@@ -16,6 +16,17 @@ import { join } from 'node:path';
 import { zstdCompressSync, zstdDecompressSync } from 'node:zlib';
 import { describe, expect, it } from 'vitest';
 import { polygonRanges, ringOffsetsOf, toRowGeometry, triangulateRow } from '../row-geometry.js';
+import { isKindValue, valueFromJSON } from '../value.js';
+import {
+  BigInteger,
+  Bytes,
+  CalendarDate,
+  DateTime,
+  Decimal,
+  Duration,
+  Reference,
+  TimeOfDay,
+} from '../value-kinds.js';
 import {
   packTabaneBlock,
   readTabaneBlock,
@@ -36,7 +47,21 @@ const zstd: TabaneCompressor = {
   decompress: (stored) => new Uint8Array(zstdDecompressSync(stored)),
 };
 
-// === The JSON of the vectors: a float JSON cannot write is {"$f64": its 16 hex digits} ===
+// === The JSON of the vectors: a float JSON cannot write is {"$f64": its 16 hex digits}, and a
+// value of a kind JSON has not (a date, a reference) is its JSON form ({"$date": "2026-10-16"}) ===
+
+/** The names of the JSON forms of the values of the kinds JSON has not */
+const VALUE_TAGS = new Set([
+  '$number',
+  '$integer',
+  '$decimal',
+  '$bytes',
+  '$date',
+  '$time',
+  '$datetime',
+  '$duration',
+  '$reference',
+]);
 
 const view = new DataView(new ArrayBuffer(8));
 
@@ -49,6 +74,9 @@ function toJson(v: unknown): unknown {
     return { $f64: hex };
   }
   if (Array.isArray(v)) return v.map(toJson);
+  if (v !== null && typeof v === 'object' && isKindValue(v)) {
+    return (v as { toJSON(): unknown }).toJSON();
+  }
   if (v !== null && typeof v === 'object') {
     return Object.fromEntries(
       Object.entries(v)
@@ -69,6 +97,7 @@ function fromJson(v: unknown): unknown {
         view.setUint8(k, Number.parseInt(o.$f64.slice(k * 2, k * 2 + 2), 16));
       return view.getFloat64(0, false);
     }
+    if (keys.length === 1 && VALUE_TAGS.has(keys[0])) return valueFromJSON(o);
     return Object.fromEntries(keys.map((k) => [k, fromJson(o[k])]));
   }
   return v;
@@ -333,6 +362,51 @@ const SCENARIOS: Scenario[] = [
           ...(i === 9 && { visible: true, locked: false }),
         }),
       ),
+    },
+  },
+  {
+    name: 'values',
+    description:
+      'Attributes of every kind of value: NaN, the infinities and -0 as floats, and big integers, decimals, bytes, dates, times, date-times of the three zones, durations and references (nested and alone) under the tag other, held as their canonical bytes',
+    input: {
+      parent: 'L',
+      head: 'V',
+      dimensions: 'xy',
+      rows: [
+        {
+          id: id(A, 200),
+          type: 'Point',
+          geometry: { type: 'Point', coordinates: [0, 0] },
+          properties: {
+            depth: Number.NaN,
+            upper: Number.POSITIVE_INFINITY,
+            lower: Number.NEGATIVE_INFINITY,
+            zero: -0,
+            osm: new BigInteger(2n ** 60n),
+            area: Decimal.parse('1234.50'),
+            raw: new Bytes(new Uint8Array([0, 1, 2, 255])),
+            opened: CalendarDate.parse('1998-04-01'),
+            opens: TimeOfDay.parse('09:30:00.5'),
+            local: DateTime.parse('2026-10-16T09:30:00'),
+            utc: DateTime.parse('2026-10-16T00:30:00.123456789Z'),
+            tokyo: DateTime.parse('2026-10-16T09:30:00+09:00'),
+            span: Duration.parse('P1M2DT3.5S'),
+            target: new Reference(id(A, 201)),
+            leaders: [{ target: { featureId: new Reference(id(A, 201)) } }],
+          },
+        },
+        {
+          id: id(A, 201),
+          type: 'Point',
+          geometry: { type: 'Point', coordinates: [1, 1] },
+          properties: {
+            depth: 1.5,
+            osm: 7,
+            opened: '1998-04-01',
+            target: id(A, 200),
+          },
+        },
+      ],
     },
   },
   {

@@ -13,7 +13,8 @@ implementation in Go follows the same document and passes the same vectors.
 ## 1. Overview
 
 - A row is an id, a type, a geometry (one of the six GeoJSON types, or none), a
-  style (an object), attributes (an object of values), and optionally a deleted
+  style (an object), attributes (an object of values of every kind of the
+  values of the tables), and optionally a deleted
   flag, a shown flag (shown when omitted), a locked flag, what created it and
   the revisions of its cells
 - A row block is about a thousand rows of one run, written as columns. Read, it
@@ -48,8 +49,9 @@ rows always give the same bytes in every implementation.
   before (section 2.2)
 - Canonical bytes of a value: the canonical form of the values of the tables
   (`canonical-value.ts`): one byte of the kind (0 null, 1 false, 2 true, 3
-  integer, 4 float64, 5 string, 6 array, 7 object) and its contents, an object's
-  keys in the order of their UTF-8
+  integer, 4 float64, 5 string, 6 array, 7 object, 8 date, 9 date-time, 10
+  bytes, 11 big integer, 12 decimal, 13 time, 14 duration, 15 reference) and its
+  contents, an object's keys in the order of their UTF-8
 
 A reader refuses what a writer never writes: an integer not in its fewest bytes
 or above 2^53 - 1, UTF-8 that is not well formed, bytes that end early or are
@@ -189,14 +191,20 @@ key: the key (`string`), then:
 - Sparse: `uint` the number of entries, then per entry `uint` its row minus the
   row before minus 1 (the first: its row)
 - A `byte` tag per entry: 0 absent (dense only), 1 null, 2 false, 3 true, 4
-  float, 5 string, 6 nested, 7 integer. A number is an integer when it is an
-  integer from -(2^53 - 1) to 2^53 - 1 and not -0, otherwise a float
+  float, 5 string, 6 nested, 7 integer, 8 other. A number is an integer when it
+  is an integer from -(2^53 - 1) to 2^53 - 1 and not -0, otherwise a float: NaN
+  (with the bits `7ff8000000000000` only), the infinities and -0 are floats.
+  Nested is an array or an object, other a value of a kind of its own (a big
+  integer, a decimal, bytes, a date, a time, a date-time, a duration, a
+  reference)
 - A `run` of `int`: the integers; a `run` of `floats`: the floats
 - A `run` of `uint`: per string or nested entry, its index in the dictionary
 - The dictionary: `uint` count, then each entry (`run`): the UTF-8 of a string
-  or the canonical bytes of a nested value (an array or an object). Each
+  or the canonical bytes of a nested value or of a value of another kind. Each
   different run of bytes is one entry, in the order of the first entry that
-  names it
+  names it. The canonical bytes of an entry of the tag nested are of the kind 6
+  or 7, of the tag other of the kinds 8 to 15
+- A string and a key are well-formed Unicode: a writer refuses a lone surrogate
 
 ### 3.4 The revisions of the cells
 
@@ -306,9 +314,11 @@ dimensions, the cutting, the rows), the `blocks` it gives (`name`, `rows`,
 `partEnds`, the `content` in hex, the file of stored parts `stored` and a file
 of zstd parts `zstd`), the `rows` read back, and for some a `manifest` (its
 input, its `entries`, its `content` and `name`). A float that JSON cannot write
-(-0, NaN) is `{"$f64": "<16 hex digits of its bits, big-endian>"}`. A polygon
-row of an input whose fills are written gives its `fill`, so an implementation
-that does not make fills writes the same bytes.
+(-0, NaN, the infinities) is `{"$f64": "<16 hex digits of its bits,
+big-endian>"}`, and a value of a kind JSON has not is the object of one key of
+its JSON form (`{"$date": "2026-10-16"}`, `{"$reference": "..."}`; `value.ts`).
+A polygon row of an input whose fills are written gives its `fill`, so an
+implementation that does not make fills writes the same bytes.
 
 An implementation writes the `content` of every block (and of the manifest) from
 the input, reads the `rows` back from it, and reads the content back from both

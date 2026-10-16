@@ -17,6 +17,8 @@
  * A pure module: it depends on nothing, so it runs in a Worker as well.
  */
 
+import { DrawError } from '../shared/draw-error.js';
+
 /**
  * A column of strings held as UTF-8 bytes
  *
@@ -205,9 +207,10 @@ export function encodeUtf8Into(value: string, target: Uint8Array): number {
 }
 
 /**
- * The number of UTF-8 bytes of a string (what `TextEncoder` writes: a lone surrogate takes the
- * 3 bytes of U+FFFD)
+ * The number of UTF-8 bytes of a string of well-formed Unicode
  *
+ * @throws DrawError (`invalid-input`) when the string has a lone surrogate, which a value does
+ *   not hold (`TextEncoder` would write U+FFFD for it, changing the string unseen)
  * @internal
  */
 export function utf8LengthOf(value: string): number {
@@ -217,14 +220,13 @@ export function utf8LengthOf(value: string): number {
     const unit = value.charCodeAt(k);
     if (unit < 0x80) length += 1;
     else if (unit < 0x800) length += 2;
-    else if (unit >= 0xd800 && unit <= 0xdbff && k + 1 < n) {
-      const next = value.charCodeAt(k + 1);
-      if (next >= 0xdc00 && next <= 0xdfff) {
-        length += 4;
-        k++;
-      } else {
-        length += 3;
+    else if (unit >= 0xd800 && unit <= 0xdfff) {
+      const next = k + 1 < n ? value.charCodeAt(k + 1) : 0;
+      if (unit > 0xdbff || next < 0xdc00 || next > 0xdfff) {
+        throw new DrawError('invalid-input', 'A string with a lone surrogate is not a value');
       }
+      length += 4;
+      k++;
     } else length += 3;
   }
   return length;

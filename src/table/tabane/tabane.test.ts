@@ -496,7 +496,12 @@ describe('a block', () => {
     const row = buildings(1)[0];
     const write = (rows: TabaneRow[]) => () => writeTabaneBlock({ parent: '', head: 'a', rows });
     expect(write([{ ...row, id: 'r1' }])).toThrow(/not an id/);
-    expect(write([{ ...row, properties: { a: Number.NaN } }])).toThrow(/not a value/);
+    // NaN is a value; a Date, a Map and a string with a lone surrogate are not
+    expect(write([{ ...row, properties: { a: Number.NaN } }])).not.toThrow();
+    expect(write([{ ...row, properties: { a: new Date(0) } }])).toThrow(/class/);
+    expect(write([{ ...row, properties: { a: new Map() } }])).toThrow(/class/);
+    expect(write([{ ...row, properties: { a: 'a\uD800' } }])).toThrow(/lone surrogate/);
+    expect(write([{ ...row, properties: { 'a\uD800': 1 } }])).toThrow(/lone surrogate/);
     expect(
       write([{ ...row, geometry: { type: 'GeometryCollection', geometries: [] } as Geometry }]),
     ).toThrow(/geometry/);

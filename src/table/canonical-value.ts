@@ -4,12 +4,12 @@
 /**
  * The canonical bytes of a value
  *
- * A value of an attribute or a style (null, a boolean, a number, a string, an array or an
- * object with string keys) is written as one byte of its kind followed by its contents, in one
- * canonical form: the same value always gives the same bytes. Two styles are therefore the
- * same when their bytes are, which is how the table of styles shares one entry between every
- * row that looks alike, and a nested value (an array or an object) is held in a column as these
- * bytes and turned back into a value only when it is read.
+ * A value of an attribute or a style (`value.ts`) is written as one byte of its kind followed by
+ * its contents, in one canonical form: the same value always gives the same bytes. Two styles
+ * are therefore the same when their bytes are, which is how the table of styles shares one entry
+ * between every row that looks alike, and a nested value (an array or an object) and a value of a
+ * kind of its own (a date, a reference, ...) are held in a column as these bytes and turned back
+ * into a value only when they are read.
  *
  * The form:
  *
@@ -23,11 +23,23 @@
  * | 5 | string | the number of bytes (unsigned variable-length) and the UTF-8 |
  * | 6 | array | the number of values (unsigned variable-length) and the values |
  * | 7 | object | the number of keys (unsigned variable-length) and the key (as a string) and the value of each |
+ * | 8 | date | the days since 1970-01-01 (signed variable-length) |
+ * | 9 | date-time | the seconds (signed), the nanoseconds (unsigned), then 0 (UTC), 1 and the offset in minutes (signed), or 2 (local) |
+ * | 10 | bytes | the number of bytes (unsigned variable-length) and the bytes |
+ * | 11 | big integer | a signed variable-length integer |
+ * | 12 | decimal | the scale (unsigned variable-length), then the coefficient (signed variable-length) |
+ * | 13 | time | the nanoseconds since midnight (unsigned variable-length) |
+ * | 14 | duration | the months, the days, the seconds and the nanoseconds (signed variable-length) |
+ * | 15 | reference | the id (as a string), then the byte 0 (the number of members after it) |
  *
  * - A number is an integer when `Number.isSafeInteger` holds and it is not `-0`; any other
- *   finite number is a float64. NaN and the infinities are not values
+ *   number is a float64, the infinities as they are and NaN with the bits `7ff8000000000000`
+ *   only
+ * - A bigint is written as the number or the big integer it is, and a `Uint8Array` as bytes
  * - The keys of an object are ordered by their UTF-8 bytes; a key whose value is `undefined` is
  *   left out (as if it were not there)
+ * - A string or a key with a lone surrogate is refused, and so is an instance of a class that is
+ *   not one of the kinds (a `Date`, a `Map`)
  * - The unsigned variable-length integer puts 7 bits per byte, the lowest first, with 0x80 on
  *   every byte but the last. The signed one puts the sign in 0x40 of the first byte with the 6
  *   lowest bits, then 7 bits per byte. Both are written in the fewest bytes
@@ -37,6 +49,19 @@
 
 import { DrawError } from '../shared/draw-error.js';
 import { utf8LengthOf, writeUtf8 } from './utf8-column.js';
+import {
+  BigInteger,
+  Bytes,
+  CalendarDate,
+  DateTime,
+  Decimal,
+  Duration,
+  MAX_BIG_INTEGER,
+  MAX_DECIMAL_SCALE,
+  MIN_BIG_INTEGER,
+  Reference,
+  TimeOfDay,
+} from './value-kinds.js';
 
 /** The kinds of the canonical form */
 export const CANONICAL_NULL = 0;
@@ -47,6 +72,27 @@ export const CANONICAL_NUMBER = 4;
 export const CANONICAL_STRING = 5;
 export const CANONICAL_ARRAY = 6;
 export const CANONICAL_OBJECT = 7;
+export const CANONICAL_DATE = 8;
+export const CANONICAL_DATE_TIME = 9;
+export const CANONICAL_BYTES = 10;
+export const CANONICAL_BIG_INTEGER = 11;
+export const CANONICAL_DECIMAL = 12;
+export const CANONICAL_TIME = 13;
+export const CANONICAL_DURATION = 14;
+export const CANONICAL_REFERENCE = 15;
+
+/** The marks of the zones of a date-time */
+const ZONE_UTC = 0;
+const ZONE_OFFSET = 1;
+const ZONE_LOCAL = 2;
+
+/** The bits of the one NaN of the form */
+const CANONICAL_NAN = [0x7f, 0xf8, 0, 0, 0, 0, 0, 0];
+
+/** The largest integer a number holds exactly (2^53 - 1), as a bigint */
+const MAX_SAFE = BigInt(Number.MAX_SAFE_INTEGER);
+/** The largest magnitude of the coefficient of a decimal (10^76 - 1) */
+const MAX_COEFFICIENT = 10n ** BigInt(MAX_DECIMAL_SCALE) - 1n;
 
 /** The deepest nesting of arrays and objects a value may have */
 export const CANONICAL_MAX_DEPTH = 32;
@@ -97,11 +143,37 @@ class ByteWriter {
     }
   }
 
+  /** A signed variable-length integer of any size (a big integer, a coefficient) */
+  varBigInt(value: bigint): void {
+    const negative = value < 0n;
+    let rest = negative ? -value : value;
+    const first = Number(rest & 0x3fn);
+    rest >>= 6n;
+    this.byte((rest > 0n ? 0x80 : 0) | (negative ? 0x40 : 0) | first);
+    while (rest > 0n) {
+      const next = rest >> 7n;
+      this.byte((next > 0n ? 0x80 : 0) | Number(rest & 0x7fn));
+      rest = next;
+    }
+  }
+
   float64(value: number): void {
-    this.view8.setFloat64(0, value, false);
     this.reserve(8);
-    for (let k = 0; k < 8; k++) this.bytes[this.size + k] = this.view8.getUint8(k);
+    if (Number.isNaN(value)) {
+      // One NaN, whatever bits the platform gives it
+      for (let k = 0; k < 8; k++) this.bytes[this.size + k] = CANONICAL_NAN[k];
+    } else {
+      this.view8.setFloat64(0, value, false);
+      for (let k = 0; k < 8; k++) this.bytes[this.size + k] = this.view8.getUint8(k);
+    }
     this.size += 8;
+  }
+
+  /** Bytes as they are */
+  raw(value: Uint8Array): void {
+    this.reserve(value.length);
+    this.bytes.set(value, this.size);
+    this.size += value.length;
   }
 
   /**
@@ -173,7 +245,8 @@ const SCRATCH_KEPT_BYTES = 1 << 16;
  * Writes a value in the canonical form
  *
  * @throws when the value is not one of the kinds of the form (`undefined`, a function, a
- *   symbol, a bigint, NaN, an infinity), or when it is nested deeper than
+ *   symbol, an instance of a class that is not one of the kinds, a string with a lone surrogate,
+ *   a bigint outside -2^63 to 2^64 - 1), or when it is nested deeper than
  *   {@link CANONICAL_MAX_DEPTH}
  * @internal
  */
@@ -214,8 +287,6 @@ function writeValue(writer: ByteWriter, value: unknown, depth: number): void {
       writer.byte(value ? CANONICAL_TRUE : CANONICAL_FALSE);
       return;
     case 'number':
-      if (!Number.isFinite(value))
-        throw new DrawError('invalid-input', `Canonical value: ${value} is not a value`);
       if (Number.isSafeInteger(value) && !Object.is(value, -0)) {
         writer.byte(CANONICAL_INTEGER);
         writer.varInt(value);
@@ -228,7 +299,21 @@ function writeValue(writer: ByteWriter, value: unknown, depth: number): void {
       writer.byte(CANONICAL_STRING);
       writer.string(value);
       return;
+    case 'bigint':
+      // The number or the big integer it is
+      if (value >= -MAX_SAFE && value <= MAX_SAFE) {
+        writer.byte(CANONICAL_INTEGER);
+        writer.varInt(Number(value));
+      } else {
+        if (value < MIN_BIG_INTEGER || value > MAX_BIG_INTEGER) {
+          throw new DrawError('invalid-input', `Canonical value: ${value} is out of range`);
+        }
+        writer.byte(CANONICAL_BIG_INTEGER);
+        writer.varBigInt(value);
+      }
+      return;
     case 'object': {
+      if (writeKind(writer, value)) return;
       if (depth >= CANONICAL_MAX_DEPTH) {
         throw new DrawError(
           'invalid-input',
@@ -240,6 +325,13 @@ function writeValue(writer: ByteWriter, value: unknown, depth: number): void {
         writer.varUint(value.length);
         for (const item of value) writeValue(writer, item, depth + 1);
         return;
+      }
+      const prototype = Object.getPrototypeOf(value);
+      if (prototype !== Object.prototype && prototype !== null) {
+        throw new DrawError(
+          'invalid-input',
+          'Canonical value: an instance of a class is not a value',
+        );
       }
       const record = value as Record<string, unknown>;
       const keys: string[] = [];
@@ -265,6 +357,58 @@ function writeValue(writer: ByteWriter, value: unknown, depth: number): void {
     default:
       throw new DrawError('invalid-input', `Canonical value: a ${typeof value} is not a value`);
   }
+}
+
+/**
+ * Writes a value of a kind of its own (a date, a reference, bytes, ...)
+ *
+ * @returns Whether the value was one
+ */
+function writeKind(writer: ByteWriter, value: object): boolean {
+  if (value instanceof CalendarDate) {
+    writer.byte(CANONICAL_DATE);
+    writer.varInt(value.days);
+  } else if (value instanceof DateTime) {
+    writer.byte(CANONICAL_DATE_TIME);
+    writer.varInt(value.seconds);
+    writer.varUint(value.nanoseconds);
+    if (value.zone === 'utc') {
+      writer.byte(ZONE_UTC);
+    } else if (value.zone === 'offset') {
+      writer.byte(ZONE_OFFSET);
+      writer.varInt(value.offsetMinutes);
+    } else {
+      writer.byte(ZONE_LOCAL);
+    }
+  } else if (value instanceof Bytes || value instanceof Uint8Array) {
+    const bytes = value instanceof Bytes ? value.toUint8Array() : value;
+    writer.byte(CANONICAL_BYTES);
+    writer.varUint(bytes.length);
+    writer.raw(bytes);
+  } else if (value instanceof BigInteger) {
+    writer.byte(CANONICAL_BIG_INTEGER);
+    writer.varBigInt(value.value);
+  } else if (value instanceof Decimal) {
+    writer.byte(CANONICAL_DECIMAL);
+    writer.varUint(value.scale);
+    writer.varBigInt(value.coefficient);
+  } else if (value instanceof TimeOfDay) {
+    writer.byte(CANONICAL_TIME);
+    writer.varUint(value.nanoseconds);
+  } else if (value instanceof Duration) {
+    writer.byte(CANONICAL_DURATION);
+    writer.varInt(value.months);
+    writer.varInt(value.days);
+    writer.varInt(value.seconds);
+    writer.varInt(value.nanoseconds);
+  } else if (value instanceof Reference) {
+    writer.byte(CANONICAL_REFERENCE);
+    writer.string(value.id);
+    writer.byte(0);
+  } else {
+    return false;
+  }
+  return true;
 }
 
 /** The most keys of an object put in order by an insertion sort */
@@ -366,6 +510,32 @@ class ByteReader {
     return negative ? -value : value;
   }
 
+  /** A signed variable-length integer of any size, of a magnitude at most `max` */
+  varBigInt(max: bigint): bigint {
+    const first = this.byte();
+    const negative = (first & 0x40) !== 0;
+    let value = BigInt(first & 0x3f);
+    let shift = 6n;
+    let more = (first & 0x80) !== 0;
+    while (more) {
+      const b = this.byte();
+      value |= BigInt(b & 0x7f) << shift;
+      shift += 7n;
+      more = (b & 0x80) !== 0;
+      if (value > max) throw new DrawError('invalid-input', 'Canonical value: out of range');
+    }
+    return negative ? -value : value;
+  }
+
+  /** Bytes as they are, copied */
+  raw(length: number): Uint8Array {
+    if (this.at + length > this.end)
+      throw new DrawError('invalid-input', 'Canonical value: the bytes end too early');
+    const out = this.bytes.slice(this.at, this.at + length);
+    this.at += length;
+    return out;
+  }
+
   float64(): number {
     if (this.at + 8 > this.end)
       throw new DrawError('invalid-input', 'Canonical value: the bytes end too early');
@@ -444,6 +614,42 @@ function readValue(reader: ByteReader, depth: number): unknown {
         }
       }
       return out;
+    }
+    case CANONICAL_DATE:
+      return new CalendarDate(reader.varInt());
+    case CANONICAL_DATE_TIME: {
+      const seconds = reader.varInt();
+      const nanoseconds = reader.varUint();
+      const zone = reader.byte();
+      if (zone === ZONE_UTC) return new DateTime(seconds, nanoseconds, 'utc');
+      if (zone === ZONE_LOCAL) return new DateTime(seconds, nanoseconds, 'local');
+      if (zone !== ZONE_OFFSET)
+        throw new DrawError('invalid-input', `Canonical value: unknown zone ${zone}`);
+      return new DateTime(seconds, nanoseconds, 'offset', reader.varInt());
+    }
+    case CANONICAL_BYTES:
+      return new Bytes(reader.raw(reader.varUint()));
+    case CANONICAL_BIG_INTEGER: {
+      const negative = (reader.bytes[reader.at] & 0x40) !== 0;
+      return new BigInteger(reader.varBigInt(negative ? -MIN_BIG_INTEGER : MAX_BIG_INTEGER));
+    }
+    case CANONICAL_DECIMAL: {
+      const scale = reader.varUint();
+      return new Decimal(reader.varBigInt(MAX_COEFFICIENT), scale);
+    }
+    case CANONICAL_TIME:
+      return new TimeOfDay(reader.varUint());
+    case CANONICAL_DURATION:
+      return new Duration(reader.varInt(), reader.varInt(), reader.varInt(), reader.varInt());
+    case CANONICAL_REFERENCE: {
+      const id = reader.string();
+      if (reader.byte() !== 0) {
+        throw new DrawError(
+          'invalid-input',
+          'Canonical value: a reference with members after its id',
+        );
+      }
+      return new Reference(id);
     }
     default:
       throw new DrawError('invalid-input', `Canonical value: unknown kind ${kind}`);

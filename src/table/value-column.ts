@@ -6,10 +6,13 @@
  *
  * The attributes of the rows have no fixed type: one row holds a number under a key, the next a
  * string, a third nothing at all. A column holds them in typed arrays: the kind of each value
- * (absent, null, false, true, a number, a string, a nested value), the numbers, and the strings
- * and nested values in a dictionary of bytes that the rows refer to by index. A string is held
- * as its UTF-8 bytes and a nested value (an array or an object) as its canonical bytes
- * (`canonical-value.ts`); both become values of the engine only when they are read.
+ * (absent, null, false, true, a number, a string, a nested value, a value of another kind), the
+ * numbers (NaN, the infinities and -0 included), and the strings, the nested values and the
+ * values of the other kinds in a dictionary of bytes that the rows refer to by index. A string is
+ * held as its UTF-8 bytes, and a nested value (an array or an object) and a value of another kind
+ * (a big integer, a decimal, bytes, a date, a time, a date-time, a duration, a reference) as its
+ * canonical bytes (`canonical-value.ts`); they become values of the engine only when they are
+ * read.
  *
  * A column has one of two forms, chosen for each key when the rows are built:
  *
@@ -33,6 +36,8 @@ import {
   Utf8ColumnBuilder,
   utf8String,
 } from './utf8-column.js';
+import { isKindValue, valueOfInput } from './value.js';
+import { wellFormed } from './value-kinds.js';
 
 /** The row does not hold the key */
 export const VALUE_ABSENT = 0;
@@ -48,6 +53,21 @@ export const VALUE_NUMBER = 4;
 export const VALUE_STRING = 5;
 /** The value is an array or an object (its canonical bytes in `values`, at the index in `refs`) */
 export const VALUE_NESTED = 6;
+/**
+ * The value is of another kind: a big integer, a decimal, bytes, a date, a time, a date-time, a
+ * duration or a reference (its canonical bytes in `values`, at the index in `refs`)
+ */
+export const VALUE_OTHER = 7;
+
+/**
+ * Whether the entries of a kind hold bytes in `values` (a string, a nested value, a value of
+ * another kind)
+ *
+ * @internal
+ */
+export function holdsBytes(tag: number): boolean {
+  return tag === VALUE_STRING || tag === VALUE_NESTED || tag === VALUE_OTHER;
+}
 
 /**
  * The lowest share of rows holding a key for which its column is dense
@@ -75,13 +95,13 @@ export interface ValueColumn {
   readonly length: number;
   /** The rows of the entries, ascending (the sparse form; null for the dense form) */
   readonly rows: Int32Array | null;
-  /** The kind of each entry (`VALUE_ABSENT` to `VALUE_NESTED`) */
+  /** The kind of each entry (`VALUE_ABSENT` to `VALUE_OTHER`) */
   readonly tags: Uint8Array;
   /** The number of each entry of the kind `VALUE_NUMBER` (null when no entry is a number) */
   readonly numbers: Float64Array | null;
-  /** The index in `values` of each string or nested entry (null when there is none) */
+  /** The index in `values` of each entry that holds bytes (null when there is none) */
   readonly refs: Int32Array | null;
-  /** The bytes of the strings and the nested values (null when there is none) */
+  /** The bytes of the strings, the nested values and the other kinds (null when there is none) */
   readonly values: Utf8Column | null;
 }
 
@@ -160,7 +180,8 @@ export function readValue(column: ValueColumn, row: number, strings?: ValueStrin
       const ref = (column.refs as Int32Array)[entry];
       return strings ? strings.read(values, ref) : utf8String(values, ref);
     }
-    case VALUE_NESTED: {
+    case VALUE_NESTED:
+    case VALUE_OTHER: {
       const values = column.values as Utf8Column;
       const ref = (column.refs as Int32Array)[entry];
       return decodeCanonicalValue(values.bytes, values.offsets[ref], values.offsets[ref + 1]);
@@ -263,10 +284,11 @@ export class ValueColumnBuilder {
   }
 
   /**
-   * Sets the value of a row (`undefined` leaves it absent)
+   * Sets the value of a row (`undefined` leaves it absent). A bigint is held as the number or the
+   * big integer it is, and a `Uint8Array` as bytes
    *
    * @throws when the value is not one of the kinds of the canonical form (a nested value is
-   *   checked when it is written)
+   *   checked when it is written), or is a string with a lone surrogate
    */
   set(row: number, value: unknown): void {
     if (value === undefined) return;
@@ -277,17 +299,21 @@ export class ValueColumnBuilder {
     } else if (value === true) {
       this.setTag(row, VALUE_TRUE);
     } else if (typeof value === 'number') {
-      if (!Number.isFinite(value))
-        throw new DrawError('invalid-input', `ValueColumn: ${value} is not a value`);
       this.setNumber(row, value);
     } else if (typeof value === 'string') {
+      if (!wellFormed(value)) {
+        throw new DrawError('invalid-input', 'ValueColumn: a string with a lone surrogate');
+      }
       this.textsFor(row, VALUE_STRING).add(value);
+    } else if (typeof value === 'bigint') {
+      this.set(row, valueOfInput(value, 'ValueColumn: the value'));
     } else {
+      const tag = valueTagOf(value);
       // Written in full before the row is marked, so a value refused leaves the row as it was
       const texts = this.texts ?? this.startTexts();
       const before = texts.length;
       appendCanonicalValue(value, texts);
-      this.markText(row, VALUE_NESTED, before);
+      this.markText(row, tag, before);
     }
   }
 
@@ -304,7 +330,8 @@ export class ValueColumnBuilder {
         this.setNumber(row, (column.numbers as Float64Array)[entry]);
         return;
       case VALUE_STRING:
-      case VALUE_NESTED: {
+      case VALUE_NESTED:
+      case VALUE_OTHER: {
         const values = column.values as Utf8Column;
         const ref = (column.refs as Int32Array)[entry];
         this.textsFor(row, tag).addBytes(
@@ -352,7 +379,7 @@ export class ValueColumnBuilder {
       if (rows) rows[entry] = row;
       tags[entry] = tag;
       if (tag === VALUE_NUMBER && numbers) numbers[entry] = (this.numbers as Float64Array)[row];
-      if ((tag === VALUE_STRING || tag === VALUE_NESTED) && refs && texts && textOf) {
+      if (holdsBytes(tag) && refs && texts && textOf) {
         const text = textOf[row];
         if (asSet) {
           refs[entry] = text;
@@ -408,7 +435,7 @@ export class ValueColumnBuilder {
     let distinct = 0;
     for (let row = 0; row < this.length; row++) {
       const tag = tags[row];
-      if (tag !== VALUE_STRING && tag !== VALUE_NESTED) continue;
+      if (!holdsBytes(tag)) continue;
       const text = textOf[row];
       const start = texts.entryStart(text);
       const end = texts.entryEnd(text);
@@ -485,7 +512,7 @@ export class ValueColumnBuilder {
     const tag = this.tags[row];
     if (tag === VALUE_ABSENT) {
       this.present++;
-    } else if (tag === VALUE_STRING || tag === VALUE_NESTED) {
+    } else if (holdsBytes(tag)) {
       // Its bytes stay in `texts`, which are no longer one entry per row
       this.textRows--;
       this.textsInOrder = false;
@@ -495,3 +522,18 @@ export class ValueColumnBuilder {
 
 /** The entries `texts` of a builder starts with (it grows by doubling) */
 const TEXTS_START_ENTRIES = 64;
+
+/**
+ * The kind of an entry of a value that is neither null, a boolean, a number nor a string: a
+ * value of a kind of its own (or a `Uint8Array`, held as bytes) is `VALUE_OTHER`, any other
+ * (an array, an object) `VALUE_NESTED`
+ *
+ * @internal
+ */
+export function valueTagOf(value: unknown): number {
+  return typeof value === 'object' &&
+    value !== null &&
+    (isKindValue(value) || value instanceof Uint8Array)
+    ? VALUE_OTHER
+    : VALUE_NESTED;
+}

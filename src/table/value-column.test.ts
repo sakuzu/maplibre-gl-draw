@@ -3,6 +3,7 @@
 
 import { describe, expect, it } from 'vitest';
 import { utf8ColumnLength } from './utf8-column.js';
+import { sameValue, type Value } from './value.js';
 import {
   DENSE_MIN_SHARE,
   readNumberValue,
@@ -10,12 +11,15 @@ import {
   VALUE_ABSENT,
   VALUE_NESTED,
   VALUE_NULL,
+  VALUE_NUMBER,
+  VALUE_OTHER,
   VALUE_STRING,
   ValueColumnBuilder,
   ValueStringCache,
   valueEntryOf,
   valueKindOf,
 } from './value-column.js';
+import { BigInteger, Bytes, CalendarDate, Reference } from './value-kinds.js';
 
 /** Builds a column from the values of each row (undefined = absent) */
 function columnOf(values: readonly unknown[]) {
@@ -82,14 +86,53 @@ describe('ValueColumn', () => {
     expect(readValue(column, 0)).toBe(5);
   });
 
-  it('refuses a number that is not finite', () => {
-    expect(() => new ValueColumnBuilder(1).set(0, Number.NaN)).toThrow();
+  it('holds NaN, the infinities and -0 as numbers', () => {
+    const column = columnOf([Number.NaN, Number.POSITIVE_INFINITY, -0, 0]);
+    expect(column.tags[0]).toBe(VALUE_NUMBER);
+    expect(readValue(column, 0)).toBeNaN();
+    expect(readValue(column, 1)).toBe(Number.POSITIVE_INFINITY);
+    expect(Object.is(readValue(column, 2), -0)).toBe(true);
+    expect(Object.is(readValue(column, 3), 0)).toBe(true);
+  });
+
+  it('holds the values of the other kinds as their bytes, apart from nested values', () => {
+    const date = CalendarDate.parse('2026-10-16');
+    const values = [
+      date,
+      new BigInteger(2n ** 60n),
+      new Reference('a'),
+      [date],
+      2n ** 60n,
+      7n,
+      new Uint8Array([1, 2]),
+    ];
+    const column = columnOf(values);
+    expect([...column.tags]).toEqual([
+      VALUE_OTHER,
+      VALUE_OTHER,
+      VALUE_OTHER,
+      VALUE_NESTED,
+      VALUE_OTHER,
+      VALUE_NUMBER,
+      VALUE_OTHER,
+    ]);
+    expect(sameValue(readValue(column, 0) as Value, date)).toBe(true);
+    expect(sameValue(readValue(column, 2) as Value, new Reference('a'))).toBe(true);
+    expect(sameValue(readValue(column, 3) as Value, [date])).toBe(true);
+    expect(sameValue(readValue(column, 4) as Value, new BigInteger(2n ** 60n))).toBe(true);
+    expect(readValue(column, 5)).toBe(7);
+    expect(sameValue(readValue(column, 6) as Value, new Bytes(new Uint8Array([1, 2])))).toBe(true);
+  });
+
+  it('refuses what is not a value', () => {
+    expect(() => new ValueColumnBuilder(1).set(0, new Date(0))).toThrow();
+    expect(() => new ValueColumnBuilder(1).set(0, 'a\ud800')).toThrow(/lone surrogate/);
   });
 
   it('leaves a row as it was when its nested value is refused', () => {
     const builder = new ValueColumnBuilder(2);
     builder.set(0, 'kept');
-    expect(() => builder.set(0, { a: Number.NaN })).toThrow();
+    expect(() => builder.set(0, { a: new Date(0) })).toThrow();
     builder.set(1, [1]);
     const column = builder.finish();
     expect(readValue(column, 0)).toBe('kept');

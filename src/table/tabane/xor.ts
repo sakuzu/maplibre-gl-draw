@@ -88,8 +88,10 @@ export class XorSink {
 
   put(value: number): void {
     f64.setFloat64(0, value, true);
-    const lo = f64.getUint32(0, true);
-    const hi = f64.getUint32(4, true);
+    // One NaN, whatever bits the platform gives it: 7ff8000000000000
+    const nan = Number.isNaN(value);
+    const lo = nan ? 0 : f64.getUint32(0, true);
+    const hi = nan ? 0x7ff80000 : f64.getUint32(4, true);
     const xh = (hi ^ this.hi) >>> 0;
     const xl = (lo ^ this.lo) >>> 0;
     this.hi = hi;

@@ -116,6 +116,7 @@ describe('the table subpath', () => {
     expect([...new Set(packages)].sort()).toEqual(PACKAGES);
     const files = [...seen].map((file) => relative(SRC, file)).sort();
     expect(files).toEqual([
+      'shared/utils/own-property.ts',
       'table/builder.ts',
       'table/coordinates.ts',
       'table/index.ts',

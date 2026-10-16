@@ -26,15 +26,19 @@ import { decodeCanonicalValue, encodeCanonicalValue } from '../table/canonical-v
 import { GeometryColumnReader } from '../table/table.js';
 import type { TableGeometry } from '../table/types.js';
 import { utf8Bytes } from '../table/utf8-column.js';
+import { valueOfInput } from '../table/value.js';
 import {
   VALUE_ABSENT,
   VALUE_FALSE,
   VALUE_NESTED,
   VALUE_NULL,
   VALUE_NUMBER,
+  VALUE_OTHER,
   VALUE_STRING,
   VALUE_TRUE,
+  valueTagOf,
 } from '../table/value-column.js';
+import { wellFormed } from '../table/value-kinds.js';
 
 /**
  * The bytes the values written in place may take per row group (attributes and geometry
@@ -54,8 +58,9 @@ const ENTRY_OVERHEAD_BYTES = 48;
 const GEOMETRY_OVERHEAD_BYTES = 96;
 
 /**
- * One attribute written: its kind (`VALUE_ABSENT` to `VALUE_NESTED` of `value-column.ts`), with
- * its number or its bytes (UTF-8 for a string, canonical for a nested value)
+ * One attribute written: its kind (`VALUE_ABSENT` to `VALUE_OTHER` of `value-column.ts`), with
+ * its number or its bytes (UTF-8 for a string, canonical for a nested value or a value of another
+ * kind)
  *
  * @internal
  */
@@ -84,13 +89,16 @@ export function encodeOverrideValue(value: unknown): OverrideValue {
   if (value === null) return { tag: VALUE_NULL, number: 0, bytes: null };
   if (value === false) return { tag: VALUE_FALSE, number: 0, bytes: null };
   if (value === true) return { tag: VALUE_TRUE, number: 0, bytes: null };
-  if (typeof value === 'number') {
-    if (!Number.isFinite(value))
-      throw new DrawError('invalid-input', `ValueOverrides: ${value} is not a value`);
-    return { tag: VALUE_NUMBER, number: value, bytes: null };
+  if (typeof value === 'number') return { tag: VALUE_NUMBER, number: value, bytes: null };
+  if (typeof value === 'string') {
+    if (!wellFormed(value)) {
+      throw new DrawError('invalid-input', 'ValueOverrides: a string with a lone surrogate');
+    }
+    return { tag: VALUE_STRING, number: 0, bytes: utf8Bytes(value) };
   }
-  if (typeof value === 'string') return { tag: VALUE_STRING, number: 0, bytes: utf8Bytes(value) };
-  return { tag: VALUE_NESTED, number: 0, bytes: encodeCanonicalValue(value) };
+  // A bigint as the number or the big integer it is
+  if (typeof value === 'bigint') return encodeOverrideValue(valueOfInput(value, 'The value'));
+  return { tag: valueTagOf(value), number: 0, bytes: encodeCanonicalValue(value) };
 }
 
 /**
@@ -111,6 +119,7 @@ export function decodeOverrideValue(value: OverrideValue): unknown {
     case VALUE_STRING:
       return DECODER.decode(value.bytes as Uint8Array);
     case VALUE_NESTED:
+    case VALUE_OTHER:
       return decodeCanonicalValue(value.bytes as Uint8Array);
     default:
       return undefined;
@@ -118,13 +127,13 @@ export function decodeOverrideValue(value: OverrideValue): unknown {
 }
 
 /**
- * Whether two values written are the same value
+ * Whether two values written are the same value: NaN is the same as NaN, 0 and -0 are not
  *
  * @internal
  */
 export function sameOverrideValue(a: OverrideValue, b: OverrideValue): boolean {
   if (a.tag !== b.tag) return false;
-  if (a.tag === VALUE_NUMBER) return a.number === b.number;
+  if (a.tag === VALUE_NUMBER) return Object.is(a.number, b.number);
   if (a.bytes === null || b.bytes === null) return a.bytes === b.bytes;
   if (a.bytes.length !== b.bytes.length) return false;
   for (let i = 0; i < a.bytes.length; i++) if (a.bytes[i] !== b.bytes[i]) return false;

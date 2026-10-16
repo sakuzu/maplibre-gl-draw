@@ -22,6 +22,8 @@ import {
   triangulateRow,
 } from '../row-geometry.js';
 import type { GeometryType } from '../types.js';
+import { VALUE_OTHER, valueTagOf } from '../value-column.js';
+import { wellFormed } from '../value-kinds.js';
 import { ByteSink, compareBytes, utf8Of } from './bytes.js';
 import { decimalAt, fewestDecimals } from './decimals.js';
 import { originBytes, parseTabaneId } from './ids.js';
@@ -50,6 +52,7 @@ export const TAG_FLOAT = 4;
 export const TAG_STRING = 5;
 export const TAG_NESTED = 6;
 export const TAG_INTEGER = 7;
+export const TAG_OTHER = 8;
 
 /**
  * What a row block is written from
@@ -476,6 +479,7 @@ function writeProperties(out: ByteSink, rows: readonly TabaneRow[]): void {
     for (const key of Object.keys(properties)) {
       const value = properties[key];
       if (value === undefined) continue;
+      if (!wellFormed(key)) throw invalid('a key with a lone surrogate');
       let column = columns.get(key);
       if (!column) {
         column = { key, rows: [], values: [] };
@@ -520,7 +524,7 @@ function writeColumn(out: ByteSink, column: ColumnInput, length: number): void {
     } else if (v === true) {
       tags[entry] = TAG_TRUE;
     } else if (typeof v === 'number') {
-      if (!Number.isFinite(v)) throw invalid(`${v} is not a value of the key ${column.key}`);
+      // NaN, the infinities and -0 are floats
       if (Number.isSafeInteger(v) && !(v === 0 && 1 / v < 0)) {
         tags[entry] = TAG_INTEGER;
         integers.int(v);
@@ -531,10 +535,13 @@ function writeColumn(out: ByteSink, column: ColumnInput, length: number): void {
     } else {
       let bytes: Uint8Array;
       if (typeof v === 'string') {
+        if (!wellFormed(v))
+          throw invalid(`a string with a lone surrogate of the key ${column.key}`);
         tags[entry] = TAG_STRING;
         bytes = utf8Of(v);
       } else {
-        tags[entry] = TAG_NESTED;
+        // A value of a kind of its own (a date, a reference, bytes, ...) is other than nested
+        tags[entry] = valueTagOf(v) === VALUE_OTHER ? TAG_OTHER : TAG_NESTED;
         try {
           bytes = encodeCanonicalValue(v);
         } catch (e) {

@@ -90,9 +90,12 @@ describe('Utf8Column', () => {
 
   it('measures and writes the bytes TextEncoder writes, a lone surrogate as U+FFFD', () => {
     const encoder = new TextEncoder();
+    const lone = /[\ud800-\udbff](?![\udc00-\udfff])|(?<![\ud800-\udbff])[\udc00-\udfff]/;
     for (const value of AWKWARD) {
       const expected = encoder.encode(value);
-      expect(utf8LengthOf(value)).toBe(expected.length);
+      // A value does not hold a lone surrogate: measuring one refuses it
+      if (lone.test(value)) expect(() => utf8LengthOf(value)).toThrow(/lone surrogate/);
+      else expect(utf8LengthOf(value)).toBe(expected.length);
       const target = new Uint8Array(value.length * 3 + 4);
       const written = writeUtf8(value, target, 2);
       expect(written).toBe(expected.length);

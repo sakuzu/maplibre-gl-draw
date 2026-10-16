@@ -11,6 +11,64 @@ import {
   encodeCanonicalValue,
 } from './canonical-value.js';
 import { Utf8ColumnBuilder } from './utf8-column.js';
+import { stringifyValueJSON, type Value, valueFromJSON } from './value.js';
+
+/** Values of the kinds of their own, by their JSON form, and their canonical bytes */
+const KINDS: [string, unknown, string][] = [
+  ['NaN', { $number: 'NaN' }, '047ff8000000000000'],
+  ['the positive infinity', { $number: 'Infinity' }, '047ff0000000000000'],
+  ['a date', { $date: '2026-10-16' }, '0886c402'],
+  ['a date of a year before 0', { $date: '-000044-03-15' }, '08e5e459'],
+  [
+    'the same instant with an offset',
+    { $datetime: '2026-10-16T09:30:00+09:00' },
+    '0988c08bad0d00019c08',
+  ],
+  [
+    'an instant with nanoseconds',
+    { $datetime: '2026-10-16T00:30:00.123456789Z' },
+    '0988c08bad0d959aef3a00',
+  ],
+  ['a local date-time', { $datetime: '2026-10-16T09:30:00' }, '0998ba8fad0d0002'],
+  [
+    'the first date-time',
+    { $datetime: '-290308-12-21T19:59:05.224192Z' },
+    '09f7eb82bdef980480ccf36a00',
+  ],
+  ['minus zero', { $number: '-0' }, '048000000000000000'],
+  ['two to the 53rd, a big integer', { $integer: '9007199254740992' }, '0b8080808080808020'],
+  ['the largest big integer', { $integer: '18446744073709551615' }, '0bbfffffffffffffffff03'],
+  ['the smallest big integer', { $integer: '-9223372036854775808' }, '0bc0808080808080808002'],
+  ['a decimal', { $decimal: '123.45' }, '0c02b9c001'],
+  ['a decimal with a zero of its scale', { $decimal: '1.10' }, '0c02ae01'],
+  ['a negative decimal below 1', { $decimal: '-0.05' }, '0c0245'],
+  [
+    'the largest decimal',
+    { $decimal: '0.9999999999999999999999999999999999999999999999999999999999999999999999999999' },
+    '0c4cbfffffffffffffffffffffd0b2dcf8a5ebddcb97a599f4abe992bbd0b6c5cc91ceb2dee102',
+  ],
+  ['the empty bytes', { $bytes: '' }, '0a00'],
+  ['bytes', { $bytes: 'AAEC/w==' }, '0a04000102ff'],
+  ['a time with a fraction', { $time: '09:30:00.5' }, '0d80aa9de5aee307'],
+  ['the last nanosecond of a day', { $time: '23:59:59.999999999' }, '0dffffbb8ac9d213'],
+  ['a duration', { $duration: 'P1M2DT3.5S' }, '0e0102038094ebdc03'],
+  ['a negative duration below a second', { $duration: '-PT0.000000001S' }, '0e00000041'],
+  [
+    'a duration of both signs',
+    { $duration: { months: 1, days: -2, seconds: 3, nanoseconds: 500000000 } },
+    '0e0142038094ebdc03',
+  ],
+  ['a reference', { $reference: '1AAAAAAAAAAAA-1A' }, '0f10314141414141414141414141412d314100'],
+  [
+    'references nested',
+    { target: { featureId: { $reference: '1AAAAAAAAAAAA-1A' } }, ids: [{ $reference: 'a' }] },
+    '07020369647306010f016100067461726765740701096665617475726549640f10314141414141414141414141412d314100',
+  ],
+];
+
+function hexOf(bytes: Uint8Array): string {
+  return [...bytes].map((b) => b.toString(16).padStart(2, '0')).join('');
+}
 
 /**
  * The canonical form written the plain way (every string through TextEncoder, the keys sorted by
@@ -131,9 +189,30 @@ describe('the canonical form of a value', () => {
 
   it('refuses what is not a value', () => {
     expect(() => encodeCanonicalValue(undefined)).toThrow();
-    expect(() => encodeCanonicalValue(Number.NaN)).toThrow();
-    expect(() => encodeCanonicalValue(Number.POSITIVE_INFINITY)).toThrow();
     expect(() => encodeCanonicalValue(() => 1)).toThrow();
+    expect(() => encodeCanonicalValue(new Date(0))).toThrow(/class/);
+    expect(() => encodeCanonicalValue({ a: new Map() })).toThrow(/class/);
+    expect(() => encodeCanonicalValue(new Float32Array(1))).toThrow(/class/);
+    expect(() => encodeCanonicalValue('a\ud800')).toThrow(/lone surrogate/);
+    expect(() => encodeCanonicalValue({ '\udc00': 1 })).toThrow(/lone surrogate/);
+    expect(() => encodeCanonicalValue(2n ** 64n)).toThrow();
+  });
+
+  it('writes the values of every kind as their bytes, and reads them back', () => {
+    for (const [name, json, hex] of KINDS) {
+      const value = valueFromJSON(json);
+      const bytes = encodeCanonicalValue(value);
+      expect(hexOf(bytes), name).toBe(hex);
+      expect(JSON.parse(stringifyValueJSON(decodeCanonicalValue(bytes) as Value)), name).toEqual(
+        json,
+      );
+    }
+  });
+
+  it('writes a bigint as the number or the big integer it is, and a Uint8Array as bytes', () => {
+    expect(hexOf(encodeCanonicalValue(5n))).toBe(hexOf(encodeCanonicalValue(5)));
+    expect(hexOf(encodeCanonicalValue(2n ** 53n))).toBe('0b8080808080808020');
+    expect(hexOf(encodeCanonicalValue(new Uint8Array([0, 1, 2, 255])))).toBe('0a04000102ff');
   });
 
   it('refuses a value nested deeper than the limit, and takes one exactly at it', () => {
@@ -174,11 +253,9 @@ describe('the canonical form of a value', () => {
     const long = 'x'.repeat(300);
     const values: unknown[] = [
       'a🗾b',
-      '\ud800',
-      'a\udc00b',
       long,
       `${long}日本`,
-      { '\ue000': 1, '🗾': 2, '｡': 3, a: 4, '\ud800': 5, '\udc00': 6, [long]: 7 },
+      { '\ue000': 1, '🗾': 2, '｡': 3, a: 4, [long]: 7 },
       { zeta: 1, alpha: [{ beta: 'é', alpha: null }], gamma: { b: 2, a: 1 } },
       // More keys than are put in order one by one
       Object.fromEntries(Array.from({ length: 40 }, (_, i) => [`k${(i * 7) % 40}`, i])),
@@ -207,7 +284,7 @@ describe('the canonical form of a value', () => {
   it('adds the bytes of a value to a column, and nothing for a value refused', () => {
     const builder = new Utf8ColumnBuilder(1);
     appendCanonicalValue({ a: [1, 'b'] }, builder);
-    expect(() => appendCanonicalValue({ a: Number.NaN }, builder)).toThrow();
+    expect(() => appendCanonicalValue({ a: new Date(0) }, builder)).toThrow();
     appendCanonicalValue('c', builder);
     const column = builder.finish();
     expect(column.offsets.length).toBe(3);

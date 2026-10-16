@@ -20,6 +20,7 @@ import {
   VALUE_NESTED,
   VALUE_NULL,
   VALUE_NUMBER,
+  VALUE_OTHER,
   VALUE_STRING,
   VALUE_TRUE,
   type ValueColumn,
@@ -36,6 +37,7 @@ import {
   TAG_INTEGER,
   TAG_NESTED,
   TAG_NULL,
+  TAG_OTHER,
   TAG_STRING,
   TAG_TRUE,
 } from './row-block-write.js';
@@ -58,6 +60,7 @@ const VALUE_OF_TAG = [
   VALUE_STRING,
   VALUE_NESTED,
   VALUE_NUMBER,
+  VALUE_OTHER,
 ];
 
 /** The most rows of a row block */
@@ -449,7 +452,7 @@ function readColumn(r: ByteSource, n: number): ValueColumn {
   let refs: Int32Array | null = null;
   for (let k = 0; k < count; k++) {
     const tag = tagBytes[k];
-    if (tag > TAG_INTEGER) throw formatError(`a value of the tag ${tag}`);
+    if (tag > TAG_OTHER) throw formatError(`a value of the tag ${tag}`);
     if (tag === TAG_ABSENT && rows) throw formatError('an absent entry in a sparse column');
     tags[k] = VALUE_OF_TAG[tag];
     switch (tag) {
@@ -462,10 +465,24 @@ function readColumn(r: ByteSource, n: number): ValueColumn {
         numbers[k] = floats.get();
         break;
       case TAG_STRING:
-      case TAG_NESTED: {
+      case TAG_NESTED:
+      case TAG_OTHER: {
         refs ??= new Int32Array(count);
         const ref = refSource.uint();
         if (ref >= dictionaryCount) throw formatError('a value out of the dictionary');
+        // A nested value is an array or an object, a value of another kind one of the kinds 8 to
+        // 15 of the canonical bytes
+        if (tag !== TAG_STRING) {
+          const kind =
+            dictionary.offsets[ref] < dictionary.offsets[ref + 1]
+              ? dictionary.bytes[dictionary.offsets[ref]]
+              : -1;
+          const nested = kind === 6 || kind === 7;
+          const other = kind >= 8 && kind <= 15;
+          if (tag === TAG_NESTED ? !nested : !other) {
+            throw formatError(`a value of the kind ${kind} under the tag ${tag}`);
+          }
+        }
         refs[k] = ref;
         textEntries++;
         break;
