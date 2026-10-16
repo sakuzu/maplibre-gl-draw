@@ -16,6 +16,7 @@ import { drawProperties } from '../../../shared/properties.js';
 import { coordinatesOf } from '../../../shared/utils/coordinates.js';
 import { getCircleRadius } from '../../../shared/utils/property.js';
 import type { Feature, FeatureCoordinates, FeatureType } from '../../../store/types.js';
+import type { Value } from '../../../table/value.js';
 import { applyResult } from './apply.js';
 import { toBufferGeometry, toResultGeometry } from './targets.js';
 import type { BufferOptions, GeometryDeps } from './types.js';
@@ -25,7 +26,7 @@ interface BufferPlan {
   input: Feature;
   geometry: { type: FeatureType; coordinates: FeatureCoordinates };
   /** Only in the Circle special case, it holds the properties with the radius replaced */
-  properties?: Record<string, unknown>;
+  properties?: Record<string, Value>;
 }
 
 /**
@@ -47,7 +48,11 @@ function planCircleBuffer(input: Feature, distanceMeters: number): BufferPlan | 
     geometry: { type: 'Circle', coordinates: coordinatesOf(input) },
     // It stays a Circle, so the properties including radiusHandleAngle are inherited and only
     // the radius is replaced.
-    properties: { ...input.properties, ...drawProperties({ radiusMeters: nextRadius }) },
+    // The values of the library are numbers
+    properties: {
+      ...input.properties,
+      ...(drawProperties({ radiusMeters: nextRadius }) as Record<string, Value>),
+    },
   };
 }
 

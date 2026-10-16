@@ -10,10 +10,11 @@
 
 import { describe, expect, it } from 'vitest';
 import type { Feature } from '../../store/types.js';
+import type { Value } from '../../table/value.js';
 import { drawPropertyKey } from '../properties.js';
 import { getCreatedZoom, getRotation, getScale, setCreatedZoom } from './property.js';
 
-function featureWith(properties: Record<string, unknown>): Feature {
+function featureWith(properties: Record<string, Value>): Feature {
   return {
     id: 'f',
     type: 'Point',
@@ -32,7 +33,7 @@ describe('getter/setter round trip of the internal meta', () => {
     const props: Record<string, unknown> = {};
     setCreatedZoom(props, 12);
     expect(props[drawPropertyKey('createdZoom')]).toBe(12);
-    expect(getCreatedZoom(featureWith(props))).toBe(12);
+    expect(getCreatedZoom(featureWith(props as Record<string, Value>))).toBe(12);
   });
 
   it('rotation defaults to 0', () => {

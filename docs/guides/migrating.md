@@ -660,7 +660,7 @@ documentation always said). An app that called `setStyle` with
 
 3.0 lets a store hold the features of a layer as rows of columns (see
 [the change log](../../CHANGELOG.md#unreleased)). An app over the
-default store changes in three places.
+default store changes in four places.
 
 `Layer` and `Group` are unions told apart by `kind`. A layer held as rows
 (`kind: 'table'`) has no `items`, and a group of it no `featureIds`.
@@ -697,6 +697,24 @@ draw.on('document.changed', (change) => {
 
 `TableGeometry.dimensions` of a dataset takes the names of GeoArrow:
 `'xy'` for `2` and `'xyz'` for `3`.
+
+The values of `properties` are `Value`s. A date, a time and the id of
+another feature are values of their own kinds (`CalendarDate`,
+`DateTime`, `TimeOfDay`, `Reference`, ...), which `JSON.stringify`
+writes as their JSON form (`{"$date": text}`). A `Date` is
+refused with `invalid-input`, since it is an instant and a day given as
+one shifts with the time zone: give a date-time or a day of its own.
+
+```ts
+import { CalendarDate, DateTime } from '@sakuzu/maplibre-gl-draw';
+
+draw.features.update(featureId, {
+  properties: {
+    updated: DateTime.fromDate(new Date()), // an instant, UTC
+    opened: CalendarDate.of(1998, 4, 1), // a day
+  },
+});
+```
 
 A store of your own needs no change. A store that keeps the items of its
 layers as lists makes `DocumentChange.order` from the lists before and

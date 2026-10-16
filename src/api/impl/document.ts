@@ -9,6 +9,7 @@ import type { FeatureCollection } from 'geojson';
 import { deleteFeaturesAndGroups } from '../../store/feature-stream.js';
 import { insertGroup } from '../../store/item-lists.js';
 import type { Coordinate } from '../../store/types.js';
+import { parseJSONKeepingIntegers } from '../../table/value.js';
 import type { DocumentResource } from '../document.js';
 import { DrawError } from '../errors.js';
 import type { StoreView } from '../extension/store.js';
@@ -329,12 +330,16 @@ async function readSource(source: LoadSource): Promise<ReadSource> {
   return { kind: 'data', data: source };
 }
 
-/** Parses JSON text; text that is not JSON cannot be read */
+/**
+ * Parses JSON text, keeping an integer outside the range of a number as it is written (a big
+ * integer, not a rounded number); text that is not JSON cannot be read
+ */
 function parseJSON(text: string): unknown {
   try {
-    return JSON.parse(text);
+    return parseJSONKeepingIntegers(text);
   } catch (error) {
-    throw asDrawError('unsupported-format', error);
+    const message = error instanceof Error ? error.message : String(error);
+    throw new DrawError('unsupported-format', message, { cause: error });
   }
 }
 

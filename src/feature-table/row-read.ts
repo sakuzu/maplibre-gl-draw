@@ -23,6 +23,7 @@ import {
   type RowBlockData,
 } from '../table/row-group-types.js';
 import { utf8String } from '../table/utf8-column.js';
+import type { Value } from '../table/value.js';
 import {
   readNumberValue,
   readValue,
@@ -96,11 +97,12 @@ export function rowProperties(
   group: RowGroup,
   row: number,
   strings?: ValueStringCache,
-): Record<string, unknown> {
+): Record<string, Value> {
   const { keys, columns } = group.data.properties;
-  const out: Record<string, unknown> = {};
+  const out: Record<string, Value> = {};
   for (let i = 0; i < keys.length; i++) {
-    const value = readValue(columns[i], row, strings);
+    // A column holds values only
+    const value = readValue(columns[i], row, strings) as Value | undefined;
     if (value !== undefined) setOwnProperty(out, keys[i], value);
   }
   group.values?.forEach(row, (key, written) => {

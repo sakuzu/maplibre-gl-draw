@@ -19,6 +19,7 @@ import type {
   Feature as StoredFeature,
   FeatureStyle as StoredFeatureStyle,
 } from '../../store/types.js';
+import { type Value, valueOfInput } from '../../table/value.js';
 import { getStyleRuleChannel, resolveFeatureStyle } from '../../view/style-rule.js';
 import { DrawError } from '../errors.js';
 import type { FeaturesCollection } from '../features.js';
@@ -617,7 +618,7 @@ function prepareFeature(
     geometry: input.geometry,
     layerId,
     groupId: group?.id,
-    properties: withoutUndefined(input.properties ?? {}),
+    properties: propertiesOfInput(input.properties ?? {}),
     style: withoutUndefined(input.style ?? {}) as StoredFeatureStyle,
     visible: input.visible ?? true,
     locked: input.locked ?? false,
@@ -643,6 +644,7 @@ export function checkSharedPatch(patch: unknown): FeaturePatch {
   if (record.properties !== undefined && !isRecord(record.properties)) {
     throw invalidInput('properties must be an object');
   }
+  if (record.properties !== undefined) patchOfProperties(record.properties);
   if (record.style !== undefined) {
     const problem = describeStyleProblem(record.style as never);
     if (problem) throw invalidInput(`The patch has ${problem}`);
@@ -678,7 +680,10 @@ export function preparePatch(feature: StoredFeature, patch: FeaturePatch): Parti
   }
   if (patch.properties !== undefined) {
     if (!isRecord(patch.properties)) throw invalidInput('properties must be an object');
-    updates.properties = merged(feature.properties, patch.properties);
+    updates.properties = merged(
+      feature.properties,
+      patchOfProperties(patch.properties as Record<string, unknown>),
+    ) as Record<string, Value>;
   }
   if (patch.style !== undefined) {
     const problem = describeStyleProblem(patch.style);
@@ -710,6 +715,38 @@ function merged(
 /** A copy without the keys whose value is undefined */
 function withoutUndefined(value: object): Record<string, unknown> {
   return merged({}, value as Record<string, unknown>);
+}
+
+/**
+ * The properties of an input, each value in the one form of a value, without the keys whose
+ * value is undefined
+ *
+ * @throws DrawError `invalid-input` when a value is not a value
+ */
+function propertiesOfInput(properties: Record<string, unknown>): Record<string, Value> {
+  const out: Record<string, Value> = {};
+  for (const [key, value] of Object.entries(properties)) {
+    if (value !== undefined) setOwnProperty(out, key, valueOfInput(value, `The property ${key}`));
+  }
+  return out;
+}
+
+/**
+ * A patch of properties with each value in the one form of a value; undefined stays, to take
+ * the key off
+ *
+ * @throws DrawError `invalid-input` when a value is not a value
+ */
+function patchOfProperties(patch: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(patch)) {
+    setOwnProperty(
+      out,
+      key,
+      value === undefined ? undefined : valueOfInput(value, `The property ${key}`),
+    );
+  }
+  return out;
 }
 
 // ============================================================================

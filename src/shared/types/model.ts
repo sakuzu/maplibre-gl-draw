@@ -9,6 +9,7 @@
  */
 
 import type { Geometry, Position } from 'geojson';
+import type { Value } from '../../table/value.js';
 
 /**
  * A position as `[longitude, latitude]` in degrees (WGS 84), in the same order as GeoJSON
@@ -353,7 +354,7 @@ export interface Feature {
    * Image. Every other key is an attribute of the user, free-form; `name` and `description`
    * are read as the name and the description. Exports write them as they are.
    */
-  properties: Record<string, unknown>;
+  properties: { [key: string]: Value };
   /**
    * The style of this feature, `{}` when it has none of its own (the defaults and the layer's
    * style rule apply to the keys it leaves out)

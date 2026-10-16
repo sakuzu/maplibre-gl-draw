@@ -163,12 +163,13 @@ function countChanged(a: Picture, b: Picture, x: number, y: number, radius: numb
 
 /** Replaces every feature with the given ones */
 async function show(page: Page, features: FeatureInput[]): Promise<void> {
-  await page.evaluate((list) => {
+  // Passed as JSON: the type of the values of the properties is too deep for the arguments of a page
+  await page.evaluate((json: string) => {
     const { draw } = window as unknown as E2EWindow;
     draw.setMode('select');
     draw.features.deleteMany(draw.features.list().map((feature) => feature.id));
-    draw.features.createMany(list);
-  }, features);
+    draw.features.createMany(JSON.parse(json) as FeatureInput[]);
+  }, JSON.stringify(features));
   await settle(page);
 }
 

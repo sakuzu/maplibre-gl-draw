@@ -26,6 +26,7 @@ import type {
   LoadResult,
   SkippedFeature,
 } from '../../../store/types.js';
+import { rewriteReferences, type Value, valueOfInput } from '../../../table/value.js';
 import { DrawError, type DrawErrorCode } from '../../errors.js';
 import type { EmbeddedFileProblem } from './embedded-file.js';
 import { isEmbeddedFileProblem, normalizeEmbeddedFile } from './embedded-file.js';
@@ -60,7 +61,7 @@ interface GeoJSONFeatureMeta {
 function convertSingleGeometry(
   geometry: GeoJSON.Point | GeoJSON.LineString | GeoJSON.Polygon,
   meta: GeoJSONFeatureMeta,
-  userProperties: Record<string, unknown>,
+  userProperties: Record<string, Value>,
   featureType: unknown,
   fileData: FileData | undefined,
 ): ConvertedFeatureResult | null {
@@ -119,7 +120,7 @@ function convertSingleGeometry(
 function convertMultiGeometry(
   geometry: GeoJSON.MultiPoint | GeoJSON.MultiLineString | GeoJSON.MultiPolygon,
   meta: GeoJSONFeatureMeta,
-  userProperties: Record<string, unknown>,
+  userProperties: Record<string, Value>,
   featureType: unknown,
 ): ConvertedFeatureResult[] | null {
   if (geometry.coordinates.length === 0) return null;
@@ -151,7 +152,7 @@ function flattenMultiGeometry<T>(
   toGeometry: (coords: T) => GeoJSON.Point | GeoJSON.LineString | GeoJSON.Polygon,
   generateFeatureId: () => string,
   meta: Omit<GeoJSONFeatureMeta, 'id'>,
-  userProperties: Record<string, unknown>,
+  userProperties: Record<string, Value>,
   featureType: unknown,
   fileData: FileData | undefined,
 ): ConvertedFeatureResult[] | null {
@@ -226,7 +227,7 @@ function collectGeometryCollectionParts(
 function convertGeometryCollection(
   geometry: GeoJSON.GeometryCollection,
   meta: Omit<GeoJSONFeatureMeta, 'id'>,
-  userProperties: Record<string, unknown>,
+  userProperties: Record<string, Value>,
   generateFeatureId: () => string,
 ): ConvertedFeatureResult[] | null {
   const buckets = {
@@ -512,8 +513,9 @@ export function convertGeoJSONToFeature(
   // - with a prefix and one of this library's own values: added as is
   // - any other prefixed key (id, layerId, style, visible, locked and so on): excluded
   //   (they are handled separately)
-  // Keys are defined as own properties so that a `__proto__` key stays an ordinary key.
-  const userProperties: Record<string, unknown> = {};
+  // Keys are defined as own properties so that a `__proto__` key stays an ordinary key. Each
+  // value is held in the one form of a value, and a value that is not one refuses the feature.
+  const userProperties: Record<string, Value> = {};
   if (properties) {
     for (const [key, value] of Object.entries(properties)) {
       if (key.startsWith(DRAW_PROPERTY_PREFIX)) {
@@ -521,10 +523,10 @@ export function convertGeoJSONToFeature(
         // added here. Anything else that is not a value of this library (id, layerId, style,
         // featureType, visible, locked, imageData and so on) is excluded
         if (LIBRARY_KEYS.has(key) && (key !== drawPropertyKey('imageFileId') || !embedsImage)) {
-          setOwnProperty(userProperties, key, value);
+          setOwnProperty(userProperties, key, valueOfInput(value, `The property ${key}`));
         }
-      } else {
-        setOwnProperty(userProperties, key, value);
+      } else if (value !== undefined) {
+        setOwnProperty(userProperties, key, valueOfInput(value, `The property ${key}`));
       }
     }
   }
@@ -809,8 +811,16 @@ export async function prepareGeoJSON(
 
     const forcedLayerId = options?.layerId;
     const oneGroup = options?.oneGroup === true;
+    // The new ID of each ID of the file that was taken (the first feature of an ID names it)
+    const renamed: Record<string, string> = {};
+    const seenIds = new Set<string>();
     for (const { feature } of results) {
-      feature.id = resolveId(feature.id);
+      const before = feature.id;
+      feature.id = resolveId(before);
+      if (!seenIds.has(before)) {
+        seenIds.add(before);
+        if (feature.id !== before) setOwnProperty(renamed, before, feature.id);
+      }
       // References are resolved against this store: a layer given to the load wins over the one
       // the feature names, a layer the store does not have falls back to the current layer, and a
       // group it does not have (or a group of another layer, or any group when the groups are
@@ -826,6 +836,16 @@ export async function prepareGeoJSON(
       if (feature.groupId !== undefined) {
         const group = replace ? undefined : store.getGroup(feature.groupId);
         if (!group || group.layerId !== feature.layerId) delete feature.groupId;
+      }
+    }
+
+    // A reference to a feature that took a new ID names the new one
+    if (Object.keys(renamed).length > 0) {
+      for (const { feature } of results) {
+        feature.properties = rewriteReferences(feature.properties, renamed) as Record<
+          string,
+          Value
+        >;
       }
     }
 

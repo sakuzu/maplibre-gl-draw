@@ -27,6 +27,7 @@ import type {
   TableGeometry,
   TableMixedGeometry,
 } from './types.js';
+import type { Value } from './value.js';
 
 /** The number of offset arrays of each geometry type */
 const OFFSET_LEVELS: Readonly<Record<GeometryType, number>> = {
@@ -447,10 +448,11 @@ export class TableReader {
   }
 
   /** The value of every column at a row */
-  propertiesOf(row: number): Record<string, unknown> {
-    const properties: Record<string, unknown> = {};
+  propertiesOf(row: number): Record<string, Value> {
+    // The columns of a table hold strings, numbers, booleans and null
+    const properties: Record<string, Value> = {};
     for (const name of this.columnNames) {
-      setOwnProperty(properties, name, columnValue(this.columns[name], row));
+      setOwnProperty(properties, name, columnValue(this.columns[name], row) as Value);
     }
     return properties;
   }

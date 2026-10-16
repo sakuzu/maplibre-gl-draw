@@ -128,7 +128,28 @@ writing it. Its changes are listed after those of 3.0.0.
   of a document held as rows into a new store of rows a block at a time,
   to draw it apart without making its features.
 
+- The values of the attributes (`Value`), from the main entry and from
+  `/kasane`: the classes of the kinds JSON has not (`BigInteger`,
+  `Decimal`, `Bytes`, `CalendarDate`, `TimeOfDay`, `DateTime` local, UTC
+  or with an offset and to the nanosecond, `Duration` and `Reference`),
+  each frozen and written by `JSON.stringify` as its JSON form;
+  `sameValue`, `isValue`, `valueToJSON`, `valueFromJSON`,
+  `parseValueJSON` and `stringifyValueJSON`, which reads an integer
+  outside the range of a number as a big integer; and
+  `rewriteReferences`, which makes the references of a copy name the
+  copies. The tables and Tabane hold every kind, NaN, the infinities and
+  -0 included.
+
 ### Changed in 3.0.0
+
+- The values of `properties` are `Value`s (`DrawProperties`). A bigint
+  is held as a number or a `BigInteger`, a `Uint8Array` as `Bytes`, and
+  a `Date`, a `Map`, an instance of another class, a function or a
+  string with a lone surrogate is refused with `invalid-input`.
+- `document.load` of a text keeps an integer outside the range of a
+  number as a `BigInteger`, the values of a document of the library are
+  read from their JSON form, and a `Reference` to a feature that takes a
+  new ID on a load or a parse names the new ID.
 
 - `Layer` and `Group` are unions told apart by `kind`. A layer held as
   rows has no `items`, and a group of it no `featureIds`: narrow by

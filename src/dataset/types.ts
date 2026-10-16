@@ -14,6 +14,7 @@ import type { ProjectionData } from 'maplibre-gl';
 import type { BoundingBox, Coordinate, Feature, Layer, StyleRule } from '../shared/types/model.js';
 import type { PixelRatioInput } from '../shared/utils/pixel-ratio.js';
 import type { PreparedTable, Table } from '../table/types.js';
+import type { Value } from '../table/value.js';
 import type { RetainedDrawFactors } from '../view/renderers/draw-factors.js';
 import type { PointStyle } from '../view/renderers/point/point-shape.js';
 import type { RetainedRendererSet } from '../view/renderers/retained.js';
@@ -589,7 +590,8 @@ function truncatePositions(value: readonly unknown[]): unknown[] {
  */
 export function normalizeDisplayFeature(input: DatasetRow, index: number): Feature {
   const id = input.id === undefined || input.id === null ? String(index) : String(input.id);
-  const properties = (input.properties ?? {}) as Record<string, unknown>;
+  // The rows of a dataset are read as GeoJSON: their properties are values of JSON
+  const properties = (input.properties ?? {}) as Record<string, Value>;
   const geometry = input.geometry;
   if (!geometry || geometry.type === 'GeometryCollection') {
     return {

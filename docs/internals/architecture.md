@@ -233,8 +233,10 @@ their reading and writing sides (`api/tables.ts`); the drawing modes of
 to; the Store of core reads the public `Store` it is programmed against;
 the point hit test reads the public `Feature`; `view/shaders/` reads the
 shader types of the render context; `view/layer/` reads `DatasetManager`
-to draw datasets in the same pass; and the snap marker reads the line
-renderer's style type.
+to draw datasets in the same pass; the snap marker reads the line
+renderer's style type; and the `Feature` of `shared/` reads the type of the
+values of its properties (`Value` of `table/value.ts`, the values of the
+tables).
 `npm run check:layers` prints the current list.
 
 ## The Store

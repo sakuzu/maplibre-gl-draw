@@ -53,6 +53,29 @@
 
 // biome-ignore-all assist/source/organizeImports: the exports are grouped by task
 
+// The values of the attributes
+export type { Value } from '../table/value.js';
+export {
+  isValue,
+  parseValueJSON,
+  rewriteReferences,
+  sameValue,
+  stringifyValueJSON,
+  valueFromJSON,
+  valueToJSON,
+} from '../table/value.js';
+export type { DateTimeZone } from '../table/value-kinds.js';
+export {
+  BigInteger,
+  Bytes,
+  CalendarDate,
+  DateTime,
+  Decimal,
+  Duration,
+  Reference,
+  TimeOfDay,
+} from '../table/value-kinds.js';
+
 // Stores that hold features as rows
 export type {
   CreatedRows,

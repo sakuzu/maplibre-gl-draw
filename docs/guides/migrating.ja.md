@@ -671,7 +671,7 @@ Store を差し替えるときは、これまでどおり `options.store` に渡
 
 3.0 では、ストアがレイヤーの地物を列の行で持てるようになりました
 ([変更履歴](../../CHANGELOG.md#unreleased))。標準のストアを使う
-アプリで変わるところは 3 つです。
+アプリで変わるところは 4 つです。
 
 `Layer` と `Group` は、`kind` で見分ける共用体になりました。行で持つ
 レイヤー (`kind: 'table'`) は `items` を持たず、そのグループは
@@ -708,6 +708,24 @@ draw.on('document.changed', (change) => {
 
 データセットの `TableGeometry.dimensions` は GeoArrow の名前を取り
 ます。`2` は `'xy'`、`3` は `'xyz'` です。
+
+`properties` の値は `Value` になりました。日付、時刻、ほかの地物の
+id は、それぞれの種類の値 (`CalendarDate`、`DateTime`、`TimeOfDay`、
+`Reference` など) です。`JSON.stringify` は、これらを JSON の形
+(`{"$date": text}`) で書きます。`Date` は `invalid-input` で
+断ります。`Date` は瞬間なので、日付を `Date` で渡すと時差で日が
+ずれるためです。日時か日付の値で渡します。
+
+```ts
+import { CalendarDate, DateTime } from '@sakuzu/maplibre-gl-draw';
+
+draw.features.update(featureId, {
+  properties: {
+    updated: DateTime.fromDate(new Date()), // 瞬間 (UTC)
+    opened: CalendarDate.of(1998, 4, 1), // 日付
+  },
+});
+```
 
 自前のストアは変えなくて構いません。レイヤーの項目をリストで持つ
 ストアは、変更の前と後のリストから `diffItemOrder` で

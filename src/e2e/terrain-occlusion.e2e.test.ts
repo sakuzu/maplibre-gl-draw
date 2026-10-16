@@ -308,9 +308,10 @@ type Stroke = 'solid' | 'dashed';
 
 /** Adds a feature of the document */
 async function createFeature(feature: FeatureInput): Promise<string> {
+  // Given as unknown: the type of the values of the properties is too deep for the arguments
   const id = await page.evaluate(
-    (f) => (window as unknown as TestWindow).draw.features.create(f)?.id ?? null,
-    feature,
+    (f) => (window as unknown as TestWindow).draw.features.create(f as FeatureInput)?.id ?? null,
+    feature as unknown,
   );
   if (id === null) throw new Error('the feature was not added');
   return id;

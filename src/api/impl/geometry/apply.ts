@@ -19,6 +19,7 @@ import type {
   FeatureType,
   ItemPlacement,
 } from '../../../store/types.js';
+import type { Value } from '../../../table/value.js';
 import type { GeometryDeps } from './types.js';
 
 /**
@@ -54,7 +55,7 @@ function planPlacement(
 /**
  * Inherits the style and the properties from the input it inherits from.
  */
-function inheritProperties(anchor: Feature): Record<string, unknown> {
+function inheritProperties(anchor: Feature): Record<string, Value> {
   const properties = { ...anchor.properties };
   for (const name of CIRCLE_ONLY_PROPERTIES) {
     setDrawProperty(properties, name, undefined);
@@ -80,7 +81,7 @@ export interface CommitParams {
    * It is given explicitly only when the result stays a Circle (the Circle special case of the
    * buffer).
    */
-  properties?: Record<string, unknown>;
+  properties?: Record<string, Value>;
 }
 
 /**

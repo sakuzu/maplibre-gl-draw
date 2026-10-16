@@ -22,6 +22,7 @@ import { drawPropertyKey } from '../shared/properties.js';
 import type { Feature } from '../shared/types/model.js';
 import { createRowBlockDataBuilder } from '../table/row-group-builder.js';
 import { utf8ColumnFromStrings } from '../table/utf8-column.js';
+import type { Value } from '../table/value.js';
 import { feature, orderKey, rowOfFeature, seededRandom, tablesOfFeatures } from '../test-utils.js';
 import { createFeatureTablesStore, featureTablesInternals } from './feature-tables.js';
 import {
@@ -311,7 +312,7 @@ describe('writes at random against a list of features', () => {
           value = random() < 0.2 ? undefined : random() < 0.5 ? random() * 100 : `v${step}`;
           const properties = { ...current.properties };
           if (value === undefined) delete properties[key];
-          else properties[key] = value;
+          else properties[key] = value as Value;
           alive[i] = { ...current, properties };
         } else {
           writer.apply({

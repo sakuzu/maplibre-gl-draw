@@ -11,6 +11,7 @@
  */
 
 import type { Data, Feature, FileData, Group, Layer } from '../../../store/types.js';
+import { type Value, valueFromJSON } from '../../../table/value.js';
 import { DrawError } from '../../errors.js';
 import { NATIVE_VERSION } from './constants.js';
 import type { EmbeddedFileProblem } from './embedded-file.js';
@@ -133,7 +134,14 @@ function validateFeature(
   // store accepts any value through its API, so the library's own export can carry one. A
   // feature without a usable style gets the empty style
   const style = feature.style === undefined ? undefined : sanitizeFeatureStyle(feature.style);
-  return { ...feature, style: style ?? {} } as unknown as Feature;
+  // The values of the properties are read from their JSON form (a date is {"$date": text})
+  let properties: Value;
+  try {
+    properties = valueFromJSON(feature.properties);
+  } catch (error) {
+    fail(`${where} has properties that are not values: ${(error as Error).message}`);
+  }
+  return { ...feature, properties, style: style ?? {} } as unknown as Feature;
 }
 
 /**

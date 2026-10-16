@@ -180,11 +180,12 @@ async function drawDataset(
 
 /** Replaces the drawn features with these and reads the picture */
 async function drawFeatures(page: Page, inputs: FeatureInput[]): Promise<Picture> {
-  await page.evaluate((inputs) => {
+  // Passed as JSON: the type of the values of the properties is too deep for the arguments of a page
+  await page.evaluate((json: string) => {
     const { draw } = window as unknown as TestWindow;
     draw.features.deleteMany(draw.features.list().map((feature) => feature.id));
-    draw.features.createMany(inputs);
-  }, inputs);
+    draw.features.createMany(JSON.parse(json) as FeatureInput[]);
+  }, JSON.stringify(inputs));
   return measure(page);
 }
 

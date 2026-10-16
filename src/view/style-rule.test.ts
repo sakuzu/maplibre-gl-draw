@@ -14,6 +14,7 @@ import { describe, expect, it } from 'vitest';
 import { MESSAGES_EN } from '../messages.js';
 import { geometryFromCoordinates } from '../shared/utils/coordinates.js';
 import type { Feature, FeatureStyle, StyleRule } from '../store/types.js';
+import type { Value } from '../table/value.js';
 import {
   applyRuleColor,
   deriveLegend,
@@ -24,7 +25,7 @@ import {
 } from './style-rule.js';
 
 function makeFeature(
-  properties: Record<string, unknown>,
+  properties: Record<string, Value>,
   style?: FeatureStyle,
   type: Feature['type'] = 'Polygon',
 ): Feature {

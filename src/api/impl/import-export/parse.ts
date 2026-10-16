@@ -16,6 +16,7 @@ import { createId } from '../../../shared/utils/id.js';
 import { listedMembers } from '../../../shared/utils/listed-items.js';
 import { setOwnProperty } from '../../../shared/utils/own-property.js';
 import type { Feature, FileData, Group } from '../../../store/types.js';
+import { rewriteReferences } from '../../../table/value.js';
 import { DrawError } from '../../errors.js';
 import type { GroupInput, LayerInput, ParsedDocument } from '../../model.js';
 import { invalidInput, isRecord, onlyKeys, optionalBoolean, requireId } from '../shared.js';
@@ -147,6 +148,7 @@ export function parseGeoJSONInput(input: unknown, options?: unknown): Promise<Pa
       }
     }
 
+    rewriteFeatureReferences(features, idMap);
     return {
       features,
       groups: [...groups.values()],
@@ -250,6 +252,7 @@ export function parseNativeInput(input: unknown, options?: unknown): Promise<Par
     for (const [from, to] of groupIds) if (keptGroups.has(to)) recordId(idMap.groups, from, to);
     for (const [from, to] of fileIds) recordId(idMap.files, from, to);
     for (const [from, to] of layerIds) recordId(idMap.layers, from, to);
+    rewriteFeatureReferences(features, idMap);
 
     return { features, groups, files: parsedFiles, layers, skipped, idMap };
   });
@@ -292,4 +295,20 @@ function parseGroups(
     });
   }
   return result;
+}
+
+/**
+ * Rewrites the references in the properties of the features read to the records that took new
+ * IDs: a reference names the new ID of a feature, else of a group, else of a layer of the input
+ * (a reference to anything else stays as it is)
+ */
+function rewriteFeatureReferences(features: Feature[], idMap: IdMap): void {
+  const ids: Record<string, string> = {};
+  for (const map of [idMap.layers, idMap.groups, idMap.features]) {
+    for (const [from, to] of Object.entries(map)) setOwnProperty(ids, from, to);
+  }
+  if (Object.keys(ids).length === 0) return;
+  for (const feature of features) {
+    feature.properties = rewriteReferences(feature.properties, ids) as Feature['properties'];
+  }
 }

@@ -17,6 +17,7 @@
 import type { Geometry } from 'geojson';
 import { describe, expect, it } from 'vitest';
 import type { Feature } from '../shared/types/model.js';
+import type { Value } from '../table/value.js';
 import { feature, tablesOfFeatures } from '../test-utils.js';
 import { hitTestLayerTable } from './hit-test.js';
 import { overrideBytesOf } from './layer-table.js';
@@ -32,7 +33,7 @@ import { writeRowGeometry, writeRowValue } from './row-write.js';
 import { OVERRIDE_BYTES_LIMIT } from './value-overrides.js';
 
 /** Points whose attributes are the ones given */
-function points(properties: Array<Record<string, unknown>>): Feature[] {
+function points(properties: Array<Record<string, Value>>): Feature[] {
   return properties.map((p, i) => feature(`p${i}`, 'Point', [i, i], { properties: p }));
 }
 
@@ -58,7 +59,7 @@ describe('the attributes written in place', () => {
         kind: 'shop',
       })),
     );
-    const writes: Array<[number, string, unknown]> = [
+    const writes: Array<[number, string, Value | undefined]> = [
       [0, 'name', 'a much longer name than before'],
       [1, 'height', 12.5],
       [2, 'tag', 'b'],

@@ -18,6 +18,7 @@ import {
 import type { FeatureCoordinates } from '../../shared/types/model.js';
 import { geometryFromCoordinates } from '../../shared/utils/coordinates.js';
 import type { Coordinate, Feature, FeatureStyle, Layer, StyleRule } from '../../store/types.js';
+import type { Value } from '../../table/value.js';
 import { StyleRuleCache } from '../cache/style-rule.js';
 import { FeatureDrawer } from './drawer.js';
 import type { ImageRenderer } from './image.js';
@@ -291,7 +292,7 @@ describe('FeatureDrawer evaluation of style rules', () => {
   function makeFeature(
     id: string,
     type: Feature['type'],
-    properties: Record<string, unknown>,
+    properties: Record<string, Value>,
     style?: FeatureStyle,
   ): Feature {
     return {

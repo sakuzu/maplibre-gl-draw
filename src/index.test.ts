@@ -177,6 +177,23 @@ const MAIN = [
   'VertexRef',
   'VertexSelection',
   'VertexSelectionResource',
+  'BigInteger',
+  'Bytes',
+  'CalendarDate',
+  'DateTime',
+  'DateTimeZone',
+  'Decimal',
+  'Duration',
+  'isValue',
+  'parseValueJSON',
+  'Reference',
+  'rewriteReferences',
+  'sameValue',
+  'stringifyValueJSON',
+  'TimeOfDay',
+  'Value',
+  'valueFromJSON',
+  'valueToJSON',
 ];
 
 /** The geometry entry (layer 1) */
@@ -324,6 +341,23 @@ const KASANE = [
   'writeTabaneBlock',
   'writeTabaneBlocks',
   'writeTabaneManifest',
+  'BigInteger',
+  'Bytes',
+  'CalendarDate',
+  'DateTime',
+  'DateTimeZone',
+  'Decimal',
+  'Duration',
+  'isValue',
+  'parseValueJSON',
+  'Reference',
+  'rewriteReferences',
+  'sameValue',
+  'stringifyValueJSON',
+  'TimeOfDay',
+  'Value',
+  'valueFromJSON',
+  'valueToJSON',
 ];
 
 /** Layer 2: the building blocks for custom shaders of src/webgl/index.ts */
@@ -426,9 +460,30 @@ describeEntry('src/kasane/index.ts', KASANE, () => import('./kasane/index.js'));
 describeEntry('src/webgl/index.ts', WEBGL, () => import('./webgl/index.js'));
 
 describe('the five entries', () => {
-  it('share no name, but the transfer list of /table, which /kasane widens to row blocks', () => {
+  it('share no name, but the transfer list of /table, which /kasane widens to row blocks, and the values of the attributes, which the main entry and /kasane both export', () => {
     const all = [...MAIN, ...GEOMETRY, ...TABLE, ...KASANE, ...WEBGL];
-    expect(all.filter((name, index) => all.indexOf(name) !== index)).toEqual(['transferList']);
+    const values = [
+      'BigInteger',
+      'Bytes',
+      'CalendarDate',
+      'DateTime',
+      'DateTimeZone',
+      'Decimal',
+      'Duration',
+      'isValue',
+      'parseValueJSON',
+      'Reference',
+      'rewriteReferences',
+      'sameValue',
+      'stringifyValueJSON',
+      'TimeOfDay',
+      'Value',
+      'valueFromJSON',
+      'valueToJSON',
+    ];
+    expect(all.filter((name, index) => all.indexOf(name) !== index).sort()).toEqual(
+      ['transferList', ...values].sort(),
+    );
   });
 });
 

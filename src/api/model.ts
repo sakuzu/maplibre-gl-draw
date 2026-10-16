@@ -21,6 +21,8 @@ import { isDrawProperty as isLibraryKey } from '../shared/properties.js';
 import type { ItemMove, ItemPlacement } from '../shared/types/model.js';
 import type { LineStyle } from '../shared/types/style.js';
 import { longestRisingRun, diffItemOrder as movesBetween } from '../shared/utils/item-moves.js';
+import type { Value } from '../table/value.js';
+import type { BigInteger, Bytes, CalendarDate, DateTime, Reference } from '../table/value-kinds.js';
 import {
   deriveLegend as deriveRuleLegend,
   evaluateStyleRule as evaluateRule,
@@ -114,8 +116,16 @@ export { DRAW_PROPERTY_PREFIX } from '../shared/properties.js';
  *
  * A key that starts with {@link DRAW_PROPERTY_PREFIX} holds a value of the library; any other
  * key is an attribute of the user. Export and load keep the keys as they are.
+ *
+ * Every value is a {@link Value}: null, a boolean, a number, a string, an array or an object of
+ * values, or one of the classes of the kinds JSON has not (a date is a {@link CalendarDate}, a
+ * date-time a {@link DateTime}, the id of another feature a {@link Reference}, ...). What is
+ * given is held in one form: a bigint becomes a number or a {@link BigInteger}, a `Uint8Array`
+ * {@link Bytes}, and a key whose value is `undefined` is left out. Anything else (a `Date`, a
+ * `Map`, an instance of another class, a function, a string with a lone surrogate) is refused
+ * with `invalid-input`.
  */
-export type DrawProperties = Record<string, unknown> & {
+export type DrawProperties = { [key: string]: Value } & {
   /** The reference zoom: the zoom the feature was drawn or created at */
   'maplibre-gl-draw:createdZoom'?: number;
   /** The rotation, in degrees */
@@ -888,8 +898,9 @@ export interface ParseOptions {
  * group of a feature, the members of a group, the file of an image) name the new IDs. Nothing
  * is named automatically: a feature without a name has none.
  *
- * A reference the library does not know, such as the ID of another feature that an application
- * or an extension keeps in `properties`, is left as it is: rewrite it with `idMap`.
+ * A {@link Reference} in `properties` to a feature, a group or a layer of the input names its
+ * new ID. An ID kept as a string, which the library cannot tell from other text, is left as it
+ * is: rewrite it with `idMap`.
  */
 export interface ParsedDocument {
   /** The features, complete, with new IDs, in the order of the input */
@@ -941,9 +952,9 @@ export interface ParsedDocument {
  * the prefixed keys, a Multi geometry stays one feature unless `flattenMulti` is given, and a
  * GeometryCollection is folded by type. Unlike a load, the IDs of the input are never kept:
  * every feature and file gets one from `generateId`, and the features that name the same group
- * with `maplibre-gl-draw:groupId` form a new group. `idMap` gives the new ID of each ID of the
- * input, for the references the library does not know, such as an ID of another feature in
- * `properties`, which are left as they are. A feature that cannot be read is left out
+ * with `maplibre-gl-draw:groupId` form a new group. A {@link Reference} in `properties` names the
+ * new ID; `idMap` gives the new ID of each ID of the input, for an ID kept as a string in
+ * `properties`, which is left as it is. A feature that cannot be read is left out
  * and reported in `skipped`, with `invalid-input`; so is a feature whose embedded image is not
  * a PNG / JPEG / WebP / GIF data URL of its declared type or cannot be decoded, and one whose
  * image the browser cannot encode when it scales it down, with `unsupported-format`.
@@ -967,8 +978,10 @@ export function parseGeoJSON(
  *
  * The document is checked as `document.load` checks it. Every layer, group, feature and file
  * gets a new ID from `generateId`, and the references between them are rewritten; the
- * metadata of the document is not read. `idMap` gives the new ID of each ID of the input, for
- * the references the library does not know, which are left as they are. A feature whose image file cannot be imported is left
+ * metadata of the document is not read. A {@link Reference} in `properties` names the new ID;
+ * `idMap` gives the new ID of each ID of the input, for an ID kept as a string, which is left as
+ * it is. The values of `properties` are read from their JSON form (`valueFromJSON`). A feature
+ * whose image file cannot be imported is left
  * out and reported in `skipped`, with `invalid-input` or `unsupported-format` as for
  * {@link parseGeoJSON}, and a group whose features are all left out is left out too.
  *

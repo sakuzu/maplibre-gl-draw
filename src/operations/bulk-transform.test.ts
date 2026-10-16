@@ -21,6 +21,7 @@ import { DrawStore } from '../store/draw-store.js';
 import { TableContractStore } from '../store/table-memory.js';
 import type { Feature, FeatureType, RowValues, StoreChange } from '../store/types.js';
 import type { CoordinateDimensions } from '../table/coordinates.js';
+import type { Value } from '../table/value.js';
 import {
   resizeBulkSelection,
   rotateBulkSelection,
@@ -57,7 +58,7 @@ function featuresOf(seed: number, count: number, z: boolean): Feature[] {
         : type === 'Polygon'
           ? [[at(x, y), at(x + 0.01, y), at(x + 0.01, y + 0.01), at(x, y)]]
           : at(x, y);
-    const properties: Record<string, unknown> = { n: i };
+    const properties: Record<string, Value> = { n: i };
     if (type === 'Circle') Object.assign(properties, drawProperties({ radiusMeters: 50 + i }));
     if (type === 'Image' || next() < 0.2) {
       Object.assign(properties, drawProperties({ rotation: Math.round(next() * 90) }));

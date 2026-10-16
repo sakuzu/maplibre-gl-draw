@@ -752,7 +752,9 @@ export class Duration {
   }
 
   /** The JSON form of the value: its text, or its members when they have both signs */
-  toJSON(): { $duration: string | DurationMembers } {
+  toJSON(): {
+    $duration: string | { months: number; days: number; seconds: number; nanoseconds: number };
+  } {
     if (mixedSigns(this)) {
       return {
         $duration: {
