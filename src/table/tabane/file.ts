@@ -55,6 +55,8 @@ export interface TabaneFilePart {
  * 0 and its length), each part compressed when a compressor is given and the part gets smaller
  *
  * @param partEnds Where the parts end (the end of the content is a cut whether given or not)
+ *
+ * @experimental
  */
 export function packTabaneFile(
   content: Uint8Array,
@@ -95,6 +97,8 @@ export function packTabaneFile(
  * The parts of a file, as stored
  *
  * @throws `DrawError` with the code `unsupported-format` when the bytes are not a file
+ *
+ * @experimental
  */
 export function listTabaneFileParts(file: Uint8Array): TabaneFilePart[] {
   const r = new ByteSource(file);
@@ -131,6 +135,8 @@ export function listTabaneFileParts(file: Uint8Array): TabaneFilePart[] {
  *
  * @throws `DrawError` with the code `unsupported-format` when the part is compressed and no
  *   compressor is given, or when it does not hold its length
+ *
+ * @experimental
  */
 export function readTabaneFilePart(
   frame: TabaneFilePart,
@@ -147,6 +153,8 @@ export function readTabaneFilePart(
  * The content of a file: its parts, decompressed and put together
  *
  * @param maxLength The most bytes of content read (a file that says more is refused)
+ *
+ * @experimental
  */
 export function unpackTabaneFile(
   file: Uint8Array,
@@ -167,6 +175,8 @@ const HEX = '0123456789abcdef';
 
 /**
  * The name of a content: its SHA-256 in lowercase hex
+ *
+ * @experimental
  */
 export async function tabaneNameOf(content: Uint8Array): Promise<string> {
   const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', content as BufferSource));

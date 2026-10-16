@@ -33,6 +33,8 @@ const KEY_DIGITS = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwx
 
 /**
  * The id of a row: its origin (13 digits of base 32) and its number
+ *
+ * @experimental
  */
 export interface TabaneId {
   readonly origin: string;
@@ -41,6 +43,8 @@ export interface TabaneId {
 
 /**
  * Whether a string is an origin: 13 digits of Crockford's base 32, the first `0` to `F`
+ *
+ * @experimental
  */
 export function isTabaneOrigin(s: string): boolean {
   if (s.length !== 13) return false;
@@ -112,6 +116,8 @@ export function base32Of(n: number): string {
 
 /**
  * The text of an id: the origin, `-`, the number in base 32
+ *
+ * @experimental
  */
 export function formatTabaneId(id: TabaneId): string {
   return `${id.origin}-${base32Of(id.number)}`;
@@ -120,6 +126,8 @@ export function formatTabaneId(id: TabaneId): string {
 /**
  * The id of a text, or null when the text is not one: 13 digits of an origin, `-`, and a number
  * from 1 to 2^53 - 1 in base 32 without leading zeros
+ *
+ * @experimental
  */
 export function parseTabaneId(text: string): TabaneId | null {
   if (text.length < 15 || text.length > 25 || text.charCodeAt(13) !== 45) return null;
@@ -140,6 +148,8 @@ export function parseTabaneId(text: string): TabaneId | null {
 /**
  * The suffix of row `i` of a run: the number of its digits (one key digit), then its digits in
  * base 61 written with `1` to `z`
+ *
+ * @experimental
  */
 export function tabaneRowSuffixOf(i: number): string {
   if (!Number.isSafeInteger(i) || i < 0)

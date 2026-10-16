@@ -30,14 +30,30 @@ import type { TabaneRow, TabaneRowBlock, TabaneRowBlockData } from './types.js';
 
 /** The first bytes of the content of a block: `TBNB` */
 export const BLOCK_MAGIC = Uint8Array.of(0x54, 0x42, 0x4e, 0x42);
-/** The version of the format the writer writes */
+/**
+ * The version of the format the writer writes
+ *
+ * @experimental
+ */
 export const TABANE_VERSION = 1;
 
-/** The most rows of a row block the writer makes when not told */
+/**
+ * The most rows of a row block the writer makes when not told
+ *
+ * @experimental
+ */
 export const TABANE_TARGET_ROWS = 1000;
-/** The most coordinates of a row block the writer makes when not told (a larger row is alone) */
+/**
+ * The most coordinates of a row block the writer makes when not told (a larger row is alone)
+ *
+ * @experimental
+ */
 export const TABANE_TARGET_VERTICES = 40_000;
-/** The most bytes of the row blocks of a block the writer makes when not told */
+/**
+ * The most bytes of the row blocks of a block the writer makes when not told
+ *
+ * @experimental
+ */
 export const TABANE_TARGET_BYTES = 4 << 20;
 
 /**
@@ -142,6 +158,8 @@ export function cutGroups(
  * Writes a block: the rows cut into row blocks
  *
  * @throws `DrawError` with the code `invalid-input` when a row cannot be written
+ *
+ * @experimental
  */
 export function writeTabaneBlock(input: TabaneBlockInput): TabaneBlock {
   const rows = input.rows;
@@ -197,6 +215,8 @@ function blockOfGroups(groups: readonly Uint8Array[], sizes: readonly number[]):
  * that follow it under the key `head` followed by `tabaneRowSuffixOf(j)`, its rows numbered from 0
  *
  * @throws `DrawError` with the code `invalid-input` when a row cannot be written
+ *
+ * @experimental
  */
 export function writeTabaneBlocks(
   input: TabaneBlockInput & { readonly targetBytes?: number },
@@ -292,6 +312,8 @@ export function readBlockHead(content: Uint8Array): BlockLayout {
  * Reads the row blocks of the content of a block
  *
  * @throws `DrawError` with the code `unsupported-format` when the bytes are not a block
+ *
+ * @experimental
  */
 export function readTabaneBlock(content: Uint8Array): TabaneRowBlock[] {
   return readBlockData(content);
@@ -316,6 +338,8 @@ export function readBlockData(content: Uint8Array): TabaneRowBlockData[] {
  * row blocks (as the writer partEnds them), else from its whole content
  *
  * @throws `DrawError` with the code `unsupported-format` when the bytes are not a block
+ *
+ * @experimental
  */
 export function readTabaneBlockFile(
   file: Uint8Array,
@@ -363,6 +387,8 @@ export function readBlockFileData(
 
 /**
  * The file of a block: its head and each row block in a part of its own
+ *
+ * @experimental
  */
 export function packTabaneBlock(block: TabaneBlock, compression?: TabaneCompression): Uint8Array {
   return packTabaneFile(block.content, block.partEnds, compression);

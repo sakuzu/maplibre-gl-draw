@@ -68,6 +68,8 @@ export const MAX_GROUP_ROWS = 1 << 20;
  *
  * @param bytes The bytes of the row block (`[start, end)`)
  * @throws `DrawError` with the code `unsupported-format` when the bytes are not a row block
+ *
+ * @experimental
  */
 export function readTabaneRowBlock(
   bytes: Uint8Array,

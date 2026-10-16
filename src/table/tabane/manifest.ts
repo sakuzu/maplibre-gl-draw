@@ -77,6 +77,8 @@ export interface TabaneManifest {
  * The entry of a block in a manifest of the partition `order`, read from its content
  *
  * @throws `DrawError` with the code `unsupported-format` when the content is not a block
+ *
+ * @experimental
  */
 export async function tabaneManifestEntryOf(block: TabaneBlock): Promise<TabaneManifestEntry> {
   const content = block.content;
@@ -128,6 +130,8 @@ export async function tabaneManifestEntryOf(block: TabaneBlock): Promise<TabaneM
  * The content of a manifest
  *
  * @throws `DrawError` with the code `invalid-input` when a value cannot be written
+ *
+ * @experimental
  */
 export function writeTabaneManifest(manifest: TabaneManifest): Uint8Array {
   const value: Record<string, unknown> = {
@@ -171,6 +175,8 @@ function isCount(v: unknown): v is number {
  *
  * @throws `DrawError` with the code `unsupported-format` when the bytes are not a manifest of a
  *   version and a partition this reader knows
+ *
+ * @experimental
  */
 export function readTabaneManifest(content: Uint8Array): TabaneManifest {
   if (content.length < 4 || MANIFEST_MAGIC.some((b, i) => content[i] !== b))
