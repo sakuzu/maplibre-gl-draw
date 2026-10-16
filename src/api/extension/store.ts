@@ -301,4 +301,14 @@ export interface Store extends StoreView {
    * to date.
    */
   recordNameNumber?(type: FeatureType | 'Layer' | 'Group', number: number): void;
+  /**
+   * Whether the Store takes a feature, a group or a layer with this id. Optional: a Store
+   * without it takes every id.
+   *
+   * A Store whose ids are made by its host (the ids of a writer of a shared document) takes the
+   * ids of that form only. A load gives a feature, a group or a layer whose id the Store does
+   * not take a new id (`generateId` of the instance), as it does to an id that is taken, and
+   * the references to it name the new one.
+   */
+  acceptsId?(id: string): boolean;
 }

@@ -68,6 +68,7 @@ const CONTRACT: ReadonlySet<string> = new Set<keyof Store>([
   'setInteractionLock',
   'setLocallyHidden',
   'getMaxNameNumber',
+  'acceptsId',
   'recordNameNumber',
 ]);
 

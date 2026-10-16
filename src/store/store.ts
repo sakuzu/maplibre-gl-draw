@@ -549,4 +549,9 @@ export interface Store extends StoreView, UiState {
   getMaxNameNumber?(type: FeatureType | 'Layer' | 'Group'): number | undefined;
   /** Tells the Store the number of a name just generated (see the public `Store.recordNameNumber`) */
   recordNameNumber?(type: FeatureType | 'Layer' | 'Group', number: number): void;
+  /**
+   * Whether the Store takes a feature, a group or a layer with this id (see the public
+   * `Store.acceptsId`); every id when it is absent
+   */
+  acceptsId?(id: string): boolean;
 }

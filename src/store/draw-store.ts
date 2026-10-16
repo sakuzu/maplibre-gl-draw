@@ -392,6 +392,9 @@ export class DrawStore implements Store {
   recordNameNumber(type: FeatureType | 'Layer' | 'Group', number: number): void {
     this.#contract.recordNameNumber?.(type, number);
   }
+  acceptsId(id: string): boolean {
+    return this.#contract.acceptsId?.(id) ?? true;
+  }
 
   // ============================================================================
   // The state of this client (kept by the contract)

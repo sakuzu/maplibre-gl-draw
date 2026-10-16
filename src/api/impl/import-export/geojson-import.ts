@@ -219,9 +219,11 @@ export async function prepareGeoJSON(
     // With replace, the features and groups of the document are gone by the time the new ones
     // are written, so only the IDs of this import can collide
     const takenIds = new Set<string>();
+    // An id the Store does not take (an id of another form than its own) is replaced the same way
     const isTaken = (id: string): boolean =>
       takenIds.has(id) ||
       options?.reservedIds?.has(id) === true ||
+      store.acceptsId?.(id) === false ||
       (!replace && (store.getFeature(id) !== undefined || store.getGroup(id) !== undefined));
     const resolveId = (id: string): string => {
       let resolved = id;

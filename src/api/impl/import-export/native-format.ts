@@ -6,6 +6,7 @@
  */
 
 import { getDrawProperty } from '../../../shared/properties.js';
+import { setOwnProperty } from '../../../shared/utils/own-property.js';
 import {
   deleteFeaturesAndGroups,
   featuresInOrder,
@@ -13,7 +14,16 @@ import {
   listedLayers,
 } from '../../../store/feature-stream.js';
 import type { Store } from '../../../store/store.js';
-import type { Data, ExportOptions, FileData, LoadResult } from '../../../store/types.js';
+import type {
+  Data,
+  ExportOptions,
+  Feature,
+  FileData,
+  Group,
+  Layer,
+  LoadResult,
+} from '../../../store/types.js';
+import { rewriteReferences, type Value } from '../../../table/value.js';
 import { DrawError } from '../../errors.js';
 import { NATIVE_VERSION } from './constants.js';
 import { upgradeNativeData } from './native-upgrade.js';
@@ -81,7 +91,10 @@ export function exportNative(store: Store, options?: ExportOptions): Data {
  * Reads the native format for a load that replaces the existing data: everything is checked
  * here, and the writes are left to the transaction of the caller
  */
-export async function prepareNative(data: Data, deps: { store: Store }): Promise<PreparedLoad> {
+export async function prepareNative(
+  data: Data,
+  deps: { store: Store; generateId?: () => string },
+): Promise<PreparedLoad> {
   const { store } = deps;
 
   // Validate before applying. Since store.transact does not roll back, if an exception
@@ -108,6 +121,8 @@ export async function prepareNative(data: Data, deps: { store: Store }): Promise
       problem.cause === undefined ? undefined : { cause: problem.cause },
     );
   }
+  // The layers, groups and features whose ids the Store does not take get new ones
+  renameRefusedIds(store, deps.generateId, layers, groups, features, layerOrder);
   const featureIds = features.map((f) => f.id);
   // A kept layer the data does not list goes to the back, where it stays when the data does
   // not mention it (every layer must be on the stacking order to be drawn)
@@ -171,4 +186,67 @@ export async function prepareNative(data: Data, deps: { store: Store }): Promise
     };
   };
   return { write };
+}
+
+/**
+ * Gives the layers, groups and features of the data whose ids the Store does not take
+ * (`Store.acceptsId`) new ids, and makes every reference to them name the new ones: the layer and
+ * the group of a feature, the layer of a group, the items of a layer, the members of a group, the
+ * stacking order, and the references in the properties of the features. The data is changed in
+ * place
+ */
+function renameRefusedIds(
+  store: Store,
+  generateId: (() => string) | undefined,
+  layers: Layer[],
+  groups: Group[],
+  features: Feature[],
+  layerOrder: string[],
+): void {
+  const renamed: Record<string, string> = {};
+  if (!store.acceptsId || !generateId) return;
+  const used = new Set<string>();
+  for (const list of [layers, groups, features]) for (const item of list) used.add(item.id);
+  const newId = (): string => {
+    for (let attempt = 0; attempt < 100; attempt++) {
+      const id = generateId();
+      if (!used.has(id) && store.acceptsId?.(id) !== false) {
+        used.add(id);
+        return id;
+      }
+    }
+    throw new DrawError('invalid-input', 'Failed to generate an id the store takes');
+  };
+  for (const list of [layers, groups, features]) {
+    for (const item of list) {
+      if (store.getLayer(item.id) || store.acceptsId(item.id)) continue;
+      setOwnProperty(renamed, item.id, newId());
+    }
+  }
+  if (Object.keys(renamed).length === 0) return;
+  const to = (id: string): string =>
+    (Object.getOwnPropertyDescriptor(renamed, id)?.value as string | undefined) ?? id;
+  layers.forEach((layer, i) => {
+    const items = (layer as { items?: readonly string[] }).items;
+    layers[i] = { ...layer, id: to(layer.id), ...(items && { items: items.map(to) }) } as Layer;
+  });
+  groups.forEach((group, i) => {
+    const members = (group as { featureIds?: readonly string[] }).featureIds;
+    groups[i] = {
+      ...group,
+      id: to(group.id),
+      layerId: to(group.layerId),
+      ...(members && { featureIds: members.map(to) }),
+    } as Group;
+  });
+  features.forEach((feature, i) => {
+    features[i] = {
+      ...feature,
+      id: to(feature.id),
+      layerId: to(feature.layerId),
+      ...(feature.groupId !== undefined && { groupId: to(feature.groupId) }),
+      properties: rewriteReferences(feature.properties as Value, renamed) as Feature['properties'],
+    };
+  });
+  layerOrder.splice(0, layerOrder.length, ...layerOrder.map(to));
 }

@@ -283,7 +283,7 @@ export function createDocument(
         throw invalidInput('A document of the library brings its own layers and groups');
       }
       try {
-        return await prepareNative(data, { store });
+        return await prepareNative(data, { store, generateId: deps.generateId });
       } catch (error) {
         throw asDrawError('invalid-input', error);
       }
