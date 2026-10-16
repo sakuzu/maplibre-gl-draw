@@ -22,10 +22,10 @@ import {
   type TabaneBlockInput,
   writeTabaneBlocks,
 } from './block.js';
-import { type TabaneCompression, tabaneName, unpackTabaneFile } from './file.js';
-import { tabaneIdText } from './ids.js';
-import { readTabaneManifest, tabaneManifestEntry, writeTabaneManifest } from './manifest.js';
-import { tabaneRows } from './rows.js';
+import { type TabaneCompression, tabaneNameOf, unpackTabaneFile } from './file.js';
+import { formatTabaneId } from './ids.js';
+import { readTabaneManifest, tabaneManifestEntryOf, writeTabaneManifest } from './manifest.js';
+import { tabaneRowsOf } from './rows.js';
 import type { TabaneRow } from './types.js';
 
 const DIR = join(import.meta.dirname, 'vectors');
@@ -82,7 +82,7 @@ function hex(b: Uint8Array): string {
 
 const A = '1AAAAAAAAAAAA';
 const B = 'F000000000001';
-const id = (origin: string, n: number) => tabaneIdText({ origin, number: n });
+const id = (origin: string, n: number) => formatTabaneId({ origin, number: n });
 
 /** The fill of a polygon row as the writer makes it */
 function withFill(row: TabaneRow): TabaneRow {
@@ -96,7 +96,7 @@ function withFill(row: TabaneRow): TabaneRow {
 interface Scenario {
   readonly name: string;
   readonly description: string;
-  readonly input: TabaneBlockInput & { readonly blockBytes?: number };
+  readonly input: TabaneBlockInput & { readonly targetBytes?: number };
   readonly manifest?: {
     readonly coordinates: {
       readonly system: string;
@@ -320,8 +320,8 @@ const SCENARIOS: Scenario[] = [
       parent: 'L',
       head: 'V',
       dimensions: 'xy',
-      groupRows: 4,
-      blockBytes: 600,
+      targetRows: 4,
+      targetBytes: 600,
       rows: Array.from({ length: 22 }, (_, i) =>
         withFill({
           id: id(A, 1000 + i),
@@ -349,9 +349,9 @@ async function vectorOf(s: Scenario): Promise<Record<string, unknown>> {
     input: toJson(s.input),
     blocks: await Promise.all(
       blocks.map(async (b) => ({
-        name: await tabaneName(b.content),
+        name: await tabaneNameOf(b.content),
         rows: b.rows,
-        cuts: b.cuts,
+        partEnds: b.partEnds,
         content: hex(b.content),
         stored: hex(packTabaneBlock(b)),
         zstd: hex(packTabaneBlock(b, zstd)),
@@ -360,10 +360,10 @@ async function vectorOf(s: Scenario): Promise<Record<string, unknown>> {
   };
   // The rows read back (a position shorter than the dimensions gets NaN for the others)
   out.rows = toJson(
-    blocks.flatMap((b) => readTabaneBlock(b.content).flatMap((g) => tabaneRows(g))),
+    blocks.flatMap((b) => readTabaneBlock(b.content).flatMap((g) => tabaneRowsOf(g))),
   );
   if (s.manifest) {
-    const entries = await Promise.all(blocks.map((b) => tabaneManifestEntry(b)));
+    const entries = await Promise.all(blocks.map((b) => tabaneManifestEntryOf(b)));
     const content = writeTabaneManifest({
       coordinates: s.manifest.coordinates,
       partition: { kind: 'order' },
@@ -375,7 +375,7 @@ async function vectorOf(s: Scenario): Promise<Record<string, unknown>> {
       ...(s.manifest.extra && { extra: s.manifest.extra }),
       entries: toJson(entries),
       content: hex(content),
-      name: await tabaneName(content),
+      name: await tabaneNameOf(content),
     };
   }
   return out;
@@ -411,11 +411,11 @@ describe('the test vectors', () => {
       const rows: TabaneRow[] = [];
       for (const b of vector.blocks) {
         const content = Buffer.from(b.content, 'hex');
-        expect(await tabaneName(content)).toBe(b.name);
+        expect(await tabaneNameOf(content)).toBe(b.name);
         for (const file of [b.stored, b.zstd]) {
           expect(hex(unpackTabaneFile(Buffer.from(file, 'hex'), zstd))).toBe(b.content);
         }
-        for (const g of readTabaneBlock(content)) rows.push(...tabaneRows(g));
+        for (const g of readTabaneBlock(content)) rows.push(...tabaneRowsOf(g));
       }
       expect(toJson(rows)).toEqual(vector.rows);
       // The rows read back are the rows of the input, but for the values the dimensions add
@@ -426,7 +426,7 @@ describe('the test vectors', () => {
       });
       if (vector.manifest) {
         const content = Buffer.from(vector.manifest.content, 'hex');
-        expect(await tabaneName(content)).toBe(vector.manifest.name);
+        expect(await tabaneNameOf(content)).toBe(vector.manifest.name);
         expect(toJson(readTabaneManifest(content).blocks)).toEqual(vector.manifest.entries);
       }
     }

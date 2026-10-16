@@ -3,8 +3,8 @@
 
 /**
  * Tabane: rows written as blocks of columns named by their content, and a manifest of the blocks
- * (`README.md` of this folder). A block read is a set of groups whose columns are those of the
- * blocks of rows of the tables.
+ * (`README.md` of this folder). A block read is a set of row blocks whose columns are those of the
+ * row blocks of the tables (`RowBlock`).
  *
  * A pure module: it depends on nothing outside `/table`, so it runs in a Worker as well.
  */
@@ -17,40 +17,40 @@ export {
   packTabaneBlock,
   readTabaneBlock,
   readTabaneBlockFile,
-  TABANE_BLOCK_BYTES,
-  TABANE_GROUP_ROWS,
-  TABANE_GROUP_VERTICES,
+  TABANE_TARGET_BYTES,
+  TABANE_TARGET_ROWS,
+  TABANE_TARGET_VERTICES,
   TABANE_VERSION,
   writeTabaneBlock,
   writeTabaneBlocks,
 } from './block.js';
-export { readTabaneGroup } from './group-read.js';
+export { readTabaneRowBlock } from './row-block-read.js';
 export type {
   TabaneFill,
-  TabaneGroup,
+  TabaneRowBlock,
   TabanePlace,
   TabaneRevision,
   TabaneRow,
 } from './types.js';
 
-// The groups as blocks of rows of the tables, and as rows
-export type { TabaneRowBlockOptions } from './rows.js';
-export { tabaneRowBlock, tabaneRows } from './rows.js';
+// The row blocks read as row blocks of the tables, and as rows
+export type { RowBlockOfTabaneOptions } from './rows.js';
+export { rowBlockOfTabane, tabaneRowsOf } from './rows.js';
 
 // Files and names
-export type { TabaneCompression, TabaneFrame } from './file.js';
+export type { TabaneCompression, TabaneFilePart } from './file.js';
 export {
   packTabaneFile,
-  tabaneFrameContent,
-  tabaneFrames,
-  tabaneName,
+  readTabaneFilePart,
+  listTabaneFileParts,
+  tabaneNameOf,
   unpackTabaneFile,
 } from './file.js';
 
 // Manifests
 export type { TabaneManifest, TabaneManifestEntry } from './manifest.js';
-export { readTabaneManifest, tabaneManifestEntry, writeTabaneManifest } from './manifest.js';
+export { readTabaneManifest, tabaneManifestEntryOf, writeTabaneManifest } from './manifest.js';
 
 // Ids and keys
 export type { TabaneId } from './ids.js';
-export { isTabaneOrigin, parseTabaneId, tabaneIdText, tabaneRowSuffix } from './ids.js';
+export { isTabaneOrigin, parseTabaneId, formatTabaneId, tabaneRowSuffixOf } from './ids.js';

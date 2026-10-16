@@ -113,7 +113,7 @@ export function base32Of(n: number): string {
 /**
  * The text of an id: the origin, `-`, the number in base 32
  */
-export function tabaneIdText(id: TabaneId): string {
+export function formatTabaneId(id: TabaneId): string {
   return `${id.origin}-${base32Of(id.number)}`;
 }
 
@@ -141,7 +141,7 @@ export function parseTabaneId(text: string): TabaneId | null {
  * The suffix of row `i` of a run: the number of its digits (one key digit), then its digits in
  * base 61 written with `1` to `z`
  */
-export function tabaneRowSuffix(i: number): string {
+export function tabaneRowSuffixOf(i: number): string {
   if (!Number.isSafeInteger(i) || i < 0)
     throw new DrawError('invalid-input', `Tabane: not a row: ${i}`);
   let digits = '';
@@ -154,7 +154,7 @@ export function tabaneRowSuffix(i: number): string {
 }
 
 /**
- * The bytes of the suffix of row `i` (see {@link tabaneRowSuffix}) written into `out` at `at`
+ * The bytes of the suffix of row `i` (see {@link tabaneRowSuffixOf}) written into `out` at `at`
  *
  * @returns The number of bytes written (at most 10)
  * @internal

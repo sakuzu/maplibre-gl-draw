@@ -23,15 +23,15 @@ import { join } from 'node:path';
 import { zstdCompressSync } from 'node:zlib';
 import {
   createRowBlockBuilder,
+  formatTabaneId,
+  listTabaneFileParts,
   packTabaneBlock,
-  readTabaneGroup,
+  readTabaneFilePart,
+  readTabaneRowBlock,
+  rowBlockOfTabane,
   type TabaneRow,
-  tabaneFrameContent,
-  tabaneFrames,
-  tabaneIdText,
-  tabaneRowBlock,
-  tabaneRowSuffix,
-  tabaneRows,
+  tabaneRowSuffixOf,
+  tabaneRowsOf,
   writeTabaneBlocks,
 } from '@sakuzu/maplibre-gl-draw/kasane';
 import { decompress } from 'fzstd';
@@ -74,7 +74,7 @@ function rowsOf(file: string): TabaneRow[] {
     if (!line) continue;
     const f = JSON.parse(line) as Feature;
     out.push({
-      id: tabaneIdText({ origin: ORIGIN, number: out.length + 1 }),
+      id: formatTabaneId({ origin: ORIGIN, number: out.length + 1 }),
       type: f.geometry?.type ?? 'Point',
       geometry: f.geometry,
       properties: f.properties ?? {},
@@ -114,9 +114,9 @@ describe.skipIf(!MEASURE)('Tabane measured', () => {
         let at = 0;
         let differ = 0;
         for (const f of files) {
-          for (const frame of tabaneFrames(f).slice(1)) {
-            const group = readTabaneGroup(tabaneFrameContent(frame, zstd));
-            for (const back of tabaneRows(group)) {
+          for (const frame of listTabaneFileParts(f).slice(1)) {
+            const group = readTabaneRowBlock(readTabaneFilePart(frame, zstd));
+            for (const back of tabaneRowsOf(group)) {
               const row = rows[at++];
               if (
                 back.id !== row.id ||
@@ -131,17 +131,17 @@ describe.skipIf(!MEASURE)('Tabane measured', () => {
         (result[label] as Record<string, unknown>).readBack = { rows: at, differ };
 
         // The time to read the groups into blocks of rows, a frame at a time (warmed up)
-        const frames = files.flatMap((f) => tabaneFrames(f).slice(1));
+        const frames = files.flatMap((f) => listTabaneFileParts(f).slice(1));
         const pass = () => {
           const t = { unzip: 0, read: 0, block: 0, groups: 0 };
           const each: number[] = [];
           for (const frame of frames) {
             const a = performance.now();
-            const bytes = tabaneFrameContent(frame, zstd);
+            const bytes = readTabaneFilePart(frame, zstd);
             const b = performance.now();
-            const group = readTabaneGroup(bytes);
+            const group = readTabaneRowBlock(bytes);
             const c = performance.now();
-            tabaneRowBlock(group);
+            rowBlockOfTabane(group);
             const d = performance.now();
             t.unzip += b - a;
             t.read += c - b;
@@ -180,7 +180,7 @@ describe.skipIf(!MEASURE)('Tabane measured', () => {
               id: row.id,
               type: row.type,
               geometry: row.geometry,
-              order: `V${tabaneRowSuffix(s + i)}`,
+              order: `V${tabaneRowSuffixOf(s + i)}`,
               properties: row.properties,
             });
           });

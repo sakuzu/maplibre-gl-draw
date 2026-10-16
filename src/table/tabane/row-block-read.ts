@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * Reads the bytes of a group of rows of the Tabane format into columns of typed arrays
+ * Reads the bytes of a row block of the Tabane format into columns of typed arrays
  *
  * The columns are those of the rows of the tables (`RowBlock`): the geometry in the layout of
  * GeoArrow, the styles as a dictionary of their canonical bytes, the attributes as a column of
@@ -26,6 +26,7 @@ import {
 } from '../value-column.js';
 import { ByteSource, formatError } from './bytes.js';
 import { POW10 } from './decimals.js';
+import { originOf } from './ids.js';
 import {
   DIMENSIONS,
   GEOMETRY_TYPES,
@@ -37,14 +38,13 @@ import {
   TAG_NULL,
   TAG_STRING,
   TAG_TRUE,
-} from './group-write.js';
-import { originOf } from './ids.js';
+} from './row-block-write.js';
 import type {
   TabaneFills,
-  TabaneGroup,
-  TabaneGroupData,
   TabaneRevision,
   TabaneRevisions,
+  TabaneRowBlock,
+  TabaneRowBlockData,
 } from './types.js';
 import { XorSource } from './xor.js';
 
@@ -60,28 +60,36 @@ const VALUE_OF_TAG = [
   VALUE_NUMBER,
 ];
 
-/** The most rows of a group */
+/** The most rows of a row block */
 export const MAX_GROUP_ROWS = 1 << 20;
 
 /**
- * Reads a group of rows
+ * Reads a row block
  *
- * @param bytes The bytes of the group (`[start, end)`)
- * @throws `DrawError` with the code `unsupported-format` when the bytes are not a group
+ * @param bytes The bytes of the row block (`[start, end)`)
+ * @throws `DrawError` with the code `unsupported-format` when the bytes are not a row block
  */
-export function readTabaneGroup(bytes: Uint8Array, start = 0, end = bytes.length): TabaneGroup {
-  return readGroupData(bytes, start, end);
+export function readTabaneRowBlock(
+  bytes: Uint8Array,
+  start = 0,
+  end = bytes.length,
+): TabaneRowBlock {
+  return readRowBlockData(bytes, start, end);
 }
 
 /**
- * Reads a group of rows with every column
+ * Reads a row block with every column
  *
  * @internal
  */
-export function readGroupData(bytes: Uint8Array, start = 0, end = bytes.length): TabaneGroupData {
+export function readRowBlockData(
+  bytes: Uint8Array,
+  start = 0,
+  end = bytes.length,
+): TabaneRowBlockData {
   const r = new ByteSource(bytes, start, end);
   const n = r.uint();
-  if (n < 1 || n > MAX_GROUP_ROWS) throw formatError(`a group of ${n} rows`);
+  if (n < 1 || n > MAX_GROUP_ROWS) throw formatError(`a row block of ${n} rows`);
 
   const originCount = r.count(8);
   const origins: string[] = [];
@@ -147,7 +155,7 @@ export function readGroupData(bytes: Uint8Array, start = 0, end = bytes.length):
 
   // The types
   const typeCount = r.count();
-  if (typeCount < 1 || typeCount > 255) throw formatError('a group of no type or of too many');
+  if (typeCount < 1 || typeCount > 255) throw formatError('a row block of no type or of too many');
   const typeNames: string[] = [];
   for (let k = 0; k < typeCount; k++) typeNames.push(r.string());
   const types = typeCount > 1 ? r.take(n).slice() : new Uint8Array(n);
@@ -166,7 +174,7 @@ export function readGroupData(bytes: Uint8Array, start = 0, end = bytes.length):
 
   // The styles
   const styleCount = r.count();
-  if (styleCount < 1) throw formatError('a group of no style');
+  if (styleCount < 1) throw formatError('a row block of no style');
   const styleDictionary = readDictionary(r, styleCount);
   for (let k = 0; k < styleCount; k++) {
     const at = styleDictionary.offsets[k];
@@ -194,7 +202,7 @@ export function readGroupData(bytes: Uint8Array, start = 0, end = bytes.length):
   // The cells changed after their rows were made
   const revisions = readRevisions(r, n, origins);
 
-  if (!r.done) throw formatError('bytes are left after the group');
+  if (!r.done) throw formatError('bytes are left after the row block');
   return {
     length: n,
     ids,

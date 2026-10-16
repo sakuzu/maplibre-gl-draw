@@ -2,15 +2,15 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * A group of the Tabane format as a block of rows of the tables, and as rows
+ * A row block of the Tabane format as a block of rows of the tables, and as rows
  *
- * The columns of a group read are those of a block of rows (`RowBlock`): the geometry, the
+ * The columns of a row block read are those of a block of rows (`RowBlock`): the geometry, the
  * types, the styles and the attributes are taken as they are. What is made here is what the
- * columns of a group leave to the reader: the ids and the keys as text (from their runs), the
+ * columns of a row block leave to the reader: the ids and the keys as text (from their runs), the
  * hashes of the ids, the flags, the bbox of every row and the spatial index (they depend on the
  * system of the coordinates of the reader), and the fills of the rows that draw a ring around
  * their point (they depend on the types of the reader). The fills of the polygons are copied
- * from the group when it holds them, and made otherwise.
+ * from the row block when it holds them, and made otherwise.
  *
  * A pure module: it depends on nothing outside `/table`, so it runs in a Worker as well.
  */
@@ -47,25 +47,25 @@ import type { RowRings } from '../row-rings.js';
 import type { TableGeometry, TableMixedGeometry } from '../types.js';
 import { hashUtf8, type Utf8Column } from '../utf8-column.js';
 import { readValue } from '../value-column.js';
-import { base32Of, tabaneIdText, writeRowSuffix } from './ids.js';
+import { base32Of, formatTabaneId, writeRowSuffix } from './ids.js';
 import type {
   TabaneFill,
-  TabaneGroup,
-  TabaneGroupData,
   TabaneRevision,
   TabaneRow,
+  TabaneRowBlock,
+  TabaneRowBlockData,
 } from './types.js';
 
 const encoder = new TextEncoder();
 
 /**
- * The options of {@link tabaneRowBlock}
+ * The options of {@link rowBlockOfTabane}
  *
  * @experimental
  */
-export interface TabaneRowBlockOptions {
+export interface RowBlockOfTabaneOptions {
   /**
-   * The dimensions of the coordinates of the layer (those of the group when omitted); a group of
+   * The dimensions of the coordinates of the layer (those of the row block when omitted); a row block of
    * fewer dimensions gets NaN for the others, one of more is refused
    */
   readonly dimensions?: CoordinateDimensions;
@@ -106,11 +106,11 @@ function widen(
 }
 
 /**
- * The ids of the rows of a group as a column of text
+ * The ids of the rows of a row block as a column of text
  *
  * @internal
  */
-export function idColumn(group: TabaneGroup): Utf8Column {
+export function idColumn(group: TabaneRowBlock): Utf8Column {
   const n = group.length;
   const offsets = new Int32Array(n + 1);
   // 13 digits, `-`, at most 11 digits of a number
@@ -131,11 +131,11 @@ export function idColumn(group: TabaneGroup): Utf8Column {
 }
 
 /**
- * The keys of the rows of a group as a column of text
+ * The keys of the rows of a row block as a column of text
  *
  * @internal
  */
-export function keyColumn(group: TabaneGroup): Utf8Column {
+export function keyColumn(group: TabaneRowBlock): Utf8Column {
   const n = group.length;
   const head = encoder.encode(group.place.head);
   const offsets = new Int32Array(n + 1);
@@ -150,32 +150,35 @@ export function keyColumn(group: TabaneGroup): Utf8Column {
   return { offsets, bytes: bytes.slice(0, at) };
 }
 
-/** Whether a row of a group is deleted */
-function isDeleted(group: TabaneGroupData, row: number): boolean {
+/** Whether a row of a row block is deleted */
+function isDeleted(group: TabaneRowBlockData, row: number): boolean {
   const d = group.deleted;
   return d !== null && (d[row >> 3] & (1 << (row & 7))) !== 0;
 }
 
 /**
- * A group as a block of rows of the tables (for `FeatureTablesWriter.addBlocks`), its columns
+ * A row block as a block of rows of the tables (for `FeatureTablesWriter.addBlocks`), its columns
  * taken as they are
  *
- * @throws `DrawError` with the code `invalid-input` when the group has a dimension the layer does
+ * @throws `DrawError` with the code `invalid-input` when the row block has a dimension the layer does
  *   not
  * @experimental
  */
-export function tabaneRowBlock(group: TabaneGroup, options: TabaneRowBlockOptions = {}): RowBlock {
-  return tabaneRowBlockData(group as TabaneGroupData, options);
+export function rowBlockOfTabane(
+  group: TabaneRowBlock,
+  options: RowBlockOfTabaneOptions = {},
+): RowBlock {
+  return rowBlockDataOfTabane(group as TabaneRowBlockData, options);
 }
 
 /**
- * A group as a block of rows with every column, as the tables read it
+ * A row block as a block of rows with every column, as the tables read it
  *
  * @internal
  */
-export function tabaneRowBlockData(
-  group: TabaneGroupData,
-  options: TabaneRowBlockOptions = {},
+export function rowBlockDataOfTabane(
+  group: TabaneRowBlockData,
+  options: RowBlockOfTabaneOptions = {},
 ): RowBlockData {
   const n = group.length;
   const dims = options.dimensions ?? group.dimensions;
@@ -324,18 +327,18 @@ function geometryOf(child: TableGeometry, row: number, stride: number): Geometry
 }
 
 /**
- * The rows of a group, as the writer took them: the coordinates read back to the same bits, the
+ * The rows of a row block, as the writer took them: the coordinates read back to the same bits, the
  * values to the same values
  *
  * @experimental
  */
-export function tabaneRows(read: TabaneGroup): TabaneRow[] {
-  const group = read as TabaneGroupData;
+export function tabaneRowsOf(read: TabaneRowBlock): TabaneRow[] {
+  const group = read as TabaneRowBlockData;
   const n = group.length;
   const stride = strideOf(group.dimensions);
   const ids: string[] = [];
   for (const [origin, first, count] of group.ids) {
-    for (let k = 0; k < count; k++) ids.push(tabaneIdText({ origin, number: first + k }));
+    for (let k = 0; k < count; k++) ids.push(formatTabaneId({ origin, number: first + k }));
   }
   const made: TabaneRevision[] = [];
   for (const [revision, count] of group.made ?? [])

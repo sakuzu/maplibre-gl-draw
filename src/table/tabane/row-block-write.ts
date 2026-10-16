@@ -2,8 +2,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * Writes the bytes of a group of rows of the Tabane format (`README.md` of this folder, "A
- * group")
+ * Writes the bytes of a row block of the Tabane format (`README.md` of this folder, "A
+ * row block")
  *
  * Every choice the writer makes is fixed by the rows, so the same rows always give the same
  * bytes, in every implementation of the format.
@@ -52,7 +52,7 @@ export const TAG_NESTED = 6;
 export const TAG_INTEGER = 7;
 
 /**
- * What a group is written from
+ * What a row block is written from
  *
  * @internal
  */
@@ -68,7 +68,7 @@ function invalid(message: string): DrawError {
   return new DrawError('invalid-input', `Tabane: ${message}`);
 }
 
-/** The origins a group names, numbered in the order they are first named */
+/** The origins a row block names, numbered in the order they are first named */
 class Origins {
   readonly list: string[] = [];
   private readonly index = new Map<string, number>();
@@ -102,7 +102,7 @@ function checkRevision(r: TabaneRevision): void {
 }
 
 /**
- * The bytes of a group of rows
+ * The bytes of a row block
  *
  * @throws `DrawError` with the code `invalid-input` when a row cannot be written
  * @internal
@@ -110,7 +110,7 @@ function checkRevision(r: TabaneRevision): void {
 export function writeGroup(input: GroupInput): Uint8Array {
   const { rows, place, dimensions } = input;
   const n = rows.length;
-  if (n === 0) throw invalid('a group holds at least one row');
+  if (n === 0) throw invalid('a row block holds at least one row');
   const out = new ByteSink(n * 64);
   const origins = new Origins();
 
@@ -134,7 +134,7 @@ export function writeGroup(input: GroupInput): Uint8Array {
   const madeRuns: number[] = [];
   const withMade = rows.filter((r) => r.made !== undefined).length;
   if (withMade !== 0 && withMade !== n)
-    throw invalid('every row of a group says what made it, or none does');
+    throw invalid('every row of a row block says what made it, or none does');
   if (withMade === n) {
     for (let i = 0; i < n; ) {
       const made = rows[i].made as TabaneRevision;
@@ -214,7 +214,7 @@ export function writeGroup(input: GroupInput): Uint8Array {
     if (typeof row.type !== 'string') throw invalid(`the type of the row ${row.id}`);
     let t = typeIndex.get(row.type);
     if (t === undefined) {
-      if (typeNames.length >= 255) throw invalid('more than 255 types in a group');
+      if (typeNames.length >= 255) throw invalid('more than 255 types in a row block');
       t = typeNames.length;
       typeNames.push(row.type);
       typeIndex.set(row.type, t);

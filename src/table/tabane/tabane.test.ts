@@ -11,10 +11,10 @@
  * - A block reads back to the rows it was written from: every coordinate to the same bits, every
  *   value to the same value, the deleted rows, what made the rows and the revisions of their
  *   cells; the same rows always give the same bytes
- * - A group read is a block of rows of the tables: the same columns the builder of the blocks of
+ * - A row block read is a block of rows of the tables: the same columns the builder of the blocks of
  *   rows makes from the same rows, and the tables take it as it is
- * - Files: frames compressed or stored, read a frame at a time or whole; the name is the hash of
- *   the content whatever the frames
+ * - Files: parts compressed or stored, read a part at a time or whole; the name is the hash of
+ *   the content whatever the parts
  * - A reader refuses bytes a writer never writes
  */
 
@@ -40,18 +40,18 @@ import {
 } from './block.js';
 import { ByteSink, ByteSource } from './bytes.js';
 import { decimalAt, fewestDecimals } from './decimals.js';
-import { packTabaneFile, type TabaneCompression, tabaneName, unpackTabaneFile } from './file.js';
+import { packTabaneFile, type TabaneCompression, tabaneNameOf, unpackTabaneFile } from './file.js';
 import {
+  formatTabaneId,
   isTabaneOrigin,
   originBytes,
   originOf,
   parseTabaneId,
-  tabaneIdText,
-  tabaneRowSuffix,
+  tabaneRowSuffixOf,
   writeRowSuffix,
 } from './ids.js';
-import { readTabaneManifest, tabaneManifestEntry, writeTabaneManifest } from './manifest.js';
-import { tabaneRowBlockData, tabaneRows } from './rows.js';
+import { readTabaneManifest, tabaneManifestEntryOf, writeTabaneManifest } from './manifest.js';
+import { rowBlockDataOfTabane, tabaneRowsOf } from './rows.js';
 import type { TabaneRow } from './types.js';
 import { XorSink, XorSource } from './xor.js';
 
@@ -120,7 +120,7 @@ function buildings(count: number, seed = 1, from = 1): TabaneRow[] {
   const random = seededRandom(seed);
   const kinds = ['普通建物', '堅ろう建物', '普通無壁舎'];
   return Array.from({ length: count }, (_, i) => ({
-    id: tabaneIdText({ origin: ORIGIN, number: from + i }),
+    id: formatTabaneId({ origin: ORIGIN, number: from + i }),
     type: 'Polygon',
     geometry: building(random, 139.7 + random() * 0.1, 35.6 + random() * 0.1),
     properties: {
@@ -133,7 +133,7 @@ function buildings(count: number, seed = 1, from = 1): TabaneRow[] {
 
 /** Rows of every geometry type, value and flag */
 function variety(): TabaneRow[] {
-  const id = (n: number) => tabaneIdText({ origin: ORIGIN, number: n });
+  const id = (n: number) => formatTabaneId({ origin: ORIGIN, number: n });
   return [
     {
       id: id(1),
@@ -237,9 +237,9 @@ function variety(): TabaneRow[] {
       },
       style: { color: '#00ff00' },
     },
-    { id: tabaneIdText({ origin: OTHER, number: 7 }), type: 'Marker', geometry: null },
+    { id: formatTabaneId({ origin: OTHER, number: 7 }), type: 'Marker', geometry: null },
     {
-      id: tabaneIdText({ origin: OTHER, number: 8 }),
+      id: formatTabaneId({ origin: OTHER, number: 8 }),
       type: 'Circle',
       geometry: { type: 'Point', coordinates: [139.7, 35.6] },
       properties: { radius: 100 },
@@ -261,13 +261,13 @@ describe('the ids and the keys of the rows', () => {
   });
 
   it('write an id as text and read it back', () => {
-    expect(tabaneIdText({ origin: ORIGIN, number: 42 })).toBe(`${ORIGIN}-1A`);
+    expect(formatTabaneId({ origin: ORIGIN, number: 42 })).toBe(`${ORIGIN}-1A`);
     expect(parseTabaneId(`${ORIGIN}-1A`)).toEqual({ origin: ORIGIN, number: 42 });
     expect(parseTabaneId(`${ORIGIN}-01A`)).toBeNull();
     expect(parseTabaneId(`${ORIGIN}-0`)).toBeNull();
     expect(parseTabaneId(`${ORIGIN}1A`)).toBeNull();
     expect(parseTabaneId(`${ORIGIN}-80000000000`)).toBeNull();
-    const big = tabaneIdText({ origin: ORIGIN, number: Number.MAX_SAFE_INTEGER });
+    const big = formatTabaneId({ origin: ORIGIN, number: Number.MAX_SAFE_INTEGER });
     expect(parseTabaneId(big)?.number).toBe(Number.MAX_SAFE_INTEGER);
   });
 
@@ -286,11 +286,12 @@ describe('the ids and the keys of the rows', () => {
     ];
     const out = new Uint8Array(16);
     for (const [i, suffix] of cases) {
-      expect(tabaneRowSuffix(i)).toBe(suffix);
+      expect(tabaneRowSuffixOf(i)).toBe(suffix);
       const n = writeRowSuffix(i, out, 0);
       expect(new TextDecoder().decode(out.subarray(0, n))).toBe(suffix);
     }
-    for (let i = 0; i < 5000; i++) expect(tabaneRowSuffix(i) < tabaneRowSuffix(i + 1)).toBe(true);
+    for (let i = 0; i < 5000; i++)
+      expect(tabaneRowSuffixOf(i) < tabaneRowSuffixOf(i + 1)).toBe(true);
   });
 });
 
@@ -356,7 +357,7 @@ describe('a block', () => {
     const block = writeTabaneBlock({ parent: 'layer-1', head: 'V', rows });
     const groups = readTabaneBlock(block.content);
     expect(groups.length).toBe(1);
-    const back = tabaneRows(groups[0]);
+    const back = tabaneRowsOf(groups[0]);
     expect(same(normal(back), normal(rows))).toBe(true);
     // The fills of the polygons are those the builder makes
     expect(back.filter((r) => r.fill).map((r) => r.id)).toEqual([rows[2].id, rows[5].id]);
@@ -370,7 +371,7 @@ describe('a block', () => {
   it('keeps the coordinates of more dimensions, a missing value as NaN', () => {
     const rows: TabaneRow[] = [
       {
-        id: tabaneIdText({ origin: ORIGIN, number: 1 }),
+        id: formatTabaneId({ origin: ORIGIN, number: 1 }),
         type: 'LineString',
         geometry: {
           type: 'LineString',
@@ -381,14 +382,14 @@ describe('a block', () => {
         },
       },
       {
-        id: tabaneIdText({ origin: ORIGIN, number: 2 }),
+        id: formatTabaneId({ origin: ORIGIN, number: 2 }),
         type: 'Point',
         geometry: { type: 'Point', coordinates: [1, 2] },
       },
     ];
     const group = readTabaneBlock(writeTabaneBlock({ parent: '', head: 'a', rows }).content)[0];
     expect(group.dimensions).toBe('xyzm');
-    const back = tabaneRows(group);
+    const back = tabaneRowsOf(group);
     expect(same(back[0].geometry, rows[0].geometry)).toBe(true);
     expect(same(back[1].geometry, { type: 'Point', coordinates: [1, 2, NaN, NaN] })).toBe(true);
   });
@@ -406,7 +407,7 @@ describe('a block', () => {
       [[10, OTHER, 2], 3],
       [[11, ORIGIN, 3], 2],
     ]);
-    expect(same(withoutFill(tabaneRows(group)), withoutFill(normal(rows) as TabaneRow[]))).toBe(
+    expect(same(withoutFill(tabaneRowsOf(group)), withoutFill(normal(rows) as TabaneRow[]))).toBe(
       true,
     );
     expect(() =>
@@ -430,18 +431,18 @@ describe('a block', () => {
     expect(Buffer.from(a).equals(Buffer.from(b))).toBe(true);
   });
 
-  it('cuts its rows into groups and its groups into blocks', () => {
+  it('partEnds its rows into groups and its groups into blocks', () => {
     const rows = buildings(2500);
     const block = writeTabaneBlock({ parent: 'p', head: 'V', rows });
     const groups = readTabaneBlock(block.content);
     expect(groups.map((g) => g.length)).toEqual([1000, 1000, 500]);
     expect(groups.map((g) => g.place.firstIndex)).toEqual([0, 1000, 2000]);
-    const blocks = writeTabaneBlocks({ parent: 'p', head: 'V', rows, blockBytes: 80_000 });
+    const blocks = writeTabaneBlocks({ parent: 'p', head: 'V', rows, targetBytes: 80_000 });
     expect(blocks.length).toBeGreaterThan(1);
     let first = 0;
     blocks.forEach((b, j) => {
       const gs = readTabaneBlock(b.content);
-      expect(gs[0].place).toEqual({ parent: 'p', head: `V${tabaneRowSuffix(j)}`, firstIndex: 0 });
+      expect(gs[0].place).toEqual({ parent: 'p', head: `V${tabaneRowSuffixOf(j)}`, firstIndex: 0 });
       expect(gs[0].ids[0][1]).toBe(1 + first);
       first += b.rows;
     });
@@ -470,17 +471,17 @@ describe('a block', () => {
 });
 
 describe('a file', () => {
-  it('reads back a frame at a time, compressed or not, under the name of its content', async () => {
+  it('reads back a part at a time, compressed or not, under the name of its content', async () => {
     const rows = buildings(2100);
     const block = writeTabaneBlock({ parent: 'p', head: 'V', rows });
-    const name = await tabaneName(block.content);
+    const name = await tabaneNameOf(block.content);
     for (const compression of [undefined, zstd]) {
       const file = packTabaneBlock(block, compression);
-      expect(await tabaneName(unpackTabaneFile(file, zstd))).toBe(name);
+      expect(await tabaneNameOf(unpackTabaneFile(file, zstd))).toBe(name);
       const groups = readTabaneBlockFile(file, zstd);
-      expect(same(normal(groups.flatMap((g) => tabaneRows(g))), normal(rows))).toBe(true);
+      expect(same(normal(groups.flatMap((g) => tabaneRowsOf(g))), normal(rows))).toBe(true);
     }
-    // One frame for all: read whole
+    // One part for all: read whole
     const whole = packTabaneFile(block.content, [], zstd);
     expect(readTabaneBlockFile(whole, zstd).length).toBe(3);
     expect(packTabaneBlock(block, zstd).length).toBeLessThan(block.content.length);
@@ -500,7 +501,7 @@ describe('a file', () => {
   });
 });
 
-describe('a group as a block of rows of the tables', () => {
+describe('a row block as a block of rows of the tables', () => {
   /** Every column the builder of the blocks makes of the same rows, compared */
   function expectSameBlock(a: RowBlockData, b: RowBlockData): void {
     expect(a.length).toBe(b.length);
@@ -543,14 +544,14 @@ describe('a group as a block of rows of the tables', () => {
             id: row.id,
             type: row.type,
             geometry: row.geometry,
-            order: `V${tabaneRowSuffix(i)}`,
+            order: `V${tabaneRowSuffixOf(i)}`,
             style: row.style,
             properties: row.properties,
             deleted: row.deleted,
           });
         });
         const [built] = builder.finish();
-        expectSameBlock(tabaneRowBlockData(group), built);
+        expectSameBlock(rowBlockDataOfTabane(group), built);
       }
     }
   });
@@ -571,7 +572,7 @@ describe('a group as a block of rows of the tables', () => {
     const groups = readBlockData(writeTabaneBlock({ parent: 'l', head: 'V', rows }).content);
     writer.addBlocks(
       'l',
-      groups.map((g) => tabaneRowBlockData(g)),
+      groups.map((g) => rowBlockDataOfTabane(g)),
     );
     featureTablesInternals(store.tables as FeatureTables)?.addQueuedBlocks();
     for (const k of [0, 999, 1000, 1499]) {
@@ -585,8 +586,8 @@ describe('a group as a block of rows of the tables', () => {
 describe('a manifest', () => {
   it('reads back, and says the box, the ids and the keys of each block', async () => {
     const rows = buildings(2500);
-    const blocks = writeTabaneBlocks({ parent: 'p', head: 'V', rows, blockBytes: 80_000 });
-    const entries = await Promise.all(blocks.map((b) => tabaneManifestEntry(b)));
+    const blocks = writeTabaneBlocks({ parent: 'p', head: 'V', rows, targetBytes: 80_000 });
+    const entries = await Promise.all(blocks.map((b) => tabaneManifestEntryOf(b)));
     const manifest = {
       coordinates: { system: 'lnglat', dimensions: 'xy' as const },
       partition: { kind: 'order' as const },
@@ -596,7 +597,7 @@ describe('a manifest', () => {
     const content = writeTabaneManifest(manifest);
     expect(readTabaneManifest(content)).toEqual(manifest);
     const first = entries[0];
-    expect(first.order.first).toBe(`V${tabaneRowSuffix(0)}${tabaneRowSuffix(0)}`);
+    expect(first.order.first).toBe(`V${tabaneRowSuffixOf(0)}${tabaneRowSuffixOf(0)}`);
     expect(first.ids).toEqual([[ORIGIN, 1, first.rows]]);
     const box = first.box as [number, number][];
     for (const row of rows.slice(0, first.rows)) {

@@ -2,9 +2,9 @@
 
 Tabane is a format of rows: rows written as blocks of columns, each block named
 by the SHA-256 of its content, and a manifest that lists the blocks of a set of
-rows. A block read gives groups of rows whose columns are those of the blocks of
-rows of the tables (`RowBlock`), so a reader copies them into the tables without
-making an object per row.
+rows. A block read gives row blocks whose columns are those of the row blocks of
+the tables (`RowBlock`), so a reader copies them into the tables without making
+an object per row.
 
 Status: version 1, a draft. This folder holds the format for now; it is to move
 to Kasane, the library of the tables, with its document and its test vectors. An
@@ -15,15 +15,16 @@ implementation in Go follows the same document and passes the same vectors.
 - A row is an id, a type, a geometry (one of the six GeoJSON types, or none), a
   style (an object), attributes (an object of values), and optionally a deleted
   flag, what made it and the revisions of its cells
-- A group is about a thousand rows of one run, written as columns
-- A block is a run of rows under one parent, cut into groups. Its content is a
-  head and its groups; its file is its content cut into frames, each compressed
-  on its own
+- A row block is about a thousand rows of one run, written as columns. Read, it
+  is a row block of the tables (`RowBlock`)
+- A block is a run of rows under one parent, cut into row blocks. Its content is
+  a head and its row blocks; its file is its content cut into parts, each
+  compressed on its own
 - A manifest lists the blocks of a set of rows: their names, their sizes, the
   box of their coordinates, the runs of their ids and the keys of their first
   and last rows
 - The name of a block or a manifest is the SHA-256 of its content in lowercase
-  hex. It does not depend on how the content was cut into frames or compressed,
+  hex. It does not depend on how the content was cut into parts or compressed,
   so two writers of the same rows give the same name, and a store may compress a
   file again without renaming it
 
@@ -61,7 +62,7 @@ The number is from 1 to 2^53 - 1. As text, an id is the origin in 13 digits of
 Crockford's base 32 (`0123456789ABCDEFGHJKMNPQRSTVWXYZ`, uppercase, most
 significant first, the first digit holding the top 4 bits so it is `0` to `F`),
 `-`, and the number in base 32 without leading zeros: `1AAAAAAAAAAAA-1A`. In a
-group, an origin is 8 bytes, big-endian.
+row block, an origin is 8 bytes, big-endian.
 
 The rows of a run have no key of their own. Row `i` of a run that follows the
 key `head` has the key `head` followed by the suffix of `i`: one digit for the
@@ -93,9 +94,9 @@ A value `v` is decimal at `d` digits (0 to 13) when the integer `k` nearest to
 of the power (exact). -0, NaN and the infinities are never decimal. The fewest
 digits of `v` is the smallest `d` it is decimal at.
 
-## 3. A group
+## 3. A row block
 
-A group holds `n` rows (1 to 2^20) of one run. Its bytes, in order:
+A row block holds `n` rows (1 to 2^20) of one run. Its bytes, in order:
 
 1. `uint` `n`
 2. The origins: `uint` count, then 8 bytes each. They are numbered in the order
@@ -106,8 +107,8 @@ A group holds `n` rows (1 to 2^20) of one run. Its bytes, in order:
    as long as the numbers follow each other
 4. The place: `string` parent (the empty string for none), `byte` form of the
    keys (0: from a head), `string` head, `uint` the number of the first row of
-   the group in its run. Row `r` has the key of row `first + r` of the run
-5. What made the rows: `byte` 0 (none: what added the group made them) or 1,
+   the row block in its run. Row `r` has the key of row `first + r` of the run
+5. What made the rows: `byte` 0 (none: what added the block made them) or 1,
    then `uint` count of runs and per run `uint` sequence, `uint` origin, `uint`
    step, `uint` count. A run is as long as the revision is the same
 6. The deleted rows: `byte` 0 (none) or 1, then `ceil(n / 8)` bytes, row `r` at
@@ -167,9 +168,11 @@ in turn without their closing coordinate, a ring of fewer than 3 coordinates
 left out (and a polygon whose outer ring is). A pair `(a, b, c, d)` is the
 triangles `(a, b, c)` and `(c, b, d)`; a triangle alone is `(a, b, c, c)`.
 
-The fills are a copy of what a reader would make, kept to save the time of
-making them. A writer that cannot make them writes none, and a reader makes
-them.
+The fills are an optional column, a copy of what a reader would make, kept to
+save the time of making them. A block a client makes from rows it has (an
+import) holds them. A writer that cannot make them (a job of a server) writes
+none, and a reader of a block without them makes them, in a Worker, when it
+reads the row blocks into the tables.
 
 ### 3.3 The attributes
 
@@ -211,37 +214,37 @@ The content of a block:
 
 1. The magic `TBNB` (`54 42 4E 42`)
 2. `uint` the version (1)
-3. `uint` the number of groups (at least 1), then per group `uint` its rows and
-   `uint` its bytes
-4. The bytes of each group
+3. `uint` the number of row blocks (at least 1), then per row block `uint` its
+   rows and `uint` its bytes
+4. The bytes of each row block
 
-A writer cuts the rows into groups in their order: a group takes rows while it
-has fewer than `groupRows` (1,000 when not given) and, unless it is empty, the
-coordinates of the next row do not make it more than `groupVertices` (40,000
-when not given). The coordinates of a row are its positions.
+A writer cuts the rows into row blocks in their order: a row block takes rows
+while it has fewer than `targetRows` (1,000 when not given) and, unless it is
+empty, the coordinates of the next row do not make it more than `targetVertices`
+(40,000 when not given). The coordinates of a row are its positions.
 
-A writer of a long run cuts it into blocks in the order of its groups: a block
-takes groups while the bytes of its groups stay within `blockBytes` (4 MiB when
+A writer of a long run cuts it into blocks in the order of its row blocks: a
+block takes row blocks while their bytes stay within `targetBytes` (4 MiB when
 not given), and takes at least one. Block `j` has the head of the run followed
 by the suffix of `j` (section 2.1), and its rows are numbered from 0: the key of
-row `i` of block `j` is the head, the suffix of `j`, the suffix of `i`. A group
-is written for the block it goes in.
+row `i` of block `j` is the head, the suffix of `j`, the suffix of `i`. A row
+block is written for the block it goes in.
 
 ## 5. A file
 
-A file holds a content cut into frames:
+A file holds a content cut into parts:
 
 1. The magic `TBNF` (`54 42 4E 46`)
-2. `uint` the number of frames, then per frame `byte` method (0 stored, 1 zstd),
+2. `uint` the number of parts, then per part `byte` method (0 stored, 1 zstd),
    `uint` the bytes of its content, `uint` the bytes stored
-3. The stored bytes of each frame
+3. The stored bytes of each part
 
-The content is the contents of the frames put together. A writer of a block puts
-the head of the block (its magic to the bytes of its groups) in one frame and
-each group in a frame of its own, so a reader decompresses and reads the groups
-one at a time. A frame is compressed when the writer has a compressor and it
-gets smaller, else stored. A reader reads the groups a frame at a time when the
-frames are those of the groups, else reads the whole content.
+The content is the contents of the parts put together. A writer of a block puts
+the head of the block (its magic to the bytes of its row blocks) in one part and
+each row block in a part of its own, so a reader decompresses and reads the row
+blocks one at a time. A part is compressed when the writer has a compressor and
+it gets smaller, else stored. A reader reads the row blocks a part at a time
+when the parts are those of the row blocks, else reads the whole content.
 
 ## 6. A manifest
 
@@ -267,7 +270,7 @@ An entry of a block:
   a block without coordinates. The first value of a dimension is both; a later
   value replaces the min when smaller, else the max when larger
 - `ids`: the runs of its ids, `[origin, first, count]`, a run as long as the
-  numbers follow each other across its groups
+  numbers follow each other across its row blocks
 - `order`: `{parent, first, last}`: the parent of its rows and the keys of its
   first and last row
 
@@ -277,24 +280,24 @@ so the same manifest serves coordinates on the earth, on a plane or with time.
 
 ## 7. Reading into the tables
 
-A group is a block of rows of the tables (`tabaneRowBlock`): the geometry, the
-types, the styles and the attributes are taken as they are; the reader makes the
-ids and the keys as text from their runs, the hashes of the ids, the flags, the
-bbox of every row and the spatial index (they depend on the system of
-coordinates of the reader), and the fills of the rows that draw a ring around
-their point (they depend on the types of the reader). The fills of the polygons
-are copied when the group holds them, and made when it does not.
+A row block read is a row block of the tables (`rowBlockOfTabane`): the
+geometry, the types, the styles and the attributes are taken as they are; the
+reader makes the ids and the keys as text from their runs, the hashes of the
+ids, the flags, the bbox of every row and the spatial index (they depend on the
+system of coordinates of the reader), and the fills of the rows that draw a ring
+around their point (they depend on the types of the reader). The fills of the
+polygons are copied when the row block holds them, and made when it does not.
 
 ## 8. Test vectors
 
 `vectors/` holds one file per case: its `input` (the parent, the head, the
 dimensions, the cutting, the rows), the `blocks` it gives (`name`, `rows`,
-`cuts`, the `content` in hex, the file of stored frames `stored` and a file of
-zstd frames `zstd`), the `rows` read back, and for some a `manifest` (its input,
-its `entries`, its `content` and `name`). A float that JSON cannot write (-0,
-NaN) is `{"$f64": "<16 hex digits of its bits, big-endian>"}`. A polygon row of
-an input whose fills are written gives its `fill`, so an implementation that
-does not make fills writes the same bytes.
+`partEnds`, the `content` in hex, the file of stored parts `stored` and a file
+of zstd parts `zstd`), the `rows` read back, and for some a `manifest` (its
+input, its `entries`, its `content` and `name`). A float that JSON cannot write
+(-0, NaN) is `{"$f64": "<16 hex digits of its bits, big-endian>"}`. A polygon
+row of an input whose fills are written gives its `fill`, so an implementation
+that does not make fills writes the same bytes.
 
 An implementation writes the `content` of every block (and of the manifest) from
 the input, reads the `rows` back from it, and reads the content back from both

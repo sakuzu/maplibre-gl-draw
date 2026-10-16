@@ -37,9 +37,9 @@ import { decodeCanonicalValue, encodeCanonicalValue } from '../canonical-value.j
 import { type CoordinateDimensions, isCoordinateDimensions, strideOf } from '../coordinates.js';
 import { readBlockHead, type TabaneBlock } from './block.js';
 import { formatError } from './bytes.js';
-import { tabaneName } from './file.js';
-import { readGroupData } from './group-read.js';
-import { isTabaneOrigin, tabaneRowSuffix } from './ids.js';
+import { tabaneNameOf } from './file.js';
+import { isTabaneOrigin, tabaneRowSuffixOf } from './ids.js';
+import { readRowBlockData } from './row-block-read.js';
 
 /** The first bytes of the content of a manifest: `TBNM` */
 export const MANIFEST_MAGIC = Uint8Array.of(0x54, 0x42, 0x4e, 0x4d);
@@ -78,7 +78,7 @@ export interface TabaneManifest {
  *
  * @throws `DrawError` with the code `unsupported-format` when the content is not a block
  */
-export async function tabaneManifestEntry(block: TabaneBlock): Promise<TabaneManifestEntry> {
+export async function tabaneManifestEntryOf(block: TabaneBlock): Promise<TabaneManifestEntry> {
   const content = block.content;
   const layout = readBlockHead(content);
   const ids: [string, number, number][] = [];
@@ -87,7 +87,7 @@ export async function tabaneManifestEntry(block: TabaneBlock): Promise<TabaneMan
   let firstKey = '';
   let lastKey = '';
   layout.groups.forEach((g, k) => {
-    const group = readGroupData(content, g.start, g.end);
+    const group = readRowBlockData(content, g.start, g.end);
     for (const [origin, first, count] of group.ids) {
       const last = ids[ids.length - 1];
       if (last && last[0] === origin && last[1] + last[2] === first) last[2] += count;
@@ -95,9 +95,9 @@ export async function tabaneManifestEntry(block: TabaneBlock): Promise<TabaneMan
     }
     if (k === 0) {
       parent = group.place.parent;
-      firstKey = group.place.head + tabaneRowSuffix(group.place.firstIndex);
+      firstKey = group.place.head + tabaneRowSuffixOf(group.place.firstIndex);
     }
-    lastKey = group.place.head + tabaneRowSuffix(group.place.firstIndex + group.length - 1);
+    lastKey = group.place.head + tabaneRowSuffixOf(group.place.firstIndex + group.length - 1);
     const stride = strideOf(group.dimensions);
     for (const child of group.geometry.children) {
       const c = child.coords;
@@ -115,7 +115,7 @@ export async function tabaneManifestEntry(block: TabaneBlock): Promise<TabaneMan
     }
   });
   return {
-    name: await tabaneName(content),
+    name: await tabaneNameOf(content),
     rows: layout.rows,
     bytes: content.length,
     box,

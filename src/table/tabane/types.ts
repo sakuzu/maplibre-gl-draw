@@ -37,7 +37,7 @@ export interface TabaneFill {
 }
 
 /**
- * A row given to the writer of a group
+ * A row given to the writer of a row block
  *
  * @experimental
  */
@@ -54,7 +54,7 @@ export interface TabaneRow {
   readonly properties?: Readonly<Record<string, unknown>>;
   /** Whether the row is deleted (kept for what refers to it) */
   readonly deleted?: boolean;
-  /** What made the row (every row of a group has one, or none has) */
+  /** What made the row (every row of a row block has one, or none has) */
   readonly made?: TabaneRevision;
   /** The revision of each cell changed after the row was made, by the name of the cell */
   readonly revisions?: Readonly<Record<string, TabaneRevision>>;
@@ -66,8 +66,8 @@ export interface TabaneRow {
 }
 
 /**
- * Where the rows of a group are: under a parent, after the key `head`, row `i` of the group
- * having the key of row `firstIndex + i` of the run (`tabaneRowSuffix`)
+ * Where the rows of a row block are: under a parent, after the key `head`, row `i` of the row block
+ * having the key of row `firstIndex + i` of the run (`tabaneRowSuffixOf`)
  *
  * @experimental
  */
@@ -76,12 +76,12 @@ export interface TabanePlace {
   readonly parent: string;
   /** The key the rows follow */
   readonly head: string;
-  /** The number of the first row of the group in its run */
+  /** The number of the first row of the row block in its run */
   readonly firstIndex: number;
 }
 
 /**
- * The fills of the polygon rows of a group, as they were written
+ * The fills of the polygon rows of a row block, as they were written
  *
  * @internal
  */
@@ -115,18 +115,18 @@ export interface TabaneRevisions {
 }
 
 /**
- * A group of rows read: its rows as columns, which {@link TabaneRow}s and blocks of rows of the
+ * A row block read: its rows as columns, which {@link TabaneRow}s and blocks of rows of the
  * tables are made of
  *
  * @experimental
  */
-export interface TabaneGroup {
+export interface TabaneRowBlock {
   /** The number of rows */
   readonly length: number;
   /** The ids of the rows as runs: `[origin, first number, count]` */
   readonly ids: readonly (readonly [origin: string, first: number, count: number])[];
   readonly place: TabanePlace;
-  /** What made each row, as runs `[revision, count]` (null: what added the group) */
+  /** What made each row, as runs `[revision, count]` (null: what added the row block) */
   readonly made: readonly (readonly [revision: TabaneRevision, count: number])[] | null;
   /** The dimensions of the coordinates */
   readonly dimensions: CoordinateDimensions;
@@ -135,11 +135,11 @@ export interface TabaneGroup {
 }
 
 /**
- * A group of rows read, with every column
+ * A row block read, with every column
  *
  * @internal
  */
-export interface TabaneGroupData extends TabaneGroup {
+export interface TabaneRowBlockData extends TabaneRowBlock {
   /** A bit per row of the deleted rows (null when none is) */
   readonly deleted: Uint8Array | null;
   /** The type of each row, as an index into `typeNames` */
