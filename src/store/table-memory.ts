@@ -837,6 +837,190 @@ export class TableContractStore implements StoreContract {
     });
   }
 
+  /**
+   * Creates groups at the places of their features (see the public `Store.createGroups`): every
+   * one is checked before any is written; each takes the key of the frontmost of its features
+   * that is an item of its layer (keys made at once after the last item for the ones that go to
+   * the front), the groups are written in one write, and the features that join them in one
+   * write per layer, in their order, with the keys of their places made at once. A group deleted
+   * whose rows are kept is created again with its handle and the key it had
+   */
+  createGroups(groups: readonly Group[]): boolean {
+    return this.#apply(() => {
+      const ids = new Set<string>();
+      const joining = new Set<RowHandle>();
+      const plans: Array<{ created: TableGroup; members: RowHandle[] }> = [];
+      for (const group of groups) {
+        if (ids.has(group.id) || this.#groups.has(group.id)) {
+          throw new Error(`Group with id "${group.id}" already exists`);
+        }
+        ids.add(group.id);
+        if (!this.#layers.has(group.layerId)) {
+          throw new Error(`Layer with id "${group.layerId}" not found`);
+        }
+        const members = (group.kind === 'table' ? [] : group.featureIds).map((id) => {
+          const handle = this.tables.findRow(id);
+          if (handle === undefined) throw new Error(`Item with id "${id}" not found`);
+          if (joining.has(handle)) throw new Error(`The feature "${id}" joins two groups`);
+          joining.add(handle);
+          return handle;
+        });
+        // Its layer is the one of its first member, when it has one
+        const firstLayer =
+          members.length > 0 ? this.#internals.placeOf(members[0])?.layer.layerId : undefined;
+        plans.push({
+          created: tableGroupOf(firstLayer ? { ...group, layerId: firstLayer } : group),
+          members,
+        });
+      }
+      if (plans.length === 0) return;
+      // The places, read before anything is written: the key of the frontmost member that is an
+      // item of the layer, or the front
+      const ends = new Map<string, EndKeys>();
+      const endOf = (layerId: string): EndKeys => {
+        let end = ends.get(layerId);
+        if (!end) {
+          end = new EndKeys(this.#lastItemKey(layerId));
+          ends.set(layerId, end);
+        }
+        return end;
+      };
+      const handles: number[] = [];
+      const orders: string[] = [];
+      for (const [i, { created, members }] of plans.entries()) {
+        const kept = this.#internals.groups.handleOfId(created.id);
+        handles.push(kept >= 0 ? kept : this.#nextGroup++);
+        orders.push('');
+        const keptOrder = kept >= 0 ? this.#writer.getGroupOrder(kept) : undefined;
+        if (keptOrder !== undefined) {
+          orders[i] = keptOrder;
+          continue;
+        }
+        const walk = this.#walk(created.layerId);
+        let front = -1;
+        for (const handle of members) {
+          const code = handle * 2;
+          if (!walk?.span(code, -1)) continue;
+          if (front < 0 || walk.compare(code, front) > 0) front = code;
+        }
+        if (front >= 0) orders[i] = this.#keyOfCode(front, false);
+        else endOf(created.layerId).add((key) => (orders[i] = key));
+      }
+      for (const end of ends.values()) end.finish();
+      this.#writer.applyGroups({
+        handles: Int32Array.from(handles),
+        fields: new Map<'id' | 'order' | 'layerId' | 'visible' | 'locked', unknown[]>([
+          ['id', plans.map(({ created }) => created.id)],
+          ['order', orders],
+          ['layerId', plans.map(({ created }) => created.layerId)],
+          ['visible', plans.map(({ created }) => created.visible)],
+          ['locked', plans.map(({ created }) => created.locked)],
+        ]),
+      });
+      for (const { created } of plans) this.#groups.set(created.id, created);
+      this.#bus.merge({ groups: { created: plans.map(({ created }) => created) } });
+      // The members join their groups in one write per layer, in their order, with the keys of
+      // their places made at once after the last member there is
+      const writes = new Map<string, { rows: number[]; groups: string[]; keys: string[] }>();
+      for (const { created, members } of plans) {
+        if (members.length === 0) continue;
+        const keys = keysBetween(this.#lastMemberKey(created), null, members.length);
+        let write = writes.get(created.layerId);
+        if (!write) {
+          write = { rows: [], groups: [], keys: [] };
+          writes.set(created.layerId, write);
+        }
+        members.forEach((handle, k) => {
+          const left = this.#groupIdOfRow(handle);
+          if (left !== undefined && left !== created.id) this.#leftGroups.add(left);
+          write.rows.push(handle);
+          write.groups.push(created.id);
+          write.keys.push(keys[k]);
+        });
+      }
+      for (const [layerId, write] of writes) {
+        this.writer.apply({
+          handles: Int32Array.from(write.rows),
+          fields: new Map<RowField, unknown[]>([
+            ['layerId', write.rows.map(() => layerId)],
+            ['groupId', write.groups],
+            ['member', write.keys],
+          ]),
+        });
+      }
+    });
+  }
+
+  /**
+   * Deletes groups (see the public `Store.deleteGroups`): the members of the groups of a layer
+   * that stand next to each other take the place of them all, in the order of the groups and of
+   * their members, with keys made at once between the items just below and above them, in one
+   * write per layer
+   */
+  deleteGroups(ids: readonly string[]): boolean {
+    return this.#apply(() => {
+      const groups = [...new Set(ids)].map((id) => {
+        const group = this.#groups.get(id);
+        if (!group) throw new Error(`Group with id "${id}" not found`);
+        return group;
+      });
+      const byLayer = new Map<string, Array<{ handle: number; members: Int32Array }>>();
+      for (const group of groups) {
+        const handle = this.#internals.groups.handleOfId(group.id);
+        const view = this.tables.get(group.layerId);
+        if (handle < 0 || !view) continue;
+        const members = view.listGroupMembers(handle, 0, view.countGroupMembers(handle));
+        // A group without a member is not an item: nothing takes its place
+        if (members.length === 0) continue;
+        let list = byLayer.get(group.layerId);
+        if (!list) {
+          list = [];
+          byLayer.set(group.layerId, list);
+        }
+        list.push({ handle, members });
+      }
+      for (const [layerId, list] of byLayer) {
+        const walk = this.#walk(layerId);
+        if (!walk) continue;
+        const codeOf = (entry: { handle: number }): number => entry.handle * 2 + 1;
+        list.sort((a, b) => walk.compare(codeOf(a), codeOf(b)));
+        const rows: number[] = [];
+        const keys: string[] = [];
+        let run: typeof list = [];
+        const finishRun = (): void => {
+          if (run.length === 0) return;
+          const below = walk.below(codeOf(run[0]), -1);
+          const above = walk.above(codeOf(run[run.length - 1]), -1);
+          const members = run.flatMap((entry) => Array.from(entry.members));
+          const made = keysBetween(
+            below === null ? null : this.#keyOfCode(below, false),
+            above === null ? null : this.#keyOfCode(above, false),
+            members.length,
+          );
+          rows.push(...members);
+          keys.push(...made);
+          run = [];
+        };
+        for (const entry of list) {
+          // The groups next to each other are one run
+          const last = run[run.length - 1];
+          if (last && walk.below(codeOf(entry), -1) !== codeOf(last)) finishRun();
+          run.push(entry);
+        }
+        finishRun();
+        this.writer.apply({
+          handles: Int32Array.from(rows),
+          fields: new Map<RowField, unknown[]>([
+            ['groupId', rows.map(() => '')],
+            ['member', rows.map(() => undefined)],
+            ['order', keys],
+          ]),
+        });
+      }
+      this.#deleteGroups(groups);
+    });
+  }
+
   createFile(file: FileData): boolean {
     return this.#apply(() => {
       this.#files.create(file);
@@ -1640,7 +1824,7 @@ class EndKeys {
   #finishRun(): void {
     if (this.#run.length === 0) return;
     const keys = keysBetween(this.#last, null, this.#run.length);
-    this.#run.forEach((set, i) => set(keys[i]));
+    for (const [i, set] of this.#run.entries()) set(keys[i]);
     this.#last = keys[keys.length - 1];
     this.#run = [];
   }

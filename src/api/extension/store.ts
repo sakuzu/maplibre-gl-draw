@@ -239,10 +239,25 @@ export interface Store extends StoreView {
   applyRows?(write: RowWrite): boolean;
   /** Creates a group. */
   createGroup(group: Group): boolean;
+  /**
+   * Creates groups, one after the other in the order given, as `groups.create` puts each: at
+   * the place of the frontmost of its features that is an item of its layer (at the front when
+   * none is), its features joining it in their order (all of them or none: it throws before
+   * creating any when one cannot be created). A Store that holds its features as rows has it,
+   * and writes the groups and the features that join them at once. A Store without it is given
+   * the groups one at a time (`createGroup`, then `moveItems` to the place).
+   */
+  createGroups?(groups: readonly Group[]): boolean;
   /** Changes the fields given of a group. */
   updateGroup(id: string, updates: Partial<Group>): boolean;
   /** Deletes a group. */
   deleteGroup(id: string): boolean;
+  /**
+   * Deletes groups, as `deleteGroup` deletes each: the features of each take its place, in their
+   * order. A Store that holds its features as rows has it, and writes the features of a layer at
+   * once. A Store without it is given the groups one at a time.
+   */
+  deleteGroups?(ids: readonly string[]): boolean;
   /** Adds an embedded file. */
   createFile(file: FileData): boolean;
   /** Deletes an embedded file. */

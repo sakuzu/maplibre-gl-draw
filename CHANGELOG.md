@@ -60,7 +60,9 @@ writing it. Its changes are listed after those of 3.0.0.
   that holds its features as rows writes them in one write of its tables,
   with the keys of their order made together and short
   (`features.createMany` uses it, and gives the features one at a time to
-  a store without it); and for a store that holds its features as rows,
+  a store without it); `createGroups` and `deleteGroups`, the same for
+  groups (`groups.createMany` and `groups.deleteMany`), each group put at
+  the place of its frontmost feature as `groups.create` puts it; and for a store that holds its features as rows,
   `tables` and `applyRows`. The fields of a store of rows
   (`StoreView.tables`, `Store.applyRows`, `DocumentChange.rows` and
   `DocumentChange.opened`) are experimental, and their types are in

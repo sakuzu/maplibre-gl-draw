@@ -48,6 +48,7 @@ import {
 import { TableSelection } from '../feature-table/selection.js';
 import { coordinatesOf } from '../shared/utils/coordinates.js';
 import { rowsOfSummary, summaryOf } from './bulk-selection.js';
+import { insertGroup } from './item-lists.js';
 import { ChangeBus } from './memory/change-bus.js';
 import { MemoryDrawingState } from './memory/ui-state.js';
 import { moveItemsByLists } from './move-items.js';
@@ -346,11 +347,28 @@ export class DrawStore implements Store {
   createGroup(group: Group): boolean {
     return this.#write(() => this.#contract.createGroup(group));
   }
+  createGroups(groups: readonly Group[]): boolean {
+    return this.#write(() => {
+      const contract = this.#contract;
+      if (contract.createGroups) return contract.createGroups(groups);
+      // A Store that does not create many groups at once: one at a time, each put in its place
+      for (const group of groups) insertGroup(this, group);
+      return true;
+    });
+  }
   updateGroup(id: string, updates: Partial<Group>): boolean {
     return this.#write(() => this.#contract.updateGroup(id, updates));
   }
   deleteGroup(id: string): boolean {
     return this.#write(() => this.#contract.deleteGroup(id));
+  }
+  deleteGroups(ids: readonly string[]): boolean {
+    return this.#write(() => {
+      const contract = this.#contract;
+      if (contract.deleteGroups) return contract.deleteGroups(ids);
+      for (const id of ids) contract.deleteGroup(id);
+      return true;
+    });
   }
 
   createFile(file: FileData): boolean {

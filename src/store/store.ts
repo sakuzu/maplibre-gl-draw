@@ -525,10 +525,14 @@ export interface Store extends StoreView, UiState {
 
   /** Creates a group (see {@link DocumentStore.createGroup}) */
   createGroup(group: Group): boolean;
+  /** Creates groups at the places of their features (see the public `Store.createGroups`) */
+  createGroups(groups: readonly Group[]): boolean;
   /** Updates a group (see {@link DocumentStore.updateGroup}) */
   updateGroup(id: string, updates: Partial<Group>): boolean;
   /** Deletes a group, keeping its members (see {@link DocumentStore.deleteGroup}) */
   deleteGroup(id: string): boolean;
+  /** Deletes groups, keeping their members (see the public `Store.deleteGroups`) */
+  deleteGroups(ids: readonly string[]): boolean;
 
   /** Stores a file (see {@link DocumentStore.createFile}) */
   createFile(file: FileData): boolean;

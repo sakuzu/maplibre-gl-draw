@@ -101,9 +101,7 @@ export function createGroups(deps: ResourceDeps): GroupsCollection {
         return group;
       });
       if (store.isReadOnly()) return null;
-      store.transact(() => {
-        for (const group of prepared) createOne(group);
-      });
+      store.transact(() => store.createGroups(prepared));
       return prepared.map((group) => store.getGroup(group.id) as StoredGroup);
     },
 
@@ -148,9 +146,11 @@ export function createGroups(deps: ResourceDeps): GroupsCollection {
       const groups = requireIds(ids).map(require);
       if (store.isReadOnly() || groups.some((group) => groupLocked(store, group))) return false;
       store.transact(() => {
-        for (const group of groups) {
-          if (store.getGroup(group.id)) store.deleteGroup(group.id);
-        }
+        // Each group once
+        const there = [...new Set(groups.map((group) => group.id))].filter((id) =>
+          store.getGroup(id),
+        );
+        store.deleteGroups(there);
       });
       return true;
     },
