@@ -19,6 +19,7 @@ import type {
   DatasetRow as EngineDatasetRow,
 } from '../../dataset/types.js';
 import type { BBox } from '../../geometry/types.js';
+import { describeStyleProblem } from '../../shared/style-validation.js';
 import type { EventEmitter } from '../../shared/utils/event-emitter.js';
 import type { Feature as StoredFeature } from '../../store/types.js';
 import type {
@@ -35,7 +36,6 @@ import { DrawError } from '../errors.js';
 import type { ScreenPoint } from '../events.js';
 import type { StyleRule } from '../model.js';
 import type { EventHub } from './events.js';
-import { describeStyleProblem } from './import-export/style-validation.js';
 import { toBBox, toBoundingBox, toDatasetRow } from './rows.js';
 import {
   invalidInput,

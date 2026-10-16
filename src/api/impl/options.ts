@@ -18,6 +18,7 @@ import type { BoxSelectionStyleConfig } from '../../shared/config/rendering.js';
 import { DEFAULT_BOX_SELECTION_STYLE_CONFIG } from '../../shared/config/rendering.js';
 import type { SelectionUIConfig } from '../../shared/config/selection.js';
 import { DEFAULT_SELECTION_CONFIG } from '../../shared/config/selection.js';
+import { describeStyleProblem } from '../../shared/style-validation.js';
 import type { Color, PointStyle, StrokeStyle } from '../../shared/types/style.js';
 import type { AutoNameConfig } from '../../shared/utils/name-generator.js';
 import { DrawStore } from '../../store/draw-store.js';
@@ -32,7 +33,6 @@ import type {
 } from '../options.js';
 import type { Engine } from './engine.js';
 import type { EngineOptions } from './engine-context.js';
-import { describeStyleProblem } from './import-export/style-validation.js';
 import { invalidInput, isRecord, onlyKeys } from './shared.js';
 
 /** The options that can only be given when the instance is created */

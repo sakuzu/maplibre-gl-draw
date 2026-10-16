@@ -139,6 +139,14 @@ writing it. Its changes are listed after those of 3.0.0.
   `rewriteReferences`, which makes the references of a copy name the
   copies. The tables and Tabane hold every kind, NaN, the infinities and
   -0 included.
+- `rowsOfGeoJSON` in `/kasane` (`GeoJSONRow`, `GeoJSONRows`): features
+  of GeoJSON read as the values of rows of a layer, by the rules of
+  `document.load` (the type, the style, `visible` and `locked` from the
+  prefixed keys, the style of simplestyle-spec, the values of the
+  library, a GeometryCollection folded by type), with the ID the input
+  gives each feature, so that rows written without a load hold what a
+  load would make of the same features. A load reads a feature by the
+  same code.
 
 ### Changed in 3.0.0
 

@@ -10,7 +10,7 @@
  * read through this fold so that the image keeps its look.
  */
 
-import { drawPropertyKey } from '../../../shared/properties.js';
+import { drawPropertyKey } from './properties.js';
 
 /** The style keys of an Image that 2.0 does not have */
 const LEGACY_KEYS = ['width', 'height', 'rotation', 'opacity'] as const;

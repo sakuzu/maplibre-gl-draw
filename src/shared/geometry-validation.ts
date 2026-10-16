@@ -9,8 +9,8 @@
  * or the renderers. The rules follow docs/reference/data-format.md.
  */
 
-import { builtInGeometryKind } from '../../../shared/utils/coordinates.js';
-import type { Coordinate } from '../../../store/types.js';
+import type { Coordinate } from './types/model.js';
+import { builtInGeometryKind } from './utils/coordinates.js';
 
 /**
  * The nesting depth of the coordinates of each built-in feature type

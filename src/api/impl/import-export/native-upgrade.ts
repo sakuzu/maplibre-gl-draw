@@ -11,11 +11,11 @@
  * the validation rejects its version.
  */
 
+import { foldLegacyImageStyle } from '../../../shared/legacy-image-style.js';
 import { DRAW_PROPERTY_NAMES, drawPropertyKey } from '../../../shared/properties.js';
 import { geometryFromCoordinates } from '../../../shared/utils/coordinates.js';
 import type { FeatureCoordinates } from '../../../store/types.js';
 import { NATIVE_VERSION } from './constants.js';
-import { foldLegacyImageStyle } from './legacy-image-style.js';
 
 type Json = Record<string, unknown>;
 

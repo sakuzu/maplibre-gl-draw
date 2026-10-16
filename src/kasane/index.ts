@@ -108,6 +108,10 @@ export {
   rowValuesOf,
 } from '../api/tables.js';
 
+// Features of GeoJSON read as rows
+export type { GeoJSONRow, GeoJSONRows } from '../api/geojson-rows.js';
+export { rowsOfGeoJSON } from '../api/geojson-rows.js';
+
 // The order of the rows
 export type { ItemHandles, RowsMove } from '../api/model.js';
 export { ITEM_GROUP, ITEM_ROW } from '../api/tables.js';

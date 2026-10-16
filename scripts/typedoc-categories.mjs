@@ -40,6 +40,7 @@ const MAIN_CATEGORIES = [
 const KASANE_CATEGORIES = [
   'The values of the attributes',
   'Stores that hold features as rows',
+  'Features of GeoJSON read as rows',
   'The order of the rows',
   'Features selected in bulk and dragged',
   'Pictures of points drawn with the rows',
