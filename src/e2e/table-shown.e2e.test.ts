@@ -106,7 +106,7 @@ const PAGE_HELPERS = `
     for (const f of features) {
       builder.addRow({ id: f.id, type: f.type, geometry: f.geometry, order: f.order, style: f.style ?? {} });
     }
-    writer.addBlocks('rows', builder.finish());
+    writer.addRowBlocks('rows', builder.finish());
     return store;
   };
   window.readFrame = () => new Promise((resolve) => {

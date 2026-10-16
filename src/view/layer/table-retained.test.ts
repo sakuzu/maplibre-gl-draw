@@ -353,7 +353,7 @@ describe('the order of the drawing of a layer held as rows', () => {
     interleaved(100, 9).forEach((f, i) => {
       builder.addRow(rowOfFeature(f, orderKey(i)));
     });
-    writer.addBlocks('layer', builder.finish());
+    writer.addRowBlocks('layer', builder.finish());
     const mocks = createRenderers();
     let repaints = 0;
     const renderer = new TableLayerRenderer({

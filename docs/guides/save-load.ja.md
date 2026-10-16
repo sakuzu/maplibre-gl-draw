@@ -559,7 +559,7 @@ if (last) {
   地物を書かずに描きます。ほかの人の書き込む前の編集の途中を見せる
   ためのものです。持ち主は自分の地物だけを置き換えます
 - `writer.clear()` は、文書がよそから置き換わるとき (最初から読み直す
-  とき)、行を `addBlocks` で戻す前に、表から行を全部出します。地物に
+  とき)、行を `addRowBlocks` で戻す前に、表から行を全部出します。地物に
   した行とまとめて選んだ地物を手放し、途中の仕事を捨て、ID は行の
   handle を持ち続けます
 
@@ -586,7 +586,7 @@ version.store.createLayer({
   kind: 'table',
 });
 // Worker で作った版の行を足す:
-// version.writer.addBlocks('buildings', blocks)
+// version.writer.addRowBlocks('buildings', blocks)
 draw.document.setShown(version.store);
 // ...
 draw.document.setShown(null);

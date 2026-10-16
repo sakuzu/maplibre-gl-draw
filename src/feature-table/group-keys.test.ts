@@ -14,7 +14,7 @@
  *   key puts it, and a key written in another layer is not overwritten by the reorder of before
  * - The groups written through the writer of the Store (from elsewhere) are the groups of the
  *   document: created, moved to another layer, renamed, shown, locked and deleted, and notified
- * - the tables take in, all at once, the blocks given to `addBlocks` and the new rows
+ * - the tables take in, all at once, the blocks given to `addRowBlocks` and the new rows
  *   waiting to be built, at once; without it, they wait for the frames of the drawing as before
  */
 
@@ -68,10 +68,10 @@ function setup() {
       styleRule: undefined,
     });
   }
-  writer.addBlocks('a', points(0, 10));
+  writer.addRowBlocks('a', points(0, 10));
   const tables = store.tables as FeatureTables;
   const internals = featureTablesInternals(tables) as FeatureTablesInternals;
-  internals.addQueuedBlocks();
+  internals.addQueuedRowBlocks();
   // The side that draws: the versions go in when it lets them
   let open = true;
   internals.attachReceiver({ uploaded: () => open, swapped: () => {}, dropped: () => {} });
@@ -429,7 +429,7 @@ describe('the row groups taken in while the drawing holds the reorder of a group
   it('wait for the reorder, and are taken in the frame after it goes in', () => {
     const { writer, tables, frame, items } = heldReorder();
     // Where the members of the group stood: among them in the order drawn, free once it is in
-    writer.addBlocks('a', around(`${key(1)}5`, `${key(2)}5`));
+    writer.addRowBlocks('a', around(`${key(1)}5`, `${key(2)}5`));
     const takenIn: number[] = [];
     // The drawing holds the reorder for three frames
     for (let f = 1; f <= 6; f++) {
@@ -444,8 +444,8 @@ describe('the row groups taken in while the drawing holds the reorder of a group
 
   it('wait for the reorder when taken in at once, and are taken in once it is', () => {
     const { writer, tables, internals, draw, items } = heldReorder();
-    writer.addBlocks('a', around(`${key(1)}5`, `${key(2)}5`));
-    internals.addQueuedBlocks();
+    writer.addRowBlocks('a', around(`${key(1)}5`, `${key(2)}5`));
+    internals.addQueuedRowBlocks();
     expect(internals.hasQueuedBlocks).toBe(true);
     expect(tables.findRow('n0')).toBeUndefined();
     draw();
@@ -455,7 +455,7 @@ describe('the row groups taken in while the drawing holds the reorder of a group
 
   it('put a group whose keys hold the new key of the group in the delta once it is in', () => {
     const { writer, tables, internals, frame, draw, items, low, high } = heldReorder();
-    writer.addBlocks('a', around(low, high));
+    writer.addRowBlocks('a', around(low, high));
     const error = vi.spyOn(console, 'error').mockImplementation(() => {});
     let placed = 0;
     for (let f = 1; f <= 6; f++) {
@@ -736,11 +736,11 @@ describe('the groups written through the writer of the Store of rows', () => {
 describe('taking in the row groups without a drawing', () => {
   it('leaves the row groups given waiting for the frames until it is called', () => {
     const { tables, writer } = createFeatureTables();
-    writer.addBlocks('a', points(0, 10));
+    writer.addRowBlocks('a', points(0, 10));
     const internals = featureTablesInternals(tables) as FeatureTablesInternals;
     expect(internals.hasQueuedBlocks).toBe(true);
     expect(tables.findRow('r0')).toBeUndefined();
-    internals.addQueuedBlocks();
+    internals.addQueuedRowBlocks();
     expect(internals.hasQueuedBlocks).toBe(false);
     const view = tables.get('a');
     const order = Array.from(view?.listRowHandles(0, 20) ?? [], (h) => tables.getRowId(h));
@@ -749,9 +749,9 @@ describe('taking in the row groups without a drawing', () => {
 
   it('builds the new rows waiting into row groups of their own and takes them in', () => {
     const { tables, writer } = createFeatureTables();
-    writer.addBlocks('a', points(0, 4));
+    writer.addRowBlocks('a', points(0, 4));
     const internals = featureTablesInternals(tables) as FeatureTablesInternals;
-    internals.addQueuedBlocks();
+    internals.addQueuedRowBlocks();
     // A run of new rows after the last row: built into row groups of their own over the frames
     const n = 100;
     const ids = Array.from({ length: n }, (_, i) => `r${i + 4}`);
@@ -767,7 +767,7 @@ describe('taking in the row groups without a drawing', () => {
     });
     expect(internals.hasPendingWork).toBe(true);
     expect(internals.ids.mainGroup(handles[0])).toBeLessThan(0);
-    internals.addQueuedBlocks();
+    internals.addQueuedRowBlocks();
     // In row groups of the layer, not in its delta
     for (const handle of handles) {
       expect(internals.ids.mainGroup(handle)).toBeGreaterThanOrEqual(0);
@@ -782,14 +782,14 @@ describe('taking in the row groups without a drawing', () => {
 
   it('throws for a row group that cannot be taken in, and the groups after it keep waiting', () => {
     const { tables, writer } = createFeatureTables();
-    writer.addBlocks('a', points(0, 4));
+    writer.addRowBlocks('a', points(0, 4));
     const internals = featureTablesInternals(tables) as FeatureTablesInternals;
-    internals.addQueuedBlocks();
+    internals.addQueuedRowBlocks();
     // Its ids are rows already, then a group that can be taken in
-    writer.addBlocks('a', [...points(0, 1), ...points(10, 1)]);
-    expect(() => internals.addQueuedBlocks()).toThrow();
+    writer.addRowBlocks('a', [...points(0, 1), ...points(10, 1)]);
+    expect(() => internals.addQueuedRowBlocks()).toThrow();
     expect(internals.hasQueuedBlocks).toBe(true);
-    internals.addQueuedBlocks();
+    internals.addQueuedRowBlocks();
     expect(tables.findRow('r10')).toBeDefined();
   });
 });

@@ -65,8 +65,8 @@ function adopt(layerId: string, features: Feature[]): void {
   features.forEach((f, i) => {
     builder.addRow(rowOfFeature(f, orderKey(i)));
   });
-  tables.writer.addBlocks(layerId, builder.finish());
-  featureTablesInternals(tables.tables)?.addQueuedBlocks();
+  tables.writer.addRowBlocks(layerId, builder.finish());
+  featureTablesInternals(tables.tables)?.addQueuedRowBlocks();
 }
 
 beforeEach(() => {

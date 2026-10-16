@@ -425,7 +425,7 @@ describeEntry('src/kasane/index.ts', KASANE, () => import('./kasane/index.js'));
 describeEntry('src/webgl/index.ts', WEBGL, () => import('./webgl/index.js'));
 
 describe('the five entries', () => {
-  it('share no name, but the transfer list of /table, which /kasane widens to blocks of rows', () => {
+  it('share no name, but the transfer list of /table, which /kasane widens to row blocks', () => {
     const all = [...MAIN, ...GEOMETRY, ...TABLE, ...KASANE, ...WEBGL];
     expect(all.filter((name, index) => all.indexOf(name) !== index)).toEqual(['transferList']);
   });

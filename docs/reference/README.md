@@ -44,7 +44,7 @@ The package has five entry points.
 - `@sakuzu/maplibre-gl-draw/kasane` — the parts that hold the features of
   a layer as rows of columns: a store of rows (`createTableStore`,
   `createFeatureTables`), the reading and writing of its rows, and the
-  building of blocks of rows in a Worker (`createRowBlockBuilder`). It
+  building of row blocks in a Worker (`createRowBlockBuilder`). It
   depends on neither maplibre-gl nor WebGL nor the DOM. It is
   experimental and may change in a minor release
 - `@sakuzu/maplibre-gl-draw/webgl` — building blocks for custom shaders

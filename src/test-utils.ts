@@ -540,9 +540,9 @@ export function tablesOfFeatures(
   features.forEach((feature, i) => {
     builder.addRow(rowOfFeature(feature, orderKey(i)));
   });
-  writer.addBlocks(layerId, builder.finish());
+  writer.addRowBlocks(layerId, builder.finish());
   const internals = featureTablesInternals(tables) as FeatureTablesInternals;
-  internals.addQueuedBlocks();
+  internals.addQueuedRowBlocks();
   return { internals, table: internals.layerTable(layerId) as LayerTable, tables, writer };
 }
 
@@ -921,9 +921,9 @@ export function tablesOfReference(
         deleted: row.deleted,
       });
     }
-    if (builder.length > 0) writer.addBlocks(layerId, builder.finish());
+    if (builder.length > 0) writer.addRowBlocks(layerId, builder.finish());
   }
-  internals.addQueuedBlocks();
+  internals.addQueuedRowBlocks();
   const groupHandleOf = (id: string): number => groupHandles.get(id) as number;
   return { tables, writer, internals, groupHandleOf };
 }

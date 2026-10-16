@@ -649,7 +649,7 @@ describe('the changes of the order read from the items next to the ones a write 
         ranges += actual.filter((change) => change.kind === 'rows').length;
         // The next versions of the row groups now and then: the rows written go back to them
         if (step % 30 === 29) {
-          internals.addQueuedBlocks();
+          internals.addQueuedRowBlocks();
           internals.flushVersions();
         }
       }

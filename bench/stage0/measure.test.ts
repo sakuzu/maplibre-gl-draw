@@ -9,7 +9,7 @@
  *
  * - The blocks: every file of every set of blocks in `bench/data/stage0/` decoded as the Worker of
  *   the page decodes it, a file at a time: the time to decompress and decode a segment, and to
- *   make its rows blocks of rows of the tables
+ *   make its rows row blocks of the tables
  * - Applying batches: 100,000 items applied, a thousand batches of a client waiting for their
  *   serials, then batches of another client of 1, 1,000 and 10,000 writes received, and the own
  *   batches received back. The heap the waiting batches and the table of the last writes of
@@ -33,7 +33,7 @@ function heapMb(): number {
 }
 
 describe.skipIf(!MEASURE)('the trial measured', () => {
-  it('decodes the blocks into blocks of rows', () => {
+  it('decodes the blocks into row blocks', () => {
     if (!existsSync(OUT)) throw new Error('make the blocks first (bench/stage0/make-blocks.ts)');
     for (const name of readdirSync(OUT).sort()) {
       const dir = join(OUT, name);
@@ -80,7 +80,7 @@ describe.skipIf(!MEASURE)('the trial measured', () => {
             both: per1000(sum.unzipMs + sum.decodeMs),
             longestFileAverage: round(Math.max(...perSegment)),
           },
-          // The same 1,000 rows made blocks of rows: the rows of the builder, added, cut
+          // The same 1,000 rows made row blocks: the rows of the builder, added, cut
           blocksPer1000Ms: {
             rows: per1000(sum.rowsMs),
             add: per1000(sum.addMs),

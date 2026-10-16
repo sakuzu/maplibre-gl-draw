@@ -56,18 +56,18 @@ import {
 import { type ValueColumn, ValueColumnBuilder } from './value-column.js';
 
 /**
- * The target number of rows of a block
+ * The target number of rows of a row block
  *
- * A block is the unit that is built again when its rows change, so a smaller block costs less
+ * A row block is the unit that is built again when its rows change, so a smaller row block costs less
  * to build again and a larger one gives fewer draws. It starts from the target of a chunk of a
  * large dataset (`LARGE_CHUNK_TARGET_SIZE`), to be set from measured data.
  */
 export const ROW_BLOCK_TARGET_ROWS = 4096;
 
 /**
- * The target number of coordinates of a block
+ * The target number of coordinates of a row block
  *
- * Cutting by the rows alone would make a block of polygons of 50 coordinates hold 200,000
+ * Cutting by the rows alone would make a row block of polygons of 50 coordinates hold 200,000
  * coordinates, and building it again would take about a second. It starts from the target of a
  * chunk (`CHUNK_TARGET_VERTICES`), to be set from measured data.
  */
@@ -91,11 +91,11 @@ export interface GroupEntry {
 export interface RowBlockBuilderOptions {
   /** The groups of features the rows can belong to (none when omitted) */
   readonly groups?: readonly GroupEntry[];
-  /** The largest number of rows of a block ({@link ROW_BLOCK_TARGET_ROWS} when omitted) */
+  /** The largest number of rows of a row block ({@link ROW_BLOCK_TARGET_ROWS} when omitted) */
   readonly targetRows?: number;
   /**
-   * The largest number of coordinates of a block ({@link ROW_BLOCK_TARGET_VERTICES} when
-   * omitted). A single row of more coordinates makes a block of its own
+   * The largest number of coordinates of a row block ({@link ROW_BLOCK_TARGET_VERTICES} when
+   * omitted). A single row of more coordinates makes a row block of its own
    */
   readonly targetVertices?: number;
   /**
@@ -150,7 +150,7 @@ export interface RowInput {
 }
 
 /**
- * Builds the blocks of rows of one layer
+ * Builds the row blocks of one layer
  */
 export interface RowBlockBuilder {
   /** The number of rows added */
@@ -164,7 +164,7 @@ export interface RowBlockBuilder {
    */
   addRow(row: RowInput): void;
   /**
-   * Puts the rows in the order of the layer and cuts them into blocks
+   * Puts the rows in the order of the layer and cuts them into row blocks
    *
    * @throws `DrawError` with the code `not-found` when a row names a group the options do not give
    */
@@ -172,7 +172,7 @@ export interface RowBlockBuilder {
 }
 
 /**
- * The builder as the tables use it: its blocks with every column
+ * The builder as the tables use it: its row blocks with every column
  *
  * @internal
  */
@@ -181,14 +181,14 @@ export interface RowBlockDataBuilder extends RowBlockBuilder {
 }
 
 /**
- * Creates the builder of the blocks of rows of one layer
+ * Creates the builder of the row blocks of one layer
  */
 export function createRowBlockBuilder(options: RowBlockBuilderOptions = {}): RowBlockBuilder {
   return createRowBlockDataBuilder(options);
 }
 
 /**
- * Creates the builder of the blocks of rows of one layer, as the tables use it
+ * Creates the builder of the row blocks of one layer, as the tables use it
  *
  * @internal
  */
@@ -285,7 +285,7 @@ export function createRowBlockDataBuilder(
 }
 
 /**
- * Every buffer of the blocks, for `postMessage` with transfer (each one once)
+ * Every buffer of the row blocks, for `postMessage` with transfer (each one once)
  *
  * @internal
  */

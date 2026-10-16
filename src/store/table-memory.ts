@@ -200,7 +200,7 @@ export class TableContractStore implements StoreContract {
       createRestoreToken: () => writer.createRestoreToken(),
       forget: (handles) => writer.forget(handles),
       allocateHandles: (ids, hashes) => writer.allocateHandles(ids, hashes),
-      addBlocks: (layerId, blocks) => writer.addBlocks(layerId, blocks),
+      addRowBlocks: (layerId, blocks) => writer.addRowBlocks(layerId, blocks),
       raiseDimensions: (layerId, dimensions) => writer.raiseDimensions(layerId, dimensions),
       apply: (patch, options) => this.transact(() => this.#applyRows(patch, options)),
       applyGroups: (patch, options) => this.#applyGroups(patch, options),

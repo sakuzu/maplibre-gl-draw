@@ -105,8 +105,8 @@ describe('the items of a layer', () => {
       const member = i === 1 || i === 2 || i === 4;
       builder.addRow(member ? { ...row, group: 7, member: orderKey(i) } : row);
     }
-    writer.addBlocks('layer', builder.finish());
-    internals?.addQueuedBlocks();
+    writer.addRowBlocks('layer', builder.finish());
+    internals?.addQueuedRowBlocks();
     const view = tables.get('layer');
     if (!view) throw new Error('no layer');
     expect(view.itemCount).toBe(4);

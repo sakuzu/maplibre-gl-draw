@@ -265,7 +265,7 @@ async function drawWritten(
           locked: false,
         } as never);
       });
-      writer.addBlocks('rows', builder.finish());
+      writer.addRowBlocks('rows', builder.finish());
       Object.defineProperty(store, 'tables', { value: tables });
       w.draw.destroy();
       w.draw = w.e2e.createDraw(map, { store, initDefaultLayer: false });

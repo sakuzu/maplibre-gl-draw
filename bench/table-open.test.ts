@@ -186,7 +186,7 @@ async function open(run: Run) {
     params,
     dataUrl: 'http://localhost/data/test.ndjson',
     layerId: 'rows',
-    writer: { addBlocks: (_layerId, blocks) => taken.push(...blocks) },
+    writer: { addRowBlocks: (_layerId, blocks) => taken.push(...blocks) },
     createWorker: (() => {
       let w = 0;
       return () => fakeWorker(run.fake?.(w++));

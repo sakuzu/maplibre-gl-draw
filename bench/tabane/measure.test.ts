@@ -168,7 +168,7 @@ describe.skipIf(!MEASURE)('Tabane measured', () => {
         };
       }
 
-      // The way before, for the same rows: rows given to the builder of the blocks of rows
+      // The way before, for the same rows: rows given to the builder of the row blocks
       const builderPass = () => {
         let ms = 0;
         for (let s = 0; s < rows.length; s += 1000) {

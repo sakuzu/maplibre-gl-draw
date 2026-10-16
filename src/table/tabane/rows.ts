@@ -2,9 +2,9 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * A row block of the Tabane format as a block of rows of the tables, and as rows
+ * A row block of the Tabane format as a row block of the tables, and as rows
  *
- * The columns of a row block read are those of a block of rows (`RowBlock`): the geometry, the
+ * The columns of a row block read are those of a row block (`RowBlock`): the geometry, the
  * types, the styles and the attributes are taken as they are. What is made here is what the
  * columns of a row block leave to the reader: the ids and the keys as text (from their runs), the
  * hashes of the ids, the flags, the bbox of every row and the spatial index (they depend on the
@@ -157,7 +157,7 @@ function isDeleted(rowBlock: TabaneRowBlockData, row: number): boolean {
 }
 
 /**
- * A row block as a block of rows of the tables (for `FeatureTablesWriter.addBlocks`), its columns
+ * A row block as a row block of the tables (for `FeatureTablesWriter.addRowBlocks`), its columns
  * taken as they are
  *
  * @throws `DrawError` with the code `invalid-input` when the row block has a dimension the layer does
@@ -172,7 +172,7 @@ export function rowBlockOfTabane(
 }
 
 /**
- * A row block as a block of rows with every column, as the tables read it
+ * A row block as a row block with every column, as the tables read it
  *
  * @internal
  */

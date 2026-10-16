@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * The rows of a decoded segment as the builder of the blocks of rows takes them
+ * The rows of a decoded segment as the builder of the row blocks takes them
  * (`createRowBlockBuilder`): the tables take an id and a key of the order per row as strings, so
  * they are made here from the runs of the segment.
  *

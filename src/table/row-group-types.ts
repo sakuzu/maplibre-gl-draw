@@ -50,11 +50,11 @@ export interface TriangleCache {
 }
 
 /**
- * A block of rows of one layer, in the order of the layer: columns of typed arrays, built in a
+ * A row block of one layer, in the order of the layer: columns of typed arrays, built in a
  * Worker (`createRowBlockBuilder`) and sent to the main thread without a copy (`transferList`).
  *
  * Its other columns (the geometry, the keys of the order, the styles, the attributes, the spatial
- * index) are read by the tables only: a block is given to them as it was built.
+ * index) are read by the tables only: a row block is given to them as it was built.
  *
  * @experimental
  */
@@ -63,13 +63,13 @@ export interface RowBlock {
   readonly length: number;
   /**
    * The handle of each row: a number the document gives a row once and never changes. A Worker
-   * cannot give them, so a block built in a Worker holds -1 until the main thread does
+   * cannot give them, so a row block built in a Worker holds -1 until the main thread does
    * (`FeatureTablesWriter.allocateHandles`)
    */
   readonly handles: Int32Array;
   /** The id of each row */
   readonly ids: Utf8Column;
-  /** The hash of the bytes of each id (computed where the block is built) */
+  /** The hash of the bytes of each id (computed where the row block is built) */
   readonly idHashes: Uint32Array;
   /**
    * The group of features of each row, by the handle the builder was given for it
@@ -79,7 +79,7 @@ export interface RowBlock {
 }
 
 /**
- * A block of rows with every column, as the tables read it
+ * A row block with every column, as the tables read it
  *
  * Every array has one entry per row (`length` of them) unless it says otherwise, and every
  * array can be sent from a Worker without a copy ({@link blockTransferList}).

@@ -82,8 +82,8 @@ describe('debug.gpu and the hooks of measurement of the rows', () => {
     ['a', 'b'].forEach((id, i) => {
       builder.addRow(rowOfFeature(feature(id, 'Point', [i, i]), orderKey(i)));
     });
-    writer.addBlocks('rows', builder.finish());
-    featureTablesInternals(tables)?.addQueuedBlocks();
+    writer.addRowBlocks('rows', builder.finish());
+    featureTablesInternals(tables)?.addQueuedRowBlocks();
     const contract = new MemoryContractStore();
     Object.defineProperty(contract, 'tables', { value: tables });
     draw = createDraw(createMapStub().map, { store: contract, initDefaultLayer: false });

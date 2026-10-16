@@ -4,7 +4,7 @@
 /**
  * The copy of a document held as rows into a new Store of rows (`copyTableStore`; 13.7 of the
  * design of the tables: a print and a thumbnail read the document into a Store of rows with
- * `addBlocks`, without making its features)
+ * `addRowBlocks`, without making its features)
  *
  * - The layers, the groups at their places, the stacking order with its entries from outside the
  *   document, the metadata and the files are copied at once

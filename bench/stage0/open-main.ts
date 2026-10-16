@@ -13,7 +13,7 @@
  *    `view=all`: every row). The time until that is drawn is `small`
  * 2. Fetches the files whose bounding box meets the view first, then the rest, the next file
  *    picked when the link is free (one in the view as it is then, when there is one; otherwise
- *    the next in the order of the rows). The Workers decode each file into blocks of rows as it
+ *    the next in the order of the rows). The Workers decode each file into row blocks as it
  *    comes; the blocks of the files of the view are added to the layer as they come, in whatever
  *    order, each at the place of its keys. The time until they are all drawn is `viewDrawn`
  * 3. The blocks of the other files decoded meanwhile are added then, and the rest as they come.
@@ -499,7 +499,7 @@ async function open(): Promise<OpenResult> {
       (index, blocks) => {
         const file = files[index];
         if (inView.has(index) || viewDone) {
-          writer.addBlocks(file.layer, blocks);
+          writer.addRowBlocks(file.layer, blocks);
           rowsAdded += file.rows;
         } else {
           held.push([file.layer, blocks]);
@@ -517,7 +517,7 @@ async function open(): Promise<OpenResult> {
       result.memory.viewDrawn = memory();
       viewDone = true;
       for (const [layer, blocks] of held) {
-        writer.addBlocks(layer, blocks);
+        writer.addRowBlocks(layer, blocks);
         rowsAdded += blocks.reduce((s, b) => s + b.length, 0);
       }
       held.length = 0;
@@ -583,7 +583,7 @@ async function attach(): Promise<AttachResult | null> {
         link,
         t0,
         (index, blocks) => {
-          writer.addBlocks(manifest.files[index].layer, blocks);
+          writer.addRowBlocks(manifest.files[index].layer, blocks);
           rows += manifest.files[index].rows;
         },
         came,

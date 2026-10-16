@@ -38,7 +38,7 @@ interface BulkStore {
   applyBulk(op: unknown, rows?: Rows): boolean;
 }
 const { featureTablesInternals } = featureTablesModule as unknown as {
-  featureTablesInternals(tables: unknown): { addQueuedBlocks(): void } | undefined;
+  featureTablesInternals(tables: unknown): { addQueuedRowBlocks(): void } | undefined;
 };
 const { TableSelection } = selectionModule as unknown as {
   TableSelection: { of(handles: readonly number[]): Rows };
@@ -185,12 +185,12 @@ function storeOf(params: TableBenchParams): BulkStore {
       properties: feature.properties,
     } as never);
     if (builder.length >= 16_384) {
-      writer.addBlocks('rows', builder.finish());
+      writer.addRowBlocks('rows', builder.finish());
       builder = createRowBlockBuilder();
     }
   }
-  if (builder.length > 0) writer.addBlocks('rows', builder.finish());
-  featureTablesInternals(store.tables)?.addQueuedBlocks();
+  if (builder.length > 0) writer.addRowBlocks('rows', builder.finish());
+  featureTablesInternals(store.tables)?.addQueuedRowBlocks();
   return store as unknown as BulkStore;
 }
 

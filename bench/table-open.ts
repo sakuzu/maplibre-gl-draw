@@ -51,7 +51,7 @@ export interface OpenRowsOptions {
   readonly dataUrl: string | null;
   readonly layerId: string;
   /** What takes the row groups in */
-  readonly writer: { addBlocks(layerId: string, blocks: readonly RowBlock[]): void };
+  readonly writer: { addRowBlocks(layerId: string, blocks: readonly RowBlock[]): void };
   readonly createWorker: () => OpenWorker;
   /** The logical cores of the device */
   readonly cores: number;
@@ -158,7 +158,7 @@ export async function openRows(options: OpenRowsOptions): Promise<OpenedRows> {
     while (taking < count) {
       for (const groups of waiting[taking].splice(0)) {
         const a0 = performance.now();
-        writer.addBlocks(layerId, groups);
+        writer.addRowBlocks(layerId, groups);
         adoptMs += performance.now() - a0;
         adopted += groups.length;
         firstGroupAt ||= performance.now();

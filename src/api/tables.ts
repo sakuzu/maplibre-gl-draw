@@ -5,7 +5,7 @@
  * The features of a document held as rows of columns
  *
  * A Store can hold the features of its layers as rows rather than as objects: the rows of a
- * layer are blocks of typed arrays ({@link RowBlock}), built in a Worker
+ * layer are held in row blocks of typed arrays ({@link RowBlock}), built in a Worker
  * (`createRowBlockBuilder`) and added without a copy. The instance draws and hit tests such a
  * layer from its rows, and a reader of many rows reads the columns; a row becomes a
  * {@link Feature} only when one is asked for.
@@ -202,7 +202,7 @@ export type TableGroupField = 'id' | 'name' | 'order' | 'layerId' | 'visible' | 
 
 /**
  * Values written to groups of features of a document, by the implementation of the Store: the
- * groups by their handles (the handles rows name in their blocks, `GroupEntry.handle`).
+ * groups by their handles (the handles rows name in their row blocks, `GroupEntry.handle`).
  */
 export interface TableGroupPatch {
   /** The groups written */
@@ -224,7 +224,7 @@ export interface RowApplyOptions {
    * (`FeatureTablesWriter.createRestoreToken`): they stay as they were until it is let go of, so
    * that writing them not deleted puts them back where they were. Given, it is added to the
    * notification (`DocumentChange.restoreToken`). Rows deleted without one go with the next
-   * versions of their blocks
+   * versions of their row blocks
    */
   readonly restoreToken?: RestoreToken;
   /**
@@ -344,7 +344,7 @@ export interface FeatureTables {
   readValues(rows: RowValues): RowValues;
   /**
    * Lets go of the rows and the groups a deletion kept (`DocumentChange.restoreToken`): they go
-   * with the next versions of their blocks, and the Store may forget their ids
+   * with the next versions of their row blocks, and the Store may forget their ids
    */
   release(token: RestoreToken): void;
   /**
@@ -401,36 +401,36 @@ export interface FeatureTablesWriter {
    */
   allocateHandles(ids: Utf8Column, hashes?: Uint32Array): Int32Array;
   /**
-   * Adds blocks of rows to a layer, without copying their columns.
+   * Adds row blocks to a layer, without copying their columns.
    *
-   * The blocks are queued, and added a block at a time within the time of the frames of the
-   * drawing, so that a large file does not hold a frame; the layer draws the blocks added so
-   * far. When a block is added, its rows that have no handle yet (-1) get one (from the hashes
-   * of `idHashes`, computed where the block was built), its styles built in a Worker are numbered
-   * in the table of styles, and it is put at its place in the order of the layer. The blocks are
+   * The row blocks are queued, and added a row block at a time within the time of the frames of the
+   * drawing, so that a large file does not hold a frame; the layer draws the row blocks added so
+   * far. When a row block is added, its rows that have no handle yet (-1) get one (from the hashes
+   * of `idHashes`, computed where the row block was built), its styles built in a Worker are numbered
+   * in the table of styles, and it is put at its place in the order of the layer. The row blocks are
    * kept as they are: do not change their arrays afterwards.
    *
-   * A block whose rows are not in the order of their keys, or whose keys overlap those of
-   * another block of the layer (one added, or built of rows written, since it was made), is not
-   * left out: its rows go to the rows of the layer changed since their blocks were built (the
-   * delta), read and drawn at their places at once, and into the blocks with their next
-   * versions. A block with an id that is already a row of the document is left out, and told to
-   * `FeatureTablesOptions.onBlockRejected` (reported on the console without it).
+   * A row block whose rows are not in the order of their keys, or whose keys overlap those of
+   * another row block of the layer (one added, or built of rows written, since it was made), is not
+   * left out: its rows go to the rows of the layer changed since their row blocks were built (the
+   * delta), read and drawn at their places at once, and into the row blocks with their next
+   * versions. A row block with an id that is already a row of the document is left out, and told to
+   * `FeatureTablesOptions.onRowBlockRejected` (reported on the console without it).
    *
-   * @throws `DrawError` with the code `invalid-input` when an array of a block does not have one
-   *   entry per row, when a block is empty, or when its coordinates do not have the dimensions of
+   * @throws `DrawError` with the code `invalid-input` when an array of a row block does not have one
+   *   entry per row, when a row block is empty, or when its coordinates do not have the dimensions of
    *   the layer (`FeatureTablesOptions.dimensionsOf`), or `not-found` when a row names a group of
    *   features that is not known (nothing is queued then)
    */
-  addBlocks(layerId: string, blocks: readonly RowBlock[]): void;
+  addRowBlocks(layerId: string, rowBlocks: readonly RowBlock[]): void;
   /**
    * Raises the dimensions of the coordinates of a layer, so that it holds a `z` or an `m` it did
    * not (`xy` to `xyz`, `xyz` to `xyzm`; a layer of no rows yet included): no value is dropped.
    *
    * The rows written from then on are held with the new dimensions (a position of fewer values
-   * gets NaN for the others), and every block of the layer is due for its next version, which
-   * copies its coordinates into them over the frames; the blocks of before are read and drawn as
-   * they are until then. The blocks given to `addBlocks` from then on have the new dimensions.
+   * gets NaN for the others), and every row block of the layer is due for its next version, which
+   * copies its coordinates into them over the frames; the row blocks of before are read and drawn as
+   * they are until then. The row blocks given to `addRowBlocks` from then on have the new dimensions.
    *
    * @throws `DrawError` with the code `invalid-input` when the dimensions do not hold the ones of
    *   the layer (they are never lowered), or `invalid-state` when a row of the layer is opened as
@@ -441,18 +441,18 @@ export interface FeatureTablesWriter {
    * Writes values of rows, after the implementation of the Store recorded them.
    *
    * The geometry, the style, shown and locked, the attributes and the deletion of a row are
-   * written in place: what fits the columns of its block is written into them, the rest kept
-   * with the block and read before its columns (every reader of the rows reads the values
+   * written in place: what fits the columns of its row block is written into them, the rest kept
+   * with the row block and read before its columns (every reader of the rows reads the values
    * written). The drawing writes the rows into the chunks that draw them before its next frame.
    *
    * A row whose change moves it in the order of its layer or to another layer (`type`,
    * `layerId`, `groupId`, `order`, `member`, or an attribute the cutting of the rows into chunks
-   * reads, the created zoom) goes to the rows of its layer changed since their blocks were built
+   * reads, the created zoom) goes to the rows of its layer changed since their row blocks were built
    * (the delta), and so does a new row: a handle that names no row, with at least its `type`,
    * `layerId`, `geometry` and `order` (the other fields take the defaults of a feature). The
    * readers read the row there at once, and the drawing draws it at its place in the order; the
-   * next version of the block its key falls in takes it, over the frames. New rows whose keys
-   * are one run that no row of the layer is within are built into blocks of their own instead,
+   * next version of the row block its key falls in takes it, over the frames. New rows whose keys
+   * are one run that no row of the layer is within are built into row blocks of their own instead,
    * and are drawn once built.
    *
    * The positions of a geometry are read as coordinates of the dimensions of the layer of the
@@ -476,7 +476,7 @@ export interface FeatureTablesWriter {
    * A new group (a handle no group has) needs its `id`, `order` and `layerId`; its `name` is held
    * by the Store, not by the tables (the Store of rows of `createTableStore` creates, changes and
    * deletes its groups as the values say, and notifies them). A new key of the order of a group
-   * moves its members, which follow each other at the place of the group: the blocks are cut at
+   * moves its members, which follow each other at the place of the group: the row blocks are cut at
    * the runs of the members and at the place they go to, and put in their new order over the
    * frames, read and drawn in the order before until then; the rows are not written. A group
    * given another `layerId` is in that layer from then on; its members go there by the writes of
@@ -515,16 +515,16 @@ export interface FeatureTablesWriter {
   /**
    * Takes every row out of the tables, after the implementation of the Store recorded it: the
    * document is replaced from elsewhere (a version of it put back, the document read again from
-   * the start), and its rows come back with `addBlocks`.
+   * the start), and its rows come back with `addRowBlocks`.
    *
    * The rows opened as features and the features shown in place are let go of, the features
-   * selected in bulk are no longer marked, the next versions of the blocks and the work given to
-   * the Worker are dropped (what the Worker gives back is not taken in), the blocks queued and the
+   * selected in bulk are no longer marked, the next versions of the row blocks and the work given to
+   * the Worker are dropped (what the Worker gives back is not taken in), the row blocks queued and the
    * new rows not built yet go, and so do the rows and the groups of features the deletions kept
    * (their tokens keep nothing any more). The groups of features stay, with the keys of their
    * order, and the layers keep the dimensions of their coordinates. An id keeps its handle until
    * the Store forgets it (`forget`): a row of an id seen before gets the same handle when its
-   * block is added, so that what is kept by the handles (the values of the rows written before,
+   * row block is added, so that what is kept by the handles (the values of the rows written before,
    * the rows hidden on this client) goes on; the Store forgets the ids that do not come back.
    *
    * It is told as a replacement of the document (`DocumentChange.reset`), with the rows opened no
@@ -559,12 +559,12 @@ export interface FeatureTablesOptions {
    */
   readonly onRelease?: (handles: Int32Array) => void;
   /**
-   * Tells the Store a block given to `addBlocks` that was left out when its turn came, with its
-   * layer and why (`already-exists` for a block with an id that is already a row of the
-   * document): the rows of the block are not in the layer. Without it, the block is reported on
+   * Tells the Store a row block given to `addRowBlocks` that was left out when its turn came, with its
+   * layer and why (`already-exists` for a row block with an id that is already a row of the
+   * document): the rows of the row block are not in the layer. Without it, the row block is reported on
    * the console
    */
-  readonly onBlockRejected?: (layerId: string, reason: DrawError) => void;
+  readonly onRowBlockRejected?: (layerId: string, reason: DrawError) => void;
   /**
    * The most the deletions kept and not let go of may hold: tokens (100 when omitted), and bytes
    * of the rows they keep (64 MiB when omitted, counted at the size of a row of five corners).
@@ -591,7 +591,7 @@ export interface FeatureTablesOptions {
  * @example A Store that holds its features as rows
  * ```ts
  * const { tables, writer } = createFeatureTables();
- * writer.addBlocks('layer-1', blocks); // the blocks of rows a Worker built
+ * writer.addRowBlocks('layer-1', rowBlocks); // the row blocks a Worker built
  * const store = { ...documentStore, tables }; // the Store hands out the reading side
  * ```
  */
@@ -614,7 +614,7 @@ export function createFeatureTables(options: FeatureTablesOptions = {}): {
  *
  * @param options The options of its tables (the Worker that builds the rows)
  * @returns The Store, for the `store` option of `createDraw`, and the writer of its tables: what
- *   adds blocks of rows (`addBlocks`) and writes rows from elsewhere, in a transaction of the
+ *   adds row blocks (`addRowBlocks`) and writes rows from elsewhere, in a transaction of the
  *   Store with their source
  *
  * @example
@@ -622,7 +622,7 @@ export function createFeatureTables(options: FeatureTablesOptions = {}): {
  * const { store, writer } = createTableStore();
  * const draw = createDraw(map, { store });
  * draw.layers.create({ id: 'buildings', name: 'Buildings' }); // a layer held as rows
- * writer.addBlocks('buildings', blocks); // the blocks of rows a Worker built
+ * writer.addRowBlocks('buildings', rowBlocks); // the row blocks a Worker built
  * store.transact(() => writer.apply(values), 'remote'); // a change from elsewhere
  * ```
  */
@@ -636,7 +636,7 @@ export function createTableStore(
 }
 
 /**
- * A copy of a document held as rows ({@link copyTableStore}), made a block of rows at a time.
+ * A copy of a document held as rows ({@link copyTableStore}), made a row block at a time.
  */
 export interface TableStoreCopy {
   /** The new Store, for the `store` option of the `createDraw` that draws the copy */
@@ -644,8 +644,8 @@ export interface TableStoreCopy {
   /** The writer of its tables */
   readonly writer: FeatureTablesWriter;
   /**
-   * Copies the next block of rows into the new Store (it takes them in over the frames of its
-   * drawing, as `addBlocks` does)
+   * Copies the next row block into the new Store (it takes them in over the frames of its
+   * drawing, as `addRowBlocks` does)
    *
    * @returns Whether rows are left to copy
    */
@@ -658,9 +658,9 @@ export interface TableStoreCopy {
  *
  * The layers (each held as rows), the groups at their places, the stacking order, the metadata
  * and the embedded files are copied at once, and the features of a layer of objects too. The rows
- * are listed at once, in the order of their layers, and copied a block at a time with
- * `copyNext`, each block read as the rows are then (a value written meanwhile is copied as it is
- * when its block is read), so that the copy of a large document is spread over frames or tasks.
+ * are listed at once, in the order of their layers, and copied a row block at a time with
+ * `copyNext`, each row block read as the rows are then (a value written meanwhile is copied as it is
+ * when its row block is read), so that the copy of a large document is spread over frames or tasks.
  * The layers keep the dimensions of their coordinates.
  *
  * @param source - The Store of the document (`draw.getStore()`)

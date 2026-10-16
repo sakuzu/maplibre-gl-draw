@@ -565,7 +565,7 @@ others, in `@sakuzu/maplibre-gl-draw/kasane`:
   own features
 - `writer.clear()` takes every row out of the tables, when the document is
   replaced from elsewhere (read again from the start), before its rows
-  come back with `addBlocks`. The rows opened as features and the
+  come back with `addRowBlocks`. The rows opened as features and the
   features selected in bulk are let go of, the work under way is dropped,
   and the ids keep their handles
 
@@ -593,7 +593,7 @@ version.store.createLayer({
   kind: 'table',
 });
 // The rows of the version, built in a Worker:
-// version.writer.addBlocks('buildings', blocks)
+// version.writer.addRowBlocks('buildings', blocks)
 draw.document.setShown(version.store);
 // ...
 draw.document.setShown(null);

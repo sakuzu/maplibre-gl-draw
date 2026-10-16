@@ -115,7 +115,7 @@ export interface TabaneRevisions {
 }
 
 /**
- * A row block read: its rows as columns, which {@link TabaneRow}s and blocks of rows of the
+ * A row block read: its rows as columns, which {@link TabaneRow}s and row blocks of the
  * tables are made of
  *
  * @experimental

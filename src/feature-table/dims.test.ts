@@ -211,7 +211,7 @@ describe('the rows of layers of every dimensions', () => {
         internals.advanceQueuedBlocks(steps(10));
         await settle();
       }
-      internals.addQueuedBlocks();
+      internals.addQueuedRowBlocks();
       expectTablesMatch(tables, reference, layerIds, groupHandleOf);
       // A merge past the rows of the main thread: in the Worker
       const all = [...reference.rows.values()];
@@ -501,8 +501,8 @@ describe('the dimensions of a layer raised', () => {
       geometry: { type: 'Point', coordinates: [1, 2, 3] },
       order: key(1),
     });
-    writer.addBlocks('a', builder.finish());
-    internals.addQueuedBlocks();
+    writer.addRowBlocks('a', builder.finish());
+    internals.addQueuedRowBlocks();
     expect(dimsOfGroups(internals, 'a')).toEqual(['xyz']);
   });
 
@@ -539,7 +539,7 @@ describe('the rows of a layer of z or m', () => {
       geometry: { type: 'Point', coordinates: [1, 2] },
       order: key(5),
     });
-    expect(() => writer.addBlocks('a', builder.finish())).toThrow(
+    expect(() => writer.addRowBlocks('a', builder.finish())).toThrow(
       /coordinates of xy, its layer xyz/,
     );
     // Into a layer of xy: its z would be lost

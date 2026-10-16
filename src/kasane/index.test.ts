@@ -6,7 +6,7 @@
 /**
  * The subpath `@sakuzu/maplibre-gl-draw/kasane`
  *
- * A Worker imports it to build the blocks of rows, so what it loads at runtime must depend on
+ * A Worker imports it to build the row blocks, so what it loads at runtime must depend on
  * neither maplibre nor the drawing: every runtime import reachable from its entry is walked, and
  * none may be maplibre, a module that draws, a mode, the dispatch of the input or the
  * implementation of the instance. Its export list is pinned in src/index.test.ts.
@@ -97,7 +97,7 @@ describe('the kasane subpath', () => {
     builder.addRow(row);
     expect(codeOf(() => builder.addRow(row))).toBe('invalid-input');
     const { tables, writer } = createFeatureTables();
-    expect(codeOf(() => writer.addBlocks('l', [{ ...builder.finish()[0], length: 0 }]))).toBe(
+    expect(codeOf(() => writer.addRowBlocks('l', [{ ...builder.finish()[0], length: 0 }]))).toBe(
       'invalid-input',
     );
     expect(codeOf(() => writer.raiseDimensions('l', 'xy' as never))).toBeUndefined();

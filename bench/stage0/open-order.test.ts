@@ -21,7 +21,7 @@ const { featureTablesInternals } = featureTablesModule as unknown as {
   featureTablesInternals(
     tables: unknown,
   ):
-    | { addQueuedBlocks(): void; groupsOfRows(handles: Int32Array): Map<number, number[]> }
+    | { addQueuedRowBlocks(): void; groupsOfRows(handles: Int32Array): Map<number, number[]> }
     | undefined;
 };
 
@@ -62,12 +62,12 @@ describe('the blocks of files added out of their order', () => {
     );
     const rejected: string[] = [];
     const { tables, writer } = createFeatureTables({
-      onBlockRejected: (_layer, reason) => rejected.push(reason.message),
+      onRowBlockRejected: (_layer, reason) => rejected.push(reason.message),
     });
-    for (const f of [2, 0, 3, 1]) writer.addBlocks(LAYER, files[f].blocks);
+    for (const f of [2, 0, 3, 1]) writer.addRowBlocks(LAYER, files[f].blocks);
     const internals = featureTablesInternals(tables);
     expect(internals).toBeDefined();
-    internals?.addQueuedBlocks();
+    internals?.addQueuedRowBlocks();
     expect(rejected).toEqual([]);
     const view = tables.get(LAYER);
     const total = FILES * SEGMENTS * ROWS;

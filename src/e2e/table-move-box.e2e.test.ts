@@ -192,7 +192,7 @@ async function open(page: Page, features: SceneFeature[], form: 'rows' | 'store'
             locked: false,
           } as never);
         });
-        made.writer.addBlocks('rows', builder.finish());
+        made.writer.addRowBlocks('rows', builder.finish());
       } else {
         store = new w.e2e.internals.MemoryContractStore();
         const contract = store;

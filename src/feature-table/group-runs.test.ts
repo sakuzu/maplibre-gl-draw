@@ -112,10 +112,10 @@ function setup(n: number) {
       order: `k${String(i).padStart(5, '0')}`,
     });
   }
-  writer.addBlocks('rows', builder.finish());
+  writer.addRowBlocks('rows', builder.finish());
   const tables = store.tables as FeatureTables;
   const internals = featureTablesInternals(tables) as FeatureTablesInternals;
-  internals.addQueuedBlocks();
+  internals.addQueuedRowBlocks();
   store.transact(() => {
     GROUPS.forEach((id, k) => {
       store.createGroup({
@@ -171,7 +171,7 @@ describe('groupRunCuts', () => {
         }
         store.transact(() => writer.apply({ handles, fields, deleted }), 'remote');
         if (step % 3 === 0) {
-          internals.addQueuedBlocks();
+          internals.addQueuedRowBlocks();
           internals.flushVersions();
         }
         // New keys for some groups, compared before they go in

@@ -147,7 +147,7 @@ describe('every row taken out of the tables', () => {
     writer.clear();
     // Every row but a5 comes back, with new values
     const ids = Array.from({ length: 10 }, (_, i) => `a${i}`).filter((id) => id !== 'a5');
-    store.transact(() => writer.addBlocks('a', rowsBack(s, ids)), 'remote');
+    store.transact(() => writer.addRowBlocks('a', rowsBack(s, ids)), 'remote');
     internals.flushVersions();
     for (const id of ids) expect(tables.findRow(id)).toBe(handles.get(id));
     expect(store.getFeature('a2')?.properties).toEqual({ n: 200 });
@@ -239,7 +239,7 @@ describe('every row taken out of the tables', () => {
       geometry: { type: 'Point', coordinates: [1, 2, 30] },
       order: key(1),
     });
-    store.transact(() => writer.addBlocks('z', builder.finish()), 'remote');
+    store.transact(() => writer.addRowBlocks('z', builder.finish()), 'remote');
     internals.flushVersions();
     expect(
       tables

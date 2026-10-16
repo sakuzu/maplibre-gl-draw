@@ -8,7 +8,7 @@
  * its own, held as rows as the document is: no feature is made. The layers, the groups, the
  * stacking order, the metadata and the embedded files are copied at once; the rows a block at a
  * time (`copyNext`), each block built from the rows as they are read then (what was written in
- * place included) and added to the new Store (`addBlocks`), so that a large document does not hold
+ * place included) and added to the new Store (`addRowBlocks`), so that a large document does not hold
  * a frame. The rows are listed once, at the start, in the order of their layers: a row written
  * meanwhile is copied with the values it has when its block is read.
  */
@@ -26,7 +26,7 @@ import { createTableStore, type TableStoreOptions } from './table-memory.js';
 import type { Feature, Group, Layer } from './types.js';
 
 /**
- * A copy of a document held as rows, made a block of rows at a time
+ * A copy of a document held as rows, made a row block at a time
  *
  * @internal
  */
@@ -172,7 +172,7 @@ export function copyTableStore(
             ...(group >= 0 && !targetGroupOf.has(group) && { member: undefined }),
           });
         }
-        if (builder.length > 0) writer.addBlocks(layer.layerId, builder.finish());
+        if (builder.length > 0) writer.addRowBlocks(layer.layerId, builder.finish());
         if (layer.at >= layer.handles.length) pending.shift();
         return pending.length > 0;
       }

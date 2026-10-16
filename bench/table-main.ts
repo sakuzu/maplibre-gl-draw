@@ -256,7 +256,7 @@ function rowsWorker(): FeatureTablesWorker {
 }
 
 // The rows are held by an in-memory Store of rows: its tables are drawn, its writer adds the
-// blocks of rows and writes the changes of others. It is made from the module of the library that
+// row blocks and writes the changes of others. It is made from the module of the library that
 // holds it, with an option the library keeps to itself (the number of rows opened from which they
 // move by their state), which the declarations of its build leave out
 const createTableStore = (

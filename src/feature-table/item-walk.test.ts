@@ -45,10 +45,10 @@ function storeOf(n: number) {
       order: `k${String(i).padStart(6, '0')}`,
     });
   }
-  writer.addBlocks('rows', builder.finish());
+  writer.addRowBlocks('rows', builder.finish());
   const tables = store.tables as FeatureTables;
   const internals = featureTablesInternals(tables) as FeatureTablesInternals;
-  internals.addQueuedBlocks();
+  internals.addQueuedRowBlocks();
   return { store, writer, tables, internals };
 }
 
@@ -194,7 +194,7 @@ describe('ItemWalk', () => {
           groupsInStackingOrder(store).filter((group) => group.id !== groups[0].id),
         );
         if (step % 10 === 9) {
-          internals.addQueuedBlocks();
+          internals.addQueuedRowBlocks();
           internals.flushVersions();
           expectWalkAsLists(internals);
         }

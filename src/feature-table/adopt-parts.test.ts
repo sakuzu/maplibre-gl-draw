@@ -48,8 +48,8 @@ function build(rows: readonly RowInput[]): RowBlockData[] {
 /** The tables of a layer `rows` that took in the row groups of each part, in the order given */
 function tablesOf(parts: readonly RowBlockData[][]): FeatureTables {
   const { tables, writer } = createFeatureTablesStore();
-  for (const groups of parts) writer.addBlocks('rows', groups);
-  (featureTablesInternals(tables) as FeatureTablesInternals).addQueuedBlocks();
+  for (const groups of parts) writer.addRowBlocks('rows', groups);
+  (featureTablesInternals(tables) as FeatureTablesInternals).addQueuedRowBlocks();
   return tables;
 }
 

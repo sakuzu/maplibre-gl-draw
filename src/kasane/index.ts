@@ -6,9 +6,9 @@
  *
  * Experimental: this entry may change in a minor release. Use it to write a Store that holds its
  * features as rows, or to read and write the rows of such a Store: when a layer holds more
- * features than can be made objects at once. A Worker builds the rows into blocks of typed arrays
+ * features than can be made objects at once. A Worker builds the rows into row blocks of typed arrays
  * (`createRowBlockBuilder`), the Store adds them to its tables without a copy
- * (`writer.addBlocks`), and the instance draws and hit tests the layer from its rows, making a
+ * (`writer.addRowBlocks`), and the instance draws and hit tests the layer from its rows, making a
  * feature of a row only while it is selected or edited. An application that only draws, edits and
  * reads features needs none of it: the main entry reads the features of every layer.
  *
@@ -18,8 +18,8 @@
  *
  * const builder = createRowBlockBuilder();
  * rows.forEach((row) => builder.addRow(row)); // id, type, geometry, key of the order
- * const blocks = builder.finish();
- * self.postMessage(blocks, { transfer: transferList(blocks) });
+ * const rowBlocks = builder.finish();
+ * self.postMessage(rowBlocks, { transfer: transferList(rowBlocks) });
  *
  * // main.ts
  * import { createTableStore } from '@sakuzu/maplibre-gl-draw/kasane';
@@ -27,7 +27,7 @@
  * const { store, writer } = createTableStore();
  * const draw = createDraw(map, { store });
  * draw.layers.create({ id: 'buildings', name: 'Buildings' });
- * worker.onmessage = (e) => writer.addBlocks('buildings', e.data);
+ * worker.onmessage = (e) => writer.addRowBlocks('buildings', e.data);
  * ```
  *
  * The functions used most are {@link createTableStore}, {@link createRowBlockBuilder} and
@@ -101,7 +101,7 @@ export type {
   RowSpriteSource,
 } from '../view/renderers/rows/rows-format.js';
 
-// Build blocks of rows in a Worker
+// Build row blocks in a Worker
 export type {
   GroupEntry,
   RowBlockBuilder,

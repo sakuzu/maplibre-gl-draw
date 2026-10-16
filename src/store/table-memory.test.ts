@@ -394,10 +394,10 @@ describe('the order of the in-memory Store of rows (stage 3b)', () => {
         properties: { n: i },
       });
     }
-    writer.addBlocks('layer', builder.finish());
+    writer.addRowBlocks('layer', builder.finish());
     const internals = featureTablesInternals(store.tables);
     if (!internals) throw new Error('a Store of rows has tables');
-    internals.addQueuedBlocks();
+    internals.addQueuedRowBlocks();
     const layer = internals.layerTable('layer');
     const members = Array.from({ length: 50 }, (_, k) => `r${k * 100}`);
     const apply = vi.spyOn(writer, 'apply');
@@ -469,10 +469,10 @@ describe('the rows of a layer of z and m in the in-memory Store of rows', () => 
     };
     const builder = createRowBlockDataBuilder({ dimensions: 'xyzm', rings: circleRowRings });
     builder.addRow({ id: 'l', type: 'LineString', geometry: line, order: 'k1' });
-    writer.addBlocks('layer', builder.finish());
+    writer.addRowBlocks('layer', builder.finish());
     const tables = store.tables;
     if (!tables) throw new Error('a Store of rows has tables');
-    featureTablesInternals(tables)?.addQueuedBlocks();
+    featureTablesInternals(tables)?.addQueuedRowBlocks();
     const handle = tables.findRow('l') as number;
     const geometryOf = () =>
       tables

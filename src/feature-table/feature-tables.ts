@@ -281,7 +281,8 @@ export function createFeatureTablesStore(options: FeatureTablesInternalOptions =
   const writer: FeatureTablesWriter = {
     allocateHandles: (ids, hashes) => store.ids.allocate(ids, hashes),
     // The blocks are made by the builder and the merge of the library
-    addBlocks: (layerId, blocks) => store.addBlocks(layerId, blocks as readonly RowBlockData[]),
+    addRowBlocks: (layerId, blocks) =>
+      store.addRowBlocks(layerId, blocks as readonly RowBlockData[]),
     raiseDimensions: (layerId, dimensions) => store.raiseDimensions(layerId, dimensions),
     apply: (values, options) => store.apply(values, options),
     applyGroups: (patch, options) => store.applyGroups(patch, options),
@@ -430,7 +431,7 @@ export interface FeatureTablesInternals {
    *
    * @throws when a group cannot be taken in (the groups after it keep waiting)
    */
-  addQueuedBlocks(): void;
+  addQueuedRowBlocks(): void;
   /**
    * Calls `listener` when row groups start waiting, so the drawing asks for a frame
    *
@@ -734,7 +735,7 @@ class FeatureTablesStore implements FeatureTablesInternals {
   private readonly worker: FeatureTablesWorker | undefined;
   private readonly onChange: ((change: StoreChange) => void) | undefined;
   private readonly onRelease: ((handles: Int32Array) => void) | undefined;
-  private readonly onBlockRejected: ((layerId: string, reason: DrawError) => void) | undefined;
+  private readonly onRowBlockRejected: ((layerId: string, reason: DrawError) => void) | undefined;
   /** The features drawn over rows for this client, by owner and by id */
   private readonly overlays = new Map<string, Map<string, OverlayEntry>>();
   /** The rows of the deltas that are features drawn over rows (drawn, not read) */
@@ -790,7 +791,7 @@ class FeatureTablesStore implements FeatureTablesInternals {
     this.worker = options.worker;
     this.onChange = options.onChange;
     this.onRelease = options.onRelease;
-    this.onBlockRejected = options.onBlockRejected;
+    this.onRowBlockRejected = options.onRowBlockRejected;
     this.versions = new GroupVersions(this.versionHost());
     this.retainTokens = options.restoreLimit?.tokens ?? RETAIN_TOKENS;
     this.retainBytes = options.restoreLimit?.bytes ?? RETAIN_BYTES;
@@ -845,13 +846,13 @@ class FeatureTablesStore implements FeatureTablesInternals {
 
   flushVersions(): void {
     const unbounded = UNBOUNDED_BUDGET;
-    this.addQueuedBlocks();
+    this.addQueuedRowBlocks();
     for (let i = 0; i < 64 && (i === 0 || this.versions.hasWork); i++) {
       const before = this.versions.swapped;
       this.versions.advance(unbounded, false);
       this.versions.swapReady();
       // The row groups that waited for a reorder swapped in now
-      this.addQueuedBlocks();
+      this.addQueuedRowBlocks();
       if (this.versions.swapped === before && this.versions.built().length > 0) break;
     }
   }
@@ -1153,7 +1154,7 @@ class FeatureTablesStore implements FeatureTablesInternals {
    * Checks the row groups and queues them: they are taken in a group at a time within the
    * budget of the frames (`advanceQueuedBlocks`), so a large file does not hold a frame
    */
-  addBlocks(layerId: string, groups: readonly RowBlockData[]): void {
+  addRowBlocks(layerId: string, groups: readonly RowBlockData[]): void {
     // The checks of the shape of the groups are cheap and done here, so that a group made wrong
     // is refused before anything is queued; the checks of the rows are done when it is taken in
     const dims = this.dimsOfLayer(layerId);
@@ -1196,9 +1197,9 @@ class FeatureTablesStore implements FeatureTablesInternals {
         try {
           this.takeIn(next);
         } catch (error) {
-          // A block given to `addBlocks` is left out (there is no caller to throw to any more)
-          if (this.onBlockRejected && error instanceof DrawError) {
-            this.onBlockRejected(next.layer.layerId, error);
+          // A block given to `addRowBlocks` is left out (there is no caller to throw to any more)
+          if (this.onRowBlockRejected && error instanceof DrawError) {
+            this.onRowBlockRejected(next.layer.layerId, error);
           } else {
             console.error(error);
           }
@@ -1208,7 +1209,7 @@ class FeatureTablesStore implements FeatureTablesInternals {
     return this.adoptions.length > 0;
   }
 
-  addQueuedBlocks(): void {
+  addQueuedRowBlocks(): void {
     this.advanceCreations(UNBOUNDED_BUDGET, false);
     let at = 0;
     while (at < this.adoptions.length) {

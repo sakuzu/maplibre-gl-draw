@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * Decodes a file of segments into blocks of rows, as a Worker of the page does and as the
+ * Decodes a file of segments into row blocks, as a Worker of the page does and as the
  * measurement in Node does: each segment decompressed (fzstd, the same in both), decoded to its
  * columns, made rows for the builder and added to it; the builder of the file then cuts the rows
  * into blocks (`createRowBlockBuilder`). The time of each step is told.
@@ -35,7 +35,7 @@ export interface DecodedFile {
   readonly times: DecodeTimes;
 }
 
-/** Decodes the file of segments `bytes` into blocks of rows */
+/** Decodes the file of segments `bytes` into row blocks */
 export function decodeFile(bytes: Uint8Array): DecodedFile {
   const times: DecodeTimes = { unzipMs: 0, decodeMs: 0, rowsMs: 0, addMs: 0, finishMs: 0 };
   const builder = createRowBlockBuilder();

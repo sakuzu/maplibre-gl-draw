@@ -149,12 +149,12 @@ into two layers: layer 1 is the main entry (with `/geometry` and
   providers) and the style rule functions. The contracts are declared in
   `src/api/` and `src/api/extension/`. It follows semver. It is written
   in the words of features, layers, groups and items: the words of the
-  rows (a row, its handle, a block of rows) are left to `/kasane`.
+  rows (a row, its handle, a row block) are left to `/kasane`.
 - Layer 2, the parts that hold features as rows of columns
   (`src/kasane/index.ts`, experimental): the Store that holds them
   (`createTableStore`, `createFeatureTables`), the reading and writing
   sides of its tables, the values and the handles of rows, and the
-  builder and the merge of the blocks of rows for a Worker. It loads
+  builder and the merge of the row blocks for a Worker. It loads
   neither maplibre nor the drawing. The fields of layer 1 that a Store of
   rows fills (`StoreView.tables`, `Store.applyRows`, `DocumentChange.rows`,
   `DocumentChange.opened`, and the rows moved at once of

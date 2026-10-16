@@ -28,7 +28,7 @@ writing it. Its changes are listed after those of 3.0.0.
   store of your own; the reading and writing sides of the tables
   (`FeatureTables`, `LayerTableView`, `FeatureTablesWriter`); the values
   of rows (`RowValues`, `createRowValues`, `rowValuesOf`); and the builder
-  and the merge of blocks of rows for a Worker (`createRowBlockBuilder`,
+  and the merge of row blocks for a Worker (`createRowBlockBuilder`,
   `mergeRowBlock`, `RowBlock`, `transferList`). It loads neither
   maplibre-gl nor the drawing, and its errors are `DrawError`s.
 - `TableLayer` and `TableGroup`, the layers and groups of a store that

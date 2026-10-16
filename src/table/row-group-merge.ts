@@ -52,7 +52,7 @@ import {
  * What {@link mergeRowBlock} merges
  */
 export interface RowBlockMerge {
-  /** The blocks the rows are taken from (their styles numbered: no `styleDictionary`) */
+  /** The row blocks the rows are taken from (their styles numbered: no `styleDictionary`) */
   readonly sources: readonly RowBlock[];
   /**
    * The rows taken, two numbers each: the source and the row there (`[source, row, ...]`). A row
@@ -63,37 +63,37 @@ export interface RowBlockMerge {
   readonly groups?: readonly GroupEntry[] | null;
   /** Whether the rows are put in the order of the layer (true when omitted) */
   readonly sort?: boolean;
-  /** The target number of rows of a block ({@link ROW_BLOCK_TARGET_ROWS} when omitted) */
+  /** The target number of rows of a row block ({@link ROW_BLOCK_TARGET_ROWS} when omitted) */
   readonly targetRows?: number;
-  /** The target number of coordinates of a block ({@link ROW_BLOCK_TARGET_VERTICES} when omitted) */
+  /** The target number of coordinates of a row block ({@link ROW_BLOCK_TARGET_VERTICES} when omitted) */
   readonly targetVertices?: number;
   /**
-   * The share of the targets past which the rows are cut into blocks of the target sizes (1 when
-   * omitted: cut at the targets). The next version of a block is cut only past twice the targets
-   * (2), so a block that grew a little stays one block
+   * The share of the targets past which the rows are cut into row blocks of the target sizes (1 when
+   * omitted: cut at the targets). The next version of a row block is cut only past twice the targets
+   * (2), so a row block that grew a little stays one row block
    */
   readonly cutPast?: number;
   /**
-   * The dimensions of the coordinates of the new blocks: those of the layer. A source of fewer
+   * The dimensions of the coordinates of the new row blocks: those of the layer. A source of fewer
    * dimensions is copied with NaN for the others (a layer whose dimensions were raised). Every
    * source has the same when omitted
    */
   readonly dimensions?: CoordinateDimensions;
   /**
    * The number of coordinates a row that draws a ring around its point (a row of a Point with a
-   * fill: a Circle) is counted as when the rows are cut into blocks (`RowRings.ringVertices`; 1
+   * fill: a Circle) is counted as when the rows are cut into row blocks (`RowRings.ringVertices`; 1
    * when omitted)
    */
   readonly ringVertices?: number;
   /**
-   * The system of the coordinates the spatial index of the new blocks is made in (the plane when
+   * The system of the coordinates the spatial index of the new row blocks is made in (the plane when
    * omitted). A function: a Worker passes its own
    */
   readonly coordinateSystem?: CoordinateSystem;
 }
 
 /**
- * What the tables merge: blocks with every column, and the groups of features as the tables
+ * What the tables merge: row blocks with every column, and the groups of features as the tables
  * read them
  *
  * @internal
@@ -104,9 +104,9 @@ export interface RowBlockDataMerge extends Omit<RowBlockMerge, 'sources' | 'grou
 }
 
 /**
- * Merges rows of blocks into new blocks, in the order of the layer
+ * Merges rows of row blocks into new row blocks, in the order of the layer
  *
- * @returns The new blocks (none for no row); their handles are those of the rows
+ * @returns The new row blocks (none for no row); their handles are those of the rows
  * @throws `DrawError` with the code `invalid-input` when a source holds styles not numbered yet,
  *   or `not-found` when a row names a group of features the keys do not give
  */
@@ -115,7 +115,7 @@ export function mergeRowBlock(merge: RowBlockMerge): RowBlock[] {
 }
 
 /**
- * Merges rows of blocks into new blocks, as the tables merge them
+ * Merges rows of row blocks into new row blocks, as the tables merge them
  *
  * @internal
  */

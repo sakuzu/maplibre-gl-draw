@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * A Worker of the page of opening in steps: it decodes a file of segments into blocks of rows
+ * A Worker of the page of opening in steps: it decodes a file of segments into row blocks
  * (`decode-work.ts`) and sends them back without a copy
  */
 

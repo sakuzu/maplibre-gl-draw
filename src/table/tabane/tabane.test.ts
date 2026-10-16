@@ -11,7 +11,7 @@
  * - A block reads back to the rows it was written from: every coordinate to the same bits, every
  *   value to the same value, the deleted rows, what created the rows and the revisions of their
  *   cells; the same rows always give the same bytes
- * - A row block read is a block of rows of the tables: the same columns the builder of the blocks of
+ * - A row block read is a row block of the tables: the same columns the builder of the blocks of
  *   rows makes from the same rows, and the tables take it as it is
  * - Files: parts compressed or stored, read a part at a time or whole; the name is the hash of
  *   the content whatever the parts
@@ -501,7 +501,7 @@ describe('a file', () => {
   });
 });
 
-describe('a row block as a block of rows of the tables', () => {
+describe('a row block as a row block of the tables', () => {
   /** Every column the builder of the blocks makes of the same rows, compared */
   function expectSameBlock(a: RowBlockData, b: RowBlockData): void {
     expect(a.length).toBe(b.length);
@@ -570,11 +570,11 @@ describe('a row block as a block of rows of the tables', () => {
       styleRule: undefined,
     });
     const rowBlocks = readBlockData(writeTabaneBlock({ parent: 'l', head: 'V', rows }).content);
-    writer.addBlocks(
+    writer.addRowBlocks(
       'l',
       rowBlocks.map((g) => rowBlockDataOfTabane(g)),
     );
-    featureTablesInternals(store.tables as FeatureTables)?.addQueuedBlocks();
+    featureTablesInternals(store.tables as FeatureTables)?.addQueuedRowBlocks();
     for (const k of [0, 999, 1000, 1499]) {
       const feature = store.getFeature(rows[k].id);
       expect(feature?.geometry).toEqual(rows[k].geometry);
