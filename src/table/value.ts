@@ -30,10 +30,12 @@ import {
   Duration,
   durationOfMembers,
   fromBase64,
+  kindOf,
   MAX_BIG_INTEGER,
   MIN_BIG_INTEGER,
   Reference,
   TimeOfDay,
+  type ValueKindName,
   wellFormed,
 } from './value-kinds.js';
 
@@ -66,16 +68,7 @@ function invalid(message: string): DrawError {
 
 /** Whether something is an instance of a class of a kind of value (a date, a reference, ...) */
 export function isKindValue(v: object): boolean {
-  return (
-    v instanceof CalendarDate ||
-    v instanceof DateTime ||
-    v instanceof TimeOfDay ||
-    v instanceof Duration ||
-    v instanceof BigInteger ||
-    v instanceof Decimal ||
-    v instanceof Bytes ||
-    v instanceof Reference
-  );
+  return kindOf(v) !== undefined;
 }
 
 /** Whether an object is a plain object (of `Object.prototype` or of no prototype) */
@@ -251,53 +244,9 @@ export function sameValue(a: Value, b: Value): boolean {
   if (typeof a === 'number' || typeof b === 'number') return Object.is(a, b);
   if (a === b) return true;
   if (a === null || b === null || typeof a !== 'object' || typeof b !== 'object') return false;
-  if (a instanceof CalendarDate || b instanceof CalendarDate) {
-    return a instanceof CalendarDate && b instanceof CalendarDate && a.days === b.days;
-  }
-  if (a instanceof DateTime || b instanceof DateTime) {
-    return (
-      a instanceof DateTime &&
-      b instanceof DateTime &&
-      a.seconds === b.seconds &&
-      a.nanoseconds === b.nanoseconds &&
-      a.zone === b.zone &&
-      a.offsetMinutes === b.offsetMinutes
-    );
-  }
-  if (a instanceof TimeOfDay || b instanceof TimeOfDay) {
-    return a instanceof TimeOfDay && b instanceof TimeOfDay && a.nanoseconds === b.nanoseconds;
-  }
-  if (a instanceof Duration || b instanceof Duration) {
-    return (
-      a instanceof Duration &&
-      b instanceof Duration &&
-      a.months === b.months &&
-      a.days === b.days &&
-      a.seconds === b.seconds &&
-      a.nanoseconds === b.nanoseconds
-    );
-  }
-  if (a instanceof BigInteger || b instanceof BigInteger) {
-    return a instanceof BigInteger && b instanceof BigInteger && a.value === b.value;
-  }
-  if (a instanceof Decimal || b instanceof Decimal) {
-    return (
-      a instanceof Decimal &&
-      b instanceof Decimal &&
-      a.coefficient === b.coefficient &&
-      a.scale === b.scale
-    );
-  }
-  if (a instanceof Bytes || b instanceof Bytes) {
-    return (
-      a instanceof Bytes &&
-      b instanceof Bytes &&
-      compareBytes(a.toUint8Array(), b.toUint8Array()) === 0
-    );
-  }
-  if (a instanceof Reference || b instanceof Reference) {
-    return a instanceof Reference && b instanceof Reference && a.id === b.id;
-  }
+  const ka = kindOf(a);
+  const kb = kindOf(b);
+  if (ka !== undefined || kb !== undefined) return ka === kb && sameKindValue(ka, a, b);
   if (Array.isArray(a) !== Array.isArray(b)) return false;
   if (Array.isArray(a)) {
     const bb = b as readonly Value[];
@@ -315,6 +264,49 @@ export function sameValue(a: Value, b: Value): boolean {
     }
   }
   return true;
+}
+
+/** Whether two instances of the classes of one kind are the same value */
+function sameKindValue(kind: ValueKindName | undefined, a: object, b: object): boolean {
+  switch (kind) {
+    case 'date':
+      return (a as CalendarDate).days === (b as CalendarDate).days;
+    case 'datetime': {
+      const x = a as DateTime;
+      const y = b as DateTime;
+      return (
+        x.seconds === y.seconds &&
+        x.nanoseconds === y.nanoseconds &&
+        x.zone === y.zone &&
+        x.offsetMinutes === y.offsetMinutes
+      );
+    }
+    case 'time':
+      return (a as TimeOfDay).nanoseconds === (b as TimeOfDay).nanoseconds;
+    case 'duration': {
+      const x = a as Duration;
+      const y = b as Duration;
+      return (
+        x.months === y.months &&
+        x.days === y.days &&
+        x.seconds === y.seconds &&
+        x.nanoseconds === y.nanoseconds
+      );
+    }
+    case 'integer':
+      return (a as BigInteger).value === (b as BigInteger).value;
+    case 'decimal':
+      return (
+        (a as Decimal).coefficient === (b as Decimal).coefficient &&
+        (a as Decimal).scale === (b as Decimal).scale
+      );
+    case 'bytes':
+      return compareBytes((a as Bytes).toUint8Array(), (b as Bytes).toUint8Array()) === 0;
+    case 'reference':
+      return (a as Reference).id === (b as Reference).id;
+    default:
+      return false;
+  }
 }
 
 /** The names of the objects of the JSON form of values */

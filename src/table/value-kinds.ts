@@ -56,6 +56,37 @@ export function hasKind(v: unknown, kind: string): boolean {
   );
 }
 
+/** The names of the kinds of the classes of values */
+export type ValueKindName =
+  | 'integer'
+  | 'decimal'
+  | 'bytes'
+  | 'date'
+  | 'time'
+  | 'datetime'
+  | 'duration'
+  | 'reference';
+
+const KIND_NAMES: ReadonlySet<unknown> = new Set<ValueKindName>([
+  'integer',
+  'decimal',
+  'bytes',
+  'date',
+  'time',
+  'datetime',
+  'duration',
+  'reference',
+]);
+
+/**
+ * The kind of an object that is an instance of a class of a kind of value (one read of its mark,
+ * where `instanceof` asks each class in turn), or undefined
+ */
+export function kindOf(v: object): ValueKindName | undefined {
+  const kind = (v as { [VALUE_KIND]?: unknown })[VALUE_KIND];
+  return kind !== undefined && KIND_NAMES.has(kind) ? (kind as ValueKindName) : undefined;
+}
+
 /** The largest integer a number holds exactly (2^53 - 1), as a bigint */
 const MAX_SAFE = BigInt(Number.MAX_SAFE_INTEGER);
 /** The smallest big integer (-2^63) */

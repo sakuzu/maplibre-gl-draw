@@ -56,6 +56,7 @@ import {
   DateTime,
   Decimal,
   Duration,
+  kindOf,
   MAX_BIG_INTEGER,
   MAX_DECIMAL_SCALE,
   MIN_BIG_INTEGER,
@@ -365,50 +366,69 @@ function writeValue(writer: ByteWriter, value: unknown, depth: number): void {
  * @returns Whether the value was one
  */
 function writeKind(writer: ByteWriter, value: object): boolean {
-  if (value instanceof CalendarDate) {
-    writer.byte(CANONICAL_DATE);
-    writer.varInt(value.days);
-  } else if (value instanceof DateTime) {
-    writer.byte(CANONICAL_DATE_TIME);
-    writer.varInt(value.seconds);
-    writer.varUint(value.nanoseconds);
-    if (value.zone === 'utc') {
-      writer.byte(ZONE_UTC);
-    } else if (value.zone === 'offset') {
-      writer.byte(ZONE_OFFSET);
-      writer.varInt(value.offsetMinutes);
-    } else {
-      writer.byte(ZONE_LOCAL);
-    }
-  } else if (value instanceof Bytes || value instanceof Uint8Array) {
-    const bytes = value instanceof Bytes ? value.toUint8Array() : value;
+  if (value instanceof Uint8Array) {
     writer.byte(CANONICAL_BYTES);
-    writer.varUint(bytes.length);
-    writer.raw(bytes);
-  } else if (value instanceof BigInteger) {
-    writer.byte(CANONICAL_BIG_INTEGER);
-    writer.varBigInt(value.value);
-  } else if (value instanceof Decimal) {
-    writer.byte(CANONICAL_DECIMAL);
-    writer.varUint(value.scale);
-    writer.varBigInt(value.coefficient);
-  } else if (value instanceof TimeOfDay) {
-    writer.byte(CANONICAL_TIME);
-    writer.varUint(value.nanoseconds);
-  } else if (value instanceof Duration) {
-    writer.byte(CANONICAL_DURATION);
-    writer.varInt(value.months);
-    writer.varInt(value.days);
-    writer.varInt(value.seconds);
-    writer.varInt(value.nanoseconds);
-  } else if (value instanceof Reference) {
-    writer.byte(CANONICAL_REFERENCE);
-    writer.string(value.id);
-    writer.byte(0);
-  } else {
-    return false;
+    writer.varUint(value.length);
+    writer.raw(value);
+    return true;
   }
-  return true;
+  switch (kindOf(value)) {
+    case 'date':
+      writer.byte(CANONICAL_DATE);
+      writer.varInt((value as CalendarDate).days);
+      return true;
+    case 'datetime': {
+      const d = value as DateTime;
+      writer.byte(CANONICAL_DATE_TIME);
+      writer.varInt(d.seconds);
+      writer.varUint(d.nanoseconds);
+      if (d.zone === 'utc') {
+        writer.byte(ZONE_UTC);
+      } else if (d.zone === 'offset') {
+        writer.byte(ZONE_OFFSET);
+        writer.varInt(d.offsetMinutes);
+      } else {
+        writer.byte(ZONE_LOCAL);
+      }
+      return true;
+    }
+    case 'bytes': {
+      const bytes = (value as Bytes).toUint8Array();
+      writer.byte(CANONICAL_BYTES);
+      writer.varUint(bytes.length);
+      writer.raw(bytes);
+      return true;
+    }
+    case 'integer':
+      writer.byte(CANONICAL_BIG_INTEGER);
+      writer.varBigInt((value as BigInteger).value);
+      return true;
+    case 'decimal':
+      writer.byte(CANONICAL_DECIMAL);
+      writer.varUint((value as Decimal).scale);
+      writer.varBigInt((value as Decimal).coefficient);
+      return true;
+    case 'time':
+      writer.byte(CANONICAL_TIME);
+      writer.varUint((value as TimeOfDay).nanoseconds);
+      return true;
+    case 'duration': {
+      const d = value as Duration;
+      writer.byte(CANONICAL_DURATION);
+      writer.varInt(d.months);
+      writer.varInt(d.days);
+      writer.varInt(d.seconds);
+      writer.varInt(d.nanoseconds);
+      return true;
+    }
+    case 'reference':
+      writer.byte(CANONICAL_REFERENCE);
+      writer.string((value as Reference).id);
+      writer.byte(0);
+      return true;
+    default:
+      return false;
+  }
 }
 
 /** The most keys of an object put in order by an insertion sort */
