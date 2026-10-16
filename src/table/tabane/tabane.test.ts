@@ -237,7 +237,7 @@ function variety(): TabaneRow[] {
       },
       style: { color: '#00ff00' },
     },
-    { id: tabaneIdText({ origin: OTHER, number: 7 }), type: 'Note', geometry: null },
+    { id: tabaneIdText({ origin: OTHER, number: 7 }), type: 'Marker', geometry: null },
     {
       id: tabaneIdText({ origin: OTHER, number: 8 }),
       type: 'Circle',

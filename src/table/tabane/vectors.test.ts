@@ -236,7 +236,7 @@ const SCENARIOS: Scenario[] = [
           },
           style: { color: '#00ff00' },
         },
-        { id: id(B, 7), type: 'Note', geometry: null, properties: { text: '' } },
+        { id: id(B, 7), type: 'Marker', geometry: null, properties: { text: '' } },
         {
           id: id(B, 8),
           type: 'Circle',
