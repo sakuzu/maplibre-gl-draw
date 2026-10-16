@@ -24,7 +24,7 @@ import { ROW_FLAG_DELETED, type RowBlockData } from '../table/row-group-types.js
 import { compareRowKeys, type GroupKeySource, type RowKeySource } from '../table/row-keys.js';
 import { GeometryColumnReader } from '../table/table.js';
 import { DeltaRows } from './delta.js';
-import { skipsOf } from './row-skips.js';
+import { elsewhereSkipsOf, skipsOf } from './row-skips.js';
 import { STATE_HIDDEN_DELTA, STATE_HIDDEN_WAIT } from './row-state.js';
 import type { RowGroupHandle } from './types.js';
 import type { GeometryOverrides, ValueOverrides } from './value-overrides.js';
@@ -972,9 +972,9 @@ export class LayerTable {
   private mainFrom(g: number, r: number): [number, number] | null {
     for (let i = g; i < this.order.length; i++) {
       const group = this.groupAt(i);
-      for (let row = i === g ? r : 0; row < group.data.length; row++) {
-        if ((group.state[row] & STATE_ELSEWHERE) === 0) return [i, row];
-      }
+      // The rows read elsewhere are passed together (`RowSkips`)
+      const row = elsewhereSkipsOf(group).firstAtOrAfter(i === g ? r : 0);
+      if (row < group.data.length) return [i, row];
     }
     return null;
   }
@@ -983,9 +983,8 @@ export class LayerTable {
   private mainBefore(g: number, r: number): [number, number] | null {
     for (let i = g; i >= 0; i--) {
       const group = this.groupAt(i);
-      for (let row = (i === g ? r : group.data.length) - 1; row >= 0; row--) {
-        if ((group.state[row] & STATE_ELSEWHERE) === 0) return [i, row];
-      }
+      const row = elsewhereSkipsOf(group).lastAtOrBefore((i === g ? r : group.data.length) - 1);
+      if (row >= 0) return [i, row];
     }
     return null;
   }

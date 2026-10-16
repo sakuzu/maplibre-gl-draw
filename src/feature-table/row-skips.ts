@@ -25,14 +25,22 @@ import { STATE_HIDDEN_DELTA, STATE_HIDDEN_WAIT } from './row-state.js';
 const STATE_ELSEWHERE = STATE_HIDDEN_DELTA | STATE_HIDDEN_WAIT;
 
 /**
- * Whether the walk of the order reads a row of a group as an item: not deleted, and not the copy
- * of a row read elsewhere (in a group of the order)
+ * Whether a row of a group is read there in the order of its layer: not the copy of a row read
+ * elsewhere (a row of the delta or of the new rows is read where it is)
+ *
+ * @internal
+ */
+export function readThere(group: RowGroup, row: number): boolean {
+  return group.delta || group.pending || (group.state[row] & STATE_ELSEWHERE) === 0;
+}
+
+/**
+ * Whether the walk of the order reads a row of a group as an item: read there, and not deleted
  *
  * @internal
  */
 export function walkReads(group: RowGroup, row: number): boolean {
-  if ((group.data.flags[row] & ROW_FLAG_DELETED) !== 0) return false;
-  return group.delta || group.pending || (group.state[row] & STATE_ELSEWHERE) === 0;
+  return (group.data.flags[row] & ROW_FLAG_DELETED) === 0 && readThere(group, row);
 }
 
 /**
@@ -50,7 +58,14 @@ export class RowSkips {
   /** The number of rows the walks looked at (what a test of the cost reads) */
   steps = 0;
 
-  constructor(private readonly group: RowGroup) {}
+  /**
+   * @param group The row group
+   * @param reads Whether a row is read, not passed
+   */
+  constructor(
+    private readonly group: RowGroup,
+    private readonly reads: (group: RowGroup, row: number) => boolean = walkReads,
+  ) {}
 
   /** A row of the group became read again: the pointers are made again at the next walk */
   touch(): void {
@@ -64,7 +79,7 @@ export class RowSkips {
     let at = row;
     while (at >= 0) {
       this.steps++;
-      if (walkReads(this.group, at)) break;
+      if (this.reads(this.group, at)) break;
       at = down[at] < at ? down[at] : at - 1;
     }
     // Every row passed on the way runs down to the row found
@@ -85,7 +100,7 @@ export class RowSkips {
     let at = row;
     while (at < n) {
       this.steps++;
-      if (walkReads(this.group, at)) break;
+      if (this.reads(this.group, at)) break;
       at = up[at] > at ? up[at] : at + 1;
     }
     let fix = row;
@@ -116,30 +131,49 @@ export class RowSkips {
   }
 }
 
-/** The runs of each row group a walk read */
+/** The runs of each row group a walk read: of the rows not items, of the rows read elsewhere */
 const SKIPS = new WeakMap<RowGroup, RowSkips>();
+const ELSEWHERE_SKIPS = new WeakMap<RowGroup, RowSkips>();
 
 /**
- * The runs of the rows a walk passes in a row group (made at the first walk of it)
+ * The runs of the rows a walk of the items passes in a row group: deleted, or read elsewhere
+ * (made at the first walk of it)
  *
  * @internal
  */
 export function skipsOf(group: RowGroup): RowSkips {
   let skips = SKIPS.get(group);
   if (!skips) {
-    skips = new RowSkips(group);
+    skips = new RowSkips(group, walkReads);
     SKIPS.set(group, skips);
   }
   return skips;
 }
 
 /**
- * Notes a write of the state of a row (its flags written before): a row the walk reads now may
- * have been passed, so the runs of its group are made again
+ * The runs of the rows of a row group of the order read elsewhere (the copies of rows moved to
+ * the delta or to another group), which a walk of the rows passes
+ *
+ * @internal
+ */
+export function elsewhereSkipsOf(group: RowGroup): RowSkips {
+  let skips = ELSEWHERE_SKIPS.get(group);
+  if (!skips) {
+    skips = new RowSkips(group, readThere);
+    ELSEWHERE_SKIPS.set(group, skips);
+  }
+  return skips;
+}
+
+/**
+ * Notes a write of the state of a row (its flags written before): a row read now may have been
+ * passed, so the runs of its group are made again
  *
  * @internal
  */
 export function noteRowState(group: RowGroup, row: number): void {
   const skips = SKIPS.get(group);
   if (skips && walkReads(group, row)) skips.touch();
+  const elsewhere = ELSEWHERE_SKIPS.get(group);
+  if (elsewhere && readThere(group, row)) elsewhere.touch();
 }

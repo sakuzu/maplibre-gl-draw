@@ -1868,7 +1868,7 @@ class FeatureTablesStore implements FeatureTablesInternals {
     for (const group of set) {
       if (this.groupRetainOf.get(group) !== token) continue;
       this.groupRetainOf.delete(group);
-      if (!this.deletedGroups.has(group) || this.groupNamed(group)) continue;
+      if (!this.deletedGroups.has(group) || this.groupsNamed([group]).has(group)) continue;
       this.deletedGroups.delete(group);
       this.groups.delete(group);
       this.writtenOrders.delete(group);
@@ -2935,12 +2935,13 @@ class FeatureTablesStore implements FeatureTablesInternals {
     // A group deleted with a token is kept until the token is let go of
     const token = options.restoreToken;
     let kept = false;
+    const named = this.groupsNamed(removed);
     for (const group of removed) {
       if (token !== undefined && this.groups.has(group)) {
         this.keepGroup(group, token);
         kept = true;
       }
-      if (this.groupNamed(group) || this.groupRetainOf.has(group)) this.deletedGroups.add(group);
+      if (named.has(group) || this.groupRetainOf.has(group)) this.deletedGroups.add(group);
       else {
         this.groups.delete(group);
         this.writtenOrders.delete(group);
@@ -3046,19 +3047,29 @@ class FeatureTablesStore implements FeatureTablesInternals {
     return data;
   }
 
-  /** Whether a row (of a group, of a delta, of a creation) names a group of features */
-  private groupNamed(group: GroupHandle): boolean {
+  /**
+   * The groups of features a row (of a group, of a delta, of a creation) names, of some groups:
+   * the row groups around their rows (by their keys) and the deltas read once for all of them
+   */
+  private groupsNamed(of: Iterable<GroupHandle>): Set<GroupHandle> {
+    const wanted = new Set(of);
+    const named = new Set<GroupHandle>();
+    if (wanted.size === 0) return named;
+    const read = (handles: Int32Array): void => {
+      for (const group of handles) if (group >= 0 && wanted.has(group)) named.add(group);
+    };
     for (const layer of this.layers.values()) {
-      // The row groups around the rows that name it (by its keys), and the delta
-      const groups = rowGroupsHolding(layer, [group], this.groups).map((g) => layer.groupAt(g));
-      if (layer.delta.group) groups.push(layer.delta.group);
-      for (const rowGroup of groups) {
-        if (rowGroup.data.groups.includes(group)) return true;
+      for (const g of rowGroupsHolding(layer, wanted, this.groups))
+        read(layer.groupAt(g).data.groups);
+      if (layer.delta.group) read(layer.delta.group.data.groups);
+    }
+    for (const creation of this.creations) {
+      for (const row of creation.rows) {
+        const group = row.input.group;
+        if (group !== undefined && group >= 0 && wanted.has(group)) named.add(group);
       }
     }
-    return this.creations.some((creation) =>
-      creation.rows.some((row) => row.input.group === group),
-    );
+    return named;
   }
 
   /**
@@ -3400,8 +3411,9 @@ class FeatureTablesStore implements FeatureTablesInternals {
     // features deleted no row names any more are taken out
     for (const handle of version.dropped) this.freeIfGone(handle);
     if (version.dropped.length > 0) {
+      const named = this.groupsNamed(this.deletedGroups);
       for (const group of [...this.deletedGroups]) {
-        if (this.groupNamed(group) || this.groupRetainOf.has(group)) continue;
+        if (named.has(group) || this.groupRetainOf.has(group)) continue;
         this.deletedGroups.delete(group);
         this.groups.delete(group);
         this.writtenOrders.delete(group);
