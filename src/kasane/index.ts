@@ -106,3 +106,46 @@ export { transferList } from '../table/transfer-list.js';
 export type { CoordinateSystem } from '../table/coordinates.js';
 export type { RowRings } from '../table/row-rings.js';
 export type { Utf8Column } from '../table/utf8-column.js';
+
+// Rows written as blocks named by their content, and their manifests (Tabane)
+export type {
+  TabaneBlock,
+  TabaneBlockInput,
+  TabaneCompression,
+  TabaneFill,
+  TabaneFrame,
+  TabaneGroup,
+  TabaneId,
+  TabaneManifest,
+  TabaneManifestEntry,
+  TabanePlace,
+  TabaneRevision,
+  TabaneRow,
+  TabaneRowBlockOptions,
+} from '../table/tabane/index.js';
+export {
+  isTabaneOrigin,
+  packTabaneBlock,
+  packTabaneFile,
+  parseTabaneId,
+  readTabaneBlock,
+  readTabaneBlockFile,
+  readTabaneGroup,
+  readTabaneManifest,
+  TABANE_BLOCK_BYTES,
+  TABANE_GROUP_ROWS,
+  TABANE_GROUP_VERTICES,
+  TABANE_VERSION,
+  tabaneFrameContent,
+  tabaneFrames,
+  tabaneIdText,
+  tabaneManifestEntry,
+  tabaneName,
+  tabaneRowBlock,
+  tabaneRows,
+  tabaneRowSuffix,
+  unpackTabaneFile,
+  writeTabaneBlock,
+  writeTabaneBlocks,
+  writeTabaneManifest,
+} from '../table/tabane/index.js';
