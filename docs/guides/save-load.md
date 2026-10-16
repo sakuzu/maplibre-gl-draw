@@ -517,9 +517,11 @@ What puts them back is in the change as well:
   has none: written deleted, it is taken back
 - the place of an item (its layer, its group and its place among the
   others) is in `change.order`, whether it is a feature or a row: a move
-  with where the item stood (`ItemMove.from`), or many rows with their
-  keys before (`RowsMove.before`, written back with `draw.features.restore`
-  after `createRowValues` of `@sakuzu/maplibre-gl-draw/kasane`)
+  with where the item stood (`ItemMove.from`; a row of a Store of rows also
+  with its keys before, `ItemMove.before`), or many rows with their keys
+  before (`RowsMove.before`). The keys before are written back with
+  `draw.features.restore` after `createRowValues` of
+  `@sakuzu/maplibre-gl-draw/kasane`
 - a deletion of this client keeps the rows and the groups it deleted
   (`change.restoreToken`) until they are let go of
   (`draw.features.releaseRestore`). Written not deleted, a row comes back

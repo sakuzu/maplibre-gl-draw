@@ -259,6 +259,34 @@ describe('the changes of the order of a Store of rows', () => {
     expect(listsOf(tables, ['a'])).toEqual(before);
   });
 
+  it('tells the layer, the group and the keys before of a row moved one at a time', () => {
+    const { store, writer, tables, notified } = setup();
+    store.transact(() => {
+      for (let i = 0; i < 5; i++) store.createFeature(point(`f${i}`, 'a'));
+    });
+    const before = listsOf(tables, ['a', 'b']);
+    notified.length = 0;
+    store.moveItems(['f3'], { layerId: 'b', below: null });
+    const moves = notified.flatMap((change) => change.order ?? []) as ItemMove[];
+    expect(moves).toHaveLength(1);
+    const move = moves[0] as ItemMove;
+    expect(move.before?.handles).toEqual(Int32Array.of(tables.findRow('f3') as number));
+    expect(move.before?.fields.get('layerId')).toEqual(['a']);
+    expect(move.before?.fields.get('groupId')).toEqual([undefined]);
+    // Its keys before, written back, put the row back
+    store.transact(() => writer.apply(move.before as NonNullable<ItemMove['before']>), 'remote');
+    expect(listsOf(tables, ['a', 'b'])).toEqual(before);
+    // A row created tells none; a row deleted tells its place before
+    notified.length = 0;
+    store.createFeature(point('f9', 'a'));
+    store.deleteFeature('f1');
+    const made = notified.flatMap((change) => change.order ?? []) as ItemMove[];
+    expect(made.map((m) => [m.itemId, m.before?.fields.get('layerId')])).toEqual([
+      ['f9', undefined],
+      ['f1', ['a']],
+    ]);
+  });
+
   it('tells a group of features given a new key as one item moved', () => {
     const { store, writer, tables, notified } = setup();
     store.transact(() => {

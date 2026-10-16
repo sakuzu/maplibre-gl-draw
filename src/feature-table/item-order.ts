@@ -10,7 +10,8 @@
  *
  * - when few rows changed their places (`ORDER_ITEM_LIMIT` at most), a move per item, made one at
  *   a time (`diffItemOrder`): an item created was nowhere, an item deleted is nowhere, a group
- *   of features is an item from its first member on and until its last member leaves
+ *   of features is an item from its first member on and until its last member leaves. A row that
+ *   was somewhere tells its key, layer and group before, as a move of many rows does
  * - when more did, one move of many rows per layer (`RowsMove`) with the rows that were in a
  *   place before and are in one after, in their new order: the place they were put at together,
  *   or the item just below each of them, and their keys, layers and groups before (written back,
@@ -117,6 +118,8 @@ export class ItemOrderWatch {
   private readonly deleted: number[] = [];
   /** The layer, group and keys of each row moved before the write (absent for a new row) */
   private readonly before = new Map<RowHandle, readonly unknown[]>();
+  /** The id of each row of `before`, when the moves are told one at a time */
+  private readonly beforeIds = new Map<string, RowHandle>();
   /** The items of each container before the write (the layers by id, the groups by handle) */
   private readonly layerItems = new Map<string, ItemsKept>();
   private readonly groupItems = new Map<GroupHandle, ItemsKept>();
@@ -163,24 +166,28 @@ export class ItemOrderWatch {
    * the layers, groups and keys of the rows moved (when they are many)
    */
   keep(): void {
-    if (this.moved.size > ORDER_ITEM_LIMIT) {
-      const deleted = new Set(this.deleted);
-      for (const code of this.moved) {
-        if (deleted.has(code)) continue;
-        const handle = code >> 1;
-        const at = this.source.placeOf(handle);
-        if (!at || isDeleted(at)) continue;
-        const data = at.group.data;
-        const group = data.groups[at.row];
-        this.before.set(handle, [
-          at.layer.layerId,
-          group >= 0 ? this.source.groups.idOf(group) : undefined,
-          utf8String(data.itemKeys, at.row),
-          group >= 0 ? utf8String(data.memberKeys, at.row) : undefined,
-        ]);
+    const many = this.moved.size > ORDER_ITEM_LIMIT;
+    const deleted = new Set(this.deleted);
+    for (const code of this.moved) {
+      // Many rows: the rows that stay in a place; one at a time: the rows deleted too
+      if (many && deleted.has(code)) continue;
+      const handle = code >> 1;
+      const at = this.source.placeOf(handle);
+      if (!at || isDeleted(at)) continue;
+      const data = at.group.data;
+      const group = data.groups[at.row];
+      this.before.set(handle, [
+        at.layer.layerId,
+        group >= 0 ? this.source.groups.idOf(group) : undefined,
+        utf8String(data.itemKeys, at.row),
+        group >= 0 ? utf8String(data.memberKeys, at.row) : undefined,
+      ]);
+      if (!many) {
+        const id = this.source.idOf(handle);
+        if (id !== undefined) this.beforeIds.set(id, handle);
       }
-      return;
     }
+    if (many) return;
     for (const layerId of this.layers) {
       this.layerItems.set(layerId, this.itemsNow({ layerId, group: -1 }));
     }
@@ -238,12 +245,30 @@ export class ItemOrderWatch {
     gone.sort((a, b) => a.layer - b.layer || compareItemKeys(a.key, b.key));
     for (const { group } of gone) deleted.push(groupCode(group));
     const groupIds = new Map<GroupHandle, string>();
-    return diffItemOrder(containers, {
+    const moves = diffItemOrder(containers, {
       moved: this.moved,
       deleted,
       isGroup: (code) => (code & 1) === 1,
       idOf: (code) => this.idOf(code, groupIds),
     }) as ItemMove[];
+    // A row that was somewhere tells its place before
+    return moves.map((move) => {
+      const handle = move.from ? this.beforeIds.get(move.itemId) : undefined;
+      if (handle === undefined) return move;
+      return { ...move, before: this.placeBefore(Int32Array.of(handle)) };
+    });
+  }
+
+  /** The layers, groups and keys of rows before the write, as `RowsMove.before` holds them */
+  private placeBefore(handles: Int32Array): RowsMove['before'] {
+    const fields = new Map<RowField, unknown[]>(PLACE_FIELDS.map((field) => [field, []]));
+    for (const handle of handles) {
+      const values = this.before.get(handle) as readonly unknown[];
+      PLACE_FIELDS.forEach((field, k) => {
+        (fields.get(field) as unknown[]).push(values[k]);
+      });
+    }
+    return { handles, fields };
   }
 
   /**
@@ -359,14 +384,7 @@ export class ItemOrderWatch {
         compareRowKeys(a.group.data, a.row, b.group.data, b.row, keys ?? this.source.groups),
       );
       const handles = Int32Array.from(rows, (at) => at.group.data.handles[at.row]);
-      const fields = new Map<RowField, unknown[]>(PLACE_FIELDS.map((field) => [field, []]));
-      for (const handle of handles) {
-        const values = this.before.get(handle) as readonly unknown[];
-        PLACE_FIELDS.forEach((field, k) => {
-          (fields.get(field) as unknown[]).push(values[k]);
-        });
-      }
-      const before = { handles, fields };
+      const before = this.placeBefore(handles);
       const walk = new ItemWalk(layer, this.source);
       /** The item just below a row among the items of its layer, or the members of its group */
       const belowOf = (at: RowAt): { kind: number; handle: number } => {

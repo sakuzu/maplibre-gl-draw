@@ -513,10 +513,11 @@ core は変更の履歴を持ちません。リスナーが文書を追いかけ
   作った行には付きません。削除として書くと取り消せます
 - 項目の場所 (レイヤー、グループ、ほかの項目との並び) は、地物か行かに
   よらず `change.order` に入ります。1 つの移動なら項目がいた場所
-  (`ItemMove.from`) を、たくさんの行なら移動の前の並びの鍵
-  (`RowsMove.before`。`@sakuzu/maplibre-gl-draw/kasane` の
-  `createRowValues` で包み、`draw.features.restore` で書き戻します) を
-  持ちます
+  (`ItemMove.from`。行を持つ Store の行なら移動の前の並びの鍵
+  `ItemMove.before` も) を、たくさんの行なら移動の前の並びの鍵
+  (`RowsMove.before`) を持ちます。前の並びの鍵は
+  `@sakuzu/maplibre-gl-draw/kasane` の `createRowValues` で包み、
+  `draw.features.restore` で書き戻します
 - この端末の削除は、消した行とグループを手放すまで
   (`draw.features.releaseRestore`) 残します (`change.restoreToken`)。
   削除でない値を書くと、行は元の場所に戻ります。グループは

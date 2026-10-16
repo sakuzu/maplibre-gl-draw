@@ -933,6 +933,13 @@ export interface ItemMove {
   readonly from: ItemPosition | null;
   /** Where it is (null for an item deleted) */
   readonly to: ItemPosition | null;
+  /**
+   * For a row of a Store of rows that was somewhere (moved or deleted): its layer, its group and
+   * the keys of its order before, as {@link RowsMove.before} holds them (written back, they put
+   * the row back). Absent for an item created, a group of features, and in a Store that keeps no
+   * keys
+   */
+  readonly before?: RowValues;
 }
 
 /**
