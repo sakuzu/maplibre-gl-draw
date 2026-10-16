@@ -125,8 +125,8 @@ A group holds `n` rows (1 to 2^20) of one run. Its bytes, in order:
 ### 3.1 The geometry
 
 - `byte` the dimensions: 0 `xy`, 1 `xyz`, 2 `xym`, 3 `xyzm`. Every coordinate
-  has their number of values; a position of fewer values gets NaN for the
-  others, one of more is refused
+  has their number of values; a position of fewer values gets NaN for the others
+  (the quiet NaN of the bits `7FF8000000000000`), one of more is refused
 - `uint` the number of columns of geometry, then a `byte` type of each, in the
   order of their first row: 0 Point, 1 LineString, 2 Polygon, 3 MultiPoint, 4
   MultiLineString, 5 MultiPolygon
