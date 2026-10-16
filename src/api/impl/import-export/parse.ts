@@ -14,6 +14,7 @@
 import { readDrawProperty, setDrawProperty } from '../../../shared/properties.js';
 import { createId } from '../../../shared/utils/id.js';
 import { listedMembers } from '../../../shared/utils/listed-items.js';
+import { setOwnProperty } from '../../../shared/utils/own-property.js';
 import type { Feature, FileData, Group } from '../../../store/types.js';
 import { DrawError } from '../../errors.js';
 import type { GroupInput, LayerInput, ParsedDocument } from '../../model.js';
@@ -22,7 +23,6 @@ import { isNativeFormat, toFeatureCollection } from './format-detection.js';
 import { convertGeoJSONFeatures, decodeEmbeddedImages } from './geojson-import.js';
 import { upgradeNativeData } from './native-upgrade.js';
 import { validateNativeData } from './native-validation.js';
-import { setOwnProperty } from './own-property.js';
 
 type Skipped = ParsedDocument['skipped'];
 type IdMap = ParsedDocument['idMap'];

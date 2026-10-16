@@ -398,6 +398,21 @@ describe('a block', () => {
     expect(same(back[1].geometry, { type: 'Point', coordinates: [1, 2, NaN, NaN] })).toBe(true);
   });
 
+  it('reads an attribute named __proto__ as an own key', () => {
+    const rows: TabaneRow[] = [
+      {
+        id: formatTabaneId({ origin: ORIGIN, number: 1 }),
+        type: 'Point',
+        geometry: { type: 'Point', coordinates: [1, 2] },
+        properties: JSON.parse('{"__proto__": 1, "a": 2}'),
+      },
+    ];
+    const rowBlock = readTabaneBlock(writeTabaneBlock({ parent: '', head: 'a', rows }).content)[0];
+    const back = tabaneRowsOf(rowBlock)[0].properties as Record<string, unknown>;
+    expect(Object.getPrototypeOf(back)).toBe(Object.prototype);
+    expect(Object.keys(back).sort()).toEqual(['__proto__', 'a']);
+  });
+
   it('keeps what created the rows and the revisions of their cells', () => {
     const rows: TabaneRow[] = buildings(5).map((r, i) => ({
       ...r,

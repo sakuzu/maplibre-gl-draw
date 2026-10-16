@@ -7,6 +7,7 @@
 
 import type { RowField } from '../api/tables.js';
 import type { Feature, FeatureStyle, FeatureType } from '../shared/types/model.js';
+import { setOwnProperty } from '../shared/utils/own-property.js';
 
 /**
  * The fields of a row a feature writes over another feature of the row (its layer and group of
@@ -77,7 +78,7 @@ export function featureWithFields(
         properties ??= { ...(feature.properties ?? {}) };
         const key = field.slice('property:'.length);
         if (value === undefined) delete properties[key];
-        else properties[key] = value;
+        else setOwnProperty(properties, key, value);
       }
     }
   }

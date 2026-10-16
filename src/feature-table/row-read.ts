@@ -13,6 +13,7 @@
 import type { Geometry } from 'geojson';
 import { DrawError } from '../shared/draw-error.js';
 import type { Coordinate, Feature, FeatureType } from '../shared/types/model.js';
+import { setOwnProperty } from '../shared/utils/own-property.js';
 import type { CoordinateDimensions } from '../table/coordinates.js';
 import type { RowInput } from '../table/row-group-builder.js';
 import {
@@ -100,12 +101,12 @@ export function rowProperties(
   const out: Record<string, unknown> = {};
   for (let i = 0; i < keys.length; i++) {
     const value = readValue(columns[i], row, strings);
-    if (value !== undefined) out[keys[i]] = value;
+    if (value !== undefined) setOwnProperty(out, keys[i], value);
   }
   group.values?.forEach(row, (key, written) => {
     const value = decodeOverrideValue(written);
     if (value === undefined) delete out[key];
-    else out[key] = value;
+    else setOwnProperty(out, key, value);
   });
   return out;
 }

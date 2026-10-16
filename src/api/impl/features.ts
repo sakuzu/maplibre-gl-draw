@@ -9,6 +9,7 @@ import { featureTablesInternals } from '../../feature-table/feature-tables.js';
 import { differenceAll, intersectionAll, unionAll } from '../../geometry/boolean.js';
 import type { AreaCoordinates, MultiPolygonCoordinates } from '../../geometry/types.js';
 import { getBoundingBox } from '../../shared/utils/feature-bbox.js';
+import { setOwnProperty } from '../../shared/utils/own-property.js';
 import { forEachMatchingRow, type RowFilter, rowMatcher } from '../../store/feature-stream.js';
 import { featuresInStackingOrder } from '../../store/item-lists.js';
 import { isFeatureLocked } from '../../store/lock.js';
@@ -43,7 +44,6 @@ import {
 } from './geometry/targets.js';
 import type { GeometryDeps } from './geometry/types.js';
 import { describeGeometryProblem } from './import-export/geometry-validation.js';
-import { setOwnProperty } from './import-export/own-property.js';
 import { describeStyleProblem } from './import-export/style-validation.js';
 import { toAppliedDefaults } from './options.js';
 import { moveFeatures, resolveMoveTarget } from './placement.js';

@@ -28,12 +28,12 @@ import {
   normalizePolygonOrientation,
 } from '../../../geometry/simplify.js';
 import { DRAW_PROPERTY_PREFIX, getDrawProperty } from '../../../shared/properties.js';
+import { setOwnProperty } from '../../../shared/utils/own-property.js';
 import { featuresInOrder } from '../../../store/feature-stream.js';
 import { listShownFeatures } from '../../../store/local-visibility.js';
 import type { Store } from '../../../store/store.js';
 import type { ExportOptions, Feature, FileData } from '../../../store/types.js';
 import { GEOJSON_COORDINATE_DECIMALS } from './constants.js';
-import { setOwnProperty } from './own-property.js';
 
 type Position = [number, number];
 

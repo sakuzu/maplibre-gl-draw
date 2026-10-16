@@ -18,6 +18,7 @@
 import type { Geometry } from 'geojson';
 import { circleRowRings } from '../../shared/circle-rings.js';
 import { DrawError } from '../../shared/draw-error.js';
+import { setOwnProperty } from '../../shared/utils/own-property.js';
 import { decodeCanonicalValue } from '../canonical-value.js';
 import {
   type CoordinateDimensions,
@@ -370,7 +371,7 @@ export function tabaneRowsOf(read: TabaneRowBlock): TabaneRow[] {
     const properties: Record<string, unknown> = {};
     rowBlock.properties.keys.forEach((key, k) => {
       const v = readValue(rowBlock.properties.columns[k], r);
-      if (v !== undefined) properties[key] = v;
+      if (v !== undefined) setOwnProperty(properties, key, v);
     });
     let fill: TabaneFill | undefined;
     const f = rowBlock.fills;

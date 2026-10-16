@@ -17,6 +17,7 @@
 
 import type { Geometry, Position } from 'geojson';
 import type { Coordinate, Feature, FeatureCoordinates } from '../shared/types/model.js';
+import { setOwnProperty } from '../shared/utils/own-property.js';
 import { type CoordinateDimensions, isCoordinateDimensions, strideOf } from './coordinates.js';
 import type {
   Column,
@@ -449,7 +450,7 @@ export class TableReader {
   propertiesOf(row: number): Record<string, unknown> {
     const properties: Record<string, unknown> = {};
     for (const name of this.columnNames) {
-      properties[name] = columnValue(this.columns[name], row);
+      setOwnProperty(properties, name, columnValue(this.columns[name], row));
     }
     return properties;
   }

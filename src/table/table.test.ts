@@ -152,6 +152,18 @@ describe('the rows', () => {
     expect(table.propertiesOf(1)).toEqual({ name: 'b', kind: null, value: null });
     expect(columnValue(Int32Array.of(7), 0)).toBe(7);
   });
+
+  it('a column named __proto__ as an own key', () => {
+    const table = new TableReader({
+      ...lines(),
+      ids: Int32Array.of(10, 20),
+      columns: JSON.parse('{"__proto__": ["a", "b"]}'),
+    });
+    const properties = table.propertiesOf(0);
+    expect(Object.getPrototypeOf(properties)).toBe(Object.prototype);
+    expect(Object.keys(properties)).toEqual(['__proto__']);
+    expect(Object.getOwnPropertyDescriptor(properties, '__proto__')?.value).toBe('a');
+  });
 });
 
 /** A point, a line with z values and a polygon; the rows of the table in another order */

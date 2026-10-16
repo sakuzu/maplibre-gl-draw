@@ -15,6 +15,7 @@ import {
   setDrawProperty,
 } from '../../../shared/properties.js';
 import type { AutoNameGenerator } from '../../../shared/utils/name-generator.js';
+import { setOwnProperty } from '../../../shared/utils/own-property.js';
 import { deleteFeaturesAndGroups } from '../../../store/feature-stream.js';
 import type { Store } from '../../../store/store.js';
 import type {
@@ -30,7 +31,6 @@ import type { EmbeddedFileProblem } from './embedded-file.js';
 import { isEmbeddedFileProblem, normalizeEmbeddedFile } from './embedded-file.js';
 import { COORDINATE_DEPTH, describeCoordinateProblem } from './geometry-validation.js';
 import { foldLegacyImageStyle } from './legacy-image-style.js';
-import { setOwnProperty } from './own-property.js';
 import { isCssColor, sanitizeFeatureStyle } from './style-validation.js';
 import type { ConvertedFeatureResult, GeoJSONImportOptions, PreparedLoad } from './types.js';
 

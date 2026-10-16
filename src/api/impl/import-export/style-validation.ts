@@ -16,8 +16,8 @@
  */
 
 import { isColor } from '../../../shared/color.js';
+import { setOwnProperty } from '../../../shared/utils/own-property.js';
 import type { FeatureStyle } from '../../../store/types.js';
-import { setOwnProperty } from './own-property.js';
 
 type Check = (value: unknown) => boolean;
 

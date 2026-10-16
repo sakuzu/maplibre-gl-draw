@@ -269,3 +269,24 @@ describe('the geometry written in place', () => {
     expect(overrideBytesOf(group)).toBeGreaterThan(values + 16_000);
   });
 });
+
+describe('an attribute named __proto__', () => {
+  it('reads and writes as an own key, through every reader', () => {
+    const before = points([JSON.parse('{"__proto__": 1, "name": "a"}'), { name: 'b' }]);
+    const tables = tablesOfFeatures('layer', before);
+    const group = tables.table.groupAt(0);
+    expect(writeRowValue(group, 1, '__proto__', 'written')).toBe(true);
+    for (const [row, value] of [
+      [0, 1],
+      [1, 'written'],
+    ] as const) {
+      for (const properties of [
+        rowProperties(group, row, tables.internals.strings),
+        rowFeature(tables.internals.readContext, 'layer', group, row).properties,
+      ]) {
+        expect(Object.getPrototypeOf(properties)).toBe(Object.prototype);
+        expect(Object.getOwnPropertyDescriptor(properties, '__proto__')?.value).toBe(value);
+      }
+    }
+  });
+});
