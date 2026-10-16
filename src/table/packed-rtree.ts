@@ -16,8 +16,12 @@
 /** The number of entries of one node */
 const DEFAULT_NODE_SIZE = 16;
 
-/** The side of the Hilbert grid the centers are snapped to (2^16 cells) */
-const HILBERT_SIDE = 1 << 16;
+/**
+ * The side of the Hilbert grid the centers are snapped to (2^16 cells)
+ *
+ * @internal
+ */
+export const HILBERT_SIDE = 1 << 16;
 
 /**
  * The arrays of a packed R-tree: the spatial index of a row group
@@ -210,9 +214,11 @@ function levelEnd(levelBounds: Int32Array, position: number): number {
 }
 
 /**
- * The distance along the Hilbert curve of a cell of the 2^16 grid
+ * The distance along the Hilbert curve of a cell of the 2^16 grid (an integer below 2^32)
+ *
+ * @internal
  */
-function hilbertIndex(cellX: number, cellY: number): number {
+export function hilbertIndex(cellX: number, cellY: number): number {
   let x = cellX;
   let y = cellY;
   let d = 0;

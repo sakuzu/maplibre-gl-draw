@@ -1126,8 +1126,7 @@ export class LayerTable {
       const group = this.groupAt(g);
       const rows = found.get(group);
       if (rows) {
-        rows.sort((a, b) => a - b);
-        for (const row of rows) {
+        for (const row of inOrder(rows, group.data.length)) {
           flush(g, row);
           if ((group.state[row] & STATE_ELSEWHERE) === 0) visit(group, row);
         }
@@ -1179,6 +1178,22 @@ export class LayerTable {
       this.indexOf.set(handle, i);
     });
   }
+}
+
+/**
+ * Rows of a group in their order: marked and read off in order when they are many of the group,
+ * else sorted
+ *
+ * @param length The number of rows of the group
+ */
+function inOrder(rows: readonly number[], length: number): Int32Array {
+  if (rows.length * 8 < length) return Int32Array.from(rows).sort();
+  const marked = new Uint8Array(length);
+  for (const row of rows) marked[row] = 1;
+  const out = new Int32Array(rows.length);
+  let n = 0;
+  for (let row = 0; row < length; row++) if (marked[row] === 1) out[n++] = row;
+  return n === out.length ? out : out.subarray(0, n);
 }
 
 /** The union of the bboxes of the rows (null when no row has one) */

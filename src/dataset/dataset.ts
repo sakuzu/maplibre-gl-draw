@@ -30,6 +30,7 @@
 import type { ProjectionData } from 'maplibre-gl';
 import { DEFAULT_FEATURE_STYLE_CONFIG } from '../shared/config/feature-style.js';
 import type { BoundingBox, Coordinate, Feature, StyleRule } from '../shared/types/model.js';
+import { idleNow, whenIdle } from '../shared/utils/idle.js';
 import type { PreparedTable, Table } from '../table/types.js';
 import { type RetainedDrawFactors, sanitizeDrawFactors } from '../view/renderers/draw-factors.js';
 import type { PointStyle } from '../view/renderers/point/point-shape.js';
@@ -893,32 +894,4 @@ export class DatasetImpl implements Dataset {
       if (this.thinning.prefetch(deadline, idleNow)) this.schedulePrefetch();
     });
   }
-}
-
-/**
- * The time given to one idle task where `requestIdleCallback` is missing (ms): a slice that
- * does not blow a frame
- */
-const IDLE_FALLBACK_BUDGET_MS = 8;
-/** How long to wait for an idle period where `requestIdleCallback` is missing (ms) */
-const IDLE_FALLBACK_MS = 100;
-
-/** The clock the idle deadlines are measured with */
-function idleNow(): number {
-  return typeof performance !== 'undefined' ? performance.now() : Date.now();
-}
-
-/**
- * Runs `task` when the page is idle, with the time at which the idle period ends (a timer and a
- * fixed budget where `requestIdleCallback` is missing)
- *
- * @returns Cancels it
- */
-function whenIdle(task: (deadline: number) => void): () => void {
-  if (typeof globalThis.requestIdleCallback === 'function') {
-    const handle = globalThis.requestIdleCallback((idle) => task(idleNow() + idle.timeRemaining()));
-    return () => globalThis.cancelIdleCallback(handle);
-  }
-  const handle = setTimeout(() => task(idleNow() + IDLE_FALLBACK_BUDGET_MS), IDLE_FALLBACK_MS);
-  return () => clearTimeout(handle);
 }

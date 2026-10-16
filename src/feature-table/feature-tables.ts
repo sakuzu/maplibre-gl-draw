@@ -49,6 +49,7 @@ import type {
   StoreChange,
 } from '../shared/types/model.js';
 import { getBoundingBox } from '../shared/utils/feature-bbox.js';
+import type { IdleScheduler } from '../shared/utils/idle.js';
 import {
   type CoordinateDimensions,
   type CoordinateSystem,
@@ -210,6 +211,11 @@ export interface FeatureTablesInternalOptions extends FeatureTablesOptions {
    * the edit ends with (100 when omitted; `Infinity`: every row is written)
    */
   readonly moveOpenedByStateFrom?: number;
+  /**
+   * Runs a slice of the build of the index of the boxes of the rows while the page is idle
+   * (`requestIdleCallback`, or a timer, when omitted): a test runs the slices itself
+   */
+  readonly whenIdle?: IdleScheduler;
 }
 
 /**
@@ -836,14 +842,18 @@ class FeatureTablesStore implements FeatureTablesInternals {
     this.retainTokens = options.restoreLimit?.tokens ?? RETAIN_TOKENS;
     this.retainBytes = options.restoreLimit?.bytes ?? RETAIN_BYTES;
     this.moveHeldByStateFrom = options.moveOpenedByStateFrom ?? MOVE_HELD_BY_STATE_FROM;
-    this.rowBoxes = new RowBoxIndex({
-      boxOf: (handle, out) => this.rowBoxOf(handle, out),
-      forEachRow: (visit) => {
-        for (const layer of this.layerList) {
-          for (const handle of layer.rowOrder().handles) visit(handle);
-        }
+    this.rowBoxes = new RowBoxIndex(
+      {
+        boxOf: (handle, out) => this.rowBoxOf(handle, out),
+        rowLists: () => this.layerList.map((layer) => layer.rowOrder().handles),
+        countRows: () => {
+          let count = 0;
+          for (const layer of this.layerList) count += layer.groupRowCount + layer.delta.length;
+          return count;
+        },
       },
-    });
+      { whenIdle: options.whenIdle },
+    );
   }
 
   /**
@@ -894,15 +904,23 @@ class FeatureTablesStore implements FeatureTablesInternals {
     maxY: number,
   ): Map<RowGroup, number[]> {
     const found = new Map<RowGroup, number[]>();
+    // The rows found come by neighbourhoods, often many of one group after another: the group of
+    // the last row and its list are kept
+    let lastGroup: RowGroup | null = null;
+    let lastRows: number[] = [];
     for (const handle of this.rowBoxes.search(table.serial, minX, minY, maxX, maxY)) {
       const place = this.placeOf(handle);
       if (!place || place.layer !== table) continue;
-      let rows = found.get(place.group);
-      if (!rows) {
-        rows = [];
-        found.set(place.group, rows);
+      if (place.group !== lastGroup) {
+        lastGroup = place.group;
+        let rows = found.get(place.group);
+        if (!rows) {
+          rows = [];
+          found.set(place.group, rows);
+        }
+        lastRows = rows;
       }
-      rows.push(place.row);
+      lastRows.push(place.row);
     }
     return found;
   }
