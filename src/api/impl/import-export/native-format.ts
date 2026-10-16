@@ -27,11 +27,12 @@ const DEFAULT_LAYER_ID = 'default-layer';
  * Exports the current data in the native format
  */
 export function exportNative(store: Store, options?: ExportOptions): Data {
-  // A Store of rows: its features made from its rows one at a time, in the order they are drawn,
-  // and its layers and groups with the items and the members read from its rows
+  // A Store of rows: its features made from its rows one at a time, in the order they are drawn.
+  // Every layer and group is written with the items and the members it lists (those of a layer
+  // held as rows read from its rows): the format has no layer of rows
   let features = store.tables ? [...featuresInOrder(store)] : store.listFeatures();
-  const layers = store.tables ? listedLayers(store) : store.listLayers();
-  const groups = store.tables ? listedGroups(store) : store.listGroups();
+  const layers = listedLayers(store);
+  const groups = listedGroups(store);
 
   if (options?.featureIds && options.featureIds.length > 0) {
     const featureIdSet = new Set(options.featureIds);

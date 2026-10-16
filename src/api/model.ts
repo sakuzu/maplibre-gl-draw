@@ -354,12 +354,12 @@ export interface DrawDocument {
   modified?: string;
   /** The title and the description */
   metadata?: Metadata;
-  /** The layers */
-  layers?: Layer[];
+  /** The layers, each with the items it lists (a layer held as rows is not written here) */
+  layers?: ObjectLayer[];
   /** The IDs of the layers in stacking order, from the back */
   layerOrder: string[];
-  /** The groups */
-  groups?: Group[];
+  /** The groups, each with the features it lists */
+  groups?: ObjectGroup[];
   /** The features */
   features: Feature[];
   /** The embedded files, by ID */

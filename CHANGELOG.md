@@ -166,7 +166,10 @@ writing it. Its changes are listed after those of 3.0.0.
 - `Layer` and `Group` are unions told apart by `kind`. A layer held as
   rows has no `items`, and a group of it no `featureIds`: narrow by
   `kind` before reading them, or read them with `layers.listItems` and
-  `groups.listMembers`.
+  `groups.listMembers`. A document (`DrawDocument`) holds the layers and
+  groups that list their items (`ObjectLayer[]` and `ObjectGroup[]`): a
+  layer held as rows is written with the items its rows list, so
+  `layer.items` and `group.featureIds` of a document are read as before.
 - `feature.moved` carries `from` and `to` as `ItemPosition`s (the layer,
   the group and the items just below and above) instead of `MoveTarget`s,
   and fires for a move in the same layer or group as well, once per

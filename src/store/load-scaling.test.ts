@@ -24,11 +24,11 @@
 import { describe, expect, it } from 'vitest';
 import { createDocument } from '../api/impl/document.js';
 import { connectStoreEvents, createEventHub } from '../api/impl/events.js';
-import type { FeatureCoordinates, ObjectLayer } from '../shared/types/model.js';
+import type { FeatureCoordinates, ObjectGroup, ObjectLayer } from '../shared/types/model.js';
 import { geometryFromCoordinates } from '../shared/utils/coordinates.js';
 import { createResourceDeps } from '../test-utils.js';
 import { MemoryStore } from './memory.js';
-import type { Data, Feature, Group, Layer } from './types.js';
+import type { Data, Feature } from './types.js';
 
 function mulberry32(seed: number): () => number {
   let a = seed >>> 0;
@@ -46,7 +46,7 @@ function mulberry32(seed: number): () => number {
 function generate(count: number): Data {
   const rand = mulberry32(count * 2654435761);
   const layerCount = Math.min(12, Math.max(4, Math.round(count / 1500)));
-  const layers: Layer[] = Array.from({ length: layerCount }, (_, i) => ({
+  const layers: ObjectLayer[] = Array.from({ length: layerCount }, (_, i) => ({
     id: `layer-${i}`,
     name: `layer ${i}`,
     visible: true,
@@ -86,7 +86,7 @@ function generate(count: number): Data {
     });
     perLayer[li].push(id);
   }
-  const groups: Group[] = [];
+  const groups: ObjectGroup[] = [];
   let seq = 0;
   for (let li = 0; li < layerCount; li++) {
     const ids = perLayer[li];
@@ -113,7 +113,7 @@ function generate(count: number): Data {
       groupIds.push(gid);
       cursor += size;
     }
-    (layers[li] as ObjectLayer).items = [...groupIds, ...ids.slice(cursor)];
+    layers[li].items = [...groupIds, ...ids.slice(cursor)];
   }
   return { version: '3.0.0', layers, layerOrder: layers.map((l) => l.id), groups, features };
 }

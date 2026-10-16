@@ -1024,16 +1024,19 @@ export interface Data {
   modified?: string;
   /** The metadata of the document */
   metadata?: Metadata;
-  /** The layers, with their order of items (the order of this array has no meaning) */
-  layers?: Layer[];
+  /**
+   * The layers, with their order of items (the order of this array has no meaning): a layer
+   * held as rows is written with the items its rows list
+   */
+  layers?: ObjectLayer[];
   /**
    * The stacking order, from the back: every layer of `layers` once, and the entries of the
    * application that are not layers (see the stacking order of StoreContract) at their
    * positions
    */
   layerOrder: string[];
-  /** The groups */
-  groups?: Group[];
+  /** The groups, with the features they list */
+  groups?: ObjectGroup[];
   /** The features */
   features: Feature[];
   /** The embedded files the features use, by ID */
