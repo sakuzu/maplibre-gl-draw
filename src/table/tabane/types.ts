@@ -54,6 +54,10 @@ export interface TabaneRow {
   readonly properties?: Readonly<Record<string, unknown>>;
   /** Whether the row is deleted (kept for what refers to it) */
   readonly deleted?: boolean;
+  /** Whether the row is shown (true when omitted) */
+  readonly visible?: boolean;
+  /** Whether the row is locked (false when omitted) */
+  readonly locked?: boolean;
   /** What created the row (every row of a row block has one, or none has) */
   readonly created?: TabaneRevision;
   /** The revision of each cell changed after the row was created, by the name of the cell */
@@ -142,6 +146,10 @@ export interface TabaneRowBlock {
 export interface TabaneRowBlockData extends TabaneRowBlock {
   /** A bit per row of the deleted rows (null when none is) */
   readonly deleted: Uint8Array | null;
+  /** A bit per row of the rows not shown (null when every row is shown) */
+  readonly hidden: Uint8Array | null;
+  /** A bit per row of the locked rows (null when none is) */
+  readonly locked: Uint8Array | null;
   /** The type of each row, as an index into `typeNames` */
   readonly types: Uint8Array;
   readonly geometry: TableMixedGeometry;

@@ -194,17 +194,23 @@ export function writeRowBlock(input: RowBlockInput): Uint8Array {
     for (const v of createdRuns) out.uint(v);
   }
 
-  // The deleted rows
-  if (rows.some((r) => r.deleted === true)) {
-    out.byte(1);
+  // The flags of the rows: the deleted rows, the hidden rows, the locked rows, each written when
+  // a row has it
+  const flags: ((row: TabaneRow) => boolean)[] = [
+    (row) => row.deleted === true,
+    (row) => row.visible === false,
+    (row) => row.locked === true,
+  ];
+  const present = flags.map((has) => rows.some(has));
+  out.byte(present.reduce((sum, on, k) => sum | (on ? 1 << k : 0), 0));
+  flags.forEach((has, k) => {
+    if (!present[k]) return;
     const bits = new Uint8Array((n + 7) >> 3);
-    rows.forEach((r, i) => {
-      if (r.deleted === true) bits[i >> 3] |= 1 << (i & 7);
+    rows.forEach((row, i) => {
+      if (has(row)) bits[i >> 3] |= 1 << (i & 7);
     });
     out.bytes(bits);
-  } else {
-    out.byte(0);
-  }
+  });
 
   // The types
   const typeNames: string[] = [];

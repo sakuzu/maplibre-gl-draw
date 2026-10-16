@@ -313,6 +313,29 @@ const SCENARIOS: Scenario[] = [
     },
   },
   {
+    name: 'flags',
+    description:
+      'Rows deleted, not shown and locked, alone and together, written as three columns of bits',
+    input: {
+      parent: 'L',
+      head: 'V',
+      dimensions: 'xy',
+      fills: false,
+      rows: Array.from(
+        { length: 10 },
+        (_, i): TabaneRow => ({
+          id: id(A, 50 + i),
+          type: 'Point',
+          geometry: { type: 'Point', coordinates: [i, -i] },
+          ...(i % 4 === 1 && { deleted: true }),
+          ...(i % 3 === 0 && { visible: false }),
+          ...(i % 5 === 2 && { locked: true }),
+          ...(i === 9 && { visible: true, locked: false }),
+        }),
+      ),
+    },
+  },
+  {
     name: 'blocks',
     description:
       'A run cut into row blocks of 4 rows and into blocks of at most 600 bytes of row blocks, and the manifest of the blocks',

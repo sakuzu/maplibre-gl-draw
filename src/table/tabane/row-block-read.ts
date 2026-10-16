@@ -145,15 +145,15 @@ export function readRowBlockData(
     throw formatError(`a form of what created the rows of ${createdMode}`);
   }
 
-  // The deleted rows
-  const deletedMode = r.byte();
-  let deleted: Uint8Array | null = null;
-  if (deletedMode === 1) {
-    deleted = r.take((n + 7) >> 3).slice();
-    if (n & 7 && deleted[deleted.length - 1] >> (n & 7)) throw formatError('a bit past the rows');
-  } else if (deletedMode !== 0) {
-    throw formatError(`a form of the deleted rows of ${deletedMode}`);
-  }
+  // The flags of the rows: the deleted rows, the hidden rows, the locked rows
+  const flagsMode = r.byte();
+  if (flagsMode > 7) throw formatError(`a form of the flags of the rows of ${flagsMode}`);
+  const [deleted, hidden, locked] = [1, 2, 4].map((bit) => {
+    if ((flagsMode & bit) === 0) return null;
+    const bits = r.take((n + 7) >> 3).slice();
+    if (n & 7 && bits[bits.length - 1] >> (n & 7)) throw formatError('a bit past the rows');
+    return bits;
+  });
 
   // The types
   const typeCount = r.count();
@@ -211,6 +211,8 @@ export function readRowBlockData(
     place: { parent, head, firstIndex },
     created,
     deleted,
+    hidden,
+    locked,
     typeNames,
     types,
     dimensions,

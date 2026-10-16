@@ -435,6 +435,30 @@ describe('a block', () => {
     expect(Buffer.from(a).equals(Buffer.from(b))).toBe(true);
   });
 
+  it('keeps the rows not shown and the locked rows, and writes no column for the defaults', async () => {
+    const rows = buildings(20, 4);
+    const flagged = rows.map((r, i) => ({
+      ...r,
+      ...(i % 3 === 0 && { visible: false }),
+      ...(i % 4 === 0 && { locked: true }),
+    }));
+    const back = tabaneRowsOf(
+      readTabaneBlock(writeTabaneBlock({ parent: 'p', head: 'V', rows: flagged }).content)[0],
+    );
+    expect(back.map((r) => [r.visible ?? true, r.locked ?? false])).toEqual(
+      flagged.map((r) => [r.visible ?? true, r.locked ?? false]),
+    );
+    // Rows shown and not locked, said or not, give the same bytes and so the same name
+    const plain = writeTabaneBlock({ parent: 'p', head: 'V', rows }).content;
+    const said = writeTabaneBlock({
+      parent: 'p',
+      head: 'V',
+      rows: rows.map((r) => ({ ...r, visible: true, locked: false })),
+    }).content;
+    expect(Buffer.from(said).equals(Buffer.from(plain))).toBe(true);
+    expect(await tabaneNameOf(said)).toBe(await tabaneNameOf(plain));
+  });
+
   it('cuts its rows into row blocks and its row blocks into blocks', () => {
     const rows = buildings(2500);
     const block = writeTabaneBlock({ parent: 'p', head: 'V', rows });
@@ -537,7 +561,12 @@ describe('a row block as a row block of the tables', () => {
   }
 
   it('holds the columns the builder makes of the same rows', () => {
-    for (const rows of [buildings(1000, 3), variety()]) {
+    const flagged = buildings(50, 6).map((r, i) => ({
+      ...r,
+      ...(i % 3 === 0 && { visible: false }),
+      ...(i % 4 === 0 && { locked: true }),
+    }));
+    for (const rows of [buildings(1000, 3), variety(), flagged]) {
       for (const fills of [true, false]) {
         const rowBlock = readBlockData(
           writeTabaneBlock({ parent: 'p', head: 'V', rows, fills }).content,
@@ -552,6 +581,8 @@ describe('a row block as a row block of the tables', () => {
             style: row.style,
             properties: row.properties,
             deleted: row.deleted,
+            visible: row.visible,
+            locked: row.locked,
           });
         });
         const [built] = builder.finish();
@@ -561,7 +592,11 @@ describe('a row block as a row block of the tables', () => {
   });
 
   it('is taken by the tables as it is, and read back as features', () => {
-    const rows = buildings(1500, 5);
+    const rows = buildings(1500, 5).map((r, i) => ({
+      ...r,
+      ...(i === 999 && { visible: false }),
+      ...(i === 1000 && { locked: true }),
+    }));
     const { store, writer } = createTableStore();
     store.createLayer({
       id: 'l',
@@ -583,6 +618,8 @@ describe('a row block as a row block of the tables', () => {
       const feature = store.getFeature(rows[k].id);
       expect(feature?.geometry).toEqual(rows[k].geometry);
       expect(feature?.properties).toEqual(rows[k].properties);
+      expect(feature?.visible).toBe(rows[k].visible ?? true);
+      expect(feature?.locked).toBe(rows[k].locked ?? false);
     }
   });
 });

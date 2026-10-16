@@ -38,6 +38,7 @@ import {
 } from '../row-geometry.js';
 import {
   ROW_FLAG_DELETED,
+  ROW_FLAG_LOCKED,
   ROW_FLAG_VISIBLE,
   type RowBlock,
   type RowBlockData,
@@ -150,10 +151,9 @@ export function keyColumn(rowBlock: TabaneRowBlock): Utf8Column {
   return { offsets, bytes: bytes.slice(0, at) };
 }
 
-/** Whether a row of a row block is deleted */
-function isDeleted(rowBlock: TabaneRowBlockData, row: number): boolean {
-  const d = rowBlock.deleted;
-  return d !== null && (d[row >> 3] & (1 << (row & 7))) !== 0;
+/** Whether the bit of a row is set in a column of flags (none set when it is null) */
+function flagOf(bits: Uint8Array | null, row: number): boolean {
+  return bits !== null && (bits[row >> 3] & (1 << (row & 7))) !== 0;
 }
 
 /**
@@ -192,8 +192,12 @@ export function rowBlockDataOfTabane(
   for (let r = 0; r < n; r++) idHashes[r] = hashUtf8(ids, r);
 
   const flags = new Uint8Array(n);
-  for (let r = 0; r < n; r++)
-    flags[r] = ROW_FLAG_VISIBLE | (isDeleted(rowBlock, r) ? ROW_FLAG_DELETED : 0);
+  for (let r = 0; r < n; r++) {
+    flags[r] =
+      (flagOf(rowBlock.hidden, r) ? 0 : ROW_FLAG_VISIBLE) |
+      (flagOf(rowBlock.locked, r) ? ROW_FLAG_LOCKED : 0) |
+      (flagOf(rowBlock.deleted, r) ? ROW_FLAG_DELETED : 0);
+  }
 
   // The attributes a ring reads, by key
   const columnOf = new Map<string, number>();
@@ -382,7 +386,9 @@ export function tabaneRowsOf(read: TabaneRowBlock): TabaneRow[] {
       geometry,
       style,
       properties,
-      ...(isDeleted(rowBlock, r) && { deleted: true }),
+      ...(flagOf(rowBlock.deleted, r) && { deleted: true }),
+      ...(flagOf(rowBlock.hidden, r) && { visible: false }),
+      ...(flagOf(rowBlock.locked, r) && { locked: true }),
       ...(rowBlock.created && { created: created[r] }),
       ...(Object.keys(revisions[r]).length > 0 && { revisions: revisions[r] }),
       ...(fill && { fill }),

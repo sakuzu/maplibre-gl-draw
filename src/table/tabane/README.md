@@ -14,7 +14,8 @@ implementation in Go follows the same document and passes the same vectors.
 
 - A row is an id, a type, a geometry (one of the six GeoJSON types, or none), a
   style (an object), attributes (an object of values), and optionally a deleted
-  flag, what created it and the revisions of its cells
+  flag, a shown flag (shown when omitted), a locked flag, what created it and
+  the revisions of its cells
 - A row block is about a thousand rows of one run, written as columns. Read, it
   is a row block of the tables (`RowBlock`)
 - A block is a run of rows under one parent, cut into row blocks. Its content is
@@ -111,8 +112,12 @@ A row block holds `n` rows (1 to 2^20) of one run. Its bytes, in order:
 5. What created the rows: `byte` 0 (none: what added the block created them)
    or 1, then `uint` count of runs and per run `uint` sequence, `uint` origin,
    `uint` step, `uint` count. A run is as long as the revision is the same
-6. The deleted rows: `byte` 0 (none) or 1, then `ceil(n / 8)` bytes, row `r` at
-   bit `r % 8` of byte `r / 8`
+6. The flags of the rows: `byte` the sum of 1 when a row is deleted, 2 when a
+   row is not shown and 4 when a row is locked (0 when every row is shown, not
+   deleted and not locked), then for each of these in that order, `ceil(n / 8)`
+   bytes of the rows that have it, row `r` at bit `r % 8` of byte `r / 8`. A
+   flag no row has is not written, so rows that say they are shown and not
+   locked give the same bytes as rows that say nothing of it
 7. The types: `uint` count (1 to 255) and the names (`string`) in the order of
    their first row; when more than one, `n` bytes, the type of each row
 8. The geometry (section 3.1)
