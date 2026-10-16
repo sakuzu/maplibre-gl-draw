@@ -24,6 +24,7 @@ import { ROW_FLAG_DELETED, type RowBlockData } from '../table/row-group-types.js
 import { compareRowKeys, type GroupKeySource, type RowKeySource } from '../table/row-keys.js';
 import { GeometryColumnReader } from '../table/table.js';
 import { DeltaRows } from './delta.js';
+import { skipsOf } from './row-skips.js';
 import { STATE_HIDDEN_DELTA, STATE_HIDDEN_WAIT } from './row-state.js';
 import type { RowGroupHandle } from './types.js';
 import type { GeometryOverrides, ValueOverrides } from './value-overrides.js';
@@ -260,6 +261,10 @@ interface ReadExtras {
   readonly places: DeltaPlaces;
   /** The entry of each row of each group (-1 for none) */
   readonly entries: ReadonlyMap<RowGroup, Int32Array>;
+  /** The first entry of the run of entries of the same group each entry is in */
+  readonly runStarts: Int32Array;
+  /** The last entry of the run of entries of the same group each entry is in */
+  readonly runEnds: Int32Array;
 }
 
 /** A row of a layer moved since its group was built, in the index of the moved rows */
@@ -646,11 +651,21 @@ export class LayerTable {
       placeGroups[k] = this.orderOf(place.group);
       cuts[k] = (place.slot + 1) >> 1;
     }
+    const runStarts = new Int32Array(n);
+    const runEnds = new Int32Array(n);
+    for (let k = 0; k < n; k++) {
+      runStarts[k] = k > 0 && groups[k - 1] === groups[k] ? runStarts[k - 1] : k;
+    }
+    for (let k = n - 1; k >= 0; k--) {
+      runEnds[k] = k < n - 1 && groups[k + 1] === groups[k] ? runEnds[k + 1] : k;
+    }
     this.extras = {
       groups,
       rows: Int32Array.from(rows),
       places: { groups: placeGroups, cuts },
       entries,
+      runStarts,
+      runEnds,
     };
     this.extrasKey = key;
     return this.extras;
@@ -798,6 +813,115 @@ export class LayerTable {
     const [g, r] = this.mainOf(at);
     const next = this.lastExtraBefore(g, r) + 1;
     return this.earlier(this.mainFrom(g, r + 1), next < extras.rows.length ? next : -1);
+  }
+
+  /**
+   * The row at or before a row of the order that is not deleted (null when there is none): a run
+   * of deleted rows of a group is passed in a few steps (`RowSkips`), so a walk costs the rows it
+   * reads, not the rows deleted before them
+   *
+   * @throws when the row is not read in the layer
+   */
+  liveRowAtOrBefore(at: OrderRow | null): OrderRow | null {
+    if (!at || (at.group.data.flags[at.row] & ROW_FLAG_DELETED) === 0) return at;
+    const extras = this.readExtras();
+    const k = this.extraOf(at);
+    if (k >= 0) {
+      const g = extras.places.groups[k];
+      const main = g >= 0 ? this.mainLiveBefore(g, extras.places.cuts[k]) : null;
+      return this.later(main, this.extraLiveAtOrBefore(k - 1));
+    }
+    const [g, r] = this.mainOf(at);
+    return this.later(
+      this.mainLiveBefore(g, r),
+      this.extraLiveAtOrBefore(this.lastExtraBefore(g, r)),
+    );
+  }
+
+  /**
+   * The row at or after a row of the order that is not deleted (null when there is none), as
+   * `liveRowAtOrBefore` finds it up
+   *
+   * @throws when the row is not read in the layer
+   */
+  liveRowAtOrAfter(at: OrderRow | null): OrderRow | null {
+    if (!at || (at.group.data.flags[at.row] & ROW_FLAG_DELETED) === 0) return at;
+    const extras = this.readExtras();
+    const k = this.extraOf(at);
+    if (k >= 0) {
+      const g = extras.places.groups[k];
+      const main = g >= 0 ? this.mainLiveFrom(g, extras.places.cuts[k]) : this.mainLiveFrom(0, 0);
+      return this.earlier(main, this.extraLiveAtOrAfter(k + 1));
+    }
+    const [g, r] = this.mainOf(at);
+    return this.earlier(
+      this.mainLiveFrom(g, r + 1),
+      this.extraLiveAtOrAfter(this.lastExtraBefore(g, r) + 1),
+    );
+  }
+
+  /** The last row of the groups read there and not deleted before row `r` of the group at `g` */
+  private mainLiveBefore(g: number, r: number): [number, number] | null {
+    for (let i = g; i >= 0; i--) {
+      const group = this.groupAt(i);
+      const row = skipsOf(group).lastAtOrBefore((i === g ? r : group.data.length) - 1);
+      if (row >= 0) return [i, row];
+    }
+    return null;
+  }
+
+  /** The first row of the groups read there and not deleted at or after row `r` of the group at `g` */
+  private mainLiveFrom(g: number, r: number): [number, number] | null {
+    for (let i = g; i < this.order.length; i++) {
+      const group = this.groupAt(i);
+      const row = skipsOf(group).firstAtOrAfter(i === g ? r : 0);
+      if (row < group.data.length) return [i, row];
+    }
+    return null;
+  }
+
+  /**
+   * The last row read outside the groups at or before entry `k` that is not deleted (-1 for
+   * none): a run of deleted rows of the same group is passed in a few steps
+   */
+  private extraLiveAtOrBefore(k: number): number {
+    const extras = this.readExtras();
+    let j = k;
+    while (j >= 0) {
+      const group = extras.groups[j];
+      const row = skipsOf(group).lastAtOrBefore(extras.rows[j]);
+      const entry = row >= 0 ? (extras.entries.get(group)?.[row] ?? -1) : -1;
+      if (entry === j) return j;
+      if (row >= 0 && entry < 0) {
+        // A row of the group read for this client only (not in the order): one step down
+        j--;
+        continue;
+      }
+      // The rows of the group in the run are passed: the one found, or the run before
+      if (entry >= extras.runStarts[j]) return entry;
+      j = extras.runStarts[j] - 1;
+    }
+    return -1;
+  }
+
+  /** As `extraLiveAtOrBefore`, up: the first at or after entry `k` (-1 for none) */
+  private extraLiveAtOrAfter(k: number): number {
+    const extras = this.readExtras();
+    const n = extras.rows.length;
+    let j = k;
+    while (j < n) {
+      const group = extras.groups[j];
+      const row = skipsOf(group).firstAtOrAfter(extras.rows[j]);
+      const entry = row < group.data.length ? (extras.entries.get(group)?.[row] ?? -1) : -1;
+      if (entry === j) return j;
+      if (row < group.data.length && entry < 0) {
+        j++;
+        continue;
+      }
+      if (entry >= 0 && entry <= extras.runEnds[j]) return entry;
+      j = extras.runEnds[j] + 1;
+    }
+    return -1;
   }
 
   /**

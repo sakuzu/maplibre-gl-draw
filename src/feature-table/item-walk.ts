@@ -127,12 +127,13 @@ export class ItemWalk {
     }
     const group = code >> 1;
     if (container >= 0 || !this.source.groups.has(group)) return null;
-    let first = this.layer.rowNotBefore(this.groupStart(group), 0);
-    while (first && inGroup(first, group) && isDeleted(first)) first = this.layer.nextRow(first);
+    // The members are next to each other: the rows deleted among them are passed together
+    const first = this.layer.liveRowAtOrAfter(this.layer.rowNotBefore(this.groupStart(group), 0));
     if (!first || !inGroup(first, group)) return null;
-    let last = this.rowAfterGroup(group);
-    last = last ? this.layer.previousRow(last) : this.layer.lastRow();
-    while (last && inGroup(last, group) && isDeleted(last)) last = this.layer.previousRow(last);
+    const after = this.rowAfterGroup(group);
+    const last = this.layer.liveRowAtOrBefore(
+      after ? this.layer.previousRow(after) : this.layer.lastRow(),
+    );
     return last ? { first, last } : null;
   }
 
@@ -213,11 +214,10 @@ export class ItemWalk {
     if (!this.source.groups.has(group)) return out;
     let index = 0;
     for (
-      let at = this.layer.rowNotBefore(this.groupStart(group), 0);
+      let at = this.layer.liveRowAtOrAfter(this.layer.rowNotBefore(this.groupStart(group), 0));
       at && inGroup(at, group) && out.length < count;
-      at = this.layer.nextRow(at)
+      at = this.layer.liveRowAtOrAfter(this.layer.nextRow(at))
     ) {
-      if (isDeleted(at)) continue;
       if (index++ >= start) out.push(at.group.data.handles[at.row]);
     }
     return out;
@@ -340,12 +340,9 @@ export class ItemWalk {
     container: GroupHandle,
     skip: Skip | undefined,
   ): number | null {
-    let at = from;
+    // The rows deleted are passed together (`LayerTable.liveRowAtOrBefore`)
+    let at = this.layer.liveRowAtOrBefore(from);
     while (at) {
-      if (isDeleted(at)) {
-        at = this.layer.previousRow(at);
-        continue;
-      }
       const data = at.group.data;
       const group = data.groups[at.row];
       if (container >= 0 && group !== container) return null;
@@ -354,9 +351,9 @@ export class ItemWalk {
       if ((code & 1) === 1) {
         // Past the group: the row before its first one
         const first = this.layer.rowNotBefore(this.groupStart(group), 0);
-        at = first ? this.layer.previousRow(first) : null;
+        at = this.layer.liveRowAtOrBefore(first ? this.layer.previousRow(first) : null);
       } else {
-        at = this.layer.previousRow(at);
+        at = this.layer.liveRowAtOrBefore(this.layer.previousRow(at));
       }
     }
     return null;
@@ -364,19 +361,17 @@ export class ItemWalk {
 
   /** The first item at or above a row, read up (null when there is none in the container) */
   private up(from: OrderRow | null, container: GroupHandle, skip: Skip | undefined): number | null {
-    let at = from;
+    let at = this.layer.liveRowAtOrAfter(from);
     while (at) {
-      if (isDeleted(at)) {
-        at = this.layer.nextRow(at);
-        continue;
-      }
       const data = at.group.data;
       const group = data.groups[at.row];
       if (container >= 0 && group !== container) return null;
       const code = container < 0 && group >= 0 ? groupCode(group) : rowCode(data.handles[at.row]);
       if (!skip?.has(code)) return code;
       // Past the group: the row after its last one
-      at = (code & 1) === 1 ? this.rowAfterGroup(group) : this.layer.nextRow(at);
+      at = this.layer.liveRowAtOrAfter(
+        (code & 1) === 1 ? this.rowAfterGroup(group) : this.layer.nextRow(at),
+      );
     }
     return null;
   }

@@ -1,0 +1,145 @@
+// SPDX-FileCopyrightText: 2026 SAKAIDA Atsushi
+// SPDX-License-Identifier: AGPL-3.0-only
+
+/**
+ * The runs of the rows of a row group the walk of the order passes (`RowSkips`)
+ *
+ * The walk of the items of a layer reads the rows next to a row, and passes the rows that are not
+ * items: the deleted rows, and the copies of rows read elsewhere. Rows deleted one write after
+ * the other stay in their groups until their next versions, so a walk that passed them one at a
+ * time would cost every row deleted before it, and many deletions the square of their number.
+ * Each row group a walk reads keeps, for its rows, how far down and up the rows it passes run
+ * (pointers made shorter as they are followed, as a union-find does), so a run is passed in a
+ * few steps.
+ *
+ * A row only ever becomes passed (deleted, read elsewhere) without the pointers changing: a run
+ * they say is passed stays passed. A row that becomes read again (a deletion undone) makes them
+ * be made again at the next walk.
+ */
+
+import { ROW_FLAG_DELETED } from '../table/row-group-types.js';
+import type { RowGroup } from './layer-table.js';
+import { STATE_HIDDEN_DELTA, STATE_HIDDEN_WAIT } from './row-state.js';
+
+/** The bits of the state of a row whose copy in its group is not the row (it is read elsewhere) */
+const STATE_ELSEWHERE = STATE_HIDDEN_DELTA | STATE_HIDDEN_WAIT;
+
+/**
+ * Whether the walk of the order reads a row of a group as an item: not deleted, and not the copy
+ * of a row read elsewhere (in a group of the order)
+ *
+ * @internal
+ */
+export function walkReads(group: RowGroup, row: number): boolean {
+  if ((group.data.flags[row] & ROW_FLAG_DELETED) !== 0) return false;
+  return group.delta || group.pending || (group.state[row] & STATE_ELSEWHERE) === 0;
+}
+
+/**
+ * The runs of the rows a walk passes in one row group
+ *
+ * @internal
+ */
+export class RowSkips {
+  /** For a row passed: a row below it such that every row from just above it to it is passed */
+  private down: Int32Array | null = null;
+  /** For a row passed: a row above it such that every row from it to just below it is passed */
+  private up: Int32Array | null = null;
+  /** Whether a row became read since the pointers were made (they are made again) */
+  private stale = true;
+  /** The number of rows the walks looked at (what a test of the cost reads) */
+  steps = 0;
+
+  constructor(private readonly group: RowGroup) {}
+
+  /** A row of the group became read again: the pointers are made again at the next walk */
+  touch(): void {
+    this.stale = true;
+  }
+
+  /** The last row at or before a row that the walk reads (-1 for none) */
+  lastAtOrBefore(row: number): number {
+    if (row < 0) return -1;
+    const down = this.pointers().down;
+    let at = row;
+    while (at >= 0) {
+      this.steps++;
+      if (walkReads(this.group, at)) break;
+      at = down[at] < at ? down[at] : at - 1;
+    }
+    // Every row passed on the way runs down to the row found
+    let fix = row;
+    while (fix > at) {
+      const next = down[fix] < fix ? down[fix] : fix - 1;
+      down[fix] = at;
+      fix = next;
+    }
+    return at;
+  }
+
+  /** The first row at or after a row that the walk reads (the number of rows for none) */
+  firstAtOrAfter(row: number): number {
+    const n = this.group.data.length;
+    if (row >= n) return n;
+    const up = this.pointers().up;
+    let at = row;
+    while (at < n) {
+      this.steps++;
+      if (walkReads(this.group, at)) break;
+      at = up[at] > at ? up[at] : at + 1;
+    }
+    let fix = row;
+    while (fix < at) {
+      const next = up[fix] > fix ? up[fix] : fix + 1;
+      up[fix] = at;
+      fix = next;
+    }
+    return at;
+  }
+
+  /** The pointers, made again (each row pointing to itself) when a row became read */
+  private pointers(): { down: Int32Array; up: Int32Array } {
+    const n = this.group.data.length;
+    if (!this.down || !this.up) {
+      this.down = new Int32Array(n);
+      this.up = new Int32Array(n);
+      this.stale = true;
+    }
+    if (this.stale) {
+      for (let r = 0; r < n; r++) {
+        this.down[r] = r;
+        this.up[r] = r;
+      }
+      this.stale = false;
+    }
+    return { down: this.down, up: this.up };
+  }
+}
+
+/** The runs of each row group a walk read */
+const SKIPS = new WeakMap<RowGroup, RowSkips>();
+
+/**
+ * The runs of the rows a walk passes in a row group (made at the first walk of it)
+ *
+ * @internal
+ */
+export function skipsOf(group: RowGroup): RowSkips {
+  let skips = SKIPS.get(group);
+  if (!skips) {
+    skips = new RowSkips(group);
+    SKIPS.set(group, skips);
+  }
+  return skips;
+}
+
+/**
+ * Notes a write of the state of a row (its flags written before): a row the walk reads now may
+ * have been passed, so the runs of its group are made again
+ *
+ * @internal
+ */
+export function noteRowState(group: RowGroup, row: number): void {
+  const skips = SKIPS.get(group);
+  if (skips && walkReads(group, row)) skips.touch();
+}

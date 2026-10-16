@@ -94,6 +94,7 @@ import {
   rowType,
   rowValue,
 } from './row-read.js';
+import { noteRowState } from './row-skips.js';
 import {
   RowStateSets,
   STATE_HIDDEN_DELETED,
@@ -3612,6 +3613,7 @@ class FeatureTablesStore implements FeatureTablesInternals {
     }
     group.state[row] = state;
     group.gpuState[row] = toGpuState(state);
+    noteRowState(group, row);
   }
 
   /** Makes the copies of the state of the row of a handle again (in its group and its delta) */
