@@ -6,7 +6,7 @@
  *
  * A row group never changes its shape: a row of it placed elsewhere, a new row in its range, its
  * values written in place past a limit, its rows moved far, are kept beside it (the delta, the
- * overrides, the index of the moved rows) until the next version of the group takes them. The
+ * overrides, the marks of the moved rows) until the next version of the group takes them. The
  * next version is the rows of the group that stay and the rows of the delta whose keys fall in
  * its range, merged in the order of the layer (`mergeRowBlockData`, on the main thread or in the
  * Worker of the host), and cut into groups of the target sizes when it grew past twice them. A
@@ -100,7 +100,7 @@ const ROW_BYTES = 342;
 
 /**
  * The share of the rows of a group moved since it was built past which the group is due for its
- * next version (the moved ones are searched in the index of the moved rows of the layer)
+ * next version
  *
  * @internal
  */
@@ -420,10 +420,7 @@ export class GroupVersions {
     }
   }
 
-  /**
-   * Marks a group due when many of its rows moved since it was built (they are searched in the
-   * index of the moved rows of the layer, 7.4 of the design)
-   */
+  /** Marks a group due when many of its rows moved since it was built (7.4 of the design) */
   checkMoved(group: RowGroup): void {
     const moved = Math.max(MOVED_ROWS_MIN, group.data.length * MOVED_ROWS_SHARE);
     if (group.unindexedCount > moved) this.markDue(group.handle);

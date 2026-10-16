@@ -15,11 +15,9 @@
  * once keeps its meaning until the group is replaced.
  */
 
-import RBush from 'rbush';
 import { DrawError } from '../shared/draw-error.js';
 import type { BoundingBox } from '../shared/types/model.js';
 import type { CoordinateDimensions } from '../table/coordinates.js';
-import { searchPackedRTree } from '../table/packed-rtree.js';
 import { ROW_FLAG_DELETED, type RowBlockData } from '../table/row-group-types.js';
 import { compareRowKeys, type GroupKeySource, type RowKeySource } from '../table/row-keys.js';
 import { GeometryColumnReader } from '../table/table.js';
@@ -62,9 +60,9 @@ export interface RowGroup {
   /** The geometry written in place that does not fit the columns (null before the first) */
   geometries: GeometryOverrides | null;
   /**
-   * The rows moved since the group was built: 1 for a row the spatial index of the group no
-   * longer finds where it is (its layer finds it in its index of the moved rows). Null before
-   * the first
+   * The rows moved since the group was built: 1 for a row whose positions were written since
+   * (a group with many is due for its next version, `GroupVersions.checkMoved`). Null before the
+   * first
    */
   unindexed: Uint8Array | null;
   /** The number of rows marked in `unindexed` */
@@ -267,16 +265,6 @@ interface ReadExtras {
   readonly runEnds: Int32Array;
 }
 
-/** A row of a layer moved since its group was built, in the index of the moved rows */
-interface MovedRow {
-  minX: number;
-  minY: number;
-  maxX: number;
-  maxY: number;
-  readonly group: RowGroup;
-  readonly row: number;
-}
-
 /**
  * The rows of one layer
  *
@@ -295,9 +283,8 @@ export class LayerTable {
   /** The places of the rows of the delta, and what they were found with */
   private places: DeltaPlaces | null = null;
   private placesKey = '';
-  /** The rows moved since their group was built, by handle (7.4 of the design) */
-  private readonly moved = new Map<number, MovedRow>();
-  private movedIndex: RBush<MovedRow> | null = null;
+  /** The group of each row moved since its group was built, by handle (7.4 of the design) */
+  private readonly moved = new Map<number, RowGroup>();
   /** The rows of the layer changed since their groups were built */
   readonly delta: DeltaRows;
   /** The new rows read before their own groups are taken in (`setPendingSource`) */
@@ -1083,8 +1070,8 @@ export class LayerTable {
   }
 
   /**
-   * Records that a row moved since its group was built, with its new bbox: the spatial index of
-   * its group no longer finds it, the index of the moved rows of the layer does
+   * Records that a row moved since its group was built, with its new bbox (the index of the boxes
+   * of the rows is told to read it again)
    */
   moveRow(group: RowGroup, row: number, bounds: Float64Array): void {
     const handle = group.data.handles[row];
@@ -1092,59 +1079,8 @@ export class LayerTable {
     group.unindexed ??= new Uint8Array(group.data.length);
     if (group.unindexed[row] === 0) group.unindexedCount++;
     group.unindexed[row] = 1;
-    this.movedIndex ??= new RBush<MovedRow>();
-    const index = this.movedIndex;
-    const old = this.moved.get(handle);
-    if (old) {
-      index.remove(old);
-      this.moved.delete(handle);
-    }
-    const at = row * 4;
-    if (Number.isNaN(bounds[at])) {
-      this.moved.delete(handle);
-      return;
-    }
-    const entry: MovedRow = {
-      minX: bounds[at],
-      minY: bounds[at + 1],
-      maxX: bounds[at + 2],
-      maxY: bounds[at + 3],
-      group,
-      row,
-    };
-    this.moved.set(handle, entry);
-    index.insert(entry);
-  }
-
-  /**
-   * The rows of a group whose bbox meets a box, read from the spatial index of the group and the
-   * index of the rows moved (in no particular order)
-   *
-   * @param out Receives the rows (it is not cleared)
-   */
-  searchRows(
-    group: RowGroup,
-    minX: number,
-    minY: number,
-    maxX: number,
-    maxY: number,
-    out: number[],
-  ): void {
-    const mark = out.length;
-    searchPackedRTree(group.data.index, minX, minY, maxX, maxY, out);
-    const unindexed = group.unindexed;
-    if (unindexed) {
-      let kept = mark;
-      for (let i = mark; i < out.length; i++) {
-        if (unindexed[out[i]] === 0) out[kept++] = out[i];
-      }
-      out.length = kept;
-    }
-    if (this.movedIndex && this.moved.size > 0) {
-      for (const entry of this.movedIndex.search({ minX, minY, maxX, maxY })) {
-        if (entry.group === group) out.push(entry.row);
-      }
-    }
+    if (Number.isNaN(bounds[row * 4])) this.moved.delete(handle);
+    else this.moved.set(handle, group);
   }
 
   /**
@@ -1229,28 +1165,11 @@ export class LayerTable {
     return true;
   }
 
-  /**
-   * Where a row read in the layer is drawn, to sort rows into the order of the layer: the place
-   * of its group, its slot (`2r + 1` for row `r` of a group of the order; `2c` for a row of the
-   * delta or of the new rows, drawn just before row `c` of that group) and the order of the rows
-   * at the same slot. Null for a row not read in the layer
-   */
-  orderPositionOf(group: RowGroup, row: number): [number, number, number] | null {
-    const g = this.indexOf.get(group.handle);
-    if (g !== undefined && this.groups.get(group.handle) === group) return [g, 2 * row + 1, 0];
-    const extras = this.readExtras();
-    const k = extras.entries.get(group)?.[row] ?? -1;
-    if (k < 0) return null;
-    return [extras.places.groups[k], 2 * extras.places.cuts[k], k];
-  }
-
-  /** Takes the rows of a group out of the index of the moved rows (the group left the layer) */
+  /** Forgets the rows of a group moved since it was built (the group left the layer) */
   dropMoved(group: RowGroup): void {
-    if (group.unindexedCount === 0 || !this.movedIndex) return;
-    for (const [handle, entry] of this.moved) {
-      if (entry.group !== group) continue;
-      this.movedIndex.remove(entry);
-      this.moved.delete(handle);
+    if (group.unindexedCount === 0) return;
+    for (const [handle, of] of this.moved) {
+      if (of === group) this.moved.delete(handle);
     }
   }
 

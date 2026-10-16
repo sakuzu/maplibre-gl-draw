@@ -11,8 +11,8 @@
  * cannot change in place), the geometry of another shape, and triangles of another number. The
  * next version of the group folds the overrides into its columns.
  *
- * A geometry written moves its row out of the spatial index of its group into the index of the
- * moved rows of its layer, with its new bbox.
+ * A geometry written marks its row moved in its group, with its new bbox, and tells the index of
+ * the boxes of the rows of its layer to read the row again.
  */
 
 import type { Geometry } from 'geojson';
@@ -99,7 +99,7 @@ export function writeRowValue(group: RowGroup, row: number, key: string, value: 
  * value of a coordinate is written (a `z` or an `m` a position does not have is NaN), and the
  * coordinates whose `x` or `y` changed are told apart (only they are drawn again)
  *
- * @param table The layer of the row (its dimensions, its index of the moved rows)
+ * @param table The layer of the row (its dimensions, its rows moved)
  * @throws when the geometry is not of one of the six types a row holds, or when a position has
  *   more values than the dimensions of the layer
  * @internal
@@ -165,8 +165,8 @@ export function writeRowGeometry(
 
 /**
  * Works out again what follows from the geometry of a row (and the radius of a Circle): its
- * triangles and its bbox, with its place in the index of the moved rows. Called after its
- * geometry or the radius of a Circle was written
+ * triangles and its bbox, and records it moved in its layer. Called after its geometry or the
+ * radius of a Circle was written
  *
  * @returns Whether the triangles stayed the same, and the number of coordinates of the ring of a
  *   Circle (0 for any other row)
