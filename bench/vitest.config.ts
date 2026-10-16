@@ -12,7 +12,11 @@ const root = fileURLToPath(new URL('.', import.meta.url));
 
 export default defineConfig({
   root,
-  test: { include: ['*.test.ts', 'stage0/*.test.ts', 'tabane/*.test.ts'], environment: 'node', testTimeout: 30_000 },
+  test: {
+    include: ['*.test.ts', 'stage0/*.test.ts', 'tabane/*.test.ts'],
+    environment: 'node',
+    testTimeout: 30_000,
+  },
   resolve: {
     alias: [
       {

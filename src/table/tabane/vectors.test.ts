@@ -141,109 +141,111 @@ const SCENARIOS: Scenario[] = [
       parent: 'layer-1',
       head: 'a0V',
       dimensions: 'xy',
-      rows: [
-        {
-          id: id(A, 1),
-          type: 'Point',
-          geometry: { type: 'Point', coordinates: [139.767125, 35.681236] },
-          properties: { name: '東京駅', rank: 1, ratio: 0.1 + 0.2, flag: true, none: null },
-          style: { color: '#ff0000', width: 2.5 },
-        },
-        {
-          id: id(A, 2),
-          type: 'LineString',
-          geometry: {
+      rows: (
+        [
+          {
+            id: id(A, 1),
+            type: 'Point',
+            geometry: { type: 'Point', coordinates: [139.767125, 35.681236] },
+            properties: { name: '東京駅', rank: 1, ratio: 0.1 + 0.2, flag: true, none: null },
+            style: { color: '#ff0000', width: 2.5 },
+          },
+          {
+            id: id(A, 2),
             type: 'LineString',
-            coordinates: [
-              [0.1 + 0.2, -0],
-              [1e-300, 123456789.123],
-              [-180, 90],
-            ],
+            geometry: {
+              type: 'LineString',
+              coordinates: [
+                [0.1 + 0.2, -0],
+                [1e-300, 123456789.123],
+                [-180, 90],
+              ],
+            },
+            properties: {
+              name: '線',
+              nested: { z: 'x', a: [1, 2.5, { b: null, c: -0 }] },
+              rank: -(2 ** 60),
+              big: 2 ** 53 - 1,
+            },
+            deleted: true,
           },
-          properties: {
-            name: '線',
-            nested: { z: 'x', a: [1, 2.5, { b: null, c: -0 }] },
-            rank: -(2 ** 60),
-            big: 2 ** 53 - 1,
-          },
-          deleted: true,
-        },
-        {
-          id: id(A, 3),
-          type: 'Polygon',
-          geometry: {
+          {
+            id: id(A, 3),
             type: 'Polygon',
-            coordinates: [
-              square(0, 0, 10),
-              [
-                [2, 2],
-                [4, 2],
-                [4, 4],
-                [2, 2],
-              ],
-            ],
-          },
-          properties: { name: '面', flag: false, ratio: -0 },
-          style: { color: '#00ff00' },
-        },
-        {
-          id: id(A, 4),
-          type: 'MultiPoint',
-          geometry: {
-            type: 'MultiPoint',
-            coordinates: [
-              [1.5, 2.5],
-              [3.25, 4.125],
-            ],
-          },
-          properties: { name: '東京駅' },
-        },
-        {
-          id: id(A, 5),
-          type: 'MultiLineString',
-          geometry: {
-            type: 'MultiLineString',
-            coordinates: [
-              [
-                [0, 0],
-                [1, 1],
-              ],
-              [
-                [2, 2],
-                [3, 3],
-                [4, 5],
-              ],
-            ],
-          },
-          properties: { name: '線' },
-        },
-        {
-          id: id(A, 6),
-          type: 'MultiPolygon',
-          geometry: {
-            type: 'MultiPolygon',
-            coordinates: [
-              [
+            geometry: {
+              type: 'Polygon',
+              coordinates: [
+                square(0, 0, 10),
                 [
-                  [0, 0],
-                  [1, 0],
-                  [1, 1],
-                  [0, 0],
+                  [2, 2],
+                  [4, 2],
+                  [4, 4],
+                  [2, 2],
                 ],
               ],
-              [square(5, 5, 1)],
-            ],
+            },
+            properties: { name: '面', flag: false, ratio: -0 },
+            style: { color: '#00ff00' },
           },
-          style: { color: '#00ff00' },
-        },
-        { id: id(B, 7), type: 'Marker', geometry: null, properties: { text: '' } },
-        {
-          id: id(B, 8),
-          type: 'Circle',
-          geometry: { type: 'Point', coordinates: [139.7, 35.6] },
-          properties: { radius: 100 },
-        },
-      ].map(withFill) as TabaneRow[],
+          {
+            id: id(A, 4),
+            type: 'MultiPoint',
+            geometry: {
+              type: 'MultiPoint',
+              coordinates: [
+                [1.5, 2.5],
+                [3.25, 4.125],
+              ],
+            },
+            properties: { name: '東京駅' },
+          },
+          {
+            id: id(A, 5),
+            type: 'MultiLineString',
+            geometry: {
+              type: 'MultiLineString',
+              coordinates: [
+                [
+                  [0, 0],
+                  [1, 1],
+                ],
+                [
+                  [2, 2],
+                  [3, 3],
+                  [4, 5],
+                ],
+              ],
+            },
+            properties: { name: '線' },
+          },
+          {
+            id: id(A, 6),
+            type: 'MultiPolygon',
+            geometry: {
+              type: 'MultiPolygon',
+              coordinates: [
+                [
+                  [
+                    [0, 0],
+                    [1, 0],
+                    [1, 1],
+                    [0, 0],
+                  ],
+                ],
+                [square(5, 5, 1)],
+              ],
+            },
+            style: { color: '#00ff00' },
+          },
+          { id: id(B, 7), type: 'Marker', geometry: null, properties: { text: '' } },
+          {
+            id: id(B, 8),
+            type: 'Circle',
+            geometry: { type: 'Point', coordinates: [139.7, 35.6] },
+            properties: { radius: 100 },
+          },
+        ] as TabaneRow[]
+      ).map(withFill),
     },
   },
   {
@@ -294,15 +296,20 @@ const SCENARIOS: Scenario[] = [
       head: 'k',
       dimensions: 'xy',
       fills: false,
-      rows: Array.from({ length: 6 }, (_, i) => ({
-        id: id(A, 10 + i),
-        type: 'Point',
-        geometry: { type: 'Point', coordinates: [i, i] },
-        properties: i % 2 === 0 ? { name: `n${i}` } : {},
-        made: (i < 4 ? [1, A, 1] : [9, B, 3]) as [number, string, number],
-        ...(i === 1 && { revisions: { 'p.name': [12, B, 4], geometry: [13, '0000000000002', 1] } }),
-        ...(i === 5 && { revisions: { $place: [20, A, 7] } }),
-      })),
+      rows: Array.from(
+        { length: 6 },
+        (_, i): TabaneRow => ({
+          id: id(A, 10 + i),
+          type: 'Point',
+          geometry: { type: 'Point', coordinates: [i, i] },
+          properties: i % 2 === 0 ? { name: `n${i}` } : {},
+          made: (i < 4 ? [1, A, 1] : [9, B, 3]) as [number, string, number],
+          ...(i === 1 && {
+            revisions: { 'p.name': [12, B, 4], geometry: [13, '0000000000002', 1] },
+          }),
+          ...(i === 5 && { revisions: { $place: [20, A, 7] } }),
+        }),
+      ),
     },
   },
   {
