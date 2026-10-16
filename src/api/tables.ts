@@ -72,8 +72,10 @@ export interface LayerTableView {
    */
   readonly rowCountWithDeleted: number;
   /**
-   * The handles of the rows drawn whose bbox meets a box `[west, south, east, north]`, in the
-   * order of the layer (a hidden row is not drawn)
+   * The handles of the rows drawn whose box as drawn meets a box `[west, south, east, north]`, in
+   * the order of the layer (a hidden row is not drawn). The box as drawn is the box of the
+   * positions of a row, or for a type whose extent is worked out from its feature (an Image, a
+   * Circle, a type of an extension that gives its `bbox`), the box it covers
    */
   listDrawnRows(bbox: BBox): Int32Array;
   /** The bbox of a row (null for a row without a geometry or not in this layer) */
@@ -128,7 +130,10 @@ export const ITEM_GROUP = 1;
 export interface TableScanOptions {
   /** The layers read, in this order (every layer that holds rows when omitted) */
   readonly layerIds?: readonly string[];
-  /** Only the rows whose bbox meets this box, `[west, south, east, north]` */
+  /**
+   * Only the rows whose box as drawn meets this box, `[west, south, east, north]` (the box a row
+   * covers, as {@link LayerTableView.listDrawnRows} reads it)
+   */
   readonly bbox?: BBox;
   /**
    * `layer` (the default): the rows of each layer in its order; `any`: in no order, which costs

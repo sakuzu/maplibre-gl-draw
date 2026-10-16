@@ -139,3 +139,52 @@ describe('the hit test of the rows', () => {
     expect(clickAfresh([1, 1])).toEqual(['p']);
   });
 });
+
+describe('the rows a box finds', () => {
+  /** The ids of the rows of a scan of a box */
+  function scan(bbox: [number, number, number, number], order: 'layer' | 'any'): string[] {
+    const tables = store.tables;
+    const out: string[] = [];
+    const cursor = tables?.scan({ bbox, order });
+    for (let batch = cursor?.next(); batch; batch = cursor?.next()) {
+      for (const handle of batch) out.push(tables?.getRowId(handle) as string);
+    }
+    return out;
+  }
+
+  function drawn(bbox: [number, number, number, number]): string[] {
+    const tables = store.tables;
+    const rows = tables?.get('rows')?.listDrawnRows(bbox) ?? new Int32Array(0);
+    return [...rows].map((handle) => tables?.getRowId(handle) as string);
+  }
+
+  it('are the rows whose boxes as drawn meet it, in the order of the layer', () => {
+    store.createFeature(point('b', 'box', [1, 1]));
+    store.createFeature(point('p', 'Point', [1.4, 1.4]));
+    store.createFeature(point('far', 'Point', [5, 5]));
+    // A box over the extent of b (its point is at 1, 1) and over p
+    const bbox: [number, number, number, number] = [1.3, 1.3, 1.45, 1.45];
+    expect(scan(bbox, 'layer')).toEqual(['b', 'p']);
+    expect(scan(bbox, 'any').sort()).toEqual(['b', 'p']);
+    expect(drawn(bbox)).toEqual(['b', 'p']);
+    // In the order of the layer, whatever it is
+    draw.features.move('b', { layerId: 'rows', below: 'p', above: null });
+    expect(scan(bbox, 'layer')).toEqual(['p', 'b']);
+    expect(drawn(bbox)).toEqual(['p', 'b']);
+    // A row hidden is not drawn; a row deleted is not read
+    draw.features.update('p', { visible: false });
+    expect(drawn(bbox)).toEqual(['b']);
+    draw.features.delete('b');
+    expect(scan(bbox, 'layer')).toEqual(['p']);
+    expect(scan(bbox, 'any')).toEqual(['p']);
+  });
+
+  it('finds a row held as a feature by the box of its feature', () => {
+    store.createFeature(point('b', 'box', [1, 1]));
+    // Selected: held as a feature, then moved
+    clickAfresh([1, 1]);
+    draw.features.update('b', { geometry: { type: 'Point', coordinates: [2, 1] } });
+    expect(scan([2.3, 1.3, 2.45, 1.45], 'any')).toEqual(['b']);
+    expect(scan([1.3, 1.3, 1.45, 1.45], 'layer')).toEqual([]);
+  });
+});

@@ -1148,27 +1148,27 @@ export class LayerTable {
   }
 
   /**
-   * The rows of the layer whose bbox meets a box, in the order of the layer: the rows of its
-   * groups read there, and the rows of its delta and its new rows read before their groups are
-   * taken in at their places (the moved ones where they are now)
+   * Calls `visit` with rows found in the layer, in the order of the layer: the rows of its groups
+   * read there, and the rows of its delta and its new rows read before their groups are taken in at
+   * their places. A row not read in the layer (a row of a group of the order read elsewhere, a row
+   * of the delta drawn only, a group the layer does not read) is left out
    *
+   * @param found The rows found, by the group they are read from (in no particular order; the
+   *   arrays are sorted in place)
    * @param visit Receives each row, in order, with the group it is read from
    */
-  searchInOrder(
-    minX: number,
-    minY: number,
-    maxX: number,
-    maxY: number,
+  visitInOrder(
+    found: ReadonlyMap<RowGroup, number[]>,
     visit: (group: RowGroup, row: number) => void,
   ): void {
+    if (found.size === 0) return;
     const extras = this.readExtras();
     const hits: number[] = [];
     if (extras.rows.length > 0) {
-      const found: number[] = [];
       for (const [group, entries] of extras.entries) {
-        found.length = 0;
-        this.searchRows(group, minX, minY, maxX, maxY, found);
-        for (const row of found) {
+        const rows = found.get(group);
+        if (!rows) continue;
+        for (const row of rows) {
           if (entries[row] >= 0) hits.push(entries[row]);
         }
       }
@@ -1186,19 +1186,30 @@ export class LayerTable {
         next++;
       }
     };
-    const rows: number[] = [];
     for (let g = 0; g < this.order.length; g++) {
       const group = this.groupAt(g);
-      rows.length = 0;
-      this.searchRows(group, minX, minY, maxX, maxY, rows);
-      rows.sort((a, b) => a - b);
-      for (const row of rows) {
-        flush(g, row);
-        if ((group.state[row] & STATE_ELSEWHERE) === 0) visit(group, row);
+      const rows = found.get(group);
+      if (rows) {
+        rows.sort((a, b) => a - b);
+        for (const row of rows) {
+          flush(g, row);
+          if ((group.state[row] & STATE_ELSEWHERE) === 0) visit(group, row);
+        }
       }
-      flush(g, group.data.length);
+      if (next < hits.length) flush(g, group.data.length);
     }
     flush(Number.MAX_SAFE_INTEGER, 0);
+  }
+
+  /**
+   * Whether a row is read in the layer from a group: a row of a group of the order not read
+   * elsewhere, or a row of its delta or its new rows that is read (not drawn only)
+   */
+  readsRow(group: RowGroup, row: number): boolean {
+    if (this.indexOf.has(group.handle) && this.groups.get(group.handle) === group) {
+      return (group.state[row] & STATE_ELSEWHERE) === 0;
+    }
+    return (this.readExtras().entries.get(group)?.[row] ?? -1) >= 0;
   }
 
   /**

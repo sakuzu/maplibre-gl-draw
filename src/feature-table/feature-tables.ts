@@ -882,15 +882,29 @@ class FeatureTablesStore implements FeatureTablesInternals {
     maxY: number,
     visit: (group: RowGroup, row: number) => void,
   ): void {
-    const found: { group: RowGroup; row: number; at: [number, number, number] }[] = [];
+    table.visitInOrder(this.rowsInBox(table, minX, minY, maxX, maxY), visit);
+  }
+
+  /** The rows of a layer whose boxes meet a box, by the group they are read from */
+  private rowsInBox(
+    table: LayerTable,
+    minX: number,
+    minY: number,
+    maxX: number,
+    maxY: number,
+  ): Map<RowGroup, number[]> {
+    const found = new Map<RowGroup, number[]>();
     for (const handle of this.rowBoxes.search(table.serial, minX, minY, maxX, maxY)) {
       const place = this.placeOf(handle);
       if (!place || place.layer !== table) continue;
-      const at = table.orderPositionOf(place.group, place.row);
-      if (at) found.push({ group: place.group, row: place.row, at });
+      let rows = found.get(place.group);
+      if (!rows) {
+        rows = [];
+        found.set(place.group, rows);
+      }
+      rows.push(place.row);
     }
-    found.sort((a, b) => a.at[0] - b.at[0] || a.at[1] - b.at[1] || a.at[2] - b.at[2]);
-    for (const { group, row } of found) visit(group, row);
+    return found;
   }
 
   setRowBoxCalculator(type: string, calculator: RowBoxCalculator | undefined): void {
@@ -1766,8 +1780,22 @@ class FeatureTablesStore implements FeatureTablesInternals {
                 list.push(group.data.handles[row]);
               }
             };
-            if (bbox) {
-              layer.searchInOrder(bbox[0], bbox[1], bbox[2], bbox[3], take);
+            if (bbox && options.order === 'any') {
+              // The rows found in the index of the boxes, as it gives them
+              for (const handle of this.rowBoxes.search(
+                layer.serial,
+                bbox[0],
+                bbox[1],
+                bbox[2],
+                bbox[3],
+              )) {
+                const place = this.placeOf(handle);
+                if (place?.layer === layer && layer.readsRow(place.group, place.row)) {
+                  take(place.group, place.row);
+                }
+              }
+            } else if (bbox) {
+              this.searchRowBoxes(layer, bbox[0], bbox[1], bbox[2], bbox[3], take);
             } else {
               const order = layer.rowOrder();
               for (let i = 0; i < order.handles.length; i++) take(order.groups[i], order.rows[i]);
@@ -3980,7 +4008,7 @@ class LayerTableViewImpl implements LayerTableView {
 
   listDrawnRows(bbox: BBox): Int32Array {
     const out: number[] = [];
-    this.table.searchInOrder(bbox[0], bbox[1], bbox[2], bbox[3], (group, row) => {
+    this.store.searchRowBoxes(this.table, bbox[0], bbox[1], bbox[2], bbox[3], (group, row) => {
       if ((group.state[row] & STATE_HIDDEN_MASK) === 0) out.push(group.data.handles[row]);
     });
     return Int32Array.from(out);
