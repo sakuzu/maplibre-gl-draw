@@ -122,24 +122,24 @@ class FullListWatch {
    * of the rows moved (when they are many)
    */
   keep(): void {
-    if (this.moved.size > ORDER_ITEM_LIMIT) {
-      const deleted = new Set(this.deleted);
-      for (const code of this.moved) {
-        if (deleted.has(code)) continue;
-        const handle = code >> 1;
-        const at = this.source.placeOf(handle);
-        if (!at || isDeleted(at)) continue;
-        const data = at.group.data;
-        const group = data.groups[at.row];
-        this.before.set(handle, [
-          at.layer.layerId,
-          group >= 0 ? this.source.groups.idOf(group) : undefined,
-          utf8String(data.itemKeys, at.row),
-          group >= 0 ? utf8String(data.memberKeys, at.row) : undefined,
-        ]);
-      }
-      return;
+    const many = this.moved.size > ORDER_ITEM_LIMIT;
+    const deleted = new Set(this.deleted);
+    for (const code of this.moved) {
+      // The rows deleted tell their place before only one at a time
+      if (many && deleted.has(code)) continue;
+      const handle = code >> 1;
+      const at = this.source.placeOf(handle);
+      if (!at || isDeleted(at)) continue;
+      const data = at.group.data;
+      const group = data.groups[at.row];
+      this.before.set(handle, [
+        at.layer.layerId,
+        group >= 0 ? this.source.groups.idOf(group) : undefined,
+        utf8String(data.itemKeys, at.row),
+        group >= 0 ? utf8String(data.memberKeys, at.row) : undefined,
+      ]);
     }
+    if (many) return;
     for (const layerId of this.layers.keys()) {
       this.layers.set(layerId, this.source.layer(layerId)?.itemsOf() ?? null);
     }
@@ -191,12 +191,27 @@ class FullListWatch {
     const deleted = [...this.deleted];
     for (const code of beforeItems) if (!afterItems.has(code)) deleted.push(code);
     const groupIds = new Map<GroupHandle, string>();
-    return diffItemOrder(containers, {
+    const moves = diffItemOrder(containers, {
       moved: this.moved,
       deleted,
       isGroup: (code) => (code & 1) === 1,
       idOf: (code) => this.idOf(code, groupIds),
     }) as ItemMove[];
+    // A row that was somewhere tells its place before
+    const handleOf = new Map<string, RowHandle>();
+    for (const handle of this.before.keys()) {
+      const id = this.source.idOf(handle);
+      if (id !== undefined) handleOf.set(id, handle);
+    }
+    return moves.map((move) => {
+      const handle = move.from ? handleOf.get(move.itemId) : undefined;
+      if (handle === undefined) return move;
+      const values = this.before.get(handle) as readonly unknown[];
+      const fields = new Map<RowField, unknown[]>(
+        PLACE_FIELDS.map((field, k) => [field, [values[k]]]),
+      );
+      return { ...move, before: { handles: Int32Array.of(handle), fields } };
+    });
   }
 
   /** The id of an item */
