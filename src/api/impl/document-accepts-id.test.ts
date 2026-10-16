@@ -66,7 +66,18 @@ describe('a load into a Store that takes ids of its own form', () => {
       version: '2.0.0',
       created: '2026-01-01T00:00:00.000Z',
       modified: '2026-01-01T00:00:00.000Z',
-      layers: [{ id: 'L', name: 'L', visible: true, locked: false, opacity: 1, items: ['G'] }],
+      layers: [
+        {
+          id: 'L',
+          name: 'L',
+          visible: true,
+          locked: false,
+          opacity: 1,
+          items: ['G'],
+          styleRule: undefined,
+          metadata: undefined,
+        },
+      ],
       layerOrder: ['L'],
       groups: [
         { id: 'G', layerId: 'L', name: 'G', visible: true, locked: false, featureIds: ['F'] },
