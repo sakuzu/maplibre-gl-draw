@@ -151,6 +151,7 @@ export type { Utf8Column } from '../table/utf8-column.js';
 // Rows written as blocks named by their content, and their manifests (Tabane)
 export type {
   TabaneBlock,
+  TabaneBlockHead,
   TabaneBlockInput,
   TabaneCompressor,
   TabaneFill,
@@ -171,6 +172,7 @@ export {
   parseTabaneId,
   readTabaneBlock,
   readTabaneBlockFile,
+  readTabaneBlockHead,
   readTabaneRowBlock,
   readTabaneManifest,
   rewriteTabaneBlock,

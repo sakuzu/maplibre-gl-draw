@@ -37,6 +37,7 @@ import {
   readBlockData,
   readTabaneBlock,
   readTabaneBlockFile,
+  readTabaneBlockHead,
   rewriteTabaneBlock,
   writeTabaneBlock,
   writeTabaneBlocks,
@@ -54,9 +55,10 @@ import {
   writeRowSuffix,
 } from './ids.js';
 import { readTabaneManifest, tabaneManifestEntryOf, writeTabaneManifest } from './manifest.js';
+import { readTabaneRowBlock } from './row-block-read.js';
 import { rowBlockDataOfTabane, tabaneRowsOf } from './rows.js';
 import { sha256Hex } from './sha256.js';
-import type { TabaneRow } from './types.js';
+import type { TabaneRow, TabaneRowBlock } from './types.js';
 import { XorSink, XorSource } from './xor.js';
 
 const zstd: TabaneCompressor = {
@@ -490,6 +492,24 @@ describe('a block', () => {
       first += b.rows;
     });
     expect(first).toBe(2500);
+  });
+
+  it('reads its head alone: the rows of each row block and where its bytes are', () => {
+    const rows = buildings(2500);
+    const block = writeTabaneBlock({ parent: 'p', head: 'V', rows });
+    const head = readTabaneBlockHead(block.content);
+    expect(head.rows).toBe(2500);
+    expect(head.rowBlocks.map((g) => g.rows)).toEqual([1000, 1000, 500]);
+    const whole = readTabaneBlock(block.content);
+    head.rowBlocks.forEach((g, k) => {
+      const one = readTabaneRowBlock(block.content, g.start, g.end);
+      expect(one.length).toBe(g.rows);
+      expect(tabaneRowsOf(one)).toEqual(tabaneRowsOf(whole[k] as TabaneRowBlock));
+    });
+    expect(head.rowBlocks[head.rowBlocks.length - 1]?.end).toBe(block.content.length);
+    expect(() => readTabaneBlockHead(new Uint8Array([1, 2, 3, 4, 5]))).toThrow(
+      expect.objectContaining({ code: 'unsupported-format' }),
+    );
   });
 
   it('refuses rows it cannot write', () => {

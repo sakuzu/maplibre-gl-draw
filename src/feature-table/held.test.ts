@@ -34,6 +34,8 @@ function setup(count = 20) {
   const tables = tablesOfFeatures('layer', points(count), 8, {
     onChange: (change) => emitted.push(change),
   });
+  // What the rows added told is not gathered
+  emitted.length = 0;
   const at = (id: string) => tables.internals.ids.handleOf(id);
   const row = (id: string) => tables.tables.get('layer')?.getRow(at(id));
   return { ...tables, emitted, at, row };

@@ -34,6 +34,8 @@ function setup() {
   const tables = tablesOfFeatures('layer', list, 4, {
     onChange: (change) => emitted.push(change),
   });
+  // What the rows added told is not gathered
+  emitted.length = 0;
   const ids = () =>
     Array.from(tables.tables.get('layer')?.listRowHandles(0, 100) ?? [], (h) =>
       tables.tables.getRowId(h),

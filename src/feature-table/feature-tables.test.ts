@@ -8,6 +8,7 @@
 
 import type { Geometry, Position } from 'geojson';
 import { describe, expect, expectTypeOf, it, vi } from 'vitest';
+import type { DocumentChange } from '../api/events.js';
 import type { LayerTableView } from '../api/tables.js';
 import { createRowBlockDataBuilder, type RowInput } from '../table/row-group-builder.js';
 import type { RowBlockData } from '../table/row-group-types.js';
@@ -27,39 +28,6 @@ import {
   STATE_HIDDEN_LOCAL,
   toGpuState,
 } from './row-state.js';
-import type { TableWorkBudget } from './types.js';
-
-/**
- * Tables whose `adopt` takes the groups in at once (the queue and the budget are tested in
- * their own section)
- */
-function createFeatureTables(): ReturnType<typeof createFeatureTablesStore> {
-  const made = createFeatureTablesStore();
-  const internals = featureTablesInternals(made.tables);
-  return {
-    tables: made.tables,
-    writer: {
-      ...made.writer,
-      addRowBlocks: (layerId, groups) => {
-        made.writer.addRowBlocks(layerId, groups);
-        internals?.addQueuedRowBlocks();
-      },
-    },
-  };
-}
-
-/** A budget of `steps` steps */
-function stepBudget(steps: number): TableWorkBudget & { taken: number } {
-  const budget = {
-    taken: 0,
-    canStep: () => budget.taken < steps,
-    step: <T>(work: (deadline: number) => T): T => {
-      budget.taken++;
-      return work(Number.POSITIVE_INFINITY);
-    },
-  };
-  return budget;
-}
 
 const point = (x: number, y: number): Geometry => ({ type: 'Point', coordinates: [x, y] });
 
@@ -90,28 +58,20 @@ function groups(
 }
 
 describe('a row block that cannot be added', () => {
-  it('is left out and told to onRowBlockRejected, with its layer and why', () => {
-    const rejected: Array<[string, string | undefined]> = [];
-    const { tables, writer } = createFeatureTablesStore({
-      onRowBlockRejected: (layerId, reason) => rejected.push([layerId, reason.code]),
-    });
-    const internals = featureTablesInternals(tables) as FeatureTablesInternals;
+  it('is refused at once, and no row block given with it is added', () => {
+    const { tables, writer } = createFeatureTablesStore();
     writer.addRowBlocks('layer', groups(3));
-    internals.advanceQueuedBlocks(stepBudget(10));
     // Its ids are rows already
-    const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
-    writer.addRowBlocks('layer', groups(2));
-    internals.advanceQueuedBlocks(stepBudget(10));
-    expect(rejected).toEqual([['layer', 'already-exists']]);
-    expect(errors).not.toHaveBeenCalled();
-    errors.mockRestore();
+    expect(() =>
+      writer.addRowBlocks('layer', [...groups(2, { prefix: 'x' }), ...groups(2)]),
+    ).toThrow(expect.objectContaining({ code: 'already-exists' }));
     expect(tables.get('layer')?.rowCount).toBe(3);
   });
 });
 
 describe('the counts and the lists of the rows of a layer', () => {
   it('count the rows not deleted, and every row read with rowCountWithDeleted, which the list reads', () => {
-    const { tables, writer } = createFeatureTables();
+    const { tables, writer } = createFeatureTablesStore();
     writer.addRowBlocks('layer', groups(6, { targetRows: 4 }));
     featureTablesInternals(tables)?.addQueuedRowBlocks();
     const view = tables.get('layer') as LayerTableView;
@@ -128,7 +88,7 @@ describe('the counts and the lists of the rows of a layer', () => {
   });
 
   it('read the point of a row as a Position', () => {
-    const { tables, writer } = createFeatureTables();
+    const { tables, writer } = createFeatureTablesStore();
     writer.addRowBlocks('layer', groups(2));
     featureTablesInternals(tables)?.addQueuedRowBlocks();
     const view = tables.get('layer') as LayerTableView;
@@ -139,7 +99,7 @@ describe('the counts and the lists of the rows of a layer', () => {
 
 describe('createFeatureTables', () => {
   it('takes row groups into a layer and gives their rows handles', () => {
-    const { tables, writer } = createFeatureTables();
+    const { tables, writer } = createFeatureTablesStore();
     writer.addRowBlocks('layer', groups(10, { targetRows: 4 }));
     const view = tables.get('layer');
     expect(view?.rowCount).toBe(10);
@@ -160,7 +120,7 @@ describe('createFeatureTables', () => {
   });
 
   it('keeps handles given beforehand', () => {
-    const { tables, writer } = createFeatureTables();
+    const { tables, writer } = createFeatureTablesStore();
     const [group] = groups(3);
     const handles = writer.allocateHandles(group.ids, group.idHashes);
     group.handles.set(handles);
@@ -169,7 +129,7 @@ describe('createFeatureTables', () => {
   });
 
   it('numbers the styles of the groups in one table', () => {
-    const { tables, writer } = createFeatureTables();
+    const { tables, writer } = createFeatureTablesStore();
     writer.addRowBlocks('layer', groups(4, { targetRows: 2 }));
     const internals = featureTablesInternals(tables);
     expect(internals?.styles.size).toBe(2);
@@ -181,7 +141,7 @@ describe('createFeatureTables', () => {
   });
 
   it('reads a row back as a feature', () => {
-    const { tables, writer } = createFeatureTables();
+    const { tables, writer } = createFeatureTablesStore();
     writer.addRowBlocks('layer', groups(2, { extra: { locked: true } }));
     const feature = tables.get('layer')?.getRow(tables.findRow('r1') as number);
     expect(feature).toEqual({
@@ -198,7 +158,7 @@ describe('createFeatureTables', () => {
   });
 
   it('puts the groups of separate calls at their places in the order', () => {
-    const { tables, writer } = createFeatureTables();
+    const { tables, writer } = createFeatureTablesStore();
     writer.addRowBlocks('layer', groups(3, { keyOffset: 10, prefix: 'b' }));
     writer.addRowBlocks('layer', groups(3, { keyOffset: 0, prefix: 'a' }));
     writer.addRowBlocks('layer', groups(3, { keyOffset: 20, prefix: 'c' }));
@@ -217,7 +177,7 @@ describe('createFeatureTables', () => {
   });
 
   it('puts the rows of a group whose keys overlap another group in the delta, at their places', () => {
-    const { tables, writer } = createFeatureTables();
+    const { tables, writer } = createFeatureTablesStore();
     writer.addRowBlocks('layer', groups(5));
     // Not left out: read and drawn at their places at once
     expect(() =>
@@ -244,7 +204,7 @@ describe('createFeatureTables', () => {
   });
 
   it('puts the rows of a group not in the order of their keys in the delta, at their places', () => {
-    const { tables, writer } = createFeatureTables();
+    const { tables, writer } = createFeatureTablesStore();
     writer.addRowBlocks('layer', groups(3));
     // u100 and u101 with their keys swapped: u101 comes first
     const [built] = groups(2, { keyOffset: 100, prefix: 'u' });
@@ -268,7 +228,7 @@ describe('createFeatureTables', () => {
   });
 
   it('refuses an id that is already a row, and an unknown group', () => {
-    const { writer } = createFeatureTables();
+    const { writer } = createFeatureTablesStore();
     writer.addRowBlocks('layer', groups(5));
     expect(() => writer.addRowBlocks('layer', groups(1, { keyOffset: 50 }))).not.toThrow();
     expect(() => writer.addRowBlocks('other', groups(1, { keyOffset: 50 }))).toThrow(
@@ -281,14 +241,14 @@ describe('createFeatureTables', () => {
 
   it('refuses a group whose arrays do not have one entry per row', () => {
     // Refused before anything is queued
-    const { writer } = createFeatureTables();
+    const { writer } = createFeatureTablesStore();
     const [group] = groups(3);
     const broken = { ...group, flags: new Uint8Array(2) };
     expect(() => writer.addRowBlocks('layer', [broken])).toThrow(/flags/);
   });
 
   it('hides the rows that are not shown or are deleted, and not their handles', () => {
-    const { tables, writer } = createFeatureTables();
+    const { tables, writer } = createFeatureTablesStore();
     const builder = createRowBlockDataBuilder();
     builder.addRow({ id: 'shown', type: 'Point', geometry: point(0, 0), order: 'a' });
     builder.addRow({
@@ -325,7 +285,7 @@ describe('createFeatureTables', () => {
   });
 
   it('makes the copies of the state again when the sets of handles change', () => {
-    const { tables, writer } = createFeatureTables();
+    const { tables, writer } = createFeatureTablesStore();
     writer.addRowBlocks('layer', groups(6, { targetRows: 3 }));
     const internals = featureTablesInternals(tables);
     const layer = internals?.layerTable('layer') as LayerTable;
@@ -348,7 +308,7 @@ describe('createFeatureTables', () => {
   });
 
   it('gives nothing to a handle of another layer', () => {
-    const { tables, writer } = createFeatureTables();
+    const { tables, writer } = createFeatureTablesStore();
     writer.addRowBlocks('a', groups(2, { prefix: 'a' }));
     writer.addRowBlocks('b', groups(2, { prefix: 'b' }));
     const handle = tables.findRow('a0') as number;
@@ -358,7 +318,7 @@ describe('createFeatureTables', () => {
   });
 
   it('allocates handles for the ids of a column', () => {
-    const { tables, writer } = createFeatureTables();
+    const { tables, writer } = createFeatureTablesStore();
     const handles = writer.allocateHandles(utf8ColumnFromStrings(['x', 'y']));
     expect(tables.getRowId(handles[1])).toBe('y');
     // A handle with no row yet is not a row
@@ -368,7 +328,7 @@ describe('createFeatureTables', () => {
 
 describe('LayerTable', () => {
   it('finds the place of a key and orders places', () => {
-    const { tables, writer } = createFeatureTables();
+    const { tables, writer } = createFeatureTablesStore();
     writer.addRowBlocks('layer', groups(6, { targetRows: 3 }));
     const layer = featureTablesInternals(tables)?.layerTable('layer') as LayerTable;
     const [first, second] = layer.groupHandles;
@@ -395,34 +355,21 @@ describe('LayerTable', () => {
   });
 });
 
-describe('adopt over the frames', () => {
-  it('queues the groups and takes them in a group per step, within the budget', () => {
-    const { tables, writer } = createFeatureTablesStore();
+describe('adding row blocks', () => {
+  it('takes them in at once, in the order of their keys, and tells their rows created', () => {
+    const changes: DocumentChange[] = [];
+    const { tables, writer } = createFeatureTablesStore({ onChange: (c) => changes.push(c) });
     const internals = featureTablesInternals(tables);
     if (!internals) throw new Error('no internals');
-    const asked = vi.fn();
-    internals.onPendingWork(asked);
-
-    writer.addRowBlocks('layer', groups(9, { targetRows: 3 }));
-    expect(asked).toHaveBeenCalledTimes(1);
-    expect(internals.hasQueuedBlocks).toBe(true);
-    // Nothing is taken in yet: the layer is there and empty
-    expect(tables.get('layer')?.rowCount).toBe(0);
-    expect(tables.findRow('r0')).toBeUndefined();
-
-    // Queuing more while groups wait does not ask again
-    writer.addRowBlocks('layer', groups(3, { keyOffset: 20, prefix: 'z', targetRows: 3 }));
-    expect(asked).toHaveBeenCalledTimes(1);
-
-    const budget = stepBudget(2);
-    expect(internals.advanceQueuedBlocks(budget)).toBe(true);
-    expect(budget.taken).toBe(2);
-    expect(tables.get('layer')?.rowCount).toBe(6);
-    expect(tables.findRow('r4')).toBeDefined();
-    expect(tables.findRow('r6')).toBeUndefined();
-
-    expect(internals.advanceQueuedBlocks(stepBudget(10))).toBe(false);
+    const before = internals.revision;
+    const added = writer.addRowBlocks('layer', groups(9, { targetRows: 3 }));
     expect(internals.hasQueuedBlocks).toBe(false);
+    expect(internals.revision).toBeGreaterThan(before);
+    expect(tables.get('layer')?.rowCount).toBe(9);
+    expect(added.layers.get('layer')?.created.length).toBe(9);
+    expect(added.layers.get('layer')?.fields.has('property:name')).toBe(true);
+    expect(changes.map((c) => c.rows?.layers.get('layer')?.created.length)).toEqual([9]);
+    writer.addRowBlocks('layer', groups(3, { keyOffset: 20, prefix: 'z', targetRows: 3 }));
     const view = tables.get('layer');
     expect(Array.from(view?.listRowHandles(0, 12) ?? []).map((h) => tables.getRowId(h))).toEqual([
       ...Array.from({ length: 9 }, (_, i) => `r${i}`),
@@ -432,39 +379,16 @@ describe('adopt over the frames', () => {
     ]);
   });
 
-  it('changes the revision of the rows drawn with every group taken in', () => {
+  it('puts a row block whose keys overlap the rows of the layer in the delta', () => {
     const { tables, writer } = createFeatureTablesStore();
     const internals = featureTablesInternals(tables);
     if (!internals) throw new Error('no internals');
-    writer.addRowBlocks('layer', groups(4, { targetRows: 2 }));
-    const before = internals.revision;
-    internals.advanceQueuedBlocks(stepBudget(1));
-    expect(internals.revision).toBeGreaterThan(before);
-  });
-
-  it('leaves out a group that cannot be taken in, reports it and takes the others in', () => {
-    const { tables, writer } = createFeatureTablesStore();
-    const internals = featureTablesInternals(tables);
-    if (!internals) throw new Error('no internals');
-    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
-    try {
-      writer.addRowBlocks('layer', groups(5));
-      // Ids that are rows already, keys that overlap the first group (taken in by their rows,
-      // in the delta), then a group that is fine
-      writer.addRowBlocks('layer', groups(1, { keyOffset: 30 }));
-      writer.addRowBlocks('layer', groups(1, { keyOffset: 0 }));
-      writer.addRowBlocks('layer', groups(2, { keyOffset: 3, prefix: 'x' }));
-      writer.addRowBlocks('layer', groups(2, { keyOffset: 10, prefix: 'y' }));
-      expect(internals.advanceQueuedBlocks(stepBudget(10))).toBe(false);
-      expect(error).toHaveBeenCalledTimes(1);
-      expect(String(error.mock.calls[0][0])).toMatch(/already a row/);
-      expect(tables.findRow('x3')).toBeDefined();
-      expect(tables.findRow('y10')).toBeDefined();
-      expect(tables.findRow('r30')).toBeDefined();
-      expect(internals.deltaRowCount()).toBe(2);
-    } finally {
-      error.mockRestore();
-    }
+    writer.addRowBlocks('layer', groups(5));
+    writer.addRowBlocks('layer', groups(2, { keyOffset: 3, prefix: 'x' }));
+    writer.addRowBlocks('layer', groups(2, { keyOffset: 10, prefix: 'y' }));
+    expect(tables.findRow('x3')).toBeDefined();
+    expect(tables.findRow('y10')).toBeDefined();
+    expect(internals.deltaRowCount()).toBe(2);
   });
 
   it('refuses at once, and queues nothing, when a row names an unknown group', () => {
@@ -477,6 +401,7 @@ describe('adopt over the frames', () => {
       ]),
     ).toThrow(/unknown/);
     expect(internals?.hasQueuedBlocks).toBe(false);
+    expect(tables.get('layer')?.rowCount ?? 0).toBe(0);
   });
 
   it('gives the rows handles from the hashes the groups carry (not hashing on the main thread)', () => {

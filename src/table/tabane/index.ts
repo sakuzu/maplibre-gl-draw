@@ -12,11 +12,12 @@
 // biome-ignore-all assist/source/organizeImports: the exports are grouped by task
 
 // Write and read blocks
-export type { TabaneBlock, TabaneBlockInput } from './block.js';
+export type { TabaneBlock, TabaneBlockHead, TabaneBlockInput } from './block.js';
 export {
   packTabaneBlock,
   readTabaneBlock,
   readTabaneBlockFile,
+  readTabaneBlockHead,
   rewriteTabaneBlock,
   TABANE_TARGET_BYTES,
   TABANE_TARGET_ROWS,

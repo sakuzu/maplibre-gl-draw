@@ -35,7 +35,7 @@
 
 import { decodeCanonicalValue, encodeCanonicalValue } from '../canonical-value.js';
 import { type CoordinateDimensions, isCoordinateDimensions, strideOf } from '../coordinates.js';
-import { readBlockHead, type TabaneBlock } from './block.js';
+import { readTabaneBlockHead, type TabaneBlock } from './block.js';
 import { formatError } from './bytes.js';
 import { tabaneNameOf } from './file.js';
 import { isTabaneOrigin, tabaneRowSuffixOf } from './ids.js';
@@ -82,7 +82,7 @@ export interface TabaneManifest {
  */
 export async function tabaneManifestEntryOf(block: TabaneBlock): Promise<TabaneManifestEntry> {
   const content = block.content;
-  const layout = readBlockHead(content);
+  const layout = readTabaneBlockHead(content);
   const ids: [string, number, number][] = [];
   let box: ([number, number] | null)[] | null = null;
   let parent = '';

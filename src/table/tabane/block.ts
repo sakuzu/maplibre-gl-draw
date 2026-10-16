@@ -276,26 +276,30 @@ export function writeTabaneBlocks(
 }
 
 /**
- * The row blocks of the content of a block, as where their bytes are
+ * The head of the content of a block: its row blocks, each with its number of rows and where its
+ * bytes are in the content, and the number of its rows
  *
- * @internal
+ * @experimental
  */
-export interface BlockLayout {
+export interface TabaneBlockHead {
+  /** The row blocks, in their order: the number of rows of each and its bytes `[start, end)` */
   readonly rowBlocks: readonly {
     readonly rows: number;
     readonly start: number;
     readonly end: number;
   }[];
+  /** The number of rows of the block */
   readonly rows: number;
 }
 
 /**
- * The head of the content of a block
+ * Reads the head of the content of a block, not its row blocks: a row block is read on its own
+ * with `readTabaneRowBlock(content, start, end)`
  *
  * @throws `DrawError` with the code `unsupported-format` when the bytes are not a block
- * @internal
+ * @experimental
  */
-export function readBlockHead(content: Uint8Array): BlockLayout {
+export function readTabaneBlockHead(content: Uint8Array): TabaneBlockHead {
   const r = new ByteSource(content);
   const magic = r.take(4);
   if (BLOCK_MAGIC.some((b, i) => magic[i] !== b)) throw formatError('not a block');
@@ -334,7 +338,7 @@ export function readTabaneBlock(content: Uint8Array): TabaneRowBlock[] {
  * @internal
  */
 export function readBlockData(content: Uint8Array): TabaneRowBlockData[] {
-  const layout = readBlockHead(content);
+  const layout = readTabaneBlockHead(content);
   return layout.rowBlocks.map((g) => {
     const rowBlock = readRowBlockData(content, g.start, g.end);
     if (rowBlock.length !== g.rows) {

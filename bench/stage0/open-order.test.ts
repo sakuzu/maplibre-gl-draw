@@ -60,15 +60,11 @@ describe('the blocks of files added out of their order', () => {
     const files = Array.from({ length: FILES }, (_, f) =>
       decodeFile(fileOf(f * SEGMENTS * ROWS, SEGMENTS, ROWS)),
     );
-    const rejected: string[] = [];
-    const { tables, writer } = createFeatureTables({
-      onRowBlockRejected: (_layer, reason) => rejected.push(reason.message),
-    });
+    const { tables, writer } = createFeatureTables();
+    // Each file is taken in at once (a row block refused would throw)
     for (const f of [2, 0, 3, 1]) writer.addRowBlocks(LAYER, files[f].blocks);
     const internals = featureTablesInternals(tables);
     expect(internals).toBeDefined();
-    internals?.addQueuedRowBlocks();
-    expect(rejected).toEqual([]);
     const view = tables.get(LAYER);
     const total = FILES * SEGMENTS * ROWS;
     expect(view?.rowCount).toBe(total);

@@ -18,7 +18,7 @@
  *   waiting to be built, at once; without it, they wait for the frames of the drawing as before
  */
 
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import {
   createFeatureTables,
   type FeatureTables,
@@ -426,49 +426,28 @@ describe('the row groups taken in while the drawing holds the reorder of a group
   /** The order once the group of `n0` and `n1` and the reorder are in */
   const BETWEEN = ['r0', 'r1', 'n0', 'n1', 'r4', 'r5', 'r6', 'r7', 'r8', 'r9', 'g'];
 
-  it('wait for the reorder, and are taken in the frame after it goes in', () => {
-    const { writer, tables, frame, items } = heldReorder();
+  it('are taken in at once into the delta, and stand where their keys say once it is in', () => {
+    const { writer, tables, internals, frame, draw, items } = heldReorder();
     // Where the members of the group stood: among them in the order drawn, free once it is in
     writer.addRowBlocks('a', around(`${key(1)}5`, `${key(2)}5`));
-    const takenIn: number[] = [];
-    // The drawing holds the reorder for three frames
-    for (let f = 1; f <= 6; f++) {
-      frame(f >= 4);
-      if (takenIn.length === 0 && tables.findRow('n0') !== undefined) takenIn.push(f);
-    }
-    // The reorder goes in at the end of the fourth frame, the group in the fifth (taken in at
-    // the start of a frame, before its versions are swapped in)
-    expect(takenIn).toEqual([5]);
-    expect(items('a')).toEqual(BETWEEN);
-  });
-
-  it('wait for the reorder when taken in at once, and are taken in once it is', () => {
-    const { writer, tables, internals, draw, items } = heldReorder();
-    writer.addRowBlocks('a', around(`${key(1)}5`, `${key(2)}5`));
-    internals.addQueuedRowBlocks();
-    expect(internals.hasQueuedBlocks).toBe(true);
-    expect(tables.findRow('n0')).toBeUndefined();
-    draw();
-    expect(internals.hasQueuedBlocks).toBe(false);
-    expect(items('a')).toEqual(BETWEEN);
-  });
-
-  it('put a group whose keys hold the new key of the group in the delta once it is in', () => {
-    const { writer, tables, internals, frame, draw, items, low, high } = heldReorder();
-    writer.addRowBlocks('a', around(low, high));
-    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
-    let placed = 0;
-    for (let f = 1; f <= 6; f++) {
-      frame(f >= 4);
-      if (placed === 0 && tables.findRow('n0') !== undefined) placed = f;
-    }
-    // Not left out: taken in by its rows (it would overlap the members of the group), in the
-    // frame after the reorder is in, read and drawn at their places
-    expect(error).not.toHaveBeenCalled();
-    error.mockRestore();
-    expect(placed).toBe(5);
     const n0 = tables.findRow('n0') as number;
     expect(internals.ids.deltaLayer(n0)).toBeGreaterThanOrEqual(0);
+    expect(internals.hasQueuedBlocks).toBe(false);
+    // The drawing holds the reorder for three frames
+    for (let f = 1; f <= 6; f++) frame(f >= 4);
+    expect(items('a')).toEqual(BETWEEN);
+    draw();
+    expect(items('a')).toEqual(BETWEEN);
+  });
+
+  it('put a group whose keys hold the new key of the group in the delta', () => {
+    const { writer, tables, internals, frame, draw, items, low, high } = heldReorder();
+    writer.addRowBlocks('a', around(low, high));
+    // Taken in by its rows (it would overlap the members of the group), read and drawn at their
+    // places
+    const n0 = tables.findRow('n0') as number;
+    expect(internals.ids.deltaLayer(n0)).toBeGreaterThanOrEqual(0);
+    for (let f = 1; f <= 6; f++) frame(f >= 4);
     const after = ['r0', 'r1', 'r4', 'r5', 'r6', 'r7', 'r8', 'r9', 'n0', 'g', 'n1'];
     expect(items('a')).toEqual(after);
     const view = tables.get('a');
@@ -734,13 +713,10 @@ describe('the groups written through the writer of the Store of rows', () => {
 });
 
 describe('taking in the row groups without a drawing', () => {
-  it('leaves the row groups given waiting for the frames until it is called', () => {
+  it('takes the row groups given in at once', () => {
     const { tables, writer } = createFeatureTables();
     writer.addRowBlocks('a', points(0, 10));
     const internals = featureTablesInternals(tables) as FeatureTablesInternals;
-    expect(internals.hasQueuedBlocks).toBe(true);
-    expect(tables.findRow('r0')).toBeUndefined();
-    internals.addQueuedRowBlocks();
     expect(internals.hasQueuedBlocks).toBe(false);
     const view = tables.get('a');
     const order = Array.from(view?.listRowHandles(0, 20) ?? [], (h) => tables.getRowId(h));
@@ -780,16 +756,15 @@ describe('taking in the row groups without a drawing', () => {
     expect(order).toEqual(Array.from({ length: n + 4 }, (_, i) => `r${i}`));
   });
 
-  it('throws for a row group that cannot be taken in, and the groups after it keep waiting', () => {
+  it('throws for a row group that cannot be taken in, and takes none of the others', () => {
     const { tables, writer } = createFeatureTables();
     writer.addRowBlocks('a', points(0, 4));
-    const internals = featureTablesInternals(tables) as FeatureTablesInternals;
-    internals.addQueuedRowBlocks();
     // Its ids are rows already, then a group that can be taken in
-    writer.addRowBlocks('a', [...points(0, 1), ...points(10, 1)]);
-    expect(() => internals.addQueuedRowBlocks()).toThrow();
-    expect(internals.hasQueuedBlocks).toBe(true);
-    internals.addQueuedRowBlocks();
+    expect(() => writer.addRowBlocks('a', [...points(0, 1), ...points(10, 1)])).toThrow(
+      /already a row/,
+    );
+    expect(tables.findRow('r10')).toBeUndefined();
+    writer.addRowBlocks('a', points(10, 1));
     expect(tables.findRow('r10')).toBeDefined();
   });
 });

@@ -593,6 +593,12 @@ draw.document.setShown(version.store);
 draw.document.setShown(null);
 ```
 
+`writer.addRowBlocks(layerId, rowBlocks)` は、行の組をその場で取り込み、
+ストアのほかの書き込みと同じく、その行を作った行として知らせます
+(`change.rows`)。行の組を取り込む手間は、作る手間に比べて小さいです。
+たくさん足すときは、少しずつ足すと描画を止めません。`copyTableStore`
+は塊ずつ写します。
+
 文書を別の地図で描く (印刷する) ときは、`@sakuzu/maplibre-gl-draw/kasane`
 の `copyTableStore` で、地物を行で持つストアに写します。レイヤーと
 グループと並びは一度に、行は塊ずつ、地物を作らずに写します。

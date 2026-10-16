@@ -346,7 +346,7 @@ describe('the order of the drawing of a layer held as rows', () => {
     expect(frames).toBeGreaterThan(2);
   });
 
-  it('takes the row groups given to adopt in a group per frame first, and draws those taken in, in order', () => {
+  it('draws the row groups added, in order, from the first frame', () => {
     const { tables, writer } = createFeatureTablesStore();
     const internals = featureTablesInternals(tables) as FeatureTablesInternals;
     const builder = createRowBlockDataBuilder({ targetRows: 20 });
@@ -355,13 +355,10 @@ describe('the order of the drawing of a layer held as rows', () => {
     });
     writer.addRowBlocks('layer', builder.finish());
     const mocks = createRenderers();
-    let repaints = 0;
     const renderer = new TableLayerRenderer({
       gl: createGL(),
       terrain,
-      requestRepaint: () => {
-        repaints++;
-      },
+      requestRepaint: () => {},
       buildBudgetMs: 0,
     });
     const taken: number[] = [];
@@ -385,10 +382,9 @@ describe('the order of the drawing of a layer held as rows', () => {
       expect(inOrder(record)).toBe(true);
       frames++;
     } while ((renderer.hasPendingWork || internals.hasQueuedBlocks) && frames < 1000);
-    // With no time in the frame, the first step of each frame takes one group in
-    expect(taken.slice(0, 5)).toEqual([1, 2, 3, 4, 5]);
+    // Taken in when they were added: every group is in the first frame
+    expect(taken[0]).toBe(5);
     expect(internals.hasQueuedBlocks).toBe(false);
-    expect(repaints).toBeGreaterThanOrEqual(4);
   });
 });
 

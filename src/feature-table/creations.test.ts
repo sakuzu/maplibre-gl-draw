@@ -16,7 +16,7 @@
  *   gathered, built in the Worker, and queued to be taken in, as once they are taken in
  */
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { FeatureTablesWorker } from '../api/tables.js';
 import { createRowBlockDataBuilder } from '../table/row-group-builder.js';
 import {
@@ -126,6 +126,28 @@ describe('many new rows written at once', () => {
     // The two groups of the points, then the import in groups of the target size
     expect(sizes(internals)).toEqual([10, 10, 4096, 4096, 1808]);
     expectTablesMatch(tables, reference, ['a'], groupHandleOf);
+  });
+
+  it('give their type and their values that are not objects without being built', () => {
+    const reference = pointsReference(20);
+    const setup = tablesOfReference(reference, ['a'], 10);
+    const { tables, internals } = setup;
+    const rows = Array.from({ length: 500 }, (_, i) => ({
+      id: `n${i}`,
+      order: `${key(50_000)}${String(i).padStart(6, '0')}`,
+    }));
+    const { handles } = create(setup, reference, rows);
+    const view = tables.get('a');
+    const built = vi.spyOn(internals as unknown as { buildRows(): unknown }, 'buildRows');
+    expect(view?.getRowType(handles[7] as number)).toBe('Point');
+    expect(view?.getRowValue(handles[7] as number, 'n')).toBe(7);
+    expect(view?.getRowValue(handles[7] as number, 'none')).toBeUndefined();
+    expect(built).not.toHaveBeenCalled();
+    // A read of the row builds it, and the values are those of the row from then on
+    expect(view?.getRow(handles[7] as number)?.properties).toEqual({ n: 7 });
+    expect(built).toHaveBeenCalledTimes(1);
+    expect(view?.getRowValue(handles[7] as number, 'n')).toBe(7);
+    built.mockRestore();
   });
 
   it('go to the delta within the range of a group, around a row of the delta, or when few', () => {

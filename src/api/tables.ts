@@ -406,28 +406,33 @@ export interface FeatureTablesWriter {
    */
   allocateHandles(ids: Utf8Column, hashes?: Uint32Array): Int32Array;
   /**
-   * Adds row blocks to a layer, without copying their columns.
+   * Adds row blocks to a layer at once, without copying their columns, after the implementation of
+   * the Store recorded them.
    *
-   * The row blocks are queued, and added a row block at a time within the time of the frames of the
-   * drawing, so that a large file does not hold a frame; the layer draws the row blocks added so
-   * far. When a row block is added, its rows that have no handle yet (-1) get one (from the hashes
-   * of `idHashes`, computed where the row block was built), its styles built in a Worker are numbered
-   * in the table of styles, and it is put at its place in the order of the layer. The row blocks are
-   * kept as they are: do not change their arrays afterwards.
+   * Every row block is checked before any is added. Then each is put at its place in the order of
+   * the layer: its rows that have no handle yet (-1) get one (from the hashes of `idHashes`,
+   * computed where the row block was built), and its styles built in a Worker are numbered in the
+   * table of styles. The row blocks are kept as they are: do not change their arrays afterwards.
+   * The rows are told as created, as a write of `apply` tells them (`DocumentChange.rows`, in the
+   * transaction of the Store), and the drawing draws them from its next frame.
    *
    * A row block whose rows are not in the order of their keys, or whose keys overlap those of
    * another row block of the layer (one added, or built of rows written, since it was made), is not
    * left out: its rows go to the rows of the layer changed since their row blocks were built (the
    * delta), read and drawn at their places at once, and into the row blocks with their next
-   * versions. A row block with an id that is already a row of the document is left out, and told to
-   * `FeatureTablesOptions.onRowBlockRejected` (reported on the console without it).
+   * versions.
    *
+   * Taking in a row block costs little next to building it, but a caller that adds many keeps the
+   * frames going by adding them a few at a time (a copy of a document adds them a block at a time).
+   *
+   * @returns The rows added, by layer
    * @throws `DrawError` with the code `invalid-input` when an array of a row block does not have one
    *   entry per row, when a row block is empty, or when its coordinates do not have the dimensions of
-   *   the layer (`FeatureTablesOptions.dimensionsOf`), or `not-found` when a row names a group of
-   *   features that is not known (nothing is queued then)
+   *   the layer (`FeatureTablesOptions.dimensionsOf`), `not-found` when a row names a group of
+   *   features that is not known, or `already-exists` when an id is already a row of the document
+   *   (nothing is added then)
    */
-  addRowBlocks(layerId: string, rowBlocks: readonly RowBlock[]): void;
+  addRowBlocks(layerId: string, rowBlocks: readonly RowBlock[]): RowsChange;
   /**
    * Raises the dimensions of the coordinates of a layer, so that it holds a `z` or an `m` it did
    * not (`xy` to `xyz`, `xyz` to `xyzm`; a layer of no rows yet included): no value is dropped.
@@ -563,13 +568,6 @@ export interface FeatureTablesOptions {
    * needs their ids
    */
   readonly onRelease?: (handles: Int32Array) => void;
-  /**
-   * Tells the Store a row block given to `addRowBlocks` that was left out when its turn came, with its
-   * layer and why (`already-exists` for a row block with an id that is already a row of the
-   * document): the rows of the row block are not in the layer. Without it, the row block is reported on
-   * the console
-   */
-  readonly onRowBlockRejected?: (layerId: string, reason: DrawError) => void;
   /**
    * The most the deletions kept and not let go of may hold: tokens (100 when omitted), and bytes
    * of the rows they keep (64 MiB when omitted, counted at the size of a row of five corners).

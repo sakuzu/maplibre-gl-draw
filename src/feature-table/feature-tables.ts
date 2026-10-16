@@ -172,6 +172,19 @@ const PLACE_FIELDS: ReadonlySet<string> = new Set([
 /** The fields a new row is written with: a deleted row written all of them is created again */
 const CREATE_FIELDS: readonly RowField[] = ['type', 'layerId', 'geometry', 'order'];
 
+/** The fields of the rows of a row group taken in, told as written (with their attributes) */
+const ADDED_FIELDS: readonly RowField[] = [
+  'type',
+  'layerId',
+  'groupId',
+  'order',
+  'member',
+  'geometry',
+  'visible',
+  'locked',
+  'style',
+];
+
 /** The number of handles a scan reads at a time when not told */
 const SCAN_BATCH = 1024;
 
@@ -449,21 +462,21 @@ export interface FeatureTablesInternals {
   rowBoxIndexSize(): { readonly rows: number; readonly bytes: number };
   /** The handles of the row groups of a set of rows, the rows by group */
   groupsOfRows(handles: Int32Array): Map<RowGroupHandle, number[]>;
-  /** Whether row groups given to `adopt` are still waiting to be taken in */
+  /** Whether row groups built of new rows written are still waiting to be taken in */
   readonly hasQueuedBlocks: boolean;
   /**
-   * Takes in the row groups waiting, one group per step, within the budget of the frame (at
-   * least one group per call), but the ones of a layer whose reorder of groups of features waits
-   * (taken in once it is in). A group that cannot be taken in is left out and reported
+   * Takes in the row groups built of new rows written that wait, one group per step, within the
+   * budget of the frame (at least one group per call), but the ones of a layer whose reorder of
+   * groups of features waits (taken in once it is in). A group that cannot be taken in goes to the
+   * delta
    *
    * @returns Whether groups are still waiting
    */
   advanceQueuedBlocks(budget: TableWorkBudget): boolean;
   /**
-   * Takes in every row group waiting at once (a host without frames, the tests), but the ones
-   * of a layer whose reorder of groups of features waits (they are taken in once it is in)
-   *
-   * @throws when a group cannot be taken in (the groups after it keep waiting)
+   * Builds the new rows written and takes in every row group waiting at once (a host without
+   * frames, the tests), but the ones of a layer whose reorder of groups of features waits (they are
+   * taken in once it is in)
    */
   addQueuedRowBlocks(): void;
   /**
@@ -677,6 +690,11 @@ interface Creation {
    * after a change of its rows (`dropReading`)
    */
   reading: { readonly group: RowGroup; readonly rows: ReadonlyMap<RowHandle, number> } | null;
+  /**
+   * Its rows not taken in yet by their handles, to read a value of one without building them
+   * (made when first read after a change of its rows)
+   */
+  inputs: Map<RowHandle, RowInput> | null;
 }
 
 /**
@@ -723,7 +741,7 @@ interface Adoption {
   readonly layer: LayerTable;
   readonly data: RowBlockData;
   /** The new rows written the group is built of (put in the delta when it cannot be taken in) */
-  readonly creation?: Creation;
+  readonly creation: Creation;
 }
 
 /** What a change wrote to the rows of one layer, as it is gathered */
@@ -776,7 +794,6 @@ class FeatureTablesStore implements FeatureTablesInternals {
   private readonly worker: FeatureTablesWorker | undefined;
   private readonly onChange: ((change: StoreChange) => void) | undefined;
   private readonly onRelease: ((handles: Int32Array) => void) | undefined;
-  private readonly onRowBlockRejected: ((layerId: string, reason: DrawError) => void) | undefined;
   /** The features drawn over rows for this client, by owner and by id */
   private readonly overlays = new Map<string, Map<string, OverlayEntry>>();
   /** The rows of the deltas that are features drawn over rows (drawn, not read) */
@@ -837,7 +854,6 @@ class FeatureTablesStore implements FeatureTablesInternals {
     this.worker = options.worker;
     this.onChange = options.onChange;
     this.onRelease = options.onRelease;
-    this.onRowBlockRejected = options.onRowBlockRejected;
     this.versions = new GroupVersions(this.versionHost());
     this.retainTokens = options.restoreLimit?.tokens ?? RETAIN_TOKENS;
     this.retainBytes = options.restoreLimit?.bytes ?? RETAIN_BYTES;
@@ -1263,6 +1279,24 @@ class FeatureTablesStore implements FeatureTablesInternals {
     return { layer: creation.layer, group: reading.group, row };
   }
 
+  /**
+   * The input of a new row read from its creation, while its creation is not built to be read
+   * (undefined for a row placed elsewhere, or once its creation is built to be read): a value of
+   * the row is read from it without building the creation
+   */
+  newRowInputOf(handle: RowHandle): RowInput | undefined {
+    if (this.ids.deltaLayer(handle) >= 0 || this.rowGroups.has(this.ids.mainGroup(handle))) {
+      return undefined;
+    }
+    const creation = this.creationOf.get(handle);
+    if (!creation || creation.reading) return undefined;
+    if (!creation.inputs) {
+      creation.inputs = new Map();
+      for (const row of creation.rows) creation.inputs.set(row.handle, row.input);
+    }
+    return creation.inputs.get(handle);
+  }
+
   handleOf(id: string): RowHandle | undefined {
     const handle = this.ids.handleOf(id);
     if (handle < 0) return undefined;
@@ -1297,12 +1331,13 @@ class FeatureTablesStore implements FeatureTablesInternals {
   }
 
   /**
-   * Checks the row groups and queues them: they are taken in a group at a time within the
-   * budget of the frames (`advanceQueuedBlocks`), so a large file does not hold a frame
+   * Takes row groups into a layer at once: every group is checked before any is taken in (its
+   * shape, its dimensions, its groups of features, and that none of its ids is a row already), then
+   * each is put at its place in the order of the layer (into the delta when its rows are not in the
+   * order of their keys, overlap another group, or a reorder of the groups of the layer waits),
+   * and its rows are told as created
    */
-  addRowBlocks(layerId: string, groups: readonly RowBlockData[]): void {
-    // The checks of the shape of the groups are cheap and done here, so that a group made wrong
-    // is refused before anything is queued; the checks of the rows are done when it is taken in
+  addRowBlocks(layerId: string, groups: readonly RowBlockData[]): RowsChange {
     const dims = this.dimsOfLayer(layerId);
     for (const data of groups) {
       checkShape(data);
@@ -1317,12 +1352,29 @@ class FeatureTablesStore implements FeatureTablesInternals {
             `FeatureTables: a row names the group ${group}, which is unknown`,
           );
         }
+        const handle = this.ids.handleOfEntry(data.ids, r, data.idHashes[r]);
+        if (handle >= 0 && (this.ids.mainGroup(handle) >= 0 || this.ids.deltaLayer(handle) >= 0)) {
+          throw new DrawError(
+            'already-exists',
+            `FeatureTables: "${this.ids.idOf(handle)}" is already a row`,
+          );
+        }
       }
     }
     const layer = this.layerOf(layerId);
-    const wasPending = this.adoptions.length > 0;
-    for (const data of groups) this.adoptions.push({ layer, data });
-    if (!wasPending && this.adoptions.length > 0) this.notifyWork();
+    const drafts = new Map<string, LayerChangeDraft>();
+    const draft = draftOf(drafts, layerId);
+    for (const data of groups) {
+      if (this.reorderWaits(layer)) this.rowsToDelta(layer, data);
+      else this.adoptGroup(layer, data);
+      for (let r = 0; r < data.length; r++) draft.created.push(data.handles[r]);
+      for (const field of ADDED_FIELDS) draft.fields.add(field);
+      for (const key of data.properties.keys) draft.fields.add(`property:${key}`);
+    }
+    const change: RowsChange = { layers: finishChanges(drafts) };
+    this.onChange?.({ rows: change });
+    this.notifyWork();
+    return change;
   }
 
   get hasQueuedBlocks(): boolean {
@@ -1339,18 +1391,7 @@ class FeatureTablesStore implements FeatureTablesInternals {
         continue;
       }
       this.adoptions.splice(at, 1);
-      budget.step(() => {
-        try {
-          this.takeIn(next);
-        } catch (error) {
-          // A block given to `addRowBlocks` is left out (there is no caller to throw to any more)
-          if (this.onRowBlockRejected && error instanceof DrawError) {
-            this.onRowBlockRejected(next.layer.layerId, error);
-          } else {
-            console.error(error);
-          }
-        }
-      });
+      budget.step(() => this.takeIn(next));
     }
     return this.adoptions.length > 0;
   }
@@ -1370,17 +1411,11 @@ class FeatureTablesStore implements FeatureTablesInternals {
   }
 
   /**
-   * Takes in a row group waiting: a group of new rows written that cannot be taken in goes to the
-   * delta, and its rows are no longer read from their creation
-   *
-   * @throws when a group given to `adopt` cannot be taken in
+   * Takes in a row group of new rows written, built and waiting: one that cannot be taken in goes
+   * to the delta, and its rows are no longer read from their creation
    */
   private takeIn(adoption: Adoption): void {
     const creation = adoption.creation;
-    if (!creation) {
-      this.adoptGroup(adoption.layer, adoption.data);
-      return;
-    }
     try {
       this.adoptGroup(adoption.layer, adoption.data);
     } catch {
@@ -1471,6 +1506,7 @@ class FeatureTablesStore implements FeatureTablesInternals {
       first: oneKey(keys, order[0]),
       last: oneKey(keys, order[whole - 1]),
       reading: null,
+      inputs: null,
     };
     // Built in this pass
     head.idle = CREATE_WAIT_FRAMES + 1;
@@ -1588,6 +1624,7 @@ class FeatureTablesStore implements FeatureTablesInternals {
   private dropReading(creation: Creation): void {
     const reading = creation.reading;
     creation.reading = null;
+    creation.inputs = null;
     if (reading) {
       for (let r = 0; r < reading.group.data.length; r++) {
         this.styles.release(reading.group.data.styles[r]);
@@ -1675,6 +1712,7 @@ class FeatureTablesStore implements FeatureTablesInternals {
         status: 'gathering',
         queued: 0,
         reading: null,
+        inputs: null,
       };
       this.creations.push(target);
     } else {
@@ -4042,6 +4080,9 @@ class LayerTableViewImpl implements LayerTableView {
   }
 
   getRowType(handle: RowHandle): FeatureType | null {
+    // A new row not built yet is read from what was written (its creation is not built for it)
+    const input = this.store.newRowInputOf(handle);
+    if (input) return input.type;
     const at = this.locate(handle);
     return at ? rowType(at.group.data, at.row) : null;
   }
@@ -4052,6 +4093,13 @@ class LayerTableViewImpl implements LayerTableView {
   }
 
   getRowValue(handle: RowHandle, key: string): unknown {
+    // A new row not built yet: a value that is not an object is read from what was written, as the
+    // row would give it back (an object is read from the row, a copy of its own)
+    const input = this.store.newRowInputOf(handle);
+    if (input) {
+      const value = input.properties?.[key];
+      if (value === null || typeof value !== 'object') return value;
+    }
     const at = this.locate(handle);
     return at ? rowValue(at.group, at.row, key, this.store.strings) : undefined;
   }
