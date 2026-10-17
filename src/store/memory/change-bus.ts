@@ -161,38 +161,30 @@ function foldRows(folds: Map<string, RowsFold>, change: RowsChange): void {
 
 /**
  * The rows of arrays joined, each once, in the order they first come (what an array of a set of
- * them gives): marked in a table of bytes when the rows are small numbers, in a set otherwise
+ * them gives): joined as they are when a sorted copy shows no row twice (the rows a write creates
+ * are new), through a set otherwise
  */
 function joinRows(arrays: readonly Int32Array[]): Int32Array {
   let total = 0;
-  let min = 0;
-  let max = 0;
-  for (const array of arrays) {
-    total += array.length;
-    for (let i = 0; i < array.length; i++) {
-      const handle = array[i];
-      if (handle < min) min = handle;
-      if (handle > max) max = handle;
-    }
-  }
-  if (total === 0) return new Int32Array(0);
-  if (min < 0 || max > total * 4 + 1024) {
-    const set = new Set<number>();
-    for (const array of arrays) for (const handle of array) set.add(handle);
-    return Int32Array.from(set);
-  }
-  const seen = new Uint8Array(max + 1);
+  for (const array of arrays) total += array.length;
   const out = new Int32Array(total);
   let at = 0;
   for (const array of arrays) {
-    for (let i = 0; i < array.length; i++) {
-      const handle = array[i];
-      if (seen[handle] !== 0) continue;
-      seen[handle] = 1;
-      out[at++] = handle;
+    out.set(array, at);
+    at += array.length;
+  }
+  const sorted = out.slice().sort();
+  let twice = false;
+  for (let i = 1; i < sorted.length; i++) {
+    if (sorted[i] === sorted[i - 1]) {
+      twice = true;
+      break;
     }
   }
-  return at === total ? out : out.slice(0, at);
+  if (!twice) return out;
+  const set = new Set<number>();
+  for (let i = 0; i < out.length; i++) set.add(out[i]);
+  return Int32Array.from(set);
 }
 
 /** The rows of the folds, as the notification has them */
