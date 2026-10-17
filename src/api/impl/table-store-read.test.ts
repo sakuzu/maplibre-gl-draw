@@ -15,6 +15,7 @@ import { MemoryStore } from '../../store/memory.js';
 import type { Store } from '../../store/store.js';
 import { createTableStore } from '../../store/table-memory.js';
 import type { Feature, Group, Layer } from '../../store/types.js';
+import { createRowBlockDataBuilder } from '../../table/row-group-builder.js';
 import { createResourceDeps } from '../../test-utils.js';
 import { DrawError } from '../errors.js';
 import type { FeaturesCollection } from '../features.js';
@@ -321,6 +322,52 @@ describe('the names generated over a Store of rows', () => {
     const names = new AutoNameGenerator(rows);
     expect(names.generateName('Point')).toBe('Point 8');
     expect(names.generateName('Polygon')).toBe('Polygon 1');
+    names.dispose();
+  });
+
+  it('takes in the names of the rows of row blocks taken in, of the types of the rows', () => {
+    const { store, writer } = createTableStore();
+    store.createLayer(layerOf('blocks', true));
+    const names = new AutoNameGenerator(store);
+    expect(names.generateName('Point')).toBe('Point 1');
+    expect(names.generateName('Polygon')).toBe('Polygon 1');
+    const builder = createRowBlockDataBuilder({ targetRows: 64 });
+    for (let i = 0; i < 300; i++) {
+      const point = i % 3 !== 0;
+      builder.addRow({
+        id: `b${i}`,
+        type: point ? 'Point' : 'Polygon',
+        geometry: point
+          ? { type: 'Point', coordinates: [i, 0] }
+          : {
+              type: 'Polygon',
+              coordinates: [
+                [
+                  [i, 0],
+                  [i + 1, 0],
+                  [i + 1, 1],
+                  [i, 0],
+                ],
+              ],
+            },
+        order: `k${String(i).padStart(4, '0')}`,
+        // A name of the other type, a name that is not a number, and no name at all are passed over
+        properties:
+          i === 120
+            ? { name: 'Point 77' }
+            : i === 150
+              ? { name: 'Polygon 40' }
+              : i === 151
+                ? { name: 'Point 900' }
+                : i === 200
+                  ? { name: 'Point x' }
+                  : {},
+      });
+    }
+    writer.addRowBlocks('blocks', builder.finish());
+    expect(names.generateName('Point')).toBe('Point 901');
+    // Row 120 is a Polygon (120 % 3 === 0): its name 'Point 77' is not of its type
+    expect(names.generateName('Polygon')).toBe('Polygon 41');
     names.dispose();
   });
 

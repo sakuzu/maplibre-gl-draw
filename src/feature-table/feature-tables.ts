@@ -1263,20 +1263,48 @@ class FeatureTablesStore implements FeatureTablesInternals {
   }
 
   placeOf(handle: RowHandle): RowPlace | undefined {
+    if (!this.findPlace(handle)) return undefined;
+    return {
+      layer: this.foundLayer as LayerTable,
+      group: this.foundGroup as RowGroup,
+      row: this.foundRow,
+    };
+  }
+
+  /** The layer of the row the last `findPlace` found (read at once: the next search changes it) */
+  foundLayer: LayerTable | null = null;
+  /** The group of the row the last `findPlace` found */
+  foundGroup: RowGroup | null = null;
+  /** The row in its group the last `findPlace` found */
+  foundRow = -1;
+
+  /**
+   * Finds where a row is read, as `placeOf` does, without making an object: true when it is
+   * found, its layer, group and row then in `foundLayer`, `foundGroup` and `foundRow` (a read of a
+   * value of each row of many makes nothing per row)
+   */
+  findPlace(handle: RowHandle): boolean {
     const serial = this.ids.deltaLayer(handle);
     if (serial >= 0) {
       const layer = this.layerList[serial];
       const group = layer.delta.group;
-      if (group) return { layer, group, row: this.ids.deltaSlot(handle) };
+      if (group) return this.found(layer, group, this.ids.deltaSlot(handle));
     }
     const placed = this.rowGroups.get(this.ids.mainGroup(handle));
-    if (placed) return { layer: placed.layer, group: placed.group, row: this.ids.mainRow(handle) };
+    if (placed) return this.found(placed.layer, placed.group, this.ids.mainRow(handle));
     // A new row read from its creation until its group is taken in
     const creation = this.creationOf.get(handle);
     const reading = creation ? this.readingOf(creation) : null;
     const row = reading?.rows.get(handle);
-    if (!creation || !reading || row === undefined) return undefined;
-    return { layer: creation.layer, group: reading.group, row };
+    if (!creation || !reading || row === undefined) return false;
+    return this.found(creation.layer, reading.group, row);
+  }
+
+  private found(layer: LayerTable, group: RowGroup, row: number): true {
+    this.foundLayer = layer;
+    this.foundGroup = group;
+    this.foundRow = row;
+    return true;
   }
 
   /**
@@ -4071,10 +4099,9 @@ class LayerTableViewImpl implements LayerTableView {
   }
 
   getRowBounds(handle: RowHandle): BBox | null {
-    const at = this.locate(handle);
-    if (!at) return null;
-    const b = at.group.data.rowBounds;
-    const i = at.row * 4;
+    if (!this.locate(handle)) return null;
+    const b = (this.store.foundGroup as RowGroup).data.rowBounds;
+    const i = this.store.foundRow * 4;
     if (Number.isNaN(b[i])) return null;
     return [b[i], b[i + 1], b[i + 2], b[i + 3]];
   }
@@ -4083,13 +4110,13 @@ class LayerTableViewImpl implements LayerTableView {
     // A new row not built yet is read from what was written (its creation is not built for it)
     const input = this.store.newRowInputOf(handle);
     if (input) return input.type;
-    const at = this.locate(handle);
-    return at ? rowType(at.group.data, at.row) : null;
+    if (!this.locate(handle)) return null;
+    return rowType((this.store.foundGroup as RowGroup).data, this.store.foundRow);
   }
 
   getRowPoint(handle: RowHandle): Position | null {
-    const at = this.locate(handle);
-    return at ? rowPoint(at.group, at.row) : null;
+    if (!this.locate(handle)) return null;
+    return rowPoint(this.store.foundGroup as RowGroup, this.store.foundRow);
   }
 
   getRowValue(handle: RowHandle, key: string): unknown {
@@ -4100,19 +4127,27 @@ class LayerTableViewImpl implements LayerTableView {
       const value = input.properties?.[key];
       if (value === null || typeof value !== 'object') return value;
     }
-    const at = this.locate(handle);
-    return at ? rowValue(at.group, at.row, key, this.store.strings) : undefined;
+    if (!this.locate(handle)) return undefined;
+    return rowValue(
+      this.store.foundGroup as RowGroup,
+      this.store.foundRow,
+      key,
+      this.store.strings,
+    );
   }
 
   getRowStyle(handle: RowHandle): Readonly<FeatureStyle> | undefined {
-    const at = this.locate(handle);
-    return at ? this.store.styles.get(at.group.data.styles[at.row]) : undefined;
+    if (!this.locate(handle)) return undefined;
+    const group = this.store.foundGroup as RowGroup;
+    return this.store.styles.get(group.data.styles[this.store.foundRow]);
   }
 
   getRow(handle: RowHandle): Feature | undefined {
-    const at = this.locate(handle);
-    if (!at || (at.group.data.flags[at.row] & ROW_FLAG_DELETED) !== 0) return undefined;
-    return rowFeature(this.store.readContext, this.table.layerId, at.group, at.row);
+    if (!this.locate(handle)) return undefined;
+    const group = this.store.foundGroup as RowGroup;
+    const row = this.store.foundRow;
+    if ((group.data.flags[row] & ROW_FLAG_DELETED) !== 0) return undefined;
+    return rowFeature(this.store.readContext, this.table.layerId, group, row);
   }
 
   getDrawnRowsRevision(): number {
@@ -4159,11 +4194,12 @@ class LayerTableViewImpl implements LayerTableView {
     return members.slice(from, Math.max(from, Math.min(members.length, from + Math.max(0, count))));
   }
 
-  /** The group and row a handle is read from, when its row is in this layer */
-  private locate(handle: RowHandle): { group: RowGroup; row: number } | null {
-    const place = this.store.placeOf(handle);
-    if (!place || place.layer !== this.table) return null;
-    return { group: place.group, row: place.row };
+  /**
+   * Whether a handle is read from a row of this layer: its group and row are then the ones the
+   * store found (`foundGroup`, `foundRow`), read at once
+   */
+  private locate(handle: RowHandle): boolean {
+    return this.store.findPlace(handle) && this.store.foundLayer === this.table;
   }
 }
 

@@ -342,9 +342,12 @@ export class AutoNameGenerator {
     for (const [layerId, rows] of changes.rows?.layers ?? []) {
       const view = this.store.tables?.get(layerId);
       if (!view) continue;
-      for (const handle of rows.created) this.observeRowName(view, handle);
+      // By index: the rows of a large write are read without an iterator
+      const created = rows.created;
+      for (let i = 0; i < created.length; i++) this.observeRowName(view, created[i]);
       if (rows.fields.has('property:name') || rows.fields.has('type')) {
-        for (const handle of rows.updated) this.observeRowName(view, handle);
+        const updated = rows.updated;
+        for (let i = 0; i < updated.length; i++) this.observeRowName(view, updated[i]);
       }
     }
 
