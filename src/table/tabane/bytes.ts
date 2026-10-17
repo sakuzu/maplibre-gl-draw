@@ -160,6 +160,14 @@ export class ByteSource {
     return out;
   }
 
+  /** Passes `n` bytes and returns where they start (no view of them is made) */
+  skip(n: number): number {
+    if (n < 0 || this.pos + n > this.end) throw formatError('the bytes end early');
+    const at = this.pos;
+    this.pos += n;
+    return at;
+  }
+
   uint(): number {
     let out = 0;
     let scale = 1;

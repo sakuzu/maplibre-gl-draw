@@ -232,17 +232,24 @@ export function readRowBlockData(
 function readDictionary(r: ByteSource, count: number): Utf8Column {
   const offsets = new Int32Array(count + 1);
   const start = r.pos;
-  // The lengths first, to make one array of the bytes
+  // The lengths first, to make one array of the bytes; the runs are copied byte by byte, so no
+  // view is made for each
   let total = 0;
   for (let k = 0; k < count; k++) {
     const len = r.uint();
-    r.take(len);
+    r.skip(len);
     total += len;
     offsets[k + 1] = total;
   }
   const bytes = new Uint8Array(total);
+  const source = r.buf;
   r.pos = start;
-  for (let k = 0; k < count; k++) bytes.set(r.run(), offsets[k]);
+  for (let k = 0; k < count; k++) {
+    const len = r.uint();
+    const from = r.skip(len);
+    const to = offsets[k];
+    for (let j = 0; j < len; j++) bytes[to + j] = source[from + j];
+  }
   return { offsets, bytes };
 }
 
