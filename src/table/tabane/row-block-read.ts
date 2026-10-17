@@ -345,7 +345,7 @@ function readChild(
   // The vertices of each row of the child
   const rowVertex = (row: number): number => {
     let v = row;
-    for (const l of levels) v = l[v];
+    for (let k = 0; k < levels.length; k++) v = levels[k][v];
     return v;
   };
 
@@ -373,7 +373,8 @@ function readChild(
   if (vertices * stride > bound) throw formatError('more coordinates than their bytes hold');
   const coords = new Float64Array(vertices * stride);
   const divisor = scale >= 0 ? POW10[scale] : 1;
-  const previous = new Array<number>(stride).fill(0);
+  // The values before, as floats (no number boxed for each coordinate)
+  const previous = new Float64Array(stride);
   let at = 0;
   for (let row = 0; row < rows; row++) {
     const end = rowVertex(row + 1) * stride;
