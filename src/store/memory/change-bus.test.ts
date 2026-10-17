@@ -104,6 +104,104 @@ describe('the rows in the notifications of a transaction', () => {
   });
 });
 
+describe('the rows of a transaction whose writes only create rows', () => {
+  const plain = (change: RowsChange | undefined) =>
+    [...(change?.layers ?? [])].map(([layerId, entry]) => [
+      layerId,
+      [...entry.created],
+      [...entry.updated],
+      [...entry.deleted],
+      [...entry.fields],
+      [...entry.styleKeys],
+    ]);
+  const told = (writes: RowsChange[]): StoreChange => {
+    const bus = new ChangeBus();
+    const seen: StoreChange[] = [];
+    bus.subscribe((change) => seen.push(change));
+    bus.transact(() => {
+      for (const write of writes) bus.merge({ rows: write });
+    });
+    expect(seen).toHaveLength(1);
+    return seen[0];
+  };
+
+  it('are the rows created, each once in the order they first come, the fields and keys gathered', () => {
+    const change = told([
+      rows('a', { created: [5, 3, 5], fields: ['geometry'] }),
+      rows('b', { created: [1] }),
+      rows('a', { created: [3, 7, 2], fields: ['style'], styleKeys: ['fillColor'] }),
+    ]);
+    expect(plain(change.rows)).toEqual([
+      ['a', [5, 3, 7, 2], [], [], ['geometry', 'style'], ['fillColor']],
+      ['b', [1], [], [], [], []],
+    ]);
+  });
+
+  it('are each once for rows of large numbers too', () => {
+    const big = 2_000_000_000;
+    const change = told([rows('a', { created: [big, 4, big] }), rows('a', { created: [4, 9] })]);
+    expect(plain(change.rows)).toEqual([['a', [big, 4, 9], [], [], [], []]]);
+  });
+
+  it('fold as the writes fold two by two once a write does more than create', () => {
+    let seed = 11;
+    const random = (n: number): number => {
+      seed = (seed * 1103515245 + 12345) % 2147483648;
+      return seed % n;
+    };
+    for (let run = 0; run < 50; run++) {
+      const writes: RowsChange[] = [];
+      const pick = () => Array.from({ length: random(6) }, () => random(30));
+      // Writes that only create rows, then any writes
+      const creating = 1 + random(4);
+      for (let w = 0; w < creating; w++) {
+        writes.push(rows('a', { created: pick(), fields: random(2) ? ['geometry'] : [] }));
+      }
+      for (let w = 0; w < random(4); w++) {
+        writes.push(
+          rows('a', {
+            created: pick(),
+            updated: pick(),
+            deleted: pick(),
+            fields: random(2) ? ['style'] : ['geometry'],
+            styleKeys: random(2) ? ['fillColor'] : [],
+          }),
+        );
+      }
+      const folded = writes.reduce((a, b) => mergeRowsChanges(a, b));
+      const change = told(writes);
+      if (writes.length > 1) {
+        expect(plain(change.rows)).toEqual(plain(folded));
+      } else {
+        // One write: its rows each once
+        const entry = writes[0].layers.get('a') as LayerRowsChange;
+        expect([...(change.rows?.layers.get('a')?.created ?? [])]).toEqual([
+          ...new Set(entry.created),
+        ]);
+      }
+    }
+  });
+
+  it('take 100,000 rows created in writes of 1,000 in time linear in them', () => {
+    const bus = new ChangeBus();
+    const seen: StoreChange[] = [];
+    bus.subscribe((change) => seen.push(change));
+    const started = performance.now();
+    bus.transact(() => {
+      for (let w = 0; w < 100; w++) {
+        bus.merge({
+          rows: rows('a', { created: Array.from({ length: 1000 }, (_, i) => w * 1000 + i) }),
+        });
+      }
+    });
+    expect(performance.now() - started).toBeLessThan(100);
+    const created = seen[0].rows?.layers.get('a')?.created;
+    expect(created?.length).toBe(100_000);
+    expect(created?.[0]).toBe(0);
+    expect(created?.[99_999]).toBe(99_999);
+  });
+});
+
 describe('a notification held for writes over several tasks', () => {
   /** A bus that holds the transaction it is in, and whose writes go on until finished */
   function heldBus() {

@@ -61,6 +61,18 @@ interface UpdateIndex {
 
 /** The rows of a layer written by a transaction, being folded */
 interface RowsFold {
+  /**
+   * The writes as they came, while every one of them only created rows (null once one did more):
+   * folding them is joining them, so no set is made (a large write of new rows, as the rows of
+   * blocks put in the tables, goes through as it is)
+   */
+  parts: LayerRowsChange[] | null;
+  /** The rows folded in sets (null while the writes are kept as they came) */
+  sets: RowsSets | null;
+}
+
+/** The rows of a layer written by a transaction, folded in sets */
+interface RowsSets {
   readonly created: Set<number>;
   readonly updated: Set<number>;
   readonly deleted: Set<number>;
@@ -70,8 +82,25 @@ interface RowsFold {
   single: boolean;
 }
 
+/** Whether a write of the rows of a layer only created rows */
+function onlyCreates(change: LayerRowsChange): boolean {
+  return change.updated.length === 0 && change.deleted.length === 0;
+}
+
+/** The sets of the first write of a layer */
+function setsOf(change: LayerRowsChange): RowsSets {
+  return {
+    created: new Set(change.created),
+    updated: new Set(change.updated),
+    deleted: new Set(change.deleted),
+    fields: new Set(change.fields),
+    styleKeys: new Set(change.styleKeys),
+    single: true,
+  };
+}
+
 /** A row created and deleted within the folds dropped, a row created or deleted not updated */
-function settleRow(fold: RowsFold, handle: number): void {
+function settleRow(fold: RowsSets, handle: number): void {
   if (fold.created.has(handle) && fold.deleted.has(handle)) {
     fold.created.delete(handle);
     fold.deleted.delete(handle);
@@ -79,6 +108,25 @@ function settleRow(fold: RowsFold, handle: number): void {
   } else if (fold.updated.has(handle) && (fold.created.has(handle) || fold.deleted.has(handle))) {
     fold.updated.delete(handle);
   }
+}
+
+/** Folds a write of the rows of a layer into the sets of the ones before */
+function foldIntoSets(fold: RowsSets, next: LayerRowsChange): void {
+  for (const handle of next.created) fold.created.add(handle);
+  for (const handle of next.deleted) fold.deleted.add(handle);
+  for (const handle of next.updated) fold.updated.add(handle);
+  for (const field of next.fields) fold.fields.add(field);
+  for (const key of next.styleKeys) fold.styleKeys.add(key);
+  if (fold.single) {
+    // The first write is settled with the second, every row of both
+    fold.single = false;
+    for (const handle of [...fold.deleted]) settleRow(fold, handle);
+    for (const handle of [...fold.updated]) settleRow(fold, handle);
+    return;
+  }
+  for (const handle of next.created) settleRow(fold, handle);
+  for (const handle of next.deleted) settleRow(fold, handle);
+  for (const handle of next.updated) settleRow(fold, handle);
 }
 
 /**
@@ -89,44 +137,91 @@ function foldRows(folds: Map<string, RowsFold>, change: RowsChange): void {
   for (const [layerId, next] of change.layers) {
     const fold = folds.get(layerId);
     if (!fold) {
-      folds.set(layerId, {
-        created: new Set(next.created),
-        updated: new Set(next.updated),
-        deleted: new Set(next.deleted),
-        fields: new Set(next.fields),
-        styleKeys: new Set(next.styleKeys),
-        single: true,
-      });
+      folds.set(
+        layerId,
+        onlyCreates(next) ? { parts: [next], sets: null } : { parts: null, sets: setsOf(next) },
+      );
       continue;
     }
-    for (const handle of next.created) fold.created.add(handle);
-    for (const handle of next.deleted) fold.deleted.add(handle);
-    for (const handle of next.updated) fold.updated.add(handle);
-    for (const field of next.fields) fold.fields.add(field);
-    for (const key of next.styleKeys) fold.styleKeys.add(key);
-    if (fold.single) {
-      // The first write is settled with the second, every row of both
-      fold.single = false;
-      for (const handle of [...fold.deleted]) settleRow(fold, handle);
-      for (const handle of [...fold.updated]) settleRow(fold, handle);
-      continue;
+    if (fold.parts) {
+      if (onlyCreates(next)) {
+        fold.parts.push(next);
+        continue;
+      }
+      // A write that does more: the writes before are folded in sets as they came, then this one
+      const parts = fold.parts;
+      const sets = setsOf(parts[0]);
+      for (let k = 1; k < parts.length; k++) foldIntoSets(sets, parts[k]);
+      fold.parts = null;
+      fold.sets = sets;
     }
-    for (const handle of next.created) settleRow(fold, handle);
-    for (const handle of next.deleted) settleRow(fold, handle);
-    for (const handle of next.updated) settleRow(fold, handle);
+    foldIntoSets(fold.sets as RowsSets, next);
   }
+}
+
+/**
+ * The rows of arrays joined, each once, in the order they first come (what an array of a set of
+ * them gives): marked in a table of bytes when the rows are small numbers, in a set otherwise
+ */
+function joinRows(arrays: readonly Int32Array[]): Int32Array {
+  let total = 0;
+  let min = 0;
+  let max = 0;
+  for (const array of arrays) {
+    total += array.length;
+    for (let i = 0; i < array.length; i++) {
+      const handle = array[i];
+      if (handle < min) min = handle;
+      if (handle > max) max = handle;
+    }
+  }
+  if (total === 0) return new Int32Array(0);
+  if (min < 0 || max > total * 4 + 1024) {
+    const set = new Set<number>();
+    for (const array of arrays) for (const handle of array) set.add(handle);
+    return Int32Array.from(set);
+  }
+  const seen = new Uint8Array(max + 1);
+  const out = new Int32Array(total);
+  let at = 0;
+  for (const array of arrays) {
+    for (let i = 0; i < array.length; i++) {
+      const handle = array[i];
+      if (seen[handle] !== 0) continue;
+      seen[handle] = 1;
+      out[at++] = handle;
+    }
+  }
+  return at === total ? out : out.slice(0, at);
 }
 
 /** The rows of the folds, as the notification has them */
 function rowsOfFolds(folds: ReadonlyMap<string, RowsFold>): RowsChange {
   const layers = new Map<string, LayerRowsChange>();
   for (const [layerId, fold] of folds) {
+    if (fold.parts) {
+      const fields = new Set<RowField>();
+      const styleKeys = new Set<string>();
+      for (const part of fold.parts) {
+        for (const field of part.fields) fields.add(field);
+        for (const key of part.styleKeys) styleKeys.add(key);
+      }
+      layers.set(layerId, {
+        created: joinRows(fold.parts.map((part) => part.created)),
+        updated: new Int32Array(0),
+        deleted: new Int32Array(0),
+        fields,
+        styleKeys,
+      });
+      continue;
+    }
+    const sets = fold.sets as RowsSets;
     layers.set(layerId, {
-      created: Int32Array.from(fold.created),
-      updated: Int32Array.from(fold.updated),
-      deleted: Int32Array.from(fold.deleted),
-      fields: fold.fields,
-      styleKeys: fold.styleKeys,
+      created: Int32Array.from(sets.created),
+      updated: Int32Array.from(sets.updated),
+      deleted: Int32Array.from(sets.deleted),
+      fields: sets.fields,
+      styleKeys: sets.styleKeys,
     });
   }
   return { layers };
