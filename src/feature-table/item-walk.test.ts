@@ -17,6 +17,7 @@ import type { FeatureTables, RowField } from '../api/tables.js';
 import { groupsInStackingOrder, groupsInStackingOrderOf } from '../store/item-lists.js';
 import { createTableStore } from '../store/table-memory.js';
 import { createRowBlockDataBuilder } from '../table/row-group-builder.js';
+import { ROW_FLAG_DELETED } from '../table/row-group-types.js';
 import { createMapStub, seededRandom } from '../test-utils.js';
 import { type FeatureTablesInternals, featureTablesInternals } from './feature-tables.js';
 import { groupCode, ItemWalk, rowCode } from './item-walk.js';
@@ -67,11 +68,60 @@ function idColumn(ids: readonly string[]): { offsets: Int32Array; bytes: Uint8Ar
   return { offsets, bytes };
 }
 
+/**
+ * The items of a layer from its order, a row at a time: its rows outside a group of features and
+ * its groups (one item at each run of their members), deleted rows left out
+ */
+function itemsOfOrder(table: LayerTable) {
+  const order = table.rowOrder();
+  const kinds: number[] = [];
+  const handles: number[] = [];
+  const members = new Map<number, number[]>();
+  let last = -1;
+  let deleted = 0;
+  for (let i = 0; i < order.handles.length; i++) {
+    const data = order.groups[i].data;
+    const r = order.rows[i];
+    if ((data.flags[r] & ROW_FLAG_DELETED) !== 0) {
+      deleted++;
+      continue;
+    }
+    const group = data.groups[r];
+    if (group < 0) {
+      kinds.push(0);
+      handles.push(data.handles[r]);
+      last = -1;
+      continue;
+    }
+    members.set(group, [...(members.get(group) ?? []), data.handles[r]]);
+    if (group !== last) {
+      kinds.push(1);
+      handles.push(group);
+      last = group;
+    }
+  }
+  return { kinds, handles, members, rowCount: order.handles.length - deleted };
+}
+
 /** Checks every item the walk reads against the lists of every item of the layer */
 function expectWalkAsLists(internals: FeatureTablesInternals): void {
   const table = internals.layerTable('rows') as LayerTable;
   const walk = new ItemWalk(table, internals);
   const items = table.itemsOf();
+  // The lists are the items of the order read a row at a time, made at their sizes
+  const reference = itemsOfOrder(table);
+  expect(Array.from(items.kinds)).toEqual(reference.kinds);
+  expect(Array.from(items.handles)).toEqual(reference.handles);
+  expect(items.kinds.buffer.byteLength).toBe(items.kinds.length);
+  expect(items.handles.buffer.byteLength).toBe(items.handles.length * 4);
+  expect(new Map([...items.members].map(([g, m]) => [g, Array.from(m)]))).toEqual(
+    reference.members,
+  );
+  expect(items.rowCount).toBe(reference.rowCount);
+  const ordered = table.rowOrder();
+  expect(ordered.groups.length).toBe(ordered.handles.length);
+  expect(ordered.rows.length).toBe(ordered.handles.length);
+  expect(ordered.handles.buffer.byteLength).toBe(ordered.handles.length * 4);
   const codes = Array.from(items.kinds, (kind, i) =>
     kind === 0 ? rowCode(items.handles[i]) : groupCode(items.handles[i]),
   );

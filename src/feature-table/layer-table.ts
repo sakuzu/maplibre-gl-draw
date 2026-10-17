@@ -514,11 +514,21 @@ export class LayerTable {
    */
   rowOrder(): LayerOrder {
     if (this.ordered) return this.ordered;
-    const handles: number[] = [];
-    const groups: RowGroup[] = [];
-    const rows: number[] = [];
     const extras = this.readExtras();
     const places = extras.places;
+    // Counted first, so the arrays are made at their size (no array grown a row at a time)
+    let count = extras.rows.length;
+    for (let g = 0; g < this.order.length; g++) {
+      const group = this.groupAt(g);
+      const state = group.state;
+      for (let r = 0; r < group.data.length; r++) {
+        if ((state[r] & STATE_ELSEWHERE) === 0) count++;
+      }
+    }
+    const handles = new Int32Array(count);
+    const groups = new Array<RowGroup>(count);
+    const rows = new Int32Array(count);
+    let at = 0;
     let next = 0;
     const flush = (g: number, before: number): void => {
       while (
@@ -527,9 +537,10 @@ export class LayerTable {
       ) {
         const group = extras.groups[next];
         const row = extras.rows[next];
-        handles.push(group.data.handles[row]);
-        groups.push(group);
-        rows.push(row);
+        handles[at] = group.data.handles[row];
+        groups[at] = group;
+        rows[at] = row;
+        at++;
         next++;
       }
     };
@@ -539,14 +550,17 @@ export class LayerTable {
       for (let r = 0; r < data.length; r++) {
         flush(g, r);
         if ((group.state[r] & STATE_ELSEWHERE) !== 0) continue;
-        handles.push(data.handles[r]);
-        groups.push(group);
-        rows.push(r);
+        handles[at] = data.handles[r];
+        groups[at] = group;
+        rows[at] = r;
+        at++;
       }
       flush(g, data.length);
     }
     flush(Number.MAX_SAFE_INTEGER, 0);
-    this.ordered = { handles: Int32Array.from(handles), groups, rows: Int32Array.from(rows) };
+    if (at !== count)
+      throw new DrawError('invalid-state', 'LayerTable: the order read other rows than it counted');
+    this.ordered = { handles, groups, rows };
     return this.ordered;
   }
 
@@ -691,48 +705,62 @@ export class LayerTable {
    */
   itemsOf(): LayerItems {
     if (this.items) return this.items;
-    const kinds: number[] = [];
-    const handles: number[] = [];
-    const members = new Map<number, number[]>();
-    let last = -1;
-    let deleted = 0;
     const order = this.rowOrder();
-    for (let i = 0; i < order.handles.length; i++) {
+    const n = order.handles.length;
+    // Counted first, so the arrays are made at their size: a row outside a group of features is
+    // an item, and a group of features is one item at each run of its members
+    let count = 0;
+    let deleted = 0;
+    let last = -1;
+    for (let i = 0; i < n; i++) {
       const data = order.groups[i].data;
       const r = order.rows[i];
-      {
-        if ((data.flags[r] & ROW_FLAG_DELETED) !== 0) {
-          deleted++;
-          continue;
-        }
-        const group = data.groups[r];
-        if (group < 0) {
-          kinds.push(ITEM_KIND_ROW);
-          handles.push(data.handles[r]);
-          last = -1;
-          continue;
-        }
-        let list = members.get(group);
-        if (!list) {
-          list = [];
-          members.set(group, list);
-        }
-        list.push(data.handles[r]);
-        if (group !== last) {
-          kinds.push(ITEM_KIND_GROUP);
-          handles.push(group);
-          last = group;
-        }
+      if ((data.flags[r] & ROW_FLAG_DELETED) !== 0) {
+        deleted++;
+        continue;
+      }
+      const group = data.groups[r];
+      if (group < 0) {
+        count++;
+        last = -1;
+      } else if (group !== last) {
+        count++;
+        last = group;
+      }
+    }
+    const kinds = new Uint8Array(count);
+    const handles = new Int32Array(count);
+    const members = new Map<number, number[]>();
+    let at = 0;
+    last = -1;
+    for (let i = 0; i < n; i++) {
+      const data = order.groups[i].data;
+      const r = order.rows[i];
+      if ((data.flags[r] & ROW_FLAG_DELETED) !== 0) continue;
+      const group = data.groups[r];
+      if (group < 0) {
+        kinds[at] = ITEM_KIND_ROW;
+        handles[at] = data.handles[r];
+        at++;
+        last = -1;
+        continue;
+      }
+      let list = members.get(group);
+      if (!list) {
+        list = [];
+        members.set(group, list);
+      }
+      list.push(data.handles[r]);
+      if (group !== last) {
+        kinds[at] = ITEM_KIND_GROUP;
+        handles[at] = group;
+        at++;
+        last = group;
       }
     }
     const byGroup = new Map<number, Int32Array>();
     for (const [group, list] of members) byGroup.set(group, Int32Array.from(list));
-    this.items = {
-      kinds: Uint8Array.from(kinds),
-      handles: Int32Array.from(handles),
-      members: byGroup,
-      rowCount: order.handles.length - deleted,
-    };
+    this.items = { kinds, handles, members: byGroup, rowCount: n - deleted };
     return this.items;
   }
 
