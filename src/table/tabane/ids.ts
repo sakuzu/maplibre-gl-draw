@@ -114,6 +114,26 @@ export function base32Of(n: number): string {
   return s;
 }
 
+/** The character codes of the digits of base 32 */
+const BASE32_CODES = Uint8Array.from(BASE32, (c) => c.charCodeAt(0));
+
+/**
+ * Writes a number in base 32 without leading zeros (the digits of `base32Of`) as bytes, and
+ * returns the bytes written: no text is made
+ *
+ * @internal
+ */
+export function writeBase32(n: number, bytes: Uint8Array, at: number): number {
+  let digits = 1;
+  for (let rest = Math.floor(n / 32); rest > 0; rest = Math.floor(rest / 32)) digits++;
+  let rest = n;
+  for (let d = digits - 1; d >= 0; d--) {
+    bytes[at + d] = BASE32_CODES[rest % 32];
+    rest = Math.floor(rest / 32);
+  }
+  return digits;
+}
+
 /**
  * The text of an id: the origin, `-`, the number in base 32
  *

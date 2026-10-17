@@ -49,7 +49,7 @@ import type { RowRings } from '../row-rings.js';
 import type { TableGeometry, TableMixedGeometry } from '../types.js';
 import { hashUtf8, type Utf8Column } from '../utf8-column.js';
 import { readValue } from '../value-column.js';
-import { base32Of, formatTabaneId, writeRowSuffix } from './ids.js';
+import { formatTabaneId, writeBase32, writeRowSuffix } from './ids.js';
 import type {
   TabaneFill,
   TabaneRevision,
@@ -77,15 +77,12 @@ export interface RowBlockOfTabaneOptions {
   readonly rings?: RowRings;
 }
 
-/** The first and the end coordinate of a row of a child of a geometry */
-function vertexRange(child: TableGeometry, row: number): [number, number] {
+/** The first coordinate of a row of a child of a geometry (its end is the first of the next row) */
+function vertexStart(child: TableGeometry, row: number): number {
   let first = row;
-  let end = row + 1;
-  for (const level of child.offsets ?? []) {
-    first = level[first];
-    end = level[end];
-  }
-  return [first, end];
+  const levels = child.offsets;
+  if (levels) for (let k = 0; k < levels.length; k++) first = levels[k][first];
+  return first;
 }
 
 /** The geometry with the coordinates of `dims` (the same object when they are its own) */
@@ -124,8 +121,7 @@ export function idColumn(rowBlock: TabaneRowBlock): Utf8Column {
     for (let k = 0; k < count; k++) {
       bytes.set(prefix, at);
       at += prefix.length;
-      const digits = base32Of(first + k);
-      for (let d = 0; d < digits.length; d++) bytes[at++] = digits.charCodeAt(d);
+      at += writeBase32(first + k, bytes, at);
       offsets[++row] = at;
     }
   }
@@ -249,7 +245,8 @@ export function rowBlockDataOfTabane(
     }
     const child = geometry.children[c];
     const at = geometry.offsets[r];
-    const [first, end] = vertexRange(child, at);
+    const first = vertexStart(child, at);
+    const end = vertexStart(child, at + 1);
     const type = rowBlock.typeNames[rowBlock.types[r]];
     if (child.type === 'Point' && drawsRing[rowBlock.types[r]]) {
       const properties = rowBlock.properties;

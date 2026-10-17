@@ -56,7 +56,7 @@ import {
 } from './ids.js';
 import { readTabaneManifest, tabaneManifestEntryOf, writeTabaneManifest } from './manifest.js';
 import { readTabaneRowBlock } from './row-block-read.js';
-import { rowBlockDataOfTabane, tabaneRowsOf } from './rows.js';
+import { idColumn, rowBlockDataOfTabane, tabaneRowsOf } from './rows.js';
 import { sha256Hex } from './sha256.js';
 import type { TabaneRow, TabaneRowBlock } from './types.js';
 import { XorSink, XorSource } from './xor.js';
@@ -275,6 +275,22 @@ describe('the ids and the keys of the rows', () => {
     expect(parseTabaneId(`${ORIGIN}-80000000000`)).toBeNull();
     const big = formatTabaneId({ origin: ORIGIN, number: Number.MAX_SAFE_INTEGER });
     expect(parseTabaneId(big)?.number).toBe(Number.MAX_SAFE_INTEGER);
+  });
+
+  it('write the ids of the rows of a row block as the text of each id', () => {
+    const runs: (readonly [string, number, number])[] = [
+      [ORIGIN, 1, 40],
+      [OTHER, 1020, 10],
+      [ORIGIN, 2 ** 40 - 3, 6],
+      [OTHER, Number.MAX_SAFE_INTEGER - 2, 3],
+    ];
+    const length = runs.reduce((n, [, , count]) => n + count, 0);
+    const column = idColumn({ length, ids: runs } as unknown as TabaneRowBlock);
+    const expected = runs.flatMap(([origin, first, count]) =>
+      Array.from({ length: count }, (_, k) => formatTabaneId({ origin, number: first + k })),
+    );
+    expect(Array.from({ length }, (_, r) => utf8String(column, r))).toEqual(expected);
+    expect(column.bytes.length).toBe(column.offsets[length]);
   });
 
   it('give the suffixes of the rows of a run, in their order', () => {
