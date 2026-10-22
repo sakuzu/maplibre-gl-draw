@@ -2,8 +2,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * Writes the bytes of a row block of the Tabane format (`README.md` of this folder, "A
- * row block")
+ * Writes the bytes of a row block of the Tabane format (the README of github.com/sakuzu/tabane,
+ * "A row block")
  *
  * Every choice the writer makes is fixed by the rows, so the same rows always give the same
  * bytes, in every implementation of the format.

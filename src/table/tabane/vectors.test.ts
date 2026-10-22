@@ -4,10 +4,11 @@
 /// <reference types="node" />
 
 /**
- * The test vectors of the Tabane format (`vectors/` of this folder, described in its README)
+ * The test vectors of the Tabane format (`vectors/rows/` of github.com/sakuzu/tabane, described in
+ * its README), read from the clone `tabane` next to this repository
  *
  * Every implementation of the format writes the bytes of each vector from its input and reads
- * the rows back from them. The files of `vectors/` are what the scenarios below give: the test
+ * the rows back from them. The files of the vectors are what the scenarios below give: the test
  * fails when they differ, and `TABANE_VECTORS_WRITE=1` writes them again.
  */
 
@@ -39,7 +40,7 @@ import { readTabaneManifest, tabaneManifestEntryOf, writeTabaneManifest } from '
 import { tabaneRowsOf } from './rows.js';
 import type { TabaneRow } from './types.js';
 
-const DIR = join(import.meta.dirname, 'vectors');
+const DIR = join(import.meta.dirname, '../../../../tabane/vectors/rows');
 const WRITE = process.env.TABANE_VECTORS_WRITE === '1';
 
 const zstd: TabaneCompressor = {

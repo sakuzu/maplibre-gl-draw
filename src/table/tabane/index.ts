@@ -3,7 +3,7 @@
 
 /**
  * Tabane: rows written as blocks of columns named by their content, and a manifest of the blocks
- * (`README.md` of this folder). A block read is a set of row blocks whose columns are those of the
+ * (the README of github.com/sakuzu/tabane). A block read is a set of row blocks whose columns are those of the
  * row blocks of the tables (`RowBlock`).
  *
  * A pure module: it depends on nothing outside `/table`, so it runs in a Worker as well.

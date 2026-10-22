@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * The types of the Tabane format (see `README.md` of this folder)
+ * The types of the Tabane format (the README of github.com/sakuzu/tabane)
  *
  * A pure module (types only), so it runs in a Worker as well.
  */
