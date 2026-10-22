@@ -21,7 +21,6 @@ const ROOT = new URL('..', import.meta.url).pathname;
 const MAIN_CATEGORIES = [
   'Entry and options',
   'Document model',
-  'The values of the attributes',
   'Inputs, patches and filters',
   'The stacking order of the items',
   'State',
@@ -38,14 +37,13 @@ const MAIN_CATEGORIES = [
 
 /** The sections of src/kasane/index.ts, which are its categories (in this order) */
 const KASANE_CATEGORIES = [
-  'The values of the attributes',
   'Stores that hold features as rows',
   'Features of GeoJSON read as rows',
   'The order of the rows',
   'Features selected in bulk and dragged',
   'Pictures of points drawn with the rows',
   'Build row blocks in a Worker',
-  'Rows written as blocks named by their content, and their manifests (Tabane)',
+  'Tabane blocks (@sakuzu/tabane) read as row blocks',
 ];
 
 /** The sections of src/webgl/index.ts, which are its categories (in this order) */

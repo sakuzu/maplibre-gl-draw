@@ -18,6 +18,7 @@
  *   waiting to be built, at once; without it, they wait for the frames of the drawing as before
  */
 
+import { utf8ColumnFromStrings } from '@sakuzu/tabane';
 import { describe, expect, it } from 'vitest';
 import {
   createFeatureTables,
@@ -28,7 +29,6 @@ import {
 import type { StoreChange } from '../shared/types/model.js';
 import { createTableStore } from '../store/table-memory.js';
 import { createRowBlockDataBuilder } from '../table/row-group-builder.js';
-import { utf8ColumnFromStrings } from '../table/utf8-column.js';
 import { seededRandom } from '../test-utils.js';
 import { type FeatureTablesInternals, featureTablesInternals } from './feature-tables.js';
 import type { TableWorkBudget } from './types.js';

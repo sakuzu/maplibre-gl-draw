@@ -703,10 +703,12 @@ another feature are values of their own kinds (`CalendarDate`,
 `DateTime`, `TimeOfDay`, `Reference`, ...), which `JSON.stringify`
 writes as their JSON form (`{"$date": text}`). A `Date` is
 refused with `invalid-input`, since it is an instant and a day given as
-one shifts with the time zone: give a date-time or a day of its own.
+one shifts with the time zone: give a date-time or a day of its own. The
+values and their kinds come from `@sakuzu/tabane`, which the library
+depends on.
 
 ```ts
-import { CalendarDate, DateTime } from '@sakuzu/maplibre-gl-draw';
+import { CalendarDate, DateTime } from '@sakuzu/tabane';
 
 draw.features.update(featureId, {
   properties: {

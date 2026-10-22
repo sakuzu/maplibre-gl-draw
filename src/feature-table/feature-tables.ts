@@ -15,6 +15,17 @@
  * layer, and a new row, put a copy of the row in the delta.
  */
 
+import {
+  type CoordinateDimensions,
+  type CoordinateSystem,
+  dimsWithin,
+  isCoordinateDimensions,
+  planarCoordinates,
+  utf8ColumnFromStrings,
+  utf8ColumnLength,
+  utf8String,
+  ValueStringCache,
+} from '@sakuzu/tabane';
 import type { Position } from 'geojson';
 import type {
   FeatureTables,
@@ -51,13 +62,6 @@ import type {
 import { getBoundingBox } from '../shared/utils/feature-bbox.js';
 import type { IdleScheduler } from '../shared/utils/idle.js';
 import {
-  type CoordinateDimensions,
-  type CoordinateSystem,
-  dimsWithin,
-  isCoordinateDimensions,
-  planarCoordinates,
-} from '../table/coordinates.js';
-import {
   createRowBlockDataBuilder,
   ROW_BLOCK_TARGET_ROWS,
   type RowInput,
@@ -70,8 +74,6 @@ import {
   type RowBlockData,
 } from '../table/row-group-types.js';
 import { compareRowKeys, type RowKeySource } from '../table/row-keys.js';
-import { utf8ColumnFromStrings, utf8ColumnLength, utf8String } from '../table/utf8-column.js';
-import { ValueStringCache } from '../table/value-column.js';
 import { type BulkOperation, planBulk } from './bulk-plan.js';
 import type { RowContainers } from './bulk-rows.js';
 import { featureFields, featureWithFields } from './feature-fields.js';

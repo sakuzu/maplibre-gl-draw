@@ -5,6 +5,7 @@
  * Import / export of the native format
  */
 
+import { rewriteReferences, type Value } from '@sakuzu/tabane';
 import { getDrawProperty } from '../../../shared/properties.js';
 import { setOwnProperty } from '../../../shared/utils/own-property.js';
 import {
@@ -23,7 +24,6 @@ import type {
   Layer,
   LoadResult,
 } from '../../../store/types.js';
-import { rewriteReferences, type Value } from '../../../table/value.js';
 import { DrawError } from '../../errors.js';
 import { NATIVE_VERSION } from './constants.js';
 import { upgradeNativeData } from './native-upgrade.js';

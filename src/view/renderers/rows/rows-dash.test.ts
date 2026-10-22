@@ -25,10 +25,10 @@
  * tests also check that it misses the cuts the projection hits.
  */
 
+import { ValueStringCache } from '@sakuzu/tabane';
 import { describe, expect, it } from 'vitest';
 import { drawPropertyKey } from '../../../shared/properties.js';
 import type { Coordinate, Feature } from '../../../shared/types/model.js';
-import { ValueStringCache } from '../../../table/value-column.js';
 import { createTestDrawer, feature, tablesOfFeatures } from '../../../test-utils.js';
 import {
   collectRow,

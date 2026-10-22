@@ -12,8 +12,8 @@
  * reads is the row groups around its members and its place, not every row of the layer.
  */
 
+import { utf8ColumnFromStrings } from '@sakuzu/tabane';
 import { compareRowKeys, type GroupKeySource, type RowKeySource } from '../table/row-keys.js';
-import { utf8ColumnFromStrings } from '../table/utf8-column.js';
 import type { GroupTable } from './group-table.js';
 import type { LayerTable, RowGroup } from './layer-table.js';
 import type { GroupHandle } from './types.js';

@@ -5,6 +5,7 @@
  * Helpers shared by the tests. This file is not part of the build.
  */
 
+import { utf8ColumnFromStrings } from '@sakuzu/tabane';
 import type { Geometry } from 'geojson';
 import type { Map as MapLibreMap } from 'maplibre-gl';
 import { expect, vi } from 'vitest';
@@ -50,7 +51,6 @@ import { MemoryStore } from './store/memory.js';
 import type { Store } from './store/store.js';
 import { createTableStore } from './store/table-memory.js';
 import { createRowBlockDataBuilder, type RowInput } from './table/row-group-builder.js';
-import { utf8ColumnFromStrings } from './table/utf8-column.js';
 import { FeatureDrawer } from './view/renderers/drawer.js';
 import type { ImageRenderer } from './view/renderers/image.js';
 import type { SDFLineRenderer } from './view/renderers/line/sdf-line.js';

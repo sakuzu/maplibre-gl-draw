@@ -20,16 +20,24 @@
  * same function the main thread runs.
  */
 
-import { DrawError } from '../shared/draw-error.js';
 import {
   type CoordinateDimensions,
   type CoordinateSystem,
   dimsWithin,
+  type GeometryType,
   planarCoordinates,
+  rowGeometryOfColumn,
   sortKeyOf,
-} from './coordinates.js';
+  type TableMixedGeometry,
+  Utf8ColumnBuilder,
+  VALUE_ABSENT,
+  type ValueColumn,
+  ValueColumnBuilder,
+  valueEntryOf,
+  WIDE_VERTICES,
+} from '@sakuzu/tabane';
+import { DrawError } from '../shared/draw-error.js';
 import { buildPackedRTree } from './packed-rtree.js';
-import { rowGeometryOfColumn, WIDE_VERTICES } from './row-geometry.js';
 import {
   ChildBuilder,
   type GroupEntry,
@@ -39,14 +47,6 @@ import {
 } from './row-group-builder.js';
 import type { RowBlock, RowBlockData, TriangleCache } from './row-group-types.js';
 import { compareRowKeys, type GroupKeySource } from './row-keys.js';
-import type { GeometryType, TableMixedGeometry } from './types.js';
-import { Utf8ColumnBuilder } from './utf8-column.js';
-import {
-  VALUE_ABSENT,
-  type ValueColumn,
-  ValueColumnBuilder,
-  valueEntryOf,
-} from './value-column.js';
 
 /**
  * What {@link mergeRowBlock} merges

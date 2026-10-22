@@ -8,6 +8,7 @@
  *   commitResult  wraps applyResult in one transaction and moves the selection
  */
 
+import type { Value } from '@sakuzu/tabane';
 import type { DrawPropertyName } from '../../../shared/properties.js';
 import { setDrawProperty } from '../../../shared/properties.js';
 import { geometryFromCoordinates } from '../../../shared/utils/coordinates.js';
@@ -19,7 +20,6 @@ import type {
   FeatureType,
   ItemPlacement,
 } from '../../../store/types.js';
-import type { Value } from '../../../table/value.js';
 import type { GeometryDeps } from './types.js';
 
 /**

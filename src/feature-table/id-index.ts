@@ -1,19 +1,3 @@
-// SPDX-FileCopyrightText: 2026 SAKAIDA Atsushi
-// SPDX-License-Identifier: AGPL-3.0-only
-
-/**
- * The table from the ids of the rows to their handles, and where each row is
- *
- * The ids are compared as bytes (`Utf8Column`), never turned into strings of the engine: an
- * open-addressing table of handles keyed by the hash of the bytes (computed where the rows are
- * built, often in a Worker), and every handle remembers the column and the entry its id bytes
- * are in. A hundred thousand ids cost a few typed arrays and no string at all.
- *
- * Every handle also has where its row is: its row group and its row there (`mainGroup`,
- * `mainRow`), and its place among the rows changed since (`deltaSlot`, -1 for none), so a row
- * that is in both can be found in both.
- */
-
 import {
   encodeUtf8Into,
   equalUtf8,
@@ -23,7 +7,7 @@ import {
   type Utf8Column,
   utf8ColumnFromStrings,
   utf8String,
-} from '../table/utf8-column.js';
+} from '@sakuzu/tabane';
 import type { RowGroupHandle, RowHandle } from './types.js';
 
 /** A slot of the table that never held a handle */

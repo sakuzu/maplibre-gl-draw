@@ -22,10 +22,9 @@
  * style itself (`get`), not its number.
  */
 
+import { decodeCanonicalValue, encodeCanonicalValue, hashByteRun } from '@sakuzu/tabane';
 import { DrawError } from '../shared/draw-error.js';
 import type { FeatureStyle } from '../shared/types/model.js';
-import { decodeCanonicalValue, encodeCanonicalValue } from '../table/canonical-value.js';
-import { hashByteRun } from '../table/utf8-column.js';
 
 /**
  * The distinct styles of a document, numbered

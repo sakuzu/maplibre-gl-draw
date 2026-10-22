@@ -7,12 +7,12 @@
  * vertex, in the same order), and the number of the row after them
  */
 
+import { ValueStringCache } from '@sakuzu/tabane';
 import { describe, expect, it } from 'vitest';
 import type { FeatureTablesInternals } from '../../feature-table/feature-tables.js';
 import type { LayerTable } from '../../feature-table/layer-table.js';
 import { drawPropertyKey } from '../../shared/properties.js';
 import type { Feature, Layer } from '../../shared/types/model.js';
-import { ValueStringCache } from '../../table/value-column.js';
 import { createTestDrawer, feature, tablesOfFeatures } from '../../test-utils.js';
 import { buildLineBatchArrays, ROW_LINE_STRIDE } from '../renderers/line/line-geometry.js';
 import { buildPointInstanceData, ROW_POINT_STRIDE } from '../renderers/point/point-instance.js';

@@ -21,13 +21,11 @@
  * which the group is due for its next version.
  */
 
-import { DrawError } from '../shared/draw-error.js';
-import { decodeCanonicalValue, encodeCanonicalValue } from '../table/canonical-value.js';
-import { GeometryColumnReader } from '../table/table.js';
-import type { TableGeometry } from '../table/types.js';
-import { utf8Bytes } from '../table/utf8-column.js';
-import { valueOfInput } from '../table/value.js';
 import {
+  decodeCanonicalValue,
+  encodeCanonicalValue,
+  type TableGeometry,
+  utf8Bytes,
   VALUE_ABSENT,
   VALUE_FALSE,
   VALUE_NESTED,
@@ -37,8 +35,11 @@ import {
   VALUE_STRING,
   VALUE_TRUE,
   valueTagOf,
-} from '../table/value-column.js';
-import { wellFormed } from '../table/value-kinds.js';
+  wellFormed,
+} from '@sakuzu/tabane';
+import { DrawError } from '../shared/draw-error.js';
+import { GeometryColumnReader } from '../table/table.js';
+import { drawValueOfInput } from '../table/value-input.js';
 
 /**
  * The bytes the values written in place may take per row group (attributes and geometry
@@ -97,7 +98,7 @@ export function encodeOverrideValue(value: unknown): OverrideValue {
     return { tag: VALUE_STRING, number: 0, bytes: utf8Bytes(value) };
   }
   // A bigint as the number or the big integer it is
-  if (typeof value === 'bigint') return encodeOverrideValue(valueOfInput(value, 'The value'));
+  if (typeof value === 'bigint') return encodeOverrideValue(drawValueOfInput(value, 'The value'));
   return { tag: valueTagOf(value), number: 0, bytes: encodeCanonicalValue(value) };
 }
 

@@ -9,12 +9,12 @@
  * events), and there is no editing API here.
  */
 
+import type { Value } from '@sakuzu/tabane';
 import type { Feature as GeoJSONFeature, Geometry as GeoJSONGeometry } from 'geojson';
 import type { ProjectionData } from 'maplibre-gl';
 import type { BoundingBox, Coordinate, Feature, Layer, StyleRule } from '../shared/types/model.js';
 import type { PixelRatioInput } from '../shared/utils/pixel-ratio.js';
 import type { PreparedTable, Table } from '../table/types.js';
-import type { Value } from '../table/value.js';
 import type { RetainedDrawFactors } from '../view/renderers/draw-factors.js';
 import type { PointStyle } from '../view/renderers/point/point-shape.js';
 import type { RetainedRendererSet } from '../view/renderers/retained.js';

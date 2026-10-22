@@ -31,6 +31,7 @@
  * layers.
  */
 
+import { utf8String } from '@sakuzu/tabane';
 import type {
   ItemMove,
   ItemOrderChange,
@@ -45,7 +46,6 @@ import {
 } from '../shared/utils/item-moves.js';
 import { ROW_FLAG_DELETED } from '../table/row-group-types.js';
 import { compareRowKeys } from '../table/row-keys.js';
-import { utf8String } from '../table/utf8-column.js';
 import type { GroupTable } from './group-table.js';
 import { compareItemKeys, groupCode, type ItemKey, ItemWalk, rowCode } from './item-walk.js';
 import type { LayerTable, RowGroup } from './layer-table.js';

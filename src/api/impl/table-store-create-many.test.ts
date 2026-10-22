@@ -10,13 +10,13 @@
  * of their order are made at once, and stay short
  */
 
+import { utf8String } from '@sakuzu/tabane';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { FeatureTablesWriter, RowField } from '../../api/tables.js';
 import { featureTablesInternals } from '../../feature-table/feature-tables.js';
 import type { Store } from '../../store/store.js';
 import { createTableStore } from '../../store/table-memory.js';
 import type { Feature } from '../../store/types.js';
-import { utf8String } from '../../table/utf8-column.js';
 import { createMapStub } from '../../test-utils.js';
 import type { Draw } from '../draw.js';
 import type { FeatureInput } from '../model.js';

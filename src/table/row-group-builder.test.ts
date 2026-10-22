@@ -1,15 +1,20 @@
 // SPDX-FileCopyrightText: 2026 SAKAIDA Atsushi
 // SPDX-License-Identifier: AGPL-3.0-only
 
+import {
+  decodeCanonicalValue,
+  hashUtf8,
+  pairTriangles,
+  readValue,
+  utf8String,
+} from '@sakuzu/tabane';
 import earcut from 'earcut';
 import type { Geometry } from 'geojson';
 import { describe, expect, it } from 'vitest';
 import { generateCirclePolygon } from '../geometry/circle.js';
 import { drawPropertyKey } from '../shared/properties.js';
 import { buildEarcutInput } from '../view/renderers/polygon/earcut-input.js';
-import { decodeCanonicalValue } from './canonical-value.js';
 import { searchPackedRTree } from './packed-rtree.js';
-import { pairTriangles } from './row-geometry.js';
 import {
   blockTransferList,
   createRowBlockDataBuilder,
@@ -22,8 +27,6 @@ import {
   type RowBlockData,
 } from './row-group-types.js';
 import { GeometryColumnReader } from './table.js';
-import { hashUtf8, utf8String } from './utf8-column.js';
-import { readValue } from './value-column.js';
 
 /** A row with the defaults of the tests */
 function row(id: string, order: string, geometry: Geometry | null, extra: Partial<RowInput> = {}) {

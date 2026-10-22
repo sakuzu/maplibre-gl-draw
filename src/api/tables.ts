@@ -15,6 +15,7 @@
  * implementation of the Store keeps and calls, after it has recorded what it writes.
  */
 
+import type { CoordinateDimensions, CoordinateSystem, Utf8Column } from '@sakuzu/tabane';
 import type { Position } from 'geojson';
 import { createFeatureTablesStore } from '../feature-table/feature-tables.js';
 import type { FeatureTablesWorker } from '../feature-table/versions.js';
@@ -30,9 +31,7 @@ import type {
 } from '../shared/types/model.js';
 import { copyTableStore as copyTableStoreOf } from '../store/table-copy.js';
 import { createTableStore as createTableStoreOf } from '../store/table-memory.js';
-import type { CoordinateDimensions, CoordinateSystem } from '../table/coordinates.js';
 import type { RowBlock } from '../table/row-group-types.js';
-import type { Utf8Column } from '../table/utf8-column.js';
 import { DrawError } from './errors.js';
 import type { DocumentChange } from './events.js';
 import type { Store, StoreView, UpdateSource } from './extension/store.js';

@@ -14,10 +14,10 @@
  * - The bytes held are counted for the attributes and the geometry together
  */
 
+import type { Value } from '@sakuzu/tabane';
 import type { Geometry } from 'geojson';
 import { describe, expect, it } from 'vitest';
 import type { Feature } from '../shared/types/model.js';
-import type { Value } from '../table/value.js';
 import { feature, tablesOfFeatures } from '../test-utils.js';
 import { hitTestLayerTable } from './hit-test.js';
 import { overrideBytesOf } from './layer-table.js';

@@ -26,8 +26,8 @@
  * replaced on its own, whatever order they go in.
  */
 
+import type { CoordinateDimensions, CoordinateSystem } from '@sakuzu/tabane';
 import type { BoundingBox, RowsChange } from '../shared/types/model.js';
-import type { CoordinateDimensions, CoordinateSystem } from '../table/coordinates.js';
 import type { GroupEntry, RowBlockBuilderOptions, RowInput } from '../table/row-group-builder.js';
 import { ROW_BLOCK_TARGET_ROWS, ROW_BLOCK_TARGET_VERTICES } from '../table/row-group-builder.js';
 import {

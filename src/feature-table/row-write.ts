@@ -15,19 +15,19 @@
  * the boxes of the rows of its layer to read the row again.
  */
 
-import type { Geometry } from 'geojson';
-import { circleRingCoords } from '../shared/circle-rings.js';
-import { drawPropertyKey } from '../shared/properties.js';
 import {
   polygonRanges,
   type RowGeometry,
+  readValue,
   ringOffsetsOf,
   rowGeometryOfColumn,
   singleRowColumn,
   toRowGeometry,
   triangulateRow,
-} from '../table/row-geometry.js';
-import { readValue } from '../table/value-column.js';
+} from '@sakuzu/tabane';
+import type { Geometry } from 'geojson';
+import { circleRingCoords } from '../shared/circle-rings.js';
+import { drawPropertyKey } from '../shared/properties.js';
 import {
   columnGeometryAt,
   geometryAt,

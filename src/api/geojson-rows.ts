@@ -5,9 +5,9 @@
  * Features of GeoJSON read as the values of rows of a layer, by the rules of a load
  */
 
+import type { Value } from '@sakuzu/tabane';
 import type { Feature as GeoJSONFeature, Geometry } from 'geojson';
 import { readGeoJSONFeature } from '../feature-table/geojson-read.js';
-import type { Value } from '../table/value.js';
 import type { FeatureStyle, SkippedFeature } from './model.js';
 
 /**

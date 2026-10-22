@@ -8,6 +8,7 @@
  * before.
  */
 
+import type { CoordinateDimensions, Value } from '@sakuzu/tabane';
 import { describe, expect, it } from 'vitest';
 import type { FeatureTables } from '../api/tables.js';
 import { drawProperties } from '../shared/properties.js';
@@ -20,8 +21,6 @@ import {
 import { DrawStore } from '../store/draw-store.js';
 import { TableContractStore } from '../store/table-memory.js';
 import type { Feature, FeatureType, RowValues, StoreChange } from '../store/types.js';
-import type { CoordinateDimensions } from '../table/coordinates.js';
-import type { Value } from '../table/value.js';
 import {
   resizeBulkSelection,
   rotateBulkSelection,

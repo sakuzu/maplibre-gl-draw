@@ -21,19 +21,18 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { zstdCompressSync } from 'node:zlib';
+import { createRowBlockBuilder, rowBlockOfTabane } from '@sakuzu/maplibre-gl-draw/kasane';
 import {
-  createRowBlockBuilder,
   formatTabaneId,
   listTabaneFileParts,
   packTabaneBlock,
   readTabaneFilePart,
   readTabaneRowBlock,
-  rowBlockOfTabane,
   type TabaneRow,
   tabaneRowSuffixOf,
   tabaneRowsOf,
   writeTabaneBlocks,
-} from '@sakuzu/maplibre-gl-draw/kasane';
+} from '@sakuzu/tabane';
 import { decompress } from 'fzstd';
 import type { Feature } from 'geojson';
 import { describe, it } from 'vitest';

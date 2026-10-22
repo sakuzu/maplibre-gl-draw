@@ -10,11 +10,11 @@
  * batch and drawn with one draw call per shape.
  */
 
+import type { Value } from '@sakuzu/tabane';
 import type { ProjectionData } from 'maplibre-gl';
 import { describe, expect, it, vi } from 'vitest';
 import { DEFAULT_FEATURE_STYLE_CONFIG } from '../../shared/config/feature-style.js';
 import type { Feature, FeatureStyle, Layer, StyleRule } from '../../store/types.js';
-import type { Value } from '../../table/value.js';
 import {
   createBatchManager,
   lineBatchKey,

@@ -18,12 +18,12 @@
  *   are kept for when it ends, and an undone drag shows them
  */
 
+import { utf8String } from '@sakuzu/tabane';
 import { describe, expect, it, vi } from 'vitest';
 import type { RowField } from '../api/tables.js';
 import { featureTablesInternals } from '../feature-table/feature-tables.js';
 import { circleRowRings } from '../shared/circle-rings.js';
 import { createRowBlockDataBuilder } from '../table/row-group-builder.js';
-import { utf8String } from '../table/utf8-column.js';
 import { HOLD_LIMIT, RELEASE_DELAY_MS } from './draw-store.js';
 import { insertGroup } from './item-lists.js';
 import type { Store } from './store.js';

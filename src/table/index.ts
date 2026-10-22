@@ -45,11 +45,4 @@ export { prepareTable, transferList } from './prepare.js';
 export type { PreparedTable } from './types.js';
 
 // Column types
-export type { CoordinateDimensions } from './coordinates.js';
-export type {
-  Column,
-  DictionaryColumn,
-  GeometryType,
-  TableGeometry,
-  TableMixedGeometry,
-} from './types.js';
+export type { Column, DictionaryColumn } from './types.js';

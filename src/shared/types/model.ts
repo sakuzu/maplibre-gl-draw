@@ -8,8 +8,8 @@
  * re-exports them).
  */
 
+import type { Value } from '@sakuzu/tabane';
 import type { Geometry, Position } from 'geojson';
-import type { Value } from '../../table/value.js';
 
 /**
  * A position as `[longitude, latitude]` in degrees (WGS 84), in the same order as GeoJSON

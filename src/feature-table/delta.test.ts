@@ -16,9 +16,9 @@
  *   every read of the tables gives the reference (14.2 of the design, the delta)
  */
 
+import { utf8ColumnFromStrings } from '@sakuzu/tabane';
 import type { Geometry } from 'geojson';
 import { describe, expect, it } from 'vitest';
-import { utf8ColumnFromStrings } from '../table/utf8-column.js';
 import {
   expectTablesMatch,
   referenceKey as key,

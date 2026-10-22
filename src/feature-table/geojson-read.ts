@@ -8,6 +8,7 @@
  * (`rowsOfGeoJSON`) all read a feature here, so the same feature is read the same way.
  */
 
+import type { Value } from '@sakuzu/tabane';
 import type { Geometry, GeometryCollection } from 'geojson';
 import { COORDINATE_DEPTH, describeCoordinateProblem } from '../shared/geometry-validation.js';
 import { foldLegacyImageStyle } from '../shared/legacy-image-style.js';
@@ -21,7 +22,7 @@ import {
 import { isCssColor, sanitizeFeatureStyle } from '../shared/style-validation.js';
 import type { Coordinate, FeatureStyle } from '../shared/types/model.js';
 import { setOwnProperty } from '../shared/utils/own-property.js';
-import { type Value, valueOfInput } from '../table/value.js';
+import { drawValueOfInput } from '../table/value-input.js';
 
 /** The names of the GeoJSON geometry types, lower-cased */
 const GEOMETRY_TYPE_NAMES: ReadonlySet<string> = new Set([
@@ -431,10 +432,10 @@ export function readGeoJSONFeature(
         // is not added here. Anything else that is not a value of this library (id, layerId,
         // style, featureType, visible, locked, imageData and so on) is excluded
         if (LIBRARY_KEYS.has(key) && (key !== drawPropertyKey('imageFileId') || !embedsImage)) {
-          setOwnProperty(userProperties, key, valueOfInput(value, `The property ${key}`));
+          setOwnProperty(userProperties, key, drawValueOfInput(value, `The property ${key}`));
         }
       } else if (value !== undefined) {
-        setOwnProperty(userProperties, key, valueOfInput(value, `The property ${key}`));
+        setOwnProperty(userProperties, key, drawValueOfInput(value, `The property ${key}`));
       }
     }
   }

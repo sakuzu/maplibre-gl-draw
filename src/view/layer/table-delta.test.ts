@@ -23,13 +23,13 @@
  *   rows of the layer in their order, once each (14.1 of the design, 6.3)
  */
 
+import { utf8ColumnFromStrings } from '@sakuzu/tabane';
 import type { Geometry } from 'geojson';
 import type { ProjectionData } from 'maplibre-gl';
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { RowField, RowValues } from '../../api/tables.js';
 import type { LayerTable } from '../../feature-table/layer-table.js';
 import type { Feature, Layer } from '../../shared/types/model.js';
-import { utf8ColumnFromStrings } from '../../table/utf8-column.js';
 import {
   createTestDrawer,
   feature,

@@ -61,7 +61,8 @@ ZSTD の圧縮は、その付属の
 でほどきます。
 形状は WKB のまま受け取り、Worker が GeoArrow の配置の表の型付き配列へ
 直接ほどきます。座標は 1 つの `Float64Array` に入れ、行、ポリゴン、
-リングの区切りは `Int32Array` に入れます。文字の列は Arrow と同じ
+リングの区切りは `Int32Array` に入れます (形の列の型 `TableGeometry` は
+`@sakuzu/tabane` の物です)。文字の列は Arrow と同じ
 辞書にし、数の列は `Float64Array` にして、ファイルに値がない行は NaN に
 します。`@sakuzu/maplibre-gl-draw/table` の `prepareTable` は、
 maplibre も WebGL も読み込まず、行の範囲、まとまり、クリックのための索引を

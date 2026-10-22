@@ -15,11 +15,10 @@
  */
 
 import { createHash } from 'node:crypto';
+import { type CoordinateDimensions, toRowGeometry } from '@sakuzu/tabane';
 import type { Geometry, Position } from 'geojson';
 import { describe, expect, it } from 'vitest';
 import { circleRowRings } from '../shared/circle-rings.js';
-import type { CoordinateDimensions } from './coordinates.js';
-import { toRowGeometry } from './row-geometry.js';
 import {
   blockTransferList,
   createRowBlockDataBuilder,

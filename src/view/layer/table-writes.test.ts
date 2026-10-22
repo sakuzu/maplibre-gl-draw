@@ -17,6 +17,7 @@
  *   as a chunk built from it alone
  */
 
+import type { CoordinateDimensions } from '@sakuzu/tabane';
 import type { Geometry } from 'geojson';
 import type { ProjectionData } from 'maplibre-gl';
 import { beforeEach, describe, expect, it } from 'vitest';
@@ -29,7 +30,6 @@ import {
 } from '../../feature-table/types.js';
 import { drawPropertyKey } from '../../shared/properties.js';
 import type { Feature, FeatureStyle, Layer } from '../../shared/types/model.js';
-import type { CoordinateDimensions } from '../../table/coordinates.js';
 import {
   createTestDrawer,
   feature,

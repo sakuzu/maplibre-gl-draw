@@ -10,9 +10,9 @@
  * change) are verified.
  */
 
+import type { Value } from '@sakuzu/tabane';
 import { describe, expect, it } from 'vitest';
 import type { Feature, StyleRule } from '../../store/types.js';
-import type { Value } from '../../table/value.js';
 import { StyleRuleCache } from './style-rule.js';
 
 function makeFeature(id: string, properties: Record<string, Value>): Feature {

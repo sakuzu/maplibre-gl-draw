@@ -15,9 +15,9 @@
  * once keeps its meaning until the group is replaced.
  */
 
+import type { CoordinateDimensions } from '@sakuzu/tabane';
 import { DrawError } from '../shared/draw-error.js';
 import type { BoundingBox } from '../shared/types/model.js';
-import type { CoordinateDimensions } from '../table/coordinates.js';
 import { ROW_FLAG_DELETED, type RowBlockData } from '../table/row-group-types.js';
 import { compareRowKeys, type GroupKeySource, type RowKeySource } from '../table/row-keys.js';
 import { GeometryColumnReader } from '../table/table.js';

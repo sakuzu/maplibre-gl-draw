@@ -5,10 +5,10 @@
  * The fields of a row a feature writes, and a feature with the fields of its row written
  */
 
+import type { Value } from '@sakuzu/tabane';
 import type { RowField } from '../api/tables.js';
 import type { Feature, FeatureStyle, FeatureType } from '../shared/types/model.js';
 import { setOwnProperty } from '../shared/utils/own-property.js';
-import type { Value } from '../table/value.js';
 
 /**
  * The fields of a row a feature writes over another feature of the row (its layer and group of

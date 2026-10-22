@@ -6,9 +6,9 @@
  * group, the id of the row
  */
 
+import { utf8ColumnFromStrings } from '@sakuzu/tabane';
 import { describe, expect, it } from 'vitest';
 import { compareRowKeys, type GroupKeySource, type RowKeySource } from './row-keys.js';
-import { utf8ColumnFromStrings } from './utf8-column.js';
 
 interface Row {
   id: string;

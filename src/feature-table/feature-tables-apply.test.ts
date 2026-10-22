@@ -15,14 +15,13 @@
  *   gives the features
  */
 
+import { utf8ColumnFromStrings, type Value } from '@sakuzu/tabane';
 import type { Geometry } from 'geojson';
 import { describe, expect, it } from 'vitest';
 import { ITEM_GROUP, ITEM_ROW, type RowField, type RowValues } from '../api/tables.js';
 import { drawPropertyKey } from '../shared/properties.js';
 import type { Feature } from '../shared/types/model.js';
 import { createRowBlockDataBuilder } from '../table/row-group-builder.js';
-import { utf8ColumnFromStrings } from '../table/utf8-column.js';
-import type { Value } from '../table/value.js';
 import { feature, orderKey, rowOfFeature, seededRandom, tablesOfFeatures } from '../test-utils.js';
 import { createFeatureTablesStore, featureTablesInternals } from './feature-tables.js';
 import {

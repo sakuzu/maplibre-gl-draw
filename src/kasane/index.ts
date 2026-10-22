@@ -33,12 +33,15 @@
  * The functions used most are {@link createTableStore}, {@link createRowBlockBuilder} and
  * {@link FeatureTables}.
  *
- * Rows can also be kept and handed out as Tabane blocks: files named by the SHA-256 of their
- * content, each a run of rows of one parent cut into row blocks, listed by a manifest. Use them to
- * save the rows of a document, or to send them to another client, without making features of
- * them: a block read is row blocks the tables take as they are ({@link rowBlockOfTabane}).
+ * Rows can also be kept and handed out as Tabane blocks (`@sakuzu/tabane`): files named by the
+ * SHA-256 of their content, each a run of rows of one parent cut into row blocks, listed by a
+ * manifest. Use them to save the rows of a document, or to send them to another client, without
+ * making features of them: a block read is row blocks the tables take as they are
+ * ({@link rowBlockOfTabane}).
  *
  * ```ts
+ * import { packTabaneBlock, readTabaneBlockFile, tabaneNameOf, writeTabaneBlock } from '@sakuzu/tabane';
+ *
  * const block = writeTabaneBlock({ parent: 'buildings', head: 'V', rows });
  * const name = await tabaneNameOf(block.content); // the name to keep the file under
  * const file = packTabaneBlock(block, compressor); // its parts compressed with zstd
@@ -52,29 +55,6 @@
  */
 
 // biome-ignore-all assist/source/organizeImports: the exports are grouped by task
-
-// The values of the attributes
-export type { Value } from '../table/value.js';
-export {
-  isValue,
-  parseValueJSON,
-  rewriteReferences,
-  sameValue,
-  stringifyValueJSON,
-  valueFromJSON,
-  valueToJSON,
-} from '../table/value.js';
-export type { DateTimeZone } from '../table/value-kinds.js';
-export {
-  BigInteger,
-  Bytes,
-  CalendarDate,
-  DateTime,
-  Decimal,
-  Duration,
-  Reference,
-  TimeOfDay,
-} from '../table/value-kinds.js';
 
 // Stores that hold features as rows
 export type {
@@ -144,52 +124,8 @@ export type { RowBlockMerge } from '../table/row-group-merge.js';
 export { mergeRowBlock } from '../table/row-group-merge.js';
 export type { RowBlock } from '../table/row-group-types.js';
 export { transferList } from '../table/transfer-list.js';
-export type { CoordinateSystem } from '../table/coordinates.js';
 export type { RowRings } from '../table/row-rings.js';
-export type { Utf8Column } from '../table/utf8-column.js';
 
-// Rows written as blocks named by their content, and their manifests (Tabane)
-export type {
-  TabaneBlock,
-  TabaneBlockHead,
-  TabaneBlockInput,
-  TabaneCompressor,
-  TabaneFill,
-  TabaneFilePart,
-  TabaneRowBlock,
-  TabaneId,
-  TabaneManifest,
-  TabaneManifestEntry,
-  TabanePlace,
-  TabaneRevision,
-  TabaneRow,
-  RowBlockOfTabaneOptions,
-} from '../table/tabane/index.js';
-export {
-  isTabaneOrigin,
-  packTabaneBlock,
-  packTabaneFile,
-  parseTabaneId,
-  readTabaneBlock,
-  readTabaneBlockFile,
-  readTabaneBlockHead,
-  readTabaneRowBlock,
-  readTabaneManifest,
-  rewriteTabaneBlock,
-  TABANE_TARGET_BYTES,
-  TABANE_TARGET_ROWS,
-  TABANE_TARGET_VERTICES,
-  TABANE_VERSION,
-  readTabaneFilePart,
-  listTabaneFileParts,
-  formatTabaneId,
-  tabaneManifestEntryOf,
-  tabaneNameOf,
-  rowBlockOfTabane,
-  tabaneRowsOf,
-  tabaneRowSuffixOf,
-  unpackTabaneFile,
-  writeTabaneBlock,
-  writeTabaneBlocks,
-  writeTabaneManifest,
-} from '../table/tabane/index.js';
+// Tabane blocks (@sakuzu/tabane) read as row blocks
+export type { RowBlockOfTabaneOptions } from '../table/tabane/rows.js';
+export { rowBlockOfTabane } from '../table/tabane/rows.js';

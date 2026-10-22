@@ -11,12 +11,12 @@
  * between them are rewritten to the new IDs.
  */
 
+import { rewriteReferences, TabaneError } from '@sakuzu/tabane';
 import { readDrawProperty, setDrawProperty } from '../../../shared/properties.js';
 import { createId } from '../../../shared/utils/id.js';
 import { listedMembers } from '../../../shared/utils/listed-items.js';
 import { setOwnProperty } from '../../../shared/utils/own-property.js';
 import type { Feature, FileData, Group } from '../../../store/types.js';
-import { rewriteReferences } from '../../../table/value.js';
 import { DrawError } from '../../errors.js';
 import type { GroupInput, LayerInput, ParsedDocument } from '../../model.js';
 import { invalidInput, isRecord, onlyKeys, optionalBoolean, requireId } from '../shared.js';
@@ -72,6 +72,8 @@ async function asParse(read: () => Promise<ParsedDocument>): Promise<ParsedDocum
     return await read();
   } catch (error) {
     if (error instanceof DrawError) throw error;
+    if (error instanceof TabaneError)
+      throw new DrawError(error.code, error.message, { cause: error });
     const message = error instanceof Error ? error.message : String(error);
     throw new DrawError('invalid-input', message, { cause: error });
   }

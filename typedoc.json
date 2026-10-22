@@ -15,5 +15,14 @@
   "excludePrivate": true,
   "includeVersion": true,
   "treatWarningsAsErrors": false,
-  "validation": { "notExported": true, "invalidLink": true, "notDocumented": false }
+  "validation": {
+    "notExported": true,
+    "invalidLink": true,
+    "notDocumented": false
+  },
+  "externalSymbolLinkMappings": {
+    "@sakuzu/tabane": {
+      "*": "https://github.com/sakuzu/tabane-ts"
+    }
+  }
 }

@@ -15,6 +15,7 @@
  * `draw.options`, which emits it on the same hub.
  */
 
+import { TabaneError } from '@sakuzu/tabane';
 import { DRAW_PROPERTY_KEYS } from '../../shared/properties.js';
 import { geometryFromCoordinates } from '../../shared/utils/coordinates.js';
 import type { EngineSignals, EventEmitter } from '../../shared/utils/event-emitter.js';
@@ -469,6 +470,8 @@ function toSnapResult(result: EngineSignals['snap.change']): SnapResult {
 /** A failure of a load as a DrawError, with what was thrown as its cause */
 function toDrawError(error: unknown): DrawError {
   if (error instanceof DrawError) return error;
+  if (error instanceof TabaneError)
+    return new DrawError(error.code, error.message, { cause: error });
   const message = error instanceof Error ? error.message : String(error);
   return new DrawError('unsupported-format', message, { cause: error });
 }

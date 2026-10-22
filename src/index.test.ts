@@ -177,23 +177,6 @@ const MAIN = [
   'VertexRef',
   'VertexSelection',
   'VertexSelectionResource',
-  'BigInteger',
-  'Bytes',
-  'CalendarDate',
-  'DateTime',
-  'DateTimeZone',
-  'Decimal',
-  'Duration',
-  'isValue',
-  'parseValueJSON',
-  'Reference',
-  'rewriteReferences',
-  'sameValue',
-  'stringifyValueJSON',
-  'TimeOfDay',
-  'Value',
-  'valueFromJSON',
-  'valueToJSON',
 ];
 
 /** The geometry entry (layer 1) */
@@ -234,17 +217,13 @@ const GEOMETRY = [
 /** The table entry (layer 1) */
 const TABLE = [
   'Column',
-  'CoordinateDimensions',
   'createTableBuilder',
   'DictionaryColumn',
-  'GeometryType',
   'PreparedTable',
   'prepareTable',
   'Table',
   'TableBuilder',
   'tableFromFeatures',
-  'TableGeometry',
-  'TableMixedGeometry',
   'transferList',
 ];
 
@@ -253,7 +232,6 @@ const TABLE = [
  * rows of columns
  */
 const KASANE = [
-  'CoordinateSystem',
   'copyTableStore',
   'CreatedRows',
   'createFeatureTables',
@@ -266,30 +244,17 @@ const KASANE = [
   'FeatureTablesOptions',
   'FeatureTablesWorker',
   'FeatureTablesWriter',
-  'formatTabaneId',
   'GeoJSONRow',
   'GeoJSONRows',
   'GroupEntry',
-  'isTabaneOrigin',
   'ITEM_GROUP',
   'ITEM_ROW',
   'ItemHandles',
   'LayerRowsChange',
   'LayerTableView',
   'listSelectedRows',
-  'listTabaneFileParts',
   'mergeRowBlock',
   'OpenedApplyOptions',
-  'packTabaneBlock',
-  'packTabaneFile',
-  'parseTabaneId',
-  'readTabaneBlock',
-  'readTabaneBlockFile',
-  'readTabaneBlockHead',
-  'readTabaneFilePart',
-  'readTabaneManifest',
-  'readTabaneRowBlock',
-  'rewriteTabaneBlock',
   'ROW_BLOCK_TARGET_ROWS',
   'ROW_BLOCK_TARGET_VERTICES',
   'RowApplyOptions',
@@ -315,54 +280,11 @@ const KASANE = [
   'RowValues',
   'rowValuesOf',
   'RowWrite',
-  'TABANE_TARGET_BYTES',
-  'TABANE_TARGET_ROWS',
-  'TABANE_TARGET_VERTICES',
-  'TABANE_VERSION',
-  'TabaneBlock',
-  'TabaneBlockHead',
-  'TabaneBlockInput',
-  'TabaneCompressor',
-  'TabaneFilePart',
-  'TabaneFill',
-  'TabaneId',
-  'TabaneManifest',
-  'TabaneManifestEntry',
-  'tabaneManifestEntryOf',
-  'tabaneNameOf',
-  'TabanePlace',
-  'TabaneRevision',
-  'TabaneRow',
-  'TabaneRowBlock',
-  'tabaneRowsOf',
-  'tabaneRowSuffixOf',
   'TableGroupField',
   'TableGroupPatch',
   'TableScanOptions',
   'TableStoreCopy',
   'transferList',
-  'unpackTabaneFile',
-  'Utf8Column',
-  'writeTabaneBlock',
-  'writeTabaneBlocks',
-  'writeTabaneManifest',
-  'BigInteger',
-  'Bytes',
-  'CalendarDate',
-  'DateTime',
-  'DateTimeZone',
-  'Decimal',
-  'Duration',
-  'isValue',
-  'parseValueJSON',
-  'Reference',
-  'rewriteReferences',
-  'sameValue',
-  'stringifyValueJSON',
-  'TimeOfDay',
-  'Value',
-  'valueFromJSON',
-  'valueToJSON',
 ];
 
 /** Layer 2: the building blocks for custom shaders of src/webgl/index.ts */
@@ -465,30 +387,11 @@ describeEntry('src/kasane/index.ts', KASANE, () => import('./kasane/index.js'));
 describeEntry('src/webgl/index.ts', WEBGL, () => import('./webgl/index.js'));
 
 describe('the five entries', () => {
-  it('share no name, but the transfer list of /table, which /kasane widens to row blocks, and the values of the attributes, which the main entry and /kasane both export', () => {
+  it('share no name, but the transfer list of /table, which /kasane widens to row blocks', () => {
     const all = [...MAIN, ...GEOMETRY, ...TABLE, ...KASANE, ...WEBGL];
-    const values = [
-      'BigInteger',
-      'Bytes',
-      'CalendarDate',
-      'DateTime',
-      'DateTimeZone',
-      'Decimal',
-      'Duration',
-      'isValue',
-      'parseValueJSON',
-      'Reference',
-      'rewriteReferences',
-      'sameValue',
-      'stringifyValueJSON',
-      'TimeOfDay',
-      'Value',
-      'valueFromJSON',
-      'valueToJSON',
-    ];
-    expect(all.filter((name, index) => all.indexOf(name) !== index).sort()).toEqual(
-      ['transferList', ...values].sort(),
-    );
+    expect(all.filter((name, index) => all.indexOf(name) !== index).sort()).toEqual([
+      'transferList',
+    ]);
   });
 });
 

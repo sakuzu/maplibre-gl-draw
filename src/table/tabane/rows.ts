@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * A row block of the Tabane format as a row block of the tables, and as rows
+ * A row block of the Tabane format as a row block of the tables
  *
  * The columns of a row block read are those of a row block (`RowBlock`): the geometry, the
  * types, the styles and the attributes are taken as they are. What is made here is what the
@@ -15,28 +15,32 @@
  * A pure module: it depends on nothing outside `/table`, so it runs in a Worker as well.
  */
 
-import type { Geometry } from 'geojson';
-import { circleRowRings } from '../../shared/circle-rings.js';
-import { DrawError } from '../../shared/draw-error.js';
-import { setOwnProperty } from '../../shared/utils/own-property.js';
-import { decodeCanonicalValue } from '../canonical-value.js';
 import {
   type CoordinateDimensions,
   type CoordinateSystem,
   copyCoordinates,
   dimsWithin,
+  hashUtf8,
+  idColumn,
+  keyColumn,
   planarCoordinates,
-  sortKeyOf,
-  strideOf,
-} from '../coordinates.js';
-import { buildPackedRTree } from '../packed-rtree.js';
-import {
   polygonRanges,
+  readValue,
   ringOffsetsOf,
   rowGeometryOfColumn,
+  sortKeyOf,
+  strideOf,
+  type TabaneRowBlock,
+  type TabaneRowBlockData,
+  type TableGeometry,
+  type TableMixedGeometry,
+  tabaneFlagOf,
   triangulateRow,
   WIDE_VERTICES,
-} from '../row-geometry.js';
+} from '@sakuzu/tabane';
+import { circleRowRings } from '../../shared/circle-rings.js';
+import { DrawError } from '../../shared/draw-error.js';
+import { buildPackedRTree } from '../packed-rtree.js';
 import {
   ROW_FLAG_DELETED,
   ROW_FLAG_LOCKED,
@@ -46,19 +50,6 @@ import {
   type TriangleCache,
 } from '../row-group-types.js';
 import type { RowRings } from '../row-rings.js';
-import type { TableGeometry, TableMixedGeometry } from '../types.js';
-import { hashUtf8, type Utf8Column } from '../utf8-column.js';
-import { readValue } from '../value-column.js';
-import { formatTabaneId, writeBase32, writeRowSuffix } from './ids.js';
-import type {
-  TabaneFill,
-  TabaneRevision,
-  TabaneRow,
-  TabaneRowBlock,
-  TabaneRowBlockData,
-} from './types.js';
-
-const encoder = new TextEncoder();
 
 /**
  * The options of {@link rowBlockOfTabane}
@@ -105,55 +96,6 @@ function widen(
 }
 
 /**
- * The ids of the rows of a row block as a column of text
- *
- * @internal
- */
-export function idColumn(rowBlock: TabaneRowBlock): Utf8Column {
-  const n = rowBlock.length;
-  const offsets = new Int32Array(n + 1);
-  // 13 digits, `-`, at most 11 digits of a number
-  const bytes = new Uint8Array(n * 25);
-  let at = 0;
-  let row = 0;
-  for (const [origin, first, count] of rowBlock.ids) {
-    const prefix = encoder.encode(`${origin}-`);
-    for (let k = 0; k < count; k++) {
-      bytes.set(prefix, at);
-      at += prefix.length;
-      at += writeBase32(first + k, bytes, at);
-      offsets[++row] = at;
-    }
-  }
-  return { offsets, bytes: bytes.slice(0, at) };
-}
-
-/**
- * The keys of the rows of a row block as a column of text
- *
- * @internal
- */
-export function keyColumn(rowBlock: TabaneRowBlock): Utf8Column {
-  const n = rowBlock.length;
-  const head = encoder.encode(rowBlock.place.head);
-  const offsets = new Int32Array(n + 1);
-  const bytes = new Uint8Array(n * (head.length + 11));
-  let at = 0;
-  for (let r = 0; r < n; r++) {
-    bytes.set(head, at);
-    at += head.length;
-    at += writeRowSuffix(rowBlock.place.firstIndex + r, bytes, at);
-    offsets[r + 1] = at;
-  }
-  return { offsets, bytes: bytes.slice(0, at) };
-}
-
-/** Whether the bit of a row is set in a column of flags (none set when it is null) */
-function flagOf(bits: Uint8Array | null, row: number): boolean {
-  return bits !== null && (bits[row >> 3] & (1 << (row & 7))) !== 0;
-}
-
-/**
  * A row block as a row block of the tables (for `FeatureTablesWriter.addRowBlocks`), its columns
  * taken as they are
  *
@@ -191,9 +133,9 @@ export function rowBlockDataOfTabane(
   const flags = new Uint8Array(n);
   for (let r = 0; r < n; r++) {
     flags[r] =
-      (flagOf(rowBlock.hidden, r) ? 0 : ROW_FLAG_VISIBLE) |
-      (flagOf(rowBlock.locked, r) ? ROW_FLAG_LOCKED : 0) |
-      (flagOf(rowBlock.deleted, r) ? ROW_FLAG_DELETED : 0);
+      (tabaneFlagOf(rowBlock.hidden, r) ? 0 : ROW_FLAG_VISIBLE) |
+      (tabaneFlagOf(rowBlock.locked, r) ? ROW_FLAG_LOCKED : 0) |
+      (tabaneFlagOf(rowBlock.deleted, r) ? ROW_FLAG_DELETED : 0);
   }
 
   // The attributes a ring reads, by key
@@ -311,87 +253,4 @@ export function rowBlockDataOfTabane(
     index: buildPackedRTree(rowBounds, undefined, sortKeyOf(system)),
     vertexCount,
   };
-}
-
-// === Rows ===
-
-/** The GeoJSON geometry of a row of a child */
-function geometryOf(child: TableGeometry, row: number, stride: number): Geometry {
-  const o = child.offsets ?? [];
-  const position = (v: number): number[] =>
-    Array.from(child.coords.subarray(v * stride, v * stride + stride));
-  const walk = (level: number, at: number): unknown => {
-    if (level === o.length) return position(at);
-    const items: unknown[] = [];
-    for (let k = o[level][at]; k < o[level][at + 1]; k++) items.push(walk(level + 1, k));
-    return items;
-  };
-  return { type: child.type, coordinates: walk(0, row) } as Geometry;
-}
-
-/**
- * The rows of a row block, as the writer took them: the coordinates read back to the same bits, the
- * values to the same values
- *
- * @experimental
- */
-export function tabaneRowsOf(read: TabaneRowBlock): TabaneRow[] {
-  const rowBlock = read as TabaneRowBlockData;
-  const n = rowBlock.length;
-  const stride = strideOf(rowBlock.dimensions);
-  const ids: string[] = [];
-  for (const [origin, first, count] of rowBlock.ids) {
-    for (let k = 0; k < count; k++) ids.push(formatTabaneId({ origin, number: first + k }));
-  }
-  const created: TabaneRevision[] = [];
-  for (const [revision, count] of rowBlock.created ?? [])
-    for (let k = 0; k < count; k++) created.push(revision);
-  const revisions: Record<string, TabaneRevision>[] = Array.from({ length: n }, () => ({}));
-  const rv = rowBlock.revisions;
-  for (let k = 0; k < rv.rows.length; k++) {
-    revisions[rv.rows[k]][rv.names[rv.cells[k]]] = [
-      rv.sequences[k],
-      rv.origins[rv.originIndex[k]],
-      rv.steps[k],
-    ];
-  }
-  const out: TabaneRow[] = [];
-  for (let r = 0; r < n; r++) {
-    const c = rowBlock.geometry.types[r];
-    const child = c >= 0 ? rowBlock.geometry.children[c] : null;
-    const geometry = child ? geometryOf(child, rowBlock.geometry.offsets[r], stride) : null;
-    const s = rowBlock.styles[r];
-    const style = decodeCanonicalValue(
-      rowBlock.styleDictionary.bytes,
-      rowBlock.styleDictionary.offsets[s],
-      rowBlock.styleDictionary.offsets[s + 1],
-    ) as Record<string, unknown>;
-    const properties: Record<string, unknown> = {};
-    rowBlock.properties.keys.forEach((key, k) => {
-      const v = readValue(rowBlock.properties.columns[k], r);
-      if (v !== undefined) setOwnProperty(properties, key, v);
-    });
-    let fill: TabaneFill | undefined;
-    const f = rowBlock.fills;
-    if (f && f.vertices[r] >= 0) {
-      fill = {
-        vertices: f.vertices[r],
-        indices: Array.from(f.indices.subarray(f.offsets[r], f.offsets[r + 1])),
-      };
-    }
-    out.push({
-      id: ids[r],
-      type: rowBlock.typeNames[rowBlock.types[r]],
-      geometry,
-      style,
-      properties,
-      ...(flagOf(rowBlock.deleted, r) && { deleted: true }),
-      ...(flagOf(rowBlock.hidden, r) && { visible: false }),
-      ...(flagOf(rowBlock.locked, r) && { locked: true }),
-      ...(rowBlock.created && { created: created[r] }),
-      ...(Object.keys(revisions[r]).length > 0 && { revisions: revisions[r] }),
-      ...(fill && { fill }),
-    });
-  }
-  return out;
 }

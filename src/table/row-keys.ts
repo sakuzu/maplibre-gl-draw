@@ -25,8 +25,8 @@
  * A pure module: it depends on nothing outside `/table`, so it runs in a Worker as well.
  */
 
+import { compareByteRuns, type Utf8Column } from '@sakuzu/tabane';
 import { DrawError } from '../shared/draw-error.js';
-import { compareByteRuns, type Utf8Column } from './utf8-column.js';
 
 /**
  * The columns of rows the order is read from

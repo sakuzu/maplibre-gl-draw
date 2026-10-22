@@ -15,11 +15,11 @@
  *   dimensions is refused
  */
 
+import { type CoordinateDimensions, planarRowBox } from '@sakuzu/tabane';
 import type { Geometry, Position } from 'geojson';
 import { describe, expect, it } from 'vitest';
 import type { FeatureTablesWorker } from '../api/tables.js';
 import { circleRowRings } from '../shared/circle-rings.js';
-import { type CoordinateDimensions, planarRowBox } from '../table/coordinates.js';
 import { createRowBlockDataBuilder } from '../table/row-group-builder.js';
 import { mergeRowBlock } from '../table/row-group-merge.js';
 import {
@@ -181,7 +181,7 @@ describe('the rows of layers of every dimensions', () => {
       // Many new rows at once: built in the Worker
       const ids = Array.from({ length: 200 }, (_, i) => `w${i}`);
       const handles = writer.allocateHandles(
-        (await import('../table/utf8-column.js')).utf8ColumnFromStrings(ids),
+        (await import('@sakuzu/tabane')).utf8ColumnFromStrings(ids),
       );
       const rows: ReferenceRow[] = ids.map((id, i) => ({
         id,

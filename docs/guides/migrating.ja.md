@@ -714,10 +714,11 @@ id は、それぞれの種類の値 (`CalendarDate`、`DateTime`、`TimeOfDay`�
 `Reference` など) です。`JSON.stringify` は、これらを JSON の形
 (`{"$date": text}`) で書きます。`Date` は `invalid-input` で
 断ります。`Date` は瞬間なので、日付を `Date` で渡すと時差で日が
-ずれるためです。日時か日付の値で渡します。
+ずれるためです。日時か日付の値で渡します。値とその種類は、このライブラリーが
+使う `@sakuzu/tabane` から読みます。
 
 ```ts
-import { CalendarDate, DateTime } from '@sakuzu/maplibre-gl-draw';
+import { CalendarDate, DateTime } from '@sakuzu/tabane';
 
 draw.features.update(featureId, {
   properties: {

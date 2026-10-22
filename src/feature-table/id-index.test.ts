@@ -1,8 +1,8 @@
 // SPDX-FileCopyrightText: 2026 SAKAIDA Atsushi
 // SPDX-License-Identifier: AGPL-3.0-only
 
+import { utf8ColumnFromStrings } from '@sakuzu/tabane';
 import { describe, expect, it, vi } from 'vitest';
-import { utf8ColumnFromStrings } from '../table/utf8-column.js';
 import { IdIndex } from './id-index.js';
 
 describe('IdIndex', () => {

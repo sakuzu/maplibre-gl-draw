@@ -5,6 +5,7 @@
  * `draw.features`: the features of the document
  */
 
+import type { Value } from '@sakuzu/tabane';
 import { featureTablesInternals } from '../../feature-table/feature-tables.js';
 import { differenceAll, intersectionAll, unionAll } from '../../geometry/boolean.js';
 import type { AreaCoordinates, MultiPolygonCoordinates } from '../../geometry/types.js';
@@ -21,7 +22,7 @@ import type {
   Feature as StoredFeature,
   FeatureStyle as StoredFeatureStyle,
 } from '../../store/types.js';
-import { type Value, valueOfInput } from '../../table/value.js';
+import { drawValueOfInput } from '../../table/value-input.js';
 import { getStyleRuleChannel, resolveFeatureStyle } from '../../view/style-rule.js';
 import { DrawError } from '../errors.js';
 import type { FeaturesCollection } from '../features.js';
@@ -731,7 +732,8 @@ function withoutUndefined(value: object): Record<string, unknown> {
 function propertiesOfInput(properties: Record<string, unknown>): Record<string, Value> {
   const out: Record<string, Value> = {};
   for (const [key, value] of Object.entries(properties)) {
-    if (value !== undefined) setOwnProperty(out, key, valueOfInput(value, `The property ${key}`));
+    if (value !== undefined)
+      setOwnProperty(out, key, drawValueOfInput(value, `The property ${key}`));
   }
   return out;
 }
@@ -748,7 +750,7 @@ function patchOfProperties(patch: Record<string, unknown>): Record<string, unkno
     setOwnProperty(
       out,
       key,
-      value === undefined ? undefined : valueOfInput(value, `The property ${key}`),
+      value === undefined ? undefined : drawValueOfInput(value, `The property ${key}`),
     );
   }
   return out;

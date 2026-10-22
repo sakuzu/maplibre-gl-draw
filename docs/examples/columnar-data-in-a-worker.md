@@ -64,7 +64,8 @@ of Parquet in plain JavaScript, with its companion
 for the ZSTD compression. The geometry stays WKB, and the Worker decodes
 it straight into the typed arrays of a table in the layout of GeoArrow:
 the coordinates in one `Float64Array`, and the offsets of the rows, the
-polygons and the rings in `Int32Array`s. A text column becomes a
+polygons and the rings in `Int32Array`s (the types of a geometry column,
+`TableGeometry`, are those of `@sakuzu/tabane`). A text column becomes a
 dictionary, as in Arrow, and a column of numbers a `Float64Array`, with
 NaN where the file has no value. `prepareTable` from
 `@sakuzu/maplibre-gl-draw/table`, which imports neither maplibre nor

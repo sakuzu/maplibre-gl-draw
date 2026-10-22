@@ -24,22 +24,18 @@ const SRC = resolve(here, '..');
 /** The names the entry exports, values and types */
 const EXPORTS = [
   'Column',
-  'CoordinateDimensions',
   'createTableBuilder',
   'DictionaryColumn',
-  'GeometryType',
   'prepareTable',
   'PreparedTable',
   'Table',
   'TableBuilder',
   'tableFromFeatures',
-  'TableGeometry',
-  'TableMixedGeometry',
   'transferList',
 ];
 
 /** The packages the entry loads at runtime: none */
-const PACKAGES: string[] = [];
+const PACKAGES: string[] = ['@sakuzu/tabane'];
 
 /** The runtime imports of a file (type-only imports are erased) */
 function runtimeImports(file: string): string[] {
@@ -118,7 +114,6 @@ describe('the table subpath', () => {
     expect(files).toEqual([
       'shared/utils/own-property.ts',
       'table/builder.ts',
-      'table/coordinates.ts',
       'table/index.ts',
       'table/packed-rtree.ts',
       'table/partition.ts',

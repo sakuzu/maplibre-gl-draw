@@ -7,6 +7,7 @@
  * The search is compared with a scan of every bbox, over sizes around the node boundaries.
  */
 
+import { planarCoordinates, planarRowBox, sortKeyOf } from '@sakuzu/tabane';
 import { describe, expect, it } from 'vitest';
 import { buildPackedRTree, searchPackedRTree } from './packed-rtree.js';
 
@@ -73,5 +74,18 @@ describe('the packed R-tree', () => {
     const tree = buildPackedRTree(Float64Array.of(Number.NaN, Number.NaN, Number.NaN, Number.NaN));
     expect(tree.numItems).toBe(0);
     expect(searchPackedRTree(tree, -180, -90, 180, 90)).toEqual([]);
+  });
+});
+
+describe('the order of the leaves', () => {
+  it('orders the leaves of the index by the Hilbert curve, or by the key of a system', () => {
+    expect(sortKeyOf(planarCoordinates)).toBeUndefined();
+    const bounds = new Float64Array(40 * 4);
+    for (let i = 0; i < 40; i++) bounds.set([i, 0, i, 0], i * 4);
+    const system = { rowBox: planarRowBox, sortKey: (x: number) => -x };
+    const tree = buildPackedRTree(bounds, 4, sortKeyOf(system));
+    expect(Array.from(tree.indices.subarray(0, 40))).toEqual(
+      Array.from({ length: 40 }, (_, i) => 39 - i),
+    );
   });
 });

@@ -99,29 +99,6 @@ export type {
 } from './api/model.js';
 export { DRAW_PROPERTY_PREFIX, isDrawProperty } from './api/model.js';
 
-// The values of the attributes
-export type { Value } from './table/value.js';
-export {
-  isValue,
-  parseValueJSON,
-  rewriteReferences,
-  sameValue,
-  stringifyValueJSON,
-  valueFromJSON,
-  valueToJSON,
-} from './table/value.js';
-export type { DateTimeZone } from './table/value-kinds.js';
-export {
-  BigInteger,
-  Bytes,
-  CalendarDate,
-  DateTime,
-  Decimal,
-  Duration,
-  Reference,
-  TimeOfDay,
-} from './table/value-kinds.js';
-
 // Inputs, patches and filters
 export type {
   FeatureFilter,

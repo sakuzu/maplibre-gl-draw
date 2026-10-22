@@ -9,6 +9,7 @@
  * key is an attribute of the user.
  */
 
+import type { BigInteger, Bytes, CalendarDate, DateTime, Reference, Value } from '@sakuzu/tabane';
 import type {
   Feature as GeoJSONFeature,
   FeatureCollection as GeoJSONFeatureCollection,
@@ -21,8 +22,6 @@ import { isDrawProperty as isLibraryKey } from '../shared/properties.js';
 import type { ItemMove, ItemPlacement } from '../shared/types/model.js';
 import type { LineStyle } from '../shared/types/style.js';
 import { longestRisingRun, diffItemOrder as movesBetween } from '../shared/utils/item-moves.js';
-import type { Value } from '../table/value.js';
-import type { BigInteger, Bytes, CalendarDate, DateTime, Reference } from '../table/value-kinds.js';
 import {
   deriveLegend as deriveRuleLegend,
   evaluateStyleRule as evaluateRule,

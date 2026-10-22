@@ -6,6 +6,7 @@
  * GeoJSON FeatureCollection
  */
 
+import { rewriteReferences, type Value } from '@sakuzu/tabane';
 import { readGeoJSONFeature } from '../../../feature-table/geojson-read.js';
 import { setDrawProperty } from '../../../shared/properties.js';
 import type { AutoNameGenerator } from '../../../shared/utils/name-generator.js';
@@ -13,7 +14,6 @@ import { setOwnProperty } from '../../../shared/utils/own-property.js';
 import { deleteFeaturesAndGroups } from '../../../store/feature-stream.js';
 import type { Store } from '../../../store/store.js';
 import type { FileData, LoadResult, SkippedFeature } from '../../../store/types.js';
-import { rewriteReferences, type Value } from '../../../table/value.js';
 import { DrawError, type DrawErrorCode } from '../../errors.js';
 import type { EmbeddedFileProblem } from './embedded-file.js';
 import { isEmbeddedFileProblem, normalizeEmbeddedFile } from './embedded-file.js';

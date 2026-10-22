@@ -9,6 +9,7 @@
  * from the whole lists is kept here as the reference.
  */
 
+import { utf8String } from '@sakuzu/tabane';
 import { describe, expect, it } from 'vitest';
 import type { FeatureTables, FeatureTablesWriter, RowField } from '../api/tables.js';
 import type { ItemMove, ItemOrderChange, ItemPosition, RowsMove } from '../shared/types/model.js';
@@ -21,7 +22,6 @@ import { createTableStore } from '../store/table-memory.js';
 import type { Feature, StoreChange } from '../store/types.js';
 import { ROW_FLAG_DELETED } from '../table/row-group-types.js';
 import { compareRowKeys } from '../table/row-keys.js';
-import { utf8String } from '../table/utf8-column.js';
 import { seededRandom } from '../test-utils.js';
 import { type FeatureTablesInternals, featureTablesInternals } from './feature-tables.js';
 import { groupKeyMoves, type ItemOrderSource, ORDER_ITEM_LIMIT } from './item-order.js';

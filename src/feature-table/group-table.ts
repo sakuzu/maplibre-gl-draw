@@ -8,9 +8,9 @@
  * are here, so moving a group writes one entry and none of its members (`compareRowKeys`).
  */
 
+import { type Utf8Column, utf8ColumnFromStrings } from '@sakuzu/tabane';
 import type { GroupEntry } from '../table/row-group-builder.js';
 import type { GroupKeySource } from '../table/row-keys.js';
-import { type Utf8Column, utf8ColumnFromStrings } from '../table/utf8-column.js';
 import type { GroupHandle } from './types.js';
 
 /** One group */

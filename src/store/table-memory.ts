@@ -34,6 +34,7 @@
  * - A restore of many rows is written in steps, as one transaction told once (`row-steps.ts`)
  */
 
+import { utf8ColumnFromStrings, utf8String } from '@sakuzu/tabane';
 import type {
   FeatureTables,
   FeatureTablesWriter,
@@ -53,7 +54,6 @@ import {
 import { ItemWalk } from '../feature-table/item-walk.js';
 import { rowFeature } from '../feature-table/row-read.js';
 import { ROW_FLAG_DELETED } from '../table/row-group-types.js';
-import { utf8ColumnFromStrings, utf8String } from '../table/utf8-column.js';
 import { DrawStore } from './draw-store.js';
 import { ChangeBus } from './memory/change-bus.js';
 import { FileStore } from './memory/file-store.js';

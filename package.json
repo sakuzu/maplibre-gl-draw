@@ -112,6 +112,7 @@
     "site:preview": "vitepress preview docs"
   },
   "dependencies": {
+    "@sakuzu/tabane": "file:../tabane-ts",
     "@types/geojson": "^7946.0.16",
     "earcut": "^3.0.2",
     "polygon-clipping": "^0.15.7",

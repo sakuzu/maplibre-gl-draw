@@ -1,9 +1,9 @@
 // SPDX-FileCopyrightText: 2026 SAKAIDA Atsushi
 // SPDX-License-Identifier: AGPL-3.0-only
 
+import { encodeCanonicalValue } from '@sakuzu/tabane';
 import { describe, expect, it } from 'vitest';
 import type { FeatureStyle } from '../shared/types/model.js';
-import { encodeCanonicalValue } from '../table/canonical-value.js';
 import { StyleTable } from './style-table.js';
 
 describe('StyleTable', () => {

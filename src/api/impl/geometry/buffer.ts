@@ -10,13 +10,13 @@
  * store.transact, and all the results are selected at the end.
  */
 
+import type { Value } from '@sakuzu/tabane';
 import { buffer as computeBuffer } from '../../../geometry/buffer.js';
 // buffer is imported under an alias so that the name reads as the geometry module's function.
 import { drawProperties } from '../../../shared/properties.js';
 import { coordinatesOf } from '../../../shared/utils/coordinates.js';
 import { getCircleRadius } from '../../../shared/utils/property.js';
 import type { Feature, FeatureCoordinates, FeatureType } from '../../../store/types.js';
-import type { Value } from '../../../table/value.js';
 import { applyResult } from './apply.js';
 import { toBufferGeometry, toResultGeometry } from './targets.js';
 import type { BufferOptions, GeometryDeps } from './types.js';

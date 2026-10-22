@@ -12,6 +12,7 @@
  *   of the target sizes at once
  */
 
+import { readValue, utf8ColumnLength, utf8String } from '@sakuzu/tabane';
 import type { Geometry } from 'geojson';
 import { describe, expect, it } from 'vitest';
 import { seededRandom } from '../test-utils.js';
@@ -20,8 +21,6 @@ import { createRowBlockDataBuilder, type RowInput } from './row-group-builder.js
 import { mergeRowBlockData } from './row-group-merge.js';
 import { ROW_FLAG_LOCKED, ROW_FLAG_VISIBLE, type RowBlockData } from './row-group-types.js';
 import { GeometryColumnReader } from './table.js';
-import { utf8ColumnLength, utf8String } from './utf8-column.js';
-import { readValue } from './value-column.js';
 
 /** Numbers the styles of groups built by builders, as the table of styles of a document does */
 function numbered(groups: RowBlockData[], numbers: Map<string, number>): RowBlockData[] {

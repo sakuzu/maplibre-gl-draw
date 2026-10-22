@@ -10,11 +10,19 @@
  * (`value-overrides.ts`), then at the columns.
  */
 
+import {
+  type CoordinateDimensions,
+  readNumberValue,
+  readValue,
+  utf8String,
+  VALUE_NUMBER,
+  type Value,
+  type ValueStringCache,
+} from '@sakuzu/tabane';
 import type { Geometry } from 'geojson';
 import { DrawError } from '../shared/draw-error.js';
 import type { Coordinate, Feature, FeatureType } from '../shared/types/model.js';
 import { setOwnProperty } from '../shared/utils/own-property.js';
-import type { CoordinateDimensions } from '../table/coordinates.js';
 import type { RowInput } from '../table/row-group-builder.js';
 import {
   ROW_FLAG_DELETED,
@@ -22,14 +30,6 @@ import {
   ROW_FLAG_VISIBLE,
   type RowBlockData,
 } from '../table/row-group-types.js';
-import { utf8String } from '../table/utf8-column.js';
-import type { Value } from '../table/value.js';
-import {
-  readNumberValue,
-  readValue,
-  VALUE_NUMBER,
-  type ValueStringCache,
-} from '../table/value-column.js';
 import type { GroupTable } from './group-table.js';
 import { geometryAt, type RowGroup } from './layer-table.js';
 import type { StyleTable } from './style-table.js';

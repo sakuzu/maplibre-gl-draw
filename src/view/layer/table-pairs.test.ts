@@ -10,10 +10,10 @@
  * - The fill instances of a row are its pairs
  */
 
+import { pairTriangles } from '@sakuzu/tabane';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { rowTriangles } from '../../feature-table/row-read.js';
 import { writeRowGeometry } from '../../feature-table/row-write.js';
-import { pairTriangles } from '../../table/row-geometry.js';
 import { createTestDrawer, feature, tablesOfFeatures } from '../../test-utils.js';
 import { buildEarcutInput } from '../renderers/polygon/earcut-input.js';
 import { ROWS_KIND, RowsPalette, readRowsInstance } from '../renderers/rows/rows-format.js';

@@ -11,8 +11,8 @@
  * - A row deleted keeps its key through the versions (it is not dropped yet)
  */
 
+import { utf8ColumnFromStrings } from '@sakuzu/tabane';
 import { describe, expect, it } from 'vitest';
-import { utf8ColumnFromStrings } from '../table/utf8-column.js';
 import {
   expectTablesMatch,
   referenceKey as key,

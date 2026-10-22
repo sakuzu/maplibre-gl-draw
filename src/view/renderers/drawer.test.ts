@@ -9,6 +9,7 @@
  * rendering alpha matches the default polygon fill alpha (which comes from the config).
  */
 
+import type { Value } from '@sakuzu/tabane';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   DEFAULT_FEATURE_STYLE_CONFIG,
@@ -18,7 +19,6 @@ import {
 import type { FeatureCoordinates } from '../../shared/types/model.js';
 import { geometryFromCoordinates } from '../../shared/utils/coordinates.js';
 import type { Coordinate, Feature, FeatureStyle, Layer, StyleRule } from '../../store/types.js';
-import type { Value } from '../../table/value.js';
 import { StyleRuleCache } from '../cache/style-rule.js';
 import { FeatureDrawer } from './drawer.js';
 import type { ImageRenderer } from './image.js';

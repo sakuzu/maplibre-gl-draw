@@ -21,9 +21,9 @@
  * they stand, and the group is put among the other items by its new key.
  */
 
+import { utf8ColumnFromStrings, utf8String } from '@sakuzu/tabane';
 import { ROW_FLAG_DELETED } from '../table/row-group-types.js';
 import type { RowKeySource } from '../table/row-keys.js';
-import { utf8ColumnFromStrings, utf8String } from '../table/utf8-column.js';
 import type { GroupTable } from './group-table.js';
 import type { LayerTable, OrderRow, RowGroup } from './layer-table.js';
 import type { GroupHandle, RowHandle } from './types.js';

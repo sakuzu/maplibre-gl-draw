@@ -6,10 +6,17 @@
  * and the references of what was read with new IDs
  */
 
+import {
+  BigInteger,
+  Bytes,
+  CalendarDate,
+  DateTime,
+  Reference,
+  sameValue,
+  type Value,
+} from '@sakuzu/tabane';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { MemoryStore } from '../../store/memory.js';
-import { sameValue, type Value } from '../../table/value.js';
-import { BigInteger, Bytes, CalendarDate, DateTime, Reference } from '../../table/value-kinds.js';
 import { createResourceDeps } from '../../test-utils.js';
 import type { DocumentResource } from '../document.js';
 import { DrawError } from '../errors.js';

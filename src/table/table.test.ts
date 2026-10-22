@@ -5,9 +5,10 @@
  * Tests for the reading of a table
  */
 
+import type { TableGeometry, TableMixedGeometry } from '@sakuzu/tabane';
 import { describe, expect, it } from 'vitest';
 import { columnValue, TableReader } from './table.js';
-import type { Table, TableGeometry, TableMixedGeometry } from './types.js';
+import type { Table } from './types.js';
 
 const lines = (): Table & { geometry: TableGeometry } => ({
   length: 2,

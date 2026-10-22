@@ -6,13 +6,13 @@
  * reading of a layer
  */
 
+import { utf8ColumnFromStrings } from '@sakuzu/tabane';
 import type { Geometry, Position } from 'geojson';
 import { describe, expect, expectTypeOf, it, vi } from 'vitest';
 import type { DocumentChange } from '../api/events.js';
 import type { LayerTableView } from '../api/tables.js';
 import { createRowBlockDataBuilder, type RowInput } from '../table/row-group-builder.js';
 import type { RowBlockData } from '../table/row-group-types.js';
-import { utf8ColumnFromStrings } from '../table/utf8-column.js';
 import {
   createFeatureTablesStore,
   type FeatureTablesInternals,

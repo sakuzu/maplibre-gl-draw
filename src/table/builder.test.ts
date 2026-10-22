@@ -8,12 +8,12 @@
  * geometry and the properties it was added with.
  */
 
+import type { TableGeometry, TableMixedGeometry } from '@sakuzu/tabane';
 import type { Feature, Geometry } from 'geojson';
 import { describe, expect, it } from 'vitest';
 import { createTableBuilder, tableFromFeatures } from './builder.js';
 import { prepareTable, transferList } from './prepare.js';
 import { TableReader } from './table.js';
-import type { TableGeometry, TableMixedGeometry } from './types.js';
 
 const line = (coordinates: number[][]): Geometry => ({ type: 'LineString', coordinates });
 const point = (x: number, y: number): Geometry => ({ type: 'Point', coordinates: [x, y] });
