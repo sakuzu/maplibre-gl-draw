@@ -35,7 +35,7 @@
  *
  * Rows can also be kept and handed out as Tabane blocks (`@sakuzu/tabane`): files named by the
  * SHA-256 of their content, each a run of rows of one parent cut into row blocks, listed by a
- * manifest. Use them to save the rows of a document, or to send them to another client, without
+ * manifest. Use them to save the rows of a document, or to send them elsewhere, without
  * making features of them. A feature is a row of the columns {@link TABANE_FEATURE_COLUMNS}
  * ({@link tabaneRowOf}); {@link writeTabaneFeatureBlocks} writes features as blocks, with the
  * triangles of their polygons as caches of the files, and a block read is row blocks the tables

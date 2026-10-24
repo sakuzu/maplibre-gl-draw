@@ -398,8 +398,8 @@ Unlike the write of a drag, it stays one transaction. Its notification is held
 on both buses, the contract's and the one of `DrawStore`
 (`ChangeBus.hold`); the steps add to it (`continueHeld`), and it goes out
 once, with the source of the transaction the restore was called in, when the
-last rows are written (`release`). A history sees one step, with what keeps
-the rows (`restoreToken`) told once.
+last rows are written (`release`). Whoever keeps the steps of the writes sees
+one step, with what keeps the rows (`restoreToken`) told once.
 
 - Anything else that comes to either bus first finishes the rest: an
   outermost transaction, from this client or from elsewhere (`remote`), or a
@@ -432,9 +432,10 @@ the rows (`restoreToken`) told once.
 What was weighed:
 
 - A write from elsewhere finishes the restore, while it does not finish the
-  write of a drag. The drag write tells each step on its own, so a remote
-  change can come between two of them; the restore tells one notification,
-  and a remote change told before it would be told before writes made earlier.
+  write of a drag. The drag write tells each step on its own, so a change from
+  elsewhere can come between two of them; the restore tells one notification,
+  and a change from elsewhere told before it would be told before writes made
+  earlier.
   Keeping the remote notifications in a queue until the end was the other way,
   left out for the order it would give the listeners.
 - A read finishes the restore rather than reading what it will leave (the

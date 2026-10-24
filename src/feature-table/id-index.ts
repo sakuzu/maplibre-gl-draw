@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 SAKAIDA Atsushi
+// SPDX-License-Identifier: AGPL-3.0-only
+
 import {
   encodeUtf8Into,
   equalUtf8,

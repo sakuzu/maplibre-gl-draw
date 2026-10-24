@@ -11,7 +11,8 @@
  * time of a step is spent (`BULK_SLICE_BUDGET_MS`), the first step in the call, the next in a
  * later task. Unlike that write, it is one transaction: its notification is held until the last
  * rows are written (`ChangeBus.hold`), and goes out once, with the source of the transaction it
- * was made in (an undo is one step of a history, its stamps and what keeps its rows told once).
+ * was made in (an undo is one step for whoever keeps the steps of the writes: its stamps and what
+ * keeps its rows are told once).
  *
  * - Another write of the document, or of the state of this client, from this client or from
  *   elsewhere, finishes the rest first: the writes keep their order, and the notification of the

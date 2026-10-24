@@ -237,7 +237,7 @@ describe('draw.features.releaseRestore', () => {
 describe('the writes of draw.features of rows that are not selected', () => {
   it('are notified with the values before, and undone by writing them back', () => {
     const { draw, tables, notified } = setup();
-    // A history of the writes of this client
+    // The steps of the writes of this client, to undo them
     const steps: FeatureValues[] = [];
     draw.getStore().subscribe((change) => {
       if (change.source === 'local' && change.previousValues) steps.push(change.previousValues);

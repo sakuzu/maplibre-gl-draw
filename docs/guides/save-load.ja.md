@@ -553,7 +553,7 @@ if (last) {
 で `change.order` の移動を作ります。
 
 そうしたストアの表 (`store.tables` と、`createTableStore` の writer) には、
-ほかの端末と同期するストアのための部品が `@sakuzu/maplibre-gl-draw/kasane`
+ほかの端末と内容を揃えるストアのための部品が `@sakuzu/maplibre-gl-draw/kasane`
 にもう 2 つあります。
 
 - `tables.showInPlace(owner, features)` は、この端末だけで、行の位置に

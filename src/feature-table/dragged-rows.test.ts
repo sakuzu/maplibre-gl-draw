@@ -97,7 +97,7 @@ describe('the rows dragged', () => {
     const { store, tables, handleOf } = setup();
     store.transact(() => {
       store.createFeature({
-        ...point('e', 139.4, 'Note'),
+        ...point('e', 139.4, 'Marker'),
         properties: { 'maplibre-gl-draw:scale': 2 },
       });
     });

@@ -563,10 +563,10 @@ describe('the state of the rows', () => {
 
 describe('the rows drawn at once while they are dragged in bulk', () => {
   it('are given to the renderer of their type moved, turned and resized as the drag draws them, with their rotation and scale when they turn and scale by them', () => {
-    // A type of an extension at a point, with a rotation and a scale (a note, a text), and a
+    // A type of an extension at a point, with a rotation and a scale (a sign, a stamp), and a
     // point drawn at once (a picture with an arrow of direction)
     const features = [
-      feature('n', 'Note', [139.7, 35.6], {
+      feature('n', 'Sign', [139.7, 35.6], {
         properties: { 'maplibre-gl-draw:rotation': 10, 'maplibre-gl-draw:scale': 2 },
       }),
       feature('p', 'Marker', [139.8, 35.7]),
@@ -584,7 +584,7 @@ describe('the rows drawn at once while they are dragged in bulk', () => {
         onRemove: () => {},
         draw: (f: Feature) => drawn.push(f),
       };
-      mocks.deps.customRenderers.set('Note', extension as never);
+      mocks.deps.customRenderers.set('Sign', extension as never);
       mocks.deps.customRenderers.set('Marker', extension as never);
       const handles = ['n', 'p'].map((id) => internals.ids.handleOf(id));
       internals.states.setMoving(Int32Array.from(handles), 2);

@@ -12,7 +12,7 @@
  * the task it is written in: what is seen does not jump.
  *
  * - The rows are planned in the step that writes them, from the values they have then. A row
- *   another client changed meanwhile is written from its values with that change (the move is
+ *   changed from elsewhere meanwhile is written from its values with that change (the move is
  *   made to what it is then); a row deleted meanwhile is left out; a row locked meanwhile is left
  *   as it is (`skipLocked`), and leaves the moving set with the others of its step. A locked row
  *   when the drag is let go refuses the whole, as before
