@@ -199,7 +199,7 @@ and the rest, in `src/api/impl/`) are built on the engine.
 
 `npm run check:layers` (`scripts/check-layers.mjs`, part of `npm run lint`)
 reads the import statements of `src/` and checks them against the rules.
-Tests, `src/e2e/` and `src/test-utils.ts` are left out.
+Tests, `src/e2e/`, `src/test-support/` and `src/test-utils.ts` are left out.
 
 Every area has a height. From the bottom: `geometry/`; `shared/` together
 with `src/messages.ts`; `table/`; `extension/`; `feature-table/`; `store/`;

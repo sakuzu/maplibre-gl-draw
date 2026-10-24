@@ -2,7 +2,8 @@
   "description": "Which document covers which sources. `npm run docs:check` warns when a source changed since the base ref and the documents that cover it did not. The English document is the key; its Japanese version is checked against it. Keep the map in step when files move.",
   "ignore": [
     "**/*.test.ts",
-    "src/test-utils.ts"
+    "src/test-utils.ts",
+    "src/test-support/**"
   ],
   "docs": {
     "CHANGELOG.md": [

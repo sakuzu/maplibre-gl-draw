@@ -174,6 +174,23 @@ screen pixels. The key property is that when no provider is registered,
 the route and the cost are unchanged. See [plugins](../guides/plugins.md)
 and [custom types](../guides/custom-types.md).
 
+### 17. The reference model of the rows
+
+`src/test-support/kasane-model/`. A small model of what the rewrites of a
+document mean (the layers, their items and the members of their groups
+in order, the fields of each, and the selection), written from that
+meaning and not from a Store. A sequence of steps runs on the model and
+on a Store, and what is read is compared after every step. A step picks
+what it acts on among what is there and does nothing when it cannot be
+done, so a sequence that fails is made short by taking runs of steps out
+while it goes on failing, and is then written down as a fixed sequence.
+The fixed sequences come first; then sequences made from fixed seeds,
+whose number of failures must not grow. It runs on the Store of rows
+(with the rows held for the selection let go of or kept, and selections
+in bulk) and on the Store of objects, and the differences found are
+listed in the test. Only `store-subject.ts` knows the Store, so that
+another way to write the rows is joined there.
+
 ## Integration Tests
 
 ### Store and hit testing

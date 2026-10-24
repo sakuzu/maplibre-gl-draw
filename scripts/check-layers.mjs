@@ -13,7 +13,7 @@
  *   import whose specifiers are all `type X`, and `import('...')` in a type position) is
  *   listed but does not fail the check. Those are the known deviations of the document
  *
- * Test files (*.test.ts), src/e2e/ and src/test-utils.ts are not checked.
+ * Test files (*.test.ts), src/e2e/, src/test-support/ and src/test-utils.ts are not checked.
  * Only Node's standard modules are used.
  */
 import { readdirSync, readFileSync, statSync } from 'node:fs';
@@ -106,7 +106,7 @@ function listFiles(dir = SRC, out = []) {
     const path = join(dir, name);
     const rel = relative(SRC, path);
     if (statSync(path).isDirectory()) {
-      if (rel !== 'e2e') listFiles(path, out);
+      if (rel !== 'e2e' && rel !== 'test-support') listFiles(path, out);
     } else if (
       name.endsWith('.ts') &&
       !name.endsWith('.test.ts') &&
