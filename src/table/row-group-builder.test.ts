@@ -1,13 +1,7 @@
 // SPDX-FileCopyrightText: 2026 SAKAIDA Atsushi
 // SPDX-License-Identifier: AGPL-3.0-only
 
-import {
-  decodeCanonicalValue,
-  hashUtf8,
-  pairTriangles,
-  readValue,
-  utf8String,
-} from '@sakuzu/tabane';
+import { decodeCanonicalValue, hashUtf8, readValue, utf8String } from '@sakuzu/tabane';
 import earcut from 'earcut';
 import type { Geometry } from 'geojson';
 import { describe, expect, it } from 'vitest';
@@ -15,6 +9,7 @@ import { generateCirclePolygon } from '../geometry/circle.js';
 import { drawPropertyKey } from '../shared/properties.js';
 import { buildEarcutInput } from '../view/renderers/polygon/earcut-input.js';
 import { searchPackedRTree } from './packed-rtree.js';
+import { pairTriangles } from './row-geometry.js';
 import {
   blockTransferList,
   createRowBlockDataBuilder,

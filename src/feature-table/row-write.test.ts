@@ -14,11 +14,13 @@
  * - The bytes held are counted for the attributes and the geometry together
  */
 
-import type { Value } from '@sakuzu/tabane';
+import { type CoordinateSystem, planarCoordinates, planarRowBox, type Value } from '@sakuzu/tabane';
 import type { Geometry } from 'geojson';
 import { describe, expect, it } from 'vitest';
 import type { Feature } from '../shared/types/model.js';
-import { feature, tablesOfFeatures } from '../test-utils.js';
+import { createRowBlockDataBuilder } from '../table/row-group-builder.js';
+import { feature, referenceKey, rowPatch, tablesOfFeatures } from '../test-utils.js';
+import { createFeatureTablesStore, featureTablesInternals } from './feature-tables.js';
 import { hitTestLayerTable } from './hit-test.js';
 import { overrideBytesOf } from './layer-table.js';
 import {
@@ -162,7 +164,7 @@ describe('the geometry written in place', () => {
         ],
       ],
     };
-    expect(writeRowGeometry(tables.table, group, 1, corner)).toEqual({
+    expect(writeRowGeometry(tables.table, group, 1, corner, planarCoordinates)).toEqual({
       sameShape: true,
       from: 1,
       to: 2,
@@ -177,7 +179,9 @@ describe('the geometry written in place', () => {
         [2, 0],
       ],
     };
-    expect(writeRowGeometry(tables.table, group, 0, longer).sameShape).toBe(false);
+    expect(writeRowGeometry(tables.table, group, 0, longer, planarCoordinates).sameShape).toBe(
+      false,
+    );
     expect(group.geometries?.geometry(0)).toBeDefined();
     expect(group.geometries?.geometry(1)).toBeUndefined();
     // The arrays of the column are the ones of the group (written, not replaced)
@@ -205,30 +209,50 @@ describe('the geometry written in place', () => {
         ],
       ],
     };
-    expect(writeRowGeometry(tables.table, group, 1, notched).sameShape).toBe(false);
+    expect(writeRowGeometry(tables.table, group, 1, notched, planarCoordinates).sameShape).toBe(
+      false,
+    );
     const next = features();
     next[1] = { ...next[1], geometry: notched as Feature['geometry'] };
     expect(readGeometry(tables)).toEqual(readGeometry(tablesOfFeatures('layer', next)));
     // Back to the shape of the column: written there, and the override is dropped
-    writeRowGeometry(tables.table, group, 1, {
-      type: 'Polygon',
-      coordinates: [square(5, 5, 2)],
-    });
+    writeRowGeometry(
+      tables.table,
+      group,
+      1,
+      {
+        type: 'Polygon',
+        coordinates: [square(5, 5, 2)],
+      },
+      planarCoordinates,
+    );
     expect(group.geometries?.geometry(1)).toBeUndefined();
   });
 
   it('moves the ring of a Circle with its center, and reports a move of nothing as empty', () => {
     const tables = tablesOfFeatures('layer', features());
     const group = tables.table.groupAt(0);
-    const moved = writeRowGeometry(tables.table, group, 3, {
-      type: 'Point',
-      coordinates: [21, 20],
-    });
+    const moved = writeRowGeometry(
+      tables.table,
+      group,
+      3,
+      {
+        type: 'Point',
+        coordinates: [21, 20],
+      },
+      planarCoordinates,
+    );
     expect(moved.sameShape).toBe(true);
     expect(moved.from).toBe(0);
     expect(moved.to).toBeGreaterThan(60);
     expect(group.data.rowBounds[3 * 4]).toBeGreaterThan(20.9);
-    const still = writeRowGeometry(tables.table, group, 2, { type: 'Point', coordinates: [9, 9] });
+    const still = writeRowGeometry(
+      tables.table,
+      group,
+      2,
+      { type: 'Point', coordinates: [9, 9] },
+      planarCoordinates,
+    );
     expect(still).toEqual({ sameShape: true, from: 0, to: 0 });
   });
 
@@ -250,7 +274,13 @@ describe('the geometry written in place', () => {
       },
     });
     expect(hitTestLayerTable(tables.internals, tables.table, input(9, 9))?.row).toBe(2);
-    writeRowGeometry(tables.table, group, 2, { type: 'Point', coordinates: [30, 30] });
+    writeRowGeometry(
+      tables.table,
+      group,
+      2,
+      { type: 'Point', coordinates: [30, 30] },
+      planarCoordinates,
+    );
     expect(hitTestLayerTable(tables.internals, tables.table, input(9, 9))).toBeNull();
     expect(hitTestLayerTable(tables.internals, tables.table, input(30, 30))?.row).toBe(2);
     expect(tables.table.movedRowCount).toBe(1);
@@ -265,7 +295,13 @@ describe('the geometry written in place', () => {
     const values = overrideBytesOf(group);
     const coordinates: number[][] = [];
     for (let i = 0; i < 1000; i++) coordinates.push([i / 1000, 0]);
-    writeRowGeometry(tables.table, group, 0, { type: 'LineString', coordinates });
+    writeRowGeometry(
+      tables.table,
+      group,
+      0,
+      { type: 'LineString', coordinates },
+      planarCoordinates,
+    );
     // The 1,000 coordinates of 16 bytes each, and what the attribute took
     expect(overrideBytesOf(group)).toBeGreaterThan(values + 16_000);
   });
@@ -289,5 +325,52 @@ describe('an attribute named __proto__', () => {
         expect(Object.getOwnPropertyDescriptor(properties, '__proto__')?.value).toBe(value);
       }
     }
+  });
+});
+
+describe('the bbox of a row written', () => {
+  it('is made in the system of the coordinates of the tables, as the bbox of every other row', () => {
+    // A system whose boxes are wider by 1 than the plane's: a bbox made over the plane differs
+    const wider: CoordinateSystem = {
+      rowBox(coords, stride, from, to, out, at) {
+        planarRowBox(coords, stride, from, to, out, at);
+        out[at] -= 1;
+        out[at + 2] += 1;
+      },
+    };
+    const { tables, writer } = createFeatureTablesStore({ coordinateSystem: wider });
+    const builder = createRowBlockDataBuilder({ coordinateSystem: wider });
+    const square = (x: number): Geometry => ({
+      type: 'Polygon',
+      coordinates: [
+        [
+          [x, 0],
+          [x + 1, 0],
+          [x + 1, 1],
+          [x, 0],
+        ],
+      ],
+    });
+    builder.addRow({ id: 'a', type: 'Polygon', geometry: square(0), order: referenceKey(1) });
+    builder.addRow({ id: 'b', type: 'Polygon', geometry: square(10), order: referenceKey(2) });
+    writer.addRowBlocks('l', builder.finish());
+    featureTablesInternals(tables)?.addQueuedRowBlocks();
+    const view = tables.get('l');
+    const a = tables.findRow('a') as number;
+    const b = tables.findRow('b') as number;
+    expect(view?.getRowBounds(a)).toEqual([-1, 0, 2, 1]);
+    // The same shape, written in place; another shape, into the overrides
+    const line: Geometry = {
+      type: 'LineString',
+      coordinates: [
+        [20, 5],
+        [22, 6],
+      ],
+    };
+    writer.apply(
+      rowPatch([a, b], { geometry: [square(5), line], type: ['Polygon', 'LineString'] }),
+    );
+    expect(view?.getRowBounds(a)).toEqual([4, 0, 7, 1]);
+    expect(view?.getRowBounds(b)).toEqual([19, 5, 23, 6]);
   });
 });

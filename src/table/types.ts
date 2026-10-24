@@ -10,8 +10,122 @@
  * copy.
  */
 
-import type { TableGeometry, TableMixedGeometry } from '@sakuzu/tabane';
+import type { CoordinateDimensions } from '@sakuzu/tabane';
 import type { BBox } from '../geometry/types.js';
+
+/**
+ * The geometry type of a geometry column of a single type.
+ *
+ * A table whose rows have different types gives a {@link TableMixedGeometry}, made of columns of
+ * these types.
+ */
+export type GeometryType =
+  | 'Point'
+  | 'LineString'
+  | 'Polygon'
+  | 'MultiPoint'
+  | 'MultiLineString'
+  | 'MultiPolygon';
+
+/**
+ * The geometry column of a table whose rows share one geometry type.
+ *
+ * It follows the layout of GeoArrow: interleaved coordinates and the offset arrays, outermost
+ * first.
+ *
+ * Every row owns a contiguous run of the coordinates, so the offsets only say where each row,
+ * part and ring starts:
+ *
+ * | Type | `offsets` |
+ * | --- | --- |
+ * | Point | none: row `i` is coordinate `i` |
+ * | LineString, MultiPoint | `[row → coordinate]` |
+ * | Polygon | `[row → ring, ring → coordinate]` |
+ * | MultiLineString | `[row → part, part → coordinate]` |
+ * | MultiPolygon | `[row → polygon, polygon → ring, ring → coordinate]` |
+ *
+ * An offset array has one more entry than the level it splits (the first entry is the start of
+ * the first element, the last is the end of the last), and its values never decrease.
+ *
+ * A row without a geometry has an empty run (two equal offsets), or NaN coordinates for a Point,
+ * or a 0 bit in {@link Table.validity}. It is neither drawn nor hit.
+ *
+ * @example A table of two lines
+ * ```ts
+ * const geometry: TableGeometry = {
+ *   type: 'LineString',
+ *   coords: new Float64Array([139.70, 35.68, 139.71, 35.69, 139.72, 35.66, 139.73, 35.67]),
+ *   offsets: [new Int32Array([0, 2, 4])],
+ * };
+ * ```
+ */
+export interface TableGeometry {
+  /** The geometry type of every row */
+  type: GeometryType;
+  /**
+   * The coordinates in degrees, interleaved: `[lng0, lat0, lng1, lat1, ...]`, or with the values
+   * of `dimensions` per coordinate (`[lng0, lat0, z0, lng1, ...]` with `dimensions: 'xyz'`)
+   */
+  coords: Float64Array;
+  /**
+   * The dimensions of the coordinates (`xy` when omitted): `xy`, `xyz`, `xym` or `xyzm`, the
+   * names of GeoArrow. The rows are drawn and hit by their `x` and `y`; a `z` or an `m` that a
+   * coordinate does not have is NaN
+   */
+  dimensions?: CoordinateDimensions;
+  /** The offset arrays, outermost first (see the table above). Omitted or empty for Point */
+  offsets?: Int32Array[];
+}
+
+/**
+ * The geometry column of a table whose rows have different geometry types.
+ *
+ * It follows the layout of the mixed geometry of GeoArrow (a dense union of Arrow): a geometry
+ * column of a single type per child, and for every row of the table the child and the row within
+ * it.
+ *
+ * The geometry of row `i` is row `offsets[i]` of `children[types[i]]`, and row `i` behaves exactly
+ * as the feature of that child's type with those coordinates. The rows of a child can be in any
+ * order; the draw order is the order of the table rows. A row with a negative `types[i]` has no
+ * geometry (as a 0 bit in {@link Table.validity}, which still applies on top). The
+ * number of rows of a child is read from its arrays: the coordinates for a Point column,
+ * `offsets[0].length - 1` for the others.
+ *
+ * @example A point, a line and a polygon, the polygon first in the table
+ * ```ts
+ * const geometry: TableMixedGeometry = {
+ *   type: 'Mixed',
+ *   types: new Int8Array([2, 0, 1]),
+ *   offsets: new Int32Array([0, 0, 0]),
+ *   children: [
+ *     { type: 'Point', coords: new Float64Array([139.70, 35.68]) },
+ *     {
+ *       type: 'LineString',
+ *       coords: new Float64Array([139.71, 35.69, 139.72, 35.70]),
+ *       offsets: [new Int32Array([0, 2])],
+ *     },
+ *     {
+ *       type: 'Polygon',
+ *       coords: new Float64Array([139.73, 35.66, 139.75, 35.66, 139.75, 35.68, 139.73, 35.66]),
+ *       offsets: [new Int32Array([0, 1]), new Int32Array([0, 4])],
+ *     },
+ *   ],
+ * };
+ * ```
+ */
+export interface TableMixedGeometry {
+  /** Marks the mixed form */
+  type: 'Mixed';
+  /**
+   * For every row, the child column that holds its geometry (an index into `children`; negative
+   * for a row without a geometry)
+   */
+  types: Int8Array;
+  /** For every row, the row within its child column */
+  offsets: Int32Array;
+  /** The geometry columns of a single type */
+  children: TableGeometry[];
+}
 
 /**
  * An attribute column encoded as a dictionary (the dictionary type of Arrow).

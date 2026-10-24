@@ -36,18 +36,23 @@
  * Rows can also be kept and handed out as Tabane blocks (`@sakuzu/tabane`): files named by the
  * SHA-256 of their content, each a run of rows of one parent cut into row blocks, listed by a
  * manifest. Use them to save the rows of a document, or to send them to another client, without
- * making features of them: a block read is row blocks the tables take as they are
- * ({@link rowBlockOfTabane}).
+ * making features of them. A feature is a row of the columns {@link TABANE_FEATURE_COLUMNS}
+ * ({@link tabaneRowOf}); {@link writeTabaneFeatureBlocks} writes features as blocks, with the
+ * triangles of their polygons as caches of the files, and a block read is row blocks the tables
+ * take as they are ({@link rowBlockOfTabane}), the triangles copied from the caches.
  *
  * ```ts
- * import { packTabaneBlock, readTabaneBlockFile, tabaneNameOf, writeTabaneBlock } from '@sakuzu/tabane';
+ * import { packTabaneBlock, readTabaneBlockFile, tabaneNameOf } from '@sakuzu/tabane';
  *
- * const block = writeTabaneBlock({ parent: 'buildings', head: 'V', rows });
+ * const [{ block, caches }] = writeTabaneFeatureBlocks({ parent: 'buildings', head: 'V', rows });
  * const name = await tabaneNameOf(block.content); // the name to keep the file under
- * const file = packTabaneBlock(block, compressor); // its parts compressed with zstd
+ * const file = packTabaneBlock(block, compressor, caches); // its parts compressed with zstd
  *
  * // where it is read
- * const rowBlocks = readTabaneBlockFile(file, compressor).map((b) => rowBlockOfTabane(b));
+ * const read = readTabaneBlockFile(file, compressor);
+ * const rowBlocks = read.rowBlocks.map((b, k) =>
+ *   rowBlockOfTabane(b, { caches: read.caches.filter((c) => c.part === k + 1) }),
+ * );
  * ```
  *
  * @module kasane
@@ -126,6 +131,14 @@ export type { RowBlock } from '../table/row-group-types.js';
 export { transferList } from '../table/transfer-list.js';
 export type { RowRings } from '../table/row-rings.js';
 
-// Tabane blocks (@sakuzu/tabane) read as row blocks
+// Features as the rows of Tabane blocks (@sakuzu/tabane), and the blocks read as row blocks
+export type { TabaneFeatureRow } from '../table/tabane/columns.js';
+export {
+  featureRowOfTabane,
+  TABANE_FEATURE_COLUMNS,
+  tabaneRowOf,
+} from '../table/tabane/columns.js';
+export type { TabaneFeatureBlock, TabaneFeatureBlocksInput } from '../table/tabane/blocks.js';
+export { writeTabaneFeatureBlocks } from '../table/tabane/blocks.js';
 export type { RowBlockOfTabaneOptions } from '../table/tabane/rows.js';
 export { rowBlockOfTabane } from '../table/tabane/rows.js';

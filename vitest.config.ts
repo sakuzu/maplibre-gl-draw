@@ -4,11 +4,7 @@
 import { configDefaults, defineConfig } from 'vitest/config';
 
 export default defineConfig({
-  // @sakuzu/tabane is a clone next to this one with its own node_modules: one earcut for both, and
-  // the package run through Vite, so that a test that mocks earcut sees the triangulation of rows
-  resolve: { dedupe: ['earcut'] },
   test: {
-    server: { deps: { inline: ['@sakuzu/tabane'] } },
     globals: true,
     environment: 'node',
     include: ['src/**/*.test.ts'],

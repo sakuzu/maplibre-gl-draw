@@ -22,7 +22,6 @@
  * are drawn in the order of the table whatever the order within the children.
  */
 
-import type { GeometryType } from '@sakuzu/tabane';
 import { drawPropertyKey } from '../shared/properties.js';
 import type { Feature, FeatureCoordinates } from '../shared/types/model.js';
 import type { Color } from '../shared/types/style.js';
@@ -34,7 +33,7 @@ import {
   isDictionaryColumn,
   TableReader,
 } from '../table/table.js';
-import type { PreparedTable, Table } from '../table/types.js';
+import type { GeometryType, PreparedTable, Table } from '../table/types.js';
 import { toPackedPointStyle } from '../view/renderers/batch-manager.js';
 import { toLineInstanceColor } from '../view/renderers/line/line-geometry.js';
 import type { SDFStrokeStyle } from '../view/renderers/line/line-types.js';

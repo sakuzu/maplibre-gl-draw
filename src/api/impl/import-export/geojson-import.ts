@@ -52,7 +52,8 @@ export function convertGeoJSONToFeature(
   generateId: () => string,
   options: GeoJSONConvertOptions,
 ): { results: ConvertedFeatureResult[] } | { reason: string } {
-  const read = readGeoJSONFeature(geoFeature, options.flattenMulti === true);
+  // A Feature holds `x` and `y`: a longer position is cut to them
+  const read = readGeoJSONFeature(geoFeature, options.flattenMulti === true, 'xy');
   if (typeof read === 'string') return { reason: read };
   const { properties, image } = read;
 

@@ -8,7 +8,12 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { IDLE_BUILD_FROM, RowBoxIndex, type RowBoxSource } from './row-box-index.js';
+import {
+  IDLE_BUILD_FROM,
+  orderedKeyBits,
+  RowBoxIndex,
+  type RowBoxSource,
+} from './row-box-index.js';
 
 /** Rows on a grid of a hundred columns, each a box of a fifth of a cell; some rows deleted */
 function source(count: number) {
@@ -161,5 +166,34 @@ describe('the build of the index of the boxes of the rows', () => {
     expect(clock.waiting).toBe(0);
     const box: [number, number, number, number] = [10, 10, 12.5, 11.5];
     expect(sorted(index.search(0, ...box))).toEqual(rows.brute(...box));
+  });
+});
+
+describe('the order of the rows of the index', () => {
+  it('is the key of the system of the coordinates when it gives one', () => {
+    const count = IDLE_BUILD_FROM * 2;
+    const rows = source(count);
+    const clock = idle();
+    const centers: number[] = [];
+    const index = new RowBoxIndex(rows, {
+      ...clock,
+      // A key of its own: negative and fractional, so not one of the Hilbert curve
+      sortKey: (x, y) => {
+        centers.push(x);
+        return -y * 1000 + x / 7;
+      },
+    });
+    index.markAll();
+    while (clock.run());
+    expect(centers).toHaveLength(count);
+    for (const box of BOXES) expect(sorted(index.search(0, ...box))).toEqual(rows.brute(...box));
+  });
+
+  it('sorts the bits of the keys as the keys', () => {
+    const keys = [-1e300, -5.5, -1, -0.25, 0, 1e-300, 0.25, 1, 2, 3.75, 1e6, 2 ** 40, 1e300];
+    const bits = keys.map(orderedKeyBits);
+    for (let k = 1; k < bits.length; k++) expect(bits[k]).toBeGreaterThanOrEqual(bits[k - 1]);
+    expect(orderedKeyBits(-1)).toBeLessThan(orderedKeyBits(1));
+    expect(orderedKeyBits(1)).toBeLessThan(orderedKeyBits(2));
   });
 });

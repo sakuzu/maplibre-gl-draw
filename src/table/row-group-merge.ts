@@ -24,20 +24,17 @@ import {
   type CoordinateDimensions,
   type CoordinateSystem,
   dimsWithin,
-  type GeometryType,
   planarCoordinates,
-  rowGeometryOfColumn,
   sortKeyOf,
-  type TableMixedGeometry,
   Utf8ColumnBuilder,
   VALUE_ABSENT,
   type ValueColumn,
   ValueColumnBuilder,
   valueEntryOf,
-  WIDE_VERTICES,
 } from '@sakuzu/tabane';
 import { DrawError } from '../shared/draw-error.js';
 import { buildPackedRTree } from './packed-rtree.js';
+import { rowGeometryOfColumn, WIDE_VERTICES } from './row-geometry.js';
 import {
   ChildBuilder,
   type GroupEntry,
@@ -47,6 +44,7 @@ import {
 } from './row-group-builder.js';
 import type { RowBlock, RowBlockData, TriangleCache } from './row-group-types.js';
 import { compareRowKeys, type GroupKeySource } from './row-keys.js';
+import type { GeometryType, TableMixedGeometry } from './types.js';
 
 /**
  * What {@link mergeRowBlock} merges

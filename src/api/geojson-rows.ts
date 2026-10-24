@@ -5,7 +5,7 @@
  * Features of GeoJSON read as the values of rows of a layer, by the rules of a load
  */
 
-import type { Value } from '@sakuzu/tabane';
+import { type CoordinateDimensions, unionDims, type Value } from '@sakuzu/tabane';
 import type { Feature as GeoJSONFeature, Geometry } from 'geojson';
 import { readGeoJSONFeature } from '../feature-table/geojson-read.js';
 import type { FeatureStyle, SkippedFeature } from './model.js';
@@ -25,8 +25,17 @@ export interface GeoJSONRow {
   readonly inputId?: string;
   /** The type of the feature (`'Polygon'`, `'Circle'`, the type of an extension) */
   readonly type: string;
-  /** The geometry, every position of two numbers */
+  /**
+   * The geometry, every value of its positions kept: `x` and `y`, and the `z` (the third value)
+   * and the `m` (the fourth) the input gives
+   */
   readonly geometry: Geometry;
+  /**
+   * The dimensions of the positions of the feature the row is read from: `xy`, `xyz` when a
+   * position has three values, `xyzm` when one has four. A position of fewer has NaN for the
+   * values it does not have, as a row of the layer holds it
+   */
+  readonly dimensions: CoordinateDimensions;
   /** The style (`{}` when the input gives none) */
   readonly style: Readonly<FeatureStyle>;
   /** The attributes: the user-defined properties and the values of the library */
@@ -47,6 +56,12 @@ export interface GeoJSONRows {
   readonly rows: GeoJSONRow[];
   /** The features of the input that were not read, in the order of the input, and why */
   readonly skipped: SkippedFeature[];
+  /**
+   * The dimensions that hold the positions of every row (`xy` for none): a layer of fewer is
+   * raised to hold them, `unionDims` of `@sakuzu/tabane` giving the dimensions of the layer that
+   * hold both (`FeatureTablesWriter.raiseDimensions`)
+   */
+  readonly dimensions: CoordinateDimensions;
 }
 
 /**
@@ -56,15 +71,17 @@ export interface GeoJSONRows {
  * `maplibre-gl-draw:style` (else from the keys of simplestyle-spec), `visible` and `locked` from
  * their prefixed keys, and the values of the library stay in `properties` with their prefix. A
  * Multi geometry is one row, and a GeometryCollection is folded by type into at most three
- * rows. A position of more than two numbers is cut to the first two, as a load cuts it. The ID
+ * rows. Every value of a position is kept, the third its `z` and the fourth its `m`, where a load
+ * cuts a position to the two values of a Feature: a row of a layer holds them, the layer raised to
+ * their dimensions (`dimensions`). The ID
  * the input gives a feature is not the ID of a row: the caller gives the rows their IDs, and
  * `inputId` tells which row a reference to the ID of the input names (rewrite the references
  * with `rewriteReferences`). The layer and the group a feature names are not read: the rows go
  * where the caller writes them.
  *
- * A feature that cannot be read is left out and reported in `skipped`: one a load leaves out,
- * and a single Image point that embeds its image, which is a file of its own and not a value of
- * a row.
+ * A feature that cannot be read is left out and reported in `skipped`: one a load leaves out, one
+ * with a position of more than four values, and a single Image point that embeds its image, which
+ * is a file of its own and not a value of a row.
  *
  * @param features - The features of a FeatureCollection
  * @returns The rows and the features left out
@@ -75,8 +92,9 @@ export interface GeoJSONRows {
 export function rowsOfGeoJSON(features: readonly GeoJSONFeature[]): GeoJSONRows {
   const rows: GeoJSONRow[] = [];
   const skipped: SkippedFeature[] = [];
+  let dimensions: CoordinateDimensions = 'xy';
   features.forEach((feature: unknown, index) => {
-    const read = readGeoJSONFeature(feature, false);
+    const read = readGeoJSONFeature(feature, false, 'all');
     if (typeof read === 'string') {
       skipped.push({ index, reason: read });
       return;
@@ -85,12 +103,14 @@ export function rowsOfGeoJSON(features: readonly GeoJSONFeature[]): GeoJSONRows 
       skipped.push({ index, reason: 'the feature embeds an image, which a row does not hold' });
       return;
     }
+    dimensions = unionDims(dimensions, read.dimensions);
     read.parts.forEach(({ type, geometry }, i) => {
       rows.push({
         index,
         ...(i === 0 && read.inputId !== undefined && { inputId: read.inputId }),
         type,
         geometry,
+        dimensions: read.dimensions,
         style: read.style,
         properties: read.parts.length === 1 ? read.properties : { ...read.properties },
         visible: read.visible,
@@ -98,5 +118,5 @@ export function rowsOfGeoJSON(features: readonly GeoJSONFeature[]): GeoJSONRows 
       });
     });
   });
-  return { rows, skipped };
+  return { rows, skipped, dimensions };
 }

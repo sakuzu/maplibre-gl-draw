@@ -4,15 +4,18 @@
 /**
  * A row block of the Tabane format as a row block of the tables
  *
- * The columns of a row block read are those of a row block (`RowBlock`): the geometry, the
- * types, the styles and the attributes are taken as they are. What is made here is what the
- * columns of a row block leave to the reader: the ids and the keys as text (from their runs), the
- * hashes of the ids, the flags, the bbox of every row and the spatial index (they depend on the
- * system of the coordinates of the reader), and the fills of the rows that draw a ring around
- * their point (they depend on the types of the reader). The fills of the polygons are copied
- * from the row block when it holds them, and made otherwise.
+ * The columns of a row block read are the columns of a feature (`columns.ts`), and they are taken
+ * as columns: the points of the geometry are the coordinates of its children, the types, the
+ * styles and the attributes are taken as they are. What is made here is what the columns of a
+ * row block leave to the reader: the ids and the keys as text (from their runs), the hashes of the
+ * ids, the flags, the bbox of every row and the spatial index (they depend on the system of the
+ * coordinates of the reader), and the fills of the rows that draw a ring around their point (they
+ * depend on the types of the reader). The fills of the polygons are copied from the cache of their
+ * triangles that follows the row block in its file (`triangles.ts`) when it fits the rows, and made
+ * otherwise.
  *
- * A pure module: it depends on nothing outside `/table`, so it runs in a Worker as well.
+ * A pure module: it depends on nothing outside `/table` but its error and `@sakuzu/tabane`, so it
+ * runs in a Worker as well.
  */
 
 import {
@@ -24,23 +27,24 @@ import {
   idColumn,
   keyColumn,
   planarCoordinates,
-  polygonRanges,
   readValue,
-  ringOffsetsOf,
-  rowGeometryOfColumn,
   sortKeyOf,
   strideOf,
+  type TabaneCache,
   type TabaneRowBlock,
-  type TabaneRowBlockData,
-  type TableGeometry,
-  type TableMixedGeometry,
+  type TabaneShapeColumn,
   tabaneFlagOf,
-  triangulateRow,
-  WIDE_VERTICES,
 } from '@sakuzu/tabane';
 import { circleRowRings } from '../../shared/circle-rings.js';
 import { DrawError } from '../../shared/draw-error.js';
 import { buildPackedRTree } from '../packed-rtree.js';
+import {
+  polygonRanges,
+  ringOffsetsOf,
+  rowGeometryOfColumn,
+  triangulateRow,
+  WIDE_VERTICES,
+} from '../row-geometry.js';
 import {
   ROW_FLAG_DELETED,
   ROW_FLAG_LOCKED,
@@ -50,6 +54,9 @@ import {
   type TriangleCache,
 } from '../row-group-types.js';
 import type { RowRings } from '../row-rings.js';
+import type { TableGeometry, TableMixedGeometry } from '../types.js';
+import { featureColumnsOf, geometryTypeOf, stylesOf, typesOf } from './columns.js';
+import { type CachedFills, FILL_TRIANGLES_CACHE, readFillTrianglesCache } from './triangles.js';
 
 /**
  * The options of {@link rowBlockOfTabane}
@@ -66,6 +73,13 @@ export interface RowBlockOfTabaneOptions {
   readonly coordinateSystem?: CoordinateSystem;
   /** The rings the rows of some types draw around their point (the Circles when omitted) */
   readonly rings?: RowRings;
+  /**
+   * The caches that follow the row block in its file (those of its part, `TabaneBlockFile.caches`
+   * whose `part` is the number of the row block plus one): the triangles of its polygons are
+   * copied from the one of the triangles when it fits the rows, and made when there is none or it
+   * does not fit. A cache of another name is not read
+   */
+  readonly caches?: readonly TabaneCache[];
 }
 
 /** The first coordinate of a row of a child of a geometry (its end is the first of the next row) */
@@ -76,38 +90,62 @@ function vertexStart(child: TableGeometry, row: number): number {
   return first;
 }
 
-/** The geometry with the coordinates of `dims` (the same object when they are its own) */
-function widen(
-  geometry: TableMixedGeometry,
-  from: CoordinateDimensions,
+/**
+ * The geometry of the shapes of a row block, its points with the coordinates of `dims`: the
+ * points of each form are the coordinates of a child, the form of each row its child
+ */
+function geometryOf(
+  column: TabaneShapeColumn | null,
+  rows: number,
   dims: CoordinateDimensions,
-) {
-  if (from === dims) return geometry;
+): TableMixedGeometry {
+  if (column === null) {
+    return {
+      type: 'Mixed',
+      types: new Int8Array(rows).fill(-1),
+      offsets: new Int32Array(rows),
+      children: [],
+    };
+  }
+  const from = column.dimensions;
   if (!dimsWithin(from, dims))
     throw new DrawError('invalid-input', `Tabane: coordinates of ${from} in a layer of ${dims}`);
   const stride = strideOf(dims);
-  const children = geometry.children.map((child) => {
-    const count = child.coords.length / strideOf(from);
-    const coords = new Float64Array(count * stride);
-    copyCoordinates(child.coords, from, 0, count, coords, dims, 0);
-    return { ...child, coords, dimensions: dims };
+  const children: TableGeometry[] = column.forms.map((form) => {
+    const type = geometryTypeOf(form.name, form.depth);
+    let coords = form.points;
+    if (from !== dims) {
+      const count = coords.length / strideOf(from);
+      coords = new Float64Array(count * stride);
+      copyCoordinates(form.points, from, 0, count, coords, dims, 0);
+    }
+    return form.offsets.length > 0
+      ? { type, coords, dimensions: dims, offsets: [...form.offsets] }
+      : { type, coords, dimensions: dims };
   });
-  return { ...geometry, children };
+  return {
+    type: 'Mixed',
+    types: Int8Array.from(column.formIndex),
+    offsets: column.formRow,
+    children,
+  };
 }
 
 /**
  * A row block as a row block of the tables (for `FeatureTablesWriter.addRowBlocks`), its columns
  * taken as they are
  *
- * @throws `DrawError` with the code `invalid-input` when the row block has a dimension the layer does
- *   not
+ * @throws `DrawError` with the code `invalid-input` when the row block has a dimension the layer
+ *   does not, or is not one of features: a column that is not one of `TABANE_FEATURE_COLUMNS` or
+ *   of another kind, a row without a type, a geometry of another name or depth, a style that is
+ *   not an object
  * @experimental
  */
 export function rowBlockOfTabane(
   rowBlock: TabaneRowBlock,
   options: RowBlockOfTabaneOptions = {},
 ): RowBlock {
-  return rowBlockDataOfTabane(rowBlock as TabaneRowBlockData, options);
+  return rowBlockDataOfTabane(rowBlock, options);
 }
 
 /**
@@ -116,15 +154,19 @@ export function rowBlockOfTabane(
  * @internal
  */
 export function rowBlockDataOfTabane(
-  rowBlock: TabaneRowBlockData,
+  rowBlock: TabaneRowBlock,
   options: RowBlockOfTabaneOptions = {},
 ): RowBlockData {
   const n = rowBlock.length;
-  const dims = options.dimensions ?? rowBlock.dimensions;
+  const columns = featureColumnsOf(rowBlock);
+  const dims = options.dimensions ?? columns.geometry?.dimensions ?? 'xy';
   const system = options.coordinateSystem ?? planarCoordinates;
   const rings = options.rings ?? circleRowRings;
-  const geometry = widen(rowBlock.geometry, rowBlock.dimensions, dims);
+  const geometry = geometryOf(columns.geometry, n, dims);
   const stride = strideOf(dims);
+  const { typeNames, types } = typesOf(columns.type, n);
+  const { styleDictionary, styles } = stylesOf(columns.style, n);
+  const properties = columns.properties;
 
   const ids = idColumn(rowBlock);
   const idHashes = new Uint32Array(n);
@@ -133,20 +175,24 @@ export function rowBlockDataOfTabane(
   const flags = new Uint8Array(n);
   for (let r = 0; r < n; r++) {
     flags[r] =
-      (tabaneFlagOf(rowBlock.hidden, r) ? 0 : ROW_FLAG_VISIBLE) |
-      (tabaneFlagOf(rowBlock.locked, r) ? ROW_FLAG_LOCKED : 0) |
+      (tabaneFlagOf(columns.hidden, r) ? 0 : ROW_FLAG_VISIBLE) |
+      (tabaneFlagOf(columns.locked, r) ? ROW_FLAG_LOCKED : 0) |
       (tabaneFlagOf(rowBlock.deleted, r) ? ROW_FLAG_DELETED : 0);
   }
 
   // The attributes a ring reads, by key
   const columnOf = new Map<string, number>();
-  rowBlock.properties.keys.forEach((key, c) => {
+  properties.keys.forEach((key, c) => {
     columnOf.set(key, c);
   });
-  const drawsRing = rowBlock.typeNames.map((t) => rings.draws(t));
+  const drawsRing = typeNames.map((t) => rings.draws(t));
+
+  const cache = options.caches?.find((c) => c.name === FILL_TRIANGLES_CACHE);
+  const fills: CachedFills | null = cache
+    ? readFillTrianglesCache(cache.content, n, columns.geometry)
+    : null;
 
   const rowBounds = new Float64Array(n * 4);
-  const fills = rowBlock.fills;
   const triOffsets = new Int32Array(n + 1);
   let indices = new Uint16Array(fills ? fills.indices.length : n * 8);
   let narrow = 0;
@@ -189,9 +235,8 @@ export function rowBlockDataOfTabane(
     const at = geometry.offsets[r];
     const first = vertexStart(child, at);
     const end = vertexStart(child, at + 1);
-    const type = rowBlock.typeNames[rowBlock.types[r]];
-    if (child.type === 'Point' && drawsRing[rowBlock.types[r]]) {
-      const properties = rowBlock.properties;
+    const type = typeNames[types[r]];
+    if (child.type === 'Point' && drawsRing[types[r]]) {
       const ring = rings.ringOf(
         type,
         child.coords[first * stride],
@@ -238,16 +283,16 @@ export function rowBlockDataOfTabane(
     handles: new Int32Array(n).fill(-1),
     ids,
     idHashes,
-    types: rowBlock.types,
-    typeNames: rowBlock.typeNames,
+    types,
+    typeNames,
     geometry,
     itemKeys: keyColumn(rowBlock),
     memberKeys: { offsets: new Int32Array(n + 1), bytes: new Uint8Array(0) },
     groups: new Int32Array(n).fill(-1),
     flags,
-    styles: rowBlock.styles,
-    styleDictionary: rowBlock.styleDictionary,
-    properties: rowBlock.properties,
+    styles,
+    styleDictionary,
+    properties,
     rowBounds,
     triangles,
     index: buildPackedRTree(rowBounds, undefined, sortKeyOf(system)),

@@ -11,7 +11,6 @@
  * packed arrays are compared with the arrays of objects in `packed.test.ts`.
  */
 
-import type { GeometryType, TableGeometry, TableMixedGeometry } from '@sakuzu/tabane';
 import type { ProjectionData } from 'maplibre-gl';
 import { describe, expect, it, vi } from 'vitest';
 import { DEFAULT_FEATURE_STYLE_CONFIG } from '../shared/config/feature-style.js';
@@ -24,7 +23,14 @@ import type {
 } from '../shared/types/model.js';
 import { coordinatesOf } from '../shared/utils/coordinates.js';
 import { prepareTable } from '../table/prepare.js';
-import type { Column, PreparedTable, Table } from '../table/types.js';
+import type {
+  Column,
+  GeometryType,
+  PreparedTable,
+  Table,
+  TableGeometry,
+  TableMixedGeometry,
+} from '../table/types.js';
 import { toRow } from '../test-utils.js';
 import { FeatureDrawer } from '../view/renderers/drawer.js';
 import type { ImageRenderer } from '../view/renderers/image.js';

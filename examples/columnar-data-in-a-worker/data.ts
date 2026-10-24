@@ -7,8 +7,7 @@
 // of Tokyo Bay. `everyPoint`, without parameters, gives the positions of all of them, so that a
 // test can check where they lie.
 
-import type { Table } from '@sakuzu/maplibre-gl-draw/table';
-import type { TableGeometry } from '@sakuzu/tabane';
+import type { Table, TableGeometry } from '@sakuzu/maplibre-gl-draw/table';
 
 /** [west, south, east, north] in degrees */
 type Box = [number, number, number, number];

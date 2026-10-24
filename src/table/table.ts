@@ -17,17 +17,21 @@
 
 import {
   type CoordinateDimensions,
-  type GeometryType,
   isCoordinateDimensions,
   strideOf,
-  type TableGeometry,
-  type TableMixedGeometry,
   type Value,
 } from '@sakuzu/tabane';
 import type { Geometry, Position } from 'geojson';
 import type { Coordinate, Feature, FeatureCoordinates } from '../shared/types/model.js';
 import { setOwnProperty } from '../shared/utils/own-property.js';
-import type { Column, DictionaryColumn, Table } from './types.js';
+import type {
+  Column,
+  DictionaryColumn,
+  GeometryType,
+  Table,
+  TableGeometry,
+  TableMixedGeometry,
+} from './types.js';
 
 /** The number of offset arrays of each geometry type */
 const OFFSET_LEVELS: Readonly<Record<GeometryType, number>> = {

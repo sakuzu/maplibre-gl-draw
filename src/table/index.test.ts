@@ -26,11 +26,14 @@ const EXPORTS = [
   'Column',
   'createTableBuilder',
   'DictionaryColumn',
+  'GeometryType',
   'prepareTable',
   'PreparedTable',
   'Table',
   'TableBuilder',
   'tableFromFeatures',
+  'TableGeometry',
+  'TableMixedGeometry',
   'transferList',
 ];
 

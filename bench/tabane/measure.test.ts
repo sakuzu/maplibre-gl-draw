@@ -9,11 +9,12 @@
  * its features (the ids a run of one origin, the style empty) are written as blocks:
  *
  * - The time to write them, and the bytes of the content and of the files compressed with zstd
- *   (Node's), with and without the fills of the polygons
+ *   (Node's), with and without the caches of the triangles of the polygons
  * - Every row read back and compared with the feature it was written from, the coordinates to
  *   their bits
  * - The time to read the row blocks as the Worker of a page does: decompress a part (fzstd, as in
- *   a browser), read the row block, make it a row block of the tables. Then, for the same rows, the
+ *   a browser), read the row block, make it a row block of the tables (the triangles copied from
+ *   the cache of the file, or made without one). Then, for the same rows, the
  *   way before: rows made objects again and given to the builder of the row blocks, and the
  *   files of the trial of bench/stage0 when they were made (`node bench/stage0/make-blocks.ts`)
  */
@@ -21,17 +22,23 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { zstdCompressSync } from 'node:zlib';
-import { createRowBlockBuilder, rowBlockOfTabane } from '@sakuzu/maplibre-gl-draw/kasane';
+import {
+  createRowBlockBuilder,
+  featureRowOfTabane,
+  rowBlockOfTabane,
+  type TabaneFeatureRow,
+  writeTabaneFeatureBlocks,
+} from '@sakuzu/maplibre-gl-draw/kasane';
 import {
   formatTabaneId,
   listTabaneFileParts,
   packTabaneBlock,
+  readTabaneFileCache,
   readTabaneFilePart,
   readTabaneRowBlock,
-  type TabaneRow,
+  type TabaneCache,
   tabaneRowSuffixOf,
   tabaneRowsOf,
-  writeTabaneBlocks,
 } from '@sakuzu/tabane';
 import { decompress } from 'fzstd';
 import type { Feature } from 'geojson';
@@ -66,9 +73,9 @@ function same(a: unknown, b: unknown): boolean {
   );
 }
 
-function rowsOf(file: string): TabaneRow[] {
+function rowsOf(file: string): TabaneFeatureRow[] {
   const text = readFileSync(join(DATA, `${file}.ndjson`), 'utf8');
-  const out: TabaneRow[] = [];
+  const out: TabaneFeatureRow[] = [];
   for (const line of text.split('\n')) {
     if (!line) continue;
     const f = JSON.parse(line) as Feature;
@@ -89,16 +96,18 @@ describe.skipIf(!MEASURE)('Tabane measured', () => {
       const result: Record<string, unknown> = { file, rows: rows.length };
       for (const fills of [true, false]) {
         const t0 = performance.now();
-        const blocks = writeTabaneBlocks({ parent: 'layer', head: 'V', rows, fills });
+        const blocks = writeTabaneFeatureBlocks({ parent: 'layer', head: 'V', rows });
         const writeMs = performance.now() - t0;
         const t1 = performance.now();
-        const files = blocks.map((b) => packTabaneBlock(b, zstd));
+        const files = blocks.map((b) =>
+          packTabaneBlock(b.block, zstd, fills ? b.caches : undefined),
+        );
         const zstdMs = performance.now() - t1;
         let content = 0;
         let stored = 0;
-        for (const b of blocks) content += b.content.length;
+        for (const b of blocks) content += b.block.content.length;
         for (const f of files) stored += f.length;
-        const label = fills ? 'withFills' : 'withoutFills';
+        const label = fills ? 'withTriangles' : 'withoutTriangles';
         result[label] = {
           blocks: blocks.length,
           writeMs: Math.round(writeMs),
@@ -115,7 +124,7 @@ describe.skipIf(!MEASURE)('Tabane measured', () => {
         for (const f of files) {
           for (const part of listTabaneFileParts(f).slice(1)) {
             const rowBlock = readTabaneRowBlock(readTabaneFilePart(part, zstd));
-            for (const back of tabaneRowsOf(rowBlock)) {
+            for (const back of tabaneRowsOf(rowBlock).map(featureRowOfTabane)) {
               const row = rows[at++];
               if (
                 back.id !== row.id ||
@@ -137,10 +146,15 @@ describe.skipIf(!MEASURE)('Tabane measured', () => {
           for (const part of parts) {
             const a = performance.now();
             const bytes = readTabaneFilePart(part, zstd);
+            const caches: TabaneCache[] = part.caches.map((c) => ({
+              part: 0,
+              name: c.name,
+              content: readTabaneFileCache(c, zstd),
+            }));
             const b = performance.now();
             const rowBlock = readTabaneRowBlock(bytes);
             const c = performance.now();
-            rowBlockOfTabane(rowBlock);
+            rowBlockOfTabane(rowBlock, { caches });
             const d = performance.now();
             t.unzip += b - a;
             t.read += c - b;

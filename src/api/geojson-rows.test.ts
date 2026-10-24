@@ -56,7 +56,7 @@ function documentOf(): { store: MemoryStore; doc: ReturnType<typeof createDocume
 
 /** The features of GeoJSON the rules of a load read in their own way */
 const FEATURES: GeoJSONFeature[] = [
-  // Plain attributes, and a position of three numbers, cut to two
+  // Plain attributes, and a position of three numbers, kept (a load cuts it to two)
   feature({ type: 'Point', coordinates: [1, 2, 30] }, { name: 'a', n: 1, nested: { x: [1, 2] } }),
   // simplestyle-spec read as the style, and its keys kept as attributes
   feature(
@@ -160,12 +160,14 @@ describe('rowsOfGeoJSON', () => {
 
     expect(skipped).toEqual(loaded?.skipped);
     const ids = loaded?.featureIds ?? [];
+    const made = (i: number) => store.getFeature(ids[i] as string)?.geometry;
     expect(rows).toHaveLength(ids.length);
     rows.forEach((row, i) => {
       const made = store.getFeature(ids[i] as string);
       expect({
         type: row.type,
-        geometry: row.geometry,
+        // A Feature holds x and y: the rows keep the z a load cuts
+        geometry: i === 0 ? { type: 'Point', coordinates: [1, 2] } : row.geometry,
         style: row.style,
         properties: row.properties,
         visible: row.visible,
@@ -181,7 +183,8 @@ describe('rowsOfGeoJSON', () => {
     });
 
     // The values the cases are about, read the same way by both
-    expect(rows[0]?.geometry).toEqual({ type: 'Point', coordinates: [1, 2] });
+    expect(rows[0]?.geometry).toEqual({ type: 'Point', coordinates: [1, 2, 30] });
+    expect(made(0)).toEqual({ type: 'Point', coordinates: [1, 2] });
     expect(rows[1]?.style).toEqual({ strokeColor: '#ff0000', strokeWidth: 3, strokeOpacity: 0.5 });
     expect(rows[1]?.properties).toMatchObject({ stroke: '#ff0000' });
     expect(rows[2]?.style).toEqual({ fillColor: '#0000ff', strokeWidth: 2 });
@@ -205,6 +208,60 @@ describe('rowsOfGeoJSON', () => {
     });
     expect(Object.getOwnPropertyNames(rows[13]?.properties)).toEqual(['__proto__']);
     expect(skipped.map((s) => s.index)).toEqual([13, 14, 15, 16, 17]);
+  });
+
+  it('keeps the z and the m of the positions, and says the dimensions of the rows', () => {
+    const line = (positions: number[][]) => feature({ type: 'LineString', coordinates: positions });
+    const flat = rowsOfGeoJSON([
+      VALID,
+      line([
+        [0, 0],
+        [1, 1],
+      ]),
+    ]);
+    expect(flat.dimensions).toBe('xy');
+    expect(flat.rows.map((row) => row.dimensions)).toEqual(['xy', 'xy']);
+
+    const read = rowsOfGeoJSON([
+      VALID,
+      // A position of three values (its z) beside one of two
+      line([
+        [0, 0, 5],
+        [1, 1],
+      ]),
+      // Four values: x, y, z and m
+      feature({ type: 'Point', coordinates: [1, 2, 3, 4] }),
+      // A GeometryCollection: every row of it has the dimensions of the feature
+      feature({
+        type: 'GeometryCollection',
+        geometries: [
+          { type: 'Point', coordinates: [0, 0, 7] },
+          { type: 'Polygon', coordinates: [SQUARE] },
+        ],
+      }),
+      // More values than a row holds: left out, not cut
+      feature({ type: 'Point', coordinates: [1, 2, 3, 4, 5] }),
+    ]);
+    expect(read.dimensions).toBe('xyzm');
+    expect(read.rows.map((row) => [row.index, row.dimensions])).toEqual([
+      [0, 'xy'],
+      [1, 'xyz'],
+      [2, 'xyzm'],
+      [3, 'xyz'],
+      [3, 'xyz'],
+    ]);
+    expect(read.rows[1]?.geometry).toEqual({
+      type: 'LineString',
+      coordinates: [
+        [0, 0, 5],
+        [1, 1],
+      ],
+    });
+    expect(read.rows[2]?.geometry).toEqual({ type: 'Point', coordinates: [1, 2, 3, 4] });
+    expect(read.rows[3]?.geometry).toEqual({ type: 'MultiPoint', coordinates: [[0, 0, 7]] });
+    expect(read.skipped).toEqual([
+      { index: 4, reason: expect.stringMatching(/a position of 5 values/) },
+    ]);
   });
 
   it('names the ID of the input on the first row read from its feature', () => {

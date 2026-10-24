@@ -13,8 +13,9 @@
  * A pure module (types only), so it runs in a Worker as well.
  */
 
-import type { PropertyColumns, TableMixedGeometry, Utf8Column } from '@sakuzu/tabane';
+import type { PropertyColumns, Utf8Column } from '@sakuzu/tabane';
 import type { PackedRTree } from './packed-rtree.js';
+import type { TableMixedGeometry } from './types.js';
 
 /** The bit of {@link RowBlockData.flags} of a row that is shown */
 export const ROW_FLAG_VISIBLE = 1;

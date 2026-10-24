@@ -15,19 +15,19 @@
  * the boxes of the rows of its layer to read the row again.
  */
 
+import { type CoordinateSystem, readValue } from '@sakuzu/tabane';
+import type { Geometry } from 'geojson';
+import { circleRingCoords } from '../shared/circle-rings.js';
+import { drawPropertyKey } from '../shared/properties.js';
 import {
   polygonRanges,
   type RowGeometry,
-  readValue,
   ringOffsetsOf,
   rowGeometryOfColumn,
   singleRowColumn,
   toRowGeometry,
   triangulateRow,
-} from '@sakuzu/tabane';
-import type { Geometry } from 'geojson';
-import { circleRingCoords } from '../shared/circle-rings.js';
-import { drawPropertyKey } from '../shared/properties.js';
+} from '../table/row-geometry.js';
 import {
   columnGeometryAt,
   geometryAt,
@@ -100,6 +100,7 @@ export function writeRowValue(group: RowGroup, row: number, key: string, value: 
  * coordinates whose `x` or `y` changed are told apart (only they are drawn again)
  *
  * @param table The layer of the row (its dimensions, its rows moved)
+ * @param system The system of the coordinates the bbox of the row is made in (that of the tables)
  * @throws when the geometry is not of one of the six types a row holds, or when a position has
  *   more values than the dimensions of the layer
  * @internal
@@ -109,6 +110,7 @@ export function writeRowGeometry(
   group: RowGroup,
   row: number,
   geometry: Geometry,
+  system: CoordinateSystem,
 ): GeometryWrite {
   const next = toRowGeometry(geometry, table.dims);
   const stride = next.stride;
@@ -151,7 +153,7 @@ export function writeRowGeometry(
       group.geometries.setGeometry(row, singleRowColumn(next));
     }
   }
-  const shape = refreshRowShape(table, group, row);
+  const shape = refreshRowShape(table, group, row, system);
   if (shape.ring) {
     // A Circle draws its ring: every coordinate of it moves with its center
     return {
@@ -168,6 +170,8 @@ export function writeRowGeometry(
  * triangles and its bbox, and records it moved in its layer. Called after its geometry or the
  * radius of a Circle was written
  *
+ * @param system The system of the coordinates the bbox of the row is made in, as for every other
+ *   row of the tables (that of the tables)
  * @returns Whether the triangles stayed the same, and the number of coordinates of the ring of a
  *   Circle (0 for any other row)
  * @internal
@@ -176,13 +180,14 @@ export function refreshRowShape(
   table: LayerTable,
   group: RowGroup,
   row: number,
+  system: CoordinateSystem,
 ): { sameTriangles: boolean; ring: number } {
   const geometry = geometryAt(group, row);
   if (!geometry) return { sameTriangles: true, ring: 0 };
   const shape = shapeOf(group, row, geometry);
   const sameTriangles = shape.fill ? writeTriangles(group, row, shape.fill) : true;
   const bounds = group.data.rowBounds;
-  writeBounds(bounds, row, shape.coords, shape.stride, shape.from, shape.to);
+  system.rowBox(shape.coords, shape.stride, shape.from, shape.to, bounds, row * 4);
   table.moveRow(group, row, bounds);
   const at = row * 4;
   if (!Number.isNaN(bounds[at])) {
@@ -320,38 +325,4 @@ function writeTriangles(group: RowGroup, row: number, next: number[]): boolean {
     max < 65_536 ? Uint16Array.from(next) : Uint32Array.from(next),
   );
   return false;
-}
-
-/** Writes the bbox of the coordinates `[from, to)` (NaN when there is none or one is NaN) */
-function writeBounds(
-  bounds: Float64Array,
-  row: number,
-  coords: Float64Array,
-  stride: number,
-  from: number,
-  to: number,
-): void {
-  let minX = Number.POSITIVE_INFINITY;
-  let minY = Number.POSITIVE_INFINITY;
-  let maxX = Number.NEGATIVE_INFINITY;
-  let maxY = Number.NEGATIVE_INFINITY;
-  let ok = to > from;
-  for (let v = from; v < to && ok; v++) {
-    const x = coords[v * stride];
-    const y = coords[v * stride + 1];
-    if (Number.isNaN(x) || Number.isNaN(y)) ok = false;
-    if (x < minX) minX = x;
-    if (x > maxX) maxX = x;
-    if (y < minY) minY = y;
-    if (y > maxY) maxY = y;
-  }
-  const at = row * 4;
-  if (!ok) {
-    bounds.fill(Number.NaN, at, at + 4);
-    return;
-  }
-  bounds[at] = minX;
-  bounds[at + 1] = minY;
-  bounds[at + 2] = maxX;
-  bounds[at + 3] = maxY;
 }

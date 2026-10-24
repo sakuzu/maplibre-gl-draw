@@ -8,7 +8,7 @@
  * (`rowsOfGeoJSON`) all read a feature here, so the same feature is read the same way.
  */
 
-import type { Value } from '@sakuzu/tabane';
+import type { CoordinateDimensions, Value } from '@sakuzu/tabane';
 import type { Geometry, GeometryCollection } from 'geojson';
 import { COORDINATE_DEPTH, describeCoordinateProblem } from '../shared/geometry-validation.js';
 import { foldLegacyImageStyle } from '../shared/legacy-image-style.js';
@@ -87,11 +87,12 @@ function resolveFeatureType(geometryType: SimpleGeometryType, marker: unknown): 
 /**
  * Truncates every GeoJSON position to the two elements [longitude, latitude]
  *
- * GeoJSON allows a third element and beyond (elevation and so on), but the Coordinate
- * of core has two elements. Letting a three-element position through misaligns the
- * coordinate packing of the rendering so that nothing can be drawn, so it is normalized
- * at the import boundary. A value that is not an array is returned as it is (the
- * validation that follows rejects it).
+ * GeoJSON allows a third element and beyond (elevation and so on), but the Coordinate of a
+ * Feature has two elements: a feature read as a Feature (a load, a parse) holds `x` and `y`, and
+ * letting a longer position through misaligns the coordinate packing of the rendering so that
+ * nothing can be drawn. A feature read as rows keeps every value (`readGeoJSONFeature` reading
+ * `'all'` of the positions). A value that is not an array is returned as it is (the validation
+ * that follows rejects it).
  */
 function truncatePositions(value: unknown): unknown {
   if (!Array.isArray(value)) return value;
@@ -99,13 +100,47 @@ function truncatePositions(value: unknown): unknown {
   return value.map(truncatePositions);
 }
 
+/** A copy of the arrays of coordinates, every value of their positions kept */
+function copyPositions(value: unknown): unknown {
+  if (!Array.isArray(value)) return value;
+  if (typeof value[0] === 'number') return value.slice();
+  return value.map(copyPositions);
+}
+
+/** The most values of a position a row holds: `x`, `y`, `z` and `m` */
+const MOST_POSITION_VALUES = 4;
+
+/** The number of values of the longest position of coordinates (2 at least) */
+function longestPosition(value: unknown, longest: number): number {
+  if (!Array.isArray(value)) return longest;
+  if (typeof value[0] === 'number') return Math.max(longest, value.length);
+  let most = longest;
+  for (const item of value) most = longestPosition(item, most);
+  return most;
+}
+
 /**
- * Returns a copy of the geometry with every position truncated to two elements, or the
+ * The dimensions of positions of GeoJSON of at most `longest` values: the third value of a
+ * position is its height (`z`, RFC 7946), the fourth a measure (`m`)
+ */
+function dimensionsOfPositions(longest: number): CoordinateDimensions {
+  return longest >= 4 ? 'xyzm' : longest === 3 ? 'xyz' : 'xy';
+}
+
+/** Which values of the positions are read: `x` and `y`, or every value */
+type PositionsRead = 'xy' | 'all';
+
+/**
+ * Returns a copy of the geometry with its positions read as `positions` says (every position
+ * truncated to two elements, or kept), and the number of values of its longest position, or the
  * reason it cannot be imported
  *
  * Every geometry of a GeometryCollection must be valid for the GeometryCollection to be imported.
  */
-function normalizeGeometry(geometry: unknown): Geometry | string {
+function normalizeGeometry(
+  geometry: unknown,
+  positions: PositionsRead,
+): { geometry: Geometry; longest: number } | string {
   if (geometry === null || geometry === undefined) return 'the feature has no geometry';
   if (!isRecord(geometry)) return 'the geometry is not an object';
   const { type } = geometry;
@@ -114,22 +149,34 @@ function normalizeGeometry(geometry: unknown): Geometry | string {
       return 'the GeometryCollection has no geometries array';
     }
     const geometries: Geometry[] = [];
+    let longest = 2;
     for (const sub of geometry.geometries) {
-      const normalized = normalizeGeometry(sub);
+      const normalized = normalizeGeometry(sub, positions);
       if (typeof normalized === 'string') {
         return `a geometry of the GeometryCollection: ${normalized}`;
       }
-      geometries.push(normalized);
+      geometries.push(normalized.geometry);
+      longest = Math.max(longest, normalized.longest);
     }
-    return { type, geometries };
+    return { geometry: { type, geometries }, longest };
   }
   if (typeof type !== 'string' || !SUPPORTED_GEOMETRY_TYPES.has(type)) {
     return `unsupported geometry type "${String(type)}"`;
   }
-  const coordinates = truncatePositions(geometry.coordinates);
-  const problem = describeCoordinateProblem(type, coordinates);
+  if (positions === 'xy') {
+    const coordinates = truncatePositions(geometry.coordinates);
+    const problem = describeCoordinateProblem(type, coordinates);
+    if (problem) return `the ${type} has ${problem}`;
+    return { geometry: { type, coordinates } as Geometry, longest: 2 };
+  }
+  const coordinates = copyPositions(geometry.coordinates);
+  const longest = longestPosition(coordinates, 2);
+  if (longest > MOST_POSITION_VALUES) {
+    return `the ${type} has a position of ${longest} values, more than the ${MOST_POSITION_VALUES} of x, y, z and m`;
+  }
+  const problem = describeCoordinateProblem(type, coordinates, MOST_POSITION_VALUES);
   if (problem) return `the ${type} has ${problem}`;
-  return { type, coordinates } as Geometry;
+  return { geometry: { type, coordinates } as Geometry, longest };
 }
 
 /**
@@ -343,6 +390,11 @@ export interface GeoJSONFeatureRead {
    * when the feature embeds one (it takes the ID of the new file)
    */
   readonly properties: Record<string, Value>;
+  /**
+   * The dimensions of the positions of its geometry, as they are read: `xy` when they are read
+   * as `x` and `y`, else those of its longest position (`xyz` for three values, `xyzm` for four)
+   */
+  readonly dimensions: CoordinateDimensions;
   /** The image a single Image point embeds, with the ID the input gives its file */
   readonly image?: {
     readonly mimeType: string;
@@ -355,7 +407,9 @@ export interface GeoJSONFeatureRead {
  * Reads a feature of GeoJSON
  *
  * The geometry is validated and normalized first, and a feature that cannot be read is
- * returned as a reason instead of throwing. A Multi* geometry is kept as a Multi feature unless
+ * returned as a reason instead of throwing. Its positions are read as `x` and `y` (a Feature holds
+ * them) or with every value (the rows of a layer hold a `z` and an `m`): a position of more than
+ * four values cannot be read then. A Multi* geometry is kept as a Multi feature unless
  * `flattenMulti`. A GeometryCollection is folded by type into at most three features. The
  * type, the style, visible, locked, the IDs it names and the values of the library are read
  * from the properties with the maplibre-gl-draw: prefix; the style falls back to the keys of
@@ -368,6 +422,7 @@ export interface GeoJSONFeatureRead {
 export function readGeoJSONFeature(
   geoFeature: unknown,
   flattenMulti: boolean,
+  positions: PositionsRead,
 ): GeoJSONFeatureRead | string {
   if (!isRecord(geoFeature)) return 'the entry is not a GeoJSON Feature object';
   const rawProperties = geoFeature.properties;
@@ -375,8 +430,9 @@ export function readGeoJSONFeature(
     return 'the properties are not an object';
   }
   const properties = (rawProperties ?? null) as Record<string, unknown> | null;
-  const geometry = normalizeGeometry(geoFeature.geometry);
-  if (typeof geometry === 'string') return geometry;
+  const normalized = normalizeGeometry(geoFeature.geometry, positions);
+  if (typeof normalized === 'string') return normalized;
+  const geometry = normalized.geometry;
 
   // An id is a string; a number (allowed for a GeoJSON id) is normalized into its string
   // form, and anything else is no id. The prefixed property takes precedence, then the
@@ -482,6 +538,7 @@ export function readGeoJSONFeature(
     visible,
     locked,
     properties: userProperties,
+    dimensions: dimensionsOfPositions(normalized.longest),
     ...(image && { image }),
   };
 }

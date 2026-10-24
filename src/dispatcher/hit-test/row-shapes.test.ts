@@ -14,6 +14,7 @@
  *   feature of the row instead
  */
 
+import { planarCoordinates } from '@sakuzu/tabane';
 import type { Geometry } from 'geojson';
 import { describe, expect, it, vi } from 'vitest';
 import { hitTestLayerTable, rowHitShape } from '../../feature-table/hit-test.js';
@@ -174,7 +175,7 @@ describe('the hits of the rows tested on their columns', () => {
     const { table, internals } = tablesOfFeatures('layer', [feature('p', 'Polygon', [square])]);
     const group = table.groupAt(0);
     const grown: Geometry = { type: 'Polygon', coordinates: [ring(0, 0, 5, 9)] };
-    writeRowGeometry(table, group, 0, grown as never);
+    writeRowGeometry(table, group, 0, grown as never, planarCoordinates);
     const service = new HitTestServiceImpl(new MemoryStore(), new RBushSpatialIndex());
     const shape = rowHitShape(group, 0);
     if (!shape) throw new Error('a shape');

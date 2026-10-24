@@ -24,7 +24,6 @@
 import {
   decodeCanonicalValue,
   encodeCanonicalValue,
-  type TableGeometry,
   utf8Bytes,
   VALUE_ABSENT,
   VALUE_FALSE,
@@ -39,6 +38,7 @@ import {
 } from '@sakuzu/tabane';
 import { DrawError } from '../shared/draw-error.js';
 import { GeometryColumnReader } from '../table/table.js';
+import type { TableGeometry } from '../table/types.js';
 import { drawValueOfInput } from '../table/value-input.js';
 
 /**

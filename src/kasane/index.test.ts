@@ -72,9 +72,16 @@ describe('the kasane subpath', () => {
       ...readdirSync(join(SRC, 'feature-table'))
         .filter((name) => name.endsWith('.ts') && !name.endsWith('.test.ts'))
         .map((name) => join(SRC, 'feature-table', name)),
-      ...['row-group-builder.ts', 'row-group-merge.ts', 'row-keys.ts'].map((name) =>
-        join(SRC, 'table', name),
-      ),
+      ...[
+        'row-group-builder.ts',
+        'row-group-merge.ts',
+        'row-geometry.ts',
+        'row-keys.ts',
+        'tabane/blocks.ts',
+        'tabane/columns.ts',
+        'tabane/rows.ts',
+        'tabane/triangles.ts',
+      ].map((name) => join(SRC, 'table', name)),
     ];
     const plain = files.filter((file) => /new Error\(/.test(readFileSync(file, 'utf8')));
     expect(plain.map((file) => relative(SRC, file))).toEqual([]);

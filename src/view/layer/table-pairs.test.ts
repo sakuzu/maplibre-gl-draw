@@ -10,10 +10,11 @@
  * - The fill instances of a row are its pairs
  */
 
-import { pairTriangles } from '@sakuzu/tabane';
+import { planarCoordinates } from '@sakuzu/tabane';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { rowTriangles } from '../../feature-table/row-read.js';
 import { writeRowGeometry } from '../../feature-table/row-write.js';
+import { pairTriangles } from '../../table/row-geometry.js';
 import { createTestDrawer, feature, tablesOfFeatures } from '../../test-utils.js';
 import { buildEarcutInput } from '../renderers/polygon/earcut-input.js';
 import { ROWS_KIND, RowsPalette, readRowsInstance } from '../renderers/rows/rows-format.js';
@@ -102,21 +103,27 @@ describe('the pairs of triangles of the rows', () => {
     pack();
     expect(calls.earcut).toBe(0);
     // A corner of the square of the second row moved: its two polygons are triangulated again
-    writeRowGeometry(tables.table, group, 1, {
-      type: 'MultiPolygon',
-      coordinates: [
-        [
+    writeRowGeometry(
+      tables.table,
+      group,
+      1,
+      {
+        type: 'MultiPolygon',
+        coordinates: [
           [
-            [5, 5],
-            [6.3, 5],
-            [6, 6],
-            [5, 6],
-            [5, 5],
+            [
+              [5, 5],
+              [6.3, 5],
+              [6, 6],
+              [5, 6],
+              [5, 5],
+            ],
           ],
+          [round(8, 8, 7)],
         ],
-        [round(8, 8, 7)],
-      ],
-    });
+      },
+      planarCoordinates,
+    );
     expect(calls.earcut).toBe(2);
     calls.earcut = 0;
     pack();

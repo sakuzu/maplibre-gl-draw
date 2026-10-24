@@ -18,7 +18,7 @@
  * nor an outline draws nothing; a width without a created zoom is fixed on screen (negative).
  */
 
-import { polygonRingRuns, type ValueStringCache } from '@sakuzu/tabane';
+import type { ValueStringCache } from '@sakuzu/tabane';
 import type { RowGroup } from '../../feature-table/layer-table.js';
 import { geometryAt, type RowGeometryAt } from '../../feature-table/layer-table.js';
 import {
@@ -35,6 +35,7 @@ import type { Feature, FeatureType, StyleRule } from '../../shared/types/model.j
 import type { Color } from '../../shared/types/style.js';
 import type { PixelRatioInput } from '../../shared/utils/pixel-ratio.js';
 import { resolveContentPixelRatio, resolvePixelRatio } from '../../shared/utils/pixel-ratio.js';
+import { polygonRingRuns } from '../../table/polygon-rings.js';
 import type { GeometryColumnReader } from '../../table/table.js';
 import { toPackedPointStyle } from '../renderers/batch-manager.js';
 import { dashSegmentLength } from '../renderers/line/dash.js';

@@ -18,6 +18,7 @@
  * - The draws of a mixed layer are a few, and what they hold is in the ledger
  */
 
+import { planarCoordinates } from '@sakuzu/tabane';
 import type { ProjectionData } from 'maplibre-gl';
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { RowField } from '../../api/tables.js';
@@ -587,15 +588,21 @@ describe('the drawing of a layer held as rows in one draw per chunk', () => {
     const group = table.groupAt(0);
     // A line row made longer than its place
     const row = features.findIndex((f) => f.id.startsWith('l'));
-    const longer = writeRowGeometry(table, group, row, {
-      type: 'LineString',
-      coordinates: [
-        [0, 0],
-        [0.1, 0.1],
-        [0.2, 0],
-        [0.3, 0.1],
-      ],
-    });
+    const longer = writeRowGeometry(
+      table,
+      group,
+      row,
+      {
+        type: 'LineString',
+        coordinates: [
+          [0, 0],
+          [0.1, 0.1],
+          [0.2, 0],
+          [0.3, 0.1],
+        ],
+      },
+      planarCoordinates,
+    );
     renderer.rowsWritten('layer', [
       { group: group.handle, row, what: ROW_WRITE_GEOMETRY, ...longer, keys: [] },
     ]);

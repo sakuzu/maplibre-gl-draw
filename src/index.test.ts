@@ -219,11 +219,14 @@ const TABLE = [
   'Column',
   'createTableBuilder',
   'DictionaryColumn',
+  'GeometryType',
   'PreparedTable',
   'prepareTable',
   'Table',
   'TableBuilder',
   'tableFromFeatures',
+  'TableGeometry',
+  'TableMixedGeometry',
   'transferList',
 ];
 
@@ -240,6 +243,7 @@ const KASANE = [
   'createTableStore',
   'DraggedRows',
   'draggedRowsOf',
+  'featureRowOfTabane',
   'FeatureTables',
   'FeatureTablesOptions',
   'FeatureTablesWorker',
@@ -280,11 +284,17 @@ const KASANE = [
   'RowValues',
   'rowValuesOf',
   'RowWrite',
+  'TABANE_FEATURE_COLUMNS',
+  'TabaneFeatureBlock',
+  'TabaneFeatureBlocksInput',
+  'TabaneFeatureRow',
+  'tabaneRowOf',
   'TableGroupField',
   'TableGroupPatch',
   'TableScanOptions',
   'TableStoreCopy',
   'transferList',
+  'writeTabaneFeatureBlocks',
 ];
 
 /** Layer 2: the building blocks for custom shaders of src/webgl/index.ts */

@@ -18,6 +18,7 @@
  */
 
 import type { CoordinateDimensions } from '@sakuzu/tabane';
+import { planarCoordinates } from '@sakuzu/tabane';
 import type { Geometry } from 'geojson';
 import type { ProjectionData } from 'maplibre-gl';
 import { beforeEach, describe, expect, it } from 'vitest';
@@ -298,7 +299,7 @@ function editor(live: ReturnType<typeof drawn>, features: Feature[]) {
   };
   return {
     geometry(row: number, geometry: Geometry): void {
-      const write = writeRowGeometry(live.table, group, row, geometry);
+      const write = writeRowGeometry(live.table, group, row, geometry, planarCoordinates);
       features[row] = { ...features[row], geometry: geometry as Feature['geometry'] };
       tell(row, ROW_WRITE_GEOMETRY, write);
     },
@@ -313,7 +314,7 @@ function editor(live: ReturnType<typeof drawn>, features: Feature[]) {
     },
     radius(row: number, radius: number): void {
       writeRowValue(group, row, RADIUS, radius);
-      const shape = refreshRowShape(live.table, group, row);
+      const shape = refreshRowShape(live.table, group, row, planarCoordinates);
       features[row] = {
         ...features[row],
         properties: { ...features[row].properties, [RADIUS]: radius },

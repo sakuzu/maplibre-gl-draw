@@ -43,7 +43,7 @@ const KASANE_CATEGORIES = [
   'Features selected in bulk and dragged',
   'Pictures of points drawn with the rows',
   'Build row blocks in a Worker',
-  'Tabane blocks (@sakuzu/tabane) read as row blocks',
+  'Features as the rows of Tabane blocks (@sakuzu/tabane), and the blocks read as row blocks',
 ];
 
 /** The sections of src/webgl/index.ts, which are its categories (in this order) */

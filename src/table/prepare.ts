@@ -12,12 +12,11 @@
  * A pure module: it depends on neither maplibre nor WebGL nor the DOM.
  */
 
-import type { TableGeometry } from '@sakuzu/tabane';
 import type { BBox } from '../geometry/types.js';
 import { buildPackedRTree } from './packed-rtree.js';
 import { partitionRows } from './partition.js';
 import { isDictionaryColumn, TableReader } from './table.js';
-import type { Column, PreparedTable, Table } from './types.js';
+import type { Column, PreparedTable, Table, TableGeometry } from './types.js';
 
 /**
  * Computes the bboxes, the spatial chunks and the spatial index of a table, and returns them

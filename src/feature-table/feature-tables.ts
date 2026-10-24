@@ -21,6 +21,7 @@ import {
   dimsWithin,
   isCoordinateDimensions,
   planarCoordinates,
+  sortKeyOf,
   utf8ColumnFromStrings,
   utf8ColumnLength,
   utf8String,
@@ -870,7 +871,7 @@ class FeatureTablesStore implements FeatureTablesInternals {
           return count;
         },
       },
-      { whenIdle: options.whenIdle },
+      { whenIdle: options.whenIdle, sortKey: sortKeyOf(this.coordinates) },
     );
   }
 
@@ -3428,7 +3429,7 @@ class FeatureTablesStore implements FeatureTablesInternals {
     let keys: string[] | null = null;
     const geometry = columns.geometry?.[i];
     if (geometry !== undefined) {
-      shape = writeRowGeometry(layer, group, row, geometry as never);
+      shape = writeRowGeometry(layer, group, row, geometry as never, this.coordinates);
       what |= ROW_WRITE_GEOMETRY;
     }
     if (styleNumbers) {
@@ -3467,7 +3468,7 @@ class FeatureTablesStore implements FeatureTablesInternals {
       keys.push(key);
       if (isRadiusKey(group, row, key)) {
         // The ring of a Circle follows its radius
-        const ring = refreshRowShape(layer, group, row);
+        const ring = refreshRowShape(layer, group, row, this.coordinates);
         shape = { sameShape: ring.sameTriangles, from: 0, to: ring.ring };
         what |= ROW_WRITE_GEOMETRY;
       }

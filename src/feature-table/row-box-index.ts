@@ -60,6 +60,29 @@ export interface RowBoxIndexOptions {
   readonly whenIdle?: IdleScheduler;
   /** The clock the deadlines of the slices are read with (`idleNow` when omitted) */
   readonly now?: () => number;
+  /**
+   * The key the rows are put in order by, from the center of their boxes: that of the system of
+   * the coordinates of the tables (`CoordinateSystem.sortKey`; the Hilbert curve of the centers
+   * over their extent when omitted)
+   */
+  readonly sortKey?: (centerX: number, centerY: number) => number;
+}
+
+/** The bytes of a number, to read its bits */
+const KEY_BITS = new DataView(new ArrayBuffer(8));
+
+/**
+ * The upper 32 bits of a number made to sort as the number does: the bits of a key sorted as
+ * unsigned integers are in the order of the keys (two keys that differ in their lower bits only
+ * may come in either order, which changes no row the index finds)
+ *
+ * @internal
+ */
+export function orderedKeyBits(key: number): number {
+  KEY_BITS.setFloat64(0, key);
+  const high = KEY_BITS.getUint32(0);
+  // A negative number has its bits flipped, a positive one its sign bit set
+  return (high & 0x80000000 ? ~high : high | 0x80000000) >>> 0;
 }
 
 /** From how many rows marked the index is built again rather than written row by row */
@@ -84,7 +107,7 @@ const RADIX = 1 << RADIX_BITS;
 
 /** Where a build is: reading the boxes of the rows */
 const READ = 0;
-/** Working out the key of each row on the Hilbert curve */
+/** Working out the key of each row (the Hilbert curve, or the key of the system of the coordinates) */
 const KEY = 1;
 /** Counting the keys of a pass of the sort */
 const COUNT = 2;
@@ -127,6 +150,7 @@ export class RowBoxIndex {
   readonly #source: RowBoxSource;
   readonly #whenIdle: IdleScheduler;
   readonly #now: () => number;
+  readonly #sortKey: ((centerX: number, centerY: number) => number) | undefined;
   /** The box each handle is indexed with (minX, minY, maxX, maxY) */
   #boxes = new Float64Array(0);
   /** The layer each handle is indexed in, -1 for a handle not indexed */
@@ -148,6 +172,7 @@ export class RowBoxIndex {
     this.#source = source;
     this.#whenIdle = options.whenIdle ?? whenIdle;
     this.#now = options.now ?? idleNow;
+    this.#sortKey = options.sortKey;
     // rbush calls these unbound: they read the arrays of the index through it
     const index = this;
     class Tree extends RBush<number> {
@@ -388,17 +413,25 @@ export class RowBoxIndex {
     build.phase = KEY;
   }
 
-  /** Works out the keys of up to `n` rows on the Hilbert curve of the centers */
+  /**
+   * Works out the keys of up to `n` rows from the centers of their boxes: the key of the system of
+   * the coordinates, or the Hilbert curve of the centers
+   */
   #key(build: Build, n: number): void {
     const boxes = this.#boxes;
     const width = build.maxX - build.minX || 1;
     const height = build.maxY - build.minY || 1;
     const scale = HILBERT_SIDE - 1;
+    const sortKey = this.#sortKey;
     const end = Math.min(build.count, build.i + n);
     for (let i = build.i; i < end; i++) {
       const at = (build.items[i] - 1) * 4;
       const cx = (boxes[at] + boxes[at + 2]) / 2;
       const cy = (boxes[at + 1] + boxes[at + 3]) / 2;
+      if (sortKey) {
+        build.keys[i] = orderedKeyBits(sortKey(cx, cy));
+        continue;
+      }
       const x = Math.floor((scale * (cx - build.minX)) / width);
       const y = Math.floor((scale * (cy - build.minY)) / height);
       build.keys[i] = hilbertIndex(x, y);

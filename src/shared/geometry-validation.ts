@@ -29,29 +29,24 @@ export const COORDINATE_DEPTH: Readonly<Record<string, number>> = {
   MultiPolygon: 3,
 };
 
-/** Whether the value is a position of two finite numbers */
-function isPosition(value: unknown): value is Coordinate {
-  return (
-    Array.isArray(value) &&
-    value.length === 2 &&
-    typeof value[0] === 'number' &&
-    Number.isFinite(value[0]) &&
-    typeof value[1] === 'number' &&
-    Number.isFinite(value[1])
-  );
+/** Whether the value is a position of two finite numbers, or up to `most` of them */
+function isPosition(value: unknown, most: number): value is Coordinate {
+  if (!Array.isArray(value) || value.length < 2 || value.length > most) return false;
+  for (const v of value) if (typeof v !== 'number' || !Number.isFinite(v)) return false;
+  return true;
 }
 
 /**
  * Returns the nesting depth of well-formed coordinates, or -1 when they are malformed
  * (a non-finite number, an empty array or irregular nesting)
  */
-function coordinateDepth(value: unknown): number {
-  if (isPosition(value)) return 0;
+function coordinateDepth(value: unknown, most: number): number {
+  if (isPosition(value, most)) return 0;
   if (!Array.isArray(value) || value.length === 0) return -1;
-  const depth = coordinateDepth(value[0]);
+  const depth = coordinateDepth(value[0], most);
   if (depth < 0) return -1;
   for (let i = 1; i < value.length; i++) {
-    if (coordinateDepth(value[i]) !== depth) return -1;
+    if (coordinateDepth(value[i], most) !== depth) return -1;
   }
   return depth + 1;
 }
@@ -89,17 +84,23 @@ function polygonProblem(rings: Coordinate[][]): string | null {
  * Returns why the coordinates cannot be used for a feature of the type, or null when they
  * can
  *
- * Every position must be two finite numbers, and no array may be empty. A built-in type
- * must have its nesting depth, a line has at least two positions, and a ring at least four
- * with the first and the last equal. A custom type may use any regular depth.
+ * Every position must be two finite numbers (or up to `positionValues`), and no array may be
+ * empty. A built-in type must have its nesting depth, a line has at least two positions, and a
+ * ring at least four with the first and the last equal (their `x` and `y`). A custom type may use
+ * any regular depth.
  *
  * @param type - the feature type
  * @param coordinates - the coordinates to check
+ * @param positionValues - the most values of a position (2 when omitted: `x` and `y`)
  * @returns a short phrase that reads after "has" (for example "malformed coordinates"), or
  *   null
  */
-export function describeCoordinateProblem(type: string, coordinates: unknown): string | null {
-  const depth = coordinateDepth(coordinates);
+export function describeCoordinateProblem(
+  type: string,
+  coordinates: unknown,
+  positionValues = 2,
+): string | null {
+  const depth = coordinateDepth(coordinates, positionValues);
   if (depth < 0) return 'malformed coordinates';
   const expected = COORDINATE_DEPTH[type];
   if (expected !== undefined && depth !== expected) {

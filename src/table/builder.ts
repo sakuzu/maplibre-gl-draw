@@ -16,15 +16,9 @@
  * A pure module (it depends on nothing outside `/table`), so it runs in a Worker as well.
  */
 
-import {
-  type CoordinateDimensions,
-  copyCoordinates,
-  type GeometryType,
-  strideOf,
-  type TableGeometry,
-} from '@sakuzu/tabane';
+import { type CoordinateDimensions, copyCoordinates, strideOf } from '@sakuzu/tabane';
 import type { Feature, Geometry, Position } from 'geojson';
-import type { Column, Table } from './types.js';
+import type { Column, GeometryType, Table, TableGeometry } from './types.js';
 
 /**
  * Builds a table one row at a time, for readers that stream their rows.

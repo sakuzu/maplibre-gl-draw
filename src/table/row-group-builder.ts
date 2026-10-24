@@ -19,30 +19,29 @@ import {
   type CoordinateDimensions,
   type CoordinateSystem,
   encodeCanonicalValue,
-  type GeometryType,
   hashByteRun,
   hashUtf8,
   planarCoordinates,
-  polygonRanges,
-  type RowGeometry,
-  ringOffsetsOf,
   sortKeyOf,
   strideOf,
-  type TableGeometry,
-  type TableMixedGeometry,
-  toRowGeometry,
-  triangulateRow,
   type Utf8Column,
   Utf8ColumnBuilder,
   utf8ColumnFromStrings,
   type ValueColumn,
   ValueColumnBuilder,
-  WIDE_VERTICES,
 } from '@sakuzu/tabane';
 import type { Geometry } from 'geojson';
 import { circleRowRings } from '../shared/circle-rings.js';
 import { DrawError } from '../shared/draw-error.js';
 import { buildPackedRTree } from './packed-rtree.js';
+import {
+  polygonRanges,
+  type RowGeometry,
+  ringOffsetsOf,
+  toRowGeometry,
+  triangulateRow,
+  WIDE_VERTICES,
+} from './row-geometry.js';
 import {
   ROW_FLAG_DELETED,
   ROW_FLAG_LOCKED,
@@ -53,6 +52,7 @@ import {
 } from './row-group-types.js';
 import { compareRowKeys, type GroupKeySource, type RowKeySource } from './row-keys.js';
 import type { RowRings } from './row-rings.js';
+import type { GeometryType, TableGeometry, TableMixedGeometry } from './types.js';
 
 /**
  * The target number of rows of a row block
