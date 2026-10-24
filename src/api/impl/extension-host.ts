@@ -382,31 +382,6 @@ export function createExtensionHost(deps: ExtensionHostDeps): ExtensionHost {
       });
     };
   const interactions: PluginInteractions = {
-    filterSelectionCandidates(candidateIds) {
-      let filtered = candidateIds;
-      eachPlugin('filterSelection', (plugin) => {
-        const filter = plugin.interaction?.filterSelection;
-        if (filter) filtered = filter.call(plugin.interaction, filtered);
-        return false;
-      });
-      return filtered;
-    },
-    filterSelectionRows(view, handles) {
-      let filtered = handles;
-      eachPlugin('filterSelectionRows', (plugin) => {
-        const filter = plugin.interaction?.filterSelectionRows;
-        if (filter) filtered = filter.call(plugin.interaction, view, filtered);
-        return false;
-      });
-      return filtered;
-    },
-    canDrag(featureId, vertices) {
-      // A plugin that answers false stops the drag; one that throws is reported and skipped
-      return !eachPlugin('canDrag', (plugin) => {
-        const allow = plugin.interaction?.canDrag;
-        return allow ? allow.call(plugin.interaction, featureId, vertices) === false : false;
-      });
-    },
     handleFeatureClick: click('onFeatureClick'),
     handleFeatureDoubleClick: click('onFeatureDoubleClick'),
     isPluginInteracting: () =>

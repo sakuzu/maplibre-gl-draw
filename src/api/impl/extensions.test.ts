@@ -605,66 +605,6 @@ describe('the input of the plugins and the modes', () => {
     expect(engine.modeManager.getMode()).toBe('probe');
   });
 
-  it('narrows a selection with interaction.filterSelection', () => {
-    const { store } = engine.context;
-    const layerId = store.listLayers()[0].id;
-    const base = {
-      layerId,
-      groupId: undefined,
-      properties: {},
-      style: {},
-      locked: false,
-      visible: true,
-    };
-    store.createFeature({
-      ...base,
-      id: 'kept',
-      type: 'Point',
-      geometry: { type: 'Point', coordinates: [1, 1] },
-    });
-    store.createFeature({
-      ...base,
-      id: 'refused',
-      type: 'Point',
-      geometry: { type: 'Point', coordinates: [-1, -1] },
-    });
-    const filterSelection = vi.fn((ids: readonly string[]) => ids.filter((id) => id !== 'refused'));
-    engine.extensions.collections.plugins.add(plugin('p', { interaction: { filterSelection } }));
-
-    createSyntheticInput(engine).click([1, 1]);
-    expect(store.getSelection().ids).toEqual(['kept']);
-
-    createSyntheticInput(engine).click([-1, -1]);
-    expect(filterSelection).toHaveBeenLastCalledWith(['refused']);
-    expect(store.getSelection().ids).toEqual([]);
-  });
-
-  it('asks every plugin whether a drag may grab what it moves (canDrag)', () => {
-    const error = vi.spyOn(console, 'error').mockImplementation(() => undefined);
-    const { interactions } = engine.extensions;
-    expect(interactions.canDrag('f')).toBe(true);
-    const first = vi.fn(() => true);
-    engine.extensions.collections.plugins.add(plugin('a', { interaction: { canDrag: first } }));
-    engine.extensions.collections.plugins.add(
-      plugin('throws', {
-        interaction: {
-          canDrag: () => {
-            throw new Error('no');
-          },
-        },
-      }),
-    );
-    expect(interactions.canDrag('f', [{ ring: 0, index: 1 }])).toBe(true);
-    expect(first).toHaveBeenCalledWith('f', [{ ring: 0, index: 1 }]);
-    engine.extensions.collections.plugins.add(
-      plugin('b', { interaction: { canDrag: (id: string) => id !== 'held' } }),
-    );
-    expect(interactions.canDrag('f')).toBe(true);
-    expect(interactions.canDrag('held')).toBe(false);
-    expect(error).toHaveBeenCalled();
-    error.mockRestore();
-  });
-
   it('tells the plugins about a feature clicked again, with the feature and the click', () => {
     const { store } = engine.context;
     const layerId = store.listLayers()[0].id;

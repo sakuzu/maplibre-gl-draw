@@ -48,7 +48,7 @@ export { BULK_MOVE_SET };
 /**
  * The rows in a box drawn over a Store of rows, read on their columns: the rows that can be
  * seen and are not locked (nor their group or their layer), whose geometry meets the box by the
- * test of their type; narrowed by the plugins that narrow rows
+ * test of their type
  *
  * A row whose extent is inside the box is in it without being made a feature (the test of a
  * point, a line, an area or a circle is met then); a row on a side of the box is made the
@@ -121,39 +121,7 @@ export function queryRowsInBox(box: BoxSelection, context: EngineModeContext): T
       }
     }
   }
-  const rows = TableSelection.of([...found]);
-  return narrowRows(rows, context);
-}
-
-/**
- * The rows the plugins keep (each plugin that narrows the rows of a selection, by layer); the
- * rows of a layer are kept as they are when no plugin narrows rows
- *
- * @internal
- */
-export function narrowRows(rows: TableSelection, context: EngineModeContext): TableSelection {
-  const plugins = context.plugins;
-  const tables = context.store.tables;
-  const internals = featureTablesInternals(tables);
-  if (!plugins?.filterSelectionRows || !tables || !internals || rows.count === 0) return rows;
-  const byLayer = new Map<string, number[]>();
-  for (const handle of rows.handles) {
-    const layerId = internals.placeOf(handle)?.layer.layerId;
-    if (layerId === undefined) continue;
-    let list = byLayer.get(layerId);
-    if (!list) {
-      list = [];
-      byLayer.set(layerId, list);
-    }
-    list.push(handle);
-  }
-  const kept: number[] = [];
-  for (const [layerId, handles] of byLayer) {
-    const view = tables.get(layerId);
-    if (!view) continue;
-    kept.push(...plugins.filterSelectionRows(view, Int32Array.from(handles)));
-  }
-  return TableSelection.of(kept);
+  return TableSelection.of([...found]);
 }
 
 /**

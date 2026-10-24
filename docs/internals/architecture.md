@@ -976,9 +976,9 @@ A `Plugin` has a unique `name`, `onAdd(ctx)` and optionally `onRemove()`;
 an `api`, which others reach with `draw.extensions.plugins.getApi(name)`;
 `input` receivers that run before the mode and consume an event by
 returning `true`; and `interaction` hooks through which select mode
-delegates clicks and in-place editing to it (`filterSelection`,
-`onFeatureClick`, `onFeatureDoubleClick`, `onDrawCommit`, `isBusy`,
-`finish`, `cancel` and `container`). The host answers select mode through
+delegates clicks and in-place editing to it (`onFeatureClick`,
+`onFeatureDoubleClick`, `onDrawCommit`, `isBusy`, `finish`, `cancel` and
+`container`). The host answers select mode through
 `PluginInteractions` (`src/modes/handler.ts`), calling the plugins in the
 order they were added and reporting and skipping one that throws.
 

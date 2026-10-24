@@ -271,18 +271,6 @@ draw.extensions.plugins.add(createShortcuts());
 
 `interaction` を使うと、プラグインが選択モードの動きに加われます。
 
-- `filterSelection(candidateIds)` は、クリックや矩形で選ぶ前に
-  呼ばれ、選んでよい ID を返します
-- `filterSelectionRows(view, handles)` (実験的) は、行で持つレイヤーの
-  多くの地物を矩形で選ぶ前に呼ばれ、選んでよい行の札を、地物を作らずに
-  返します。持たないプラグインは行を絞りません
-- `canDrag(featureId, vertices)` は、選択のモードのドラッグが地物の
-  何かをつかむ前に呼ばれます。つかむのは頂点のいくつか (`vertices`。
-  2 つの間に頂点を足すときは空) か、地物の全体 (`vertices` なし。移動、
-  拡大縮小、回転、半径のドラッグ) です。ドラッグが変える地物ごとに
-  呼ばれ、共有の頂点でついて動く地物も含みます。どれかに false を返すと、
-  ロックされた地物と同じくドラッグは始まりません。まとめて選んだ地物の
-  ドラッグと、提供者のハンドルのドラッグでは呼ばれません
 - `onFeatureClick(feature, event)` は、選ばれている地物がもう一度
   クリックされたときに呼ばれます。true を返すと、プラグインがその
   クリックを処理したことになります
@@ -291,29 +279,6 @@ draw.extensions.plugins.add(createShortcuts());
 - `onDrawCommit(feature)` は、描画モードが地物を作ったときに呼ばれ
   ます。`ctx.commitFeature` の確定 (組み込みの描画モードもこれを使い
   ます) と、`image.requested` の後の読み込みが置いた画像です
-
-一部の地物を選択から外す絞り込みです。
-
-```ts
-import type { Plugin, PluginContext } from '@sakuzu/maplibre-gl-draw';
-
-function createBackgroundFilter(): Plugin {
-  let ctx: PluginContext | null = null;
-  return {
-    name: 'background',
-    onAdd(context) {
-      ctx = context;
-    },
-    interaction: {
-      filterSelection(candidateIds) {
-        return candidateIds.filter(
-          (id) => ctx?.draw.features.get(id)?.properties.background !== true,
-        );
-      },
-    },
-  };
-}
-```
 
 ### 排他的な操作
 

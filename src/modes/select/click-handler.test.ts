@@ -231,7 +231,6 @@ describe.each(STORE_KINDS)('on %s', (_kind, createStore) => {
           isPluginInteracting: () => busy,
           getPluginInteractionContainer: () => container,
           finishPluginInteraction: finish,
-          filterSelectionCandidates: (ids: string[]) => ids,
           handleFeatureClick: onFeatureClick,
         },
       } as unknown as EngineModeContext;

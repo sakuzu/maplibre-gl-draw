@@ -81,10 +81,7 @@ export function handleSelectDoubleClick(
   if (top?.kind !== 'store') return;
   event.originalEvent.preventDefault();
 
-  const filtered = context.plugins?.filterSelectionCandidates([top.feature.id]) ?? [top.feature.id];
-  if (filtered.length > 0) {
-    store.setSelection('feature', filtered);
-  }
+  store.setSelection('feature', [top.feature.id]);
   context.plugins?.handleFeatureDoubleClick(top.feature.id, event);
 }
 
@@ -235,7 +232,7 @@ function handleFeatureClick(
   if (event.modifiers.shift && rows && selection.type === 'feature' && handle !== undefined) {
     if (rows.has(handle)) {
       store.selectRows(rows.without([handle]));
-    } else if ((context.plugins?.filterSelectionCandidates([feature.id]) ?? [feature.id]).length) {
+    } else {
       store.selectRows(rows.with([handle]));
     }
     return;
@@ -246,11 +243,10 @@ function handleFeatureClick(
     ? toggleSelection(selection, feature.id)
     : [feature.id];
 
-  const filtered = context.plugins?.filterSelectionCandidates(candidateIds) ?? candidateIds;
-  if (filtered.length === 0) {
+  if (candidateIds.length === 0) {
     store.setSelection(null, []);
   } else {
-    store.setSelection('feature', filtered);
+    store.setSelection('feature', candidateIds);
   }
 }
 

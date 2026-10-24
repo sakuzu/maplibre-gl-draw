@@ -56,8 +56,6 @@ const INPUT_HANDLERS = [
 
 /** The hooks of the interaction of a plugin */
 const INTERACTION_HOOKS = [
-  'filterSelection',
-  'canDrag',
   'onFeatureClick',
   'onFeatureDoubleClick',
   'onDrawCommit',

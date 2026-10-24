@@ -412,11 +412,7 @@ export class SelectMode implements EngineModeHandler {
     const hitFeatureId = top.feature.id;
 
     if (!selectedIds.includes(hitFeatureId)) {
-      const filtered = this.#context.plugins?.filterSelectionCandidates([hitFeatureId]) ?? [
-        hitFeatureId,
-      ];
-      if (filtered.length === 0) return;
-      store.setSelection('feature', filtered);
+      store.setSelection('feature', [hitFeatureId]);
     }
 
     const newSelectedFeatures = getSelectedFeatures(store);
@@ -429,7 +425,7 @@ export class SelectMode implements EngineModeHandler {
   }
 
   onDragMove(event: DragNormalizedEvent): void {
-    const { store, map, plugins } = this.#context;
+    const { store, map } = this.#context;
     const boxSelection = store.getBoxSelection();
 
     // Update the box selection
@@ -448,13 +444,11 @@ export class SelectMode implements EngineModeHandler {
 
       // Live selection preview (a frame that selects the same features changes nothing)
       const hitIds = queryFeaturesInBox(updatedBoxSelection, this.#context);
-      const filtered =
-        hitIds.length > 0 ? (plugins?.filterSelectionCandidates(hitIds) ?? hitIds) : hitIds;
-      if (!selectsExactly(store.getSelection(), filtered)) {
-        if (filtered.length === 0) {
+      if (!selectsExactly(store.getSelection(), hitIds)) {
+        if (hitIds.length === 0) {
           store.setSelection(null, []);
         } else {
-          store.setSelection('feature', filtered);
+          store.setSelection('feature', hitIds);
         }
       }
       return;
@@ -525,7 +519,7 @@ export class SelectMode implements EngineModeHandler {
   }
 
   onDragEnd(event: DragNormalizedEvent): void {
-    const { store, map, plugins } = this.#context;
+    const { store, map } = this.#context;
     const boxSelection = store.getBoxSelection();
 
     // Commit the box selection
@@ -542,17 +536,14 @@ export class SelectMode implements EngineModeHandler {
           for (const handles of rowsByLayerInOrder(internals, rows).values()) {
             for (const handle of handles) ids.push(internals.ids.idOf(handle) as string);
           }
-          const filtered = ids.length > 0 ? (plugins?.filterSelectionCandidates(ids) ?? ids) : ids;
-          store.setSelection(filtered.length > 0 ? 'feature' : null, filtered);
+          store.setSelection(ids.length > 0 ? 'feature' : null, ids);
         }
       } else {
         const hitIds = queryFeaturesInBox(boxSelection, this.#context);
-        const filtered =
-          hitIds.length > 0 ? (plugins?.filterSelectionCandidates(hitIds) ?? hitIds) : hitIds;
-        if (filtered.length === 0) {
+        if (hitIds.length === 0) {
           store.setSelection(null, []);
         } else {
-          store.setSelection('feature', filtered);
+          store.setSelection('feature', hitIds);
         }
       }
       store.setBoxSelection(null);

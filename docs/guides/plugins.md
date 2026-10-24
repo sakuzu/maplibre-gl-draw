@@ -272,21 +272,6 @@ draw.extensions.plugins.add(createShortcuts());
 
 `interaction` lets a plugin take part in what the select mode does:
 
-- `filterSelection(candidateIds)` is asked before a click or a box
-  selects, and returns the IDs that may be selected
-- `filterSelectionRows(view, handles)` (experimental) is asked before a box
-  selects many features of a layer held as rows, and returns the handles
-  of the rows that may be selected, without making features of them; a
-  plugin without it narrows no row
-- `canDrag(featureId, vertices)` is asked before a drag of the select
-  mode grabs what it moves of a feature: some of its vertices
-  (`vertices`, empty for a vertex added between two), or the feature
-  whole (no `vertices`: a move, a resize, a rotation, a drag of a
-  radius). It is asked for every feature the drag would change, the
-  features that follow a shared vertex included; false for any of them
-  keeps the drag from starting, as for a locked feature. The drags of
-  features selected in bulk and of the handles of providers are not
-  asked
 - `onFeatureClick(feature, event)` is called when a selected feature
   is clicked again; returning true means the plugin handled the click
 - `onFeatureDoubleClick(feature, event)` is called when a feature is
@@ -294,29 +279,6 @@ draw.extensions.plugins.add(createShortcuts());
 - `onDrawCommit(feature)` is called when a drawing mode created a
   feature: each commit of `ctx.commitFeature` (the built-in drawing modes
   use it too), and the image the load after an `image.requested` places
-
-A filter keeps some features out of the selection:
-
-```ts
-import type { Plugin, PluginContext } from '@sakuzu/maplibre-gl-draw';
-
-function createBackgroundFilter(): Plugin {
-  let ctx: PluginContext | null = null;
-  return {
-    name: 'background',
-    onAdd(context) {
-      ctx = context;
-    },
-    interaction: {
-      filterSelection(candidateIds) {
-        return candidateIds.filter(
-          (id) => ctx?.draw.features.get(id)?.properties.background !== true,
-        );
-      },
-    },
-  };
-}
-```
 
 ### An exclusive interaction
 
