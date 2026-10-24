@@ -6,10 +6,17 @@
  * `draw.options` changes while it runs
  */
 
+import type { ConsistencyCheckOptions } from '../debug/types.js';
 import type { Messages } from '../messages.js';
 import type { Store } from './extension/store.js';
 import type { FeatureStyle, FeatureType, LineStyle } from './model.js';
 import type { Mode } from './state.js';
+
+export type {
+  ConsistencyCheck,
+  ConsistencyCheckOptions,
+  ConsistencyFailure,
+} from '../debug/types.js';
 
 /** The options of snapping to vertices, edges, intersections and guides. */
 export interface SnappingOptions {
@@ -471,6 +478,29 @@ export interface DrawOptions extends RuntimeOptions {
    * ULIDs.
    */
   generateId?: () => string;
+  /**
+   * Diagnostics for the development of an application or an extension; only at creation
+   *
+   * @experimental
+   */
+  debug?: DebugOptions;
+}
+
+/**
+ * The diagnostics of an instance, for development and tests: they read the whole of what they
+ * look at, so they cost as much as the document.
+ *
+ * @experimental
+ */
+export interface DebugOptions {
+  /**
+   * Checks that the state of the instance agrees with itself: the ids of the rows and the places
+   * they are read at, and the selection, once each notification of the Store has gone out (once
+   * per outermost transaction), and what is drawn, once a frame is drawn. `true` runs every
+   * check. A check that fails throws `DrawError` with the code `invalid-state`, from the write or
+   * the transaction that ended (or from the frame), unless it is one of the checks allowed to fail.
+   */
+  checks?: boolean | ConsistencyCheckOptions;
 }
 
 /**

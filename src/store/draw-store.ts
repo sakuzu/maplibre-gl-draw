@@ -625,6 +625,17 @@ export class DrawStore implements Store {
     return this.#bus.subscribe(listener);
   }
 
+  /**
+   * Sets what is called once each notification of this Store has gone to every listener: once
+   * per outermost transaction, or per write outside one (null for nothing). What it throws
+   * reaches the write or the transaction that ended
+   *
+   * @internal
+   */
+  setAfterNotify(fn: ((changes: StoreChange) => void) | null): void {
+    this.#bus.setAfterFlush(fn);
+  }
+
   transact<T>(fn: () => T, source: UpdateSource = 'local'): T {
     // A write of this client comes after the write over several tasks under way
     if (source !== 'remote') this.finishSlicedWrite();

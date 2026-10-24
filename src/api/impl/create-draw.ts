@@ -6,6 +6,8 @@
  */
 
 import type { Map as MaplibreMap } from 'maplibre-gl';
+import { ConsistencyChecks } from '../../debug/consistency.js';
+import { DrawStore } from '../../store/draw-store.js';
 import type { Draw } from '../draw.js';
 import type { StoreView } from '../extension/store.js';
 import type { DrawOptions } from '../options.js';
@@ -67,6 +69,9 @@ export function createDrawOnEngine(
   };
   const features = createFeatures(deps);
   const groups = createGroups(deps);
+  // The checks of the state, in development (`debug.checks`): after each notification of the
+  // Store, and after each frame drawn
+  const stopChecks = attachChecks(engine, options);
   // Set once destroy has run to the end, so that the extensions removed by it can still read
   // the instance
   let destroyed = false;
@@ -149,6 +154,7 @@ export function createDrawOnEngine(
     destroy() {
       if (destroyed) return;
       try {
+        stopChecks();
         engine.destroy();
       } finally {
         memory.dispose();
@@ -164,6 +170,28 @@ export function createDrawOnEngine(
   attachTableDiagnostics(draw, engine);
   engine.extensions.attach(draw, options.store);
   return draw;
+}
+
+/**
+ * Runs the checks of the state `debug.checks` asks for: those of the document and the selection
+ * once each notification of the Store has gone out, that of what is drawn once each frame is drawn
+ *
+ * @returns the function that stops them
+ */
+function attachChecks(engine: Engine, options: DrawOptions): () => void {
+  const asked = options.debug?.checks;
+  const { store } = engine.context;
+  if (!asked || !(store instanceof DrawStore)) return () => {};
+  const checks = new ConsistencyChecks(asked, {
+    store,
+    checkDrawing: () => engine.customLayer.checkDrawnCopies(),
+  });
+  store.setAfterNotify(() => checks.afterNotify());
+  const stopFrames = engine.customLayer.onFrameDrawn(() => checks.afterFrame());
+  return () => {
+    store.setAfterNotify(null);
+    stopFrames();
+  };
 }
 
 /**

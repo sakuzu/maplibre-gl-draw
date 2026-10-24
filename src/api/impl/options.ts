@@ -10,6 +10,7 @@
  * which the renderers, the modes and the services read in place.
  */
 
+import { CONSISTENCY_CHECKS } from '../../debug/consistency.js';
 import { MESSAGES_EN, resolveMessages } from '../../messages.js';
 import { formatColor, isColor, toColor } from '../../shared/color.js';
 import type { FeatureStyleConfig } from '../../shared/config/feature-style.js';
@@ -36,7 +37,7 @@ import type { EngineOptions } from './engine-context.js';
 import { invalidInput, isRecord, onlyKeys } from './shared.js';
 
 /** The options that can only be given when the instance is created */
-const CREATION_KEYS = ['defaultMode', 'store', 'initDefaultLayer', 'generateId'] as const;
+const CREATION_KEYS = ['defaultMode', 'store', 'initDefaultLayer', 'generateId', 'debug'] as const;
 
 /** The options that change while the instance runs */
 const RUNTIME_KEYS = [
@@ -290,6 +291,10 @@ export function checkDrawOptions(options: unknown): asserts options is DrawOptio
     defaultMode: string,
     initDefaultLayer: bool,
     generateId: func,
+    debug(value, what) {
+      if (!isRecord(value)) throw invalidInput(`${what} must be an object`);
+      checkFields(value, what, { checks: checkChecks });
+    },
     store(value, what) {
       if (!isRecord(value) && !(value instanceof DrawStore)) {
         throw invalidInput(`${what} must be a Store`);
@@ -302,6 +307,21 @@ export function checkDrawOptions(options: unknown): asserts options is DrawOptio
       }
     },
   });
+}
+
+/** Checks `debug.checks`: a boolean, or the checks run and allowed to fail */
+function checkChecks(value: unknown, what: string): void {
+  if (typeof value === 'boolean') return;
+  if (!isRecord(value)) throw invalidInput(`${what} must be a boolean or an object`);
+  const names = (list: unknown, at: string): void => {
+    if (
+      !Array.isArray(list) ||
+      list.some((name) => !(CONSISTENCY_CHECKS as readonly unknown[]).includes(name))
+    ) {
+      throw invalidInput(`${at} must be an array of ${CONSISTENCY_CHECKS.join(', ')}`);
+    }
+  };
+  checkFields(value, what, { run: names, allowed: names, onFailure: func });
 }
 
 /**

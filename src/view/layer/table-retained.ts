@@ -567,6 +567,52 @@ export class TableLayerRenderer {
   }
 
   /**
+   * The differences between what the drawing keeps of the rows and the rows as they are now
+   * (none when they agree), read once a frame is drawn: the texture of the state of the rows of
+   * each row group is written from the version of the state the group has, and the features kept
+   * for the rows drawn at once are the rows as they read now
+   *
+   * @internal
+   */
+  checkCopies(): string[] {
+    const problems: string[] = [];
+    for (const [layerId, cache] of this.layers) {
+      const groups = cache.delta
+        ? [...cache.groups.values(), cache.delta]
+        : [...cache.groups.values()];
+      for (const groupCache of groups) {
+        const group = groupCache.group;
+        if (groupCache.texture && groupCache.uploadedVersion !== group.stateVersion) {
+          problems.push(
+            `the state of the rows of the row group ${group.handle} of the layer "${layerId}" is drawn from its version ${groupCache.uploadedVersion}, and the rows are at ${group.stateVersion}`,
+          );
+        }
+        const tables = cache.tables;
+        if (!tables) continue;
+        const chunks = [
+          ...(groupCache.byKind?.chunks ?? []),
+          ...(groupCache.oneDraw?.chunks ?? []),
+        ];
+        for (const chunk of chunks) {
+          if (chunk.type !== 'immediate' || !chunk.features) continue;
+          for (let i = 0; i < chunk.filled; i++) {
+            const kept = chunk.features[i];
+            const row = chunk.range.from + i;
+            if (!kept || row >= group.data.length) continue;
+            const now = rowFeatureToRead(tables.readContext, layerId, group, row);
+            if (featureText(kept) !== featureText(now)) {
+              problems.push(
+                `the feature kept for the row ${row} of the row group ${group.handle} of the layer "${layerId}" is ${featureText(kept)}, and the row reads ${featureText(now)}`,
+              );
+            }
+          }
+        }
+      }
+    }
+    return problems;
+  }
+
+  /**
    * Writes what the drawing in one draw queued to the GPU (the chunks built, the values of the
    * styles, the writes in place). Called before the main pass of the frame
    */
@@ -2777,4 +2823,18 @@ function polygonJob(
       batch = null;
     },
   };
+}
+
+/** What a feature draws, as text to compare (its id, its kind, its place and every value) */
+function featureText(feature: Feature): string {
+  return JSON.stringify([
+    feature.id,
+    feature.type,
+    feature.groupId ?? null,
+    feature.visible,
+    feature.locked,
+    feature.geometry,
+    feature.style,
+    feature.properties,
+  ]);
 }

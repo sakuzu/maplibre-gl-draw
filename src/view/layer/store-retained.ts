@@ -232,6 +232,48 @@ export class StoreRetainedCache {
   }
 
   /**
+   * The differences between the chunks kept and the features they draw as they are now: the
+   * features of the chunks of each layer shown, in order, are its features to display, in the
+   * order of the Store, and each says which chunk holds it (none when they agree). A layer that
+   * is not shown is not drawn, and keeps its chunks until it is drawn again
+   *
+   * @internal
+   */
+  checkCopies(): string[] {
+    const problems: string[] = [];
+    const display = new Map<string, string[]>();
+    for (const feature of getDisplayFeatures(this.store)) {
+      const ids = display.get(feature.layerId);
+      if (ids) ids.push(feature.id);
+      else display.set(feature.layerId, [feature.id]);
+    }
+    for (const [layerId, cache] of this.layers) {
+      const layer = this.store.getLayer(layerId);
+      if (!layer?.visible || this.store.isHidden(layerId)) continue;
+      const kept = cache.chunks.flatMap((chunk) => chunk.featureIds);
+      const expected = display.get(layerId) ?? [];
+      const n = Math.max(kept.length, expected.length);
+      for (let i = 0; i < n; i++) {
+        if (kept[i] === expected[i]) continue;
+        problems.push(
+          `the chunks of the layer "${layerId}" draw ${kept[i] === undefined ? 'nothing' : `the feature "${kept[i]}"`} at ${i}, where the Store shows ${expected[i] === undefined ? 'nothing' : `the feature "${expected[i]}"`}`,
+        );
+        break;
+      }
+      cache.chunks.forEach((chunk, index) => {
+        for (const id of chunk.featureIds) {
+          if (cache.featureToChunk.get(id) !== index) {
+            problems.push(
+              `the feature "${id}" of the layer "${layerId}" is in the chunk ${index}, and is looked up in the chunk ${cache.featureToChunk.get(id)}`,
+            );
+          }
+        }
+      });
+    }
+    return problems;
+  }
+
+  /**
    * Applies the changes of the Store
    *
    * The decisions are conservative (rebuilding too much still renders correctly; rebuilding too

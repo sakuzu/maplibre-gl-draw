@@ -126,6 +126,8 @@ and the rest, in `src/api/impl/`) are built on the engine.
 ```text
                api/            public API, its implementation and the engine
                  |
+               debug/          checks of the state, for development
+                 |
                dispatcher/     input
                  |
                modes/
@@ -204,7 +206,7 @@ Tests, `src/e2e/`, `src/test-support/` and `src/test-utils.ts` are left out.
 Every area has a height. From the bottom: `geometry/`; `shared/` together
 with `src/messages.ts`; `table/`; `extension/`; `feature-table/`; `store/`;
 `view/`; `dataset/`; `operations/` and `snapping/` at the same height;
-`modes/`; `dispatcher/`; `api/`; and the entry file `src/index.ts`, with
+`modes/`; `dispatcher/`; `debug/`; `api/`; and the entry file `src/index.ts`, with
 `src/webgl/` at the same height. An import
 may point to a lower area or stay inside its own area, with the exceptions
 of rules 4, 5, 6, 9 and 10.
@@ -1143,6 +1145,7 @@ part.
 | `api/` | Public API; `impl/` the engine and resources |
 | `store/` | Store contracts, DrawStore, index |
 | `dispatcher/` | Normalizer, router, hit testing |
+| `debug/` | Checks of the state (`debug.checks`) |
 | `modes/` | ModeManager, select and draw modes |
 | `operations/` | Resize, rotate, vertex, tracing |
 | `snapping/` | SnapService, providers, marker |
@@ -1153,6 +1156,7 @@ part.
 | `shared/` | Types, math, config, utils |
 | `geometry/` | Pure geometry (sub-entry) |
 | `e2e/` | Browser end-to-end tests |
+| `test-support/` | Models the tests compare with |
 
 Unit tests sit next to the file they test as `*.test.ts`. What each layer's
 tests protect is in [test-design.md](./test-design.md).

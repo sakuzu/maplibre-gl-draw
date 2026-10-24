@@ -472,6 +472,8 @@ export class ChangeBus {
   #hold: { readonly finish: () => void; readonly source: UpdateSource } | null = null;
   /** Whether the held writes are being finished (what comes meanwhile is part of them) */
   #finishing = false;
+  /** Called once a notification has gone to every listener (see `setAfterFlush`) */
+  #afterFlush: ((changes: StoreChange) => void) | null = null;
 
   /**
    * @param beforeFlush Called when the outermost operation is about to notify, before the
@@ -487,6 +489,15 @@ export class ChangeBus {
     return () => {
       this.#listeners.delete(listener);
     };
+  }
+
+  /**
+   * Sets what is called once a notification has gone to every listener (null for nothing). It is
+   * called outside the guard of the listeners, so what it throws reaches the write or the
+   * transaction that ended, after the bus is ready for the next one
+   */
+  setAfterFlush(fn: ((changes: StoreChange) => void) | null): void {
+    this.#afterFlush = fn;
   }
 
   /** The source of the outermost transaction being run ('local' outside one) */
@@ -517,8 +528,11 @@ export class ChangeBus {
     } finally {
       this.#transactionDepth--;
       if (this.#transactionDepth === 0) {
-        if (!this.#hold) this.#flushChanges();
-        this.#currentSource = 'local';
+        try {
+          if (!this.#hold) this.#flushChanges();
+        } finally {
+          this.#currentSource = 'local';
+        }
       }
     }
   }
@@ -563,12 +577,15 @@ export class ChangeBus {
     } finally {
       this.#transactionDepth--;
       if (this.#transactionDepth === 0) {
-        // Let go of within it: flushed with its source
-        if (!this.#hold) {
-          this.#currentSource = hold.source;
-          this.#flushChanges();
+        try {
+          // Let go of within it: flushed with its source
+          if (!this.#hold) {
+            this.#currentSource = hold.source;
+            this.#flushChanges();
+          }
+        } finally {
+          this.#currentSource = 'local';
         }
-        this.#currentSource = 'local';
       }
     }
   }
@@ -656,5 +673,6 @@ export class ChangeBus {
         console.error('Error in a store listener:', error);
       }
     }
+    this.#afterFlush?.(changes);
   }
 }

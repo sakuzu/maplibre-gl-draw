@@ -57,6 +57,10 @@ export type { CaptureImageOptions, Draw, TransactOptions } from './api/draw.js';
 export { createDraw } from './api/draw.js';
 export type {
   AutoNameOptions,
+  ConsistencyCheck,
+  ConsistencyCheckOptions,
+  ConsistencyFailure,
+  DebugOptions,
   DrawOptions,
   OptionsResource,
   RenderingOptions,

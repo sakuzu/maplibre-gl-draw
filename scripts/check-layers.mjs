@@ -39,6 +39,7 @@ const RANK = {
   snapping: 4,
   modes: 5,
   dispatcher: 6,
+  debug: 7,
   api: 8,
   entry: 9,
   // The layer 2 entries: entries like src/index.ts, and imported by nothing (rule 10)

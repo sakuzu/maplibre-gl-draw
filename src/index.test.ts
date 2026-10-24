@@ -26,6 +26,10 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
  */
 const MAIN = [
   'AutoNameOptions',
+  'ConsistencyCheck',
+  'ConsistencyCheckOptions',
+  'ConsistencyFailure',
+  'DebugOptions',
   'ItemListChange',
   'ItemMove',
   'diffItemOrder',

@@ -157,6 +157,14 @@ writing it. Its changes are listed after those of 3.0.0.
   gives each feature, so that rows written without a load hold what a
   load would make of the same features. A load reads a feature by the
   same code.
+- `debug.checks` of `createDraw`, experimental (`DebugOptions`,
+  `ConsistencyCheck`, `ConsistencyCheckOptions`, `ConsistencyFailure`):
+  for development and tests, the instance checks that its state agrees
+  with itself (the ids of the rows and the places they are read at, the
+  selection, and what the drawing keeps), once each notification of the
+  store has gone out and once each frame is drawn. A check that fails
+  throws `DrawError` with the code `invalid-state`, unless it is allowed
+  to fail; each failure is given to `onFailure`.
 
 ### Changed in 3.0.0
 

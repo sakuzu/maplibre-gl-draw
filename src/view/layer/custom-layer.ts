@@ -206,6 +206,18 @@ export interface CustomLayerInterface extends BaseCustomLayerInterface {
    */
   getTableRenderer(): TableLayerRenderer | null;
   /**
+   * Calls `listener` once each frame is drawn (after its last slot)
+   *
+   * @returns the function that stops calling it
+   */
+  onFrameDrawn(listener: () => void): () => void;
+  /**
+   * The differences between what the drawing keeps (the batches of the features, the rows drawn
+   * at once, the state of the rows) and what it copies as it is now: none when it agrees, or while
+   * the drawing is not on a map
+   */
+  checkDrawnCopies(): string[];
+  /**
    * Whether work remains that later frames finish without the host doing anything (see
    * `draw.hasPendingWork()`)
    */
@@ -322,6 +334,8 @@ export function createCustomLayer(deps: CustomLayerDeps): CustomLayerInterface {
   };
   /** The ordered list of the features to display (the immediate path; follows the Store) */
   const displayList = new DisplayListCache(store);
+  /** What is called once each frame is drawn */
+  const frameListeners = new Set<() => void>();
   const dynamicOverlayRenderers: EngineOverlayRenderer[] = [];
 
   /**
@@ -815,6 +829,7 @@ export function createCustomLayer(deps: CustomLayerDeps): CustomLayerInterface {
       engine.tableRetained?.endFrame();
       engine.shownTableRetained?.endFrame();
       engine.frame = null;
+      for (const listener of [...frameListeners]) listener();
     }
   }
 
@@ -971,6 +986,21 @@ export function createCustomLayer(deps: CustomLayerDeps): CustomLayerInterface {
 
     getTableRenderer(): TableLayerRenderer | null {
       return engine.tableRetained;
+    },
+
+    onFrameDrawn(listener: () => void): () => void {
+      frameListeners.add(listener);
+      return () => {
+        frameListeners.delete(listener);
+      };
+    },
+
+    checkDrawnCopies(): string[] {
+      return [
+        ...(engine.storeRetainedCache?.checkCopies() ?? []),
+        ...(engine.tableRetained?.checkCopies() ?? []),
+        ...(engine.shownTableRetained?.checkCopies() ?? []),
+      ];
     },
 
     hasPendingWork(): boolean {
