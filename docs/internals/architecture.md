@@ -857,7 +857,8 @@ The only gate is in `DrawStore`'s write methods. While read-only is on,
 `createFeature`, `updateFeature`, `deleteFeature`, `createLayer`,
 `updateLayer`, `deleteLayer`, `setLayerOrder`, `reorderInLayer`,
 `createGroup`, `updateGroup`, `deleteGroup`, `reorderInGroup`,
-`createFile`, `deleteFile` and `setMetadata` do nothing and return `false`.
+`createFile`, `deleteFile` and `setMetadata` do nothing and return `false`,
+and `applyEdits` does nothing and returns `null`.
 They do not throw, even for an unknown id, so no caller breaks. The public
 methods that map onto one of these writes return the same boolean.
 

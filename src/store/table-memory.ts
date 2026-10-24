@@ -55,6 +55,7 @@ import { ItemWalk } from '../feature-table/item-walk.js';
 import { rowFeature } from '../feature-table/row-read.js';
 import { ROW_FLAG_DELETED } from '../table/row-group-types.js';
 import { DrawStore } from './draw-store.js';
+import { updatesOfEdits } from './feature-edits.js';
 import { ChangeBus } from './memory/change-bus.js';
 import { FileStore } from './memory/file-store.js';
 import { frozenCopy } from './memory/frozen.js';
@@ -62,7 +63,7 @@ import { MemoryClientState } from './memory/ui-state.js';
 import { compareKeys, keyAfter, keysBetween } from './order-keys.js';
 import { BULK_SLICE_BUDGET_MS, BULK_SLICE_ROWS, rowStepsOf, sliceRowValues } from './row-steps.js';
 import { combineValuesBefore } from './row-values-before.js';
-import type { Store, StoreContract } from './store.js';
+import type { EditResult, FeatureEdit, Store, StoreContract } from './store.js';
 import type {
   Feature,
   FileData,
@@ -425,6 +426,17 @@ export class TableContractStore implements StoreContract {
         groupId: moved.groupId,
       } as Feature);
     });
+  }
+
+  applyEdits(edits: readonly FeatureEdit[]): EditResult {
+    // Every edit is checked before one is written
+    const { updates, dropped } = updatesOfEdits(edits, (id) => this.getFeature(id));
+    if (updates.length > 0) {
+      this.transact(() => {
+        for (const { id, updates: fields } of updates) this.updateFeature(id, fields);
+      });
+    }
+    return { dropped };
   }
 
   abortIntermediateUpdates(ids: string[]): void {

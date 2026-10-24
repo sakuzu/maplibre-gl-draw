@@ -105,6 +105,8 @@ export { DRAW_PROPERTY_PREFIX, isDrawProperty } from './api/model.js';
 
 // Inputs, patches and filters
 export type {
+  EditResult,
+  FeatureEdit,
   FeatureFilter,
   FeatureInput,
   FeatureListOptions,
@@ -146,8 +148,10 @@ export type {
   SnapResult,
   TerrainDiagnostics,
   GpuMemoryDiagnostics,
+  VertexId,
   VertexRef,
   VertexSelection,
+  VertexTarget,
 } from './api/state.js';
 export { MODES } from './api/state.js';
 

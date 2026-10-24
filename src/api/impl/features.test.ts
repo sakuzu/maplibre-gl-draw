@@ -7,7 +7,7 @@
  */
 
 import type { Polygon } from 'geojson';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ObjectGroup, ObjectLayer } from '../../shared/types/model.js';
 import { MemoryStore } from '../../store/memory.js';
 import type { StoreChange } from '../../store/types.js';
@@ -288,6 +288,15 @@ describe('update', () => {
     store.setReadOnly(true);
     expect(features.update('a', { visible: false })).toBeNull();
   });
+
+  it('writes the patch through applyEdits of the Store, as an edit set', () => {
+    const applyEdits = vi.spyOn(store, 'applyEdits');
+    const updateFeature = vi.spyOn(store, 'updateFeature');
+    const patch = { properties: { kind: undefined }, visible: false };
+    features.update('a', patch);
+    expect(applyEdits.mock.calls).toEqual([[[{ kind: 'set', featureId: 'a', patch }]]]);
+    expect(updateFeature).not.toHaveBeenCalled();
+  });
 });
 
 describe('updateMany', () => {
@@ -303,6 +312,24 @@ describe('updateMany', () => {
     ]);
     expect(updated?.map((f) => f.id)).toEqual(['a', 'b']);
     expect(notifications).toHaveLength(1);
+  });
+
+  it('writes every patch through one applyEdits of the Store', () => {
+    const applyEdits = vi.spyOn(store, 'applyEdits');
+    const updateFeature = vi.spyOn(store, 'updateFeature');
+    features.updateMany([
+      { id: 'a', patch: { visible: false } },
+      { id: 'b', patch: { properties: { n: 1 } } },
+    ]);
+    expect(applyEdits.mock.calls).toEqual([
+      [
+        [
+          { kind: 'set', featureId: 'a', patch: { visible: false } },
+          { kind: 'set', featureId: 'b', patch: { properties: { n: 1 } } },
+        ],
+      ],
+    ]);
+    expect(updateFeature).not.toHaveBeenCalled();
   });
 
   it('changes nothing when one patch is wrong or one feature is locked', () => {

@@ -31,7 +31,6 @@ import {
   featureRowFilter,
   featureRowMatcher,
   pageOf,
-  preparePatch,
 } from './features.js';
 import { moveBulkSelection } from './placement.js';
 import type { ResourceDeps } from './shared.js';
@@ -292,13 +291,13 @@ export function createSelection(
       ) {
         return false;
       }
-      const updates = prepared.map(({ feature, patch: made }) => ({
-        id: feature.id,
-        updates: preparePatch(feature, made),
-      }));
-      store.transact(() => {
-        for (const { id, updates: fields } of updates) store.updateFeature(id, fields);
-      });
+      store.applyEdits(
+        prepared.map(({ feature, patch: made }) => ({
+          kind: 'set',
+          featureId: feature.id,
+          patch: made,
+        })),
+      );
       return true;
     },
 

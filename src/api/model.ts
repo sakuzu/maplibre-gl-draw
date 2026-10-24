@@ -33,6 +33,7 @@ import {
   convertFeatureToGeoJSON,
 } from './impl/import-export/geojson-export.js';
 import { parseGeoJSONInput, parseNativeInput } from './impl/import-export/parse.js';
+import type { VertexTarget } from './state.js';
 
 // ============================================================================
 // Features
@@ -414,6 +415,68 @@ export interface FeaturePatch {
   visible?: boolean;
   /** Whether it is locked */
   locked?: boolean;
+}
+
+/**
+ * An edit of a feature, as a Store applies it (`Store.applyEdits`).
+ *
+ * - `set` changes the fields of `patch` as `features.update` does: the keys of `properties`
+ *   and `style` one by one (a key given as `undefined` is removed), the geometry whole.
+ * - `vertex-move` puts each vertex of `vertices` at the position of the same index in
+ *   `positions` (the two have the same length).
+ * - `vertex-insert` adds a vertex at `position`, just after the vertex `after` or just before
+ *   the vertex `before` (exactly one of the two is given), in its line or ring. A point and the
+ *   points of a MultiPoint take no vertex.
+ * - `vertex-delete` deletes the vertices, and keeps the lines and the rings of the geometry with
+ *   enough positions; a point of a MultiPoint goes with its vertex.
+ *
+ * The last position of a closed ring is its first vertex: moving or deleting either moves or
+ * deletes both, and a vertex inserted after the last or before the first goes between the last
+ * vertex and the first.
+ */
+export type FeatureEdit =
+  | {
+      kind: 'set';
+      /** The feature */
+      featureId: string;
+      /** The fields to change */
+      patch: FeaturePatch;
+    }
+  | {
+      kind: 'vertex-move';
+      /** The feature */
+      featureId: string;
+      /** The vertices to move */
+      vertices: readonly VertexTarget[];
+      /** Where each of them goes, in the same order, `[longitude, latitude]` in degrees */
+      positions: readonly Position[];
+    }
+  | {
+      kind: 'vertex-insert';
+      /** The feature */
+      featureId: string;
+      /** The vertex the new one follows */
+      after?: VertexTarget;
+      /** The vertex the new one goes before */
+      before?: VertexTarget;
+      /** The position of the new vertex, `[longitude, latitude]` in degrees */
+      position: Position;
+    }
+  | {
+      kind: 'vertex-delete';
+      /** The feature */
+      featureId: string;
+      /** The vertices to delete */
+      vertices: readonly VertexTarget[];
+    };
+
+/** What a Store did with edits of features (`Store.applyEdits`). */
+export interface EditResult {
+  /**
+   * The number of edits left out because the feature they name was not there (deleted, or never
+   * created)
+   */
+  readonly dropped: number;
 }
 
 /**

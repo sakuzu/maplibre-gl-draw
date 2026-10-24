@@ -24,12 +24,13 @@ import {
   trimmedContainer,
 } from '../shared/utils/item-moves.js';
 import { DrawStore } from './draw-store.js';
+import { updatesOfEdits } from './feature-edits.js';
 import { ChangeBus } from './memory/change-bus.js';
 import { FileStore } from './memory/file-store.js';
 import { frozenCopy, frozenFeature } from './memory/frozen.js';
 import { MemoryClientState } from './memory/ui-state.js';
 import { moveItemsByLists } from './move-items.js';
-import type { DocumentStore, Store, StoreContract } from './store.js';
+import type { DocumentStore, EditResult, FeatureEdit, Store, StoreContract } from './store.js';
 import type {
   Feature,
   FileData,
@@ -128,6 +129,16 @@ export class MemoryContractStore implements StoreContract {
   }
   updateFeature(id: string, updates: Partial<Feature>, options?: UpdateFeatureOptions): boolean {
     return this.#apply(() => this.#document.updateFeature(id, updates, options));
+  }
+  applyEdits(edits: readonly FeatureEdit[]): EditResult {
+    // Every edit is checked before one is written
+    const { updates, dropped } = updatesOfEdits(edits, (id) => this.#document.getFeature(id));
+    if (updates.length > 0) {
+      this.#apply(() => {
+        for (const { id, updates: fields } of updates) this.#document.updateFeature(id, fields);
+      });
+    }
+    return { dropped };
   }
   deleteFeature(id: string): boolean {
     return this.#apply(() => this.#document.deleteFeature(id));

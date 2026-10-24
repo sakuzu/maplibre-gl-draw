@@ -67,10 +67,12 @@ const MAIN = [
   'DrawOptions',
   'DrawPointerEvent',
   'DrawProperties',
+  'EditResult',
   'evaluateStyleRule',
   'ExtensionContext',
   'ExtensionsCollections',
   'Feature',
+  'FeatureEdit',
   'FeatureFilter',
   'FeatureInput',
   'FeatureListOptions',
@@ -178,9 +180,11 @@ const MAIN = [
   'TracingOptions',
   'TransactOptions',
   'UpdateSource',
+  'VertexId',
   'VertexRef',
   'VertexSelection',
   'VertexSelectionResource',
+  'VertexTarget',
 ];
 
 /** The geometry entry (layer 1) */

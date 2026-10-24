@@ -20,8 +20,16 @@
  */
 
 import { coordinatesOf } from '../shared/utils/coordinates.js';
+import {
+  deleteVertexAt,
+  insertVertexAt,
+  isClosedRing,
+  isVertexOf,
+} from '../shared/utils/vertex-edits.js';
 import { getVertexPart } from '../shared/utils/vertex-ref.js';
 import type { Coordinate, Feature, FeatureCoordinates, VertexRef } from '../store/types.js';
+
+export { sortVertexRefsForDeletion } from '../shared/utils/vertex-edits.js';
 
 /**
  * The state of a vertex operation
@@ -47,44 +55,10 @@ export interface VertexState {
 }
 
 /**
- * Whether the ring is closed (first = last)
- */
-function isClosedRing(ring: Coordinate[]): boolean {
-  return (
-    ring.length >= 2 &&
-    ring[0][0] === ring[ring.length - 1][0] &&
-    ring[0][1] === ring[ring.length - 1][1]
-  );
-}
-
-/**
  * Picks out only the vertex references that belong to the given part
  */
 function refsOfPart(refs: readonly VertexRef[], part: number): VertexRef[] {
   return refs.filter((r) => getVertexPart(r) === part);
-}
-
-/**
- * Sorts the vertex references into the order in which vertex deletion is applied
- *
- * Within one ring, unless the larger index is deleted first, the following indices
- * shift by the number already removed. The same holds for parts and rings (deleting
- * from a MultiPoint removes the part itself, so the part numbers shift). They are
- * therefore sorted in descending lexicographic order of (part, ring, index). That
- * way, within the same part and the same ring the order is descending by index as
- * before, and references in different parts or rings do not affect each other's
- * indices.
- *
- * @internal
- */
-export function sortVertexRefsForDeletion(refs: readonly VertexRef[]): VertexRef[] {
-  return [...refs].sort((a, b) => {
-    const partDiff = getVertexPart(b) - getVertexPart(a);
-    if (partDiff !== 0) return partDiff;
-    const ringDiff = b.ring - a.ring;
-    if (ringDiff !== 0) return ringDiff;
-    return b.index - a.index;
-  });
 }
 
 /**
@@ -296,17 +270,6 @@ export function computeVertexMove(
 }
 
 /**
- * Makes only the top-level array of the coordinates new
- *
- * A copy that keeps the current contract, "a new top-level array is returned", even
- * on a branch that does not change the coordinates. The elements (parts / rings /
- * coordinate pairs) keep sharing references with the input.
- */
-function copyTopLevelCoordinates(coordinates: FeatureCoordinates): FeatureCoordinates {
-  return (coordinates as unknown[]).slice() as FeatureCoordinates;
-}
-
-/**
  * Adds a vertex (an addition from a midpoint handle)
  *
  * A MultiPoint has no edges, so there is no addition from a midpoint, and the
@@ -330,109 +293,12 @@ export function addVertex(
   after: VertexRef,
   newCoord: Coordinate,
 ): FeatureCoordinates {
-  const part = getVertexPart(after);
-
-  if (feature.type === 'LineString') {
-    const lineCoords = (coordinatesOf(feature) as Coordinate[]).slice();
-    // It has neither rings nor parts, so nothing is added other than ring 0 / part 0
-    if (after.ring !== 0 || part !== 0) return lineCoords;
-    lineCoords.splice(after.index + 1, 0, newCoord);
-    return lineCoords;
-  }
-
-  if (feature.type === 'Polygon') {
-    const initialRings = coordinatesOf(feature) as Coordinate[][];
-    const rings = initialRings.slice();
-    if (part !== 0) return rings;
-    if (after.ring < 0 || after.ring >= rings.length) return rings;
-    const ring = initialRings[after.ring].slice();
-    ring.splice(after.index + 1, 0, newCoord);
-    rings[after.ring] = ring;
-    return rings;
-  }
-
-  if (feature.type === 'MultiLineString') {
-    const initialParts = coordinatesOf(feature) as Coordinate[][];
-    const parts = initialParts.slice();
-    if (after.ring !== 0) return parts;
-    if (part < 0 || part >= parts.length) return parts;
-    const line = initialParts[part].slice();
-    line.splice(after.index + 1, 0, newCoord);
-    parts[part] = line;
-    return parts;
-  }
-
-  if (feature.type === 'MultiPolygon') {
-    const initialParts = coordinatesOf(feature) as Coordinate[][][];
-    const parts = initialParts.slice();
-    if (part < 0 || part >= parts.length) return parts;
-    const initialRings = initialParts[part];
-    if (after.ring < 0 || after.ring >= initialRings.length) return parts;
-    const rings = initialRings.slice();
-    const ring = initialRings[after.ring].slice();
-    ring.splice(after.index + 1, 0, newCoord);
-    rings[after.ring] = ring;
-    parts[part] = rings;
-    return parts;
-  }
-
-  return copyTopLevelCoordinates(coordinatesOf(feature));
-}
-
-/**
- * Returns an array of rings with one vertex deleted from a ring of the polygon
- *
- * The tests for the minimum vertex count and for a closed ring are done per ring. For
- * a MultiPolygon they are done per part and ring (even if a ring of one part is at
- * the minimum vertex count, the other parts are unaffected).
- *
- * copy-on-write: only the array of rings and the target ring are copied, and the
- * other rings and the coordinate pairs keep sharing references with initialRings.
- * initialRings is not rewritten.
- *
- * @returns The new array of rings when the deletion succeeded, null when it did not
- */
-function deleteVertexFromRings(
-  initialRings: Coordinate[][],
-  ref: VertexRef,
-): Coordinate[][] | null {
-  if (ref.ring < 0 || ref.ring >= initialRings.length) return null;
-  const initialRing = initialRings[ref.ring];
-
-  const isClosed = isClosedRing(initialRing);
-
-  // A polygon needs at least 3 points (4 counting the closing point). An inner ring
-  // has the same condition, and a ring that cannot be reduced any further refuses the
-  // deletion (no collapsed ring is created).
-  const minPoints = isClosed ? 4 : 3;
-  if (initialRing.length <= minPoints) return null;
-
-  // Out of range is refused
-  if (ref.index < 0 || ref.index >= initialRing.length) return null;
-
-  // The last vertex of a closed ring is a duplicate of the first one (the closing
-  // point) and is not an independent vertex. Deleting it would break the ring (the
-  // first one would be overwritten by the value of the last one), so it is refused.
-  // To remove the closing point, delete the first one (index 0).
-  if (isClosed && ref.index === initialRing.length - 1) return null;
-
-  // Delete (this is done on the copied ring)
-  const ring = initialRing.slice();
-  ring.splice(ref.index, 1);
-
-  // When the first vertex of a closed ring was removed, the new last one (= the old
-  // closing point) is synchronized to the new first one so that it stays closed. For
-  // any other vertex deletion the first and the last ones do not change, so no
-  // synchronization is needed.
-  // The rewrite is done by assigning a new pair array (because the coordinate pairs
-  // are shared with the input).
-  if (isClosed && ref.index === 0) {
-    ring[ring.length - 1] = [...ring[0]];
-  }
-
-  const rings = initialRings.slice();
-  rings[ref.ring] = ring;
-  return rings;
+  return insertVertexAt(
+    feature.type,
+    coordinatesOf(feature),
+    { ...after, index: after.index + 1 },
+    newCoord,
+  );
 }
 
 /**
@@ -447,67 +313,7 @@ function deleteVertexFromRings(
  * @internal
  */
 export function deleteVertex(feature: Feature, ref: VertexRef): FeatureCoordinates | null {
-  const part = getVertexPart(ref);
-
-  if (feature.type === 'Point') {
-    // The vertex of a Point cannot be deleted
-    return null;
-  }
-
-  if (feature.type === 'LineString') {
-    // It has neither rings nor parts, so anything other than ring 0 / part 0 is an
-    // invalid reference
-    if (ref.ring !== 0 || part !== 0) return null;
-    const initialCoords = coordinatesOf(feature) as Coordinate[];
-    // At least 2 points are needed
-    if (initialCoords.length <= 2) return null;
-    const lineCoords = initialCoords.slice();
-    lineCoords.splice(ref.index, 1);
-    return lineCoords;
-  }
-
-  if (feature.type === 'Polygon') {
-    if (part !== 0) return null;
-    return deleteVertexFromRings(coordinatesOf(feature) as Coordinate[][], ref);
-  }
-
-  if (feature.type === 'MultiPoint') {
-    // Deleting a vertex removes the part itself. The last remaining part cannot be
-    // removed
-    const initialPoints = coordinatesOf(feature) as Coordinate[];
-    if (ref.ring !== 0 || ref.index !== 0) return null;
-    if (part < 0 || part >= initialPoints.length) return null;
-    if (initialPoints.length <= 1) return null;
-    const points = initialPoints.slice();
-    points.splice(part, 1);
-    return points;
-  }
-
-  if (feature.type === 'MultiLineString') {
-    const initialParts = coordinatesOf(feature) as Coordinate[][];
-    if (ref.ring !== 0) return null;
-    if (part < 0 || part >= initialParts.length) return null;
-    const initialLine = initialParts[part];
-    // At least 2 points are needed (this is decided per part)
-    if (initialLine.length <= 2) return null;
-    const line = initialLine.slice();
-    line.splice(ref.index, 1);
-    const parts = initialParts.slice();
-    parts[part] = line;
-    return parts;
-  }
-
-  if (feature.type === 'MultiPolygon') {
-    const initialParts = coordinatesOf(feature) as Coordinate[][][];
-    if (part < 0 || part >= initialParts.length) return null;
-    const rings = deleteVertexFromRings(initialParts[part], ref);
-    if (!rings) return null;
-    const parts = initialParts.slice();
-    parts[part] = rings;
-    return parts;
-  }
-
-  return copyTopLevelCoordinates(coordinatesOf(feature));
+  return deleteVertexAt(feature.type, coordinatesOf(feature), ref);
 }
 
 /**
@@ -522,60 +328,11 @@ export function startVertexMove(
 ): VertexState | null {
   if (vertices.length === 0) return null;
 
-  // Check the validity of the vertex references
-  if (feature.type === 'Point') {
-    if (vertices.length !== 1) return null;
-    const ref = vertices[0];
-    if (getVertexPart(ref) !== 0 || ref.ring !== 0 || ref.index !== 0) return null;
-  } else if (feature.type === 'LineString') {
-    const coords = coordinatesOf(feature) as Coordinate[];
-    const isValid = vertices.every(
-      (r) => getVertexPart(r) === 0 && r.ring === 0 && r.index >= 0 && r.index < coords.length,
-    );
-    if (!isValid) return null;
-  } else if (feature.type === 'Polygon') {
-    const rings = coordinatesOf(feature) as Coordinate[][];
-    if (rings.length === 0) return null;
-    const isValid = vertices.every(
-      (r) =>
-        getVertexPart(r) === 0 &&
-        r.ring >= 0 &&
-        r.ring < rings.length &&
-        r.index >= 0 &&
-        r.index < rings[r.ring].length,
-    );
-    if (!isValid) return null;
-  } else if (feature.type === 'MultiPoint') {
-    const points = coordinatesOf(feature) as Coordinate[];
-    if (points.length === 0) return null;
-    const isValid = vertices.every((r) => {
-      const part = getVertexPart(r);
-      return part >= 0 && part < points.length && r.ring === 0 && r.index === 0;
-    });
-    if (!isValid) return null;
-  } else if (feature.type === 'MultiLineString') {
-    const parts = coordinatesOf(feature) as Coordinate[][];
-    if (parts.length === 0) return null;
-    const isValid = vertices.every((r) => {
-      const part = getVertexPart(r);
-      if (part < 0 || part >= parts.length) return false;
-      return r.ring === 0 && r.index >= 0 && r.index < parts[part].length;
-    });
-    if (!isValid) return null;
-  } else if (feature.type === 'MultiPolygon') {
-    const parts = coordinatesOf(feature) as Coordinate[][][];
-    if (parts.length === 0) return null;
-    const isValid = vertices.every((r) => {
-      const part = getVertexPart(r);
-      if (part < 0 || part >= parts.length) return false;
-      const rings = parts[part];
-      if (r.ring < 0 || r.ring >= rings.length) return false;
-      return r.index >= 0 && r.index < rings[r.ring].length;
-    });
-    if (!isValid) return null;
-  } else {
-    return null;
-  }
+  // Check the validity of the vertex references (a type other than the six of GeoJSON has
+  // no vertex to move)
+  if (feature.type === 'Point' && vertices.length !== 1) return null;
+  const coordinates = coordinatesOf(feature);
+  if (!vertices.every((ref) => isVertexOf(feature.type, coordinates, ref))) return null;
 
   return {
     featureId: feature.id,

@@ -10,7 +10,9 @@
 
 import type { DocumentChange } from '../events.js';
 import type {
+  EditResult,
   Feature,
+  FeatureEdit,
   FeatureType,
   FileData,
   Group,
@@ -18,7 +20,7 @@ import type {
   Layer,
   Metadata,
 } from '../model.js';
-import type { Mode, Selection, SelectionType, VertexSelection } from '../state.js';
+import type { Mode, Selection, SelectionType, VertexRef, VertexSelection } from '../state.js';
 import type { FeatureTables, RowWrite } from '../tables.js';
 
 /**
@@ -174,12 +176,13 @@ export interface StoreView {
  * - The stacking order: `createLayer` adds the new layer at the front unless the order
  *   already holds it, `deleteLayer` takes it out, and no other write adds or removes entries.
  * - Writes return whether they were applied: a write of the document returns true when it
- *   changed the Store, and false when it was refused, changing nothing. A write whose
- *   argument cannot apply (an ID that names nothing) may throw instead, storing nothing.
+ *   changed the Store, and false when it was refused, changing nothing (`applyEdits` returns
+ *   what it applied, and `null` when it was refused). A write whose argument cannot apply (an
+ *   ID that names nothing) may throw instead, storing nothing.
  * - Read-only refusals: the instance does not call the writes of the document while
  *   `isReadOnly()` is true, and a Store may refuse them then (and for reasons of its own) by
- *   returning false. The interaction lock does not stop any write. The writes of the state of
- *   this client return nothing: the instance takes them as applied.
+ *   returning false (`null` for `applyEdits`). The interaction lock does not stop any write.
+ *   The writes of the state of this client return nothing: the instance takes them as applied.
  */
 export interface Store extends StoreView {
   /** Creates a feature. */
@@ -200,6 +203,23 @@ export interface Store extends StoreView {
   ): boolean;
   /** Drops the intermediate updates of these features that were not followed by a final one. */
   abortIntermediateUpdates?(ids: string[]): void;
+  /**
+   * Applies edits of features, one after the other in the order given, as one transaction:
+   * every edit applies over the feature as the edits before it leave it, and the edits apply all
+   * of them or none.
+   *
+   * An edit of a feature that is not there (deleted, or never created) is left out and counted in
+   * the result; the other edits apply. A Store that gives its vertices no IDs takes the vertices
+   * of the edits by their places ({@link VertexRef}) only.
+   *
+   * @returns What was applied, or `null` when the Store refuses the edits, changing nothing
+   *   (read-only, or a reason of its own)
+   * @throws DrawError `invalid-input`, storing nothing, when an edit cannot apply: an edit or a
+   *   patch of the wrong shape, a vertex the feature does not have, positions that do not match
+   *   the vertices, an insert with both or neither of `after` and `before`, or a deletion that
+   *   leaves a line or a ring with too few positions
+   */
+  applyEdits(edits: readonly FeatureEdit[]): EditResult | null;
   /** Deletes a feature. */
   deleteFeature(id: string): boolean;
   /** Creates a layer. */

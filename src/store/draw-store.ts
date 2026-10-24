@@ -53,7 +53,7 @@ import { ChangeBus } from './memory/change-bus.js';
 import { MemoryDrawingState } from './memory/ui-state.js';
 import { moveItemsByLists } from './move-items.js';
 import { BULK_SLICE_ROWS, type RowSteps, rowStepsOf } from './row-steps.js';
-import type { SlicedWrite, Store, StoreContract } from './store.js';
+import type { EditResult, FeatureEdit, SlicedWrite, Store, StoreContract } from './store.js';
 import type {
   BoxSelection,
   DragState,
@@ -258,6 +258,10 @@ export class DrawStore implements Store {
   }
   abortIntermediateUpdates(ids: string[]): void {
     this.#contract.abortIntermediateUpdates?.(ids);
+  }
+  applyEdits(edits: readonly FeatureEdit[]): EditResult | null {
+    if (this.#contract.isReadOnly() || !this.#takesWrites()) return null;
+    return this.transact(() => this.#contract.applyEdits(edits));
   }
   deleteFeature(id: string): boolean {
     return this.#write(() => {

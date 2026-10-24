@@ -5,7 +5,7 @@
  * Tests for draw.selection and draw.vertexSelection
  */
 
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ObjectGroup, ObjectLayer } from '../../shared/types/model.js';
 import { MemoryStore } from '../../store/memory.js';
 import { createResourceDeps } from '../../test-utils.js';
@@ -195,5 +195,24 @@ describe('draw.vertexSelection', () => {
       ],
     });
     expect(vertices.get()).toBeNull();
+  });
+});
+
+describe('selection.update', () => {
+  it('writes the patches of the features selected through one applyEdits of the Store', () => {
+    selection.set('feature', ['a', 'line']);
+    const applyEdits = vi.spyOn(store, 'applyEdits');
+    const updateFeature = vi.spyOn(store, 'updateFeature');
+    expect(selection.update({ style: { strokeWidth: 3 } })).toBe(true);
+    expect(applyEdits.mock.calls).toEqual([
+      [
+        [
+          { kind: 'set', featureId: 'a', patch: { style: { strokeWidth: 3 } } },
+          { kind: 'set', featureId: 'line', patch: { style: { strokeWidth: 3 } } },
+        ],
+      ],
+    ]);
+    expect(updateFeature).not.toHaveBeenCalled();
+    expect(store.getFeature('line')?.style.strokeWidth).toBe(3);
   });
 });

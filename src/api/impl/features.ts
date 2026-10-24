@@ -13,6 +13,7 @@ import { describeGeometryProblem } from '../../shared/geometry-validation.js';
 import { describeStyleProblem } from '../../shared/style-validation.js';
 import { getBoundingBox } from '../../shared/utils/feature-bbox.js';
 import { setOwnProperty } from '../../shared/utils/own-property.js';
+import { featureUpdatesOfPatch, mergedKeys, propertiesPatchOf } from '../../store/feature-edits.js';
 import { forEachMatchingRow, type RowFilter, rowMatcher } from '../../store/feature-stream.js';
 import { featuresInStackingOrder } from '../../store/item-lists.js';
 import { isFeatureLocked } from '../../store/lock.js';
@@ -245,10 +246,11 @@ export function createFeatures(deps: ResourceDeps): FeaturesCollection {
 
     update(id, patch) {
       const feature = require(id);
-      const updates = preparePatch(feature, patch);
+      // The patch is checked before the refusals of the state
+      preparePatch(feature, patch);
       if (store.isReadOnly()) return null;
       if (featureLocked(store, feature) && !onlyLockOrVisibility(patch)) return null;
-      store.updateFeature(feature.id, updates);
+      store.applyEdits([{ kind: 'set', featureId: feature.id, patch }]);
       return store.getFeature(feature.id) ?? null;
     },
 
@@ -260,16 +262,18 @@ export function createFeatures(deps: ResourceDeps): FeaturesCollection {
         const feature = require((entry as { id: unknown }).id);
         if (seen.has(feature.id)) throw invalidInput(`The ID ${feature.id} is given twice`);
         seen.add(feature.id);
-        return { feature, patch: entry.patch, updates: preparePatch(feature, entry.patch) };
+        // The patch is checked before the refusals of the state
+        preparePatch(feature, entry.patch);
+        return { feature, patch: entry.patch };
       });
       if (store.isReadOnly()) return null;
       const refused = prepared.some(
         ({ feature, patch }) => featureLocked(store, feature) && !onlyLockOrVisibility(patch),
       );
       if (refused) return null;
-      store.transact(() => {
-        for (const { feature, updates } of prepared) store.updateFeature(feature.id, updates);
-      });
+      store.applyEdits(
+        prepared.map(({ feature, patch }) => ({ kind: 'set', featureId: feature.id, patch })),
+      );
       return prepared.map(({ feature }) => store.getFeature(feature.id) as StoredFeature);
     },
 
@@ -650,7 +654,7 @@ export function checkSharedPatch(patch: unknown): FeaturePatch {
   if (record.properties !== undefined && !isRecord(record.properties)) {
     throw invalidInput('properties must be an object');
   }
-  if (record.properties !== undefined) patchOfProperties(record.properties);
+  if (record.properties !== undefined) propertiesPatchOf(record.properties);
   if (record.style !== undefined) {
     const problem = describeStyleProblem(record.style as never);
     if (problem) throw invalidInput(`The patch has ${problem}`);
@@ -668,59 +672,18 @@ export function featureRowFilter(filter: FeatureFilter | undefined): RowFilter {
 }
 
 /**
- * Checks a patch and builds the updates of the Store; throws DrawError on a wrong patch
+ * Checks a patch and builds the updates of the Store (`featureUpdatesOfPatch`); throws DrawError
+ * on a wrong patch
  *
  * @internal
  */
 export function preparePatch(feature: StoredFeature, patch: FeaturePatch): Partial<StoredFeature> {
-  requireRecord(patch, 'The patch');
-  const record = patch as unknown as Record<string, unknown>;
-  onlyKeys(record, PATCH_KEYS, 'The patch');
-  optionalBoolean(record, 'visible');
-  optionalBoolean(record, 'locked');
-  const updates: Partial<StoredFeature> = {};
-  if (patch.geometry !== undefined) {
-    const problem = describeGeometryProblem(feature.type, patch.geometry);
-    if (problem) throw invalidInput(`The patch has ${problem}`);
-    updates.geometry = patch.geometry;
-  }
-  if (patch.properties !== undefined) {
-    if (!isRecord(patch.properties)) throw invalidInput('properties must be an object');
-    updates.properties = merged(
-      feature.properties,
-      patchOfProperties(patch.properties as Record<string, unknown>),
-    ) as Record<string, Value>;
-  }
-  if (patch.style !== undefined) {
-    const problem = describeStyleProblem(patch.style);
-    if (problem) throw invalidInput(`The patch has ${problem}`);
-    updates.style = merged(
-      feature.style as Record<string, unknown>,
-      patch.style as Record<string, unknown>,
-    ) as StoredFeatureStyle;
-  }
-  if (patch.visible !== undefined) updates.visible = patch.visible;
-  if (patch.locked !== undefined) updates.locked = patch.locked;
-  return updates;
-}
-
-/** The keys of `base` with the keys of `patch` set, and removed where they are undefined */
-function merged(
-  base: Record<string, unknown>,
-  patch: Record<string, unknown>,
-): Record<string, unknown> {
-  const result: Record<string, unknown> = {};
-  for (const [key, value] of Object.entries(base)) setOwnProperty(result, key, value);
-  for (const [key, value] of Object.entries(patch)) {
-    if (value === undefined) delete result[key];
-    else setOwnProperty(result, key, value);
-  }
-  return result;
+  return featureUpdatesOfPatch(feature, patch);
 }
 
 /** A copy without the keys whose value is undefined */
 function withoutUndefined(value: object): Record<string, unknown> {
-  return merged({}, value as Record<string, unknown>);
+  return mergedKeys({}, value as Record<string, unknown>);
 }
 
 /**
@@ -734,24 +697,6 @@ function propertiesOfInput(properties: Record<string, unknown>): Record<string, 
   for (const [key, value] of Object.entries(properties)) {
     if (value !== undefined)
       setOwnProperty(out, key, drawValueOfInput(value, `The property ${key}`));
-  }
-  return out;
-}
-
-/**
- * A patch of properties with each value in the one form of a value; undefined stays, to take
- * the key off
- *
- * @throws DrawError `invalid-input` when a value is not a value
- */
-function patchOfProperties(patch: Record<string, unknown>): Record<string, unknown> {
-  const out: Record<string, unknown> = {};
-  for (const [key, value] of Object.entries(patch)) {
-    setOwnProperty(
-      out,
-      key,
-      value === undefined ? undefined : drawValueOfInput(value, `The property ${key}`),
-    );
   }
   return out;
 }

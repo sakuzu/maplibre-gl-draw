@@ -75,6 +75,16 @@ export interface VertexRef {
   index: number;
 }
 
+/**
+ * The ID a Store gives a vertex, which stays the vertex's while vertices are added and deleted
+ * before it. The instance does not read it; a Store that gives its vertices no IDs takes their
+ * places ({@link VertexRef}) only.
+ */
+export type VertexId = string;
+
+/** A vertex of a feature: the ID its Store gives it, or its place. */
+export type VertexTarget = VertexId | VertexRef;
+
 /** The selected vertices of one feature. */
 export interface VertexSelection {
   /** The ID of the feature */

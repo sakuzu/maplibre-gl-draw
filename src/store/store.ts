@@ -23,6 +23,8 @@
  */
 
 import type { Store as PublicStore, StoreView as PublicStoreView } from '../api/extension/store.js';
+import type { EditResult, FeatureEdit, FeaturePatch } from '../api/model.js';
+import type { VertexTarget } from '../api/state.js';
 import type { FeatureTables, RowWrite } from '../api/tables.js';
 import type { BulkOperation } from '../feature-table/bulk-plan.js';
 import type { TableSelection } from '../feature-table/selection.js';
@@ -46,6 +48,9 @@ import type {
   UpdateSource,
   VertexSelection,
 } from './types.js';
+
+/** The edits of features the Store applies, in the shape of the public types */
+export type { EditResult, FeatureEdit, FeaturePatch, VertexTarget };
 
 /**
  * The Store a host gives with the `store` option: the public `Store`, with the rules core
@@ -440,6 +445,11 @@ export interface Store extends StoreView, UiState {
   updateFeature(id: string, updates: Partial<Feature>, options?: UpdateFeatureOptions): boolean;
   /** Discards uncommitted intermediate states (see DocumentStore) */
   abortIntermediateUpdates?(ids: string[]): void;
+  /**
+   * Applies edits of features as one transaction, all of them or none (see the public
+   * `Store.applyEdits`): null when it was refused because the Store is read-only
+   */
+  applyEdits(edits: readonly FeatureEdit[]): EditResult | null;
   /** Deletes a feature (see {@link DocumentStore.deleteFeature}) */
   deleteFeature(id: string): boolean;
 
