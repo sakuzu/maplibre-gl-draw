@@ -607,11 +607,11 @@ export interface FeatureListOptions {
  */
 export interface FeatureReadOptions {
   /**
-   * Whether the feature is read as the drafts edit it (`draw.drafts`): the edits of the drafts
+   * Whether the feature is read as the sketches edit it (`draw.sketches`): the edits of the sketches
    * with an owner, then the ones of this client, applied over the feature, as it is drawn.
    * False when left out: the feature as the document holds it.
    */
-  applyDrafts?: boolean;
+  applySketches?: boolean;
 }
 
 /**

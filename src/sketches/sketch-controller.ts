@@ -2,30 +2,36 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * The drafts of an instance (`DraftController`): the edits shown over the document before they
- * are written (`draw.drafts`)
+ * The sketches of an instance (`SketchController`): the edits shown over the document before they
+ * are written (`draw.sketches`)
  *
- * A draft holds edits (`DraftEdit`). What it shows is the features it edits as its edits leave
+ * A sketch holds edits (`SketchEdit`). What it shows is the features it edits as its edits leave
  * them over their values of now, worked out again whenever the Store writes one of them: at the
  * end of each frame of writes (each notification of the Store), from the write marks of the rows
  * of a Store of rows (`write-marks.ts`) and from the features a Store of objects tells written. A
- * draft is never carried over what was written: it is applied again over it.
+ * sketch is never carried over what was written: it is applied again over it.
  *
- * A draft of this client (`owner` null) edits only what it can write. A feature of it deleted,
+ * A sketch of this client (`owner` null) edits only what it can write. A feature of it deleted,
  * locked, hidden or put into a layer that cannot be written is left out (counted as dropped), a
- * vertex it edits that is no longer there likewise, and the draft ends once nothing of it is left.
- * The drafts with an owner pass no gate and cannot be committed; they are drawn under the
- * drafts of this client, in the order they came. A commit makes the edits of a draft the edits of
+ * vertex it edits that is no longer there likewise, and the sketch ends once nothing of it is left.
+ * The sketches with an owner pass no gate and cannot be committed; they are drawn under the
+ * sketches of this client, in the order they came. A commit makes the edits of a sketch the edits of
  * the Store (`applyEdits`) and its features to create the features of the Store, in one
  * transaction.
  *
- * Every draft ends in one place (`#end`), and what an operation changed is drawn and told once it
+ * Every sketch ends in one place (`#end`), and what an operation changed is drawn and told once it
  * is done: the features shown are worked out again, then the events go out, in their order.
  */
 
-import type { Draft, DraftEdit, DraftEndReason, DraftInput, DraftPatch } from '../api/drafts.js';
 import type { DrawEvents } from '../api/events.js';
 import type { FeatureInput } from '../api/model.js';
+import type {
+  Sketch,
+  SketchEdit,
+  SketchEndReason,
+  SketchInput,
+  SketchPatch,
+} from '../api/sketches.js';
 import { featureTablesInternals } from '../feature-table/feature-tables.js';
 import { writeMarkKeeperOf } from '../feature-table/write-marks.js';
 import { DrawError } from '../shared/draw-error.js';
@@ -40,7 +46,7 @@ import type { Feature, StoreChange, VertexRef } from '../store/types.js';
 import { isWritableLayer } from '../store/writable-layer.js';
 import {
   type CreateEdit,
-  checkDraftEdits,
+  checkSketchEdits,
   featureEditsOf,
   featureIdsOfEdit,
   isSelectionEdit,
@@ -50,34 +56,34 @@ import {
   verticesOf,
   withoutFeatures,
   withoutVertices,
-} from './draft-edits.js';
-import { DraftView, type DrawnCreate } from './draft-view.js';
+} from './sketch-edits.js';
+import { type DrawnCreate, SketchView } from './sketch-view.js';
 
-/** The keys of the input of a draft */
+/** The keys of the input of a sketch */
 const INPUT_KEYS: readonly string[] = ['id', 'edits', 'owner'];
 
-/** The keys of a patch of a draft */
+/** The keys of a patch of a sketch */
 const PATCH_KEYS: readonly string[] = ['edits'];
 
-/** The order the reasons a feature is left out are told in, when several leave a draft empty */
-const DROP_REASONS: readonly DraftEndReason[] = ['deleted', 'locked', 'layer-unavailable'];
+/** The order the reasons a feature is left out are told in, when several leave a sketch empty */
+const DROP_REASONS: readonly SketchEndReason[] = ['deleted', 'locked', 'layer-unavailable'];
 
 /**
- * The events of the drafts
+ * The events of the sketches
  *
  * @internal
  */
-export type DraftEventName = 'draft.added' | 'draft.updated' | 'draft.removed';
+export type SketchEventName = 'sketch.added' | 'sketch.updated' | 'sketch.removed';
 
 /**
- * What the drafts read and are told of the instance
+ * What the sketches read and are told of the instance
  *
  * @internal
  */
-export interface DraftControllerDeps {
+export interface SketchControllerDeps {
   /** The Store of the instance */
   readonly store: Store;
-  /** Makes an ID: of a draft given none, and of a feature created with none */
+  /** Makes an ID: of a sketch given none, and of a feature created with none */
   readonly generateId: () => string;
   /** The layer a feature created goes into when its input names neither layer nor group */
   readonly getActiveLayerId: () => string;
@@ -92,16 +98,16 @@ export interface DraftControllerDeps {
 }
 
 /**
- * Compares what a draft drew with what its commit wrote (the checks of the state): the problems
+ * Compares what a sketch drew with what its commit wrote (the checks of the state): the problems
  * found, given to the check
  *
  * @internal
  */
-export type DraftCommitCheck = (problems: string[]) => void;
+export type SketchCommitCheck = (problems: string[]) => void;
 
-/** A draft and what is kept with it */
+/** A sketch and what is kept with it */
 interface Entry {
-  draft: Draft;
+  sketch: Sketch;
   /** The order it was added in */
   readonly seq: number;
   /** The edits of it left out so far */
@@ -115,9 +121,9 @@ interface Entry {
   createLayers: Map<number, string>;
 }
 
-/** A draft checked, before it is added or changed */
+/** A sketch checked, before it is added or changed */
 interface Prepared {
-  readonly edits: readonly DraftEdit[];
+  readonly edits: readonly SketchEdit[];
   readonly shapes: Map<string, string>;
   readonly createLayers: Map<number, string>;
   /** The features it edits (the ones selected now for `{ selection: true }`) */
@@ -125,19 +131,19 @@ interface Prepared {
 }
 
 /**
- * The drafts of an instance
+ * The sketches of an instance
  *
  * @internal
  */
-export class DraftController {
-  readonly #deps: DraftControllerDeps;
+export class SketchController {
+  readonly #deps: SketchControllerDeps;
   readonly #store: Store;
-  /** What the drafts draw */
-  readonly view: DraftView;
-  /** The drafts, in the order they were added */
+  /** What the sketches draw */
+  readonly view: SketchView;
+  /** The sketches, in the order they were added */
   readonly #entries = new Map<string, Entry>();
   #seq = 0;
-  /** The features drafts edit, as the drafts leave them, by ID */
+  /** The features sketches edit, as the sketches leave them, by ID */
   #applied = new Map<string, Feature>();
   /** The feature of the Store each feature of `#applied` was worked out over */
   #basis = new Map<string, Feature>();
@@ -152,20 +158,20 @@ export class DraftController {
   #depth = 0;
   #dirty = false;
   /** The events of the operation under way, told once it is done */
-  #events: Array<[DraftEventName, DrawEvents[DraftEventName]]> = [];
-  #listener: (<K extends DraftEventName>(event: K, payload: DrawEvents[K]) => void) | null = null;
+  #events: Array<[SketchEventName, DrawEvents[SketchEventName]]> = [];
+  #listener: (<K extends SketchEventName>(event: K, payload: DrawEvents[K]) => void) | null = null;
   #unsubscribe: (() => void) | null = null;
-  #commitCheck: DraftCommitCheck | null = null;
+  #commitCheck: SketchCommitCheck | null = null;
   #afterOperate: (() => void) | null = null;
 
-  constructor(deps: DraftControllerDeps) {
+  constructor(deps: SketchControllerDeps) {
     this.#deps = deps;
     this.#store = deps.store;
-    this.view = new DraftView(deps.store);
+    this.view = new SketchView(deps.store);
     this.#readOnly = deps.store.isReadOnly();
   }
 
-  /** Follows the writes of the Store: the drafts are applied again at the end of each frame */
+  /** Follows the writes of the Store: the sketches are applied again at the end of each frame */
   attach(): void {
     if (this.#unsubscribe) return;
     this.#readOnly = this.#store.isReadOnly();
@@ -179,15 +185,15 @@ export class DraftController {
     this.#unsubscribe = null;
   }
 
-  /** Sets what the events of the drafts are told to (null: nothing) */
+  /** Sets what the events of the sketches are told to (null: nothing) */
   setListener(
-    listener: (<K extends DraftEventName>(event: K, payload: DrawEvents[K]) => void) | null,
+    listener: (<K extends SketchEventName>(event: K, payload: DrawEvents[K]) => void) | null,
   ): void {
     this.#listener = listener;
   }
 
-  /** Sets what compares the drafts drawn with what their commits write (null: nothing) */
-  setCommitCheck(check: DraftCommitCheck | null): void {
+  /** Sets what compares the sketches drawn with what their commits write (null: nothing) */
+  setCommitCheck(check: SketchCommitCheck | null): void {
     this.#commitCheck = check;
   }
 
@@ -195,13 +201,13 @@ export class DraftController {
   // Reads
   // ==========================================================================
 
-  get(id: string): Draft | undefined {
-    return this.#entries.get(id)?.draft;
+  get(id: string): Sketch | undefined {
+    return this.#entries.get(id)?.sketch;
   }
 
-  /** The drafts in the order they are drawn: the ones with an owner first */
-  list(): Draft[] {
-    return this.#ordered().map((entry) => entry.draft);
+  /** The sketches in the order they are drawn: the ones with an owner first */
+  list(): Sketch[] {
+    return this.#ordered().map((entry) => entry.sketch);
   }
 
   count(): number {
@@ -212,13 +218,13 @@ export class DraftController {
     return this.#entries.has(id);
   }
 
-  /** A feature of the Store as the drafts edit it (the feature itself when none does) */
+  /** A feature of the Store as the sketches edit it (the feature itself when none does) */
   appliedFeature(id: string): Feature | undefined {
     return this.#applied.get(id) ?? this.#store.getFeature(id);
   }
 
   /**
-   * The features drafts edit that are shown, as the drafts leave them: what is drawn in their
+   * The features sketches edit that are shown, as the sketches leave them: what is drawn in their
    * places (the checks compare what is drawn with it)
    */
   expectedDrawn(): Map<string, Feature> {
@@ -230,7 +236,7 @@ export class DraftController {
     return out;
   }
 
-  /** Sets what is called once each operation of the drafts is done (null: nothing) */
+  /** Sets what is called once each operation of the sketches is done (null: nothing) */
   setAfterOperate(fn: (() => void) | null): void {
     this.#afterOperate = fn;
   }
@@ -239,20 +245,20 @@ export class DraftController {
   // Writes
   // ==========================================================================
 
-  add(input: DraftInput): Draft | null {
+  add(input: SketchInput): Sketch | null {
     return this.#operate(() => this.#addAll([input], 'add')?.[0] ?? null);
   }
 
-  addMany(inputs: readonly DraftInput[]): Draft[] | null {
+  addMany(inputs: readonly SketchInput[]): Sketch[] | null {
     if (!Array.isArray(inputs)) throw invalidInput('The inputs must be an array');
     return this.#operate(() => this.#addAll(inputs, 'addMany'));
   }
 
-  update(id: string, patch: DraftPatch): Draft | null {
+  update(id: string, patch: SketchPatch): Sketch | null {
     return this.#operate(() => this.#updateAll([{ id, patch }])?.[0] ?? null);
   }
 
-  updateMany(patches: readonly { id: string; patch: DraftPatch }[]): Draft[] | null {
+  updateMany(patches: readonly { id: string; patch: SketchPatch }[]): Sketch[] | null {
     if (!Array.isArray(patches)) throw invalidInput('The patches must be an array');
     return this.#operate(() => this.#updateAll(patches));
   }
@@ -265,19 +271,19 @@ export class DraftController {
     const entries = this.#requireAll(ids);
     return this.#operate(() => {
       for (const entry of entries) {
-        this.#end(entry.draft.id, entry.draft.owner === null ? 'cancelled' : 'withdrawn');
+        this.#end(entry.sketch.id, entry.sketch.owner === null ? 'cancelled' : 'withdrawn');
       }
       return true;
     });
   }
 
   /**
-   * Ends a draft for a reason (the input of a mode ends its draft so: `deselected`), without
+   * Ends a sketch for a reason (the input of a mode ends its sketch so: `deselected`), without
    * writing it
    *
-   * @throws DrawError `not-found` when there is no draft with this ID
+   * @throws DrawError `not-found` when there is no sketch with this ID
    */
-  end(id: string, reason: Exclude<DraftEndReason, 'committed'>): void {
+  end(id: string, reason: Exclude<SketchEndReason, 'committed'>): void {
     this.#requireAll([id]);
     this.#operate(() => this.#end(id, reason));
   }
@@ -289,7 +295,7 @@ export class DraftController {
   commitMany(ids: readonly string[]): boolean {
     const entries = this.#requireAll(ids);
     return this.#operate(() => {
-      if (entries.some((entry) => entry.draft.owner !== null)) return false;
+      if (entries.some((entry) => entry.sketch.owner !== null)) return false;
       if (this.#store.isReadOnly()) return false;
       return this.#commitEntries(entries);
     });
@@ -299,8 +305,8 @@ export class DraftController {
   // Adding and changing
   // ==========================================================================
 
-  /** Adds drafts, all of them or none (null when one of this client is refused) */
-  #addAll(inputs: readonly DraftInput[], what: string): Draft[] | null {
+  /** Adds sketches, all of them or none (null when one of this client is refused) */
+  #addAll(inputs: readonly SketchInput[], what: string): Sketch[] | null {
     const taken = new Set<string>();
     const checked = inputs.map((input) => {
       if (!isRecord(input)) throw invalidInput('The input must be an object');
@@ -320,14 +326,14 @@ export class DraftController {
       if (owner !== null) requireId(owner, 'The owner');
       return { id, owner, prepared: this.#prepare(id, input.edits) };
     });
-    // Two drafts of this client of a feature, given at once
+    // Two sketches of this client of a feature, given at once
     const touchedBy = new Map<string, string>();
     for (const { id, owner, prepared } of checked) {
       if (owner !== null) continue;
       for (const featureId of prepared.touched) {
         if (touchedBy.has(featureId)) {
           throw invalidInput(
-            `The drafts ${touchedBy.get(featureId)} and ${id} of ${what} both edit the feature ${featureId}`,
+            `The sketches ${touchedBy.get(featureId)} and ${id} of ${what} both edit the feature ${featureId}`,
           );
         }
         touchedBy.set(featureId, id);
@@ -336,7 +342,7 @@ export class DraftController {
     if (checked.some(({ owner, prepared }) => owner === null && !this.#allowed(prepared))) {
       return null;
     }
-    // A second draft of this client of a feature commits the first one
+    // A second sketch of this client of a feature commits the first one
     const before = this.#ownTouching(
       checked.filter(({ owner }) => owner === null).flatMap(({ prepared }) => prepared.touched),
       new Set(),
@@ -347,25 +353,25 @@ export class DraftController {
         return null;
       }
     }
-    const drafts: Draft[] = [];
+    const sketches: Sketch[] = [];
     for (const { id, owner, prepared } of checked) {
       const entry: Entry = {
-        draft: draftOf(id, prepared.edits, owner),
+        sketch: sketchOf(id, prepared.edits, owner),
         seq: this.#seq++,
         dropped: 0,
         shapes: prepared.shapes,
         createLayers: prepared.createLayers,
       };
       this.#entries.set(id, entry);
-      drafts.push(entry.draft);
-      this.#queue('draft.added', { draft: entry.draft });
+      sketches.push(entry.sketch);
+      this.#queue('sketch.added', { sketch: entry.sketch });
     }
     this.#dirty = true;
-    return drafts;
+    return sketches;
   }
 
-  /** Changes drafts, all of them or none (null when one of this client is refused) */
-  #updateAll(patches: readonly { id: string; patch: DraftPatch }[]): Draft[] | null {
+  /** Changes sketches, all of them or none (null when one of this client is refused) */
+  #updateAll(patches: readonly { id: string; patch: SketchPatch }[]): Sketch[] | null {
     const seen = new Set<string>();
     const checked = patches.map((entry) => {
       if (!isRecord(entry)) throw invalidInput('Each entry must be an object');
@@ -377,12 +383,12 @@ export class DraftController {
       const patch = entry.patch as unknown;
       if (!isRecord(patch)) throw invalidInput('The patch must be an object');
       onlyKeys(patch, PATCH_KEYS, 'The patch');
-      const edits = patch.edits === undefined ? found.draft.edits : patch.edits;
+      const edits = patch.edits === undefined ? found.sketch.edits : patch.edits;
       return { entry: found, prepared: this.#prepare(id, edits) };
     });
-    const own = checked.filter(({ entry }) => entry.draft.owner === null);
+    const own = checked.filter(({ entry }) => entry.sketch.owner === null);
     if (own.some(({ prepared }) => !this.#allowed(prepared))) return null;
-    const changing = new Set(checked.map(({ entry }) => entry.draft.id));
+    const changing = new Set(checked.map(({ entry }) => entry.sketch.id));
     const before = this.#ownTouching(
       own.flatMap(({ prepared }) => prepared.touched),
       changing,
@@ -391,20 +397,20 @@ export class DraftController {
       if (!this.#store.isReadOnly()) this.#commitEntries(before);
       if (own.some(({ prepared }) => !this.#allowed(prepared))) return null;
     }
-    const drafts: Draft[] = [];
+    const sketches: Sketch[] = [];
     for (const { entry, prepared } of checked) {
-      entry.draft = draftOf(entry.draft.id, prepared.edits, entry.draft.owner);
+      entry.sketch = sketchOf(entry.sketch.id, prepared.edits, entry.sketch.owner);
       entry.shapes = prepared.shapes;
       entry.createLayers = prepared.createLayers;
-      drafts.push(entry.draft);
-      this.#queue('draft.updated', { draft: entry.draft, dropped: 0 });
+      sketches.push(entry.sketch);
+      this.#queue('sketch.updated', { sketch: entry.sketch, dropped: 0 });
     }
     this.#dirty = true;
-    return drafts;
+    return sketches;
   }
 
   /**
-   * Checks the edits of a draft and what it is kept with: the features and the vertices they
+   * Checks the edits of a sketch and what it is kept with: the features and the vertices they
    * name are there and take the edits (each edit applied over the features as they are now)
    *
    * @throws DrawError `invalid-input` for edits that cannot apply, `not-found` for a feature, a
@@ -413,8 +419,8 @@ export class DraftController {
   #prepare(id: string, given: unknown): Prepared {
     const store = this.#store;
     const transforms = this.#transforms();
-    checkDraftEdits(given, store.getVertexIds !== undefined, transforms);
-    let edits: readonly DraftEdit[] = given;
+    checkSketchEdits(given, store.getVertexIds !== undefined, transforms);
+    let edits: readonly SketchEdit[] = given;
     const createLayers = new Map<number, string>();
     edits.forEach((edit, i) => {
       if (edit.kind !== 'create') {
@@ -488,7 +494,7 @@ export class DraftController {
   }
 
   /**
-   * Whether a draft of this client may be added or changed so: the document is not read-only, the
+   * Whether a sketch of this client may be added or changed so: the document is not read-only, the
    * features it edits can be written, there are features selected for `{ selection: true }`, and
    * the layers it creates features in can be written
    */
@@ -511,13 +517,13 @@ export class DraftController {
     return ok;
   }
 
-  /** The drafts of this client that edit any of the features, other than the ones given */
+  /** The sketches of this client that edit any of the features, other than the ones given */
   #ownTouching(featureIds: readonly string[], except: ReadonlySet<string>): Entry[] {
     if (featureIds.length === 0) return [];
     const ids = new Set(featureIds);
     const out: Entry[] = [];
     for (const entry of this.#entries.values()) {
-      if (entry.draft.owner !== null || except.has(entry.draft.id)) continue;
+      if (entry.sketch.owner !== null || except.has(entry.sketch.id)) continue;
       if (this.#touchedBy(entry).some((featureId) => ids.has(featureId))) out.push(entry);
     }
     return out;
@@ -528,26 +534,26 @@ export class DraftController {
   // ==========================================================================
 
   /**
-   * Writes drafts of this client in one transaction: the features they create created in their
-   * places, and their edits given to the Store (`applyEdits`, once for each draft). A draft that
+   * Writes sketches of this client in one transaction: the features they create created in their
+   * places, and their edits given to the Store (`applyEdits`, once for each sketch). A sketch that
    * creates a feature in a layer that cannot be written ends (`layer-unavailable`) and nothing is
    * written then
    */
   #commitEntries(entries: readonly Entry[]): boolean {
     const store = this.#store;
     const unavailable = entries.filter((entry) =>
-      entry.draft.edits.some(
+      entry.sketch.edits.some(
         (edit, i) =>
           edit.kind === 'create' && !this.#createWritable(edit, entry.createLayers.get(i)),
       ),
     );
     if (unavailable.length > 0) {
-      for (const entry of unavailable) this.#end(entry.draft.id, 'layer-unavailable');
+      for (const entry of unavailable) this.#end(entry.sketch.id, 'layer-unavailable');
       return false;
     }
     const writes = entries.map((entry) => {
       const creates: Array<{ feature: Feature; below: string | null; key: string }> = [];
-      entry.draft.edits.forEach((edit, i) => {
+      entry.sketch.edits.forEach((edit, i) => {
         if (edit.kind !== 'create') return;
         const layerId = entry.createLayers.get(i) ?? '';
         const feature = this.#deps.prepareFeature(
@@ -555,15 +561,15 @@ export class DraftController {
           edit.feature.id ?? this.#deps.generateId(),
           layerId,
         );
-        creates.push({ feature, below: edit.below, key: createKey(entry.draft.id, i) });
+        creates.push({ feature, below: edit.below, key: createKey(entry.sketch.id, i) });
       });
       // A Store that gives its vertices IDs takes them by their IDs
-      const edits = featureEditsOf(entry.draft.edits, () => this.#selected());
+      const edits = featureEditsOf(entry.sketch.edits, () => this.#selected());
       return { entry, creates, edits };
     });
     const drawn = this.#commitCheck ? this.#drawnBefore(writes) : null;
-    // What the drafts drew goes with them, before the Store is written
-    for (const { entry } of writes) this.#entries.delete(entry.draft.id);
+    // What the sketches drew goes with them, before the Store is written
+    for (const { entry } of writes) this.#entries.delete(entry.sketch.id);
     this.#refresh();
     const results: Array<number | null> = [];
     store.transact(() => {
@@ -578,8 +584,8 @@ export class DraftController {
     writes.forEach(({ entry }, i) => {
       const dropped = results[i];
       entry.dropped += dropped ?? 0;
-      this.#queue('draft.removed', {
-        draft: entry.draft,
+      this.#queue('sketch.removed', {
+        sketch: entry.sketch,
         reason: dropped === null ? 'read-only' : 'committed',
         dropped: entry.dropped,
       });
@@ -612,13 +618,13 @@ export class DraftController {
   // Ending
   // ==========================================================================
 
-  /** Ends a draft: the one place a draft ends, its end told once the operation is done */
-  #end(id: string, reason: DraftEndReason): void {
+  /** Ends a sketch: the one place a sketch ends, its end told once the operation is done */
+  #end(id: string, reason: SketchEndReason): void {
     const entry = this.#entries.get(id);
     if (!entry) return;
     this.#entries.delete(id);
     this.#dirty = true;
-    this.#queue('draft.removed', { draft: entry.draft, reason, dropped: entry.dropped });
+    this.#queue('sketch.removed', { sketch: entry.sketch, reason, dropped: entry.dropped });
   }
 
   // ==========================================================================
@@ -626,7 +632,7 @@ export class DraftController {
   // ==========================================================================
 
   /**
-   * Applies the drafts again at the end of a frame of writes of the Store: over the features it
+   * Applies the sketches again at the end of a frame of writes of the Store: over the features it
    * wrote, the ones it deleted, locked, hid or put into a layer that cannot be written left out,
    * and over the vertices as they are now
    */
@@ -638,7 +644,7 @@ export class DraftController {
       }
       if (changes.reset === true) {
         for (const entry of [...this.#entries.values()]) {
-          this.#end(entry.draft.id, 'document-replaced');
+          this.#end(entry.sketch.id, 'document-replaced');
         }
         return;
       }
@@ -646,7 +652,7 @@ export class DraftController {
       const readOnly = store.isReadOnly();
       if (readOnly && !this.#readOnly) {
         for (const entry of [...this.#entries.values()]) {
-          if (entry.draft.owner === null) this.#end(entry.draft.id, 'read-only');
+          if (entry.sketch.owner === null) this.#end(entry.sketch.id, 'read-only');
         }
       }
       this.#readOnly = readOnly;
@@ -659,7 +665,7 @@ export class DraftController {
       for (const entry of [...this.#entries.values()]) {
         const touched = this.#touchedBy(entry);
         const named = written === null ? touched : touched.filter((id) => written.has(id));
-        const selects = selection && entry.draft.edits.some(isSelectionEdit);
+        const selects = selection && entry.sketch.edits.some(isSelectionEdit);
         if (named.length > 0 || selects) this.#applyAgain(entry, named);
       }
       if (
@@ -692,19 +698,19 @@ export class DraftController {
   }
 
   /**
-   * Applies a draft again over the features named written: the ones gone or that cannot be written
-   * left out (the draft ends once nothing of it is left), and its vertices found again
+   * Applies a sketch again over the features named written: the ones gone or that cannot be written
+   * left out (the sketch ends once nothing of it is left), and its vertices found again
    */
   #applyAgain(entry: Entry, named: readonly string[]): void {
     const store = this.#store;
-    const own = entry.draft.owner === null;
-    const gone = new Map<string, DraftEndReason>();
+    const own = entry.sketch.owner === null;
+    const gone = new Map<string, SketchEndReason>();
     for (const id of named) {
       const feature = store.getFeature(id);
       const reason = !feature ? 'deleted' : own ? this.#unavailable(feature) : null;
       if (reason) gone.set(id, reason);
     }
-    let edits: readonly DraftEdit[] = entry.draft.edits;
+    let edits: readonly SketchEdit[] = entry.sketch.edits;
     let dropped = 0;
     if (gone.size > 0) {
       const left = withoutFeatures(edits, new Set(gone.keys()));
@@ -730,46 +736,46 @@ export class DraftController {
         continue;
       }
       if (entry.shapes.get(featureId) !== vertexShapeOf(feature.geometry)) {
-        this.#end(entry.draft.id, 'vertices-removed');
+        this.#end(entry.sketch.id, 'vertices-removed');
         return;
       }
     }
     dropped += verticesDropped;
-    const hadVertices = vertexFeatureIds(entry.draft.edits).size > 0;
+    const hadVertices = vertexFeatureIds(entry.sketch.edits).size > 0;
     if (verticesDropped > 0 && hadVertices && vertexFeatureIds(edits).size === 0) {
       entry.dropped += dropped;
-      this.#end(entry.draft.id, 'vertices-removed');
+      this.#end(entry.sketch.id, 'vertices-removed');
       return;
     }
-    if (edits.length === 0 && entry.draft.edits.length > 0) {
+    if (edits.length === 0 && entry.sketch.edits.length > 0) {
       entry.dropped += dropped;
       const reasons = new Set(gone.values());
       this.#end(
-        entry.draft.id,
+        entry.sketch.id,
         DROP_REASONS.find((reason) => reasons.has(reason)) ?? 'vertices-removed',
       );
       return;
     }
-    // A draft of the features selected ends once none is
+    // A sketch of the features selected ends once none is
     if (edits.length > 0 && edits.every(isSelectionEdit) && this.#selected().length === 0) {
       entry.dropped += dropped;
-      this.#end(entry.draft.id, 'deselected');
+      this.#end(entry.sketch.id, 'deselected');
       return;
     }
     if (dropped === 0) return;
     entry.dropped += dropped;
-    entry.draft = draftOf(entry.draft.id, edits, entry.draft.owner);
+    entry.sketch = sketchOf(entry.sketch.id, edits, entry.sketch.owner);
     this.#dirty = true;
-    this.#queue('draft.updated', { draft: entry.draft, dropped });
+    this.#queue('sketch.updated', { sketch: entry.sketch, dropped });
   }
 
   // ==========================================================================
-  // What the drafts show
+  // What the sketches show
   // ==========================================================================
 
   /**
-   * Works out again the features the drafts edit as they leave them, and what the drafts draw: the
-   * drafts applied one after the other in the order they are drawn, over the features as they are
+   * Works out again the features the sketches edit as they leave them, and what the sketches draw: the
+   * sketches applied one after the other in the order they are drawn, over the features as they are
    * now
    */
   #refresh(): void {
@@ -795,12 +801,12 @@ export class DraftController {
       let updates: ReturnType<typeof updatesOfEdits>['updates'];
       try {
         updates = updatesOfEdits(
-          featureEditsOf(entry.draft.edits, () => this.#selected(), findVertex),
+          featureEditsOf(entry.sketch.edits, () => this.#selected(), findVertex),
           live,
           transforms,
         ).updates;
       } catch {
-        // A draft whose edits no longer apply over the features as they are (the drafts of other
+        // A sketch whose edits no longer apply over the features as they are (the sketches of other
         // clients pass no check) draws them as they are
         continue;
       }
@@ -827,13 +833,13 @@ export class DraftController {
     this.view.set(drawn, this.#drawnCreates());
   }
 
-  /** The features the drafts create, as they are drawn (the ones whose layer is not shown left out) */
+  /** The features the sketches create, as they are drawn (the ones whose layer is not shown left out) */
   #drawnCreates(): DrawnCreate[] {
     const out: DrawnCreate[] = [];
     for (const entry of this.#ordered()) {
-      entry.draft.edits.forEach((edit, i) => {
+      entry.sketch.edits.forEach((edit, i) => {
         if (edit.kind !== 'create') return;
-        const key = createKey(entry.draft.id, i);
+        const key = createKey(entry.sketch.id, i);
         let feature: Feature;
         try {
           feature = this.#deps.prepareFeature(edit.feature, key, entry.createLayers.get(i) ?? '');
@@ -857,10 +863,10 @@ export class DraftController {
     return out;
   }
 
-  /** Whether the drafts have features to create */
+  /** Whether the sketches have features to create */
   #hasCreates(): boolean {
     for (const entry of this.#entries.values()) {
-      if (entry.draft.edits.some((edit) => edit.kind === 'create')) return true;
+      if (entry.sketch.edits.some((edit) => edit.kind === 'create')) return true;
     }
     return false;
   }
@@ -869,7 +875,7 @@ export class DraftController {
   // The checks of the state
   // ==========================================================================
 
-  /** What the drafts drew of the features their commits write, before they are written */
+  /** What the sketches drew of the features their commits write, before they are written */
   #drawnBefore(
     writes: ReadonlyArray<{
       entry: Entry;
@@ -878,15 +884,15 @@ export class DraftController {
     }>,
   ): Array<{ id: string; drawn: unknown }> | null {
     const store = this.#store;
-    // A write the drafts were not applied again over yet is not compared
+    // A write the sketches were not applied again over yet is not compared
     if (!this.#fresh()) return null;
     const others = new Set<string>();
     for (const entry of this.#entries.values()) {
-      if (entry.draft.owner !== null) for (const id of this.#touchedBy(entry)) others.add(id);
+      if (entry.sketch.owner !== null) for (const id of this.#touchedBy(entry)) others.add(id);
     }
     const tables = featureTablesInternals(store.tables);
     const drawnOf = (id: string): unknown =>
-      tables ? tables.draftGeometryOf(id) : this.view.drawnFeature(id)?.geometry;
+      tables ? tables.sketchGeometryOf(id) : this.view.drawnFeature(id)?.geometry;
     const out: Array<{ id: string; drawn: unknown }> = [];
     for (const { entry, creates } of writes) {
       for (const id of this.#touchedBy(entry)) {
@@ -900,7 +906,7 @@ export class DraftController {
     return out;
   }
 
-  /** Compares what the drafts drew with what their commits wrote (`DraftCommitCheck`) */
+  /** Compares what the sketches drew with what their commits wrote (`SketchCommitCheck`) */
   #compareCommitted(drawn: ReadonlyArray<{ id: string; drawn: unknown }>): void {
     const tables = featureTablesInternals(this.#store.tables);
     const problems: string[] = [];
@@ -908,7 +914,7 @@ export class DraftController {
       const written = tables ? tables.rowGeometryOf(id) : this.#store.getFeature(id)?.geometry;
       if (!sameBits(before, written)) {
         problems.push(
-          `the feature "${id}" was drawn as ${JSON.stringify(before)} before its draft was committed, and is written as ${JSON.stringify(written)}`,
+          `the feature "${id}" was drawn as ${JSON.stringify(before)} before its sketch was committed, and is written as ${JSON.stringify(written)}`,
         );
       }
     }
@@ -954,23 +960,23 @@ export class DraftController {
     return result;
   }
 
-  #queue<K extends DraftEventName>(event: K, payload: DrawEvents[K]): void {
+  #queue<K extends SketchEventName>(event: K, payload: DrawEvents[K]): void {
     this.#events.push([event, payload]);
   }
 
-  /** The drafts in the order they are drawn: the ones with an owner first, each in its order */
+  /** The sketches in the order they are drawn: the ones with an owner first, each in its order */
   #ordered(): Entry[] {
     const entries = [...this.#entries.values()];
     return [
-      ...entries.filter((entry) => entry.draft.owner !== null),
-      ...entries.filter((entry) => entry.draft.owner === null),
+      ...entries.filter((entry) => entry.sketch.owner !== null),
+      ...entries.filter((entry) => entry.sketch.owner === null),
     ];
   }
 
-  /** The features a draft edits (the ones selected now for `{ selection: true }`) */
+  /** The features a sketch edits (the ones selected now for `{ selection: true }`) */
   #touchedBy(entry: Entry): string[] {
     const out = new Set<string>();
-    for (const edit of entry.draft.edits) {
+    for (const edit of entry.sketch.edits) {
       for (const id of featureIdsOfEdit(edit, () => this.#selected())) out.add(id);
     }
     return [...out];
@@ -989,10 +995,10 @@ export class DraftController {
   }
 
   /**
-   * Why a feature cannot take a draft of this client: locked (itself, its group or its layer),
+   * Why a feature cannot take a sketch of this client: locked (itself, its group or its layer),
    * hidden or in a layer that cannot be written (`layer-unavailable`); null when it can
    */
-  #unavailable(feature: Feature): DraftEndReason | null {
+  #unavailable(feature: Feature): SketchEndReason | null {
     const store = this.#store;
     if (isFeatureLocked(feature, store)) return 'locked';
     if (!this.#shown(feature)) return 'layer-unavailable';
@@ -1052,7 +1058,7 @@ export class DraftController {
     return [...this.#store.listHidden()].sort().join('\u0000');
   }
 
-  /** The drafts of the IDs, each there (all or none) */
+  /** The sketches of the IDs, each there (all or none) */
   #requireAll(ids: readonly string[]): Entry[] {
     if (!Array.isArray(ids)) throw invalidInput('The IDs must be an array');
     const out: Entry[] = [];
@@ -1065,14 +1071,14 @@ export class DraftController {
   }
 }
 
-/** A draft, frozen */
-function draftOf(id: string, edits: readonly DraftEdit[], owner: string | null): Draft {
+/** A sketch, frozen */
+function sketchOf(id: string, edits: readonly SketchEdit[], owner: string | null): Sketch {
   return Object.freeze({ id, edits: Object.freeze([...edits]), owner });
 }
 
-/** The ID a feature a draft creates is drawn with: an ID of no feature of the document */
-function createKey(draftId: string, index: number): string {
-  return `\u0000draft\u0000${draftId}\u0000${index}`;
+/** The ID a feature a sketch creates is drawn with: an ID of no feature of the document */
+function createKey(sketchId: string, index: number): string {
+  return `\u0000sketch\u0000${sketchId}\u0000${index}`;
 }
 
 /** Whether a change of the Store changed the document */
@@ -1108,8 +1114,8 @@ function invalidInput(message: string, details?: unknown): DrawError {
   return new DrawError('invalid-input', message, details);
 }
 
-/** The error for an ID of no draft, or of no feature */
-function notFound(id: unknown, kind = 'draft'): DrawError {
+/** The error for an ID of no sketch, or of no feature */
+function notFound(id: unknown, kind = 'sketch'): DrawError {
   return new DrawError('not-found', `There is no ${kind} with the ID ${JSON.stringify(id)}`, {
     id,
   });

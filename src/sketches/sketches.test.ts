@@ -2,26 +2,25 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * The drafts (`draw.drafts`) over the Store of objects, the Store of rows and a Store that gives
+ * The sketches (`draw.sketches`) over the Store of objects, the Store of rows and a Store that gives
  * its vertices IDs, with every check of the state on
  *
- * - add: the gates of a draft of this client (read-only, a lock, a layer that cannot be written, a
- *   feature hidden) give null, an ID of no feature throws, and a draft with an owner passes no
+ * - add: the gates of a sketch of this client (read-only, a lock, a layer that cannot be written, a
+ *   feature hidden) give null, an ID of no feature throws, and a sketch with an owner passes no
  *   gate
  * - the events and their order; a commit writes in one transaction with one `applyEdits`, a
  *   removal writes nothing
- * - a second draft of this client of a feature commits the first one; the drafts with an owner
+ * - a second sketch of this client of a feature commits the first one; the sketches with an owner
  *   are applied first and cannot be committed
  * - applied again over what the Store writes: a feature deleted, locked or hidden is left out
- *   (dropped) and the draft goes on, and ends with the reason once nothing is left; the vertices
+ *   (dropped) and the sketch goes on, and ends with the reason once nothing is left; the vertices
  *   found again by their IDs, or by their places while the shape stays
- * - a feature created in its place (`below`), and a draft ended when its layer cannot be written
- * - the reads with the drafts (`applyDrafts`)
- * - the checks `drafts` and `draft-commits` pass, and fail when what they check is broken
+ * - a feature created in its place (`below`), and a sketch ended when its layer cannot be written
+ * - the reads with the sketches (`applySketches`)
+ * - the checks `sketches` and `sketch-commits` pass, and fail when what they check is broken
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { Draft, DraftEdit } from '../api/drafts.js';
 import type { Draw } from '../api/draw.js';
 import type { DrawEvents } from '../api/events.js';
 import type { Store as PublicStore } from '../api/extension/store.js';
@@ -29,8 +28,9 @@ import { createDrawOnEngine } from '../api/impl/create-draw.js';
 import type { Engine } from '../api/impl/engine.js';
 import { createEngine } from '../api/impl/engine.js';
 import type { ConsistencyFailure } from '../api/options.js';
+import type { Sketch, SketchEdit } from '../api/sketches.js';
 import { featureTablesInternals } from '../feature-table/feature-tables.js';
-import { STATE_HIDDEN_DRAFT } from '../feature-table/row-state.js';
+import { STATE_HIDDEN_SKETCH } from '../feature-table/row-state.js';
 import { DrawError } from '../shared/draw-error.js';
 import { MemoryStore } from '../store/memory.js';
 import type { FeatureEdit, Store } from '../store/store.js';
@@ -115,7 +115,7 @@ function storeOf(kind: Kind): Store {
 }
 
 /** An instance over a Store of a kind, with every check of the state on */
-function open(kind: Kind, allowed: Array<'drafts' | 'draft-commits'> = []): Opened {
+function open(kind: Kind, allowed: Array<'sketches' | 'sketch-commits'> = []): Opened {
   const store = storeOf(kind);
   const failures: ConsistencyFailure[] = [];
   const options = {
@@ -130,9 +130,9 @@ function open(kind: Kind, allowed: Array<'drafts' | 'draft-commits'> = []): Open
   opened.push(draw);
   const events: Array<[string, unknown]> = [];
   for (const event of [
-    'draft.added',
-    'draft.updated',
-    'draft.removed',
+    'sketch.added',
+    'sketch.updated',
+    'sketch.removed',
     'document.changed',
   ] as const) {
     draw.on(event, (payload) => events.push([event, payload]));
@@ -170,7 +170,7 @@ const move = (
   featureId: string,
   to: [number, number],
   vertex: VertexRef | string = { ring: 0, index: 1 },
-): DraftEdit => ({
+): SketchEdit => ({
   kind: 'vertex-move',
   featureId,
   vertices: [vertex as VertexRef],
@@ -178,63 +178,63 @@ const move = (
 });
 
 for (const kind of KINDS) {
-  describe(`drafts over the Store of ${kind}`, () => {
-    it('adds a draft that is drawn and read with the drafts, and writes nothing', () => {
+  describe(`sketches over the Store of ${kind}`, () => {
+    it('adds a sketch that is drawn and read with the sketches, and writes nothing', () => {
       const { draw, events, failures } = open(kind);
       const a = line(draw);
       events.length = 0;
-      const draft = draw.drafts.add({ edits: [move(a.id, [1, 1])] }) as Draft;
-      expect(draft.owner).toBeNull();
-      expect(draw.drafts.get(draft.id)).toBe(draft);
-      expect(draw.drafts.list()).toEqual([draft]);
-      expect(draw.drafts.count()).toBe(1);
-      expect(draw.drafts.has(draft.id)).toBe(true);
-      expect(names(events)).toEqual(['draft.added']);
+      const sketch = draw.sketches.add({ edits: [move(a.id, [1, 1])] }) as Sketch;
+      expect(sketch.owner).toBeNull();
+      expect(draw.sketches.get(sketch.id)).toBe(sketch);
+      expect(draw.sketches.list()).toEqual([sketch]);
+      expect(draw.sketches.count()).toBe(1);
+      expect(draw.sketches.has(sketch.id)).toBe(true);
+      expect(names(events)).toEqual(['sketch.added']);
       expect(coordinatesOf(draw.features.get(a.id))[1]).toEqual([1, 0]);
-      expect(coordinatesOf(draw.features.get(a.id, { applyDrafts: true }))[1]).toEqual([1, 1]);
+      expect(coordinatesOf(draw.features.get(a.id, { applySketches: true }))[1]).toEqual([1, 1]);
       expect(
         draw.features
-          .getMany([a.id, 'none'], { applyDrafts: true })
+          .getMany([a.id, 'none'], { applySketches: true })
           .map((f) => f && coordinatesOf(f)[1]),
       ).toEqual([[1, 1], undefined]);
       expect(() => draw.features.get(a.id, { other: true } as never)).toThrow(DrawError);
-      expect(() => draw.features.get(a.id, { applyDrafts: 1 } as never)).toThrow(DrawError);
+      expect(() => draw.features.get(a.id, { applySketches: 1 } as never)).toThrow(DrawError);
       if (kind === 'ids') {
         // The vertex is kept by its ID
-        expect((draft.edits[0] as unknown as { vertices: unknown[] }).vertices).toEqual(['1,0']);
+        expect((sketch.edits[0] as unknown as { vertices: unknown[] }).vertices).toEqual(['1,0']);
       }
       expect(failures).toEqual([]);
     });
 
-    it('refuses a draft of this client of what cannot be written, and throws for no feature', () => {
+    it('refuses a sketch of this client of what cannot be written, and throws for no feature', () => {
       const { draw, failures } = open(kind);
       const a = line(draw);
       const b = line(draw, 10);
-      expect(() => draw.drafts.add({ edits: [move('none', [0, 0])] })).toThrow(
+      expect(() => draw.sketches.add({ edits: [move('none', [0, 0])] })).toThrow(
         expect.objectContaining({ code: 'not-found' }),
       );
-      expect(() => draw.drafts.add({ edits: [{ kind: 'nothing' } as never] })).toThrow(
+      expect(() => draw.sketches.add({ edits: [{ kind: 'nothing' } as never] })).toThrow(
         expect.objectContaining({ code: 'invalid-input' }),
       );
-      expect(() => draw.drafts.add({ edits: [move(a.id, [0, 0], { ring: 0, index: 9 })] })).toThrow(
-        expect.objectContaining({ code: 'invalid-input' }),
-      );
+      expect(() =>
+        draw.sketches.add({ edits: [move(a.id, [0, 0], { ring: 0, index: 9 })] }),
+      ).toThrow(expect.objectContaining({ code: 'invalid-input' }));
       draw.features.update(a.id, { locked: true });
-      expect(draw.drafts.add({ edits: [move(a.id, [1, 1])] })).toBeNull();
-      // A draft with an owner passes no gate
-      expect(draw.drafts.add({ edits: [move(a.id, [1, 1])], owner: 'other' })).not.toBeNull();
+      expect(draw.sketches.add({ edits: [move(a.id, [1, 1])] })).toBeNull();
+      // A sketch with an owner passes no gate
+      expect(draw.sketches.add({ edits: [move(a.id, [1, 1])], owner: 'other' })).not.toBeNull();
       draw.features.update(a.id, { locked: false });
       draw.layers.update('default-layer', { visible: false });
-      expect(draw.drafts.add({ edits: [move(b.id, [11, 1])] })).toBeNull();
+      expect(draw.sketches.add({ edits: [move(b.id, [11, 1])] })).toBeNull();
       draw.layers.update('default-layer', { visible: true });
       draw.setReadOnly(true);
-      expect(draw.drafts.add({ edits: [move(b.id, [11, 1])] })).toBeNull();
+      expect(draw.sketches.add({ edits: [move(b.id, [11, 1])] })).toBeNull();
       draw.setReadOnly(false);
       draw.layers.update('default-layer', { locked: true });
-      expect(draw.drafts.add({ edits: [move(b.id, [11, 1])] })).toBeNull();
+      expect(draw.sketches.add({ edits: [move(b.id, [11, 1])] })).toBeNull();
       draw.layers.update('default-layer', { locked: false });
-      expect(draw.drafts.add({ id: 'd', edits: [move(b.id, [11, 1])] })).not.toBeNull();
-      expect(() => draw.drafts.add({ id: 'd', edits: [] })).toThrow(
+      expect(draw.sketches.add({ id: 'd', edits: [move(b.id, [11, 1])] })).not.toBeNull();
+      expect(() => draw.sketches.add({ id: 'd', edits: [] })).toThrow(
         expect.objectContaining({ code: 'already-exists' }),
       );
       expect(failures).toEqual([]);
@@ -248,74 +248,74 @@ for (const kind of KINDS) {
         store as unknown as { applyEdits: Store['applyEdits'] },
         'applyEdits',
       );
-      const removed = draw.drafts.add({ edits: [move(b.id, [11, 5])] }) as Draft;
+      const removed = draw.sketches.add({ edits: [move(b.id, [11, 5])] }) as Sketch;
       events.length = 0;
-      expect(draw.drafts.remove(removed.id)).toBe(true);
+      expect(draw.sketches.remove(removed.id)).toBe(true);
       expect(applyEdits).not.toHaveBeenCalled();
       expect(events).toEqual([
-        ['draft.removed', { draft: removed, reason: 'cancelled', dropped: 0 }],
+        ['sketch.removed', { sketch: removed, reason: 'cancelled', dropped: 0 }],
       ]);
       expect(coordinatesOf(draw.features.get(b.id))[1]).toEqual([11, 0]);
 
-      const draft = draw.drafts.add({
+      const sketch = draw.sketches.add({
         edits: [
           move(a.id, [1, 1]),
           { kind: 'translate', target: { featureIds: [b.id] }, from: [0, 0], to: [0, 1] },
         ],
-      }) as Draft;
-      const shown = draw.features.get(b.id, { applyDrafts: true });
+      }) as Sketch;
+      const shown = draw.features.get(b.id, { applySketches: true });
       events.length = 0;
-      expect(draw.drafts.commit(draft.id)).toBe(true);
+      expect(draw.sketches.commit(sketch.id)).toBe(true);
       expect(applyEdits).toHaveBeenCalledTimes(1);
-      expect(names(events)).toEqual(['document.changed', 'draft.removed']);
-      expect(events[1][1]).toEqual({ draft, reason: 'committed', dropped: 0 });
-      expect(draw.drafts.count()).toBe(0);
+      expect(names(events)).toEqual(['document.changed', 'sketch.removed']);
+      expect(events[1][1]).toEqual({ sketch, reason: 'committed', dropped: 0 });
+      expect(draw.sketches.count()).toBe(0);
       expect(coordinatesOf(draw.features.get(a.id))[1]).toEqual([1, 1]);
       expect(draw.features.get(b.id)?.geometry).toEqual(shown?.geometry);
       expect(coordinatesOf(draw.features.get(b.id))[0][1]).toBeGreaterThan(0.9);
-      expect(() => draw.drafts.commit(draft.id)).toThrow(
+      expect(() => draw.sketches.commit(sketch.id)).toThrow(
         expect.objectContaining({ code: 'not-found' }),
       );
       expect(failures).toEqual([]);
     });
 
-    it('commits the first draft of this client of a feature when a second one starts', () => {
+    it('commits the first sketch of this client of a feature when a second one starts', () => {
       const { draw, events, failures } = open(kind);
       const a = line(draw);
-      const first = draw.drafts.add({ edits: [move(a.id, [1, 1])] }) as Draft;
+      const first = draw.sketches.add({ edits: [move(a.id, [1, 1])] }) as Sketch;
       events.length = 0;
-      const second = draw.drafts.add({
+      const second = draw.sketches.add({
         edits: [{ kind: 'set', featureId: a.id, patch: { properties: { n: 1 } } }],
-      }) as Draft;
-      expect(names(events)).toEqual(['document.changed', 'draft.removed', 'draft.added']);
-      expect(events[1][1]).toEqual({ draft: first, reason: 'committed', dropped: 0 });
+      }) as Sketch;
+      expect(names(events)).toEqual(['document.changed', 'sketch.removed', 'sketch.added']);
+      expect(events[1][1]).toEqual({ sketch: first, reason: 'committed', dropped: 0 });
       expect(coordinatesOf(draw.features.get(a.id))[1]).toEqual([1, 1]);
-      expect(draw.drafts.list()).toEqual([second]);
+      expect(draw.sketches.list()).toEqual([second]);
       expect(failures).toEqual([]);
     });
 
-    it('draws the drafts with an owner first, in their order, and does not commit them', () => {
+    it('draws the sketches with an owner first, in their order, and does not commit them', () => {
       const { draw, failures } = open(kind);
       const a = line(draw);
-      const mine = draw.drafts.add({
+      const mine = draw.sketches.add({
         edits: [{ kind: 'set', featureId: a.id, patch: { properties: { by: 'me' } } }],
-      }) as Draft;
-      const theirs = draw.drafts.add({
+      }) as Sketch;
+      const theirs = draw.sketches.add({
         owner: 'other',
         edits: [
           { kind: 'set', featureId: a.id, patch: { properties: { by: 'other', other: true } } },
         ],
-      }) as Draft;
-      expect(draw.drafts.list()).toEqual([theirs, mine]);
-      expect(draw.features.get(a.id, { applyDrafts: true })?.properties).toMatchObject({
+      }) as Sketch;
+      expect(draw.sketches.list()).toEqual([theirs, mine]);
+      expect(draw.features.get(a.id, { applySketches: true })?.properties).toMatchObject({
         by: 'me',
         other: true,
       });
-      expect(draw.drafts.commit(theirs.id)).toBe(false);
-      expect(draw.drafts.commitMany([mine.id, theirs.id])).toBe(false);
-      expect(draw.drafts.count()).toBe(2);
-      draw.drafts.remove(theirs.id);
-      expect(draw.features.get(a.id, { applyDrafts: true })?.properties).toEqual({ by: 'me' });
+      expect(draw.sketches.commit(theirs.id)).toBe(false);
+      expect(draw.sketches.commitMany([mine.id, theirs.id])).toBe(false);
+      expect(draw.sketches.count()).toBe(2);
+      draw.sketches.remove(theirs.id);
+      expect(draw.features.get(a.id, { applySketches: true })?.properties).toEqual({ by: 'me' });
       expect(failures).toEqual([]);
     });
 
@@ -324,7 +324,7 @@ for (const kind of KINDS) {
       const a = line(draw);
       const b = line(draw, 10);
       const c = line(draw, 20);
-      const draft = draw.drafts.add({
+      const sketch = draw.sketches.add({
         edits: [
           {
             kind: 'translate',
@@ -333,25 +333,25 @@ for (const kind of KINDS) {
             to: [0, 1],
           },
         ],
-      }) as Draft;
+      }) as Sketch;
       events.length = 0;
       draw.transact(() => draw.features.delete(a.id), { source: 'remote' });
-      expect(names(events)).toEqual(['document.changed', 'draft.updated']);
-      const updated = events[1][1] as DrawEvents['draft.updated'];
+      expect(names(events)).toEqual(['document.changed', 'sketch.updated']);
+      const updated = events[1][1] as DrawEvents['sketch.updated'];
       expect(updated.dropped).toBe(1);
-      expect(updated.draft.edits[0]).toMatchObject({ target: { featureIds: [b.id, c.id] } });
-      expect(draw.drafts.get(draft.id)).toBe(updated.draft);
+      expect(updated.sketch.edits[0]).toMatchObject({ target: { featureIds: [b.id, c.id] } });
+      expect(draw.sketches.get(sketch.id)).toBe(updated.sketch);
       events.length = 0;
       draw.features.update(b.id, { locked: true });
-      expect(names(events)).toEqual(['document.changed', 'draft.updated']);
-      expect(draw.drafts.get(draft.id)?.edits[0]).toMatchObject({
+      expect(names(events)).toEqual(['document.changed', 'sketch.updated']);
+      expect(draw.sketches.get(sketch.id)?.edits[0]).toMatchObject({
         target: { featureIds: [c.id] },
       });
       events.length = 0;
       draw.features.update(c.id, { locked: true });
-      expect(names(events)).toEqual(['document.changed', 'draft.removed']);
+      expect(names(events)).toEqual(['document.changed', 'sketch.removed']);
       expect(events[1][1]).toMatchObject({ reason: 'locked', dropped: 3 });
-      expect(draw.drafts.count()).toBe(0);
+      expect(draw.sketches.count()).toBe(0);
       expect(failures).toEqual([]);
     });
 
@@ -359,25 +359,25 @@ for (const kind of KINDS) {
       const { draw, events, failures } = open(kind);
       const a = line(draw);
       const b = line(draw, 10);
-      draw.drafts.add({ edits: [move(a.id, [1, 1])] });
-      draw.drafts.add({ edits: [move(b.id, [11, 1])] });
+      draw.sketches.add({ edits: [move(a.id, [1, 1])] });
+      draw.sketches.add({ edits: [move(b.id, [11, 1])] });
       events.length = 0;
       draw.features.delete(a.id);
       draw.hidden.add(b.id);
       expect(
         events
-          .filter(([name]) => name === 'draft.removed')
-          .map(([, p]) => (p as DrawEvents['draft.removed']).reason),
+          .filter(([name]) => name === 'sketch.removed')
+          .map(([, p]) => (p as DrawEvents['sketch.removed']).reason),
       ).toEqual(['deleted', 'layer-unavailable']);
       expect(failures).toEqual([]);
     });
 
-    it('applies a draft of a vertex again over another vertex moved, and finds it again', () => {
+    it('applies a sketch of a vertex again over another vertex moved, and finds it again', () => {
       const { draw, events, failures } = open(kind);
       const a = line(draw);
-      const draft = draw.drafts.add({ edits: [move(a.id, [1, 1])] }) as Draft;
+      const sketch = draw.sketches.add({ edits: [move(a.id, [1, 1])] }) as Sketch;
       events.length = 0;
-      // Another vertex moved: the draft goes on, over the new position
+      // Another vertex moved: the sketch goes on, over the new position
       draw.transact(
         () =>
           draw.features.update(a.id, {
@@ -392,8 +392,8 @@ for (const kind of KINDS) {
           }),
         { source: 'remote' },
       );
-      expect(draw.drafts.get(draft.id)).toBe(draft);
-      expect(coordinatesOf(draw.features.get(a.id, { applyDrafts: true }))).toEqual([
+      expect(draw.sketches.get(sketch.id)).toBe(sketch);
+      expect(coordinatesOf(draw.features.get(a.id, { applySketches: true }))).toEqual([
         [0, 2],
         [1, 1],
         [2, 0],
@@ -416,8 +416,8 @@ for (const kind of KINDS) {
       );
       if (kind === 'ids') {
         // Found by its ID: the same vertex, now the third
-        expect(draw.drafts.get(draft.id)).toBe(draft);
-        expect(coordinatesOf(draw.features.get(a.id, { applyDrafts: true }))).toEqual([
+        expect(draw.sketches.get(sketch.id)).toBe(sketch);
+        expect(coordinatesOf(draw.features.get(a.id, { applySketches: true }))).toEqual([
           [-1, 0],
           [0, 2],
           [1, 1],
@@ -445,19 +445,19 @@ for (const kind of KINDS) {
           dropped: 1,
         });
       } else {
-        // Taken by its place: the shape changed, the draft ends
-        expect(events[events.length - 1]?.[0]).toBe('draft.removed');
+        // Taken by its place: the shape changed, the sketch ends
+        expect(events[events.length - 1]?.[0]).toBe('sketch.removed');
         expect(events[events.length - 1]?.[1]).toMatchObject({ reason: 'vertices-removed' });
       }
-      expect(draw.drafts.count()).toBe(0);
+      expect(draw.sketches.count()).toBe(0);
       expect(failures).toEqual([]);
     });
 
-    it('creates a feature in its place, and ends a draft whose layer cannot be written', () => {
+    it('creates a feature in its place, and ends a sketch whose layer cannot be written', () => {
       const { draw, events, failures } = open(kind);
       const a = line(draw);
       const b = line(draw, 10);
-      const create = (below: string | null): DraftEdit => ({
+      const create = (below: string | null): SketchEdit => ({
         kind: 'create',
         feature: {
           type: 'Point',
@@ -467,21 +467,21 @@ for (const kind of KINDS) {
         placedVertexCount: 1,
         below,
       });
-      const first = draw.drafts.add({ edits: [create(a.id)] }) as Draft;
-      expect(draw.drafts.commit(first.id)).toBe(true);
+      const first = draw.sketches.add({ edits: [create(a.id)] }) as Sketch;
+      expect(draw.sketches.commit(first.id)).toBe(true);
       const items = (): string[] =>
         draw.layers.listItems('default-layer', { offset: 0, limit: 10 });
       expect(items()).toEqual([a.id, `new-${a.id}`, b.id]);
-      const second = draw.drafts.add({ edits: [create(null)] }) as Draft;
-      expect(draw.drafts.commit(second.id)).toBe(true);
+      const second = draw.sketches.add({ edits: [create(null)] }) as Sketch;
+      expect(draw.sketches.commit(second.id)).toBe(true);
       expect(items()).toEqual(['new-null', a.id, `new-${a.id}`, b.id]);
 
-      const third = draw.drafts.add({ edits: [create(b.id)] }) as Draft;
+      const third = draw.sketches.add({ edits: [create(b.id)] }) as Sketch;
       draw.layers.update('default-layer', { locked: true });
       events.length = 0;
-      expect(draw.drafts.commit(third.id)).toBe(false);
+      expect(draw.sketches.commit(third.id)).toBe(false);
       expect(events).toEqual([
-        ['draft.removed', { draft: third, reason: 'layer-unavailable', dropped: 0 }],
+        ['sketch.removed', { sketch: third, reason: 'layer-unavailable', dropped: 0 }],
       ]);
       expect((third.edits[0] as { feature: { geometry: unknown } }).feature.geometry).toEqual({
         type: 'Point',
@@ -491,18 +491,18 @@ for (const kind of KINDS) {
       expect(failures).toEqual([]);
     });
 
-    it('ends the drafts of this client when the document becomes read-only, and all when it is replaced', () => {
+    it('ends the sketches of this client when the document becomes read-only, and all when it is replaced', () => {
       const { draw, events, failures } = open(kind);
       const a = line(draw);
       const b = line(draw, 10);
-      draw.drafts.add({ edits: [move(a.id, [1, 1])] });
-      const theirs = draw.drafts.add({ owner: 'other', edits: [move(b.id, [11, 1])] }) as Draft;
+      draw.sketches.add({ edits: [move(a.id, [1, 1])] });
+      const theirs = draw.sketches.add({ owner: 'other', edits: [move(b.id, [11, 1])] }) as Sketch;
       events.length = 0;
       draw.setReadOnly(true);
-      expect(events.map(([, p]) => (p as DrawEvents['draft.removed']).reason)).toEqual([
+      expect(events.map(([, p]) => (p as DrawEvents['sketch.removed']).reason)).toEqual([
         'read-only',
       ]);
-      expect(draw.drafts.list()).toEqual([theirs]);
+      expect(draw.sketches.list()).toEqual([theirs]);
       draw.setReadOnly(false);
       expect(failures).toEqual([]);
     });
@@ -514,38 +514,38 @@ for (const kind of KINDS) {
       const c = line(draw, 20);
       draw.features.update(c.id, { locked: true });
       expect(
-        draw.drafts.addMany([{ edits: [move(a.id, [1, 1])] }, { edits: [move(c.id, [21, 1])] }]),
+        draw.sketches.addMany([{ edits: [move(a.id, [1, 1])] }, { edits: [move(c.id, [21, 1])] }]),
       ).toBeNull();
-      expect(draw.drafts.count()).toBe(0);
+      expect(draw.sketches.count()).toBe(0);
       expect(() =>
-        draw.drafts.addMany([{ edits: [move(a.id, [1, 1])] }, { edits: [move(a.id, [1, 2])] }]),
+        draw.sketches.addMany([{ edits: [move(a.id, [1, 1])] }, { edits: [move(a.id, [1, 2])] }]),
       ).toThrow(expect.objectContaining({ code: 'invalid-input' }));
-      const [d1, d2] = draw.drafts.addMany([
+      const [d1, d2] = draw.sketches.addMany([
         { edits: [move(a.id, [1, 1])] },
         { edits: [move(b.id, [11, 1])] },
-      ]) as Draft[];
+      ]) as Sketch[];
       expect(() =>
-        draw.drafts.updateMany([
+        draw.sketches.updateMany([
           { id: d1.id, patch: { edits: [move(a.id, [1, 3])] } },
           { id: 'none', patch: {} },
         ]),
       ).toThrow(expect.objectContaining({ code: 'not-found' }));
-      expect(draw.drafts.get(d1.id)).toBe(d1);
-      const [u1] = draw.drafts.updateMany([
+      expect(draw.sketches.get(d1.id)).toBe(d1);
+      const [u1] = draw.sketches.updateMany([
         { id: d1.id, patch: { edits: [move(a.id, [1, 3])] } },
-      ]) as Draft[];
-      expect(coordinatesOf(draw.features.get(a.id, { applyDrafts: true }))[1]).toEqual([1, 3]);
-      expect(() => draw.drafts.removeMany([d2.id, 'none'])).toThrow(
+      ]) as Sketch[];
+      expect(coordinatesOf(draw.features.get(a.id, { applySketches: true }))[1]).toEqual([1, 3]);
+      expect(() => draw.sketches.removeMany([d2.id, 'none'])).toThrow(
         expect.objectContaining({ code: 'not-found' }),
       );
-      expect(draw.drafts.count()).toBe(2);
+      expect(draw.sketches.count()).toBe(2);
       const applyEdits = vi.spyOn(
         store as unknown as { applyEdits: Store['applyEdits'] },
         'applyEdits',
       );
       events.length = 0;
-      expect(draw.drafts.commitMany([u1.id, d2.id])).toBe(true);
-      expect(names(events)).toEqual(['document.changed', 'draft.removed', 'draft.removed']);
+      expect(draw.sketches.commitMany([u1.id, d2.id])).toBe(true);
+      expect(names(events)).toEqual(['document.changed', 'sketch.removed', 'sketch.removed']);
       expect(applyEdits).toHaveBeenCalledTimes(2);
       expect(coordinatesOf(draw.features.get(b.id))[1]).toEqual([11, 1]);
       expect(failures).toEqual([]);
@@ -557,19 +557,19 @@ for (const kind of KINDS) {
       const b = line(draw, 10);
       draw.selection.set('feature', [a.id, b.id]);
       draw.features.update(b.id, { locked: true });
-      const draft = draw.drafts.add({
+      const sketch = draw.sketches.add({
         edits: [{ kind: 'translate', target: { selection: true }, from: [0, 0], to: [0, 0.5] }],
-      }) as Draft;
-      expect(coordinatesOf(draw.features.get(a.id, { applyDrafts: true }))[0][1]).toBeGreaterThan(
+      }) as Sketch;
+      expect(coordinatesOf(draw.features.get(a.id, { applySketches: true }))[0][1]).toBeGreaterThan(
         0.4,
       );
-      expect(coordinatesOf(draw.features.get(b.id, { applyDrafts: true }))[0][1]).toBe(0);
+      expect(coordinatesOf(draw.features.get(b.id, { applySketches: true }))[0][1]).toBe(0);
       events.length = 0;
       draw.selection.clear();
-      expect(events).toEqual([['draft.removed', { draft, reason: 'deselected', dropped: 0 }]]);
+      expect(events).toEqual([['sketch.removed', { sketch, reason: 'deselected', dropped: 0 }]]);
       draw.selection.set('feature', [b.id]);
       expect(
-        draw.drafts.add({
+        draw.sketches.add({
           edits: [{ kind: 'translate', target: { selection: true }, from: [0, 0], to: [0, 1] }],
         }),
       ).toBeNull();
@@ -581,52 +581,52 @@ for (const kind of KINDS) {
       const a = line(draw);
       events.length = 0;
       draw.transact(() => {
-        const draft = draw.drafts.add({ edits: [move(a.id, [1, 1])] }) as Draft;
+        const sketch = draw.sketches.add({ edits: [move(a.id, [1, 1])] }) as Sketch;
         draw.features.update(a.id, { properties: { n: 1 } });
-        draw.drafts.commit(draft.id);
+        draw.sketches.commit(sketch.id);
       });
-      expect(names(events)).toEqual(['draft.added', 'draft.removed', 'document.changed']);
+      expect(names(events)).toEqual(['sketch.added', 'sketch.removed', 'document.changed']);
       expect(coordinatesOf(draw.features.get(a.id))[1]).toEqual([1, 1]);
       expect(draw.features.get(a.id)?.properties).toEqual({ n: 1 });
-      // A transaction that writes nothing but draws a draft
-      draw.transact(() => draw.drafts.add({ edits: [move(a.id, [1, 2])] }));
+      // A transaction that writes nothing but draws a sketch
+      draw.transact(() => draw.sketches.add({ edits: [move(a.id, [1, 2])] }));
       draw.features.update(a.id, { properties: { n: 2 } });
       expect(failures).toEqual([]);
     });
 
-    it('runs the checks of the drafts, which find what is drawn broken', () => {
-      const { engine, draw, failures } = open(kind, ['drafts', 'draft-commits']);
+    it('runs the checks of the sketches, which find what is drawn broken', () => {
+      const { engine, draw, failures } = open(kind, ['sketches', 'sketch-commits']);
       const a = line(draw);
-      const draft = draw.drafts.add({
+      const sketch = draw.sketches.add({
         edits: [
           { kind: 'translate', target: { featureIds: [a.id] }, from: [0, 0], to: [0.5, 0.5] },
         ],
-      }) as Draft;
+      }) as Sketch;
       expect(failures).toEqual([]);
-      // The draft hidden no more, or drawn as something else
+      // The sketch hidden no more, or drawn as something else
       const tables = featureTablesInternals(draw.getStore().tables);
       if (tables) {
         const handle = tables.ids.handleOf(a.id);
         const place = tables.placeOf(handle)!;
-        expect(place.group.state[place.row] & STATE_HIDDEN_DRAFT).not.toBe(0);
-        tables.states.setDrafted(Int32Array.of(handle), false);
+        expect(place.group.state[place.row] & STATE_HIDDEN_SKETCH).not.toBe(0);
+        tables.states.setSketched(Int32Array.of(handle), false);
       } else {
-        engine.drafts.view.set(new Map(), []);
+        engine.sketches.view.set(new Map(), []);
       }
       line(draw, 30);
-      expect(failures.map((f) => f.check)).toContain('drafts');
+      expect(failures.map((f) => f.check)).toContain('sketches');
       failures.length = 0;
       // A commit that writes other than what was drawn
-      draw.drafts.remove(draft.id);
-      const second = draw.drafts.add({
+      draw.sketches.remove(sketch.id);
+      const second = draw.sketches.add({
         edits: [
           { kind: 'translate', target: { featureIds: [a.id] }, from: [0, 0], to: [0.5, 0.5] },
         ],
-      }) as Draft;
+      }) as Sketch;
       expect(failures).toEqual([]);
-      // Drawn otherwise than the draft leaves it
-      const drawn = engine.drafts.view.liveFeatures().get(a.id) as Feature;
-      engine.drafts.view.set(
+      // Drawn otherwise than the sketch leaves it
+      const drawn = engine.sketches.view.liveFeatures().get(a.id) as Feature;
+      engine.sketches.view.set(
         new Map([
           [
             a.id,
@@ -644,18 +644,18 @@ for (const kind of KINDS) {
         ]),
         [],
       );
-      expect(draw.drafts.commit(second.id)).toBe(true);
-      expect(failures.map((f) => f.check)).toContain('draft-commits');
+      expect(draw.sketches.commit(second.id)).toBe(true);
+      expect(failures.map((f) => f.check)).toContain('sketch-commits');
     });
   });
 }
 
-describe('the checks of the drafts as a failure', () => {
+describe('the checks of the sketches as a failure', () => {
   it('throws from the operation that found them', () => {
     const { draw, engine } = open('objects');
     const a = line(draw);
-    draw.drafts.add({ edits: [move(a.id, [1, 1])] });
-    engine.drafts.view.set(new Map(), []);
-    expect(() => line(draw, 10)).toThrow(/\(drafts\)/);
+    draw.sketches.add({ edits: [move(a.id, [1, 1])] });
+    engine.sketches.view.set(new Map(), []);
+    expect(() => line(draw, 10)).toThrow(/\(sketches\)/);
   });
 });

@@ -36,14 +36,14 @@
  *   the styles) is what a drawing made again from the rows as they are now makes, its styles
  *   resolved afresh (see `TableLayerRenderer.checkRebuild`). It reads every row, so it runs once
  *   every {@link DRAWING_REBUILD_FRAMES} frames drawn, the first included
- * - `drafts`: each feature a draft edits that is shown is drawn as the drafts leave it in the
+ * - `sketches`: each feature a sketch edits that is shown is drawn as the sketches leave it in the
  *   place of the feature, once, and the feature itself is not drawn (over a Store of rows, its row
- *   is hidden by the mark of the drafts, `STATE_HIDDEN_DRAFT`, and the draft is drawn at its keys);
- *   no other feature is drawn otherwise. The features drafts create are not read. Once each
- *   notification of the Store has gone out and each operation of the drafts is done
- * - `draft-commits`: when a draft of this client is committed with no write of the Store since
- *   the drafts were last applied, each feature it edits (and creates) that it drew, and that no
- *   draft with an owner edits, is written with the geometry it was drawn with, to the bit
+ *   is hidden by the mark of the sketches, `STATE_HIDDEN_SKETCH`, and the sketch is drawn at its keys);
+ *   no other feature is drawn otherwise. The features sketches create are not read. Once each
+ *   notification of the Store has gone out and each operation of the sketches is done
+ * - `sketch-commits`: when a sketch of this client is committed with no write of the Store since
+ *   the sketches were last applied, each feature it edits (and creates) that it drew, and that no
+ *   sketch with an owner edits, is written with the geometry it was drawn with, to the bit
  *   (over a Store of rows, as the rows read them). At each commit
  *
  * The two checks of the drawing of the rows read what the GPU holds from copies the drawing keeps
@@ -56,12 +56,12 @@
  */
 
 import { utf8String } from '@sakuzu/tabane';
-import type { DraftController } from '../drafts/draft-controller.js';
 import { featureTablesInternals } from '../feature-table/feature-tables.js';
 import type { RowGroup } from '../feature-table/layer-table.js';
 import { STATE_BULK } from '../feature-table/row-state.js';
 import { writeMarkKeeperOf } from '../feature-table/write-marks.js';
 import { DrawError } from '../shared/draw-error.js';
+import type { SketchController } from '../sketches/sketch-controller.js';
 import type { Store } from '../store/store.js';
 import type { Feature } from '../store/types.js';
 import type { ConsistencyCheck, ConsistencyCheckOptions, ConsistencyFailure } from './types.js';
@@ -81,8 +81,8 @@ export const CONSISTENCY_CHECKS: readonly ConsistencyCheck[] = [
   'drawing',
   'drawing-writes',
   'drawing-rebuild',
-  'drafts',
-  'draft-commits',
+  'sketches',
+  'sketch-commits',
 ];
 
 /**
@@ -109,36 +109,36 @@ export interface ConsistencyTarget {
   readonly checkDrawnWrites: () => string[];
   /** The differences between what the drawing of the rows keeps and a drawing made again */
   readonly checkDrawnRebuild: () => string[];
-  /** The drafts of the instance (none checked when omitted) */
-  readonly drafts?: DraftController;
+  /** The sketches of the instance (none checked when omitted) */
+  readonly sketches?: SketchController;
   /**
-   * The differences between what is drawn and the drafts drawn over the features given (by ID,
+   * The differences between what is drawn and the sketches drawn over the features given (by ID,
    * with the feature each is drawn as)
    */
-  readonly checkDrawnDrafts?: (expected: ReadonlyMap<string, Feature>) => string[];
+  readonly checkDrawnSketches?: (expected: ReadonlyMap<string, Feature>) => string[];
 }
 
 /**
- * The drafts drawn in the places of the features they edit (`drafts`): each feature a draft edits
- * that is shown is drawn as the drafts leave it, and the drawing draws it so in its place
+ * The sketches drawn in the places of the features they edit (`sketches`): each feature a sketch edits
+ * that is shown is drawn as the sketches leave it, and the drawing draws it so in its place
  *
  * @internal
  */
-export function checkDrafts(target: ConsistencyTarget): string[] {
-  const drafts = target.drafts;
-  if (!drafts) return [];
+export function checkSketches(target: ConsistencyTarget): string[] {
+  const sketches = target.sketches;
+  if (!sketches) return [];
   const problems: string[] = [];
-  const expected = drafts.expectedDrawn();
-  const drawn = drafts.view.liveFeatures();
+  const expected = sketches.expectedDrawn();
+  const drawn = sketches.view.liveFeatures();
   for (const [id, feature] of expected) {
     if (drawn.get(id) !== feature) {
-      problems.push(`the feature "${id}" a draft edits is not drawn as the drafts leave it`);
+      problems.push(`the feature "${id}" a sketch edits is not drawn as the sketches leave it`);
     }
   }
   for (const id of drawn.keys()) {
-    if (!expected.has(id)) problems.push(`the feature "${id}" is drawn as a draft it has not`);
+    if (!expected.has(id)) problems.push(`the feature "${id}" is drawn as a sketch it has not`);
   }
-  problems.push(...(target.checkDrawnDrafts?.(expected) ?? []));
+  problems.push(...(target.checkDrawnSketches?.(expected) ?? []));
   return problems;
 }
 
@@ -404,20 +404,20 @@ export class ConsistencyChecks {
     if (this.#run.has('feature-cache')) {
       featureTablesInternals(target.store.tables)?.featureCache.watch();
     }
-    // The commits of the drafts are checked as they are made
-    if (this.#run.has('draft-commits')) {
-      target.drafts?.setCommitCheck((problems) => this.#check('draft-commits', () => problems));
+    // The commits of the sketches are checked as they are made
+    if (this.#run.has('sketch-commits')) {
+      target.sketches?.setCommitCheck((problems) => this.#check('sketch-commits', () => problems));
     }
   }
 
-  /** Stops the checks the drafts run (at each commit) */
+  /** Stops the checks the sketches run (at each commit) */
   stop(): void {
-    this.#target.drafts?.setCommitCheck(null);
+    this.#target.sketches?.setCommitCheck(null);
   }
 
-  /** Runs the check of the drafts drawn (once an operation of the drafts is done) */
-  afterDrafts(): void {
-    this.#check('drafts', () => checkDrafts(this.#target));
+  /** Runs the check of the sketches drawn (once an operation of the sketches is done) */
+  afterSketches(): void {
+    this.#check('sketches', () => checkSketches(this.#target));
   }
 
   /**
@@ -429,7 +429,7 @@ export class ConsistencyChecks {
     this.#check('selection', () => checkSelection(this.#target.store));
     this.#check('write-marks', () => checkWriteMarks(this.#target.store));
     this.#check('feature-cache', () => checkFeatureCache(this.#target.store));
-    this.#check('drafts', () => checkDrafts(this.#target));
+    this.#check('sketches', () => checkSketches(this.#target));
   }
 
   /**

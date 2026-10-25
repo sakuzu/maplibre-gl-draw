@@ -2,18 +2,18 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * The edits of the drafts (`DraftEdit`), as pure functions: their checks, the features and the
+ * The edits of the sketches (`SketchEdit`), as pure functions: their checks, the features and the
  * vertices they name, what is left of them when some of those are gone, and the edits of features
  * they are made into to be shown and written
  *
- * A draft holds its edits as they were given, the vertices of a Store that gives its vertices IDs
- * by those IDs (made from their places when the draft is added). To be shown and written, the
+ * A sketch holds its edits as they were given, the vertices of a Store that gives its vertices IDs
+ * by those IDs (made from their places when the sketch is added). To be shown and written, the
  * edits of `{ selection: true }` name the features selected, and the vertices are found where they
  * are now.
  */
 
 import type { Geometry } from 'geojson';
-import type { DraftEdit } from '../api/drafts.js';
+import type { SketchEdit } from '../api/sketches.js';
 import { DrawError } from '../shared/draw-error.js';
 import { checkEdits, isTransformEdit } from '../store/feature-edits.js';
 import type {
@@ -24,8 +24,8 @@ import type {
 } from '../store/store.js';
 import type { VertexRef } from '../store/types.js';
 
-/** The edit of a draft that draws a new feature */
-export type CreateEdit = Extract<DraftEdit, { kind: 'create' }>;
+/** The edit of a sketch that draws a new feature */
+export type CreateEdit = Extract<SketchEdit, { kind: 'create' }>;
 
 /** The edits of features that move, rotate and scale them */
 type FeaturesEdit = Extract<FeatureEdit, { kind: TransformEdit['kind'] }>;
@@ -46,11 +46,11 @@ const CREATE_KEYS: readonly string[] = [
 const ID_PROBE: VertexRef = { ring: 0, index: 0 };
 
 /**
- * Whether an edit of a draft draws a new feature
+ * Whether an edit of a sketch draws a new feature
  *
  * @internal
  */
-export function isCreateEdit(edit: DraftEdit): edit is CreateEdit {
+export function isCreateEdit(edit: SketchEdit): edit is CreateEdit {
   return edit.kind === 'create';
 }
 
@@ -59,7 +59,7 @@ export function isCreateEdit(edit: DraftEdit): edit is CreateEdit {
  *
  * @internal
  */
-export function isSelectionEdit(edit: DraftEdit): boolean {
+export function isSelectionEdit(edit: SketchEdit): boolean {
   return (
     isTransformEdit(edit as FeatureEdit) &&
     (edit as FeaturesEdit).target !== null &&
@@ -69,7 +69,7 @@ export function isSelectionEdit(edit: DraftEdit): boolean {
 }
 
 /**
- * Checks the edits of a draft, each as its kind takes it, before anything is changed
+ * Checks the edits of a sketch, each as its kind takes it, before anything is changed
  *
  * The edits of features are checked as a Store takes them (`checkEdits`), with the features
  * selected for `{ selection: true }` and, for a Store that gives its vertices IDs, the IDs of
@@ -80,11 +80,11 @@ export function isSelectionEdit(edit: DraftEdit): boolean {
  *   does not take
  * @internal
  */
-export function checkDraftEdits(
+export function checkSketchEdits(
   edits: unknown,
   vertexIds: boolean,
   transforms: GeometryTransforms,
-): asserts edits is readonly DraftEdit[] {
+): asserts edits is readonly SketchEdit[] {
   if (!Array.isArray(edits)) throw invalidInput('The edits must be an array');
   for (const edit of edits) {
     if (!isRecord(edit)) throw invalidInput('Each edit must be an object');
@@ -115,7 +115,7 @@ function checkCreate(edit: Record<string, unknown>): void {
 }
 
 /**
- * The edit a Store would take for the shape of an edit of a draft: the selection as no feature
+ * The edit a Store would take for the shape of an edit of a sketch: the selection as no feature
  * yet, and the IDs of vertices as a place
  */
 function probeOf(edit: FeatureEdit, vertexIds: boolean): FeatureEdit {
@@ -151,7 +151,7 @@ function probeOf(edit: FeatureEdit, vertexIds: boolean): FeatureEdit {
  * @internal
  */
 export function featureIdsOfEdit(
-  edit: DraftEdit,
+  edit: SketchEdit,
   selected: () => readonly string[],
 ): readonly string[] {
   if (edit.kind === 'create') return [];
@@ -165,7 +165,7 @@ export function featureIdsOfEdit(
  *
  * @internal
  */
-export function isVertexEdit(edit: DraftEdit): edit is VertexEdit {
+export function isVertexEdit(edit: SketchEdit): edit is VertexEdit {
   return (
     edit.kind === 'vertex-move' || edit.kind === 'vertex-insert' || edit.kind === 'vertex-delete'
   );
@@ -179,10 +179,10 @@ export function isVertexEdit(edit: DraftEdit): edit is VertexEdit {
  * @internal
  */
 export function withoutFeatures(
-  edits: readonly DraftEdit[],
+  edits: readonly SketchEdit[],
   gone: ReadonlySet<string>,
-): { edits: DraftEdit[]; dropped: number } {
-  const out: DraftEdit[] = [];
+): { edits: SketchEdit[]; dropped: number } {
+  const out: SketchEdit[] = [];
   let dropped = 0;
   for (const edit of edits) {
     if (edit.kind === 'create' || isSelectionEdit(edit)) {
@@ -198,7 +198,7 @@ export function withoutFeatures(
     const kept = ids.filter((id) => !gone.has(id));
     dropped += ids.length - kept.length;
     if (kept.length === ids.length) out.push(edit);
-    else if (kept.length > 0) out.push({ ...edit, target: { featureIds: kept } } as DraftEdit);
+    else if (kept.length > 0) out.push({ ...edit, target: { featureIds: kept } } as SketchEdit);
   }
   return { edits: out, dropped };
 }
@@ -211,11 +211,11 @@ export function withoutFeatures(
  * @internal
  */
 export function withoutVertices(
-  edits: readonly DraftEdit[],
+  edits: readonly SketchEdit[],
   featureId: string,
   keep: (vertex: VertexTarget) => boolean,
-): { edits: DraftEdit[]; dropped: number } {
-  const out: DraftEdit[] = [];
+): { edits: SketchEdit[]; dropped: number } {
+  const out: SketchEdit[] = [];
   let dropped = 0;
   for (const edit of edits) {
     if (!isVertexEdit(edit) || edit.featureId !== featureId) {
@@ -242,7 +242,7 @@ export function withoutVertices(
 function keptVertices(
   edit: Extract<VertexEdit, { kind: 'vertex-move' | 'vertex-delete' }>,
   kept: readonly number[],
-): DraftEdit {
+): SketchEdit {
   const vertices = kept.map((i) => edit.vertices[i]);
   if (edit.kind === 'vertex-delete') return { ...edit, vertices };
   return { ...edit, vertices, positions: kept.map((i) => edit.positions[i]) };
@@ -254,7 +254,7 @@ function keptVertices(
  *
  * @internal
  */
-export function verticesOf(edits: readonly DraftEdit[], featureId: string): VertexTarget[] {
+export function verticesOf(edits: readonly SketchEdit[], featureId: string): VertexTarget[] {
   const out: VertexTarget[] = [];
   for (const edit of edits) {
     if (!isVertexEdit(edit) || edit.featureId !== featureId) continue;
@@ -271,10 +271,10 @@ export function verticesOf(edits: readonly DraftEdit[], featureId: string): Vert
  * @internal
  */
 export function mapVertices(
-  edits: readonly DraftEdit[],
+  edits: readonly SketchEdit[],
   featureId: string,
   replace: (vertex: VertexTarget) => VertexTarget,
-): DraftEdit[] {
+): SketchEdit[] {
   return edits.map((edit) => {
     if (!isVertexEdit(edit) || edit.featureId !== featureId) return edit;
     if (edit.kind === 'vertex-insert') {
@@ -291,7 +291,7 @@ export function mapVertices(
  *
  * @internal
  */
-export function vertexFeatureIds(edits: readonly DraftEdit[]): Set<string> {
+export function vertexFeatureIds(edits: readonly SketchEdit[]): Set<string> {
   const out = new Set<string>();
   for (const edit of edits) if (isVertexEdit(edit)) out.add(edit.featureId);
   return out;
@@ -322,7 +322,7 @@ function shapeOf(coordinates: unknown[]): string {
 }
 
 /**
- * The edits of features a set of edits of a draft is made into, to be shown or written: the edits
+ * The edits of features a set of edits of a sketch is made into, to be shown or written: the edits
  * `create` left out, `{ selection: true }` made the features `selected` gives (the edit left out
  * when they are none), and the vertices of a feature found by `findVertex` (an edit of a vertex
  * not found left out, as the Store leaves out an edit of a feature that is not there)
@@ -330,7 +330,7 @@ function shapeOf(coordinates: unknown[]): string {
  * @internal
  */
 export function featureEditsOf(
-  edits: readonly DraftEdit[],
+  edits: readonly SketchEdit[],
   selected: () => readonly string[],
   findVertex?: (featureId: string, vertices: readonly VertexTarget[]) => (VertexRef | null)[],
 ): FeatureEdit[] {

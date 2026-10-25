@@ -106,11 +106,11 @@ import {
   RowStateSets,
   STATE_HIDDEN_DELETED,
   STATE_HIDDEN_DELTA,
-  STATE_HIDDEN_DRAFT,
   STATE_HIDDEN_GROUP,
   STATE_HIDDEN_INVISIBLE,
   STATE_HIDDEN_LOCAL,
   STATE_HIDDEN_MASK,
+  STATE_HIDDEN_SKETCH,
   STATE_HIDDEN_WAIT,
   STATE_UNIFORM,
   toGpuState,
@@ -654,24 +654,24 @@ export interface FeatureTablesInternals {
    */
   showInPlace(owner: string, features: readonly Feature[]): void;
   /**
-   * Draws the drafts of features in the places of their rows, for this client only: the ones drawn
-   * before and not given now are no longer drawn. A draft of a feature of a row is drawn in its
-   * place, the row hidden by the mark of the drafts (`STATE_HIDDEN_DRAFT`) and the features of
-   * `showInPlace` over it not drawn while it is; a draft of a new feature is drawn at the keys
-   * given (`DraftOverlay.place`), or at the end of its layer. Nothing is written
+   * Draws the sketches of features in the places of their rows, for this client only: the ones drawn
+   * before and not given now are no longer drawn. A sketch of a feature of a row is drawn in its
+   * place, the row hidden by the mark of the sketches (`STATE_HIDDEN_SKETCH`) and the features of
+   * `showInPlace` over it not drawn while it is; a sketch of a new feature is drawn at the keys
+   * given (`SketchOverlay.place`), or at the end of its layer. Nothing is written
    */
-  showDrafts(drafts: readonly DraftOverlay[]): void;
+  showSketches(sketches: readonly SketchOverlay[]): void;
   /**
-   * The differences between the drafts drawn and the features that should have one drawn over
-   * their rows (`expected`, by id): each such row is hidden by the mark of the drafts, the draft is
+   * The differences between the sketches drawn and the features that should have one drawn over
+   * their rows (`expected`, by id): each such row is hidden by the mark of the sketches, the sketch is
    * drawn over it at its keys and nothing else is, and no other row has the mark
    */
-  checkDrafts(expected: ReadonlySet<string>): string[];
+  checkSketches(expected: ReadonlySet<string>): string[];
   /**
-   * The geometry the draft of a feature is drawn with, as its row of the delta reads it (undefined
-   * when no draft of it is drawn)
+   * The geometry the sketch of a feature is drawn with, as its row of the delta reads it (undefined
+   * when no sketch of it is drawn)
    */
-  draftGeometryOf(id: string): Geometry | null | undefined;
+  sketchGeometryOf(id: string): Geometry | null | undefined;
   /** The geometry of the row of a feature, as it is read (undefined for an id of no row) */
   rowGeometryOf(id: string): Geometry | null | undefined;
   /**
@@ -784,8 +784,8 @@ const HELD_MOVE_SET = 1;
 const MOVE_HELD_BY_STATE_FROM = 100;
 
 /** A feature drawn over a row for this client */
-/** The owner of the features drawn for the drafts (`showDrafts`), among the owners of `showInPlace` */
-const DRAFT_OWNER = '\u0000drafts';
+/** The owner of the features drawn for the sketches (`showSketches`), among the owners of `showInPlace` */
+const SKETCH_OWNER = '\u0000sketches';
 
 /**
  * The keys of the order a feature of no row is drawn at: the key of the order of its layer, and in
@@ -800,12 +800,12 @@ export interface OverlayPlace {
 }
 
 /**
- * A feature drawn over the rows (`showInPlace`, `showDrafts`): over the row of its id, or for a
+ * A feature drawn over the rows (`showInPlace`, `showSketches`): over the row of its id, or for a
  * feature of no row at the keys given (`place`), or at the end of its layer
  *
  * @internal
  */
-export interface DraftOverlay {
+export interface SketchOverlay {
   readonly feature: Feature;
   readonly place?: OverlayPlace;
 }
@@ -882,11 +882,11 @@ class FeatureTablesStore implements FeatureTablesInternals {
   /** The rows of the deltas that are features drawn over rows (drawn, not read) */
   private readonly drawnOnlyRows = new Set<RowHandle>();
   /** The features each owner draws over rows, as it gave them last */
-  private readonly overlayInputs = new Map<string, readonly DraftOverlay[]>();
-  /** The rows a feature of an owner other than the drafts is drawn over */
+  private readonly overlayInputs = new Map<string, readonly SketchOverlay[]>();
+  /** The rows a feature of an owner other than the sketches is drawn over */
   private overlaidRows = new Set<RowHandle>();
-  /** The rows a draft is drawn over */
-  private draftedRows = new Set<RowHandle>();
+  /** The rows a sketch is drawn over */
+  private sketchedRows = new Set<RowHandle>();
   /** The rows held as features, by owner */
   private readonly holders = new Map<string, ReadonlySet<RowHandle>>();
   /** The rows held, with their features */
@@ -1175,12 +1175,13 @@ class FeatureTablesStore implements FeatureTablesInternals {
     // handles, which the rows of the same ids get again)
     if (this.overlaidRows.size > 0)
       this.states.setOverlaid(Int32Array.from(this.overlaidRows), false);
-    if (this.draftedRows.size > 0) this.states.setDrafted(Int32Array.from(this.draftedRows), false);
+    if (this.sketchedRows.size > 0)
+      this.states.setSketched(Int32Array.from(this.sketchedRows), false);
     this.overlays.clear();
     this.overlayInputs.clear();
     this.drawnOnlyRows.clear();
     this.overlaidRows = new Set();
-    this.draftedRows = new Set();
+    this.sketchedRows = new Set();
     const marked = Int32Array.from(this.states.bulkHandles());
     if (marked.length > 0) {
       this.states.setBulk(marked, false);
@@ -2699,19 +2700,19 @@ class FeatureTablesStore implements FeatureTablesInternals {
     this.syncOverlays(new Set([owner]));
   }
 
-  showDrafts(drafts: readonly DraftOverlay[]): void {
-    const before = this.draftedRows;
-    if (drafts.length > 0) this.overlayInputs.set(DRAFT_OWNER, drafts);
-    else this.overlayInputs.delete(DRAFT_OWNER);
-    const after = this.draftedHandles();
-    // The features of the other owners drawn over a row whose draft comes or goes are drawn again
+  showSketches(sketches: readonly SketchOverlay[]): void {
+    const before = this.sketchedRows;
+    if (sketches.length > 0) this.overlayInputs.set(SKETCH_OWNER, sketches);
+    else this.overlayInputs.delete(SKETCH_OWNER);
+    const after = this.sketchedHandles();
+    // The features of the other owners drawn over a row whose sketch comes or goes are drawn again
     const changed = new Set<RowHandle>();
     for (const handle of before) if (!after.has(handle)) changed.add(handle);
     for (const handle of after) if (!before.has(handle)) changed.add(handle);
-    const owners = new Set<string>([DRAFT_OWNER]);
+    const owners = new Set<string>([SKETCH_OWNER]);
     if (changed.size > 0) {
       for (const [owner, inputs] of this.overlayInputs) {
-        if (owner === DRAFT_OWNER) continue;
+        if (owner === SKETCH_OWNER) continue;
         for (const input of inputs) {
           const over = this.handleOf(input.feature.id);
           if (over !== undefined && changed.has(over)) {
@@ -2724,10 +2725,10 @@ class FeatureTablesStore implements FeatureTablesInternals {
     this.syncOverlays(owners);
   }
 
-  /** The rows the drafts are drawn over, as given now */
-  private draftedHandles(): Set<RowHandle> {
+  /** The rows the sketches are drawn over, as given now */
+  private sketchedHandles(): Set<RowHandle> {
     const out = new Set<RowHandle>();
-    for (const input of this.overlayInputs.get(DRAFT_OWNER) ?? []) {
+    for (const input of this.overlayInputs.get(SKETCH_OWNER) ?? []) {
       if (input.place) continue;
       const over = this.handleOf(input.feature.id);
       if (over !== undefined) out.add(over);
@@ -2736,15 +2737,15 @@ class FeatureTablesStore implements FeatureTablesInternals {
   }
 
   /**
-   * Draws again the features of owners over the rows (`showInPlace`, `showDrafts`): each is a row
+   * Draws again the features of owners over the rows (`showInPlace`, `showSketches`): each is a row
    * of the delta of its layer drawn and not read (`drawnOnlyRows`), with the keys of the row it is
-   * drawn over, the keys given (`OverlayPlace`), or at the end of its layer. A row a draft is drawn
-   * over is drawn over by the draft only (`STATE_HIDDEN_DRAFT`), the features of the other owners
-   * over it waiting until the draft is no longer drawn; a row a feature of another owner is drawn
+   * drawn over, the keys given (`OverlayPlace`), or at the end of its layer. A row a sketch is drawn
+   * over is drawn over by the sketch only (`STATE_HIDDEN_SKETCH`), the features of the other owners
+   * over it waiting until the sketch is no longer drawn; a row a feature of another owner is drawn
    * over is not drawn (`STATE_HIDDEN_OVERLAY`). The rows are not written
    */
   private syncOverlays(owners: ReadonlySet<string>): void {
-    const drafted = this.draftedHandles();
+    const sketched = this.sketchedHandles();
     const leaving = new Map<LayerTable, Set<RowHandle>>();
     const coming = new Map<LayerTable, DeltaInput[]>();
     const leave = (layer: LayerTable, handle: RowHandle): void => {
@@ -2760,8 +2761,8 @@ class FeatureTablesStore implements FeatureTablesInternals {
       const next = new Map<string, OverlayEntry>();
       for (const { feature, place: given } of this.overlayInputs.get(owner) ?? []) {
         const over = given ? undefined : this.handleOf(feature.id);
-        // The row is drawn over by its draft
-        if (owner !== DRAFT_OWNER && over !== undefined && drafted.has(over)) continue;
+        // The row is drawn over by its sketch
+        if (owner !== SKETCH_OWNER && over !== undefined && sketched.has(over)) continue;
         const id = `\u0000overlay\u0000${owner}\u0000${feature.id}`;
         const [handle] = this.ids.allocate(utf8ColumnFromStrings([id]));
         const place = over === undefined ? undefined : this.placeOf(over);
@@ -2817,19 +2818,19 @@ class FeatureTablesStore implements FeatureTablesInternals {
     }
     // The rows drawn over are not drawn
     const overlaid = new Set<RowHandle>();
-    const draftedNow = new Set<RowHandle>();
+    const sketchedNow = new Set<RowHandle>();
     for (const [owner, entries] of this.overlays) {
-      const into = owner === DRAFT_OWNER ? draftedNow : overlaid;
+      const into = owner === SKETCH_OWNER ? sketchedNow : overlaid;
       for (const entry of entries.values()) if (entry.over !== undefined) into.add(entry.over);
     }
     this.setOverRows(overlaid, this.overlaidRows, (handles, on) =>
       this.states.setOverlaid(handles, on),
     );
     this.overlaidRows = overlaid;
-    this.setOverRows(draftedNow, this.draftedRows, (handles, on) =>
-      this.states.setDrafted(handles, on),
+    this.setOverRows(sketchedNow, this.sketchedRows, (handles, on) =>
+      this.states.setSketched(handles, on),
     );
-    this.draftedRows = draftedNow;
+    this.sketchedRows = sketchedNow;
     this.revisionCount++;
   }
 
@@ -2845,9 +2846,9 @@ class FeatureTablesStore implements FeatureTablesInternals {
     if (off.length > 0) mark(Int32Array.from(off), false);
   }
 
-  checkDrafts(expected: ReadonlySet<string>): string[] {
+  checkSketches(expected: ReadonlySet<string>): string[] {
     const problems: string[] = [];
-    const entries = this.overlays.get(DRAFT_OWNER) ?? new Map<string, OverlayEntry>();
+    const entries = this.overlays.get(SKETCH_OWNER) ?? new Map<string, OverlayEntry>();
     /** The features drawn over each row, of any owner */
     const over = new Map<RowHandle, number>();
     for (const owned of this.overlays.values()) {
@@ -2867,15 +2868,15 @@ class FeatureTablesStore implements FeatureTablesInternals {
       const handle = this.handleOf(id);
       const place = handle === undefined ? undefined : this.placeOf(handle);
       if (handle === undefined || !place) {
-        problems.push(`the feature "${id}" has a draft drawn, and no row`);
+        problems.push(`the feature "${id}" has a sketch drawn, and no row`);
         continue;
       }
-      if ((place.group.state[place.row] & STATE_HIDDEN_DRAFT) === 0) {
-        problems.push(`the row of the feature "${id}" is not hidden by the mark of its draft`);
+      if ((place.group.state[place.row] & STATE_HIDDEN_SKETCH) === 0) {
+        problems.push(`the row of the feature "${id}" is not hidden by the mark of its sketch`);
       }
       const entry = entries.get(id);
       if (!entry || entry.over !== handle) {
-        problems.push(`the draft of the feature "${id}" is not drawn over its row`);
+        problems.push(`the sketch of the feature "${id}" is not drawn over its row`);
         continue;
       }
       if ((over.get(handle) ?? 0) !== 1) {
@@ -2883,26 +2884,26 @@ class FeatureTablesStore implements FeatureTablesInternals {
       }
       const drawn = this.placeOf(entry.handle);
       if (!drawn || drawn.layer !== place.layer) {
-        problems.push(`the draft of the feature "${id}" is not drawn in the layer of its row`);
+        problems.push(`the sketch of the feature "${id}" is not drawn in the layer of its row`);
         continue;
       }
       if (keysOf(drawn) !== keysOf(place)) {
         problems.push(
-          `the draft of the feature "${id}" is drawn at the keys ${keysOf(drawn)}, and its row is at ${keysOf(place)}`,
+          `the sketch of the feature "${id}" is drawn at the keys ${keysOf(drawn)}, and its row is at ${keysOf(place)}`,
         );
       }
     }
-    for (const handle of this.draftedRows) {
+    for (const handle of this.sketchedRows) {
       const id = this.ids.idOf(handle);
       if (id === undefined || !expected.has(id)) {
-        problems.push(`the row ${handle} ("${id}") is hidden by the mark of a draft it has not`);
+        problems.push(`the row ${handle} ("${id}") is hidden by the mark of a sketch it has not`);
       }
     }
     return problems;
   }
 
-  draftGeometryOf(id: string): Geometry | null | undefined {
-    const entry = this.overlays.get(DRAFT_OWNER)?.get(id);
+  sketchGeometryOf(id: string): Geometry | null | undefined {
+    const entry = this.overlays.get(SKETCH_OWNER)?.get(id);
     const place = entry ? this.placeOf(entry.handle) : undefined;
     return place ? rowInputOf(this.readContext, place.group, place.row).geometry : undefined;
   }

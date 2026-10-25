@@ -32,7 +32,7 @@ export interface FeaturesCollection {
   /**
    * Gets a feature by ID.
    *
-   * @param options - `applyDrafts` reads it as the drafts edit it (`draw.drafts`), as it is drawn
+   * @param options - `applySketches` reads it as the sketches edit it (`draw.sketches`), as it is drawn
    * @returns The feature, or `undefined` when there is none with this ID
    * @throws `DrawError` with the code `invalid-input` when the options have the wrong shape
    */
@@ -40,7 +40,7 @@ export interface FeaturesCollection {
   /**
    * Gets features by ID, in the order of the IDs.
    *
-   * @param options - `applyDrafts` reads them as the drafts edit them (`draw.drafts`)
+   * @param options - `applySketches` reads them as the sketches edit them (`draw.sketches`)
    * @returns One entry per ID: the feature, or `undefined` when there is none with that ID
    * @throws `DrawError` with the code `invalid-input` when the options have the wrong shape
    */

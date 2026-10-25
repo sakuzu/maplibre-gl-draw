@@ -49,9 +49,9 @@ For using the library rather than changing it, start with the
 | StyleRule | A declarative per-layer style from attributes |
 | Display dataset | Store-independent data for mass display |
 | Snap | Moving an input onto a nearby vertex or edge |
-| Draft | Edits drawn before they are written (`draw.drafts`) |
-| Edit | A change a draft or a Store applies (`DraftEdit`) |
-| Owner | Who makes a draft: `null` for this client |
+| Sketch | Edits drawn before they are written (`draw.sketches`) |
+| Edit | A change a sketch or a Store applies (`SketchEdit`) |
+| Owner | Who makes a sketch: `null` for this client |
 
 ## Responsibilities
 
@@ -143,7 +143,7 @@ and the rest, in `src/api/impl/`) are built on the engine.
                  |
    dataset/ --> view/          rendering (dataset/ borrows renderers)
                  |  reads and subscribes
-               drafts/         edits drawn before they are written
+               sketches/       edits drawn before they are written
                  |
                store/          state
                  |
@@ -201,10 +201,10 @@ and the rest, in `src/api/impl/`) are built on the engine.
     (the tables a Store can hand out). It reads `table/` and `shared/`, and
     knows neither the Store nor the view: `store/`, `view/` and
     `dispatcher/` read it.
-12. `drafts/` holds the drafts (`draw.drafts`): the edits drawn over the
+12. `sketches/` holds the sketches (`draw.sketches`): the edits drawn over the
     document before they are written. It reads and subscribes to `store/`,
-    and gives the drafts of a Store of rows to its tables; `view/` reads
-    what the drafts draw of a Store of objects, and `modes/` and `api/`
+    and gives the sketches of a Store of rows to its tables; `view/` reads
+    what the sketches draw of a Store of objects, and `modes/` and `api/`
     add, change and commit them.
 
 ### Checking the rules
@@ -215,7 +215,7 @@ Tests, `src/e2e/`, `src/test-support/` and `src/test-utils.ts` are left out.
 
 Every area has a height. From the bottom: `geometry/`; `shared/` together
 with `src/messages.ts`; `table/`; `extension/`; `feature-table/`; `store/`;
-`drafts/`; `view/`; `dataset/`; `operations/` and `snapping/` at the same height;
+`sketches/`; `view/`; `dataset/`; `operations/` and `snapping/` at the same height;
 `modes/`; `dispatcher/`; `debug/`; `api/`; and the entry file `src/index.ts`, with
 `src/webgl/` at the same height. An import
 may point to a lower area or stay inside its own area, with the exceptions

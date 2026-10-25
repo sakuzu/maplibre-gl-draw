@@ -41,7 +41,6 @@ import type {
   Map as MapLibreMap,
 } from 'maplibre-gl';
 import type { DatasetManager } from '../../dataset/manager.js';
-import type { DraftView } from '../../drafts/draft-view.js';
 import type { EngineOverlayRenderer, FeatureTypeHandler } from '../../extension/index.js';
 import { featureTablesInternals } from '../../feature-table/feature-tables.js';
 import type { FeatureStyleConfig } from '../../shared/config/feature-style.js';
@@ -49,6 +48,7 @@ import type { RenderingConfig } from '../../shared/config/rendering.js';
 import type { SelectionUIConfig } from '../../shared/config/selection.js';
 import type { PixelRatioInput } from '../../shared/utils/pixel-ratio.js';
 import { resolveContentPixelRatio, resolvePixelRatio } from '../../shared/utils/pixel-ratio.js';
+import type { SketchView } from '../../sketches/sketch-view.js';
 import type { SpatialIndex } from '../../store/spatial/spatial-index.js';
 import type { Store, StoreContractView } from '../../store/store.js';
 import type { Feature, StoreChange } from '../../store/types.js';
@@ -92,10 +92,10 @@ export interface CustomLayerDeps {
   map: MapLibreMap;
   store: Store;
   /**
-   * What the drafts of the document draw (none drawn when omitted): a Store of objects is read
+   * What the sketches of the document draw (none drawn when omitted): a Store of objects is read
    * with them, and a Store of rows draws them among its rows
    */
-  drafts?: DraftView;
+  sketches?: SketchView;
   spatialIndex: SpatialIndex;
   featureStyle: FeatureStyleConfig;
   selectionConfig: SelectionUIConfig;
@@ -243,13 +243,13 @@ export interface CustomLayerInterface extends BaseCustomLayerInterface {
    */
   checkDrawnRebuild(): string[];
   /**
-   * The differences between what is drawn and the drafts drawn over the features given (by ID,
+   * The differences between what is drawn and the sketches drawn over the features given (by ID,
    * with the feature each is drawn as): over a Store of rows, each row hidden by the mark of the
-   * drafts and its draft drawn at its keys; over a Store of objects, each feature read as the one
+   * sketches and its sketch drawn at its keys; over a Store of objects, each feature read as the one
    * it is drawn as, once, in its place, and no other feature read otherwise. None while another
    * document is shown
    */
-  checkDrawnDrafts(expected: ReadonlyMap<string, Feature>): string[];
+  checkDrawnSketches(expected: ReadonlyMap<string, Feature>): string[];
   /**
    * Whether work remains that later frames finish without the host doing anything (see
    * `draw.hasPendingWork()`)
@@ -301,8 +301,8 @@ interface EngineState {
    */
   builtPixelRatio: number | null;
   unsubscribeStore: (() => void) | null;
-  /** Stops following what the drafts draw */
-  unsubscribeDrafts: (() => void) | null;
+  /** Stops following what the sketches draw */
+  unsubscribeSketches: (() => void) | null;
   /** Stops the asking for frames when row groups wait to be taken in */
   unwatchTables: (() => void) | null;
   /** Stops following the document shown in place of the document (its rows and its changes) */
@@ -349,19 +349,19 @@ export function createCustomLayer(deps: CustomLayerDeps): CustomLayerInterface {
 
   // The drawing reads the Store through a view of it, which gives the document shown in place of
   // the document while there is one, and leaves the state of this client out while asked
-  const shown = createShownStore(own, deps.drafts);
+  const shown = createShownStore(own, deps.sketches);
   const store = shown.store;
-  // The features the drafts draw are drawn wherever they are (the index of the Store places them
+  // The features the sketches draw are drawn wherever they are (the index of the Store places them
   // where the document has them, and has none for a feature to create)
-  const drafts = deps.drafts;
-  const drawnIndex: SpatialIndex = drafts
+  const sketches = deps.sketches;
+  const drawnIndex: SpatialIndex = sketches
     ? {
         findNear: (coordinate, tolerance) => spatialIndex.findNear(coordinate, tolerance),
         findInBounds(bounds) {
           const ids = spatialIndex.findInBounds(bounds);
-          if (drafts.size === 0 || shown.getShown() !== null) return ids;
+          if (sketches.size === 0 || shown.getShown() !== null) return ids;
           const seen = new Set(ids);
-          for (const id of drafts.ids()) if (!seen.has(id)) ids.push(id);
+          for (const id of sketches.ids()) if (!seen.has(id)) ids.push(id);
           return ids;
         },
       }
@@ -376,7 +376,7 @@ export function createCustomLayer(deps: CustomLayerDeps): CustomLayerInterface {
     shownTableRetained: null,
     builtPixelRatio: null,
     unsubscribeStore: null,
-    unsubscribeDrafts: null,
+    unsubscribeSketches: null,
     unwatchTables: null,
     unwatchShown: null,
     unwatchContextLoss: null,
@@ -503,9 +503,9 @@ export function createCustomLayer(deps: CustomLayerDeps): CustomLayerInterface {
     // Changes made while the layer was off the map were not seen
     displayList.invalidate();
     engine.unsubscribeStore = store.subscribe(followStore);
-    // What the drafts draw of a Store of objects is told as the Store tells its changes
-    engine.unsubscribeDrafts =
-      drafts?.onChange((changes) => {
+    // What the sketches draw of a Store of objects is told as the Store tells its changes
+    engine.unsubscribeSketches =
+      sketches?.onChange((changes) => {
         if (shown.getShown() !== null) return;
         followStore(changes);
         engine.mapInstance?.triggerRepaint();
@@ -549,8 +549,8 @@ export function createCustomLayer(deps: CustomLayerDeps): CustomLayerInterface {
       engine.unsubscribeStore();
       engine.unsubscribeStore = null;
     }
-    engine.unsubscribeDrafts?.();
-    engine.unsubscribeDrafts = null;
+    engine.unsubscribeSketches?.();
+    engine.unsubscribeSketches = null;
     engine.unwatchTables?.();
     engine.unwatchTables = null;
     engine.unwatchShown?.();
@@ -1075,11 +1075,11 @@ export function createCustomLayer(deps: CustomLayerDeps): CustomLayerInterface {
       ];
     },
 
-    checkDrawnDrafts(expected: ReadonlyMap<string, Feature>): string[] {
+    checkDrawnSketches(expected: ReadonlyMap<string, Feature>): string[] {
       if (shown.getShown() !== null) return [];
       const tables = featureTablesInternals(own.tables);
-      if (tables) return tables.checkDrafts(new Set(expected.keys()));
-      return checkObjectDrafts(own, store, expected, drafts);
+      if (tables) return tables.checkSketches(new Set(expected.keys()));
+      return checkObjectSketches(own, store, expected, sketches);
     },
 
     checkDrawnRebuild(): string[] {
@@ -1128,23 +1128,23 @@ export function createCustomLayer(deps: CustomLayerDeps): CustomLayerInterface {
 
 /**
  * The differences between the features a Store of objects is drawn with (`drawn`, read with the
- * drafts) and the drafts drawn over the features given: each read as the feature it is drawn as,
+ * sketches) and the sketches drawn over the features given: each read as the feature it is drawn as,
  * once, where the feature is in the stacking order of the Store, and no other feature read
- * otherwise (the features the drafts create left out)
+ * otherwise (the features the sketches create left out)
  */
-function checkObjectDrafts(
+function checkObjectSketches(
   own: Store,
   drawn: Store,
   expected: ReadonlyMap<string, Feature>,
-  drafts: DraftView | undefined,
+  sketches: SketchView | undefined,
 ): string[] {
   const problems: string[] = [];
-  const creates = new Set(drafts?.creates().map((create) => create.key) ?? []);
+  const creates = new Set(sketches?.creates().map((create) => create.key) ?? []);
   const list = drawn.listFeaturesInOrder().filter((feature) => !creates.has(feature.id));
   const ownList = own.listFeaturesInOrder();
   if (list.length !== ownList.length) {
     problems.push(
-      `${list.length} features are drawn with the drafts, and the Store has ${ownList.length}`,
+      `${list.length} features are drawn with the sketches, and the Store has ${ownList.length}`,
     );
     return problems;
   }
@@ -1155,16 +1155,16 @@ function checkObjectDrafts(
       problems.push(`the feature "${feature.id}" is drawn where the Store has "${at.id}"`);
       continue;
     }
-    const draft = expected.get(feature.id);
-    if (draft !== undefined) {
-      if (feature !== draft) {
-        problems.push(`the feature "${feature.id}" is drawn, and not as its draft leaves it`);
+    const sketch = expected.get(feature.id);
+    if (sketch !== undefined) {
+      if (feature !== sketch) {
+        problems.push(`the feature "${feature.id}" is drawn, and not as its sketch leaves it`);
       }
-      if (drawn.getFeature(feature.id) !== draft) {
-        problems.push(`the feature "${feature.id}" is not read as its draft leaves it`);
+      if (drawn.getFeature(feature.id) !== sketch) {
+        problems.push(`the feature "${feature.id}" is not read as its sketch leaves it`);
       }
     } else if (feature !== at) {
-      problems.push(`the feature "${feature.id}" is drawn as a draft it has not`);
+      problems.push(`the feature "${feature.id}" is drawn as a sketch it has not`);
     }
   }
   return problems;

@@ -118,13 +118,13 @@ change is made.
 | `dataset.removed` | `{ datasetId }` |
 | `dataset.reordered` | `{ order; previous }` |
 
-### Drafts
+### Sketches
 
 | Event | Payload |
 | --- | --- |
-| `draft.added` | `{ draft: Draft }` |
-| `draft.updated` | `{ draft: Draft; dropped }` |
-| `draft.removed` | `{ draft: Draft; reason: DraftEndReason; dropped }` |
+| `sketch.added` | `{ sketch: Sketch }` |
+| `sketch.updated` | `{ sketch: Sketch; dropped }` |
+| `sketch.removed` | `{ sketch: Sketch; reason: SketchEndReason; dropped }` |
 
 ### Drawing
 
@@ -431,32 +431,32 @@ The datasets that exist before you subscribe are not announced, so read
 `draw.datasets.list()` once when you start following them (see
 [Showing large data](../guides/large-data.md)).
 
-### draft.added, draft.updated and draft.removed
+### sketch.added, sketch.updated and sketch.removed
 
-A draft of `draw.drafts` was added, changed or ended. They fire once the
-operation is done: the features read with `{ applyDrafts: true }` inside
+A sketch of `draw.sketches` was added, changed or ended. They fire once the
+operation is done: the features read with `{ applySketches: true }` inside
 a listener already show the change.
 
-- `draft.added` fires in `draw.drafts.add` and `addMany`, one per draft
-- `draft.updated` fires in `draw.drafts.update` and `updateMany`
+- `sketch.added` fires in `draw.sketches.add` and `addMany`, one per sketch
+- `sketch.updated` fires in `draw.sketches.update` and `updateMany`
   (`dropped` is 0), and when a write of the document leaves edits of a
-  draft out: a feature it edits was deleted, locked, hidden or put into a
+  sketch out: a feature it edits was deleted, locked, hidden or put into a
   layer that cannot be written, or a vertex it edits is no longer there.
   `dropped` is the number of edits left out then
-- `draft.removed` fires once a draft ends, with the reason
-  (`DraftEndReason`): `committed` by `draw.drafts.commit`, `cancelled`
-  by `draw.drafts.remove`, `withdrawn` for a draft with an owner removed,
+- `sketch.removed` fires once a sketch ends, with the reason
+  (`SketchEndReason`): `committed` by `draw.sketches.commit`, `cancelled`
+  by `draw.sketches.remove`, `withdrawn` for a sketch with an owner removed,
   `deleted`, `locked`, `layer-unavailable` or `vertices-removed` once
   nothing of it is left, `read-only` when the document becomes read-only,
   `document-replaced` when the whole document is replaced, and
-  `deselected` for a draft of the features selected once none is.
+  `deselected` for a sketch of the features selected once none is.
   `dropped` counts the edits left out from when it was added to its end,
   the edits of features no longer there when it was written included
 
 A commit writes in one transaction: `document.changed` comes first, then
-`draft.removed`. A second draft of this client of a feature commits the
-first one before it is added: `document.changed`, `draft.removed`, then
-`draft.added`. Inside `draw.transact`, the events of the drafts come at
+`sketch.removed`. A second sketch of this client of a feature commits the
+first one before it is added: `document.changed`, `sketch.removed`, then
+`sketch.added`. Inside `draw.transact`, the events of the sketches come at
 once and `document.changed` when the transaction ends.
 
 ### dataset.reordered

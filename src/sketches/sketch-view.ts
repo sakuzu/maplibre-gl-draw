@@ -2,26 +2,26 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * What the drafts draw (`DraftView`): each feature a draft edits, drawn as the drafts leave it in
- * the place of the feature, and each feature a draft creates, drawn in the place it will be
+ * What the sketches draw (`SketchView`): each feature a sketch edits, drawn as the sketches leave it in
+ * the place of the feature, and each feature a sketch creates, drawn in the place it will be
  * created in
  *
- * A feature of a draft is drawn in place of the feature it edits, one for each feature whatever
- * the number of drafts that edit it (they are applied one after the other). Over a Store of rows,
- * the drafts are rows of the deltas drawn and not read, and the row of a feature a draft edits is
- * hidden by the mark of the drafts (`FeatureTables` internals, `showDrafts`). Over a Store of
+ * A feature of a sketch is drawn in place of the feature it edits, one for each feature whatever
+ * the number of sketches that edit it (they are applied one after the other). Over a Store of rows,
+ * the sketches are rows of the deltas drawn and not read, and the row of a feature a sketch edits is
+ * hidden by the mark of the sketches (`FeatureTables` internals, `showSketches`). Over a Store of
  * objects, the drawing reads the features through this view (`ordered`, `drawnFeature`), and is
  * told which features it draws otherwise (`onChange`), as a change of the Store tells it.
  */
 
-import type { DraftOverlay } from '../feature-table/feature-tables.js';
+import type { SketchOverlay } from '../feature-table/feature-tables.js';
 import { featureTablesInternals } from '../feature-table/feature-tables.js';
 import { rowPlaceKeysOf } from '../store/row-places.js';
 import type { Store } from '../store/store.js';
 import type { Feature, ItemPlacement, StoreChange } from '../store/types.js';
 
 /**
- * A feature a draft creates, as it is drawn
+ * A feature a sketch creates, as it is drawn
  *
  * @internal
  */
@@ -34,22 +34,22 @@ export interface DrawnCreate {
   readonly placement: ItemPlacement & { readonly below: string | null };
 }
 
-/** What the order of the features with the drafts reads of a Store of objects */
+/** What the order of the features with the sketches reads of a Store of objects */
 interface OrderStore {
   getLayerOrder(): readonly string[];
   getGroup(id: string): { readonly layerId: string } | undefined;
 }
 
 /**
- * What the drafts draw, and its changes
+ * What the sketches draw, and its changes
  *
  * @internal
  */
-export class DraftView {
+export class SketchView {
   readonly #store: Store;
-  /** The features drafts edit, as they are drawn, by ID */
+  /** The features sketches edit, as they are drawn, by ID */
   #live = new Map<string, Feature>();
-  /** The features drafts create, as they are drawn, in the order they are drawn */
+  /** The features sketches create, as they are drawn, in the order they are drawn */
   #creates: readonly DrawnCreate[] = [];
   /** The same, by the ID they are drawn with */
   #createByKey = new Map<string, DrawnCreate>();
@@ -59,27 +59,27 @@ export class DraftView {
     this.#store = store;
   }
 
-  /** The number of features drawn for the drafts */
+  /** The number of features drawn for the sketches */
   get size(): number {
     return this.#live.size + this.#creates.length;
   }
 
-  /** The feature drawn for the drafts with this ID (a feature edited, or one created) */
+  /** The feature drawn for the sketches with this ID (a feature edited, or one created) */
   drawnFeature(id: string): Feature | undefined {
     return this.#live.get(id) ?? this.#createByKey.get(id)?.feature;
   }
 
-  /** The features drafts edit, as they are drawn, by ID */
+  /** The features sketches edit, as they are drawn, by ID */
   liveFeatures(): ReadonlyMap<string, Feature> {
     return this.#live;
   }
 
-  /** The features drafts create, as they are drawn */
+  /** The features sketches create, as they are drawn */
   creates(): readonly DrawnCreate[] {
     return this.#creates;
   }
 
-  /** The IDs of the features drawn for the drafts */
+  /** The IDs of the features drawn for the sketches */
   ids(): string[] {
     return [...this.#live.keys(), ...this.#creates.map((create) => create.key)];
   }
@@ -98,7 +98,7 @@ export class DraftView {
   }
 
   /**
-   * Sets what the drafts draw: the features they edit as they leave them, and the features they
+   * Sets what the sketches draw: the features they edit as they leave them, and the features they
    * create
    */
   set(live: ReadonlyMap<string, Feature>, creates: readonly DrawnCreate[]): void {
@@ -120,23 +120,23 @@ export class DraftView {
     for (const listener of [...this.#listeners]) listener(change);
   }
 
-  /** Draws the drafts among the rows of a Store of rows */
+  /** Draws the sketches among the rows of a Store of rows */
   #showRows(): void {
     const tables = featureTablesInternals(this.#store.tables);
     if (!tables) return;
     const placeKeys = rowPlaceKeysOf(this.#store.tables);
-    const overlays: DraftOverlay[] = [];
+    const overlays: SketchOverlay[] = [];
     for (const feature of this.#live.values()) overlays.push({ feature });
     for (const create of this.#creates) {
       const place = placeKeys?.(create.placement);
       if (place) overlays.push({ feature: create.feature, place });
     }
-    tables.showDrafts(overlays);
+    tables.showSketches(overlays);
   }
 
   /**
    * The change of what the drawing of a Store of objects draws: each feature drawn otherwise, with
-   * the one drawn before (the feature of the Store when it was not drafted, or is no longer)
+   * the one drawn before (the feature of the Store when it was not sketched, or is no longer)
    */
   #changeOf(
     before: ReadonlyMap<string, Feature>,
@@ -181,8 +181,8 @@ export class DraftView {
   }
 
   /**
-   * The features of a Store of objects in stacking order with the drafts: each feature a draft
-   * edits as it is drawn, and each feature a draft creates in its place
+   * The features of a Store of objects in stacking order with the sketches: each feature a sketch
+   * edits as it is drawn, and each feature a sketch creates in its place
    *
    * @param list The features of the Store in stacking order
    */
@@ -198,7 +198,7 @@ export class DraftView {
     return out;
   }
 
-  /** The features of a Store of objects, in no order, with the drafts (see `ordered`) */
+  /** The features of a Store of objects, in no order, with the sketches (see `ordered`) */
   unordered(list: readonly Feature[]): Feature[] {
     const live = this.#live;
     const out =

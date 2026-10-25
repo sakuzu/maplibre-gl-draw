@@ -4,7 +4,7 @@
 /**
  * The keys of the order of a place, as a Store of rows makes them for a new feature put there
  *
- * A draft of a new feature (`draw.drafts`) is drawn among the rows at the place it will be
+ * A sketch of a new feature (`draw.sketches`) is drawn among the rows at the place it will be
  * created in, before it is a row: the Store of rows of core gives the keys of that place, found by
  * its tables.
  */

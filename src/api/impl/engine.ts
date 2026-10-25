@@ -22,7 +22,6 @@ import { createTopmostHitTester } from '../../dispatcher/hit-test/topmost.js';
 import type { InputRouter } from '../../dispatcher/input-router.js';
 import { createInputRouter } from '../../dispatcher/input-router.js';
 import { createInputNormalizer } from '../../dispatcher/normalizer.js';
-import { DraftController } from '../../drafts/draft-controller.js';
 import {
   DrawImageMode,
   drawCircleMode,
@@ -34,6 +33,7 @@ import {
 import type { EngineModeContext } from '../../modes/handler.js';
 import type { ModeManager } from '../../modes/manager.js';
 import { SelectMode } from '../../modes/select/mode.js';
+import { SketchController } from '../../sketches/sketch-controller.js';
 import { SnapIndicatorRenderer } from '../../snapping/indicator.js';
 import { createDisplaySnapProviders } from '../../snapping/providers/display.js';
 import type { Mode } from '../../store/types.js';
@@ -105,8 +105,8 @@ export interface Engine {
   readonly modeManager: ModeManager;
   /** The datasets */
   readonly datasets: DatasetManager;
-  /** The drafts: the edits drawn over the document before they are written */
-  readonly drafts: DraftController;
+  /** The sketches: the edits drawn over the document before they are written */
+  readonly sketches: SketchController;
   /** The router of the input (the tests hand it synthetic events) */
   readonly inputRouter: InputRouter;
   /** The extensions of the extension contract: plugins, modes, feature types and the rest */
@@ -273,9 +273,9 @@ export function createEngine(
     teardown.add(snapService.register(provider));
   }
 
-  // 2.8 The drafts: what they draw is drawn with the document, and they follow the writes of the
+  // 2.8 The sketches: what they draw is drawn with the document, and they follow the writes of the
   // Store once the events of the instance do (step 8)
-  const drafts = new DraftController({
+  const sketches = new SketchController({
     store,
     generateId: context.generateFeatureId,
     getActiveLayerId: context.getActiveLayerId,
@@ -286,7 +286,7 @@ export function createEngine(
   const customLayer = createCustomLayer({
     map,
     store,
-    drafts: drafts.view,
+    sketches: sketches.view,
     spatialIndex,
     featureStyle,
     selectionConfig: selectionStyle,
@@ -441,12 +441,12 @@ export function createEngine(
   const stopEngineEvents = connectEngineEvents(events, eventEmitter, {
     hitAt: (point) => extensions.hitAt(point),
   });
-  // The drafts are applied again after the events of a write went out, and tell their own
-  drafts.setListener((event, payload) => events.emit(event, payload));
-  drafts.attach();
+  // The sketches are applied again after the events of a write went out, and tell their own
+  sketches.setListener((event, payload) => events.emit(event, payload));
+  sketches.attach();
   teardown.add(() => {
-    drafts.detach();
-    drafts.setListener(null);
+    sketches.detach();
+    sketches.setListener(null);
     stopStoreEvents();
     stopEngineEvents();
     events.clear();
@@ -508,7 +508,7 @@ export function createEngine(
     customLayer,
     modeManager,
     datasets,
-    drafts,
+    sketches,
     inputRouter,
     extensions,
     events,

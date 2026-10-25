@@ -306,13 +306,13 @@ export interface Store extends StoreView {
    * The IDs of vertices of a feature, given by their places: the ID of each, in the same order.
    * Optional, for a Store that gives its vertices IDs ({@link VertexId}), which stay the vertex's
    * while other vertices are added before it and deleted. The instance asks only for the vertices
-   * it edits (a draft of them), and gives the IDs back to `findVertices` and to `applyEdits`.
+   * it edits (a sketch of them), and gives the IDs back to `findVertices` and to `applyEdits`.
    */
   getVertexIds?(featureId: string, vertices: readonly VertexRef[]): readonly VertexId[];
   /**
    * The places of vertices of a feature, given by their IDs: the place of each in the geometry of
    * now, in the same order, or `null` for a vertex that is no longer there (or a feature that is
-   * not there). Optional, with `getVertexIds`: the instance reads where the vertices of a draft are
+   * not there). Optional, with `getVertexIds`: the instance reads where the vertices of a sketch are
    * after the feature was written.
    */
   findVertices?(featureId: string, ids: readonly VertexId[]): (VertexRef | null)[];

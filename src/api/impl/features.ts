@@ -108,17 +108,17 @@ export function createFeatures(deps: ResourceDeps): FeaturesCollection {
   const inStackingOrder = (features: StoredFeature[]): StoredFeature[] =>
     featuresInStackingOrder(store, features);
 
-  /** How a feature is read: from the Store, or as the drafts edit it (the options checked) */
+  /** How a feature is read: from the Store, or as the sketches edit it (the options checked) */
   const readerOf = (
     options: FeatureReadOptions | undefined,
   ): ((id: string) => StoredFeature | undefined) => {
     if (options !== undefined) {
       requireRecord(options, 'The options');
-      onlyKeys(options as unknown as Record<string, unknown>, ['applyDrafts'], 'The options');
-      optionalBoolean(options as unknown as Record<string, unknown>, 'applyDrafts');
+      onlyKeys(options as unknown as Record<string, unknown>, ['applySketches'], 'The options');
+      optionalBoolean(options as unknown as Record<string, unknown>, 'applySketches');
     }
     const applied = deps.appliedFeature;
-    if (options?.applyDrafts === true && applied) {
+    if (options?.applySketches === true && applied) {
       return (id) => (store.getFeature(id) ? applied(id) : undefined);
     }
     return (id) => store.getFeature(id);
@@ -589,7 +589,7 @@ export function pageOf(options: FeatureListOptions): {
 // ============================================================================
 
 /**
- * Checks the input of a feature a draft creates and builds the feature `features.create` would
+ * Checks the input of a feature a sketch creates and builds the feature `features.create` would
  * store: with the ID given when the input has none, in the layer given when it names neither layer
  * nor group
  *

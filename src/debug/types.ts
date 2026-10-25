@@ -11,9 +11,9 @@
  * (`selection`), the marks the rows are written with (`write-marks`), the features kept of rows
  * (`feature-cache`), what is drawn (`drawing`), the rows written in place where they are drawn
  * against the same rows drawn afresh (`drawing-writes`), everything the drawing of the rows keeps
- * against a drawing made again from the rows (`drawing-rebuild`), the drafts drawn in the places of
- * the features they edit (`drafts`), what a draft drew against what its commit wrote
- * (`draft-commits`)
+ * against a drawing made again from the rows (`drawing-rebuild`), the sketches drawn in the places of
+ * the features they edit (`sketches`), what a sketch drew against what its commit wrote
+ * (`sketch-commits`)
  *
  * @experimental
  */
@@ -25,8 +25,8 @@ export type ConsistencyCheck =
   | 'drawing'
   | 'drawing-writes'
   | 'drawing-rebuild'
-  | 'drafts'
-  | 'draft-commits';
+  | 'sketches'
+  | 'sketch-commits';
 
 /**
  * A check that failed, and what it found

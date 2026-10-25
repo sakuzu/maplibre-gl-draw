@@ -2,32 +2,32 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * The edits of the drafts as pure functions: their checks, what is left of them when features or
+ * The edits of the sketches as pure functions: their checks, what is left of them when features or
  * vertices are gone, the shape of the vertices, and the edits of features they are made into
  */
 
 import { describe, expect, it } from 'vitest';
-import type { DraftEdit } from '../api/drafts.js';
+import type { SketchEdit } from '../api/sketches.js';
 import { DEFAULT_TRANSFORMS } from '../store/feature-edits.js';
 import {
-  checkDraftEdits,
+  checkSketchEdits,
   featureEditsOf,
   vertexShapeOf,
   withoutFeatures,
   withoutVertices,
-} from './draft-edits.js';
+} from './sketch-edits.js';
 
-const translate = (ids: string[]): DraftEdit => ({
+const translate = (ids: string[]): SketchEdit => ({
   kind: 'translate',
   target: { featureIds: ids },
   from: [0, 0],
   to: [1, 1],
 });
 
-describe('checkDraftEdits', () => {
+describe('checkSketchEdits', () => {
   it('takes the edits of features, the selection, the IDs of vertices given, and create', () => {
     expect(() =>
-      checkDraftEdits(
+      checkSketchEdits(
         [
           translate(['a']),
           { kind: 'rotate', target: { selection: true }, center: [0, 0], angleDegrees: 10 },
@@ -42,30 +42,30 @@ describe('checkDraftEdits', () => {
         DEFAULT_TRANSFORMS,
       ),
     ).not.toThrow();
-    const byId: DraftEdit = { kind: 'vertex-delete', featureId: 'a', vertices: ['v1'] };
-    expect(() => checkDraftEdits([byId], true, DEFAULT_TRANSFORMS)).not.toThrow();
-    expect(() => checkDraftEdits([byId], false, DEFAULT_TRANSFORMS)).toThrow(/by its place/);
+    const byId: SketchEdit = { kind: 'vertex-delete', featureId: 'a', vertices: ['v1'] };
+    expect(() => checkSketchEdits([byId], true, DEFAULT_TRANSFORMS)).not.toThrow();
+    expect(() => checkSketchEdits([byId], false, DEFAULT_TRANSFORMS)).toThrow(/by its place/);
     expect(() =>
-      checkDraftEdits(
+      checkSketchEdits(
         [{ kind: 'create', feature: {}, placedVertexCount: -1, below: null } as never],
         false,
         DEFAULT_TRANSFORMS,
       ),
     ).toThrow(/placedVertexCount/);
     expect(() =>
-      checkDraftEdits(
+      checkSketchEdits(
         [{ kind: 'translate', target: { selection: false }, from: [0, 0], to: [0, 0] } as never],
         false,
         DEFAULT_TRANSFORMS,
       ),
     ).toThrow(/target/);
-    expect(() => checkDraftEdits('x', false, DEFAULT_TRANSFORMS)).toThrow(/array/);
+    expect(() => checkSketchEdits('x', false, DEFAULT_TRANSFORMS)).toThrow(/array/);
   });
 });
 
 describe('what is left of the edits', () => {
   it('leaves out the features gone, each counted once', () => {
-    const edits: DraftEdit[] = [
+    const edits: SketchEdit[] = [
       { kind: 'set', featureId: 'a', patch: { visible: false } },
       translate(['a', 'b']),
       translate(['a']),
@@ -76,7 +76,7 @@ describe('what is left of the edits', () => {
   });
 
   it('leaves out the vertices gone and the insertions next to them', () => {
-    const edits: DraftEdit[] = [
+    const edits: SketchEdit[] = [
       {
         kind: 'vertex-move',
         featureId: 'a',
@@ -160,7 +160,7 @@ describe('vertexShapeOf', () => {
 
 describe('featureEditsOf', () => {
   it('makes the selection the features selected and finds the vertices, leaving out create', () => {
-    const edits: DraftEdit[] = [
+    const edits: SketchEdit[] = [
       { kind: 'translate', target: { selection: true }, from: [0, 0], to: [1, 1] },
       {
         kind: 'vertex-move',

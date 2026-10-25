@@ -8,7 +8,6 @@
 import type { Map as MaplibreMap } from 'maplibre-gl';
 import type { DatasetsCollection } from './datasets.js';
 import type { DocumentResource } from './document.js';
-import type { DraftsCollection } from './drafts.js';
 import type { DrawingResource } from './drawing.js';
 import type { DrawEvents } from './events.js';
 import type { StoreView, UpdateSource } from './extension/store.js';
@@ -22,6 +21,7 @@ import type { MemoryResource } from './memory.js';
 import type { MetadataResource } from './metadata.js';
 import type { DrawOptions, OptionsResource } from './options.js';
 import type { SelectionResource, VertexSelectionResource } from './selection.js';
+import type { SketchesCollection } from './sketches.js';
 import type { GpuMemoryDiagnostics, LayerStackEntry, Mode, TerrainDiagnostics } from './state.js';
 
 /** The options of {@link Draw.transact} */
@@ -68,7 +68,7 @@ export interface Draw {
   /** What this client hides without changing the document */
   readonly hidden: HiddenCollection;
   /** The edits drawn over the document before they are written */
-  readonly drafts: DraftsCollection;
+  readonly sketches: SketchesCollection;
   /** What this client has selected */
   readonly selection: SelectionResource;
   /** The selected vertices of one feature in this client */

@@ -33,7 +33,7 @@
  * - `draw.layers` (create, update, reorder, setActive): {@link LayersCollection}
  * - `draw.groups` (create, update, move): {@link GroupsCollection}
  * - `draw.datasets` (add, remove, move): {@link DatasetsCollection}
- * - `draw.drafts` (add, update, commit, remove): {@link DraftsCollection}
+ * - `draw.sketches` (add, update, commit, remove): {@link SketchesCollection}
  * - `draw.selection` (set, add, clear, delete, group): {@link SelectionResource}
  * - `draw.vertexSelection` (set, clear, delete): {@link VertexSelectionResource}
  * - `draw.metadata` and `draw.options` (get, update): {@link MetadataResource}, {@link OptionsResource}
@@ -77,13 +77,13 @@ export type { LayersCollection } from './api/layers.js';
 export type { GroupsCollection } from './api/groups.js';
 export type { HiddenCollection } from './api/hidden.js';
 export type {
-  Draft,
-  DraftEdit,
-  DraftEndReason,
-  DraftInput,
-  DraftPatch,
-  DraftsCollection,
-} from './api/drafts.js';
+  Sketch,
+  SketchEdit,
+  SketchEndReason,
+  SketchInput,
+  SketchPatch,
+  SketchesCollection,
+} from './api/sketches.js';
 export type { SelectionResource, VertexSelectionResource } from './api/selection.js';
 export type { MetadataResource } from './api/metadata.js';
 export type { DrawingResource } from './api/drawing.js';
