@@ -140,6 +140,7 @@ import {
   type VersionHost,
   type WaitingCopies,
 } from './versions.js';
+import { WriteMarks } from './write-marks.js';
 
 /** The key of the created zoom: the cutting of the rows into chunks reads it */
 const CREATED_ZOOM_KEY = drawPropertyKey('createdZoom');
@@ -430,6 +431,15 @@ export interface FeatureTablesInternals {
   readonly readContext: RowReadContext;
   /** Changes with every change of the rows drawn of any layer */
   readonly revision: number;
+  /** The write mark the rows written are stamped with (`write-marks.ts`) */
+  readonly writeMarks: WriteMarks;
+  /**
+   * Sets the write mark the rows written from now on are stamped with: the Store gives it at the
+   * beginning of each frame that writes values (see `write-marks.ts`)
+   *
+   * @throws DrawError (`invalid-state`) for a mark below the one before
+   */
+  setWriteMark(mark: number): void;
   /** The rows of a layer (undefined for a layer that holds none) */
   layerTable(layerId: string): LayerTable | undefined;
   /** The reads of the rows of a layer without making features (undefined for a layer of none) */
@@ -778,8 +788,7 @@ class FeatureTablesStore implements FeatureTablesInternals {
   private readonly rowGroups = new Map<RowGroupHandle, { layer: LayerTable; group: RowGroup }>();
   private nextGroup = 0;
   private revisionCount = 0;
-  /** The number of the last change written (the rows of the delta keep the one they were in) */
-  private writeCount = 0;
+  readonly writeMarks = new WriteMarks();
   /** The row groups given to `adopt` and not taken in yet, in the order they were given */
   private readonly adoptions: Adoption[] = [];
   /** The new rows built into groups of their own, being gathered or built */
@@ -966,8 +975,8 @@ class FeatureTablesStore implements FeatureTablesInternals {
     const store = this;
     return {
       layers: () => this.layers.values(),
-      get writeNumber() {
-        return store.writeCount;
+      get writeMark() {
+        return store.writeMarks.mark;
       },
       nextGroupHandle: () => this.nextGroup++,
       inDelta: (handle) => this.ids.deltaLayer(handle) >= 0,
@@ -1640,7 +1649,7 @@ class FeatureTablesStore implements FeatureTablesInternals {
       creation.layer.dims,
     );
     if (!data) return null;
-    const group = createRowGroup(-1, data, false, true);
+    const group = createRowGroup(-1, data, this.writeMarks.mark, false, true);
     const rows = new Map<RowHandle, number>();
     for (let r = 0; r < data.length; r++) {
       rows.set(data.handles[r], r);
@@ -1667,7 +1676,7 @@ class FeatureTablesStore implements FeatureTablesInternals {
   /** Puts the rows of a creation into the delta (it could not be built) */
   private creationToDelta(creation: Creation): void {
     this.endCreation(creation);
-    this.rebuildDelta(creation.layer, new Set(), creation.rows, ++this.writeCount);
+    this.rebuildDelta(creation.layer, new Set(), creation.rows);
     this.revisionCount++;
   }
 
@@ -1679,7 +1688,7 @@ class FeatureTablesStore implements FeatureTablesInternals {
     this.numberStyles(data);
     data.handles.set(this.ids.allocate(data.ids, data.idHashes));
     this.rowBoxes.mark(data.handles);
-    const group = createRowGroup(-1, data);
+    const group = createRowGroup(-1, data, this.writeMarks.mark);
     const rows: DeltaInput[] = [];
     const seen = new Set<RowHandle>();
     for (let r = 0; r < data.length; r++) {
@@ -1691,7 +1700,7 @@ class FeatureTablesStore implements FeatureTablesInternals {
       seen.add(handle);
       rows.push({ handle, input: rowInputOf(this.readContext, group, r) });
     }
-    this.rebuildDelta(layer, new Set(), rows, ++this.writeCount);
+    this.rebuildDelta(layer, new Set(), rows);
     this.revisionCount++;
   }
 
@@ -1914,10 +1923,11 @@ class FeatureTablesStore implements FeatureTablesInternals {
         inputs.set(placed.layer, list);
       }
       list.push({ handle, input });
+      // Its group is not where it is read any more
+      this.writeMarks.stampGroup(placed.group);
     }
     if (inputs.size === 0) return;
-    const number = ++this.writeCount;
-    for (const [layer, list] of inputs) this.rebuildDelta(layer, new Set(), list, number);
+    for (const [layer, list] of inputs) this.rebuildDelta(layer, new Set(), list);
     for (const list of inputs.values()) {
       for (const { handle } of list) this.refreshCopies(handle);
     }
@@ -2573,6 +2583,10 @@ class FeatureTablesStore implements FeatureTablesInternals {
     this.readGate = gate;
   }
 
+  setWriteMark(mark: number): void {
+    this.writeMarks.set(mark);
+  }
+
   watchOrderOf(patch: RowValues): () => void {
     const parts = { watch: this.watchOrder(patch) };
     this.partsWatch = parts;
@@ -2633,9 +2647,8 @@ class FeatureTablesStore implements FeatureTablesInternals {
     }
     if (next.size > 0) this.overlays.set(owner, next);
     else this.overlays.delete(owner);
-    const number = ++this.writeCount;
     for (const layer of new Set([...leaving.keys(), ...coming.keys()])) {
-      this.rebuildDelta(layer, leaving.get(layer) ?? new Set(), coming.get(layer) ?? [], number);
+      this.rebuildDelta(layer, leaving.get(layer) ?? new Set(), coming.get(layer) ?? []);
     }
     for (const [layer, set] of leaving) {
       for (const handle of set) {
@@ -2682,7 +2695,10 @@ class FeatureTablesStore implements FeatureTablesInternals {
       moved: undefined,
     });
     // Its copy in the delta stays there until it is no longer held
-    if (place.group.delta) place.layer.delta.setWritten(place.row, Number.POSITIVE_INFINITY);
+    if (place.group.delta) {
+      place.layer.delta.setKept(place.row, true);
+      this.versions.rowHeld(handle);
+    }
     return feature;
   }
 
@@ -2710,7 +2726,7 @@ class FeatureTablesStore implements FeatureTablesInternals {
     this.stopMove(handle, held);
     const serial = this.ids.deltaLayer(handle);
     if (serial >= 0) {
-      this.layerList[serial].delta.setWritten(this.ids.deltaSlot(handle), ++this.writeCount);
+      this.layerList[serial].delta.setKept(this.ids.deltaSlot(handle), false);
       this.notifyWork();
     }
     return held.feature.id;
@@ -2889,7 +2905,9 @@ class FeatureTablesStore implements FeatureTablesInternals {
     let lastLayer: string | undefined;
     let lastChange: LayerChangeDraft | undefined;
 
-    const number = ++this.writeCount;
+    const marks = this.writeMarks;
+    // The rows of the deltas written under the mark a version started under stay for it
+    const watched = this.versions.watches(marks.mark);
     const writes = new Map<string, InPlaceRowWrite[]>();
     const touched = new Set<RowGroup>();
     const moving = new Map<LayerTable, DeltaInput[]>();
@@ -2961,17 +2979,13 @@ class FeatureTablesStore implements FeatureTablesInternals {
         }
         const write = this.writeInPlace(place, i, fields, deleted, styleNumbers, columns);
         if (!write) continue;
+        marks.stamp(place.group, place.row);
+        if (watched && place.group.delta) this.versions.rowChanged(handle, marks.mark);
         if (write.what & ROW_WRITE_GEOMETRY) this.touch(place.layer.layerId, place.group.bounds);
         if (write.what & (ROW_WRITE_GEOMETRY | ROW_WRITE_STATE)) stateChanged = true;
         if (place.group !== lastTouched) {
           touched.add(place.group);
           lastTouched = place.group;
-        }
-        if (place.group.delta) {
-          place.layer.delta.setWritten(
-            place.row,
-            this.heldRows.has(handle) ? Number.POSITIVE_INFINITY : number,
-          );
         }
         let list =
           lastWritesLayer === place.layer.layerId ? lastWrites : writes.get(place.layer.layerId);
@@ -3011,6 +3025,9 @@ class FeatureTablesStore implements FeatureTablesInternals {
           leaving.set(place.layer, set);
         }
         set.add(handle);
+      } else {
+        // Its group is not where it is read any more (the delta it goes to is made again)
+        marks.stampGroup(place.group);
       }
       if (!place) created = true;
     }
@@ -3040,7 +3057,7 @@ class FeatureTablesStore implements FeatureTablesInternals {
     // The deltas
     const layers = new Set<LayerTable>([...moving.keys(), ...leaving.keys()]);
     for (const layer of layers) {
-      this.rebuildDelta(layer, leaving.get(layer) ?? new Set(), moving.get(layer) ?? [], number);
+      this.rebuildDelta(layer, leaving.get(layer) ?? new Set(), moving.get(layer) ?? []);
     }
     for (const list of moving.values()) {
       for (const { handle } of list) this.refreshCopies(handle);
@@ -3214,7 +3231,7 @@ class FeatureTablesStore implements FeatureTablesInternals {
         this.writtenOrders.delete(group);
       }
       for (const other of this.layers.values()) {
-        if (other.delta.group) this.rebuildDelta(other, new Set(), [], this.writeCount);
+        if (other.delta.group) this.rebuildDelta(other, new Set(), []);
         other.touchItems();
       }
       return;
@@ -3507,6 +3524,15 @@ class FeatureTablesStore implements FeatureTablesInternals {
       }
       for (const creation of this.creations) this.dropReading(creation);
     }
+    // The rows of the version keep the write marks they have where they are read until now
+    for (const group of groups) {
+      const handles = group.data.handles;
+      for (let r = 0; r < handles.length; r++) {
+        if (this.findPlace(handles[r])) {
+          group.marks[r] = (this.foundGroup as RowGroup).marks[this.foundRow];
+        }
+      }
+    }
     layer.replaceGroups(version.replaces, groups);
     for (const old of version.replaces) {
       this.rowGroups.delete(old.handle);
@@ -3525,11 +3551,17 @@ class FeatureTablesStore implements FeatureTablesInternals {
       }
       set.add(handle);
     };
-    const takes = (handle: RowHandle, number: number): boolean => {
+    // Whether the copy of a row in a delta goes, for a version that took the rows of the deltas
+    // up to a mark (-1: none): it is not kept, and was not written since
+    const takes = (handle: RowHandle, mark: number): boolean => {
       const serial = this.ids.deltaLayer(handle);
       if (serial < 0) return false;
-      return this.layerList[serial].delta.writtenOf(this.ids.deltaSlot(handle)) <= number;
+      const delta = this.layerList[serial].delta;
+      const slot = this.ids.deltaSlot(handle);
+      return !delta.isKept(slot) && (delta.group as RowGroup).marks[slot] <= mark;
     };
+    const markOf = (handle: RowHandle): number =>
+      version.stays.has(handle) ? -1 : version.deltaMark;
     // The rows of the version
     const inNew = new Set<RowHandle>();
     for (const group of groups) {
@@ -3543,11 +3575,10 @@ class FeatureTablesStore implements FeatureTablesInternals {
           waiting.delete(handle);
         } else {
           // Read in another group until that one has its next version (a copy that waited in
-          // a group replaced keeps the number of the version that put it there)
+          // a group replaced keeps the mark of the version that put it there)
           const before = waiting.get(handle);
-          const number =
-            before && replacedGroups.has(before.group) ? before.number : version.deltaNumber;
-          waiting.set(handle, { group, row: r, number });
+          const mark = before && replacedGroups.has(before.group) ? before.mark : markOf(handle);
+          waiting.set(handle, { group, row: r, mark });
         }
       }
     }
@@ -3563,7 +3594,7 @@ class FeatureTablesStore implements FeatureTablesInternals {
           this.ids.setMain(handle, copy.group.handle, copy.row);
           waiting.delete(handle);
           handed.push(copy);
-          if (takes(handle, copy.number)) leave(handle);
+          if (takes(handle, copy.mark)) leave(handle);
         } else {
           this.ids.setMain(handle, -1, -1);
         }
@@ -3574,14 +3605,14 @@ class FeatureTablesStore implements FeatureTablesInternals {
       const data = group.data;
       for (let r = 0; r < data.length; r++) {
         const handle = data.handles[r];
-        if (this.ids.mainGroup(handle) === group.handle && takes(handle, version.deltaNumber)) {
+        if (this.ids.mainGroup(handle) === group.handle && takes(handle, markOf(handle))) {
           leave(handle);
         }
       }
     }
     // The rows deleted the version left out: their copies in the deltas go too
     for (const handle of version.dropped) {
-      if (takes(handle, version.deltaNumber)) leave(handle);
+      if (takes(handle, markOf(handle))) leave(handle);
     }
     // A copy waiting in a group replaced waits in the version, or not any more
     const newGroups = new Set<RowGroup>(groups);
@@ -3600,7 +3631,7 @@ class FeatureTablesStore implements FeatureTablesInternals {
       copy.group.stateVersion++;
       this.rowGroups.get(copy.group.handle)?.layer.touchItems();
     }
-    for (const [delta, set] of leaving) this.rebuildDelta(delta, set, [], this.writeCount);
+    for (const [delta, set] of leaving) this.rebuildDelta(delta, set, []);
     // The values written in place since the version started
     const writes = new Map<string, InPlaceRowWrite[]>();
     for (const entry of version.log) {
@@ -3630,7 +3661,7 @@ class FeatureTablesStore implements FeatureTablesInternals {
       // The rows of the deltas in the order of the new keys
       for (const other of this.layers.values()) {
         if (other.delta.group && !leaving.has(other)) {
-          this.rebuildDelta(other, new Set(), [], this.writeCount);
+          this.rebuildDelta(other, new Set(), []);
         }
       }
       for (const other of this.layers.values()) other.touchItems();
@@ -3663,20 +3694,21 @@ class FeatureTablesStore implements FeatureTablesInternals {
 
   /**
    * Makes the rows of the delta of a layer again: its rows but the ones leaving it, and the rows
-   * coming into it (written in the change `number`). A row of the delta written in place is
-   * built again with its values, so the new rows hold no values written in place
+   * coming into it (stamped with the write mark of now; the rows that stay keep theirs). A row of
+   * the delta written in place is built again with its values, so the new rows hold no values
+   * written in place
    */
   private rebuildDelta(
     layer: LayerTable,
     leaving: ReadonlySet<RowHandle>,
     coming: readonly DeltaInput[],
-    number: number,
   ): void {
     const delta = layer.delta;
     const old = delta.group;
     const sources: RowBlockData[] = [];
     const pairs: number[] = [];
-    const writtenOf = new Map<RowHandle, number>();
+    /** The marks of the rows that stay */
+    const marksOf = new Map<RowHandle, number>();
     const inputs: RowInput[] = [];
     const comingHandles = new Set(coming.map((entry) => entry.handle));
     if (old) {
@@ -3684,7 +3716,7 @@ class FeatureTablesStore implements FeatureTablesInternals {
       for (let r = 0; r < old.data.length; r++) {
         const handle = old.data.handles[r];
         if (leaving.has(handle) || comingHandles.has(handle)) continue;
-        writtenOf.set(handle, delta.writtenOf(r));
+        marksOf.set(handle, old.marks[r]);
         if (old.values?.has(r) || old.geometries?.geometry(r) || old.geometries?.rowTriangles(r)) {
           inputs.push(rowInputOf(this.readContext, old, r));
         } else {
@@ -3692,10 +3724,7 @@ class FeatureTablesStore implements FeatureTablesInternals {
         }
       }
     }
-    for (const entry of coming) {
-      inputs.push(entry.input);
-      writtenOf.set(entry.handle, number);
-    }
+    for (const entry of coming) inputs.push(entry.input);
     if (inputs.length > 0) {
       const built = this.buildRows(inputs, layer.dims);
       if (built) {
@@ -3713,17 +3742,24 @@ class FeatureTablesStore implements FeatureTablesInternals {
       ringVertices: circleRowRings.ringVertices,
       coordinateSystem: this.coordinates,
     });
-    const group = merged.length > 0 ? createRowGroup(delta.handle, merged[0], true) : null;
-    const written = new Float64Array(group?.data.length ?? 0);
+    const marks = this.writeMarks;
+    const group =
+      merged.length > 0 ? createRowGroup(delta.handle, merged[0], marks.mark, true) : null;
+    const kept = new Uint8Array(group?.data.length ?? 0);
     if (group) {
+      // The rows coming in under the mark a version started under stay for it
+      const watched = coming.length > 0 && this.versions.watches(marks.mark);
       for (let r = 0; r < group.data.length; r++) {
         const handle = group.data.handles[r];
         // A row held as a feature stays in the delta until it is no longer held, and a feature
         // drawn over a row as long as it is drawn
-        written[r] =
-          this.heldRows.has(handle) || this.drawnOnlyRows.has(handle)
-            ? Number.POSITIVE_INFINITY
-            : (writtenOf.get(handle) ?? number);
+        if (this.heldRows.has(handle) || this.drawnOnlyRows.has(handle)) kept[r] = 1;
+        const mark = marksOf.get(handle);
+        if (mark !== undefined) group.marks[r] = mark;
+        else {
+          marks.stamp(group, r);
+          if (watched) this.versions.rowChanged(handle, marks.mark);
+        }
         this.styles.retain(group.data.styles[r]);
       }
     }
@@ -3741,7 +3777,7 @@ class FeatureTablesStore implements FeatureTablesInternals {
       }
       for (let r = 0; r < group.data.length; r++) this.writeState(group, r);
     }
-    delta.rebuild(group, written);
+    delta.rebuild(group, kept);
     layer.touchItems();
     this.touch(layer.layerId, unionBounds(old?.bounds ?? null, group?.bounds ?? null));
     // The copies the rows leaving the delta had in their groups are read again
@@ -3823,7 +3859,7 @@ class FeatureTablesStore implements FeatureTablesInternals {
       this.rowsToDelta(layer, data);
       return;
     }
-    const group = createRowGroup(this.nextGroup++, data);
+    const group = createRowGroup(this.nextGroup++, data, this.writeMarks.mark);
     layer.insert(group);
     this.rowBoxes.mark(data.handles);
     // The rows that use each style are counted (a style no row uses is given again)

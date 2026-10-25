@@ -32,6 +32,9 @@
  *   their source (`store.transact(() => writer.apply(patch), 'remote')`)
  * - `listFeatures` and `listFeaturesInOrder` throw: the rows are read from the tables
  * - A restore of many rows is written in steps, as one transaction told once (`row-steps.ts`)
+ * - The write mark of the rows (`write-marks.ts`) goes up once in each frame that writes values:
+ *   an outermost transaction, a step of a restore written in steps, a call of its writer outside
+ *   a transaction
  */
 
 import { utf8ColumnFromStrings, utf8String } from '@sakuzu/tabane';
@@ -53,6 +56,7 @@ import {
 } from '../feature-table/feature-tables.js';
 import { ItemWalk } from '../feature-table/item-walk.js';
 import { rowFeature } from '../feature-table/row-read.js';
+import { createWriteMarkKeeper, type WriteMarkKeeper } from '../feature-table/write-marks.js';
 import { ROW_FLAG_DELETED } from '../table/row-group-types.js';
 import { DrawStore } from './draw-store.js';
 import { updatesOfEdits } from './feature-edits.js';
@@ -162,9 +166,11 @@ export class TableContractStore implements StoreContract {
   readonly tables: FeatureTables;
   /** The writer of the tables, through which every write reads the values before it writes */
   readonly writer: FeatureTablesWriter;
-  /** The writer of the tables as they make it */
+  /** The writer of the tables as they make it, its writes of values in the frames of the marks */
   readonly #writer: FeatureTablesWriter;
   readonly #internals: FeatureTablesInternals;
+  /** The write mark of the rows, and the frames of writes */
+  readonly #marks: WriteMarkKeeper;
   readonly #layers = new Map<string, TableLayer>();
   #order: string[] = [];
   readonly #groups = new Map<string, TableGroup>();
@@ -195,21 +201,33 @@ export class TableContractStore implements StoreContract {
       onRelease: (handles) => this.#writer.forget(handles),
     });
     this.tables = tables;
-    this.#writer = writer;
+    this.#internals = featureTablesInternals(tables) as FeatureTablesInternals;
+    const marks = createWriteMarkKeeper(tables, this.#internals);
+    this.#marks = marks;
+    // Every write of values of the tables raises the mark of its frame (once a frame)
+    this.#writer = {
+      ...writer,
+      addRowBlocks: (layerId, blocks) => marks.write(() => writer.addRowBlocks(layerId, blocks)),
+      apply: (patch, options) => marks.write(() => writer.apply(patch, options)),
+      applyGroups: (patch, options) => marks.write(() => writer.applyGroups(patch, options)),
+      applyOpened: (id, feature, options) =>
+        marks.write(() => writer.applyOpened(id, feature, options)),
+      clear: () => marks.write(() => writer.clear()),
+    };
+    const own = this.#writer;
     this.writer = {
-      lookup: (id) => writer.lookup(id),
-      createRestoreToken: () => writer.createRestoreToken(),
-      forget: (handles) => writer.forget(handles),
-      allocateHandles: (ids, hashes) => writer.allocateHandles(ids, hashes),
-      addRowBlocks: (layerId, blocks) => this.transact(() => writer.addRowBlocks(layerId, blocks)),
-      raiseDimensions: (layerId, dimensions) => writer.raiseDimensions(layerId, dimensions),
+      lookup: (id) => own.lookup(id),
+      createRestoreToken: () => own.createRestoreToken(),
+      forget: (handles) => own.forget(handles),
+      allocateHandles: (ids, hashes) => own.allocateHandles(ids, hashes),
+      addRowBlocks: (layerId, blocks) => this.transact(() => own.addRowBlocks(layerId, blocks)),
+      raiseDimensions: (layerId, dimensions) => own.raiseDimensions(layerId, dimensions),
       apply: (patch, options) => this.transact(() => this.#applyRows(patch, options)),
       applyGroups: (patch, options) => this.#applyGroups(patch, options),
-      applyOpened: (id, feature, options) => writer.applyOpened(id, feature, options),
-      getGroupOrder: (groupHandle) => writer.getGroupOrder(groupHandle),
-      clear: () => this.transact(() => writer.clear(), 'remote'),
+      applyOpened: (id, feature, options) => own.applyOpened(id, feature, options),
+      getGroupOrder: (groupHandle) => own.getGroupOrder(groupHandle),
+      clear: () => this.transact(() => own.clear(), 'remote'),
     };
-    this.#internals = featureTablesInternals(tables) as FeatureTablesInternals;
     this.#bus.subscribe((changes) => this.#deliver(changes));
     // A read of the rows comes after the restore under way, finished first
     this.#internals.setReadGate(() => {
@@ -1134,7 +1152,8 @@ export class TableContractStore implements StoreContract {
   transact<T>(fn: () => T, source: UpdateSource = 'local'): T {
     // A write comes after the restore under way, finished first (in a transaction too)
     if (this.#steps && !this.#inStep) this.#finishSteps();
-    return this.#bus.transact(fn, source);
+    // The outermost transaction is a frame of the write marks
+    return this.#marks.frame(() => this.#bus.transact(fn, source));
   }
 
   // ==========================================================================
@@ -1176,7 +1195,12 @@ export class TableContractStore implements StoreContract {
   /** Writes the next step of a restore, in its transaction, and the end after the last one */
   #nextStep(steps: RestoreSteps): void {
     if (this.#steps !== steps) return;
-    this.#bus.continueHeld(() => this.#writeSteps(steps, performance.now() + BULK_SLICE_BUDGET_MS));
+    // Each step is a frame of the write marks
+    this.#marks.frame(() =>
+      this.#bus.continueHeld(() =>
+        this.#writeSteps(steps, performance.now() + BULK_SLICE_BUDGET_MS),
+      ),
+    );
     if (steps.at < steps.patch.handles.length) {
       steps.timer = setTimeout(() => this.#nextStep(steps), 0);
       return;
@@ -1188,7 +1212,9 @@ export class TableContractStore implements StoreContract {
   #finishSteps(): void {
     const steps = this.#steps;
     if (!steps || this.#inStep) return;
-    this.#bus.continueHeld(() => this.#writeSteps(steps, Number.POSITIVE_INFINITY));
+    this.#marks.frame(() =>
+      this.#bus.continueHeld(() => this.#writeSteps(steps, Number.POSITIVE_INFINITY)),
+    );
     this.#endSteps(steps);
   }
 
@@ -1222,10 +1248,12 @@ export class TableContractStore implements StoreContract {
     if (this.#steps !== steps) return;
     this.#steps = null;
     if (steps.timer !== null) clearTimeout(steps.timer);
-    this.#bus.continueHeld(() => {
-      steps.tellOrder();
-      this.#deleteEmptyGroups();
-    });
+    this.#marks.frame(() =>
+      this.#bus.continueHeld(() => {
+        steps.tellOrder();
+        this.#deleteEmptyGroups();
+      }),
+    );
     this.#bus.release();
     steps.onEnd();
   }

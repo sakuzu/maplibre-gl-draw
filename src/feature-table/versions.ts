@@ -12,8 +12,8 @@
  * Worker of the host), and cut into groups of the target sizes when it grew past twice them. A
  * small group is merged with its neighbor.
  *
- * A version goes through: started (its groups locked, the number of the last change it takes
- * from the delta kept), built (its columns are made), uploaded (every side that draws the rows
+ * A version goes through: started (its groups locked, the write mark it takes the rows of the
+ * delta up to kept), built (its columns are made), uploaded (every side that draws the rows
  * has its GPU side, `GroupVersionReceiver`), and swapped. The swap replaces the groups in one
  * step, in the pass before the main one of the frame its GPU side is up in: the rows it took
  * leave the delta, the values written in place of its groups since it started are written again
@@ -124,8 +124,16 @@ export interface GroupVersion {
   readonly replaces: readonly RowGroup[];
   /** The groups of the version once built */
   groups: RowGroup[] | null;
-  /** The number of the last change it took from the delta */
-  readonly deltaNumber: number;
+  /**
+   * The write mark when it started: it takes the rows of the delta last written up to it (but the
+   * ones in `stays`)
+   */
+  readonly deltaMark: number;
+  /**
+   * The rows of the delta that stay there when it is swapped in, whatever their marks: kept there
+   * when it started (held as features), held since, or written or come in since under its mark
+   */
+  readonly stays: Set<RowHandle>;
   /**
    * The groups of features its rows name, and the versions of their keys it was made with (a
    * version whose rows are in the order of other keys is dropped, G12 of the design)
@@ -182,8 +190,8 @@ export interface GroupVersionReceiver {
 export interface VersionHost {
   /** The layers */
   layers(): Iterable<LayerTable>;
-  /** The number of the last change written */
-  readonly writeNumber: number;
+  /** The write mark the rows written now are stamped with (`write-marks.ts`) */
+  readonly writeMark: number;
   /** The handle a new group gets */
   nextGroupHandle(): RowGroupHandle;
   /** Whether the row of a handle has a copy in a delta */
@@ -225,11 +233,13 @@ export interface VersionHost {
 
 /**
  * The copies of rows waiting in a group for the next version of the group they came from: by
- * handle, the group and the row, and the number of the change the version took from the delta
+ * handle, the group and the row, and the write mark the version took the rows of the delta up to
+ * (-1 once the row of the delta is not the copy any more: it was held, or written under that mark
+ * after the version started)
  *
  * @internal
  */
-export type WaitingCopies = Map<RowHandle, { group: RowGroup; row: number; number: number }>;
+export type WaitingCopies = Map<RowHandle, { group: RowGroup; row: number; mark: number }>;
 
 /**
  * The next versions of the row groups of the tables
@@ -307,6 +317,36 @@ export class GroupVersions {
    */
   logWrite(group: RowGroupHandle, entry: InPlaceEntry): void {
     this.locked.get(group)?.log.push(entry);
+  }
+
+  /**
+   * Whether a row of a delta written or come in under a mark can stay for a version or a copy
+   * waiting (`rowChanged`): a version started under the mark, or a copy waiting
+   */
+  watches(mark: number): boolean {
+    if (this.waiting.size > 0) return true;
+    for (const version of this.pending.values()) if (version.deltaMark === mark) return true;
+    return false;
+  }
+
+  /**
+   * A row of a delta was written, or came in, under a mark: the versions started under the same
+   * mark leave it in the delta, and so does the copy of it waiting that a version under the mark
+   * made (the rows written in later frames have later marks)
+   */
+  rowChanged(handle: RowHandle, mark: number): void {
+    for (const version of this.pending.values()) {
+      if (version.deltaMark === mark) version.stays.add(handle);
+    }
+    const copy = this.waiting.get(handle);
+    if (copy && copy.mark === mark) copy.mark = -1;
+  }
+
+  /** A row of a delta is held as a feature: no version started, nor copy waiting, takes it */
+  rowHeld(handle: RowHandle): void {
+    for (const version of this.pending.values()) version.stays.add(handle);
+    const copy = this.waiting.get(handle);
+    if (copy) copy.mark = -1;
   }
 
   /**
@@ -477,7 +517,8 @@ export class GroupVersions {
       layer,
       replaces: groups,
       groups: null,
-      deltaNumber: host.writeNumber,
+      deltaMark: host.writeMark,
+      stays: new Set(),
       keys: new Map(),
       takesDelta: true,
       orders,
@@ -491,7 +532,7 @@ export class GroupVersions {
       this.due.delete(group.handle);
       this.urged.delete(group.handle);
     }
-    const merge = this.mergeOf(layer, groups, version.dropped);
+    const merge = this.mergeOf(layer, groups, version.dropped, version.stays);
     (version as { keys: ReadonlyMap<GroupHandle, number> }).keys = this.keysOf(merge);
     this.pending.set(version.id, version);
     this.mostPending = Math.max(this.mostPending, this.pending.size);
@@ -529,12 +570,14 @@ export class GroupVersions {
 
   /**
    * What a next version merges: the rows that stay, and the rows of the delta in its range (the
-   * rows deleted that nothing keeps are left out, into `dropped`)
+   * rows deleted that nothing keeps are left out, into `dropped`; the rows of the delta kept there
+   * go into `stays`)
    */
   private mergeOf(
     layer: LayerTable,
     groups: readonly RowGroup[],
     dropped: RowHandle[],
+    stays: Set<RowHandle>,
   ): RowBlockDataMerge {
     const host = this.host;
     const sources: RowBlockData[] = [];
@@ -567,6 +610,7 @@ export class GroupVersions {
       for (let k = 0; k < delta.data.length; k++) {
         if (!indices.has(places.groups[k])) continue;
         if (host.drawnOnly(delta.data.handles[k])) continue;
+        if (layer.delta.isKept(k)) stays.add(delta.data.handles[k]);
         // A row deleted read here is left out when its copy in a group goes with the version too
         const main = host.mainGroup(delta.data.handles[k]);
         if (
@@ -626,7 +670,7 @@ export class GroupVersions {
     version.groups = built.map((data) => {
       host.retainStyles(data, 1);
       const handle = reuse ? version.replaces[0].handle : host.nextGroupHandle();
-      return createRowGroup(handle, data);
+      return createRowGroup(handle, data, host.writeMark);
     });
     version.status = 'built';
   }
@@ -700,7 +744,8 @@ export class GroupVersions {
       layer,
       replaces: groups,
       groups: null,
-      deltaNumber: this.host.writeNumber,
+      deltaMark: this.host.writeMark,
+      stays: new Set(),
       keys: new Map(),
       takesDelta: false,
       orders,
@@ -717,7 +762,7 @@ export class GroupVersions {
     const host = this.host;
     version.groups = built.map((data) => {
       host.retainStyles(data, 1);
-      return createRowGroup(host.nextGroupHandle(), data);
+      return createRowGroup(host.nextGroupHandle(), data, host.writeMark);
     });
     version.status = 'built';
     if (this.receivers.size === 0) this.swapReady();

@@ -173,8 +173,9 @@ export function createDrawOnEngine(
 }
 
 /**
- * Runs the checks of the state `debug.checks` asks for: those of the document and the selection
- * once each notification of the Store has gone out, that of what is drawn once each frame is drawn
+ * Runs the checks of the state `debug.checks` asks for: those of the document, the selection and
+ * the write marks once each notification of the Store has gone out, that of what is drawn once
+ * each frame is drawn
  *
  * @returns the function that stops them
  */

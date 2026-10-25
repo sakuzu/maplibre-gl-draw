@@ -9,7 +9,7 @@
  *   not read
  * - A row moved to another layer goes to the delta of that layer
  * - A new row (a handle without a row, with its type, layer, geometry and key) goes to the delta
- * - A row of the delta written again is written in place there, with the number of the change
+ * - A row of the delta written again is written in place there, with the write mark of the write
  * - What the drawing could not write into its place goes to the delta as it is
  * - The change written is returned by layer
  * - Writes of every kind at random, applied to the tables and to a reference sorted by the keys:
@@ -82,26 +82,29 @@ describe('the delta of a layer', () => {
     expect(internals.deltaRowCount()).toBe(2);
   });
 
-  it('writes a row of the delta in place there, with the number of the change', () => {
+  it('writes a row of the delta in place there, with the write mark of the write', () => {
     const random = seededRandom(3);
     const reference = referenceOf(random, 30, ['a']);
     const { tables, writer, internals } = tablesOf(reference, ['a']);
     const handle = tables.findRow('r5') as number;
+    internals.setWriteMark(1);
     writer.apply(patchOf([handle], { order: [key(1)] }));
     const delta = internals.layerTable('a')?.delta;
     const slot = internals.ids.deltaSlot(handle);
-    const first = delta?.writtenOf(slot) ?? -1;
+    expect(delta?.group?.marks[slot]).toBe(1);
     const group = delta?.group;
     const revision = delta?.revision;
     const writes: unknown[] = [];
     internals.onRowsWritten((_layer, list) => writes.push(...list));
+    internals.setWriteMark(2);
     writer.apply(
       patchOf([handle], { 'property:name': ['written'], style: [{ pointColor: '#00ff00' }] }),
     );
     // In place: the rows of the delta are not made again
     expect(delta?.group).toBe(group);
     expect(delta?.revision).toBe(revision);
-    expect(delta?.writtenOf(slot)).toBeGreaterThan(first);
+    expect(delta?.group?.marks[slot]).toBe(2);
+    expect(delta?.group?.mark).toBe(2);
     expect(tables.get('a')?.getRowValue(handle, 'name')).toBe('written');
     expect(writes).toHaveLength(1);
     expect((writes[0] as { group: number }).group).toBe(delta?.handle);

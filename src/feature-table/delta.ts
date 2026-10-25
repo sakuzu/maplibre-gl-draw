@@ -11,10 +11,10 @@
  * or leave (`rebuild`), and written in place as the rows of a group are otherwise. While a row is
  * in the delta, its copy in its group is hidden and not read: the delta copy is the row.
  *
- * Every row of the delta has the number of the change it was last written in, so the next
- * version of a group, which takes the rows of the delta written up to a number when it starts,
- * leaves the rows written after it in the delta. A row held as a feature has the number
- * `Infinity` while it is held: no version takes it. Every row also has a copy number for the
+ * Every row of the delta has the write mark it was last written in, as the rows of a group do
+ * (`write-marks.ts`), so the next version of a group, which takes the rows of the delta written up
+ * to the mark of when it starts, leaves the rows written after it in the delta. A row held as a
+ * feature is kept while it is held: no version takes it. Every row also has a copy number for the
  * drawings that number the copies of the rows (a draped drawing keeps one element per copy): it
  * is given when the row comes into the delta and kept until it leaves, whatever the rows are made
  * again around it.
@@ -31,8 +31,8 @@ import type { RowGroupHandle, RowHandle } from './types.js';
 export class DeltaRows {
   /** The rows in the order of the layer, as one row group (null when there is none) */
   private rowGroup: RowGroup | null = null;
-  /** The number each row was last written in, by row of the group */
-  private written: Float64Array = new Float64Array(0);
+  /** 1 for a row kept whatever version comes (a row held as a feature), by row of the group */
+  private kept: Uint8Array = new Uint8Array(0);
   /** The copy number of each handle */
   private readonly copies = new Map<RowHandle, number>();
   private readonly freeCopies: number[] = [];
@@ -57,28 +57,20 @@ export class DeltaRows {
     return this.revisionCount;
   }
 
-  /** The number a row was last written in */
-  writtenOf(row: number): number {
-    return this.written[row];
-  }
-
-  /** Records the number a row is written in */
-  setWritten(row: number, number: number): void {
-    this.written[row] = number;
-  }
-
-  /**
-   * Whether a row is kept in the delta whatever version comes (a row held as a feature: its
-   * number is `Infinity` while it is held)
-   */
+  /** Whether a row is kept in the delta whatever version comes (a row held as a feature) */
   isKept(row: number): boolean {
-    return this.written[row] === Number.POSITIVE_INFINITY;
+    return this.kept[row] === 1;
+  }
+
+  /** Keeps a row in the delta whatever version comes, or lets it go to the next version */
+  setKept(row: number, kept: boolean): void {
+    this.kept[row] = kept ? 1 : 0;
   }
 
   /** Whether a row of the delta can go to the next version of its group (one is not kept) */
   hasFoldable(): boolean {
-    for (let r = 0; r < this.written.length; r++) {
-      if (this.written[r] !== Number.POSITIVE_INFINITY) return true;
+    for (let r = 0; r < this.kept.length; r++) {
+      if (this.kept[r] === 0) return true;
     }
     return false;
   }
@@ -97,29 +89,29 @@ export class DeltaRows {
    * Puts the rows made again in place
    *
    * @param group The rows (null for none)
-   * @param written The number each row was last written in
+   * @param kept 1 for each row kept whatever version comes
    */
-  rebuild(group: RowGroup | null, written: Float64Array): void {
+  rebuild(group: RowGroup | null, kept: Uint8Array): void {
     const before = this.rowGroup;
-    const kept = new Set<RowHandle>();
+    const present = new Set<RowHandle>();
     if (group) {
-      for (const handle of group.data.handles) kept.add(handle);
+      for (const handle of group.data.handles) present.add(handle);
     }
     if (before) {
       for (const handle of before.data.handles) {
-        if (kept.has(handle)) continue;
+        if (present.has(handle)) continue;
         const copy = this.copies.get(handle);
         if (copy === undefined) continue;
         this.copies.delete(handle);
         this.freeCopies.push(copy);
       }
     }
-    for (const handle of kept) {
+    for (const handle of present) {
       if (this.copies.has(handle)) continue;
       this.copies.set(handle, this.freeCopies.pop() ?? this.nextCopy++);
     }
     this.rowGroup = group;
-    this.written = written;
+    this.kept = kept;
     this.revisionCount++;
   }
 }

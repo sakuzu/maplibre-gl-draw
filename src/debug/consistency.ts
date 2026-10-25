@@ -5,10 +5,10 @@
  * The checks that the state of an instance agrees with itself (`DrawOptions.debug.checks`)
  *
  * They are for development and tests: each reads the whole of what it checks, so it costs as
- * much as the document. The checks of the document and of the selection run once each
- * notification of the Store has gone out (once per outermost transaction); the check of what is
- * drawn runs once a frame is drawn, since what the drawing keeps is made again for the frame after
- * a change, not at the change.
+ * much as the document. The checks of the document, of the selection and of the write marks run
+ * once each notification of the Store has gone out (once per outermost transaction); the check of
+ * what is drawn runs once a frame is drawn, since what the drawing keeps is made again for the
+ * frame after a change, not at the change.
  *
  * - `id-index`: the ids of the rows find their rows, and each row is read where its id says;
  *   the groups of the layers held as rows are found by their ids; the items of a layer of
@@ -16,6 +16,10 @@
  * - `selection`: the rows marked as selected in bulk are the rows of the selection in bulk, and
  *   their copies in the row groups say so; what is selected is there and shown (its own flag,
  *   its group and its layer, and the local hiding); a selection with nothing in it has no type
+ * - `write-marks`: a Store of rows has one write mark, which only goes up, and its tables have
+ *   it; each frame of writes that wrote rows raised it once, and the rows it wrote and their row
+ *   groups have its mark (each frame is read as it ends, from the creation of the checks on); no
+ *   row and no row group has a mark past the one of the Store, nor a row a mark past its group
  * - `drawing`: what the drawing keeps is made from the state it copies, as it is now (see the
  *   drawings, `checkCopies`)
  *
@@ -25,7 +29,9 @@
 
 import { utf8String } from '@sakuzu/tabane';
 import { featureTablesInternals } from '../feature-table/feature-tables.js';
+import type { RowGroup } from '../feature-table/layer-table.js';
 import { STATE_BULK } from '../feature-table/row-state.js';
+import { writeMarkKeeperOf } from '../feature-table/write-marks.js';
 import { DrawError } from '../shared/draw-error.js';
 import type { Store } from '../store/store.js';
 import type { ConsistencyCheck, ConsistencyCheckOptions, ConsistencyFailure } from './types.js';
@@ -37,7 +43,12 @@ export type { ConsistencyCheck, ConsistencyCheckOptions, ConsistencyFailure } fr
  *
  * @internal
  */
-export const CONSISTENCY_CHECKS: readonly ConsistencyCheck[] = ['id-index', 'selection', 'drawing'];
+export const CONSISTENCY_CHECKS: readonly ConsistencyCheck[] = [
+  'id-index',
+  'selection',
+  'write-marks',
+  'drawing',
+];
 
 /** The problems a check gives at most (the rest are not read) */
 const PROBLEM_LIMIT = 20;
@@ -189,6 +200,42 @@ export function checkSelection(store: Store): string[] {
   return problems;
 }
 
+/**
+ * The write marks of a Store of rows: what its frames found since the last check, and the marks
+ * of the rows and of their groups now (`write-marks`)
+ *
+ * @internal
+ */
+export function checkWriteMarks(store: Store): string[] {
+  const tables = featureTablesInternals(store.tables);
+  const keeper = writeMarkKeeperOf(store.tables);
+  if (!tables) return [];
+  const problems = keeper?.takeProblems() ?? [];
+  const full = (): boolean => problems.length >= PROBLEM_LIMIT;
+  const mark = tables.writeMarks.mark;
+  const checkGroup = (layerId: string, group: RowGroup): void => {
+    if (group.mark > mark) {
+      problems.push(
+        `the row group ${group.handle} of the layer "${layerId}" has the write mark ${group.mark}, past the mark ${mark}`,
+      );
+    }
+    for (let r = 0; r < group.data.length && !full(); r++) {
+      if (group.marks[r] <= group.mark) continue;
+      problems.push(
+        `the row ${group.data.handles[r]} has the write mark ${group.marks[r]}, past the mark ${group.mark} of its group`,
+      );
+    }
+  };
+  for (const layer of store.listLayers()) {
+    if (full()) break;
+    const table = tables.layerTable(layer.id);
+    if (!table) continue;
+    for (let g = 0; g < table.groupCount && !full(); g++) checkGroup(layer.id, table.groupAt(g));
+    if (table.delta.group && !full()) checkGroup(layer.id, table.delta.group);
+  }
+  return problems;
+}
+
 /** Why a selected item should not be selected: not there, or hidden (null when it may be) */
 function hiddenReason(
   store: Store,
@@ -254,12 +301,18 @@ export class ConsistencyChecks {
     this.#run = new Set(given.run ?? CONSISTENCY_CHECKS);
     this.#allowed = new Set(given.allowed ?? []);
     this.#onFailure = given.onFailure;
+    // The frames of writes are read as they end, from now on
+    if (this.#run.has('write-marks')) writeMarkKeeperOf(target.store.tables)?.watch();
   }
 
-  /** Runs the checks of the document and of the selection (once a notification went out) */
+  /**
+   * Runs the checks of the document, of the selection and of the write marks (once a
+   * notification went out)
+   */
   afterNotify(): void {
     this.#check('id-index', () => checkIdIndex(this.#target.store));
     this.#check('selection', () => checkSelection(this.#target.store));
+    this.#check('write-marks', () => checkWriteMarks(this.#target.store));
   }
 
   /** Runs the check of what is drawn (once a frame is drawn) */

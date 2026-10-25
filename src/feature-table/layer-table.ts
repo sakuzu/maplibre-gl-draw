@@ -46,6 +46,13 @@ export interface RowGroup {
   readonly gpuState: Uint8Array;
   /** Changes with every change of the state of a row of the group */
   stateVersion: number;
+  /** The write mark each row was last written in (`write-marks.ts`) */
+  readonly marks: Uint32Array;
+  /**
+   * The write mark its rows last changed in: a row written, come in or gone, or gone from it to
+   * the delta (the mark it was made at for a group made outside a write)
+   */
+  mark: number;
   /**
    * The union of the bboxes of the rows (null when no row has a geometry). A row written in
    * place only widens it
@@ -100,13 +107,14 @@ export interface TablePosition {
 }
 
 /**
- * Makes the row group of a layer for its columns
+ * Makes the row group of a layer for its columns, every row of it and itself with a write mark
  *
  * @internal
  */
 export function createRowGroup(
   handle: RowGroupHandle,
   data: RowBlockData,
+  mark: number,
   delta = false,
   pending = false,
 ): RowGroup {
@@ -116,6 +124,8 @@ export function createRowGroup(
     state: new Uint16Array(data.length),
     gpuState: new Uint8Array(data.length),
     stateVersion: 0,
+    marks: new Uint32Array(data.length).fill(mark),
+    mark,
     bounds: unionOfRows(data.rowBounds),
     propertyIndex: new Map(data.properties.keys.map((key, i) => [key, i])),
     readers: null,

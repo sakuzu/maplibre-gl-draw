@@ -21,6 +21,7 @@ import { createDraw } from '../api/draw.js';
 import type { Store as PublicStore } from '../api/extension/store.js';
 import type { ConsistencyFailure } from '../api/options.js';
 import { featureTablesInternals } from '../feature-table/feature-tables.js';
+import { writeMarkKeeperOf } from '../feature-table/write-marks.js';
 import { DrawError } from '../shared/draw-error.js';
 import type { DrawStore } from '../store/draw-store.js';
 import { MemoryStore } from '../store/memory.js';
@@ -34,6 +35,7 @@ import {
   ConsistencyChecks,
   checkIdIndex,
   checkSelection,
+  checkWriteMarks,
 } from './consistency.js';
 
 function layer(id: string): Layer {
@@ -112,7 +114,7 @@ describe('the option debug.checks', () => {
     expect(() => createDraw(map, { debug: { checks: 'yes' as never } })).toThrow(DrawError);
     expect(() =>
       createDraw(map, { debug: { checks: { run: ['nothing' as ConsistencyCheck] } } }),
-    ).toThrow(/must be an array of id-index, selection, drawing/);
+    ).toThrow(/must be an array of id-index, selection, write-marks, drawing/);
     expect(() => createDraw(map, { debug: { other: true } as never })).toThrow(DrawError);
     const draw = createDraw(map, { debug: { checks: true } });
     expect(() => draw.options.update({ debug: {} } as never)).toThrow(/only be given when/);
@@ -183,6 +185,32 @@ describe('the option debug.checks', () => {
 });
 
 describe('each check finds the state it is about broken', () => {
+  it('write-marks: a frame that stamped rows and left the mark, marks past the Store and the group', () => {
+    const store = createTableStore().store;
+    store.createLayer(layer('a'));
+    store.createFeature(point('p', 0));
+    store.createFeature(point('q', 1));
+    const internals = featureTablesInternals(store.tables)!;
+    const keeper = writeMarkKeeperOf(store.tables)!;
+    internals.flushVersions();
+    keeper.watch();
+    store.updateFeature('p', { properties: { n: 1 } });
+    expect(checkWriteMarks(store)).toEqual([]);
+    // Rows put into the delta in a frame that writes no value: stamped with the mark before
+    store.transact(() => internals.toDelta([internals.ids.handleOf('q')]));
+    expect(checkWriteMarks(store)).toEqual([
+      'a frame stamped 1 rows, and the write mark went up 0 times',
+    ]);
+    expect(checkWriteMarks(store)).toEqual([]);
+    // A row with a mark past its group, tables with a mark past the Store
+    const place = internals.placeOf(internals.ids.handleOf('p'))!;
+    place.group.marks[place.row] = place.group.mark + 1;
+    internals.setWriteMark(keeper.mark + 1);
+    const problems = checkWriteMarks(store);
+    expect(problems[0]).toContain(`the Store is at the write mark ${keeper.mark}`);
+    expect(problems[1]).toContain('past the mark');
+  });
+
   it('id-index: an item of a layer that names nothing, a member that is not in its group', () => {
     const items = ['p', 'g', 'gone'];
     const fake = {

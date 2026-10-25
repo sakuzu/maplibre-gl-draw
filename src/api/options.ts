@@ -495,8 +495,9 @@ export interface DrawOptions extends RuntimeOptions {
 export interface DebugOptions {
   /**
    * Checks that the state of the instance agrees with itself: the ids of the rows and the places
-   * they are read at, and the selection, once each notification of the Store has gone out (once
-   * per outermost transaction), and what is drawn, once a frame is drawn. `true` runs every
+   * they are read at, the selection, and the marks the rows are written with, once each
+   * notification of the Store has gone out (once per outermost transaction), and what is drawn,
+   * once a frame is drawn. `true` runs every
    * check. A check that fails throws `DrawError` with the code `invalid-state`, from the write or
    * the transaction that ended (or from the frame), unless it is one of the checks allowed to fail.
    */

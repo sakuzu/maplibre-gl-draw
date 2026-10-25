@@ -8,11 +8,11 @@
 
 /**
  * A check of the state of an instance: the ids of the rows (`id-index`), the selection
- * (`selection`), what is drawn (`drawing`)
+ * (`selection`), the marks the rows are written with (`write-marks`), what is drawn (`drawing`)
  *
  * @experimental
  */
-export type ConsistencyCheck = 'id-index' | 'selection' | 'drawing';
+export type ConsistencyCheck = 'id-index' | 'selection' | 'write-marks' | 'drawing';
 
 /**
  * A check that failed, and what it found
