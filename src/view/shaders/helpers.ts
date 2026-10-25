@@ -236,6 +236,16 @@ uniform float u_use_offset_mode;
 // difference needed to align the linearization center with the camera center is received here
 uniform vec2 u_origin_shift;
 
+// 1 when the offsets handed to the projection are taken from the center (u_center_lnglat) rather
+// than from the origin of the batch: a row moved by the motion of its moving set gives its
+// positions so (ROW_STATE_GLSL), and every position a vertex reads is of the same row
+float g_offset_from_center = 0.0;
+
+// The gap between what the offsets are taken from and the center
+vec2 origin_shift() {
+    return g_offset_from_center > 0.5 ? vec2(0.0) : u_origin_shift;
+}
+
 // Note: u_projection_transition is defined in MapLibre's globe mode prelude
 // It is not defined in Mercator mode, so it must be added dynamically using
 // getProjectionTransitionUniform() (exported from shader-helpers.ts)
@@ -390,7 +400,7 @@ vec4 project_position_to_clipspace_from_offset(vec2 lngLatOffset, mat4 viewProje
     // Add the gap between the reference coordinates and the linearization center exactly
     // once here
     // (adding it inside project_offset_to_clipspace would double-count it)
-    vec2 shifted = lngLatOffset + u_origin_shift;
+    vec2 shifted = lngLatOffset + origin_shift();
 
     // In globe mode, use MapLibre's projectTile()
     if (u_projection_transition > 0.0) {
@@ -418,7 +428,7 @@ vec4 project_position_to_clipspace_from_offset(vec2 lngLatOffset, mat4 viewProje
 // different way, the elevation the vertex picks up and the elevation the fill reads would
 // diverge. The branches are evaluated in the same order as the projection.
 vec2 shade_mercator_offset(vec2 lngLatOffset) {
-    vec2 shifted = lngLatOffset + u_origin_shift;
+    vec2 shifted = lngLatOffset + origin_shift();
     if (u_projection_transition > 0.0 || u_use_offset_mode <= 0.5) {
         return lngLatToMercator(shifted + u_center_lnglat) - u_center_mercator;
     }

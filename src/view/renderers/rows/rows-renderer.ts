@@ -608,6 +608,7 @@ export class RowsRenderer {
       run,
       program.rowState as RowStateUniforms,
       rowState,
+      data.origin,
       camera ? camera.centerLngLat : data.origin,
     );
     this.bindTextures(chunk);

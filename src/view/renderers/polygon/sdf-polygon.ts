@@ -1052,6 +1052,7 @@ void main() {
       run,
       row.state,
       rowState,
+      batch.origin,
       cameraUniforms ? cameraUniforms.centerLngLat : batch.origin,
     );
 

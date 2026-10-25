@@ -13,10 +13,14 @@ import { describe, expect, it } from 'vitest';
 import type { FeatureTables } from '../api/tables.js';
 import { TableSelection } from '../feature-table/selection.js';
 import { DrawStore } from '../store/draw-store.js';
+import type { TransformEdit } from '../store/store.js';
 import { TableContractStore } from '../store/table-memory.js';
 import type { Feature, StoreChange } from '../store/types.js';
 import { BULK_SLICE_ROWS, writeKindsInSlices } from './bulk-sliced.js';
-import { translationKinds } from './bulk-transform.js';
+import { type BulkKinds, transformKinds } from './bulk-transform.js';
+
+/** A move of one degree to the east along the equator: one degree of longitude at any latitude */
+const EAST_ONE_DEGREE: TransformEdit = { kind: 'translate', from: [0, 0], to: [1, 0] };
 
 const COUNT = BULK_SLICE_ROWS * 2 + 100;
 
@@ -59,9 +63,9 @@ function setup() {
   const steps: Array<() => void> = [];
   const written: number[][] = [];
   const done: boolean[] = [];
-  /** Writes a move of every row by (1, 2) in steps of one slice each */
+  /** Writes a move of every row one degree to the east in steps of one slice each */
   const start = (): boolean =>
-    writeKindsInSlices(store, rows, translationKinds(rows, 1, 2), {
+    writeKindsInSlices(store, rows, transformKinds(store, EAST_ONE_DEGREE, rows) as BulkKinds, {
       onWritten: (list) => written.push([...list]),
       onDone: (wrote) => done.push(wrote),
       budgetMs: 0,
@@ -141,7 +145,7 @@ describe('the write in steps of a drag of features selected in bulk', () => {
     const { store, rows, done, steps } = setup();
     store.updateFeature('f5', { locked: true });
     expect(
-      writeKindsInSlices(store, rows, translationKinds(rows, 1, 2), {
+      writeKindsInSlices(store, rows, transformKinds(store, EAST_ONE_DEGREE, rows) as BulkKinds, {
         onDone: (wrote) => done.push(wrote),
         schedule: (step) => steps.push(step),
       }),

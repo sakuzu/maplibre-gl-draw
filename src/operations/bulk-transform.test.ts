@@ -3,9 +3,9 @@
 
 /**
  * Moving, rotating and resizing features selected in bulk write their rows with the values the
- * drags of the same features selected one by one write (a property test over random documents),
- * keep the values of a position after `x` and `y`, and are put back to the bit by the values
- * before.
+ * drags of the same features selected one by one write for the same edit (a property test over
+ * random documents), keep the values of a position after `x` and `y`, and are put back to the bit
+ * by the values before.
  */
 
 import type { CoordinateDimensions, Value } from '@sakuzu/tabane';
@@ -13,21 +13,14 @@ import { describe, expect, it } from 'vitest';
 import type { FeatureTables } from '../api/tables.js';
 import { drawProperties } from '../shared/properties.js';
 import type { BoundingBoxCoords } from '../shared/types/selection-box.js';
-import {
-  coordinatesOf,
-  geometryFromCoordinates,
-  mapCoordinatesDeep,
-} from '../shared/utils/coordinates.js';
 import { DrawStore } from '../store/draw-store.js';
+import type { TransformEdit } from '../store/store.js';
 import { TableContractStore } from '../store/table-memory.js';
 import type { Feature, FeatureType, RowValues, StoreChange } from '../store/types.js';
-import {
-  resizeBulkSelection,
-  rotateBulkSelection,
-  translateBulkSelection,
-} from './bulk-transform.js';
-import { computeResize, startResize } from './resize.js';
-import { computeRotation, getRotationDelta, startRotation } from './rotate.js';
+import { transformBulkSelection } from './bulk-transform.js';
+import { rotateEditOf } from './rotate.js';
+import { scaleEditOf, startScale } from './scale.js';
+import { transformedUpdates, transformStartOf, transformsOf } from './transform-features.js';
 
 function random(seed: number): () => number {
   let a = seed >>> 0;
@@ -122,32 +115,14 @@ function rowsOf(_store: DrawStore, tables: FeatureTables, ids: readonly string[]
   });
 }
 
-/** The features one by one: written as the drags write them */
-function writeOneByOne(
-  store: DrawStore,
-  ids: readonly string[],
-  results: Map<
-    string,
-    { coordinates: unknown; rotation?: number; scale?: number; radiusMeters?: number }
-  >,
-): void {
+/** The features one by one: written as the drags of features write an edit */
+function writeOneByOne(store: DrawStore, ids: readonly string[], edit: TransformEdit): void {
+  const transforms = transformsOf(store);
   store.transact(() => {
     for (const id of ids) {
       const feature = store.getFeature(id) as Feature;
-      const result = results.get(id);
-      if (!result) continue;
-      const properties = { ...feature.properties };
-      if (result.rotation !== undefined)
-        Object.assign(properties, drawProperties({ rotation: result.rotation }));
-      if (result.scale !== undefined)
-        Object.assign(properties, drawProperties({ scale: result.scale }));
-      if (result.radiusMeters !== undefined && feature.type === 'Circle') {
-        Object.assign(properties, drawProperties({ radiusMeters: result.radiusMeters }));
-      }
-      store.updateFeature(id, {
-        geometry: geometryFromCoordinates(feature.type, result.coordinates as never),
-        properties,
-      });
+      const updates = transformedUpdates(transforms, edit, transformStartOf(feature), feature);
+      if (updates) store.updateFeature(id, updates);
     }
   });
 }
@@ -170,46 +145,17 @@ describe('moving, rotating and resizing features selected in bulk', () => {
         const single = storeOf(features, 100_000);
         bulk.store.setSelection('feature', ids);
         expect(bulk.store.getSelectedRows()?.count).toBe(40);
-        const selected = ids.map((id) => single.store.getFeature(id) as Feature);
+        let edit: TransformEdit;
         if (operation === 'move') {
-          const [dx, dy] = [0.0123456789, -0.00987654321];
-          expect(translateBulkSelection(bulk.store, dx, dy)).toBe(true);
-          const results = new Map(
-            selected.map((feature) => [
-              feature.id,
-              {
-                coordinates: mapCoordinatesDeep(coordinatesOf(feature), (c) => [
-                  c[0] + dx,
-                  c[1] + dy,
-                ]),
-              },
-            ]),
-          );
-          writeOneByOne(single.store, ids, results);
+          edit = { kind: 'translate', from: [139.1, 35.1], to: [139.1123456789, 35.09012345679] };
         } else if (operation === 'rotate') {
-          const start = { lng: 139.3, lat: 35.1 };
-          const current = { lng: 139.2, lat: 35.3 };
-          const state = startRotation(start, BBOX, selected);
-          const results = computeRotation(state, current, selected);
-          const angle = getRotationDelta(state, current);
-          expect(rotateBulkSelection(bulk.store, BBOX.center, angle)).toBe(true);
-          writeOneByOne(single.store, ids, results);
+          edit = rotateEditOf(BBOX.center, { lng: 139.3, lat: 35.1 }, { lng: 139.2, lat: 35.3 });
         } else {
-          const handle = operation;
-          const start = { lng: 139.21, lat: 35.21 };
-          const current = { lng: 139.25, lat: 35.18 };
-          const state = startResize(handle, start, BBOX, selected);
-          const results = computeResize(state, current, selected);
-          expect(
-            resizeBulkSelection(bulk.store, {
-              handle,
-              bbox: BBOX,
-              startLngLat: start,
-              currentLngLat: current,
-            }),
-          ).toBe(true);
-          writeOneByOne(single.store, ids, results);
+          const state = startScale(operation, { lng: 139.21, lat: 35.21 }, BBOX);
+          edit = scaleEditOf(state, { lng: 139.25, lat: 35.18 });
         }
+        expect(transformBulkSelection(bulk.store, edit)).toBe(true);
+        writeOneByOne(single.store, ids, edit);
         expect(rowsOf(bulk.store, bulk.tables, ids)).toEqual(
           rowsOf(single.store, single.tables, ids),
         );
@@ -224,12 +170,13 @@ describe('moving, rotating and resizing features selected in bulk', () => {
     bulk.store.setSelection('feature', ids);
     const before = rowsOf(bulk.store, bulk.tables, ids);
     const count = bulk.changes.length;
-    resizeBulkSelection(bulk.store, {
-      handle: 'resize-se',
-      bbox: BBOX,
-      startLngLat: { lng: 139.21, lat: 35 },
-      currentLngLat: { lng: 139.3, lat: 34.9 },
-    });
+    transformBulkSelection(
+      bulk.store,
+      scaleEditOf(startScale('resize-se', { lng: 139.21, lat: 35 }, BBOX), {
+        lng: 139.3,
+        lat: 34.9,
+      }),
+    );
     expect(bulk.changes.length).toBe(count + 1);
     const previous = bulk.changes[bulk.changes.length - 1].previousValues as RowValues;
     expect(previous.handles.length).toBe(30);
@@ -263,14 +210,15 @@ describe('moving, rotating and resizing features selected in bulk', () => {
       positions(tables).map((p) => [p[0], p[1]]);
     const zBefore = zs(bulk.store, bulk.tables);
     for (const store of [bulk.store, plain.store]) {
-      rotateBulkSelection(store, BBOX.center, 0.3);
-      resizeBulkSelection(store, {
-        handle: 'resize-n',
-        bbox: BBOX,
-        startLngLat: { lng: 139.1, lat: 35.21 },
-        currentLngLat: { lng: 139.1, lat: 35.3 },
-      });
-      translateBulkSelection(store, 0.1, 0.2);
+      transformBulkSelection(store, { kind: 'rotate', center: BBOX.center, angleDegrees: 17 });
+      transformBulkSelection(
+        store,
+        scaleEditOf(startScale('resize-n', { lng: 139.1, lat: 35.21 }, BBOX), {
+          lng: 139.1,
+          lat: 35.3,
+        }),
+      );
+      transformBulkSelection(store, { kind: 'translate', from: [139, 35], to: [139.1, 35.2] });
     }
     expect(zs(bulk.store, bulk.tables)).toEqual(zBefore);
     expect(xys(bulk.store, bulk.tables)).toEqual(xys(plain.store, plain.tables));
@@ -284,7 +232,11 @@ describe('moving, rotating and resizing features selected in bulk', () => {
       'feature',
       features.map((feature) => feature.id),
     );
-    expect(translateBulkSelection(bulk.store, 1, 1)).toBe(false);
-    expect(rotateBulkSelection(bulk.store, BBOX.center, 1)).toBe(false);
+    expect(
+      transformBulkSelection(bulk.store, { kind: 'translate', from: [139, 35], to: [140, 36] }),
+    ).toBe(false);
+    expect(
+      transformBulkSelection(bulk.store, { kind: 'rotate', center: BBOX.center, angleDegrees: 1 }),
+    ).toBe(false);
   });
 });

@@ -21,8 +21,7 @@ import {
   featureTablesInternals,
 } from '../../feature-table/feature-tables.js';
 import type { LayerTable } from '../../feature-table/layer-table.js';
-import { toPlane } from '../../shared/math/mercator-plane.js';
-import { resizeTransform, rotationTransform } from '../../shared/math/plane-transform.js';
+import type { EnuEdit } from '../../geometry/enu-transforms.js';
 import type { Feature, Layer } from '../../shared/types/model.js';
 import { createRowBlockDataBuilder } from '../../table/row-group-builder.js';
 import {
@@ -571,10 +570,11 @@ describe('the rows drawn at once while they are dragged in bulk', () => {
       }),
       feature('p', 'Marker', [139.8, 35.7]),
     ];
-    for (const transform of [
-      rotationTransform(toPlane([139.75, 35.65]), 0.5),
-      resizeTransform(toPlane([139.6, 35.5]), 1.5, 0.75, 1.5),
-    ]) {
+    const edits: EnuEdit[] = [
+      { kind: 'rotate', center: [139.75, 35.65], angleDegrees: 30 },
+      { kind: 'scale', center: [139.6, 35.5], eastFactor: 1.5, northFactor: 0.75, sizeFactor: 1.5 },
+    ];
+    for (const transform of edits) {
       const { internals, table, tables } = tablesOfFeatures('layer', features);
       const mocks = createRenderers();
       const drawn: Feature[] = [];
@@ -615,8 +615,9 @@ describe('the rows drawn at once while they are dragged in bulk', () => {
         expect(coordinates[1]).toBeCloseTo(expected[1], 6);
       });
       const properties = drawn[0].properties;
-      expect(properties['maplibre-gl-draw:rotation']).toBeCloseTo(10 + transform.rotationDeg, 9);
-      expect(properties['maplibre-gl-draw:scale']).toBeCloseTo(2 * transform.scale, 9);
+      // The rotation takes the angle (within [0, 360)), the scale the factor of the size
+      expect(properties['maplibre-gl-draw:rotation']).toBe(transform.kind === 'rotate' ? 40 : 10);
+      expect(properties['maplibre-gl-draw:scale']).toBe(transform.kind === 'scale' ? 3 : 2);
     }
   });
 });

@@ -15,10 +15,18 @@
  * programs without the define, which neither have the attribute nor read the texture.
  */
 
-import type { PlaneTransform } from '../../shared/math/plane-transform.js';
+import type { EnuEdit } from '../../geometry/enu-transforms.js';
 import { type GpuLedger, textureBytes } from '../gpu-ledger.js';
 import { getRenderFrame } from '../shaders/frame.js';
 import type { RetainedDrawRun } from './draw-run.js';
+import {
+  MOTION_SLOTS,
+  type MotionFrame,
+  MotionUniformValues,
+  motionFrameOf,
+  ROW_MOTION_GLSL,
+  stillMotionFrame,
+} from './row-motion.js';
 
 /** The width of the texture of the state of a row group (rows per texture line) */
 export const ROW_STATE_WIDTH = 128;
@@ -39,17 +47,9 @@ uniform highp usampler2D u_row_state;
 uniform int u_row_state_width;
 // The translation of each moving set in degrees of longitude and latitude (set 0 is none)
 uniform vec2 u_state_translate[4];
-// The rotation or resize of the moving sets (bit k: set k has one), applied before the
-// translation in the plane of Web Mercator around a center (plane-transform.ts)
+// The sets moved by the motion of an edit (bit k: set k has one), before their translation
+// (row-motion.ts)
 uniform int u_state_transformed;
-// The matrix of each set (a, b, c, d: x' = a x + c y, y' = b x + d y), for the rows resized along
-// the axes and for the rows that keep their shape
-uniform vec4 u_state_matrix[4];
-uniform vec4 u_state_matrix_uniform[4];
-// The center the offsets are taken from minus the center of the transform, in degrees
-uniform vec2 u_state_center[4];
-// The sine, the cosine and the tangent of the latitude of the center of the transform
-uniform vec3 u_state_center_lat[4];
 
 uint readRowState(float row) {
     int index = int(row + 0.5);
@@ -62,23 +62,6 @@ bool rowStateHidden(uint state) {
 
 vec2 rowStateTranslation(uint state) {
     return u_state_translate[int((state >> 1u) & 3u)];
-}
-
-// atanh and sinh of a small value without cancellation
-float rowAtanh(float z) {
-    if (abs(z) < 0.1) {
-        float z2 = z * z;
-        return z * (1.0 + z2 * (1.0 / 3.0 + z2 * (0.2 + z2 * (1.0 / 7.0 + z2 / 9.0))));
-    }
-    return 0.5 * log((1.0 + z) / (1.0 - z));
-}
-
-float rowSinh(float x) {
-    if (abs(x) < 0.1) {
-        float x2 = x * x;
-        return x * (1.0 + x2 * (1.0 / 6.0 + x2 * (1.0 / 120.0 + x2 / 5040.0)));
-    }
-    return 0.5 * (exp(x) - exp(-x));
 }
 
 // The sine and the cosine of an angle, by their series for a small one: the built-in functions of
@@ -103,42 +86,20 @@ float rowAtan(float x) {
     }
     return atan(x);
 }
-
-// The difference of the northing of Mercator, in degrees, of a latitude delta degrees north of
-// the center (c: the sine, the cosine and the tangent of its latitude)
-float rowMercatorDelta(float delta, vec3 c) {
-    vec2 halfAngle = rowSinCos(delta * 0.008726646259971648);
-    float sinHalf = halfAngle.x;
-    float cosHalf = halfAngle.y;
-    float cosMid = c.y * cosHalf - c.x * sinHalf;
-    float sinTo = c.x * (cosHalf * cosHalf - sinHalf * sinHalf) + c.y * 2.0 * sinHalf * cosHalf;
-    return rowAtanh(2.0 * cosMid * sinHalf / (1.0 - sinTo * c.x)) * 57.29577951308232;
-}
-
-// The difference of latitude of a point y degrees of northing north of the center
-float rowLatitudeDelta(float y, vec3 c) {
-    float sinhHalf = rowSinh(y * 0.008726646259971648);
-    float coshHalf = sqrt(1.0 + sinhHalf * sinhHalf);
-    float coshMid = coshHalf / c.y + c.z * sinhHalf;
-    float deltaTan = 2.0 * coshMid * sinhHalf;
-    return rowAtan(deltaTan / (1.0 + c.z * (c.z + deltaTan))) * 57.29577951308232;
-}
-
-// An offset of a row moved by its moving set: rotated or resized around the center of the set,
-// then translated (an offset of a row not moving as it is)
+${ROW_MOTION_GLSL}
+// An offset of a row moved by its moving set: by the motion of the set, then translated (an
+// offset of a row not moving as it is). A row moved by a motion gives its offset from the center
+// of the camera, which the projection then takes as it is (g_offset_from_center): every
+// position the vertex reads is of the same row, so all of them are taken so
 vec2 rowStateMove(uint state, vec2 offset) {
     int moveSet = int((state >> 1u) & 3u);
     if (moveSet == 0) return offset;
-    vec2 moved = offset;
     if (((u_state_transformed >> moveSet) & 1) != 0) {
-        vec2 rel = offset + u_origin_shift + u_state_center[moveSet];
-        vec4 m = (state & 16u) != 0u ? u_state_matrix_uniform[moveSet] : u_state_matrix[moveSet];
-        vec3 c = u_state_center_lat[moveSet];
-        float y = rowMercatorDelta(rel.y, c);
-        vec2 q = vec2(m.x * rel.x + m.z * y, m.y * rel.x + m.w * y);
-        moved = vec2(q.x, rowLatitudeDelta(q.y, c)) - u_origin_shift - u_state_center[moveSet];
+        int slot = 2 * (moveSet - 1) + ((state & 16u) != 0u ? 1 : 0);
+        g_offset_from_center = 1.0;
+        return rowMotionMove(slot, offset) + u_state_translate[moveSet];
     }
-    return moved + u_state_translate[moveSet];
+    return offset + u_state_translate[moveSet];
 }
 #endif
 `;
@@ -168,8 +129,11 @@ export interface RowStateBinding {
   readonly texture: RowStateTexture;
   /** `[dLng, dLat]` of the sets 0 to 3 (set 0 is always 0) */
   readonly translations: Float32Array;
-  /** The rotation or resize of the sets 0 to 3, applied before the translation (null for none) */
-  readonly transforms?: ReadonlyArray<PlaneTransform | null>;
+  /**
+   * The edit that moves, rotates or scales each of the sets 0 to 3, applied before the
+   * translation (null for none)
+   */
+  readonly transforms?: ReadonlyArray<EnuEdit | null>;
 }
 
 /**
@@ -188,17 +152,17 @@ export class RowStateUniforms {
   private readonly width: WebGLUniformLocation | null;
   private readonly translate: WebGLUniformLocation | null;
   private readonly transformed: WebGLUniformLocation | null;
-  private readonly matrix: WebGLUniformLocation | null;
-  private readonly matrixUniform: WebGLUniformLocation | null;
-  private readonly center: WebGLUniformLocation | null;
-  private readonly centerLat: WebGLUniformLocation | null;
+  private readonly motionRows: WebGLUniformLocation | null;
+  private readonly motionOffsets: WebGLUniformLocation | null;
+  private readonly motionFrom: WebGLUniformLocation | null;
+  private readonly motionTo: WebGLUniformLocation | null;
   /** The frame the values were written in (-1 before the first write) */
   private frame = -1;
   private writtenWidth = Number.NaN;
   private readonly writtenTranslations = new Float32Array(8).fill(Number.NaN);
-  /** The values of the transforms, as they are written (and were written last) */
-  private readonly transformValues = new TransformUniformValues();
-  private readonly writtenTransforms = new TransformUniformValues(Number.NaN);
+  /** The values of the motions, as they are written (and were written last) */
+  private readonly motionValues = new MotionStateValues();
+  private readonly writtenMotions = new MotionStateValues(Number.NaN);
 
   constructor(
     private readonly gl: WebGL2RenderingContext,
@@ -208,20 +172,25 @@ export class RowStateUniforms {
     this.width = gl.getUniformLocation(program, 'u_row_state_width');
     this.translate = gl.getUniformLocation(program, 'u_state_translate');
     this.transformed = gl.getUniformLocation(program, 'u_state_transformed');
-    this.matrix = gl.getUniformLocation(program, 'u_state_matrix');
-    this.matrixUniform = gl.getUniformLocation(program, 'u_state_matrix_uniform');
-    this.center = gl.getUniformLocation(program, 'u_state_center');
-    this.centerLat = gl.getUniformLocation(program, 'u_state_center_lat');
+    this.motionRows = gl.getUniformLocation(program, 'u_motion_rows');
+    this.motionOffsets = gl.getUniformLocation(program, 'u_motion_offsets');
+    this.motionFrom = gl.getUniformLocation(program, 'u_motion_from');
+    this.motionTo = gl.getUniformLocation(program, 'u_motion_to');
   }
 
   /**
    * Writes the uniforms for a draw (the program in use must be the one of these uniforms)
    *
-   * @param center The center the offsets of the draw are taken from (the camera center, or the
-   *   origin of the batch), `[lng, lat]` in degrees: the centers of the transforms are given as
-   *   their differences from it
+   * @param origin The origin the offsets of the batch drawn are taken from, `[lng, lat]` in
+   *   degrees
+   * @param center The center the projection takes the offsets from (`u_center_lnglat`: the camera
+   *   center, or the origin of the batch)
    */
-  write(binding: RowStateBinding, center: readonly [number, number] = [0, 0]): void {
+  write(
+    binding: RowStateBinding,
+    origin: readonly [number, number] = [0, 0],
+    center: readonly [number, number] = origin,
+  ): void {
     const gl = this.gl;
     const frame = getRenderFrame();
     const stale = this.frame !== frame;
@@ -237,77 +206,113 @@ export class RowStateUniforms {
       gl.uniform2fv(this.translate, translations);
       this.writtenTranslations.set(translations.subarray(0, this.writtenTranslations.length));
     }
-    const values = this.transformValues;
-    values.set(binding.transforms, center);
-    const written = this.writtenTransforms;
+    const values = this.motionValues;
+    values.set(binding.transforms, origin, center);
+    const written = this.writtenMotions;
     if (this.transformed && (stale || written.flags !== values.flags)) {
       gl.uniform1i(this.transformed, values.flags);
     }
     if (values.flags === 0 && !stale && written.flags === 0) return;
-    if (this.matrix && (stale || !sameValues(written.matrix, values.matrix))) {
-      gl.uniform4fv(this.matrix, values.matrix);
+    const motion = values.motion;
+    const before = written.motion;
+    if (this.motionRows && (stale || !sameValues(before.rows, motion.rows))) {
+      gl.uniform4fv(this.motionRows, motion.rows);
     }
-    if (this.matrixUniform && (stale || !sameValues(written.uniform, values.uniform))) {
-      gl.uniform4fv(this.matrixUniform, values.uniform);
+    if (this.motionOffsets && (stale || !sameValues(before.offsets, motion.offsets))) {
+      gl.uniform4fv(this.motionOffsets, motion.offsets);
     }
-    if (this.center && (stale || !sameValues(written.center, values.center))) {
-      gl.uniform2fv(this.center, values.center);
+    if (this.motionFrom && (stale || !sameValues(before.from, motion.from))) {
+      gl.uniform4fv(this.motionFrom, motion.from);
     }
-    if (this.centerLat && (stale || !sameValues(written.centerLat, values.centerLat))) {
-      gl.uniform3fv(this.centerLat, values.centerLat);
+    if (this.motionTo && (stale || !sameValues(before.to, motion.to))) {
+      gl.uniform4fv(this.motionTo, motion.to);
     }
     written.copy(values);
   }
 }
 
+/** The motions of the centers of the camera computed last (the draws of a frame share them) */
+const FRAME_CACHE_SIZE = 8;
+const frameCache: Array<{
+  edit: EnuEdit;
+  uniformScale: boolean;
+  lon: number;
+  lat: number;
+  frame: MotionFrame | null;
+} | null> = new Array(FRAME_CACHE_SIZE).fill(null);
+let frameCacheNext = 0;
+
+/** The motion of an edit for a center of the camera, computed once for the draws that share it */
+function cachedMotionFrame(
+  edit: EnuEdit,
+  uniformScale: boolean,
+  center: readonly [number, number],
+): MotionFrame | null {
+  const lon = center[0];
+  const lat = center[1];
+  for (const entry of frameCache) {
+    if (
+      entry &&
+      entry.edit === edit &&
+      entry.uniformScale === uniformScale &&
+      entry.lon === lon &&
+      entry.lat === lat
+    ) {
+      return entry.frame;
+    }
+  }
+  const frame = motionFrameOf(edit, uniformScale, [lon, lat]);
+  frameCache[frameCacheNext] = { edit, uniformScale, lon, lat, frame };
+  frameCacheNext = (frameCacheNext + 1) % FRAME_CACHE_SIZE;
+  return frame;
+}
+
 /**
- * The values of the uniforms of the transforms of the moving sets
+ * The values of the uniforms of the motions of the moving sets
  *
  * @internal
  */
-export class TransformUniformValues {
-  /** Bit k: set k has a transform */
+export class MotionStateValues {
+  /** Bit k: set k has a motion */
   flags = 0;
-  readonly matrix = new Float32Array(16);
-  readonly uniform = new Float32Array(16);
-  readonly center = new Float32Array(8);
-  readonly centerLat = new Float32Array(12);
+  readonly motion: MotionUniformValues;
 
   constructor(fill = 0) {
-    for (const array of [this.matrix, this.uniform, this.center, this.centerLat]) array.fill(fill);
+    this.motion = new MotionUniformValues(fill);
     if (Number.isNaN(fill)) this.flags = -1;
   }
 
   /**
-   * The values of the transforms of the sets, the centers given as their differences from the
-   * center the offsets are taken from (computed in float64)
+   * The values of the motions of the sets, for a batch whose offsets are taken from `origin`, drawn
+   * with the projection centered on `center` (computed in float64)
    */
   set(
-    transforms: ReadonlyArray<PlaneTransform | null> | undefined,
+    transforms: ReadonlyArray<EnuEdit | null> | undefined,
     origin: readonly [number, number],
+    center: readonly [number, number],
   ): void {
     this.flags = 0;
-    for (let set = 0; set < 4; set++) {
-      const transform = transforms?.[set] ?? null;
-      if (!transform) continue;
+    // The projection takes the offsets from the center as a float32 (u_center_lnglat)
+    const k: [number, number] = [Math.fround(center[0]), Math.fround(center[1])];
+    for (let set = 1; set < 4 && 2 * (set - 1) + 1 < MOTION_SLOTS; set++) {
+      const edit = transforms?.[set] ?? null;
+      if (!edit) continue;
+      const frame = cachedMotionFrame(edit, false, k);
+      // A row that keeps its shape is scaled by sizeFactor, the others by their factors: either
+      // may move while the other does not
+      const uniform = edit.kind === 'scale' ? cachedMotionFrame(edit, true, k) : frame;
+      if (!frame && !uniform) continue;
       this.flags |= 1 << set;
-      this.matrix.set(transform.matrix, set * 4);
-      this.uniform.set(transform.uniformMatrix, set * 4);
-      this.center[set * 2] = origin[0] - transform.center[0];
-      this.center[set * 2 + 1] = origin[1] - transform.center[1];
-      const phi = (transform.center[1] * Math.PI) / 180;
-      this.centerLat[set * 3] = Math.sin(phi);
-      this.centerLat[set * 3 + 1] = Math.cos(phi);
-      this.centerLat[set * 3 + 2] = Math.tan(phi);
+      const slot = 2 * (set - 1);
+      this.motion.write(slot, frame ?? stillMotionFrame(k), origin);
+      if (uniform === frame) this.motion.copySlot(slot, slot + 1);
+      else this.motion.write(slot + 1, uniform ?? stillMotionFrame(k), origin);
     }
   }
 
-  copy(other: TransformUniformValues): void {
+  copy(other: MotionStateValues): void {
     this.flags = other.flags;
-    this.matrix.set(other.matrix);
-    this.uniform.set(other.uniform);
-    this.center.set(other.center);
-    this.centerLat.set(other.centerLat);
+    this.motion.copy(other.motion);
   }
 }
 
@@ -325,16 +330,19 @@ function sameValues(written: Float32Array, values: Float32Array): boolean {
  * The texture is bound through the run of the draws (once per group within a run), and the
  * uniforms are written when their values change.
  *
+ * @param origin The origin the offsets of the batch are taken from
+ * @param center The center the projection takes the offsets from (the origin when omitted)
  * @internal
  */
 export function bindRowState(
   run: RetainedDrawRun,
   uniforms: RowStateUniforms,
   binding: RowStateBinding,
+  origin?: readonly [number, number],
   center?: readonly [number, number],
 ): void {
   run.bindRowState(binding.texture.texture);
-  uniforms.write(binding, center);
+  uniforms.write(binding, origin, center);
 }
 
 /**

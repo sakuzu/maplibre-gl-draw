@@ -11,7 +11,9 @@
 
 import { describe, expect, it } from 'vitest';
 import { generateCirclePolygon } from '../../../geometry/circle.js';
-import { computeRotation, getRotationDelta, startRotation } from '../../../operations/rotate.js';
+import { rotateEditOf } from '../../../operations/rotate.js';
+import { transformedUpdates, transformStartOf } from '../../../operations/transform-features.js';
+import { DEFAULT_TRANSFORMS } from '../../../store/feature-edits.js';
 import type { Coordinate, Feature } from '../../../store/types.js';
 import { computeBoundingBox, rotateBoundingBox } from './bounding-box.js';
 
@@ -81,12 +83,17 @@ describe('rotateBoundingBox', () => {
     expect(bbox).not.toBeNull();
     if (!bbox) return;
 
-    const state = startRotation({ lng: 25, lat: 50 }, bbox, [polygon]);
     const pointer = { lng: 18, lat: 62 };
-    const rotated = computeRotation(state, pointer, [polygon]).get('polygon-1');
+    const edit = rotateEditOf(bbox.center, { lng: 25, lat: 50 }, pointer);
+    const rotated = transformedUpdates(
+      DEFAULT_TRANSFORMS,
+      edit,
+      transformStartOf(polygon),
+      polygon,
+    );
     if (!rotated) throw new Error('no rotation result');
-    const ring = (rotated.coordinates as Coordinate[][])[0];
-    const frame = rotateBoundingBox(bbox, getRotationDelta(state, pointer));
+    const ring = (rotated.geometry as unknown as { coordinates: Coordinate[][] }).coordinates[0];
+    const frame = rotateBoundingBox(bbox, (edit.angleDegrees * Math.PI) / 180);
 
     const frameCorners = [frame.topLeft, frame.topRight, frame.bottomRight, frame.bottomLeft];
     for (let i = 0; i < 4; i++) {

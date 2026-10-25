@@ -437,3 +437,139 @@ export function applyEnuEdit<V extends EnuValues>(edit: EnuEdit, values: V): V {
   }
   return out as V;
 }
+
+/**
+ * A position moved by an edit, as a feature of it is moved by {@link applyEnuEdit}: a new array,
+ * the numbers past the first two as they were; the position given back as it is when the edit
+ * does nothing
+ *
+ * The longitude is the one nearest to the position's own (for a move, plus the longitude of the
+ * end less that of the start): a feature whose first longitude leaves [-180, 180] is shifted
+ * as a whole by {@link applyEnuEdit}, which a single position does not know.
+ *
+ * @param uniformScale Whether the feature of the position keeps its shape (moved by
+ *   `sizeFactor` along both the east and the north)
+ * @internal
+ */
+export function moveEnuPosition(
+  edit: EnuEdit,
+  position: readonly number[],
+  uniformScale: boolean,
+): number[] {
+  if (doesNothing(edit)) return position.slice();
+  const motion = cachedMotion(edit, uniformScale);
+  return motion ? movePosition(motion, position) : position.slice();
+}
+
+/**
+ * The offset of a point from another in the east, north and up frame of the other, at height 0:
+ * `[east, north]` in metres
+ *
+ * @internal
+ */
+export function enuOffsetOf(center: EditPoint, point: EditPoint): [number, number] {
+  const frame = frameAt(center[0] as number, center[1] as number);
+  toEarthCentred(point[0] as number, point[1] as number, SCRATCH_X);
+  const d0 = (SCRATCH_X[0] as number) - (frame[0] as number);
+  const d1 = (SCRATCH_X[1] as number) - (frame[1] as number);
+  const d2 = (SCRATCH_X[2] as number) - (frame[2] as number);
+  return [
+    d0 * (frame[3] as number) + d1 * (frame[4] as number) + d2 * (frame[5] as number),
+    d0 * (frame[6] as number) + d1 * (frame[7] as number) + d2 * (frame[8] as number),
+  ];
+}
+
+/**
+ * The edit that takes what an edit moved back where it was: a move from the end to the start, a
+ * rotation by the opposite angle, a scaling by the inverse factors
+ *
+ * @internal
+ */
+export function inverseEnuEdit(edit: EnuEdit): EnuEdit {
+  switch (edit.kind) {
+    case 'translate':
+      return { kind: 'translate', from: edit.to, to: edit.from };
+    case 'rotate':
+      return { kind: 'rotate', center: edit.center, angleDegrees: -edit.angleDegrees };
+    case 'scale':
+      return {
+        kind: 'scale',
+        center: edit.center,
+        eastFactor: 1 / edit.eastFactor,
+        northFactor: 1 / edit.northFactor,
+        sizeFactor: 1 / edit.sizeFactor,
+      };
+  }
+}
+
+/**
+ * How an edit moves the earth-centred coordinates of the positions: `X' = L X + t`, with `L`
+ * given row first (`matrix[3 i + j]`) and `t` as `offset`
+ *
+ * @internal
+ */
+export interface EnuAffine {
+  readonly matrix: Float64Array;
+  readonly offset: Float64Array;
+}
+
+/**
+ * The affine map of the earth-centred coordinates an edit makes (null when it moves no position):
+ * the same motion as {@link applyEnuEdit}, written as one matrix and one offset
+ *
+ * @param uniformScale Whether the feature keeps its shape (a scaling by `sizeFactor`)
+ * @internal
+ */
+export function enuAffineOf(edit: EnuEdit, uniformScale: boolean): EnuAffine | null {
+  if (doesNothing(edit)) return null;
+  const motion = motionOf(edit, uniformScale);
+  if (!motion) return null;
+  const matrix = new Float64Array(9);
+  const offset = new Float64Array(3);
+  let origin: Frame;
+  let target: Frame;
+  if (motion.kind === 'translate') {
+    // L = B_to B_fromᵀ
+    const f = motion.from;
+    const t = motion.to;
+    for (let i = 0; i < 3; i++) {
+      for (let j = 0; j < 3; j++) {
+        matrix[i * 3 + j] =
+          (t[3 + i] as number) * (f[3 + j] as number) +
+          (t[6 + i] as number) * (f[6 + j] as number) +
+          (t[9 + i] as number) * (f[9 + j] as number);
+      }
+    }
+    origin = f;
+    target = t;
+  } else {
+    // L = B M Bᵀ, M = [[a, b, 0], [c, d, 0], [0, 0, up]] over the east, north and up
+    const b = motion.frame;
+    const m = [motion.a, motion.b, 0, motion.c, motion.d, 0, 0, 0, motion.up];
+    for (let i = 0; i < 3; i++) {
+      for (let j = 0; j < 3; j++) {
+        let sum = 0;
+        for (let k = 0; k < 3; k++) {
+          for (let l = 0; l < 3; l++) {
+            sum +=
+              (b[3 + k * 3 + i] as number) *
+              (m[k * 3 + l] as number) *
+              (b[3 + l * 3 + j] as number);
+          }
+        }
+        matrix[i * 3 + j] = sum;
+      }
+    }
+    origin = b;
+    target = b;
+  }
+  // t = O_target − L O_origin
+  for (let i = 0; i < 3; i++) {
+    offset[i] =
+      (target[i] as number) -
+      ((matrix[i * 3] as number) * (origin[0] as number) +
+        (matrix[i * 3 + 1] as number) * (origin[1] as number) +
+        (matrix[i * 3 + 2] as number) * (origin[2] as number));
+  }
+  return { matrix, offset };
+}

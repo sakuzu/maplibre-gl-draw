@@ -5,7 +5,7 @@
  * The feature type handler of the engine
  *
  * The shape the engine reads a feature type that is not built in through: its renderer, its
- * hit testing, its box selection, its bounding boxes, its resize and its snapping candidates.
+ * hit testing, its box selection, its bounding boxes and its snapping candidates.
  * A `FeatureTypeDefinition` of the extension contract is installed as one of these by the
  * adapters of `api/impl/adapters.ts`. It is types only and sits low in the layer order, so the
  * view, snapping and operations layers read it without reaching up into api.
@@ -13,41 +13,12 @@
 
 import type { BoxSelectionStrategy } from '../dispatcher/hit-test/box-strategy.js';
 import type { HitTestStrategy } from '../dispatcher/hit-test/strategies/index.js';
-import type { ResizeState } from '../operations/resize.js';
-import type { HandleType } from '../shared/config/constants.js';
-import type { BoundingBox, Coordinate, Feature } from '../shared/types/model.js';
+import type { BoundingBox, Feature } from '../shared/types/model.js';
 import type { BoundingBoxCoords } from '../shared/types/selection-box.js';
 import type { SnapCandidate, SnapProviderContext } from '../snapping/types.js';
 import type { HandleInfo } from '../view/ui/handles.js';
 import type { PointFrameExtent } from '../view/ui/selection-ui/index.js';
 import type { FeatureTypeRenderer } from './renderers.js';
-
-/**
- * The result of the resize computation for a feature type that is not built in, used when
- * processing different from the standard resize (changing scale) is needed
- *
- * @internal
- */
-export interface TypeResizeResult {
-  /** The new coordinates */
-  coordinates: Coordinate;
-  /** The new width (in pixels, optional) */
-  width?: number;
-  /** The new height (in pixels, optional) */
-  height?: number;
-}
-
-/**
- * The resize computation of a feature type that is not built in
- *
- * @internal
- */
-export type TypeResizeCalculator = (
-  handle: HandleType,
-  state: ResizeState,
-  currentLngLat: { lng: number; lat: number },
-  feature: Feature,
-) => TypeResizeResult | null;
 
 /**
  * A feature type that is not built in: how its features are drawn, hit, selected, resized and
@@ -71,14 +42,6 @@ export interface FeatureTypeHandler {
 
   /** The custom box selection strategy (when omitted, a coordinate-based fallback is used) */
   readonly boxSelection?: BoxSelectionStrategy;
-
-  /**
-   * The resize strategy (applied when computeCustomResize returns null)
-   * - 'scale': changes the scale property (as an Image does)
-   * - 'coordinates': changes the coordinates directly (the same as Polygon and LineString)
-   * - when omitted: a generic check (decided by the presence of the scale property)
-   */
-  readonly resizeStrategy?: 'scale' | 'coordinates';
 
   /**
    * Bounding box computation
@@ -143,24 +106,6 @@ export interface FeatureTypeHandler {
    * @param bbox The bounding box for the selection UI
    */
   getAdditionalResizeHandles?(feature: Feature, bbox: BoundingBoxCoords): HandleInfo[];
-
-  /**
-   * Custom resize computation
-   *
-   * Provides custom resize logic such as edge-midpoint handles.
-   * Returning null applies the standard resize (changing scale).
-   *
-   * @param handle The type of the handle being operated
-   * @param state The state of the resize operation
-   * @param currentLngLat The current mouse coordinate
-   * @param feature The target feature
-   */
-  computeCustomResize?(
-    handle: HandleType,
-    state: ResizeState,
-    currentLngLat: { lng: number; lat: number },
-    feature: Feature,
-  ): TypeResizeResult | null;
 
   /**
    * Returns the snapping candidates

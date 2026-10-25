@@ -15,8 +15,8 @@
  * in two makes its copy again from the same sets and the state stays with the rows.
  */
 
+import type { EnuEdit } from '../geometry/enu-transforms.js';
 import { DrawError } from '../shared/draw-error.js';
-import type { PlaneTransform } from '../shared/math/plane-transform.js';
 import type { RowHandle } from './types.js';
 
 // === The bits of the copy kept by a row group (16 bits per row) ===
@@ -60,8 +60,8 @@ export const STATE_MOVE_MASK = 3 << STATE_MOVE_SHIFT;
 export const STATE_UNIFORM = 1 << 11;
 /**
  * Turned and scaled by its values while it is dragged (its rotation, its scale), as the write of
- * the drag let go turns and scales it: an image, a type an extension resizes by its scale, a row
- * that has such a value
+ * the drag let go turns and scales it: a row whose type gives it the field the edit changes
+ * (`store/transform-roles.ts`)
  */
 export const STATE_BY_VALUES = 1 << 12;
 
@@ -122,8 +122,8 @@ export class RowStateSets {
   private readonly bulk = new Set<RowHandle>();
   /** The translation of each moving set, `[dLng, dLat]` (set 0 is unused) */
   private readonly translations = new Float64Array((MOVE_SETS + 1) * 2);
-  /** The rotation or resize of each moving set (null for none; set 0 is unused) */
-  private readonly transforms: Array<PlaneTransform | null> = new Array(MOVE_SETS + 1).fill(null);
+  /** The edit that moves, rotates or scales each moving set (null for none; set 0 is unused) */
+  private readonly transforms: Array<EnuEdit | null> = new Array(MOVE_SETS + 1).fill(null);
   private translationRevision = 0;
 
   constructor(private readonly onChange: (handles: Int32Array) => void) {}
@@ -218,18 +218,20 @@ export class RowStateSets {
   }
 
   /**
-   * The rotation or resize of a moving set, applied before its translation (null for none)
+   * The edit that moves, rotates or scales a moving set, applied before its translation (null for
+   * none)
    */
-  transform(set: number): PlaneTransform | null {
+  transform(set: number): EnuEdit | null {
     return this.transforms[set] ?? null;
   }
 
   /**
-   * Sets the rotation or resize of a moving set (null: it only translates)
+   * Sets the edit that moves, rotates or scales a moving set (null: it only translates); its rows
+   * are drawn as the edit moves them (`view/renderers/row-motion.ts`)
    *
    * @throws when the set is not 1 to 3
    */
-  setTransform(set: number, transform: PlaneTransform | null): void {
+  setTransform(set: number, transform: EnuEdit | null): void {
     if (!Number.isInteger(set) || set < 1 || set > MOVE_SETS) {
       throw new DrawError('invalid-input', `RowStateSets: no moving set ${set}`);
     }

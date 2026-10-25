@@ -181,7 +181,13 @@ export class BulkFramesRenderer {
     this.originShift[0] = camera ? frames.origin[0] - camera.centerLngLat[0] : 0;
     this.originShift[1] = camera ? frames.origin[1] - camera.centerLngLat[1] : 0;
     this.projection.setUniforms(projectionData, zoom, camera, this.originShift);
-    bindRowState(this.run, this.rowState, binding, camera ? camera.centerLngLat : frames.origin);
+    bindRowState(
+      this.run,
+      this.rowState,
+      binding,
+      frames.origin,
+      camera ? camera.centerLngLat : frames.origin,
+    );
     const ratio = resolvePixelRatio(this.pixelRatio);
     const stroke = config.boundingBox.stroke;
     const loc = this.locations;
@@ -390,7 +396,10 @@ void main() {
         );
         // Widened by the margin on the plane of the map, as marginOnMapPlane widens it: in CSS px
         // of the latitude of its center (y down), every side moved out along the sides
-        float latitude = (moved[0].y + moved[1].y + moved[2].y + moved[3].y) * 0.25 + u_origin_latitude;
+        // (taken from the center when the row is moved by a motion: its latitude is close enough
+        // for the size of a pixel)
+        float baseLatitude = g_offset_from_center > 0.5 ? u_origin_latitude - u_origin_shift.y : u_origin_latitude;
+        float latitude = (moved[0].y + moved[1].y + moved[2].y + moved[3].y) * 0.25 + baseLatitude;
         vec2 degPerPx = vec2(u_deg_per_px, -u_deg_per_px * cos(radians(latitude)));
         vec2 q[4] = vec2[4](moved[0] / degPerPx, moved[1] / degPerPx, moved[2] / degPerPx, moved[3] / degPerPx);
         vec2 right = q[1] - q[0];

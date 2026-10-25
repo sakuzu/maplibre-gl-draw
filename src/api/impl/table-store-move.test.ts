@@ -132,15 +132,27 @@ function moving(tables: FeatureTables, id: string): boolean {
   return (state & STATE_MOVE_MASK) !== 0;
 }
 
-/** Drags the selection by the body of the square of `a`, and reads the middle of the drag */
+/**
+ * Drags the selection by the body of the square of `a` one degree to the east along its parallel,
+ * and reads the middle of the drag
+ *
+ * A move along a parallel turns the positions about the axis of the poles: every one moves by the
+ * same degrees of longitude, so the rows held are moved by one translation of the degrees.
+ */
 function dragSelection(read: () => void): void {
   const router = engine.inputRouter;
   router.dispatch(event<MouseNormalizedEvent>('mousedown', 0.25, 0.25));
   router.dispatch(event<DragNormalizedEvent>('dragstart', 0.25, 0.25, [0.25, 0.25]));
-  router.dispatch(event<DragNormalizedEvent>('dragmove', 0.75, 1.25, [0.25, 0.25]));
-  router.dispatch(event<DragNormalizedEvent>('dragmove', 1.25, 2.25, [0.25, 0.25]));
+  router.dispatch(event<DragNormalizedEvent>('dragmove', 0.75, 0.25, [0.25, 0.25]));
+  router.dispatch(event<DragNormalizedEvent>('dragmove', 1.25, 0.25, [0.25, 0.25]));
   read();
-  router.dispatch(event<DragNormalizedEvent>('dragend', 1.25, 2.25, [0.25, 0.25]));
+  router.dispatch(event<DragNormalizedEvent>('dragend', 1.25, 0.25, [0.25, 0.25]));
+}
+
+/** A corner near the one expected (about 0.1 mm) */
+function expectCornerNear(actual: number[] | undefined, expected: readonly number[]): void {
+  expect(Math.abs((actual?.[0] as number) - (expected[0] as number))).toBeLessThan(1e-9);
+  expect(Math.abs((actual?.[1] as number) - (expected[1] as number))).toBeLessThan(1e-9);
 }
 
 describe('a drag of many features held as rows', () => {
@@ -150,14 +162,16 @@ describe('a drag of many features held as rows', () => {
     dragSelection(() => {
       IDS.forEach((id, i) => {
         expect(rowCorner(tables, id)).toEqual([i, 0]);
-        expect(featureCorner(id)).toEqual([i + 1, 2]);
+        expectCornerNear(featureCorner(id), [i + 1, 0]);
         expect(moving(tables, id)).toBe(true);
       });
-      expect(featureTablesInternals(tables)?.states.translation(1)).toEqual([1, 2]);
+      const [dLng, dLat] = featureTablesInternals(tables)?.states.translation(1) ?? [];
+      expect(Math.abs((dLng as number) - 1)).toBeLessThan(1e-9);
+      expect(Math.abs(dLat as number)).toBeLessThan(1e-9);
     });
     IDS.forEach((id, i) => {
-      expect(rowCorner(tables, id)).toEqual([i + 1, 2]);
-      expect(featureCorner(id)).toEqual([i + 1, 2]);
+      expectCornerNear(rowCorner(tables, id), [i + 1, 0]);
+      expectCornerNear(featureCorner(id), [i + 1, 0]);
       expect(moving(tables, id)).toBe(false);
     });
   });
@@ -167,12 +181,12 @@ describe('a drag of many features held as rows', () => {
     draw.selection.set('feature', IDS);
     dragSelection(() => {
       IDS.forEach((id, i) => {
-        expect(rowCorner(tables, id)).toEqual([i + 1, 2]);
+        expectCornerNear(rowCorner(tables, id), [i + 1, 0]);
         expect(moving(tables, id)).toBe(false);
       });
     });
     IDS.forEach((id, i) => {
-      expect(rowCorner(tables, id)).toEqual([i + 1, 2]);
+      expectCornerNear(rowCorner(tables, id), [i + 1, 0]);
     });
   });
 });

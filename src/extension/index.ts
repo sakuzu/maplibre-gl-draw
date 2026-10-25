@@ -6,11 +6,7 @@
  * overlays. The extension contract of `api/extension/` is installed into them.
  */
 
-export type {
-  FeatureTypeHandler,
-  TypeResizeCalculator,
-  TypeResizeResult,
-} from './feature-handler.js';
+export type { FeatureTypeHandler } from './feature-handler.js';
 export type {
   EngineOverlayRenderer,
   FeatureTypeRenderer,

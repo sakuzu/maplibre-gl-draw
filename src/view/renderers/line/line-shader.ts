@@ -114,7 +114,7 @@ vec2 stationMercatorToLngLat(vec2 mercator) {
 vec2 stationOffset(vec2 a, vec2 b, float t) {
     if (u_station_mercator < 0.5) return mix(a, b, t);
     // The same absolute coordinates as project_position_to_clipspace_from_offset
-    vec2 base = u_origin_shift + u_center_lnglat;
+    vec2 base = origin_shift() + u_center_lnglat;
     vec2 la = a + base;
     vec2 lb = b + base;
     la.y = clamp(la.y, -STATION_MAX_LAT, STATION_MAX_LAT);

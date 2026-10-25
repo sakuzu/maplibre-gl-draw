@@ -8,11 +8,11 @@
  *   is in the box are in it, the others are tested as the features they are, by the test of
  *   their type (the rows on the sides of the box only)
  * - A drag of the features selected in bulk moves, rotates or resizes their rows by the state of
- *   their rows: they are in one moving set, drawn moved by its translation or its transform, and
- *   written once on the CPU when the drag is let go, in the same task the set is let go of (the
- *   drawing takes both in the same frame)
+ *   their rows: they are in one moving set, drawn moved by the edit of the drag (`translate`,
+ *   `rotate`, `scale`), and written once on the CPU with the same edit when the drag is let go,
+ *   in the same task the set is let go of (the drawing takes both in the same frame)
  * - The arrow keys move them by the same moving set, and the moves made while a key is held are
- *   written once, a moment after the last one (one step of the history)
+ *   written once, a moment after the last one (one step of the history), as one move
  */
 
 import type { DragNormalizedEvent } from '../../dispatcher/types.js';
@@ -24,17 +24,15 @@ import { TableSelection } from '../../feature-table/selection.js';
 import { writeKindsInSlices } from '../../operations/bulk-sliced.js';
 import {
   type BulkKinds,
-  resizeKinds,
-  rotationKinds,
   rowsByValues,
-  translateBulkSelection,
-  translationKinds,
+  transformBulkSelection,
+  transformKinds,
 } from '../../operations/bulk-transform.js';
-import { computeResizeFactors, startResize } from '../../operations/resize.js';
-import { getRotationDelta, startRotation } from '../../operations/rotate.js';
+import { rotateEditOf } from '../../operations/rotate.js';
+import { type ScaleState, scaleEditOf, startScale } from '../../operations/scale.js';
 import type { HandleType } from '../../shared/config/constants.js';
-import { resizeTransform, rotationTransform } from '../../shared/math/plane-transform.js';
 import type { BoundingBoxCoords } from '../../shared/types/selection-box.js';
+import type { TransformEdit } from '../../store/store.js';
 import type { BoxSelection, Feature } from '../../store/types.js';
 import { ROW_FLAG_DELETED, ROW_FLAG_LOCKED } from '../../table/row-group-types.js';
 import type { EngineModeContext } from '../handler.js';
@@ -207,17 +205,22 @@ abstract class BulkDrag implements DragOperation {
   }
 }
 
+/** Sets the edit the moving set of the features selected in bulk is drawn moved by */
+function showEdit(context: EngineModeContext, edit: TransformEdit): void {
+  featureTablesInternals(context.store.tables)?.states.setTransform(BULK_MOVE_SET, edit);
+  context.map.triggerRepaint();
+}
+
 /**
- * The move of the features selected in bulk: their moving set is translated by the offset of
- * the pointer, and their rows are written by it once let go
+ * The move of the features selected in bulk: their moving set is moved from the point the drag
+ * started at to the pointer, and their rows are written by the same edit once let go
  *
  * @internal
  */
 export class BulkMoveDrag extends BulkDrag {
   readonly type = 'move' as const;
   readonly #start: { lng: number; lat: number };
-  #dx = 0;
-  #dy = 0;
+  #edit: TransformEdit | null = null;
 
   constructor(context: EngineModeContext, rows: TableSelection, event: DragNormalizedEvent) {
     super(context, rows);
@@ -225,32 +228,34 @@ export class BulkMoveDrag extends BulkDrag {
   }
 
   update(event: DragNormalizedEvent): void {
-    this.#dx = event.lngLat.lng - this.#start.lng;
-    this.#dy = event.lngLat.lat - this.#start.lat;
-    featureTablesInternals(this.context.store.tables)?.states.setTranslation(
-      BULK_MOVE_SET,
-      this.#dx,
-      this.#dy,
-    );
-    this.context.map.triggerRepaint();
+    this.#edit = {
+      kind: 'translate',
+      from: [this.#start.lng, this.#start.lat],
+      to: [event.lngLat.lng, event.lngLat.lat],
+    };
+    showEdit(this.context, this.#edit);
   }
 
-  protected kinds(): BulkKinds | null {
-    if (this.#dx === 0 && this.#dy === 0) return null;
-    return translationKinds(this.rows, this.#dx, this.#dy);
+  protected kinds(store: DragStore): BulkKinds | null {
+    const edit = this.#edit;
+    if (edit?.kind !== 'translate') return null;
+    if (edit.from[0] === edit.to[0] && edit.from[1] === edit.to[1]) return null;
+    return transformKinds(store, edit, this.rows);
   }
 }
 
 /**
  * The rotation of the features selected in bulk around the center of their frame: their moving
- * set is turned by the angle of the pointer, and their rows are written by it once let go
+ * set is turned by the angle of the pointer, and their rows are written by the same edit once
+ * let go
  *
  * @internal
  */
 export class BulkRotateDrag extends BulkDrag {
   readonly type = 'rotate' as const;
-  readonly #state: ReturnType<typeof startRotation>;
-  #angle = 0;
+  readonly #center: [number, number];
+  readonly #start: { lng: number; lat: number };
+  #edit: TransformEdit | null = null;
 
   constructor(
     context: EngineModeContext,
@@ -261,15 +266,11 @@ export class BulkRotateDrag extends BulkDrag {
     super(context, rows);
     // The rows turned by their rotation are drawn so, as they are written once let go
     featureTablesInternals(context.store.tables)?.states.setByValues(
-      rowsByValues(context.store, rows, 'rotate', context.selectionScope.extensions),
+      rowsByValues(context.store, rows, 'rotate'),
       true,
     );
-    this.#state = startRotation(
-      dragStartLngLat(event),
-      bbox,
-      [],
-      context.selectionScope.extensions,
-    );
+    this.#center = [bbox.center[0], bbox.center[1]];
+    this.#start = dragStartLngLat(event);
     context.store.setDragState({
       operation: 'rotate',
       rotateInfo: {
@@ -281,51 +282,41 @@ export class BulkRotateDrag extends BulkDrag {
           center: bbox.center,
         },
         currentAngle: 0,
+        center: this.#center,
       },
     });
   }
 
   update(event: DragNormalizedEvent, store: DragStore): void {
-    this.#angle = getRotationDelta(this.#state, event.lngLat);
-    const center = this.#state.center as [number, number];
-    featureTablesInternals(store.tables)?.states.setTransform(
-      BULK_MOVE_SET,
-      rotationTransform(center, this.#angle),
-    );
+    const edit = rotateEditOf(this.#center, this.#start, event.lngLat);
+    this.#edit = edit;
+    showEdit(this.context, edit);
     const dragState = store.getDragState();
     if (dragState?.rotateInfo) {
       store.setDragState({
         ...dragState,
-        rotateInfo: { ...dragState.rotateInfo, currentAngle: this.#angle },
+        rotateInfo: { ...dragState.rotateInfo, currentAngle: (edit.angleDegrees * Math.PI) / 180 },
       });
     }
-    this.context.map.triggerRepaint();
   }
 
   protected kinds(store: DragStore): BulkKinds | null {
-    if (this.#angle === 0) return null;
-    return rotationKinds(
-      store,
-      this.#state.center as [number, number],
-      this.#angle,
-      this.context.selectionScope.extensions,
-      this.rows,
-    );
+    const edit = this.#edit;
+    if (edit?.kind !== 'rotate' || edit.angleDegrees === 0) return null;
+    return transformKinds(store, edit, this.rows);
   }
 }
 
 /**
  * The resize of the features selected in bulk from a handle of their frame: their moving set is
- * scaled by the factors of the pointer, and their rows are written by them once let go
+ * scaled by the factors of the pointer, and their rows are written by the same edit once let go
  *
  * @internal
  */
 export class BulkResizeDrag extends BulkDrag {
   readonly type = 'resize' as const;
-  readonly #state: ReturnType<typeof startResize>;
-  readonly #handle: HandleType;
-  readonly #bbox: BoundingBoxCoords;
-  #current: { lng: number; lat: number } | null = null;
+  readonly #state: ScaleState;
+  #edit: TransformEdit | null = null;
 
   constructor(
     context: EngineModeContext,
@@ -335,62 +326,32 @@ export class BulkResizeDrag extends BulkDrag {
     bbox: BoundingBoxCoords,
   ) {
     super(context, rows);
-    // The rows resized by their scale are drawn so, as they are written once let go
+    // The rows that keep their shape are drawn so, as they are written once let go
     featureTablesInternals(context.store.tables)?.states.setByValues(
-      rowsByValues(context.store, rows, 'resize', context.selectionScope.extensions),
+      rowsByValues(context.store, rows, 'scale'),
       true,
     );
-    this.#handle = handle;
-    this.#bbox = bbox;
-    this.#state = startResize(
+    // A frame thinner than a pixel along an axis is not stretched along it, as the resize drag
+    // of features takes it
+    this.#state = startScale(
       handle,
       dragStartLngLat(event),
       bbox,
-      [],
-      context.selectionScope.extensions,
-      minAxisExtentOf(context),
+      context.map.getZoom?.(),
+      context.selectionScope.extensions.getTileSize() ?? 512,
     );
     context.store.setDragState({ operation: 'resize' });
   }
 
-  update(event: DragNormalizedEvent, store: DragStore): void {
-    this.#current = { lng: event.lngLat.lng, lat: event.lngLat.lat };
-    const { anchor, scaleX, scaleY, uniformScale } = computeResizeFactors(
-      this.#state,
-      this.#current,
-    );
-    featureTablesInternals(store.tables)?.states.setTransform(
-      BULK_MOVE_SET,
-      resizeTransform(anchor, scaleX, scaleY, uniformScale),
-    );
-    this.context.map.triggerRepaint();
+  update(event: DragNormalizedEvent): void {
+    this.#edit = scaleEditOf(this.#state, event.lngLat);
+    showEdit(this.context, this.#edit);
   }
 
   protected kinds(store: DragStore): BulkKinds | null {
-    if (!this.#current) return null;
-    return resizeKinds(
-      store,
-      {
-        handle: this.#handle,
-        bbox: this.#bbox,
-        startLngLat: this.#state.startLngLat,
-        currentLngLat: this.#current,
-        minAxisExtent: this.#state.minAxisExtent,
-      },
-      this.context.selectionScope.extensions,
-      this.rows,
-    );
+    if (!this.#edit) return null;
+    return transformKinds(store, this.#edit, this.rows);
   }
-}
-
-/**
- * The extent below which a frame is not stretched along an axis: 1 pixel at the zoom, in Web
- * Mercator world units (as the resize drag of features takes it)
- */
-function minAxisExtentOf(context: EngineModeContext): number {
-  const zoom = context.map.getZoom?.();
-  const tileSize = context.selectionScope.extensions.getTileSize() ?? 512;
-  return Number.isFinite(zoom) ? 1 / (tileSize * 2 ** (zoom as number)) : 0;
 }
 
 // ============================================================================
@@ -405,12 +366,15 @@ export const BULK_NUDGE_COMMIT_MS = 300;
  * keys are pressed, and written once, `BULK_NUDGE_COMMIT_MS` after the last press (the presses of
  * a key held are one step of the history)
  *
+ * The presses make one move (`translate`): from the center of the frame of the features when the
+ * first key is pressed, to where the presses took it.
+ *
  * @internal
  */
 export class BulkNudge {
   #rows: TableSelection | null = null;
-  #dx = 0;
-  #dy = 0;
+  #from: [number, number] = [0, 0];
+  #to: [number, number] = [0, 0];
   #timer: ReturnType<typeof setTimeout> | null = null;
   #context: EngineModeContext | null = null;
 
@@ -420,11 +384,17 @@ export class BulkNudge {
   }
 
   /**
-   * Adds a move of a press of a key (degrees); the moves are written a moment after the last one
+   * Adds the move of a press of a key; the moves are written a moment after the last one
    *
+   * @param center The center of the frame of the features (where the first press starts from)
+   * @param step Where a press takes a point: given the point the presses took the center to so far
    * @returns false when nothing is selected in bulk or the selection cannot be moved
    */
-  add(context: EngineModeContext, dx: number, dy: number): boolean {
+  add(
+    context: EngineModeContext,
+    center: readonly [number, number],
+    step: (from: readonly [number, number]) => [number, number],
+  ): boolean {
     const rows = context.store.getSelectedRows();
     const states = featureTablesInternals(context.store.tables)?.states;
     if (!rows || !states) return false;
@@ -434,14 +404,13 @@ export class BulkNudge {
       context.store.finishSlicedWrite();
       this.#rows = rows;
       this.#context = context;
-      this.#dx = 0;
-      this.#dy = 0;
+      this.#from = [center[0], center[1]];
+      this.#to = [center[0], center[1]];
       states.setMoving(rows.handles, BULK_MOVE_SET);
-      states.setTransform(BULK_MOVE_SET, null);
+      states.setTranslation(BULK_MOVE_SET, 0, 0);
     }
-    this.#dx += dx;
-    this.#dy += dy;
-    states.setTranslation(BULK_MOVE_SET, this.#dx, this.#dy);
+    this.#to = step(this.#to);
+    states.setTransform(BULK_MOVE_SET, this.#edit());
     context.map.triggerRepaint();
     if (this.#timer !== null) clearTimeout(this.#timer);
     this.#timer = setTimeout(() => {
@@ -451,9 +420,9 @@ export class BulkNudge {
     return true;
   }
 
-  /** The translation shown so far */
-  get offset(): [number, number] {
-    return [this.#dx, this.#dy];
+  /** The move shown so far */
+  #edit(): TransformEdit {
+    return { kind: 'translate', from: [...this.#from], to: [...this.#to] };
   }
 
   /** Writes the moves waiting now (one change), and lets the moving set go */
@@ -467,13 +436,13 @@ export class BulkNudge {
     if (!rows || !context) return;
     const store = context.store;
     try {
-      if (this.#dx !== 0 || this.#dy !== 0) {
-        translateBulkSelection(store, this.#dx, this.#dy, rows);
+      if (this.#from[0] !== this.#to[0] || this.#from[1] !== this.#to[1]) {
+        transformBulkSelection(store, this.#edit(), rows);
       }
     } finally {
       const states = featureTablesInternals(store.tables)?.states;
       states?.setMoving(rows.handles, 0);
-      states?.setTranslation(BULK_MOVE_SET, 0, 0);
+      states?.setTransform(BULK_MOVE_SET, null);
       context.map.triggerRepaint();
     }
   }
@@ -489,7 +458,7 @@ export class BulkNudge {
     if (!rows || !context) return;
     const states = featureTablesInternals(context.store.tables)?.states;
     states?.setMoving(rows.handles, 0);
-    states?.setTranslation(BULK_MOVE_SET, 0, 0);
+    states?.setTransform(BULK_MOVE_SET, null);
     context.map.triggerRepaint();
   }
 }

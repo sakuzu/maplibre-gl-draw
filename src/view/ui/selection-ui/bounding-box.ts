@@ -13,8 +13,8 @@
  */
 
 import { circleBoundingBox } from '../../../geometry/circle.js';
+import { type EnuEdit, moveEnuPosition } from '../../../geometry/enu-transforms.js';
 import { pixelsToDegreesLat, pixelsToDegreesLng } from '../../../shared/math/index.js';
-import { fromPlane, toPlane } from '../../../shared/math/mercator-plane.js';
 import { coordinatesOf } from '../../../shared/utils/coordinates.js';
 import {
   getCircleRadius,
@@ -246,11 +246,11 @@ export function computeCombinedBoundingBox(
 /**
  * Rotate a BoundingBox around its center
  *
- * Rotates in Web Mercator, the same plane and angle convention as the rotate operation
- * (operations/rotate.ts), so the frame drawn during a rotation drag stays on the corners of
- * the rotated feature at any latitude and size.
+ * Rotates in the east, north and up frame of the center on the WGS 84 ellipsoid, as the rotate
+ * drag writes the features it turns (`geometry/enu-transforms.ts`), so the frame drawn during a
+ * rotation drag stays on the corners of the rotated features at any latitude and size.
  *
- * @param angle Rotation (radians, counterclockwise in the transform plane)
+ * @param angle Rotation (radians, counterclockwise seen from above)
  * @param rotationCenter The center of the rotation. The frame's own center when omitted
  */
 export function rotateBoundingBox(
@@ -259,15 +259,10 @@ export function rotateBoundingBox(
   rotationCenter?: Coordinate,
 ): BoundingBoxCoords {
   const center = rotationCenter ?? bbox.center;
-  const cos = Math.cos(angle);
-  const sin = Math.sin(angle);
-  const [cx, cy] = toPlane(center);
-
+  const edit: EnuEdit = { kind: 'rotate', center, angleDegrees: (angle * 180) / Math.PI };
   const rotatePoint = (coord: Coordinate): Coordinate => {
-    const [x, y] = toPlane(coord);
-    const dx = x - cx;
-    const dy = y - cy;
-    return fromPlane(cx + dx * cos - dy * sin, cy + dx * sin + dy * cos);
+    const moved = moveEnuPosition(edit, coord, false);
+    return [moved[0] as number, moved[1] as number];
   };
 
   return {

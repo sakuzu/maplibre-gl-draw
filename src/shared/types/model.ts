@@ -1166,8 +1166,10 @@ export interface RotateInfo {
   initialBbox: BoundingBoxCoordsSimple;
   /** The bbox of each feature when the rotation started (only for a multiple selection) */
   initialFeatureBboxes?: Map<string, BoundingBoxCoordsSimple>;
-  /** The current rotation angle (in radians) */
+  /** The current rotation angle (in radians, counterclockwise) */
   currentAngle: number;
+  /** The center the features turn around (the center of `initialBbox` when omitted) */
+  center?: Coordinate;
 }
 
 /**

@@ -25,6 +25,7 @@ import { STATE_BULK } from '../../feature-table/row-state.js';
 import { coordinatesOf } from '../../shared/utils/coordinates.js';
 import type { Store } from '../../store/store.js';
 import type { Feature } from '../../store/types.js';
+import { referenceTranslate } from '../../test-support/enu-reference.js';
 import { internalsOf, STORE_KINDS } from '../../test-utils.js';
 import type { AuxiliaryHandleProvider } from '../../view/ui/auxiliary-handles.js';
 import { createSelectionScope } from '../../view/ui/selection-scope.js';
@@ -495,10 +496,20 @@ describe.each(STORE_KINDS)('on %s', (_kind, createStore) => {
 
     it('moves the selection by one pixel (ten with Shift) and uses the key', () => {
       store.setSelection('feature', ['f1']);
+      // The press moves the features from the center of their frame, by a pixel on the screen
+      const ring = (coordinatesOf(store.getFeature('f1') as Feature) as number[][][])[0] ?? [];
+      const xs = ring.map((position) => position[0] as number);
+      const ys = ring.map((position) => position[1] as number);
+      const center: [number, number] = [
+        (Math.min(...xs) + Math.max(...xs)) / 2,
+        (Math.min(...ys) + Math.max(...ys)) / 2,
+      ];
       const right = arrow('ArrowRight');
       mode.onKeyDown(right.event);
       // The mock map draws 1 degree as 10 pixels
-      expect(firstVertex()).toEqual([0.1, 0]);
+      const expected = referenceTranslate([0, 0], center, [center[0] + 0.1, center[1]]);
+      expect(Math.abs((firstVertex()[0] as number) - expected[0])).toBeLessThan(1e-9);
+      expect(Math.abs((firstVertex()[1] as number) - expected[1])).toBeLessThan(1e-9);
       expect(right.preventDefault).toHaveBeenCalled();
 
       mode.onKeyDown(arrow('ArrowUp', true).event);

@@ -27,6 +27,7 @@ import { applyMarginToBoundingBox } from '../../shared/math/index.js';
 import { DrawStore } from '../../store/draw-store.js';
 import { TableContractStore } from '../../store/table-memory.js';
 import type { Feature, StoreChange } from '../../store/types.js';
+import { referenceTranslate } from '../../test-support/enu-reference.js';
 import { bulkFrame } from '../../view/ui/handle-test.js';
 import { computeResizeHandles, computeRotateHandle } from '../../view/ui/handles.js';
 import { createSelectionScope } from '../../view/ui/selection-scope.js';
@@ -189,6 +190,23 @@ function corners(): number[][] {
   });
 }
 
+/** The move of the drags of the tests: from (6.5, 0.5) to (8.5, 1.5) */
+const DRAG_FROM: [number, number] = [6.5, 0.5];
+const DRAG_TO: [number, number] = [8.5, 1.5];
+
+/** Positions near the ones expected (about 0.1 mm; a longitude a whole number of turns off) */
+function expectNear(
+  actual: readonly (readonly number[])[],
+  expected: readonly (readonly number[])[],
+): void {
+  expect(actual.length).toBe(expected.length);
+  actual.forEach((position, i) => {
+    const dx = (position[0] as number) - (expected[i]?.[0] as number);
+    expect(Math.abs(dx - 360 * Math.round(dx / 360))).toBeLessThan(1e-9);
+    expect(Math.abs((position[1] as number) - (expected[i]?.[1] as number))).toBeLessThan(1e-9);
+  });
+}
+
 /** The moving set of the row of a feature */
 function movingSetOf(id: string): number {
   const internals = featureTablesInternals(store.tables);
@@ -236,19 +254,42 @@ describe('the select mode over features selected in bulk', () => {
     const count = changes.length;
     mode.onDragMove(drag('dragmove', 8.5, 1.5, [6.5, 0.5]));
     const states = featureTablesInternals(store.tables)?.states;
-    expect(states?.translation(BULK_MOVE_SET)).toEqual([2, 1]);
+    expect(states?.transform(BULK_MOVE_SET)).toEqual({
+      kind: 'translate',
+      from: DRAG_FROM,
+      to: DRAG_TO,
+    });
     // Nothing is written while it is dragged
     expect(corners()).toEqual(before);
     expect(changes.slice(count).some((change) => change.rows)).toBe(false);
     mode.onDragEnd(drag('dragend', 8.5, 1.5, [6.5, 0.5]));
-    expect(corners()).toEqual(before.map(([x, y]) => [x + 2, y + 1]));
+    const moved = before.map((position) => referenceTranslate(position, DRAG_FROM, DRAG_TO));
+    expectNear(corners(), moved);
     expect(ids.map(movingSetOf)).toEqual(ids.map(() => 0));
-    expect(states?.translation(BULK_MOVE_SET)).toEqual([0, 0]);
+    expect(states?.transform(BULK_MOVE_SET)).toBeNull();
     const written = changes.slice(count).filter((change) => change.rows);
     expect(written).toHaveLength(1);
     expect(written[0].previousValues).toBeDefined();
     expect(emitted.some(([name]) => name === 'drag.ended')).toBe(true);
-    expect(store.getSelection().bulk?.bounds).toEqual([2, 1, 13, 2]);
+    // The extent of the corners of the squares moved
+    const bounds = store.getSelection().bulk?.bounds as number[];
+    const movedCorners = ids.flatMap((_, i) =>
+      [
+        [i * 2, 0],
+        [i * 2 + 1, 0],
+        [i * 2 + 1, 1],
+        [i * 2, 1],
+      ].map((position) => referenceTranslate(position, DRAG_FROM, DRAG_TO)),
+    );
+    const xs = movedCorners.map((position) => position[0]);
+    const ys = movedCorners.map((position) => position[1]);
+    expectNear(
+      [bounds.slice(0, 2), bounds.slice(2)],
+      [
+        [Math.min(...xs), Math.min(...ys)],
+        [Math.max(...xs), Math.max(...ys)],
+      ],
+    );
   });
 
   it('writes many of them in steps once let go, and announces the end of the drag after the last', () => {
@@ -276,18 +317,19 @@ describe('the select mode over features selected in bulk', () => {
     expect(store.slicedWritePending).toBe(true);
     expect(ids.map(movingSetOf)).toEqual(ids.map(() => 0));
     expect(movingSetOf(more[more.length - 1])).toBe(BULK_MOVE_SET);
-    expect(states?.translation(BULK_MOVE_SET)).toEqual([2, 1]);
+    expect(states?.transform(BULK_MOVE_SET)?.kind).toBe('translate');
     expect(emitted.some(([name]) => name === 'drag.ended')).toBe(false);
     vi.runAllTimers();
     expect(store.slicedWritePending).toBe(false);
     expect(movingSetOf(more[more.length - 1])).toBe(0);
-    expect(states?.translation(BULK_MOVE_SET)).toEqual([0, 0]);
+    expect(states?.transform(BULK_MOVE_SET)).toBeNull();
     expect(emitted.filter(([name]) => name === 'drag.ended')).toHaveLength(1);
     const last = store.tables
       ?.get('l')
       ?.getRow(store.tables.findRow(more[more.length - 1]) as number);
-    expect(((last as Feature).geometry as { coordinates: number[][][] }).coordinates[0][0]).toEqual(
-      [(more.length - 1) * 2 + 2, 11],
+    expectNear(
+      [((last as Feature).geometry as { coordinates: number[][][] }).coordinates[0][0] as number[]],
+      [referenceTranslate([(more.length - 1) * 2, 10], DRAG_FROM, DRAG_TO)],
     );
     vi.restoreAllMocks();
   });
@@ -336,8 +378,8 @@ describe('the select mode over features selected in bulk', () => {
   });
 
   it('writes the features turned and scaled by their values where the drag drew them', () => {
-    // An image without a scale nor a rotation yet, and a type of an extension resized by its scale
-    context.selectionScope.extensions.registerResizeStrategy('Card', 'scale');
+    // An image without a scale nor a rotation yet, and a type of an extension with a scale and a
+    // rotation
     const point = (id: string, type: string, x: number, properties = {}): Feature => ({
       ...square(id, 0, 0),
       type,
@@ -346,7 +388,12 @@ describe('the select mode over features selected in bulk', () => {
     });
     store.transact(() => {
       store.createFeature(point('img', 'Image', 13, { 'maplibre-gl-draw:imageFileId': 'i' }));
-      store.createFeature(point('card', 'Card', 15));
+      store.createFeature(
+        point('card', 'Card', 15, {
+          'maplibre-gl-draw:scale': 1,
+          'maplibre-gl-draw:rotation': 0,
+        }),
+      );
     });
     const tables = store.tables as NonNullable<typeof store.tables>;
     const handleOf = (id: string) => tables.findRow(id) as number;
@@ -380,7 +427,7 @@ describe('the select mode over features selected in bulk', () => {
       expect(drawn?.scale).not.toBe(1);
     }
 
-    // A rotation: the card turns by its rotation, which it had not
+    // A rotation: the card turns by its rotation
     const rotate = computeRotateHandle(
       marginedFrame(),
       DEFAULT_SELECTION_CONFIG.rotateHandle.distance,
@@ -394,7 +441,11 @@ describe('the select mode over features selected in bulk', () => {
     const turned = dragged?.rotation(handleOf('card'));
     expect(turned).not.toBe(0);
     mode.onDragEnd(drag('dragend', to[0], to[1], rotate as [number, number]));
-    expect(read('card').properties['maplibre-gl-draw:rotation']).toBeCloseTo(turned as number, 9);
+    // Its rotation of 0 takes the angle, within [0, 360)
+    expect(read('card').properties['maplibre-gl-draw:rotation']).toBeCloseTo(
+      ((turned as number) + 360) % 360,
+      9,
+    );
     // A square has no rotation of its own: it turns by its coordinates
     expect(draggedRowsOf(tables)).toBeNull();
   });
@@ -433,10 +484,12 @@ describe('the select mode over features selected in bulk', () => {
     const count = changes.length;
     for (let i = 0; i < 5; i++) mode.onKeyDown(key('ArrowRight'));
     expect(corners()).toEqual(before);
-    expect(featureTablesInternals(store.tables)?.states.translation(BULK_MOVE_SET)[0]).toBeCloseTo(
-      0.5,
-      9,
-    );
+    // One move from the center of the frame, five presses to the east
+    const shown = featureTablesInternals(store.tables)?.states.transform(BULK_MOVE_SET);
+    expect(shown?.kind).toBe('translate');
+    if (shown?.kind !== 'translate') return;
+    expect((shown.to[0] as number) - (shown.from[0] as number)).toBeCloseTo(0.5, 9);
+    expect(shown.to[1]).toBe(shown.from[1]);
     vi.advanceTimersByTime(BULK_NUDGE_COMMIT_MS + 10);
     expect(corners()[0][0]).toBeCloseTo(before[0][0] + 0.5, 9);
     expect(changes.slice(count).filter((change) => change.rows)).toHaveLength(1);

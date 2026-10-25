@@ -2,17 +2,21 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * Transform drags: resize and rotate the selection with its bounding box handles
+ * Transform drags: resize and rotate the selection with its bounding box handles, by the edits
+ * `scale` and `rotate` as the Store computes them
  */
 
 import type { DragNormalizedEvent } from '../../../dispatcher/types.js';
-import type { ResizeState } from '../../../operations/resize.js';
-import { computeResize, startResize } from '../../../operations/resize.js';
-import type { RotateState } from '../../../operations/rotate.js';
-import { computeRotation, getRotationDelta, startRotation } from '../../../operations/rotate.js';
+import { rotateEditOf, rotationCenterOf } from '../../../operations/rotate.js';
+import { type ScaleState, scaleEditOf, startScale } from '../../../operations/scale.js';
+import {
+  type TransformStart,
+  transformedUpdates,
+  transformStartOf,
+  transformsOf,
+} from '../../../operations/transform-features.js';
 import type { HandleType } from '../../../shared/config/constants.js';
-import { drawProperties } from '../../../shared/properties.js';
-import { geometryFromCoordinates } from '../../../shared/utils/coordinates.js';
+import type { TransformEdit } from '../../../store/store.js';
 import type { Feature } from '../../../store/types.js';
 import type { BoundingBoxCoords } from '../../../view/ui/selection-ui/index.js';
 import { computeBoundingBox } from '../../../view/ui/selection-ui/index.js';
@@ -21,6 +25,29 @@ import type { IntermediateWrites } from './intermediate-writes.js';
 import type { DragOperation, DragScope, DragStore } from './operation.js';
 import { dragStartLngLat, selectedFeaturesOf } from './operation.js';
 
+/** The values of the features a drag started from, by feature id */
+function startsOf(features: readonly Feature[]): Map<string, TransformStart> {
+  const starts = new Map<string, TransformStart>();
+  for (const feature of features) starts.set(feature.id, transformStartOf(feature));
+  return starts;
+}
+
+/** Writes an edit over the selected features the drag started from */
+function writeEdit(
+  edit: TransformEdit,
+  starts: ReadonlyMap<string, TransformStart>,
+  store: DragStore,
+  writes: IntermediateWrites,
+): void {
+  const transforms = transformsOf(store);
+  for (const feature of selectedFeaturesOf(store)) {
+    const start = starts.get(feature.id);
+    if (!start) continue;
+    const updates = transformedUpdates(transforms, edit, start, feature);
+    if (updates) writes.write(store, feature.id, updates);
+  }
+}
+
 // === Resize operation ===
 
 /** @internal */
@@ -28,54 +55,12 @@ export class ResizeDrag implements DragOperation {
   readonly type = 'resize' as const;
 
   constructor(
-    private readonly state: ResizeState,
-    private readonly scope: DragScope,
+    private readonly state: ScaleState,
+    private readonly starts: ReadonlyMap<string, TransformStart>,
   ) {}
 
   update(event: DragNormalizedEvent, store: DragStore, writes: IntermediateWrites): void {
-    // Compute the resize for each feature
-    for (const feature of selectedFeaturesOf(store)) {
-      const resizeResults = computeResize(
-        this.state,
-        event.lngLat,
-        [feature],
-        this.scope?.extensions,
-      );
-      const result = resizeResults.get(feature.id);
-
-      if (result) {
-        const updates: Partial<Feature> = {
-          geometry: geometryFromCoordinates(feature.type, result.coordinates),
-        };
-
-        // Update the scale property when there is one (Text, Image, etc.)
-        if (result.scale !== undefined) {
-          updates.properties = {
-            ...feature.properties,
-            ...drawProperties({ scale: result.scale }),
-          };
-        }
-
-        // For a Circle, also update the radiusMeters property
-        if (result.radiusMeters !== undefined && feature.type === 'Circle') {
-          updates.properties = {
-            ...feature.properties,
-            ...drawProperties({ radiusMeters: result.radiusMeters }),
-          };
-        }
-
-        // For a custom resize, also update the width / height properties (Note, etc.)
-        if (result.width !== undefined || result.height !== undefined) {
-          updates.properties = {
-            ...feature.properties,
-            ...(result.width !== undefined && { width: result.width }),
-            ...(result.height !== undefined && { height: result.height }),
-          };
-        }
-
-        writes.write(store, feature.id, updates);
-      }
-    }
+    writeEdit(scaleEditOf(this.state, event.lngLat), this.starts, store, writes);
   }
 }
 
@@ -90,21 +75,15 @@ export function startResizeDrag(
   map: EngineModeContext['map'],
   scope: DragScope,
 ): ResizeDrag {
-  // A box thinner than 1 pixel on screen is not stretched along that axis (converted into
-  // Web Mercator world units at the current zoom)
-  const zoom = map.getZoom?.();
-  const tileSize = scope?.extensions.getTileSize() ?? 512;
-  const minAxisExtent = Number.isFinite(zoom) ? 1 / (tileSize * 2 ** (zoom as number)) : 0;
-
-  const state = startResize(
+  // A box thinner than 1 pixel on screen is not stretched along that axis
+  const state = startScale(
     handle,
     dragStartLngLat(event),
     bbox,
-    features,
-    scope?.extensions,
-    minAxisExtent,
+    map.getZoom?.(),
+    scope?.extensions.getTileSize() ?? 512,
   );
-  return new ResizeDrag(state, scope);
+  return new ResizeDrag(state, startsOf(features));
 }
 
 // === Rotate operation ===
@@ -113,39 +92,24 @@ export function startResizeDrag(
 export class RotateDrag implements DragOperation {
   readonly type = 'rotate' as const;
 
-  constructor(private readonly state: RotateState) {}
+  constructor(
+    private readonly center: [number, number],
+    private readonly startLngLat: { lng: number; lat: number },
+    private readonly starts: ReadonlyMap<string, TransformStart>,
+  ) {}
 
   update(event: DragNormalizedEvent, store: DragStore, writes: IntermediateWrites): void {
-    const rotateResults = computeRotation(this.state, event.lngLat, selectedFeaturesOf(store));
-
-    for (const [id, result] of rotateResults) {
-      const feature = store.getFeature(id);
-      if (feature) {
-        const updates: Partial<Feature> = {
-          geometry: geometryFromCoordinates(feature.type, result.coordinates),
-        };
-
-        // Update the rotation property when there is one (Text, Image, Note, etc.)
-        if (result.rotation !== undefined) {
-          updates.properties = {
-            ...feature.properties,
-            ...drawProperties({ rotation: result.rotation }),
-          };
-        }
-
-        writes.write(store, id, updates);
-      }
-    }
+    const edit = rotateEditOf(this.center, this.startLngLat, event.lngLat);
+    writeEdit(edit, this.starts, store, writes);
 
     // Update the rotation angle (for drawing the bbox during the rotation)
-    const currentAngle = getRotationDelta(this.state, event.lngLat);
     const currentDragState = store.getDragState();
     if (currentDragState?.rotateInfo) {
       store.setDragState({
         ...currentDragState,
         rotateInfo: {
           ...currentDragState.rotateInfo,
-          currentAngle,
+          currentAngle: (edit.angleDegrees * Math.PI) / 180,
         },
       });
     }
@@ -162,9 +126,8 @@ export function startRotateDrag(
   store: DragStore,
   scope: DragScope,
 ): RotateDrag {
-  const drag = new RotateDrag(
-    startRotation(dragStartLngLat(event), bbox, features, scope?.extensions),
-  );
+  const center = rotationCenterOf(bbox, features);
+  const drag = new RotateDrag(center, dragStartLngLat(event), startsOf(features));
 
   // On a multiple selection, also save the initialBbox of each feature
   let initialFeatureBboxes: Map<string, BoundingBoxCoords> | undefined;
@@ -191,6 +154,7 @@ export function startRotateDrag(
       },
       initialFeatureBboxes,
       currentAngle: 0,
+      center,
     },
   });
   return drag;

@@ -5,7 +5,7 @@
  * The registry of the Selection UI extension points
  *
  * A mechanism for the custom feature types of extension implementations to provide their own
- * boundingBox computation / resize handles / resize strategy / point frame extent.
+ * boundingBox computation / resize handles / point frame extent.
  *
  * One registry belongs to one draw instance (it is created by its engine and handed to the
  * CustomLayer, the modes and the extension host). Two draw instances on the same page
@@ -23,8 +23,6 @@ import type {
   PointFrameExtent,
   PointFrameExtentProvider,
   PointFrameOutlineProvider,
-  ResizeStrategy,
-  TypeResizeCalculator,
 } from './types.js';
 
 /**
@@ -58,16 +56,6 @@ export interface SelectionExtensionRegistry {
   ): () => void;
   /** Returns the additional resize handles calculator of a type, or `undefined` */
   getAdditionalResizeHandlesCalculator(type: string): AdditionalResizeHandlesCalculator | undefined;
-
-  /** Registers how a feature type is resized, replacing the built-in computation */
-  registerCustomResize(type: string, calculator: TypeResizeCalculator): () => void;
-  /** Returns the custom resize calculator of a type, or `undefined` */
-  getCustomResizeCalculator(type: string): TypeResizeCalculator | undefined;
-
-  /** Registers whether a feature type resizes by its coordinates or by its scale */
-  registerResizeStrategy(type: string, strategy: ResizeStrategy): () => void;
-  /** Returns the resize strategy of a type, or `undefined` */
-  getResizeStrategy(type: string): ResizeStrategy | undefined;
 
   /** Registers the size of the selection frame of a point-like feature type */
   registerPointFrameExtent(type: string, provider: PointFrameExtentProvider): () => void;
@@ -127,8 +115,6 @@ export function createSelectionExtensionRegistry(
 ): SelectionExtensionRegistry {
   const boundingBoxes = new Map<string, CustomBoundingBoxCalculator>();
   const additionalHandles = new Map<string, AdditionalResizeHandlesCalculator>();
-  const customResizes = new Map<string, TypeResizeCalculator>();
-  const resizeStrategies = new Map<string, ResizeStrategy>();
   const pointFrameExtents = new Map<string, PointFrameExtentProvider>();
   const pointFrameOutlines = new Map<string, PointFrameOutlineProvider>();
   let tileSize = DEFAULT_REGISTRY_TILE_SIZE;
@@ -147,12 +133,6 @@ export function createSelectionExtensionRegistry(
     registerAdditionalResizeHandles: (type, calculator) =>
       registerIn(additionalHandles, type, calculator),
     getAdditionalResizeHandlesCalculator: (type) => additionalHandles.get(type),
-
-    registerCustomResize: (type, calculator) => registerIn(customResizes, type, calculator),
-    getCustomResizeCalculator: (type) => customResizes.get(type),
-
-    registerResizeStrategy: (type, strategy) => registerIn(resizeStrategies, type, strategy),
-    getResizeStrategy: (type) => resizeStrategies.get(type),
 
     registerPointFrameExtent: (type, provider) => registerIn(pointFrameExtents, type, provider),
     getPointFrameExtentProvider: (type) => pointFrameExtents.get(type),
@@ -179,8 +159,6 @@ export function createSelectionExtensionRegistry(
     clear() {
       boundingBoxes.clear();
       additionalHandles.clear();
-      customResizes.clear();
-      resizeStrategies.clear();
       pointFrameExtents.clear();
       pointFrameOutlines.clear();
     },

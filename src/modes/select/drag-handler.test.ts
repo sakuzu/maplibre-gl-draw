@@ -26,6 +26,7 @@ import { DEFAULT_SNAP_OPTIONS } from '../../snapping/types.js';
 import { StoreSpatialIndex } from '../../store/spatial/store-spatial-index.js';
 import type { Store } from '../../store/store.js';
 import type { Coordinate, Feature, StoreChange, VertexRef } from '../../store/types.js';
+import { referenceTranslate } from '../../test-support/enu-reference.js';
 import { STORE_KINDS } from '../../test-utils.js';
 import type {
   AuxiliaryHandleHit,
@@ -158,6 +159,27 @@ describe.each(STORE_KINDS)('on %s', (_kind, createStore) => {
 
   function coordinatesOf(id: string): unknown {
     return featureCoordinates(store.getFeature(id));
+  }
+
+  /** The ring of a square moved from `from` to `to`, as the reference moves it */
+  function movedSquare(
+    minX: number,
+    minY: number,
+    from: [number, number],
+    to: [number, number],
+  ): number[][] {
+    const ring = (square('', minX, minY).geometry as { coordinates: number[][][] }).coordinates[0];
+    return (ring ?? []).map((position) => referenceTranslate(position, from, to));
+  }
+
+  /** The ring of a feature near the one expected (about 0.1 mm) */
+  function expectRingNear(id: string, expected: number[][]): void {
+    const ring = (coordinatesOf(id) as number[][][])[0] ?? [];
+    expect(ring.length).toBe(expected.length);
+    ring.forEach((position, i) => {
+      expect(Math.abs((position[0] as number) - (expected[i]?.[0] as number))).toBeLessThan(1e-9);
+      expect(Math.abs((position[1] as number) - (expected[i]?.[1] as number))).toBeLessThan(1e-9);
+    });
   }
 
   beforeEach(() => {
@@ -871,7 +893,7 @@ describe.each(STORE_KINDS)('on %s', (_kind, createStore) => {
     });
 
     it('a move drag also goes intermediate -> commit, with several features in 1 transaction', () => {
-      putFeature(square('f2', 100, 100));
+      putFeature(square('f2', 100, 50));
       watchFeatureBatches();
 
       startMoveDrag(['f1', 'f2'], [0, 0]);
@@ -885,8 +907,8 @@ describe.each(STORE_KINDS)('on %s', (_kind, createStore) => {
       const intermediates = batches.filter((c) => updatesOf(c).some((u) => u.isIntermediate));
       expect(intermediates).toHaveLength(1);
       expect(updatesOf(intermediates[0]).map((u) => u.id)).toEqual(['f1', 'f2']);
-      expect(coordinatesOf('f1')).toEqual(featureCoordinates(square('f1', 3, 4)));
-      expect(coordinatesOf('f2')).toEqual(featureCoordinates(square('f2', 103, 104)));
+      expectRingNear('f1', movedSquare(0, 0, [0, 0], [3, 4]));
+      expectRingNear('f2', movedSquare(100, 50, [0, 0], [3, 4]));
     });
 
     it('a radius drag goes intermediate -> commit, the committed value is the last radius', () => {
@@ -1022,7 +1044,7 @@ describe.each(STORE_KINDS)('on %s', (_kind, createStore) => {
 
       expect(() => handler.endDrag(context)).not.toThrow();
 
-      expect(coordinatesOf('f1')).toEqual(featureCoordinates(square('f1', 3, 4)));
+      expectRingNear('f1', movedSquare(0, 0, [0, 0], [3, 4]));
       expect(store.getFeature('f2')).toBeUndefined();
       expectDragCleanedUp();
     });
@@ -1574,7 +1596,7 @@ describe.each(STORE_KINDS)('on %s', (_kind, createStore) => {
         featureIds: ['f1'],
         cancelled: false,
       });
-      expect(coordinatesOf('f1')).toEqual(featureCoordinates(square('f1', 3, 4)));
+      expectRingNear('f1', movedSquare(0, 0, [0, 0], [3, 4]));
     });
   });
 });

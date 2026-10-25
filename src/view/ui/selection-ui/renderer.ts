@@ -152,7 +152,7 @@ export class SelectionUIRenderer {
     const rotateInfo = dragState.rotateInfo;
     if (!rotateInfo) return;
     const { initialBbox, initialFeatureBboxes, currentAngle } = rotateInfo;
-    const rotationCenter = initialBbox.center;
+    const rotationCenter = rotateInfo.center ?? initialBbox.center;
 
     if (features.length > 1 && initialFeatureBboxes) {
       for (const feature of features) {
@@ -168,7 +168,7 @@ export class SelectionUIRenderer {
       }
     }
 
-    const rotatedBbox = rotateBoundingBox(initialBbox, currentAngle);
+    const rotatedBbox = rotateBoundingBox(initialBbox, currentAngle, rotationCenter);
     const marginedBbox = this.#applyMargin(rotatedBbox, zoom);
     this.#strokeBoundingBox(marginedBbox, zoom);
   }

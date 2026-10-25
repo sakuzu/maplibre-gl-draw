@@ -9,9 +9,9 @@
  */
 
 import type { CustomRenderMethodInput, Map as MapLibreMap } from 'maplibre-gl';
+import { type EnuEdit, moveEnuPosition } from '../../geometry/enu-transforms.js';
 import { THINNING_VIEWPORT_MARGIN_PX } from '../../shared/config/selection.js';
 import { type CoordinateTransform, createCoordinateTransform } from '../../shared/math/index.js';
-import { type PlaneTransform, transformPosition } from '../../shared/math/plane-transform.js';
 import { supportsVertexEditing } from '../../shared/utils/coordinates.js';
 import { isGlobeProjection } from '../../shared/utils/map.js';
 import { summaryHasArea } from '../../store/bulk-selection.js';
@@ -106,7 +106,7 @@ export function renderSelectionUI(
   // While rotating, the rotated bbox is used for drawing the handles
   const rotateInfo = dragState?.rotateInfo;
   if (operation === 'rotate' && rotateInfo) {
-    bbox = rotateBoundingBox(rotateInfo.initialBbox, rotateInfo.currentAngle);
+    bbox = rotateBoundingBox(rotateInfo.initialBbox, rotateInfo.currentAngle, rotateInfo.center);
   }
 
   if (selectedFeatures.length === 1) {
@@ -375,7 +375,11 @@ function renderSingleSelectionHandles(
   // While rotating, the rotated bbox is used
   const rotateInfo = dragState?.rotateInfo;
   if (operation === 'rotate' && rotateInfo) {
-    singleBbox = rotateBoundingBox(rotateInfo.initialBbox, rotateInfo.currentAngle);
+    singleBbox = rotateBoundingBox(
+      rotateInfo.initialBbox,
+      rotateInfo.currentAngle,
+      rotateInfo.center,
+    );
   }
 
   // The special handle rendering for Circle
@@ -567,12 +571,12 @@ function renderMultiSelectionHandles(
 }
 
 /**
- * What the drag of features selected in bulk does to them now: the translation and the rotation
- * or resize of their moving set (null when they are not dragged)
+ * What the drag of features selected in bulk does to them now: the translation and the edit that
+ * moves, rotates or scales their moving set (null when they are not dragged)
  */
 export interface BulkMovement {
   readonly translation: readonly [number, number];
-  readonly transform: PlaneTransform | null;
+  readonly transform: EnuEdit | null;
 }
 
 /**
@@ -603,7 +607,11 @@ export function renderBulkSelectionUI(
   const operation = dragState?.operation ?? null;
   let frame = bulkFrame(bulk.bounds);
   if (operation === 'rotate' && dragState?.rotateInfo) {
-    frame = rotateBoundingBox(dragState.rotateInfo.initialBbox, dragState.rotateInfo.currentAngle);
+    frame = rotateBoundingBox(
+      dragState.rotateInfo.initialBbox,
+      dragState.rotateInfo.currentAngle,
+      dragState.rotateInfo.center,
+    );
   } else if (movement) {
     frame = movedFrame(frame, movement);
   }
@@ -617,14 +625,14 @@ export function renderBulkSelectionUI(
   }
 }
 
-/** A frame moved by the drag of the features it frames */
+/** A frame moved by the drag of the features it frames, as their edit moves them */
 function movedFrame(frame: BoundingBoxCoords, movement: BulkMovement): BoundingBoxCoords {
   const [dx, dy] = movement.translation;
   const move = (corner: Coordinate): Coordinate => {
     const moved = movement.transform
-      ? transformPosition(movement.transform, corner, false)
+      ? moveEnuPosition(movement.transform, corner, false)
       : [corner[0], corner[1]];
-    return [moved[0] + dx, moved[1] + dy];
+    return [(moved[0] as number) + dx, (moved[1] as number) + dy];
   };
   return {
     topLeft: move(frame.topLeft),

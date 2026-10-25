@@ -20,8 +20,8 @@ import type { IntermediateWrites } from './intermediate-writes.js';
 export type DragStore = EngineModeContext['store'];
 
 /**
- * The selection scope of the draw instance the drag belongs to (the resize and rotate
- * strategies of custom types, and the auxiliary handle providers). Null before a drag starts
+ * The selection scope of the draw instance the drag belongs to (the bounding boxes of custom
+ * types, the tile size of the map, and the auxiliary handle providers). Null before a drag starts
  */
 export type DragScope = EngineModeContext['selectionScope'] | null;
 

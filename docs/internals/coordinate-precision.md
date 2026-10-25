@@ -115,8 +115,9 @@ chooses the path:
 ```glsl
 vec4 project_position_to_clipspace_from_offset(
     vec2 lngLatOffset, mat4 viewProjectionMatrix) {
-    // Origin of a retained batch minus the screen center ((0,0) otherwise)
-    vec2 shifted = lngLatOffset + u_origin_shift;
+    // Origin of a retained batch minus the screen center ((0,0) otherwise,
+    // and for a row moved on the GPU, whose offset is from the center)
+    vec2 shifted = lngLatOffset + origin_shift();
     // Globe mode: maplibre's projection
     if (u_projection_transition > 0.0) {
         vec2 mercator = lngLatToMercator(shifted + u_center_lnglat);
@@ -206,6 +207,15 @@ visible region as the origin (`rebasedRetainedOrigin` in
 `src/view/shaders/retained-origin.ts`). Below about zoom 16 a chunk several
 degrees wide stays within the tolerance, and the origin chosen for the
 view is kept across rebuilds caused by data changes.
+
+Rows dragged in bulk are moved on the GPU by the edit of the drag, with the
+formulas the edit is written with (`src/view/renderers/row-motion.ts`): the
+differences from the place the screen center is moved from (R) are carried
+to the differences from where it goes, and the result is the offset of the
+position from the screen center, handed to the projection as it is (the
+shift is not added and taken away again). A chunk that holds such rows takes
+its origin near the region the view sees them from while they are dragged,
+so that the baked offsets are small where it matters.
 
 The center of linearization stays at the screen center, not at the chunk
 origin. The Mercator conversion of the offset path is a second-order

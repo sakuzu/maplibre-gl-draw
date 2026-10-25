@@ -1182,6 +1182,7 @@ void main() {
       run,
       this.rowStateUniforms as RowStateUniforms,
       rowState,
+      batch.origin,
       cameraUniforms ? cameraUniforms.centerLngLat : batch.origin,
     );
 

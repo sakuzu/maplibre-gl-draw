@@ -6,16 +6,16 @@
  *
  * - An Image has its rotation and its scale, and keeps its shape; a Circle has its radius, and
  *   keeps its shape; any feature that has a rotation or a scale has them
- * - The features that have a rotation are the ones the rotate drag turns by their rotation, and
- *   the ones that have a scale (other than a Circle) the ones the resize drag scales by their
- *   scale
+ * - The rotate drag writes the rotation of the features that have one, and the resize drag the
+ *   scale of the ones that have one and the radius of a Circle
  * - The values given the computation: the fields there, null for the ones not there yet
  */
 
 import { describe, expect, it } from 'vitest';
-import { startResize } from '../operations/resize.js';
-import { startRotation } from '../operations/rotate.js';
+import { transformedUpdates, transformStartOf } from '../operations/transform-features.js';
 import { DRAW_PROPERTY_KEYS } from '../shared/properties.js';
+import { DEFAULT_TRANSFORMS } from './feature-edits.js';
+import type { TransformEdit } from './store.js';
 import { transformRolesOf, transformValuesOf } from './transform-roles.js';
 import type { Feature } from './types.js';
 
@@ -90,25 +90,26 @@ describe('the roles of the fields of a feature', () => {
     expect(rolesOf(feature('LineString', { [RADIUS]: 1 }))).toEqual({ uniformScale: false });
   });
 
-  it('has a rotation for the features the rotate drag turns by their rotation', () => {
+  it('has the rotate drag write the rotation of the features with one, and the resize drag their size', () => {
+    const rotate: TransformEdit = { kind: 'rotate', center: [139.6, 35.5], angleDegrees: 30 };
+    const scale: TransformEdit = {
+      kind: 'scale',
+      center: [139.6, 35.5],
+      eastFactor: 2,
+      northFactor: 0.5,
+      sizeFactor: 1.5,
+    };
     for (const f of features()) {
-      const state = startRotation({ lng: 139.7, lat: 35.6 }, BOX, [f]);
-      expect(rolesOf(f).angleDegrees !== undefined, f.id).toBe(state.initialRotations.has(f.id));
-    }
-  });
-
-  it('has a scale for the features the resize drag scales by their scale, but a Circle', () => {
-    for (const f of features()) {
-      const state = startResize('resize-se', { lng: 139.7, lat: 35.6 }, BOX, [f]);
       const roles = rolesOf(f);
-      if (f.type === 'Circle') {
-        // A Circle scales its radius (the resize drag scales a scale it has instead)
-        expect(roles.size, f.id).toBe(RADIUS);
-        expect(roles.uniformScale, f.id).toBe(true);
-        continue;
-      }
-      expect(roles.size === SCALE, f.id).toBe(state.initialScales.has(f.id));
-      expect(roles.uniformScale, f.id).toBe(state.initialScales.has(f.id));
+      const start = transformStartOf(f);
+      const rotated = transformedUpdates(DEFAULT_TRANSFORMS, rotate, start, f)?.properties ?? {};
+      expect(typeof rotated[ROTATION] === 'number', f.id).toBe(roles.angleDegrees !== undefined);
+      const scaled = transformedUpdates(DEFAULT_TRANSFORMS, scale, start, f)?.properties ?? {};
+      const sizeKey = f.type === 'Circle' ? RADIUS : SCALE;
+      expect(
+        typeof scaled[sizeKey] === 'number' && scaled[sizeKey] !== f.properties[sizeKey],
+        f.id,
+      ).toBe(roles.size === sizeKey);
     }
   });
 
@@ -131,11 +132,3 @@ describe('the roles of the fields of a feature', () => {
     ).toEqual({ geometry: named.geometry, angleDegrees: null });
   });
 });
-
-const BOX = {
-  topLeft: [139.6, 35.7] as [number, number],
-  topRight: [139.8, 35.7] as [number, number],
-  bottomLeft: [139.6, 35.5] as [number, number],
-  bottomRight: [139.8, 35.5] as [number, number],
-  center: [139.7, 35.6] as [number, number],
-};

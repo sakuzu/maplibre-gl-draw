@@ -1,31 +1,35 @@
 // SPDX-FileCopyrightText: 2026 SAKAIDA Atsushi
 // SPDX-License-Identifier: AGPL-3.0-only
 
-import { describe, expect, it } from 'vitest';
-import type { Coordinate, Feature } from '../store/types.js';
-import type { BoundingBoxCoords } from '../view/ui/selection-ui/index.js';
-import { createSelectionExtensionRegistry } from '../view/ui/selection-ui/index.js';
-import { computeRotation, getRotationDelta, startRotation } from './rotate.js';
-
 /**
- * The latitude whose Mercator y equals a distance given in degrees of longitude
+ * The rotation of a rotate drag as an edit, and what the drag writes over its features
  *
- * The rotation happens in Web Mercator, so a point rotated from the east onto the meridian of
- * the center lands at the latitude whose Mercator y matches its former longitude offset.
+ * - The angle is the one the pointer turned around the center in the east, north and up frame of
+ *   the center: a quarter of a turn counterclockwise is 90, the other way -90, within (-180, 180];
+ *   the pointer on the center is 0
+ * - The center: the one of the frame, or the position of an only feature that turns by its
+ *   rotation and is a point
+ * - The positions are rotated as the reference rotates them (computed apart, in float64), at any
+ *   latitude and size, the parts of the Multi geometries kept; a pole gives no NaN
+ * - An image alone keeps its position, and its rotation takes the angle within [0, 360); with
+ *   another feature it turns around the center of the frame
+ * - A rotation by 0 leaves the positions as they were
  */
-function latAtMercatorDegrees(degrees: number): number {
-  const y = (degrees * Math.PI) / 180;
-  return ((2 * Math.atan(Math.exp(y)) - Math.PI / 2) * 180) / Math.PI;
-}
 
-/** The Mercator y of a latitude, in degrees of longitude */
-function mercatorDegrees(lat: number): number {
-  return (Math.log(Math.tan(Math.PI / 4 + (lat * Math.PI) / 360)) * 180) / Math.PI;
-}
+import type { LineString, MultiPolygon, Point, Polygon } from 'geojson';
+import { describe, expect, it } from 'vitest';
+import { DRAW_PROPERTY_KEYS } from '../shared/properties.js';
+import { DEFAULT_TRANSFORMS } from '../store/feature-edits.js';
+import type { Coordinate, Feature } from '../store/types.js';
+import { referenceEnuOffset, referenceRotate } from '../test-support/enu-reference.js';
+import type { BoundingBoxCoords } from '../view/ui/selection-ui/index.js';
+import { rotateEditOf, rotationAngleOf, rotationCenterOf } from './rotate.js';
+import { transformedUpdates, transformStartOf } from './transform-features.js';
 
-/**
- * Creates a feature for the tests with the minimum set of fields
- */
+/** About 0.1 mm, in degrees */
+const TOLERANCE = 1e-9;
+const ROTATION = DRAW_PROPERTY_KEYS.rotation;
+
 function createFeature(
   overrides: Partial<Feature> & { id: string; type: string; geometry: Feature['geometry'] },
 ): Feature {
@@ -39,619 +43,261 @@ function createFeature(
   } as Feature;
 }
 
-/**
- * Creates BoundingBoxCoords for the tests
- */
-function createBBox(center: Coordinate): BoundingBoxCoords {
+function createBBox(center: Coordinate, half = 1): BoundingBoxCoords {
   return {
-    topLeft: [center[0] - 1, center[1] + 1],
-    topRight: [center[0] + 1, center[1] + 1],
-    bottomRight: [center[0] + 1, center[1] - 1],
-    bottomLeft: [center[0] - 1, center[1] - 1],
+    topLeft: [center[0] - half, center[1] + half],
+    topRight: [center[0] + half, center[1] + half],
+    bottomRight: [center[0] + half, center[1] - half],
+    bottomLeft: [center[0] - half, center[1] - half],
     center,
   };
 }
 
-describe('startRotation', () => {
-  it('creates a state with the correct center, startAngle, initialCoordinates and initialRotations', () => {
-    const center: Coordinate = [0, 0];
-    const bbox = createBBox(center);
-    const startLngLat = { lng: 1, lat: 0 };
+/** The positions of a feature rotated by a drag from `start` to `current` around `center` */
+function rotated(
+  feature: Feature,
+  center: [number, number],
+  start: { lng: number; lat: number },
+  current: { lng: number; lat: number },
+): Partial<Feature> {
+  const edit = rotateEditOf(center, start, current);
+  const updates = transformedUpdates(DEFAULT_TRANSFORMS, edit, transformStartOf(feature), feature);
+  if (!updates) throw new Error('the edit was not taken');
+  return updates;
+}
 
-    const feature = createFeature({
-      id: 'f1',
-      type: 'LineString',
-      geometry: {
-        type: 'LineString',
-        coordinates: [
-          [1, 0],
-          [2, 0],
-        ] as Coordinate[],
-      },
-    });
+function expectNear(actual: readonly number[], expected: readonly number[]): void {
+  expect(Math.abs((actual[0] as number) - (expected[0] as number))).toBeLessThan(TOLERANCE);
+  expect(Math.abs((actual[1] as number) - (expected[1] as number))).toBeLessThan(TOLERANCE);
+}
 
-    const state = startRotation(startLngLat, bbox, [feature]);
+describe('the angle of a rotate drag', () => {
+  const center: [number, number] = [139.7, 35.68];
 
-    expect(state.center).toEqual(center);
-    expect(state.startLngLat).toEqual(startLngLat);
-    // center=[0,0], point={lng:1, lat:0} => dx=1*cos(0)=1, dy=0 => atan2(0,1)=0
-    expect(state.startAngle).toBeCloseTo(0);
-    expect(state.initialCoordinates.get('f1')).toEqual([
-      [1, 0],
-      [2, 0],
-    ]);
-    // A LineString has no rotation property, so initialRotations is empty
-    expect(state.initialRotations.size).toBe(0);
+  it('is a quarter of a turn when the pointer goes from the east to the north', () => {
+    const angle = rotationAngleOf(center, { lng: 139.71, lat: 35.68 }, { lng: 139.7, lat: 35.69 });
+    expect(Math.abs(angle - 90)).toBeLessThan(0.01);
   });
 
-  it('stores the initial rotation angle for a feature that has a rotation property', () => {
-    const center: Coordinate = [0, 0];
-    const bbox = createBBox(center);
-    const startLngLat = { lng: 1, lat: 0 };
-
-    const imageFeature = createFeature({
-      id: 'img1',
-      type: 'Image',
-      geometry: { type: 'Point', coordinates: [0, 0] as Coordinate },
-      properties: {
-        'maplibre-gl-draw:imageFileId': 'file1',
-        'maplibre-gl-draw:imageWidth': 100,
-        'maplibre-gl-draw:imageHeight': 100,
-        'maplibre-gl-draw:createdZoom': 10,
-        'maplibre-gl-draw:rotation': 45,
-      },
-    });
-
-    const state = startRotation(startLngLat, bbox, [imageFeature]);
-
-    expect(state.initialRotations.get('img1')).toBe(45);
+  it('is negative the other way, and within (-180, 180]', () => {
+    const back = rotationAngleOf(center, { lng: 139.71, lat: 35.68 }, { lng: 139.7, lat: 35.67 });
+    expect(Math.abs(back + 90)).toBeLessThan(0.01);
+    const far = rotationAngleOf(center, { lng: 139.7, lat: 35.69 }, { lng: 139.69, lat: 35.679 });
+    expect(far).toBeGreaterThan(-180);
+    expect(far).toBeLessThanOrEqual(180);
+    // From the north to nearly the west, past it: counterclockwise by a little more than 90
+    const [se, sn] = referenceEnuOffset(center, [139.7, 35.69]);
+    const [ce, cn] = referenceEnuOffset(center, [139.69, 35.679]);
+    const expected = ((Math.atan2(cn, ce) - Math.atan2(sn, se)) * 180) / Math.PI + 360;
+    expect(Math.abs(far - expected)).toBeLessThan(1e-9);
+    expect(far).toBeGreaterThan(90);
+    const across = rotationAngleOf(
+      center,
+      { lng: 139.71, lat: 35.6801 },
+      { lng: 139.69, lat: 35.6801 },
+    );
+    expect(across).toBeGreaterThan(170);
+    expect(across).toBeLessThanOrEqual(180);
   });
 
-  it('stores an initial rotation of 0 for an Image feature whose rotation is not set', () => {
-    const center: Coordinate = [0, 0];
-    const bbox = createBBox(center);
-    const startLngLat = { lng: 1, lat: 0 };
-
-    const imageFeature = createFeature({
-      id: 'img1',
-      type: 'Image',
-      geometry: { type: 'Point', coordinates: [0, 0] as Coordinate },
-      properties: {
-        'maplibre-gl-draw:imageFileId': 'file1',
-        'maplibre-gl-draw:imageWidth': 100,
-        'maplibre-gl-draw:imageHeight': 100,
-        'maplibre-gl-draw:createdZoom': 10,
-      },
-    });
-
-    const state = startRotation(startLngLat, bbox, [imageFeature]);
-
-    expect(state.initialRotations.get('img1')).toBe(0);
-  });
-
-  it('creates a deep copy of the coordinates (it holds no reference to the original coordinates)', () => {
-    const center: Coordinate = [0, 0];
-    const bbox = createBBox(center);
-    const coords: Coordinate[] = [
-      [1, 0],
-      [2, 0],
-    ];
-    const feature = createFeature({
-      id: 'f1',
-      type: 'LineString',
-      geometry: { type: 'LineString', coordinates: coords },
-    });
-
-    const state = startRotation({ lng: 1, lat: 0 }, bbox, [feature]);
-
-    // Changing the original coordinates has no effect on initialCoordinates
-    coords[0][0] = 999;
-    const stored = state.initialCoordinates.get('f1') as Coordinate[];
-    expect(stored[0][0]).toBe(1);
+  it('is 0 for the same position, and for a pointer on the center', () => {
+    expect(rotationAngleOf(center, { lng: 139.71, lat: 35.7 }, { lng: 139.71, lat: 35.7 })).toBe(0);
+    expect(rotationAngleOf(center, { lng: 139.7, lat: 35.68 }, { lng: 139.71, lat: 35.7 })).toBe(0);
   });
 });
 
-describe('computeRotation', () => {
-  it('LineString: rotates the coordinates around the center', () => {
-    // Tested on the equator
-    const center: Coordinate = [0, 0];
-    const bbox = createBBox(center);
-    const startLngLat = { lng: 1, lat: 0 };
+describe('the center of a rotate drag', () => {
+  const bbox = createBBox([139.7, 35.7], 0.1);
 
-    const feature = createFeature({
-      id: 'f1',
-      type: 'LineString',
-      geometry: {
-        type: 'LineString',
-        coordinates: [
-          [1, 0],
-          [2, 0],
-        ] as Coordinate[],
-      },
-    });
-
-    const state = startRotation(startLngLat, bbox, [feature]);
-
-    // A 90 degree rotation: startAngle=0, so currentAngle is set to become pi/2
-    // center=[0,0], currentLngLat={lng:0, lat:1} => dx=0, dy=1 => atan2(1,0)=π/2
-    const currentLngLat = { lng: 0, lat: 1 };
-    const result = computeRotation(state, currentLngLat, [feature]);
-
-    const rotated = result.get('f1');
-    expect(rotated).toBeDefined();
-    const coords = rotated!.coordinates as Coordinate[];
-
-    // [1,0] rotated by 90 degrees => [0, about 1] (1 degree of Mercator y)
-    expect(coords[0][0]).toBeCloseTo(0, 9);
-    expect(coords[0][1]).toBeCloseTo(latAtMercatorDegrees(1), 9);
-
-    // [2,0] rotated by 90 degrees => [0, about 2]
-    expect(coords[1][0]).toBeCloseTo(0, 9);
-    expect(coords[1][1]).toBeCloseTo(latAtMercatorDegrees(2), 9);
-
-    // A LineString has no rotation property
-    expect(rotated!.rotation).toBeUndefined();
-  });
-
-  it('a single Image feature: the coordinates are not changed and only the rotation property is updated', () => {
-    const center: Coordinate = [0, 0];
-    const bbox = createBBox(center);
-    const startLngLat = { lng: 1, lat: 0 };
-
-    const imageFeature = createFeature({
-      id: 'img1',
+  it('is the position of an image alone', () => {
+    const image = createFeature({
+      id: 'image',
       type: 'Image',
-      geometry: { type: 'Point', coordinates: [5, 5] as Coordinate },
-      properties: {
-        'maplibre-gl-draw:imageFileId': 'file1',
-        'maplibre-gl-draw:imageWidth': 100,
-        'maplibre-gl-draw:imageHeight': 100,
-        'maplibre-gl-draw:createdZoom': 10,
-        'maplibre-gl-draw:rotation': 10,
-      },
+      geometry: { type: 'Point', coordinates: [139.65, 35.72] },
     });
-
-    const state = startRotation(startLngLat, bbox, [imageFeature]);
-
-    // A 90 degree rotation
-    const currentLngLat = { lng: 0, lat: 1 };
-    const result = computeRotation(state, currentLngLat, [imageFeature]);
-
-    const rotated = result.get('img1');
-    expect(rotated).toBeDefined();
-
-    // The coordinates of an Image in a single selection do not change
-    expect(rotated!.coordinates).toEqual([5, 5]);
-
-    // rotation = initialRotation(10) + deltaAngleDeg(90) = 100
-    expect(rotated!.rotation).toBeCloseTo(100, 5);
+    expect(rotationCenterOf(bbox, [image])).toEqual([139.65, 35.72]);
   });
 
-  it('several features (an Image and a LineString): both the coordinates and the rotation of the Image are changed', () => {
-    const center: Coordinate = [0, 0];
-    const bbox = createBBox(center);
-    const startLngLat = { lng: 1, lat: 0 };
-
-    const imageFeature = createFeature({
-      id: 'img1',
+  it('is the center of the frame for several features, or a feature that does not turn by its rotation', () => {
+    const image = createFeature({
+      id: 'image',
       type: 'Image',
-      geometry: { type: 'Point', coordinates: [1, 0] as Coordinate },
-      properties: {
-        'maplibre-gl-draw:imageFileId': 'file1',
-        'maplibre-gl-draw:imageWidth': 100,
-        'maplibre-gl-draw:imageHeight': 100,
-        'maplibre-gl-draw:createdZoom': 10,
-        'maplibre-gl-draw:rotation': 0,
-      },
+      geometry: { type: 'Point', coordinates: [139.65, 35.72] },
     });
-
-    const lineFeature = createFeature({
-      id: 'line1',
+    const line = createFeature({
+      id: 'line',
       type: 'LineString',
       geometry: {
         type: 'LineString',
         coordinates: [
-          [2, 0],
-          [3, 0],
-        ] as Coordinate[],
+          [139.6, 35.6],
+          [139.8, 35.8],
+        ],
       },
     });
-
-    const state = startRotation(startLngLat, bbox, [imageFeature, lineFeature]);
-
-    // A 90 degree rotation
-    const currentLngLat = { lng: 0, lat: 1 };
-    const result = computeRotation(state, currentLngLat, [imageFeature, lineFeature]);
-
-    // The Image feature: it is a multiple selection, so the coordinates rotate too
-    const imgResult = result.get('img1');
-    expect(imgResult).toBeDefined();
-    const imgCoords = imgResult!.coordinates as Coordinate;
-    expect(imgCoords[0]).toBeCloseTo(0, 9);
-    expect(imgCoords[1]).toBeCloseTo(latAtMercatorDegrees(1), 9);
-    expect(imgResult!.rotation).toBeCloseTo(90, 5);
-
-    // The LineString feature: the coordinates rotate
-    const lineResult = result.get('line1');
-    expect(lineResult).toBeDefined();
-    const lineCoords = lineResult!.coordinates as Coordinate[];
-    expect(lineCoords[0][0]).toBeCloseTo(0, 9);
-    expect(lineCoords[0][1]).toBeCloseTo(latAtMercatorDegrees(2), 9);
-    expect(lineResult!.rotation).toBeUndefined();
+    expect(rotationCenterOf(bbox, [image, line])).toEqual([139.7, 35.7]);
+    expect(rotationCenterOf(bbox, [line])).toEqual([139.7, 35.7]);
   });
+});
 
-  it('a 0 degree rotation: the coordinates do not change', () => {
-    const center: Coordinate = [0, 0];
-    const bbox = createBBox(center);
-    const startLngLat = { lng: 1, lat: 0 };
-
-    const feature = createFeature({
-      id: 'f1',
+describe('what a rotate drag writes', () => {
+  it('rotates a LineString as the reference does', () => {
+    const center: [number, number] = [139.7, 35.68];
+    const coordinates = [
+      [139.6, 35.6],
+      [139.8, 35.65],
+      [139.75, 35.78],
+    ];
+    const line = createFeature({
+      id: 'line',
       type: 'LineString',
-      geometry: {
-        type: 'LineString',
-        coordinates: [
-          [1, 2],
-          [3, 4],
-        ] as Coordinate[],
-      },
+      geometry: { type: 'LineString', coordinates },
     });
-
-    const state = startRotation(startLngLat, bbox, [feature]);
-
-    // The same position as the start => deltaAngle=0
-    const currentLngLat = { lng: 1, lat: 0 };
-    const result = computeRotation(state, currentLngLat, [feature]);
-
-    const rotated = result.get('f1');
-    expect(rotated).toBeDefined();
-    const coords = rotated!.coordinates as Coordinate[];
-    expect(coords[0][0]).toBeCloseTo(1, 5);
-    expect(coords[0][1]).toBeCloseTo(2, 5);
-    expect(coords[1][0]).toBeCloseTo(3, 5);
-    expect(coords[1][1]).toBeCloseTo(4, 5);
+    const start = { lng: 139.71, lat: 35.68 };
+    const current = { lng: 139.7, lat: 35.69 };
+    const angle = rotationAngleOf(center, start, current);
+    const moved = (rotated(line, center, start, current).geometry as LineString).coordinates;
+    coordinates.forEach((position, i) => {
+      expectNear(moved[i] as number[], referenceRotate(position, center, angle));
+    });
   });
 
-  it('rotates a Polygon (a nested array of coordinates) correctly', () => {
-    const center: Coordinate = [0, 0];
-    const bbox = createBBox(center);
-    const startLngLat = { lng: 1, lat: 0 };
-
-    const feature = createFeature({
-      id: 'poly1',
+  it('rotates a large feature far from the equator as the reference does', () => {
+    const center: [number, number] = [137, 38];
+    const coordinates = [
+      [129, 31],
+      [145, 31],
+      [145, 45],
+      [129, 45],
+      [129, 31],
+    ];
+    const polygon = createFeature({
+      id: 'polygon',
       type: 'Polygon',
-      geometry: {
-        type: 'Polygon',
-        coordinates: [
-          [
-            [1, 0],
-            [0, 1],
-            [-1, 0],
-          ],
-        ] as Coordinate[][],
-      },
+      geometry: { type: 'Polygon', coordinates: [coordinates] },
     });
-
-    const state = startRotation(startLngLat, bbox, [feature]);
-
-    // A 90 degree rotation
-    const currentLngLat = { lng: 0, lat: 1 };
-    const result = computeRotation(state, currentLngLat, [feature]);
-
-    const rotated = result.get('poly1');
-    expect(rotated).toBeDefined();
-    const coords = rotated!.coordinates as Coordinate[][];
-    // [1,0] => [0, about 1]
-    expect(coords[0][0][0]).toBeCloseTo(0, 9);
-    expect(coords[0][0][1]).toBeCloseTo(latAtMercatorDegrees(1), 9);
-    // [0,1] => [about -1, 0]
-    expect(coords[0][1][0]).toBeCloseTo(-mercatorDegrees(1), 9);
-    expect(coords[0][1][1]).toBeCloseTo(0, 9);
-    // [-1,0] => [0, about -1]
-    expect(coords[0][2][0]).toBeCloseTo(0, 9);
-    expect(coords[0][2][1]).toBeCloseTo(latAtMercatorDegrees(-1), 9);
+    const start = { lng: 140, lat: 38 };
+    const current = { lng: 139.5, lat: 40 };
+    const angle = rotationAngleOf(center, start, current);
+    const moved = (rotated(polygon, center, start, current).geometry as Polygon).coordinates[0];
+    coordinates.forEach((position, i) => {
+      expectNear(moved?.[i] as number[], referenceRotate(position, center, angle));
+    });
   });
 
-  it('rotates in Web Mercator at a non-zero latitude, as the map shows it', () => {
-    // Tested at a latitude of 45 degrees
-    const center: Coordinate = [0, 45];
-    const bbox = createBBox(center);
-
-    // startLngLat is set to the east of the center
-    const startLngLat = { lng: 1, lat: 45 };
-
-    const feature = createFeature({
-      id: 'f1',
-      type: 'LineString',
-      geometry: { type: 'LineString', coordinates: [[1, 45]] as Coordinate[] },
+  it('rotates every part and every ring of a MultiPolygon and keeps the nested structure', () => {
+    const center: [number, number] = [10, 50];
+    const parts = [
+      [
+        [
+          [9, 49],
+          [9.5, 49],
+          [9.5, 49.5],
+          [9, 49],
+        ],
+      ],
+      [
+        [
+          [10.5, 50.5],
+          [11, 50.5],
+          [11, 51],
+          [10.5, 50.5],
+        ],
+        [
+          [10.6, 50.6],
+          [10.8, 50.6],
+          [10.8, 50.8],
+          [10.6, 50.6],
+        ],
+      ],
+    ];
+    const multi = createFeature({
+      id: 'multi',
+      type: 'MultiPolygon',
+      geometry: { type: 'MultiPolygon', coordinates: parts },
     });
-
-    const state = startRotation(startLngLat, bbox, [feature]);
-    expect(state.startAngle).toBeCloseTo(0, 9);
-
-    // Due north of the center is a rotation of 90 degrees
-    const result = computeRotation(state, { lng: 0, lat: 46 }, [feature]);
-    const coords = result.get('f1')!.coordinates as Coordinate[];
-
-    // [1, 45] lands on the meridian of the center, 1 degree of Mercator y north of it
-    expect(coords[0][0]).toBeCloseTo(0, 9);
-    expect(coords[0][1]).toBeCloseTo(latAtMercatorDegrees(mercatorDegrees(45) + 1), 9);
+    const start = { lng: 10.5, lat: 50 };
+    const current = { lng: 10, lat: 50.5 };
+    const angle = rotationAngleOf(center, start, current);
+    const moved = (rotated(multi, center, start, current).geometry as MultiPolygon).coordinates;
+    expect(moved.length).toBe(2);
+    expect(moved[1]?.length).toBe(2);
+    parts.forEach((part, p) => {
+      part.forEach((ring, r) => {
+        ring.forEach((position, i) => {
+          expectNear(moved[p]?.[r]?.[i] as number[], referenceRotate(position, center, angle));
+        });
+      });
+    });
   });
 
-  it('keeps the shape of a large feature on the map', () => {
-    const center: Coordinate = [10, 60];
-    const bbox = createBBox(center);
-    const square = [
-      [5, 57],
-      [15, 57],
-      [15, 63],
-      [5, 63],
-    ] as Coordinate[];
-    const feature = createFeature({
-      id: 'sq',
+  it('keeps the position of an image alone and adds the angle to its rotation within [0, 360)', () => {
+    const image = createFeature({
+      id: 'image',
+      type: 'Image',
+      geometry: { type: 'Point', coordinates: [139.7, 35.68] },
+      properties: { [ROTATION]: 350 },
+    });
+    const center = rotationCenterOf(createBBox([139.7, 35.68], 0.01), [image]);
+    const updates = rotated(image, center, { lng: 139.71, lat: 35.68 }, { lng: 139.7, lat: 35.69 });
+    expect((updates.geometry as Point).coordinates).toEqual([139.7, 35.68]);
+    const rotation = updates.properties?.[ROTATION] as number;
+    expect(rotation).toBeGreaterThanOrEqual(0);
+    expect(Math.abs(rotation - 80)).toBeLessThan(0.01);
+  });
+
+  it('turns an image with another feature around the center of the frame', () => {
+    const center: [number, number] = [139.7, 35.68];
+    const image = createFeature({
+      id: 'image',
+      type: 'Image',
+      geometry: { type: 'Point', coordinates: [139.75, 35.7] },
+    });
+    const start = { lng: 139.71, lat: 35.68 };
+    const current = { lng: 139.7, lat: 35.69 };
+    const angle = rotationAngleOf(center, start, current);
+    const updates = rotated(image, center, start, current);
+    expectNear(
+      (updates.geometry as Point).coordinates,
+      referenceRotate([139.75, 35.7], center, angle),
+    );
+    expect(Math.abs((updates.properties?.[ROTATION] as number) - angle)).toBeLessThan(1e-12);
+  });
+
+  it('leaves the positions as they were for a rotation by 0', () => {
+    const coordinates = [
+      [139.6, 35.6],
+      [139.8, 35.8],
+    ];
+    const line = createFeature({
+      id: 'line',
       type: 'LineString',
-      geometry: { type: 'LineString', coordinates: square },
+      geometry: { type: 'LineString', coordinates },
     });
-
-    /** The side lengths and diagonals as the map shows them (in Mercator) */
-    const shape = (coords: Coordinate[]) => {
-      const plane = coords.map(([lng, lat]) => [lng, mercatorDegrees(lat)]);
-      const lengths: number[] = [];
-      for (let i = 0; i < plane.length; i++) {
-        for (let j = i + 1; j < plane.length; j++) {
-          lengths.push(Math.hypot(plane[i][0] - plane[j][0], plane[i][1] - plane[j][1]));
-        }
-      }
-      return lengths;
-    };
-
-    // A rotation of 60 degrees
-    const state = startRotation({ lng: 20, lat: 60 }, bbox, [feature]);
-    const cy = mercatorDegrees(60);
-    const target = {
-      lng: 10 + 10 * Math.cos(Math.PI / 3),
-      lat: latAtMercatorDegrees(cy + 10 * Math.sin(Math.PI / 3)),
-    };
-    const rotated = computeRotation(state, target, [feature]).get('sq')!
-      .coordinates as Coordinate[];
-
-    const before = shape(square);
-    const after = shape(rotated);
-    before.forEach((length, i) => {
-      expect(after[i]).toBeCloseTo(length, 9);
-    });
+    const at = { lng: 139.71, lat: 35.7 };
+    expect((rotated(line, [139.7, 35.7], at, at).geometry as LineString).coordinates).toEqual(
+      coordinates,
+    );
   });
 
   it('rotates a feature at a pole without producing NaN', () => {
-    const center: Coordinate = [0, 89];
-    const bbox = createBBox(center);
-    const feature = createFeature({
-      id: 'p',
+    const line = createFeature({
+      id: 'pole',
       type: 'LineString',
       geometry: {
         type: 'LineString',
         coordinates: [
-          [1, 90],
-          [2, -90],
-        ] as Coordinate[],
+          [0, 90],
+          [10, 89],
+        ],
       },
     });
-    const state = startRotation({ lng: 1, lat: 90 }, bbox, [feature]);
-    const result = computeRotation(state, { lng: -1, lat: 90 }, [feature]);
-    for (const [lng, lat] of result.get('p')!.coordinates as Coordinate[]) {
-      expect(Number.isFinite(lng)).toBe(true);
-      expect(Number.isFinite(lat)).toBe(true);
+    const moved = (
+      rotated(line, [5, 89.5], { lng: 6, lat: 89.5 }, { lng: 5, lat: 89.6 }).geometry as LineString
+    ).coordinates;
+    for (const position of moved) {
+      expect(Number.isFinite(position[0])).toBe(true);
+      expect(Number.isFinite(position[1])).toBe(true);
     }
-  });
-
-  it('skips a feature that is not in initialCoordinates', () => {
-    const center: Coordinate = [0, 0];
-    const bbox = createBBox(center);
-    const startLngLat = { lng: 1, lat: 0 };
-
-    const feature1 = createFeature({
-      id: 'f1',
-      type: 'LineString',
-      geometry: { type: 'LineString', coordinates: [[1, 0]] as Coordinate[] },
-    });
-
-    const state = startRotation(startLngLat, bbox, [feature1]);
-
-    // Add a feature that is not contained in the state
-    const feature2 = createFeature({
-      id: 'f2',
-      type: 'LineString',
-      geometry: { type: 'LineString', coordinates: [[2, 0]] as Coordinate[] },
-    });
-
-    const result = computeRotation(state, { lng: 0, lat: 1 }, [feature1, feature2]);
-
-    expect(result.has('f1')).toBe(true);
-    expect(result.has('f2')).toBe(false);
-  });
-});
-
-describe('getRotationDelta', () => {
-  it('returns the difference between the angle at the start and the current angle in radians', () => {
-    const center: Coordinate = [0, 0];
-    const bbox = createBBox(center);
-    const startLngLat = { lng: 1, lat: 0 };
-
-    const feature = createFeature({
-      id: 'f1',
-      type: 'LineString',
-      geometry: { type: 'LineString', coordinates: [[1, 0]] as Coordinate[] },
-    });
-
-    const state = startRotation(startLngLat, bbox, [feature]);
-
-    // center=[0,0] => startAngle = atan2(0, 1) = 0
-    // currentAngle = atan2(1, 0) = π/2
-    const delta = getRotationDelta(state, { lng: 0, lat: 1 });
-    expect(delta).toBeCloseTo(Math.PI / 2, 5);
-  });
-
-  it('returns a negative value for a rotation in the reverse direction', () => {
-    const center: Coordinate = [0, 0];
-    const bbox = createBBox(center);
-    const startLngLat = { lng: 0, lat: 1 };
-
-    const feature = createFeature({
-      id: 'f1',
-      type: 'LineString',
-      geometry: { type: 'LineString', coordinates: [[1, 0]] as Coordinate[] },
-    });
-
-    const state = startRotation(startLngLat, bbox, [feature]);
-
-    // startAngle = atan2(1, 0) = π/2
-    // currentAngle = atan2(0, 1) = 0
-    // delta = 0 - π/2 = -π/2
-    const delta = getRotationDelta(state, { lng: 1, lat: 0 });
-    expect(delta).toBeCloseTo(-Math.PI / 2, 5);
-  });
-
-  it('returns 0 for the same position', () => {
-    const center: Coordinate = [0, 0];
-    const bbox = createBBox(center);
-    const startLngLat = { lng: 1, lat: 1 };
-
-    const feature = createFeature({
-      id: 'f1',
-      type: 'LineString',
-      geometry: { type: 'LineString', coordinates: [[1, 0]] as Coordinate[] },
-    });
-
-    const state = startRotation(startLngLat, bbox, [feature]);
-
-    const delta = getRotationDelta(state, { lng: 1, lat: 1 });
-    expect(delta).toBeCloseTo(0, 5);
-  });
-});
-
-describe('custom types registered with the scale strategy', () => {
-  it('rotate through the rotation property of the draw instance that registered them', () => {
-    const extensions = createSelectionExtensionRegistry();
-    extensions.registerResizeStrategy('CustomWidget', 'scale');
-
-    const center: Coordinate = [0, 0];
-    const bbox = createBBox(center);
-    const startLngLat = { lng: 1, lat: 0 };
-
-    // No rotation property yet: the registration alone makes it rotate by property
-    const customFeature = createFeature({
-      id: 'cw1',
-      type: 'CustomWidget',
-      geometry: { type: 'Point', coordinates: [1, 0] as Coordinate },
-      properties: {},
-    });
-
-    const state = startRotation(startLngLat, bbox, [customFeature], extensions);
-    expect(state.initialRotations.get('cw1')).toBe(0);
-
-    // For a single selection the coordinates are not changed and only rotation is updated
-    const currentLngLat = { lng: 0, lat: 1 };
-    const result = computeRotation(state, currentLngLat, [customFeature]);
-    const rotated = result.get('cw1');
-    expect(rotated).toBeDefined();
-    expect(rotated!.coordinates).toEqual([1, 0]);
-    expect(rotated!.rotation).toBeCloseTo(90, 5);
-  });
-
-  it('do not rotate by property in another draw instance that did not register them', () => {
-    const registering = createSelectionExtensionRegistry();
-    registering.registerResizeStrategy('CustomWidget', 'scale');
-    const other = createSelectionExtensionRegistry();
-
-    const feature = createFeature({
-      id: 'cw2',
-      type: 'CustomWidget',
-      geometry: { type: 'Point', coordinates: [1, 0] as Coordinate },
-      properties: {},
-    });
-    const state = startRotation({ lng: 1, lat: 0 }, createBBox([0, 0]), [feature], other);
-
-    expect(state.initialRotations.has('cw2')).toBe(false);
-  });
-
-  it('also treats an unregistered type with rotation in properties as supporting rotation', () => {
-    const center: Coordinate = [0, 0];
-    const bbox = createBBox(center);
-    const startLngLat = { lng: 1, lat: 0 };
-
-    const feature = createFeature({
-      id: 'unregistered1',
-      type: 'UnregisteredType',
-      geometry: { type: 'Point', coordinates: [1, 0] as Coordinate },
-      properties: { 'maplibre-gl-draw:rotation': 15 },
-    });
-
-    const state = startRotation(startLngLat, bbox, [feature]);
-
-    expect(state.initialRotations.get('unregistered1')).toBe(15);
-  });
-
-  it('treats an unregistered type without rotation in properties as not supporting rotation', () => {
-    const center: Coordinate = [0, 0];
-    const bbox = createBBox(center);
-    const startLngLat = { lng: 1, lat: 0 };
-
-    const feature = createFeature({
-      id: 'plain1',
-      type: 'SomeOtherType',
-      geometry: { type: 'LineString', coordinates: [[1, 0]] as Coordinate[] },
-      properties: {},
-    });
-
-    const state = startRotation(startLngLat, bbox, [feature]);
-
-    expect(state.initialRotations.has('plain1')).toBe(false);
-  });
-});
-
-describe('computeRotation on the Multi variants (preservation of the part structure)', () => {
-  it('rotates every part and every ring of a MultiPolygon and keeps the nested structure', () => {
-    const center: Coordinate = [0, 0];
-    const bbox = createBBox(center);
-    // The start angle is 0 degrees and the current angle is 90 degrees -> a 90 degree
-    // counter-clockwise rotation
-    const startLngLat = { lng: 1, lat: 0 };
-
-    const feature = createFeature({
-      id: 'mpoly',
-      type: 'MultiPolygon',
-      geometry: {
-        type: 'MultiPolygon',
-        coordinates: [
-          [
-            [
-              [1, 0],
-              [2, 0],
-            ],
-          ],
-          [
-            [
-              [0, 1],
-              [0, 2],
-            ],
-          ],
-        ] as Coordinate[][][],
-      },
-    });
-
-    const state = startRotation(startLngLat, bbox, [feature]);
-    const result = computeRotation(state, { lng: 0, lat: 1 }, [feature]);
-    const coords = result.get('mpoly')?.coordinates as number[][][][];
-
-    // The nested structure (2 parts / 1 ring / 2 vertices) is kept
-    expect(coords).toHaveLength(2);
-    expect(coords[0]).toHaveLength(1);
-    expect(coords[0][0]).toHaveLength(2);
-
-    // A 90 degree rotation takes [1,0] near [0,1], and [0,1] near [-1,0] (in Mercator)
-    expect(coords[0][0][0][0]).toBeCloseTo(0, 9);
-    expect(coords[0][0][0][1]).toBeCloseTo(latAtMercatorDegrees(1), 9);
-    expect(coords[1][0][0][0]).toBeCloseTo(-mercatorDegrees(1), 9);
-    expect(coords[1][0][0][1]).toBeCloseTo(0, 9);
   });
 });

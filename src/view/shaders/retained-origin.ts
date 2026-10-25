@@ -17,6 +17,12 @@
  * `RETAINED_ORIGIN_TOLERANCE_PX`, the batch is built again with the center of that region as the
  * origin. At the zoom levels where the data spreads over a large part of the screen the error is
  * far below a pixel, so this only happens at high zoom, where the region on screen is small.
+ *
+ * Rows moved on the GPU by the edit of a drag are seen on the screen far from where they are: the
+ * region the view sees them from (the view moved back by the edit, `movedViews`) is on the screen
+ * for them. A batch that holds such rows takes its origin near that region while they are
+ * dragged (`view/renderers/row-motion.ts`): the rows dragged are the ones looked at, and a row of
+ * the batch that stays where it is may be far from it then.
  */
 
 import type { BoundingBox } from '../../store/types.js';
@@ -103,9 +109,19 @@ export function rebasedRetainedOrigin(
   extent: BoundingBox | null,
   view: BoundingBox | null,
   zoom: number,
+  movedViews?: readonly BoundingBox[],
 ): [number, number] | null {
   if (!extent) return null;
-  return rebasedOriginOf(origin, extent.minX, extent.minY, extent.maxX, extent.maxY, view, zoom);
+  return rebasedOriginOf(
+    origin,
+    extent.minX,
+    extent.minY,
+    extent.maxX,
+    extent.maxY,
+    view,
+    zoom,
+    movedViews,
+  );
 }
 
 /**
@@ -114,6 +130,8 @@ export function rebasedRetainedOrigin(
  * The drawing asks it of every chunk in view on every frame, so nothing is made unless a new
  * origin is proposed.
  *
+ * @param movedViews The regions the view sees the rows of the batch moved on the GPU from: the
+ *   parts of the extent in them are the region on screen, in place of the view, when there are
  * @internal
  */
 export function rebasedOriginOf(
@@ -124,12 +142,33 @@ export function rebasedOriginOf(
   extentMaxY: number,
   view: BoundingBox | null,
   zoom: number,
+  movedViews?: readonly BoundingBox[],
 ): [number, number] | null {
-  // The region on screen: the extent clipped to the view (the whole extent without a view)
-  const minX = view ? Math.max(extentMinX, view.minX) : extentMinX;
-  const minY = view ? Math.max(extentMinY, view.minY) : extentMinY;
-  const maxX = view ? Math.min(extentMaxX, view.maxX) : extentMaxX;
-  const maxY = view ? Math.min(extentMaxY, view.maxY) : extentMaxY;
+  // The region on screen: the parts of the extent the rows moved are seen from, or else the
+  // extent clipped to the view (the whole extent without a view)
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  if (movedViews) {
+    for (const moved of movedViews) {
+      const x0 = Math.max(extentMinX, moved.minX);
+      const y0 = Math.max(extentMinY, moved.minY);
+      const x1 = Math.min(extentMaxX, moved.maxX);
+      const y1 = Math.min(extentMaxY, moved.maxY);
+      if (!(x0 <= x1 && y0 <= y1)) continue;
+      minX = Math.min(minX, x0);
+      minY = Math.min(minY, y0);
+      maxX = Math.max(maxX, x1);
+      maxY = Math.max(maxY, y1);
+    }
+  }
+  if (!(minX <= maxX && minY <= maxY)) {
+    minX = view ? Math.max(extentMinX, view.minX) : extentMinX;
+    minY = view ? Math.max(extentMinY, view.minY) : extentMinY;
+    maxX = view ? Math.min(extentMaxX, view.maxX) : extentMaxX;
+    maxY = view ? Math.min(extentMaxY, view.maxY) : extentMaxY;
+  }
   if (!(minX <= maxX && minY <= maxY)) return null;
 
   const error = originErrorPx(origin[0], origin[1], minX, minY, maxX, maxY, zoom);

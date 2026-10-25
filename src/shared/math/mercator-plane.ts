@@ -2,15 +2,13 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * The plane the transform operations work in
+ * The plane of Web Mercator, as a coordinate of the drawing
  *
- * Resize and rotate compute in Web Mercator, the plane the map is drawn in, so a transform
- * does on the map what the pointer does on the screen (at any latitude and size, with no
- * local cos φ approximation that changes the shape a little on every rotation). The plane is
- * maplibre's world coordinate (0 to 1 across the world) with y pointing north, so an angle
- * measured in it is counterclockwise like the old lng/lat angle. Longitude is linear and not
- * wrapped. Latitude is clamped to the Web Mercator limit (±85.051129 degrees), beyond which
- * the map draws nothing and the projection reaches infinity at the poles.
+ * The plane is maplibre's world coordinate (0 to 1 across the world) with y pointing north.
+ * Longitude is linear and not wrapped. Latitude is clamped to the Web Mercator limit
+ * (±85.051129 degrees), beyond which the map draws nothing and the projection reaches infinity at
+ * the poles. The drawing cuts the edges it lays on the globe in it (`globe-subdivision.ts`); the
+ * edits that move, rotate and scale features are not computed in it (`geometry/enu-transforms.ts`).
  */
 
 import type { Coordinate } from '../types/model.js';

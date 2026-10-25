@@ -65,8 +65,8 @@ export class SelectModeDragHandler {
   private announcedKind: DragKind | null = null;
   private announcer: EventEmitter | null = null;
   /**
-   * The selection scope of the draw instance the current drag belongs to (the resize and
-   * rotate strategies of custom types, and the auxiliary handle providers). Set by startDrag
+   * The selection scope of the draw instance the current drag belongs to (the bounding boxes of
+   * custom types, the tile size of the map, and the auxiliary handle providers). Set by startDrag
    */
   private scope: DragScope = null;
 

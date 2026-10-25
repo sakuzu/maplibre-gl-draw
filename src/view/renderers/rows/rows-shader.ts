@@ -167,7 +167,7 @@ vec2 quadCorner() {
 
 // The length of a segment as the lines dashed on the CPU measure it, in CSS px at zoom 0
 float dashLength0(vec2 a, vec2 b) {
-    vec2 base = u_origin_shift + u_center_lnglat;
+    vec2 base = origin_shift() + u_center_lnglat;
     float latitude = (a.y + b.y) * 0.5 + base.y;
     float cosLatitude = max(cos(latitude * PI / 180.0), 1e-6);
     float perDegree = ${glslFloat(DEFAULT_TILE_SIZE)} / 360.0;

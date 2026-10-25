@@ -20,9 +20,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { FeatureTables, RowField } from '../api/tables.js';
 import { BULK_SLICE_ROWS, writeKindsInSlices } from '../operations/bulk-sliced.js';
-import { translationKinds } from '../operations/bulk-transform.js';
+import { type BulkKinds, transformKinds } from '../operations/bulk-transform.js';
 import { DrawError } from '../shared/draw-error.js';
 import type { DrawStore } from '../store/draw-store.js';
+import type { TransformEdit } from '../store/store.js';
 import { createTableStore } from '../store/table-memory.js';
 import type { Feature } from '../store/types.js';
 import {
@@ -38,6 +39,9 @@ import { TableSelection } from './selection.js';
 import type { TableWorkBudget } from './types.js';
 import type { GroupVersion, GroupVersionReceiver } from './versions.js';
 import { writeMarkKeeperOf } from './write-marks.js';
+
+/** A move of one degree to the east along the equator: one degree of longitude at any latitude */
+const EAST_ONE_DEGREE: TransformEdit = { kind: 'translate', from: [0, 0], to: [1, 0] };
 
 function point(i: number, layerId = 'a'): Feature {
   return {
@@ -160,7 +164,7 @@ describe('the write mark of a Store of rows', () => {
     const rows = store.getSelectedRows() as TableSelection;
     const steps: Array<() => void> = [];
     const before = keeper.mark;
-    writeKindsInSlices(store, rows, translationKinds(rows, 1, 2), {
+    writeKindsInSlices(store, rows, transformKinds(store, EAST_ONE_DEGREE, rows) as BulkKinds, {
       onDone: () => {},
       budgetMs: 0,
       schedule: (step) => steps.push(step),

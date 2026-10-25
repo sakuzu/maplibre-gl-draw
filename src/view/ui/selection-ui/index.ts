@@ -32,6 +32,4 @@ export type {
   PointFrameExtent,
   PointFrameExtentProvider,
   PointFrameOutlineProvider,
-  ResizeStrategy,
-  TypeResizeCalculator,
 } from './types.js';

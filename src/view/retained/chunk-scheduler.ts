@@ -161,6 +161,11 @@ export interface ChunkSchedulerFrame {
   /** The zoom (for the choice of the origin) */
   readonly zoom: number;
   /**
+   * The regions the view sees the rows of the chunk moved on the GPU from (the view moved back by
+   * the edit of a drag): the chunk is built around them while they are dragged
+   */
+  readonly movedViews?: readonly BoundingBox[];
+  /**
    * Whether the camera is still. While it moves, nothing is started or stepped (a build of 20 to
    * 50 ms makes a gesture stutter, and the view it would be built for changes anyway)
    */
@@ -209,7 +214,7 @@ export function advanceChunkBuild<S extends RetainedChunkState<B>, B>(
   frame: ChunkSchedulerFrame,
   host: ChunkSchedulerHost<S, B>,
 ): boolean {
-  const { bounds, zoom, settled, budget } = frame;
+  const { bounds, zoom, settled, budget, movedViews } = frame;
   if (!intersects(state.bounds, bounds)) return false;
   let pending = false;
 
@@ -217,7 +222,7 @@ export function advanceChunkBuild<S extends RetainedChunkState<B>, B>(
   // it has keep being drawn until then)
   const rebased =
     state.batches !== null && !state.job
-      ? rebasedRetainedOrigin(chunkOrigin(state), state.bounds, bounds, zoom)
+      ? rebasedRetainedOrigin(chunkOrigin(state), state.bounds, bounds, zoom, movedViews)
       : null;
   if (rebased) state.viewOrigin = rebased;
   const stale = state.batches !== null && (state.stale || host.isStale(state) || rebased !== null);

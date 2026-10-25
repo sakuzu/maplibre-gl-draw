@@ -3,23 +3,18 @@
 
 /**
  * What follows rows dragged in bulk reads them by their state: whether a row is dragged, where a
- * position of it is drawn now (as the shader moves it, computed on the CPU), and its rotation
- * and scale; the rows of a selection of many features are read by their summary, and the
+ * position of it is drawn now (as the edit of the drag moves it once written, as the reference
+ * computes it apart), and its rotation and scale; the rows of a selection of many features are read by their summary, and the
  * decision of such a selection is told to what builds their moving parts.
  */
 
 import { describe, expect, it } from 'vitest';
 import type { FeatureTables } from '../api/tables.js';
-import { toPlane } from '../shared/math/mercator-plane.js';
-import {
-  resizeTransform,
-  rotationTransform,
-  transformPosition,
-} from '../shared/math/plane-transform.js';
 import { listSelectedRows } from '../store/bulk-selection.js';
 import { DrawStore } from '../store/draw-store.js';
 import { TableContractStore } from '../store/table-memory.js';
 import type { Feature } from '../store/types.js';
+import { referenceRotate, referenceScale } from '../test-support/enu-reference.js';
 import { internalsOf } from '../test-utils.js';
 import { draggedRowsOf } from './dragged-rows.js';
 import { BULK_MOVE_SET } from './row-state.js';
@@ -37,6 +32,14 @@ function point(id: string, x: number, type: Feature['type'] = 'Point'): Feature 
     visible: true,
     locked: false,
   };
+}
+
+/** A position near another, the numbers past the first two the same */
+function expectNear(actual: readonly number[] | undefined, expected: readonly number[]): void {
+  expect(actual?.length).toBe(expected.length);
+  expect(Math.abs((actual?.[0] as number) - (expected[0] as number))).toBeLessThan(1e-9);
+  expect(Math.abs((actual?.[1] as number) - (expected[1] as number))).toBeLessThan(1e-9);
+  expect(actual?.slice(2)).toEqual(expected.slice(2));
 }
 
 function setup() {
@@ -74,20 +77,19 @@ describe('the rows dragged', () => {
     states.setMoving(Int32Array.of(handleOf('a'), handleOf('b')), BULK_MOVE_SET);
     // a turns by its rotation, as the write of the drag would turn it
     states.setByValues(Int32Array.of(handleOf('a')), true);
-    const transform = rotationTransform([139.1, 35], 0.25);
-    states.setTransform(BULK_MOVE_SET, transform);
+    states.setTransform(BULK_MOVE_SET, { kind: 'rotate', center: [139.1, 35], angleDegrees: 15 });
     states.setTranslation(BULK_MOVE_SET, 0.5, -0.25);
     const dragged = draggedRowsOf(tables);
     expect(dragged?.has(handleOf('a'))).toBe(true);
     expect(dragged?.has(handleOf('c'))).toBe(false);
-    const moved = transformPosition(transform, [139, 35, 7], false);
-    expect(dragged?.position(handleOf('a'), [139, 35, 7])).toEqual([
+    const moved = referenceRotate([139, 35], [139.1, 35], 15);
+    expectNear(dragged?.position(handleOf('a'), [139, 35, 7]), [
       moved[0] + 0.5,
       moved[1] - 0.25,
       7,
     ]);
     expect(dragged?.position(handleOf('c'), [139.2, 35])).toEqual([139.2, 35]);
-    expect(dragged?.rotation(handleOf('a'))).toBeCloseTo((0.25 * 180) / Math.PI, 12);
+    expect(dragged?.rotation(handleOf('a'))).toBe(15);
     expect(dragged?.rotation(handleOf('b'))).toBe(0);
     expect(dragged?.rotation(handleOf('c'))).toBe(0);
     expect(dragged?.scale(handleOf('b'))).toBe(1);
@@ -106,15 +108,22 @@ describe('the rows dragged', () => {
     states.setMoving(Int32Array.from(rows), BULK_MOVE_SET);
     // e is resized by its scale, as the write of the drag would resize it
     states.setByValues(Int32Array.of(handleOf('e')), true);
-    const transform = resizeTransform(toPlane([139, 34.9]), 2, 0.5, 2);
-    states.setTransform(BULK_MOVE_SET, transform);
+    states.setTransform(BULK_MOVE_SET, {
+      kind: 'scale',
+      center: [139, 34.9],
+      eastFactor: 2,
+      northFactor: 0.5,
+      sizeFactor: 2,
+    });
     const dragged = draggedRowsOf(tables);
-    expect(dragged?.position(handleOf('a'), [139, 35])).toEqual(
-      transformPosition(transform, [139, 35], false),
+    expectNear(
+      dragged?.position(handleOf('a'), [139, 35]),
+      referenceScale([139, 35], [139, 34.9], 2, 0.5),
     );
     for (const id of ['b', 'e']) {
-      expect(dragged?.position(handleOf(id), [139, 35])).toEqual(
-        transformPosition(transform, [139, 35], true),
+      expectNear(
+        dragged?.position(handleOf(id), [139, 35]),
+        referenceScale([139, 35], [139, 34.9], 2, 2),
       );
       expect(dragged?.scale(handleOf(id))).toBe(2);
     }

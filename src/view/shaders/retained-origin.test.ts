@@ -72,6 +72,8 @@ const TOKYO: [number, number] = [139.7671, 35.6812];
 /** About 1000 px around Osaka at zoom 22 */
 const OSAKA_VIEW: BoundingBox = { minX: 135.4959, minY: 34.7024, maxX: 135.4961, maxY: 34.7026 };
 const TOKYO_OSAKA: BoundingBox = { minX: 135.4959, minY: 34.7024, maxX: 139.7671, maxY: 35.6812 };
+/** The center of the view on Osaka */
+const OSAKA_VIEW_CENTER: [number, number] = [135.496, 34.7025];
 
 describe('the precision of a retained batch', () => {
   it('an origin in Tokyo leaves more than 0.1 px in Osaka at zoom 22 (the defect)', () => {
@@ -109,6 +111,30 @@ describe('the precision of a retained batch', () => {
     // The whole extent in view: its center is already the best origin
     const center: [number, number] = [137.6315, 35.1918];
     expect(rebasedRetainedOrigin(center, TOKYO_OSAKA, null, 22)).toBeNull();
+  });
+
+  it('is taken near where the view sees the rows of the batch moved on the GPU from', () => {
+    // Rows of Tokyo dragged to Osaka: the view on Osaka sees them from Tokyo
+    const tokyoView: BoundingBox = {
+      minX: TOKYO[0] - 0.0001,
+      minY: TOKYO[1] - 0.0001,
+      maxX: TOKYO[0],
+      maxY: TOKYO[1],
+    };
+    const origin = rebasedRetainedOrigin(OSAKA_VIEW_CENTER, TOKYO_OSAKA, OSAKA_VIEW, 22, [
+      tokyoView,
+    ]);
+    expect(origin).not.toBeNull();
+    expect(worstInRegion(origin as [number, number], tokyoView, 22)).toBeLessThanOrEqual(
+      RETAINED_ORIGIN_TOLERANCE_PX,
+    );
+    // Without the rows moved, the origin stays in Osaka
+    expect(rebasedRetainedOrigin(OSAKA_VIEW_CENTER, TOKYO_OSAKA, OSAKA_VIEW, 22)).toBeNull();
+    // A region off the extent is not on the screen: the view is
+    const away: BoundingBox = { minX: 0, minY: 0, maxX: 1, maxY: 1 };
+    expect(
+      rebasedRetainedOrigin(OSAKA_VIEW_CENTER, TOKYO_OSAKA, OSAKA_VIEW, 22, [away]),
+    ).toBeNull();
   });
 
   it('keeps the origin when the extent is not in view', () => {

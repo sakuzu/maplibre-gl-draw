@@ -11,8 +11,6 @@ import type { BoundingBoxCoords } from '../../../shared/types/selection-box.js';
 import type { Coordinate, Feature } from '../../../store/types.js';
 
 // BoundingBoxCoords is a basic type (operations/ reads it too), defined in shared/.
-// TypeResizeCalculator is an extension contract, defined in extension/.
-export type { TypeResizeCalculator } from '../../../extension/index.js';
 export type { BoundingBoxCoords } from '../../../shared/types/selection-box.js';
 
 /**
@@ -78,11 +76,3 @@ export type AdditionalResizeHandlesCalculator = (
   feature: Feature,
   bbox: BoundingBoxCoords,
 ) => AdditionalHandleInfo[];
-
-/**
- * How a feature type is resized.
- *
- *   - scale       : changes the scale property (as with Text and Image)
- *   - coordinates : changes the coordinates directly (as with Polygon and LineString)
- */
-export type ResizeStrategy = 'scale' | 'coordinates';

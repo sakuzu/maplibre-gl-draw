@@ -365,6 +365,7 @@ describe.each(STORE_KINDS)('the drags of the select mode over %s', (_, makeStore
       const view = open(makeStore(), [A(), B()]);
       select(view, IN_A);
       const [w, s, e, n] = boxOf(view.store, 'a');
+      const northWest = ringOf(view.store, 'a').findIndex(([x, y]) => x === w && y === n);
       const handle = southEastHandleOf([w, s, e, n]);
       const changes = drag(view, handle, [handle[0] - 0.2, handle[1] - 0.2]);
       expect(changes).toHaveLength(1);
@@ -372,8 +373,10 @@ describe.each(STORE_KINDS)('the drags of the select mode over %s', (_, makeStore
       expect(view.drags.map(({ kind }) => kind)).toEqual(['handle', 'handle']);
       // The north-west corner stays; the east side comes west, the south side goes south
       const after = boxOf(view.store, 'a');
+      const corner = ringOf(view.store, 'a')[northWest] ?? [];
+      expect(corner[0]).toBeCloseTo(w, 6);
+      expect(corner[1]).toBeCloseTo(n, 6);
       expect(after[0]).toBeCloseTo(w, 6);
-      expect(after[3]).toBeCloseTo(n, 6);
       expect(after[2]).toBeLessThan(e);
       expect(after[1]).toBeLessThan(s);
       expect(view.draw.selection.get()).toEqual({ type: 'feature', ids: ['a'] });

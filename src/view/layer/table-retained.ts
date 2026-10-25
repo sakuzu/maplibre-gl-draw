@@ -46,6 +46,7 @@ import { type LayerTable, type RowGroup, widenBounds } from '../../feature-table
 import { rowFeatureToRead, rowHasGeometry, rowType } from '../../feature-table/row-read.js';
 import {
   GPU_STATE_BULK,
+  GPU_STATE_MOVE_SHIFT,
   MOVE_SETS,
   STATE_BULK,
   STATE_BY_VALUES,
@@ -63,12 +64,17 @@ import {
   type RowGroupHandle,
 } from '../../feature-table/types.js';
 import type { GroupVersion, GroupVersionReceiver } from '../../feature-table/versions.js';
+import {
+  applyEnuEdit,
+  type EnuEdit,
+  inverseEnuEdit,
+  moveEnuPosition,
+} from '../../geometry/enu-transforms.js';
 import type { SelectionUIConfig } from '../../shared/config/selection.js';
-import { type PlaneTransform, transformPosition } from '../../shared/math/plane-transform.js';
-import { drawProperties, getDrawProperty } from '../../shared/properties.js';
-import type { BoundingBox, Coordinate, Feature, Layer } from '../../shared/types/model.js';
+import type { BoundingBox, Feature, Layer } from '../../shared/types/model.js';
 import type { PixelRatioInput } from '../../shared/utils/pixel-ratio.js';
 import { resolvePixelRatio } from '../../shared/utils/pixel-ratio.js';
+import { roleFieldsOf, transformRolesOf, transformValuesOf } from '../../store/transform-roles.js';
 import type { FeatureCompanionRegistry } from '../feature-companion.js';
 import type { GpuLedger } from '../gpu-ledger.js';
 import {
@@ -165,6 +171,8 @@ const SLICE_POLYGON_VERTICES = 2_000;
 
 /** The whole world: the range drawn when the view is not known */
 const WORLD: BoundingBox = { minX: -540, minY: -90, maxX: 540, maxY: 90 };
+/** No region */
+const NO_VIEWS: readonly BoundingBox[] = [];
 
 /**
  * One range of rows drawn, as the record of the draws gives it
@@ -458,6 +466,8 @@ interface FreshDrawing {
 interface SchedulerFrame {
   bounds: BoundingBox;
   zoom: number;
+  /** The regions the view sees the rows moved from, for a chunk that holds rows moved (or none) */
+  movedViews: readonly BoundingBox[];
   settled: boolean;
   budget: ChunkBuildBudget;
 }
@@ -496,7 +506,7 @@ export class TableLayerRenderer {
   private prepared = false;
   private readonly translations = new Float32Array((MOVE_SETS + 1) * 2);
   /** The rotation or resize of each moving set (one array of the renderer, as the translations) */
-  private readonly transforms: Array<PlaneTransform | null> = new Array(MOVE_SETS + 1).fill(null);
+  private readonly transforms: Array<EnuEdit | null> = new Array(MOVE_SETS + 1).fill(null);
   /** The time of the last pass before the main one, and of the drawing of the frames (ms) */
   private prerenderMs = 0;
   private drawMs = 0;
@@ -548,9 +558,14 @@ export class TableLayerRenderer {
   private readonly schedule: SchedulerFrame = {
     bounds: WORLD,
     zoom: 0,
+    movedViews: [],
     settled: true,
     budget: createChunkBuildBudget(0),
   };
+  /** The regions the view sees the rows of the moving sets from (set per layer) */
+  private readonly movedViews: BoundingBox[] = [];
+  /** The moving sets the rows of a chunk are in (bit k: set k), by the version of its state */
+  private readonly chunkMoves = new WeakMap<object, { version: number; sets: number }>();
   /** What the building of the chunks by kind asks of the layer and the group being drawn */
   private readonly host: ChunkSchedulerHost<RetainedRowsChunk, TableChunkBatch>;
   /** What the building of the chunks drawn in one draw asks of them */
@@ -1234,6 +1249,8 @@ export class TableLayerRenderer {
     const schedule = this.schedule;
     schedule.bounds = bounds;
     schedule.zoom = frame.zoom;
+    movedViewsOf(this.transforms, bounds, this.movedViews);
+    schedule.movedViews = NO_VIEWS;
     schedule.settled = settled;
     schedule.budget = budget;
 
@@ -2200,6 +2217,11 @@ export class TableLayerRenderer {
         this.drawImmediate(tables, chunk, settled);
         continue;
       }
+      // A chunk that holds rows moved by an edit is built around where the view sees them from
+      this.schedule.movedViews =
+        this.movedViews.length > 0 && this.holdsMovedRows(chunk, pass.group as RowGroup)
+          ? this.movedViews
+          : NO_VIEWS;
       const pending =
         chunk.type === 'rows'
           ? advanceChunkBuild(chunk, this.schedule, this.oneDrawHost)
@@ -2208,6 +2230,27 @@ export class TableLayerRenderer {
       // The rows of the delta within the chunk, when it was not drawn
       this.drawInserts(chunk.range.to - 1);
     }
+  }
+
+  /**
+   * Whether a chunk holds rows of a moving set that an edit moves (the sets of its rows read once
+   * per version of the state of its group)
+   */
+  private holdsMovedRows(chunk: TableChunk, group: RowGroup): boolean {
+    let known = this.chunkMoves.get(chunk);
+    if (!known || known.version !== group.stateVersion) {
+      const state = group.gpuState;
+      let sets = 0;
+      for (let row = chunk.range.from; row < chunk.range.to; row++) {
+        sets |= 1 << (((state[row] as number) >> GPU_STATE_MOVE_SHIFT) & 3);
+      }
+      known = { version: group.stateVersion, sets };
+      this.chunkMoves.set(chunk, known);
+    }
+    for (let set = 1; set <= MOVE_SETS; set++) {
+      if ((known.sets & (1 << set)) !== 0 && this.transforms[set]) return true;
+    }
+    return false;
   }
 
   /** Draws the chunks of the group being drawn for a drawing as they are built, in view */
@@ -2483,9 +2526,7 @@ export class TableLayerRenderer {
       drawer = null;
       const set = (state & STATE_MOVE_MASK) >> STATE_MOVE_SHIFT;
       features.push(
-        set > 0
-          ? movedFeature(feature, this.translations, this.transforms[set], set, state)
-          : feature,
+        set > 0 ? movedFeature(feature, this.translations, this.transforms[set], set) : feature,
       );
     }
     drawFeatures();
@@ -2926,10 +2967,6 @@ function holdsBulkMark(groupCache: GroupCache): boolean {
   return groupCache.bulkMarked;
 }
 
-/**
- * A feature moved by its moving set (the rows drawn at once): rotated or resized by the transform
- * of the set as the drags compute it, its rotation, scale and radius with it, then translated
- */
 /** Whether a renderer of a custom type draws rows from the rows (`drawRows`) */
 function anyRowsDrawer(renderers: ReadonlyMap<string, unknown>): boolean {
   for (const renderer of renderers.values()) {
@@ -2938,48 +2975,86 @@ function anyRowsDrawer(renderers: ReadonlyMap<string, unknown>): boolean {
   return false;
 }
 
+/**
+ * The regions the view sees the rows of the moving sets from: the view moved back by the edit of
+ * each set (for a scaling, by its factors and by its size), as the extents of its corners, the
+ * middles of its sides and its center (into `out`)
+ */
+function movedViewsOf(
+  transforms: ReadonlyArray<EnuEdit | null>,
+  view: BoundingBox,
+  out: BoundingBox[],
+): void {
+  out.length = 0;
+  if (view === WORLD) return;
+  for (const edit of transforms) {
+    if (!edit) continue;
+    const back = inverseEnuEdit(edit);
+    for (const uniform of edit.kind === 'scale' ? [false, true] : [false]) {
+      let minX = Infinity;
+      let minY = Infinity;
+      let maxX = -Infinity;
+      let maxY = -Infinity;
+      for (const fx of [0, 0.5, 1]) {
+        for (const fy of [0, 0.5, 1]) {
+          const x = view.minX + (view.maxX - view.minX) * fx;
+          const y = Math.max(-90, Math.min(90, view.minY + (view.maxY - view.minY) * fy));
+          const p = moveEnuPosition(back, [x, y], uniform);
+          minX = Math.min(minX, p[0] as number);
+          minY = Math.min(minY, p[1] as number);
+          maxX = Math.max(maxX, p[0] as number);
+          maxY = Math.max(maxY, p[1] as number);
+        }
+      }
+      if (minX <= maxX && minY <= maxY) out.push({ minX, minY, maxX, maxY });
+    }
+  }
+}
+
+/**
+ * A feature moved by its moving set (the rows drawn at once): moved, rotated or scaled by the edit
+ * of the set as the drag let go writes it, its rotation, scale and radius with it, then translated
+ */
 function movedFeature(
   feature: Feature,
   translations: Float32Array,
-  transform: PlaneTransform | null,
+  transform: EnuEdit | null,
   set: number,
-  state: number,
 ): Feature {
   const dLng = translations[set * 2];
   const dLat = translations[set * 2 + 1];
   if (dLng === 0 && dLat === 0 && !transform) return feature;
-  // A row turned or scaled by its values (as the write of the drag let go decides) keeps its
-  // shape and changes its values, as a Circle keeps its shape and changes its radius
-  const byValues = (state & STATE_BY_VALUES) !== 0;
-  const keepsShape = feature.type === 'Circle' || byValues;
+  let moved = feature;
+  if (transform) {
+    // Moved as the write of the drag let go moves it: the computation of the library over its
+    // geometry and the fields of its roles (a rotation, a scale, the radius of a Circle)
+    const properties = (feature.properties ?? {}) as Record<string, unknown>;
+    const read = (key: string): unknown => (key in properties ? properties[key] : undefined);
+    const roles = transformRolesOf(feature.type, (key) => read(key) !== undefined);
+    const before = transformValuesOf(feature.geometry, roles, read);
+    const after = applyEnuEdit(transform, before);
+    const fields = roleFieldsOf(roles, before, after);
+    moved = {
+      ...feature,
+      geometry: after.geometry as Feature['geometry'],
+      ...(fields.length > 0 && {
+        properties: { ...feature.properties, ...Object.fromEntries(fields) },
+      }),
+    };
+  }
+  if (dLng === 0 && dLat === 0) return moved;
   const shift = (value: unknown): unknown => {
     if (!Array.isArray(value)) return value;
     if (typeof value[0] === 'number') {
-      const position = transform
-        ? transformPosition(transform, value as number[], keepsShape)
-        : (value as Coordinate);
-      return [position[0] + dLng, position[1] + dLat, ...position.slice(2)];
+      return [(value[0] as number) + dLng, (value[1] as number) + dLat, ...value.slice(2)];
     }
     return value.map(shift);
   };
-  const geometry = feature.geometry as { type: string; coordinates?: unknown };
-  const moved: Feature = {
-    ...feature,
+  const geometry = moved.geometry as { type: string; coordinates?: unknown };
+  return {
+    ...moved,
     geometry: { ...geometry, coordinates: shift(geometry.coordinates) } as Feature['geometry'],
   };
-  if (!transform) return moved;
-  const values: Partial<Record<'rotation' | 'scale' | 'radiusMeters', number>> = {};
-  if (transform.rotationDeg !== 0 && byValues) {
-    values.rotation = (getDrawProperty(feature, 'rotation') ?? 0) + transform.rotationDeg;
-  }
-  if (transform.scale !== 1) {
-    if (byValues) values.scale = (getDrawProperty(feature, 'scale') ?? 1) * transform.scale;
-    const radius = getDrawProperty(feature, 'radiusMeters');
-    if (feature.type === 'Circle' && radius !== undefined)
-      values.radiusMeters = radius * transform.scale;
-  }
-  if (Object.keys(values).length === 0) return moved;
-  return { ...moved, properties: { ...feature.properties, ...drawProperties(values) } };
 }
 
 // === The builds of the batches ===

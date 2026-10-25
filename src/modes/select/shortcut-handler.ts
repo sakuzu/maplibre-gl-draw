@@ -11,12 +11,14 @@ import { bulkSelectionLocked } from '../../operations/bulk-selection.js';
 import { groupSelection, ungroupSelection } from '../../operations/layer-operations.js';
 import { deleteSelection } from '../../operations/selection-operations.js';
 import {
-  coordinatesOf,
-  geometryFromCoordinates,
-  mapCoordinatesDeep,
-} from '../../shared/utils/coordinates.js';
+  transformedUpdates,
+  transformStartOf,
+  transformsOf,
+} from '../../operations/transform-features.js';
+import { coordinatesOf, mapCoordinatesDeep } from '../../shared/utils/coordinates.js';
 import { isInteractionBlocked } from '../../store/lock.js';
-import type { Coordinate, Feature, FeatureCoordinates } from '../../store/types.js';
+import type { TransformEdit } from '../../store/store.js';
+import type { Feature } from '../../store/types.js';
 import { getSelectedFeatureIds } from '../../view/ui/helper.js';
 import type { EngineModeContext } from '../handler.js';
 import type { BulkNudge } from './bulk.js';
@@ -69,8 +71,10 @@ export function handleDeleteShortcut(context: EngineModeContext): void {
 /**
  * Handling of the arrow keys: moves the selected features by a few pixels on the screen
  *
- * One key press is one committed change (one notification). Like a drag, nothing moves while
- * any selected feature is blocked (read-only, the interaction lock or a lock of its own).
+ * The press is one move (`translate`) of every feature, as the Store computes it: from the center
+ * of the frame of the selection to the point the pixels of the press take it to on the screen.
+ * One key press is one committed change (one notification). Like a drag, nothing moves while any
+ * selected feature is blocked (read-only, the interaction lock or a lock of its own).
  *
  * @returns whether the key was used (a selection was moved); otherwise the key is left to
  *   the map (MapLibre pans with it)
@@ -86,6 +90,12 @@ export function handleNudgeShortcut(
 
   const { store, map } = context;
   const step = modifiers.shift ? NUDGE_LARGE : NUDGE_SMALL;
+  /** The point the press takes a point to: moved by the pixels of the press on the screen */
+  const pressed = (from: readonly [number, number]): [number, number] => {
+    const at = map.project([from[0], from[1]]);
+    const to = map.unproject([at.x + direction[0] * step, at.y + direction[1] * step]);
+    return [to.lng, to.lat];
+  };
 
   // Features selected in bulk: moved by their moving set while the keys are pressed, and written
   // once a moment after the last press (the presses of a key held are one change)
@@ -95,14 +105,8 @@ export function handleNudgeShortcut(
     if (store.isReadOnly() || store.isInteractionLocked() || bulkSelectionLocked(store)) {
       return false;
     }
-    // One offset in degrees for every feature, taken at the center of their frame where the moves
-    // waiting put it
     const [west, south, east, north] = bulk.bounds;
-    const [shownX, shownY] = bulkNudge.active ? bulkNudge.offset : [0, 0];
-    const reference: Coordinate = [(west + east) / 2 + shownX, (south + north) / 2 + shownY];
-    const from = map.project(reference);
-    const to = map.unproject([from.x + direction[0] * step, from.y + direction[1] * step]);
-    return bulkNudge.add(context, to.lng - reference[0], to.lat - reference[1]);
+    return bulkNudge.add(context, [(west + east) / 2, (south + north) / 2], pressed);
   }
 
   const features = getSelectedFeatureIds(store)
@@ -111,30 +115,39 @@ export function handleNudgeShortcut(
   if (features.length === 0) return false;
   if (features.some((f) => isInteractionBlocked(f, store))) return false;
 
-  // One offset in degrees for every feature, taken at a point of the selection, so the
-  // features keep their relative placement (the same translation as a move drag)
-  const reference = firstCoordinate(coordinatesOf(features[0]));
-  if (!reference) return false;
-  const from = map.project(reference);
-  const to = map.unproject([from.x + direction[0] * step, from.y + direction[1] * step]);
-  const dx = to.lng - reference[0];
-  const dy = to.lat - reference[1];
+  const center = selectionCenterOf(features);
+  if (!center) return false;
+  const edit: TransformEdit = { kind: 'translate', from: center, to: pressed(center) };
+  const transforms = transformsOf(store);
 
   store.transact(() => {
     for (const feature of features) {
-      const coordinates = mapCoordinatesDeep(coordinatesOf(feature), (c) => [c[0] + dx, c[1] + dy]);
-      store.updateFeature(feature.id, {
-        geometry: geometryFromCoordinates(feature.type, coordinates),
-      });
+      const updates = transformedUpdates(transforms, edit, transformStartOf(feature), feature);
+      if (updates?.geometry) store.updateFeature(feature.id, { geometry: updates.geometry });
     }
   });
   return true;
 }
 
-function firstCoordinate(coordinates: FeatureCoordinates): Coordinate | null {
-  let value: unknown = coordinates;
-  while (Array.isArray(value) && Array.isArray(value[0])) value = value[0];
-  return Array.isArray(value) && typeof value[0] === 'number' ? (value as Coordinate) : null;
+/** The center of the extent of the positions of features (null without a position) */
+function selectionCenterOf(features: readonly Feature[]): [number, number] | null {
+  let west = Infinity;
+  let south = Infinity;
+  let east = -Infinity;
+  let north = -Infinity;
+  for (const feature of features) {
+    mapCoordinatesDeep(coordinatesOf(feature), (position) => {
+      const x = position[0] as number;
+      const y = position[1] as number;
+      if (x < west) west = x;
+      if (x > east) east = x;
+      if (y < south) south = y;
+      if (y > north) north = y;
+      return position;
+    });
+  }
+  if (!(west <= east && south <= north)) return null;
+  return [(west + east) / 2, (south + north) / 2];
 }
 
 /**
