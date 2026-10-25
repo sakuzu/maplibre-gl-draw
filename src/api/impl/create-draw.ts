@@ -15,6 +15,7 @@ import { captureImage } from './capture.js';
 import { createDatasets } from './datasets.js';
 import { guardAfterDestroy } from './destroy-guard.js';
 import { createDocument } from './document.js';
+import { createDrafts } from './drafts.js';
 import { createDrawing, createDrawingResource } from './drawing.js';
 import type { Engine } from './engine.js';
 import { createEngine } from './engine.js';
@@ -66,6 +67,7 @@ export function createDrawOnEngine(
     setActiveLayerId: context.setActiveLayerId,
     getStyleOptions: drawOptions.getStyle,
     spatialIndex: context.spatialIndex,
+    appliedFeature: (id) => engine.drafts.appliedFeature(id),
   };
   const features = createFeatures(deps);
   const groups = createGroups(deps);
@@ -95,6 +97,7 @@ export function createDrawOnEngine(
     groups,
     datasets: createDatasets(engine.datasets, events, context.eventEmitter),
     hidden: createHidden(deps),
+    drafts: createDrafts(engine.drafts),
     selection: createSelection(deps, { features, groups }),
     vertexSelection: createVertexSelection(deps),
     drawing: createDrawingResource(engine),
@@ -188,11 +191,16 @@ function attachChecks(engine: Engine, options: DrawOptions): () => void {
     checkDrawing: () => engine.customLayer.checkDrawnCopies(),
     checkDrawnWrites: () => engine.customLayer.checkDrawnWrites(),
     checkDrawnRebuild: () => engine.customLayer.checkDrawnRebuild(),
+    drafts: engine.drafts,
+    checkDrawnDrafts: (expected) => engine.customLayer.checkDrawnDrafts(expected),
   });
   store.setAfterNotify(() => checks.afterNotify());
+  engine.drafts.setAfterOperate(() => checks.afterDrafts());
   const stopFrames = engine.customLayer.onFrameDrawn(() => checks.afterFrame());
   return () => {
     store.setAfterNotify(null);
+    engine.drafts.setAfterOperate(null);
+    checks.stop();
     stopFrames();
   };
 }

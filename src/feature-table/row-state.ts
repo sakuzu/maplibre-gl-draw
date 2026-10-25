@@ -41,10 +41,15 @@ export const STATE_HIDDEN_WAIT = 1 << 5;
  * the row is not drawn, and is still hit where it is
  */
 export const STATE_HIDDEN_OVERLAY = 1 << 6;
-/** The bits of every reason a row is hidden (bit 7 is kept for more) */
+/**
+ * A draft of the feature of the row is drawn in its place (`draw.drafts`): the row is not drawn,
+ * and is still hit where it is
+ */
+export const STATE_HIDDEN_DRAFT = 1 << 7;
+/** The bits of every reason a row is hidden */
 export const STATE_HIDDEN_MASK = 0xff;
 /** The bits of the reasons a row is not hit (a row drawn over is hit where it is) */
-export const STATE_UNHIT_MASK = STATE_HIDDEN_MASK & ~STATE_HIDDEN_OVERLAY;
+export const STATE_UNHIT_MASK = STATE_HIDDEN_MASK & ~STATE_HIDDEN_OVERLAY & ~STATE_HIDDEN_DRAFT;
 /** Marked as selected in bulk */
 export const STATE_BULK = 1 << 8;
 /** The first of the two bits of the moving set of the row (0 = not moving, 1 to 3) */
@@ -101,6 +106,7 @@ const SET_MOVE_SHIFT = 2;
 const SET_MOVE_MASK = 3 << SET_MOVE_SHIFT;
 const SET_OVERLAY = 16;
 const SET_BY_VALUES = 32;
+const SET_DRAFT = 64;
 
 /**
  * The state of the rows kept as sets of handles
@@ -133,6 +139,7 @@ export class RowStateSets {
     return (
       ((bits & SET_HIDDEN) !== 0 ? STATE_HIDDEN_LOCAL : 0) |
       ((bits & SET_OVERLAY) !== 0 ? STATE_HIDDEN_OVERLAY : 0) |
+      ((bits & SET_DRAFT) !== 0 ? STATE_HIDDEN_DRAFT : 0) |
       ((bits & SET_BULK) !== 0 ? STATE_BULK : 0) |
       ((bits & SET_BY_VALUES) !== 0 ? STATE_BY_VALUES | STATE_UNIFORM : 0) |
       (((bits & SET_MOVE_MASK) >> SET_MOVE_SHIFT) << STATE_MOVE_SHIFT)
@@ -147,6 +154,11 @@ export class RowStateSets {
   /** Marks or unmarks rows as drawn over by a feature in their place, for this client only */
   setOverlaid(handles: Int32Array, overlaid: boolean): void {
     this.update(handles, (bits) => (overlaid ? bits | SET_OVERLAY : bits & ~SET_OVERLAY));
+  }
+
+  /** Marks or unmarks rows as drawn over by a draft of their features, for this client only */
+  setDrafted(handles: Int32Array, drafted: boolean): void {
+    this.update(handles, (bits) => (drafted ? bits | SET_DRAFT : bits & ~SET_DRAFT));
   }
 
   /** Marks or unmarks rows as selected in bulk */

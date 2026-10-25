@@ -603,6 +603,18 @@ export interface FeatureListOptions {
 }
 
 /**
+ * How `features.get` and `features.getMany` read a feature.
+ */
+export interface FeatureReadOptions {
+  /**
+   * Whether the feature is read as the drafts edit it (`draw.drafts`): the edits of the drafts
+   * with an owner, then the ones of this client, applied over the feature, as it is drawn.
+   * False when left out: the feature as the document holds it.
+   */
+  applyDrafts?: boolean;
+}
+
+/**
  * Which items `layers.listItems` and `groups.listMembers` read: a range of them by position, from
  * the back.
  *

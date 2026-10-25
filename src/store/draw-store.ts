@@ -274,6 +274,23 @@ export class DrawStore implements Store {
   get transforms(): GeometryTransforms | undefined {
     return this.#contract.transforms;
   }
+  /** The IDs the contract gives vertices (undefined when it gives none) */
+  get getVertexIds(): Store['getVertexIds'] {
+    const contract = this.#contract;
+    if (typeof contract.getVertexIds !== 'function') return undefined;
+    return (featureId, vertices) =>
+      (contract.getVertexIds as NonNullable<Store['getVertexIds']>)(featureId, vertices);
+  }
+  /** The places of vertices by the IDs the contract gives them (undefined when it gives none) */
+  get findVertices(): Store['findVertices'] {
+    const contract = this.#contract;
+    if (typeof contract.findVertices !== 'function') return undefined;
+    return (featureId, ids) =>
+      (contract.findVertices as NonNullable<Store['findVertices']>)(featureId, ids);
+  }
+  selectedFeatureIds(): readonly string[] {
+    return this.#selectedFeatureIds();
+  }
   deleteFeature(id: string): boolean {
     return this.#write(() => {
       const deleted = this.#contract.deleteFeature(id);

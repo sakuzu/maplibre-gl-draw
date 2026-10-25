@@ -33,6 +33,7 @@ const RANK = {
   extension: 1.5,
   'feature-table': 1.7,
   store: 2,
+  drafts: 2.5,
   view: 3,
   dataset: 3.5,
   operations: 4,

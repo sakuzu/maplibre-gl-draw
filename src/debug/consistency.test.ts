@@ -570,6 +570,88 @@ const DRAWN_EDITS: Readonly<
       () => draw.layers.update(layerId, { styleRule: undefined }),
     ];
   },
+  'a draft of a vertex of a line moved, changed, and committed': (draw, layerId) => {
+    const l = draw.features.create({
+      type: 'LineString',
+      geometry: {
+        type: 'LineString',
+        coordinates: [
+          [0, 0],
+          [0.5, 0.5],
+          [1, 0],
+        ],
+      },
+      layerId,
+    })!;
+    draw.features.create({ type: 'Polygon', geometry: SQUARE, layerId });
+    const edit = (y: number) => ({
+      kind: 'vertex-move' as const,
+      featureId: l.id,
+      vertices: [{ ring: 0, index: 1 }],
+      positions: [[0.5, y]],
+    });
+    let id = '';
+    return [
+      () => {
+        id = draw.drafts.add({ edits: [edit(0.6)] })!.id;
+      },
+      () => draw.drafts.update(id, { edits: [edit(0.8)] }),
+      () => draw.drafts.commit(id),
+    ];
+  },
+  'a draft of polygons turned, one of them deleted, and removed': (draw, layerId) => {
+    const ids = [0, 1].map(
+      (i) =>
+        draw.features.create({
+          type: 'Polygon',
+          geometry: {
+            type: 'Polygon',
+            coordinates: [SQUARE.coordinates[0].map(([x, y]) => [x + i * 2, y])],
+          },
+          layerId,
+        })!.id,
+    );
+    let id = '';
+    return [
+      () => {
+        id = draw.drafts.add({
+          edits: [
+            { kind: 'rotate', target: { featureIds: ids }, center: [1.5, 0.5], angleDegrees: 30 },
+          ],
+        })!.id;
+      },
+      () => draw.features.delete(ids[0]),
+      () => draw.drafts.remove(id),
+    ];
+  },
+  'a draft creating a line above a polygon, drawn on and committed': (draw, layerId) => {
+    const p = draw.features.create({ type: 'Polygon', geometry: SQUARE, layerId })!;
+    draw.features.create({ type: 'Polygon', geometry: SQUARE, layerId });
+    const create = (x: number) => ({
+      kind: 'create' as const,
+      feature: {
+        type: 'LineString',
+        geometry: {
+          type: 'LineString' as const,
+          coordinates: [
+            [0, 0],
+            [x, 1],
+          ],
+        },
+        layerId,
+      },
+      placedVertexCount: 1,
+      below: p.id,
+    });
+    let id = '';
+    return [
+      () => {
+        id = draw.drafts.add({ edits: [create(0.5)] })!.id;
+      },
+      () => draw.drafts.update(id, { edits: [create(0.9)] }),
+      () => draw.drafts.commit(id),
+    ];
+  },
   'features hidden here, shown again and deleted': (draw, layerId) => {
     const a = draw.features.create({ type: 'Polygon', geometry: SQUARE, layerId })!;
     const b = draw.features.create({

@@ -10,6 +10,7 @@
 
 import type { Position } from 'geojson';
 import type { Dataset, DatasetRow } from './datasets.js';
+import type { Draft, DraftEndReason } from './drafts.js';
 import type { DrawError } from './errors.js';
 import type { Hit } from './extension/provider.js';
 import type { StoreView, UpdateSource } from './extension/store.js';
@@ -195,6 +196,20 @@ export interface DrawEvents {
    * `DocumentChange.order`. A move of a group in its layer does not fire `group.updated`
    */
   'group.moved': { group: Group; from: ItemPosition; to: ItemPosition; source: string };
+  /** A draft was added (`drafts.add`) */
+  'draft.added': { draft: Draft };
+  /**
+   * A draft changed: `drafts.update` changed its edits, or edits of it were left out because the
+   * features or the vertices they edit are no longer there or can no longer be written
+   * (`dropped`, the number left out then)
+   */
+  'draft.updated': { draft: Draft; dropped: number };
+  /**
+   * A draft ended: it was written, removed, or what it edits is gone (`reason`). `dropped` is the
+   * number of edits of it left out, from when it was added to its end (the edits of features that
+   * were no longer there when it was written included)
+   */
+  'draft.removed': { draft: Draft; reason: DraftEndReason; dropped: number };
   /** The title or the description changed */
   'metadata.updated': { metadata: Metadata; previous: Metadata; source: string };
   /**

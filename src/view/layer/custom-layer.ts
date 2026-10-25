@@ -41,6 +41,7 @@ import type {
   Map as MapLibreMap,
 } from 'maplibre-gl';
 import type { DatasetManager } from '../../dataset/manager.js';
+import type { DraftView } from '../../drafts/draft-view.js';
 import type { EngineOverlayRenderer, FeatureTypeHandler } from '../../extension/index.js';
 import { featureTablesInternals } from '../../feature-table/feature-tables.js';
 import type { FeatureStyleConfig } from '../../shared/config/feature-style.js';
@@ -50,6 +51,7 @@ import type { PixelRatioInput } from '../../shared/utils/pixel-ratio.js';
 import { resolveContentPixelRatio, resolvePixelRatio } from '../../shared/utils/pixel-ratio.js';
 import type { SpatialIndex } from '../../store/spatial/spatial-index.js';
 import type { Store, StoreContractView } from '../../store/store.js';
+import type { Feature, StoreChange } from '../../store/types.js';
 import type { FeatureCompanionRegistry } from '../feature-companion.js';
 import { updateGlobeSubdivision } from '../globe-subdivision.js';
 import type { GpuMemorySnapshot } from '../gpu-ledger.js';
@@ -89,6 +91,11 @@ import { TerrainResolver } from './terrain-resolver.js';
 export interface CustomLayerDeps {
   map: MapLibreMap;
   store: Store;
+  /**
+   * What the drafts of the document draw (none drawn when omitted): a Store of objects is read
+   * with them, and a Store of rows draws them among its rows
+   */
+  drafts?: DraftView;
   spatialIndex: SpatialIndex;
   featureStyle: FeatureStyleConfig;
   selectionConfig: SelectionUIConfig;
@@ -236,6 +243,14 @@ export interface CustomLayerInterface extends BaseCustomLayerInterface {
    */
   checkDrawnRebuild(): string[];
   /**
+   * The differences between what is drawn and the drafts drawn over the features given (by ID,
+   * with the feature each is drawn as): over a Store of rows, each row hidden by the mark of the
+   * drafts and its draft drawn at its keys; over a Store of objects, each feature read as the one
+   * it is drawn as, once, in its place, and no other feature read otherwise. None while another
+   * document is shown
+   */
+  checkDrawnDrafts(expected: ReadonlyMap<string, Feature>): string[];
+  /**
    * Whether work remains that later frames finish without the host doing anything (see
    * `draw.hasPendingWork()`)
    */
@@ -286,6 +301,8 @@ interface EngineState {
    */
   builtPixelRatio: number | null;
   unsubscribeStore: (() => void) | null;
+  /** Stops following what the drafts draw */
+  unsubscribeDrafts: (() => void) | null;
   /** Stops the asking for frames when row groups wait to be taken in */
   unwatchTables: (() => void) | null;
   /** Stops following the document shown in place of the document (its rows and its changes) */
@@ -332,8 +349,23 @@ export function createCustomLayer(deps: CustomLayerDeps): CustomLayerInterface {
 
   // The drawing reads the Store through a view of it, which gives the document shown in place of
   // the document while there is one, and leaves the state of this client out while asked
-  const shown = createShownStore(own);
+  const shown = createShownStore(own, deps.drafts);
   const store = shown.store;
+  // The features the drafts draw are drawn wherever they are (the index of the Store places them
+  // where the document has them, and has none for a feature to create)
+  const drafts = deps.drafts;
+  const drawnIndex: SpatialIndex = drafts
+    ? {
+        findNear: (coordinate, tolerance) => spatialIndex.findNear(coordinate, tolerance),
+        findInBounds(bounds) {
+          const ids = spatialIndex.findInBounds(bounds);
+          if (drafts.size === 0 || shown.getShown() !== null) return ids;
+          const seen = new Set(ids);
+          for (const id of drafts.ids()) if (!seen.has(id)) ids.push(id);
+          return ids;
+        },
+      }
+    : spatialIndex;
 
   const engine: EngineState = {
     gl: null,
@@ -344,6 +376,7 @@ export function createCustomLayer(deps: CustomLayerDeps): CustomLayerInterface {
     shownTableRetained: null,
     builtPixelRatio: null,
     unsubscribeStore: null,
+    unsubscribeDrafts: null,
     unwatchTables: null,
     unwatchShown: null,
     unwatchContextLoss: null,
@@ -393,6 +426,67 @@ export function createCustomLayer(deps: CustomLayerDeps): CustomLayerInterface {
   // when the last slot is removed)
   // ---------------------------------------------------------------------------
 
+  /** Follows a change of the Store: what the drawing derived from the features goes */
+  function followStore(changes: StoreChange): void {
+    // A replacement of the whole document drops every cache of the features, whatever the
+    // notification lists (the new document can reuse an ID with another shape)
+    if (changes.reset === true) {
+      renderScope.earcut.clear();
+      renderScope.styleRules.clear();
+      terrainContext.fillCache.clear();
+      engine.storeRetainedCache?.invalidateAll();
+      // The rows were taken out of the tables (they come back as new blocks): their chunks go
+      if (own.tables)
+        engine.tableRetained?.dispose(engine.renderers?.batchManager.getRetainedRenderers());
+    }
+    engine.storeRetainedCache?.applyChanges(changes);
+    displayList.applyChanges(changes);
+    // The binning of the analytic drape is rebuilt only on a change of the geometry, the style,
+    // the membership or the order. Rebuilding it indiscriminately on changes such as
+    // selection / editing / tentative / mode would run the dataset (about 10 ms) and the
+    // binning on every interaction and make the map stutter (measured; the exclusion test of
+    // the dataset depends only on the type and the style, so the collected result does not
+    // change even without looking at them). The opacity of a layer is a factor of its drape
+    // source, written every frame, so a change of the opacity alone keeps the binning.
+    const affectsDrape =
+      changes.features !== undefined ||
+      changes.rows !== undefined ||
+      (changes.layers !== undefined && !isOpacityOnlyLayersChange(changes.layers)) ||
+      changes.groups !== undefined ||
+      changes.order !== undefined;
+    if (affectsDrape) drape.invalidate();
+
+    if (changes.features?.updated) {
+      for (const { id } of changes.features.updated) {
+        renderScope.earcut.delete(id);
+        renderScope.styleRules.delete(id);
+        terrainContext.fillCache.delete(id);
+      }
+    }
+    if (changes.features?.deleted) {
+      for (const feature of changes.features.deleted) {
+        renderScope.earcut.delete(feature.id);
+        renderScope.styleRules.delete(feature.id);
+        terrainContext.fillCache.delete(feature.id);
+      }
+    }
+    // When the style rule of a layer changes, the evaluation results of every feature that
+    // belongs to that layer go stale. There is no reverse lookup of the membership, so the
+    // whole cache is discarded (changing a rule is a rare operation).
+    if (changes.layers?.updated) {
+      for (const { layer, previous } of changes.layers.updated) {
+        if (layer.styleRule !== previous.styleRule) {
+          renderScope.styleRules.clear();
+          break;
+        }
+      }
+    }
+    // When the stacking order changes, the slots follow it (a layer added, removed or
+    // reordered; a dataset joining the order also goes through setLayerOrder
+    // and arrives here)
+    if (changes.layers !== undefined) slots.sync();
+  }
+
   function engineAdd(mapInstance: MapLibreMap, glContext: WebGL2RenderingContext): void {
     if (!slots.attach()) return;
 
@@ -408,65 +502,14 @@ export function createCustomLayer(deps: CustomLayerDeps): CustomLayerInterface {
     // caches
     // Changes made while the layer was off the map were not seen
     displayList.invalidate();
-    engine.unsubscribeStore = store.subscribe((changes) => {
-      // A replacement of the whole document drops every cache of the features, whatever the
-      // notification lists (the new document can reuse an ID with another shape)
-      if (changes.reset === true) {
-        renderScope.earcut.clear();
-        renderScope.styleRules.clear();
-        terrainContext.fillCache.clear();
-        engine.storeRetainedCache?.invalidateAll();
-        // The rows were taken out of the tables (they come back as new blocks): their chunks go
-        if (own.tables)
-          engine.tableRetained?.dispose(engine.renderers?.batchManager.getRetainedRenderers());
-      }
-      engine.storeRetainedCache?.applyChanges(changes);
-      displayList.applyChanges(changes);
-      // The binning of the analytic drape is rebuilt only on a change of the geometry, the style,
-      // the membership or the order. Rebuilding it indiscriminately on changes such as
-      // selection / editing / tentative / mode would run the dataset (about 10 ms) and the
-      // binning on every interaction and make the map stutter (measured; the exclusion test of
-      // the dataset depends only on the type and the style, so the collected result does not
-      // change even without looking at them). The opacity of a layer is a factor of its drape
-      // source, written every frame, so a change of the opacity alone keeps the binning.
-      const affectsDrape =
-        changes.features !== undefined ||
-        changes.rows !== undefined ||
-        (changes.layers !== undefined && !isOpacityOnlyLayersChange(changes.layers)) ||
-        changes.groups !== undefined ||
-        changes.order !== undefined;
-      if (affectsDrape) drape.invalidate();
-
-      if (changes.features?.updated) {
-        for (const { id } of changes.features.updated) {
-          renderScope.earcut.delete(id);
-          renderScope.styleRules.delete(id);
-          terrainContext.fillCache.delete(id);
-        }
-      }
-      if (changes.features?.deleted) {
-        for (const feature of changes.features.deleted) {
-          renderScope.earcut.delete(feature.id);
-          renderScope.styleRules.delete(feature.id);
-          terrainContext.fillCache.delete(feature.id);
-        }
-      }
-      // When the style rule of a layer changes, the evaluation results of every feature that
-      // belongs to that layer go stale. There is no reverse lookup of the membership, so the
-      // whole cache is discarded (changing a rule is a rare operation).
-      if (changes.layers?.updated) {
-        for (const { layer, previous } of changes.layers.updated) {
-          if (layer.styleRule !== previous.styleRule) {
-            renderScope.styleRules.clear();
-            break;
-          }
-        }
-      }
-      // When the stacking order changes, the slots follow it (a layer added, removed or
-      // reordered; a dataset joining the order also goes through setLayerOrder
-      // and arrives here)
-      if (changes.layers !== undefined) slots.sync();
-    });
+    engine.unsubscribeStore = store.subscribe(followStore);
+    // What the drafts draw of a Store of objects is told as the Store tells its changes
+    engine.unsubscribeDrafts =
+      drafts?.onChange((changes) => {
+        if (shown.getShown() !== null) return;
+        followStore(changes);
+        engine.mapInstance?.triggerRepaint();
+      }) ?? null;
 
     // The row groups given to the tables are taken in over the frames: a frame is asked for
     // when they start waiting. The rows written in place are written into the chunks that draw
@@ -506,6 +549,8 @@ export function createCustomLayer(deps: CustomLayerDeps): CustomLayerInterface {
       engine.unsubscribeStore();
       engine.unsubscribeStore = null;
     }
+    engine.unsubscribeDrafts?.();
+    engine.unsubscribeDrafts = null;
     engine.unwatchTables?.();
     engine.unwatchTables = null;
     engine.unwatchShown?.();
@@ -617,7 +662,7 @@ export function createCustomLayer(deps: CustomLayerDeps): CustomLayerInterface {
       gl,
       map: mapInstance,
       store,
-      spatialIndex,
+      spatialIndex: drawnIndex,
       featureStyle,
       selectionConfig,
       renderingConfig,
@@ -1030,6 +1075,13 @@ export function createCustomLayer(deps: CustomLayerDeps): CustomLayerInterface {
       ];
     },
 
+    checkDrawnDrafts(expected: ReadonlyMap<string, Feature>): string[] {
+      if (shown.getShown() !== null) return [];
+      const tables = featureTablesInternals(own.tables);
+      if (tables) return tables.checkDrafts(new Set(expected.keys()));
+      return checkObjectDrafts(own, store, expected, drafts);
+    },
+
     checkDrawnRebuild(): string[] {
       return [
         ...(engine.tableRetained?.checkRebuild() ?? []),
@@ -1072,4 +1124,48 @@ export function createCustomLayer(deps: CustomLayerDeps): CustomLayerInterface {
   slots.init(customLayer);
 
   return customLayer;
+}
+
+/**
+ * The differences between the features a Store of objects is drawn with (`drawn`, read with the
+ * drafts) and the drafts drawn over the features given: each read as the feature it is drawn as,
+ * once, where the feature is in the stacking order of the Store, and no other feature read
+ * otherwise (the features the drafts create left out)
+ */
+function checkObjectDrafts(
+  own: Store,
+  drawn: Store,
+  expected: ReadonlyMap<string, Feature>,
+  drafts: DraftView | undefined,
+): string[] {
+  const problems: string[] = [];
+  const creates = new Set(drafts?.creates().map((create) => create.key) ?? []);
+  const list = drawn.listFeaturesInOrder().filter((feature) => !creates.has(feature.id));
+  const ownList = own.listFeaturesInOrder();
+  if (list.length !== ownList.length) {
+    problems.push(
+      `${list.length} features are drawn with the drafts, and the Store has ${ownList.length}`,
+    );
+    return problems;
+  }
+  for (let i = 0; i < list.length; i++) {
+    const feature = list[i];
+    const at = ownList[i];
+    if (feature.id !== at.id) {
+      problems.push(`the feature "${feature.id}" is drawn where the Store has "${at.id}"`);
+      continue;
+    }
+    const draft = expected.get(feature.id);
+    if (draft !== undefined) {
+      if (feature !== draft) {
+        problems.push(`the feature "${feature.id}" is drawn, and not as its draft leaves it`);
+      }
+      if (drawn.getFeature(feature.id) !== draft) {
+        problems.push(`the feature "${feature.id}" is not read as its draft leaves it`);
+      }
+    } else if (feature !== at) {
+      problems.push(`the feature "${feature.id}" is drawn as a draft it has not`);
+    }
+  }
+  return problems;
 }

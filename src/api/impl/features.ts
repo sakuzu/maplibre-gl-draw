@@ -33,6 +33,7 @@ import type {
   FeatureInput,
   FeatureListOptions,
   FeaturePatch,
+  FeatureReadOptions,
   FeatureStyleResolved,
   MoveTarget,
 } from '../model.js';
@@ -106,6 +107,22 @@ export function createFeatures(deps: ResourceDeps): FeaturesCollection {
   /** The features in stacking order, from the back */
   const inStackingOrder = (features: StoredFeature[]): StoredFeature[] =>
     featuresInStackingOrder(store, features);
+
+  /** How a feature is read: from the Store, or as the drafts edit it (the options checked) */
+  const readerOf = (
+    options: FeatureReadOptions | undefined,
+  ): ((id: string) => StoredFeature | undefined) => {
+    if (options !== undefined) {
+      requireRecord(options, 'The options');
+      onlyKeys(options as unknown as Record<string, unknown>, ['applyDrafts'], 'The options');
+      optionalBoolean(options as unknown as Record<string, unknown>, 'applyDrafts');
+    }
+    const applied = deps.appliedFeature;
+    if (options?.applyDrafts === true && applied) {
+      return (id) => (store.getFeature(id) ? applied(id) : undefined);
+    }
+    return (id) => store.getFeature(id);
+  };
 
   const checkedEntries = (filter: FeatureFilter | undefined) => checkedFilterEntries(filter);
   const filterOf = (filter: FeatureFilter | undefined) => featureFilterOf(deps, filter);
@@ -196,10 +213,11 @@ export function createFeatures(deps: ResourceDeps): FeaturesCollection {
 
   return {
     ...createRestore(deps),
-    get: (id) => store.getFeature(id),
-    getMany(ids) {
+    get: (id, options) => readerOf(options)(id),
+    getMany(ids, options) {
       if (!Array.isArray(ids)) throw invalidInput('The IDs must be an array');
-      return ids.map((id) => store.getFeature(id));
+      const read = readerOf(options);
+      return ids.map((id) => read(id));
     },
     list,
     count(filter) {
@@ -570,9 +588,30 @@ export function pageOf(options: FeatureListOptions): {
 // Inputs and patches
 // ============================================================================
 
+/**
+ * Checks the input of a feature a draft creates and builds the feature `features.create` would
+ * store: with the ID given when the input has none, in the layer given when it names neither layer
+ * nor group
+ *
+ * @throws DrawError as `features.create` does for a wrong input
+ * @internal
+ */
+export function prepareFeatureInput(
+  store: Store,
+  input: FeatureInput,
+  id: string,
+  layerId: string,
+): StoredFeature {
+  return prepareFeature(
+    { store, generateId: () => id, getActiveLayerId: () => layerId },
+    input,
+    new Set(),
+  );
+}
+
 /** Checks an input and builds the feature to store; throws DrawError on a wrong input */
 function prepareFeature(
-  deps: ResourceDeps,
+  deps: Pick<ResourceDeps, 'store' | 'generateId' | 'getActiveLayerId'>,
   input: FeatureInput,
   pending: ReadonlySet<string>,
 ): StoredFeature {

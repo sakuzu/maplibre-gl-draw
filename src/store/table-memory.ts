@@ -75,6 +75,7 @@ import { FileStore } from './memory/file-store.js';
 import { frozenCopy } from './memory/frozen.js';
 import { MemoryClientState } from './memory/ui-state.js';
 import { compareKeys, keyAfter, keysBetween } from './order-keys.js';
+import { setRowPlaceKeys } from './row-places.js';
 import { BULK_SLICE_BUDGET_MS, BULK_SLICE_ROWS, rowStepsOf, sliceRowValues } from './row-steps.js';
 import { combineValuesBefore } from './row-values-before.js';
 import type {
@@ -276,6 +277,25 @@ export class TableContractStore implements StoreContract {
       begin: (write, onEnd) => this.#beginSteps(write, onEnd),
       finish: () => this.#finishSteps(),
     });
+    setRowPlaceKeys(tables, (to) => this.#placeKeys(to));
+  }
+
+  /**
+   * The keys of the order a new feature put in a place gets, among the items there now (see
+   * `row-places.ts`): null when the layer or the group is not there
+   */
+  #placeKeys(to: ItemPlacement): { order: string; member?: string; group?: number } | null {
+    if (!this.#layers.has(to.layerId)) return null;
+    const group = to.groupId === undefined ? undefined : this.#groups.get(to.groupId);
+    if (to.groupId !== undefined && (!group || group.layerId !== to.layerId)) return null;
+    const [key] = this.#keysAt(to, group, new Set(), 1);
+    if (!group) return { order: key };
+    // The key of a member is not read in the order of its layer
+    return {
+      order: keyAfter(this.#lastItemKey(to.layerId)),
+      member: key,
+      group: this.#internals.groups.handleOfId(group.id),
+    };
   }
 
   // ==========================================================================

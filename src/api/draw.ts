@@ -8,6 +8,7 @@
 import type { Map as MaplibreMap } from 'maplibre-gl';
 import type { DatasetsCollection } from './datasets.js';
 import type { DocumentResource } from './document.js';
+import type { DraftsCollection } from './drafts.js';
 import type { DrawingResource } from './drawing.js';
 import type { DrawEvents } from './events.js';
 import type { StoreView, UpdateSource } from './extension/store.js';
@@ -66,6 +67,8 @@ export interface Draw {
   readonly datasets: DatasetsCollection;
   /** What this client hides without changing the document */
   readonly hidden: HiddenCollection;
+  /** The edits drawn over the document before they are written */
+  readonly drafts: DraftsCollection;
   /** What this client has selected */
   readonly selection: SelectionResource;
   /** The selected vertices of one feature in this client */

@@ -30,7 +30,7 @@ import type {
   TransformValues,
 } from '../api/extension/store.js';
 import type { EditResult, EditTarget, FeatureEdit, FeaturePatch } from '../api/model.js';
-import type { VertexTarget } from '../api/state.js';
+import type { VertexId, VertexTarget } from '../api/state.js';
 import type { FeatureTables, RowWrite } from '../api/tables.js';
 import type { BulkOperation } from '../feature-table/bulk-plan.js';
 import type { TableSelection } from '../feature-table/selection.js';
@@ -52,6 +52,7 @@ import type {
   TentativeState,
   UpdateFeatureOptions,
   UpdateSource,
+  VertexRef,
   VertexSelection,
 } from './types.js';
 
@@ -470,6 +471,25 @@ export interface Store extends StoreView, UiState {
    * `Store.transforms`); undefined for the computation of the library
    */
   readonly transforms?: GeometryTransforms;
+  /**
+   * The IDs of vertices of a feature, by their places (see the public `Store.getVertexIds`);
+   * undefined for a Store that gives its vertices no IDs
+   */
+  readonly getVertexIds?: (
+    featureId: string,
+    vertices: readonly VertexRef[],
+  ) => readonly VertexId[];
+  /**
+   * The places of vertices of a feature, by their IDs (see the public `Store.findVertices`);
+   * undefined for a Store that gives its vertices no IDs
+   */
+  readonly findVertices?: (featureId: string, ids: readonly VertexId[]) => (VertexRef | null)[];
+  /**
+   * The IDs of the features selected: the rows selected in bulk, or the features, the members of
+   * the groups or the features of the layers selected (what an edit of `{ selection: true }`
+   * names)
+   */
+  selectedFeatureIds(): readonly string[];
   /** Deletes a feature (see {@link DocumentStore.deleteFeature}) */
   deleteFeature(id: string): boolean;
 

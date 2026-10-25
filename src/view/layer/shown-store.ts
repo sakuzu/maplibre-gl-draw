@@ -16,12 +16,18 @@
  *   no selection, no shape being drawn, no box, no drag, no vertex selected, so that the frame
  *   draws the documents only (an image of the map, the other document).
  *
+ * The drafts of the document of a Store of objects are read through it as well (`DraftView`): a
+ * feature a draft edits is read as the drafts leave it, in its place, and a feature a draft
+ * creates is read in the place it will be created in, while the document is drawn. A Store of rows
+ * draws its drafts among its rows.
+ *
  * Everything else (the writes, the subscription, the internals of the Store of core) goes to the
  * Store of the instance.
  */
 
+import type { DraftView } from '../../drafts/draft-view.js';
 import type { Store, StoreContractView } from '../../store/store.js';
-import type { Selection } from '../../store/types.js';
+import type { Feature, Selection } from '../../store/types.js';
 
 /** The reads of the document, given by the document shown in place of the document */
 const DOCUMENT_READS: ReadonlySet<PropertyKey> = new Set<keyof StoreContractView>([
@@ -83,7 +89,7 @@ export interface ShownStore {
  *
  * @internal
  */
-export function createShownStore(own: Store): ShownStore {
+export function createShownStore(own: Store, drafts?: DraftView): ShownStore {
   let shown: StoreContractView | null = null;
   let editingHidden = false;
   /** The methods of the Store of the instance, bound to it (it keeps private fields) */
@@ -104,8 +110,29 @@ export function createShownStore(own: Store): ShownStore {
     }
     return bound;
   };
+  /** The reads of the features with the drafts of a Store of objects */
+  const draftReads = new Map<PropertyKey, unknown>([
+    [
+      'getFeature',
+      (id: string): Feature | undefined => drafts?.drawnFeature(id) ?? own.getFeature(id),
+    ],
+    ['listFeatures', (): Feature[] => drafts?.unordered(own.listFeatures()) ?? own.listFeatures()],
+    [
+      'listFeaturesInOrder',
+      (): Feature[] => drafts?.ordered(own.listFeaturesInOrder(), own) ?? own.listFeaturesInOrder(),
+    ],
+  ]);
   const store = new Proxy(own, {
     get(target, property) {
+      if (
+        draftReads.has(property) &&
+        shown === null &&
+        drafts !== undefined &&
+        drafts.size > 0 &&
+        own.tables === undefined
+      ) {
+        return draftReads.get(property);
+      }
       if (shown !== null && DOCUMENT_READS.has(property)) {
         if (property === 'listHidden' && typeof shown.listHidden !== 'function')
           return () => NO_HIDDEN;

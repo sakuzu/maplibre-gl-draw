@@ -133,7 +133,9 @@
     ],
     "docs/reference/events.md": [
       "src/api/events.ts",
-      "src/api/impl/events.ts"
+      "src/api/impl/events.ts",
+      "src/api/drafts.ts",
+      "src/drafts/**"
     ],
     "docs/reference/data-format.md": [
       "src/api/impl/import-export/native-format.ts",
