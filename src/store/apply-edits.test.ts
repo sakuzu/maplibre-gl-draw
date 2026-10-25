@@ -447,7 +447,7 @@ describe.each(STORES)('applyEdits of %s', (_name, make) => {
           patch: { geometry: { type: 'LineString', coordinates: [] } },
         },
       ],
-      ['an unknown kind', { kind: 'translate', featureId: 'point' } as never],
+      ['an unknown kind', { kind: 'transform', featureId: 'point' } as never],
     ];
     for (const [what, edit] of wrong) {
       const { store, notified } = watched(make);

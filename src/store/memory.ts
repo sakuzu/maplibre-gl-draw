@@ -30,7 +30,14 @@ import { FileStore } from './memory/file-store.js';
 import { frozenCopy, frozenFeature } from './memory/frozen.js';
 import { MemoryClientState } from './memory/ui-state.js';
 import { moveItemsByLists } from './move-items.js';
-import type { DocumentStore, EditResult, FeatureEdit, Store, StoreContract } from './store.js';
+import type {
+  DocumentStore,
+  EditResult,
+  FeatureEdit,
+  GeometryTransforms,
+  Store,
+  StoreContract,
+} from './store.js';
 import type {
   Feature,
   FileData,
@@ -83,8 +90,11 @@ export class MemoryContractStore implements StoreContract {
   readonly #bus = new ChangeBus();
   readonly #document = new MemoryDocumentStore();
   readonly #client = new MemoryClientState(this.#bus);
+  /** The computation of the edits that move, rotate and scale features (the library's when none) */
+  readonly transforms?: GeometryTransforms;
 
-  constructor() {
+  constructor(options: { readonly transforms?: GeometryTransforms } = {}) {
+    if (options.transforms) this.transforms = options.transforms;
     this.#document.subscribe((changes) => this.#bus.merge(changes));
   }
 
@@ -132,7 +142,11 @@ export class MemoryContractStore implements StoreContract {
   }
   applyEdits(edits: readonly FeatureEdit[]): EditResult {
     // Every edit is checked before one is written
-    const { updates, dropped } = updatesOfEdits(edits, (id) => this.#document.getFeature(id));
+    const { updates, dropped } = updatesOfEdits(
+      edits,
+      (id) => this.#document.getFeature(id),
+      this.transforms,
+    );
     if (updates.length > 0) {
       this.#apply(() => {
         for (const { id, updates: fields } of updates) this.#document.updateFeature(id, fields);

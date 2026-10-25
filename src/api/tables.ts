@@ -34,7 +34,7 @@ import { createTableStore as createTableStoreOf } from '../store/table-memory.js
 import type { RowBlock } from '../table/row-group-types.js';
 import { DrawError } from './errors.js';
 import type { DocumentChange } from './events.js';
-import type { Store, StoreView, UpdateSource } from './extension/store.js';
+import type { GeometryTransforms, Store, StoreView, UpdateSource } from './extension/store.js';
 import type { Feature, FeatureStyle, FeatureType, FeatureValues } from './model.js';
 
 export type {
@@ -615,7 +615,9 @@ export function createFeatureTables(options: FeatureTablesOptions = {}): {
  * elsewhere).
  * `listFeatures` and `listFeaturesInOrder` throw: read the rows from the tables.
  *
- * @param options The options of its tables (the Worker that builds the rows)
+ * @param options The options of its tables (the Worker that builds the rows), and how it
+ *   computes the edits that move, rotate and scale features (`transforms`, see
+ *   {@link Store.transforms}; the computation of the library when omitted)
  * @returns The Store, for the `store` option of `createDraw`, and the writer of its tables: what
  *   adds row blocks (`addRowBlocks`) and writes rows from elsewhere, in a transaction of the
  *   Store with their source
@@ -630,7 +632,9 @@ export function createFeatureTables(options: FeatureTablesOptions = {}): {
  * ```
  */
 export function createTableStore(
-  options: Omit<FeatureTablesOptions, 'onChange' | 'onRelease'> = {},
+  options: Omit<FeatureTablesOptions, 'onChange' | 'onRelease'> & {
+    readonly transforms?: GeometryTransforms;
+  } = {},
 ): {
   store: Store;
   writer: FeatureTablesWriter;

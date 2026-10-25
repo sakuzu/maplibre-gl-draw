@@ -53,7 +53,14 @@ import { ChangeBus } from './memory/change-bus.js';
 import { MemoryDrawingState } from './memory/ui-state.js';
 import { moveItemsByLists } from './move-items.js';
 import { BULK_SLICE_ROWS, type RowSteps, rowStepsOf } from './row-steps.js';
-import type { EditResult, FeatureEdit, SlicedWrite, Store, StoreContract } from './store.js';
+import type {
+  EditResult,
+  FeatureEdit,
+  GeometryTransforms,
+  SlicedWrite,
+  Store,
+  StoreContract,
+} from './store.js';
 import type {
   BoxSelection,
   DragState,
@@ -261,7 +268,11 @@ export class DrawStore implements Store {
   }
   applyEdits(edits: readonly FeatureEdit[]): EditResult | null {
     if (this.#contract.isReadOnly() || !this.#takesWrites()) return null;
-    return this.transact(() => this.#contract.applyEdits(edits));
+    return this.transact(() => this.#contract.applyEdits(this.#withSelectionResolved(edits)));
+  }
+  /** The computation of the edits that move, rotate and scale features of the contract */
+  get transforms(): GeometryTransforms | undefined {
+    return this.#contract.transforms;
   }
   deleteFeature(id: string): boolean {
     return this.#write(() => {
@@ -811,6 +822,76 @@ export class DrawStore implements Store {
       layerLocked: (layerId) => contract.getLayer(layerId)?.locked === true,
       hidden: (id) => contract.isHidden(id),
     };
+  }
+
+  /**
+   * Edits whose target is the selection (`{ selection: true }`) made edits of the features
+   * selected now, by their IDs: the edits are given as they are when none is
+   */
+  #withSelectionResolved(edits: readonly FeatureEdit[]): readonly FeatureEdit[] {
+    if (!Array.isArray(edits)) return edits;
+    let selected: readonly string[] | null = null;
+    let out: FeatureEdit[] | null = null;
+    for (let i = 0; i < edits.length; i++) {
+      const edit = edits[i];
+      const target = (edit as { target?: unknown } | null | undefined)?.target;
+      if (
+        typeof target !== 'object' ||
+        target === null ||
+        (target as { selection?: unknown }).selection !== true ||
+        Object.keys(target).length !== 1
+      ) {
+        continue;
+      }
+      selected ??= this.#selectedFeatureIds();
+      out ??= [...edits];
+      out[i] = { ...edit, target: { featureIds: selected } } as FeatureEdit;
+    }
+    return out ?? edits;
+  }
+
+  /**
+   * The IDs of the features selected: the rows selected in bulk, or the features, the members of
+   * the groups or the features of the layers selected
+   */
+  #selectedFeatureIds(): readonly string[] {
+    const contract = this.#contract;
+    const tables = contract.tables;
+    const bulk = this.#bulk;
+    if (bulk && tables) {
+      const ids: string[] = [];
+      for (const handle of bulk.rows.handles) {
+        const id = tables.getRowId(handle);
+        if (id !== undefined) ids.push(id);
+      }
+      return ids;
+    }
+    const { type, ids } = contract.getSelection();
+    if (type === 'feature') return [...ids];
+    const out: string[] = [];
+    const membersOf = (group: Group): readonly string[] =>
+      group.kind === 'table' ? tableGroupMemberIds(tables, group) : group.featureIds;
+    if (type === 'group') {
+      for (const id of ids) {
+        const group = contract.getGroup(id);
+        if (group) out.push(...membersOf(group));
+      }
+    } else if (type === 'layer') {
+      for (const id of ids) {
+        const layer = contract.getLayer(id);
+        if (!layer) continue;
+        if (layer.kind === 'table') {
+          out.push(...tableLayerFeatureIds(tables, id));
+          continue;
+        }
+        for (const item of layer.items) {
+          const group = contract.getGroup(item);
+          if (group) out.push(...membersOf(group));
+          else out.push(item);
+        }
+      }
+    }
+    return out;
   }
 
   /** The rows of the features of a selection (the members of the groups and the layers) */

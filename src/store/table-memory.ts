@@ -58,7 +58,18 @@ import { ItemWalk } from '../feature-table/item-walk.js';
 import { createWriteMarkKeeper, type WriteMarkKeeper } from '../feature-table/write-marks.js';
 import { ROW_FLAG_DELETED } from '../table/row-group-types.js';
 import { DrawStore } from './draw-store.js';
-import { updatesOfEdits } from './feature-edits.js';
+import {
+  checkEdits,
+  DEFAULT_TRANSFORMS,
+  type FeatureUpdate,
+  featureIdsOf,
+  featureUpdatesOfEdit,
+  hasTransformEdits,
+  isTransformEdit,
+  transformedFeatureFields,
+  transformedFields,
+  updatesOfEdits,
+} from './feature-edits.js';
 import { ChangeBus } from './memory/change-bus.js';
 import { FileStore } from './memory/file-store.js';
 import { frozenCopy } from './memory/frozen.js';
@@ -66,7 +77,15 @@ import { MemoryClientState } from './memory/ui-state.js';
 import { compareKeys, keyAfter, keysBetween } from './order-keys.js';
 import { BULK_SLICE_BUDGET_MS, BULK_SLICE_ROWS, rowStepsOf, sliceRowValues } from './row-steps.js';
 import { combineValuesBefore } from './row-values-before.js';
-import type { EditResult, FeatureEdit, Store, StoreContract } from './store.js';
+import type {
+  EditResult,
+  FeatureEdit,
+  GeometryTransforms,
+  Store,
+  StoreContract,
+  TransformEdit,
+} from './store.js';
+import { transformRoleFields } from './transform-roles.js';
 import type {
   Feature,
   FileData,
@@ -98,7 +117,21 @@ import type {
 export type TableStoreOptions = Omit<FeatureTablesInternalOptions, 'onChange' | 'onRelease'> & {
   /** The most features opened at once for the selection (`HOLD_LIMIT` when omitted) */
   readonly holdLimit?: number;
+  /** The computation of the edits that move, rotate and scale features (the library's when none) */
+  readonly transforms?: GeometryTransforms;
 };
+
+/**
+ * A row an edit that moves, rotates or scales features read, as the edits before leave it: its
+ * type, its geometry, the keys of `properties` read and the fields written
+ */
+interface TransformedRow {
+  readonly handle: RowHandle;
+  readonly type: string;
+  geometry: Feature['geometry'];
+  readonly properties: Map<string, unknown>;
+  readonly fields: Map<RowField, unknown>;
+}
 
 /**
  * Creates an empty in-memory Store that holds its features as rows of columns
@@ -113,8 +146,8 @@ export function createTableStore(options: TableStoreOptions = {}): {
   store: Store;
   writer: FeatureTablesWriter;
 } {
-  const { holdLimit, ...tableOptions } = options;
-  const contract = new TableContractStore(tableOptions);
+  const { holdLimit, transforms, ...tableOptions } = options;
+  const contract = new TableContractStore(tableOptions, transforms);
   return {
     store: new DrawStore(contract, holdLimit === undefined ? {} : { holdLimit }),
     writer: contract.writer,
@@ -192,7 +225,14 @@ export class TableContractStore implements StoreContract {
   /** Whether a step of it is being written (its own writes and reads do not finish it) */
   #inStep = false;
 
-  constructor(options: TableStoreOptions = {}) {
+  /** The computation of the edits that move, rotate and scale features (the library's when none) */
+  readonly transforms?: GeometryTransforms;
+
+  constructor(
+    options: Omit<TableStoreOptions, 'holdLimit' | 'transforms'> = {},
+    transforms?: GeometryTransforms,
+  ) {
+    if (transforms) this.transforms = transforms;
     const { tables, writer } = createFeatureTablesStore({
       ...options,
       onChange: (change) => this.#bus.merge(change as StoreChange),
@@ -445,15 +485,159 @@ export class TableContractStore implements StoreContract {
     });
   }
 
+  /**
+   * Applies edits of features (see the public `Store.applyEdits`): every edit is checked before
+   * one is written. The edits of one feature, and the edits that move, rotate and scale the rows
+   * held as features, are made into the updates of the features. The other rows an edit that
+   * moves, rotates or scales features names are read and written as rows, with no feature made:
+   * their type, geometry and fields of the roles read at once, the geometry and those fields
+   * written in one write
+   */
   applyEdits(edits: readonly FeatureEdit[]): EditResult {
-    // Every edit is checked before one is written
-    const { updates, dropped } = updatesOfEdits(edits, (id) => this.getFeature(id));
-    if (updates.length > 0) {
+    const transforms = this.transforms ?? DEFAULT_TRANSFORMS;
+    if (!hasTransformEdits(edits)) {
+      // The edits of one feature only: made into the updates of the features
+      const { updates, dropped } = updatesOfEdits(edits, (id) => this.getFeature(id), transforms);
+      if (updates.length > 0) {
+        this.transact(() => {
+          for (const { id, updates: fields } of updates) this.updateFeature(id, fields);
+        });
+      }
+      return { dropped };
+    }
+    const computed = checkEdits(edits, transforms);
+    // The features as the edits before leave them, and the rows not made features
+    const edited = new Map<string, Feature>();
+    const rows = new Map<string, TransformedRow>();
+    const updates: FeatureUpdate[] = [];
+    let dropped = 0;
+    /** A feature as the edits before leave it, made of its row when it was read as one */
+    const featureOf = (id: string): Feature | undefined => {
+      const made = edited.get(id);
+      if (made) return made;
+      const feature = this.getFeature(id);
+      const row = rows.get(id);
+      if (!feature || !row) return feature;
+      // The row was edited as a row: the fields written so far go with the feature
+      rows.delete(id);
+      const written = featureWithFields(feature, row.fields);
+      const fields: Partial<Feature> = {};
+      if (row.fields.has('geometry')) fields.geometry = written.geometry;
+      if (row.fields.size > (row.fields.has('geometry') ? 1 : 0)) {
+        fields.properties = written.properties;
+      }
+      updates.push({ id, updates: fields });
+      return written;
+    };
+    edits.forEach((edit, i) => {
+      if (!isTransformEdit(edit)) {
+        const feature = featureOf(edit.featureId);
+        if (!feature) {
+          dropped++;
+          return;
+        }
+        const fields = featureUpdatesOfEdit(feature, edit);
+        edited.set(feature.id, { ...feature, ...fields });
+        updates.push({ id: feature.id, updates: fields });
+        return;
+      }
+      const transform = computed[i] as TransformEdit;
+      const ids = featureIdsOf(edit);
+      this.#readRows(ids, edited, rows);
+      for (const id of ids) {
+        const row = rows.get(id);
+        if (row) {
+          this.#transformRow(transforms, transform, id, row);
+          continue;
+        }
+        const feature = featureOf(id);
+        if (!feature) {
+          dropped++;
+          continue;
+        }
+        const fields = transformedFeatureFields(transforms, transform, feature);
+        if (!fields) continue;
+        edited.set(feature.id, { ...feature, ...fields });
+        updates.push({ id: feature.id, updates: fields });
+      }
+    });
+    const written = [...rows.values()].filter((row) => row.fields.size > 0);
+    if (updates.length > 0 || written.length > 0) {
       this.transact(() => {
         for (const { id, updates: fields } of updates) this.updateFeature(id, fields);
+        if (written.length > 0) this.#writeRows(written);
       });
     }
     return { dropped };
+  }
+
+  /**
+   * Reads the rows of features an edit that moves, rotates or scales features names that are not
+   * made features yet (not edited as features, not held), at once: their type, geometry and the
+   * keys of `properties` of the roles
+   */
+  #readRows(
+    ids: readonly string[],
+    edited: ReadonlyMap<string, Feature>,
+    rows: Map<string, TransformedRow>,
+  ): void {
+    const handles: number[] = [];
+    const named: string[] = [];
+    for (const id of ids) {
+      if (edited.has(id) || rows.has(id) || this.#internals.getOpenedFeature(id)) continue;
+      const handle = this.tables.findRow(id);
+      if (handle === undefined || this.#internals.isHeld(handle)) continue;
+      handles.push(handle);
+      named.push(id);
+    }
+    if (handles.length === 0) return;
+    const keys = transformRoleFields();
+    const read = this.tables.readValues({
+      handles: Int32Array.from(handles),
+      fields: new Map<RowField, unknown[]>([
+        ['type', []],
+        ['geometry', []],
+        ...keys.map((key): [RowField, unknown[]] => [`property:${key}`, []]),
+      ]),
+    });
+    const types = read.fields.get('type') as readonly unknown[];
+    const geometries = read.fields.get('geometry') as readonly unknown[];
+    const values = keys.map((key) => read.fields.get(`property:${key}`) as readonly unknown[]);
+    named.forEach((id, i) => {
+      const properties = new Map<string, unknown>();
+      keys.forEach((key, k) => {
+        const value = values[k]?.[i];
+        if (value !== undefined) properties.set(key, value);
+      });
+      rows.set(id, {
+        handle: handles[i] as number,
+        type: types[i] as string,
+        geometry: geometries[i] as Feature['geometry'],
+        properties,
+        fields: new Map(),
+      });
+    });
+  }
+
+  /** Applies an edit that moves, rotates or scales features to a row read as one */
+  #transformRow(
+    transforms: GeometryTransforms,
+    edit: TransformEdit,
+    id: string,
+    row: TransformedRow,
+  ): void {
+    const fields = transformedFields(transforms, edit, id, row.type, row.geometry, (key) =>
+      row.properties.get(key),
+    );
+    if (!fields) return;
+    if (fields.geometry !== undefined) {
+      row.geometry = fields.geometry;
+      row.fields.set('geometry', fields.geometry);
+    }
+    for (const [key, value] of fields.properties) {
+      row.properties.set(key, value);
+      row.fields.set(`property:${key}`, value);
+    }
   }
 
   abortIntermediateUpdates(ids: string[]): void {

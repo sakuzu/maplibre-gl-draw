@@ -106,6 +106,7 @@ export { DRAW_PROPERTY_PREFIX, isDrawProperty } from './api/model.js';
 // Inputs, patches and filters
 export type {
   EditResult,
+  EditTarget,
   FeatureEdit,
   FeatureFilter,
   FeatureInput,
@@ -183,7 +184,14 @@ export type {
 } from './api/datasets.js';
 
 // Store
-export type { Store, StoreView, UpdateSource } from './api/extension/store.js';
+export type {
+  GeometryTransforms,
+  Store,
+  StoreView,
+  TransformEdit,
+  TransformValues,
+  UpdateSource,
+} from './api/extension/store.js';
 export { diffItemOrder } from './api/model.js';
 
 // Extensions

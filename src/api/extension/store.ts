@@ -8,6 +8,7 @@
  * option of `createDraw`, for example to keep the document somewhere shared.
  */
 
+import type { Geometry } from 'geojson';
 import type { DocumentChange } from '../events.js';
 import type {
   EditResult,
@@ -47,6 +48,65 @@ export type UpdateSource =
   | 'remote'
   | 'import'
   | (string & Record<never, never>);
+
+/**
+ * An edit that moves, rotates or scales features, without the features it names: what
+ * {@link GeometryTransforms} computes. Its points are `[longitude, latitude]`, two numbers.
+ */
+export type TransformEdit =
+  | Omit<Extract<FeatureEdit, { kind: 'translate' }>, 'target'>
+  | Omit<Extract<FeatureEdit, { kind: 'rotate' }>, 'target'>
+  | Omit<Extract<FeatureEdit, { kind: 'scale' }>, 'target'>;
+
+/**
+ * The values of one feature an edit that moves, rotates or scales features changes
+ * ({@link GeometryTransforms.apply}): its geometry, and the fields its type changes with it.
+ *
+ * A key of a field is there only when the type of the feature has that field: its value is the
+ * one the feature has, or `null` when the feature has none yet. An edit starts a field of `null`
+ * from 0 for `angle` and from 1 for `size`, and leaves `bearing` at `null`.
+ */
+export interface TransformValues {
+  /** The GeoJSON geometry */
+  readonly geometry: Geometry;
+  /**
+   * The rotation, in degrees counterclockwise: a rotation adds its angle, within [0, 360)
+   * (the rotation of an image)
+   */
+  readonly angle?: number | null;
+  /**
+   * A direction, in degrees clockwise from the north: a rotation takes its angle away, within
+   * [0, 360)
+   */
+  readonly bearing?: number | null;
+  /** A size: a scaling multiplies it by `sizeFactor` (the scale of an image, the radius of a circle) */
+  readonly size?: number | null;
+  /**
+   * Whether a scaling moves the positions by `sizeFactor` along both the east and the north in
+   * place of `eastFactor` and `northFactor`, so that the feature keeps its shape (an image, a
+   * circle)
+   */
+  readonly uniformScale?: boolean;
+}
+
+/**
+ * How a Store computes the edits that move, rotate and scale features
+ * ({@link Store.transforms}).
+ */
+export interface GeometryTransforms {
+  /**
+   * Whether the Store takes the values of an edit (its points, its angle, its factors). An edit
+   * it does not take makes `applyEdits` throw `invalid-input`, storing nothing.
+   */
+  accepts(edit: TransformEdit): boolean;
+  /**
+   * The values of one feature with an edit applied: its geometry and its fields, in the same
+   * shape as they are given (a field given is given back). An edit that does nothing (a move to
+   * the same point, a rotation by 0, a scaling whose factors are all 1) gives the values back as
+   * they are.
+   */
+  apply(edit: TransformEdit, values: TransformValues): TransformValues;
+}
 
 /**
  * The read side of the Store: the document, the state of this client, and the subscription
@@ -212,14 +272,29 @@ export interface Store extends StoreView {
    * the result; the other edits apply. A Store that gives its vertices no IDs takes the vertices
    * of the edits by their places ({@link VertexRef}) only.
    *
+   * The edits that move, rotate and scale features name their features by their IDs
+   * (`{ featureIds }`): each feature that is not there is left out and counted. The instance
+   * makes `{ selection: true }` the IDs of the features selected before it calls the Store. They
+   * are computed by {@link Store.transforms}, or by the computation of the library when the Store
+   * has none.
+   *
    * @returns What was applied, or `null` when the Store refuses the edits, changing nothing
    *   (read-only, or a reason of its own)
    * @throws DrawError `invalid-input`, storing nothing, when an edit cannot apply: an edit or a
    *   patch of the wrong shape, a vertex the feature does not have, positions that do not match
-   *   the vertices, an insert with both or neither of `after` and `before`, or a deletion that
-   *   leaves a line or a ring with too few positions
+   *   the vertices, an insert with both or neither of `after` and `before`, a deletion that
+   *   leaves a line or a ring with too few positions, a target of `{ selection: true }`, or an
+   *   edit whose values the computation does not take (`accepts`)
    */
   applyEdits(edits: readonly FeatureEdit[]): EditResult | null;
+  /**
+   * How the Store computes the edits that move, rotate and scale features (`applyEdits`).
+   * Optional: without it, the library computes them on the WGS 84 ellipsoid, in the east, north
+   * and up frame of the point the edit names. A Store gives its own to compute them as the
+   * document it keeps them in does, so that what the instance shows of an edit and what the
+   * Store writes are computed alike.
+   */
+  readonly transforms?: GeometryTransforms;
   /** Deletes a feature. */
   deleteFeature(id: string): boolean;
   /** Creates a layer. */

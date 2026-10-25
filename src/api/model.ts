@@ -430,9 +430,25 @@ export interface FeaturePatch {
  * - `vertex-delete` deletes the vertices, and keeps the lines and the rings of the geometry with
  *   enough positions; a point of a MultiPoint goes with its vertex.
  *
+ * - `translate` moves the features of `target` from the point `from` to the point `to`, in the
+ *   east, north and up frame of the earth at each of the two points.
+ * - `rotate` turns the features of `target` about `center` by `angleDegrees`, counterclockwise
+ *   seen from above, and adds the angle to the rotation of the features that have one.
+ * - `scale` stretches the features of `target` about `center` by `eastFactor` along the east and
+ *   by `northFactor` along the north, and multiplies the size of the features that have one (a
+ *   scale, the radius of a circle) by `sizeFactor`; such a feature moves by `sizeFactor` along
+ *   both, so that it keeps its shape.
+ *
  * The last position of a closed ring is its first vertex: moving or deleting either moves or
  * deletes both, and a vertex inserted after the last or before the first goes between the last
  * vertex and the first.
+ *
+ * The points of `translate`, `rotate` and `scale` are `[longitude, latitude]` in degrees (a
+ * number after the first two is not read). The values they take (the latitudes, the angle and
+ * the factors) are the ones the Store takes (`Store.transforms`, or the ranges of the computation
+ * of the library for a Store without it: a latitude within [-90, 90], an angle within
+ * (-180, 180], factors within [1/1,000,000, 1,000,000]). They change the
+ * longitudes and the latitudes of the positions, and keep the numbers after them as they are.
  */
 export type FeatureEdit =
   | {
@@ -468,6 +484,55 @@ export type FeatureEdit =
       featureId: string;
       /** The vertices to delete */
       vertices: readonly VertexTarget[];
+    }
+  | {
+      kind: 'translate';
+      /** The features */
+      target: EditTarget;
+      /** The point the features move from, `[longitude, latitude]` in degrees */
+      from: Position;
+      /** The point they move to, `[longitude, latitude]` in degrees */
+      to: Position;
+    }
+  | {
+      kind: 'rotate';
+      /** The features */
+      target: EditTarget;
+      /** The point they turn about, `[longitude, latitude]` in degrees */
+      center: Position;
+      /** The angle, counterclockwise seen from above */
+      angleDegrees: number;
+    }
+  | {
+      kind: 'scale';
+      /** The features */
+      target: EditTarget;
+      /** The point they stretch from, `[longitude, latitude]` in degrees */
+      center: Position;
+      /** The factor along the east */
+      eastFactor: number;
+      /** The factor along the north */
+      northFactor: number;
+      /** The factor of the size of the features that have one, and of how far they move */
+      sizeFactor: number;
+    };
+
+/**
+ * The features an edit of {@link FeatureEdit} moves, rotates or scales: these features, or the
+ * features selected in this client when it is applied (the features of the groups and the layers
+ * selected).
+ *
+ * The instance gives a Store the IDs: `{ selection: true }` is what an application asks of the
+ * instance, and a Store that is given it throws.
+ */
+export type EditTarget =
+  | {
+      /** The IDs of the features, each once */
+      featureIds: readonly string[];
+    }
+  | {
+      /** The features selected */
+      selection: true;
     };
 
 /** What a Store did with edits of features (`Store.applyEdits`). */

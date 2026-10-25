@@ -11,12 +11,18 @@
  * `shared/utils/vertex-edits.ts`, as the vertex operations of the select mode do, and write the
  * geometry whole.
  *
+ * The edits that move, rotate and scale features (`translate`, `rotate`, `scale`) are computed by
+ * the computation of the Store (`Store.transforms`), or by the one of the library
+ * (`geometry/enu-transforms.ts`) for a Store without it, over the geometry and the fields of the
+ * roles of each feature (`transform-roles.ts`).
+ *
  * Everything is checked before anything is written: an edit that cannot apply throws a
  * DrawError `invalid-input`, and the Store writes none of the edits then.
  */
 
 import type { Value } from '@sakuzu/tabane';
 import type { Geometry } from 'geojson';
+import { acceptsEnuEdit, applyEnuEdit } from '../geometry/enu-transforms.js';
 import { DrawError } from '../shared/draw-error.js';
 import { describeGeometryProblem } from '../shared/geometry-validation.js';
 import { describeStyleProblem } from '../shared/style-validation.js';
@@ -32,7 +38,21 @@ import {
 } from '../shared/utils/vertex-edits.js';
 import { getVertexPart } from '../shared/utils/vertex-ref.js';
 import { drawValueOfInput } from '../table/value-input.js';
-import type { FeatureEdit, FeaturePatch, VertexTarget } from './store.js';
+import type {
+  FeatureEdit,
+  FeaturePatch,
+  GeometryTransforms,
+  TransformEdit,
+  TransformValues,
+  VertexTarget,
+} from './store.js';
+import {
+  roleFieldsOf,
+  type TransformRoles,
+  transformEditOf,
+  transformRolesOf,
+  transformValuesOf,
+} from './transform-roles.js';
 import type { Coordinate, Feature, FeatureCoordinates, FeatureStyle, VertexRef } from './types.js';
 
 /** The keys a patch may have */
@@ -44,7 +64,118 @@ const EDIT_KEYS: Readonly<Record<FeatureEdit['kind'], readonly string[]>> = {
   'vertex-move': ['kind', 'featureId', 'vertices', 'positions'],
   'vertex-insert': ['kind', 'featureId', 'after', 'before', 'position'],
   'vertex-delete': ['kind', 'featureId', 'vertices'],
+  translate: ['kind', 'target', 'from', 'to'],
+  rotate: ['kind', 'target', 'center', 'angleDegrees'],
+  scale: ['kind', 'target', 'center', 'eastFactor', 'northFactor', 'sizeFactor'],
 };
+
+/**
+ * The computation of the edits that move, rotate and scale features for a Store that gives none
+ *
+ * @internal
+ */
+export const DEFAULT_TRANSFORMS: GeometryTransforms = {
+  accepts: acceptsEnuEdit,
+  apply: applyEnuEdit,
+};
+
+/** The edits that move, rotate and scale features */
+type FeaturesEdit = Extract<FeatureEdit, { kind: TransformEdit['kind'] }>;
+
+/** The edits of one feature */
+type OneFeatureEdit = Exclude<FeatureEdit, FeaturesEdit>;
+
+/**
+ * Whether an edit moves, rotates or scales features
+ *
+ * @internal
+ */
+export function isTransformEdit(edit: FeatureEdit): edit is FeaturesEdit {
+  return edit.kind === 'translate' || edit.kind === 'rotate' || edit.kind === 'scale';
+}
+
+/**
+ * Whether edits hold an edit that moves, rotates or scales features (an edit of a wrong shape is
+ * not one)
+ *
+ * @internal
+ */
+export function hasTransformEdits(edits: readonly FeatureEdit[]): boolean {
+  if (!Array.isArray(edits)) return false;
+  for (const edit of edits) {
+    const kind = isRecord(edit) ? edit.kind : undefined;
+    if (kind === 'translate' || kind === 'rotate' || kind === 'scale') return true;
+  }
+  return false;
+}
+
+/**
+ * The IDs of the features of an edit that moves, rotates or scales features (checked)
+ *
+ * @internal
+ */
+export function featureIdsOf(edit: FeaturesEdit): readonly string[] {
+  return (edit.target as { featureIds: readonly string[] }).featureIds;
+}
+
+/**
+ * Checks edits, each as its kind takes it and the edits that move, rotate and scale features
+ * as the computation takes them, before any is applied
+ *
+ * @returns The edit each of those gives its computation, at its index (undefined for the others)
+ * @throws DrawError `invalid-input` when an edit cannot apply
+ * @internal
+ */
+export function checkEdits(
+  edits: readonly FeatureEdit[],
+  transforms: GeometryTransforms,
+): Array<TransformEdit | undefined> {
+  if (!Array.isArray(edits)) throw invalidInput('The edits must be an array');
+  return edits.map((edit) => {
+    checkEdit(edit);
+    if (!isTransformEdit(edit)) return undefined;
+    const computed = transformEditOf(edit);
+    if (!transforms.accepts(computed)) {
+      throw invalidInput(`The edit ${edit.kind} has values the Store does not take`, {
+        edit: computed,
+      });
+    }
+    return computed;
+  });
+}
+
+/**
+ * The fields an edit that moves, rotates or scales features writes over one of them: its
+ * geometry and the keys of `properties` of its roles (none when it changes nothing)
+ *
+ * @param type The type of the feature
+ * @param read Reads a key of its `properties` (undefined for a key that is not there)
+ * @throws DrawError `invalid-input` when the computation gives a geometry the feature cannot have
+ * @internal
+ */
+export function transformedFields(
+  transforms: GeometryTransforms,
+  edit: TransformEdit,
+  id: string,
+  type: string,
+  geometry: Geometry,
+  read: (key: string) => unknown,
+): { geometry: Geometry | undefined; properties: Array<[string, number]> } | null {
+  const roles: TransformRoles = transformRolesOf(type, (key) => read(key) !== undefined);
+  const before: TransformValues = transformValuesOf(geometry, roles, read);
+  const after = transforms.apply(edit, before);
+  if (after === before) return null;
+  const moved = after.geometry !== geometry ? after.geometry : undefined;
+  if (moved !== undefined) {
+    const problem = describeGeometryProblem(type, moved);
+    if (problem) {
+      throw invalidInput(`The edit ${edit.kind} gives the feature ${id} ${problem}`, { id });
+    }
+  }
+  const properties = roleFieldsOf(roles, before, after);
+  if (moved === undefined && properties.length === 0) return null;
+  return { geometry: moved, properties };
+}
 
 /** The kinds of the edits */
 const EDIT_KINDS: ReadonlySet<string> = new Set(Object.keys(EDIT_KEYS));
@@ -81,27 +212,83 @@ export interface FeatureUpdate {
 export function updatesOfEdits(
   edits: readonly FeatureEdit[],
   getFeature: (id: string) => Feature | undefined,
+  transforms: GeometryTransforms = DEFAULT_TRANSFORMS,
 ): { updates: FeatureUpdate[]; dropped: number } {
-  if (!Array.isArray(edits)) throw invalidInput('The edits must be an array');
+  const computed = checkEdits(edits, transforms);
   // The features as the edits before leave them
   const edited = new Map<string, Feature>();
   const updates: FeatureUpdate[] = [];
   let dropped = 0;
-  for (const edit of edits) {
-    checkEdit(edit);
-    const feature = edited.get(edit.featureId) ?? getFeature(edit.featureId);
-    if (!feature) {
-      dropped++;
-      continue;
+  edits.forEach((edit, i) => {
+    if (!isTransformEdit(edit)) {
+      const feature = edited.get(edit.featureId) ?? getFeature(edit.featureId);
+      if (!feature) {
+        dropped++;
+        return;
+      }
+      const fields = featureUpdatesOfEdit(feature, edit);
+      edited.set(feature.id, { ...feature, ...fields });
+      updates.push({ id: feature.id, updates: fields });
+      return;
     }
-    const fields: Partial<Feature> =
-      edit.kind === 'set'
-        ? featureUpdatesOfPatch(feature, edit.patch)
-        : { geometry: editedGeometry(feature, edit) };
-    edited.set(feature.id, { ...feature, ...fields });
-    updates.push({ id: feature.id, updates: fields });
-  }
+    const transform = computed[i] as TransformEdit;
+    for (const id of featureIdsOf(edit)) {
+      const feature = edited.get(id) ?? getFeature(id);
+      if (!feature) {
+        dropped++;
+        continue;
+      }
+      const fields = transformedFeatureFields(transforms, transform, feature);
+      if (!fields) continue;
+      edited.set(feature.id, { ...feature, ...fields });
+      updates.push({ id: feature.id, updates: fields });
+    }
+  });
   return { updates, dropped };
+}
+
+/**
+ * The fields an edit of one feature writes over it
+ *
+ * @throws DrawError `invalid-input` when it cannot apply
+ * @internal
+ */
+export function featureUpdatesOfEdit(feature: Feature, edit: OneFeatureEdit): Partial<Feature> {
+  return edit.kind === 'set'
+    ? featureUpdatesOfPatch(feature, edit.patch)
+    : { geometry: editedGeometry(feature, edit) };
+}
+
+/**
+ * The fields an edit that moves, rotates or scales features writes over one of them (null when
+ * it changes nothing)
+ *
+ * @throws DrawError `invalid-input` when the computation gives a geometry the feature cannot have
+ * @internal
+ */
+export function transformedFeatureFields(
+  transforms: GeometryTransforms,
+  edit: TransformEdit,
+  feature: Feature,
+): Partial<Feature> | null {
+  const properties = (feature.properties ?? {}) as Record<string, unknown>;
+  const fields = transformedFields(
+    transforms,
+    edit,
+    feature.id,
+    feature.type,
+    feature.geometry,
+    (key) => (key in properties ? properties[key] : undefined),
+  );
+  if (!fields) return null;
+  const out: Partial<Feature> = {};
+  if (fields.geometry !== undefined) out.geometry = fields.geometry;
+  if (fields.properties.length > 0) {
+    const next: Record<string, Value> = { ...(properties as Record<string, Value>) };
+    for (const [key, value] of fields.properties) setOwnProperty(next, key, value);
+    out.properties = next;
+  }
+  return out;
 }
 
 /**
@@ -193,6 +380,10 @@ function checkEdit(edit: FeatureEdit): void {
     throw invalidInput(`An edit cannot have the kind ${JSON.stringify(kind)}`);
   }
   onlyKeys(record, EDIT_KEYS[kind as FeatureEdit['kind']], `An edit ${kind}`);
+  if (isTransformEdit(edit)) {
+    checkTransformEdit(edit);
+    return;
+  }
   if (typeof record.featureId !== 'string' || record.featureId === '') {
     throw invalidInput('featureId must be a non-empty string');
   }
@@ -220,6 +411,59 @@ function checkEdit(edit: FeatureEdit): void {
       checkVertices(edit.vertices);
       return;
   }
+}
+
+/**
+ * Checks the shape of an edit that moves, rotates or scales features: its features by their IDs,
+ * each once, its points two numbers or more, its angle and its factors numbers (their ranges are
+ * the ones of the computation)
+ */
+function checkTransformEdit(edit: FeaturesEdit): void {
+  const target = edit.target as unknown;
+  if (!isRecord(target)) throw invalidInput('target must be { featureIds }');
+  if ('selection' in target) {
+    throw invalidInput(
+      'The Store takes the features of an edit by their IDs ({ featureIds }), not the selection',
+    );
+  }
+  onlyKeys(target, ['featureIds'], 'target');
+  const ids = target.featureIds;
+  if (!Array.isArray(ids) || ids.some((id) => typeof id !== 'string' || id === '')) {
+    throw invalidInput('featureIds must be an array of non-empty strings');
+  }
+  if (new Set(ids).size !== ids.length) throw invalidInput('featureIds names a feature twice');
+  switch (edit.kind) {
+    case 'translate':
+      checkEditPoint(edit.from, 'from');
+      checkEditPoint(edit.to, 'to');
+      return;
+    case 'rotate':
+      checkEditPoint(edit.center, 'center');
+      checkNumber(edit.angleDegrees, 'angleDegrees');
+      return;
+    case 'scale':
+      checkEditPoint(edit.center, 'center');
+      checkNumber(edit.eastFactor, 'eastFactor');
+      checkNumber(edit.northFactor, 'northFactor');
+      checkNumber(edit.sizeFactor, 'sizeFactor');
+      return;
+  }
+}
+
+/** Checks a point of an edit that moves, rotates or scales features: two numbers or more */
+function checkEditPoint(point: unknown, name: string): void {
+  if (
+    !Array.isArray(point) ||
+    point.length < 2 ||
+    point.some((value) => typeof value !== 'number')
+  ) {
+    throw invalidInput(`${name} must be [longitude, latitude], numbers`);
+  }
+}
+
+/** Checks a value of an edit that must be a number */
+function checkNumber(value: unknown, name: string): void {
+  if (typeof value !== 'number') throw invalidInput(`${name} must be a number`);
 }
 
 /** Checks the vertices of an edit: a non-empty array of places of vertices */
@@ -269,7 +513,7 @@ function checkPosition(position: unknown): asserts position is Coordinate {
 // ============================================================================
 
 /** The edits of the vertices */
-type VertexEdit = Exclude<FeatureEdit, { kind: 'set' }>;
+type VertexEdit = Exclude<OneFeatureEdit, { kind: 'set' }>;
 
 /**
  * The geometry an edit of the vertices leaves the feature with

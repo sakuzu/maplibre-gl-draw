@@ -22,8 +22,14 @@
  * DocumentStore is the document half the in-memory contract store is built on.
  */
 
-import type { Store as PublicStore, StoreView as PublicStoreView } from '../api/extension/store.js';
-import type { EditResult, FeatureEdit, FeaturePatch } from '../api/model.js';
+import type {
+  GeometryTransforms,
+  Store as PublicStore,
+  StoreView as PublicStoreView,
+  TransformEdit,
+  TransformValues,
+} from '../api/extension/store.js';
+import type { EditResult, EditTarget, FeatureEdit, FeaturePatch } from '../api/model.js';
 import type { VertexTarget } from '../api/state.js';
 import type { FeatureTables, RowWrite } from '../api/tables.js';
 import type { BulkOperation } from '../feature-table/bulk-plan.js';
@@ -50,7 +56,16 @@ import type {
 } from './types.js';
 
 /** The edits of features the Store applies, in the shape of the public types */
-export type { EditResult, FeatureEdit, FeaturePatch, VertexTarget };
+export type {
+  EditResult,
+  EditTarget,
+  FeatureEdit,
+  FeaturePatch,
+  GeometryTransforms,
+  TransformEdit,
+  TransformValues,
+  VertexTarget,
+};
 
 /**
  * The Store a host gives with the `store` option: the public `Store`, with the rules core
@@ -450,6 +465,11 @@ export interface Store extends StoreView, UiState {
    * `Store.applyEdits`): null when it was refused because the Store is read-only
    */
   applyEdits(edits: readonly FeatureEdit[]): EditResult | null;
+  /**
+   * How the Store computes the edits that move, rotate and scale features (see the public
+   * `Store.transforms`); undefined for the computation of the library
+   */
+  readonly transforms?: GeometryTransforms;
   /** Deletes a feature (see {@link DocumentStore.deleteFeature}) */
   deleteFeature(id: string): boolean;
 
