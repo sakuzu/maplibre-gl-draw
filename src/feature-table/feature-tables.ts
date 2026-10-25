@@ -448,6 +448,11 @@ export interface FeatureTablesInternals {
   setWriteMark(mark: number): void;
   /** The rows of a layer (undefined for a layer that holds none) */
   layerTable(layerId: string): LayerTable | undefined;
+  /**
+   * The state of a row as its copy in its row group is made: from the sets of the state, its
+   * values, its group of features and where it is read (the checks compare the copy with it)
+   */
+  rowStateOf(group: RowGroup, row: number): number;
   /** The reads of the rows of a layer without making features (undefined for a layer of none) */
   view(layerId: string): LayerTableView | undefined;
   /** The layer and the row group of a handle of a row group */
@@ -3907,6 +3912,13 @@ class FeatureTablesStore implements FeatureTablesInternals {
 
   /** Makes the copy of the state of a row again */
   private writeState(group: RowGroup, row: number): void {
+    const state = this.rowStateOf(group, row);
+    group.state[row] = state;
+    group.gpuState[row] = toGpuState(state);
+    noteRowState(group, row);
+  }
+
+  rowStateOf(group: RowGroup, row: number): number {
     const data = group.data;
     const handle = data.handles[row];
     const flags = data.flags[row];
@@ -3925,9 +3937,7 @@ class FeatureTablesStore implements FeatureTablesInternals {
       if (this.ids.deltaLayer(handle) >= 0) state |= STATE_HIDDEN_DELTA;
       if (this.ids.mainGroup(handle) !== group.handle) state |= STATE_HIDDEN_WAIT;
     }
-    group.state[row] = state;
-    group.gpuState[row] = toGpuState(state);
-    noteRowState(group, row);
+    return state;
   }
 
   /** Makes the copies of the state of the row of a handle again (in its group and its delta) */

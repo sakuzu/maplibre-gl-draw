@@ -26,6 +26,7 @@ import { PointShapeRenderer } from '../renderers/point/point-shape.js';
 import { PolygonBatchRenderer } from '../renderers/polygon/batch.js';
 import { FillShaderManager } from '../renderers/polygon/fill.js';
 import { SDFPolygonRenderer } from '../renderers/polygon/sdf-polygon.js';
+import { RowsCopies } from '../renderers/rows/rows-copies.js';
 import { RowsRenderer } from '../renderers/rows/rows-renderer.js';
 import { StrokeRenderer } from '../renderers/stroke.js';
 import { ShaderInitializer } from '../shaders/initializer.js';
@@ -85,6 +86,11 @@ export interface InitRenderersDeps {
   scope: RenderScope;
   /** Where the failure to load the image of an Image feature is reported */
   onImageError?: ImageErrorFn;
+  /**
+   * Whether the renderer of the rows keeps what it writes to the GPU, for the checks of what is
+   * drawn (`RowsCopies`; false by default: it keeps nothing)
+   */
+  keepCopies?: boolean;
 }
 
 /**
@@ -134,7 +140,14 @@ export function initRenderers(deps: InitRenderersDeps): Renderers {
     ...polygonScope,
     gpu: scope.gpu,
   });
-  const rowsRenderer = new RowsRenderer(mapInstance, gl, pixelRatio, terrain, scope.gpu);
+  const rowsRenderer = new RowsRenderer(
+    mapInstance,
+    gl,
+    pixelRatio,
+    terrain,
+    scope.gpu,
+    deps.keepCopies ? new RowsCopies() : null,
+  );
   const bulkFramesRenderer = new BulkFramesRenderer(gl, pixelRatio, scope.gpu);
   const fillShaderManager = new FillShaderManager(gl, terrain);
 

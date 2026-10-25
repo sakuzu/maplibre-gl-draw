@@ -31,6 +31,12 @@
  *
  * For tests and measurements it can record the ranges it draws in order (`recordDraws`) and cut
  * the ranges it draws at a number of places spread over the rows in view (`setArtificialCuts`).
+ *
+ * For the checks of what is drawn it can keep what it writes to the GPU (`keepCopies`: the
+ * textures of the state here, the chunks and the palettes in the renderer of the rows) and
+ * compare it with the rows: the rows written in place with the same rows packed afresh
+ * (`checkWrites`), and everything it keeps with a drawing made again from the rows
+ * (`checkRebuild`).
  */
 
 import type { ProjectionData } from 'maplibre-gl';
@@ -41,10 +47,13 @@ import { rowFeatureToRead, rowHasGeometry, rowType } from '../../feature-table/r
 import {
   GPU_STATE_BULK,
   MOVE_SETS,
+  STATE_BULK,
   STATE_BY_VALUES,
   STATE_HIDDEN_MASK,
   STATE_MOVE_MASK,
   STATE_MOVE_SHIFT,
+  STATE_UNIFORM,
+  toGpuState,
 } from '../../feature-table/row-state.js';
 import {
   type InPlaceRowWrite,
@@ -79,7 +88,13 @@ import {
   type RowStateTexture,
   uploadRowState,
 } from '../renderers/row-state.js';
-import { type RowSpriteSource, RowsPalette } from '../renderers/rows/rows-format.js';
+import { drawnRowText, type RowsCopies } from '../renderers/rows/rows-copies.js';
+import {
+  ROWS_STYLE_FLOATS,
+  type RowSpriteSource,
+  type RowsChunkData,
+  RowsPalette,
+} from '../renderers/rows/rows-format.js';
 import type { RowsChunk as RowsGpuChunk, RowsRenderer } from '../renderers/rows/rows-renderer.js';
 import {
   advanceChunkBuild,
@@ -239,6 +254,11 @@ export interface TableLayerRendererOptions {
   readonly versionBudgetWhileMovingMs?: number;
   /** Asks for another frame */
   readonly requestRepaint: () => void;
+  /**
+   * Whether what is written to the GPU is kept, for the checks of what is drawn (false by
+   * default: nothing is kept)
+   */
+  readonly keepCopies?: boolean;
 }
 
 /** The batches of a retained chunk of rows */
@@ -420,6 +440,20 @@ interface DrawPass {
   oneDraw: boolean;
 }
 
+/** A drawing made again from the rows of a layer, for the checks (its styles resolved afresh) */
+interface FreshDrawing {
+  /** The styles of the drawing in one draw, with a palette of their own */
+  readonly styles: RowsStyles;
+  /** What a row is packed with (its pictures given by `classify`) */
+  readonly context: RowPackContext;
+  /** The kind a row is drawn with in a drawing, and the source of its pictures */
+  classify(
+    group: RowGroup,
+    row: number,
+    oneDraw: boolean,
+  ): { kind: TableRunKind | null; source: RowSpriteSource | undefined };
+}
+
 /** The frame of the chunk scheduler, set once per layer */
 interface SchedulerFrame {
   bounds: BoundingBox;
@@ -521,9 +555,25 @@ export class TableLayerRenderer {
   private readonly host: ChunkSchedulerHost<RetainedRowsChunk, TableChunkBatch>;
   /** What the building of the chunks drawn in one draw asks of them */
   private readonly oneDrawHost: ChunkSchedulerHost<OneDrawRowsChunk, RowsGpuChunk>;
+  /** The state each texture of the state was last written with (null when nothing is kept) */
+  private readonly stateCopies: WeakMap<RowStateTexture, Uint8Array> | null;
+  /** Writes a texture of the state (and keeps what it wrote, when that is kept) */
+  private readonly uploadState: (
+    gl: WebGL2RenderingContext,
+    texture: RowStateTexture,
+    state: Uint8Array,
+  ) => void;
 
   constructor(private readonly options: TableLayerRendererOptions) {
     this.versionBudgetWhileMovingMs = options.versionBudgetWhileMovingMs ?? 0;
+    const stateCopies = options.keepCopies ? new WeakMap<RowStateTexture, Uint8Array>() : null;
+    this.stateCopies = stateCopies;
+    this.uploadState = stateCopies
+      ? (gl, texture, state) => {
+          uploadRowState(gl, texture, state);
+          stateCopies.set(texture, state.slice(0, texture.rows));
+        }
+      : uploadRowState;
     const pass = this.pass;
     this.host = {
       isStale: () => false,
@@ -610,6 +660,320 @@ export class TableLayerRenderer {
       }
     }
     return problems;
+  }
+
+  /**
+   * The differences between the rows written in place in the chunks drawn in one draw since the
+   * last look, as the GPU holds them (the writes of their coordinates and of their styles, the
+   * rows packed again into their places), and the same rows packed afresh from their columns as
+   * a build of their chunk packs them, their styles resolved afresh (none when they agree, and
+   * when nothing is kept of what is written to the GPU). Read once a frame is drawn: the rows of
+   * a chunk the drawing is making again, or whose writes wait for the next frame, are read once
+   * it is made
+   *
+   * @internal
+   */
+  checkWrites(): string[] {
+    const copies = this.renderers?.rows?.copies;
+    if (!copies) return [];
+    const problems: string[] = [];
+    for (const [layerId, cache] of this.layers) {
+      const fresh = this.freshDrawingOf(layerId, cache);
+      if (!fresh) continue;
+      for (const groupCache of this.checkedGroups(layerId, cache)) {
+        const held = groupCache.oneDraw;
+        if (!this.isSettled(cache, groupCache, held)) continue;
+        for (const chunk of (held as GroupChunks<OneDrawChunk>).chunks) {
+          if (chunk.type !== 'rows' || !chunk.batches) continue;
+          const copy = settledCopy(chunk, copies);
+          const written = copies.writtenOf(chunk.batches);
+          if (!copy || !written || written.size === 0) continue;
+          for (const local of written) {
+            this.compareRow(layerId, cache, fresh, groupCache.group, copy, local, problems);
+          }
+          written.clear();
+        }
+      }
+    }
+    return problems;
+  }
+
+  /**
+   * The differences between everything the drawing keeps of the rows and a drawing made again
+   * from the rows as they are now, its styles resolved afresh (none when they agree, and when
+   * nothing is kept of what is written to the GPU), read once a frame is drawn:
+   *
+   * - every row group of a layer drawn is drawn, and every row shown that has a geometry is in a
+   *   chunk of each drawing its group has
+   * - each row shown is drawn with the kind (in one draw, at once, by the renderer of its kind)
+   *   and the pictures a drawing made again draws it with, and a row in a chunk drawn in one draw
+   *   draws, as the GPU holds the chunk, what the row packed afresh draws (`drawnRowText`)
+   * - the copy of the state of each row in its group draws as the state its rows make now does
+   *   (hidden or shown, not why; selected in bulk; moved), the byte the GPU reads is made from
+   *   it, and the texture of the state holds those bytes
+   * - the texture of the values of the styles of a layer holds the values of the styles used
+   *
+   * What the drawing marked to be made again and is still making is passed over: a layer not
+   * drawn in the last frame or with rows written since, a group whose styles or whose chunks are
+   * being made again, a chunk being built, writes and values waiting for the next frame
+   *
+   * @internal
+   */
+  checkRebuild(): string[] {
+    const copies = this.renderers?.rows?.copies;
+    const stateCopies = this.stateCopies;
+    if (!copies || !stateCopies) return [];
+    const problems: string[] = [];
+    for (const [layerId, cache] of this.layers) {
+      const fresh = this.freshDrawingOf(layerId, cache);
+      const tables = cache.tables;
+      const table = tables?.layerTable(layerId);
+      if (!fresh || !tables || !table) continue;
+      for (let g = 0; g < table.groupCount; g++) {
+        const group = table.groupAt(g);
+        if (cache.groups.get(group.handle)?.group !== group) {
+          problems.push(`the row group ${group.handle} of the layer "${layerId}" is not drawn`);
+        }
+      }
+      for (const groupCache of this.checkedGroups(layerId, cache)) {
+        if (problems.length >= CHECK_PROBLEMS) return problems;
+        this.checkGroupState(layerId, groupCache, tables, stateCopies, problems);
+        const delta = groupCache === cache.delta;
+        for (const oneDraw of delta ? [true] : [true, false]) {
+          const held = oneDraw ? groupCache.oneDraw : groupCache.byKind;
+          if (this.isSettled(cache, groupCache, held)) {
+            this.checkGroupChunks(layerId, cache, fresh, groupCache, oneDraw, copies, problems);
+          }
+        }
+      }
+      this.checkPalette(layerId, cache, copies, problems);
+    }
+    return problems;
+  }
+
+  /**
+   * A drawing made again from the rows of a layer, for the checks: null for a layer not drawn in
+   * the last frame, or with rows written in place since (they are written into its chunks with
+   * the next frame)
+   */
+  private freshDrawingOf(layerId: string, cache: LayerCache): FreshDrawing | null {
+    const { tables, layer, deps } = cache;
+    const renderers = this.renderers;
+    if (cache.drawnFrame !== this.frameCount || !tables || !layer || !deps || !renderers) {
+      return null;
+    }
+    if (!cache.rowsStyles || !tables.layerTable(layerId)) return null;
+    if ((this.written.get(layerId)?.size ?? 0) > 0) return null;
+    const slots = new RowStyleSlots(renderers.styles, tables.styles, layer.styleRule);
+    const pixelRatio = this.options.pixelRatio;
+    const view = tables.view(layerId);
+    return {
+      styles: new RowsStyles(slots, new RowsPalette(), pixelRatio, tables.styles),
+      context: { slots, strings: tables.strings, pixelRatio, terrain: this.options.terrain },
+      classify: (group, row, oneDraw) => {
+        let source: RowSpriteSource | undefined;
+        const kind = classifyRow(group, row, {
+          slots,
+          customTypes: deps.customRenderers,
+          companions: deps.companions as FeatureCompanionRegistry,
+          featureOf: (rows, r) => rowFeatureToRead(tables.readContext, layerId, rows, r),
+          view,
+          layer,
+          oneDraw,
+          onSprite: (_r, found) => {
+            source = found;
+          },
+        });
+        return { kind, source };
+      },
+    };
+  }
+
+  /** The groups of a layer the checks read: its row groups, and its delta when it is packed */
+  private checkedGroups(layerId: string, cache: LayerCache): GroupCache[] {
+    const groups = [...cache.groups.values()];
+    const delta = cache.delta;
+    const table = cache.tables?.layerTable(layerId);
+    if (delta && !cache.deltaStale && delta.group === table?.delta.group) groups.push(delta);
+    return groups;
+  }
+
+  /**
+   * Whether the chunks of a group for a drawing are made for the styles and the classification
+   * of its layer as they are (not being resolved, cut or replaced again)
+   */
+  private isSettled(
+    cache: LayerCache,
+    groupCache: GroupCache,
+    held: GroupChunks<TableChunk> | null,
+  ): boolean {
+    return (
+      held !== null &&
+      groupCache.styleGeneration === cache.styleGeneration &&
+      held.generation === cache.generation &&
+      held.retiring === null
+    );
+  }
+
+  /**
+   * The copy of the state of each row of a group against the state its rows make now (what the
+   * drawing reads of it), the byte the GPU reads against it, and the texture of the state against
+   * those bytes
+   */
+  private checkGroupState(
+    layerId: string,
+    groupCache: GroupCache,
+    tables: FeatureTablesInternals,
+    stateCopies: WeakMap<RowStateTexture, Uint8Array>,
+    problems: string[],
+  ): void {
+    const group = groupCache.group;
+    const rows = group.data.length;
+    const where = (row: number): string =>
+      `the row ${row} of the row group ${group.handle} of the layer "${layerId}"`;
+    for (let row = 0; row < rows && problems.length < CHECK_PROBLEMS; row++) {
+      const state = group.state[row];
+      const made = tables.rowStateOf(group, row);
+      if (drawnState(state) !== drawnState(made)) {
+        problems.push(`${where(row)} has the state ${state}, and its rows make ${made}`);
+      } else if (group.gpuState[row] !== toGpuState(state)) {
+        problems.push(
+          `${where(row)} gives the GPU the state ${group.gpuState[row]}, and its state makes ${toGpuState(state)}`,
+        );
+      }
+    }
+    const texture = groupCache.texture;
+    const uploaded = texture ? stateCopies.get(texture) : undefined;
+    if (!texture || !uploaded || groupCache.uploadedVersion !== group.stateVersion) return;
+    for (let row = 0; row < Math.min(rows, texture.rows); row++) {
+      if (problems.length >= CHECK_PROBLEMS) return;
+      if (uploaded[row] === group.gpuState[row]) continue;
+      problems.push(
+        `the texture of the state holds ${uploaded[row]} for ${where(row)}, and the row has ${group.gpuState[row]}`,
+      );
+    }
+  }
+
+  /**
+   * The chunks of a group for a drawing against a drawing made again: the rows shown that have a
+   * geometry are each in a chunk, drawn with the kind and the pictures a drawing made again
+   * draws them with, and a row of a chunk drawn in one draw draws what the row packed afresh
+   * draws
+   */
+  private checkGroupChunks(
+    layerId: string,
+    cache: LayerCache,
+    fresh: FreshDrawing,
+    groupCache: GroupCache,
+    oneDraw: boolean,
+    copies: RowsCopies,
+    problems: string[],
+  ): void {
+    const group = groupCache.group;
+    const held = (oneDraw ? groupCache.oneDraw : groupCache.byKind) as GroupChunks<TableChunk>;
+    const rows = group.data.length;
+    const shown = (row: number): boolean => (group.state[row] & STATE_HIDDEN_MASK) === 0;
+    const where = (row: number): string =>
+      `the row ${row} of the row group ${group.handle} of the layer "${layerId}"`;
+    const covered = new Uint8Array(rows);
+    for (const chunk of held.chunks) {
+      if (problems.length >= CHECK_PROBLEMS) return;
+      const { from, to } = chunk.range;
+      covered.fill(1, from, to);
+      const copy = chunk.type === 'rows' ? settledCopy(chunk, copies) : null;
+      if (copy) {
+        for (let local = 0; local < copy.rows; local++) {
+          this.compareRow(layerId, cache, fresh, group, copy, local, problems);
+        }
+        continue;
+      }
+      // The kind the rows are drawn with (the rows of a chunk not built yet included)
+      const drawnAs: TableRunKind = chunk.type === 'immediate' ? 'immediate' : chunk.range.kind;
+      for (let row = from; row < to && problems.length < CHECK_PROBLEMS; row++) {
+        if (!shown(row)) continue;
+        const { kind } = fresh.classify(group, row, oneDraw);
+        if (kind === null || kind === drawnAs) continue;
+        problems.push(
+          `${where(row)} is drawn ${kindText(drawnAs)}, and a drawing made again draws it ${kindText(kind)}`,
+        );
+      }
+    }
+    for (let row = 0; row < rows && problems.length < CHECK_PROBLEMS; row++) {
+      if (covered[row] || !shown(row) || !rowHasGeometry(group, row)) continue;
+      problems.push(
+        `${where(row)} is in no chunk of the drawing ${oneDraw ? 'in one draw' : 'by kind'}, and a drawing made again draws it`,
+      );
+    }
+  }
+
+  /**
+   * One row of a chunk drawn in one draw, as the GPU holds the chunk, against the row packed
+   * afresh from its columns with its styles resolved afresh (a row hidden draws nothing and is
+   * passed over)
+   */
+  private compareRow(
+    layerId: string,
+    cache: LayerCache,
+    fresh: FreshDrawing,
+    group: RowGroup,
+    copy: RowsChunkData,
+    local: number,
+    problems: string[],
+  ): void {
+    if (problems.length >= CHECK_PROBLEMS) return;
+    const row = copy.rowBase + local;
+    if ((group.state[row] & STATE_HIDDEN_MASK) !== 0) return;
+    const where = `the row ${row} of the row group ${group.handle} of the layer "${layerId}"`;
+    if (copy.palette !== cache.rowsStyles?.palette) {
+      problems.push(`${where} is drawn with the styles resolved before the ones of its layer`);
+      return;
+    }
+    const { kind, source } = fresh.classify(group, row, true);
+    if (kind !== null && kind !== 'rows') {
+      problems.push(
+        `${where} is drawn in one draw, and a drawing made again draws it ${kindText(kind)}`,
+      );
+      return;
+    }
+    if (source && source !== copy.sprites) {
+      problems.push(`${where} is drawn without the pictures a drawing made again draws it with`);
+      return;
+    }
+    const draft = new RowsDraft(1, row, undefined, null);
+    collectRow(group, row, 0, draft, copy.origin, {
+      ...fresh.context,
+      rowsStyles: fresh.styles,
+      spriteSourceOf: (r) => (r === row ? source : undefined),
+    });
+    const made = draft.finish(copy.origin, fresh.styles.palette, source ?? null);
+    const drawn = drawnRowText(copy, local, copy.palette.values);
+    const again = drawnRowText(made, 0, fresh.styles.palette.values);
+    if (drawn === again) return;
+    const [a, b] = firstDifference(drawn, again);
+    problems.push(`${where} draws ${a}, and a drawing made again draws ${b}`);
+  }
+
+  /** The values of the styles used of a layer, as its texture holds them, against the palette */
+  private checkPalette(
+    layerId: string,
+    cache: LayerCache,
+    copies: RowsCopies,
+    problems: string[],
+  ): void {
+    const palette = cache.rowsStyles?.palette;
+    const uploaded = palette ? copies.paletteOf(palette) : undefined;
+    // Values written since the last upload reach the texture with the next frame
+    if (!palette || !uploaded || palette.dirty.size > 0) return;
+    for (let style = 0; style < palette.count && problems.length < CHECK_PROBLEMS; style++) {
+      if (palette.usesOf(style) <= 0) continue;
+      const at = style * ROWS_STYLE_FLOATS;
+      const held = Array.from(palette.values.subarray(at, at + ROWS_STYLE_FLOATS));
+      const onGpu = Array.from(uploaded.subarray(at, at + ROWS_STYLE_FLOATS));
+      if (held.every((value, i) => Object.is(value, onGpu[i]))) continue;
+      problems.push(
+        `the style ${style} of the layer "${layerId}" is drawn with ${JSON.stringify(onGpu)}, and its values are ${JSON.stringify(held)}`,
+      );
+    }
   }
 
   /**
@@ -1768,7 +2132,7 @@ export class TableLayerRenderer {
         const texture = groupCache.texture;
         if (!texture) continue;
         if (groupCache.uploadedVersion !== group.stateVersion) {
-          uploadRowState(this.options.gl, texture, group.gpuState);
+          this.uploadState(this.options.gl, texture, group.gpuState);
           groupCache.uploadedVersion = group.stateVersion;
         }
         // The binding is kept with the group (the translations and the transforms are the arrays
@@ -2837,4 +3201,58 @@ function featureText(feature: Feature): string {
     feature.style,
     feature.properties,
   ]);
+}
+
+/** The problems a check of the drawing gives at most (the rest are not read) */
+const CHECK_PROBLEMS = 20;
+
+/**
+ * The arrays of a chunk drawn in one draw as the GPU holds them, when the chunk is drawn as it is
+ * built (null while it is being built, marked to be built again, not on the GPU yet, or with
+ * writes waiting for the next frame; and when nothing is kept)
+ */
+function settledCopy(chunk: OneDrawRowsChunk, copies: RowsCopies): RowsChunkData | null {
+  const gpu = chunk.batches;
+  if (!gpu || chunk.job || chunk.stale || !gpu.uploaded || gpu.disposed) return null;
+  const writes = gpu.writes;
+  if (
+    writes &&
+    writes.instances.size + writes.points.size + writes.coords.size + writes.rowStyles.size > 0
+  ) {
+    return null;
+  }
+  return copies.copyOf(gpu) ?? null;
+}
+
+/**
+ * What the drawing reads of the state of a row: whether it is hidden (not why), whether it is
+ * marked as selected in bulk, its moving set and how it is moved
+ */
+function drawnState(state: number): number {
+  return (
+    ((state & STATE_HIDDEN_MASK) !== 0 ? 1 : 0) |
+    (state & (STATE_BULK | STATE_MOVE_MASK | STATE_UNIFORM | STATE_BY_VALUES))
+  );
+}
+
+/** How a kind of run draws its rows, for the problems */
+function kindText(kind: TableRunKind): string {
+  switch (kind) {
+    case 'rows':
+      return 'in one draw';
+    case 'immediate':
+      return 'at once';
+    default:
+      return `by kind (${kind})`;
+  }
+}
+
+/** The parts of two texts from a little before their first difference */
+function firstDifference(a: string, b: string): [string, string] {
+  let at = 0;
+  while (at < a.length && at < b.length && a[at] === b[at]) at++;
+  const from = Math.max(0, at - 40);
+  const part = (text: string): string =>
+    `${from > 0 ? '...' : ''}${text.slice(from, from + 160)}${text.length > from + 160 ? '...' : ''}`;
+  return [part(a), part(b)];
 }

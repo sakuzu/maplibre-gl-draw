@@ -103,6 +103,11 @@ export interface EngineOptions {
   pixelRatio?: number;
   /** The strings the engine shows */
   messages?: Partial<Messages>;
+  /**
+   * Whether the drawing keeps what it writes to the GPU, for the checks of what is drawn that
+   * compare it with the rows (false by default: it keeps nothing)
+   */
+  keepDrawnCopies?: boolean;
 }
 
 export const DEFAULT_OPTIONS = {
@@ -155,6 +160,7 @@ export interface Context {
       | 'pixelRatio'
       | 'isExternalEntry'
       | 'messages'
+      | 'keepDrawnCopies'
     >
   >;
   /**

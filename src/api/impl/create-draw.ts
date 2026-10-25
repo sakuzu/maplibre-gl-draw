@@ -186,6 +186,8 @@ function attachChecks(engine: Engine, options: DrawOptions): () => void {
   const checks = new ConsistencyChecks(asked, {
     store,
     checkDrawing: () => engine.customLayer.checkDrawnCopies(),
+    checkDrawnWrites: () => engine.customLayer.checkDrawnWrites(),
+    checkDrawnRebuild: () => engine.customLayer.checkDrawnRebuild(),
   });
   store.setAfterNotify(() => checks.afterNotify());
   const stopFrames = engine.customLayer.onFrameDrawn(() => checks.afterFrame());

@@ -11,8 +11,14 @@
  *   is not read
  * - Each check finds the state it is about broken
  * - The check of what is drawn runs once a frame is drawn
- * - The sequences of the reference model of the rows run on both Stores with every check on: the
- *   checks that fail now are listed (`KNOWN_BROKEN`)
+ * - Edits written by hand, a frame drawn after each, fail no check, those of the drawing of the
+ *   rows run every frame (`drawing-writes`, `drawing-rebuild`)
+ * - The sequences of the reference model of the rows run on both Stores with every check on, and
+ *   drawn, a frame after each step: the checks that fail now are listed (`KNOWN_BROKEN`)
+ * - The checks of the drawing of the rows find a rule of the drawing broken in the test: a write
+ *   of the style of a row not told to the drawing, the styles of a new style rule not resolved
+ *   again, a write of the coordinates in place written wrong
+ * - The drawing keeps what it writes to the GPU only while those checks run
  */
 
 import type { CustomRenderMethodInput } from 'maplibre-gl';
@@ -21,6 +27,7 @@ import { createDraw } from '../api/draw.js';
 import type { Store as PublicStore } from '../api/extension/store.js';
 import type { ConsistencyFailure } from '../api/options.js';
 import { featureTablesInternals } from '../feature-table/feature-tables.js';
+import { ROW_WRITE_STYLE } from '../feature-table/types.js';
 import { writeMarkKeeperOf } from '../feature-table/write-marks.js';
 import { DrawError } from '../shared/draw-error.js';
 import type { DrawStore } from '../store/draw-store.js';
@@ -30,6 +37,9 @@ import { createTableStore } from '../store/table-memory.js';
 import type { Feature, Layer } from '../store/types.js';
 import { randomSteps, runSteps, storeSubject } from '../test-support/kasane-model/index.js';
 import { createMapStub, memoryGL } from '../test-utils.js';
+import type { CustomLayerInterface } from '../view/layer/custom-layer.js';
+import { TableLayerRenderer } from '../view/layer/table-retained.js';
+import { RowsRenderer } from '../view/renderers/rows/rows-renderer.js';
 import {
   type ConsistencyCheck,
   ConsistencyChecks,
@@ -37,6 +47,7 @@ import {
   checkIdIndex,
   checkSelection,
   checkWriteMarks,
+  DRAWING_REBUILD_FRAMES,
 } from './consistency.js';
 
 function layer(id: string): Layer {
@@ -94,7 +105,7 @@ function checked(
   const failures: ConsistencyFailure[] = [];
   const checks = new ConsistencyChecks(
     { allowed: options.allowed ?? [], onFailure: (failure) => failures.push(failure) },
-    { store, checkDrawing: () => [] },
+    { store, checkDrawing: () => [], checkDrawnWrites: () => [], checkDrawnRebuild: () => [] },
   );
   (store as DrawStore).setAfterNotify(() => checks.afterNotify());
   return { store, failures };
@@ -178,7 +189,7 @@ describe('the option debug.checks', () => {
     const read = vi.fn((): string[] => ['broken']);
     const checks = new ConsistencyChecks(
       { run: ['id-index'] },
-      { store: only, checkDrawing: read },
+      { store: only, checkDrawing: read, checkDrawnWrites: read, checkDrawnRebuild: read },
     );
     checks.afterFrame();
     expect(read).not.toHaveBeenCalled();
@@ -388,19 +399,30 @@ describe('the check of what is drawn', () => {
 });
 
 /** A draw instance on a map that draws its frames, with every check on and its failures */
-function drawnInstance(kind: Kind) {
+function drawnInstance(
+  kind: Kind,
+  options: {
+    allowed?: ConsistencyCheck[];
+    holdLimit?: number;
+    checks?: false | { run: ConsistencyCheck[] };
+  } = {},
+) {
   const stub = createMapStub();
   Object.assign(stub.map, { getPixelRatio: () => 1 });
   const failures: ConsistencyFailure[] = [];
+  const store = storeOf(kind, options.holdLimit);
   const draw = createDraw(stub.map, {
-    store: storeOf(kind) as unknown as PublicStore,
+    store: store as unknown as PublicStore,
     initDefaultLayer: false,
-    debug: {
-      checks: {
-        allowed: ['id-index', 'selection', 'drawing'],
-        onFailure: (failure) => failures.push(failure),
+    ...(options.checks !== false && {
+      debug: {
+        checks: {
+          ...options.checks,
+          allowed: options.allowed ?? ['id-index', 'selection', 'drawing'],
+          onFailure: (failure) => failures.push(failure),
+        },
       },
-    },
+    }),
   });
   const memory = memoryGL().gl;
   const gl = new Proxy(memory, {
@@ -417,7 +439,17 @@ function drawnInstance(kind: Kind) {
       vi.advanceTimersByTime(50);
     }
   };
-  return { draw, failures, frame };
+  const tableRenderer = (layers[0] as unknown as CustomLayerInterface).getTableRenderer();
+  return { draw, store, failures, frame, tableRenderer };
+}
+
+/** Counts the rows the checks of the drawing of the rows compare (so a test knows they ran) */
+function countComparedRows(): { readonly count: () => number; readonly restore: () => void } {
+  const spy = vi.spyOn(
+    TableLayerRenderer.prototype as unknown as { compareRow: () => void },
+    'compareRow',
+  );
+  return { count: () => spy.mock.calls.length, restore: () => spy.mockRestore() };
 }
 
 const SQUARE = {
@@ -483,17 +515,118 @@ const DRAWN_EDITS: Readonly<
       () => draw.features.update(l.id, { visible: true }),
     ];
   },
+  'a point moved in place and its color written': (draw, layerId) => {
+    const p = draw.features.create({
+      type: 'Point',
+      geometry: { type: 'Point', coordinates: [0.2, 0.2] },
+      layerId,
+    })!;
+    draw.features.create({ type: 'Polygon', geometry: SQUARE, layerId });
+    return [
+      () => draw.features.update(p.id, { geometry: { type: 'Point', coordinates: [0.3, 0.25] } }),
+      () => draw.features.update(p.id, { style: { pointColor: '#00aa44' } }),
+      () => draw.features.update(p.id, { geometry: { type: 'Point', coordinates: [0.4, 0.3] } }),
+    ];
+  },
+  'a line made dashed, moved, and solid again': (draw, layerId) => {
+    const line = (dx: number) => ({
+      type: 'LineString' as const,
+      coordinates: [
+        [dx, 0],
+        [dx + 0.5, 0.5],
+        [dx + 1, 0],
+      ],
+    });
+    const l = draw.features.create({ type: 'LineString', geometry: line(0), layerId })!;
+    draw.features.create({ type: 'Polygon', geometry: SQUARE, layerId });
+    return [
+      () => draw.features.update(l.id, { style: { lineStyle: 'dashed' } }),
+      () => draw.features.update(l.id, { geometry: line(0.25) }),
+      () => draw.features.update(l.id, { style: { lineStyle: 'solid', strokeWidth: 6 } }),
+      () => draw.features.update(l.id, { geometry: line(0.5) }),
+    ];
+  },
+  'polygons given a style rule by their layer, and a value it reads written': (draw, layerId) => {
+    const ids = [0, 1, 2].map(
+      (i) =>
+        draw.features.create({
+          type: 'Polygon',
+          geometry: SQUARE,
+          layerId,
+          properties: { kind: i % 2 === 0 ? 'a' : 'b' },
+        })!.id,
+    );
+    return [
+      () =>
+        draw.layers.update(layerId, {
+          styleRule: {
+            kind: 'categorical',
+            property: 'kind',
+            map: { a: '#ff0000', b: '#0000ff' },
+            other: '#888888',
+          },
+        }),
+      () => draw.features.update(ids[1], { properties: { kind: 'a' } }),
+      () => draw.layers.update(layerId, { styleRule: undefined }),
+    ];
+  },
+  'features hidden here, shown again and deleted': (draw, layerId) => {
+    const a = draw.features.create({ type: 'Polygon', geometry: SQUARE, layerId })!;
+    const b = draw.features.create({
+      type: 'Point',
+      geometry: { type: 'Point', coordinates: [0.5, 0.5] },
+      layerId,
+    })!;
+    return [
+      () => draw.hidden.add(a.id),
+      () => draw.hidden.remove(a.id),
+      () => draw.features.delete(b.id),
+    ];
+  },
 };
 
-/** The edits whose checks fail now, by Store, with the checks */
-const KNOWN_DRAWN: Readonly<Record<string, Partial<Record<Kind, readonly ConsistencyCheck[]>>>> =
-  {};
+/**
+ * The checks a failure of which is noted and lets the edits go on (the checks of the drawing of
+ * the rows are never allowed to fail on the edits and on the sequences drawn)
+ */
+const OLD_CHECKS: ConsistencyCheck[] = [
+  'id-index',
+  'selection',
+  'write-marks',
+  'feature-cache',
+  'drawing',
+];
+
+/**
+ * The edits whose checks fail now, by Store (and drawing), with the checks. `write-marks`: by
+ * kind, the line made dashed is drawn at once, and a row has a write mark past the mark of its
+ * row group
+ */
+const KNOWN_DRAWN: Readonly<
+  Record<string, Partial<Record<Kind | 'rows by kind', readonly ConsistencyCheck[]>>>
+> = {
+  'a line made dashed, moved, and solid again': { 'rows by kind': ['write-marks'] },
+};
 
 describe('edits written by hand, a frame drawn after each, with every check on', () => {
-  for (const kind of ['rows', 'objects'] as const) {
+  // A fixed sequence is short: what the drawing keeps is made again each frame
+  beforeEach(() => {
+    ConsistencyChecks.rebuildEvery = 1;
+  });
+  afterEach(() => {
+    ConsistencyChecks.rebuildEvery = DRAWING_REBUILD_FRAMES;
+  });
+
+  for (const kind of ['rows', 'rows by kind', 'objects'] as const) {
     for (const [name, edits] of Object.entries(DRAWN_EDITS)) {
       it(`${name} (${kind})`, () => {
-        const { draw, failures, frame } = drawnInstance(kind);
+        const { draw, failures, frame, tableRenderer } = drawnInstance(
+          kind === 'objects' ? 'objects' : 'rows',
+          { allowed: OLD_CHECKS },
+        );
+        // The rows drawn by the renderers of their kinds, as on the terrain and the globe
+        if (kind === 'rows by kind') tableRenderer?.setDrawingByKind(true);
+        const compared = countComparedRows();
         const layerId = draw.layers.create({ name: 'a' })!.id;
         const steps = edits(draw, layerId);
         frame();
@@ -501,6 +634,9 @@ describe('edits written by hand, a frame drawn after each, with every check on',
           step();
           frame();
         }
+        // The rows are compared (the Store of objects has none)
+        if (kind === 'rows') expect(compared.count()).toBeGreaterThan(0);
+        compared.restore();
         if (process.env.KASANE_MODEL_REPORT && failures.length > 0) {
           console.log(`${kind} | ${name} | ${failures[0].check}: ${failures[0].problems[0]}`);
         }
@@ -553,4 +689,211 @@ describe('the sequences of the reference model of the rows, with every check on'
       expect([...broken].sort()).toEqual([...KNOWN_BROKEN[kind]].sort());
     });
   }
+});
+
+/**
+ * The checks that fail now on the sequences of the reference model drawn, by Store: the checks
+ * of the drawing of the rows are never allowed to fail there (a failure of another is noted and
+ * the sequence goes on). `write-marks`: once frames are drawn, a row has a write mark past the
+ * mark of its row group (the sequences that are not drawn do not find it)
+ */
+const KNOWN_BROKEN_DRAWN: Readonly<
+  Record<'rows' | 'rows-bulk' | 'rows by kind', readonly ConsistencyCheck[]>
+> = {
+  rows: ['write-marks'],
+  'rows-bulk': ['write-marks'],
+  'rows by kind': ['write-marks'],
+};
+
+describe('the sequences of the reference model of the rows drawn, with every check on', () => {
+  for (const kind of ['rows', 'rows-bulk', 'rows by kind'] as const) {
+    it(`fail no check but the known ones, a frame drawn after each step (${kind})`, () => {
+      const broken = new Set<ConsistencyCheck>();
+      const differed: string[] = [];
+      const compared = countComparedRows();
+      for (let seed = 1; seed <= 40; seed++) {
+        const steps = randomSteps(seed, { length: 60 });
+        const result = runSteps(steps, () => {
+          const drawn = drawnInstance('rows', {
+            allowed: OLD_CHECKS,
+            ...(kind === 'rows-bulk' && { holdLimit: 2 }),
+          });
+          if (kind === 'rows by kind') drawn.tableRenderer?.setDrawingByKind(true);
+          const subject = storeSubject(drawn.store, drawn.frame);
+          return {
+            ...subject,
+            read: () => {
+              for (const failure of drawn.failures) broken.add(failure.check);
+              if (process.env.KASANE_MODEL_REPORT && drawn.failures.length > 0) {
+                const failure = drawn.failures[0];
+                console.log(
+                  `${kind} drawn | seed ${seed} | ${failure.check}: ${failure.problems[0]}`,
+                );
+              }
+              drawn.failures.length = 0;
+              return subject.read();
+            },
+            dispose: () => drawn.draw.destroy(),
+          };
+        });
+        if (result) differed.push(`seed ${seed} step ${result.step}: ${result.reason}`);
+      }
+      expect(differed).toEqual([]);
+      // The rows drawn in one draw are compared (by kind, their kinds and their state only)
+      if (kind !== 'rows by kind') expect(compared.count()).toBeGreaterThan(0);
+      compared.restore();
+      expect([...broken].sort()).toEqual([...KNOWN_BROKEN_DRAWN[kind]].sort());
+    });
+  }
+});
+
+describe('the checks of the drawing of the rows find a rule of the drawing broken', () => {
+  beforeEach(() => {
+    ConsistencyChecks.rebuildEvery = 1;
+  });
+  afterEach(() => {
+    ConsistencyChecks.rebuildEvery = DRAWING_REBUILD_FRAMES;
+    vi.restoreAllMocks();
+  });
+
+  /** The checks that failed on the frames after an edit, with the drawing of the rows checked */
+  function failedAfter(
+    make: (draw: ReturnType<typeof createDraw>, layerId: string) => () => void,
+  ): string[] {
+    const { draw, failures, frame } = drawnInstance('rows', {
+      allowed: ['id-index', 'selection', 'drawing', 'drawing-writes', 'drawing-rebuild'],
+    });
+    const layerId = draw.layers.create({ name: 'a' })!.id;
+    const edit = make(draw, layerId);
+    frame();
+    expect(failures).toEqual([]);
+    edit();
+    frame();
+    if (process.env.KASANE_MODEL_REPORT) {
+      for (const failure of failures) console.log(failure.check, failure.problems[0]);
+    }
+    draw.destroy();
+    return [...new Set(failures.map((failure) => failure.check))].sort();
+  }
+
+  const line = {
+    type: 'LineString' as const,
+    coordinates: [
+      [0, 0],
+      [0.5, 0.5],
+      [1, 0],
+    ],
+  };
+
+  it('drawing-rebuild: a write of the style of a row is not told to the drawing', () => {
+    const rowsWritten = TableLayerRenderer.prototype.rowsWritten;
+    vi.spyOn(TableLayerRenderer.prototype, 'rowsWritten').mockImplementation(function (
+      this: TableLayerRenderer,
+      layerId,
+      writes,
+    ) {
+      // The writes of the style are lost on their way to the drawing
+      const told = writes.filter((write) => (write.what & ROW_WRITE_STYLE) === 0);
+      rowsWritten.call(this, layerId, told);
+    });
+    const failed = failedAfter((draw, layerId) => {
+      const l = draw.features.create({ type: 'LineString', geometry: line, layerId })!;
+      return () => draw.features.update(l.id, { style: { strokeColor: '#00aa44' } });
+    });
+    expect(failed).toEqual(['drawing-rebuild']);
+  });
+
+  it('drawing-rebuild: the styles of the rows are not resolved again for a new style rule', () => {
+    vi.spyOn(
+      TableLayerRenderer.prototype as unknown as {
+        restyleGroup: (
+          cache: { styleGeneration: number },
+          group: { styleGeneration: number },
+        ) => void;
+      },
+      'restyleGroup',
+    ).mockImplementation((cache, group) => {
+      // Marked as resolved, and nothing resolved
+      group.styleGeneration = cache.styleGeneration;
+    });
+    const failed = failedAfter((draw, layerId) => {
+      draw.features.create({
+        type: 'Polygon',
+        geometry: SQUARE,
+        layerId,
+        properties: { kind: 'a' },
+      });
+      return () =>
+        draw.layers.update(layerId, {
+          styleRule: {
+            kind: 'categorical',
+            property: 'kind',
+            map: { a: '#ff0000' },
+            other: '#888888',
+          },
+        });
+    });
+    expect(failed).toEqual(['drawing-rebuild']);
+  });
+
+  it('drawing-writes: a write of the coordinates of a row in place is written wrong', () => {
+    const patchCoords = RowsRenderer.prototype.patchCoords;
+    vi.spyOn(RowsRenderer.prototype, 'patchCoords').mockImplementation(function (
+      this: RowsRenderer,
+      chunk,
+      coordFrom,
+      values,
+      count,
+    ) {
+      // Half a degree off
+      const wrong = Array.from(values, (value) => value + 0.5);
+      patchCoords.call(this, chunk, coordFrom, wrong, count);
+    });
+    const failed = failedAfter((draw, layerId) => {
+      const p = draw.features.create({
+        type: 'Point',
+        geometry: { type: 'Point', coordinates: [0.2, 0.2] },
+        layerId,
+      })!;
+      return () =>
+        draw.features.update(p.id, { geometry: { type: 'Point', coordinates: [0.3, 0.3] } });
+    });
+    expect(failed).toEqual(['drawing-rebuild', 'drawing-writes']);
+  });
+});
+
+describe('what the drawing keeps of what it writes to the GPU', () => {
+  /** What the drawing of the rows keeps, after a few frames of a layer with rows */
+  function kept(checks: false | { run: ConsistencyCheck[] } | undefined) {
+    const drawn = drawnInstance('rows', { checks });
+    const layerId = drawn.draw.layers.create({ name: 'a' })!.id;
+    drawn.draw.features.create({ type: 'Polygon', geometry: SQUARE, layerId });
+    drawn.frame();
+    const renderer = drawn.tableRenderer as unknown as {
+      renderers: { rows: { copies: unknown } } | null;
+      stateCopies: unknown;
+    };
+    const result = {
+      chunks: renderer.renderers?.rows.copies ?? null,
+      states: renderer.stateCopies,
+    };
+    drawn.draw.destroy();
+    return result;
+  }
+
+  it('is nothing without the checks of the drawing of the rows', () => {
+    for (const checks of [false, { run: ['id-index', 'drawing'] }] as const) {
+      const { chunks, states } = kept(checks === false ? false : { run: [...checks.run] });
+      expect(chunks).toBeNull();
+      expect(states).toBeNull();
+    }
+  });
+
+  it('is what the GPU holds while one of them runs', () => {
+    for (const run of [['drawing-writes'], ['drawing-rebuild'], undefined] as const) {
+      const { chunks, states } = kept(run ? { run: [...run] } : undefined);
+      expect(chunks).not.toBeNull();
+      expect(states).not.toBeNull();
+    }
+  });
 });

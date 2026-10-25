@@ -37,6 +37,7 @@ import { TerrainContext } from '../../terrain/context.js';
 import { NEUTRAL_DRAW_FACTORS, type RetainedDrawFactors } from '../draw-factors.js';
 import { type RetainedDrawRun, retainedDrawRun } from '../draw-run.js';
 import { bindRowState, type RowStateBinding, RowStateUniforms } from '../row-state.js';
+import type { RowsCopies } from './rows-copies.js';
 import {
   ROWS_COORD_WIDTH,
   ROWS_INSTANCE_BYTES,
@@ -202,6 +203,8 @@ export class RowsRenderer {
   private readonly pixelRatio: PixelRatioInput | undefined;
   private readonly terrain: TerrainContext;
   private readonly ledger: GpuLedger | undefined;
+  /** What is kept of what the GPU holds, for the checks of what is drawn (null without them) */
+  readonly copies: RowsCopies | null;
   private readonly run: RetainedDrawRun;
   private readonly parallel: boolean;
   /** The program of each variant, compiled once */
@@ -238,8 +241,10 @@ export class RowsRenderer {
     pixelRatio?: PixelRatioInput,
     terrain: TerrainContext = new TerrainContext(),
     ledger?: GpuLedger,
+    copies: RowsCopies | null = null,
   ) {
     this.gl = gl;
+    this.copies = copies;
     this.map = map;
     this.pixelRatio = pixelRatio;
     this.terrain = terrain;
@@ -522,6 +527,7 @@ export class RowsRenderer {
   disposeChunk(chunk: RowsChunk): void {
     if (chunk.disposed) return;
     chunk.disposed = true;
+    this.copies?.disposed(chunk);
     this.queued.delete(chunk);
     this.patched.delete(chunk);
     const gl = this.gl;
@@ -912,6 +918,7 @@ export class RowsRenderer {
       i = j;
     }
     gl.bindTexture(gl.TEXTURE_2D, null);
+    this.copies?.paletteUploaded(palette, lines);
     palette.dirty.clear();
   }
 
@@ -981,7 +988,9 @@ export class RowsRenderer {
     chunk.pointedFirst = 0;
 
     chunk.uploaded = true;
-    // The packed arrays are on the GPU: the chunk keeps none of them
+    // The packed arrays are on the GPU: the chunk keeps none of them (the copies of the checks
+    // keep them as the GPU holds them)
+    this.copies?.uploaded(chunk, data);
     chunk.packed = null;
   }
 
@@ -1024,6 +1033,7 @@ export class RowsRenderer {
   private uploadPatches(chunk: RowsChunk): void {
     const writes = chunk.writes;
     if (chunk.disposed || !chunk.uploaded || !writes) return;
+    this.copies?.patched(chunk, writes);
     const gl = this.gl;
     const buffer = (target: WebGLBuffer | null, values: TexelWrites): void => {
       if (values.size === 0) return;

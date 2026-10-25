@@ -290,6 +290,8 @@ export function createEngine(
     // The failure to load the image of an Image feature (an error event)
     onImageError: (featureId, error) =>
       eventEmitter.emit('load.error', { source: 'image', featureId, error }),
+    // What is written to the GPU is kept only for the checks of what is drawn
+    keepDrawnCopies: options.keepDrawnCopies === true,
   });
 
   // 3.5 Add the snapping indicator as a built-in overlay

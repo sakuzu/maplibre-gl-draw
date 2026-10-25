@@ -692,12 +692,24 @@ export function toEngineOptions(
   if (runtime.scaleWithZoom !== undefined) result.scaleWithZoom = runtime.scaleWithZoom;
   if (runtime.clickTolerance !== undefined) result.clickTolerance = runtime.clickTolerance;
   if (runtime.dragThreshold !== undefined) result.dragThreshold = runtime.dragThreshold;
+  if (keepsDrawnCopies(options)) result.keepDrawnCopies = true;
   if (options.store !== undefined) {
     // A Store of the library is used as it is; the Store of an application is read and written
     // through the public contract only, and the instance keeps the drawing state around it
     result.store = options.store;
   }
   return result;
+}
+
+/**
+ * Whether the checks asked for compare what is written to the GPU with the rows
+ * (`drawing-writes`, `drawing-rebuild`): the drawing keeps it only then
+ */
+function keepsDrawnCopies(options: DrawOptions): boolean {
+  const checks = options.debug?.checks;
+  if (!checks) return false;
+  const run = checks === true ? undefined : checks.run;
+  return run === undefined || run.includes('drawing-writes') || run.includes('drawing-rebuild');
 }
 
 // ============================================================================

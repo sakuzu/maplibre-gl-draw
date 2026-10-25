@@ -86,6 +86,14 @@ export class TexelWrites {
     this.clear();
   }
 
+  /**
+   * Hands each texel written to `read`, in no order, without forgetting them: its number, and the
+   * array its values are in from `at`
+   */
+  forEach(read: (texel: number, values: Float32Array, at: number) => void): void {
+    for (const [texel, slot] of this.slots) read(texel, this.values, slot * this.floats);
+  }
+
   /** Forgets the texels written */
   clear(): void {
     this.slots.clear();

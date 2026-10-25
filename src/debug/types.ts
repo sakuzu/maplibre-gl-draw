@@ -9,7 +9,9 @@
 /**
  * A check of the state of an instance: the ids of the rows (`id-index`), the selection
  * (`selection`), the marks the rows are written with (`write-marks`), the features kept of rows
- * (`feature-cache`), what is drawn (`drawing`)
+ * (`feature-cache`), what is drawn (`drawing`), the rows written in place where they are drawn
+ * against the same rows drawn afresh (`drawing-writes`), everything the drawing of the rows keeps
+ * against a drawing made again from the rows (`drawing-rebuild`)
  *
  * @experimental
  */
@@ -18,7 +20,9 @@ export type ConsistencyCheck =
   | 'selection'
   | 'write-marks'
   | 'feature-cache'
-  | 'drawing';
+  | 'drawing'
+  | 'drawing-writes'
+  | 'drawing-rebuild';
 
 /**
  * A check that failed, and what it found

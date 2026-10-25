@@ -144,6 +144,11 @@ export interface CustomLayerDeps {
    * fails; the draw instance turns it into the load.error event)
    */
   onImageError?: (featureId: string, error: Error) => void;
+  /**
+   * Whether the drawing keeps what it writes to the GPU, for the checks of what is drawn (false
+   * by default: it keeps nothing). Read once, when the drawing is made
+   */
+  keepDrawnCopies?: boolean;
 }
 
 /**
@@ -217,6 +222,19 @@ export interface CustomLayerInterface extends BaseCustomLayerInterface {
    * the drawing is not on a map
    */
   checkDrawnCopies(): string[];
+  /**
+   * The differences between the rows written in place in the chunks drawn in one draw (as the
+   * GPU holds them) and the same rows packed again from their columns: none when they agree, or
+   * when the drawing keeps nothing of what it writes to the GPU (`keepDrawnCopies`)
+   */
+  checkDrawnWrites(): string[];
+  /**
+   * The differences between what the drawing of the rows keeps (the chunks as the GPU holds
+   * them, the kinds the rows are drawn with, the state of the rows and its texture, the values of
+   * the styles) and a drawing made again from the rows as they are now: none when they agree, or
+   * when the drawing keeps nothing of what it writes to the GPU (`keepDrawnCopies`)
+   */
+  checkDrawnRebuild(): string[];
   /**
    * Whether work remains that later frames finish without the host doing anything (see
    * `draw.hasPendingWork()`)
@@ -530,6 +548,7 @@ export function createCustomLayer(deps: CustomLayerDeps): CustomLayerInterface {
       ledger: renderScope.gpu,
       pixelRatio,
       requestRepaint: () => engine.mapInstance?.triggerRepaint(),
+      keepCopies: deps.keepDrawnCopies === true,
     });
   }
 
@@ -606,6 +625,7 @@ export function createCustomLayer(deps: CustomLayerDeps): CustomLayerInterface {
       pixelRatio,
       scope: renderScope,
       onImageError: deps.onImageError,
+      keepCopies: deps.keepDrawnCopies === true,
     });
 
     if (renderingConfig.storeRetained !== false) {
@@ -1000,6 +1020,20 @@ export function createCustomLayer(deps: CustomLayerDeps): CustomLayerInterface {
         ...(engine.storeRetainedCache?.checkCopies() ?? []),
         ...(engine.tableRetained?.checkCopies() ?? []),
         ...(engine.shownTableRetained?.checkCopies() ?? []),
+      ];
+    },
+
+    checkDrawnWrites(): string[] {
+      return [
+        ...(engine.tableRetained?.checkWrites() ?? []),
+        ...(engine.shownTableRetained?.checkWrites() ?? []),
+      ];
+    },
+
+    checkDrawnRebuild(): string[] {
+      return [
+        ...(engine.tableRetained?.checkRebuild() ?? []),
+        ...(engine.shownTableRetained?.checkRebuild() ?? []),
       ];
     },
 

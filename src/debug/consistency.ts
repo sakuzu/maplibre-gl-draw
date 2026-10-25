@@ -7,8 +7,8 @@
  * They are for development and tests: each reads the whole of what it checks, so it costs as
  * much as the document. The checks of the document, of the selection, of the write marks and of
  * the features kept run once each notification of the Store has gone out (once per outermost
- * transaction); the check of
- * what is drawn runs once a frame is drawn, since what the drawing keeps is made again for the
+ * transaction); the checks of
+ * what is drawn run once a frame is drawn, since what the drawing keeps is made again for the
  * frame after a change, not at the change.
  *
  * - `id-index`: the ids of the rows find their rows, and each row is read where its id says;
@@ -27,6 +27,20 @@
  *   found); what is kept is frozen from the creation of the checks on
  * - `drawing`: what the drawing keeps is made from the state it copies, as it is now (see the
  *   drawings, `checkCopies`)
+ * - `drawing-writes`: the rows written in place in the chunks drawn in one draw (their
+ *   coordinates, their styles, the rows packed again into their places) draw, as the GPU holds
+ *   them, what the same rows packed afresh as a build of their chunk packs them draw (see
+ *   `TableLayerRenderer.checkWrites`). Each frame
+ * - `drawing-rebuild`: everything the drawing of the rows keeps (the chunks as the GPU holds
+ *   them, the kind each row is drawn with, the state of the rows and its texture, the values of
+ *   the styles) is what a drawing made again from the rows as they are now makes, its styles
+ *   resolved afresh (see `TableLayerRenderer.checkRebuild`). It reads every row, so it runs once
+ *   every {@link DRAWING_REBUILD_FRAMES} frames drawn, the first included
+ *
+ * The two checks of the drawing of the rows read what the GPU holds from copies the drawing keeps
+ * only while one of them runs (decided when the instance is created), and pass over what the
+ * drawing marked to be made again and is still making (a chunk being built, styles being
+ * resolved again, writes waiting for the next frame).
  *
  * A check that fails throws `DrawError` with the code `invalid-state`, unless it is one of the
  * checks allowed to fail; every failure is given to `onFailure` first.
@@ -54,7 +68,17 @@ export const CONSISTENCY_CHECKS: readonly ConsistencyCheck[] = [
   'write-marks',
   'feature-cache',
   'drawing',
+  'drawing-writes',
+  'drawing-rebuild',
 ];
+
+/**
+ * The frames drawn between two runs of `drawing-rebuild`, which reads every row (1 runs it each
+ * frame)
+ *
+ * @internal
+ */
+export const DRAWING_REBUILD_FRAMES = 8;
 
 /** The problems a check gives at most (the rest are not read) */
 const PROBLEM_LIMIT = 20;
@@ -68,6 +92,10 @@ export interface ConsistencyTarget {
   readonly store: Store;
   /** The differences between what the drawing keeps and what it copies (none while not drawn) */
   readonly checkDrawing: () => string[];
+  /** The differences between the rows written in place where they are drawn and the same drawn afresh */
+  readonly checkDrawnWrites: () => string[];
+  /** The differences between what the drawing of the rows keeps and a drawing made again */
+  readonly checkDrawnRebuild: () => string[];
 }
 
 /**
@@ -306,7 +334,16 @@ function hiddenReason(
  * @internal
  */
 export class ConsistencyChecks {
+  /**
+   * The frames drawn between two runs of `drawing-rebuild` for the checks made from now on (the
+   * tests set 1, to run it every frame)
+   */
+  static rebuildEvery = DRAWING_REBUILD_FRAMES;
+
   readonly #target: ConsistencyTarget;
+  readonly #rebuildEvery = Math.max(1, Math.floor(ConsistencyChecks.rebuildEvery));
+  /** The frames drawn since the checks were made */
+  #frames = 0;
   readonly #run: ReadonlySet<ConsistencyCheck>;
   readonly #allowed: ReadonlySet<ConsistencyCheck>;
   readonly #onFailure: ((failure: ConsistencyFailure) => void) | undefined;
@@ -336,9 +373,17 @@ export class ConsistencyChecks {
     this.#check('feature-cache', () => checkFeatureCache(this.#target.store));
   }
 
-  /** Runs the check of what is drawn (once a frame is drawn) */
+  /**
+   * Runs the checks of what is drawn (once a frame is drawn): `drawing-rebuild` once every few
+   * frames
+   */
   afterFrame(): void {
+    const frame = this.#frames++;
     this.#check('drawing', this.#target.checkDrawing);
+    this.#check('drawing-writes', this.#target.checkDrawnWrites);
+    if (frame % this.#rebuildEvery === 0) {
+      this.#check('drawing-rebuild', this.#target.checkDrawnRebuild);
+    }
   }
 
   #check(check: ConsistencyCheck, read: () => string[]): void {
