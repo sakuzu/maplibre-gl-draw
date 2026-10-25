@@ -18,7 +18,7 @@ import { describe, expect, it } from 'vitest';
 import { DrawError } from '../api/errors.js';
 import { featureTablesInternals } from '../feature-table/feature-tables.js';
 import { MemoryStore } from './memory.js';
-import type { Store } from './store.js';
+import type { GeometryTransforms, Store } from './store.js';
 import { copyTableStore } from './table-copy.js';
 import { createTableStore } from './table-memory.js';
 import type { Feature, Layer } from './types.js';
@@ -157,6 +157,18 @@ describe('the copy of a document held as rows', () => {
     expect(read(copy.store)).toEqual(read(store));
     expect(read(copy.store)).toEqual([{ type: 'Point', coordinates: [1, 2, 30] }]);
     expect(writer).toBeDefined();
+  });
+
+  it('gives the copy the computation of the edits of the Store copied', () => {
+    const transforms: GeometryTransforms = {
+      accepts: () => true,
+      apply: (_edit, values) => values,
+    };
+    const { store } = createTableStore({ transforms });
+    const copy = copyTableStore(store);
+    expect(copy.store.transforms).toBe(transforms);
+    // A Store with none gives none: the copy computes them as the library does
+    expect(copyTableStore(source().store).store.transforms).toBeUndefined();
   });
 
   it('refuses a Store that does not hold its features as rows', () => {

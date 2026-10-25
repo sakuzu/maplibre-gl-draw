@@ -668,7 +668,8 @@ export interface TableStoreCopy {
  * are listed at once, in the order of their layers, and copied a row block at a time with
  * `copyNext`, each row block read as the rows are then (a value written meanwhile is copied as it is
  * when its row block is read), so that the copy of a large document is spread over frames or tasks.
- * The layers keep the dimensions of their coordinates.
+ * The layers keep the dimensions of their coordinates. The new Store computes the edits that
+ * move, rotate and scale features as the Store copied does (its `transforms`).
  *
  * @param source - The Store of the document (`draw.getStore()`)
  * @param options - The options of the tables of the new Store (the Worker that builds its next

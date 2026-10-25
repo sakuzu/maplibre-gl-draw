@@ -347,7 +347,7 @@ describe.each(CONTRACTS)('the edits that move, rotate and scale features of %s',
         return {
           ...values,
           geometry: { type: 'Point', coordinates: [lng + 1, lat] },
-          ...('angle' in values && { angle: 7 }),
+          ...('angleDegrees' in values && { angleDegrees: 7 }),
         };
       },
     };

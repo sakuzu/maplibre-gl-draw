@@ -64,7 +64,7 @@ export type TransformEdit =
  *
  * A key of a field is there only when the type of the feature has that field: its value is the
  * one the feature has, or `null` when the feature has none yet. An edit starts a field of `null`
- * from 0 for `angle` and from 1 for `size`, and leaves `bearing` at `null`.
+ * from 0 for `angleDegrees` and from 1 for `size`, and leaves `bearingDegrees` at `null`.
  */
 export interface TransformValues {
   /** The GeoJSON geometry */
@@ -73,12 +73,12 @@ export interface TransformValues {
    * The rotation, in degrees counterclockwise: a rotation adds its angle, within [0, 360)
    * (the rotation of an image)
    */
-  readonly angle?: number | null;
+  readonly angleDegrees?: number | null;
   /**
    * A direction, in degrees clockwise from the north: a rotation takes its angle away, within
    * [0, 360)
    */
-  readonly bearing?: number | null;
+  readonly bearingDegrees?: number | null;
   /** A size: a scaling multiplies it by `sizeFactor` (the scale of an image, the radius of a circle) */
   readonly size?: number | null;
   /**

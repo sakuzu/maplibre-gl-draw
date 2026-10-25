@@ -10,7 +10,8 @@
  * time (`copyNext`), each block built from the rows as they are read then (what was written in
  * place included) and added to the new Store (`addRowBlocks`), so that a large document does not hold
  * a frame. The rows are listed once, at the start, in the order of their layers: a row written
- * meanwhile is copied with the values it has when its block is read.
+ * meanwhile is copied with the values it has when its block is read. The new Store computes the
+ * edits that move, rotate and scale features as the one copied does (its `transforms`).
  */
 
 import { featureTablesInternals } from '../feature-table/feature-tables.js';
@@ -21,7 +22,7 @@ import {
   type GroupEntry,
   ROW_BLOCK_TARGET_ROWS,
 } from '../table/row-group-builder.js';
-import type { Store, StoreContractView } from './store.js';
+import type { GeometryTransforms, Store, StoreContractView } from './store.js';
 import { createTableStore, type TableStoreOptions } from './table-memory.js';
 import type { Feature, Group, Layer } from './types.js';
 
@@ -59,11 +60,16 @@ export function copyTableStore(
     throw new DrawError('invalid-input', 'The Store to copy does not hold its features as rows');
   }
   const { blockRows = ROW_BLOCK_TARGET_ROWS, ...tableOptions } = options;
+  // The computation of the edits of the Store copied (a Store has it, a view of one may not)
+  const transforms =
+    tableOptions.transforms ??
+    (source as { readonly transforms?: GeometryTransforms | undefined }).transforms;
   /** The key of the order of a group of features here: the one written last */
   const groupOrderOf = (handle: number): string | undefined =>
     internals.writtenOrders.get(handle) ?? internals.groups.orderOf(handle);
   const target = createTableStore({
     ...tableOptions,
+    ...(transforms && { transforms }),
     // The layers keep the dimensions of their coordinates (no value is dropped)
     dimensionsOf: (layerId) => internals.readContext.dimensionsOf(layerId),
   });

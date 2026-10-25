@@ -74,7 +74,7 @@ function features(): Feature[] {
 describe('the roles of the fields of a feature', () => {
   it('gives an Image its rotation and its scale, a Circle its radius, and others what they have', () => {
     expect(rolesOf(feature('Image', {}))).toEqual({
-      angle: ROTATION,
+      angleDegrees: ROTATION,
       size: SCALE,
       uniformScale: true,
     });
@@ -83,7 +83,7 @@ describe('the roles of the fields of a feature', () => {
       uniformScale: true,
     });
     expect(rolesOf(feature('Polygon', { [ROTATION]: 1 }))).toEqual({
-      angle: ROTATION,
+      angleDegrees: ROTATION,
       uniformScale: false,
     });
     expect(rolesOf(feature('Point', { [SCALE]: 1 }))).toEqual({ size: SCALE, uniformScale: true });
@@ -93,7 +93,7 @@ describe('the roles of the fields of a feature', () => {
   it('has a rotation for the features the rotate drag turns by their rotation', () => {
     for (const f of features()) {
       const state = startRotation({ lng: 139.7, lat: 35.6 }, BOX, [f]);
-      expect(rolesOf(f).angle !== undefined, f.id).toBe(state.initialRotations.has(f.id));
+      expect(rolesOf(f).angleDegrees !== undefined, f.id).toBe(state.initialRotations.has(f.id));
     }
   });
 
@@ -117,7 +117,7 @@ describe('the roles of the fields of a feature', () => {
     const read = (key: string) => image.properties[key];
     expect(transformValuesOf(image.geometry, rolesOf(image), read)).toEqual({
       geometry: image.geometry,
-      angle: 30,
+      angleDegrees: 30,
       size: null,
       uniformScale: true,
     });
@@ -128,7 +128,7 @@ describe('the roles of the fields of a feature', () => {
     const named = feature('Point', { [ROTATION]: 'thirty' });
     expect(
       transformValuesOf(named.geometry, rolesOf(named), (key) => named.properties[key]),
-    ).toEqual({ geometry: named.geometry, angle: null });
+    ).toEqual({ geometry: named.geometry, angleDegrees: null });
   });
 });
 

@@ -72,18 +72,23 @@ describe('the computation of the library', () => {
   it('brings the positions back after twelve rotations of 30 degrees', () => {
     const line = tokyoLine();
     const edit: EnuEdit = { kind: 'rotate', center: [139.71, 35.69], angleDegrees: 30 };
-    let values: EnuValues = { geometry: line, angle: 15 };
+    let values: EnuValues = { geometry: line, angleDegrees: 15 };
     for (let i = 0; i < 12; i++) values = applyEnuEdit(edit, values);
     const back = (values.geometry as LineString).coordinates;
     line.coordinates.forEach((position, i) => {
       expect(Math.abs((back[i]?.[0] as number) - (position[0] as number))).toBeLessThan(TOLERANCE);
       expect(Math.abs((back[i]?.[1] as number) - (position[1] as number))).toBeLessThan(TOLERANCE);
     });
-    expect(values.angle).toBeCloseTo(15, 9);
+    expect(values.angleDegrees).toBeCloseTo(15, 9);
   });
 
   it('gives the values back as they are for an edit that does nothing', () => {
-    const values: EnuValues = { geometry: tokyoLine(), angle: 370, size: 2, uniformScale: true };
+    const values: EnuValues = {
+      geometry: tokyoLine(),
+      angleDegrees: 370,
+      size: 2,
+      uniformScale: true,
+    };
     const edits: EnuEdit[] = [
       { kind: 'translate', from: [139.7, 35.6], to: [139.7, 35.6] },
       { kind: 'rotate', center: [139.7, 35.6], angleDegrees: 0 },
@@ -197,16 +202,20 @@ describe('the computation of the library', () => {
 
   it('changes the fields of the roles', () => {
     const rotate: EnuEdit = { kind: 'rotate', center: [139.7, 35.6], angleDegrees: -90 };
-    expect(applyEnuEdit(rotate, { geometry: point(139.7, 35.6), angle: 30 }).angle).toBe(300);
-    expect(applyEnuEdit(rotate, { geometry: point(139.7, 35.6), angle: null }).angle).toBe(270);
+    expect(
+      applyEnuEdit(rotate, { geometry: point(139.7, 35.6), angleDegrees: 30 }).angleDegrees,
+    ).toBe(300);
+    expect(
+      applyEnuEdit(rotate, { geometry: point(139.7, 35.6), angleDegrees: null }).angleDegrees,
+    ).toBe(270);
     const turned = applyEnuEdit(
       { kind: 'rotate', center: [139.7, 35.6], angleDegrees: 180 },
-      { geometry: point(139.7, 35.6), angle: 270, bearing: 90 },
+      { geometry: point(139.7, 35.6), angleDegrees: 270, bearingDegrees: 90 },
     );
-    expect(turned.angle).toBe(90);
-    expect(turned.bearing).toBe(270);
+    expect(turned.angleDegrees).toBe(90);
+    expect(turned.bearingDegrees).toBe(270);
     expect(
-      applyEnuEdit(rotate, { geometry: point(139.7, 35.6), bearing: null }).bearing,
+      applyEnuEdit(rotate, { geometry: point(139.7, 35.6), bearingDegrees: null }).bearingDegrees,
     ).toBeNull();
     const scale: EnuEdit = {
       kind: 'scale',
@@ -219,7 +228,9 @@ describe('the computation of the library', () => {
     expect(applyEnuEdit(scale, { geometry: point(139.7, 35.6), size: null }).size).toBe(3);
     // A rotation does not change the size, nor a scaling the angle
     expect(applyEnuEdit(rotate, { geometry: point(139.7, 35.6), size: 2 }).size).toBe(2);
-    expect(applyEnuEdit(scale, { geometry: point(139.7, 35.6), angle: 30 }).angle).toBe(30);
+    expect(
+      applyEnuEdit(scale, { geometry: point(139.7, 35.6), angleDegrees: 30 }).angleDegrees,
+    ).toBe(30);
   });
 
   it('moves a feature that keeps its shape by the factor of the size', () => {

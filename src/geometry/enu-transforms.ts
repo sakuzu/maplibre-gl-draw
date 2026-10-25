@@ -25,9 +25,10 @@
  * a scaling stays as it is. The numbers of a position past the longitude and the latitude are
  * kept as they are, and are not read.
  *
- * The fields: a rotation adds its angle to `angle` and takes it away from `bearing`, each then
- * within [0, 360); a scaling multiplies `size` by `sizeFactor`. A field of `null` starts from 0
- * for `angle` and 1 for `size`; `bearing` stays `null`.
+ * The fields: a rotation adds its angle to `angleDegrees` and takes it away from
+ * `bearingDegrees`, each then within [0, 360); a scaling multiplies `size` by `sizeFactor`. A
+ * field of `null` starts from 0 for `angleDegrees` and 1 for `size`; `bearingDegrees` stays
+ * `null`.
  *
  * It takes the finite numbers only, a latitude within [-90, 90], an angle within (-180, 180]
  * and factors within [1/1,000,000, 1,000,000]. An edit that does nothing (a move to the same
@@ -68,8 +69,8 @@ export type EnuEdit =
  */
 export interface EnuValues {
   readonly geometry: Geometry;
-  readonly angle?: number | null;
-  readonly bearing?: number | null;
+  readonly angleDegrees?: number | null;
+  readonly bearingDegrees?: number | null;
   readonly size?: number | null;
   readonly uniformScale?: boolean;
 }
@@ -425,9 +426,11 @@ export function applyEnuEdit<V extends EnuValues>(edit: EnuEdit, values: V): V {
   const out: { -readonly [K in keyof EnuValues]: EnuValues[K] } = { ...values };
   if (motion) out.geometry = moveGeometry(motion, values.geometry);
   if (edit.kind === 'rotate') {
-    if ('angle' in values) out.angle = withinTurn((values.angle ?? 0) + edit.angleDegrees);
-    if ('bearing' in values && typeof values.bearing === 'number') {
-      out.bearing = withinTurn(values.bearing - edit.angleDegrees);
+    if ('angleDegrees' in values) {
+      out.angleDegrees = withinTurn((values.angleDegrees ?? 0) + edit.angleDegrees);
+    }
+    if ('bearingDegrees' in values && typeof values.bearingDegrees === 'number') {
+      out.bearingDegrees = withinTurn(values.bearingDegrees - edit.angleDegrees);
     }
   } else if (edit.kind === 'scale') {
     if ('size' in values) out.size = (values.size ?? 1) * edit.sizeFactor;

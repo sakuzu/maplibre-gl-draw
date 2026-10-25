@@ -5,15 +5,16 @@
  * The fields the edits that move, rotate and scale features change with the geometry, and the
  * values a Store gives its computation (`Store.transforms`) for a feature
  *
- * Which field of a feature is the rotation (`angle`) and which is its size (`size`), and whether a
+ * Which field of a feature is the rotation (`angleDegrees`) and which is its size (`size`), and whether a
  * scaling moves its positions uniformly (`uniformScale`), is told by its type:
  *
- * - An Image: `angle` is its rotation, `size` its scale, and it keeps its shape
+ * - An Image: `angleDegrees` is its rotation, `size` its scale, and it keeps its shape
  * - A Circle: `size` is its radius, and it keeps its shape
- * - Any type: a feature that has a rotation (the key, whatever its value) has `angle`, and one
+ * - Any type: a feature that has a rotation (the key, whatever its value) has `angleDegrees`, and
+ *   one
  *   that has a scale has `size` and keeps its shape
  *
- * No type has `bearing` yet.
+ * No type has `bearingDegrees` yet.
  *
  * @internal
  */
@@ -30,7 +31,7 @@ import type { TransformEdit, TransformValues } from './store.js';
  */
 export interface TransformRoles {
   /** The key of the rotation, in degrees counterclockwise */
-  readonly angle?: string;
+  readonly angleDegrees?: string;
   /** The key of the size */
   readonly size?: string;
   /** Whether a scaling moves its positions uniformly (by `sizeFactor`) */
@@ -38,11 +39,14 @@ export interface TransformRoles {
 }
 
 const IMAGE_ROLES: TransformRoles = {
-  angle: DRAW_PROPERTY_KEYS.rotation,
+  angleDegrees: DRAW_PROPERTY_KEYS.rotation,
   size: DRAW_PROPERTY_KEYS.scale,
   uniformScale: true,
 };
-const ROTATION_ROLES: TransformRoles = { angle: DRAW_PROPERTY_KEYS.rotation, uniformScale: false };
+const ROTATION_ROLES: TransformRoles = {
+  angleDegrees: DRAW_PROPERTY_KEYS.rotation,
+  uniformScale: false,
+};
 const SCALE_ROLES: TransformRoles = { size: DRAW_PROPERTY_KEYS.scale, uniformScale: true };
 const NO_ROLES: TransformRoles = { uniformScale: false };
 
@@ -56,7 +60,7 @@ export function transformRolesOf(type: string, has: (key: string) => boolean): T
   const angle = has(DRAW_PROPERTY_KEYS.rotation);
   if (type === 'Circle') {
     return {
-      ...(angle && { angle: DRAW_PROPERTY_KEYS.rotation }),
+      ...(angle && { angleDegrees: DRAW_PROPERTY_KEYS.rotation }),
       size: DRAW_PROPERTY_KEYS.radiusMeters,
       uniformScale: true,
     };
@@ -101,7 +105,9 @@ export function transformValuesOf(
 ): TransformValues {
   return {
     geometry,
-    ...(roles.angle !== undefined && { angle: numberOrNull(read(roles.angle)) }),
+    ...(roles.angleDegrees !== undefined && {
+      angleDegrees: numberOrNull(read(roles.angleDegrees)),
+    }),
     ...(roles.size !== undefined && { size: numberOrNull(read(roles.size)) }),
     ...(roles.uniformScale && { uniformScale: true }),
   };
@@ -119,8 +125,12 @@ export function roleFieldsOf(
   after: TransformValues,
 ): Array<[string, number]> {
   const out: Array<[string, number]> = [];
-  if (roles.angle !== undefined && after.angle !== before.angle && isFiniteNumber(after.angle)) {
-    out.push([roles.angle, after.angle]);
+  if (
+    roles.angleDegrees !== undefined &&
+    after.angleDegrees !== before.angleDegrees &&
+    isFiniteNumber(after.angleDegrees)
+  ) {
+    out.push([roles.angleDegrees, after.angleDegrees]);
   }
   if (roles.size !== undefined && after.size !== before.size && isFiniteNumber(after.size)) {
     out.push([roles.size, after.size]);
