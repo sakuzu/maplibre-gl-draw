@@ -589,24 +589,12 @@ const DRAWN_EDITS: Readonly<
  * The checks a failure of which is noted and lets the edits go on (the checks of the drawing of
  * the rows are never allowed to fail on the edits and on the sequences drawn)
  */
-const OLD_CHECKS: ConsistencyCheck[] = [
-  'id-index',
-  'selection',
-  'write-marks',
-  'feature-cache',
-  'drawing',
-];
+const OLD_CHECKS: ConsistencyCheck[] = ['id-index', 'selection', 'feature-cache', 'drawing'];
 
-/**
- * The edits whose checks fail now, by Store (and drawing), with the checks. `write-marks`: by
- * kind, the line made dashed is drawn at once, and a row has a write mark past the mark of its
- * row group
- */
+/** The edits whose checks fail now, by Store (and drawing), with the checks */
 const KNOWN_DRAWN: Readonly<
   Record<string, Partial<Record<Kind | 'rows by kind', readonly ConsistencyCheck[]>>>
-> = {
-  'a line made dashed, moved, and solid again': { 'rows by kind': ['write-marks'] },
-};
+> = {};
 
 describe('edits written by hand, a frame drawn after each, with every check on', () => {
   // A fixed sequence is short: what the drawing keeps is made again each frame
@@ -694,15 +682,14 @@ describe('the sequences of the reference model of the rows, with every check on'
 /**
  * The checks that fail now on the sequences of the reference model drawn, by Store: the checks
  * of the drawing of the rows are never allowed to fail there (a failure of another is noted and
- * the sequence goes on). `write-marks`: once frames are drawn, a row has a write mark past the
- * mark of its row group (the sequences that are not drawn do not find it)
+ * the sequence goes on)
  */
 const KNOWN_BROKEN_DRAWN: Readonly<
   Record<'rows' | 'rows-bulk' | 'rows by kind', readonly ConsistencyCheck[]>
 > = {
-  rows: ['write-marks'],
-  'rows-bulk': ['write-marks'],
-  'rows by kind': ['write-marks'],
+  rows: [],
+  'rows-bulk': [],
+  'rows by kind': [],
 };
 
 describe('the sequences of the reference model of the rows drawn, with every check on', () => {

@@ -3560,8 +3560,10 @@ class FeatureTablesStore implements FeatureTablesInternals {
       }
       for (const creation of this.creations) this.dropReading(creation);
     }
-    // The rows of the version keep the write marks they have where they are read until now
+    // The rows of the version keep the write marks they have where they are read until now, and
+    // its groups go in with the mark of now (rows were written since they were built)
     for (const group of groups) {
+      group.mark = this.writeMarks.mark;
       const handles = group.data.handles;
       for (let r = 0; r < handles.length; r++) {
         if (this.findPlace(handles[r])) {

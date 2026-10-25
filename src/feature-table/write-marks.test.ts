@@ -388,4 +388,20 @@ describe('the next versions with the write marks', () => {
     expect(marksOf('p10')).toBe(0);
     expect(internals.placeOf(at('p3'))?.group.mark).toBe(2);
   });
+
+  it('go in with the mark of when they are swapped in, past the rows written while they wait', () => {
+    const { tables, writer, internals, sides } = waitingVersion(3);
+    const [version] = internals.builtVersions('a');
+    const handle = (version.groups ?? [])[0].data.handles[0];
+    // A row of the version written in place under a later mark while it waits
+    internals.setWriteMark(4);
+    writer.apply(rowPatch([handle], { 'property:name': ['later'] }));
+    sides.allowAll();
+    internals.swapVersions();
+    const place = internals.placeOf(handle);
+    expect(place?.group).toBe((version.groups ?? [])[0]);
+    expect(place?.group.marks[place.row]).toBe(4);
+    expect(place?.group.mark).toBe(4);
+    expect(tables.get('a')?.getRowValue(handle, 'name')).toBe('later');
+  });
 });
