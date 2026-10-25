@@ -39,8 +39,10 @@ export interface RowBoxSource {
   /**
    * The box of a row as it is drawn now and the number of its layer, or null for no row (deleted,
    * gone): written into `out` (minX, minY, maxX, maxY)
+   *
+   * @param inBuild Whether it is read in a build of every row (rather than as a row marked)
    */
-  boxOf(handle: RowHandle, out: Float64Array): number | null;
+  boxOf(handle: RowHandle, out: Float64Array, inBuild: boolean): number | null;
   /**
    * The handles of every row of the tables, an array per layer (to build the index again); the
    * arrays are not changed afterwards
@@ -300,7 +302,7 @@ export class RowBoxIndex {
         this.#layers[handle] = -1;
         this.#count--;
       }
-      const layer = this.#source.boxOf(handle, box);
+      const layer = this.#source.boxOf(handle, box, false);
       if (layer === null) continue;
       this.#reserve(handle + 1);
       this.#boxes.set(box, handle * 4);
@@ -380,7 +382,7 @@ export class RowBoxIndex {
       const end = Math.min(list.length, build.at + left);
       for (let i = build.at; i < end; i++) {
         const handle = list[i];
-        const layer = this.#source.boxOf(handle, box);
+        const layer = this.#source.boxOf(handle, box, true);
         if (layer === null) continue;
         this.#reserve(handle + 1);
         if (this.#layers[handle] >= 0) continue;

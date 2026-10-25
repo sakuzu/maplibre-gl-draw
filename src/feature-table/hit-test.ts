@@ -10,9 +10,9 @@
  * tested from the front of the order. A candidate is
  * tested on its column, read in place as a shape, by the same test as a feature of its type: no
  * feature is made. A type whose test reads a feature (an image, the type of an extension, a
- * shape cut on the globe) is tested on a feature made of the row for the test and dropped. A
- * hidden row (not shown, deleted, hidden by this client) is not a candidate; a row a feature is
- * drawn over for this client (`showInPlace`) is hit where it is.
+ * shape cut on the globe) is tested on the feature of the row (`FeatureCache`), given with the
+ * hit for what reads it after. A hidden row (not shown, deleted, hidden by this client) is not a
+ * candidate; a row a feature is drawn over for this client (`showInPlace`) is hit where it is.
  */
 
 import { ColumnRun, type HitShape, type PositionRun } from '../shared/math/position-runs.js';
@@ -20,7 +20,7 @@ import { drawPropertyKey } from '../shared/properties.js';
 import type { Coordinate, Feature, FeatureStyle, FeatureType } from '../shared/types/model.js';
 import type { FeatureTablesInternals } from './feature-tables.js';
 import { geometryAt, type LayerTable, type RowGroup } from './layer-table.js';
-import { rowFeature, rowNumber, rowType } from './row-read.js';
+import { rowNumber, rowType } from './row-read.js';
 import { STATE_UNHIT_MASK } from './row-state.js';
 
 /** The key of the radius of a Circle in the attributes of a row */
@@ -68,6 +68,8 @@ export interface TableRowHit {
   readonly tolerance: number;
   /** Its shape as it was tested (null when it was tested as a feature) */
   readonly shape: HitShape | null;
+  /** The feature it was tested as (null when it was tested by its shape) */
+  readonly feature: Feature | null;
 }
 
 /**
@@ -96,13 +98,13 @@ export function hitTestLayerTable(
     const shape = rowHitShape(group, row);
     let hit = shape ? input.testShape(type, shape, input.coordinate, tolerance) : null;
     if (hit === null) {
-      // A type tested on a feature: one made for the test and dropped
-      const feature = rowFeature(internals.readContext, table.layerId, group, row);
+      // A type tested on a feature: the one kept of the row, made for the test otherwise
+      const feature = internals.featureCache.featureOf(table.layerId, group, row);
       hit = input.test(feature, input.coordinate, tolerance);
-      if (hit) return { group, row, type, tolerance, shape: null };
+      if (hit) return { group, row, type, tolerance, shape: null, feature };
       continue;
     }
-    if (hit) return { group, row, type, tolerance, shape };
+    if (hit) return { group, row, type, tolerance, shape, feature: null };
   }
   return null;
 }

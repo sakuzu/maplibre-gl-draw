@@ -51,7 +51,6 @@ import {
 } from '../../feature-table/feature-tables.js';
 import { hitTestLayerTable } from '../../feature-table/hit-test.js';
 import type { LayerTable } from '../../feature-table/layer-table.js';
-import { rowFeature } from '../../feature-table/row-read.js';
 import type { LngLat, ScreenPoint } from '../../shared/math/index.js';
 import { getDisplayFeatures } from '../../store/local-visibility.js';
 import type { Store } from '../../store/store.js';
@@ -335,9 +334,8 @@ export function createTopmostHitTester(deps: TopmostHitTestDeps): HitTestTopmost
       const distancePx = (): number => {
         const distance = hit.shape
           ? (hitTestService.distanceOfShape?.(hit.type, hit.shape, coordinate, hit.tolerance) ?? 0)
-          : (hitTestService.hitTestAll(point, unproject, [
-              rowFeature(tables.readContext, table.layerId, hit.group, hit.row),
-            ])[0]?.distance ?? 0);
+          : (hitTestService.hitTestAll(point, unproject, [hit.feature as Feature])[0]?.distance ??
+            0);
         const onePixel = Math.abs(
           unproject({ x: point.x + 1, y: point.y }).lng - unproject(point).lng,
         );

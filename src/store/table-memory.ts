@@ -55,7 +55,6 @@ import {
   featureTablesInternals,
 } from '../feature-table/feature-tables.js';
 import { ItemWalk } from '../feature-table/item-walk.js';
-import { rowFeature } from '../feature-table/row-read.js';
 import { createWriteMarkKeeper, type WriteMarkKeeper } from '../feature-table/write-marks.js';
 import { ROW_FLAG_DELETED } from '../table/row-group-types.js';
 import { DrawStore } from './draw-store.js';
@@ -1537,11 +1536,11 @@ export class TableContractStore implements StoreContract {
     return !!place && (place.group.data.flags[place.row] & ROW_FLAG_DELETED) === 0;
   }
 
-  /** A row not held as a feature (undefined for a deleted row) */
+  /** A row not held as a feature, kept or made (undefined for a deleted row) */
   #rowFeature(handle: RowHandle): Feature | undefined {
     const place = this.#internals.placeOf(handle);
     if (!place || (place.group.data.flags[place.row] & ROW_FLAG_DELETED) !== 0) return undefined;
-    return rowFeature(this.#internals.readContext, place.layer.layerId, place.group, place.row);
+    return this.#internals.featureCache.featureOf(place.layer.layerId, place.group, place.row);
   }
 
   /** The key of the order of the last item of a layer (null for none) */

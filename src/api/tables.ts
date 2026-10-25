@@ -91,8 +91,9 @@ export interface LayerTableView {
    */
   getRowStyle(handle: RowHandle): Readonly<FeatureStyle> | undefined;
   /**
-   * A row as a feature: a new object every call, so read the values above for what is read
-   * often (undefined for a deleted row or one not in this layer)
+   * A row as a feature, which is not to be changed: the same object is given again while the row
+   * is not written, a few rows at a time, so read the values above for what is read often
+   * (undefined for a deleted row or one not in this layer)
    */
   getRow(handle: RowHandle): Feature | undefined;
   /** Changes whenever the rows drawn may have changed (added, hidden, shown) */

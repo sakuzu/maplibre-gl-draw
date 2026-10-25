@@ -7,7 +7,7 @@
 
 import type { RowUpdate } from '../../feature-table/bulk-plan.js';
 import { rowsByLayerInOrder } from '../../feature-table/bulk-rows.js';
-import { featureTablesInternals } from '../../feature-table/feature-tables.js';
+import { featureTablesInternals, readWithoutKeeping } from '../../feature-table/feature-tables.js';
 import { TableSelection } from '../../feature-table/selection.js';
 import { groupSelection, ungroupSelection } from '../../operations/layer-operations.js';
 import {
@@ -219,10 +219,13 @@ export function createSelection(
           from = at >= 0 ? at + 1 : firstAfter(found, rows, after);
         }
         const out: Feature[] = [];
-        for (let i = from; i < rows.length && out.length < page.limit; i++) {
-          const feature = store.getFeature(store.tables?.getRowId(rows[i]) as string);
-          if (feature) out.push(feature as Feature);
-        }
+        // A page of many rows keeps none of the features it makes
+        readWithoutKeeping(store.tables, () => {
+          for (let i = from; i < rows.length && out.length < page.limit; i++) {
+            const feature = store.getFeature(store.tables?.getRowId(rows[i]) as string);
+            if (feature) out.push(feature as Feature);
+          }
+        });
         return out;
       }
       const matches = featureMatcher(deps, filter);

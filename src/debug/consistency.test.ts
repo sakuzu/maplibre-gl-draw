@@ -33,6 +33,7 @@ import { createMapStub, memoryGL } from '../test-utils.js';
 import {
   type ConsistencyCheck,
   ConsistencyChecks,
+  checkFeatureCache,
   checkIdIndex,
   checkSelection,
   checkWriteMarks,
@@ -114,7 +115,7 @@ describe('the option debug.checks', () => {
     expect(() => createDraw(map, { debug: { checks: 'yes' as never } })).toThrow(DrawError);
     expect(() =>
       createDraw(map, { debug: { checks: { run: ['nothing' as ConsistencyCheck] } } }),
-    ).toThrow(/must be an array of id-index, selection, write-marks, drawing/);
+    ).toThrow(/must be an array of id-index, selection, write-marks, feature-cache, drawing/);
     expect(() => createDraw(map, { debug: { other: true } as never })).toThrow(DrawError);
     const draw = createDraw(map, { debug: { checks: true } });
     expect(() => draw.options.update({ debug: {} } as never)).toThrow(/only be given when/);
@@ -209,6 +210,39 @@ describe('each check finds the state it is about broken', () => {
     const problems = checkWriteMarks(store);
     expect(problems[0]).toContain(`the Store is at the write mark ${keeper.mark}`);
     expect(problems[1]).toContain('past the mark');
+  });
+
+  it('feature-cache: a feature kept changed by its reader, a row read where it is not', () => {
+    const store = createTableStore().store;
+    store.createLayer(layer('a'));
+    store.createFeature(point('p', 0));
+    store.createFeature(point('q', 1));
+    const internals = featureTablesInternals(store.tables)!;
+    internals.flushVersions();
+    const cache = internals.featureCache;
+    const changed = store.getFeature('p') as Feature;
+    (changed.properties as Record<string, unknown>).n = 99;
+    cache.watch();
+    const p = internals.placeOf(internals.ids.handleOf('p'))!;
+    expect(checkFeatureCache(store)).toEqual([
+      `the feature kept for the row ${internals.ids.handleOf('p')} of the write mark ${p.group.marks[p.row]} is not the one its row makes now`,
+    ]);
+    // Given again, it is found too, and what is kept from now on is frozen
+    expect(store.getFeature('p')).toBe(changed);
+    expect(checkFeatureCache(store)[0]).toContain('is not the one its row makes now');
+    const frozen = store.getFeature('q') as Feature;
+    expect(Object.isFrozen((frozen.geometry as { coordinates: number[] }).coordinates)).toBe(true);
+    expect(checkFeatureCache(store).length).toBe(1);
+    // A row read from a group it is not read from any more
+    const handle = internals.ids.handleOf('q');
+    const before = internals.placeOf(handle)!;
+    store.transact(() => internals.toDelta([handle]));
+    store.updateFeature('q', { properties: { n: 10 } });
+    cache.featureOf('a', before.group, before.row);
+    cache.featureOf('a', before.group, before.row);
+    expect(checkFeatureCache(store)).toContain(
+      `the feature kept for the row ${handle} has the write mark ${before.group.marks[before.row]}, and its row ${internals.placeOf(handle)!.group.marks[internals.placeOf(handle)!.row]}`,
+    );
   });
 
   it('id-index: an item of a layer that names nothing, a member that is not in its group', () => {

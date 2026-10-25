@@ -6,7 +6,7 @@
  */
 
 import type { Value } from '@sakuzu/tabane';
-import { featureTablesInternals } from '../../feature-table/feature-tables.js';
+import { featureTablesInternals, readWithoutKeeping } from '../../feature-table/feature-tables.js';
 import { differenceAll, intersectionAll, unionAll } from '../../geometry/boolean.js';
 import type { AreaCoordinates, MultiPolygonCoordinates } from '../../geometry/types.js';
 import { describeGeometryProblem } from '../../shared/geometry-validation.js';
@@ -179,14 +179,17 @@ export function createFeatures(deps: ResourceDeps): FeaturesCollection {
     if (page.after !== undefined && after === undefined) throw notFound('feature', page.after);
     const features: Feature[] = [];
     if (page.limit === 0) return features;
-    forEachRow(
-      filter,
-      (id) => {
-        const feature = store.getFeature(id);
-        if (feature) features.push(feature);
-        return features.length < page.limit;
-      },
-      after,
+    // A page of many rows keeps none of the features it makes
+    readWithoutKeeping(tables, () =>
+      forEachRow(
+        filter,
+        (id) => {
+          const feature = store.getFeature(id);
+          if (feature) features.push(feature);
+          return features.length < page.limit;
+        },
+        after,
+      ),
     );
     return features;
   }

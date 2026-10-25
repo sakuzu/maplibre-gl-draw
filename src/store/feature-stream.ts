@@ -12,7 +12,7 @@
  */
 
 import type { FeatureTables, RowHandle, RowValues } from '../api/tables.js';
-import { featureTablesInternals } from '../feature-table/feature-tables.js';
+import { featureTablesInternals, readWithoutKeeping } from '../feature-table/feature-tables.js';
 import { ROW_FLAG_LOCKED, ROW_FLAG_VISIBLE } from '../table/row-group-types.js';
 import { listEveryFeatureInOrder } from './ordering.js';
 import type { Feature, FeatureType, Group, Layer, ObjectGroup, ObjectLayer } from './types.js';
@@ -44,7 +44,7 @@ export function layerIdsInOrder(store: FeatureSource): string[] {
 
 /**
  * Every feature in the order it is drawn, one at a time (a feature of a row is made when it is
- * reached, and not kept)
+ * reached, and not kept: `readWithoutKeeping`)
  *
  * @internal
  */
@@ -58,7 +58,8 @@ export function* featuresInOrder(store: FeatureSource): Generator<Feature> {
     const cursor = tables.scan({ layerIds: [layerId] });
     for (let batch = cursor.next(); batch; batch = cursor.next()) {
       for (const handle of batch) {
-        const feature = store.getFeature(tables.getRowId(handle) as string);
+        const id = tables.getRowId(handle) as string;
+        const feature = readWithoutKeeping(tables, () => store.getFeature(id));
         if (feature) yield feature;
       }
     }

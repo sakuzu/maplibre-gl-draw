@@ -5,8 +5,9 @@
  * The checks that the state of an instance agrees with itself (`DrawOptions.debug.checks`)
  *
  * They are for development and tests: each reads the whole of what it checks, so it costs as
- * much as the document. The checks of the document, of the selection and of the write marks run
- * once each notification of the Store has gone out (once per outermost transaction); the check of
+ * much as the document. The checks of the document, of the selection, of the write marks and of
+ * the features kept run once each notification of the Store has gone out (once per outermost
+ * transaction); the check of
  * what is drawn runs once a frame is drawn, since what the drawing keeps is made again for the
  * frame after a change, not at the change.
  *
@@ -20,6 +21,10 @@
  *   it; each frame of writes that wrote rows raised it once, and the rows it wrote and their row
  *   groups have its mark (each frame is read as it ends, from the creation of the checks on); no
  *   row and no row group has a mark past the one of the Store, nor a row a mark past its group
+ * - `feature-cache`: a feature kept of a row (`feature-cache.ts`) is given only while its row has
+ *   the mark it was made at, and is the feature the row makes then: each one given is made again
+ *   and compared, and so is each one kept at the check (a feature kept changed by its reader is
+ *   found); what is kept is frozen from the creation of the checks on
  * - `drawing`: what the drawing keeps is made from the state it copies, as it is now (see the
  *   drawings, `checkCopies`)
  *
@@ -47,6 +52,7 @@ export const CONSISTENCY_CHECKS: readonly ConsistencyCheck[] = [
   'id-index',
   'selection',
   'write-marks',
+  'feature-cache',
   'drawing',
 ];
 
@@ -236,6 +242,16 @@ export function checkWriteMarks(store: Store): string[] {
   return problems;
 }
 
+/**
+ * The features kept of rows: what the ones given since the last check found, and the ones kept
+ * now (`feature-cache`)
+ *
+ * @internal
+ */
+export function checkFeatureCache(store: Store): string[] {
+  return featureTablesInternals(store.tables)?.featureCache.takeProblems() ?? [];
+}
+
 /** Why a selected item should not be selected: not there, or hidden (null when it may be) */
 function hiddenReason(
   store: Store,
@@ -303,16 +319,21 @@ export class ConsistencyChecks {
     this.#onFailure = given.onFailure;
     // The frames of writes are read as they end, from now on
     if (this.#run.has('write-marks')) writeMarkKeeperOf(target.store.tables)?.watch();
+    // The features kept are checked as they are given, from now on
+    if (this.#run.has('feature-cache')) {
+      featureTablesInternals(target.store.tables)?.featureCache.watch();
+    }
   }
 
   /**
-   * Runs the checks of the document, of the selection and of the write marks (once a
-   * notification went out)
+   * Runs the checks of the document, of the selection, of the write marks and of the features
+   * kept (once a notification went out)
    */
   afterNotify(): void {
     this.#check('id-index', () => checkIdIndex(this.#target.store));
     this.#check('selection', () => checkSelection(this.#target.store));
     this.#check('write-marks', () => checkWriteMarks(this.#target.store));
+    this.#check('feature-cache', () => checkFeatureCache(this.#target.store));
   }
 
   /** Runs the check of what is drawn (once a frame is drawn) */

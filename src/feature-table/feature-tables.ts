@@ -77,6 +77,7 @@ import {
 import { compareRowKeys, type RowKeySource } from '../table/row-keys.js';
 import { type BulkOperation, planBulk } from './bulk-plan.js';
 import type { RowContainers } from './bulk-rows.js';
+import { FeatureCache } from './feature-cache.js';
 import { featureFields, featureWithFields } from './feature-fields.js';
 import { groupRunCuts, rowGroupsHolding } from './group-runs.js';
 import { GroupTable } from './group-table.js';
@@ -434,6 +435,11 @@ export interface FeatureTablesInternals {
   /** The write mark the rows written are stamped with (`write-marks.ts`) */
   readonly writeMarks: WriteMarks;
   /**
+   * The features made of rows, kept by the versions of their rows (`feature-cache.ts`): what the
+   * reads of one row at a time make features through
+   */
+  readonly featureCache: FeatureCache;
+  /**
    * Sets the write mark the rows written from now on are stamped with: the Store gives it at the
    * beginning of each frame that writes values (see `write-marks.ts`)
    *
@@ -671,6 +677,17 @@ export function featureTablesInternals(
   return tables ? INTERNALS.get(tables) : undefined;
 }
 
+/**
+ * Runs reads of many rows one after the other (a page of a list, every feature in order): they
+ * give the features kept of rows, and keep no more (`FeatureCache.withoutKeeping`)
+ *
+ * @internal
+ */
+export function readWithoutKeeping<T>(tables: FeatureTables | undefined, read: () => T): T {
+  const cache = featureTablesInternals(tables)?.featureCache;
+  return cache ? cache.withoutKeeping(read) : read();
+}
+
 /** A row of a patch that comes into the delta of a layer */
 interface DeltaInput {
   readonly handle: RowHandle;
@@ -789,6 +806,7 @@ class FeatureTablesStore implements FeatureTablesInternals {
   private nextGroup = 0;
   private revisionCount = 0;
   readonly writeMarks = new WriteMarks();
+  readonly featureCache: FeatureCache;
   /** The row groups given to `adopt` and not taken in yet, in the order they were given */
   private readonly adoptions: Adoption[] = [];
   /** The new rows built into groups of their own, being gathered or built */
@@ -863,6 +881,12 @@ class FeatureTablesStore implements FeatureTablesInternals {
       strings: this.strings,
       dimensionsOf: (layerId) => this.dimsOfLayer(layerId),
     };
+    this.featureCache = new FeatureCache({
+      writeMarks: this.writeMarks,
+      readContext: this.readContext,
+      isHeld: (handle) => this.heldRows.has(handle),
+      placeOf: (handle) => this.placeOf(handle),
+    });
     this.worker = options.worker;
     this.onChange = options.onChange;
     this.onRelease = options.onRelease;
@@ -872,7 +896,7 @@ class FeatureTablesStore implements FeatureTablesInternals {
     this.moveHeldByStateFrom = options.moveOpenedByStateFrom ?? MOVE_HELD_BY_STATE_FROM;
     this.rowBoxes = new RowBoxIndex(
       {
-        boxOf: (handle, out) => this.rowBoxOf(handle, out),
+        boxOf: (handle, out, inBuild) => this.rowBoxOf(handle, out, inBuild),
         rowLists: () => this.layerList.map((layer) => layer.rowOrder().handles),
         countRows: () => {
           let count = 0;
@@ -887,9 +911,9 @@ class FeatureTablesStore implements FeatureTablesInternals {
   /**
    * The box of a row as it is drawn now, and the number of its layer (null for no row): the box of
    * the feature of a row held, the box the calculation of its type gives (an Image, the type of an
-   * extension), or the box of its positions
+   * extension), or the box of its positions. A feature made for a build of every box is not kept
    */
-  private rowBoxOf(handle: RowHandle, out: Float64Array): number | null {
+  private rowBoxOf(handle: RowHandle, out: Float64Array, inBuild: boolean): number | null {
     const place = this.placeOf(handle);
     if (!place) return null;
     const { layer, group, row } = place;
@@ -898,7 +922,13 @@ class FeatureTablesStore implements FeatureTablesInternals {
     const type = held ? held.feature.type : rowType(group.data, row);
     const calculator = this.rowBoxCalculators.get(type);
     if (held || calculator || type === 'Image') {
-      const feature = held?.feature ?? rowFeature(this.readContext, layer.layerId, group, row);
+      const feature =
+        held?.feature ??
+        (inBuild
+          ? this.featureCache.withoutKeeping(() =>
+              this.featureCache.featureOf(layer.layerId, group, row),
+            )
+          : this.featureCache.featureOf(layer.layerId, group, row));
       const box = calculator
         ? calculator(feature, this.rowBoxTileSize)
         : getBoundingBox(feature, this.rowBoxTileSize);
@@ -1074,6 +1104,7 @@ class FeatureTablesStore implements FeatureTablesInternals {
 
   clear(): void {
     this.rowBoxes.markAll();
+    this.featureCache.clear();
     // The rows opened as features are let go of, without writing them (their rows go)
     const removed: string[] = [];
     for (const [handle, held] of this.heldRows) {
@@ -4186,7 +4217,7 @@ class LayerTableViewImpl implements LayerTableView {
     const group = this.store.foundGroup as RowGroup;
     const row = this.store.foundRow;
     if ((group.data.flags[row] & ROW_FLAG_DELETED) !== 0) return undefined;
-    return rowFeature(this.store.readContext, this.table.layerId, group, row);
+    return this.store.featureCache.featureOf(this.table.layerId, group, row);
   }
 
   getDrawnRowsRevision(): number {

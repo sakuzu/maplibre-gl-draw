@@ -73,8 +73,11 @@ describe('the in-memory Store of rows', () => {
     expect(store.getLayer('layer')?.kind).toBe('table');
     expect(store.getLayer('layer')).not.toHaveProperty('items');
     expect(store.getFeature('p2')?.geometry).toEqual({ type: 'Point', coordinates: [2, 0] });
-    // A row not held is read anew every time
-    expect(store.getFeature('p2')).not.toBe(store.getFeature('p2'));
+    // A row not held is made a feature once until it is written (feature-cache.ts)
+    const read = store.getFeature('p2');
+    expect(store.getFeature('p2')).toBe(read);
+    store.updateFeature('p2', { properties: { n: 20 } });
+    expect(store.getFeature('p2')).not.toBe(read);
     expect(() => store.listFeatures()).toThrow();
     expect(() => store.listFeaturesInOrder()).toThrow();
     const view = tables.get('layer');

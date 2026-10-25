@@ -17,7 +17,9 @@
  * of then.
  *
  * What is kept from the rows can keep the mark it was made at and be compared with the marks of
- * the rows and of their groups when it is used.
+ * the rows and of their groups when it is used. A row written in the frame under way may be
+ * written again under the same mark, so what is made of it then is not kept (`settled`), and a
+ * row stamped outside a frame that raised the mark is told to what keeps it (`onUnframedStamp`).
  */
 
 import { DrawError } from '../shared/draw-error.js';
@@ -41,6 +43,15 @@ export class WriteMarks {
   #stamped = 0;
   /** The rows stamped under the mark of now, while the check of the marks reads them */
   #rows: RowHandle[] | null = null;
+  /** Whether a keeper gives the marks by its frames (`byFrames`) */
+  #framed = false;
+  /** Whether the frame that raised the mark of now is under way */
+  #open = false;
+  /**
+   * Called with a row stamped while no frame that raised the mark is under way: its mark does
+   * not tell it from what it was before
+   */
+  onUnframedStamp: ((handle: RowHandle) => void) | null = null;
 
   /** The mark the rows written now are stamped with */
   get mark(): number {
@@ -50,6 +61,24 @@ export class WriteMarks {
   /** The number of rows stamped so far */
   get stamped(): number {
     return this.#stamped;
+  }
+
+  /**
+   * Whether a row of a mark is not written again under it: the marks are given by frames, and the
+   * row was not written in the frame under way (whose rows may be written again under its mark)
+   */
+  settled(mark: number): boolean {
+    return this.#framed && !(this.#open && mark === this.#mark);
+  }
+
+  /** Tells that a keeper gives the marks by its frames (see `settled`) */
+  byFrames(): void {
+    this.#framed = true;
+  }
+
+  /** Tells that the frame that raised the mark of now ended */
+  close(): void {
+    this.#open = false;
   }
 
   /**
@@ -66,6 +95,7 @@ export class WriteMarks {
     }
     if (mark === this.#mark) return;
     this.#mark = mark;
+    this.#open = true;
     if (this.#rows) this.#rows.length = 0;
   }
 
@@ -75,6 +105,7 @@ export class WriteMarks {
     group.mark = this.#mark;
     this.#stamped++;
     this.#rows?.push(group.data.handles[row]);
+    if (this.#framed && !this.#open) this.onUnframedStamp?.(group.data.handles[row]);
   }
 
   /** Stamps the mark on a group whose rows changed without a row of it written (a row gone) */
@@ -126,7 +157,9 @@ export class WriteMarkKeeper {
   #readMark = 0;
   readonly #problems: string[] = [];
 
-  constructor(private readonly target: WriteMarkTarget) {}
+  constructor(private readonly target: WriteMarkTarget) {
+    target.writeMarks.byFrames();
+  }
 
   /** The mark of the Store */
   get mark(): number {
@@ -193,6 +226,7 @@ export class WriteMarkKeeper {
   }
 
   #end(): void {
+    if (this.#raised) this.target.writeMarks.close();
     if (!this.#watched) return;
     const marks = this.target.writeMarks;
     const raised = this.#mark - this.#frameMark;
