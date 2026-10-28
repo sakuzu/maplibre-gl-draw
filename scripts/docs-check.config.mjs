@@ -5,17 +5,21 @@
 //
 // Globs are matched against paths relative to the repository root, with `/` as the separator.
 
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 
 /**
  * Terms kept outside the repository: the names of the products that use the library. A
- * maintainer links them to scripts/terms.local.json, which git ignores:
- * `{ "documents": [{ "name": "...", "source": "<regular expression>", "flags": "i" }, ...] }`.
+ * maintainer links the lists into scripts/terms.local/, which git ignores. The `documents` of
+ * every file is read: `{ "documents": [{ "name": "...", "source": "<regular expression>", "flags":
+ * "i" }, ...] }`, and the other keys of a file are left to other checks.
  */
-const localTermsFile = new URL('./terms.local.json', import.meta.url);
-const localTerms = existsSync(localTermsFile)
-  ? JSON.parse(readFileSync(localTermsFile, 'utf8'))
-  : null;
+const localDir = new URL('./terms.local/', import.meta.url);
+const localDocuments = existsSync(localDir)
+  ? readdirSync(localDir)
+      .filter((f) => f.endsWith('.json'))
+      .sort()
+      .flatMap((f) => JSON.parse(readFileSync(new URL(f, localDir), 'utf8')).documents ?? [])
+  : [];
 
 /** The Markdown files that are documents: linted, link-checked and checked for terms */
 const markdown = {
@@ -92,7 +96,7 @@ declare const nextRows: import('@sakuzu/maplibre-gl-draw').DatasetRow[];
   },
 
   terms: [
-    ...(localTerms?.documents ?? []).map((t) => ({
+    ...localDocuments.map((t) => ({
       name: t.name,
       pattern: new RegExp(t.source, t.flags ?? ''),
       ...everywhere,

@@ -5,7 +5,7 @@ dist/
 .pack/
 docs/reference/api/
 site-dist/
-scripts/terms.local.json
+scripts/terms.local/
 docs/.vitepress/cache/
 docs/.vitepress/dist/
 docs/api/

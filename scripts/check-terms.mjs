@@ -34,20 +34,28 @@ const SCAN = [
 ];
 const SKIP_DIRS = new Set(['node_modules', 'dist', 'public', '.pack']);
 /** Generated output that is not written by hand, and the local list of terms itself */
-const SKIP_PATHS = ['docs/reference/api', 'scripts/terms.local.json'];
+const SKIP_PATHS = ['docs/reference/api', 'scripts/terms.local'];
 const EXT = /\.(md|ts|mts|mjs|js|html|css|json|svelte)$/;
 
 /**
  * Terms that name or describe an extension
  *
- * The list is not kept in this repository, because it would itself describe the extensions it
- * guards against. A maintainer links it to scripts/terms.local.json, which git ignores:
- * `{ "extension": [{ "source": "<regular expression>", "flags": "i" }, ...] }`. Without the
- * file, only the retired names are checked.
+ * The lists are not kept in this repository, because they would themselves describe the
+ * extensions they guard against. A maintainer links them into scripts/terms.local/, which git
+ * ignores. The `extension` of every file is read:
+ * `{ "extension": [{ "source": "<regular expression>", "flags": "i" }, ...] }`, and the other keys
+ * of a file are left to other checks. Without a list, only the retired names are checked.
  */
-const LOCAL_TERMS = join(ROOT, 'scripts/terms.local.json');
-const localTerms = existsSync(LOCAL_TERMS) ? JSON.parse(readFileSync(LOCAL_TERMS, 'utf8')) : null;
-const TERMS = (localTerms?.extension ?? []).map((t) => new RegExp(t.source, t.flags ?? ''));
+const LOCAL_DIR = join(ROOT, 'scripts/terms.local');
+const localLists = existsSync(LOCAL_DIR)
+  ? readdirSync(LOCAL_DIR)
+      .filter((f) => f.endsWith('.json'))
+      .sort()
+      .map((f) => JSON.parse(readFileSync(join(LOCAL_DIR, f), 'utf8')))
+  : [];
+const TERMS = localLists
+  .flatMap((list) => list.extension ?? [])
+  .map((t) => new RegExp(t.source, t.flags ?? ''));
 
 /** Retired names: the old side of every rename in scripts/term-map.json */
 const RETIRED = JSON.parse(readFileSync(join(ROOT, 'scripts/term-map.json'), 'utf8')).retired.map(
@@ -135,8 +143,8 @@ if (retiredHits.length > 0) {
   console.error(`check-terms: ${retiredHits.length} hit(s)`);
 }
 if (hits.length > 0 || retiredHits.length > 0) process.exit(1);
-if (localTerms === null) {
-  console.log('check-terms: ok (retired names only; scripts/terms.local.json is not present)');
+if (localLists.length === 0) {
+  console.log('check-terms: ok (retired names only; scripts/terms.local/ has no list)');
 } else {
   console.log('check-terms: ok');
 }
