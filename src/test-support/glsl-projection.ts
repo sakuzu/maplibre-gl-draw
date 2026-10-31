@@ -70,8 +70,11 @@ export const float32Arithmetic: Arithmetic = {
  */
 export class BoundedArithmetic implements Arithmetic {
   count = 0;
+  private readonly directions: Float64Array | null;
 
-  constructor(private readonly directions: Float64Array | null) {}
+  constructor(directions: Float64Array | null) {
+    this.directions = directions;
+  }
 
   private relative(value: number, bound: number): number {
     const s = this.directions?.[this.count] ?? 0;
@@ -115,9 +118,10 @@ export class BoundedArithmetic implements Arithmetic {
  * operation moved alone by its bound, and the moves of all of them added up in their worst
  * directions)
  */
-export function worstCase(
-  compute: (arithmetic: Arithmetic) => readonly number[],
-): { exact: number[]; error: number[] } {
+export function worstCase(compute: (arithmetic: Arithmetic) => readonly number[]): {
+  exact: number[];
+  error: number[];
+} {
   const counting = new BoundedArithmetic(null);
   const exact = [...compute(counting)];
   const n = counting.count;
@@ -240,11 +244,7 @@ export function uniformsOf(
 }
 
 /** Clip space to CSS pixels of a viewport (y down) */
-export function screenOf(
-  clip: readonly number[],
-  width: number,
-  height: number,
-): [number, number] {
+export function screenOf(clip: readonly number[], width: number, height: number): [number, number] {
   const w = clip[3] as number;
   return [
     ((clip[0] as number) / w + 1) * 0.5 * width,
@@ -297,16 +297,41 @@ export function offsetSineCosine(ar: Arithmetic, x: number): [number, number] {
   return [ar.mul(x, horner(ar, x2, SINE)), horner(ar, x2, COSINE)];
 }
 
-/** `mercator_offset_y`: the Mercator y offset, from sin and cos of half the latitude offset */
-export function mercatorOffsetY(ar: Arithmetic, half: readonly [number, number], u: ShaderUniforms): number {
+/**
+ * `mercator_offset_y`: the Mercator y offset, from sin and cos of half the latitude offset
+ *
+ * With h half the offset and m = φ0 + h the latitude halfway, the offset of the isometric
+ * latitude is 2 atanh(w) with w = sin h / cos m. A small w takes the series of atanh; a large one
+ * the log of (cos m + sin h) / (cos m - sin h), whose two sides are formed from the center
+ * directly (1 - sin φ0 and 1 + sin φ0 as cos² φ0 over the other), so that no difference of
+ * numbers near 1 is left to the log.
+ */
+export function mercatorOffsetY(
+  ar: Arithmetic,
+  half: readonly [number, number],
+  u: ShaderUniforms,
+): number {
   const [s0, c0] = u.centerSineCosine;
-  const w = ar.div(half[0], ar.sub(ar.mul(c0, half[1]), ar.mul(s0, half[0])));
-  const a = Math.abs(w);
+  const cosMid = ar.sub(ar.mul(c0, half[1]), ar.mul(s0, half[0]));
+  const w = ar.div(half[0], cosMid);
   let psi: number;
-  if (a < SERIES_LIMIT) {
+  if (Math.abs(w) < SERIES_LIMIT) {
     psi = ar.mul(ar.mul(2, w), horner(ar, ar.mul(w, w), ATANH));
   } else {
-    psi = Math.sign(w) * ar.log(ar.div(ar.add(1, a), ar.sub(1, a)));
+    const c2 = ar.mul(c0, c0);
+    let onePlus: number;
+    let oneMinus: number;
+    if (s0 >= 0) {
+      onePlus = ar.add(1, s0);
+      oneMinus = ar.div(c2, onePlus);
+    } else {
+      oneMinus = ar.sub(1, s0);
+      onePlus = ar.div(c2, oneMinus);
+    }
+    const cosH = ar.mul(c0, half[1]);
+    const above = ar.add(cosH, ar.mul(oneMinus, half[0]));
+    const below = ar.sub(cosH, ar.mul(onePlus, half[0]));
+    psi = ar.log(ar.div(above, below));
   }
   return ar.mul(psi, MERCATOR_Y);
 }
@@ -367,7 +392,10 @@ export function projectCenterOffset(
 ): number[] {
   const c = u.projectionCenter;
   if (u.transition > 0) {
-    const halfLng = offsetSineCosine(ar, ar.mul(wrappedLongitudeOffset(ar, lngOffset), HALF_DEGREE));
+    const halfLng = offsetSineCosine(
+      ar,
+      ar.mul(wrappedLongitudeOffset(ar, lngOffset), HALF_DEGREE),
+    );
     const sphere = sphereOffset(ar, halfLat, halfLng, u);
     const [s0, c0, sl0, cl0] = u.centerSineCosine;
     const center = [ar.mul(sl0, c0), s0, ar.mul(cl0, c0)];
@@ -375,7 +403,12 @@ export function projectCenterOffset(
     const offset = sphere.map((d, i) => ar.add(d, ar.mul(ar.add(center[i] as number, d), lift)));
     const globe = transformBy(ar, u.mainMatrix, [...offset, 0]);
     if (u.transition > GLOBE_ONLY) {
-      return [ar.add(c[0], globe[0] as number), ar.add(c[1], globe[1] as number), 0, ar.add(c[3], globe[3] as number)];
+      return [
+        ar.add(c[0], globe[0] as number),
+        ar.add(c[1], globe[1] as number),
+        0,
+        ar.add(c[3], globe[3] as number),
+      ];
     }
     const flat = transformBy(ar, u.fallbackMatrix, [mercator[0], mercator[1], elevation, 0]);
     const t = u.transition;
@@ -399,7 +432,10 @@ export function projectOffsetToClip(
   u: ShaderUniforms,
 ): number[] {
   const halfLat = offsetSineCosine(ar, ar.mul(latOffset, HALF_DEGREE));
-  const mercator: [number, number] = [ar.mul(lngOffset, PER_DEGREE), mercatorOffsetY(ar, halfLat, u)];
+  const mercator: [number, number] = [
+    ar.mul(lngOffset, PER_DEGREE),
+    mercatorOffsetY(ar, halfLat, u),
+  ];
   return projectCenterOffset(ar, mercator, lngOffset, halfLat, 0, u);
 }
 
@@ -433,6 +469,38 @@ export function projectMercatorOffsetToClip(
 ): number[] {
   const halfLat = halfLatitudeOfMercatorOffset(ar, mercator[1], u);
   return projectCenterOffset(ar, mercator, ar.mul(mercator[0], 360), halfLat, 0, u);
+}
+
+/** The Mercator offset of a position given by its offset in degrees (`project_offset`) */
+export function mercatorOffsetOf(
+  ar: Arithmetic,
+  lngOffset: number,
+  latOffset: number,
+  u: ShaderUniforms,
+): [number, number] {
+  const halfLat = offsetSineCosine(ar, ar.mul(latOffset, HALF_DEGREE));
+  return [ar.mul(lngOffset, PER_DEGREE), mercatorOffsetY(ar, halfLat, u)];
+}
+
+/**
+ * `stationClip` of the line shader on the globe: clip space of the point at `t` along the straight
+ * line of the Mercator plane between two positions given by their offsets in degrees
+ */
+export function stationClip(
+  ar: Arithmetic,
+  a: readonly [number, number],
+  b: readonly [number, number],
+  t: number,
+  u: ShaderUniforms,
+): number[] {
+  const ma = mercatorOffsetOf(ar, a[0], a[1], u);
+  const mb = mercatorOffsetOf(ar, b[0], b[1], u);
+  const s = ar.sub(1, t);
+  const mercator: [number, number] = [
+    ar.add(ar.mul(ma[0], s), ar.mul(mb[0], t)),
+    ar.add(ar.mul(ma[1], s), ar.mul(mb[1], t)),
+  ];
+  return projectMercatorOffsetToClip(ar, mercator, u);
 }
 
 // ============================================================================
