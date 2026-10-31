@@ -159,10 +159,7 @@ function realRenderers(gl: WebGL2RenderingContext, terrain: TerrainContext) {
     run: retainedDrawRun(gl),
   };
   const camera = (zoom: number, projectionData: ProjectionData): void => {
-    const offset = calculateOffsetUniforms(
-      CENTER,
-      projectionData.mainMatrix as unknown as Float32Array,
-    );
+    const offset = calculateOffsetUniforms(CENTER, projectionData);
     point.setOffsetUniforms(offset);
     point.setProjectionData(projectionData);
     line.setOffsetUniforms(offset);
@@ -273,9 +270,7 @@ describe('the GL calls per draw', () => {
       beginRenderFrame();
       const projectionData = projection();
       camera(14, projectionData);
-      rows.setOffsetUniforms(
-        calculateOffsetUniforms(CENTER, projectionData.mainMatrix as unknown as Float32Array),
-      );
+      rows.setOffsetUniforms(calculateOffsetUniforms(CENTER, projectionData));
       tableRenderer.beginFrame();
       tableRenderer.drawLayer(
         internals,

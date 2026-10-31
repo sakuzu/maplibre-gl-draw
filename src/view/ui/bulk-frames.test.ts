@@ -49,6 +49,9 @@ const binding = {
 
 const SHADER = { vertexShaderPrelude: '', define: '', variantName: 'mercator' };
 
+/** The projection data of a frame (the identity matrix) */
+const PROJECTION = { mainMatrix: [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1] };
+
 describe('the frames of the features selected in bulk', () => {
   it('give each row its extent from the origin of its group, and a row of one position its marker', () => {
     const { gl, calls } = recordingGl();
@@ -69,7 +72,9 @@ describe('the frames of the features selected in bulk', () => {
       Number.NaN,
       Number.NaN,
     ]);
-    renderer.drawGroup(group, binding, 1, {} as never, 10, DEFAULT_SELECTION_CONFIG, () => [8, 5]);
+    renderer.drawGroup(group, binding, 1, PROJECTION as never, 10, DEFAULT_SELECTION_CONFIG, () => [
+      8, 5,
+    ]);
     const data = calls.find((call) => call.name === 'bufferData')?.args[1] as Float32Array;
     expect(Array.from(data.subarray(0, 8))).toEqual([0, 0, 1, 1, 0, 0, 0, 0]);
     expect(Array.from(data.subarray(8, 16))).toEqual([2, 2, 2, 2, 1, 8, 5, 0]);
@@ -90,7 +95,7 @@ describe('the frames of the features selected in bulk', () => {
         group,
         binding,
         revision,
-        {} as never,
+        PROJECTION as never,
         10,
         DEFAULT_SELECTION_CONFIG,
         () => null,
@@ -137,7 +142,7 @@ describe('the frames of the features selected in bulk', () => {
         groupOf([0, 0, 0, 0]),
         binding,
         1,
-        {} as never,
+        PROJECTION as never,
         10,
         DEFAULT_SELECTION_CONFIG,
         () => [8, 5],

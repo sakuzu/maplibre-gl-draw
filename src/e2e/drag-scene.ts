@@ -175,8 +175,15 @@ export async function openScenePage(
  * Makes a new instance on the page over a Store of a kind holding the features in a layer `L`,
  * the map back at the center and the zoom of the page (a drag that missed may have moved it),
  * and waits until everything is built
+ *
+ * @param center - The center the map is put back at (the center of the page when omitted)
  */
-export async function load(page: Page, spec: SceneSpec, zoom: number): Promise<void> {
+export async function load(
+  page: Page,
+  spec: SceneSpec,
+  zoom: number,
+  center: readonly [number, number] = CENTER,
+): Promise<void> {
   await page.evaluate(
     async ({ s, zoom, center }) => {
       type Draw = import('../index.js').Draw;
@@ -491,7 +498,7 @@ export async function load(page: Page, spec: SceneSpec, zoom: number): Promise<v
       await frame();
       for (let i = 0; i < 200 && draw.hasPendingWork(); i++) await frame();
     },
-    { s: spec, zoom, center: CENTER },
+    { s: spec, zoom, center: [center[0], center[1]] as [number, number] },
   );
   await settle(page);
 }

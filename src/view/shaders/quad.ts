@@ -5,8 +5,8 @@
  * QuadShader
  *
  * A shader for drawing a textured quad (a quadrilateral).
- * Uses MapLibre's projectTile to support pitch/roll/globe.
- * Avoids coordinate precision problems with offset mode.
+ * Projects its corners from their offsets from the center of the view (OFFSET_MODE_GLSL), with
+ * pitch, roll and the globe, without the precision problems of absolute coordinates.
  *
  * On frames where terrain (3D) is enabled, a billboard with only four corners
  * lets the terrain poke through from the inside, so the drawing is split into
@@ -298,9 +298,7 @@ void main() {
     }
 
     // Compute the relative coordinates on the CPU side (offset mode: computed at 64-bit
-    // precision)
-    // The shader's project_position_to_clipspace_from_offset handles it appropriately
-    // according to the zoom
+    // precision), which the shader's project_position_to_clipspace_from_offset projects
     const centerLngLat: [number, number] = this.offsetUniforms?.centerLngLat ?? [0, 0];
 
     if (terrain && terrainOn && this.drawSubdivided(terrain, vertices, centerLngLat)) {

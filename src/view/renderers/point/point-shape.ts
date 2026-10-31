@@ -5,7 +5,8 @@
  * PointShapeRenderer
  *
  * A renderer that draws a point as a shape of a fixed size in screen pixels.
- * The Mercator-to-clip-space conversion is done on the GPU (using MapLibre's projectTile)
+ * The position is projected on the GPU from its offset from the center of the view
+ * (OFFSET_MODE_GLSL)
  */
 
 import type { Map as MapLibreMap, ProjectionData } from 'maplibre-gl';

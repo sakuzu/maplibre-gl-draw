@@ -600,7 +600,7 @@ export class RowsRenderer {
       program.projection.setUniforms(
         projectionData,
         zoom,
-        calculateOffsetUniforms(data.origin, projectionData.mainMatrix as unknown as Float32Array),
+        calculateOffsetUniforms(data.origin, projectionData),
       );
     }
     this.writeUniforms(program, chunk, zoom, factors);

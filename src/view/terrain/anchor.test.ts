@@ -62,13 +62,11 @@ const OFFSET: OffsetUniforms = {
   centerLngLat64: [0, 0],
   centerMercator: [0.5, 0.5],
   projectionCenter: [0, 0, 0, 1],
-  unitsPerDegree: [1, 1, 1],
-  unitsPerDegree2: [0, 0, 0],
 };
 
 /**
- * The identity matrix with only the term "elevation moves the screen upward" added
- * (column-major)
+ * The identity matrix moved so that the center of the Mercator plane lands on the center of the
+ * screen, with only the term "elevation moves the screen upward" added (column-major)
  *
  * m[9] is the coefficient with which z affects clip y. Unless it is given a non-zero value,
  * adding an elevation does not change the projected result and the test protects nothing.
@@ -79,6 +77,8 @@ function matrixWithElevationTerm(zToY: number): number[] {
   m[5] = 1; // y → clip y
   m[9] = zToY; // z → clip y
   m[10] = 1;
+  m[12] = -0.5; // the center of the plane (longitude 0, latitude 0) → clip 0
+  m[13] = -0.5;
   m[15] = 1;
   return m;
 }
@@ -86,9 +86,9 @@ function matrixWithElevationTerm(zToY: number): number[] {
 function applyFrame(terrain: TerrainLike, zToY = 4): void {
   setAnchorFrame(context, {
     terrain,
-    zoom: 14, // The offset mode branch (>= 12)
+    zoom: 14,
     elevationScale: 1e-3,
-    mainMatrix: matrixWithElevationTerm(zToY),
+    projection: { mainMatrix: matrixWithElevationTerm(zToY) },
     offsetUniforms: OFFSET,
     width: 800,
     height: 600,

@@ -68,10 +68,13 @@ export function terrainAnchorsOf(
 /** The offsets of each projection matrix of a frame */
 const offsetsByMatrix = new WeakMap<object, OffsetUniforms>();
 
-function offsetOf(base: FrameDrawContext): OffsetUniforms {
+function offsetOf(base: FrameDrawContext, projection: ProjectionData): OffsetUniforms {
   let offset = offsetsByMatrix.get(base.mainMatrixArray);
   if (!offset) {
-    offset = calculateOffsetUniforms(base.centerLngLat, base.mainMatrixArray);
+    offset = calculateOffsetUniforms(base.centerLngLat, {
+      ...projection,
+      mainMatrix: base.mainMatrixArray as ProjectionData['mainMatrix'],
+    });
     offsetsByMatrix.set(base.mainMatrixArray, offset);
   }
   return offset;
@@ -151,7 +154,7 @@ export function createRenderContext(
   const context: RenderContext = {
     gl,
     shader: base.shaderData,
-    offset: offsetOf(base),
+    offset: offsetOf(base, projection),
     projection,
     zoom,
     pixelRatio: base.pixelRatio,

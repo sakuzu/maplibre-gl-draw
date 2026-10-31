@@ -932,8 +932,8 @@ void main() {
    * u_origin_shift: the matrices, the canvas dimensions and the camera-related values are
    * invariant within a frame (see frame.ts).
    *
-   * @param originShift The gap between the origin of the vertex offsets and the linearization
-   *   center (defaults to [0,0])
+   * @param originShift The gap between the origin of the vertex offsets and the center the
+   *   offsets are taken from (defaults to [0,0])
    */
   private setProjectionUniformsWith(
     program: WebGLProgram,
@@ -1167,9 +1167,7 @@ void main() {
     const gl = this.gl;
     const program = this.rowProgram;
     const cameraUniforms = this.offsetUniforms;
-    const offsetUniforms =
-      cameraUniforms ??
-      calculateOffsetUniforms(batch.origin, projectionData.mainMatrix as unknown as Float32Array);
+    const offsetUniforms = cameraUniforms ?? calculateOffsetUniforms(batch.origin, projectionData);
     const originShift = this.originShift;
     originShift[0] = cameraUniforms ? batch.origin[0] - cameraUniforms.centerLngLat[0] : 0;
     originShift[1] = cameraUniforms ? batch.origin[1] - cameraUniforms.centerLngLat[1] : 0;
@@ -1220,15 +1218,13 @@ void main() {
 
     const gl = this.gl;
 
-    // The linearization center is aligned with the camera center (linearizing around the origin
-    // of the batch turns the residual of the Mercator approximation into a displacement of
-    // pixel order at vertices far from the center).
-    // The instances are relative to the origin, so that difference is passed as u_origin_shift
+    // The offsets are taken from the camera center, near what is on screen. The instances are
+    // relative to the origin, so that difference is passed as u_origin_shift
     const cameraUniforms = this.offsetUniforms;
     const offsetUniforms =
       cameraUniforms ??
       // Fallback (normally custom-layer has already called setOffsetUniforms every frame)
-      calculateOffsetUniforms(batch.origin, projectionData.mainMatrix as unknown as Float32Array);
+      calculateOffsetUniforms(batch.origin, projectionData);
     const originShift = this.originShift;
     originShift[0] = cameraUniforms ? batch.origin[0] - cameraUniforms.centerLngLat[0] : 0;
     originShift[1] = cameraUniforms ? batch.origin[1] - cameraUniforms.centerLngLat[1] : 0;

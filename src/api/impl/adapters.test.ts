@@ -143,7 +143,12 @@ describe('a custom feature type', () => {
     expect(ctx.pixelRatio).toBe(2);
     expect(ctx.opacity).toBe(0.5);
     expect(ctx.shader.variantName).toBe('mercator');
-    expect(ctx.offset).toEqual(calculateOffsetUniforms(base.centerLngLat, base.mainMatrixArray));
+    expect(ctx.offset).toEqual(
+      calculateOffsetUniforms(base.centerLngLat, {
+        ...PROJECTION,
+        mainMatrix: base.mainMatrixArray as never,
+      }),
+    );
 
     ctx.line.draw(
       [

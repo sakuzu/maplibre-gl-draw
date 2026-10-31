@@ -247,6 +247,28 @@ function sameCameraPosition(a: CameraPosition | null, b: CameraPosition | null):
   );
 }
 
+/**
+ * The main matrix of a frame at 64-bit precision, as an array
+ *
+ * maplibre gives a custom layer the matrix of the globe in its projection data as 32-bit floats
+ * (`mainMatrix`), and the same matrix at 64-bit precision as the model view projection matrix of
+ * the render input. The center in clip space is the matrix times a position on the unit sphere,
+ * whose rounding to 32 bits moves it by pixels at the highest zooms, so the CPU computes it with
+ * the latter. On Web Mercator the main matrix of the projection data is at 64-bit precision
+ * already (the model view projection matrix is of other units there).
+ */
+function mainMatrixOfFrame(renderOptions: CustomRenderMethodInput): number[] {
+  const data = renderOptions.defaultProjectionData;
+  const main = Array.from(data.mainMatrix as Iterable<number>);
+  if (!((data.projectionTransition ?? 0) > 0)) return main;
+  const precise = Array.from((renderOptions.modelViewProjectionMatrix ?? []) as Iterable<number>);
+  // The same matrix to the precision of 32-bit floats, or the one of the projection data
+  const same =
+    precise.length === 16 &&
+    precise.every((value, i) => Math.fround(value) === Math.fround(main[i] as number));
+  return same ? precise : main;
+}
+
 /** What building a frame reads */
 export interface FrameBuildInput {
   gl: WebGL2RenderingContext;
@@ -291,13 +313,15 @@ export function buildFrameState(input: FrameBuildInput): FrameState {
   r.shaderInitializer.incrementSdfLineFrame();
   r.shaderInitializer.ensureShaders(shaderData);
   r.shaderInitializer.setProjectionData(defaultProjectionData);
-  const mainMatrixArray = Array.from(defaultProjectionData.mainMatrix as Iterable<number>);
-  const baseOffsetUniforms = calculateOffsetUniforms(centerLngLat, mainMatrixArray);
+  const mainMatrixArray = mainMatrixOfFrame(renderOptions);
+  // The projection the CPU computes the center and the anchors with, in float64
+  const frameProjection = { ...defaultProjectionData, mainMatrix: mainMatrixArray as never };
+  const baseOffsetUniforms = calculateOffsetUniforms(centerLngLat, frameProjection);
   r.shaderInitializer.applyOffsetUniforms(baseOffsetUniforms);
 
   // Shader initialization of the BoxSelectionRenderer
   r.boxSelectionRenderer.ensureShader(shaderData);
-  const boxOffsetUniforms = calculateOffsetUniforms(centerLngLat, mainMatrixArray);
+  const boxOffsetUniforms = calculateOffsetUniforms(centerLngLat, frameProjection);
   r.boxSelectionRenderer.setOffsetUniforms(boxOffsetUniforms);
 
   // The scale of the sizes of the current view (the margin of the selection frame, the distance
@@ -324,7 +348,7 @@ export function buildFrameState(input: FrameBuildInput): FrameState {
       elevationQuery: map,
       zoom,
       elevationScale: terrainState.elevationScale,
-      mainMatrix: mainMatrixArray,
+      projection: frameProjection,
       offsetUniforms: boxOffsetUniforms,
       width: viewport.width,
       height: viewport.height,
@@ -586,8 +610,8 @@ function buildQuadDrapeFrame(
  * One copy (the base one, unchanged) unless the view crosses the antimeridian. Across it,
  * each copy gets its range of the view, the features of that range, the virtual camera
  * (center and matrix moved by the copy's shift, computed in 64 bits) and the DEM atlas in the
- * frame of that camera. The globe draws with maplibre's projectTile, which has no seam, so it
- * keeps one copy.
+ * frame of that camera. The globe has no seam (a longitude offset is taken around the sphere),
+ * so it keeps one copy.
  */
 export function planCopies(
   baseCopy: CopyPass,
@@ -659,7 +683,7 @@ export function planCopies(
       lngShift: shift,
       view,
       projectionData,
-      offsetUniforms: calculateOffsetUniforms(center, matrix),
+      offsetUniforms: calculateOffsetUniforms(center, projectionData),
       customRendererContext: {
         ...baseCopy.customRendererContext,
         centerLngLat: center,

@@ -28,21 +28,21 @@ export interface ShaderData {
 
 /**
  * The values for drawing positions relative to the center of the view, which keeps the
- * precision of 32-bit floats near the camera.
+ * precision of 32-bit floats near the camera at every zoom, on Web Mercator, on the globe and in
+ * the transition between.
  */
 export interface OffsetUniforms {
-  /** The center, rounded to 32-bit floats for the shader */
+  /** The center, rounded to 32-bit floats for the shader (what the offsets are taken from) */
   centerLngLat: [number, number];
   /** The center at 64-bit precision, for the offsets computed on the CPU */
   centerLngLat64: [number, number];
   /** The Mercator coordinates of the center, at 64-bit precision */
   centerMercator: [number, number];
-  /** The center of the view in clip space, at 64-bit precision */
+  /**
+   * The center in clip space as the frame projects it, at 64-bit precision: on Web Mercator,
+   * on the globe, or both mixed by the transition between them
+   */
   projectionCenter: [number, number, number, number];
-  /** The Mercator units per degree of longitude and latitude at the center */
-  unitsPerDegree: [number, number, number];
-  /** The second-order correction of `unitsPerDegree` for the change with latitude */
-  unitsPerDegree2: [number, number, number];
 }
 
 /**

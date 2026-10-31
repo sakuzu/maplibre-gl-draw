@@ -64,37 +64,62 @@ that, and the symptoms are:
 
 ## The offset method
 
-The shader never sees absolute coordinates at high zoom. The CPU, which
-computes in 64 bits, subtracts the viewport center from every vertex, and
-the GPU projects only the small difference.
+The shader never sees absolute coordinates, at any zoom and in any
+projection. The CPU, which computes in 64 bits, subtracts the center of
+the view from every vertex, and the GPU projects only the small
+difference.
 
 ```text
 Absolute (loses precision):
-  GPU: gl_Position = matrix * mercator(lngLat)
+  GPU: gl_Position = matrix * project(lngLat)
 
 Offset (precise):
   CPU: offset = lngLat - centerLngLat           (64-bit)
-  GPU: gl_Position = matrix * toMercatorUnits(offset)
+       projectionCenter = matrix * project(centerLngLat)   (64-bit)
+  GPU: gl_Position = matrix * projectOffset(offset)
                    + projectionCenter           (Float32, small values)
 ```
 
+`projectOffset` turns the offset in degrees into the offset of the space
+the matrix of the frame takes: the Mercator plane on Web Mercator, the
+unit sphere on the globe, and both, mixed by the transition, in the
+transition between them. It is not an approximation around the center:
+it is the exact difference, formed so that it keeps the precision of the
+offset however small it is.
+
 ### The uniforms
 
-`calculateOffsetUniforms(centerLngLat, mainMatrix)` in
-`src/view/shaders/helpers.ts` computes the uniforms of the frame:
+`calculateOffsetUniforms(centerLngLat, projection)` in
+`src/view/shaders/helpers.ts` computes the uniforms of a center from the
+projection data of the frame (its matrices and its transition):
 
-- `centerLngLat`: the viewport center rounded to Float32, sent to the
-  shader
-- `centerLngLat64`: the same center in 64 bits, used for the offsets on the
-  CPU
+- `centerLngLat`: the center rounded to Float32, what the offsets are
+  taken from, sent to the shader as `u_center_lnglat`
+- `centerLngLat64`: the same center in 64 bits, used for the offsets on
+  the CPU
 - `centerMercator`: the center in Mercator units (64 bits), used by the
   terrain to place the DEM atlas relative to the center
-- `projectionCenter`: the center in clip space
-- `unitsPerDegree`: the factor from degrees to Mercator units at the
-  center
-- `unitsPerDegree2`: the second-order correction for the change of that
-  factor with latitude (a port of `getDistanceScales` from
-  `@math.gl/web-mercator`)
+- `projectionCenter`: the center in clip space as the frame projects it
+  (`clipOfPosition` in `src/view/shaders/center-projection.ts`, in 64
+  bits): on Web Mercator, on the globe, or both mixed by the transition,
+  sent as `u_projection_center`
+
+`ProjectionUniformManager` (`src/view/shaders/projection.ts`) also writes
+`u_center_sine_cosine`: sine and cosine of the latitude and of the
+longitude of the center, computed in 64 bits. Without the uniforms of a
+center it takes the offsets from (0, 0), as absolute coordinates.
+
+maplibre gives a custom layer the matrix of the globe in its projection
+data as 32-bit floats. The center in clip space is that matrix times a
+position on the unit sphere scaled by the radius of the globe in pixels,
+whose rounding to 32 bits moves it by half a pixel at zoom 18 and twice
+that at every zoom above. The CPU
+therefore computes the center with the same matrix in 64 bits, which the
+render input of the custom layer gives as `modelViewProjectionMatrix`
+while the globe is drawn (`mainMatrixOfFrame` in
+`src/view/layer/frame-state.ts`, used only when it is the matrix of the
+projection data to the precision of 32-bit floats). On Web Mercator the
+matrix of the projection data is in 64 bits already.
 
 `calculateLngLatOffset(lngLat, centerLngLat)` is the subtraction on the
 CPU. A JavaScript number is a 64-bit float, and the result is small, so it
@@ -102,57 +127,85 @@ survives the conversion to Float32.
 
 ### The shader side
 
-`OFFSET_MODE_GLSL` in the same file holds the shader functions. The core of
-the offset path:
+`OFFSET_MODE_GLSL` in the same file holds the shader functions, and the
+part that forms the offsets is in
+`src/view/shaders/center-projection.ts`. GLSL ES 3.00 bounds the error of
+a few operations only (4.5.1): `+`, `-` and `*` are correctly rounded,
+`/` is within 2.5 ULP, `log` within 3 ULP (an absolute 2^-21 for an
+argument in [0.5, 2]), `exp(x)` within 3 + 2|x| ULP and `inversesqrt`
+within 2 ULP. It gives no bound for the trigonometric built-ins (`sin`,
+`cos`, `tan`, `atan`, `sinh` and the others), and some GPUs compute them
+loosely: on SwiftShader, which Chrome falls back to without a GPU, the
+Mercator y of the latitude of Tokyo computed as
+`log(tan(lat) + 1 / cos(lat))` is off by about 4.7e-6, which is 2.5 px at
+zoom 10 and 9.9 px at zoom 11.99. The projection of positions therefore
+uses only the operations with a bound:
+
+- `offset_sine_cosine(x)`: sine and cosine of half an offset (at most 90
+  degrees) by their Taylor polynomials to x^13 and x^14, whose remainders
+  are below 10^-9
+- `mercator_offset_y(halfLat)`: the Mercator y of the offset of a
+  latitude. With h half the offset and m the latitude halfway, the offset
+  of the isometric latitude is 2 atanh(w) with w = sin h / cos m, and
+  cos m = cos(lat0) cos h - sin(lat0) sin h. A small w (below 0.4) takes
+  the series of atanh(w) / w to w^18. A large one takes the log of
+  (cos m + sin h) / (cos m - sin h), whose two sides are formed as
+  `cos(lat0) cos h + (1 - sin lat0) sin h` and
+  `cos(lat0) cos h - (1 + sin lat0) sin h`, with `1 - sin lat0` and
+  `1 + sin lat0` formed as `cos² lat0` over the other: no difference of
+  numbers close to 1 is left to the log
+- `half_latitude_of_mercator_offset(dy)`: the inverse, for a point given
+  by its Mercator offset (the stations of a line on the globe): tanh of
+  half the isometric offset by its series below 0.4 and by `exp` above,
+  `tan h = w cos(lat0) / (1 + w sin(lat0))`, and sine and cosine of h
+  with `inversesqrt`
+- `sphere_offset(halfLat, halfLng)`: the offset on the unit sphere of the
+  globe. Each component is a difference formed from the half offsets
+  (`sin(lat) - sin(lat0) = 2 sin h cos m`, and the same for the cosine and
+  for the longitude), so it keeps the precision of the offset
+- `project_center_offset(...)`: the offset through the matrix, plus the
+  center. On the globe, `u_projection_matrix` takes the offset on the
+  sphere and the depth that hides the far side of the sphere is computed
+  from the position as maplibre's prelude computes it
+  (`globeComputeClippingZ`); in the transition, the offset on the
+  Mercator plane goes through `u_projection_fallback_matrix` and the two
+  are mixed by `u_projection_transition`, as maplibre's
+  `interpolateProjection` mixes its own layers (the depth taken from the
+  globe from a transition of 0.2 on). The globe branch is compiled only
+  in the variant of the globe (`#ifdef GLOBE`)
 
 ```glsl
-// Relative degrees to Mercator units (second order in latitude)
-vec3 project_offset(vec3 offset) {
-    float dy = offset.y;
-    vec3 unitsPerDegree = u_units_per_degree + u_units_per_degree2 * dy;
-    return offset * unitsPerDegree;
-}
-
 vec4 project_offset_to_clipspace(vec2 lngLatOffset, mat4 viewProjectionMatrix) {
-    vec3 mercatorOffset = project_offset(vec3(lngLatOffset, 0.0));
-    // The terrain elevation goes into z (0 without terrain)
-    mercatorOffset.z = terrain_elevation_from_offset(mercatorOffset.xy);
-    vec4 offset = vec4(mercatorOffset, 0.0);
-    return viewProjectionMatrix * offset + u_projection_center;
+    vec2 halfLat = half_latitude_offset(lngLatOffset.y);
+    vec2 mercatorOffset = vec2(lngLatOffset.x / 360, mercator_offset_y(halfLat));
+    float elevation = terrain_elevation_from_offset(mercatorOffset);
+    return project_center_offset(mercatorOffset, lngLatOffset.x, halfLat,
+                                 elevation, viewProjectionMatrix);
 }
-```
 
-The renderers call `project_position_to_clipspace_from_offset`, which
-chooses the path:
-
-```glsl
 vec4 project_position_to_clipspace_from_offset(
     vec2 lngLatOffset, mat4 viewProjectionMatrix) {
-    // Origin of a retained batch minus the screen center ((0,0) otherwise,
-    // and for a row moved on the GPU, whose offset is from the center)
-    vec2 shifted = lngLatOffset + origin_shift();
-    // Globe mode: maplibre's projection
-    if (u_projection_transition > 0.0) {
-        vec2 mercator = lngLatToMercator(shifted + u_center_lnglat);
-        return projectTileWithElevation(mercator,
-                                        terrain_elevation_at(mercator));
-    }
-    // High zoom: the offset path
-    if (u_use_offset_mode > 0.5) {
-        return project_offset_to_clipspace(shifted, viewProjectionMatrix);
-    }
-    // Low zoom: maplibre's projection
-    vec2 mercator = lngLatToMercator(shifted + u_center_lnglat);
-    return projectTileWithElevation(mercator, terrain_elevation_at(mercator));
+    // Origin of a retained batch minus the center ((0,0) otherwise, and
+    // for a row moved on the GPU, whose offset is from the center)
+    return project_offset_to_clipspace(lngLatOffset + origin_shift(),
+                                       viewProjectionMatrix);
 }
 ```
 
-`projectTileWithElevation` at elevation 0 gives the same result as
-maplibre's `projectTile()`. `ProjectionUniformManager`
-(`src/view/shaders/projection.ts`) writes `u_use_offset_mode` as 1 at
-zoom 12 and above and 0 below. At low zoom the precision problem does not
-arise, and the absolute path avoids the approximation error of the offset
-path for data that covers a wide area.
+The elevation of the terrain is in Mercator units. On the globe it is
+handed on as maplibre's prelude would take it from
+`projectTileWithElevation`, as meters, so the relief barely shows on the
+globe; that is how it has always been drawn.
+
+The terrain reads the DEM atlas at the Mercator offset the vertex is
+projected from (`terrain_elevation_from_offset`), and the shading of a
+fill samples the same offset (`shade_mercator_offset`), so the elevation
+a vertex picks up and the elevation the fill reads are always the same.
+
+The projection is the same at every zoom: there is no branch by zoom.
+The anchors over terrain are projected on the CPU with the same formula in
+64 bits (`clipOfPosition`), so what is drawn and what is hit agree on Web
+Mercator, on the globe and in the transition.
 
 Every program reads its textures at highp. GLSL ES 3.00 gives `sampler2D`
 no default precision other than lowp, and a lookup returns the precision of
@@ -179,8 +232,8 @@ coordinates on the CPU, and projects them with
 | `FillShaderManager` | Fill of a polygon being drawn |
 | `QuadShader` | Images |
 
-The uniforms are computed once per frame, from the map center and the main
-matrix of maplibre's projection data, and distributed to every renderer
+The uniforms are computed once per frame, from the map center and the
+projection data of the frame, and distributed to every renderer
 with `ShaderInitializer.applyOffsetUniforms()` (`buildFrameState` in
 `src/view/layer/frame-state.ts`). The frame and its batches are described
 in [Rendering](./rendering.md).
@@ -230,40 +283,106 @@ shift is not added and taken away again). A chunk that holds such rows takes
 its origin near the region the view sees them from while they are dragged,
 so that the baked offsets are small where it matters.
 
-The center of linearization stays at the screen center, not at the chunk
-origin. The Mercator conversion of the offset path is a second-order
-approximation around its center, and its error grows with the cube of the
-latitude difference from that center. A chunk cut in draw order can span a
-wide area, so linearizing around its origin would displace vertices far
-from it by many pixels at high zoom. Instead the screen-center uniforms of
-the frame are used as they are, and `u_origin_shift` is added to the
-vertex's relative coordinate first. That moves only the center of
-linearization to the screen center, without changing the baked data. The
-vertices in view are always near the screen center, so the approximation
-error stays invisible at every zoom. In immediate drawing the shift is
-(0, 0).
+The offsets are taken from the screen center, not from the chunk origin:
+the screen-center uniforms of the frame are used as they are, and
+`u_origin_shift` is added to the vertex's relative coordinate first. The
+formula is exact from any center, but the offsets of what is on screen are
+then small, so they keep their precision. In immediate drawing the shift
+is (0, 0).
 
 ## Globe mode
 
 maplibre's globe projection is supported with the same data.
 
-- When `u_projection_transition` is greater than 0, the map is in globe
-  mode (or transitioning to it), and the shader restores the absolute
-  coordinate and uses maplibre's projection (`projectTileWithElevation`)
-- Globe mode is used mainly at low zoom, where Float32 is precise enough,
-  so the offset path is not needed there
-- The globe uniforms (`u_projection_tile_mercator_coords`,
-  `u_projection_clipping_plane`, `u_projection_transition`,
-  `u_projection_fallback_matrix`) come from maplibre's prelude and are set
-  directly from `ProjectionData`
+- When `u_projection_transition` is greater than 0, the map is on the
+  globe (or in the transition to it), and the shader takes the offset on
+  the unit sphere from sine and cosine of the half offsets and of the
+  center, at every zoom; it does not use maplibre's `projectTile`, which
+  takes `sin` and `cos` of the absolute longitude
+- In the transition, the offsets on the Mercator plane and on the sphere
+  are mixed by the transition as maplibre mixes its own layers.
+  `map.project` gives the position on the globe alone in the transition,
+  so what is drawn lies off it by the difference of the two projections,
+  a small fraction of a pixel near the center of the view at the zooms of
+  the transition
+- The globe uniforms (`u_projection_clipping_plane`,
+  `u_projection_transition`, `u_projection_fallback_matrix`, and
+  `u_projection_tile_mercator_coords` of the prelude) come from maplibre's
+  prelude and are set directly from `ProjectionData`
 - The data is the same, but the edges are cut finer on the globe: two
   projected vertices would be joined by a chord through the sphere, so an
   edge is cut along the Mercator plane before it is projected, as maplibre
   cuts its own layers (`shared/math/globe-subdivision.ts`; see
   [Edges on the globe](./rendering.md#edges-on-the-globe)). The points a
   cut adds are computed in 64 bits on the CPU, or, for the stations of a
-  line, from the Float32 offsets on the GPU, which is precise enough at the
-  zooms of the globe
+  line, on the GPU from the Mercator offsets of the ends of the segment
+  (see the precision above)
+
+## The precision of the projection
+
+The precision is derived from the bounds of the operations, not measured
+on one GPU: a GPU at the limit of the specification may give any result
+within them. `src/test-support/glsl-projection.ts` is a copy of the GLSL
+on the CPU, operation by operation, that moves each operation by its bound
+in the direction that moves the result most (to the first order), and
+`src/view/shaders/projection-precision.test.ts` holds it to the reference
+position computed in 64 bits with the matrices maplibre builds.
+
+Every operation leaves an error relative to its result, so the error of a
+position is a number of roundoffs of a 32-bit float (u = 2^-24) of its
+distance from the center:
+
+- the offset rounded to Float32: 1 u; the half offset in radians: 2 u
+- the polynomials of sine and cosine: 2 to 3 u each
+- `cos m`: 3 u, times at most 3 where its two terms cancel (a midpoint
+  latitude near the limit of Web Mercator)
+- the division of w: 5 u (2.5 ULP); the series of atanh and the factors:
+  4 u
+- the log of a large offset: 6 u (3 ULP), and up to 32 times the
+  roundoffs of its two sides where one of them is small, that is where a
+  position lies near the limit of Web Mercator (85.05 degrees)
+- the offset on the sphere: about 8 u; the matrix and the center: 3 u, and
+  the center in clip space rounded to Float32 (1 u of the scale of every
+  offset)
+
+Added in their worst directions, a position is off by at most about 25 u
+of its distance from the center, and 70 u near the limit of Web Mercator.
+None of these depend on the zoom: a pixel at zoom 24 is the same number of
+roundoffs as a pixel at zoom 0. So on a screen of 1920 x 1080 px:
+
+- a position on the screen (at most about 1,100 px from the center) is off
+  by at most 0.0024 px on Web Mercator, flat and tilted, and 0.0061 px on
+  the globe and in the transition, at every zoom from 0 to 24
+- a point drawn on an edge whose ends lie outside the screen is between
+  them, so it is off by at most what they are. An end D px from the center
+  is off by at most 70 u D: 0.27 px for ends 2^16 px (65,536 px) from the
+  center, 1 px at 2^18 px. The half pixel is held for edges whose ends are
+  within 2^16 px of the center; beyond it the error grows with the
+  distance of the ends (the Float32 offsets of the ends alone carry 1 u of
+  it), and a longer edge on screen at a high zoom is cut finer to stay
+  within it
+- the points of a line on the globe are mixed on the Mercator plane from
+  the Mercator offsets of its ends: for ends 2^16 px apart, 0.12 px
+
+On the WebGL2 of headless Chromium (SwiftShader),
+`src/view/shaders/projection-gpu.test.ts` runs the GLSL through transform
+feedback and holds it to 64 bits: offsets of 1e-4 to 60 degrees from
+centers at latitudes 0 to 80, seen 500 px away, land within 0.00014 px.
+The end-to-end tests `src/e2e/projection-mercator.e2e.test.ts` and
+`src/e2e/projection-globe.e2e.test.ts` hold what is drawn (fills, lines,
+points, images, vertex handles, the frames of features selected together,
+over a Store of objects and the Store of rows) to `map.project` within half
+a pixel, at zooms 0 to 24 on Web Mercator and on the globe and in the
+transition.
+
+GPUs may fuse a multiplication and an addition into one operation, which
+rounds once instead of twice and only lessens the error.
+
+maplibre draws its own layers with the trigonometric built-ins
+(`projectToSphere` takes `sin` and `cos` of the longitude, and Web
+Mercator keeps absolute Mercator coordinates in Float32). On a GPU at the
+limit of the specification its base map may therefore lie off what the
+library draws, which stays where `map.project` and hit testing put it.
 
 ## Pitch and roll
 
@@ -307,7 +426,7 @@ the same scale, the one of the frame drawn last
 `setScreenScaleFrame`), and the hit test projects those same positions to
 the screen. The frame of a point is tested on the screen around the
 projected point, as it is drawn. maplibre's `project()`
-runs in 64 bits on the CPU, and the offset path of the shader resolves the
+runs in 64 bits on the CPU, and the projection of the shader resolves the
 same point to well under a pixel, so a handle is hit where it is drawn at
 every zoom.
 
@@ -341,8 +460,7 @@ virtual camera:
 - The matrix moves by `+lngShift` (`M' = M * T(lngShift / 360)` in Mercator
   units, `translateMatrixByLongitude` in `src/view/shaders/helpers.ts`), so
   the two cancel for the camera: `calculateOffsetUniforms` gives the same
-  projection center, and the absolute path of the shader (low zoom) moves
-  by the same amount
+  projection center
 - The DEM atlas is handed to the shader in the frame of that camera
 
 The CPU and the GPU use the same formula, and the shift is a whole number
@@ -417,7 +535,8 @@ them. GeoJSON export brings them back into
 
 - Check that the offset uniforms of the frame reach the renderer
   (`setOffsetUniforms`)
-- Check that `u_use_offset_mode` is 1 at zoom 12 and above
+- Check that `u_center_sine_cosine` and `u_projection_center` are written
+  from the uniforms of the same center as `u_center_lnglat`
 - Check that the renderer computes relative coordinates with
   `calculateLngLatOffset` on the CPU rather than sending absolute ones
 - For a retained batch, check that `u_origin_shift` is the origin minus
@@ -431,9 +550,13 @@ them. GeoJSON export brings them back into
 
 ### The display is wrong in globe mode
 
-- Check that `u_projection_transition` is set from the projection data
-- In globe mode the absolute path (`projectTileWithElevation`) must be
-  used, not the offset path
+- Check that `u_projection_transition` is set from the projection data,
+  and that the program was compiled with the `#define` of the globe
+  variant (the globe branch of `project_center_offset` is compiled only
+  there)
+- Check that the center in clip space was computed with the projection
+  data of the frame, its fallback matrix and its transition, and on the
+  globe with the matrix in 64 bits
 - An edge that cuts across the sphere instead of following its parallel or
   meridian was drawn without the cut of the globe: check that the renderer
   takes its step from `getSurfaceTessellationStep` and that the terrain

@@ -51,8 +51,6 @@ const OFFSET: OffsetUniforms = {
   centerLngLat64: [0, 0],
   centerMercator: [0.5, 0.5],
   projectionCenter: [0, 0, 0, 1],
-  unitsPerDegree: [1, 1, 1],
-  unitsPerDegree2: [0, 0, 0],
 };
 
 /** The identity matrix with only the term "elevation affects clip y" added (column-major) */
@@ -71,7 +69,7 @@ function applyFrame(context: TerrainContext, terrain: TerrainLike): void {
     terrain,
     zoom: 14,
     elevationScale: 1e-3,
-    mainMatrix: matrixWithElevationTerm(4),
+    projection: { mainMatrix: matrixWithElevationTerm(4) },
     offsetUniforms: OFFSET,
     width: 800,
     height: 600,

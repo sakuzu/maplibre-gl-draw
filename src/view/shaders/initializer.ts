@@ -21,7 +21,12 @@ import type { RowsRenderer } from '../renderers/rows/rows-renderer.js';
 import type { StrokeRenderer } from '../renderers/stroke.js';
 import type { BulkFramesRenderer } from '../ui/bulk-frames.js';
 import type { TentativeRenderer } from '../ui/tentative.js';
-import { calculateOffsetUniforms, type OffsetUniforms, type ShaderData } from './helpers.js';
+import {
+  calculateOffsetUniforms,
+  type OffsetUniforms,
+  type ProjectionMatrices,
+  type ShaderData,
+} from './helpers.js';
 import type { QuadShader } from './quad.js';
 
 /**
@@ -135,8 +140,8 @@ export class ShaderInitializer {
    * Computes projectionCenter at 64-bit precision on the CPU side and passes it to each renderer
    * The uniforms for globe mode are set directly from ProjectionData
    */
-  setOffsetUniforms(centerLngLat: [number, number], mainMatrix: Float32Array | number[]): void {
-    this.applyOffsetUniforms(calculateOffsetUniforms(centerLngLat, mainMatrix));
+  setOffsetUniforms(centerLngLat: [number, number], projection: ProjectionMatrices): void {
+    this.applyOffsetUniforms(calculateOffsetUniforms(centerLngLat, projection));
   }
 
   /**

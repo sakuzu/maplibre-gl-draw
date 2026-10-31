@@ -10,11 +10,10 @@
  * frame drawn, and laid around the feature, so they tilt and turn with the map. The frame of a
  * point is drawn on the screen around its marker. The tests hold:
  *
- * - untilted, on a flat Web Mercator view, on the globe and in the middle of the transition from
- *   the globe to Web Mercator, the margin and the distance in pixels, measured against the vertex
- *   handles drawn beside them
- * - flat, tilted and turned, on the globe and over terrain: the handles and the frame are grabbed
- *   where they are drawn and not beside them
+ * - on a flat Web Mercator view without terrain, the margin and the distance in pixels
+ * - tilted and turned, on the globe, in the middle of the transition from the globe to Web
+ *   Mercator, and over terrain: the handles and the frame are grabbed where they are drawn and not
+ *   beside them
  * - the frame of a point, around its marker, grabbed where it is drawn
  * - the arrow keys on a turned map, along the screen
  *
@@ -128,6 +127,14 @@ const VIEWS: readonly View[] = [
     pitch: 30,
     globe: true,
     size: 6,
+  },
+  {
+    name: 'in the transition from the globe to Web Mercator',
+    center: [139.7, 35.68],
+    zoom: 11.5,
+    pitch: 20,
+    globe: true,
+    size: 0.02,
   },
 ];
 

@@ -33,9 +33,9 @@
  * `src/e2e/terrain.e2e.test.ts` holds all of them to `map.queryTerrainElevation`. For anchors
  * alone the CPU-side value is authoritative and is handed to the GPU.
  *
- * The projection formula is a copy of the vertex shader's (OFFSET_MODE_GLSL in
- * `shaders/helpers.ts`). It goes through the same branch, including the condition for
- * switching to offset mode (zoom >= 12). The lift (liftMeters) is not added. That exists for
+ * The projection formula is the vertex shader's (OFFSET_MODE_GLSL in `shaders/helpers.ts`),
+ * computed in float64 (`clipOfPosition` in `shaders/center-projection.ts`): on Web Mercator, on
+ * the globe and in the transition between, at every zoom. The lift (liftMeters) is not added. That exists for
  * rendering reasons, to avoid Z-fighting with the terrain mesh; anchors are drawn without a
  * depth test so they do not need it, and adding it would make them disagree with
  * `map.project`.
@@ -56,18 +56,11 @@ import {
   setAnchorProjector,
 } from '../../shared/math/index.js';
 import { nearestLongitude } from '../../shared/math/longitude.js';
-import type { OffsetUniforms } from '../shaders/helpers.js';
+import { clipOfPosition } from '../shaders/center-projection.js';
+import type { OffsetUniforms, ProjectionMatrices } from '../shaders/helpers.js';
 import { INACTIVE_ANCHOR_FRAME, type TerrainContext } from './context.js';
 import { getRenderableTerrainTiles, type TerrainLike } from './detect.js';
 import { groundElevationMeters, type TerrainElevationQuery } from './ground.js';
-
-/**
- * The zoom at which offset mode is switched on
- *
- * It must be the same value as the check on the vertex shader side (each renderer raises
- * u_use_offset_mode at `zoom >= 12`).
- */
-const OFFSET_MODE_MIN_ZOOM = 12;
 
 /**
  * Returns a number that changes whenever the elevations {@link anchorElevationMeters} returns
@@ -111,7 +104,8 @@ export function setAnchorFrame(
     elevationQuery?: TerrainElevationQuery | null;
     zoom: number;
     elevationScale: number;
-    mainMatrix: number[];
+    /** The projection data of the frame (its matrices and its transition) */
+    projection: ProjectionMatrices;
     offsetUniforms: OffsetUniforms;
     width: number;
     height: number;
@@ -119,16 +113,15 @@ export function setAnchorFrame(
     cameraMercator?: readonly [number, number, number] | null;
   },
 ): void {
-  const { terrain, zoom, elevationScale, mainMatrix, offsetUniforms, width, height } = options;
+  const { terrain, zoom, elevationScale, projection, offsetUniforms, width, height } = options;
 
   context.anchorFrame = {
     terrain,
     elevationQuery: options.elevationQuery ?? null,
     tileZoom: Math.floor(zoom),
     elevationScale,
-    mainMatrix,
+    projection,
     offsetUniforms,
-    useOffsetMode: zoom >= OFFSET_MODE_MIN_ZOOM,
     width,
     height,
     cameraMercator: options.cameraMercator ?? null,
@@ -160,7 +153,7 @@ export function clearAnchorFrame(context: TerrainContext): void {
  */
 export function isAnchorActive(context: TerrainContext): boolean {
   const frame = context.anchorFrame;
-  return frame.terrain !== null && frame.mainMatrix !== null;
+  return frame.terrain !== null && frame.projection !== null;
 }
 
 /**
@@ -233,7 +226,7 @@ export function projectAnchor(
   lat: number,
 ): ScreenPoint | null {
   const frame = context.anchorFrame;
-  if (!frame.mainMatrix || !frame.terrain) return null;
+  if (!frame.projection || !frame.terrain) return null;
   return projectAnchorAt(context, lng, lat, anchorElevationMeters(context, lng, lat));
 }
 
@@ -257,42 +250,17 @@ export function projectAnchorAt(
   elevationMeters: number,
 ): ScreenPoint | null {
   const frame = context.anchorFrame;
-  const { mainMatrix: m, offsetUniforms, terrain, width, height } = frame;
-  if (!m || !terrain || width <= 0 || height <= 0) return null;
+  const { projection, terrain, width, height } = frame;
+  if (!projection || !terrain || width <= 0 || height <= 0) return null;
 
-  const elevationMercator = elevationMeters * frame.elevationScale;
-  // The anchor is projected on the copy of the world it is drawn on
-  const drawnLng = drawnLongitude(context, lng);
-
-  let clipX: number;
-  let clipY: number;
-  let clipW: number;
-
-  if (frame.useOffsetMode && offsetUniforms) {
-    // Offset mode: linearize relative to the center
-    // (the same formula as project_offset_to_clipspace in the shader)
-    const { centerLngLat, projectionCenter, unitsPerDegree, unitsPerDegree2 } = offsetUniforms;
-    const lngOffset = drawnLng - centerLngLat[0];
-    const latOffset = lat - centerLngLat[1];
-    const mercX = lngOffset * (unitsPerDegree[0] + unitsPerDegree2[0] * latOffset);
-    const mercY = latOffset * (unitsPerDegree[1] + unitsPerDegree2[1] * latOffset);
-
-    // offset.w = 0, so the fourth column of the matrix has no effect. The translation comes
-    // from projectionCenter
-    clipX = m[0] * mercX + m[4] * mercY + m[8] * elevationMercator + projectionCenter[0];
-    clipY = m[1] * mercX + m[5] * mercY + m[9] * elevationMercator + projectionCenter[1];
-    clipW = m[3] * mercX + m[7] * mercY + m[11] * elevationMercator + projectionCenter[3];
-  } else {
-    // Low zoom: put the absolute Mercator coordinates through the matrix as they are
-    // (the same formula as projectTileWithElevation in the shader)
-    const mercX = (drawnLng + 180) / 360;
-    const latRad = (lat * Math.PI) / 180;
-    const mercY = (1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2;
-
-    clipX = m[0] * mercX + m[4] * mercY + m[8] * elevationMercator + m[12];
-    clipY = m[1] * mercX + m[5] * mercY + m[9] * elevationMercator + m[13];
-    clipW = m[3] * mercX + m[7] * mercY + m[11] * elevationMercator + m[15];
-  }
+  // The projection of the shaders, in float64: the anchor is projected on the copy of the world
+  // it is drawn on, at its elevation in Mercator units
+  const [clipX, clipY, , clipW] = clipOfPosition(
+    projection,
+    drawnLongitude(context, lng),
+    lat,
+    elevationMeters * frame.elevationScale,
+  );
 
   // clipW <= 0 means behind the camera. Dividing by it as is produces coordinates folded over
   // to the opposite side of the screen, and hit testing hits "a point that is not visible". It
