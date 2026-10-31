@@ -53,7 +53,7 @@ describe.each(KINDS)('over a Store of %s', (kind) => {
         latitude,
       })),
     ];
-    const worst = await worstMiss(page, views);
+    const worst = await worstMiss(page, kind, views);
     expect(worst.px, worst.where).toBeLessThan(0.5);
   });
 });

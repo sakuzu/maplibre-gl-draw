@@ -36,7 +36,7 @@ describe.each(KINDS)('over a Store of %s', (kind) => {
     const views = VIEW_ZOOMS.flatMap((zoom) =>
       VIEW_LATITUDES.map((latitude) => ({ projection: 'mercator' as const, zoom, latitude })),
     );
-    const worst = await worstMiss(page, views);
+    const worst = await worstMiss(page, kind, views);
     expect(worst.px, worst.where).toBeLessThan(0.5);
   });
 });

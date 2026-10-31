@@ -22,7 +22,13 @@
  */
 
 import type { Page } from 'playwright-core';
-import { degreesPerPixelAtZoom } from '../shared/math/index.js';
+import { mercatorLerp } from '../shared/math/globe-subdivision.js';
+import {
+  applyMarginToBoundingBox,
+  degreesPerPixelAtZoom,
+  metersPerPixelInFrame,
+} from '../shared/math/index.js';
+import { getBoundingBox } from '../shared/utils/feature-bbox.js';
 import { computeQuadVertices } from '../view/shaders/quad.js';
 import {
   type FeatureInput,
@@ -66,6 +72,8 @@ const VERTEX: Rgb = [0x00, 0x30, 0xd0];
 const FRAME: Rgb = [0xff, 0x00, 0xb0];
 /** The rotation of the image (degrees) */
 const IMAGE_ROTATION = 27;
+/** The points an edge of a frame is followed by */
+const OUTLINE_STEPS = 16;
 const IDS = ['fill', 'line', 'point', 'image', 'held', 'far-1', 'far-2'];
 
 /** A center of pixels of a color looked for, and the positions it is held to */
@@ -75,7 +83,7 @@ interface Look {
   /** The positions whose projection gives the reference (one, two ends, or the corners) */
   positions: Array<[number, number]>;
   /** How the reference is made from their projections */
-  reference: 'point' | 'middle' | 'area' | 'box';
+  reference: 'point' | 'middle' | 'area' | 'outline';
   /** The radius in CSS px of the circle around the reference where the pixels are taken */
   radius: number;
 }
@@ -116,6 +124,8 @@ async function putView(page: Page, view: ProjectionView): Promise<[number, numbe
     draw.selection.clear();
     // A change of the projection compiles the programs again: only when it changes
     if (map.getProjection()?.type !== type) map.setProjection({ type } as never);
+    // maplibre stops at zoom 22 unless told otherwise; 24 is the most it goes to
+    if (map.getMaxZoom() < 24) map.setMaxZoom(24);
     map.jumpTo({ center: [139.7, v.latitude], zoom: v.zoom, pitch: 0, bearing: 0 });
     const c = map.getCenter();
     return [c.lng, c.lat] as [number, number];
@@ -136,6 +146,7 @@ function sizesOf(view: ProjectionView): { spacing: number; size: number } {
 
 /** The scene of a view: the features, the selection style and what is looked for */
 function sceneOf(
+  kind: StoreKind,
   view: ProjectionView,
   center: [number, number],
 ): { features: FeatureInput[]; selectionStyle: unknown; looks: Look[]; frames: Look[] } {
@@ -265,18 +276,51 @@ function sceneOf(
     ),
   ];
   const radius = size * 1.6 + margin + 4;
-  const frameOf = (what: string, positions: Array<[number, number]>): Look => ({
-    what: `frame of the ${what}`,
-    color: FRAME,
-    positions,
-    reference: positions.length === 1 ? 'point' : 'box',
-    radius,
-  });
+  // The frame of a shape: its box widened by the margin on the ground, as the selection widens
+  // it with the scale of the frame of the view
+  const transition = view.projection === 'mercator' ? 0 : view.projection === 'globe' ? 1 : 0.5;
+  const scale = { zoom: view.zoom, centerLatitude: center[1], transition };
+  const frameOf = (what: string, feature: FeatureInput): Look => {
+    // A point, and on the Store of rows every row of one position (an image too), is framed on
+    // the screen around its position
+    if (feature.type === 'Point' || (kind === 'rows' && feature.type === 'Image')) {
+      const positions = [feature.geometry.coordinates as [number, number]];
+      return { what: `frame of the ${what}`, color: FRAME, positions, reference: 'point', radius };
+    }
+    // The box of the feature as the Store holds it
+    const box = getBoundingBox(feature as never);
+    const [x0, x1, y0, y1] = [box.minX, box.maxX, box.minY, box.maxY];
+    const widened = applyMarginToBoundingBox(
+      { topLeft: [x0, y1], topRight: [x1, y1], bottomRight: [x1, y0], bottomLeft: [x0, y0] },
+      margin,
+      { metersPerPixel: (c) => metersPerPixelInFrame(scale, c[1]) },
+    );
+    // Its edges go along the Mercator plane, which on the globe at a low zoom bends them; the
+    // frames of the rows selected in bulk join their corners on the screen
+    const corners = [widened.topLeft, widened.topRight, widened.bottomRight, widened.bottomLeft];
+    const steps = kind === 'rows' ? 1 : OUTLINE_STEPS;
+    const outline: Array<[number, number]> = [];
+    for (let i = 0; i < 4; i++) {
+      const a = corners[i] as [number, number];
+      const b = corners[(i + 1) % 4] as [number, number];
+      for (let k = 0; k < steps; k++) {
+        outline.push(mercatorLerp(a, b, k / steps) as [number, number]);
+      }
+    }
+    return {
+      what: `frame of the ${what}`,
+      color: FRAME,
+      positions: outline,
+      reference: 'outline',
+      radius,
+    };
+  };
+  const byId = (id: string) => features.find((f) => f.id === id) as FeatureInput;
   const frames = [
-    frameOf('fill', fill),
-    frameOf('line', line),
-    frameOf('point', [point]),
-    frameOf('image', imageCorners),
+    frameOf('fill', byId('fill')),
+    frameOf('line', byId('line')),
+    frameOf('point', byId('point')),
+    frameOf('image', byId('image')),
   ];
   return { features, selectionStyle, looks, frames };
 }
@@ -366,22 +410,20 @@ function measure(page: Page, looks: Look[]): Promise<Miss[]> {
         const ps = look.positions.map(project);
         if (look.reference === 'point') return ps[0] as [number, number];
         if (look.reference === 'middle') return mean(ps);
-        if (look.reference === 'box') {
-          // The corners of the box of the positions, projected
-          const lngs = look.positions.map((p) => p[0] as number);
-          const lats = look.positions.map((p) => p[1] as number);
-          const x0 = Math.min(...lngs);
-          const x1 = Math.max(...lngs);
-          const y0 = Math.min(...lats);
-          const y1 = Math.max(...lats);
-          return mean(
-            [
-              [x0, y0],
-              [x1, y0],
-              [x1, y1],
-              [x0, y1],
-            ].map(project),
-          );
+        if (look.reference === 'outline') {
+          // The center of the projected closed outline, by length
+          let length = 0;
+          let ox = 0;
+          let oy = 0;
+          for (let i = 0; i < ps.length; i++) {
+            const [ax, ay] = ps[i] as [number, number];
+            const [bx, by] = ps[(i + 1) % ps.length] as [number, number];
+            const l = Math.hypot(bx - ax, by - ay);
+            length += l;
+            ox += ((ax + bx) / 2) * l;
+            oy += ((ay + by) / 2) * l;
+          }
+          return [ox / length, oy / length];
         }
         // The area centroid of the projected polygon
         let area = 0;
@@ -446,9 +488,9 @@ function measure(page: Page, looks: Look[]): Promise<Miss[]> {
  * maplibre projects it: the fill, the line, the point, the image and the vertex handles, then the
  * frames of the four small things selected together
  */
-export async function missesOf(page: Page, view: ProjectionView): Promise<Miss[]> {
+export async function missesOf(page: Page, kind: StoreKind, view: ProjectionView): Promise<Miss[]> {
   const center = await putView(page, view);
-  const { features, selectionStyle, looks, frames } = sceneOf(view, center);
+  const { features, selectionStyle, looks, frames } = sceneOf(kind, view, center);
   await putFeatures(page, features, selectionStyle);
   await select(page, ['held']);
   await settle(page);
@@ -461,11 +503,12 @@ export async function missesOf(page: Page, view: ProjectionView): Promise<Miss[]
 /** The largest miss of the things drawn in some views, and where */
 export async function worstMiss(
   page: Page,
+  kind: StoreKind,
   views: readonly ProjectionView[],
 ): Promise<{ px: number; where: string }> {
   let worst = { px: 0, where: '' };
   for (const view of views) {
-    for (const miss of await missesOf(page, view)) {
+    for (const miss of await missesOf(page, kind, view)) {
       if (!(miss.px <= worst.px)) {
         worst = {
           px: miss.px,
