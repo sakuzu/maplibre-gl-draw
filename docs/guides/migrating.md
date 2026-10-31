@@ -734,6 +734,15 @@ The contract of the extensions is reworked so that an extension hands
 positions on the map to the library, and the library answers what is
 drawn. Each change below names what replaces what is gone.
 
+- `bounds` and `outline` of a feature type, and `ctx.screen.bounds` and
+  `ctx.screen.outline`, are gone: a type returns its `footprint`,
+  four corners on the map (`{ kind: 'ground', corners }`) for a shape
+  drawn on the map, or a box of a fixed size on the screen around a
+  position (`{ kind: 'screen', position, halfWidthPx, halfHeightPx }`)
+  for a mark that keeps its size, and the library makes the selection
+  box from it. The kind, not the geometry, decides whether the box has
+  the resize and rotate handles. `selectionStyle.boundingBox` is
+  `selectionStyle.box`
 - `ctx.drawing` is gone: `ctx.draw.drawing` is the same object
 - `boxSelect(feature, boxPx, ctx)` names its box in pixels `boxPx`
 - A `Hit` of a feature names it by `id` alone; `featureId` is the

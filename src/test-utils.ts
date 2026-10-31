@@ -340,7 +340,6 @@ export function createModeHarness(options: {
   const screen = createScreenContext({
     map,
     pixelRatio: services.pixelRatio,
-    selectionExtensions: services.selectionExtensions,
   });
   return {
     draw,

@@ -133,7 +133,7 @@ const draw = createDraw(map, {
   screen: a handle is drawn at its position the size you give at every
   pitch, and the frame of a point stands around its marker on the screen.
   The margin of the frame of a feature with an extent
-  (`boundingBox.margin`) and the distance of the rotate handle
+  (`box.margin`) and the distance of the rotate handle
   (`rotateHandle.distance`) are laid on the map instead: each is turned
   into meters on the ground at the feature with the scale of the view
   (`ScreenContext.metersPerPixel`), so the frame and the handle tilt and

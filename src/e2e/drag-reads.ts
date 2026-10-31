@@ -95,7 +95,7 @@ const HANDLES = [I_RESIZE, I_ROTATE, I_VERTEX, I_MIDPOINT, I_RADIUS];
  * the handles at those, whatever the options draw)
  */
 const selectionStyle = {
-  boundingBox: {
+  box: {
     stroke: { width: 2, color: hex(FRAME), opacity: 1, lineStyle: 'solid' },
     margin: 10,
   },
@@ -649,7 +649,7 @@ function describeDrags(group: DragReadsGroup): void {
 /** The handles at sizes and a distance and margin of their own, in the colors of the tests */
 const largeSelectionStyle = {
   ...selectionStyle,
-  boundingBox: { ...selectionStyle.boundingBox, margin: 20 },
+  box: { ...selectionStyle.box, margin: 20 },
   resizeHandle: { point: pointLook('square', RESIZE, 16) },
   rotateHandle: {
     ...selectionStyle.rotateHandle,

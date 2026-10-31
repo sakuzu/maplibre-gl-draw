@@ -216,7 +216,13 @@ export type {
   SnapContext,
   TerrainSurface,
 } from './api/extension/context.js';
-export type { FeatureTypeDefinition, Handle } from './api/extension/feature-type.js';
+export type {
+  FeatureTypeDefinition,
+  Footprint,
+  GroundFootprint,
+  Handle,
+  ScreenFootprint,
+} from './api/extension/feature-type.js';
 export type {
   DrawKeyEvent,
   DrawPointerEvent,

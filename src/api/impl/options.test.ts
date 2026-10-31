@@ -120,7 +120,7 @@ describe('the options at creation', () => {
       { defaultMode: 3 },
       { initDefaultLayer: 'no' },
       { store: {} },
-      { selectionStyle: { boundingBox: { stroke: { color: 'nope' } } } },
+      { selectionStyle: { box: { stroke: { color: 'nope' } } } },
       { previewStyle: { strokeWidth: -1 } },
       { previewStyle: { pointStrokeWidth: -1 } },
       { style: { point: { pointStrokeColor: 'nope' } } },
@@ -208,7 +208,7 @@ describe('options.update', () => {
     const { selectionStyle, renderingConfig } = engine.context;
     options.update({
       selectionStyle: {
-        boundingBox: {
+        box: {
           stroke: { width: 3, color: 'black', opacity: 1, lineStyle: 'dotted' },
           margin: 4,
         },
@@ -226,8 +226,8 @@ describe('options.update', () => {
         boxSelection: { fillColor: 'gray', fillOpacity: 0.3, strokeColor: 'navy', strokeWidth: 1 },
       },
     });
-    expect(selectionStyle.boundingBox.stroke).toMatchObject({ width: 3, color: [0, 0, 0, 1] });
-    expect(selectionStyle.boundingBox.margin).toBe(4);
+    expect(selectionStyle.box.stroke).toMatchObject({ width: 3, color: [0, 0, 0, 1] });
+    expect(selectionStyle.box.margin).toBe(4);
     expect(selectionStyle.vertexHandle.point.strokeColor).toEqual([0, 0, 0, 0.5]);
     expect(selectionStyle.vertexHandle.point.shape).toBe('square');
     expect(renderingConfig.boxSelectionStyle.fillColor).toEqual(toColor('gray', 0.3));

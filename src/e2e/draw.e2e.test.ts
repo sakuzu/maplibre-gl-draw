@@ -796,7 +796,7 @@ describe('the combined frame of a multiple selection on a turned and pitched map
       w.e2eSelectionStyle = draw.options.get().selectionStyle;
       draw.options.update({
         selectionStyle: {
-          boundingBox: {
+          box: {
             stroke: { width: 2, color: '#00ff00', opacity: 1, lineStyle: 'solid' },
             margin: 10,
           },

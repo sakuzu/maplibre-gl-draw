@@ -20,14 +20,14 @@ import { createMapStub, createSyntheticInput } from '../../test-utils.js';
 import { createFeatureCompanionRegistry } from '../../view/feature-companion.js';
 import { calculateOffsetUniforms } from '../../view/shaders/helpers.js';
 import type { TerrainContext } from '../../view/terrain/context.js';
+import { computeBoundingBox, hasZeroArea } from '../../view/ui/selection-ui/index.js';
 import { offsetUniformsAt, viewUniforms } from '../../webgl/index.js';
-import type { Draw } from '../draw.js';
 import { DrawError } from '../errors.js';
 import type { ScreenContext } from '../extension/context.js';
-import type { FeatureTypeDefinition, Handle } from '../extension/feature-type.js';
+import type { FeatureTypeDefinition, Footprint, Handle } from '../extension/feature-type.js';
 import type { Hit } from '../extension/provider.js';
 import type { RenderContext } from '../extension/render.js';
-import type { Feature, FeatureInput } from '../model.js';
+import type { Feature } from '../model.js';
 import type { LayerTableView } from '../tables.js';
 import type { AdapterDeps } from './adapters.js';
 import { adaptCompanionProvider } from './adapters.js';
@@ -411,7 +411,7 @@ describe('the answers of a custom feature type and a companion provider from the
   });
 });
 
-describe('the outline of a custom feature type', () => {
+describe('the footprint of a custom feature type', () => {
   const baseFeature = {
     layerId: 'l',
     groupId: undefined,
@@ -420,114 +420,130 @@ describe('the outline of a custom feature type', () => {
     locked: false,
     visible: true,
   };
-  /** A diamond around the screen point of a coordinate, 20 px from its middle */
-  const diamond = (feature: Feature, ctx: { project(p: GeoJSON.Position): [number, number] }) => {
-    const geometry = feature.geometry as GeoJSON.Point | GeoJSON.Polygon;
-    const anchor = geometry.type === 'Point' ? geometry.coordinates : geometry.coordinates[0][0];
-    const [x, y] = ctx.project(anchor);
-    return [
-      [x, y - 20],
-      [x + 20, y],
-      [x, y + 20],
-      [x - 20, y],
-    ] as Array<[number, number]>;
-  };
   const renderer = { onAdd: vi.fn(), draw: vi.fn(), onRemove: vi.fn() };
-
-  it('gives the frame and its handles of a type that is not a point, before bounds', () => {
-    const engine = engineWithDraw();
-    let turned = true;
-    engine.extensions.collections.featureTypes.add({
-      type: 'turned',
-      geometry: 'Polygon',
-      renderer,
-      bounds: () => ({ min: [0, 0], max: [10, 10] }),
-      outline: (feature, ctx) => (turned ? diamond(feature, ctx) : []),
-    });
-    const calculator = engine.context.selectionScope.extensions.getBoundingBoxCalculator('turned');
-    const feature = {
-      ...baseFeature,
-      id: 't',
-      type: 'turned',
-      geometry: {
-        type: 'Polygon' as const,
-        coordinates: [
-          [
-            [1, 1],
-            [2, 1],
-            [2, 2],
-            [1, 1],
-          ],
-        ],
+  /** A diamond 0.2 degrees around the first position of a feature, laid on the map */
+  const diamond = (feature: Feature): Footprint => {
+    const geometry = feature.geometry as GeoJSON.Point | GeoJSON.Polygon;
+    const [x, y] = geometry.type === 'Point' ? geometry.coordinates : geometry.coordinates[0][0];
+    return {
+      kind: 'ground',
+      corners: {
+        topLeft: [x, y + 0.2],
+        topRight: [x + 0.2, y],
+        bottomRight: [x, y - 0.2],
+        bottomLeft: [x - 0.2, y],
       },
     };
-    // (1, 1) is (500, 200) on the screen of the stub, where 1 degree is 100 px
-    expect(calculator?.(feature, 512)).toEqual({
+  };
+  const polygon = {
+    ...baseFeature,
+    id: 't',
+    type: 'shape',
+    geometry: {
+      type: 'Polygon' as const,
+      coordinates: [
+        [
+          [1, 1],
+          [2, 1],
+          [2, 2],
+          [1, 1],
+        ],
+      ],
+    },
+  };
+  const point = {
+    ...baseFeature,
+    id: 'p',
+    type: 'shape',
+    geometry: { type: 'Point' as const, coordinates: [1, 1] },
+  };
+
+  it('frames a footprint laid on the map on the map, whatever the geometry', () => {
+    const engine = engineWithDraw();
+    engine.extensions.collections.featureTypes.add({
+      type: 'shape',
+      geometry: 'Point',
+      renderer,
+      footprint: (feature) => diamond(feature),
+    });
+    const { extensions } = engine.context.selectionScope;
+    const box = computeBoundingBox(point, extensions);
+    expect(box).toEqual({
       topLeft: [1, 1.2],
       topRight: [1.2, 1],
       bottomRight: [1, 0.8],
       bottomLeft: [0.8, 1],
       center: [1, 1],
     });
-    // Anything but four corners gives the box of bounds
-    turned = false;
-    expect(calculator?.(feature, 512)).toEqual({
-      topLeft: [-4, 3],
-      topRight: [-3.9, 3],
-      bottomRight: [-3.9, 2.9],
-      bottomLeft: [-4, 2.9],
-      center: [-3.95, 2.95],
-    });
+    // A box with area: the resize and rotate handles stand on its corners
+    expect(box && hasZeroArea(box)).toBe(false);
     engine.destroy();
   });
 
-  it('gives the frame of a point type, which keeps no area and no resize handles', () => {
+  it('frames a footprint of the screen on the screen around its position, whatever the geometry', () => {
     const engine = engineWithDraw();
     engine.extensions.collections.featureTypes.add({
-      type: 'turned-pin',
-      geometry: 'Point',
+      type: 'shape',
+      geometry: 'Polygon',
       renderer,
-      outline: (feature, ctx) => diamond(feature, ctx),
+      footprint: () => ({ kind: 'screen', position: [1.5, 1.5], halfWidthPx: 20, halfHeightPx: 8 }),
     });
     const { extensions } = engine.context.selectionScope;
-    const feature = {
-      ...baseFeature,
-      id: 'p',
-      type: 'turned-pin',
-      geometry: { type: 'Point' as const, coordinates: [1, 1] },
-    };
-    expect(extensions.getBoundingBoxCalculator('turned-pin')).toBeUndefined();
-    expect(extensions.resolvePointFrameCorners(feature, { x: 500, y: 200 }, 0)).toEqual([
-      { x: 500, y: 180 },
-      { x: 520, y: 200 },
-      { x: 500, y: 220 },
-      { x: 480, y: 200 },
+    const box = computeBoundingBox(polygon, extensions);
+    expect(box?.center).toEqual([1.5, 1.5]);
+    expect(box && hasZeroArea(box)).toBe(true);
+    expect(extensions.resolvePointFrameCorners(polygon, { x: 550, y: 150 }, 4)).toEqual([
+      { x: 526, y: 138 },
+      { x: 574, y: 138 },
+      { x: 574, y: 162 },
+      { x: 526, y: 162 },
     ]);
-    // The margin moves every edge of the diamond out, so its top goes up by 4 * sqrt(2)
-    const [top] = extensions.resolvePointFrameCorners(feature, { x: 500, y: 200 }, 4);
-    expect(top.x).toBeCloseTo(500);
-    expect(top.y).toBeCloseTo(180 - 4 * Math.SQRT2);
-
-    engine.extensions.collections.featureTypes.remove('turned-pin');
-    expect(extensions.resolvePointFrameCorners(feature, { x: 500, y: 200 }, 0)).toEqual([
-      { x: 494, y: 194 },
-      { x: 506, y: 194 },
-      { x: 506, y: 206 },
-      { x: 494, y: 206 },
-    ]);
+    engine.extensions.collections.featureTypes.remove('shape');
+    expect(computeBoundingBox(polygon, extensions)?.center).toEqual([1.5, 1.5]);
     engine.destroy();
   });
 
-  it('refuses an outline that is not a function', () => {
+  it('gives the footprint of the geometry for one that is not one, and none for null', () => {
+    const engine = engineWithDraw();
+    let given: unknown = null;
+    engine.extensions.collections.featureTypes.add({
+      type: 'shape',
+      geometry: 'Polygon',
+      renderer,
+      footprint: () => given as Footprint | null,
+    });
+    const { extensions } = engine.context.selectionScope;
+    expect(computeBoundingBox(polygon, extensions)).toBeNull();
+    const ofGeometry = {
+      topLeft: [1, 2],
+      topRight: [2, 2],
+      bottomRight: [2, 1],
+      bottomLeft: [1, 1],
+      center: [1.5, 1.5],
+    };
+    for (const wrong of [
+      { kind: 'ground', corners: { topLeft: [0, 0], topRight: [1, 0], bottomRight: [1, 1] } },
+      { kind: 'screen', position: [1, 1], halfWidthPx: -1, halfHeightPx: 2 },
+      { kind: 'screen', position: [Number.NaN, 1], halfWidthPx: 1, halfHeightPx: 2 },
+      { kind: 'other' },
+      [],
+    ]) {
+      given = wrong;
+      expect(computeBoundingBox(polygon, extensions)).toEqual(ofGeometry);
+    }
+    engine.destroy();
+  });
+
+  it('refuses a footprint that is not a function', () => {
     const engine = engineWithDraw();
     expect(() =>
       engine.extensions.collections.featureTypes.add({
         type: 'wrong',
         geometry: 'Point',
         renderer,
-        outline: [] as never,
+        footprint: [] as never,
       }),
-    ).toThrow(/outline/);
+    ).toThrow(/footprint/);
     engine.destroy();
   });
 });
@@ -857,149 +873,5 @@ describe('a companion provider', () => {
       deps,
     );
     expect(fromFeatures.hasRow).toBeUndefined();
-  });
-});
-
-describe('the outline of any feature on the screen', () => {
-  /** A draw instance on an engine, with the screen of its extensions */
-  function withScreen() {
-    const engine = createEngine(createMapStub().map, {}, { deferDefaultMode: true });
-    const draw = createDrawOnEngine(engine);
-    engine.enterDefaultMode();
-    let screen: ScreenContext | null = null;
-    draw.extensions.plugins.add({
-      name: 'reader',
-      onAdd(ctx) {
-        screen = ctx.screen;
-      },
-    });
-    return { engine, draw, screen: screen as unknown as ScreenContext };
-  }
-  const renderer = { onAdd: vi.fn(), draw: vi.fn(), onRemove: vi.fn() };
-  /** Creates a feature that must be created */
-  const create = (draw: Draw, input: FeatureInput): Feature => {
-    const feature = draw.features.create(input);
-    if (!feature) throw new Error('not created');
-    return feature;
-  };
-
-  it('gives the corners of the extent of a line or an area, and the frame of a point', () => {
-    const { engine, draw, screen } = withScreen();
-    const area = create(draw, {
-      type: 'Polygon',
-      geometry: {
-        type: 'Polygon',
-        coordinates: [
-          [
-            [0, 0],
-            [1, 0],
-            [1, 1],
-            [0, 0],
-          ],
-        ],
-      },
-    });
-    // (0, 0) is (400, 300) on the screen of the stub, where 1 degree is 100 px
-    expect(screen.outline(area)).toEqual([
-      [400, 200],
-      [500, 200],
-      [500, 300],
-      [400, 300],
-    ]);
-    const point = create(draw, {
-      type: 'Point',
-      geometry: { type: 'Point', coordinates: [1, 1] },
-    });
-    // The frame of a point spans its marker: a radius of 6 px and an outline of 2 px
-    expect(screen.outline(point)).toEqual([
-      [492, 192],
-      [508, 192],
-      [508, 208],
-      [492, 208],
-    ]);
-    engine.destroy();
-  });
-
-  it('gives the turned corners of an image', () => {
-    const { engine, draw, screen } = withScreen();
-    const image = (rotation: number) =>
-      create(draw, {
-        type: 'Image',
-        geometry: { type: 'Point', coordinates: [1, 1] },
-        properties: {
-          'maplibre-gl-draw:imageWidth': 200,
-          'maplibre-gl-draw:imageHeight': 100,
-          'maplibre-gl-draw:rotation': rotation,
-        },
-      });
-    const [topLeft, topRight, bottomRight] = screen.outline(image(0));
-    expect(topLeft[1]).toBeCloseTo(topRight[1]);
-    expect(topRight[0]).toBeCloseTo(bottomRight[0]);
-    expect(topRight[0] - topLeft[0]).toBeGreaterThan(bottomRight[1] - topRight[1]);
-    const turned = screen.outline(image(90));
-    expect(turned).toHaveLength(4);
-    // Turned a quarter, the top edge stands upright
-    expect(turned[0][0]).toBeCloseTo(turned[1][0]);
-    expect(turned[1][1]).toBeCloseTo(turned[2][1]);
-    engine.destroy();
-  });
-
-  it('gives the outline of a custom type, or the corners of its bounds', () => {
-    const { engine, draw, screen } = withScreen();
-    draw.extensions.featureTypes.add({
-      type: 'diamond',
-      geometry: 'Polygon',
-      renderer,
-      outline: (feature, ctx) => {
-        const [x, y] = ctx.project((feature.geometry as GeoJSON.Polygon).coordinates[0][0]);
-        return [
-          [x, y - 20],
-          [x + 20, y],
-          [x, y + 20],
-          [x - 20, y],
-        ];
-      },
-    });
-    draw.extensions.featureTypes.add({
-      type: 'badge',
-      geometry: 'Point',
-      renderer,
-      bounds: (feature, ctx) => {
-        const [x, y] = ctx.project((feature.geometry as GeoJSON.Point).coordinates);
-        return { min: [x - 10, y - 5], max: [x + 10, y + 5] };
-      },
-    });
-    const ring = [
-      [1, 1],
-      [2, 1],
-      [2, 2],
-      [1, 1],
-    ];
-    const diamond = create(draw, {
-      type: 'diamond',
-      geometry: { type: 'Polygon', coordinates: [ring] },
-    });
-    const corners = screen.outline(diamond);
-    const expected = [
-      [500, 180],
-      [520, 200],
-      [500, 220],
-      [480, 200],
-    ];
-    corners.forEach((corner, i) => {
-      expect(corner[0]).toBeCloseTo(expected[i][0]);
-      expect(corner[1]).toBeCloseTo(expected[i][1]);
-    });
-    const badge = create(draw, {
-      type: 'badge',
-      geometry: { type: 'Point', coordinates: [1, 1] },
-    });
-    expect(screen.outline(badge)).toEqual([
-      [490, 195],
-      [510, 195],
-      [510, 205],
-      [490, 205],
-    ]);
-    engine.destroy();
   });
 });

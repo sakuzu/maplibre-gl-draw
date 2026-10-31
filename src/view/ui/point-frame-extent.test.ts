@@ -29,7 +29,7 @@ const transform: CoordinateTransform = {
   metersPerPixel: planeMetersPerPixel(100),
 };
 
-const MARGIN = DEFAULT_SELECTION_CONFIG.boundingBox.margin;
+const MARGIN = DEFAULT_SELECTION_CONFIG.box.margin;
 /** The default half width and half height of the frame (DEFAULT_POINT_FRAME_SIZE / 2) */
 const DEFAULT_HALF = 6;
 
@@ -156,38 +156,5 @@ describe('the set of handles of a point does not change with the extent', () => 
     // Outside the frame (30 + 10 = 40px / 20 + 10 = 30px) nothing is hit
     expect(hit(42, 0, feature)).toBeNull();
     expect(hit(0, -32, feature)).toBeNull();
-  });
-});
-
-describe('the outline of the selection box of a point', () => {
-  /** A diamond 40 px from its middle, the screen point (100, -100) of [1, 1] */
-  scope.extensions.registerPointFrameOutline('Turned', () => [
-    { x: 100, y: -140 },
-    { x: 140, y: -100 },
-    { x: 100, y: -60 },
-    { x: 60, y: -100 },
-  ]);
-  const turned = (): Feature =>
-    makeFeature({ type: 'Turned', geometry: { type: 'Point', coordinates: [1, 1] } });
-
-  it('draws the frame along the outline, every edge moved out by the margin', () => {
-    const [top, right] = scope.extensions.resolvePointFrameCorners(
-      turned(),
-      transform.project([1, 1]),
-      MARGIN,
-    );
-    // The edges of the diamond are turned by 45 degrees, so its tips move by MARGIN * sqrt(2)
-    expect(top.x).toBeCloseTo(100);
-    expect(top.y).toBeCloseTo(-100 - (40 + MARGIN * Math.SQRT2));
-    expect(right.x).toBeCloseTo(100 + 40 + MARGIN * Math.SQRT2);
-    expect(right.y).toBeCloseTo(-100);
-  });
-
-  it('grabs the inside of the outline as a move, and no resize or rotate', () => {
-    const feature = turned();
-    expect(hit(100, -100, feature)?.type).toBe('move');
-    expect(hit(100, -140, feature)?.type).toBe('move');
-    // The corner of the square around the diamond is outside it
-    expect(hit(135, -135, feature)).toBeNull();
   });
 });

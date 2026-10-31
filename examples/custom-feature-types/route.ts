@@ -90,14 +90,22 @@ export const routeType: FeatureTypeDefinition = {
       return x >= boxPx.min[0] && x <= boxPx.max[0] && y >= boxPx.min[1] && y <= boxPx.max[1];
     });
   },
-  // The frame of the selection
-  bounds(feature, ctx) {
-    const points = verticesOf(feature).map((v) => ctx.project(v));
-    const xs = points.map((p) => p[0]);
-    const ys = points.map((p) => p[1]);
+  // What the route covers, which the selection box frames: the extent of its vertices, laid on
+  // the map
+  footprint(feature) {
+    const points = verticesOf(feature);
+    const west = Math.min(...points.map((p) => p[0]));
+    const east = Math.max(...points.map((p) => p[0]));
+    const south = Math.min(...points.map((p) => p[1]));
+    const north = Math.max(...points.map((p) => p[1]));
     return {
-      min: [Math.min(...xs), Math.min(...ys)],
-      max: [Math.max(...xs), Math.max(...ys)],
+      kind: 'ground',
+      corners: {
+        topLeft: [west, north],
+        topRight: [east, north],
+        bottomRight: [east, south],
+        bottomLeft: [west, south],
+      },
     };
   },
   // A handle on each vertex, which moves that vertex

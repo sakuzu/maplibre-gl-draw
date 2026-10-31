@@ -67,7 +67,7 @@ const FRAME: Rgb = [0xff, 0x00, 0xff];
 const HANDLE: Rgb = [0x80, 0x80, 0x00];
 
 const selectionStyle = {
-  boundingBox: {
+  box: {
     stroke: { width: 2, color: hex(FRAME), opacity: 1, lineStyle: 'solid' },
     margin: 10,
   },

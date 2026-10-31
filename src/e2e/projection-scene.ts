@@ -243,7 +243,7 @@ function sceneOf(
   ];
   const hidden = (shape: string) => ({ ...pointLook(shape, VERTEX, 2), fillOpacity: 0 });
   const selectionStyle = {
-    boundingBox: {
+    box: {
       stroke: { width: 1.5, color: hex(FRAME), opacity: 1, lineStyle: 'solid' },
       margin,
     },

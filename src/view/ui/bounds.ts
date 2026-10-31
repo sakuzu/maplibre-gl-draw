@@ -48,7 +48,7 @@ export function isPointInSelectionFrame(
   extensions?: SelectionExtensionRegistry,
 ): boolean {
   if (features.length === 0) return false;
-  const margin = config.boundingBox.margin;
+  const margin = config.box.margin;
   let underPoint: Coordinate | null = null;
   const inFrame = (box: BoundingBoxCoords): boolean => {
     if (!underPoint) {
@@ -95,7 +95,7 @@ function isPointInPointFrame(
   const center = transform.project(position);
   const corners = extensions
     ? extensions.resolvePointFrameCorners(feature, center, margin)
-    : resolvePointFrameCornersWith(undefined, undefined, feature, center, margin);
+    : resolvePointFrameCornersWith(undefined, feature, center, margin);
   return corners.length === 4 && isPointInQuad(screenPoint, corners);
 }
 

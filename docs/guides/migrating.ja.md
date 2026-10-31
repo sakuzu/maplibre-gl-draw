@@ -743,6 +743,14 @@ draw.features.update(featureId, {
 拡張の窓口を組み直しました。拡張はライブラリーに地図の上の位置を渡し、
 描かれた物はライブラリーが答えます。消えた物は、それぞれ代わりを書きます。
 
+- 型の `bounds` と `outline`、`ctx.screen.bounds` と `ctx.screen.outline`
+  は無くなりました。型は外形 `footprint` を返します。地図の上に描く形は
+  地図の上の 4 つの角 (`{ kind: 'ground', corners }`)、大きさを保つ印は
+  位置の周りの画面の上で大きさの決まった箱
+  (`{ kind: 'screen', position, halfWidthPx, halfHeightPx }`) です。
+  ライブラリーがそこから選択の枠を作ります。枠に大きさを変えるハンドルと
+  回すハンドルが付くかは、図形ではなく種類で決まります。
+  `selectionStyle.boundingBox` は `selectionStyle.box` になりました
 - `ctx.drawing` は無くなりました。同じものが `ctx.draw.drawing` です
 - `boxSelect(feature, boxPx, ctx)` の画面の箱の引数は `boxPx` です
 - 地物の `Hit` は、その地物を `id` だけで指します。`featureId` は、

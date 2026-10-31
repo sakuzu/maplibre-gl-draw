@@ -231,7 +231,7 @@ function marginedFrame() {
   const bulk = store.getSelection().bulk;
   const frame = bulkFrame(bulk?.bbox as [number, number, number, number]);
   return {
-    ...applyMarginToBoundingBox(frame, DEFAULT_SELECTION_CONFIG.boundingBox.margin, PLANE),
+    ...applyMarginToBoundingBox(frame, DEFAULT_SELECTION_CONFIG.box.margin, PLANE),
     center: frame.center,
   };
 }

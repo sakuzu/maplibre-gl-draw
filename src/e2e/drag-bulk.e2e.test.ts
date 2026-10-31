@@ -94,7 +94,7 @@ const I_ROTATE = 4;
 const I_VERTEX = 5;
 
 const selectionStyle = {
-  boundingBox: {
+  box: {
     stroke: { width: 2, color: hex(FRAME), opacity: 1, lineStyle: 'solid' },
     margin: 10,
   },

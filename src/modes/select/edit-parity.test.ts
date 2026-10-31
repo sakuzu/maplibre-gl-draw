@@ -47,7 +47,7 @@ type LngLat = [number, number];
  * The margin of the frame of the selection, in degrees (1 degree is 100 px on the map stub, whose
  * scale near the equator lays 100 px on a degree)
  */
-const MARGIN = DEFAULT_SELECTION_CONFIG.boundingBox.margin / 100;
+const MARGIN = DEFAULT_SELECTION_CONFIG.box.margin / 100;
 
 /** A rectangle from its south-west corner to its north-east corner */
 function rectangle(id: string, [w, s]: LngLat, [e, n]: LngLat, extra: Partial<Feature> = {}) {

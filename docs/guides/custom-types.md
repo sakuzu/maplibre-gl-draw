@@ -252,43 +252,48 @@ The other members of a definition are optional:
 
 | Member | Without it |
 | --- | --- |
-| `bounds` | The frame follows the extent of the geometry |
-| `outline` | The frame is the box of `bounds` |
+| `footprint` | The footprint of the geometry |
 | `handles` | The type has no handles of its own |
 | `onHandleDrag` | A drag of its handles changes nothing |
 | `snapCandidates` | The vertices and edges of the geometry |
 
-`bounds` returns the frame on the screen, `{ min, max }` in pixels, or
-`null` when the feature has nothing to draw. For a type with a `Point`
-geometry, it sizes the frame around the point.
+`footprint(feature, ctx)` says what a feature covers, and the library
+makes the selection box from it: it draws the box, hits it, and places
+the resize and rotate handles on it. It returns one of two kinds, and the
+kind, not the geometry, decides how the box is drawn and hit:
 
-`outline` is for a type whose shape turns, such as a box drawn at an
-angle. It returns the four corners of the frame on the screen, in
-pixels, in the order top left, top right, bottom right, bottom left of
-the shape as it stands unturned. The frame is drawn along them in place
-of the box of `bounds`, and for a geometry other than `Point` the
-resize and rotate handles sit on its corners and edges. A `Point` type
-keeps a frame without those handles. That frame stays on the screen:
-it is drawn around the point the way its marker is, so it keeps its
-size on a pitched view and is hidden with the marker behind the globe.
-When `outline` returns anything
-but four corners, the frame comes from `bounds`. `ctx.screen.outline`
-reads the corners of the frame of any feature, of the built-in types
-too, so that something drawn around a feature can follow its frame; a
-type does not call it for its own features from `outline` or `bounds`.
+- `{ kind: 'ground', corners: { topLeft, topRight, bottomRight,
+  bottomLeft } }`, four positions on the map, in the order of the shape
+  as it stands unturned, for a shape drawn on the map, such as a box
+  drawn at an angle. The selection box is drawn and hit on the map, with
+  the resize and rotate handles on its corners and edges, and it tilts
+  and turns with the map. `ground` names the plane of the map here, not
+  the surface of the terrain
+- `{ kind: 'screen', position, halfWidthPx, halfHeightPx }`, a box of a
+  fixed size on the screen around a position on the map, for a mark that
+  keeps its size on the screen. The selection box is drawn and hit on
+  the screen around the position, the way a point marker is, so it keeps
+  its size on a pitched view and is hidden with the marker behind the
+  globe. It has no resize or rotate handles
 
-Neither `outline`, `bounds` nor `ctx.screen.outline` includes the
-margin of the frame (`selectionStyle.boundingBox.margin`, 10 pixels by
-default). The engine adds it when it draws: every edge of the frame
-stands the margin outside the corners, for every type, points
-included, and the resize and rotate handles sit on the frame. The frame
-of a point takes the margin on the screen, around its marker. Any other
-frame takes it on the map: the margin is turned into meters at the
-feature with `ctx.screen.metersPerPixel` and laid on the ground, so the
-frame tilts and turns with the map. Something you draw around a feature
-for the current view, such as a handle out of its frame, stands where
-the engine would put it when you lay its pixels on the ground the same
-way, and your hit test then finds it where it is drawn.
+It returns `null` for a feature with nothing to draw, which has no
+selection box. Without `footprint`, or when it returns anything else
+than the two kinds, the footprint is that of the geometry: the extent of
+its positions, or a box the size of a point marker around a single
+position. A size kept with a zoom, such as a box drawn at the zoom it was
+made at, is laid on the map with `pixelsToMeters` and `metersToDegrees`
+of `/geometry`, the formula the library draws such sizes by.
+
+The footprint does not include the margin of the selection box
+(`selectionStyle.box.margin`, 10 pixels by default). The library adds it:
+every edge of the box stands the margin outside the footprint, for every
+type, points included. A box of the screen takes the margin on the
+screen. A box on the map takes it on the map: the margin is turned into
+meters at the feature with `ctx.screen.metersPerPixel` and laid on the
+ground, so the box tilts and turns with the map. Something you draw
+around a feature for the current view, such as a handle out of its box,
+stands where the library would put it when you lay its pixels on the
+ground the same way, and your hit test then finds it where it is drawn.
 
 `handles` returns the handles of a selected feature, each with an ID,
 a position and a cursor. A drag of one calls `onHandleDrag` for every
@@ -354,7 +359,7 @@ in the place of a built-in type of the same name: `Point`,
 definition has the `geometry` the built-in type holds (`Point` for a
 circle and an image, `LineString` for a freehand line). The features
 of the type are then drawn by its renderer. Its `hitTest`, `boxSelect`,
-`bounds`, `outline`, `bbox` and `snapCandidates` replace those of the
+`footprint`, `bbox` and `snapCandidates` replace those of the
 built-in type when it has them; for the members it leaves out, the
 built-in type keeps its own. Its `handles` are shown with the handles
 of the built-in type:

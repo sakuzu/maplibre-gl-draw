@@ -99,7 +99,7 @@ const I_ROTATE = 5;
 const I_FIRST = 6;
 
 const selectionStyle = {
-  boundingBox: {
+  box: {
     stroke: { width: 2, color: hex(FRAME), opacity: 1, lineStyle: 'solid' },
     margin: 10,
   },

@@ -208,10 +208,10 @@ export class BulkFramesRenderer {
       camera ? camera.centerLngLat : frames.origin,
     );
     const ratio = resolvePixelRatio(this.pixelRatio);
-    const stroke = config.boundingBox.stroke;
+    const stroke = config.box.stroke;
     const loc = this.locations;
     if (loc.u_viewport) gl.uniform2f(loc.u_viewport, gl.drawingBufferWidth, gl.drawingBufferHeight);
-    if (loc.u_margin) gl.uniform1f(loc.u_margin, config.boundingBox.margin);
+    if (loc.u_margin) gl.uniform1f(loc.u_margin, config.box.margin);
     if (loc.u_half_width) gl.uniform1f(loc.u_half_width, (stroke.width * ratio) / 2);
     if (loc.u_ratio) gl.uniform1f(loc.u_ratio, ratio);
     if (loc.u_color) {

@@ -56,7 +56,13 @@ import { computeBoundingBox } from '../../view/ui/selection-ui/index.js';
 import type { BoundingBoxCoords } from '../../view/ui/selection-ui/types.js';
 import type { ScreenPoint } from '../events.js';
 import type { HitTestContext, ScreenContext, SnapContext } from '../extension/context.js';
-import type { FeatureTypeDefinition, Handle } from '../extension/feature-type.js';
+import type {
+  FeatureTypeDefinition,
+  Footprint,
+  GroundFootprint,
+  Handle,
+  ScreenFootprint,
+} from '../extension/feature-type.js';
 import type {
   CompanionProvider,
   HandleProvider,
@@ -266,14 +272,42 @@ function boxSelectionOf(
   };
 }
 
-/** Whether a value is a point on the screen with finite coordinates */
-function isScreenPoint(value: unknown): value is ScreenPoint {
+/** Whether a value is a position with finite coordinates */
+function isPosition(value: unknown): value is GeoJSON.Position {
   return (
     Array.isArray(value) &&
     value.length >= 2 &&
     Number.isFinite(value[0]) &&
     Number.isFinite(value[1])
   );
+}
+
+/** Whether a value is a size in pixels: a finite number of 0 or more */
+function isSizePx(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0;
+}
+
+/**
+ * A footprint a type gave, when it is one: null for nothing to draw, undefined for anything
+ * else, which gives the footprint of the geometry
+ */
+function validFootprint(value: unknown): Footprint | null | undefined {
+  if (value === null) return null;
+  if (typeof value !== 'object' || value === undefined) return undefined;
+  const shape = value as Partial<GroundFootprint> & Partial<ScreenFootprint>;
+  if (shape.kind === 'ground') {
+    const corners = shape.corners;
+    return corners &&
+      [corners.topLeft, corners.topRight, corners.bottomRight, corners.bottomLeft].every(isPosition)
+      ? (shape as GroundFootprint)
+      : undefined;
+  }
+  if (shape.kind === 'screen') {
+    return isPosition(shape.position) && isSizePx(shape.halfWidthPx) && isSizePx(shape.halfHeightPx)
+      ? (shape as ScreenFootprint)
+      : undefined;
+  }
+  return undefined;
 }
 
 /** A selection box with no area at one coordinate */
@@ -363,71 +397,41 @@ export function installFeatureType(
       );
     }
 
-    const bounds = definition.bounds?.bind(definition);
-    const outline = definition.outline?.bind(definition);
-    /** The four corners of the outline of a feature, or null when it gives none */
-    const cornersOf = (feature: StoredFeature): ScreenPoint[] | null => {
-      if (!applies(feature)) return null;
-      const corners = outline?.(feature as Feature, deps.screen);
-      return Array.isArray(corners) && corners.length === 4 && corners.every(isScreenPoint)
-        ? corners
-        : null;
-    };
-    // A circle and an image have a frame with area; a point and a custom point type do not
-    const pointFrame = overriding ? type === 'Point' : definition.geometry === 'Point';
-    if (pointFrame) {
-      if (bounds) {
-        // A point keeps its point frame; the extent gives its size
-        add(
-          deps.selectionExtensions.registerPointFrameExtent(type, (feature) => {
-            if (!applies(feature)) return null;
-            const box = bounds(feature as Feature, deps.screen);
-            if (!box) return null;
-            const center = deps.screen.project((feature.geometry as GeoJSON.Point).coordinates);
-            return {
-              halfWidth: Math.max(center[0] - box.min[0], box.max[0] - center[0]),
-              halfHeight: Math.max(center[1] - box.min[1], box.max[1] - center[1]),
-            };
-          }),
-        );
-      }
-      if (outline) {
-        // The frame of a point follows the outline, and the point keeps no resize handles
-        add(
-          deps.selectionExtensions.registerPointFrameOutline(
-            type,
-            (feature) => cornersOf(feature)?.map(([x, y]) => ({ x, y })) ?? null,
-          ),
-        );
-      }
-    } else if (bounds || outline) {
-      const at = (x: number, y: number): Coordinate => {
-        const p = deps.screen.unproject([x, y]);
-        return [p[0], p[1]];
-      };
+    const footprint = definition.footprint?.bind(definition);
+    if (footprint) {
+      /** The footprint the type gives a feature it takes, when it is one */
+      const footprintOf = (feature: StoredFeature): Footprint | null | undefined =>
+        applies(feature) ? validFootprint(footprint(feature as Feature, deps.screen)) : undefined;
+      // The selection box on the map: the corners of a footprint laid on the map, or the
+      // position of one of the screen (a box without area, which is drawn on the screen around
+      // it); the box of the geometry for a feature the type does not take or gives none of
       add(
         deps.selectionExtensions.registerBoundingBox(type, (feature) => {
-          if (!applies(feature)) return computeBoundingBox(feature) ?? degenerateBox(at(0, 0));
-          const corners = cornersOf(feature);
-          if (corners) {
-            // The frame and its handles follow the outline, turned as the shape is
-            const [topLeft, topRight, bottomRight, bottomLeft] = corners.map(([x, y]) => at(x, y));
-            const middle = at(
+          const shape = footprintOf(feature);
+          if (shape === null) return null;
+          if (shape === undefined) return computeBoundingBox(feature);
+          if (shape.kind === 'screen') return degenerateBox([shape.position[0], shape.position[1]]);
+          const { topLeft, topRight, bottomRight, bottomLeft } = shape.corners;
+          const corners = [topLeft, topRight, bottomRight, bottomLeft];
+          return {
+            topLeft: [topLeft[0], topLeft[1]],
+            topRight: [topRight[0], topRight[1]],
+            bottomRight: [bottomRight[0], bottomRight[1]],
+            bottomLeft: [bottomLeft[0], bottomLeft[1]],
+            center: [
               corners.reduce((sum, corner) => sum + corner[0], 0) / 4,
               corners.reduce((sum, corner) => sum + corner[1], 0) / 4,
-            );
-            return { topLeft, topRight, bottomRight, bottomLeft, center: middle };
-          }
-          if (!bounds) return computeBoundingBox(feature) ?? degenerateBox(at(0, 0));
-          const box = bounds(feature as Feature, deps.screen);
-          if (!box) return degenerateBox(at(0, 0));
-          return {
-            topLeft: at(box.min[0], box.min[1]),
-            topRight: at(box.max[0], box.min[1]),
-            bottomRight: at(box.max[0], box.max[1]),
-            bottomLeft: at(box.min[0], box.max[1]),
-            center: at((box.min[0] + box.max[0]) / 2, (box.min[1] + box.max[1]) / 2),
+            ],
           };
+        }),
+      );
+      // The size on the screen of a footprint of the screen
+      add(
+        deps.selectionExtensions.registerPointFrameExtent(type, (feature) => {
+          const shape = footprintOf(feature);
+          return shape?.kind === 'screen'
+            ? { halfWidth: shape.halfWidthPx, halfHeight: shape.halfHeightPx }
+            : null;
         }),
       );
     }

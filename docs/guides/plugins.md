@@ -125,10 +125,8 @@ instance:
   gives the next name the way the `autoName` option says
   ([automatic names](drawing.md#automatic-names))
 - `screen`, the conversion between positions and points on the screen,
-  the zoom and the pixel ratio, and the extent (`bounds`) and the four
-  corners of the selection frame (`outline`) of any feature on the
-  screen, turned as the shape is, without the margin the frame is drawn
-  with
+  the zoom, the pixel ratio and the meters of a pixel, in the frame drawn
+  last
 - `terrain`, the positions and heights on the terrain of this instance
   ([terrain](terrain.md))
 - `invalidate`, which asks for features to be drawn again when

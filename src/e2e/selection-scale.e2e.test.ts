@@ -72,7 +72,7 @@ const HALF = 5;
  * vertex and midpoint handles a pixel or two across, out of the way of the frame
  */
 const selectionStyle = {
-  boundingBox: {
+  box: {
     stroke: { width: 2, color: hex(FRAME), opacity: 1, lineStyle: 'solid' },
     margin: MARGIN,
   },

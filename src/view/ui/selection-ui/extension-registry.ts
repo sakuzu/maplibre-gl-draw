@@ -5,7 +5,7 @@
  * The registry of the Selection UI extension points
  *
  * A mechanism for the custom feature types of extension implementations to provide their own
- * boundingBox computation / resize handles / point frame extent.
+ * selection box computation / resize handles / point frame extent.
  *
  * One registry belongs to one draw instance (it is created by its engine and handed to the
  * CustomLayer, the modes and the extension host). Two draw instances on the same page
@@ -14,7 +14,6 @@
  * calculators take it as an argument.
  */
 
-import { expandQuad } from '../../../shared/math/transform.js';
 import type { Feature } from '../../../store/types.js';
 import type {
   AdditionalResizeHandlesCalculator,
@@ -22,7 +21,6 @@ import type {
   FramePoint,
   PointFrameExtent,
   PointFrameExtentProvider,
-  PointFrameOutlineProvider,
 } from './types.js';
 
 /**
@@ -70,12 +68,9 @@ export interface SelectionExtensionRegistry {
    */
   resolvePointFrameExtent(feature: Feature): PointFrameExtent;
 
-  /** Registers the outline of the selection frame of a point-like feature type */
-  registerPointFrameOutline(type: string, provider: PointFrameOutlineProvider): () => void;
   /**
    * The four corners of the selection frame of a zero-area feature on the screen, expanded by
-   * the margin: the registered outline when it gives four finite corners, else the rectangle
-   * of {@link resolvePointFrameExtent} around the center
+   * the margin: the rectangle of {@link resolvePointFrameExtent} around the center
    *
    * @param center The center of the frame on the screen, in CSS px
    * @param margin The margin of the frame, in CSS px
@@ -116,7 +111,6 @@ export function createSelectionExtensionRegistry(
   const boundingBoxes = new Map<string, CustomBoundingBoxCalculator>();
   const additionalHandles = new Map<string, AdditionalResizeHandlesCalculator>();
   const pointFrameExtents = new Map<string, PointFrameExtentProvider>();
-  const pointFrameOutlines = new Map<string, PointFrameOutlineProvider>();
   let tileSize = DEFAULT_REGISTRY_TILE_SIZE;
   /** The extent provider of a type, falling back to the default extent of the registry */
   const extentProviderOf = (type: string): PointFrameExtentProvider | undefined => {
@@ -140,15 +134,8 @@ export function createSelectionExtensionRegistry(
       return resolvePointFrameExtentWith(extentProviderOf(feature.type), feature);
     },
 
-    registerPointFrameOutline: (type, provider) => registerIn(pointFrameOutlines, type, provider),
     resolvePointFrameCorners(feature, center, margin) {
-      return resolvePointFrameCornersWith(
-        extentProviderOf(feature.type),
-        pointFrameOutlines.get(feature.type),
-        feature,
-        center,
-        margin,
-      );
+      return resolvePointFrameCornersWith(extentProviderOf(feature.type), feature, center, margin);
     },
 
     getTileSize: () => tileSize,
@@ -160,7 +147,6 @@ export function createSelectionExtensionRegistry(
       boundingBoxes.clear();
       additionalHandles.clear();
       pointFrameExtents.clear();
-      pointFrameOutlines.clear();
     },
   };
 }
@@ -198,26 +184,15 @@ function validExtent(extent: PointFrameExtent | null | undefined): PointFrameExt
 
 /**
  * The four corners of the selection frame of a zero-area feature on the screen, expanded by
- * the margin, with optional providers
- *
- * An outline of four finite corners has every edge moved outward by the margin; any other
- * outline, or none, gives the rectangle of the extent around the center, widened the same way.
+ * the margin, with an optional provider: the rectangle of the extent around the center, widened
+ * by the margin on every side
  */
 export function resolvePointFrameCornersWith(
   extentProvider: PointFrameExtentProvider | undefined,
-  outlineProvider: PointFrameOutlineProvider | undefined,
   feature: Feature,
   center: FramePoint,
   margin: number,
 ): FramePoint[] {
-  const outline = outlineProvider?.(feature);
-  if (
-    outline &&
-    outline.length === 4 &&
-    outline.every((corner) => Number.isFinite(corner.x) && Number.isFinite(corner.y))
-  ) {
-    return expandQuad(outline, margin);
-  }
   const extent = resolvePointFrameExtentWith(extentProvider, feature);
   const halfWidth = extent.halfWidth + margin;
   const halfHeight = extent.halfHeight + margin;

@@ -38,7 +38,7 @@ function makeFeature(partial: Pick<Feature, 'type' | 'geometry'>): Feature {
 
 describe('isPointInSelectionFrame, the frame of a single position', () => {
   /** The frame of a point: the 12px square of its marker and the margin, on the screen */
-  const HALF = 6 + DEFAULT_SELECTION_CONFIG.boundingBox.margin;
+  const HALF = 6 + DEFAULT_SELECTION_CONFIG.box.margin;
   const inFrame = (feature: Feature, x: number, y: number) =>
     isPointInSelectionFrame({ x, y }, [feature], transform, DEFAULT_SELECTION_CONFIG);
 

@@ -153,7 +153,7 @@ const MARK = record({
 });
 
 const SELECTION_STYLE_CHECKS = {
-  boundingBox: record({ stroke: STROKE, margin: nonNegative }),
+  box: record({ stroke: STROKE, margin: nonNegative }),
   resizeHandle: record({ point: POINT }),
   rotateHandle: record({ point: POINT, distance: nonNegative, connector: STROKE }),
   vertexHandle: record({ point: POINT, selected: POINT, followed: POINT }),
@@ -607,9 +607,9 @@ export function toSelectionConfig(options: RuntimeOptions): SelectionUIConfig {
   const sub = (key: keyof SelectionStyleOptions, name: string) =>
     part(key)[name] as Record_ | undefined;
 
-  toStroke(config.boundingBox.stroke, sub('boundingBox', 'stroke'));
-  if (part('boundingBox').margin !== undefined) {
-    config.boundingBox.margin = part('boundingBox').margin as number;
+  toStroke(config.box.stroke, sub('box', 'stroke'));
+  if (part('box').margin !== undefined) {
+    config.box.margin = part('box').margin as number;
   }
   toPoint(config.resizeHandle.point, sub('resizeHandle', 'point'));
   toPoint(config.rotateHandle.point, sub('rotateHandle', 'point'));

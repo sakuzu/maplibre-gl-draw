@@ -143,7 +143,6 @@ export function createExtensionHost(deps: ExtensionHostDeps): ExtensionHost {
   const screen = createScreenContext({
     map,
     pixelRatio: context.pixelRatioSource,
-    selectionExtensions: context.selectionScope.extensions,
   });
 
   const adapterDeps: AdapterDeps = {

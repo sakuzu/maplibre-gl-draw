@@ -511,7 +511,7 @@ export function hitTestHandles(
 
   // The bbox after the margin is applied (for computing the handle positions), as the drawing
   // makes it
-  const margin = config.boundingBox.margin;
+  const margin = config.box.margin;
   const marginedBbox: BoundingBoxCoords = {
     ...applyMarginToBoundingBox(rawBbox, margin, transform),
     center: rawBbox.center,
@@ -608,7 +608,7 @@ export function hitTestBulkHandles(
   transform = alignToPointer(transform, screenPoint);
   const rawBbox = bulkFrame(bulk.bbox);
   const marginedBbox: BoundingBoxCoords = {
-    ...applyMarginToBoundingBox(rawBbox, config.boundingBox.margin, transform),
+    ...applyMarginToBoundingBox(rawBbox, config.box.margin, transform),
     center: rawBbox.center,
   };
   const params: HitTestParams = { screenPoint, transform, scope };

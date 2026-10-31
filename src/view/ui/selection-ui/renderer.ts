@@ -225,7 +225,7 @@ export class SelectionUIRenderer {
       [coord[0], coord[1]],
       frame.elevationMeters,
       frame.corners.map((corner) => ({ x: corner.x - x, y: corner.y - y })),
-      this.#config.boundingBox.stroke,
+      this.#config.box.stroke,
       anchorGhostOpacity(this.#terrain, coord[0], coord[1]),
       zoom,
       projectionData,
@@ -253,7 +253,7 @@ export class SelectionUIRenderer {
       ? projectAnchorAt(terrain, coord[0], coord[1], elevationMeters)
       : transform.project(coord);
     if (!center) return null;
-    const margin = this.#config.boundingBox.margin;
+    const margin = this.#config.box.margin;
     const corners = this.#extensions.resolvePointFrameCorners(feature, center, margin);
     return { anchor: coord, elevationMeters, center, corners };
   }
@@ -262,7 +262,7 @@ export class SelectionUIRenderer {
 
   #applyMargin(bbox: BoundingBoxCoords): BoundingBoxCoords {
     if (!this.#transform) return bbox;
-    const margin = this.#config.boundingBox.margin;
+    const margin = this.#config.box.margin;
     return {
       ...applyMarginToBoundingBox(bbox, margin, this.#transform),
       center: bbox.center,
@@ -284,7 +284,7 @@ export class SelectionUIRenderer {
   #strokePath(coords: Coordinate[], zoom: number): void {
     this.#strokeRenderer.draw(
       coords,
-      this.#config.boundingBox.stroke,
+      this.#config.box.stroke,
       { widthUnit: 'pixels', closed: true, followTerrain: true },
       zoom,
       this.#projectionData ?? undefined,

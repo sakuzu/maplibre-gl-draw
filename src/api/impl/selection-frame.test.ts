@@ -2,8 +2,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * Tests for the selection frame the engine draws: the outline of `ScreenContext.outline`,
- * which has no margin, with `selectionStyle.boundingBox.margin` added on every side
+ * Tests for the selection frame the engine draws: the footprint of a feature, which has no
+ * margin, with `selectionStyle.box.margin` added on every side
  */
 
 import type { ProjectionData } from 'maplibre-gl';
@@ -21,6 +21,7 @@ import type { PointShapeRenderer } from '../../view/renderers/point/point-shape.
 import type { StrokeRenderer } from '../../view/renderers/stroke.js';
 import { SelectionHandlesRenderer } from '../../view/ui/handles.js';
 import { createSelectionExtensionRegistry } from '../../view/ui/selection-ui/extension-registry.js';
+import { computeBoundingBox, hasZeroArea } from '../../view/ui/selection-ui/index.js';
 import { SelectionUIRenderer } from '../../view/ui/selection-ui/renderer.js';
 import type { ScreenPoint } from '../events.js';
 import { createScreenContext } from './contexts.js';
@@ -29,30 +30,48 @@ import { createEngine } from './engine.js';
 
 /** The zoom at which a pixel of the map plane is a pixel of the stub map (100 px a degree) */
 const ZOOM = Math.log2((360 * 100) / 512);
-const MARGIN = DEFAULT_SELECTION_CONFIG.boundingBox.margin;
+const MARGIN = DEFAULT_SELECTION_CONFIG.box.margin;
 
 const { map } = createMapStub();
 const extensions = createSelectionExtensionRegistry();
-const screen = createScreenContext({
-  map,
-  pixelRatio: { resolve: () => 1 } as never,
-  selectionExtensions: extensions,
-});
+const screen = createScreenContext({ map, pixelRatio: { resolve: () => 1 } as never });
 const transform = createCoordinateTransform(map);
 
-/** A point type whose frame is a rectangle 60 by 20 px turned by 30 degrees */
-extensions.registerPointFrameOutline('Turned', (feature) => {
-  const [x, y] = screen.project((feature.geometry as GeoJSON.Point).coordinates);
+/**
+ * A point type whose footprint is laid on the map: a rectangle 0.6 by 0.2 degrees (60 by 20 px
+ * on the stub) turned by 30 degrees
+ */
+extensions.registerBoundingBox('Turned', (feature) => {
+  const [x, y] = (feature.geometry as GeoJSON.Point).coordinates;
   const angle = Math.PI / 6;
   const u = [Math.cos(angle), Math.sin(angle)];
   const v = [-Math.sin(angle), Math.cos(angle)];
-  return [
-    [-30, -10],
-    [30, -10],
-    [30, 10],
-    [-30, 10],
-  ].map(([a, b]) => ({ x: x + u[0] * a + v[0] * b, y: y + u[1] * a + v[1] * b }));
+  const [topLeft, topRight, bottomRight, bottomLeft] = [
+    [-0.3, 0.1],
+    [0.3, 0.1],
+    [0.3, -0.1],
+    [-0.3, -0.1],
+  ].map(([a, b]): Coordinate => [x + u[0] * a + v[0] * b, y + u[1] * a + v[1] * b]);
+  return { topLeft, topRight, bottomRight, bottomLeft, center: [x, y] };
 });
+
+/**
+ * The footprint of a feature on the screen, without the margin: the corners of its box on the
+ * map, or the extent of a point around its position
+ */
+function footprintOf(
+  target: Feature,
+  registry: typeof extensions = extensions,
+  project: (lngLat: Coordinate) => ScreenPoint = (c) => screen.project(c),
+): ScreenPoint[] {
+  const box = computeBoundingBox(target, registry);
+  if (!box) return [];
+  if (hasZeroArea(box)) {
+    const [x, y] = project(box.center);
+    return registry.resolvePointFrameCorners(target, { x, y }, 0).map((c) => [c.x, c.y]);
+  }
+  return [box.topLeft, box.topRight, box.bottomRight, box.bottomLeft].map(project);
+}
 
 function feature(type: string, geometry: GeoJSON.Geometry, properties = {}): Feature {
   return {
@@ -145,9 +164,9 @@ function outwardDistance(p: ScreenPoint, a: ScreenPoint, b: ScreenPoint, inside:
 
 describe('the selection frame', () => {
   it.each(FEATURES.map((f) => [f.type, f] as const))(
-    'of a %s stands the margin outside every edge of its outline',
+    'of a %s stands the margin outside every edge of its footprint',
     (_type, target) => {
-      const outline = screen.outline(target);
+      const outline = footprintOf(target);
       expect(outline).toHaveLength(4);
       const frame = drawnFrame(target);
       const middle: ScreenPoint = [
@@ -170,12 +189,12 @@ describe('the selection frame', () => {
     },
   );
 
-  it('keeps ScreenContext.outline without the margin', () => {
+  it('keeps the footprint without the margin', () => {
     const [point] = FEATURES;
     const [x, y] = screen.project((point.geometry as GeoJSON.Point).coordinates);
     // Without a draw instance to give the extent of the marker, the frame of a point is a
     // 12 px square around it, with no margin
-    expect(screen.outline(point)).toEqual([
+    expect(footprintOf(point)).toEqual([
       [x - 6, y - 6],
       [x + 6, y - 6],
       [x + 6, y + 6],
@@ -202,14 +221,14 @@ describe('the selection frame of a built-in point of a draw instance', () => {
       const engineScreen = createScreenContext({
         map: engineMap,
         pixelRatio: { resolve: () => 1 } as never,
-        selectionExtensions: registry,
       });
       const [x] = engineScreen.project([0.1, 0.1]);
       const { renderer, frames } = recordingRenderer(registry, (c) => engineScreen.project(c));
       renderer.setTransform(createCoordinateTransform(engineMap));
       renderer.draw([stored], ZOOM);
       const right = frames[0][1][0];
-      return { outline: engineScreen.outline(stored)[1][0] - x, frame: right - x };
+      const outline = footprintOf(stored, registry, (c) => engineScreen.project(c));
+      return { outline: outline[1][0] - x, frame: right - x };
     } finally {
       engine.destroy();
     }

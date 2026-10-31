@@ -168,7 +168,7 @@ export interface SelectionUIConfig {
    *
    * @defaultValue `#FF2D55`, 2 px, solid, 10 px from the features
    */
-  boundingBox: BoundingBoxStyle;
+  box: BoundingBoxStyle;
   /**
    * The resize handles at the four corners of the box
    *
@@ -217,7 +217,7 @@ export interface SelectionUIConfig {
  * Default selection UI configuration
  */
 export const DEFAULT_SELECTION_CONFIG: SelectionUIConfig = {
-  boundingBox: {
+  box: {
     stroke: {
       // 2px for better visibility (the documented specification is 1px, but that is too thin
       // on high DPI)
@@ -390,12 +390,12 @@ export function mergeSelectionUIConfig(
   override: Partial<SelectionUIConfig>,
 ): SelectionUIConfig {
   return {
-    boundingBox: {
-      ...base.boundingBox,
-      ...override.boundingBox,
+    box: {
+      ...base.box,
+      ...override.box,
       stroke: {
-        ...base.boundingBox.stroke,
-        ...override.boundingBox?.stroke,
+        ...base.box.stroke,
+        ...override.box?.stroke,
       },
     },
     resizeHandle: {

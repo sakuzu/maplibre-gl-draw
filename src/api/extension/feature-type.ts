@@ -46,6 +46,44 @@ export interface FeatureTypeRows {
 }
 
 /**
+ * A footprint laid on the map (`FeatureTypeDefinition.footprint`): four corners on the map, in
+ * the order top left, top right, bottom right, bottom left of the shape as it stands unturned.
+ * The word `ground` names the plane of the map here, not the surface of the terrain.
+ */
+export interface GroundFootprint {
+  /** A footprint laid on the map */
+  kind: 'ground';
+  /** The four corners, as positions on the map */
+  corners: {
+    topLeft: Position;
+    topRight: Position;
+    bottomRight: Position;
+    bottomLeft: Position;
+  };
+}
+
+/**
+ * A footprint of a fixed size on the screen (`FeatureTypeDefinition.footprint`): a box around a
+ * position on the map, the half of its width and height in pixels.
+ */
+export interface ScreenFootprint {
+  /** A footprint of a fixed size on the screen */
+  kind: 'screen';
+  /** The position on the map the box is around */
+  position: Position;
+  /** Half the width of the box, in CSS pixels */
+  halfWidthPx: number;
+  /** Half the height of the box, in CSS pixels */
+  halfHeightPx: number;
+}
+
+/**
+ * What a feature covers, as its type declares it (`FeatureTypeDefinition.footprint`): four
+ * corners laid on the map, or a box of a fixed size on the screen around a position.
+ */
+export type Footprint = GroundFootprint | ScreenFootprint;
+
+/**
  * The definition of a custom feature type. Its handles and snapping candidates are written
  * here; a provider is only for the types an extension does not define.
  */
@@ -111,23 +149,22 @@ export interface FeatureTypeDefinition {
     ctx: HitTestContext,
   ): boolean;
   /**
-   * The extent of the selection box of a feature on the screen, in pixels.
+   * The footprint of a feature: what it covers, without the margin of the selection box, which
+   * the engine adds (`selectionStyle.box.margin`) to draw the selection box, hit it and place
+   * the handles. Either four corners laid on the map (`kind: 'ground'`), for a shape drawn on
+   * the map, turned as it is, or a box of a fixed size on the screen around a position on the map
+   * (`kind: 'screen'`), for a mark that keeps its size on the screen. The kind decides how the
+   * selection box is drawn and hit, whatever the geometry: a box on the map is drawn and hit on
+   * the map and has the resize and rotate handles on its corners, and a box on the screen is drawn
+   * and hit on the screen, around its position, and has none.
    *
-   * @returns The corners of the extent, or `null` when the feature has nothing to draw
-   */
-  bounds?(feature: Feature, ctx: ScreenContext): { min: ScreenPoint; max: ScreenPoint } | null;
-  /**
-   * The outline of the selection frame of a feature on the screen, in pixels, for a type whose
-   * shape turns: its four corners in the order top left, top right, bottom right, bottom left
-   * of the shape as it stands unturned, without the margin of the frame
-   * (`selectionStyle.boundingBox.margin`). The engine draws the selection frame along it when
-   * it is given, and from `bounds` otherwise, with every edge moved the margin outward. For a
-   * type of any geometry but `Point`, the resize and rotate handles sit on the corners of that
-   * frame too; a `Point` type keeps a frame with no such handles.
+   * A type without it, or a footprint that is not one of the two (corners that are not four
+   * finite positions, sizes that are not finite numbers of 0 or more), has the footprint of its
+   * geometry: the extent of its positions, or a point the size of a point marker around it.
    *
-   * @returns The four corners; anything else (or an empty array) gives the frame of `bounds`
+   * @returns The footprint, or `null` when the feature has nothing to draw
    */
-  outline?(feature: Feature, ctx: ScreenContext): ScreenPoint[];
+  footprint?(feature: Feature, ctx: ScreenContext): Footprint | null;
   /**
    * The handles that resize or reshape a selected feature. The engine draws them with the
    * look of the vertex handles, hit tests them at the same size, and gives their drags to

@@ -168,6 +168,14 @@ writing it. Its changes are listed after those of 3.0.0.
   the margin of the selection frame and the distance of the rotate handle
   on the map with it, so that an extension can lay what it draws around a
   feature for the current view the same way.
+- `FeatureTypeDefinition.footprint(feature, ctx)`: what a feature of a
+  type covers, from which the library makes its selection box (draws it,
+  hits it and places the handles on it), as four corners laid on the map
+  (`GroundFootprint`) or a box of a fixed size on the screen around a
+  position (`ScreenFootprint`), the two kinds of `Footprint`. The kind,
+  not the geometry, decides whether the box is drawn and hit on the map,
+  with the resize and rotate handles, or on the screen, without them. A
+  type without it has the footprint of its geometry.
 - `PluginContext.emit(event, payload)`: a plugin sends events of its
   own, which it declares in `DrawEvents` by declaration merging, to the
   subscribers of `draw.on` and `ctx.on`, so that every event is in the
@@ -247,6 +255,9 @@ writing it. Its changes are listed after those of 3.0.0.
   entry exports `BBox`, the type `features.bbox` returns.
 - The box of `FeatureTypeDefinition.boxSelect` is named `boxPx`, as a
   value in pixels is.
+- `selectionStyle.boundingBox` is `selectionStyle.box`, the look of the
+  selection box, so that `bbox` and the box of the selection are not one
+  word in two lengths.
 - A `Hit` of a feature names it by `id` alone, as `ModeContext.hitTest`
   and `map.clicked` give it: `featureId` is the feature a companion or a
   handle belongs to.
@@ -289,6 +300,12 @@ writing it. Its changes are listed after those of 3.0.0.
 
 - `DocumentChange.layerReorder` and `DocumentChange.groupReorder`: the
   order inside a layer or a group is told by `DocumentChange.order`.
+- `FeatureTypeDefinition.bounds` and `outline`, and
+  `ScreenContext.bounds` and `outline`, which gave the selection frame
+  in pixels of the screen: a type declares its `footprint` on the map or
+  on the screen, and the library makes the selection box from it. A frame
+  of the screen is a box around a position, upright as the frame of a
+  point is.
 - `ExtensionContext.drawing`: an extension reaches the same object as
   `ctx.draw.drawing`.
 

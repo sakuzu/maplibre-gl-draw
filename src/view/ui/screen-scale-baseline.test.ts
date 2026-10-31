@@ -96,7 +96,7 @@ const square = (): Feature =>
 const point = (): Feature =>
   feature({ type: 'Point', geometry: { type: 'Point', coordinates: [...CENTER] } });
 
-const MARGIN = DEFAULT_SELECTION_CONFIG.boundingBox.margin;
+const MARGIN = DEFAULT_SELECTION_CONFIG.box.margin;
 
 describe('the frame and the handles of a selection on a flat Web Mercator view', () => {
   const map = mercatorMap();

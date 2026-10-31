@@ -445,7 +445,7 @@ export class SelectionHandlesRenderer {
   private marginedBox(bbox: BoundingBoxCoords): BoundingBoxCoords {
     if (!this.transform) return bbox;
     return {
-      ...applyMarginToBoundingBox(bbox, this.config.boundingBox.margin, this.transform),
+      ...applyMarginToBoundingBox(bbox, this.config.box.margin, this.transform),
       center: bbox.center,
     };
   }

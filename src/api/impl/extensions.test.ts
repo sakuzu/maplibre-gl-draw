@@ -31,6 +31,7 @@ import type { CompanionProvider, HandleProvider, SnapProvider } from '../extensi
 import type { OverlayRenderer } from '../extension/render.js';
 import type { Store } from '../extension/store.js';
 import type { ExtensionsCollections } from '../extensions.js';
+import type { Feature } from '../model.js';
 import { createDrawOnEngine } from './create-draw.js';
 import type { Engine } from './engine.js';
 import { createEngine } from './engine.js';
@@ -300,26 +301,62 @@ describe('extensions.featureTypes.override', () => {
     instance.destroy();
   });
 
-  it('keeps the frame of a point for Point only, and a frame with area for an image', () => {
+  it('frames an override by the kind of its footprint, whatever its geometry', () => {
     const { engine, instance } = setUp();
-    const bounds = () => ({ min: [0, 0] as [number, number], max: [10, 10] as [number, number] });
     const { extensions } = engine.context.selectionScope;
+    // A point laid on the map as a square of 0.2 degrees, and an image as a mark of the screen
     instance.extensions.featureTypes.override({
       type: 'Point',
       geometry: 'Point',
       renderer,
-      bounds,
+      footprint: (feature) => {
+        const [x, y] = (feature.geometry as GeoJSON.Point).coordinates;
+        return {
+          kind: 'ground',
+          corners: {
+            topLeft: [x - 0.1, y + 0.1],
+            topRight: [x + 0.1, y + 0.1],
+            bottomRight: [x + 0.1, y - 0.1],
+            bottomLeft: [x - 0.1, y - 0.1],
+          },
+        };
+      },
     });
     instance.extensions.featureTypes.override({
       type: 'Image',
       geometry: 'Point',
       renderer,
-      bounds,
+      footprint: (feature) => ({
+        kind: 'screen',
+        position: (feature.geometry as GeoJSON.Point).coordinates,
+        halfWidthPx: 15,
+        halfHeightPx: 5,
+      }),
     });
-    expect(extensions.getPointFrameExtentProvider('Point')).toBeDefined();
-    expect(extensions.getBoundingBoxCalculator('Point')).toBeUndefined();
-    expect(extensions.getBoundingBoxCalculator('Image')).toBeDefined();
-    expect(extensions.getPointFrameExtentProvider('Image')).toBeUndefined();
+    const point = instance.features.create({
+      type: 'Point',
+      geometry: { type: 'Point', coordinates: [1, 1] },
+    }) as Feature;
+    const image = instance.features.create({
+      type: 'Image',
+      geometry: { type: 'Point', coordinates: [2, 2] },
+    }) as Feature;
+    const box = computeBoundingBox(point as never, extensions);
+    expect(box?.topLeft[0]).toBeCloseTo(0.9, 12);
+    expect(box?.bottomRight[1]).toBeCloseTo(0.9, 12);
+    expect(box?.center).toEqual([1, 1]);
+    // An image of the screen keeps no area on the map and is the size it gives on the screen
+    expect(computeBoundingBox(image as never, extensions)).toEqual({
+      topLeft: [2, 2],
+      topRight: [2, 2],
+      bottomRight: [2, 2],
+      bottomLeft: [2, 2],
+      center: [2, 2],
+    });
+    expect(extensions.resolvePointFrameExtent(image as never)).toEqual({
+      halfWidth: 15,
+      halfHeight: 5,
+    });
     instance.destroy();
   });
 
@@ -340,7 +377,12 @@ describe('extensions.featureTypes.override', () => {
       renderer,
       appliesTo: (feature) => feature.properties.kind === 'special',
       hitTest,
-      bounds: () => ({ min: [0, 0], max: [10, 10] }),
+      footprint: (feature) => ({
+        kind: 'screen',
+        position: (feature.geometry as GeoJSON.Polygon).coordinates[0][0],
+        halfWidthPx: 10,
+        halfHeightPx: 10,
+      }),
       bbox: () => [-50, -50, 50, 50],
       handles,
       snapCandidates,
@@ -818,7 +860,7 @@ describe('ModeContext.commitFeature', () => {
   });
 
   it('gives the look of the selection with CSS colors, the options over the defaults', () => {
-    expect(ctx.selectionStyle.boundingBox.stroke.color).toMatch(/^#|^rgba\(/);
+    expect(ctx.selectionStyle.box.stroke.color).toMatch(/^#|^rgba\(/);
     expect(ctx.selectionStyle.boxSelection.strokeWidth).toEqual(expect.any(Number));
     ctx.draw.options.update({ selectionStyle: { boxSelection: { strokeColor: 'red' } } } as never);
     expect(ctx.selectionStyle.boxSelection.strokeColor).toBe('red');
@@ -1164,7 +1206,12 @@ describe('the extensions of two draw instances', () => {
     type: 'Card',
     geometry: 'Polygon',
     renderer: { onAdd() {}, draw() {}, onRemove() {} },
-    bounds: () => ({ min: [0, 0], max: [10, 10] }),
+    footprint: (feature) => ({
+      kind: 'screen',
+      position: (feature.geometry as GeoJSON.Polygon).coordinates[0][0],
+      halfWidthPx: 10,
+      halfHeightPx: 10,
+    }),
   };
   const handles = (name: string): HandleProvider => ({
     name,

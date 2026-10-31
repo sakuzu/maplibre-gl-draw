@@ -163,7 +163,7 @@ export interface RenderingOptions {
  */
 export interface SelectionStyleOptions {
   /** The box around the selection */
-  boundingBox?: {
+  box?: {
     /** The line of the box */
     stroke: {
       /** The width in CSS pixels */
@@ -178,13 +178,14 @@ export interface SelectionStyleOptions {
       dashArray?: number[];
     };
     /**
-     * The gap between the features and the box, in CSS pixels: every edge of the box stands
-     * this far outside the outline of the selection (`ScreenContext.outline`), and the resize
-     * and rotate handles sit on the box. It is laid on the ground at the features, turned into
+     * The gap between the features and the box, in CSS pixels: every edge of the selection box
+     * stands this far outside the footprint of a feature (`FeatureTypeDefinition.footprint`, or
+     * the footprint of its geometry), and the resize and rotate handles sit on the box. It is laid on the ground at the features, turned into
      * meters with the scale of the view (`ScreenContext.metersPerPixel`), so the box tilts and
      * turns with the map: these pixels on a flat Web Mercator map without terrain, foreshortened
      * as the map is when it is tilted, and shorter away from the center of the view on the globe.
-     * The box of a point takes it on the screen, around its marker.
+     * The box of a footprint of the screen (a point) takes it on the screen, around its
+     * position.
      */
     margin: number;
   };

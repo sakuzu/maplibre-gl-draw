@@ -31,5 +31,4 @@ export type {
   FramePoint,
   PointFrameExtent,
   PointFrameExtentProvider,
-  PointFrameOutlineProvider,
 } from './types.js';

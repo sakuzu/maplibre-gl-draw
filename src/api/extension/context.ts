@@ -68,30 +68,6 @@ export interface ScreenContext {
   /** The position drawn at a point on the screen, on the terrain when it is on. */
   unproject(point: ScreenPoint): Position;
   /**
-   * The extent of a feature on the screen, in pixels; a feature off the screen still has
-   * one.
-   *
-   * @returns The corners of the extent, or `null` when the feature has nothing to draw
-   */
-  bounds(feature: Feature): { min: ScreenPoint; max: ScreenPoint } | null;
-  /**
-   * The outline of the selection frame of a feature on the screen, in pixels, without the
-   * margin the frame is drawn with (`selectionStyle.boundingBox.margin`): its four corners in
-   * the order top left, top right, bottom right, bottom left of the shape as it stands
-   * unturned. It answers for every type: an image and any other turned shape give the turned
-   * corners, a line or an area the corners of its extent, a point the square its marker
-   * spans (its radius and its outline), and a custom type the corners of its `outline`, or of
-   * its `bounds` when it has none. A feature
-   * off the screen still has one. The engine draws the frame with every edge moved the margin
-   * outward from these corners.
-   *
-   * A custom type must not call it for its own features from its `outline` or `bounds`, which
-   * it calls.
-   *
-   * @returns The four corners, or an empty array when the feature has nothing to draw
-   */
-  outline(feature: Feature): ScreenPoint[];
-  /**
    * The length on the ground that a CSS pixel spans at a position, in the frame drawn last.
    *
    * The engine turns the sizes in pixels of what it draws on the map for the current view (the
