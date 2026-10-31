@@ -1102,12 +1102,17 @@ function layoutOf(data: RowsChunkData): RowsChunkLayout {
  */
 function pointInstanceAttribs(gl: WebGL2RenderingContext, first: number, setup: boolean): void {
   const base = first * ROWS_INSTANCE_BYTES;
-  for (const [location, offset] of [
-    [1, 0],
-    [2, 16],
+  // The tag (the kind and the row): an integer attribute, read as the integer it is
+  if (setup) gl.enableVertexAttribArray(1);
+  gl.vertexAttribIPointer(1, 1, gl.UNSIGNED_INT, ROWS_INSTANCE_BYTES, base);
+  if (setup) gl.vertexAttribDivisor(1, 1);
+  // The coordinates 0 to 2, and coordinate 3 with the range of the segment and the length before
+  for (const [location, size, offset] of [
+    [2, 3, 4],
+    [3, 4, 16],
   ] as const) {
     if (setup) gl.enableVertexAttribArray(location);
-    gl.vertexAttribPointer(location, 4, gl.FLOAT, false, ROWS_INSTANCE_BYTES, base + offset);
+    gl.vertexAttribPointer(location, size, gl.FLOAT, false, ROWS_INSTANCE_BYTES, base + offset);
     if (setup) gl.vertexAttribDivisor(location, 1);
   }
 }

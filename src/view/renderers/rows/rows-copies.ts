@@ -23,13 +23,13 @@
 import {
   ROWS_INSTANCE_FLOATS,
   ROWS_KIND,
-  ROWS_KIND_FACTOR,
   ROWS_ROW_STYLE_FLOATS,
   ROWS_STYLE_FLOATS,
   ROWS_STYLE_WIDTH,
   type RowsChunkData,
   type RowsPalette,
   readRowsInstance,
+  rowOfInstanceWord,
 } from './rows-format.js';
 import type { RowsChunk, RowsChunkWrites } from './rows-renderer.js';
 
@@ -79,8 +79,7 @@ export class RowsCopies {
     const instance =
       (target: Float32Array) => (texel: number, values: Float32Array, at: number) => {
         target.set(values.subarray(at, at + ROWS_INSTANCE_FLOATS), texel * ROWS_INSTANCE_FLOATS);
-        const head = values[at];
-        noted.add(head - Math.floor(head / ROWS_KIND_FACTOR) * ROWS_KIND_FACTOR - copy.rowBase);
+        noted.add(rowOfInstanceWord(values[at] as number) - copy.rowBase);
       };
     writes.instances.forEach(instance(copy.instances));
     writes.points.forEach(instance(copy.points));
