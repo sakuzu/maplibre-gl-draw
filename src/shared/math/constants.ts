@@ -7,14 +7,17 @@
  * Earth-related constants, rendering parameters, and default style values.
  */
 
+import { EARTH_RADIUS_METERS } from '../../geometry/units.js';
+
 /**
- * Earth-related constants
+ * Earth-related constants, on the sphere the map is drawn on (maplibre's, of the mean radius
+ * `EARTH_RADIUS_METERS`)
  */
 export const EARTH = {
   /** Circumference of the Earth (meters) */
-  CIRCUMFERENCE_METERS: 40075016.686,
+  CIRCUMFERENCE_METERS: 2 * Math.PI * EARTH_RADIUS_METERS,
   /** Number of meters per degree */
-  METERS_PER_DEGREE: 40075016.686 / 360,
+  METERS_PER_DEGREE: (2 * Math.PI * EARTH_RADIUS_METERS) / 360,
   /** Factor that converts radians to degrees */
   DEGREES_PER_RADIAN: 180 / Math.PI,
   /** Factor that converts degrees to radians */

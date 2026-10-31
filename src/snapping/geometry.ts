@@ -11,7 +11,7 @@
  * compared.
  */
 
-import { DEFAULT_TILE_SIZE, pixelsToDegreesLat, pixelsToDegreesLng } from '../shared/math/index.js';
+import { DEFAULT_TILE_SIZE, degreesPerPixelAtZoom } from '../shared/math/index.js';
 import type { Coordinate } from '../store/types.js';
 
 /**
@@ -37,10 +37,8 @@ export function degreesPerPixel(
   zoom: number,
   tileSize: number = DEFAULT_TILE_SIZE,
 ): DegreesPerPixel {
-  return {
-    lng: pixelsToDegreesLng(1, latitude, zoom, tileSize),
-    lat: pixelsToDegreesLat(1, latitude, zoom, tileSize),
-  };
+  const [lng, lat] = degreesPerPixelAtZoom(latitude, zoom, tileSize);
+  return { lng, lat };
 }
 
 /**

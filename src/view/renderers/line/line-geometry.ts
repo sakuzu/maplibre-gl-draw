@@ -10,6 +10,7 @@
  */
 
 import { EARTH } from '../../../shared/math/constants.js';
+import { worldSizeAtZoom } from '../../../shared/math/ground-scale.js';
 import type { PixelRatioInput } from '../../../shared/utils/pixel-ratio.js';
 import { resolveContentPixelRatio, resolvePixelRatio } from '../../../shared/utils/pixel-ratio.js';
 import { globeGridOf } from '../../globe-subdivision.js';
@@ -273,7 +274,7 @@ export function maxInstanceSegmentMercator(
     const length = instanceData[i * INSTANCE_STRIDE + 7];
     if (length > max) max = length;
   }
-  const world = WORLD_TILE_SIZE * 2 ** zoom * dashPixelRatio;
+  const world = worldSizeAtZoom(zoom) * dashPixelRatio;
   return world > 0 ? max / world : 0;
 }
 
@@ -461,7 +462,7 @@ export function maxSegmentMercatorOf(
     const length = instanceData[i * stride + 7];
     if (length > max) max = length;
   }
-  const world = WORLD_TILE_SIZE * 2 ** zoom * dashPixelRatio;
+  const world = worldSizeAtZoom(zoom) * dashPixelRatio;
   return world > 0 ? max / world : 0;
 }
 
@@ -571,15 +572,6 @@ export function writeLineInstances(
 }
 
 /**
- * The side of the Web Mercator world at zoom 0, in CSS px
- *
- * maplibre lays the world out on 512 px tiles, so the world is `512 * 2^zoom` CSS px wide.
- *
- * @internal
- */
-export const WORLD_TILE_SIZE = 512;
-
-/**
  * The distance between two points on a flat Web Mercator map, in CSS px at `zoom`
  *
  * The projection stretches the latitude by 1 / cos(latitude) exactly as it stretches the
@@ -609,7 +601,7 @@ export function screenPixelDistanceXY(
   by: number,
   zoom: number,
 ): number {
-  const world = WORLD_TILE_SIZE * 2 ** zoom;
+  const world = worldSizeAtZoom(zoom);
   const dx = ((bx - ax) / 360) * world;
   const dy = (mercatorY(by) - mercatorY(ay)) * world;
   return Math.sqrt(dx * dx + dy * dy);

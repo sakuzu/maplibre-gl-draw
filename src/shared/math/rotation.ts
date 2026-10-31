@@ -12,7 +12,7 @@
  */
 
 import type { Coordinate } from '../types/model.js';
-import { getMetersPerPixel, toDegrees, toRadians } from './distance.js';
+import { toDegrees, toRadians } from './distance.js';
 
 /**
  * WGS84 ellipsoid parameters
@@ -160,57 +160,6 @@ export function rotateCoordinatesOnSphere(
   angleDegrees: number,
 ): Coordinate[] {
   return coords.map((coord) => rotateCoordinateOnSphere(coord, center, angleDegrees));
-}
-
-/**
- * Kilometers per degree of latitude
- */
-const KILOMETERS_PER_DEGREE_LATITUDE = 111.32;
-
-/**
- * Converts kilometers into degrees (with a latitude correction)
- *
- * @param km Distance (kilometers)
- * @param latitude Reference latitude
- * @returns Degrees
- */
-export function kmToDegrees(km: number, latitude: number): number {
-  // Distance of 1 degree of latitude
-  const latDegrees = km / KILOMETERS_PER_DEGREE_LATITUDE;
-
-  // The distance of 1 degree of longitude varies with the latitude
-  const lngDegrees = km / (KILOMETERS_PER_DEGREE_LATITUDE * Math.cos(toRadians(latitude)));
-
-  // Use the larger one to be safe
-  return Math.max(latDegrees, lngDegrees);
-}
-
-/**
- * Converts pixels into degrees (with a latitude correction)
- *
- * @param pixels Number of pixels
- * @param latitude Reference latitude
- * @param zoom Zoom level
- * @param tileSize Tile size (default 512)
- * @returns Degrees
- */
-export function pixelsToDegrees(
-  pixels: number,
-  latitude: number,
-  zoom: number,
-  tileSize = 512,
-): { lngDegrees: number; latDegrees: number } {
-  // Meters per pixel
-  const metersPerPixel = getMetersPerPixel(latitude, zoom, tileSize);
-
-  // Convert meters into kilometers
-  const km = (pixels * metersPerPixel) / 1000;
-
-  // Convert kilometers into degrees (it differs between longitude and latitude)
-  const latDegrees = km / KILOMETERS_PER_DEGREE_LATITUDE;
-  const lngDegrees = km / (KILOMETERS_PER_DEGREE_LATITUDE * Math.cos(toRadians(latitude)));
-
-  return { lngDegrees, latDegrees };
 }
 
 /**

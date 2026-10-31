@@ -10,11 +10,7 @@
  */
 
 import type { Map as MapLibreMap, ProjectionData } from 'maplibre-gl';
-import {
-  getMetersPerPixel,
-  metersToDegreesLat,
-  metersToDegreesLng,
-} from '../../shared/math/index.js';
+import { degreesPerPixelAtZoom } from '../../shared/math/index.js';
 import { coordinatesOf } from '../../shared/utils/coordinates.js';
 import { getTileSize } from '../../shared/utils/map.js';
 import { getImageProperties } from '../../shared/utils/property.js';
@@ -137,15 +133,11 @@ export class ImageRenderer {
     const createdZoom = properties.createdZoom || zoom;
     const scale = properties.scale || 1;
 
-    // Pixel -> meter conversion at createdZoom
+    // The degrees of the pixels at createdZoom
     const tileSize = this.getMapTileSize();
-    const metersPerPixel = getMetersPerPixel(latitude, createdZoom, tileSize);
-    const widthMeters = displayWidth * scale * metersPerPixel;
-    const heightMeters = displayHeight * scale * metersPerPixel;
-
-    // Convert meters -> degrees
-    const widthDeg = metersToDegreesLng(widthMeters, latitude);
-    const heightDeg = metersToDegreesLat(heightMeters);
+    const [lngPerPixel, latPerPixel] = degreesPerPixelAtZoom(latitude, createdZoom, tileSize);
+    const widthDeg = displayWidth * scale * lngPerPixel;
+    const heightDeg = displayHeight * scale * latPerPixel;
 
     // Rotation angle (degrees -> radians)
     const rotationRad = ((properties.rotation || 0) * Math.PI) / 180;
@@ -217,15 +209,11 @@ export class ImageRenderer {
     const createdZoom = properties.createdZoom || zoom;
     const scale = properties.scale || 1;
 
-    // Pixel -> meter conversion at createdZoom
+    // The degrees of the pixels at createdZoom
     const tileSize = this.getMapTileSize();
-    const metersPerPixel = getMetersPerPixel(latitude, createdZoom, tileSize);
-    const widthMeters = displayWidth * scale * metersPerPixel;
-    const heightMeters = displayHeight * scale * metersPerPixel;
-
-    // Convert meters -> degrees
-    const widthDeg = metersToDegreesLng(widthMeters, latitude);
-    const heightDeg = metersToDegreesLat(heightMeters);
+    const [lngPerPixel, latPerPixel] = degreesPerPixelAtZoom(latitude, createdZoom, tileSize);
+    const widthDeg = displayWidth * scale * lngPerPixel;
+    const heightDeg = displayHeight * scale * latPerPixel;
 
     // Rotation angle
     const rotationRad = ((properties.rotation || 0) * Math.PI) / 180;

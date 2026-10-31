@@ -24,21 +24,22 @@ export {
 // Distance computation
 export {
   euclideanDistance,
-  getMetersPerPixel,
   haversineDistanceMeters,
-  lngToMeters,
-  metersToDegreesLat,
-  metersToDegreesLng,
-  metersToLat,
-  metersToLng,
   midpoint,
-  pixelsToDegreesLat,
-  pixelsToDegreesLng,
   pointToPolylineDistance,
   pointToSegmentDistance,
   toDegrees,
   toRadians,
 } from './distance.js';
+// Sizes in pixels as lengths on the ground
+export {
+  degreesPerMeterAt,
+  degreesPerPixelAtZoom,
+  metersOnTangentPlane,
+  metersPerPixelAtZoom,
+  offsetOnTangentPlane,
+  worldSizeAtZoom,
+} from './ground-scale.js';
 // Intersection testing
 export type { OBBCorners } from './intersection.js';
 export {
@@ -57,8 +58,6 @@ export { createOBB, distanceToOBB, getOBBAABB, getOBBCorners, pointInOBB } from 
 export {
   computeRotatedQuadCorners,
   ecefToWGS84,
-  kmToDegrees,
-  pixelsToDegrees,
   rotateCoordinateOnSphere,
   rotateCoordinatesOnSphere,
   wgs84ToECEF,

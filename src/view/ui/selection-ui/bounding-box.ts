@@ -14,7 +14,7 @@
 
 import { circleBoundingBox } from '../../../geometry/circle.js';
 import { type EnuEdit, moveEnuPosition } from '../../../geometry/enu-transforms.js';
-import { pixelsToDegreesLat, pixelsToDegreesLng } from '../../../shared/math/index.js';
+import { degreesPerPixelAtZoom } from '../../../shared/math/index.js';
 import { coordinatesOf } from '../../../shared/utils/coordinates.js';
 import {
   getCircleRadius,
@@ -148,8 +148,9 @@ function computeOrientedBoundingBox(feature: Feature): BoundingBoxCoords | null 
 
   const displayWidth = imageWidth * scale;
   const displayHeight = imageHeight * scale;
-  const halfWidthDeg = pixelsToDegreesLng(displayWidth / 2, lat, createdZoom, tileSize);
-  const halfHeightDeg = pixelsToDegreesLat(displayHeight / 2, lat, createdZoom, tileSize);
+  const [lngPerPixel, latPerPixel] = degreesPerPixelAtZoom(lat, createdZoom, tileSize);
+  const halfWidthDeg = (displayWidth / 2) * lngPerPixel;
+  const halfHeightDeg = (displayHeight / 2) * latPerPixel;
 
   const rotationRad = (rotation * Math.PI) / 180;
   const cos = Math.cos(rotationRad);

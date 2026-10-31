@@ -201,8 +201,9 @@ describe('tracing of the line drawing mode', () => {
   it('inserts nothing when both points are snapped onto the same edge', () => {
     modeManager.setMode('draw_line');
 
-    const a: Coordinate = [ORIGIN.lng + STEP / 4, ORIGIN.lat];
-    const b: Coordinate = [ORIGIN.lng + (STEP * 3) / 4, ORIGIN.lat];
+    // 12px from the vertices at both ends of the edge, past the tolerance of a vertex (10px)
+    const a: Coordinate = [ORIGIN.lng + STEP * 0.3, ORIGIN.lat];
+    const b: Coordinate = [ORIGIN.lng + STEP * 0.7, ORIGIN.lat];
     input.click(a);
     input.click(b);
     input.key('Enter');

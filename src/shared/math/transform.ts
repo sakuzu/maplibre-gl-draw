@@ -10,7 +10,7 @@
 import type { Map as MapLibreMap } from 'maplibre-gl';
 
 import type { Coordinate } from '../types/model.js';
-import { pixelsToDegreesLat, pixelsToDegreesLng } from './distance.js';
+import { degreesPerPixelAtZoom } from './ground-scale.js';
 
 /**
  * Clamps a latitude into the valid range
@@ -295,8 +295,7 @@ function marginOnMapPlane(
   const corners = [coords.topLeft, coords.topRight, coords.bottomRight, coords.bottomLeft];
   const centerLng = (corners[0][0] + corners[1][0] + corners[2][0] + corners[3][0]) / 4;
   const centerLat = (corners[0][1] + corners[1][1] + corners[2][1] + corners[3][1]) / 4;
-  const degPerPxLng = pixelsToDegreesLng(1, centerLat, zoom);
-  const degPerPxLat = pixelsToDegreesLat(1, centerLat, zoom);
+  const [degPerPxLng, degPerPxLat] = degreesPerPixelAtZoom(centerLat, zoom);
   if (!(degPerPxLng > 0) || !(degPerPxLat > 0)) {
     return {
       topLeft: coords.topLeft,

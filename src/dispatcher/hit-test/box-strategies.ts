@@ -11,10 +11,9 @@
 import {
   createOBB,
   DEFAULT_TILE_SIZE,
-  getMetersPerPixel,
+  degreesPerMeterAt,
+  degreesPerPixelAtZoom,
   getOBBCorners,
-  metersToDegreesLat,
-  metersToDegreesLng,
   pointInRectangle,
   rectangleIntersectsCircle,
   rectangleIntersectsLineString,
@@ -197,13 +196,9 @@ export class ImageBoxSelectionStrategy implements BoxSelectionStrategy {
     const createdZoom = properties.createdZoom || 14;
     const scale = properties.scale || 1;
 
-    const widthMeters =
-      getMetersPerPixel(latitude, createdZoom, this.tileSize) * displayWidth * scale;
-    const heightMeters =
-      getMetersPerPixel(latitude, createdZoom, this.tileSize) * displayHeight * scale;
-
-    const widthDeg = metersToDegreesLng(widthMeters, latitude);
-    const heightDeg = metersToDegreesLat(heightMeters);
+    const [lngPerPixel, latPerPixel] = degreesPerPixelAtZoom(latitude, createdZoom, this.tileSize);
+    const widthDeg = displayWidth * scale * lngPerPixel;
+    const heightDeg = displayHeight * scale * latPerPixel;
 
     const rotation = properties.rotation || 0;
 
@@ -238,8 +233,9 @@ export class CircleBoxSelectionStrategy implements BoxSelectionStrategy {
       return pointInRectangle(center, rect);
     }
 
-    const rLng = metersToDegreesLng(radiusMeters, center[1]);
-    const rLat = metersToDegreesLat(radiusMeters);
+    const [lngPerMeter, latPerMeter] = degreesPerMeterAt(center[1]);
+    const rLng = radiusMeters * lngPerMeter;
+    const rLat = radiusMeters * latPerMeter;
     if (rLng <= 0 || rLat <= 0) {
       return pointInRectangle(center, rect);
     }

@@ -12,7 +12,7 @@
  * (local-frame.ts).
  */
 
-import { haversineDistanceMeters, metersToLng } from '../../../shared/math/index.js';
+import { degreesPerMeterAt, haversineDistanceMeters } from '../../../shared/math/index.js';
 import {
   type HitShape,
   type PositionRun,
@@ -248,10 +248,7 @@ export const circleShapeTest: ShapeHitTest = {
     if (!center || radiusMeters === undefined || radiusMeters <= 0) return false;
     const distanceMeters = haversineDistanceMeters(coordinate, center);
     // The tolerance is a longitude difference: in meters at the latitude of the center
-    const toleranceMeters =
-      Math.abs(metersToLng(1, center[1])) > 0
-        ? (toleranceLngLat / metersToLng(1, center[1])) * 1
-        : 0;
+    const toleranceMeters = toleranceLngLat / degreesPerMeterAt(center[1])[0];
     const effectiveTolerance = Math.max(toleranceMeters, 10);
     return distanceMeters <= radiusMeters + effectiveTolerance;
   },

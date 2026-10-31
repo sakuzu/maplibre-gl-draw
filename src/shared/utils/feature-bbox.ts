@@ -9,7 +9,7 @@
  */
 
 import { circleBoundingBox } from '../../geometry/circle.js';
-import { pixelsToDegreesLat, pixelsToDegreesLng, rotateCoordinateOnSphere } from '../math/index.js';
+import { degreesPerPixelAtZoom, rotateCoordinateOnSphere } from '../math/index.js';
 import type { BoundingBox, Coordinate, Feature, FeatureCoordinates } from '../types/model.js';
 import { coordinatesOf, forEachCoordinateDeep } from './coordinates.js';
 import { getCircleRadius, getCreatedZoom, getImageProperties } from './property.js';
@@ -41,8 +41,9 @@ function computeBoundingBox(feature: Feature, tileSize: number): BoundingBox {
     const displayHeight = imageHeight * scale;
 
     // Convert the pixel size into degrees
-    const halfWidthDeg = pixelsToDegreesLng(displayWidth / 2, lat, createdZoom, tileSize);
-    const halfHeightDeg = pixelsToDegreesLat(displayHeight / 2, lat, createdZoom, tileSize);
+    const [lngPerPixel, latPerPixel] = degreesPerPixelAtZoom(lat, createdZoom, tileSize);
+    const halfWidthDeg = (displayWidth / 2) * lngPerPixel;
+    const halfHeightDeg = (displayHeight / 2) * latPerPixel;
 
     // Compute the bounding box taking rotation into account
     return computeRotatedBoundingBox(lng, lat, halfWidthDeg, halfHeightDeg, rotation);

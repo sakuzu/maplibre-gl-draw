@@ -5,16 +5,8 @@ import { describe, expect, it } from 'vitest';
 import type { Coordinate } from '../../store/types.js';
 import {
   euclideanDistance,
-  getMetersPerPixel,
   haversineDistanceMeters,
-  lngToMeters,
-  metersToDegreesLat,
-  metersToDegreesLng,
-  metersToLat,
-  metersToLng,
   midpoint,
-  pixelsToDegreesLat,
-  pixelsToDegreesLng,
   pointToPolylineDistance,
   pointToSegmentDistance,
   toDegrees,
@@ -141,44 +133,6 @@ describe('midpoint', () => {
   });
 });
 
-describe('metersToLng / metersToLat / lngToMeters', () => {
-  it('the round-trip conversion between metersToLng and lngToMeters agrees (equator)', () => {
-    const meters = 1000;
-    const lat = 0;
-    const lngDiff = metersToLng(meters, lat);
-    const result = lngToMeters(lngDiff, lat);
-    expect(result).toBeCloseTo(meters, 3);
-  });
-
-  it('the round-trip conversion between metersToLng and lngToMeters agrees (high latitude)', () => {
-    const meters = 1000;
-    const lat = 60;
-    const lngDiff = metersToLng(meters, lat);
-    const result = lngToMeters(lngDiff, lat);
-    expect(result).toBeCloseTo(meters, 3);
-  });
-
-  it('metersToLng on the equator comes out close to metersToLat', () => {
-    const meters = 10000;
-    const lngDeg = metersToLng(meters, 0);
-    const latDeg = metersToLat(meters);
-    expect(lngDeg).toBeCloseTo(latDeg, 5);
-  });
-
-  it('at a high latitude metersToLng becomes larger than metersToLat', () => {
-    const meters = 10000;
-    const lngDeg = metersToLng(meters, 60);
-    const latDeg = metersToLat(meters);
-    expect(lngDeg).toBeGreaterThan(latDeg);
-  });
-
-  it('0 meters is 0 degrees', () => {
-    expect(metersToLng(0, 35)).toBe(0);
-    expect(metersToLat(0)).toBe(0);
-    expect(lngToMeters(0, 35)).toBe(0);
-  });
-});
-
 describe('pointToSegmentDistance', () => {
   it('a point on the segment has a distance of 0', () => {
     const point: Coordinate = [5, 0];
@@ -240,74 +194,5 @@ describe('pointToPolylineDistance', () => {
       [10, 0],
     ];
     expect(pointToPolylineDistance([5, 3], line)).toBeCloseTo(3, 10);
-  });
-});
-
-describe('getMetersPerPixel', () => {
-  it('the value at zoom 0 on the equator', () => {
-    const mpp = getMetersPerPixel(0, 0);
-    // 40075016.686 / 512 ~ 78271.5
-    expect(mpp).toBeCloseTo(40075016.686 / 512, 0);
-  });
-
-  it('the higher the zoom, the smaller the value', () => {
-    const mpp0 = getMetersPerPixel(0, 0);
-    const mpp10 = getMetersPerPixel(0, 10);
-    expect(mpp10).toBeLessThan(mpp0);
-    expect(mpp0 / mpp10).toBeCloseTo(1024, 0);
-  });
-
-  it('the value becomes smaller at a high latitude', () => {
-    const equator = getMetersPerPixel(0, 10);
-    const highLat = getMetersPerPixel(60, 10);
-    expect(highLat).toBeLessThan(equator);
-    // cos(60) = 0.5, so roughly half
-    expect(highLat / equator).toBeCloseTo(0.5, 2);
-  });
-});
-
-describe('metersToDegreesLng / metersToDegreesLat', () => {
-  it('0 meters is 0 degrees', () => {
-    expect(metersToDegreesLng(0, 0)).toBe(0);
-    expect(metersToDegreesLat(0)).toBe(0);
-  });
-
-  it('on the equator the longitude and latitude conversion results are roughly the same', () => {
-    const meters = 111000;
-    const lngDeg = metersToDegreesLng(meters, 0);
-    const latDeg = metersToDegreesLat(meters);
-    expect(lngDeg).toBeCloseTo(latDeg, 3);
-  });
-
-  it('1 degree of latitude is roughly 111km', () => {
-    const deg = metersToDegreesLat(111_000);
-    expect(deg).toBeCloseTo(1, 1);
-  });
-});
-
-describe('pixelsToDegreesLng / pixelsToDegreesLat', () => {
-  it('0 pixels is 0 degrees', () => {
-    expect(pixelsToDegreesLng(0, 35, 10)).toBe(0);
-    expect(pixelsToDegreesLat(0, 35, 10)).toBe(0);
-  });
-
-  it('consistency with getMetersPerPixel (longitude direction)', () => {
-    const lat = 35;
-    const zoom = 10;
-    const pixels = 100;
-    const mpp = getMetersPerPixel(lat, zoom);
-    const meters = pixels * mpp;
-    const expected = metersToDegreesLng(meters, lat);
-    expect(pixelsToDegreesLng(pixels, lat, zoom)).toBeCloseTo(expected, 10);
-  });
-
-  it('consistency with getMetersPerPixel (latitude direction)', () => {
-    const lat = 35;
-    const zoom = 10;
-    const pixels = 100;
-    const mpp = getMetersPerPixel(lat, zoom);
-    const meters = pixels * mpp;
-    const expected = metersToDegreesLat(meters);
-    expect(pixelsToDegreesLat(pixels, lat, zoom)).toBeCloseTo(expected, 10);
   });
 });

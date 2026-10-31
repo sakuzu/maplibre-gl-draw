@@ -6,8 +6,6 @@ import type { Coordinate } from '../../store/types.js';
 import {
   computeRotatedQuadCorners,
   ecefToWGS84,
-  kmToDegrees,
-  pixelsToDegrees,
   rotateCoordinateOnSphere,
   rotateCoordinatesOnSphere,
   wgs84ToECEF,
@@ -136,48 +134,6 @@ describe('rotateCoordinatesOnSphere', () => {
     const center: Coordinate = [139, 35];
     const result = rotateCoordinatesOnSphere(coords, center, 45);
     expect(result).toHaveLength(2);
-  });
-});
-
-describe('kmToDegrees', () => {
-  it('converts kilometers into degrees at the equator', () => {
-    const result = kmToDegrees(111.32, 0);
-    // At the equator 1 degree of latitude = roughly 111.32km
-    expect(result).toBeCloseTo(1, 1);
-  });
-
-  it('at a high latitude the degrees in the longitude direction become larger', () => {
-    const equator = kmToDegrees(100, 0);
-    const highLat = kmToDegrees(100, 60);
-    // At a high latitude the distance per degree of longitude is shorter, so the same
-    // distance comes out as a larger number of degrees
-    expect(highLat).toBeGreaterThan(equator);
-  });
-
-  it('0km returns 0 degrees', () => {
-    expect(kmToDegrees(0, 0)).toBe(0);
-    expect(kmToDegrees(0, 45)).toBe(0);
-  });
-});
-
-describe('pixelsToDegrees', () => {
-  it('0 pixels returns 0 degrees', () => {
-    const result = pixelsToDegrees(0, 0, 10);
-    expect(result.lngDegrees).toBe(0);
-    expect(result.latDegrees).toBe(0);
-  });
-
-  it('returns a positive value at a known zoom level', () => {
-    const result = pixelsToDegrees(100, 0, 10);
-    expect(result.lngDegrees).toBeGreaterThan(0);
-    expect(result.latDegrees).toBeGreaterThan(0);
-  });
-
-  it('as the zoom level rises the degrees become smaller', () => {
-    const lowZoom = pixelsToDegrees(100, 0, 5);
-    const highZoom = pixelsToDegrees(100, 0, 10);
-    expect(highZoom.lngDegrees).toBeLessThan(lowZoom.lngDegrees);
-    expect(highZoom.latDegrees).toBeLessThan(lowZoom.latDegrees);
   });
 });
 

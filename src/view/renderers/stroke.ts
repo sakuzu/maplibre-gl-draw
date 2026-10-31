@@ -10,7 +10,11 @@
  */
 
 import type { Map as MapLibreMap, ProjectionData } from 'maplibre-gl';
-import { getDashPattern, getMetersPerPixel, RENDERING_DEFAULTS } from '../../shared/math/index.js';
+import {
+  getDashPattern,
+  metersPerPixelAtZoom,
+  RENDERING_DEFAULTS,
+} from '../../shared/math/index.js';
 import type { StrokeStyle } from '../../shared/types/style.js';
 import type { PixelRatioInput } from '../../shared/utils/pixel-ratio.js';
 import { resolveContentPixelRatio, resolvePixelRatio } from '../../shared/utils/pixel-ratio.js';
@@ -458,7 +462,7 @@ void main() {
     // Meter units: convert into pixels
     const tileSize =
       (this.map as unknown as { transform?: { tileSize?: number } }).transform?.tileSize ?? 512;
-    const metersPerPixel = getMetersPerPixel(centerLat, zoom, tileSize);
+    const metersPerPixel = metersPerPixelAtZoom(centerLat, zoom, tileSize);
     // Meter units are converted into physical pixels as well. But a ground dimension
     // already scales with the camera zoom (metersPerPixel moves with the zoom), so
     // renderScale is not multiplied in (see "the two ratios" in

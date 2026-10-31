@@ -7,7 +7,7 @@
  * Precomputes the dash pattern on the CPU side and returns each dash as an individual segment
  */
 
-import { DEFAULT_TILE_SIZE } from '../../../shared/math/index.js';
+import { DEFAULT_TILE_SIZE, worldSizeAtZoom } from '../../../shared/math/index.js';
 import type { Coordinate } from '../../../shared/types/model.js';
 
 export type { Coordinate };
@@ -61,7 +61,7 @@ export function dashSegmentLength(
   zoom: number,
   tileSize: number = DEFAULT_TILE_SIZE,
 ): number {
-  const pixelsPerLngDegree = (tileSize * 2 ** zoom) / 360;
+  const pixelsPerLngDegree = worldSizeAtZoom(zoom, tileSize) / 360;
   // Determine the stretch per degree from the latitude at the middle of the interval (the
   // mapping is affine within the interval, so interpolating with the ratio computed here still
   // gives exactly the same intersection positions)

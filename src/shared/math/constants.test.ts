@@ -11,8 +11,8 @@ import {
 } from './constants.js';
 
 describe('EARTH', () => {
-  it('CIRCUMFERENCE_METERS is roughly 40,075,017 meters', () => {
-    expect(EARTH.CIRCUMFERENCE_METERS).toBeCloseTo(40075016.686, 0);
+  it('CIRCUMFERENCE_METERS is the circumference of the sphere of maplibre, of 6,371,008.8 m', () => {
+    expect(EARTH.CIRCUMFERENCE_METERS).toBeCloseTo(2 * Math.PI * 6371008.8, 6);
   });
 
   it('METERS_PER_DEGREE is the circumference / 360', () => {

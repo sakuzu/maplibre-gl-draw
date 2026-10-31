@@ -25,6 +25,7 @@
  * the batch that stays where it is may be far from it then.
  */
 
+import { worldSizeAtZoom } from '../../shared/math/ground-scale.js';
 import type { BoundingBox } from '../../store/types.js';
 
 /** The largest screen error of the baked offsets that is accepted (CSS px) */
@@ -32,9 +33,6 @@ export const RETAINED_ORIGIN_TOLERANCE_PX = 0.1;
 
 /** The unit roundoff of Float32 */
 const FLOAT32_ROUNDOFF = 2 ** -24;
-
-/** The width of the world in CSS px at zoom 0 (the tile size of maplibre) */
-const WORLD_SIZE_PX = 512;
 
 /** The latitude where Web Mercator stops (the scale diverges at the poles) */
 const MAX_MERCATOR_LATITUDE = 85.0511287798;
@@ -87,7 +85,7 @@ function originErrorPx(
   const dLat = Math.max(Math.abs(minY - originY), Math.abs(maxY - originY));
   const lat = Math.min(Math.max(Math.abs(minY), Math.abs(maxY)), MAX_MERCATOR_LATITUDE);
   const latScale = 1 / Math.cos((lat * Math.PI) / 180);
-  const pxPerDegree = (WORLD_SIZE_PX * 2 ** zoom) / 360;
+  const pxPerDegree = worldSizeAtZoom(zoom) / 360;
   return 2 * FLOAT32_ROUNDOFF * Math.max(dLng, dLat * latScale) * pxPerDegree;
 }
 

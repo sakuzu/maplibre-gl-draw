@@ -11,10 +11,8 @@
 import {
   createOBB,
   DEFAULT_TILE_SIZE,
+  degreesPerPixelAtZoom,
   distanceToOBB,
-  getMetersPerPixel,
-  metersToDegreesLat,
-  metersToDegreesLng,
 } from '../../../shared/math/index.js';
 import { coordinatesOf } from '../../../shared/utils/coordinates.js';
 import { getImageProperties } from '../../../shared/utils/property.js';
@@ -113,15 +111,10 @@ export class ImageHitTestStrategy implements HitTestStrategy {
     const createdZoom = properties.createdZoom || 14;
     const scale = properties.scale || 1;
 
-    // Pixel to meter conversion at createdZoom
-    const widthMeters =
-      getMetersPerPixel(latitude, createdZoom, this.tileSize) * displayWidth * scale;
-    const heightMeters =
-      getMetersPerPixel(latitude, createdZoom, this.tileSize) * displayHeight * scale;
-
-    // Convert meters to degrees
-    const widthDeg = metersToDegreesLng(widthMeters, latitude);
-    const heightDeg = metersToDegreesLat(heightMeters);
+    // The degrees of the pixels at createdZoom
+    const [lngPerPixel, latPerPixel] = degreesPerPixelAtZoom(latitude, createdZoom, this.tileSize);
+    const widthDeg = displayWidth * scale * lngPerPixel;
+    const heightDeg = displayHeight * scale * latPerPixel;
 
     // Rotation angle
     const rotation = properties.rotation || 0;

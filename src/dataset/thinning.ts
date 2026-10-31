@@ -33,6 +33,7 @@
  * screen).
  */
 
+import { worldSizeAtZoom } from '../shared/math/ground-scale.js';
 import type { Coordinate, Feature } from '../shared/types/model.js';
 import { coordinatesOf } from '../shared/utils/coordinates.js';
 import type { PointStyle } from '../view/renderers/point/point-shape.js';
@@ -60,9 +61,6 @@ const MAX_CACHED_BANDS = 6;
 
 /** Upper limit of the zoom bands (22 steps, the same as the tile coordinates) */
 const MAX_ZOOM_BAND = 22;
-
-/** Screen pixels of one tile of the mercator world coordinates (512px tiles) */
-const TILE_SIZE_PX = 512;
 
 /** Upper limit of the latitude that Web Mercator can express */
 const MAX_MERCATOR_LAT = 85.0511287798066;
@@ -182,7 +180,7 @@ export function zoomBandFor(zoom: number): number {
  * @internal
  */
 export function worldUnitsPerPixel(band: number): number {
-  return 1 / (TILE_SIZE_PX * 2 ** band);
+  return 1 / worldSizeAtZoom(band);
 }
 
 /**

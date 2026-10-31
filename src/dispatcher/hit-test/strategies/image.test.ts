@@ -10,12 +10,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import {
-  DEFAULT_TILE_SIZE,
-  getMetersPerPixel,
-  metersToDegreesLat,
-  metersToDegreesLng,
-} from '../../../shared/math/index.js';
+import { DEFAULT_TILE_SIZE, degreesPerPixelAtZoom } from '../../../shared/math/index.js';
 import type { Coordinate, Feature } from '../../../store/types.js';
 import { computeQuadVertices } from '../../../view/shaders/quad.js';
 import { ImageHitTestStrategy } from './image.js';
@@ -46,9 +41,9 @@ function image(lng: number, lat: number, rotation: number): Feature {
 /** The four corners of the rendered image (the same size computation as
  * computeQuadVertices) */
 function drawnCorners(lng: number, lat: number, rotation: number): Coordinate[] {
-  const mpp = getMetersPerPixel(lat, 14, DEFAULT_TILE_SIZE);
-  const widthDeg = metersToDegreesLng(mpp * IMG_W, lat);
-  const heightDeg = metersToDegreesLat(mpp * IMG_H);
+  const [lngPerPixel, latPerPixel] = degreesPerPixelAtZoom(lat, 14, DEFAULT_TILE_SIZE);
+  const widthDeg = lngPerPixel * IMG_W;
+  const heightDeg = latPerPixel * IMG_H;
   const q = computeQuadVertices(lng, lat, widthDeg, heightDeg, (rotation * Math.PI) / 180);
   return [q.topLeft, q.topRight, q.bottomRight, q.bottomLeft];
 }
