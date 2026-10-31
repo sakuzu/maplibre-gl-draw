@@ -15,6 +15,7 @@ import {
   transformStartOf,
   transformsOf,
 } from '../../operations/transform-features.js';
+import { createCoordinateTransform, offsetOnTangentPlane } from '../../shared/math/index.js';
 import { coordinatesOf, mapCoordinatesDeep } from '../../shared/utils/coordinates.js';
 import { isInteractionBlocked } from '../../store/lock.js';
 import type { TransformEdit } from '../../store/store.js';
@@ -69,10 +70,14 @@ export function handleDeleteShortcut(context: EngineModeContext): void {
 }
 
 /**
- * Handling of the arrow keys: moves the selected features by a few pixels on the screen
+ * Handling of the arrow keys: moves the selected features by a few pixels of the view
  *
  * The press is one move (`translate`) of every feature, as the Store computes it: from the center
- * of the frame of the selection to the point the pixels of the press take it to on the screen.
+ * of the frame of the selection, along the direction of the key on the screen turned by the
+ * bearing of the map onto the ground, by the pixels of the press turned into meters with the scale
+ * of the frame drawn last (on the plane tangent to the sphere of the map there). On a map turned
+ * flat and untilted the selection moves by those pixels on the screen; tilted, it moves by the
+ * same length on the ground, foreshortened as the map is.
  * One key press is one committed change (one notification). Like a drag, nothing moves while any
  * selected feature is blocked (read-only, the interaction lock or a lock of its own).
  *
@@ -90,11 +95,17 @@ export function handleNudgeShortcut(
 
   const { store, map } = context;
   const step = modifiers.shift ? NUDGE_LARGE : NUDGE_SMALL;
-  /** The point the press takes a point to: moved by the pixels of the press on the screen */
+  const transform = createCoordinateTransform(map);
+  // The right and the down of the screen on the ground: up is the bearing of the map (clockwise
+  // from north), right is a quarter turn clockwise from it
+  const bearing = (map.getBearing() * Math.PI) / 180;
+  const [right, down] = direction;
+  const east = right * Math.cos(bearing) - down * Math.sin(bearing);
+  const north = -right * Math.sin(bearing) - down * Math.cos(bearing);
+  /** The point the press takes a point to: moved by the pixels of the press on the ground */
   const pressed = (from: readonly [number, number]): [number, number] => {
-    const at = map.project([from[0], from[1]]);
-    const to = map.unproject([at.x + direction[0] * step, at.y + direction[1] * step]);
-    return [to.lng, to.lat];
+    const meters = step * transform.metersPerPixel([from[0], from[1]]);
+    return offsetOnTangentPlane(from, east * meters, north * meters);
   };
 
   // Features selected in bulk: moved by their moving set while the keys are pressed, and written

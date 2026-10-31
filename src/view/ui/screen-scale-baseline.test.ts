@@ -226,15 +226,17 @@ describe('the arrow keys on a flat Web Mercator view', () => {
         styleRule: undefined,
         metadata: undefined,
       });
-      store.createFeature(square());
+      store.createFeature(point());
     }, 'remote');
     store.setSelection('feature', ['f']);
-    const firstVertex = () =>
-      (coordinatesOf(store.getFeature('f') as Feature) as number[][][])[0]?.[0] as [number, number];
-    const before = map.project(firstVertex());
+    // A point is the center of the frame of its selection, which the press moves by its pixels
+    // (a position away from it moves by the same length on the ground, a little more or less on
+    // the screen where the scale of Web Mercator is another)
+    const position = () => coordinatesOf(store.getFeature('f') as Feature) as [number, number];
+    const before = map.project(position());
     const context = { store, map } as unknown as EngineModeContext;
     expect(handleNudgeShortcut(context, key, { ...NO_MODIFIERS, shift })).toBe(true);
-    const after = map.project(firstVertex());
+    const after = map.project(position());
     return { x: after.x - before.x, y: after.y - before.y };
   }
 
@@ -250,8 +252,8 @@ describe('the arrow keys on a flat Web Mercator view', () => {
         [true, 10],
       ] as const) {
         const by = moved(key, shift);
-        expect(by.x).toBeCloseTo(x * step, 3);
-        expect(by.y).toBeCloseTo(y * step, 3);
+        expect(by.x).toBeCloseTo(x * step, 4);
+        expect(by.y).toBeCloseTo(y * step, 4);
       }
     }
   });

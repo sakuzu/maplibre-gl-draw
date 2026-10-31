@@ -23,7 +23,11 @@ import { featureTablesInternals } from '../../feature-table/feature-tables.js';
 import { STATE_MOVE_MASK, STATE_MOVE_SHIFT } from '../../feature-table/row-state.js';
 import { BULK_SLICE_BUDGET_MS, BULK_SLICE_ROWS } from '../../operations/bulk-sliced.js';
 import { DEFAULT_SELECTION_CONFIG } from '../../shared/config/selection.js';
-import { applyMarginToBoundingBox, setScreenScaleFrame } from '../../shared/math/index.js';
+import {
+  applyMarginToBoundingBox,
+  offsetOnTangentPlane,
+  setScreenScaleFrame,
+} from '../../shared/math/index.js';
 import { DrawStore } from '../../store/draw-store.js';
 import { TableContractStore } from '../../store/table-memory.js';
 import type { Feature, StoreChange } from '../../store/types.js';
@@ -484,14 +488,17 @@ describe('the select mode over features selected in bulk', () => {
     const count = changes.length;
     for (let i = 0; i < 5; i++) mode.onKeyDown(key('ArrowRight'));
     expect(corners()).toEqual(before);
-    // One move from the center of the frame, five presses to the east
+    // One move from the center of the frame, five presses to the east: five pixels of the scale
+    // of the frame on the ground there
     const shown = featureTablesInternals(store.tables)?.states.transform(BULK_MOVE_SET);
     expect(shown?.kind).toBe('translate');
     if (shown?.kind !== 'translate') return;
-    expect((shown.to[0] as number) - (shown.from[0] as number)).toBeCloseTo(0.5, 9);
+    const from = shown.from as [number, number];
+    const east = offsetOnTangentPlane(from, 5 * PLANE.metersPerPixel(from), 0)[0] - from[0];
+    expect((shown.to[0] as number) - from[0]).toBeCloseTo(east, 9);
     expect(shown.to[1]).toBe(shown.from[1]);
     vi.advanceTimersByTime(BULK_NUDGE_COMMIT_MS + 10);
-    expect(corners()[0][0]).toBeCloseTo(before[0][0] + 0.5, 9);
+    expect(corners()[0][0]).toBeCloseTo(before[0][0] + east, 9);
     expect(changes.slice(count).filter((change) => change.rows)).toHaveLength(1);
     expect(ids.map(movingSetOf)).toEqual(ids.map(() => 0));
   });
