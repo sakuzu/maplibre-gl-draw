@@ -125,12 +125,12 @@ const CHANGES: readonly Change[] = [
   { name: 'the opacity of the fill', from: fill({}), to: fill({ fillOpacity: 1 }), fill: true },
   {
     name: 'a style without a line style to a dashed line',
-    from: { strokeWidth: 6 },
+    from: { strokeWidth: 6, fillOpacity: 0 },
     to: { lineStyle: 'dashed' },
   },
   {
     name: 'a style without a line style to a dotted line',
-    from: { strokeWidth: 6 },
+    from: { strokeWidth: 6, fillOpacity: 0 },
     to: { lineStyle: 'dotted' },
   },
   { name: 'no style to a wide stroke', from: {}, to: { strokeWidth: 10 } },
