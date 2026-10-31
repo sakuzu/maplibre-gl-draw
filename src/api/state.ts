@@ -58,9 +58,9 @@ export interface SelectionBulk {
   readonly layerIds: readonly string[];
   /**
    * The extent of their geometries, as `[west, south, east, north]` in degrees (`null` when none
-   * has a geometry): the frame the handles to rotate and resize them stand on
+   * has a geometry): the box the handles to rotate and resize them stand on
    */
-  readonly bounds: BBox | null;
+  readonly bbox: BBox | null;
 }
 
 /**

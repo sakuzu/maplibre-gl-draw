@@ -96,7 +96,7 @@ export interface Selection {
 export interface SelectionBulk {
   readonly count: number;
   readonly layerIds: readonly string[];
-  readonly bounds: [number, number, number, number] | null;
+  readonly bbox: [number, number, number, number] | null;
 }
 
 /**

@@ -597,7 +597,7 @@ export function renderBulkSelectionUI(
   movement: BulkMovement | null,
 ): void {
   const { selectionUIRenderer, selectionHandlesRenderer, map } = deps;
-  if (!bulk.bounds || !selectionUIRenderer || !selectionHandlesRenderer) return;
+  if (!bulk.bbox || !selectionUIRenderer || !selectionHandlesRenderer) return;
   const transform = createCoordinateTransform(map);
   selectionUIRenderer.setTransform(transform);
   selectionUIRenderer.setProjectionData(projectionData);
@@ -605,7 +605,7 @@ export function renderBulkSelectionUI(
   selectionHandlesRenderer.setProjectionData(projectionData);
 
   const operation = dragState?.operation ?? null;
-  let frame = bulkFrame(bulk.bounds);
+  let frame = bulkFrame(bulk.bbox);
   if (operation === 'rotate' && dragState?.rotateInfo) {
     frame = rotateBoundingBox(
       dragState.rotateInfo.initialBbox,

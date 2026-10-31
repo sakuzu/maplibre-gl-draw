@@ -90,11 +90,11 @@ export interface FeatureTypeDefinition {
   /**
    * Whether a box selection takes a feature of this type.
    *
-   * @param box - The corners of the box on the screen, in pixels
+   * @param boxPx - The corners of the box on the screen, in pixels
    */
   boxSelect?(
     feature: Feature,
-    box: { min: ScreenPoint; max: ScreenPoint },
+    boxPx: { min: ScreenPoint; max: ScreenPoint },
     ctx: HitTestContext,
   ): boolean;
   /**

@@ -244,7 +244,7 @@ export interface PreparedTable {
    * The extent of the rows with a geometry, as `[west, south, east, north]` in degrees, or
    * `null` when no row has a geometry
    */
-  readonly bounds: BBox | null;
+  readonly bbox: BBox | null;
   /**
    * The bbox of each row, `[minX, minY, maxX, maxY]` (NaN for a row without a geometry)
    *

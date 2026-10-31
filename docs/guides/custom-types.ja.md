@@ -225,7 +225,7 @@ const hitRoute: FeatureTypeDefinition = {
 - 範囲は文書に従い、地物が変わるたびに測り直されます。範囲が文書の外の
   何かで決まるときは、それが変わったときにプラグインから
   `ctx.invalidate({ type: 'Route' })` を呼びます
-- `boxSelect(feature, box, ctx)` は、選択の矩形が地物を取るかを、
+- `boxSelect(feature, boxPx, ctx)` は、選択の矩形が地物を取るかを、
   ピクセルの矩形で決めます。無ければ図形で決まります
 
 ## 選択とハンドル

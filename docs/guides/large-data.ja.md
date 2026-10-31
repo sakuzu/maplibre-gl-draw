@@ -319,7 +319,7 @@ worker.postMessage(file);
 `setTable` が同じ配列を自分で計算します。`draw.datasets.add` の
 `table` オプションは、どちらも受け取ります。
 
-下ごしらえ済みの表は、行の数 (`length`) と範囲 (`bounds`。
+下ごしらえ済みの表は、行の数 (`length`) と範囲 (`bbox`。
 `[west, south, east, north]` で、幾何を持つ行が無ければ `null`) も
 持ちます。たとえば、読んだものに地図を合わせるのに使えます。
 
@@ -328,7 +328,7 @@ declare const prepared: import('@sakuzu/maplibre-gl-draw/table').PreparedTable;
 -->
 
 ```ts
-if (prepared.bounds) map.fitBounds(prepared.bounds, { padding: 20 });
+if (prepared.bbox) map.fitBounds(prepared.bbox, { padding: 20 });
 console.log(`${prepared.length} 行`);
 ```
 
@@ -612,7 +612,7 @@ function placeText(): void {
 | --- | --- |
 | `getRowId(index)` | ID |
 | `getRowType(index)` | 幾何の型 |
-| `getRowBounds(index)` | 範囲 (`[west, south, east, north]`) |
+| `getRowBBox(index)` | 範囲 (`[west, south, east, north]`) |
 | `getRowPoint(index)` | `Point` の位置 |
 | `getRow(index)` | GeoJSON の地物としての行 |
 | `findRow(id)` | ID の行の番号。無ければ `null` |

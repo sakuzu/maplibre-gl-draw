@@ -86,7 +86,7 @@ describe('features selected in bulk', () => {
     expect(selection.ids).toEqual([]);
     expect(selection.bulk?.count).toBe(5);
     expect(selection.bulk?.layerIds).toEqual(['l']);
-    expect(selection.bulk?.bounds).toEqual([0, 0, 9, 1]);
+    expect(selection.bulk?.bbox).toEqual([0, 0, 9, 1]);
     expect(store.getSelectedRows()?.count).toBe(5);
     expect(internalsOf(tables).getOpenedFeature('f0')).toBeUndefined();
     expect(marked(tables, 'f4')).toBe(true);
@@ -191,7 +191,7 @@ describe('features selected in bulk', () => {
       },
     });
     expect(store.getSelection().bulk).not.toBe(moved);
-    expect(store.getSelection().bulk?.bounds).toEqual([-10, 0, 7, 1]);
+    expect(store.getSelection().bulk?.bbox).toEqual([-10, 0, 7, 1]);
   });
 
   it('are put back from a summary kept, without what is gone', () => {

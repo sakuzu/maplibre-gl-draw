@@ -197,7 +197,7 @@ export interface Dataset {
   /** The type of the geometry of a row, or `null` when there is no such row. */
   getRowType(index: number): FeatureType | null;
   /** The extent of a row, or `null` when there is no such row or it has no geometry. */
-  getRowBounds(index: number): BBox | null;
+  getRowBBox(index: number): BBox | null;
   /** The position of a point row, or `null` when the row is not a point. */
   getRowPoint(index: number): Position | null;
   /** The index of the row with this ID, or `null` when there is none. */

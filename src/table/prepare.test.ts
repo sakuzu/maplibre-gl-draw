@@ -89,9 +89,9 @@ describe('prepareTable', () => {
       geometry: { type: 'Point', coords: Float64Array.of(1, 5, -2, 3, Number.NaN, Number.NaN) },
       validity: Uint8Array.of(0b011),
     };
-    expect(prepareTable(table).bounds).toEqual([-2, 3, 1, 5]);
+    expect(prepareTable(table).bbox).toEqual([-2, 3, 1, 5]);
     const empty: Table = { length: 0, geometry: { type: 'Point', coords: new Float64Array(0) } };
-    expect(prepareTable(empty).bounds).toBeNull();
+    expect(prepareTable(empty).bbox).toBeNull();
   });
 
   it('lists every buffer once for the transfer', () => {
@@ -136,7 +136,7 @@ describe('prepareTable', () => {
     };
     const prepared = prepareTable(table);
     expect(Array.from(prepared.rowBounds)).toEqual([1, 1, 1, 1, 0, 0, 2, 2]);
-    expect(prepared.bounds).toEqual([0, 0, 2, 2]);
+    expect(prepared.bbox).toEqual([0, 0, 2, 2]);
     const buffers = transferList(table);
     expect(buffers).toEqual(
       [types, offsets, point, line, lineOffsets].map((array) => array.buffer),

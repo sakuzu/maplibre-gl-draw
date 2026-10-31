@@ -607,7 +607,7 @@ describe('the drags of features selected in bulk (MV-3, RT-4, RS-5)', () => {
 
   /** The box of the features selected in bulk */
   function boundsOf(view: Opened): readonly number[] {
-    return view.draw.selection.get().bulk?.bounds ?? [];
+    return view.draw.selection.get().bulk?.bbox ?? [];
   }
 
   /** The first corner of each square, as its row reads it */

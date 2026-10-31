@@ -604,9 +604,9 @@ export function hitTestBulkHandles(
   config: SelectionUIConfig,
   scope: SelectionScope,
 ): HandleHitResult | null {
-  if (!bulk.bounds) return null;
+  if (!bulk.bbox) return null;
   transform = alignToPointer(transform, screenPoint);
-  const rawBbox = bulkFrame(bulk.bounds);
+  const rawBbox = bulkFrame(bulk.bbox);
   const marginedBbox: BoundingBoxCoords = {
     ...applyMarginToBoundingBox(rawBbox, config.boundingBox.margin, transform),
     center: rawBbox.center,

@@ -229,7 +229,7 @@ function movingSetOf(id: string): number {
 /** The frame of the features selected in bulk with its margin, as its handles stand on it */
 function marginedFrame() {
   const bulk = store.getSelection().bulk;
-  const frame = bulkFrame(bulk?.bounds as [number, number, number, number]);
+  const frame = bulkFrame(bulk?.bbox as [number, number, number, number]);
   return {
     ...applyMarginToBoundingBox(frame, DEFAULT_SELECTION_CONFIG.boundingBox.margin, PLANE),
     center: frame.center,
@@ -276,7 +276,7 @@ describe('the select mode over features selected in bulk', () => {
     expect(written[0].previousValues).toBeDefined();
     expect(emitted.some(([name]) => name === 'drag.ended')).toBe(true);
     // The extent of the corners of the squares moved
-    const bounds = store.getSelection().bulk?.bounds as number[];
+    const bounds = store.getSelection().bulk?.bbox as number[];
     const movedCorners = ids.flatMap((_, i) =>
       [
         [i * 2, 0],
@@ -361,7 +361,7 @@ describe('the select mode over features selected in bulk', () => {
     ).position;
     mode.onDragStart(drag('dragstart', rotate[0], rotate[1], rotate as [number, number]));
     expect(store.getDragState()?.operation).toBe('rotate');
-    const center = store.getSelection().bulk?.bounds as number[];
+    const center = store.getSelection().bulk?.bbox as number[];
     mode.onDragMove(
       drag(
         'dragmove',
@@ -437,7 +437,7 @@ describe('the select mode over features selected in bulk', () => {
       DEFAULT_SELECTION_CONFIG.rotateHandle.distance,
       PLANE,
     ).position;
-    const center = store.getSelection().bulk?.bounds as number[];
+    const center = store.getSelection().bulk?.bbox as number[];
     const to: [number, number] = [(center[0] + center[2]) / 2 + 3, (center[1] + center[3]) / 2];
     mode.onDragStart(drag('dragstart', rotate[0], rotate[1], rotate as [number, number]));
     mode.onDragMove(drag('dragmove', to[0], to[1], rotate as [number, number]));

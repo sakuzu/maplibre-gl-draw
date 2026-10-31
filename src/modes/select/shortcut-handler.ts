@@ -112,11 +112,11 @@ export function handleNudgeShortcut(
   // once a moment after the last press (the presses of a key held are one change)
   const bulk = store.getSelection().bulk;
   if (bulk) {
-    if (!bulkNudge || !bulk.bounds) return false;
+    if (!bulkNudge || !bulk.bbox) return false;
     if (store.isReadOnly() || store.isInteractionLocked() || bulkSelectionLocked(store)) {
       return false;
     }
-    const [west, south, east, north] = bulk.bounds;
+    const [west, south, east, north] = bulk.bbox;
     return bulkNudge.add(context, [(west + east) / 2, (south + north) / 2], pressed);
   }
 

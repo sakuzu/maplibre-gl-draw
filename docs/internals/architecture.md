@@ -1113,7 +1113,9 @@ because it would freeze the internal structure for the outside.
   `QuadShader`, the blend and billboard helpers, the input types of the
   shared line renderer, the dash and terrain subdivision rules, and
   `PointHitTestStrategy`. Pure math that is not tied to them (oriented
-  boxes, pixel and degree conversion, contrast colors) is not published.
+  boxes, contrast colors) is not published; a size in pixels at a zoom
+  turned into meters is `pixelsToMeters` of `/geometry`, so that an
+  extension draws it by the formula of the library.
   It may change in a minor release.
 
 The rules for deciding which layer a new symbol belongs to, and the steps

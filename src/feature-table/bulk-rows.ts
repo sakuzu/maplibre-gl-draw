@@ -38,7 +38,7 @@ export interface RowsSummary {
   /** The layers, in the order they are first met in the set */
   readonly layerIds: readonly string[];
   /** The union of the extents of the rows, `[west, south, east, north]` (null when none has one) */
-  readonly bounds: BBox | null;
+  readonly bbox: BBox | null;
   /** Whether a row has an extent with an area (not a single position) */
   readonly hasArea: boolean;
 }
@@ -76,7 +76,7 @@ export function summarizeRows(
   return {
     count,
     layerIds: [...layers],
-    bounds: minX <= maxX ? [minX, minY, maxX, maxY] : null,
+    bbox: minX <= maxX ? [minX, minY, maxX, maxY] : null,
     hasArea,
   };
 }

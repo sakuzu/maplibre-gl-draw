@@ -589,8 +589,8 @@ export class SelectMode implements EngineModeHandler {
     const { store } = this.#context;
     const bulk = store.getSelection().bulk;
     const rows = store.getSelectedRows();
-    if (!bulk?.bounds || !rows) return null;
-    const frame = bulkFrame(bulk.bounds);
+    if (!bulk?.bbox || !rows) return null;
+    const frame = bulkFrame(bulk.bbox);
     const hit = hitTestBulkHandles(
       point,
       bulk,

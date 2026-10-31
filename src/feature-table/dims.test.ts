@@ -527,7 +527,7 @@ describe('the rows of a layer of z or m', () => {
     expect(() => tables.get('a')?.getRow(handle)).toThrow(/is not a feature/);
     // What is read without a feature: x and y
     expect(tables.get('a')?.getRowPoint(handle)).toEqual([1, 2]);
-    expect(tables.get('a')?.getRowBounds(handle)).toEqual([1, 2, 1, 2]);
+    expect(tables.get('a')?.getRowBBox(handle)).toEqual([1, 2, 1, 2]);
   });
 
   it('refuse a row group of other dimensions, and a row moved from a layer they do not read', () => {

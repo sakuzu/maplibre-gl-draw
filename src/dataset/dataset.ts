@@ -526,7 +526,7 @@ export class DatasetImpl implements Dataset {
     return this.hasRow(row) ? this.source.typeOf(row) : null;
   }
 
-  getRowBounds(row: number): BoundingBox | null {
+  getRowBBox(row: number): BoundingBox | null {
     if (!this.hasRow(row) || !this.source.hasGeometry(row)) return null;
     const bounds = this.source.bounds;
     const at = row * 4;

@@ -358,7 +358,7 @@ describe('the bbox of a row written', () => {
     const view = tables.get('l');
     const a = tables.findRow('a') as number;
     const b = tables.findRow('b') as number;
-    expect(view?.getRowBounds(a)).toEqual([-1, 0, 2, 1]);
+    expect(view?.getRowBBox(a)).toEqual([-1, 0, 2, 1]);
     // The same shape, written in place; another shape, into the overrides
     const line: Geometry = {
       type: 'LineString',
@@ -370,7 +370,7 @@ describe('the bbox of a row written', () => {
     writer.apply(
       rowPatch([a, b], { geometry: [square(5), line], type: ['Polygon', 'LineString'] }),
     );
-    expect(view?.getRowBounds(a)).toEqual([4, 0, 7, 1]);
-    expect(view?.getRowBounds(b)).toEqual([19, 5, 23, 6]);
+    expect(view?.getRowBBox(a)).toEqual([4, 0, 7, 1]);
+    expect(view?.getRowBBox(b)).toEqual([19, 5, 23, 6]);
   });
 });

@@ -355,9 +355,9 @@ class GatedLayerView implements LayerTableView {
     this.gate();
     return this.view.listDrawnRows(bbox);
   }
-  getRowBounds(handle: RowHandle): BBox | null {
+  getRowBBox(handle: RowHandle): BBox | null {
     this.gate();
-    return this.view.getRowBounds(handle);
+    return this.view.getRowBBox(handle);
   }
   getRowType(handle: RowHandle): FeatureType | null {
     this.gate();
@@ -4396,7 +4396,7 @@ class LayerTableViewImpl implements LayerTableView {
     return Int32Array.from(out);
   }
 
-  getRowBounds(handle: RowHandle): BBox | null {
+  getRowBBox(handle: RowHandle): BBox | null {
     if (!this.locate(handle)) return null;
     const b = (this.store.foundGroup as RowGroup).data.rowBounds;
     const i = this.store.foundRow * 4;

@@ -137,7 +137,7 @@ describe('the rows dragged', () => {
     expect(Array.from(listSelectedRows(bulk as never))).toEqual(
       ['a', 'b', 'c'].map(handleOf).sort((x, y) => x - y),
     );
-    expect(listSelectedRows({ count: 0, layerIds: [], bounds: null })).toEqual(new Int32Array(0));
+    expect(listSelectedRows({ count: 0, layerIds: [], bbox: null })).toEqual(new Int32Array(0));
   });
 
   it('of a selection of many features are told once it is decided, and its end', () => {

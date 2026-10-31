@@ -79,7 +79,7 @@ function setup() {
 describe('the write in steps of a drag of features selected in bulk', () => {
   it('writes a slice of rows per step, each in its own change, and tells the end once', () => {
     const { store, changes, steps, written, done, start, x } = setup();
-    const bounds = store.getSelection().bulk?.bounds;
+    const bounds = store.getSelection().bulk?.bbox;
     expect(start()).toBe(true);
     // The first step is made at once, the next ones in later tasks
     expect(x(0)).toBeCloseTo(1, 9);
@@ -88,7 +88,7 @@ describe('the write in steps of a drag of features selected in bulk', () => {
     expect(changes).toHaveLength(1);
     expect(store.slicedWritePending).toBe(true);
     // The extent of the selection is kept while the rows are written (they are drawn by it)
-    expect(store.getSelection().bulk?.bounds).toEqual(bounds);
+    expect(store.getSelection().bulk?.bbox).toEqual(bounds);
     expect(done).toEqual([]);
     steps.shift()?.();
     steps.shift()?.();
@@ -98,7 +98,7 @@ describe('the write in steps of a drag of features selected in bulk', () => {
     expect(done).toEqual([true]);
     expect(store.slicedWritePending).toBe(false);
     for (const i of [0, BULK_SLICE_ROWS, COUNT - 1]) expect(x(i)).toBeCloseTo(i * 0.001 + 1, 9);
-    expect(store.getSelection().bulk?.bounds?.[0]).toBeCloseTo(1, 9);
+    expect(store.getSelection().bulk?.bbox?.[0]).toBeCloseTo(1, 9);
   });
 
   it('is finished at once by another write of this client, before that write', () => {

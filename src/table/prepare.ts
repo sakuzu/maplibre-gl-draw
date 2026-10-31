@@ -50,7 +50,7 @@ export function prepareTable(table: Table): PreparedTable {
   return {
     table,
     length: reader.length,
-    bounds: extentOf(rowBounds),
+    bbox: extentOf(rowBounds),
     rowBounds,
     chunkRows: chunks.rows,
     chunkOffsets: chunks.offsets,

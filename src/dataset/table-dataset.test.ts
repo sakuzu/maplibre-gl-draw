@@ -964,7 +964,7 @@ describe('reading by row matches the features', () => {
           const feature = dataset.getRow(row) as Feature;
           expect(dataset.getRowId(row)).toBe(feature.id);
           expect(dataset.getRowType(row)).toBe(feature.type);
-          expect(dataset.getRowBounds(row)).toEqual(bboxOf(feature));
+          expect(dataset.getRowBBox(row)).toEqual(bboxOf(feature));
           expect(dataset.getRowPoint(row)).toEqual(
             feature.type === 'Point' ? coordinatesOf(feature) : null,
           );
@@ -1006,7 +1006,7 @@ describe('reading by row matches the features', () => {
     // Row 3 names no child; row 10 is hidden by validity
     for (const row of [3, 10]) {
       expect(dataset.getRowType(row)).toBeNull();
-      expect(dataset.getRowBounds(row)).toBeNull();
+      expect(dataset.getRowBBox(row)).toBeNull();
       expect(dataset.getRowPoint(row)).toBeNull();
       expect(dataset.getRowId(row)).toBe(`r${row}`);
     }
@@ -1015,7 +1015,7 @@ describe('reading by row matches the features', () => {
       expect(dataset.getRow(row)).toBeUndefined();
       expect(dataset.getRowId(row)).toBeNull();
       expect(dataset.getRowType(row)).toBeNull();
-      expect(dataset.getRowBounds(row)).toBeNull();
+      expect(dataset.getRowBBox(row)).toBeNull();
       expect(dataset.getRowPoint(row)).toBeNull();
     }
   });

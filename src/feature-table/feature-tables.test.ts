@@ -313,8 +313,8 @@ describe('createFeatureTables', () => {
     writer.addRowBlocks('b', groups(2, { prefix: 'b' }));
     const handle = tables.findRow('a0') as number;
     expect(tables.get('b')?.getRow(handle)).toBeUndefined();
-    expect(tables.get('b')?.getRowBounds(handle)).toBeNull();
-    expect(tables.get('a')?.getRowBounds(handle)).toEqual([0, 0, 0, 0]);
+    expect(tables.get('b')?.getRowBBox(handle)).toBeNull();
+    expect(tables.get('a')?.getRowBBox(handle)).toEqual([0, 0, 0, 0]);
   });
 
   it('allocates handles for the ids of a column', () => {

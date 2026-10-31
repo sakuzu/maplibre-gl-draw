@@ -234,6 +234,14 @@ writing it. Its changes are listed after those of 3.0.0.
 - Every length on the ground is measured on the sphere maplibre draws,
   of a radius of 6,371,008.8 m, instead of a circumference of
   40,075,016.686 m: a width given in meters is drawn 0.11 % wider.
+- The extents in degrees are named `bbox`, as `features.bbox` and the
+  `bbox` of a filter are: `SelectionBulk.bbox` (was `bounds`),
+  `PreparedTable.bbox` of `/table` (was `bounds`),
+  `Dataset.getRowBBox` (was `getRowBounds`) and
+  `LayerTableView.getRowBBox` of `/kasane` (was `getRowBounds`). The main
+  entry exports `BBox`, the type `features.bbox` returns.
+- The box of `FeatureTypeDefinition.boxSelect` is named `boxPx`, as a
+  value in pixels is.
 
 ### Removed in 3.0.0
 

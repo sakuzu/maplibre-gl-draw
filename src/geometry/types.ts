@@ -47,7 +47,8 @@ export type MultiPolygonCoordinates = PolygonCoordinates[];
 export type AreaCoordinates = PolygonCoordinates | MultiPolygonCoordinates;
 
 /**
- * A bounding box as `[minLng, minLat, maxLng, maxLat]` in degrees.
+ * A bounding box as `[minLng, minLat, maxLng, maxLat]`, in degrees in this entry (the main entry
+ * and `/geometry` give it so; `features.bbox` returns it).
  *
  * A box never crosses the ±180 degree meridian: `minLng <= maxLng` always holds.
  */

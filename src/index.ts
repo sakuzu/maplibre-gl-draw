@@ -113,6 +113,7 @@ export type {
 export { DRAW_PROPERTY_PREFIX, isDrawProperty } from './api/model.js';
 
 // Inputs, patches and filters
+export type { BBox } from './geometry/types.js';
 export type {
   EditResult,
   EditTarget,

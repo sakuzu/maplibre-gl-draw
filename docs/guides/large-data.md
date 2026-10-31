@@ -322,7 +322,7 @@ computes the same arrays itself. `draw.datasets.add` takes either as
 the `table` option.
 
 A prepared table also tells its number of rows (`length`) and its
-extent (`bounds`, `[west, south, east, north]`, or `null` when no row has
+extent (`bbox`, `[west, south, east, north]`, or `null` when no row has
 a geometry), for example to fit the map to what was read:
 
 <!-- docs-check:
@@ -330,7 +330,7 @@ declare const prepared: import('@sakuzu/maplibre-gl-draw/table').PreparedTable;
 -->
 
 ```ts
-if (prepared.bounds) map.fitBounds(prepared.bounds, { padding: 20 });
+if (prepared.bbox) map.fitBounds(prepared.bbox, { padding: 20 });
 console.log(`${prepared.length} rows`);
 ```
 
@@ -619,7 +619,7 @@ The reads of one row do not build its feature either, except `getRow`.
 | --- | --- |
 | `getRowId(index)` | The ID |
 | `getRowType(index)` | The geometry type |
-| `getRowBounds(index)` | The extent, as `[west, south, east, north]` |
+| `getRowBBox(index)` | The extent, as `[west, south, east, north]` |
 | `getRowPoint(index)` | The position of a `Point` |
 | `getRow(index)` | The row as a GeoJSON feature |
 | `findRow(id)` | The index of an ID, or `null` |

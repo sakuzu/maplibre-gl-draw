@@ -337,8 +337,8 @@ export function wrapDataset(dataset: EngineDataset): Dataset {
     },
     getRowId: (index) => dataset.getRowId(index),
     getRowType: (index) => dataset.getRowType(index),
-    getRowBounds(index) {
-      const bounds = dataset.getRowBounds(index);
+    getRowBBox(index) {
+      const bounds = dataset.getRowBBox(index);
       return bounds ? toBBox(bounds) : null;
     },
     getRowPoint(index) {

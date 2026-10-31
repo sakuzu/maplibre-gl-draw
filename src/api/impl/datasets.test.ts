@@ -185,7 +185,7 @@ describe('a dataset', () => {
     expect(dataset.getRowId(1)).toBe('b');
     expect(dataset.getRowType(2)).toBe('LineString');
     expect(dataset.getRowType(9)).toBeNull();
-    expect(dataset.getRowBounds(2)).toEqual([0, 0, 0.5, 0.25]);
+    expect(dataset.getRowBBox(2)).toEqual([0, 0, 0.5, 0.25]);
     expect(dataset.getRowPoint(0)).toEqual([0.1, 0.1]);
     expect(dataset.getRowPoint(2)).toBeNull();
     expect(dataset.findRow('l')).toBe(2);

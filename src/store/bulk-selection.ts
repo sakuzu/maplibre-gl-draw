@@ -30,7 +30,7 @@ export function summaryOf(internals: FeatureTablesInternals, rows: TableSelectio
   const bulk: SelectionBulk = Object.freeze({
     count: summary.count,
     layerIds: Object.freeze([...summary.layerIds]) as readonly string[],
-    bounds: summary.bounds,
+    bbox: summary.bbox,
   });
   ROWS.set(bulk, rows);
   if (summary.hasArea) WITH_AREA.add(bulk);

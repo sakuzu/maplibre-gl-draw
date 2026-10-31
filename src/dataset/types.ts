@@ -439,7 +439,7 @@ export interface Dataset {
    *
    * @returns null for a row without a geometry, or out of range
    */
-  getRowBounds(row: number): BoundingBox | null;
+  getRowBBox(row: number): BoundingBox | null;
   /**
    * The `[lng, lat]` of a row whose geometry is a `Point`, without building its feature
    *

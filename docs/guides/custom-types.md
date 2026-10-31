@@ -235,7 +235,7 @@ const hitRoute: FeatureTypeDefinition = {
   feature changes. When it depends on something outside the document,
   call `ctx.invalidate({ type: 'Route' })` from a plugin when that
   changes
-- `boxSelect(feature, box, ctx)` decides whether a selection box takes
+- `boxSelect(feature, boxPx, ctx)` decides whether a selection box takes
   a feature, with the box in pixels. Without it the geometry decides
 
 ## Selection and handles

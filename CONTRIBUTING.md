@@ -166,8 +166,10 @@ into two layers: layer 1 is the main entry (with `/geometry` and
   blend and billboard helpers, the input types of the shared line
   renderer, the dash and terrain subdivision rules, and
   `PointHitTestStrategy`. Pure math that is not tied to them (oriented
-  boxes, pixel and degree conversion, contrast colors) is not published;
-  an extension keeps its own.
+  boxes, contrast colors) is not published; an extension keeps its own.
+  A size in pixels at a zoom turned into meters, which an extension must
+  draw and hit test by the formula the library draws by, is
+  `pixelsToMeters` of `/geometry`.
 
 The guarantee of layer 2 is weaker than that of layer 1: it may change in
 a minor release. No layer 1 declaration refers to a layer 2 type, but the

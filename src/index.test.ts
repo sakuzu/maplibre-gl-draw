@@ -26,6 +26,7 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
  */
 const MAIN = [
   'AutoNameOptions',
+  'BBox',
   'ConsistencyCheck',
   'ConsistencyCheckOptions',
   'ConsistencyFailure',
@@ -417,9 +418,10 @@ describeEntry('src/kasane/index.ts', KASANE, () => import('./kasane/index.js'));
 describeEntry('src/webgl/index.ts', WEBGL, () => import('./webgl/index.js'));
 
 describe('the five entries', () => {
-  it('share no name, but the transfer list of /table, which /kasane widens to row blocks', () => {
+  it('share no name, but the box of /geometry, which the main entry gives too, and the transfer list of /table, which /kasane widens to row blocks', () => {
     const all = [...MAIN, ...GEOMETRY, ...TABLE, ...KASANE, ...WEBGL];
     expect(all.filter((name, index) => all.indexOf(name) !== index).sort()).toEqual([
+      'BBox',
       'transferList',
     ]);
   });

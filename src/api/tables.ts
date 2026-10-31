@@ -78,7 +78,7 @@ export interface LayerTableView {
    */
   listDrawnRows(bbox: BBox): Int32Array;
   /** The bbox of a row (null for a row without a geometry or not in this layer) */
-  getRowBounds(handle: RowHandle): BBox | null;
+  getRowBBox(handle: RowHandle): BBox | null;
   /** The type of a row (null for a row not in this layer) */
   getRowType(handle: RowHandle): FeatureType | null;
   /** The position of a row whose geometry is a Point, `[x, y]` (null for any other row) */
