@@ -210,6 +210,11 @@ writing it. Its changes are listed after those of 3.0.0.
   handle of an extension on a feature no longer snap to the features they
   change, as a move did not already: the pointer was pulled to an edge or
   a vertex of the feature it was turning or resizing, which moves with it.
+- The handles of the selection are grabbed where they are drawn when
+  `selectionStyle` gives them other sizes, another margin of the box or
+  another distance of the rotate handle: the select mode tested them at
+  the sizes and distances by default, so a handle drawn larger, or farther
+  out, could not be grabbed where it was drawn.
 
 ### Migration to 3.0.0
 

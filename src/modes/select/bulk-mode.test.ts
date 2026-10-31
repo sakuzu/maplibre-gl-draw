@@ -156,6 +156,7 @@ beforeEach(() => {
     hitTestTopmost: () => top,
     plugins: undefined,
     selectionScope: createSelectionScope(),
+    selectionStyle: DEFAULT_SELECTION_CONFIG,
     boxSelectionRegistry: registry,
     spatialIndex: { findInBounds: () => [] },
     eventEmitter: { emit: (name: string, payload: unknown) => emitted.push([name, payload]) },

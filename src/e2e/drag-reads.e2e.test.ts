@@ -627,3 +627,94 @@ describe.each(KINDS)('a drag of one feature over a Store of %s', (kind) => {
     await expectHitsAsDrawn(page);
   });
 });
+
+/** The handles at sizes and a distance and margin of their own, in the colors of the tests */
+const largeSelectionStyle = {
+  ...selectionStyle,
+  boundingBox: { ...selectionStyle.boundingBox, margin: 20 },
+  resizeHandle: { point: pointLook('square', RESIZE, 16) },
+  rotateHandle: {
+    ...selectionStyle.rotateHandle,
+    point: pointLook('circle', ROTATE, 16),
+    distance: 30,
+  },
+  vertexHandle: {
+    point: pointLook('square', VERTEX, 18),
+    selected: pointLook('square', VERTEX, 18),
+    followed: pointLook('square', VERTEX, 18),
+  },
+  midpointHandle: { point: pointLook('square', MIDPOINT, 14) },
+  radiusHandle: { point: pointLook('square', RADIUS, 16) },
+};
+
+describe.each(KINDS)(
+  'the handles drawn at the sizes and distances of the options over a Store of %s',
+  (kind) => {
+    let page: Page;
+
+    beforeAll(async () => {
+      page = await openScenePage(browser, bundle, ZOOM);
+    }, browserTimeout(60_000));
+
+    afterAll(async () => {
+      await page?.close();
+    });
+
+    /** The cursor over a point and over the points a little short of the corners of a handle */
+    async function expectHandleAt(point: MapPoint, half: number, cursor: string): Promise<void> {
+      for (const [dx, dy] of [
+        [0, 0],
+        [half - 2, half - 2],
+        [-(half - 2), -(half - 2)],
+      ] as const) {
+        expect(await cursorAt(page, [point[0] + dx, point[1] + dy])).toBe(cursor);
+      }
+    }
+
+    it('hits each handle of a polygon where it is drawn, and turns it from there', {
+      timeout: SCENES_TIMEOUT,
+    }, async () => {
+      const scene = polygonScene(kind);
+      await load(page, { ...scene, options: { selectionStyle: largeSelectionStyle } }, ZOOM);
+      await select(page, ['p']);
+      const selected = await frame(page, COLORS);
+      const fill = (selected[I_OUTLINE] as Drawn).box as Box;
+      const resize = (selected[I_RESIZE] as Drawn).box as Box;
+      // The resize handles stand on the frame, the margin out of the outline
+      expect(Math.abs(resize[2] - 8 - fill[2] - 20)).toBeLessThan(3);
+      await expectHandleAt([resize[2] - 7.5, resize[3] - 7.5], 8, 'se-resize');
+      await expectHandleAt([resize[0] + 7.5, resize[1] + 7.5], 8, 'nw-resize');
+      const rotate = (selected[I_ROTATE] as Drawn).center as MapPoint;
+      // The rotate handle stands above the frame
+      expect(rotate[1]).toBeLessThan(resize[1]);
+      await expectHandleAt(rotate, 8, 'grab');
+      await expectHandleAt(await mapPointOf(page, CORNERS[2] as number[]), 9, 'pointer');
+      const midpoint = between(
+        await mapPointOf(page, CORNERS[0] as number[]),
+        await mapPointOf(page, CORNERS[1] as number[]),
+        0.5,
+      );
+      await expectHandleAt(midpoint, 7, 'crosshair');
+
+      await mark(page);
+      await pressAndMove(page, rotate, [80, 60], STEPS);
+      await release(page);
+      expect(sequenceOf(await events(page))[0]).toBe('start handle');
+      const turned = await frame(page, COLORS);
+      expect(differs(turned[I_OUTLINE] as Drawn, selected[I_OUTLINE] as Drawn)).toBe(true);
+      expectNear((turned[I_FILL] as Drawn).center, (selected[I_FILL] as Drawn).center as MapPoint);
+    });
+
+    it('hits the radius handle of a circle where it is drawn', {
+      timeout: SCENES_TIMEOUT,
+    }, async () => {
+      const scene = circleScene(kind);
+      await load(page, { ...scene, options: { selectionStyle: largeSelectionStyle } }, ZOOM);
+      await select(page, ['p']);
+      const selected = await frame(page, COLORS);
+      await expectHandleAt((selected[I_RADIUS] as Drawn).center as MapPoint, 8, 'pointer');
+      const resize = (selected[I_RESIZE] as Drawn).box as Box;
+      await expectHandleAt([resize[2] - 7.5, resize[3] - 7.5], 8, 'se-resize');
+    });
+  },
+);

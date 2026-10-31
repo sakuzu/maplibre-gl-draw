@@ -25,7 +25,6 @@ import type {
 import { rowsByLayerInOrder } from '../../feature-table/bulk-rows.js';
 import { featureTablesInternals } from '../../feature-table/feature-tables.js';
 import { TableSelection } from '../../feature-table/selection.js';
-import { DEFAULT_SELECTION_CONFIG, type SelectionUIConfig } from '../../shared/config/selection.js';
 import { createCoordinateTransform } from '../../shared/math/index.js';
 import { getDisplayFeatures } from '../../store/local-visibility.js';
 import type { BoxSelection, Coordinate, Mode, Selection } from '../../store/types.js';
@@ -83,7 +82,6 @@ export class SelectMode implements EngineModeHandler {
   #boxMarked: TableSelection = TableSelection.empty;
   /** The moves of the arrow keys over features selected in bulk, waiting to be written */
   readonly #nudge = new BulkNudge();
-  #config: SelectionUIConfig = DEFAULT_SELECTION_CONFIG;
 
   // ============================================================================
   // Lifecycle
@@ -200,7 +198,7 @@ export class SelectMode implements EngineModeHandler {
         event.point,
         bulk,
         transform,
-        this.#config,
+        this.#context.selectionStyle,
         map.getZoom(),
         this.#context.selectionScope,
       )
@@ -230,7 +228,7 @@ export class SelectMode implements EngineModeHandler {
           event.point,
           selectedFeatures,
           transform,
-          this.#config,
+          this.#context.selectionStyle,
           zoom,
           this.#context.selectionScope,
           getAdditionalHandles,
@@ -245,7 +243,7 @@ export class SelectMode implements EngineModeHandler {
       const geoBbox = computeCombinedGeoBoundingBox(
         selectedFeatures,
         transform,
-        this.#config,
+        this.#context.selectionStyle,
         this.#context.selectionScope.extensions,
       );
       if (geoBbox) {
@@ -266,7 +264,7 @@ export class SelectMode implements EngineModeHandler {
       const globalHit = hitTestGlobalAuxiliaryHandles(
         event.point,
         transform,
-        this.#config,
+        this.#context.selectionStyle,
         map.getZoom(),
         getGlobalAuxiliaryHandlesCallback(this.#context.selectionScope),
       );
@@ -300,7 +298,7 @@ export class SelectMode implements EngineModeHandler {
 
   onClick(event: MouseNormalizedEvent): void {
     if (this.#dragHandler.isActive()) return;
-    handleSelectClick(event, this.#context, this.#config);
+    handleSelectClick(event, this.#context, this.#context.selectionStyle);
   }
 
   onDoubleClick(event: MouseNormalizedEvent): void {
@@ -373,7 +371,7 @@ export class SelectMode implements EngineModeHandler {
             dragStartPoint,
             selectedFeatures,
             transform,
-            this.#config,
+            this.#context.selectionStyle,
             zoom,
             this.#context.selectionScope,
             getAdditionalHandles,
@@ -393,7 +391,7 @@ export class SelectMode implements EngineModeHandler {
     const globalHit = hitTestGlobalAuxiliaryHandles(
       dragStartPoint,
       transform,
-      this.#config,
+      this.#context.selectionStyle,
       map.getZoom(),
       getGlobalAuxiliaryHandlesCallback(this.#context.selectionScope),
     );
@@ -497,7 +495,7 @@ export class SelectMode implements EngineModeHandler {
       point,
       bulk,
       transform,
-      this.#config,
+      this.#context.selectionStyle,
       map.getZoom(),
       this.#context.selectionScope,
     );
@@ -645,6 +643,6 @@ export class SelectMode implements EngineModeHandler {
     if (this.#dragHandler.isActive() || this.#context.plugins?.isPluginInteracting()) {
       return;
     }
-    updateCursorForSelection(event, this.#context, this.#config);
+    updateCursorForSelection(event, this.#context, this.#context.selectionStyle);
   }
 }

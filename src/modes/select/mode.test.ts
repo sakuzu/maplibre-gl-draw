@@ -22,6 +22,7 @@ import type {
 } from '../../dispatcher/types.js';
 import { featureTablesInternals } from '../../feature-table/feature-tables.js';
 import { STATE_BULK } from '../../feature-table/row-state.js';
+import { DEFAULT_SELECTION_CONFIG } from '../../shared/config/selection.js';
 import { coordinatesOf } from '../../shared/utils/coordinates.js';
 import type { Store } from '../../store/store.js';
 import type { Feature } from '../../store/types.js';
@@ -157,6 +158,7 @@ describe.each(STORE_KINDS)('on %s', (_kind, createStore) => {
       },
       plugins: undefined,
       selectionScope: createSelectionScope(),
+      selectionStyle: DEFAULT_SELECTION_CONFIG,
     } as unknown as EngineModeContext;
     mode = new SelectMode();
     mode.onStart(context);
