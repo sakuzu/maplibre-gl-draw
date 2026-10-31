@@ -225,6 +225,7 @@ const GEOMETRY = [
   'nearestPointOnLine',
   'overlaps',
   'perimeter',
+  'pixelsToMeters',
   'pointInPolygon',
   'pointOnSurface',
   'rewind',

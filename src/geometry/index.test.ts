@@ -52,6 +52,7 @@ const EXPECTED_VALUES = [
   // Bounds and units
   'bbox',
   'metersToDegrees',
+  'pixelsToMeters',
   // Types and errors
   'EARTH_RADIUS_METERS',
   'GeometryError',
@@ -83,7 +84,7 @@ describe('public surface of geometry', () => {
   it('exports exactly the public names, types included', () => {
     const expected = [...EXPECTED_VALUES, ...EXPECTED_TYPES].sort();
     expect(exportedNames().sort()).toEqual(expected);
-    expect(expected).toHaveLength(31);
+    expect(expected).toHaveLength(32);
   });
 
   it('can compute without using the DOM', () => {

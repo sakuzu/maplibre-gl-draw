@@ -32,7 +32,8 @@ mode applied.
   the scale at the center of the view on the globe, mixed by the transition
   between them. A size kept with a zoom (an image placed at a zoom) takes
   the scale of Web Mercator at that zoom and the latitude of the feature,
-  once (`metersPerPixelAtZoom` in `src/shared/math/ground-scale.ts`). For
+  once (`pixelsToMeters` of `/geometry`, which `metersPerPixelAtZoom` in
+  `src/shared/math/ground-scale.ts` reads, for extensions too). For
   example, `applyMarginToBoundingBox` widens a geographic bounding box by
   the margin in meters. What keeps its size on the screen (a handle, a
   point marker and the frame around it) keeps a geographic position and is

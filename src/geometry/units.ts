@@ -52,3 +52,31 @@ export function metersToDegrees(meters: number, latitude: number): { lng: number
   const lat = toDegrees(meters / EARTH_RADIUS_METERS);
   return { lng: lat / Math.cos(toRadians(latitude)), lat };
 }
+
+/** The latitude limit of Web Mercator in degrees, past which its scale is not finite */
+const MAX_MERCATOR_LATITUDE = 85.0511287798066;
+
+/** The width of a tile of maplibre in pixels, which its zoom counts from */
+const TILE_SIZE = 512;
+
+/**
+ * Converts a size in pixels at a zoom into a length on the ground at a latitude.
+ *
+ * It is the scale of Web Mercator on the sphere of {@link EARTH_RADIUS_METERS} at the zoom of
+ * maplibre (the world is 512 pixels wide at zoom 0): a pixel spans the circumference times the
+ * cosine of the latitude, over the width of the world in pixels at the zoom. Use it for a size
+ * given in pixels at a zoom of its own, such as the zoom a shape was made at, so that the shape
+ * keeps its size on the ground whatever the view; {@link metersToDegrees} then lays the length
+ * at the latitude. The latitude is held within the latitudes Web Mercator draws (±85.0511
+ * degrees).
+ *
+ * @param pixels The size in pixels
+ * @param zoom The zoom at which the size is given
+ * @param latitude The latitude in degrees
+ * @returns The length in meters
+ */
+export function pixelsToMeters(pixels: number, zoom: number, latitude: number): number {
+  const lat = Math.max(-MAX_MERCATOR_LATITUDE, Math.min(MAX_MERCATOR_LATITUDE, latitude));
+  const metersAround = 2 * Math.PI * EARTH_RADIUS_METERS * Math.cos(toRadians(lat));
+  return (pixels * metersAround) / (TILE_SIZE * 2 ** zoom);
+}

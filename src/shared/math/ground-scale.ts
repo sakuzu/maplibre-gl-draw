@@ -22,9 +22,9 @@
  * compute on the WGS 84 ellipsoid (`geometry/enu-transforms.ts`) and do not use it.
  */
 
-import { EARTH_RADIUS_METERS } from '../../geometry/units.js';
+import { EARTH_RADIUS_METERS, pixelsToMeters } from '../../geometry/units.js';
 import type { Coordinate } from '../types/model.js';
-import { DEFAULT_TILE_SIZE, EARTH } from './constants.js';
+import { DEFAULT_TILE_SIZE } from './constants.js';
 
 /** The latitude limit of Web Mercator (degrees), past which no scale is finite */
 const MAX_MERCATOR_LATITUDE = 85.0511287798066;
@@ -61,7 +61,8 @@ export function metersPerPixelAtZoom(
   zoom: number,
   tileSize: number = DEFAULT_TILE_SIZE,
 ): number {
-  return (EARTH.CIRCUMFERENCE_METERS * cosLatitude(latitude)) / worldSizeAtZoom(zoom, tileSize);
+  // The zoom of /geometry counts tiles of DEFAULT_TILE_SIZE pixels
+  return pixelsToMeters(DEFAULT_TILE_SIZE / tileSize, zoom, latitude);
 }
 
 /**

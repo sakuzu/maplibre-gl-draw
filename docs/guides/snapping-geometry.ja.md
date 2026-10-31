@@ -356,7 +356,7 @@ const band = buffer(road, 100, { segments: 32 });
 - 調べる: `pointInPolygon`、`overlaps`、`contains`、
   `bboxIntersects`、`bboxContains`
 - 整える: `makeValid`、`rewind`、`simplify`
-- 範囲と単位: `bbox`、`metersToDegrees`
+- 範囲と単位: `bbox`、`metersToDegrees`、`pixelsToMeters`
 
 描いた地物は、そのまま入力にできます。関数は、GeoJSON の Feature と
 同じように、`geometry` の欄を持つものなら何でも使います。読むのは

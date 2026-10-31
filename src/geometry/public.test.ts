@@ -36,6 +36,7 @@ import {
   nearestPointOnLine,
   overlaps,
   perimeter,
+  pixelsToMeters,
   pointInPolygon,
   pointOnSurface,
   rewind,
@@ -746,7 +747,7 @@ describe('simplify', () => {
   });
 });
 
-describe('bbox and metersToDegrees', () => {
+describe('bbox, metersToDegrees and pixelsToMeters', () => {
   it('bbox spans every position of any geometry', () => {
     expect(
       bbox(
@@ -784,6 +785,24 @@ describe('bbox and metersToDegrees', () => {
     expect(lat).toBeCloseTo(((1000 / EARTH_RADIUS_METERS) * 180) / Math.PI, 15);
     expect(lng).toBeCloseTo(2 * lat, 12);
     expect(distance([0, 0], [0, lat])).toBeCloseTo(1000, 6);
+  });
+
+  it('pixelsToMeters is the scale of Web Mercator at a zoom on the sphere', () => {
+    // At zoom 0 the world is 512 pixels wide: a pixel at the equator is its circumference / 512
+    const circumference = 2 * Math.PI * EARTH_RADIUS_METERS;
+    expect(pixelsToMeters(1, 0, 0)).toBeCloseTo(circumference / 512, 9);
+    // Each zoom halves it, and the cosine of the latitude shrinks it
+    expect(pixelsToMeters(10, 3, 60)).toBeCloseTo((10 * circumference * 0.5) / (512 * 8), 9);
+    // A length of pixels laid with metersToDegrees spans as many degrees of longitude as the
+    // pixels do on Web Mercator at the zoom
+    const meters = pixelsToMeters(256, 2, 35);
+    expect(metersToDegrees(meters, 35).lng).toBeCloseTo((256 / (512 * 4)) * 360, 9);
+  });
+
+  it('pixelsToMeters holds the latitude within the latitudes of Web Mercator', () => {
+    expect(pixelsToMeters(1, 0, 90)).toBe(pixelsToMeters(1, 0, 85.0511287798066));
+    expect(pixelsToMeters(1, 0, -89)).toBe(pixelsToMeters(1, 0, -85.0511287798066));
+    expect(Number.isFinite(pixelsToMeters(1, 0, 90))).toBe(true);
   });
 
   it('bboxIntersects and bboxContains compare boxes', () => {

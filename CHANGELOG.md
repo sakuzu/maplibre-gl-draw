@@ -166,6 +166,12 @@ writing it. Its changes are listed after those of 3.0.0.
   the margin of the selection frame and the distance of the rotate handle
   on the map with it, so that an extension can lay what it draws around a
   feature for the current view the same way.
+- `pixelsToMeters(pixels, zoom, latitude)` in `/geometry`: a size in
+  pixels at a zoom of its own (the zoom a shape was made at) as a length
+  on the ground, by the scale of Web Mercator on the sphere of
+  `EARTH_RADIUS_METERS`, which the library draws a size kept with a zoom
+  by. With `metersToDegrees`, an extension draws and hit tests such a
+  size by the same formula as the library.
 
 ### Changed in 3.0.0
 

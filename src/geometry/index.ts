@@ -65,7 +65,7 @@ export { makeValid, rewind, simplify } from './public-repair.js';
 
 // Bounds and units
 export { bbox } from './public-bounds.js';
-export { metersToDegrees } from './units.js';
+export { metersToDegrees, pixelsToMeters } from './units.js';
 
 // Types and errors
 export type { GeometryErrorCode } from './errors.js';

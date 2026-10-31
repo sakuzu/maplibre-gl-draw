@@ -353,7 +353,7 @@ The functions are grouped by what they do:
 - Test: `pointInPolygon`, `overlaps`, `contains`, `bboxIntersects` and
   `bboxContains`
 - Repair: `makeValid`, `rewind` and `simplify`
-- Bounds and units: `bbox` and `metersToDegrees`
+- Bounds and units: `bbox`, `metersToDegrees` and `pixelsToMeters`
 
 A feature of the drawing is input as it is: the functions use anything
 with a `geometry` field, as they use a GeoJSON feature. They read its
