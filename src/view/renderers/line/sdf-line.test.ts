@@ -17,10 +17,10 @@ import type { Color } from './sdf-line.js';
 import { SDFLineRenderer } from './sdf-line.js';
 
 describe('toLineInstanceColor', () => {
-  it('folds the opacity into every component (premultiplied alpha)', () => {
+  it('folds the opacity into the alpha only (a color that is not premultiplied)', () => {
     const color: Color = [1, 0.5, 0, 1];
 
-    expect(toLineInstanceColor(color, 0.5)).toEqual([0.5, 0.25, 0, 0.5]);
+    expect(toLineInstanceColor(color, 0.5)).toEqual([1, 0.5, 0, 0.5]);
   });
 
   it('returns the color unchanged at opacity 1', () => {
@@ -30,28 +30,31 @@ describe('toLineInstanceColor', () => {
   });
 
   it('becomes fully transparent at opacity 0', () => {
-    expect(toLineInstanceColor([1, 1, 1, 1], 0)).toEqual([0, 0, 0, 0]);
+    expect(toLineInstanceColor([1, 1, 1, 1], 0)).toEqual([1, 1, 1, 0]);
   });
 
-  it('gives the same composited result as the previous u_color * (coverage * u_opacity)', () => {
+  it('composites as the frame blends it: the opacity once, in the alpha', () => {
     const color: Color = [0.9, 0.3, 0.1, 1];
     const opacity = 0.4;
     const coverage = 0.75;
+    const below = [1, 1, 1];
 
-    // New path: multiply the pre-folded color by the coverage
+    // The shader puts the coverage into the alpha; the frame blends SRC_ALPHA, ONE_MINUS_SRC_ALPHA
     const instanceColor = toLineInstanceColor(color, opacity);
-    const next = instanceColor.map((c) => c * coverage);
-    // Old path: multiply the uniform color by (coverage * opacity)
-    const prev = color.map((c) => c * (coverage * opacity));
+    const alpha = (instanceColor[3] as number) * coverage;
+    const drawn = below.map((b, i) => (instanceColor[i] as number) * alpha + b * (1 - alpha));
+    const expected = below.map(
+      (b, i) => (color[i] as number) * opacity * coverage + b * (1 - opacity * coverage),
+    );
 
-    for (let i = 0; i < 4; i++) {
-      expect(next[i]).toBeCloseTo(prev[i], 10);
+    for (let i = 0; i < 3; i++) {
+      expect(drawn[i]).toBeCloseTo(expected[i] as number, 10);
     }
   });
 
   it('normalizes out-of-range or invalid opacity values', () => {
     expect(toLineInstanceColor([1, 1, 1, 1], 2)).toEqual([1, 1, 1, 1]);
-    expect(toLineInstanceColor([1, 1, 1, 1], -1)).toEqual([0, 0, 0, 0]);
+    expect(toLineInstanceColor([1, 1, 1, 1], -1)).toEqual([1, 1, 1, 0]);
     expect(toLineInstanceColor([1, 1, 1, 1], Number.NaN)).toEqual([1, 1, 1, 1]);
   });
 });

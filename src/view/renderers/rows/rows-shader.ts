@@ -381,7 +381,7 @@ void drawSegment(int kind, int style, float createdZoom, bool hasCreatedZoom) {
     vec2 totalClipOffset = screenToClipOffset(vertexOffset, currentClip.w);
     gl_Position = currentClip + vec4(totalClipOffset, 0.0, 0.0);
 
-    v_color = color * ink;
+    v_color = vec4(color.rgb, color.a * ink);
     v_params = vec4(halfWidth, screenSegmentLength, 0.0, 0.0);
     v_geom = vec4(side * expandedHalfWidth, linePos, 0.0, 0.0);
 
@@ -668,7 +668,7 @@ vec4 shadeSegment() {
             coverage = bodyCoverage(d, w);
         }
     }
-    return v_color * coverage * u_opacity;
+    return vec4(v_color.rgb, v_color.a * coverage * u_opacity);
 }
 
 vec4 shadeOutline() {
@@ -695,7 +695,7 @@ void main() {
     } else {
         vec4 texel = texture(u_sprites, v_geom.xy);
         if (u_sprite_premultiplied > 0.5 && texel.a > 0.0) texel.rgb /= texel.a;
-        fragColor = texel * (u_opacity * v_params.x);
+        fragColor = vec4(texel.rgb, texel.a * u_opacity * v_params.x);
     }
 }`;
 }

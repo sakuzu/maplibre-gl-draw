@@ -427,7 +427,8 @@ void main() {
     float right = pixelLine(d + w);
     float coverage = right - left;
 
-    fragColor = u_color * coverage;
+    // Not premultiplied: the coverage goes to the alpha only (blend.ts)
+    fragColor = vec4(u_color.rgb, u_color.a * coverage);
 }`;
 
     return createProgram(this.gl, vertexSource, fragmentSource);

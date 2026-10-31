@@ -690,7 +690,8 @@ HHAA (half-plane anti-aliasing) method.
 - Color, opacity and width are instance attributes, so lines differing in
   them share a draw call as long as the shape is the same
 - An instance is 12 floats (48 bytes): `a_indices` (vec4), `a_extra`
-  (vec4) and `a_color` (vec4, premultiplied, with the opacity folded in)
+  (vec4) and `a_color` (vec4, not premultiplied, with the opacity folded
+  into its alpha)
 
 ```typescript
 class SDFLineRenderer {
@@ -2059,7 +2060,12 @@ blendFuncSeparate(SRC_ALPHA, ONE_MINUS_SRC_ALPHA, ONE, ONE_MINUS_SRC_ALPHA)
 ```
 
 The renderers output straight (non-premultiplied) colors, so RGB composites
-with `SRC_ALPHA` / `ONE_MINUS_SRC_ALPHA`. The maplibre canvas is
+with `SRC_ALPHA` / `ONE_MINUS_SRC_ALPHA`. Every factor of a color (its
+opacity, the opacity of the layer, the coverage of its edges) goes to its
+alpha only: a factor put into RGB as well is applied twice by the blending.
+The lines, the outlines and the frames of the selection follow it as the
+fills and the points do, whether a feature of a built-in type or a renderer
+of a custom type draws them. The maplibre canvas is
 premultiplied, and its alpha is the opacity composited so far. Using the RGB
 factors for alpha would give `a * a + (1 - a) * dst.a`, so a 25% fill would
 drop to 6.25%, and where the canvas is still transparent translucent fills
