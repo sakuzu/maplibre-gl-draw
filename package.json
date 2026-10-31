@@ -76,7 +76,7 @@
   ],
   "scripts": {
     "build": "rm -rf dist tsconfig.build.tsbuildinfo && tsc -p tsconfig.build.json",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit --incremental false --composite false",
     "check:spdx": "node scripts/spdx.mjs",
     "lint": "biome check src examples playground bench ui scripts docs/.vitepress/config.mts docs/.vitepress/theme && npm run check:layers && npm run check:terms && npm run check:spdx && node ui/scripts/check-imports.mjs",
     "check:layers": "node scripts/check-layers.mjs",

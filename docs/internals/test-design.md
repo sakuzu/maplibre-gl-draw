@@ -352,7 +352,7 @@ Tests that use random data seed it (mulberry32) so failures reproduce.
 | `npm test` | Unit, integration and shader compile tests |
 | `npm run test:watch` | The same in watch mode |
 | `npm run test:e2e` | The end-to-end tests in `src/e2e/` |
-| `npm run typecheck` | The TypeScript compiler without output |
+| `npm run typecheck` | The TypeScript compiler, with no output nor build info |
 | `npm run lint` | Biome, the layer rule check and the terms check |
 
 ### Coverage
