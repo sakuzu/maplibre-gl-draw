@@ -20,7 +20,7 @@ import {
   screenOf,
   type TestCamera,
 } from '../../test-support/glsl-projection.js';
-import { calculateOffsetUniforms } from '../shaders/helpers.js';
+import { calculateOffsetUniforms, type ProjectionMatrices } from '../shaders/helpers.js';
 import { clearAnchorFrame, projectAnchorAt, setAnchorFrame } from './anchor.js';
 import { TerrainContext } from './context.js';
 import type { TerrainLike } from './detect.js';
@@ -47,12 +47,18 @@ const latitudeOf = (y: number): number =>
 /** The largest distance in CSS px from the anchors to the reference, over positions on the screen */
 function worstOf(camera: TestCamera, transition: number): { px: number; where: string } {
   const projection = frameProjection(camera, transition);
+  const data = {
+    mainMatrix: projection.mainMatrix,
+    fallbackMatrix: projection.fallbackMatrix,
+    projectionTransition: projection.projectionTransition,
+    clippingPlane: [...projection.clippingPlane],
+  } as unknown as ProjectionMatrices;
   setAnchorFrame(context, {
     terrain: flat,
     zoom: camera.zoom,
     elevationScale: 0,
-    mainMatrix: [...projection.mainMatrix],
-    offsetUniforms: calculateOffsetUniforms([...camera.center], [...projection.mainMatrix]),
+    projection: data,
+    offsetUniforms: calculateOffsetUniforms(camera.center, data),
     width: camera.width,
     height: camera.height,
   });

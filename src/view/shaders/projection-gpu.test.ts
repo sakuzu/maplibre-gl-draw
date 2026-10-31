@@ -88,8 +88,7 @@ function recordUniforms(
   ) as unknown as WebGL2RenderingContext;
   const manager = new ProjectionUniformManager(gl);
   manager.getLocations({} as WebGLProgram);
-  const mainMatrix = projectionData.mainMatrix as unknown as number[];
-  manager.setUniforms(projectionData, zoom, calculateOffsetUniforms(center, mainMatrix));
+  manager.setUniforms(projectionData, zoom, calculateOffsetUniforms(center, projectionData));
   return writes;
 }
 

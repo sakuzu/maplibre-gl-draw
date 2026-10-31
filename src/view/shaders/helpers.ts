@@ -11,8 +11,15 @@
 // The shader prelude and the offset values are the types of the extension contract, so that the
 // renderers and the second layer of the API name the same types as the main entry
 import type { OffsetUniforms, ShaderData } from '../../api/extension/render.js';
+import {
+  CENTER_OFFSET_GLSL,
+  CENTER_PROJECTION_CONSTANTS,
+  clipOfPosition,
+  glslFloat32,
+  type ProjectionMatrices,
+} from './center-projection.js';
 
-export type { OffsetUniforms, ShaderData };
+export type { OffsetUniforms, ProjectionMatrices, ShaderData };
 
 /**
  * Converts WGS84 coordinates to Mercator coordinates (high precision
@@ -164,49 +171,27 @@ float dem_elevation_meters(vec2 mercatorOffset) {
 `;
 
 /**
- * The GLSL functions that project positions relative to the view center (offset mode), with
- * globe support; include it in a vertex shader after the maplibre prelude.
+ * The GLSL functions that project positions relative to the view center (offset mode), on Web
+ * Mercator, on the globe and in the transition between; include it in a vertex shader after the
+ * maplibre prelude and its `#define`.
  *
- * To solve the coordinate precision problem (jitter), it uses the same
- * approach as deck.gl's project module. The projection functions below include
- * a port from deck.gl. See THIRD_PARTY_NOTICES.md for the source and the
- * copyright notice.
- * In globe mode, MapLibre's projectTile() is used.
+ * A position is given as its offset in degrees from the center of the view, computed in float64
+ * on the CPU and rounded to a 32-bit float, which keeps its precision near the camera. The
+ * approach is the one of deck.gl's project module (see THIRD_PARTY_NOTICES.md for the source and
+ * the copyright notice): no absolute coordinate is held in the shader, only offsets, and the
+ * center in clip space is computed on the CPU in float64 and added at the end. The offset is
+ * turned into the offset of the space the matrix of the frame takes (the Mercator plane, the unit
+ * sphere of the globe, or both mixed by the transition) with only the operations GLSL ES 3.00
+ * bounds the error of (`view/shaders/center-projection.ts`), so at every zoom a position is a few
+ * roundoffs of its distance from the center off.
  *
- * The essential points:
- * 1. Do not add Mercator coordinates inside the shader
- * 2. Handle only relative coordinates (offsets) in the shader
- * 3. Compute the clip coordinates of the center at 64-bit precision on the CPU
- *    side and add them at the end
- *
- * The computation flow:
- * 1. position.xyz -= coordinateOrigin  // make it relative (Float32 is enough)
- * 2. offset = project_offset(position) // convert degrees -> Mercator units
- * 3. gl_Position = viewProjectionMatrix * offset + projectionCenter
- *    ^ projectionCenter is computed at 64-bit precision on the CPU side
- *
- * Globe mode support:
- * - When projectionTransition > 0, MapLibre's projectTile() is used
- * - Globe mode is active at zoom < 12, where the precision problem does not
- *   occur
- * - In Mercator mode, the precision problem is solved by offset mode
- *
- * The uniforms used:
- * - u_center_lnglat: the WGS84 coordinates of the viewport center (already
- *   rounded to Float32)
- * - u_projection_center: the center coordinates in clip space (computed at
- *   64-bit precision on the CPU side)
- * - u_units_per_degree: the conversion coefficient from degrees to Mercator
- *   units (computed on the CPU side)
- * - u_units_per_degree2: the non-linear correction coefficient (corrects the
- *   variation due to latitude)
- * - u_projection_transition: defined in MapLibre's prelude (0 = Mercator,
- *   1 = globe)
- *
- * The uniforms for globe mode (defined in MapLibre's prelude):
- * - u_projection_tile_mercator_coords: the Mercator coordinates of the tile
- * - u_projection_clipping_plane: the clipping plane
- * - u_projection_fallback_matrix: the fallback matrix
+ * The uniforms:
+ * - `u_center_lnglat`: the center, rounded to Float32 (what the offsets are taken from)
+ * - `u_center_sine_cosine`: sin and cos of its latitude and of its longitude (float64 on the CPU)
+ * - `u_projection_center`: the center in clip space (float64 on the CPU)
+ * - `u_origin_shift`: the gap between the origin of a retained batch and the center
+ * - maplibre's prelude: `u_projection_matrix`, and on the globe `u_projection_transition`,
+ *   `u_projection_fallback_matrix` and `u_projection_clipping_plane`
  */
 export const OFFSET_MODE_GLSL =
   `
@@ -214,26 +199,11 @@ export const OFFSET_MODE_GLSL =
 
 // The WGS84 coordinates of the viewport center (already rounded to Float32)
 uniform vec2 u_center_lnglat;
-// The Mercator coordinates of the viewport center (Float32)
-uniform vec2 u_center_mercator;
-// The center coordinates in clip space (computed at 64-bit precision on the CPU side)
-uniform vec4 u_projection_center;
-// The conversion coefficient from degrees to Mercator units
-uniform vec3 u_units_per_degree;
-// The non-linear correction coefficient (the variation due to latitude)
-uniform vec3 u_units_per_degree2;
 
-// The offset mode flag (1 = offset mode, 0 = the projectTile approach)
-// Offset mode is used to solve the precision problem at high zoom levels (around zoom >= 12)
-// At low zoom levels, or when unset (default 0), projectTile() is used
-// Offset mode computes with coordinates relative to the viewport center, so with data
-// covering a wide area the error grows at vertices far from the center
-uniform float u_use_offset_mode;
-
-// The reference coordinates of a retained batch - the linearization center (the camera
-// center). Immediate mode uses (0,0)
-// The vertices of a retained batch are relative to the reference coordinates, so the
-// difference needed to align the linearization center with the camera center is received here
+// The reference coordinates of a retained batch - the center of the view. Immediate mode uses
+// (0,0)
+// The vertices of a retained batch are relative to the reference coordinates, so the gap to the
+// center is received here
 uniform vec2 u_origin_shift;
 
 // 1 when the offsets handed to the projection are taken from the center (u_center_lnglat) rather
@@ -293,131 +263,39 @@ float terrain_elevation_from_offset(vec2 mercatorOffset) {
     if (g_anchor_elevation_on > 0.5) return g_anchor_elevation_m * u_elevation_params.x;
     return (dem_elevation_meters(mercatorOffset) + u_elevation_params.y) * u_elevation_params.x;
 }
-
-// The elevation at absolute Mercator coordinates (in Mercator units, lift included)
-float terrain_elevation_at(vec2 mercator) {
-    if (u_terrain_on < 0.5) return 0.0;
-    if (g_anchor_elevation_on > 0.5) return g_anchor_elevation_m * u_elevation_params.x;
-    return terrain_elevation_from_offset(mercator - u_center_mercator);
-}
-
-// Converts WGS84 coordinates to Mercator coordinates (the 0-1 range)
-vec2 lngLatToMercator(vec2 lngLat) {
-    float x = (lngLat.x + 180.0) / 360.0;
-    float latRad = lngLat.y * PI / 180.0;
-    float y = (1.0 - log(tan(latRad) + 1.0 / cos(latRad)) / PI) / 2.0;
-    return vec2(x, y);
-}
-
-// Converts offset coordinates into the units of the common space (Mercator)
-// A port of deck.gl's project_offset_
-// See THIRD_PARTY_NOTICES.md for the source and the copyright notice
+` +
+  CENTER_OFFSET_GLSL +
+  `
+// Converts an offset from the center in degrees into the offset on the Mercator plane (z is
+// kept as it is)
 vec3 project_offset(vec3 offset) {
-    float dy = offset.y;
-    vec3 unitsPerDegree = u_units_per_degree + u_units_per_degree2 * dy;
-    return offset * unitsPerDegree;
+    vec2 halfLat = half_latitude_offset(offset.y);
+    return vec3(offset.x * ${glslFloat32(CENTER_PROJECTION_CONSTANTS.perDegree)}, mercator_offset_y(halfLat), offset.z);
 }
 
-// Converts WGS84 coordinates to relative coordinates and projects them into clip space
-// (for Mercator mode)
-// A port of deck.gl's project_position + project_common_position_to_clipspace
-// See THIRD_PARTY_NOTICES.md for the source and the copyright notice
-vec4 project_position_mercator(vec2 lngLat, mat4 viewProjectionMatrix) {
-    // 1. Compute the coordinates relative to the center (Float32 has enough precision)
-    vec2 lngLatOffset = lngLat - u_center_lnglat;
-
-    // 2. Convert the relative coordinates into the units of the common space
-    vec3 mercatorOffset = project_offset(vec3(lngLatOffset, 0.0));
-
-    // 2.5 Put the terrain elevation into z. u_projection_center is computed at z=0, but the
-    // matrix is linear, so composing it by adding only the z term is correct
-    mercatorOffset.z = terrain_elevation_from_offset(mercatorOffset.xy);
-
-    // 3. viewProjectionMatrix * offset + projectionCenter
-    // Setting w=0 keeps the fourth column of the matrix (the translation) from having an
-    // effect
-    // The translation comes only from projectionCenter
-    vec4 offset = vec4(mercatorOffset, 0.0);
-    return viewProjectionMatrix * offset + u_projection_center;
-}
-
-// Projects relative coordinates (already computed on the CPU side) into clip space
-// (for Mercator mode, the high precision version)
-// The offset from the center is computed at 64-bit precision on the CPU side and the result
-// is received here
-// This keeps the precision loss from the conversion to Float32 to a minimum
-// The clip conversion is a port of deck.gl's project_common_position_to_clipspace
-// See THIRD_PARTY_NOTICES.md for the source and the copyright notice
+// Projects an offset from the center in degrees into clip space, with the elevation of the
+// terrain under it
 vec4 project_offset_to_clipspace(vec2 lngLatOffset, mat4 viewProjectionMatrix) {
-    // Convert the relative coordinates into the units of the common space
-    vec3 mercatorOffset = project_offset(vec3(lngLatOffset, 0.0));
-
-    // Put the terrain elevation into z (0 when terrain is disabled)
-    mercatorOffset.z = terrain_elevation_from_offset(mercatorOffset.xy);
-
-    // viewProjectionMatrix * offset + projectionCenter
-    vec4 offset = vec4(mercatorOffset, 0.0);
-    return viewProjectionMatrix * offset + u_projection_center;
+    vec2 halfLat = half_latitude_offset(lngLatOffset.y);
+    vec2 mercatorOffset = vec2(lngLatOffset.x * ${glslFloat32(CENTER_PROJECTION_CONSTANTS.perDegree)}, mercator_offset_y(halfLat));
+    float elevation = terrain_elevation_from_offset(mercatorOffset);
+    return project_center_offset(mercatorOffset, lngLatOffset.x, halfLat, elevation, viewProjectionMatrix);
 }
 
-// Projects WGS84 coordinates into clip space
-// Switches automatically between globe mode, low zoom and high zoom
-// - Globe mode (u_projection_transition > 0): uses MapLibre's projectTile()
-// - Mercator mode with u_use_offset_mode=0: uses projectTile() (for low zoom)
-// - Mercator mode with u_use_offset_mode=1: solves the precision problem with offset mode
-//   (for high zoom)
-vec4 project_position_to_clipspace(vec2 lngLat, mat4 viewProjectionMatrix) {
-    // In globe mode, use MapLibre's projectTile()
-    // u_projection_transition is defined in MapLibre's prelude
-    if (u_projection_transition > 0.0) {
-        // Convert WGS84 -> Mercator and hand it to projectTile()
-        vec2 mercator = lngLatToMercator(lngLat);
-        return projectTileWithElevation(mercator, terrain_elevation_at(mercator));
-    }
-    // Used only when offset mode is enabled
-    // It solves the precision problem at high zoom levels, but with data covering a wide
-    // area the error grows at vertices far from the center
-    if (u_use_offset_mode > 0.5) {
-        return project_position_mercator(lngLat, viewProjectionMatrix);
-    }
-    // Default: use MapLibre's projectTile()
-    // It is safe because the precision problem does not occur at low zoom levels
-    // (projectTileWithElevation at elevation 0 gives the same result as projectTile)
-    vec2 mercator = lngLatToMercator(lngLat);
-    return projectTileWithElevation(mercator, terrain_elevation_at(mercator));
+// Projects an offset from the center on the Mercator plane into clip space, with the elevation
+// of the terrain under it (the points of a line taken along the Mercator plane)
+vec4 project_mercator_offset_to_clipspace(vec2 mercatorOffset, mat4 viewProjectionMatrix) {
+    vec2 halfLat = half_latitude_of_mercator_offset(mercatorOffset.y);
+    float lngOffset = mercatorOffset.x * 360.0;
+    float elevation = terrain_elevation_from_offset(mercatorOffset);
+    return project_center_offset(mercatorOffset, lngOffset, halfLat, elevation, viewProjectionMatrix);
 }
 
-// Projects relative coordinates (already computed at 64-bit precision on the CPU side) into
-// clip space (the high precision version)
-// The offset from the center is computed at 64-bit precision on the CPU side and the result
-// is received here
-// This makes it possible to draw at the correct position even at high zoom levels
-// - Globe mode: restores the absolute coordinates from relative + center coordinates and
-//   uses projectTile()
-// - Mercator mode with u_use_offset_mode=1: high precision drawing with offset mode
-// - Otherwise: restores the absolute coordinates and uses projectTile()
+// Projects a position given relative to the origin of what is drawn (a retained batch, or the
+// center in immediate mode) into clip space: what the renderers call
 vec4 project_position_to_clipspace_from_offset(vec2 lngLatOffset, mat4 viewProjectionMatrix) {
-    // Add the gap between the reference coordinates and the linearization center exactly
-    // once here
-    // (adding it inside project_offset_to_clipspace would double-count it)
-    vec2 shifted = lngLatOffset + origin_shift();
-
-    // In globe mode, use MapLibre's projectTile()
-    if (u_projection_transition > 0.0) {
-        // Restore the absolute coordinates from the relative ones (Float32 precision, but
-        // acceptable in globe mode)
-        vec2 lngLat = shifted + u_center_lnglat;
-        vec2 mercator = lngLatToMercator(lngLat);
-        return projectTileWithElevation(mercator, terrain_elevation_at(mercator));
-    }
-    // Used only when offset mode is enabled
-    if (u_use_offset_mode > 0.5) {
-        return project_offset_to_clipspace(shifted, viewProjectionMatrix);
-    }
-    // Default: restore the absolute coordinates and use MapLibre's projectTile()
-    vec2 lngLat = shifted + u_center_lnglat;
-    vec2 mercator = lngLatToMercator(lngLat);
-    return projectTileWithElevation(mercator, terrain_elevation_at(mercator));
+    // Add the gap between the reference coordinates and the center exactly once here
+    return project_offset_to_clipspace(lngLatOffset + origin_shift(), viewProjectionMatrix);
 }
 
 // The Mercator coordinates relative to the center (used as the sample position of the
@@ -426,80 +304,37 @@ vec4 project_position_to_clipspace_from_offset(vec2 lngLatOffset, mat4 viewProje
 // It is exactly the quantity this vertex uses when looking up the elevation
 // (the argument of terrain_elevation_from_offset). If only the shading were derived a
 // different way, the elevation the vertex picks up and the elevation the fill reads would
-// diverge. The branches are evaluated in the same order as the projection.
+// diverge.
 vec2 shade_mercator_offset(vec2 lngLatOffset) {
-    vec2 shifted = lngLatOffset + origin_shift();
-    if (u_projection_transition > 0.0 || u_use_offset_mode <= 0.5) {
-        return lngLatToMercator(shifted + u_center_lnglat) - u_center_mercator;
-    }
-    return project_offset(vec3(shifted, 0.0)).xy;
+    return project_offset(vec3(lngLatOffset + origin_shift(), 0.0)).xy;
 }
 `;
 
 /**
- * Computes the offset-mode uniforms for a view center, to pass to `setOffsetUniforms` of the
- * renderers.
+ * Computes the offset-mode uniforms for a center (the center of the view, or the origin of what
+ * is drawn), to pass to `setOffsetUniforms` of the renderers.
  *
- * The uniforms for globe mode are obtained directly from ProjectionData, so
- * this function performs only the offset computation for the Mercator
- * projection.
+ * The center is rounded to Float32 (what the offsets are taken from) and projected into clip
+ * space in float64 as the shaders project a position: on Web Mercator, on the globe, or both
+ * mixed by the transition of the frame.
  *
- * @param centerLngLat The view center `[lng, lat]` in degrees
- * @param mainMatrix MapLibre's projection matrix (column-major 4x4)
+ * @param centerLngLat The center `[lng, lat]` in degrees
+ * @param projection MapLibre's projection data of the frame (its matrices and its transition)
  * @returns The uniform values for offset mode
  */
 export function calculateOffsetUniforms(
-  centerLngLat: [number, number],
-  mainMatrix: Float32Array | number[],
+  centerLngLat: readonly [number, number] | readonly number[],
+  projection: ProjectionMatrices,
 ): OffsetUniforms {
-  // 1. Round the center coordinates to Float32 (the same procedure as deck.gl)
-  const centerLng = Math.fround(centerLngLat[0]);
-  const centerLat = Math.fround(centerLngLat[1]);
-
-  // 2. Compute the Mercator coordinates of the center at 64-bit precision
+  // Round the center coordinates to Float32 (the same procedure as deck.gl)
+  const centerLng = Math.fround(centerLngLat[0] as number);
+  const centerLat = Math.fround(centerLngLat[1] as number);
   const [centerMercX, centerMercY] = lngLatToMercator(centerLng, centerLat);
-
-  // 3. Convert the Mercator coordinates of the center into clip space (matrix computation
-  // at 64-bit precision)
-  // gl_Position = mainMatrix * [mercX, mercY, 0, 1]
-  const m = mainMatrix;
-  const projectionCenter: [number, number, number, number] = [
-    m[0] * centerMercX + m[4] * centerMercY + m[12],
-    m[1] * centerMercX + m[5] * centerMercY + m[13],
-    m[2] * centerMercX + m[6] * centerMercY + m[14],
-    m[3] * centerMercX + m[7] * centerMercY + m[15],
-  ];
-
-  // 4. Compute the conversion coefficient from degrees to Mercator units
-  // The Mercator projection: x = (lng + 180) / 360
-  //                          y = (1 - log(tan(lat) + sec(lat)) / PI) / 2
-  // dx/dlng = 1/360
-  // dy/dlat = -1 / (360 * cos(lat))  (linear approximation)
-  const latRad = (centerLat * Math.PI) / 180;
-  const cosLat = Math.cos(latRad);
-
-  const unitsPerDegreeX = 1 / 360;
-  const unitsPerDegreeY = -1 / (360 * cosLat);
-
-  // 5. The non-linear correction coefficient (the variation due to latitude)
-  // Corresponds to deck.gl's unitsPerDegree2 and corrects the distortion at high latitudes
-  //
-  // A port of getDistanceScales (highPrecision) from @math.gl/web-mercator:
-  //   latCosine2 = DEGREES_TO_RADIANS * tan(lat) / cos(lat)
-  //   unitsPerDegree2Y = (unitsPerDegreeX * latCosine2) / 2
-  // See THIRD_PARTY_NOTICES.md for the source and the copyright notice
-  //
-  // In this project the Y axis is flipped (a tile coordinate system), so the sign is flipped
-  const latCosine2 = ((Math.PI / 180) * Math.tan(latRad)) / cosLat;
-  const unitsPerDegree2Y = -(unitsPerDegreeX * latCosine2) / 2;
-
   return {
     centerLngLat: [centerLng, centerLat],
-    centerLngLat64: [centerLngLat[0], centerLngLat[1]], // keeps the original 64-bit values
+    centerLngLat64: [centerLngLat[0] as number, centerLngLat[1] as number],
     centerMercator: [centerMercX, centerMercY],
-    projectionCenter,
-    unitsPerDegree: [unitsPerDegreeX, unitsPerDegreeY, 1],
-    unitsPerDegree2: [0, unitsPerDegree2Y, 0],
+    projectionCenter: clipOfPosition(projection, centerLng, centerLat),
   };
 }
 
@@ -511,9 +346,7 @@ export function calculateOffsetUniforms(
  * offset the CPU computes against it comes out shifted, in 64 bits) and the matrix moves by
  * +lngShift (M' = M * T(lngShift / 360) in Mercator units), so the two cancel for the camera
  * and the copy lands next to the stored one. Passing both to `calculateOffsetUniforms` gives
- * the same projection center as the real camera, and the absolute path of the shader
- * (projectTile at low zoom) moves by the same amount through the matrix. It is one formula
- * for the CPU and the GPU.
+ * the same projection center as the real camera. It is one formula for the CPU and the GPU.
  *
  * @param matrix The projection matrix (column-major 4x4)
  * @param lngShift The shift in degrees of longitude (a multiple of 360)
@@ -545,152 +378,4 @@ export function calculateLngLatOffset(
   // The subtraction is done at 64-bit precision, and since the result is a small value the
   // precision is kept even in Float32
   return [lngLat[0] - centerLngLat[0], lngLat[1] - centerLngLat[1]];
-}
-
-/**
- * Viewport information
- */
-export interface Viewport {
-  width: number;
-  height: number;
-}
-
-/**
- * The interface for the offset mode coordinate transform
- */
-export interface OffsetModeTransform {
-  project: (lngLat: [number, number]) => { x: number; y: number };
-  unproject: (point: { x: number; y: number }) => { lng: number; lat: number };
-}
-
-/**
- * Creates the offset mode coordinate transform (performs the same computation
- * as the shader on the CPU side)
- *
- * The computation flow of the shader:
- * 1. lngLatOffset = lngLat - u_center_lnglat
- * 2. mercatorOffset = project_offset(lngLatOffset)
- *    = lngLatOffset * (u_units_per_degree + u_units_per_degree2 * lngLatOffset.y)
- * 3. clipPos = viewProjectionMatrix * vec4(mercatorOffset, 0) + u_projection_center
- * 4. ndc = clipPos.xy / clipPos.w
- * 5. screen = (ndc * 0.5 + 0.5) * viewport
- *
- * @param uniforms The uniform values for offset mode
- * @param mainMatrix MapLibre's projection matrix
- * @param viewport The viewport information
- */
-export function createOffsetModeTransform(
-  uniforms: OffsetUniforms,
-  mainMatrix: Float32Array | number[],
-  viewport: Viewport,
-): OffsetModeTransform {
-  const m = mainMatrix;
-  // Use the center coordinates already rounded to Float32 (to stay consistent with
-  // projectionCenter)
-  const { centerLngLat, projectionCenter, unitsPerDegree, unitsPerDegree2 } = uniforms;
-
-  return {
-    project: (lngLat: [number, number]): { x: number; y: number } => {
-      // 1. Compute the relative coordinates (using the center coordinates rounded to Float32)
-      const lngOffset = lngLat[0] - centerLngLat[0];
-      const latOffset = lngLat[1] - centerLngLat[1];
-
-      // 2. Convert into a Mercator offset (equivalent to the shader's project_offset)
-      const upd = [
-        unitsPerDegree[0] + unitsPerDegree2[0] * latOffset,
-        unitsPerDegree[1] + unitsPerDegree2[1] * latOffset,
-        unitsPerDegree[2] + unitsPerDegree2[2] * latOffset,
-      ];
-      const mercX = lngOffset * upd[0];
-      const mercY = latOffset * upd[1];
-
-      // 3. viewProjectionMatrix * offset + projectionCenter
-      // offset.w = 0, so the fourth column of the matrix has no effect
-      const clipX = m[0] * mercX + m[4] * mercY + projectionCenter[0];
-      const clipY = m[1] * mercX + m[5] * mercY + projectionCenter[1];
-      const clipW = m[3] * mercX + m[7] * mercY + projectionCenter[3];
-
-      // 4. Convert to NDC
-      const ndcX = clipX / clipW;
-      const ndcY = clipY / clipW;
-
-      // 5. Convert to screen coordinates
-      const screenX = (ndcX * 0.5 + 0.5) * viewport.width;
-      const screenY = (1 - (ndcY * 0.5 + 0.5)) * viewport.height; // the Y axis is flipped
-
-      return { x: screenX, y: screenY };
-    },
-
-    unproject: (point: { x: number; y: number }): { lng: number; lat: number } => {
-      // The inverse transform: screen coordinates -> geographic coordinates
-
-      // 1. Screen coordinates -> NDC
-      const ndcX = (point.x / viewport.width) * 2 - 1;
-      const ndcY = -((point.y / viewport.height) * 2 - 1); // the Y axis is flipped
-
-      // The inverse transform is non-linear, so an approximate solution is found with
-      // Newton's method
-      // A linear approximation is used as the initial value
-
-      // Estimate the initial clipW using the w component of projectionCenter
-      const initialClipW = projectionCenter[3];
-
-      // clipX = ndcX * clipW, clipY = ndcY * clipW
-      // clipX = m[0]*mercX + m[4]*mercY + projectionCenter[0]
-      // clipY = m[1]*mercX + m[5]*mercY + projectionCenter[1]
-      // clipW = m[3]*mercX + m[7]*mercY + projectionCenter[3]
-
-      // Initial estimate: solve the linear equations taking clipW ~= projectionCenter[3]
-      const clipX0 = ndcX * initialClipW;
-      const clipY0 = ndcY * initialClipW;
-
-      // Find mercX and mercY (a 2x2 system of simultaneous equations)
-      // m[0]*mercX + m[4]*mercY = clipX0 - projectionCenter[0]
-      // m[1]*mercX + m[5]*mercY = clipY0 - projectionCenter[1]
-      const det = m[0] * m[5] - m[1] * m[4];
-      if (Math.abs(det) < 1e-10) {
-        // Return the center for a singular matrix
-        return { lng: centerLngLat[0], lat: centerLngLat[1] };
-      }
-
-      const bx = clipX0 - projectionCenter[0];
-      const by = clipY0 - projectionCenter[1];
-      const mercX = (m[5] * bx - m[4] * by) / det;
-      const mercY = (m[0] * by - m[1] * bx) / det;
-
-      // Mercator offset -> geographic coordinate offset (the inverse transform)
-      // mercX = lngOffset * unitsPerDegree[0]
-      // mercY = latOffset * (unitsPerDegree[1] + unitsPerDegree2[1] * latOffset)
-      // Solve the quadratic equation
-
-      const lngOffset = mercX / unitsPerDegree[0];
-
-      // The quadratic equation in latOffset:
-      // unitsPerDegree2[1] * latOffset^2 + unitsPerDegree[1] * latOffset - mercY = 0
-      let latOffset: number;
-      if (Math.abs(unitsPerDegree2[1]) < 1e-15) {
-        // Linear approximation
-        latOffset = mercY / unitsPerDegree[1];
-      } else {
-        const a = unitsPerDegree2[1];
-        const b = unitsPerDegree[1];
-        const c = -mercY;
-        const discriminant = b * b - 4 * a * c;
-        if (discriminant < 0) {
-          latOffset = mercY / unitsPerDegree[1]; // fallback
-        } else {
-          // Choosing the sign: pick the smaller solution (the one closer to the center)
-          const sqrtD = Math.sqrt(discriminant);
-          const lat1 = (-b + sqrtD) / (2 * a);
-          const lat2 = (-b - sqrtD) / (2 * a);
-          latOffset = Math.abs(lat1) < Math.abs(lat2) ? lat1 : lat2;
-        }
-      }
-
-      return {
-        lng: centerLngLat[0] + lngOffset,
-        lat: centerLngLat[1] + latOffset,
-      };
-    },
-  };
 }

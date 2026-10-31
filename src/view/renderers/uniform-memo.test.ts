@@ -201,9 +201,7 @@ describe('memoizing uniforms in the retained rendering of points', () => {
     renderer.ensureShader(SHADER_DATA);
 
     const projectionData = createProjectionData();
-    renderer.setOffsetUniforms(
-      calculateOffsetUniforms([0, 0], projectionData.mainMatrix as unknown as Float32Array),
-    );
+    renderer.setOffsetUniforms(calculateOffsetUniforms([0, 0], projectionData));
 
     const batches = [
       renderer.buildRetained(points(0, 0), 'circle', { origin: [0, 0] })!,
@@ -221,7 +219,8 @@ describe('memoizing uniforms in the retained rendering of points', () => {
     expect(mock.writes('u_projection_matrix')).toBe(1);
     expect(mock.writes('u_projection_fallback_matrix')).toBe(1);
     expect(mock.writes('u_center_lnglat')).toBe(1);
-    expect(mock.writes('u_use_offset_mode')).toBe(1);
+    expect(mock.writes('u_center_sine_cosine')).toBe(1);
+    expect(mock.writes('u_projection_center')).toBe(1);
     expect(mock.writes('u_size_scale')).toBe(1);
     // The shape is a value of the instances, not a uniform
     expect(mock.writes('u_shape')).toBe(0);
@@ -234,9 +233,7 @@ describe('memoizing uniforms in the retained rendering of points', () => {
 
     const projectionData = createProjectionData();
     // The center of the linearization (the camera center) is [0, 0]
-    renderer.setOffsetUniforms(
-      calculateOffsetUniforms([0, 0], projectionData.mainMatrix as unknown as Float32Array),
-    );
+    renderer.setOffsetUniforms(calculateOffsetUniforms([0, 0], projectionData));
 
     const batches = [
       renderer.buildRetained(points(0, 0), 'circle', { origin: [0, 0] })!,
@@ -262,9 +259,7 @@ describe('memoizing uniforms in the retained rendering of points', () => {
     renderer.ensureShader(SHADER_DATA);
 
     const projectionData = createProjectionData();
-    renderer.setOffsetUniforms(
-      calculateOffsetUniforms([0, 0], projectionData.mainMatrix as unknown as Float32Array),
-    );
+    renderer.setOffsetUniforms(calculateOffsetUniforms([0, 0], projectionData));
     const batch = renderer.buildRetained(points(0, 0), 'circle', { origin: [0, 0] })!;
 
     beginRenderFrame();
@@ -287,9 +282,7 @@ describe('memoizing uniforms in the retained rendering of points', () => {
     renderer.ensureShader(SHADER_DATA);
 
     const first = createProjectionData();
-    renderer.setOffsetUniforms(
-      calculateOffsetUniforms([0, 0], first.mainMatrix as unknown as Float32Array),
-    );
+    renderer.setOffsetUniforms(calculateOffsetUniforms([0, 0], first));
     const batch = renderer.buildRetained(points(0, 0), 'circle', { origin: [0, 0] })!;
 
     beginRenderFrame();
@@ -306,9 +299,7 @@ describe('memoizing uniforms in the retained rendering of points', () => {
     renderer.ensureShader(SHADER_DATA);
 
     const projectionData = createProjectionData();
-    renderer.setOffsetUniforms(
-      calculateOffsetUniforms([0, 0], projectionData.mainMatrix as unknown as Float32Array),
-    );
+    renderer.setOffsetUniforms(calculateOffsetUniforms([0, 0], projectionData));
     const batch = renderer.buildRetained(points(0, 0), 'circle', { origin: [0, 0] })!;
 
     beginRenderFrame();
@@ -331,9 +322,7 @@ describe('memoizing uniforms in the retained rendering of lines', () => {
     renderer.ensureShader(SHADER_DATA);
 
     const projectionData = createProjectionData();
-    renderer.setOffsetUniforms(
-      calculateOffsetUniforms([0, 0], projectionData.mainMatrix as unknown as Float32Array),
-    );
+    renderer.setOffsetUniforms(calculateOffsetUniforms([0, 0], projectionData));
 
     const batches = [
       renderer.buildRetainedBatch(lineItems(0, 0), { lineStyle: 'solid' }, { origin: [0, 0] })!,
@@ -363,9 +352,7 @@ describe('memoizing uniforms in the retained rendering of lines', () => {
     renderer.ensureShader(SHADER_DATA);
 
     const projectionData = createProjectionData();
-    renderer.setOffsetUniforms(
-      calculateOffsetUniforms([0, 0], projectionData.mainMatrix as unknown as Float32Array),
-    );
+    renderer.setOffsetUniforms(calculateOffsetUniforms([0, 0], projectionData));
     const batch = renderer.buildRetainedBatch(
       lineItems(0, 0),
       { lineStyle: 'solid' },

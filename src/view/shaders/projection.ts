@@ -20,8 +20,9 @@ import {
   TERRAIN_ATLAS_TEXTURE_UNIT,
   type TerrainRenderState,
 } from '../terrain/state.js';
+import { centerSineCosineOf } from './center-projection.js';
 import { getRenderFrame } from './frame.js';
-import type { OffsetUniforms } from './helpers.js';
+import { calculateOffsetUniforms, type OffsetUniforms } from './helpers.js';
 
 /**
  * The locations of the projection and terrain uniforms of one program, as
@@ -31,18 +32,14 @@ import type { OffsetUniforms } from './helpers.js';
 export interface ProjectionUniformLocations {
   /** `u_projection_matrix`: the projection matrix of the frame */
   matrix: WebGLUniformLocation | null;
-  /** `u_center_lnglat`: the view center in degrees, rounded to Float32 (offset mode) */
+  /** `u_center_lnglat`: the center the offsets are taken from, in degrees, rounded to Float32 */
   centerLngLat: WebGLUniformLocation | null;
-  /** `u_projection_center`: the view center in clip space (offset mode) */
+  /** `u_center_sine_cosine`: sin and cos of the latitude and of the longitude of the center */
+  centerSineCosine: WebGLUniformLocation | null;
+  /** `u_projection_center`: the center in clip space */
   projectionCenter: WebGLUniformLocation | null;
-  /** `u_units_per_degree`: Mercator units per degree at the center (offset mode) */
-  unitsPerDegree: WebGLUniformLocation | null;
-  /** `u_units_per_degree2`: the latitude correction of the above (offset mode) */
-  unitsPerDegree2: WebGLUniformLocation | null;
-  /** `u_use_offset_mode`: 1 to project relative to the center, 0 otherwise */
-  useOffsetMode: WebGLUniformLocation | null;
   /**
-   * The gap between the reference coordinates of a retained batch and the linearization
+   * `u_origin_shift`: the gap between the reference coordinates of a retained batch and the
    * center (immediate mode uses [0, 0])
    */
   originShift: WebGLUniformLocation | null;
@@ -54,8 +51,6 @@ export interface ProjectionUniformLocations {
   transition: WebGLUniformLocation | null;
   /** Globe: the fallback matrix (from maplibre's prelude) */
   fallbackMatrix: WebGLUniformLocation | null;
-  /** Terrain: the Mercator coordinates of the view center */
-  centerMercator: WebGLUniformLocation | null;
   /** Terrain: 1 while the terrain is drawn, 0 otherwise */
   terrainOn: WebGLUniformLocation | null;
   /** Terrain: the sampler of the DEM atlas */
@@ -88,18 +83,11 @@ interface ProjectionUniformMemo {
   mainMatrix: unknown;
   /** The source of the globe-related uniforms (by reference) */
   globeSource: ProjectionData | null;
-  /** The value written to u_use_offset_mode */
-  useOffsetMode: number;
   /** The value written to u_origin_shift */
   originShiftX: number;
   originShiftY: number;
-  /** The source of u_center_lnglat (by reference; null means [0,0] was written) */
+  /** The source of the uniforms of the center (by reference) */
   centerSource: OffsetUniforms | null;
-  /**
-   * The source of the offset-mode-specific uniforms (by reference; null means
-   * the default values were written)
-   */
-  offsetSource: OffsetUniforms | null;
   /** The source of the terrain uniforms (by reference) */
   terrainSource: TerrainRenderState | null;
   /** The value written to u_terrain_on */
@@ -129,11 +117,9 @@ function createMemo(): ProjectionUniformMemo {
     frame: -1,
     mainMatrix: null,
     globeSource: null,
-    useOffsetMode: Number.NaN,
     originShiftX: Number.NaN,
     originShiftY: Number.NaN,
     centerSource: null,
-    offsetSource: null,
     terrainSource: null,
     terrainOn: Number.NaN,
     terrainCenterSource: null,
@@ -152,6 +138,8 @@ export class ProjectionUniformManager {
   private gl: WebGL2RenderingContext;
   private locations: ProjectionUniformLocations | null = null;
   private memo: ProjectionUniformMemo = createMemo();
+  /** The uniforms of the center [0, 0], for the draws given none */
+  private origin: { projectionData: ProjectionData; uniforms: OffsetUniforms } | null = null;
   /**
    * Whether this is a renderer that draws things stuck to the ground surface
    * (polygons and lines)
@@ -215,12 +203,10 @@ export class ProjectionUniformManager {
     this.locations = {
       // The basic projection
       matrix: gl.getUniformLocation(program, 'u_projection_matrix'),
-      // For offset mode
+      // The center the offsets are taken from
       centerLngLat: gl.getUniformLocation(program, 'u_center_lnglat'),
+      centerSineCosine: gl.getUniformLocation(program, 'u_center_sine_cosine'),
       projectionCenter: gl.getUniformLocation(program, 'u_projection_center'),
-      unitsPerDegree: gl.getUniformLocation(program, 'u_units_per_degree'),
-      unitsPerDegree2: gl.getUniformLocation(program, 'u_units_per_degree2'),
-      useOffsetMode: gl.getUniformLocation(program, 'u_use_offset_mode'),
       originShift: gl.getUniformLocation(program, 'u_origin_shift'),
       // For globe mode
       mercatorCoords: gl.getUniformLocation(program, 'u_projection_tile_mercator_coords'),
@@ -228,7 +214,6 @@ export class ProjectionUniformManager {
       transition: gl.getUniformLocation(program, 'u_projection_transition'),
       fallbackMatrix: gl.getUniformLocation(program, 'u_projection_fallback_matrix'),
       // For terrain
-      centerMercator: gl.getUniformLocation(program, 'u_center_mercator'),
       terrainOn: gl.getUniformLocation(program, 'u_terrain_on'),
       demAtlas: gl.getUniformLocation(program, 'u_dem_atlas'),
       demAtlasRect: gl.getUniformLocation(program, 'u_dem_atlas_rect'),
@@ -248,6 +233,14 @@ export class ProjectionUniformManager {
     return this.locations;
   }
 
+  /** The uniforms of the center [0, 0] for the projection data of a frame (computed once) */
+  private originUniformsOf(projectionData: ProjectionData): OffsetUniforms {
+    if (this.origin?.projectionData !== projectionData) {
+      this.origin = { projectionData, uniforms: calculateOffsetUniforms([0, 0], projectionData) };
+    }
+    return this.origin.uniforms;
+  }
+
   /**
    * Sets the projection uniforms
    *
@@ -257,14 +250,15 @@ export class ProjectionUniformManager {
    * are invariant within a frame (see frame.ts).
    *
    * @param projectionData MapLibre's ProjectionData
-   * @param zoom The current zoom level
-   * @param offsetUniforms The uniforms for offset mode (null is allowed)
+   * @param _zoom The zoom of the frame (not read: the projection is the same at every zoom)
+   * @param offsetUniforms The uniforms of the center the offsets are taken from (null takes
+   *   them from [0, 0], as absolute coordinates)
    * @param originShift The gap between the reference coordinates of the vertex offsets and
-   *   the linearization center (the default is [0,0])
+   *   the center (the default is [0,0])
    */
   setUniforms(
     projectionData: ProjectionData,
-    zoom: number,
+    _zoom: number,
     offsetUniforms: OffsetUniforms | null,
     originShift: [number, number] = NO_ORIGIN_SHIFT,
   ): void {
@@ -279,19 +273,10 @@ export class ProjectionUniformManager {
     const frame = getRenderFrame();
     const staleFrame = memo.frame !== frame;
 
-    // Use offset mode at high zoom levels (zoom >= 12)
-    const useOffsetMode = zoom >= 12 ? 1.0 : 0.0;
-
     // Projection matrix
     if (locs.matrix && (staleFrame || memo.mainMatrix !== projectionData.mainMatrix)) {
       gl.uniformMatrix4fv(locs.matrix, false, projectionData.mainMatrix);
       memo.mainMatrix = projectionData.mainMatrix;
-    }
-
-    // The offset mode flag
-    if (locs.useOffsetMode && (staleFrame || memo.useOffsetMode !== useOffsetMode)) {
-      gl.uniform1f(locs.useOffsetMode, useOffsetMode);
-      memo.useOffsetMode = useOffsetMode;
     }
 
     // The gap of the reference coordinates is always set (defaults to [0,0])
@@ -307,46 +292,17 @@ export class ProjectionUniformManager {
       memo.originShiftY = originShift[1];
     }
 
-    // centerLngLat is always set (because the relative coordinates are computed on the CPU
-    // side, it is required even at zoom < 12 so that the shader's fallback path can restore
-    // the absolute coordinates)
-    if (locs.centerLngLat && (staleFrame || memo.centerSource !== offsetUniforms)) {
-      if (offsetUniforms) {
-        gl.uniform2fv(locs.centerLngLat, offsetUniforms.centerLngLat);
-      } else {
-        gl.uniform2fv(locs.centerLngLat, [0, 0]);
+    // The center the offsets are taken from: its degrees, sin and cos of them, and its position
+    // in clip space. Without the uniforms of a center the offsets are absolute coordinates, the
+    // offsets from [0, 0]
+    const center = offsetUniforms ?? this.originUniformsOf(projectionData);
+    if (staleFrame || memo.centerSource !== center) {
+      if (locs.centerLngLat) gl.uniform2fv(locs.centerLngLat, center.centerLngLat);
+      if (locs.centerSineCosine) {
+        gl.uniform4fv(locs.centerSineCosine, centerSineCosineOf(center.centerLngLat));
       }
-      memo.centerSource = offsetUniforms;
-    }
-
-    // The uniforms specific to offset mode (used only when zoom >= 12)
-    // If the source is the same, the written values are the same too (null means the default
-    // values were written)
-    const offsetSource = offsetUniforms && useOffsetMode > 0 ? offsetUniforms : null;
-    if (staleFrame || memo.offsetSource !== offsetSource) {
-      if (offsetSource) {
-        if (locs.projectionCenter) {
-          gl.uniform4fv(locs.projectionCenter, offsetSource.projectionCenter);
-        }
-        if (locs.unitsPerDegree) {
-          gl.uniform3fv(locs.unitsPerDegree, offsetSource.unitsPerDegree);
-        }
-        if (locs.unitsPerDegree2) {
-          gl.uniform3fv(locs.unitsPerDegree2, offsetSource.unitsPerDegree2);
-        }
-      } else {
-        // Default values when not in offset mode
-        if (locs.projectionCenter) {
-          gl.uniform4fv(locs.projectionCenter, [0, 0, 0, 0]);
-        }
-        if (locs.unitsPerDegree) {
-          gl.uniform3fv(locs.unitsPerDegree, [1, 1, 1]);
-        }
-        if (locs.unitsPerDegree2) {
-          gl.uniform3fv(locs.unitsPerDegree2, [0, 0, 0]);
-        }
-      }
-      memo.offsetSource = offsetSource;
+      if (locs.projectionCenter) gl.uniform4fv(locs.projectionCenter, center.projectionCenter);
+      memo.centerSource = center;
     }
 
     // The uniforms for globe mode (taken from projectionData)
@@ -382,14 +338,13 @@ export class ProjectionUniformManager {
       staleFrame ||
       memo.terrainSource !== terrain ||
       memo.terrainOn !== terrainOn ||
-      memo.terrainCenterSource !== offsetUniforms
+      memo.terrainCenterSource !== center
     ) {
-      const centerMercX = offsetUniforms?.centerMercator[0] ?? 0;
-      const centerMercY = offsetUniforms?.centerMercator[1] ?? 0;
+      const centerMercX = center.centerMercator[0];
+      const centerMercY = center.centerMercator[1];
 
       if (locs.terrainOn) gl.uniform1f(locs.terrainOn, terrainOn);
       if (locs.demAtlas) gl.uniform1i(locs.demAtlas, TERRAIN_ATLAS_TEXTURE_UNIT);
-      if (locs.centerMercator) gl.uniform2f(locs.centerMercator, centerMercX, centerMercY);
       if (locs.demAtlasRect) {
         gl.uniform4f(
           locs.demAtlasRect,
@@ -407,7 +362,7 @@ export class ProjectionUniformManager {
       }
       memo.terrainSource = terrain;
       memo.terrainOn = terrainOn;
-      memo.terrainCenterSource = offsetUniforms;
+      memo.terrainCenterSource = center;
     }
 
     // The uniforms of the terrain shading (declared only by the shaders of the polygon fill)

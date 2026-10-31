@@ -26,8 +26,6 @@ const OFFSET: OffsetUniforms = {
   centerLngLat64: [0, 0],
   centerMercator: [0.5, 0.5],
   projectionCenter: [0, 0, 0, 1],
-  unitsPerDegree: [1, 1, 1],
-  unitsPerDegree2: [0, 0, 0],
 };
 
 /** Terrain that is nothing but a single 2000 m high ridge at latitude 35.30 to 35.32 */
@@ -76,7 +74,7 @@ function applyFrame(options: { camera?: readonly [number, number, number] | null
     terrain: createRidgeTerrain(),
     zoom: 11.7,
     elevationScale: SCALE,
-    mainMatrix: new Array(16).fill(0),
+    projection: { mainMatrix: new Array(16).fill(0) },
     offsetUniforms: OFFSET,
     width: 800,
     height: 600,

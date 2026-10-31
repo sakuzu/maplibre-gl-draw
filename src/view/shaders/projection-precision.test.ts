@@ -60,6 +60,9 @@ const ROUNDOFFS_OF_DISTANCE = 72;
 /** The built-in functions GLSL ES 3.00 gives no bound of the error */
 const UNBOUNDED = /\b(sin|cos|tan|asin|acos|atan|sinh|cosh|tanh|asinh|acosh|atanh)\s*\(/;
 
+/** GLSL without its comments */
+const code = (glsl: string): string => glsl.replace(/\/\/.*$/gm, '');
+
 /** The latitude of a Mercator y (float64) */
 const latitudeOf = (y: number): number =>
   (Math.atan(Math.sinh(Math.PI * (1 - 2 * y))) * 180) / Math.PI;
@@ -212,9 +215,9 @@ function screenPositions(camera: TestCamera): Array<[number, number]> {
 
 describe('the GLSL of the projection', () => {
   it('calls none of the built-in functions without a bound of the error', () => {
-    expect(OFFSET_MODE_GLSL).not.toMatch(UNBOUNDED);
+    expect(code(OFFSET_MODE_GLSL)).not.toMatch(UNBOUNDED);
     // The points of a line on the globe are taken along the Mercator plane
-    const line = buildLineVertexSource('', '');
+    const line = code(buildLineVertexSource('', ''));
     const stations = [...line.matchAll(/\n\w+ station\w*\([^)]*\) \{[\s\S]*?\n\}/g)].map(
       (m) => m[0],
     );
@@ -223,30 +226,37 @@ describe('the GLSL of the projection', () => {
   });
 });
 
+/** The copy at the limit is run once per operation of every position: a few seconds a test */
+const HEAVY = { timeout: 60_000 };
+
 describe('the projection at the limit of the specification', () => {
-  it('stays within half a pixel on the screen of Web Mercator, flat and tilted, at every zoom', () => {
-    let worst: Worst = { px: 0, where: '' };
-    for (const zoom of ZOOMS) {
-      for (const lat of LATITUDES) {
-        for (const lng of LONGITUDES) {
-          for (const pitch of [0, 60]) {
-            const camera: TestCamera = {
-              center: [lng, lat],
-              zoom,
-              pitch,
-              bearing: 30,
-              width: WIDTH,
-              height: HEIGHT,
-            };
-            worst = worse(worst, worstOf(camera, 0, screenPositions(camera), true));
+  it(
+    'stays within half a pixel on the screen of Web Mercator, flat and tilted, at every zoom',
+    HEAVY,
+    () => {
+      let worst: Worst = { px: 0, where: '' };
+      for (const zoom of ZOOMS) {
+        for (const lat of LATITUDES) {
+          for (const lng of LONGITUDES) {
+            for (const pitch of [0, 60]) {
+              const camera: TestCamera = {
+                center: [lng, lat],
+                zoom,
+                pitch,
+                bearing: 30,
+                width: WIDTH,
+                height: HEIGHT,
+              };
+              worst = worse(worst, worstOf(camera, 0, screenPositions(camera), true));
+            }
           }
         }
       }
-    }
-    expect(worst.px, worst.where).toBeLessThan(LIMIT_PX);
-  });
+      expect(worst.px, worst.where).toBeLessThan(LIMIT_PX);
+    },
+  );
 
-  it('stays within half a pixel at the ends of an edge across the screen', () => {
+  it('stays within half a pixel at the ends of an edge across the screen', HEAVY, () => {
     let worst: Worst = { px: 0, where: '' };
     for (const zoom of ZOOMS) {
       for (const lat of [...LATITUDES, 84.9, -60]) {
@@ -260,7 +270,7 @@ describe('the projection at the limit of the specification', () => {
     expect(worst.px, worst.where).toBeLessThan(LIMIT_PX);
   });
 
-  it('keeps the error of a position within a few dozen roundoffs of its distance', () => {
+  it('keeps the error of a position within a few dozen roundoffs of its distance', HEAVY, () => {
     // What bounds an edge across the screen, whose ends are far
     let roundoffs = 0;
     for (const zoom of ZOOMS) {
@@ -275,7 +285,7 @@ describe('the projection at the limit of the specification', () => {
     expect(roundoffs).toBeLessThan(ROUNDOFFS_OF_DISTANCE);
   });
 
-  it('stays within half a pixel on the screen of the globe and of the transition', () => {
+  it('stays within half a pixel on the screen of the globe and of the transition', HEAVY, () => {
     let worst: Worst = { px: 0, where: '' };
     for (const transition of [1, 0.5, 0.05]) {
       for (const zoom of ZOOMS) {
@@ -295,25 +305,29 @@ describe('the projection at the limit of the specification', () => {
     expect(worst.px, worst.where).toBeLessThan(LIMIT_PX);
   });
 
-  it('stays within half a pixel at the points of a line on the globe between far ends', () => {
-    let worst: Worst = { px: 0, where: '' };
-    for (const transition of [1, 0.5]) {
-      for (const zoom of ZOOMS) {
-        for (const lat of LATITUDES) {
-          const camera: TestCamera = {
-            center: [139.7, lat],
-            zoom,
-            pitch: 30,
-            bearing: 20,
-            width: WIDTH,
-            height: HEIGHT,
-          };
-          for (const reach of [4 * ON_SCREEN, EDGE_REACH]) {
-            worst = worse(worst, worstStationOf(camera, transition, reach));
+  it(
+    'stays within half a pixel at the points of a line on the globe between far ends',
+    HEAVY,
+    () => {
+      let worst: Worst = { px: 0, where: '' };
+      for (const transition of [1, 0.5]) {
+        for (const zoom of ZOOMS) {
+          for (const lat of LATITUDES) {
+            const camera: TestCamera = {
+              center: [139.7, lat],
+              zoom,
+              pitch: 30,
+              bearing: 20,
+              width: WIDTH,
+              height: HEIGHT,
+            };
+            for (const reach of [4 * ON_SCREEN, EDGE_REACH]) {
+              worst = worse(worst, worstStationOf(camera, transition, reach));
+            }
           }
         }
       }
-    }
-    expect(worst.px, worst.where).toBeLessThan(LIMIT_PX);
-  });
+      expect(worst.px, worst.where).toBeLessThan(LIMIT_PX);
+    },
+  );
 });

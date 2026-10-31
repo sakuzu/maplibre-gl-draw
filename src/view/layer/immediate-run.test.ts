@@ -152,10 +152,7 @@ function setup(options: { rows?: boolean } = {}) {
     companions: createFeatureCompanionRegistry(),
   };
   const camera = (projectionData: ProjectionData): void => {
-    const offset = calculateOffsetUniforms(
-      CENTER,
-      projectionData.mainMatrix as unknown as Float32Array,
-    );
+    const offset = calculateOffsetUniforms(CENTER, projectionData);
     point.setOffsetUniforms(offset);
     point.setProjectionData(projectionData);
     line.setOffsetUniforms(offset);

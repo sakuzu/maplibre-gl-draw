@@ -105,10 +105,7 @@ function recordShifts(): { shifts: number[][]; arrays: Set<unknown> } {
 }
 
 function expectedShifts(): number[][] {
-  const camera = calculateOffsetUniforms(
-    CAMERA,
-    projection().mainMatrix as unknown as Float32Array,
-  );
+  const camera = calculateOffsetUniforms(CAMERA, projection());
   return ORIGINS.map((origin) => [
     Math.fround(origin[0]) - camera.centerLngLat[0],
     Math.fround(origin[1]) - camera.centerLngLat[1],
@@ -124,10 +121,7 @@ function binding(gl: WebGL2RenderingContext): RowStateBinding {
 describe('the gap of the origin of a retained batch', () => {
   it('is written into one array per renderer, with the gap of each batch', () => {
     const { gl } = createGL();
-    const camera = calculateOffsetUniforms(
-      CAMERA,
-      projection().mainMatrix as unknown as Float32Array,
-    );
+    const camera = calculateOffsetUniforms(CAMERA, projection());
     const point = new PointInstanceRenderer({} as MapLibreMap, gl, 1);
     const line = new SDFLineRenderer({} as MapLibreMap, gl, 1);
     const polygon = new SDFPolygonRenderer(gl, 1);

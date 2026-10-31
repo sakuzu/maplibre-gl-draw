@@ -888,11 +888,8 @@ void main() {
 
     run.useProgram(this.program);
 
-    // The center of the linearization is aligned to the camera center (if it were
-    // linearized around the origin of the batch, the residual of the Mercator
-    // approximation would become a displacement of several pixels at vertices far from
-    // the center). The vertices are relative to the origin, so that difference is passed
-    // via u_origin_shift
+    // The offsets are taken from the camera center, near what is on screen. The vertices are
+    // relative to the origin of the batch, so that difference is passed via u_origin_shift
     const cameraUniforms = this.offsetUniforms;
     if (cameraUniforms) {
       this.projectionUniformManager.setUniforms(
@@ -906,7 +903,7 @@ void main() {
       this.projectionUniformManager.setUniforms(
         projectionData,
         zoom,
-        calculateOffsetUniforms(batch.origin, projectionData.mainMatrix as unknown as Float32Array),
+        calculateOffsetUniforms(batch.origin, projectionData),
       );
     }
 
@@ -1043,7 +1040,7 @@ void main() {
       row.projection.setUniforms(
         projectionData,
         zoom,
-        calculateOffsetUniforms(batch.origin, projectionData.mainMatrix as unknown as Float32Array),
+        calculateOffsetUniforms(batch.origin, projectionData),
       );
     }
     row.uniforms.setShape(viewport, batch.widthZoom ?? zoom);

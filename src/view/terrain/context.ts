@@ -30,7 +30,7 @@
  */
 
 import { TerrainFillCache } from '../cache/terrain-fill.js';
-import type { OffsetUniforms } from '../shaders/helpers.js';
+import type { OffsetUniforms, ProjectionMatrices } from '../shaders/helpers.js';
 import type { TerrainLike } from './detect.js';
 import type { QuadDrapeFrame } from './drape/quad.js';
 import { TerrainCoverage, type TerrainElevationQuery } from './ground.js';
@@ -192,12 +192,10 @@ export interface AnchorFrame {
   /** The factor from meters to Mercator z (represented by the latitude of the screen
    * center) */
   elevationScale: number;
-  /** The projection matrix being handed to the vertex shader */
-  mainMatrix: number[] | null;
-  /** The uniforms of offset mode (the center of the linearization) */
+  /** The projection data of the frame being handed to the vertex shader (its matrices) */
+  projection: ProjectionMatrices | null;
+  /** The uniforms of the center of the view */
   offsetUniforms: OffsetUniforms | null;
-  /** Whether offset mode is used (the same as the shader's u_use_offset_mode) */
-  useOffsetMode: boolean;
   /** The viewport (in CSS pixels, the same unit as map.project) */
   width: number;
   height: number;
@@ -217,9 +215,8 @@ export const INACTIVE_ANCHOR_FRAME: AnchorFrame = {
   elevationQuery: null,
   tileZoom: 0,
   elevationScale: 0,
-  mainMatrix: null,
+  projection: null,
   offsetUniforms: null,
-  useOffsetMode: false,
   width: 0,
   height: 0,
   cameraMercator: null,

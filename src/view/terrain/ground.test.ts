@@ -106,8 +106,6 @@ describe('anchorElevationMeters reads the drawn surface', () => {
     centerLngLat64: [179, 0] as [number, number],
     centerMercator: [0.997, 0.5] as [number, number],
     projectionCenter: [0, 0, 0, 1] as [number, number, number, number],
-    unitsPerDegree: [1, 1, 1] as [number, number, number],
-    unitsPerDegree2: [0, 0, 0] as [number, number, number],
   };
 
   it('asks the map on the copy of the world the point is drawn on', () => {
@@ -121,7 +119,7 @@ describe('anchorElevationMeters reads the drawn surface', () => {
       elevationQuery: query,
       zoom: 14,
       elevationScale: 1e-3,
-      mainMatrix: new Array(16).fill(0),
+      projection: { mainMatrix: new Array(16).fill(0) },
       offsetUniforms: OFFSET,
       width: 800,
       height: 600,

@@ -98,29 +98,26 @@ vec4 projectOffset(vec2 offset) {
 // The Mercator limit of latitude (the plane reaches infinity at the poles)
 const float STATION_MAX_LAT = 85.0511287798066;
 
-// Mercator coordinates (0-1) -> WGS84
-vec2 stationMercatorToLngLat(vec2 mercator) {
-    float lng = mercator.x * 360.0 - 180.0;
-    float lat = degrees(atan(sinh(PI * (1.0 - 2.0 * mercator.y))));
-    return vec2(lng, lat);
+// The offset of a latitude kept within the limit of the Mercator plane (an offset within it is
+// kept exactly)
+vec2 stationWithinMercator(vec2 offset, float baseLatitude) {
+    return vec2(offset.x, clamp(offset.y, -STATION_MAX_LAT - baseLatitude, STATION_MAX_LAT - baseLatitude));
 }
 
-// The point at t along the segment from a to b (relative coordinates)
+// The point at t along the segment from a to b (relative coordinates), in clip space
 //
 // On the terrain it moves along the degrees, as it always has. On the globe it moves along the
 // straight line of the Mercator plane: that is the path maplibre draws an edge along on the
 // sphere (a parallel stays a parallel), where a straight line between the projected ends would
-// be a chord through the sphere.
-vec2 stationOffset(vec2 a, vec2 b, float t) {
-    if (u_station_mercator < 0.5) return mix(a, b, t);
-    // The same absolute coordinates as project_position_to_clipspace_from_offset
-    vec2 base = origin_shift() + u_center_lnglat;
-    vec2 la = a + base;
-    vec2 lb = b + base;
-    la.y = clamp(la.y, -STATION_MAX_LAT, STATION_MAX_LAT);
-    lb.y = clamp(lb.y, -STATION_MAX_LAT, STATION_MAX_LAT);
-    vec2 mercator = mix(lngLatToMercator(la), lngLatToMercator(lb), t);
-    return stationMercatorToLngLat(mercator) - base;
+// be a chord through the sphere. The Mercator offsets of the ends from the center are mixed and
+// projected as they are, so no absolute coordinate is formed.
+vec4 stationClip(vec2 a, vec2 b, float t) {
+    if (u_station_mercator < 0.5) return projectOffset(mix(a, b, t));
+    vec2 shift = origin_shift();
+    float baseLatitude = shift.y + u_center_lnglat.y;
+    vec2 ma = project_offset(vec3(stationWithinMercator(a + shift, baseLatitude), 0.0)).xy;
+    vec2 mb = project_offset(vec3(stationWithinMercator(b + shift, baseLatitude), 0.0)).xy;
+    return project_mercator_offset_to_clipspace(ma * (1.0 - t) + mb * t, u_projection_matrix);
 }
 
 // Convert clip-space coordinates into screen space (pixels)
@@ -186,17 +183,18 @@ void main() {
     // branch skips this block entirely, so it is exactly identical to the previous computation.
     if (u_stations > 1.5) {
         float dt = 1.0 / stations;
-        vec2 backOffset = stationOffset(startOffset, endOffset, max(t - dt, 0.0));
-        vec2 forwardOffset = stationOffset(startOffset, endOffset, min(t + dt, 1.0));
 
         if (!atStart && !atEnd) {
-            vec2 midOffset = stationOffset(startOffset, endOffset, t);
-            currentClip = projectOffset(midOffset);
+            currentClip = stationClip(startOffset, endOffset, t);
             currentScreen = clipToScreen(currentClip);
         }
 
-        vec2 backScreen = atStart ? currentScreen : clipToScreen(projectOffset(backOffset));
-        vec2 forwardScreen = atEnd ? currentScreen : clipToScreen(projectOffset(forwardOffset));
+        vec2 backScreen = atStart
+            ? currentScreen
+            : clipToScreen(stationClip(startOffset, endOffset, max(t - dt, 0.0)));
+        vec2 forwardScreen = atEnd
+            ? currentScreen
+            : clipToScreen(stationClip(startOffset, endOffset, min(t + dt, 1.0)));
         vec2 localVec = forwardScreen - backScreen;
         float localLen = length(localVec);
         if (localLen > 0.0001) {

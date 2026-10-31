@@ -23,6 +23,8 @@
  * The matrices are those maplibre builds for a custom layer (Web Mercator and the globe).
  */
 
+import { CENTER_PROJECTION_CONSTANTS } from '../view/shaders/center-projection.js';
+
 const F32 = Math.fround;
 const DEG = Math.PI / 180;
 
@@ -191,7 +193,7 @@ export function sphereOf(lng: number, lat: number): [number, number, number] {
 }
 
 /** The threshold over which maplibre draws the globe alone, as the shader compares it */
-const GLOBE_ONLY = F32(0.999);
+const GLOBE_ONLY = CENTER_PROJECTION_CONSTANTS.globeOnly;
 
 /**
  * The position of a longitude and a latitude in clip space, in float64, as maplibre's projection
@@ -256,33 +258,19 @@ export function screenOf(clip: readonly number[], width: number, height: number)
 // The GLSL, operation by operation
 // ============================================================================
 
-const factorial = (n: number): number => (n <= 1 ? 1 : n * factorial(n - 1));
-/** sin: 1, -1/3!, 1/5!, ... 1/13!, as 32-bit floats */
-const SINE = [1, 3, 5, 7, 9, 11, 13].map((n, i) => F32((i % 2 === 0 ? 1 : -1) / factorial(n)));
-/** cos: 1, -1/2!, 1/4!, ... 1/14! */
-const COSINE = [0, 2, 4, 6, 8, 10, 12, 14].map((n, i) =>
-  F32((i % 2 === 0 ? 1 : -1) / factorial(n)),
-);
-/** atanh(w) / w: 1, 1/3, 1/5, ... 1/19 */
-const ATANH = Array.from({ length: 10 }, (_, k) => F32(1 / (2 * k + 1)));
-/** tanh(x) / x: the Taylor coefficients of tanh up to x^15 */
-const TANH = [
-  1,
-  -1 / 3,
-  2 / 15,
-  -17 / 315,
-  62 / 2835,
-  -1382 / 155925,
-  21844 / 6081075,
-  -929569 / 638512875,
-].map(F32);
-const HALF_DEGREE = F32(Math.PI / 360);
-const PER_DEGREE = F32(1 / 360);
-const MERCATOR_Y = F32(-1 / (2 * Math.PI));
-const PI_32 = F32(Math.PI);
-const GLOBE_RADIUS = F32(6371008.8);
-/** Where the series of atanh and tanh give way to log and exp */
-export const SERIES_LIMIT = F32(0.4);
+// The coefficients and the constants as the GLSL holds them
+const {
+  sine: SINE,
+  cosine: COSINE,
+  atanh: ATANH,
+  tanh: TANH,
+  halfDegree: HALF_DEGREE,
+  perDegree: PER_DEGREE,
+  mercatorY: MERCATOR_Y,
+  pi: PI_32,
+  globeRadius: GLOBE_RADIUS,
+  seriesLimit: SERIES_LIMIT,
+} = CENTER_PROJECTION_CONSTANTS;
 
 /** Horner's rule: c0 + x (c1 + x (c2 + ...)) */
 function horner(ar: Arithmetic, x: number, c: readonly number[]): number {
