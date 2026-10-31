@@ -20,7 +20,8 @@ export interface BoundingBoxStyle {
    */
   stroke: StrokeStyle;
   /**
-   * The gap between the selected features and the box, in CSS pixels
+   * The gap between the selected features and the box, in CSS pixels, laid on the ground with
+   * the scale of the view (the box of a point takes it on the screen)
    *
    * @defaultValue `10`
    */
@@ -53,7 +54,8 @@ export interface RotateHandleStyle {
    */
   point: PointStyle;
   /**
-   * The distance between the handle and the box, in CSS pixels
+   * The distance between the handle and the box, in CSS pixels, laid on the ground with the
+   * scale of the view
    *
    * @defaultValue `10`
    */

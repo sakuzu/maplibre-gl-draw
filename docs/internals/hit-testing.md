@@ -559,7 +559,8 @@ the same way (`computeRotateHandle`).
 3. Auxiliary handles (single selection only)
 4. Vertex handles (single selection only)
 5. Midpoint handles (single selection only)
-6. The inside of the bounding box (move)
+6. The inside of the frames drawn (move): the frame of all of them and the
+   frame of each, a point's frame on the screen around its marker
 
 Handle positions are enumerated by `computeVertexHandles()` and
 `computeMidpointHandles()` in `src/view/ui/handles.ts`. They walk every

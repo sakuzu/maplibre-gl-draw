@@ -273,7 +273,14 @@ Neither `outline`, `bounds` nor `ctx.screen.outline` includes the
 margin of the frame (`selectionStyle.boundingBox.margin`, 10 pixels by
 default). The engine adds it when it draws: every edge of the frame
 stands the margin outside the corners, for every type, points
-included, and the resize and rotate handles sit on the frame.
+included, and the resize and rotate handles sit on the frame. The frame
+of a point takes the margin on the screen, around its marker. Any other
+frame takes it on the map: the margin is turned into meters at the
+feature with `ctx.screen.metersPerPixel` and laid on the ground, so the
+frame tilts and turns with the map. Something you draw around a feature
+for the current view, such as a handle out of its frame, stands where
+the engine would put it when you lay its pixels on the ground the same
+way, and your hit test then finds it where it is drawn.
 
 `handles` returns the handles of a selected feature, each with an ID,
 a position and a cursor. A drag of one calls `onHandleDrag` for every

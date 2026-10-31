@@ -161,6 +161,11 @@ writing it. Its changes are listed after those of 3.0.0.
   store has gone out and once each frame is drawn. A check that fails
   throws `DrawError` with the code `invalid-state`, unless it is allowed
   to fail; each failure is given to `onFailure`.
+- `ScreenContext.metersPerPixel(lngLat)`: the meters a CSS pixel spans on
+  the ground at a position, in the frame drawn last, as the engine lays
+  the margin of the selection frame and the distance of the rotate handle
+  on the map with it, so that an extension can lay what it draws around a
+  feature for the current view the same way.
 
 ### Changed in 3.0.0
 
@@ -198,6 +203,31 @@ writing it. Its changes are listed after those of 3.0.0.
 - `TableGeometry.dimensions` takes the names of GeoArrow (`'xy'`,
   `'xyz'`, `'xym'` or `'xyzm'`, `CoordinateDimensions`) instead of `2` or
   `3`.
+- The rotate handle stands `selectionStyle.rotateHandle.distance` CSS
+  pixels above the frame on a flat map, closer to the frame than before:
+  it stood twice that distance away at the equator and more toward the
+  poles (about 2.5 times at a latitude of 35 degrees), as its distance
+  was turned into degrees with tiles of 256 pixels and with the scale of
+  the longitude for the latitude too.
+- The margin of the frame of a feature with an extent and the distance of
+  the rotate handle are laid on the ground: they are turned into meters
+  at the feature with the scale of the view (`ScreenContext.metersPerPixel`:
+  that of Web Mercator at the latitude of the feature, that of the center
+  of the view on the globe, and the mix of the two in the transition
+  between them) and tilt and turn with the map. On a flat Web Mercator
+  map without terrain they are the pixels given, as before; tilted they
+  are foreshortened as the map is, on the globe they are the pixels given
+  at the center of the view and shorter toward its edge, and over terrain
+  they follow the ground. The frame of a point stays on the screen around
+  its marker.
+- The arrow keys move the selection by a length on the ground: the
+  pixels of the press turned into meters with the scale of the view,
+  along the direction of the key on the screen turned by the bearing of
+  the map. On a flat Web Mercator map, untilted, it moves by those pixels
+  on the screen as before; tilted, by the same length on the ground.
+- Every length on the ground is measured on the sphere maplibre draws,
+  of a radius of 6,371,008.8 m, instead of a circumference of
+  40,075,016.686 m: a width given in meters is drawn 0.11 % wider.
 
 ### Removed in 3.0.0
 
@@ -215,6 +245,15 @@ writing it. Its changes are listed after those of 3.0.0.
   another distance of the rotate handle: the select mode tested them at
   the sizes and distances by default, so a handle drawn larger, or farther
   out, could not be grabbed where it was drawn.
+- The frame of the selection and its handles are grabbed where they are
+  drawn on a tilted map, on the globe and over terrain: the drawing laid
+  the margin on the map at the scale of Web Mercator while the hit test
+  went through the screen and back, which with terrain or tilt lands
+  elsewhere. Both now make the frame with the same function, and the
+  frame of a point is tested on the screen around its marker, as it is
+  drawn. A press inside the frames drawn around several features (the
+  frame of all of them and the frame of each) moves them, and a press
+  outside them does not.
 
 ### Migration to 3.0.0
 

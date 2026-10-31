@@ -180,7 +180,11 @@ export interface SelectionStyleOptions {
     /**
      * The gap between the features and the box, in CSS pixels: every edge of the box stands
      * this far outside the outline of the selection (`ScreenContext.outline`), and the resize
-     * and rotate handles sit on the box
+     * and rotate handles sit on the box. It is laid on the ground at the features, turned into
+     * meters with the scale of the view (`ScreenContext.metersPerPixel`), so the box tilts and
+     * turns with the map: these pixels on a flat Web Mercator map without terrain, foreshortened
+     * as the map is when it is tilted, and shorter away from the center of the view on the globe.
+     * The box of a point takes it on the screen, around its marker.
      */
     margin: number;
   };
@@ -227,7 +231,10 @@ export interface SelectionStyleOptions {
       /** The icon, for the `icon` shape */
       iconId?: string;
     };
-    /** The distance between the handle and the box, in CSS pixels */
+    /**
+     * The distance between the handle and the box, in CSS pixels, laid on the ground as the
+     * margin of the box is: these pixels on a flat Web Mercator map without terrain
+     */
     distance: number;
     /** The line that joins the handle to the box */
     connector: {

@@ -19,11 +19,24 @@ mode applied.
 - Data is geographic. The coordinates of a feature, bounding boxes and
   handle positions are all longitude and latitude, and so is what the
   Store holds
-- Computation is geographic. A value given in pixels (a margin, an icon
-  size, a frame around a point) is measured once in screen coordinates and
-  converted back to geographic coordinates before it is kept. For example,
-  `applyMarginToBoundingBox` measures the margin in pixels but returns a
-  geographic bounding box
+- Computation is geographic. A length given in pixels for something laid
+  on the map is turned into meters on the ground and laid around the
+  feature, on the plane tangent to the sphere of the map there, and never
+  goes through the screen and back (with terrain, a position projected and
+  unprojected again lands elsewhere). There are two scales. A size of the
+  current view (the margin of the selection frame, the distance of the
+  rotate handle, the move of an arrow key) takes the meters of a CSS pixel
+  in the frame drawn last (`metersPerPixelInFrame` in
+  `src/shared/math/screen-scale.ts`, `ScreenContext.metersPerPixel` for
+  extensions): the scale of Web Mercator at the latitude of the feature,
+  the scale at the center of the view on the globe, mixed by the transition
+  between them. A size kept with a zoom (an image placed at a zoom) takes
+  the scale of Web Mercator at that zoom and the latitude of the feature,
+  once (`metersPerPixelAtZoom` in `src/shared/math/ground-scale.ts`). For
+  example, `applyMarginToBoundingBox` widens a geographic bounding box by
+  the margin in meters. What keeps its size on the screen (a handle, a
+  point marker and the frame around it) keeps a geographic position and is
+  drawn and hit tested on the screen around it
 - Renderers receive geographic coordinates and project them in the vertex
   shader with the projection data of the frame
 - Hit testing starts from geographic coordinates. The click is unprojected,
@@ -272,8 +285,10 @@ vertex and midpoint handles) is drawn with the same architecture:
 
 1. The bounding box is computed in geographic coordinates; for a rotated
    Image it is the oriented box
-2. `applyMarginToBoundingBox()` adds the margin, measured in pixels and
-   converted to geographic coordinates
+2. `applyMarginToBoundingBox()` adds the margin, turned into meters with
+   the scale of the frame and laid on the ground at the center of the box;
+   `computeRotateHandle()` places the rotate handle the same way (the frame
+   of a point is drawn on the screen around it, as its marker is)
 3. `StrokeRenderer` draws the frame and `PointShapeRenderer` the handles,
    both with relative coordinates computed on the CPU
 
@@ -285,9 +300,13 @@ screen and the pointer is compared with the handle rectangle.
 
 The transform on both sides is the same `CoordinateTransform`, built from
 the map by `createCoordinateTransform` in `src/shared/math/transform.ts`.
-The drawing uses it to lay out the pixel-sized parts (the margin, the
-handle positions) in geographic coordinates, and the hit test uses it to
-project those same positions back to the screen. maplibre's `project()`
+The drawing and the hit test lay out the pixel-sized parts (the margin, the
+handle positions) in geographic coordinates with the same functions and
+the same scale, the one of the frame drawn last
+(`CoordinateTransform.metersPerPixel`, recorded by the frame with
+`setScreenScaleFrame`), and the hit test projects those same positions to
+the screen. The frame of a point is tested on the screen around the
+projected point, as it is drawn. maplibre's `project()`
 runs in 64 bits on the CPU, and the offset path of the shader resolves the
 same point to well under a pixel, so a handle is hit where it is drawn at
 every zoom.
