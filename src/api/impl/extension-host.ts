@@ -20,6 +20,7 @@ import type { MouseNormalizedEvent } from '../../dispatcher/types.js';
 import type { BBox } from '../../geometry/types.js';
 import type { PluginInteractions } from '../../modes/handler.js';
 import type { ModeManager } from '../../modes/manager.js';
+import { createCoordinateTransform } from '../../shared/math/index.js';
 import type { BoundingBox, Feature as StoredFeature } from '../../store/types.js';
 import type { FeatureCompanionRegistry } from '../../view/feature-companion.js';
 import type { CustomLayerInterface } from '../../view/layer/index.js';
@@ -265,7 +266,8 @@ export function createExtensionHost(deps: ExtensionHostDeps): ExtensionHost {
     collections,
   };
 
-  const unproject = (point: { x: number; y: number }) => map.unproject([point.x, point.y]);
+  const view = createCoordinateTransform(map);
+  const unproject = (point: { x: number; y: number }) => view.unproject(point);
   const modeServices: ModeServices = {
     ...services,
     hitTestTopmost(point, tolerancePx) {

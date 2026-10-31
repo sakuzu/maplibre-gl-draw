@@ -72,6 +72,7 @@ export type {
   LngLat,
   MercatorCoord,
   ScreenPoint,
+  ViewProjector,
 } from './transform.js';
 export {
   applyMarginToBoundingBox,
@@ -80,8 +81,10 @@ export {
   createCoordinateTransform,
   expandQuad,
   getAnchorProjector,
+  getViewProjector,
   lngLatToMercator,
   screenScaleFrameOf,
   setAnchorProjector,
   setScreenScaleFrame,
+  setViewProjector,
 } from './transform.js';

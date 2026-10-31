@@ -380,7 +380,7 @@ export class SelectMode implements EngineModeHandler {
       case 'box': {
         const selection = store.getSelection();
         const dragStartPoint = event.dragStartPoint ?? event.point;
-        const geoLngLat = map.unproject([dragStartPoint.x, dragStartPoint.y]);
+        const geoLngLat = createCoordinateTransform(map).unproject(dragStartPoint);
         const startPoint: Coordinate = [geoLngLat.lng, geoLngLat.lat];
         store.setBoxSelection({
           startPoint,
@@ -531,7 +531,7 @@ export class SelectMode implements EngineModeHandler {
 
     // Update the box selection
     if (boxSelection) {
-      const geoLngLat = map.unproject([event.point.x, event.point.y]);
+      const geoLngLat = createCoordinateTransform(map).unproject(event.point);
       const endPoint: Coordinate = [geoLngLat.lng, geoLngLat.lat];
       const updatedBoxSelection: BoxSelection = { ...boxSelection, endPoint };
       store.setBoxSelection(updatedBoxSelection);

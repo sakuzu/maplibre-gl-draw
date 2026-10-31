@@ -30,6 +30,7 @@ import {
   PolygonHitTestStrategy,
 } from '../../dispatcher/hit-test/strategies/index.js';
 import type { DragNormalizedEvent } from '../../dispatcher/types.js';
+import { createCoordinateTransform } from '../../shared/math/index.js';
 import type { SnapTargetsRegistry } from '../../snapping/custom-targets.js';
 import type {
   SnapCandidate as EngineSnapCandidate,
@@ -107,7 +108,8 @@ export interface AdapterDeps extends RenderAdapterDeps {
 
 /** The pixels per degree of longitude around a point, measured on the screen */
 function degreesPerPixel(map: MapLibreMap, point: { x: number; y: number }): number {
-  return toleranceDegrees((p) => map.unproject([p.x, p.y]), point, 1) || 1;
+  const view = createCoordinateTransform(map);
+  return toleranceDegrees((p) => view.unproject(p), point, 1) || 1;
 }
 
 /** What a hit test of the contract receives, for a position and a tolerance in degrees */
@@ -116,7 +118,7 @@ function hitContextAt(
   coordinate: Coordinate,
   toleranceLngLat: number,
 ): { ctx: HitTestContext; degPerPx: number } {
-  const at = deps.map.project([coordinate[0], coordinate[1]]);
+  const at = createCoordinateTransform(deps.map).project(coordinate);
   const degPerPx = degreesPerPixel(deps.map, at);
   return {
     ctx: {
@@ -247,10 +249,8 @@ function boxSelectionOf(
   return {
     featureType: definition.type,
     intersects(feature, rect) {
-      const corners = [
-        deps.map.project([rect.minX, rect.minY]),
-        deps.map.project([rect.maxX, rect.maxY]),
-      ];
+      const view = createCoordinateTransform(deps.map);
+      const corners = [view.project([rect.minX, rect.minY]), view.project([rect.maxX, rect.maxY])];
       const min: ScreenPoint = [
         Math.min(corners[0].x, corners[1].x),
         Math.min(corners[0].y, corners[1].y),

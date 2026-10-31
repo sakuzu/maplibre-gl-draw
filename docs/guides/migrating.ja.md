@@ -760,6 +760,12 @@ draw.features.update(featureId, {
   `rows.appliesTo` は前の `appliesToRow`、`renderer.rows.draw` と
   `renderer.rows.sprites` は前の `drawRows` と `rowSprites`、付き物の
   提供者の `rows.has` は前の `hasRow` です
+- 描く文脈は、`ctx.zoom` と `ctx.pixelRatio` の代わりにそのコマの画面
+  `ctx.screen` (プラグインの `screen` と同じもの) を持ちます。
+  `ctx.screen.zoom` と `ctx.screen.pixelRatio` を読んでください
+- `ctx.screen` は最後に描いたコマについて答えます (`project`、`unproject`、
+  `zoom`、`metersPerPixel`)。ポインターのイベントの位置は、その下に
+  描かれている位置です。カメラがその後に動いても、つかむ物は描いた物です
 - `ctx.terrain` は `TerrainSurface` になりました (前は `TerrainAnchors`)。
   `occlusionOpacity(lngLat)` は前の `ghostOpacity` です。`project` は
   無くなりました。位置がどこに描かれるかは、地形があれば地形の上で、

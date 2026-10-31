@@ -239,7 +239,7 @@ export function createScreenContext(
     toScreenPoint(transform.project([lngLat[0], lngLat[1]]));
   return {
     project,
-    unproject: (point) => toPosition(map.unproject(point)),
+    unproject: (point) => toPosition(transform.unproject({ x: point[0], y: point[1] })),
     bounds(feature) {
       const own = boundsOf?.(feature);
       if (own !== undefined) return own;
@@ -267,7 +267,7 @@ export function createScreenContext(
     },
     metersPerPixel: (lngLat) => metersPerPixelInFrame(screenScaleFrameOf(map), lngLat[1]),
     get zoom() {
-      return map.getZoom();
+      return screenScaleFrameOf(map).zoom;
     },
     get pixelRatio() {
       return services.pixelRatio.resolve();

@@ -14,6 +14,7 @@
 
 import type { Map as MapLibreMap } from 'maplibre-gl';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { setViewProjector } from '../shared/math/index.js';
 import { createInputNormalizer, type InputNormalizer } from './normalizer.js';
 import type { DragNormalizedEvent, MouseNormalizedEvent, NormalizedEvent } from './types.js';
 
@@ -167,6 +168,29 @@ describe('InputNormalizer', () => {
   afterEach(() => {
     normalizer.detach();
     vi.useRealTimers();
+  });
+
+  it('takes the position under the pointer from the frame drawn last', () => {
+    // The camera of the map moved since the frame: maplibre gives the position under the
+    // pointer with its current camera, and the view of the frame what is drawn there
+    setViewProjector(map as unknown as MapLibreMap, {
+      project: () => null,
+      unproject: (x, y, near) => ({ lng: near.lng + 0.5, lat: y + x * 0 }),
+    });
+    try {
+      mouse('mousemove', { x: 10, y: 20 });
+      mouse('click', { x: 30, y: 40 });
+    } finally {
+      setViewProjector(map as unknown as MapLibreMap, null);
+    }
+    expect(events.map((e) => ('lngLat' in e ? e.lngLat : null))).toEqual([
+      { lng: 10.5, lat: 20 },
+      { lng: 30.5, lat: 40 },
+    ]);
+    // Without a frame, the position maplibre gives
+    events.length = 0;
+    mouse('mousemove', { x: 1, y: 2 });
+    expect(events[0]).toMatchObject({ lngLat: { lng: 1, lat: 2 } });
   });
 
   it('leaves drag and drop on the map to the host', () => {

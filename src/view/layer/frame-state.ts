@@ -26,7 +26,12 @@ import {
   type OffsetUniforms,
   translateMatrixByLongitude,
 } from '../shaders/helpers.js';
-import { anchorViewportOf, clearAnchorFrame, setAnchorFrame } from '../terrain/anchor.js';
+import {
+  anchorViewportOf,
+  clearAnchorFrame,
+  setAnchorFrame,
+  setViewFrame,
+} from '../terrain/anchor.js';
 import type { TerrainContext, TerrainRenderState } from '../terrain/context.js';
 import {
   getCameraMercator,
@@ -333,6 +338,16 @@ export function buildFrameState(input: FrameBuildInput): FrameState {
     transition: defaultProjectionData.projectionTransition ?? 0,
   };
   setScreenScaleFrame(map, screenScale);
+
+  // The view of this frame, with or without terrain: the drawing reads it during the frame, and
+  // the hit testing, the input and the extensions until the next one (`projectOnView`)
+  const view = anchorViewportOf(map);
+  setViewFrame(terrainContext, {
+    projection: frameProjection,
+    offsetUniforms: boxOffsetUniforms,
+    width: view.width,
+    height: view.height,
+  });
 
   // Establish the anchor projection (the single source shared by the positions of the points
   // and the handles and by the hit testing) with the values of this frame. The matrix, the

@@ -12,7 +12,7 @@
 
 import type { ProjectionData } from 'maplibre-gl';
 import { afterEach, describe, expect, it } from 'vitest';
-import type { TerrainSurface } from '../../api/extension/context.js';
+import type { ScreenContext, TerrainSurface } from '../../api/extension/context.js';
 import type { RenderContext } from '../../api/extension/render.js';
 import { createTerrainSurface } from '../../api/impl/contexts.js';
 import { createRenderContext } from '../../api/impl/render-context.js';
@@ -77,6 +77,7 @@ function renderContextOver(terrain: TerrainContext): RenderContext {
     PROJECTION,
     14,
     createTerrainSurface(terrain),
+    {} as ScreenContext,
   );
 }
 

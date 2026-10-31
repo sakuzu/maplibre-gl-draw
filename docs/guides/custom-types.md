@@ -129,8 +129,12 @@ The `RenderContext` carries what a renderer needs to draw:
 - `opacity`, the opacity of the layer of the feature, from 0 to 1. The
   shared renderers do not apply it by themselves: multiply it into the
   opacity you pass, so that the feature fades with its layer
-- `zoom` and `pixelRatio`. Use `pixelRatio` rather than
-  `window.devicePixelRatio`
+- `screen`, the conversion between positions and points of the screen
+  in the frame being drawn (`project`, `unproject`, `metersPerPixel`),
+  its `zoom` and its `pixelRatio`: the same object as `ctx.screen` of a
+  plugin, which answers for the frame drawn last once it is drawn. Use
+  `screen.pixelRatio` rather than `window.devicePixelRatio`, and read
+  the screen from the context rather than keeping one from elsewhere
 - `terrain`, the heights of the ground (see [Terrain](#terrain))
 - `gl`, `shader`, `offset` and `projection`, for a renderer that
   writes its own shaders (see [Your own shaders](#your-own-shaders))
@@ -654,7 +658,7 @@ function pathOnTerrain(
 ): [number, number][] {
   ctx.gl.useProgram(program);
   uniforms.setTerrain(ctx);
-  uniforms.setUniforms(ctx.projection, ctx.zoom, ctx.offset);
+  uniforms.setUniforms(ctx.projection, ctx.screen.zoom, ctx.offset);
   const step = terrainTessellationStep(ctx);
   // upload the path and draw it
   return step ? densifyPath(coordinates, step) : coordinates;

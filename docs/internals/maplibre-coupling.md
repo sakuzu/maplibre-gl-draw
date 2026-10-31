@@ -313,16 +313,24 @@ Each item has the same five parts.
   `map.unproject` returns the intersection of the pointer ray with the
   terrain surface and is called for one point at a time.
 - What we rely on — avoidance. `createCoordinateTransform` in
-  `src/shared/math/transform.ts` routes `project` to our own anchor
-  projection through `setAnchorProjector` / `getAnchorProjector` (the
-  dependency is inverted because `shared` cannot depend on `view`). It is
-  the CPU copy of the vertex shader's projection with the elevation of item
-  8, so hit testing follows what is drawn, and it costs 5 to 7 ms per
-  10,000 points on the first lookup of a frame (1.5 ms from the cache of the
-  frame) and 0.6 us a point outside the drawn tiles. With the same
-  elevation it lands within 0.01 px of `map.project`. `unproject` cannot be
-  derived from the matrix alone, so maplibre's is used as is.
-  `clampLatitude` avoids `map.project()` throwing beyond latitude ±90.
+  `src/shared/math/transform.ts` routes `project` and `unproject` to the
+  view of the frame drawn last through `setViewProjector` /
+  `getViewProjector` (the dependency is inverted because `shared` cannot
+  depend on `view`): `projectOnView` and `unprojectOnView` of
+  `src/view/terrain/anchor.ts`. `project` is the CPU copy of the vertex
+  shader's projection of that frame, with the elevation of item 8 when the
+  terrain is on (the anchor projection) and on the map otherwise, so hit
+  testing follows what is drawn, and it costs 5 to 7 ms per 10,000 points
+  on the first lookup of a frame (1.5 ms from the cache of the frame) and
+  0.6 us a point outside the drawn tiles. With the same elevation it lands
+  within 0.01 px of `map.project`. `unproject` cannot be derived from the
+  matrix alone: it is solved by Newton's method from the position
+  `map.unproject` gives (with the current camera, the frame drawn last but
+  for a camera moved since), within 1e-6 px, and is null where nothing is
+  drawn. The positions of the pointer events are taken the same way
+  (`src/dispatcher/normalizer.ts`). Before the first frame, maplibre's
+  `project` and `unproject` are used. `clampLatitude` avoids
+  `map.project()` throwing beyond latitude ±90.
 - Symptoms when it breaks — if the anchor projection drifts from the
   shader, symbols are hit away from where they are drawn. Handing hit
   testing to `map.project` would stall on vertices outside the drawn tiles

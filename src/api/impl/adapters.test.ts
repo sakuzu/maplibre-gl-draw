@@ -139,8 +139,17 @@ describe('a custom feature type', () => {
     expect(drawn.id).toBe('p1');
     expect(ctx.gl).toBe(GL);
     expect(ctx.projection).toBe(PROJECTION);
-    expect(ctx.zoom).toBe(12);
-    expect(ctx.pixelRatio).toBe(2);
+    // The screen of the frame is the screen of the extensions, read while the frame is drawn
+    let screen: ScreenContext | null = null;
+    engine.extensions.collections.plugins.add({
+      name: 'screen',
+      onAdd(context) {
+        screen = context.screen;
+      },
+    });
+    expect(ctx.screen).toBe(screen);
+    expect(ctx).not.toHaveProperty('zoom');
+    expect(ctx).not.toHaveProperty('pixelRatio');
     expect(ctx.opacity).toBe(0.5);
     expect(ctx.shader.variantName).toBe('mercator');
     expect(ctx.offset).toEqual(
@@ -740,14 +749,14 @@ describe('the overlays', () => {
           return () => removed.push(renderer);
         },
       },
-      { surface: createTerrainSurface },
+      { surface: createTerrainSurface, screen: { zoom: 7 } as ScreenContext },
     );
     const calls: string[] = [];
     const overlay = (name: string, order?: number) => ({
       name,
       ...(order !== undefined && { order }),
       onAdd: () => calls.push(`add ${name}`),
-      draw: (ctx: RenderContext) => calls.push(`draw ${name} ${ctx.zoom}`),
+      draw: (ctx: RenderContext) => calls.push(`draw ${name} ${ctx.screen.zoom}`),
       drawForLayer: (layerId: string) => calls.push(`layer ${name} ${layerId}`),
       onRemove: () => calls.push(`remove ${name}`),
     });

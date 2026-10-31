@@ -255,6 +255,17 @@ writing it. Its changes are listed after those of 3.0.0.
   are `selectMode` (`onFeatureClick`, `onFeatureDoubleClick`), and an
   exclusive interaction is `exclusive`, whose `isActive()` (was
   `isBusy`) it requires, with `finish`, `cancel` and `container`.
+- The values of the screen are those of the frame drawn last:
+  `ScreenContext.project`, `unproject`, `zoom` and `metersPerPixel`, the
+  heights of `ctx.terrain`, and the position of a pointer event, which is
+  the position drawn under the pointer (the inverse of the projection of
+  the frame, found from the position maplibre gives with its current
+  camera). While a frame is drawn, they are those of that frame. What is
+  grabbed is what was drawn, also when the camera moved after the frame;
+  the positions `draw.drawing` is given are used as they are.
+- `RenderContext.screen`, the screen of the frame being drawn (the same
+  object as `ctx.screen` of an extension), in place of
+  `RenderContext.zoom` and `RenderContext.pixelRatio`, which it has.
 - `TerrainAnchors` is `TerrainSurface`, the surface of the terrain:
   `occlusionOpacity` (was `ghostOpacity`), `elevation` and `generation`.
   Its `project` is gone: `ScreenContext.project` answers where a position

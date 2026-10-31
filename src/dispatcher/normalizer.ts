@@ -29,6 +29,7 @@
  */
 
 import type { Map as MapLibreMap, MapMouseEvent, MapTouchEvent } from 'maplibre-gl';
+import { getViewProjector } from '../shared/math/index.js';
 import { nearestLongitude } from '../shared/math/longitude.js';
 import type {
   DragNormalizedEvent,
@@ -214,6 +215,14 @@ export function createInputNormalizer(
 ): InputNormalizer {
   const canvas = map.getCanvas();
   const listeners = new Set<(event: NormalizedEvent) => void>();
+  /**
+   * The position under the pointer, in the frame drawn last: what is drawn there, also when the
+   * camera moved since (maplibre gives the position under its current camera)
+   */
+  const lngLatOf = (e: { point: { x: number; y: number }; lngLat: LngLat }): LngLat => {
+    const near = { lng: e.lngLat.lng, lat: e.lngLat.lat };
+    return getViewProjector(map)?.unproject(e.point.x, e.point.y, near) ?? near;
+  };
   const opts = { ...DEFAULT_OPTIONS, ...options };
   let profiles = createProfiles(opts);
 
@@ -444,20 +453,14 @@ export function createInputNormalizer(
     if (isTouchCompat(e.originalEvent)) return;
 
     focusCanvas();
-    beginPress(
-      'mouse',
-      pointerType,
-      { x: e.point.x, y: e.point.y },
-      { lng: e.lngLat.lng, lat: e.lngLat.lat },
-      e.originalEvent,
-    );
+    beginPress('mouse', pointerType, { x: e.point.x, y: e.point.y }, lngLatOf(e), e.originalEvent);
   }
 
   function handleMouseMove(e: MapMouseEvent): void {
     if (isTouchCompat(e.originalEvent)) return;
 
     const currentPoint = { x: e.point.x, y: e.point.y };
-    const currentLngLat = { lng: e.lngLat.lng, lat: e.lngLat.lat };
+    const currentLngLat = lngLatOf(e);
 
     if (press?.source === 'mouse') {
       // The left button is already up: its mouseup went where the page could not see it
@@ -484,7 +487,7 @@ export function createInputNormalizer(
     if (isTouchCompat(e.originalEvent)) return;
 
     const currentPoint = { x: e.point.x, y: e.point.y };
-    const currentLngLat = { lng: e.lngLat.lng, lat: e.lngLat.lat };
+    const currentLngLat = lngLatOf(e);
 
     if (press?.source === 'mouse') {
       const current = press;
@@ -516,7 +519,7 @@ export function createInputNormalizer(
       mouseEvent(
         'click',
         { x: e.point.x, y: e.point.y },
-        { lng: e.lngLat.lng, lat: e.lngLat.lat },
+        lngLatOf(e),
         e.originalEvent,
         lastMousePointerType,
       ),
@@ -534,7 +537,7 @@ export function createInputNormalizer(
       mouseEvent(
         'dblclick',
         { x: e.point.x, y: e.point.y },
-        { lng: e.lngLat.lng, lat: e.lngLat.lat },
+        lngLatOf(e),
         e.originalEvent,
         lastMousePointerType,
       ),
@@ -552,7 +555,7 @@ export function createInputNormalizer(
       mouseEvent(
         'contextmenu',
         { x: e.point.x, y: e.point.y },
-        { lng: e.lngLat.lng, lat: e.lngLat.lat },
+        lngLatOf(e),
         e.originalEvent,
         'mouse',
       ),
@@ -581,7 +584,7 @@ export function createInputNormalizer(
     if (e.originalEvent.target !== canvas) return;
 
     const point = { x: e.point.x, y: e.point.y };
-    const lngLat = { lng: e.lngLat.lng, lat: e.lngLat.lat };
+    const lngLat = lngLatOf(e);
     const pointerType = touchPointerType(e.originalEvent);
 
     // A touch has no hover, so the position is announced before the press, in the
@@ -592,12 +595,7 @@ export function createInputNormalizer(
 
   function handleTouchMove(e: MapTouchEvent): void {
     if (press?.source !== 'touch' || e.originalEvent.touches.length !== 1) return;
-    movePress(
-      press,
-      { x: e.point.x, y: e.point.y },
-      { lng: e.lngLat.lng, lat: e.lngLat.lat },
-      e.originalEvent,
-    );
+    movePress(press, { x: e.point.x, y: e.point.y }, lngLatOf(e), e.originalEvent);
   }
 
   function handleTouchEnd(e: MapTouchEvent): void {
@@ -609,7 +607,7 @@ export function createInputNormalizer(
 
     // The point of a touchend is the lifted finger (changedTouches)
     const point = { x: e.point.x, y: e.point.y };
-    const lngLat = { lng: e.lngLat.lng, lat: e.lngLat.lat };
+    const lngLat = lngLatOf(e);
 
     if (!releasePress(current, point, lngLat, e.originalEvent)) {
       lastTap = null;

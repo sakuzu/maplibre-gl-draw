@@ -12,6 +12,7 @@ import type {
   ModifierKeys,
   MouseNormalizedEvent,
 } from '../../dispatcher/types.js';
+import { createCoordinateTransform } from '../../shared/math/index.js';
 import type { TerrainRenderState } from '../../view/terrain/context.js';
 import { INITIAL_DRAPE_DEBUG } from '../../view/terrain/context.js';
 import {
@@ -174,8 +175,8 @@ export function createDrawingResource(
   const isActive = (): boolean => isDrawing() || modeManager.getHandler()?.writesFeatures === true;
 
   const pointer = (type: 'mousemove' | 'click', [lng, lat]: [number, number]) => {
-    const projected = map.project([lng, lat]);
-    const point = { x: projected.x, y: projected.y };
+    // The point the position is drawn at in the frame drawn last; the position stays as given
+    const point = createCoordinateTransform(map).project([lng, lat]);
     const event: MouseNormalizedEvent = {
       type,
       point,

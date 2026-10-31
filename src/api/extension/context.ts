@@ -54,14 +54,18 @@ export interface NameGenerator {
   next(type: FeatureType | 'Layer' | 'Group'): string | undefined;
 }
 
-/** The conversion between positions on the map and points on the screen. */
+/**
+ * The conversion between positions on the map and points on the screen, in the frame drawn last:
+ * what is drawn, also when the camera moved since (by code, between two frames). While a frame is
+ * drawn, it answers for that frame. Before the first frame, it answers for the camera of the map.
+ */
 export interface ScreenContext {
   /**
    * The point on the screen where a position is drawn: on the terrain when it is on, as the
    * shared renderers lay what they draw on it.
    */
   project(lngLat: Position): ScreenPoint;
-  /** The position on the map of a point on the screen. */
+  /** The position drawn at a point on the screen, on the terrain when it is on. */
   unproject(point: ScreenPoint): Position;
   /**
    * The extent of a feature on the screen, in pixels; a feature off the screen still has
@@ -105,7 +109,7 @@ export interface ScreenContext {
    * @returns The meters of a CSS pixel
    */
   metersPerPixel(lngLat: Position): number;
-  /** The zoom of the map */
+  /** The zoom of the frame */
   readonly zoom: number;
   /** The pixel ratio the drawing uses */
   readonly pixelRatio: number;

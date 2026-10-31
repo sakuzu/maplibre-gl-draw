@@ -8,7 +8,12 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { FeatureTypeRenderer } from '../../extension/renderers.js';
-import { setAnchorProjector } from '../../shared/math/index.js';
+import { pixelsToMeters } from '../../geometry/units.js';
+import {
+  setAnchorProjector,
+  setScreenScaleFrame,
+  setViewProjector,
+} from '../../shared/math/index.js';
 import { MemoryContractStore } from '../../store/memory.js';
 import type { StoreChange } from '../../store/types.js';
 import { createMapStub, createSyntheticInput } from '../../test-utils.js';
@@ -555,6 +560,34 @@ describe('extensions.plugins', () => {
     );
     expect(() => emit('', {})).toThrow(expect.objectContaining({ code: 'invalid-input' }));
     expect(received).toHaveLength(1);
+  });
+
+  it('answers for the screen in the frame drawn last', () => {
+    let ctx: PluginContext | null = null;
+    draw.extensions.plugins.add(
+      plugin('p', {
+        onAdd(context) {
+          ctx = context;
+        },
+      }),
+    );
+    const { screen } = ctx as unknown as PluginContext;
+    const map = draw.getMap();
+    // A frame drawn at another view than the camera of the map now
+    setScreenScaleFrame(map, { zoom: 3.5, centerLatitude: 0, transition: 0 });
+    setViewProjector(map, {
+      project: () => ({ x: 7, y: 9 }),
+      unproject: (_x, _y, near) => ({ lng: near.lng + 1, lat: near.lat }),
+    });
+    try {
+      expect(screen.zoom).toBe(3.5);
+      expect(screen.project([1, 1])).toEqual([7, 9]);
+      expect(screen.unproject([500, 200])).toEqual([2, 1]);
+      expect(screen.metersPerPixel([0, 0])).toBeCloseTo(pixelsToMeters(1, 3.5, 0), 6);
+    } finally {
+      setViewProjector(map, null);
+      setScreenScaleFrame(map, null);
+    }
   });
 
   it('gives the heights of the terrain, and projects onto it through the screen', () => {

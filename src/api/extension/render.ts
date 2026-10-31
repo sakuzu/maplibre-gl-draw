@@ -11,7 +11,7 @@ import type { Map as MaplibreMap, ProjectionData } from 'maplibre-gl';
 import type { RowSpriteSource } from '../../view/renderers/rows/rows-format.js';
 import type { Feature, LineStyle, PointShape } from '../model.js';
 import type { LayerTableView } from '../tables.js';
-import type { TerrainSurface } from './context.js';
+import type { ScreenContext, TerrainSurface } from './context.js';
 
 /**
  * The shader prelude the map passes to a custom layer, for compiling programs for the current
@@ -131,10 +131,12 @@ export interface RenderContext {
   readonly offset: OffsetUniforms;
   /** The projection of the frame, as the map passes it to a custom layer */
   readonly projection: ProjectionData;
-  /** The zoom of the frame */
-  readonly zoom: number;
-  /** The pixel ratio of the drawing */
-  readonly pixelRatio: number;
+  /**
+   * The conversion between the map and the screen, its zoom and its pixel ratio, in the frame
+   * being drawn: the same object as `ctx.screen` of the context of an extension, which answers
+   * for the frame drawn last once the frame is drawn
+   */
+  readonly screen: ScreenContext;
   /** The opacity of the layer being drawn, from 0 to 1 */
   readonly opacity: number;
   /**

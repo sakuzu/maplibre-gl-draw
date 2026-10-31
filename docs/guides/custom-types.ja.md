@@ -123,8 +123,12 @@ const ends = feature.style.routeEnds === 'dot' ? 'dot' : 'none';
 - `opacity` は、地物のレイヤーの不透明度で、0 から 1 です。共有の描画器
   はこれを自分では掛けません。渡す不透明度に掛けてください。そうすると、
   地物がレイヤーと一緒に薄くなります
-- `zoom` と `pixelRatio` です。`window.devicePixelRatio` ではなく
-  `pixelRatio` を使ってください
+- `screen` は、描いているコマでの位置と画面の点の変換 (`project`、
+  `unproject`、`metersPerPixel`) と、そのズーム `zoom` とピクセル比
+  `pixelRatio` です。プラグインの `ctx.screen` と同じもので、コマを
+  描き終えると最後に描いたコマについて答えます。`window.devicePixelRatio`
+  ではなく `screen.pixelRatio` を使い、ほかから持ち込んだ画面ではなく、
+  この欄の画面を読んでください
 - `terrain` は地面の高さです ([地形](#地形) を参照)
 - `gl`、`shader`、`offset`、`projection` は、自分でシェーダーを書く
   描画器のためのものです ([自分のシェーダー](#自分のシェーダー) を参照)
@@ -620,7 +624,7 @@ function pathOnTerrain(
 ): [number, number][] {
   ctx.gl.useProgram(program);
   uniforms.setTerrain(ctx);
-  uniforms.setUniforms(ctx.projection, ctx.zoom, ctx.offset);
+  uniforms.setUniforms(ctx.projection, ctx.screen.zoom, ctx.offset);
   const step = terrainTessellationStep(ctx);
   // path を送って描く
   return step ? densifyPath(coordinates, step) : coordinates;

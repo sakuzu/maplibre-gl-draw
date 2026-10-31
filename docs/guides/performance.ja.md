@@ -224,7 +224,7 @@ draw.extensions.overlays.add({
   name: 'outline',
   onAdd: () => {},
   draw(ctx) {
-    const widthInDevicePixels = 2 * ctx.pixelRatio;
+    const widthInDevicePixels = 2 * ctx.screen.pixelRatio;
     // その幅で描く
   },
   onRemove: () => {},

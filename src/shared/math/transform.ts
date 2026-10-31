@@ -146,6 +146,42 @@ export function getAnchorProjector(map: MapLibreMap): AnchorProjector | null {
 }
 
 /**
+ * The conversion between positions and points of the screen in the frame drawn last
+ *
+ * The drawing and the hit testing read the frame drawn last, so that what is grabbed is what was
+ * drawn: a camera moved after the frame (by code, between two frames) does not move what is hit
+ * away from where it is drawn. The view layer computes it with the projection of the shaders in
+ * float64, on the terrain when it is on (`view/terrain/anchor.ts`), and injects it here per map.
+ */
+export interface ViewProjector {
+  /**
+   * The point of the screen (CSS pixels) where a position is drawn in the frame drawn last; null
+   * behind the camera or before the first frame
+   */
+  project(lng: number, lat: number): ScreenPoint | null;
+  /**
+   * The position drawn at a point of the screen in the frame drawn last, found from a position
+   * near it (what maplibre unprojects the point to with its current camera); null when no
+   * position is drawn there or before the first frame
+   */
+  unproject(x: number, y: number, near: LngLat): LngLat | null;
+}
+
+/** The view of the frame drawn last, per map */
+const viewProjectors = new WeakMap<object, ViewProjector>();
+
+/** Injects the view of the frame drawn last (the view layer calls this per map; null removes it) */
+export function setViewProjector(map: MapLibreMap, projector: ViewProjector | null): void {
+  if (projector) viewProjectors.set(map, projector);
+  else viewProjectors.delete(map);
+}
+
+/** The view of the frame drawn last of a map, or null when none is injected */
+export function getViewProjector(map: MapLibreMap): ViewProjector | null {
+  return viewProjectors.get(map) ?? null;
+}
+
+/**
  * The scale of the frame drawn last, per map
  *
  * The selection UI is drawn in a frame and hit tested between frames, so both read the frame
@@ -192,6 +228,8 @@ export function screenScaleFrameOf(
 export function createCoordinateTransform(map: MapLibreMap): CoordinateTransform {
   return {
     project: (coord: Coordinate) => {
+      const drawn = viewProjectors.get(map)?.project(coord[0], coord[1]);
+      if (drawn) return drawn;
       const anchored = anchorProjectors.get(map)?.project(coord[0], coord[1]);
       if (anchored) return anchored;
       const p = map.project([coord[0], coord[1]]);
@@ -199,7 +237,8 @@ export function createCoordinateTransform(map: MapLibreMap): CoordinateTransform
     },
     unproject: (point: { x: number; y: number }) => {
       const ll = map.unproject([point.x, point.y]);
-      return { lng: ll.lng, lat: ll.lat };
+      const near = { lng: ll.lng, lat: ll.lat };
+      return viewProjectors.get(map)?.unproject(point.x, point.y, near) ?? near;
     },
     metersPerPixel: (lngLat: Coordinate) =>
       metersPerPixelInFrame(screenScaleFrameOf(map), lngLat[1]),

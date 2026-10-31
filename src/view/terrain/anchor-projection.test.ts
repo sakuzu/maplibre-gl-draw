@@ -21,8 +21,15 @@ import {
   type TestCamera,
 } from '../../test-support/glsl-projection.js';
 import { calculateOffsetUniforms, type ProjectionMatrices } from '../shaders/helpers.js';
-import { clearAnchorFrame, projectAnchorAt, setAnchorFrame } from './anchor.js';
-import { TerrainContext } from './context.js';
+import {
+  clearAnchorFrame,
+  projectAnchorAt,
+  projectOnView,
+  setAnchorFrame,
+  setViewFrame,
+  unprojectOnView,
+} from './anchor.js';
+import { NO_VIEW_FRAME, TerrainContext } from './context.js';
 import type { TerrainLike } from './detect.js';
 
 const WIDTH = 1280;
@@ -38,6 +45,7 @@ const flat = {
 
 afterEach(() => {
   clearAnchorFrame(context);
+  setViewFrame(context, NO_VIEW_FRAME);
 });
 
 /** The latitude of a Mercator y */
@@ -113,4 +121,76 @@ describe('the projection of the anchors', () => {
     }
     expect(worst.px, worst.where).toBeLessThan(0.01);
   });
+});
+
+describe('the view of the frame drawn last, without terrain', () => {
+  /** Records the view of a frame of a camera, as the drawing does every frame */
+  function drawView(camera: TestCamera, transition: number): void {
+    const projection = frameProjection(camera, transition);
+    const data = {
+      mainMatrix: projection.mainMatrix,
+      fallbackMatrix: projection.fallbackMatrix,
+      projectionTransition: projection.projectionTransition,
+      clippingPlane: [...projection.clippingPlane],
+    } as unknown as ProjectionMatrices;
+    setViewFrame(context, {
+      projection: data,
+      offsetUniforms: calculateOffsetUniforms(camera.center, data),
+      width: camera.width,
+      height: camera.height,
+    });
+  }
+
+  it('answers nothing before the first frame', () => {
+    expect(projectOnView(context, 139.7, 35.6)).toBeNull();
+    expect(unprojectOnView(context, 10, 10, { lng: 139.7, lat: 35.6 })).toBeNull();
+  });
+
+  it.each([
+    ['Web Mercator', 0],
+    ['the globe', 1],
+    ['the transition from the globe to Web Mercator', 0.5],
+  ] as const)(
+    'projects where maplibre puts a position on %s, and back from a point',
+    (_name, transition) => {
+      for (const zoom of [2, 10, 18, 24]) {
+        const camera: TestCamera = {
+          center: [139.7, 35.68],
+          zoom,
+          pitch: 50,
+          bearing: 25,
+          width: WIDTH,
+          height: HEIGHT,
+        };
+        drawView(camera, transition);
+        const worldSize = 512 * 2 ** zoom;
+        const [cx, cy] = mercatorOf(camera.center[0], camera.center[1]);
+        for (const [dx, dy] of [
+          [0, 0],
+          [200, -100],
+          [-300, 150],
+        ]) {
+          const lng = (cx + dx / worldSize) * 360 - 180;
+          const lat = latitudeOf(cy + dy / worldSize);
+          const [x, y] = screenOf(
+            referenceClip(frameProjection(camera, transition), lng, lat),
+            WIDTH,
+            HEIGHT,
+          );
+          const point = projectOnView(context, lng, lat);
+          expect(point && Math.hypot(point.x - x, point.y - y)).toBeLessThan(0.01);
+          // The position drawn at the point, found from a position some pixels away from it, as the
+          // camera of the map may have moved since the frame
+          const near = {
+            lng: lng + (30 / worldSize) * 360,
+            lat: latitudeOf(mercatorOf(lng, lat)[1] - 20 / worldSize),
+          };
+          const back = unprojectOnView(context, x, y, near);
+          expect(back).not.toBeNull();
+          const again = back && projectOnView(context, back.lng, back.lat);
+          expect(again && Math.hypot(again.x - x, again.y - y)).toBeLessThan(1e-3);
+        }
+      }
+    },
+  );
 });

@@ -33,6 +33,7 @@ import {
 import type { EngineModeContext } from '../../modes/handler.js';
 import type { ModeManager } from '../../modes/manager.js';
 import { SelectMode } from '../../modes/select/mode.js';
+import { createCoordinateTransform } from '../../shared/math/index.js';
 import { SketchController } from '../../sketches/sketch-controller.js';
 import { SnapIndicatorRenderer } from '../../snapping/indicator.js';
 import { createDisplaySnapProviders } from '../../snapping/providers/display.js';
@@ -236,7 +237,9 @@ export function createEngine(
   // own Store.
   const featureCompanions = createFeatureCompanionRegistry();
 
-  const unproject = (p: { x: number; y: number }) => map.unproject([p.x, p.y]);
+  // The conversions of the frame drawn last, which the input is in
+  const view = createCoordinateTransform(map);
+  const unproject = (p: { x: number; y: number }) => view.unproject(p);
   const topmostDeps: Parameters<typeof createTopmostHitTester>[0] = {
     store,
     hitTestService,
@@ -247,10 +250,7 @@ export function createEngine(
     // Context of the companion hits (feature companion). A companion decides
     // its hit by its appearance in screen px, so the projection, the zoom and
     // the tolerance are passed.
-    project: (lngLat) => {
-      const projected = map.project(lngLat);
-      return { x: projected.x, y: projected.y };
-    },
+    project: (lngLat) => view.project([lngLat[0], lngLat[1]]),
     getZoom: () => map.getZoom(),
     // Read at each hit, so a change of the option applies at once
     get clickTolerancePx() {

@@ -11,6 +11,7 @@ import {
   createFeatureTablesStore,
   featureTablesInternals,
 } from '../../feature-table/feature-tables.js';
+import { setViewProjector } from '../../shared/math/index.js';
 import { MemoryContractStore } from '../../store/memory.js';
 import { createRowBlockDataBuilder } from '../../table/row-group-builder.js';
 import {
@@ -223,6 +224,35 @@ describe('drawing', () => {
     // The plugin consumed the click: the mode placed no second vertex
     draw.drawing.finish();
     expect(draw.features.list({ type: 'LineString' })).toHaveLength(0);
+  });
+
+  it('keeps the positions given as they are, at the point the frame drawn last draws them', () => {
+    const stub = createMapStub();
+    draw = createDraw(stub.map);
+    const clicks: unknown[] = [];
+    draw.extensions.plugins.add({
+      name: 'listener',
+      onAdd() {},
+      input: {
+        onClick(event) {
+          clicks.push({ lngLat: event.lngLat, point: event.point });
+          return true;
+        },
+      },
+    });
+    // The frame drawn last draws the position elsewhere than the camera of the map now, and
+    // unprojects its point elsewhere again: the position stays the one given
+    setViewProjector(stub.map as never, {
+      project: () => ({ x: 7, y: 9 }),
+      unproject: () => ({ lng: 50, lat: 50 }),
+    });
+    try {
+      draw.setMode('draw_line');
+      draw.drawing.addVertex([1, 1]);
+    } finally {
+      setViewProjector(stub.map as never, null);
+    }
+    expect(clicks).toEqual([{ lngLat: [1, 1], point: [7, 9] }]);
   });
 
   it('places the exact positions, with no click tolerance, and finishes wherever they are', () => {

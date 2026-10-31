@@ -209,6 +209,28 @@ export interface AnchorFrame {
   cameraMercator: readonly [number, number, number] | null;
 }
 
+/**
+ * The view of a frame: what the projection of the shaders reads, with or without terrain
+ * (`projectOnView` of `anchor.ts`)
+ */
+export interface ViewFrame {
+  /** The projection data of the frame (its matrices and its transition); null before a frame */
+  projection: ProjectionMatrices | null;
+  /** The uniforms of the center of the view */
+  offsetUniforms: OffsetUniforms | null;
+  /** The viewport (in CSS pixels, the same unit as map.project) */
+  width: number;
+  height: number;
+}
+
+/** The view before the first frame */
+export const NO_VIEW_FRAME: ViewFrame = {
+  projection: null,
+  offsetUniforms: null,
+  width: 0,
+  height: 0,
+};
+
 /** The frame used when the anchor projection is unavailable */
 export const INACTIVE_ANCHOR_FRAME: AnchorFrame = {
   terrain: null,
@@ -378,6 +400,9 @@ export class TerrainContext {
    */
   anchorFrame: AnchorFrame = INACTIVE_ANCHOR_FRAME;
 
+  /** The view of the frame drawn last (being drawn, during a frame), with or without terrain */
+  viewFrame: ViewFrame = NO_VIEW_FRAME;
+
   /**
    * The elevation cache within a single frame
    *
@@ -486,6 +511,7 @@ export class TerrainContext {
     this.tessellationTiling = null;
     this.tessellationCoarsening = 1;
     this.anchorFrame = INACTIVE_ANCHOR_FRAME;
+    this.viewFrame = NO_VIEW_FRAME;
     this.elevationCache = new Map();
     this.occlusionCache = new Map();
     this.coverage.clear();

@@ -54,11 +54,12 @@ import {
   type AnchorProjector,
   type ScreenPoint,
   setAnchorProjector,
+  setViewProjector,
 } from '../../shared/math/index.js';
 import { nearestLongitude } from '../../shared/math/longitude.js';
 import { clipOfPosition } from '../shaders/center-projection.js';
 import type { OffsetUniforms, ProjectionMatrices } from '../shaders/helpers.js';
-import { INACTIVE_ANCHOR_FRAME, type TerrainContext } from './context.js';
+import { INACTIVE_ANCHOR_FRAME, type TerrainContext, type ViewFrame } from './context.js';
 import { getRenderableTerrainTiles, type TerrainLike } from './detect.js';
 import { groundElevationMeters, type TerrainElevationQuery } from './ground.js';
 
@@ -203,7 +204,7 @@ export function anchorElevationMeters(context: TerrainContext, lng: number, lat:
  * @internal
  */
 export function drawnLongitude(context: TerrainContext, lng: number): number {
-  const offsetUniforms = context.anchorFrame.offsetUniforms;
+  const offsetUniforms = context.viewFrame.offsetUniforms ?? context.anchorFrame.offsetUniforms;
   return offsetUniforms ? nearestLongitude(lng, offsetUniforms.centerLngLat64[0]) : lng;
 }
 
@@ -251,29 +252,134 @@ export function projectAnchorAt(
 ): ScreenPoint | null {
   const frame = context.anchorFrame;
   const { projection, terrain, width, height } = frame;
-  if (!projection || !terrain || width <= 0 || height <= 0) return null;
-
-  // The projection of the shaders, in float64: the anchor is projected on the copy of the world
-  // it is drawn on, at its elevation in Mercator units
-  const [clipX, clipY, , clipW] = clipOfPosition(
-    projection,
-    drawnLongitude(context, lng),
-    lat,
-    elevationMeters * frame.elevationScale,
+  if (!projection || !terrain) return null;
+  // The anchor is projected on the copy of the world it is drawn on, at its elevation in
+  // Mercator units
+  return screenOfClip(
+    clipOfPosition(
+      projection,
+      drawnLongitude(context, lng),
+      lat,
+      elevationMeters * frame.elevationScale,
+    ),
+    width,
+    height,
   );
+}
 
-  // clipW <= 0 means behind the camera. Dividing by it as is produces coordinates folded over
-  // to the opposite side of the screen, and hit testing hits "a point that is not visible". It
-  // is returned as unusable (the caller either falls back to MapLibre's project or drops it
-  // from the candidates).
-  if (!Number.isFinite(clipW) || clipW <= 0) return null;
-
+/**
+ * A point of the screen from a position in clip space, in CSS pixels of a viewport
+ *
+ * clipW <= 0 means behind the camera. Dividing by it as is produces coordinates folded over to
+ * the opposite side of the screen, and hit testing hits "a point that is not visible". It is
+ * returned as unusable (the caller either falls back to MapLibre's project or drops it from the
+ * candidates).
+ */
+function screenOfClip(
+  [clipX, clipY, , clipW]: readonly number[],
+  width: number,
+  height: number,
+): ScreenPoint | null {
+  if (width <= 0 || height <= 0 || !Number.isFinite(clipW) || clipW <= 0) return null;
   const ndcX = clipX / clipW;
   const ndcY = clipY / clipW;
   return {
     x: (ndcX * 0.5 + 0.5) * width,
     y: (1 - (ndcY * 0.5 + 0.5)) * height,
   };
+}
+
+/**
+ * Records the view of the frame being drawn, with or without terrain (custom-layer calls it
+ * every frame): the drawing reads it during the frame, and the hit testing and the extensions
+ * until the next one
+ */
+export function setViewFrame(context: TerrainContext, frame: ViewFrame): void {
+  context.viewFrame = frame;
+}
+
+/**
+ * The point of the screen where a position is drawn in the frame drawn last: on the terrain
+ * through the anchor projection while it is active, on the map with the projection of the
+ * shaders otherwise, in float64
+ *
+ * @returns null behind the camera or before the first frame
+ * @internal
+ */
+export function projectOnView(
+  context: TerrainContext,
+  lng: number,
+  lat: number,
+): ScreenPoint | null {
+  if (isAnchorActive(context)) return projectAnchor(context, lng, lat);
+  const { projection, width, height } = context.viewFrame;
+  if (!projection) return null;
+  return screenOfClip(
+    clipOfPosition(projection, drawnLongitude(context, lng), lat, 0),
+    width,
+    height,
+  );
+}
+
+/** The steps of Newton's method of {@link unprojectOnView} at most */
+const UNPROJECT_STEPS = 8;
+
+/** How close to the point, in CSS pixels, a position of {@link unprojectOnView} is taken */
+const UNPROJECT_TOLERANCE_PX = 1e-6;
+
+/** How far from the point a position of {@link unprojectOnView} may stay, in CSS pixels */
+const UNPROJECT_MISS_PX = 0.01;
+
+/**
+ * The step in degrees the derivatives of {@link unprojectOnView} are taken over: a few pixels at
+ * zoom 24 and a millionth of one at zoom 0, which the projection in float64 resolves
+ */
+const UNPROJECT_STEP_DEGREES = 1e-7;
+
+/**
+ * The position drawn at a point of the screen in the frame drawn last: the inverse of
+ * {@link projectOnView}, found by Newton's method from a position near it
+ *
+ * The projection of the frame is not inverted in a closed form (the globe, the transition and
+ * the terrain make it a surface of their own), so it is solved for the point from `near`, the
+ * position maplibre unprojects the point to with its current camera, which is the frame drawn
+ * last but for a camera moved since.
+ *
+ * @returns null when no position is drawn there (in space beside the globe, behind the camera),
+ *   or before the first frame
+ * @internal
+ */
+export function unprojectOnView(
+  context: TerrainContext,
+  x: number,
+  y: number,
+  near: { lng: number; lat: number },
+): { lng: number; lat: number } | null {
+  if (!context.viewFrame.projection) return null;
+  let lng = near.lng;
+  let lat = near.lat;
+  for (let step = 0; step < UNPROJECT_STEPS; step++) {
+    const at = projectOnView(context, lng, lat);
+    if (!at) return null;
+    const dx = x - at.x;
+    const dy = y - at.y;
+    if (Math.hypot(dx, dy) <= UNPROJECT_TOLERANCE_PX) return { lng, lat };
+    const h = UNPROJECT_STEP_DEGREES;
+    const east = projectOnView(context, lng + h, lat);
+    const north = projectOnView(context, lng, lat + h);
+    if (!east || !north) return null;
+    const a = (east.x - at.x) / h;
+    const b = (north.x - at.x) / h;
+    const c = (east.y - at.y) / h;
+    const d = (north.y - at.y) / h;
+    const det = a * d - b * c;
+    if (!Number.isFinite(det) || det === 0) return null;
+    lng += (d * dx - b * dy) / det;
+    lat += (a * dy - c * dx) / det;
+    lat = Math.max(-90, Math.min(90, lat));
+  }
+  const at = projectOnView(context, lng, lat);
+  return at && Math.hypot(x - at.x, y - at.y) <= UNPROJECT_MISS_PX ? { lng, lat } : null;
 }
 
 /**
@@ -291,6 +397,12 @@ export function installAnchorProjector(map: MapLibreMap, context: TerrainContext
     project: (lng, lat) => projectAnchor(context, lng, lat),
   };
   setAnchorProjector(map, projector);
+  // The view of the frame drawn last, which every conversion between the map and the screen
+  // reads, with or without terrain
+  setViewProjector(map, {
+    project: (lng, lat) => projectOnView(context, lng, lat),
+    unproject: (x, y, near) => unprojectOnView(context, x, y, near),
+  });
 }
 
 /**
@@ -298,6 +410,7 @@ export function installAnchorProjector(map: MapLibreMap, context: TerrainContext
  */
 export function uninstallAnchorProjector(map: MapLibreMap): void {
   setAnchorProjector(map, null);
+  setViewProjector(map, null);
 }
 
 /**

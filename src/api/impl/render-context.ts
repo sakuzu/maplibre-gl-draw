@@ -24,7 +24,7 @@ import { applyDrawBlendState } from '../../view/layer/blend.js';
 import { calculateOffsetUniforms } from '../../view/shaders/helpers.js';
 import { bindTerrainState } from '../../view/terrain/binding.js';
 import type { TerrainContext } from '../../view/terrain/context.js';
-import type { TerrainSurface } from '../extension/context.js';
+import type { ScreenContext, TerrainSurface } from '../extension/context.js';
 import type {
   FeatureRenderer,
   FillRenderer,
@@ -99,6 +99,7 @@ export function createRenderContext(
   projection: ProjectionData,
   zoom: number,
   surface: TerrainSurface,
+  screen: ScreenContext,
 ): RenderContext {
   const line: LineRenderer = {
     draw(coordinates, style, options = {}) {
@@ -158,8 +159,7 @@ export function createRenderContext(
     shader: base.shaderData,
     offset: offsetOf(base, projection),
     projection,
-    zoom,
-    pixelRatio: base.pixelRatio,
+    screen,
     opacity: base.opacity,
     terrain: surface,
     line,
@@ -175,6 +175,8 @@ export function createRenderContext(
 export interface RenderAdapterDeps {
   /** The surface of the terrain of a terrain state */
   surface(terrain: TerrainContext): TerrainSurface;
+  /** The conversion between the map and the screen of the instance */
+  readonly screen: ScreenContext;
 }
 
 /** The map and the WebGL context a renderer was added with */
@@ -209,7 +211,14 @@ function createContextCache(deps: RenderAdapterDeps) {
     ) {
       return last.context;
     }
-    const context = createRenderContext(gl, base, projection, zoom, deps.surface(base.terrain));
+    const context = createRenderContext(
+      gl,
+      base,
+      projection,
+      zoom,
+      deps.surface(base.terrain),
+      deps.screen,
+    );
     last = { base, projection, zoom, context };
     return context;
   };
