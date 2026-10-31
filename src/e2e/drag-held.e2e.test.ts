@@ -510,8 +510,10 @@ describe.each(KINDS)('many features dragged over a Store of %s', (kind) => {
       expectSame(mid.drawn[I_LAST] as Drawn, selected.drawn[I_LAST] as Drawn, 0.01, 0.5);
       expect((mid.drawn[I_FRAME] as Drawn).count).toBeGreaterThan(100);
       // The image taken in the middle of the drag shows it where it is dragged. This holds the
-      // behavior as it is, which nothing decides yet: it may change later
-      expectSame(image[0] as Drawn, mid.drawn[I_FIRST] as Drawn, 0.05);
+      // behavior as it is, which nothing decides yet: it may change later. The image has none of
+      // the handles drawn over the square, so it shows all of its fill
+      expect((image[0] as Drawn).box).toEqual((mid.drawn[I_FIRST] as Drawn).box);
+      expectNear((image[0] as Drawn).center, (mid.drawn[I_FIRST] as Drawn).center as MapPoint);
       expect(mid.first).not.toEqual(selected.first);
       expect(mid.firstSketched).toEqual(mid.first);
       expect(mid.last).toEqual(selected.last);
