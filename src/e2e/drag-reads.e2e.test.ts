@@ -178,8 +178,6 @@ interface Edit {
   vertexSelected?: boolean;
   /** How far the feature is moved as a whole, when it follows the pointer */
   follows?: [number, number];
-  /** Whether the snaps of the drag are held to leave out the feature dragged (true when left out) */
-  snapChecked?: boolean;
   /** Registers what the drag needs on the instance */
   setup?(page: Page): Promise<void>;
 }
@@ -260,7 +258,6 @@ const EDITS: Edit[] = [
     started: 'handle',
     carried: null,
     shown: [I_ROTATE],
-    snapChecked: false,
     escape: 'restored',
   },
   {
@@ -271,6 +268,21 @@ const EDITS: Edit[] = [
       return [box[2] - 4.5, box[3] - 4.5];
     },
     by: [30, 25],
+    cursor: 'se-resize',
+    started: 'handle',
+    carried: null,
+    shown: [I_RESIZE],
+    escape: 'restored',
+  },
+  {
+    name: 'a resize inward from the south-east handle, over the corner of the feature',
+    scene: polygonScene,
+    grab: async (_page, selected) => {
+      const box = (selected[I_RESIZE] as Drawn).box as Box;
+      return [box[2] - 4.5, box[3] - 4.5];
+    },
+    // The pointer passes over the corner and along the edges of the feature it resizes
+    by: [-40, -32],
     cursor: 'se-resize',
     started: 'handle',
     carried: null,
@@ -514,7 +526,7 @@ function expectMiddle(edit: Edit, r: Run): void {
     ...inserted,
     ...times(STEPS - 1, ['I p', 'D']),
   ]);
-  if (edit.snapChecked !== false) expectNoSnapToItself(r.midEvents);
+  expectNoSnapToItself(r.midEvents);
   expect(r.midEvents.filter((e) => e.name === 'preview.changed')).toEqual([]);
 }
 

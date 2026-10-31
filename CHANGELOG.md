@@ -204,6 +204,13 @@ writing it. Its changes are listed after those of 3.0.0.
 - `DocumentChange.layerReorder` and `DocumentChange.groupReorder`: the
   order inside a layer or a group is told by `DocumentChange.order`.
 
+### Fixed in 3.0.0
+
+- A rotation, a resize, a drag of the radius of a circle and a drag of a
+  handle of an extension on a feature no longer snap to the features they
+  change, as a move did not already: the pointer was pulled to an edge or
+  a vertex of the feature it was turning or resizing, which moves with it.
+
 ### Migration to 3.0.0
 
 | 2.x | 3.0 |

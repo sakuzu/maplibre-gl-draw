@@ -156,9 +156,9 @@ export class SelectModeDragHandler {
     switch (hitResult.type) {
       case 'move':
         this.begin(startMoveDrag(event, [...selectedIds], store));
-        // Record the features being moved. Snapping excludes them from its candidates (snapping
-        // to itself pulls the cursor back, shifting by the grab offset and making it look like
-        // it vibrates)
+        // Record the features the drag changes as a whole (here and below). Snapping excludes
+        // them from its candidates (snapping to itself pulls the cursor back, shifting by the
+        // grab offset and making it look like it vibrates)
         store.setDragState({ operation: 'move', movingFeatureIds: [...selectedIds] });
         break;
 
@@ -173,11 +173,13 @@ export class SelectModeDragHandler {
             this.scope,
           ),
         );
-        store.setDragState({ operation: 'resize' });
+        store.setDragState({ operation: 'resize', movingFeatureIds: [...selectedIds] });
         break;
 
       case 'rotate':
-        this.begin(startRotateDrag(event, bbox, selectedFeatures, store, this.scope));
+        this.begin(
+          startRotateDrag(event, bbox, selectedFeatures, store, this.scope, [...selectedIds]),
+        );
         break;
 
       case 'vertex':
@@ -199,13 +201,17 @@ export class SelectModeDragHandler {
 
       case 'radius':
         this.begin(startRadiusDrag(hitResult.featureId!, store));
-        store.setDragState({ operation: 'radius' });
+        store.setDragState({ operation: 'radius', movingFeatureIds: [hitResult.featureId!] });
         break;
 
       case 'auxiliary':
-        // Delegation is already done above (we only get here when it was accepted)
+        // Delegation is already done above (we only get here when it was accepted). Core does
+        // not know what the handle changes, so the feature it is on is taken as changed whole
         this.begin(auxiliaryDrag);
-        store.setDragState({ operation: 'auxiliary' });
+        store.setDragState({
+          operation: 'auxiliary',
+          ...(hitResult.featureId !== undefined && { movingFeatureIds: [hitResult.featureId] }),
+        });
         break;
     }
   }

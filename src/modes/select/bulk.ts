@@ -273,6 +273,8 @@ export class BulkRotateDrag extends BulkDrag {
     this.#start = dragStartLngLat(event);
     context.store.setDragState({
       operation: 'rotate',
+      movingFeatureIds: [],
+      movingRows: rows,
       rotateInfo: {
         initialBbox: {
           topLeft: bbox.topLeft,
@@ -340,7 +342,7 @@ export class BulkResizeDrag extends BulkDrag {
       context.map.getZoom?.(),
       context.selectionScope.extensions.getTileSize() ?? 512,
     );
-    context.store.setDragState({ operation: 'resize' });
+    context.store.setDragState({ operation: 'resize', movingFeatureIds: [], movingRows: rows });
   }
 
   update(event: DragNormalizedEvent): void {

@@ -260,32 +260,32 @@ export function createInputRouter(deps: InputRouterDeps): InputRouter {
   /**
    * Builds the snapping context
    *
-   * While a vertex / midpoint is being dragged, the grabbed vertex itself is
-   * excluded (the other vertices of the same feature stay as candidates so that a
-   * ring can be closed). The exclusion can be derived from the drag state of the
-   * Store, so no modification is needed on the select mode side.
+   * What is left out is read from the drag state of the Store, whatever the kind of the
+   * drag:
    *
-   * While a move drag is in progress, the features being moved are excluded whole.
-   * A feature being moved travels with the cursor, so if it stayed a candidate it
-   * would always sit inside the tolerance, the cursor would be pulled back to its
-   * own position, and it would repeat "drift every frame by the offset from when it
-   * was grabbed, then leave the tolerance and catch up all at once" (which looks
-   * like a vibration). It is the same reasoning as excludeVertex for a vertex drag,
-   * except that the unit that is removed is the whole feature.
+   * - the features (and the rows) the drag changes as a whole, which the drag state holds
+   *   (`movingFeatureIds`, `movingRows`): a move, a rotation, a resize, the radius of a
+   *   circle, a handle of an extension on a feature. What a drag changes as a whole travels
+   *   with the cursor, so if it stayed a candidate it would always sit inside the
+   *   tolerance, the cursor would be pulled back to it, and it would repeat "drift every
+   *   frame by the offset from when it was grabbed, then leave the tolerance and catch up
+   *   all at once" (which looks like a vibration)
+   * - the grabbed vertex of a vertex / midpoint drag (`activeVertex`), for the same reason
+   *   with the vertex as the unit: the other vertices of the same feature stay candidates
+   *   so that a ring can be closed
    *
    * The feature to prefer when candidates tie is read from the current mode (a
    * drawing mode returns the boundary it started tracing).
    */
   function buildSnapContext(modifiers: ModifierKeys): SnapContext {
     const dragState = context.store.getDragState();
-    const isVertexDrag = dragState?.operation === 'vertex' || dragState?.operation === 'midpoint';
     const excludeVertex =
-      isVertexDrag && dragState?.activeFeatureId && dragState.activeVertex
+      dragState?.activeFeatureId && dragState.activeVertex
         ? { featureId: dragState.activeFeatureId, vertex: dragState.activeVertex }
         : undefined;
 
-    const moving = dragState?.operation === 'move' ? dragState.movingFeatureIds : undefined;
-    const movingRows = dragState?.operation === 'move' ? dragState.movingRows : undefined;
+    const moving = dragState?.movingFeatureIds;
+    const movingRows = dragState?.movingRows;
     const tables = context.store.tables;
     const excludeFeatureIds =
       movingRows && tables

@@ -118,6 +118,8 @@ export class RotateDrag implements DragOperation {
 
 /**
  * Start a rotate drag from the rotation handle, and set the DragState it draws from
+ *
+ * @param movingFeatureIds The features the rotation turns (snapping leaves them out)
  */
 export function startRotateDrag(
   event: DragNormalizedEvent,
@@ -125,6 +127,7 @@ export function startRotateDrag(
   features: Feature[],
   store: DragStore,
   scope: DragScope,
+  movingFeatureIds: string[],
 ): RotateDrag {
   const center = rotationCenterOf(bbox, features);
   const drag = new RotateDrag(center, dragStartLngLat(event), startsOf(features));
@@ -144,6 +147,7 @@ export function startRotateDrag(
   // Save the bbox at the start of the rotation (for drawing the bbox during the rotation)
   store.setDragState({
     operation: 'rotate',
+    movingFeatureIds,
     rotateInfo: {
       initialBbox: {
         topLeft: bbox.topLeft,

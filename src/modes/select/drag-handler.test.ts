@@ -837,6 +837,35 @@ describe.each(STORE_KINDS)('on %s', (_kind, createStore) => {
       expect(store.getDragState()).toBeNull();
     });
 
+    it('a rotation, a resize and a radius drag carry the features they change whole', () => {
+      putFeature({
+        id: 'c1',
+        type: 'Circle',
+        geometry: { type: 'Point', coordinates: [50, 0] },
+        layerId: 'l1',
+        groupId: undefined,
+        properties: { 'maplibre-gl-draw:radiusMeters': 1000 },
+        locked: false,
+        visible: true,
+        style: {},
+      });
+      store.setSelection('feature', ['f1']);
+      const bbox = computeSelectionBoundingBox(getSelectedFeatures(store));
+
+      handler.startDrag({ type: 'rotate' }, dragEvent(5, 20), context, bbox);
+      expect(store.getDragState()?.movingFeatureIds).toEqual(['f1']);
+      handler.endDrag(context);
+
+      handler.startDrag({ type: 'resize', handle: 'resize-se' }, dragEvent(10, -10), context, bbox);
+      expect(store.getDragState()?.movingFeatureIds).toEqual(['f1']);
+      handler.endDrag(context);
+
+      startRadiusDrag('c1', [50, 0]);
+      expect(store.getDragState()?.movingFeatureIds).toEqual(['c1']);
+      handler.endDrag(context);
+      expect(store.getDragState()).toBeNull();
+    });
+
     it('updates partway through a vertex drag carry isIntermediate', () => {
       watchFeatureBatches();
 
@@ -1222,7 +1251,11 @@ describe.each(STORE_KINDS)('on %s', (_kind, createStore) => {
         startAuxiliaryDrag([5, 5]);
 
         expect(handler.isActive()).toBe(true);
-        expect(store.getDragState()).toEqual({ operation: 'auxiliary' });
+        // The feature the handle is on is taken as changed whole (snapping leaves it out)
+        expect(store.getDragState()).toEqual({
+          operation: 'auxiliary',
+          movingFeatureIds: [HIT.featureId],
+        });
         expect(map.dragPan.isEnabled()).toBe(false);
       });
 

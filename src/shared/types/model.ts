@@ -1197,16 +1197,18 @@ export interface DragState {
    */
   rotateInfo?: RotateInfo;
   /**
-   * The IDs of the features being moved (a group/layer selection is already resolved into
-   * its members)
-   * Set only when operation is 'move'
+   * The IDs of the features the drag changes as a whole (a group/layer selection is already
+   * resolved into its members): the features moved, rotated or resized, the circle whose radius
+   * is dragged, and the feature a handle of an extension is on. Not set for a vertex or a
+   * midpoint, whose drag changes one vertex (`activeVertex`)
    *
-   * Used so that snapping can exclude "the very feature being moved" from the candidates.
+   * Snapping leaves them out of the candidates: what the drag changes as a whole goes with the
+   * pointer, and would pull it back to itself.
    */
   movingFeatureIds?: string[];
   /**
-   * The rows of the features selected in bulk being moved (snapping leaves them out as it leaves
-   * out `movingFeatureIds`)
+   * The rows of the features selected in bulk the drag changes as a whole (snapping leaves them
+   * out as it leaves out `movingFeatureIds`)
    */
   movingRows?: { has(handle: number): boolean };
 }

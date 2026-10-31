@@ -286,6 +286,31 @@ describe('Snapping of InputRouter', () => {
     expect(mode.dragMoves[0].lngLat).toEqual(cursor);
   });
 
+  it.each(['rotate', 'resize', 'radius', 'auxiliary'] as const)(
+    'does not snap to the features a %s drag changes as a whole',
+    (operation) => {
+      putFeature('p1', 'Point', TARGET);
+      startRouter();
+      store.setDragState({ operation, movingFeatureIds: ['p1'] });
+
+      const cursor = nearTarget(3);
+      normalizer.emit(makeDragMoveEvent(cursor.lng, cursor.lat));
+
+      expect(mode.dragMoves[0].lngLat).toEqual(cursor);
+    },
+  );
+
+  it('leaves out what the drag state holds, not what its kind is', () => {
+    putFeature('p1', 'Point', TARGET);
+    startRouter();
+    store.setDragState({ operation: 'resize' });
+
+    const cursor = nearTarget(3);
+    normalizer.emit(makeDragMoveEvent(cursor.lng, cursor.lat));
+
+    expect(mode.dragMoves[0].lngLat).toEqual({ lng: TARGET[0], lat: TARGET[1] });
+  });
+
   it('snaps to features that are not being moved even during a move drag', () => {
     putFeature('p1', 'Point', TARGET);
     putFeature('p2', 'Point', [TARGET[0] + 0.05, TARGET[1]]);
