@@ -2,9 +2,10 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * End-to-end tests of what every place that reads an edit in progress shows and answers, for each
- * drag of one selected feature, over a Store of objects and over the Store of rows of the library,
- * on the real maplibre and WebGL of the browser
+ * The end-to-end tests of what every place that reads an edit in progress shows and answers, for
+ * each drag of one selected feature, over a Store of objects and over the Store of rows of the
+ * library, on the real maplibre and WebGL of the browser (`describeDragReads`, called by a test
+ * file for each group of drags, so that no file runs for long)
  *
  * The drags: a move (from a press on the outline), a rotation and a resize from the handles of the
  * frame, a vertex, a midpoint, the radius of a circle, and a handle of a handle provider; and the
@@ -14,14 +15,15 @@
  * - the hit test, held over a grid of the map to the frame (a feature is hit where it is drawn,
  *   nothing where nothing is drawn)
  * - the cursor over the handles (the hit test of the handles)
- * - the snapping: the feature being dragged is no candidate of its own drag
+ * - the snapping: the feature being dragged is no candidate of its own drag, from its start on
  * - the events of the features and the drags, with their marks of intermediate writes
  * - `features.get`, with the sketches applied and without
  * - the selected vertices
  * - the image of the map taken in the middle of a drag
  *
  * Every expectation is the behavior of the library as it is, to hold it while the places that
- * read an edit in progress are brought together.
+ * read an edit in progress are brought together. The handles drawn at sizes and distances of their
+ * own are hit where they are drawn.
  */
 
 import type { Browser, Page } from 'playwright-core';
@@ -64,14 +66,6 @@ import { type Bundle, bundlePage, launchBrowser, settle } from './harness.js';
 
 let browser: Browser;
 let bundle: Bundle;
-
-beforeAll(async () => {
-  [browser, bundle] = await Promise.all([launchBrowser(), bundlePage()]);
-}, browserTimeout(60_000));
-
-afterAll(async () => {
-  await browser?.close();
-});
 
 const ZOOM = 14;
 /** The steps of the moves of the pointer of a drag (the first only starts the drag) */
@@ -157,9 +151,18 @@ const between = (a: MapPoint, b: MapPoint, t: number): MapPoint => [
   a[1] + (b[1] - a[1]) * t,
 ];
 
+/**
+ * The groups of the tests, a test file each: the drags that move or turn the feature as a whole
+ * and the arrow keys; the resizes and the radius of a circle; the drags of a vertex, a midpoint
+ * and a handle of a handle provider; and the handles drawn at sizes and distances of their own
+ */
+export type DragReadsGroup = 'moves' | 'resizes' | 'vertices' | 'handles';
+
 /** A drag of one feature */
 interface Edit {
   name: string;
+  /** The group of the tests it is in */
+  group: DragReadsGroup;
   scene: (kind: StoreKind) => SceneSpec;
   /** Where the drag starts, from the frame with the feature selected */
   grab(page: Page, selected: Drawn[]): Promise<MapPoint>;
@@ -232,6 +235,7 @@ async function registerShiftHandle(page: Page): Promise<void> {
 const EDITS: Edit[] = [
   {
     name: 'a move from a press on the outline',
+    group: 'moves',
     scene: polygonScene,
     // A quarter of the way up the west edge: off the vertices and the midpoint, on the outline,
     // so that the pointer stays on an edge of the feature it moves
@@ -251,6 +255,7 @@ const EDITS: Edit[] = [
   },
   {
     name: 'a rotation from the rotate handle',
+    group: 'moves',
     scene: polygonScene,
     grab: async (_page, selected) => (selected[I_ROTATE] as Drawn).center as MapPoint,
     by: [80, 60],
@@ -262,6 +267,7 @@ const EDITS: Edit[] = [
   },
   {
     name: 'a resize from the south-east handle',
+    group: 'resizes',
     scene: polygonScene,
     grab: async (_page, selected) => {
       const box = (selected[I_RESIZE] as Drawn).box as Box;
@@ -276,6 +282,7 @@ const EDITS: Edit[] = [
   },
   {
     name: 'a resize inward from the south-east handle, over the corner of the feature',
+    group: 'resizes',
     scene: polygonScene,
     grab: async (_page, selected) => {
       const box = (selected[I_RESIZE] as Drawn).box as Box;
@@ -291,6 +298,7 @@ const EDITS: Edit[] = [
   },
   {
     name: 'a vertex',
+    group: 'vertices',
     scene: polygonScene,
     grab: (page) => mapPointOf(page, CORNERS[2] as number[]),
     by: [30, -24],
@@ -302,6 +310,7 @@ const EDITS: Edit[] = [
   },
   {
     name: 'a midpoint',
+    group: 'vertices',
     scene: polygonScene,
     grab: async (page) =>
       between(
@@ -317,6 +326,7 @@ const EDITS: Edit[] = [
   },
   {
     name: 'the radius of a circle',
+    group: 'resizes',
     scene: circleScene,
     grab: async (_page, selected) => (selected[I_RADIUS] as Drawn).center as MapPoint,
     by: [40, 0],
@@ -327,6 +337,7 @@ const EDITS: Edit[] = [
   },
   {
     name: 'a handle of a handle provider',
+    group: 'vertices',
     scene: polygonScene,
     setup: registerShiftHandle,
     grab: (page) => mapPointOf(page, at(0, -0.002)),
@@ -532,103 +543,108 @@ function expectMiddle(edit: Edit, r: Run): void {
   expect(r.midEvents.filter((e) => e.name === 'preview.changed')).toEqual([]);
 }
 
-describe.each(KINDS)('a drag of one feature over a Store of %s', (kind) => {
-  let page: Page;
+function describeDrags(group: DragReadsGroup): void {
+  describe.each(KINDS)('a drag of one feature over a Store of %s', (kind) => {
+    let page: Page;
 
-  beforeAll(async () => {
-    page = await openScenePage(browser, bundle, ZOOM);
-  }, browserTimeout(60_000));
+    beforeAll(async () => {
+      page = await openScenePage(browser, bundle, ZOOM);
+    }, browserTimeout(60_000));
 
-  afterAll(async () => {
-    await page?.close();
-  });
-
-  describe.each(EDITS)('$name', (edit) => {
-    it('is drawn, hit and read as it goes in its middle, and as written once let go', {
-      timeout: SCENES_TIMEOUT,
-    }, async () => {
-      const r = await run(page, kind, edit, false);
-      expectMiddle(edit, r);
-      // Let go: written as the middle showed it last
-      expect(r.endGeometry).toEqual(r.midGeometry);
-      expect(r.endRadius).toEqual(r.midRadius);
-      expectSame(r.end[I_FILL] as Drawn, r.mid[I_FILL] as Drawn);
-      expect((r.end[I_FRAME] as Drawn).count).toBeGreaterThan(200);
-      const ended = edit.started ? [`end ${edit.started}`] : [];
-      expect(sequenceOf(r.endEvents)).toEqual(['U p', 'D', ...ended]);
-      if (edit.follows) {
-        // Moved as far as the pointer: no snap pulled it
-        expectNear(shiftOf(r.end[I_FILL] as Drawn, r.selected[I_FILL] as Drawn), edit.follows);
-        expectNear(shiftOf(r.end[I_FRAME] as Drawn, r.selected[I_FRAME] as Drawn), edit.follows);
-      }
-      // The handles are drawn again around the feature as written, and hit there
-      expect((r.end[I_RESIZE] as Drawn).count).toBe((r.selected[I_RESIZE] as Drawn).count);
-      const box = (r.end[I_RESIZE] as Drawn).box as Box;
-      expect(await cursorAt(page, [box[2] - 4.5, box[3] - 4.5])).toBe('se-resize');
-      const turn = edit.scene === polygonScene ? I_ROTATE : I_RADIUS;
-      const handle = r.end[turn] as Drawn;
-      expect(handle.count).toBeGreaterThan(50);
-      expect(await cursorAt(page, handle.center as MapPoint)).toBe(
-        turn === I_ROTATE ? 'grab' : 'pointer',
-      );
+    afterAll(async () => {
+      await page?.close();
     });
 
-    it('is drawn, hit and read as it goes in its middle, and as before once cancelled', {
-      timeout: SCENES_TIMEOUT,
-    }, async () => {
-      const r = await run(page, kind, edit, true);
-      expectMiddle(edit, r);
-      const ended = edit.started ? [`end ${edit.started} cancelled`] : [];
-      if (edit.escape === 'last patch written') {
-        // The handle of a provider takes the end of the drag as its last patch, written
+    describe.each(EDITS.filter((edit) => edit.group === group))('$name', (edit) => {
+      it('is drawn, hit and read as it goes in its middle, and as written once let go', {
+        timeout: SCENES_TIMEOUT,
+      }, async () => {
+        const r = await run(page, kind, edit, false);
+        expectMiddle(edit, r);
+        // Let go: written as the middle showed it last
         expect(r.endGeometry).toEqual(r.midGeometry);
+        expect(r.endRadius).toEqual(r.midRadius);
         expectSame(r.end[I_FILL] as Drawn, r.mid[I_FILL] as Drawn);
+        expect((r.end[I_FRAME] as Drawn).count).toBeGreaterThan(200);
+        const ended = edit.started ? [`end ${edit.started}`] : [];
         expect(sequenceOf(r.endEvents)).toEqual(['U p', 'D', ...ended]);
-        return;
-      }
-      // The feature goes back in a write in the middle (and a Store of rows writes its row back)
-      const back = kind === 'rows' ? ['I p', 'D', 'U p', 'D'] : ['I p', 'D'];
-      expect(sequenceOf(r.endEvents)).toEqual([...back, ...ended]);
-      expect(r.endRadius).toEqual(r.radius);
-      expectSame(r.end[I_FILL] as Drawn, r.selected[I_FILL] as Drawn);
-      expectSame(r.end[I_FRAME] as Drawn, r.selected[I_FRAME] as Drawn);
-      if (edit.escape === 'vertex added') {
-        // The vertex a midpoint added when it was grabbed stays, at the midpoint
-        expect(positionsOf(r.endGeometry)).toBe(positionsOf(r.geometry) + 1);
-        expect((r.end[I_VERTEX] as Drawn).count).toBeGreaterThan(
-          (r.selected[I_VERTEX] as Drawn).count,
+        if (edit.follows) {
+          // Moved as far as the pointer: no snap pulled it
+          expectNear(shiftOf(r.end[I_FILL] as Drawn, r.selected[I_FILL] as Drawn), edit.follows);
+          expectNear(shiftOf(r.end[I_FRAME] as Drawn, r.selected[I_FRAME] as Drawn), edit.follows);
+        }
+        // The handles are drawn again around the feature as written, and hit there
+        expect((r.end[I_RESIZE] as Drawn).count).toBe((r.selected[I_RESIZE] as Drawn).count);
+        const box = (r.end[I_RESIZE] as Drawn).box as Box;
+        expect(await cursorAt(page, [box[2] - 4.5, box[3] - 4.5])).toBe('se-resize');
+        const turn = edit.scene === polygonScene ? I_ROTATE : I_RADIUS;
+        const handle = r.end[turn] as Drawn;
+        expect(handle.count).toBeGreaterThan(50);
+        expect(await cursorAt(page, handle.center as MapPoint)).toBe(
+          turn === I_ROTATE ? 'grab' : 'pointer',
         );
-      } else {
-        expect(r.endGeometry).toEqual(r.geometry);
-        for (const i of HANDLES) expectSame(r.end[i] as Drawn, r.selected[i] as Drawn, 0.05);
+      });
+
+      it('is drawn, hit and read as it goes in its middle, and as before once cancelled', {
+        timeout: SCENES_TIMEOUT,
+      }, async () => {
+        const r = await run(page, kind, edit, true);
+        expectMiddle(edit, r);
+        const ended = edit.started ? [`end ${edit.started} cancelled`] : [];
+        if (edit.escape === 'last patch written') {
+          // The handle of a provider takes the end of the drag as its last patch, written
+          expect(r.endGeometry).toEqual(r.midGeometry);
+          expectSame(r.end[I_FILL] as Drawn, r.mid[I_FILL] as Drawn);
+          expect(sequenceOf(r.endEvents)).toEqual(['U p', 'D', ...ended]);
+          return;
+        }
+        // The feature goes back in a write in the middle (and a Store of rows writes its row back)
+        const back = kind === 'rows' ? ['I p', 'D', 'U p', 'D'] : ['I p', 'D'];
+        expect(sequenceOf(r.endEvents)).toEqual([...back, ...ended]);
+        expect(r.endRadius).toEqual(r.radius);
+        expectSame(r.end[I_FILL] as Drawn, r.selected[I_FILL] as Drawn);
+        expectSame(r.end[I_FRAME] as Drawn, r.selected[I_FRAME] as Drawn);
+        if (edit.escape === 'vertex added') {
+          // The vertex a midpoint added when it was grabbed stays, at the midpoint
+          expect(positionsOf(r.endGeometry)).toBe(positionsOf(r.geometry) + 1);
+          expect((r.end[I_VERTEX] as Drawn).count).toBeGreaterThan(
+            (r.selected[I_VERTEX] as Drawn).count,
+          );
+        } else {
+          expect(r.endGeometry).toEqual(r.geometry);
+          for (const i of HANDLES) expectSame(r.end[i] as Drawn, r.selected[i] as Drawn, 0.05);
+        }
+      });
+    });
+
+    // The arrow keys move the feature as a whole, with the drags of the group that do
+    if (group !== 'moves') return;
+
+    it('moves the selection with the arrow keys, each press written at once', {
+      timeout: SCENES_TIMEOUT,
+    }, async () => {
+      await load(page, polygonScene(kind), ZOOM);
+      await select(page, ['p']);
+      const selected = await frame(page, COLORS);
+      // A click on the feature gives the canvas the focus of the keys
+      await cursorAt(page, (selected[I_FILL] as Drawn).center as MapPoint);
+      await page.mouse.down();
+      await page.mouse.up();
+      await settle(page);
+      await mark(page);
+      await page.keyboard.press('Shift+ArrowRight');
+      await page.keyboard.press('Shift+ArrowDown');
+      await settle(page);
+      const moved = await frame(page, COLORS);
+      expect(sequenceOf(await events(page))).toEqual(times(2, ['U p', 'D']));
+      for (const i of [I_FILL, I_OUTLINE, I_FRAME, I_RESIZE, I_ROTATE, I_VERTEX, I_MIDPOINT]) {
+        expect((moved[i] as Drawn).count).toBe((selected[i] as Drawn).count);
+        expectNear(shiftOf(moved[i] as Drawn, selected[i] as Drawn), [10, 10], 1);
       }
+      await expectHitsAsDrawn(page);
     });
   });
-
-  it('moves the selection with the arrow keys, each press written at once', {
-    timeout: SCENES_TIMEOUT,
-  }, async () => {
-    await load(page, polygonScene(kind), ZOOM);
-    await select(page, ['p']);
-    const selected = await frame(page, COLORS);
-    // A click on the feature gives the canvas the focus of the keys
-    await cursorAt(page, (selected[I_FILL] as Drawn).center as MapPoint);
-    await page.mouse.down();
-    await page.mouse.up();
-    await settle(page);
-    await mark(page);
-    await page.keyboard.press('Shift+ArrowRight');
-    await page.keyboard.press('Shift+ArrowDown');
-    await settle(page);
-    const moved = await frame(page, COLORS);
-    expect(sequenceOf(await events(page))).toEqual(times(2, ['U p', 'D']));
-    for (const i of [I_FILL, I_OUTLINE, I_FRAME, I_RESIZE, I_ROTATE, I_VERTEX, I_MIDPOINT]) {
-      expect((moved[i] as Drawn).count).toBe((selected[i] as Drawn).count);
-      expectNear(shiftOf(moved[i] as Drawn, selected[i] as Drawn), [10, 10], 1);
-    }
-    await expectHitsAsDrawn(page);
-  });
-});
+}
 
 /** The handles at sizes and a distance and margin of their own, in the colors of the tests */
 const largeSelectionStyle = {
@@ -649,74 +665,96 @@ const largeSelectionStyle = {
   radiusHandle: { point: pointLook('square', RADIUS, 16) },
 };
 
-describe.each(KINDS)(
-  'the handles drawn at the sizes and distances of the options over a Store of %s',
-  (kind) => {
-    let page: Page;
+function describeHandles(): void {
+  describe.each(KINDS)(
+    'the handles drawn at the sizes and distances of the options over a Store of %s',
+    (kind) => {
+      let page: Page;
 
-    beforeAll(async () => {
-      page = await openScenePage(browser, bundle, ZOOM);
-    }, browserTimeout(60_000));
+      beforeAll(async () => {
+        page = await openScenePage(browser, bundle, ZOOM);
+      }, browserTimeout(60_000));
 
-    afterAll(async () => {
-      await page?.close();
-    });
+      afterAll(async () => {
+        await page?.close();
+      });
 
-    /** The cursor over a point and over the points a little short of the corners of a handle */
-    async function expectHandleAt(point: MapPoint, half: number, cursor: string): Promise<void> {
-      for (const [dx, dy] of [
-        [0, 0],
-        [half - 2, half - 2],
-        [-(half - 2), -(half - 2)],
-      ] as const) {
-        expect(await cursorAt(page, [point[0] + dx, point[1] + dy])).toBe(cursor);
+      /** The cursor over a point and over the points a little short of the corners of a handle */
+      async function expectHandleAt(point: MapPoint, half: number, cursor: string): Promise<void> {
+        for (const [dx, dy] of [
+          [0, 0],
+          [half - 2, half - 2],
+          [-(half - 2), -(half - 2)],
+        ] as const) {
+          expect(await cursorAt(page, [point[0] + dx, point[1] + dy])).toBe(cursor);
+        }
       }
-    }
 
-    it('hits each handle of a polygon where it is drawn, and turns it from there', {
-      timeout: SCENES_TIMEOUT,
-    }, async () => {
-      const scene = polygonScene(kind);
-      await load(page, { ...scene, options: { selectionStyle: largeSelectionStyle } }, ZOOM);
-      await select(page, ['p']);
-      const selected = await frame(page, COLORS);
-      const fill = (selected[I_OUTLINE] as Drawn).box as Box;
-      const resize = (selected[I_RESIZE] as Drawn).box as Box;
-      // The resize handles stand on the frame, the margin out of the outline
-      expect(Math.abs(resize[2] - 8 - fill[2] - 20)).toBeLessThan(3);
-      await expectHandleAt([resize[2] - 7.5, resize[3] - 7.5], 8, 'se-resize');
-      await expectHandleAt([resize[0] + 7.5, resize[1] + 7.5], 8, 'nw-resize');
-      const rotate = (selected[I_ROTATE] as Drawn).center as MapPoint;
-      // The rotate handle stands above the frame
-      expect(rotate[1]).toBeLessThan(resize[1]);
-      await expectHandleAt(rotate, 8, 'grab');
-      await expectHandleAt(await mapPointOf(page, CORNERS[2] as number[]), 9, 'pointer');
-      const midpoint = between(
-        await mapPointOf(page, CORNERS[0] as number[]),
-        await mapPointOf(page, CORNERS[1] as number[]),
-        0.5,
-      );
-      await expectHandleAt(midpoint, 7, 'crosshair');
+      it('hits each handle of a polygon where it is drawn, and turns it from there', {
+        timeout: SCENES_TIMEOUT,
+      }, async () => {
+        const scene = polygonScene(kind);
+        await load(page, { ...scene, options: { selectionStyle: largeSelectionStyle } }, ZOOM);
+        await select(page, ['p']);
+        const selected = await frame(page, COLORS);
+        const fill = (selected[I_OUTLINE] as Drawn).box as Box;
+        const resize = (selected[I_RESIZE] as Drawn).box as Box;
+        // The resize handles stand on the frame, the margin out of the outline
+        expect(Math.abs(resize[2] - 8 - fill[2] - 20)).toBeLessThan(3);
+        await expectHandleAt([resize[2] - 7.5, resize[3] - 7.5], 8, 'se-resize');
+        await expectHandleAt([resize[0] + 7.5, resize[1] + 7.5], 8, 'nw-resize');
+        const rotate = (selected[I_ROTATE] as Drawn).center as MapPoint;
+        // The rotate handle stands above the frame
+        expect(rotate[1]).toBeLessThan(resize[1]);
+        await expectHandleAt(rotate, 8, 'grab');
+        await expectHandleAt(await mapPointOf(page, CORNERS[2] as number[]), 9, 'pointer');
+        const midpoint = between(
+          await mapPointOf(page, CORNERS[0] as number[]),
+          await mapPointOf(page, CORNERS[1] as number[]),
+          0.5,
+        );
+        await expectHandleAt(midpoint, 7, 'crosshair');
 
-      await mark(page);
-      await pressAndMove(page, rotate, [80, 60], STEPS);
-      await release(page);
-      expect(sequenceOf(await events(page))[0]).toBe('start handle');
-      const turned = await frame(page, COLORS);
-      expect(differs(turned[I_OUTLINE] as Drawn, selected[I_OUTLINE] as Drawn)).toBe(true);
-      expectNear((turned[I_FILL] as Drawn).center, (selected[I_FILL] as Drawn).center as MapPoint);
-    });
+        await mark(page);
+        await pressAndMove(page, rotate, [80, 60], STEPS);
+        await release(page);
+        expect(sequenceOf(await events(page))[0]).toBe('start handle');
+        const turned = await frame(page, COLORS);
+        expect(differs(turned[I_OUTLINE] as Drawn, selected[I_OUTLINE] as Drawn)).toBe(true);
+        expectNear(
+          (turned[I_FILL] as Drawn).center,
+          (selected[I_FILL] as Drawn).center as MapPoint,
+        );
+      });
 
-    it('hits the radius handle of a circle where it is drawn', {
-      timeout: SCENES_TIMEOUT,
-    }, async () => {
-      const scene = circleScene(kind);
-      await load(page, { ...scene, options: { selectionStyle: largeSelectionStyle } }, ZOOM);
-      await select(page, ['p']);
-      const selected = await frame(page, COLORS);
-      await expectHandleAt((selected[I_RADIUS] as Drawn).center as MapPoint, 8, 'pointer');
-      const resize = (selected[I_RESIZE] as Drawn).box as Box;
-      await expectHandleAt([resize[2] - 7.5, resize[3] - 7.5], 8, 'se-resize');
-    });
-  },
-);
+      it('hits the radius handle of a circle where it is drawn', {
+        timeout: SCENES_TIMEOUT,
+      }, async () => {
+        const scene = circleScene(kind);
+        await load(page, { ...scene, options: { selectionStyle: largeSelectionStyle } }, ZOOM);
+        await select(page, ['p']);
+        const selected = await frame(page, COLORS);
+        await expectHandleAt((selected[I_RADIUS] as Drawn).center as MapPoint, 8, 'pointer');
+        const resize = (selected[I_RESIZE] as Drawn).box as Box;
+        await expectHandleAt([resize[2] - 7.5, resize[3] - 7.5], 8, 'se-resize');
+      });
+    },
+  );
+}
+
+/**
+ * Registers the tests of a group of drags of one feature, over a Store of objects and over the
+ * Store of rows, on a browser of their own
+ */
+export function describeDragReads(group: DragReadsGroup): void {
+  beforeAll(async () => {
+    [browser, bundle] = await Promise.all([launchBrowser(), bundlePage()]);
+  }, browserTimeout(60_000));
+
+  afterAll(async () => {
+    await browser?.close();
+  });
+
+  if (group === 'handles') describeHandles();
+  else describeDrags(group);
+}
