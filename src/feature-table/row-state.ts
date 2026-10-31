@@ -114,6 +114,12 @@ const SET_SKETCH = 64;
  * A change calls `onChange` with the handles whose state changed, so the row groups holding
  * them make their copies again.
  *
+ * A moving set moves its rows by its translation and its transform while one row is in it. Once
+ * the last of its rows leaves it (taken out of every set, put into another, or forgotten), it is
+ * let go of: no translation and no transform. Whatever moves rows by a set (a drag of features
+ * selected in bulk, the arrow keys, a move of many rows held) takes it so, empty and still, and
+ * leaves it so with its rows, on one path, whether the move is written or put back.
+ *
  * @internal
  */
 export class RowStateSets {
@@ -125,6 +131,8 @@ export class RowStateSets {
   /** The edit that moves, rotates or scales each moving set (null for none; set 0 is unused) */
   private readonly transforms: Array<EnuEdit | null> = new Array(MOVE_SETS + 1).fill(null);
   private translationRevision = 0;
+  /** The number of rows in each moving set (set 0 is unused) */
+  private readonly members = new Int32Array(MOVE_SETS + 1);
 
   constructor(private readonly onChange: (handles: Int32Array) => void) {}
 
@@ -199,7 +207,10 @@ export class RowStateSets {
   /** Forgets the state of a handle (given again to another row) */
   clear(handle: RowHandle): void {
     this.bulk.delete(handle);
-    if (handle >= 0 && handle < this.bits.length) this.bits[handle] = 0;
+    if (handle < 0 || handle >= this.bits.length) return;
+    const left = this.leave(this.bits[handle], 0);
+    this.bits[handle] = 0;
+    this.letGoIfEmpty(left);
   }
 
   /** The translation of a moving set, `[dLng, dLat]` in degrees */
@@ -245,14 +256,43 @@ export class RowStateSets {
     for (const handle of handles) if (handle > max) max = handle;
     this.reserve(max + 1);
     const changed: number[] = [];
+    let left = 0;
     for (const handle of handles) {
       if (handle < 0) continue;
       const next = change(this.bits[handle]);
       if (next === this.bits[handle]) continue;
+      left |= this.leave(this.bits[handle], next);
       this.bits[handle] = next;
       changed.push(handle);
     }
+    this.letGoIfEmpty(left);
     if (changed.length > 0) this.onChange(Int32Array.from(changed));
+  }
+
+  /**
+   * Counts a row out of the moving set of its bits and into the one of its next bits
+   *
+   * @returns The set it left, as a bit (0 when it stays in its set)
+   */
+  private leave(bits: number, next: number): number {
+    const from = (bits & SET_MOVE_MASK) >> SET_MOVE_SHIFT;
+    const to = (next & SET_MOVE_MASK) >> SET_MOVE_SHIFT;
+    if (from === to) return 0;
+    if (to > 0) this.members[to]++;
+    if (from === 0) return 0;
+    this.members[from]--;
+    return 1 << from;
+  }
+
+  /** Lets go of the moving sets rows left that no row is in any more */
+  private letGoIfEmpty(left: number): void {
+    for (let set = 1; set <= MOVE_SETS; set++) {
+      if ((left & (1 << set)) === 0 || this.members[set] > 0) continue;
+      this.translations[set * 2] = 0;
+      this.translations[set * 2 + 1] = 0;
+      this.transforms[set] = null;
+      this.translationRevision++;
+    }
   }
 
   private reserve(n: number): void {

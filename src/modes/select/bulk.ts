@@ -158,12 +158,9 @@ abstract class BulkDrag implements DragOperation {
     protected readonly rows: TableSelection,
   ) {
     // A write of a drag let go before, still under way, is made first (its rows leave the moving
-    // set it shares)
+    // set it shares, which is let go of with the last of them: the rows enter it still)
     context.store.finishSlicedWrite();
-    const states = featureTablesInternals(context.store.tables)?.states;
-    states?.setMoving(rows.handles, BULK_MOVE_SET);
-    states?.setTranslation(BULK_MOVE_SET, 0, 0);
-    states?.setTransform(BULK_MOVE_SET, null);
+    featureTablesInternals(context.store.tables)?.states.setMoving(rows.handles, BULK_MOVE_SET);
   }
 
   abstract update(event: DragNormalizedEvent, store: DragStore, writes: IntermediateWrites): void;
@@ -174,8 +171,8 @@ abstract class BulkDrag implements DragOperation {
   /**
    * Ends the drag. Committed, the rows are written where they are drawn, in steps
    * (`bulk-sliced.ts`): each row leaves the moving set in the task it is written in, and the
-   * moving set is let go of with the last of them; then `done` is called. Not committed, the
-   * moving set is let go of at once
+   * moving set is let go of with the last of them (`RowStateSets`); then `done` is called. Not
+   * committed, the rows leave the moving set at once
    */
   end(store: DragStore, committed: boolean, done?: () => void): void {
     if (this.#ended) return;
@@ -184,8 +181,6 @@ abstract class BulkDrag implements DragOperation {
     const release = (): void => {
       states?.setMoving(this.rows.handles, 0);
       states?.setByValues(this.rows.handles, false);
-      states?.setTranslation(BULK_MOVE_SET, 0, 0);
-      states?.setTransform(BULK_MOVE_SET, null);
       this.context.map.triggerRepaint();
       done?.();
     };
@@ -406,7 +401,6 @@ export class BulkNudge {
       this.#from = [center[0], center[1]];
       this.#to = [center[0], center[1]];
       states.setMoving(rows.handles, BULK_MOVE_SET);
-      states.setTranslation(BULK_MOVE_SET, 0, 0);
     }
     this.#to = step(this.#to);
     states.setTransform(BULK_MOVE_SET, this.#edit());
@@ -424,7 +418,7 @@ export class BulkNudge {
     return { kind: 'translate', from: [...this.#from], to: [...this.#to] };
   }
 
-  /** Writes the moves waiting now (one change), and lets the moving set go */
+  /** Writes the moves waiting now (one change), and takes the rows out of the moving set */
   flush(): void {
     if (this.#timer !== null) clearTimeout(this.#timer);
     this.#timer = null;
@@ -439,9 +433,7 @@ export class BulkNudge {
         transformBulkSelection(store, this.#edit(), rows);
       }
     } finally {
-      const states = featureTablesInternals(store.tables)?.states;
-      states?.setMoving(rows.handles, 0);
-      states?.setTransform(BULK_MOVE_SET, null);
+      featureTablesInternals(store.tables)?.states.setMoving(rows.handles, 0);
       context.map.triggerRepaint();
     }
   }
@@ -455,9 +447,7 @@ export class BulkNudge {
     this.#rows = null;
     this.#context = null;
     if (!rows || !context) return;
-    const states = featureTablesInternals(context.store.tables)?.states;
-    states?.setMoving(rows.handles, 0);
-    states?.setTransform(BULK_MOVE_SET, null);
+    featureTablesInternals(context.store.tables)?.states.setMoving(rows.handles, 0);
     context.map.triggerRepaint();
   }
 }

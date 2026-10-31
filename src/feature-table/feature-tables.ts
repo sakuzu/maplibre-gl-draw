@@ -2656,7 +2656,10 @@ class FeatureTablesStore implements FeatureTablesInternals {
     this.applyPatch({ handles: Int32Array.of(handle), fields: columns }, new Map());
   }
 
-  /** Takes a row held out of the moving set of the rows held, once its row is written */
+  /**
+   * Takes a row held out of the moving set of the rows held, once its row is written (the set is
+   * let go of with the last of them, `RowStateSets`)
+   */
   private stopMove(handle: RowHandle, held: HeldRow): void {
     if (!held.moved) return;
     held.moved = undefined;
