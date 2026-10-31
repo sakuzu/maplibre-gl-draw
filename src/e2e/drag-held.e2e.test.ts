@@ -3,26 +3,30 @@
 
 /**
  * End-to-end tests of what every place that reads an edit in progress shows and answers, for a
- * drag of many features selected one by one, on either side of the number of rows held from which
- * a row held moved as a whole by one translation of its longitudes and latitudes is drawn moved by
- * its state (100), on the real maplibre and WebGL of the browser
+ * drag of many features selected one by one, on either side of the number of rows held from
+ * which a row held moved as a whole is drawn moved by its state, on the real maplibre and WebGL of
+ * the browser
  *
  * A hundred small squares are in the scene; 99 of them or all of them are selected. Over the
- * Store of rows of the library, their rows are held as features, and a write in the middle of the
- * drag goes to each of them; over a Store of objects, the features are written in every frame. A
- * move from a press on one of them, and a rotation from the rotate handle of their frame; in the
- * middle, once let go and once cancelled with Escape:
+ * Store of rows of the library, their rows are held as features: a move in the middle writes each
+ * of them, and from 100 rows held a row held moved as a whole keeps its values and is drawn moved
+ * by the state of its row (a rotation still writes it). Over a Store of objects, the features are
+ * written in every frame. A move from a press on one of them, and a rotation from the rotate
+ * handle of their frame; and a handle of a handle provider in the middle of one square selected
+ * alone, which moves it as a whole by one translation, with the others held besides up to 99 or
+ * 100 rows. In the middle, once let go and once cancelled with Escape:
  *
  * - the fills and the outlines drawn, and the frames of the selection and its handles
  * - the hit test, held over a grid of the map to the frame
- * - the snapping: none of the features dragged is a candidate of its own drag
+ * - the snapping: none of the features dragged is a candidate of its own drag, from its start on
  * - the events of the features, the document and the drags, with their marks of intermediate
  *   writes
  * - `features.get`, with the sketches applied and without
  * - the image of the map taken in the middle of a drag
  *
  * Every expectation is the behavior of the library as it is, to hold it while the places that
- * read an edit in progress are brought together.
+ * read an edit in progress are brought together, but for the snap of the start of a drag: it
+ * leaves out what the drag changes, as the snaps of its middle do.
  */
 
 import type { Browser, Page } from 'playwright-core';
@@ -34,6 +38,7 @@ import {
   type Box,
   cancelAndRelease,
   capture,
+  cursorAt,
   type Drawn,
   events,
   frame,
@@ -82,13 +87,16 @@ const LAST: Rgb = [0x90, 0x20, 0xc0];
 const FRAME: Rgb = [0xff, 0x00, 0xff];
 const RESIZE: Rgb = [0x00, 0xc0, 0x00];
 const ROTATE: Rgb = [0x80, 0x00, 0x00];
-const COLORS = [FILL, OUTLINE, LAST, FRAME, RESIZE, ROTATE] as const;
+/** The fill of the first square, the one a handle of a handle provider moves */
+const FIRST: Rgb = [0x10, 0xa0, 0x50];
+const COLORS = [FILL, OUTLINE, LAST, FRAME, RESIZE, ROTATE, FIRST] as const;
 const I_FILL = 0;
 const I_OUTLINE = 1;
 const I_LAST = 2;
 const I_FRAME = 3;
 const I_RESIZE = 4;
 const I_ROTATE = 5;
+const I_FIRST = 6;
 
 const selectionStyle = {
   boundingBox: {
@@ -101,6 +109,14 @@ const selectionStyle = {
     distance: 10,
     connector: { width: 2, color: hex(FRAME), opacity: 1, lineStyle: 'solid' },
   },
+  // Small, so that the handles of a square selected alone (and the handle of a handle provider,
+  // drawn with their look) leave its fill seen
+  vertexHandle: {
+    point: pointLook('square', FRAME, 4),
+    selected: pointLook('square', FRAME, 4),
+    followed: pointLook('square', FRAME, 4),
+  },
+  midpointHandle: { point: pointLook('circle', FRAME, 4) },
 };
 
 /**
@@ -120,7 +136,7 @@ const scene = (kind: StoreKind): SceneSpec => ({
     type: 'Polygon',
     geometry: { type: 'Polygon', coordinates: [SQUARES[i]] },
     style: {
-      fillColor: hex(i === COUNT - 1 ? LAST : FILL),
+      fillColor: hex(i === COUNT - 1 ? LAST : i === 0 ? FIRST : FILL),
       fillOpacity: 1,
       strokeColor: hex(i === COUNT - 1 ? LAST : OUTLINE),
       strokeWidth: 2,
@@ -239,8 +255,27 @@ interface Reads {
   first: unknown;
   firstSketched: unknown;
   last: unknown;
+  /** The translation of the moving set of the rows held (null over a Store of objects) */
+  translation: [number, number] | null;
   events: Recorded[];
 }
+
+/**
+ * The translation the rows held moved as a whole are drawn moved by, in degrees: that of their
+ * moving set (set 1; null over a Store of objects)
+ */
+const heldTranslation = (page: Page): Promise<[number, number] | null> =>
+  page.evaluate(() => {
+    const w = window as unknown as {
+      store: import('../index.js').Store;
+      e2e: {
+        internals: {
+          featureTablesInternals: typeof import('../feature-table/feature-tables.js').featureTablesInternals;
+        };
+      };
+    };
+    return w.e2e.internals.featureTablesInternals(w.store.tables)?.states.translation(1) ?? null;
+  });
 
 async function readAll(page: Page): Promise<Reads> {
   return {
@@ -248,13 +283,14 @@ async function readAll(page: Page): Promise<Reads> {
     first: await geometryOf(page, IDS[0] as string),
     firstSketched: await geometryOf(page, IDS[0] as string, true),
     last: await geometryOf(page, IDS[COUNT - 1] as string),
+    translation: await heldTranslation(page),
     events: await events(page),
   };
 }
 
 /** The hit test answers as the frame draws: the squares where they are drawn, none elsewhere */
 async function expectHitsAsDrawn(page: Page, moment: string): Promise<void> {
-  const answers = await agreement(page, [FILL, LAST], [FILL, LAST, OUTLINE], 8);
+  const answers = await agreement(page, [FILL, LAST, FIRST], [FILL, LAST, FIRST, OUTLINE], 8);
   expect(answers.inside, moment).toBeGreaterThan(30);
   expect(answers.outside, moment).toBeGreaterThan(1000);
   expect(answers.missedInside, moment).toEqual([]);
@@ -272,6 +308,69 @@ function counted(recorded: readonly Recorded[]): Record<string, number> {
   return out;
 }
 
+/** Holds rows of the Store of rows as features for an owner of the test, without a selection */
+const hold = (page: Page, ids: string[]): Promise<void> =>
+  page.evaluate((i) => {
+    const w = window as unknown as {
+      store: import('../index.js').Store;
+      e2e: {
+        internals: {
+          featureTablesInternals: typeof import('../feature-table/feature-tables.js').featureTablesInternals;
+        };
+      };
+    };
+    w.e2e.internals.featureTablesInternals(w.store.tables)?.open('e2e-held', i);
+  }, ids);
+
+/**
+ * Registers a handle provider whose handle, in the middle of a square, moves it as a whole with
+ * the pointer by one translation of its longitudes and latitudes
+ */
+async function registerShiftHandle(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    type Ring = number[][];
+    const draw = (window as unknown as { draw: import('../index.js').Draw }).draw;
+    let start: { rings: Ring[]; from: number[] } | null = null;
+    draw.extensions.handleProviders.add({
+      name: 'e2e-shift',
+      handles(feature) {
+        if (feature.geometry.type !== 'Polygon') return [];
+        const ring = feature.geometry.coordinates[0] as Ring;
+        let x = 0;
+        let y = 0;
+        for (const c of ring.slice(0, -1)) {
+          x += c[0] as number;
+          y += c[1] as number;
+        }
+        const n = ring.length - 1;
+        return [{ id: 'h', kind: 'shift', position: [x / n, y / n], cursor: 'alias' }];
+      },
+      onDragStart(feature, _handle, event) {
+        if (feature?.geometry.type !== 'Polygon') return false;
+        start = { rings: feature.geometry.coordinates as Ring[], from: event.lngLat as number[] };
+        return true;
+      },
+      onDrag(_feature, _handle, event) {
+        if (!start) return null;
+        const s = start;
+        const dx = (event.lngLat[0] as number) - (s.from[0] as number);
+        const dy = (event.lngLat[1] as number) - (s.from[1] as number);
+        return {
+          geometry: {
+            type: 'Polygon',
+            coordinates: s.rings.map((r) =>
+              r.map((c) => [(c[0] as number) + dx, (c[1] as number) + dy]),
+            ),
+          },
+        };
+      },
+      onDragEnd() {
+        start = null;
+      },
+    });
+  });
+}
+
 describe.each(KINDS)('many features dragged over a Store of %s', (kind) => {
   let page: Page;
 
@@ -279,6 +378,8 @@ describe.each(KINDS)('many features dragged over a Store of %s', (kind) => {
     page = await openScenePage(browser, bundle, ZOOM);
     // One instance for every test: a new instance over a Store of rows builds its programs again
     await load(page, scene(kind), ZOOM);
+    // Its handle is drawn and grabbed on a feature selected alone (the cases of one square)
+    await registerShiftHandle(page);
   }, browserTimeout(90_000));
 
   afterAll(async () => {
@@ -327,8 +428,8 @@ describe.each(KINDS)('many features dragged over a Store of %s', (kind) => {
       expect(mid.first).not.toEqual(selected.first);
       expect(mid.firstSketched).toEqual(mid.first);
       expect(JSON.stringify(mid.last) !== JSON.stringify(selected.last)).toBe(lastMoves);
-      const start = mid.events.findIndex((e) => e.name === 'drag.started');
-      const snaps = mid.events.slice(start + 1).filter((e) => e.name === 'snap.changed');
+      // From the start of the drag on, the snap of its start included
+      const snaps = mid.events.filter((e) => e.name === 'snap.changed');
       expect(snaps.filter((e) => ids.includes(e.snapFeature ?? ''))).toEqual([]);
       const started = edit.moves ? 'feature' : 'handle';
       expect(counted(mid.events)).toEqual({
@@ -369,6 +470,89 @@ describe.each(KINDS)('many features dragged over a Store of %s', (kind) => {
       const back = ids.map((id) => `I ${id}`);
       const written = kind === 'rows' ? ['D', ...ids.map((id) => `U ${id}`), 'D'] : ['D'];
       expect(sequenceOf(end.events)).toEqual([...back, ...written, `end ${started} cancelled`]);
+    });
+  });
+
+  describe.each([99, 100])('a handle of a handle provider on one square, %i rows held', (n) => {
+    const BY: [number, number] = [-30, -20];
+    /** The provider moves the square from where the drag started: a step after the press */
+    const FOLLOWS: [number, number] = [
+      (BY[0] * (STEPS - 1)) / STEPS,
+      (BY[1] * (STEPS - 1)) / STEPS,
+    ];
+
+    async function run(cancelled: boolean) {
+      await restore(page);
+      // The first square selected, and the others held besides (over the Store of rows)
+      await hold(page, IDS.slice(1, n));
+      await select(page, [IDS[0] as string]);
+      expect(await heldCount(page)).toBe(kind === 'rows' ? n : 0);
+      const selected = await readAll(page);
+      await expectHitsAsDrawn(page, 'selected');
+      const grabbed = await mapPointOf(page, at(-0.0063, 0.0054));
+      expect(await cursorAt(page, grabbed)).toBe('alias');
+      await mark(page);
+      await pressAndMove(page, grabbed, BY, STEPS);
+      const mid = await readAll(page);
+      await expectHitsAsDrawn(page, 'in the middle');
+      const image = await capture(page, [FIRST]);
+      await mark(page);
+      if (cancelled) await cancelAndRelease(page);
+      else await release(page);
+      await idle(page);
+      const end = await readAll(page);
+      await expectHitsAsDrawn(page, 'once ended');
+      await hold(page, []);
+
+      // The middle: the square drawn as it goes, read and told so, and nothing else moved
+      expectNear(shiftOf(mid.drawn[I_FIRST] as Drawn, selected.drawn[I_FIRST] as Drawn), FOLLOWS);
+      expectSame(mid.drawn[I_FILL] as Drawn, selected.drawn[I_FILL] as Drawn, 0.01, 0.5);
+      expectSame(mid.drawn[I_LAST] as Drawn, selected.drawn[I_LAST] as Drawn, 0.01, 0.5);
+      expect((mid.drawn[I_FRAME] as Drawn).count).toBeGreaterThan(100);
+      // The image taken in the middle of the drag shows it where it is dragged. This holds the
+      // behavior as it is, which nothing decides yet: it may change later
+      expectSame(image[0] as Drawn, mid.drawn[I_FIRST] as Drawn, 0.05);
+      expect(mid.first).not.toEqual(selected.first);
+      expect(mid.firstSketched).toEqual(mid.first);
+      expect(mid.last).toEqual(selected.last);
+      if (kind === 'rows') {
+        // From 100 rows held, the row of the square moved as a whole by one translation keeps its
+        // values in the middle and is drawn moved by the translation of the moving set of the
+        // rows held; below it the row is written
+        expect(selected.translation).toEqual([0, 0]);
+        const [dx, dy] = mid.translation as [number, number];
+        if (n >= 100) {
+          expect(dx).toBeLessThan(0);
+          expect(dy).toBeGreaterThan(0);
+        } else {
+          expect([dx, dy]).toEqual([0, 0]);
+        }
+      }
+      const snaps = mid.events.filter((e) => e.name === 'snap.changed');
+      expect(snaps.filter((e) => e.snapFeature === IDS[0])).toEqual([]);
+      expect(sequenceOf(mid.events)).toEqual(
+        Array.from({ length: STEPS - 1 }, () => [`I ${IDS[0]}`, 'D']).flat(),
+      );
+      // Once ended (let go, or cancelled: the provider takes the end of the drag as its last
+      // patch), written as the middle showed it last
+      expect(end.first).toEqual(mid.first);
+      expect(end.firstSketched).toEqual(end.first);
+      if (kind === 'rows') expect(end.translation).toEqual([0, 0]);
+      expectSame(end.drawn[I_FIRST] as Drawn, mid.drawn[I_FIRST] as Drawn);
+      expectSame(end.drawn[I_FILL] as Drawn, selected.drawn[I_FILL] as Drawn, 0.01, 0.5);
+      expect(sequenceOf(end.events)).toEqual([`U ${IDS[0]}`, 'D']);
+    }
+
+    it('is drawn, hit and read as it goes in its middle, and as written once let go', {
+      timeout: SCENES_TIMEOUT,
+    }, async () => {
+      await run(false);
+    });
+
+    it('is drawn, hit and read as it goes in its middle, and written once cancelled', {
+      timeout: SCENES_TIMEOUT,
+    }, async () => {
+      await run(true);
     });
   });
 });

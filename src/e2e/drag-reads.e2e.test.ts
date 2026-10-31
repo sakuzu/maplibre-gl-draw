@@ -381,10 +381,12 @@ async function expectHitsAsDrawn(page: Page): Promise<void> {
   expect(answers.ids).toEqual(['p']);
 }
 
-/** The snaps told after the drag started: none of them is to the feature being dragged */
+/**
+ * The snaps told from the press on, the snap of the start of the drag included: none of them is
+ * to the feature being dragged
+ */
 function expectNoSnapToItself(recorded: readonly Recorded[]): void {
-  const start = recorded.findIndex((e) => e.name === 'drag.started');
-  const snaps = recorded.slice(start + 1).filter((e) => e.name === 'snap.changed');
+  const snaps = recorded.filter((e) => e.name === 'snap.changed');
   expect(snaps.filter((e) => e.snapFeature === 'p')).toEqual([]);
 }
 
