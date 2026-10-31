@@ -162,27 +162,37 @@ export interface FeatureRenderer {
   /** Called when the renderer is removed; release what `onAdd` created. */
   onRemove(map: MaplibreMap, gl: WebGL2RenderingContext): void;
   /**
-   * The pictures it draws its points with, for the layers held as rows: a point it takes whose
-   * style has a picture here is drawn with the other rows of its layer, in their order and in
-   * their draw, from the texture and the picture given, rather than by `draw` one at a time (a
-   * point whose style has none is drawn by `draw`). Without it, every feature it takes is drawn
-   * by `draw`. Its type is in `@sakuzu/maplibre-gl-draw/kasane`.
+   * How it draws the rows of a layer held as rows, without making features of them. Its type is
+   * in `@sakuzu/maplibre-gl-draw/kasane`.
    *
    * @experimental
    */
-  readonly rowSprites?: RowSpriteSource;
+  readonly rows?: FeatureRendererRows;
+}
+
+/**
+ * How a renderer of a feature type draws the rows of a layer held as rows
+ * (`FeatureRenderer.rows`), without making features of them
+ *
+ * @experimental
+ */
+export interface FeatureRendererRows {
   /**
-   * Draws features of rows of a layer held as rows, from the rows, without making features of
-   * them: the rows `draw` would draw one after the other, in that order (rows next to each other
-   * in the order of the layer, of the same type, not hidden and in view). A row with a companion
-   * is drawn by `draw`. A row being dragged in bulk is given as it is written: read where it is
-   * drawn with `draggedRowsOf`. Without it, the instance makes the features of the rows (keeping
-   * them up to a limit) and draws them by `draw`. Its types are in
-   * `@sakuzu/maplibre-gl-draw/kasane`.
-   *
-   * @experimental
+   * The pictures it draws its points with: a point it takes whose style has a picture here is
+   * drawn with the other rows of its layer, in their order and in their draw, from the texture
+   * and the picture given, rather than by `draw` one at a time (a point whose style has none is
+   * drawn by `draw`). Without it, every feature it takes is drawn by `draw`.
    */
-  drawRows?(view: LayerTableView, handles: Int32Array, ctx: RenderContext): void;
+  readonly sprites?: RowSpriteSource;
+  /**
+   * Draws features of rows, from the rows: the rows `FeatureRenderer.draw` would draw one after
+   * the other, in that order (rows next to each other in the order of the layer, of the same
+   * type, not hidden and in view). A row with a companion is drawn by `FeatureRenderer.draw`. A
+   * row being dragged in bulk is given as it is written: read where it is drawn with
+   * `draggedRowsOf`. Without it, the instance makes the features of the rows (keeping them up to a
+   * limit) and draws them by `FeatureRenderer.draw`.
+   */
+  draw?(view: LayerTableView, handles: Int32Array, ctx: RenderContext): void;
 }
 
 /**

@@ -400,21 +400,21 @@ draw.extensions.featureTypes.override({
 ```
 
 On a layer held as rows, the points such a renderer takes are drawn one at a
-time by `draw`, each between the rows around it. A renderer that draws its
-points as pictures can give them as `rowSprites` (experimental, its types in
-`/kasane`): a texture, the rectangle of the picture of a style, and its size
-on screen. Such a point is then drawn with the other rows of its layer, in
-their order and in their draw, so a layer where points with icons and areas
-alternate is drawn in a few draws.
+time by `draw`, each between the rows around it. What a definition and its
+renderer do from the rows themselves, without making a feature of each row,
+is in one member of each, `rows`, experimental with its types in `/kasane`
+(`FeatureTypeRows`, `FeatureRendererRows`):
 
-Two more members, experimental with their types in `/kasane`, keep a layer of
-many rows from making a feature of each row:
-
-- `appliesToRow(view, handle)` gives the answer of `appliesTo` from the row,
-  read from the `LayerTableView` of the layer (`getRowValue`, `getRowType`).
-  Without it, a feature is made from each row of the type to ask `appliesTo`
-  whenever the rows are sorted for the drawing
-- `renderer.drawRows(view, handles, ctx)` draws the rows the renderer draws
+- `renderer.rows.sprites` gives the pictures a renderer draws its points
+  with: a texture, the rectangle of the picture of a style, and its size on
+  screen. Such a point is then drawn with the other rows of its layer, in
+  their order and in their draw, so a layer where points with icons and areas
+  alternate is drawn in a few draws
+- `rows.appliesTo(view, handle)` gives the answer of `appliesTo` from the
+  row, read from the `LayerTableView` of the layer (`getRowValue`,
+  `getRowType`). Without it, a feature is made from each row of the type to
+  ask `appliesTo` whenever the rows are sorted for the drawing
+- `renderer.rows.draw(view, handles, ctx)` draws the rows the renderer draws
   one at a time from the rows: consecutive rows of the type, not hidden and in
   view, in the order of the layer. Without it, the features of such rows are
   made, kept up to a limit, and drawn by `draw`. A row being dragged in bulk
@@ -593,7 +593,7 @@ draw.extensions.companionProviders.add(halo);
 
 - `has(feature)` is asked for every feature on every drawing and every
   hit test, so it must answer at once, from the feature or from an
-  index you keep. On a layer held as rows, `hasRow(view, handle)`
+  index you keep. On a layer held as rows, `rows.has(view, handle)`
   (experimental, its types in `/kasane`) gives the same answer from the
   row; without it, a feature is made from each row to ask `has` whenever
   the rows are sorted for the drawing

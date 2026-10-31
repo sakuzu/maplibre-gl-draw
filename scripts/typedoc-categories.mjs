@@ -41,6 +41,7 @@ const KASANE_CATEGORIES = [
   'Features of GeoJSON read as rows',
   'The order of the rows',
   'Features selected in bulk and dragged',
+  'What the extensions answer and draw from the rows',
   'Pictures of points drawn with the rows',
   'Build row blocks in a Worker',
   'Features as the rows of Tabane blocks (@sakuzu/tabane), and the blocks read as row blocks',

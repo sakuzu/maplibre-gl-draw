@@ -317,7 +317,8 @@ export function installFeatureType(
   const appliesTo = overriding ? definition.appliesTo?.bind(definition) : undefined;
   const applies = (feature: StoredFeature): boolean => appliesTo?.(feature as Feature) !== false;
   // The same answer, from a row of a layer held as rows (read with appliesTo only)
-  const appliesToRow = appliesTo ? definition.appliesToRow?.bind(definition) : undefined;
+  const rows = definition.rows;
+  const appliesToRow = appliesTo && rows ? rows.appliesTo.bind(rows) : undefined;
 
   try {
     const renderer = adaptFeatureRenderer(type, definition.renderer, deps);
@@ -655,8 +656,8 @@ export function adaptCompanionProvider(
     id: provider.name,
     has: (feature) => provider.has(feature as Feature),
     // The same answer, from a row of a layer held as rows
-    ...(provider.hasRow && {
-      hasRow: (view: LayerTableView, handle: number) => provider.hasRow?.(view, handle) === true,
+    ...(provider.rows && {
+      hasRow: (view: LayerTableView, handle: number) => provider.rows?.has(view, handle) === true,
     }),
     draw(feature, projectionData, zoom, context) {
       drawCompanion(draw, feature, projectionData, zoom, context);

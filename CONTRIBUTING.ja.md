@@ -146,8 +146,10 @@ export (`./store` や `./modes` など) は追加しません。実装の内部�
   行の組を作る builder と merge を含みます。maplibre も描画も読み込み
   ません。行で持つストアが埋める層 1 の欄 (`StoreView.tables`、
   `Store.applyRows`、`DocumentChange.rows`、`DocumentChange.opened`、
-  `ItemOrderChange` のうち行をまとめて動かす形) には `@experimental` を
-  付け、その型は `/kasane` だけが export します。
+  `ItemOrderChange` のうち行をまとめて動かす形) と、拡張が行から答えて
+  描く欄 `rows` (`FeatureTypeDefinition`、`FeatureRenderer`、
+  `CompanionProvider` の欄) には `@experimental` を付け、その型は
+  `/kasane` だけが export します。
 - 層 2 は独自のシェーダーを書く人向けの部品です (`src/webgl/index.ts`)。
   core のシェーダーと地形の描き方に結び付いた部品を含みます。GLSL の
   断片と投影の uniform、`createProgram`、`QuadShader`、合成と看板の補助、

@@ -29,6 +29,23 @@ export interface Handle {
 }
 
 /**
+ * What a definition of a feature type answers from the rows of a layer held as rows
+ * (`FeatureTypeDefinition.rows`), without making features of them
+ *
+ * @experimental
+ */
+export interface FeatureTypeRows {
+  /**
+   * Whether the definition takes the feature of a row: the answer `appliesTo` gives for the
+   * feature of the row (the two must agree). It is read with `appliesTo` only, and as it, only in
+   * a definition that overrides a built-in type. Without it, a feature is made from each row of
+   * the type to ask `appliesTo` whenever the rows are classified for the drawing, so a type of many
+   * rows should have it.
+   */
+  appliesTo(view: LayerTableView, handle: RowHandle): boolean;
+}
+
+/**
  * The definition of a custom feature type. Its handles and snapping candidates are written
  * here; a provider is only for the types an extension does not define.
  */
@@ -59,16 +76,12 @@ export interface FeatureTypeDefinition {
    */
   appliesTo?(feature: Feature): boolean;
   /**
-   * Whether the definition takes the feature of a row of a layer held as rows, answered from the
-   * row without making it a feature: the answer `appliesTo` gives for the feature of the row (the
-   * two must agree). It is read with `appliesTo` only, and as it, only in a definition that
-   * overrides a built-in type. Without it, a feature is made from each row of the type to ask
-   * `appliesTo` whenever the rows are classified for the drawing, so a type of many rows should
-   * have it. Its types are in `@sakuzu/maplibre-gl-draw/kasane`.
+   * What the definition answers from the rows of a layer held as rows, without making features of
+   * them. Its type is in `@sakuzu/maplibre-gl-draw/kasane`.
    *
    * @experimental
    */
-  appliesToRow?(view: LayerTableView, handle: RowHandle): boolean;
+  readonly rows?: FeatureTypeRows;
   /**
    * The extent of a feature on the map, `[west, south, east, north]` in degrees, for a type
    * that draws beyond its geometry by a distance on the ground. The spatial index takes it:

@@ -730,9 +730,9 @@ draw.features.update(featureId, {
 ```
 
 度の範囲は、`features.bbox` と同じく、どこでも `bbox` と呼びます。
-`selection.get().bulk.bbox`、下ごしらえ済みの表の `prepared.bbox`、
-`dataset.getRowBBox(index)` は、`bounds` と `getRowBounds` でした。
-その型 `BBox` は main の入口からも読めます。
+下ごしらえ済みの表の `prepared.bbox` と `dataset.getRowBBox(index)` は、
+`bounds` と `getRowBounds` でした。その型 `BBox` は main の入口からも
+読めます。
 
 自前のストアは変えなくて構いません。レイヤーの項目をリストで持つ
 ストアは、変更の前と後のリストから `diffItemOrder` で
@@ -755,6 +755,11 @@ draw.features.update(featureId, {
   (`onFeatureClick`、`onFeatureDoubleClick`)、排他的な操作は
   `exclusive` です。`exclusive` は `isActive()` (前は `isBusy`) を必ず
   持ち、`finish`、`cancel`、`container` を持てます
+- 型、その描画器、付き物の提供者が、行で持つレイヤーの行から答えて描く
+  ものは、それぞれの 1 つの欄 `rows` にあります (実験的)。
+  `rows.appliesTo` は前の `appliesToRow`、`renderer.rows.draw` と
+  `renderer.rows.sprites` は前の `drawRows` と `rowSprites`、付き物の
+  提供者の `rows.has` は前の `hasRow` です
 - `ctx.terrain` は `TerrainSurface` になりました (前は `TerrainAnchors`)。
   `occlusionOpacity(lngLat)` は前の `ghostOpacity` です。`project` は
   無くなりました。位置がどこに描かれるかは、地形があれば地形の上で、

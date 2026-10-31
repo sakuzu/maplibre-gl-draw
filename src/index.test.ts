@@ -256,11 +256,14 @@ const TABLE = [
  * rows of columns
  */
 const KASANE = [
+  'CompanionProviderRows',
   'copyTableStore',
   'CreatedRows',
   'createFeatureTables',
   'createRowBlockBuilder',
   'createRowValues',
+  'FeatureRendererRows',
+  'FeatureTypeRows',
   'createTableStore',
   'DraggedRows',
   'draggedRowsOf',

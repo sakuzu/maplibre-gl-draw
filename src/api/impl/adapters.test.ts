@@ -316,7 +316,7 @@ describe('the pictures of the points of a custom feature type', () => {
       type: 'Point',
       geometry: 'Point',
       appliesTo: () => true,
-      renderer: { onAdd: vi.fn(), draw: vi.fn(), onRemove: vi.fn(), rowSprites },
+      renderer: { onAdd: vi.fn(), draw: vi.fn(), onRemove: vi.fn(), rows: { sprites: rowSprites } },
     });
     expect((registered as unknown as FeatureTypeRenderer).rowSprites).toBe(rowSprites);
     engine.destroy();
@@ -338,13 +338,13 @@ describe('the answers of a custom feature type and a companion provider from the
       type: 'Point',
       geometry: 'Point',
       appliesTo: () => true,
-      appliesToRow,
-      renderer: { onAdd: vi.fn(), draw: vi.fn(), onRemove: vi.fn(), drawRows },
+      rows: { appliesTo: appliesToRow },
+      renderer: { onAdd: vi.fn(), draw: vi.fn(), onRemove: vi.fn(), rows: { draw: drawRows } },
     });
     engine.extensions.collections.featureTypes.add({
       type: 'pin',
       geometry: 'Point',
-      appliesToRow,
+      rows: { appliesTo: appliesToRow },
       renderer: { onAdd: vi.fn(), draw: vi.fn(), onRemove: vi.fn() },
     });
     const [point, pin] = registered;
@@ -358,33 +358,41 @@ describe('the answers of a custom feature type and a companion provider from the
     engine.destroy();
   });
 
-  it('refuses an appliesToRow, a hasRow or a drawRows that is not a function', () => {
+  it('refuses the rows of a type, of a renderer or of a companion provider of the wrong shape', () => {
     const engine = engineWithDraw();
     const renderer = { onAdd: vi.fn(), draw: vi.fn(), onRemove: vi.fn() };
     expect(() =>
       engine.extensions.collections.featureTypes.add({
         type: 'pin',
         geometry: 'Point',
-        appliesToRow: true as never,
+        rows: { appliesTo: true as never },
         renderer,
       }),
-    ).toThrow(/appliesToRow/);
+    ).toThrow(/rows\.appliesTo/);
     expect(() =>
       engine.extensions.collections.featureTypes.add({
         type: 'pin',
         geometry: 'Point',
-        renderer: { ...renderer, drawRows: 1 as never },
+        rows: true as never,
+        renderer,
       }),
-    ).toThrow(/drawRows/);
+    ).toThrow(/rows/);
+    expect(() =>
+      engine.extensions.collections.featureTypes.add({
+        type: 'pin',
+        geometry: 'Point',
+        renderer: { ...renderer, rows: { draw: 1 as never } },
+      }),
+    ).toThrow(/renderer\.rows\.draw/);
     expect(() =>
       engine.extensions.collections.companionProviders.add({
         name: 'leaders',
         has: () => false,
-        hasRow: 'yes' as never,
+        rows: { has: 'yes' as never },
         draw: () => {},
         hitTest: () => null,
       }),
-    ).toThrow(/hasRow/);
+    ).toThrow(/rows\.has/);
     engine.destroy();
   });
 });
@@ -814,7 +822,7 @@ describe('a companion provider', () => {
     expect(onClick).toHaveBeenCalledWith(feature, own, expect.objectContaining({ lngLat: [1, 1] }));
   });
 
-  it('answers from the rows with its hasRow, and has none without it', () => {
+  it('answers from the rows with its rows.has, and has none without it', () => {
     const deps = {
       store: { getFeature: () => undefined },
       screen: {},
@@ -823,7 +831,7 @@ describe('a companion provider', () => {
     } as unknown as AdapterDeps;
     const hasRow = vi.fn((_view: LayerTableView, handle: number) => handle === 2);
     const fromRows = adaptCompanionProvider(
-      { name: 'rows', has: () => false, hasRow, draw() {}, hitTest: () => null },
+      { name: 'rows', has: () => false, rows: { has: hasRow }, draw() {}, hitTest: () => null },
       deps,
     );
     const view = {} as LayerTableView;

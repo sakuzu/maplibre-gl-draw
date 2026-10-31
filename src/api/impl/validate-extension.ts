@@ -69,7 +69,6 @@ const SHAPES: Readonly<
     required: [],
     optional: [
       'appliesTo',
-      'appliesToRow',
       'hitTest',
       'boxSelect',
       'bounds',
@@ -91,7 +90,7 @@ const SHAPES: Readonly<
     required: ['handles', 'onDrag'],
     optional: ['globalHandles', 'onDragStart', 'onDragEnd'],
   },
-  'companion provider': { required: ['has', 'draw', 'hitTest'], optional: ['hasRow', 'onClick'] },
+  'companion provider': { required: ['has', 'draw', 'hitTest'], optional: ['onClick'] },
 };
 
 /** The error for a value of the wrong shape */
@@ -138,11 +137,13 @@ function optionalGroup(
   member: string,
   names: readonly string[],
   required: readonly string[] = [],
+  prefix = '',
 ): void {
   const group = value[member];
   if (group === undefined) return;
-  if (!isObject(group)) throw wrongShape(kind, `has ${member} that is not an object`, member);
-  requireFunctions(kind, group, required, names, `${member}.`);
+  const path = `${prefix}${member}`;
+  if (!isObject(group)) throw wrongShape(kind, `has ${path} that is not an object`, path);
+  requireFunctions(kind, group, required, names, `${path}.`);
 }
 
 /** Checks an optional number, finite and, when asked, not negative */
@@ -189,10 +190,15 @@ export function validateExtension(kind: ExtensionKind, value: unknown): void {
       }
       const renderer = value.renderer;
       if (!isObject(renderer)) throw wrongShape(kind, 'must have a renderer', 'renderer');
-      requireFunctions(kind, renderer, ['onAdd', 'draw', 'onRemove'], ['drawRows'], 'renderer.');
+      requireFunctions(kind, renderer, ['onAdd', 'draw', 'onRemove'], [], 'renderer.');
+      optionalGroup(kind, renderer, 'rows', ['draw'], [], 'renderer.');
+      optionalGroup(kind, value, 'rows', [], ['appliesTo']);
       optionalNumber(kind, value, 'hitPaddingPx', true);
       return;
     }
+    case 'companion provider':
+      optionalGroup(kind, value, 'rows', [], ['has']);
+      return;
     case 'overlay':
       optionalNumber(kind, value, 'order', false);
       return;

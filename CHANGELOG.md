@@ -92,16 +92,18 @@ writing it. Its changes are listed after those of 3.0.0.
   page at a time.
 - `drag.started` and `drag.ended` carry `bulk` for features selected in
   bulk.
-- Experimental: `FeatureRenderer.rowSprites`, the pictures of the points
-  a renderer draws, drawn with the rows of a layer held as rows; and in
-  `/kasane`,
+- Experimental: what an extension answers and draws from the rows of a
+  layer held as rows, without making their features, in one member `rows`
+  of each of its types, whose types are in `/kasane`:
+  `FeatureTypeDefinition.rows.appliesTo` (`FeatureTypeRows`),
+  `CompanionProvider.rows.has` (`CompanionProviderRows`), and
+  `FeatureRenderer.rows` (`FeatureRendererRows`) with `draw`, which draws
+  the rows, and `sprites`, the pictures of the points a renderer draws,
+  drawn with the rows of their layer. In `/kasane` too,
   `listSelectedRows`, `draggedRowsOf` (`DraggedRows`) and the types of the
   pictures (`RowSpriteSource`, `RowSprite`, `RowSpriteDistanceScale`).
-- Experimental: the answers and the drawing of an extension from the rows
-  of a layer held as rows, without making their features:
-  `FeatureTypeDefinition.appliesToRow`, `CompanionProvider.hasRow` and
-  `FeatureRenderer.drawRows`. `LayerTableView.getRowStyle` reads the style
-  of a row, shared and frozen, without a copy.
+  `LayerTableView.getRowStyle` reads the style of a row, shared and
+  frozen, without a copy.
 - Features selected in bulk and turned or resized are drawn during the drag
   as they are written once let go: an image, a type resized by its scale
   and a feature with a rotation or a scale keep their shape and change
@@ -239,10 +241,9 @@ writing it. Its changes are listed after those of 3.0.0.
   of a radius of 6,371,008.8 m, instead of a circumference of
   40,075,016.686 m: a width given in meters is drawn 0.11 % wider.
 - The extents in degrees are named `bbox`, as `features.bbox` and the
-  `bbox` of a filter are: `SelectionBulk.bbox` (was `bounds`),
-  `PreparedTable.bbox` of `/table` (was `bounds`),
-  `Dataset.getRowBBox` (was `getRowBounds`) and
-  `LayerTableView.getRowBBox` of `/kasane` (was `getRowBounds`). The main
+  `bbox` of a filter are: `PreparedTable.bbox` of `/table` (was
+  `bounds`) and `Dataset.getRowBBox` (was `getRowBounds`), as
+  `SelectionBulk.bbox` and `LayerTableView.getRowBBox` are. The main
   entry exports `BBox`, the type `features.bbox` returns.
 - The box of `FeatureTypeDefinition.boxSelect` is named `boxPx`, as a
   value in pixels is.

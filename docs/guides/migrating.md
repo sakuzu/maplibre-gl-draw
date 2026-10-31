@@ -720,9 +720,9 @@ draw.features.update(featureId, {
 ```
 
 An extent in degrees is named `bbox` wherever it is, as in
-`features.bbox`: `selection.get().bulk.bbox`, `prepared.bbox` of a
-prepared table and `dataset.getRowBBox(index)` were `bounds` and
-`getRowBounds`. The main entry exports its type, `BBox`.
+`features.bbox`: `prepared.bbox` of a prepared table and
+`dataset.getRowBBox(index)` were `bounds` and `getRowBounds`. The main
+entry exports its type, `BBox`.
 
 A store of your own needs no change. A store that keeps the items of its
 layers as lists makes `DocumentChange.order` from the lists before and
@@ -747,6 +747,11 @@ drawn. Each change below names what replaces what is gone.
   `onFeatureDoubleClick`), and the exclusive interaction is `exclusive`,
   whose `isActive()` (was `isBusy`) it must have, with `finish`, `cancel`
   and `container`
+- What a type, its renderer and a companion provider answer and draw
+  from the rows of a layer held as rows is in one member `rows` of each
+  (experimental): `rows.appliesTo` was `appliesToRow`, `renderer.rows.draw`
+  and `renderer.rows.sprites` were `drawRows` and `rowSprites`, and
+  `rows.has` of a companion provider was `hasRow`
 - `ctx.terrain` is a `TerrainSurface` (was `TerrainAnchors`):
   `occlusionOpacity(lngLat)` was `ghostOpacity`, and `project` is gone,
   since `ctx.screen.project(lngLat)` answers where a position is drawn,

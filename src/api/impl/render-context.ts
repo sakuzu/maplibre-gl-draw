@@ -248,12 +248,12 @@ export function adaptFeatureRenderer(
       renderer.onRemove(map, gl);
     },
     // The pictures of the points drawn with the rows, as the renderer gives them
-    ...(renderer.rowSprites && { rowSprites: renderer.rowSprites }),
+    ...(renderer.rows?.sprites && { rowSprites: renderer.rows.sprites }),
     // The rows drawn at once, from the rows, when the renderer draws them so
-    ...(renderer.drawRows && {
+    ...(renderer.rows?.draw && {
       drawRows(view: LayerTableView, handles: Int32Array, projectionData, zoom, context) {
         if (!attachment) return;
-        renderer.drawRows?.(
+        renderer.rows?.draw?.(
           view,
           handles,
           contextFor(attachment.gl, context, projectionData, zoom),

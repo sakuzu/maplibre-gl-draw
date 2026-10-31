@@ -98,6 +98,21 @@ export interface HandleProvider {
 }
 
 /**
+ * What a companion provider answers from the rows of a layer held as rows
+ * (`CompanionProvider.rows`), without making features of them
+ *
+ * @experimental
+ */
+export interface CompanionProviderRows {
+  /**
+   * Whether the feature of a row has a companion: the answer `CompanionProvider.has` gives for
+   * the feature of the row (the two must agree). Without it, a feature is made from each row to
+   * ask `has` whenever the rows are classified for the drawing, so a provider should have it.
+   */
+  has(view: LayerTableView, handle: RowHandle): boolean;
+}
+
+/**
  * An extension that draws a companion one step below a feature, such as a leader line, and
  * hit tests it at the same step.
  */
@@ -110,15 +125,12 @@ export interface CompanionProvider {
    */
   has(feature: Feature): boolean;
   /**
-   * Whether the feature of a row of a layer held as rows has a companion, answered from the row
-   * without making it a feature: the answer `has` gives for the feature of the row (the two must
-   * agree). Without it, a feature is made from each row to ask `has` whenever the rows are
-   * classified for the drawing, so a provider should have it. Its types are in
-   * `@sakuzu/maplibre-gl-draw/kasane`.
+   * What the provider answers from the rows of a layer held as rows, without making features of
+   * them. Its type is in `@sakuzu/maplibre-gl-draw/kasane`.
    *
    * @experimental
    */
-  hasRow?(view: LayerTableView, handle: RowHandle): boolean;
+  readonly rows?: CompanionProviderRows;
   /** Draws the companion of a feature. */
   draw(feature: Feature, ctx: RenderContext): void;
   /**

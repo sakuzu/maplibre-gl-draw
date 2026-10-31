@@ -158,8 +158,10 @@ into two layers: layer 1 is the main entry (with `/geometry` and
   neither maplibre nor the drawing. The fields of layer 1 that a Store of
   rows fills (`StoreView.tables`, `Store.applyRows`, `DocumentChange.rows`,
   `DocumentChange.opened`, and the rows moved at once of
-  `ItemOrderChange`) carry the `@experimental` tag, and their types are
-  exported by `/kasane` only.
+  `ItemOrderChange`), and the field `rows` through which an extension
+  answers and draws from the rows (of `FeatureTypeDefinition`,
+  `FeatureRenderer` and `CompanionProvider`), carry the `@experimental`
+  tag, and their types are exported by `/kasane` only.
 - Layer 2, the building blocks for custom shaders (`src/webgl/index.ts`).
   Parts tied to the shaders and the terrain drawing of core: the GLSL
   snippet and the projection uniforms, `createProgram`, `QuadShader`, the
