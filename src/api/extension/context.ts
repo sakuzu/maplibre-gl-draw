@@ -20,26 +20,26 @@ import type { Mode, SnapResult } from '../state.js';
 import type { Hit } from './provider.js';
 import type { StoreView } from './store.js';
 
-/** The positions and the heights on the terrain, for placing things on it. */
-export interface TerrainAnchors {
+/**
+ * The surface of the terrain of the map, for placing marks on it: its heights, and where it hides
+ * a position from the camera. Where a position is on the screen, on the terrain when it is on, is
+ * {@link ScreenContext.project}.
+ */
+export interface TerrainSurface {
   /**
-   * The point on the screen of a position lifted to the ground.
-   *
-   * @returns The point, or `null` when the terrain is off or not ready
-   */
-  project(lngLat: Position): ScreenPoint | null;
-  /**
-   * The height of the ground at a position.
+   * The height of the terrain at a position.
    *
    * @returns The height in meters; 0 when the terrain is off
    */
   elevation(lngLat: Position): number;
   /**
-   * The opacity for a mark at a position: lower when the terrain hides it from the camera.
+   * The opacity to draw a mark at a position with for what of it the terrain hides from the
+   * camera: 1 where it is in view, lower behind a slope. Multiply it into the opacity of the
+   * mark.
    *
    * @returns A value from 0 to 1; 1 when the terrain is off
    */
-  ghostOpacity(lngLat: Position): number;
+  occlusionOpacity(lngLat: Position): number;
   /** A number that changes whenever the heights `elevation` returns may have changed. */
   generation(): number;
 }
@@ -56,7 +56,10 @@ export interface NameGenerator {
 
 /** The conversion between positions on the map and points on the screen. */
 export interface ScreenContext {
-  /** The point on the screen of a position. */
+  /**
+   * The point on the screen where a position is drawn: on the terrain when it is on, as the
+   * shared renderers lay what they draw on it.
+   */
   project(lngLat: Position): ScreenPoint;
   /** The position on the map of a point on the screen. */
   unproject(point: ScreenPoint): Position;
@@ -135,8 +138,8 @@ export interface ExtensionContext {
     event: K,
     listener: (payload: DrawEvents[K]) => void,
   ): () => void;
-  /** The positions and the heights on the terrain */
-  readonly terrain: TerrainAnchors;
+  /** The heights of the terrain and where it hides a position */
+  readonly terrain: TerrainSurface;
   /** The automatic names of new features, layers and groups */
   readonly names: NameGenerator;
   /** The conversion between the map and the screen */

@@ -422,18 +422,20 @@ many rows from making a feature of each row:
 
 ## Terrain
 
-With terrain on, the shared renderers lay what they draw on the ground
-by themselves. For a mark of your own, `ctx.terrain` gives the heights:
+With terrain on, the shared renderers lay what they draw on the terrain
+by themselves. For a mark of your own, `ctx.terrain` (`TerrainSurface`)
+gives the surface of the terrain:
 
-- `elevation(lngLat)` is the height of the ground in meters, 0 without
+- `elevation(lngLat)` is the height of the terrain in meters, 0 without
   terrain. Pass it to the point renderer as `elevationMeters` to place
-  a marker on the ground
-- `project(lngLat)` is the point on the screen of a position lifted to
-  the ground, or `null` without terrain
-- `ghostOpacity(lngLat)` is lower where the terrain hides the position
-  from the camera; multiply it into the opacity of the mark
+  a marker on the terrain
+- `occlusionOpacity(lngLat)` is lower where the terrain hides the
+  position from the camera; multiply it into the opacity of the mark
 - `generation()` changes whenever the heights may have changed, so a
   renderer that keeps heights knows when to read them again
+
+Where a position is on the screen, on the terrain when it is on, is
+`ctx.screen.project(lngLat)`, as for every position.
 
 Outside the drawing, a plugin reads the same terrain through
 `ctx.terrain` of its context. See [terrain](terrain.md).
@@ -682,4 +684,4 @@ function pathOnTerrain(
 - [SnapProvider](../api/maplibre-gl-draw/interfaces/SnapProvider.md),
   [HandleProvider](../api/maplibre-gl-draw/interfaces/HandleProvider.md)
   and [CompanionProvider](../api/maplibre-gl-draw/interfaces/CompanionProvider.md)
-- [TerrainAnchors](../api/maplibre-gl-draw/interfaces/TerrainAnchors.md)
+- [TerrainSurface](../api/maplibre-gl-draw/interfaces/TerrainSurface.md)

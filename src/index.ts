@@ -214,7 +214,7 @@ export type {
   PluginContext,
   ScreenContext,
   SnapContext,
-  TerrainAnchors,
+  TerrainSurface,
 } from './api/extension/context.js';
 export type { FeatureTypeDefinition, Handle } from './api/extension/feature-type.js';
 export type {

@@ -26,7 +26,7 @@
  */
 
 import type { ProjectionData } from 'maplibre-gl';
-import type { TerrainAnchors } from '../../api/extension/context.js';
+import type { TerrainSurface } from '../../api/extension/context.js';
 import type { RenderContext } from '../../api/extension/render.js';
 import { globeGridOf } from '../globe-subdivision.js';
 import { terrainStateOf } from '../terrain/binding.js';
@@ -128,7 +128,7 @@ export class QuadShader {
    * @param terrain - The render context of the draw call, or its `terrain`; `null` (or an
    *   object the engine did not hand out) draws without terrain
    */
-  setTerrain(terrain: RenderContext | TerrainAnchors | null): void {
+  setTerrain(terrain: RenderContext | TerrainSurface | null): void {
     this.useTerrainState(terrainStateOf(terrain));
   }
 
@@ -540,7 +540,7 @@ void main() {
  * @returns true if it was painted; false when the caller must draw it another way
  */
 export function drawQuadSurfaceOnTerrain(
-  terrain: RenderContext | TerrainAnchors,
+  terrain: RenderContext | TerrainSurface,
   corners: DrapeQuadCorners,
   surface: QuadDrapeSurface,
   opacity: number,

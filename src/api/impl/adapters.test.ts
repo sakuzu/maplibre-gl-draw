@@ -29,7 +29,7 @@ import type { Feature, FeatureInput } from '../model.js';
 import type { LayerTableView } from '../tables.js';
 import type { AdapterDeps } from './adapters.js';
 import { adaptCompanionProvider } from './adapters.js';
-import { createTerrainAnchors } from './contexts.js';
+import { createTerrainSurface } from './contexts.js';
 import { createDrawOnEngine } from './create-draw.js';
 import type { Engine } from './engine.js';
 import { createEngine } from './engine.js';
@@ -732,7 +732,7 @@ describe('the overlays', () => {
           return () => removed.push(renderer);
         },
       },
-      { anchors: createTerrainAnchors },
+      { surface: createTerrainSurface },
     );
     const calls: string[] = [];
     const overlay = (name: string, order?: number) => ({
@@ -783,7 +783,7 @@ describe('a companion provider', () => {
       store: { getFeature: () => feature },
       screen: {},
       customLayer: { getGL: () => null },
-      anchors: createTerrainAnchors,
+      surface: createTerrainSurface,
     } as unknown as AdapterDeps;
     const provider = adaptCompanionProvider(
       { name: 'labels', has: () => true, draw() {}, hitTest: () => own, onClick },
@@ -819,7 +819,7 @@ describe('a companion provider', () => {
       store: { getFeature: () => undefined },
       screen: {},
       customLayer: { getGL: () => null },
-      anchors: createTerrainAnchors,
+      surface: createTerrainSurface,
     } as unknown as AdapterDeps;
     const hasRow = vi.fn((_view: LayerTableView, handle: number) => handle === 2);
     const fromRows = adaptCompanionProvider(

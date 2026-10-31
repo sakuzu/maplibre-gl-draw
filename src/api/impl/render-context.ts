@@ -24,7 +24,7 @@ import { applyDrawBlendState } from '../../view/layer/blend.js';
 import { calculateOffsetUniforms } from '../../view/shaders/helpers.js';
 import { bindTerrainState } from '../../view/terrain/binding.js';
 import type { TerrainContext } from '../../view/terrain/context.js';
-import type { TerrainAnchors } from '../extension/context.js';
+import type { TerrainSurface } from '../extension/context.js';
 import type {
   FeatureRenderer,
   FillRenderer,
@@ -38,27 +38,27 @@ import type { Feature } from '../model.js';
 import type { LayerTableView } from '../tables.js';
 
 // ============================================================================
-// Terrain anchors
+// The surface of the terrain
 // ============================================================================
 
-/** The anchors of each terrain state, so that a frame does not build them again */
-const anchorsByTerrain = new WeakMap<TerrainContext, TerrainAnchors>();
+/** The surface of each terrain state, so that a frame does not build it again */
+const surfaceByTerrain = new WeakMap<TerrainContext, TerrainSurface>();
 
 /**
- * The terrain anchors of the contract over the terrain state of an instance
+ * The surface of the terrain of the contract over the terrain state of an instance
  *
  * @internal
  */
-export function terrainAnchorsOf(
+export function terrainSurfaceOf(
   terrain: TerrainContext,
-  build: (terrain: TerrainContext) => TerrainAnchors,
-): TerrainAnchors {
-  let anchors = anchorsByTerrain.get(terrain);
-  if (!anchors) {
-    anchors = build(terrain);
-    anchorsByTerrain.set(terrain, anchors);
+  build: (terrain: TerrainContext) => TerrainSurface,
+): TerrainSurface {
+  let surface = surfaceByTerrain.get(terrain);
+  if (!surface) {
+    surface = build(terrain);
+    surfaceByTerrain.set(terrain, surface);
   }
-  return anchors;
+  return surface;
 }
 
 // ============================================================================
@@ -90,7 +90,7 @@ function pair(position: Position): [number, number] {
  *
  * @param gl - The WebGL context the renderer was added with
  * @param base - The context the engine gives its own renderers in this draw call
- * @param anchors - The terrain anchors of the terrain state of `base`
+ * @param surface - The surface of the terrain of the terrain state of `base`
  * @internal
  */
 export function createRenderContext(
@@ -98,7 +98,7 @@ export function createRenderContext(
   base: FrameDrawContext,
   projection: ProjectionData,
   zoom: number,
-  anchors: TerrainAnchors,
+  surface: TerrainSurface,
 ): RenderContext {
   const line: LineRenderer = {
     draw(coordinates, style, options = {}) {
@@ -161,7 +161,7 @@ export function createRenderContext(
     zoom,
     pixelRatio: base.pixelRatio,
     opacity: base.opacity,
-    terrain: anchors,
+    terrain: surface,
     line,
     fill,
     point,
@@ -173,8 +173,8 @@ export function createRenderContext(
 
 /** What the adapters of the renderers read from the instance */
 export interface RenderAdapterDeps {
-  /** The terrain anchors of a terrain state */
-  anchors(terrain: TerrainContext): TerrainAnchors;
+  /** The surface of the terrain of a terrain state */
+  surface(terrain: TerrainContext): TerrainSurface;
 }
 
 /** The map and the WebGL context a renderer was added with */
@@ -209,7 +209,7 @@ function createContextCache(deps: RenderAdapterDeps) {
     ) {
       return last.context;
     }
-    const context = createRenderContext(gl, base, projection, zoom, deps.anchors(base.terrain));
+    const context = createRenderContext(gl, base, projection, zoom, deps.surface(base.terrain));
     last = { base, projection, zoom, context };
     return context;
   };

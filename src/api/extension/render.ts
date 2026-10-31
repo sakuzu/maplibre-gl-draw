@@ -11,7 +11,7 @@ import type { Map as MaplibreMap, ProjectionData } from 'maplibre-gl';
 import type { RowSpriteSource } from '../../view/renderers/rows/rows-format.js';
 import type { Feature, LineStyle, PointShape } from '../model.js';
 import type { LayerTableView } from '../tables.js';
-import type { TerrainAnchors } from './context.js';
+import type { TerrainSurface } from './context.js';
 
 /**
  * The shader prelude the map passes to a custom layer, for compiling programs for the current
@@ -138,10 +138,10 @@ export interface RenderContext {
   /** The opacity of the layer being drawn, from 0 to 1 */
   readonly opacity: number;
   /**
-   * The positions and the heights on the terrain. The building blocks of the `/webgl` entry
-   * that draw on the terrain take it, or the whole render context.
+   * The heights of the terrain and where it hides a position. The building blocks of the
+   * `/webgl` entry that draw on the terrain take it, or the whole render context.
    */
-  readonly terrain: TerrainAnchors;
+  readonly terrain: TerrainSurface;
   /** The shared renderer of lines */
   readonly line: LineRenderer;
   /** The shared renderer of areas */

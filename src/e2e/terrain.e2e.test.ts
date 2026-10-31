@@ -144,7 +144,7 @@ describe('the ground of the symbols', () => {
     const offsets = await page.evaluate((list) => {
       const w = window as unknown as TerrainWindow;
       return list.map(([lng, lat]) => {
-        const anchor = w.probe.terrain.project([lng, lat]);
+        const anchor = w.probe.screen.project([lng, lat]);
         const maplibre = w.map.project([lng, lat]);
         return anchor ? Math.hypot(anchor[0] - maplibre.x, anchor[1] - maplibre.y) : null;
       });
@@ -417,7 +417,7 @@ async function frameExtent(
       draw.selection.set('feature', [point.id]);
       await frameReady();
       await frameReady();
-      const center = w.probe.terrain.project([ground.lng, ground.lat]);
+      const center = w.probe.screen.project([ground.lng, ground.lat]);
       const box = await new Promise<number[]>((resolve) => {
         map.once('render', () => {
           const gl = map.getCanvas().getContext('webgl2') as WebGL2RenderingContext;

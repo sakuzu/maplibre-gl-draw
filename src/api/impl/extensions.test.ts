@@ -8,6 +8,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { FeatureTypeRenderer } from '../../extension/renderers.js';
+import { setAnchorProjector } from '../../shared/math/index.js';
 import { MemoryContractStore } from '../../store/memory.js';
 import type { StoreChange } from '../../store/types.js';
 import { createMapStub, createSyntheticInput } from '../../test-utils.js';
@@ -524,6 +525,36 @@ describe('extensions.plugins', () => {
     expect(context.screen.project([1, 1])).toEqual([500, 200]);
     expect(context.screen.unproject([500, 200])).toEqual([1, 1]);
     expect(context.names.next('Layer')).toEqual(expect.any(String));
+  });
+
+  it('gives the heights of the terrain, and projects onto it through the screen', () => {
+    let ctx: PluginContext | null = null;
+    draw.extensions.plugins.add(
+      plugin('p', {
+        onAdd(context) {
+          ctx = context;
+        },
+      }),
+    );
+    const context = ctx as unknown as PluginContext;
+    // Without terrain: the ground is at 0 and nothing hides a position
+    expect(context.terrain.elevation([1, 1])).toBe(0);
+    expect(context.terrain.occlusionOpacity([1, 1])).toBe(1);
+    expect(context.terrain.generation()).toEqual(expect.any(Number));
+    // One projection: the screen answers where a position is drawn, on the terrain when it is on
+    expect(Object.keys(context.terrain).sort()).toEqual([
+      'elevation',
+      'generation',
+      'occlusionOpacity',
+    ]);
+    const map = draw.getMap();
+    setAnchorProjector(map, { project: () => ({ x: 7, y: 9 }) });
+    try {
+      expect(context.screen.project([1, 1])).toEqual([7, 9]);
+    } finally {
+      setAnchorProjector(map, null);
+    }
+    expect(context.screen.project([1, 1])).toEqual([500, 200]);
   });
 });
 

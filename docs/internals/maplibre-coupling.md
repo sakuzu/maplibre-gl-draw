@@ -289,8 +289,9 @@ Each item has the same five parts.
   0.1 % too small (1 px at the top of a 6,700 m exaggerated peak).
 - Check when upgrading — `src/e2e/terrain.e2e.test.ts` compares
   `ExtensionContext.terrain.elevation` with `map.queryTerrainElevation`
-  (within 1e-6 m) and `ExtensionContext.terrain.project` with `map.project`
-  (within 0.01 px) over a pitched view of a known DEM.
+  (within 1e-6 m) and `ExtensionContext.screen.project`, which projects
+  onto the terrain as the drawing does, with `map.project` (within
+  0.01 px) over a pitched view of a known DEM.
   `src/view/terrain/ground.test.ts` covers the coverage keys and the
   fallback.
 - Conditions for removal — a public way to ask whether a point is covered
@@ -591,8 +592,9 @@ Each item has the same five parts.
   render scope (`src/view/layer/render-scope.ts`) together with the
   per-feature triangulation and style caches. No reader looks up "the
   instance drawn last": renderers receive their context at construction,
-  an extension renderer gets its anchors as `RenderContext.terrain`, a
-  plugin projects through `ExtensionContext.terrain.project`, and hit testing is
+  an extension renderer gets the surface of the terrain as
+  `RenderContext.terrain`, a plugin projects through
+  `ExtensionContext.screen.project`, and hit testing is
   bound per map with `setAnchorProjector(map, ...)`. The registries of the
   extension points belong to the draw instance as well (see
   [architecture](./architecture.md)). The depth-test record is kept per

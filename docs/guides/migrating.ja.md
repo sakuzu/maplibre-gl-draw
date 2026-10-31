@@ -747,6 +747,11 @@ draw.features.update(featureId, {
 - `boxSelect(feature, boxPx, ctx)` の画面の箱の引数は `boxPx` です
 - 地物の `Hit` は、その地物を `id` だけで指します。`featureId` は、
   付き物かハンドルが属する地物です
+- `ctx.terrain` は `TerrainSurface` になりました (前は `TerrainAnchors`)。
+  `occlusionOpacity(lngLat)` は前の `ghostOpacity` です。`project` は
+  無くなりました。位置がどこに描かれるかは、地形があれば地形の上で、
+  `ctx.screen.project(lngLat)` が答えます (地形が無いと
+  `terrain.project` は `null` でしたが、こちらは地図の上の点を返します)
 - ピクセルの幅を与えるズームは、`ctx.line.draw` のオプションの
   `referenceZoom` です (前は `createdZoom`)。`ctx.point.draw` も、
   印の大きさと縁の太さのためにこれを受け取ります

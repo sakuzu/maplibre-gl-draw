@@ -17,7 +17,11 @@ import type { ModeManager } from '../../modes/manager.js';
 import { formatColor } from '../../shared/color.js';
 import type { BoxSelectionStyleConfig } from '../../shared/config/rendering.js';
 import type { SelectionUIConfig } from '../../shared/config/selection.js';
-import { metersPerPixelInFrame, screenScaleFrameOf } from '../../shared/math/index.js';
+import {
+  createCoordinateTransform,
+  metersPerPixelInFrame,
+  screenScaleFrameOf,
+} from '../../shared/math/index.js';
 import { DRAW_PROPERTY_KEYS, getDrawProperty } from '../../shared/properties.js';
 import { coordinatesOf } from '../../shared/utils/coordinates.js';
 import type { AutoNameGenerator } from '../../shared/utils/name-generator.js';
@@ -27,11 +31,7 @@ import type { StoreSpatialIndex } from '../../store/spatial/store-spatial-index.
 import type { Store } from '../../store/store.js';
 import type { Feature as StoredFeature, TentativeState } from '../../store/types.js';
 import { isWritableLayer } from '../../store/writable-layer.js';
-import {
-  anchorElevationMeters,
-  getAnchorElevationGeneration,
-  projectAnchor,
-} from '../../view/terrain/anchor.js';
+import { anchorElevationMeters, getAnchorElevationGeneration } from '../../view/terrain/anchor.js';
 import { bindTerrainState } from '../../view/terrain/binding.js';
 import type { TerrainContext } from '../../view/terrain/context.js';
 import { anchorGhostOpacity } from '../../view/terrain/occlusion.js';
@@ -44,7 +44,7 @@ import type {
   ModeContext,
   NameGenerator,
   ScreenContext,
-  TerrainAnchors,
+  TerrainSurface,
 } from '../extension/context.js';
 import type { Hit } from '../extension/provider.js';
 import type { ExtensionsCollections } from '../extensions.js';
@@ -192,23 +192,19 @@ export interface ContextServices {
 }
 
 /**
- * The terrain anchors over the terrain state of an instance
+ * The surface of the terrain over the terrain state of an instance
  *
  * @internal
  */
-export function createTerrainAnchors(terrain: TerrainContext): TerrainAnchors {
-  const anchors: TerrainAnchors = {
-    project(lngLat) {
-      const point = projectAnchor(terrain, lngLat[0], lngLat[1]);
-      return point ? [point.x, point.y] : null;
-    },
+export function createTerrainSurface(terrain: TerrainContext): TerrainSurface {
+  const surface: TerrainSurface = {
     elevation: (lngLat) => anchorElevationMeters(terrain, lngLat[0], lngLat[1]),
-    ghostOpacity: (lngLat) => anchorGhostOpacity(terrain, lngLat[0], lngLat[1]),
+    occlusionOpacity: (lngLat) => anchorGhostOpacity(terrain, lngLat[0], lngLat[1]),
     generation: () => getAnchorElevationGeneration(terrain),
   };
-  // The building blocks of the second entry find the state behind the anchors
-  bindTerrainState(anchors, terrain);
-  return anchors;
+  // The building blocks of the second entry find the state behind the surface
+  bindTerrainState(surface, terrain);
+  return surface;
 }
 
 /**
@@ -236,8 +232,11 @@ export function createScreenContext(
   boundsOf?: (feature: Feature) => { min: ScreenPoint; max: ScreenPoint } | null | undefined,
 ): ScreenContext {
   const { map } = services;
+  // Where a position is drawn: on the terrain through the projection of the anchors, which the
+  // drawing lays it with, or on the map
+  const transform = createCoordinateTransform(map);
   const project = (lngLat: Position): ScreenPoint =>
-    toScreenPoint(map.project([lngLat[0], lngLat[1]]));
+    toScreenPoint(transform.project([lngLat[0], lngLat[1]]));
   return {
     project,
     unproject: (point) => toPosition(map.unproject(point)),
@@ -363,7 +362,7 @@ export function createExtensionContext(
       listeners.get(listener)?.get(event)?.();
     },
     once: (event, listener) => subscribe(event, listener, true),
-    terrain: createTerrainAnchors(services.terrain),
+    terrain: createTerrainSurface(services.terrain),
     names: createNameGenerator(services.autoNameGenerator),
     screen,
     invalidate(filter) {

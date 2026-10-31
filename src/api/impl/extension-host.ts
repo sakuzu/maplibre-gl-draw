@@ -44,7 +44,7 @@ import {
   createModeContext,
   createScreenContext,
   createSubscriptions,
-  createTerrainAnchors,
+  createTerrainSurface,
   toHit,
 } from './contexts.js';
 import type { Context } from './engine-context.js';
@@ -52,7 +52,7 @@ import type { ExtensionRegistries, Installer } from './extensions.js';
 import { createExtensionsCollections, createRegistry, OVERRIDABLE_TYPES } from './extensions.js';
 import { preparePatch } from './features.js';
 import { bridgeMode, createInputRoute, deliverPointerLeave, toPointerEvent } from './input.js';
-import { createOverlayStack, terrainAnchorsOf } from './render-context.js';
+import { createOverlayStack, terrainSurfaceOf } from './render-context.js';
 import { validateExtension } from './validate-extension.js';
 
 /** The feature types of the engine, which a custom type cannot take the name of */
@@ -155,7 +155,7 @@ export function createExtensionHost(deps: ExtensionHostDeps): ExtensionHost {
     snapTargets: context.snapTargets,
     customLayer,
     spatialIndex: context.spatialIndex,
-    anchors: (state) => terrainAnchorsOf(state, createTerrainAnchors),
+    surface: (state) => terrainSurfaceOf(state, createTerrainSurface),
     registerSnapProvider: (provider) => context.snapService.register(provider),
     applyPatch(featureId, patch, final) {
       const feature = store.getFeature(featureId);

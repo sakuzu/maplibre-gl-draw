@@ -9,7 +9,7 @@
  * nothing. Rendering without terrain therefore does not change by a single byte.
  */
 
-import type { TerrainAnchors } from '../../api/extension/context.js';
+import type { TerrainSurface } from '../../api/extension/context.js';
 import type { RenderContext } from '../../api/extension/render.js';
 import type { Coordinate } from '../../store/types.js';
 import { terrainStateOf } from './binding.js';
@@ -43,7 +43,7 @@ import { tilingSignature } from './tiling.js';
  *   by the engine)
  */
 export function terrainTessellationStep(
-  terrain: RenderContext | TerrainAnchors,
+  terrain: RenderContext | TerrainSurface,
 ): TessellationStep | null {
   const state = terrainStateOf(terrain);
   return state ? terrainStepOf(state) : null;

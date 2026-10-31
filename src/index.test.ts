@@ -183,7 +183,7 @@ const MAIN = [
   'StyleRule',
   'TableGroup',
   'TableLayer',
-  'TerrainAnchors',
+  'TerrainSurface',
   'TerrainDiagnostics',
   'ToGeoJSONOptions',
   'TopologyOptions',

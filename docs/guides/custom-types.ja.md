@@ -401,17 +401,18 @@ draw.extensions.featureTypes.override({
 
 ## 地形
 
-地形があるとき、共有の描画器は描くものを自分で地面に載せます。自分の
-印のためには、`ctx.terrain` が高さを渡します。
+地形があるとき、共有の描画器は描くものを自分で地形に載せます。自分の
+印のためには、`ctx.terrain` (`TerrainSurface`) が地形の面を渡します。
 
-- `elevation(lngLat)` は地面の高さ (メートル) で、地形が無ければ 0 です。
-  点の描画器に `elevationMeters` として渡すと、印が地面に載ります
-- `project(lngLat)` は、地面まで持ち上げた位置の画面の点です。地形が
-  無ければ `null` です
-- `ghostOpacity(lngLat)` は、地形がカメラからその位置を隠すところで
+- `elevation(lngLat)` は地形の高さ (メートル) で、地形が無ければ 0 です。
+  点の描画器に `elevationMeters` として渡すと、印が地形に載ります
+- `occlusionOpacity(lngLat)` は、地形がカメラからその位置を隠すところで
   低くなります。印の不透明度に掛けてください
 - `generation()` は、高さが変わったかもしれないときに変わります。高さを
   覚えておく描画器は、これで読み直す時を知ります
+
+位置が画面のどこにあるか (地形があれば地形の上) は、どの位置とも同じく
+`ctx.screen.project(lngLat)` です。
 
 描画の外では、プラグインが窓口の `ctx.terrain` で同じ地形を読みます。
 [地形](terrain.ja.md) を参照してください。
@@ -649,4 +650,4 @@ function pathOnTerrain(
 - [SnapProvider](../api/maplibre-gl-draw/interfaces/SnapProvider.md)、
   [HandleProvider](../api/maplibre-gl-draw/interfaces/HandleProvider.md)、
   [CompanionProvider](../api/maplibre-gl-draw/interfaces/CompanionProvider.md)
-- [TerrainAnchors](../api/maplibre-gl-draw/interfaces/TerrainAnchors.md)
+- [TerrainSurface](../api/maplibre-gl-draw/interfaces/TerrainSurface.md)

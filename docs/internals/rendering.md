@@ -1928,8 +1928,8 @@ batches, and the editing UI of the current selection is never ghosted.
 The terrain frame state, generation counters and caches live in a
 `TerrainContext` (`terrain/context.ts`), one per custom layer. There is no
 current context: renderers receive it at construction, extension renderers
-through `RenderContext.terrain`, and plugins use
-`ExtensionContext.terrain.project`. Draw instances on one page (a main map, a
+through `RenderContext.terrain`, and plugins project through
+`ExtensionContext.screen.project`. Draw instances on one page (a main map, a
 thumbnail) must not share counters, or a retained batch could wrongly
 conclude that nothing changed.
 

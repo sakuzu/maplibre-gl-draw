@@ -12,9 +12,9 @@
 
 import type { ProjectionData } from 'maplibre-gl';
 import { afterEach, describe, expect, it } from 'vitest';
-import type { TerrainAnchors } from '../../api/extension/context.js';
+import type { TerrainSurface } from '../../api/extension/context.js';
 import type { RenderContext } from '../../api/extension/render.js';
-import { createTerrainAnchors } from '../../api/impl/contexts.js';
+import { createTerrainSurface } from '../../api/impl/contexts.js';
 import { createRenderContext } from '../../api/impl/render-context.js';
 import type { FrameDrawContext } from '../../extension/renderers.js';
 import { beginRenderFrame } from '../shaders/frame.js';
@@ -76,12 +76,12 @@ function renderContextOver(terrain: TerrainContext): RenderContext {
     base,
     PROJECTION,
     14,
-    createTerrainAnchors(terrain),
+    createTerrainSurface(terrain),
   );
 }
 
 /** The u_terrain_on a manager writes after `setTerrain(source)` */
-function terrainOnWith(source: RenderContext | TerrainAnchors | null): number | undefined {
+function terrainOnWith(source: RenderContext | TerrainSurface | null): number | undefined {
   const { gl, terrainOn } = createMockGL();
   const manager = new ProjectionUniformManager(gl);
   manager.setTerrain(source);
@@ -103,7 +103,7 @@ describe('the terrain behind a render context', () => {
 
   it('finds no state for null and for an object the engine did not hand out', () => {
     expect(terrainStateOf(null)).toBeNull();
-    expect(terrainStateOf({} as TerrainAnchors)).toBeNull();
+    expect(terrainStateOf({} as TerrainSurface)).toBeNull();
     expect(terrainStateOf({ terrain: {} } as RenderContext)).toBeNull();
   });
 
@@ -113,7 +113,7 @@ describe('the terrain behind a render context', () => {
     expect(terrainOnWith(ctx)).toBe(1);
     expect(terrainOnWith(ctx.terrain)).toBe(1);
     expect(terrainOnWith(null)).toBe(0);
-    expect(terrainOnWith({} as TerrainAnchors)).toBe(0);
+    expect(terrainOnWith({} as TerrainSurface)).toBe(0);
   });
 
   it('gives the tessellation step of the terrain of the render context', () => {
@@ -122,7 +122,7 @@ describe('the terrain behind a render context', () => {
     setTerrainRenderState(terrain, ACTIVE_TERRAIN);
     expect(terrainTessellationStep(ctx)?.grid).toBe(ACTIVE_TERRAIN.stepGrid);
     expect(terrainTessellationStep(ctx.terrain)?.grid).toBe(ACTIVE_TERRAIN.stepGrid);
-    expect(terrainTessellationStep({} as TerrainAnchors)).toBeNull();
+    expect(terrainTessellationStep({} as TerrainSurface)).toBeNull();
   });
 
   it('paints no surface without terrain', () => {
@@ -134,6 +134,6 @@ describe('the terrain behind a render context', () => {
     ] as unknown as Parameters<typeof drawQuadSurfaceOnTerrain>[1];
     const surface = {} as Parameters<typeof drawQuadSurfaceOnTerrain>[2];
     expect(drawQuadSurfaceOnTerrain(renderContextOver(terrain), corners, surface, 1)).toBe(false);
-    expect(drawQuadSurfaceOnTerrain({} as TerrainAnchors, corners, surface, 1)).toBe(false);
+    expect(drawQuadSurfaceOnTerrain({} as TerrainSurface, corners, surface, 1)).toBe(false);
   });
 });
