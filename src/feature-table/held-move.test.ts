@@ -16,6 +16,7 @@ import type { Store } from '../store/store.js';
 import { createTableStore } from '../store/table-memory.js';
 import type { Feature, StoreChange } from '../store/types.js';
 import { internalsOf } from '../test-utils.js';
+import { draggedRowsOf } from './dragged-rows.js';
 import { featureTablesInternals } from './feature-tables.js';
 import { translationBetween } from './held-move.js';
 import {
@@ -232,6 +233,9 @@ describe('many rows held moved as a whole', () => {
       expect(rowGeometry(tables, id)).toEqual(moved(squareAt(Number(id.slice(1)) * 2, 0), 1, 0.5));
       expect(movingSet(tables, id)).toEqual([0, 0]);
     }
+    // Nothing is dragged any more: the moving set is let go of with its last row
+    expect(featureTablesInternals(tables)?.states.translation(1)).toEqual([0, 0]);
+    expect(draggedRowsOf(tables)).toBeNull();
     store.setSelection(null, []);
     expect(rowGeometry(tables, 's0')).toEqual(moved(squareAt(0, 0), 1, 0.5));
   });
@@ -247,6 +251,7 @@ describe('many rows held moved as a whole', () => {
       expect(internalsOf(tables).getOpenedFeature(id)?.geometry).toEqual(start);
       expect(movingSet(tables, id)).toEqual([0, 0]);
     }
+    expect(draggedRowsOf(tables)).toBeNull();
     // Let go of in the middle of a move: the rows hold the values before it
     drag(store, ids, 2, 2);
     store.setSelection(null, []);
@@ -256,6 +261,7 @@ describe('many rows held moved as a whole', () => {
       expect(rowGeometry(tables, id)).toEqual(squareAt(Number(id.slice(1)) * 2, 0));
       expect(movingSet(tables, id)).toEqual([0, 0]);
     }
+    expect(draggedRowsOf(tables)).toBeNull();
   });
 
   it('writes the rows in the middle of the move when fewer rows are held', () => {
