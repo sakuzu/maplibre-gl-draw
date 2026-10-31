@@ -22,7 +22,7 @@ import {
   isInBBox,
   makeRefFactory,
 } from '../../shared/utils/feature-segments.js';
-import { isSameVertexRef } from '../../shared/utils/vertex-ref.js';
+import { hasVertexRef } from '../../shared/utils/vertex-ref.js';
 import { isLocallyHidden } from '../../store/local-visibility.js';
 import type { SpatialIndex } from '../../store/spatial/spatial-index.js';
 import type { Store } from '../../store/store.js';
@@ -100,16 +100,30 @@ export function queryFeatures(
 }
 
 /**
- * Whether the vertex is to be excluded
+ * Whether the vertex is to be excluded (`excludeParts`)
  */
 export function isExcludedVertex(
   featureId: string,
   vertex: VertexRef | undefined,
   ctx: SnapProviderContext,
 ): boolean {
-  const exclude = ctx.excludeVertex;
-  if (!exclude || !vertex) return false;
-  return exclude.featureId === featureId && isSameVertexRef(vertex, exclude.vertex);
+  const exclude = ctx.excludeParts;
+  if (!exclude || !vertex || exclude.featureId !== featureId) return false;
+  return hasVertexRef(exclude.vertices, vertex);
+}
+
+/**
+ * Whether the edge that starts from a vertex is to be excluded (`excludeParts`), with the
+ * crossings on it
+ */
+export function isExcludedEdge(
+  featureId: string,
+  startRef: VertexRef,
+  ctx: SnapProviderContext,
+): boolean {
+  const exclude = ctx.excludeParts;
+  if (!exclude || exclude.featureId !== featureId) return false;
+  return hasVertexRef(exclude.edges, startRef);
 }
 
 /**

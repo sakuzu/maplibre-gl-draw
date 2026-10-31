@@ -15,8 +15,8 @@
  * so no dedicated index is kept.
  *
  * The rules of exclusion are the same as for the vertex and edge providers: the
- * edges of an excluded feature and the edges touching the vertex being dragged are
- * not used in the computation of the intersections.
+ * edges of an excluded feature and the edges a drag changes (`excludeParts`) are not
+ * used in the computation of the intersections.
  */
 
 import { segmentIntersection } from '../../geometry/split.js';
@@ -32,7 +32,7 @@ import type { StoreSnapProviderDeps } from './shared.js';
 import {
   collectFeatureSegmentsInBBox,
   hasSnapEdges,
-  isExcludedVertex,
+  isExcludedEdge,
   queryFeatures,
   segmentIntersectsBBox,
 } from './shared.js';
@@ -73,10 +73,9 @@ function collectNearbySegments(
     if (!hasSnapEdges(feature.type)) continue;
 
     const segments: Array<{ start: Coordinate; end: Coordinate }> = [];
-    collectFeatureSegmentsInBBox(feature, bbox, (start, end, startRef, endRef) => {
+    collectFeatureSegmentsInBBox(feature, bbox, (start, end, startRef) => {
       if (!segmentIntersectsBBox(start, end, bbox)) return;
-      if (isExcludedVertex(feature.id, startRef, ctx)) return;
-      if (isExcludedVertex(feature.id, endRef, ctx)) return;
+      if (isExcludedEdge(feature.id, startRef, ctx)) return;
       segments.push({ start, end });
     });
 

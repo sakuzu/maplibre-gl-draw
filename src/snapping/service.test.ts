@@ -541,7 +541,11 @@ describe('SnapService', () => {
 
       resolveAt(service, ORIGIN, {
         excludeFeatureId: 'f1',
-        excludeVertex: { featureId: 'f2', vertex: { ring: 0, index: 3 } },
+        excludeParts: {
+          featureId: 'f2',
+          vertices: [{ ring: 0, index: 3 }],
+          edges: [{ ring: 0, index: 2 }],
+        },
       });
 
       expect(seen).toHaveLength(1);
@@ -551,7 +555,11 @@ describe('SnapService', () => {
       expect(ctx.toleranceLngDeg).toBeCloseTo(perPixel.lng * 10, 12);
       expect(ctx.toleranceLatDeg).toBeCloseTo(perPixel.lat * 10, 12);
       expect(ctx.excludeFeatureId).toBe('f1');
-      expect(ctx.excludeVertex).toEqual({ featureId: 'f2', vertex: { ring: 0, index: 3 } });
+      expect(ctx.excludeParts).toEqual({
+        featureId: 'f2',
+        vertices: [{ ring: 0, index: 3 }],
+        edges: [{ ring: 0, index: 2 }],
+      });
       expect(ctx.lngLat).toEqual(ORIGIN);
       expect(ctx.point).toEqual({ x: 100, y: 100 });
       expect(bbox.maxX - bbox.minX).toBeCloseTo(perPixel.lng * 20, 12);

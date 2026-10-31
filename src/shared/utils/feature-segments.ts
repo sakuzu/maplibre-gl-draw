@@ -16,6 +16,7 @@ import {
 } from '../math/segment-grid.js';
 import type { BoundingBox, Coordinate, Feature, VertexRef } from '../types/model.js';
 import { coordinatesOf } from './coordinates.js';
+import { isSameVertexRef } from './vertex-ref.js';
 
 /**
  * The visit function for an edge (called during the listing of edges)
@@ -237,6 +238,22 @@ export function collectFeatureSegments(feature: Feature, visit: SegmentVisitor):
   forEachPart(feature, (coords, ring, part) => {
     collectSegments(coords, ring, part, visit);
   });
+}
+
+/**
+ * The edges of a feature a vertex starts or ends, each by the vertex it starts from (its
+ * `startRef` in the listing of the edges)
+ *
+ * The references are those of the listing: the last edge of a closed ring ends at the vertex 0.
+ *
+ * @internal
+ */
+export function edgesOfVertex(feature: Feature, vertex: VertexRef): VertexRef[] {
+  const edges: VertexRef[] = [];
+  collectFeatureSegments(feature, (_start, _end, startRef, endRef) => {
+    if (isSameVertexRef(startRef, vertex) || isSameVertexRef(endRef, vertex)) edges.push(startRef);
+  });
+  return edges;
 }
 
 /**

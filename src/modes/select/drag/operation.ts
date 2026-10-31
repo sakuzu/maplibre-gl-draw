@@ -11,7 +11,8 @@
  */
 
 import type { DragNormalizedEvent } from '../../../dispatcher/types.js';
-import type { DragOperationType, DragTargets, Feature } from '../../../store/types.js';
+import { edgesOfVertex } from '../../../shared/utils/feature-segments.js';
+import type { DragOperationType, DragTargets, Feature, VertexRef } from '../../../store/types.js';
 import type { HandleHitResult } from '../../../view/ui/handle-test.js';
 import { getSelectedFeatureIds } from '../../../view/ui/helper.js';
 import type { EngineModeContext } from '../../handler.js';
@@ -69,40 +70,56 @@ export function selectedFeaturesOf(store: DragStore): Feature[] {
 
 /**
  * What a drag grabbed by a handle hit on the selected features (or by a press on one of them,
- * a move) changes, as its drag state records it: the selected features moved, resized or
- * rotated, the vertex dragged (for a midpoint, the vertex it adds after the one of the hit), the
- * circle whose radius is dragged, and the feature a handle of an extension is on (core does not
- * know what the handle changes, so the feature is taken as changed whole; a handle on no feature
- * changes nothing core knows of)
+ * a move) changes when it starts, as its drag state records it: the selected features moved,
+ * resized or rotated, the vertex dragged with the edges it starts and ends, the edge a midpoint
+ * is on, the circle whose radius is dragged, and the feature a handle of an extension is on (core
+ * does not know what the handle changes, so the feature is taken as changed whole; a handle on no
+ * feature changes nothing core knows of)
  *
  * The drag state and the snap of the start of the drag (before the drag state is set) both read
- * it, so that snapping leaves out the same from the start of the drag to its end. A midpoint adds
- * its vertex only once the drag starts: at its start the index names the vertex after the edge the
- * midpoint is on, which is left out with its edges, that edge among them.
+ * it, so that snapping leaves out the same from the start of the drag to its end. A midpoint is the
+ * one drag that changes the feature as it starts: it adds a vertex in the edge it is on, and its
+ * drag state then records the vertex and the two edges it splits the edge into
+ * (`vertexDragTargets`), which leave out the same as the edge did.
  *
  * @param selectedIds The selected features, with group / layer selections resolved
+ * @param store Where the feature of a vertex is read, for its edges
  */
 export function dragTargetsOfHit(
   hit: HandleHitResult,
   selectedIds: readonly string[],
+  store: Pick<DragStore, 'getFeature'>,
 ): DragTargets {
   switch (hit.type) {
     case 'move':
     case 'resize':
     case 'rotate':
       return { movingFeatureIds: [...selectedIds] };
-    case 'vertex':
-      return { activeFeatureId: hit.featureId, activeVertex: hit.vertexRef };
+    case 'vertex': {
+      const feature = hit.featureId !== undefined ? store.getFeature(hit.featureId) : undefined;
+      return feature && hit.vertexRef ? vertexDragTargets(feature, hit.vertexRef) : {};
+    }
     case 'midpoint':
       return {
         activeFeatureId: hit.featureId,
-        activeVertex: hit.vertexRef && { ...hit.vertexRef, index: hit.vertexRef.index + 1 },
+        ...(hit.vertexRef && { activeEdges: [hit.vertexRef] }),
       };
     case 'radius':
       return { movingFeatureIds: hit.featureId !== undefined ? [hit.featureId] : [] };
     case 'auxiliary':
       return hit.featureId !== undefined ? { movingFeatureIds: [hit.featureId] } : {};
   }
+}
+
+/**
+ * What a drag of a vertex of a feature changes: the vertex, and the edges it starts and ends
+ */
+export function vertexDragTargets(feature: Feature, vertex: VertexRef): DragTargets {
+  return {
+    activeFeatureId: feature.id,
+    activeVertex: vertex,
+    activeEdges: edgesOfVertex(feature, vertex),
+  };
 }
 
 /**

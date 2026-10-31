@@ -165,8 +165,17 @@ describe('the snapping to the rows held as columns', () => {
       const target = features[Math.floor(random() * features.length)];
       const ctx = context({
         excludeFeatureId: k % 3 === 0 ? target.id : undefined,
-        excludeVertex:
-          k % 3 === 1 ? { featureId: target.id, vertex: { ring: 0, index: 1 } } : undefined,
+        excludeParts:
+          k % 3 === 1
+            ? {
+                featureId: target.id,
+                vertices: [{ ring: 0, index: 1 }],
+                edges: [
+                  { ring: 0, index: 0 },
+                  { ring: 0, index: 1 },
+                ],
+              }
+            : undefined,
       });
       const vertices = (deps: typeof objects, table: boolean) =>
         (table

@@ -272,8 +272,9 @@ export interface EngineModeHandler {
   getSnapPreference?(): { featureId: string; datasetId?: string } | null;
 
   /**
-   * Returns what the drag this start of a drag starts will change, as its drag state will record
-   * it
+   * Returns what the drag this start of a drag starts will change, in the document as it is
+   * before the drag starts: as its drag state will record it, but for a drag that changes the
+   * document as it starts, whose drag state records the same parts as they are once changed
    *
    * Read by InputRouter right before it passes the start of a drag through snapping: the mode
    * starts the drag, and sets its drag state, only once it receives the start with the snapped

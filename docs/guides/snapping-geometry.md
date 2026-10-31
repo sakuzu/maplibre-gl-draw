@@ -94,6 +94,9 @@ then edge, then guide), and among the same kind the nearest wins.
 - A dragged vertex does not snap to itself or its own edges, but it does
   snap to the other vertices of its feature, so a ring can be closed on its
   first vertex
+- A dragged midpoint does not snap to the edge it is on (the two edges it
+  splits it into once it moves), but it does snap to the corners at the
+  ends of that edge and to the rest of its feature
 - A drag that changes features as a whole (a move, a rotation, a resize,
   the radius of a circle, a handle of an extension on a feature) does not
   snap to the features it changes

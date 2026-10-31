@@ -288,17 +288,22 @@ export function createInputRouter(deps: InputRouterDeps): InputRouter {
    *   back to it, and it would repeat "drift every frame by the offset from when it was
    *   grabbed, then leave the tolerance and catch up all at once" (which looks like a
    *   vibration). At the start, the pointer is still on what it grabbed
-   * - the grabbed vertex of a vertex / midpoint drag (`activeVertex`), for the same reason
-   *   with the vertex as the unit: the other vertices of the same feature stay candidates
-   *   so that a ring can be closed
+   * - the parts of one feature a vertex / midpoint drag changes (`activeVertex`, `activeEdges`):
+   *   the vertex it drags and the edges it starts and ends, or, before a midpoint adds its
+   *   vertex, the edge it is on. The other vertices and edges of the same feature stay
+   *   candidates, so that a ring can be closed and a midpoint can reach the corners of its edge
    *
    * The feature to prefer when candidates tie is read from the current mode (a
    * drawing mode returns the boundary it started tracing).
    */
   function buildSnapContext(modifiers: ModifierKeys, targets: DragTargets | null): SnapContext {
-    const excludeVertex =
-      targets?.activeFeatureId && targets.activeVertex
-        ? { featureId: targets.activeFeatureId, vertex: targets.activeVertex }
+    const excludeParts =
+      targets?.activeFeatureId && (targets.activeVertex || targets.activeEdges)
+        ? {
+            featureId: targets.activeFeatureId,
+            vertices: targets.activeVertex ? [targets.activeVertex] : [],
+            edges: targets.activeEdges ?? [],
+          }
         : undefined;
 
     const moving = targets?.movingFeatureIds;
@@ -318,7 +323,7 @@ export function createInputRouter(deps: InputRouterDeps): InputRouter {
 
     return {
       zoom: map.getZoom(),
-      excludeVertex,
+      excludeParts,
       excludeFeatureIds,
       preferFeature,
       modifiers,

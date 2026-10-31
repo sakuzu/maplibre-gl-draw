@@ -225,6 +225,7 @@ export class MemoryDrawingState {
       ? {
           operation: state.operation,
           activeVertex: state.activeVertex ? { ...state.activeVertex } : undefined,
+          ...(state.activeEdges && { activeEdges: state.activeEdges.map((edge) => ({ ...edge })) }),
           activeFeatureId: state.activeFeatureId,
           rotateInfo: state.rotateInfo,
           movingFeatureIds: state.movingFeatureIds ? [...state.movingFeatureIds] : undefined,

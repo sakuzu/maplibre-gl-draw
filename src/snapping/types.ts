@@ -50,17 +50,23 @@ export const SNAP_KIND_PRIORITY: Record<SnapTargetKind, number> = {
 };
 
 /**
- * A single vertex to leave out of the snapping candidates.
+ * The parts of one feature a drag changes, left out of the snapping candidates: the vertices it
+ * moves and the edges it changes, and the crossings of those edges.
  *
- * A vertex being dragged would snap to itself, so it is excluded. Only 1 vertex is
- * excluded, and the other vertices of the same feature are still included (so that a
- * ring can be closed).
+ * What a drag changes goes with the pointer, so it would snap to itself. The other vertices and
+ * edges of the same feature are still included (so that a ring can be closed on its first
+ * vertex, and the start of a drag of a midpoint can reach the corners of its edge).
  */
-export interface SnapExcludeVertex {
+export interface SnapExcludeParts {
   /** The ID of the target feature */
   featureId: string;
-  /** The reference of the vertex to exclude */
-  vertex: VertexRef;
+  /** The vertices to exclude */
+  vertices: readonly VertexRef[];
+  /**
+   * The edges to exclude, each by the vertex it starts from (the `startRef` of the listing of the
+   * edges: the last edge of a closed ring ends at the vertex 0)
+   */
+  edges: readonly VertexRef[];
 }
 
 /**
@@ -83,12 +89,12 @@ export interface SnapContext {
    * A feature being moved travels with the cursor, so snapping to itself would repeat
    * "pull the cursor back to its own position -> shift again by the grab offset on
    * the next frame" and the view would oscillate. The reason for excluding them is
-   * the same as for excludeVertex; the only difference is that the target is a whole
+   * the same as for excludeParts; the only difference is that the target is a whole
    * feature rather than a single vertex.
    */
   excludeFeatureIds?: ReadonlySet<string>;
-  /** The vertex to exclude (the vertex being dragged itself) */
-  excludeVertex?: SnapExcludeVertex;
+  /** The parts of a feature to exclude (the vertex being dragged and its edges, say) */
+  excludeParts?: SnapExcludeParts;
   /**
    * The feature to prefer when both the priority and the distance are tied
    *
@@ -114,7 +120,7 @@ export interface SnapContext {
  * position and the tolerance in pixels and in degrees.
  *
  * A provider should honor the exclusions (`excludeFeatureId`, `excludeFeatureIds`,
- * `excludeVertex`): the features being moved travel with the cursor, and snapping to them
+ * `excludeParts`): the features being moved travel with the cursor, and snapping to them
  * would pull the cursor back to itself.
  */
 export interface SnapProviderContext extends SnapContext {

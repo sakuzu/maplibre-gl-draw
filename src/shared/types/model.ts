@@ -1187,6 +1187,12 @@ export interface DragState {
    */
   activeVertex?: VertexRef;
   /**
+   * The edges of the feature being operated on that the drag of a vertex or a midpoint changes,
+   * each by the vertex it starts from (as the edges of a feature are listed): the edges the vertex
+   * starts and ends. Before a midpoint adds its vertex, the edge it is on alone
+   */
+  activeEdges?: VertexRef[];
+  /**
    * The ID of the feature being operated on while editing a vertex/midpoint
    * Set only when operation is 'vertex' or 'midpoint'
    */
@@ -1200,7 +1206,7 @@ export interface DragState {
    * The IDs of the features the drag changes as a whole (a group/layer selection is already
    * resolved into its members): the features moved, rotated or resized, the circle whose radius
    * is dragged, and the feature a handle of an extension is on. Not set for a vertex or a
-   * midpoint, whose drag changes one vertex (`activeVertex`)
+   * midpoint, whose drag changes one vertex and its edges (`activeVertex`, `activeEdges`)
    *
    * Snapping leaves them out of the candidates: what the drag changes as a whole goes with the
    * pointer, and would pull it back to itself.
@@ -1215,10 +1221,10 @@ export interface DragState {
 
 /**
  * What a drag changes, as its drag state records it: the features and the rows it changes as a
- * whole, or the vertex it drags. Snapping leaves them out of the candidates, from the start of
- * the drag (before the drag state is set) to its end
+ * whole, or the vertex it drags and the edges it changes. Snapping leaves them out of the
+ * candidates, from the start of the drag (before the drag state is set) to its end
  */
 export type DragTargets = Pick<
   DragState,
-  'movingFeatureIds' | 'movingRows' | 'activeFeatureId' | 'activeVertex'
+  'movingFeatureIds' | 'movingRows' | 'activeFeatureId' | 'activeVertex' | 'activeEdges'
 >;

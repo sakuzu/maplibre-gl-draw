@@ -113,21 +113,22 @@ type Grab =
     };
 
 /**
- * What the drag of a grab changes, as its drag state records it (null for a box selection, which
- * changes nothing). The drag handler records the same from the same hit and selection
+ * What the drag of a grab changes as it starts, as its drag state records it (null for a box
+ * selection, which changes nothing). The drag handler records the same from the same hit and
+ * selection
  */
-function targetsOfGrab(grab: Grab): DragTargets | null {
+function targetsOfGrab(grab: Grab, store: EngineModeContext['store']): DragTargets | null {
   switch (grab.kind) {
     case 'box':
       return null;
     case 'bulk':
       return bulkDragTargets(grab.rows);
     case 'handle':
-      return dragTargetsOfHit(grab.hit, grab.selectedIds);
+      return dragTargetsOfHit(grab.hit, grab.selectedIds, store);
     case 'global':
-      return dragTargetsOfHit(grab.hit, []);
+      return dragTargetsOfHit(grab.hit, [], store);
     case 'feature':
-      return dragTargetsOfHit(MOVE, grab.selectedIds);
+      return dragTargetsOfHit(MOVE, grab.selectedIds, store);
   }
 }
 
@@ -420,14 +421,15 @@ export class SelectMode implements EngineModeHandler {
 
   /**
    * What the drag a start of a drag starts will change, as its drag state will record it (null
-   * when it starts no drag that changes anything)
+   * when it starts no drag that changes anything). A midpoint answers the edge it is on, which its
+   * drag splits with the vertex it adds as it starts, and records as that vertex and its two edges
    *
    * Read from the same grab the start of the drag starts (`#grabOf`), without starting it:
    * InputRouter snaps the start of the drag leaving it out, before the drag sets its drag state.
    */
   getDragTargets(event: DragNormalizedEvent): DragTargets | null {
     const grab = this.#grabOf(event, false);
-    return grab ? targetsOfGrab(grab) : null;
+    return grab ? targetsOfGrab(grab, this.#context.store) : null;
   }
 
   /**

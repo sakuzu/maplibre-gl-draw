@@ -28,7 +28,7 @@ import type {
   SnapTargetsProvider,
 } from '../types.js';
 import type { StoreSnapProviderDeps } from './shared.js';
-import { isExcludedVertex } from './shared.js';
+import { isExcludedEdge, isExcludedVertex } from './shared.js';
 
 /**
  * The rows near a box that are snapping targets
@@ -106,9 +106,8 @@ export function createTableEdgeSnapProvider(deps: StoreSnapProviderDeps): SnapPr
       forEachTargetRow(deps, bbox, ctx, (row) => {
         if (customTargetsOf(deps, row) || !rowHasEdges(row.type)) return;
         rowSegmentsInBBox(row, bbox, (start, end, startRef, endRef) => {
-          // An edge touching the vertex being dragged passes over the cursor
-          if (isExcludedVertex(row.id, startRef, ctx)) return;
-          if (isExcludedVertex(row.id, endRef, ctx)) return;
+          // An edge the drag changes passes over the cursor
+          if (isExcludedEdge(row.id, startRef, ctx)) return;
           candidates.push({ kind: 'edge', start, end, startRef, endRef, featureId: row.id });
         });
       });
@@ -132,9 +131,8 @@ export function collectRowSegments(
   forEachTargetRow(deps, bbox, ctx, (row) => {
     if (customTargetsOf(deps, row) || !rowHasEdges(row.type)) return;
     const segments: Array<{ start: Coordinate; end: Coordinate }> = [];
-    rowSegmentsInBBox(row, bbox, (start, end, startRef, endRef) => {
-      if (isExcludedVertex(row.id, startRef, ctx)) return;
-      if (isExcludedVertex(row.id, endRef, ctx)) return;
+    rowSegmentsInBBox(row, bbox, (start, end, startRef) => {
+      if (isExcludedEdge(row.id, startRef, ctx)) return;
       segments.push({ start, end });
     });
     if (segments.length > 0) out.push({ featureId: row.id, segments });

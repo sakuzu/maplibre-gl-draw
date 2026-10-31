@@ -246,7 +246,9 @@ describe('the built-in vertex provider', () => {
     ]);
 
     const candidates = vertexCandidates(
-      providerContext({ excludeVertex: { featureId: 'f1', vertex: { ring: 0, index: 1 } } }),
+      providerContext({
+        excludeParts: { featureId: 'f1', vertices: [{ ring: 0, index: 1 }], edges: [] },
+      }),
     );
 
     expect(coordsOf(candidates)).toEqual([
@@ -266,7 +268,9 @@ describe('the built-in vertex provider', () => {
     ]);
 
     const candidates = vertexCandidates(
-      providerContext({ excludeVertex: { featureId: 'f1', vertex: { ring: 0, index: 0 } } }),
+      providerContext({
+        excludeParts: { featureId: 'f1', vertices: [{ ring: 0, index: 0 }], edges: [] },
+      }),
     );
 
     expect(candidates.filter((c) => c.featureId === 'f1')).toHaveLength(1);
@@ -375,7 +379,9 @@ describe('the built-in vertex provider', () => {
     ]);
 
     const candidates = vertexCandidates(
-      providerContext({ excludeVertex: { featureId: 'marker', vertex: { ring: 0, index: 0 } } }),
+      providerContext({
+        excludeParts: { featureId: 'marker', vertices: [{ ring: 0, index: 0 }], edges: [] },
+      }),
     );
 
     expect(candidates).toHaveLength(0);
@@ -498,7 +504,7 @@ describe('the built-in edge provider', () => {
     expect(edgeCandidates()).toHaveLength(0);
   });
 
-  it('excludes the edges touching the vertex being dragged (because they pass over the cursor)', () => {
+  it('excludes the edges a drag changes, by the vertex each starts from', () => {
     putFeature('f1', 'LineString', [
       [0, 0],
       [0.1, 0],
@@ -507,15 +513,24 @@ describe('the built-in edge provider', () => {
     ]);
 
     const candidates = edgeCandidates(
-      providerContext({ excludeVertex: { featureId: 'f1', vertex: { ring: 0, index: 1 } } }),
+      providerContext({
+        excludeParts: {
+          featureId: 'f1',
+          vertices: [],
+          edges: [
+            { ring: 0, index: 0 },
+            { ring: 0, index: 1 },
+          ],
+        },
+      }),
     );
 
-    // The 2 edges touching vertex 1 disappear, and only [0.2,0]-[0.3,0] is left
+    // The 2 edges of vertex 1 disappear, and only [0.2,0]-[0.3,0] is left
     expect(candidates).toHaveLength(1);
     expect(candidates[0].start).toEqual([0.2, 0]);
   });
 
-  it('makes the closing point at the end of a closed ring count as the first vertex for the exclusion', () => {
+  it('names the closing edge of a ring by the last vertex it starts from', () => {
     putFeature('poly', 'Polygon', [
       [
         [0, 0],
@@ -526,10 +541,19 @@ describe('the built-in edge provider', () => {
     ]);
 
     const candidates = edgeCandidates(
-      providerContext({ excludeVertex: { featureId: 'poly', vertex: { ring: 0, index: 0 } } }),
+      providerContext({
+        excludeParts: {
+          featureId: 'poly',
+          vertices: [],
+          edges: [
+            { ring: 0, index: 0 },
+            { ring: 0, index: 2 },
+          ],
+        },
+      }),
     );
 
-    // The 2 edges touching vertex 0 (the first one and the closing one) disappear
+    // The 2 edges of vertex 0 (the first one and the closing one) disappear
     expect(candidates).toHaveLength(1);
     expect(candidates[0]).toMatchObject({ start: [0.4, 0], end: [0.4, 0.4] });
   });
@@ -672,11 +696,13 @@ describe('the built-in intersection provider', () => {
     expect(intersectionCandidates(providerContext({ excludeFeatureId: 'v' }))).toHaveLength(0);
   });
 
-  it('does not use the edges touching the vertex being dragged in the computation of intersections', () => {
+  it('does not use the edges a drag changes in the computation of intersections', () => {
     addCrossingLines();
 
     const candidates = intersectionCandidates(
-      providerContext({ excludeVertex: { featureId: 'v', vertex: { ring: 0, index: 0 } } }),
+      providerContext({
+        excludeParts: { featureId: 'v', vertices: [], edges: [{ ring: 0, index: 0 }] },
+      }),
     );
 
     expect(candidates).toHaveLength(0);

@@ -764,14 +764,17 @@ kinds above.
   (`view/ui/handles.ts`), so holes and Multi parts are targets as they are.
 - The InputRouter leaves out what the drag an input belongs to changes
   (`DragTargets`): the features and the rows it changes as a whole, and the
-  vertex it drags. It takes them from one place, `dragTargetsOf`: in the
-  middle and at the end of a drag, the Store's drag state; at its start,
-  which the mode starts only once it receives it snapped, what the mode
-  says the drag will change (`getDragTargets`). Select mode answers that
-  from the same grab its `onDragStart` starts, and the drag records the
-  same in its drag state. Select mode drags start from `dragStartLngLat`,
-  which is never snapped, so snapping `dragstart` and `dragend` does not
-  shift them.
+  vertex it drags and the edges it changes (`excludeParts` of the snapping
+  context: a vertex leaves out itself and the edges it starts and ends, a
+  midpoint before its vertex is added the edge it is on). It takes them
+  from one place, `dragTargetsOf`: in the middle and at the end of a drag,
+  the Store's drag state; at its start, which the mode starts only once it
+  receives it snapped, what the mode says the drag will change
+  (`getDragTargets`). Select mode answers that from the same grab its
+  `onDragStart` starts, and the drag records the same in its drag state (a
+  midpoint records the vertex it adds and the two edges it splits the edge
+  into). Select mode drags start from `dragStartLngLat`, which is never
+  snapped, so snapping `dragstart` and `dragend` does not shift them.
 - The marker is a built-in overlay renderer (`snapping/indicator.ts`).
   Snapping does not change the Store, so it repaints on the `snap.change`
   signal. The

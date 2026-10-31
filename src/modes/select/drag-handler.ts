@@ -101,7 +101,7 @@ export class SelectModeDragHandler {
       context.map.dragPan.disable();
       this.writes.discard(store);
       this.operation = globalDrag;
-      store.setDragState({ operation: 'auxiliary', ...dragTargetsOfHit(hitResult, []) });
+      store.setDragState({ operation: 'auxiliary', ...dragTargetsOfHit(hitResult, [], store) });
       return;
     }
 
@@ -162,7 +162,7 @@ export class SelectModeDragHandler {
     // from its candidates (snapping to itself pulls the cursor back, shifting by the grab offset
     // and making it look like it vibrates); the start of the drag was snapped leaving out the
     // same (SelectMode.getDragTargets)
-    const targets = dragTargetsOfHit(hitResult, selectedIds);
+    const targets = dragTargetsOfHit(hitResult, selectedIds, store);
     switch (hitResult.type) {
       case 'move':
         this.begin(startMoveDrag(event, [...selectedIds], store));
@@ -183,9 +183,9 @@ export class SelectModeDragHandler {
         break;
 
       case 'midpoint':
-        // The vertex dragged is the one it adds, after the one of the hit
+        // The vertex dragged is the one it adds, after the one of the hit: its drag state records
+        // it once it is added (the edge of the hit is split into the edges of the vertex)
         this.begin(startMidpointDrag(event, hitResult.featureId!, hitResult.vertexRef!, store));
-        store.setDragState({ operation: 'midpoint', ...targets });
         break;
 
       case 'radius':

@@ -12,9 +12,8 @@
  *
  *   - Hidden features (both the shared visible flag and local hiding)
  *   - The features of ctx.excludeFeatureId / ctx.excludeFeatureIds
- *   - The vertex of ctx.excludeVertex and the edges touching it (the vertex being
- *     dragged sits on the cursor, so the edges touching it would always be at a
- *     distance of 0)
+ *   - The vertices and the edges of ctx.excludeParts (what a drag of a vertex or a
+ *     midpoint changes sits on the cursor, so it would always be at a distance of 0)
  *   - The tentative feature being drawn (it is not a feature of the Store, so it never
  *     enters in the first place)
  *
@@ -39,6 +38,7 @@ import {
   collectFeatureSegmentsInBBox,
   collectVertexCandidatesInBBox,
   hasSnapEdges,
+  isExcludedEdge,
   isExcludedVertex,
   queryFeatures,
   segmentIntersectsBBox,
@@ -120,10 +120,8 @@ export function createStoreEdgeSnapProvider(deps: StoreSnapProviderDeps): SnapPr
 
         collectFeatureSegmentsInBBox(feature, bbox, (start, end, startRef, endRef) => {
           if (!segmentIntersectsBBox(start, end, bbox)) return;
-          // An edge touching the vertex being dragged passes over the cursor, so it is
-          // excluded
-          if (isExcludedVertex(feature.id, startRef, ctx)) return;
-          if (isExcludedVertex(feature.id, endRef, ctx)) return;
+          // An edge the drag changes passes over the cursor, so it is excluded
+          if (isExcludedEdge(feature.id, startRef, ctx)) return;
 
           const candidate: SnapSegmentCandidate = {
             kind: 'edge',

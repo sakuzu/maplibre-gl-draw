@@ -14,8 +14,12 @@ import { hasVertexRef } from '../../../shared/utils/vertex-ref.js';
 import type { Coordinate, DragTargets, VertexRef } from '../../../store/types.js';
 import type { EngineModeContext } from '../../handler.js';
 import type { IntermediateWrites } from './intermediate-writes.js';
-import type { DragOperation, DragStore } from './operation.js';
-import { dragStartLngLat } from './operation.js';
+import {
+  type DragOperation,
+  type DragStore,
+  dragStartLngLat,
+  vertexDragTargets,
+} from './operation.js';
 
 /**
  * Whether the modifier key that temporarily disables shared-vertex following is held down
@@ -197,7 +201,8 @@ export function startVertexDrag(
 
 /**
  * Start a midpoint drag: insert a vertex at the midpoint and continue as a move of that
- * vertex. Returns null when the feature is gone
+ * vertex, and set the DragState it draws from (the vertex added, with the two edges it splits the
+ * edge into). Returns null when the feature is gone
  */
 export function startMidpointDrag(
   event: DragNormalizedEvent,
@@ -226,5 +231,6 @@ export function startMidpointDrag(
   const state = startVertexMove(updatedFeature, [newVertexRef], startLngLat);
   if (!state) return null;
 
+  store.setDragState({ operation: 'midpoint', ...vertexDragTargets(updatedFeature, newVertexRef) });
   return new VertexDrag('midpoint', state);
 }

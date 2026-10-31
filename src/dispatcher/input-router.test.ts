@@ -336,12 +336,39 @@ describe('Snapping of InputRouter', () => {
   it('snaps the start of a drag of a vertex leaving out that vertex and its edges', () => {
     putFeature('line', 'LineString', [TARGET, [TARGET[0] + 0.05, TARGET[1]]]);
     startRouter();
-    mode.getDragTargets = () => ({ activeFeatureId: 'line', activeVertex: { ring: 0, index: 0 } });
+    mode.getDragTargets = () => ({
+      activeFeatureId: 'line',
+      activeVertex: { ring: 0, index: 0 },
+      activeEdges: [{ ring: 0, index: 0 }],
+    });
 
-    const cursor = nearTarget(3);
+    // Near the vertex and a pixel off its edge
+    const cursor = { lng: nearTarget(3).lng, lat: TARGET[1] + DEG_PER_PIXEL_LNG };
     normalizer.emit(makeDragEvent('dragstart', cursor.lng, cursor.lat));
 
     expect(mode.dragStarts[0].lngLat).toEqual(cursor);
+  });
+
+  it('snaps the start of a drag of a midpoint to the corner at the end of its edge', () => {
+    // The midpoint of the edge from the west vertex to TARGET is grabbed
+    putFeature('line', 'LineString', [
+      [TARGET[0] - 0.05, TARGET[1]],
+      TARGET,
+      [TARGET[0], TARGET[1] + 0.05],
+    ]);
+    startRouter();
+    mode.getDragTargets = () => ({ activeFeatureId: 'line', activeEdges: [{ ring: 0, index: 0 }] });
+    const offEdge = DEG_PER_PIXEL_LNG;
+
+    // On the edge, away from its corners: the edge is left out
+    const onEdge = { lng: TARGET[0] - 0.02, lat: TARGET[1] + offEdge };
+    normalizer.emit(makeDragEvent('dragstart', onEdge.lng, onEdge.lat));
+    expect(mode.dragStarts[0].lngLat).toEqual(onEdge);
+
+    // Near the corner at its end: the corner is not
+    const nearCorner = { lng: nearTarget(-3).lng, lat: TARGET[1] + offEdge };
+    normalizer.emit(makeDragEvent('dragstart', nearCorner.lng, nearCorner.lat));
+    expect(mode.dragStarts[1].lngLat).toEqual({ lng: TARGET[0], lat: TARGET[1] });
   });
 
   it('asks the mode at the start of a drag only: its middle and its end read the drag state', () => {

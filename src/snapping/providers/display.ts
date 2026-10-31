@@ -42,7 +42,7 @@ import type {
 import {
   collectFeatureSegments,
   hasSnapEdges,
-  isExcludedVertex,
+  isExcludedEdge,
   queryFeatures,
   segmentIntersectsBBox,
 } from './shared.js';
@@ -188,7 +188,7 @@ export function createDisplaySnapProviders(deps: DisplaySnapProviderDeps): Displ
   /**
    * Lists the snapping target features near the bbox
    *
-   * ctx.excludeFeatureId / excludeVertex are not looked at. Both exist to keep a
+   * ctx.excludeFeatureId / excludeParts are not looked at. Both exist to keep a
    * feature being edited in the Store from snapping to itself, and they have nothing
    * to do with the features of datasets, which are never dragged.
    */
@@ -266,10 +266,9 @@ export function createDisplaySnapProviders(deps: DisplaySnapProviderDeps): Displ
       if (!hasSnapEdges(feature.type)) continue;
 
       const segments: Array<{ start: Coordinate; end: Coordinate }> = [];
-      collectFeatureSegments(feature, (start, end, startRef, endRef) => {
+      collectFeatureSegments(feature, (start, end, startRef) => {
         if (!segmentIntersectsBBox(start, end, bbox)) return;
-        if (isExcludedVertex(feature.id, startRef, ctx)) return;
-        if (isExcludedVertex(feature.id, endRef, ctx)) return;
+        if (isExcludedEdge(feature.id, startRef, ctx)) return;
         segments.push({ start, end });
       });
 
