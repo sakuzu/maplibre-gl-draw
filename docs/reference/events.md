@@ -33,6 +33,13 @@ An extension subscribes with `on`, `off` and `once` of its context. They
 take the same names and payloads, and the subscriptions end by themselves
 when the extension is removed (see [Plugins](../guides/plugins.md)).
 
+A plugin adds events of its own to the same list: it declares them in
+`DrawEvents` by declaration merging, named `resource.pastParticiple`, and
+sends them with `ctx.emit`, so that they are subscribed to with `draw.on`
+as the events below are
+([events of a plugin](../guides/plugins.md#events-of-a-plugin)). The
+events of this page are the library's alone to send.
+
 ## Delivery
 
 Listeners run synchronously, inside the call that caused the change. When

@@ -738,6 +738,9 @@ drawn. Each change below names what replaces what is gone.
 - `boxSelect(feature, boxPx, ctx)` names its box in pixels `boxPx`
 - A `Hit` of a feature names it by `id` alone; `featureId` is the
   feature a companion or a handle belongs to
+- A plugin sends events of its own with `ctx.emit(event, payload)`,
+  having declared them in `DrawEvents` by declaration merging, and they
+  are subscribed to with `draw.on` as every event is
 - `Plugin.interaction` is split by what each part does:
   `onDrawCommit(feature)` is a member of the plugin, the clicks of the
   select mode are `selectMode` (`onFeatureClick`,

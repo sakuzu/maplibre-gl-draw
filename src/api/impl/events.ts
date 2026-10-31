@@ -58,6 +58,71 @@ interface Entry {
   readonly once: boolean;
 }
 
+/** Every event of the library, which only the library sends */
+const LIBRARY_EVENT_KEYS = {
+  'feature.created': true,
+  'feature.updated': true,
+  'feature.deleted': true,
+  'feature.moved': true,
+  'layer.created': true,
+  'layer.updated': true,
+  'layer.deleted': true,
+  'layer.reordered': true,
+  'group.created': true,
+  'group.updated': true,
+  'group.deleted': true,
+  'group.moved': true,
+  'sketch.added': true,
+  'sketch.updated': true,
+  'sketch.removed': true,
+  'metadata.updated': true,
+  'document.changed': true,
+  'document.loaded': true,
+  'selection.changed': true,
+  'vertexSelection.changed': true,
+  'drag.started': true,
+  'drag.ended': true,
+  'mode.changed': true,
+  'hidden.changed': true,
+  'readOnly.changed': true,
+  'interactionLock.changed': true,
+  'options.changed': true,
+  'snap.changed': true,
+  'preview.changed': true,
+  'map.clicked': true,
+  'dataset.clicked': true,
+  'dataset.added': true,
+  'dataset.removed': true,
+  'dataset.reordered': true,
+  'image.requested': true,
+  'layerStack.changed': true,
+  error: true,
+} satisfies Record<keyof DrawEvents, true>;
+
+/** The names of the events of the library */
+const LIBRARY_EVENTS: ReadonlySet<string> = new Set(Object.keys(LIBRARY_EVENT_KEYS));
+
+/**
+ * Sends an event of a plugin, one it adds to `DrawEvents` by declaration merging
+ *
+ * @throws DrawError `invalid-input` when the name is not a string of characters, or is one of the
+ *   events of the library
+ * @internal
+ */
+export function emitPluginEvent<K extends keyof DrawEvents>(
+  hub: Pick<EventHub, 'emit'>,
+  event: K,
+  payload: DrawEvents[K],
+): void {
+  if (typeof event !== 'string' || event.length === 0) {
+    throw new DrawError('invalid-input', 'The name of an event must be a string of characters');
+  }
+  if (LIBRARY_EVENTS.has(event)) {
+    throw new DrawError('invalid-input', `The event ${event} is the library's to send`, { event });
+  }
+  hub.emit(event, payload);
+}
+
 /**
  * Creates the emitter of `DrawEvents`
  *

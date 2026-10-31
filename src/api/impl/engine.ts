@@ -47,10 +47,16 @@ import {
   DEFAULT_VIEWPORT_EXPANSION_FACTOR,
   getExpandedViewportBounds,
 } from '../../view/viewport.js';
+import type { DrawEvents } from '../events.js';
 import type { Context, EngineOptions } from './engine-context.js';
 import { createContext } from './engine-context.js';
 import type { EventHub } from './events.js';
-import { connectEngineEvents, connectStoreEvents, createEventHub } from './events.js';
+import {
+  connectEngineEvents,
+  connectStoreEvents,
+  createEventHub,
+  emitPluginEvent,
+} from './events.js';
 import type { ExtensionHost } from './extension-host.js';
 import { createExtensionHost } from './extension-host.js';
 import { prepareFeatureInput } from './features.js';
@@ -342,6 +348,9 @@ export function createEngine(
     customLayer,
     modeManager,
     featureCompanions,
+    // The event hub is made once the engine is set up, before any plugin is added
+    emitPluginEvent: <K extends keyof DrawEvents>(event: K, payload: DrawEvents[K]) =>
+      emitPluginEvent(events, event, payload),
     hitTestTopmost,
     hitTestTopmostWith: (tolerancePx) =>
       createTopmostHitTester({

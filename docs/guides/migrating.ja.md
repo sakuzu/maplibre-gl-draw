@@ -747,6 +747,9 @@ draw.features.update(featureId, {
 - `boxSelect(feature, boxPx, ctx)` の画面の箱の引数は `boxPx` です
 - 地物の `Hit` は、その地物を `id` だけで指します。`featureId` は、
   付き物かハンドルが属する地物です
+- プラグインは、宣言の併合で `DrawEvents` に足した自分のイベントを
+  `ctx.emit(event, payload)` で送ります。どのイベントとも同じく
+  `draw.on` で購読します
 - `Plugin.interaction` は役目ごとに分かれました。`onDrawCommit(feature)`
   はプラグインの欄になり、選択モードのクリックは `selectMode`
   (`onFeatureClick`、`onFeatureDoubleClick`)、排他的な操作は

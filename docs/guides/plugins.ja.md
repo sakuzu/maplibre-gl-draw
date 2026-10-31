@@ -119,6 +119,8 @@ console.log(counter?.count());
   プラグインを外すと終わります
 - `extensions` は `draw.extensions` と同じコレクションです。ここで
   足したものは、プラグインと一緒に外れます
+- `emit` は、プラグインのイベントを `draw.on` の購読者に送ります
+  ([プラグインのイベント](#プラグインのイベント))
 - `names` はインスタンスの自動の名前です。`names.next('Layer')` は、
   オプション `autoName` のとおりに次の名前を返します
   ([自動の名前](drawing.ja.md#自動の名前))
@@ -221,6 +223,41 @@ declare function forget(datasetId: string): void;
 for (const dataset of ctx.draw.datasets.list()) follow(dataset.id);
 ctx.on('dataset.added', ({ dataset }) => follow(dataset.id));
 ctx.on('dataset.removed', ({ datasetId }) => forget(datasetId));
+```
+
+### プラグインのイベント
+
+プラグインは、自分の中の変化を同じイベントの一覧で知らせます。自分の
+イベントを宣言の併合で `DrawEvents` に足し、ライブラリーのイベントと
+同じく「資源.過去分詞」の名前にして、`ctx.emit` で送ります。
+アプリケーションとほかのプラグインは、どのイベントとも同じく `draw.on`
+と `ctx.on` で購読します。ライブラリーのイベントを送るのはライブラリー
+だけです。`emit` にライブラリーのイベントを渡すと、コード
+`invalid-input` の `DrawError` を投げます。
+
+```ts
+import type { Plugin } from '@sakuzu/maplibre-gl-draw';
+
+declare module '@sakuzu/maplibre-gl-draw' {
+  interface DrawEvents {
+    /** 数えた、変わった地物の数 */
+    'counter.changed': { count: number };
+  }
+}
+
+const counter: Plugin = {
+  name: 'counter',
+  onAdd(ctx) {
+    let count = 0;
+    ctx.on('document.changed', (change) => {
+      count += change.features?.updated?.length ?? 0;
+      ctx.emit('counter.changed', { count });
+    });
+  },
+};
+
+draw.extensions.plugins.add(counter);
+draw.on('counter.changed', ({ count }) => console.log(count));
 ```
 
 ## 入力

@@ -119,6 +119,8 @@ instance:
   here ends when the plugin is removed
 - `extensions`, the same collections as `draw.extensions`. What a
   plugin adds here is removed with the plugin
+- `emit`, which sends an event of the plugin to the subscribers of
+  `draw.on` ([events of a plugin](#events-of-a-plugin))
 - `names`, the automatic names of the instance. `names.next('Layer')`
   gives the next name the way the `autoName` option says
   ([automatic names](drawing.md#automatic-names))
@@ -222,6 +224,41 @@ declare function forget(datasetId: string): void;
 for (const dataset of ctx.draw.datasets.list()) follow(dataset.id);
 ctx.on('dataset.added', ({ dataset }) => follow(dataset.id));
 ctx.on('dataset.removed', ({ datasetId }) => forget(datasetId));
+```
+
+### Events of a plugin
+
+A plugin tells what changes in it through the same list of events: it
+adds its events to `DrawEvents` by declaration merging, named
+`resource.pastParticiple` as the events of the library are, and sends
+them with `ctx.emit`. An application and other plugins subscribe to them
+with `draw.on` and `ctx.on`, as to any event. The events of the library
+are the library's to send: `emit` throws a `DrawError` with the code
+`invalid-input` for one of them.
+
+```ts
+import type { Plugin } from '@sakuzu/maplibre-gl-draw';
+
+declare module '@sakuzu/maplibre-gl-draw' {
+  interface DrawEvents {
+    /** The number of features the counter has seen changed */
+    'counter.changed': { count: number };
+  }
+}
+
+const counter: Plugin = {
+  name: 'counter',
+  onAdd(ctx) {
+    let count = 0;
+    ctx.on('document.changed', (change) => {
+      count += change.features?.updated?.length ?? 0;
+      ctx.emit('counter.changed', { count });
+    });
+  },
+};
+
+draw.extensions.plugins.add(counter);
+draw.on('counter.changed', ({ count }) => console.log(count));
 ```
 
 ## Input

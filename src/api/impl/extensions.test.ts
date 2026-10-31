@@ -527,6 +527,36 @@ describe('extensions.plugins', () => {
     expect(context.names.next('Layer')).toEqual(expect.any(String));
   });
 
+  it('lets a plugin send events of its own to the subscribers of draw.on, and none of the library', () => {
+    let ctx: PluginContext | null = null;
+    draw.extensions.plugins.add(
+      plugin('counter', {
+        onAdd(context) {
+          ctx = context;
+        },
+      }),
+    );
+    // An event a plugin adds to DrawEvents by declaration merging; the test sends it untyped
+    const emit = (ctx as unknown as PluginContext).emit as (
+      event: string,
+      payload: unknown,
+    ) => void;
+    const received: unknown[] = [];
+    (draw.on as (event: string, listener: (payload: unknown) => void) => () => void)(
+      'counter.changed',
+      (payload) => received.push(payload),
+    );
+    emit('counter.changed', { count: 2 });
+    expect(received).toEqual([{ count: 2 }]);
+    // The events of the library are the library's to send
+    expect(() => emit('document.changed', {})).toThrow(DrawError);
+    expect(() => emit('selection.changed', {})).toThrow(
+      expect.objectContaining({ code: 'invalid-input' }),
+    );
+    expect(() => emit('', {})).toThrow(expect.objectContaining({ code: 'invalid-input' }));
+    expect(received).toHaveLength(1);
+  });
+
   it('gives the heights of the terrain, and projects onto it through the screen', () => {
     let ctx: PluginContext | null = null;
     draw.extensions.plugins.add(
