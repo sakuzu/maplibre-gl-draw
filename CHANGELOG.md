@@ -245,6 +245,11 @@ writing it. Its changes are listed after those of 3.0.0.
 - A `Hit` of a feature names it by `id` alone, as `ModeContext.hitTest`
   and `map.clicked` give it: `featureId` is the feature a companion or a
   handle belongs to.
+- `Plugin.interaction` is split by what each part does: `onDrawCommit`
+  is a member of the plugin, the hooks of the clicks of the select mode
+  are `selectMode` (`onFeatureClick`, `onFeatureDoubleClick`), and an
+  exclusive interaction is `exclusive`, whose `isActive()` (was
+  `isBusy`) it requires, with `finish`, `cancel` and `container`.
 - `TerrainAnchors` is `TerrainSurface`, the surface of the terrain:
   `occlusionOpacity` (was `ghostOpacity`), `elevation` and `generation`.
   Its `project` is gone: `ScreenContext.project` answers where a position

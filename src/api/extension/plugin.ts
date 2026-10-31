@@ -30,25 +30,31 @@ export interface Plugin<Api = unknown> {
    * event, so that the mode does not get it.
    */
   readonly input?: Partial<InputHandlers>;
-  /** The hooks of the select mode, and an exclusive interaction of the plugin */
-  readonly interaction?: {
+  /**
+   * A drawing mode created a feature: a commit of `ModeContext.commitFeature`, which the
+   * built-in drawing modes use too, or the image placed by the load that follows a request of the
+   * image mode.
+   */
+  onDrawCommit?(feature: Feature): void;
+  /** The hooks of the select mode: the clicks on a feature it offers the plugins */
+  readonly selectMode?: {
     /** A selected feature was clicked again; returning true means the plugin handled it */
     onFeatureClick?(feature: Feature, event: DrawPointerEvent): boolean;
     /** A feature was double-clicked; returning true means the plugin handled it */
     onFeatureDoubleClick?(feature: Feature, event: DrawPointerEvent): boolean;
-    /**
-     * A drawing mode created a feature: a commit of `ModeContext.commitFeature`, which the
-     * built-in drawing modes use too, or the image placed by the load that follows a request
-     * of the image mode
-     */
-    onDrawCommit?(feature: Feature): void;
-    /** Whether the plugin is in an exclusive interaction, during which the mode stays still */
-    isBusy?(): boolean;
-    /** Completes the exclusive interaction */
+  };
+  /**
+   * An exclusive interaction of the plugin on the map, such as a form it shows over a feature:
+   * while it is active, the select mode stays still.
+   */
+  readonly exclusive?: {
+    /** Whether the interaction is active; the select mode stays still while it is */
+    isActive(): boolean;
+    /** Completes the interaction: a click outside its container, or the select mode left */
     finish?(): void;
-    /** Cancels the exclusive interaction */
+    /** Cancels the interaction: an Escape */
     cancel?(): void;
-    /** The element of the exclusive interaction; clicks inside it are left to the plugin */
+    /** The element of the interaction; a press inside it is left to the plugin */
     container?(): HTMLElement | null;
   };
 }

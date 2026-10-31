@@ -997,10 +997,12 @@ overlays and the snap, handle and companion providers. The contracts are in
 A `Plugin` has a unique `name`, `onAdd(ctx)` and optionally `onRemove()`;
 an `api`, which others reach with `draw.extensions.plugins.getApi(name)`;
 `input` receivers that run before the mode and consume an event by
-returning `true`; and `interaction` hooks through which select mode
-delegates clicks and in-place editing to it (`onFeatureClick`,
-`onFeatureDoubleClick`, `onDrawCommit`, `isBusy`, `finish`, `cancel` and
-`container`). The host answers select mode through
+returning `true`; `onDrawCommit`, told of each feature a drawing mode
+creates; the `selectMode` hooks through which select mode delegates the
+clicks on a feature to it (`onFeatureClick`, `onFeatureDoubleClick`); and
+an `exclusive` interaction, such as an editing in place, during which
+select mode stays still (`isActive`, `finish`, `cancel` and `container`).
+The host answers select mode through
 `PluginInteractions` (`src/modes/handler.ts`), calling the plugins in the
 order they were added and reporting and skipping one that throws.
 

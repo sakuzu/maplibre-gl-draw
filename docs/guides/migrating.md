@@ -738,6 +738,12 @@ drawn. Each change below names what replaces what is gone.
 - `boxSelect(feature, boxPx, ctx)` names its box in pixels `boxPx`
 - A `Hit` of a feature names it by `id` alone; `featureId` is the
   feature a companion or a handle belongs to
+- `Plugin.interaction` is split by what each part does:
+  `onDrawCommit(feature)` is a member of the plugin, the clicks of the
+  select mode are `selectMode` (`onFeatureClick`,
+  `onFeatureDoubleClick`), and the exclusive interaction is `exclusive`,
+  whose `isActive()` (was `isBusy`) it must have, with `finish`, `cancel`
+  and `container`
 - `ctx.terrain` is a `TerrainSurface` (was `TerrainAnchors`):
   `occlusionOpacity(lngLat)` was `ghostOpacity`, and `project` is gone,
   since `ctx.screen.project(lngLat)` answers where a position is drawn,

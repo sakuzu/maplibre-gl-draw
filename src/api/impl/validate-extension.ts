@@ -54,22 +54,17 @@ const INPUT_HANDLERS = [
   'onKeyUp',
 ] as const;
 
-/** The hooks of the interaction of a plugin */
-const INTERACTION_HOOKS = [
-  'onFeatureClick',
-  'onFeatureDoubleClick',
-  'onDrawCommit',
-  'isBusy',
-  'finish',
-  'cancel',
-  'container',
-] as const;
+/** The hooks of the select mode a plugin may give */
+const SELECT_MODE_HOOKS = ['onFeatureClick', 'onFeatureDoubleClick'] as const;
+
+/** The members of the exclusive interaction of a plugin besides `isActive`, which it requires */
+const EXCLUSIVE_HOOKS = ['finish', 'cancel', 'container'] as const;
 
 /** What each kind requires and allows, besides its name */
 const SHAPES: Readonly<
   Record<Exclude<ExtensionKind, 'mode'>, { required: string[]; optional: string[] }>
 > = {
-  plugin: { required: ['onAdd'], optional: ['onRemove'] },
+  plugin: { required: ['onAdd'], optional: ['onRemove', 'onDrawCommit'] },
   'feature type': {
     required: [],
     optional: [
@@ -133,17 +128,21 @@ function requireFunctions(
   }
 }
 
-/** Checks an optional group of functions, such as the input receivers of a plugin */
+/**
+ * Checks an optional group of functions, such as the input receivers of a plugin: the functions
+ * it may have, and those it must have when it is given
+ */
 function optionalGroup(
   kind: ExtensionKind,
   value: Record<string, unknown>,
   member: string,
   names: readonly string[],
+  required: readonly string[] = [],
 ): void {
   const group = value[member];
   if (group === undefined) return;
   if (!isObject(group)) throw wrongShape(kind, `has ${member} that is not an object`, member);
-  requireFunctions(kind, group, [], names, `${member}.`);
+  requireFunctions(kind, group, required, names, `${member}.`);
 }
 
 /** Checks an optional number, finite and, when asked, not negative */
@@ -181,7 +180,8 @@ export function validateExtension(kind: ExtensionKind, value: unknown): void {
   switch (kind) {
     case 'plugin':
       optionalGroup(kind, value, 'input', INPUT_HANDLERS);
-      optionalGroup(kind, value, 'interaction', INTERACTION_HOOKS);
+      optionalGroup(kind, value, 'selectMode', SELECT_MODE_HOOKS);
+      optionalGroup(kind, value, 'exclusive', EXCLUSIVE_HOOKS, ['isActive']);
       return;
     case 'feature type': {
       if (typeof value.geometry !== 'string' || !GEOMETRY_TYPES.has(value.geometry)) {

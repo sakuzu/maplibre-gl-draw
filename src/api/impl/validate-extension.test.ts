@@ -19,7 +19,14 @@ const renderer = { onAdd: noop, draw: noop, onRemove: noop };
 
 /** A value of the right shape for each kind */
 const VALID: Record<ExtensionKind, unknown> = {
-  plugin: { name: 'p', onAdd: noop, input: { onClick: noop }, interaction: { isBusy: noop } },
+  plugin: {
+    name: 'p',
+    onAdd: noop,
+    input: { onClick: noop },
+    selectMode: { onFeatureClick: noop },
+    onDrawCommit: noop,
+    exclusive: { isActive: noop },
+  },
   mode: () => ({}),
   'feature type': { type: 't', geometry: 'Point', renderer, hitPaddingPx: 4 },
   overlay: { name: 'o', onAdd: noop, draw: noop, onRemove: noop, order: -1 },
@@ -36,7 +43,18 @@ const INVALID: Array<[ExtensionKind, unknown, string | undefined]> = [
   ['plugin', { name: 'p', onAdd: noop, onRemove: 1 }, 'onRemove'],
   ['plugin', { name: 'p', onAdd: noop, input: 1 }, 'input'],
   ['plugin', { name: 'p', onAdd: noop, input: { onClick: 'x' } }, 'input.onClick'],
-  ['plugin', { name: 'p', onAdd: noop, interaction: { finish: {} } }, 'interaction.finish'],
+  [
+    'plugin',
+    { name: 'p', onAdd: noop, selectMode: { onFeatureClick: 1 } },
+    'selectMode.onFeatureClick',
+  ],
+  ['plugin', { name: 'p', onAdd: noop, onDrawCommit: {} }, 'onDrawCommit'],
+  ['plugin', { name: 'p', onAdd: noop, exclusive: { finish: noop } }, 'exclusive.isActive'],
+  [
+    'plugin',
+    { name: 'p', onAdd: noop, exclusive: { isActive: noop, finish: {} } },
+    'exclusive.finish',
+  ],
   ['mode', {}, undefined],
   ['feature type', { type: 't', renderer }, 'geometry'],
   ['feature type', { type: 't', geometry: 'Circle', renderer }, 'geometry'],

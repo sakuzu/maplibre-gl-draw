@@ -69,7 +69,9 @@ const removeLogger = draw.extensions.plugins.add(logger);
 | `onRemove()` | 窓口の外で持っているものを解放します |
 | `api` | `draw.extensions.plugins.getApi(name)` で読むもの |
 | `input` | モードより先に呼ばれる入力の受け手 |
-| `interaction` | 選択モードのフックと排他的な操作 |
+| `onDrawCommit(feature)` | 描画モードが地物を作った |
+| `selectMode` | 選択モードの地物のクリックのフック |
+| `exclusive` | 排他的な操作。その間、選択モードは動きません |
 
 ### API を渡す
 
@@ -270,22 +272,24 @@ draw.extensions.plugins.add(createShortcuts());
 
 ## 選択モードのフック
 
-`interaction` を使うと、プラグインが選択モードの動きに加われます。
+`selectMode` を使うと、プラグインが選択モードのクリックに加われます。
 
 - `onFeatureClick(feature, event)` は、選ばれている地物がもう一度
   クリックされたときに呼ばれます。true を返すと、プラグインがその
   クリックを処理したことになります
 - `onFeatureDoubleClick(feature, event)` は、地物がダブルクリック
   されたときに、その地物を選んだ後で呼ばれます
-- `onDrawCommit(feature)` は、描画モードが地物を作ったときに呼ばれ
-  ます。`ctx.commitFeature` の確定 (組み込みの描画モードもこれを使い
-  ます) と、`image.requested` の後の読み込みが置いた画像です
+
+`onDrawCommit(feature)` は、描画モードが地物を作ったときに呼ばれます。
+`ctx.commitFeature` の確定 (組み込みの描画モードもこれを使います) と、
+`image.requested` の後の読み込みが置いた画像です。
 
 ### 排他的な操作
 
 プラグインは、地図の上に出す入力欄のような、地物に対する自分の操作を
-持てます。`isBusy()` が true を返す間、選択モードは動きません。
-ドラッグも選択もせず、Escape 以外のキーを無視します。
+`exclusive` に持てます。`exclusive.isActive()` が true を返す間、
+選択モードは動きません。ドラッグも選択もせず、Escape 以外のキーを
+無視します。
 
 - `container()` が返す要素の中の押し下げはプラグインに任され、地図は
   パンしません

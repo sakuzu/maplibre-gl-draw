@@ -362,7 +362,7 @@ export function createExtensionHost(deps: ExtensionHostDeps): ExtensionHost {
   /** Tells every plugin that a drawing mode created a feature */
   function announceDrawCommit(feature: Feature): void {
     eachPlugin('onDrawCommit', (plugin) => {
-      plugin.interaction?.onDrawCommit?.(feature);
+      plugin.onDrawCommit?.(feature);
       return false;
     });
   }
@@ -374,32 +374,32 @@ export function createExtensionHost(deps: ExtensionHostDeps): ExtensionHost {
       const feature = featureOf(featureId);
       if (!feature || !event) return false;
       return eachPlugin(hook, (plugin) => {
-        const handler = plugin.interaction?.[hook];
-        return handler?.call(plugin.interaction, feature, toPointerEvent(event)) === true;
+        const handler = plugin.selectMode?.[hook];
+        return handler?.call(plugin.selectMode, feature, toPointerEvent(event)) === true;
       });
     };
   const interactions: PluginInteractions = {
     handleFeatureClick: click('onFeatureClick'),
     handleFeatureDoubleClick: click('onFeatureDoubleClick'),
     isPluginInteracting: () =>
-      eachPlugin('isBusy', (plugin) => plugin.interaction?.isBusy?.() === true),
+      eachPlugin('isActive', (plugin) => plugin.exclusive?.isActive() === true),
     finishPluginInteraction() {
       eachPlugin('finish', (plugin) => {
-        plugin.interaction?.finish?.();
+        plugin.exclusive?.finish?.();
         return false;
       });
     },
     cancelPluginInteraction() {
       eachPlugin('cancel', (plugin) => {
-        plugin.interaction?.cancel?.();
+        plugin.exclusive?.cancel?.();
         return false;
       });
     },
     getPluginInteractionContainer() {
       let container: HTMLElement | null = null;
       eachPlugin('container', (plugin) => {
-        if (plugin.interaction?.isBusy?.() !== true) return false;
-        container = plugin.interaction.container?.() ?? null;
+        if (plugin.exclusive?.isActive() !== true) return false;
+        container = plugin.exclusive.container?.() ?? null;
         return container !== null;
       });
       return container;

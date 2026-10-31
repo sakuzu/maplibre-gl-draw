@@ -69,7 +69,9 @@ name must be unique in the instance.
 | `onRemove()` | Releases what the plugin holds outside the context |
 | `api` | What other code reads with `draw.extensions.plugins.getApi(name)` |
 | `input` | Receivers of the input, called before those of the mode |
-| `interaction` | Hooks of the select mode and an exclusive interaction |
+| `onDrawCommit(feature)` | A drawing mode created a feature |
+| `selectMode` | Hooks of the clicks of the select mode on a feature |
+| `exclusive` | An exclusive interaction; the select mode waits meanwhile |
 
 ### Offering an API
 
@@ -271,22 +273,23 @@ draw.extensions.plugins.add(createShortcuts());
 
 ## Hooks of the select mode
 
-`interaction` lets a plugin take part in what the select mode does:
+`selectMode` lets a plugin take part in the clicks of the select mode:
 
 - `onFeatureClick(feature, event)` is called when a selected feature
   is clicked again; returning true means the plugin handled the click
 - `onFeatureDoubleClick(feature, event)` is called when a feature is
   double-clicked, after it is selected
-- `onDrawCommit(feature)` is called when a drawing mode created a
-  feature: each commit of `ctx.commitFeature` (the built-in drawing modes
-  use it too), and the image the load after an `image.requested` places
+
+`onDrawCommit(feature)` is called when a drawing mode created a
+feature: each commit of `ctx.commitFeature` (the built-in drawing modes
+use it too), and the image the load after an `image.requested` places.
 
 ### An exclusive interaction
 
 A plugin can hold an interaction of its own on a feature, such as a
-form it shows over the map. While `isBusy()` returns true, the select
-mode stays still: it does not drag or select, and it ignores the keys
-but Escape.
+form it shows over the map, in `exclusive`. While `exclusive.isActive()`
+returns true, the select mode stays still: it does not drag or select,
+and it ignores the keys but Escape.
 
 - A press inside the element that `container()` returns is left to the
   plugin, and the map does not pan

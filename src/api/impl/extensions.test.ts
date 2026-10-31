@@ -653,13 +653,31 @@ describe('the input of the plugins and the modes', () => {
       visible: true,
     });
     const onFeatureClick = vi.fn(() => true);
-    engine.extensions.collections.plugins.add(plugin('p', { interaction: { onFeatureClick } }));
+    engine.extensions.collections.plugins.add(plugin('p', { selectMode: { onFeatureClick } }));
     createSyntheticInput(engine).click([1, 1]);
     createSyntheticInput(engine).click([1, 1]);
     expect(onFeatureClick).toHaveBeenCalledWith(
       expect.objectContaining({ id: 'f' }),
       expect.objectContaining({ lngLat: [1, 1] }),
     );
+  });
+
+  it('keeps the select mode still during an exclusive interaction, which Escape cancels', () => {
+    let active = true;
+    const cancel = vi.fn(() => {
+      active = false;
+    });
+    const finish = vi.fn();
+    engine.extensions.collections.plugins.add(
+      plugin('p', { exclusive: { isActive: () => active, cancel, finish } }),
+    );
+    const input = createSyntheticInput(engine);
+    input.key('Escape');
+    expect(cancel).toHaveBeenCalledTimes(1);
+    expect(finish).not.toHaveBeenCalled();
+    // Not active any more: Escape is the select mode's again
+    input.key('Escape');
+    expect(cancel).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -754,7 +772,7 @@ describe('ModeContext.commitFeature', () => {
   it('tells the plugins of each feature it commits, and not of a refused one', () => {
     const committed: string[] = [];
     engine.extensions.collections.plugins.add(
-      plugin('commits', { interaction: { onDrawCommit: (feature) => committed.push(feature.id) } }),
+      plugin('commits', { onDrawCommit: (feature) => committed.push(feature.id) }),
     );
     const feature = ctx.commitFeature({
       type: 'Point',
@@ -931,7 +949,7 @@ describe('the built-in modes written to the contract', () => {
   it('tells the plugins of a point it draws, and of the image placed after a request', () => {
     const committed: string[] = [];
     engine.extensions.collections.plugins.add(
-      plugin('commits', { interaction: { onDrawCommit: (feature) => committed.push(feature.id) } }),
+      plugin('commits', { onDrawCommit: (feature) => committed.push(feature.id) }),
     );
     engine.modeManager.setMode('draw_point');
     createSyntheticInput(engine).click([1, 1]);

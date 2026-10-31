@@ -747,6 +747,11 @@ draw.features.update(featureId, {
 - `boxSelect(feature, boxPx, ctx)` の画面の箱の引数は `boxPx` です
 - 地物の `Hit` は、その地物を `id` だけで指します。`featureId` は、
   付き物かハンドルが属する地物です
+- `Plugin.interaction` は役目ごとに分かれました。`onDrawCommit(feature)`
+  はプラグインの欄になり、選択モードのクリックは `selectMode`
+  (`onFeatureClick`、`onFeatureDoubleClick`)、排他的な操作は
+  `exclusive` です。`exclusive` は `isActive()` (前は `isBusy`) を必ず
+  持ち、`finish`、`cancel`、`container` を持てます
 - `ctx.terrain` は `TerrainSurface` になりました (前は `TerrainAnchors`)。
   `occlusionOpacity(lngLat)` は前の `ghostOpacity` です。`project` は
   無くなりました。位置がどこに描かれるかは、地形があれば地形の上で、
