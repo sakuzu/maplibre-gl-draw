@@ -1809,6 +1809,11 @@ pixel is inside a polygon or how far it is from a line.
   stop baking them into their chunk batches. The hand-over is released at
   once when the drape stops being usable for a lasting reason, and kept
   through transient ones, so batches are not re-baked back and forth
+- A layer held as rows is not collected: it is drawn from its rows alone,
+  at its place in the order (`isLayerDrawnFromRows`, the one test the
+  layer loop of the frame and the drape share). The features of its rows
+  held (selected, dragged) are what is read of the rows, not another path
+  of drawing them, so a row held is drawn once
 - Dashed and dotted lines and outlines are elements too. Their style
   carries the coefficients of the pattern (`DRAPE_DASH_TEXEL`), the
   binning stacks the start of each edge along its path next to the edge
