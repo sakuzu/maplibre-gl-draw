@@ -16,6 +16,7 @@ import {
   transformsOf,
 } from '../../../operations/transform-features.js';
 import type { HandleType } from '../../../shared/config/constants.js';
+import { createCoordinateTransform } from '../../../shared/math/index.js';
 import type { TransformEdit } from '../../../store/store.js';
 import type { Feature } from '../../../store/types.js';
 import type { BoundingBoxCoords } from '../../../view/ui/selection-ui/index.js';
@@ -73,15 +74,11 @@ export function startResizeDrag(
   bbox: BoundingBoxCoords,
   features: Feature[],
   map: EngineModeContext['map'],
-  scope: DragScope,
 ): ResizeDrag {
   // A box thinner than 1 pixel on screen is not stretched along that axis
-  const state = startScale(
-    handle,
-    dragStartLngLat(event),
-    bbox,
-    map.getZoom?.(),
-    scope?.extensions.getTileSize() ?? 512,
+  const transform = createCoordinateTransform(map);
+  const state = startScale(handle, dragStartLngLat(event), bbox, (lngLat) =>
+    transform.metersPerPixel(lngLat),
   );
   return new ResizeDrag(state, startsOf(features));
 }

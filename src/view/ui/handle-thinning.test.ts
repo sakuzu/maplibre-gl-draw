@@ -24,6 +24,7 @@ import type { CoordinateTransform } from '../../shared/math/index.js';
 import type { FeatureCoordinates } from '../../shared/types/model.js';
 import { coordinatesOf, geometryFromCoordinates } from '../../shared/utils/coordinates.js';
 import type { Coordinate, Feature, VertexRef } from '../../store/types.js';
+import { planeMetersPerPixel } from '../../test-utils.js';
 import { hitTestHandles } from './handle-test.js';
 import type { ThinningViewport, VisibleHandleSet } from './handle-thinning.js';
 import {
@@ -583,6 +584,7 @@ describe('consistency with hit testing', () => {
   const geoTransform: CoordinateTransform = {
     project: geoProject,
     unproject: (point) => ({ lng: point.x / GEO_SCALE, lat: point.y / GEO_SCALE }),
+    metersPerPixel: planeMetersPerPixel(GEO_SCALE),
   };
   const geoLine = (count: number, stepX: number, id?: string): Feature => {
     const line = makeLine(count, stepX, id);

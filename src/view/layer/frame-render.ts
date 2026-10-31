@@ -322,6 +322,7 @@ export function renderForeground(deps: FrameRenderDeps, f: FrameState): void {
     );
     if (bulkFramesShown && tables && pointExtent) {
       r.bulkFramesRenderer.setRotating(store.getDragState()?.operation === 'rotate');
+      r.bulkFramesRenderer.setScreenScale(f.screenScale);
       deps.tableRetained?.drawBulkFrames(
         r.bulkFramesRenderer,
         copy.projectionData,

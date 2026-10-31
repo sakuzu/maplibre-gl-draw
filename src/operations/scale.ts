@@ -30,8 +30,6 @@ type ScaleEdit = Extract<TransformEdit, { kind: 'scale' }>;
 
 /** The smallest factor of a drag */
 const MIN_FACTOR = 0.1;
-/** The semi-major axis of WGS 84, in metres */
-const SEMI_MAJOR_AXIS = 6378137;
 
 /**
  * The state of a resize drag, taken when it starts
@@ -133,39 +131,19 @@ function anchorOf(
 }
 
 /**
- * The length of a pixel of the screen on the ground at a latitude, in metres
- *
- * @param zoom The zoom of the map (no limit when it is not a finite number)
- * @param tileSize The tile size of the map, in pixels
- * @internal
- */
-export function pixelMetresAt(
-  latitude: number,
-  zoom: number | undefined,
-  tileSize: number,
-): number {
-  if (!Number.isFinite(zoom)) return 0;
-  return (
-    (2 * Math.PI * SEMI_MAJOR_AXIS * Math.cos((latitude * Math.PI) / 180)) /
-    (tileSize * 2 ** (zoom as number))
-  );
-}
-
-/**
  * Starts a resize drag from a handle of the frame of the features
  *
  * @param startLngLat The pointer at the start
- * @param zoom The zoom of the map: a frame thinner than a pixel along an axis is not stretched
- *   along it (undefined: only a frame of no extent is left alone)
- * @param tileSize The tile size of the map, in pixels
+ * @param metersPerPixel The meters a pixel of the screen spans on the ground at a position: a
+ *   frame thinner than a pixel along an axis is not stretched along it (undefined: only a frame of
+ *   no extent is left alone)
  * @internal
  */
 export function startScale(
   handle: HandleType,
   startLngLat: { lng: number; lat: number },
   bbox: BoundingBoxCoords,
-  zoom?: number,
-  tileSize = 512,
+  metersPerPixel?: (lngLat: [number, number]) => number,
 ): ScaleState {
   const { anchor, handlePoint, directionX, directionY } = anchorOf(handle, bbox);
   const start = enuOffsetOf(anchor, [startLngLat.lng, startLngLat.lat]);
@@ -178,7 +156,7 @@ export function startScale(
     start,
     width: Math.abs(reach[0]),
     height: Math.abs(reach[1]),
-    minExtent: pixelMetresAt(anchor[1], zoom, tileSize),
+    minExtent: metersPerPixel?.(anchor) ?? 0,
   };
 }
 

@@ -17,6 +17,7 @@ import type {
   FrameDrawContext,
   LayeredOverlayRenderer,
 } from '../../extension/index.js';
+import { type ScreenScaleFrame, setScreenScaleFrame } from '../../shared/math/index.js';
 import { isLocallyHidden } from '../../store/local-visibility.js';
 import type { Store } from '../../store/store.js';
 import type { Feature } from '../../store/types.js';
@@ -95,6 +96,11 @@ export interface FrameState {
   readonly getProjectionData: CustomRenderMethodInput['getProjectionData'];
   readonly zoom: number;
   readonly rawZoom: number;
+  /**
+   * The scale of the sizes of the current view in this frame (the meters of a CSS pixel), which
+   * the hit testing reads until the next frame
+   */
+  readonly screenScale: ScreenScaleFrame;
   readonly dpr: number;
   readonly terrainState: TerrainRenderState;
   readonly mapTerrain: MapTerrain;
@@ -294,6 +300,16 @@ export function buildFrameState(input: FrameBuildInput): FrameState {
   const boxOffsetUniforms = calculateOffsetUniforms(centerLngLat, mainMatrixArray);
   r.boxSelectionRenderer.setOffsetUniforms(boxOffsetUniforms);
 
+  // The scale of the sizes of the current view (the margin of the selection frame, the distance
+  // of the rotate handle) in this frame: the drawing reads it now and the hit testing until the
+  // next frame, so that a handle is grabbed where it was drawn
+  const screenScale: ScreenScaleFrame = {
+    zoom,
+    centerLatitude: center.lat,
+    transition: defaultProjectionData.projectionTransition ?? 0,
+  };
+  setScreenScaleFrame(map, screenScale);
+
   // Establish the anchor projection (the single source shared by the positions of the points
   // and the handles and by the hit testing) with the values of this frame. The matrix, the
   // offsets and the elevation scale used for rendering are passed through as they are, so the
@@ -473,6 +489,7 @@ export function buildFrameState(input: FrameBuildInput): FrameState {
     getProjectionData: renderOptions.getProjectionData,
     zoom,
     rawZoom,
+    screenScale,
     dpr,
     terrainState,
     mapTerrain,

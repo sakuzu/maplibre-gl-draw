@@ -31,6 +31,7 @@ import {
 import { rotateEditOf } from '../../operations/rotate.js';
 import { type ScaleState, scaleEditOf, startScale } from '../../operations/scale.js';
 import type { HandleType } from '../../shared/config/constants.js';
+import { createCoordinateTransform } from '../../shared/math/index.js';
 import type { BoundingBoxCoords } from '../../shared/types/selection-box.js';
 import type { TransformEdit } from '../../store/store.js';
 import type { BoxSelection, Feature } from '../../store/types.js';
@@ -335,12 +336,9 @@ export class BulkResizeDrag extends BulkDrag {
     );
     // A frame thinner than a pixel along an axis is not stretched along it, as the resize drag
     // of features takes it
-    this.#state = startScale(
-      handle,
-      dragStartLngLat(event),
-      bbox,
-      context.map.getZoom?.(),
-      context.selectionScope.extensions.getTileSize() ?? 512,
+    const transform = createCoordinateTransform(context.map);
+    this.#state = startScale(handle, dragStartLngLat(event), bbox, (lngLat) =>
+      transform.metersPerPixel(lngLat),
     );
     context.store.setDragState({ operation: 'resize', movingFeatureIds: [], movingRows: rows });
   }

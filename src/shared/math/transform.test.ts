@@ -3,7 +3,7 @@
 
 import { describe, expect, it } from 'vitest';
 import type { Coordinate } from '../../store/types.js';
-import type { CoordinateTransform } from './transform.js';
+import { metersOnTangentPlane } from './ground-scale.js';
 import {
   applyMarginToBoundingBox,
   clampCoordinate,
@@ -93,102 +93,56 @@ describe('lngLatToMercator', () => {
   });
 });
 
-describe('applyMarginToBoundingBox (map plane)', () => {
-  const bbox = {
-    topLeft: [139.0, 35.5] as [number, number],
-    topRight: [139.4, 35.5] as [number, number],
-    bottomRight: [139.4, 35.2] as [number, number],
-    bottomLeft: [139.0, 35.2] as [number, number],
-  };
-
-  /** A transform that imitates project/unproject with terrain (the round trip is not the
-   * identity) */
-  const terrainTransform = {
-    project: (c: [number, number]) => ({ x: c[0] * 1000, y: -c[1] * 1000 }),
-    // It re-hits the ground surface only on the way back, so a round trip drifts by 0.05
-    // degrees
-    unproject: (p: { x: number; y: number }) => ({ lng: p.x / 1000, lat: -p.y / 1000 + 0.05 }),
-  };
-
-  it('passing zoom avoids the screen-coordinate round trip (no drift with terrain)', () => {
-    const result = applyMarginToBoundingBox(bbox, 4, terrainTransform, 11);
-
-    // If it round-tripped, every latitude would drift by 0.05 degrees. Check that there is no
-    // drift
-    expect(result.topLeft[1]).toBeGreaterThan(35.5);
-    expect(result.topLeft[1]).toBeLessThan(35.51);
-    expect(result.bottomLeft[1]).toBeLessThan(35.2);
-    expect(result.bottomLeft[1]).toBeGreaterThan(35.19);
-  });
-
-  it('the 4 corners widen outward (the center does not move)', () => {
-    const result = applyMarginToBoundingBox(bbox, 8, terrainTransform, 11);
-
-    expect(result.topLeft[0]).toBeLessThan(bbox.topLeft[0]);
-    expect(result.topRight[0]).toBeGreaterThan(bbox.topRight[0]);
-    expect(result.topLeft[1]).toBeGreaterThan(bbox.topLeft[1]);
-    expect(result.bottomRight[1]).toBeLessThan(bbox.bottomRight[1]);
-
-    const centerLng = (result.topLeft[0] + result.bottomRight[0]) / 2;
-    const centerLat = (result.topLeft[1] + result.bottomRight[1]) / 2;
-    expect(centerLng).toBeCloseTo(139.2, 6);
-    expect(centerLat).toBeCloseTo(35.35, 6);
-  });
-});
-
 describe('applyMarginToBoundingBox', () => {
-  // project: lng,lat -> x,y (the identity transform)
-  // unproject: x,y -> lng,lat (the identity transform)
-  const identityTransform: CoordinateTransform = {
-    project: (coord: Coordinate) => ({ x: coord[0], y: coord[1] }),
-    unproject: (point: { x: number; y: number }) => ({ lng: point.x, lat: point.y }),
+  const bbox = {
+    topLeft: [139.0, 35.5] as Coordinate,
+    topRight: [139.4, 35.5] as Coordinate,
+    bottomRight: [139.4, 35.2] as Coordinate,
+    bottomLeft: [139.0, 35.2] as Coordinate,
   };
+  const center: Coordinate = [139.2, 35.35];
+  /** Two meters a pixel, wherever it is asked (the frame is made from the scale alone) */
+  const scale = { metersPerPixel: () => 2 };
 
-  const coords = {
-    topLeft: [-10, -10] as Coordinate,
-    topRight: [10, -10] as Coordinate,
-    bottomRight: [10, 10] as Coordinate,
-    bottomLeft: [-10, 10] as Coordinate,
-  };
-
-  it('a margin of 0 gives the same coordinates as the original', () => {
-    const result = applyMarginToBoundingBox(coords, 0, identityTransform);
-    expect(result.topLeft[0]).toBeCloseTo(-10);
-    expect(result.topLeft[1]).toBeCloseTo(-10);
-    expect(result.bottomRight[0]).toBeCloseTo(10);
-    expect(result.bottomRight[1]).toBeCloseTo(10);
+  it('moves every edge out by the margin in meters on the plane tangent at the center', () => {
+    const result = applyMarginToBoundingBox(bbox, 10, scale);
+    const [westOf, northOf] = metersOnTangentPlane(center, bbox.topLeft);
+    const [east, north] = metersOnTangentPlane(center, result.topLeft);
+    expect(east - westOf).toBeCloseTo(-20, 6);
+    expect(north - northOf).toBeCloseTo(20, 6);
+    const [eastOf, southOf] = metersOnTangentPlane(center, bbox.bottomRight);
+    const [farEast, farSouth] = metersOnTangentPlane(center, result.bottomRight);
+    expect(farEast - eastOf).toBeCloseTo(20, 6);
+    expect(farSouth - southOf).toBeCloseTo(-20, 6);
   });
 
-  it('a positive margin expands the coordinates outward', () => {
-    const margin = 5;
-    const result = applyMarginToBoundingBox(coords, margin, identityTransform);
-
-    // Every edge moves out by the margin: topLeft (-10,-10) -> (-15,-15)
-    expect(result.topLeft[0]).toBeCloseTo(-15);
-    expect(result.topLeft[1]).toBeCloseTo(-15);
-    expect(result.bottomRight[0]).toBeCloseTo(15);
-    expect(result.bottomRight[1]).toBeCloseTo(15);
+  it('keeps the center, and the corners for a margin of 0', () => {
+    const result = applyMarginToBoundingBox(bbox, 8, scale);
+    expect((result.topLeft[0] + result.bottomRight[0]) / 2).toBeCloseTo(center[0], 9);
+    expect((result.topLeft[1] + result.bottomRight[1]) / 2).toBeCloseTo(center[1], 9);
+    expect(applyMarginToBoundingBox(bbox, 0, scale)).toEqual({
+      topLeft: bbox.topLeft,
+      topRight: bbox.topRight,
+      bottomRight: bbox.bottomRight,
+      bottomLeft: bbox.bottomLeft,
+    });
   });
 
-  it('all 4 corners are returned', () => {
-    const result = applyMarginToBoundingBox(coords, 1, identityTransform);
-    expect(result).toHaveProperty('topLeft');
-    expect(result).toHaveProperty('topRight');
-    expect(result).toHaveProperty('bottomRight');
-    expect(result).toHaveProperty('bottomLeft');
+  it('asks the scale at the center of the box', () => {
+    const asked: Coordinate[] = [];
+    applyMarginToBoundingBox(bbox, 4, {
+      metersPerPixel: (lngLat) => {
+        asked.push(lngLat);
+        return 1;
+      },
+    });
+    expect(asked).toEqual([center]);
   });
 
-  it('a symmetric input gives a symmetric result too', () => {
-    const margin = 3;
-    const result = applyMarginToBoundingBox(coords, margin, identityTransform);
-
-    // topLeft and bottomRight are symmetric about the center
-    expect(result.topLeft[0]).toBeCloseTo(-result.bottomRight[0]);
-    expect(result.topLeft[1]).toBeCloseTo(-result.bottomRight[1]);
-
-    // topRight and bottomLeft are also symmetric about the center
-    expect(result.topRight[0]).toBeCloseTo(-result.bottomLeft[0]);
-    expect(result.topRight[1]).toBeCloseTo(-result.bottomLeft[1]);
+  it('leaves the box as it is without a scale', () => {
+    const result = applyMarginToBoundingBox(bbox, 4, { metersPerPixel: () => Number.NaN });
+    expect(result.topLeft).toEqual(bbox.topLeft);
+    expect(result.bottomRight).toEqual(bbox.bottomRight);
   });
 });
 

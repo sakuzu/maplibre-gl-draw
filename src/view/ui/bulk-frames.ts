@@ -12,8 +12,9 @@
  * (`rowStateMove`), so its frame follows it.
  *
  * A frame is the extent of the row, moved as the row is, widened by the margin of the selection UI
- * on the plane of the map as the frame of a feature is (`marginOnMapPlane`), and outlined by the
- * line of the stroke of the selection UI as StrokeRenderer draws it; a row of one position gets
+ * on the ground as the frame of a feature is (`applyMarginToBoundingBox`, with the scale of the
+ * frame of the map: `screen-scale.ts`), and outlined by the line of the stroke of the selection UI
+ * as StrokeRenderer draws it; a row of one position gets
  * the square of the extent of its marker plus the margin, on the screen, as a point does (while
  * the rows are turned from the rotation handle, the box of the margin alone, as the selection UI
  * turns the box of no extent of a point).
@@ -22,7 +23,12 @@
 import type { ProjectionData } from 'maplibre-gl';
 import type { RowGroup } from '../../feature-table/layer-table.js';
 import type { SelectionUIConfig } from '../../shared/config/selection.js';
-import { DEFAULT_TILE_SIZE, RENDERING_DEFAULTS } from '../../shared/math/constants.js';
+import { RENDERING_DEFAULTS } from '../../shared/math/constants.js';
+import {
+  type ScreenScaleFrame,
+  type ScreenScaleUniforms,
+  screenScaleUniformsOf,
+} from '../../shared/math/screen-scale.js';
 import type { PixelRatioInput } from '../../shared/utils/pixel-ratio.js';
 import { resolvePixelRatio } from '../../shared/utils/pixel-ratio.js';
 import type { GpuLedger } from '../gpu-ledger.js';
@@ -87,6 +93,7 @@ export class BulkFramesRenderer {
   private readonly originShift: [number, number] = [0, 0];
   private shaderData: ShaderData | null = null;
   private rotating = false;
+  private scale: ScreenScaleUniforms | null = null;
 
   constructor(
     private readonly gl: WebGL2RenderingContext,
@@ -129,7 +136,10 @@ export class BulkFramesRenderer {
       'u_margin',
       'u_half_width',
       'u_color',
-      'u_deg_per_px',
+      'u_pixels_per_meter_at_equator',
+      'u_center_secant',
+      'u_scale_transition',
+      'u_degrees_per_meter_north',
       'u_ratio',
       'u_origin_latitude',
       'u_rotating',
@@ -155,6 +165,14 @@ export class BulkFramesRenderer {
   }
 
   /**
+   * Sets the scale of the frame of the map being drawn: the margin is laid on the ground with it,
+   * as the selection UI lays it
+   */
+  setScreenScale(frame: ScreenScaleFrame): void {
+    this.scale = screenScaleUniformsOf(frame);
+  }
+
+  /**
    * Draws the frames of the rows of a group marked as selected in bulk
    *
    * @param revision Changes with every change of the extents of the rows (their instances are
@@ -172,7 +190,8 @@ export class BulkFramesRenderer {
   ): void {
     if (!this.ensureProgram()) return;
     const program = this.program;
-    if (!program || !this.rowState) return;
+    const scale = this.scale;
+    if (!program || !this.rowState || !scale) return;
     const frames = this.framesOf(group, revision, pointExtent);
     if (!frames || frames.rows === 0) return;
     const gl = this.gl;
@@ -199,7 +218,14 @@ export class BulkFramesRenderer {
       const [r, g, b, a] = stroke.color;
       gl.uniform4f(loc.u_color, r, g, b, a * stroke.opacity);
     }
-    if (loc.u_deg_per_px) gl.uniform1f(loc.u_deg_per_px, 360 / (DEFAULT_TILE_SIZE * 2 ** zoom));
+    if (loc.u_pixels_per_meter_at_equator) {
+      gl.uniform1f(loc.u_pixels_per_meter_at_equator, scale.pixelsPerMeterAtEquator);
+    }
+    if (loc.u_center_secant) gl.uniform1f(loc.u_center_secant, scale.centerSecant);
+    if (loc.u_scale_transition) gl.uniform1f(loc.u_scale_transition, scale.transition);
+    if (loc.u_degrees_per_meter_north) {
+      gl.uniform1f(loc.u_degrees_per_meter_north, scale.degreesPerMeterNorth);
+    }
     if (loc.u_origin_latitude) gl.uniform1f(loc.u_origin_latitude, frames.origin[1]);
     if (loc.u_rotating) gl.uniform1f(loc.u_rotating, this.rotating ? 1 : 0);
     gl.bindVertexArray(frames.vao);
@@ -297,8 +323,8 @@ export class BulkFramesRenderer {
  * The vertex shader of the frames (the variant of the rows: it reads the state of the rows)
  *
  * A frame is drawn as the selection UI draws the frame of a feature: the extent of the row, moved
- * as the row is, widened by the margin on the plane of the map (`marginOnMapPlane`, after the
- * move, so a resize does not scale the margin), and outlined by the line of StrokeRenderer (the
+ * as the row is, widened by the margin on the ground (`applyMarginToBoundingBox`, after the move,
+ * so a resize does not scale the margin), and outlined by the line of StrokeRenderer (the
  * miters at the corners and the band of one pixel the coverage fades in). A row of one position
  * gets the square of its marker and the margin on the screen, as AnchoredOutlineRenderer draws
  * the frame of a point; while the rows are turned from the rotation handle it is a box of no
@@ -325,8 +351,13 @@ uniform vec2 u_viewport;
 uniform float u_margin;
 uniform float u_half_width;
 uniform float u_ratio;
-// Degrees of longitude per CSS px at the zoom of the frame
-uniform float u_deg_per_px;
+// The scale of the frame of the map (screenScaleUniformsOf): the CSS px of a meter at the equator
+// on Web Mercator, the secant of the latitude of the center of the view, the transition to the
+// globe, and the degrees of latitude of a meter north
+uniform float u_pixels_per_meter_at_equator;
+uniform float u_center_secant;
+uniform float u_scale_transition;
+uniform float u_degrees_per_meter_north;
 // The latitude of the origin of the group (the offsets are taken from it)
 uniform float u_origin_latitude;
 // 1 while the rows are turned from the rotation handle
@@ -338,6 +369,15 @@ out float v_point;
 
 vec2 toScreen(vec4 clip) {
     return (clip.xy / clip.w * 0.5 + 0.5) * u_viewport;
+}
+
+// The degrees of longitude and of latitude of a CSS px east and north at a latitude, on the plane
+// tangent to the sphere there: the scale of the frame (metersPerPixelInFrame)
+vec2 degreesPerPixelAt(float latitude) {
+    float secant = 1.0 / max(cos(radians(latitude)), 1e-6);
+    float pixelsPerMeter = u_pixels_per_meter_at_equator * mix(secant, u_center_secant, u_scale_transition);
+    float north = u_degrees_per_meter_north / pixelsPerMeter;
+    return vec2(north * secant, north);
 }
 
 // The direction of the miter at a corner of the outline, scaled by its length in half widths, as
@@ -394,13 +434,14 @@ void main() {
             rowStateMove(state, a_bounds.zy),
             rowStateMove(state, a_bounds.xy)
         );
-        // Widened by the margin on the plane of the map, as marginOnMapPlane widens it: in CSS px
-        // of the latitude of its center (y down), every side moved out along the sides
-        // (taken from the center when the row is moved by a motion: its latitude is close enough
-        // for the size of a pixel)
+        // Widened by the margin on the ground, as applyMarginToBoundingBox widens it: in CSS px of
+        // the scale at the latitude of its center on the tangent plane there (y down), every side
+        // moved out along the sides (taken from the center when the row is moved by a motion: its
+        // latitude is close enough for the size of a pixel)
         float baseLatitude = g_offset_from_center > 0.5 ? u_origin_latitude - u_origin_shift.y : u_origin_latitude;
         float latitude = (moved[0].y + moved[1].y + moved[2].y + moved[3].y) * 0.25 + baseLatitude;
-        vec2 degPerPx = vec2(u_deg_per_px, -u_deg_per_px * cos(radians(latitude)));
+        vec2 perPixel = degreesPerPixelAt(latitude);
+        vec2 degPerPx = vec2(perPixel.x, -perPixel.y);
         vec2 q[4] = vec2[4](moved[0] / degPerPx, moved[1] / degPerPx, moved[2] / degPerPx, moved[3] / degPerPx);
         vec2 right = q[1] - q[0];
         if (length(right) == 0.0) right = q[2] - q[3];

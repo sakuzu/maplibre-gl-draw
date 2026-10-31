@@ -17,9 +17,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { TopHit } from '../../dispatcher/hit-test/topmost.js';
 import type { MouseNormalizedEvent } from '../../dispatcher/types.js';
 import { DEFAULT_SELECTION_CONFIG } from '../../shared/config/selection.js';
+import { setScreenScaleFrame } from '../../shared/math/index.js';
 import type { Store } from '../../store/store.js';
 import type { Feature } from '../../store/types.js';
-import { STORE_KINDS } from '../../test-utils.js';
+import { planeScaleFrame, STORE_KINDS } from '../../test-utils.js';
 import type { FeatureCompanionProvider } from '../../view/feature-companion.js';
 import {
   createFeatureCompanionRegistry,
@@ -68,9 +69,10 @@ describe.each(STORE_KINDS)('on %s', (_kind, createStore) => {
   }
 
   function makeMap() {
-    return {
+    const map = {
       getCanvas: () => ({ style: { cursor: '' } }),
       getZoom: () => 10,
+      getBearing: () => 0,
       triggerRepaint: vi.fn(),
       project: (lngLat: { lng: number; lat: number }) => ({
         x: lngLat.lng * 10,
@@ -78,6 +80,8 @@ describe.each(STORE_KINDS)('on %s', (_kind, createStore) => {
       }),
       unproject: (p: { x: number; y: number }) => ({ lng: p.x / 10, lat: -p.y / 10 }),
     };
+    setScreenScaleFrame(map as never, planeScaleFrame(10));
+    return map;
   }
 
   let store: Store;

@@ -13,7 +13,12 @@ import type { HandleType } from '../../shared/config/constants.js';
 import type { SelectionUIConfig } from '../../shared/config/selection.js';
 import { mercatorMidpoint } from '../../shared/math/globe-subdivision.js';
 import type { CoordinateTransform } from '../../shared/math/index.js';
-import { applyMarginToBoundingBox, clampLatitude } from '../../shared/math/index.js';
+import {
+  applyMarginToBoundingBox,
+  clampLatitude,
+  metersOnTangentPlane,
+  offsetOnTangentPlane,
+} from '../../shared/math/index.js';
 import { coordinatesOf } from '../../shared/utils/coordinates.js';
 import { getCircleRadius, getRadiusHandleAngle } from '../../shared/utils/property.js';
 import { hasVertexRef, isSameVertexRef } from '../../shared/utils/vertex-ref.js';
@@ -81,68 +86,44 @@ export function computeResizeHandles(
 /**
  * Computes the position of the rotate handle
  *
- * Supports an OBB (rotated bounding box).
- * Offsets in the direction perpendicular to the top edge.
+ * The handle stands the distance out of the middle of the top edge, square to that edge (so it
+ * follows a turned frame), on the ground: the distance is turned into meters there with the scale
+ * of the frame drawn last (`transform.metersPerPixel`) and laid on the plane tangent to the sphere
+ * there, so the handle tilts and turns with the map. The drawing and the hit testing place it
+ * with this same function.
+ *
+ * @param bbox The frame, its margin included
+ * @param distancePixels The distance from the top edge, in CSS pixels
+ * @param transform What gives the scale of the frame
  *
  * @internal
  */
 export function computeRotateHandle(
   bbox: BoundingBoxCoords,
   distancePixels: number,
-  zoom: number,
+  transform: Pick<CoordinateTransform, 'metersPerPixel'>,
 ): HandleInfo {
   // Midpoint of the top edge, on the edge as drawn (a plain average on a parallel)
   const topCenter = mercatorMidpoint(bbox.topLeft, bbox.topRight);
+  const meters = distancePixels * transform.metersPerPixel(topCenter);
 
-  // Convert the pixel distance to degrees (approximation)
-  const pixelsPerDegree = (256 * 2 ** zoom) / 360;
-  const degreesOffset = distancePixels / pixelsPerDegree;
+  // The top edge (topLeft -> topRight) on the tangent plane at its middle, in meters
+  const [leftEast, leftNorth] = metersOnTangentPlane(topCenter, bbox.topLeft);
+  const [rightEast, rightNorth] = metersOnTangentPlane(topCenter, bbox.topRight);
+  const edgeEast = rightEast - leftEast;
+  const edgeNorth = rightNorth - leftNorth;
+  const edgeLength = Math.hypot(edgeEast, edgeNorth);
 
-  // Edge vector of the top edge (topLeft -> topRight)
-  const edgeDx = bbox.topRight[0] - bbox.topLeft[0];
-  const edgeDy = bbox.topRight[1] - bbox.topLeft[1];
-
-  // Latitude correction: in geographic coordinates longitude and latitude have different
-  // scales, so a latitude correction is required to compute the correct perpendicular vector
-  const latRad = (topCenter[1] * Math.PI) / 180;
-  const latCos = Math.cos(latRad);
-
-  // Edge vector in the normalized space (latCos applied along the longitude axis)
-  const normEdgeDx = edgeDx * latCos;
-  const normEdgeDy = edgeDy;
-
-  // Length of the edge in the normalized space
-  const normEdgeLength = Math.sqrt(normEdgeDx * normEdgeDx + normEdgeDy * normEdgeDy);
-
-  // When the edge is 0 (a single point and the like), default to the upward direction
-  if (normEdgeLength === 0) {
-    return {
-      type: 'rotate',
-      // Clamped because at low zoom levels the latitude can fall outside the valid range
-      position: [topCenter[0], clampLatitude(topCenter[1] + degreesOffset)],
-    };
-  }
-
-  // Unit edge vector in the normalized space
-  const normUnitDx = normEdgeDx / normEdgeLength;
-  const normUnitDy = normEdgeDy / normEdgeLength;
-
-  // Perpendicular vector in the normalized space (90 degrees counterclockwise = upward)
-  // In 2D the perpendicular of (dx, dy) is (-dy, dx)
-  const normPerpX = -normUnitDy;
-  const normPerpY = normUnitDx;
-
-  // Convert back to geographic coordinates (divide by latCos along the longitude axis)
-  const perpX = normPerpX / latCos;
-  const perpY = normPerpY;
+  // Square to the edge, turned 90 degrees counterclockwise (up for an unturned frame); up when
+  // the edge has no length (a single point and the like)
+  const upEast = edgeLength > 0 ? -edgeNorth / edgeLength : 0;
+  const upNorth = edgeLength > 0 ? edgeEast / edgeLength : 1;
+  const position = offsetOnTangentPlane(topCenter, upEast * meters, upNorth * meters);
 
   return {
     type: 'rotate',
     // Clamped because at low zoom levels the latitude can fall outside the valid range
-    position: [
-      topCenter[0] + perpX * degreesOffset,
-      clampLatitude(topCenter[1] + perpY * degreesOffset),
-    ],
+    position: [position[0], clampLatitude(position[1])],
   };
 }
 
@@ -458,6 +439,18 @@ export class SelectionHandlesRenderer {
   }
 
   /**
+   * The frame with the margin of the selection UI, as the hit testing makes it
+   * (`applyMarginToBoundingBox`); the frame as it is without a transform
+   */
+  private marginedBox(bbox: BoundingBoxCoords): BoundingBoxCoords {
+    if (!this.transform) return bbox;
+    return {
+      ...applyMarginToBoundingBox(bbox, this.config.boundingBox.margin, this.transform),
+      center: bbox.center,
+    };
+  }
+
+  /**
    * Draws the resize handles
    * Draws them at the four corners of the bbox after the margin is applied (additional
    * handles can also be drawn)
@@ -473,14 +466,7 @@ export class SelectionHandlesRenderer {
     getAdditionalHandles?: (marginedBbox: BoundingBoxCoords) => HandleInfo[],
   ): void {
     // Compute the bbox with the margin applied
-    let marginedBbox = bbox;
-    if (this.transform) {
-      const margin = this.config.boundingBox.margin;
-      marginedBbox = {
-        ...applyMarginToBoundingBox(bbox, margin, this.transform, zoom),
-        center: bbox.center,
-      };
-    }
+    const marginedBbox = this.marginedBox(bbox);
 
     // If a callback is given, call it with the bbox after the margin is applied
     const additionalHandles = getAdditionalHandles?.(marginedBbox);
@@ -501,17 +487,12 @@ export class SelectionHandlesRenderer {
    * after the margin is applied
    */
   drawRotateHandle(bbox: BoundingBoxCoords, zoom: number): void {
+    const transform = this.transform;
+    if (!transform) return;
     // Compute the bbox with the margin applied
-    let marginedBbox = bbox;
-    if (this.transform) {
-      const margin = this.config.boundingBox.margin;
-      marginedBbox = {
-        ...applyMarginToBoundingBox(bbox, margin, this.transform, zoom),
-        center: bbox.center,
-      };
-    }
+    const marginedBbox = this.marginedBox(bbox);
 
-    const handle = computeRotateHandle(marginedBbox, this.config.rotateHandle.distance, zoom);
+    const handle = computeRotateHandle(marginedBbox, this.config.rotateHandle.distance, transform);
 
     // Draw the connector line (from the midpoint of the top edge after the margin is applied)
     const topCenter = mercatorMidpoint(marginedBbox.topLeft, marginedBbox.topRight);

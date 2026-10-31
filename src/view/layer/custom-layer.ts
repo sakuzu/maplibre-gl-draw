@@ -46,6 +46,7 @@ import { featureTablesInternals } from '../../feature-table/feature-tables.js';
 import type { FeatureStyleConfig } from '../../shared/config/feature-style.js';
 import type { RenderingConfig } from '../../shared/config/rendering.js';
 import type { SelectionUIConfig } from '../../shared/config/selection.js';
+import { setScreenScaleFrame } from '../../shared/math/index.js';
 import type { PixelRatioInput } from '../../shared/utils/pixel-ratio.js';
 import { resolveContentPixelRatio, resolvePixelRatio } from '../../shared/utils/pixel-ratio.js';
 import type { SketchView } from '../../sketches/sketch-view.js';
@@ -571,7 +572,11 @@ export function createCustomLayer(deps: CustomLayerDeps): CustomLayerInterface {
     // Release the terrain state of this instance
     releaseTerrainContext(terrainContext);
     // Remove the inserted anchor projection (hit testing goes back to the project of MapLibre)
-    if (map) uninstallAnchorProjector(map);
+    // and forget the scale of the frame drawn last
+    if (map) {
+      uninstallAnchorProjector(map);
+      setScreenScaleFrame(map, null);
+    }
   }
 
   // ---------------------------------------------------------------------------

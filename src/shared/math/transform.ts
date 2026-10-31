@@ -10,7 +10,8 @@
 import type { Map as MapLibreMap } from 'maplibre-gl';
 
 import type { Coordinate } from '../types/model.js';
-import { degreesPerPixelAtZoom } from './ground-scale.js';
+import { metersOnTangentPlane, offsetOnTangentPlane } from './ground-scale.js';
+import { metersPerPixelInFrame, type ScreenScaleFrame } from './screen-scale.js';
 
 /**
  * Clamps a latitude into the valid range
@@ -89,6 +90,13 @@ export interface CoordinateTransform {
 
   /** Converts a screen coordinate into a geographic coordinate */
   unproject(point: ScreenPoint): LngLat;
+
+  /**
+   * The meters a CSS pixel spans on the ground at a position, in the frame drawn last
+   * ({@link metersPerPixelInFrame}): what turns a size of the current view in pixels into a
+   * length laid around a feature
+   */
+  metersPerPixel(lngLat: Coordinate): number;
 }
 
 /**
@@ -138,6 +146,35 @@ export function getAnchorProjector(map: MapLibreMap): AnchorProjector | null {
 }
 
 /**
+ * The scale of the frame drawn last, per map
+ *
+ * The selection UI is drawn in a frame and hit tested between frames, so both read the frame
+ * drawn last: what is grabbed is what was drawn. Keyed by the map, as the anchor projection is.
+ */
+const screenScaleFrames = new WeakMap<object, ScreenScaleFrame>();
+
+/**
+ * Records the scale of the frame being drawn (the view layer calls this per frame; null forgets
+ * it)
+ */
+export function setScreenScaleFrame(map: MapLibreMap, frame: ScreenScaleFrame | null): void {
+  if (frame) screenScaleFrames.set(map, frame);
+  else screenScaleFrames.delete(map);
+}
+
+/**
+ * The scale of the frame drawn last; before the first frame, that of the camera of the map on
+ * Web Mercator
+ */
+export function screenScaleFrameOf(
+  map: Pick<MapLibreMap, 'getZoom' | 'getCenter'>,
+): ScreenScaleFrame {
+  const drawn = screenScaleFrames.get(map);
+  if (drawn) return drawn;
+  return { zoom: map.getZoom(), centerLatitude: map.getCenter().lat, transition: 0 };
+}
+
+/**
  * Creates a CoordinateTransform from a MapLibre map
  *
  * When terrain is enabled, project goes through the anchor projection (elevation included, one
@@ -164,6 +201,8 @@ export function createCoordinateTransform(map: MapLibreMap): CoordinateTransform
       const ll = map.unproject([point.x, point.y]);
       return { lng: ll.lng, lat: ll.lat };
     },
+    metersPerPixel: (lngLat: Coordinate) =>
+      metersPerPixelInFrame(screenScaleFrameOf(map), lngLat[1]),
   };
 }
 
@@ -209,21 +248,17 @@ export function expandQuad(
 /**
  * Applies a margin in pixels to a bounding box
  *
- * Every edge moves outward by the margin ({@link expandQuad}).
- *
- * When zoom is passed, the expansion is done on the map plane. When it is not passed, the
- * expansion round-trips through screen coordinates. It must not round-trip when there is
- * terrain: with terrain enabled, project projects a point at the height of the ground surface
- * and unproject casts a ray from the screen onto the ground surface and comes back, so the
- * round trip is no longer the identity mapping. With a tilted view, the returned values drift
- * by kilometers, and the box appears far away from the feature, with a different shape too.
+ * Every edge moves outward by the margin ({@link expandQuad}), on the ground: the margin is
+ * turned into meters at the center of the box with the scale of the frame drawn last
+ * (`transform.metersPerPixel`) and laid on the plane tangent to the sphere there, so the frame
+ * tilts and turns with the map. The drawing and the hit testing make the frame with this same
+ * function. It never goes through the screen and back: with terrain, a position projected and
+ * unprojected again lands elsewhere, and a tilted view would move the frame by kilometers.
  *
  * @param coords Coordinates of the 4 corners of the bounding box
  *   [topLeft, topRight, bottomRight, bottomLeft]
- * @param margin Margin size (pixels)
- * @param transform Coordinate transformation interface
- * @param zoom Current zoom (when passed, the expansion is done on the map plane; required when
- *   there is terrain)
+ * @param margin Margin size (CSS pixels)
+ * @param transform What gives the scale of the frame
  * @returns Coordinates of the 4 corners after the margin is applied
  */
 export function applyMarginToBoundingBox(
@@ -234,58 +269,7 @@ export function applyMarginToBoundingBox(
     bottomLeft: Coordinate;
   },
   margin: number,
-  transform: CoordinateTransform,
-  zoom?: number,
-): {
-  topLeft: Coordinate;
-  topRight: Coordinate;
-  bottomRight: Coordinate;
-  bottomLeft: Coordinate;
-} {
-  if (zoom !== undefined) return marginOnMapPlane(coords, margin, zoom);
-
-  // Convert the 4 corners into screen coordinates (clamp the latitude to prevent
-  // out-of-range errors)
-  const corners = [
-    transform.project(clampCoordinate(coords.topLeft)),
-    transform.project(clampCoordinate(coords.topRight)),
-    transform.project(clampCoordinate(coords.bottomRight)),
-    transform.project(clampCoordinate(coords.bottomLeft)),
-  ];
-
-  // Move every edge outward by the margin
-  const expandedCorners = expandQuad(corners, margin);
-
-  // Convert into geographic coordinates
-  const topLeftResult = transform.unproject(expandedCorners[0]);
-  const topRightResult = transform.unproject(expandedCorners[1]);
-  const bottomRightResult = transform.unproject(expandedCorners[2]);
-  const bottomLeftResult = transform.unproject(expandedCorners[3]);
-
-  return {
-    topLeft: [topLeftResult.lng, topLeftResult.lat],
-    topRight: [topRightResult.lng, topRightResult.lat],
-    bottomRight: [bottomRightResult.lng, bottomRightResult.lat],
-    bottomLeft: [bottomLeftResult.lng, bottomLeftResult.lat],
-  };
-}
-
-/**
- * Widens the 4 corners outward from the center on the map plane
- *
- * It does not round-trip through screen coordinates, so it is affected by neither terrain nor
- * tilt. How many degrees one pixel amounts to is derived from the latitude of the center and
- * the current zoom.
- */
-function marginOnMapPlane(
-  coords: {
-    topLeft: Coordinate;
-    topRight: Coordinate;
-    bottomRight: Coordinate;
-    bottomLeft: Coordinate;
-  },
-  margin: number,
-  zoom: number,
+  transform: Pick<CoordinateTransform, 'metersPerPixel'>,
 ): {
   topLeft: Coordinate;
   topRight: Coordinate;
@@ -293,10 +277,12 @@ function marginOnMapPlane(
   bottomLeft: Coordinate;
 } {
   const corners = [coords.topLeft, coords.topRight, coords.bottomRight, coords.bottomLeft];
-  const centerLng = (corners[0][0] + corners[1][0] + corners[2][0] + corners[3][0]) / 4;
-  const centerLat = (corners[0][1] + corners[1][1] + corners[2][1] + corners[3][1]) / 4;
-  const [degPerPxLng, degPerPxLat] = degreesPerPixelAtZoom(centerLat, zoom);
-  if (!(degPerPxLng > 0) || !(degPerPxLat > 0)) {
+  const center: Coordinate = [
+    (corners[0][0] + corners[1][0] + corners[2][0] + corners[3][0]) / 4,
+    (corners[0][1] + corners[1][1] + corners[2][1] + corners[3][1]) / 4,
+  ];
+  const metersPerPixel = transform.metersPerPixel(center);
+  if (!(metersPerPixel > 0) || !Number.isFinite(metersPerPixel)) {
     return {
       topLeft: coords.topLeft,
       topRight: coords.topRight,
@@ -305,15 +291,14 @@ function marginOnMapPlane(
     };
   }
 
-  // The vertical and horizontal scales differ, so convert into pixels (y down, as on the
-  // screen) first and then widen
+  // In meters on the tangent plane, with y pointing down as on the screen
   const expanded = expandQuad(
-    corners.map(([lng, lat]) => ({
-      x: (lng - centerLng) / degPerPxLng,
-      y: -(lat - centerLat) / degPerPxLat,
-    })),
-    margin,
-  ).map(({ x, y }): Coordinate => [centerLng + x * degPerPxLng, centerLat - y * degPerPxLat]);
+    corners.map((corner) => {
+      const [east, north] = metersOnTangentPlane(center, corner);
+      return { x: east, y: -north };
+    }),
+    margin * metersPerPixel,
+  ).map(({ x, y }) => offsetOnTangentPlane(center, x, -y));
 
   return {
     topLeft: expanded[0],

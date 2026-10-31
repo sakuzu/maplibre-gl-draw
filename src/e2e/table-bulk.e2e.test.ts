@@ -441,8 +441,8 @@ describe('features selected in bulk', () => {
     const features = scene();
     /**
      * The rotation handle: above the middle of the top of the frame, the margin of the frame
-     * (10 px) and the distance of the handle (10, in degrees of tiles of 256 px, as
-     * computeRotateHandle places it) above the top of the features
+     * (10 px) and the distance of the handle (10 px) above the top of the features, on a map
+     * untilted and unturned
      */
     const handleOf = async (): Promise<[number, number]> =>
       page.evaluate(() => {
@@ -464,9 +464,8 @@ describe('features selected in bulk', () => {
         };
         for (const feature of all) walk((feature.geometry as { coordinates: unknown }).coordinates);
         const top = w.map.project([(west + east) / 2, north]);
-        const frameTop = w.map.unproject([top.x, top.y - 10]);
-        const distance = 10 / ((256 * 2 ** w.map.getZoom()) / 360);
-        return [frameTop.lng, frameTop.lat + distance] as [number, number];
+        const handle = w.map.unproject([top.x, top.y - 10 - 10]);
+        return [handle.lng, handle.lat] as [number, number];
       });
     await open(page, features, 'store');
     const handle = await handleOf();

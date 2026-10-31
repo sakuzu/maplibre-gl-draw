@@ -11,7 +11,12 @@
 import type { CustomRenderMethodInput, Map as MapLibreMap } from 'maplibre-gl';
 import { type EnuEdit, moveEnuPosition } from '../../geometry/enu-transforms.js';
 import { THINNING_VIEWPORT_MARGIN_PX } from '../../shared/config/selection.js';
-import { type CoordinateTransform, createCoordinateTransform } from '../../shared/math/index.js';
+import {
+  type CoordinateTransform,
+  createCoordinateTransform,
+  metersPerPixelInFrame,
+  screenScaleFrameOf,
+} from '../../shared/math/index.js';
 import { supportsVertexEditing } from '../../shared/utils/coordinates.js';
 import { isGlobeProjection } from '../../shared/utils/map.js';
 import { summaryHasArea } from '../../store/bulk-selection.js';
@@ -190,6 +195,8 @@ function coordinateTransformOf(map: MapLibreMap): CoordinateTransform {
       const ll = map.unproject([point.x, point.y]);
       return { lng: ll.lng, lat: ll.lat };
     },
+    metersPerPixel: (lngLat: Coordinate) =>
+      metersPerPixelInFrame(screenScaleFrameOf(map), lngLat[1]),
   };
 }
 
@@ -311,14 +318,7 @@ export function renderFollowedVertices(
     pointInstanceRenderer.setProjectionData(projectionData);
   }
 
-  const coordinateTransform: CoordinateTransform = {
-    project: (lngLat: Coordinate) => map.project([lngLat[0], lngLat[1]]),
-    unproject: (point: { x: number; y: number }) => {
-      const ll = map.unproject([point.x, point.y]);
-      return { lng: ll.lng, lat: ll.lat };
-    },
-  };
-  selectionHandlesRenderer.setTransform(coordinateTransform);
+  selectionHandlesRenderer.setTransform(coordinateTransformOf(map));
   selectionHandlesRenderer.setProjectionData(projectionData);
 
   for (const followed of followedVertices) {

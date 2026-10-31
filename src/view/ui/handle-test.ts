@@ -23,7 +23,7 @@ import type {
   AuxiliaryHandleContext,
   AuxiliaryHandleHit,
 } from './auxiliary-handles.js';
-import { computeCombinedGeoBoundingBox, isPointInGeoBoundingBox } from './bounds.js';
+import { isPointInGeoBoundingBox, isPointInSelectionFrame } from './bounds.js';
 import type { VisibleHandleSet } from './handle-thinning.js';
 import { resolveMidpointCoordinate, resolveVertexCoordinate } from './handle-thinning.js';
 import type { HandleInfo } from './handles.js';
@@ -102,6 +102,7 @@ function alignToPointer(
   return {
     project: (lngLat) => transform.project([nearestLongitude(lngLat[0], reference), lngLat[1]]),
     unproject: (point) => transform.unproject(point),
+    metersPerPixel: (lngLat) => transform.metersPerPixel(lngLat),
   };
 }
 
@@ -130,10 +131,9 @@ function isPointInHandleRect(
 function hitTestRotateHandle(
   marginedBbox: BoundingBoxCoords,
   config: SelectionUIConfig,
-  zoom: number,
   params: HitTestParams,
 ): HandleHitResult | null {
-  const handle = computeRotateHandle(marginedBbox, config.rotateHandle.distance, zoom);
+  const handle = computeRotateHandle(marginedBbox, config.rotateHandle.distance, params.transform);
   const handleScreenPos = params.transform.project(handle.position);
   const halfSize = config.rotateHandle.point.size / 2;
 
@@ -503,19 +503,14 @@ export function hitTestHandles(
   }
   transform = alignToPointer(transform, screenPoint);
 
-  // Compute the bbox with the margin in geographic coordinates (for the move test)
-  const geoBbox = computeCombinedGeoBoundingBox(features, transform, config, scope.extensions);
-  if (!geoBbox) {
-    return null;
-  }
-
   // Compute the bbox without the margin (for computing the handle positions)
   const rawBbox = computeCombinedBoundingBox(features, scope.extensions);
   if (!rawBbox) {
     return null;
   }
 
-  // The bbox after the margin is applied (for computing the handle positions)
+  // The bbox after the margin is applied (for computing the handle positions), as the drawing
+  // makes it
   const margin = config.boundingBox.margin;
   const marginedBbox: BoundingBoxCoords = {
     ...applyMarginToBoundingBox(rawBbox, margin, transform),
@@ -543,7 +538,7 @@ export function hitTestHandles(
       if (radiusHit) return radiusHit;
     } else {
       // 1. Rotate handle (anything other than a Circle)
-      const rotateHit = hitTestRotateHandle(marginedBbox, config, zoom, params);
+      const rotateHit = hitTestRotateHandle(marginedBbox, config, params);
       if (rotateHit) return rotateHit;
     }
 
@@ -587,12 +582,8 @@ export function hitTestHandles(
     }
   }
 
-  // 6. Inside of the bounding box (move)
-  // Convert the click position to geographic coordinates and test it
-  const geoLngLat = transform.unproject(screenPoint);
-  const geoPoint: Coordinate = [geoLngLat.lng, geoLngLat.lat];
-
-  if (isPointInGeoBoundingBox(geoPoint, geoBbox)) {
+  // 6. Inside of the frames drawn (move)
+  if (isPointInSelectionFrame(screenPoint, features, transform, config, scope.extensions)) {
     return { type: 'move' };
   }
 
@@ -611,7 +602,6 @@ export function hitTestBulkHandles(
   bulk: SelectionBulk,
   transform: CoordinateTransform,
   config: SelectionUIConfig,
-  zoom: number,
   scope: SelectionScope,
 ): HandleHitResult | null {
   if (!bulk.bounds) return null;
@@ -623,7 +613,7 @@ export function hitTestBulkHandles(
   };
   const params: HitTestParams = { screenPoint, transform, scope };
   if (summaryHasArea(bulk)) {
-    const rotateHit = hitTestRotateHandle(marginedBbox, config, zoom, params);
+    const rotateHit = hitTestRotateHandle(marginedBbox, config, params);
     if (rotateHit) return rotateHit;
     const resizeHit = hitTestResizeHandles(marginedBbox, config, params);
     if (resizeHit) return resizeHit;

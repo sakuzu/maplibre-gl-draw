@@ -23,11 +23,12 @@ import { featureTablesInternals } from '../../feature-table/feature-tables.js';
 import { STATE_MOVE_MASK, STATE_MOVE_SHIFT } from '../../feature-table/row-state.js';
 import { BULK_SLICE_BUDGET_MS, BULK_SLICE_ROWS } from '../../operations/bulk-sliced.js';
 import { DEFAULT_SELECTION_CONFIG } from '../../shared/config/selection.js';
-import { applyMarginToBoundingBox } from '../../shared/math/index.js';
+import { applyMarginToBoundingBox, setScreenScaleFrame } from '../../shared/math/index.js';
 import { DrawStore } from '../../store/draw-store.js';
 import { TableContractStore } from '../../store/table-memory.js';
 import type { Feature, StoreChange } from '../../store/types.js';
 import { referenceTranslate } from '../../test-support/enu-reference.js';
+import { planeMetersPerPixel, planeScaleFrame } from '../../test-utils.js';
 import { bulkFrame } from '../../view/ui/handle-test.js';
 import { computeResizeHandles, computeRotateHandle } from '../../view/ui/handles.js';
 import { createSelectionScope } from '../../view/ui/selection-scope.js';
@@ -74,10 +75,11 @@ function makeMap() {
     }),
     isEnabled: () => dragPan.enabled,
   };
-  return {
+  const map = {
     dragPan,
     getCanvas: () => ({ style: { cursor: '' } }),
     getZoom: () => 6,
+    getBearing: () => 0,
     triggerRepaint: vi.fn(),
     project: (lngLat: [number, number] | { lng: number; lat: number }) => {
       const lng = Array.isArray(lngLat) ? lngLat[0] : lngLat.lng;
@@ -90,7 +92,12 @@ function makeMap() {
       return { lng: x / 10, lat: -y / 10 };
     },
   };
+  setScreenScaleFrame(map as never, planeScaleFrame(10));
+  return map;
 }
+
+/** The scale of the plane of the map (1 degree = 10 px) */
+const PLANE = { metersPerPixel: planeMetersPerPixel(10) };
 
 const NO_MODIFIERS = { shift: false, ctrl: false, alt: false, meta: false };
 
@@ -219,16 +226,8 @@ function movingSetOf(id: string): number {
 function marginedFrame() {
   const bulk = store.getSelection().bulk;
   const frame = bulkFrame(bulk?.bounds as [number, number, number, number]);
-  const transform = {
-    project: (c: [number, number]) => ({ x: c[0] * 10, y: -c[1] * 10 }),
-    unproject: (p: { x: number; y: number }) => ({ lng: p.x / 10, lat: -p.y / 10 }),
-  };
   return {
-    ...applyMarginToBoundingBox(
-      frame,
-      DEFAULT_SELECTION_CONFIG.boundingBox.margin,
-      transform as never,
-    ),
+    ...applyMarginToBoundingBox(frame, DEFAULT_SELECTION_CONFIG.boundingBox.margin, PLANE),
     center: frame.center,
   };
 }
@@ -354,7 +353,7 @@ describe('the select mode over features selected in bulk', () => {
     const rotate = computeRotateHandle(
       marginedFrame(),
       DEFAULT_SELECTION_CONFIG.rotateHandle.distance,
-      6,
+      PLANE,
     ).position;
     mode.onDragStart(drag('dragstart', rotate[0], rotate[1], rotate as [number, number]));
     expect(store.getDragState()?.operation).toBe('rotate');
@@ -432,7 +431,7 @@ describe('the select mode over features selected in bulk', () => {
     const rotate = computeRotateHandle(
       marginedFrame(),
       DEFAULT_SELECTION_CONFIG.rotateHandle.distance,
-      6,
+      PLANE,
     ).position;
     const center = store.getSelection().bulk?.bounds as number[];
     const to: [number, number] = [(center[0] + center[2]) / 2 + 3, (center[1] + center[3]) / 2];

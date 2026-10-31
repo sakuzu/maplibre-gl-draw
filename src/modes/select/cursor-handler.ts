@@ -97,7 +97,6 @@ export function updateCursorForSelection(
       bulk,
       transform,
       config,
-      map.getZoom(),
       context.selectionScope,
     );
     if (bulkHit && bulkHit.type !== 'move') {

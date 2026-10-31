@@ -54,6 +54,7 @@ describe('the frames of the features selected in bulk', () => {
     const { gl, calls } = recordingGl();
     const renderer = new BulkFramesRenderer(gl, 2);
     renderer.ensureShader(SHADER as never);
+    renderer.setScreenScale({ zoom: 10, centerLatitude: 0, transition: 0 });
     const group = groupOf([
       10,
       20,
@@ -82,6 +83,7 @@ describe('the frames of the features selected in bulk', () => {
     const { gl, calls } = recordingGl();
     const renderer = new BulkFramesRenderer(gl);
     renderer.ensureShader(SHADER as never);
+    renderer.setScreenScale({ zoom: 10, centerLatitude: 0, transition: 0 });
     const group = groupOf([0, 0, 1, 1]);
     const draw = (revision: number) =>
       renderer.drawGroup(
@@ -129,6 +131,7 @@ describe('the frames of the features selected in bulk', () => {
     const { gl, calls } = recordingGl();
     const renderer = new BulkFramesRenderer(gl);
     renderer.ensureShader(SHADER as never);
+    renderer.setScreenScale({ zoom: 10, centerLatitude: 0, transition: 0 });
     const draw = () =>
       renderer.drawGroup(
         groupOf([0, 0, 0, 0]),

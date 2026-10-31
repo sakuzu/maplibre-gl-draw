@@ -12,12 +12,14 @@
 import { describe, expect, it } from 'vitest';
 import { destinationPoint, haversineDistanceMeters } from '../../geometry/distance.js';
 import { DEFAULT_SELECTION_CONFIG } from '../../shared/config/selection.js';
+import { metersOnTangentPlane, offsetOnTangentPlane } from '../../shared/math/index.js';
 import type { Coordinate, Feature } from '../../store/types.js';
 import type { PointShapeRenderer, PointStyle } from '../renderers/point/point-shape.js';
 import type { StrokeRenderer } from '../renderers/stroke.js';
 import {
   computeCircleRadiusHandle,
   computeMidpointHandles,
+  computeRotateHandle,
   computeVertexHandles,
   SelectionHandlesRenderer,
   supportsVertexEditing,
@@ -425,5 +427,44 @@ describe('SelectionHandlesRenderer.drawFollowedVertexHandles', () => {
     const { renderer, calls } = makeRenderer();
     renderer.drawFollowedVertexHandles(polygonWithHole(), [], 10);
     expect(calls).toEqual([]);
+  });
+});
+
+describe('computeRotateHandle', () => {
+  /** Two meters a pixel wherever it is asked */
+  const scale = { metersPerPixel: () => 2 };
+  const frame = (corners: Coordinate[]) => ({
+    topLeft: corners[0] as Coordinate,
+    topRight: corners[1] as Coordinate,
+    bottomRight: corners[2] as Coordinate,
+    bottomLeft: corners[3] as Coordinate,
+    center: corners[0] as Coordinate,
+  });
+
+  it('stands the distance in meters north of the middle of the top of an unturned frame', () => {
+    const handle = computeRotateHandle(
+      frame([
+        [139.69, 35.69],
+        [139.71, 35.69],
+        [139.71, 35.67],
+        [139.69, 35.67],
+      ]),
+      10,
+      scale,
+    );
+    const [east, north] = metersOnTangentPlane([139.7, 35.69], handle.position);
+    expect(east).toBeCloseTo(0, 9);
+    expect(north).toBeCloseTo(20, 9);
+  });
+
+  it('stands square to the top edge of a turned frame, on the plane tangent at its middle', () => {
+    const middle: Coordinate = [139.7, 35.69];
+    // The top edge from 30 m south-west to 30 m north-east of its middle, in meters on the plane
+    const topLeft = offsetOnTangentPlane(middle, -30, -30);
+    const topRight = offsetOnTangentPlane(middle, 30, 30);
+    const handle = computeRotateHandle(frame([topLeft, topRight, middle, middle]), 10, scale);
+    const [east, north] = metersOnTangentPlane(middle, handle.position);
+    expect(east).toBeCloseTo(-20 / Math.SQRT2, 3);
+    expect(north).toBeCloseTo(20 / Math.SQRT2, 3);
   });
 });

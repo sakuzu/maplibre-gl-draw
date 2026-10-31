@@ -62,6 +62,9 @@ export {
   rotateCoordinatesOnSphere,
   wgs84ToECEF,
 } from './rotation.js';
+// The scale of a size of the current view
+export type { ScreenScaleFrame, ScreenScaleUniforms } from './screen-scale.js';
+export { metersPerPixelInFrame, screenScaleUniformsOf } from './screen-scale.js';
 // Coordinate transformation
 export type {
   AnchorProjector,
@@ -78,5 +81,7 @@ export {
   expandQuad,
   getAnchorProjector,
   lngLatToMercator,
+  screenScaleFrameOf,
   setAnchorProjector,
+  setScreenScaleFrame,
 } from './transform.js';

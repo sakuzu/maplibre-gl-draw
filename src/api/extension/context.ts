@@ -85,6 +85,24 @@ export interface ScreenContext {
    * @returns The four corners, or an empty array when the feature has nothing to draw
    */
   outline(feature: Feature): ScreenPoint[];
+  /**
+   * The length on the ground that a CSS pixel spans at a position, in the frame drawn last.
+   *
+   * The engine turns the sizes in pixels of what it draws on the map for the current view (the
+   * margin of the selection frame, the distance of the rotate handle, the move of an arrow key)
+   * into meters with it, and lays them on the plane tangent to the sphere of the map at the
+   * feature (maplibre's sphere, of a radius of 6,371,008.8 m), so they tilt and turn with the map
+   * and keep their place on it. It follows the projection: on Web Mercator the scale at the
+   * latitude of the position, on the globe the scale at the center of the view, and the mix of
+   * the two while the map goes from one to the other. It is read from the frame drawn last, so a
+   * hit test between two frames finds what that frame drew; before the first frame it is the
+   * scale of the camera on Web Mercator. On a map turned flat and untilted, without terrain, a
+   * length of `n * metersPerPixel(position)` meters is `n` pixels on the screen; tilted, on the
+   * globe away from the center, or over terrain, it is foreshortened as the map is.
+   *
+   * @returns The meters of a CSS pixel
+   */
+  metersPerPixel(lngLat: Position): number;
   /** The zoom of the map */
   readonly zoom: number;
   /** The pixel ratio the drawing uses */

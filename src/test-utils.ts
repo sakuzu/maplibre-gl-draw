@@ -43,6 +43,11 @@ import { circleRowRings } from './shared/circle-rings.js';
 import { DEFAULT_FEATURE_STYLE_CONFIG } from './shared/config/feature-style.js';
 import { DEFAULT_BOX_SELECTION_STYLE_CONFIG } from './shared/config/rendering.js';
 import { DEFAULT_SELECTION_CONFIG } from './shared/config/selection.js';
+import {
+  metersPerPixelInFrame,
+  type ScreenScaleFrame,
+  setScreenScaleFrame,
+} from './shared/math/index.js';
 import type { Feature } from './shared/types/model.js';
 import { EventEmitterImpl } from './shared/utils/event-emitter.js';
 import { AutoNameGenerator } from './shared/utils/name-generator.js';
@@ -109,6 +114,22 @@ export function toRows(inputs: readonly TestRowInput[]): DatasetRow[] {
 /** The feature a dataset holds for a row given in the shape of a feature of the Store */
 export function displayFeature(input: TestRowInput): Feature {
   return normalizeDisplayFeature(toRow(input), 0);
+}
+
+/**
+ * The scale of a frame on which a pixel spans on the ground, at every latitude, what a pixel north
+ * of a plane of the tests does: such a plane maps the degrees linearly, `pixelsPerDegree` pixels a
+ * degree of longitude and of latitude (the sizes of the selection UI in pixels are laid on the
+ * ground with it, so on such a plane they keep their pixels near the equator)
+ */
+export function planeScaleFrame(pixelsPerDegree: number): ScreenScaleFrame {
+  return { zoom: Math.log2((pixelsPerDegree * 360) / 512), centerLatitude: 0, transition: 1 };
+}
+
+/** The meters of a pixel of a plane of the tests ({@link planeScaleFrame}) */
+export function planeMetersPerPixel(pixelsPerDegree: number): (lngLat: [number, number]) => number {
+  const frame = planeScaleFrame(pixelsPerDegree);
+  return (lngLat) => metersPerPixelInFrame(frame, lngLat[1]);
 }
 
 type Listener = (...args: unknown[]) => void;
@@ -207,6 +228,9 @@ export function createMapStub(options: { boxZoomEnabled?: boolean } = {}) {
 
   const count = (listeners: Map<string, Set<Listener>>) =>
     [...listeners.values()].reduce((sum, set) => sum + set.size, 0);
+
+  // The stub draws no frame: the scale of its plane stands for the frame drawn last
+  setScreenScaleFrame(map as unknown as MapLibreMap, planeScaleFrame(100));
 
   return {
     map: map as unknown as MapLibreMap,

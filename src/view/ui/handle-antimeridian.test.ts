@@ -13,6 +13,7 @@ import { describe, expect, it } from 'vitest';
 import { DEFAULT_SELECTION_CONFIG } from '../../shared/config/selection.js';
 import type { CoordinateTransform } from '../../shared/math/index.js';
 import type { Coordinate, Feature } from '../../store/types.js';
+import { planeMetersPerPixel } from '../../test-utils.js';
 import { hitTestHandles } from './handle-test.js';
 import { createSelectionScope } from './selection-scope.js';
 
@@ -23,6 +24,7 @@ const transform: CoordinateTransform = {
     lng: 180 + point.x / 1000,
     lat: -point.y / 1000,
   }),
+  metersPerPixel: planeMetersPerPixel(1000),
 };
 
 function line(id: string, coordinates: Coordinate[]): Feature {

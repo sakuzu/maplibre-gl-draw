@@ -20,6 +20,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { DragNormalizedEvent } from '../../dispatcher/types.js';
 import { destinationPoint, haversineDistanceMeters } from '../../geometry/distance.js';
 import { DEFAULT_TOPOLOGY_CONFIG } from '../../shared/config/topology.js';
+import { setScreenScaleFrame } from '../../shared/math/index.js';
 import { coordinatesOf as featureCoordinates } from '../../shared/utils/coordinates.js';
 import type { SnapDisableKey } from '../../snapping/types.js';
 import { DEFAULT_SNAP_OPTIONS } from '../../snapping/types.js';
@@ -27,7 +28,7 @@ import { StoreSpatialIndex } from '../../store/spatial/store-spatial-index.js';
 import type { Store } from '../../store/store.js';
 import type { Coordinate, Feature, StoreChange, VertexRef } from '../../store/types.js';
 import { referenceTranslate } from '../../test-support/enu-reference.js';
-import { STORE_KINDS } from '../../test-utils.js';
+import { planeScaleFrame, STORE_KINDS } from '../../test-utils.js';
 import type {
   AuxiliaryHandleHit,
   AuxiliaryHandleProvider,
@@ -91,10 +92,11 @@ describe.each(STORE_KINDS)('on %s', (_kind, createStore) => {
       }),
       isEnabled: () => dragPan.enabled,
     };
-    return {
+    const map = {
       dragPan,
       getCanvas: () => ({ style: { cursor: '' } }),
       getZoom: () => 10,
+      getBearing: () => 0,
       triggerRepaint: vi.fn(),
       project: (lngLat: { lng: number; lat: number }) => ({
         x: lngLat.lng * 10,
@@ -102,6 +104,8 @@ describe.each(STORE_KINDS)('on %s', (_kind, createStore) => {
       }),
       unproject: (p: { x: number; y: number }) => ({ lng: p.x / 10, lat: -p.y / 10 }),
     };
+    setScreenScaleFrame(map as never, planeScaleFrame(10));
+    return map;
   }
 
   let store: Store;

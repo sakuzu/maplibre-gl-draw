@@ -23,11 +23,12 @@ import type {
 import { featureTablesInternals } from '../../feature-table/feature-tables.js';
 import { STATE_BULK } from '../../feature-table/row-state.js';
 import { DEFAULT_SELECTION_CONFIG } from '../../shared/config/selection.js';
+import { setScreenScaleFrame } from '../../shared/math/index.js';
 import { coordinatesOf } from '../../shared/utils/coordinates.js';
 import type { Store } from '../../store/store.js';
 import type { Feature } from '../../store/types.js';
 import { referenceTranslate } from '../../test-support/enu-reference.js';
-import { internalsOf, STORE_KINDS } from '../../test-utils.js';
+import { internalsOf, planeScaleFrame, STORE_KINDS } from '../../test-utils.js';
 import type { AuxiliaryHandleProvider } from '../../view/ui/auxiliary-handles.js';
 import { createSelectionScope } from '../../view/ui/selection-scope.js';
 import type { EngineModeContext } from '../handler.js';
@@ -75,10 +76,11 @@ describe.each(STORE_KINDS)('on %s', (_kind, createStore) => {
       }),
       isEnabled: () => dragPan.enabled,
     };
-    return {
+    const map = {
       dragPan,
       getCanvas: () => ({ style: { cursor: '' } }),
       getZoom: () => 10,
+      getBearing: () => 0,
       triggerRepaint: vi.fn(),
       project: (lngLat: [number, number] | { lng: number; lat: number }) => {
         const lng = Array.isArray(lngLat) ? lngLat[0] : lngLat.lng;
@@ -91,6 +93,8 @@ describe.each(STORE_KINDS)('on %s', (_kind, createStore) => {
         return { lng: x / 10, lat: -y / 10 };
       },
     };
+    setScreenScaleFrame(map as never, planeScaleFrame(10));
+    return map;
   }
 
   const NO_MODIFIERS = { shift: false, ctrl: false, alt: false, meta: false };

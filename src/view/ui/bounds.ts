@@ -2,165 +2,115 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * Computing the selection bounding box
+ * Hit testing the frames of the selection
  *
- * Computes the bounding box in geographic coordinates uniformly for every feature type.
- * Used by hit testing.
- *
- * The basic policy (see docs/internals/architecture.md):
- * - Data and computation are in geographic coordinates
- * - Hit testing unprojects the click position and decides in geographic coordinates
- * - Only rendering converts into screen coordinates
+ * Tests a point of the screen against the frames the selection UI draws, made by the same
+ * functions: a frame laid on the map is tested on the map, and the frame of a point, which is
+ * drawn on the screen around it, on the screen.
  */
 
 import type { SelectionUIConfig } from '../../shared/config/selection.js';
-import type { CoordinateTransform } from '../../shared/math/index.js';
+import type { CoordinateTransform, ScreenPoint } from '../../shared/math/index.js';
 import { applyMarginToBoundingBox } from '../../shared/math/index.js';
 import type { Coordinate, Feature } from '../../store/types.js';
 import {
   type BoundingBoxCoords,
   computeBoundingBox,
+  computeCombinedBoundingBox,
   hasZeroArea,
   resolvePointFrameCornersWith,
   type SelectionExtensionRegistry,
 } from './selection-ui/index.js';
 
 /**
- * Compute the bounding box with a margin of a feature in geographic coordinates
+ * Whether a point of the screen is inside the frames drawn around the selection
  *
- * Supports every feature type:
- * - Point: the icon size + the margin are computed in screen coordinates and converted
- *   into geographic coordinates
- * - LineString/Polygon: the margin is applied by applyMarginToBoundingBox
+ * The frames are the ones the selection UI draws, made by the same functions:
  *
- * @param feature The target feature
- * @param transform The coordinate transform
+ * - a feature with an extent has its box widened by the margin on the ground
+ *   (`applyMarginToBoundingBox`), and the position under the point is tested against it
+ * - a feature of a single position (a point) has the frame of its marker and the margin on the
+ *   screen around the point, as its marker is drawn, and the point is tested on the screen
+ * - several features have the frame of all of them (the box of their positions, a point counting
+ *   by its position, widened by the margin) besides the frame of each
+ *
+ * @param screenPoint The point, in CSS pixels
+ * @param features The selected features
+ * @param transform The coordinate transform (the projection the markers are drawn with)
  * @param config The selection UI configuration
- * @returns The bounding box with a margin in geographic coordinates, or null when it
- * cannot be computed
+ * @param extensions The draw instance's extension points (custom bounding boxes and point frames)
  */
-export function computeFeatureGeoBoundingBox(
-  feature: Feature,
+export function isPointInSelectionFrame(
+  screenPoint: ScreenPoint,
+  features: readonly Feature[],
   transform: CoordinateTransform,
   config: SelectionUIConfig,
   extensions?: SelectionExtensionRegistry,
-): BoundingBoxCoords | null {
+): boolean {
+  if (features.length === 0) return false;
   const margin = config.boundingBox.margin;
-
-  // Compute the bbox for the selection UI (the draw instance's custom types included)
-  const selectionBbox = computeBoundingBox(feature, extensions);
-  if (!selectionBbox) return null;
-
-  // Zero area (a single-coordinate feature such as Point) is expanded in pixels on screen
-  if (hasZeroArea(selectionBbox)) {
-    return computeSingleCoordGeoBoundingBox(
-      feature,
-      selectionBbox.center,
-      transform,
-      margin,
-      extensions,
-    );
-  }
-
-  // A bbox that has a size is expanded by the margin
-  const marginedBbox = applyMarginToBoundingBox(selectionBbox, margin, transform);
-  return {
-    ...marginedBbox,
-    center: selectionBbox.center,
-  };
-}
-
-/**
- * Compute the combined geographic bounding box of several features (with a margin)
- *
- * @param features The array of target features
- * @param transform The coordinate transform
- * @param config The selection UI configuration
- * @param extensions The draw instance's extension points (custom bounding boxes and point
- *   frame extents)
- * @returns The bounding box with a margin in geographic coordinates, or null when it
- * cannot be computed
- */
-export function computeCombinedGeoBoundingBox(
-  features: Feature[],
-  transform: CoordinateTransform,
-  config: SelectionUIConfig,
-  extensions?: SelectionExtensionRegistry,
-): BoundingBoxCoords | null {
-  if (features.length === 0) return null;
-
-  // For a single feature the OBB is returned as is
-  if (features.length === 1) {
-    return computeFeatureGeoBoundingBox(features[0], transform, config, extensions);
-  }
-
-  // For several features, an AABB containing all the vertices is computed
-  let minLng = Number.POSITIVE_INFINITY;
-  let maxLng = Number.NEGATIVE_INFINITY;
-  let minLat = Number.POSITIVE_INFINITY;
-  let maxLat = Number.NEGATIVE_INFINITY;
-
-  for (const feature of features) {
-    const bbox = computeFeatureGeoBoundingBox(feature, transform, config, extensions);
-    if (!bbox) continue;
-
-    // Update the min/max of the 4 corners
-    const corners = [bbox.topLeft, bbox.topRight, bbox.bottomRight, bbox.bottomLeft];
-    for (const corner of corners) {
-      minLng = Math.min(minLng, corner[0]);
-      maxLng = Math.max(maxLng, corner[0]);
-      minLat = Math.min(minLat, corner[1]);
-      maxLat = Math.max(maxLat, corner[1]);
+  let underPoint: Coordinate | null = null;
+  const inFrame = (box: BoundingBoxCoords): boolean => {
+    if (!underPoint) {
+      const lngLat = transform.unproject(screenPoint);
+      underPoint = [lngLat.lng, lngLat.lat];
     }
-  }
-
-  if (!Number.isFinite(minLng)) return null;
-
-  return {
-    topLeft: [minLng, maxLat],
-    topRight: [maxLng, maxLat],
-    bottomRight: [maxLng, minLat],
-    bottomLeft: [minLng, minLat],
-    center: [(minLng + maxLng) / 2, (minLat + maxLat) / 2],
+    return isPointInGeoBoundingBox(underPoint, {
+      ...applyMarginToBoundingBox(box, margin, transform),
+      center: box.center,
+    });
   };
+
+  if (features.length > 1) {
+    const combined = computeCombinedBoundingBox([...features], extensions);
+    if (combined && inFrame(combined)) return true;
+  }
+  for (const feature of features) {
+    const box = computeBoundingBox(feature, extensions);
+    if (!box) continue;
+    const inside = hasZeroArea(box)
+      ? isPointInPointFrame(screenPoint, feature, box.center, transform, margin, extensions)
+      : inFrame(box);
+    if (inside) return true;
+  }
+  return false;
 }
 
 /**
- * Compute the bounding box with a margin of a single-coordinate feature in geographic coordinates
+ * Whether a point of the screen is inside the frame of a feature of a single position: the extent
+ * of its marker (registrable per type; the marker of a built-in point, or a 12px square when
+ * unregistered) plus the margin, around the point on the screen, as the selection UI draws it
  *
- * The extent of the frame of a point (registrable per type; the marker of a built-in point, or
- * a 12px square when unregistered)
- * plus the margin is computed in screen coordinates and converted into geographic ones.
- * The coordinate received is the center of the bbox (since features other than Point can
- * also be zero-area, e.g. a MultiPoint with a single point; coordinates must not be
- * treated as a Coordinate).
+ * The position received is the center of the bbox (features other than Point can also be
+ * zero-area, e.g. a MultiPoint with a single point).
  */
-function computeSingleCoordGeoBoundingBox(
+function isPointInPointFrame(
+  screenPoint: ScreenPoint,
   feature: Feature,
-  coord: Coordinate,
+  position: Coordinate,
   transform: CoordinateTransform,
   margin: number,
   extensions: SelectionExtensionRegistry | undefined,
-): BoundingBoxCoords {
-  const center = transform.project(coord);
-
-  // The corners of the frame of the point (its outline, or its extent) + the margin
+): boolean {
+  const center = transform.project(position);
   const corners = extensions
     ? extensions.resolvePointFrameCorners(feature, center, margin)
     : resolvePointFrameCornersWith(undefined, undefined, feature, center, margin);
+  return corners.length === 4 && isPointInQuad(screenPoint, corners);
+}
 
-  // Convert the 4 corners in screen coordinates into geographic coordinates
-  const [topLeft, topRight, bottomRight, bottomLeft] = corners.map((corner) =>
-    transform.unproject(corner),
-  );
-
-  return {
-    topLeft: [topLeft.lng, topLeft.lat],
-    topRight: [topRight.lng, topRight.lat],
-    bottomRight: [bottomRight.lng, bottomRight.lat],
-    bottomLeft: [bottomLeft.lng, bottomLeft.lat],
-    center: coord,
-  };
+/** Whether a point is inside a convex quadrilateral (the cross product method) */
+function isPointInQuad(point: ScreenPoint, corners: readonly ScreenPoint[]): boolean {
+  let sign = 0;
+  for (let i = 0; i < 4; i++) {
+    const p1 = corners[i];
+    const p2 = corners[(i + 1) % 4];
+    const cross = (p2.x - p1.x) * (point.y - p1.y) - (p2.y - p1.y) * (point.x - p1.x);
+    const side = cross >= 0 ? 1 : -1;
+    if (sign === 0) sign = side;
+    else if (side !== sign) return false;
+  }
+  return true;
 }
 
 /**

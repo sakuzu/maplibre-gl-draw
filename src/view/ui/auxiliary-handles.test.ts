@@ -25,6 +25,7 @@ import {
 import { DEFAULT_SELECTION_CONFIG } from '../../shared/config/selection.js';
 import type { CoordinateTransform } from '../../shared/math/index.js';
 import type { Coordinate, Feature } from '../../store/types.js';
+import { planeMetersPerPixel } from '../../test-utils.js';
 import type {
   AuxiliaryHandle,
   AuxiliaryHandleContext,
@@ -42,6 +43,7 @@ import { createSelectionScope } from './selection-scope.js';
 const transform: CoordinateTransform = {
   project: (lngLat: Coordinate) => ({ x: lngLat[0] * 10, y: -lngLat[1] * 10 }),
   unproject: (point: { x: number; y: number }) => ({ lng: point.x / 10, lat: -point.y / 10 }),
+  metersPerPixel: planeMetersPerPixel(10),
 };
 
 const ZOOM = 10;

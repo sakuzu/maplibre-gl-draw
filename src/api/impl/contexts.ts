@@ -17,6 +17,7 @@ import type { ModeManager } from '../../modes/manager.js';
 import { formatColor } from '../../shared/color.js';
 import type { BoxSelectionStyleConfig } from '../../shared/config/rendering.js';
 import type { SelectionUIConfig } from '../../shared/config/selection.js';
+import { metersPerPixelInFrame, screenScaleFrameOf } from '../../shared/math/index.js';
 import { DRAW_PROPERTY_KEYS, getDrawProperty } from '../../shared/properties.js';
 import { coordinatesOf } from '../../shared/utils/coordinates.js';
 import type { AutoNameGenerator } from '../../shared/utils/name-generator.js';
@@ -265,6 +266,7 @@ export function createScreenContext(
       }
       return [box.topLeft, box.topRight, box.bottomRight, box.bottomLeft].map(project);
     },
+    metersPerPixel: (lngLat) => metersPerPixelInFrame(screenScaleFrameOf(map), lngLat[1]),
     get zoom() {
       return map.getZoom();
     },

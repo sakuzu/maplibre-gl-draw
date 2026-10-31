@@ -101,7 +101,7 @@ export class SelectionUIRenderer {
    * bulk: the box of their extent, as it is moved while they are dragged)
    */
   drawFrame(bbox: BoundingBoxCoords, zoom: number): void {
-    this.#strokeBoundingBox(this.#applyMargin(bbox, zoom), zoom);
+    this.#strokeBoundingBox(this.#applyMargin(bbox), zoom);
   }
 
   /**
@@ -163,13 +163,13 @@ export class SelectionUIRenderer {
           currentAngle,
           rotationCenter,
         );
-        const marginedBbox = this.#applyMargin(rotatedFeatureBbox, zoom);
+        const marginedBbox = this.#applyMargin(rotatedFeatureBbox);
         this.#strokeBoundingBox(marginedBbox, zoom);
       }
     }
 
     const rotatedBbox = rotateBoundingBox(initialBbox, currentAngle, rotationCenter);
-    const marginedBbox = this.#applyMargin(rotatedBbox, zoom);
+    const marginedBbox = this.#applyMargin(rotatedBbox);
     this.#strokeBoundingBox(marginedBbox, zoom);
   }
 
@@ -179,7 +179,7 @@ export class SelectionUIRenderer {
   #drawIndividualBoundingBox(feature: Feature, zoom: number): void {
     const bbox = computeBoundingBox(feature, this.#extensions);
     if (!bbox) return;
-    this.#strokeBoundingBox(this.#applyMargin(bbox, zoom), zoom);
+    this.#strokeBoundingBox(this.#applyMargin(bbox), zoom);
   }
 
   /**
@@ -194,7 +194,7 @@ export class SelectionUIRenderer {
   #drawBoundingBoxWithMargin(features: Feature[], zoom: number): void {
     const bbox = computeCombinedBoundingBox(features, this.#extensions);
     if (!bbox) return;
-    this.#strokeBoundingBox(this.#applyMargin(bbox, zoom), zoom);
+    this.#strokeBoundingBox(this.#applyMargin(bbox), zoom);
   }
 
   /**
@@ -260,11 +260,11 @@ export class SelectionUIRenderer {
 
   // ---------------- helpers ----------------
 
-  #applyMargin(bbox: BoundingBoxCoords, zoom: number): BoundingBoxCoords {
+  #applyMargin(bbox: BoundingBoxCoords): BoundingBoxCoords {
     if (!this.#transform) return bbox;
     const margin = this.#config.boundingBox.margin;
     return {
-      ...applyMarginToBoundingBox(bbox, margin, this.#transform, zoom),
+      ...applyMarginToBoundingBox(bbox, margin, this.#transform),
       center: bbox.center,
     };
   }

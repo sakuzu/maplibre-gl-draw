@@ -16,15 +16,17 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { DEFAULT_SELECTION_CONFIG } from '../../shared/config/selection.js';
 import type { CoordinateTransform } from '../../shared/math/index.js';
 import type { Feature } from '../../store/types.js';
-import { computeFeatureGeoBoundingBox } from './bounds.js';
+import { planeMetersPerPixel } from '../../test-utils.js';
+import { isPointInSelectionFrame } from './bounds.js';
 import { hitTestHandles } from './handle-test.js';
 import { createSelectionScope } from './selection-scope.js';
-import type { PointFrameExtent } from './selection-ui/index.js';
+import { computeBoundingBox, type PointFrameExtent } from './selection-ui/index.js';
 
 /** A planar transform where 1 degree = 100px (for the tests) */
 const transform: CoordinateTransform = {
   project: (lngLat) => ({ x: lngLat[0] * 100, y: -lngLat[1] * 100 }),
   unproject: (point) => ({ lng: point.x / 100, lat: -point.y / 100 }),
+  metersPerPixel: planeMetersPerPixel(100),
 };
 
 const MARGIN = DEFAULT_SELECTION_CONFIG.boundingBox.margin;
@@ -56,21 +58,32 @@ function makeFeature(partial: Pick<Feature, 'type' | 'geometry'>): Feature {
 const pointFeature = (): Feature =>
   makeFeature({ type: 'Point', geometry: { type: 'Point', coordinates: [0, 0] } });
 
-/** Take out the half width and half height of the frame in screen pixels */
+/**
+ * Take out the half width and half height of the frame in screen pixels, as the selection UI
+ * draws it, and check that the hit test takes the frame drawn
+ */
 function framePx(feature: Feature): { halfWidth: number; halfHeight: number } {
-  const bbox = computeFeatureGeoBoundingBox(
-    feature,
-    transform,
-    DEFAULT_SELECTION_CONFIG,
-    scope.extensions,
-  );
+  const bbox = computeBoundingBox(feature, scope.extensions);
   if (!bbox) throw new Error('bbox cannot be computed');
-  const topLeft = transform.project(bbox.topLeft);
-  const bottomRight = transform.project(bbox.bottomRight);
-  return {
-    halfWidth: (bottomRight.x - topLeft.x) / 2,
-    halfHeight: (bottomRight.y - topLeft.y) / 2,
-  };
+  const center = transform.project(bbox.center);
+  const corners = scope.extensions.resolvePointFrameCorners(feature, center, MARGIN);
+  const xs = corners.map((corner) => corner.x);
+  const ys = corners.map((corner) => corner.y);
+  const halfWidth = (Math.max(...xs) - Math.min(...xs)) / 2;
+  const halfHeight = (Math.max(...ys) - Math.min(...ys)) / 2;
+  const inFrame = (x: number, y: number) =>
+    isPointInSelectionFrame(
+      { x, y },
+      [feature],
+      transform,
+      DEFAULT_SELECTION_CONFIG,
+      scope.extensions,
+    );
+  expect(inFrame(center.x + halfWidth - 0.01, center.y)).toBe(true);
+  expect(inFrame(center.x + halfWidth + 0.01, center.y)).toBe(false);
+  expect(inFrame(center.x, center.y - halfHeight + 0.01)).toBe(true);
+  expect(inFrame(center.x, center.y - halfHeight - 0.01)).toBe(false);
+  return { halfWidth, halfHeight };
 }
 
 function hit(x: number, y: number, feature: Feature) {
@@ -158,15 +171,11 @@ describe('the outline of the selection box of a point', () => {
     makeFeature({ type: 'Turned', geometry: { type: 'Point', coordinates: [1, 1] } });
 
   it('draws the frame along the outline, every edge moved out by the margin', () => {
-    const bbox = computeFeatureGeoBoundingBox(
+    const [top, right] = scope.extensions.resolvePointFrameCorners(
       turned(),
-      transform,
-      DEFAULT_SELECTION_CONFIG,
-      scope.extensions,
+      transform.project([1, 1]),
+      MARGIN,
     );
-    if (!bbox) throw new Error('bbox cannot be computed');
-    const top = transform.project(bbox.topLeft);
-    const right = transform.project(bbox.topRight);
     // The edges of the diamond are turned by 45 degrees, so its tips move by MARGIN * sqrt(2)
     expect(top.x).toBeCloseTo(100);
     expect(top.y).toBeCloseTo(-100 - (40 + MARGIN * Math.SQRT2));

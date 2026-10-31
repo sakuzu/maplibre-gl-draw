@@ -163,16 +163,7 @@ export class SelectModeDragHandler {
         break;
 
       case 'resize':
-        this.begin(
-          startResizeDrag(
-            event,
-            hitResult.handle!,
-            bbox,
-            selectedFeatures,
-            context.map,
-            this.scope,
-          ),
-        );
+        this.begin(startResizeDrag(event, hitResult.handle!, bbox, selectedFeatures, context.map));
         store.setDragState({ operation: 'resize', movingFeatureIds: [...selectedIds] });
         break;
 

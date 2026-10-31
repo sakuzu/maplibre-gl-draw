@@ -28,7 +28,7 @@ import { TableSelection } from '../../feature-table/selection.js';
 import { createCoordinateTransform } from '../../shared/math/index.js';
 import { getDisplayFeatures } from '../../store/local-visibility.js';
 import type { BoxSelection, Coordinate, Mode, Selection } from '../../store/types.js';
-import { computeCombinedGeoBoundingBox, isPointInGeoBoundingBox } from '../../view/ui/bounds.js';
+import { isPointInSelectionFrame } from '../../view/ui/bounds.js';
 import type { HandleHitResult } from '../../view/ui/handle-test.js';
 import {
   bulkFrame,
@@ -199,7 +199,6 @@ export class SelectMode implements EngineModeHandler {
         bulk,
         transform,
         this.#context.selectionStyle,
-        map.getZoom(),
         this.#context.selectionScope,
       )
     ) {
@@ -240,19 +239,17 @@ export class SelectMode implements EngineModeHandler {
         }
       }
 
-      const geoBbox = computeCombinedGeoBoundingBox(
-        selectedFeatures,
-        transform,
-        this.#context.selectionStyle,
-        this.#context.selectionScope.extensions,
-      );
-      if (geoBbox) {
-        const geoLngLat = transform.unproject(event.point);
-        const geoPoint: Coordinate = [geoLngLat.lng, geoLngLat.lat];
-        if (isPointInGeoBoundingBox(geoPoint, geoBbox)) {
-          map.dragPan.disable();
-          return true;
-        }
+      if (
+        isPointInSelectionFrame(
+          event.point,
+          selectedFeatures,
+          transform,
+          this.#context.selectionStyle,
+          this.#context.selectionScope.extensions,
+        )
+      ) {
+        map.dragPan.disable();
+        return true;
       }
     }
 
@@ -486,7 +483,7 @@ export class SelectMode implements EngineModeHandler {
     point: { x: number; y: number },
     transform: ReturnType<typeof createCoordinateTransform>,
   ): boolean {
-    const { store, map } = this.#context;
+    const { store } = this.#context;
     const bulk = store.getSelection().bulk;
     const rows = store.getSelectedRows();
     if (!bulk?.bounds || !rows) return false;
@@ -496,7 +493,6 @@ export class SelectMode implements EngineModeHandler {
       bulk,
       transform,
       this.#context.selectionStyle,
-      map.getZoom(),
       this.#context.selectionScope,
     );
     if (hit && hit.type !== 'move') {

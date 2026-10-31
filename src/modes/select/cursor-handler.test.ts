@@ -14,9 +14,10 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { MouseNormalizedEvent } from '../../dispatcher/types.js';
 import { DEFAULT_SELECTION_CONFIG } from '../../shared/config/selection.js';
+import { setScreenScaleFrame } from '../../shared/math/index.js';
 import type { Store } from '../../store/store.js';
 import type { Feature } from '../../store/types.js';
-import { STORE_KINDS } from '../../test-utils.js';
+import { planeScaleFrame, STORE_KINDS } from '../../test-utils.js';
 import { createSelectionScope } from '../../view/ui/selection-scope.js';
 import type { EngineModeContext } from '../handler.js';
 import { updateCursorForSelection } from './cursor-handler.js';
@@ -51,9 +52,10 @@ describe.each(STORE_KINDS)('on %s', (_kind, createStore) => {
   // project / unproject as a pair so that the real coordinate computation of the hit test runs
   // through unchanged.
   function makeMap(canvas: { style: { cursor: string } }) {
-    return {
+    const map = {
       getCanvas: () => canvas,
       getZoom: () => 10,
+      getBearing: () => 0,
       project: (lngLat: [number, number] | { lng: number; lat: number }) => {
         const lng = Array.isArray(lngLat) ? lngLat[0] : lngLat.lng;
         const lat = Array.isArray(lngLat) ? lngLat[1] : lngLat.lat;
@@ -65,6 +67,8 @@ describe.each(STORE_KINDS)('on %s', (_kind, createStore) => {
         return { lng: x / 10, lat: -y / 10 };
       },
     };
+    setScreenScaleFrame(map as never, planeScaleFrame(10));
+    return map;
   }
 
   let store: Store;

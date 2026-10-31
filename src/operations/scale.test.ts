@@ -17,6 +17,7 @@
 
 import type { MultiLineString, Point, Polygon } from 'geojson';
 import { describe, expect, it } from 'vitest';
+import { metersPerPixelAtZoom } from '../shared/math/index.js';
 import { DRAW_PROPERTY_KEYS } from '../shared/properties.js';
 import type { BoundingBoxCoords } from '../shared/types/selection-box.js';
 import { DEFAULT_TRANSFORMS } from '../store/feature-edits.js';
@@ -99,9 +100,11 @@ describe('the factors of a resize drag', () => {
     };
     const start = { lng: 139.00005, lat: 35.000025 };
     const pointer = { lng: 139.0001, lat: 35.000025 };
-    const close = scaleEditOf(startScale('resize-e', start, small, 22), pointer);
+    const atZoom = (zoom: number) => (lngLat: [number, number]) =>
+      metersPerPixelAtZoom(lngLat[1], zoom);
+    const close = scaleEditOf(startScale('resize-e', start, small, atZoom(22)), pointer);
     expect(Math.abs(close.eastFactor - 2)).toBeLessThan(1e-6);
-    const far = scaleEditOf(startScale('resize-e', start, small, 10), pointer);
+    const far = scaleEditOf(startScale('resize-e', start, small, atZoom(10)), pointer);
     expect(far.eastFactor).toBe(1);
   });
 });

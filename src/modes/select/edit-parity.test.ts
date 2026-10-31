@@ -33,12 +33,20 @@ import { DrawStore } from '../../store/draw-store.js';
 import type { Store } from '../../store/store.js';
 import { TableContractStore } from '../../store/table-memory.js';
 import type { Feature } from '../../store/types.js';
-import { createMapStub, createSyntheticInput, STORE_KINDS } from '../../test-utils.js';
+import {
+  createMapStub,
+  createSyntheticInput,
+  planeMetersPerPixel,
+  STORE_KINDS,
+} from '../../test-utils.js';
 import { computeRotateHandle } from '../../view/ui/handles.js';
 
 type LngLat = [number, number];
 
-/** The margin of the frame of the selection, in degrees (1 degree is 100 px on the map stub) */
+/**
+ * The margin of the frame of the selection, in degrees (1 degree is 100 px on the map stub, whose
+ * scale near the equator lays 100 px on a degree)
+ */
 const MARGIN = DEFAULT_SELECTION_CONFIG.boundingBox.margin / 100;
 
 /** A rectangle from its south-west corner to its north-east corner */
@@ -252,7 +260,9 @@ function rotateHandleOf([w, s, e, n]: readonly number[]): LngLat {
     bottomLeft: [w - MARGIN, s - MARGIN] as LngLat,
     center: [(w + e) / 2, (s + n) / 2] as LngLat,
   };
-  const handle = computeRotateHandle(margined, DEFAULT_SELECTION_CONFIG.rotateHandle.distance, 10);
+  const handle = computeRotateHandle(margined, DEFAULT_SELECTION_CONFIG.rotateHandle.distance, {
+    metersPerPixel: planeMetersPerPixel(100),
+  });
   return handle.position as LngLat;
 }
 
