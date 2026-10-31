@@ -294,10 +294,9 @@ describe.each(STORE_KINDS)('on %s', (_kind, createStore) => {
     it('answers what the drag of each handle of the selection records once it starts', () => {
       store.setSelection('feature', ['f1']);
       hit = { feature: store.getFeature('f1') as Feature, distance: 0 };
-      // A vertex, a midpoint, the inside of the frame
+      // A vertex and the inside of the frame
       const presses: [number, number][] = [
         [0, 0],
-        [5, 0],
         [5, 5],
       ];
       const answers = presses.map(([lng, lat]) => {
@@ -310,10 +309,40 @@ describe.each(STORE_KINDS)('on %s', (_kind, createStore) => {
       });
 
       expect(answers).toEqual([
-        { activeFeatureId: 'f1', activeVertex: { ring: 0, index: 0 } },
-        { activeFeatureId: 'f1', activeVertex: { ring: 0, index: 1 } },
+        // The vertex and the edges it starts and ends (by the vertex each starts from)
+        {
+          activeFeatureId: 'f1',
+          activeVertex: { ring: 0, index: 0 },
+          activeEdges: [
+            { ring: 0, index: 0 },
+            { ring: 0, index: 3 },
+          ],
+        },
         { movingFeatureIds: ['f1'] },
       ]);
+    });
+
+    it('answers the edge a midpoint is on, which its drag splits with the vertex it adds', () => {
+      store.setSelection('feature', ['f1']);
+      hit = { feature: store.getFeature('f1') as Feature, distance: 0 };
+
+      // Before the drag adds its vertex: the edge from the vertex 0 to the vertex 1, which stays
+      // a candidate with the edges after it
+      expect(mode.getDragTargets(pressAt(5, 0))).toEqual({
+        activeFeatureId: 'f1',
+        activeEdges: [{ ring: 0, index: 0 }],
+      });
+
+      // Once it is added: the vertex 1 and the two edges it splits the edge into
+      mode.onDragStart(pressAt(5, 0));
+      expect(recorded()).toEqual({
+        activeFeatureId: 'f1',
+        activeVertex: { ring: 0, index: 1 },
+        activeEdges: [
+          { ring: 0, index: 0 },
+          { ring: 0, index: 1 },
+        ],
+      });
     });
 
     it('answers a row held as columns by its id, without holding it', () => {
