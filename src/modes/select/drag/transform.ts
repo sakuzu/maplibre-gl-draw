@@ -18,7 +18,7 @@ import {
 import type { HandleType } from '../../../shared/config/constants.js';
 import { createCoordinateTransform } from '../../../shared/math/index.js';
 import type { TransformEdit } from '../../../store/store.js';
-import type { Feature } from '../../../store/types.js';
+import type { DragTargets, Feature } from '../../../store/types.js';
 import type { BoundingBoxCoords } from '../../../view/ui/selection-ui/index.js';
 import { computeBoundingBox } from '../../../view/ui/selection-ui/index.js';
 import type { EngineModeContext } from '../../handler.js';
@@ -116,7 +116,8 @@ export class RotateDrag implements DragOperation {
 /**
  * Start a rotate drag from the rotation handle, and set the DragState it draws from
  *
- * @param movingFeatureIds The features the rotation turns (snapping leaves them out)
+ * @param targets The features the rotation turns, as its drag state records them (snapping
+ *   leaves them out)
  */
 export function startRotateDrag(
   event: DragNormalizedEvent,
@@ -124,7 +125,7 @@ export function startRotateDrag(
   features: Feature[],
   store: DragStore,
   scope: DragScope,
-  movingFeatureIds: string[],
+  targets: DragTargets,
 ): RotateDrag {
   const center = rotationCenterOf(bbox, features);
   const drag = new RotateDrag(center, dragStartLngLat(event), startsOf(features));
@@ -144,7 +145,7 @@ export function startRotateDrag(
   // Save the bbox at the start of the rotation (for drawing the bbox during the rotation)
   store.setDragState({
     operation: 'rotate',
-    movingFeatureIds,
+    ...targets,
     rotateInfo: {
       initialBbox: {
         topLeft: bbox.topLeft,

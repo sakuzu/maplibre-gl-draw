@@ -11,7 +11,8 @@
  */
 
 import type { DragNormalizedEvent } from '../../../dispatcher/types.js';
-import type { DragOperationType, Feature } from '../../../store/types.js';
+import type { DragOperationType, DragTargets, Feature } from '../../../store/types.js';
+import type { HandleHitResult } from '../../../view/ui/handle-test.js';
 import { getSelectedFeatureIds } from '../../../view/ui/helper.js';
 import type { EngineModeContext } from '../../handler.js';
 import type { IntermediateWrites } from './intermediate-writes.js';
@@ -64,4 +65,48 @@ export function selectedFeaturesOf(store: DragStore): Feature[] {
   return getSelectedFeatureIds(store)
     .map((id) => store.getFeature(id))
     .filter((f): f is Feature => f !== undefined);
+}
+
+/**
+ * What a drag grabbed by a handle hit on the selected features (or by a press on one of them,
+ * a move) changes, as its drag state records it: the selected features moved, resized or
+ * rotated, the vertex dragged (for a midpoint, the vertex it adds after the one of the hit), the
+ * circle whose radius is dragged, and the feature a handle of an extension is on (core does not
+ * know what the handle changes, so the feature is taken as changed whole; a handle on no feature
+ * changes nothing core knows of)
+ *
+ * The drag state and the snap of the start of the drag (before the drag state is set) both read
+ * it, so that snapping leaves out the same from the start of the drag to its end.
+ *
+ * @param selectedIds The selected features, with group / layer selections resolved
+ */
+export function dragTargetsOfHit(
+  hit: HandleHitResult,
+  selectedIds: readonly string[],
+): DragTargets {
+  switch (hit.type) {
+    case 'move':
+    case 'resize':
+    case 'rotate':
+      return { movingFeatureIds: [...selectedIds] };
+    case 'vertex':
+      return { activeFeatureId: hit.featureId, activeVertex: hit.vertexRef };
+    case 'midpoint':
+      return {
+        activeFeatureId: hit.featureId,
+        activeVertex: hit.vertexRef && { ...hit.vertexRef, index: hit.vertexRef.index + 1 },
+      };
+    case 'radius':
+      return { movingFeatureIds: hit.featureId !== undefined ? [hit.featureId] : [] };
+    case 'auxiliary':
+      return hit.featureId !== undefined ? { movingFeatureIds: [hit.featureId] } : {};
+  }
+}
+
+/**
+ * What a drag of the features selected in bulk changes, as its drag state records it: their rows
+ * (their IDs are not listed). Read as {@link dragTargetsOfHit} is
+ */
+export function bulkDragTargets(rows: { has(handle: number): boolean }): DragTargets {
+  return { movingFeatureIds: [], movingRows: rows };
 }

@@ -16,7 +16,7 @@ import type {
   KeyNormalizedEvent,
   MouseNormalizedEvent,
 } from '../dispatcher/types.js';
-import type { Mode } from '../store/types.js';
+import type { DragTargets, Mode } from '../store/types.js';
 
 /**
  * An input whose coordinates go through snapping, as asked about by
@@ -270,6 +270,21 @@ export interface EngineModeHandler {
    * @returns the feature to prefer, or null if there is none
    */
   getSnapPreference?(): { featureId: string; datasetId?: string } | null;
+
+  /**
+   * Returns what the drag this start of a drag starts will change, as its drag state will record
+   * it
+   *
+   * Read by InputRouter right before it passes the start of a drag through snapping: the mode
+   * starts the drag, and sets its drag state, only once it receives the start with the snapped
+   * coordinates, so the start is snapped leaving out what the mode says here, as the rest of the
+   * drag is snapped leaving out what the drag state holds. It decides from the press as the start
+   * of the drag does, and starts nothing.
+   *
+   * @param event the start of the drag, with its raw coordinates
+   * @returns what the drag will change, or null when it starts no drag that changes anything
+   */
+  getDragTargets?(event: DragNormalizedEvent): DragTargets | null;
 
   /**
    * Returns, per input type, whether snapping is to be applied

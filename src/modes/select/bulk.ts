@@ -40,7 +40,7 @@ import type { EngineModeContext } from '../handler.js';
 import { boxRects, isFeatureInBox } from './box-selection.js';
 import type { IntermediateWrites } from './drag/intermediate-writes.js';
 import type { DragOperation, DragStore } from './drag/operation.js';
-import { dragStartLngLat } from './drag/operation.js';
+import { bulkDragTargets, dragStartLngLat } from './drag/operation.js';
 
 export { BULK_MOVE_SET };
 
@@ -274,8 +274,7 @@ export class BulkRotateDrag extends BulkDrag {
     this.#start = dragStartLngLat(event);
     context.store.setDragState({
       operation: 'rotate',
-      movingFeatureIds: [],
-      movingRows: rows,
+      ...bulkDragTargets(rows),
       rotateInfo: {
         initialBbox: {
           topLeft: bbox.topLeft,
@@ -340,7 +339,7 @@ export class BulkResizeDrag extends BulkDrag {
     this.#state = startScale(handle, dragStartLngLat(event), bbox, (lngLat) =>
       transform.metersPerPixel(lngLat),
     );
-    context.store.setDragState({ operation: 'resize', movingFeatureIds: [], movingRows: rows });
+    context.store.setDragState({ operation: 'resize', ...bulkDragTargets(rows) });
   }
 
   update(event: DragNormalizedEvent): void {

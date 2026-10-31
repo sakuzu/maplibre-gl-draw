@@ -1212,3 +1212,13 @@ export interface DragState {
    */
   movingRows?: { has(handle: number): boolean };
 }
+
+/**
+ * What a drag changes, as its drag state records it: the features and the rows it changes as a
+ * whole, or the vertex it drags. Snapping leaves them out of the candidates, from the start of
+ * the drag (before the drag state is set) to its end
+ */
+export type DragTargets = Pick<
+  DragState,
+  'movingFeatureIds' | 'movingRows' | 'activeFeatureId' | 'activeVertex'
+>;

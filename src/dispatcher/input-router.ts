@@ -29,7 +29,7 @@ import type { EngineModeContext, EngineModeHandler, SnapInputKind } from '../mod
 import type { ModeManager } from '../modes/manager.js';
 import { nearestLongitude, wrapLongitude } from '../shared/math/longitude.js';
 import type { SnapContext, SnapResult, SnapService } from '../snapping/types.js';
-import type { Coordinate, TentativeState } from '../store/types.js';
+import type { Coordinate, DragTargets, TentativeState } from '../store/types.js';
 import type { InputNormalizer } from './normalizer.js';
 import type {
   DragNormalizedEvent,
@@ -258,18 +258,33 @@ export function createInputRouter(deps: InputRouterDeps): InputRouter {
   let pointerHeld = false;
 
   /**
+   * What the drag an input belongs to changes: what the drag state of the Store holds, and at
+   * the start of a drag, which the mode starts only once it receives it, what the mode says the
+   * drag it starts will change (it would record the same in the drag state)
+   */
+  function dragTargetsOf(
+    event: MouseNormalizedEvent | DragNormalizedEvent,
+    inputType: SnapInputKind,
+  ): DragTargets | null {
+    const dragState = context.store.getDragState();
+    if (inputType !== 'dragstart') return dragState;
+    const handler = modeManager.getHandler();
+    return handler?.getDragTargets?.(event as DragNormalizedEvent) ?? dragState;
+  }
+
+  /**
    * Builds the snapping context
    *
-   * What is left out is read from the drag state of the Store, whatever the kind of the
-   * drag:
+   * What is left out is what the drag changes (`dragTargetsOf`), the same from the start of
+   * the drag to its end, whatever the kind of the drag:
    *
-   * - the features (and the rows) the drag changes as a whole, which the drag state holds
-   *   (`movingFeatureIds`, `movingRows`): a move, a rotation, a resize, the radius of a
-   *   circle, a handle of an extension on a feature. What a drag changes as a whole travels
-   *   with the cursor, so if it stayed a candidate it would always sit inside the
-   *   tolerance, the cursor would be pulled back to it, and it would repeat "drift every
-   *   frame by the offset from when it was grabbed, then leave the tolerance and catch up
-   *   all at once" (which looks like a vibration)
+   * - the features (and the rows) the drag changes as a whole (`movingFeatureIds`,
+   *   `movingRows`): a move, a rotation, a resize, the radius of a circle, a handle of an
+   *   extension on a feature. What a drag changes as a whole travels with the cursor, so if it
+   *   stayed a candidate it would always sit inside the tolerance, the cursor would be pulled
+   *   back to it, and it would repeat "drift every frame by the offset from when it was
+   *   grabbed, then leave the tolerance and catch up all at once" (which looks like a
+   *   vibration). At the start, the pointer is still on what it grabbed
    * - the grabbed vertex of a vertex / midpoint drag (`activeVertex`), for the same reason
    *   with the vertex as the unit: the other vertices of the same feature stay candidates
    *   so that a ring can be closed
@@ -277,15 +292,14 @@ export function createInputRouter(deps: InputRouterDeps): InputRouter {
    * The feature to prefer when candidates tie is read from the current mode (a
    * drawing mode returns the boundary it started tracing).
    */
-  function buildSnapContext(modifiers: ModifierKeys): SnapContext {
-    const dragState = context.store.getDragState();
+  function buildSnapContext(modifiers: ModifierKeys, targets: DragTargets | null): SnapContext {
     const excludeVertex =
-      dragState?.activeFeatureId && dragState.activeVertex
-        ? { featureId: dragState.activeFeatureId, vertex: dragState.activeVertex }
+      targets?.activeFeatureId && targets.activeVertex
+        ? { featureId: targets.activeFeatureId, vertex: targets.activeVertex }
         : undefined;
 
-    const moving = dragState?.movingFeatureIds;
-    const movingRows = dragState?.movingRows;
+    const moving = targets?.movingFeatureIds;
+    const movingRows = targets?.movingRows;
     const tables = context.store.tables;
     const excludeFeatureIds =
       movingRows && tables
@@ -331,7 +345,7 @@ export function createInputRouter(deps: InputRouterDeps): InputRouter {
     const result = snapService.resolve(
       event.lngLat,
       event.point,
-      buildSnapContext(event.modifiers),
+      buildSnapContext(event.modifiers, dragTargetsOf(event, inputType)),
     );
     if (result.lngLat.lng === event.lngLat.lng && result.lngLat.lat === event.lngLat.lat) {
       return { event, result: result.target ? result : null };
@@ -487,7 +501,9 @@ export function createInputRouter(deps: InputRouterDeps): InputRouter {
       // "start drawing exactly at a corner of a boundary and end at a corner" for
       // drag-driven drawing (freehand). The drag operations of select mode use
       // dragStartLngLat (the press position from before the threshold was exceeded)
-      // as their start position, so they are unaffected by the replacement here.
+      // as their start position, so they are unaffected by the replacement here (a handle of
+      // an extension is given the snapped start). The start leaves out what the drag it
+      // starts will change, as the rest of the drag does (dragTargetsOf).
       case 'dragstart': {
         const { event: snapped, result } = applySnap(event, 'dragstart');
         return engineOr(toExtensions(handler, event, snapped, result), handler.onDragStart, () =>

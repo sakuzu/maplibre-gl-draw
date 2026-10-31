@@ -27,7 +27,12 @@ import { BulkMoveDrag, BulkResizeDrag, BulkRotateDrag } from './bulk.js';
 import { type AuxiliaryDrag, resolveAuxiliaryDrag } from './drag/auxiliary.js';
 import { IntermediateWrites } from './drag/intermediate-writes.js';
 import { startMoveDrag } from './drag/move.js';
-import type { DragOperation, DragScope } from './drag/operation.js';
+import {
+  bulkDragTargets,
+  type DragOperation,
+  type DragScope,
+  dragTargetsOfHit,
+} from './drag/operation.js';
 import { startRadiusDrag } from './drag/radius.js';
 import { startResizeDrag, startRotateDrag } from './drag/transform.js';
 import {
@@ -96,7 +101,7 @@ export class SelectModeDragHandler {
       context.map.dragPan.disable();
       this.writes.discard(store);
       this.operation = globalDrag;
-      store.setDragState({ operation: 'auxiliary' });
+      store.setDragState({ operation: 'auxiliary', ...dragTargetsOfHit(hitResult, []) });
       return;
     }
 
@@ -153,56 +158,45 @@ export class SelectModeDragHandler {
     // endDrag)
     this.writes.discard(store);
 
+    // What the drag changes, recorded in its drag state (here and below). Snapping excludes it
+    // from its candidates (snapping to itself pulls the cursor back, shifting by the grab offset
+    // and making it look like it vibrates); the start of the drag was snapped leaving out the
+    // same (SelectMode.getDragTargets)
+    const targets = dragTargetsOfHit(hitResult, selectedIds);
     switch (hitResult.type) {
       case 'move':
         this.begin(startMoveDrag(event, [...selectedIds], store));
-        // Record the features the drag changes as a whole (here and below). Snapping excludes
-        // them from its candidates (snapping to itself pulls the cursor back, shifting by the
-        // grab offset and making it look like it vibrates)
-        store.setDragState({ operation: 'move', movingFeatureIds: [...selectedIds] });
+        store.setDragState({ operation: 'move', ...targets });
         break;
 
       case 'resize':
         this.begin(startResizeDrag(event, hitResult.handle!, bbox, selectedFeatures, context.map));
-        store.setDragState({ operation: 'resize', movingFeatureIds: [...selectedIds] });
+        store.setDragState({ operation: 'resize', ...targets });
         break;
 
       case 'rotate':
-        this.begin(
-          startRotateDrag(event, bbox, selectedFeatures, store, this.scope, [...selectedIds]),
-        );
+        this.begin(startRotateDrag(event, bbox, selectedFeatures, store, this.scope, targets));
         break;
 
       case 'vertex':
-        this.begin(startVertexDrag(vertexPlan!, context));
+        this.begin(startVertexDrag(vertexPlan!, context, targets));
         break;
 
       case 'midpoint':
+        // The vertex dragged is the one it adds, after the one of the hit
         this.begin(startMidpointDrag(event, hitResult.featureId!, hitResult.vertexRef!, store));
-        // For midpoint, the newly added vertex is afterIndex + 1 in the same part and same ring
-        store.setDragState({
-          operation: 'midpoint',
-          activeVertex: {
-            ...hitResult.vertexRef!,
-            index: hitResult.vertexRef!.index + 1,
-          },
-          activeFeatureId: hitResult.featureId!,
-        });
+        store.setDragState({ operation: 'midpoint', ...targets });
         break;
 
       case 'radius':
         this.begin(startRadiusDrag(hitResult.featureId!, store));
-        store.setDragState({ operation: 'radius', movingFeatureIds: [hitResult.featureId!] });
+        store.setDragState({ operation: 'radius', ...targets });
         break;
 
       case 'auxiliary':
-        // Delegation is already done above (we only get here when it was accepted). Core does
-        // not know what the handle changes, so the feature it is on is taken as changed whole
+        // Delegation is already done above (we only get here when it was accepted)
         this.begin(auxiliaryDrag);
-        store.setDragState({
-          operation: 'auxiliary',
-          ...(hitResult.featureId !== undefined && { movingFeatureIds: [hitResult.featureId] }),
-        });
+        store.setDragState({ operation: 'auxiliary', ...targets });
         break;
     }
   }
@@ -238,7 +232,7 @@ export class SelectModeDragHandler {
     this.writes.discard(store);
     if (hitResult.type === 'move') {
       this.begin(new BulkMoveDrag(context, rows, event));
-      store.setDragState({ operation: 'move', movingFeatureIds: [], movingRows: rows });
+      store.setDragState({ operation: 'move', ...bulkDragTargets(rows) });
     } else if (hitResult.type === 'rotate') {
       this.begin(new BulkRotateDrag(context, rows, event, bbox));
     } else {

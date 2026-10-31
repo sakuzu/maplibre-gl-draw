@@ -11,7 +11,7 @@ import type { VertexState } from '../../../operations/vertex.js';
 import { addVertex, computeVertexMove, startVertexMove } from '../../../operations/vertex.js';
 import { geometryFromCoordinates } from '../../../shared/utils/coordinates.js';
 import { hasVertexRef } from '../../../shared/utils/vertex-ref.js';
-import type { Coordinate, VertexRef } from '../../../store/types.js';
+import type { Coordinate, DragTargets, VertexRef } from '../../../store/types.js';
 import type { EngineModeContext } from '../../handler.js';
 import type { IntermediateWrites } from './intermediate-writes.js';
 import type { DragOperation, DragStore } from './operation.js';
@@ -168,8 +168,15 @@ export function planVertexDrag(
 
 /**
  * Start a planned vertex drag, and set the DragState and the followed vertices it draws from
+ *
+ * @param targets The vertex the drag started from, as its drag state records it (snapping leaves
+ *   it out)
  */
-export function startVertexDrag(plan: VertexDragPlan, context: EngineModeContext): VertexDrag {
+export function startVertexDrag(
+  plan: VertexDragPlan,
+  context: EngineModeContext,
+  targets: DragTargets,
+): VertexDrag {
   const { store } = context;
   const { state, followers } = plan;
 
@@ -183,11 +190,7 @@ export function startVertexDrag(plan: VertexDragPlan, context: EngineModeContext
   );
 
   // Set the DragState (activeVertex is the vertex the drag started from)
-  store.setDragState({
-    operation: 'vertex',
-    activeVertex: plan.vertexRef,
-    activeFeatureId: state.featureId,
-  });
+  store.setDragState({ operation: 'vertex', ...targets });
 
   return new VertexDrag('vertex', state, followers);
 }
