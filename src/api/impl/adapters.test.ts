@@ -20,7 +20,9 @@ import { createMapStub, createSyntheticInput } from '../../test-utils.js';
 import { createFeatureCompanionRegistry } from '../../view/feature-companion.js';
 import { calculateOffsetUniforms } from '../../view/shaders/helpers.js';
 import type { TerrainContext } from '../../view/terrain/context.js';
+import { offsetUniformsAt, viewUniforms } from '../../webgl/index.js';
 import type { Draw } from '../draw.js';
+import { DrawError } from '../errors.js';
 import type { ScreenContext } from '../extension/context.js';
 import type { FeatureTypeDefinition, Handle } from '../extension/feature-type.js';
 import type { Hit } from '../extension/provider.js';
@@ -138,7 +140,6 @@ describe('a custom feature type', () => {
     ];
     expect(drawn.id).toBe('p1');
     expect(ctx.gl).toBe(GL);
-    expect(ctx.projection).toBe(PROJECTION);
     // The screen of the frame is the screen of the extensions, read while the frame is drawn
     let screen: ScreenContext | null = null;
     engine.extensions.collections.plugins.add({
@@ -151,13 +152,17 @@ describe('a custom feature type', () => {
     expect(ctx).not.toHaveProperty('zoom');
     expect(ctx).not.toHaveProperty('pixelRatio');
     expect(ctx.opacity).toBe(0.5);
-    expect(ctx.shader.variantName).toBe('mercator');
-    expect(ctx.offset).toEqual(
-      calculateOffsetUniforms(base.centerLngLat, {
-        ...PROJECTION,
-        mainMatrix: base.mainMatrixArray as never,
-      }),
-    );
+    // The details of the GPU are read through /webgl, not from the context
+    expect(ctx).not.toHaveProperty('shader');
+    expect(ctx).not.toHaveProperty('offset');
+    expect(ctx).not.toHaveProperty('projection');
+    const view = viewUniforms(ctx);
+    expect(view.shader.variantName).toBe('mercator');
+    expect(view.projection).toBe(PROJECTION);
+    const frame = { ...PROJECTION, mainMatrix: base.mainMatrixArray as never };
+    expect(view.offset).toEqual(calculateOffsetUniforms(base.centerLngLat, frame));
+    expect(offsetUniformsAt(ctx, [1, 2])).toEqual(calculateOffsetUniforms([1, 2], frame));
+    expect(() => viewUniforms({} as RenderContext)).toThrow(DrawError);
 
     ctx.line.draw(
       [

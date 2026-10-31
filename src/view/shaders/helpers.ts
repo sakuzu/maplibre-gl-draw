@@ -8,9 +8,6 @@
  * Performs the WGS84 -> Mercator -> clip coordinate conversion on the GPU
  */
 
-// The shader prelude and the offset values are the types of the extension contract, so that the
-// renderers and the second layer of the API name the same types as the main entry
-import type { OffsetUniforms, ShaderData } from '../../api/extension/render.js';
 import {
   CENTER_OFFSET_GLSL,
   CENTER_PROJECTION_CONSTANTS,
@@ -19,7 +16,38 @@ import {
   type ProjectionMatrices,
 } from './center-projection.js';
 
-export type { OffsetUniforms, ProjectionMatrices, ShaderData };
+export type { ProjectionMatrices };
+
+/**
+ * The shader prelude the map passes to a custom layer, for compiling programs for the current
+ * projection.
+ */
+export interface ShaderData {
+  /** The GLSL the map prepends to a vertex shader (its projection functions) */
+  vertexShaderPrelude: string;
+  /** The `#define` lines of the current projection */
+  define: string;
+  /** The name of the projection variant; a program is compiled again when it changes */
+  variantName: string;
+}
+
+/**
+ * The values for drawing positions relative to a center, which keeps the precision of 32-bit
+ * floats near it at every zoom, on Web Mercator, on the globe and in the transition between.
+ */
+export interface OffsetUniforms {
+  /** The center, rounded to 32-bit floats for the shader (what the offsets are taken from) */
+  centerLngLat: [number, number];
+  /** The center at 64-bit precision, for the offsets computed on the CPU */
+  centerLngLat64: [number, number];
+  /** The Mercator coordinates of the center, at 64-bit precision */
+  centerMercator: [number, number];
+  /**
+   * The center in clip space as the frame projects it, at 64-bit precision: on Web Mercator,
+   * on the globe, or both mixed by the transition between them
+   */
+  projectionCenter: [number, number, number, number];
+}
 
 /**
  * Converts WGS84 coordinates to Mercator coordinates (high precision

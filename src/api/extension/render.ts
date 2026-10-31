@@ -7,43 +7,11 @@
  */
 
 import type { Position } from 'geojson';
-import type { Map as MaplibreMap, ProjectionData } from 'maplibre-gl';
+import type { Map as MaplibreMap } from 'maplibre-gl';
 import type { RowSpriteSource } from '../../view/renderers/rows/rows-format.js';
 import type { Feature, LineStyle, PointShape } from '../model.js';
 import type { LayerTableView } from '../tables.js';
 import type { ScreenContext, TerrainSurface } from './context.js';
-
-/**
- * The shader prelude the map passes to a custom layer, for compiling programs for the current
- * projection.
- */
-export interface ShaderData {
-  /** The GLSL the map prepends to a vertex shader (its projection functions) */
-  vertexShaderPrelude: string;
-  /** The `#define` lines of the current projection */
-  define: string;
-  /** The name of the projection variant; a program is compiled again when it changes */
-  variantName: string;
-}
-
-/**
- * The values for drawing positions relative to the center of the view, which keeps the
- * precision of 32-bit floats near the camera at every zoom, on Web Mercator, on the globe and in
- * the transition between.
- */
-export interface OffsetUniforms {
-  /** The center, rounded to 32-bit floats for the shader (what the offsets are taken from) */
-  centerLngLat: [number, number];
-  /** The center at 64-bit precision, for the offsets computed on the CPU */
-  centerLngLat64: [number, number];
-  /** The Mercator coordinates of the center, at 64-bit precision */
-  centerMercator: [number, number];
-  /**
-   * The center in clip space as the frame projects it, at 64-bit precision: on Web Mercator,
-   * on the globe, or both mixed by the transition between them
-   */
-  projectionCenter: [number, number, number, number];
-}
 
 /**
  * The shared renderer of lines. It only draws; the zoom, the projection and the terrain come
@@ -120,17 +88,13 @@ export interface PointRenderer {
 }
 
 /**
- * Everything a renderer needs to draw a frame. The offsets are already computed.
+ * Everything a renderer needs to draw a frame: the shared renderers, the screen and the terrain of
+ * the frame. A renderer with shaders of its own reads the values of the GPU of the frame through
+ * `viewUniforms(ctx)` and `offsetUniformsAt(ctx, position)` of `@sakuzu/maplibre-gl-draw/webgl`.
  */
 export interface RenderContext {
   /** The WebGL context of the map */
   readonly gl: WebGL2RenderingContext;
-  /** The shader prelude of the current projection */
-  readonly shader: ShaderData;
-  /** The values for drawing relative to the center of the view */
-  readonly offset: OffsetUniforms;
-  /** The projection of the frame, as the map passes it to a custom layer */
-  readonly projection: ProjectionData;
   /**
    * The conversion between the map and the screen, its zoom and its pixel ratio, in the frame
    * being drawn: the same object as `ctx.screen` of the context of an extension, which answers

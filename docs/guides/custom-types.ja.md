@@ -130,8 +130,9 @@ const ends = feature.style.routeEnds === 'dot' ? 'dot' : 'none';
   ではなく `screen.pixelRatio` を使い、ほかから持ち込んだ画面ではなく、
   この欄の画面を読んでください
 - `terrain` は地面の高さです ([地形](#地形) を参照)
-- `gl`、`shader`、`offset`、`projection` は、自分でシェーダーを書く
-  描画器のためのものです ([自分のシェーダー](#自分のシェーダー) を参照)
+- `gl` は WebGL の文脈で、自分でシェーダーを書く描画器のためのもの
+  です。そうした描画器は、コマの GPU の値を `/webgl` で読みます
+  ([自分のシェーダー](#自分のシェーダー) を参照)
 
 面を塗り、縁を描く型です。
 
@@ -590,8 +591,11 @@ draw.extensions.companionProviders.add(halo);
 
 共有の描画器は、線、面、点の印を描きます。それ以外のものは、描画器が
 `ctx.gl` で自分のシェーダーをコンパイルして描きます。位置は、
-`ctx.shader` (地図の投影の関数)、`ctx.offset` (精度を落とさずにカメラの
-近くを描くための表示の中心)、`ctx.projection` で決めます。
+`/webgl` の `viewUniforms(ctx)` が渡すコマの GPU の値、`shader` (地図の
+投影の関数)、`projection`、`offset` (精度を落とさずにカメラの近くを
+描くための表示の中心) で決めます。`offsetUniformsAt(ctx, position)` は、
+ほかの位置からの差の値を渡します。中心から遠い形を、その形の位置の
+周りで描くときに使います。
 
 入口 `@sakuzu/maplibre-gl-draw/webgl` には、ライブラリーのシェーダーの
 土台になっている部品があります。投影の GLSL とその uniform のための
@@ -614,6 +618,7 @@ import {
   densifyPath,
   type ProjectionUniformManager,
   terrainTessellationStep,
+  viewUniforms,
 } from '@sakuzu/maplibre-gl-draw/webgl';
 
 function pathOnTerrain(
@@ -622,9 +627,10 @@ function pathOnTerrain(
   uniforms: ProjectionUniformManager,
   coordinates: [number, number][],
 ): [number, number][] {
+  const view = viewUniforms(ctx);
   ctx.gl.useProgram(program);
   uniforms.setTerrain(ctx);
-  uniforms.setUniforms(ctx.projection, ctx.screen.zoom, ctx.offset);
+  uniforms.setUniforms(view.projection, ctx.screen.zoom, view.offset);
   const step = terrainTessellationStep(ctx);
   // path を送って描く
   return step ? densifyPath(coordinates, step) : coordinates;

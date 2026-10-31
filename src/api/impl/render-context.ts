@@ -21,7 +21,8 @@ import type {
 import { toColor } from '../../shared/color.js';
 import type { Feature as StoredFeature } from '../../store/types.js';
 import { applyDrawBlendState } from '../../view/layer/blend.js';
-import { calculateOffsetUniforms } from '../../view/shaders/helpers.js';
+import { calculateOffsetUniforms, type OffsetUniforms } from '../../view/shaders/helpers.js';
+import { bindViewUniforms } from '../../view/shaders/view-uniforms.js';
 import { bindTerrainState } from '../../view/terrain/binding.js';
 import type { TerrainContext } from '../../view/terrain/context.js';
 import type { ScreenContext, TerrainSurface } from '../extension/context.js';
@@ -29,7 +30,6 @@ import type {
   FeatureRenderer,
   FillRenderer,
   LineRenderer,
-  OffsetUniforms,
   OverlayRenderer,
   PointRenderer,
   RenderContext,
@@ -68,13 +68,15 @@ export function terrainSurfaceOf(
 /** The offsets of each projection matrix of a frame */
 const offsetsByMatrix = new WeakMap<object, OffsetUniforms>();
 
+/** The projection of a frame the CPU computes centers with: the matrix of the frame in float64 */
+function frameOf(base: FrameDrawContext, projection: ProjectionData): ProjectionData {
+  return { ...projection, mainMatrix: base.mainMatrixArray as ProjectionData['mainMatrix'] };
+}
+
 function offsetOf(base: FrameDrawContext, projection: ProjectionData): OffsetUniforms {
   let offset = offsetsByMatrix.get(base.mainMatrixArray);
   if (!offset) {
-    offset = calculateOffsetUniforms(base.centerLngLat, {
-      ...projection,
-      mainMatrix: base.mainMatrixArray as ProjectionData['mainMatrix'],
-    });
+    offset = calculateOffsetUniforms(base.centerLngLat, frameOf(base, projection));
     offsetsByMatrix.set(base.mainMatrixArray, offset);
   }
   return offset;
@@ -156,9 +158,6 @@ export function createRenderContext(
   };
   const context: RenderContext = {
     gl,
-    shader: base.shaderData,
-    offset: offsetOf(base, projection),
-    projection,
     screen,
     opacity: base.opacity,
     terrain: surface,
@@ -166,8 +165,15 @@ export function createRenderContext(
     fill,
     point,
   };
-  // The building blocks of the second entry find the terrain state behind the context
+  // The building blocks of the second entry find the terrain state and the values of the GPU of
+  // the frame behind the context
   bindTerrainState(context, base.terrain);
+  bindViewUniforms(context, {
+    shader: base.shaderData,
+    projection,
+    offset: offsetOf(base, projection),
+    frame: frameOf(base, projection),
+  });
   return context;
 }
 

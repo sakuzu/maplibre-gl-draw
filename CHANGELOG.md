@@ -266,6 +266,12 @@ writing it. Its changes are listed after those of 3.0.0.
 - `RenderContext.screen`, the screen of the frame being drawn (the same
   object as `ctx.screen` of an extension), in place of
   `RenderContext.zoom` and `RenderContext.pixelRatio`, which it has.
+- The values of the GPU of a frame are out of the main entry: the render
+  context no longer has `shader`, `offset` and `projection`, and
+  `viewUniforms(ctx)` of `/webgl` gives them (`ViewUniforms`), with
+  `offsetUniformsAt(ctx, position)`, the offsets from a position in the
+  frame of a render context. `ShaderData` and `OffsetUniforms` are types
+  of `/webgl`.
 - `TerrainAnchors` is `TerrainSurface`, the surface of the terrain:
   `occlusionOpacity` (was `ghostOpacity`), `elevation` and `generation`.
   Its `project` is gone: `ScreenContext.project` answers where a position

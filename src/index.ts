@@ -237,11 +237,9 @@ export type {
   FeatureRenderer,
   FillRenderer,
   LineRenderer,
-  OffsetUniforms,
   OverlayRenderer,
   PointRenderer,
   RenderContext,
-  ShaderData,
 } from './api/extension/render.js';
 export type {
   ExtensionsCollections,

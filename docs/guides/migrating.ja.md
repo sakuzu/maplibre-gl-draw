@@ -766,6 +766,12 @@ draw.features.update(featureId, {
 - `ctx.screen` は最後に描いたコマについて答えます (`project`、`unproject`、
   `zoom`、`metersPerPixel`)。ポインターのイベントの位置は、その下に
   描かれている位置です。カメラがその後に動いても、つかむ物は描いた物です
+- コマの GPU の値は、描く文脈からでなく `/webgl` で読みます。
+  `viewUniforms(ctx)` が `shader`、`projection`、`offset` (前は
+  `ctx.shader`、`ctx.projection`、`ctx.offset`) を渡し、
+  `offsetUniformsAt(ctx, position)` がある位置からの差の値を渡します
+  (`calculateOffsetUniforms` の写しの代わり)。`ShaderData` と
+  `OffsetUniforms` は `/webgl` の型です
 - `ctx.terrain` は `TerrainSurface` になりました (前は `TerrainAnchors`)。
   `occlusionOpacity(lngLat)` は前の `ghostOpacity` です。`project` は
   無くなりました。位置がどこに描かれるかは、地形があれば地形の上で、

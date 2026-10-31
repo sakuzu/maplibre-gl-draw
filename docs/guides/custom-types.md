@@ -136,8 +136,9 @@ The `RenderContext` carries what a renderer needs to draw:
   `screen.pixelRatio` rather than `window.devicePixelRatio`, and read
   the screen from the context rather than keeping one from elsewhere
 - `terrain`, the heights of the ground (see [Terrain](#terrain))
-- `gl`, `shader`, `offset` and `projection`, for a renderer that
-  writes its own shaders (see [Your own shaders](#your-own-shaders))
+- `gl`, the WebGL context, for a renderer that writes its own shaders,
+  which reads the values of the GPU of the frame through `/webgl` (see
+  [Your own shaders](#your-own-shaders))
 
 A type that fills an area and outlines it:
 
@@ -622,9 +623,13 @@ draw.extensions.companionProviders.add(halo);
 
 The shared renderers cover lines, areas and point markers. For
 anything else, a renderer compiles its own shaders with `ctx.gl`, and
-positions them with `ctx.shader` (the projection functions of the map),
-`ctx.offset` (the center of the view, for drawing near the camera
-without losing precision) and `ctx.projection`.
+positions them with the values of the GPU of the frame, which
+`viewUniforms(ctx)` of `/webgl` gives: `shader` (the projection
+functions of the map), `projection`, and `offset` (the center of the
+view, for drawing near the camera without losing precision).
+`offsetUniformsAt(ctx, position)` gives the offsets from another
+position, for a shape far from the center drawn around its own
+position.
 
 The entry `@sakuzu/maplibre-gl-draw/webgl` has the parts the shaders of
 the library are built on: the GLSL of the projection and
@@ -648,6 +653,7 @@ import {
   densifyPath,
   type ProjectionUniformManager,
   terrainTessellationStep,
+  viewUniforms,
 } from '@sakuzu/maplibre-gl-draw/webgl';
 
 function pathOnTerrain(
@@ -656,9 +662,10 @@ function pathOnTerrain(
   uniforms: ProjectionUniformManager,
   coordinates: [number, number][],
 ): [number, number][] {
+  const view = viewUniforms(ctx);
   ctx.gl.useProgram(program);
   uniforms.setTerrain(ctx);
-  uniforms.setUniforms(ctx.projection, ctx.screen.zoom, ctx.offset);
+  uniforms.setUniforms(view.projection, ctx.screen.zoom, view.offset);
   const step = terrainTessellationStep(ctx);
   // upload the path and draw it
   return step ? densifyPath(coordinates, step) : coordinates;

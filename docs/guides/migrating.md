@@ -759,6 +759,12 @@ drawn. Each change below names what replaces what is gone.
   `zoom`, `metersPerPixel`), and the position of a pointer event is the
   position drawn under it: what is grabbed is what was drawn, also when
   the camera moved since
+- The values of the GPU of the frame are read through `/webgl`, not from
+  the render context: `viewUniforms(ctx)` gives `shader`, `projection`
+  and `offset` (were `ctx.shader`, `ctx.projection` and `ctx.offset`),
+  `offsetUniformsAt(ctx, position)` the offsets from a position (in
+  place of a copy of `calculateOffsetUniforms`), and `ShaderData` and
+  `OffsetUniforms` are types of `/webgl`
 - `ctx.terrain` is a `TerrainSurface` (was `TerrainAnchors`):
   `occlusionOpacity(lngLat)` was `ghostOpacity`, and `project` is gone,
   since `ctx.screen.project(lngLat)` answers where a position is drawn,

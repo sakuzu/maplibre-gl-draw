@@ -7,14 +7,15 @@
  * Use it only when a custom feature type or an overlay needs a shader of its own. The
  * {@link maplibre-gl-draw!RenderContext | RenderContext} a renderer receives already carries
  * the shared renderers of lines, areas and point markers, and most renderers need nothing
- * more. This entry holds the GLSL of the projection, the uniforms that go with it, the quad
- * shader, and the rules the shared renderers follow for dashes and terrain. The parts that draw
- * on the terrain take the render context of the draw call (or its `terrain`). Unlike the main
- * entry, it may change in a minor release.
+ * more. This entry holds the values of the GPU of the frame a render context draws
+ * ({@link viewUniforms}, {@link offsetUniformsAt}), the GLSL of the projection, the uniforms
+ * that go with it, the quad shader, and the rules the shared renderers follow for dashes and
+ * terrain. The parts that draw on the terrain take the render context of the draw call (or its
+ * `terrain`). Unlike the main entry, it may change in a minor release.
  *
  * ```ts
  * import {
- *   createProgram, OFFSET_MODE_GLSL, ProjectionUniformManager,
+ *   createProgram, OFFSET_MODE_GLSL, ProjectionUniformManager, viewUniforms,
  * } from '@sakuzu/maplibre-gl-draw/webgl';
  *
  * let program: WebGLProgram | null = null;
@@ -23,15 +24,16 @@
  *   name: 'my-shader',
  *   onAdd: () => {},
  *   draw(ctx) {
+ *     const view = viewUniforms(ctx);
  *     if (!program) {
- *       const vertex = vertexSource(ctx.shader.vertexShaderPrelude, OFFSET_MODE_GLSL);
+ *       const vertex = vertexSource(view.shader.vertexShaderPrelude, OFFSET_MODE_GLSL);
  *       program = createProgram(ctx.gl, vertex, fragmentSource);
  *       uniforms = new ProjectionUniformManager(ctx.gl);
  *       uniforms.getLocations(program);
  *     }
  *     ctx.gl.useProgram(program);
  *     uniforms?.setTerrain(ctx);
- *     uniforms?.setUniforms(ctx.projection, ctx.zoom, ctx.offset);
+ *     uniforms?.setUniforms(view.projection, ctx.screen.zoom, view.offset);
  *     // bind the buffers of your shape and draw it
  *   },
  *   onRemove: (_map, gl) => gl.deleteProgram(program),
@@ -40,7 +42,7 @@
  *
  * Read next: the guide
  * [custom feature types](https://sakuzu.github.io/maplibre-gl-draw/guides/custom-types). The
- * parts used most are {@link createProgram}, {@link OFFSET_MODE_GLSL} and
+ * parts used most are {@link viewUniforms}, {@link createProgram}, {@link OFFSET_MODE_GLSL} and
  * {@link ProjectionUniformManager}.
  *
  * @module webgl
@@ -50,12 +52,15 @@
 
 // Shaders and projection
 export { DEFAULT_TILE_SIZE } from '../shared/math/constants.js';
+export type { OffsetUniforms, ShaderData } from '../view/shaders/helpers.js';
 export {
   calculateLngLatOffset,
   createProgram,
   OFFSET_MODE_GLSL,
 } from '../view/shaders/helpers.js';
 export { ProjectionUniformManager } from '../view/shaders/projection.js';
+export type { ViewUniforms } from '../view/shaders/view-uniforms.js';
+export { offsetUniformsAt, viewUniforms } from '../view/shaders/view-uniforms.js';
 
 // Blending and billboards
 export { applyDrawBlendState } from '../view/layer/blend.js';
