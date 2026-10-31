@@ -240,6 +240,12 @@ writing it. Its changes are listed after those of 3.0.0.
   handle of an extension on a feature no longer snap to the features they
   change, as a move did not already: the pointer was pulled to an edge or
   a vertex of the feature it was turning or resizing, which moves with it.
+- The start of a drag no longer snaps to what the drag changes, as the
+  rest of the drag does not: a move, a resize, a vertex and a midpoint
+  could snap to their own feature as they started, and a handle of an
+  extension on a feature was given a start pulled to a vertex of that
+  feature, so the feature did not follow the pointer from where it was
+  grabbed.
 - The handles of the selection are grabbed where they are drawn when
   `selectionStyle` gives them other sizes, another margin of the box or
   another distance of the rotate handle: the select mode tested them at

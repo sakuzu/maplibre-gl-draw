@@ -254,6 +254,118 @@ describe.each(STORE_KINDS)('on %s', (_kind, createStore) => {
     });
   });
 
+  describe('SelectMode.getDragTargets: what the drag a press starts will change', () => {
+    /** A start of a drag pressed at a position of the map (1 degree = 10 px) */
+    function pressAt(lng: number, lat: number, shift = false): DragNormalizedEvent {
+      const point = { x: lng * 10, y: -lat * 10 };
+      return {
+        ...dragEvent(),
+        point,
+        lngLat: { lng, lat },
+        dragStartPoint: point,
+        dragStartLngLat: { lng, lat },
+        modifiers: { ...NO_MODIFIERS, shift },
+      };
+    }
+
+    /** What the drag state records of what the drag changes (null without a drag) */
+    function recorded() {
+      const state = store.getDragState();
+      if (!state) return null;
+      const { operation: _operation, rotateInfo: _rotateInfo, ...targets } = state;
+      return targets;
+    }
+
+    it('answers the features a press on a feature moves, and changes nothing to answer', () => {
+      hit = { feature: store.getFeature('f1') as Feature, distance: 0 };
+
+      const targets = mode.getDragTargets(pressAt(5, 5));
+
+      expect(targets).toEqual({ movingFeatureIds: ['f1'] });
+      expect(store.getSelection()).toEqual({ type: null, ids: [] });
+      expect(store.getDragState()).toBeNull();
+      expect(map.dragPan.disable).not.toHaveBeenCalled();
+      expect(holds).toEqual([false]);
+
+      mode.onDragStart(pressAt(5, 5));
+      expect(recorded()).toEqual(targets);
+    });
+
+    it('answers what the drag of each handle of the selection records once it starts', () => {
+      store.setSelection('feature', ['f1']);
+      hit = { feature: store.getFeature('f1') as Feature, distance: 0 };
+      // A vertex, a midpoint, the inside of the frame
+      const presses: [number, number][] = [
+        [0, 0],
+        [5, 0],
+        [5, 5],
+      ];
+      const answers = presses.map(([lng, lat]) => {
+        const targets = mode.getDragTargets(pressAt(lng, lat));
+        mode.onDragStart(pressAt(lng, lat));
+        const record = recorded();
+        mode.onDragCancel();
+        expect(record).toEqual(targets);
+        return targets;
+      });
+
+      expect(answers).toEqual([
+        { activeFeatureId: 'f1', activeVertex: { ring: 0, index: 0 } },
+        { activeFeatureId: 'f1', activeVertex: { ring: 0, index: 1 } },
+        { movingFeatureIds: ['f1'] },
+      ]);
+    });
+
+    it('answers a row held as columns by its id, without holding it', () => {
+      rowTop = {
+        kind: 'row',
+        layerId: 'l1',
+        id: 'r1',
+        handle: 0,
+        locked: false,
+        distancePx: () => 0,
+      };
+
+      expect(mode.getDragTargets(pressAt(5, 5))).toEqual({
+        movingFeatureIds: ['r1'],
+      });
+      expect(holds).toEqual([false]);
+    });
+
+    it('answers nothing for a box selection, under the interaction lock and on the empty map', () => {
+      hit = { feature: store.getFeature('f1') as Feature, distance: 0 };
+      expect(mode.getDragTargets(pressAt(5, 5, true))).toBeNull();
+
+      store.setInteractionLock(true);
+      expect(mode.getDragTargets(pressAt(5, 5))).toBeNull();
+      store.setInteractionLock(false);
+
+      hit = null;
+      expect(mode.getDragTargets(pressAt(50, 50))).toBeNull();
+    });
+
+    it('answers nothing for a handle on no feature, without asking its provider', () => {
+      const onHandleDragStart = vi.fn(() => true);
+      context.selectionScope.auxiliaryHandles.register({
+        id: 'p1',
+        getHandles: () => [],
+        getGlobalHandles: () => [{ id: 'g1', position: [5, 5] }],
+        onHandleDragStart,
+        onHandleDragMove: () => {},
+        onHandleDragEnd: () => {},
+      });
+      try {
+        expect(mode.getDragTargets(pressAt(5, 5))).toEqual({});
+        expect(onHandleDragStart).not.toHaveBeenCalled();
+
+        mode.onDragStart(pressAt(5, 5));
+        expect(recorded()).toEqual({});
+      } finally {
+        context.selectionScope.auxiliaryHandles.clear();
+      }
+    });
+  });
+
   describe('clearing the selection in SelectMode.onStop', () => {
     it('a normal mode switch (to drawing, etc.) clears the selection', () => {
       store.setSelection('feature', ['f1']);
@@ -413,7 +525,12 @@ describe.each(STORE_KINDS)('on %s', (_kind, createStore) => {
 
   describe('SelectMode: cancelling a drag', () => {
     function dragAt(type: DragNormalizedEvent['type'], lng: number, lat: number) {
-      return { ...dragEvent(), type, point: { x: lng * 10, y: -lat * 10 }, lngLat: { lng, lat } };
+      return {
+        ...dragEvent(),
+        type,
+        point: { x: lng * 10, y: -lat * 10 },
+        lngLat: { lng, lat },
+      };
     }
 
     function key(k: string): KeyNormalizedEvent {
@@ -460,7 +577,10 @@ describe.each(STORE_KINDS)('on %s', (_kind, createStore) => {
     it.skipIf(rows)(
       'a frame that selects the same features does not change the selection again',
       () => {
-        context.spatialIndex = { findNear: () => [], findInBounds: () => ['f1'] };
+        context.spatialIndex = {
+          findNear: () => [],
+          findInBounds: () => ['f1'],
+        };
         context.boxSelectionRegistry = {
           get: () => ({ intersects: () => true }),
         } as unknown as EngineModeContext['boxSelectionRegistry'];
@@ -544,14 +664,18 @@ describe.each(STORE_KINDS)('on %s', (_kind, createStore) => {
     it('consumes a double click on a feature (no zoom) and leaves one on the empty map', () => {
       const onFeature = { ...mouseEvent(), type: 'dblclick' as const };
       const preventOnFeature = vi.fn();
-      onFeature.originalEvent = { preventDefault: preventOnFeature } as unknown as MouseEvent;
+      onFeature.originalEvent = {
+        preventDefault: preventOnFeature,
+      } as unknown as MouseEvent;
       hit = { feature: store.getFeature('f1')!, distance: 0 };
       mode.onDoubleClick(onFeature);
       expect(preventOnFeature).toHaveBeenCalled();
 
       const onMap = { ...mouseEvent(), type: 'dblclick' as const };
       const preventOnMap = vi.fn();
-      onMap.originalEvent = { preventDefault: preventOnMap } as unknown as MouseEvent;
+      onMap.originalEvent = {
+        preventDefault: preventOnMap,
+      } as unknown as MouseEvent;
       hit = null;
       mode.onDoubleClick(onMap);
       expect(preventOnMap).not.toHaveBeenCalled();

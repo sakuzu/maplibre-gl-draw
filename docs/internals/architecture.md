@@ -656,7 +656,9 @@ The methods are all optional:
 - Keyboard: `onKeyDown`, `onKeyUp`
 - Vertices while drawing: `undoVertex`, `redoVertex`
 - Snapping: `isSnapEnabledFor(type)` declines snapping per input kind;
-  `getSnapPreference()` names the feature to prefer when candidates tie
+  `getSnapPreference()` names the feature to prefer when candidates tie;
+  `getDragTargets(event)` says what the drag a `dragstart` starts will
+  change, before the mode starts it
 - `writesFeatures`: the mode creates features, so it may be entered only
   while a layer can be written
 
@@ -760,10 +762,16 @@ kinds above.
   committed vertices of the tentative shape.
 - Vertex enumeration shares the handle computation of the selection UI
   (`view/ui/handles.ts`), so holes and Multi parts are targets as they are.
-- The InputRouter excludes, from the Store's drag state, the grabbed vertex
-  during a vertex drag and the moving features during a move. Select mode
-  drags start from `dragStartLngLat`, which is never snapped, so snapping
-  `dragstart` and `dragend` does not shift them.
+- The InputRouter leaves out what the drag an input belongs to changes
+  (`DragTargets`): the features and the rows it changes as a whole, and the
+  vertex it drags. It takes them from one place, `dragTargetsOf`: in the
+  middle and at the end of a drag, the Store's drag state; at its start,
+  which the mode starts only once it receives it snapped, what the mode
+  says the drag will change (`getDragTargets`). Select mode answers that
+  from the same grab its `onDragStart` starts, and the drag records the
+  same in its drag state. Select mode drags start from `dragStartLngLat`,
+  which is never snapped, so snapping `dragstart` and `dragend` does not
+  shift them.
 - The marker is a built-in overlay renderer (`snapping/indicator.ts`).
   Snapping does not change the Store, so it repaints on the `snap.change`
   signal. The

@@ -76,7 +76,9 @@ export function selectedFeaturesOf(store: DragStore): Feature[] {
  * changes nothing core knows of)
  *
  * The drag state and the snap of the start of the drag (before the drag state is set) both read
- * it, so that snapping leaves out the same from the start of the drag to its end.
+ * it, so that snapping leaves out the same from the start of the drag to its end. A midpoint adds
+ * its vertex only once the drag starts: at its start the index names the vertex after the edge the
+ * midpoint is on, which is left out with its edges, that edge among them.
  *
  * @param selectedIds The selected features, with group / layer selections resolved
  */

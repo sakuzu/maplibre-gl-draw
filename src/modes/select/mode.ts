@@ -27,7 +27,7 @@ import { featureTablesInternals } from '../../feature-table/feature-tables.js';
 import { TableSelection } from '../../feature-table/selection.js';
 import { createCoordinateTransform } from '../../shared/math/index.js';
 import { getDisplayFeatures } from '../../store/local-visibility.js';
-import type { BoxSelection, Coordinate, Mode, Selection } from '../../store/types.js';
+import type { BoxSelection, Coordinate, DragTargets, Mode, Selection } from '../../store/types.js';
 import { isPointInSelectionFrame } from '../../view/ui/bounds.js';
 import type { HandleHitResult } from '../../view/ui/handle-test.js';
 import {
@@ -41,11 +41,13 @@ import {
   getSelectedFeatureIds,
   getSelectedFeatures,
 } from '../../view/ui/helper.js';
+import type { BoundingBoxCoords } from '../../view/ui/selection-ui/index.js';
 import type { EngineModeContext, EngineModeHandler, SnapInputKind } from '../handler.js';
 import { queryFeaturesInBox } from './box-selection.js';
 import { BulkNudge, queryRowsInBox } from './bulk.js';
 import { handleSelectClick, handleSelectDoubleClick } from './click-handler.js';
 import { updateCursorForSelection } from './cursor-handler.js';
+import { bulkDragTargets, dragTargetsOfHit } from './drag/operation.js';
 import { SelectModeDragHandler } from './drag-handler.js';
 import {
   getAdditionalResizeHandlesCallback,
@@ -70,6 +72,63 @@ function selectsExactly(selection: Selection, ids: readonly string[]): boolean {
     selection.ids.length === ids.length &&
     selection.ids.every((id, i) => id === ids[i])
   );
+}
+
+/** A press inside the frame of the selection, or on a feature: a move */
+const MOVE: HandleHitResult = { type: 'move' };
+
+/**
+ * What a press grabs (`SelectMode.#grabOf`): the start of the drag starts it, and the mode answers
+ * what the drag will change from it (`SelectMode.getDragTargets`)
+ */
+type Grab =
+  /** Shift: a box selection */
+  | { kind: 'box' }
+  /** A handle of the frame of the features selected in bulk, or one of them (a move) */
+  | {
+      kind: 'bulk';
+      hit: HandleHitResult;
+      /** The frame of their extent (without its margin) */
+      frame: BoundingBoxCoords;
+      /** Their rows */
+      rows: TableSelection;
+    }
+  /** A handle of the selected features */
+  | {
+      kind: 'handle';
+      hit: HandleHitResult;
+      /** The frame of the selected features */
+      bbox: BoundingBoxCoords;
+      /** The selected features, with group / layer selections resolved */
+      selectedIds: readonly string[];
+    }
+  /** A handle that does not belong to the selection */
+  | { kind: 'global'; hit: HandleHitResult }
+  /** A feature, moved with the selection it is in, or alone once the press selects it */
+  | {
+      kind: 'feature';
+      featureId: string;
+      /** The features the move drags: the selection, once the press selects the feature */
+      selectedIds: readonly string[];
+    };
+
+/**
+ * What the drag of a grab changes, as its drag state records it (null for a box selection, which
+ * changes nothing). The drag handler records the same from the same hit and selection
+ */
+function targetsOfGrab(grab: Grab): DragTargets | null {
+  switch (grab.kind) {
+    case 'box':
+      return null;
+    case 'bulk':
+      return bulkDragTargets(grab.rows);
+    case 'handle':
+      return dragTargetsOfHit(grab.hit, grab.selectedIds);
+    case 'global':
+      return dragTargetsOfHit(grab.hit, []);
+    case 'feature':
+      return dragTargetsOfHit(MOVE, grab.selectedIds);
+  }
 }
 
 /** @internal */
@@ -306,47 +365,112 @@ export class SelectMode implements EngineModeHandler {
   // Drag
   // ============================================================================
 
+  /**
+   * Starts what the press grabs (`#grabOf`): a box selection, or a drag of what it grabbed
+   */
   onDragStart(event: DragNormalizedEvent): void {
     if (this.#context.plugins?.isPluginInteracting()) return;
+    this.#nudge.flush();
+    const grab = this.#grabOf(event, true);
+    if (!grab) return;
 
     const { store, map } = this.#context;
-    this.#nudge.flush();
-    const selection = store.getSelection();
-    // Group / layer selections are also resolved to their members (so dragging the selection box
-    // moves a group as one). Features selected in bulk are not listed (their rows are dragged)
-    const selectedIds = getSelectedFeatureIds(store);
-    const transform = createCoordinateTransform(map);
-    const dragStartPoint = event.dragStartPoint ?? event.point;
+    switch (grab.kind) {
+      case 'box': {
+        const selection = store.getSelection();
+        const dragStartPoint = event.dragStartPoint ?? event.point;
+        const geoLngLat = map.unproject([dragStartPoint.x, dragStartPoint.y]);
+        const startPoint: Coordinate = [geoLngLat.lng, geoLngLat.lat];
+        store.setBoxSelection({
+          startPoint,
+          endPoint: startPoint,
+          previousSelection: [...getSelectedFeatureIds(store)],
+          // Features selected in bulk are put back from the selection itself on a cancel, and
+          // are let go of while the box marks its rows (the marks are the box's)
+          ...(selection.bulk && { previous: selection }),
+        });
+        if (selection.bulk) store.setSelection(null, []);
+        map.dragPan.disable();
+        map.triggerRepaint();
+        return;
+      }
+      case 'bulk':
+        this.#dragHandler.startBulkDrag(grab.hit, event, this.#context, grab.frame);
+        return;
+      case 'handle':
+        this.#dragHandler.startDrag(grab.hit, event, this.#context, grab.bbox);
+        return;
+      case 'global':
+        this.#dragHandler.startDrag(grab.hit, event, this.#context, null);
+        return;
+      case 'feature': {
+        // The feature pressed is selected (unless the selection it is in moves) and moved
+        if (!getSelectedFeatureIds(store).includes(grab.featureId)) {
+          store.setSelection('feature', [grab.featureId]);
+        }
+        const bbox = computeSelectionBoundingBox(
+          getSelectedFeatures(store),
+          this.#context.selectionScope.extensions,
+        );
+        this.#dragHandler.startDrag(MOVE, event, this.#context, bbox);
+        return;
+      }
+    }
+  }
+
+  /**
+   * What the drag a start of a drag starts will change, as its drag state will record it (null
+   * when it starts no drag that changes anything)
+   *
+   * Read from the same grab the start of the drag starts (`#grabOf`), without starting it:
+   * InputRouter snaps the start of the drag leaving it out, before the drag sets its drag state.
+   */
+  getDragTargets(event: DragNormalizedEvent): DragTargets | null {
+    const grab = this.#grabOf(event, false);
+    return grab ? targetsOfGrab(grab) : null;
+  }
+
+  /**
+   * What a press grabs, from where it was pressed (`dragStartPoint`), in this order: a box
+   * selection with Shift; nothing while a plugin interacts or the interaction lock is on (the
+   * drag pans the map); a handle of the frame of the features selected in bulk, or one of them;
+   * a handle of the selected features; a handle that does not belong to the selection (an
+   * extension implementation's focus, etc.); the topmost feature. Null when it grabs nothing (a
+   * dataset in the foreground, or nothing at all: the drag pans the map)
+   *
+   * It starts nothing: the start of the drag and `getDragTargets` both read it, and without
+   * `hold` it changes nothing either. Whether the drag then starts (read-only, a lock, a provider
+   * that refuses its handle) is decided by the drag handler.
+   *
+   * @param hold Whether a row held as columns that is pressed is held as a feature, to drag it
+   *   (the start of the drag); without it the row is only named
+   */
+  #grabOf(event: DragNormalizedEvent, hold: boolean): Grab | null {
+    const { store, map, plugins } = this.#context;
+    if (plugins?.isPluginInteracting()) return null;
 
     // Shift+drag = box selection
-    if (event.modifiers.shift) {
-      const geoLngLat = map.unproject([dragStartPoint.x, dragStartPoint.y]);
-      const startPoint: Coordinate = [geoLngLat.lng, geoLngLat.lat];
-      store.setBoxSelection({
-        startPoint,
-        endPoint: startPoint,
-        previousSelection: [...selectedIds],
-        // Features selected in bulk are put back from the selection itself on a cancel, and are
-        // let go of while the box marks its rows (the marks are the box's)
-        ...(selection.bulk && { previous: selection }),
-      });
-      if (selection.bulk) store.setSelection(null, []);
-      map.dragPan.disable();
-      map.triggerRepaint();
-      return;
-    }
+    if (event.modifiers.shift) return { kind: 'box' };
 
-    // While the interaction lock is on, the drag is passed straight through to
-    // the map pan. Neither the selection is changed nor a drag operation started (paired with
-    // onMouseDown not disabling dragPan; starting a move selection here would select a feature
-    // during a pan). Shift box selection is already handled above, so it is preserved.
-    if (store.isInteractionLocked()) return;
+    // While the interaction lock is on, the drag is passed straight through to the map pan.
+    // Neither the selection is changed nor a drag operation started (paired with onMouseDown not
+    // disabling dragPan; starting a move selection here would select a feature during a pan).
+    // Shift box selection is already handled above, so it is preserved.
+    if (store.isInteractionLocked()) return null;
+
+    const point = event.dragStartPoint ?? event.point;
+    const transform = createCoordinateTransform(map);
 
     // Features selected in bulk: a handle of their frame, or a press on one of them, drags them
     // all (the selection is not narrowed to the one pressed)
-    if (selection.bulk && this.#dragBulk(event, dragStartPoint, transform)) return;
+    const bulk = this.#bulkGrabOf(point, transform);
+    if (bulk) return bulk;
 
-    // A handle hit on the selected features -> start the corresponding drag operation
+    // Group / layer selections are also resolved to their members (so dragging the selection box
+    // moves a group as one). Features selected in bulk are not listed (their rows are dragged)
+    const selectedIds = getSelectedFeatureIds(store);
+
+    // A handle hit on the selected features -> the corresponding drag operation
     if (selectedIds.length > 0) {
       const selectedFeatures = getSelectedFeatures(store);
       if (selectedFeatures.length > 0) {
@@ -355,29 +479,17 @@ export class SelectMode implements EngineModeHandler {
           this.#context.selectionScope.extensions,
         );
         if (bbox) {
-          const zoom = map.getZoom();
-          const getAdditionalHandles = getAdditionalResizeHandlesCallback(
-            selectedFeatures,
-            this.#context.selectionScope,
-          );
-          const getAuxiliaryHandles = getAuxiliaryHandlesCallback(
-            selectedFeatures,
-            this.#context.selectionScope,
-          );
-          const handleHit = hitTestHandles(
-            dragStartPoint,
+          const hit = hitTestHandles(
+            point,
             selectedFeatures,
             transform,
             this.#context.selectionStyle,
-            zoom,
+            map.getZoom(),
             this.#context.selectionScope,
-            getAdditionalHandles,
-            getAuxiliaryHandles,
+            getAdditionalResizeHandlesCallback(selectedFeatures, this.#context.selectionScope),
+            getAuxiliaryHandlesCallback(selectedFeatures, this.#context.selectionScope),
           );
-          if (handleHit) {
-            this.#dragHandler.startDrag(handleHit, event, this.#context, bbox);
-            return;
-          }
+          if (hit) return { kind: 'handle', hit, bbox, selectedIds };
         }
       }
     }
@@ -386,37 +498,29 @@ export class SelectMode implements EngineModeHandler {
     // no selection handle was hit, they are taken before grabbing a feature. Whether delegation
     // is accepted and the readOnly test are decided by drag-handler.
     const globalHit = hitTestGlobalAuxiliaryHandles(
-      dragStartPoint,
+      point,
       transform,
       this.#context.selectionStyle,
       map.getZoom(),
       getGlobalAuxiliaryHandlesCallback(this.#context.selectionScope),
     );
-    if (globalHit) {
-      this.#dragHandler.startDrag(globalHit, event, this.#context, null);
-      return;
-    }
+    if (globalHit) return { kind: 'global', hit: globalHit };
 
-    // When no handle was hit: select the feature -> move operation
-    // When a dataset is in the foreground, nothing is grabbed and no drag is
-    // started (dragPan is alive, so it becomes a map pan).
-    const orderedFeatures = getDisplayFeatures(store);
-    // A row held as columns is made a feature to drag it
-    const top = this.#context.hitTestTopmost(dragStartPoint, { orderedFeatures, hold: true });
-    if (top?.kind !== 'store') return;
-    const hitFeatureId = top.feature.id;
-
-    if (!selectedIds.includes(hitFeatureId)) {
-      store.setSelection('feature', [hitFeatureId]);
-    }
-
-    const newSelectedFeatures = getSelectedFeatures(store);
-    const bbox = computeSelectionBoundingBox(
-      newSelectedFeatures,
-      this.#context.selectionScope.extensions,
-    );
-    const moveHit: HandleHitResult = { type: 'move' };
-    this.#dragHandler.startDrag(moveHit, event, this.#context, bbox);
+    // When no handle was hit: the feature pressed -> move operation. When a dataset is in the
+    // foreground, nothing is grabbed (dragPan is alive, so it becomes a map pan). A row held as
+    // columns is made a feature to drag it
+    const top = this.#context.hitTestTopmost(point, {
+      orderedFeatures: getDisplayFeatures(store),
+      hold,
+    });
+    const featureId =
+      top?.kind === 'store' ? top.feature.id : !hold && top?.kind === 'row' ? top.id : undefined;
+    if (featureId === undefined) return null;
+    return {
+      kind: 'feature',
+      featureId,
+      selectedIds: selectedIds.includes(featureId) ? selectedIds : [featureId],
+    };
   }
 
   onDragMove(event: DragNormalizedEvent): void {
@@ -473,20 +577,17 @@ export class SelectMode implements EngineModeHandler {
   }
 
   /**
-   * Starts a drag of the features selected in bulk: by a handle of their frame, or by a press on
-   * one of them (taken whether the drag starts or not: the selection is not narrowed to it)
-   *
-   * @returns Whether the press was on their handles or on one of them
+   * What a press grabs of the features selected in bulk: a handle of their frame, or one of them
+   * (a move of them all: the selection is not narrowed to it). Null when the press is on neither
    */
-  #dragBulk(
-    event: DragNormalizedEvent,
+  #bulkGrabOf(
     point: { x: number; y: number },
     transform: ReturnType<typeof createCoordinateTransform>,
-  ): boolean {
+  ): Grab | null {
     const { store } = this.#context;
     const bulk = store.getSelection().bulk;
     const rows = store.getSelectedRows();
-    if (!bulk?.bounds || !rows) return false;
+    if (!bulk?.bounds || !rows) return null;
     const frame = bulkFrame(bulk.bounds);
     const hit = hitTestBulkHandles(
       point,
@@ -495,21 +596,19 @@ export class SelectMode implements EngineModeHandler {
       this.#context.selectionStyle,
       this.#context.selectionScope,
     );
-    if (hit && hit.type !== 'move') {
-      this.#dragHandler.startBulkDrag(hit, event, this.#context, frame);
-      return true;
-    }
+    if (hit && hit.type !== 'move') return { kind: 'bulk', hit, frame, rows };
     // A press on one of them (not made a feature)
-    const top = this.#context.hitTestTopmost(point, { orderedFeatures: getDisplayFeatures(store) });
+    const top = this.#context.hitTestTopmost(point, {
+      orderedFeatures: getDisplayFeatures(store),
+    });
     const handle =
       top?.kind === 'row'
         ? top.handle
         : top?.kind === 'store'
           ? store.tables?.findRow(top.feature.id)
           : undefined;
-    if (handle === undefined || !rows.has(handle)) return false;
-    this.#dragHandler.startBulkDrag({ type: 'move' }, event, this.#context, frame);
-    return true;
+    if (handle === undefined || !rows.has(handle)) return null;
+    return { kind: 'bulk', hit: MOVE, frame, rows };
   }
 
   onDragEnd(event: DragNormalizedEvent): void {

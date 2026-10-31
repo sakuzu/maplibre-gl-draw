@@ -24,7 +24,7 @@ import { createSnapService } from '../snapping/service.js';
 import type { SnapContext, SnapService } from '../snapping/types.js';
 import { MemoryStore } from '../store/memory.js';
 import { RBushSpatialIndex } from '../store/spatial/spatial-index.js';
-import type { Feature, Layer } from '../store/types.js';
+import type { DragTargets, Feature, Layer } from '../store/types.js';
 import { createInputRouter } from './input-router.js';
 import type {
   DragNormalizedEvent,
@@ -74,6 +74,11 @@ class RecordingMode implements EngineModeHandler {
    * Assigning it inside a test produces the case where the mode implements the hook.
    */
   isSnapEnabledFor?: (inputType: SnapInputKind) => boolean;
+  /**
+   * What the drag a start of a drag starts will change (by default unimplemented: the start is
+   * snapped leaving out what the drag state holds)
+   */
+  getDragTargets?: (event: DragNormalizedEvent) => DragTargets | null;
 
   getSnapPreference(): { featureId: string; datasetId?: string } | null {
     return this.snapPreference;
@@ -309,6 +314,75 @@ describe('Snapping of InputRouter', () => {
     normalizer.emit(makeDragMoveEvent(cursor.lng, cursor.lat));
 
     expect(mode.dragMoves[0].lngLat).toEqual({ lng: TARGET[0], lat: TARGET[1] });
+  });
+
+  it('snaps the start of a drag leaving out what the mode says the drag will change', () => {
+    putFeature('p1', 'Point', TARGET);
+    startRouter();
+    const asked: DragNormalizedEvent[] = [];
+    mode.getDragTargets = (event) => {
+      asked.push(event);
+      return { movingFeatureIds: ['p1'] };
+    };
+
+    const cursor = nearTarget(3);
+    normalizer.emit(makeDragEvent('dragstart', cursor.lng, cursor.lat));
+
+    // The mode is asked with the start as it came, before it is snapped
+    expect(asked.map((event) => event.lngLat)).toEqual([cursor]);
+    expect(mode.dragStarts[0].lngLat).toEqual(cursor);
+  });
+
+  it('snaps the start of a drag of a vertex leaving out that vertex and its edges', () => {
+    putFeature('line', 'LineString', [TARGET, [TARGET[0] + 0.05, TARGET[1]]]);
+    startRouter();
+    mode.getDragTargets = () => ({ activeFeatureId: 'line', activeVertex: { ring: 0, index: 0 } });
+
+    const cursor = nearTarget(3);
+    normalizer.emit(makeDragEvent('dragstart', cursor.lng, cursor.lat));
+
+    expect(mode.dragStarts[0].lngLat).toEqual(cursor);
+  });
+
+  it('asks the mode at the start of a drag only: its middle and its end read the drag state', () => {
+    putFeature('p1', 'Point', TARGET);
+    startRouter();
+    let asked = 0;
+    mode.getDragTargets = () => {
+      asked += 1;
+      return { movingFeatureIds: ['p1'] };
+    };
+
+    const cursor = nearTarget(3);
+    normalizer.emit(makeDragMoveEvent(cursor.lng, cursor.lat));
+    normalizer.emit(makeDragEvent('dragend', cursor.lng, cursor.lat));
+
+    expect(asked).toBe(0);
+    expect(mode.dragMoves[0].lngLat).toEqual({ lng: TARGET[0], lat: TARGET[1] });
+    expect(mode.dragEnds[0].lngLat).toEqual({ lng: TARGET[0], lat: TARGET[1] });
+  });
+
+  it('snaps the start of a drag that changes nothing as any other input', () => {
+    putFeature('p1', 'Point', TARGET);
+    startRouter();
+    mode.getDragTargets = () => null;
+
+    const cursor = nearTarget(3);
+    normalizer.emit(makeDragEvent('dragstart', cursor.lng, cursor.lat));
+
+    expect(mode.dragStarts[0].lngLat).toEqual({ lng: TARGET[0], lat: TARGET[1] });
+  });
+
+  it('leaves the start of a drag to the drag state when the mode does not say', () => {
+    putFeature('p1', 'Point', TARGET);
+    startRouter();
+    store.setDragState({ operation: 'move', movingFeatureIds: ['p1'] });
+
+    const cursor = nearTarget(3);
+    normalizer.emit(makeDragEvent('dragstart', cursor.lng, cursor.lat));
+
+    expect(mode.getDragTargets).toBeUndefined();
+    expect(mode.dragStarts[0].lngLat).toEqual(cursor);
   });
 
   it('snaps to features that are not being moved even during a move drag', () => {

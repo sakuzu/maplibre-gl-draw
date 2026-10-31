@@ -97,6 +97,8 @@ then edge, then guide), and among the same kind the nearest wins.
 - A drag that changes features as a whole (a move, a rotation, a resize,
   the radius of a circle, a handle of an extension on a feature) does not
   snap to the features it changes
+- Both hold from the start of the drag: the position it starts from is not
+  snapped to what it changes either
 - The handles of features with many vertices are thinned on screen, but
   snapping still sees every vertex
 - Freehand snaps the start and the end of a stroke only, so a hand-drawn

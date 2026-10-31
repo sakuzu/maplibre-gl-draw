@@ -258,18 +258,21 @@ export function createInputRouter(deps: InputRouterDeps): InputRouter {
   let pointerHeld = false;
 
   /**
-   * What the drag an input belongs to changes: what the drag state of the Store holds, and at
-   * the start of a drag, which the mode starts only once it receives it, what the mode says the
-   * drag it starts will change (it would record the same in the drag state)
+   * What the drag an input belongs to changes: the one place every reading of it during a drag
+   * takes it from (the snapping of the input, `buildSnapContext`)
+   *
+   * In the middle and at the end of a drag, it is what the drag state of the Store holds. At its
+   * start, the mode has not started the drag yet (it starts it once it receives the start with
+   * its snapped coordinates), so it is what the mode says the drag it starts will change
+   * (`EngineModeHandler.getDragTargets`), which the drag then records in its drag state. A mode
+   * that does not say leaves it to the drag state.
    */
-  function dragTargetsOf(
-    event: MouseNormalizedEvent | DragNormalizedEvent,
-    inputType: SnapInputKind,
-  ): DragTargets | null {
-    const dragState = context.store.getDragState();
-    if (inputType !== 'dragstart') return dragState;
-    const handler = modeManager.getHandler();
-    return handler?.getDragTargets?.(event as DragNormalizedEvent) ?? dragState;
+  function dragTargetsOf(event: MouseNormalizedEvent | DragNormalizedEvent): DragTargets | null {
+    if (event.type === 'dragstart') {
+      const handler = modeManager.getHandler();
+      if (handler?.getDragTargets) return handler.getDragTargets(event);
+    }
+    return context.store.getDragState();
   }
 
   /**
@@ -345,7 +348,7 @@ export function createInputRouter(deps: InputRouterDeps): InputRouter {
     const result = snapService.resolve(
       event.lngLat,
       event.point,
-      buildSnapContext(event.modifiers, dragTargetsOf(event, inputType)),
+      buildSnapContext(event.modifiers, dragTargetsOf(event)),
     );
     if (result.lngLat.lng === event.lngLat.lng && result.lngLat.lat === event.lngLat.lat) {
       return { event, result: result.target ? result : null };
