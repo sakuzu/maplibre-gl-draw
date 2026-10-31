@@ -19,11 +19,17 @@ import type { RenderContext } from './render.js';
 
 /** What a hit test found. */
 export interface Hit {
-  /** What was hit */
+  /**
+   * What was hit: a feature, a row of a dataset, a companion of a feature, or a handle on a
+   * feature
+   */
   kind: 'feature' | 'dataset' | 'companion' | 'handle';
-  /** The ID of what was hit */
+  /**
+   * The ID of what was hit: of the feature, of the row of the dataset, or the ID the companion
+   * or the handle gives itself
+   */
   id: string;
-  /** The ID of the feature it belongs to */
+  /** The ID of the feature a companion or a handle belongs to; absent for a feature */
   featureId?: string;
   /** The ID of the dataset, for a row of a dataset */
   datasetId?: string;

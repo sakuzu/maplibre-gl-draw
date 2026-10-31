@@ -736,6 +736,8 @@ drawn. Each change below names what replaces what is gone.
 
 - `ctx.drawing` is gone: `ctx.draw.drawing` is the same object
 - `boxSelect(feature, boxPx, ctx)` names its box in pixels `boxPx`
+- A `Hit` of a feature names it by `id` alone; `featureId` is the
+  feature a companion or a handle belongs to
 
 ## From mapbox-gl-draw or terra-draw
 

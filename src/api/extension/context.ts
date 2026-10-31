@@ -172,7 +172,9 @@ export interface ModeContext extends ExtensionContext {
    */
   setMode(mode: Mode): boolean;
   /**
-   * The topmost feature or dataset row at a point on the screen.
+   * What is topmost at a point on the screen, as a click there finds it: a feature (`kind:
+   * 'feature'`, its ID in `id`), a companion of a feature (`'companion'`, with the feature in
+   * `featureId`) or a row of a dataset (`'dataset'`, with the dataset in `datasetId`).
    *
    * @param options - `tolerancePx` is how far from the point a hit may be, in pixels
    * @returns What was hit, or `null`

@@ -242,6 +242,9 @@ writing it. Its changes are listed after those of 3.0.0.
   entry exports `BBox`, the type `features.bbox` returns.
 - The box of `FeatureTypeDefinition.boxSelect` is named `boxPx`, as a
   value in pixels is.
+- A `Hit` of a feature names it by `id` alone, as `ModeContext.hitTest`
+  and `map.clicked` give it: `featureId` is the feature a companion or a
+  handle belongs to.
 
 ### Removed in 3.0.0
 

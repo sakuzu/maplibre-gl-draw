@@ -745,6 +745,8 @@ draw.features.update(featureId, {
 
 - `ctx.drawing` は無くなりました。同じものが `ctx.draw.drawing` です
 - `boxSelect(feature, boxPx, ctx)` の画面の箱の引数は `boxPx` です
+- 地物の `Hit` は、その地物を `id` だけで指します。`featureId` は、
+  付き物かハンドルが属する地物です
 
 ## mapbox-gl-draw や terra-draw から
 

@@ -423,7 +423,6 @@ export function toHit(
       return {
         kind: 'feature',
         id: top.feature.id,
-        featureId: top.feature.id,
         distancePx: distanceToFeaturePx(top.feature),
       };
     case 'row':
@@ -432,7 +431,6 @@ export function toHit(
       return {
         kind: 'feature',
         id: top.id,
-        featureId: top.id,
         distancePx: top.distancePx(),
       };
     case 'dataset':

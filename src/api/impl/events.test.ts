@@ -608,8 +608,10 @@ describe('the signals of the engine', () => {
     expect(clicks[0]).toMatchObject({
       lngLat: [1, 1],
       point: [500, 200],
-      hit: { kind: 'feature', id: point.id, featureId: point.id },
+      hit: { kind: 'feature', id: point.id },
     });
+    // A feature is named by `id` alone
+    expect(clicks[0].hit).not.toHaveProperty('featureId');
     expect(clicks[1]).toEqual({ lngLat: [-0.5, -0.5], point: [350, 350], hit: null });
 
     // Not in a drawing mode

@@ -81,15 +81,13 @@ export const routeType: FeatureTypeDefinition = {
       best = Math.min(best, segmentDistance(ctx.point, points[i - 1], points[i]));
     }
     const reach = Math.max(ctx.tolerancePx, routeLook(feature).routeWidth / 2);
-    return best <= reach
-      ? { kind: 'feature', id: feature.id, featureId: feature.id, distancePx: best }
-      : null;
+    return best <= reach ? { kind: 'feature', id: feature.id, distancePx: best } : null;
   },
   // A selection box takes a route when one of its vertices is inside
-  boxSelect(feature, box, ctx) {
+  boxSelect(feature, boxPx, ctx) {
     return verticesOf(feature).some((v) => {
       const [x, y] = ctx.screen.project(v);
-      return x >= box.min[0] && x <= box.max[0] && y >= box.min[1] && y <= box.max[1];
+      return x >= boxPx.min[0] && x <= boxPx.max[0] && y >= boxPx.min[1] && y <= boxPx.max[1];
     });
   },
   // The frame of the selection

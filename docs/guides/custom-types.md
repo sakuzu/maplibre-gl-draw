@@ -214,7 +214,7 @@ const hitRoute: FeatureTypeDefinition = {
     }
     if (best > ctx.tolerancePx) return null;
     const id = feature.id;
-    return { kind: 'feature', id, featureId: id, distancePx: best };
+    return { kind: 'feature', id, distancePx: best };
   },
 };
 ```
