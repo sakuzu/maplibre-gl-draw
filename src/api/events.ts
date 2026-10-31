@@ -210,6 +210,15 @@ export interface DrawEvents {
    * were no longer there when it was written included)
    */
   'sketch.removed': { sketch: Sketch; reason: SketchEndReason; dropped: number };
+  /**
+   * Features as they are drawn changed (`draw.rendered`): `ids` lists the features whose shape,
+   * values or look as drawn changed, by a write of the document or by a sketch, since the last
+   * time, or that were created or deleted. It fires once a frame that draws the change is drawn,
+   * at most once a frame, and its values (`rendered.get`, `rendered.getSelectionBox`) are those
+   * of that frame. The rows dragged in bulk, which are not written while they are dragged, are
+   * read in each frame with `rendered.getDraggedRows`.
+   */
+  'rendered.changed': { ids: readonly string[] };
   /** The title or the description changed */
   'metadata.updated': { metadata: Metadata; previous: Metadata; source: string };
   /**

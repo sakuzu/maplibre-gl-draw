@@ -104,7 +104,6 @@ export { ITEM_GROUP, ITEM_ROW } from '../api/tables.js';
 // Features selected in bulk and dragged
 export { listSelectedRows } from '../store/bulk-selection.js';
 export type { DraggedRows } from '../feature-table/dragged-rows.js';
-export { draggedRowsOf } from '../feature-table/dragged-rows.js';
 
 // What the extensions answer and draw from the rows
 export type { FeatureTypeRows } from '../api/extension/feature-type.js';

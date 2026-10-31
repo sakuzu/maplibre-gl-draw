@@ -219,7 +219,10 @@ export interface CustomLayerInterface extends BaseCustomLayerInterface {
    */
   getTableRenderer(): TableLayerRenderer | null;
   /**
-   * Calls `listener` once each frame is drawn (after its last slot)
+   * Calls `listener` once each frame is drawn (after its last slot): the one signal that a frame is
+   * drawn. The view of the frame, which the screen answers with (`setViewFrame`,
+   * `setScreenScaleFrame`), was recorded as the frame began; from this signal on it is the view of
+   * the frame drawn last
    *
    * @returns the function that stops calling it
    */

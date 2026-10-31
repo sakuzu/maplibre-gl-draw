@@ -428,7 +428,8 @@ is in one member of each, `rows`, experimental with its types in `/kasane`
   one at a time from the rows: consecutive rows of the type, not hidden and in
   view, in the order of the layer. Without it, the features of such rows are
   made, kept up to a limit, and drawn by `draw`. A row being dragged in bulk
-  is given as it is written; `draggedRowsOf` tells where it is drawn
+  is given as it is written; `draw.rendered.getDraggedRows()` tells where it is
+  drawn
 
 ## Terrain
 
@@ -540,9 +541,12 @@ const grid: SnapProvider = {
 draw.extensions.snapProviders.add(grid);
 ```
 
-The context gives the pointer on the screen and on the map, the
-tolerance in pixels, `screen`, and `excludeIds`, the features that must
-not be snapped to, such as the one being drawn. `priority` breaks ties
+The context (`PointContext`, the one a hit test receives too) gives the
+pointer on the screen and on the map, the tolerance in pixels, `screen`,
+and, when the snapping leaves features out, `excludeIds`: the features
+that must not be snapped to, such as the one being drawn and those
+dragged. A hit test receives in it the features this client is dragging
+as a whole. `priority` breaks ties
 between candidates at the same distance; the higher one wins. A `kind`
 of your own is ranked as a vertex and reaches the snapping result
 (`target.kind`) as it is.
@@ -694,7 +698,7 @@ function pathOnTerrain(
 - [LineRenderer](../api/maplibre-gl-draw/interfaces/LineRenderer.md),
   [FillRenderer](../api/maplibre-gl-draw/interfaces/FillRenderer.md) and
   [PointRenderer](../api/maplibre-gl-draw/interfaces/PointRenderer.md)
-- [HitTestContext](../api/maplibre-gl-draw/interfaces/HitTestContext.md)
+- [PointContext](../api/maplibre-gl-draw/interfaces/PointContext.md)
   and [Hit](../api/maplibre-gl-draw/interfaces/Hit.md)
 - [OverlayRenderer](../api/maplibre-gl-draw/interfaces/OverlayRenderer.md)
 - [SnapProvider](../api/maplibre-gl-draw/interfaces/SnapProvider.md),

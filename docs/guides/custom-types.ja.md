@@ -406,7 +406,8 @@ draw.extensions.featureTypes.override({
   行から描きます。渡すのは、その型の続いた行のうち、隠れておらず見えている
   ものを、レイヤーの順に並べたものです。無いときは、そうした行の地物を作り、
   上限まで覚えて `draw` で描きます。まとめてドラッグしている行は、書かれた
-  ままの値で渡します。描かれている所は `draggedRowsOf` で分かります
+  ままの値で渡します。描かれている所は `draw.rendered.getDraggedRows()` で
+  分かります
 
 ## 地形
 
@@ -512,9 +513,11 @@ const grid: SnapProvider = {
 draw.extensions.snapProviders.add(grid);
 ```
 
-窓口は、画面と地図の上のポインター、ピクセルでの許容量、`screen`、
-`excludeIds` を渡します。`excludeIds` は、描いている途中の地物のように
-吸着させてはいけない地物です。`priority` は、同じ距離の候補の間の
+窓口 (`PointContext`。当たり判定も同じものを受け取ります) は、画面と
+地図の上のポインター、ピクセルでの許容量、`screen` と、吸着が外す地物が
+あるときは `excludeIds` を渡します。`excludeIds` は、描いている途中の
+地物やドラッグしている地物のように、吸着させてはいけない地物です。
+当たり判定には、この端末が丸ごとドラッグしている地物が入ります。`priority` は、同じ距離の候補の間の
 順を決めます。大きい方が勝ちます。自分で決めた `kind` は頂点として
 順位を決め、吸着の結果 (`target.kind`) にそのまま届きます。
 
@@ -658,7 +661,7 @@ function pathOnTerrain(
 - [LineRenderer](../api/maplibre-gl-draw/interfaces/LineRenderer.md)、
   [FillRenderer](../api/maplibre-gl-draw/interfaces/FillRenderer.md)、
   [PointRenderer](../api/maplibre-gl-draw/interfaces/PointRenderer.md)
-- [HitTestContext](../api/maplibre-gl-draw/interfaces/HitTestContext.md)
+- [PointContext](../api/maplibre-gl-draw/interfaces/PointContext.md)
   と [Hit](../api/maplibre-gl-draw/interfaces/Hit.md)
 - [OverlayRenderer](../api/maplibre-gl-draw/interfaces/OverlayRenderer.md)
 - [SnapProvider](../api/maplibre-gl-draw/interfaces/SnapProvider.md)、

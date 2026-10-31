@@ -743,6 +743,12 @@ drawn. Each change below names what replaces what is gone.
   box from it. The kind, not the geometry, decides whether the box has
   the resize and rotate handles. `selectionStyle.boundingBox` is
   `selectionStyle.box`
+- What is drawn around a feature reads the feature as it is drawn from
+  `ctx.draw.rendered` (`get`, `getMany`, `getSelectionBox`, and
+  `getDraggedRows` for the rows dragged in bulk, which was
+  `draggedRowsOf` of `/kasane`), and follows `rendered.changed`
+- `HitTestContext` and `SnapContext` are one type, `PointContext`, whose
+  `excludeIds` is absent when the reading leaves out nothing
 - `ctx.drawing` is gone: `ctx.draw.drawing` is the same object
 - `boxSelect(feature, boxPx, ctx)` names its box in pixels `boxPx`
 - A `Hit` of a feature names it by `id` alone; `featureId` is the

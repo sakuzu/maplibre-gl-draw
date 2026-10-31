@@ -223,6 +223,29 @@ ctx.on('dataset.added', ({ dataset }) => follow(dataset.id));
 ctx.on('dataset.removed', ({ datasetId }) => forget(datasetId));
 ```
 
+### 描かれているもの
+
+地物の周りに何かを描くプラグインや、地物がどこにあるかを読むプラグインは、
+描かれている地物を `ctx.draw.rendered` から読みます。下書き
+(`draw.sketches`) が文書の上に当てられた、書く前の編集の途中の形です。
+`rendered.getSelectionBox(id)` は、その選択の枠 (外形に余白を足したもの)
+を、最後に描いたコマでライブラリーが描いて当てるとおりに渡します。
+`rendered.changed` は、変わった地物を、それを描くコマを描き終えたときに
+知らせます。書くものは文書 `ctx.draw.features` を読みます。
+
+<!-- docs-check:
+declare const ctx: import('@sakuzu/maplibre-gl-draw').PluginContext;
+declare function follow(feature: import('@sakuzu/maplibre-gl-draw').Feature): void;
+-->
+
+```ts
+ctx.on('rendered.changed', ({ ids }) => {
+  for (const feature of ctx.draw.rendered.getMany(ids)) {
+    if (feature) follow(feature);
+  }
+});
+```
+
 ### プラグインのイベント
 
 プラグインは、自分の中の変化を同じイベントの一覧で知らせます。自分の

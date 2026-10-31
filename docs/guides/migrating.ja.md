@@ -751,6 +751,12 @@ draw.features.update(featureId, {
   ライブラリーがそこから選択の枠を作ります。枠に大きさを変えるハンドルと
   回すハンドルが付くかは、図形ではなく種類で決まります。
   `selectionStyle.boundingBox` は `selectionStyle.box` になりました
+- 地物の周りに描くものは、描かれている地物を `ctx.draw.rendered` で
+  読みます (`get`、`getMany`、`getSelectionBox`。まとめてドラッグしている
+  行は `getDraggedRows` で、前の `/kasane` の `draggedRowsOf` です)。
+  変わったことは `rendered.changed` で知ります
+- `HitTestContext` と `SnapContext` は 1 つの型 `PointContext` に
+  なりました。外すものが無いとき、`excludeIds` はありません
 - `ctx.drawing` は無くなりました。同じものが `ctx.draw.drawing` です
 - `boxSelect(feature, boxPx, ctx)` の画面の箱の引数は `boxPx` です
 - 地物の `Hit` は、その地物を `id` だけで指します。`featureId` は、

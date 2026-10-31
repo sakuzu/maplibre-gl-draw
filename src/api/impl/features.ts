@@ -33,7 +33,6 @@ import type {
   FeatureInput,
   FeatureListOptions,
   FeaturePatch,
-  FeatureReadOptions,
   FeatureStyleResolved,
   MoveTarget,
 } from '../model.js';
@@ -107,22 +106,6 @@ export function createFeatures(deps: ResourceDeps): FeaturesCollection {
   /** The features in stacking order, from the back */
   const inStackingOrder = (features: StoredFeature[]): StoredFeature[] =>
     featuresInStackingOrder(store, features);
-
-  /** How a feature is read: from the Store, or as the sketches edit it (the options checked) */
-  const readerOf = (
-    options: FeatureReadOptions | undefined,
-  ): ((id: string) => StoredFeature | undefined) => {
-    if (options !== undefined) {
-      requireRecord(options, 'The options');
-      onlyKeys(options as unknown as Record<string, unknown>, ['applySketches'], 'The options');
-      optionalBoolean(options as unknown as Record<string, unknown>, 'applySketches');
-    }
-    const applied = deps.appliedFeature;
-    if (options?.applySketches === true && applied) {
-      return (id) => (store.getFeature(id) ? applied(id) : undefined);
-    }
-    return (id) => store.getFeature(id);
-  };
 
   const checkedEntries = (filter: FeatureFilter | undefined) => checkedFilterEntries(filter);
   const filterOf = (filter: FeatureFilter | undefined) => featureFilterOf(deps, filter);
@@ -213,11 +196,10 @@ export function createFeatures(deps: ResourceDeps): FeaturesCollection {
 
   return {
     ...createRestore(deps),
-    get: (id, options) => readerOf(options)(id),
-    getMany(ids, options) {
+    get: (id) => store.getFeature(id),
+    getMany(ids) {
       if (!Array.isArray(ids)) throw invalidInput('The IDs must be an array');
-      const read = readerOf(options);
-      return ids.map((id) => read(id));
+      return ids.map((id) => store.getFeature(id));
     },
     list,
     count(filter) {

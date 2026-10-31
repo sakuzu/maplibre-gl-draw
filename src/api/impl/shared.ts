@@ -37,11 +37,6 @@ export interface ResourceDeps {
    * measured when it is left out
    */
   spatialIndex?: { findInBounds(bounds: BoundingBox): string[] };
-  /**
-   * A feature as the sketches edit it (`FeatureReadOptions.applySketches`); the feature of the Store
-   * when it is left out
-   */
-  appliedFeature?: (id: string) => Feature | undefined;
 }
 
 // ============================================================================

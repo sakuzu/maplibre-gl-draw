@@ -11,7 +11,7 @@ import type { BBox } from '../../geometry/types.js';
 import type { ScreenPoint } from '../events.js';
 import type { Feature, FeaturePatch } from '../model.js';
 import type { LayerTableView, RowHandle } from '../tables.js';
-import type { HitTestContext, ScreenContext, SnapContext } from './context.js';
+import type { PointContext, ScreenContext } from './context.js';
 import type { DrawPointerEvent } from './mode.js';
 import type { Hit, SnapCandidate } from './provider.js';
 import type { FeatureRenderer } from './render.js';
@@ -137,7 +137,7 @@ export interface FeatureTypeDefinition {
    *
    * @returns What was hit, or `null`
    */
-  hitTest?(feature: Feature, ctx: HitTestContext): Hit | null;
+  hitTest?(feature: Feature, ctx: PointContext): Hit | null;
   /**
    * Whether a box selection takes a feature of this type.
    *
@@ -146,7 +146,7 @@ export interface FeatureTypeDefinition {
   boxSelect?(
     feature: Feature,
     boxPx: { min: ScreenPoint; max: ScreenPoint },
-    ctx: HitTestContext,
+    ctx: PointContext,
   ): boolean;
   /**
    * The footprint of a feature: what it covers, without the margin of the selection box, which
@@ -191,5 +191,5 @@ export interface FeatureTypeDefinition {
    */
   onHandleDragEnd?(feature: Feature | null, handle: Handle, event: DrawPointerEvent): void;
   /** The snapping candidates a feature of this type offers. */
-  snapCandidates?(feature: Feature, ctx: SnapContext): SnapCandidate[];
+  snapCandidates?(feature: Feature, ctx: PointContext): SnapCandidate[];
 }

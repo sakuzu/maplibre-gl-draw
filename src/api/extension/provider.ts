@@ -12,7 +12,7 @@
 import type { Position } from 'geojson';
 import type { Feature, FeaturePatch } from '../model.js';
 import type { LayerTableView, RowHandle } from '../tables.js';
-import type { HitTestContext, ScreenContext, SnapContext } from './context.js';
+import type { PointContext, ScreenContext } from './context.js';
 import type { Handle } from './feature-type.js';
 import type { DrawPointerEvent } from './mode.js';
 import type { RenderContext } from './render.js';
@@ -54,7 +54,7 @@ export interface SnapProvider {
   /** The name it is registered under */
   readonly name: string;
   /** The candidates near the point of the context. */
-  candidates(ctx: SnapContext): SnapCandidate[];
+  candidates(ctx: PointContext): SnapCandidate[];
 }
 
 /** An extension that shows handles of its own on the selected features and receives their drags. */
@@ -145,7 +145,7 @@ export interface CompanionProvider {
    *
    * @returns What was hit, or `null`
    */
-  hitTest(feature: Feature, ctx: HitTestContext): Hit | null;
+  hitTest(feature: Feature, ctx: PointContext): Hit | null;
   /**
    * A companion was clicked.
    *

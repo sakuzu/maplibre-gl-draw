@@ -633,19 +633,22 @@ export const select = (page: Page, ids: string[]): Promise<void> =>
     else draw.selection.set('feature', i);
   }, ids);
 
-/** The geometry of a feature as `features.get` reads it, with the sketches applied or not */
+/**
+ * The geometry of a feature as the document holds it (`features.get`), or as it is drawn, with
+ * the sketches applied (`rendered.get`)
+ */
 export const geometryOf = (
   page: Page,
   id: string,
-  applySketches = false,
+  rendered = false,
 ): Promise<{ type: string; coordinates: unknown } | null> =>
   page.evaluate(
     ([i, a]) => {
       const draw = (window as unknown as SceneWindow).draw;
-      const feature = draw.features.get(i as string, { applySketches: a as boolean });
+      const feature = a ? draw.rendered.get(i as string) : draw.features.get(i as string);
       return (feature?.geometry as { type: string; coordinates: unknown } | undefined) ?? null;
     },
-    [id, applySketches] as const,
+    [id, rendered] as const,
   );
 
 /** A value of the properties of a feature, as `features.get` reads it */

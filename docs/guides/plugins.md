@@ -224,6 +224,30 @@ ctx.on('dataset.added', ({ dataset }) => follow(dataset.id));
 ctx.on('dataset.removed', ({ datasetId }) => forget(datasetId));
 ```
 
+### What is drawn
+
+A plugin that draws something around a feature, or reads where it is,
+reads the feature as it is drawn from `ctx.draw.rendered`: with the
+sketches (`draw.sketches`) applied over the document, while it is edited
+and not written yet. `rendered.getSelectionBox(id)` gives
+its selection box, the footprint with the margin, as the library draws
+and hits it in the frame drawn last. `rendered.changed` tells the
+features that changed, once the frame that draws them is drawn. What
+writes reads the document, `ctx.draw.features`.
+
+<!-- docs-check:
+declare const ctx: import('@sakuzu/maplibre-gl-draw').PluginContext;
+declare function follow(feature: import('@sakuzu/maplibre-gl-draw').Feature): void;
+-->
+
+```ts
+ctx.on('rendered.changed', ({ ids }) => {
+  for (const feature of ctx.draw.rendered.getMany(ids)) {
+    if (feature) follow(feature);
+  }
+});
+```
+
 ### Events of a plugin
 
 A plugin tells what changes in it through the same list of events: it

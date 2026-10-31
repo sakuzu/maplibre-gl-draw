@@ -18,9 +18,61 @@ import {
   computeBoundingBox,
   computeCombinedBoundingBox,
   hasZeroArea,
-  resolvePointFrameCornersWith,
+  resolvePointFrameExtentWith,
   type SelectionExtensionRegistry,
 } from './selection-ui/index.js';
+
+/**
+ * The selection box of one feature: its footprint with the margin, as the selection UI draws and
+ * hits it
+ *
+ * - a footprint laid on the map: its corners with the margin laid on the ground
+ *   (`applyMarginToBoundingBox`) at the scale of the frame of the transform
+ * - a footprint of the screen (a box without area on the map): its position, and the half sizes
+ *   of its extent on the screen with the margin
+ *
+ * @internal
+ */
+export type SelectionBoxShape =
+  | {
+      kind: 'ground';
+      topLeft: Coordinate;
+      topRight: Coordinate;
+      bottomRight: Coordinate;
+      bottomLeft: Coordinate;
+    }
+  | { kind: 'screen'; position: Coordinate; halfWidth: number; halfHeight: number };
+
+/**
+ * The selection box of one feature (see {@link SelectionBoxShape})
+ *
+ * @param transform The coordinate transform of the frame (the scale the margin is laid with)
+ * @param margin The margin of the box, in CSS pixels
+ * @param extensions The draw instance's extension points (custom boxes and point frames)
+ * @returns The box, or null when the feature has nothing to draw
+ * @internal
+ */
+export function selectionBoxOf(
+  feature: Feature,
+  transform: Pick<CoordinateTransform, 'metersPerPixel'>,
+  margin: number,
+  extensions?: SelectionExtensionRegistry,
+): SelectionBoxShape | null {
+  const box = computeBoundingBox(feature, extensions);
+  if (!box) return null;
+  if (hasZeroArea(box)) {
+    const extent = extensions
+      ? extensions.resolvePointFrameExtent(feature)
+      : resolvePointFrameExtentWith(undefined, feature);
+    return {
+      kind: 'screen',
+      position: box.center,
+      halfWidth: extent.halfWidth + margin,
+      halfHeight: extent.halfHeight + margin,
+    };
+  }
+  return { kind: 'ground', ...applyMarginToBoundingBox(box, margin, transform) };
+}
 
 /**
  * Whether a point of the screen is inside the frames drawn around the selection
@@ -50,67 +102,46 @@ export function isPointInSelectionFrame(
   if (features.length === 0) return false;
   const margin = config.box.margin;
   let underPoint: Coordinate | null = null;
-  const inFrame = (box: BoundingBoxCoords): boolean => {
+  const underPointOf = (): Coordinate => {
     if (!underPoint) {
       const lngLat = transform.unproject(screenPoint);
       underPoint = [lngLat.lng, lngLat.lat];
     }
-    return isPointInGeoBoundingBox(underPoint, {
-      ...applyMarginToBoundingBox(box, margin, transform),
-      center: box.center,
-    });
+    return underPoint;
   };
+  const inFrame = (box: BoundingBoxCoords): boolean =>
+    isPointInGeoBoundingBox(underPointOf(), applyMarginToBoundingBox(box, margin, transform));
 
   if (features.length > 1) {
     const combined = computeCombinedBoundingBox([...features], extensions);
     if (combined && inFrame(combined)) return true;
   }
   for (const feature of features) {
-    const box = computeBoundingBox(feature, extensions);
+    const box = selectionBoxOf(feature, transform, margin, extensions);
     if (!box) continue;
-    const inside = hasZeroArea(box)
-      ? isPointInPointFrame(screenPoint, feature, box.center, transform, margin, extensions)
-      : inFrame(box);
+    const inside =
+      box.kind === 'screen'
+        ? isPointInScreenBox(screenPoint, box, transform)
+        : isPointInGeoBoundingBox(underPointOf(), box);
     if (inside) return true;
   }
   return false;
 }
 
 /**
- * Whether a point of the screen is inside the frame of a feature of a single position: the extent
- * of its marker (registrable per type; the marker of a built-in point, or a 12px square when
- * unregistered) plus the margin, around the point on the screen, as the selection UI draws it
- *
- * The position received is the center of the bbox (features other than Point can also be
- * zero-area, e.g. a MultiPoint with a single point).
+ * Whether a point of the screen is inside a selection box of the screen: its half sizes around
+ * its position on the screen, as the selection UI draws it
  */
-function isPointInPointFrame(
+function isPointInScreenBox(
   screenPoint: ScreenPoint,
-  feature: Feature,
-  position: Coordinate,
+  box: Extract<SelectionBoxShape, { kind: 'screen' }>,
   transform: CoordinateTransform,
-  margin: number,
-  extensions: SelectionExtensionRegistry | undefined,
 ): boolean {
-  const center = transform.project(position);
-  const corners = extensions
-    ? extensions.resolvePointFrameCorners(feature, center, margin)
-    : resolvePointFrameCornersWith(undefined, feature, center, margin);
-  return corners.length === 4 && isPointInQuad(screenPoint, corners);
-}
-
-/** Whether a point is inside a convex quadrilateral (the cross product method) */
-function isPointInQuad(point: ScreenPoint, corners: readonly ScreenPoint[]): boolean {
-  let sign = 0;
-  for (let i = 0; i < 4; i++) {
-    const p1 = corners[i];
-    const p2 = corners[(i + 1) % 4];
-    const cross = (p2.x - p1.x) * (point.y - p1.y) - (p2.y - p1.y) * (point.x - p1.x);
-    const side = cross >= 0 ? 1 : -1;
-    if (sign === 0) sign = side;
-    else if (side !== sign) return false;
-  }
-  return true;
+  const center = transform.project(box.position);
+  return (
+    Math.abs(screenPoint.x - center.x) <= box.halfWidth &&
+    Math.abs(screenPoint.y - center.y) <= box.halfHeight
+  );
 }
 
 /**
@@ -123,7 +154,10 @@ function isPointInQuad(point: ScreenPoint, corners: readonly ScreenPoint[]): boo
  * @param bbox The bounding box in geographic coordinates
  * @returns true when the point is inside the bbox
  */
-export function isPointInGeoBoundingBox(lngLat: Coordinate, bbox: BoundingBoxCoords): boolean {
+export function isPointInGeoBoundingBox(
+  lngLat: Coordinate,
+  bbox: Pick<BoundingBoxCoords, 'topLeft' | 'topRight' | 'bottomRight' | 'bottomLeft'>,
+): boolean {
   // Inside test for a convex quadrilateral (the cross product method)
   const corners = [bbox.topLeft, bbox.topRight, bbox.bottomRight, bbox.bottomLeft];
 

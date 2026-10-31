@@ -20,6 +20,7 @@ import type { LayersCollection } from './layers.js';
 import type { MemoryResource } from './memory.js';
 import type { MetadataResource } from './metadata.js';
 import type { DrawOptions, OptionsResource } from './options.js';
+import type { RenderedResource } from './rendered.js';
 import type { SelectionResource, VertexSelectionResource } from './selection.js';
 import type { SketchesCollection } from './sketches.js';
 import type { GpuMemoryDiagnostics, LayerStackEntry, Mode, TerrainDiagnostics } from './state.js';
@@ -69,6 +70,8 @@ export interface Draw {
   readonly hidden: HiddenCollection;
   /** The edits drawn over the document before they are written */
   readonly sketches: SketchesCollection;
+  /** The features as this client draws them, with the sketches, and their selection boxes */
+  readonly rendered: RenderedResource;
   /** What this client has selected */
   readonly selection: SelectionResource;
   /** The selected vertices of one feature in this client */

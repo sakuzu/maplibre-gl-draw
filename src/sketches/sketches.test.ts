@@ -16,7 +16,7 @@
  *   (dropped) and the sketch goes on, and ends with the reason once nothing is left; the vertices
  *   found again by their IDs, or by their places while the shape stays
  * - a feature created in its place (`below`), and a sketch ended when its layer cannot be written
- * - the reads with the sketches (`applySketches`)
+ * - the reads of the features as they are drawn, with the sketches (`draw.rendered`)
  * - the checks `sketches` and `sketch-commits` pass, and fail when what they check is broken
  */
 
@@ -31,7 +31,6 @@ import type { ConsistencyFailure } from '../api/options.js';
 import type { Sketch, SketchEdit } from '../api/sketches.js';
 import { featureTablesInternals } from '../feature-table/feature-tables.js';
 import { STATE_HIDDEN_SKETCH } from '../feature-table/row-state.js';
-import { DrawError } from '../shared/draw-error.js';
 import { MemoryStore } from '../store/memory.js';
 import type { FeatureEdit, Store } from '../store/store.js';
 import { createTableStore } from '../store/table-memory.js';
@@ -191,14 +190,11 @@ for (const kind of KINDS) {
       expect(draw.sketches.has(sketch.id)).toBe(true);
       expect(names(events)).toEqual(['sketch.added']);
       expect(coordinatesOf(draw.features.get(a.id))[1]).toEqual([1, 0]);
-      expect(coordinatesOf(draw.features.get(a.id, { applySketches: true }))[1]).toEqual([1, 1]);
-      expect(
-        draw.features
-          .getMany([a.id, 'none'], { applySketches: true })
-          .map((f) => f && coordinatesOf(f)[1]),
-      ).toEqual([[1, 1], undefined]);
-      expect(() => draw.features.get(a.id, { other: true } as never)).toThrow(DrawError);
-      expect(() => draw.features.get(a.id, { applySketches: 1 } as never)).toThrow(DrawError);
+      expect(coordinatesOf(draw.rendered.get(a.id))[1]).toEqual([1, 1]);
+      expect(draw.rendered.getMany([a.id, 'none']).map((f) => f && coordinatesOf(f)[1])).toEqual([
+        [1, 1],
+        undefined,
+      ]);
       if (kind === 'ids') {
         // The vertex is kept by its ID
         expect((sketch.edits[0] as unknown as { vertices: unknown[] }).vertices).toEqual(['1,0']);
@@ -263,7 +259,7 @@ for (const kind of KINDS) {
           { kind: 'translate', target: { featureIds: [b.id] }, from: [0, 0], to: [0, 1] },
         ],
       }) as Sketch;
-      const shown = draw.features.get(b.id, { applySketches: true });
+      const shown = draw.rendered.get(b.id);
       events.length = 0;
       expect(draw.sketches.commit(sketch.id)).toBe(true);
       expect(applyEdits).toHaveBeenCalledTimes(1);
@@ -307,7 +303,7 @@ for (const kind of KINDS) {
         ],
       }) as Sketch;
       expect(draw.sketches.list()).toEqual([theirs, mine]);
-      expect(draw.features.get(a.id, { applySketches: true })?.properties).toMatchObject({
+      expect(draw.rendered.get(a.id)?.properties).toMatchObject({
         by: 'me',
         other: true,
       });
@@ -315,7 +311,7 @@ for (const kind of KINDS) {
       expect(draw.sketches.commitMany([mine.id, theirs.id])).toBe(false);
       expect(draw.sketches.count()).toBe(2);
       draw.sketches.remove(theirs.id);
-      expect(draw.features.get(a.id, { applySketches: true })?.properties).toEqual({ by: 'me' });
+      expect(draw.rendered.get(a.id)?.properties).toEqual({ by: 'me' });
       expect(failures).toEqual([]);
     });
 
@@ -393,7 +389,7 @@ for (const kind of KINDS) {
         { source: 'remote' },
       );
       expect(draw.sketches.get(sketch.id)).toBe(sketch);
-      expect(coordinatesOf(draw.features.get(a.id, { applySketches: true }))).toEqual([
+      expect(coordinatesOf(draw.rendered.get(a.id))).toEqual([
         [0, 2],
         [1, 1],
         [2, 0],
@@ -417,7 +413,7 @@ for (const kind of KINDS) {
       if (kind === 'ids') {
         // Found by its ID: the same vertex, now the third
         expect(draw.sketches.get(sketch.id)).toBe(sketch);
-        expect(coordinatesOf(draw.features.get(a.id, { applySketches: true }))).toEqual([
+        expect(coordinatesOf(draw.rendered.get(a.id))).toEqual([
           [-1, 0],
           [0, 2],
           [1, 1],
@@ -534,7 +530,7 @@ for (const kind of KINDS) {
       const [u1] = draw.sketches.updateMany([
         { id: d1.id, patch: { edits: [move(a.id, [1, 3])] } },
       ]) as Sketch[];
-      expect(coordinatesOf(draw.features.get(a.id, { applySketches: true }))[1]).toEqual([1, 3]);
+      expect(coordinatesOf(draw.rendered.get(a.id))[1]).toEqual([1, 3]);
       expect(() => draw.sketches.removeMany([d2.id, 'none'])).toThrow(
         expect.objectContaining({ code: 'not-found' }),
       );
@@ -560,10 +556,8 @@ for (const kind of KINDS) {
       const sketch = draw.sketches.add({
         edits: [{ kind: 'translate', target: { selection: true }, from: [0, 0], to: [0, 0.5] }],
       }) as Sketch;
-      expect(coordinatesOf(draw.features.get(a.id, { applySketches: true }))[0][1]).toBeGreaterThan(
-        0.4,
-      );
-      expect(coordinatesOf(draw.features.get(b.id, { applySketches: true }))[0][1]).toBe(0);
+      expect(coordinatesOf(draw.rendered.get(a.id))[0][1]).toBeGreaterThan(0.4);
+      expect(coordinatesOf(draw.rendered.get(b.id))[0][1]).toBe(0);
       events.length = 0;
       draw.selection.clear();
       expect(events).toEqual([['sketch.removed', { sketch, reason: 'deselected', dropped: 0 }]]);

@@ -23,7 +23,7 @@ import type { TerrainContext } from '../../view/terrain/context.js';
 import { computeBoundingBox, hasZeroArea } from '../../view/ui/selection-ui/index.js';
 import { offsetUniformsAt, viewUniforms } from '../../webgl/index.js';
 import { DrawError } from '../errors.js';
-import type { ScreenContext } from '../extension/context.js';
+import type { PointContext, ScreenContext } from '../extension/context.js';
 import type { FeatureTypeDefinition, Footprint, Handle } from '../extension/feature-type.js';
 import type { Hit } from '../extension/provider.js';
 import type { RenderContext } from '../extension/render.js';
@@ -818,7 +818,7 @@ describe('a companion provider', () => {
     const onClick = vi.fn(() => true);
     const feature = { id: 'f', type: 'Point', geometry: { type: 'Point', coordinates: [1, 1] } };
     const deps = {
-      store: { getFeature: () => feature },
+      store: { getFeature: () => feature, getDragState: () => null },
       screen: {},
       customLayer: { getGL: () => null },
       surface: createTerrainSurface,
@@ -852,9 +852,48 @@ describe('a companion provider', () => {
     expect(onClick).toHaveBeenCalledWith(feature, own, expect.objectContaining({ lngLat: [1, 1] }));
   });
 
+  it('tells its hit test what the reading leaves out: the features this client drags', () => {
+    const contexts: PointContext[] = [];
+    let dragged: string[] | null = null;
+    const deps = {
+      store: {
+        getFeature: () => undefined,
+        getDragState: () => (dragged ? { operation: 'move', movingFeatureIds: dragged } : null),
+      },
+      screen: {},
+      customLayer: { getGL: () => null },
+      surface: createTerrainSurface,
+    } as unknown as AdapterDeps;
+    const provider = adaptCompanionProvider(
+      {
+        name: 'probe',
+        has: () => true,
+        draw() {},
+        hitTest: (_feature, ctx) => {
+          contexts.push(ctx);
+          return null;
+        },
+      },
+      deps,
+    );
+    const at = {
+      point: { x: 5, y: 5 },
+      project: () => ({ x: 0, y: 0 }),
+      unproject: () => ({ lng: 1, lat: 1 }),
+      zoom: 10,
+      tolerancePx: 4,
+    };
+    const feature = { id: 'f', type: 'Point', geometry: { type: 'Point', coordinates: [1, 1] } };
+    provider.hitTest(feature as never, { x: 5, y: 5 }, at);
+    dragged = ['f', 'g'];
+    provider.hitTest(feature as never, { x: 5, y: 5 }, at);
+    expect(contexts[0]).not.toHaveProperty('excludeIds');
+    expect([...(contexts[1].excludeIds ?? [])]).toEqual(['f', 'g']);
+  });
+
   it('answers from the rows with its rows.has, and has none without it', () => {
     const deps = {
-      store: { getFeature: () => undefined },
+      store: { getFeature: () => undefined, getDragState: () => null },
       screen: {},
       customLayer: { getGL: () => null },
       surface: createTerrainSurface,

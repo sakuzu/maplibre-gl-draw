@@ -132,6 +132,7 @@ change is made.
 | `sketch.added` | `{ sketch: Sketch }` |
 | `sketch.updated` | `{ sketch: Sketch; dropped }` |
 | `sketch.removed` | `{ sketch: Sketch; reason: SketchEndReason; dropped }` |
+| `rendered.changed` | `{ ids }` |
 
 ### Drawing
 
@@ -441,8 +442,8 @@ The datasets that exist before you subscribe are not announced, so read
 ### sketch.added, sketch.updated and sketch.removed
 
 A sketch of `draw.sketches` was added, changed or ended. They fire once the
-operation is done: the features read with `{ applySketches: true }` inside
-a listener already show the change.
+operation is done: the features read with `draw.rendered.get` inside a
+listener already show the change.
 
 - `sketch.added` fires in `draw.sketches.add` and `addMany`, one per sketch
 - `sketch.updated` fires in `draw.sketches.update` and `updateMany`
@@ -465,6 +466,18 @@ A commit writes in one transaction: `document.changed` comes first, then
 first one before it is added: `document.changed`, `sketch.removed`, then
 `sketch.added`. Inside `draw.transact`, the events of the sketches come at
 once and `document.changed` when the transaction ends.
+
+### rendered.changed
+
+The features as this client draws them (`draw.rendered`) changed: `ids`
+lists the features whose shape, values or look as drawn changed, by a
+write of the document or by a sketch, and those created or deleted. It
+fires once the frame that draws the change is drawn, at most once a
+frame, after the frame: `draw.rendered` and the screen of the contexts
+then answer for that frame. It does not fire while no frame is drawn. The
+rows dragged in bulk are not written while they are dragged; what is
+drawn with them reads where they are in each frame, with
+`draw.rendered.getDraggedRows()`.
 
 ### dataset.reordered
 

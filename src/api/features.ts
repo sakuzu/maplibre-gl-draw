@@ -12,7 +12,6 @@ import type {
   FeatureInput,
   FeatureListOptions,
   FeaturePatch,
-  FeatureReadOptions,
   FeatureStyleResolved,
   FeatureValues,
   MoveTarget,
@@ -30,21 +29,18 @@ import type {
  */
 export interface FeaturesCollection {
   /**
-   * Gets a feature by ID.
+   * Gets a feature by ID, as the document holds it. A feature as it is drawn, with the sketches
+   * applied over it, is `draw.rendered.get`.
    *
-   * @param options - `applySketches` reads it as the sketches edit it (`draw.sketches`), as it is drawn
    * @returns The feature, or `undefined` when there is none with this ID
-   * @throws `DrawError` with the code `invalid-input` when the options have the wrong shape
    */
-  get(id: string, options?: FeatureReadOptions): Feature | undefined;
+  get(id: string): Feature | undefined;
   /**
-   * Gets features by ID, in the order of the IDs.
+   * Gets features by ID, in the order of the IDs, as the document holds them.
    *
-   * @param options - `applySketches` reads them as the sketches edit them (`draw.sketches`)
    * @returns One entry per ID: the feature, or `undefined` when there is none with that ID
-   * @throws `DrawError` with the code `invalid-input` when the options have the wrong shape
    */
-  getMany(ids: readonly string[], options?: FeatureReadOptions): (Feature | undefined)[];
+  getMany(ids: readonly string[]): (Feature | undefined)[];
   /**
    * Lists the features in stacking order, from the back.
    *

@@ -1,0 +1,53 @@
+// SPDX-FileCopyrightText: 2026 SAKAIDA Atsushi
+// SPDX-License-Identifier: AGPL-3.0-only
+
+/**
+ * `draw.rendered`: the features as this client draws them
+ */
+
+import type { DraggedRows } from '../feature-table/dragged-rows.js';
+import type { Footprint } from './extension/feature-type.js';
+import type { Feature } from './model.js';
+
+/**
+ * The features as this client draws them: the document with the sketches applied over it
+ * (`draw.sketches`, those with an owner first, then those of this client), and their selection
+ * boxes in the frame drawn last. What is drawn around a feature reads it here, so that it follows
+ * the feature as it is drawn, also while it is edited and not written yet; what writes reads the
+ * document (`draw.features`). It tells what changed with `rendered.changed`, once a frame that
+ * draws the change is drawn.
+ */
+export interface RenderedResource {
+  /**
+   * A feature as it is drawn: the feature of the document with the sketches applied over it.
+   *
+   * @returns The feature, or `undefined` when there is none with this ID in the document
+   */
+  get(id: string): Feature | undefined;
+  /**
+   * Features as they are drawn, in the order of the IDs.
+   *
+   * @returns One entry per ID: the feature, or `undefined` when there is none with that ID
+   */
+  getMany(ids: readonly string[]): (Feature | undefined)[];
+  /**
+   * The selection box of a feature as it is drawn, in the frame drawn last: its footprint (the
+   * one its type declares, or that of its geometry) with the margin of `selectionStyle.box`
+   * added, as the library draws and hits it. A footprint laid on the map has the margin laid on
+   * the map at the scale of that frame; a footprint of the screen has it added to its half sizes.
+   * The answer is the same whether the feature is selected or not.
+   *
+   * @returns The selection box, or `null` when there is no feature with this ID or it has nothing
+   *   to draw
+   */
+  getSelectionBox(id: string): Footprint | null;
+  /**
+   * The rows of a layer held as rows being dragged in bulk, and where each of them is drawn, while
+   * they are drawn moved and not written yet: what is drawn with such a row reads where it is
+   * drawn here, in the draw call of each frame. Its type is in `@sakuzu/maplibre-gl-draw/kasane`.
+   *
+   * @returns What reads them, or `null` when no row is dragged
+   * @experimental
+   */
+  getDraggedRows(): DraggedRows | null;
+}

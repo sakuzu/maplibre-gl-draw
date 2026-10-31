@@ -75,6 +75,7 @@ const LIBRARY_EVENT_KEYS = {
   'sketch.added': true,
   'sketch.updated': true,
   'sketch.removed': true,
+  'rendered.changed': true,
   'metadata.updated': true,
   'document.changed': true,
   'document.loaded': true,

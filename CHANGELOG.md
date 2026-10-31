@@ -100,7 +100,8 @@ writing it. Its changes are listed after those of 3.0.0.
   `FeatureRenderer.rows` (`FeatureRendererRows`) with `draw`, which draws
   the rows, and `sprites`, the pictures of the points a renderer draws,
   drawn with the rows of their layer. In `/kasane` too,
-  `listSelectedRows`, `draggedRowsOf` (`DraggedRows`) and the types of the
+  `listSelectedRows`, `DraggedRows` (read with
+  `draw.rendered.getDraggedRows()`) and the types of the
   pictures (`RowSpriteSource`, `RowSprite`, `RowSpriteDistanceScale`).
   `LayerTableView.getRowStyle` reads the style of a row, shared and
   frozen, without a copy.
@@ -168,6 +169,14 @@ writing it. Its changes are listed after those of 3.0.0.
   the margin of the selection frame and the distance of the rotate handle
   on the map with it, so that an extension can lay what it draws around a
   feature for the current view the same way.
+- `draw.rendered` (`RenderedResource`), the features as this client draws
+  them: `get` and `getMany` read them with the sketches applied over the
+  document, `getSelectionBox` gives the selection box of a feature (its
+  footprint with the margin) in the frame drawn last, and
+  `getDraggedRows`, experimental, the rows dragged in bulk. The event
+  `rendered.changed` tells the features changed, once the frame that
+  draws them is drawn, at most once a frame. What is drawn around a
+  feature reads it there.
 - `FeatureTypeDefinition.footprint(feature, ctx)`: what a feature of a
   type covers, from which the library makes its selection box (draws it,
   hits it and places the handles on it), as four corners laid on the map
@@ -300,6 +309,10 @@ writing it. Its changes are listed after those of 3.0.0.
 
 - `DocumentChange.layerReorder` and `DocumentChange.groupReorder`: the
   order inside a layer or a group is told by `DocumentChange.order`.
+- `HitTestContext` and `SnapContext`: a hit test and the snapping
+  candidates receive one context, `PointContext`, whose `excludeIds`
+  (absent when none) tells what the reading leaves out, for a hit test
+  the features this client drags as a whole.
 - `FeatureTypeDefinition.bounds` and `outline`, and
   `ScreenContext.bounds` and `outline`, which gave the selection frame
   in pixels of the screen: a type declares its `footprint` on the map or

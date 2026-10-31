@@ -166,7 +166,8 @@ const removeRoads = draw.extensions.snapProviders.add(roads);
 
 - `candidates` receives the pointer (`point` on the screen, `lngLat` on
   the map), the tolerance in pixels, the conversion between the map and
-  the screen (`screen`) and the IDs to leave out (`excludeIds`).
+  the screen (`screen`) and, when there are any, the IDs to leave out
+  (`excludeIds`).
   Returning candidates farther than the tolerance is harmless; the
   library keeps the near ones and decides which wins
 - A candidate is a point. To snap along a segment of your own data,

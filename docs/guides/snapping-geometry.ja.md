@@ -167,7 +167,7 @@ const removeRoads = draw.extensions.snapProviders.add(roads);
 
 - `candidates` は、ポインターの位置 (画面の `point` と地図の
   `lngLat`)、画素での許容距離、地図と画面の変換 (`screen`)、
-  除外する ID (`excludeIds`) を受け取ります。許容距離より遠い
+  除外する ID があればそれ (`excludeIds`) を受け取ります。許容距離より遠い
   候補を返しても問題ありません。近いものだけを残し、どれを
   選ぶかはライブラリーが決めます
 - 候補は点です。自前のデータの線分に沿って吸着させたいときは、

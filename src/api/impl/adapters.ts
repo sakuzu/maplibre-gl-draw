@@ -55,7 +55,7 @@ import type { SelectionExtensionRegistry } from '../../view/ui/selection-ui/exte
 import { computeBoundingBox } from '../../view/ui/selection-ui/index.js';
 import type { BoundingBoxCoords } from '../../view/ui/selection-ui/types.js';
 import type { ScreenPoint } from '../events.js';
-import type { HitTestContext, ScreenContext, SnapContext } from '../extension/context.js';
+import type { PointContext, ScreenContext } from '../extension/context.js';
 import type {
   FeatureTypeDefinition,
   Footprint,
@@ -118,12 +118,21 @@ function degreesPerPixel(map: MapLibreMap, point: { x: number; y: number }): num
   return toleranceDegrees((p) => view.unproject(p), point, 1) || 1;
 }
 
+/**
+ * What a hit test leaves out: the features this client drags as a whole (none when it drags
+ * none)
+ */
+function hitExclusion(store: Pick<Store, 'getDragState'>): Pick<PointContext, 'excludeIds'> {
+  const moving = store.getDragState()?.movingFeatureIds;
+  return moving && moving.length > 0 ? { excludeIds: new Set(moving) } : {};
+}
+
 /** What a hit test of the contract receives, for a position and a tolerance in degrees */
 function hitContextAt(
   deps: AdapterDeps,
   coordinate: Coordinate,
   toleranceLngLat: number,
-): { ctx: HitTestContext; degPerPx: number } {
+): { ctx: PointContext; degPerPx: number } {
   const at = createCoordinateTransform(deps.map).project(coordinate);
   const degPerPx = degreesPerPixel(deps.map, at);
   return {
@@ -132,6 +141,7 @@ function hitContextAt(
       lngLat: [coordinate[0], coordinate[1]],
       tolerancePx: toleranceLngLat / degPerPx,
       screen: deps.screen,
+      ...hitExclusion(deps.store),
     },
     degPerPx,
   };
@@ -526,8 +536,11 @@ const ENGINE_KINDS: ReadonlySet<string> = new Set<SnapTargetKind>([
   'guide',
 ]);
 
-/** What a provider of snapping candidates of the contract receives */
-function toSnapContext(ctx: SnapProviderContext, screen: ScreenContext): SnapContext {
+/**
+ * What a provider of snapping candidates of the contract receives: what the snapping leaves out
+ * (the features moved as a whole, the one being drawn), absent when it leaves out none
+ */
+function toSnapContext(ctx: SnapProviderContext, screen: ScreenContext): PointContext {
   const excludeIds = new Set<string>(ctx.excludeFeatureIds ?? []);
   if (ctx.excludeFeatureId !== undefined) excludeIds.add(ctx.excludeFeatureId);
   return {
@@ -535,7 +548,7 @@ function toSnapContext(ctx: SnapProviderContext, screen: ScreenContext): SnapCon
     lngLat: toPosition(ctx.lngLat),
     tolerancePx: ctx.tolerancePx,
     screen,
-    excludeIds,
+    ...(excludeIds.size > 0 && { excludeIds }),
   };
 }
 
@@ -672,6 +685,7 @@ export function adaptCompanionProvider(
         lngLat: toPosition(context.unproject(point)),
         tolerancePx: context.tolerancePx,
         screen: deps.screen,
+        ...hitExclusion(deps.store),
       });
       return hit ? ({ id: hit.id, contractHit: hit } as { id: string; contractHit: Hit }) : null;
     },

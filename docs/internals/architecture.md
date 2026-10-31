@@ -52,6 +52,9 @@ For using the library rather than changing it, start with the
 | Sketch | Edits drawn before they are written (`draw.sketches`) |
 | Edit | A change a sketch or a Store applies (`SketchEdit`) |
 | Owner | Who makes a sketch: `null` for this client |
+| Rendered | A feature as drawn, with the sketches (`draw.rendered`) |
+| Footprint | What a feature covers, without the margin of its box |
+| Selection box | The footprint with the margin, around a selected feature |
 
 ## Responsibilities
 

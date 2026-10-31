@@ -39,6 +39,7 @@
  * - `draw.metadata` and `draw.options` (get, update): {@link MetadataResource}, {@link OptionsResource}
  * - `draw.document` (load, toJSON, toGeoJSON): {@link DocumentResource}
  * - `draw.drawing` (addVertex, finish, cancel): {@link DrawingResource}
+ * - `draw.rendered` (get, getSelectionBox): {@link RenderedResource}
  * - `draw.extensions` (plugins, modes, feature types): {@link ExtensionsCollections}
  * - events with `draw.on`: {@link DrawEvents}; errors: {@link DrawError}
  *
@@ -84,6 +85,7 @@ export type {
   SketchPatch,
   SketchesCollection,
 } from './api/sketches.js';
+export type { RenderedResource } from './api/rendered.js';
 export type { SelectionResource, VertexSelectionResource } from './api/selection.js';
 export type { MetadataResource } from './api/metadata.js';
 export type { DrawingResource } from './api/drawing.js';
@@ -122,7 +124,6 @@ export type {
   FeatureInput,
   FeatureListOptions,
   FeaturePatch,
-  FeatureReadOptions,
   FeatureStyleSample,
   GroupFilter,
   GroupInput,
@@ -208,12 +209,11 @@ export { diffItemOrder } from './api/model.js';
 // Extensions
 export type {
   ExtensionContext,
-  HitTestContext,
   ModeContext,
   NameGenerator,
   PluginContext,
+  PointContext,
   ScreenContext,
-  SnapContext,
   TerrainSurface,
 } from './api/extension/context.js';
 export type {

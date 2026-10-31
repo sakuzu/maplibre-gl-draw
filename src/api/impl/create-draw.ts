@@ -25,6 +25,7 @@ import { createLayers } from './layers.js';
 import { createMemory } from './memory.js';
 import { createMetadata } from './metadata.js';
 import { checkDrawOptions, createOptions, toEngineOptions } from './options.js';
+import { createRendered } from './rendered.js';
 import { createSelection, createVertexSelection } from './selection.js';
 import type { ResourceDeps } from './shared.js';
 import { invalidInput, notFound, requireRecord, withLocksIgnored } from './shared.js';
@@ -67,10 +68,23 @@ export function createDrawOnEngine(
     setActiveLayerId: context.setActiveLayerId,
     getStyleOptions: drawOptions.getStyle,
     spatialIndex: context.spatialIndex,
-    appliedFeature: (id) => engine.sketches.appliedFeature(id),
   };
   const features = createFeatures(deps);
   const groups = createGroups(deps);
+  // The features as this client draws them, and what changed of them once a frame is drawn
+  const rendered = createRendered({
+    map,
+    store,
+    appliedFeature: (id) => engine.sketches.appliedFeature(id),
+    selectedIds: () => {
+      const selection = store.getSelection();
+      return selection.type === 'feature' ? selection.ids : [];
+    },
+    selectionStyle: context.selectionStyle,
+    selectionExtensions: context.selectionScope.extensions,
+    events,
+    onFrameDrawn: (listener) => engine.customLayer.onFrameDrawn(listener),
+  });
   // The checks of the state, in development (`debug.checks`): after each notification of the
   // Store, and after each frame drawn
   const stopChecks = attachChecks(engine, options);
@@ -98,6 +112,7 @@ export function createDrawOnEngine(
     datasets: createDatasets(engine.datasets, events, context.eventEmitter),
     hidden: createHidden(deps),
     sketches: createSketches(engine.sketches),
+    rendered: rendered.rendered,
     selection: createSelection(deps, { features, groups }),
     vertexSelection: createVertexSelection(deps),
     drawing: createDrawingResource(engine),
@@ -158,6 +173,7 @@ export function createDrawOnEngine(
       if (destroyed) return;
       try {
         stopChecks();
+        rendered.stop();
         engine.destroy();
       } finally {
         memory.dispose();

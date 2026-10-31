@@ -238,28 +238,25 @@ export interface ModeContext extends ExtensionContext {
   listTraceRows(bbox: BBox): { datasetId: string; rowIndex: number; row: DatasetRow }[];
 }
 
-/** What a hit test of a custom feature type or a companion receives. */
-export interface HitTestContext {
-  /** The point on the screen */
+/**
+ * What an extension receives for a point on the screen: a hit test of a custom feature type or a
+ * companion (`hitTest`, `boxSelect`), and the snapping candidates of a type or of a provider
+ * (`snapCandidates`, `SnapProvider.candidates`). What one reads and the other does not is told
+ * here, in `excludeIds`.
+ */
+export interface PointContext {
+  /** The point on the screen, in the frame drawn last */
   point: ScreenPoint;
-  /** The position on the map */
+  /** The position on the map drawn at the point */
   lngLat: Position;
-  /** How far from the point a hit may be, in pixels */
+  /** How far from the point a hit or a candidate may be, in pixels */
   tolerancePx: number;
-  /** The conversion between the map and the screen */
+  /** The conversion between the map and the screen, in the frame drawn last */
   screen: ScreenContext;
-}
-
-/** What a provider of snapping candidates receives. */
-export interface SnapContext {
-  /** The point on the screen */
-  point: ScreenPoint;
-  /** The position on the map */
-  lngLat: Position;
-  /** How far from the point a candidate may be, in pixels */
-  tolerancePx: number;
-  /** The conversion between the map and the screen */
-  screen: ScreenContext;
-  /** The IDs of the features that must not be snapped to, such as the one being drawn */
-  excludeIds: ReadonlySet<string>;
+  /**
+   * The IDs of the features this reading leaves out, absent when it leaves out none: for a hit
+   * test, the features this client is dragging as a whole; for snapping, those and the features
+   * that must not be snapped to, such as the one being drawn
+   */
+  excludeIds?: ReadonlySet<string>;
 }
