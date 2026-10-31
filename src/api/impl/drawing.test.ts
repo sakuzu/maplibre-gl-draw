@@ -204,7 +204,7 @@ describe('drawing', () => {
     draw.extensions.plugins.add({
       name: 'listener',
       onAdd(ctx) {
-        contextDrawing = ctx.drawing;
+        contextDrawing = ctx.draw.drawing;
       },
       input: {
         onClick(event) {

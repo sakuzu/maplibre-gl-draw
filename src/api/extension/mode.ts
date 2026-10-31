@@ -115,13 +115,13 @@ export interface ModeHandler extends Partial<InputHandlers> {
    */
   onCancel?(): void;
   /**
-   * Removes the last vertex of the shape being drawn, as `ctx.drawing.undoVertex` asks.
+   * Removes the last vertex of the shape being drawn, as `draw.drawing.undoVertex` asks.
    *
    * @returns True when a vertex was removed
    */
   onUndoVertex?(): boolean;
   /**
-   * Puts back the vertex the last `onUndoVertex` removed, as `ctx.drawing.redoVertex` asks.
+   * Puts back the vertex the last `onUndoVertex` removed, as `draw.drawing.redoVertex` asks.
    *
    * @returns True when a vertex was put back
    */

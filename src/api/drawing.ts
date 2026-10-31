@@ -19,7 +19,7 @@ import type { Position } from 'geojson';
  * carries it as its snapped position. A mode that ignores clicks, or a plugin that consumes
  * them, ignores or consumes these as well.
  *
- * Extensions reach the same object as `ctx.drawing`.
+ * Extensions reach it as `ctx.draw.drawing`.
  */
 export interface DrawingResource {
   /**

@@ -129,13 +129,14 @@ instance:
   ([terrain](terrain.md))
 - `invalidate`, which asks for features to be drawn again when
   something outside the document changed their look
-- `drawing`, the same object as `draw.drawing`: it places a vertex,
-  moves the preview and finishes the shape as the input of the map
-  would (`addVertex`, `moveTo`, `finish`), removes the last vertex and
-  puts it back (`undoVertex`, `redoVertex`), cancels the shape as an
-  Escape does, without leaving the mode (`cancel`), and tells whether a
-  drawing mode is drawing (`isActive`, `isDrawing`)
-  ([Drawing and editing](drawing.md#driving-a-drawing-mode-from-code))
+
+The shape being drawn is `ctx.draw.drawing`, as for an application: it
+places a vertex, moves the preview and finishes the shape as the input of
+the map would (`addVertex`, `moveTo`, `finish`), removes the last vertex
+and puts it back (`undoVertex`, `redoVertex`), cancels the shape as an
+Escape does, without leaving the mode (`cancel`), and tells whether a
+drawing mode is drawing (`isActive`, `isDrawing`)
+([Drawing and editing](drawing.md#driving-a-drawing-mode-from-code)).
 
 ### Writing to the document
 

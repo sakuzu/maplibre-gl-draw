@@ -12,7 +12,6 @@ import type { Position } from 'geojson';
 import type { BBox } from '../../geometry/types.js';
 import type { DatasetRow } from '../datasets.js';
 import type { Draw } from '../draw.js';
-import type { DrawingResource } from '../drawing.js';
 import type { DrawEvents, ScreenPoint } from '../events.js';
 import type { ExtensionsCollections } from '../extensions.js';
 import type { Feature, FeatureInput, FeatureType, Layer } from '../model.js';
@@ -111,7 +110,7 @@ export interface ScreenContext {
 
 /**
  * What every context of an extension has: the public API, the Store, the events, the
- * terrain, the automatic names, the screen and a way to redraw, and the shape being drawn.
+ * terrain, the automatic names, the screen and a way to redraw.
  */
 export interface ExtensionContext {
   /** The whole public API; an extension reads and writes the document through it */
@@ -149,11 +148,6 @@ export interface ExtensionContext {
    *   is left out
    */
   invalidate(filter?: { type?: string; ids?: string[] }): void;
-  /**
-   * The shape the current drawing mode is drawing: the same object as `draw.drawing`, to place,
-   * finish, cancel, undo and redo its vertices
-   */
-  readonly drawing: DrawingResource;
 }
 
 /**

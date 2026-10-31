@@ -671,7 +671,8 @@ Store を差し替えるときは、これまでどおり `options.store` に渡
 
 3.0 では、ストアがレイヤーの地物を列の行で持てるようになりました
 ([変更履歴](../../CHANGELOG.md#unreleased))。標準のストアを使う
-アプリで変わるところは 4 つです。
+アプリで変わるところは次のとおりです。拡張で変わるところは
+[3.0 の拡張](#30-の拡張)にあります。
 
 `Layer` と `Group` は、`kind` で見分ける共用体になりました。行で持つ
 レイヤー (`kind: 'table'`) は `items` を持たず、そのグループは
@@ -728,9 +729,22 @@ draw.features.update(featureId, {
 });
 ```
 
+度の範囲は、`features.bbox` と同じく、どこでも `bbox` と呼びます。
+`selection.get().bulk.bbox`、下ごしらえ済みの表の `prepared.bbox`、
+`dataset.getRowBBox(index)` は、`bounds` と `getRowBounds` でした。
+その型 `BBox` は main の入口からも読めます。
+
 自前のストアは変えなくて構いません。レイヤーの項目をリストで持つ
 ストアは、変更の前と後のリストから `diffItemOrder` で
 `DocumentChange.order` を作ります。
+
+### 3.0 の拡張
+
+拡張の窓口を組み直しました。拡張はライブラリーに地図の上の位置を渡し、
+描かれた物はライブラリーが答えます。消えた物は、それぞれ代わりを書きます。
+
+- `ctx.drawing` は無くなりました。同じものが `ctx.draw.drawing` です
+- `boxSelect(feature, boxPx, ctx)` の画面の箱の引数は `boxPx` です
 
 ## mapbox-gl-draw や terra-draw から
 

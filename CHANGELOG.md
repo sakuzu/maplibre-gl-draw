@@ -247,6 +247,8 @@ writing it. Its changes are listed after those of 3.0.0.
 
 - `DocumentChange.layerReorder` and `DocumentChange.groupReorder`: the
   order inside a layer or a group is told by `DocumentChange.order`.
+- `ExtensionContext.drawing`: an extension reaches the same object as
+  `ctx.draw.drawing`.
 
 ### Fixed in 3.0.0
 

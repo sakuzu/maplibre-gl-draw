@@ -516,9 +516,11 @@ describe('extensions.plugins', () => {
     );
     const context = ctx as unknown as PluginContext;
     expect(context.draw).toBe(draw);
+    // The shape being drawn is draw.drawing, reached through ctx.draw, with no second way to it
+    expect('drawing' in context).toBe(false);
     expect(context.store.listLayers()).toHaveLength(1);
-    expect(context.drawing.isDrawing()).toBe(false);
-    expect(context.drawing.undoVertex()).toBe(false);
+    expect(context.draw.drawing.isDrawing()).toBe(false);
+    expect(context.draw.drawing.undoVertex()).toBe(false);
     expect(context.screen.project([1, 1])).toEqual([500, 200]);
     expect(context.screen.unproject([500, 200])).toEqual([1, 1]);
     expect(context.names.next('Layer')).toEqual(expect.any(String));
@@ -972,9 +974,9 @@ describe('what a drawing mode reads and shows', () => {
     expect(tentative.getTentative()).toEqual(
       expect.objectContaining({ confirmedCount: 2, highlightedVertexIndex: 0 }),
     );
-    expect(ctx.drawing.isDrawing()).toBe(true);
+    expect(ctx.draw.drawing.isDrawing()).toBe(true);
     ctx.preview.clear();
-    expect(ctx.drawing.isDrawing()).toBe(false);
+    expect(ctx.draw.drawing.isDrawing()).toBe(false);
   });
 
   it('gives the writable layer, or null when none can be written', () => {
@@ -1115,20 +1117,20 @@ describe('drawing.cancel', () => {
       }),
     );
     const context = ctx as unknown as PluginContext;
-    expect(context.drawing.cancel()).toBe(false);
+    expect(context.draw.drawing.cancel()).toBe(false);
 
     engine.modeManager.setMode('draw_line');
     const input = createSyntheticInput(engine);
     input.click([0, 0]);
     input.move([1, 1]);
-    expect(context.drawing.isDrawing()).toBe(true);
+    expect(context.draw.drawing.isDrawing()).toBe(true);
     const previews: unknown[] = [];
     draw.on('preview.changed', ({ feature }) => previews.push(feature));
-    expect(context.drawing.cancel()).toBe(true);
-    expect(context.drawing.isDrawing()).toBe(false);
+    expect(context.draw.drawing.cancel()).toBe(true);
+    expect(context.draw.drawing.isDrawing()).toBe(false);
     expect(previews).toEqual([null]);
     expect(engine.modeManager.getMode()).toBe('draw_line');
-    expect(context.drawing.cancel()).toBe(false);
+    expect(context.draw.drawing.cancel()).toBe(false);
     expect(engine.modeManager.getMode()).toBe('draw_line');
 
     // The mode dropped its vertices: the next click starts a new shape
@@ -1152,9 +1154,9 @@ describe('drawing.cancel', () => {
     }));
     engine.modeManager.setMode('custom');
     input.click([0, 0]);
-    expect(context.drawing.cancel()).toBe(true);
+    expect(context.draw.drawing.cancel()).toBe(true);
     expect(onCancel).toHaveBeenCalledTimes(1);
-    expect(context.drawing.isDrawing()).toBe(false);
+    expect(context.draw.drawing.isDrawing()).toBe(false);
     expect(engine.modeManager.getMode()).toBe('custom');
     draw.destroy();
   });

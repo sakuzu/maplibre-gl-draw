@@ -660,7 +660,8 @@ documentation always said). An app that called `setStyle` with
 
 3.0 lets a store hold the features of a layer as rows of columns (see
 [the change log](../../CHANGELOG.md#unreleased)). An app over the
-default store changes in four places.
+default store changes in the places below, and an extension in those of
+[an extension](#an-extension-in-30).
 
 `Layer` and `Group` are unions told apart by `kind`. A layer held as rows
 (`kind: 'table'`) has no `items`, and a group of it no `featureIds`.
@@ -718,9 +719,23 @@ draw.features.update(featureId, {
 });
 ```
 
+An extent in degrees is named `bbox` wherever it is, as in
+`features.bbox`: `selection.get().bulk.bbox`, `prepared.bbox` of a
+prepared table and `dataset.getRowBBox(index)` were `bounds` and
+`getRowBounds`. The main entry exports its type, `BBox`.
+
 A store of your own needs no change. A store that keeps the items of its
 layers as lists makes `DocumentChange.order` from the lists before and
 after with `diffItemOrder`.
+
+### An extension in 3.0
+
+The contract of the extensions is reworked so that an extension hands
+positions on the map to the library, and the library answers what is
+drawn. Each change below names what replaces what is gone.
+
+- `ctx.drawing` is gone: `ctx.draw.drawing` is the same object
+- `boxSelect(feature, boxPx, ctx)` names its box in pixels `boxPx`
 
 ## From mapbox-gl-draw or terra-draw
 

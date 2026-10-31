@@ -73,7 +73,7 @@ async function isDrawing(page: Page): Promise<boolean> {
       draw.extensions.plugins.add({
         name: 'e2e-probe',
         onAdd(ctx) {
-          probe.e2eDrawing = ctx.drawing;
+          probe.e2eDrawing = ctx.draw.drawing;
         },
       });
     }

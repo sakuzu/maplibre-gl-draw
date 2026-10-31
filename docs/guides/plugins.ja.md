@@ -128,13 +128,14 @@ console.log(counter?.count());
   ([地形](terrain.ja.md))
 - `invalidate` は、文書の外の何かが見た目を変えたときに、地物を描き
   直させます
-- `drawing` は `draw.drawing` と同じものです。地図からの入力と同じように
-  頂点を置き、プレビューを動かし、形を描き終えます (`addVertex`、
-  `moveTo`、`finish`)。最後の頂点を取り除き、また戻します
-  (`undoVertex`、`redoVertex`)。Escape と同じようにその形を取り消し、
-  モードは離れません (`cancel`)。描画モードが描いているかを答えます
-  (`isActive`、`isDrawing`)
-  ([描画と編集](drawing.ja.md#描画モードをコードから動かす))
+
+描いている途中の形は、アプリケーションと同じく `ctx.draw.drawing` です。
+地図からの入力と同じように頂点を置き、プレビューを動かし、形を描き終えます
+(`addVertex`、`moveTo`、`finish`)。最後の頂点を取り除き、また戻します
+(`undoVertex`、`redoVertex`)。Escape と同じようにその形を取り消し、
+モードは離れません (`cancel`)。描画モードが描いているかを答えます
+(`isActive`、`isDrawing`)
+([描画と編集](drawing.ja.md#描画モードをコードから動かす))。
 
 ### 文書に書く
 

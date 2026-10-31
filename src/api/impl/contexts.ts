@@ -373,11 +373,6 @@ export function createExtensionContext(
       if (filter?.type === undefined && filter?.ids === undefined) spatialIndex.invalidateAll();
       map.triggerRepaint();
     },
-    // The same object as draw.drawing, read when it is asked for: the draw instance is attached
-    // after the host is built
-    get drawing() {
-      return services.getDraw().drawing;
-    },
   };
 }
 
@@ -516,9 +511,6 @@ export function createModeContext(
     names: base.names,
     screen: base.screen,
     invalidate: base.invalidate,
-    get drawing() {
-      return base.drawing;
-    },
     setMode: (mode) => services.modeManager.setMode(mode),
     hitTest(point, options) {
       const at = { x: point[0], y: point[1] };
