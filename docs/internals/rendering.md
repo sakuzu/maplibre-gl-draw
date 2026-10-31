@@ -1690,7 +1690,10 @@ the path of maplibre's layers.
   plane needs (`maxSegmentMercator` of the batch) with the line cell, and
   `u_station_mercator` makes the vertex shader place the stations along the
   Mercator plane instead of along the degrees, the way the terrain places
-  them. Nothing is baked, so zooming rebuilds nothing
+  them: the Mercator offsets of the ends from the center are mixed and
+  projected from the Mercator plane (`stationClip`,
+  `project_mercator_offset_to_clipspace`), so no absolute coordinate is
+  formed. Nothing is baked, so zooming rebuilds nothing
 - The other paths drawn on the CPU are cut with the line cell before they
   are drawn: the dashes of features (`densifyPathForGlobe` before
   `splitIntoDashes`) and the outlines of the selection UI
@@ -1963,7 +1966,7 @@ alone. Each renderer remembers the value it wrote last and skips
 - Matrices and camera values are compared by the reference of the
   `ProjectionData` or `OffsetUniforms` they come from. Both are recreated
   every frame, so the same reference means the same contents
-- Scalars (canvas size, `u_use_offset_mode`, `u_origin_shift`, zoom,
+- Scalars (canvas size, `u_origin_shift`, zoom,
   widths) are compared by value; `u_origin_shift` is the one that really
   changes between chunks
 - `beginRenderFrame()` (`view/shaders/frame.ts`) advances a frame number at

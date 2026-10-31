@@ -438,10 +438,11 @@ Each item has the same five parts.
 - What we rely on — avoidance + assumption.
   `getProjectionTransitionUniform(prelude)` in
   `src/view/shaders/helpers.ts` inspects the prelude string and adds the
-  uniform declaration only when the prelude lacks it. At high zoom (item
-  15) the shaders use a linearized projection derived from deck.gl instead
-  of `projectTile`; at low zoom they use `projectTileWithElevation`,
-  relying on it being identical to `projectTile` at elevation 0.
+  uniform declaration only when the prelude lacks it. The shaders do not
+  call `projectTile` (item 15): they read the uniforms of the prelude
+  (`u_projection_matrix`, and on the globe `u_projection_fallback_matrix`
+  and `u_projection_clipping_plane`) and compile their globe branch under
+  the `#define GLOBE` of the globe variant.
 - Symptoms when it breaks — a duplicate or a missing declaration fails the
   shader compilation, and nothing of the library is drawn.
 - Check when upgrading — `src/view/shaders/compile.test.ts` runs a
@@ -452,28 +453,48 @@ Each item has the same five parts.
 - Conditions for removal — if upstream documents the prelude contents as a
   stable contract, a plain conditional can replace the string inspection.
 
-## 15. The `zoom >= 12` Branch for Offset Mode
+## 15. The Projection of the Globe and of the Transition Is Imitated
 
-- Upstream behavior — not an upstream mechanism as such, but maplibre's
-  matrices work in Mercator world coordinates 0..1, and in Float32 that
-  leaves several pixels of rounding inside a z16 tile. The matrices are
-  assembled with factors taken from the centre latitude of the view.
-- What we rely on — assumption. `src/view/shaders/projection.ts` raises
-  `u_use_offset_mode` at `zoom >= 12`. `OFFSET_MODE_MIN_ZOOM = 12` in
-  `src/view/terrain/anchor.ts` must always equal that threshold.
-  `metersToMercatorScale()` in `src/view/terrain/metrics.ts` produces the
-  same factor as `MercatorCoordinate.fromLngLat(lngLat, meters).z`; it
-  depends on latitude but may be taken at the screen centre. Elevations
-  passed to vertices must be in Mercator units, never in metres. The
-  method is explained in [coordinate precision](./coordinate-precision.md).
-- Symptoms when it breaks — if the thresholds differ, CPU anchors and GPU
-  vertices go through different projection formulas and a symbol is drawn
-  away from where it is hit. Elevations passed in metres send features
-  into the stratosphere.
-- Check when upgrading — `src/view/terrain/anchor.test.ts`. Whether
-  upstream still assembles its matrices from the centre latitude is
-  checked by hand.
-- Conditions for removal — none. It is our own precision branch.
+- Upstream behavior — maplibre's globe prelude
+  (`shaders/_projection_globe.vertex.glsl`) puts a position on the unit
+  sphere in `projectToSphere`, with `sin` and `cos` of its longitude, and
+  `interpolateProjection` mixes it with the position on the Mercator
+  plane through `u_projection_fallback_matrix` by `u_projection_transition`
+  (`mix` of x, y and w; the depth from the globe from a transition of 0.2
+  on, the globe alone above 0.999). The projection data of a custom layer
+  gives the matrix of the globe as 32-bit floats
+  (`VerticalPerspectiveTransform.getProjectionData`), and the render input
+  gives the same matrix in 64 bits as `modelViewProjectionMatrix` while the
+  globe is drawn. On Web Mercator the matrix of the projection data is in
+  64 bits and the model view projection matrix is of other units.
+- What we rely on — imitation + assumption. The shaders project every
+  position from its offset from the center with their own formulas
+  (`src/view/shaders/center-projection.ts`): the offset on the sphere from
+  sine and cosine of the half offsets, mixed with the offset on the
+  Mercator plane as `interpolateProjection` mixes them, and the depth of
+  `globeComputeClippingZ`. `clipOfPosition` computes the same on the CPU in
+  64 bits for the center and for the anchors over terrain.
+  `mainMatrixOfFrame` in `src/view/layer/frame-state.ts` takes the
+  `modelViewProjectionMatrix` of the render input as the matrix of the
+  globe in 64 bits when it is that matrix to the precision of 32-bit
+  floats, and the matrix of the projection data otherwise. Elevations
+  passed to vertices are in Mercator units, never in metres; the globe
+  takes them as metres, as `projectTileWithElevation` would. The method
+  is explained in [coordinate precision](./coordinate-precision.md).
+- Symptoms when it breaks — if maplibre mixes the projections another way,
+  what the library draws in the transition lies off maplibre's layers. If
+  the model view projection matrix stops being the matrix of the globe,
+  the 32-bit matrix is used and what is drawn on the globe drifts from
+  `map.project` by up to several pixels above zoom 18. Elevations passed in
+  metres send features into the stratosphere.
+- Check when upgrading — `src/e2e/projection-globe.e2e.test.ts` holds what
+  is drawn on the globe and in the transition to `map.project`;
+  `src/view/terrain/anchor-projection.test.ts` holds the projection of the
+  anchors. Compare `projectToSphere`, `interpolateProjection` and
+  `globeComputeClippingZ` with the new source.
+- Conditions for removal — none. The precision of the projection is our
+  own (maplibre's prelude uses the trigonometric built-ins, whose error
+  GLSL ES 3.00 does not bound).
 
 ## 16. The `premultipliedAlpha` Canvas
 
@@ -962,9 +983,10 @@ Each item has the same five parts.
   transition (`projectionTransition` below 0.999) the depth is mixed in
   from `z_globeness_threshold` (0.2) on. `map.project` projects such a
   position onto the near face.
-- What we rely on — assumption. Our shaders project through
-  `projectTileWithElevation`, so the clip hides what lies behind the
-  sphere. A marker and the selection frame of a point
+- What we rely on — imitation. Our shaders give a position the same
+  depth (`project_center_offset` in
+  `src/view/shaders/center-projection.ts`), so the clip hides what lies
+  behind the sphere. A marker and the selection frame of a point
   (`src/view/renderers/anchored-outline.ts`) put the depth of their
   anchor on every vertex, so the far side clips them whole; the combined
   frame of a multiple selection is a box on the map and is clipped like
@@ -976,8 +998,8 @@ Each item has the same five parts.
   frame, and that a point near the edge gets the frame of its marker.
   Compare `globeComputeClippingZ` and `interpolateProjection` with the new
   source.
-- Conditions for removal — none while the engine projects its vertices
-  with maplibre's prelude.
+- Conditions for removal — none while the engine draws the globe of
+  maplibre.
 
 ## When Upgrading the Version
 
