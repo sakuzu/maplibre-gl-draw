@@ -747,6 +747,9 @@ draw.features.update(featureId, {
 - `boxSelect(feature, boxPx, ctx)` の画面の箱の引数は `boxPx` です
 - 地物の `Hit` は、その地物を `id` だけで指します。`featureId` は、
   付き物かハンドルが属する地物です
+- ピクセルの幅を与えるズームは、`ctx.line.draw` のオプションの
+  `referenceZoom` です (前は `createdZoom`)。`ctx.point.draw` も、
+  印の大きさと縁の太さのためにこれを受け取ります
 
 ## mapbox-gl-draw や terra-draw から
 

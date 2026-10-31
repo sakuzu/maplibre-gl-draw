@@ -738,6 +738,9 @@ drawn. Each change below names what replaces what is gone.
 - `boxSelect(feature, boxPx, ctx)` names its box in pixels `boxPx`
 - A `Hit` of a feature names it by `id` alone; `featureId` is the
   feature a companion or a handle belongs to
+- The zoom a width in pixels is given at is `referenceZoom` in the
+  options of `ctx.line.draw` (was `createdZoom`), and `ctx.point.draw`
+  takes it too, for the size and the outline of its marker
 
 ## From mapbox-gl-draw or terra-draw
 

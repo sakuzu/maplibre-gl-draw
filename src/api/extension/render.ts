@@ -57,8 +57,9 @@ export interface LineRenderer {
    * @param style - The width in pixels, the CSS color, the opacity from 0 to 1, the dash
    *   pattern, and a custom `[dash, gap]` in pixels
    * @param options - `closed` joins the last position to the first; `widthUnit` says whether
-   *   the width is in pixels or meters; `createdZoom` is the zoom at which the width applies,
-   *   so that the line grows and shrinks with the zoom
+   *   the width is in pixels or meters; `referenceZoom` is the zoom at which a width in pixels is
+   *   given, so that the line grows and shrinks with the zoom: it is drawn `2 ** (zoom -
+   *   referenceZoom)` times as wide (the width stays the same at every zoom when it is left out)
    */
   draw(
     coordinates: readonly Position[],
@@ -69,7 +70,7 @@ export interface LineRenderer {
       lineStyle: LineStyle;
       dashArray?: number[];
     },
-    options?: { closed?: boolean; widthUnit?: 'pixels' | 'meters'; createdZoom?: number },
+    options?: { closed?: boolean; widthUnit?: 'pixels' | 'meters'; referenceZoom?: number },
   ): void;
 }
 
@@ -99,7 +100,9 @@ export interface PointRenderer {
    * @param style - The shape, the size in pixels, the fill and the outline (CSS colors,
    *   opacities from 0 to 1, the outline width in pixels)
    * @param options - `elevationMeters` places the marker at this height instead of on the
-   *   ground
+   *   ground; `referenceZoom` is the zoom at which the size and the outline width are given, so
+   *   that the marker grows and shrinks with the zoom as a line does: it is drawn `2 ** (zoom -
+   *   referenceZoom)` times as large (the same size at every zoom when it is left out)
    */
   draw(
     position: Position,
@@ -112,7 +115,7 @@ export interface PointRenderer {
       strokeWidth: number;
       strokeOpacity: number;
     },
-    options?: { elevationMeters?: number },
+    options?: { elevationMeters?: number; referenceZoom?: number },
   ): void;
 }
 

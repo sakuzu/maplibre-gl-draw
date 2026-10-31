@@ -112,7 +112,7 @@ export function createRenderContext(
       };
       const common = {
         widthUnit: options.widthUnit ?? 'pixels',
-        ...(options.createdZoom !== undefined && { createdZoom: options.createdZoom }),
+        ...(options.referenceZoom !== undefined && { createdZoom: options.referenceZoom }),
       };
       if (options.closed) {
         base.sdfLineRenderer.drawClosed(coords, stroke, common, zoom, projection);
@@ -134,15 +134,17 @@ export function createRenderContext(
   };
   const point: PointRenderer = {
     draw(position, style, options = {}) {
+      // A size given at a reference zoom follows the zoom from it, as the width of a line does
+      const scale = options.referenceZoom === undefined ? 1 : 2 ** (zoom - options.referenceZoom);
       base.pointShapeRenderer.draw(
         pair(position),
         {
           shape: style.shape,
-          size: style.size,
+          size: style.size * scale,
           fillColor: toColor(style.fillColor),
           fillOpacity: style.fillOpacity,
           strokeColor: toColor(style.strokeColor),
-          strokeWidth: style.strokeWidth,
+          strokeWidth: style.strokeWidth * scale,
           strokeOpacity: style.strokeOpacity,
         },
         zoom,

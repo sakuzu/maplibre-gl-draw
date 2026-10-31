@@ -167,6 +167,51 @@ describe('a custom feature type', () => {
       12,
       PROJECTION,
     );
+    // A width given at a reference zoom follows the zoom from it
+    ctx.line.draw(
+      [
+        [0, 0],
+        [1, 1],
+      ],
+      { width: 2, color: '#ff0000', opacity: 1, lineStyle: 'solid' },
+      { referenceZoom: 10 },
+    );
+    expect(base.sdfLineRenderer.draw).toHaveBeenLastCalledWith(
+      [
+        [0, 0],
+        [1, 1],
+      ],
+      { width: 2, color: [1, 0, 0, 1], opacity: 1, lineStyle: 'solid' },
+      { widthUnit: 'pixels', createdZoom: 10, closed: false },
+      12,
+      PROJECTION,
+    );
+    // So do the size and the outline of a point marker: four times as large two zooms in
+    const marker = {
+      shape: 'circle' as const,
+      size: 6,
+      fillColor: '#00ff00',
+      fillOpacity: 1,
+      strokeColor: '#000000',
+      strokeWidth: 1,
+      strokeOpacity: 1,
+    };
+    ctx.point.draw([0, 0], marker);
+    expect(base.pointShapeRenderer.draw).toHaveBeenLastCalledWith(
+      [0, 0],
+      expect.objectContaining({ size: 6, strokeWidth: 1 }),
+      12,
+      undefined,
+      undefined,
+    );
+    ctx.point.draw([0, 0], marker, { referenceZoom: 10 });
+    expect(base.pointShapeRenderer.draw).toHaveBeenLastCalledWith(
+      [0, 0],
+      expect.objectContaining({ size: 24, strokeWidth: 4 }),
+      12,
+      undefined,
+      undefined,
+    );
     ctx.fill.draw(
       [
         [

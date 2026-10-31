@@ -160,9 +160,11 @@ draw.extensions.featureTypes.add({
 ```
 
 線の描画器は、既定では幅をピクセルで受け取ります。
-`widthUnit: 'meters'` にすると地上のメートルになります。`createdZoom`
+`widthUnit: 'meters'` にすると地上のメートルになります。`referenceZoom`
 を渡すと、そのズームでの幅を基準に、線がズームに合わせて太くなったり
-細くなったりします。
+細くなったりします。点の描画器も、印の大きさと縁の太さに
+`referenceZoom` を受け取ります。地図の上で大きさを保つ地物の印には、
+地物が持つズーム (`maplibre-gl-draw:createdZoom`) を渡します。
 
 表示が経度 ±180 度の子午線をまたぐと、描画は世界の写しをそれぞれ
 見せ、`draw` は写しごとに 1 回呼ばれます。描くものを地図のカメラから

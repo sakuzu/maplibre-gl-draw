@@ -167,8 +167,11 @@ draw.extensions.featureTypes.add({
 
 The line renderer takes a width in pixels by default.
 `widthUnit: 'meters'` gives it in meters on the ground, and
-`createdZoom` makes the line grow and shrink with the zoom from the
-width it has at that zoom.
+`referenceZoom` makes the line grow and shrink with the zoom from the
+width it has at that zoom. The point renderer takes `referenceZoom` too,
+for the size and the outline of its marker: a marker of a feature that
+keeps its size on the map passes the zoom the feature keeps
+(`maplibre-gl-draw:createdZoom`).
 
 When the view crosses the ±180 degree meridian, a drawing shows each
 copy of the world, and `draw` is called once per copy. Compute what you

@@ -245,6 +245,12 @@ writing it. Its changes are listed after those of 3.0.0.
 - A `Hit` of a feature names it by `id` alone, as `ModeContext.hitTest`
   and `map.clicked` give it: `featureId` is the feature a companion or a
   handle belongs to.
+- The zoom a width in pixels is given at is `referenceZoom` in the
+  options of `LineRenderer.draw` (was `createdZoom`, the name of the key
+  a feature keeps it under), and `PointRenderer.draw` takes it too: the
+  size and the outline width of the marker are drawn
+  `2 ** (zoom - referenceZoom)` times as large, as the width of a line
+  is.
 
 ### Removed in 3.0.0
 
