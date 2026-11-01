@@ -55,32 +55,21 @@ export { supportsVertexEditing } from '../../shared/utils/coordinates.js';
 
 /**
  * Computes the positions of the resize handles
- * Specification: show resize handles only at the four corners of the bounding box
+ * Specification: show resize handles only at the four corners of the bounding box (the
+ * handles an extension adds are auxiliary handles, `auxiliary-handles.ts`)
  *
  * @param bbox Bounding box
- * @param additionalHandles Additional handles (edge-center handles and the like)
  *
  * @internal
  */
-export function computeResizeHandles(
-  bbox: BoundingBoxCoords,
-  additionalHandles?: HandleInfo[],
-): HandleInfo[] {
+export function computeResizeHandles(bbox: BoundingBoxCoords): HandleInfo[] {
   const { topLeft, topRight, bottomRight, bottomLeft } = bbox;
-
-  const handles: HandleInfo[] = [
+  return [
     { type: 'resize-nw', position: topLeft },
     { type: 'resize-ne', position: topRight },
     { type: 'resize-se', position: bottomRight },
     { type: 'resize-sw', position: bottomLeft },
   ];
-
-  // Append the additional handles if there are any
-  if (additionalHandles && additionalHandles.length > 0) {
-    handles.push(...additionalHandles);
-  }
-
-  return handles;
 }
 
 /**
@@ -452,25 +441,15 @@ export class SelectionHandlesRenderer {
 
   /**
    * Draws the resize handles
-   * Draws them at the four corners of the bbox after the margin is applied (additional
-   * handles can also be drawn)
+   * Draws them at the four corners of the bbox after the margin is applied
    *
    * @param bbox Bounding box
    * @param zoom Zoom level
-   * @param getAdditionalHandles Callback that computes the additional handles (it receives
-   *   the bbox after the margin is applied)
    */
-  drawResizeHandles(
-    bbox: BoundingBoxCoords,
-    zoom: number,
-    getAdditionalHandles?: (marginedBbox: BoundingBoxCoords) => HandleInfo[],
-  ): void {
+  drawResizeHandles(bbox: BoundingBoxCoords, zoom: number): void {
     // Compute the bbox with the margin applied
     const marginedBbox = this.marginedBox(bbox);
-
-    // If a callback is given, call it with the bbox after the margin is applied
-    const additionalHandles = getAdditionalHandles?.(marginedBbox);
-    const handles = computeResizeHandles(marginedBbox, additionalHandles);
+    const handles = computeResizeHandles(marginedBbox);
 
     // Each handle sits on the ground elevation of its own point. Hit testing (anchor
     // projection) uses the same elevation, so the drawn position and the grabbable position
@@ -641,15 +620,14 @@ export class SelectionHandlesRenderer {
   }
 
   /**
-   * Draws the auxiliary handles of the extensions with the look of the vertex handles, the
-   * size their hit test uses
+   * Draws the auxiliary handles of the extensions that core draws (`scale`) with the look of the
+   * resize handles, the size their hit test uses; the extension draws the others (`custom`)
    */
   drawAuxiliaryHandles(positions: readonly Coordinate[], zoom: number): void {
-    this.drawHandlesWithStyle(
-      positions.map((position) => ({ position })),
-      this.config.vertexHandle.point,
-      zoom,
-    );
+    // Each one on the ground elevation of its own point, as the resize handles are
+    for (const position of positions) {
+      this.pointRenderer.draw(position, this.config.resizeHandle.point, zoom);
+    }
   }
 
   /**
@@ -746,18 +724,13 @@ export class SelectionHandlesRenderer {
       activeVertex?: VertexRef;
       /** References of the selected vertices (for highlighting) */
       selectedVertices?: readonly VertexRef[];
-      /**
-       * Callback that computes the additional resize handles (it receives the bbox after
-       * the margin is applied)
-       */
-      getAdditionalResizeHandles?: (marginedBbox: BoundingBoxCoords) => HandleInfo[];
       /** The display set thinned by screen density (when omitted, all handles) */
       visibleSet?: VisibleHandleSet | null;
     },
     zoom: number,
   ): void {
     if (options.showResize) {
-      this.drawResizeHandles(bbox, zoom, options.getAdditionalResizeHandles);
+      this.drawResizeHandles(bbox, zoom);
     }
     if (options.showRotate) {
       this.drawRotateHandle(bbox, zoom);

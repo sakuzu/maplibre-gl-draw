@@ -12,7 +12,7 @@
 import type { Position } from 'geojson';
 import type { Feature, FeaturePatch } from '../model.js';
 import type { LayerTableView, RowHandle } from '../tables.js';
-import type { PointContext, ScreenContext } from './context.js';
+import type { HandleContext, PointContext, ScreenContext } from './context.js';
 import type { Handle } from './feature-type.js';
 import type { DrawPointerEvent } from './mode.js';
 import type { RenderContext } from './render.js';
@@ -62,13 +62,15 @@ export interface HandleProvider {
   /** The name it is registered under */
   readonly name: string;
   /**
-   * The handles of a selected feature. The engine draws them with the look of the vertex
-   * handles, hit tests them at the same size, and gives their drags to `onDrag`.
+   * The handles of a selected feature: handles the library draws as resize handles
+   * (`kind: 'scale'`), and handles the provider draws itself (`kind: 'custom'`). Their drags go to
+   * `onDrag`. Place them from the selection box of the context (`ctx.selectionBox`), so that they
+   * sit on the box the library draws.
    */
-  handles(feature: Feature, ctx: ScreenContext): Handle[];
+  handles(feature: Feature, ctx: HandleContext): Handle[];
   /**
-   * The handles that belong to no feature, shown whatever is selected; they are hit and
-   * dragged like the others, and their drag arrives with `feature` as `null`.
+   * The handles that belong to no feature, shown whatever is selected, of the same two kinds;
+   * they are hit and dragged like the others, and their drag arrives with `feature` as `null`.
    */
   globalHandles?(ctx: ScreenContext): Handle[];
   /**

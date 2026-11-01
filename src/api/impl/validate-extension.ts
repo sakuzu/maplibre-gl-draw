@@ -161,6 +161,36 @@ function optionalNumber(
 }
 
 /**
+ * Checks the fields a feature type declares its resize and rotation change: an object whose keys
+ * are non-empty strings, two different keys, and a boolean for whether a scaling keeps the shape
+ */
+function optionalTransformFields(kind: ExtensionKind, value: Record<string, unknown>): void {
+  const fields = value.transformFields;
+  if (fields === undefined) return;
+  if (!isObject(fields)) {
+    throw wrongShape(kind, 'has transformFields that is not an object', 'transformFields');
+  }
+  for (const member of ['angleDegrees', 'size']) {
+    const key = fields[member];
+    if (key !== undefined && (typeof key !== 'string' || key === '')) {
+      const path = `transformFields.${member}`;
+      throw wrongShape(kind, `has ${path} that is not a non-empty string`, path);
+    }
+  }
+  if (fields.angleDegrees !== undefined && fields.angleDegrees === fields.size) {
+    throw wrongShape(
+      kind,
+      'has transformFields.angleDegrees and transformFields.size that are the same key',
+      'transformFields',
+    );
+  }
+  if (fields.uniformScale !== undefined && typeof fields.uniformScale !== 'boolean') {
+    const path = 'transformFields.uniformScale';
+    throw wrongShape(kind, `has ${path} that is not a boolean`, path);
+  }
+}
+
+/**
  * Checks that a value has the shape of an extension of the kind; the name is not checked
  *
  * @param kind - The kind of extension the value is added as
@@ -193,6 +223,7 @@ export function validateExtension(kind: ExtensionKind, value: unknown): void {
       optionalGroup(kind, renderer, 'rows', ['draw'], [], 'renderer.');
       optionalGroup(kind, value, 'rows', [], ['appliesTo']);
       optionalNumber(kind, value, 'hitPaddingPx', true);
+      optionalTransformFields(kind, value);
       return;
     }
     case 'companion provider':

@@ -36,6 +36,9 @@ custom-feature-types
 
 定義 (`route.ts`) は、型に描画、当たり判定、範囲選択、選択枠、頂点の
 ハンドルを与えます。描画にはライブラリーの共有の線の描画を使います。
+選択枠の大きさを変えるハンドルと回すハンドルはライブラリーが描き、
+頂点のハンドルは `custom` のハンドルで、その印はページの重ね描き
+(`routeVertexMarks`) が描きます。
 `featureTypes.add` で登録し (1)、`featureTypes.remove` で外します。外すのは、
 ページが `ui.actions.add` で足したスイッチです (6)。ルートのスタイルのキー
 (`routeColor`、`routeWidth`、`routeDashed`) は、`FeatureStyle` への宣言の

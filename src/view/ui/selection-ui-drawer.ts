@@ -30,11 +30,10 @@ import type {
   VertexSelection,
 } from '../../store/types.js';
 import type { PointInstanceRenderer } from '../renderers/point/point-instance.js';
-import type { AuxiliaryHandleContext } from './auxiliary-handles.js';
+import type { AuxiliaryHandle, AuxiliaryHandleContext } from './auxiliary-handles.js';
 import { bulkFrame } from './handle-test.js';
 import type { ThinningViewport, VisibleHandleSet } from './handle-thinning.js';
 import { computeVisibleHandleSet, shouldThinHandles } from './handle-thinning.js';
-import type { HandleInfo } from './handles.js';
 import type { SelectionHandlesRenderer, SelectionUIRenderer } from './index.js';
 import type { SelectionScope } from './selection-scope.js';
 import {
@@ -132,15 +131,13 @@ export function renderSelectionUI(
       prepareVisibleHandleSet(selectedFeatures[0], map, scope),
       scope,
     );
-    // The handles of the extensions, shown as the other handles are (hidden while another
-    // operation runs)
+    // The handles of the extensions core draws (`scale`), shown as the other handles are
+    // (hidden while another operation runs); the extensions draw the others
     if (operation === null || operation === 'auxiliary') {
       const context = auxiliaryHandleContext(map, zoom);
       const positions = scope.auxiliaryHandles
         .list()
-        .flatMap((provider) =>
-          provider.getHandles(selectedFeatures[0], context).map((handle) => handle.position),
-        );
+        .flatMap((provider) => drawnPositions(provider.getHandles(selectedFeatures[0], context)));
       if (positions.length > 0) selectionHandlesRenderer.drawAuxiliaryHandles(positions, zoom);
     }
   } else {
@@ -176,8 +173,8 @@ export function renderGlobalAuxiliaryHandles(
   if (!providers.some((provider) => provider.getGlobalHandles !== undefined)) return;
 
   const context = auxiliaryHandleContext(map, zoom);
-  const positions = providers.flatMap(
-    (provider) => provider.getGlobalHandles?.(context).map((handle) => handle.position) ?? [],
+  const positions = providers.flatMap((provider) =>
+    drawnPositions(provider.getGlobalHandles?.(context) ?? []),
   );
   if (positions.length === 0) return;
 
@@ -185,6 +182,13 @@ export function renderGlobalAuxiliaryHandles(
   selectionHandlesRenderer.setTransform(coordinateTransformOf(map));
   selectionHandlesRenderer.setProjectionData(projectionData);
   selectionHandlesRenderer.drawAuxiliaryHandles(positions, zoom);
+}
+
+/** The positions of the auxiliary handles core draws (`scale`; an extension draws a `custom` one) */
+function drawnPositions(handles: readonly AuxiliaryHandle[]): Coordinate[] {
+  const out: Coordinate[] = [];
+  for (const handle of handles) if (handle.kind === 'scale') out.push(handle.position);
+  return out;
 }
 
 /** The coordinate transform of the map */
@@ -395,7 +399,6 @@ function renderSingleSelectionHandles(
       dragState,
       selectedVertexRefs,
       visibleSet,
-      scope,
     );
   }
 }
@@ -456,7 +459,6 @@ function renderNonCircleHandles(
   dragState: DragState | null,
   selectedVertexRefs: readonly VertexRef[] | undefined,
   visibleSet: VisibleHandleSet | undefined,
-  scope: SelectionScope,
 ): void {
   // The rules for showing handles in a single selection
   // (LineString, Polygon, the Multi kinds, Image, Freehand, custom features)
@@ -501,16 +503,6 @@ function renderNonCircleHandles(
     activeVertex = dragState?.activeVertex;
   }
 
-  // Create the callback that computes the additional handles of a custom feature
-  // Get the calculator from the draw instance's registry
-  let getAdditionalResizeHandles: ((marginedBbox: BoundingBoxCoords) => HandleInfo[]) | undefined;
-  const calculator = scope.extensions.getAdditionalResizeHandlesCalculator(feature.type);
-  if (calculator) {
-    // Create the callback that receives the bbox after the margin is applied
-    getAdditionalResizeHandles = (marginedBbox) =>
-      calculator(feature, marginedBbox) as HandleInfo[];
-  }
-
   selectionHandlesRenderer.drawAllHandles(
     feature,
     bbox,
@@ -521,7 +513,6 @@ function renderNonCircleHandles(
       showMidpoint,
       activeVertex,
       selectedVertices: selectedVertexRefs,
-      getAdditionalResizeHandles,
       visibleSet,
     },
     zoom,

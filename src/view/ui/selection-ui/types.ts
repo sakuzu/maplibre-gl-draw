@@ -8,7 +8,7 @@
  */
 
 import type { BoundingBoxCoords } from '../../../shared/types/selection-box.js';
-import type { Coordinate, Feature } from '../../../store/types.js';
+import type { Feature } from '../../../store/types.js';
 
 // BoundingBoxCoords is a basic type (operations/ reads it too), defined in shared/.
 export type { BoundingBoxCoords } from '../../../shared/types/selection-box.js';
@@ -51,22 +51,3 @@ export interface FramePoint {
   x: number;
   y: number;
 }
-
-/**
- * A resize handle a custom feature type adds to the built-in ones (the same shape as
- * {@link HandleInfo}).
- */
-export interface AdditionalHandleInfo {
-  /** The handle kind, passed back to the resize computation when it is dragged */
-  type: string;
-  /** The position of the handle, `[lng, lat]` in degrees */
-  position: Coordinate;
-}
-
-/**
- * Returns the resize handles a feature of a custom type adds, given its selection box.
- */
-export type AdditionalResizeHandlesCalculator = (
-  feature: Feature,
-  bbox: BoundingBoxCoords,
-) => AdditionalHandleInfo[];

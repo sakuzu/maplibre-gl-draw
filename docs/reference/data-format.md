@@ -295,6 +295,11 @@ Both formats write the keys as they are.
 The full key is the prefix followed by the name in the table, such as
 `maplibre-gl-draw:createdZoom`.
 
+The resize and the rotation of the selection write `scale` and
+`rotation` of an Image, and of a feature of another built-in type that
+has them. A feature of a custom type has the fields its type declares
+instead (`transformFields` of its definition), under the keys it names.
+
 The library reads `name` and `description` as the name and the
 description of a feature; they are plain keys, which other tools read too.
 New features get a name from the `autoName` option.

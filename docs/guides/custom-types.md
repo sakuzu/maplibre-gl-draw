@@ -253,6 +253,7 @@ The other members of a definition are optional:
 | Member | Without it |
 | --- | --- |
 | `footprint` | The footprint of the geometry |
+| `transformFields` | The resize and the rotation change the geometry only |
 | `handles` | The type has no handles of its own |
 | `onHandleDrag` | A drag of its handles changes nothing |
 | `snapCandidates` | The vertices and edges of the geometry |
@@ -266,9 +267,9 @@ kind, not the geometry, decides how the box is drawn and hit:
   bottomLeft } }`, four positions on the map, in the order of the shape
   as it stands unturned, for a shape drawn on the map, such as a box
   drawn at an angle. The selection box is drawn and hit on the map, with
-  the resize and rotate handles on its corners and edges, and it tilts
-  and turns with the map. `ground` names the plane of the map here, not
-  the surface of the terrain
+  the resize handles on its corners and the rotate handle above it, and
+  it tilts and turns with the map. `ground` names the plane of the map
+  here, not the surface of the terrain
 - `{ kind: 'screen', position, halfWidthPx, halfHeightPx }`, a box of a
   fixed size on the screen around a position on the map, for a mark that
   keeps its size on the screen. The selection box is drawn and hit on
@@ -295,12 +296,78 @@ around a feature for the current view, such as a handle out of its box,
 stands where the library would put it when you lay its pixels on the
 ground the same way, and your hit test then finds it where it is drawn.
 
-`handles` returns the handles of a selected feature, each with an ID,
-a position and a cursor. A drag of one calls `onHandleDrag` for every
-move of the pointer and once more when the drag ends, and the
-`FeaturePatch` it returns is applied to the feature. The patches of the
-moves are intermediate updates; the one of the end is the one that
-stays:
+The resize and rotate handles of a footprint laid on the map are those
+of a built-in shape: squares on the corners of the selection box, a
+circle above it joined to it by a line, with the look and the distance
+of `selectionStyle`, hit where they are drawn. Their drags are the resize
+and the rotation of the library, for one feature or many at once: they
+move the geometry, and write the fields the type declares in
+`transformFields`, the keys of `properties` where its features keep
+their rotation (in degrees counterclockwise) and their size, and whether
+a scaling keeps their shape:
+
+<!-- docs-check:
+declare function boardFootprint(
+  feature: Feature,
+): import('@sakuzu/maplibre-gl-draw').Footprint;
+declare const boardRenderer: import('@sakuzu/maplibre-gl-draw').FeatureRenderer;
+-->
+
+```ts
+import type { FeatureTypeDefinition } from '@sakuzu/maplibre-gl-draw';
+
+// A signboard: a box laid on the map around its position, turned by
+// `boardAngle` and grown by `boardScale`, which its footprint and its
+// renderer read
+const signboard: FeatureTypeDefinition = {
+  type: 'Signboard',
+  geometry: 'Point',
+  renderer: boardRenderer,
+  footprint: (feature) => boardFootprint(feature),
+  transformFields: {
+    angleDegrees: 'boardAngle',
+    size: 'boardScale',
+    uniformScale: true,
+  },
+};
+```
+
+A rotation adds its angle to `boardAngle`, within [0, 360), and a resize
+multiplies `boardScale` by its factor; a feature without the key starts
+from 0 and from 1. A rotation of a single feature of a `Point` geometry
+turns it around its position, which stays; several features turn around
+the middle of their box. A type without `transformFields` has its
+geometry changed only, whatever keys its features have. A store of your
+own reads the declaration with `draw.extensions.featureTypes.get(type)`
+to give its computation (`Store.transforms`) the values of a feature.
+
+`handles(feature, ctx)` returns the handles the type adds to a selected
+feature, each with an ID, a position and a cursor, and a `kind` that
+says how it is shown:
+
+- `{ kind: 'scale', id, position }` is drawn by the library as the resize
+  handles are (`selectionStyle.resizeHandle`) and hit at their size, such
+  as a handle in the middle of an edge that changes the width of a box
+- `{ kind: 'custom', id, position, sizePx }` is drawn by the type itself,
+  in its renderer or an overlay, and hit within a square of `sizePx`
+  pixels around its position, the size of the mark it draws, such as a
+  mark on the end of a line
+
+Return only the handles you show: a handle you hide (on a read-only
+document, say) is left out, so that nothing that cannot be seen can be
+grabbed. A handle of another kind, or a custom one whose `sizePx` is not
+a finite number of 0 or more, is left out. The context gives the screen
+(`ctx.screen`), the selection box the library draws, its margin included
+(`ctx.selectionBox`, what `draw.rendered.getSelectionBox` answers, or
+`null`), and the look of the selection (`ctx.selectionStyle`). Place a
+handle on the box from `ctx.selectionBox`, so that it sits where the
+library draws the box.
+
+A drag of a handle calls `onHandleDrag` for every move of the pointer and
+once more when the drag ends, and the `FeaturePatch` it returns is
+applied to the feature. The patches of the moves are intermediate
+updates; the one of the end is the one that stays. The ID tells the
+handles of the type apart:
 
 <!-- docs-check:
 declare function verticesOf(feature: Feature): Position[];
@@ -314,12 +381,14 @@ const reshapeRoute: FeatureTypeDefinition = {
   type: 'Route',
   geometry: 'LineString',
   renderer: routeRenderer,
-  // A handle on each vertex, which moves that vertex
+  // A handle on each vertex, which moves that vertex. An overlay draws
+  // its mark, 8 pixels wide (see Overlays below)
   handles(feature) {
     return verticesOf(feature).map((position, index) => ({
+      kind: 'custom',
       id: String(index),
       position,
-      kind: 'vertex',
+      sizePx: 8,
       cursor: 'move',
     }));
   },
@@ -331,12 +400,9 @@ const reshapeRoute: FeatureTypeDefinition = {
 };
 ```
 
-The library draws the handles of the selected feature with the look of
-its vertex handles (the `vertexHandle` of `selectionStyle`), hit tests
-them at the same size, and hands the drag over. The handles are hidden
-while another handle is dragged, and nothing is shown or dragged while
-the drawing is read-only, under the interaction lock, or while the
-feature is locked.
+The handles are hidden while another handle is dragged, and nothing is
+shown or dragged while the drawing is read-only, under the interaction
+lock, or while the feature is locked.
 
 `onHandleDragStart(feature, handle, event)` is asked before a drag of
 a handle starts; it returns `false` to refuse the drag, and the pointer
@@ -459,7 +525,8 @@ of a renderer, with the same rules, and a `name`. Add it with
 `draw.extensions.overlays.add`, which returns the function that
 removes it.
 
-An overlay that marks the handles of the selected routes:
+An overlay that draws the marks of the handles of the selected routes
+(the `custom` handles of the type above, 8 pixels wide):
 
 <!-- docs-check:
 declare function verticesOf(feature: Feature): Position[];
@@ -554,15 +621,17 @@ of your own is ranked as a vertex and reaches the snapping result
 ### Handles
 
 A `HandleProvider` shows handles of its own on the selected features:
-`handles(feature, screen)` returns them, and `onDrag(feature, handle,
-event)` returns the patch a drag makes, as `onHandleDrag` of a
-definition does. `globalHandles(screen)` returns handles that belong to
+`handles(feature, ctx)` returns them, with the context and the two kinds
+a definition has, and `onDrag(feature, handle, event)` returns the patch
+a drag makes, as `onHandleDrag` of a definition does.
+`globalHandles(screen)` returns handles that belong to
 no feature and are shown whatever is selected; their drag arrives with
 `feature` as `null`, and the provider writes what the drag changes
 itself. `onDragStart` and `onDragEnd` surround a drag as
 `onHandleDragStart` and `onHandleDragEnd` of a definition do, and
 `onDragStart` refuses it by returning `false`. As with a definition,
-the library draws the handles with the look of its vertex handles.
+the library draws the `scale` handles as resize handles, and the
+provider draws the `custom` ones.
 
 ### Companions
 
@@ -691,8 +760,10 @@ function pathOnTerrain(
 
 ## Reference
 
-- [FeatureTypeDefinition](../api/maplibre-gl-draw/interfaces/FeatureTypeDefinition.md)
-  and [Handle](../api/maplibre-gl-draw/interfaces/Handle.md)
+- [FeatureTypeDefinition](../api/maplibre-gl-draw/interfaces/FeatureTypeDefinition.md),
+  [TransformFields](../api/maplibre-gl-draw/interfaces/TransformFields.md),
+  [Handle](../api/maplibre-gl-draw/type-aliases/Handle.md) and
+  [HandleContext](../api/maplibre-gl-draw/interfaces/HandleContext.md)
 - [FeatureRenderer](../api/maplibre-gl-draw/interfaces/FeatureRenderer.md)
   and [RenderContext](../api/maplibre-gl-draw/interfaces/RenderContext.md)
 - [LineRenderer](../api/maplibre-gl-draw/interfaces/LineRenderer.md),

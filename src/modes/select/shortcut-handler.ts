@@ -19,6 +19,7 @@ import { createCoordinateTransform, offsetOnTangentPlane } from '../../shared/ma
 import { coordinatesOf, mapCoordinatesDeep } from '../../shared/utils/coordinates.js';
 import { isInteractionBlocked } from '../../store/lock.js';
 import type { TransformEdit } from '../../store/store.js';
+import { transformFieldsOfStore } from '../../store/transform-roles.js';
 import type { Feature } from '../../store/types.js';
 import { getSelectedFeatureIds } from '../../view/ui/helper.js';
 import type { EngineModeContext } from '../handler.js';
@@ -130,10 +131,12 @@ export function handleNudgeShortcut(
   if (!center) return false;
   const edit: TransformEdit = { kind: 'translate', from: center, to: pressed(center) };
   const transforms = transformsOf(store);
+  const fields = transformFieldsOfStore(store);
 
   store.transact(() => {
     for (const feature of features) {
-      const updates = transformedUpdates(transforms, edit, transformStartOf(feature), feature);
+      const start = transformStartOf(feature, fields);
+      const updates = transformedUpdates(transforms, edit, start, feature);
       if (updates?.geometry) store.updateFeature(feature.id, { geometry: updates.geometry });
     }
   });

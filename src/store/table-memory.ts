@@ -86,7 +86,11 @@ import type {
   StoreContract,
   TransformEdit,
 } from './store.js';
-import { transformRoleFields } from './transform-roles.js';
+import {
+  type TransformFieldsRegistry,
+  takeTransformFields,
+  transformRoleFields,
+} from './transform-roles.js';
 import type {
   Feature,
   FileData,
@@ -228,12 +232,17 @@ export class TableContractStore implements StoreContract {
 
   /** The computation of the edits that move, rotate and scale features (the library's when none) */
   readonly transforms?: GeometryTransforms;
+  /** The fields the custom types of the instance declare, which the edits read (none: no instance) */
+  #transformFields: TransformFieldsRegistry | null = null;
 
   constructor(
     options: Omit<TableStoreOptions, 'holdLimit' | 'transforms'> = {},
     transforms?: GeometryTransforms,
   ) {
     if (transforms) this.transforms = transforms;
+    takeTransformFields(this, (fields) => {
+      this.#transformFields = fields;
+    });
     const { tables, writer } = createFeatureTablesStore({
       ...options,
       onChange: (change) => this.#bus.merge(change as StoreChange),
@@ -517,7 +526,12 @@ export class TableContractStore implements StoreContract {
     const transforms = this.transforms ?? DEFAULT_TRANSFORMS;
     if (!hasTransformEdits(edits)) {
       // The edits of one feature only: made into the updates of the features
-      const { updates, dropped } = updatesOfEdits(edits, (id) => this.getFeature(id), transforms);
+      const { updates, dropped } = updatesOfEdits(
+        edits,
+        (id) => this.getFeature(id),
+        transforms,
+        this.#transformFields,
+      );
       if (updates.length > 0) {
         this.transact(() => {
           for (const { id, updates: fields } of updates) this.updateFeature(id, fields);
@@ -575,7 +589,12 @@ export class TableContractStore implements StoreContract {
           dropped++;
           continue;
         }
-        const fields = transformedFeatureFields(transforms, transform, feature);
+        const fields = transformedFeatureFields(
+          transforms,
+          transform,
+          feature,
+          this.#transformFields,
+        );
         if (!fields) continue;
         edited.set(feature.id, { ...feature, ...fields });
         updates.push({ id: feature.id, updates: fields });
@@ -611,7 +630,7 @@ export class TableContractStore implements StoreContract {
       named.push(id);
     }
     if (handles.length === 0) return;
-    const keys = transformRoleFields();
+    const keys = transformRoleFields(this.#transformFields);
     const read = this.tables.readValues({
       handles: Int32Array.from(handles),
       fields: new Map<RowField, unknown[]>([
@@ -646,8 +665,14 @@ export class TableContractStore implements StoreContract {
     id: string,
     row: TransformedRow,
   ): void {
-    const fields = transformedFields(transforms, edit, id, row.type, row.geometry, (key) =>
-      row.properties.get(key),
+    const fields = transformedFields(
+      transforms,
+      edit,
+      id,
+      row.type,
+      row.geometry,
+      (key) => row.properties.get(key),
+      this.#transformFields,
     );
     if (!fields) return;
     if (fields.geometry !== undefined) {

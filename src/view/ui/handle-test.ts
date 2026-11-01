@@ -18,15 +18,15 @@ import { applyMarginToBoundingBox } from '../../shared/math/index.js';
 import { nearestLongitude } from '../../shared/math/longitude.js';
 import { summaryHasArea } from '../../store/bulk-selection.js';
 import type { Coordinate, Feature, SelectionBulk, VertexRef } from '../../store/types.js';
-import type {
-  AuxiliaryHandleCandidate,
-  AuxiliaryHandleContext,
-  AuxiliaryHandleHit,
+import {
+  type AuxiliaryHandleCandidate,
+  type AuxiliaryHandleContext,
+  type AuxiliaryHandleHit,
+  auxiliaryHandleSize,
 } from './auxiliary-handles.js';
 import { isPointInGeoBoundingBox, isPointInSelectionFrame } from './bounds.js';
 import type { VisibleHandleSet } from './handle-thinning.js';
 import { resolveMidpointCoordinate, resolveVertexCoordinate } from './handle-thinning.js';
-import type { HandleInfo } from './handles.js';
 import {
   computeCircleRadiusHandle,
   computeMidpointHandles,
@@ -145,22 +145,18 @@ function hitTestRotateHandle(
 }
 
 /**
- * Hit test for the resize handles
+ * Hit test for the resize handles at the four corners
  *
  * @param marginedBbox Bounding box after the margin is applied
  * @param config Configuration of the selection UI
  * @param params Hit test parameters
- * @param getAdditionalHandles Callback that computes the additional handles (it receives
- *   the bbox after the margin is applied)
  */
 function hitTestResizeHandles(
   marginedBbox: BoundingBoxCoords,
   config: SelectionUIConfig,
   params: HitTestParams,
-  getAdditionalHandles?: (marginedBbox: BoundingBoxCoords) => HandleInfo[],
 ): HandleHitResult | null {
-  const additionalHandles = getAdditionalHandles?.(marginedBbox);
-  const handles = computeResizeHandles(marginedBbox, additionalHandles);
+  const handles = computeResizeHandles(marginedBbox);
   const halfSize = config.resizeHandle.point.size / 2;
 
   for (const handle of handles) {
@@ -380,9 +376,10 @@ function hitTestCircleRadiusHandle(
  * Hit test for the auxiliary handles (provided by an extension implementation)
  *
  * Enumerating the handles is left to the callback (the aggregation of the providers), while
- * the test is done with the same screen-px rectangle as the existing handles. To keep the
- * grab feel uniform, the test size is the same as for the vertex handles, which is also the
- * size the selection UI draws them at.
+ * the test is done with the same screen-px rectangle as the existing handles, of the size each
+ * handle is shown at: the size of the resize handles for a `scale` handle (the size the
+ * selection UI draws it at), the size the extension declares for a `custom` one (the size of the
+ * mark it draws).
  */
 function hitTestAuxiliaryHandles(
   feature: Feature,
@@ -398,10 +395,11 @@ function hitTestAuxiliaryHandles(
     zoom,
   };
 
-  const halfSize = config.vertexHandle.point.size / 2;
+  const resizeSize = config.resizeHandle.point.size;
 
   for (const { providerId, handle } of getAuxiliaryHandles(context)) {
     const handleScreenPos = params.transform.project(handle.position);
+    const halfSize = auxiliaryHandleSize(handle, resizeSize) / 2;
     if (isPointInHandleRect(params.screenPoint, handleScreenPos, halfSize)) {
       return {
         type: 'auxiliary',
@@ -447,10 +445,11 @@ export function hitTestGlobalAuxiliaryHandles(
     zoom,
   };
 
-  const halfSize = config.vertexHandle.point.size / 2;
+  const resizeSize = config.resizeHandle.point.size;
 
   for (const { providerId, handle } of getGlobalHandles(context)) {
     const handleScreenPos = transform.project(handle.position);
+    const halfSize = auxiliaryHandleSize(handle, resizeSize) / 2;
     if (isPointInHandleRect(screenPoint, handleScreenPos, halfSize)) {
       return {
         type: 'auxiliary',
@@ -468,7 +467,7 @@ export function hitTestGlobalAuxiliaryHandles(
  *
  * Priority order:
  * 1. Rotate handle
- * 2. Resize handles (the four corners + the additional handles)
+ * 2. Resize handles (the four corners)
  * 3. Auxiliary handles (provided by an extension implementation; single selection only)
  * 4. Vertex handles
  * 5. Midpoint handles
@@ -481,8 +480,6 @@ export function hitTestGlobalAuxiliaryHandles(
  * @param zoom Zoom level
  * @param scope The selection scope of the draw instance (extension points of the custom
  *   types and the thinned handle sets that are displayed)
- * @param getAdditionalResizeHandles Callback that computes the additional handles (it
- *   receives the bbox after the margin is applied)
  * @param getAuxiliaryHandles Callback that enumerates the auxiliary handles (when omitted,
  *   the auxiliary handles are not tested)
  *
@@ -495,7 +492,6 @@ export function hitTestHandles(
   config: SelectionUIConfig,
   zoom: number,
   scope: SelectionScope,
-  getAdditionalResizeHandles?: (marginedBbox: BoundingBoxCoords) => HandleInfo[],
   getAuxiliaryHandles?: AuxiliaryHandlesCallback,
 ): HandleHitResult | null {
   if (features.length === 0) {
@@ -542,18 +538,13 @@ export function hitTestHandles(
       if (rotateHit) return rotateHit;
     }
 
-    // 2. Resize handles (including the additional handles)
-    const resizeHit = hitTestResizeHandles(
-      marginedBbox,
-      config,
-      params,
-      getAdditionalResizeHandles,
-    );
+    // 2. Resize handles
+    const resizeHit = hitTestResizeHandles(marginedBbox, config, params);
     if (resizeHit) return resizeHit;
   }
 
-  // 3. Auxiliary handles (single selection only; the same restriction as the existing
-  //    additional handles). They are taken after resize and before vertex. When they
+  // 3. Auxiliary handles (single selection only). They are taken after resize and before
+  //    vertex. When they
   //    overlap a vertex or a midpoint, the auxiliary handle wins (it is enough to move it
   //    aside and then grab the vertex).
   if (features.length === 1 && getAuxiliaryHandles) {

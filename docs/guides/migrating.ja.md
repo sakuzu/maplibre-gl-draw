@@ -751,6 +751,23 @@ draw.features.update(featureId, {
   ライブラリーがそこから選択の枠を作ります。枠に大きさを変えるハンドルと
   回すハンドルが付くかは、図形ではなく種類で決まります。
   `selectionStyle.boundingBox` は `selectionStyle.box` になりました
+- 地図の上の外形の大きさを変えるハンドルと回すハンドルは、組み込みの形の
+  ものと同じです。そのドラッグは、型が `transformFields` で宣言した欄
+  (回転と大きさの鍵と、大きさ変えで形を保つかどうか) を書き、鍵の無い
+  地物は 0 と 1 から始めます。独自の型はその欄だけを持ちます。地物の
+  `maplibre-gl-draw:rotation` と `maplibre-gl-draw:scale` は、型がそこで
+  名指したときだけ書かれます。自分のハンドルで (`onHandleDrag` で) 地物を
+  回して大きくしていた型は、欄を宣言し、角と回転をライブラリーに任せます
+- `Handle.kind` は、拡張が付ける名前ではなく、ハンドルの見せ方になり
+  ました (ハンドルは `id` で見分けます)。`'scale'` はライブラリーが
+  大きさを変えるハンドルとして描いてその大きさで当て、`'custom'` は
+  拡張が描き、拡張が渡す `sizePx` の中で当てます。拡張の印の上に
+  ライブラリーが白い丸を重ねて描くことは無くなりました
+- 地物の型と `HandleProvider` の `handles(feature, ctx)` は、画面の代わりに
+  `HandleContext` を受けます。`ctx.screen`、ライブラリーが描く余白込みの
+  選択の枠 (`ctx.selectionBox`。`draw.rendered.getSelectionBox` の答え)、
+  選択の見た目 (`ctx.selectionStyle`) を持ち、枠の上のハンドルは
+  ライブラリーが描く枠の所に立ちます
 - 地物の周りに描くものは、描かれている地物を `ctx.draw.rendered` で
   読みます (`get`、`getMany`、`getSelectionBox`。まとめてドラッグしている
   行は `getDraggedRows` で、前の `/kasane` の `draggedRowsOf` です)。

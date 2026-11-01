@@ -13,6 +13,7 @@ import {
   transformStartOf,
   transformsOf,
 } from '../../../operations/transform-features.js';
+import { transformFieldsOfStore } from '../../../store/transform-roles.js';
 import type { IntermediateWrites } from './intermediate-writes.js';
 import type { DragOperation, DragStore } from './operation.js';
 import { dragStartLngLat } from './operation.js';
@@ -64,10 +65,11 @@ export function startMoveDrag(
   store: DragStore,
 ): MoveDrag {
   const starts = new Map<string, TransformStart>();
+  const fields = transformFieldsOfStore(store);
 
   for (const id of featureIds) {
     const feature = store.getFeature(id);
-    if (feature) starts.set(id, transformStartOf(feature));
+    if (feature) starts.set(id, transformStartOf(feature, fields));
   }
 
   return new MoveDrag({

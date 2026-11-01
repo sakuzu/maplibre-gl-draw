@@ -11,22 +11,55 @@ import type { BBox } from '../../geometry/types.js';
 import type { ScreenPoint } from '../events.js';
 import type { Feature, FeaturePatch } from '../model.js';
 import type { LayerTableView, RowHandle } from '../tables.js';
-import type { PointContext, ScreenContext } from './context.js';
+import type { HandleContext, PointContext, ScreenContext } from './context.js';
 import type { DrawPointerEvent } from './mode.js';
 import type { Hit, SnapCandidate } from './provider.js';
 import type { FeatureRenderer } from './render.js';
+import type { TransformFields } from './store.js';
 
-/** One handle on a selected feature. */
-export interface Handle {
-  /** The ID of the handle, unique within the feature */
+/**
+ * A handle the library draws as it draws the resize handles at the corners of the selection box
+ * (`selectionStyle.resizeHandle`), and hits at the size it draws it, such as a handle in the middle
+ * of an edge that changes the width of a box. Its drag goes to the extension that gave it.
+ */
+export interface ScaleHandle {
+  /** A handle drawn and hit as the resize handles are */
+  kind: 'scale';
+  /** The ID of the handle, unique within the feature; the extension tells its handles apart by it */
   id: string;
-  /** The position of the handle */
+  /** The position of the handle on the map */
   position: Position;
-  /** The kind of handle, as its provider names it */
-  kind: string;
-  /** The CSS cursor over the handle */
+  /** The CSS cursor over the handle; `pointer` when it is left out */
   cursor?: string;
 }
+
+/**
+ * A handle the extension draws itself, such as a mark on the end of a line drawn by its renderer.
+ * The library does not draw it, and hits it within a square of `sizePx` around its position, the
+ * size of the mark. Its drag goes to the extension that gave it.
+ */
+export interface CustomHandle {
+  /** A handle the extension draws */
+  kind: 'custom';
+  /** The ID of the handle, unique within the feature; the extension tells its handles apart by it */
+  id: string;
+  /** The position of the handle on the map */
+  position: Position;
+  /** The size of the mark the extension draws, in CSS pixels: the side of the square it is hit in */
+  sizePx: number;
+  /** The CSS cursor over the handle; `pointer` when it is left out */
+  cursor?: string;
+}
+
+/**
+ * One handle an extension shows on a selected feature: one the library draws as a resize handle
+ * (`kind: 'scale'`), or one the extension draws itself (`kind: 'custom'`).
+ *
+ * An extension returns only the handles it shows: a handle it hides (on a read-only document, say)
+ * is not returned, so that nothing that cannot be seen can be grabbed. A handle of another kind,
+ * or a custom one whose `sizePx` is not a finite number of 0 or more, is left out.
+ */
+export type Handle = ScaleHandle | CustomHandle;
 
 /**
  * What a definition of a feature type answers from the rows of a layer held as rows
@@ -155,8 +188,11 @@ export interface FeatureTypeDefinition {
    * the map, turned as it is, or a box of a fixed size on the screen around a position on the map
    * (`kind: 'screen'`), for a mark that keeps its size on the screen. The kind decides how the
    * selection box is drawn and hit, whatever the geometry: a box on the map is drawn and hit on
-   * the map and has the resize and rotate handles on its corners, and a box on the screen is drawn
-   * and hit on the screen, around its position, and has none.
+   * the map, and has the resize handles on its corners and the rotate handle above it, joined to
+   * it by a line, drawn and hit as those of a built-in shape (with `selectionStyle`) and dragged
+   * by the edits `scale` and `rotate` (which write the geometry and the fields of
+   * `transformFields`); a box on the screen is drawn and hit on the screen, around its position,
+   * and has none of them.
    *
    * A type without it, or a footprint that is not one of the two (corners that are not four
    * finite positions, sizes that are not finite numbers of 0 or more), has the footprint of its
@@ -166,11 +202,26 @@ export interface FeatureTypeDefinition {
    */
   footprint?(feature: Feature, ctx: ScreenContext): Footprint | null;
   /**
-   * The handles that resize or reshape a selected feature. The engine draws them with the
-   * look of the vertex handles, hit tests them at the same size, and gives their drags to
-   * `onHandleDrag`.
+   * The fields of its features that the resize and the rotation of the selection change with
+   * their geometry: the key of `properties` of their rotation and of their size, and whether a
+   * scaling keeps their shape. The resize handles at the corners of the selection box and the
+   * rotate handle above it (which a type with a footprint laid on the map has) write them as the
+   * edits `scale` and `rotate` compute them, whether one feature or many are selected, and a
+   * feature without a key of them starts from 0 for the rotation and 1 for the size. A rotation of
+   * a single feature of a `Point` geometry with a rotation turns it around its position.
+   *
+   * Without it, the resize and the rotation change the geometry of the features only. It is
+   * ignored in a definition given to `override`: a built-in type keeps its own fields.
    */
-  handles?(feature: Feature, ctx: ScreenContext): Handle[];
+  readonly transformFields?: TransformFields;
+  /**
+   * The handles an extension adds to a selected feature, besides the resize and rotate handles
+   * the library gives a footprint laid on the map: handles the library draws as resize handles
+   * (`kind: 'scale'`), and handles the type draws itself (`kind: 'custom'`). Their drags go to
+   * `onHandleDrag`. Place them from the selection box of the context (`ctx.selectionBox`), so
+   * that they sit on the box the library draws.
+   */
+  handles?(feature: Feature, ctx: HandleContext): Handle[];
   /**
    * The change a drag of one of its handles makes.
    *

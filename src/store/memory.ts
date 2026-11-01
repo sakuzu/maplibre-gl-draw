@@ -38,6 +38,7 @@ import type {
   Store,
   StoreContract,
 } from './store.js';
+import { type TransformFieldsRegistry, takeTransformFields } from './transform-roles.js';
 import type {
   Feature,
   FileData,
@@ -92,9 +93,14 @@ export class MemoryContractStore implements StoreContract {
   readonly #client = new MemoryClientState(this.#bus);
   /** The computation of the edits that move, rotate and scale features (the library's when none) */
   readonly transforms?: GeometryTransforms;
+  /** The fields the custom types of the instance declare, which the edits read (none: no instance) */
+  #transformFields: TransformFieldsRegistry | null = null;
 
   constructor(options: { readonly transforms?: GeometryTransforms } = {}) {
     if (options.transforms) this.transforms = options.transforms;
+    takeTransformFields(this, (fields) => {
+      this.#transformFields = fields;
+    });
     this.#document.subscribe((changes) => this.#bus.merge(changes));
   }
 
@@ -146,6 +152,7 @@ export class MemoryContractStore implements StoreContract {
       edits,
       (id) => this.#document.getFeature(id),
       this.transforms,
+      this.#transformFields,
     );
     if (updates.length > 0) {
       this.#apply(() => {

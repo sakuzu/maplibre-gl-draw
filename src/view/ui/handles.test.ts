@@ -430,6 +430,33 @@ describe('SelectionHandlesRenderer.drawFollowedVertexHandles', () => {
   });
 });
 
+describe('SelectionHandlesRenderer.drawAuxiliaryHandles', () => {
+  it('draws the handles of the extensions core draws as the resize handles are drawn', () => {
+    const calls: Array<{ position: Coordinate; style: PointStyle }> = [];
+    const pointRenderer = {
+      draw: (position: Coordinate, style: PointStyle) => {
+        calls.push({ position, style });
+      },
+    } as unknown as PointShapeRenderer;
+    const renderer = new SelectionHandlesRenderer(
+      { draw: () => {} } as unknown as StrokeRenderer,
+      pointRenderer,
+      DEFAULT_SELECTION_CONFIG,
+    );
+    renderer.drawAuxiliaryHandles(
+      [
+        [1, 2],
+        [3, 4],
+      ],
+      10,
+    );
+    expect(calls).toEqual([
+      { position: [1, 2], style: DEFAULT_SELECTION_CONFIG.resizeHandle.point },
+      { position: [3, 4], style: DEFAULT_SELECTION_CONFIG.resizeHandle.point },
+    ]);
+  });
+});
+
 describe('computeRotateHandle', () => {
   /** Two meters a pixel wherever it is asked */
   const scale = { metersPerPixel: () => 2 };

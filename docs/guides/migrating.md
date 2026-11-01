@@ -743,6 +743,27 @@ drawn. Each change below names what replaces what is gone.
   box from it. The kind, not the geometry, decides whether the box has
   the resize and rotate handles. `selectionStyle.boundingBox` is
   `selectionStyle.box`
+- The resize and rotate handles of a footprint laid on the map are those
+  of a built-in shape, and their drags write the fields a type declares
+  in `transformFields` (the keys of its rotation and its size, and
+  whether a scaling keeps the shape), from 0 and 1 for a feature without
+  them. A custom type has those fields and no other: a
+  `maplibre-gl-draw:rotation` or `maplibre-gl-draw:scale` of its features
+  is written only when the type names it there. A type that turned and
+  grew its features from handles of its own (with `onHandleDrag`)
+  declares its fields and leaves the corners and the rotation to the
+  library
+- `Handle.kind` says how a handle is shown, no longer a name the
+  extension gives it (tell the handles apart by `id`): `'scale'` is drawn
+  by the library as a resize handle and hit at its size, `'custom'` is
+  drawn by the extension and hit within the `sizePx` it gives. The
+  library no longer draws a white circle over a mark of the extension
+- `handles(feature, ctx)` of a feature type and of a `HandleProvider`
+  receives a `HandleContext` in place of the screen: `ctx.screen`, the
+  selection box the library draws (`ctx.selectionBox`, with its margin,
+  as `draw.rendered.getSelectionBox` answers) and the look of the
+  selection (`ctx.selectionStyle`), so that a handle on the box sits
+  where the library draws it
 - What is drawn around a feature reads the feature as it is drawn from
   `ctx.draw.rendered` (`get`, `getMany`, `getSelectionBox`, and
   `getDraggedRows` for the rows dragged in bulk, which was

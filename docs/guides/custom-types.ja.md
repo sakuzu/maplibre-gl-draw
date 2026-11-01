@@ -242,6 +242,7 @@ const hitRoute: FeatureTypeDefinition = {
 | メンバー | 無いとき |
 | --- | --- |
 | `footprint` | 図形の外形です |
+| `transformFields` | 大きさ変えと回転は図形だけを変えます |
 | `handles` | その型に自分のハンドルはありません |
 | `onHandleDrag` | ハンドルをドラッグしても何も変わりません |
 | `snapCandidates` | 図形の頂点と辺が候補です |
@@ -254,8 +255,8 @@ const hitRoute: FeatureTypeDefinition = {
 - `{ kind: 'ground', corners: { topLeft, topRight, bottomRight,
   bottomLeft } }` は地図の上の 4 つの位置で、順は回す前の形の左上、
   右上、右下、左下です。斜めに描く箱のように、地図の上に描く形のための
-  ものです。選択の枠は地図の上で描いて当て、大きさを変えるハンドルと
-  回すハンドルがその角と辺に付き、地図と一緒に傾いて回ります。ここでの
+  ものです。選択の枠は地図の上で描いて当て、大きさを変えるハンドルが
+  その角に、回すハンドルがその上に付き、地図と一緒に傾いて回ります。ここでの
   `ground` は地図の面のことで、地形の面のことではありません
 - `{ kind: 'screen', position, halfWidthPx, halfHeightPx }` は、地図の
   上の位置の周りの、画面の上で大きさの決まった箱です。画面の上で大きさを
@@ -281,11 +282,70 @@ const hitRoute: FeatureTypeDefinition = {
 地面に置けば、ライブラリーが置くのと同じ所に立ち、自分の当たり判定も
 描いた所でそれを見つけます。
 
-`handles` は、選ばれている地物のハンドルを返します。それぞれ ID、位置、
-カーソルを持ちます。ハンドルをドラッグすると、ポインターが動くたびに
-`onHandleDrag` が呼ばれ、ドラッグの終わりにもう一度呼ばれます。返した
-`FeaturePatch` は地物に当てられます。動いている間の差分は途中の更新
-で、終わりの差分が残ります。
+地図の上の外形の、大きさを変えるハンドルと回すハンドルは、組み込みの
+形のものと同じです。選択の枠の角の四角と、枠の上にあって線で枠と
+つながる丸で、見た目と離れ方は `selectionStyle` に従い、描いた所で
+当たります。そのドラッグは、1 つの地物でも複数でも、ライブラリーの
+大きさ変えと回転です。図形を動かし、型が `transformFields` で宣言した
+欄を書きます。宣言するのは、地物が回転 (反時計回りの度) と大きさを
+持つ `properties` の鍵と、大きさ変えで形を保つかどうかです。
+
+<!-- docs-check:
+declare function boardFootprint(
+  feature: Feature,
+): import('@sakuzu/maplibre-gl-draw').Footprint;
+declare const boardRenderer: import('@sakuzu/maplibre-gl-draw').FeatureRenderer;
+-->
+
+```ts
+import type { FeatureTypeDefinition } from '@sakuzu/maplibre-gl-draw';
+
+// 看板。位置の周りに地図の上に置く箱で、`boardAngle` で回り、
+// `boardScale` で大きくなる。外形と描画器はこの 2 つを読む
+const signboard: FeatureTypeDefinition = {
+  type: 'Signboard',
+  geometry: 'Point',
+  renderer: boardRenderer,
+  footprint: (feature) => boardFootprint(feature),
+  transformFields: {
+    angleDegrees: 'boardAngle',
+    size: 'boardScale',
+    uniformScale: true,
+  },
+};
+```
+
+回転は `boardAngle` に角度を足して 0 以上 360 未満に収め、大きさ変えは
+`boardScale` に倍率を掛けます。鍵の無い地物は 0 と 1 から始まります。
+`Point` の図形を持つ地物 1 つの回転は、その位置の周りに回し、位置は
+動きません。複数の地物は、その枠の中心の周りに回ります。
+`transformFields` の無い型は、地物がどんな鍵を持っていても、図形だけが
+変わります。自前の Store は、地物の値を計算 (`Store.transforms`) に
+渡すために、宣言を `draw.extensions.featureTypes.get(type)` で読みます。
+
+`handles(feature, ctx)` は、型が選ばれている地物に足すハンドルを返し
+ます。それぞれ ID、位置、カーソルと、見せ方を決める `kind` を持ちます。
+
+- `{ kind: 'scale', id, position }` は、ライブラリーが大きさを変える
+  ハンドルと同じように (`selectionStyle.resizeHandle`) 描き、その
+  大きさで当てます。箱の幅を変える辺の中ほどのハンドルなどに使います
+- `{ kind: 'custom', id, position, sizePx }` は、型が描画器か重ね描き
+  で自分で描き、位置の周りの `sizePx` ピクセルの四角で当てます。描く
+  印の大きさです。線の端の印などに使います
+
+見せるハンドルだけを返します。隠すハンドル (読み取り専用の文書のとき
+など) は返さず、見えないものを掴ませません。ほかの種類のハンドルと、
+`sizePx` が 0 以上の有限の数でない `custom` のハンドルは除かれます。
+文脈は、画面 (`ctx.screen`)、ライブラリーが描く余白込みの選択の枠
+(`ctx.selectionBox`。`draw.rendered.getSelectionBox` の答えで、無ければ
+`null`)、選択の見た目 (`ctx.selectionStyle`) を持ちます。枠の上の
+ハンドルは `ctx.selectionBox` から置くと、ライブラリーが描く枠の所に
+立ちます。
+
+ハンドルをドラッグすると、ポインターが動くたびに `onHandleDrag` が
+呼ばれ、ドラッグの終わりにもう一度呼ばれます。返した `FeaturePatch` は
+地物に当てられます。動いている間の差分は途中の更新で、終わりの差分が
+残ります。型のハンドルは ID で見分けます。
 
 <!-- docs-check:
 declare function verticesOf(feature: Feature): Position[];
@@ -299,12 +359,14 @@ const reshapeRoute: FeatureTypeDefinition = {
   type: 'Route',
   geometry: 'LineString',
   renderer: routeRenderer,
-  // 頂点ごとに、その頂点を動かすハンドルを置く
+  // 頂点ごとに、その頂点を動かすハンドルを置く。印は重ね描きが
+  // 8 ピクセルの幅で描く (下の「重ね描き」)
   handles(feature) {
     return verticesOf(feature).map((position, index) => ({
+      kind: 'custom',
       id: String(index),
       position,
-      kind: 'vertex',
+      sizePx: 8,
       cursor: 'move',
     }));
   },
@@ -316,11 +378,9 @@ const reshapeRoute: FeatureTypeDefinition = {
 };
 ```
 
-ライブラリーは、選ばれている地物のハンドルを頂点のハンドルと同じ
-見た目 (`selectionStyle` の `vertexHandle`) で描き、同じ大きさで当たり
-判定をして、ドラッグを渡します。ほかのハンドルをドラッグしている間は
-隠れます。描画が読み取り専用のとき、操作ロックの間、地物がロックされて
-いる間は、表示もドラッグもしません。
+ほかのハンドルをドラッグしている間は隠れます。描画が読み取り専用の
+とき、操作ロックの間、地物がロックされている間は、表示もドラッグも
+しません。
 
 `onHandleDragStart(feature, handle, event)` は、ハンドルのドラッグが
 始まる前に問われます。`false` を返すとドラッグを拒み、ポインターは
@@ -434,7 +494,7 @@ draw.extensions.featureTypes.override({
 同じ決まりで持ち、ほかに `name` を持ちます。
 `draw.extensions.overlays.add` で足し、返る関数で外します。
 
-選ばれている経路のハンドルに印を付ける重ね描きです。
+選ばれている経路のハンドルの印 (上の型の `custom` のハンドルで、幅は 8 ピクセル) を描く重ね描きです。
 
 <!-- docs-check:
 declare function verticesOf(feature: Feature): Position[];
@@ -524,15 +584,16 @@ draw.extensions.snapProviders.add(grid);
 ### ハンドル
 
 `HandleProvider` は、選ばれている地物に自分のハンドルを出します。
-`handles(feature, screen)` がハンドルを返し、
-`onDrag(feature, handle, event)` がドラッグで変わる差分を返します。
+`handles(feature, ctx)` が、定義と同じ文脈と 2 つの種類でハンドルを
+返し、`onDrag(feature, handle, event)` がドラッグで変わる差分を返します。
 定義の `onHandleDrag` と同じです。`globalHandles(screen)` は、どの
 地物にも属さず、何を選んでいても出るハンドルを返します。そのドラッグ
 では `feature` が `null` で届き、変わるものは提供者が自分で書き込み
 ます。`onDragStart` と `onDragEnd` は、定義の `onHandleDragStart` と
 `onHandleDragEnd` と同じように、ドラッグの前後で呼ばれます。
 `onDragStart` は `false` を返してドラッグを拒めます。定義と同じく、
-ハンドルはライブラリーが頂点のハンドルと同じ見た目で描きます。
+`scale` のハンドルはライブラリーが大きさを変えるハンドルとして描き、
+`custom` のハンドルは提供者が描きます。
 
 ### 付き物
 
@@ -654,8 +715,10 @@ function pathOnTerrain(
 
 ## リファレンス
 
-- [FeatureTypeDefinition](../api/maplibre-gl-draw/interfaces/FeatureTypeDefinition.md)
-  と [Handle](../api/maplibre-gl-draw/interfaces/Handle.md)
+- [FeatureTypeDefinition](../api/maplibre-gl-draw/interfaces/FeatureTypeDefinition.md)、
+  [TransformFields](../api/maplibre-gl-draw/interfaces/TransformFields.md)、
+  [Handle](../api/maplibre-gl-draw/type-aliases/Handle.md)、
+  [HandleContext](../api/maplibre-gl-draw/interfaces/HandleContext.md)
 - [FeatureRenderer](../api/maplibre-gl-draw/interfaces/FeatureRenderer.md)
   と [RenderContext](../api/maplibre-gl-draw/interfaces/RenderContext.md)
 - [LineRenderer](../api/maplibre-gl-draw/interfaces/LineRenderer.md)、

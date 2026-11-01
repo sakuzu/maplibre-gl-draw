@@ -142,8 +142,15 @@ describe('the auxiliary handles of the extensions', () => {
 
   const provider: AuxiliaryHandleProvider = {
     id: 'pins',
-    getHandles: (feature) => [{ id: 'a', position: [feature.id === 'f2' ? 12 : 0, 3] }],
-    getGlobalHandles: () => [{ id: 'g', position: [50, 50] }],
+    getHandles: (feature) => [
+      { kind: 'scale', id: 'a', position: [feature.id === 'f2' ? 12 : 0, 3] },
+      // Drawn by its extension, not by the library
+      { kind: 'custom', id: 'mark', position: [7, 7], sizePx: 8 },
+    ],
+    getGlobalHandles: () => [
+      { kind: 'scale', id: 'g', position: [50, 50] },
+      { kind: 'custom', id: 'free-mark', position: [60, 60], sizePx: 8 },
+    ],
     onHandleDragStart: () => true,
     onHandleDragMove: () => {},
     onHandleDragEnd: () => {},
@@ -182,7 +189,7 @@ describe('the auxiliary handles of the extensions', () => {
     } as unknown as SelectionUIDrawerDeps;
   });
 
-  it('draws the handles of the selected feature with the other handles', () => {
+  it('draws the scale handles of the selected feature with the other handles, and no custom one', () => {
     const feature = store.getFeature('f2') as Feature;
     renderSelectionUI([feature], ZOOM, PROJECTION_DATA, auxDeps, null);
     expect(auxiliary).toEqual([[[12, 3]]]);
@@ -197,7 +204,7 @@ describe('the auxiliary handles of the extensions', () => {
     expect(auxiliary).toHaveLength(1);
   });
 
-  it('draws the handles that belong to no feature', () => {
+  it('draws the scale handles that belong to no feature, and no custom one', () => {
     renderGlobalAuxiliaryHandles(ZOOM, PROJECTION_DATA, auxDeps, null);
     expect(auxiliary).toEqual([[[50, 50]]]);
     renderGlobalAuxiliaryHandles(ZOOM, PROJECTION_DATA, auxDeps, { operation: 'vertex' });

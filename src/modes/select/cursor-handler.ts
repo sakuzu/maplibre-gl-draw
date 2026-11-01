@@ -30,11 +30,7 @@ import {
   getSelectedFeatures,
 } from '../../view/ui/helper.js';
 import type { EngineModeContext } from '../handler.js';
-import {
-  getAdditionalResizeHandlesCallback,
-  getAuxiliaryHandlesCallback,
-  getGlobalAuxiliaryHandlesCallback,
-} from './hit-helpers.js';
+import { getAuxiliaryHandlesCallback, getGlobalAuxiliaryHandlesCallback } from './hit-helpers.js';
 
 export function updateCursorForSelection(
   event: MouseNormalizedEvent,
@@ -63,10 +59,6 @@ export function updateCursorForSelection(
 
     if (bbox) {
       const zoom = map.getZoom();
-      const getAdditionalHandles = getAdditionalResizeHandlesCallback(
-        selectedFeatures,
-        context.selectionScope,
-      );
       const getAuxiliaryHandles = getAuxiliaryHandlesCallback(
         selectedFeatures,
         context.selectionScope,
@@ -78,7 +70,6 @@ export function updateCursorForSelection(
         config,
         zoom,
         context.selectionScope,
-        getAdditionalHandles,
         getAuxiliaryHandles,
       );
 

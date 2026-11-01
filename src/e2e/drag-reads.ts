@@ -204,7 +204,7 @@ async function registerShiftHandle(page: Page): Promise<void> {
           y += c[1] as number;
         }
         const n = ring.length - 1;
-        return [{ id: 'h', kind: 'shift', position: [x / n, y / n - 0.002], cursor: 'alias' }];
+        return [{ id: 'h', kind: 'scale', position: [x / n, y / n - 0.002], cursor: 'alias' }];
       },
       onDragStart(feature, _handle, event) {
         if (feature?.geometry.type !== 'Polygon') return false;

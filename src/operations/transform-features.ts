@@ -13,6 +13,7 @@
 import { DEFAULT_TRANSFORMS } from '../store/feature-edits.js';
 import type { GeometryTransforms, TransformEdit, TransformValues } from '../store/store.js';
 import {
+  type TransformFieldsRegistry,
   type TransformRoles,
   transformRolesOf,
   transformValuesOf,
@@ -35,12 +36,16 @@ export interface TransformStart {
  * The values of a feature a drag starts from (a copy of its geometry is not made: the Store
  * never changes an object it gave)
  *
+ * @param fields The fields the custom types of the instance declare
  * @internal
  */
-export function transformStartOf(feature: Feature): TransformStart {
+export function transformStartOf(
+  feature: Feature,
+  fields?: TransformFieldsRegistry | null,
+): TransformStart {
   const properties = (feature.properties ?? {}) as Record<string, unknown>;
   const read = (key: string): unknown => (key in properties ? properties[key] : undefined);
-  const roles = transformRolesOf(feature.type, (key) => read(key) !== undefined);
+  const roles = transformRolesOf(feature.type, (key) => read(key) !== undefined, fields);
   return { roles, values: transformValuesOf(feature.geometry, roles, read), properties };
 }
 

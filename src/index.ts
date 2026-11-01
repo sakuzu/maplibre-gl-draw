@@ -201,6 +201,7 @@ export type {
   Store,
   StoreView,
   TransformEdit,
+  TransformFields,
   TransformValues,
   UpdateSource,
 } from './api/extension/store.js';
@@ -209,6 +210,7 @@ export { diffItemOrder } from './api/model.js';
 // Extensions
 export type {
   ExtensionContext,
+  HandleContext,
   ModeContext,
   NameGenerator,
   PluginContext,
@@ -217,10 +219,12 @@ export type {
   TerrainSurface,
 } from './api/extension/context.js';
 export type {
+  CustomHandle,
   FeatureTypeDefinition,
   Footprint,
   GroundFootprint,
   Handle,
+  ScaleHandle,
   ScreenFootprint,
 } from './api/extension/feature-type.js';
 export type {

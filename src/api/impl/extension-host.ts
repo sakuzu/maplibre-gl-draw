@@ -21,6 +21,8 @@ import type { BBox } from '../../geometry/types.js';
 import type { PluginInteractions } from '../../modes/handler.js';
 import type { ModeManager } from '../../modes/manager.js';
 import { createCoordinateTransform } from '../../shared/math/index.js';
+import { DrawStore } from '../../store/draw-store.js';
+import { createTransformFieldsRegistry } from '../../store/transform-roles.js';
 import type { BoundingBox, Feature as StoredFeature } from '../../store/types.js';
 import type { FeatureCompanionRegistry } from '../../view/feature-companion.js';
 import type { CustomLayerInterface } from '../../view/layer/index.js';
@@ -48,6 +50,7 @@ import {
   createSubscriptions,
   createTerrainSurface,
   toHit,
+  toSelectionStyle,
 } from './contexts.js';
 import type { Context } from './engine-context.js';
 import type { ExtensionRegistries, Installer } from './extensions.js';
@@ -145,6 +148,10 @@ export function createExtensionHost(deps: ExtensionHostDeps): ExtensionHost {
     pixelRatio: context.pixelRatioSource,
   });
 
+  // The fields the custom types declare, which the drags and the Store of the library read
+  const transformFields = createTransformFieldsRegistry();
+  if (store instanceof DrawStore) store.setTransformFields(transformFields);
+
   const adapterDeps: AdapterDeps = {
     map,
     store,
@@ -165,6 +172,14 @@ export function createExtensionHost(deps: ExtensionHostDeps): ExtensionHost {
       if (!feature || store.isReadOnly()) return;
       store.updateFeature(featureId, preparePatch(feature, patch), { isIntermediate: !final });
     },
+    selectionBoxOf: (featureId) => getDraw().rendered.getSelectionBox(featureId),
+    selectionStyle: () =>
+      toSelectionStyle(
+        context.selectionStyle,
+        context.renderingConfig.boxSelectionStyle,
+        getDraw().options.get().selectionStyle,
+      ),
+    transformFields,
   };
   const overlays = createOverlayStack(customLayer, adapterDeps);
 
@@ -484,6 +499,10 @@ export function createExtensionHost(deps: ExtensionHostDeps): ExtensionHost {
       registries.overlays.clear();
       registries.featureTypes.clear();
       registries.modes.clear();
+      // The Store may serve another instance after this one
+      if (store instanceof DrawStore && store.transformFields === transformFields) {
+        store.setTransformFields(null);
+      }
       destroyed = true;
     },
   };

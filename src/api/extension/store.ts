@@ -69,8 +69,9 @@ export type TransformEdit =
  * The values of one feature an edit that moves, rotates or scales features changes
  * ({@link GeometryTransforms.apply}): its geometry, and the fields its type changes with it.
  *
- * A key of a field is there only when the type of the feature has that field: its value is the
- * one the feature has, or `null` when the feature has none yet. An edit starts a field of `null`
+ * A key of a field is there only when the type of the feature has that field (a custom type has
+ * the ones it declares, {@link TransformFields}): its value is the one the feature has, or `null`
+ * when the feature has none yet. An edit starts a field of `null`
  * from 0 for `angleDegrees` and from 1 for `size`, and leaves `bearingDegrees` at `null`.
  */
 export interface TransformValues {
@@ -92,6 +93,37 @@ export interface TransformValues {
    * Whether a scaling moves the positions by `sizeFactor` along both the east and the north in
    * place of `eastFactor` and `northFactor`, so that the feature keeps its shape (an image, a
    * circle)
+   */
+  readonly uniformScale?: boolean;
+}
+
+/**
+ * The fields of the features of a custom type that the edits that move, rotate and scale features
+ * change with their geometry, as the type declares them (`FeatureTypeDefinition.transformFields`):
+ * for each field of {@link TransformValues} the type has, the key of `properties` that holds it.
+ *
+ * For example, a type of signboards whose features keep their rotation under `boardAngle` and
+ * their size under `boardScale`, and keep their shape when they are scaled, declares
+ * `{ angleDegrees: 'boardAngle', size: 'boardScale', uniformScale: true }`. The resize and the
+ * rotation of the selection then write those keys as the edit computes them, and a Store reads
+ * them to give its computation the values of a feature.
+ */
+export interface TransformFields {
+  /**
+   * The key of `properties` that holds the rotation of a feature, in degrees counterclockwise
+   * (`TransformValues.angleDegrees`). A rotation adds its angle to it, within [0, 360); a feature
+   * without the key starts from 0.
+   */
+  readonly angleDegrees?: string;
+  /**
+   * The key of `properties` that holds the size of a feature (`TransformValues.size`). A scaling
+   * multiplies it by `sizeFactor`; a feature without the key starts from 1.
+   */
+  readonly size?: string;
+  /**
+   * Whether a scaling moves the positions of a feature by `sizeFactor` along both the east and
+   * the north, so that it keeps its shape (`TransformValues.uniformScale`); false when it is left
+   * out.
    */
   readonly uniformScale?: boolean;
 }
@@ -283,7 +315,9 @@ export interface Store extends StoreView {
    * (`{ featureIds }`): each feature that is not there is left out and counted. The instance
    * makes `{ selection: true }` the IDs of the features selected before it calls the Store. They
    * are computed by {@link Store.transforms}, or by the computation of the library when the Store
-   * has none.
+   * has none, over the geometry of each feature and the fields of its type: for a custom type,
+   * the ones it declares ({@link TransformFields}, read with
+   * `draw.extensions.featureTypes.get(type)`).
    *
    * @returns What was applied, or `null` when the Store refuses the edits, changing nothing
    *   (read-only, or a reason of its own)

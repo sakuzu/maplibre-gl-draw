@@ -61,6 +61,11 @@ import type {
   Store,
   StoreContract,
 } from './store.js';
+import {
+  setTransformFieldsOfStore,
+  type TransformFieldsRegistry,
+  transformFieldsOfStore,
+} from './transform-roles.js';
 import type {
   BoxSelection,
   DragState,
@@ -273,6 +278,21 @@ export class DrawStore implements Store {
   /** The computation of the edits that move, rotate and scale features of the contract */
   get transforms(): GeometryTransforms | undefined {
     return this.#contract.transforms;
+  }
+  /**
+   * The fields the custom types of the instance this Store belongs to declare (null while it
+   * belongs to none): what the drags read, and what the edits of a contract of the library read
+   */
+  get transformFields(): TransformFieldsRegistry | null {
+    return transformFieldsOfStore(this);
+  }
+  /**
+   * Sets the fields the custom types of the instance declare, for the drags and for a contract of
+   * the library, which takes them (`takeTransformFields`); the contract of an application decides
+   * the fields of its edits itself
+   */
+  setTransformFields(fields: TransformFieldsRegistry | null): void {
+    setTransformFieldsOfStore(this, this.#contract, fields);
   }
   /** The IDs the contract gives vertices (undefined when it gives none) */
   get getVertexIds(): Store['getVertexIds'] {

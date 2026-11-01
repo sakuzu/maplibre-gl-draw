@@ -27,6 +27,7 @@ import type {
   Store as PublicStore,
   StoreView as PublicStoreView,
   TransformEdit,
+  TransformFields,
   TransformValues,
 } from '../api/extension/store.js';
 import type { EditResult, EditTarget, FeatureEdit, FeaturePatch } from '../api/model.js';
@@ -64,6 +65,7 @@ export type {
   FeaturePatch,
   GeometryTransforms,
   TransformEdit,
+  TransformFields,
   TransformValues,
   VertexTarget,
 };

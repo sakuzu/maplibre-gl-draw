@@ -66,10 +66,10 @@ writes, and the decision for each.
 | the key a style rule names | style rules | user data, unprefixed |
 | simplestyle keys (`stroke`, `fill`) | GeoJSON import | user data, unprefixed |
 
-`width` and `height` are written by core only when the internal resize
-calculator of a custom type returns them, and only that type reads them;
-a type added through the public contract resizes with `handles` and
-`onHandleDrag` and writes what it chooses. The keys of simplestyle are
+Core does not write `width` and `height`: a custom type writes them with
+its `handles` and `onHandleDrag`, and the resize and the rotation of the
+library write only the fields it declares in `transformFields`, under the
+keys it names. The keys of simplestyle are
 read on GeoJSON import as a fallback style, and kept as attributes. These
 keys belong to the user or the extension, not to the library, so they
 keep their names.

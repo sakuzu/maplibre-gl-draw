@@ -74,7 +74,12 @@ import type { SelectionUIConfig } from '../../shared/config/selection.js';
 import type { BoundingBox, Feature, Layer } from '../../shared/types/model.js';
 import type { PixelRatioInput } from '../../shared/utils/pixel-ratio.js';
 import { resolvePixelRatio } from '../../shared/utils/pixel-ratio.js';
-import { roleFieldsOf, transformRolesOf, transformValuesOf } from '../../store/transform-roles.js';
+import {
+  roleFieldsOf,
+  type TransformFieldsRegistry,
+  transformRolesOf,
+  transformValuesOf,
+} from '../../store/transform-roles.js';
 import type { FeatureCompanionRegistry } from '../feature-companion.js';
 import type { GpuLedger } from '../gpu-ledger.js';
 import {
@@ -267,6 +272,11 @@ export interface TableLayerRendererOptions {
    * default: nothing is kept)
    */
   readonly keepCopies?: boolean;
+  /**
+   * The fields the custom types of the instance declare, which a feature moved by its moving set
+   * is rotated and scaled with (none when it is left out)
+   */
+  readonly transformFields?: () => TransformFieldsRegistry | null;
 }
 
 /** The batches of a retained chunk of rows */
@@ -2526,7 +2536,15 @@ export class TableLayerRenderer {
       drawer = null;
       const set = (state & STATE_MOVE_MASK) >> STATE_MOVE_SHIFT;
       features.push(
-        set > 0 ? movedFeature(feature, this.translations, this.transforms[set], set) : feature,
+        set > 0
+          ? movedFeature(
+              feature,
+              this.translations,
+              this.transforms[set],
+              set,
+              this.options.transformFields?.() ?? null,
+            )
+          : feature,
       );
     }
     drawFeatures();
@@ -3020,6 +3038,7 @@ function movedFeature(
   translations: Float32Array,
   transform: EnuEdit | null,
   set: number,
+  declared: TransformFieldsRegistry | null,
 ): Feature {
   const dLng = translations[set * 2];
   const dLat = translations[set * 2 + 1];
@@ -3030,7 +3049,7 @@ function movedFeature(
     // geometry and the fields of its roles (a rotation, a scale, the radius of a Circle)
     const properties = (feature.properties ?? {}) as Record<string, unknown>;
     const read = (key: string): unknown => (key in properties ? properties[key] : undefined);
-    const roles = transformRolesOf(feature.type, (key) => read(key) !== undefined);
+    const roles = transformRolesOf(feature.type, (key) => read(key) !== undefined, declared);
     const before = transformValuesOf(feature.geometry, roles, read);
     const after = applyEnuEdit(transform, before);
     const fields = roleFieldsOf(roles, before, after);

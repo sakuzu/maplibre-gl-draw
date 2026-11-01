@@ -5,7 +5,8 @@
  * The registry of the Selection UI extension points
  *
  * A mechanism for the custom feature types of extension implementations to provide their own
- * selection box computation / resize handles / point frame extent.
+ * selection box computation / point frame extent (the handles they add are auxiliary handles,
+ * `auxiliary-handles.ts`).
  *
  * One registry belongs to one draw instance (it is created by its engine and handed to the
  * CustomLayer, the modes and the extension host). Two draw instances on the same page
@@ -16,7 +17,6 @@
 
 import type { Feature } from '../../../store/types.js';
 import type {
-  AdditionalResizeHandlesCalculator,
   CustomBoundingBoxCalculator,
   FramePoint,
   PointFrameExtent,
@@ -46,14 +46,6 @@ export interface SelectionExtensionRegistry {
   registerBoundingBox(type: string, calculator: CustomBoundingBoxCalculator): () => void;
   /** Returns the bounding box calculator of a type, or `undefined` */
   getBoundingBoxCalculator(type: string): CustomBoundingBoxCalculator | undefined;
-
-  /** Registers the resize handles a feature type adds to the four corner handles */
-  registerAdditionalResizeHandles(
-    type: string,
-    calculator: AdditionalResizeHandlesCalculator,
-  ): () => void;
-  /** Returns the additional resize handles calculator of a type, or `undefined` */
-  getAdditionalResizeHandlesCalculator(type: string): AdditionalResizeHandlesCalculator | undefined;
 
   /** Registers the size of the selection frame of a point-like feature type */
   registerPointFrameExtent(type: string, provider: PointFrameExtentProvider): () => void;
@@ -109,7 +101,6 @@ export function createSelectionExtensionRegistry(
   defaultPointFrameExtent?: PointFrameExtentProvider,
 ): SelectionExtensionRegistry {
   const boundingBoxes = new Map<string, CustomBoundingBoxCalculator>();
-  const additionalHandles = new Map<string, AdditionalResizeHandlesCalculator>();
   const pointFrameExtents = new Map<string, PointFrameExtentProvider>();
   let tileSize = DEFAULT_REGISTRY_TILE_SIZE;
   /** The extent provider of a type, falling back to the default extent of the registry */
@@ -123,10 +114,6 @@ export function createSelectionExtensionRegistry(
   return {
     registerBoundingBox: (type, calculator) => registerIn(boundingBoxes, type, calculator),
     getBoundingBoxCalculator: (type) => boundingBoxes.get(type),
-
-    registerAdditionalResizeHandles: (type, calculator) =>
-      registerIn(additionalHandles, type, calculator),
-    getAdditionalResizeHandlesCalculator: (type) => additionalHandles.get(type),
 
     registerPointFrameExtent: (type, provider) => registerIn(pointFrameExtents, type, provider),
     getPointFrameExtentProvider: (type) => pointFrameExtents.get(type),
@@ -145,7 +132,6 @@ export function createSelectionExtensionRegistry(
 
     clear() {
       boundingBoxes.clear();
-      additionalHandles.clear();
       pointFrameExtents.clear();
     },
   };

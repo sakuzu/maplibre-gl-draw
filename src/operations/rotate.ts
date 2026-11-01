@@ -13,7 +13,7 @@
 import { enuOffsetOf } from '../geometry/enu-transforms.js';
 import type { BoundingBoxCoords } from '../shared/types/selection-box.js';
 import type { TransformEdit } from '../store/store.js';
-import { transformRolesOf } from '../store/transform-roles.js';
+import { type TransformFieldsRegistry, transformRolesOf } from '../store/transform-roles.js';
 import type { Feature } from '../store/types.js';
 
 /** A rotate edit */
@@ -24,16 +24,18 @@ type RotateEdit = Extract<TransformEdit, { kind: 'rotate' }>;
  * the feature when it is the only one and turns by its rotation (a point: its position stays and
  * its rotation changes)
  *
+ * @param fields The fields the custom types of the instance declare
  * @internal
  */
 export function rotationCenterOf(
   bbox: BoundingBoxCoords,
   features: readonly Feature[],
+  fields?: TransformFieldsRegistry | null,
 ): [number, number] {
   if (features.length === 1) {
     const feature = features[0] as Feature;
     const properties = (feature.properties ?? {}) as Record<string, unknown>;
-    const roles = transformRolesOf(feature.type, (key) => key in properties);
+    const roles = transformRolesOf(feature.type, (key) => key in properties, fields);
     const geometry = feature.geometry as { type: string; coordinates?: unknown };
     if (roles.angleDegrees !== undefined && geometry.type === 'Point') {
       const position = geometry.coordinates as number[];

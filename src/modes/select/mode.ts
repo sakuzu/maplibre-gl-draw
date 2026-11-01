@@ -49,11 +49,7 @@ import { handleSelectClick, handleSelectDoubleClick } from './click-handler.js';
 import { updateCursorForSelection } from './cursor-handler.js';
 import { bulkDragTargets, dragTargetsOfHit } from './drag/operation.js';
 import { SelectModeDragHandler } from './drag-handler.js';
-import {
-  getAdditionalResizeHandlesCallback,
-  getAuxiliaryHandlesCallback,
-  getGlobalAuxiliaryHandlesCallback,
-} from './hit-helpers.js';
+import { getAuxiliaryHandlesCallback, getGlobalAuxiliaryHandlesCallback } from './hit-helpers.js';
 import {
   handleDeleteShortcut,
   handleEscapeShortcut,
@@ -275,10 +271,6 @@ export class SelectMode implements EngineModeHandler {
 
       if (bbox) {
         const zoom = map.getZoom();
-        const getAdditionalHandles = getAdditionalResizeHandlesCallback(
-          selectedFeatures,
-          this.#context.selectionScope,
-        );
         const getAuxiliaryHandles = getAuxiliaryHandlesCallback(
           selectedFeatures,
           this.#context.selectionScope,
@@ -290,7 +282,6 @@ export class SelectMode implements EngineModeHandler {
           this.#context.selectionStyle,
           zoom,
           this.#context.selectionScope,
-          getAdditionalHandles,
           getAuxiliaryHandles,
         );
         if (handleHit) {
@@ -488,7 +479,6 @@ export class SelectMode implements EngineModeHandler {
             this.#context.selectionStyle,
             map.getZoom(),
             this.#context.selectionScope,
-            getAdditionalResizeHandlesCallback(selectedFeatures, this.#context.selectionScope),
             getAuxiliaryHandlesCallback(selectedFeatures, this.#context.selectionScope),
           );
           if (hit) return { kind: 'handle', hit, bbox, selectedIds };

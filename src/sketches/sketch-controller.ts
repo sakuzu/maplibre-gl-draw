@@ -42,6 +42,7 @@ import { itemNeighbors } from '../store/item-lists.js';
 import { isLocallyHidden } from '../store/local-visibility.js';
 import { isFeatureLocked } from '../store/lock.js';
 import type { FeatureEdit, GeometryTransforms, Store, VertexTarget } from '../store/store.js';
+import { transformFieldsOfStore } from '../store/transform-roles.js';
 import type { Feature, StoreChange, VertexRef } from '../store/types.js';
 import { isWritableLayer } from '../store/writable-layer.js';
 import {
@@ -477,6 +478,7 @@ export class SketchController {
       featureEditsOf(edits, () => this.#selected(), this.#vertexFinder()),
       (featureId) => store.getFeature(featureId),
       transforms,
+      transformFieldsOfStore(store),
     );
     const shapes = new Map<string, string>();
     if (!findVertices) {
@@ -804,6 +806,7 @@ export class SketchController {
           featureEditsOf(entry.sketch.edits, () => this.#selected(), findVertex),
           live,
           transforms,
+          transformFieldsOfStore(this.#store),
         ).updates;
       } catch {
         // A sketch whose edits no longer apply over the features as they are (the sketches of other

@@ -52,6 +52,7 @@ import { resolveContentPixelRatio, resolvePixelRatio } from '../../shared/utils/
 import type { SketchView } from '../../sketches/sketch-view.js';
 import type { SpatialIndex } from '../../store/spatial/spatial-index.js';
 import type { Store, StoreContractView } from '../../store/store.js';
+import { transformFieldsOfStore } from '../../store/transform-roles.js';
 import type { Feature, StoreChange } from '../../store/types.js';
 import type { FeatureCompanionRegistry } from '../feature-companion.js';
 import { updateGlobeSubdivision } from '../globe-subdivision.js';
@@ -602,6 +603,7 @@ export function createCustomLayer(deps: CustomLayerDeps): CustomLayerInterface {
       pixelRatio,
       requestRepaint: () => engine.mapInstance?.triggerRepaint(),
       keepCopies: deps.keepDrawnCopies === true,
+      transformFields: () => transformFieldsOfStore(own),
     });
   }
 

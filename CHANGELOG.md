@@ -185,6 +185,20 @@ writing it. Its changes are listed after those of 3.0.0.
   not the geometry, decides whether the box is drawn and hit on the map,
   with the resize and rotate handles, or on the screen, without them. A
   type without it has the footprint of its geometry.
+- `FeatureTypeDefinition.transformFields` (`TransformFields`): the keys of
+  `properties` a custom type keeps the rotation and the size of its
+  features under, and whether a scaling keeps their shape. The resize and
+  rotate handles of a footprint laid on the map, drawn and hit as those of
+  a built-in shape, write them as the edits `scale` and `rotate` compute
+  them, for one feature or many, from 0 and 1 for a feature without them;
+  a rotation of a single feature of a `Point` turns it around its
+  position. The edits of a store of the library write them too, and a
+  store of your own reads them with `draw.extensions.featureTypes.get`.
+- `HandleContext`: what the `handles` of a feature type and of a handle
+  provider receive, the screen, the selection box the library draws
+  (`selectionBox`, as `draw.rendered.getSelectionBox` answers it) and the
+  look of the selection (`selectionStyle`), so that a handle on the box
+  sits where the library draws it.
 - `PluginContext.emit(event, payload)`: a plugin sends events of its
   own, which it declares in `DrawEvents` by declaration merging, to the
   subscribers of `draw.on` and `ctx.on`, so that every event is in the
@@ -305,6 +319,20 @@ writing it. Its changes are listed after those of 3.0.0.
   `2 ** (zoom - referenceZoom)` times as large, as the width of a line
   is.
 
+- A handle of an extension says how it is shown (`Handle` is
+  `ScaleHandle | CustomHandle`): `kind: 'scale'` is drawn as the resize
+  handles are and hit at their size, and `kind: 'custom'` is drawn by the
+  extension and hit within the `sizePx` it gives, the size of its mark.
+  `kind` was a name the extension gave the handle, which `id` already
+  tells; the library drew every handle as a vertex handle, over the mark
+  an extension drew. A handle of another kind is left out.
+- `FeatureTypeDefinition.handles` and `HandleProvider.handles` receive a
+  `HandleContext` in place of the `ScreenContext`, which is its `screen`.
+- A custom type has the fields its `transformFields` declares and no
+  other: the resize and the rotation no longer write
+  `maplibre-gl-draw:rotation` and `maplibre-gl-draw:scale` of its
+  features because they have them.
+
 ### Removed in 3.0.0
 
 - `DocumentChange.layerReorder` and `DocumentChange.groupReorder`: the
@@ -360,6 +388,8 @@ writing it. Its changes are listed after those of 3.0.0.
 | `TableGeometry.dimensions: 3` | `'xyz'` |
 | `layer.items` of any layer | `layers.listItems(layer.id)` |
 | `group.featureIds` of any group | `groups.listMembers(group.id)` |
+| `Handle.kind`, a name the extension gives | `Handle.id`; `kind` |
+| `handles(feature, screen)` | `handles(feature, ctx)`, `ctx.screen` |
 
 ### Added in 2.3.0
 

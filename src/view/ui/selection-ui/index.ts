@@ -24,8 +24,6 @@ export {
 } from './extension-registry.js';
 export { SelectionUIRenderer } from './renderer.js';
 export type {
-  AdditionalHandleInfo,
-  AdditionalResizeHandlesCalculator,
   BoundingBoxCoords,
   CustomBoundingBoxCalculator,
   FramePoint,

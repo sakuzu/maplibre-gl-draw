@@ -111,7 +111,6 @@ function hitTest(
     DEFAULT_SELECTION_CONFIG,
     ZOOM,
     scope,
-    undefined,
     getAuxiliaryHandles,
   );
 }
@@ -168,7 +167,9 @@ describe('registry of the auxiliary handles', () => {
 
   it('a provider registered in another draw instance is never enumerated here', () => {
     const other = createSelectionScope();
-    other.auxiliaryHandles.register(stubProvider('p1', [{ id: 'h1', position: [1, 1] }]));
+    other.auxiliaryHandles.register(
+      stubProvider('p1', [{ kind: 'scale', id: 'h1', position: [1, 1] }]),
+    );
 
     expect(scope.auxiliaryHandles.list()).toEqual([]);
     expect(getAuxiliaryHandlesCallback([square('f1', 0, 0)], scope)).toBeUndefined();
@@ -191,7 +192,9 @@ describe('the auxiliary handle enumeration callback (the single-selection restri
   });
 
   it('is undefined for a multiple selection', () => {
-    scope.auxiliaryHandles.register(stubProvider('p1', [{ id: 'h1', position: [0, 0] }]));
+    scope.auxiliaryHandles.register(
+      stubProvider('p1', [{ kind: 'scale', id: 'h1', position: [0, 0] }]),
+    );
 
     expect(
       getAuxiliaryHandlesCallback([square('f1', 0, 0), square('f2', 20, 0)], scope),
@@ -199,8 +202,12 @@ describe('the auxiliary handle enumeration callback (the single-selection restri
   });
 
   it('collects the handles of all providers in registration order for a single selection', () => {
-    scope.auxiliaryHandles.register(stubProvider('p1', [{ id: 'h1', position: [1, 1] }]));
-    scope.auxiliaryHandles.register(stubProvider('p2', [{ id: 'h2', position: [2, 2] }]));
+    scope.auxiliaryHandles.register(
+      stubProvider('p1', [{ kind: 'scale', id: 'h1', position: [1, 1] }]),
+    );
+    scope.auxiliaryHandles.register(
+      stubProvider('p2', [{ kind: 'scale', id: 'h2', position: [2, 2] }]),
+    );
 
     const callback = getAuxiliaryHandlesCallback([square('f1', 0, 0)], scope);
     const candidates = callback?.({
@@ -211,8 +218,8 @@ describe('the auxiliary handle enumeration callback (the single-selection restri
     });
 
     expect(candidates).toEqual([
-      { providerId: 'p1', handle: { id: 'h1', position: [1, 1] } },
-      { providerId: 'p2', handle: { id: 'h2', position: [2, 2] } },
+      { providerId: 'p1', handle: { kind: 'scale', id: 'h1', position: [1, 1] } },
+      { providerId: 'p2', handle: { kind: 'scale', id: 'h2', position: [2, 2] } },
     ]);
   });
 
@@ -240,7 +247,9 @@ describe('the priority order of hitTestHandles', () => {
 
   /** A callback that returns a single position */
   function handlesAt(position: Coordinate, cursor?: string): AuxiliaryHandlesCallback {
-    return () => [{ providerId: 'p1', handle: { id: 'h1', position, cursor } }];
+    return () => [
+      { providerId: 'p1', handle: { kind: 'scale' as const, id: 'h1', position, cursor } },
+    ];
   }
 
   it('takes the auxiliary handle before the vertex', () => {
@@ -271,8 +280,43 @@ describe('the priority order of hitTestHandles', () => {
   });
 
   it('does not take an auxiliary handle that is far away (the test is a screen-px rect)', () => {
-    // Farther than the radius of a vertex handle (12/2 = 6px)
+    // Farther than the half size of a resize handle (10/2 = 5px)
     expect(hitTest({ x: 50, y: -50 }, [feature], handlesAt([5.7, 5]))?.type).toBe('move');
+  });
+
+  it('hits a scale handle at the size of the resize handles, the size it is drawn at', () => {
+    // 4px from the handle is inside the half size of a resize handle (5px), 6px outside
+    expect(hitTest({ x: 54, y: -50 }, [feature], handlesAt([5, 5]))?.type).toBe('auxiliary');
+    expect(hitTest({ x: 56, y: -50 }, [feature], handlesAt([5, 5]))?.type).toBe('move');
+  });
+
+  it('hits a custom handle at the size its extension declares, the size of its mark', () => {
+    const custom =
+      (sizePx: number): AuxiliaryHandlesCallback =>
+      () => [{ providerId: 'p1', handle: { kind: 'custom', id: 'h1', position: [5, 5], sizePx } }];
+    // A mark of 20px: hit 9px away, not 11px away
+    expect(hitTest({ x: 59, y: -50 }, [feature], custom(20))?.type).toBe('auxiliary');
+    expect(hitTest({ x: 61, y: -50 }, [feature], custom(20))?.type).toBe('move');
+    // A mark of 4px: not hit 3px away, where a resize handle would be
+    expect(hitTest({ x: 53, y: -50 }, [feature], custom(4))?.type).toBe('move');
+    expect(
+      hitTestGlobalAuxiliaryHandles(
+        { x: 59, y: -50 },
+        transform,
+        DEFAULT_SELECTION_CONFIG,
+        ZOOM,
+        custom(20),
+      )?.type,
+    ).toBe('auxiliary');
+    expect(
+      hitTestGlobalAuxiliaryHandles(
+        { x: 61, y: -50 },
+        transform,
+        DEFAULT_SELECTION_CONFIG,
+        ZOOM,
+        custom(20),
+      ),
+    ).toBeNull();
   });
 
   it('takes the auxiliary handle even on a Point that has no rotate or resize handle', () => {
@@ -357,14 +401,20 @@ describe('selection-independent auxiliary handles (getGlobalHandles)', () => {
 
   describe('the enumeration callback', () => {
     it('is undefined when no provider has getGlobalHandles (the same path as before)', () => {
-      scope.auxiliaryHandles.register(stubProvider('p1', [{ id: 'h1', position: [5, 5] }]));
+      scope.auxiliaryHandles.register(
+        stubProvider('p1', [{ kind: 'scale', id: 'h1', position: [5, 5] }]),
+      );
 
       expect(getGlobalAuxiliaryHandlesCallback(scope)).toBeUndefined();
     });
 
     it('collects the handles of all providers in order even when the selection is empty', () => {
-      scope.auxiliaryHandles.register(globalProvider('p1', [{ id: 'g1', position: [1, 1] }]));
-      scope.auxiliaryHandles.register(globalProvider('p2', [{ id: 'g2', position: [2, 2] }]));
+      scope.auxiliaryHandles.register(
+        globalProvider('p1', [{ kind: 'scale', id: 'g1', position: [1, 1] }]),
+      );
+      scope.auxiliaryHandles.register(
+        globalProvider('p2', [{ kind: 'scale', id: 'g2', position: [2, 2] }]),
+      );
 
       const candidates = getGlobalAuxiliaryHandlesCallback(scope)?.({
         point: { x: 0, y: 0 },
@@ -374,16 +424,18 @@ describe('selection-independent auxiliary handles (getGlobalHandles)', () => {
       });
 
       expect(candidates).toEqual([
-        { providerId: 'p1', handle: { id: 'g1', position: [1, 1] } },
-        { providerId: 'p2', handle: { id: 'g2', position: [2, 2] } },
+        { providerId: 'p1', handle: { kind: 'scale', id: 'g1', position: [1, 1] } },
+        { providerId: 'p2', handle: { kind: 'scale', id: 'g2', position: [2, 2] } },
       ]);
     });
 
     it('a provider without getGlobalHandles does not mix in', () => {
       scope.auxiliaryHandles.register(
-        stubProvider('selection-only', [{ id: 'h1', position: [5, 5] }]),
+        stubProvider('selection-only', [{ kind: 'scale', id: 'h1', position: [5, 5] }]),
       );
-      scope.auxiliaryHandles.register(globalProvider('p1', [{ id: 'g1', position: [1, 1] }]));
+      scope.auxiliaryHandles.register(
+        globalProvider('p1', [{ kind: 'scale', id: 'g1', position: [1, 1] }]),
+      );
 
       const candidates = getGlobalAuxiliaryHandlesCallback(scope)?.({
         point: { x: 0, y: 0 },
@@ -392,7 +444,9 @@ describe('selection-independent auxiliary handles (getGlobalHandles)', () => {
         zoom: ZOOM,
       });
 
-      expect(candidates).toEqual([{ providerId: 'p1', handle: { id: 'g1', position: [1, 1] } }]);
+      expect(candidates).toEqual([
+        { providerId: 'p1', handle: { kind: 'scale', id: 'g1', position: [1, 1] } },
+      ]);
     });
 
     it('getGlobalHandles receives the context (test point / transform / zoom)', () => {
@@ -414,7 +468,9 @@ describe('selection-independent auxiliary handles (getGlobalHandles)', () => {
   describe('hit testing', () => {
     /** A callback that returns a single position */
     function handlesAt(position: Coordinate, cursor?: string): AuxiliaryHandlesCallback {
-      return () => [{ providerId: 'p1', handle: { id: 'g1', position, cursor } }];
+      return () => [
+        { providerId: 'p1', handle: { kind: 'scale' as const, id: 'g1', position, cursor } },
+      ];
     }
 
     it('a handle can be grabbed even without a selection (returned as auxiliary)', () => {
@@ -454,7 +510,9 @@ describe('selection-independent auxiliary handles (getGlobalHandles)', () => {
   describe('non-interference with the handles of the selection', () => {
     it('getGlobalHandles is not called by hitTestHandles (selection handles as before)', () => {
       const feature = square('f1', 0, 0);
-      const getGlobalHandles = vi.fn(() => [{ id: 'g1', position: [10, 0] as Coordinate }]);
+      const getGlobalHandles = vi.fn(() => [
+        { kind: 'scale' as const, id: 'g1', position: [10, 0] as Coordinate },
+      ]);
       scope.auxiliaryHandles.register({ ...stubProvider('p1', []), getGlobalHandles });
 
       // [10,0] is a vertex of f1. The selection handle test returns vertex as before

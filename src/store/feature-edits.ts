@@ -48,6 +48,7 @@ import type {
 } from './store.js';
 import {
   roleFieldsOf,
+  type TransformFieldsRegistry,
   type TransformRoles,
   transformEditOf,
   transformRolesOf,
@@ -150,6 +151,7 @@ export function checkEdits(
  *
  * @param type The type of the feature
  * @param read Reads a key of its `properties` (undefined for a key that is not there)
+ * @param fields The fields the custom types of the instance declare
  * @throws DrawError `invalid-input` when the computation gives a geometry the feature cannot have
  * @internal
  */
@@ -160,8 +162,9 @@ export function transformedFields(
   type: string,
   geometry: Geometry,
   read: (key: string) => unknown,
+  fields?: TransformFieldsRegistry | null,
 ): { geometry: Geometry | undefined; properties: Array<[string, number]> } | null {
-  const roles: TransformRoles = transformRolesOf(type, (key) => read(key) !== undefined);
+  const roles: TransformRoles = transformRolesOf(type, (key) => read(key) !== undefined, fields);
   const before: TransformValues = transformValuesOf(geometry, roles, read);
   const after = transforms.apply(edit, before);
   if (after === before) return null;
@@ -206,6 +209,7 @@ export interface FeatureUpdate {
  *
  * An edit of a feature `getFeature` does not find is left out and counted.
  *
+ * @param fields The fields the custom types of the instance declare
  * @throws DrawError `invalid-input` when an edit cannot apply
  * @internal
  */
@@ -213,6 +217,7 @@ export function updatesOfEdits(
   edits: readonly FeatureEdit[],
   getFeature: (id: string) => Feature | undefined,
   transforms: GeometryTransforms = DEFAULT_TRANSFORMS,
+  fields?: TransformFieldsRegistry | null,
 ): { updates: FeatureUpdate[]; dropped: number } {
   const computed = checkEdits(edits, transforms);
   // The features as the edits before leave them
@@ -238,10 +243,10 @@ export function updatesOfEdits(
         dropped++;
         continue;
       }
-      const fields = transformedFeatureFields(transforms, transform, feature);
-      if (!fields) continue;
-      edited.set(feature.id, { ...feature, ...fields });
-      updates.push({ id: feature.id, updates: fields });
+      const written = transformedFeatureFields(transforms, transform, feature, fields);
+      if (!written) continue;
+      edited.set(feature.id, { ...feature, ...written });
+      updates.push({ id: feature.id, updates: written });
     }
   });
   return { updates, dropped };
@@ -263,6 +268,7 @@ export function featureUpdatesOfEdit(feature: Feature, edit: OneFeatureEdit): Pa
  * The fields an edit that moves, rotates or scales features writes over one of them (null when
  * it changes nothing)
  *
+ * @param fields The fields the custom types of the instance declare
  * @throws DrawError `invalid-input` when the computation gives a geometry the feature cannot have
  * @internal
  */
@@ -270,22 +276,24 @@ export function transformedFeatureFields(
   transforms: GeometryTransforms,
   edit: TransformEdit,
   feature: Feature,
+  fields?: TransformFieldsRegistry | null,
 ): Partial<Feature> | null {
   const properties = (feature.properties ?? {}) as Record<string, unknown>;
-  const fields = transformedFields(
+  const written = transformedFields(
     transforms,
     edit,
     feature.id,
     feature.type,
     feature.geometry,
     (key) => (key in properties ? properties[key] : undefined),
+    fields,
   );
-  if (!fields) return null;
+  if (!written) return null;
   const out: Partial<Feature> = {};
-  if (fields.geometry !== undefined) out.geometry = fields.geometry;
-  if (fields.properties.length > 0) {
+  if (written.geometry !== undefined) out.geometry = written.geometry;
+  if (written.properties.length > 0) {
     const next: Record<string, Value> = { ...(properties as Record<string, Value>) };
-    for (const [key, value] of fields.properties) setOwnProperty(next, key, value);
+    for (const [key, value] of written.properties) setOwnProperty(next, key, value);
     out.properties = next;
   }
   return out;

@@ -17,6 +17,7 @@ import type { ExtensionsCollections } from '../extensions.js';
 import type { Feature, FeatureInput, FeatureType, Layer } from '../model.js';
 import type { SelectionStyleOptions } from '../options.js';
 import type { Mode, SnapResult } from '../state.js';
+import type { Footprint } from './feature-type.js';
 import type { Hit } from './provider.js';
 import type { StoreView } from './store.js';
 
@@ -259,4 +260,22 @@ export interface PointContext {
    * that must not be snapped to, such as the one being drawn
    */
   excludeIds?: ReadonlySet<string>;
+}
+
+/**
+ * What an extension receives to place the handles of a selected feature (the `handles` of a
+ * custom feature type and of a handle provider): the screen, the selection box of the feature,
+ * and the look of the selection.
+ */
+export interface HandleContext {
+  /** The conversion between the map and the screen, in the frame drawn last */
+  readonly screen: ScreenContext;
+  /**
+   * The selection box of the feature, as the library draws and hits it: its footprint with the
+   * margin of `selectionStyle.box` added, in the frame drawn last (what
+   * `draw.rendered.getSelectionBox` answers); `null` when the feature has nothing to draw
+   */
+  readonly selectionBox: Footprint | null;
+  /** The look of the selection: the box, and the size and look of every kind of handle */
+  readonly selectionStyle: Required<SelectionStyleOptions>;
 }

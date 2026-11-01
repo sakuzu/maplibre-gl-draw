@@ -3,12 +3,14 @@
 
 // The feature type "Route" of the custom-feature-types example: a line drawn with style keys of
 // its own. One definition says how it is drawn (with the library's shared line renderer), hit,
-// box-selected, framed and reshaped.
+// box-selected, framed and reshaped; an overlay draws the marks of the handles on its vertices.
 
 import type {
+  Draw,
   Feature,
   FeatureRenderer,
   FeatureTypeDefinition,
+  OverlayRenderer,
   Position,
   ScreenPoint,
 } from '@sakuzu/maplibre-gl-draw';
@@ -24,6 +26,9 @@ declare module '@sakuzu/maplibre-gl-draw' {
     routeDashed?: boolean;
   }
 }
+
+/** The size of the mark of a handle on a vertex of a route, in CSS pixels */
+const VERTEX_MARK_SIZE_PX = 10;
 
 /** The look of a route without style keys of its own */
 export const ROUTE_DEFAULTS = { routeColor: '#e64d1a', routeWidth: 3, routeDashed: true };
@@ -108,12 +113,15 @@ export const routeType: FeatureTypeDefinition = {
       },
     };
   },
-  // A handle on each vertex, which moves that vertex
+  // A handle on each vertex, which moves that vertex. The library draws the resize and rotate
+  // handles of the footprint; the marks of these handles are drawn by `routeVertexMarks`, and the
+  // library hits each within the size of its mark
   handles(feature) {
     return verticesOf(feature).map((position, index) => ({
+      kind: 'custom',
       id: String(index),
       position,
-      kind: 'vertex',
+      sizePx: VERTEX_MARK_SIZE_PX,
       cursor: 'move',
     }));
   },
@@ -123,3 +131,35 @@ export const routeType: FeatureTypeDefinition = {
     return { geometry: { type: 'LineString', coordinates } };
   },
 };
+
+/**
+ * The marks of the handles on the vertices of the selected route: an overlay, drawn above the
+ * features, while the type is registered, one route is selected and the drawing can be edited
+ */
+export function routeVertexMarks(draw: Draw): OverlayRenderer {
+  return {
+    name: 'route-vertex-marks',
+    onAdd() {},
+    draw(ctx) {
+      if (!draw.extensions.featureTypes.has('Route') || draw.isReadOnly()) return;
+      const { ids } = draw.selection.get();
+      if (ids.length !== 1) return;
+      // The route as it is drawn, also while one of its vertices is dragged
+      const route = draw.rendered.get(ids[0] as string);
+      if (route?.type !== 'Route' || route.locked) return;
+      const look = routeLook(route);
+      for (const position of verticesOf(route)) {
+        ctx.point.draw(position, {
+          shape: 'circle',
+          size: VERTEX_MARK_SIZE_PX,
+          fillColor: '#ffffff',
+          fillOpacity: 1,
+          strokeColor: look.routeColor,
+          strokeWidth: 2,
+          strokeOpacity: 1,
+        });
+      }
+    },
+    onRemove() {},
+  };
+}

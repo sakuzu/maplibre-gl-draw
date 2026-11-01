@@ -573,13 +573,16 @@ be seen is what can be operated.
 
 ### Auxiliary handles
 
-Auxiliary handles let an extension put out handles that are neither
-vertices nor resize handles (`src/view/ui/auxiliary-handles.ts`,
-added through `draw.extensions.handleProviders`). They use the
-same screen rectangle test as the other handles, sized like the vertex
-handles. When one overlaps a vertex or a midpoint, the auxiliary handle
-wins; moving it aside and then grabbing the vertex is enough. With no
-provider registered, the test is skipped.
+Auxiliary handles let an extension put out handles besides the vertices
+and the resize and rotate handles of the selection box
+(`src/view/ui/auxiliary-handles.ts`, added through the `handles` of a
+feature type and `draw.extensions.handleProviders`). They use the same
+screen rectangle test as the other handles, at the size each is shown
+at: a `scale` handle, which the selection UI draws as a resize handle, at
+the size of the resize handles; a `custom` handle, which the extension
+draws, at the `sizePx` it declares. When one overlaps a vertex or a
+midpoint, the auxiliary handle wins; moving it aside and then grabbing
+the vertex is enough. With no provider registered, the test is skipped.
 
 Some auxiliary handles do not depend on the selection
 (`getGlobalHandles`). They appear even when nothing is selected, so they

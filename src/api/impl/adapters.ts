@@ -40,6 +40,7 @@ import type {
 } from '../../snapping/types.js';
 import { getBoundingBox } from '../../store/spatial/index.js';
 import type { Store } from '../../store/store.js';
+import type { TransformFieldsRegistry } from '../../store/transform-roles.js';
 import type { BoundingBox, Coordinate, Feature as StoredFeature } from '../../store/types.js';
 import type {
   FeatureCompanionProvider,
@@ -55,7 +56,7 @@ import type { SelectionExtensionRegistry } from '../../view/ui/selection-ui/exte
 import { computeBoundingBox } from '../../view/ui/selection-ui/index.js';
 import type { BoundingBoxCoords } from '../../view/ui/selection-ui/types.js';
 import type { ScreenPoint } from '../events.js';
-import type { PointContext, ScreenContext } from '../extension/context.js';
+import type { HandleContext, PointContext, ScreenContext } from '../extension/context.js';
 import type {
   FeatureTypeDefinition,
   Footprint,
@@ -71,6 +72,7 @@ import type {
   SnapProvider,
 } from '../extension/provider.js';
 import type { Feature, FeaturePatch } from '../model.js';
+import type { SelectionStyleOptions } from '../options.js';
 import type { LayerTableView } from '../tables.js';
 import { toPosition, toScreenPoint } from './contexts.js';
 import { toPointerEvent } from './input.js';
@@ -106,6 +108,12 @@ export interface AdapterDeps extends RenderAdapterDeps {
   registerSnapProvider(provider: EngineSnapProvider): () => void;
   /** Applies a patch of a handle drag to a feature; `final` is false while the drag goes on */
   applyPatch(featureId: string, patch: FeaturePatch, final: boolean): void;
+  /** The selection box of a feature as it is drawn (`draw.rendered.getSelectionBox`) */
+  selectionBoxOf(featureId: string): Footprint | null;
+  /** The look of the selection as it is now */
+  selectionStyle(): Required<SelectionStyleOptions>;
+  /** The fields the custom types of the instance declare, by type */
+  readonly transformFields: TransformFieldsRegistry;
 }
 
 // ============================================================================
@@ -325,12 +333,47 @@ function degenerateBox(c: Coordinate): BoundingBoxCoords {
   return { topLeft: c, topRight: c, bottomRight: c, bottomLeft: c, center: c };
 }
 
-/** A handle of the contract as a handle of the engine */
-function toEngineHandle(handle: Handle): AuxiliaryHandle {
+/**
+ * A handle of the contract as a handle of the engine, or null for one that is not one (another
+ * kind, or a custom one whose size is not a finite number of 0 or more)
+ */
+function toEngineHandle(handle: Handle): AuxiliaryHandle | null {
+  if (handle === null || typeof handle !== 'object') return null;
+  const position: Coordinate = [handle.position[0], handle.position[1]];
+  const cursor = handle.cursor !== undefined && { cursor: handle.cursor };
+  if (handle.kind === 'scale') return { kind: 'scale', id: handle.id, position, ...cursor };
+  if (handle.kind === 'custom' && Number.isFinite(handle.sizePx) && handle.sizePx >= 0) {
+    return { kind: 'custom', id: handle.id, position, sizePx: handle.sizePx, ...cursor };
+  }
+  return null;
+}
+
+/** The handles of the contract that are handles, as the engine takes them */
+function toEngineHandles(handles: readonly Handle[]): AuxiliaryHandle[] {
+  const out: AuxiliaryHandle[] = [];
+  for (const handle of handles) {
+    const engine = toEngineHandle(handle);
+    if (engine) out.push(engine);
+  }
+  return out;
+}
+
+/**
+ * The context the handles of a feature are placed with: its selection box and the look of the
+ * selection are read when they are asked for
+ */
+function handleContextOf(
+  featureId: string,
+  deps: Pick<AdapterDeps, 'screen' | 'selectionBoxOf' | 'selectionStyle'>,
+): HandleContext {
   return {
-    id: handle.id,
-    position: [handle.position[0], handle.position[1]],
-    ...(handle.cursor !== undefined && { cursor: handle.cursor }),
+    screen: deps.screen,
+    get selectionBox() {
+      return deps.selectionBoxOf(featureId);
+    },
+    get selectionStyle() {
+      return deps.selectionStyle();
+    },
   };
 }
 
@@ -446,6 +489,10 @@ export function installFeatureType(
       );
     }
 
+    // The fields its resize and rotation write, for a custom type (an override keeps the fields of
+    // the built-in type)
+    if (!overriding) add(deps.transformFields.register(type, definition.transformFields ?? {}));
+
     const handles = definition.handles?.bind(definition);
     if (handles) {
       const onHandleDrag = definition.onHandleDrag?.bind(definition);
@@ -456,9 +503,9 @@ export function installFeatureType(
           adaptHandleProvider(
             {
               name: `\u0000type:${type}`,
-              handles: (feature, screen) =>
+              handles: (feature, ctx) =>
                 feature.type === type && applies(feature as unknown as StoredFeature)
-                  ? handles(feature, screen)
+                  ? handles(feature, ctx)
                   : [],
               onDrag: (feature, handle, event) =>
                 feature && onHandleDrag ? onHandleDrag(feature, handle, event) : null,
@@ -594,13 +641,22 @@ export function adaptSnapProvider(
  */
 export function adaptHandleProvider(
   provider: HandleProvider,
-  deps: Pick<AdapterDeps, 'store' | 'screen' | 'applyPatch'>,
+  deps: Pick<AdapterDeps, 'store' | 'screen' | 'applyPatch' | 'selectionBoxOf' | 'selectionStyle'>,
 ): AuxiliaryHandleProvider {
   let active: { featureId: string; handle: Handle } | null = null;
+  /** The handles of a feature, of the contract, that the engine takes */
+  const featureHandles = (feature: Feature): Handle[] =>
+    provider
+      .handles(feature, handleContextOf(feature.id, deps))
+      .filter((handle) => toEngineHandle(handle) !== null);
   const handlesOf = (featureId: string, global: boolean | undefined): Handle[] => {
-    if (global) return provider.globalHandles?.(deps.screen) ?? [];
+    if (global) {
+      return (provider.globalHandles?.(deps.screen) ?? []).filter(
+        (handle) => toEngineHandle(handle) !== null,
+      );
+    }
     const feature = deps.store.getFeature(featureId);
-    return feature ? provider.handles(feature as Feature, deps.screen) : [];
+    return feature ? featureHandles(feature as Feature) : [];
   };
   const drag = (event: DragNormalizedEvent, final: boolean): void => {
     if (!active) return;
@@ -614,9 +670,10 @@ export function adaptHandleProvider(
   };
   return {
     id: provider.name,
-    getHandles: (feature) => provider.handles(feature as Feature, deps.screen).map(toEngineHandle),
+    getHandles: (feature) =>
+      toEngineHandles(provider.handles(feature as Feature, handleContextOf(feature.id, deps))),
     ...(provider.globalHandles && {
-      getGlobalHandles: () => provider.globalHandles?.(deps.screen).map(toEngineHandle) ?? [],
+      getGlobalHandles: () => toEngineHandles(provider.globalHandles?.(deps.screen) ?? []),
     }),
     onHandleDragStart(hit, event) {
       const handle = handlesOf(hit.featureId, hit.global).find((h) => h.id === hit.handleId);

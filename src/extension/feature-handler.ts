@@ -16,7 +16,6 @@ import type { HitTestStrategy } from '../dispatcher/hit-test/strategies/index.js
 import type { BoundingBox, Feature } from '../shared/types/model.js';
 import type { BoundingBoxCoords } from '../shared/types/selection-box.js';
 import type { SnapCandidate, SnapProviderContext } from '../snapping/types.js';
-import type { HandleInfo } from '../view/ui/handles.js';
 import type { PointFrameExtent } from '../view/ui/selection-ui/index.js';
 import type { FeatureTypeRenderer } from './renderers.js';
 
@@ -94,18 +93,6 @@ export interface FeatureTypeHandler {
    * @param tileSize The tile size (512 by default)
    */
   getSelectionBoundingBox?(feature: Feature, tileSize: number): BoundingBoxCoords;
-
-  /**
-   * Returns additional resize handles
-   *
-   * Returns the handles to display in addition to the standard four corner handles.
-   * When omitted, only the four corner handles are shown.
-   * Called only for a single selection.
-   *
-   * @param feature The target feature
-   * @param bbox The bounding box for the selection UI
-   */
-  getAdditionalResizeHandles?(feature: Feature, bbox: BoundingBoxCoords): HandleInfo[];
 
   /**
    * Returns the snapping candidates

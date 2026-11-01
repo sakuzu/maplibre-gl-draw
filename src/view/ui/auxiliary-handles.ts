@@ -4,11 +4,12 @@
 /**
  * Extension point for the auxiliary handles
  *
- * A general-purpose hook for showing and grabbing handles on the selected feature that are
- * "neither a vertex nor a resize handle". Core draws them with the look of the vertex handles
- * (the selection UI), hit tests them at the same size and delegates their drags. core knows
- * nothing at all about the meaning of a handle (it only carries the position and the
- * identifier).
+ * A general-purpose hook for showing and grabbing handles on the selected feature besides the
+ * vertex handles and the resize and rotate handles of the selection box. A handle says how it is
+ * shown: core draws a `scale` handle as it draws the resize handles and hits it at that size,
+ * and draws no `custom` handle (the extension draws it) and hits it at the size the extension
+ * declares. core delegates their drags, and knows nothing at all about the meaning of a handle
+ * (it only carries its kind, its position and its identifier).
  *
  * There are two ways to emit handles: those bound to the selected feature (getHandles) and
  * those that can always be emitted regardless of the selection (getGlobalHandles). The
@@ -25,15 +26,32 @@ import type { LngLat, ScreenPoint } from '../../shared/math/index.js';
 import type { Coordinate, Feature } from '../../store/types.js';
 
 /**
- * One auxiliary handle returned by an {@link AuxiliaryHandleProvider}.
+ * One auxiliary handle returned by an {@link AuxiliaryHandleProvider}: one core draws with the
+ * look of the resize handles and hits at their size (`scale`), or one the extension draws, which
+ * core hits within a square of `sizePx` (`custom`).
  */
-export interface AuxiliaryHandle {
+export type AuxiliaryHandle =
+  | (AuxiliaryHandleBase & { readonly kind: 'scale' })
+  | (AuxiliaryHandleBase & { readonly kind: 'custom'; readonly sizePx: number });
+
+/** What every auxiliary handle has */
+interface AuxiliaryHandleBase {
   /** Identifier unique within the provider */
   id: string;
   /** Position of the handle, `[lng, lat]` in degrees */
   position: Coordinate;
   /** Cursor on hover (when omitted, 'pointer') */
   cursor?: string;
+}
+
+/**
+ * The side of the square an auxiliary handle is hit in, in CSS px: the size of the resize
+ * handles for a `scale` handle, the size the extension declares for a `custom` one
+ *
+ * @internal
+ */
+export function auxiliaryHandleSize(handle: AuxiliaryHandle, resizeHandleSize: number): number {
+  return handle.kind === 'scale' ? resizeHandleSize : handle.sizePx;
 }
 
 /**
@@ -81,7 +99,8 @@ export interface AuxiliaryHandleHit {
  * and the receiver of their drags.
  *
  * A `HandleProvider` of `draw.extensions.handleProviders` is installed as one. The engine draws
- * the handles with the look of the vertex handles, hit tests them and delegates their drags.
+ * the `scale` handles with the look of the resize handles, hit tests every handle at the size it
+ * is shown at, and delegates their drags.
  */
 export interface AuxiliaryHandleProvider {
   /** Identifier unique within the registry (re-registering with the same id overwrites) */

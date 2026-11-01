@@ -23,7 +23,12 @@ import { livePlaceOf } from '../feature-table/bulk-rows.js';
 import { featureTablesInternals } from '../feature-table/feature-tables.js';
 import { TableSelection } from '../feature-table/selection.js';
 import type { Store, TransformEdit } from '../store/store.js';
-import { transformRolesOf, transformValuesOf } from '../store/transform-roles.js';
+import {
+  type TransformFieldsRegistry,
+  transformFieldsOfStore,
+  transformRolesOf,
+  transformValuesOf,
+} from '../store/transform-roles.js';
 import type { RowField } from '../store/types.js';
 import { rowsLocked } from './bulk-selection.js';
 import { transformsOf } from './transform-features.js';
@@ -42,13 +47,18 @@ export function rowsByValues(
 ): Int32Array {
   const internals = featureTablesInternals(store.tables);
   if (!internals) return new Int32Array(0);
+  const fields = transformFieldsOfStore(store);
   const out: number[] = [];
   for (const handle of rows.handles) {
     const place = livePlaceOf(internals, handle);
     const view = place ? store.tables?.get(place.layer.layerId) : undefined;
     const type = view?.getRowType(handle);
     if (!view || type === null || type === undefined) continue;
-    const roles = transformRolesOf(type, (key) => view.getRowValue(handle, key) !== undefined);
+    const roles = transformRolesOf(
+      type,
+      (key) => view.getRowValue(handle, key) !== undefined,
+      fields,
+    );
     if (kind === 'rotate' ? roles.angleDegrees !== undefined : roles.uniformScale) out.push(handle);
   }
   return Int32Array.from(out);
@@ -115,6 +125,7 @@ export function transformKinds(
   if (!internals || !tables) return null;
   const transforms = transformsOf(store);
   if (!transforms.accepts(edit)) return null;
+  const declared = transformFieldsOfStore(store);
   // The rows by the field of their roles the edit changes with their geometry (none: '')
   const byField = new Map<string, number[]>();
   for (const handle of rows.handles) {
@@ -124,7 +135,11 @@ export function transformKinds(
     const type = view?.getRowType(handle) ?? null;
     let field = '';
     if (view && type !== null && edit.kind !== 'translate') {
-      const roles = transformRolesOf(type, (key) => view.getRowValue(handle, key) !== undefined);
+      const roles = transformRolesOf(
+        type,
+        (key) => view.getRowValue(handle, key) !== undefined,
+        declared,
+      );
       field = (edit.kind === 'rotate' ? roles.angleDegrees : roles.size) ?? '';
     }
     let list = byField.get(field);
@@ -144,7 +159,7 @@ export function transformKinds(
         fields,
         write: (handle, read) => {
           const type = tables.get(read.place.layer.layerId)?.getRowType(handle) ?? null;
-          const moved = transformedRow(transforms, edit, read, type);
+          const moved = transformedRow(transforms, edit, read, type, declared);
           if (!moved) return null;
           if (field === '') return [moved.geometry];
           const value = field === moved.angleKey ? moved.angleDegrees : moved.size;
@@ -162,6 +177,7 @@ function transformedRow(
   edit: TransformEdit,
   read: BulkRowReader,
   type: string | null,
+  fields: TransformFieldsRegistry | null,
 ): {
   geometry: unknown;
   angleKey: string | undefined;
@@ -170,7 +186,7 @@ function transformedRow(
 } | null {
   const geometry = read.geometry() as Geometry | undefined;
   if (!geometry) return null;
-  const roles = transformRolesOf(type ?? '', (key) => read.value(key) !== undefined);
+  const roles = transformRolesOf(type ?? '', (key) => read.value(key) !== undefined, fields);
   const after = transforms.apply(
     edit,
     transformValuesOf(geometry, roles, (key) => read.value(key)),

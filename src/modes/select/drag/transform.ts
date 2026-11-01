@@ -18,6 +18,10 @@ import {
 import type { HandleType } from '../../../shared/config/constants.js';
 import { createCoordinateTransform } from '../../../shared/math/index.js';
 import type { TransformEdit } from '../../../store/store.js';
+import {
+  type TransformFieldsRegistry,
+  transformFieldsOfStore,
+} from '../../../store/transform-roles.js';
 import type { DragTargets, Feature } from '../../../store/types.js';
 import type { BoundingBoxCoords } from '../../../view/ui/selection-ui/index.js';
 import { computeBoundingBox } from '../../../view/ui/selection-ui/index.js';
@@ -27,9 +31,12 @@ import type { DragOperation, DragScope, DragStore } from './operation.js';
 import { dragStartLngLat, selectedFeaturesOf } from './operation.js';
 
 /** The values of the features a drag started from, by feature id */
-function startsOf(features: readonly Feature[]): Map<string, TransformStart> {
+function startsOf(
+  features: readonly Feature[],
+  fields: TransformFieldsRegistry | null,
+): Map<string, TransformStart> {
   const starts = new Map<string, TransformStart>();
-  for (const feature of features) starts.set(feature.id, transformStartOf(feature));
+  for (const feature of features) starts.set(feature.id, transformStartOf(feature, fields));
   return starts;
 }
 
@@ -67,6 +74,8 @@ export class ResizeDrag implements DragOperation {
 
 /**
  * Start a resize drag from a bounding box handle
+ *
+ * @param store The Store of the instance, whose custom types tell the fields the drag writes
  */
 export function startResizeDrag(
   event: DragNormalizedEvent,
@@ -74,13 +83,14 @@ export function startResizeDrag(
   bbox: BoundingBoxCoords,
   features: Feature[],
   map: EngineModeContext['map'],
+  store: DragStore,
 ): ResizeDrag {
   // A box thinner than 1 pixel on screen is not stretched along that axis
   const transform = createCoordinateTransform(map);
   const state = startScale(handle, dragStartLngLat(event), bbox, (lngLat) =>
     transform.metersPerPixel(lngLat),
   );
-  return new ResizeDrag(state, startsOf(features));
+  return new ResizeDrag(state, startsOf(features, transformFieldsOfStore(store)));
 }
 
 // === Rotate operation ===
@@ -127,8 +137,9 @@ export function startRotateDrag(
   scope: DragScope,
   targets: DragTargets,
 ): RotateDrag {
-  const center = rotationCenterOf(bbox, features);
-  const drag = new RotateDrag(center, dragStartLngLat(event), startsOf(features));
+  const fields = transformFieldsOfStore(store);
+  const center = rotationCenterOf(bbox, features, fields);
+  const drag = new RotateDrag(center, dragStartLngLat(event), startsOf(features, fields));
 
   // On a multiple selection, also save the initialBbox of each feature
   let initialFeatureBboxes: Map<string, BoundingBoxCoords> | undefined;

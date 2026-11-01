@@ -33,8 +33,6 @@ export {
 } from './helper.js';
 // Computing and drawing the selection UI
 export type {
-  AdditionalHandleInfo,
-  AdditionalResizeHandlesCalculator,
   BoundingBoxCoords,
   CustomBoundingBoxCalculator,
   PointFrameExtent,

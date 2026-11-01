@@ -3,7 +3,8 @@
 
 // custom-feature-types: a feature type the library does not have.
 // A "Route" (route.ts) is a line with style keys of its own: a color, a width and whether it is
-// dashed. Its definition draws it, hits it and takes it into a selection box. The panel on the
+// dashed. Its definition draws it, hits it, takes it into a selection box and gives it a handle on
+// each vertex, whose marks an overlay draws. The panel on the
 // right has no style fields for a type it does not know, so the page adds a section for the
 // route's keys. A switch in the card of actions at the bottom left, with the key U, unregisters
 // the type and registers it again.
@@ -17,7 +18,7 @@ import '../maplibre-setup.ts';
 import { BASEMAPS, basemapStyle, initialBasemapId } from '../basemap.ts';
 import '../example.css';
 import { HILL_ROUTE, RIVER_ROUTE } from './data.ts';
-import { routeLook, routeType } from './route.ts';
+import { routeLook, routeType, routeVertexMarks } from './route.ts';
 
 const map = new maplibregl.Map({
   container: 'map',
@@ -30,6 +31,8 @@ const draw = createDraw(map);
 // 1. Register the type. `featureTypes.remove('Route')`, or the function `add` returns,
 // unregisters it (6)
 draw.extensions.featureTypes.add(routeType);
+// The marks of the handles on the vertices of the selected route, which the type draws itself
+draw.extensions.overlays.add(routeVertexMarks(draw));
 
 // 2. Two routes (their lines are in data.ts), one with style keys of its own
 draw.features.create({
