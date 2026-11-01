@@ -168,7 +168,7 @@ describe('registry of the auxiliary handles', () => {
   it('a provider registered in another draw instance is never enumerated here', () => {
     const other = createSelectionScope();
     other.auxiliaryHandles.register(
-      stubProvider('p1', [{ kind: 'scale', id: 'h1', position: [1, 1] }]),
+      stubProvider('p1', [{ kind: 'resize', id: 'h1', position: [1, 1] }]),
     );
 
     expect(scope.auxiliaryHandles.list()).toEqual([]);
@@ -193,7 +193,7 @@ describe('the auxiliary handle enumeration callback (the single-selection restri
 
   it('is undefined for a multiple selection', () => {
     scope.auxiliaryHandles.register(
-      stubProvider('p1', [{ kind: 'scale', id: 'h1', position: [0, 0] }]),
+      stubProvider('p1', [{ kind: 'resize', id: 'h1', position: [0, 0] }]),
     );
 
     expect(
@@ -203,10 +203,10 @@ describe('the auxiliary handle enumeration callback (the single-selection restri
 
   it('collects the handles of all providers in registration order for a single selection', () => {
     scope.auxiliaryHandles.register(
-      stubProvider('p1', [{ kind: 'scale', id: 'h1', position: [1, 1] }]),
+      stubProvider('p1', [{ kind: 'resize', id: 'h1', position: [1, 1] }]),
     );
     scope.auxiliaryHandles.register(
-      stubProvider('p2', [{ kind: 'scale', id: 'h2', position: [2, 2] }]),
+      stubProvider('p2', [{ kind: 'resize', id: 'h2', position: [2, 2] }]),
     );
 
     const callback = getAuxiliaryHandlesCallback([square('f1', 0, 0)], scope);
@@ -218,8 +218,8 @@ describe('the auxiliary handle enumeration callback (the single-selection restri
     });
 
     expect(candidates).toEqual([
-      { providerId: 'p1', handle: { kind: 'scale', id: 'h1', position: [1, 1] } },
-      { providerId: 'p2', handle: { kind: 'scale', id: 'h2', position: [2, 2] } },
+      { providerId: 'p1', handle: { kind: 'resize', id: 'h1', position: [1, 1] } },
+      { providerId: 'p2', handle: { kind: 'resize', id: 'h2', position: [2, 2] } },
     ]);
   });
 
@@ -248,7 +248,7 @@ describe('the priority order of hitTestHandles', () => {
   /** A callback that returns a single position */
   function handlesAt(position: Coordinate, cursor?: string): AuxiliaryHandlesCallback {
     return () => [
-      { providerId: 'p1', handle: { kind: 'scale' as const, id: 'h1', position, cursor } },
+      { providerId: 'p1', handle: { kind: 'resize' as const, id: 'h1', position, cursor } },
     ];
   }
 
@@ -402,7 +402,7 @@ describe('selection-independent auxiliary handles (getGlobalHandles)', () => {
   describe('the enumeration callback', () => {
     it('is undefined when no provider has getGlobalHandles (the same path as before)', () => {
       scope.auxiliaryHandles.register(
-        stubProvider('p1', [{ kind: 'scale', id: 'h1', position: [5, 5] }]),
+        stubProvider('p1', [{ kind: 'resize', id: 'h1', position: [5, 5] }]),
       );
 
       expect(getGlobalAuxiliaryHandlesCallback(scope)).toBeUndefined();
@@ -410,10 +410,10 @@ describe('selection-independent auxiliary handles (getGlobalHandles)', () => {
 
     it('collects the handles of all providers in order even when the selection is empty', () => {
       scope.auxiliaryHandles.register(
-        globalProvider('p1', [{ kind: 'scale', id: 'g1', position: [1, 1] }]),
+        globalProvider('p1', [{ kind: 'resize', id: 'g1', position: [1, 1] }]),
       );
       scope.auxiliaryHandles.register(
-        globalProvider('p2', [{ kind: 'scale', id: 'g2', position: [2, 2] }]),
+        globalProvider('p2', [{ kind: 'resize', id: 'g2', position: [2, 2] }]),
       );
 
       const candidates = getGlobalAuxiliaryHandlesCallback(scope)?.({
@@ -424,17 +424,17 @@ describe('selection-independent auxiliary handles (getGlobalHandles)', () => {
       });
 
       expect(candidates).toEqual([
-        { providerId: 'p1', handle: { kind: 'scale', id: 'g1', position: [1, 1] } },
-        { providerId: 'p2', handle: { kind: 'scale', id: 'g2', position: [2, 2] } },
+        { providerId: 'p1', handle: { kind: 'resize', id: 'g1', position: [1, 1] } },
+        { providerId: 'p2', handle: { kind: 'resize', id: 'g2', position: [2, 2] } },
       ]);
     });
 
     it('a provider without getGlobalHandles does not mix in', () => {
       scope.auxiliaryHandles.register(
-        stubProvider('selection-only', [{ kind: 'scale', id: 'h1', position: [5, 5] }]),
+        stubProvider('selection-only', [{ kind: 'resize', id: 'h1', position: [5, 5] }]),
       );
       scope.auxiliaryHandles.register(
-        globalProvider('p1', [{ kind: 'scale', id: 'g1', position: [1, 1] }]),
+        globalProvider('p1', [{ kind: 'resize', id: 'g1', position: [1, 1] }]),
       );
 
       const candidates = getGlobalAuxiliaryHandlesCallback(scope)?.({
@@ -445,7 +445,7 @@ describe('selection-independent auxiliary handles (getGlobalHandles)', () => {
       });
 
       expect(candidates).toEqual([
-        { providerId: 'p1', handle: { kind: 'scale', id: 'g1', position: [1, 1] } },
+        { providerId: 'p1', handle: { kind: 'resize', id: 'g1', position: [1, 1] } },
       ]);
     });
 
@@ -469,7 +469,7 @@ describe('selection-independent auxiliary handles (getGlobalHandles)', () => {
     /** A callback that returns a single position */
     function handlesAt(position: Coordinate, cursor?: string): AuxiliaryHandlesCallback {
       return () => [
-        { providerId: 'p1', handle: { kind: 'scale' as const, id: 'g1', position, cursor } },
+        { providerId: 'p1', handle: { kind: 'resize' as const, id: 'g1', position, cursor } },
       ];
     }
 
@@ -511,7 +511,7 @@ describe('selection-independent auxiliary handles (getGlobalHandles)', () => {
     it('getGlobalHandles is not called by hitTestHandles (selection handles as before)', () => {
       const feature = square('f1', 0, 0);
       const getGlobalHandles = vi.fn(() => [
-        { kind: 'scale' as const, id: 'g1', position: [10, 0] as Coordinate },
+        { kind: 'resize' as const, id: 'g1', position: [10, 0] as Coordinate },
       ]);
       scope.auxiliaryHandles.register({ ...stubProvider('p1', []), getGlobalHandles });
 

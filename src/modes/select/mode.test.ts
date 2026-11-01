@@ -378,7 +378,7 @@ describe.each(STORE_KINDS)('on %s', (_kind, createStore) => {
       context.selectionScope.auxiliaryHandles.register({
         id: 'p1',
         getHandles: () => [],
-        getGlobalHandles: () => [{ kind: 'scale', id: 'g1', position: [5, 5] }],
+        getGlobalHandles: () => [{ kind: 'resize', id: 'g1', position: [5, 5] }],
         onHandleDragStart,
         onHandleDragMove: () => {},
         onHandleDragEnd: () => {},
@@ -424,7 +424,7 @@ describe.each(STORE_KINDS)('on %s', (_kind, createStore) => {
       context.selectionScope.auxiliaryHandles.register({
         id: 'p1',
         getHandles: () => [],
-        getGlobalHandles: () => [{ kind: 'scale', id: 'g1', position: [5, 5] }],
+        getGlobalHandles: () => [{ kind: 'resize', id: 'g1', position: [5, 5] }],
         onHandleDragStart,
         onHandleDragMove: () => {},
         onHandleDragEnd: () => {},
@@ -476,7 +476,7 @@ describe.each(STORE_KINDS)('on %s', (_kind, createStore) => {
     it('with no provider implementing getGlobalHandles the usual path is unchanged', () => {
       context.selectionScope.auxiliaryHandles.register({
         id: 'selection-only',
-        getHandles: () => [{ kind: 'scale', id: 'h1', position: [5, 5] }],
+        getHandles: () => [{ kind: 'resize', id: 'h1', position: [5, 5] }],
         onHandleDragStart: () => true,
         onHandleDragMove: () => {},
         onHandleDragEnd: () => {},

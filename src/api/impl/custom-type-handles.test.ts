@@ -14,15 +14,20 @@
  *   none has none, whatever keys its features have
  * - The edits of a Store of the library (`applyEdits`) write the same fields, over features and
  *   over rows not made features
- * - The handles a type or a provider adds: a `scale` one is drawn as a resize handle and hit at
- *   its size, a `custom` one is not drawn and is hit at the size it declares, and a handle of
- *   another kind is left out
+ * - The handles a type or a provider adds: a `resize` one is drawn as a resize handle and hit at
+ *   its size, a `custom` one is drawn by the extension (`drawHandles`, with a render context of
+ *   the frame) and is hit at the size it declares, and a handle of another kind, or a custom one
+ *   of a size not above 0, is left out with a warning once a reason
+ * - A definition that overrides a built-in type cannot declare fields
  * - Their `handles` receive the screen, the selection box the library draws
- *   (`draw.rendered.getSelectionBox`) and the look of the selection
+ *   (`draw.rendered.getSelectionBox`; none for the handles of no feature) and the look of the
+ *   selection
  */
 
+import type { ProjectionData } from 'maplibre-gl';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { DragNormalizedEvent, MouseNormalizedEvent } from '../../dispatcher/types.js';
+import type { FrameDrawContext } from '../../extension/renderers.js';
 import { transformBulkSelection } from '../../operations/bulk-transform.js';
 import { DEFAULT_SELECTION_CONFIG } from '../../shared/config/selection.js';
 import { DrawStore } from '../../store/draw-store.js';
@@ -30,6 +35,7 @@ import type { Store } from '../../store/store.js';
 import { TableContractStore } from '../../store/table-memory.js';
 import type { Feature as StoredFeature } from '../../store/types.js';
 import { createMapStub, planeMetersPerPixel, STORE_KINDS } from '../../test-utils.js';
+import type { TerrainContext } from '../../view/terrain/context.js';
 import type { AuxiliaryHandleContext } from '../../view/ui/auxiliary-handles.js';
 import { hitTestHandles } from '../../view/ui/handle-test.js';
 import { computeRotateHandle } from '../../view/ui/handles.js';
@@ -74,7 +80,7 @@ const CARD: FeatureTypeDefinition = {
   geometry: 'Point',
   renderer,
   footprint: boardFootprint,
-  transformFields: { angleDegrees: ANGLE, size: SIZE, uniformScale: true },
+  transformFields: { angleDegreesKey: ANGLE, scaleKey: SIZE, uniformScale: true },
 };
 
 /** A label box: the same footprint, no field declared */
@@ -272,7 +278,7 @@ describe.each(STORE_KINDS)('the handles of a footprint laid on the map over %s',
         halfWidthPx: 20,
         halfHeightPx: 10,
       }),
-      transformFields: { angleDegrees: ANGLE },
+      transformFields: { angleDegreesKey: ANGLE },
     });
     const feature = view.store.getFeature('m') as StoredFeature;
     const transform = {
@@ -420,14 +426,19 @@ describe('the handles of a footprint laid on the map, of features selected in bu
 
 describe('the handles a custom type adds', () => {
   const handles: Handle[] = [
-    { kind: 'scale', id: 'edge', position: [0.4, 0], cursor: 'ew-resize' },
+    { kind: 'resize', id: 'edge', position: [0.4, 0], cursor: 'ew-resize' },
     { kind: 'custom', id: 'tip', position: [0, 0.5], sizePx: 20 },
     { kind: 'other', id: 'odd', position: [0, 1] } as unknown as Handle,
     { kind: 'custom', id: 'bad', position: [0, 1], sizePx: -1 },
+    { kind: 'custom', id: 'flat', position: [0, 1], sizePx: 0 },
     { id: 'none', position: [0, 1] } as unknown as Handle,
+    { kind: 'scale', id: 'old', position: [0, 1] } as unknown as Handle,
   ];
 
-  function withHandles(seen: HandleContext[] = []): Opened {
+  function withHandles(
+    seen: HandleContext[] = [],
+    drawHandles?: FeatureTypeDefinition['drawHandles'],
+  ): Opened {
     const view = open(new DrawStore(new TableContractStore()), [featureOf('c', 'card', [0, 0])]);
     view.draw.extensions.featureTypes.remove('card');
     view.draw.extensions.featureTypes.add({
@@ -437,18 +448,50 @@ describe('the handles a custom type adds', () => {
         return handles;
       },
       onHandleDrag: () => null,
+      ...(drawHandles && { drawHandles }),
     });
     return view;
   }
 
-  it('are the scale and custom ones, a handle of another kind left out', () => {
-    const view = withHandles();
+  it('are the resize and custom ones, the others left out with a warning once a reason', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const view = withHandles();
+      const provider = view.engine.context.selectionScope.auxiliaryHandles.list()[0];
+      const feature = view.store.getFeature('c') as StoredFeature;
+      for (let i = 0; i < 3; i++) {
+        expect(provider?.getHandles(feature, {} as AuxiliaryHandleContext)).toEqual([
+          { kind: 'resize', id: 'edge', position: [0.4, 0], cursor: 'ew-resize' },
+          { kind: 'custom', id: 'tip', position: [0, 0.5], sizePx: 20 },
+        ]);
+      }
+      // The kind "other", a size not above 0 (-1 and 0), no kind, and the kind "scale"
+      expect(warn).toHaveBeenCalledTimes(4);
+      expect(String(warn.mock.calls[0]?.[0])).toContain('feature type "card"');
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it('have the type draw its custom handles, with a render context of the frame', () => {
+    const drawHandles = vi.fn();
+    const view = withHandles([], drawHandles);
+    vi.spyOn(view.engine.customLayer, 'getGL').mockReturnValue({} as WebGL2RenderingContext);
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const provider = view.engine.context.selectionScope.auxiliaryHandles.list()[0];
     const feature = view.store.getFeature('c') as StoredFeature;
-    expect(provider?.getHandles(feature, {} as AuxiliaryHandleContext)).toEqual([
-      { kind: 'scale', id: 'edge', position: [0.4, 0], cursor: 'ew-resize' },
-      { kind: 'custom', id: 'tip', position: [0, 0.5], sizePx: 20 },
-    ]);
+    const given = provider?.getHandles(feature, {} as AuxiliaryHandleContext) ?? [];
+    warn.mockRestore();
+    provider?.drawHandles?.(feature, given, PROJECTION, 10, frameContext());
+    expect(drawHandles).toHaveBeenCalledTimes(1);
+    expect(drawHandles).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'c' }),
+      [{ kind: 'custom', id: 'tip', position: [0, 0.5], sizePx: 20 }],
+      expect.objectContaining({ point: expect.anything(), screen: expect.anything() }),
+    );
+    // Nothing to draw: not called
+    provider?.drawHandles?.(feature, [], PROJECTION, 10, frameContext());
+    expect(drawHandles).toHaveBeenCalledTimes(1);
   });
 
   it('receive the selection box the library draws and the look of the selection', () => {
@@ -482,7 +525,44 @@ describe('the handles a custom type adds', () => {
     provider?.getHandles(view.store.getFeature('c') as StoredFeature, {} as AuxiliaryHandleContext);
     expect(seen[0]?.selectionBox).toEqual(view.draw.rendered.getSelectionBox('c'));
   });
+
+  it('give the handles of no feature a context without a selection box', () => {
+    const view = open(new DrawStore(new TableContractStore()), []);
+    const seen: HandleContext[] = [];
+    view.draw.extensions.handleProviders.add({
+      name: 'free',
+      handles: () => [],
+      globalHandles(ctx) {
+        seen.push(ctx);
+        return [{ kind: 'custom', id: 'g', position: [0, 0], sizePx: 6 }];
+      },
+      onDrag: () => null,
+    });
+    const provider = view.engine.context.selectionScope.auxiliaryHandles.get('free');
+    expect(provider?.getGlobalHandles?.({} as AuxiliaryHandleContext)).toEqual([
+      { kind: 'custom', id: 'g', position: [0, 0], sizePx: 6 },
+    ]);
+    expect(seen[0]?.selectionBox).toBeNull();
+    expect(seen[0]?.selectionStyle.box.margin).toBe(DEFAULT_SELECTION_CONFIG.box.margin);
+  });
 });
+
+const PROJECTION = { mainMatrix: new Float32Array(16) } as unknown as ProjectionData;
+
+/** The values of a frame, with spies for the shared renderers */
+function frameContext(): FrameDrawContext {
+  return {
+    shaderData: { vertexShaderPrelude: 'prelude', define: '#define X', variantName: 'mercator' },
+    centerLngLat: [0, 0],
+    mainMatrixArray: Array.from({ length: 16 }, (_, i) => (i % 5 === 0 ? 1 : 0)),
+    pixelRatio: 1,
+    terrain: {} as TerrainContext,
+    opacity: 1,
+    sdfLineRenderer: { draw: vi.fn(), drawClosed: vi.fn() },
+    fillShaderManager: { drawPolygonRings: vi.fn() },
+    pointShapeRenderer: { draw: vi.fn() },
+  } as unknown as FrameDrawContext;
+}
 
 /** The stroke of the box of the selection, as the default has it */
 function boxStyle() {
@@ -496,9 +576,9 @@ describe('the fields a custom type declares', () => {
     const view = open(new DrawStore(new TableContractStore()), []);
     for (const transformFields of [
       'boardAngle',
-      { angleDegrees: '' },
-      { size: 3 },
-      { angleDegrees: 'same', size: 'same' },
+      { angleDegreesKey: '' },
+      { scaleKey: 3 },
+      { angleDegreesKey: 'same', scaleKey: 'same' },
       { uniformScale: 'yes' },
     ]) {
       expect(() =>
@@ -510,6 +590,19 @@ describe('the fields a custom type declares', () => {
         }),
       ).toThrow(DrawError);
     }
+  });
+
+  it('cannot be given to a definition that overrides a built-in type', () => {
+    const view = open(new DrawStore(new TableContractStore()), []);
+    expect(() =>
+      view.draw.extensions.featureTypes.override({
+        type: 'Point',
+        geometry: 'Point',
+        renderer,
+        transformFields: { angleDegreesKey: ANGLE },
+      }),
+    ).toThrow(expect.objectContaining({ code: 'invalid-input' }));
+    expect(view.draw.extensions.featureTypes.has('Point')).toBe(false);
   });
 
   it('are let go of with the type, and with the instance', () => {

@@ -242,8 +242,9 @@ const hitRoute: FeatureTypeDefinition = {
 | メンバー | 無いとき |
 | --- | --- |
 | `footprint` | 図形の外形です |
-| `transformFields` | 大きさ変えと回転は図形だけを変えます |
+| `transformFields` | どの大きさ変えと回転も図形だけを変えます |
 | `handles` | その型に自分のハンドルはありません |
+| `drawHandles` | `custom` のハンドルは当たりますが描かれません |
 | `onHandleDrag` | ハンドルをドラッグしても何も変わりません |
 | `snapCandidates` | 図形の頂点と辺が候補です |
 
@@ -287,8 +288,8 @@ const hitRoute: FeatureTypeDefinition = {
 つながる丸で、見た目と離れ方は `selectionStyle` に従い、描いた所で
 当たります。そのドラッグは、1 つの地物でも複数でも、ライブラリーの
 大きさ変えと回転です。図形を動かし、型が `transformFields` で宣言した
-欄を書きます。宣言するのは、地物が回転 (反時計回りの度) と大きさを
-持つ `properties` の鍵と、大きさ変えで形を保つかどうかです。
+欄を書きます。宣言するのは、地物が回転 (反時計回りの度) と大きさの
+倍率を持つ `properties` の鍵と、大きさ変えで形を保つかどうかです。
 
 <!-- docs-check:
 declare function boardFootprint(
@@ -308,8 +309,8 @@ const signboard: FeatureTypeDefinition = {
   renderer: boardRenderer,
   footprint: (feature) => boardFootprint(feature),
   transformFields: {
-    angleDegrees: 'boardAngle',
-    size: 'boardScale',
+    angleDegreesKey: 'boardAngle',
+    scaleKey: 'boardScale',
     uniformScale: true,
   },
 };
@@ -317,35 +318,88 @@ const signboard: FeatureTypeDefinition = {
 
 回転は `boardAngle` に角度を足して 0 以上 360 未満に収め、大きさ変えは
 `boardScale` に倍率を掛けます。鍵の無い地物は 0 と 1 から始まります。
-`Point` の図形を持つ地物 1 つの回転は、その位置の周りに回し、位置は
-動きません。複数の地物は、その枠の中心の周りに回ります。
-`transformFields` の無い型は、地物がどんな鍵を持っていても、図形だけが
-変わります。自前の Store は、地物の値を計算 (`Store.transforms`) に
-渡すために、宣言を `draw.extensions.featureTypes.get(type)` で読みます。
+同じ欄は、ハンドルだけでなく、地物への `rotate` と `scale` の編集の
+全部が書きます。
+
+| 地物を回し、大きさを変えるもの | 宣言した欄を書くか |
+| --- | --- |
+| 選択の枠のハンドル | 書きます。地物が 1 つでも複数でも |
+| まとめて選んだ地物のドラッグ | 書きます |
+| `rotate` と `scale` の編集 (`Store.applyEdits`) | 書きます |
+| 下書き (`draw.sketches`) が持つ同じ編集 | 書きます |
+| 型の `onHandleDrag` | 書きません。差分に書いたものだけが変わります |
+
+`angleDegreesKey` を宣言した型
+の、`Point` の図形を持つ地物 1 つの回転は、その位置の周りに回し、位置
+は動きません。複数の地物は、その枠の中心の周りに回ります。
+`transformFields` の無い型は、地物がどんな鍵を持っていても図形だけが
+変わり、`override` に渡す定義はこれを持てません。自前の Store は、地物
+の値を計算 (`Store.transforms`) に渡すために、宣言を
+`draw.extensions.featureTypes.get(type)` で読みます。鍵には
+`maplibre-gl-draw:` の前置きを付けません。前置きはライブラリーが自分の
+値に使います ([データの形式](../reference/data-format.md#properties))。
 
 `handles(feature, ctx)` は、型が選ばれている地物に足すハンドルを返し
 ます。それぞれ ID、位置、カーソルと、見せ方を決める `kind` を持ちます。
 
-- `{ kind: 'scale', id, position }` は、ライブラリーが大きさを変える
+- `{ kind: 'resize', id, position }` は、ライブラリーが大きさを変える
   ハンドルと同じように (`selectionStyle.resizeHandle`) 描き、その
-  大きさで当てます。箱の幅を変える辺の中ほどのハンドルなどに使います
-- `{ kind: 'custom', id, position, sizePx }` は、型が描画器か重ね描き
-  で自分で描き、位置の周りの `sizePx` ピクセルの四角で当てます。描く
-  印の大きさです。線の端の印などに使います
+  大きさで当てます。箱の幅を変える辺の中ほどのハンドルなどに使います。
+  同じなのは見た目だけで、ドラッグはライブラリーの大きさ変えでなく
+  `onHandleDrag` に届きます
+- `{ kind: 'custom', id, position, sizePx }` は、型が `drawHandles` で
+  自分で描き、位置の周りの `sizePx` ピクセルの四角で当てます。描く印の
+  直径を渡します。線の端の印などに使います
 
-見せるハンドルだけを返します。隠すハンドル (読み取り専用の文書のとき
-など) は返さず、見えないものを掴ませません。ほかの種類のハンドルと、
-`sizePx` が 0 以上の有限の数でない `custom` のハンドルは除かれます。
-文脈は、画面 (`ctx.screen`)、ライブラリーが描く余白込みの選択の枠
-(`ctx.selectionBox`。`draw.rendered.getSelectionBox` の答えで、無ければ
-`null`)、選択の見た目 (`ctx.selectionStyle`) を持ちます。枠の上の
-ハンドルは `ctx.selectionBox` から置くと、ライブラリーが描く枠の所に
-立ちます。
+ハンドルは、地物が 1 つだけ選ばれているときにだけ出ます。いつ見せ、
+当て、ドラッグさせるかは、どの型でも同じくライブラリーだけが決めます。
+地物が 1 つだけ選ばれていて、文書が読み取り専用でも操作ロックの間でも
+なく、地物がロックされておらず、選択のほかのハンドル (大きさ、回転、
+頂点) をドラッグしていない間です。型はこれを確かめません。ほかの種類の
+ハンドルと、`sizePx` が 0 より大きい有限の数でない `custom` のハンドルは
+除かれ、種類ごとに 1 回コンソールに警告が出ます。
+
+文脈は、画面 (`ctx.screen`)、ライブラリーが描く選択の枠
+(`ctx.selectionBox`。`draw.rendered.getSelectionBox` の答えで、外形に
+余白を足したもの。無ければ `null`)、選択の見た目 (`ctx.selectionStyle`)
+を持ちます。枠の上のハンドルは `ctx.selectionBox` から置くと、
+ライブラリーが描く枠の所に立ちます。
 
 ハンドルをドラッグすると、ポインターが動くたびに `onHandleDrag` が
 呼ばれ、ドラッグの終わりにもう一度呼ばれます。返した `FeaturePatch` は
 地物に当てられます。動いている間の差分は途中の更新で、終わりの差分が
-残ります。型のハンドルは ID で見分けます。
+残ります。型のハンドルは ID で見分けます。看板の東の辺の中ほどに置き、
+幅だけを変える `resize` のハンドルです。
+
+<!-- docs-check: continue
+declare function eastMiddleOf(
+  box: import('@sakuzu/maplibre-gl-draw').Footprint,
+): Position;
+declare function widthFromCenter(feature: Feature, pointer: Position): number;
+-->
+
+```ts
+const signboardWithWidth: FeatureTypeDefinition = {
+  ...signboard,
+  handles(_feature, ctx) {
+    if (!ctx.selectionBox) return [];
+    const position = eastMiddleOf(ctx.selectionBox);
+    return [{ kind: 'resize', id: 'east', position, cursor: 'ew-resize' }];
+  },
+  // 倍率を掛ける前の幅で、外形はこれに `boardScale` を掛ける。辺は幅
+  // だけを変え、角は看板の全体を一様に大きくし続ける
+  onHandleDrag(feature, _handle, event) {
+    const boardWidth = widthFromCenter(feature, event.lngLat);
+    return { properties: { boardWidth } };
+  },
+};
+```
+
+辺は型の自分の鍵 (`boardWidth`) を書き、ライブラリーはそれに触れません。
+`uniformScale` があるので、角の大きさを変えるハンドルは形を保ち、
+`boardScale` だけを掛けます。2 つは重なって効きます。
+
+頂点ごとにその頂点を動かすハンドルを置き、ハンドルの印を描く経路です。
 
 <!-- docs-check:
 declare function verticesOf(feature: Feature): Position[];
@@ -359,8 +413,6 @@ const reshapeRoute: FeatureTypeDefinition = {
   type: 'Route',
   geometry: 'LineString',
   renderer: routeRenderer,
-  // 頂点ごとに、その頂点を動かすハンドルを置く。印は重ね描きが
-  // 8 ピクセルの幅で描く (下の「重ね描き」)
   handles(feature) {
     return verticesOf(feature).map((position, index) => ({
       kind: 'custom',
@@ -370,6 +422,20 @@ const reshapeRoute: FeatureTypeDefinition = {
       cursor: 'move',
     }));
   },
+  // 印はそれぞれ、ハンドルが当たる幅で描く
+  drawHandles(_feature, handles, ctx) {
+    for (const handle of handles) {
+      ctx.point.draw(handle.position, {
+        shape: 'circle',
+        size: handle.sizePx,
+        fillColor: '#ffffff',
+        fillOpacity: 1,
+        strokeColor: '#e64d1a',
+        strokeWidth: 2,
+        strokeOpacity: 1,
+      });
+    }
+  },
   onHandleDrag(feature, handle, event) {
     const coordinates = [...verticesOf(feature)];
     coordinates[Number(handle.id)] = event.lngLat;
@@ -378,9 +444,10 @@ const reshapeRoute: FeatureTypeDefinition = {
 };
 ```
 
-ほかのハンドルをドラッグしている間は隠れます。描画が読み取り専用の
-とき、操作ロックの間、地物がロックされている間は、表示もドラッグも
-しません。
+`drawHandles(feature, handles, ctx)` は、`handles` が返した `custom` の
+ハンドルと、コマの描画の文脈 (共有の描画器と `ctx.screen`) を受けます。
+ライブラリーは選択を描いた後、その地物のハンドルを見せるときにだけ呼び、
+見せるものが無いときは呼びません。型を外すと、描くものも一緒に消えます。
 
 `onHandleDragStart(feature, handle, event)` は、ハンドルのドラッグが
 始まる前に問われます。`false` を返すとドラッグを拒み、ポインターは
@@ -494,7 +561,7 @@ draw.extensions.featureTypes.override({
 同じ決まりで持ち、ほかに `name` を持ちます。
 `draw.extensions.overlays.add` で足し、返る関数で外します。
 
-選ばれている経路のハンドルの印 (上の型の `custom` のハンドルで、幅は 8 ピクセル) を描く重ね描きです。
+どの経路にも、その始まりに印を付ける重ね描きです。
 
 <!-- docs-check:
 declare function verticesOf(feature: Feature): Position[];
@@ -503,29 +570,28 @@ declare function verticesOf(feature: Feature): Position[];
 ```ts
 import type { OverlayRenderer } from '@sakuzu/maplibre-gl-draw';
 
-const routeHandleMarks: OverlayRenderer = {
-  name: 'route-handles',
+const routeStarts: OverlayRenderer = {
+  name: 'route-starts',
   onAdd() {},
   draw(ctx) {
-    for (const feature of draw.selection.features()) {
-      if (feature.type !== 'Route') continue;
-      for (const position of verticesOf(feature)) {
-        ctx.point.draw(position, {
-          shape: 'circle',
-          size: 8,
-          fillColor: '#ffffff',
-          fillOpacity: 1,
-          strokeColor: '#e64d1a',
-          strokeWidth: 2,
-          strokeOpacity: 1,
-        });
-      }
+    for (const feature of draw.features.list({ type: 'Route' })) {
+      const [start] = verticesOf(feature);
+      if (!start) continue;
+      ctx.point.draw(start, {
+        shape: 'square',
+        size: 8,
+        fillColor: '#e64d1a',
+        fillOpacity: 1,
+        strokeColor: '#ffffff',
+        strokeWidth: 1,
+        strokeOpacity: 1,
+      });
     }
   },
   onRemove() {},
 };
 
-draw.extensions.overlays.add(routeHandleMarks);
+draw.extensions.overlays.add(routeStarts);
 ```
 
 - `draw(ctx)` は、地物と選択の上に描きます
@@ -584,16 +650,20 @@ draw.extensions.snapProviders.add(grid);
 ### ハンドル
 
 `HandleProvider` は、選ばれている地物に自分のハンドルを出します。
-`handles(feature, ctx)` が、定義と同じ文脈と 2 つの種類でハンドルを
-返し、`onDrag(feature, handle, event)` がドラッグで変わる差分を返します。
-定義の `onHandleDrag` と同じです。`globalHandles(screen)` は、どの
+`handles(feature, ctx)` が、定義と同じ文脈と 2 つの種類で、地物が
+1 つだけ選ばれているときにハンドルを返し、`onDrag(feature, handle,
+event)` がドラッグで変わる差分を返します。`drawHandles(feature,
+handles, ctx)` は、定義のものと同じく `custom` のハンドルを描きます。
+定義の `onHandleDrag` と同じです。`globalHandles(ctx)` は、どの
 地物にも属さず、何を選んでいても出るハンドルを返します。そのドラッグ
 では `feature` が `null` で届き、変わるものは提供者が自分で書き込み
 ます。`onDragStart` と `onDragEnd` は、定義の `onHandleDragStart` と
 `onHandleDragEnd` と同じように、ドラッグの前後で呼ばれます。
 `onDragStart` は `false` を返してドラッグを拒めます。定義と同じく、
-`scale` のハンドルはライブラリーが大きさを変えるハンドルとして描き、
-`custom` のハンドルは提供者が描きます。
+`resize` のハンドルはライブラリーが大きさを変えるハンドルとして描き、
+`custom` のハンドルは提供者が `drawHandles` で描きます。
+`globalHandles` のハンドルでは `feature` が `null` で届き、その文脈に
+選択の枠はありません。
 
 ### 付き物
 

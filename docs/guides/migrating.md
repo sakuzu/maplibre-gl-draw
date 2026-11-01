@@ -744,26 +744,28 @@ drawn. Each change below names what replaces what is gone.
   the resize and rotate handles. `selectionStyle.boundingBox` is
   `selectionStyle.box`
 - The resize and rotate handles of a footprint laid on the map are those
-  of a built-in shape, and their drags write the fields a type declares
-  in `transformFields` (the keys of its rotation and its size, and
-  whether a scaling keeps the shape), from 0 and 1 for a feature without
-  them. A custom type has those fields and no other: a
+  of a built-in shape, and their drags, as every `rotate` and `scale`
+  edit, write the fields a type declares in `transformFields`
+  (`angleDegreesKey`, `scaleKey`, `uniformScale`), from 0 and 1 for a
+  feature without them. A custom type has those fields and no other: a
   `maplibre-gl-draw:rotation` or `maplibre-gl-draw:scale` of its features
   is written only when the type names it there. A type that turned and
   grew its features from handles of its own (with `onHandleDrag`)
   declares its fields and leaves the corners and the rotation to the
-  library
+  library. A definition given to `override` cannot have them
 - `Handle.kind` says how a handle is shown, no longer a name the
-  extension gives it (tell the handles apart by `id`): `'scale'` is drawn
-  by the library as a resize handle and hit at its size, `'custom'` is
-  drawn by the extension and hit within the `sizePx` it gives. The
-  library no longer draws a white circle over a mark of the extension
-- `handles(feature, ctx)` of a feature type and of a `HandleProvider`
-  receives a `HandleContext` in place of the screen: `ctx.screen`, the
-  selection box the library draws (`ctx.selectionBox`, with its margin,
-  as `draw.rendered.getSelectionBox` answers) and the look of the
-  selection (`ctx.selectionStyle`), so that a handle on the box sits
-  where the library draws it
+  extension gives it (tell the handles apart by `id`): `'resize'` is
+  drawn by the library as a resize handle and hit at its size, `'custom'`
+  is drawn by the extension in `drawHandles` and hit within the `sizePx`
+  it gives, the diameter of its mark. Another kind is left out with a
+  warning. The library drew every handle as a white circle, the look of
+  a vertex handle; a type that wants that look draws it in `drawHandles`
+- `handles(feature, ctx)` and `globalHandles(ctx)` receive a
+  `HandleContext` in place of the screen: `ctx.screen`, the selection box
+  the library draws (`ctx.selectionBox`, the footprint with the margin,
+  as `draw.rendered.getSelectionBox` answers; `null` for the handles of
+  no feature) and the look of the selection (`ctx.selectionStyle`)
+
 - What is drawn around a feature reads the feature as it is drawn from
   `ctx.draw.rendered` (`get`, `getMany`, `getSelectionBox`, and
   `getDraggedRows` for the rows dragged in bulk, which was
@@ -809,6 +811,58 @@ drawn. Each change below names what replaces what is gone.
 - The zoom a width in pixels is given at is `referenceZoom` in the
   options of `ctx.line.draw` (was `createdZoom`), and `ctx.point.draw`
   takes it too, for the size and the outline of its marker
+
+A handle on each vertex, as 2.x gave it and as 3.0 gives it, with the
+white circle the library drew, now drawn by the type:
+
+<!-- docs-check: skip -->
+
+```ts
+// 2.x
+handles(feature, screen) {
+  return verticesOf(feature).map((position, index) => ({
+    id: String(index),
+    position,
+    kind: 'vertex',
+  }));
+},
+```
+
+<!-- docs-check:
+type Feature = import('@sakuzu/maplibre-gl-draw').Feature;
+type Position = import('@sakuzu/maplibre-gl-draw').Position;
+declare function verticesOf(feature: Feature): Position[];
+-->
+
+```ts
+import type { FeatureTypeDefinition } from '@sakuzu/maplibre-gl-draw';
+
+// 3.0
+const vertexHandles: Pick<FeatureTypeDefinition, 'handles' | 'drawHandles'> = {
+  handles(feature) {
+    return verticesOf(feature).map((position, index) => ({
+      kind: 'custom',
+      id: String(index),
+      position,
+      sizePx: 12,
+    }));
+  },
+  // The white circle with the outline of the selection, 12 pixels wide
+  drawHandles(_feature, handles, ctx) {
+    for (const handle of handles) {
+      ctx.point.draw(handle.position, {
+        shape: 'circle',
+        size: handle.sizePx,
+        fillColor: '#ffffff',
+        fillOpacity: 1,
+        strokeColor: '#ff2d55',
+        strokeWidth: 2,
+        strokeOpacity: 1,
+      });
+    }
+  },
+};
+```
 
 ## From mapbox-gl-draw or terra-draw
 

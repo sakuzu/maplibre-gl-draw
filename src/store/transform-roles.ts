@@ -92,8 +92,8 @@ export function createTransformFieldsRegistry(): TransformFieldsRegistry {
       if (!keys) {
         const all = new Set<string>();
         for (const fields of byType.values()) {
-          if (fields.angleDegrees !== undefined) all.add(fields.angleDegrees);
-          if (fields.size !== undefined) all.add(fields.size);
+          if (fields.angleDegreesKey !== undefined) all.add(fields.angleDegreesKey);
+          if (fields.scaleKey !== undefined) all.add(fields.scaleKey);
         }
         keys = [...all];
       }
@@ -197,8 +197,8 @@ export function transformRolesOf(
 /** The roles of the fields a custom type declares */
 function rolesOfDeclaration(declared: TransformFields): TransformRoles {
   return {
-    ...(declared.angleDegrees !== undefined && { angleDegrees: declared.angleDegrees }),
-    ...(declared.size !== undefined && { size: declared.size }),
+    ...(declared.angleDegreesKey !== undefined && { angleDegrees: declared.angleDegreesKey }),
+    ...(declared.scaleKey !== undefined && { size: declared.scaleKey }),
     uniformScale: declared.uniformScale === true,
   };
 }

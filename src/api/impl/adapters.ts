@@ -58,6 +58,7 @@ import type { BoundingBoxCoords } from '../../view/ui/selection-ui/types.js';
 import type { ScreenPoint } from '../events.js';
 import type { HandleContext, PointContext, ScreenContext } from '../extension/context.js';
 import type {
+  CustomHandle,
   FeatureTypeDefinition,
   Footprint,
   GroundFootprint,
@@ -77,7 +78,11 @@ import type { LayerTableView } from '../tables.js';
 import { toPosition, toScreenPoint } from './contexts.js';
 import { toPointerEvent } from './input.js';
 import type { RenderAdapterDeps } from './render-context.js';
-import { adaptFeatureRenderer, createCompanionDrawer } from './render-context.js';
+import {
+  adaptFeatureRenderer,
+  createCompanionDrawer,
+  createFrameContexts,
+} from './render-context.js';
 
 /**
  * The registries and services of the engine the adapters are installed into
@@ -334,42 +339,72 @@ function degenerateBox(c: Coordinate): BoundingBoxCoords {
 }
 
 /**
- * A handle of the contract as a handle of the engine, or null for one that is not one (another
- * kind, or a custom one whose size is not a finite number of 0 or more)
+ * Whether a handle of the contract is one the engine takes: a resize handle, or a custom one whose
+ * size is a finite number above 0
  */
-function toEngineHandle(handle: Handle): AuxiliaryHandle | null {
-  if (handle === null || typeof handle !== 'object') return null;
-  const position: Coordinate = [handle.position[0], handle.position[1]];
-  const cursor = handle.cursor !== undefined && { cursor: handle.cursor };
-  if (handle.kind === 'scale') return { kind: 'scale', id: handle.id, position, ...cursor };
-  if (handle.kind === 'custom' && Number.isFinite(handle.sizePx) && handle.sizePx >= 0) {
-    return { kind: 'custom', id: handle.id, position, sizePx: handle.sizePx, ...cursor };
-  }
-  return null;
+function isHandle(handle: Handle): boolean {
+  if (handle === null || typeof handle !== 'object') return false;
+  if (handle.kind === 'resize') return true;
+  return handle.kind === 'custom' && Number.isFinite(handle.sizePx) && handle.sizePx > 0;
 }
 
-/** The handles of the contract that are handles, as the engine takes them */
-function toEngineHandles(handles: readonly Handle[]): AuxiliaryHandle[] {
-  const out: AuxiliaryHandle[] = [];
+/**
+ * Leaves out the handles the engine does not take, with a warning in the console once for each
+ * reason of each extension (`warned` keeps the reasons told)
+ */
+function takenHandles(handles: readonly Handle[], label: string, warned: Set<string>): Handle[] {
+  if (handles.every(isHandle)) return handles as Handle[];
+  const out: Handle[] = [];
   for (const handle of handles) {
-    const engine = toEngineHandle(handle);
-    if (engine) out.push(engine);
+    if (isHandle(handle)) {
+      out.push(handle);
+      continue;
+    }
+    const kind = (handle as { kind?: unknown } | null)?.kind;
+    const reason =
+      kind === 'custom'
+        ? 'a custom handle whose sizePx is not a finite number above 0'
+        : `a handle of the kind ${JSON.stringify(kind)} (a handle is of the kind 'resize' or 'custom')`;
+    if (warned.has(reason)) continue;
+    warned.add(reason);
+    console.warn(`The ${label} gave ${reason}, which is left out`);
   }
   return out;
 }
 
+/** A handle of the contract the engine takes as a handle of the engine */
+function toEngineHandle(handle: Handle): AuxiliaryHandle {
+  const position: Coordinate = [handle.position[0], handle.position[1]];
+  const cursor = handle.cursor !== undefined && { cursor: handle.cursor };
+  return handle.kind === 'resize'
+    ? { kind: 'resize', id: handle.id, position, ...cursor }
+    : { kind: 'custom', id: handle.id, position, sizePx: handle.sizePx, ...cursor };
+}
+
+/** A custom handle of the engine as a handle of the contract, for its drawing */
+function toCustomHandle(handle: AuxiliaryHandle): CustomHandle | null {
+  if (handle.kind !== 'custom') return null;
+  return {
+    kind: 'custom',
+    id: handle.id,
+    position: [handle.position[0], handle.position[1]],
+    sizePx: handle.sizePx,
+    ...(handle.cursor !== undefined && { cursor: handle.cursor }),
+  };
+}
+
 /**
- * The context the handles of a feature are placed with: its selection box and the look of the
- * selection are read when they are asked for
+ * The context the handles of a feature are placed with: its selection box (none for the handles
+ * of no feature, `featureId` null) and the look of the selection are read when they are asked for
  */
 function handleContextOf(
-  featureId: string,
+  featureId: string | null,
   deps: Pick<AdapterDeps, 'screen' | 'selectionBoxOf' | 'selectionStyle'>,
 ): HandleContext {
   return {
     screen: deps.screen,
     get selectionBox() {
-      return deps.selectionBoxOf(featureId);
+      return featureId === null ? null : deps.selectionBoxOf(featureId);
     },
     get selectionStyle() {
       return deps.selectionStyle();
@@ -498,6 +533,7 @@ export function installFeatureType(
       const onHandleDrag = definition.onHandleDrag?.bind(definition);
       const onHandleDragStart = definition.onHandleDragStart?.bind(definition);
       const onHandleDragEnd = definition.onHandleDragEnd?.bind(definition);
+      const drawHandles = definition.drawHandles?.bind(definition);
       add(
         deps.auxiliaryHandles.register(
           adaptHandleProvider(
@@ -516,8 +552,14 @@ export function installFeatureType(
               ...(onHandleDragEnd && {
                 onDragEnd: (feature, handle, event) => onHandleDragEnd(feature, handle, event),
               }),
+              ...(drawHandles && {
+                drawHandles: (feature, shown, ctx) => {
+                  if (feature) drawHandles(feature, shown, ctx);
+                },
+              }),
             },
             deps,
+            `feature type ${JSON.stringify(type)}`,
           ),
         ),
       );
@@ -641,22 +683,26 @@ export function adaptSnapProvider(
  */
 export function adaptHandleProvider(
   provider: HandleProvider,
-  deps: Pick<AdapterDeps, 'store' | 'screen' | 'applyPatch' | 'selectionBoxOf' | 'selectionStyle'>,
+  deps: Pick<
+    AdapterDeps,
+    | 'store'
+    | 'screen'
+    | 'applyPatch'
+    | 'selectionBoxOf'
+    | 'selectionStyle'
+    | 'customLayer'
+    | 'surface'
+  >,
+  label = `handle provider ${JSON.stringify(provider.name)}`,
 ): AuxiliaryHandleProvider {
   let active: { featureId: string; handle: Handle } | null = null;
-  /** The handles of a feature, of the contract, that the engine takes */
-  const featureHandles = (feature: Feature): Handle[] =>
-    provider
-      .handles(feature, handleContextOf(feature.id, deps))
-      .filter((handle) => toEngineHandle(handle) !== null);
-  const handlesOf = (featureId: string, global: boolean | undefined): Handle[] => {
-    if (global) {
-      return (provider.globalHandles?.(deps.screen) ?? []).filter(
-        (handle) => toEngineHandle(handle) !== null,
-      );
-    }
-    const feature = deps.store.getFeature(featureId);
-    return feature ? featureHandles(feature as Feature) : [];
+  /** The reasons of the handles left out that were told in the console */
+  const warned = new Set<string>();
+  /** The handles of a feature (null: the handles of no feature) the engine takes */
+  const handlesOf = (feature: Feature | null): Handle[] => {
+    const ctx = handleContextOf(feature?.id ?? null, deps);
+    const given = feature ? provider.handles(feature, ctx) : (provider.globalHandles?.(ctx) ?? []);
+    return takenHandles(given, label, warned);
   };
   const drag = (event: DragNormalizedEvent, final: boolean): void => {
     if (!active) return;
@@ -668,20 +714,32 @@ export function adaptHandleProvider(
     );
     if (patch && feature) deps.applyPatch(feature.id, patch, final);
   };
+  const contextOf = createFrameContexts(deps, () => deps.customLayer.getGL());
+  const draw = provider.drawHandles?.bind(provider);
   return {
     id: provider.name,
-    getHandles: (feature) =>
-      toEngineHandles(provider.handles(feature as Feature, handleContextOf(feature.id, deps))),
+    getHandles: (feature) => handlesOf(feature as Feature).map(toEngineHandle),
     ...(provider.globalHandles && {
-      getGlobalHandles: () => toEngineHandles(provider.globalHandles?.(deps.screen) ?? []),
+      getGlobalHandles: () => handlesOf(null).map(toEngineHandle),
+    }),
+    ...(draw && {
+      drawHandles(feature, handles, projectionData, zoom, frame) {
+        const shown = handles.flatMap((handle) => toCustomHandle(handle) ?? []);
+        const ctx = contextOf(frame, projectionData, zoom);
+        if (shown.length === 0 || !ctx) return;
+        draw((feature as Feature | null) ?? null, shown, ctx);
+      },
     }),
     onHandleDragStart(hit, event) {
-      const handle = handlesOf(hit.featureId, hit.global).find((h) => h.id === hit.handleId);
+      const feature = hit.global ? null : deps.store.getFeature(hit.featureId);
+      if (feature === undefined) return false;
+      const handle = handlesOf((feature as Feature | null) ?? null).find(
+        (h) => h.id === hit.handleId,
+      );
       if (!handle) return false;
       if (provider.onDragStart) {
-        const feature = hit.featureId ? deps.store.getFeature(hit.featureId) : undefined;
         const accepted = provider.onDragStart(
-          (feature as Feature | undefined) ?? null,
+          (feature as Feature | null) ?? null,
           handle,
           toPointerEvent(event),
         );

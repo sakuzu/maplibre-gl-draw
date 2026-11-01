@@ -14,17 +14,20 @@ import type { LayerTableView, RowHandle } from '../tables.js';
 import type { HandleContext, PointContext, ScreenContext } from './context.js';
 import type { DrawPointerEvent } from './mode.js';
 import type { Hit, SnapCandidate } from './provider.js';
-import type { FeatureRenderer } from './render.js';
+import type { FeatureRenderer, RenderContext } from './render.js';
 import type { TransformFields } from './store.js';
 
 /**
  * A handle the library draws as it draws the resize handles at the corners of the selection box
  * (`selectionStyle.resizeHandle`), and hits at the size it draws it, such as a handle in the middle
- * of an edge that changes the width of a box. Its drag goes to the extension that gave it.
+ * of an edge that changes the width of a box. It has the look of a resize handle only: its drag
+ * goes to the extension that gave it (`onHandleDrag` of a type, `onDrag` of a provider), which
+ * says what it changes, not to the edit `scale` of the library, which the resize handles at the
+ * corners make.
  */
-export interface ScaleHandle {
+export interface ResizeHandle {
   /** A handle drawn and hit as the resize handles are */
-  kind: 'scale';
+  kind: 'resize';
   /** The ID of the handle, unique within the feature; the extension tells its handles apart by it */
   id: string;
   /** The position of the handle on the map */
@@ -34,9 +37,10 @@ export interface ScaleHandle {
 }
 
 /**
- * A handle the extension draws itself, such as a mark on the end of a line drawn by its renderer.
- * The library does not draw it, and hits it within a square of `sizePx` around its position, the
- * size of the mark. Its drag goes to the extension that gave it.
+ * A handle the extension draws itself (in `drawHandles` of a type or of a provider), such as a
+ * mark on the end of a line. The library does not draw it, and hits it within a square of `sizePx`
+ * CSS pixels around its position: give it the diameter of the mark drawn. Its drag goes to the
+ * extension that gave it.
  */
 export interface CustomHandle {
   /** A handle the extension draws */
@@ -45,21 +49,27 @@ export interface CustomHandle {
   id: string;
   /** The position of the handle on the map */
   position: Position;
-  /** The size of the mark the extension draws, in CSS pixels: the side of the square it is hit in */
+  /**
+   * The size of the mark the extension draws (its diameter), in CSS pixels, a finite number above
+   * 0: the side of the square the handle is hit in
+   */
   sizePx: number;
   /** The CSS cursor over the handle; `pointer` when it is left out */
   cursor?: string;
 }
 
 /**
- * One handle an extension shows on a selected feature: one the library draws as a resize handle
- * (`kind: 'scale'`), or one the extension draws itself (`kind: 'custom'`).
+ * One handle an extension adds to a selected feature: one the library draws as a resize handle
+ * (`kind: 'resize'`), or one the extension draws itself (`kind: 'custom'`).
  *
- * An extension returns only the handles it shows: a handle it hides (on a read-only document, say)
- * is not returned, so that nothing that cannot be seen can be grabbed. A handle of another kind,
- * or a custom one whose `sizePx` is not a finite number of 0 or more, is left out.
+ * The library decides when the handles are shown, hit and dragged, for every extension alike:
+ * while one feature only is selected, the document is not read-only nor under the interaction
+ * lock, the feature is not locked, and no other handle of the selection (a resize, rotate or
+ * vertex handle) is dragged. An extension does not test these itself. A handle of another kind,
+ * or a custom one whose `sizePx` is not a finite number above 0, is left out, with a warning in
+ * the console once for each kind and extension.
  */
-export type Handle = ScaleHandle | CustomHandle;
+export type Handle = ResizeHandle | CustomHandle;
 
 /**
  * What a definition of a feature type answers from the rows of a layer held as rows
@@ -191,7 +201,7 @@ export interface FeatureTypeDefinition {
    * the map, and has the resize handles on its corners and the rotate handle above it, joined to
    * it by a line, drawn and hit as those of a built-in shape (with `selectionStyle`) and dragged
    * by the edits `scale` and `rotate` (which write the geometry and the fields of
-   * `transformFields`); a box on the screen is drawn and hit on the screen, around its position,
+   * `transformFields`), for one feature selected or many; a box on the screen is drawn and hit on the screen, around its position,
    * and has none of them.
    *
    * A type without it, or a footprint that is not one of the two (corners that are not four
@@ -202,26 +212,40 @@ export interface FeatureTypeDefinition {
    */
   footprint?(feature: Feature, ctx: ScreenContext): Footprint | null;
   /**
-   * The fields of its features that the resize and the rotation of the selection change with
-   * their geometry: the key of `properties` of their rotation and of their size, and whether a
-   * scaling keeps their shape. The resize handles at the corners of the selection box and the
-   * rotate handle above it (which a type with a footprint laid on the map has) write them as the
-   * edits `scale` and `rotate` compute them, whether one feature or many are selected, and a
-   * feature without a key of them starts from 0 for the rotation and 1 for the size. A rotation of
-   * a single feature of a `Point` geometry with a rotation turns it around its position.
+   * The fields of its features that the resize and the rotation change with their geometry: the
+   * key of `properties` of their rotation and of their size, and whether a scaling keeps their
+   * shape. The edits `scale` and `rotate` write them, whether they come from the resize handles at
+   * the corners of the selection box and the rotate handle above it (which a type with a footprint
+   * laid on the map has), for one feature selected or many, or from a Store edit
+   * (`Store.applyEdits`). A feature without a key of them starts from 0 for the rotation and 1 for
+   * the size. A rotation of a single feature of a `Point` geometry, of a type that declares
+   * `angleDegreesKey`, turns it around its position.
    *
-   * Without it, the resize and the rotation change the geometry of the features only. It is
-   * ignored in a definition given to `override`: a built-in type keeps its own fields.
+   * Without it, the resize and the rotation change the geometry of the features only, whatever
+   * keys they have. A definition given to `override` cannot have it (a built-in type keeps its own
+   * fields): `override` throws `invalid-input`.
    */
   readonly transformFields?: TransformFields;
   /**
    * The handles an extension adds to a selected feature, besides the resize and rotate handles
    * the library gives a footprint laid on the map: handles the library draws as resize handles
-   * (`kind: 'scale'`), and handles the type draws itself (`kind: 'custom'`). Their drags go to
-   * `onHandleDrag`. Place them from the selection box of the context (`ctx.selectionBox`), so
-   * that they sit on the box the library draws.
+   * (`kind: 'resize'`), and handles the type draws itself in `drawHandles` (`kind: 'custom'`).
+   * Their drags go to `onHandleDrag`. The library asks for them while one feature only is
+   * selected, and shows them under the conditions told on {@link Handle}. Place them from the
+   * selection box of the context (`ctx.selectionBox`), so that they sit on the box the library
+   * draws.
    */
   handles?(feature: Feature, ctx: HandleContext): Handle[];
+  /**
+   * Draws the custom handles of a selected feature (`kind: 'custom'` of `handles`), with the
+   * shared renderers of the frame. The library calls it, after drawing the selection, exactly
+   * when it shows the handles of the feature (see {@link Handle}), so a type draws its marks here
+   * and tests nothing; it is not called when the feature has no custom handle shown. Draw each
+   * mark `sizePx` wide, the size it is hit at.
+   *
+   * @param handles - The custom handles `handles` gave, in their order
+   */
+  drawHandles?(feature: Feature, handles: readonly CustomHandle[], ctx: RenderContext): void;
   /**
    * The change a drag of one of its handles makes.
    *

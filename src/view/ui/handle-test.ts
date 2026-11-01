@@ -377,7 +377,7 @@ function hitTestCircleRadiusHandle(
  *
  * Enumerating the handles is left to the callback (the aggregation of the providers), while
  * the test is done with the same screen-px rectangle as the existing handles, of the size each
- * handle is shown at: the size of the resize handles for a `scale` handle (the size the
+ * handle is shown at: the size of the resize handles for a `resize` handle (the size the
  * selection UI draws it at), the size the extension declares for a `custom` one (the size of the
  * mark it draws).
  */

@@ -253,8 +253,9 @@ The other members of a definition are optional:
 | Member | Without it |
 | --- | --- |
 | `footprint` | The footprint of the geometry |
-| `transformFields` | The resize and the rotation change the geometry only |
+| `transformFields` | Every resize and rotation changes the geometry only |
 | `handles` | The type has no handles of its own |
+| `drawHandles` | Its custom handles are hit but not drawn |
 | `onHandleDrag` | A drag of its handles changes nothing |
 | `snapCandidates` | The vertices and edges of the geometry |
 
@@ -303,8 +304,8 @@ of `selectionStyle`, hit where they are drawn. Their drags are the resize
 and the rotation of the library, for one feature or many at once: they
 move the geometry, and write the fields the type declares in
 `transformFields`, the keys of `properties` where its features keep
-their rotation (in degrees counterclockwise) and their size, and whether
-a scaling keeps their shape:
+their rotation (in degrees counterclockwise) and the factor of their
+size, and whether a scaling keeps their shape:
 
 <!-- docs-check:
 declare function boardFootprint(
@@ -325,8 +326,8 @@ const signboard: FeatureTypeDefinition = {
   renderer: boardRenderer,
   footprint: (feature) => boardFootprint(feature),
   transformFields: {
-    angleDegrees: 'boardAngle',
-    size: 'boardScale',
+    angleDegreesKey: 'boardAngle',
+    scaleKey: 'boardScale',
     uniformScale: true,
   },
 };
@@ -334,40 +335,96 @@ const signboard: FeatureTypeDefinition = {
 
 A rotation adds its angle to `boardAngle`, within [0, 360), and a resize
 multiplies `boardScale` by its factor; a feature without the key starts
-from 0 and from 1. A rotation of a single feature of a `Point` geometry
-turns it around its position, which stays; several features turn around
-the middle of their box. A type without `transformFields` has its
-geometry changed only, whatever keys its features have. A store of your
-own reads the declaration with `draw.extensions.featureTypes.get(type)`
-to give its computation (`Store.transforms`) the values of a feature.
+from 0 and from 1. The same fields are written by every `rotate` and
+`scale` edit of the features, not only by the handles:
+
+| What turns or resizes the features | Writes the declared fields |
+| --- | --- |
+| The handles of the selection box | Yes, for one feature or many |
+| A drag of features selected in bulk | Yes |
+| A `rotate` or `scale` edit (`Store.applyEdits`) | Yes |
+| The same edit held by a sketch (`draw.sketches`) | Yes |
+| `onHandleDrag` of the type | No: its patch writes what it says |
+
+A rotation of a single feature of a `Point`
+geometry, of a type that declares `angleDegreesKey`, turns it around its
+position, which stays; several features turn around the middle of their
+box. A type without `transformFields` has its geometry changed only,
+whatever keys its features have, and a definition given to `override`
+cannot have it. A store of your own reads the declaration with
+`draw.extensions.featureTypes.get(type)` to give its computation
+(`Store.transforms`) the values of a feature. Name the keys without the
+`maplibre-gl-draw:` prefix, which the library keeps for its own values
+([data format](../reference/data-format.md#properties)).
 
 `handles(feature, ctx)` returns the handles the type adds to a selected
 feature, each with an ID, a position and a cursor, and a `kind` that
 says how it is shown:
 
-- `{ kind: 'scale', id, position }` is drawn by the library as the resize
-  handles are (`selectionStyle.resizeHandle`) and hit at their size, such
-  as a handle in the middle of an edge that changes the width of a box
-- `{ kind: 'custom', id, position, sizePx }` is drawn by the type itself,
-  in its renderer or an overlay, and hit within a square of `sizePx`
-  pixels around its position, the size of the mark it draws, such as a
-  mark on the end of a line
+- `{ kind: 'resize', id, position }` is drawn by the library as the
+  resize handles are (`selectionStyle.resizeHandle`) and hit at their
+  size, such as a handle in the middle of an edge that changes the width
+  of a box. It has their look only: its drag goes to `onHandleDrag`,
+  not to the resize of the library
+- `{ kind: 'custom', id, position, sizePx }` is drawn by the type itself
+  in `drawHandles`, and hit within a square of `sizePx` pixels around its
+  position: give it the diameter of the mark you draw, such as a mark on
+  the end of a line
 
-Return only the handles you show: a handle you hide (on a read-only
-document, say) is left out, so that nothing that cannot be seen can be
-grabbed. A handle of another kind, or a custom one whose `sizePx` is not
-a finite number of 0 or more, is left out. The context gives the screen
-(`ctx.screen`), the selection box the library draws, its margin included
-(`ctx.selectionBox`, what `draw.rendered.getSelectionBox` answers, or
-`null`), and the look of the selection (`ctx.selectionStyle`). Place a
-handle on the box from `ctx.selectionBox`, so that it sits where the
-library draws the box.
+The handles appear only while one feature is selected. The library alone
+decides when they are shown, hit and dragged, for every type alike: while
+one feature only is selected, the document is not read-only nor under
+the interaction lock, the feature is not locked, and no other handle of
+the selection (a resize, rotate or vertex handle) is dragged. A type
+tests none of this. A handle of another kind, or a custom one whose
+`sizePx` is not a finite number above 0, is left out, with a warning in
+the console once for each kind.
+
+The context gives the screen (`ctx.screen`), the selection box the
+library draws (`ctx.selectionBox`, what `draw.rendered.getSelectionBox`
+answers: the footprint with the margin added, or `null`), and the look of
+the selection (`ctx.selectionStyle`). Place a handle on the box from
+`ctx.selectionBox`, so that it sits where the library draws the box.
 
 A drag of a handle calls `onHandleDrag` for every move of the pointer and
 once more when the drag ends, and the `FeaturePatch` it returns is
 applied to the feature. The patches of the moves are intermediate
 updates; the one of the end is the one that stays. The ID tells the
-handles of the type apart:
+handles of the type apart. A `resize` handle in the middle of the east
+edge of the signboard that changes its width alone:
+
+<!-- docs-check: continue
+declare function eastMiddleOf(
+  box: import('@sakuzu/maplibre-gl-draw').Footprint,
+): Position;
+declare function widthFromCenter(feature: Feature, pointer: Position): number;
+-->
+
+```ts
+const signboardWithWidth: FeatureTypeDefinition = {
+  ...signboard,
+  handles(_feature, ctx) {
+    if (!ctx.selectionBox) return [];
+    const position = eastMiddleOf(ctx.selectionBox);
+    return [{ kind: 'resize', id: 'east', position, cursor: 'ew-resize' }];
+  },
+  // The width before the scale, which the footprint multiplies by
+  // `boardScale`: the edge changes the width only, and the corners keep
+  // scaling the whole board uniformly
+  onHandleDrag(feature, _handle, event) {
+    const boardWidth = widthFromCenter(feature, event.lngLat);
+    return { properties: { boardWidth } };
+  },
+};
+```
+
+The edge writes a key of the type's own (`boardWidth`), which the
+library does not touch; with `uniformScale`, the resize handles at the
+corners keep the shape and multiply `boardScale` only, so the two
+compose.
+
+A route with a handle on each vertex, which moves that vertex, and draws
+the marks of its handles:
 
 <!-- docs-check:
 declare function verticesOf(feature: Feature): Position[];
@@ -381,8 +438,6 @@ const reshapeRoute: FeatureTypeDefinition = {
   type: 'Route',
   geometry: 'LineString',
   renderer: routeRenderer,
-  // A handle on each vertex, which moves that vertex. An overlay draws
-  // its mark, 8 pixels wide (see Overlays below)
   handles(feature) {
     return verticesOf(feature).map((position, index) => ({
       kind: 'custom',
@@ -392,6 +447,20 @@ const reshapeRoute: FeatureTypeDefinition = {
       cursor: 'move',
     }));
   },
+  // Each mark as wide as its handle is hit
+  drawHandles(_feature, handles, ctx) {
+    for (const handle of handles) {
+      ctx.point.draw(handle.position, {
+        shape: 'circle',
+        size: handle.sizePx,
+        fillColor: '#ffffff',
+        fillOpacity: 1,
+        strokeColor: '#e64d1a',
+        strokeWidth: 2,
+        strokeOpacity: 1,
+      });
+    }
+  },
   onHandleDrag(feature, handle, event) {
     const coordinates = [...verticesOf(feature)];
     coordinates[Number(handle.id)] = event.lngLat;
@@ -400,9 +469,12 @@ const reshapeRoute: FeatureTypeDefinition = {
 };
 ```
 
-The handles are hidden while another handle is dragged, and nothing is
-shown or dragged while the drawing is read-only, under the interaction
-lock, or while the feature is locked.
+`drawHandles(feature, handles, ctx)` receives the custom handles
+`handles` gave, and the render context of the frame (the shared
+renderers, `ctx.screen`). The library calls it after drawing the
+selection, exactly when it shows the handles of the feature, and not
+when none is shown; what it draws goes away with the type when the type
+is removed.
 
 `onHandleDragStart(feature, handle, event)` is asked before a drag of
 a handle starts; it returns `false` to refuse the drag, and the pointer
@@ -525,8 +597,7 @@ of a renderer, with the same rules, and a `name`. Add it with
 `draw.extensions.overlays.add`, which returns the function that
 removes it.
 
-An overlay that draws the marks of the handles of the selected routes
-(the `custom` handles of the type above, 8 pixels wide):
+An overlay that marks where every route starts:
 
 <!-- docs-check:
 declare function verticesOf(feature: Feature): Position[];
@@ -535,29 +606,28 @@ declare function verticesOf(feature: Feature): Position[];
 ```ts
 import type { OverlayRenderer } from '@sakuzu/maplibre-gl-draw';
 
-const routeHandleMarks: OverlayRenderer = {
-  name: 'route-handles',
+const routeStarts: OverlayRenderer = {
+  name: 'route-starts',
   onAdd() {},
   draw(ctx) {
-    for (const feature of draw.selection.features()) {
-      if (feature.type !== 'Route') continue;
-      for (const position of verticesOf(feature)) {
-        ctx.point.draw(position, {
-          shape: 'circle',
-          size: 8,
-          fillColor: '#ffffff',
-          fillOpacity: 1,
-          strokeColor: '#e64d1a',
-          strokeWidth: 2,
-          strokeOpacity: 1,
-        });
-      }
+    for (const feature of draw.features.list({ type: 'Route' })) {
+      const [start] = verticesOf(feature);
+      if (!start) continue;
+      ctx.point.draw(start, {
+        shape: 'square',
+        size: 8,
+        fillColor: '#e64d1a',
+        fillOpacity: 1,
+        strokeColor: '#ffffff',
+        strokeWidth: 1,
+        strokeOpacity: 1,
+      });
     }
   },
   onRemove() {},
 };
 
-draw.extensions.overlays.add(routeHandleMarks);
+draw.extensions.overlays.add(routeStarts);
 ```
 
 - `draw(ctx)` draws above the features and the selection
@@ -622,16 +692,20 @@ of your own is ranked as a vertex and reaches the snapping result
 
 A `HandleProvider` shows handles of its own on the selected features:
 `handles(feature, ctx)` returns them, with the context and the two kinds
-a definition has, and `onDrag(feature, handle, event)` returns the patch
-a drag makes, as `onHandleDrag` of a definition does.
-`globalHandles(screen)` returns handles that belong to
+a definition has, only while one feature is selected, and
+`onDrag(feature, handle, event)` returns the patch a drag makes, as
+`onHandleDrag` of a definition does. `drawHandles(feature, handles, ctx)`
+draws its custom handles, as that of a definition does.
+`globalHandles(ctx)` returns handles that belong to
 no feature and are shown whatever is selected; their drag arrives with
 `feature` as `null`, and the provider writes what the drag changes
 itself. `onDragStart` and `onDragEnd` surround a drag as
 `onHandleDragStart` and `onHandleDragEnd` of a definition do, and
 `onDragStart` refuses it by returning `false`. As with a definition,
-the library draws the `scale` handles as resize handles, and the
-provider draws the `custom` ones.
+the library draws the `resize` handles as resize handles, and the
+provider draws the `custom` ones in `drawHandles`, called with `feature`
+as `null` for those of `globalHandles`, whose context has no selection
+box.
 
 ### Companions
 

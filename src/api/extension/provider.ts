@@ -12,8 +12,8 @@
 import type { Position } from 'geojson';
 import type { Feature, FeaturePatch } from '../model.js';
 import type { LayerTableView, RowHandle } from '../tables.js';
-import type { HandleContext, PointContext, ScreenContext } from './context.js';
-import type { Handle } from './feature-type.js';
+import type { HandleContext, PointContext } from './context.js';
+import type { CustomHandle, Handle } from './feature-type.js';
 import type { DrawPointerEvent } from './mode.js';
 import type { RenderContext } from './render.js';
 
@@ -63,16 +63,32 @@ export interface HandleProvider {
   readonly name: string;
   /**
    * The handles of a selected feature: handles the library draws as resize handles
-   * (`kind: 'scale'`), and handles the provider draws itself (`kind: 'custom'`). Their drags go to
-   * `onDrag`. Place them from the selection box of the context (`ctx.selectionBox`), so that they
-   * sit on the box the library draws.
+   * (`kind: 'resize'`), and handles the provider draws itself in `drawHandles`
+   * (`kind: 'custom'`). Their drags go to `onDrag`. The library asks for them while one feature
+   * only is selected, and shows them under the conditions told on {@link Handle}. Place them from
+   * the selection box of the context (`ctx.selectionBox`), so that they sit on the box the
+   * library draws.
    */
   handles(feature: Feature, ctx: HandleContext): Handle[];
   /**
-   * The handles that belong to no feature, shown whatever is selected, of the same two kinds;
-   * they are hit and dragged like the others, and their drag arrives with `feature` as `null`.
+   * The handles that belong to no feature, shown whatever is selected (while the select mode is
+   * on and the document is neither read-only nor under the interaction lock), of the same two
+   * kinds; they are hit and dragged like the others, and their drag arrives with `feature` as
+   * `null`. Their context has no selection box (`ctx.selectionBox` is `null`).
    */
-  globalHandles?(ctx: ScreenContext): Handle[];
+  globalHandles?(ctx: HandleContext): Handle[];
+  /**
+   * Draws the custom handles of the provider (`kind: 'custom'`), with the shared renderers of the
+   * frame. The library calls it, after drawing the selection, exactly when it shows them: for the
+   * handles of a selected feature under the conditions told on {@link Handle}, and for those of
+   * `globalHandles` while they are shown. A provider draws its marks here and tests nothing; it is
+   * not called when no custom handle is shown. Draw each mark `sizePx` wide, the size it is hit
+   * at.
+   *
+   * @param feature - The feature the handles are on; `null` for the handles of `globalHandles`
+   * @param handles - The custom handles given, in their order
+   */
+  drawHandles?(feature: Feature | null, handles: readonly CustomHandle[], ctx: RenderContext): void;
   /**
    * The change a drag of one of its handles makes. It is called for every move of the drag
    * and once more when the drag ends; the patch of the end is the one that stays.

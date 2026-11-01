@@ -6,6 +6,16 @@
  *
  * Each kind of extension receives one narrow context with only what that kind needs. Every
  * type a context holds is part of the public API and follows semver.
+ *
+ * The three contexts of what is read on the screen:
+ *
+ * - {@link ScreenContext}: the conversion between the map and the screen alone, in the frame
+ *   drawn last. Every context has it (`ctx.screen`); a type receives it alone where it answers
+ *   from the feature only (`footprint`)
+ * - {@link PointContext}: a point on the screen being tested, with its position, its tolerance
+ *   and what the reading leaves out, for a hit test, a box selection and snapping candidates
+ * - {@link HandleContext}: what places the handles of a feature, the selection box the library
+ *   draws (its margin included) and the look of the selection, for `handles` and `globalHandles`
  */
 
 import type { Position } from 'geojson';
@@ -264,16 +274,18 @@ export interface PointContext {
 
 /**
  * What an extension receives to place the handles of a selected feature (the `handles` of a
- * custom feature type and of a handle provider): the screen, the selection box of the feature,
- * and the look of the selection.
+ * custom feature type and of a handle provider) and the handles of no feature
+ * (`HandleProvider.globalHandles`): the screen, the selection box of the feature, and the look of
+ * the selection.
  */
 export interface HandleContext {
   /** The conversion between the map and the screen, in the frame drawn last */
   readonly screen: ScreenContext;
   /**
-   * The selection box of the feature, as the library draws and hits it: its footprint with the
-   * margin of `selectionStyle.box` added, in the frame drawn last (what
-   * `draw.rendered.getSelectionBox` answers); `null` when the feature has nothing to draw
+   * The selection box of the feature, as the library draws and hits it, in the frame drawn last
+   * (what `draw.rendered.getSelectionBox` answers): its footprint with the margin of
+   * `selectionStyle.box` added, so not the footprint itself. A handle placed on it sits on the box
+   * drawn. `null` when the feature has nothing to draw, and for the handles of no feature
    */
   readonly selectionBox: Footprint | null;
   /** The look of the selection: the box, and the size and look of every kind of handle */

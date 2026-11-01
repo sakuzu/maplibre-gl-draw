@@ -100,13 +100,16 @@ export interface TransformValues {
 /**
  * The fields of the features of a custom type that the edits that move, rotate and scale features
  * change with their geometry, as the type declares them (`FeatureTypeDefinition.transformFields`):
- * for each field of {@link TransformValues} the type has, the key of `properties` that holds it.
+ * the keys of `properties` that hold them. A Store gives its computation their values as the
+ * fields of {@link TransformValues}: the value under `angleDegreesKey` as `angleDegrees`, the
+ * value under `scaleKey` as `size`, and `uniformScale` as it is. A custom type has no
+ * `bearingDegrees`.
  *
  * For example, a type of signboards whose features keep their rotation under `boardAngle` and
- * their size under `boardScale`, and keep their shape when they are scaled, declares
- * `{ angleDegrees: 'boardAngle', size: 'boardScale', uniformScale: true }`. The resize and the
- * rotation of the selection then write those keys as the edit computes them, and a Store reads
- * them to give its computation the values of a feature.
+ * the factor of their size under `boardScale`, and keep their shape when they are scaled, declares
+ * `{ angleDegreesKey: 'boardAngle', scaleKey: 'boardScale', uniformScale: true }`. The resize and
+ * the rotation then write those keys as the edits compute them, and a Store reads them to give
+ * its computation the values of a feature.
  */
 export interface TransformFields {
   /**
@@ -114,12 +117,13 @@ export interface TransformFields {
    * (`TransformValues.angleDegrees`). A rotation adds its angle to it, within [0, 360); a feature
    * without the key starts from 0.
    */
-  readonly angleDegrees?: string;
+  readonly angleDegreesKey?: string;
   /**
-   * The key of `properties` that holds the size of a feature (`TransformValues.size`). A scaling
-   * multiplies it by `sizeFactor`; a feature without the key starts from 1.
+   * The key of `properties` that holds the factor of the size of a feature
+   * (`TransformValues.size`). A scaling multiplies it by `sizeFactor`; a feature without the key
+   * starts from 1.
    */
-  readonly size?: string;
+  readonly scaleKey?: string;
   /**
    * Whether a scaling moves the positions of a feature by `sizeFactor` along both the east and
    * the north, so that it keeps its shape (`TransformValues.uniformScale`); false when it is left

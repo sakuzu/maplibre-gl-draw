@@ -186,19 +186,27 @@ writing it. Its changes are listed after those of 3.0.0.
   with the resize and rotate handles, or on the screen, without them. A
   type without it has the footprint of its geometry.
 - `FeatureTypeDefinition.transformFields` (`TransformFields`): the keys of
-  `properties` a custom type keeps the rotation and the size of its
-  features under, and whether a scaling keeps their shape. The resize and
-  rotate handles of a footprint laid on the map, drawn and hit as those of
-  a built-in shape, write them as the edits `scale` and `rotate` compute
-  them, for one feature or many, from 0 and 1 for a feature without them;
-  a rotation of a single feature of a `Point` turns it around its
-  position. The edits of a store of the library write them too, and a
-  store of your own reads them with `draw.extensions.featureTypes.get`.
+  `properties` a custom type keeps the rotation and the factor of the
+  size of its features under (`angleDegreesKey`, `scaleKey`), and whether
+  a scaling keeps their shape (`uniformScale`). Every `rotate` and
+  `scale` edit writes them, from 0 and 1 for a feature without them: the
+  resize and rotate handles of a footprint laid on the map, drawn and hit
+  as those of a built-in shape, for one feature or many, and the edits a
+  store applies (`Store.applyEdits`); a rotation of a single feature of a
+  `Point` turns it around its position. A store of your own reads them
+  with `draw.extensions.featureTypes.get`. A definition given to
+  `override` cannot have them (`invalid-input`).
 - `HandleContext`: what the `handles` of a feature type and of a handle
-  provider receive, the screen, the selection box the library draws
-  (`selectionBox`, as `draw.rendered.getSelectionBox` answers it) and the
-  look of the selection (`selectionStyle`), so that a handle on the box
-  sits where the library draws it.
+  provider, and `globalHandles`, receive: the screen, the selection box
+  the library draws (`selectionBox`, as `draw.rendered.getSelectionBox`
+  answers it, `null` for the handles of no feature) and the look of the
+  selection (`selectionStyle`), so that a handle on the box sits where
+  the library draws it.
+- `drawHandles(feature, handles, ctx)` of a feature type and of a handle
+  provider: the extension draws its custom handles there, with the render
+  context of the frame. The library calls it exactly when it shows them
+  (one feature selected, the document editable, the feature not locked,
+  no other handle dragged), so an extension tests none of it.
 - `PluginContext.emit(event, payload)`: a plugin sends events of its
   own, which it declares in `DrawEvents` by declaration merging, to the
   subscribers of `draw.on` and `ctx.on`, so that every event is in the
@@ -320,14 +328,18 @@ writing it. Its changes are listed after those of 3.0.0.
   is.
 
 - A handle of an extension says how it is shown (`Handle` is
-  `ScaleHandle | CustomHandle`): `kind: 'scale'` is drawn as the resize
-  handles are and hit at their size, and `kind: 'custom'` is drawn by the
-  extension and hit within the `sizePx` it gives, the size of its mark.
-  `kind` was a name the extension gave the handle, which `id` already
-  tells; the library drew every handle as a vertex handle, over the mark
-  an extension drew. A handle of another kind is left out.
-- `FeatureTypeDefinition.handles` and `HandleProvider.handles` receive a
-  `HandleContext` in place of the `ScreenContext`, which is its `screen`.
+  `ResizeHandle | CustomHandle`): `kind: 'resize'` is drawn as the resize
+  handles are and hit at their size (its drag still goes to the
+  extension), and `kind: 'custom'` is drawn by the extension in
+  `drawHandles` and hit within the `sizePx` it gives, a finite number
+  above 0, the diameter of its mark. `kind` was a name the extension gave
+  the handle, which `id` already tells; the library drew every handle as
+  a white circle, the look of a vertex handle, over the mark an extension
+  drew. A handle of another kind, or of a wrong size, is left out with a
+  warning in the console once a reason.
+- `FeatureTypeDefinition.handles`, `HandleProvider.handles` and
+  `HandleProvider.globalHandles` receive a `HandleContext` in place of the
+  `ScreenContext`, which is its `screen`.
 - A custom type has the fields its `transformFields` declares and no
   other: the resize and the rotation no longer write
   `maplibre-gl-draw:rotation` and `maplibre-gl-draw:scale` of its
@@ -388,8 +400,11 @@ writing it. Its changes are listed after those of 3.0.0.
 | `TableGeometry.dimensions: 3` | `'xyz'` |
 | `layer.items` of any layer | `layers.listItems(layer.id)` |
 | `group.featureIds` of any group | `groups.listMembers(group.id)` |
-| `Handle.kind`, a name the extension gives | `Handle.id`; `kind` |
+| `Handle.kind`, a name the extension gives | `Handle.id` |
+| `kind: 'vertex'` | `kind: 'custom'` with `sizePx` |
+| The white circle the library drew | `drawHandles`, `ctx.point.draw` |
 | `handles(feature, screen)` | `handles(feature, ctx)`, `ctx.screen` |
+| `globalHandles(screen)` | `globalHandles(ctx)`, `ctx.screen` |
 
 ### Added in 2.3.0
 

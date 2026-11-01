@@ -578,7 +578,7 @@ and the resize and rotate handles of the selection box
 (`src/view/ui/auxiliary-handles.ts`, added through the `handles` of a
 feature type and `draw.extensions.handleProviders`). They use the same
 screen rectangle test as the other handles, at the size each is shown
-at: a `scale` handle, which the selection UI draws as a resize handle, at
+at: a `resize` handle, which the selection UI draws as a resize handle, at
 the size of the resize handles; a `custom` handle, which the extension
 draws, at the `sizePx` it declares. When one overlaps a vertex or a
 midpoint, the auxiliary handle wins; moving it aside and then grabbing

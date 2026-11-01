@@ -33,14 +33,16 @@ export interface DraggedRows {
    */
   position(handle: RowHandle, position: Position): Position;
   /**
-   * The angle a row dragged that turns by its rotation (an image, a row that has a rotation) is
+   * The angle a row dragged that turns by its rotation (an image, a row of a custom type that
+   * declares `angleDegreesKey`, a row of another type that has a rotation) is
    * turned by, in degrees counterclockwise (0 otherwise): its rotation once written is the one it
    * has plus this angle, within [0, 360)
    */
   rotation(handle: RowHandle): number;
   /**
-   * The factor of the scale of a row dragged that keeps its shape (an image, a row that has a
-   * scale), and of the radius of a Circle (1 otherwise)
+   * The factor of the scale of a row dragged that keeps its shape (an image, a row of a custom
+   * type that declares `uniformScale`, a row of another type that has a scale), and of the radius
+   * of a Circle (1 otherwise)
    */
   scale(handle: RowHandle): number;
 }

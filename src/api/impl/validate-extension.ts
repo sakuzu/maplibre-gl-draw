@@ -77,6 +77,7 @@ const SHAPES: Readonly<
       'onHandleDrag',
       'onHandleDragStart',
       'onHandleDragEnd',
+      'drawHandles',
       'snapCandidates',
     ],
   },
@@ -87,7 +88,7 @@ const SHAPES: Readonly<
   'snap provider': { required: ['candidates'], optional: [] },
   'handle provider': {
     required: ['handles', 'onDrag'],
-    optional: ['globalHandles', 'onDragStart', 'onDragEnd'],
+    optional: ['globalHandles', 'onDragStart', 'onDragEnd', 'drawHandles'],
   },
   'companion provider': { required: ['has', 'draw', 'hitTest'], optional: ['onClick'] },
 };
@@ -170,23 +171,40 @@ function optionalTransformFields(kind: ExtensionKind, value: Record<string, unkn
   if (!isObject(fields)) {
     throw wrongShape(kind, 'has transformFields that is not an object', 'transformFields');
   }
-  for (const member of ['angleDegrees', 'size']) {
+  for (const member of ['angleDegreesKey', 'scaleKey']) {
     const key = fields[member];
     if (key !== undefined && (typeof key !== 'string' || key === '')) {
       const path = `transformFields.${member}`;
       throw wrongShape(kind, `has ${path} that is not a non-empty string`, path);
     }
   }
-  if (fields.angleDegrees !== undefined && fields.angleDegrees === fields.size) {
+  if (fields.angleDegreesKey !== undefined && fields.angleDegreesKey === fields.scaleKey) {
     throw wrongShape(
       kind,
-      'has transformFields.angleDegrees and transformFields.size that are the same key',
+      'has transformFields.angleDegreesKey and transformFields.scaleKey that are the same key',
       'transformFields',
     );
   }
   if (fields.uniformScale !== undefined && typeof fields.uniformScale !== 'boolean') {
     const path = 'transformFields.uniformScale';
     throw wrongShape(kind, `has ${path} that is not a boolean`, path);
+  }
+}
+
+/**
+ * Checks a definition given to `featureTypes.override` beyond the shape of a feature type: it has
+ * no `transformFields`, since a built-in type keeps the fields of its own
+ *
+ * @throws `DrawError` with the code `invalid-input` when it has
+ * @internal
+ */
+export function validateOverride(definition: { readonly transformFields?: unknown }): void {
+  if (definition.transformFields !== undefined) {
+    throw wrongShape(
+      'feature type',
+      'that overrides a built-in type cannot have transformFields: the built-in type keeps its own',
+      'transformFields',
+    );
   }
 }
 

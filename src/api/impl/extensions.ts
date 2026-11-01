@@ -26,6 +26,7 @@ import type {
   ProvidersCollection,
 } from '../extensions.js';
 import { invalidInput, notFound } from './shared.js';
+import { validateOverride } from './validate-extension.js';
 
 /**
  * How one kind of extension is installed into the engine
@@ -364,6 +365,7 @@ function namedCollectionByType(
           },
         );
       }
+      validateOverride(definition);
       const remove = registry.add([[type, definition]], { overriding: true });
       record?.(remove);
       return remove;

@@ -224,7 +224,7 @@ export type {
   Footprint,
   GroundFootprint,
   Handle,
-  ScaleHandle,
+  ResizeHandle,
   ScreenFootprint,
 } from './api/extension/feature-type.js';
 export type {

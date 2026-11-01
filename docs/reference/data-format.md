@@ -298,7 +298,11 @@ The full key is the prefix followed by the name in the table, such as
 The resize and the rotation of the selection write `scale` and
 `rotation` of an Image, and of a feature of another built-in type that
 has them. A feature of a custom type has the fields its type declares
-instead (`transformFields` of its definition), under the keys it names.
+instead (`angleDegreesKey` and `scaleKey` of `transformFields` of its
+definition), under the keys it names. A custom type names keys of its
+own, without the `maplibre-gl-draw:` prefix, such as `boardAngle`: the
+prefix is the library's, whose keys mean what this table says for every
+type.
 
 The library reads `name` and `description` as the name and the
 description of a feature; they are plain keys, which other tools read too.

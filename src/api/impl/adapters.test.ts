@@ -78,7 +78,7 @@ function drag(type: DragNormalizedEvent['type'], lng: number, lat: number): Drag
 describe('a custom feature type', () => {
   let engine: Engine;
   let registered: FeatureTypeRenderer | null;
-  const handle: Handle = { id: 'corner', position: [1.5, 1], kind: 'scale', cursor: 'ew-resize' };
+  const handle: Handle = { id: 'corner', position: [1.5, 1], kind: 'resize', cursor: 'ew-resize' };
   const definition = {
     type: 'pin',
     geometry: 'Point',
@@ -272,7 +272,7 @@ describe('a custom feature type', () => {
     expect(feature).toBeDefined();
     const shown = provider.getHandles(feature as never, {} as never);
     expect(shown).toEqual([
-      { kind: 'scale', id: 'corner', position: [1.5, 1], cursor: 'ew-resize' },
+      { kind: 'resize', id: 'corner', position: [1.5, 1], cursor: 'ew-resize' },
     ]);
 
     const updates: Array<boolean | undefined> = [];
@@ -612,7 +612,7 @@ describe('the extent of a custom feature type', () => {
 });
 
 describe('the start and the end of a handle drag', () => {
-  const handle: Handle = { id: 'h', position: [1, 1], kind: 'scale' };
+  const handle: Handle = { id: 'h', position: [1, 1], kind: 'resize' };
   const renderer = { onAdd: vi.fn(), draw: vi.fn(), onRemove: vi.fn() };
 
   function setUp() {

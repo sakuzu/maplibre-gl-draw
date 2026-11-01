@@ -6,7 +6,7 @@
  *
  * A general-purpose hook for showing and grabbing handles on the selected feature besides the
  * vertex handles and the resize and rotate handles of the selection box. A handle says how it is
- * shown: core draws a `scale` handle as it draws the resize handles and hits it at that size,
+ * shown: core draws a `resize` handle as it draws the resize handles and hits it at that size,
  * and draws no `custom` handle (the extension draws it) and hits it at the size the extension
  * declares. core delegates their drags, and knows nothing at all about the meaning of a handle
  * (it only carries its kind, its position and its identifier).
@@ -21,17 +21,19 @@
  * of a second draw instance on the same page never appear in, or take the drags of, the first.
  */
 
+import type { ProjectionData } from 'maplibre-gl';
 import type { DragNormalizedEvent } from '../../dispatcher/types.js';
+import type { FrameDrawContext } from '../../extension/renderers.js';
 import type { LngLat, ScreenPoint } from '../../shared/math/index.js';
 import type { Coordinate, Feature } from '../../store/types.js';
 
 /**
  * One auxiliary handle returned by an {@link AuxiliaryHandleProvider}: one core draws with the
- * look of the resize handles and hits at their size (`scale`), or one the extension draws, which
+ * look of the resize handles and hits at their size (`resize`), or one the extension draws, which
  * core hits within a square of `sizePx` (`custom`).
  */
 export type AuxiliaryHandle =
-  | (AuxiliaryHandleBase & { readonly kind: 'scale' })
+  | (AuxiliaryHandleBase & { readonly kind: 'resize' })
   | (AuxiliaryHandleBase & { readonly kind: 'custom'; readonly sizePx: number });
 
 /** What every auxiliary handle has */
@@ -46,12 +48,12 @@ interface AuxiliaryHandleBase {
 
 /**
  * The side of the square an auxiliary handle is hit in, in CSS px: the size of the resize
- * handles for a `scale` handle, the size the extension declares for a `custom` one
+ * handles for a `resize` handle, the size the extension declares for a `custom` one
  *
  * @internal
  */
 export function auxiliaryHandleSize(handle: AuxiliaryHandle, resizeHandleSize: number): number {
-  return handle.kind === 'scale' ? resizeHandleSize : handle.sizePx;
+  return handle.kind === 'resize' ? resizeHandleSize : handle.sizePx;
 }
 
 /**
@@ -99,7 +101,7 @@ export interface AuxiliaryHandleHit {
  * and the receiver of their drags.
  *
  * A `HandleProvider` of `draw.extensions.handleProviders` is installed as one. The engine draws
- * the `scale` handles with the look of the resize handles, hit tests every handle at the size it
+ * the `resize` handles with the look of the resize handles, hit tests every handle at the size it
  * is shown at, and delegates their drags.
  */
 export interface AuxiliaryHandleProvider {
@@ -134,6 +136,22 @@ export interface AuxiliaryHandleProvider {
   onHandleDragMove(event: DragNormalizedEvent): void;
   /** Called at the end of a drag this provider accepted */
   onHandleDragEnd(event: DragNormalizedEvent): void;
+  /**
+   * Draws the `custom` handles of the provider core shows: called by the selection UI only, in the
+   * frame, where and while it shows the other handles of the provider (the decision of whether
+   * they are shown is core's alone)
+   *
+   * @param feature The feature the handles are on; `null` for the handles of `getGlobalHandles`
+   * @param handles The `custom` handles the provider gave, in its order (never empty)
+   * @param frame The values of the frame the selection UI is drawn in
+   */
+  drawHandles?(
+    feature: Feature | null,
+    handles: readonly AuxiliaryHandle[],
+    projectionData: ProjectionData,
+    zoom: number,
+    frame: FrameDrawContext,
+  ): void;
 }
 
 /**

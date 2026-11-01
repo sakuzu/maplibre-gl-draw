@@ -1053,11 +1053,14 @@ Two of them have their core side here:
   drag: the provider must accept the start before core stops the map's pan
   and sends the move and end to the same provider. Read-only, the
   interaction lock and (for a handle tied to a feature) the effective lock
-  are checked first. The selection UI draws the `scale` handles with the
+  are checked first. The selection UI draws the `resize` handles with the
   look and the size of the resize handles (`renderSelectionUI` for the
   handles of the selected feature, `renderGlobalAuxiliaryHandles` for the
-  others, in the select mode while the document can be edited), and
-  leaves the `custom` handles to the extension, which draws them. The
+  others, in the select mode while the document can be edited), and at
+  the same place and under the same conditions has the provider draw its
+  `custom` handles (`drawHandles`, with a render context of the frame of
+  the copy of the world drawn), so that whether they are shown is decided
+  there only. The
   handles of a custom type and of a handle provider are placed with a
   `HandleContext`: the screen, the selection box as `draw.rendered`
   answers it, and the look of the selection.

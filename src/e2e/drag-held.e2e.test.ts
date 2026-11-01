@@ -343,7 +343,7 @@ async function registerShiftHandle(page: Page): Promise<void> {
           y += c[1] as number;
         }
         const n = ring.length - 1;
-        return [{ id: 'h', kind: 'scale', position: [x / n, y / n], cursor: 'alias' }];
+        return [{ id: 'h', kind: 'resize', position: [x / n, y / n], cursor: 'alias' }];
       },
       onDragStart(feature, _handle, event) {
         if (feature?.geometry.type !== 'Polygon') return false;

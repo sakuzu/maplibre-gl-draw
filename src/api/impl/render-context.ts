@@ -279,6 +279,23 @@ export function adaptFeatureRenderer(
 }
 
 /**
+ * The render contexts of the frames an extension draws in outside a feature and a layer (the
+ * handles it draws itself), one per frame: null while the map gives no WebGL context
+ *
+ * @internal
+ */
+export function createFrameContexts(
+  deps: RenderAdapterDeps,
+  getGl: () => WebGL2RenderingContext | null,
+): (frame: FrameDrawContext, projection: ProjectionData, zoom: number) => RenderContext | null {
+  const contextFor = createContextCache(deps);
+  return (frame, projection, zoom) => {
+    const gl = getGl();
+    return gl ? contextFor(gl, frame, projection, zoom) : null;
+  };
+}
+
+/**
  * The drawing of a companion through the contract, for one provider
  *
  * @internal

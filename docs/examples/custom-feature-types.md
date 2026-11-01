@@ -40,12 +40,12 @@ The definition (`route.ts`) gives the type its renderer, which draws the
 line with the shared line renderer of the library, its hit test, its box
 selection, its selection frame and the handles on its vertices. The
 library draws the resize and rotate handles of its frame; the handles on
-the vertices are `custom` handles, whose marks an overlay of the page
-draws (`routeVertexMarks`). `featureTypes.add` registers it (1), and
-`featureTypes.remove` takes it out again, from a switch the page adds
-with `ui.actions.add` (6). The
-style keys of a route (`routeColor`, `routeWidth`, `routeDashed`) are
-declared by declaration merging on `FeatureStyle`: core keeps a key it
+the vertices are `custom` handles, whose marks the type draws itself
+(`drawHandles`), as wide as they are hit. `featureTypes.add` registers it
+(1), and `featureTypes.remove` takes it out again, from a switch the page
+adds with `ui.actions.add` (6). The style keys of a route (`routeColor`,
+`routeWidth`, `routeDashed`) are declared by declaration merging on
+`FeatureStyle`: core keeps a key it
 does not define with the feature, and the renderer checks the value
 before using it.
 

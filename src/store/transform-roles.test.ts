@@ -144,7 +144,11 @@ describe('the roles of the fields of a feature', () => {
 describe('the roles of the fields of a feature of a custom type', () => {
   it('are the fields its type declares, and none when it declares none, whatever keys it has', () => {
     const fields = createTransformFieldsRegistry();
-    fields.register('Card', { angleDegrees: 'cardAngle', size: 'cardScale', uniformScale: true });
+    fields.register('Card', {
+      angleDegreesKey: 'cardAngle',
+      scaleKey: 'cardScale',
+      uniformScale: true,
+    });
     fields.register('Banner', {});
     const has = () => true;
     expect(transformRolesOf('Card', () => false, fields)).toEqual({
@@ -167,7 +171,11 @@ describe('the roles of the fields of a feature of a custom type', () => {
 
   it('start the fields a feature does not have from 0 and 1', () => {
     const fields = createTransformFieldsRegistry();
-    fields.register('Card', { angleDegrees: 'cardAngle', size: 'cardScale', uniformScale: true });
+    fields.register('Card', {
+      angleDegreesKey: 'cardAngle',
+      scaleKey: 'cardScale',
+      uniformScale: true,
+    });
     const card = feature('Card', {});
     const start = transformStartOf(card, fields);
     const rotated = transformedUpdates(
@@ -188,7 +196,7 @@ describe('the roles of the fields of a feature of a custom type', () => {
 
   it('add the keys the types declare to the keys read, and let them go with their type', () => {
     const fields = createTransformFieldsRegistry();
-    const remove = fields.register('Card', { angleDegrees: 'cardAngle', size: 'cardScale' });
+    const remove = fields.register('Card', { angleDegreesKey: 'cardAngle', scaleKey: 'cardScale' });
     expect(transformRoleFields(fields)).toEqual([
       ROTATION,
       SCALE,

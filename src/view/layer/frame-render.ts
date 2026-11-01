@@ -311,11 +311,17 @@ export function renderForeground(deps: FrameRenderDeps, f: FrameState): void {
   // antimeridian is drawn on the copy the feature is drawn on)
   for (const copy of f.copies) {
     applyCopy(deps, copy);
+    // The extensions draw their own handles with the values of the frame of this copy
+    const copyUIDeps = {
+      ...selectionUIDeps,
+      frame: copy.customRendererContext,
+      restoreBlendState: f.restoreBlendState,
+    };
     renderSelectionUI(
       copy.selectedFeatures,
       f.zoom,
       copy.projectionData,
-      selectionUIDeps,
+      copyUIDeps,
       store.getDragState(),
       store.getVertexSelection(),
       selectionLocked,
@@ -346,12 +352,7 @@ export function renderForeground(deps: FrameRenderDeps, f: FrameState): void {
     }
     // The handles of the extensions that belong to no feature, while they can be grabbed
     if (globalHandlesShown) {
-      renderGlobalAuxiliaryHandles(
-        f.zoom,
-        copy.projectionData,
-        selectionUIDeps,
-        store.getDragState(),
-      );
+      renderGlobalAuxiliaryHandles(f.zoom, copy.projectionData, copyUIDeps, store.getDragState());
     }
 
     // The vertices that follow along when a shared vertex is moved (raised only during a

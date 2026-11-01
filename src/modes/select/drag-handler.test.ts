@@ -1437,7 +1437,7 @@ describe.each(STORE_KINDS)('on %s', (_kind, createStore) => {
       context.selectionScope.auxiliaryHandles.register({
         id: 'p1',
         getHandles: () => [],
-        getGlobalHandles: () => [{ kind: 'scale', id: 'g1', position: [5, 5] }],
+        getGlobalHandles: () => [{ kind: 'resize', id: 'g1', position: [5, 5] }],
         onHandleDragStart,
         onHandleDragMove,
         onHandleDragEnd,

@@ -752,22 +752,26 @@ draw.features.update(featureId, {
   回すハンドルが付くかは、図形ではなく種類で決まります。
   `selectionStyle.boundingBox` は `selectionStyle.box` になりました
 - 地図の上の外形の大きさを変えるハンドルと回すハンドルは、組み込みの形の
-  ものと同じです。そのドラッグは、型が `transformFields` で宣言した欄
-  (回転と大きさの鍵と、大きさ変えで形を保つかどうか) を書き、鍵の無い
-  地物は 0 と 1 から始めます。独自の型はその欄だけを持ちます。地物の
-  `maplibre-gl-draw:rotation` と `maplibre-gl-draw:scale` は、型がそこで
-  名指したときだけ書かれます。自分のハンドルで (`onHandleDrag` で) 地物を
-  回して大きくしていた型は、欄を宣言し、角と回転をライブラリーに任せます
+  ものと同じです。そのドラッグは、`rotate` と `scale` の編集の全部と同じく、
+  型が `transformFields` で宣言した欄 (`angleDegreesKey`、`scaleKey`、
+  `uniformScale`) を書き、鍵の無い地物は 0 と 1 から始めます。独自の型は
+  その欄だけを持ちます。地物の `maplibre-gl-draw:rotation` と
+  `maplibre-gl-draw:scale` は、型がそこで名指したときだけ書かれます。
+  自分のハンドルで (`onHandleDrag` で) 地物を回して大きくしていた型は、
+  欄を宣言し、角と回転をライブラリーに任せます。`override` に渡す定義は
+  これを持てません
 - `Handle.kind` は、拡張が付ける名前ではなく、ハンドルの見せ方になり
-  ました (ハンドルは `id` で見分けます)。`'scale'` はライブラリーが
+  ました (ハンドルは `id` で見分けます)。`'resize'` はライブラリーが
   大きさを変えるハンドルとして描いてその大きさで当て、`'custom'` は
-  拡張が描き、拡張が渡す `sizePx` の中で当てます。拡張の印の上に
-  ライブラリーが白い丸を重ねて描くことは無くなりました
-- 地物の型と `HandleProvider` の `handles(feature, ctx)` は、画面の代わりに
-  `HandleContext` を受けます。`ctx.screen`、ライブラリーが描く余白込みの
-  選択の枠 (`ctx.selectionBox`。`draw.rendered.getSelectionBox` の答え)、
-  選択の見た目 (`ctx.selectionStyle`) を持ち、枠の上のハンドルは
-  ライブラリーが描く枠の所に立ちます
+  拡張が `drawHandles` で描き、拡張が渡す `sizePx` (印の直径) の中で
+  当てます。ほかの種類は警告を出して除かれます。ライブラリーはどの
+  ハンドルも頂点のハンドルの見た目の白い丸で描いていました。その見た目
+  にしたい型は `drawHandles` で描きます
+- `handles(feature, ctx)` と `globalHandles(ctx)` は、画面の代わりに
+  `HandleContext` を受けます。`ctx.screen`、ライブラリーが描く選択の枠
+  (`ctx.selectionBox`。外形に余白を足したもので、
+  `draw.rendered.getSelectionBox` の答え。どの地物にも属さない
+  ハンドルでは `null`)、選択の見た目 (`ctx.selectionStyle`) を持ちます
 - 地物の周りに描くものは、描かれている地物を `ctx.draw.rendered` で
   読みます (`get`、`getMany`、`getSelectionBox`。まとめてドラッグしている
   行は `getDraggedRows` で、前の `/kasane` の `draggedRowsOf` です)。
@@ -811,6 +815,58 @@ draw.features.update(featureId, {
 - ピクセルの幅を与えるズームは、`ctx.line.draw` のオプションの
   `referenceZoom` です (前は `createdZoom`)。`ctx.point.draw` も、
   印の大きさと縁の太さのためにこれを受け取ります
+
+頂点ごとのハンドルの 2.x と 3.0 の書き方です。ライブラリーが描いていた
+白い丸は、型が描きます。
+
+<!-- docs-check: skip -->
+
+```ts
+// 2.x
+handles(feature, screen) {
+  return verticesOf(feature).map((position, index) => ({
+    id: String(index),
+    position,
+    kind: 'vertex',
+  }));
+},
+```
+
+<!-- docs-check:
+type Feature = import('@sakuzu/maplibre-gl-draw').Feature;
+type Position = import('@sakuzu/maplibre-gl-draw').Position;
+declare function verticesOf(feature: Feature): Position[];
+-->
+
+```ts
+import type { FeatureTypeDefinition } from '@sakuzu/maplibre-gl-draw';
+
+// 3.0
+const vertexHandles: Pick<FeatureTypeDefinition, 'handles' | 'drawHandles'> = {
+  handles(feature) {
+    return verticesOf(feature).map((position, index) => ({
+      kind: 'custom',
+      id: String(index),
+      position,
+      sizePx: 12,
+    }));
+  },
+  // 選択の色の縁の白い丸。幅は 12 ピクセル
+  drawHandles(_feature, handles, ctx) {
+    for (const handle of handles) {
+      ctx.point.draw(handle.position, {
+        shape: 'circle',
+        size: handle.sizePx,
+        fillColor: '#ffffff',
+        fillOpacity: 1,
+        strokeColor: '#ff2d55',
+        strokeWidth: 2,
+        strokeOpacity: 1,
+      });
+    }
+  },
+};
+```
 
 ## mapbox-gl-draw や terra-draw から
 

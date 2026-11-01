@@ -117,7 +117,7 @@ const MAIN = [
   'Handle',
   'HandleContext',
   'HandleProvider',
-  'ScaleHandle',
+  'ResizeHandle',
   'CustomHandle',
   'HiddenCollection',
   'Hit',

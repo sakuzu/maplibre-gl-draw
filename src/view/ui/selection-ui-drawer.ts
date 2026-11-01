@@ -9,6 +9,7 @@
  */
 
 import type { CustomRenderMethodInput, Map as MapLibreMap } from 'maplibre-gl';
+import type { FrameDrawContext } from '../../extension/renderers.js';
 import { type EnuEdit, moveEnuPosition } from '../../geometry/enu-transforms.js';
 import { THINNING_VIEWPORT_MARGIN_PX } from '../../shared/config/selection.js';
 import {
@@ -30,7 +31,11 @@ import type {
   VertexSelection,
 } from '../../store/types.js';
 import type { PointInstanceRenderer } from '../renderers/point/point-instance.js';
-import type { AuxiliaryHandle, AuxiliaryHandleContext } from './auxiliary-handles.js';
+import type {
+  AuxiliaryHandle,
+  AuxiliaryHandleContext,
+  AuxiliaryHandleProvider,
+} from './auxiliary-handles.js';
 import { bulkFrame } from './handle-test.js';
 import type { ThinningViewport, VisibleHandleSet } from './handle-thinning.js';
 import { computeVisibleHandleSet, shouldThinHandles } from './handle-thinning.js';
@@ -53,6 +58,13 @@ export interface SelectionUIDrawerDeps {
   map: MapLibreMap;
   /** The selection scope of the draw instance (extension points and thinned handle sets) */
   scope: SelectionScope;
+  /**
+   * The values of the frame the selection UI is drawn in, which the extensions draw their
+   * `custom` handles with (none: they are not drawn)
+   */
+  frame?: FrameDrawContext;
+  /** Puts back the blending of the frame after an extension drew */
+  restoreBlendState?: () => void;
 }
 
 /**
@@ -131,14 +143,18 @@ export function renderSelectionUI(
       prepareVisibleHandleSet(selectedFeatures[0], map, scope),
       scope,
     );
-    // The handles of the extensions core draws (`scale`), shown as the other handles are
-    // (hidden while another operation runs); the extensions draw the others
+    // The handles of the extensions, shown as the other handles are (hidden while another
+    // operation runs): core draws the `resize` ones, and has each extension draw its `custom` ones
+    // then, so that whether they are shown is decided here only
     if (operation === null || operation === 'auxiliary') {
       const context = auxiliaryHandleContext(map, zoom);
-      const positions = scope.auxiliaryHandles
+      const feature = selectedFeatures[0];
+      const given = scope.auxiliaryHandles
         .list()
-        .flatMap((provider) => drawnPositions(provider.getHandles(selectedFeatures[0], context)));
+        .map((provider) => [provider, provider.getHandles(feature, context)] as const);
+      const positions = given.flatMap(([, handles]) => drawnPositions(handles));
       if (positions.length > 0) selectionHandlesRenderer.drawAuxiliaryHandles(positions, zoom);
+      drawCustomHandles(given, feature, projectionData, zoom, deps);
     }
   } else {
     renderMultiSelectionHandles(
@@ -173,21 +189,47 @@ export function renderGlobalAuxiliaryHandles(
   if (!providers.some((provider) => provider.getGlobalHandles !== undefined)) return;
 
   const context = auxiliaryHandleContext(map, zoom);
-  const positions = providers.flatMap((provider) =>
-    drawnPositions(provider.getGlobalHandles?.(context) ?? []),
+  const given = providers.map(
+    (provider) => [provider, provider.getGlobalHandles?.(context) ?? []] as const,
   );
-  if (positions.length === 0) return;
-
-  if (pointInstanceRenderer) pointInstanceRenderer.setProjectionData(projectionData);
-  selectionHandlesRenderer.setTransform(coordinateTransformOf(map));
-  selectionHandlesRenderer.setProjectionData(projectionData);
-  selectionHandlesRenderer.drawAuxiliaryHandles(positions, zoom);
+  const positions = given.flatMap(([, handles]) => drawnPositions(handles));
+  if (positions.length > 0) {
+    if (pointInstanceRenderer) pointInstanceRenderer.setProjectionData(projectionData);
+    selectionHandlesRenderer.setTransform(coordinateTransformOf(map));
+    selectionHandlesRenderer.setProjectionData(projectionData);
+    selectionHandlesRenderer.drawAuxiliaryHandles(positions, zoom);
+  }
+  drawCustomHandles(given, null, projectionData, zoom, deps);
 }
 
-/** The positions of the auxiliary handles core draws (`scale`; an extension draws a `custom` one) */
+/**
+ * Has each provider draw the `custom` handles it gave (`drawHandles`), when it has any and draws
+ * them, in the frame of the selection UI
+ *
+ * @param feature The feature the handles are on; null for the handles of no feature
+ */
+function drawCustomHandles(
+  given: ReadonlyArray<readonly [AuxiliaryHandleProvider, readonly AuxiliaryHandle[]]>,
+  feature: Feature | null,
+  projectionData: CustomRenderMethodInput['defaultProjectionData'],
+  zoom: number,
+  deps: SelectionUIDrawerDeps,
+): void {
+  const { frame } = deps;
+  if (!frame) return;
+  for (const [provider, handles] of given) {
+    if (!provider.drawHandles) continue;
+    const custom = handles.filter((handle) => handle.kind === 'custom');
+    if (custom.length === 0) continue;
+    provider.drawHandles(feature, custom, projectionData, zoom, frame);
+    deps.restoreBlendState?.();
+  }
+}
+
+/** The positions of the auxiliary handles core draws (`resize`; an extension draws a `custom` one) */
 function drawnPositions(handles: readonly AuxiliaryHandle[]): Coordinate[] {
   const out: Coordinate[] = [];
-  for (const handle of handles) if (handle.kind === 'scale') out.push(handle.position);
+  for (const handle of handles) if (handle.kind === 'resize') out.push(handle.position);
   return out;
 }
 

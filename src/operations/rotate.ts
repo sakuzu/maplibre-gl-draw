@@ -21,8 +21,9 @@ type RotateEdit = Extract<TransformEdit, { kind: 'rotate' }>;
 
 /**
  * The center a rotate drag turns its features around: the center of their frame, or the place of
- * the feature when it is the only one and turns by its rotation (a point: its position stays and
- * its rotation changes)
+ * the feature when it is the only one, a `Point`, and turns by its rotation (an Image, a feature of
+ * a custom type that declares `angleDegreesKey`, or a feature of another type that has a
+ * rotation): its position stays and its rotation changes
  *
  * @param fields The fields the custom types of the instance declare
  * @internal
