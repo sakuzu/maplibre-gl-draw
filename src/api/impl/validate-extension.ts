@@ -204,10 +204,23 @@ function optionalDefaultStyle(kind: ExtensionKind, value: Record<string, unknown
     throw wrongShape(kind, `has defaultStyle that is ${problem}`, 'defaultStyle');
 }
 
+/** Checks the channel a feature type declares the rule colors: `'fill'`, `'stroke'` or `'point'` */
+function optionalStyleRuleChannel(kind: ExtensionKind, value: Record<string, unknown>): void {
+  const channel = value.styleRuleChannel;
+  if (channel === undefined) return;
+  if (channel !== 'fill' && channel !== 'stroke' && channel !== 'point') {
+    throw wrongShape(
+      kind,
+      "has styleRuleChannel that is not 'fill', 'stroke' or 'point'",
+      'styleRuleChannel',
+    );
+  }
+}
+
 /**
  * Checks a definition given to `featureTypes.override` beyond the shape of a feature type: it has
- * no `transformFields` and no `defaultStyle`, since a built-in type keeps the fields and the
- * defaults of its own
+ * no `transformFields`, no `defaultStyle` and no `styleRuleChannel`, since a built-in type keeps
+ * the fields, the defaults and the channel of its own
  *
  * @throws `DrawError` with the code `invalid-input` when it has
  * @internal
@@ -215,6 +228,7 @@ function optionalDefaultStyle(kind: ExtensionKind, value: Record<string, unknown
 export function validateOverride(definition: {
   readonly transformFields?: unknown;
   readonly defaultStyle?: unknown;
+  readonly styleRuleChannel?: unknown;
 }): void {
   if (definition.transformFields !== undefined) {
     throw wrongShape(
@@ -228,6 +242,13 @@ export function validateOverride(definition: {
       'feature type',
       'that overrides a built-in type cannot have defaultStyle: the built-in type keeps the defaults of the style option',
       'defaultStyle',
+    );
+  }
+  if (definition.styleRuleChannel !== undefined) {
+    throw wrongShape(
+      'feature type',
+      'that overrides a built-in type cannot have styleRuleChannel: the built-in type keeps the channel of its type',
+      'styleRuleChannel',
     );
   }
 }
@@ -267,6 +288,7 @@ export function validateExtension(kind: ExtensionKind, value: unknown): void {
       optionalNumber(kind, value, 'hitPaddingPx', true);
       optionalTransformFields(kind, value);
       optionalDefaultStyle(kind, value);
+      optionalStyleRuleChannel(kind, value);
       return;
     }
     case 'companion provider':

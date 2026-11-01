@@ -11,8 +11,10 @@
  *   (`FeatureTypeDefinition.defaultStyle`) over the defaults of the `style` option for its
  *   geometry, which fill the keys the type leaves out; the defaults of the option alone for a type
  *   that declares none and for a built-in type
- * - The color of the layer rule, in the channel of the type only (`getStyleRuleChannel`: the
- *   point, the stroke or the fill)
+ * - The color of the layer rule, in the channel of the type only: the point, the stroke or the
+ *   fill. A built-in type has the channel of its type (`getStyleRuleChannel`); a custom type the
+ *   one it declares (`FeatureTypeDefinition.styleRuleChannel`), or else the one of the geometry of
+ *   the feature, as a built-in type of that geometry has it
  * - The style of the feature
  *
  * @internal
@@ -20,7 +22,12 @@
 
 import { mergedKeys } from '../../store/feature-edits.js';
 import type { Layer, Feature as StoredFeature } from '../../store/types.js';
-import { getStyleRuleChannel, resolveFeatureStyle } from '../../view/style-rule.js';
+import {
+  getGeometryRuleChannel,
+  getStyleRuleChannel,
+  resolveFeatureStyle,
+  type StyleRuleChannel,
+} from '../../view/style-rule.js';
 import type { FeatureStyle, FeatureStyleResolved } from '../model.js';
 import type { RuntimeOptions } from '../options.js';
 import { toAppliedDefaults } from './options.js';
@@ -50,19 +57,32 @@ export interface AppliedStyles {
    */
   of(feature: StoredFeature): FeatureStyleResolved;
   /**
-   * Registers the look a custom type declares (a copy of it)
+   * Registers a custom type, with the look it declares (a copy of it) and the channel the rule
+   * colors, when it declares them
    *
    * @returns The function that cancels the registration (it leaves a later registration of the
    *   same type as it is)
    */
-  registerType(type: string, style: FeatureStyle): () => void;
+  registerType(type: string, declared: DeclaredLook): () => void;
+}
+
+/**
+ * What a custom type declares of the look of its features
+ *
+ * @internal
+ */
+export interface DeclaredLook {
+  /** The look of a feature without a style of its own (`FeatureTypeDefinition.defaultStyle`) */
+  readonly style?: FeatureStyle;
+  /** The channel the rule colors (`FeatureTypeDefinition.styleRuleChannel`) */
+  readonly channel?: StyleRuleChannel;
 }
 
 /** A look put together, with what it was put together from */
 interface Entry {
   readonly rule: Layer['styleRule'];
   readonly options: RuntimeOptions['style'];
-  readonly declared: FeatureStyle | undefined;
+  readonly declared: DeclaredLook | undefined;
   readonly style: FeatureStyleResolved;
 }
 
@@ -79,15 +99,24 @@ function compose(
   feature: StoredFeature,
   rule: Layer['styleRule'],
   options: RuntimeOptions['style'],
-  declared: FeatureStyle | undefined,
+  declared: DeclaredLook | undefined,
 ): FeatureStyleResolved {
   const defaults = toAppliedDefaults(options, feature.type);
-  const own = resolveFeatureStyle(feature, rule, getStyleRuleChannel(feature.type)) ?? {};
+  const own = resolveFeatureStyle(feature, rule, channelOf(feature, declared)) ?? {};
   return {
     ...defaults,
-    ...(declared && withoutUndefined(declared)),
+    ...(declared?.style && withoutUndefined(declared.style)),
     ...withoutUndefined(own),
   } as FeatureStyleResolved;
+}
+
+/**
+ * The channel the layer rule colors of a feature: the one of its type for a built-in type, and
+ * for a custom type the one it declares, or else the one of the geometry of the feature
+ */
+function channelOf(feature: StoredFeature, declared: DeclaredLook | undefined): StyleRuleChannel {
+  if (!declared) return getStyleRuleChannel(feature.type);
+  return declared.channel ?? getGeometryRuleChannel(feature.geometry.type);
 }
 
 /**
@@ -96,7 +125,7 @@ function compose(
  * @internal
  */
 export function createAppliedStyles(source: AppliedStyleSource): AppliedStyles {
-  const declaredByType = new Map<string, FeatureStyle>();
+  const declaredByType = new Map<string, DeclaredLook>();
   // A feature is a new object once it changes, so the look of each one is kept with it
   const looks = new WeakMap<StoredFeature, Entry>();
   return {
@@ -113,8 +142,11 @@ export function createAppliedStyles(source: AppliedStyleSource): AppliedStyles {
       looks.set(feature, { rule, options, declared, style });
       return style;
     },
-    registerType(type, style) {
-      const own: FeatureStyle = { ...style };
+    registerType(type, declared) {
+      const own: DeclaredLook = {
+        ...(declared.style && { style: { ...declared.style } }),
+        ...(declared.channel && { channel: declared.channel }),
+      };
       declaredByType.set(type, own);
       return () => {
         if (declaredByType.get(type) === own) declaredByType.delete(type);

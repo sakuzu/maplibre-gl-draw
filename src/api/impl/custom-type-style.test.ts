@@ -7,9 +7,12 @@
  * - A type declares the look of its features without a style of their own (`defaultStyle`), and
  *   `features.getAppliedStyle` puts the layer rule and the style of the feature over it, in place
  *   of the defaults of its geometry; the keys it leaves out keep those defaults
- * - The layer rule colors the channel of the type only: `fillColor` for a custom type, whatever
- *   its geometry, so a box drawn with a paper of `fillColor` is colored by the rule, and its
- *   outline is not
+ * - The layer rule colors the channel of the type only: the one it declares
+ *   (`styleRuleChannel`), so a box on a Point drawn with a paper of `fillColor` that declares
+ *   `'fill'` is colored by the rule, and its outline is not; a type that declares none takes the
+ *   channel of the geometry of the feature, as a built-in type of that geometry does (`pointColor`
+ *   for a Point, `strokeColor` for a LineString, `fillColor` for a Polygon)
+ * - A channel that is not one, and one in a definition that overrides a built-in type, are refused
  * - The style of a feature wins over the rule
  * - A type that declares none, and the built-in types, keep the defaults of their geometry
  * - The renderer of the type reads the same look from its render context
@@ -62,6 +65,7 @@ const CARD: FeatureTypeDefinition = {
   type: 'card',
   geometry: 'Point',
   defaultStyle: CARD_LOOK,
+  styleRuleChannel: 'fill',
   renderer: rendererOf('card'),
 };
 
@@ -70,6 +74,28 @@ const PIN: FeatureTypeDefinition = {
   type: 'pin',
   geometry: 'Point',
   renderer: rendererOf('pin'),
+};
+
+/** A trail: a type of lines that declares no look */
+const TRAIL: FeatureTypeDefinition = {
+  type: 'trail',
+  geometry: 'LineString',
+  renderer: rendererOf('trail'),
+};
+
+/** A plot: a type of areas that declares no look */
+const PLOT: FeatureTypeDefinition = {
+  type: 'plot',
+  geometry: 'Polygon',
+  renderer: rendererOf('plot'),
+};
+
+/** A route: a type of lines whose rule colors its fill */
+const SWATH: FeatureTypeDefinition = {
+  type: 'swath',
+  geometry: 'LineString',
+  styleRuleChannel: 'fill',
+  renderer: rendererOf('swath'),
 };
 
 const PROJECTION = { mainMatrix: new Float32Array(16) } as unknown as ProjectionData;
@@ -105,11 +131,38 @@ afterEach(() => {
   reads.clear();
 });
 
+/** The geometry of a feature of each type of the tests */
+function geometryOf(type: string): StoredFeature['geometry'] {
+  if (type === 'trail' || type === 'swath') {
+    return {
+      type: 'LineString',
+      coordinates: [
+        [0, 0],
+        [1, 1],
+      ],
+    };
+  }
+  if (type === 'plot') {
+    return {
+      type: 'Polygon',
+      coordinates: [
+        [
+          [0, 0],
+          [1, 0],
+          [1, 1],
+          [0, 0],
+        ],
+      ],
+    };
+  }
+  return { type: 'Point', coordinates: [0, 0] };
+}
+
 function featureOf(id: string, type: string, style: FeatureStyle = {}): StoredFeature {
   return {
     id,
     type,
-    geometry: { type: 'Point', coordinates: [0, 0] },
+    geometry: geometryOf(type),
     layerId: 'l',
     groupId: undefined,
     properties: { kind: 'a' },
@@ -145,8 +198,7 @@ function open(store: Store, features: readonly StoredFeature[]): Opened {
     renderers.set(type, renderer);
     return register(type, renderer);
   });
-  draw.extensions.featureTypes.add(CARD);
-  draw.extensions.featureTypes.add(PIN);
+  draw.extensions.featureTypes.addMany([CARD, PIN, TRAIL, PLOT, SWATH]);
   store.transact(() => {
     for (const feature of features) store.createFeature(feature);
   });
@@ -201,7 +253,7 @@ describe.each(STORE_KINDS)('the look of a custom type over %s', (_, makeStore) =
     });
   });
 
-  it('leaves a type that declares none and the built-in types as they were', () => {
+  it('takes the channel of the geometry for a type that declares none, as the built-in types', () => {
     const view = open(makeStore(), [featureOf('p', 'pin'), featureOf('q', 'Point')]);
     const defaults = {
       fillColor: '#ff0077',
@@ -213,14 +265,37 @@ describe.each(STORE_KINDS)('the look of a custom type over %s', (_, makeStore) =
     expect(view.draw.features.getAppliedStyle('p')).toMatchObject(defaults);
     expect(view.draw.features.getAppliedStyle('q')).toMatchObject(defaults);
     view.draw.layers.update('l', { styleRule: { kind: 'single', color: '#00ff00' } });
+    // A type of points that declares no channel: the point, as a built-in point
     expect(view.draw.features.getAppliedStyle('p')).toMatchObject({
       ...defaults,
-      fillColor: '#00ff00',
+      pointColor: '#00ff00',
     });
     expect(view.draw.features.getAppliedStyle('q')).toMatchObject({
       ...defaults,
       pointColor: '#00ff00',
     });
+  });
+
+  it('takes the stroke of a type of lines and the fill of a type of areas that declare none', () => {
+    const view = open(makeStore(), [featureOf('t', 'trail'), featureOf('a', 'plot')]);
+    view.draw.layers.update('l', { styleRule: { kind: 'single', color: '#00ff00' } });
+    expect(view.draw.features.getAppliedStyle('t')).toMatchObject({
+      strokeColor: '#00ff00',
+      fillColor: '#ff0077',
+    });
+    expect(view.draw.features.getAppliedStyle('a')).toMatchObject({
+      fillColor: '#00ff00',
+      strokeColor: '#ff0077',
+    });
+  });
+
+  it('takes the channel a type declares over the one of its geometry', () => {
+    const view = open(makeStore(), [featureOf('s', 'swath')]);
+    view.draw.layers.update('l', { styleRule: { kind: 'single', color: '#00ff00' } });
+    expect(view.draw.features.getAppliedStyle('s')).toMatchObject({
+      fillColor: '#00ff00',
+    });
+    expect(view.draw.features.getAppliedStyle('s')?.strokeColor).not.toBe('#00ff00');
   });
 
   it('is read by the renderer from its render context as getAppliedStyle answers it', () => {
@@ -283,6 +358,27 @@ describe('the declaration of the look of a type', () => {
         defaultStyle: CARD_LOOK,
       }),
     ).toThrow(expect.objectContaining({ code: 'invalid-input' }));
+    expect(() =>
+      view.draw.extensions.featureTypes.override({
+        type: 'Point',
+        geometry: 'Point',
+        renderer: rendererOf('Point'),
+        styleRuleChannel: 'fill',
+      }),
+    ).toThrow(expect.objectContaining({ code: 'invalid-input' }));
+  });
+
+  it('refuses a channel that is not one', () => {
+    const view = open(STORE_KINDS[0][1](), []);
+    expect(() =>
+      view.draw.extensions.featureTypes.add({
+        type: 'bad',
+        geometry: 'Point',
+        renderer: rendererOf('bad'),
+        styleRuleChannel: 'outline',
+      } as never),
+    ).toThrow(expect.objectContaining({ code: 'invalid-input' }));
+    expect(view.draw.extensions.featureTypes.has('bad')).toBe(false);
   });
 
   it('is copied when the type is added, and goes with the type', () => {

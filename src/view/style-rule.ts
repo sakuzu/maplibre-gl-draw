@@ -58,14 +58,32 @@ const CHANNEL_COLOR_PROPERTY: Record<StyleRuleChannel, 'pointColor' | 'strokeCol
   };
 
 /**
- * Returns the channel that carries the rule color for a feature type.
+ * Returns the channel that carries the rule color for a built-in feature type, by its name.
  *
- * Types other than the known ones (Image and custom types) return 'fill'.
+ * Types other than the known ones (Image, and a name it does not know) return 'fill'. A custom
+ * type has the channel it declares or the one of its geometry (`api/impl/applied-style.ts`).
  *
  * @param type The feature type
  * @returns `'point'`, `'stroke'` or `'fill'`
  */
 export function getStyleRuleChannel(type: FeatureType): StyleRuleChannel {
+  return channelOfTypeName(type);
+}
+
+/**
+ * The channel of a geometry, as the built-in types of that geometry have it: `point` for a Point
+ * or a MultiPoint, `stroke` for a LineString or a MultiLineString, and `fill` for any other (a
+ * Polygon, a MultiPolygon, a GeometryCollection)
+ *
+ * @param geometryType The type of the GeoJSON geometry
+ * @returns `'point'`, `'stroke'` or `'fill'`
+ */
+export function getGeometryRuleChannel(geometryType: string): StyleRuleChannel {
+  return channelOfTypeName(geometryType);
+}
+
+/** The channel of a built-in feature type or of a geometry type, by its name */
+function channelOfTypeName(type: string): StyleRuleChannel {
   switch (type) {
     case 'Point':
     case 'MultiPoint':

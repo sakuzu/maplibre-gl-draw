@@ -223,7 +223,9 @@ draw.layers.update(layerId, { styleRule: undefined });
 ## どの色が使われるか
 
 1. 地物自身の、そのチャンネルの色。点は `pointColor`、線は
-   `strokeColor`、面とそれ以外の型は `fillColor`
+   `strokeColor`、面と画像は `fillColor` です。独自の型は、宣言した
+   チャンネル (`styleRuleChannel`) か、それが無ければ地物の幾何の
+   チャンネルです
 2. レイヤーの規則
 3. 地物の独自の型が宣言した見た目 (`defaultStyle`)、その次に
    インスタンスの既定値
@@ -266,6 +268,11 @@ import { evaluateStyleRule, getStyleRuleChannel } from '@sakuzu/maplibre-gl-draw
 const color = evaluateStyleRule(rule, feature.properties);
 const channel = getStyleRuleChannel(feature.type); // 'point'、'stroke'、'fill' のどれか
 ```
+
+`getStyleRuleChannel` は、組み込みの型について名前で答えます。独自の型の
+チャンネルは、その `styleRuleChannel`
+(`draw.extensions.featureTypes.get(type)`) か、それが無ければ地物の幾何の
+チャンネルで、その幾何の組み込みの型と同じです。
 
 ## 凡例
 

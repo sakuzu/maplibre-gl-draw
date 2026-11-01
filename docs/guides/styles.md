@@ -228,7 +228,9 @@ A dataset takes the same rule type; see
 ## Which color wins
 
 1. The feature's own color for its channel: `pointColor` for points,
-   `strokeColor` for lines, `fillColor` for areas and other types
+   `strokeColor` for lines, `fillColor` for areas and images. A custom
+   type has the channel it declares (`styleRuleChannel`), or else the
+   one of the geometry of the feature
 2. The layer's rule
 3. The look the custom type of the feature declares (`defaultStyle`),
    then the default of the instance
@@ -270,6 +272,11 @@ import { evaluateStyleRule, getStyleRuleChannel } from '@sakuzu/maplibre-gl-draw
 const color = evaluateStyleRule(rule, feature.properties);
 const channel = getStyleRuleChannel(feature.type); // 'point', 'stroke' or 'fill'
 ```
+
+`getStyleRuleChannel` answers for the built-in types, by their name. The
+channel of a custom type is its `styleRuleChannel`
+(`draw.extensions.featureTypes.get(type)`), or else the channel of the
+geometry of the feature, as for a built-in type of that geometry.
 
 ## Legends
 

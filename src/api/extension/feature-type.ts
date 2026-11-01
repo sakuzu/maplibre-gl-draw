@@ -148,15 +148,27 @@ export interface FeatureTypeDefinition {
    * the defaults of its geometry (the `style` option), which still fill the keys it leaves out.
    * `draw.features.getAppliedStyle` and the render context (`ctx.appliedStyle(feature)`) put the
    * color of the layer rule and the style of the feature over it, so a renderer that draws with
-   * that answer draws what the library answers. The rule colors the fill of a custom type
-   * (`fillColor`, see `getStyleRuleChannel`), whatever its geometry, and the style of a feature
-   * wins over the rule.
+   * that answer draws what the library answers. The rule colors the key of
+   * {@link FeatureTypeDefinition.styleRuleChannel}, and the style of a feature wins over the rule.
    *
    * It is checked as the style of a feature is, and copied when the type is added. A definition
    * given to `override` cannot have it (a built-in type keeps the defaults of the `style`
    * option): `override` throws `invalid-input`.
    */
   readonly defaultStyle?: FeatureStyle;
+  /**
+   * The key of the look the color of a layer rule goes to, for the features of this type:
+   * `'fill'` (`fillColor`), `'stroke'` (`strokeColor`) or `'point'` (`pointColor`). When it is
+   * left out, the geometry of a feature decides, as it does for the built-in types: `'point'` for
+   * a Point or a MultiPoint, `'stroke'` for a LineString or a MultiLineString, and `'fill'` for a
+   * Polygon, a MultiPolygon or any other geometry.
+   *
+   * A type drawn as a card or a box on a Point, whose paper is `fillColor`, declares `'fill'` so
+   * that the rule colors its paper. `draw.features.getAppliedStyle` and the render context
+   * (`ctx.appliedStyle(feature)`) answer with it. A definition given to `override` cannot have it
+   * (a built-in type keeps the channel of its type): `override` throws `invalid-input`.
+   */
+  readonly styleRuleChannel?: 'fill' | 'stroke' | 'point';
   /**
    * Which features of the type the definition takes, for a definition that overrides a
    * built-in type (`extensions.featureTypes.override`). A feature for which it returns false

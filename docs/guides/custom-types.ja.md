@@ -208,10 +208,15 @@ draw.extensions.featureTypes.add({
 3. 型が宣言した見た目
 4. 型が書かなかった鍵には、その幾何の `style` の設定の既定
 
-- スタイルの規則は、独自の型では幾何によらず `fillColor` を塗ります
-  ([どの色が使われるか](styles.ja.md#どの色が使われるか))。上の区域は、規則の色を
-  塗りにとり、縁はそのままです。スタイルに `fillColor` を持つ地物は
-  自分の色のままです
+- スタイルの規則は、見た目の鍵の 1 つを塗ります
+  ([どの色が使われるか](styles.ja.md#どの色が使われるか))。型が
+  `styleRuleChannel` で宣言した鍵 (`'fill'` は `fillColor`、`'stroke'` は
+  `strokeColor`、`'point'` は `pointColor`) か、宣言が無ければ組み込みの型と
+  同じく地物の幾何の鍵です。Point は `pointColor`、LineString は
+  `strokeColor`、Polygon は `fillColor` です。上の区域は Polygon なので、
+  規則の色を塗りにとり、縁はそのままです。Point の上に紙を `fillColor` で
+  描くカードや箱は、`styleRuleChannel: 'fill'` を宣言します。スタイルに
+  その鍵を持つ地物は自分の色のままです
 - `defaultStyle` は地物のスタイルと同じように確かめられ、正しくないものは
   `invalid-input` で拒まれます。型を足したときに写されるので、変えるには
   型を足し直します

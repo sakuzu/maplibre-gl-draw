@@ -217,10 +217,16 @@ drawn:
 4. The default of the `style` option for its geometry, for the keys the
    type leaves out
 
-- The style rule colors `fillColor` of a custom type, whatever its
-  geometry ([which color wins](styles.md#which-color-wins)). The zone
-  above takes the color of the rule as its fill and keeps its outline.
-  A feature whose style sets `fillColor` keeps its own color
+- The style rule colors one key of the look
+  ([which color wins](styles.md#which-color-wins)): the one the type
+  declares in `styleRuleChannel` (`'fill'` for `fillColor`, `'stroke'`
+  for `strokeColor`, `'point'` for `pointColor`), or else the one of the
+  geometry of the feature, as for a built-in type: `pointColor` for a
+  Point, `strokeColor` for a LineString and `fillColor` for a Polygon.
+  The zone above, a Polygon, takes the color of the rule as its fill and
+  keeps its outline. A card or a box drawn on a Point, whose paper is
+  `fillColor`, declares `styleRuleChannel: 'fill'`. A feature whose style
+  sets the key keeps its own color
 - `defaultStyle` is checked as the style of a feature is, and an invalid
   one is refused with `invalid-input`. It is copied when the type is
   added: change it by adding the type again

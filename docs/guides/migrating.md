@@ -817,8 +817,15 @@ drawn. Each change below names what replaces what is gone.
   color of the layer rule over it and the style of the feature), in
   place of reading `feature.style` with defaults of its own. A type that
   drew so drew no color of a layer rule, and `getAppliedStyle` answered
-  the defaults of the geometry for it; the rule colors `fillColor` of a
-  custom type. A definition given to `override` cannot have it
+  the defaults of the geometry for it. A definition given to `override`
+  cannot have it
+- The rule colors the key a custom type declares in `styleRuleChannel`
+  (`'fill'`, `'stroke'` or `'point'`), or else the key of the geometry
+  of the feature, as for a built-in type. It colored `fillColor` of every
+  custom type: a type of points or of lines that declares none now has
+  the rule color in `pointColor` or in `strokeColor`, and a type drawn
+  as a card or a box on a Point with its paper in `fillColor` declares
+  `styleRuleChannel: 'fill'` to keep it
 - A style key an extension adds to `FeatureStyle` by declaration merging
   is optional in `FeatureStyleResolved` (it was required, though the look
   has it only when the type or the feature gives it): check it where it

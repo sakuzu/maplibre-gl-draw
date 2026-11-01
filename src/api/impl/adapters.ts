@@ -530,9 +530,15 @@ export function installFeatureType(
     // The fields its resize and rotation write, for a custom type (an override keeps the fields of
     // the built-in type)
     if (!overriding) add(deps.transformFields.register(type, definition.transformFields ?? {}));
-    // The look it declares, for a custom type (an override keeps the defaults of the built-in type)
-    if (!overriding && definition.defaultStyle) {
-      add(deps.appliedStyles.registerType(type, definition.defaultStyle));
+    // The look it declares and the channel the rule colors, for a custom type (an override keeps
+    // the defaults and the channel of the built-in type)
+    if (!overriding) {
+      add(
+        deps.appliedStyles.registerType(type, {
+          style: definition.defaultStyle,
+          channel: definition.styleRuleChannel,
+        }),
+      );
     }
 
     const handles = definition.handles?.bind(definition);

@@ -211,9 +211,13 @@ writing it. Its changes are listed after those of 3.0.0.
   custom type, in place of the defaults of their geometry (the `style`
   option, which still fills the keys it leaves out).
   `features.getAppliedStyle` answers it with the color of the layer rule
-  (the fill of a custom type) and the style of the feature over it. It is
-  checked as the style of a feature is, and a definition given to
+  (in the channel of the type) and the style of the feature over it. It
+  is checked as the style of a feature is, and a definition given to
   `override` cannot have it (`invalid-input`).
+- `FeatureTypeDefinition.styleRuleChannel` (`'fill'`, `'stroke'` or
+  `'point'`): the key of the look the color of a layer rule goes to for
+  the features of a custom type. A definition given to `override` cannot
+  have it (`invalid-input`).
 - `RenderContext.appliedStyle(feature)`: the look a feature is drawn
   with, as `features.getAppliedStyle` answers it, put together by the
   library in one place, so that the renderer of a custom type draws what
@@ -245,6 +249,16 @@ writing it. Its changes are listed after those of 3.0.0.
   `invalid-input` before anything is written.
 
 ### Changed in 3.0.0
+
+- The color of a layer rule goes to the key a custom type declares in
+  `styleRuleChannel`, or else to the key of the geometry of the feature,
+  as for a built-in type: `pointColor` for a Point or a MultiPoint,
+  `strokeColor` for a LineString or a MultiLineString, and `fillColor`
+  for a Polygon or any other geometry. It went to `fillColor` for every
+  custom type: the rule color of a custom type of points or of lines that
+  declares no channel changes, and a type drawn as a card or a box on a
+  Point with its paper in `fillColor` declares `styleRuleChannel: 'fill'`
+  to keep it.
 
 - `FeatureStyleResolved` has every key of the style the library defines,
   each required, and no more: a style key an extension adds to
