@@ -77,7 +77,12 @@ export interface LayerTableView {
    * Circle, a type of an extension that gives its `bbox`), the box it covers
    */
   listDrawnRows(bbox: BBox): Int32Array;
-  /** The bbox of a row (null for a row without a geometry or not in this layer) */
+  /**
+   * The bbox of the positions of a row, `[west, south, east, north]` in degrees, as they are now
+   * (null for a row without a geometry or not in this layer). It is the box of the geometry, not
+   * the box as drawn of a type whose extent is worked out from its feature, which
+   * {@link LayerTableView.listDrawnRows} meets
+   */
   getRowBBox(handle: RowHandle): BBox | null;
   /** The type of a row (null for a row not in this layer) */
   getRowType(handle: RowHandle): FeatureType | null;

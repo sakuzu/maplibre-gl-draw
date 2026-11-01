@@ -154,6 +154,8 @@ const zoneRenderer: FeatureRenderer = {
   draw(feature, ctx) {
     const rings = (feature.geometry as Polygon).coordinates;
     const look = ctx.appliedStyle(feature);
+    // The zoom the feature was drawn at, from which its width follows the map
+    const referenceZoom = feature.properties['maplibre-gl-draw:createdZoom'];
     ctx.fill.draw(rings, {
       color: look.fillColor,
       opacity: look.fillOpacity * ctx.opacity,
@@ -167,7 +169,7 @@ const zoneRenderer: FeatureRenderer = {
           opacity: look.strokeOpacity * ctx.opacity,
           lineStyle: look.lineStyle,
         },
-        { closed: true },
+        { closed: true, referenceZoom },
       );
     }
   },
@@ -195,7 +197,37 @@ The line renderer takes a width in pixels by default.
 width it has at that zoom. The point renderer takes `referenceZoom` too,
 for the size and the outline of its marker: a marker of a feature that
 keeps its size on the map passes the zoom the feature keeps
-(`maplibre-gl-draw:createdZoom`).
+(`maplibre-gl-draw:createdZoom`). A renderer reads that zoom from the
+key of the feature, as the zone above does; a feature without it keeps
+its size on the screen.
+
+A type of points draws its marker with the point renderer and the look
+of the feature. The look has the radius of the marker (`pointRadius`),
+and the renderer takes its diameter (`size`):
+
+<!-- docs-check:
+declare const feature: import('@sakuzu/maplibre-gl-draw').Feature;
+declare const ctx: import('@sakuzu/maplibre-gl-draw').RenderContext;
+-->
+
+```ts
+import type { Point } from 'geojson';
+
+const look = ctx.appliedStyle(feature);
+ctx.point.draw(
+  (feature.geometry as Point).coordinates,
+  {
+    shape: look.pointShape,
+    size: 2 * look.pointRadius,
+    fillColor: look.pointColor,
+    fillOpacity: look.pointOpacity * ctx.opacity,
+    strokeColor: look.pointStrokeColor,
+    strokeWidth: look.pointStrokeWidth,
+    strokeOpacity: look.pointOpacity * ctx.opacity,
+  },
+  { referenceZoom: feature.properties['maplibre-gl-draw:createdZoom'] },
+);
+```
 
 When the view crosses the ±180 degree meridian, a drawing shows each
 copy of the world, and `draw` is called once per copy. Compute what you
@@ -392,6 +424,12 @@ const signboard: FeatureTypeDefinition = {
   },
 };
 ```
+
+`boardFootprint` lays the box on the map from its size in pixels at the
+zoom it was made at, its angle and its scale, as `cardFootprint` of the
+card of the example [Custom feature types](../examples/custom-feature-types.md)
+(`card.ts`) does; `eastMiddleOf` and `widthFromCenter` below are written
+out there too.
 
 A rotation adds its angle to `boardAngle`, within [0, 360), and a resize
 multiplies `boardScale` by its factor; a feature without the key starts

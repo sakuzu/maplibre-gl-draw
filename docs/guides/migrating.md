@@ -615,16 +615,20 @@ The building blocks for custom shaders move from the main entry to
 the main entry follows semver. `getStrokeDashPattern` and
 `getTerrainTessellationStep` are `dashPattern` and
 `terrainTessellationStep` there. `ShaderData` and `OffsetUniforms`,
-the types of the fields of `RenderContext`, stay in the main entry.
+the types of the fields of `RenderContext`, stayed in the main entry in
+2.x; in 3.0 they are types of `/webgl`, with `viewUniforms(ctx)` that
+gives them ([an extension in 3.0](#an-extension-in-30)).
 The parts that draw on the terrain take the `RenderContext` of the draw
 call (or its `terrain`) in place of the terrain state
 (`FrameDrawContext.terrain`): write `setTerrain(ctx)`,
 `terrainTessellationStep(ctx)` and `drawQuadSurfaceOnTerrain(ctx, ...)`,
 and construct `ProjectionUniformManager` and `QuadShader` without a
 terrain. `TerrainContext` and `TerrainRenderState` are not exported. The
-pure math that 1.0 exported
-(oriented boxes, conversions between pixels and degrees, contrast
-colors) is not exported any more: keep your own copy.
+pure math that 1.0 exported (oriented boxes, conversions between pixels
+and degrees, contrast colors) is not exported any more: keep your own
+copy. From 3.0, a size in pixels kept with a zoom is turned into a
+length on the ground with `pixelsToMeters` of `/geometry`, and into
+degrees with `metersToDegrees`, the formula the library draws by.
 
 ### The Store
 

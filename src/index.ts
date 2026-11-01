@@ -13,8 +13,9 @@
  *
  * Import from here for everything an application does with a drawing: create the instance,
  * read and change its features, layers and groups, listen to what changes, save and load the
- * document, and add plugins, modes and feature types. Three subpaths cover the rest: geometry
- * that needs no map (`/geometry`), large tables read in a Worker (`/table`) and custom shaders
+ * document, and add plugins, modes and feature types. Four subpaths cover the rest: geometry
+ * that needs no map (`/geometry`), large tables read in a Worker (`/table`), the parts that hold
+ * the features of a layer as rows of columns (`/kasane`, experimental) and custom shaders
  * (`/webgl`).
  *
  * ```ts

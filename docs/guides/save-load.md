@@ -479,7 +479,9 @@ only part of the document can also implement the optional
 part it does not hold are not used again.
 
 A store whose IDs are of a form of its own (the IDs of a writer of a
-shared document) implements the optional `acceptsId(id)` and is given
+shared document) implements the optional `acceptsId(id)`, which is given
+the ID alone (not whether it names a feature, a group or a layer), and is
+given
 with a `generateId` that makes IDs of that form. A load gives a feature,
 a group or a layer whose ID the store does not take a new ID, and a
 feature, a group or a layer created with such an ID (`features.create`

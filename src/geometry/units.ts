@@ -70,6 +70,10 @@ const TILE_SIZE = 512;
  * at the latitude. The latitude is held within the latitudes Web Mercator draws (±85.0511
  * degrees).
  *
+ * It does not depend on the view. A size of the current view, which keeps its pixels as the map
+ * zooms and tilts (a margin, a handle out of a box), takes the meters of a pixel of the view drawn
+ * last instead: `ScreenContext.metersPerPixel(position)` of the context of an extension.
+ *
  * @param pixels The size in pixels
  * @param zoom The zoom at which the size is given
  * @param latitude The latitude in degrees

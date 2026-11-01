@@ -498,6 +498,34 @@ writing it. Its changes are listed after those of 3.0.0.
 | The white circle the library drew | `drawHandles`, `ctx.point.draw` |
 | `handles(feature, screen)` | `handles(feature, ctx)`, `ctx.screen` |
 | `globalHandles(screen)` | `globalHandles(ctx)`, `ctx.screen` |
+| `PreparedTable.bounds`, `SelectionBulk.bounds` | `bbox` |
+| `Dataset.getRowBounds`, `LayerTableView.getRowBounds` | `getRowBBox` |
+| `selectionStyle.boundingBox` | `selectionStyle.box` |
+| `selectionStyle.boxSelection` | `selectionStyle.selectionRectangle` |
+| `boxSelect(feature, box, ctx)` | `boxSelect(feature, boxPx, ctx)` |
+| `FeatureTypeDefinition.bounds`, `outline` | `footprint(feature, ctx)` |
+| `ScreenContext.bounds`, `outline` | `draw.rendered.getSelectionBox(id)` |
+| `HitTestContext`, `SnapContext` | `PointContext` |
+| `Hit` of a type, of a companion | `{ distancePx }`, `{ id, distancePx }` |
+| `Hit` kind `'handle'` | (removed) |
+| `features.get(id, { applySketches })` | `draw.rendered.get(id)` |
+| `draggedRowsOf(tables)` of `/kasane` | `draw.rendered.getDraggedRows()` |
+| `ExtensionContext.drawing` | `ctx.draw.drawing` |
+| `interaction.onDrawCommit` | `Plugin.onFeatureCommit` |
+| `interaction.onFeatureClick` | `selectMode.onSelectedFeatureClick` |
+| `interaction.onFeatureDoubleClick` | `selectMode.onFeatureDoubleClick` |
+| `interaction.isBusy` | `exclusive.isActive` |
+| `HandleProvider.onDrag` | `onHandleDrag` |
+| `HandleProvider.onDragStart` | `onHandleDragStart` |
+| `HandleProvider.onDragEnd` | `onHandleDragEnd` |
+| `TerrainAnchors` | `TerrainSurface` |
+| `TerrainAnchors.ghostOpacity` | `TerrainSurface.occlusionOpacity` |
+| `TerrainAnchors.project` | `ScreenContext.project` |
+| `RenderContext.zoom`, `pixelRatio` | `ctx.screen.zoom`, `pixelRatio` |
+| `RenderContext.shader`, `offset`, `projection` | `viewUniforms(ctx)` |
+| `ShaderData`, `OffsetUniforms` of the main entry | the same of `/webgl` |
+| `ctx.line.draw(..., { createdZoom })` | `{ referenceZoom }` |
+| `setUniforms(projection, zoom, offset)` | `setUniforms(projection, offset)` |
 
 ### Added in 2.3.0
 

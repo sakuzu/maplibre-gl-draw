@@ -94,6 +94,11 @@ export interface ScreenContext {
    * length of `n * metersPerPixel(position)` meters is `n` pixels on the screen; tilted, on the
    * globe away from the center, or over terrain, it is foreshortened as the map is.
    *
+   * Use it for a size of the current view, which keeps its pixels as the map zooms (a margin, a
+   * handle out of a box). A size kept with a zoom of its own, which grows and shrinks with the
+   * map from that zoom (a box made at a zoom), takes `pixelsToMeters(pixels, zoom, latitude)` of
+   * `/geometry` instead: it does not depend on the view.
+   *
    * @returns The meters of a CSS pixel
    */
   metersPerPixel(lngLat: Position): number;
@@ -258,19 +263,19 @@ export interface ModeContext extends ExtensionContext {
  */
 export interface PointContext {
   /** The point on the screen, in the view drawn last */
-  point: ScreenPoint;
+  readonly point: ScreenPoint;
   /** The position on the map drawn at the point */
-  lngLat: Position;
+  readonly lngLat: Position;
   /** How far from the point a hit or a candidate may be, in pixels */
-  tolerancePx: number;
+  readonly tolerancePx: number;
   /** The conversion between the map and the screen, in the view drawn last */
-  screen: ScreenContext;
+  readonly screen: ScreenContext;
   /**
    * The IDs of the features this reading leaves out, absent when it leaves out none: for a hit
    * test, the features this client is dragging as a whole; for snapping, those and the features
    * that must not be snapped to, such as the one being drawn
    */
-  excludeIds?: ReadonlySet<string>;
+  readonly excludeIds?: ReadonlySet<string>;
 }
 
 /**

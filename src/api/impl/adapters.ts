@@ -716,8 +716,8 @@ export function adaptSnapProvider(
 /**
  * A provider of handles of the contract as a provider of auxiliary handles of the engine
  *
- * The drag of a handle asks `onHandleDragStart` first, which can refuse it, then calls `onHandleDrag` for
- * every move and applies its patch as an intermediate update; the patch of the end of the drag
+ * The drag of a handle asks `onHandleDragStart` first, which can refuse it, then calls
+ * `onHandleDrag` for every move and applies its patch as an intermediate update; the patch of the end of the drag
  * is applied as the final one, and `onHandleDragEnd` follows it.
  *
  * @internal

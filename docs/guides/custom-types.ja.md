@@ -148,6 +148,8 @@ const zoneRenderer: FeatureRenderer = {
   draw(feature, ctx) {
     const rings = (feature.geometry as Polygon).coordinates;
     const look = ctx.appliedStyle(feature);
+    // The zoom the feature was drawn at, from which its width follows the map
+    const referenceZoom = feature.properties['maplibre-gl-draw:createdZoom'];
     ctx.fill.draw(rings, {
       color: look.fillColor,
       opacity: look.fillOpacity * ctx.opacity,
@@ -161,7 +163,7 @@ const zoneRenderer: FeatureRenderer = {
           opacity: look.strokeOpacity * ctx.opacity,
           lineStyle: look.lineStyle,
         },
-        { closed: true },
+        { closed: true, referenceZoom },
       );
     }
   },
@@ -188,7 +190,36 @@ draw.extensions.featureTypes.add({
 を渡すと、そのズームでの幅を基準に、線がズームに合わせて太くなったり
 細くなったりします。点の描画器も、印の大きさと縁の太さに
 `referenceZoom` を受け取ります。地図の上で大きさを保つ地物の印には、
-地物が持つズーム (`maplibre-gl-draw:createdZoom`) を渡します。
+地物が持つズーム (`maplibre-gl-draw:createdZoom`) を渡します。描画器は、
+上の区域のように、そのズームを地物の鍵から読みます。その鍵の無い地物は、
+画面の上で大きさを保ちます。
+
+点の型は、点の描画器と地物の見た目で印を描きます。見た目は印の半径
+(`pointRadius`) を持ち、描画器は直径 (`size`) を受け取ります。
+
+<!-- docs-check:
+declare const feature: import('@sakuzu/maplibre-gl-draw').Feature;
+declare const ctx: import('@sakuzu/maplibre-gl-draw').RenderContext;
+-->
+
+```ts
+import type { Point } from 'geojson';
+
+const look = ctx.appliedStyle(feature);
+ctx.point.draw(
+  (feature.geometry as Point).coordinates,
+  {
+    shape: look.pointShape,
+    size: 2 * look.pointRadius,
+    fillColor: look.pointColor,
+    fillOpacity: look.pointOpacity * ctx.opacity,
+    strokeColor: look.pointStrokeColor,
+    strokeWidth: look.pointStrokeWidth,
+    strokeOpacity: look.pointOpacity * ctx.opacity,
+  },
+  { referenceZoom: feature.properties['maplibre-gl-draw:createdZoom'] },
+);
+```
 
 表示が経度 ±180 度の子午線をまたぐと、描画は世界の写しをそれぞれ
 見せ、`draw` は写しごとに 1 回呼ばれます。描くものを地図のカメラから
@@ -371,6 +402,12 @@ const signboard: FeatureTypeDefinition = {
   },
 };
 ```
+
+`boardFootprint` は、作ったときのズームでのピクセルの大きさと角度と倍率
+から、箱を地図の上に置きます。例
+[Custom feature types](../examples/custom-feature-types.ja.md) のカード
+(`card.ts`) の `cardFootprint` と同じです。下の `eastMiddleOf` と
+`widthFromCenter` も、そこに書いてあります。
 
 回転は `boardAngle` に角度を足して 0 以上 360 未満に収め、大きさ変えは
 `boardScale` に倍率を掛けます。鍵の無い地物は 0 と 1 から始まります。

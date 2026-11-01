@@ -469,8 +469,9 @@ export interface Store extends StoreView {
    * `invalid-input`, and nothing is written. So a Store that takes the id of something deleted,
    * to bring it back, answers true for it.
    *
-   * It is not asked of the ids `generateId` makes, which the Store is given with: give the
-   * instance a `generateId` whose ids the Store takes. Nor is it asked of a group a Store of rows
+   * It is given the id alone, not whether it is the id of a feature, a group or a layer: a Store
+   * takes or refuses an id by its form. It is not asked of the ids `generateId` makes, which the
+   * Store is given with: give the instance a `generateId` whose ids the Store takes. Nor is it asked of a group a Store of rows
    * brings back (`groups.restore`), which keeps its id.
    */
   acceptsId?(id: string): boolean;

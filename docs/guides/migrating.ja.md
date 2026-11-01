@@ -628,15 +628,19 @@ options)` で描きます。
 でも変わることがあります。main の入口は semver に従います。
 `getStrokeDashPattern` と `getTerrainTessellationStep` は、そこでは
 `dashPattern` と `terrainTessellationStep` です。`RenderContext`
-の欄の型である `ShaderData` と `OffsetUniforms` は main の入口に
-残ります。地形の上に描く部品は、地形の状態 (`FrameDrawContext.terrain`)
+の欄の型である `ShaderData` と `OffsetUniforms` は、2.x では main の
+入口に残りました。3.0 では、それらを渡す `viewUniforms(ctx)` と一緒に
+`/webgl` の型になります ([3.0 の拡張](#30-の拡張))。地形の上に描く部品は、地形の状態 (`FrameDrawContext.terrain`)
 の代わりに、描画の呼び出しの `RenderContext` (かその `terrain`) を
 受け取ります。`setTerrain(ctx)`、`terrainTessellationStep(ctx)`、
 `drawQuadSurfaceOnTerrain(ctx, ...)` と書き、
 `ProjectionUniformManager` と `QuadShader` は地形を渡さずに作ります。
-`TerrainContext` と `TerrainRenderState` は出さなくなりました。1.0 が出していた
-純粋な計算 (向きのある矩形、ピクセルと度の換算、コントラストの色)
-は出さなくなりました。必要なら手元に写してください。
+`TerrainContext` と `TerrainRenderState` は出さなくなりました。1.0 が
+出していた純粋な計算 (向きのある矩形、ピクセルと度の換算、コントラストの
+色) は出さなくなりました。必要なら手元に写してください。3.0 からは、
+ズームと一緒に持つピクセルの大きさを、`/geometry` の `pixelsToMeters` で
+地面の長さに、`metersToDegrees` で度に直せます。ライブラリーが描くのと
+同じ式です。
 
 ### Store
 
