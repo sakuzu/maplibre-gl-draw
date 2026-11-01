@@ -39,8 +39,9 @@ import { tilingSignature } from './tiling.js';
  * that it follows the terrain (pass it to `densifyPath`).
  *
  * @param terrain - The render context of the draw call, or its `terrain`
- * @returns The step, or `null` when the terrain is disabled (or the object was not handed out
- *   by the engine)
+ * @returns The step, or `null` when the terrain is disabled
+ * @throws `DrawError` with the code `invalid-input` when it is an object the instance did not
+ *   give a renderer, as `viewUniforms` does
  */
 export function terrainTessellationStep(
   terrain: RenderContext | TerrainSurface,

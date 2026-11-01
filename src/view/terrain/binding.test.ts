@@ -7,7 +7,8 @@
  *
  * A renderer of an extension only holds the `RenderContext` it receives (or its `terrain`).
  * The building blocks that draw on the terrain must find the terrain state of the instance
- * behind it, and an object the engine did not hand out must draw without terrain.
+ * behind it. `null` draws without terrain, and an object the engine did not hand out is refused
+ * with `invalid-input`, as `viewUniforms` refuses it.
  */
 
 import type { ProjectionData } from 'maplibre-gl';
@@ -105,10 +106,11 @@ describe('the terrain behind a render context', () => {
     expect(terrainStateOf(ctx.terrain)).toBe(terrain);
   });
 
-  it('finds no state for null and for an object the engine did not hand out', () => {
+  it('finds no state for null, and refuses an object the engine did not hand out', () => {
     expect(terrainStateOf(null)).toBeNull();
-    expect(terrainStateOf({} as TerrainSurface)).toBeNull();
-    expect(terrainStateOf({ terrain: {} } as RenderContext)).toBeNull();
+    const refused = expect.objectContaining({ code: 'invalid-input' });
+    expect(() => terrainStateOf({} as TerrainSurface)).toThrow(refused);
+    expect(() => terrainStateOf({ terrain: {} } as RenderContext)).toThrow(refused);
   });
 
   it('lets ProjectionUniformManager draw on the terrain of the render context', () => {
@@ -117,7 +119,9 @@ describe('the terrain behind a render context', () => {
     expect(terrainOnWith(ctx)).toBe(1);
     expect(terrainOnWith(ctx.terrain)).toBe(1);
     expect(terrainOnWith(null)).toBe(0);
-    expect(terrainOnWith({} as TerrainSurface)).toBe(0);
+    expect(() => terrainOnWith({} as TerrainSurface)).toThrow(
+      expect.objectContaining({ code: 'invalid-input' }),
+    );
   });
 
   it('gives the tessellation step of the terrain of the render context', () => {
@@ -126,7 +130,9 @@ describe('the terrain behind a render context', () => {
     setTerrainRenderState(terrain, ACTIVE_TERRAIN);
     expect(terrainTessellationStep(ctx)?.grid).toBe(ACTIVE_TERRAIN.stepGrid);
     expect(terrainTessellationStep(ctx.terrain)?.grid).toBe(ACTIVE_TERRAIN.stepGrid);
-    expect(terrainTessellationStep({} as TerrainSurface)).toBeNull();
+    expect(() => terrainTessellationStep({} as TerrainSurface)).toThrow(
+      expect.objectContaining({ code: 'invalid-input' }),
+    );
   });
 
   it('paints no surface without terrain', () => {
@@ -138,6 +144,8 @@ describe('the terrain behind a render context', () => {
     ] as unknown as Parameters<typeof drawQuadSurfaceOnTerrain>[1];
     const surface = {} as Parameters<typeof drawQuadSurfaceOnTerrain>[2];
     expect(drawQuadSurfaceOnTerrain(renderContextOver(terrain), corners, surface, 1)).toBe(false);
-    expect(drawQuadSurfaceOnTerrain({} as TerrainSurface, corners, surface, 1)).toBe(false);
+    expect(() => drawQuadSurfaceOnTerrain({} as TerrainSurface, corners, surface, 1)).toThrow(
+      expect.objectContaining({ code: 'invalid-input' }),
+    );
   });
 });

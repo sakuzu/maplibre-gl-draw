@@ -174,8 +174,10 @@ export class ProjectionUniformManager {
   /**
    * Sets the terrain the next uniforms are taken from.
    *
-   * @param terrain - The render context of the draw call, or its `terrain`; `null` (or an
-   *   object the engine did not hand out) draws without terrain
+   * @param terrain - The render context of the draw call, or its `terrain`; `null` draws without
+   *   terrain
+   * @throws `DrawError` with the code `invalid-input` when it is an object the instance did not
+   *   give a renderer, as `viewUniforms` does
    */
   setTerrain(terrain: RenderContext | TerrainSurface | null): void {
     this.terrain = terrainStateOf(terrain);

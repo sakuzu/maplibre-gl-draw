@@ -528,6 +528,7 @@ describe('the footprint of a custom feature type', () => {
 
   it('gives the footprint of the geometry for one that is not one, and none for null', () => {
     const engine = engineWithDraw();
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     let given: unknown = null;
     engine.extensions.collections.featureTypes.add({
       type: 'shape',
@@ -554,6 +555,10 @@ describe('the footprint of a custom feature type', () => {
       given = wrong;
       expect(computeBoundingBox(polygon, extensions)).toEqual(ofGeometry);
     }
+    // Told once, in the console, as a handle left out is
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(String(warn.mock.calls[0]?.[0])).toMatch(/"shape" gave a footprint that is not one/);
+    warn.mockRestore();
     engine.destroy();
   });
 
@@ -604,11 +609,17 @@ describe('the extent of a custom feature type', () => {
     expect(draw.features.list({ bbox: [11.5, 11.5, 12, 12] })).toHaveLength(0);
     expect(draw.features.list({ bbox: near })).toHaveLength(1);
 
-    // An extent that is not four finite numbers gives the one of the geometry
+    // An extent that is not four finite numbers gives the one of the geometry, told once
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     reach = Number.NaN;
     engine.context.spatialIndex.invalidateType('wide');
     expect(draw.features.list({ bbox: near })).toHaveLength(0);
     expect(draw.features.list({ bbox: [9, 9, 10, 10] })).toHaveLength(1);
+    engine.context.spatialIndex.invalidateType('wide');
+    expect(draw.features.list({ bbox: [9, 9, 10, 10] })).toHaveLength(1);
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(String(warn.mock.calls[0]?.[0])).toMatch(/"wide" gave a bbox that is not one/);
+    warn.mockRestore();
 
     reach = 2;
     engine.context.spatialIndex.invalidateType('wide');

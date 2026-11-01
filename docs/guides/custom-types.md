@@ -863,8 +863,9 @@ call, or its `terrain`: `setTerrain(ctx)` on a
 `ProjectionUniformManager` or a `QuadShader` before drawing, and
 `terrainTessellationStep(ctx)` and `drawQuadSurfaceOnTerrain(ctx, ...)`.
 The render context is valid for its draw call only, so pass the one of
-each call; given `null`, or an object the library did not hand out,
-they draw without terrain.
+each call. Given `null`, they draw without terrain; given an object the
+library did not hand out, they throw a `DrawError` with the code
+`invalid-input`, as `viewUniforms` does.
 
 ```ts
 import type { RenderContext } from '@sakuzu/maplibre-gl-draw';

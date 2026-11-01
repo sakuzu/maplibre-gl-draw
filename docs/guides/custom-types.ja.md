@@ -811,8 +811,9 @@ draw.extensions.companionProviders.add(halo);
 `setTerrain(ctx)` を呼び、`terrainTessellationStep(ctx)` と
 `drawQuadSurfaceOnTerrain(ctx, ...)` にも渡します。描画の文脈はその
 呼び出しの間だけ有効なので、呼び出しごとにそのときのものを渡して
-ください。`null` や、ライブラリーが渡したものでないオブジェクトを
-渡すと、地形なしで描きます。
+ください。`null` を渡すと、地形なしで描きます。ライブラリーが渡した
+ものでないオブジェクトを渡すと、`viewUniforms` と同じく、コード
+`invalid-input` の `DrawError` を投げます。
 
 ```ts
 import type { RenderContext } from '@sakuzu/maplibre-gl-draw';

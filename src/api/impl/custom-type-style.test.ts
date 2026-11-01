@@ -405,3 +405,48 @@ describe('the type of the look a feature is drawn with', () => {
     expectTypeOf<Required<FeatureStyle>>().toExtend<FeatureStyleResolved>();
   });
 });
+
+describe('a color a shared renderer cannot read', () => {
+  it('is drawn transparent, and told once in the console for each part of each renderer', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const view = open(STORE_KINDS[0][1](), [
+      featureOf('s', 'scribble'),
+      featureOf('t', 'scribble'),
+    ]);
+    view.draw.extensions.featureTypes.add({
+      type: 'scribble',
+      geometry: 'Point',
+      renderer: {
+        onAdd() {},
+        draw(feature, ctx) {
+          const at = (feature.geometry as unknown as { coordinates: [number, number] }).coordinates;
+          ctx.line.draw([at, at], { width: 1, color: 'tomatoes', opacity: 1, lineStyle: 'solid' });
+          ctx.fill.draw([[at, at, at]], { color: 'not a color', opacity: 1 });
+          ctx.point.draw(at, {
+            shape: 'circle',
+            size: 4,
+            fillColor: '#ff0000',
+            fillOpacity: 1,
+            strokeColor: 'nope',
+            strokeWidth: 1,
+            strokeOpacity: 1,
+          });
+        },
+        onRemove() {},
+      },
+    });
+    const renderer = view.renderers.get('scribble');
+    if (!renderer) throw new Error('no renderer');
+    renderer.onAdd(GL, view.engine.map);
+    const context = frame();
+    for (const id of ['s', 't', 's']) {
+      renderer.draw(view.store.getFeature(id) as StoredFeature, PROJECTION, 12, context);
+    }
+    const told = warn.mock.calls.map((call) => String(call[0]));
+    expect(told).toHaveLength(3);
+    expect(told[0]).toMatch(/"tomatoes" as the color of ctx\.line/);
+    expect(told[1]).toMatch(/"not a color" as the color of ctx\.fill/);
+    expect(told[2]).toMatch(/"nope" as the strokeColor of ctx\.point/);
+    warn.mockRestore();
+  });
+});

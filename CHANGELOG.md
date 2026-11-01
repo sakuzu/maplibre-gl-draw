@@ -254,6 +254,17 @@ writing it. Its changes are listed after those of 3.0.0.
 
 ### Changed in 3.0.0
 
+- What the library does not take is told, as a handle of a wrong shape
+  is: a footprint or a bbox of a feature type that is not one, which
+  falls back to that of the geometry, and a color a shared renderer
+  cannot read, which is drawn transparent, give a warning in the console
+  once (for the type, or for each part of each renderer). The parts of
+  `/webgl` that draw on the terrain (`setTerrain`,
+  `terrainTessellationStep`, `drawQuadSurfaceOnTerrain`) throw a
+  `DrawError` with the code `invalid-input` for an object the instance did
+  not give a renderer, as `viewUniforms` does (`null` still draws without
+  terrain); they drew without terrain.
+
 - The color of a layer rule goes to the key a custom type declares in
   `styleRuleChannel`, or else to the key of the geometry of the feature,
   as for a built-in type: `pointColor` for a Point or a MultiPoint,

@@ -16,6 +16,10 @@ import type { ScreenContext, TerrainSurface } from './context.js';
 /**
  * The shared renderer of lines. It only draws; the zoom, the projection and the terrain come
  * from the {@link RenderContext} it was taken from.
+ *
+ * The shared renderers read their colors as `parseCssColor` does: a color they cannot read
+ * is drawn transparent, and told by a warning in the console, once for each part of each
+ * renderer of an instance.
  */
 export interface LineRenderer {
   /**

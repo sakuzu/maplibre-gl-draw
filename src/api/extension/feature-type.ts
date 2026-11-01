@@ -201,7 +201,8 @@ export interface FeatureTypeDefinition {
    * it gathers the candidates of a hit test and of a box selection, answers
    * `features.list({ bbox })`, and decides which features are near enough to the view to be
    * drawn. The extent of the geometry is used when it is left out, and when it returns an
-   * extent that is not four finite numbers from the west and south to the east and north.
+   * extent that is not four finite numbers from the west and south to the east and north, which
+   * is told by a warning in the console, once for the type.
    *
    * It is measured when a feature changes; call `invalidate({ type })` when it depends on
    * something outside the document. A reach in pixels belongs in `hitPaddingPx`.
@@ -240,7 +241,8 @@ export interface FeatureTypeDefinition {
    *
    * A type without it, or a footprint that is not one of the two (corners that are not four
    * finite positions, sizes that are not finite numbers of 0 or more), has the footprint of its
-   * geometry: the extent of its positions, or a point the size of a point marker around it.
+   * geometry: the extent of its positions, or a point the size of a point marker around it. A
+   * footprint that is not one is told by a warning in the console, once for the type.
    *
    * @returns The footprint, or `null` when the feature has nothing to draw
    */

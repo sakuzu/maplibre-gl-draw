@@ -18,7 +18,7 @@ import type {
   FrameDrawContext,
   LayeredOverlayRenderer,
 } from '../../extension/renderers.js';
-import { toColor } from '../../shared/color.js';
+import { parseColor, toColor } from '../../shared/color.js';
 import type { Feature as StoredFeature } from '../../store/types.js';
 import { applyDrawBlendState } from '../../view/layer/blend.js';
 import { calculateOffsetUniforms, type OffsetUniforms } from '../../view/shaders/helpers.js';
@@ -88,6 +88,42 @@ function pair(position: Position): [number, number] {
 }
 
 /**
+ * Tells a color a shared renderer cannot read (it draws it transparent): a warning in the console
+ * once for each part of each shared renderer of an instance
+ */
+type ColorWarning = (part: string, value: unknown) => void;
+
+/** The parts of the shared renderers of each instance already warned of a color */
+const warnedColors = new WeakMap<RenderAdapterDeps, Set<string>>();
+
+/** The warning of the colors of the shared renderers of an instance */
+function colorWarningOf(deps: RenderAdapterDeps): ColorWarning {
+  return (part, value) => {
+    let warned = warnedColors.get(deps);
+    if (!warned) {
+      warned = new Set();
+      warnedColors.set(deps, warned);
+    }
+    if (warned.has(part)) return;
+    warned.add(part);
+    console.warn(
+      `The shared renderer was given ${JSON.stringify(value)} as ${part}, which is not a CSS ` +
+        'color the library reads (parseCssColor); it is drawn transparent',
+    );
+  };
+}
+
+/** A CSS color of a shared renderer, told once when it cannot be read */
+function colorOf(
+  value: string,
+  part: string,
+  warn: ColorWarning | undefined,
+): ReturnType<typeof toColor> {
+  if (warn && parseColor(value) === null) warn(part, value);
+  return toColor(value);
+}
+
+/**
  * Builds the render context of the contract for one draw call
  *
  * @param gl - The WebGL context the renderer was added with
@@ -104,13 +140,14 @@ export function createRenderContext(
   surface: TerrainSurface,
   screen: ScreenContext,
   appliedStyle: (feature: StoredFeature) => FeatureStyleResolved,
+  warnColor?: ColorWarning,
 ): RenderContext {
   const line: LineRenderer = {
     draw(coordinates, style, options = {}) {
       const coords = coordinates.map(pair);
       const stroke = {
         width: style.width,
-        color: toColor(style.color),
+        color: colorOf(style.color, 'the color of ctx.line', warnColor),
         opacity: style.opacity,
         lineStyle: style.lineStyle,
         ...(style.dashArray !== undefined && { dashArray: style.dashArray }),
@@ -128,7 +165,7 @@ export function createRenderContext(
   };
   const fill: FillRenderer = {
     draw(rings, style) {
-      const [r, g, b, a] = toColor(style.color);
+      const [r, g, b, a] = colorOf(style.color, 'the color of ctx.fill', warnColor);
       base.fillShaderManager.drawPolygonRings(
         rings.map((ring) => ring.map(pair)),
         [r, g, b, a * style.opacity],
@@ -146,9 +183,9 @@ export function createRenderContext(
         {
           shape: style.shape,
           size: style.size * scale,
-          fillColor: toColor(style.fillColor),
+          fillColor: colorOf(style.fillColor, 'the fillColor of ctx.point', warnColor),
           fillOpacity: style.fillOpacity,
-          strokeColor: toColor(style.strokeColor),
+          strokeColor: colorOf(style.strokeColor, 'the strokeColor of ctx.point', warnColor),
           strokeWidth: style.strokeWidth * scale,
           strokeOpacity: style.strokeOpacity,
         },
@@ -202,6 +239,7 @@ interface Attachment {
  * share one
  */
 function createContextCache(deps: RenderAdapterDeps) {
+  const warnColor = colorWarningOf(deps);
   let last: {
     base: FrameDrawContext;
     projection: ProjectionData;
@@ -231,6 +269,7 @@ function createContextCache(deps: RenderAdapterDeps) {
       deps.surface(base.terrain),
       deps.screen,
       deps.appliedStyle,
+      warnColor,
     );
     last = { base, projection, zoom, context };
     return context;

@@ -496,11 +496,21 @@ export function installFeatureType(
     const footprint = definition.footprint?.bind(definition);
     if (footprint) {
       const footprintContext: FootprintContext = Object.freeze({ screen: deps.screen });
+      let warnedFootprint = false;
       /** The footprint the type gives a feature it takes, when it is one */
-      const footprintOf = (feature: StoredFeature): Footprint | null | undefined =>
-        applies(feature)
-          ? validFootprint(footprint(feature as Feature, footprintContext))
-          : undefined;
+      const footprintOf = (feature: StoredFeature): Footprint | null | undefined => {
+        if (!applies(feature)) return undefined;
+        const valid = validFootprint(footprint(feature as Feature, footprintContext));
+        if (valid === undefined && !warnedFootprint) {
+          warnedFootprint = true;
+          console.warn(
+            `The feature type ${JSON.stringify(type)} gave a footprint that is not one (four ` +
+              'finite corners laid on the map, or a position and sizes of 0 or more on the ' +
+              'screen), so the footprint of its geometry is used',
+          );
+        }
+        return valid;
+      };
       // The selection box on the map: the corners of a footprint laid on the map, or the
       // position of one of the screen (a box without area, which is drawn on the screen around
       // it); the box of the geometry for a feature the type does not take or gives none of
@@ -603,6 +613,7 @@ export function installFeatureType(
 
     const bbox = definition.bbox?.bind(definition);
     if (bbox) {
+      let warnedBBox = false;
       // The spatial index measures the features of the type by the extent it gives
       add(
         deps.spatialIndex.setCustomBoundingBoxCalculator(type, (feature, tileSize) => {
@@ -616,6 +627,14 @@ export function installFeatureType(
             extent[1] <= extent[3]
           ) {
             return { minX: extent[0], minY: extent[1], maxX: extent[2], maxY: extent[3] };
+          }
+          if (!warnedBBox) {
+            warnedBBox = true;
+            console.warn(
+              `The feature type ${JSON.stringify(type)} gave a bbox that is not one (four finite ` +
+                'numbers from the west and south to the east and north), so the extent of its ' +
+                'geometry is used',
+            );
           }
           return getBoundingBox(feature, tileSize);
         }),

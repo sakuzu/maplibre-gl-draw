@@ -125,8 +125,10 @@ export class QuadShader {
   /**
    * Sets the terrain the next draws use.
    *
-   * @param terrain - The render context of the draw call, or its `terrain`; `null` (or an
-   *   object the engine did not hand out) draws without terrain
+   * @param terrain - The render context of the draw call, or its `terrain`; `null` draws without
+   *   terrain
+   * @throws `DrawError` with the code `invalid-input` when it is an object the instance did not
+   *   give a renderer, as `viewUniforms` does
    */
   setTerrain(terrain: RenderContext | TerrainSurface | null): void {
     this.useTerrainState(terrainStateOf(terrain));
@@ -538,6 +540,8 @@ void main() {
  * @param surface - The fill and the text
  * @param opacity - The opacity, 0..1
  * @returns true if it was painted; false when the caller must draw it another way
+ * @throws `DrawError` with the code `invalid-input` when `terrain` is an object the instance did
+ *   not give a renderer, as `viewUniforms` does
  */
 export function drawQuadSurfaceOnTerrain(
   terrain: RenderContext | TerrainSurface,
