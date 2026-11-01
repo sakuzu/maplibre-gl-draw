@@ -1052,6 +1052,9 @@ The host installs each into the registries the engine reads, through the
 adapters of `src/api/impl/adapters.ts` and `render-context.ts`: a feature
 type becomes a `FeatureTypeHandler` of `src/extension/`, whose renderer is
 handed a `RenderContext` made from the `FrameDrawContext` of the frame.
+The look the type declares (`defaultStyle`) goes to the `AppliedStyles` of
+the host (`src/api/impl/applied-style.ts`), which answers both
+`RenderContext.appliedStyle` and `draw.features.getAppliedStyle`.
 
 Two of them have their core side here:
 

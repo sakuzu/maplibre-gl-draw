@@ -811,6 +811,14 @@ drawn. Each change below names what replaces what is gone.
 - The zoom a width in pixels is given at is `referenceZoom` in the
   options of `ctx.line.draw` (was `createdZoom`), and `ctx.point.draw`
   takes it too, for the size and the outline of its marker
+- A type declares the look of its features in `defaultStyle`, and its
+  renderer draws with `ctx.appliedStyle(feature)`, the look
+  `draw.features.getAppliedStyle` answers (the look of the type, the
+  color of the layer rule over it and the style of the feature), in
+  place of reading `feature.style` with defaults of its own. A type that
+  drew so drew no color of a layer rule, and `getAppliedStyle` answered
+  the defaults of the geometry for it; the rule colors `fillColor` of a
+  custom type. A definition given to `override` cannot have it
 
 A handle on each vertex, as 2.x gave it and as 3.0 gives it, with the
 white circle the library drew, now drawn by the type:

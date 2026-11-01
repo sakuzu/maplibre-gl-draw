@@ -325,8 +325,9 @@ const attributes = Object.entries(feature.properties).filter(
 `feature.style` is a
 [`FeatureStyle`](../api/maplibre-gl-draw/interfaces/FeatureStyle.md), `{}`
 when the feature has no look of its own. A key that is not set takes the
-color of the style rule of its layer, or the default of the instance (the
-`style` option). Which keys apply depends on the type.
+color of the style rule of its layer, or the look its custom type
+declares (`defaultStyle` of its definition), or the default of the
+instance (the `style` option). Which keys apply depends on the type.
 
 - Point and MultiPoint: `pointColor`, `pointRadius`, `pointShape`,
   `pointOpacity`, `pointStrokeColor` and `pointStrokeWidth` (the outline
@@ -347,8 +348,9 @@ code that reads such a key checks its value, because a value can also reach
 a feature through `features.update` or a replaced Store. In TypeScript, add
 the keys to the `FeatureStyle` interface with declaration merging.
 
-The color that the `styleRule` of a layer gives a feature is computed when
-drawing and is not written into `feature.style`.
+The color that the `styleRule` of a layer gives a feature, and the look its
+custom type declares, are applied when drawing and are not written into
+`feature.style`.
 `draw.features.getAppliedStyle(id)` returns the look a feature is drawn
 with. See [Styles](../guides/styles.md).
 

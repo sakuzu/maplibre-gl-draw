@@ -98,7 +98,10 @@ draw.features.update(featureId, {
 自分のスタイルを持たない地物の見た目は、インスタンスのオプション
 `style` で設定します。種類ごとに 1 つの `FeatureStyle` を渡します。
 種類は `point`、`line`、`polygon`、`circle`、`image` です。省略した
-キーは組み込みの既定値のままです。
+キーは組み込みの既定値のままです。独自の型は、その代わりに自分の地物の
+見た目を宣言できます (`defaultStyle`。
+[独自の型](custom-types.ja.md#型の見た目) を参照)。型が書かなかった
+キーは、ここの既定値のままです。
 
 ```ts
 import { createDraw } from '@sakuzu/maplibre-gl-draw';
@@ -217,7 +220,8 @@ draw.layers.update(layerId, { styleRule: undefined });
 1. 地物自身の、そのチャンネルの色。点は `pointColor`、線は
    `strokeColor`、面とそれ以外の型は `fillColor`
 2. レイヤーの規則
-3. インスタンスの既定値
+3. 地物の独自の型が宣言した見た目 (`defaultStyle`)、その次に
+   インスタンスの既定値
 
 - 規則が色を決めるのは 1 つのチャンネルだけです。面の塗りは規則から
   決まり、輪郭は、スタイルで `strokeColor` を指定しない限り既定のまま
@@ -231,9 +235,10 @@ draw.layers.update(layerId, { styleRule: undefined });
   文字列には `other` が使われます
 
 `features.getAppliedStyle(id)` は、地物が実際に描かれる見た目を、
-すべてのキーを埋めて返します (`style.circle` と `style.image` の既定も
-含みます)。インスペクターのパネルに表示するときに
-使えます。
+すべてのキーを埋めて返します (`style.circle` と `style.image` の既定と、
+独自の型が宣言した見た目も含みます)。インスペクターのパネルに表示する
+ときに使えます。独自の型の描画器も、同じ答え
+(`ctx.appliedStyle(feature)`) で描きます。
 
 ```ts
 const look = draw.features.getAppliedStyle(featureId);

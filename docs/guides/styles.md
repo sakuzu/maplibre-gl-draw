@@ -98,7 +98,10 @@ draw.features.update(featureId, {
 The look of a feature with no style of its own is set for the instance
 with the option `style`, one `FeatureStyle` per kind: `point`, `line`,
 `polygon`, `circle` and `image`. A key left out keeps the built-in
-default.
+default. A custom type can declare the look of its features in their
+place (`defaultStyle`, see
+[custom types](custom-types.md#the-look-of-a-type)); the keys it leaves
+out keep these defaults.
 
 ```ts
 import { createDraw } from '@sakuzu/maplibre-gl-draw';
@@ -221,7 +224,8 @@ A dataset takes the same rule type; see
 1. The feature's own color for its channel: `pointColor` for points,
    `strokeColor` for lines, `fillColor` for areas and other types
 2. The layer's rule
-3. The default of the instance
+3. The look the custom type of the feature declares (`defaultStyle`),
+   then the default of the instance
 
 - The rule colors one channel only. An area gets its fill from the rule
   and keeps the default outline unless its style sets `strokeColor`
@@ -234,7 +238,9 @@ A dataset takes the same rule type; see
 
 `features.getAppliedStyle(id)` returns the look a feature is drawn with,
 every key filled in (the defaults of `style.circle` and `style.image`
-included), which an inspector panel can show:
+and the look a custom type declares included), which an inspector panel
+can show. The renderer of a custom type draws with the same answer
+(`ctx.appliedStyle(feature)`):
 
 ```ts
 const look = draw.features.getAppliedStyle(featureId);

@@ -849,6 +849,22 @@ The evaluation itself is a pure function in `view/style-rule.ts`, usable
 without rendering. The rule types are described in the
 [Styles guide](../guides/styles.md).
 
+The renderer of a custom type draws itself, so it is handed the whole
+look instead: `RenderContext.appliedStyle(feature)`, which
+`draw.features.getAppliedStyle(id)` answers too. Both read the one
+`AppliedStyles` of the instance (`api/impl/applied-style.ts`, owned by the
+extension host), the only place that puts a look together: the defaults
+of the `style` option for the geometry (`toAppliedDefaults`), the look the
+type declares (`defaultStyle`, registered when the type is installed)
+over them, then `resolveFeatureStyle` (the rule color in the channel of
+the type, `fill` for a custom type, and the style of the feature). The
+look is kept with the feature object in a `WeakMap`, frozen, with the
+rule, the `style` option and the declaration it was made from; a read
+with the same three gives the same object, so a frame puts the look of a
+feature together once, and the next frame too while nothing changed. A
+feature is a new object once it changes, which drops its look.
+`getAppliedStyle` returns a copy.
+
 #### StyleRuleCache
 
 `StyleRuleCache` (`view/cache/style-rule.ts`) caches rule results by feature

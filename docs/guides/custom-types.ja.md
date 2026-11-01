@@ -129,6 +129,9 @@ const ends = feature.style.routeEnds === 'dot' ? 'dot' : 'none';
   描き終えると最後に描いたコマについて答えます。`window.devicePixelRatio`
   ではなく `screen.pixelRatio` を使い、ほかから持ち込んだ画面ではなく、
   この欄の画面を読んでください
+- `appliedStyle(feature)` は、地物を描く見た目で、
+  `draw.features.getAppliedStyle` の答えと同じです
+  ([型の見た目](#型の見た目) を参照)
 - `terrain` は地面の高さです ([地形](#地形) を参照)
 - `gl` は WebGL の文脈で、自分でシェーダーを書く描画器のためのもの
   です。そうした描画器は、コマの GPU の値を `/webgl` で読みます
@@ -144,12 +147,20 @@ const zoneRenderer: FeatureRenderer = {
   onAdd() {},
   draw(feature, ctx) {
     const rings = (feature.geometry as Polygon).coordinates;
-    const color = feature.style.fillColor ?? '#2563eb';
-    ctx.fill.draw(rings, { color, opacity: 0.2 * ctx.opacity });
+    const look = ctx.appliedStyle(feature);
+    ctx.fill.draw(rings, {
+      color: look.fillColor,
+      opacity: look.fillOpacity * ctx.opacity,
+    });
     for (const ring of rings) {
       ctx.line.draw(
         ring,
-        { width: 2, color, opacity: ctx.opacity, lineStyle: 'dotted' },
+        {
+          width: look.strokeWidth,
+          color: look.strokeColor,
+          opacity: look.strokeOpacity * ctx.opacity,
+          lineStyle: look.lineStyle,
+        },
         { closed: true },
       );
     }
@@ -160,6 +171,14 @@ const zoneRenderer: FeatureRenderer = {
 draw.extensions.featureTypes.add({
   type: 'Zone',
   geometry: 'Polygon',
+  // 自分のスタイルを持たない区域の見た目
+  defaultStyle: {
+    fillColor: '#2563eb',
+    fillOpacity: 0.2,
+    strokeColor: '#2563eb',
+    strokeWidth: 2,
+    lineStyle: 'dotted',
+  },
   renderer: zoneRenderer,
 });
 ```
@@ -175,6 +194,33 @@ draw.extensions.featureTypes.add({
 見せ、`draw` は写しごとに 1 回呼ばれます。描くものを地図のカメラから
 ではなく、地物と窓口から計算してください。そうすれば正しい写しに
 描かれます。
+
+### 型の見た目
+
+型は、その地物の見た目を `defaultStyle` (`FeatureStyle`) で宣言し、
+描画器は `feature.style` と自分の既定ではなく
+`ctx.appliedStyle(feature)` で描きます。見た目はライブラリーが組み立て、
+描画器にも `draw.features.getAppliedStyle(id)` にも同じ組み立て方で
+答えます。そのため、インスペクターのパネルは描かれているものを見せます。
+
+1. 地物のスタイル
+2. レイヤーのスタイルの規則の色
+3. 型が宣言した見た目
+4. 型が書かなかった鍵には、その幾何の `style` の設定の既定
+
+- スタイルの規則は、独自の型では幾何によらず `fillColor` を塗ります
+  ([どの色が使われるか](styles.ja.md#どの色が使われるか))。上の区域は、規則の色を
+  塗りにとり、縁はそのままです。スタイルに `fillColor` を持つ地物は
+  自分の色のままです
+- `defaultStyle` は地物のスタイルと同じように確かめられ、正しくないものは
+  `invalid-input` で拒まれます。型を足したときに写されるので、変えるには
+  型を足し直します
+- `defaultStyle` を宣言しない型は、これまでどおり `style` の設定の既定から
+  始まります
+- 地物の見た目は 1 度だけ組み立てられ、地物と一緒に取っておかれます。
+  同じコマでも次のコマでも、地物、そのレイヤーの規則、`style` の設定の
+  どれかが変わるまでは、読み直すと同じオブジェクトが返ります。描く地物
+  ごとに読み、オブジェクトは変えないでください
 
 ## 当たり判定
 

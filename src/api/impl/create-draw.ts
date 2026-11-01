@@ -66,7 +66,7 @@ export function createDrawOnEngine(
     autoNameGenerator: context.autoNameGenerator,
     getActiveLayerId: context.getActiveLayerId,
     setActiveLayerId: context.setActiveLayerId,
-    getStyleOptions: drawOptions.getStyle,
+    appliedStyle: engine.extensions.appliedStyle,
     spatialIndex: context.spatialIndex,
   };
   const features = createFeatures(deps);
@@ -187,7 +187,7 @@ export function createDrawOnEngine(
     skip: new Set(['destroy']),
   });
   attachTableDiagnostics(draw, engine);
-  engine.extensions.attach(draw, options.store);
+  engine.extensions.attach(draw, drawOptions.getStyle, options.store);
   return draw;
 }
 

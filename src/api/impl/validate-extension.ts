@@ -11,6 +11,7 @@
  * name is checked by the collection itself.
  */
 
+import { describeStyleProblem } from '../../shared/style-validation.js';
 import { DrawError } from '../errors.js';
 
 /**
@@ -191,19 +192,42 @@ function optionalTransformFields(kind: ExtensionKind, value: Record<string, unkn
   }
 }
 
+/** Checks the look a feature type declares: a style, checked as the style of a feature is */
+function optionalDefaultStyle(kind: ExtensionKind, value: Record<string, unknown>): void {
+  const style = value.defaultStyle;
+  if (style === undefined) return;
+  if (!isObject(style)) {
+    throw wrongShape(kind, 'has defaultStyle that is not an object', 'defaultStyle');
+  }
+  const problem = describeStyleProblem(style);
+  if (problem !== null)
+    throw wrongShape(kind, `has defaultStyle that is ${problem}`, 'defaultStyle');
+}
+
 /**
  * Checks a definition given to `featureTypes.override` beyond the shape of a feature type: it has
- * no `transformFields`, since a built-in type keeps the fields of its own
+ * no `transformFields` and no `defaultStyle`, since a built-in type keeps the fields and the
+ * defaults of its own
  *
  * @throws `DrawError` with the code `invalid-input` when it has
  * @internal
  */
-export function validateOverride(definition: { readonly transformFields?: unknown }): void {
+export function validateOverride(definition: {
+  readonly transformFields?: unknown;
+  readonly defaultStyle?: unknown;
+}): void {
   if (definition.transformFields !== undefined) {
     throw wrongShape(
       'feature type',
       'that overrides a built-in type cannot have transformFields: the built-in type keeps its own',
       'transformFields',
+    );
+  }
+  if (definition.defaultStyle !== undefined) {
+    throw wrongShape(
+      'feature type',
+      'that overrides a built-in type cannot have defaultStyle: the built-in type keeps the defaults of the style option',
+      'defaultStyle',
     );
   }
 }
@@ -242,6 +266,7 @@ export function validateExtension(kind: ExtensionKind, value: unknown): void {
       optionalGroup(kind, value, 'rows', [], ['appliesTo']);
       optionalNumber(kind, value, 'hitPaddingPx', true);
       optionalTransformFields(kind, value);
+      optionalDefaultStyle(kind, value);
       return;
     }
     case 'companion provider':

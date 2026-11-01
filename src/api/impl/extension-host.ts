@@ -34,7 +34,8 @@ import type { Plugin } from '../extension/plugin.js';
 import type { Hit } from '../extension/provider.js';
 import type { StoreView } from '../extension/store.js';
 import type { ExtensionsCollections } from '../extensions.js';
-import type { Feature } from '../model.js';
+import type { Feature, FeatureStyleResolved } from '../model.js';
+import type { RuntimeOptions } from '../options.js';
 import type { AdapterDeps } from './adapters.js';
 import {
   adaptCompanionProvider,
@@ -42,6 +43,7 @@ import {
   adaptSnapProvider,
   installFeatureType,
 } from './adapters.js';
+import { createAppliedStyles } from './applied-style.js';
 import type { ContextServices, ModeServices } from './contexts.js';
 import {
   createExtensionContext,
@@ -111,10 +113,17 @@ export interface ExtensionHost {
   /** The frontmost hit at a point on the screen, in the shape of the contract */
   hitAt(point: { x: number; y: number }): Hit | null;
   /**
-   * Gives the host the draw instance the contexts hand out, and the Store given in the
-   * options, whose notifications that reset the document interrupt the current mode
+   * The look a feature is drawn with (`draw.features.getAppliedStyle`), which the renderers of
+   * the custom types read from their render context: the look its type declares, the color of the
+   * rule of its layer and its style
    */
-  attach(draw: Draw, documentStore?: StoreView): void;
+  appliedStyle(feature: StoredFeature): FeatureStyleResolved;
+  /**
+   * Gives the host the draw instance the contexts hand out, the `style` option the looks of the
+   * features start from, and the Store given in the options, whose notifications that reset the
+   * document interrupt the current mode
+   */
+  attach(draw: Draw, styleOptions: () => RuntimeOptions['style'], documentStore?: StoreView): void;
   /** Starts listening to the map (the pointer leaving it) */
   start(): void;
   /** Removes every extension and stops listening */
@@ -152,6 +161,15 @@ export function createExtensionHost(deps: ExtensionHostDeps): ExtensionHost {
   const transformFields = createTransformFieldsRegistry();
   if (store instanceof DrawStore) store.setTransformFields(transformFields);
 
+  // The looks of the features, with the looks the custom types declare. The `style` option is the
+  // one of the draw instance, once it is attached
+  let styleOptions: () => RuntimeOptions['style'] = () => undefined;
+  const appliedStyles = createAppliedStyles({
+    getLayer: (id) => store.getLayer(id),
+    getStyleOptions: () => styleOptions(),
+  });
+  const appliedStyle = (feature: StoredFeature): FeatureStyleResolved => appliedStyles.of(feature);
+
   const adapterDeps: AdapterDeps = {
     map,
     store,
@@ -180,6 +198,8 @@ export function createExtensionHost(deps: ExtensionHostDeps): ExtensionHost {
         getDraw().options.get().selectionStyle,
       ),
     transformFields,
+    appliedStyles,
+    appliedStyle,
   };
   const overlays = createOverlayStack(customLayer, adapterDeps);
 
@@ -466,8 +486,10 @@ export function createExtensionHost(deps: ExtensionHostDeps): ExtensionHost {
       toHit(modeServices.hitTestTopmost(point), (feature) =>
         modeServices.distanceToFeaturePx(feature, point),
       ),
-    attach(draw, documentStore) {
+    appliedStyle,
+    attach(draw, options, documentStore) {
       attached = draw;
+      styleOptions = options;
       watchImageCommits(draw);
       // A Store that replaces its whole document says so with `reset`: the mode drops what it
       // was drawing, as it does for an Escape

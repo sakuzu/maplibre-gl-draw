@@ -135,6 +135,9 @@ The `RenderContext` carries what a renderer needs to draw:
   plugin, which answers for the frame drawn last once it is drawn. Use
   `screen.pixelRatio` rather than `window.devicePixelRatio`, and read
   the screen from the context rather than keeping one from elsewhere
+- `appliedStyle(feature)`, the look a feature is drawn with, as
+  `draw.features.getAppliedStyle` answers it (see
+  [The look of a type](#the-look-of-a-type))
 - `terrain`, the heights of the ground (see [Terrain](#terrain))
 - `gl`, the WebGL context, for a renderer that writes its own shaders,
   which reads the values of the GPU of the frame through `/webgl` (see
@@ -150,12 +153,20 @@ const zoneRenderer: FeatureRenderer = {
   onAdd() {},
   draw(feature, ctx) {
     const rings = (feature.geometry as Polygon).coordinates;
-    const color = feature.style.fillColor ?? '#2563eb';
-    ctx.fill.draw(rings, { color, opacity: 0.2 * ctx.opacity });
+    const look = ctx.appliedStyle(feature);
+    ctx.fill.draw(rings, {
+      color: look.fillColor,
+      opacity: look.fillOpacity * ctx.opacity,
+    });
     for (const ring of rings) {
       ctx.line.draw(
         ring,
-        { width: 2, color, opacity: ctx.opacity, lineStyle: 'dotted' },
+        {
+          width: look.strokeWidth,
+          color: look.strokeColor,
+          opacity: look.strokeOpacity * ctx.opacity,
+          lineStyle: look.lineStyle,
+        },
         { closed: true },
       );
     }
@@ -166,6 +177,14 @@ const zoneRenderer: FeatureRenderer = {
 draw.extensions.featureTypes.add({
   type: 'Zone',
   geometry: 'Polygon',
+  // The look of a zone without a style of its own
+  defaultStyle: {
+    fillColor: '#2563eb',
+    fillOpacity: 0.2,
+    strokeColor: '#2563eb',
+    strokeWidth: 2,
+    lineStyle: 'dotted',
+  },
   renderer: zoneRenderer,
 });
 ```
@@ -182,6 +201,35 @@ When the view crosses the ±180 degree meridian, a drawing shows each
 copy of the world, and `draw` is called once per copy. Compute what you
 draw from the feature and the context, not from the camera of the map,
 and it lands on the right copy.
+
+### The look of a type
+
+A type declares the look of its features in `defaultStyle`, a
+`FeatureStyle`, and its renderer draws with `ctx.appliedStyle(feature)`
+rather than with `feature.style` and defaults of its own. The library
+puts the look together, the same way for the renderer and for
+`draw.features.getAppliedStyle(id)`, so an inspector panel shows what is
+drawn:
+
+1. The style of the feature
+2. The color of the style rule of its layer
+3. The look the type declares
+4. The default of the `style` option for its geometry, for the keys the
+   type leaves out
+
+- The style rule colors `fillColor` of a custom type, whatever its
+  geometry ([which color wins](styles.md#which-color-wins)). The zone
+  above takes the color of the rule as its fill and keeps its outline.
+  A feature whose style sets `fillColor` keeps its own color
+- `defaultStyle` is checked as the style of a feature is, and an invalid
+  one is refused with `invalid-input`. It is copied when the type is
+  added: change it by adding the type again
+- A type that declares no `defaultStyle` starts from the defaults of the
+  `style` option, as before
+- The look of a feature is put together once and kept with it: reading
+  it again, in the frame or in the next one, gives the same object until
+  the feature, the rule of its layer or the `style` option changes. Read
+  it for each feature you draw, and do not change it
 
 ## Hit testing
 

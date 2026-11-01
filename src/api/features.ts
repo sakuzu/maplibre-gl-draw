@@ -216,11 +216,14 @@ export interface FeaturesCollection {
   releaseRestore(token: RestoreToken): void;
   /**
    * The look a feature is drawn with: the default, the layer rule and the style of the
-   * feature put on top of each other.
+   * feature put on top of each other. The default is the look the custom type of the feature
+   * declares (`FeatureTypeDefinition.defaultStyle`) over the defaults of the `style` option for
+   * its geometry; the renderer of a custom type reads the same look
+   * (`RenderContext.appliedStyle`).
    *
-   * The colors of the `style` option and of the style of the feature are the strings they
-   * were given, alpha included; the color of a layer rule is `#rrggbb`, as
-   * {@link evaluateStyleRule} gives it, and a default is `#rrggbb`.
+   * The colors of the `style` option, of the look a type declares and of the style of the
+   * feature are the strings they were given, alpha included; the color of a layer rule is
+   * `#rrggbb`, as {@link evaluateStyleRule} gives it, and a built-in default is `#rrggbb`.
    *
    * @returns The look, or `undefined` when there is no feature with this ID
    */

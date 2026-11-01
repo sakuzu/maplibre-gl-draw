@@ -75,6 +75,7 @@ import type {
 import type { Feature, FeaturePatch } from '../model.js';
 import type { SelectionStyleOptions } from '../options.js';
 import type { LayerTableView } from '../tables.js';
+import type { AppliedStyles } from './applied-style.js';
 import { toPosition, toScreenPoint } from './contexts.js';
 import { toPointerEvent } from './input.js';
 import type { RenderAdapterDeps } from './render-context.js';
@@ -119,6 +120,8 @@ export interface AdapterDeps extends RenderAdapterDeps {
   selectionStyle(): Required<SelectionStyleOptions>;
   /** The fields the custom types of the instance declare, by type */
   readonly transformFields: TransformFieldsRegistry;
+  /** The looks of the features, which take the look a custom type declares */
+  readonly appliedStyles: Pick<AppliedStyles, 'registerType'>;
 }
 
 // ============================================================================
@@ -527,6 +530,10 @@ export function installFeatureType(
     // The fields its resize and rotation write, for a custom type (an override keeps the fields of
     // the built-in type)
     if (!overriding) add(deps.transformFields.register(type, definition.transformFields ?? {}));
+    // The look it declares, for a custom type (an override keeps the defaults of the built-in type)
+    if (!overriding && definition.defaultStyle) {
+      add(deps.appliedStyles.registerType(type, definition.defaultStyle));
+    }
 
     const handles = definition.handles?.bind(definition);
     if (handles) {
@@ -692,6 +699,7 @@ export function adaptHandleProvider(
     | 'selectionStyle'
     | 'customLayer'
     | 'surface'
+    | 'appliedStyle'
   >,
   label = `handle provider ${JSON.stringify(provider.name)}`,
 ): AuxiliaryHandleProvider {

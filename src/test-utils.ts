@@ -12,6 +12,7 @@ import { expect, vi } from 'vitest';
 import type { Draw } from './api/draw.js';
 import type { ModeFactory } from './api/extension/mode.js';
 import type { ExtensionsCollections } from './api/extensions.js';
+import { createAppliedStyles } from './api/impl/applied-style.js';
 import type { ModeServices } from './api/impl/contexts.js';
 import { createModeContext, createScreenContext } from './api/impl/contexts.js';
 import { createFeatures } from './api/impl/features.js';
@@ -262,7 +263,10 @@ export function createResourceDeps(store: Store): ResourceDeps & { emitter: Even
     setActiveLayerId: (id) => {
       if (store.getLayer(id)) active = id;
     },
-    getStyleOptions: () => undefined,
+    appliedStyle: createAppliedStyles({
+      getLayer: (id) => store.getLayer(id),
+      getStyleOptions: () => undefined,
+    }).of,
     emitter,
   };
 }

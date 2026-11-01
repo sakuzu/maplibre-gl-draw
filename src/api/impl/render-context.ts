@@ -34,7 +34,7 @@ import type {
   PointRenderer,
   RenderContext,
 } from '../extension/render.js';
-import type { Feature } from '../model.js';
+import type { Feature, FeatureStyleResolved } from '../model.js';
 import type { LayerTableView } from '../tables.js';
 
 // ============================================================================
@@ -93,6 +93,7 @@ function pair(position: Position): [number, number] {
  * @param gl - The WebGL context the renderer was added with
  * @param base - The context the engine gives its own renderers in this draw call
  * @param surface - The surface of the terrain of the terrain state of `base`
+ * @param appliedStyle - The look a feature is drawn with (`draw.features.getAppliedStyle`)
  * @internal
  */
 export function createRenderContext(
@@ -102,6 +103,7 @@ export function createRenderContext(
   zoom: number,
   surface: TerrainSurface,
   screen: ScreenContext,
+  appliedStyle: (feature: StoredFeature) => FeatureStyleResolved,
 ): RenderContext {
   const line: LineRenderer = {
     draw(coordinates, style, options = {}) {
@@ -164,6 +166,8 @@ export function createRenderContext(
     line,
     fill,
     point,
+    // The features a renderer is given are those of the Store, as the contract shows them
+    appliedStyle: (feature) => appliedStyle(feature as unknown as StoredFeature),
   };
   // The building blocks of the second entry find the terrain state and the values of the GPU of
   // the frame behind the context
@@ -183,6 +187,8 @@ export interface RenderAdapterDeps {
   surface(terrain: TerrainContext): TerrainSurface;
   /** The conversion between the map and the screen of the instance */
   readonly screen: ScreenContext;
+  /** The look a feature is drawn with, which `draw.features.getAppliedStyle` answers too */
+  appliedStyle(feature: StoredFeature): FeatureStyleResolved;
 }
 
 /** The map and the WebGL context a renderer was added with */
@@ -224,6 +230,7 @@ function createContextCache(deps: RenderAdapterDeps) {
       zoom,
       deps.surface(base.terrain),
       deps.screen,
+      deps.appliedStyle,
     );
     last = { base, projection, zoom, context };
     return context;

@@ -772,7 +772,13 @@ describe('the overlays', () => {
           return () => removed.push(renderer);
         },
       },
-      { surface: createTerrainSurface, screen: { zoom: 7 } as ScreenContext },
+      {
+        surface: createTerrainSurface,
+        screen: { zoom: 7 } as ScreenContext,
+        appliedStyle: () => {
+          throw new Error('no look is read');
+        },
+      },
     );
     const calls: string[] = [];
     const overlay = (name: string, order?: number) => ({

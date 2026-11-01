@@ -815,6 +815,14 @@ draw.features.update(featureId, {
 - ピクセルの幅を与えるズームは、`ctx.line.draw` のオプションの
   `referenceZoom` です (前は `createdZoom`)。`ctx.point.draw` も、
   印の大きさと縁の太さのためにこれを受け取ります
+- 型は自分の地物の見た目を `defaultStyle` で宣言し、描画器は
+  `feature.style` を自分の既定と合わせて読む代わりに、
+  `ctx.appliedStyle(feature)` で描きます。これは
+  `draw.features.getAppliedStyle` の答え (型の見た目に、レイヤーの規則の
+  色と地物のスタイルを重ねたもの) と同じです。前の書き方の型はレイヤーの
+  規則の色を描かず、`getAppliedStyle` はその型に幾何の既定を答えて
+  いました。規則は独自の型の `fillColor` を塗ります。`override` に渡す
+  定義は持てません
 
 頂点ごとのハンドルの 2.x と 3.0 の書き方です。ライブラリーが描いていた
 白い丸は、型が描きます。

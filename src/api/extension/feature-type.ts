@@ -9,7 +9,7 @@
 import type { Geometry, Position } from 'geojson';
 import type { BBox } from '../../geometry/types.js';
 import type { ScreenPoint } from '../events.js';
-import type { Feature, FeaturePatch } from '../model.js';
+import type { Feature, FeaturePatch, FeatureStyle } from '../model.js';
 import type { LayerTableView, RowHandle } from '../tables.js';
 import type { HandleContext, PointContext, ScreenContext } from './context.js';
 import type { DrawPointerEvent } from './mode.js';
@@ -143,6 +143,20 @@ export interface FeatureTypeDefinition {
   readonly hitPaddingPx?: number;
   /** How the features of this type are drawn */
   readonly renderer: FeatureRenderer;
+  /**
+   * The look of a feature of this type whose style and layer rule leave a key out, in place of
+   * the defaults of its geometry (the `style` option), which still fill the keys it leaves out.
+   * `draw.features.getAppliedStyle` and the render context (`ctx.appliedStyle(feature)`) put the
+   * color of the layer rule and the style of the feature over it, so a renderer that draws with
+   * that answer draws what the library answers. The rule colors the fill of a custom type
+   * (`fillColor`, see `getStyleRuleChannel`), whatever its geometry, and the style of a feature
+   * wins over the rule.
+   *
+   * It is checked as the style of a feature is, and copied when the type is added. A definition
+   * given to `override` cannot have it (a built-in type keeps the defaults of the `style`
+   * option): `override` throws `invalid-input`.
+   */
+  readonly defaultStyle?: FeatureStyle;
   /**
    * Which features of the type the definition takes, for a definition that overrides a
    * built-in type (`extensions.featureTypes.override`). A feature for which it returns false

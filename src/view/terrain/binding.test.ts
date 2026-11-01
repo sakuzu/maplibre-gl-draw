@@ -78,6 +78,9 @@ function renderContextOver(terrain: TerrainContext): RenderContext {
     14,
     createTerrainSurface(terrain),
     {} as ScreenContext,
+    () => {
+      throw new Error('no look is read');
+    },
   );
 }
 

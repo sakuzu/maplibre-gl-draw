@@ -11,7 +11,7 @@ import { isFeatureLocked, isGroupLocked } from '../../store/lock.js';
 import type { Store } from '../../store/store.js';
 import type { BoundingBox, Feature, Group, Layer, SelectionType } from '../../store/types.js';
 import { DrawError } from '../errors.js';
-import type { RuntimeOptions } from '../options.js';
+import type { FeatureStyleResolved } from '../model.js';
 
 /**
  * The dependencies of the resources. A bare Store and plain functions are enough, so that a
@@ -30,8 +30,11 @@ export interface ResourceDeps {
   getActiveLayerId: () => string;
   /** Changes the active layer */
   setActiveLayerId: (id: string) => void;
-  /** The `style` option as it was given: the defaults of the look of the features */
-  getStyleOptions: () => RuntimeOptions['style'];
+  /**
+   * The look a feature is drawn with: the look its type declares, the color of the rule of its
+   * layer and its style (`createAppliedStyles`)
+   */
+  appliedStyle: (feature: Feature) => FeatureStyleResolved;
   /**
    * The spatial index of the features, for a filter by extent; the extent of each feature is
    * measured when it is left out

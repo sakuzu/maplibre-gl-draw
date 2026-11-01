@@ -207,6 +207,19 @@ writing it. Its changes are listed after those of 3.0.0.
   context of the frame. The library calls it exactly when it shows them
   (one feature selected, the document editable, the feature not locked,
   no other handle dragged), so an extension tests none of it.
+- `FeatureTypeDefinition.defaultStyle`: the look of the features of a
+  custom type, in place of the defaults of their geometry (the `style`
+  option, which still fills the keys it leaves out).
+  `features.getAppliedStyle` answers it with the color of the layer rule
+  (the fill of a custom type) and the style of the feature over it. It is
+  checked as the style of a feature is, and a definition given to
+  `override` cannot have it (`invalid-input`).
+- `RenderContext.appliedStyle(feature)`: the look a feature is drawn
+  with, as `features.getAppliedStyle` answers it, put together by the
+  library in one place, so that the renderer of a custom type draws what
+  the library answers, the color of the layer rule included. Reading it
+  again gives the same object until the feature, the rule of its layer or
+  the `style` option changes.
 - `PluginContext.emit(event, payload)`: a plugin sends events of its
   own, which it declares in `DrawEvents` by declaration merging, to the
   subscribers of `draw.on` and `ctx.on`, so that every event is in the

@@ -24,7 +24,6 @@ import type {
   FeatureStyle as StoredFeatureStyle,
 } from '../../store/types.js';
 import { drawValueOfInput } from '../../table/value-input.js';
-import { getStyleRuleChannel, resolveFeatureStyle } from '../../view/style-rule.js';
 import { DrawError } from '../errors.js';
 import type { FeaturesCollection } from '../features.js';
 import type {
@@ -33,10 +32,8 @@ import type {
   FeatureInput,
   FeatureListOptions,
   FeaturePatch,
-  FeatureStyleResolved,
   MoveTarget,
 } from '../model.js';
-import type { RuntimeOptions } from '../options.js';
 import { featuresExtent, rowsExtent } from './feature-extent.js';
 import { applyResult } from './geometry/apply.js';
 import { runBuffer } from './geometry/buffer.js';
@@ -49,7 +46,6 @@ import {
   toResultGeometry,
 } from './geometry/targets.js';
 import type { GeometryDeps } from './geometry/types.js';
-import { toAppliedDefaults } from './options.js';
 import { moveFeatures, resolveMoveTarget } from './placement.js';
 import { createRestore } from './restore.js';
 import type { ResourceDeps } from './shared.js';
@@ -312,7 +308,8 @@ export function createFeatures(deps: ResourceDeps): FeaturesCollection {
     getAppliedStyle(id) {
       const feature = store.getFeature(id);
       if (!feature) return undefined;
-      return appliedStyle(store, feature, deps.getStyleOptions());
+      // A copy: the look is kept for the feature, and the caller may change what it is given
+      return { ...deps.appliedStyle(feature) };
     },
 
     union(ids) {
@@ -723,25 +720,4 @@ function propertiesOfInput(properties: Record<string, unknown>): Record<string, 
       setOwnProperty(out, key, drawValueOfInput(value, `The property ${key}`));
   }
   return out;
-}
-
-// ============================================================================
-// The applied style
-// ============================================================================
-
-/**
- * The look a feature is drawn with: the defaults of the options, the color of the layer rule
- * and the style of the feature, in that order. The colors of the options and of the feature
- * are the strings given, never rounded
- */
-function appliedStyle(
-  store: Store,
-  feature: StoredFeature,
-  style: RuntimeOptions['style'],
-): FeatureStyleResolved {
-  const defaults = toAppliedDefaults(style, feature.type);
-  const layer = store.getLayer(feature.layerId);
-  const own =
-    resolveFeatureStyle(feature, layer?.styleRule, getStyleRuleChannel(feature.type)) ?? {};
-  return { ...defaults, ...withoutUndefined(own) } as FeatureStyleResolved;
 }

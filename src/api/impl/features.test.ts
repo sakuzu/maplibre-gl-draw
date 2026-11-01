@@ -15,6 +15,7 @@ import { createResourceDeps } from '../../test-utils.js';
 import { DrawError } from '../errors.js';
 import type { FeaturesCollection } from '../features.js';
 import type { FeatureInput } from '../model.js';
+import { createAppliedStyles } from './applied-style.js';
 import { createFeatures } from './features.js';
 
 let store: MemoryStore;
@@ -552,10 +553,13 @@ describe('getAppliedStyle', () => {
     const deps = createResourceDeps(store);
     const withStyle = createFeatures({
       ...deps,
-      getStyleOptions: () => ({
-        circle: { fillColor: 'blue', strokeWidth: 4 },
-        image: { imageOpacity: 0.5 },
-      }),
+      appliedStyle: createAppliedStyles({
+        getLayer: (id) => store.getLayer(id),
+        getStyleOptions: () => ({
+          circle: { fillColor: 'blue', strokeWidth: 4 },
+          image: { imageOpacity: 0.5 },
+        }),
+      }).of,
     });
     const base = {
       layerId: 'l1',
