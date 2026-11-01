@@ -29,7 +29,7 @@ draw.on('selection.changed', () => {
 draw.hidden.add(layerId);
 ```
 
-The user can click features and see their frame, the map pans from on top
+The user can click features and see their selection box, the map pans from on top
 of them, and nothing the user does changes the drawing.
 
 ## Read-only
@@ -70,7 +70,7 @@ start an edit. Writes from code are not stopped.
 | Still possible | Stopped |
 | --- | --- |
 | selecting, vertex selection | moving, resizing, rotating |
-| the selection frame, without handles | vertex drags, midpoint inserts |
+| the selection box, without handles | vertex drags, midpoint inserts |
 | panning the map from on top of features | Delete key, group, ungroup |
 | local hiding | arrow-key moves |
 | writes from code and plugins | entering a drawing mode |

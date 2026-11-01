@@ -997,16 +997,17 @@ Each item has the same five parts.
 - What we rely on — imitation. Our shaders give a position the same
   depth (`project_center_offset` in
   `src/view/shaders/center-projection.ts`), so the clip hides what lies
-  behind the sphere. A marker and the selection frame of a point
+  behind the sphere. A marker and the selection box of a point
   (`src/view/renderers/anchored-outline.ts`) put the depth of their
   anchor on every vertex, so the far side clips them whole; the combined
-  frame of a multiple selection is a box on the map and is clipped like
-  any line. Nothing of a frame is made from `map.project` on the CPU.
-- Symptoms when it breaks — the frame of a selected point behind the
-  sphere is drawn on its near face.
+  selection box of a multiple selection is a box on the map and is
+  clipped like any line. Nothing of a selection box is made from
+  `map.project` on the CPU.
+- Symptoms when it breaks — the selection box of a selected point behind
+  the sphere is drawn on its near face.
 - Check when upgrading — `src/e2e/globe.e2e.test.ts` holds that a point
-  behind the sphere and the combined frame of points behind it draw no
-  frame, and that a point near the edge gets the frame of its marker.
+  behind the sphere and the combined selection box of points behind it
+  draw no box, and that a point near the edge gets the box of its marker.
   Compare `globeComputeClippingZ` and `interpolateProjection` with the new
   source.
 - Conditions for removal — none while the engine draws the globe of

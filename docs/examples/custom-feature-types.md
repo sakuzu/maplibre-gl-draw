@@ -38,8 +38,8 @@ with the looks they had.
 
 The definition (`route.ts`) gives the type its renderer, which draws the
 line with the shared line renderer of the library, its hit test, its box
-selection, its selection frame and the handles on its vertices. The
-library draws the resize and rotate handles of its frame; the handles on
+selection, its selection box and the handles on its vertices. The
+library draws the resize and rotate handles of its box; the handles on
 the vertices are `custom` handles, whose marks the type draws itself
 (`drawHandles`), as wide as they are hit. `featureTypes.add` registers it
 (1), and `featureTypes.remove` takes it out again, from a switch the page

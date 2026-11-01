@@ -166,7 +166,7 @@ writing it. Its changes are listed after those of 3.0.0.
   to fail; each failure is given to `onFailure`.
 - `ScreenContext.metersPerPixel(lngLat)`: the meters a CSS pixel spans on
   the ground at a position, in the frame drawn last, as the engine lays
-  the margin of the selection frame and the distance of the rotate handle
+  the margin of the selection box and the distance of the rotate handle
   on the map with it, so that an extension can lay what it draws around a
   feature for the current view the same way.
 - `draw.rendered` (`RenderedResource`), the features as this client draws
@@ -290,13 +290,14 @@ writing it. Its changes are listed after those of 3.0.0.
   `'xyz'`, `'xym'` or `'xyzm'`, `CoordinateDimensions`) instead of `2` or
   `3`.
 - The rotate handle stands `selectionStyle.rotateHandle.distance` CSS
-  pixels above the frame on a flat map, closer to the frame than before:
+  pixels above the selection box on a flat map, closer to the box than
+  before:
   it stood twice that distance away at the equator and more toward the
   poles (about 2.5 times at a latitude of 35 degrees), as its distance
   was turned into degrees with tiles of 256 pixels and with the scale of
   the longitude for the latitude too.
-- The margin of the frame of a feature with an extent and the distance of
-  the rotate handle are laid on the ground: they are turned into meters
+- The margin of the selection box of a feature with an extent and the
+  distance of the rotate handle are laid on the ground: they are turned into meters
   at the feature with the scale of the view (`ScreenContext.metersPerPixel`:
   that of Web Mercator at the latitude of the feature, that of the center
   of the view on the globe, and the mix of the two in the transition
@@ -304,8 +305,8 @@ writing it. Its changes are listed after those of 3.0.0.
   map without terrain they are the pixels given, as before; tilted they
   are foreshortened as the map is, on the globe they are the pixels given
   at the center of the view and shorter toward its edge, and over terrain
-  they follow the ground. The frame of a point stays on the screen around
-  its marker.
+  they follow the ground. The selection box of a point stays on the
+  screen around its marker.
 - The arrow keys move the selection by a length on the ground: the
   pixels of the press turned into meters with the scale of the view,
   along the direction of the key on the screen turned by the bearing of
@@ -389,11 +390,11 @@ writing it. Its changes are listed after those of 3.0.0.
   (absent when none) tells what the reading leaves out, for a hit test
   the features this client drags as a whole.
 - `FeatureTypeDefinition.bounds` and `outline`, and
-  `ScreenContext.bounds` and `outline`, which gave the selection frame
-  in pixels of the screen: a type declares its `footprint` on the map or
-  on the screen, and the library makes the selection box from it. A frame
-  of the screen is a box around a position, upright as the frame of a
-  point is.
+  `ScreenContext.bounds` and `outline`, which gave the selection box in
+  pixels of the screen: a type declares its `footprint` on the map or on
+  the screen, and the library makes the selection box from it. A
+  selection box of the screen is a box around a position, upright as the
+  box of a point is.
 - `ExtensionContext.drawing`: an extension reaches the same object as
   `ctx.draw.drawing`.
 
@@ -426,15 +427,15 @@ writing it. Its changes are listed after those of 3.0.0.
   another distance of the rotate handle: the select mode tested them at
   the sizes and distances by default, so a handle drawn larger, or farther
   out, could not be grabbed where it was drawn.
-- The frame of the selection and its handles are grabbed where they are
-  drawn on a tilted map, on the globe and over terrain: the drawing laid
-  the margin on the map at the scale of Web Mercator while the hit test
-  went through the screen and back, which with terrain or tilt lands
-  elsewhere. Both now make the frame with the same function, and the
-  frame of a point is tested on the screen around its marker, as it is
-  drawn. A press inside the frames drawn around several features (the
-  frame of all of them and the frame of each) moves them, and a press
-  outside them does not.
+- The selection box and its handles are grabbed where they are drawn on
+  a tilted map, on the globe and over terrain: the drawing laid the
+  margin on the map at the scale of Web Mercator while the hit test went
+  through the screen and back, which with terrain or tilt lands
+  elsewhere. Both now make the box with the same function, and the box
+  of a point is tested on the screen around its marker, as it is drawn.
+  A press inside the boxes drawn around several features (the box of all
+  of them and the box of each) moves them, and a press outside them does
+  not.
 
 ### Migration to 3.0.0
 

@@ -4,8 +4,8 @@ aside: false
 
 # Editing shapes
 
-The handles of a selected feature: the frame that resizes and rotates
-it, its vertices and midpoints, an area with a hole, an area of two
+The handles of a selected feature: the selection box that resizes and
+rotates it, its vertices and midpoints, an area with a hole, an area of two
 parts, and two parcels whose shared vertices move together.
 
 ```example
@@ -14,8 +14,8 @@ editing-shapes
 
 On a wide screen, the page opens with the west parcel selected. The
 squares at the
-corners of its frame resize it from the opposite corner, and the dot
-above the frame rotates it around the center. A round handle sits on
+corners of its selection box resize it from the opposite corner, and the
+dot above the box rotates it around the center. A round handle sits on
 each vertex and a smaller one halfway along each edge: drag a vertex to
 move it, or a midpoint to add a vertex there. Click a vertex to select
 it, Shift + click to add another, and Delete removes them. The two
@@ -55,6 +55,6 @@ screen (4).
 - [`TopologyOptions`](../api/maplibre-gl-draw/interfaces/TopologyOptions.md)
   for `sharedVertexDrag`, and
   [`SelectionStyleOptions`](../api/maplibre-gl-draw/interfaces/SelectionStyleOptions.md)
-  for the look of the frame and the handles
+  for the look of the selection box and the handles
 - [`VertexSelectionResource`](../api/maplibre-gl-draw/interfaces/VertexSelectionResource.md),
   the selected vertices from code

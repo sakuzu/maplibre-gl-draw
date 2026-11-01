@@ -176,8 +176,8 @@ image where it was dropped, the application listens to the drop and calls
 ## Selecting and editing
 
 In `select` mode a click on a feature selects it, and a click on empty map
-clears the selection. A selected feature shows a frame and the handles its
-type supports:
+clears the selection. A selected feature shows a selection box and the
+handles its type supports:
 
 | Type | Move | Vertices | Midpoints | Corners | Rotate |
 | --- | --- | --- | --- | --- | --- |
@@ -193,24 +193,24 @@ What each part does when it is dragged:
 
 | Part | Drag |
 | --- | --- |
-| The feature or the inside of its frame | moves the feature |
+| The feature or the inside of its selection box | moves the feature |
 | A vertex handle | moves that vertex |
 | A midpoint handle | inserts a vertex there and moves it |
 | A corner handle | scales from the opposite corner |
-| The rotation handle | rotates around the center of the frame |
+| The rotation handle | rotates around the center of the box |
 | The radius handle (`Circle`) | changes the radius, center fixed |
 
 - A drag with a corner changes the radius and the center of a circle
   together; the radius handle keeps the center and remembers its angle
   (`maplibre-gl-draw:radiusHandleAngle`)
 - An image is scaled as a whole (`maplibre-gl-draw:scale`), not per axis
-- A point keeps a constant size on screen, so it has only a frame
+- A point keeps a constant size on screen, so it has only a selection box
 - A midpoint handle sits on the edge as it is drawn, halfway across in
   longitude
 - On the globe an edge between two vertices follows the path it takes on
   the Mercator map (a parallel stays a parallel), as the layers of the map
-  do. The fill, the outline, the frame, the handles and the hit test all
-  follow that path
+  do. The fill, the outline, the selection box, the handles and the hit
+  test all follow that path
 - A single-coordinate feature (a one-point `MultiPoint`) shows its vertex
   handles but no corners or rotation handle
 - Every drag is one change: while it lasts, `feature.updated` arrives with
@@ -219,7 +219,7 @@ What each part does when it is dragged:
 - A locked feature can be selected but shows no handles and does not move
   ([Layers and groups](layers.md))
 
-The colors and sizes of the frame and the handles are the
+The colors and sizes of the selection box and the handles are the
 `selectionStyle` option. For a line or polygon with very many vertices the
 handles are thinned on screen; see [Performance](performance.md).
 
@@ -263,17 +263,17 @@ features can move together; see
 | Click on empty map | clears the selection |
 
 A box selection selects the features whose shape meets the box (a point
-counts by its coordinate, an image by its rotated frame). When the
+counts by its coordinate, an image by its rotated box). When the
 selection existed before, each feature in the box is toggled. Escape during
 the drag restores the selection as it was. Locked and hidden features are
 not box-selected.
 
-A multiple selection shows one frame with corner and rotation handles
-around all of it. Dragging inside the frame moves every feature by the same
-amount; a corner scales them all from the opposite corner, each by its own
-rule (coordinates for geometries, the scale for images, only the position
-for points); the rotation handle turns them around the center of the frame
-(points keep their markers upright).
+A multiple selection shows one selection box with corner and rotation
+handles around all of it. Dragging inside the box moves every feature by
+the same amount; a corner scales them all from the opposite corner, each
+by its own rule (coordinates for geometries, the scale for images, only
+the position for points); the rotation handle turns them around the
+center of the box (points keep their markers upright).
 
 A touch screen has no Shift key, so box selection and Shift+click are not
 available there. Offer your own control and call `draw.selection.set` and
@@ -311,11 +311,11 @@ In a store that holds its features as rows, more features than are made at
 once (2,000) are selected in bulk: a box over them, `selection.setAll`, or a
 group or a layer of many features. The selection then has no list of IDs:
 `selection.get().bulk` tells how many, in which layers and where. Each
-feature shows its frame and the selection one frame with its handles, as for
-several features. A press on one of them moves them all, and the handles of
-the frame rotate and resize them all; they are written once, when they are
-let go. The arrow keys move them too, and the moves of a key held are
-written once, a moment after the last press (one step of an undo).
+feature shows its selection box and the selection one box with its handles,
+as for several features. A press on one of them moves them all, and the
+handles of the box rotate and resize them all; they are written once, when
+they are let go. The arrow keys move them too, and the moves of a key held
+are written once, a moment after the last press (one step of an undo).
 
 The verbs of `draw.selection` act on them (`delete`, `group`, `ungroup`,
 `move`, `update`). `selection.features(filter, { limit, after })` reads
@@ -394,8 +394,8 @@ polygons with holes come from:
 - `draw.features.create` with the geometry
 
 They are drawn, hit-tested and edited like single geometries. A click on
-any part selects the whole feature, the frame encloses every part, and
-every part and ring gets its own vertex and midpoint handles.
+any part selects the whole feature, the selection box encloses every
+part, and every part and ring gets its own vertex and midpoint handles.
 
 | Type | `part` | `ring` | `index` |
 | --- | --- | --- | --- |
@@ -564,9 +564,9 @@ application offer another way to enter coordinates, such as a form.
   standard UI and listens to `document.changed`
 - [Build your own UI](../examples/custom-ui.md) calls `setMode` from
   buttons of its own and follows `mode.changed` and the selection
-- [Editing shapes](../examples/editing-shapes.md) shows the frame, the
-  vertex and midpoint handles, an area with a hole, a `MultiPolygon` and
-  shared vertices that move together
+- [Editing shapes](../examples/editing-shapes.md) shows the selection
+  box, the vertex and midpoint handles, an area with a hole, a
+  `MultiPolygon` and shared vertices that move together
 
 ## Reference
 

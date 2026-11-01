@@ -82,7 +82,7 @@ export interface ScreenContext {
    * The length on the ground that a CSS pixel spans at a position, in the frame drawn last.
    *
    * The engine turns the sizes in pixels of what it draws on the map for the current view (the
-   * margin of the selection frame, the distance of the rotate handle, the move of an arrow key)
+   * margin of the selection box, the distance of the rotate handle, the move of an arrow key)
    * into meters with it, and lays them on the plane tangent to the sphere of the map at the
    * feature (maplibre's sphere, of a radius of 6,371,008.8 m), so they tilt and turn with the map
    * and keep their place on it. It follows the projection: on Web Mercator the scale at the

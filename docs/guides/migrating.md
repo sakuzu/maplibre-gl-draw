@@ -819,6 +819,14 @@ drawn. Each change below names what replaces what is gone.
   drew so drew no color of a layer rule, and `getAppliedStyle` answered
   the defaults of the geometry for it; the rule colors `fillColor` of a
   custom type. A definition given to `override` cannot have it
+- A style key an extension adds to `FeatureStyle` by declaration merging
+  is optional in `FeatureStyleResolved` (it was required, though the look
+  has it only when the type or the feature gives it): check it where it
+  is read, as the keys of `feature.style` are
+- An extension that read the CSS colors it draws with a parser of its
+  own reads them with `parseCssColor` of the main entry, the parser the
+  library checks and draws them with, so that it takes and draws the
+  same colors
 
 A handle on each vertex, as 2.x gave it and as 3.0 gives it, with the
 white circle the library drew, now drawn by the type:

@@ -24,7 +24,7 @@ mode applied.
   feature, on the plane tangent to the sphere of the map there, and never
   goes through the screen and back (with terrain, a position projected and
   unprojected again lands elsewhere). There are two scales. A size of the
-  current view (the margin of the selection frame, the distance of the
+  current view (the margin of the selection box, the distance of the
   rotate handle, the move of an arrow key) takes the meters of a CSS pixel
   in the frame drawn last (`metersPerPixelInFrame` in
   `src/shared/math/screen-scale.ts`, `ScreenContext.metersPerPixel` for
@@ -36,8 +36,8 @@ mode applied.
   `src/shared/math/ground-scale.ts` reads, for extensions too). For
   example, `applyMarginToBoundingBox` widens a geographic bounding box by
   the margin in meters. What keeps its size on the screen (a handle, a
-  point marker and the frame around it) keeps a geographic position and is
-  drawn and hit tested on the screen around it
+  point marker and the selection box around it) keeps a geographic
+  position and is drawn and hit tested on the screen around it
 - Renderers receive geographic coordinates and project them in the vertex
   shader with the projection data of the frame
 - Hit testing starts from geographic coordinates. The click is unprojected,
@@ -388,7 +388,7 @@ library draws, which stays where `map.project` and hit testing put it.
 ## Pitch and roll
 
 maplibre's projection matrix already contains pitch and roll. Because
-features, the selection frame and the handles are all defined in
+features, the selection box and the handles are all defined in
 geographic coordinates and projected in the shader, they follow pitch and
 roll with no extra work.
 
@@ -425,8 +425,8 @@ handle positions) in geographic coordinates with the same functions and
 the same scale, the one of the frame drawn last
 (`CoordinateTransform.metersPerPixel`, recorded by the frame with
 `setScreenScaleFrame`), and the hit test projects those same positions to
-the screen. The frame of a point is tested on the screen around the
-projected point, as it is drawn. maplibre's `project()`
+the screen. The selection box of a point is tested on the screen around
+the projected point, as it is drawn. maplibre's `project()`
 runs in 64 bits on the CPU, and the projection of the shader resolves the
 same point to well under a pixel, so a handle is hit where it is drawn at
 every zoom.

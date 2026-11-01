@@ -223,7 +223,7 @@ before any layer of the frame draws (see
 [Collision thinning](#collision-thinning)).
 
 `renderForeground` runs once per world copy in the last slot. It draws the
-selection UI (only the selection frame when editing is blocked), the
+selection UI (only the selection box when editing is blocked), the
 vertices that follow a shared vertex, the tentative vertices and those of
 the layer-aware renderers, the box selection (base copy only) and the
 overlays that are not layer-aware.
@@ -1714,8 +1714,9 @@ the path of maplibre's layers.
 - The other paths drawn on the CPU are cut with the line cell before they
   are drawn: the dashes of features (`densifyPathForGlobe` before
   `splitIntoDashes`) and the outlines of the selection UI
-  (`StrokeRenderer`). The frame of a point is a figure of the screen laid
-  around an anchor (`AnchoredOutlineRenderer`), so there is nothing to cut
+  (`StrokeRenderer`). The selection box of a point is a figure of the
+  screen laid around an anchor (`AnchoredOutlineRenderer`), so there is
+  nothing to cut
 - Images (`QuadShader`) are cut with the fill cell into the grid of the
   terrain's degraded path (`buildQuadGrid`, one piece per cell): the
   corners are interpolated on the Mercator plane and the texture
@@ -2051,7 +2052,7 @@ to physical pixels when drawn. All reads of the ratio go through
 - Renderers and datasets receive the source itself
   (`PixelRatioInput = number | (() => number) | PixelRatioProvider`), so a
   change reaches every reader from the next frame on. Extension renderers
-  get the resolved value as `RenderContext.pixelRatio`
+  get the resolved value as `RenderContext.screen.pixelRatio`
 - `rendering.renderScale` of the options multiplies a factor on top
   (default 1). A host that shows the map scaled down uses it to shrink what
   is fixed in screen pixels by the same ratio

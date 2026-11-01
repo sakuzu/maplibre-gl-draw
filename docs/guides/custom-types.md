@@ -576,7 +576,7 @@ back.
 such as the points that carry an icon. A feature for which it returns
 false keeps the built-in type entirely: it is drawn in batches with the
 other built-in features, and keeps the built-in hit test, box
-selection, frame, handles, snapping candidates and extent. The others
+selection, selection box, handles, snapping candidates and extent. The others
 are drawn and hit by the definition. It is asked again whenever a
 feature changes, so its answer follows from the feature alone. `add`
 ignores it: a custom type takes every feature of its type.

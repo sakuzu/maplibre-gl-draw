@@ -137,14 +137,15 @@ const draw = createDraw(map, {
   of a circle and the box of a box selection). Each part you give
   replaces the default of that part, so give it whole. Its colors are CSS
   colors and its sizes CSS pixels
-- The handles, the lines and the frame of a point keep their sizes on the
-  screen: a handle is drawn at its position the size you give at every
-  pitch, and the frame of a point stands around its marker on the screen.
-  The margin of the frame of a feature with an extent
+- The handles, the lines and the selection box of a point keep their
+  sizes on the screen: a handle is drawn at its position the size you give
+  at every pitch, and the selection box of a point stands around its
+  marker on the screen. The margin of the selection box of a feature with
+  an extent
   (`box.margin`) and the distance of the rotate handle
   (`rotateHandle.distance`) are laid on the map instead: each is turned
   into meters on the ground at the feature with the scale of the view
-  (`ScreenContext.metersPerPixel`), so the frame and the handle tilt and
+  (`ScreenContext.metersPerPixel`), so the box and the handle tilt and
   turn with the map and stay where they are on it. On a flat Web Mercator
   map, untilted and without terrain, they are the pixels you give. Tilted
   they are foreshortened as the map is (shorter toward the horizon), on

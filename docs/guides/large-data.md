@@ -45,7 +45,7 @@ if (row?.geometry) {
 | --- | --- | --- |
 | Editing | Move, vertices, geometry | None |
 | Events | `feature.created` and others | `clicked`, `hovered`, `changed` |
-| Selection | A frame and handles | A highlight (`setSelectedRowIds`) |
+| Selection | A selection box and handles | A highlight (`setSelectedRowIds`) |
 | Saving | `document.toJSON()` | Not saved, only its ID in the order |
 | Size | 200,000 stay editable | Tens of thousands to millions |
 
