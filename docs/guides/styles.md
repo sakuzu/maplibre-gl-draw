@@ -345,6 +345,10 @@ A value is a string or a function that formats one from numbers already
 turned into strings. The table belongs to the instance, so two maps on a
 page can use different languages. There is no locale detection.
 
+An extension adds keys of its own to the same table, so the option
+`messages` translates them too ([messages of a
+plugin](plugins.md#messages-of-a-plugin)).
+
 The words of the names the library gives new features, layers and groups
 (`Layer 1`) are not in this table. Translate them with the option
 `autoName` ([Drawing and editing](drawing.md)).

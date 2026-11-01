@@ -39,6 +39,7 @@ import {
   featureTablesInternals,
 } from './feature-table/feature-tables.js';
 import type { LayerTable } from './feature-table/layer-table.js';
+import { resolveMessages } from './messages.js';
 import type { ModeManager } from './modes/manager.js';
 import { circleRowRings } from './shared/circle-rings.js';
 import { DEFAULT_FEATURE_STYLE_CONFIG } from './shared/config/feature-style.js';
@@ -327,6 +328,7 @@ export function createModeHarness(options: {
     terrain: {} as TerrainContext,
     pixelRatio: { resolve: () => 1, getScaleFactor: () => 1 },
     autoNameGenerator,
+    messages: resolveMessages(),
     selectionExtensions: createSelectionExtensionRegistry(),
     spatialIndex: { invalidate: () => {}, invalidateType: () => {}, invalidateAll: () => {} },
     modeManager,

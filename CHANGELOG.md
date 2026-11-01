@@ -238,6 +238,13 @@ writing it. Its changes are listed after those of 3.0.0.
   `EARTH_RADIUS_METERS`, which the library draws a size kept with a zoom
   by. With `metersToDegrees`, an extension draws and hit tests such a
   size by the same formula as the library.
+- `defineMessages(defaults)` and `ExtensionContext.messages`: an
+  extension declares message keys of its own in `Messages` by
+  declaration merging and gives their English defaults to
+  `defineMessages`; the `messages` option of every instance then takes
+  them as it takes the keys of the library (a key nothing defines is
+  still refused), and the extension reads them from `ctx.messages`, the
+  table of its instance.
 - `parseCssColor(value)`: a CSS color read as the library reads every
   color it takes, as `[red, green, blue, alpha]` from 0 to 1, or `null`
   for a value it does not take, so that an extension checks the colors of

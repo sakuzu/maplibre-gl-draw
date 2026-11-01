@@ -11,7 +11,7 @@
  */
 
 import { CONSISTENCY_CHECKS } from '../../debug/consistency.js';
-import { MESSAGES_EN, resolveMessages } from '../../messages.js';
+import { messageDefaultOf, resolveMessages } from '../../messages.js';
 import { formatColor, isColor, toColor } from '../../shared/color.js';
 import type { FeatureStyleConfig } from '../../shared/config/feature-style.js';
 import { DEFAULT_FEATURE_STYLE_CONFIG } from '../../shared/config/feature-style.js';
@@ -172,9 +172,14 @@ const SELECTION_STYLE_CHECKS = {
 const RUNTIME_CHECKS: Readonly<Record<string, (value: unknown, what: string) => void>> = {
   messages(value, what) {
     if (!isRecord(value)) throw invalidInput(`${what} must be an object`);
-    onlyKeys(value, Object.keys(MESSAGES_EN), what);
+    // The keys of the library and those the extensions defined (defineMessages)
+    onlyKeys(
+      value,
+      Object.keys(value).filter((key) => messageDefaultOf(key) !== undefined),
+      what,
+    );
     for (const [key, entry] of Object.entries(value)) {
-      const expected = typeof MESSAGES_EN[key as keyof typeof MESSAGES_EN];
+      const expected = typeof messageDefaultOf(key);
       if (entry !== undefined && typeof entry !== expected) {
         throw invalidInput(`${what}.${key} must be a ${expected}`);
       }

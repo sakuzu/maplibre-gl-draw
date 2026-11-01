@@ -21,6 +21,7 @@
 
 import type { Position } from 'geojson';
 import type { BBox } from '../../geometry/types.js';
+import type { Messages } from '../../messages.js';
 import type { DatasetRow } from '../datasets.js';
 import type { Draw } from '../draw.js';
 import type { DrawEvents, ScreenPoint } from '../events.js';
@@ -139,6 +140,12 @@ export interface ExtensionContext {
   readonly terrain: TerrainSurface;
   /** The automatic names of new features, layers and groups */
   readonly names: NameGenerator;
+  /**
+   * The table of the messages of the instance: the defaults of the library and of the keys the
+   * extensions defined (`defineMessages`), with the `messages` option over them. Read a message
+   * when it is shown, as the option can change it; do not change the table.
+   */
+  readonly messages: Readonly<Messages>;
   /** The conversion between the map and the screen */
   readonly screen: ScreenContext;
   /**

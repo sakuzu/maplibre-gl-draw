@@ -13,6 +13,7 @@ import type { Position } from 'geojson';
 import type { Map as MapLibreMap } from 'maplibre-gl';
 import type { TopHit } from '../../dispatcher/hit-test/topmost.js';
 import type { BBox } from '../../geometry/types.js';
+import type { Messages } from '../../messages.js';
 import type { ModeManager } from '../../modes/manager.js';
 import { formatColor } from '../../shared/color.js';
 import type { BoxSelectionStyleConfig } from '../../shared/config/rendering.js';
@@ -179,6 +180,8 @@ export interface ContextServices {
   /** The pixel ratio the drawing uses */
   readonly pixelRatio: PixelRatioProvider;
   readonly autoNameGenerator: AutoNameGenerator;
+  /** The table of the messages of the instance, which the `messages` option changes in place */
+  readonly messages: Readonly<Messages>;
   /** The selection extents of the custom types */
   readonly selectionExtensions: SelectionExtensionRegistry;
   /** The spatial index, for the invalidation of features */
@@ -337,6 +340,7 @@ export function createExtensionContext(
     once: (event, listener) => subscribe(event, listener, true),
     terrain: createTerrainSurface(services.terrain),
     names: createNameGenerator(services.autoNameGenerator),
+    messages: services.messages,
     screen,
     invalidate(filter) {
       if (filter?.type !== undefined) spatialIndex.invalidateType(filter.type);
@@ -479,6 +483,7 @@ export function createModeContext(
     once: base.once,
     terrain: base.terrain,
     names: base.names,
+    messages: base.messages,
     screen: base.screen,
     invalidate: base.invalidate,
     setMode: (mode) => services.modeManager.setMode(mode),

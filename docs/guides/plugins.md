@@ -250,6 +250,44 @@ ctx.on('rendered.changed', ({ ids }) => {
 });
 ```
 
+### Messages of a plugin
+
+A plugin that shows words of its own puts them in the one table of
+messages of the library, so that an application translates them with the
+same option `messages`. It declares its keys in `Messages` by
+declaration merging and gives their English defaults to
+`defineMessages`, before the instance whose option names them is
+created (when it makes its plugin, say). It reads them from
+`ctx.messages`, the table of the instance, when it shows them, as the
+option can change them. A key nothing defines is refused by the option,
+as before.
+
+<!-- docs-check:
+declare const map: import('maplibre-gl').Map;
+-->
+
+```ts
+import { createDraw, defineMessages, type Plugin } from '@sakuzu/maplibre-gl-draw';
+
+declare module '@sakuzu/maplibre-gl-draw' {
+  interface Messages {
+    pinLabel: string;
+  }
+}
+
+defineMessages({ pinLabel: 'Pin' });
+
+const pins: Plugin = {
+  name: 'pins',
+  onAdd(ctx) {
+    console.log(ctx.messages.pinLabel);
+  },
+};
+
+const draw = createDraw(map, { messages: { pinLabel: 'Épingle' } });
+draw.extensions.plugins.add(pins);
+```
+
 ### Events of a plugin
 
 A plugin tells what changes in it through the same list of events: it

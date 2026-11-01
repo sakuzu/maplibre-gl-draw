@@ -248,6 +248,43 @@ ctx.on('rendered.changed', ({ ids }) => {
 });
 ```
 
+### プラグインの文言
+
+自分の語を見せるプラグインは、その語をライブラリーの 1 つの文言の表に
+入れます。そうすると、アプリは同じオプション `messages` で翻訳できます。
+プラグインは、自分の鍵を宣言の併合で `Messages` に宣言し、その英語の
+既定を `defineMessages` に渡します。オプションでその鍵を指定する
+インスタンスを作る前 (プラグインを作るときなど) に渡してください。
+見せるときに、インスタンスの表 `ctx.messages` から読みます。オプションで
+変わることがあるからです。どこにも定められていない鍵は、これまでどおり
+オプションが拒みます。
+
+<!-- docs-check:
+declare const map: import('maplibre-gl').Map;
+-->
+
+```ts
+import { createDraw, defineMessages, type Plugin } from '@sakuzu/maplibre-gl-draw';
+
+declare module '@sakuzu/maplibre-gl-draw' {
+  interface Messages {
+    pinLabel: string;
+  }
+}
+
+defineMessages({ pinLabel: 'Pin' });
+
+const pins: Plugin = {
+  name: 'pins',
+  onAdd(ctx) {
+    console.log(ctx.messages.pinLabel);
+  },
+};
+
+const draw = createDraw(map, { messages: { pinLabel: 'Épingle' } });
+draw.extensions.plugins.add(pins);
+```
+
 ### プラグインのイベント
 
 プラグインは、自分の中の変化を同じイベントの一覧で知らせます。自分の

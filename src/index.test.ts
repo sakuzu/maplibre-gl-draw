@@ -54,6 +54,7 @@ const MAIN = [
   'DatasetsCollection',
   'DatasetThinningStats',
   'DatasetZoomScale',
+  'defineMessages',
   'deriveLegend',
   'DocumentChange',
   'DocumentResource',
