@@ -812,9 +812,12 @@ draw.options.update({
 - プラグインは、宣言の併合で `DrawEvents` に足した自分のイベントを
   `ctx.emit(event, payload)` で送ります。どのイベントとも同じく
   `draw.on` で購読します
-- `Plugin.interaction` は役目ごとに分かれました。`onDrawCommit(feature)`
-  はプラグインの欄になり、選択モードのクリックは `selectMode`
-  (`onFeatureClick`、`onFeatureDoubleClick`)、排他的な操作は
+- `Plugin.interaction` は役目ごとに分かれました。`onFeatureCommit(feature)`
+  (前は `onDrawCommit`。`ModeContext.commitFeature` に合わせた名です) は
+  プラグインの欄になり、選択モードのクリックは `selectMode`
+  (`onSelectedFeatureClick` と `onFeatureDoubleClick`。前者は 1 つだけ選んだ
+  地物を押し直したときにだけ呼ばれるので、前の `onFeatureClick` を改め
+  ました)、排他的な操作は
   `exclusive` です。`exclusive` は `isActive()` (前は `isBusy`) を必ず
   持ち、`finish`、`cancel`、`container` を持てます
 - 型、その描画器、付き物の提供者が、行で持つレイヤーの行から答えて描く

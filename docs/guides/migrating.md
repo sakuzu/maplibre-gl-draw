@@ -808,9 +808,12 @@ drawn. Each change below names what replaces what is gone.
   having declared them in `DrawEvents` by declaration merging, and they
   are subscribed to with `draw.on` as every event is
 - `Plugin.interaction` is split by what each part does:
-  `onDrawCommit(feature)` is a member of the plugin, the clicks of the
-  select mode are `selectMode` (`onFeatureClick`,
-  `onFeatureDoubleClick`), and the exclusive interaction is `exclusive`,
+  `onFeatureCommit(feature)` (was `onDrawCommit`, named as
+  `ModeContext.commitFeature`) is a member of the plugin, the clicks of
+  the select mode are `selectMode` (`onSelectedFeatureClick`, was
+  `onFeatureClick`, as it is called for a click on the feature selected
+  alone only, and `onFeatureDoubleClick`), and the exclusive interaction
+  is `exclusive`,
   whose `isActive()` (was `isBusy`) it must have, with `finish`, `cancel`
   and `container`
 - What a type, its renderer and a companion provider answer and draw

@@ -401,15 +401,15 @@ export function createExtensionHost(deps: ExtensionHostDeps): ExtensionHost {
   }
   /** Tells every plugin that a drawing mode created a feature */
   function announceDrawCommit(feature: Feature): void {
-    eachPlugin('onDrawCommit', (plugin) => {
-      plugin.onDrawCommit?.(feature);
+    eachPlugin('onFeatureCommit', (plugin) => {
+      plugin.onFeatureCommit?.(feature);
       return false;
     });
   }
   const featureOf = (id: string): Feature | undefined =>
     store.getFeature(id) as Feature | undefined;
   const click =
-    (hook: 'onFeatureClick' | 'onFeatureDoubleClick') =>
+    (hook: 'onSelectedFeatureClick' | 'onFeatureDoubleClick') =>
     (featureId: string, event?: MouseNormalizedEvent): boolean => {
       const feature = featureOf(featureId);
       if (!feature || !event) return false;
@@ -419,7 +419,7 @@ export function createExtensionHost(deps: ExtensionHostDeps): ExtensionHost {
       });
     };
   const interactions: PluginInteractions = {
-    handleFeatureClick: click('onFeatureClick'),
+    handleFeatureClick: click('onSelectedFeatureClick'),
     handleFeatureDoubleClick: click('onFeatureDoubleClick'),
     isPluginInteracting: () =>
       eachPlugin('isActive', (plugin) => plugin.exclusive?.isActive() === true),

@@ -354,11 +354,14 @@ writing it. Its changes are listed after those of 3.0.0.
   the distance (`{ id, distancePx }`): the library fills in the `Hit` it
   gives out (`map.clicked`, `ModeContext.hitTest`, the `onClick` of the
   provider) with the kind, the ID of the feature and `featureId`.
-- `Plugin.interaction` is split by what each part does: `onDrawCommit`
-  is a member of the plugin, the hooks of the clicks of the select mode
-  are `selectMode` (`onFeatureClick`, `onFeatureDoubleClick`), and an
-  exclusive interaction is `exclusive`, whose `isActive()` (was
-  `isBusy`) it requires, with `finish`, `cancel` and `container`.
+- `Plugin.interaction` is split by what each part does: `onFeatureCommit`
+  (was `onDrawCommit`, named as `ModeContext.commitFeature`) is a member
+  of the plugin, the hooks of the clicks of the select mode are
+  `selectMode` (`onSelectedFeatureClick`, was `onFeatureClick`, called for
+  a click on the feature selected alone only, and
+  `onFeatureDoubleClick`), and an exclusive interaction is `exclusive`,
+  whose `isActive()` (was `isBusy`) it requires, with `finish`, `cancel`
+  and `container`.
 - The values of the screen are those of the view drawn last:
   `ScreenContext.project`, `unproject`, `zoom` and `metersPerPixel`, the
   heights of `ctx.terrain`, and the position of a pointer event, which is

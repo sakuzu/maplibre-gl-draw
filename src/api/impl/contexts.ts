@@ -370,7 +370,7 @@ export interface ModeServices extends ContextServices {
   getWritableLayerId(): string;
   /** Generates the ID of a new feature */
   generateId(): string;
-  /** Tells the plugins that a drawing mode created a feature (`interaction.onDrawCommit`) */
+  /** Tells the plugins that a drawing mode created a feature (`interaction.onFeatureCommit`) */
   notifyDrawCommit(feature: Feature): void;
   /** Whether new features follow the zoom with their widths */
   readonly scaleWithZoom: boolean;

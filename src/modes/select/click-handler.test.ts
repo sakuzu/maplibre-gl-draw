@@ -220,7 +220,7 @@ describe.each(STORE_KINDS)('on %s', (_kind, createStore) => {
     const container = { contains: (target: unknown) => target === inside } as HTMLElement;
 
     let finish: ReturnType<typeof vi.fn>;
-    let onFeatureClick: ReturnType<typeof vi.fn>;
+    let onSelectedFeatureClick: ReturnType<typeof vi.fn>;
     let busy: boolean;
 
     beforeEach(() => {
@@ -228,14 +228,14 @@ describe.each(STORE_KINDS)('on %s', (_kind, createStore) => {
       finish = vi.fn(() => {
         busy = false;
       });
-      onFeatureClick = vi.fn(() => true);
+      onSelectedFeatureClick = vi.fn(() => true);
       context = {
         ...context,
         plugins: {
           isPluginInteracting: () => busy,
           getPluginInteractionContainer: () => container,
           finishPluginInteraction: finish,
-          handleFeatureClick: onFeatureClick,
+          handleFeatureClick: onSelectedFeatureClick,
         },
       } as unknown as EngineModeContext;
     });
@@ -285,7 +285,7 @@ describe.each(STORE_KINDS)('on %s', (_kind, createStore) => {
       clickOn({});
 
       expect(finish).toHaveBeenCalledTimes(1);
-      expect(onFeatureClick).not.toHaveBeenCalled();
+      expect(onSelectedFeatureClick).not.toHaveBeenCalled();
       expect(store.getSelection()).toEqual({ type: 'feature', ids: ['f1'] });
     });
   });

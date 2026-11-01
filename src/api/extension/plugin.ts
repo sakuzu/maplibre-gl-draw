@@ -35,12 +35,18 @@ export interface Plugin<Api = unknown> {
    * built-in drawing modes use too, or the image placed by the load that follows a request of the
    * image mode.
    */
-  onDrawCommit?(feature: Feature): void;
+  onFeatureCommit?(feature: Feature): void;
   /** The hooks of the select mode: the clicks on a feature it offers the plugins */
   readonly selectMode?: {
-    /** A selected feature was clicked again; returning true means the plugin handled it */
-    onFeatureClick?(feature: Feature, event: DrawPointerEvent): boolean;
-    /** A feature was double-clicked; returning true means the plugin handled it */
+    /**
+     * The feature selected alone was clicked again (not with Shift, and not by the click that
+     * finished an exclusive interaction); returning true means the plugin handled it
+     */
+    onSelectedFeatureClick?(feature: Feature, event: DrawPointerEvent): boolean;
+    /**
+     * A feature was double-clicked, selected or not: the select mode selects it, then asks;
+     * returning true means the plugin handled it
+     */
     onFeatureDoubleClick?(feature: Feature, event: DrawPointerEvent): boolean;
   };
   /**

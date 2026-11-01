@@ -56,7 +56,7 @@ const INPUT_HANDLERS = [
 ] as const;
 
 /** The hooks of the select mode a plugin may give */
-const SELECT_MODE_HOOKS = ['onFeatureClick', 'onFeatureDoubleClick'] as const;
+const SELECT_MODE_HOOKS = ['onSelectedFeatureClick', 'onFeatureDoubleClick'] as const;
 
 /** The members of the exclusive interaction of a plugin besides `isActive`, which it requires */
 const EXCLUSIVE_HOOKS = ['finish', 'cancel', 'container'] as const;
@@ -65,7 +65,7 @@ const EXCLUSIVE_HOOKS = ['finish', 'cancel', 'container'] as const;
 const SHAPES: Readonly<
   Record<Exclude<ExtensionKind, 'mode'>, { required: string[]; optional: string[] }>
 > = {
-  plugin: { required: ['onAdd'], optional: ['onRemove', 'onDrawCommit'] },
+  plugin: { required: ['onAdd'], optional: ['onRemove', 'onFeatureCommit'] },
   'feature type': {
     required: [],
     optional: [

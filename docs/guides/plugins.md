@@ -69,7 +69,7 @@ name must be unique in the instance.
 | `onRemove()` | Releases what the plugin holds outside the context |
 | `api` | What other code reads with `draw.extensions.plugins.getApi(name)` |
 | `input` | Receivers of the input, called before those of the mode |
-| `onDrawCommit(feature)` | A drawing mode created a feature |
+| `onFeatureCommit(feature)` | A drawing mode created a feature |
 | `selectMode` | Hooks of the clicks of the select mode on a feature |
 | `exclusive` | An exclusive interaction; the select mode waits meanwhile |
 
@@ -339,12 +339,12 @@ draw.extensions.plugins.add(createShortcuts());
 
 `selectMode` lets a plugin take part in the clicks of the select mode:
 
-- `onFeatureClick(feature, event)` is called when a selected feature
+- `onSelectedFeatureClick(feature, event)` is called when a selected feature
   is clicked again; returning true means the plugin handled the click
 - `onFeatureDoubleClick(feature, event)` is called when a feature is
   double-clicked, after it is selected
 
-`onDrawCommit(feature)` is called when a drawing mode created a
+`onFeatureCommit(feature)` is called when a drawing mode created a
 feature: each commit of `ctx.commitFeature` (the built-in drawing modes
 use it too), and the image the load after an `image.requested` places.
 
@@ -360,7 +360,7 @@ and it ignores the keys but Escape.
 - A click outside that element calls `finish()`, and then goes on as
   an ordinary click: it selects the feature under it, or clears the
   selection on the empty map. A click on the feature that is already
-  selected does not call `onFeatureClick`, so the click that finishes
+  selected does not call `onSelectedFeatureClick`, so the click that finishes
   an interaction does not start another
 - Escape calls `cancel()`
 - Leaving the select mode calls `finish()`

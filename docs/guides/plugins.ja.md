@@ -69,7 +69,7 @@ const removeLogger = draw.extensions.plugins.add(logger);
 | `onRemove()` | 窓口の外で持っているものを解放します |
 | `api` | `draw.extensions.plugins.getApi(name)` で読むもの |
 | `input` | モードより先に呼ばれる入力の受け手 |
-| `onDrawCommit(feature)` | 描画モードが地物を作った |
+| `onFeatureCommit(feature)` | 描画モードが地物を作った |
 | `selectMode` | 選択モードの地物のクリックのフック |
 | `exclusive` | 排他的な操作。その間、選択モードは動きません |
 
@@ -337,13 +337,13 @@ draw.extensions.plugins.add(createShortcuts());
 
 `selectMode` を使うと、プラグインが選択モードのクリックに加われます。
 
-- `onFeatureClick(feature, event)` は、選ばれている地物がもう一度
+- `onSelectedFeatureClick(feature, event)` は、選ばれている地物がもう一度
   クリックされたときに呼ばれます。true を返すと、プラグインがその
   クリックを処理したことになります
 - `onFeatureDoubleClick(feature, event)` は、地物がダブルクリック
   されたときに、その地物を選んだ後で呼ばれます
 
-`onDrawCommit(feature)` は、描画モードが地物を作ったときに呼ばれます。
+`onFeatureCommit(feature)` は、描画モードが地物を作ったときに呼ばれます。
 `ctx.commitFeature` の確定 (組み込みの描画モードもこれを使います) と、
 `image.requested` の後の読み込みが置いた画像です。
 
@@ -358,7 +358,7 @@ draw.extensions.plugins.add(createShortcuts());
   パンしません
 - その要素の外をクリックすると `finish()` が呼ばれ、続けて通常の
   クリックとして扱われます。地物の上なら、その地物を選択し、何もない
-  地図の上なら選択を解きます。選択中の地物を押しても `onFeatureClick`
+  地図の上なら選択を解きます。選択中の地物を押しても `onSelectedFeatureClick`
   は呼ばれないので、操作を終えたクリックが次の操作を始めることは
   ありません
 - Escape で `cancel()` が呼ばれます

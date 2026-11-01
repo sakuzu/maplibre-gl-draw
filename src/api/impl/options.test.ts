@@ -80,7 +80,12 @@ describe('the options at creation', () => {
     setup({
       style: { polygon: { fillColor: 'rgb(0, 0, 255)', fillOpacity: 0.5 } },
       selectionStyle: {
-        selectionRectangle: { fillColor: 'red', fillOpacity: 0.1, strokeColor: 'red', strokeWidth: 3 },
+        selectionRectangle: {
+          fillColor: 'red',
+          fillOpacity: 0.1,
+          strokeColor: 'red',
+          strokeWidth: 3,
+        },
       },
       snapping: { tolerancePx: 20 },
       tracing: { enabled: false },
@@ -223,7 +228,12 @@ describe('options.update', () => {
             strokeOpacity: 1,
           },
         } as never,
-        selectionRectangle: { fillColor: 'gray', fillOpacity: 0.3, strokeColor: 'navy', strokeWidth: 1 },
+        selectionRectangle: {
+          fillColor: 'gray',
+          fillOpacity: 0.3,
+          strokeColor: 'navy',
+          strokeWidth: 1,
+        },
       },
     });
     expect(selectionStyle.box.stroke).toMatchObject({ width: 3, color: [0, 0, 0, 1] });

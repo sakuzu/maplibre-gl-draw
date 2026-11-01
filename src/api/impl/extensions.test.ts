@@ -757,11 +757,13 @@ describe('the input of the plugins and the modes', () => {
       locked: false,
       visible: true,
     });
-    const onFeatureClick = vi.fn(() => true);
-    engine.extensions.collections.plugins.add(plugin('p', { selectMode: { onFeatureClick } }));
+    const onSelectedFeatureClick = vi.fn(() => true);
+    engine.extensions.collections.plugins.add(
+      plugin('p', { selectMode: { onSelectedFeatureClick } }),
+    );
     createSyntheticInput(engine).click([1, 1]);
     createSyntheticInput(engine).click([1, 1]);
-    expect(onFeatureClick).toHaveBeenCalledWith(
+    expect(onSelectedFeatureClick).toHaveBeenCalledWith(
       expect.objectContaining({ id: 'f' }),
       expect.objectContaining({ lngLat: [1, 1] }),
     );
@@ -862,7 +864,9 @@ describe('ModeContext.commitFeature', () => {
   it('gives the look of the selection with CSS colors, the options over the defaults', () => {
     expect(ctx.selectionStyle.box.stroke.color).toMatch(/^#|^rgba\(/);
     expect(ctx.selectionStyle.selectionRectangle.strokeWidth).toEqual(expect.any(Number));
-    ctx.draw.options.update({ selectionStyle: { selectionRectangle: { strokeColor: 'red' } } } as never);
+    ctx.draw.options.update({
+      selectionStyle: { selectionRectangle: { strokeColor: 'red' } },
+    } as never);
     expect(ctx.selectionStyle.selectionRectangle.strokeColor).toBe('red');
   });
 
@@ -877,7 +881,7 @@ describe('ModeContext.commitFeature', () => {
   it('tells the plugins of each feature it commits, and not of a refused one', () => {
     const committed: string[] = [];
     engine.extensions.collections.plugins.add(
-      plugin('commits', { onDrawCommit: (feature) => committed.push(feature.id) }),
+      plugin('commits', { onFeatureCommit: (feature) => committed.push(feature.id) }),
     );
     const feature = ctx.commitFeature({
       type: 'Point',
@@ -1054,7 +1058,7 @@ describe('the built-in modes written to the contract', () => {
   it('tells the plugins of a point it draws, and of the image placed after a request', () => {
     const committed: string[] = [];
     engine.extensions.collections.plugins.add(
-      plugin('commits', { onDrawCommit: (feature) => committed.push(feature.id) }),
+      plugin('commits', { onFeatureCommit: (feature) => committed.push(feature.id) }),
     );
     engine.modeManager.setMode('draw_point');
     createSyntheticInput(engine).click([1, 1]);
