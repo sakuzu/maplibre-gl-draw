@@ -41,8 +41,8 @@
  * below its feature, so the order in which things are seen matches the order in which they
  * can be grabbed. The rows of a layer held as rows are examined in the same order, from the
  * front: each row itself, then its companions, asked only of the rows the drawing gives
- * companions (`rowHasCompanion`), on the feature of the row made to read. When no provider at
- * all is registered, this detour never happens.
+ * companions, which are kept by the layer (`companion-rows.ts`), so a hit does not cost the rows
+ * of the layer. When no provider at all is registered, this detour never happens.
  */
 
 import type { DisplayHitTestFn } from '../../dataset/dataset.js';
@@ -54,7 +54,7 @@ import {
 } from '../../feature-table/feature-tables.js';
 import { hitTestLayerTable, type TableRowHit } from '../../feature-table/hit-test.js';
 import type { LayerTable, RowGroup } from '../../feature-table/layer-table.js';
-import { rowFeatureToRead, rowHasGeometry } from '../../feature-table/row-read.js';
+import { rowFeatureToRead } from '../../feature-table/row-read.js';
 import { STATE_UNHIT_MASK } from '../../feature-table/row-state.js';
 import type { LngLat, ScreenPoint } from '../../shared/math/index.js';
 import { getDisplayFeatures } from '../../store/local-visibility.js';
@@ -67,8 +67,8 @@ import type {
   FeatureCompanionRegistry,
 } from '../../view/feature-companion.js';
 import { hitTestFeatureCompanions } from '../../view/feature-companion.js';
-import { rowHasCompanion } from '../../view/layer/table-partition.js';
 import { getStyleRuleChannel } from '../../view/style-rule.js';
+import { companionRowsInFront, companionRowsOf } from './companion-rows.js';
 import { clickCopies } from './local-frame.js';
 import type { HitTestService, UnprojectFunction } from './service.js';
 import { DEFAULT_HIT_TEST_OPTIONS } from './strategies/base.js';
@@ -376,10 +376,11 @@ export function createTopmostHitTester(deps: TopmostHitTestDeps): HitTestTopmost
    *
    * The rows are examined from the front as the features of a layer are: each row itself, then
    * its companions. Only the rows hit can be hit themselves, so the frontmost row hit is found
-   * first, and the rows in front of it are asked for their companions. A row is asked for them
-   * when the drawing gives it companions (`rowHasCompanion`), on its feature made to read, as
-   * the drawing makes it; no feature is made for a row without companions. Without a provider
-   * of companions, only the frontmost row hit is looked for.
+   * first, and the rows with companions in front of it are asked for their companions, from the
+   * front, before it. The rows with companions are kept by the layer (`companionRowsOf`), so a
+   * hit costs them and not the rows of the layer; their feature is made to read, as the drawing
+   * makes it, only when they are asked. Without a provider of companions, only the frontmost row
+   * hit is looked for.
    */
   const rowsOf = (
     tables: FeatureTablesInternals,
@@ -400,23 +401,18 @@ export function createTopmostHitTester(deps: TopmostHitTestDeps): HitTestTopmost
     const companions = deps.companions;
     if (!context || !companions) return rowHit();
 
-    const view = tables.view(table.layerId);
-    const order = table.rowOrder();
-    for (let i = order.handles.length - 1; i >= 0; i--) {
-      const group = order.groups[i];
-      const row = order.rows[i];
-      if (front && front.hit.group === group && front.hit.row === row) return rowHit();
-
-      // A row that is not hit, or draws nothing, has no companion drawn either
+    const withCompanions = companionRowsOf(tables, table, companions);
+    if (withCompanions.rows.length === 0) return rowHit();
+    const inFront = front
+      ? companionRowsInFront(table, withCompanions, front.hit.group, front.hit.row)
+      : withCompanions;
+    for (let i = inFront.rows.length - 1; i >= 0; i--) {
+      const group = inFront.groups[i];
+      const row = inFront.rows[i];
+      // A row that is not hit has no companion hit either
       if ((group.state[row] & STATE_UNHIT_MASK) !== 0 || skip?.(group, row)) continue;
-      if (!rowHasGeometry(group, row)) continue;
-      let feature: Feature | undefined;
-      const featureOf = (): Feature => {
-        feature ??= rowFeatureToRead(tables.readContext, table.layerId, group, row);
-        return feature;
-      };
-      if (!rowHasCompanion(companions, view, group, row, featureOf)) continue;
-      const companionHit = companionOf(featureOf(), context, visible);
+      const feature = rowFeatureToRead(tables.readContext, table.layerId, group, row);
+      const companionHit = companionOf(feature, context, visible);
       if (companionHit) return companionHit;
     }
     return rowHit();

@@ -364,4 +364,118 @@ describe('the hit testing of the companions of the rows held as columns', () => 
     expect(companionTester()(at(60, 50), { hold: true })?.kind).toBe('companion');
     expect(internalsOf(tables.tables).getOpenedFeature('a')).toBeUndefined();
   });
+
+  /**
+   * A provider of a line along the latitude in the attribute `callout` of a feature, from
+   * longitude 0 to 100, answered from the rows; it counts the rows it is asked about
+   */
+  function registerCallouts(id = 'callouts') {
+    const asked = { rows: 0 };
+    const hitTest = vi.fn<FeatureCompanionProvider['hitTest']>((f, point, context) => {
+      const lat = f.properties.callout;
+      if (typeof lat !== 'number') return null;
+      const y = context.project([0, lat]).y;
+      return Math.abs(point.y - y) <= context.tolerancePx ? { id: `callout-of-${f.id}` } : null;
+    });
+    companions.register({
+      id,
+      has: (f) => typeof f.properties.callout === 'number',
+      hasRow: (view: LayerTableView, handle: number) => {
+        asked.rows++;
+        return typeof view.getRowValue(handle, 'callout') === 'number';
+      },
+      draw: () => {},
+      hitTest,
+      onCompanionClick: () => {},
+    });
+    return { asked, hitTest };
+  }
+
+  /** Points on a grid of 200 columns, one degree apart, in groups of 4096 rows */
+  function adoptGrid(layerId: string, count: number, extra: (i: number) => Partial<Feature>): void {
+    const builder = createRowBlockDataBuilder({ targetRows: 4096 });
+    for (let i = 0; i < count; i++) {
+      const f = feature(`p${i}`, 'Point', [i % 200, Math.floor(i / 200)], extra(i));
+      builder.addRow(rowOfFeature(f, orderKey(i)));
+    }
+    tables.writer.addRowBlocks(layerId, builder.finish());
+    featureTablesInternals(tables.tables)?.addQueuedRowBlocks();
+  }
+
+  it('does not walk the rows of a layer on each hit: the rows with companions are kept', () => {
+    layer('l');
+    adoptGrid('l', 20_000, () => ({}));
+    const { asked } = registerCallouts();
+    const hitTest = companionTester();
+    // Found once, on the first hit
+    expect(rowId(hitTest(at(10, 10)))).toBe('p2010');
+    expect(asked.rows).toBe(20_000);
+    asked.rows = 0;
+    for (let i = 0; i < 50; i++) {
+      expect(rowId(hitTest(at(i, 20)))).toBe(`p${4000 + i}`);
+      expect(hitTest(at(i + 0.5, 300))).toBeNull();
+    }
+    expect(asked.rows).toBe(0);
+    // Another hit tester of the same providers keeps them as well
+    companionTester()(at(10, 10));
+    expect(asked.rows).toBe(0);
+  });
+
+  it('asks only the rows with companions in front of the row hit', () => {
+    layer('l');
+    // Every 1000th row has a callout along latitude 30.5, between the rows of the grid
+    adoptGrid('l', 20_000, (i) => (i % 1000 === 0 ? { properties: { callout: 30.5 } } : {}));
+    const { hitTest } = registerCallouts();
+    const companionHit = companionTester()(at(150.5, 30.5));
+    expect(companionHit?.kind === 'companion' && companionHit.companion.featureId).toBe('p19000');
+    expect(hitTest).toHaveBeenCalledTimes(1);
+    hitTest.mockClear();
+    // On the row p10000 (row 50 of the grid): the rows with callouts in front of it only
+    expect(rowId(companionTester()(at(0, 50)))).toBe('p10000');
+    expect(hitTest.mock.calls.map(([f]) => f.id)).toEqual(
+      Array.from({ length: 9 }, (_, k) => `p${19000 - k * 1000}`),
+    );
+  });
+
+  it('finds the rows with companions again when a row is written', () => {
+    layer('l');
+    adopt('l', [feature('a', 'Polygon', square(0, 0)), feature('b', 'Polygon', square(20, 0))]);
+    const { asked } = registerCallouts();
+    const hitTest = companionTester();
+    expect(hitTest(at(60, 50))).toBeNull();
+    tables.writer.apply({
+      handles: Int32Array.of(tables.tables.findRow('a') as number),
+      fields: new Map([['property:callout', [50]]]),
+    });
+    asked.rows = 0;
+    const hit = hitTest(at(60, 50));
+    expect(hit?.kind === 'companion' && hit.companion.featureId).toBe('a');
+    expect(asked.rows).toBe(2);
+  });
+
+  it('finds the rows with companions again when the rows or the providers change', () => {
+    layer('l');
+    adopt('l', [feature('a', 'Polygon', square(0, 0), { properties: { callout: 50 } })]);
+    const hitTest = companionTester();
+    // No provider yet
+    expect(hitTest(at(60, 50))).toBeNull();
+    registerCallouts();
+    const first = hitTest(at(60, 50));
+    expect(first?.kind === 'companion' && first.companion.featureId).toBe('a');
+    // A row comes in front of it, with a callout
+    const builder = createRowBlockDataBuilder({ targetRows: 2 });
+    builder.addRow(
+      rowOfFeature(
+        feature('b', 'Polygon', square(20, 0), { properties: { callout: 50 } }),
+        orderKey(5),
+      ),
+    );
+    tables.writer.addRowBlocks('l', builder.finish());
+    featureTablesInternals(tables.tables)?.addQueuedRowBlocks();
+    const second = hitTest(at(60, 50));
+    expect(second?.kind === 'companion' && second.companion.featureId).toBe('b');
+    // The providers go
+    companions.clear();
+    expect(hitTest(at(60, 50))).toBeNull();
+  });
 });
