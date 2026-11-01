@@ -532,9 +532,10 @@ Each item has the same five parts.
 - Upstream behavior (keyboard) — maplibre's keyboard handler (arrow keys,
   `+`, `-`) listens for keydown on the map container, the canvas's parent.
 - What we rely on (keyboard) — the normalizer listens on the canvas and
-  sees a key first. When a mode used a key the map also uses (it prevented
-  the default, for example an arrow key moving the selection), the
-  normalizer calls `stopPropagation()` so the container never sees it.
+  sees a key first. When a key the map also uses was used (the input
+  router prevented its default, for example an arrow key moving the
+  selection), the normalizer calls `stopPropagation()` so the container
+  never sees it.
   Other keys keep bubbling to maplibre and the page.
 - Upstream behavior (touch) — maplibre fires the map events `touchstart`,
   `touchmove`, `touchend` and `touchcancel` from passive listeners on the

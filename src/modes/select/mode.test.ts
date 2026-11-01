@@ -666,27 +666,24 @@ describe.each(STORE_KINDS)('on %s', (_kind, createStore) => {
         (Math.min(...ys) + Math.max(...ys)) / 2,
       ];
       const right = arrow('ArrowRight');
-      mode.onKeyDown(right.event);
+      const used = mode.onKeyDown(right.event);
       const pressed = offsetOnTangentPlane(center, planeMetersPerPixel(10)(center), 0);
       const expected = referenceTranslate([0, 0], center, pressed);
       expect(Math.abs((firstVertex()[0] as number) - expected[0])).toBeLessThan(1e-9);
       expect(Math.abs((firstVertex()[1] as number) - expected[1])).toBeLessThan(1e-9);
-      expect(right.preventDefault).toHaveBeenCalled();
+      // The key is used (the input router prevents its default action)
+      expect(used).toBe(true);
 
       mode.onKeyDown(arrow('ArrowUp', true).event);
       expect(firstVertex()[1]).toBeCloseTo(1);
     });
 
     it('leaves the key to the map without a selection or while the feature is locked', () => {
-      const empty = arrow('ArrowLeft');
-      mode.onKeyDown(empty.event);
-      expect(empty.preventDefault).not.toHaveBeenCalled();
+      expect(mode.onKeyDown(arrow('ArrowLeft').event)).toBe(false);
 
       store.setSelection('feature', ['f1']);
       store.updateFeature('f1', { locked: true });
-      const locked = arrow('ArrowLeft');
-      mode.onKeyDown(locked.event);
-      expect(locked.preventDefault).not.toHaveBeenCalled();
+      expect(mode.onKeyDown(arrow('ArrowLeft').event)).toBe(false);
       expect(firstVertex()).toEqual([0, 0]);
     });
 

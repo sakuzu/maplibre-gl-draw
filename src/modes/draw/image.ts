@@ -57,9 +57,9 @@ export class DrawImageMode implements EngineModeHandler {
     this.context.map.getCanvas().style.cursor = '';
   }
 
-  onKeyDown(event: KeyNormalizedEvent): void {
-    if (event.key === 'Escape') {
-      this.context.setMode('select');
-    }
+  onKeyDown(event: KeyNormalizedEvent): boolean {
+    if (event.key !== 'Escape') return false;
+    this.context.setMode('select');
+    return true;
   }
 }

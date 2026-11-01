@@ -41,11 +41,13 @@ const ARROW_DIRECTIONS: Readonly<Record<string, readonly [number, number]>> = {
  *
  * The behavior is identical to the API's groupSelection (the key, the menu and the API place the
  * new group at the same position).
+ *
+ * @returns whether the key was used (a group was made)
  */
-export function handleGroupShortcut(context: EngineModeContext): void {
+export function handleGroupShortcut(context: EngineModeContext): boolean {
   const { store, autoNameGenerator, generateFeatureId } = context;
-  if (store.isReadOnly() || store.isInteractionLocked()) return;
-  groupSelection(store, generateFeatureId, autoNameGenerator);
+  if (store.isReadOnly() || store.isInteractionLocked()) return false;
+  return groupSelection(store, generateFeatureId, autoNameGenerator) !== null;
 }
 
 /**
@@ -54,19 +56,24 @@ export function handleGroupShortcut(context: EngineModeContext): void {
  * The behavior is identical to the API's ungroupSelection (keeping the key, the menu and the API
  * consistent): a group selection is dissolved, and for a member feature selection only that
  * member leaves.
+ *
+ * @returns whether the key was used (the selection was ungrouped)
  */
-export function handleUngroupShortcut(context: EngineModeContext): void {
+export function handleUngroupShortcut(context: EngineModeContext): boolean {
   const { store } = context;
-  if (store.isReadOnly() || store.isInteractionLocked()) return;
-  ungroupSelection(store);
+  if (store.isReadOnly() || store.isInteractionLocked()) return false;
+  return ungroupSelection(store);
 }
 
 /**
  * Handling of the Delete / Backspace key: deletes what is selected (vertices, features, groups
  * or layers; locked items are kept) with `deleteSelection` of `operations/`.
+ *
+ * @returns whether the key was used (something was deleted); with nothing selected, or only
+ *   locked items, the key is left to the page
  */
-export function handleDeleteShortcut(context: EngineModeContext): void {
-  deleteSelection(context.store);
+export function handleDeleteShortcut(context: EngineModeContext): boolean {
+  return deleteSelection(context.store);
 }
 
 /**
@@ -162,9 +169,12 @@ function selectionCenterOf(features: readonly Feature[]): [number, number] | nul
 }
 
 /**
- * Handling of the Escape key
+ * Handling of the Escape key: cancels a box selection, or lets go of the vertices selected, or
+ * of the selection
+ *
+ * @returns whether the key was used; with nothing selected, the key is left to the page
  */
-export function handleEscapeShortcut(context: EngineModeContext): void {
+export function handleEscapeShortcut(context: EngineModeContext): boolean {
   const { store, map } = context;
   const boxSelection = store.getBoxSelection();
 
@@ -181,16 +191,19 @@ export function handleEscapeShortcut(context: EngineModeContext): void {
     store.setBoxSelection(null);
     map.dragPan.enable();
     map.triggerRepaint();
-    return;
+    return true;
   }
 
   // Clear the vertex selection when vertices are selected
   const selectedVertices = store.getVertexSelection();
   if (selectedVertices) {
     store.setSelectedVertices(null);
-    return;
+    return true;
   }
 
   // Clear the feature selection
+  const selection = store.getSelection();
+  if (selection.ids.length === 0 && !selection.bulk) return false;
   store.setSelection(null, []);
+  return true;
 }

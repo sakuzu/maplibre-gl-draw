@@ -262,8 +262,11 @@ draw.extensions.plugins.add(createShortcuts());
 - A consumed press does not reach the map, so the map does not pan. A
   consumed double click does not zoom the map, and while a mode with
   `writes: true` is the current mode no double click does
-- A consumed key still reaches the map. To stop the map from also
-  using it (the arrows, `+`, `-`), call `event.original.preventDefault()`
+- A consumed key has its default action prevented, so the map does not
+  also use it (the arrows, `+`, `-`), and a page listening for the same
+  keys outside the canvas can tell it from `defaultPrevented`. Return
+  true from `onKeyDown` only when the key did something; a key not
+  consumed is left to the map and the page
 - `onPointerLeave` arrives when the pointer leaves the map
 - In `select` only the drags snap. A click or a move there carries
   `snapped.lngLat` equal to `lngLat`
@@ -387,7 +390,14 @@ Every member of a `ModeHandler` is optional:
 `onCancel` arrives on an Escape that neither a plugin nor the mode
 consumed, and when the Store replaces its whole document (a notification
 with `reset: true`). The mode drops what it was drawing and stays the
-current mode.
+current mode. That Escape counts as used: its default action is
+prevented, as that of a key the mode consumes.
+
+A mode answers its keys as the modes of the library do: `onKeyDown`
+returns true when the key did something (Enter finished the shape,
+Backspace removed a vertex, Escape dropped the shape or left the mode)
+and false otherwise (Enter with too few vertices, Backspace with none),
+so that the page gets the keys the mode had no use for.
 
 ### What the context adds
 

@@ -626,18 +626,20 @@ describe('InputNormalizer', () => {
       expect(windowListeners.get('blur')?.size).toBe(0);
     });
 
-    it('turns Escape during a drag into dragcancel and does not deliver the key', () => {
+    it('turns Escape during a drag into dragcancel, does not deliver the key and prevents its default', () => {
       drag();
-      key('Escape');
+      const event = key('Escape');
 
       expect(types()).toEqual(['mousedown', 'dragstart', 'dragcancel']);
+      expect(event.preventDefault).toHaveBeenCalled();
     });
 
-    it('delivers Escape as a keydown when no drag is in progress', () => {
+    it('delivers Escape as a keydown when no drag is in progress, its default left alone', () => {
       mouse('mousedown', { x: 10, y: 10 });
-      key('Escape');
+      const event = key('Escape');
 
       expect(types()).toEqual(['mousedown', 'keydown']);
+      expect(event.preventDefault).not.toHaveBeenCalled();
     });
 
     it('releases a press whose button is found up, at its last position', () => {

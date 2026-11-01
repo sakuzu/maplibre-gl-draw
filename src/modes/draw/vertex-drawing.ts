@@ -111,8 +111,9 @@ export function createVertexDrawing(ctx: ModeContext, shape: VertexShape): ModeH
     ctx.preview.clear();
   };
 
-  const finish = (): void => {
-    if (vertices.length < shape.minVertices) return;
+  /** Commits the shape drawn and returns to the select mode; false while it has too few vertices */
+  const finish = (): boolean => {
+    if (vertices.length < shape.minVertices) return false;
     const input = shape.feature(vertices);
     ctx.draw.transact(() => {
       const feature = ctx.commitFeature(input);
@@ -120,6 +121,7 @@ export function createVertexDrawing(ctx: ModeContext, shape: VertexShape): ModeH
     });
     reset();
     ctx.setMode('select');
+    return true;
   };
 
   const place = (event: DrawPointerEvent): void => {
@@ -194,18 +196,17 @@ export function createVertexDrawing(ctx: ModeContext, shape: VertexShape): ModeH
           if (vertices.length > 0) reset();
           else ctx.setMode('select');
           return true;
+        // A key is consumed only when it did something: one that did nothing is left to the page
         case 'Enter':
-          finish();
-          return true;
+          return finish();
         case 'Backspace':
         case 'Delete':
-          if (vertices.length > 0) {
-            vertices.pop();
-            // A vertex removed with the keyboard cannot be redone, and the trace starts over
-            redo = [];
-            clearTrace();
-            show(false);
-          }
+          if (vertices.length === 0) return false;
+          vertices.pop();
+          // A vertex removed with the keyboard cannot be redone, and the trace starts over
+          redo = [];
+          clearTrace();
+          show(false);
           return true;
         default:
           return false;

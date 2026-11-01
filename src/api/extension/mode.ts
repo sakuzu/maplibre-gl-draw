@@ -85,7 +85,12 @@ export interface InputHandlers {
   onDragEnd(event: DrawPointerEvent): boolean | void;
   /** A drag was cancelled */
   onDragCancel(event: DrawPointerEvent): boolean | void;
-  /** A key was pressed */
+  /**
+   * A key was pressed. Return true only when the key was used (it did something): the default
+   * action of a key consumed is prevented, so that the map does not also act on it and a page
+   * listening to the same keys can tell it from `defaultPrevented`. A key not consumed is left
+   * to the map and the page.
+   */
   onKeyDown(event: DrawKeyEvent): boolean | void;
   /** A key was released */
   onKeyUp(event: DrawKeyEvent): boolean | void;

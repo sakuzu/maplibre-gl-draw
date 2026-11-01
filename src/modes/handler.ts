@@ -220,8 +220,14 @@ export interface EngineModeHandler {
    */
   onDragCancel?(event: DragNormalizedEvent): void;
 
-  /** Called on a key down (normalized) */
-  onKeyDown?(event: KeyNormalizedEvent): void;
+  /**
+   * Called on a key down (normalized)
+   *
+   * @returns whether the mode used the key (it did something with it). The input router
+   *   prevents the default action of a key used, so that a page listening to the same keys
+   *   can tell it from `defaultPrevented`; a key not used is left to the map and the page
+   */
+  onKeyDown?(event: KeyNormalizedEvent): boolean;
 
   /** Called on a key up (normalized) */
   onKeyUp?(event: KeyNormalizedEvent): void;

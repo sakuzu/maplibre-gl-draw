@@ -339,6 +339,25 @@ draw.selection.update((sample) => ({
 キーが地図に渡り、地図がパンします。地物をダブルクリックしても
 地図はズームしません。
 
+ライブラリーが使ったキーは、どのモードでも既定の動作を止めます
+(`KeyboardEvent.preventDefault()`)。使わなかったキーはそのままにします。
+何も選んでいないときの Delete、取り消すものも解除するものも無いときの
+Escape、描画モードで確定するものも消すものも無いときの Enter と
+Backspace がそれに当たります。プラグインや拡張のモードが消費したキーも
+同じように止めます。地図の周りのパネルのために、キャンバスの外
+(`document`) でも同じキーを受け取るページは、地図が使ったキーを
+飛ばせます。
+
+<!-- docs-check:
+declare function deleteFromThePanel(): void;
+-->
+```ts
+document.addEventListener('keydown', (event) => {
+  if (event.defaultPrevented) return; // 地図が使ったキー
+  if (event.key === 'Delete') deleteFromThePanel();
+});
+```
+
 ウィンドウがフォーカスを失うと、ドラッグは書き込まれずに終わります。
 ページの外でボタンを離した場合は、ポインターが最後にあった位置で離した
 ものとして扱います。
