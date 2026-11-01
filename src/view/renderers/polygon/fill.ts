@@ -149,10 +149,9 @@ void main() {
   /**
    * Sets the projection uniforms (supporting offset mode + globe mode)
    * @param projectionData MapLibre's ProjectionData
-   * @param zoom The current zoom level (used for switching offset mode)
    */
-  private setProjectionUniforms(projectionData: ProjectionData, zoom: number): void {
-    this.projectionUniformManager.setUniforms(projectionData, zoom, this.offsetUniforms);
+  private setProjectionUniforms(projectionData: ProjectionData): void {
+    this.projectionUniformManager.setUniforms(projectionData, this.offsetUniforms);
   }
 
   /**
@@ -182,13 +181,13 @@ void main() {
    * @param rings The array of rings ([0] is the outer ring, [1..] are inner rings, WGS84)
    * @param color The fill color
    * @param projectionData MapLibre's ProjectionData
-   * @param zoom The current zoom level
+   * @param _zoom The current zoom level (not read)
    */
   drawPolygonRings(
     rings: Coordinate[][],
     color: [number, number, number, number],
     projectionData: ProjectionData,
-    zoom: number,
+    _zoom: number,
   ): void {
     if (!this.program) return;
 
@@ -230,7 +229,7 @@ void main() {
     gl.useProgram(this.program);
 
     // Set the projection uniforms
-    this.setProjectionUniforms(projectionData, zoom);
+    this.setProjectionUniforms(projectionData);
 
     if (this.colorLoc) {
       gl.uniform4fv(this.colorLoc, color);

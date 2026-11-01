@@ -59,7 +59,6 @@ interface UniformWrite {
 /** The uniforms `ProjectionUniformManager` writes for a frame, through a GL that records them */
 function recordUniforms(
   projectionData: ProjectionData,
-  zoom: number,
   center: [number, number],
 ): UniformWrite[] {
   const writes: UniformWrite[] = [];
@@ -88,7 +87,7 @@ function recordUniforms(
   ) as unknown as WebGL2RenderingContext;
   const manager = new ProjectionUniformManager(gl);
   manager.getLocations({} as WebGLProgram);
-  manager.setUniforms(projectionData, zoom, calculateOffsetUniforms(center, projectionData));
+  manager.setUniforms(projectionData, calculateOffsetUniforms(center, projectionData));
   return writes;
 }
 
@@ -235,7 +234,7 @@ function casesOf(transition: number): Array<Case & { reference: [number, number]
         const w = clip[3];
         if (!(w > 0) || Math.abs(clip[0] / w) > 1 || Math.abs(clip[1] / w) > 1) continue;
         out.push({
-          uniforms: recordUniforms(data, zoom, center),
+          uniforms: recordUniforms(data, center),
           offset,
           reference: screenOf(clip, WIDTH, HEIGHT),
           where: `transition ${transition} center ${center} offset ${[ex * delta, ey * delta]} zoom ${zoom.toFixed(2)}`,

@@ -184,7 +184,7 @@ export class BulkFramesRenderer {
     binding: RowStateBinding,
     revision: number,
     projectionData: ProjectionData,
-    zoom: number,
+    _zoom: number,
     config: SelectionUIConfig,
     pointExtent: PointFrameExtent,
   ): void {
@@ -199,7 +199,7 @@ export class BulkFramesRenderer {
     const camera = this.offsetUniforms;
     this.originShift[0] = camera ? frames.origin[0] - camera.centerLngLat[0] : 0;
     this.originShift[1] = camera ? frames.origin[1] - camera.centerLngLat[1] : 0;
-    this.projection.setUniforms(projectionData, zoom, camera, this.originShift);
+    this.projection.setUniforms(projectionData, camera, this.originShift);
     bindRowState(
       this.run,
       this.rowState,

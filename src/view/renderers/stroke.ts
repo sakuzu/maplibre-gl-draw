@@ -437,10 +437,9 @@ void main() {
   /**
    * Set the projection uniforms (supports offset mode and globe mode)
    * @param projectionData MapLibre's ProjectionData
-   * @param zoom The current zoom level (used to switch offset mode)
    */
-  private setProjectionUniforms(projectionData: ProjectionData, zoom: number): void {
-    this.projectionUniformManager.setUniforms(projectionData, zoom, this.offsetUniforms);
+  private setProjectionUniforms(projectionData: ProjectionData): void {
+    this.projectionUniformManager.setUniforms(projectionData, this.offsetUniforms);
   }
 
   /**
@@ -626,7 +625,7 @@ void main() {
     gl.bindVertexArray(this.vao);
 
     gl.useProgram(this.program);
-    this.setProjectionUniforms(projectionData, zoom);
+    this.setProjectionUniforms(projectionData);
 
     // Set the viewport size and the line width
     if (this.viewportLoc) {

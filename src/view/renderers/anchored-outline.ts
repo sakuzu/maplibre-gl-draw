@@ -261,7 +261,7 @@ void main() {
    * @param corners The corners relative to the anchor's point on the screen, in CSS px
    * @param style The line (its width is in CSS px)
    * @param opacity A factor on the opacity of the line (the terrain's ghost of the marker)
-   * @param zoom The zoom of the frame
+   * @param _zoom The zoom of the frame (not read)
    * @param projectionData The projection of the copy of the world being drawn
    */
   draw(
@@ -270,7 +270,7 @@ void main() {
     corners: readonly OutlineOffset[],
     style: StrokeStyle,
     opacity: number,
-    zoom: number,
+    _zoom: number,
     projectionData: ProjectionData,
   ): void {
     if (!this.program) return;
@@ -284,7 +284,7 @@ void main() {
     gl.bufferData(gl.ARRAY_BUFFER, data, gl.DYNAMIC_DRAW);
     gl.bindVertexArray(this.vao);
     gl.useProgram(this.program);
-    this.projectionUniformManager.setUniforms(projectionData, zoom, this.offsetUniforms);
+    this.projectionUniformManager.setUniforms(projectionData, this.offsetUniforms);
 
     const center: [number, number] = this.offsetUniforms?.centerLngLat ?? [0, 0];
     const offset = calculateLngLatOffset([anchor[0], anchor[1]], center);

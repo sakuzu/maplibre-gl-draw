@@ -92,7 +92,7 @@ function terrainOnWith(source: RenderContext | TerrainSurface | null): number | 
   manager.setTerrain(source);
   manager.getLocations({} as WebGLProgram);
   beginRenderFrame();
-  manager.setUniforms(PROJECTION, 14, null);
+  manager.setUniforms(PROJECTION, null);
   return terrainOn();
 }
 

@@ -914,11 +914,10 @@ void main() {
   /**
    * Sets the projection uniforms (supporting the offset mode and the globe mode)
    * @param program The shader program
-   * @param zoom The current zoom level (used to switch the offset mode)
    */
-  private setProjectionUniforms(program: WebGLProgram, zoom: number): void {
+  private setProjectionUniforms(program: WebGLProgram): void {
     if (!this.projectionData) return;
-    this.setProjectionUniformsWith(program, zoom, this.projectionData, this.offsetUniforms);
+    this.setProjectionUniformsWith(program, this.projectionData, this.offsetUniforms);
   }
 
   /**
@@ -937,7 +936,6 @@ void main() {
    */
   private setProjectionUniformsWith(
     program: WebGLProgram,
-    zoom: number,
     projectionData: ProjectionData,
     offsetUniforms: OffsetUniforms | null,
     originShift: [number, number] = [0, 0],
@@ -950,7 +948,7 @@ void main() {
     // The projection uniforms (offset mode, globe, terrain) are delegated to the shared manager.
     // Writing them here by hand would make this renderer alone miss uniforms added to the
     // projection (which is exactly what happened with the terrain uniforms added later).
-    projection.setUniforms(projectionData, zoom, offsetUniforms, originShift);
+    projection.setUniforms(projectionData, offsetUniforms, originShift);
 
     // Only the factor that places the billboard in pixels is specific to this renderer, so it is
     // written here by hand
@@ -975,14 +973,14 @@ void main() {
    *
    * @param points The array of point data
    * @param shape The shape of the points that do not name one
-   * @param zoom The current zoom level
+   * @param _zoom The current zoom level (not read)
    * @param factors The draw-time factors (the opacity of the layer being drawn; scale 1 and
    *   opacity 1 when omitted)
    */
   drawAll(
     points: PointInstanceDataFull[],
     shape: PointShape,
-    zoom: number,
+    _zoom: number,
     factors: RetainedDrawFactors = NEUTRAL_DRAW_FACTORS,
   ): void {
     if (!this.program || !this.projectionData) return;
@@ -1010,7 +1008,7 @@ void main() {
     this.ledger?.record(this.instanceBuffer, 'points', 'buffer', instanceData.byteLength);
 
     this.run.useProgram(this.program);
-    this.setProjectionUniforms(this.program, zoom);
+    this.setProjectionUniforms(this.program);
     // Always written (1 when the caller has none) so that no factor of an earlier draw is left
     this.setDrawFactors(this.program, factors);
 
@@ -1153,7 +1151,7 @@ void main() {
     batch: RetainedPointBatch,
     fromRow: number,
     toRow: number,
-    zoom: number,
+    _zoom: number,
     projectionData: ProjectionData,
     rowState: RowStateBinding,
     factors: RetainedDrawFactors = NEUTRAL_DRAW_FACTORS,
@@ -1174,7 +1172,7 @@ void main() {
 
     const run = this.run;
     run.useProgram(program);
-    this.setProjectionUniformsWith(program, zoom, projectionData, offsetUniforms, originShift);
+    this.setProjectionUniformsWith(program, projectionData, offsetUniforms, originShift);
     this.setDrawFactors(program, factors);
     bindRowState(
       run,
@@ -1209,7 +1207,7 @@ void main() {
    */
   drawRetained(
     batch: RetainedPointBatch,
-    zoom: number,
+    _zoom: number,
     projectionData: ProjectionData,
     factors: RetainedDrawFactors = NEUTRAL_DRAW_FACTORS,
   ): void {
@@ -1231,7 +1229,7 @@ void main() {
 
     const run = this.run;
     run.useProgram(this.program);
-    this.setProjectionUniformsWith(this.program, zoom, projectionData, offsetUniforms, originShift);
+    this.setProjectionUniformsWith(this.program, projectionData, offsetUniforms, originShift);
     this.setDrawFactors(this.program, factors);
 
     run.bindVertexArray(batch.vao);

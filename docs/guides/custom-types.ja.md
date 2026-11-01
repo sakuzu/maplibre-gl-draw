@@ -833,7 +833,7 @@ function pathOnTerrain(
   const view = viewUniforms(ctx);
   ctx.gl.useProgram(program);
   uniforms.setTerrain(ctx);
-  uniforms.setUniforms(view.projection, ctx.screen.zoom, view.offset);
+  uniforms.setUniforms(view.projection, view.offset);
   const step = terrainTessellationStep(ctx);
   // path を送って描く
   return step ? densifyPath(coordinates, step) : coordinates;

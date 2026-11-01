@@ -219,11 +219,11 @@ export class SDFLineRenderer {
    * This lets subsequent draw()/drawBatch() calls skip those settings.
    *
    * @param projectionData MapLibre's ProjectionData
-   * @param zoom The current zoom level
+   * @param _zoom The current zoom level (not read)
    *
    * @internal
    */
-  beginDraw(projectionData: ProjectionData, zoom: number): void {
+  beginDraw(projectionData: ProjectionData, _zoom: number): void {
     if (!this.program) return;
 
     const gl = this.gl;
@@ -231,7 +231,7 @@ export class SDFLineRenderer {
     this.run.useProgram(this.program);
     gl.bindVertexArray(this.quadVAO);
 
-    this.setProjectionUniforms(projectionData, zoom);
+    this.setProjectionUniforms(projectionData);
 
     // Set the viewport size (the actual framebuffer size)
     this.uniforms.setViewport(gl.drawingBufferWidth, gl.drawingBufferHeight);
@@ -343,10 +343,9 @@ export class SDFLineRenderer {
   /**
    * Sets the projection uniforms (supporting offset mode and globe mode)
    * @param projectionData MapLibre's ProjectionData
-   * @param zoom The current zoom level (used to switch offset mode)
    */
-  private setProjectionUniforms(projectionData: ProjectionData, zoom: number): void {
-    this.projectionUniformManager.setUniforms(projectionData, zoom, this.offsetUniforms);
+  private setProjectionUniforms(projectionData: ProjectionData): void {
+    this.projectionUniformManager.setUniforms(projectionData, this.offsetUniforms);
   }
 
   /**
@@ -419,7 +418,7 @@ export class SDFLineRenderer {
     // The projection uniforms and the viewport are skipped when beginDraw() already set them
     // (a performance optimization)
     if (!this.isDrawing) {
-      this.setProjectionUniforms(projectionData, zoom);
+      this.setProjectionUniforms(projectionData);
       this.uniforms.setViewport(gl.drawingBufferWidth, gl.drawingBufferHeight);
     }
 
@@ -720,16 +719,11 @@ export class SDFLineRenderer {
     if (cameraUniforms) {
       projection.setUniforms(
         projectionData,
-        zoom,
         cameraUniforms,
         this.originShiftOf(batch.origin, cameraUniforms),
       );
     } else {
-      projection.setUniforms(
-        projectionData,
-        zoom,
-        calculateOffsetUniforms(batch.origin, projectionData),
-      );
+      projection.setUniforms(projectionData, calculateOffsetUniforms(batch.origin, projectionData));
     }
     uniforms.setViewport(gl.drawingBufferWidth, gl.drawingBufferHeight);
     const stations = resolveLineStations(
@@ -838,7 +832,6 @@ export class SDFLineRenderer {
     if (cameraUniforms) {
       this.projectionUniformManager.setUniforms(
         projectionData,
-        zoom,
         cameraUniforms,
         this.originShiftOf(batch.origin, cameraUniforms),
       );
@@ -846,7 +839,6 @@ export class SDFLineRenderer {
       // Fallback (normally custom-layer has already called setOffsetUniforms each frame)
       this.projectionUniformManager.setUniforms(
         projectionData,
-        zoom,
         calculateOffsetUniforms(batch.origin, projectionData),
       );
     }
@@ -881,7 +873,7 @@ export class SDFLineRenderer {
     // uniforms (because the subsequent drawAll assumes the state set up by beginDraw)
     if (this.isDrawing) {
       gl.bindVertexArray(this.quadVAO);
-      this.setProjectionUniforms(projectionData, zoom);
+      this.setProjectionUniforms(projectionData);
       // Leave no residual factors either (executeDrawCall rewrites them too, but the restoring
       // side closes the loop)
       this.uniforms.setDrawFactors(NEUTRAL_DRAW_FACTORS);

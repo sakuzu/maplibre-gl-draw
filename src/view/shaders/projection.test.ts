@@ -82,7 +82,7 @@ function terrainOnOf(
   const manager = new ProjectionUniformManager(gl, { surface }).useTerrainState(terrain);
   manager.getLocations({} as WebGLProgram);
   beginRenderFrame();
-  const run = (): void => manager.setUniforms(PROJECTION, 14, null);
+  const run = (): void => manager.setUniforms(PROJECTION, null);
   if (draw) draw(run);
   else run();
   return lastValue('u_terrain_on');
@@ -153,7 +153,7 @@ describe('the terrain of the draw instance', () => {
     const manager = new ProjectionUniformManager(gl);
     manager.getLocations({} as WebGLProgram);
     beginRenderFrame();
-    manager.setUniforms(PROJECTION, 14, null);
+    manager.setUniforms(PROJECTION, null);
     expect(lastValue('u_terrain_on')).toBe(0);
   });
 });

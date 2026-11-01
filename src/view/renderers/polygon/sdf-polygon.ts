@@ -740,10 +740,9 @@ void main() {
   /**
    * Sets the projection uniforms (supporting offset mode + globe mode)
    * @param projectionData MapLibre's ProjectionData
-   * @param zoom The current zoom level (used for switching offset mode)
    */
-  private setProjectionUniforms(projectionData: ProjectionData, zoom: number): void {
-    this.projectionUniformManager.setUniforms(projectionData, zoom, this.offsetUniforms);
+  private setProjectionUniforms(projectionData: ProjectionData): void {
+    this.projectionUniformManager.setUniforms(projectionData, this.offsetUniforms);
   }
 
   /**
@@ -781,7 +780,7 @@ void main() {
 
     // Draw
     this.run.useProgram(this.program);
-    this.setProjectionUniforms(projectionData, zoom);
+    this.setProjectionUniforms(projectionData);
     const uniforms = this.uniforms as PolygonUniforms;
     uniforms.setShape(viewport, zoom);
     // Always written (1 when the caller has none) so that no factor of an earlier draw is left
@@ -894,7 +893,6 @@ void main() {
     if (cameraUniforms) {
       this.projectionUniformManager.setUniforms(
         projectionData,
-        zoom,
         cameraUniforms,
         this.originShiftOf(batch.origin, cameraUniforms),
       );
@@ -902,7 +900,6 @@ void main() {
       // Fallback (normally custom-layer has already called setOffsetUniforms each frame)
       this.projectionUniformManager.setUniforms(
         projectionData,
-        zoom,
         calculateOffsetUniforms(batch.origin, projectionData),
       );
     }
@@ -1032,14 +1029,12 @@ void main() {
     if (cameraUniforms) {
       row.projection.setUniforms(
         projectionData,
-        zoom,
         cameraUniforms,
         this.originShiftOf(batch.origin, cameraUniforms),
       );
     } else {
       row.projection.setUniforms(
         projectionData,
-        zoom,
         calculateOffsetUniforms(batch.origin, projectionData),
       );
     }

@@ -320,11 +320,10 @@ void main() {
 
   /**
    * Sets the projection uniforms (supporting the offset mode and the globe mode)
-   * @param zoom The current zoom level (used to switch the offset mode)
    */
-  private setProjectionUniforms(zoom: number): void {
+  private setProjectionUniforms(): void {
     if (!this.projectionData) return;
-    this.projectionUniformManager.setUniforms(this.projectionData, zoom, this.offsetUniforms);
+    this.projectionUniformManager.setUniforms(this.projectionData, this.offsetUniforms);
   }
 
   /**
@@ -355,13 +354,13 @@ void main() {
    * Draws a point
    * @param coord The coordinates [lng, lat]
    * @param style The point style
-   * @param zoom The current zoom level
+   * @param _zoom The current zoom level (not read)
    * @param featureId The feature ID (optional)
    */
   draw(
     coord: [number, number],
     style: PointStyle,
-    zoom: number,
+    _zoom: number,
     featureId?: string,
     /**
      * The elevation to place it at (meters). When omitted, the ground elevation is used
@@ -387,7 +386,7 @@ void main() {
     gl.useProgram(this.program);
 
     // Set the projection uniforms
-    this.setProjectionUniforms(zoom);
+    this.setProjectionUniforms();
 
     // Compute the relative coordinates on the CPU side (offset mode: 64-bit precision)
     const centerLngLat: [number, number] = this.offsetUniforms?.centerLngLat ?? [0, 0];

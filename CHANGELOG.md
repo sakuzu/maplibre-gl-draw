@@ -390,6 +390,8 @@ writing it. Its changes are listed after those of 3.0.0.
   `offsetUniformsAt(ctx, position)`, the offsets from a position in the
   view of a render context. `ShaderData` and `OffsetUniforms` are types
   of `/webgl`.
+- `ProjectionUniformManager.setUniforms(projection, offset, originShift?)`
+  of `/webgl` no longer takes the zoom, which it did not read.
 - `TerrainAnchors` is `TerrainSurface`, the surface of the terrain:
   `occlusionOpacity` (was `ghostOpacity`), `elevation` and `generation`.
   Its `project` is gone: `ScreenContext.project` answers where a position

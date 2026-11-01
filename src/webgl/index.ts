@@ -33,7 +33,7 @@
  *     }
  *     ctx.gl.useProgram(program);
  *     uniforms?.setTerrain(ctx);
- *     uniforms?.setUniforms(view.projection, ctx.screen.zoom, view.offset);
+ *     uniforms?.setUniforms(view.projection, view.offset);
  *     // bind the buffers of your shape and draw it
  *   },
  *   onRemove: (_map, gl) => gl.deleteProgram(program),

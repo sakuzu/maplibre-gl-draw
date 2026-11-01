@@ -94,7 +94,7 @@ function recordShifts(): { shifts: number[][]; arrays: Set<unknown> } {
     this: ProjectionUniformManager,
     ...args: Parameters<ProjectionUniformManager['setUniforms']>
   ) {
-    const shift = args[3];
+    const shift = args[2];
     if (shift) {
       shifts.push([shift[0], shift[1]]);
       arrays.add(shift);

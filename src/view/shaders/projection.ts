@@ -252,7 +252,6 @@ export class ProjectionUniformManager {
    * are invariant within a draw (see frame.ts).
    *
    * @param projectionData MapLibre's ProjectionData
-   * @param _zoom The zoom of the view (not read: the projection is the same at every zoom)
    * @param offsetUniforms The uniforms of the center the offsets are taken from (null takes
    *   them from [0, 0], as absolute coordinates)
    * @param originShift The gap between the reference coordinates of the vertex offsets and
@@ -260,7 +259,6 @@ export class ProjectionUniformManager {
    */
   setUniforms(
     projectionData: ProjectionData,
-    _zoom: number,
     offsetUniforms: OffsetUniforms | null,
     originShift: [number, number] = NO_ORIGIN_SHIFT,
   ): void {

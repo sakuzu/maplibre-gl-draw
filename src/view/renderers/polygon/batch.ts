@@ -188,10 +188,9 @@ void main() {
   /**
    * Sets the projection uniforms (supporting offset mode + globe mode)
    * @param projectionData MapLibre's ProjectionData
-   * @param zoom The current zoom level (used for switching offset mode)
    */
-  private setProjectionUniforms(projectionData: ProjectionData, zoom: number): void {
-    this.projectionUniformManager.setUniforms(projectionData, zoom, this.offsetUniforms);
+  private setProjectionUniforms(projectionData: ProjectionData): void {
+    this.projectionUniformManager.setUniforms(projectionData, this.offsetUniforms);
   }
 
   /**
@@ -199,10 +198,10 @@ void main() {
    *
    * @param polygons The array of polygon data (in draw order)
    * @param projectionData MapLibre's ProjectionData
-   * @param zoom The current zoom level
+   * @param _zoom The current zoom level (not read)
    * @returns The number of indices drawn (for debugging)
    */
-  drawBatch(polygons: PolygonBatchData[], projectionData: ProjectionData, zoom: number): number {
+  drawBatch(polygons: PolygonBatchData[], projectionData: ProjectionData, _zoom: number): number {
     if (!this.program || polygons.length === 0) return 0;
 
     const gl = this.gl;
@@ -219,7 +218,7 @@ void main() {
 
     // Draw
     gl.useProgram(this.program);
-    this.setProjectionUniforms(projectionData, zoom);
+    this.setProjectionUniforms(projectionData);
 
     gl.bindVertexArray(this.vao);
     // The ELEMENT_ARRAY_BUFFER binding is VAO state, so the transfer is done after

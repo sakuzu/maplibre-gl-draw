@@ -249,10 +249,9 @@ void main() {
   /**
    * Sets the projection uniforms (supporting offset mode + globe mode)
    * @param projectionData MapLibre's ProjectionData
-   * @param zoom The current zoom level (used to switch offset mode)
    */
-  private setProjectionUniforms(projectionData: ProjectionData, zoom: number): void {
-    this.projectionUniformManager.setUniforms(projectionData, zoom, this.offsetUniforms);
+  private setProjectionUniforms(projectionData: ProjectionData): void {
+    this.projectionUniformManager.setUniforms(projectionData, this.offsetUniforms);
   }
 
   /**
@@ -262,14 +261,14 @@ void main() {
    * @param texture The texture
    * @param opacity The opacity
    * @param projectionData MapLibre's ProjectionData
-   * @param zoom The current zoom level
+   * @param _zoom The current zoom level (not read)
    */
   draw(
     vertices: QuadVertices,
     texture: WebGLTexture,
     opacity: number,
     projectionData: ProjectionData,
-    zoom: number,
+    _zoom: number,
   ): void {
     if (!this.program) return;
 
@@ -285,7 +284,7 @@ void main() {
     const gl = this.gl;
 
     gl.useProgram(this.program);
-    this.setProjectionUniforms(projectionData, zoom);
+    this.setProjectionUniforms(projectionData);
 
     // Set the opacity
     if (this.opacityLoc) {

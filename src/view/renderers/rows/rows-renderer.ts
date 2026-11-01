@@ -595,11 +595,10 @@ export class RowsRenderer {
     if (camera) {
       this.originShift[0] = data.origin[0] - camera.centerLngLat[0];
       this.originShift[1] = data.origin[1] - camera.centerLngLat[1];
-      program.projection.setUniforms(projectionData, zoom, camera, this.originShift);
+      program.projection.setUniforms(projectionData, camera, this.originShift);
     } else {
       program.projection.setUniforms(
         projectionData,
-        zoom,
         calculateOffsetUniforms(data.origin, projectionData),
       );
     }
