@@ -88,8 +88,8 @@ const SHAPES: Readonly<
   },
   'snap provider': { required: ['candidates'], optional: [] },
   'handle provider': {
-    required: ['handles', 'onDrag'],
-    optional: ['globalHandles', 'onDragStart', 'onDragEnd', 'drawHandles'],
+    required: ['handles', 'onHandleDrag'],
+    optional: ['globalHandles', 'onHandleDragStart', 'onHandleDragEnd', 'drawHandles'],
   },
   'companion provider': { required: ['has', 'draw', 'hitTest'], optional: ['onClick'] },
 };

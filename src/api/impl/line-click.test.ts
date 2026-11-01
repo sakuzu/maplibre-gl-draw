@@ -168,7 +168,7 @@ function register(target: Draw, extras: readonly Extras[]): void {
       name: 'grips',
       handles: () => [],
       globalHandles: () => [],
-      onDrag: () => null,
+      onHandleDrag: () => null,
     });
   }
   if (extras.includes('input')) {

@@ -564,14 +564,15 @@ export function installFeatureType(
                 feature.type === type && applies(feature as unknown as StoredFeature)
                   ? handles(feature, ctx)
                   : [],
-              onDrag: (feature, handle, event) =>
+              onHandleDrag: (feature, handle, event) =>
                 feature && onHandleDrag ? onHandleDrag(feature, handle, event) : null,
               ...(onHandleDragStart && {
-                onDragStart: (feature, handle, event) =>
+                onHandleDragStart: (feature, handle, event) =>
                   feature !== null && onHandleDragStart(feature, handle, event) !== false,
               }),
               ...(onHandleDragEnd && {
-                onDragEnd: (feature, handle, event) => onHandleDragEnd(feature, handle, event),
+                onHandleDragEnd: (feature, handle, event) =>
+                  onHandleDragEnd(feature, handle, event),
               }),
               ...(drawHandles && {
                 drawHandles: (feature, shown, ctx) => {
@@ -696,9 +697,9 @@ export function adaptSnapProvider(
 /**
  * A provider of handles of the contract as a provider of auxiliary handles of the engine
  *
- * The drag of a handle asks `onDragStart` first, which can refuse it, then calls `onDrag` for
+ * The drag of a handle asks `onHandleDragStart` first, which can refuse it, then calls `onHandleDrag` for
  * every move and applies its patch as an intermediate update; the patch of the end of the drag
- * is applied as the final one, and `onDragEnd` follows it.
+ * is applied as the final one, and `onHandleDragEnd` follows it.
  *
  * @internal
  */
@@ -729,7 +730,7 @@ export function adaptHandleProvider(
   const drag = (event: DragNormalizedEvent, final: boolean): void => {
     if (!active) return;
     const feature = active.featureId ? deps.store.getFeature(active.featureId) : undefined;
-    const patch = provider.onDrag(
+    const patch = provider.onHandleDrag(
       (feature as Feature | undefined) ?? null,
       active.handle,
       toPointerEvent(event),
@@ -759,8 +760,8 @@ export function adaptHandleProvider(
         (h) => h.id === hit.handleId,
       );
       if (!handle) return false;
-      if (provider.onDragStart) {
-        const accepted = provider.onDragStart(
+      if (provider.onHandleDragStart) {
+        const accepted = provider.onHandleDragStart(
           (feature as Feature | null) ?? null,
           handle,
           toPointerEvent(event),
@@ -779,9 +780,9 @@ export function adaptHandleProvider(
         drag(event, true);
       } finally {
         active = null;
-        if (ended && provider.onDragEnd) {
+        if (ended && provider.onHandleDragEnd) {
           const feature = ended.featureId ? deps.store.getFeature(ended.featureId) : undefined;
-          provider.onDragEnd(
+          provider.onHandleDragEnd(
             (feature as Feature | undefined) ?? null,
             ended.handle,
             toPointerEvent(event),

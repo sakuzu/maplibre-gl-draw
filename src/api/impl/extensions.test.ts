@@ -56,7 +56,7 @@ function snapProvider(name: string): SnapProvider {
   return { name, candidates: () => [] };
 }
 function handleProvider(name: string): HandleProvider {
-  return { name, handles: () => [], onDrag: () => null };
+  return { name, handles: () => [], onHandleDrag: () => null };
 }
 function companionProvider(name: string): CompanionProvider {
   return { name, has: () => false, draw() {}, hitTest: () => null };
@@ -1220,7 +1220,7 @@ describe('the extensions of two draw instances', () => {
   const handles = (name: string): HandleProvider => ({
     name,
     handles: () => [],
-    onDrag: () => null,
+    onHandleDrag: () => null,
   });
 
   it('keep what is added to one instance out of the other', () => {

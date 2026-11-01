@@ -795,6 +795,9 @@ draw.options.update({
   (`ctx.selectionBox`。外形に余白を足したもので、
   `draw.rendered.getSelectionBox` の答え。どの地物にも属さない
   ハンドルでは `null`)、選択の見た目 (`ctx.selectionStyle`) を持ちます
+- `HandleProvider` のハンドルのドラッグは、定義と同じ名の
+  `onHandleDrag`、`onHandleDragStart`、`onHandleDragEnd` に届きます
+  (前は `onDrag`、`onDragStart`、`onDragEnd`)
 - 地物の周りに描くものは、描かれている地物を `ctx.draw.rendered` で
   読みます (`get`、`getMany`、`getSelectionBox`。まとめてドラッグしている
   行は `getDraggedRows` で、前の `/kasane` の `draggedRowsOf` です)。

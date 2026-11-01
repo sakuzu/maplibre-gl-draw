@@ -519,7 +519,7 @@ describe('the handles a custom type adds', () => {
         seen.push(ctx);
         return [];
       },
-      onDrag: () => null,
+      onHandleDrag: () => null,
     });
     const provider = view.engine.context.selectionScope.auxiliaryHandles.get('grips');
     provider?.getHandles(view.store.getFeature('c') as StoredFeature, {} as AuxiliaryHandleContext);
@@ -536,7 +536,7 @@ describe('the handles a custom type adds', () => {
         seen.push(ctx);
         return [{ kind: 'custom', id: 'g', position: [0, 0], sizePx: 6 }];
       },
-      onDrag: () => null,
+      onHandleDrag: () => null,
     });
     const provider = view.engine.context.selectionScope.auxiliaryHandles.get('free');
     expect(provider?.getGlobalHandles?.({} as AuxiliaryHandleContext)).toEqual([

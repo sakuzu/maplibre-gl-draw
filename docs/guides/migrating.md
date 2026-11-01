@@ -788,6 +788,9 @@ drawn. Each change below names what replaces what is gone.
   the library draws (`ctx.selectionBox`, the footprint with the margin,
   as `draw.rendered.getSelectionBox` answers; `null` for the handles of
   no feature) and the look of the selection (`ctx.selectionStyle`)
+- The drag of a handle of a `HandleProvider` goes to `onHandleDrag`,
+  `onHandleDragStart` and `onHandleDragEnd` (were `onDrag`,
+  `onDragStart` and `onDragEnd`), the names of a definition
 
 - What is drawn around a feature reads the feature as it is drawn from
   `ctx.draw.rendered` (`get`, `getMany`, `getSelectionBox`, and

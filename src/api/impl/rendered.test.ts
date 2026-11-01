@@ -11,8 +11,8 @@
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createCoordinateTransform } from '../../shared/math/index.js';
-import type { Feature as StoredFeature } from '../../store/types.js';
 import { createTableStore } from '../../store/table-memory.js';
+import type { Feature as StoredFeature } from '../../store/types.js';
 import { createMapStub } from '../../test-utils.js';
 import { selectionBoxOf } from '../../view/ui/bounds.js';
 import type { Draw } from '../draw.js';

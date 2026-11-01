@@ -65,7 +65,7 @@ export interface HandleProvider {
   /**
    * The handles of a selected feature: handles the library draws as resize handles
    * (`kind: 'resize'`), and handles the provider draws itself in `drawHandles`
-   * (`kind: 'custom'`). Their drags go to `onDrag`. The library asks for them while one feature
+   * (`kind: 'custom'`). Their drags go to `onHandleDrag`. The library asks for them while one feature
    * only is selected, and shows them under the conditions told on {@link Handle}. Place them from
    * the selection box of the context (`ctx.selectionBox`), so that they sit on the box the
    * library draws.
@@ -97,23 +97,27 @@ export interface HandleProvider {
    * @param feature - The feature the handle is on; `null` for a handle of `globalHandles`
    * @returns The patch to apply to the feature, or `null` for no change
    */
-  onDrag(feature: Feature | null, handle: Handle, event: DrawPointerEvent): FeaturePatch | null;
+  onHandleDrag(
+    feature: Feature | null,
+    handle: Handle,
+    event: DrawPointerEvent,
+  ): FeaturePatch | null;
   /**
-   * A drag of one of its handles is about to start, before the first `onDrag`.
+   * A drag of one of its handles is about to start, before the first `onHandleDrag`.
    *
    * @param feature - The feature the handle is on; `null` for a handle of `globalHandles`
    * @returns False to refuse the drag: the pointer then does what it would do without the
-   *   handle, and no `onDrag` nor `onDragEnd` follows
+   *   handle, and no `onHandleDrag` nor `onHandleDragEnd` follows
    */
-  onDragStart?(feature: Feature | null, handle: Handle, event: DrawPointerEvent): boolean;
+  onHandleDragStart?(feature: Feature | null, handle: Handle, event: DrawPointerEvent): boolean;
   /**
-   * A drag of one of its handles ended, after the last `onDrag` and its patch. It is called
+   * A drag of one of its handles ended, after the last `onHandleDrag` and its patch. It is called
    * once for every drag that started, also when the drag is cut short.
    *
    * @param feature - The feature the handle is on as it is now; `null` for a handle of
    *   `globalHandles`, or when the feature is gone
    */
-  onDragEnd?(feature: Feature | null, handle: Handle, event: DrawPointerEvent): void;
+  onHandleDragEnd?(feature: Feature | null, handle: Handle, event: DrawPointerEvent): void;
 }
 
 /**

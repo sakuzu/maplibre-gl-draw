@@ -707,15 +707,15 @@ draw.extensions.snapProviders.add(grid);
 
 `HandleProvider` は、選ばれている地物に自分のハンドルを出します。
 `handles(feature, ctx)` が、定義と同じ文脈と 2 つの種類で、地物が
-1 つだけ選ばれているときにハンドルを返し、`onDrag(feature, handle,
-event)` がドラッグで変わる差分を返します。`drawHandles(feature,
-handles, ctx)` は、定義のものと同じく `custom` のハンドルを描きます。
-定義の `onHandleDrag` と同じです。`globalHandles(ctx)` は、どの
+1 つだけ選ばれているときにハンドルを返し、定義と同じく
+`onHandleDrag(feature, handle, event)` がドラッグで変わる差分を返します。
+`drawHandles(feature, handles, ctx)` は、定義のものと同じく `custom` の
+ハンドルを描きます。`globalHandles(ctx)` は、どの
 地物にも属さず、何を選んでいても出るハンドルを返します。そのドラッグ
 では `feature` が `null` で届き、変わるものは提供者が自分で書き込み
-ます。`onDragStart` と `onDragEnd` は、定義の `onHandleDragStart` と
-`onHandleDragEnd` と同じように、ドラッグの前後で呼ばれます。
-`onDragStart` は `false` を返してドラッグを拒めます。定義と同じく、
+ます。`onHandleDragStart` と `onHandleDragEnd` は、定義のものと同じ
+ように、ドラッグの前後で呼ばれます。`onHandleDragStart` は `false` を
+返してドラッグを拒めます。定義と同じく、
 `resize` のハンドルはライブラリーが大きさを変えるハンドルとして描き、
 `custom` のハンドルは提供者が `drawHandles` で描きます。
 `globalHandles` のハンドルでは `feature` が `null` で届き、その文脈に

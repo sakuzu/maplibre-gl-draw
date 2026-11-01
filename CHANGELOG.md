@@ -405,6 +405,9 @@ writing it. Its changes are listed after those of 3.0.0.
 - `FeatureTypeDefinition.handles`, `HandleProvider.handles` and
   `HandleProvider.globalHandles` receive a `HandleContext` in place of the
   `ScreenContext`, which is its `screen`.
+- The drag of a handle of a `HandleProvider` goes to `onHandleDrag`,
+  `onHandleDragStart` and `onHandleDragEnd` (were `onDrag`, `onDragStart`
+  and `onDragEnd`), the names a feature type has.
 - A custom type has the fields its `transformFields` declares and no
   other: the resize and the rotation no longer write
   `maplibre-gl-draw:rotation` and `maplibre-gl-draw:scale` of its

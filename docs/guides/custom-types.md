@@ -753,15 +753,15 @@ of your own is ranked as a vertex and reaches the snapping result
 A `HandleProvider` shows handles of its own on the selected features:
 `handles(feature, ctx)` returns them, with the context and the two kinds
 a definition has, only while one feature is selected, and
-`onDrag(feature, handle, event)` returns the patch a drag makes, as
-`onHandleDrag` of a definition does. `drawHandles(feature, handles, ctx)`
+`onHandleDrag(feature, handle, event)` returns the patch a drag makes,
+as that of a definition does. `drawHandles(feature, handles, ctx)`
 draws its custom handles, as that of a definition does.
 `globalHandles(ctx)` returns handles that belong to
 no feature and are shown whatever is selected; their drag arrives with
 `feature` as `null`, and the provider writes what the drag changes
-itself. `onDragStart` and `onDragEnd` surround a drag as
-`onHandleDragStart` and `onHandleDragEnd` of a definition do, and
-`onDragStart` refuses it by returning `false`. As with a definition,
+itself. `onHandleDragStart` and `onHandleDragEnd` surround a drag as
+those of a definition do, and `onHandleDragStart` refuses it by
+returning `false`. As with a definition,
 the library draws the `resize` handles as resize handles, and the
 provider draws the `custom` ones in `drawHandles`, called with `feature`
 as `null` for those of `globalHandles`, whose context has no selection

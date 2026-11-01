@@ -206,12 +206,12 @@ async function registerShiftHandle(page: Page): Promise<void> {
         const n = ring.length - 1;
         return [{ id: 'h', kind: 'resize', position: [x / n, y / n - 0.002], cursor: 'alias' }];
       },
-      onDragStart(feature, _handle, event) {
+      onHandleDragStart(feature, _handle, event) {
         if (feature?.geometry.type !== 'Polygon') return false;
         start = { rings: feature.geometry.coordinates as Ring[], from: event.lngLat as number[] };
         return true;
       },
-      onDrag(_feature, _handle, event) {
+      onHandleDrag(_feature, _handle, event) {
         if (!start) return null;
         const s = start;
         const dx = (event.lngLat[0] as number) - (s.from[0] as number);
@@ -225,7 +225,7 @@ async function registerShiftHandle(page: Page): Promise<void> {
           },
         };
       },
-      onDragEnd() {
+      onHandleDragEnd() {
         start = null;
       },
     });

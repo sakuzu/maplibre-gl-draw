@@ -654,22 +654,22 @@ describe('the start and the end of a handle drag', () => {
   }
   const hit = (providerId: string, featureId = 'f') => ({ providerId, handleId: 'h', featureId });
 
-  it('asks onDragStart, which can refuse, and calls onDragEnd once after the last onDrag', () => {
+  it('asks onHandleDragStart, which can refuse, and calls onHandleDragEnd once after the last onHandleDrag', () => {
     const engine = setUp();
     const calls: string[] = [];
     let accept = false;
     engine.extensions.collections.handleProviders.add({
       name: 'grips',
       handles: () => [handle],
-      onDrag: (feature, _handle, event) => {
+      onHandleDrag: (feature, _handle, event) => {
         calls.push(`drag ${feature?.id} ${event.lngLat[0]}`);
         return { properties: { at: event.lngLat[0] } };
       },
-      onDragStart: (feature, grabbed, event) => {
+      onHandleDragStart: (feature, grabbed, event) => {
         calls.push(`start ${feature?.id} ${grabbed.id} ${event.lngLat[0]}`);
         return accept;
       },
-      onDragEnd: (feature, grabbed, event) => {
+      onHandleDragEnd: (feature, grabbed, event) => {
         calls.push(`end ${feature?.properties.at} ${grabbed.id} ${event.lngLat[0]}`);
       },
     });
@@ -698,9 +698,9 @@ describe('the start and the end of a handle drag', () => {
       name: 'free',
       handles: () => [],
       globalHandles: () => [handle],
-      onDrag: () => null,
-      onDragStart,
-      onDragEnd,
+      onHandleDrag: () => null,
+      onHandleDragStart: onDragStart,
+      onHandleDragEnd: onDragEnd,
     });
     const provider = engine.context.selectionScope.auxiliaryHandles.get('free');
     if (!provider) throw new Error('not installed');

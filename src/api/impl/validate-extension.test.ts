@@ -31,7 +31,7 @@ const VALID: Record<ExtensionKind, unknown> = {
   'feature type': { type: 't', geometry: 'Point', renderer, hitPaddingPx: 4 },
   overlay: { name: 'o', onAdd: noop, draw: noop, onRemove: noop, order: -1 },
   'snap provider': { name: 's', candidates: () => [] },
-  'handle provider': { name: 'h', handles: () => [], onDrag: () => null },
+  'handle provider': { name: 'h', handles: () => [], onHandleDrag: () => null },
   'companion provider': { name: 'c', has: () => false, draw: noop, hitTest: () => null },
 };
 
@@ -66,7 +66,7 @@ const INVALID: Array<[ExtensionKind, unknown, string | undefined]> = [
   ['overlay', { ...(VALID.overlay as object), order: Number.NaN }, 'order'],
   ['overlay', { ...(VALID.overlay as object), drawVertices: true }, 'drawVertices'],
   ['snap provider', { name: 's' }, 'candidates'],
-  ['handle provider', { name: 'h', handles: noop }, 'onDrag'],
+  ['handle provider', { name: 'h', handles: noop }, 'onHandleDrag'],
   [
     'handle provider',
     { ...(VALID['handle provider'] as object), globalHandles: 1 },

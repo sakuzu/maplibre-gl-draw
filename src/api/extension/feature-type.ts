@@ -21,7 +21,7 @@ import type { TransformFields } from './store.js';
  * A handle the library draws as it draws the resize handles at the corners of the selection box
  * (`selectionStyle.resizeHandle`), and hits at the size it draws it, such as a handle in the middle
  * of an edge that changes the width of a box. It has the look of a resize handle only: its drag
- * goes to the extension that gave it (`onHandleDrag` of a type, `onDrag` of a provider), which
+ * goes to the extension that gave it (`onHandleDrag` of a type or of a provider), which
  * says what it changes, not to the edit `scale` of the library, which the resize handles at the
  * corners make.
  */
