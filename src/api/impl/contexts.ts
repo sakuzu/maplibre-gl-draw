@@ -128,7 +128,7 @@ export function toSelectionStyle(
 ): Required<SelectionStyleOptions> {
   const resolved = {
     ...(withCssColors(config) as object),
-    boxSelection: {
+    selectionRectangle: {
       fillColor: formatColor([box.fillColor[0], box.fillColor[1], box.fillColor[2], 1]),
       fillOpacity: box.fillColor[3],
       strokeColor: formatColor(box.strokeColor),

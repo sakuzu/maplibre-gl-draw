@@ -119,7 +119,7 @@ const draw = createDraw(map, {
   },
   previewStyle: { strokeColor: '#ff6f00' },
   selectionStyle: {
-    boxSelection: {
+    selectionRectangle: {
       fillColor: '#ff6f00',
       fillOpacity: 0.1,
       strokeColor: '#ff6f00',

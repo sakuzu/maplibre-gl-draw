@@ -861,9 +861,9 @@ describe('ModeContext.commitFeature', () => {
 
   it('gives the look of the selection with CSS colors, the options over the defaults', () => {
     expect(ctx.selectionStyle.box.stroke.color).toMatch(/^#|^rgba\(/);
-    expect(ctx.selectionStyle.boxSelection.strokeWidth).toEqual(expect.any(Number));
-    ctx.draw.options.update({ selectionStyle: { boxSelection: { strokeColor: 'red' } } } as never);
-    expect(ctx.selectionStyle.boxSelection.strokeColor).toBe('red');
+    expect(ctx.selectionStyle.selectionRectangle.strokeWidth).toEqual(expect.any(Number));
+    ctx.draw.options.update({ selectionStyle: { selectionRectangle: { strokeColor: 'red' } } } as never);
+    expect(ctx.selectionStyle.selectionRectangle.strokeColor).toBe('red');
   });
 
   it('refuses while the document is read-only', () => {

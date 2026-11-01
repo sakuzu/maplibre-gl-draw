@@ -161,7 +161,7 @@ const SELECTION_STYLE_CHECKS = {
   radiusHandle: record({ point: POINT }),
   centerMarker: record({ point: POINT }),
   radiusLine: record({ stroke: STROKE }),
-  boxSelection: record({
+  selectionRectangle: record({
     fillColor: color,
     fillOpacity: opacity,
     strokeColor: color,
@@ -634,8 +634,8 @@ export function toSelectionConfig(options: RuntimeOptions): SelectionUIConfig {
  */
 export function toBoxSelectionStyle(options: RuntimeOptions): BoxSelectionStyleConfig {
   const config = structuredClone(DEFAULT_BOX_SELECTION_STYLE_CONFIG);
-  const box = options.selectionStyle?.boxSelection as
-    | Partial<NonNullable<SelectionStyleOptions['boxSelection']>>
+  const box = options.selectionStyle?.selectionRectangle as
+    | Partial<NonNullable<SelectionStyleOptions['selectionRectangle']>>
     | undefined;
   if (!box) return config;
   if (box.fillColor !== undefined || box.fillOpacity !== undefined) {

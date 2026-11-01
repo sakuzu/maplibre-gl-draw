@@ -343,6 +343,9 @@ writing it. Its changes are listed after those of 3.0.0.
 - `selectionStyle.boundingBox` is `selectionStyle.box`, the look of the
   selection box, so that `bbox` and the box of the selection are not one
   word in two lengths.
+- `selectionStyle.boxSelection` is `selectionStyle.selectionRectangle`,
+  the look of the rectangle a box selection drags, so that `box` names
+  the selection box alone.
 - A `Hit` of a feature names it by `id` alone, as `ModeContext.hitTest`
   and `map.clicked` give it: `featureId` is the feature a companion
   belongs to. The kind `handle` is gone, as the library makes none.

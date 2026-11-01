@@ -734,6 +734,29 @@ draw.features.update(featureId, {
 `bounds` と `getRowBounds` でした。その型 `BBox` は main の入口からも
 読めます。
 
+「box」の語が 1 つの物を指すように、`selectionStyle` の鍵を 2 つ改め
+ました。選択した地物の周りに描く箱、つまり選択の枠の見た目は
+`selectionStyle.box` (前は `boundingBox`) です。範囲選択 (Shift を押し
+ながらのドラッグ) で引く四角の見た目は
+`selectionStyle.selectionRectangle` (前は `boxSelection`) です。
+
+```ts
+draw.options.update({
+  selectionStyle: {
+    box: {
+      stroke: { width: 1, color: '#ff6f00', opacity: 1, lineStyle: 'dashed' },
+      margin: 6,
+    },
+    selectionRectangle: {
+      fillColor: '#ff6f00',
+      fillOpacity: 0.1,
+      strokeColor: '#ff6f00',
+      strokeWidth: 1,
+    },
+  },
+});
+```
+
 自前のストアは変えなくて構いません。レイヤーの項目をリストで持つ
 ストアは、変更の前と後のリストから `diffItemOrder` で
 `DocumentChange.order` を作ります。

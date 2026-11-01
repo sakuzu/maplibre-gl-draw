@@ -724,6 +724,29 @@ An extent in degrees is named `bbox` wherever it is, as in
 `dataset.getRowBBox(index)` were `bounds` and `getRowBounds`. The main
 entry exports its type, `BBox`.
 
+Two keys of `selectionStyle` are renamed, so that "box" names one thing:
+the look of the box drawn around a selected feature, the selection box,
+is `selectionStyle.box` (was `boundingBox`), and the look of the
+rectangle a box selection drags (Shift and a drag) is
+`selectionStyle.selectionRectangle` (was `boxSelection`).
+
+```ts
+draw.options.update({
+  selectionStyle: {
+    box: {
+      stroke: { width: 1, color: '#ff6f00', opacity: 1, lineStyle: 'dashed' },
+      margin: 6,
+    },
+    selectionRectangle: {
+      fillColor: '#ff6f00',
+      fillOpacity: 0.1,
+      strokeColor: '#ff6f00',
+      strokeWidth: 1,
+    },
+  },
+});
+```
+
 A store of your own needs no change. A store that keeps the items of its
 layers as lists makes `DocumentChange.order` from the lists before and
 after with `diffItemOrder`.

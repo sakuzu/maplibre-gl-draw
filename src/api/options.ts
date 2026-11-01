@@ -377,8 +377,11 @@ export interface SelectionStyleOptions {
       iconId?: string;
     };
   };
-  /** The rectangle of a box selection (Shift and a drag) */
-  boxSelection?: {
+  /**
+   * The rectangle a box selection drags (Shift and a drag); `box` is the selection box around the
+   * features selected
+   */
+  selectionRectangle?: {
     /** The fill color (a CSS color) */
     fillColor: string;
     /** The opacity of the fill, from 0 to 1 */
