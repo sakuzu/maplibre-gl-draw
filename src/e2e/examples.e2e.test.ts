@@ -1524,6 +1524,14 @@ describe('the examples', () => {
     // Selected: the handle is drawn there with the look of a vertex handle
     expect((await colorsAround(page, first)).some(isWhite)).toBe(true);
 
+    // The first vertex back in the middle of the map, clear of the panels (the layer of the cards
+    // makes the panel of the layers taller)
+    await page.evaluate(
+      (center) =>
+        (window as unknown as E2EWindow).map.jumpTo({ center: center as [number, number] }),
+      first,
+    );
+    await settle(page);
     // The handle takes the drag, and the definition moves the vertex
     const from = await pageOf(page, first);
     await drag(page, from, { x: from.x - 40, y: from.y + 30 });

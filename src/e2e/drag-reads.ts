@@ -249,6 +249,8 @@ const EDITS: Edit[] = [
     cursor: 'move',
     started: 'feature',
     carried: null,
+    // The handles follow the feature as it is moved, as they stand at rest
+    shown: [I_RESIZE, I_ROTATE, I_VERTEX, I_MIDPOINT],
     escape: 'restored',
     vertexSelected: true,
     follows: [120, 60],
@@ -514,7 +516,7 @@ function expectMiddle(edit: Edit, r: Run): void {
   );
   expect((r.mid[I_OUTLINE] as Drawn).count).toBeGreaterThan(200);
   // The frame is drawn; the handles are not, but the one carried under the pointer and the ones
-  // of the edit
+  // the edit shows (all of them, moved, for a move of the feature as a whole)
   expect((r.mid[I_FRAME] as Drawn).count).toBeGreaterThan(200);
   for (const i of HANDLES) {
     const drawn = r.mid[i] as Drawn;

@@ -92,6 +92,34 @@ interface Scene {
   images?: Record<string, string>;
 }
 
+/** A handle drawn with nothing */
+const NO_POINT = {
+  shape: 'circle',
+  size: 0,
+  fillColor: '#000000',
+  fillOpacity: 0,
+  strokeColor: '#000000',
+  strokeWidth: 0,
+  strokeOpacity: 0,
+};
+
+/**
+ * The handles of the selection drawn with nothing: they follow a feature moved as a whole and
+ * are drawn over it (`drag-reads-moves` holds where), so the shape is measured alone here
+ */
+const NO_HANDLES = {
+  selectionStyle: {
+    resizeHandle: { point: NO_POINT },
+    rotateHandle: {
+      point: NO_POINT,
+      distance: 0,
+      connector: { width: 0, color: '#000000', opacity: 0, lineStyle: 'solid' },
+    },
+    vertexHandle: { point: NO_POINT, selected: NO_POINT, followed: NO_POINT },
+    midpointHandle: { point: NO_POINT },
+  },
+};
+
 /** A position at an offset from the center, in degrees */
 const at = (dx: number, dy: number): [number, number] => [CENTER[0] + dx, CENTER[1] + dy];
 
@@ -433,6 +461,7 @@ describe.each(KINDS)('a drag over a Store of %s', (kind) => {
           kind,
           zoom,
           terrain: true,
+          options: NO_HANDLES,
           features: [
             polygon('p', [ring(0, 0, r)], {
               fillColor: hex(FILL),
@@ -462,6 +491,7 @@ describe.each(KINDS)('a drag over a Store of %s', (kind) => {
           kind,
           zoom,
           terrain: true,
+          options: NO_HANDLES,
           features: [
             {
               id: 'l',
@@ -501,6 +531,7 @@ describe.each(KINDS)('a drag over a Store of %s', (kind) => {
         const page = await open({
           kind,
           zoom: 12,
+          options: NO_HANDLES,
           features: [
             polygon('p', [ring(0, 0, 0.02)], madeDotted ? { fillColor: hex(FILL) } : DOTTED),
           ],
