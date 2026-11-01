@@ -231,7 +231,7 @@ describe('buildLineBatchArrays', () => {
     expect(arrays?.instanceData[INSTANCE_STRIDE + 5]).toBe(-2 * 3);
   });
 
-  it('folds the opacity into the instance color', () => {
+  it('folds the opacity into the alpha of the instance color', () => {
     const arrays = buildLineBatchArrays(
       [
         item(
@@ -247,7 +247,7 @@ describe('buildLineBatchArrays', () => {
       1,
     );
 
-    expect([...(arrays?.instanceData.subarray(8, 12) ?? [])]).toEqual([0.5, 0.25, 0, 0.5]);
+    expect([...(arrays?.instanceData.subarray(8, 12) ?? [])]).toEqual([1, 0.5, 0, 0.5]);
   });
 });
 

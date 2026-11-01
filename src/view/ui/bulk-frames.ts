@@ -499,5 +499,6 @@ float pixelLine(float x) {
 
 void main() {
     float coverage = pixelLine(v_dist + v_width) - pixelLine(v_dist - v_width);
-    fragColor = v_point > 0.5 ? vec4(u_color.rgb, u_color.a * coverage) : u_color * coverage;
+    // Not premultiplied: the coverage goes to the alpha only (blend.ts)
+    fragColor = vec4(u_color.rgb, u_color.a * coverage);
 }`;

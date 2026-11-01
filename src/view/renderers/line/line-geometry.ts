@@ -113,15 +113,15 @@ export interface LineBatchArrays {
 /**
  * Computes the color to pass as an instance attribute
  *
- * The fragment shader multiplies every color component by the coverage before output
- * (premultiplied alpha), so the opacity is folded into every component and not just alpha.
- * This gives the same composited result as the previous `u_color * (coverage * u_opacity)`.
+ * Every drawing outputs a color that is not premultiplied and the frame blends it so
+ * (`applyDrawBlendState`): the opacity goes to the alpha only, as the coverage and the opacity of
+ * the layer do in the shader.
  *
  * @internal
  */
 export function toLineInstanceColor(color: Color, opacity: number): Color {
   const o = Number.isFinite(opacity) ? Math.min(Math.max(opacity, 0), 1) : 1;
-  return [color[0] * o, color[1] * o, color[2] * o, color[3] * o];
+  return [color[0], color[1], color[2], color[3] * o];
 }
 
 /**

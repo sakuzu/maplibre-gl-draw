@@ -226,10 +226,14 @@ describe('RowsRenderer', () => {
     const at = mock.calls.length;
     // Rows 2 and 3: instances 3 to 9
     renderer.drawRange(chunk, 2, 4, 14, PROJECTION, binding());
-    const pointers = mock.calls.slice(at).filter((c) => c.name === 'vertexAttribPointer');
-    expect(pointers.map((c) => [c.args[0], c.args[5]])).toEqual([
-      [1, 3 * ROWS_INSTANCE_BYTES],
-      [2, 3 * ROWS_INSTANCE_BYTES + 16],
+    const pointers = mock.calls
+      .slice(at)
+      .filter((c) => c.name === 'vertexAttribPointer' || c.name === 'vertexAttribIPointer');
+    // The tag as an integer attribute (its offset is its fifth argument), the floats after it
+    expect(pointers.map((c) => [c.name, c.args[0], c.args[c.args.length - 1]])).toEqual([
+      ['vertexAttribIPointer', 1, 3 * ROWS_INSTANCE_BYTES],
+      ['vertexAttribPointer', 2, 3 * ROWS_INSTANCE_BYTES + 4],
+      ['vertexAttribPointer', 3, 3 * ROWS_INSTANCE_BYTES + 16],
     ]);
     const drawCall = lastDraw(mock.calls);
     expect(drawCall.args[3]).toBe(7);
@@ -237,6 +241,7 @@ describe('RowsRenderer', () => {
     const again = mock.calls.length;
     renderer.drawRange(chunk, 2, 4, 14, PROJECTION, binding());
     expect(mock.count('vertexAttribPointer', again)).toBe(0);
+    expect(mock.count('vertexAttribIPointer', again)).toBe(0);
     // An empty range draws nothing
     const empty = mock.calls.length;
     renderer.drawRange(chunk, 2, 2, 14, PROJECTION, binding());

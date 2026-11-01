@@ -37,7 +37,7 @@ import { DASH_COEFFICIENTS } from '../line/dash.js';
 import { POINT_AA_PADDING_PX, POINT_MIN_OUTER_PX } from '../point/point-instance.js';
 import { POINT_SDF_GLSL } from '../point/point-sdf.js';
 import { ROW_HIDDEN_POSITION_GLSL, ROW_STATE_GLSL } from '../row-state.js';
-import { ROWS_KIND, ROWS_KIND_FACTOR, ROWS_STYLE_TEXELS } from './rows-format.js';
+import { ROWS_KIND, ROWS_KIND_SHIFT, ROWS_ROW_MASK, ROWS_STYLE_TEXELS } from './rows-format.js';
 
 /** A float literal of GLSL */
 function glslFloat(value: number): string {
@@ -73,11 +73,14 @@ ${getProjectionTransitionUniform(prelude)}${OFFSET_MODE_GLSL}${TERRAIN_SHADE_VER
 
 // The corner of the strip of 4 vertices (0 to 3)
 layout(location = 0) in float a_corner;
-// x: kind * ${ROWS_KIND_FACTOR} + the number of the row in its group, yzw: coordinates 0 to 2
-layout(location = 1) in vec4 a_head;
+// The tag: the kind above bit ${ROWS_KIND_SHIFT} and the number of the row in its group below it,
+// taken apart with a shift and a mask (exact on every GPU)
+layout(location = 1) in uint a_tag;
+// xyz: coordinates 0 to 2
+layout(location = 2) in vec3 a_head;
 // x: coordinate 3, y and z: the range of the segment drawn, w: the length of the line before a
 // dashed segment (CSS px at zoom 0)
-layout(location = 2) in vec4 a_tail;
+layout(location = 3) in vec4 a_tail;
 
 // The coordinates of the chunk (offsets from its origin)
 uniform sampler2D u_coords;
@@ -213,7 +216,7 @@ void drawPoint(int style) {
     // gives it); with the terrain off it is not used
     g_anchor_elevation_m = 0.0;
     g_anchor_elevation_on = 1.0;
-    vec2 offset = rowsCoord(a_head.y);
+    vec2 offset = rowsCoord(a_head.x);
     emitShadeOffset(offset);
     vec4 centerClip = rowsProject(offset);
     if (centerClip.w <= 0.0) {
@@ -241,7 +244,7 @@ void drawPoint(int style) {
 void drawSprite(int style) {
     g_anchor_elevation_m = 0.0;
     g_anchor_elevation_on = 1.0;
-    vec2 offset = rowsCoord(a_head.y);
+    vec2 offset = rowsCoord(a_head.x);
     emitShadeOffset(offset);
     vec4 centerClip = rowsProject(offset);
     if (centerClip.w <= 0.0) {
@@ -287,15 +290,15 @@ void drawSprite(int style) {
 }
 
 void drawSegment(int kind, int style, float createdZoom, bool hasCreatedZoom) {
-    int prevIdx = int(a_head.y);
+    int prevIdx = int(a_head.x);
     int nextIdx = int(a_tail.x);
     bool atStart = g_corner < 2;
     bool atEnd = !atStart;
     float t = atStart ? 0.0 : 1.0;
     float side = (g_corner & 1) == 0 ? 1.0 : -1.0;
 
-    vec2 startOffset = rowsCoord(a_head.z);
-    vec2 endOffset = rowsCoord(a_head.w);
+    vec2 startOffset = rowsCoord(a_head.y);
+    vec2 endOffset = rowsCoord(a_head.z);
     emitShadeOffset(atStart ? startOffset : endOffset);
     vec4 startClip = rowsProject(startOffset);
     vec4 endClip = rowsProject(endOffset);
@@ -312,7 +315,7 @@ void drawSegment(int kind, int style, float createdZoom, bool hasCreatedZoom) {
     vec2 miterNormal = normal;
     if (atStart) {
         if (prevIdx >= 0) {
-            vec2 prevScreen = clipToScreen(rowsProject(rowsCoord(a_head.y)));
+            vec2 prevScreen = clipToScreen(rowsProject(rowsCoord(a_head.x)));
             vec2 prevDir = normalize(startScreen - prevScreen);
             vec2 prevNormal = vec2(-prevDir.y, prevDir.x);
             vec2 avgNormal = prevNormal + normal;
@@ -378,7 +381,7 @@ void drawSegment(int kind, int style, float createdZoom, bool hasCreatedZoom) {
     vec2 totalClipOffset = screenToClipOffset(vertexOffset, currentClip.w);
     gl_Position = currentClip + vec4(totalClipOffset, 0.0, 0.0);
 
-    v_color = color * ink;
+    v_color = vec4(color.rgb, color.a * ink);
     v_params = vec4(halfWidth, screenSegmentLength, 0.0, 0.0);
     v_geom = vec4(side * expandedHalfWidth, linePos, 0.0, 0.0);
 
@@ -401,7 +404,7 @@ void drawSegment(int kind, int style, float createdZoom, bool hasCreatedZoom) {
         v_dash_range = vec3(startCss, startCss + lengthCss, nextIdx < 0 ? 1.0 : 0.0);
         if (prevIdx >= 0) {
             v_dash_prev = dashNeighbor(
-                rowsCoord(a_head.y), startOffset, segmentDir, startCss, vec2(dash, gap), scale, true
+                rowsCoord(a_head.x), startOffset, segmentDir, startCss, vec2(dash, gap), scale, true
             );
         }
         if (nextIdx >= 0) {
@@ -423,9 +426,9 @@ void drawSegment(int kind, int style, float createdZoom, bool hasCreatedZoom) {
 void drawOutline(int style, float createdZoom, bool hasCreatedZoom) {
     bool first = g_corner < 2;
     float side = (g_corner & 1) == 0 ? 1.0 : -1.0;
-    vec2 pos = rowsCoord(first ? a_head.z : a_head.w);
-    vec2 prev = rowsCoord(first ? a_head.y : a_head.z);
-    vec2 next = rowsCoord(first ? a_head.w : a_tail.x);
+    vec2 pos = rowsCoord(first ? a_head.y : a_head.z);
+    vec2 prev = rowsCoord(first ? a_head.x : a_head.y);
+    vec2 next = rowsCoord(first ? a_head.z : a_tail.x);
     emitShadeOffset(pos);
 
     vec4 clipPos = rowsProject(pos);
@@ -464,7 +467,7 @@ void drawOutline(int style, float createdZoom, bool hasCreatedZoom) {
 }
 
 void drawFill(int style) {
-    float index = g_corner == 0 ? a_head.y : (g_corner == 1 ? a_head.z : (g_corner == 2 ? a_head.w : a_tail.x));
+    float index = g_corner == 0 ? a_head.x : (g_corner == 1 ? a_head.y : (g_corner == 2 ? a_head.z : a_tail.x));
     vec2 pos = rowsCoord(index);
     emitShadeOffset(pos);
     gl_Position = rowsProject(pos);
@@ -472,8 +475,8 @@ void drawFill(int style) {
 }
 
 void main() {
-    int kind = int(floor(a_head.x / ${glslFloat(ROWS_KIND_FACTOR)}));
-    float row = a_head.x - float(kind) * ${glslFloat(ROWS_KIND_FACTOR)};
+    int kind = int(a_tag >> ${ROWS_KIND_SHIFT}u);
+    int row = int(a_tag & ${ROWS_ROW_MASK}u);
     g_corner = int(a_corner + 0.5);
     v_kind = kind;
     v_color = vec4(0.0);
@@ -486,7 +489,7 @@ void main() {
     v_geom = vec4(0.0);
 
     // The state of the row: a hidden row draws nothing, a moving one is moved by its set
-    uint rowState = readRowState(row);
+    uint rowState = readRowState(float(row));
     if (rowStateHidden(rowState)) {
         emitShadeOffset(vec2(0.0));
         gl_Position = ${ROW_HIDDEN_POSITION_GLSL};
@@ -494,7 +497,7 @@ void main() {
     }
     g_row_state = rowState;
 
-    int local = int(row + 0.5) - u_row_base;
+    int local = row - u_row_base;
     vec4 rowStyle = texelFetch(
         u_row_styles,
         ivec2(local % u_row_style_width, local / u_row_style_width),
@@ -665,7 +668,7 @@ vec4 shadeSegment() {
             coverage = bodyCoverage(d, w);
         }
     }
-    return v_color * coverage * u_opacity;
+    return vec4(v_color.rgb, v_color.a * coverage * u_opacity);
 }
 
 vec4 shadeOutline() {
@@ -692,7 +695,7 @@ void main() {
     } else {
         vec4 texel = texture(u_sprites, v_geom.xy);
         if (u_sprite_premultiplied > 0.5 && texel.a > 0.0) texel.rgb /= texel.a;
-        fragColor = texel * (u_opacity * v_params.x);
+        fragColor = vec4(texel.rgb, texel.a * u_opacity * v_params.x);
     }
 }`;
 }

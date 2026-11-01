@@ -6,8 +6,9 @@
  *
  * Every point, segment of a line, edge of the outline of a polygon and pair of triangles of its
  * fill is one instance of 32 bytes, drawn as a strip of 4 vertices by one program. An instance
- * holds no style and no position: it holds its kind, the number of its row in its row group and
- * the numbers of its coordinates, and the vertex shader reads the rest from textures:
+ * holds no style and no position: it holds its kind and the number of its row in its row group
+ * (one unsigned integer, its tag, read by the shader as an integer attribute) and the numbers of
+ * its coordinates, and the vertex shader reads the rest from textures:
  *
  * - the coordinates of the chunk (`RG32F`, offsets from the origin of the chunk), by number
  * - the style of each row of the chunk (`RGBA32F`, one texel per row): the number of its
@@ -47,11 +48,48 @@ export const ROWS_KIND = {
 export type RowsKind = (typeof ROWS_KIND)[keyof typeof ROWS_KIND];
 
 /**
- * The factor of the kind in the first float of an instance (`kind * ROWS_KIND_FACTOR + row`):
- * 2^21, so the sum stays an exact integer in a float (below 2^24) for the six kinds and a row
- * group of up to 2^21 rows, whatever number of rows a host builds its groups with
+ * The bits of the number of the row in the tag of an instance (`kind << ROWS_KIND_SHIFT | row`):
+ * a row group of up to 2^21 rows, whatever number of rows a host builds its groups with, and the
+ * kind above them
+ *
+ * The tag is the first word of an instance, an unsigned integer the shader reads as an integer
+ * attribute and takes apart with a shift and a mask, which are exact on every GPU. A kind and a
+ * row taken out of a float by a division move to the next integer on a GPU that uses the 2.5 ULP
+ * GLSL ES 3.00 allows a division (the instance then reads the style and the state of the next
+ * row).
  */
-export const ROWS_KIND_FACTOR = 2_097_152;
+export const ROWS_KIND_SHIFT = 21;
+/** The mask of the number of the row in the tag of an instance */
+export const ROWS_ROW_MASK = (1 << ROWS_KIND_SHIFT) - 1;
+
+/**
+ * The tag as the float whose bits it is, and back: the instances are written into float arrays,
+ * and the tag is the bits of their first word. A tag is below 2^24, so its float is a subnormal
+ * or a small normal number (never a NaN), which a copy through a number keeps bit for bit
+ */
+const TAG_BITS = new Uint32Array(1);
+const TAG_FLOAT = new Float32Array(TAG_BITS.buffer);
+
+/** The float whose bits are the tag of a kind and a row */
+function tagAsFloat(kind: RowsKind, row: number): number {
+  TAG_BITS[0] = (kind << ROWS_KIND_SHIFT) | row;
+  return TAG_FLOAT[0] as number;
+}
+
+/** The tag whose bits a float is */
+function tagOfFloat(value: number): number {
+  TAG_FLOAT[0] = value;
+  return TAG_BITS[0] as number;
+}
+
+/**
+ * The number of the row of the instance at a float of an array of instances (its first word)
+ *
+ * @internal
+ */
+export function rowOfInstanceWord(value: number): number {
+  return tagOfFloat(value) & ROWS_ROW_MASK;
+}
 
 /** The texels of the values of one resolved style */
 export const ROWS_STYLE_TEXELS = 4;
@@ -93,7 +131,7 @@ export function writeRowsInstance(
   extra = 0,
 ): void {
   const base = at * ROWS_INSTANCE_FLOATS;
-  target[base] = kind * ROWS_KIND_FACTOR + row;
+  target[base] = tagAsFloat(kind, row);
   target[base + 1] = i0;
   target[base + 2] = i1;
   target[base + 3] = i2;
@@ -141,11 +179,10 @@ export interface RowsInstance {
  */
 export function readRowsInstance(source: Float32Array, at: number): RowsInstance {
   const base = at * ROWS_INSTANCE_FLOATS;
-  const head = source[base];
-  const kind = Math.floor(head / ROWS_KIND_FACTOR) as RowsKind;
+  const tag = tagOfFloat(source[base] as number);
   return {
-    kind,
-    row: head - kind * ROWS_KIND_FACTOR,
+    kind: (tag >>> ROWS_KIND_SHIFT) as RowsKind,
+    row: tag & ROWS_ROW_MASK,
     indices: [source[base + 1], source[base + 2], source[base + 3], source[base + 4]],
     t0: source[base + 5],
     t1: source[base + 6],

@@ -327,7 +327,7 @@ void main() {
     v_linesofar = segmentStart + t * screenSegmentLength;  // cumulative distance (for dashes)
     v_line_pos = linePos;                  // position along the line
     v_seg_length = screenSegmentLength;    // segment length (computed on the GPU)
-    v_color = a_color * ink;               // line color (instance attribute), by the ink
+    v_color = vec4(a_color.rgb, a_color.a * ink);  // line color (instance attribute), its alpha by the ink
 }`;
 }
 
@@ -344,7 +344,7 @@ in float v_width;       // half the line width (pixels)
 in float v_line_pos;    // position along the line
 in float v_seg_length;  // segment length
 in float v_linesofar;   // cumulative distance (drawing-buffer px, for dashes)
-in vec4 v_color;        // line color (opacity already folded in)
+in vec4 v_color;        // line color, not premultiplied (its opacity in its alpha)
 
 uniform float u_dashEnabled;  // flag that enables the dash pattern
 uniform vec4 u_dashArray;     // [dash, gap, period, 0] in drawing-buffer px
@@ -389,6 +389,7 @@ void main() {
         }
     }
 
-    // The factor is multiplied into the whole value the same way the existing coverage is
-    fragColor = v_color * coverage * u_opacity;
+    // The frame blends a color that is not premultiplied: the coverage and the factor go to the
+    // alpha only (blend.ts)
+    fragColor = vec4(v_color.rgb, v_color.a * coverage * u_opacity);
 }`;

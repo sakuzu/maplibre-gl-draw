@@ -18,6 +18,7 @@
  * two-stage arrangement). The condition for dropping is decided here by `canDrape`.
  */
 
+import { isLayerDrawnFromRows } from '../../../feature-table/held-order.js';
 import { coordinatesOf } from '../../../shared/utils/coordinates.js';
 import { getCreatedZoom } from '../../../shared/utils/property.js';
 import { getDisplayFeatures, isLocallyHidden } from '../../../store/local-visibility.js';
@@ -213,6 +214,9 @@ export function collectDrapeElements(
       }
       continue;
     }
+    // A layer held as rows is drawn from its rows alone: the features of its rows held are not
+    // painted on the ground besides
+    if (isLayerDrawnFromRows(store.tables, layer)) continue;
     const layerSource = drapeLayerSource(layerIndex++, datasets.length);
     if (layerSource > 0) context.layerSources.set(layerId, layerSource);
     // A layer without a source of its own has its opacity baked into its colors

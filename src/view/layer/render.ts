@@ -15,6 +15,7 @@ import type {
   LayeredOverlayRenderer,
 } from '../../extension/index.js';
 import { featureTablesInternals } from '../../feature-table/feature-tables.js';
+import { isLayerDrawnFromRows } from '../../feature-table/held-order.js';
 import type { Store } from '../../store/store.js';
 import type { BoundingBox, Feature, Layer } from '../../store/types.js';
 import type { FeatureCompanionRegistry } from '../feature-companion.js';
@@ -175,10 +176,19 @@ export function renderLayers(
     // The custom renderers and the companions of the layer get its opacity in their context
     const layerContext = layerRendererContext(customRendererContext, layer);
 
-    const table = tables?.layerTable(layerId);
-    if (table && tables && tableRetained) {
-      // A layer held as rows: drawn from its rows, unless the layer is hidden
-      if (rowRenderers && layer.visible !== false && !store.isHidden(layerId)) {
+    if (isLayerDrawnFromRows(store.tables, layer)) {
+      // A layer held as rows: drawn from its rows only, unless the layer is hidden. One that
+      // has no rows yet draws nothing: a cache of the features of objects of the same id, built
+      // for another document the instance drew, is not its own
+      const table = tables?.layerTable(layerId);
+      if (
+        table &&
+        tables &&
+        tableRetained &&
+        rowRenderers &&
+        layer.visible !== false &&
+        !store.isHidden(layerId)
+      ) {
         tableRetained.drawLayer(
           tables,
           table,
@@ -195,9 +205,6 @@ export function renderLayers(
           },
         );
       }
-    } else if (tables && layer.kind === 'table') {
-      // A layer held as rows that has no rows yet draws nothing: a cache of the features of
-      // objects of the same id, built for another document the instance drew, is not its own
     } else if (useRetained && retainedRenderers) {
       storeRetained.drawLayer(
         layerId,

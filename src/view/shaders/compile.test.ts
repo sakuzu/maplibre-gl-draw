@@ -338,6 +338,28 @@ describe('shader programs on a real WebGL2', () => {
     }
   });
 
+  it('takes no number out of an attribute with an operation GLSL ES 3.00 lets err', () => {
+    // A number an attribute carries (a row, a kind, an index) is read as it is (`int(a_x)`,
+    // `int(a_x + 0.5)`: exact for the integers a float holds) or from an integer attribute with
+    // shifts and masks. A division may err by 2.5 ULP, and `floor`, `fract` and `mod` of it move
+    // to the next integer on a GPU that uses the freedom (SwiftShader divides exactly)
+    const code = (source: string): string => source.replace(/\/\/[^\n]*/g, '');
+    const roundedQuotient = /\b(floor|fract|mod|u?int)\s*\([^;]*\ba_\w+[^;]*\//;
+    const ofAttribute = /\b(floor|fract|mod)\s*\([^;]*\ba_\w+/;
+    for (const program of recordPrograms(preludes[0])) {
+      for (const stage of [program.vertex, program.fragment]) {
+        const lines = code(stage).split('\n');
+        expect(
+          lines.filter((line) => roundedQuotient.test(line) || ofAttribute.test(line)),
+          program.name,
+        ).toEqual([]);
+      }
+    }
+    // The rows drawn in one draw read their kind and their row from an integer attribute
+    const rows = recordPrograms(preludes[0]).find((p) => p.name.endsWith('RowsRenderer #1'));
+    expect(rows?.vertex).toMatch(/\bin uint a_tag;/);
+  });
+
   it('reports a broken shader (the check itself works)', async () => {
     const [program] = recordPrograms(preludes[0]);
     const broken = { ...program, name: 'broken', fragment: program.fragment.replace(';', '') };
