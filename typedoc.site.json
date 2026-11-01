@@ -25,6 +25,7 @@
     "Store",
     "Extensions",
     "Style rule functions",
+    "Color functions",
     "GeoJSON functions",
     "Parse functions",
     "Measure",

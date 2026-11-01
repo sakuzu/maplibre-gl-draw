@@ -31,6 +31,7 @@ const MAIN_CATEGORIES = [
   'Store',
   'Extensions',
   'Style rule functions',
+  'Color functions',
   'GeoJSON functions',
   'Parse functions',
 ];
