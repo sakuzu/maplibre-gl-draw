@@ -236,6 +236,10 @@ export function createMapStub(options: { boxZoomEnabled?: boolean } = {}) {
     map: map as unknown as MapLibreMap,
     canvas,
     layers,
+    /** Hands an event to the listeners of the canvas, as the browser would */
+    fireCanvas: (type: string, event: unknown) => {
+      for (const fn of [...(canvasListeners.get(type) ?? [])]) fn(event);
+    },
     mapListenerCount: () => count(mapListeners),
     canvasListenerCount: () => count(canvasListeners),
     isBoxZoomEnabled: () => boxZoomEnabled,

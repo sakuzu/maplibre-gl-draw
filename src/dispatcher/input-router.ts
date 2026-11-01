@@ -33,6 +33,7 @@ import type { Coordinate, DragTargets, TentativeState } from '../store/types.js'
 import type { InputNormalizer } from './normalizer.js';
 import type {
   DragNormalizedEvent,
+  KeyNormalizedEvent,
   MapClickEventPayload,
   ModifierKeys,
   MouseNormalizedEvent,
@@ -57,7 +58,8 @@ export interface InputRouter {
    * all take effect in the same way. The tests and `draw.drawing` use this to drive the modes.
    *
    * @returns True when a receiver took the event: a plugin or a mode of the extension contract
-   *   consumed it, or the mode of the engine has a receiver for it
+   *   consumed it, or the mode of the engine has a receiver for it. A key down is taken only
+   *   when it was used (its default action is then prevented)
    */
   dispatch(event: NormalizedEvent): boolean;
 
@@ -539,12 +541,15 @@ export function createInputRouter(deps: InputRouterDeps): InputRouter {
         return engineOr(toExtensions(handler, event, event, null), handler.onDragCancel, () =>
           handler.onDragCancel?.(event),
         );
+      // The single place where a key used has its default action prevented: by a plugin that
+      // consumed it, by a mode of the contract that consumed it (or that an Escape interrupted),
+      // or by a mode of the engine that used it. A page listening to the same keys outside the
+      // canvas tells a key used from `defaultPrevented` and does not handle it twice; a key no
+      // one used is left to the map (an arrow key pans it) and to the page
       case 'keydown': {
-        if (extensionInput?.toPlugins(event, event, null)) return true;
-        const consumed = extensionInput?.toMode(handler, event, event, null);
-        if (consumed !== undefined) return consumed;
-        handler.onKeyDown?.(event);
-        return handler.onKeyDown !== undefined;
+        const used = handleKeyDownEvent(handler, event);
+        if (used) event.originalEvent.preventDefault();
+        return used;
       }
       case 'keyup':
         return engineOr(toExtensions(handler, event, event, null), handler.onKeyUp, () =>
@@ -567,6 +572,18 @@ export function createInputRouter(deps: InputRouterDeps): InputRouter {
     if (route !== 'engine') return route === 'consumed';
     run();
     return receiver !== undefined;
+  }
+
+  /**
+   * A key down: to the plugins, then to the mode
+   *
+   * @returns Whether the key was used
+   */
+  function handleKeyDownEvent(handler: EngineModeHandler, event: KeyNormalizedEvent): boolean {
+    if (extensionInput?.toPlugins(event, event, null)) return true;
+    const consumed = extensionInput?.toMode(handler, event, event, null);
+    if (consumed !== undefined) return consumed;
+    return handler.onKeyDown?.(event) === true;
   }
 
   function handleClick(handler: EngineModeHandler, event: MouseNormalizedEvent): void {

@@ -220,6 +220,10 @@ writing it. Its changes are listed after those of 3.0.0.
 
 ### Changed in 3.0.0
 
+- A key a plugin or a mode of an extension consumes (`onKeyDown` returns
+  true) has its default action prevented, so the map no longer also acts
+  on it (an arrow key consumed does not pan). Return true only for a key
+  that did something.
 - The values of `properties` are `Value`s (`DrawProperties`). A bigint
   is held as a number or a `BigInteger`, a `Uint8Array` as `Bytes`, and
   a `Date`, a `Map`, an instance of another class, a function or a
@@ -364,6 +368,18 @@ writing it. Its changes are listed after those of 3.0.0.
 
 ### Fixed in 3.0.0
 
+- A key the library uses has its default action prevented, in every mode
+  and whoever uses it: the select mode, the drawing modes, a plugin or a
+  mode of an extension that consumes it, and the Escape that cancels a
+  drag. Delete and Backspace deleting a vertex or the selection, Escape
+  clearing a selection, and Enter, Backspace and Escape of the drawing
+  modes did not prevent it, so a page that also listens for the keys on
+  `document` and skips those with `defaultPrevented` handled them a
+  second time (a vertex deleted with Delete was followed by the deletion
+  of its whole feature). A key that does nothing (Delete with nothing
+  selected, Escape with nothing to clear, Enter with too few vertices,
+  Backspace with none, Cmd/Ctrl+G with nothing to group) is left to the
+  map and the page.
 - A rotation, a resize, a drag of the radius of a circle and a drag of a
   handle of an extension on a feature no longer snap to the features they
   change, as a move did not already: the pointer was pulled to an edge or

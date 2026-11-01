@@ -19,9 +19,9 @@
  * long press time) are closed inside this file (POINTER_PROFILES).
  *
  * A press also ends without a release (`dragcancel`) when the window loses focus or
- * Escape is pressed during a drag; that Escape is not delivered as a keydown. A mouse
- * press whose button is found up on a mousemove (the release happened where the page
- * could not see it) is released at its last position.
+ * Escape is pressed during a drag; that Escape is not delivered as a keydown, and its
+ * default action is prevented. A mouse press whose button is found up on a mousemove (the
+ * release happened where the page could not see it) is released at its last position.
  *
  * The canvas takes the keyboard focus when it is pressed (a mode that consumes the
  * mousedown prevents the browser from moving the focus), and a dblclick that a mode
@@ -640,9 +640,11 @@ export function createInputNormalizer(
 
   // Keyboard event handlers
   function handleKeyDown(e: KeyboardEvent): void {
-    // Escape during a drag cancels the drag, and the key is used up by that
+    // Escape during a drag cancels the drag, and the key is used up by that: its default action
+    // is prevented, as the input router prevents that of every key used
     if (e.key === 'Escape' && press?.dragging) {
       cancelPress(press, press.lastEvent);
+      e.preventDefault();
       return;
     }
     const event: KeyNormalizedEvent = {
@@ -653,7 +655,7 @@ export function createInputNormalizer(
       originalEvent: e,
     };
     emit(event);
-    // A map key a mode used (it prevented the default action) does not also reach
+    // A map key used (the input router prevented its default action) does not also reach
     // MapLibre's keyboard handler, which listens on the map container (an arrow key would
     // move the selection and pan the map). Other keys keep bubbling to the page
     if (e.defaultPrevented && MAP_KEYS.has(e.key)) e.stopPropagation();

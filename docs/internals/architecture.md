@@ -588,9 +588,15 @@ long press, double tap) are closed inside the normalizer. Further rules:
 - The canvas is focused on a mouse press, because a mode that consumes
   `mousedown` also prevents the browser's focus change. Keys are read on
   the canvas.
-- A mode consumes a `dblclick` or a key with
-  `originalEvent.preventDefault()`; the normalizer then also keeps
-  maplibre's double click zoom or keyboard handler from acting on it.
+- A mode consumes a `dblclick` with `originalEvent.preventDefault()`.
+  A key is used when a plugin or a mode of the contract consumes it, or
+  `onKeyDown` of a mode of the engine returns true; the InputRouter then
+  prevents its default action, in one place for every key (the keydown
+  branch of `handleEvent`). The normalizer prevents that of the Escape
+  that cancels a drag. Either way, the normalizer then also keeps
+  maplibre's double click zoom or keyboard handler from acting on it,
+  and a page listening for the same keys tells a key used from
+  `defaultPrevented`.
 
 How maplibre's own handlers are kept intact is described in
 [maplibre-coupling.md](./maplibre-coupling.md).
@@ -656,7 +662,9 @@ The methods are all optional:
   `onMouseUp`, `onDragStart`, `onDragMove`, `onDragEnd`, `onDragCancel`.
   `onMouseDown` returns `true` to consume the press, which stops it from
   reaching maplibre
-- Keyboard: `onKeyDown`, `onKeyUp`
+- Keyboard: `onKeyDown`, `onKeyUp`. `onKeyDown` returns `true` only when
+  the key did something, and the InputRouter then prevents its default
+  action
 - Vertices while drawing: `undoVertex`, `redoVertex`
 - Snapping: `isSnapEnabledFor(type)` declines snapping per input kind;
   `getSnapPreference()` names the feature to prefer when candidates tie;

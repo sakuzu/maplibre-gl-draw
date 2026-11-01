@@ -345,6 +345,25 @@ instance is read-only or under the interaction lock; then, and without a
 selection, the key is left to the map, which pans. A double click on a
 feature does not zoom the map.
 
+A key the library uses, in any mode, has its default action prevented
+(`KeyboardEvent.preventDefault()`), and a key it does not use is left
+alone: Delete with nothing selected, Escape with nothing to cancel or
+clear, Enter or Backspace while a drawing mode has nothing to finish or
+remove. A key a plugin or a mode of an extension consumes is prevented
+the same way. A page that also listens for the same keys outside the
+canvas (on `document`, for the panels around the map) can skip the keys
+the map already used:
+
+<!-- docs-check:
+declare function deleteFromThePanel(): void;
+-->
+```ts
+document.addEventListener('keydown', (event) => {
+  if (event.defaultPrevented) return; // the map used it
+  if (event.key === 'Delete') deleteFromThePanel();
+});
+```
+
 A drag ends without being written when the window loses the focus, and a
 press released outside the page is released where the pointer last was.
 

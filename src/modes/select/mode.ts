@@ -675,29 +675,31 @@ export class SelectMode implements EngineModeHandler {
   // Keyboard / MouseMove
   // ============================================================================
 
-  onKeyDown(event: KeyNormalizedEvent): void {
+  /**
+   * A key down: the shortcuts of the selection. The input router prevents the default action of
+   * a key used, so a key is used only when it did something
+   *
+   * @returns whether the key was used
+   */
+  onKeyDown(event: KeyNormalizedEvent): boolean {
     const { plugins, store } = this.#context;
 
     // Skip destructive key operations during a plugin interaction
     if (plugins?.isPluginInteracting()) {
-      if (event.key === 'Escape') {
-        plugins.cancelPluginInteraction();
-      }
-      return;
+      if (event.key !== 'Escape') return false;
+      plugins.cancelPluginInteraction();
+      return true;
     }
 
     // Escape during a drag cancels the drag (the InputNormalizer already turns a real
     // Escape into dragcancel; this covers synthetic input)
     if (event.key === 'Escape' && (this.#dragHandler.isActive() || store.getBoxSelection())) {
       this.onDragCancel();
-      return;
+      return true;
     }
 
     // Arrow keys: move the selection by a few pixels. A used key is not also a map pan
-    if (handleNudgeShortcut(this.#context, event.key, event.modifiers, this.#nudge)) {
-      event.originalEvent.preventDefault();
-      return;
-    }
+    if (handleNudgeShortcut(this.#context, event.key, event.modifiers, this.#nudge)) return true;
     // Another key: the moves of the arrow keys waiting are written first
     this.#nudge.flush();
 
@@ -705,25 +707,19 @@ export class SelectMode implements EngineModeHandler {
 
     // Cmd+G / Ctrl+G: group
     if (event.key.toLowerCase() === 'g' && isMetaOrCtrl && !event.modifiers.shift) {
-      event.originalEvent.preventDefault();
-      handleGroupShortcut(this.#context);
-      return;
+      return handleGroupShortcut(this.#context);
     }
     // Shift+Cmd+G / Shift+Ctrl+G: ungroup
     if (event.key.toLowerCase() === 'g' && isMetaOrCtrl && event.modifiers.shift) {
-      event.originalEvent.preventDefault();
-      handleUngroupShortcut(this.#context);
-      return;
+      return handleUngroupShortcut(this.#context);
     }
     // Delete / Backspace: delete the selection
     if (event.key === 'Delete' || event.key === 'Backspace') {
-      handleDeleteShortcut(this.#context);
-      return;
+      return handleDeleteShortcut(this.#context);
     }
     // Escape: cancel the box selection / clear the selection
-    if (event.key === 'Escape') {
-      handleEscapeShortcut(this.#context);
-    }
+    if (event.key === 'Escape') return handleEscapeShortcut(this.#context);
+    return false;
   }
 
   onMouseMove(event: MouseNormalizedEvent): void {
