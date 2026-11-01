@@ -119,6 +119,61 @@ describe('draw.rendered', () => {
     expect(draw.rendered.getSelectionBox('none')).toBeNull();
   });
 
+  it('gives the footprint as it is drawn: the box the selection box adds the margin to', () => {
+    const a = line();
+    const point = draw.features.create({
+      type: 'Point',
+      geometry: { type: 'Point', coordinates: [1, 1] },
+    }) as Feature;
+    // An image of 100 by 50 pixels at zoom 1, turned by 30 degrees: its four corners as drawn
+    const image = draw.features.create({
+      type: 'Image',
+      geometry: { type: 'Point', coordinates: [2, 2] },
+      properties: {
+        'maplibre-gl-draw:imageWidth': 100,
+        'maplibre-gl-draw:imageHeight': 50,
+        'maplibre-gl-draw:createdZoom': 1,
+        'maplibre-gl-draw:rotation': 30,
+      },
+    }) as Feature;
+    const { context } = engine;
+    const extensions = context.selectionScope.extensions;
+    const transform = createCoordinateTransform(draw.getMap());
+    for (const feature of [a, image]) {
+      const expected = selectionBoxOf(
+        context.store.getFeature(feature.id) as StoredFeature,
+        transform,
+        0,
+        extensions,
+      );
+      const footprint = draw.rendered.getFootprint(feature.id);
+      if (footprint?.kind !== 'ground' || expected?.kind !== 'ground') {
+        throw new Error('not on the map');
+      }
+      expect(footprint.corners).toEqual({
+        topLeft: expected.topLeft,
+        topRight: expected.topRight,
+        bottomRight: expected.bottomRight,
+        bottomLeft: expected.bottomLeft,
+      });
+    }
+    // The line: the extent of its positions, without the margin
+    const ofLine = draw.rendered.getFootprint(a.id);
+    expect(ofLine?.kind === 'ground' && ofLine.corners.topLeft).toEqual([0, 1]);
+    // The image is turned: its corners are not those of an upright box
+    const ofImage = draw.rendered.getFootprint(image.id);
+    if (ofImage?.kind !== 'ground') throw new Error('not on the map');
+    expect(ofImage.corners.topLeft[1]).not.toBeCloseTo(ofImage.corners.topRight[1], 6);
+    // A point: the box of its marker on the screen, without the margin
+    expect(draw.rendered.getFootprint(point.id)).toEqual({
+      kind: 'screen',
+      position: [1, 1],
+      halfWidthPx: 8,
+      halfHeightPx: 8,
+    });
+    expect(draw.rendered.getFootprint('none')).toBeNull();
+  });
+
   it('has no dragged rows over a Store of objects', () => {
     expect(draw.rendered.getDraggedRows()).toBeNull();
   });

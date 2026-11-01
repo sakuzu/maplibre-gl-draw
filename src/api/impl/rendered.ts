@@ -72,39 +72,46 @@ export function createRendered(deps: RenderedDeps): {
       if (!Array.isArray(ids)) throw invalidInput('The IDs must be an array');
       return ids.map((id) => read(id) as Feature | undefined);
     },
-    getSelectionBox(id) {
-      const feature = read(id);
-      if (!feature) return null;
-      const box = selectionBoxOf(
-        feature,
-        createCoordinateTransform(map),
-        deps.selectionStyle.box.margin,
-        deps.selectionExtensions,
-      );
-      if (!box) return null;
-      const footprint: Footprint =
-        box.kind === 'screen'
-          ? {
-              kind: 'screen',
-              position: [box.position[0], box.position[1]],
-              halfWidthPx: box.halfWidth,
-              halfHeightPx: box.halfHeight,
-            }
-          : {
-              kind: 'ground',
-              corners: {
-                topLeft: [box.topLeft[0], box.topLeft[1]],
-                topRight: [box.topRight[0], box.topRight[1]],
-                bottomRight: [box.bottomRight[0], box.bottomRight[1]],
-                bottomLeft: [box.bottomLeft[0], box.bottomLeft[1]],
-              },
-            };
-      return footprint;
-    },
+    getSelectionBox: (id) => boxOf(id, deps.selectionStyle.box.margin),
+    getFootprint: (id) => boxOf(id, 0),
     getDraggedRows(): DraggedRows | null {
       return draggedRowsOf(store.tables);
     },
   };
+
+  /**
+   * The box of a feature as it is drawn, made by the function the selection UI draws it with: its
+   * footprint with a margin (none for the footprint itself)
+   */
+  function boxOf(id: string, margin: number): Footprint | null {
+    const feature = read(id);
+    if (!feature) return null;
+    const box = selectionBoxOf(
+      feature,
+      createCoordinateTransform(map),
+      margin,
+      deps.selectionExtensions,
+    );
+    if (!box) return null;
+    const footprint: Footprint =
+      box.kind === 'screen'
+        ? {
+            kind: 'screen',
+            position: [box.position[0], box.position[1]],
+            halfWidthPx: box.halfWidth,
+            halfHeightPx: box.halfHeight,
+          }
+        : {
+            kind: 'ground',
+            corners: {
+              topLeft: [box.topLeft[0], box.topLeft[1]],
+              topRight: [box.topRight[0], box.topRight[1]],
+              bottomRight: [box.bottomRight[0], box.bottomRight[1]],
+              bottomLeft: [box.bottomLeft[0], box.bottomLeft[1]],
+            },
+          };
+    return footprint;
+  }
 
   // The features whose shape as drawn changed since the last notification
   const changed = new Set<string>();

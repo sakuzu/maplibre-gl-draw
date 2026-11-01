@@ -172,8 +172,10 @@ writing it. Its changes are listed after those of 3.0.0.
 - `draw.rendered` (`RenderedResource`), the features as this client draws
   them: `get` and `getMany` read them with the sketches applied over the
   document, `getSelectionBox` gives the selection box of a feature (its
-  footprint with the margin) in the view drawn last, and
-  `getDraggedRows`, experimental, the rows dragged in bulk. The event
+  footprint with the margin) in the view drawn last, `getFootprint` its
+  footprint without the margin (the four corners of an image as it is
+  drawn, the footprint a custom type declares), and `getDraggedRows`,
+  experimental, the rows dragged in bulk. The event
   `rendered.changed` tells the features whose shapes changed (a write of
   features or of rows, or a sketch), once the draw of the map that draws
   them is done, at most once a draw; the look and the selection box,

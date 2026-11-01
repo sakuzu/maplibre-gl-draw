@@ -231,9 +231,11 @@ reads the feature as it is drawn from `ctx.draw.rendered`: with the
 sketches (`draw.sketches`) applied over the document, while it is edited
 and not written yet. `rendered.getSelectionBox(id)` gives
 its selection box, the footprint with the margin, as the library draws
-and hits it in the view drawn last. `rendered.changed` tells the
-features whose shapes changed, once the draw of the map that draws them
-is done. It tells no change of the look nor of the selection box with
+and hits it in the view drawn last, and `rendered.getFootprint(id)` its
+footprint without the margin, the box the library makes it from (the
+four corners of an image as it is drawn, say). `rendered.changed` tells
+the features whose shapes changed, once the draw of the map that draws
+them is done. It tells no change of the look nor of the selection box with
 the view: read those at each draw. What writes reads the document,
 `ctx.draw.features`.
 

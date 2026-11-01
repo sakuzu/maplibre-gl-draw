@@ -230,6 +230,8 @@ ctx.on('dataset.removed', ({ datasetId }) => forget(datasetId));
 (`draw.sketches`) が文書の上に当てられた、書く前の編集の途中の形です。
 `rendered.getSelectionBox(id)` は、その選択の枠 (外形に余白を足したもの)
 を、最後に描いた画面でライブラリーが描いて当てるとおりに渡します。
+`rendered.getFootprint(id)` は、余白の無い外形、つまりライブラリーが
+選択の枠を作る元の箱 (描かれている画像の 4 隅など) を渡します。
 `rendered.changed` は、形が変わった地物を、それを描く 1 回を描き終えた
 ときに知らせます。見た目の変化と、画面に合わせて変わる選択の枠は知らせ
 ないので、描くたびに読んでください。書くものは文書 `ctx.draw.features`

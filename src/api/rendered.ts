@@ -44,6 +44,19 @@ export interface RenderedResource {
    */
   getSelectionBox(id: string): Footprint | null;
   /**
+   * The footprint of a feature as it is drawn, in the view drawn last: what it covers, without
+   * the margin of the selection box. For a custom type, the footprint its type declares
+   * (`FeatureTypeDefinition.footprint`); for a built-in type and a type that declares none, the
+   * footprint of its geometry as the library makes it (the four corners of an image, turned and
+   * scaled as it is drawn; the extent of the positions of a shape; a box of a fixed size on the
+   * screen around a point, the size of its marker). It is the box `getSelectionBox` adds the
+   * margin to.
+   *
+   * @returns The footprint, or `null` when there is no feature with this ID or it has nothing to
+   *   draw
+   */
+  getFootprint(id: string): Footprint | null;
+  /**
    * The rows of a layer held as rows being dragged in bulk, and where each of them is drawn, while
    * they are drawn moved and not written yet: what is drawn with such a row reads where it is
    * drawn here, in each draw of the map. Its type is in `@sakuzu/maplibre-gl-draw/kasane`.
