@@ -781,7 +781,11 @@ draw.features.update(featureId, {
 - `ctx.drawing` は無くなりました。同じものが `ctx.draw.drawing` です
 - `boxSelect(feature, boxPx, ctx)` の画面の箱の引数は `boxPx` です
 - 地物の `Hit` は、その地物を `id` だけで指します。`featureId` は、
-  付き物かハンドルが属する地物です
+  付き物が属する地物です。ライブラリーが作らないので、種類 `handle` は
+  無くなりました
+- 地物の型の `hitTest` は距離だけ `{ distancePx }` を、付き物の提供者の
+  `hitTest` は ID と距離 `{ id, distancePx }` を返します。外に渡す `Hit`
+  (種類、地物の ID、`featureId`) はライブラリーが埋めます
 - プラグインは、宣言の併合で `DrawEvents` に足した自分のイベントを
   `ctx.emit(event, payload)` で送ります。どのイベントとも同じく
   `draw.on` で購読します

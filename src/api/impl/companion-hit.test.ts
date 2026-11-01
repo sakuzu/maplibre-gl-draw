@@ -10,6 +10,10 @@
  * the stacking order decides between different features, the handles of the selection come
  * before everything, and a feature and its companion come before the rows of a dataset
  * below them. The map stub projects one degree to one hundred pixels.
+ *
+ * A feature type answers its hit test with the distance only, and a companion provider with its
+ * ID and the distance: the library fills in the hit it gives out (`map.clicked`,
+ * `ModeContext.hitTest`, the `onClick` of the provider) with the kind and the feature.
  */
 
 import type { LineString, Point } from 'geojson';
@@ -18,6 +22,8 @@ import type { DragNormalizedEvent, MouseNormalizedEvent } from '../../dispatcher
 import { createMapStub, createSyntheticInput } from '../../test-utils.js';
 import type { Draw } from '../draw.js';
 import type { DrawEvents } from '../events.js';
+import type { ModeContext } from '../extension/context.js';
+import type { Hit } from '../extension/provider.js';
 import type { Feature } from '../model.js';
 import { createDrawOnEngine } from './create-draw.js';
 import type { Engine } from './engine.js';
@@ -119,7 +125,7 @@ function point(lngLat: [number, number], style: Feature['style'] = {}): Feature 
  *
  * @returns The IDs of the features whose companion received a click
  */
-function companionOf(ids: string[], radiusPx: number, consume = true): string[] {
+function companionOf(ids: string[], radiusPx: number, consume = true, hits: Hit[] = []): string[] {
   const clicked: string[] = [];
   draw.extensions.companionProviders.add({
     name: 'lead',
@@ -128,12 +134,11 @@ function companionOf(ids: string[], radiusPx: number, consume = true): string[] 
     hitTest(feature, ctx) {
       const [x, y] = ctx.screen.project((feature.geometry as Point).coordinates);
       const distancePx = Math.hypot(ctx.point[0] - x, ctx.point[1] - y);
-      return distancePx <= radiusPx
-        ? { kind: 'companion', id: `lead-${feature.id}`, featureId: feature.id, distancePx }
-        : null;
+      return distancePx <= radiusPx ? { id: `lead-${feature.id}`, distancePx } : null;
     },
-    onClick(feature) {
+    onClick(feature, hit) {
       clicked.push(feature.id);
+      hits.push(hit);
       return consume;
     },
   });
@@ -204,9 +209,7 @@ describe('a Point type that takes only some points', () => {
         tolerances.push(ctx.tolerancePx);
         const [x, y] = ctx.screen.project((feature.geometry as Point).coordinates);
         const distancePx = Math.hypot(ctx.point[0] - x, ctx.point[1] - y);
-        return distancePx <= ctx.tolerancePx
-          ? { kind: 'feature', id: feature.id, distancePx }
-          : null;
+        return distancePx <= ctx.tolerancePx ? { distancePx } : null;
       },
     });
     const plain = point([0, 0]);
@@ -322,3 +325,69 @@ describe('a dataset below the document', () => {
     expect(rows.map((row) => row.datasetId)).toEqual(['land']);
   });
 });
+
+describe('the hits the library gives out', () => {
+  /** The context of a mode, entered for the test */
+  function modeContext(): ModeContext {
+    let captured: ModeContext | null = null;
+    draw.extensions.modes.add('probe', (ctx) => {
+      captured = ctx;
+      return {};
+    });
+    draw.setMode('probe');
+    if (!captured) throw new Error('the mode was not entered');
+    return captured;
+  }
+
+  it('fills in a hit of a companion with its kind, its ID, its feature and its distance', () => {
+    const p = point([0, 0]);
+    const hits: Hit[] = [];
+    companionOf([p.id], 100, false, hits);
+    const clicks: DrawEvents['map.clicked'][] = [];
+    draw.on('map.clicked', (payload) => clicks.push(payload));
+    draw.setMode('select');
+    pointerClick([0.5, 0]);
+    const expected = { kind: 'companion', id: `lead-${p.id}`, featureId: p.id };
+    expect(hits).toEqual([expect.objectContaining(expected)]);
+    expect(hits[0].distancePx).toBeCloseTo(50, 0);
+    expect(clicks.map((click) => click.hit)).toEqual([expect.objectContaining(expected)]);
+    const ctx = modeContext();
+    expect(ctx.hitTest(screenPointOf([0.5, 0]))).toEqual(expect.objectContaining(expected));
+  });
+
+  it('fills in a hit of a custom type with the kind feature and the ID of the feature', () => {
+    draw.extensions.featureTypes.add({
+      type: 'pin',
+      geometry: 'Point',
+      renderer: { onAdd() {}, draw() {}, onRemove() {} },
+      hitTest(feature, ctx) {
+        const [x, y] = ctx.screen.project((feature.geometry as Point).coordinates);
+        const distancePx = Math.hypot(ctx.point[0] - x, ctx.point[1] - y);
+        return distancePx <= 20 ? { distancePx } : null;
+      },
+    });
+    const pin = draw.features.create({
+      type: 'pin',
+      geometry: { type: 'Point', coordinates: [1, 1] },
+    });
+    if (!pin) throw new Error('no feature');
+    const clicks: DrawEvents['map.clicked'][] = [];
+    draw.on('map.clicked', (payload) => clicks.push(payload));
+    draw.setMode('select');
+    pointerClick([1.04, 1]);
+    const hit = clicks[0]?.hit;
+    expect(hit).toEqual({ kind: 'feature', id: pin.id, distancePx: expect.any(Number) });
+    const ctx = modeContext();
+    expect(ctx.hitTest(screenPointOf([1.04, 1]))).toEqual({
+      kind: 'feature',
+      id: pin.id,
+      distancePx: expect.any(Number),
+    });
+  });
+});
+
+/** The screen point of a position, as a mode is given it */
+function screenPointOf(lngLat: [number, number]): [number, number] {
+  const { x, y } = screenOf(lngLat);
+  return [x, y];
+}

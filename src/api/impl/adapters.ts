@@ -816,7 +816,15 @@ export function adaptCompanionProvider(
         screen: deps.screen,
         ...hitExclusion(deps.store),
       });
-      return hit ? ({ id: hit.id, contractHit: hit } as { id: string; contractHit: Hit }) : null;
+      if (!hit) return null;
+      // The hit the library gives out, filled in from what the provider answered
+      const contractHit: Hit = {
+        kind: 'companion',
+        id: hit.id,
+        featureId: feature.id,
+        distancePx: hit.distancePx,
+      };
+      return { id: hit.id, contractHit } as { id: string; contractHit: Hit };
     },
     onCompanionClick(featureId, hit, event?: unknown) {
       const feature = deps.store.getFeature(featureId);

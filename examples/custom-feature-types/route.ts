@@ -84,7 +84,7 @@ export const routeType: FeatureTypeDefinition = {
       best = Math.min(best, segmentDistance(ctx.point, points[i - 1], points[i]));
     }
     const reach = Math.max(ctx.tolerancePx, routeLook(feature).routeWidth / 2);
-    return best <= reach ? { kind: 'feature', id: feature.id, distancePx: best } : null;
+    return best <= reach ? { distancePx: best } : null;
   },
   // A selection box takes a route when one of its vertices is inside
   boxSelect(feature, boxPx, ctx) {

@@ -822,7 +822,8 @@ describe('the overlays', () => {
 
 describe('a companion provider', () => {
   it('keeps the hit it returned and gives it back to onClick with the click', () => {
-    const own: Hit = { kind: 'companion', id: 'label', featureId: 'f', distancePx: 3 };
+    const own = { id: 'label', distancePx: 3 };
+    const filled: Hit = { kind: 'companion', id: 'label', featureId: 'f', distancePx: 3 };
     const onClick = vi.fn(() => true);
     const feature = { id: 'f', type: 'Point', geometry: { type: 'Point', coordinates: [1, 1] } };
     const deps = {
@@ -857,7 +858,11 @@ describe('a companion provider', () => {
       modifiers: { shift: false, ctrl: false, alt: false, meta: false },
     } as MouseNormalizedEvent;
     provider.onCompanionClick('f', hit as never, click);
-    expect(onClick).toHaveBeenCalledWith(feature, own, expect.objectContaining({ lngLat: [1, 1] }));
+    expect(onClick).toHaveBeenCalledWith(
+      feature,
+      filled,
+      expect.objectContaining({ lngLat: [1, 1] }),
+    );
   });
 
   it('tells its hit test what the reading leaves out: the features this client drags', () => {

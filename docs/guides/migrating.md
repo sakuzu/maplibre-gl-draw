@@ -775,7 +775,12 @@ drawn. Each change below names what replaces what is gone.
 - `ctx.drawing` is gone: `ctx.draw.drawing` is the same object
 - `boxSelect(feature, boxPx, ctx)` names its box in pixels `boxPx`
 - A `Hit` of a feature names it by `id` alone; `featureId` is the
-  feature a companion or a handle belongs to
+  feature a companion belongs to. The kind `handle` is gone, as the
+  library makes none
+- The `hitTest` of a feature type returns the distance only,
+  `{ distancePx }`, and the `hitTest` of a companion provider its ID and
+  the distance, `{ id, distancePx }`; the library fills in the `Hit` it
+  gives out (the kind, the ID of the feature, `featureId`)
 - A plugin sends events of its own with `ctx.emit(event, payload)`,
   having declared them in `DrawEvents` by declaration merging, and they
   are subscribed to with `draw.on` as every event is

@@ -340,8 +340,13 @@ writing it. Its changes are listed after those of 3.0.0.
   selection box, so that `bbox` and the box of the selection are not one
   word in two lengths.
 - A `Hit` of a feature names it by `id` alone, as `ModeContext.hitTest`
-  and `map.clicked` give it: `featureId` is the feature a companion or a
-  handle belongs to.
+  and `map.clicked` give it: `featureId` is the feature a companion
+  belongs to. The kind `handle` is gone, as the library makes none.
+- The `hitTest` of a feature type returns the distance only
+  (`{ distancePx }`), and the `hitTest` of a companion provider its ID and
+  the distance (`{ id, distancePx }`): the library fills in the `Hit` it
+  gives out (`map.clicked`, `ModeContext.hitTest`, the `onClick` of the
+  provider) with the kind, the ID of the feature and `featureId`.
 - `Plugin.interaction` is split by what each part does: `onDrawCommit`
   is a member of the plugin, the hooks of the clicks of the select mode
   are `selectMode` (`onFeatureClick`, `onFeatureDoubleClick`), and an

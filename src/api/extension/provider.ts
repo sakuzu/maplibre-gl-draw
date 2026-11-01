@@ -17,19 +17,20 @@ import type { CustomHandle, Handle } from './feature-type.js';
 import type { DrawPointerEvent } from './mode.js';
 import type { RenderContext } from './render.js';
 
-/** What a hit test found. */
+/**
+ * What a hit test of the library found (`ModeContext.hitTest`, `map.clicked`, the hit a
+ * companion provider is given back in `onClick`). The library fills it in: a feature type answers
+ * its hit test with the distance only, and a companion provider with its ID and the distance.
+ */
 export interface Hit {
-  /**
-   * What was hit: a feature, a row of a dataset, a companion of a feature, or a handle on a
-   * feature
-   */
-  kind: 'feature' | 'dataset' | 'companion' | 'handle';
+  /** What was hit: a feature, a row of a dataset, or a companion of a feature */
+  kind: 'feature' | 'dataset' | 'companion';
   /**
    * The ID of what was hit: of the feature, of the row of the dataset, or the ID the companion
-   * or the handle gives itself
+   * gives itself
    */
   id: string;
-  /** The ID of the feature a companion or a handle belongs to; absent for a feature */
+  /** The ID of the feature a companion belongs to; absent for a feature and a row */
   featureId?: string;
   /** The ID of the dataset, for a row of a dataset */
   datasetId?: string;
@@ -161,13 +162,16 @@ export interface CompanionProvider {
    * companion and a companion wins over the features behind its feature; the rows of a
    * dataset come only after the features and the companions in front of them.
    *
-   * @returns What was hit, or `null`
+   * @returns The ID the companion gives itself (`Hit.id`) and the distance from the point in
+   *   pixels, or `null` when the point misses it. The library makes the {@link Hit} of it, with
+   *   the kind `companion` and the feature in `featureId`
    */
-  hitTest(feature: Feature, ctx: PointContext): Hit | null;
+  hitTest(feature: Feature, ctx: PointContext): { id: string; distancePx: number } | null;
   /**
    * A companion was clicked.
    *
-   * @param hit - What `hitTest` returned
+   * @param hit - The hit the library made of what `hitTest` returned: the kind `companion`, the
+   *   ID of the companion, the feature in `featureId` and the distance
    * @returns True to consume the click, which then changes nothing else; false, or nothing,
    *   to leave it to the select mode as a click on the feature
    */

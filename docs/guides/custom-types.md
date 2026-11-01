@@ -243,7 +243,10 @@ Without `hitTest`, a feature of the type is hit like its geometry: a
 line near the pointer, an area under it. `hitTest(feature, ctx)`
 replaces that. It receives the point on the screen, its position on the
 map, the click tolerance in pixels and `screen` to project positions,
-and it returns a `Hit` or `null`:
+and it returns the distance from the point to the feature in pixels,
+`{ distancePx }`, or `null` when the point misses it. The library makes
+the `Hit` it gives out of it (the kind `feature` and the ID of the
+feature):
 
 <!-- docs-check:
 declare function verticesOf(feature: Feature): Position[];
@@ -275,8 +278,7 @@ const hitRoute: FeatureTypeDefinition = {
       best = Math.min(best, d);
     }
     if (best > ctx.tolerancePx) return null;
-    const id = feature.id;
-    return { kind: 'feature', id, distancePx: best };
+    return { distancePx: best };
   },
 };
 ```
@@ -789,9 +791,7 @@ const halo: CompanionProvider = {
   hitTest(feature, ctx) {
     const [x, y] = ctx.screen.project((feature.geometry as Point).coordinates);
     const distancePx = Math.hypot(ctx.point[0] - x, ctx.point[1] - y);
-    return distancePx <= 14
-      ? { kind: 'companion', id: feature.id, featureId: feature.id, distancePx }
-      : null;
+    return distancePx <= 14 ? { id: feature.id, distancePx } : null;
   },
   onClick(feature) {
     console.log('the halo of', feature.id);
@@ -809,6 +809,10 @@ draw.extensions.companionProviders.add(halo);
   row; without it, a feature is made from each row to ask `has` whenever
   the rows are sorted for the drawing
 - `draw` is called just before the feature itself
+- `hitTest` returns the ID the companion gives itself and the distance,
+  `{ id, distancePx }`, or `null`. The library makes the `Hit` it gives
+  out (`map.clicked`, `ModeContext.hitTest`, `onClick`) of it, with the
+  kind `companion` and the feature in `featureId`
 - `hitTest` is asked at the step of its feature: when the pointer missed
   the feature itself, before the feature behind it. At one point on the
   screen a click therefore goes, in this order:

@@ -494,9 +494,7 @@ describe('a point with a companion under the real pointer', () => {
         hitTest(f, ctx) {
           const [x, y] = ctx.screen.project((f.geometry as { coordinates: number[] }).coordinates);
           const distancePx = Math.hypot(ctx.point[0] - x, ctx.point[1] - y);
-          return distancePx <= 60
-            ? { kind: 'companion', id: 'lead', featureId: f.id, distancePx }
-            : null;
+          return distancePx <= 60 ? { id: 'lead', distancePx } : null;
         },
         onClick(f) {
           w.e2eLeadClicks.push(f.id);

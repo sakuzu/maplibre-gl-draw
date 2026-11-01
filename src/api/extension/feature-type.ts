@@ -204,9 +204,11 @@ export interface FeatureTypeDefinition {
   /**
    * Hit tests a feature of this type; the geometry is hit tested when it is left out.
    *
-   * @returns What was hit, or `null`
+   * @returns The distance from the point to the feature, in pixels, or `null` when the point
+   *   misses it. The library makes the {@link Hit} of it (the kind `feature` and the ID of the
+   *   feature)
    */
-  hitTest?(feature: Feature, ctx: PointContext): Hit | null;
+  hitTest?(feature: Feature, ctx: PointContext): { distancePx: number } | null;
   /**
    * Whether a box selection takes a feature of this type.
    *

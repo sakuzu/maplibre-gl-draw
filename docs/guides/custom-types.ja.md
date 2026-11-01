@@ -232,7 +232,10 @@ draw.extensions.featureTypes.add({
 `hitTest` が無いと、その型の地物は図形のとおりに当たります。線なら
 ポインターの近く、面ならポインターの下です。`hitTest(feature, ctx)` は
 それを置き換えます。画面の点、その地図の位置、ピクセルでのクリックの
-許容量、位置を投影する `screen` を受け取り、`Hit` か `null` を返します。
+許容量、位置を投影する `screen` を受け取り、点から地物までのピクセルの
+距離 `{ distancePx }` を返します。点が当たらないときは `null` を返します。
+ライブラリーは、そこから外に渡す `Hit` (種類 `feature` と地物の ID) を
+作ります。
 
 <!-- docs-check:
 declare function verticesOf(feature: Feature): Position[];
@@ -264,8 +267,7 @@ const hitRoute: FeatureTypeDefinition = {
       best = Math.min(best, d);
     }
     if (best > ctx.tolerancePx) return null;
-    const id = feature.id;
-    return { kind: 'feature', id, distancePx: best };
+    return { distancePx: best };
   },
 };
 ```
@@ -744,9 +746,7 @@ const halo: CompanionProvider = {
   hitTest(feature, ctx) {
     const [x, y] = ctx.screen.project((feature.geometry as Point).coordinates);
     const distancePx = Math.hypot(ctx.point[0] - x, ctx.point[1] - y);
-    return distancePx <= 14
-      ? { kind: 'companion', id: feature.id, featureId: feature.id, distancePx }
-      : null;
+    return distancePx <= 14 ? { id: feature.id, distancePx } : null;
   },
   onClick(feature) {
     console.log('the halo of', feature.id);
@@ -763,6 +763,10 @@ draw.extensions.companionProviders.add(halo);
   `/kasane` にあります) が同じ答えを行から返します。無いときは、描く
   ために行を分けるたびに、行ごとに地物を作って `has` に尋ねます
 - `draw` は、地物そのものの直前に呼ばれます
+- `hitTest` は、付き物が自分に付けた ID と距離 `{ id, distancePx }` か、
+  `null` を返します。ライブラリーは、そこから外に渡す `Hit`
+  (`map.clicked`、`ModeContext.hitTest`、`onClick`) を、種類 `companion`
+  と、`featureId` の地物を埋めて作ります
 - `hitTest` は、その地物の段で尋ねられます。ポインターが地物そのもの
   に当たらなかったときに、その後ろの地物より先に尋ねられます。その
   ため、画面の同じ点へのクリックは次の順で行き先が決まります
