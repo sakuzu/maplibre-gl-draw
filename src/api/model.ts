@@ -89,7 +89,10 @@ export interface FeatureStyle {
   lineStyle?: LineStyle;
   /** The color of a point marker */
   pointColor?: string;
-  /** The radius of a point marker, in pixels */
+  /**
+   * The radius of a point marker, in pixels: half its diameter (`PointRenderer.draw` takes the
+   * diameter, `size`)
+   */
   pointRadius?: number;
   /** The shape of a point marker */
   pointShape?: PointShape;

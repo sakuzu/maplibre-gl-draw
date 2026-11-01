@@ -66,7 +66,9 @@ export interface PointRenderer {
    *
    * @param position - The position
    * @param style - The shape, the size in pixels, the fill and the outline (CSS colors,
-   *   opacities from 0 to 1, the outline width in pixels)
+   *   opacities from 0 to 1, the outline width in pixels). The size is the diameter of the
+   *   marker, twice the `pointRadius` of a style: a marker drawn with the look a feature is drawn
+   *   with (`RenderContext.appliedStyle`) takes `size: 2 * look.pointRadius`
    * @param options - `elevationMeters` places the marker at this height instead of on the
    *   ground; `referenceZoom` is the zoom at which the size and the outline width are given, so
    *   that the marker grows and shrinks with the zoom as a line does: it is drawn `2 ** (zoom -
@@ -76,6 +78,7 @@ export interface PointRenderer {
     position: Position,
     style: {
       shape: PointShape;
+      /** The diameter of the marker, in CSS pixels */
       size: number;
       fillColor: string;
       fillOpacity: number;

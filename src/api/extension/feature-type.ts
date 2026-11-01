@@ -50,8 +50,8 @@ export interface CustomHandle {
   /** The position of the handle on the map */
   position: Position;
   /**
-   * The size of the mark the extension draws (its diameter), in CSS pixels, a finite number above
-   * 0: the side of the square the handle is hit in
+   * The side of the square the handle is hit in, around its position, in CSS pixels: a finite
+   * number above 0. The extension draws its mark within it (a round mark of this diameter fits)
    */
   sizePx: number;
   /** The CSS cursor over the handle; `pointer` when it is left out */
@@ -114,9 +114,15 @@ export interface ScreenFootprint {
   kind: 'screen';
   /** The position on the map the box is around */
   position: Position;
-  /** Half the width of the box, in CSS pixels */
+  /**
+   * Half the width of the box, in CSS pixels: the distance from its position to its left or right
+   * edge
+   */
   halfWidthPx: number;
-  /** Half the height of the box, in CSS pixels */
+  /**
+   * Half the height of the box, in CSS pixels: the distance from its position to its top or
+   * bottom edge
+   */
   halfHeightPx: number;
 }
 
