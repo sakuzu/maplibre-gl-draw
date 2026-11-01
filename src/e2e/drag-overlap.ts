@@ -50,7 +50,7 @@ const NO_POINT = {
   strokeOpacity: 0,
 };
 const selectionStyle = {
-  boundingBox: { stroke: NO_STROKE, margin: 0 },
+  box: { stroke: NO_STROKE, margin: 0 },
   resizeHandle: { point: NO_POINT },
   rotateHandle: { point: NO_POINT, distance: 0, connector: NO_STROKE },
   vertexHandle: { point: NO_POINT, selected: NO_POINT, followed: NO_POINT },
