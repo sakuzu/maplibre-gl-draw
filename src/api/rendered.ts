@@ -14,8 +14,10 @@ import type { Feature } from './model.js';
  * (`draw.sketches`, those with an owner first, then those of this client), and their selection
  * boxes in the view drawn last. What is drawn around a feature reads it here, so that it follows
  * the feature as it is drawn, also while it is edited and not written yet; what writes reads the
- * document (`draw.features`). It tells what changed with `rendered.changed`, once a draw of the
- * map that draws the change is done.
+ * document (`draw.features`). It tells the shapes that changed with `rendered.changed`, once a
+ * draw of the map that draws the change is done; the look and the selection box are read at each
+ * draw. It has no look of its own: a renderer reads the look a feature is drawn with in its render
+ * context (`RenderContext.appliedStyle`).
  */
 export interface RenderedResource {
   /**

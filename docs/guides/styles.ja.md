@@ -241,11 +241,12 @@ draw.layers.update(layerId, { styleRule: undefined });
 - `graduated` と `continuous` が受け付けるのは数値だけです。数字の
   文字列には `other` が使われます
 
-`features.getAppliedStyle(id)` は、地物が実際に描かれる見た目を、
+`features.getAppliedStyle(id)` は、文書の地物の値のとおりの見た目を、
 すべてのキーを埋めて返します (`style.circle` と `style.image` の既定と、
 独自の型が宣言した見た目も含みます)。インスペクターのパネルに表示する
-ときに使えます。独自の型の描画器も、同じ答え
-(`ctx.appliedStyle(feature)`) で描きます。
+ときに使えます。下書きは当たりません。独自の型の描画器は、描く地物に
+下書きを当てた見た目を、同じ組み立て方で描く文脈から読みます
+(`ctx.appliedStyle(feature)`)。
 
 ```ts
 const look = draw.features.getAppliedStyle(featureId);

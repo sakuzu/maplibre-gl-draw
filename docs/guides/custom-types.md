@@ -209,7 +209,9 @@ A type declares the look of its features in `defaultStyle`, a
 rather than with `feature.style` and defaults of its own. The library
 puts the look together, the same way for the renderer and for
 `draw.features.getAppliedStyle(id)`, so an inspector panel shows what is
-drawn:
+drawn. `getAppliedStyle` answers for the values of the document, without
+the sketches; the render context answers for the feature it draws, the
+sketches applied:
 
 1. The style of the feature
 2. The color of the style rule of its layer

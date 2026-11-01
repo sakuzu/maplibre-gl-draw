@@ -202,6 +202,8 @@ draw.extensions.featureTypes.add({
 `ctx.appliedStyle(feature)` で描きます。見た目はライブラリーが組み立て、
 描画器にも `draw.features.getAppliedStyle(id)` にも同じ組み立て方で
 答えます。そのため、インスペクターのパネルは描かれているものを見せます。
+`getAppliedStyle` は下書きを当てない文書の値について答え、描く文脈は
+下書きを当てた描く地物について答えます。
 
 1. 地物のスタイル
 2. レイヤーのスタイルの規則の色

@@ -7,8 +7,11 @@
  * A feature as it is drawn is the feature of the Store with the sketches applied over it, and its
  * selection box is made by the function the selection UI draws and hits it with
  * (`selectionBoxOf`). The features changed since the last notification are gathered from the
- * changes of the document and of the sketches, and told once the frame that draws them is drawn:
- * the one signal of the drawing that a frame is drawn, after which the screen answers for it.
+ * changes of the document (the features of a Store of objects and the rows of a Store of rows) and
+ * of the sketches, and told once the draw of the map that draws them is done: the one signal of
+ * the drawing that a draw is done, after which the screen answers for it. A change of the look
+ * (a layer rule, the `style` option, a type added or removed) and of the selection box with the
+ * view (its margin) is not told: those are read at each draw.
  */
 
 import type { Map as MapLibreMap } from 'maplibre-gl';
@@ -131,6 +134,17 @@ export function createRendered(deps: RenderedDeps): {
       for (const feature of features?.created ?? []) changed.add(feature.id);
       for (const update of features?.updated ?? []) changed.add(update.id);
       for (const feature of features?.deleted ?? []) changed.add(feature.id);
+      // The rows a Store of rows wrote, which it tells by their handles, not as features
+      const tables = store.tables;
+      if (!change.rows || !tables) return;
+      for (const rows of change.rows.layers.values()) {
+        for (const handles of [rows.created, rows.updated, rows.deleted]) {
+          for (const handle of handles) {
+            const id = tables.getRowId(handle);
+            if (id !== undefined) changed.add(id);
+          }
+        }
+      }
     }),
     events.on('sketch.added', ({ sketch }) => sketchChanged(sketch, false)),
     events.on('sketch.updated', ({ sketch }) => sketchChanged(sketch, false)),

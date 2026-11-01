@@ -174,8 +174,10 @@ writing it. Its changes are listed after those of 3.0.0.
   document, `getSelectionBox` gives the selection box of a feature (its
   footprint with the margin) in the view drawn last, and
   `getDraggedRows`, experimental, the rows dragged in bulk. The event
-  `rendered.changed` tells the features changed, once the draw of the map
-  that draws them is done, at most once a draw. What is drawn around a
+  `rendered.changed` tells the features whose shapes changed (a write of
+  features or of rows, or a sketch), once the draw of the map that draws
+  them is done, at most once a draw; the look and the selection box,
+  which follows the view, are read at each draw. What is drawn around a
   feature reads it there.
 - `FeatureTypeDefinition.footprint(feature, ctx)`: what a feature of a
   type covers, from which the library makes its selection box (draws it,
@@ -220,8 +222,9 @@ writing it. Its changes are listed after those of 3.0.0.
   the features of a custom type. A definition given to `override` cannot
   have it (`invalid-input`).
 - `RenderContext.appliedStyle(feature)`: the look a feature is drawn
-  with, as `features.getAppliedStyle` answers it, put together by the
-  library in one place, so that the renderer of a custom type draws what
+  with (the feature drawn, the sketches applied), put together as
+  `features.getAppliedStyle` puts the look of the values of the document,
+  by the library in one place, so that the renderer of a custom type draws what
   the library answers, the color of the layer rule included. Reading it
   again gives the same object until the feature, the rule of its layer or
   the `style` option changes.

@@ -116,11 +116,13 @@ export interface RenderContext {
   /** The shared renderer of point markers */
   readonly point: PointRenderer;
   /**
-   * The look a feature is drawn with, as `draw.features.getAppliedStyle` answers it: the look its
-   * type declares (`FeatureTypeDefinition.defaultStyle`, the defaults of its geometry for a type
-   * that declares none), the color of the rule of its layer and the style of the feature, put on
-   * top of each other by the library. A renderer draws with it rather than reading
-   * `feature.style` and defaults of its own, so that what it draws is what the library answers.
+   * The look a feature is drawn with, put together as `draw.features.getAppliedStyle` puts it:
+   * the look its type declares (`FeatureTypeDefinition.defaultStyle`, the defaults of its
+   * geometry for a type that declares none), the color of the rule of its layer and the style of
+   * the feature, put on top of each other by the library. It answers for the feature given, the
+   * one the renderer draws with the sketches applied, where `getAppliedStyle` answers for the
+   * values of the document. A renderer draws with it rather than reading `feature.style` and
+   * defaults of its own, so that what it draws is what the library answers.
    *
    * It is put together once for a feature as it is: reading it again, in the same draw or in the
    * next one, gives the same object until the feature, the rule of its layer or the `style`

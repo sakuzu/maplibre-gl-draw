@@ -211,12 +211,17 @@ export interface DrawEvents {
    */
   'sketch.removed': { sketch: Sketch; reason: SketchEndReason; dropped: number };
   /**
-   * Features as they are drawn changed (`draw.rendered`): `ids` lists the features whose shape,
-   * values or look as drawn changed, by a write of the document or by a sketch, since the last
-   * time, or that were created or deleted. It fires once a draw of the map that draws the change
-   * is done, at most once a draw, and its values (`rendered.get`, `rendered.getSelectionBox`) are
-   * those of that view. The rows dragged in bulk, which are not written while they are dragged,
-   * are read in each draw with `rendered.getDraggedRows`.
+   * The shapes of features as they are drawn changed (`draw.rendered`): `ids` lists the features
+   * a write of the document (of features, or of the rows of a Store of rows) or a sketch changed
+   * since the last time, and those created or deleted. It fires once a draw of the map that draws
+   * the change is done, at most once a draw, and its values (`rendered.get`,
+   * `rendered.getSelectionBox`) are those of that view.
+   *
+   * It tells changes of the shapes only. A change of the look (a layer rule, the `style` option, a
+   * type added or removed) and the selection box that changes with the view (its margin laid on
+   * the map at the scale of the view) are not told: read the look and the selection box at each
+   * draw. The rows dragged in bulk, which are not written while they are dragged, are read in each
+   * draw with `rendered.getDraggedRows`.
    */
   'rendered.changed': { ids: readonly string[] };
   /** The title or the description changed */

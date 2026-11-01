@@ -244,11 +244,13 @@ A dataset takes the same rule type; see
 - `graduated` and `continuous` accept numbers only; a numeric string gets
   `other`
 
-`features.getAppliedStyle(id)` returns the look a feature is drawn with,
-every key filled in (the defaults of `style.circle` and `style.image`
-and the look a custom type declares included), which an inspector panel
-can show. The renderer of a custom type draws with the same answer
-(`ctx.appliedStyle(feature)`):
+`features.getAppliedStyle(id)` returns the look of a feature of the
+document, as its values are, every key filled in (the defaults of
+`style.circle` and `style.image` and the look a custom type declares
+included), which an inspector panel can show. The sketches are not
+applied to it. The renderer of a custom type reads the look of the
+feature it draws, the sketches applied, put together the same way, from
+its render context (`ctx.appliedStyle(feature)`):
 
 ```ts
 const look = draw.features.getAppliedStyle(featureId);

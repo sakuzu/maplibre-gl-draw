@@ -4,12 +4,15 @@
 /**
  * Tests of `draw.rendered`: the features as they are drawn (the sketches applied), their
  * selection boxes made by the function the selection UI draws and hits them with, and
- * `rendered.changed`, told once the frame that draws a change is drawn
+ * `rendered.changed`, told once the draw that draws a change is done: the features written, those
+ * a sketch edits, and the rows a Store of rows writes (it tells them by their handles); not a
+ * change of the look (a layer rule, the `style` option), which a draw reads each time
  */
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createCoordinateTransform } from '../../shared/math/index.js';
 import type { Feature as StoredFeature } from '../../store/types.js';
+import { createTableStore } from '../../store/table-memory.js';
 import { createMapStub } from '../../test-utils.js';
 import { selectionBoxOf } from '../../view/ui/bounds.js';
 import type { Draw } from '../draw.js';
@@ -155,5 +158,68 @@ describe('rendered.changed', () => {
     draw.features.delete(a.id);
     drawFrame();
     expect(told).toEqual([[a.id], [a.id, b.id].sort(), [a.id, b.id].sort()]);
+  });
+
+  it('tells the features of the rows a Store of rows writes, and no change of the look', () => {
+    draw.destroy();
+    const { store } = createTableStore();
+    store.createLayer({
+      id: 'rows',
+      name: 'rows',
+      visible: true,
+      locked: false,
+      opacity: 1,
+      kind: 'table',
+      styleRule: undefined,
+      metadata: undefined,
+    });
+    store.transact(() => {
+      for (const id of ['r0', 'r1', 'r2']) {
+        store.createFeature({
+          id,
+          type: 'Point',
+          geometry: { type: 'Point', coordinates: [0, 0] },
+          layerId: 'rows',
+          groupId: undefined,
+          properties: {},
+          style: {},
+          visible: true,
+          locked: false,
+        });
+      }
+    });
+    const listeners = new Set<() => void>();
+    engine = createEngine(
+      createMapStub().map,
+      { store, initDefaultLayer: false },
+      { deferDefaultMode: true },
+    );
+    engine.customLayer.onFrameDrawn = (listener) => {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    };
+    drawFrame = () => {
+      for (const listener of [...listeners]) listener();
+    };
+    draw = createDrawOnEngine(engine, { store, initDefaultLayer: false });
+    engine.enterDefaultMode();
+    drawFrame();
+    const told: string[][] = [];
+    draw.on('rendered.changed', ({ ids }) => told.push([...ids].sort()));
+    const notified: boolean[] = [];
+    draw.on('document.changed', (change) => {
+      notified.push(change.rows !== undefined && (change.features?.updated ?? []).length === 0);
+    });
+    // Written as rows only: the change names no feature
+    draw.features.update('r1', { geometry: { type: 'Point', coordinates: [1, 1] } });
+    draw.features.delete('r2');
+    expect(notified).toEqual([true, true]);
+    drawFrame();
+    expect(told).toEqual([['r1', 'r2']]);
+    // A change of the look is read by each draw, not told
+    draw.layers.update('rows', { styleRule: { kind: 'single', color: '#00ff00' } });
+    draw.options.update({ style: { point: { pointRadius: 9 } } });
+    drawFrame();
+    expect(told).toHaveLength(1);
   });
 });

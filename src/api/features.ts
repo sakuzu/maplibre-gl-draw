@@ -215,11 +215,12 @@ export interface FeaturesCollection {
    */
   releaseRestore(token: RestoreToken): void;
   /**
-   * The look a feature is drawn with: the default, the layer rule and the style of the
-   * feature put on top of each other. The default is the look the custom type of the feature
-   * declares (`FeatureTypeDefinition.defaultStyle`) over the defaults of the `style` option for
-   * its geometry; the renderer of a custom type reads the same look
-   * (`RenderContext.appliedStyle`).
+   * The look of a feature of the document, as its values are: the default, the layer rule and
+   * the style of the feature put on top of each other. The default is the look the custom type of
+   * the feature declares (`FeatureTypeDefinition.defaultStyle`) over the defaults of the `style`
+   * option for its geometry. The sketches are not applied: a feature being edited has the look of
+   * its values written. The renderer of a custom type reads the look of the feature it draws,
+   * the sketches applied, from its render context (`RenderContext.appliedStyle`).
    *
    * The colors of the `style` option, of the look a type declares and of the style of the
    * feature are the strings they were given, alpha included; the color of a layer rule is

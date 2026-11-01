@@ -232,8 +232,10 @@ sketches (`draw.sketches`) applied over the document, while it is edited
 and not written yet. `rendered.getSelectionBox(id)` gives
 its selection box, the footprint with the margin, as the library draws
 and hits it in the view drawn last. `rendered.changed` tells the
-features that changed, once the draw of the map that draws them is done. What
-writes reads the document, `ctx.draw.features`.
+features whose shapes changed, once the draw of the map that draws them
+is done. It tells no change of the look nor of the selection box with
+the view: read those at each draw. What writes reads the document,
+`ctx.draw.features`.
 
 <!-- docs-check:
 declare const ctx: import('@sakuzu/maplibre-gl-draw').PluginContext;
