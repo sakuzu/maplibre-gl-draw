@@ -254,6 +254,14 @@ writing it. Its changes are listed after those of 3.0.0.
 
 ### Changed in 3.0.0
 
+- While a selected feature is dragged as a whole, its handles follow it:
+  the resize, rotate and vertex handles of the library and the handles of
+  an extension (`resize` drawn by the library, `custom` drawn by
+  `drawHandles`) are shown with its selection box where it is drawn as it
+  moves, and none of them is grabbed until the drag ends. They were
+  hidden during the move. A drag of several features keeps its handles
+  hidden.
+
 - What the library does not take is told, as a handle of a wrong shape
   is: a footprint or a bbox of a feature type that is not one, which
   falls back to that of the geometry, and a color a shared renderer

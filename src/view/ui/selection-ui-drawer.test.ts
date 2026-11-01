@@ -198,11 +198,18 @@ describe('the auxiliary handles of the extensions', () => {
 
   it('hides them while another operation runs and while the selection is locked', () => {
     const feature = store.getFeature('f2') as Feature;
-    renderSelectionUI([feature], ZOOM, PROJECTION_DATA, auxDeps, { operation: 'move' });
+    renderSelectionUI([feature], ZOOM, PROJECTION_DATA, auxDeps, { operation: 'rotate' });
+    renderSelectionUI([feature], ZOOM, PROJECTION_DATA, auxDeps, { operation: 'resize' });
     renderSelectionUI([feature], ZOOM, PROJECTION_DATA, auxDeps, null, null, true);
     expect(auxiliary).toEqual([]);
     renderSelectionUI([feature], ZOOM, PROJECTION_DATA, auxDeps, { operation: 'auxiliary' });
     expect(auxiliary).toHaveLength(1);
+  });
+
+  it('shows them while the feature is moved, where it is drawn as it moves', () => {
+    const feature = store.getFeature('f2') as Feature;
+    renderSelectionUI([feature], ZOOM, PROJECTION_DATA, auxDeps, { operation: 'move' });
+    expect(auxiliary).toEqual([[[12, 3]]]);
   });
 
   it('draws the resize handles that belong to no feature, and no custom one', () => {
@@ -235,10 +242,14 @@ describe('the auxiliary handles of the extensions', () => {
       [null, ['free-mark']],
     ]);
     expect(restored).toHaveBeenCalledTimes(2);
+    // While the feature is moved too, where it is drawn
+    drawn.length = 0;
+    renderSelectionUI([feature], ZOOM, PROJECTION_DATA, withFrame, { operation: 'move' });
+    expect(drawn).toEqual([['f2', ['mark']]]);
     // Not while another operation runs, while the selection is locked, for several features, nor
     // without the frame
     drawn.length = 0;
-    renderSelectionUI([feature], ZOOM, PROJECTION_DATA, withFrame, { operation: 'move' });
+    renderSelectionUI([feature], ZOOM, PROJECTION_DATA, withFrame, { operation: 'rotate' });
     renderSelectionUI([feature], ZOOM, PROJECTION_DATA, withFrame, null, null, true);
     renderSelectionUI(
       [feature, square('f3', 30, 0)],

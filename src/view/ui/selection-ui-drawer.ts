@@ -144,9 +144,10 @@ export function renderSelectionUI(
       scope,
     );
     // The handles of the extensions, shown as the other handles are (hidden while another
-    // operation runs): core draws the `resize` ones, and has each extension draw its `custom` ones
-    // then, so that whether they are shown is decided here only
-    if (operation === null || operation === 'auxiliary') {
+    // operation runs, shown where the feature is drawn while it is moved): core draws the
+    // `resize` ones, and has each extension draw its `custom` ones then, so that whether they are
+    // shown is decided here only
+    if (operation === null || operation === 'auxiliary' || operation === 'move') {
       const context = auxiliaryHandleContext(map, zoom);
       const feature = selectedFeatures[0];
       const given = scope.auxiliaryHandles
@@ -395,7 +396,7 @@ function renderSingleSelectionHandles(
   // area, so without drawing them the state would be "grabbable although invisible".
   const featureBbox = computeBoundingBox(feature, scope.extensions);
   if (featureBbox && hasZeroArea(featureBbox)) {
-    if (supportsVertexEditing(feature.type) && operation !== 'move') {
+    if (supportsVertexEditing(feature.type)) {
       selectionHandlesRenderer.drawAllHandles(
         feature,
         featureBbox,
@@ -460,13 +461,8 @@ function renderCircleHandles(
   let showCenterMarker = true;
   let showRadiusLine = true;
 
-  if (operation === 'move') {
-    // While moving: all handles are hidden
-    showResize = false;
-    showRadiusHandle = false;
-    showCenterMarker = false;
-    showRadiusLine = false;
-  } else if (operation === 'resize') {
+  // While moving, the handles follow the feature as it is drawn, as they stand at rest
+  if (operation === 'resize') {
     // While resizing: only the resize handles are shown
     showRadiusHandle = false;
     showCenterMarker = false;
@@ -507,10 +503,6 @@ function renderNonCircleHandles(
   // The Multi kinds are treated the same as LineString / Polygon (with vertex handles).
   // MultiPoint has no edges, so the midpoint handles come out empty.
   const isVertexEditable = supportsVertexEditing(feature.type);
-  const isImage = feature.type === 'Image';
-  const isFreehand = feature.type === 'Freehand';
-  // Custom features: anything other than the types Core knows is treated like Image
-  const isCustomFeature = !isVertexEditable && !isImage && !isFreehand && feature.type !== 'Circle';
 
   let showResize = true;
   let showRotate = true;
@@ -519,15 +511,8 @@ function renderNonCircleHandles(
   let showMidpoint = isVertexEditable;
   let activeVertex: VertexRef | undefined;
 
-  if (operation === 'move') {
-    // While moving: vertex-editable types/Text/Image/Freehand/custom features hide all handles
-    if (isVertexEditable || isImage || isFreehand || isCustomFeature) {
-      showResize = false;
-      showRotate = false;
-      showVertex = false;
-      showMidpoint = false;
-    }
-  } else if (operation === 'resize') {
+  // While moving, the handles follow the feature as it is drawn, as they stand at rest
+  if (operation === 'resize') {
     // While resizing: only the resize handles are shown
     showRotate = false;
     showVertex = false;

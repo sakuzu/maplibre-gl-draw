@@ -473,8 +473,11 @@ The handles appear only while one feature is selected. The library alone
 decides when they are shown, hit and dragged, for every type alike: while
 one feature only is selected, the document is not read-only nor under
 the interaction lock, the feature is not locked, and no other handle of
-the selection (a resize, rotate or vertex handle) is dragged. A type
-tests none of this. A handle of another kind, or a custom one whose
+the selection (a resize, rotate or vertex handle) is dragged. While the
+feature itself is dragged as a whole, its handles, the library's and the
+type's (`drawHandles` included), are shown with its selection box where
+it is drawn as it moves, and none of them is grabbed until the drag
+ends. A type tests none of this. A handle of another kind, or a custom one whose
 `sizePx` is not a finite number above 0, is left out, with a warning in
 the console once for each kind.
 

@@ -65,7 +65,9 @@ export interface CustomHandle {
  * The library decides when the handles are shown, hit and dragged, for every extension alike:
  * while one feature only is selected, the document is not read-only nor under the interaction
  * lock, the feature is not locked, and no other handle of the selection (a resize, rotate or
- * vertex handle) is dragged. An extension does not test these itself. A handle of another kind,
+ * vertex handle) is dragged. While the feature itself is dragged (moved as a whole), its handles
+ * are shown, and drawn (`drawHandles`), where it is drawn as it moves, and none of them is grabbed
+ * until the drag ends. An extension does not test these itself. A handle of another kind,
  * or a custom one whose `sizePx` is not a finite number above 0, is left out, with a warning in
  * the console once for each kind and extension.
  */

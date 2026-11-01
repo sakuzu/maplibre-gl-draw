@@ -494,6 +494,32 @@ describe('the handles a custom type adds', () => {
     expect(drawHandles).toHaveBeenCalledTimes(1);
   });
 
+  it('follow the feature while it is moved: placed on its selection box as it is drawn', () => {
+    const seen: HandleContext[] = [];
+    const view = withHandles(seen);
+    view.draw.selection.set('feature', ['c']);
+    const before = view.draw.rendered.getSelectionBox('c');
+    // A press inside the card and a move, not let go yet
+    const router = view.engine.inputRouter;
+    router.dispatch(event<MouseNormalizedEvent>(view.engine, 'mousemove', [0, 0]));
+    router.dispatch(event<MouseNormalizedEvent>(view.engine, 'mousedown', [0, 0]));
+    router.dispatch(event<DragNormalizedEvent>(view.engine, 'dragstart', [0, 0], [0, 0]));
+    router.dispatch(event<DragNormalizedEvent>(view.engine, 'dragmove', [0.2, 0.1], [0, 0]));
+    expect(view.store.getDragState()?.operation).toBe('move');
+    // The selection UI asks for the handles of the feature drawn, which the drag moved
+    const provider = view.engine.context.selectionScope.auxiliaryHandles.list()[0];
+    const moved = view.store.getFeature('c') as StoredFeature;
+    const [x, y] = (moved.geometry as { coordinates: number[] }).coordinates;
+    expect(x).toBeCloseTo(0.2, 9);
+    expect(y).toBeCloseTo(0.1, 9);
+    seen.length = 0;
+    provider?.getHandles(moved, {} as AuxiliaryHandleContext);
+    const box = seen[0]?.selectionBox;
+    expect(box).toEqual(view.draw.rendered.getSelectionBox('c'));
+    expect(box).not.toEqual(before);
+    router.dispatch(event<DragNormalizedEvent>(view.engine, 'dragend', [0.2, 0.1], [0, 0]));
+  });
+
   it('receive the selection box the library draws and the look of the selection', () => {
     const seen: HandleContext[] = [];
     const view = withHandles(seen);
