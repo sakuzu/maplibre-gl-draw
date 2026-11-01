@@ -20,6 +20,7 @@
 
 import type { Map as MapLibreMap, ProjectionData } from 'maplibre-gl';
 
+import { metersPerPixelAtZoom } from '../../../shared/math/ground-scale.js';
 import type { PixelRatioInput } from '../../../shared/utils/pixel-ratio.js';
 import { resolveContentPixelRatio, resolvePixelRatio } from '../../../shared/utils/pixel-ratio.js';
 import type { GpuLedger } from '../../gpu-ledger.js';
@@ -500,8 +501,11 @@ export class SDFLineRenderer {
     const instanceData = this.scratchInstances.subarray(0, instanceCount * INSTANCE_STRIDE);
     const instanceColor = toLineInstanceColor(style.color, style.opacity);
 
-    // Compute on the GPU when createdZoom is specified, otherwise use u_width
-    const useGpuScaling = options.createdZoom !== undefined;
+    // A width in meters is a length on the ground: it is turned into pixels at the zoom and the
+    // latitude of the middle of the line, and a zoom of reference does not apply to it
+    const meters = options.widthUnit === 'meters';
+    // Compute on the GPU when createdZoom is specified (a width in pixels), otherwise use u_width
+    const useGpuScaling = !meters && options.createdZoom !== undefined;
     // Convert the line width into physical pixels (CSS pixels * devicePixelRatio)
     const strokeWidth = useGpuScaling ? style.width * contentDpr : 0;
     const createdZoom = options.createdZoom ?? 0;
@@ -527,7 +531,11 @@ export class SDFLineRenderer {
 
     // widthOverride: the GPU computation (0) when createdZoom is specified, otherwise u_width
     // Convert the line width into physical pixels (CSS pixels * devicePixelRatio)
-    const widthOverride = useGpuScaling ? 0 : style.width * screenDpr;
+    const widthOverride = useGpuScaling
+      ? 0
+      : meters
+        ? metersToPhysicalPixels(style.width, coords, zoom, contentDpr)
+        : style.width * screenDpr;
 
     this.executeDrawCall(
       instanceCount,
@@ -949,4 +957,25 @@ export class SDFLineRenderer {
       this.immInstanceBuffer = null;
     }
   }
+}
+
+/**
+ * A width in meters on the ground as physical pixels, at the zoom and at the latitude of the
+ * middle of a line. A length on the ground scales with the camera already, so the ratio without
+ * `renderScale` is used ("the two ratios" in shared/utils/pixel-ratio.ts)
+ */
+function metersToPhysicalPixels(
+  widthMeters: number,
+  coords: ReadonlyArray<readonly [number, number]>,
+  zoom: number,
+  contentDpr: number,
+): number {
+  let south = Number.POSITIVE_INFINITY;
+  let north = Number.NEGATIVE_INFINITY;
+  for (const [, lat] of coords) {
+    if (lat < south) south = lat;
+    if (lat > north) north = lat;
+  }
+  const latitude = Number.isFinite(south) ? (south + north) / 2 : 0;
+  return (widthMeters / metersPerPixelAtZoom(latitude, zoom)) * contentDpr;
 }

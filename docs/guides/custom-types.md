@@ -192,9 +192,11 @@ draw.extensions.featureTypes.add({
 ```
 
 The line renderer takes a width in pixels by default.
-`widthUnit: 'meters'` gives it in meters on the ground, and
-`referenceZoom` makes the line grow and shrink with the zoom from the
-width it has at that zoom. The point renderer takes `referenceZoom` too,
+`widthUnit: 'meters'` gives it in meters on the ground, drawn as the
+pixels it spans at the zoom and the latitude of the line, so it follows
+the map by itself. `referenceZoom` makes a line of a width in pixels grow
+and shrink with the zoom from the width it has at that zoom; a width in
+meters does not take it. The point renderer takes `referenceZoom` too,
 for the size and the outline of its marker: a marker of a feature that
 keeps its size on the map passes the zoom the feature keeps
 (`maplibre-gl-draw:createdZoom`). A renderer reads that zoom from the

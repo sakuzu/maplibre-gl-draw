@@ -29,9 +29,13 @@ export interface LineRenderer {
    * @param style - The width in pixels, the CSS color, the opacity from 0 to 1, the dash
    *   pattern, and a custom `[dash, gap]` in pixels
    * @param options - `closed` joins the last position to the first; `widthUnit` says whether
-   *   the width is in pixels or meters; `referenceZoom` is the zoom at which a width in pixels is
-   *   given, so that the line grows and shrinks with the zoom: it is drawn `2 ** (zoom -
-   *   referenceZoom)` times as wide (the width stays the same at every zoom when it is left out)
+   *   the width is in CSS pixels (`'pixels'`, when it is left out) or in meters on the ground
+   *   (`'meters'`: a length on the ground, drawn as the pixels it spans at the zoom and at the
+   *   latitude of the middle of the line, so it follows the map); `referenceZoom` is the zoom at
+   *   which a width in pixels is given, so that the line grows and shrinks with the zoom: it is
+   *   drawn `2 ** (zoom - referenceZoom)` times as wide (the width stays the same at every zoom
+   *   when it is left out). `referenceZoom` applies to a width in pixels only: a width in meters
+   *   follows the map by itself and does not take it
    */
   draw(
     coordinates: readonly Position[],

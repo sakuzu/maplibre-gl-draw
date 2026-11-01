@@ -462,6 +462,11 @@ writing it. Its changes are listed after those of 3.0.0.
 
 ### Fixed in 3.0.0
 
+- `widthUnit: 'meters'` of the shared line renderer (`ctx.line.draw`)
+  draws the width as a length on the ground, the pixels it spans at the
+  zoom and the latitude of the line: the width was drawn in pixels. A
+  `referenceZoom` applies to a width in pixels only.
+
 - A key the library uses has its default action prevented, in every mode
   and whoever uses it: the select mode, the drawing modes, a plugin or a
   mode of an extension that consumes it, and the Escape that cancels a

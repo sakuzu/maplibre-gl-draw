@@ -37,15 +37,18 @@ export type WidthUnit = 'pixels' | 'meters';
 
 /** The options of one `draw` call of the shared line renderer. */
 export interface SDFStrokeOptions {
-  /** The unit of the width. The renderer draws `width` in CSS px */
+  /**
+   * The unit of the width: CSS px, or meters on the ground, which the renderer turns into pixels
+   * at the zoom and the latitude of the middle of the line (and `createdZoom` does not apply to)
+   */
   widthUnit: WidthUnit;
   /** Whether the path is closed (the last position joins the first) */
   closed: boolean;
   /** The id of the feature drawn, for diagnostics */
   featureId?: string;
   /**
-   * The zoom at which `width` applies; the width then scales as `width * 2^(zoom -
-   * createdZoom)`. When omitted, the width is fixed on screen
+   * The zoom at which a `width` in pixels applies; the width then scales as `width * 2^(zoom -
+   * createdZoom)`. When omitted, the width is fixed on screen. A width in meters ignores it
    */
   createdZoom?: number;
 }
