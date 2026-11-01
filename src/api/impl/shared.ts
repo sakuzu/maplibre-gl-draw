@@ -164,6 +164,37 @@ export function isTaken(store: Store, id: string): boolean {
   );
 }
 
+/**
+ * Checks the ID given to a new feature, group or layer, before anything is written: a non-empty
+ * string (`invalid-input`), that names nothing yet, here or in the same write (`already-exists`),
+ * and that the Store takes (`Store.acceptsId`; `invalid-input`)
+ *
+ * @param pending - The IDs taken by the other entries of the same write
+ * @param alsoTaken - Whether the ID is taken in a way of its own kind (an entry of the stacking
+ *   order, for a layer)
+ * @returns The ID
+ * @internal
+ */
+export function requireNewId(
+  store: Store,
+  value: unknown,
+  pending: ReadonlySet<string>,
+  alsoTaken?: (id: string) => boolean,
+): string {
+  const id = requireId(value);
+  if (isTaken(store, id) || pending.has(id) || alsoTaken?.(id) === true) {
+    throw new DrawError('already-exists', `The ID ${JSON.stringify(id)} is already taken`, { id });
+  }
+  if (store.acceptsId?.(id) === false) {
+    throw new DrawError(
+      'invalid-input',
+      `The Store does not take the ID ${JSON.stringify(id)} (leave the ID out, and one is made)`,
+      { id },
+    );
+  }
+  return id;
+}
+
 /** The layer that lists a group, or else the layer the group records */
 export function layerOfGroup(store: Store, group: Group): Layer | undefined {
   return store.getLayer(group.layerId);

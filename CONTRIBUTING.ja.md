@@ -31,8 +31,9 @@ CLA への同意は 1 手順です。最初のプルリクエストを開くと 
 いないコードは、そのライセンスとともにプルリクエストに明記してください。
 
 すべてのプルリクエストで、次の門が GitHub Actions
-(`.github/workflows/ci.yml`) で走ります。`typecheck`、`lint`、`test`、
-`build`、`check:package`、`docs:check`、`test:e2e`。push の前にローカル
+(`.github/workflows/ci.yml`) で走ります。`typecheck`、
+`typecheck:examples`、`lint`、`test`、`build`、`check:package`、
+`docs:check`、`test:e2e`。push の前にローカル
 でも回してください。E2E は最初に 1 回 `npx playwright-core install
 chromium-headless-shell` が要ります。
 
@@ -137,7 +138,7 @@ export (`./store` や `./modes` など) は追加しません。実装の内部�
   `StyleRule`、`DrawDocument` など)、状態、`DrawEvents`、`DrawError`、
   データセット、Store の契約、拡張の窓口 (`Plugin`、各種の窓口、
   `ModeHandler`、`FeatureTypeDefinition`、描画器、提供者)、スタイルの
-  規則の関数を含みます。契約は `src/api/` と `src/api/extension/` で
+  規則の関数、CSS の色を読む関数を含みます。契約は `src/api/` と `src/api/extension/` で
   宣言します。semver に従います。地物、レイヤー、グループ、項目の
   言葉で書き、行の言葉 (行、行の札、行の組) は `/kasane` に任せます。
 - 層 2 の `/kasane` は、地物を列の行で持つための部品です
@@ -197,6 +198,7 @@ export (`./store` や `./modes` など) は追加しません。実装の内部�
 npm install        # ルートで実行 (examples もまとめてインストール)
 npx playwright-core install chromium-headless-shell  # 初回だけ (シェーダーの試験用)
 npm run typecheck  # 型チェック
+npm run typecheck:examples  # 例と playground と bench を src/ の型で確かめる
 npm test           # vitest
 npm run test:e2e   # 実際の maplibre の地図での E2E テスト (約 10 秒)
 npm run build      # dist/ を生成
@@ -214,9 +216,16 @@ npm run dev        # examples をブラウザで起動 (localhost:3200)
 例と playground は `ui/` の標準の UI を地図に重ねていて、アプリが npm
 から取るのと同じように、そのビルド `ui/dist/` から取ります。これが無いと
 `npm run dev`、`npm run site:dev`、`npm run site:build`、
-`npm run test:e2e` はメッセージを出して止まります。
+`npm run test:e2e`、`npm run typecheck:examples` はメッセージを出して
+止まります。
 先に `npm run build` と `npm run ui:build` を実行し、`ui/` を直したら
 もう一度 `npm run ui:build` を実行してください。
+
+`npm run typecheck:examples` は、先に `src/` の型の宣言を `.types/` に
+書き出し (`tsconfig.types.json`。内部の印の付いた宣言は除きます)、例と
+playground と bench をその宣言に対して型チェックします (`tsc -b`)。古い
+`dist/` でなく今のパッケージが公開する型で確かめ、例の宣言の併合は
+`src/` のコンパイルに届きません。
 
 例、playground、`ui/` の開発用のページの見本の地物は、東京駅の周りの
 東側か別の場所に置き、皇居の上には置きません。ページは描くデータを自分の

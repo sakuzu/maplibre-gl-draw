@@ -31,10 +31,10 @@ first. Code you did not write yourself must be identified in the pull
 request together with its license.
 
 Every pull request runs the gates below on GitHub Actions
-(`.github/workflows/ci.yml`): `typecheck`, `lint`, `test`, `build`,
-`check:package`, `docs:check` and `test:e2e`. Run them locally before you
-push; the end-to-end tests need `npx playwright-core install
-chromium-headless-shell` once.
+(`.github/workflows/ci.yml`): `typecheck`, `typecheck:examples`, `lint`,
+`test`, `build`, `check:package`, `docs:check` and `test:e2e`. Run them
+locally before you push; the end-to-end tests need
+`npx playwright-core install chromium-headless-shell` once.
 
 The rules below are the ones we keep inside this repository.
 
@@ -146,10 +146,11 @@ into two layers: layer 1 is the main entry (with `/geometry` and
   filters, the state, `DrawEvents`, `DrawError`, the datasets, the Store
   contracts, the extension contract (`Plugin`, the contexts,
   `ModeHandler`, `FeatureTypeDefinition`, the renderers and the
-  providers) and the style rule functions. The contracts are declared in
-  `src/api/` and `src/api/extension/`. It follows semver. It is written
-  in the words of features, layers, groups and items: the words of the
-  rows (a row, its handle, a row block) are left to `/kasane`.
+  providers), the style rule functions and the reader of CSS colors. The
+  contracts are declared in `src/api/` and `src/api/extension/`. It
+  follows semver. It is written in the words of features, layers, groups
+  and items: the words of the rows (a row, its handle, a row block) are
+  left to `/kasane`.
 - Layer 2, the parts that hold features as rows of columns
   (`src/kasane/index.ts`, experimental): the Store that holds them
   (`createTableStore`, `createFeatureTables`), the reading and writing
@@ -212,6 +213,7 @@ declaration.
 npm install        # run at the root (also installs examples)
 npx playwright-core install chromium-headless-shell  # once, for the shader test
 npm run typecheck  # type check
+npm run typecheck:examples  # examples, playground, bench against src/ types
 npm test           # vitest
 npm run test:e2e   # end-to-end tests on a real maplibre map (about 10 s)
 npm run build      # emit dist/
@@ -228,10 +230,18 @@ npm run dev        # serve the examples in the browser (localhost:3200)
 
 The examples and the playground lay the standard UI of `ui/` over the
 map and take it from its build, `ui/dist/`, as an application takes it
-from npm. `npm run dev`, `npm run site:dev`, `npm run site:build` and
-`npm run test:e2e` stop with a message while it is missing: run
+from npm. `npm run dev`, `npm run site:dev`, `npm run site:build`,
+`npm run test:e2e` and `npm run typecheck:examples` stop with a message
+while it is missing: run
 `npm run build` and then `npm run ui:build` first, and `npm run ui:build`
 again after a change to `ui/`.
+
+`npm run typecheck:examples` type checks the examples, the playground and
+the bench (`tsc -b`) against the declarations of `src/`, which it writes
+into `.types/` first (`tsconfig.types.json`, without the declarations
+marked internal), so they are checked against the types the package
+publishes as they are now, not against an old `dist/`, and a declaration
+merging of an example does not reach the compilation of `src/`.
 
 The sample features of the examples, the playground and the development
 page of `ui/` lie around Tokyo Station on its east side, or elsewhere,

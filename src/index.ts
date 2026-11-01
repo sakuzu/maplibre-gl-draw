@@ -263,6 +263,9 @@ export type {
 // Style rule functions
 export { deriveLegend, evaluateStyleRule, getStyleRuleChannel } from './api/model.js';
 
+// Color functions
+export { parseCssColor } from './api/model.js';
+
 // GeoJSON functions
 export type { ToGeoJSONOptions } from './api/model.js';
 export { featuresToGeoJSON, featureToGeoJSON } from './api/model.js';

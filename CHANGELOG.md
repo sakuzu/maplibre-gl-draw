@@ -230,8 +230,26 @@ writing it. Its changes are listed after those of 3.0.0.
   `EARTH_RADIUS_METERS`, which the library draws a size kept with a zoom
   by. With `metersToDegrees`, an extension draws and hit tests such a
   size by the same formula as the library.
+- `parseCssColor(value)`: a CSS color read as the library reads every
+  color it takes, as `[red, green, blue, alpha]` from 0 to 1, or `null`
+  for a value it does not take, so that an extension checks the colors of
+  its own style keys, and reads the colors it draws with its own shader,
+  as the library does.
+- `Store.acceptsId(id)`, optional: whether the store takes a feature, a
+  group or a layer with an ID. A load gives one whose ID the store does
+  not take a new ID, as it does to an ID that is taken, and the
+  references to it name the new one; a feature, a group or a layer
+  created with an ID given (`create` and `createMany` of the features,
+  the groups and the layers, a sketch that creates a feature, the new
+  layer and group of a load) that it does not take is refused with
+  `invalid-input` before anything is written.
 
 ### Changed in 3.0.0
+
+- `FeatureStyleResolved` has every key of the style the library defines,
+  each required, and no more: a style key an extension adds to
+  `FeatureStyle` by declaration merging stays optional in it, as the look
+  has it only when the type or the feature gives it (it was required).
 
 - A key a plugin or a mode of an extension consumes (`onKeyDown` returns
   true) has its default action prevented, so the map no longer also acts

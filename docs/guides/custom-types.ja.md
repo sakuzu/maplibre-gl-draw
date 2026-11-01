@@ -789,6 +789,11 @@ draw.extensions.companionProviders.add(halo);
 主の入口と違い、マイナーリリースで変わることがあります
 ([版](../reference/README.md))。
 
+シェーダーは色を数で受けます。`ctx.appliedStyle(feature)` の CSS の色は、
+主の入口の `parseCssColor` で読みます。ライブラリーと同じ読み方で、
+0 から 1 の `[red, green, blue, alpha]` を返します
+([スタイル](styles.ja.md#地物自身のスタイル))。
+
 地形の上に描く部品は、描画の呼び出しの描画の文脈か、その `terrain` を
 受け取ります。描く前に `ProjectionUniformManager` や `QuadShader` の
 `setTerrain(ctx)` を呼び、`terrainTessellationStep(ctx)` と

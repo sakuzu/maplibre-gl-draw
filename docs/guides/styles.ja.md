@@ -72,6 +72,11 @@ draw.features.update(featureId, {
 - 色は CSS の色 (`#1e88e5`、`rgb(30 136 229)`、`hsl(...)`、`tomato`)
   で、不透明度は 0 から 1 です。型や形の合わない値は、コード
   `invalid-input` の `DrawError` を投げます
+- `parseCssColor(value)` は、ライブラリーと同じ読み方で色を読み、
+  0 から 1 の `[red, green, blue, alpha]` を返します。ライブラリーが色と
+  して受けない値には `null` を返します。拡張は、自分のスタイルの鍵の色を
+  これで確かめ、自分のシェーダーで描く色もこれで読みます。そうすると、
+  ライブラリーと同じ色を受けて同じ色で描けます
 - `lineStyle` は `solid`、`dashed`、`dotted` のどれかです
 - `strokeWidth` は、地物を描いたときのズーム、つまり基準のズーム
   (プロパティー `maplibre-gl-draw:createdZoom`) での幅をピクセルで
@@ -353,6 +358,7 @@ deriveLegend(rule, { legendOther: 'Autres' });
 - [`evaluateStyleRule`](../api/maplibre-gl-draw/functions/evaluateStyleRule.md)
   と
   [`getStyleRuleChannel`](../api/maplibre-gl-draw/functions/getStyleRuleChannel.md)
+- [`parseCssColor`](../api/maplibre-gl-draw/functions/parseCssColor.md)
 - [`RuntimeOptions`](../api/maplibre-gl-draw/interfaces/RuntimeOptions.md)
   (`style`、`previewStyle`、`selectionStyle`、`scaleWithZoom`、
   `messages`) と

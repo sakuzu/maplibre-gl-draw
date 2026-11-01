@@ -8,7 +8,6 @@
 import { holdsLockedItem } from '../../operations/selection-operations.js';
 import type { Store } from '../../store/store.js';
 import type { Layer as StoredLayer, StyleRule } from '../../store/types.js';
-import { DrawError } from '../errors.js';
 import type { LayersCollection } from '../layers.js';
 import type { Layer, LayerFilter, LayerInput, LayerPatch } from '../model.js';
 import { layerItemCount, layerItemIds, rangeOf } from './item-reads.js';
@@ -17,7 +16,6 @@ import {
   filterEntries,
   invalidInput,
   isRecord,
-  isTaken,
   layerLocked,
   locksIgnored,
   matches,
@@ -27,8 +25,8 @@ import {
   optionalBoolean,
   optionalIndex,
   optionalString,
-  requireId,
   requireIds,
+  requireNewId,
   requireRecord,
 } from './shared.js';
 
@@ -266,17 +264,12 @@ export function prepareLayer(
   checkLayerFields(record);
   const index = optionalIndex(input.index);
 
-  let id: string;
-  if (input.id === undefined) {
-    id = deps.generateId();
-  } else {
-    id = requireId(input.id);
-    if (isTaken(store, id) || pending.has(id) || store.getLayerOrder().includes(id)) {
-      throw new DrawError('already-exists', `The ID ${JSON.stringify(id)} is already taken`, {
-        id,
-      });
-    }
-  }
+  const id =
+    input.id === undefined
+      ? deps.generateId()
+      : requireNewId(store, input.id, pending, (taken: string) =>
+          store.getLayerOrder().includes(taken),
+        );
 
   return {
     layer: {

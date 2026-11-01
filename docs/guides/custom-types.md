@@ -839,6 +839,11 @@ terrain ([the webgl entry](../api/webgl/index.md)). It may change in a
 minor release, unlike the main entry
 ([versions](../reference/README.md)).
 
+A shader takes its colors as numbers: read the CSS colors of
+`ctx.appliedStyle(feature)` with `parseCssColor` of the main entry,
+which gives `[red, green, blue, alpha]` from 0 to 1 as the library reads
+them ([styles](styles.md#a-features-own-style)).
+
 The parts that draw on the terrain take the render context of the draw
 call, or its `terrain`: `setTerrain(ctx)` on a
 `ProjectionUniformManager` or a `QuadShader` before drawing, and

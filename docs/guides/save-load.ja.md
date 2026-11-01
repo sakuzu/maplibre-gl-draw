@@ -477,6 +477,13 @@ const draw = createDraw(map, { store });
 `getMaxNameNumber` と `recordNameNumber` も実装できます。持っていない
 部分で使われた番号を、使い直さないためです。
 
+ID が独自の形のストア (共有の文書の書き手の ID など) は、省略できる
+`acceptsId(id)` を実装し、その形の ID を作る `generateId` と一緒に
+渡します。読み込みでは、ストアが受けない ID の地物、グループ、
+レイヤーに新しい ID を付けます。そのような ID で地物、グループ、
+レイヤーを作ると (`id` を付けた `features.create` など)、何も書かずに
+`invalid-input` で拒みます。
+
 ストアが持つ文書は、`document.toJSON()` が書き出すものと同じです。形は
 [データ形式のリファレンス](../reference/data-format.md) にあります。
 

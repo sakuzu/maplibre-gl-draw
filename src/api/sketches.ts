@@ -124,9 +124,10 @@ export interface SketchesCollection {
    *
    * @returns The sketch, or `null` when a sketch of this client is refused (read-only, a lock, a
    *   feature hidden or a layer that cannot be written)
-   * @throws `DrawError` with the code `invalid-input` when the input has the wrong shape or an
-   *   edit cannot apply, `already-exists` when its ID is taken, or `not-found` when an edit names
-   *   a feature, a layer or a group that does not exist
+   * @throws `DrawError` with the code `invalid-input` when the input has the wrong shape, an
+   *   edit cannot apply or a feature it creates has an ID the Store does not take
+   *   (`Store.acceptsId`), `already-exists` when its ID is taken, or `not-found` when an edit
+   *   names a feature, a layer or a group that does not exist
    */
   add(input: SketchInput): Sketch | null;
   /**

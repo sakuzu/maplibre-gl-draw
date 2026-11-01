@@ -72,6 +72,11 @@ draw.features.update(featureId, {
 - Colors are CSS colors (`#1e88e5`, `rgb(30 136 229)`, `hsl(...)`,
   `tomato`); opacities run from 0 to 1. A value of the wrong type or
   form throws a `DrawError` with the code `invalid-input`
+- `parseCssColor(value)` reads a color as the library reads it, and
+  gives `[red, green, blue, alpha]` from 0 to 1, or `null` for a value
+  the library does not take as a color. An extension checks a color of
+  its own style keys with it, and reads the colors it draws with its own
+  shader with it, so it takes and draws the same colors as the library
 - `lineStyle` is `solid`, `dashed` or `dotted`
 - `strokeWidth` is in pixels at the zoom the feature was drawn at, its
   reference zoom (the property `maplibre-gl-draw:createdZoom`). The line
@@ -356,6 +361,7 @@ The words of the names the library gives new features, layers and groups
 - [`evaluateStyleRule`](../api/maplibre-gl-draw/functions/evaluateStyleRule.md)
   and
   [`getStyleRuleChannel`](../api/maplibre-gl-draw/functions/getStyleRuleChannel.md)
+- [`parseCssColor`](../api/maplibre-gl-draw/functions/parseCssColor.md)
 - [`RuntimeOptions`](../api/maplibre-gl-draw/interfaces/RuntimeOptions.md)
   (`style`, `previewStyle`, `selectionStyle`, `scaleWithZoom`,
   `messages`) and

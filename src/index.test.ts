@@ -153,6 +153,7 @@ const MAIN = [
   'OverlayRenderer',
   'OverlaysCollection',
   'ParsedDocument',
+  'parseCssColor',
   'parseGeoJSON',
   'parseNative',
   'ParseOptions',

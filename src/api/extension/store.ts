@@ -462,7 +462,16 @@ export interface Store extends StoreView {
    * A Store whose ids are made by its host (the ids of a writer of a shared document) takes the
    * ids of that form only. A load gives a feature, a group or a layer whose id the Store does
    * not take a new id (`generateId` of the instance), as it does to an id that is taken, and
-   * the references to it name the new one.
+   * the references to it name the new one. A feature, a group or a layer created with an id
+   * given (`features.create`, `features.createMany`, `groups.create`, `layers.create`, a
+   * sketch that creates a feature, and the new layer and group of a load) is checked before
+   * anything is written: an id the Store does not take throws a `DrawError` with the code
+   * `invalid-input`, and nothing is written. So a Store that takes the id of something deleted,
+   * to bring it back, answers true for it.
+   *
+   * It is not asked of the ids `generateId` makes, which the Store is given with: give the
+   * instance a `generateId` whose ids the Store takes. Nor is it asked of a group a Store of rows
+   * brings back (`groups.restore`), which keeps its id.
    */
   acceptsId?(id: string): boolean;
 }

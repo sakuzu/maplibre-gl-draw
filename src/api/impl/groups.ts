@@ -36,8 +36,8 @@ import {
   onlyLockOrVisibility,
   optionalBoolean,
   optionalString,
-  requireId,
   requireIds,
+  requireNewId,
   requireRecord,
 } from './shared.js';
 
@@ -180,10 +180,22 @@ export function createGroups(deps: ResourceDeps): GroupsCollection {
       if (layerId === undefined) throw notFound('group kept by a deletion', id);
       const layer = store.getLayer(layerId);
       if (!layer) throw notFound('layer', layerId);
+      if (isTaken(store, id)) {
+        throw new DrawError('already-exists', `The ID ${JSON.stringify(id)} is already taken`, {
+          id,
+        });
+      }
       if (store.isReadOnly() || layerLocked(store, layer)) return null;
-      const shell = prepareGroupShell(deps, { id }, INPUT_KEYS, new Set());
+      // The group the Store kept comes back under its ID, which is not a new one: it is not asked
+      // of the Store (Store.acceptsId), as the ID of a new group is
+      const shell: GroupShell = {
+        id,
+        name: deps.autoNameGenerator.generateGroupName(),
+        visible: true,
+        locked: false,
+      };
       // The Store gives it the place it had (the key of its order its rows were kept with)
-      store.createGroup({ ...shell, id, layerId, kind: 'table' });
+      store.createGroup({ ...shell, layerId, kind: 'table' });
       return store.getGroup(id) ?? null;
     },
   };
@@ -226,17 +238,7 @@ export function prepareGroupShell(
   optionalString(record, 'name');
   optionalBoolean(record, 'visible');
   optionalBoolean(record, 'locked');
-  let id: string;
-  if (input.id === undefined) {
-    id = deps.generateId();
-  } else {
-    id = requireId(input.id);
-    if (isTaken(store, id) || pending.has(id)) {
-      throw new DrawError('already-exists', `The ID ${JSON.stringify(id)} is already taken`, {
-        id,
-      });
-    }
-  }
+  const id = input.id === undefined ? deps.generateId() : requireNewId(store, input.id, pending);
   return {
     id,
     name: input.name ?? deps.autoNameGenerator.generateGroupName(),

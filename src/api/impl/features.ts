@@ -55,7 +55,6 @@ import {
   invalidInput,
   invalidState,
   isRecord,
-  isTaken,
   matches,
   notFound,
   onlyKeys,
@@ -63,6 +62,7 @@ import {
   optionalBoolean,
   requireId,
   requireIds,
+  requireNewId,
   requireRecord,
 } from './shared.js';
 
@@ -613,17 +613,7 @@ function prepareFeature(
   optionalBoolean(record, 'visible');
   optionalBoolean(record, 'locked');
 
-  let id: string;
-  if (input.id === undefined) {
-    id = deps.generateId();
-  } else {
-    id = requireId(input.id);
-    if (isTaken(store, id) || pending.has(id)) {
-      throw new DrawError('already-exists', `The ID ${JSON.stringify(id)} is already taken`, {
-        id,
-      });
-    }
-  }
+  const id = input.id === undefined ? deps.generateId() : requireNewId(store, input.id, pending);
 
   const group = input.groupId === undefined ? undefined : store.getGroup(requireId(input.groupId));
   if (input.groupId !== undefined && !group) throw notFound('group', input.groupId);

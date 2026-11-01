@@ -18,6 +18,7 @@ import type {
 } from 'geojson';
 import type { BBox } from '../geometry/types.js';
 import type { Messages } from '../messages.js';
+import { parseColor } from '../shared/color.js';
 import { isDrawProperty as isLibraryKey } from '../shared/properties.js';
 import type { ItemMove, ItemPlacement } from '../shared/types/model.js';
 import type { LineStyle } from '../shared/types/style.js';
@@ -67,8 +68,8 @@ export type PointShape = 'circle' | 'square' | 'triangle' | 'star';
  * How a feature looks; every key is optional, and a key left out takes the value of the
  * layer rule or the default.
  *
- * Colors are CSS colors. Widths and radii are in CSS pixels at the reference zoom of the
- * feature.
+ * Colors are CSS colors, read as {@link parseCssColor} reads them. Widths and radii are in CSS
+ * pixels at the reference zoom of the feature.
  */
 export interface FeatureStyle {
   /** The fill color */
@@ -105,8 +106,30 @@ export interface FeatureStyle {
 /**
  * The look a feature is drawn with: the default, the layer rule and the style of the feature
  * put on top of each other.
+ *
+ * Every key the library defines is there. A style key an extension or a host adds to
+ * {@link FeatureStyle} by declaration merging stays optional: it is there only when the look the
+ * type of the feature declares or the style of the feature has it.
  */
-export type FeatureStyleResolved = Required<FeatureStyle>;
+export type FeatureStyleResolved = FeatureStyle &
+  Required<
+    Pick<
+      FeatureStyle,
+      | 'fillColor'
+      | 'fillOpacity'
+      | 'strokeColor'
+      | 'strokeWidth'
+      | 'strokeOpacity'
+      | 'lineStyle'
+      | 'pointColor'
+      | 'pointRadius'
+      | 'pointShape'
+      | 'pointOpacity'
+      | 'pointStrokeColor'
+      | 'pointStrokeWidth'
+      | 'imageOpacity'
+    >
+  >;
 
 export { DRAW_PROPERTY_PREFIX } from '../shared/properties.js';
 
@@ -943,6 +966,38 @@ export function deriveLegend(rule: StyleRule, messages?: Partial<Messages>): Leg
  */
 export function getStyleRuleChannel(type: FeatureType): 'point' | 'stroke' | 'fill' {
   return getRuleChannel(type);
+}
+
+// ============================================================================
+// Color functions
+// ============================================================================
+
+/**
+ * Reads a CSS color as the library reads every color it takes: the colors of
+ * {@link FeatureStyle}, of the options and of the look a type declares are checked and drawn
+ * with it.
+ *
+ * It reads `#rgb`, `#rgba`, `#rrggbb`, `#rrggbbaa`, `rgb()` and `rgba()`, `hsl()` and `hsla()`
+ * (with commas, or with spaces and a `/` before the alpha), the named colors of CSS and
+ * `transparent`. An extension reads the colors it draws with its own shader here, and checks a
+ * color in a style key of its own here, so that it takes and draws the colors the library takes
+ * and draws, no more and no fewer.
+ *
+ * @param value - The color
+ * @returns The color as `[red, green, blue, alpha]`, each from 0 to 1 and not premultiplied, in a
+ *   new array; `null` when the value is not a color the library reads
+ *
+ * @example
+ * ```ts
+ * parseCssColor('#ff000080'); // [1, 0, 0, 0.5019607843137255]
+ * parseCssColor('rebeccapurple'); // [0.4, 0.2, 0.6, 1]
+ * parseCssColor('not a color'); // null
+ * ```
+ */
+export function parseCssColor(
+  value: unknown,
+): [red: number, green: number, blue: number, alpha: number] | null {
+  return typeof value === 'string' ? parseColor(value) : null;
 }
 
 // ============================================================================

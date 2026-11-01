@@ -56,6 +56,9 @@ jobs:
       # The UI on a real map in headless Chromium (the browser installed above)
       - run: npm run ui:test:e2e
       - run: npm run ui:build
+      # The examples, the playground and the bench against the declarations of src/ (they take
+      # the standard UI from its build, so this comes after npm run ui:build)
+      - run: npm run typecheck:examples
       - run: npm run ui:check:package
       - name: Documentation site (fails on a dead link)
         run: npm run site:build

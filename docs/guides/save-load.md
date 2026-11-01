@@ -478,6 +478,14 @@ only part of the document can also implement the optional
 `getMaxNameNumber` and `recordNameNumber`, so that the numbers used in the
 part it does not hold are not used again.
 
+A store whose IDs are of a form of its own (the IDs of a writer of a
+shared document) implements the optional `acceptsId(id)` and is given
+with a `generateId` that makes IDs of that form. A load gives a feature,
+a group or a layer whose ID the store does not take a new ID, and a
+feature, a group or a layer created with such an ID (`features.create`
+with `id`, say) is refused with `invalid-input` before anything is
+written.
+
 The document it holds is the one `document.toJSON()` writes; its shape is
 in [the data format reference](../reference/data-format.md).
 

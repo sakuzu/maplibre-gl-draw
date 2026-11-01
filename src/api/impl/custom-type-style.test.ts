@@ -15,10 +15,12 @@
  * - The renderer of the type reads the same look from its render context
  *   (`RenderContext.appliedStyle`), the same object however many times it reads it while nothing
  *   changes, and the new look once the rule or the style changes
+ * - Its type has every key the library defines, and no more: a key an extension adds to
+ *   `FeatureStyle` by declaration merging is not made required by it
  */
 
 import type { ProjectionData } from 'maplibre-gl';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, expectTypeOf, it, vi } from 'vitest';
 import type { FeatureTypeRenderer, FrameDrawContext } from '../../extension/renderers.js';
 import type { Store } from '../../store/store.js';
 import type { Feature as StoredFeature } from '../../store/types.js';
@@ -296,5 +298,14 @@ describe('the declaration of the look of a type', () => {
     expect(view.draw.features.getAppliedStyle('s')?.fillColor).toBe('#fff3c4');
     remove();
     expect(view.draw.features.getAppliedStyle('s')?.fillColor).toBe('#ff0077');
+  });
+});
+
+describe('the type of the look a feature is drawn with', () => {
+  it('has every key of the style the library defines, each required', () => {
+    // Listed apart from FeatureStyle, so that a key merged into FeatureStyle stays optional; a key
+    // the library adds to FeatureStyle and leaves out of the list fails here
+    expectTypeOf<FeatureStyleResolved>().toExtend<Required<FeatureStyle>>();
+    expectTypeOf<Required<FeatureStyle>>().toExtend<FeatureStyleResolved>();
   });
 });

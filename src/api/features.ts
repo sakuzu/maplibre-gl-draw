@@ -107,10 +107,10 @@ export interface FeaturesCollection {
    * Creates a feature and returns it as it was stored.
    *
    * @returns The new feature, or `null` when the document is read-only
-   * @throws `DrawError` with the code `invalid-input` when the input has the wrong shape,
-   *   `already-exists` when its ID is taken, `not-found` when its layer or group does not
-   *   exist, or `invalid-state` when the input names no layer and the document has no layer
-   *   to put it in
+   * @throws `DrawError` with the code `invalid-input` when the input has the wrong shape or its
+   *   ID is not one the Store takes (`Store.acceptsId`), `already-exists` when its ID is taken,
+   *   `not-found` when its layer or group does not exist, or `invalid-state` when the input
+   *   names no layer and the document has no layer to put it in
    */
   create(input: FeatureInput): Feature | null;
   /**

@@ -65,8 +65,8 @@ export interface LayersCollection {
    * Creates a layer and returns it as it was stored.
    *
    * @returns The new layer, or `null` when the document is read-only
-   * @throws `DrawError` with the code `invalid-input` when the input has the wrong shape, or
-   *   `already-exists` when its ID is taken
+   * @throws `DrawError` with the code `invalid-input` when the input has the wrong shape or its
+   *   ID is not one the Store takes (`Store.acceptsId`), or `already-exists` when its ID is taken
    */
   create(input: LayerInput): Layer | null;
   /**

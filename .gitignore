@@ -1,5 +1,7 @@
 node_modules/
 dist/
+# The declarations the examples, the playground and the bench are type checked against
+.types/
 .claude/
 *.tsbuildinfo
 .pack/

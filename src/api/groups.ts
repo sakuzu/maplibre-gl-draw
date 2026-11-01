@@ -72,8 +72,9 @@ export interface GroupsCollection {
    *
    * @returns The new group, or `null` when the document is read-only
    * @throws `DrawError` with the code `not-found` when one of the features does not exist,
-   *   `invalid-input` when there is no feature or the features are not in the same layer (or not
-   *   in `layerId`), or `already-exists` when its ID is taken
+   *   `invalid-input` when there is no feature, the features are not in the same layer (or not
+   *   in `layerId`) or its ID is not one the Store takes (`Store.acceptsId`), or
+   *   `already-exists` when its ID is taken
    */
   create(input: GroupInput): Group | null;
   /**

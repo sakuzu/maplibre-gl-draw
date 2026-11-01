@@ -31,9 +31,9 @@ export interface DocumentResource {
    *   neither a document of the library nor GeoJSON, an image file that cannot be decoded), or
    *   `invalid-input` when the document is not valid (a document of the library that breaks
    *   its format, an embedded image that is broken, an image without `coordinate`, `layer`
-   *   with `layerId`, `layer` or `group` with a document of the library), `not-found` for a
-   *   `layerId` the document does not have, or `already-exists` for an ID of `layer` or
-   *   `group` that is taken
+   *   with `layerId`, `layer` or `group` with a document of the library, an ID of `layer` or
+   *   `group` the Store does not take), `not-found` for a `layerId` the document does not have,
+   *   or `already-exists` for an ID of `layer` or `group` that is taken
    */
   load(source: LoadSource, options?: LoadOptions): Promise<LoadResult | null>;
   /**
