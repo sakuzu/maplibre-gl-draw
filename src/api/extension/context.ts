@@ -7,11 +7,12 @@
  * Each kind of extension receives one narrow context with only what that kind needs. Every
  * type a context holds is part of the public API and follows semver.
  *
- * The three contexts of what is read on the screen:
+ * The contexts of what is read on the screen:
  *
  * - {@link ScreenContext}: the conversion between the map and the screen alone, in the view
- *   drawn last. Every context has it (`ctx.screen`); a type receives it alone where it answers
- *   from the feature only (`footprint`)
+ *   drawn last. Every context has it (`ctx.screen`)
+ * - {@link FootprintContext}: what a type reads to answer the footprint of a feature, the screen
+ *   alone
  * - {@link PointContext}: a point on the screen being tested, with its position, its tolerance
  *   and what the reading leaves out, for a hit test, a box selection and snapping candidates
  * - {@link HandleContext}: what places the handles of a feature, the selection box the library
@@ -270,6 +271,15 @@ export interface PointContext {
    * that must not be snapped to, such as the one being drawn
    */
   excludeIds?: ReadonlySet<string>;
+}
+
+/**
+ * What a feature type receives to answer the footprint of a feature
+ * (`FeatureTypeDefinition.footprint`): the screen, in the view drawn last.
+ */
+export interface FootprintContext {
+  /** The conversion between the map and the screen, in the view drawn last */
+  readonly screen: ScreenContext;
 }
 
 /**

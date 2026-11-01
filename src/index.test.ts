@@ -115,6 +115,7 @@ const MAIN = [
   'GroupPatch',
   'GroupsCollection',
   'Handle',
+  'FootprintContext',
   'HandleContext',
   'HandleProvider',
   'ResizeHandle',

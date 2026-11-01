@@ -210,6 +210,7 @@ export { diffItemOrder } from './api/model.js';
 // Extensions
 export type {
   ExtensionContext,
+  FootprintContext,
   HandleContext,
   ModeContext,
   NameGenerator,

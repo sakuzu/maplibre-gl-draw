@@ -56,7 +56,12 @@ import type { SelectionExtensionRegistry } from '../../view/ui/selection-ui/exte
 import { computeBoundingBox } from '../../view/ui/selection-ui/index.js';
 import type { BoundingBoxCoords } from '../../view/ui/selection-ui/types.js';
 import type { ScreenPoint } from '../events.js';
-import type { HandleContext, PointContext, ScreenContext } from '../extension/context.js';
+import type {
+  FootprintContext,
+  HandleContext,
+  PointContext,
+  ScreenContext,
+} from '../extension/context.js';
 import type {
   CustomHandle,
   FeatureTypeDefinition,
@@ -490,9 +495,12 @@ export function installFeatureType(
 
     const footprint = definition.footprint?.bind(definition);
     if (footprint) {
+      const footprintContext: FootprintContext = Object.freeze({ screen: deps.screen });
       /** The footprint the type gives a feature it takes, when it is one */
       const footprintOf = (feature: StoredFeature): Footprint | null | undefined =>
-        applies(feature) ? validFootprint(footprint(feature as Feature, deps.screen)) : undefined;
+        applies(feature)
+          ? validFootprint(footprint(feature as Feature, footprintContext))
+          : undefined;
       // The selection box on the map: the corners of a footprint laid on the map, or the
       // position of one of the screen (a box without area, which is drawn on the screen around
       // it); the box of the geometry for a feature the type does not take or gives none of

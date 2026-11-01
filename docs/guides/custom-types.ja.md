@@ -301,7 +301,8 @@ const hitRoute: FeatureTypeDefinition = {
 | `onHandleDrag` | ハンドルをドラッグしても何も変わりません |
 | `snapCandidates` | 図形の頂点と辺が候補です |
 
-`footprint(feature, ctx)` は、地物が覆う外形を答えます。ライブラリーは
+`footprint(feature, ctx)` は、地物が覆う外形を答えます。文脈は画面だけを
+持つ `FootprintContext` (`ctx.screen`) です。ライブラリーは
 そこから選択の枠を作ります。枠を描き、当て、大きさを変えるハンドルと
 回すハンドルを枠に置きます。返す外形は次の 2 種類で、枠をどう描いて
 当てるかは、図形ではなくこの種類が決めます。

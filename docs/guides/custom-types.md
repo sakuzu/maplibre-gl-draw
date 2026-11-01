@@ -317,8 +317,10 @@ The other members of a definition are optional:
 
 `footprint(feature, ctx)` says what a feature covers, and the library
 makes the selection box from it: it draws the box, hits it, and places
-the resize and rotate handles on it. It returns one of two kinds, and the
-kind, not the geometry, decides how the box is drawn and hit:
+the resize and rotate handles on it. Its context is a
+`FootprintContext`, the screen alone (`ctx.screen`). It returns one of
+two kinds, and the kind, not the geometry, decides how the box is drawn
+and hit:
 
 - `{ kind: 'ground', corners: { topLeft, topRight, bottomRight,
   bottomLeft } }`, four positions on the map, in the order of the shape

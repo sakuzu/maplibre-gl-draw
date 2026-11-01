@@ -184,7 +184,8 @@ writing it. Its changes are listed after those of 3.0.0.
   position (`ScreenFootprint`), the two kinds of `Footprint`. The kind,
   not the geometry, decides whether the box is drawn and hit on the map,
   with the resize and rotate handles, or on the screen, without them. A
-  type without it has the footprint of its geometry.
+  type without it has the footprint of its geometry. Its context is a
+  `FootprintContext`, the screen alone (`ctx.screen`).
 - `FeatureTypeDefinition.transformFields` (`TransformFields`): the keys of
   `properties` a custom type keeps the rotation and the factor of the
   size of its features under (`angleDegreesKey`, `scaleKey`), and whether

@@ -23,7 +23,7 @@ import type { TerrainContext } from '../../view/terrain/context.js';
 import { computeBoundingBox, hasZeroArea } from '../../view/ui/selection-ui/index.js';
 import { offsetUniformsAt, viewUniforms } from '../../webgl/index.js';
 import { DrawError } from '../errors.js';
-import type { PointContext, ScreenContext } from '../extension/context.js';
+import type { FootprintContext, PointContext, ScreenContext } from '../extension/context.js';
 import type { FeatureTypeDefinition, Footprint, Handle } from '../extension/feature-type.js';
 import type { Hit } from '../extension/provider.js';
 import type { RenderContext } from '../extension/render.js';
@@ -502,6 +502,27 @@ describe('the footprint of a custom feature type', () => {
     ]);
     engine.extensions.collections.featureTypes.remove('shape');
     expect(computeBoundingBox(polygon, extensions)?.center).toEqual([1.5, 1.5]);
+    engine.destroy();
+  });
+
+  it('gives the footprint a context of the screen alone, which it cannot change', () => {
+    const engine = engineWithDraw();
+    const contexts: FootprintContext[] = [];
+    engine.extensions.collections.featureTypes.add({
+      type: 'shape',
+      geometry: 'Polygon',
+      renderer,
+      footprint: (_feature, ctx) => {
+        contexts.push(ctx);
+        return null;
+      },
+    });
+    computeBoundingBox(polygon, engine.context.selectionScope.extensions);
+    expect(contexts.length).toBeGreaterThan(0);
+    const [ctx] = contexts;
+    expect(Object.keys(ctx)).toEqual(['screen']);
+    expect(typeof ctx.screen.project).toBe('function');
+    expect(Object.isFrozen(ctx)).toBe(true);
     engine.destroy();
   });
 

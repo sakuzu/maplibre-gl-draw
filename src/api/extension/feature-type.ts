@@ -11,7 +11,7 @@ import type { BBox } from '../../geometry/types.js';
 import type { ScreenPoint } from '../events.js';
 import type { Feature, FeaturePatch, FeatureStyle } from '../model.js';
 import type { LayerTableView, RowHandle } from '../tables.js';
-import type { HandleContext, PointContext, ScreenContext } from './context.js';
+import type { FootprintContext, HandleContext, PointContext } from './context.js';
 import type { DrawPointerEvent } from './mode.js';
 import type { Hit, SnapCandidate } from './provider.js';
 import type { FeatureRenderer, RenderContext } from './render.js';
@@ -238,7 +238,7 @@ export interface FeatureTypeDefinition {
    *
    * @returns The footprint, or `null` when the feature has nothing to draw
    */
-  footprint?(feature: Feature, ctx: ScreenContext): Footprint | null;
+  footprint?(feature: Feature, ctx: FootprintContext): Footprint | null;
   /**
    * The fields of its features that the resize and the rotation change with their geometry: the
    * key of `properties` of their rotation and of their size, and whether a scaling keeps their
