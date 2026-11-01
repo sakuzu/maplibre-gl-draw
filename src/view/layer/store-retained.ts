@@ -223,7 +223,7 @@ export class StoreRetainedCache {
           deps.renderers.line.drawRetainedBatch(chunk.line, zoom, projectionData, factors);
         }
         if (chunk.point) {
-          deps.renderers.point.drawRetained(chunk.point, zoom, projectionData, factors);
+          deps.renderers.point.drawRetained(chunk.point, projectionData, factors);
         }
       }
     } finally {

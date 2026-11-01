@@ -120,16 +120,16 @@ export class TentativeRenderer {
    *
    * Called after the selection UI so that they are shown in the foreground.
    */
-  drawVertices(tentative: TentativeState, zoom: number): void {
+  drawVertices(tentative: TentativeState): void {
     if (tentative.type === 'Point') {
       const coord = tentative.coordinates as Coordinate;
-      this.drawPointShape(coord, this.vertexStyle, zoom);
+      this.drawPointShape(coord, this.vertexStyle);
     } else if (tentative.type === 'LineString') {
-      this.drawLineStringVertices(tentative, zoom);
+      this.drawLineStringVertices(tentative);
     } else if (tentative.type === 'Polygon') {
-      this.drawPolygonVertices(tentative, zoom);
+      this.drawPolygonVertices(tentative);
     } else if (tentative.type === 'Circle') {
-      this.drawCircleVertices(tentative, zoom);
+      this.drawCircleVertices(tentative);
     } else if (tentative.type === 'Freehand') {
       // Freehand is lines only and does not draw vertices (the existing behavior is kept)
     }
@@ -138,8 +138,8 @@ export class TentativeRenderer {
   /**
    * Draw a Point shape
    */
-  private drawPointShape(coord: Coordinate, style: PointStyle, zoom: number): void {
-    this.pointShapeRenderer.draw(coord, style, zoom);
+  private drawPointShape(coord: Coordinate, style: PointStyle): void {
+    this.pointShapeRenderer.draw(coord, style);
   }
 
   /**
@@ -184,14 +184,14 @@ export class TentativeRenderer {
   /**
    * Tentative rendering of the vertices of a LineString
    */
-  private drawLineStringVertices(tentative: TentativeState, zoom: number): void {
+  private drawLineStringVertices(tentative: TentativeState): void {
     const coords = tentative.coordinates as Coordinate[];
     const highlightedIndex = tentative.highlightedVertexIndex;
 
     // Draw the vertices (the highlighted one has a different style)
     for (let i = 0; i < coords.length; i++) {
       const style = i === highlightedIndex ? this.highlightedVertexStyle : this.vertexStyle;
-      this.drawPointShape(coords[i], style, zoom);
+      this.drawPointShape(coords[i], style);
     }
   }
 
@@ -216,7 +216,7 @@ export class TentativeRenderer {
 
     // Fill from 3 points or more (4 points or more when closed)
     if (outerRing.length >= 4) {
-      this.fillShaderManager.drawPolygon(outerRing, this.fillColor, projectionData, zoom);
+      this.fillShaderManager.drawPolygon(outerRing, this.fillColor, projectionData);
     }
 
     // Draw solid lines between the confirmed vertices (when there are 2 or more of them)
@@ -266,7 +266,7 @@ export class TentativeRenderer {
   /**
    * Tentative rendering of the vertices of a Polygon
    */
-  private drawPolygonVertices(tentative: TentativeState, zoom: number): void {
+  private drawPolygonVertices(tentative: TentativeState): void {
     const rings = tentative.coordinates as Coordinate[][];
     const outerRing = rings[0];
 
@@ -280,7 +280,7 @@ export class TentativeRenderer {
     const highlightedIndex = tentative.highlightedVertexIndex;
     for (let i = 0; i < uniqueVertexCount; i++) {
       const style = i === highlightedIndex ? this.highlightedVertexStyle : this.vertexStyle;
-      this.drawPointShape(outerRing[i], style, zoom);
+      this.drawPointShape(outerRing[i], style);
     }
   }
 
@@ -301,7 +301,7 @@ export class TentativeRenderer {
       // The preview of the circle (the fill)
       const circleCoords = generateCirclePolygon(center, radiusMeters);
       if (circleCoords.length >= 4) {
-        this.fillShaderManager.drawPolygon(circleCoords, this.fillColor, projectionData, zoom);
+        this.fillShaderManager.drawPolygon(circleCoords, this.fillColor, projectionData);
       }
 
       // The stroke of the circle
@@ -334,7 +334,7 @@ export class TentativeRenderer {
   /**
    * Tentative rendering of the vertices of a Circle
    */
-  private drawCircleVertices(tentative: TentativeState, zoom: number): void {
+  private drawCircleVertices(tentative: TentativeState): void {
     const center = tentative.coordinates as Coordinate;
     const radiusMeters = tentative.radiusMeters ?? 0;
     const radiusHandleAngle = tentative.radiusHandleAngle ?? 135;
@@ -344,14 +344,14 @@ export class TentativeRenderer {
       const handlePosition = destinationPoint(center, radiusMeters, radiusHandleAngle);
 
       // Draw the center marker (shown below the radius change handle)
-      this.drawPointShape(center, this.circleCenterMarkerStyle, zoom);
+      this.drawPointShape(center, this.circleCenterMarkerStyle);
 
       // Draw the radius change handle (shown above the center marker)
-      this.drawPointShape(handlePosition, this.circleRadiusHandleStyle, zoom);
+      this.drawPointShape(handlePosition, this.circleRadiusHandleStyle);
     } else {
       // When the radius is 0, only the radius change handle is shown at the center position
-      this.drawPointShape(center, this.circleCenterMarkerStyle, zoom);
-      this.drawPointShape(center, this.circleRadiusHandleStyle, zoom);
+      this.drawPointShape(center, this.circleCenterMarkerStyle);
+      this.drawPointShape(center, this.circleRadiusHandleStyle);
     }
   }
 

@@ -420,7 +420,7 @@ export class BatchManager {
       }
       // Shapes that do not support instancing are drawn individually, one point at a time
       // (MultiPoint comes into this function part by part, so they are drawn per point)
-      this.featureDrawer.drawPointShape(coord, this.withFrameFactors(style), this.zoom, feature.id);
+      this.featureDrawer.drawPointShape(coord, this.withFrameFactors(style), feature.id);
     } else {
       // Color, size and stroke are instance attributes, so the batch key only needs the shape
       const batchKey: InstancingShape = instancedShape;
@@ -447,7 +447,7 @@ export class BatchManager {
   private flushPointBatches(): void {
     for (const batch of this.pointBatches.values()) {
       if (batch.points.length > 0) {
-        this.pointInstanceRenderer.drawAll(batch.points, batch.shape, this.zoom, this.factors);
+        this.pointInstanceRenderer.drawAll(batch.points, batch.shape, this.factors);
       }
     }
     this.pointBatches.clear();
@@ -557,7 +557,7 @@ export class BatchManager {
 
   private beginSDFLineDraw(): void {
     if (!this.sdfLineDrawing && this.projectionData) {
-      this.sdfLineRenderer.beginDraw(this.projectionData, this.zoom);
+      this.sdfLineRenderer.beginDraw(this.projectionData);
       this.sdfLineDrawing = true;
     }
   }
@@ -763,7 +763,7 @@ export class BatchManager {
 
   private flushPolygonFillBatch(): void {
     if (this.polygonFillBatch.length > 0 && this.projectionData) {
-      this.polygonBatchRenderer.drawBatch(this.polygonFillBatch, this.projectionData, this.zoom);
+      this.polygonBatchRenderer.drawBatch(this.polygonFillBatch, this.projectionData);
       this.polygonFillBatch.length = 0;
     }
   }

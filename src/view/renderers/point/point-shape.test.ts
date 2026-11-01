@@ -161,7 +161,6 @@ function drawOnce(
       strokeOpacity: 1,
       strokeWidth: 2,
     } as Parameters<PointShapeRenderer['draw']>[1],
-    12,
     featureId,
   );
 }

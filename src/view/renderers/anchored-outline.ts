@@ -261,7 +261,6 @@ void main() {
    * @param corners The corners relative to the anchor's point on the screen, in CSS px
    * @param style The line (its width is in CSS px)
    * @param opacity A factor on the opacity of the line (the terrain's ghost of the marker)
-   * @param _zoom The zoom of the frame (not read)
    * @param projectionData The projection of the copy of the world being drawn
    */
   draw(
@@ -270,7 +269,6 @@ void main() {
     corners: readonly OutlineOffset[],
     style: StrokeStyle,
     opacity: number,
-    _zoom: number,
     projectionData: ProjectionData,
   ): void {
     if (!this.program) return;

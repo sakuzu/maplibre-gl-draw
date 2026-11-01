@@ -72,7 +72,7 @@ describe('the frames of the features selected in bulk', () => {
       Number.NaN,
       Number.NaN,
     ]);
-    renderer.drawGroup(group, binding, 1, PROJECTION as never, 10, DEFAULT_SELECTION_CONFIG, () => [
+    renderer.drawGroup(group, binding, 1, PROJECTION as never, DEFAULT_SELECTION_CONFIG, () => [
       8, 5,
     ]);
     const data = calls.find((call) => call.name === 'bufferData')?.args[1] as Float32Array;
@@ -96,7 +96,6 @@ describe('the frames of the features selected in bulk', () => {
         binding,
         revision,
         PROJECTION as never,
-        10,
         DEFAULT_SELECTION_CONFIG,
         () => null,
       );
@@ -143,7 +142,6 @@ describe('the frames of the features selected in bulk', () => {
         binding,
         1,
         PROJECTION as never,
-        10,
         DEFAULT_SELECTION_CONFIG,
         () => [8, 5],
       );

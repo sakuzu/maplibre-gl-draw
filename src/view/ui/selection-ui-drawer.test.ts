@@ -104,35 +104,35 @@ describe('renderFollowedVertices', () => {
   ];
 
   it('draws nothing when the UI state is null', () => {
-    renderFollowedVertices(null, store, ZOOM, PROJECTION_DATA, deps);
+    renderFollowedVertices(null, store, PROJECTION_DATA, deps);
     expect(drawn).toEqual([]);
   });
 
   it('draws nothing for an empty array either', () => {
-    renderFollowedVertices([], store, ZOOM, PROJECTION_DATA, deps);
+    renderFollowedVertices([], store, PROJECTION_DATA, deps);
     expect(drawn).toEqual([]);
   });
 
   it('passes the following features and vertex references through as they are', () => {
-    renderFollowedVertices(followed, store, ZOOM, PROJECTION_DATA, deps);
+    renderFollowedVertices(followed, store, PROJECTION_DATA, deps);
     expect(drawn).toEqual([{ featureId: 'f2', refs: followed[0].vertices }]);
   });
 
   it('does not draw deleted features', () => {
     store.deleteFeature('f2');
-    renderFollowedVertices(followed, store, ZOOM, PROJECTION_DATA, deps);
+    renderFollowedVertices(followed, store, PROJECTION_DATA, deps);
     expect(drawn).toEqual([]);
   });
 
   it('does not draw hidden features', () => {
     store.updateFeature('f2', { visible: false });
-    renderFollowedVertices(followed, store, ZOOM, PROJECTION_DATA, deps);
+    renderFollowedVertices(followed, store, PROJECTION_DATA, deps);
     expect(drawn).toEqual([]);
   });
 
   it('does not draw locally hidden features', () => {
     store.setLocallyHidden('f2', true);
-    renderFollowedVertices(followed, store, ZOOM, PROJECTION_DATA, deps);
+    renderFollowedVertices(followed, store, PROJECTION_DATA, deps);
     expect(drawn).toEqual([]);
   });
 });

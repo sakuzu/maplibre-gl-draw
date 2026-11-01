@@ -244,7 +244,7 @@ function createRendererProbe(
           origin: options?.origin,
           shapes: points.map((point) => point.shape ?? shape),
         }) as unknown as RetainedPointBatch,
-      drawRetained: (batch, _zoom, _projection, factors): void => {
+      drawRetained: (batch, _projection, factors): void => {
         recordDraw(batch, factors);
       },
       disposeRetained: (batch): void => {

@@ -127,8 +127,8 @@ describe('the draws of rows outside a run', () => {
     const state = binding(mock, 4);
     beginRenderFrame();
     mock.clear();
-    point.drawRetainedRange(points, 0, 2, 12, projection(), state);
-    point.drawRetainedRange(points, 0, 2, 12, projection(), state);
+    point.drawRetainedRange(points, 0, 2, projection(), state);
+    point.drawRetainedRange(points, 0, 2, projection(), state);
     expect(mock.of('useProgram')).toHaveLength(2);
     expect(mock.of('bindVertexArray').map((call) => call.args[0])).toEqual([
       points.vao,
@@ -147,8 +147,8 @@ describe('the draws of rows in a run', () => {
     beginRenderFrame();
     mock.clear();
     run.begin();
-    point.drawRetainedRange(points, 0, 2, 12, projection(), state);
-    point.drawRetainedRange(points, 0, 2, 12, projection(), state);
+    point.drawRetainedRange(points, 0, 2, projection(), state);
+    point.drawRetainedRange(points, 0, 2, projection(), state);
     line.drawRetainedRange(lines, 0, 2, 12, projection(), state);
     line.drawRetainedRange(lines, 0, 2, 12, projection(), state);
     // One program per change of program
@@ -174,9 +174,9 @@ describe('the draws of rows in a run', () => {
     beginRenderFrame();
     mock.clear();
     run.begin();
-    point.drawRetainedRange(points, 0, 1, 12, projection(), first);
-    point.drawRetainedRange(points, 1, 2, 12, projection(), second);
-    point.drawRetainedRange(points, 2, 3, 12, projection(), second);
+    point.drawRetainedRange(points, 0, 1, projection(), first);
+    point.drawRetainedRange(points, 1, 2, projection(), second);
+    point.drawRetainedRange(points, 2, 3, projection(), second);
     run.end();
     expect(mock.of('bindTexture').map((call) => call.args[1])).toEqual([
       first.texture.texture,
@@ -189,13 +189,13 @@ describe('the draws of rows in a run', () => {
     const state = binding(mock, 4);
     beginRenderFrame();
     run.begin();
-    point.drawRetainedRange(points, 0, 2, 12, projection(), state);
+    point.drawRetainedRange(points, 0, 2, projection(), state);
     mock.clear();
     run.forget();
     // The vertex array left bound is unbound before the other drawing
     expect(mock.of('bindVertexArray').map((call) => call.args[0])).toEqual([null]);
     mock.clear();
-    point.drawRetainedRange(points, 0, 2, 12, projection(), state);
+    point.drawRetainedRange(points, 0, 2, projection(), state);
     expect(mock.of('useProgram')).toHaveLength(1);
     expect(mock.of('bindTexture')).toHaveLength(1);
     expect(mock.of('activeTexture')).toHaveLength(2);
@@ -207,17 +207,17 @@ describe('the draws of rows in a run', () => {
     const state = binding(mock, 4);
     beginRenderFrame();
     run.begin();
-    point.drawRetainedRange(points, 0, 2, 12, projection(), state);
+    point.drawRetainedRange(points, 0, 2, projection(), state);
     // A frame that starts while a run is open (its end was skipped) trusts nothing of it
     beginRenderFrame();
     mock.clear();
-    point.drawRetainedRange(points, 0, 2, 12, projection(), state);
+    point.drawRetainedRange(points, 0, 2, projection(), state);
     expect(mock.of('useProgram')).toHaveLength(1);
     expect(mock.of('bindTexture')).toHaveLength(1);
     // A run that begins forgets the one before
     mock.clear();
     run.begin();
-    point.drawRetainedRange(points, 0, 2, 12, projection(), state);
+    point.drawRetainedRange(points, 0, 2, projection(), state);
     expect(mock.of('bindVertexArray').map((call) => call.args[0])).toEqual([null, points.vao]);
     expect(mock.of('useProgram')).toHaveLength(1);
     expect(mock.of('bindTexture')).toHaveLength(1);
@@ -230,9 +230,9 @@ describe('the draws of rows in a run', () => {
     beginRenderFrame();
     mock.clear();
     run.begin();
-    point.drawRetainedRange(points, 0, 1, 12, projection(), state);
+    point.drawRetainedRange(points, 0, 1, projection(), state);
     polygon.drawRetainedRange(polygons, 0, 1, 12, projection(), [800, 600], state);
-    point.drawRetainedRange(points, 1, 2, 12, projection(), state);
+    point.drawRetainedRange(points, 1, 2, projection(), state);
     run.end();
     expect(mock.of('useProgram')).toHaveLength(3);
   });
@@ -249,7 +249,7 @@ describe('the instance attributes of a batch of rows', () => {
       return mock.of('vertexAttribPointer').length;
     };
     const drawPoints = (from: number, to: number) => () =>
-      point.drawRetainedRange(points, from, to, 12, projection(), state);
+      point.drawRetainedRange(points, from, to, projection(), state);
     // A range from the first row: the attributes point there since the build
     expect(pointers(drawPoints(0, 2))).toBe(0);
     // Another first instance: the 8 attributes of the instances are pointed again (no enabling)
@@ -278,18 +278,18 @@ describe('the uniforms of the draws of rows', () => {
     const state = binding(mock, 4, translations);
     beginRenderFrame();
     mock.clear();
-    point.drawRetainedRange(points, 0, 1, 12, projection(), state);
-    point.drawRetainedRange(points, 1, 2, 12, projection(), state);
+    point.drawRetainedRange(points, 0, 1, projection(), state);
+    point.drawRetainedRange(points, 1, 2, projection(), state);
     expect(mock.uniform('u_row_state')).toHaveLength(1);
     expect(mock.uniform('u_row_state_width')).toHaveLength(1);
     expect(mock.uniform('u_state_translate')).toHaveLength(1);
     // The translations are the same array, written in place by the caller
     translations[2] = 0.5;
-    point.drawRetainedRange(points, 2, 3, 12, projection(), state);
+    point.drawRetainedRange(points, 2, 3, projection(), state);
     expect(mock.uniform('u_state_translate')).toHaveLength(2);
     expect(mock.uniform('u_row_state')).toHaveLength(1);
     beginRenderFrame();
-    point.drawRetainedRange(points, 0, 1, 12, projection(), state);
+    point.drawRetainedRange(points, 0, 1, projection(), state);
     expect(mock.uniform('u_row_state')).toHaveLength(2);
     expect(mock.uniform('u_row_state_width')).toHaveLength(2);
     expect(mock.uniform('u_state_translate')).toHaveLength(3);

@@ -170,7 +170,6 @@ export function createRenderContext(
         rings.map((ring) => ring.map(pair)),
         [r, g, b, a * style.opacity],
         projection,
-        zoom,
       );
     },
   };
@@ -189,7 +188,6 @@ export function createRenderContext(
           strokeWidth: style.strokeWidth * scale,
           strokeOpacity: style.strokeOpacity,
         },
-        zoom,
         undefined,
         options.elevationMeters,
       );

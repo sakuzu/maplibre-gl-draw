@@ -326,7 +326,7 @@ describe('the GL calls per draw', () => {
           ],
           'circle',
         );
-        if (batch) batches.push(() => point.drawRetained(batch, 14, projectionData));
+        if (batch) batches.push(() => point.drawRetained(batch, projectionData));
       } else if (at === 1) {
         const coords = (f.geometry as { coordinates: unknown }).coordinates as [number, number][];
         const batch = line.buildRetainedBatch(

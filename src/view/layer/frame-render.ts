@@ -332,7 +332,6 @@ export function renderForeground(deps: FrameRenderDeps, f: FrameState): void {
       deps.tableRetained?.drawBulkFrames(
         r.bulkFramesRenderer,
         copy.projectionData,
-        f.zoom,
         r.selectionUIRenderer.config,
         tables.revision,
         pointExtent,
@@ -361,14 +360,13 @@ export function renderForeground(deps: FrameRenderDeps, f: FrameState): void {
     renderFollowedVertices(
       store.getFollowedVertices?.() ?? null,
       store,
-      f.zoom,
       copy.projectionData,
       selectionUIDeps,
     );
 
     // Draw the vertices of the tentative in the foreground
     if (tentative) {
-      r.tentativeRenderer.drawVertices(tentative, f.zoom);
+      r.tentativeRenderer.drawVertices(tentative);
     }
 
     // Draw the vertices of the layer-aware renderers in the foreground

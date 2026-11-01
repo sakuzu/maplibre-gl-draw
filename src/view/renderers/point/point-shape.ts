@@ -354,13 +354,11 @@ void main() {
    * Draws a point
    * @param coord The coordinates [lng, lat]
    * @param style The point style
-   * @param _zoom The current zoom level (not read)
    * @param featureId The feature ID (optional)
    */
   draw(
     coord: [number, number],
     style: PointStyle,
-    _zoom: number,
     featureId?: string,
     /**
      * The elevation to place it at (meters). When omitted, the ground elevation is used

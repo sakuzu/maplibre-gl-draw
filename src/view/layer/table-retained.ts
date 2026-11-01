@@ -2111,7 +2111,6 @@ export class TableLayerRenderer {
   drawBulkFrames(
     renderer: BulkFramesRenderer,
     projectionData: ProjectionData,
-    zoom: number,
     config: SelectionUIConfig,
     revision: number,
     pointExtent: PointFrameExtent,
@@ -2128,7 +2127,6 @@ export class TableLayerRenderer {
           binding,
           revision,
           projectionData,
-          zoom,
           config,
           pointExtent,
         );
@@ -2367,7 +2365,6 @@ export class TableLayerRenderer {
           batches.batch as RetainedPointBatch,
           from,
           to,
-          zoom,
           projectionData,
           binding,
           pass.factors,

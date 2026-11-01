@@ -212,7 +212,7 @@ describe('memoizing uniforms in the retained rendering of points', () => {
     beginRenderFrame();
     mock.reset();
     for (const batch of batches) {
-      renderer.drawRetained(batch, 14, projectionData);
+      renderer.drawRetained(batch, projectionData);
     }
 
     // The fill and the outline are one program, so the matrix is written only once
@@ -243,7 +243,7 @@ describe('memoizing uniforms in the retained rendering of points', () => {
     beginRenderFrame();
     mock.reset();
     for (const batch of batches) {
-      renderer.drawRetained(batch, 14, projectionData);
+      renderer.drawRetained(batch, projectionData);
     }
 
     // 1 program x 2 chunks. The shift of the origin is specific to the chunk
@@ -263,16 +263,16 @@ describe('memoizing uniforms in the retained rendering of points', () => {
     const batch = renderer.buildRetained(points(0, 0), 'circle', { origin: [0, 0] })!;
 
     beginRenderFrame();
-    renderer.drawRetained(batch, 14, projectionData);
+    renderer.drawRetained(batch, projectionData);
 
     mock.reset();
-    renderer.drawRetained(batch, 14, projectionData);
+    renderer.drawRetained(batch, projectionData);
     expect(mock.writes('u_projection_matrix')).toBe(0);
 
     // Even with the same ProjectionData, it is rewritten when the frame changes
     beginRenderFrame();
     mock.reset();
-    renderer.drawRetained(batch, 14, projectionData);
+    renderer.drawRetained(batch, projectionData);
     expect(mock.writes('u_projection_matrix')).toBe(1);
   });
 
@@ -286,10 +286,10 @@ describe('memoizing uniforms in the retained rendering of points', () => {
     const batch = renderer.buildRetained(points(0, 0), 'circle', { origin: [0, 0] })!;
 
     beginRenderFrame();
-    renderer.drawRetained(batch, 14, first);
+    renderer.drawRetained(batch, first);
 
     mock.reset();
-    renderer.drawRetained(batch, 14, createProjectionData());
+    renderer.drawRetained(batch, createProjectionData());
     expect(mock.writes('u_projection_matrix')).toBe(1);
   });
 
@@ -303,14 +303,14 @@ describe('memoizing uniforms in the retained rendering of points', () => {
     const batch = renderer.buildRetained(points(0, 0), 'circle', { origin: [0, 0] })!;
 
     beginRenderFrame();
-    renderer.drawRetained(batch, 14, projectionData);
+    renderer.drawRetained(batch, projectionData);
 
     // Changing the projection rebuilds the program (the uniforms return to their initial values)
     renderer.ensureShader({ ...SHADER_DATA, variantName: 'globe' });
     const rebuilt = renderer.buildRetained(points(0, 0), 'circle', { origin: [0, 0] })!;
 
     mock.reset();
-    renderer.drawRetained(rebuilt, 14, projectionData);
+    renderer.drawRetained(rebuilt, projectionData);
     expect(mock.writes('u_projection_matrix')).toBe(1);
   });
 });

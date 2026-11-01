@@ -201,7 +201,7 @@ describe('a point batch of rows', () => {
     expect(ledger.snapshot().byOwner.points).toBeGreaterThanOrEqual(5 * ROW_POINT_STRIDE * 4);
 
     mock.clear();
-    renderer.drawRetainedRange(batch, 1, 3, 12, projection(), binding(mock.gl, 3));
+    renderer.drawRetainedRange(batch, 1, 3, projection(), binding(mock.gl, 3));
     const draws = mock.of('drawArraysInstanced');
     expect(draws).toHaveLength(1);
     expect(draws[0].args[3]).toBe(4);
@@ -239,7 +239,7 @@ describe('a point batch of rows', () => {
     );
     if (!batch) throw new Error('batch');
     mock.clear();
-    renderer.drawRetainedRange(batch, 0, 1, 12, projection(), binding(mock.gl, 2));
+    renderer.drawRetainedRange(batch, 0, 1, projection(), binding(mock.gl, 2));
     expect(mock.of('drawArraysInstanced')).toHaveLength(0);
   });
 });

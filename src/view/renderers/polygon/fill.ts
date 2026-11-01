@@ -162,15 +162,13 @@ void main() {
    * @param coords The coordinate array (WGS84)
    * @param color The fill color
    * @param projectionData MapLibre's ProjectionData
-   * @param zoom The current zoom level
    */
   drawPolygon(
     coords: Coordinate[],
     color: [number, number, number, number],
     projectionData: ProjectionData,
-    zoom: number,
   ): void {
-    this.drawPolygonRings([coords], color, projectionData, zoom);
+    this.drawPolygonRings([coords], color, projectionData);
   }
 
   /**
@@ -181,13 +179,11 @@ void main() {
    * @param rings The array of rings ([0] is the outer ring, [1..] are inner rings, WGS84)
    * @param color The fill color
    * @param projectionData MapLibre's ProjectionData
-   * @param _zoom The current zoom level (not read)
    */
   drawPolygonRings(
     rings: Coordinate[][],
     color: [number, number, number, number],
     projectionData: ProjectionData,
-    _zoom: number,
   ): void {
     if (!this.program) return;
 

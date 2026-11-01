@@ -347,7 +347,7 @@ describe('immediate mode of FillShaderManager', () => {
     manager.ensureShader(SHADER_DATA);
 
     mock.reset();
-    manager.drawPolygonRings([SQUARE], [1, 0, 0, 1], createProjectionData(), 12);
+    manager.drawPolygonRings([SQUARE], [1, 0, 0, 1], createProjectionData());
 
     const uploaded = indexUploads(mock);
     expect(uploaded).toHaveLength(1);
@@ -372,11 +372,11 @@ describe('immediate mode of FillShaderManager', () => {
     manager.ensureShader(SHADER_DATA);
 
     mock.reset();
-    manager.drawPolygonRings([SQUARE], [1, 0, 0, 1], createProjectionData(), 12);
+    manager.drawPolygonRings([SQUARE], [1, 0, 0, 1], createProjectionData());
     expect(mock.created()).toEqual(NO_NEW_RESOURCES);
 
     mock.reset();
-    manager.drawPolygonRings([SQUARE], [0, 1, 0, 1], createProjectionData(), 12);
+    manager.drawPolygonRings([SQUARE], [0, 1, 0, 1], createProjectionData());
 
     expect(mock.created()).toEqual(NO_NEW_RESOURCES);
     expect(mock.calls('deleteBuffer')).toHaveLength(0);

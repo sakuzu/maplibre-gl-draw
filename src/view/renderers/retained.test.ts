@@ -442,7 +442,7 @@ describe('retained mode of PointInstanceRenderer', () => {
     if (!batch) throw new Error('batch');
 
     mock.reset();
-    renderer.drawRetained(batch, 12, createProjectionData());
+    renderer.drawRetained(batch, createProjectionData());
 
     expect(mock.bufferData()).toBe(0);
     // Once for the fill + the outline
@@ -527,16 +527,16 @@ describe('the draw-time factors (u_size_scale / u_opacity)', () => {
     const batch = renderer.buildRetained(POINTS, 'circle');
     if (!batch) throw new Error('batch');
 
-    renderer.drawRetained(batch, 12, createProjectionData(), { scale: 0.5, opacity: 0.25 });
+    renderer.drawRetained(batch, createProjectionData(), { scale: 0.5, opacity: 0.25 });
     expect(mock.uniform1f('u_size_scale')).toBe(0.5);
     expect(mock.uniform1f('u_opacity')).toBe(0.25);
 
-    renderer.drawRetained(batch, 12, createProjectionData());
+    renderer.drawRetained(batch, createProjectionData());
     expect(mock.uniform1f('u_size_scale')).toBe(1);
     expect(mock.uniform1f('u_opacity')).toBe(1);
 
-    renderer.drawRetained(batch, 12, createProjectionData(), { scale: 3, opacity: 0.5 });
-    renderer.drawAll(POINTS, 'circle', 12);
+    renderer.drawRetained(batch, createProjectionData(), { scale: 3, opacity: 0.5 });
+    renderer.drawAll(POINTS, 'circle');
     expect(mock.uniform1f('u_size_scale')).toBe(1);
     expect(mock.uniform1f('u_opacity')).toBe(1);
   });

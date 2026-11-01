@@ -973,14 +973,12 @@ void main() {
    *
    * @param points The array of point data
    * @param shape The shape of the points that do not name one
-   * @param _zoom The current zoom level (not read)
    * @param factors The draw-time factors (the opacity of the layer being drawn; scale 1 and
    *   opacity 1 when omitted)
    */
   drawAll(
     points: PointInstanceDataFull[],
     shape: PointShape,
-    _zoom: number,
     factors: RetainedDrawFactors = NEUTRAL_DRAW_FACTORS,
   ): void {
     if (!this.program || !this.projectionData) return;
@@ -1151,7 +1149,6 @@ void main() {
     batch: RetainedPointBatch,
     fromRow: number,
     toRow: number,
-    _zoom: number,
     projectionData: ProjectionData,
     rowState: RowStateBinding,
     factors: RetainedDrawFactors = NEUTRAL_DRAW_FACTORS,
@@ -1207,7 +1204,6 @@ void main() {
    */
   drawRetained(
     batch: RetainedPointBatch,
-    _zoom: number,
     projectionData: ProjectionData,
     factors: RetainedDrawFactors = NEUTRAL_DRAW_FACTORS,
   ): void {

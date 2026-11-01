@@ -444,9 +444,8 @@ export class SelectionHandlesRenderer {
    * Draws them at the four corners of the bbox after the margin is applied
    *
    * @param bbox Bounding box
-   * @param zoom Zoom level
    */
-  drawResizeHandles(bbox: BoundingBoxCoords, zoom: number): void {
+  drawResizeHandles(bbox: BoundingBoxCoords): void {
     // Compute the bbox with the margin applied
     const marginedBbox = this.marginedBox(bbox);
     const handles = computeResizeHandles(marginedBbox);
@@ -456,7 +455,7 @@ export class SelectionHandlesRenderer {
     // match structurally. Putting them all at a single height to match the selection box
     // would shift only the rendering and make them ungrabbable
     for (const handle of handles) {
-      this.pointRenderer.draw(handle.position, this.config.resizeHandle.point, zoom);
+      this.pointRenderer.draw(handle.position, this.config.resizeHandle.point);
     }
   }
 
@@ -487,13 +486,12 @@ export class SelectionHandlesRenderer {
 
     // Draw the handle (put on the ground elevation of each point so that it matches the
     // grabbable position)
-    this.pointRenderer.draw(handle.position, this.config.rotateHandle.point, zoom);
+    this.pointRenderer.draw(handle.position, this.config.rotateHandle.point);
   }
 
   /**
    * Draws the vertex handles
    * @param feature Target feature
-   * @param zoom Zoom level
    * @param options Options
    *   - activeVertex: when specified, only that vertex and the selected vertices are drawn
    *   - selectedVertices: references of the selected vertices (for highlighting)
@@ -501,7 +499,6 @@ export class SelectionHandlesRenderer {
    */
   drawVertexHandles(
     feature: Feature,
-    zoom: number,
     options?: {
       activeVertex?: VertexRef;
       selectedVertices?: readonly VertexRef[];
@@ -537,7 +534,7 @@ export class SelectionHandlesRenderer {
         const style = isSelected
           ? this.config.vertexHandle.selected
           : this.config.vertexHandle.point;
-        this.pointRenderer.draw(handle.position, style, zoom);
+        this.pointRenderer.draw(handle.position, style);
       }
       return;
     }
@@ -567,7 +564,7 @@ export class SelectionHandlesRenderer {
         strokeWidth: style.strokeWidth,
       }));
 
-      this.pointInstanceRenderer.drawAll(points, 'circle', zoom);
+      this.pointInstanceRenderer.drawAll(points, 'circle');
     }
 
     // Draw the selected vertices (highlight style)
@@ -591,7 +588,7 @@ export class SelectionHandlesRenderer {
         strokeWidth: style.strokeWidth,
       }));
 
-      this.pointInstanceRenderer.drawAll(points, 'circle', zoom);
+      this.pointInstanceRenderer.drawAll(points, 'circle');
     }
   }
 
@@ -606,27 +603,23 @@ export class SelectionHandlesRenderer {
    * ring, so even when it is included in the references only one handle is drawn, as the
    * first vertex.
    */
-  drawFollowedVertexHandles(
-    feature: Feature,
-    followedVertices: readonly VertexRef[],
-    zoom: number,
-  ): void {
+  drawFollowedVertexHandles(feature: Feature, followedVertices: readonly VertexRef[]): void {
     if (followedVertices.length === 0) return;
 
     const handles = computeVertexHandles(feature).filter((h) =>
       hasVertexRef(followedVertices, h.vertexRef!),
     );
-    this.drawHandlesWithStyle(handles, this.config.vertexHandle.followed, zoom);
+    this.drawHandlesWithStyle(handles, this.config.vertexHandle.followed);
   }
 
   /**
    * Draws the auxiliary handles of the extensions that core draws (`scale`) with the look of the
    * resize handles, the size their hit test uses; the extension draws the others (`custom`)
    */
-  drawAuxiliaryHandles(positions: readonly Coordinate[], zoom: number): void {
+  drawAuxiliaryHandles(positions: readonly Coordinate[]): void {
     // Each one on the ground elevation of its own point, as the resize handles are
     for (const position of positions) {
-      this.pointRenderer.draw(position, this.config.resizeHandle.point, zoom);
+      this.pointRenderer.draw(position, this.config.resizeHandle.point);
     }
   }
 
@@ -638,13 +631,12 @@ export class SelectionHandlesRenderer {
   private drawHandlesWithStyle(
     handles: ReadonlyArray<Pick<HandleInfo, 'position'>>,
     style: PointStyle,
-    zoom: number,
   ): void {
     if (handles.length === 0) return;
 
     if (!this.pointInstanceRenderer || handles.length < 2) {
       for (const handle of handles) {
-        this.pointRenderer.draw(handle.position, style, zoom);
+        this.pointRenderer.draw(handle.position, style);
       }
       return;
     }
@@ -667,7 +659,7 @@ export class SelectionHandlesRenderer {
       strokeWidth: style.strokeWidth,
     }));
 
-    this.pointInstanceRenderer.drawAll(points, 'circle', zoom);
+    this.pointInstanceRenderer.drawAll(points, 'circle');
   }
 
   /**
@@ -675,13 +667,13 @@ export class SelectionHandlesRenderer {
    *
    * @param visibleSet The display set thinned by screen density (when omitted, all edges)
    */
-  drawMidpointHandles(feature: Feature, zoom: number, visibleSet?: VisibleHandleSet | null): void {
+  drawMidpointHandles(feature: Feature, visibleSet?: VisibleHandleSet | null): void {
     const handles = computeMidpointHandles(feature, visibleSet);
 
     // Draw individually when instancing is unavailable
     if (!this.pointInstanceRenderer || handles.length < 2) {
       for (const handle of handles) {
-        this.pointRenderer.draw(handle.position, this.config.midpointHandle.point, zoom);
+        this.pointRenderer.draw(handle.position, this.config.midpointHandle.point);
       }
       return;
     }
@@ -706,7 +698,7 @@ export class SelectionHandlesRenderer {
       strokeWidth: style.strokeWidth,
     }));
 
-    this.pointInstanceRenderer.drawAll(points, 'circle', zoom);
+    this.pointInstanceRenderer.drawAll(points, 'circle');
   }
 
   /**
@@ -730,41 +722,41 @@ export class SelectionHandlesRenderer {
     zoom: number,
   ): void {
     if (options.showResize) {
-      this.drawResizeHandles(bbox, zoom);
+      this.drawResizeHandles(bbox);
     }
     if (options.showRotate) {
       this.drawRotateHandle(bbox, zoom);
     }
     if (options.showVertex) {
-      this.drawVertexHandles(feature, zoom, {
+      this.drawVertexHandles(feature, {
         activeVertex: options.activeVertex,
         selectedVertices: options.selectedVertices,
         visibleSet: options.visibleSet,
       });
     }
     if (options.showMidpoint) {
-      this.drawMidpointHandles(feature, zoom, options.visibleSet);
+      this.drawMidpointHandles(feature, options.visibleSet);
     }
   }
 
   /**
    * Draws the radius handle for a Circle
    */
-  drawCircleRadiusHandle(feature: Feature, zoom: number): void {
+  drawCircleRadiusHandle(feature: Feature): void {
     const handle = computeCircleRadiusHandle(feature);
     if (!handle) return;
 
-    this.pointRenderer.draw(handle.position, this.config.radiusHandle.point, zoom);
+    this.pointRenderer.draw(handle.position, this.config.radiusHandle.point);
   }
 
   /**
    * Draws the center marker for a Circle
    */
-  drawCircleCenterMarker(feature: Feature, zoom: number): void {
+  drawCircleCenterMarker(feature: Feature): void {
     const handle = computeCircleCenterHandle(feature);
     if (!handle) return;
 
-    this.pointRenderer.draw(handle.position, this.config.centerMarker.point, zoom);
+    this.pointRenderer.draw(handle.position, this.config.centerMarker.point);
   }
 
   /**
@@ -800,17 +792,17 @@ export class SelectionHandlesRenderer {
     zoom: number,
   ): void {
     if (options.showResize) {
-      this.drawResizeHandles(bbox, zoom);
+      this.drawResizeHandles(bbox);
     }
     // Draw the radius line first (so that it goes under the handles)
     if (options.showRadiusLine) {
       this.drawCircleRadiusLine(feature, zoom);
     }
     if (options.showCenterMarker) {
-      this.drawCircleCenterMarker(feature, zoom);
+      this.drawCircleCenterMarker(feature);
     }
     if (options.showRadiusHandle) {
-      this.drawCircleRadiusHandle(feature, zoom);
+      this.drawCircleRadiusHandle(feature);
     }
   }
 

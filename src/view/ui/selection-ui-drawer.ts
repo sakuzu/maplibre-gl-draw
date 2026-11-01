@@ -154,7 +154,7 @@ export function renderSelectionUI(
         .list()
         .map((provider) => [provider, provider.getHandles(feature, context)] as const);
       const positions = given.flatMap(([, handles]) => drawnPositions(handles));
-      if (positions.length > 0) selectionHandlesRenderer.drawAuxiliaryHandles(positions, zoom);
+      if (positions.length > 0) selectionHandlesRenderer.drawAuxiliaryHandles(positions);
       drawCustomHandles(given, feature, projectionData, zoom, deps);
     }
   } else {
@@ -198,7 +198,7 @@ export function renderGlobalAuxiliaryHandles(
     if (pointInstanceRenderer) pointInstanceRenderer.setProjectionData(projectionData);
     selectionHandlesRenderer.setTransform(coordinateTransformOf(map));
     selectionHandlesRenderer.setProjectionData(projectionData);
-    selectionHandlesRenderer.drawAuxiliaryHandles(positions, zoom);
+    selectionHandlesRenderer.drawAuxiliaryHandles(positions);
   }
   drawCustomHandles(given, null, projectionData, zoom, deps);
 }
@@ -352,7 +352,6 @@ export interface FollowedVertexStore extends LocalHiddenStore {
 export function renderFollowedVertices(
   followedVertices: VertexSelection[] | null,
   store: FollowedVertexStore,
-  zoom: number,
   projectionData: CustomRenderMethodInput['defaultProjectionData'],
   deps: SelectionUIDrawerDeps,
 ): void {
@@ -372,7 +371,7 @@ export function renderFollowedVertices(
     const feature = store.getFeature(followed.featureId);
     // The handles of features that disappeared or were hidden during the drag are not drawn
     if (!feature?.visible || isLocallyHidden(feature, store)) continue;
-    selectionHandlesRenderer.drawFollowedVertexHandles(feature, followed.vertices, zoom);
+    selectionHandlesRenderer.drawFollowedVertexHandles(feature, followed.vertices);
   }
 }
 
@@ -581,7 +580,7 @@ function renderMultiSelectionHandles(
   }
 
   if (showResize) {
-    selectionHandlesRenderer.drawResizeHandles(bbox, zoom);
+    selectionHandlesRenderer.drawResizeHandles(bbox);
   }
   if (showRotate) {
     selectionHandlesRenderer.drawRotateHandle(bbox, zoom);
@@ -636,7 +635,7 @@ export function renderBulkSelectionUI(
   selectionUIRenderer.drawFrame(frame, zoom);
   if (isLocked || !summaryHasArea(bulk)) return;
   if (operation !== 'move' && operation !== 'rotate') {
-    selectionHandlesRenderer.drawResizeHandles(frame, zoom);
+    selectionHandlesRenderer.drawResizeHandles(frame);
   }
   if (operation !== 'move' && operation !== 'resize') {
     selectionHandlesRenderer.drawRotateHandle(frame, zoom);

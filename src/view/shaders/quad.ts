@@ -261,14 +261,12 @@ void main() {
    * @param texture The texture
    * @param opacity The opacity
    * @param projectionData MapLibre's ProjectionData
-   * @param _zoom The current zoom level (not read)
    */
   draw(
     vertices: QuadVertices,
     texture: WebGLTexture,
     opacity: number,
     projectionData: ProjectionData,
-    _zoom: number,
   ): void {
     if (!this.program) return;
 

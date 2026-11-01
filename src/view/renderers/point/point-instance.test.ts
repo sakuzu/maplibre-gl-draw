@@ -204,7 +204,7 @@ describe('single-pass rendering of points', () => {
     const renderer = createRenderer(mock);
 
     mock.reset();
-    renderer.drawAll(POINTS, 'circle', 12);
+    renderer.drawAll(POINTS, 'circle');
 
     const draws = mock.calls('drawArraysInstanced');
     expect(draws).toHaveLength(1);
@@ -223,7 +223,7 @@ describe('single-pass rendering of points', () => {
     expect(batch.instanceCount).toBe(POINTS.length);
 
     mock.reset();
-    renderer.drawRetained(batch, 12, createProjectionData());
+    renderer.drawRetained(batch, createProjectionData());
 
     const draws = mock.calls('drawArraysInstanced');
     expect(draws).toHaveLength(1);
@@ -236,7 +236,7 @@ describe('single-pass rendering of points', () => {
     const renderer = createRenderer(mock);
 
     mock.reset();
-    renderer.drawAll(POINTS, 'circle', 12);
+    renderer.drawAll(POINTS, 'circle');
 
     const data = instanceUpload(mock);
     expect(data).toHaveLength(POINTS.length * STRIDE);
@@ -273,7 +273,7 @@ describe('single-pass rendering of points', () => {
 
     const codes = (shape: 'circle' | 'square' | 'triangle' | 'star'): number[] => {
       mock.reset();
-      renderer.drawAll(POINTS, shape, 12);
+      renderer.drawAll(POINTS, shape);
       const data = instanceUpload(mock);
       return POINTS.map((_, i) => data[i * STRIDE + 13]);
     };
@@ -295,7 +295,7 @@ describe('single-pass rendering of points', () => {
     ];
 
     mock.reset();
-    renderer.drawAll(mixed, 'square', 12);
+    renderer.drawAll(mixed, 'square');
 
     expect(mock.calls('drawArraysInstanced')).toHaveLength(1);
     const data = instanceUpload(mock);

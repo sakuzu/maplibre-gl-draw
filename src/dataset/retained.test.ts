@@ -152,7 +152,7 @@ function createRetainedProbe(): RetainedProbe {
           count: points.length,
           origin: options?.origin,
         }) as unknown as RetainedPointBatch,
-      drawRetained: (batch, _zoom, _projectionData, factors): void => {
+      drawRetained: (batch, _projectionData, factors): void => {
         drawn.push(batch as unknown as MockBatch);
         drawnFactors.push(factors);
       },

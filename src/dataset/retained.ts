@@ -882,7 +882,7 @@ export function drawChunkBatches(
     renderers.line.drawRetainedBatch(batch, zoom, projectionData, factors);
   }
   for (const batch of batches.points) {
-    renderers.point.drawRetained(batch, zoom, projectionData, factors);
+    renderers.point.drawRetained(batch, projectionData, factors);
   }
 }
 

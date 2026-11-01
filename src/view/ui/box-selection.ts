@@ -78,7 +78,6 @@ export class BoxSelectionRenderer {
       ring,
       this.styleConfig.fillColor as [number, number, number, number],
       projectionData,
-      zoom,
     );
 
     // Draw the frame (a dotted line)

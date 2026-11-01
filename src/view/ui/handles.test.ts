@@ -399,7 +399,7 @@ describe('SelectionHandlesRenderer.drawFollowedVertexHandles', () => {
 
   it('draws only the specified vertices in the following style', () => {
     const { renderer, calls } = makeRenderer();
-    renderer.drawFollowedVertexHandles(polygonWithHole(), [{ ring: 0, index: 1 }], 10);
+    renderer.drawFollowedVertexHandles(polygonWithHole(), [{ ring: 0, index: 1 }]);
 
     expect(calls).toHaveLength(1);
     expect(calls[0].position).toEqual([20, 0]);
@@ -410,14 +410,10 @@ describe('SelectionHandlesRenderer.drawFollowedVertexHandles', () => {
     const { renderer, calls } = makeRenderer();
     // The outer ring has 5 points (the last one is the closing point), and the closing
     // point has no handle
-    renderer.drawFollowedVertexHandles(
-      polygonWithHole(),
-      [
-        { ring: 0, index: 0 },
-        { ring: 0, index: 4 },
-      ],
-      10,
-    );
+    renderer.drawFollowedVertexHandles(polygonWithHole(), [
+      { ring: 0, index: 0 },
+      { ring: 0, index: 4 },
+    ]);
 
     expect(calls).toHaveLength(1);
     expect(calls[0].position).toEqual([0, 0]);
@@ -425,7 +421,7 @@ describe('SelectionHandlesRenderer.drawFollowedVertexHandles', () => {
 
   it('draws nothing when the references are empty', () => {
     const { renderer, calls } = makeRenderer();
-    renderer.drawFollowedVertexHandles(polygonWithHole(), [], 10);
+    renderer.drawFollowedVertexHandles(polygonWithHole(), []);
     expect(calls).toEqual([]);
   });
 });
@@ -443,13 +439,10 @@ describe('SelectionHandlesRenderer.drawAuxiliaryHandles', () => {
       pointRenderer,
       DEFAULT_SELECTION_CONFIG,
     );
-    renderer.drawAuxiliaryHandles(
-      [
-        [1, 2],
-        [3, 4],
-      ],
-      10,
-    );
+    renderer.drawAuxiliaryHandles([
+      [1, 2],
+      [3, 4],
+    ]);
     expect(calls).toEqual([
       { position: [1, 2], style: DEFAULT_SELECTION_CONFIG.resizeHandle.point },
       { position: [3, 4], style: DEFAULT_SELECTION_CONFIG.resizeHandle.point },

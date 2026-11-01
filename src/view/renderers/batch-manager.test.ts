@@ -879,7 +879,7 @@ describe('BatchManager the opacity of the layer', () => {
     h.manager.processFeature(polygon('g'), false);
     h.manager.endFrame();
 
-    expect(h.pointDrawAll.mock.calls[0][3]).toEqual({ scale: 1, opacity: 0.5 });
+    expect(h.pointDrawAll.mock.calls[0][2]).toEqual({ scale: 1, opacity: 0.5 });
     expect(h.lineDrawAll.mock.calls[0][4]).toEqual({ scale: 1, opacity: 0.5 });
     expect(h.sdfPolygonDrawBatch.mock.calls[0][4]).toEqual({ scale: 1, opacity: 0.5 });
   });
@@ -914,7 +914,7 @@ describe('BatchManager the opacity of the layer', () => {
     h.manager.processFeature(makePoint('p', [0, 0]), false);
     h.manager.endFrame();
 
-    expect(h.pointDrawAll.mock.calls[0][3]).toEqual({ scale: 1, opacity: 1 });
+    expect(h.pointDrawAll.mock.calls[0][2]).toEqual({ scale: 1, opacity: 1 });
   });
 
   it('combines the factors of the frame with those of the layer for every batch', () => {
@@ -944,7 +944,7 @@ describe('BatchManager the opacity of the layer', () => {
     h.manager.processFeature(polygon('g'), false);
     h.manager.endFrame();
 
-    expect(h.pointDrawAll.mock.calls[0][3]).toEqual({ scale: 2, opacity: 0.25 });
+    expect(h.pointDrawAll.mock.calls[0][2]).toEqual({ scale: 2, opacity: 0.25 });
     expect(h.lineDrawAll.mock.calls[0][4]).toEqual({ scale: 2, opacity: 0.25 });
     expect(h.sdfPolygonDrawBatch.mock.calls[0][4]).toEqual({ scale: 2, opacity: 0.25 });
   });

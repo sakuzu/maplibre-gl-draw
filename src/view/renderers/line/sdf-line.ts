@@ -220,11 +220,10 @@ export class SDFLineRenderer {
    * This lets subsequent draw()/drawBatch() calls skip those settings.
    *
    * @param projectionData MapLibre's ProjectionData
-   * @param _zoom The current zoom level (not read)
    *
    * @internal
    */
-  beginDraw(projectionData: ProjectionData, _zoom: number): void {
+  beginDraw(projectionData: ProjectionData): void {
     if (!this.program) return;
 
     const gl = this.gl;

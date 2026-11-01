@@ -49,7 +49,6 @@ function fakeService(result: SnapResult | null): SnapService {
 interface DrawCall {
   coord: [number, number];
   style: PointStyle;
-  zoom: number;
 }
 
 interface LineCall {
@@ -62,8 +61,8 @@ interface LineCall {
 function fakeContext(calls: DrawCall[], lineCalls: LineCall[] = []): FrameDrawContext {
   return {
     pointShapeRenderer: {
-      draw: (coord: [number, number], style: PointStyle, zoom: number) => {
-        calls.push({ coord, style, zoom });
+      draw: (coord: [number, number], style: PointStyle) => {
+        calls.push({ coord, style });
       },
     },
     sdfLineRenderer: {
@@ -139,10 +138,8 @@ describe('SnapIndicatorRenderer', () => {
     expect(calls).toHaveLength(2);
     expect(calls[0].coord).toEqual([1, 2]);
     expect(calls[0].style.shape).toBe('circle');
-    expect(calls[0].zoom).toBe(14);
     expect(calls[1].coord).toEqual([3, 4]);
     expect(calls[1].style.shape).toBe('square');
-    expect(calls[1].zoom).toBe(15);
   });
 
   it('draws an intersection with a symbol that can be told apart from a vertex (a small filled circle)', () => {

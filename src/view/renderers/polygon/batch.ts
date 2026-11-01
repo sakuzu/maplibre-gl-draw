@@ -198,10 +198,9 @@ void main() {
    *
    * @param polygons The array of polygon data (in draw order)
    * @param projectionData MapLibre's ProjectionData
-   * @param _zoom The current zoom level (not read)
    * @returns The number of indices drawn (for debugging)
    */
-  drawBatch(polygons: PolygonBatchData[], projectionData: ProjectionData, _zoom: number): number {
+  drawBatch(polygons: PolygonBatchData[], projectionData: ProjectionData): number {
     if (!this.program || polygons.length === 0) return 0;
 
     const gl = this.gl;

@@ -214,7 +214,6 @@ describe('a custom feature type', () => {
     expect(base.pointShapeRenderer.draw).toHaveBeenLastCalledWith(
       [0, 0],
       expect.objectContaining({ size: 6, strokeWidth: 1 }),
-      12,
       undefined,
       undefined,
     );
@@ -222,7 +221,6 @@ describe('a custom feature type', () => {
     expect(base.pointShapeRenderer.draw).toHaveBeenLastCalledWith(
       [0, 0],
       expect.objectContaining({ size: 24, strokeWidth: 4 }),
-      12,
       undefined,
       undefined,
     );
@@ -246,7 +244,6 @@ describe('a custom feature type', () => {
       ],
       [0, 0, 1, 0.25],
       PROJECTION,
-      12,
     );
 
     adapter.onRemove();

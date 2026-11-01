@@ -121,7 +121,7 @@ export class SelectionUIRenderer {
       const feature = features[0];
       const bbox = computeBoundingBox(feature, this.#extensions);
       if (bbox && hasZeroArea(bbox)) {
-        this.#drawPointBoundingBox(feature, bbox.center, zoom);
+        this.#drawPointBoundingBox(feature, bbox.center);
       } else {
         this.#drawBoundingBoxWithMargin([feature], zoom);
       }
@@ -132,7 +132,7 @@ export class SelectionUIRenderer {
     for (const feature of features) {
       const bbox = computeBoundingBox(feature, this.#extensions);
       if (bbox && hasZeroArea(bbox)) {
-        this.#drawPointBoundingBox(feature, bbox.center, zoom);
+        this.#drawPointBoundingBox(feature, bbox.center);
       } else {
         this.#drawIndividualBoundingBox(feature, zoom);
       }
@@ -216,7 +216,7 @@ export class SelectionUIRenderer {
    * #pointFrame): it is seen where the marker is seen, and faint where the terrain makes the
    * marker faint.
    */
-  #drawPointBoundingBox(feature: Feature, coord: Coordinate, zoom: number): void {
+  #drawPointBoundingBox(feature: Feature, coord: Coordinate): void {
     const frame = this.#pointFrame(feature, coord);
     const projectionData = this.#projectionData;
     if (!frame || !projectionData) return;
@@ -227,7 +227,6 @@ export class SelectionUIRenderer {
       frame.corners.map((corner) => ({ x: corner.x - x, y: corner.y - y })),
       this.#config.box.stroke,
       anchorGhostOpacity(this.#terrain, coord[0], coord[1]),
-      zoom,
       projectionData,
     );
   }

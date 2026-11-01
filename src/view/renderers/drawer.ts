@@ -97,7 +97,7 @@ export class FeatureDrawer {
     if (feature.type === 'Point') {
       const coord = coordinatesOf(feature) as Coordinate;
       const pointStyle = pointWithOpacity(this.getPointStyle(feature, layer), opacity);
-      this.drawPointShape(coord, pointStyle, zoom, feature.id);
+      this.drawPointShape(coord, pointStyle, feature.id);
     } else if (feature.type === 'LineString') {
       const coords = coordinatesOf(feature) as Coordinate[];
       const createdZoom = getCreatedZoom(feature) ?? zoom;
@@ -124,7 +124,7 @@ export class FeatureDrawer {
       const parts = coordinatesOf(feature) as Coordinate[];
       const pointStyle = pointWithOpacity(this.getPointStyle(feature, layer), opacity);
       for (const coord of parts) {
-        this.drawPointShape(coord, pointStyle, zoom, feature.id);
+        this.drawPointShape(coord, pointStyle, feature.id);
       }
     } else if (feature.type === 'MultiLineString') {
       // Draw a line for each part
@@ -316,8 +316,8 @@ export class FeatureDrawer {
   /**
    * Draw a Point shape
    */
-  drawPointShape(coord: Coordinate, style: PointStyle, zoom: number, featureId?: string): void {
-    this.pointShapeRenderer.draw(coord, style, zoom, featureId);
+  drawPointShape(coord: Coordinate, style: PointStyle, featureId?: string): void {
+    this.pointShapeRenderer.draw(coord, style, featureId);
   }
 
   /**
@@ -362,7 +362,7 @@ export class FeatureDrawer {
 
     // Fill (inner rings are punched out as holes)
     if (fillColor[3] > 0) {
-      this.fillShaderManager.drawPolygonRings(rings, fillColor, projectionData, zoom);
+      this.fillShaderManager.drawPolygonRings(rings, fillColor, projectionData);
     }
 
     // Stroke (computed on the GPU): the outer ring and each inner ring are drawn as closed paths
@@ -412,7 +412,7 @@ export class FeatureDrawer {
 
     // Fill
     if (fillColor[3] > 0) {
-      this.fillShaderManager.drawPolygon(circleCoords, fillColor, projectionData, zoom);
+      this.fillShaderManager.drawPolygon(circleCoords, fillColor, projectionData);
     }
 
     // Stroke

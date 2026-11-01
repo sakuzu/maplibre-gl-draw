@@ -184,7 +184,6 @@ export class BulkFramesRenderer {
     binding: RowStateBinding,
     revision: number,
     projectionData: ProjectionData,
-    _zoom: number,
     config: SelectionUIConfig,
     pointExtent: PointFrameExtent,
   ): void {

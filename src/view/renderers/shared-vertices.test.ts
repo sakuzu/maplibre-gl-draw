@@ -236,7 +236,7 @@ describe('the vertices of the billboard of the points', () => {
 
     // The immediate mode draws through a vertex array of its own
     renderer.setProjectionData(projection());
-    renderer.drawAll([POINT], 'circle', 12);
+    renderer.drawAll([POINT], 'circle');
     const immediate = lastPointed(mock);
     expect(immediate).toBeDefined();
     // The billboard and the instances of the immediate mode

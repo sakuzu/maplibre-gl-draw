@@ -274,7 +274,7 @@ describe('the combined frame of a multiple selection', () => {
     handlesRenderer.setTransform(transform);
     const bbox = renderer.computeCombinedFeatureBoundingBox(features);
     if (!bbox) throw new Error('no box');
-    handlesRenderer.drawResizeHandles(bbox, ZOOM);
+    handlesRenderer.drawResizeHandles(bbox);
     return { frame: frames[frames.length - 1], handles };
   }
 

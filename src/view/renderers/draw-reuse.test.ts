@@ -176,7 +176,7 @@ describe('the gap of the origin of a retained batch', () => {
       );
       if (!points || !lines || !polygons || !single) throw new Error('batch');
       draws.push(
-        () => point.drawRetainedRange(points, 0, 1, 14, projection(), state),
+        () => point.drawRetainedRange(points, 0, 1, projection(), state),
         () => line.drawRetainedRange(lines, 0, 1, 14, projection(), state),
         () => polygon.drawRetainedRange(polygons, 0, 1, 14, projection(), [800, 600], state),
         () => polygon.drawRetained(single, 14, projection(), [800, 600]),
