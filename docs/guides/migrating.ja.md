@@ -860,11 +860,14 @@ draw.options.update({
   規則の色を描かず、`getAppliedStyle` はその型に幾何の既定を答えて
   いました。`override` に渡す定義は持てません
 - 規則は、独自の型が `styleRuleChannel` で宣言した鍵 (`'fill'`、
-  `'stroke'`、`'point'`) か、宣言が無ければ組み込みの型と同じく地物の
+  `'stroke'`、`'point'`) か、宣言が無ければ組み込みの型と同じく定義の
   幾何の鍵を塗ります。前はどの独自の型でも `fillColor` を塗っていました。
   宣言しない点や線の型では、規則の色が `pointColor` か `strokeColor` に
   入るようになります。Point の上に紙を `fillColor` で描くカードや箱の
-  型は、`styleRuleChannel: 'fill'` を宣言すると前と同じになります
+  型は、`styleRuleChannel: 'fill'` を宣言すると前と同じになります。
+  組み込みの型しか知らなかった主の入口の関数 `getStyleRuleChannel(type)` は
+  無くなりました。`draw.extensions.featureTypes.getStyleRuleChannel(type)`
+  が、ライブラリーが塗るのと同じく、どの型にも答えます
 - 拡張が宣言の併合で `FeatureStyle` に足したスタイルの鍵は、
   `FeatureStyleResolved` では省略できる鍵です (前は必須でしたが、見た目は
   型か地物が与えたときだけその鍵を持ちます)。`feature.style` の鍵と同じ

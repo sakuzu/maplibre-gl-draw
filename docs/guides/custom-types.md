@@ -257,7 +257,7 @@ sketches applied:
   ([which color wins](styles.md#which-color-wins)): the one the type
   declares in `styleRuleChannel` (`'fill'` for `fillColor`, `'stroke'`
   for `strokeColor`, `'point'` for `pointColor`), or else the one of the
-  geometry of the feature, as for a built-in type: `pointColor` for a
+  geometry of its definition, as for a built-in type: `pointColor` for a
   Point, `strokeColor` for a LineString and `fillColor` for a Polygon.
   The zone above, a Polygon, takes the color of the rule as its fill and
   keeps its outline. A card or a box drawn on a Point, whose paper is

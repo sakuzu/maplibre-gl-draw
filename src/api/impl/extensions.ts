@@ -11,6 +11,7 @@
  */
 
 import type { Geometry } from 'geojson';
+import { getStyleRuleChannel, type StyleRuleChannel } from '../../view/style-rule.js';
 import { DrawError } from '../errors.js';
 import type { FeatureTypeDefinition } from '../extension/feature-type.js';
 import type { ModeFactory } from '../extension/mode.js';
@@ -275,7 +276,10 @@ export function createExtensionsCollections(
     removeMany: (names) => registries.modes.remove(names),
   };
 
-  const byType = namedCollectionByType(registries.featureTypes, record);
+  const byType: FeatureTypesCollection = {
+    ...namedCollectionByType(registries.featureTypes, record),
+    getStyleRuleChannel: (type) => styleRuleChannelOfType(registries.featureTypes, type),
+  };
   const overlays: OverlaysCollection = namedCollection(registries.overlays, 'overlay', record);
   const snapProviders: ProvidersCollection<SnapProvider> = namedCollection(
     registries.snapProviders,
@@ -302,6 +306,41 @@ export function createExtensionsCollections(
     handleProviders,
     companionProviders,
   };
+}
+
+/**
+ * The feature types of the engine, which a custom type cannot take the name of
+ *
+ * @internal
+ */
+export const BUILT_IN_TYPES: ReadonlySet<string> = new Set([
+  'Point',
+  'LineString',
+  'Polygon',
+  'MultiPoint',
+  'MultiLineString',
+  'MultiPolygon',
+  'Image',
+  'Circle',
+  'Freehand',
+]);
+
+/**
+ * The channel a layer rule colors for a feature type, the one judgment of an instance: a built-in
+ * type by its name (an override keeps the channel of the built-in type), a custom type by what
+ * it declares (`styleRuleChannel`) or else by the geometry of its definition
+ *
+ * @internal
+ */
+export function styleRuleChannelOfType(
+  featureTypes: Registry<FeatureTypeDefinition>,
+  type: string,
+): StyleRuleChannel {
+  const definition = BUILT_IN_TYPES.has(type) ? undefined : featureTypes.get(type);
+  return getStyleRuleChannel(
+    type,
+    definition && { channel: definition.styleRuleChannel, geometry: definition.geometry },
+  );
 }
 
 /**
@@ -335,7 +374,7 @@ function typeOf(definition: FeatureTypeDefinition): string {
 function namedCollectionByType(
   registry: Registry<FeatureTypeDefinition>,
   record: Recorder | undefined,
-): FeatureTypesCollection {
+): Omit<FeatureTypesCollection, 'getStyleRuleChannel'> {
   const addAll = (definitions: readonly FeatureTypeDefinition[]): (() => void) => {
     if (!Array.isArray(definitions)) throw invalidInput('The feature types must be an array');
     const remove = registry.add(

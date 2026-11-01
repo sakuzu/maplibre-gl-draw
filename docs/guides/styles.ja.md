@@ -224,7 +224,7 @@ draw.layers.update(layerId, { styleRule: undefined });
 
 1. 地物自身の、そのチャンネルの色。点は `pointColor`、線は
    `strokeColor`、面と画像は `fillColor` です。独自の型は、宣言した
-   チャンネル (`styleRuleChannel`) か、それが無ければ地物の幾何の
+   チャンネル (`styleRuleChannel`) か、それが無ければ定義の幾何の
    チャンネルです
 2. レイヤーの規則
 3. 地物の独自の型が宣言した見た目 (`defaultStyle`)、その次に
@@ -257,23 +257,23 @@ if (look) console.log(look.fillColor, look.strokeWidth, look.lineStyle);
 含めて返ります。規則の色は `#rrggbb` で返ります。
 
 評価の処理は純関数としても公開しているので、表の行を地図と同じ色で塗る
-など、ほかの用途にも使えます。
+など、ほかの用途にも使えます。色が入る見た目の部分は、独自の型を知って
+いるインスタンスが答えます。`draw.extensions.featureTypes.getStyleRuleChannel(type)`
+は、組み込みの型には種類のチャンネルを、独自の型には宣言したチャンネル
+(`styleRuleChannel`) か、それが無ければ定義の幾何のチャンネルを返します。
+ライブラリーが塗るのと同じ判定です。
 
 <!-- docs-check:
 declare const rule: import('@sakuzu/maplibre-gl-draw').StyleRule;
 -->
 
 ```ts
-import { evaluateStyleRule, getStyleRuleChannel } from '@sakuzu/maplibre-gl-draw';
+import { evaluateStyleRule } from '@sakuzu/maplibre-gl-draw';
 
 const color = evaluateStyleRule(rule, feature.properties);
-const channel = getStyleRuleChannel(feature.type); // 'point'、'stroke'、'fill' のどれか
+// 'point'、'stroke'、'fill' のどれか
+const channel = draw.extensions.featureTypes.getStyleRuleChannel(feature.type);
 ```
-
-`getStyleRuleChannel` は、組み込みの型について名前で答えます。独自の型の
-チャンネルは、その `styleRuleChannel`
-(`draw.extensions.featureTypes.get(type)`) か、それが無ければ地物の幾何の
-チャンネルで、その幾何の組み込みの型と同じです。
 
 ## 凡例
 
@@ -368,7 +368,7 @@ deriveLegend(rule, { legendOther: 'Autres' });
   と [`LegendEntry`](../api/maplibre-gl-draw/interfaces/LegendEntry.md)
 - [`evaluateStyleRule`](../api/maplibre-gl-draw/functions/evaluateStyleRule.md)
   と
-  [`getStyleRuleChannel`](../api/maplibre-gl-draw/functions/getStyleRuleChannel.md)
+  [`FeatureTypesCollection.getStyleRuleChannel`](../api/maplibre-gl-draw/interfaces/FeatureTypesCollection.md#getstylerulechannel)
 - [`parseCssColor`](../api/maplibre-gl-draw/functions/parseCssColor.md)
 - [`RuntimeOptions`](../api/maplibre-gl-draw/interfaces/RuntimeOptions.md)
   (`style`、`previewStyle`、`selectionStyle`、`scaleWithZoom`、

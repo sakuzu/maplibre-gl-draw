@@ -328,6 +328,45 @@ describe.each(STORE_KINDS)('the look of a custom type over %s', (_, makeStore) =
   });
 });
 
+describe('the channel of the rule of a type, the one judgment of the instance', () => {
+  it('answers for the built-in types by their kind and for the custom types by their declaration', () => {
+    const view = open(STORE_KINDS[0][1](), []);
+    const channelOf = (type: string) => view.draw.extensions.featureTypes.getStyleRuleChannel(type);
+    expect(['Point', 'MultiPoint'].map(channelOf)).toEqual(['point', 'point']);
+    expect(['LineString', 'MultiLineString', 'Freehand'].map(channelOf)).toEqual([
+      'stroke',
+      'stroke',
+      'stroke',
+    ]);
+    expect(['Polygon', 'MultiPolygon', 'Circle', 'Image'].map(channelOf)).toEqual([
+      'fill',
+      'fill',
+      'fill',
+      'fill',
+    ]);
+    // Declared, and else by the geometry of the definition
+    expect(['card', 'pin', 'trail', 'plot', 'swath'].map(channelOf)).toEqual([
+      'fill',
+      'point',
+      'stroke',
+      'fill',
+      'fill',
+    ]);
+    // A name no type has
+    expect(channelOf('nothing')).toBe('fill');
+    // An override keeps the channel of the built-in type (an Image is drawn on a Point)
+    view.draw.extensions.featureTypes.override({
+      type: 'Image',
+      geometry: 'Point',
+      renderer: rendererOf('Image'),
+    });
+    expect(channelOf('Image')).toBe('fill');
+    // A type removed is a name no type has
+    view.draw.extensions.featureTypes.remove('pin');
+    expect(channelOf('pin')).toBe('fill');
+  });
+});
+
 describe('the declaration of the look of a type', () => {
   it('is refused when it is not a style', () => {
     const view = open(STORE_KINDS[0][1](), []);

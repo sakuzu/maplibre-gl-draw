@@ -223,6 +223,10 @@ writing it. Its changes are listed after those of 3.0.0.
   `'point'`): the key of the look the color of a layer rule goes to for
   the features of a custom type. A definition given to `override` cannot
   have it (`invalid-input`).
+- `draw.extensions.featureTypes.getStyleRuleChannel(type)`: the channel a
+  layer rule colors for a type, built-in or custom (its declaration, or
+  the geometry of its definition), the one judgment the library colors
+  with.
 - `RenderContext.appliedStyle(feature)`: the look a feature is drawn
   with (the feature drawn, the sketches applied), put together as
   `features.getAppliedStyle` puts the look of the values of the document,
@@ -283,8 +287,8 @@ writing it. Its changes are listed after those of 3.0.0.
   terrain); they drew without terrain.
 
 - The color of a layer rule goes to the key a custom type declares in
-  `styleRuleChannel`, or else to the key of the geometry of the feature,
-  as for a built-in type: `pointColor` for a Point or a MultiPoint,
+  `styleRuleChannel`, or else to the key of the geometry of its
+  definition, as for a built-in type: `pointColor` for a Point or a MultiPoint,
   `strokeColor` for a LineString or a MultiLineString, and `fillColor`
   for a Polygon or any other geometry. It went to `fillColor` for every
   custom type: the rule color of a custom type of points or of lines that
@@ -459,6 +463,9 @@ writing it. Its changes are listed after those of 3.0.0.
   box of a point is.
 - `ExtensionContext.drawing`: an extension reaches the same object as
   `ctx.draw.drawing`.
+- The function `getStyleRuleChannel(type)` of the main entry, which knew
+  the built-in types only: `draw.extensions.featureTypes.getStyleRuleChannel(type)`
+  answers for the custom types too.
 
 ### Fixed in 3.0.0
 
@@ -533,6 +540,7 @@ writing it. Its changes are listed after those of 3.0.0.
 | `features.get(id, { applySketches })` | `draw.rendered.get(id)` |
 | `draggedRowsOf(tables)` of `/kasane` | `draw.rendered.getDraggedRows()` |
 | `ExtensionContext.drawing` | `ctx.draw.drawing` |
+| `getStyleRuleChannel(type)` | `featureTypes.getStyleRuleChannel(type)` |
 | `interaction.onDrawCommit` | `Plugin.onFeatureCommit` |
 | `interaction.onFeatureClick` | `selectMode.onSelectedFeatureClick` |
 | `interaction.onFeatureDoubleClick` | `selectMode.onFeatureDoubleClick` |

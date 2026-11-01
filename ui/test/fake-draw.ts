@@ -472,6 +472,10 @@ export function fakeDraw(
     // What the inspector reads besides (fakeDocument has a stand-in with every member it uses)
     isReadOnly: () => false,
     transact: <T>(fn: () => T) => fn(),
+    // The channel a style rule colors for a type, as core judges it for the built-in types
+    extensions: {
+      featureTypes: { getStyleRuleChannel: (type: string) => builtInRuleChannel(type) },
+    },
   };
   Object.assign(draw.features, {
     getMany: (list: readonly string[]) => list.map((id) => features.get(id)),
@@ -791,4 +795,11 @@ export function fakeDocument(
       fake.emit('readOnly.changed', { readOnly: value });
     },
   };
+}
+
+/** The channel a style rule colors for a built-in type, as core judges it */
+export function builtInRuleChannel(type: string): 'point' | 'stroke' | 'fill' {
+  if (type === 'Point' || type === 'MultiPoint') return 'point';
+  if (type === 'LineString' || type === 'MultiLineString' || type === 'Freehand') return 'stroke';
+  return 'fill';
 }

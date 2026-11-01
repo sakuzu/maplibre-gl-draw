@@ -8,6 +8,7 @@ import type { Feature, FeatureListOptions, FeatureType, Layer } from '@sakuzu/ma
 import { describe, expect, it, vi } from 'vitest';
 import { type LegendSource, legendBlocks } from '../src/layers/legend.js';
 import { resolveMessages } from '../src/messages.js';
+import { builtInRuleChannel } from './fake-draw.js';
 
 const en = resolveMessages('en');
 
@@ -31,6 +32,7 @@ function tableSource(types: FeatureType[]): LegendSource & { list: ReturnType<ty
     return filter.layerId === 'rows' ? features.slice(0, options.limit) : [];
   });
   return {
+    extensions: { featureTypes: { getStyleRuleChannel: builtInRuleChannel } },
     layers: { get: (id) => (id === 'rows' ? layer : undefined), getOrder: () => ['rows'] },
     features: { list },
     list,

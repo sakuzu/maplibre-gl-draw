@@ -835,10 +835,13 @@ class FeatureDrawer {
 A layer's `styleRule` is evaluated just before drawing, and the Store is
 never rewritten with rule colors. The three getters call `resolveStyle()`:
 
-1. `getStyleRuleChannel(feature.type)` picks the channel: `point` for Point
-   and MultiPoint, `stroke` for LineString, MultiLineString and Freehand,
-   `fill` for everything else (Polygon, MultiPolygon, Circle, Image and
-   custom types)
+1. `getStyleRuleChannel(feature.type)` (`src/view/style-rule.ts`) picks the
+   channel: `point` for Point and MultiPoint, `stroke` for LineString,
+   MultiLineString and Freehand, `fill` for everything else (Polygon,
+   MultiPolygon, Circle, Image). The looks of the custom types go through
+   the same function with what the type declares
+   (`styleRuleChannelOfType` in `src/api/impl/extensions.ts`, which
+   `draw.extensions.featureTypes.getStyleRuleChannel` answers)
 2. The draw instance's `StyleRuleCache` (the `styleRules` of the render
    scope) resolves `(feature, layer?.styleRule)` to a rule color
 3. `applyRuleColor(feature.style, ruleColor, channel)` puts it on the

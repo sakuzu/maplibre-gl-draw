@@ -28,16 +28,16 @@ import Group from '@lucide/svelte/icons/group';
 import Layers from '@lucide/svelte/icons/layers';
 import Shapes from '@lucide/svelte/icons/shapes';
 import type { IconComponent, IconSource, TreeNode } from '@sakuzu/kata/svelte';
-import {
-  type Dataset,
-  type Group as DrawGroup,
-  type Feature,
-  type FeatureFilter,
-  type FeatureStyleResolved,
-  getStyleRuleChannel,
-  type Layer,
-  type Selection,
-  type SelectionType,
+import type {
+  Dataset,
+  Group as DrawGroup,
+  Feature,
+  FeatureFilter,
+  FeatureStyleResolved,
+  FeatureType,
+  Layer,
+  Selection,
+  SelectionType,
 } from '@sakuzu/maplibre-gl-draw';
 import { fillWord, type Messages } from '../messages.js';
 
@@ -70,6 +70,12 @@ export function isSelectable(kind: string | undefined): kind is NodeKind {
  * and a layer held as rows alike
  */
 export interface TreeSource {
+  /** The channel a style rule colors for a type, the judgment core colors with */
+  readonly extensions: {
+    readonly featureTypes: {
+      getStyleRuleChannel(type: FeatureType): 'point' | 'stroke' | 'fill';
+    };
+  };
   readonly layers: {
     get(id: string): Layer | undefined;
     getOrder(): readonly string[];
@@ -185,9 +191,9 @@ export function featureName(feature: Feature, m: Messages): string {
 export function featureColor(
   feature: Feature,
   style: FeatureStyleResolved | undefined,
+  channel: 'point' | 'stroke' | 'fill',
 ): string | undefined {
   if (!style || feature.type === 'Image') return undefined;
-  const channel = getStyleRuleChannel(feature.type);
   if (channel === 'point') return style.pointColor;
   if (channel === 'stroke') return style.strokeColor;
   return style.fillColor;
@@ -199,7 +205,11 @@ function featureNode(source: TreeSource, feature: Feature, m: Messages): LayerTr
     kind: 'feature',
     name: featureName(feature, m),
     icon: typeIcon(feature.type),
-    iconColor: featureColor(feature, source.features.getAppliedStyle(feature.id)),
+    iconColor: featureColor(
+      feature,
+      source.features.getAppliedStyle(feature.id),
+      source.extensions.featureTypes.getStyleRuleChannel(feature.type),
+    ),
     visible: shown(source, feature),
     locked: feature.locked,
     data: feature,

@@ -102,7 +102,6 @@ const MAIN = [
   'GroundFootprint',
   'FileData',
   'FillRenderer',
-  'getStyleRuleChannel',
   'GpuMemoryDiagnostics',
   'DocumentSize',
   'CaptureImageOptions',

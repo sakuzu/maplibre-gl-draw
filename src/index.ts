@@ -264,7 +264,7 @@ export type {
 } from './api/extensions.js';
 
 // Style rule functions
-export { deriveLegend, evaluateStyleRule, getStyleRuleChannel } from './api/model.js';
+export { deriveLegend, evaluateStyleRule } from './api/model.js';
 
 // Color functions
 export { parseCssColor } from './api/model.js';

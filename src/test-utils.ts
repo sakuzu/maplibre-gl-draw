@@ -62,6 +62,7 @@ import { FeatureDrawer } from './view/renderers/drawer.js';
 import type { ImageRenderer } from './view/renderers/image.js';
 import type { SDFLineRenderer } from './view/renderers/line/sdf-line.js';
 import type { PointShapeRenderer } from './view/renderers/point/point-shape.js';
+import { getStyleRuleChannel } from './view/style-rule.js';
 import type { TerrainContext } from './view/terrain/context.js';
 import { createSelectionExtensionRegistry } from './view/ui/selection-ui/extension-registry.js';
 
@@ -267,6 +268,7 @@ export function createResourceDeps(store: Store): ResourceDeps & { emitter: Even
     appliedStyle: createAppliedStyles({
       getLayer: (id) => store.getLayer(id),
       getStyleOptions: () => undefined,
+      styleRuleChannelOf: (type: string) => getStyleRuleChannel(type),
     }).of,
     emitter,
   };

@@ -13,6 +13,7 @@ import type { ModeFactory } from './extension/mode.js';
 import type { Plugin } from './extension/plugin.js';
 import type { CompanionProvider, HandleProvider, SnapProvider } from './extension/provider.js';
 import type { OverlayRenderer } from './extension/render.js';
+import type { FeatureType } from './model.js';
 
 /** The plugins, in the order they were added. */
 export interface PluginsCollection {
@@ -134,6 +135,20 @@ export interface FeatureTypesCollection {
   count(): number;
   /** Whether a feature type with this name was added or overridden. */
   has(name: string): boolean;
+  /**
+   * The part of the look the color of a layer rule goes to for the features of a type: `'point'`
+   * (`pointColor`), `'stroke'` (`strokeColor`) or `'fill'` (`fillColor`). A built-in type has the
+   * channel of its kind: the point for a Point and a MultiPoint, the stroke for a LineString, a
+   * MultiLineString and a Freehand, the fill for the areas, a Circle and an Image (an override
+   * keeps it). A custom type has the channel it declares
+   * (`FeatureTypeDefinition.styleRuleChannel`), or else the one of the geometry of its definition,
+   * as a built-in type of that geometry has it. A name no type has is `'fill'`.
+   *
+   * It is the one judgment the library colors with: `draw.features.getAppliedStyle`, the render
+   * context and the datasets read it, so a legend or an inspector that reads it shows what is
+   * drawn.
+   */
+  getStyleRuleChannel(type: FeatureType): 'point' | 'stroke' | 'fill';
   /**
    * Adds a custom feature type. The type takes every feature of its type: its `appliesTo`, if
    * it has one, is ignored.

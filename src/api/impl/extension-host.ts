@@ -56,24 +56,17 @@ import {
 } from './contexts.js';
 import type { Context } from './engine-context.js';
 import type { ExtensionRegistries, Installer } from './extensions.js';
-import { createExtensionsCollections, createRegistry, OVERRIDABLE_TYPES } from './extensions.js';
+import {
+  BUILT_IN_TYPES,
+  createExtensionsCollections,
+  createRegistry,
+  OVERRIDABLE_TYPES,
+  styleRuleChannelOfType,
+} from './extensions.js';
 import { preparePatch } from './features.js';
 import { bridgeMode, createInputRoute, deliverPointerLeave, toPointerEvent } from './input.js';
 import { createOverlayStack, terrainSurfaceOf } from './render-context.js';
 import { validateExtension } from './validate-extension.js';
-
-/** The feature types of the engine, which a custom type cannot take the name of */
-const BUILT_IN_TYPES: ReadonlySet<string> = new Set([
-  'Point',
-  'LineString',
-  'Polygon',
-  'MultiPoint',
-  'MultiLineString',
-  'MultiPolygon',
-  'Image',
-  'Circle',
-  'Freehand',
-]);
 
 /**
  * What the host is built over
@@ -167,6 +160,7 @@ export function createExtensionHost(deps: ExtensionHostDeps): ExtensionHost {
   const appliedStyles = createAppliedStyles({
     getLayer: (id) => store.getLayer(id),
     getStyleOptions: () => styleOptions(),
+    styleRuleChannelOf: (type) => styleRuleChannelOfType(registries.featureTypes, type),
   });
   const appliedStyle = (feature: StoredFeature): FeatureStyleResolved => appliedStyles.of(feature);
 

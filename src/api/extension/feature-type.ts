@@ -167,9 +167,10 @@ export interface FeatureTypeDefinition {
   /**
    * The key of the look the color of a layer rule goes to, for the features of this type:
    * `'fill'` (`fillColor`), `'stroke'` (`strokeColor`) or `'point'` (`pointColor`). When it is
-   * left out, the geometry of a feature decides, as it does for the built-in types: `'point'` for
-   * a Point or a MultiPoint, `'stroke'` for a LineString or a MultiLineString, and `'fill'` for a
-   * Polygon, a MultiPolygon or any other geometry.
+   * left out, the geometry of the definition decides, as it does for the built-in types:
+   * `'point'` for a Point or a MultiPoint, `'stroke'` for a LineString or a MultiLineString, and
+   * `'fill'` for a Polygon, a MultiPolygon or any other geometry.
+   * `draw.extensions.featureTypes.getStyleRuleChannel(type)` answers it.
    *
    * A type drawn as a card or a box on a Point, whose paper is `fillColor`, declares `'fill'` so
    * that the rule colors its paper. `draw.features.getAppliedStyle` and the render context

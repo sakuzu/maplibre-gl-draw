@@ -230,7 +230,7 @@ A dataset takes the same rule type; see
 1. The feature's own color for its channel: `pointColor` for points,
    `strokeColor` for lines, `fillColor` for areas and images. A custom
    type has the channel it declares (`styleRuleChannel`), or else the
-   one of the geometry of the feature
+   one of the geometry of its definition
 2. The layer's rule
 3. The look the custom type of the feature declares (`defaultStyle`),
    then the default of the instance
@@ -261,24 +261,25 @@ The colors of the `style` option and of the style of the feature come
 back as the strings they were given, alpha included; the color of a rule
 comes back as `#rrggbb`.
 
-The evaluation is also exposed as pure functions for other uses, such as
-coloring a table row the same way as the map:
+The evaluation is also exposed as a pure function for other uses, such
+as coloring a table row the same way as the map. The part of the look the
+color goes to is answered by the instance, which knows the custom types:
+`draw.extensions.featureTypes.getStyleRuleChannel(type)` gives the channel
+of a built-in type by its kind, and of a custom type the one it declares
+(`styleRuleChannel`) or else the one of the geometry of its definition,
+the judgment the library colors with:
 
 <!-- docs-check:
 declare const rule: import('@sakuzu/maplibre-gl-draw').StyleRule;
 -->
 
 ```ts
-import { evaluateStyleRule, getStyleRuleChannel } from '@sakuzu/maplibre-gl-draw';
+import { evaluateStyleRule } from '@sakuzu/maplibre-gl-draw';
 
 const color = evaluateStyleRule(rule, feature.properties);
-const channel = getStyleRuleChannel(feature.type); // 'point', 'stroke' or 'fill'
+// 'point', 'stroke' or 'fill'
+const channel = draw.extensions.featureTypes.getStyleRuleChannel(feature.type);
 ```
-
-`getStyleRuleChannel` answers for the built-in types, by their name. The
-channel of a custom type is its `styleRuleChannel`
-(`draw.extensions.featureTypes.get(type)`), or else the channel of the
-geometry of the feature, as for a built-in type of that geometry.
 
 ## Legends
 
@@ -374,7 +375,7 @@ The words of the names the library gives new features, layers and groups
   and [`LegendEntry`](../api/maplibre-gl-draw/interfaces/LegendEntry.md)
 - [`evaluateStyleRule`](../api/maplibre-gl-draw/functions/evaluateStyleRule.md)
   and
-  [`getStyleRuleChannel`](../api/maplibre-gl-draw/functions/getStyleRuleChannel.md)
+  [`FeatureTypesCollection.getStyleRuleChannel`](../api/maplibre-gl-draw/interfaces/FeatureTypesCollection.md#getstylerulechannel)
 - [`parseCssColor`](../api/maplibre-gl-draw/functions/parseCssColor.md)
 - [`RuntimeOptions`](../api/maplibre-gl-draw/interfaces/RuntimeOptions.md)
   (`style`, `previewStyle`, `selectionStyle`, `scaleWithZoom`,

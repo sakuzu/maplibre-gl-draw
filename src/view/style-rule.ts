@@ -58,28 +58,34 @@ const CHANNEL_COLOR_PROPERTY: Record<StyleRuleChannel, 'pointColor' | 'strokeCol
   };
 
 /**
- * Returns the channel that carries the rule color for a built-in feature type, by its name.
- *
- * Types other than the known ones (Image, and a name it does not know) return 'fill'. A custom
- * type has the channel it declares or the one of its geometry (`api/impl/applied-style.ts`).
- *
- * @param type The feature type
- * @returns `'point'`, `'stroke'` or `'fill'`
+ * What a custom feature type declares of the channel the rule colors: the channel itself
+ * (`FeatureTypeDefinition.styleRuleChannel`) and the geometry of its definition, which decides
+ * when it declares none
  */
-export function getStyleRuleChannel(type: FeatureType): StyleRuleChannel {
-  return channelOfTypeName(type);
+export interface CustomRuleChannel {
+  readonly channel?: StyleRuleChannel;
+  readonly geometry: string;
 }
 
 /**
- * The channel of a geometry, as the built-in types of that geometry have it: `point` for a Point
- * or a MultiPoint, `stroke` for a LineString or a MultiLineString, and `fill` for any other (a
- * Polygon, a MultiPolygon, a GeometryCollection)
+ * The channel that carries the rule color for a feature type: the one judgment of the library,
+ * which the looks of the features, the datasets and `draw.extensions.featureTypes` read.
  *
- * @param geometryType The type of the GeoJSON geometry
+ * A built-in type has the channel of its name; a custom type the one it declares, or else the one
+ * of the geometry of its definition, as a built-in type of that geometry has it (`point` for a
+ * Point or a MultiPoint, `stroke` for a LineString or a MultiLineString, and `fill` for any
+ * other). A name nothing knows is `fill`.
+ *
+ * @param type The feature type
+ * @param custom What the type declares, for a custom type (none for a built-in type)
  * @returns `'point'`, `'stroke'` or `'fill'`
  */
-export function getGeometryRuleChannel(geometryType: string): StyleRuleChannel {
-  return channelOfTypeName(geometryType);
+export function getStyleRuleChannel(
+  type: FeatureType,
+  custom?: CustomRuleChannel,
+): StyleRuleChannel {
+  if (custom) return custom.channel ?? channelOfTypeName(custom.geometry);
+  return channelOfTypeName(type);
 }
 
 /** The channel of a built-in feature type or of a geometry type, by its name */

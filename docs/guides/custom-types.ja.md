@@ -247,7 +247,7 @@ ctx.point.draw(
   ([どの色が使われるか](styles.ja.md#どの色が使われるか))。型が
   `styleRuleChannel` で宣言した鍵 (`'fill'` は `fillColor`、`'stroke'` は
   `strokeColor`、`'point'` は `pointColor`) か、宣言が無ければ組み込みの型と
-  同じく地物の幾何の鍵です。Point は `pointColor`、LineString は
+  同じく定義の幾何の鍵です。Point は `pointColor`、LineString は
   `strokeColor`、Polygon は `fillColor` です。上の区域は Polygon なので、
   規則の色を塗りにとり、縁はそのままです。Point の上に紙を `fillColor` で
   描くカードや箱は、`styleRuleChannel: 'fill'` を宣言します。スタイルに

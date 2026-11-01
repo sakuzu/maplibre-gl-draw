@@ -13,6 +13,7 @@ import type { Map as MapLibreMap } from 'maplibre-gl';
 import { describe, expect, it } from 'vitest';
 import { drawLineMode } from '../../modes/draw/line.js';
 import { createModeHarness, keyInput, pointerInput } from '../../test-utils.js';
+import { getStyleRuleChannel } from '../../view/style-rule.js';
 import { createAppliedStyles } from './applied-style.js';
 import { createDocument } from './document.js';
 import type { Context } from './engine-context.js';
@@ -40,6 +41,7 @@ function depsOf(context: Context): ResourceDeps {
     appliedStyle: createAppliedStyles({
       getLayer: (id) => context.store.getLayer(id),
       getStyleOptions: () => undefined,
+      styleRuleChannelOf: (type: string) => getStyleRuleChannel(type),
     }).of,
     spatialIndex: context.spatialIndex,
   };

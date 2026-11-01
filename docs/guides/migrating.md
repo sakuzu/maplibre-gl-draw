@@ -859,11 +859,14 @@ drawn. Each change below names what replaces what is gone.
   cannot have it
 - The rule colors the key a custom type declares in `styleRuleChannel`
   (`'fill'`, `'stroke'` or `'point'`), or else the key of the geometry
-  of the feature, as for a built-in type. It colored `fillColor` of every
-  custom type: a type of points or of lines that declares none now has
-  the rule color in `pointColor` or in `strokeColor`, and a type drawn
-  as a card or a box on a Point with its paper in `fillColor` declares
-  `styleRuleChannel: 'fill'` to keep it
+  of its definition, as for a built-in type. It colored `fillColor` of
+  every custom type: a type of points or of lines that declares none now
+  has the rule color in `pointColor` or in `strokeColor`, and a type
+  drawn as a card or a box on a Point with its paper in `fillColor`
+  declares `styleRuleChannel: 'fill'` to keep it. The function
+  `getStyleRuleChannel(type)` of the main entry, which knew the built-in
+  types only, is gone: `draw.extensions.featureTypes.getStyleRuleChannel(type)`
+  answers for every type, as the library colors
 - A style key an extension adds to `FeatureStyle` by declaration merging
   is optional in `FeatureStyleResolved` (it was required, though the look
   has it only when the type or the feature gives it): check it where it

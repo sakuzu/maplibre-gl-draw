@@ -10,7 +10,7 @@ import { describe, expect, it } from 'vitest';
 import { planMove } from '../src/layers/move.js';
 import { buildNodes, type LayerTreeNode, type TreeSource } from '../src/layers/tree.js';
 import { resolveMessages } from '../src/messages.js';
-import { feature } from './fake-draw.js';
+import { builtInRuleChannel, feature } from './fake-draw.js';
 
 const en = resolveMessages('en');
 
@@ -41,6 +41,7 @@ function tableSource(): TreeSource {
     if (f) features.set(id, { ...f, groupId: 'g' });
   }
   return {
+    extensions: { featureTypes: { getStyleRuleChannel: builtInRuleChannel } },
     layers: {
       get: (id) => (id === 'rows' ? layer : undefined),
       getOrder: () => ['rows'],

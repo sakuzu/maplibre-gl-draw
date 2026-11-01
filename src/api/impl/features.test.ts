@@ -12,6 +12,7 @@ import type { ObjectGroup, ObjectLayer } from '../../shared/types/model.js';
 import { MemoryStore } from '../../store/memory.js';
 import type { StoreChange } from '../../store/types.js';
 import { createResourceDeps } from '../../test-utils.js';
+import { getStyleRuleChannel } from '../../view/style-rule.js';
 import { DrawError } from '../errors.js';
 import type { FeaturesCollection } from '../features.js';
 import type { FeatureInput } from '../model.js';
@@ -559,6 +560,7 @@ describe('getAppliedStyle', () => {
           circle: { fillColor: 'blue', strokeWidth: 4 },
           image: { imageOpacity: 0.5 },
         }),
+        styleRuleChannelOf: (type: string) => getStyleRuleChannel(type),
       }).of,
     });
     const base = {

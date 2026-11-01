@@ -18,7 +18,6 @@ import {
   type Feature,
   type FeatureListOptions,
   type FeatureType,
-  getStyleRuleChannel,
   type Layer,
   type LegendEntry,
 } from '@sakuzu/maplibre-gl-draw';
@@ -49,6 +48,10 @@ export type LegendDataset = Pick<
 
 /** What the legend reads from the draw instance */
 export interface LegendSource {
+  /** The channel a style rule colors for a type, the judgment core colors with */
+  readonly extensions: {
+    readonly featureTypes: { getStyleRuleChannel(type: FeatureType): RuleChannel };
+  };
   readonly layers: {
     get(id: string): Layer | undefined;
     getOrder(): readonly string[];
@@ -90,16 +93,28 @@ export function legendMessages(m: Messages): Partial<CoreMessages> {
  * The shape of the swatches for the features of a layer: a dot for points, a line for lines, an
  * area for areas, and a box when they are mixed or there are none
  */
-export function legendShape(features: readonly Feature[]): LegendShape {
-  return shapeOfTypes(features.map((feature) => feature.type));
+export function legendShape(
+  features: readonly Feature[],
+  channelOf: (type: FeatureType) => RuleChannel,
+): LegendShape {
+  return shapeOfTypes(
+    features.map((feature) => feature.type),
+    channelOf,
+  );
 }
 
+/** The part of the look a style rule colors */
+type RuleChannel = 'point' | 'stroke' | 'fill';
+
 /** The shape of the swatches for features of these types, as `legendShape` gives it */
-function shapeOfTypes(types: Iterable<FeatureType>): LegendShape {
+function shapeOfTypes(
+  types: Iterable<FeatureType>,
+  channelOf: (type: FeatureType) => RuleChannel,
+): LegendShape {
   let channel: string | undefined;
   for (const type of types) {
     if (type === 'Image') continue;
-    const next = getStyleRuleChannel(type);
+    const next = channelOf(type);
     if (channel === undefined) channel = next;
     else if (channel !== next) return 'box';
   }
@@ -115,7 +130,10 @@ function shapeOfTypes(types: Iterable<FeatureType>): LegendShape {
  * rows makes no more features than that
  */
 function layerShape(source: LegendSource, layer: Layer): LegendShape {
-  return legendShape(source.features.list({ layerId: layer.id }, { limit: SAMPLED_ROWS }));
+  return legendShape(
+    source.features.list({ layerId: layer.id }, { limit: SAMPLED_ROWS }),
+    channelOfSource(source),
+  );
 }
 
 /**
@@ -123,7 +141,10 @@ function layerShape(source: LegendSource, layer: Layer): LegendShape {
  * most a thousand), so that a large dataset costs no more than a small one: a box when it has no
  * rows yet
  */
-export function datasetShape(dataset: LegendDataset): LegendShape {
+export function datasetShape(
+  dataset: LegendDataset,
+  channelOf: (type: FeatureType) => RuleChannel,
+): LegendShape {
   const count = Math.min(dataset.getThinningStats().total, SAMPLED_ROWS);
   function* types(): Generator<FeatureType> {
     for (let i = 0; i < count; i++) {
@@ -131,7 +152,12 @@ export function datasetShape(dataset: LegendDataset): LegendShape {
       if (type !== null) yield type;
     }
   }
-  return shapeOfTypes(types());
+  return shapeOfTypes(types(), channelOf);
+}
+
+/** The judgment of the channel of a source of the legend */
+function channelOfSource(source: LegendSource): (type: FeatureType) => RuleChannel {
+  return (type) => source.extensions.featureTypes.getStyleRuleChannel(type);
 }
 
 /**
@@ -151,7 +177,7 @@ export function legendBlocks(source: LegendSource, m: Messages): LegendBlock[] {
       id: dataset.id,
       name: dataset.id,
       entries: deriveLegend(rule, words),
-      shape: datasetShape(dataset),
+      shape: datasetShape(dataset, channelOfSource(source)),
     });
   };
   // From the back, as core lists them

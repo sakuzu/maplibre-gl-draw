@@ -26,7 +26,6 @@ import { longestRisingRun, diffItemOrder as movesBetween } from '../shared/utils
 import {
   deriveLegend as deriveRuleLegend,
   evaluateStyleRule as evaluateRule,
-  getStyleRuleChannel as getRuleChannel,
 } from '../view/style-rule.js';
 import type { DrawErrorCode } from './errors.js';
 import {
@@ -959,20 +958,6 @@ export function evaluateStyleRule(
  */
 export function deriveLegend(rule: StyleRule, messages?: Partial<Messages>): LegendEntry[] {
   return deriveRuleLegend(rule, messages);
-}
-
-/**
- * The part of the look a style rule colors for a built-in type: the point, the stroke or the fill.
- *
- * It answers by the name of the type. A custom type has the channel it declares
- * (`FeatureTypeDefinition.styleRuleChannel`), or else the one of the geometry of the feature, as a
- * built-in type of that geometry has it; this function answers `fill` for a name it does not know.
- *
- * @param type - The type of the feature
- * @returns `point` for points, `stroke` for lines and `fill` for areas and images
- */
-export function getStyleRuleChannel(type: FeatureType): 'point' | 'stroke' | 'fill' {
-  return getRuleChannel(type);
 }
 
 // ============================================================================

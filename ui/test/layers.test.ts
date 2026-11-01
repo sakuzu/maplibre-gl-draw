@@ -19,7 +19,7 @@ import {
   selectionOf,
 } from '../src/layers/tree.js';
 import { resolveMessages } from '../src/messages.js';
-import { fakeDraw, feature, group, layer } from './fake-draw.js';
+import { builtInRuleChannel, fakeDraw, feature, group, layer } from './fake-draw.js';
 
 const en = resolveMessages('en');
 
@@ -521,18 +521,25 @@ describe('the legend', () => {
       doc: { layers: [], datasets: [{ id: 'big', rows: 200_000, rowType: 'LineString' }] },
     });
     const big = fake.datasets[0];
-    expect(datasetShape(big as never)).toBe('line');
+    expect(datasetShape(big as never, builtInRuleChannel)).toBe('line');
     expect(big.getRowType).toHaveBeenCalledTimes(1000);
     big.setRowCount(0);
-    expect(datasetShape(big as never)).toBe('box');
+    expect(datasetShape(big as never, builtInRuleChannel)).toBe('box');
+  });
+
+  it('reads the shape of the swatches of a custom type from the judgment of core', () => {
+    const f = (type: string) => feature(type, 'l', type);
+    const channelOf = (type: string) => (type === 'Card' ? 'fill' : builtInRuleChannel(type));
+    expect(legendShape([f('Card'), f('Polygon')], channelOf)).toBe('area');
+    expect(legendShape([f('Card'), f('Point')], channelOf)).toBe('box');
   });
 
   it('draws the swatches after what the features of the layer are', () => {
     const f = (type: string) => feature(type, 'l', type);
-    expect(legendShape([f('Point'), f('MultiPoint')])).toBe('dot');
-    expect(legendShape([f('LineString'), f('Freehand')])).toBe('line');
-    expect(legendShape([f('Polygon'), f('Circle'), f('Image')])).toBe('area');
-    expect(legendShape([f('Point'), f('Polygon')])).toBe('box');
-    expect(legendShape([])).toBe('box');
+    expect(legendShape([f('Point'), f('MultiPoint')], builtInRuleChannel)).toBe('dot');
+    expect(legendShape([f('LineString'), f('Freehand')], builtInRuleChannel)).toBe('line');
+    expect(legendShape([f('Polygon'), f('Circle'), f('Image')], builtInRuleChannel)).toBe('area');
+    expect(legendShape([f('Point'), f('Polygon')], builtInRuleChannel)).toBe('box');
+    expect(legendShape([], builtInRuleChannel)).toBe('box');
   });
 });
