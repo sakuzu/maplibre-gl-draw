@@ -39,7 +39,10 @@
  * (view/feature-companion) are asked right after the test of the feature itself fails and
  * before moving on to the next (one step further back) feature. A companion is drawn one z
  * below its feature, so the order in which things are seen matches the order in which they
- * can be grabbed. When no provider at all is registered, this detour never happens.
+ * can be grabbed. The rows of a layer held as rows are examined in the same order, from the
+ * front: each row itself, then its companions, asked only of the rows the drawing gives
+ * companions (`rowHasCompanion`), on the feature of the row made to read. When no provider at
+ * all is registered, this detour never happens.
  */
 
 import type { DisplayHitTestFn } from '../../dataset/dataset.js';
@@ -49,12 +52,14 @@ import {
   type FeatureTablesInternals,
   featureTablesInternals,
 } from '../../feature-table/feature-tables.js';
-import { hitTestLayerTable } from '../../feature-table/hit-test.js';
-import type { LayerTable } from '../../feature-table/layer-table.js';
+import { hitTestLayerTable, type TableRowHit } from '../../feature-table/hit-test.js';
+import type { LayerTable, RowGroup } from '../../feature-table/layer-table.js';
+import { rowFeatureToRead, rowHasGeometry } from '../../feature-table/row-read.js';
+import { STATE_UNHIT_MASK } from '../../feature-table/row-state.js';
 import type { LngLat, ScreenPoint } from '../../shared/math/index.js';
 import { getDisplayFeatures } from '../../store/local-visibility.js';
 import type { Store } from '../../store/store.js';
-import type { Coordinate, Feature, FeatureStyle, FeatureType } from '../../store/types.js';
+import type { Coordinate, Feature, FeatureStyle, FeatureType, Layer } from '../../store/types.js';
 import { ROW_FLAG_LOCKED } from '../../table/row-group-types.js';
 import type {
   CompanionHitContext,
@@ -62,6 +67,7 @@ import type {
   FeatureCompanionRegistry,
 } from '../../view/feature-companion.js';
 import { hitTestFeatureCompanions } from '../../view/feature-companion.js';
+import { rowHasCompanion } from '../../view/layer/table-partition.js';
 import { getStyleRuleChannel } from '../../view/style-rule.js';
 import { clickCopies } from './local-frame.js';
 import type { HitTestService, UnprojectFunction } from './service.js';
@@ -266,19 +272,32 @@ export function createTopmostHitTester(deps: TopmostHitTestDeps): HitTestTopmost
   };
 
   /**
-   * The frontmost row of a layer held as rows hit at the click (null when none is, or when the
-   * layer is hidden): a row, or a feature of the Store for a row held (made one when `hold`)
+   * The rows a hit leaves out besides their state: the rows of a group hidden by this client
+   * (undefined when none is hidden)
    */
-  const rowOf = (
+  const hiddenGroupRows = (
+    tables: FeatureTablesInternals,
+  ): ((group: RowGroup, row: number) => boolean) | undefined => {
+    const hidden = store.listHidden();
+    if (hidden.size === 0) return undefined;
+    return (group, row) => {
+      const groupHandle = group.data.groups[row];
+      const groupId = groupHandle >= 0 ? tables.groups.idOf(groupHandle) : undefined;
+      return groupId !== undefined && hidden.has(groupId);
+    };
+  };
+
+  /**
+   * The frontmost row of a layer held as rows hit at the click, with the copy of the click it
+   * was hit at (null when none is)
+   */
+  const frontRowOf = (
     tables: FeatureTablesInternals,
     table: LayerTable,
-    point: ScreenPoint,
     copies: readonly Coordinate[],
     tolerance: number,
-    hold: boolean,
-  ): TopHit | null => {
-    const layer = store.getLayer(table.layerId);
-    if (!layer || layer.visible === false || store.isHidden(table.layerId)) return null;
+    skip: ((group: RowGroup, row: number) => boolean) | undefined,
+  ): { hit: TableRowHit; coordinate: Coordinate } | null => {
     // A point is hit anywhere on its marker: the candidates are looked for as far as the
     // largest marker of the styles of the rows reaches
     const degreesPerPixel = 360 / (512 * 2 ** (deps.getZoom?.() ?? 0));
@@ -296,7 +315,6 @@ export function createTopmostHitTester(deps: TopmostHitTestDeps): HitTestTopmost
       maxMarkerReach(tables, deps) * degreesPerPixel,
       tolerance + extraReach * pixel,
     );
-    const hidden = store.listHidden();
     for (const coordinate of copies) {
       const hit = hitTestLayerTable(tables, table, {
         coordinate,
@@ -306,44 +324,102 @@ export function createTopmostHitTester(deps: TopmostHitTestDeps): HitTestTopmost
           hitTestService.hitTestShape?.(type, shape, at, within) ?? null,
         test,
         // A row of a group hidden by this client is not hit
-        skip:
-          hidden.size === 0
-            ? undefined
-            : (group, row) => {
-                const groupHandle = group.data.groups[row];
-                const groupId = groupHandle >= 0 ? tables.groups.idOf(groupHandle) : undefined;
-                return groupId !== undefined && hidden.has(groupId);
-              },
+        skip,
       });
-      if (!hit) continue;
-      const data = hit.group.data;
-      const handle = data.handles[hit.row];
-      const id = tables.ids.idOf(handle) as string;
-      const held = tables.getOpenedFeature(id);
-      if (held) return { kind: 'store', feature: held };
-      if (hold) {
-        holdForPointer(id);
-        const feature = tables.getOpenedFeature(id);
-        if (feature) return { kind: 'store', feature };
-      }
-      const groupHandle = data.groups[hit.row];
-      const locked =
-        (data.flags[hit.row] & ROW_FLAG_LOCKED) !== 0 ||
-        (groupHandle >= 0 && tables.groups.isLocked(groupHandle)) ||
-        layer.locked === true;
-      const distancePx = (): number => {
-        const distance = hit.shape
-          ? (hitTestService.distanceOfShape?.(hit.type, hit.shape, coordinate, hit.tolerance) ?? 0)
-          : (hitTestService.hitTestAll(point, unproject, [hit.feature as Feature])[0]?.distance ??
-            0);
-        const onePixel = Math.abs(
-          unproject({ x: point.x + 1, y: point.y }).lng - unproject(point).lng,
-        );
-        return onePixel > 0 ? distance / onePixel : 0;
-      };
-      return { kind: 'row', layerId: table.layerId, id, handle, locked, distancePx };
+      if (hit) return { hit, coordinate };
     }
     return null;
+  };
+
+  /**
+   * What a row hit is: a row, or a feature of the Store for a row held (made one when `hold`)
+   */
+  const rowHitOf = (
+    tables: FeatureTablesInternals,
+    table: LayerTable,
+    layer: Layer,
+    found: { hit: TableRowHit; coordinate: Coordinate },
+    point: ScreenPoint,
+    hold: boolean,
+  ): TopHit => {
+    const { hit, coordinate } = found;
+    const data = hit.group.data;
+    const handle = data.handles[hit.row];
+    const id = tables.ids.idOf(handle) as string;
+    const held = tables.getOpenedFeature(id);
+    if (held) return { kind: 'store', feature: held };
+    if (hold) {
+      holdForPointer(id);
+      const feature = tables.getOpenedFeature(id);
+      if (feature) return { kind: 'store', feature };
+    }
+    const groupHandle = data.groups[hit.row];
+    const locked =
+      (data.flags[hit.row] & ROW_FLAG_LOCKED) !== 0 ||
+      (groupHandle >= 0 && tables.groups.isLocked(groupHandle)) ||
+      layer.locked === true;
+    const distancePx = (): number => {
+      const distance = hit.shape
+        ? (hitTestService.distanceOfShape?.(hit.type, hit.shape, coordinate, hit.tolerance) ?? 0)
+        : (hitTestService.hitTestAll(point, unproject, [hit.feature as Feature])[0]?.distance ?? 0);
+      const onePixel = Math.abs(
+        unproject({ x: point.x + 1, y: point.y }).lng - unproject(point).lng,
+      );
+      return onePixel > 0 ? distance / onePixel : 0;
+    };
+    return { kind: 'row', layerId: table.layerId, id, handle, locked, distancePx };
+  };
+
+  /**
+   * The frontmost hit among the rows of a layer held as rows and their companions (null when
+   * none is, or when the layer is hidden)
+   *
+   * The rows are examined from the front as the features of a layer are: each row itself, then
+   * its companions. Only the rows hit can be hit themselves, so the frontmost row hit is found
+   * first, and the rows in front of it are asked for their companions. A row is asked for them
+   * when the drawing gives it companions (`rowHasCompanion`), on its feature made to read, as
+   * the drawing makes it; no feature is made for a row without companions. Without a provider
+   * of companions, only the frontmost row hit is looked for.
+   */
+  const rowsOf = (
+    tables: FeatureTablesInternals,
+    table: LayerTable,
+    point: ScreenPoint,
+    copies: readonly Coordinate[],
+    tolerance: number,
+    hold: boolean,
+    context: CompanionHitContext | null,
+    visible: VisibilityLookup,
+  ): TopHit | null => {
+    const layer = store.getLayer(table.layerId);
+    if (!layer || layer.visible === false || store.isHidden(table.layerId)) return null;
+    const skip = hiddenGroupRows(tables);
+    const front = frontRowOf(tables, table, copies, tolerance, skip);
+    const rowHit = (): TopHit | null =>
+      front ? rowHitOf(tables, table, layer, front, point, hold) : null;
+    const companions = deps.companions;
+    if (!context || !companions) return rowHit();
+
+    const view = tables.view(table.layerId);
+    const order = table.rowOrder();
+    for (let i = order.handles.length - 1; i >= 0; i--) {
+      const group = order.groups[i];
+      const row = order.rows[i];
+      if (front && front.hit.group === group && front.hit.row === row) return rowHit();
+
+      // A row that is not hit, or draws nothing, has no companion drawn either
+      if ((group.state[row] & STATE_UNHIT_MASK) !== 0 || skip?.(group, row)) continue;
+      if (!rowHasGeometry(group, row)) continue;
+      let feature: Feature | undefined;
+      const featureOf = (): Feature => {
+        feature ??= rowFeatureToRead(tables.readContext, table.layerId, group, row);
+        return feature;
+      };
+      if (!rowHasCompanion(companions, view, group, row, featureOf)) continue;
+      const companionHit = companionOf(featureOf(), context, visible);
+      if (companionHit) return companionHit;
+    }
+    return rowHit();
   };
 
   return (point, options) => {
@@ -405,11 +481,20 @@ export function createTopmostHitTester(deps: TopmostHitTestDeps): HitTestTopmost
     for (let i = layerOrder.length - 1; i >= 0; i--) {
       const entryId = layerOrder[i];
 
-      // A layer held as rows is tested on its rows
+      // A layer held as rows is tested on its rows: each row itself, then its companions
       const table = tables?.layerTable(entryId);
       if (tables && table) {
-        const row = rowOf(tables, table, point, copies, tolerance, options?.hold === true);
-        if (row) return row;
+        const hit = rowsOf(
+          tables,
+          table,
+          point,
+          copies,
+          tolerance,
+          options?.hold === true,
+          companion,
+          visible,
+        );
+        if (hit) return hit;
         continue;
       }
 

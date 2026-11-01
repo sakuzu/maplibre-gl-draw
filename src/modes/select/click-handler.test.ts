@@ -14,10 +14,12 @@
  */
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { TopHit } from '../../dispatcher/hit-test/topmost.js';
+import { HitTestServiceImpl } from '../../dispatcher/hit-test/service.js';
+import { createTopmostHitTester, type TopHit } from '../../dispatcher/hit-test/topmost.js';
 import type { MouseNormalizedEvent } from '../../dispatcher/types.js';
 import { DEFAULT_SELECTION_CONFIG } from '../../shared/config/selection.js';
 import { setScreenScaleFrame } from '../../shared/math/index.js';
+import { RBushSpatialIndex } from '../../store/spatial/spatial-index.js';
 import type { Store } from '../../store/store.js';
 import type { Feature } from '../../store/types.js';
 import { planeScaleFrame, STORE_KINDS } from '../../test-utils.js';
@@ -211,6 +213,68 @@ describe.each(STORE_KINDS)('on %s', (_kind, createStore) => {
       click();
 
       expect(store.getSelection().type).toBeNull();
+    });
+  });
+
+  describe('a click on a companion found by the hit testing', () => {
+    /** The provider of a line of f1 along latitude 5, from longitude 20 to 100 */
+    function registerLine(consume: boolean): void {
+      onCompanionClick = vi.fn<FeatureCompanionProvider['onCompanionClick']>(() => consume);
+      companions.register({
+        id: 'line',
+        has: (feature) => feature.id === 'f1',
+        draw: () => {},
+        hitTest: (_feature, point, hitContext) => {
+          const from = hitContext.project([20, 5]);
+          const to = hitContext.project([100, 5]);
+          const on =
+            Math.abs(point.y - from.y) <= hitContext.tolerancePx &&
+            point.x >= from.x &&
+            point.x <= to.x;
+          return on ? { id: 'line-of-f1' } : null;
+        },
+        onCompanionClick,
+      });
+    }
+
+    /** A click on the line, away from the features */
+    function clickOnLine(): void {
+      const map = makeMap();
+      const hitTestTopmost = createTopmostHitTester({
+        store,
+        hitTestService: new HitTestServiceImpl(store, new RBushSpatialIndex()),
+        unproject: map.unproject,
+        toleranceLngLat: () => 0.5,
+        project: ([lng, lat]) => map.project({ lng, lat }),
+        getZoom: () => 10,
+        clickTolerancePx: 5,
+        companions,
+      });
+      context = { ...context, map, hitTestTopmost } as unknown as EngineModeContext;
+      handleSelectClick(
+        { ...clickEvent(), point: { x: 500, y: -50 }, lngLat: { lng: 50, lat: 5 } },
+        context,
+        DEFAULT_SELECTION_CONFIG,
+      );
+    }
+
+    it('hands the click to the provider of the companion, and changes no selection', () => {
+      registerLine(true);
+      store.setSelection('feature', ['f2']);
+
+      clickOnLine();
+
+      expect(onCompanionClick).toHaveBeenCalledWith('f1', { id: 'line-of-f1' }, expect.anything());
+      expect(store.getSelection()).toEqual({ type: 'feature', ids: ['f2'] });
+    });
+
+    it('selects the feature of the companion when the provider leaves the click', () => {
+      registerLine(false);
+
+      clickOnLine();
+
+      expect(onCompanionClick).toHaveBeenCalledTimes(1);
+      expect(store.getSelection()).toEqual({ type: 'feature', ids: ['f1'] });
     });
   });
 

@@ -511,6 +511,11 @@ writing it. Its changes are listed after those of 3.0.0.
   A press inside the boxes drawn around several features (the box of all
   of them and the box of each) moves them, and a press outside them does
   not.
+- The companions of the features of a layer held as rows are hit where
+  they are drawn: the hit test asked the rows themselves only, so a click
+  on a companion (a callout line away from its feature) went through it.
+  The rows are now asked as the features are, from the front, each row
+  itself and then its companions.
 
 ### Migration to 3.0.0
 
