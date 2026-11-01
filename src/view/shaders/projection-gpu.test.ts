@@ -57,10 +57,7 @@ interface UniformWrite {
 }
 
 /** The uniforms `ProjectionUniformManager` writes for a frame, through a GL that records them */
-function recordUniforms(
-  projectionData: ProjectionData,
-  center: [number, number],
-): UniformWrite[] {
+function recordUniforms(projectionData: ProjectionData, center: [number, number]): UniformWrite[] {
   const writes: UniformWrite[] = [];
   const gl = new Proxy(
     {},

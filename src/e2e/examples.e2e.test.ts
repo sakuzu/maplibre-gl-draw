@@ -1413,7 +1413,7 @@ describe('the examples', () => {
     const [hill, river] = await page.evaluate(() => {
       const { draw } = window as unknown as E2EWindow;
       draw.selection.clear();
-      return draw.features.list();
+      return draw.features.list({ type: 'Route' });
     });
     expect(river.type).toBe('Route');
     // The river route is drawn solid in its own blue (#1f6feb)
@@ -1441,7 +1441,7 @@ describe('the examples', () => {
     const [hill, river] = await page.evaluate(() => {
       const { draw } = window as unknown as E2EWindow;
       draw.selection.clear();
-      return draw.features.list();
+      return draw.features.list({ type: 'Route' });
     });
     const [r0, r1] = (river.geometry as GeoJSON.LineString).coordinates;
     const riverMiddle = [(r0[0] + r1[0]) / 2, (r0[1] + r1[1]) / 2];
@@ -1454,7 +1454,7 @@ describe('the examples', () => {
         const { draw } = window as unknown as E2EWindow;
         return {
           registered: draw.extensions.featureTypes.has('Route'),
-          count: draw.features.count(),
+          count: draw.features.count({ type: 'Route' }),
           selected: [...draw.selection.get().ids],
         };
       });
@@ -1501,7 +1501,7 @@ describe('the examples', () => {
     const hill = await page.evaluate(() => {
       const { draw } = window as unknown as E2EWindow;
       draw.selection.clear();
-      return draw.features.list()[0];
+      return draw.features.list({ type: 'Route' })[0];
     });
     const [first, second] = (hill.geometry as GeoJSON.LineString).coordinates;
     // The first vertex in the middle of the map, clear of the panels
@@ -1535,6 +1535,56 @@ describe('the examples', () => {
     expect(movedFirst[0]).toBeLessThan(first[0]);
     expect(movedFirst[1]).toBeLessThan(first[1]);
     expect(movedSecond).toEqual(second);
+    await close();
+  });
+
+  it('custom-feature-types lays a card on the map, colors its paper by the rule and widens it by its east edge', {
+    timeout: TIMEOUT,
+  }, async () => {
+    const { page, close } = await openExample('custom-feature-types');
+    const card = await page.evaluate(() => {
+      const { draw, map } = window as unknown as E2EWindow;
+      draw.selection.clear();
+      const [hill] = draw.features.list({ type: 'Card' });
+      map.jumpTo({
+        center: (hill.geometry as GeoJSON.Point).coordinates as [number, number],
+        zoom: 14,
+      });
+      return hill;
+    });
+    await settle(page);
+    const center = (card.geometry as GeoJSON.Point).coordinates;
+    // The paper takes the color of the rule of its layer for its topic (#ffd6a5), though the
+    // geometry is a Point: the type declares that the rule colors its fill
+    const peach = (await colorsAround(page, center)).some(
+      ([r, g, b]) => r > 240 && g > 200 && g < 225 && b > 150 && b < 180,
+    );
+    expect(peach).toBe(true);
+
+    // Selected, it has a resize handle in the middle of the east edge of its selection box,
+    // which widens it alone
+    await page.evaluate(
+      (id) => (window as unknown as E2EWindow).draw.selection.set('feature', [id]),
+      card.id,
+    );
+    await settle(page);
+    await still(page);
+    const east = await page.evaluate((id) => {
+      const { draw } = window as unknown as E2EWindow;
+      const box = draw.rendered.getSelectionBox(id);
+      if (box?.kind !== 'ground') return null;
+      const { topRight, bottomRight } = box.corners;
+      return [(topRight[0] + bottomRight[0]) / 2, (topRight[1] + bottomRight[1]) / 2];
+    }, card.id);
+    if (!east) throw new Error('no selection box laid on the map');
+    const from = await pageOf(page, east);
+    await drag(page, from, { x: from.x + 60, y: from.y });
+    const after = await page.evaluate(
+      (id) => (window as unknown as E2EWindow).draw.features.get(id)?.properties,
+      card.id,
+    );
+    expect(after?.cardWidth as number).toBeGreaterThan(120);
+    expect(after?.cardScale).toBeUndefined();
     await close();
   });
 
