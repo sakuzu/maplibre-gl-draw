@@ -90,7 +90,7 @@ export const MESSAGES_EN: Readonly<Messages> = Object.freeze({
 
 /** Whether an object has a key of its own */
 function hasOwn(object: object, key: string): boolean {
-  return Object.prototype.hasOwnProperty.call(object, key);
+  return Object.getOwnPropertyDescriptor(object, key) !== undefined;
 }
 
 /** The English defaults of the keys the extensions defined (`defineMessages`), by key */
