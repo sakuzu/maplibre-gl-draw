@@ -299,7 +299,7 @@ npm run deploy:pages -- --remote upstream  # push to another remote
 `npm run site:dev` starts the dev server of the examples (port 3200), of
 the playground (port 3300) and of VitePress (port 5173), prints
 <http://localhost:5173/maplibre-gl-draw/> once all three answer, and
-stops them all on Ctrl-C. The pages frame the examples and the playground
+stops them all on Ctrl-C. The pages embed the examples and the playground
 from their dev servers, so a change to an example, to the library or to
 a page shows on reload. `npm run dev` still serves the examples alone.
 
@@ -324,7 +324,7 @@ repository's Pages (the `base` of the VitePress configuration), which
 - `examples/` — the examples, served by `npm run dev`; their pages and
   the gallery are in `docs/examples/`
 - `playground/` — one page to try every feature
-- `bench/` — pages that measure frame times, for contributors
+- `bench/` — pages that measure draw times, for contributors
 - `docs/` — getting started, the guides, the reference and the internals
   (`docs/README.md` is the index)
 - `scripts/` — the checks run by `npm run lint` and `npm run docs:check`,

@@ -130,9 +130,9 @@ The `RenderContext` carries what a renderer needs to draw:
   shared renderers do not apply it by themselves: multiply it into the
   opacity you pass, so that the feature fades with its layer
 - `screen`, the conversion between positions and points of the screen
-  in the frame being drawn (`project`, `unproject`, `metersPerPixel`),
+  in the view being drawn (`project`, `unproject`, `metersPerPixel`),
   its `zoom` and its `pixelRatio`: the same object as `ctx.screen` of a
-  plugin, which answers for the frame drawn last once it is drawn. Use
+  plugin, which answers for the view drawn last once it is drawn. Use
   `screen.pixelRatio` rather than `window.devicePixelRatio`, and read
   the screen from the context rather than keeping one from elsewhere
 - `appliedStyle(feature)`, the look a feature is drawn with, as
@@ -140,7 +140,7 @@ The `RenderContext` carries what a renderer needs to draw:
   [The look of a type](#the-look-of-a-type))
 - `terrain`, the heights of the ground (see [Terrain](#terrain))
 - `gl`, the WebGL context, for a renderer that writes its own shaders,
-  which reads the values of the GPU of the frame through `/webgl` (see
+  which reads the values of the GPU of the view through `/webgl` (see
   [Your own shaders](#your-own-shaders))
 
 A type that fills an area and outlines it:
@@ -227,7 +227,7 @@ drawn:
 - A type that declares no `defaultStyle` starts from the defaults of the
   `style` option, as before
 - The look of a feature is put together once and kept with it: reading
-  it again, in the frame or in the next one, gives the same object until
+  it again, in the same draw or in the next one, gives the same object until
   the feature, the rule of its layer or the `style` option changes. Read
   it for each feature you draw, and do not change it
 
@@ -518,7 +518,7 @@ const reshapeRoute: FeatureTypeDefinition = {
 ```
 
 `drawHandles(feature, handles, ctx)` receives the custom handles
-`handles` gave, and the render context of the frame (the shared
+`handles` gave, and the render context of the draw (the shared
 renderers, `ctx.screen`). The library calls it after drawing the
 selection, exactly when it shows the handles of the feature, and not
 when none is shown; what it draws goes away with the type when the type
@@ -823,7 +823,7 @@ draw.extensions.companionProviders.add(halo);
 
 The shared renderers cover lines, areas and point markers. For
 anything else, a renderer compiles its own shaders with `ctx.gl`, and
-positions them with the values of the GPU of the frame, which
+positions them with the values of the GPU of the view, which
 `viewUniforms(ctx)` of `/webgl` gives: `shader` (the projection
 functions of the map), `projection`, and `offset` (the center of the
 view, for drawing near the camera without losing precision).

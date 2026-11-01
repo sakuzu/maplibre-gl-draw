@@ -81,7 +81,7 @@ function ask(request: Request): Promise<Reply> {
 /** A time in whole milliseconds, for the console (one below the timer's resolution can come out a little under zero; it reads as 0) */
 const ms = (value: number): string => `${Math.max(0, Math.round(value)).toLocaleString('en')} ms`;
 
-/** Resolves with the time of the next frame drawn */
+/** Resolves with the time of the next draw of the map */
 function nextFrame(): Promise<number> {
   return new Promise((resolve) => {
     map.once('render', () => resolve(performance.now()));
@@ -98,14 +98,14 @@ const loaded: Promise<Loaded> = ask({
 }).then(async ({ prepared, times }) => {
   // 3. The prepared table goes to the dataset as it arrived: nothing is computed again here
   buildings.setTable(prepared);
-  // The time from the request to the first frame that draws the rows
+  // The time from the request to the first draw of the rows
   const firstFrameMs = (await nextFrame()) - started;
   console.info(
     `${prepared.length.toLocaleString('en')} building footprints read from a GeoParquet file`,
     `in a Worker and drawn from its columns: ${ms(times.fetch)} to fetch the file,`,
     `${ms(times.read)} to read the columns, ${ms(times.table)} to build the table,`,
     `${ms(times.prepare)} to prepare it, and ${ms(firstFrameMs)} from the request to the`,
-    'first frame that draws them',
+    'first draw of them',
   );
   return { rows: prepared.length, times, firstFrameMs };
 });
@@ -179,7 +179,7 @@ async function toggleMillion(): Promise<void> {
     `${prepared.length.toLocaleString('en')} points made in a Worker as typed arrays:`,
     `${ms(times.build)} to build the table, ${ms(times.prepare)} to prepare it,`,
     `${ms(transfer)} to transfer it without a copy, and ${ms(firstFrame)} from handing it to`,
-    `the dataset to the first frame that draws them; the arrays hold ${Math.round(arrays)} MB${heap}`,
+    `the dataset to the first draw of them; the arrays hold ${Math.round(arrays)} MB${heap}`,
   );
   busy = false;
   ui.actions.refresh();

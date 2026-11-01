@@ -51,7 +51,7 @@ const draw = createDraw(map, { initDefaultLayer: false, snapping: { datasets: tr
 const locale = new URLSearchParams(location.search).get('locale') === 'ja' ? 'ja' : 'en';
 const ui = createDrawUI(draw, { locale, basemaps: BASEMAPS, basemap: initialBasemapId(BASEMAP) });
 
-// 2. Two layers of the user's drawing, there from the first frame: a survey area, to lie behind
+// 2. Two layers of the user's drawing, there from the first draw: a survey area, to lie behind
 // the buildings, and a planned route with its stops, in front of them. New drawings go to the
 // route (the active layer)
 const survey = draw.layers.create({ name: 'Survey area' });
@@ -109,7 +109,7 @@ const ms = (value: number): string => `${Math.round(value).toLocaleString('en')}
 // rows once the map has loaded, without outlines, colored by their value from pale yellow to
 // blue. With the order `layer-order` they stand in the stacking order of the layers, behind
 // the survey area. They take no clicks, so the lines drawn snap to the buildings, not to them.
-// The console says how long they took to make, to give and to reach the first frame drawn
+// The console says how long they took to make, to give and to reach the first draw
 const BY_VALUE: StyleRule = {
   kind: 'graduated',
   property: 'value',
@@ -135,7 +135,7 @@ const cellsShown = new Promise<number>((resolve) => {
       const frame = performance.now();
       console.info(
         `${rows.length.toLocaleString('en')} cells: ${ms(made - started)} to make the rows,`,
-        `${ms(given - made)} to give them to the dataset, and the first frame`,
+        `${ms(given - made)} to give them to the dataset, and the first draw`,
         `${ms(frame - given)} after`,
       );
       resolve(rows.length);
@@ -175,7 +175,7 @@ const points = draw.datasets.add({
   interactive: true,
 });
 
-/** Logs, once the next frame is drawn, how many of the points handed over are drawn */
+/** Logs, once the map draws next, how many of the points handed over are drawn */
 function logThinning(): Promise<{ visible: number; total: number }> {
   return new Promise((resolve) => {
     map.once('render', () => {

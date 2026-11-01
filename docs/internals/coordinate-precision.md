@@ -26,7 +26,7 @@ mode applied.
   unprojected again lands elsewhere). There are two scales. A size of the
   current view (the margin of the selection box, the distance of the
   rotate handle, the move of an arrow key) takes the meters of a CSS pixel
-  in the frame drawn last (`metersPerPixelInFrame` in
+  in the view drawn last (`metersPerPixelInFrame` in
   `src/shared/math/screen-scale.ts`, `ScreenContext.metersPerPixel` for
   extensions): the scale of Web Mercator at the latitude of the feature,
   the scale at the center of the view on the globe, mixed by the transition
@@ -39,9 +39,9 @@ mode applied.
   point marker and the selection box around it) keeps a geographic
   position and is drawn and hit tested on the screen around it
 - Renderers receive geographic coordinates and project them in the vertex
-  shader with the projection data of the frame
+  shader with the projection data of the view drawn
 - Hit testing starts from geographic coordinates. The click is unprojected,
-  and containment and distances are decided in a local frame around it.
+  and containment and distances are decided in local axes around it.
   The exceptions are the handles of the selection UI and the symbols on
   terrain, which are tested in screen space against positions projected
   with the same transform the drawing uses (see
@@ -61,7 +61,7 @@ that, and the symptoms are:
 
 - Features tremble while they are dragged
 - Features distort while they are rotated
-- The selection UI and the feature it frames do not line up
+- The selection UI and the feature it surrounds do not line up
 
 ## The offset method
 
@@ -82,7 +82,7 @@ Offset (precise):
 ```
 
 `projectOffset` turns the offset in degrees into the offset of the space
-the matrix of the frame takes: the Mercator plane on Web Mercator, the
+the matrix of the view drawn takes: the Mercator plane on Web Mercator, the
 unit sphere on the globe, and both, mixed by the transition, in the
 transition between them. It is not an approximation around the center:
 it is the exact difference, formed so that it keeps the precision of the
@@ -92,7 +92,7 @@ offset however small it is.
 
 `calculateOffsetUniforms(centerLngLat, projection)` in
 `src/view/shaders/helpers.ts` computes the uniforms of a center from the
-projection data of the frame (its matrices and its transition):
+projection data of the view drawn (its matrices and its transition):
 
 - `centerLngLat`: the center rounded to Float32, what the offsets are
   taken from, sent to the shader as `u_center_lnglat`
@@ -100,7 +100,7 @@ projection data of the frame (its matrices and its transition):
   the CPU
 - `centerMercator`: the center in Mercator units (64 bits), used by the
   terrain to place the DEM atlas relative to the center
-- `projectionCenter`: the center in clip space as the frame projects it
+- `projectionCenter`: the center in clip space as the view drawn projects it
   (`clipOfPosition` in `src/view/shaders/center-projection.ts`, in 64
   bits): on Web Mercator, on the globe, or both mixed by the transition,
   sent as `u_projection_center`
@@ -218,7 +218,7 @@ inserts `precision highp sampler2D;` into both stages of every program
 ## Renderers
 
 Every renderer that draws geometry takes the same path: it receives the
-offset uniforms of the frame through `setOffsetUniforms`, computes relative
+offset uniforms of the view drawn through `setOffsetUniforms`, computes relative
 coordinates on the CPU, and projects them with
 `project_position_to_clipspace_from_offset`.
 
@@ -233,28 +233,28 @@ coordinates on the CPU, and projects them with
 | `FillShaderManager` | Fill of a polygon being drawn |
 | `QuadShader` | Images |
 
-The uniforms are computed once per frame, from the map center and the
-projection data of the frame, and distributed to every renderer
+The uniforms are computed once per draw, from the map center and the
+projection data of the view drawn, and distributed to every renderer
 with `ShaderInitializer.applyOffsetUniforms()` (`buildFrameState` in
-`src/view/layer/frame-state.ts`). The frame and its batches are described
+`src/view/layer/frame-state.ts`). The draw and its batches are described
 in [Rendering](./rendering.md).
 
 ### Immediate drawing
 
 What is drawn immediately (the selection UI, the polygon being drawn, and
 features that cannot be retained) computes its relative coordinates again
-every frame, because the screen center moves from frame to frame and an
-offset from last frame's center is useless. The triangulation of a polygon
-is cached per feature and part, since indices refer to vertices, not to
-coordinate values, and stay valid when the center moves.
+every draw, because the screen center moves from draw to draw and an
+offset from the center of the last draw is useless. The triangulation of a
+polygon is cached per feature and part, since indices refer to vertices,
+not to coordinate values, and stay valid when the center moves.
 
 ### The origin of a retained batch
 
 Retained batches (the Store's `src/view/layer/store-retained.ts` and the
 datasets in `src/dataset/`) do not recompute offsets every
-frame. Each chunk has its own origin, and the coordinates relative to that
+draw. Each chunk has its own origin, and the coordinates relative to that
 origin are baked into the vertex buffer once, independent of the camera.
-Only the projection uniforms change per frame.
+Only the projection uniforms change per draw.
 
 - A Store chunk takes the center of its extent. Runs are cut in draw order,
   so the contents of a chunk are not necessarily close together in space
@@ -285,7 +285,7 @@ its origin near the region the view sees them from while they are dragged,
 so that the baked offsets are small where it matters.
 
 The offsets are taken from the screen center, not from the chunk origin:
-the screen-center uniforms of the frame are used as they are, and
+the screen-center uniforms of the view drawn are used as they are, and
 `u_origin_shift` is added to the vertex's relative coordinate first. The
 formula is exact from any center, but the offsets of what is on screen are
 then small, so they keep their precision. In immediate drawing the shift
@@ -371,10 +371,10 @@ feedback and holds it to 64 bits: offsets of 1e-4 to 60 degrees from
 centers at latitudes 0 to 80, seen 500 px away, land within 0.00014 px.
 The end-to-end tests `src/e2e/projection-mercator.e2e.test.ts` and
 `src/e2e/projection-globe.e2e.test.ts` hold what is drawn (fills, lines,
-points, images, vertex handles, the frames of features selected together,
-over a Store of objects and the Store of rows) to `map.project` within half
-a pixel, at zooms 0 to 24 on Web Mercator and on the globe and in the
-transition.
+points, images, vertex handles, the selection boxes of features selected
+together, over a Store of objects and the Store of rows) to `map.project`
+within half a pixel, at zooms 0 to 24 on Web Mercator and on the globe and
+in the transition.
 
 GPUs may fuse a multiplication and an addition into one operation, which
 rounds once instead of twice and only lessens the error.
@@ -393,23 +393,23 @@ geographic coordinates and projected in the shader, they follow pitch and
 roll with no extra work.
 
 The rule that follows is that nothing on the map is drawn in screen
-coordinates. A frame or handle laid out in pixels would stay flat while the
+coordinates. A box or handle laid out in pixels would stay flat while the
 map tilts under it; laid out in geographic coordinates, it tilts with the
 map. Pixel sizes are honored by converting them to geographic coordinates
 around the feature, as in "Coordinate systems" above.
 
 ## The selection UI
 
-The selection UI (the frame, the resize handles, the rotate handle, the
+The selection UI (the selection box, the resize handles, the rotate handle, the
 vertex and midpoint handles) is drawn with the same architecture:
 
 1. The bounding box is computed in geographic coordinates; for a rotated
    Image it is the oriented box
 2. `applyMarginToBoundingBox()` adds the margin, turned into meters with
-   the scale of the frame and laid on the ground at the center of the box;
-   `computeRotateHandle()` places the rotate handle the same way (the frame
+   the scale of the view drawn and laid on the ground at the center of the box;
+   `computeRotateHandle()` places the rotate handle the same way (the box
    of a point is drawn on the screen around it, as its marker is)
-3. `StrokeRenderer` draws the frame and `PointShapeRenderer` the handles,
+3. `StrokeRenderer` draws the box and `PointShapeRenderer` the handles,
    both with relative coordinates computed on the CPU
 
 ### Agreement with hit testing
@@ -422,8 +422,8 @@ The transform on both sides is the same `CoordinateTransform`, built from
 the map by `createCoordinateTransform` in `src/shared/math/transform.ts`.
 The drawing and the hit test lay out the pixel-sized parts (the margin, the
 handle positions) in geographic coordinates with the same functions and
-the same scale, the one of the frame drawn last
-(`CoordinateTransform.metersPerPixel`, recorded by the frame with
+the same scale, the one of the view drawn last
+(`CoordinateTransform.metersPerPixel`, recorded by each draw with
 `setScreenScaleFrame`), and the hit test projects those same positions to
 the screen. The selection box of a point is tested on the screen around
 the projected point, as it is drawn. maplibre's `project()`
@@ -431,7 +431,7 @@ runs in 64 bits on the CPU, and the projection of the shader resolves the
 same point to well under a pixel, so a handle is hit where it is drawn at
 every zoom.
 
-With terrain, `project` goes through the anchor projection of the frame
+With terrain, `project` goes through the anchor projection of the view drawn
 (`setAnchorProjector`, implemented by `src/view/terrain/anchor.ts`), the
 same projection, elevation and matrix the vertex shader uses for points and
 handles. The drawn position and the hit region then agree by construction,
@@ -450,7 +450,7 @@ that shows the stored longitudes on the other side of the line.
 
 ### Drawing
 
-Each frame draws one pass per copy in view (`splitLongitudeCopies` in
+Each draw has one pass per copy in view (`splitLongitudeCopies` in
 `src/view/viewport.ts`). Away from the line that is the stored copy alone.
 Across it, the features of the other side are drawn a second time through a
 virtual camera:
@@ -462,7 +462,7 @@ virtual camera:
   units, `translateMatrixByLongitude` in `src/view/shaders/helpers.ts`), so
   the two cancel for the camera: `calculateOffsetUniforms` gives the same
   projection center
-- The DEM atlas is handed to the shader in the frame of that camera
+- The DEM atlas is handed to the shader in the coordinate axes of that camera
 
 The CPU and the GPU use the same formula, and the shift is a whole number
 of turns added in 64 bits, so no precision is lost. Each copy draws the
@@ -484,7 +484,7 @@ drawn once, on the stored copy.
 
 The pointer unprojects to the unwrapped longitude of the view (above 180 on
 the copy east of the line), and every test must meet the copy drawn under
-it. The alignment is made in the local frame of each test, around the
+it. The alignment is made in the local axes of each test, around the
 pointer:
 
 - `HitTestService` and the unified z traversal test the click on each copy
@@ -495,13 +495,13 @@ pointer:
   distance
 - The handle test projects every longitude on its copy nearest to the
   pointer (`alignToPointer` in `src/view/ui/handle-test.ts`), and its
-  pre-filtering rectangle compares in the same frame. With terrain, the
+  pre-filtering rectangle compares in the same axes. With terrain, the
   anchor projection (`src/view/terrain/anchor.ts`) takes the copy nearest
   to the camera, which is the copy the anchor is drawn on
 - Snapping looks candidates up around the cursor brought into [-180, 180]
   (and on the neighbouring copy) and takes each candidate on its copy
-  nearest to the cursor, so the snapped position is in the frame of the
-  cursor while the target keeps its stored coordinates
+  nearest to the cursor, so the snapped position is in the coordinate
+  axes of the cursor while the target keeps its stored coordinates
   (`src/snapping/service.ts`)
 
 Away from the antimeridian nothing moves. When the view is 360 degrees wide
@@ -534,14 +534,14 @@ them. GeoJSON export brings them back into
 
 ### Features tremble
 
-- Check that the offset uniforms of the frame reach the renderer
+- Check that the offset uniforms of the view drawn reach the renderer
   (`setOffsetUniforms`)
 - Check that `u_center_sine_cosine` and `u_projection_center` are written
   from the uniforms of the same center as `u_center_lnglat`
 - Check that the renderer computes relative coordinates with
   `calculateLngLatOffset` on the CPU rather than sending absolute ones
 - For a retained batch, check that `u_origin_shift` is the origin minus
-  the screen center of this frame
+  the screen center of this draw
 
 ### Features are missing or far off
 
@@ -556,12 +556,12 @@ them. GeoJSON export brings them back into
   variant (the globe branch of `project_center_offset` is compiled only
   there)
 - Check that the center in clip space was computed with the projection
-  data of the frame, its fallback matrix and its transition, and on the
+  data of the view drawn, its fallback matrix and its transition, and on the
   globe with the matrix in 64 bits
 - An edge that cuts across the sphere instead of following its parallel or
   meridian was drawn without the cut of the globe: check that the renderer
   takes its step from `getSurfaceTessellationStep` and that the terrain
-  context has the cells of the frame (`updateGlobeSubdivision`)
+  context has the cells of the view drawn (`updateGlobeSubdivision`)
 
 ### The selection UI does not line up
 

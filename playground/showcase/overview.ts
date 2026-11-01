@@ -7,7 +7,7 @@
  * Loads the drawing of `overview-data.ts` (five layers with groups, styles, a layer at half
  * opacity, a style rule and an embedded image), adds the dataset of hexagonal cells colored by
  * a graduated rule under the layers, makes the layer Notes active and selects the area with a
- * hole, so that its frame and vertex handles show and the inspector opens on its style, and
+ * hole, so that its selection box and vertex handles show and the inspector opens on its style, and
  * closes some rows of the layer panel so that the whole stack shows. The Legend tab of the
  * standard UI lists the rules of the layer Land use and of the dataset.
  *

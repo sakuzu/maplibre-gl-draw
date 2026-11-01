@@ -163,11 +163,11 @@ export interface Draw {
    * An image of the map as it is drawn now: the base map, the document (or the document shown in
    * its place) and the datasets, as far as the map shows them, without the state of this client
    * (the selection, its handles, the shape being drawn, the box). The image is taken in the next
-   * frame the map draws, which this asks for; the frames after it draw the state of this client
+   * draw of the map, which this asks for; the draws after it draw the state of this client
    * again. A size of another shape than the map is covered by the map, cut at its middle.
    *
-   * It costs one frame and no other drawing of the document: a thumbnail of a document too large
-   * to draw a second time is taken so.
+   * It costs one draw of the map and no other drawing of the document: a thumbnail of a document
+   * too large to draw a second time is taken so.
    *
    * @returns The image, once encoded
    * @throws `DrawError` (the promise rejects) with the code `invalid-input` when an option has the

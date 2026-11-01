@@ -88,17 +88,18 @@ export interface PointRenderer {
 }
 
 /**
- * Everything a renderer needs to draw a frame: the shared renderers, the screen and the terrain of
- * the frame. A renderer with shaders of its own reads the values of the GPU of the frame through
- * `viewUniforms(ctx)` and `offsetUniformsAt(ctx, position)` of `@sakuzu/maplibre-gl-draw/webgl`.
+ * Everything a renderer needs to draw: the shared renderers, the screen and the terrain of the
+ * view being drawn. A renderer with shaders of its own reads the values of the GPU of that view
+ * through `viewUniforms(ctx)` and `offsetUniformsAt(ctx, position)` of
+ * `@sakuzu/maplibre-gl-draw/webgl`.
  */
 export interface RenderContext {
   /** The WebGL context of the map */
   readonly gl: WebGL2RenderingContext;
   /**
-   * The conversion between the map and the screen, its zoom and its pixel ratio, in the frame
+   * The conversion between the map and the screen, its zoom and its pixel ratio, in the view
    * being drawn: the same object as `ctx.screen` of the context of an extension, which answers
-   * for the frame drawn last once the frame is drawn
+   * for the view drawn last once the view is drawn
    */
   readonly screen: ScreenContext;
   /** The opacity of the layer being drawn, from 0 to 1 */
@@ -121,7 +122,7 @@ export interface RenderContext {
    * top of each other by the library. A renderer draws with it rather than reading
    * `feature.style` and defaults of its own, so that what it draws is what the library answers.
    *
-   * It is put together once for a feature as it is: reading it again, in the frame or in the
+   * It is put together once for a feature as it is: reading it again, in the same draw or in the
    * next one, gives the same object until the feature, the rule of its layer or the `style`
    * option changes. Do not change the object.
    */

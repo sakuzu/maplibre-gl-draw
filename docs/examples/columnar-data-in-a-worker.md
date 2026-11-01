@@ -23,7 +23,7 @@ yellow for the large, in classes cut at 50, 100, 200 and 500 m² (half
 the buildings are under 70 m²). The browser console says how many rows
 came and how long each step took: fetching the file (700 KB), reading
 its columns, building the table and preparing it, and the time from the
-request to the first frame that draws the rows. The page stays
+request to the first draw of the rows. The page stays
 responsive meanwhile. Click a building:
 its row is logged, with values read from the columns. As in
 [Datasets](datasets.md), the rows are shown, not edited, so the panel on
@@ -38,7 +38,7 @@ the page. A second dataset draws them, colored by how the trip is made:
 on foot, by bicycle, by car or by train. The console says how long the
 Worker took to build the table and to prepare it, how long the transfer
 took (under a millisecond, as nothing is copied), how long from handing
-the table to the dataset to the first frame that draws it, and how large
+the table to the dataset to the first draw of it, and how large
 the arrays are (88 MB). Where the browser tells the size of the heap of
 JavaScript, the console gives it before and after: it does not grow, as
 the rows add no object to it. Zoom out to see them all; the pieces of

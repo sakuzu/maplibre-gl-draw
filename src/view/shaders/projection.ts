@@ -30,7 +30,7 @@ import { calculateOffsetUniforms, type OffsetUniforms } from './helpers.js';
  * not declare the uniform.
  */
 export interface ProjectionUniformLocations {
-  /** `u_projection_matrix`: the projection matrix of the frame */
+  /** `u_projection_matrix`: the projection matrix of the view */
   matrix: WebGLUniformLocation | null;
   /** `u_center_lnglat`: the center the offsets are taken from, in degrees, rounded to Float32 */
   centerLngLat: WebGLUniformLocation | null;
@@ -164,7 +164,7 @@ export class ProjectionUniformManager {
   /**
    * @param gl - The WebGL context of the map
    * @param options - `surface`: whether the renderer draws things stuck to the ground (areas
-   *   and lines), which lie flat on the frames that draw them flat
+   *   and lines), which lie flat on the views that draw them flat
    */
   constructor(gl: WebGL2RenderingContext, options: { surface?: boolean } = {}) {
     this.gl = gl;
@@ -247,10 +247,10 @@ export class ProjectionUniformManager {
    * A uniform whose value is the same as last time is not rewritten. Retained
    * mode passes through here for every chunk, but the only thing that changes
    * between chunks is u_origin_shift; the matrix and the camera-related values
-   * are invariant within a frame (see frame.ts).
+   * are invariant within a draw (see frame.ts).
    *
    * @param projectionData MapLibre's ProjectionData
-   * @param _zoom The zoom of the frame (not read: the projection is the same at every zoom)
+   * @param _zoom The zoom of the view (not read: the projection is the same at every zoom)
    * @param offsetUniforms The uniforms of the center the offsets are taken from (null takes
    *   them from [0, 0], as absolute coordinates)
    * @param originShift The gap between the reference coordinates of the vertex offsets and

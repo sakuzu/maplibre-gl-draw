@@ -305,7 +305,7 @@ README の画像を撮り直します。
 - `examples/` は例です。`npm run dev` で開きます。例のページとギャラリーは
   `docs/examples/` にあります
 - `playground/` はすべての機能を試せる 1 枚のページです
-- `bench/` はフレーム時間を測るページです (貢献する人向け)
+- `bench/` は描く 1 回の時間を測るページです (貢献する人向け)
 - `docs/` にははじめかた、手引き、リファレンス、内部の文書があります
   (索引は `docs/README.md`)
 - `scripts/` には `npm run lint` と `npm run docs:check` が実行する

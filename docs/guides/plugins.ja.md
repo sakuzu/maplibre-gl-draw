@@ -124,7 +124,7 @@ console.log(counter?.count());
 - `names` はインスタンスの自動の名前です。`names.next('Layer')` は、
   オプション `autoName` のとおりに次の名前を返します
   ([自動の名前](drawing.ja.md#自動の名前))
-- `screen` は、最後に描いたコマでの、地図の位置と画面の点の変換、
+- `screen` は、最後に描いた画面での、地図の位置と画面の点の変換、
   ズーム、ピクセル比、1 ピクセルのメートルです
 - `terrain` は、このインスタンスの地形の上の位置と高さです
   ([地形](terrain.ja.md))
@@ -229,8 +229,8 @@ ctx.on('dataset.removed', ({ datasetId }) => forget(datasetId));
 描かれている地物を `ctx.draw.rendered` から読みます。下書き
 (`draw.sketches`) が文書の上に当てられた、書く前の編集の途中の形です。
 `rendered.getSelectionBox(id)` は、その選択の枠 (外形に余白を足したもの)
-を、最後に描いたコマでライブラリーが描いて当てるとおりに渡します。
-`rendered.changed` は、変わった地物を、それを描くコマを描き終えたときに
+を、最後に描いた画面でライブラリーが描いて当てるとおりに渡します。
+`rendered.changed` は、変わった地物を、それを描く 1 回を描き終えたときに
 知らせます。書くものは文書 `ctx.draw.features` を読みます。
 
 <!-- docs-check:

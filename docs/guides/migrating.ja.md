@@ -795,13 +795,13 @@ draw.features.update(featureId, {
   `rows.appliesTo` は前の `appliesToRow`、`renderer.rows.draw` と
   `renderer.rows.sprites` は前の `drawRows` と `rowSprites`、付き物の
   提供者の `rows.has` は前の `hasRow` です
-- 描く文脈は、`ctx.zoom` と `ctx.pixelRatio` の代わりにそのコマの画面
+- 描く文脈は、`ctx.zoom` と `ctx.pixelRatio` の代わりに描いている画面
   `ctx.screen` (プラグインの `screen` と同じもの) を持ちます。
   `ctx.screen.zoom` と `ctx.screen.pixelRatio` を読んでください
-- `ctx.screen` は最後に描いたコマについて答えます (`project`、`unproject`、
+- `ctx.screen` は最後に描いた画面について答えます (`project`、`unproject`、
   `zoom`、`metersPerPixel`)。ポインターのイベントの位置は、その下に
   描かれている位置です。カメラがその後に動いても、つかむ物は描いた物です
-- コマの GPU の値は、描く文脈からでなく `/webgl` で読みます。
+- 描いている画面の GPU の値は、描く文脈からでなく `/webgl` で読みます。
   `viewUniforms(ctx)` が `shader`、`projection`、`offset` (前は
   `ctx.shader`、`ctx.projection`、`ctx.offset`) を渡し、
   `offsetUniformsAt(ctx, position)` がある位置からの差の値を渡します

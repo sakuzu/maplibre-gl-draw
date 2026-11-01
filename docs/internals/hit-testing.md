@@ -177,7 +177,7 @@ candidate features -> per-type strategy -> hits (with distances)
 ### Stage 1: narrowing the candidates
 
 The click is unprojected, the tolerance is converted into degrees (see
-"Tolerance and the local frame"), and the spatial index returns the IDs
+"Tolerance and the local axes"), and the spatial index returns the IDs
 whose bounding boxes touch the square of that radius around the click.
 Only visible features among `orderedFeatures` are kept.
 
@@ -287,12 +287,12 @@ The draw instance passes `createGlobeShapeResolver(map)`
   a parallel or a meridian is the drawn edge exactly; a slanted edge of a
   rotated image stays within a fraction of a pixel of it
 
-## Tolerance and the local frame
+## Tolerance and the local axes
 
 `clickTolerance` is a screen length. The same pixel distance from a
 feature must give the same decision whatever the bearing, the pitch or the
 latitude. Coordinates are longitude and latitude, so the decision is made
-in the local frame of hit testing (`src/dispatcher/hit-test/local-frame.ts`),
+in the local axes of hit testing (`src/dispatcher/hit-test/local-frame.ts`),
 in which one unit is the same screen length in every direction.
 
 - The tolerance `toleranceLngLat` is the ground length of `clickTolerance`
@@ -306,7 +306,7 @@ in which one unit is the same screen length in every direction.
   longitude (Web Mercator), so latitude differences are divided by cos φ of
   the click latitude (`localDistance`, `localPointToSegmentDistance`,
   `localPointToPolylineDistance`). The inside test of a polygon is not
-  affected, because the frame only scales the latitude axis
+  affected, because the local axes scale only the latitude axis
 - A custom strategy receives the tolerance in the same unit. To compare a
   latitude difference, multiply the tolerance by cos φ, as the image test
   does
@@ -409,7 +409,7 @@ there is one, and otherwise from `getBoundingBox(feature, tileSize)` in
 
 The built-in strategies live in `src/dispatcher/hit-test/strategies/`.
 `HitTestServiceImpl` registers them in its constructor. Distances are
-measured in the local frame, and Freehand is registered with the
+measured in the local axes, and Freehand is registered with the
 LineString strategy.
 
 ### Point
@@ -547,8 +547,8 @@ longitude (`mercatorMidpoint`): the average of the latitudes in degrees
 lies off a long slanted edge. An edge along a meridian or a parallel keeps
 the plain average. The drawing and the test resolve the position with the
 same function (`computeMidpointHandles`, `resolveMidpointCoordinate`). The
-rotation handle stands on the midpoint of the top edge of the frame found
-the same way (`computeRotateHandle`).
+rotation handle stands on the midpoint of the top edge of the selection
+box found the same way (`computeRotateHandle`).
 
 ### Priority of the handles
 
@@ -559,8 +559,8 @@ the same way (`computeRotateHandle`).
 3. Auxiliary handles (single selection only)
 4. Vertex handles (single selection only)
 5. Midpoint handles (single selection only)
-6. The inside of the frames drawn (move): the frame of all of them and the
-   frame of each, a point's frame on the screen around its marker
+6. The inside of the selection boxes drawn (move): the box of all of them
+   and the box of each, a point's box on the screen around its marker
 
 Handle positions are enumerated by `computeVertexHandles()` and
 `computeMidpointHandles()` in `src/view/ui/handles.ts`. They walk every
@@ -594,11 +594,11 @@ of a selection, and a drag goes through the same `auxiliary` path. The
 only difference is that there is no owning feature, which is expressed by
 `auxiliary.global` and an empty `featureId`.
 
-### Frame of a zero-area selection
+### Box of a zero-area selection
 
 When the bounding box of a single selection has zero area (a Point, a
 MultiPoint with one point), no rotate or resize handles are shown and the
-whole inside of the frame means move. The size of that frame can be
+whole inside of the box means move. The size of that box can be
 registered per type (`getPointFrameExtent` of the engine handler of the type,
 resolved by `resolvePointFrameExtent()` of the instance's
 `SelectionExtensionRegistry` in
@@ -738,7 +738,7 @@ screen position of the click. No geographic search is involved.
 - The reach in pixels is the click tolerance plus the registered candidate
   reach of the type. Occluded points are candidates too, since they are
   visible
-- While the projector returns null (terrain disabled, no frame yet), the
+- While the projector returns null (terrain disabled, no view drawn yet), the
   whole path falls back to the geographic one. Hit testing without terrain
   is unchanged
 - Vertex handles already share the anchor of the selection UI drawing, so

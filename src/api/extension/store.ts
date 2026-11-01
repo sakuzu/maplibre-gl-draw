@@ -335,7 +335,7 @@ export interface Store extends StoreView {
   /**
    * How the Store computes the edits that move, rotate and scale features (`applyEdits`).
    * Optional: without it, the library computes them on the WGS 84 ellipsoid, in the east, north
-   * and up frame of the point the edit names. A Store gives its own to compute them as the
+   * and up axes of the point the edit names. A Store gives its own to compute them as the
    * document it keeps them in does, so that what the instance shows of an edit and what the
    * Store writes are computed alike.
    */

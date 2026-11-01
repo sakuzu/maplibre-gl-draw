@@ -454,7 +454,7 @@ export interface FeaturePatch {
  *   enough positions; a point of a MultiPoint goes with its vertex.
  *
  * - `translate` moves the features of `target` from the point `from` to the point `to`, in the
- *   east, north and up frame of the earth at each of the two points.
+ *   east, north and up axes of the earth at each of the two points.
  * - `rotate` turns the features of `target` about `center` by `angleDegrees`, counterclockwise
  *   seen from above, and adds the angle to the rotation of the features that have one.
  * - `scale` stretches the features of `target` about `center` by `eastFactor` along the east and

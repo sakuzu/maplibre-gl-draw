@@ -10,7 +10,7 @@ It is written for contributors who know maplibre-gl but not the internals of
 this library. Three topics have their own documents:
 
 - [rendering.md](./rendering.md): the WebGL2 pipeline, the renderers, the
-  retained batches, terrain, display order and the frames of the stacking
+  retained batches, terrain, display order and the slots of the stacking
   order
 - [hit-testing.md](./hit-testing.md): the two-stage hit test, the spatial
   index, the unified z traversal and the per-type strategies
@@ -405,7 +405,7 @@ Store of rows of core is written in steps (`src/store/row-steps.ts`), with the
 run and the time of a step of the write of a drag of features selected in bulk
 (`BULK_SLICE_ROWS`, `BULK_SLICE_BUDGET_MS`): the first step in the call, the
 next ones in later tasks. The undo of the deletion of a layer of 100,000 rows
-writes them back so, and no frame waits for all of them.
+writes them back so, and no draw waits for all of them.
 
 Unlike the write of a drag, it stays one transaction. Its notification is held
 on both buses, the contract's and the one of `DrawStore`
@@ -967,7 +967,7 @@ Local hiding is applied in six places.
 - Rendering. The immediate path (`view/layer/display-list.ts`) and the
   retained batches cut their runs from the display features. The Store
   updates the hidden `Set` in place, so the retained batches compare it
-  against a snapshot of the previous frame, not by reference.
+  against a snapshot of the previous draw, not by reference.
 - Hit testing. Click, cursor and selection pass the display features to the
   hit test.
 - Box selection. `queryFeaturesInBox` in `modes/select/box-selection.ts`
@@ -1051,7 +1051,8 @@ added. Their use is described in [custom-types.md](../guides/custom-types.md).
 The host installs each into the registries the engine reads, through the
 adapters of `src/api/impl/adapters.ts` and `render-context.ts`: a feature
 type becomes a `FeatureTypeHandler` of `src/extension/`, whose renderer is
-handed a `RenderContext` made from the `FrameDrawContext` of the frame.
+handed a `RenderContext` made from the `FrameDrawContext` of the view
+being drawn.
 The look the type declares (`defaultStyle`) goes to the `AppliedStyles` of
 the host (`src/api/impl/applied-style.ts`), which answers both
 `RenderContext.appliedStyle` and `draw.features.getAppliedStyle`.
@@ -1069,8 +1070,8 @@ Two of them have their core side here:
   handles of the selected feature, `renderGlobalAuxiliaryHandles` for the
   others, in the select mode while the document can be edited), and at
   the same place and under the same conditions has the provider draw its
-  `custom` handles (`drawHandles`, with a render context of the frame of
-  the copy of the world drawn), so that whether they are shown is decided
+  `custom` handles (`drawHandles`, with a render context of the view of
+  the copy of the world being drawn), so that whether they are shown is decided
   there only. The
   handles of a custom type and of a handle provider are placed with a
   `HandleContext`: the screen, the selection box as `draw.rendered`

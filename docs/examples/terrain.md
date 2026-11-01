@@ -17,14 +17,14 @@ bottom: the vertices land on the ground under the pointer. Select a
 feature and drag it or its vertices; the handles stand on the ground.
 Turn the map with the right button, or with Ctrl and a drag, and press
 the compass at the bottom right to make it flat again. The browser
-console says whether the last frame was drawn on the terrain.
+console says whether the last draw was on the terrain.
 
 ## Code
 
 The terrain is the map's own: a `raster-dem` source and
 `map.setTerrain` (2). The library has no setting for it and follows it,
 so the features (3) and the standard UI (4) are created as on a flat
-map. `draw.debug.terrain` tells how the last frame was drawn (5).
+map. `draw.debug.terrain` tells how the last draw went (5).
 The elevation is [Mapterhorn](https://mapterhorn.com/), a public DEM of
 the whole globe whose TileJSON gives the encoding, the tile size and the
 attribution, so the source names only its address.

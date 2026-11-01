@@ -472,11 +472,11 @@ once and `document.changed` when the transaction ends.
 The features as this client draws them (`draw.rendered`) changed: `ids`
 lists the features whose shape, values or look as drawn changed, by a
 write of the document or by a sketch, and those created or deleted. It
-fires once the frame that draws the change is drawn, at most once a
-frame, after the frame: `draw.rendered` and the screen of the contexts
-then answer for that frame. It does not fire while no frame is drawn. The
-rows dragged in bulk are not written while they are dragged; what is
-drawn with them reads where they are in each frame, with
+fires once the draw of the map that draws the change is done, at most
+once a draw, after the draw: `draw.rendered` and the screen of the
+contexts then answer for that view. It does not fire while the map does
+not draw. The rows dragged in bulk are not written while they are
+dragged; what is drawn with them reads where they are in each draw, with
 `draw.rendered.getDraggedRows()`.
 
 ### dataset.reordered

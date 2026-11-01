@@ -35,7 +35,7 @@ import { buildDocument, type SceneFeature, type SceneLayer } from './scene';
 /** The camera of the scene: the drawing fills the map between the panels of the standard UI */
 export const OVERVIEW_CAMERA = { center: [139.7775, 35.6826] as [number, number], zoom: 14.35 };
 
-/** The feature that is selected, to show its frame and its vertex handles */
+/** The feature that is selected, to show its selection box and its vertex handles */
 export const SELECTED_FEATURE = 'courtyard';
 
 /** The layer new drawings go into */

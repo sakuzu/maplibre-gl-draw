@@ -44,7 +44,7 @@ the drawing. From the back:
 The map is the light grey Positron basemap, so that the colors read. The
 browser console says how long the points took to make (about 150 ms on
 a laptop), and how long the cells took to make (70 ms), to give to the
-dataset (about 360 ms) and to reach the first frame that draws them. It
+dataset (about 360 ms) and to reach the first draw of them. It
 also says how many of the points handed over for the view are drawn, for
 example 10,760 of 41,441 at the opening view.
 
@@ -70,7 +70,7 @@ its key, which `?` lists:
 
 The page turns on the snapping to datasets (the default, given to show
 it) and makes its own layers (1). The survey area and the route are
-features of two layers, there from the first frame (2). The cells are
+features of two layers, there from the first draw (2). The cells are
 made in data.ts and given to `draw.datasets.add` as rows once the map
 has loaded, with a graduated rule on `value` and a base style without
 outlines. With the order `layer-order`, the dataset has a place in the

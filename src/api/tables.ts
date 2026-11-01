@@ -414,7 +414,7 @@ export interface FeatureTablesWriter {
    * computed where the row block was built), and its styles built in a Worker are numbered in the
    * table of styles. The row blocks are kept as they are: do not change their arrays afterwards.
    * The rows are told as created, as a write of `apply` tells them (`DocumentChange.rows`, in the
-   * transaction of the Store), and the drawing draws them from its next frame.
+   * transaction of the Store), and the drawing draws them from its next draw.
    *
    * A row block whose rows are not in the order of their keys, or whose keys overlap those of
    * another row block of the layer (one added, or built of rows written, since it was made), is not
@@ -423,7 +423,7 @@ export interface FeatureTablesWriter {
    * versions.
    *
    * Taking in a row block costs little next to building it, but a caller that adds many keeps the
-   * frames going by adding them a few at a time (a copy of a document adds them a block at a time).
+   * draws going by adding them a few at a time (a copy of a document adds them a block at a time).
    *
    * @returns The rows added, by layer
    * @throws `DrawError` with the code `invalid-input` when an array of a row block does not have one
@@ -439,7 +439,7 @@ export interface FeatureTablesWriter {
    *
    * The rows written from then on are held with the new dimensions (a position of fewer values
    * gets NaN for the others), and every row block of the layer is due for its next version, which
-   * copies its coordinates into them over the frames; the row blocks of before are read and drawn as
+   * copies its coordinates into them over the draws; the row blocks of before are read and drawn as
    * they are until then. The row blocks given to `addRowBlocks` from then on have the new dimensions.
    *
    * @throws `DrawError` with the code `invalid-input` when the dimensions do not hold the ones of
@@ -453,7 +453,7 @@ export interface FeatureTablesWriter {
    * The geometry, the style, shown and locked, the attributes and the deletion of a row are
    * written in place: what fits the columns of its row block is written into them, the rest kept
    * with the row block and read before its columns (every reader of the rows reads the values
-   * written). The drawing writes the rows into the chunks that draw them before its next frame.
+   * written). The drawing writes the rows into the chunks that draw them before its next draw.
    *
    * A row whose change moves it in the order of its layer or to another layer (`type`,
    * `layerId`, `groupId`, `order`, `member`, or an attribute the cutting of the rows into chunks
@@ -461,7 +461,7 @@ export interface FeatureTablesWriter {
    * (the delta), and so does a new row: a handle that names no row, with at least its `type`,
    * `layerId`, `geometry` and `order` (the other fields take the defaults of a feature). The
    * readers read the row there at once, and the drawing draws it at its place in the order; the
-   * next version of the row block its key falls in takes it, over the frames. New rows whose keys
+   * next version of the row block its key falls in takes it, over the draws. New rows whose keys
    * are one run that no row of the layer is within are built into row blocks of their own instead,
    * and are drawn once built.
    *
@@ -488,7 +488,7 @@ export interface FeatureTablesWriter {
    * deletes its groups as the values say, and notifies them). A new key of the order of a group
    * moves its members, which follow each other at the place of the group: the row blocks are cut at
    * the runs of the members and at the place they go to, and put in their new order over the
-   * frames, read and drawn in the order before until then; the rows are not written. A group
+   * draws, read and drawn in the order before until then; the rows are not written. A group
    * given another `layerId` is in that layer from then on; its members go there by the writes of
    * their rows (`apply`). A group shown or hidden shows or hides its members. A group deleted is
    * taken out once no row names it and no token keeps it: deleted with a token
@@ -515,7 +515,7 @@ export interface FeatureTablesWriter {
    * The key of the order of a group of features: where the group stands among the items of its
    * layer (the key of the order of a row, a fractional index, compared byte by byte; its members
    * follow each other at its place). It is the key last written, read at once: a new key puts
-   * the members at their new place over the frames, and the rows are read and drawn in the order
+   * the members at their new place over the draws, and the rows are read and drawn in the order
    * before until then. The layer of the group is the `layerId` of the group (`Store.getGroup`).
    *
    * @param groupHandle - The handle of the group ({@link FeatureTables.findGroup})
@@ -551,7 +551,7 @@ export interface FeatureTablesWriter {
 export interface FeatureTablesOptions {
   /**
    * Where the large merges and builds of rows run (on the main thread, within the time of the
-   * frames, when omitted)
+   * draws of the map, when omitted)
    */
   readonly worker?: FeatureTablesWorker;
   /**
@@ -651,7 +651,7 @@ export interface TableStoreCopy {
   /** The writer of its tables */
   readonly writer: FeatureTablesWriter;
   /**
-   * Copies the next row block into the new Store (it takes them in over the frames of its
+   * Copies the next row block into the new Store (it takes them in over the draws of its
    * drawing, as `addRowBlocks` does)
    *
    * @returns Whether rows are left to copy
@@ -667,7 +667,7 @@ export interface TableStoreCopy {
  * and the embedded files are copied at once, and the features of a layer of objects too. The rows
  * are listed at once, in the order of their layers, and copied a row block at a time with
  * `copyNext`, each row block read as the rows are then (a value written meanwhile is copied as it is
- * when its row block is read), so that the copy of a large document is spread over frames or tasks.
+ * when its row block is read), so that the copy of a large document is spread over draws or tasks.
  * The layers keep the dimensions of their coordinates. The new Store computes the edits that
  * move, rotate and scale features as the Store copied does (its `transforms`).
  *

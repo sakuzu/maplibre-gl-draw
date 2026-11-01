@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 // editing-shapes: changing the shape of a selected feature with its handles.
-// A selected feature shows a frame with handles at its corners that resize it and a handle
+// A selected feature shows a selection box with handles at its corners that resize it and a handle
 // above it that rotates it, and a handle at each vertex and halfway along each edge. Two parcels
 // share an edge: with the option `topology.sharedVertexDrag`, dragging a vertex of that edge
 // moves the same vertex of the other parcel too. An area with a hole and an area of two parts
@@ -47,7 +47,7 @@ const [west] = created;
 const locale = new URLSearchParams(location.search).get('locale') === 'ja' ? 'ja' : 'en';
 const ui = createDrawUI(draw, { locale });
 
-// 4. Open with the west parcel selected on a wide screen, so its frame and its handles are drawn
+// 4. Open with the west parcel selected on a wide screen, so its selection box and its handles are drawn
 // (on a narrow one the panel would open over the map)
 if (matchMedia('(min-width: 48rem)').matches) draw.selection.set('feature', [west.id]);
 

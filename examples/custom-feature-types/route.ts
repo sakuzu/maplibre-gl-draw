@@ -42,7 +42,7 @@ export function routeLook(feature: Feature): typeof ROUTE_DEFAULTS {
   };
 }
 
-// Drawn in the feature's place in the layer order. The shared renderers are ready for the frame
+// Drawn in the feature's place in the layer order. The shared renderers are ready for the draw
 // (shader and projection), so the renderer creates no GL object of its own
 const routeRenderer: FeatureRenderer = {
   onAdd() {},
@@ -93,7 +93,7 @@ export const routeType: FeatureTypeDefinition = {
       return x >= boxPx.min[0] && x <= boxPx.max[0] && y >= boxPx.min[1] && y <= boxPx.max[1];
     });
   },
-  // What the route covers, which the selection box frames: the extent of its vertices, laid on
+  // What the route covers, which the selection box goes around: the extent of its vertices, laid on
   // the map
   footprint(feature) {
     const points = verticesOf(feature);

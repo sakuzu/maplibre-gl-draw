@@ -23,14 +23,14 @@ import {
 } from './helpers.js';
 
 /**
- * The values of the GPU of a frame a shader of its own is compiled and drawn with: the prelude of
- * the projection of the frame, its projection data, and the values for drawing positions relative
+ * The values of the GPU of a view a shader of its own is compiled and drawn with: the prelude of
+ * the projection of the view, its projection data, and the values for drawing positions relative
  * to the center of the view.
  */
 export interface ViewUniforms {
-  /** The shader prelude of the projection of the frame, to compile programs with */
+  /** The shader prelude of the projection of the view, to compile programs with */
   readonly shader: ShaderData;
-  /** The projection of the frame, as the map passes it to a custom layer */
+  /** The projection of the view, as the map passes it to a custom layer */
   readonly projection: ProjectionData;
   /** The values for drawing positions relative to the center of the view */
   readonly offset: OffsetUniforms;
@@ -72,7 +72,7 @@ function viewOf(ctx: RenderContext): BoundView {
 }
 
 /**
- * The values of the GPU of the frame a render context draws: the shader prelude to compile
+ * The values of the GPU of the view a render context draws: the shader prelude to compile
  * programs with, the projection data, and the values for drawing positions relative to the
  * center of the view, which `ProjectionUniformManager.setUniforms` takes.
  *
@@ -87,7 +87,7 @@ export function viewUniforms(ctx: RenderContext): ViewUniforms {
 
 /**
  * The values for drawing positions relative to a position rather than to the center of the view,
- * in the frame a render context draws: the offsets of a shape around its own position, for a
+ * in the view a render context draws: the offsets of a shape around its own position, for a
  * shape far from the center drawn with the precision of 32-bit floats near it.
  *
  * @param ctx - The render context of the draw call

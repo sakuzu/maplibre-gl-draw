@@ -72,7 +72,7 @@ export interface QuadVertices {
  * Draws a textured quad on the map, such as a picture pasted onto it, following pitch,
  * globe and terrain.
  *
- * Call `ensureShader` with the shader data of the frame and `setOffsetUniforms` before
+ * Call `ensureShader` with the shader data of the view being drawn and `setOffsetUniforms` before
  * `draw`. On terrain the quad is painted as ground pixels when possible, otherwise it is
  * subdivided to the terrain mesh.
  */
@@ -528,7 +528,7 @@ void main() {
  * fragment, so a mismatch of subdivision between the fill and the text cannot
  * occur.
  *
- * Returns false on frames with no terrain and on frames that have terrain but
+ * Returns false on draws with no terrain and on draws that have terrain but
  * no entry point for the analytic drape (the DEM has not arrived, the shader
  * cannot be built). The caller falls back to the conventional way of drawing
  * (the fill texture + a separate draw of the text).

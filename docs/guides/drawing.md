@@ -96,7 +96,7 @@ draw.options.update({
 
 `preview.changed` fires every time that shape changes, and once with
 `feature: null` when it is created, discarded or left. It is not
-throttled, so a listener that does heavy work waits for the next frame
+throttled, so a listener that does heavy work waits for the next draw
 itself. Besides `feature`, it carries `confirmedVertices` (how many
 vertices from the start are placed) and `highlightVertex` (the vertex
 drawn highlighted) when the mode gave them. Use it to show the length

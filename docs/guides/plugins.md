@@ -125,7 +125,7 @@ instance:
   gives the next name the way the `autoName` option says
   ([automatic names](drawing.md#automatic-names))
 - `screen`, the conversion between positions and points on the screen,
-  the zoom, the pixel ratio and the meters of a pixel, in the frame drawn
+  the zoom, the pixel ratio and the meters of a pixel, in the view drawn
   last
 - `terrain`, the positions and heights on the terrain of this instance
   ([terrain](terrain.md))
@@ -231,8 +231,8 @@ reads the feature as it is drawn from `ctx.draw.rendered`: with the
 sketches (`draw.sketches`) applied over the document, while it is edited
 and not written yet. `rendered.getSelectionBox(id)` gives
 its selection box, the footprint with the margin, as the library draws
-and hits it in the frame drawn last. `rendered.changed` tells the
-features that changed, once the frame that draws them is drawn. What
+and hits it in the view drawn last. `rendered.changed` tells the
+features that changed, once the draw of the map that draws them is done. What
 writes reads the document, `ctx.draw.features`.
 
 <!-- docs-check:

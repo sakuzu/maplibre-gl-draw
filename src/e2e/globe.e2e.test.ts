@@ -499,7 +499,7 @@ describe('the points near the edge of the sphere', () => {
 });
 
 /**
- * The extent (CSS px) of the pixels of the stroke of the selection frame (#FF2D55) in the
+ * The extent (CSS px) of the pixels of the stroke of the selection box (#FF2D55) in the
  * second of two frames, or null when none is drawn (read in the page: the whole picture is
  * not carried out of it)
  */
@@ -557,7 +557,7 @@ async function selectPoint(page: Page, coordinate: [number, number]): Promise<vo
 /** The side of the frame of that marker: the marker (16 px) and the margin on each side */
 const POINT_FRAME_SIDE = 2 * (6 + 2) + 2 * 10;
 
-describe('the selection frame of a point on the globe', () => {
+describe('the selection box of a point on the globe', () => {
   it('a point on the far side of the sphere gets no frame', async () => {
     const page = await openGlobe(CAMERA);
     // On the near side the frame is drawn around the marker

@@ -37,12 +37,12 @@ Each item has the same five parts.
 - Upstream behavior — `webgl/draw/draw_custom.ts:68` passes
   `painter.getDepthModeFor3D()` when `renderingMode === '3d'`: `LEQUAL`,
   `DepthMode.ReadWrite` and `renderContext.depthRangeFor3D`
-  (`render/painter.ts:489`). `depthRangeFor3D` is recomputed every frame
+  (`render/painter.ts:489`). `depthRangeFor3D` is recomputed every draw
   (`render/painter.ts:581`) as
   `[0, 1 - (style._order.length + 2) * numSublayers * depthEpsilon]`, and
   the same range is given to the terrain mesh and to `'3d'` custom layers.
   Depth test and blending are on, face culling is off.
-- What we rely on — assumption. Every frame of the stacking order in
+- What we rely on — assumption. Every slot of the stacking order in
   `src/view/layer/custom-layer.ts` is registered with `renderingMode: '3d'`
   and receives the depth test enabled with `LEQUAL`.
   `applySegmentDepthState` in `src/view/layer/gl-state.ts` (at the start
@@ -218,7 +218,7 @@ Each item has the same five parts.
   see that the polygon fill covers the same pixels every time and after a
   zoom round trip.
 - Conditions for removal — none. Upstream's lazy resolution is correct
-  behavior; we only need to look it up every frame.
+  behavior; we only need to look it up every draw.
 
 ## 7. Where the Terrain Objects Live
 
@@ -314,21 +314,21 @@ Each item has the same five parts.
   terrain surface and is called for one point at a time.
 - What we rely on — avoidance. `createCoordinateTransform` in
   `src/shared/math/transform.ts` routes `project` and `unproject` to the
-  view of the frame drawn last through `setViewProjector` /
+  view drawn last through `setViewProjector` /
   `getViewProjector` (the dependency is inverted because `shared` cannot
   depend on `view`): `projectOnView` and `unprojectOnView` of
   `src/view/terrain/anchor.ts`. `project` is the CPU copy of the vertex
-  shader's projection of that frame, with the elevation of item 8 when the
+  shader's projection of that view, with the elevation of item 8 when the
   terrain is on (the anchor projection) and on the map otherwise, so hit
   testing follows what is drawn, and it costs 5 to 7 ms per 10,000 points
-  on the first lookup of a frame (1.5 ms from the cache of the frame) and
+  on the first lookup of a draw (1.5 ms from the cache of the draw) and
   0.6 us a point outside the drawn tiles. With the same elevation it lands
   within 0.01 px of `map.project`. `unproject` cannot be derived from the
   matrix alone: it is solved by Newton's method from the position
-  `map.unproject` gives (with the current camera, the frame drawn last but
+  `map.unproject` gives (with the current camera, the view drawn last but
   for a camera moved since), within 1e-6 px, and is null where nothing is
   drawn. The positions of the pointer events are taken the same way
-  (`src/dispatcher/normalizer.ts`). Before the first frame, maplibre's
+  (`src/dispatcher/normalizer.ts`). Before the first draw, maplibre's
   `project` and `unproject` are used. `clampLatitude` avoids
   `map.project()` throwing beyond latitude ±90.
 - Symptoms when it breaks — if the anchor projection drifts from the
@@ -358,7 +358,7 @@ Each item has the same five parts.
   point, so a depth test would hide a whole label buried a few metres into
   the ground.
 - Symptoms when it breaks — if `depthAtPoint` were used, rendering would
-  stall in proportion to the number of symbols, reaching seconds per frame
+  stall in proportion to the number of symbols, reaching seconds per draw
   on label-heavy maps.
 - Check when upgrading — `src/view/terrain/occlusion.test.ts`.
 - Conditions for removal — a public upstream occlusion query (such as the
@@ -392,12 +392,12 @@ Each item has the same five parts.
   so the terrain branch is never taken. The flag is dead for custom layers.
 - What we rely on — avoidance. We never pass null and never set
   `applyTerrainMatrix`. The drape (`src/view/layer/drape-planner.ts`) and
-  the textured-quad frame (`src/view/layer/frame-state.ts`) call
+  the textured-quad draw (`src/view/layer/frame-state.ts`) call
   `getProjectionData` with the tile IDs of the renderable terrain tiles,
   wrapped in try/catch; a failure yields null and that tile is skipped.
   Everything else uses `args.defaultProjectionData`.
 - Symptoms when it breaks — an exception that escaped would lose a whole
-  frame, and the map would flicker or freeze.
+  draw, and the map would flicker or freeze.
 - Check when upgrading — manual. See whether the new version accepts null
   and whether `applyTerrainMatrix` has an effect for custom layers.
 - Conditions for removal — if upstream accepts null as documented and
@@ -595,7 +595,7 @@ Each item has the same five parts.
   (a main view, thumbnails, previews, print). maplibre gives each its own
   terrain and painter.
 - What we rely on — assumption. The library keeps nothing per page. The
-  terrain frame state, the generation counter, the subdivision cache and
+  terrain state of each draw, the generation counter, the subdivision cache and
   the DEM coverage generation live in `TerrainContext`
   (`src/view/terrain/context.ts`), and each CustomLayer owns one in its
   render scope (`src/view/layer/render-scope.ts`) together with the
@@ -629,12 +629,12 @@ Each item has the same five parts.
   exponent. A step relative to the finest tile in view would stay the same
   across a zoom change even though the real step doubled. A step converted
   to metres is wrong too: it changes with tiny latitude moves and would
-  advance the generation every frame.
+  advance the generation every draw.
 - Symptoms when it breaks — polygons subdivided for the old tiling remain,
   their chords disagree with the new mesh, and dotted breakthroughs and
   seams appear on ridges and in valleys. The view is clean after a reload
   but degrades after panning and zooming. With a metre-based fingerprint,
-  every frame rebuilds and panning becomes sluggish.
+  every draw rebuilds and panning becomes sluggish.
 - Check when upgrading — the `tilingSignature` cases of
   `src/view/terrain/tiling.test.ts`.
 - Conditions for removal — none.
@@ -690,21 +690,21 @@ Each item has the same five parts.
   the layers of the new style end up above the custom layers. When the
   diff changed something, `setState` fires `style.load`
   (`style/style.ts:887`) at once, and `styledata` follows with the next
-  frame (`Style.update`). A diff that changes nothing fires neither. A
+  draw (`Style.update`). A diff that changes nothing fires neither. A
   layer added or moved by the host fires `styledata` alone, never
   `style.load`.
 - What we rely on — assumption. `styleAcceptsLayers()` in
   `src/view/layer/attach.ts` reads `map.style?._loaded === true`, the same
   condition `_checkLoaded` checks, and is the only reader.
   `attachSlotLayers()` checks it when Draw is created and on every
-  `styledata` and `style.load`, and adds the frames missing from the map
-  (a missing frame goes just behind the next frame on the map, so the
-  frames stay in order). On `style.load` only, it also puts the frames
+  `styledata` and `style.load`, and adds the slots missing from the map
+  (a missing slot goes just behind the next slot on the map, so the
+  slots stay in order). On `style.load` only, it also puts the slots
   back on top of the map with the public `map.getLayersOrder()` and
-  `map.moveLayer()`: the block from the backmost frame to the frontmost
-  one moves to the top, each frame with the native layers that sat just
+  `map.moveLayer()`: the block from the backmost slot to the frontmost
+  one moves to the top, each slot with the native layers that sat just
   above it (the separators of the host), and the layers that were above
-  the frontmost frame stay below the block. Nothing moves when the block
+  the frontmost slot stay below the block. Nothing moves when the block
   is already on top, so the `styledata` that follows a move finds nothing
   to do. Since a host's own `addLayer` fires no `style.load`, a layer the
   host puts above the drawing stays there until the style changes. The
@@ -712,14 +712,14 @@ Each item has the same five parts.
   internal; the timing of `styledata` and `style.load` is part of the
   reliance.
 - Symptoms when it breaks — if the field is renamed, the check is always
-  false and the frames are never added. Nothing throws and nothing
+  false and the slots are never added. Nothing throws and nothing
   is logged: features exist in the Store but nothing is drawn. If
   `styledata` stops firing after a style change, the slots are not
   restored after a full `setStyle`, with the same silent result. If a
-  diffed `setStyle` stops firing `style.load`, the frames stay under the
+  diffed `setStyle` stops firing `style.load`, the slots stay under the
   layers of the new style and the drawing is hidden under the basemap.
   If `serialize()` starts to include custom layers, the diff removes the
-  frames and `styledata` adds them back on top, which also works.
+  slots and `styledata` adds them back on top, which also works.
 - Check when upgrading — `src/view/layer/attach.test.ts` uses a stand-in
   map. The E2E case "a diffed setStyle on a real map" in
   `src/e2e/draw.e2e.test.ts` diffs to a style with layers on a real map
@@ -830,7 +830,7 @@ Each item has the same five parts.
   calls.
 - What we rely on — avoidance + assumption. Every texture is uploaded
   during rendering: an image decoded in `img.onload` is only kept, and the
-  next frame that needs it uploads it (`TextureCache.acquireImageTexture`
+  next draw that needs it uploads it (`TextureCache.acquireImageTexture`
   in `src/view/cache/texture.ts`). `uploadRgbaTexture` sets
   `UNPACK_FLIP_Y_WEBGL` and `UNPACK_PREMULTIPLY_ALPHA_WEBGL` to false
   explicitly (the shaders expect straight alpha, first row at the top) and
@@ -868,14 +868,14 @@ Each item has the same five parts.
   vectors, dimension, exaggeration). An in-place rewrite does not show in
   that key, so the key is trusted only after `areTilesLoaded()` (read in
   `src/view/layer/terrain-resolver.ts`): while tiles load, the atlas is
-  baked every frame, and once more on the first frame after all have
+  baked every draw, and once more on the first draw after all have
   arrived.
 - Symptoms when it breaks — if a DEM texture could change without a tile
   load (a new upstream path setting `needsTerrainPrepare`), the atlas would
   keep old elevations and fills and lines would sink into or float above
   the terrain, most visibly at tile borders, until the camera changes the
   layout. If `areTilesLoaded()` never became true, the atlas would be baked
-  every frame (slower, not wrong).
+  every draw (slower, not wrong).
 - Check when upgrading — `src/view/terrain/dem-atlas.test.ts`. By hand,
   compare `getTerrainData` and the places that set `needsTerrainPrepare`
   with the new source, and load a terrain view from a cold cache to check
@@ -893,18 +893,18 @@ Each item has the same five parts.
   by `context.setDirty()`. `render` is called later in the translucent
   pass.
 - What we rely on — assumption. The first slot layer
-  (`src/view/layer/custom-layer.ts`) resolves the frame's terrain state in
+  (`src/view/layer/custom-layer.ts`) resolves the terrain state of the draw in
   `prerender` (`TerrainResolver` in `src/view/layer/terrain-resolver.ts`),
   which bakes the DEM atlas into its own framebuffer when it changed (item
   26); `render` then uses that state. Switching framebuffers in the middle
-  of the main pass would make a tiled GPU store and reload the whole frame.
-  When `prerender` did not run for a frame, `render` resolves the state
+  of the main pass would make a tiled GPU store and reload the whole view.
+  When `prerender` did not run for a draw, `render` resolves the state
   itself, so a version without the offscreen pass still draws correctly.
   The atlas restores the framebuffer, viewport and capabilities it changed.
-- Symptoms when it breaks — if `prerender` ran for a frame that is then not
-  rendered, the state would be one frame old; if it ran before `onAdd`,
+- Symptoms when it breaks — if `prerender` ran for a draw that is then not
+  rendered, the state would be one draw old; if it ran before `onAdd`,
   nothing would happen (the GPU side is checked first). If `prerender` were
-  no longer called, the only sign would be slower terrain frames on mobile
+  no longer called, the only sign would be slower terrain draws on mobile
   GPUs.
 - Check when upgrading — compare the offscreen pass of `Painter.render`
   and `draw_custom.ts` with the new source.
@@ -930,7 +930,7 @@ Each item has the same five parts.
 - What we rely on — imitation and avoidance. `globeSubdivisionGrid` in
   `src/shared/math/globe-subdivision.ts` copies the granularity, and
   `updateGlobeSubdivision` in `src/view/globe-subdivision.ts` (called from
-  `src/view/layer/custom-layer.ts` each frame) cuts only while
+  `src/view/layer/custom-layer.ts` each draw) cuts only while
   `projectionTransition` is above 0, so an edge follows the path of
   maplibre's layers instead of a chord through the sphere. Hit testing
   (`src/dispatcher/hit-test/globe-shape.ts`) cuts on a map whose
@@ -958,30 +958,30 @@ Each item has the same five parts.
   itself; the bounds item goes away if maplibre's globe bounds come to
   cover the whole visible cap.
 
-## 29. `idle` Does Not Wait for a Frame a Custom Layer Asked For
+## 29. `idle` Does Not Wait for a Draw a Custom Layer Asked For
 
 - Upstream behavior — at the end of `Map._render` (`ui/map.ts`, around
-  line 4480) maplibre asks for another frame only for its own dirty state
+  line 4480) maplibre asks for another draw only for its own dirty state
   (sources, style, placement, render to texture) or `repaint`; otherwise
   it fires `idle` when the map is not moving and loaded. `triggerRepaint`
-  called by a custom layer during `render` schedules the next frame
+  called by a custom layer during `render` schedules the next draw
   (`_frameRequest` was cleared before `_render`), and `idle` still fires
-  after the frame that asked for it.
-- What we rely on — avoidance. Work spread over frames (the chunks of a
+  after the draw that asked for it.
+- What we rely on — avoidance. Work spread over draws (the chunks of a
   dataset, the triangulation of huge polygons, the index of the terrain
-  drape, the hand-over of the drape) asks for the next frame with
+  drape, the hand-over of the drape) asks for the next draw with
   `triggerRepaint`, which maplibre does not count as unfinished.
   `Draw.hasPendingWork()` (`src/api/impl/drawing.ts`, asking the
   custom layer in `src/view/layer/custom-layer.ts`) reports that work, and
   a host that reads the picture back waits for `idle` and then for a
   `render` after which it is false
-  ([Performance](../guides/performance.md#complete-frames-for-a-picture)).
+  ([Performance](../guides/performance.md#complete-draws-for-a-picture)).
 - Symptoms when it breaks — none here: if `idle` came to wait for the
-  frames a custom layer asks for, waiting for `idle` would be enough and
+  draws a custom layer asks for, waiting for `idle` would be enough and
   `hasPendingWork()` would simply be false when it fires.
 - Check when upgrading — read the end of `Map._render` in the new source.
-- Conditions for removal — `idle` waiting for the frames requested during
-  `render`; `hasPendingWork()` stays useful for the work that no frame
+- Conditions for removal — `idle` waiting for the draws requested during
+  `render`; `hasPendingWork()` stays useful for the work that no draw
   finishes (the answer of a provider).
 
 ## 30. The Far Side of the Globe Is Clipped by Depth

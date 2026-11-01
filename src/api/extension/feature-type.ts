@@ -252,7 +252,7 @@ export interface FeatureTypeDefinition {
   handles?(feature: Feature, ctx: HandleContext): Handle[];
   /**
    * Draws the custom handles of a selected feature (`kind: 'custom'` of `handles`), with the
-   * shared renderers of the frame. The library calls it, after drawing the selection, exactly
+   * shared renderers of the draw. The library calls it, after drawing the selection, exactly
    * when it shows the handles of the feature (see {@link Handle}), so a type draws its marks here
    * and tests nothing; it is not called when the feature has no custom handle shown. Draw each
    * mark `sizePx` wide, the size it is hit at.

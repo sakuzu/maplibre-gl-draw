@@ -73,7 +73,7 @@ await draw.document.load(
 const locale = new URLSearchParams(location.search).get('locale') === 'ja' ? 'ja' : 'en';
 const ui = createDrawUI(draw, { locale, basemaps: BASEMAPS, basemap: initialBasemapId() });
 
-// 5. How the last frame was drawn: whether the terrain was in use and whether the areas and the
+// 5. How the last draw went: whether the terrain was in use and whether the areas and the
 // lines were painted on the ground. For debugging; the fields may change in a minor release
 map.once('idle', () => {
   const { render, drape } = draw.debug.terrain();

@@ -15,7 +15,7 @@ import { pointsShapeTest, shapeOfFeature } from './shape-tests.js';
 /**
  * The built-in hit test of `Point` features: hit within the tolerance of the position.
  *
- * The distance is measured in a local frame around the click, where a degree of longitude is
+ * The distance is measured on local axes around the click, where a degree of longitude is
  * scaled by the cosine of the latitude. A feature type drawn as a point can reuse it, or
  * extend it to widen the hit area. The engine uses it as the hit test of its points.
  */
@@ -32,7 +32,7 @@ export class PointHitTestStrategy {
     );
   }
 
-  /** The distance from the coordinate to the feature, in degrees of the local frame */
+  /** The distance from the coordinate to the feature, in degrees of the local axes */
   distance(feature: Feature, coordinate: [number, number]): number {
     return pointsShapeTest.distanceShape(shapeOfFeature(feature as StoredFeature), coordinate);
   }

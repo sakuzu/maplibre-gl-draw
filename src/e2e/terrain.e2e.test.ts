@@ -390,7 +390,7 @@ interface FrameView {
 }
 
 /**
- * The extent on the screen (CSS px) of the stroke of the selection frame (#FF2D55) of a point
+ * The extent on the screen (CSS px) of the stroke of the selection box (#FF2D55) of a point
  * placed on the ground under a point of the canvas, with the given radius and outline
  */
 async function frameExtent(
@@ -469,7 +469,7 @@ function expectFrame(
   expect(Math.abs((frame.box[1] + frame.box[3]) / 2 - frame.center[1])).toBeLessThanOrEqual(2);
 }
 
-describe('the selection frame of a point on the terrain', () => {
+describe('the selection box of a point on the terrain', () => {
   const marker = { pointRadius: 10, pointStrokeWidth: 2 };
   const below = { x: MAP_SIZE.width / 2, y: MAP_SIZE.height * 0.6 };
   const far = { x: MAP_SIZE.width / 2, y: MAP_SIZE.height * 0.3 };

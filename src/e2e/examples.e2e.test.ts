@@ -917,7 +917,7 @@ describe('the examples', () => {
     expect(logs.some((line) => /^1,000,000 points made in \d+ ms/.test(line))).toBe(true);
     expect(
       logs.some((line) =>
-        /^250,000 cells: [\d,]+ ms to make the rows, [\d,]+ ms to give them to the dataset, and the first frame [\d,]+ ms after$/.test(
+        /^250,000 cells: [\d,]+ ms to make the rows, [\d,]+ ms to give them to the dataset, and the first draw [\d,]+ ms after$/.test(
           line,
         ),
       ),
@@ -1095,7 +1095,7 @@ describe('the examples', () => {
     expect(infos).toHaveLength(1);
     expect(infos[0]).toMatch(
       new RegExp(
-        `^${rows.toLocaleString('en')} building footprints read from a GeoParquet file in a Worker and drawn from its columns: \\d+ ms to fetch the file, \\d+ ms to read the columns, \\d+ ms to build the table, \\d+ ms to prepare it, and \\d+ ms from the request to the first frame that draws them$`,
+        `^${rows.toLocaleString('en')} building footprints read from a GeoParquet file in a Worker and drawn from its columns: \\d+ ms to fetch the file, \\d+ ms to read the columns, \\d+ ms to build the table, \\d+ ms to prepare it, and \\d+ ms from the request to the first draw of them$`,
       ),
     );
     // It opens on Dark, which the style of the address stands in for
@@ -1157,7 +1157,7 @@ describe('the examples', () => {
     await expect.poll(million, { timeout: browserTimeout(30_000) }).toBe(1_000_000);
     await expect.poll(() => infos.length, { timeout: browserTimeout(10_000) }).toBe(2);
     expect(infos[1]).toMatch(
-      /^1,000,000 points made in a Worker as typed arrays: [\d,]+ ms to build the table, [\d,]+ ms to prepare it, [\d,]+ ms to transfer it without a copy, and [\d,]+ ms from handing it to the dataset to the first frame that draws them; the arrays hold \d+ MB( \(JavaScript heap \d+ MB before, \d+ MB after\))?$/,
+      /^1,000,000 points made in a Worker as typed arrays: [\d,]+ ms to build the table, [\d,]+ ms to prepare it, [\d,]+ ms to transfer it without a copy, and [\d,]+ ms from handing it to the dataset to the first draw of them; the arrays hold \d+ MB( \(JavaScript heap \d+ MB before, \d+ MB after\))?$/,
     );
     // A click on one of them, alone at zoom 18, reports its row
     const point = await page.evaluate(() => {

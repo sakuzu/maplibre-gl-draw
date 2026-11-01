@@ -790,14 +790,14 @@ drawn. Each change below names what replaces what is gone.
   (experimental): `rows.appliesTo` was `appliesToRow`, `renderer.rows.draw`
   and `renderer.rows.sprites` were `drawRows` and `rowSprites`, and
   `rows.has` of a companion provider was `hasRow`
-- The render context has the screen of the frame, `ctx.screen` (the
+- The render context has the screen of the view it draws, `ctx.screen` (the
   same object as the `screen` of a plugin), in place of `ctx.zoom` and
   `ctx.pixelRatio`: read `ctx.screen.zoom` and `ctx.screen.pixelRatio`
-- `ctx.screen` answers for the frame drawn last (`project`, `unproject`,
+- `ctx.screen` answers for the view drawn last (`project`, `unproject`,
   `zoom`, `metersPerPixel`), and the position of a pointer event is the
   position drawn under it: what is grabbed is what was drawn, also when
   the camera moved since
-- The values of the GPU of the frame are read through `/webgl`, not from
+- The values of the GPU of the view are read through `/webgl`, not from
   the render context: `viewUniforms(ctx)` gives `shader`, `projection`
   and `offset` (were `ctx.shader`, `ctx.projection` and `ctx.offset`),
   `offsetUniformsAt(ctx, position)` the offsets from a position (in

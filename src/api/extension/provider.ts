@@ -79,7 +79,7 @@ export interface HandleProvider {
   globalHandles?(ctx: HandleContext): Handle[];
   /**
    * Draws the custom handles of the provider (`kind: 'custom'`), with the shared renderers of the
-   * frame. The library calls it, after drawing the selection, exactly when it shows them: for the
+   * draw. The library calls it, after drawing the selection, exactly when it shows them: for the
    * handles of a selected feature under the conditions told on {@link Handle}, and for those of
    * `globalHandles` while they are shown. A provider draws its marks here and tests nothing; it is
    * not called when no custom handle is shown. Draw each mark `sizePx` wide, the size it is hit
@@ -138,7 +138,7 @@ export interface CompanionProvider {
   /** The name it is registered under */
   readonly name: string;
   /**
-   * Whether a feature has a companion. It is asked for every feature on every frame and
+   * Whether a feature has a companion. It is asked for every feature on every draw of the map and
    * every hit test, so it must answer at once.
    */
   has(feature: Feature): boolean;

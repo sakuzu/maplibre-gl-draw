@@ -23,8 +23,8 @@ the selection UI and the drawing preview inside them.
 - One renderer per kind of geometry: points, lines, polygons, images and
   selection handles. Circle, Freehand and Multi geometries reuse them
 - Store features are drawn in retained mode by default: GPU resources are
-  built per layer in advance, and a frame only binds, sets uniforms and
-  draws. Datasets have their own retained mode
+  built per layer in advance, and each draw of the map only binds, sets
+  uniforms and draws. Datasets have their own retained mode
 - The stacking order is the order of the draw calls. No depth buffer
   orders our own drawings against each other
 - The RenderCoordinator asks maplibre for a repaint when the Store changes,
@@ -34,7 +34,7 @@ The code lives in these directories of `src/`:
 
 - `view/` - the rendering of the Store: the coordinator, the viewport
   filter, the style rule evaluation (`view/style-rule.ts`, pure functions)
-- `view/layer/` - the custom layer, the slots, the frame state, the render
+- `view/layer/` - the custom layer, the slots, the draw state, the render
   loop and the retained cache of the Store
 - `view/renderers/` - the renderers of features
 - `view/ui/` - the selection UI (bounding box, handles, box selection)
@@ -44,13 +44,13 @@ The code lives in these directories of `src/`:
 - `dataset/` - datasets. They borrow the renderers of
   `view/` but share no state with the Store path
 
-## The flow of a frame
+## The flow of a draw
 
 ```text
 Store change
   │ RenderCoordinator: map.triggerRepaint()
   ▼
-maplibre frame
+maplibre draw
   │ prerender (first slot)   terrain state, DEM atlas bake
   ▼
 render of slot 0 ─────────── beginFrame + buildFrameState (once)
@@ -59,7 +59,7 @@ render of slot 0 ─────────── beginFrame + buildFrameState 
   │ renderSegment(0)         GL state, drape of the segment,
   │                          renderLayers once per world copy
   ▼
-render of slot 1..n-1        renderSegment(i) with the shared frame
+render of slot 1..n-1        renderSegment(i) with the shared state
   │                          (maplibre native layers can sit between)
   ▼
 last slot                    renderForeground: selection UI,
@@ -87,7 +87,7 @@ rows), `layers` (including the order between layers), `groups`, `order`
 in-progress geometry of a drawing mode), `uiStateChanged` (drag state,
 box selection) or `reset`.
 
-The coordinator only schedules a frame. What the frame redraws, and what
+The coordinator only schedules a draw. What the draw redraws, and what
 it rebuilds, is decided by the custom layer from its own Store
 subscription (see [Invalidation](#invalidation)).
 
@@ -116,11 +116,11 @@ receives what it reads as arguments.
 - `SlotManager` (`slot-manager.ts`) keeps the slots in step with the
   stacking order and counts how many are on the map
 - `TerrainResolver` (`terrain-resolver.ts`) resolves the terrain state of a
-  frame: the DEM atlas, the subdivision step and region
+  draw: the DEM atlas, the subdivision step and region
 - `DrapePlanner` (`drape-planner.ts`) decides whether the analytic drape is
-  used in the frame and why, holds its tile plan and the hand-over to the
+  used in the draw and why, holds its tile plan and the hand-over to the
   datasets
-- `buildFrameState` (`frame-state.ts`) builds the state of a frame, once,
+- `buildFrameState` (`frame-state.ts`) builds the state of a draw, once,
   in the first slot
 - `renderSegment` / `renderForeground` (`frame-render.ts`) draw one segment
   and the foreground pass
@@ -132,7 +132,7 @@ receives what it reads as arguments.
 ### The engine behind the slots
 
 All slots of one draw instance share one engine: the WebGL context, the
-renderers, the retained cache of the Store and the frame being drawn. The
+renderers, the retained cache of the Store and the view being drawn. The
 first slot that goes onto the map builds it, and the last one that leaves
 tears it down. The outline below keeps the names of the implementation and
 leaves out the terrain and the drape.
@@ -153,7 +153,7 @@ function engineAdd(mapInstance, glContext) {
 function renderSlot(index: number, input: CustomRenderMethodInput) {
   if (!engine.gl || !engine.renderers) return;
   if (engine.gl.isContextLost()) return;
-  // the first slot of a maplibre frame prepares the shared state
+  // the first slot of a maplibre draw prepares the shared state
   if (engine.frame === null || index <= engine.frame.lastIndex) {
     engine.frame = beginFrame(input);
   }
@@ -170,7 +170,7 @@ function renderSlot(index: number, input: CustomRenderMethodInput) {
 
 The layer itself has the id `maplibre-gl-draw-layer`, `renderingMode: '3d'`,
 `onAdd: engineAdd`, `render` calling `renderSlot(0, ...)`, and a
-`prerender` that resolves the terrain state of the frame before maplibre's
+`prerender` that resolves the terrain state of the draw before maplibre's
 main pass. `onRemove` tears the engine down only when the last slot leaves:
 it unsubscribes, releases the GPU resources and the terrain context, and
 uninstalls the anchor projector.
@@ -181,7 +181,7 @@ ShaderInitializer), the anchor projection, the plan of the drape, the
 choice between retained and immediate mode, the features for immediate
 mode (from the display list), the selected features
 (`getSelectedFeatureIds`) and the copies of the world (`planCopies`).
-Every later slot of the same maplibre frame reuses it.
+Every later slot of the same maplibre draw reuses it.
 
 The style zoom (`StyleZoom` in `frame-state.ts`) is the zoom the sizes are
 derived from. It follows the increments of the zoom while the camera
@@ -207,19 +207,19 @@ a settlement.
 The gap between the style zoom and the raw zoom comes from settlements
 only, and the kind of move decides what happens to it:
 
-- a move that changes the zoom within one frame (`jumpTo`, `setZoom`):
-  the next frame sees the camera moved and takes the raw zoom, dropping
+- a move that changes the zoom within one draw (`jumpTo`, `setZoom`):
+  the next draw sees the camera moved and takes the raw zoom, dropping
   the gap
-- an animated move (`easeTo`, `flyTo`, a gesture, inertia): the frames of
+- an animated move (`easeTo`, `flyTo`, a gesture, inertia): the draws of
   the move follow the increments of the raw zoom and keep the gap, so no
   size jumps when the move starts; the gap stays after the move ends
 - a settlement: absorbed, the gap changes by its step (about ±0.3 at
   most as the elevation under the camera changes)
 
-Right after the style zoom, `beginFrame` starts the frame of the datasets
+Right after the style zoom, `beginFrame` starts the draw of the datasets
 (`DatasetManager.beginFrame`): each visible dataset decides the zoom band
 of its collision thinning from the style zoom, before the drape plan and
-before any layer of the frame draws (see
+before any layer of the draw is drawn (see
 [Collision thinning](#collision-thinning)).
 
 `renderForeground` runs once per world copy in the last slot. It draws the
@@ -231,7 +231,7 @@ overlays that are not layer-aware.
 ### GL state of a slot
 
 maplibre resets the GL state between layers, so every slot establishes the
-state its frame assumes and hands the maplibre defaults back at the end.
+state its draw assumes and hands the maplibre defaults back at the end.
 Every switch of blending, depth test, depth function, depth mask and
 polygon offset made by the layer itself is in `gl-state.ts`.
 
@@ -262,7 +262,7 @@ Every object that lives in the WebGL context (buffers, textures, programs,
 vertex arrays, framebuffers: the renderers, the retained batches of the
 Store and of the datasets, the DEM atlas and the drape) is
 created by one function, `buildGpuResources`, and dropped by one function,
-`releaseGpuResources`. Nothing else holds a GL object across frames. The
+`releaseGpuResources`. Nothing else holds a GL object across draws. The
 CPU-side state (the Store subscription, the triangulation and style rule
 caches, the collected drape elements) is outside the pair.
 
@@ -306,7 +306,7 @@ needs:
   renderers and extension overlays
 - `features` and `selectedFeatures`: what is drawn in immediate mode and
   what is selected on that copy
-- `terrainState`: the DEM atlas placed in the frame of that camera
+- `terrainState`: the DEM atlas placed in the coordinate axes of that camera
 
 Each slot draws its drape once (the drape is drawn per terrain tile with
 the matrix maplibre gives each tile, and tiles carry their own wrap), then
@@ -323,7 +323,7 @@ picture, z-order included.
 
 - Retained mode: when a `StoreRetainedCache` is passed and the renderers
   provide the retained API, each layer draws its prebuilt chunks
-- Immediate mode: the features of the layer are walked every frame and
+- Immediate mode: the features of the layer are walked every draw and
   pushed through the BatchManager
 
 ```typescript
@@ -367,10 +367,10 @@ stacking order alone decides the order:
   separators and stale ids are ignored
 
 The bounding box of the expanded viewport (`viewportBounds`) does not
-depend on the number of features, so it is computed once per frame and
+depend on the number of features, so it is computed once per draw and
 passed to `drawLayer` and to the datasets, whether or not retained mode
 is in use. The set of visible ids for immediate chunks (`getVisibleIds`) is
-queried at most once per frame, and only when a first immediate chunk needs
+queried at most once per draw, and only when a first immediate chunk needs
 it. If the renderers lack the retained API (a test stub, for example),
 `getRetainedRenderers()` returns `undefined` and the loop falls back to
 immediate mode.
@@ -412,19 +412,19 @@ class ViewportFilter {
   handles of a selection by the view (`computeThinningViewport`) is skipped
   on the globe
 
-Neither path calls `filter()` in a frame.
+Neither path calls `filter()` in a draw.
 
 - The immediate path keeps the ordered list of features to display
   (`DisplayListCache`, `view/layer/display-list.ts`), rebuilt only after a
   Store change that can alter it (features, layers, groups, their order,
   local visibility). It takes the ids in view from `getVisibleIds()` and
-  puts them in draw order by their rank in that list, so a frame costs in
+  puts them in draw order by their rank in that list, so a draw costs in
   proportion to what is on screen. When more than a quarter of the list is
   visible, one pass over the list is cheaper than sorting and is used
   instead
 - The retained path never walks the feature list. Chunks are thinned by
   their bbox against `getBounds()`, and `getVisibleIds()` is used only for
-  immediate chunks, memoized per frame
+  immediate chunks, memoized per draw
 
 ## ShaderInitializer
 
@@ -444,7 +444,7 @@ class ShaderInitializer {
 `ensureShaders` compiles each renderer's programs against the shader
 prelude maplibre gives the custom layer for the current projection.
 `applyOffsetUniforms` takes offset-mode uniforms that were computed once
-per frame and per world copy, instead of recomputing them per renderer.
+per draw and per world copy, instead of recomputing them per renderer.
 
 Every program is compiled by `createProgram` (`view/shaders/helpers.ts`),
 which gives both stages `precision highp sampler2D;`. The unit tests use a
@@ -571,7 +571,7 @@ be retained and always take the immediate path (see
 
 With the terrain on, the analytic drape paints dashed and dotted lines, and
 dashed outlines, on the ground like solid ones (see
-[Analytic drape](#analytic-drape)); the CPU split above is left to frames
+[Analytic drape](#analytic-drape)); the CPU split above is left to draws
 the drape does not paint. A ribbon widened on the screen around a line
 that lies on the ground has the depth of the middle of the line, so on a
 pitched view its side towards the camera sank into the nearer ground.
@@ -579,10 +579,10 @@ pitched view its side towards the camera sank into the nearer ground.
 The pattern comes from the same table as the CPU split
 (`DASH_COEFFICIENTS` in `dash.ts`: a dash is `max(a, b * w)` and a gap
 `max(w + 1, c * w)` for a width `w`), and it is measured the same way, in
-pixels of the 512-pixel world at the zoom of the frame. The binning keeps,
+pixels of the 512-pixel world at the zoom of the view drawn. The binning keeps,
 next to each edge of a dashed element, where it starts along its path
 (`drapePathStarts`, worked out only for dashed elements); the shader turns
-the width of the frame into the dash and the gap, finds the dash closest
+the width in the view drawn into the dash and the gap, finds the dash closest
 to the pixel on the edge, and measures the distance to that piece of the
 edge. A dash cut by a vertex is drawn by both edges and meets in a round
 joint, as a solid line does.
@@ -632,7 +632,7 @@ A batch is flushed:
   `endSDFLineDraw` is not called)
 - When the style changes in a way that is not an instance attribute
 - Before an image or a custom type, which are drawn individually
-- At the end of the frame, the only place `endSDFLineDraw()` is called, to
+- At the end of the draw, the only place `endSDFLineDraw()` is called, to
   avoid needless shader state changes
 
 These boundaries are the same positions at which retained mode cuts its
@@ -668,7 +668,7 @@ up to the provider.
   same layer
 - While `has(feature)` is false nothing is flushed or drawn, so maps and
   features without a provider keep full batching. `has` runs for every
-  feature on every frame and must be O(1)
+  feature on every draw and must be O(1)
 - The registry belongs to the draw instance (`featureCompanions` is a
   required argument of `createCustomLayer`), like every extension point
   registry. A provider encloses its own Store, and feature ids are the same
@@ -705,7 +705,7 @@ class SDFLineRenderer {
 ```
 
 In immediate mode the renderer keeps its coordinate texture and instance
-buffer alive instead of creating them per frame:
+buffer alive instead of creating them per draw:
 
 - The coordinate texture is immutable (`texStorage2D`), with a power-of-two
   side at least as large as the required `texSize`. Only the data is
@@ -860,8 +860,8 @@ over them, then `resolveFeatureStyle` (the rule color in the channel of
 the type, `fill` for a custom type, and the style of the feature). The
 look is kept with the feature object in a `WeakMap`, frozen, with the
 rule, the `style` option and the declaration it was made from; a read
-with the same three gives the same object, so a frame puts the look of a
-feature together once, and the next frame too while nothing changed. A
+with the same three gives the same object, so a draw puts the look of a
+feature together once, and the next draw too while nothing changed. A
 feature is a new object once it changes, which drops its look.
 `getAppliedStyle` returns a copy.
 
@@ -901,7 +901,7 @@ the image becomes ready.
   the image's data URL (`acquireImageTexture`). The first call starts the
   decode (one per data URL, shared by every caller) and returns null;
   nothing is drawn until the decode finishes and requests a redraw
-- The next frame that asks uploads the decoded image. Uploads happen only
+- The next draw that asks uploads the decoded image. Uploads happen only
   while rendering, never from `img.onload`: the context is shared with
   maplibre, which caches its GL state and resets that cache only after a
   custom layer's `render`. The upload sets `UNPACK_FLIP_Y_WEBGL` and
@@ -910,7 +910,7 @@ the image becomes ready.
 - An image larger than `MAX_TEXTURE_SIZE` is scaled down to fit, and image
   textures get mipmaps, since images are often drawn smaller than their
   size. The display size still comes from the image's own size
-- A failed decode is not retried every frame (only after
+- A failed decode is not retried every draw (only after
   `invalidateImage`), and a decode that finishes after the layer is removed
   is dropped
 - The quad is drawn with the `QuadShader`, scaled with the zoom relative to
@@ -919,15 +919,15 @@ the image becomes ready.
 ## Retained mode for Store features
 
 Immediate mode repeats style resolution, relative coordinates, CPU vertex
-construction and upload for every visible feature on every frame, even for
-features that do not move. As the count grows this dominates the frame.
+construction and upload for every visible feature on every draw, even for
+features that do not move. As the count grows this dominates each draw.
 
 Store features are therefore drawn in retained mode by default
 (`StoreRetainedCache`, `view/layer/store-retained.ts` and its
 `store-retained-*.ts` parts). Retained batches are built per layer, and a
-frame only binds them, sets uniforms and draws. The vertex data does not
-depend on the camera (projection is done with per-frame uniforms), so it is
-rebuilt only when the features or their style change. The option
+draw of the map only binds them, sets uniforms and draws. The vertex data
+does not depend on the camera (projection is done with per-draw uniforms),
+so it is rebuilt only when the features or their style change. The option
 `rendering.cacheGeometry: false` (`storeRetained` in the internal
 rendering configuration) returns to immediate mode; both give the same
 picture, z-order included.
@@ -970,7 +970,7 @@ the painter's order is the same as in immediate mode.
 The vertices of a batch are baked as Float32 offsets from an origin, the
 center of the chunk's bbox. When the error this leaves on screen would
 exceed a tenth of a pixel at high zoom, the chunk is rebuilt around the
-view (`view/shaders/retained-origin.ts`, at most once per frame per chunk).
+view (`view/shaders/retained-origin.ts`, at most once per draw per chunk).
 The details are in [Coordinate precision](./coordinate-precision.md).
 
 ### Fixed widths in shared batches
@@ -984,8 +984,8 @@ outlines alike.
 
 ### Viewport thinning of chunks
 
-Retained batches do not depend on the camera, but drawing every chunk every
-frame would send much off-screen geometry to the GPU when the data is far
+Retained batches do not depend on the camera, but drawing every chunk on every
+draw would send much off-screen geometry to the GPU when the data is far
 wider than the view. Each chunk carries a longitude and latitude bbox, and
 chunks that do not intersect the expanded viewport are skipped.
 
@@ -1001,13 +1001,13 @@ chunks that do not intersect the expanded viewport are skipped.
 
 Immediate chunks are also thinned per feature with
 `ViewportFilter.getVisibleIds()`, so touching the view does not draw every
-off-screen feature of the chunk. The query runs only in frames that draw an
-immediate chunk, once per frame.
+off-screen feature of the chunk. The query runs only in draws with an
+immediate chunk, once per draw.
 
 ### Invalidation
 
 Invalidation comes from the Store subscription (in `onAdd`) and from
-snapshots compared at the start of a frame. It is conservative: rebuilding
+snapshots compared at the start of a draw. It is conservative: rebuilding
 too much is still correct, rebuilding too little leaves a stale picture.
 
 | Change                                          | Rebuilt            |
@@ -1033,9 +1033,9 @@ too much is still correct, rebuilding too little leaves a stale picture.
   everything; both are rare
 - The locally hidden set (`store.listHidden()`) is updated in place,
   so `RetainedInvalidationWatch` (`store-retained-invalidation.ts`)
-  compares its size and elements with the previous frame
+  compares its size and elements with the previous draw
 - The companion registry has a generation number that changes on every
-  registration and removal. Comparing one integer per frame catches a
+  registration and removal. Comparing one integer per draw catches a
   change of the "has a companion" classification
 - The terrain generations cover the subdivision step baked into polygon
   vertices and the ground elevation baked into point instances. The globe
@@ -1044,9 +1044,9 @@ too much is still correct, rebuilding too little leaves a stale picture.
 - The classification is checked again when a chunk is rebuilt. If it
   disagrees with the chunk's kind (a property change moved a style rule
   result, say), the whole layer is cut again. If it disagrees a second
-  time, the frame is drawn in immediate mode and the next frame retries. A
+  time, the view is drawn in immediate mode and the next draw retries. A
   chunk whose GPU resources could not be created (shaders not ready) is
-  drawn in immediate mode for that frame as well
+  drawn in immediate mode for that draw as well
 
 Small coordinate changes such as a vertex drag do not rebuild. For
 LineString and Freehand, an update that keeps the coordinate count and moves
@@ -1153,7 +1153,7 @@ numbers of its rows, not the features.
   the vertex target becomes a chunk of its own
 - Datasets of more than 50,000 features use a target of 4,096 features
   (`chunkTargetSizeFor()`). A chunk is also the unit of drawing, and each
-  one costs a program switch and uniform setup per frame. Culling gets
+  one costs a program switch and uniform setup per draw. Culling gets
   coarser, but off-screen vertices are dropped by clipping, so the GPU
   processes the same number of vertices
 - Cutting at the median evens out the counts whatever the distribution. A
@@ -1175,7 +1175,7 @@ one chunk: polygon, line and point retained batches, plus the features that
 cannot be retained, drawn in immediate mode.
 
 - Vertices are baked relative to an origin. Only the projection uniforms
-  and the zoom change per frame. A chunk that spreads widely is rebuilt
+  and the zoom change per draw. A chunk that spreads widely is rebuilt
   around the view at high zoom, as on the Store path
 - Line widths and point sizes are baked in physical pixels. Features
   without a `createdZoom` are built with a width zoom of 0 and drawn with
@@ -1191,23 +1191,23 @@ cannot be retained, drawn in immediate mode.
   polygons and the lines: the anchor elevations of the terrain and the
   collision thinning change only the points
 
-### Building across frames
+### Building across draws
 
 A chunk is built only when it first intersects the view, and building is
-sliced by time: at most `CHUNK_BUILD_BUDGET_MS` (12 ms) per frame, always at
-least one chunk. Chunks not built yet appear over the next frames, much
+sliced by time: at most `CHUNK_BUILD_BUDGET_MS` (12 ms) per draw, always at
+least one chunk. Chunks not built yet appear over the next draws, much
 like tiles arriving. Polygons are built in bundles of about 2,000 vertices,
-so one large surface does not stall a frame, and a chunk that is being
+so one large surface does not stall a draw, and a chunk that is being
 rebuilt keeps drawing its previous batches until the new ones are ready.
 With `timeSlicing: false` in the rendering settings the budget is
-infinite, and every chunk in view is built in the frame (see
-[Complete frames](#complete-frames)).
+infinite, and every chunk in view is built in the draw (see
+[Complete draws](#complete-draws)).
 
 A build has two phases, and the budget covers both. The first walks the
 rows of the chunk, applies the rule colors and resolves the styles into
 the intermediate data (`ChunkCollector`, in slices of
 `COLLECT_SLICE_ROWS`, 512 rows); the second builds the GPU resources from
-it. Starting a build does no work, so a first frame with hundreds of
+it. Starting a build does no work, so a first draw with hundreds of
 visible chunks walks only the chunks it has the budget for, instead of
 resolving the styles of the whole view at once.
 
@@ -1242,20 +1242,20 @@ draws the chunk (see [Collision thinning](#collision-thinning)).
 dataset itself survives and is rebuilt on the next draw once the layer
 is added back.
 
-### Triangulating huge polygons across frames
+### Triangulating huge polygons across draws
 
 A single polygon with a million vertices (a coastline, a large lake) can
 take many seconds to triangulate. On the path of the datasets the
-triangulation is chopped up and advanced across frames, and the geometry is
+triangulation is chopped up and advanced across draws, and the geometry is
 never simplified.
 
 - Only polygons above `ASYNC_TRIANGULATION_VERTEX_THRESHOLD` (10,000
   vertices) take this path; ordinary data is triangulated on the spot
 - A slice is `TRIANGULATION_SLICE_MS` (8 ms). The budget is shared by the
   whole map (`TriangulationScheduler`), so more datasets do not mean
-  more time per frame
+  more time per draw
 - The fill of the polygon appears when its triangulation finishes; the
-  outline appears from the first frame. On completion only that chunk is
+  outline appears from the first draw. On completion only that chunk is
   rebuilt and a repaint is requested
 - `SlicedEarcut` (`view/renderers/polygon/earcut-sliced.ts`) is a port of
   earcut's ear clipping loop that can stop and resume. Its result is
@@ -1264,45 +1264,45 @@ never simplified.
   bundles workers
 - Drawing that happens once and is read back (an export, a thumbnail) sets
   `timeSlicing: false` in the rendering style, so fills are ready in the
-  first frame
+  first draw
 
-### Complete frames
+### Complete draws
 
 A host that reads the picture back (a print, a thumbnail) needs to know
 when it is complete. Two things answer it.
 
 `timeSlicing` (rendering settings, true by default) is the one switch of
-the work that is spread over frames. With false, every frame is complete
+the work that is spread over draws. With false, every draw is complete
 while the camera is still:
 
-- the chunks of the datasets in view are built in the frame
+- the chunks of the datasets in view are built in the draw
   (`buildBudgetMs` of the chunk set is infinite)
 - every polygon is triangulated on the spot (the threshold of
   `TriangulationScheduler` is infinite)
-- the tile index of the analytic drape is built in the frame
+- the tile index of the analytic drape is built in the draw
   (`DrapePlanner` prepares it without a budget)
 
 The rebuilds that wait for the camera to stop still wait; a capture is
 taken with the camera still.
 
-`Draw.hasPendingWork()` reports the work later frames finish on
+`Draw.hasPendingWork()` reports the work later draws finish on
 their own. It asks the engine (`CustomLayerInterface.hasPendingWork`),
 which asks:
 
-- the drape planner: tiles of the index left for the next frames (the
+- the drape planner: tiles of the index left for the next draws (the
   previous plan drawn meanwhile), or a hand-over to the datasets waiting
-  for `DRAPE_STABLE_FRAMES` usable frames. It requests the frames that
+  for `DRAPE_STABLE_FRAMES` usable draws. It requests the draws that
   finish either
 - the datasets (`DatasetManager.hasPendingWork`): a queued triangulation;
-  a chunk the most recent frame left unbuilt, for a visible dataset that
-  frame drew (a hidden one, or one on no side of the frame, has no work);
+  a chunk the most recent draw left unbuilt, for a visible dataset drawn
+  in it (a hidden one, or one on no side of the view drawn, has no work);
   a provider call waiting for its debounce or its response
 - the overlay renderers, through the optional
   `EngineOverlayRenderer.hasPendingWork` (`OverlayRenderer.hasPendingWork`
   of the extension contract)
 
-maplibre fires `idle` after a frame even when a custom layer asked for
-another frame while drawing it, so `idle` alone does not tell. The host
+maplibre fires `idle` after a draw even when a custom layer asked for
+another draw while drawing it, so `idle` alone does not tell. The host
 waits for `idle` (the tiles and the DEM of the map), then for a `render`
 after which `hasPendingWork()` is false.
 
@@ -1406,7 +1406,7 @@ it.
 ### Draw-time factors
 
 A retained batch bakes sizes and colors. For adjustments that change every
-frame ("a little thinner and fainter as the zoom changes"), two uniforms
+draw ("a little thinner and fainter as the zoom changes"), two uniforms
 are multiplied onto the baked values at draw time:
 
 - `u_size_scale` (vertex) multiplies point diameters, line widths and
@@ -1434,7 +1434,7 @@ reaches the baked data, so a change of the opacity alone rebuilds nothing
 
 - Retained chunks pass it to `drawRetained` / `drawRetainedBatch`
 - In immediate mode `BatchManager.beginFrame(…, layer)` takes it for the
-  frame and passes it to the immediate `drawAll` and `drawBatch`. The
+  draw and passes it to the immediate `drawAll` and `drawBatch`. The
   paths without a factor uniform multiply it into their colors: the
   fill-only polygon batch (per-vertex colors), the per-point shapes, and
   `FeatureDrawer.drawFeature` (images through `ImageRenderer`, which also
@@ -1459,14 +1459,14 @@ The factors of a dataset come from `DatasetOptions.zoomScale`
 type DatasetZoomScale = (zoom: number) => { scale: number; opacity: number };
 ```
 
-- It is evaluated once per frame, and the same value goes to every chunk
-  and batch of that frame
+- It is evaluated once per draw, and the same value goes to every chunk
+  and batch of that draw
 - The factors apply only at draw time, so changing the function does not
   rebuild batches, unless the thinning footprint changes the winners
 - A NaN, infinite or out-of-range result does not break drawing
   (`sanitizeDrawFactors` clamps scale to a positive finite number and
   opacity to 0..1)
-- A frame where `opacity` is 0 skips the dataset entirely
+- A draw where `opacity` is 0 skips the dataset entirely
 - It applies per dataset, never to the Store, and multiplies with the
   render scale
 - Every path of the dataset gets the same factors. The features drawn in
@@ -1544,7 +1544,7 @@ screen.
 
 ### Following the zoom
 
-The drawn rows follow one zoom: the style zoom of the frame being drawn,
+The drawn rows follow one zoom: the style zoom of the view being drawn,
 lowered by the drop of the pitch correction. The zoom of the map is not
 read again. The elevation settlement of the terrain changes it without
 changing the picture, and a band taken from it would flip while nothing
@@ -1553,27 +1553,28 @@ change: it picks the winners of the band of `zoom` for the current
 contents, style and settings, and does nothing when they are already
 those.
 
-- Every frame calls it first, in `DatasetManager.beginFrame`, before the
+- Every draw calls it first, in `DatasetManager.beginFrame`, before the
   drape plan and before any layer draws, for every visible dataset. A
-  layer that draws in the same frame reads the rows the frame draws. The
+  layer that draws in the same draw reads the rows drawn in it. The
   draw of a dataset calls it again with the same zoom, which finds
-  nothing to do (and keeps a draw without a frame, in a test, correct)
+  nothing to do (and keeps a dataset draw made outside a draw of the map,
+  in a test, correct)
 - A change made by the host picks the winners at once, with the zoom of
-  the most recent frame (the zoom of the map before the first frame):
+  the most recent draw (the zoom of the map before the first draw):
   replaced contents, a new style, new zoom factors, new settings. The next
-  frame draws them
-- A hidden dataset keeps its rows; the first frame that draws it again
+  draw shows them
+- A hidden dataset keeps its rows; the first draw that shows it again
   brings them up to date
 
 The winners of up to six bands are kept per (feature generation, style
 revision), least recently used first out, so the selection runs once per
 band crossed and going back to a band costs nothing. The selection of a
 band over 260,000 points takes 20 to 75 ms (more winners, more work), more
-than a frame, so while the page is idle the bands within two of the
+than a draw takes, so while the page is idle the bands within two of the
 current one are picked ahead. `CollisionSelection` advances a selection
 in slices of `SELECTION_SLICE_ROWS` (4,096) rows, under 2 ms each at that
 size, and stops at the deadline of the idle period
-(`CollisionThinningState.prefetch`). A frame that needs a band being
+(`CollisionThinningState.prefetch`). A draw that needs a band being
 picked ahead finishes that selection instead of starting over. A
 selection sliced this way gives the same winners as one run in one go.
 
@@ -1590,7 +1591,7 @@ is never modified once it is in use, so its identity names it:
   one has its point part rebuilt (`rebuildChunkPoints`). When its rows are
   drawn alike in both masks (it has no point, or none of its points
   changed) it only records the new mask
-- This rebuild runs in every frame, while the camera moves as well: until
+- This rebuild runs in every draw, while the camera moves as well: until
   it does, the points of another band would be drawn at this scale (after
   a large zoom out, piled up into a solid patch). It costs a walk over the
   rows of the chunk plus the packing of the points it draws, which the
@@ -1598,12 +1599,12 @@ is never modified once it is in use, so its identity names it:
   260,000 points in view to a band with a few thousand winners, on the
   CPU. The other rebuilds keep waiting for the camera to stop
 
-So the frame that switches the rows draws exactly those rows, and the
+So the draw that switches the rows draws exactly those rows, and the
 queries (`collectDrawnRows`, `getVisibleFeatureIds`, `getThinningStats`)
-and the hit test answer for them from the start of that frame. Every
+and the hit test answer for them from the start of that draw. Every
 change of the drawn rows advances `getDrawnRowsRevision()`, a number a
 listener can keep its derived data under. The `change` event (`reason:
-'thinning'`) of a band entered by a frame is sent after that frame (a
+'thinning'`) of a band entered by a draw is sent after that draw (a
 microtask), so no listener runs in the middle of drawing; a change made by
 the host sends it at once, like its other events.
 `DatasetImpl.drawnRowsChanged` is the one place that handles a change of
@@ -1666,7 +1667,7 @@ screen
 - The shaders do not branch on the projection for the vertices themselves.
   What changes on the globe is how finely the edges are cut before they
   are projected (below). When code must know the projection,
-  `projectionTransition` of the projection data tells the frame (above 0
+  `projectionTransition` of the projection data tells the view drawn (above 0
   while the globe is drawn), and `map.getProjection()` the setting
 
 The offset-mode computation that keeps precision at high zoom, and how it
@@ -1693,7 +1694,7 @@ the path of maplibre's layers.
   the zoom). A cell changes only when the zoom crosses an integer above 6
   for fills and 9 for lines
 - `updateGlobeSubdivision` records the cells on the terrain context at the
-  start of each frame from `projectionTransition` and the zoom, and
+  start of each draw from `projectionTransition` and the zoom, and
   advances `globeGeneration` when they change (the globe switched on or
   off, a cell halved)
 - Fills and their outlines are cut on the CPU through the subdivision of
@@ -1735,7 +1736,7 @@ Hit testing tests the same paths (`dispatcher/hit-test/globe-shape.ts`,
 see [Hit testing](./hit-testing.md)). The midpoint handle of an edge is the
 point on the edge as drawn halfway across in longitude
 (`mercatorMidpoint`), on the Mercator map as on the globe; so is the
-anchor of the rotation handle on the top edge of the frame.
+anchor of the rotation handle on the top edge of the selection box.
 
 ## Terrain
 
@@ -1747,7 +1748,7 @@ depends on are in [maplibre coupling](./maplibre-coupling.md).
 
 ### Detection
 
-There is no API to turn it on. Every frame the custom layer looks at the
+There is no API to turn it on. On every draw the custom layer looks at the
 map's terrain and takes the terrain path when there is one. The core holds
 no knowledge of DEM sources or encodings; the DEM passed to `setTerrain` is
 the host's business. A map without terrain draws exactly as if terrain
@@ -1761,15 +1762,15 @@ The DEM tiles in view are baked into one texture, the DEM atlas
 (`view/terrain/dem-atlas.ts`), that every vertex shader reads. The bake
 renders into its own framebuffer, so it runs in the `prerender` of the
 first slot, in maplibre's offscreen pass: switching framebuffers during the
-main pass makes a tiled GPU store and reload the whole frame. A frame whose
+main pass makes a tiled GPU store and reload the whole view. A draw whose
 `prerender` did not run resolves the terrain state in `render` instead.
 
 A bake is skipped when nothing it reads changed (layout, tiles and their
 DEM textures, matrices, dimension, exaggeration). maplibre rewrites DEM
 textures in place while tiles load, which that key cannot see, so it is
 trusted only after `map.areTilesLoaded()`; until then the atlas is baked
-every frame. The atlas stays bound to its own texture unit
-(`TERRAIN_ATLAS_TEXTURE_UNIT`) for the whole frame, and the drape binds its
+every draw. The atlas stays bound to its own texture unit
+(`TERRAIN_ATLAS_TEXTURE_UNIT`) for the whole draw, and the drape binds its
 DEMs elsewhere, so later drawings never read elevations from a wrong
 texture.
 
@@ -1803,7 +1804,7 @@ pixel is inside a polygon or how far it is from a line.
   float texture (`drape/binning.ts`). A tile over
   `DRAPE_MAX_EDGES_PER_TILE` (120,000) edges is degraded without being
   built. The index is kept per tile, and only tiles newly in view are
-  built, within a per-frame budget (`drape/bin-store.ts`)
+  built, within a per-draw budget (`drape/bin-store.ts`)
 - The element order and the index are swapped as a pair and never mixed,
   and drawing continues with the previous pair while a new one is built.
   Anything that takes an element number (the ranges of the slots, below)
@@ -1821,14 +1822,14 @@ pixel is inside a polygon or how far it is from a line.
   parent tile's DEM until the real one arrives
 - Datasets are collected into the same element list as the
   Store (`collectDrapeElements`, `drape/pass.ts`). Once the drape has been
-  usable for `DRAPE_STABLE_FRAMES` frames, the planner hands their
+  usable for `DRAPE_STABLE_FRAMES` draws, the planner hands their
   polygons and lines over (`setDrapedDatasets`), and those datasets
   stop baking them into their chunk batches. The hand-over is released at
   once when the drape stops being usable for a lasting reason, and kept
   through transient ones, so batches are not re-baked back and forth
 - A layer held as rows is not collected: it is drawn from its rows alone,
   at its place in the order (`isLayerDrawnFromRows`, the one test the
-  layer loop of the frame and the drape share). The features of its rows
+  layer loop of the draw and the drape share). The features of its rows
   held (selected, dragged) are what is read of the rows, not another path
   of drawing them, so a row held is drawn once
 - Dashed and dotted lines and outlines are elements too. Their style
@@ -1838,7 +1839,7 @@ pixel is inside a polygon or how far it is from a line.
   the dashes are. The fill and the selection highlight read the whole
   outline (see [Dashes](#dashes))
 - Each element carries a factor source (`u_source_factors`, opacity and
-  size, written every frame). Source 0 is neutral, the
+  size, written every draw). Source 0 is neutral, the
   datasets come next (their `zoomScale`), and then each Store layer
   (its opacity; `drapeLayerSource`). A change of those factors does not
   rebuild the index. A layer past `DRAPE_MAX_SOURCES` (64) has its
@@ -1847,7 +1848,7 @@ pixel is inside a polygon or how far it is from a line.
 
 ### Choosing the path
 
-`DrapePlanner.planFrame()` decides per frame whether the drape is used, and
+`DrapePlanner.planFrame()` decides per draw whether the drape is used, and
 records the reason in the diagnostic values (`getTerrainDrapeDebug`):
 `terrain-off`, `wide-zoom`, `no-drapeable-features`, `vertex-budget`,
 `cell-overflow`, `no-dem-tiles`, `stale-plan`, `texture-limit` or `ok`.
@@ -1874,10 +1875,10 @@ slope-proportional `polygonOffset`. The step is bounded above by the ground
 size of a DEM pixel and below by a fixed length on screen, and changes with
 the zoom.
 
-In a frame that uses the drape, what it cannot paint is drawn after it by
+In a draw that uses the drape, what it cannot paint is drawn after it by
 this path: the geometry being drawn, the features of extensions, and the
 datasets not yet handed over to the drape. It is drawn in the same depth
-state as in a frame without the drape (`applySegmentDepthState`), so the
+state as in a draw without the drape (`applySegmentDepthState`), so the
 terrain hides it behind a mountain in both. The end-to-end test
 `src/e2e/terrain-occlusion.e2e.test.ts` checks the pixels behind a peak and
 in front of it for solid and dashed lines and outlines, of the Store and of
@@ -1943,12 +1944,12 @@ it, so an occluded symbol is drawn as a ghost (`occlusion.ts`,
 selected. The test steps along the segment from the camera to the anchor
 (up to 24 samples) and checks whether the ground rises above it; maplibre's
 `depthAtPoint` is avoided because it waits on `readPixels`. Ghosting is
-applied only on paths redrawn every frame, never baked into retained
+applied only on paths redrawn on every draw, never baked into retained
 batches, and the editing UI of the current selection is never ghosted.
 
 ### Terrain state per instance
 
-The terrain frame state, generation counters and caches live in a
+The terrain state of each draw, generation counters and caches live in a
 `TerrainContext` (`terrain/context.ts`), one per custom layer. There is no
 current context: renderers receive it at construction, extension renderers
 through `RenderContext.terrain`, and plugins project through
@@ -1964,8 +1965,8 @@ How an extension draws its own symbols on terrain is described in the
 ### How GPU resources are held
 
 Renderers create their VAOs and buffers once and only upload data
-(`bufferData`, `texSubImage2D`) and draw per frame; no `createBuffer` or
-`delete*` per draw. StrokeRenderer, AnchoredOutlineRenderer,
+(`bufferData`, `texSubImage2D`) and draw on every draw of the map; no
+`createBuffer` or `delete*` per draw. StrokeRenderer, AnchoredOutlineRenderer,
 FillShaderManager, PolygonBatchRenderer and SDFPolygonRenderer keep their
 VAO and buffers
 (index buffers bound into the VAO), SDFLineRenderer keeps its coordinate
@@ -1977,23 +1978,23 @@ allocation beyond it fails and leaves a texture that samples as zeros, so a
 part of the map would silently vanish. A line batch's coordinate texture is
 never built past it, images are scaled down, and the drape lays out its
 tables in rows of 2,048 texels; when a table would still be too tall, or an
-allocation fails, the frame is drawn without the drape (`texture-limit`).
+allocation fails, the view is drawn without the drape (`texture-limit`).
 
-### Uniforms written once per frame
+### Uniforms written once per draw of the map
 
 Retained mode issues one draw per visible chunk, so rewriting the same
-projection and camera uniforms per chunk would spend the frame on setup
+projection and camera uniforms per chunk would spend the draw time on setup
 alone. Each renderer remembers the value it wrote last and skips
 `gl.uniform*` when it is unchanged.
 
 - Matrices and camera values are compared by the reference of the
   `ProjectionData` or `OffsetUniforms` they come from. Both are recreated
-  every frame, so the same reference means the same contents
+  every draw of the map, so the same reference means the same contents
 - Scalars (canvas size, `u_origin_shift`, zoom,
   widths) are compared by value; `u_origin_shift` is the one that really
   changes between chunks
-- `beginRenderFrame()` (`view/shaders/frame.ts`) advances a frame number at
-  the entry of `render`, and a new frame number discards the remembered
+- `beginRenderFrame()` (`view/shaders/frame.ts`) advances a draw number at
+  the entry of `render`, and a new draw number discards the remembered
   values, in case maplibre ever reuses an object with new contents
 - Relinking a program discards them too
 
@@ -2019,7 +2020,7 @@ them opens a run around them (`RetainedDrawRun`,
   the rows held as columns call `forget()` before they draw features at
   once (the immediate mode, custom types, companions) and `end()` after the
   layer, in a `finally`; both unbind the vertex array left bound and forget
-  everything, and a new frame forgets it as well
+  everything, and a new draw of the map forgets it as well
 - A batch of rows points its instance attributes at the first instance of a
   range only when they point elsewhere (the vertex array keeps the place it
   points at)
@@ -2051,7 +2052,7 @@ to physical pixels when drawn. All reads of the ratio go through
   created with and a window moved to another display
 - Renderers and datasets receive the source itself
   (`PixelRatioInput = number | (() => number) | PixelRatioProvider`), so a
-  change reaches every reader from the next frame on. Extension renderers
+  change reaches every reader from the next draw on. Extension renderers
   get the resolved value as `RenderContext.screen.pixelRatio`
 - `rendering.renderScale` of the options multiplies a factor on top
   (default 1). A host that shows the map scaled down uses it to shrink what
@@ -2075,7 +2076,7 @@ of the stroke width is how the CPU side declares which kind a width is.
 ### Alpha blending
 
 `applyDrawBlendState()` (`view/layer/blend.ts`) sets up blending for the
-frame:
+draw:
 
 ```text
 blendFuncSeparate(SRC_ALPHA, ONE_MINUS_SRC_ALPHA, ONE, ONE_MINUS_SRC_ALPHA)
@@ -2085,7 +2086,7 @@ The renderers output straight (non-premultiplied) colors, so RGB composites
 with `SRC_ALPHA` / `ONE_MINUS_SRC_ALPHA`. Every factor of a color (its
 opacity, the opacity of the layer, the coverage of its edges) goes to its
 alpha only: a factor put into RGB as well is applied twice by the blending.
-The lines, the outlines and the frames of the selection follow it as the
+The lines, the outlines and the selection boxes follow it as the
 fills and the points do, whether a feature of a built-in type or a renderer
 of a custom type draws them. The maplibre canvas is
 premultiplied, and its alpha is the opacity composited so far. Using the RGB
@@ -2094,7 +2095,7 @@ drop to 6.25%, and where the canvas is still transparent translucent fills
 would all but vanish. `ONE` for the alpha source gives the correct
 `a + (1 - a) * dst.a`, and RGB is unchanged.
 
-The custom layer owns this state for the whole frame. Anyone else may
+The custom layer owns this state for the whole draw. Anyone else may
 change the blend function only during its own drawing and must restore it
 with `applyDrawBlendState()` (exported for extension renderers) before
 returning. Because an extension may not, the core calls
@@ -2102,7 +2103,7 @@ returning. Because an extension may not, the core calls
 external code: custom feature renderers (in `render.ts` and in the
 immediate chunks of the retained cache), `drawForLayer` and `drawVertices`
 of layer-aware overlays, and `draw` of overlay renderers. Otherwise
-everything drawn later in the frame would be composited wrongly.
+everything drawn later in the draw would be composited wrongly.
 
 ## Display order
 
@@ -2199,7 +2200,7 @@ sequence into segments and draws each with its own custom layer, a slot
   (`slotLayerId`). `SlotManager` follows changes of `layerOrder`,
   creates and removes slots, and adds and removes them from the map
 - Each slot's `render` passes only its own segment to `renderLayers`. The
-  preparation of the frame (projection, terrain state, shaders, viewport)
+  preparation of the draw (projection, terrain state, shaders, viewport)
   is done once by the first slot and shared
 - `below-store` datasets are drawn by the first slot and `above-store`
   datasets by the last
@@ -2207,9 +2208,9 @@ sequence into segments and draws each with its own custom layer, a slot
   drawn by the last slot. Nothing in the foreground can be placed above a
   separator
 - `draw.getLayerStack()` returns the segments and the layer ids of the
-  frames, and the `layerStack.changed` event announces changes. The host moves each
-  native layer to just after the slot of the preceding segment; placing
-  native layers is the host's job
+  slots, and the `layerStack.changed` event announces changes. The host
+  moves each native layer to just after the slot of the preceding segment;
+  placing native layers is the host's job
 - After a style change (`style.load`), the slots go back on top of the
   map in their order (`attachSlotLayers`, `view/layer/attach.ts`). A
   diffed `setStyle` leaves custom layers in place and adds the new
@@ -2240,7 +2241,7 @@ The drape keeps one element list and one tile index for all slots. The
 elements follow the stacking sequence, and the start of each entry
 (`entryStarts`) is recorded at dataset time, so a slot paints only the
 range of its segment with the same ranged drawing used for images. For the
-few frames after the sequence changes, while the index being drawn does not
+few draws after the sequence changes, while the index being drawn does not
 match the current sequence, the first slot paints every element.
 
 ## Invariants
@@ -2253,7 +2254,7 @@ These are easy to break and hard to notice:
 - Do not add reasons for invalidation to `StoreRetainedCache.applyChanges`
   that the order between layers could trigger
 - Do not discard chunk batches in `setOrder` or `moveDataset`
-- Do not call `getLayerOrder()` more often within a frame
+- Do not call `getLayerOrder()` more often within a draw
 - Do not remove the `hasAny()` short-circuit of the datasets, which
   keeps the cost on maps without datasets at zero
 - Restore the blend state after every call into external code, and write

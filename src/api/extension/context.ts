@@ -9,7 +9,7 @@
  *
  * The three contexts of what is read on the screen:
  *
- * - {@link ScreenContext}: the conversion between the map and the screen alone, in the frame
+ * - {@link ScreenContext}: the conversion between the map and the screen alone, in the view
  *   drawn last. Every context has it (`ctx.screen`); a type receives it alone where it answers
  *   from the feature only (`footprint`)
  * - {@link PointContext}: a point on the screen being tested, with its position, its tolerance
@@ -66,9 +66,9 @@ export interface NameGenerator {
 }
 
 /**
- * The conversion between positions on the map and points on the screen, in the frame drawn last:
- * what is drawn, also when the camera moved since (by code, between two frames). While a frame is
- * drawn, it answers for that frame. Before the first frame, it answers for the camera of the map.
+ * The conversion between positions on the map and points on the screen, in the view drawn last:
+ * what is drawn, also when the camera moved since (by code, between two draws). While a view is
+ * drawn, it answers for that view. Before the first draw, it answers for the camera of the map.
  */
 export interface ScreenContext {
   /**
@@ -79,7 +79,7 @@ export interface ScreenContext {
   /** The position drawn at a point on the screen, on the terrain when it is on. */
   unproject(point: ScreenPoint): Position;
   /**
-   * The length on the ground that a CSS pixel spans at a position, in the frame drawn last.
+   * The length on the ground that a CSS pixel spans at a position, in the view drawn last.
    *
    * The engine turns the sizes in pixels of what it draws on the map for the current view (the
    * margin of the selection box, the distance of the rotate handle, the move of an arrow key)
@@ -87,8 +87,8 @@ export interface ScreenContext {
    * feature (maplibre's sphere, of a radius of 6,371,008.8 m), so they tilt and turn with the map
    * and keep their place on it. It follows the projection: on Web Mercator the scale at the
    * latitude of the position, on the globe the scale at the center of the view, and the mix of
-   * the two while the map goes from one to the other. It is read from the frame drawn last, so a
-   * hit test between two frames finds what that frame drew; before the first frame it is the
+   * the two while the map goes from one to the other. It is read from the view drawn last, so a
+   * hit test between two draws finds what that view drew; before the first draw it is the
    * scale of the camera on Web Mercator. On a map turned flat and untilted, without terrain, a
    * length of `n * metersPerPixel(position)` meters is `n` pixels on the screen; tilted, on the
    * globe away from the center, or over terrain, it is foreshortened as the map is.
@@ -96,7 +96,7 @@ export interface ScreenContext {
    * @returns The meters of a CSS pixel
    */
   metersPerPixel(lngLat: Position): number;
-  /** The zoom of the frame */
+  /** The zoom of the view */
   readonly zoom: number;
   /** The pixel ratio the drawing uses */
   readonly pixelRatio: number;
@@ -256,13 +256,13 @@ export interface ModeContext extends ExtensionContext {
  * here, in `excludeIds`.
  */
 export interface PointContext {
-  /** The point on the screen, in the frame drawn last */
+  /** The point on the screen, in the view drawn last */
   point: ScreenPoint;
   /** The position on the map drawn at the point */
   lngLat: Position;
   /** How far from the point a hit or a candidate may be, in pixels */
   tolerancePx: number;
-  /** The conversion between the map and the screen, in the frame drawn last */
+  /** The conversion between the map and the screen, in the view drawn last */
   screen: ScreenContext;
   /**
    * The IDs of the features this reading leaves out, absent when it leaves out none: for a hit
@@ -279,10 +279,10 @@ export interface PointContext {
  * the selection.
  */
 export interface HandleContext {
-  /** The conversion between the map and the screen, in the frame drawn last */
+  /** The conversion between the map and the screen, in the view drawn last */
   readonly screen: ScreenContext;
   /**
-   * The selection box of the feature, as the library draws and hits it, in the frame drawn last
+   * The selection box of the feature, as the library draws and hits it, in the view drawn last
    * (what `draw.rendered.getSelectionBox` answers): its footprint with the margin of
    * `selectionStyle.box` added, so not the footprint itself. A handle placed on it sits on the box
    * drawn. `null` when the feature has nothing to draw, and for the handles of no feature

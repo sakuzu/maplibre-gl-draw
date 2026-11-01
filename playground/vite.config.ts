@@ -15,7 +15,7 @@ export default defineConfig({
     chunkSizeWarningLimit: 3000,
   },
   server: {
-    // A port of its own, kept: the pages of the examples frame the playground from this address
+    // A port of its own, kept: the pages of the examples embed the playground from this address
     port: 3300,
     strictPort: true,
     open: true,

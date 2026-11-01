@@ -43,7 +43,7 @@ export interface OffsetUniforms {
   /** The Mercator coordinates of the center, at 64-bit precision */
   centerMercator: [number, number];
   /**
-   * The center in clip space as the frame projects it, at 64-bit precision: on Web Mercator,
+   * The center in clip space as the view projects it, at 64-bit precision: on Web Mercator,
    * on the globe, or both mixed by the transition between them
    */
   projectionCenter: [number, number, number, number];
@@ -208,7 +208,7 @@ float dem_elevation_meters(vec2 mercatorOffset) {
  * approach is the one of deck.gl's project module (see THIRD_PARTY_NOTICES.md for the source and
  * the copyright notice): no absolute coordinate is held in the shader, only offsets, and the
  * center in clip space is computed on the CPU in float64 and added at the end. The offset is
- * turned into the offset of the space the matrix of the frame takes (the Mercator plane, the unit
+ * turned into the offset of the space the matrix of the view takes (the Mercator plane, the unit
  * sphere of the globe, or both mixed by the transition) with only the operations GLSL ES 3.00
  * bounds the error of (`view/shaders/center-projection.ts`), so at every zoom a position is a few
  * roundoffs of its distance from the center off.

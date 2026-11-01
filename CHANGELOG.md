@@ -81,8 +81,8 @@ writing it. Its changes are listed after those of 3.0.0.
   `bulk` and `previousBulk` in `DocumentChange.selection` and
   `selection.changed`). The verbs of `draw.selection` act on them, the
   select mode moves, rotates and resizes them by the state of their rows
-  and writes them once let go, over several frames (each frame writes the
-  rows that fit in its time, the others drawn moved until then, and
+  and writes them once let go, over several draws of the map (each draw
+  writes the rows that fit in its time, the others drawn moved until then, and
   `drag.ended` comes after the last), and the arrow keys write the moves
   of a key held once.
 - `selection.setAll(filter)`, `selection.count(filter)`,
@@ -126,7 +126,7 @@ writing it. Its changes are listed after those of 3.0.0.
   size would take (`estimate`, `DocumentSize`, `MemoryBytes`), so that a
   page stops what would pass the limit before it starts.
 - `draw.captureImage(options)` (`CaptureImageOptions`): an image of the map
-  as it is drawn, taken in its next frame without the selection and the
+  as it is drawn, taken in its next draw without the selection and the
   shape being drawn.
 - In `/kasane`: `FeatureTables.showInPlace(owner, features)`, features
   drawn in the places of rows for this client only, without writing them
@@ -161,21 +161,21 @@ writing it. Its changes are listed after those of 3.0.0.
   for development and tests, the instance checks that its state agrees
   with itself (the ids of the rows and the places they are read at, the
   selection, and what the drawing keeps), once each notification of the
-  store has gone out and once each frame is drawn. A check that fails
+  store has gone out and once each draw of the map is done. A check that fails
   throws `DrawError` with the code `invalid-state`, unless it is allowed
   to fail; each failure is given to `onFailure`.
 - `ScreenContext.metersPerPixel(lngLat)`: the meters a CSS pixel spans on
-  the ground at a position, in the frame drawn last, as the engine lays
+  the ground at a position, in the view drawn last, as the engine lays
   the margin of the selection box and the distance of the rotate handle
   on the map with it, so that an extension can lay what it draws around a
   feature for the current view the same way.
 - `draw.rendered` (`RenderedResource`), the features as this client draws
   them: `get` and `getMany` read them with the sketches applied over the
   document, `getSelectionBox` gives the selection box of a feature (its
-  footprint with the margin) in the frame drawn last, and
+  footprint with the margin) in the view drawn last, and
   `getDraggedRows`, experimental, the rows dragged in bulk. The event
-  `rendered.changed` tells the features changed, once the frame that
-  draws them is drawn, at most once a frame. What is drawn around a
+  `rendered.changed` tells the features changed, once the draw of the map
+  that draws them is done, at most once a draw. What is drawn around a
   feature reads it there.
 - `FeatureTypeDefinition.footprint(feature, ctx)`: what a feature of a
   type covers, from which the library makes its selection box (draws it,
@@ -204,7 +204,7 @@ writing it. Its changes are listed after those of 3.0.0.
   the library draws it.
 - `drawHandles(feature, handles, ctx)` of a feature type and of a handle
   provider: the extension draws its custom handles there, with the render
-  context of the frame. The library calls it exactly when it shows them
+  context of the draw. The library calls it exactly when it shows them
   (one feature selected, the document editable, the feature not locked,
   no other handle dragged), so an extension tests none of it.
 - `FeatureTypeDefinition.defaultStyle`: the look of the features of a
@@ -333,22 +333,22 @@ writing it. Its changes are listed after those of 3.0.0.
   are `selectMode` (`onFeatureClick`, `onFeatureDoubleClick`), and an
   exclusive interaction is `exclusive`, whose `isActive()` (was
   `isBusy`) it requires, with `finish`, `cancel` and `container`.
-- The values of the screen are those of the frame drawn last:
+- The values of the screen are those of the view drawn last:
   `ScreenContext.project`, `unproject`, `zoom` and `metersPerPixel`, the
   heights of `ctx.terrain`, and the position of a pointer event, which is
   the position drawn under the pointer (the inverse of the projection of
-  the frame, found from the position maplibre gives with its current
-  camera). While a frame is drawn, they are those of that frame. What is
-  grabbed is what was drawn, also when the camera moved after the frame;
+  that view, found from the position maplibre gives with its current
+  camera). While a view is drawn, they are those of that view. What is
+  grabbed is what was drawn, also when the camera moved after the draw;
   the positions `draw.drawing` is given are used as they are.
-- `RenderContext.screen`, the screen of the frame being drawn (the same
+- `RenderContext.screen`, the screen of the view being drawn (the same
   object as `ctx.screen` of an extension), in place of
   `RenderContext.zoom` and `RenderContext.pixelRatio`, which it has.
-- The values of the GPU of a frame are out of the main entry: the render
+- The values of the GPU of a view are out of the main entry: the render
   context no longer has `shader`, `offset` and `projection`, and
   `viewUniforms(ctx)` of `/webgl` gives them (`ViewUniforms`), with
   `offsetUniformsAt(ctx, position)`, the offsets from a position in the
-  frame of a render context. `ShaderData` and `OffsetUniforms` are types
+  view of a render context. `ShaderData` and `OffsetUniforms` are types
   of `/webgl`.
 - `TerrainAnchors` is `TerrainSurface`, the surface of the terrain:
   `occlusionOpacity` (was `ghostOpacity`), `elevation` and `generation`.

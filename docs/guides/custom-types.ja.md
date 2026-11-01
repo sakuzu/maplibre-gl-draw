@@ -123,10 +123,10 @@ const ends = feature.style.routeEnds === 'dot' ? 'dot' : 'none';
 - `opacity` は、地物のレイヤーの不透明度で、0 から 1 です。共有の描画器
   はこれを自分では掛けません。渡す不透明度に掛けてください。そうすると、
   地物がレイヤーと一緒に薄くなります
-- `screen` は、描いているコマでの位置と画面の点の変換 (`project`、
+- `screen` は、描いている画面での位置と画面の点の変換 (`project`、
   `unproject`、`metersPerPixel`) と、そのズーム `zoom` とピクセル比
-  `pixelRatio` です。プラグインの `ctx.screen` と同じもので、コマを
-  描き終えると最後に描いたコマについて答えます。`window.devicePixelRatio`
+  `pixelRatio` です。プラグインの `ctx.screen` と同じもので、描き
+  終えると最後に描いた画面について答えます。`window.devicePixelRatio`
   ではなく `screen.pixelRatio` を使い、ほかから持ち込んだ画面ではなく、
   この欄の画面を読んでください
 - `appliedStyle(feature)` は、地物を描く見た目で、
@@ -134,7 +134,7 @@ const ends = feature.style.routeEnds === 'dot' ? 'dot' : 'none';
   ([型の見た目](#型の見た目) を参照)
 - `terrain` は地面の高さです ([地形](#地形) を参照)
 - `gl` は WebGL の文脈で、自分でシェーダーを書く描画器のためのもの
-  です。そうした描画器は、コマの GPU の値を `/webgl` で読みます
+  です。そうした描画器は、描いている画面の GPU の値を `/webgl` で読みます
   ([自分のシェーダー](#自分のシェーダー) を参照)
 
 面を塗り、縁を描く型です。
@@ -218,7 +218,7 @@ draw.extensions.featureTypes.add({
 - `defaultStyle` を宣言しない型は、これまでどおり `style` の設定の既定から
   始まります
 - 地物の見た目は 1 度だけ組み立てられ、地物と一緒に取っておかれます。
-  同じコマでも次のコマでも、地物、そのレイヤーの規則、`style` の設定の
+  同じ描く 1 回でも次の 1 回でも、地物、そのレイヤーの規則、`style` の設定の
   どれかが変わるまでは、読み直すと同じオブジェクトが返ります。描く地物
   ごとに読み、オブジェクトは変えないでください
 
@@ -491,7 +491,7 @@ const reshapeRoute: FeatureTypeDefinition = {
 ```
 
 `drawHandles(feature, handles, ctx)` は、`handles` が返した `custom` の
-ハンドルと、コマの描画の文脈 (共有の描画器と `ctx.screen`) を受けます。
+ハンドルと、描く 1 回の描画の文脈 (共有の描画器と `ctx.screen`) を受けます。
 ライブラリーは選択を描いた後、その地物のハンドルを見せるときにだけ呼び、
 見せるものが無いときは呼びません。型を外すと、描くものも一緒に消えます。
 
@@ -776,7 +776,7 @@ draw.extensions.companionProviders.add(halo);
 
 共有の描画器は、線、面、点の印を描きます。それ以外のものは、描画器が
 `ctx.gl` で自分のシェーダーをコンパイルして描きます。位置は、
-`/webgl` の `viewUniforms(ctx)` が渡すコマの GPU の値、`shader` (地図の
+`/webgl` の `viewUniforms(ctx)` が渡す描いている画面の GPU の値、`shader` (地図の
 投影の関数)、`projection`、`offset` (精度を落とさずにカメラの近くを
 描くための表示の中心) で決めます。`offsetUniformsAt(ctx, position)` は、
 ほかの位置からの差の値を渡します。中心から遠い形を、その形の位置の

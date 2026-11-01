@@ -18,7 +18,7 @@ measure on your own data.
 
 A dataset is built for tens of thousands of features.
 A dataset of 50,000 polygons with a graduated style rule, panned and
-zoomed on a machine with a GPU, drew within the frame time of a 120 Hz
+zoomed on a machine with a GPU, drew within the draw time of a 120 Hz
 display. With a provider, only the features of the visible extent are
 held, so the total size of the source does not matter.
 
@@ -86,28 +86,28 @@ areas in view. `cacheGeometry: false` builds the geometry of the document
 again on every drawing. The picture is the same; use it only to rule out
 the kept geometry when you look into a drawing problem.
 
-Work that does not fit in one frame is spread over the following
-frames, so the page never stalls while the picture fills in, much like
-tiles arriving: the geometry of a dataset is built within a time budget
-per frame, a polygon of a dataset with a very large number of vertices
-(more than 10,000) is filled in over several frames (its outline appears
-first and its fill when the work ends), and so is the preparation of the
-terrain.
+Work that does not fit in one draw of the map is spread over the
+following draws, so the page never stalls while the picture fills in,
+much like tiles arriving: the geometry of a dataset is built within a
+time budget per draw, a polygon of a dataset with a very large number of
+vertices (more than 10,000) is filled in over several draws (its outline
+appears first and its fill when the work ends), and so is the
+preparation of the terrain.
 
-## Complete frames for a picture
+## Complete draws for a picture
 
-A map that draws a frame to read the picture back, for printing, a
-thumbnail or an export, sets `timeSlicing: false`. Every frame is then
-complete: the work above is done in the frame that needs it, however
-long that frame takes. Keep the default on an interactive map.
+A map that draws to read the picture back, for printing, a thumbnail or
+an export, sets `timeSlicing: false`. Every draw of the map is then
+complete: the work above is done in the draw that needs it, however long
+that draw takes. Keep the default on an interactive map.
 
-A complete frame is not yet a complete picture: the tiles and the DEM of
-the map arrive asynchronously, and some work cannot be done in a frame
+A complete draw is not yet a complete picture: the tiles and the DEM of
+the map arrive asynchronously, and some work cannot be done in one draw
 at all (the answer of a provider, an overlay renderer that prepares its
-resources over several frames). `draw.hasPendingWork()` tells whether
+resources over several draws). `draw.hasPendingWork()` tells whether
 such work remains. The map fires `idle` even when this library asked for
-another frame during the last one, so wait for `idle` and then for
-`hasPendingWork()` to be false after a frame:
+another draw during the last one, so wait for `idle` and then for
+`hasPendingWork()` to be false after a draw:
 
 ```ts
 async function whenPictureComplete(): Promise<void> {
@@ -117,14 +117,14 @@ async function whenPictureComplete(): Promise<void> {
 }
 ```
 
-The collision thinning of a dataset needs nothing: the frame decides
+The collision thinning of a dataset needs nothing: each draw decides
 which points it draws from the zoom it draws with.
 
 A picture of the map as it is on the screen needs no second map:
-`draw.captureImage` takes it in the next frame the map draws, without
+`draw.captureImage` takes it in the next draw of the map, without
 the selection, its handles and the shape being drawn, and scales it to
 the size asked for (a size of another shape is covered by the map and
-cut at its middle). It costs one frame, so it suits a thumbnail of a
+cut at its middle). It costs one draw, so it suits a thumbnail of a
 document too large to draw a second time:
 
 ```ts
@@ -237,11 +237,11 @@ drawing on the GPU through ANGLE's Metal backend, with a map of 1280 ×
 in four runs.
 
 - `draw.document.load` of the 208,073 features took 0.64 to 0.66 s
-- Panning, zooming and turning the map for 10 s drew frames of 8.4 ms
+- Panning, zooming and turning the map for 10 s took draws of 8.4 ms
   at the median and 13 ms at the 90th percentile, 19 ms at the slowest
 
 Clicks and arrow keys were measured from the input event to the next
-frame after the change was drawn, in three runs.
+draw after the change, in three runs.
 
 - A click on a feature showed it selected about 60 ms after the click
   (medians of 61, 65 and 66 ms over 20 clicks each, 47 to 91 ms in all)
@@ -263,7 +263,7 @@ you import. Everything in the main entry, minified, is about 600 kB
 
 The repository has two measurement pages for contributors: one pans and
 zooms over a dataset, the other over a document loaded with
-`n` features, and both report the frame times. How to run them and their
+`n` features, and both report the draw times. How to run them and their
 URL parameters are in [bench/README.md](../../bench/README.md). Run them
 on the devices your users have; the numbers depend on the GPU and the
 browser.

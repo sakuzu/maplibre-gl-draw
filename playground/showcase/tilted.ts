@@ -5,7 +5,7 @@
  * The tilted scene: the drawing of the overview seen with pitch and bearing
  *
  * The same document as the overview, with the camera tilted and turned so that north is not
- * at the top. The area with a hole is selected, as in the overview, so that its frame and
+ * at the top. The area with a hole is selected, as in the overview, so that its selection box and
  * vertex handles show on the tilted map.
  */
 

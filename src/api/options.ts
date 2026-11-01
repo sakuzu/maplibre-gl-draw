@@ -505,10 +505,11 @@ export interface DebugOptions {
    * Checks that the state of the instance agrees with itself: the ids of the rows and the places
    * they are read at, the selection, the marks the rows are written with, and the features kept
    * of rows, once each notification of the Store has gone out (once per outermost transaction),
-   * and what is drawn, once a frame is drawn (what the drawing of the rows keeps against a
-   * drawing made again from the rows once every few frames; while those checks run, the drawing
-   * keeps a copy of what it writes to the GPU). `true` runs every check. A check that fails throws `DrawError` with the code `invalid-state`, from the write or
-   * the transaction that ended (or from the frame), unless it is one of the checks allowed to fail.
+   * and what is drawn, once each draw of the map is done (what the drawing of the rows keeps
+   * against a drawing made again from the rows once every few draws; while those checks run, the
+   * drawing keeps a copy of what it writes to the GPU). `true` runs every check. A check that
+   * fails throws `DrawError` with the code `invalid-state`, from the write or the transaction
+   * that ended (or from the draw), unless it is one of the checks allowed to fail.
    */
   checks?: boolean | ConsistencyCheckOptions;
 }

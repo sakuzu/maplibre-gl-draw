@@ -18,7 +18,7 @@ can be read in any order after it.
    API
 2. [rendering.md](./rendering.md): the WebGL2 pipeline, the renderers,
    retained batches, datasets, terrain, draw order and
-   frames
+   slots
 3. [hit-testing.md](./hit-testing.md): the two-stage hit test, the z-order
    walk, the per-type tests and hits on datasets
 4. [coordinate-precision.md](./coordinate-precision.md): offset

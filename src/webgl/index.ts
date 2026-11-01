@@ -7,7 +7,7 @@
  * Use it only when a custom feature type or an overlay needs a shader of its own. The
  * {@link maplibre-gl-draw!RenderContext | RenderContext} a renderer receives already carries
  * the shared renderers of lines, areas and point markers, and most renderers need nothing
- * more. This entry holds the values of the GPU of the frame a render context draws
+ * more. This entry holds the values of the GPU of the view a render context draws
  * ({@link viewUniforms}, {@link offsetUniformsAt}), the GLSL of the projection, the uniforms
  * that go with it, the quad shader, and the rules the shared renderers follow for dashes and
  * terrain. The parts that draw on the terrain take the render context of the draw call (or its

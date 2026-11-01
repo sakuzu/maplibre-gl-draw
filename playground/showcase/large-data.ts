@@ -7,7 +7,7 @@
  * Every building, street and place of the scene is an editable feature of the Store, loaded
  * with `draw.document.load()`: each one can be selected, moved and reshaped. The tilted camera shows
  * them near at hand, where they can be told apart, and far into the distance, where they
- * become a texture. A park in the foreground is selected, with its frame and vertex handles.
+ * become a texture. A park in the foreground is selected, with its selection box and vertex handles.
  *
  * The city is made up. The streets form a bent grid of blocks, and each block is filled with
  * lots and the houses on them; a few blocks are parks, and a few houses have a shop or a

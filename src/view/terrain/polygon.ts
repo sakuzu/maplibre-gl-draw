@@ -35,7 +35,7 @@ import {
 import { tilingSignature } from './tiling.js';
 
 /**
- * Returns the subdivision step of the terrain mesh for the current frame, to cut a shape so
+ * Returns the subdivision step of the terrain mesh for the current view, to cut a shape so
  * that it follows the terrain (pass it to `densifyPath`).
  *
  * @param terrain - The render context of the draw call, or its `terrain`

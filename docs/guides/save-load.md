@@ -612,7 +612,7 @@ draw.document.setShown(null);
 `writer.addRowBlocks(layerId, rowBlocks)` takes the row blocks in at once
 and tells their rows created, as any write of the store does
 (`change.rows`). Taking a row block in costs little next to building it; a
-caller that adds many keeps the frames going by adding a few at a time, as
+caller that adds many keeps the draws going by adding a few at a time, as
 `copyTableStore` copies a block at a time.
 
 To draw the document apart, in a map of its own (a print), copy it into a
