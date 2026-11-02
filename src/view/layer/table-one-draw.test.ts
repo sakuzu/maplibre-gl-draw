@@ -909,3 +909,115 @@ describe('the check of the classification of a row written in place', () => {
     expect(setUp.internals.deltaRowCount()).toBe(1);
   });
 });
+
+describe('the rows drawn at once out of view', () => {
+  /** The box of the view of the tests */
+  const VIEW = { minX: 0, minY: 0, maxX: 1, maxY: 1 };
+
+  /**
+   * Images (drawn at once) scattered over the layer in its order, `inView` of them in the view
+   * and the others far from it, each with a companion
+   */
+  function scattered(count: number, inView: number, seed: number) {
+    const random = seededRandom(seed);
+    const at = new Set<number>();
+    while (at.size < inView) at.add(Math.floor(random() * count));
+    const features: Feature[] = [];
+    for (let i = 0; i < count; i++) {
+      const position = at.has(i)
+        ? [0.05 + random() * 0.9, 0.05 + random() * 0.9]
+        : [5 + random() * 95, 5 + random() * 45];
+      features.push(feature(`i${i}`, 'Image', position));
+    }
+    // One group, so the rows are one chunk drawn at once that meets the view
+    const setUp = setup(features, count);
+    const companions: string[] = [];
+    setUp.deps.companions.register({
+      id: 'ring',
+      has: () => true,
+      draw: (f) => {
+        companions.push(f.id);
+      },
+      hitTest: () => null,
+      onCompanionClick: () => undefined,
+    });
+    const inViewIds = features.filter((_, i) => at.has(i)).map((f) => f.id);
+    return { ...setUp, features, companions, inViewIds };
+  }
+
+  it('looks at the rows in view only, as many whatever the number of the rows of the layer', () => {
+    const visited: number[] = [];
+    for (const count of [2_000, 20_000]) {
+      const { renderer, frame, companions, inViewIds } = scattered(count, 40, 31);
+      // The features of the rows are kept over the first frames
+      frame(VIEW);
+      frame(VIEW);
+      companions.length = 0;
+      const { immediate } = frame(VIEW);
+      // The rows in view, in their order, each with its companion
+      expect(immediate).toEqual(inViewIds);
+      expect(companions).toEqual(inViewIds);
+      expect(renderer.atOnceStats.drawn).toBe(40);
+      visited.push(renderer.atOnceStats.visited);
+      // Without a view, every row
+      expect(frame().immediate.length).toBe(count);
+    }
+    expect(visited).toEqual([40, 40]);
+  });
+
+  it('looks at no row of a chunk out of view, and draws the rows of a moving set where they are moved', () => {
+    const { renderer, frame, internals, features, inViewIds } = scattered(2_000, 40, 32);
+    frame(VIEW);
+    frame(VIEW);
+    // A view where no row is
+    const { immediate } = frame({ minX: -50, minY: -50, maxX: -40, maxY: -40 });
+    expect(immediate).toEqual([]);
+    expect(renderer.atOnceStats.visited).toBe(0);
+    // A row far away moved into the view, a row in view moved out of it
+    const away = features.find((f) => !inViewIds.includes(f.id)) as Feature;
+    const [ax, ay] = (away.geometry as { coordinates: number[] }).coordinates;
+    const ids = internals.ids;
+    internals.states.setMoving(Int32Array.of(ids.handleOf(away.id)), 1);
+    internals.states.setTranslation(1, 0.5 - ax, 0.5 - ay);
+    internals.states.setMoving(Int32Array.of(ids.handleOf(inViewIds[0])), 2);
+    internals.states.setTranslation(2, 30, 30);
+    const moved = frame(VIEW).immediate;
+    expect(moved).toContain(away.id);
+    expect(moved).not.toContain(inViewIds[0]);
+    expect(moved.length).toBe(40);
+  });
+
+  it('draws a row written into the view, and leaves out a row written out of it', () => {
+    const { renderer, frame, table, features, inViewIds } = scattered(2_000, 40, 33);
+    frame(VIEW);
+    frame(VIEW);
+    const group = table.groupAt(0);
+    const write = (id: string, position: number[]): void => {
+      const row = features.findIndex((f) => f.id === id);
+      const written = writeRowGeometry(
+        table,
+        group,
+        row,
+        { type: 'Point', coordinates: position },
+        planarCoordinates,
+      );
+      renderer.rowsWritten('layer', [
+        {
+          group: group.handle,
+          row,
+          handle: group.data.handles[row],
+          what: ROW_WRITE_GEOMETRY,
+          ...written,
+          keys: [],
+        },
+      ]);
+    };
+    const away = features.find((f) => !inViewIds.includes(f.id)) as Feature;
+    write(away.id, [0.5, 0.5]);
+    write(inViewIds[1], [60, 30]);
+    const { immediate } = frame(VIEW);
+    expect(immediate).toContain(away.id);
+    expect(immediate).not.toContain(inViewIds[1]);
+    expect(immediate.length).toBe(40);
+  });
+});

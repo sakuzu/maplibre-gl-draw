@@ -27,7 +27,8 @@
  *
  * In both, the rows that cannot be in a chunk (images, custom types, features with companions,
  * shapes that are not instanced, and by kind the dashed lines) are drawn at once, from features
- * made from the rows and kept up to a number.
+ * made from the rows and kept up to a number, the rows in view only: a chunk of them out of view
+ * is skipped, and the rows in view of a chunk of many rows are found in an index of their boxes.
  *
  * The chunks are built over the frames within a budget (`view/retained/chunk-scheduler.ts`),
  * and a chunk invalidated (a new rendering pixel ratio, a new style rule) keeps drawing until the
@@ -96,6 +97,7 @@ import {
   transformRolesOf,
   transformValuesOf,
 } from '../../store/transform-roles.js';
+import { buildPackedRTree, type PackedRTree, searchPackedRTree } from '../../table/packed-rtree.js';
 import type { FeatureCompanionRegistry } from '../feature-companion.js';
 import type { GpuLedger } from '../gpu-ledger.js';
 import {
@@ -136,6 +138,7 @@ import {
 } from '../retained/chunk-scheduler.js';
 import { anchorElevationMeters } from '../terrain/anchor.js';
 import type { TerrainContext } from '../terrain/context.js';
+import type { DrapeBounds } from '../terrain/drape/geometry.js';
 import { isTerrainCameraMoving } from '../terrain/state.js';
 import { type MercatorRect, mercatorX, mercatorY } from '../terrain/tessellation.js';
 import type { BulkFramesRenderer, PointFrameExtent } from '../ui/bulk-frames.js';
@@ -202,6 +205,9 @@ export const IMMEDIATE_CACHE_LIMIT = 50_000;
 
 /** The rows packed between two looks at the clock */
 const SLICE_ROWS = 512;
+
+/** From how many rows a chunk drawn at once finds its rows in view in an index of their boxes */
+const IMMEDIATE_INDEX_FROM = 64;
 
 /** The vertices of polygons packed and written between two looks at the clock */
 const SLICE_POLYGON_VERTICES = 2_000;
@@ -352,6 +358,16 @@ interface ImmediateRowsChunk {
   features: Array<Feature | null> | null;
   /** The rows filled so far */
   filled: number;
+  /**
+   * The union of the bboxes of its rows (null when no row has one): it only widens as its rows
+   * are written, so a row moved out of it is not culled with it
+   */
+  bounds: BoundingBox | null;
+  /**
+   * The bboxes of its rows in a spatial index, made when the chunk has many rows and the view
+   * holds only a part of it (dropped when one of its rows is written by its geometry)
+   */
+  index: PackedRTree | null;
 }
 
 /** A chunk of the drawing by kind */
@@ -597,6 +613,16 @@ export class TableLayerRenderer {
   private readonly translations = new Float32Array((MOVE_SETS + 1) * 2);
   /** The rotation or resize of each moving set (one array of the renderer, as the translations) */
   private readonly transforms: Array<EnuEdit | null> = new Array(MOVE_SETS + 1).fill(null);
+  /**
+   * The regions the view sees the rows of each moving set from, moved back by its translation and
+   * its edit (null for a set that does not move), for the layer being drawn
+   */
+  private readonly setViews: Array<BoundingBox[] | null> = new Array(MOVE_SETS + 1).fill(null);
+  /**
+   * The rows the drawing at once looked at in the frame, and of them the rows in view it drew (for
+   * the tests and the measurements: the work of a frame follows the rows in view)
+   */
+  readonly atOnceStats = { visited: 0, drawn: 0 };
   /** The time of the last pass before the main one, and of the drawing of the frames (ms) */
   private prerenderMs = 0;
   private drawMs = 0;
@@ -1226,6 +1252,8 @@ export class TableLayerRenderer {
     this.prepared = false;
     this.lastDrawMs = this.drawMs;
     this.drawMs = 0;
+    this.atOnceStats.visited = 0;
+    this.atOnceStats.drawn = 0;
     this.budget = createChunkBuildBudget(this.options.buildBudgetMs ?? TABLE_BUILD_BUDGET_MS);
     this.pending = false;
     // A new pixel ratio: the batches by kind hold their widths and are built again (drawn until
@@ -1388,6 +1416,7 @@ export class TableLayerRenderer {
     }
 
     const bounds = frame.bounds ?? WORLD;
+    setViewsOf(this.translations, this.transforms, bounds, this.setViews);
     const settled = !isTerrainCameraMoving(this.options.terrain);
     // The surface the rows are cut for, once per frame
     if (this.surfaceFrame !== this.frameCount) {
@@ -1847,6 +1876,15 @@ export class TableLayerRenderer {
             ? rowFeatureToRead(cache.tables.readContext, cache.layer?.id ?? '', group, row)
             : null;
         }
+        if ((write.what & ROW_WRITE_GEOMETRY) !== 0) {
+          // Its extent widens, and its rows are found in view by their boxes as written
+          const b = group.data.rowBounds;
+          const at = row * 4;
+          if (!Number.isNaN(b[at])) {
+            chunk.bounds = widenBounds(chunk.bounds, b[at], b[at + 1], b[at + 2], b[at + 3]);
+          }
+          chunk.index = null;
+        }
       } else if (chunk.type === 'retained') {
         // The batches by kind hold their rows: built again (drawn until then)
         if (drawn) this.invalidateChunk(chunk, true);
@@ -2254,6 +2292,11 @@ export class TableLayerRenderer {
       const kept = byRange.get(rangeKey(range));
       if (!kept) return this.makeChunk(range);
       if (!oneDraw) this.invalidateChunk(kept, true);
+      if (kept.type === 'immediate') {
+        // The rows in view are found by their boxes as they are now
+        kept.bounds = range.bounds;
+        kept.index = null;
+      }
       return [kept];
     });
     // The chunks of the last cut not kept are released (they were never drawn)
@@ -2281,7 +2324,9 @@ export class TableLayerRenderer {
   /** A chunk for a range of rows (none for a range without a bbox) */
   private makeChunk(range: OrderedChunkRange): TableChunk[] {
     if (range.kind === 'immediate') {
-      return [{ type: 'immediate', range, features: null, filled: 0 }];
+      return [
+        { type: 'immediate', range, features: null, filled: 0, bounds: range.bounds, index: null },
+      ];
     }
     if (!range.bounds) return [];
     const state = {
@@ -2670,6 +2715,18 @@ export class TableLayerRenderer {
    * per version of the state of its group)
    */
   private holdsMovedRows(chunk: TableChunk, group: RowGroup): boolean {
+    const sets = this.movingSetsOf(chunk, group);
+    for (let set = 1; set <= MOVE_SETS; set++) {
+      if ((sets & (1 << set)) !== 0 && this.transforms[set]) return true;
+    }
+    return false;
+  }
+
+  /**
+   * The moving sets the rows of a chunk are in, as bits by set (read once per version of the
+   * state of its group)
+   */
+  private movingSetsOf(chunk: TableChunk, group: RowGroup): number {
     let known = this.chunkMoves.get(chunk);
     if (!known || known.version !== group.stateVersion) {
       const state = group.gpuState;
@@ -2680,10 +2737,7 @@ export class TableLayerRenderer {
       known = { version: group.stateVersion, sets };
       this.chunkMoves.set(chunk, known);
     }
-    for (let set = 1; set <= MOVE_SETS; set++) {
-      if ((known.sets & (1 << set)) !== 0 && this.transforms[set]) return true;
-    }
-    return false;
+    return known.sets;
   }
 
   /** Draws the chunks of the group being drawn for a drawing as they are built, in view */
@@ -3044,23 +3098,102 @@ export class TableLayerRenderer {
       this.pending = true;
     }
 
+    // A chunk out of view draws nothing (the rows of the delta within it are drawn)
+    const shown = this.immediateInView(chunk, group);
+    const kept = (i: number): Feature | null =>
+      chunk.features && i - from < chunk.filled ? chunk.features[i - from] : null;
     // Drawn in parts at the places of the rows of the delta within the chunk
     let part = from;
     for (let at = this.nextInsert(); ; at = this.nextInsert()) {
       const end = at !== null && at > part && at < to ? at : to;
-      // On the drape, a break: what is drawn at once comes after the drape painted under it
-      if (this.painter.active) {
-        const rank = this.drape.rankOfRow(layerId, group, part);
-        if (rank) this.painter.breakAt(rank, rowsBox(group, part, end), TABLE_DRAPE_POINT_REACH_PX);
+      if (shown) {
+        const rows = this.rowsInView(chunk, group, part, end);
+        // On the drape, a break: what is drawn at once comes after the drape painted under it
+        if (this.painter.active && (rows === null || rows.length > 0)) {
+          const rank = this.drape.rankOfRow(layerId, group, part);
+          const box = rows === null ? rowsBox(group, part, end) : boxOfRows(group, rows);
+          if (rank) this.painter.breakAt(rank, box, TABLE_DRAPE_POINT_REACH_PX);
+        }
+        this.drawAtOnce(group, part, end, kept, rows);
+        this.recordRange('immediate', part, end);
       }
-      this.drawAtOnce(group, part, end, (i) =>
-        chunk.features && i - from < chunk.filled ? chunk.features[i - from] : null,
-      );
-      this.recordRange('immediate', part, end);
       if (end >= to) break;
       this.drawInserts(end);
       part = end;
     }
+  }
+
+  /**
+   * Whether a chunk drawn at once of the group being drawn meets the view: its extent, or for the
+   * rows of a moving set in it, the extent the view sees them from
+   */
+  private immediateInView(chunk: ImmediateRowsChunk, group: RowGroup): boolean {
+    const bounds = (this.pass.frame as TableLayerFrame).bounds ?? WORLD;
+    const box = chunk.bounds;
+    if (!box) return false;
+    if (bounds === WORLD || meets(box, bounds)) return true;
+    const sets = this.movingSetsOf(chunk, group);
+    for (let set = 1; set <= MOVE_SETS; set++) {
+      if ((sets & (1 << set)) === 0) continue;
+      for (const view of this.setViews[set] ?? NO_VIEWS) if (meets(box, view)) return true;
+    }
+    return false;
+  }
+
+  /**
+   * The rows `[from, to)` of a chunk drawn at once that may be in view, in their order, found by
+   * their boxes in the index of the chunk: for a chunk of many rows that the view does not hold
+   * whole (null otherwise, when the rows of the range are walked)
+   */
+  private rowsInView(
+    chunk: ImmediateRowsChunk,
+    group: RowGroup,
+    from: number,
+    to: number,
+  ): number[] | null {
+    const bounds = (this.pass.frame as TableLayerFrame).bounds ?? WORLD;
+    const box = chunk.bounds;
+    const { range } = chunk;
+    if (bounds === WORLD || !box || range.to - range.from < IMMEDIATE_INDEX_FROM) return null;
+    // The moving sets of its rows that move
+    let sets = 0;
+    const of = this.movingSetsOf(chunk, group);
+    for (let set = 1; set <= MOVE_SETS; set++) {
+      if ((of & (1 << set)) !== 0 && this.setViews[set]) sets |= 1 << set;
+    }
+    const held =
+      box.minX >= bounds.minX &&
+      box.maxX <= bounds.maxX &&
+      box.minY >= bounds.minY &&
+      box.maxY <= bounds.maxY;
+    if (held && sets === 0) return null;
+    chunk.index ??= buildPackedRTree(group.data.rowBounds.subarray(range.from * 4, range.to * 4));
+    const found: number[] = [];
+    const search = (view: BoundingBox): void => {
+      searchPackedRTree(
+        chunk.index as PackedRTree,
+        view.minX,
+        view.minY,
+        view.maxX,
+        view.maxY,
+        found,
+      );
+    };
+    search(bounds);
+    for (let set = 1; set <= MOVE_SETS; set++) {
+      if ((sets & (1 << set)) === 0) continue;
+      for (const view of this.setViews[set] ?? NO_VIEWS) search(view);
+    }
+    found.sort((a, b) => a - b);
+    const out: number[] = [];
+    let last = -1;
+    for (const local of found) {
+      const row = range.from + local;
+      if (row === last || row < from || row >= to) continue;
+      out.push(row);
+      last = row;
+    }
+    return out;
   }
 
   /**
@@ -3069,19 +3202,22 @@ export class TableLayerRenderer {
    * the run, and some of it draws without the run
    *
    * @param kept The feature kept for a row (null when none is)
+   * @param candidates The rows of `[from, to)` that may be in view, in their order (every row of
+   *   it when omitted)
    */
   private drawAtOnce(
     group: RowGroup,
     from: number,
     to: number,
     kept: (row: number) => Feature | null,
+    candidates?: readonly number[] | null,
   ): void {
     const pass = this.pass;
     const frame = pass.frame as TableLayerFrame;
     const tables = pass.tables as FeatureTablesInternals;
     const bounds = frame.bounds ?? WORLD;
-    const rowBounds = group.data.rowBounds;
     const deps = pass.deps as StoreRetainedDrawDeps;
+    const stats = this.atOnceStats;
     const features: Feature[] = [];
     // The rows an extension draws from the rows, consecutive ones of one renderer at a time
     let drawer: FeatureTypeRenderer | null = null;
@@ -3112,13 +3248,21 @@ export class TableLayerRenderer {
       deps.restoreBlendState?.();
       handles.length = 0;
     };
-    for (let row = from; row < to; row++) {
+    const count = candidates ? candidates.length : to - from;
+    for (let k = 0; k < count; k++) {
+      const row = candidates ? (candidates[k] as number) : from + k;
+      stats.visited++;
       const state = group.state[row];
       if ((state & STATE_HIDDEN_MASK) !== 0) continue;
+      // A row out of view is not drawn, nor its companion (a row of a moving set where the view
+      // sees it from)
+      if (!rowHasGeometry(group, row)) continue;
+      const set = (state & STATE_MOVE_MASK) >> STATE_MOVE_SHIFT;
+      if (bounds !== WORLD && !this.rowShown(group, row, set, bounds)) continue;
+      stats.drawn++;
       let feature = kept(row);
       const rows = this.rowsDrawerOf(group, row, feature);
       if (rows) {
-        if (!rowHasGeometry(group, row) || !rowInView(rowBounds, row, bounds)) continue;
         // The features before are drawn first, and the rows of another renderer
         drawFeatures();
         if (rows !== drawer) drawRows();
@@ -3126,14 +3270,10 @@ export class TableLayerRenderer {
         handles.push(group.data.handles[row]);
         continue;
       }
-      if (!feature) {
-        // A row not kept is made when it is in view
-        if (!rowHasGeometry(group, row) || !rowInView(rowBounds, row, bounds)) continue;
-        feature = rowFeatureToRead(tables.readContext, pass.layerId, group, row);
-      }
+      // A row not kept is made when it is in view
+      feature ??= rowFeatureToRead(tables.readContext, pass.layerId, group, row);
       drawRows();
       drawer = null;
-      const set = (state & STATE_MOVE_MASK) >> STATE_MOVE_SHIFT;
       features.push(
         set > 0
           ? movedFeature(
@@ -3149,6 +3289,20 @@ export class TableLayerRenderer {
     drawFeatures();
     drawRows();
     if (ended) (pass.renderers as RetainedRendererSet).run?.begin();
+  }
+
+  /**
+   * Whether a row is in view: its bbox, or for a row of a moving set that moves, its bbox where
+   * the view sees the set from
+   *
+   * @param set The moving set of the row (0 for none)
+   */
+  private rowShown(group: RowGroup, row: number, set: number, bounds: BoundingBox): boolean {
+    const rowBounds = group.data.rowBounds;
+    const views = set > 0 ? this.setViews[set] : null;
+    if (!views) return rowInView(rowBounds, row, bounds);
+    for (const view of views) if (rowInView(rowBounds, row, view)) return true;
+    return false;
   }
 
   /**
@@ -3640,6 +3794,38 @@ function anyRowsDrawer(renderers: ReadonlyMap<string, unknown>): boolean {
 }
 
 /**
+ * The regions the view sees the rows of each moving set from (into `out`, by set): the view moved
+ * back by the translation of the set, then by its edit as `movedViewsOf` moves it back; null for a
+ * set that does not move, and for every set when the view is the whole world
+ */
+function setViewsOf(
+  translations: Float32Array,
+  transforms: ReadonlyArray<EnuEdit | null>,
+  view: BoundingBox,
+  out: Array<BoundingBox[] | null>,
+): void {
+  for (let set = 1; set <= MOVE_SETS; set++) {
+    const dLng = translations[set * 2];
+    const dLat = translations[set * 2 + 1];
+    const edit = transforms[set] ?? null;
+    if (view === WORLD || (dLng === 0 && dLat === 0 && !edit)) {
+      out[set] = null;
+      continue;
+    }
+    const shifted: BoundingBox = {
+      minX: view.minX - dLng,
+      minY: view.minY - dLat,
+      maxX: view.maxX - dLng,
+      maxY: view.maxY - dLat,
+    };
+    const views: BoundingBox[] = [];
+    if (edit) movedBackViews(edit, shifted, views);
+    else views.push(shifted);
+    out[set] = views;
+  }
+}
+
+/**
  * The regions the view sees the rows of the moving sets from: the view moved back by the edit of
  * each set (for a scaling, by its factors and by its size), as the extents of its corners, the
  * middles of its sides and its center (into `out`)
@@ -3652,27 +3838,53 @@ function movedViewsOf(
   out.length = 0;
   if (view === WORLD) return;
   for (const edit of transforms) {
-    if (!edit) continue;
-    const back = inverseEnuEdit(edit);
-    for (const uniform of edit.kind === 'scale' ? [false, true] : [false]) {
-      let minX = Infinity;
-      let minY = Infinity;
-      let maxX = -Infinity;
-      let maxY = -Infinity;
-      for (const fx of [0, 0.5, 1]) {
-        for (const fy of [0, 0.5, 1]) {
-          const x = view.minX + (view.maxX - view.minX) * fx;
-          const y = Math.max(-90, Math.min(90, view.minY + (view.maxY - view.minY) * fy));
-          const p = moveEnuPosition(back, [x, y], uniform);
-          minX = Math.min(minX, p[0] as number);
-          minY = Math.min(minY, p[1] as number);
-          maxX = Math.max(maxX, p[0] as number);
-          maxY = Math.max(maxY, p[1] as number);
-        }
-      }
-      if (minX <= maxX && minY <= maxY) out.push({ minX, minY, maxX, maxY });
-    }
+    if (edit) movedBackViews(edit, view, out);
   }
+}
+
+/** The regions a view is seen from before an edit (appended to `out`), as `movedViewsOf` */
+function movedBackViews(edit: EnuEdit, view: BoundingBox, out: BoundingBox[]): void {
+  const back = inverseEnuEdit(edit);
+  for (const uniform of edit.kind === 'scale' ? [false, true] : [false]) {
+    let minX = Infinity;
+    let minY = Infinity;
+    let maxX = -Infinity;
+    let maxY = -Infinity;
+    for (const fx of [0, 0.5, 1]) {
+      for (const fy of [0, 0.5, 1]) {
+        const x = view.minX + (view.maxX - view.minX) * fx;
+        const y = Math.max(-90, Math.min(90, view.minY + (view.maxY - view.minY) * fy));
+        const p = moveEnuPosition(back, [x, y], uniform);
+        minX = Math.min(minX, p[0] as number);
+        minY = Math.min(minY, p[1] as number);
+        maxX = Math.max(maxX, p[0] as number);
+        maxY = Math.max(maxY, p[1] as number);
+      }
+    }
+    if (minX <= maxX && minY <= maxY) out.push({ minX, minY, maxX, maxY });
+  }
+}
+
+/**
+ * The Mercator box of some rows of a group, for the breaks of the drape (null for none)
+ *
+ * @param rows The rows, in their order
+ */
+function boxOfRows(group: RowGroup, rows: readonly number[]): DrapeBounds | null {
+  let out: DrapeBounds | null = null;
+  for (const row of rows) {
+    const box = rowsBox(group, row, row + 1);
+    if (!box) continue;
+    out = out
+      ? {
+          minX: Math.min(out.minX, box.minX),
+          minY: Math.min(out.minY, box.minY),
+          maxX: Math.max(out.maxX, box.maxX),
+          maxY: Math.max(out.maxY, box.maxY),
+        }
+      : box;
+  }
+  return out;
 }
 
 /**

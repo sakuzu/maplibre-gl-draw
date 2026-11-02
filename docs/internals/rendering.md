@@ -2010,6 +2010,17 @@ kinds. The rows of a chunk are cut for the surface (`table-surface.ts`,
   that came or went. A point being moved reads the DEM atlas where it is
   drawn until it is written. Points stand on the ground also where the
   fills and lines are drawn flat
+- The rows drawn at once (images, custom types, rows with a companion)
+  are drawn only in view, so the work of a frame follows the rows in
+  view, not the rows of the layer: a chunk of them whose extent misses the
+  view is skipped, and in a chunk of `IMMEDIATE_INDEX_FROM` (64) rows or
+  more that the view holds only in part, the rows in view are found in a
+  packed R-tree of their boxes, made when first needed and dropped when a
+  row of the chunk is written by its geometry (the extent of the chunk
+  only widens then). A row is in view by its bbox, and a row of a moving
+  set by its bbox where the view sees the set from (moved back by its
+  translation and its edit); a row out of view draws neither itself nor
+  its companion
 
 #### The drape of the rows
 
