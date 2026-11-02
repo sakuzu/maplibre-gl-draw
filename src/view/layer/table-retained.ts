@@ -8,12 +8,22 @@
  * the GPU chunks of a group (`table-partition.ts`) in theirs. A chunk outside the view is
  * skipped, which keeps the order since a chunk is a run of the order. It is drawn one of two ways:
  *
- * - in one draw (`renderers/rows/`), on a flat map: a chunk holds rows of every kind, points,
- *   lines, dashed lines, polygons and the points an extension draws with pictures, and is drawn
- *   in one draw whatever kinds its rows are; it ends only where a row is drawn at once
- * - by kind, elsewhere (the terrain, the globe): a chunk is a run of rows of one kind, and
- *   polygons, solid lines and points are retained batches of the renderers of their kinds
- *   (`table-collect.ts`)
+ * - in one draw (`renderers/rows/`), on a flat map, on the terrain and on the globe: a chunk
+ *   holds rows of every kind, points, lines, dashed lines, polygons and the points an extension
+ *   draws with pictures, and is drawn in one draw whatever kinds its rows are; it ends only where
+ *   a row is drawn at once
+ * - by kind, while the program of the drawing in one draw is not ready (and where it cannot be
+ *   made): a chunk is a run of rows of one kind, and polygons, solid lines and points are
+ *   retained batches of the renderers of their kinds (`table-collect.ts`)
+ *
+ * On the terrain and on the globe the chunks drawn in one draw hold their rows cut for the
+ * surface (`table-surface.ts`): when the surface changes (a step of the mesh, the tiles of the
+ * terrain, the cell of the globe) the rows of the chunks in view whose fingerprint changed are
+ * packed again into their places a row at a time within the budget, the chunk drawn as it is
+ * until then, and a chunk with a row that does not fit is built again. The points of a chunk take
+ * the elevation of the ground under them from the heights of the chunk, written on the CPU with
+ * the elevation the hit testing uses and read again under the tiles of the terrain that came or
+ * went, within the budget.
  *
  * In both, the rows that cannot be in a chunk (images, custom types, features with companions,
  * shapes that are not instanced, and by kind the dashed lines) are drawn at once, from features
@@ -42,7 +52,12 @@
 import type { ProjectionData } from 'maplibre-gl';
 import type { FeatureTypeRenderer } from '../../extension/renderers.js';
 import type { FeatureTablesInternals } from '../../feature-table/feature-tables.js';
-import { type LayerTable, type RowGroup, widenBounds } from '../../feature-table/layer-table.js';
+import {
+  geometryAt,
+  type LayerTable,
+  type RowGroup,
+  widenBounds,
+} from '../../feature-table/layer-table.js';
 import { rowFeatureToRead, rowHasGeometry, rowType } from '../../feature-table/row-read.js';
 import {
   GPU_STATE_BULK,
@@ -118,8 +133,10 @@ import {
   type RetainedChunkJob,
   type RetainedChunkState,
 } from '../retained/chunk-scheduler.js';
+import { anchorElevationMeters } from '../terrain/anchor.js';
 import type { TerrainContext } from '../terrain/context.js';
 import { isTerrainCameraMoving } from '../terrain/state.js';
+import { type MercatorRect, mercatorX, mercatorY } from '../terrain/tessellation.js';
 import type { BulkFramesRenderer, PointFrameExtent } from '../ui/bulk-frames.js';
 import { drawImmediateFeatures, type StoreRetainedDrawDeps } from './store-retained-immediate.js';
 import {
@@ -137,8 +154,10 @@ import {
   RowsDraft,
   type RowsPackContext,
   RowsStyles,
+  type RowsSurface,
   resolveRowStyle,
   rowCreatedZoom,
+  rowSurfaceKey,
   writeLineRow,
   writePointRow,
   writePolygonRow,
@@ -151,6 +170,7 @@ import {
   rowHasCompanion,
   type TableRunKind,
 } from './table-partition.js';
+import { TableSurface } from './table-surface.js';
 
 /**
  * The time the builds of the batches of the rows may take in one frame (ms)
@@ -297,6 +317,19 @@ interface OneDrawRowsChunk extends RetainedChunkState<RowsGpuChunk> {
   readonly range: OrderedChunkRange;
 }
 
+/**
+ * How the rows of a chunk drawn in one draw are cut for the surface: the generation of the
+ * surface they were last cut or checked for, the fingerprint of the cut of each row
+ * (`rowSurfaceKey`), and the row the check against a new surface goes on from
+ */
+interface ChunkCut {
+  generation: number;
+  /** The generation the check in progress is for */
+  target: number;
+  readonly keys: Int32Array;
+  at: number;
+}
+
 /** A chunk of rows drawn at once */
 interface ImmediateRowsChunk {
   readonly type: 'immediate';
@@ -351,6 +384,8 @@ interface GroupCache {
   /** Whether a row is marked as selected in bulk, and the version of the state it was read at */
   bulkMarked: boolean;
   bulkMarkVersion: number;
+  /** The generation of the surface the rows of a delta were packed for (-1 for a group) */
+  surfaceGeneration: number;
 }
 
 /** What is kept for a layer */
@@ -464,6 +499,8 @@ interface FreshDrawing {
   readonly styles: RowsStyles;
   /** What a row is packed with (its pictures given by `classify`) */
   readonly context: RowPackContext;
+  /** The surface the rows are cut for */
+  readonly surface: RowsSurface | null;
   /** The kind a row is drawn with in a drawing, and the source of its pictures */
   classify(
     group: RowGroup,
@@ -512,6 +549,14 @@ export class TableLayerRenderer {
   private record: TableDrawRecord[] | null = null;
   /** Whether the layers are drawn by kind even where they can be drawn in one draw */
   private byKind = false;
+  /** The surface the rows are cut for, decided once per frame */
+  private readonly surfaces = new TableSurface();
+  /** The frame the surface was decided in */
+  private surfaceFrame = -1;
+  /** How the rows of each chunk drawn in one draw are cut */
+  private readonly chunkCuts = new WeakMap<RowsGpuChunk, ChunkCut>();
+  /** The generation of the elevations the heights of each chunk were written with */
+  private readonly heightGenerations = new WeakMap<RowsGpuChunk, number>();
   /** Whether the uploads of the frame were written before its main pass */
   private prepared = false;
   private readonly translations = new Float32Array((MOVE_SETS + 1) * 2);
@@ -619,14 +664,23 @@ export class TableLayerRenderer {
     };
     this.oneDrawHost = {
       isStale: () => false,
-      startJob: (state, origin) =>
-        oneDrawJob(
-          pass.group as RowGroup,
+      startJob: (state, origin) => {
+        // The chunk is cut for the surface of the frame the build starts in, and its points
+        // get their elevations with it (written to the GPU with the chunk)
+        const generation = this.surfaces.generation;
+        const group = pass.group as RowGroup;
+        return oneDrawJob(
+          group,
           state.range,
           normalizeOrigin(origin),
           this.packContext(pass.groupCache as GroupCache),
           (pass.renderers as RetainedRendererSet).rows as RowsRenderer,
-        ),
+          (chunk, keys) => {
+            this.chunkCuts.set(chunk, { generation, target: generation, keys, at: 0 });
+            this.writeHeights(group, chunk, null);
+          },
+        );
+      },
       adoptJob: () => {},
       disposeBatches: (chunk) => pass.renderers?.rows?.disposeChunk(chunk),
       draw: (state) => {
@@ -709,7 +763,7 @@ export class TableLayerRenderer {
         const held = groupCache.oneDraw;
         if (!this.isSettled(cache, groupCache, held)) continue;
         for (const chunk of (held as GroupChunks<OneDrawChunk>).chunks) {
-          if (chunk.type !== 'rows' || !chunk.batches) continue;
+          if (chunk.type !== 'rows' || !chunk.batches || !this.cutIsCurrent(chunk)) continue;
           const copy = settledCopy(chunk, copies);
           const written = copies.writtenOf(chunk.batches);
           if (!copy || !written || written.size === 0) continue;
@@ -795,6 +849,7 @@ export class TableLayerRenderer {
     return {
       styles: new RowsStyles(slots, new RowsPalette(), pixelRatio, tables.styles),
       context: { slots, strings: tables.strings, pixelRatio, terrain: this.options.terrain },
+      surface: this.surfaces.surface,
       classify: (group, row, oneDraw) => {
         let source: RowSpriteSource | undefined;
         const kind = classifyRow(group, row, {
@@ -812,6 +867,15 @@ export class TableLayerRenderer {
         return { kind, source };
       },
     };
+  }
+
+  /**
+   * Whether the rows of a chunk are cut for the surface of the frame (a chunk being cut again is
+   * passed over by the checks)
+   */
+  private cutIsCurrent(chunk: OneDrawRowsChunk): boolean {
+    const cut = chunk.batches ? this.chunkCuts.get(chunk.batches) : undefined;
+    return !cut || cut.generation === this.surfaces.generation;
   }
 
   /** The groups of a layer the checks read: its row groups, and its delta when it is packed */
@@ -905,7 +969,8 @@ export class TableLayerRenderer {
       if (problems.length >= CHECK_PROBLEMS) return;
       const { from, to } = chunk.range;
       covered.fill(1, from, to);
-      const copy = chunk.type === 'rows' ? settledCopy(chunk, copies) : null;
+      const copy =
+        chunk.type === 'rows' && this.cutIsCurrent(chunk) ? settledCopy(chunk, copies) : null;
       if (copy) {
         for (let local = 0; local < copy.rows; local++) {
           this.compareRow(layerId, cache, fresh, group, copy, local, problems);
@@ -968,6 +1033,7 @@ export class TableLayerRenderer {
     collectRow(group, row, 0, draft, copy.origin, {
       ...fresh.context,
       rowsStyles: fresh.styles,
+      surface: fresh.surface,
       spriteSourceOf: (r) => (r === row ? source : undefined),
     });
     const made = draft.finish(copy.origin, fresh.styles.palette, source ?? null);
@@ -1146,9 +1212,9 @@ export class TableLayerRenderer {
   /**
    * Draws a layer held as rows, in the order of its rows
    *
-   * On a flat map, where the renderer of the drawing in one draw is there and its program is
-   * ready, every chunk of rows is drawn in one draw; elsewhere (the terrain, the globe) the rows
-   * are drawn with the renderers of their kinds. A group whose chunks of one drawing are not
+   * Where the renderer of the drawing in one draw is there and its program is ready, every chunk
+   * of rows is drawn in one draw, on a flat map, on the terrain and on the globe; until then the
+   * rows are drawn with the renderers of their kinds. A group whose chunks of one drawing are not
    * built yet in view is drawn with the chunks of the other while they are, so nothing goes
    * missing when the drawing changes, and the chunks of the other drawing are released once
    * those of the drawing used are built.
@@ -1165,11 +1231,9 @@ export class TableLayerRenderer {
   ): void {
     const renderers = deps.renderers;
     const rows = renderers.rows ?? null;
-    const terrain = this.options.terrain;
-    const flat = !terrain.renderState.active && terrain.globeGrids === null;
-    const oneDrawUsable = rows !== null && flat && rows.ready;
+    const oneDrawUsable = rows?.ready === true;
     // The program compiles: frames are asked for until it is ready
-    if (rows !== null && flat && !oneDrawUsable && rows.compiling) this.pending = true;
+    if (rows !== null && !oneDrawUsable && rows.compiling) this.pending = true;
     const byKindUsable = canDrawRows(renderers);
     let drawing: Drawing;
     if (oneDrawUsable && !this.byKind) drawing = 'one-draw';
@@ -1209,6 +1273,13 @@ export class TableLayerRenderer {
 
     const bounds = frame.bounds ?? WORLD;
     const settled = !isTerrainCameraMoving(this.options.terrain);
+    // The surface the rows are cut for, once per frame
+    if (this.surfaceFrame !== this.frameCount) {
+      this.surfaceFrame = this.frameCount;
+      this.surfaces.update(this.options.terrain, bounds, {
+        forEachFill: (view, visit) => this.forEachFill(view, visit),
+      });
+    }
 
     // The drawing of each group: the one of the layer, or the other while its chunks in view
     // are not built and those of the other are. Once its chunks in view are built, the chunks
@@ -1518,6 +1589,7 @@ export class TableLayerRenderer {
           continue;
         }
         const draft = new RowsDraft(1, row, undefined, rowsStyles.palette);
+        draft.leavesRoom = false;
         collectRow(group, row, 0, draft, gpu.data.origin, context);
         const patch = draft.finish(gpu.data.origin, gpu.data.palette, gpu.data.sprites);
         if (!rows.patchRows(gpu, local, patch)) {
@@ -1525,6 +1597,7 @@ export class TableLayerRenderer {
           this.invalidateChunk(chunk, true);
           break;
         }
+        this.rowPacked(group, gpu, local);
       }
     }
   }
@@ -1669,12 +1742,17 @@ export class TableLayerRenderer {
     const styleWritten =
       (write.what & ROW_WRITE_STYLE) !== 0 || this.ruleKeyWritten(cache, write.keys);
 
-    // The positions only: the row keeps its shape and its style, and is not dashed
+    // The positions only: the row keeps its shape and its style, and is not dashed; on a surface
+    // that cuts the rows, a point (the cut of a line or a polygon follows its positions)
+    const layout = rowsStyles.layoutOf(held);
+    const kind = layout & 7;
+    const pointLike = kind === ROWS_LAYOUT.point || kind === ROWS_LAYOUT.sprite;
     if (
       (write.what & ROW_WRITE_GEOMETRY) !== 0 &&
       write.sameShape &&
       !styleWritten &&
-      (rowsStyles.layoutOf(held) & ROWS_LAYOUT.dashed) === 0
+      (layout & ROWS_LAYOUT.dashed) === 0 &&
+      (this.surfaces.surface === null || pointLike)
     ) {
       if (write.to > write.from) {
         const firstCoord = gpu.data.coordFirst[local];
@@ -1685,6 +1763,8 @@ export class TableLayerRenderer {
           rows.patchCoords(gpu, firstCoord + n, coords, 1);
         });
         collectRow(group, row, 0, draft, gpu.data.origin, context);
+        // The points stand where the hit testing finds them
+        this.writeRowHeights(group, gpu, local);
       }
       stats.inPlace++;
       stats.coordsOnly++;
@@ -1706,10 +1786,12 @@ export class TableLayerRenderer {
 
     // The row packed again into its place, when it fits
     const draft = new RowsDraft(1, row, undefined, rowsStyles.palette);
+    draft.leavesRoom = false;
     collectRow(group, row, 0, draft, gpu.data.origin, context);
     if (
       rows.patchRows(gpu, local, draft.finish(gpu.data.origin, gpu.data.palette, gpu.data.sprites))
     ) {
+      this.rowPacked(group, gpu, local);
       stats.inPlace++;
       return true;
     }
@@ -2182,8 +2264,34 @@ export class TableLayerRenderer {
     return {
       ...context,
       rowsStyles,
+      surface: this.surfaces.surface,
       spriteSourceOf: (row) => sprites.get(row),
     };
+  }
+
+  /**
+   * Visits the extents of the polygon rows of every layer drawn whose group meets a view (the
+   * coarsening of the fills, decided when the step of the surface changes)
+   */
+  private forEachFill(
+    view: BoundingBox,
+    visit: (minX: number, minY: number, maxX: number, maxY: number) => void,
+  ): void {
+    for (const cache of this.layers.values()) {
+      for (const groupCache of cache.groups.values()) {
+        const groupBounds = groupCache.group.bounds;
+        if (groupBounds && !meets(groupBounds, view)) continue;
+        const data = groupCache.group.data;
+        const b = data.rowBounds;
+        for (let row = 0; row < data.length; row++) {
+          const at = row * 4;
+          if (Number.isNaN(b[at])) continue;
+          const type = rowType(data, row);
+          if (type !== 'Polygon' && type !== 'MultiPolygon' && type !== 'Circle') continue;
+          visit(b[at], b[at + 1], b[at + 2], b[at + 3]);
+        }
+      }
+    }
   }
 
   // === The builds ===
@@ -2230,6 +2338,11 @@ export class TableLayerRenderer {
         this.movedViews.length > 0 && this.holdsMovedRows(chunk, pass.group as RowGroup)
           ? this.movedViews
           : NO_VIEWS;
+      if (chunk.type === 'rows' && chunk.batches && !chunk.job) {
+        // Cut again for the surface, and the elevations of its points read again
+        this.cutForSurface(chunk);
+        if (chunk.batches) this.updateHeights(chunk);
+      }
       const pending =
         chunk.type === 'rows'
           ? advanceChunkBuild(chunk, this.schedule, this.oneDrawHost)
@@ -2238,6 +2351,144 @@ export class TableLayerRenderer {
       // The rows of the delta within the chunk, when it was not drawn
       this.drawInserts(chunk.range.to - 1);
     }
+  }
+
+  /**
+   * Cuts the rows of a chunk of the group being drawn again for the surface of the frame, once
+   * the camera is still and the chunk is in view, within the budget: each row whose fingerprint
+   * changed is packed again into its place, a row at a time (the chunk draws its rows as they are
+   * until then). A row that does not fit its place makes the chunk build again (drawn until then)
+   */
+  private cutForSurface(chunk: OneDrawRowsChunk): void {
+    const gpu = chunk.batches as RowsGpuChunk;
+    const cut = this.chunkCuts.get(gpu);
+    const generation = this.surfaces.generation;
+    if (!cut || cut.generation === generation) return;
+    const pass = this.pass;
+    const schedule = this.schedule;
+    const rows = pass.renderers?.rows;
+    const groupCache = pass.groupCache;
+    if (!rows || !groupCache || !meets(chunk.bounds, schedule.bounds)) return;
+    const context = this.packContext(groupCache);
+    // A chunk of the styles before is built again with the new ones
+    if (gpu.data.palette !== context.rowsStyles.palette) return;
+    if (!schedule.settled || !schedule.budget.canStep()) {
+      this.pending = true;
+      return;
+    }
+    if (cut.target !== generation) {
+      cut.target = generation;
+      cut.at = 0;
+    }
+    const group = groupCache.group;
+    const surface = this.surfaces.surface;
+    const budget = schedule.budget;
+    const data = gpu.data;
+    const result = budget.step((deadline): 'done' | 'more' | 'rebuild' => {
+      while (cut.at < data.rows) {
+        const local = cut.at;
+        const row = data.rowBase + local;
+        const key = rowSurfaceKey(group, row, surface);
+        if (key !== cut.keys[local]) {
+          const draft = new RowsDraft(1, row, undefined, context.rowsStyles.palette);
+          draft.leavesRoom = false;
+          collectRow(group, row, 0, draft, data.origin, context);
+          if (!rows.patchRows(gpu, local, draft.finish(data.origin, data.palette, data.sprites))) {
+            draft.releaseStyles();
+            return 'rebuild';
+          }
+          cut.keys[local] = key;
+        }
+        cut.at++;
+        if ((cut.at & 63) === 0 && budget.now() >= deadline) return 'more';
+      }
+      return 'done';
+    });
+    if (result === 'rebuild') {
+      // The next version of the chunk takes its places again
+      this.invalidateChunk(chunk, true);
+      this.pending = true;
+    } else if (result === 'done') {
+      cut.generation = generation;
+      cut.at = 0;
+    } else {
+      this.pending = true;
+    }
+  }
+
+  /**
+   * Reads the elevations of the points of a chunk of the group being drawn again while the
+   * terrain is drawn, when the tiles of the terrain changed since they were read: those of the
+   * rows under the tiles that came or went, within the budget
+   */
+  private updateHeights(chunk: OneDrawRowsChunk): void {
+    const terrain = this.options.terrain;
+    const gpu = chunk.batches as RowsGpuChunk;
+    if (!terrain.renderState.active || gpu.data.pointCount === 0) return;
+    const generation = terrain.elevationGeneration;
+    const written = this.heightGenerations.get(gpu) ?? -1;
+    if (written === generation) return;
+    const group = this.pass.group;
+    const budget = this.schedule.budget;
+    if (!group || !meets(chunk.bounds, this.schedule.bounds)) return;
+    if (!budget.canStep()) {
+      this.pending = true;
+      return;
+    }
+    const regions =
+      written < 0 || !gpu.heightValues ? null : this.surfaces.elevationChangesSince(written);
+    if (regions && !boundsMeetRegions(chunk.bounds, regions)) {
+      this.heightGenerations.set(gpu, generation);
+      return;
+    }
+    budget.step(() => this.writeHeights(group, gpu, regions));
+  }
+
+  /**
+   * Writes the elevations of the points of the rows of a chunk under regions (of every point for
+   * null), with the elevation the hit testing projects them with, and queues the whole array
+   */
+  private writeHeights(
+    group: RowGroup,
+    gpu: RowsGpuChunk,
+    regions: readonly MercatorRect[] | null,
+  ): void {
+    const terrain = this.options.terrain;
+    const rows = this.renderers?.rows;
+    const data = gpu.data;
+    if (!rows || !terrain.renderState.active || data.pointCount === 0) return;
+    const values = gpu.heightValues ?? new Float32Array(data.coordCount);
+    const whole = regions === null || !gpu.heightValues;
+    const bounds = group.data.rowBounds;
+    for (let local = 0; local < data.rows; local++) {
+      if (data.pointFirst[local + 1] === data.pointFirst[local]) continue;
+      const row = data.rowBase + local;
+      if (!whole && !rowMeetsRegions(bounds, row, regions as readonly MercatorRect[])) continue;
+      writeRowHeights(group, row, values, data.coordFirst[local], terrain);
+    }
+    rows.setHeights(gpu, values);
+    this.heightGenerations.set(gpu, terrain.elevationGeneration);
+  }
+
+  /**
+   * What follows a row packed again into its place in a chunk: its fingerprint of the cut is the
+   * one of the surface it was packed for, and its points get their elevations
+   */
+  private rowPacked(group: RowGroup, gpu: RowsGpuChunk, local: number): void {
+    const cut = this.chunkCuts.get(gpu);
+    if (cut)
+      cut.keys[local] = rowSurfaceKey(group, gpu.data.rowBase + local, this.surfaces.surface);
+    this.writeRowHeights(group, gpu, local);
+  }
+
+  /** Writes the elevations of the points of one row of a chunk again (a row written in place) */
+  private writeRowHeights(group: RowGroup, gpu: RowsGpuChunk, local: number): void {
+    const terrain = this.options.terrain;
+    const rows = this.renderers?.rows;
+    const data = gpu.data;
+    if (!rows || !gpu.heightValues || data.pointFirst[local + 1] === data.pointFirst[local]) return;
+    writeRowHeights(group, data.rowBase + local, gpu.heightValues, data.coordFirst[local], terrain);
+    rows.setHeights(gpu, gpu.heightValues);
   }
 
   /**
@@ -2683,14 +2934,27 @@ export class TableLayerRenderer {
         held.group === group &&
         !cache.deltaStale &&
         held.styleGeneration === cache.styleGeneration &&
+        held.surfaceGeneration === this.surfaces.generation &&
         held.oneDraw?.generation === cache.generation &&
         held.oneDraw.chunks.every((c) => c.type !== 'rows' || c.batches?.data.palette === palette);
-      if (current) continue;
+      if (current) {
+        // The elevations of its points follow the tiles of the terrain (a delta is small: read
+        // whole)
+        for (const chunk of held.oneDraw?.chunks ?? []) {
+          const gpu = chunk.type === 'rows' ? chunk.batches : null;
+          const generation = this.options.terrain.elevationGeneration;
+          if (gpu && this.heightGenerations.get(gpu) !== generation) {
+            this.writeHeights(held.group, gpu, null);
+          }
+        }
+        continue;
+      }
       if (held) this.disposeGroup(held);
       cache.delta = null;
       cache.deltaStale = false;
       if (!group) continue;
       const deltaCache = newGroupCache(group, cache.styleGeneration);
+      deltaCache.surfaceGeneration = this.surfaces.generation;
       cache.delta = deltaCache;
       const { tables, slots, layer, deps } = cache;
       if (!rows || !tables || !slots || !layer || !deps || !cache.context || !cache.rowsStyles) {
@@ -2723,6 +2987,7 @@ export class TableLayerRenderer {
         const origin = normalizeOrigin(chunkOrigin(chunk));
         chunk.batches = packRowsChunk(group, chunk.range, origin, context, rows);
         chunk.origin = origin;
+        this.writeHeights(group, chunk.batches, null);
       }
     }
   }
@@ -2848,10 +3113,14 @@ function oneDrawJob(
   origin: [number, number],
   context: RowsPackContext,
   rows: RowsRenderer,
+  onPacked: (chunk: RowsGpuChunk, keys: Int32Array) => void,
 ): RetainedChunkJob<RowsGpuChunk> {
   const count = range.to - range.from;
   const palette = context.rowsStyles.palette;
   const draft = new RowsDraft(count, range.from, range.vertices, palette);
+  // The fingerprint of the cut of each row for the surface it is packed for
+  const keys = new Int32Array(count);
+  const surface = context.surface ?? null;
   // The pictures of the chunk come from one source (`partitionRowGroup`)
   let sprites: RowSpriteSource | null = null;
   for (let row = range.from; row < range.to && !sprites; row++) {
@@ -2867,11 +3136,13 @@ function oneDrawJob(
           const end = Math.min(count, next + SLICE_ROWS);
           for (; next < end; next++) {
             collectRow(group, range.from + next, next, draft, origin, context);
+            keys[next] = rowSurfaceKey(group, range.from + next, surface);
           }
           if (now() >= deadline) break;
         }
         if (next < count) return false;
         chunk = rows.createChunk(draft.finish(origin, palette, sprites));
+        onPacked(chunk, keys);
         return false;
       }
       done = chunk.uploaded;
@@ -2901,6 +3172,7 @@ function newGroupCache(group: RowGroup, styleGeneration: number): GroupCache {
     styleGeneration,
     bulkMarked: false,
     bulkMarkVersion: -1,
+    surfaceGeneration: -1,
   };
 }
 
@@ -3346,4 +3618,72 @@ function firstDifference(a: string, b: string): [string, string] {
   const part = (text: string): string =>
     `${from > 0 ? '...' : ''}${text.slice(from, from + 160)}${text.length > from + 160 ? '...' : ''}`;
   return [part(a), part(b)];
+}
+
+/**
+ * Writes the elevations of the points of a row (meters, the elevation the hit testing projects
+ * them with) at the coordinates they are packed at, from `first`
+ */
+function writeRowHeights(
+  group: RowGroup,
+  row: number,
+  values: Float32Array,
+  first: number,
+  terrain: TerrainContext,
+): void {
+  const geometry = geometryAt(group, row);
+  if (!geometry) return;
+  const { reader, at } = geometry;
+  if (reader.type !== 'Point' && reader.type !== 'MultiPoint') return;
+  const coords = reader.coords;
+  const stride = reader.stride;
+  const start = reader.vertexStart(at);
+  const end = reader.vertexStart(at + 1);
+  for (let v = start; v < end && first + v - start < values.length; v++) {
+    values[first + v - start] = anchorElevationMeters(
+      terrain,
+      coords[v * stride],
+      coords[v * stride + 1],
+    );
+  }
+}
+
+/** Whether a box in degrees meets one of the regions (Mercator) */
+function boundsMeetRegions(bounds: BoundingBox, regions: readonly MercatorRect[]): boolean {
+  return boxMeetsRegions(bounds.minX, bounds.minY, bounds.maxX, bounds.maxY, regions);
+}
+
+/** Whether the extent of a row meets one of the regions (Mercator) */
+function rowMeetsRegions(
+  rowBounds: Float64Array,
+  row: number,
+  regions: readonly MercatorRect[],
+): boolean {
+  const at = row * 4;
+  if (Number.isNaN(rowBounds[at])) return false;
+  return boxMeetsRegions(
+    rowBounds[at],
+    rowBounds[at + 1],
+    rowBounds[at + 2],
+    rowBounds[at + 3],
+    regions,
+  );
+}
+
+function boxMeetsRegions(
+  minX: number,
+  minY: number,
+  maxX: number,
+  maxY: number,
+  regions: readonly MercatorRect[],
+): boolean {
+  // Mercator y decreases as the latitude increases
+  const x0 = mercatorX(minX);
+  const x1 = mercatorX(maxX);
+  const y0 = mercatorY(maxY);
+  const y1 = mercatorY(minY);
+  for (const region of regions) {
+    if (x0 <= region.x1 && x1 >= region.x0 && y0 <= region.y1 && y1 >= region.y0) return true;
+  }
+  return false;
 }

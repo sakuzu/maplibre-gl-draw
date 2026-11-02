@@ -335,6 +335,39 @@ function crossingPoints(
   const ay = mercatorY(a[1]);
   const bx = mercatorX(b[0]);
   const by = mercatorY(b[1]);
+  const ts = crossingParameters(a, b, grid, region);
+  if (ts.length === 0) return [];
+
+  const points: Coordinate[] = [];
+  let previous = -1;
+  for (const t of ts) {
+    if (t <= 0 || t >= 1 || t === previous) continue;
+    if (points.length >= budget) break;
+    previous = t;
+    const mx = ax + (bx - ax) * t;
+    const my = ay + (by - ay) * t;
+    points.push([lngFromMercatorX(mx), latFromMercatorY(my)]);
+  }
+  return points;
+}
+
+/**
+ * The parameters along the edge (a, b) where it crosses the lines of the lattice, in ascending
+ * order (an equal parameter may repeat): where {@link densifyPath} cuts the edge, on the straight
+ * line of the Mercator plane between its ends. None for an edge outside the area
+ *
+ * @internal
+ */
+export function crossingParameters(
+  a: Coordinate,
+  b: Coordinate,
+  grid: number,
+  region?: MercatorRect | null,
+): number[] {
+  const ax = mercatorX(a[0]);
+  const ay = mercatorY(a[1]);
+  const bx = mercatorX(b[0]);
+  const by = mercatorY(b[1]);
 
   // An edge outside the area is not split (the elevation saturates at the edge value, so
   // there is no point in splitting it)
@@ -348,21 +381,8 @@ function crossingPoints(
   const ts: number[] = [];
   collectAxisCrossings(ax, bx, grid, ts);
   collectAxisCrossings(ay, by, grid, ts);
-  if (ts.length === 0) return [];
-
   ts.sort((x, y) => x - y);
-
-  const points: Coordinate[] = [];
-  let previous = -1;
-  for (const t of ts) {
-    if (t <= 0 || t >= 1 || t === previous) continue;
-    if (points.length >= budget) break;
-    previous = t;
-    const mx = ax + (bx - ax) * t;
-    const my = ay + (by - ay) * t;
-    points.push([lngFromMercatorX(mx), latFromMercatorY(my)]);
-  }
-  return points;
+  return ts;
 }
 
 /**

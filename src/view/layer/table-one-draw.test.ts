@@ -11,9 +11,10 @@
  * - A chunk is written to the GPU before the main pass of a frame and drawn from that frame on;
  *   nothing is written to a buffer or a texture of the rows while a layer is drawn
  * - The cuts, the chunks out of view and the record of the draws work as by kind
- * - Where the drawing in one draw cannot draw (the terrain, the globe, the program compiling,
- *   the switch of the tests), the rows are drawn by kind; a group is drawn with the chunks of the
- *   drawing it had until those of the new one are built, and the old ones are then released
+ * - The globe is drawn in one draw as a flat map is; where the drawing in one draw cannot draw
+ *   (the program compiling, the switch of the tests), the rows are drawn by kind; a group is
+ *   drawn with the chunks of the drawing it had until those of the new one are built, and the old
+ *   ones are then released
  * - A write in place of the style of a row reaches its chunk; a row drawn at once is refused
  * - The draws of a mixed layer are a few, and what they hold is in the ledger
  */
@@ -438,15 +439,19 @@ describe('the drawing of a layer held as rows in one draw per chunk', () => {
     }
   });
 
-  it('draws by kind on the globe and on the terrain, and on the switch of the tests', () => {
+  it('draws in one draw on the globe as on a flat map, and by kind on the switch of the tests', () => {
     const { renderer, frame } = setup(interleaved(200, 8), 100);
     terrain.globeGrids = { fill: 0.001, line: 0.001 };
+    // Packed, written, then drawn
+    frame();
     frame();
     let { record } = frame();
-    expect(record.some((entry) => entry.kind === 'rows')).toBe(false);
-    expect(record.some((entry) => entry.kind === 'polygon')).toBe(true);
+    expect(record.some((entry) => entry.kind === 'rows')).toBe(true);
+    expect(record.some((entry) => entry.kind === 'polygon')).toBe(false);
     terrain.globeGrids = null;
     renderer.setDrawingByKind(true);
+    // The chunks by kind are built while the chunks in one draw draw the rows
+    frame();
     ({ record } = frame());
     expect(record.some((entry) => entry.kind === 'rows')).toBe(false);
     renderer.setDrawingByKind(false);

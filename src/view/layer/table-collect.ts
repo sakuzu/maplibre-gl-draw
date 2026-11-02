@@ -16,6 +16,12 @@
  * is drawn per part of two coordinates or more; a polygon per polygon, its fill then its
  * outline, with the rings it draws (`polygon-rings.ts`); a polygon with neither a visible fill
  * nor an outline draws nothing; a width without a created zoom is fixed on screen (negative).
+ *
+ * On the terrain and on the globe the rows packed for the drawing in one draw are cut for the
+ * surface (`RowsSurface`): the fill of a polygon is cut on the mesh of the surface, its outline
+ * on the same step, and the segments of a line into pieces of equal length no longer than the
+ * piece of the surface, each piece an instance holding its part `[t0, t1]` of the segment (the
+ * coordinates stay those of the line).
  */
 
 import type { ValueStringCache } from '@sakuzu/tabane';
@@ -36,7 +42,9 @@ import type { Color } from '../../shared/types/style.js';
 import type { PixelRatioInput } from '../../shared/utils/pixel-ratio.js';
 import { resolveContentPixelRatio, resolvePixelRatio } from '../../shared/utils/pixel-ratio.js';
 import { polygonRingRuns } from '../../table/polygon-rings.js';
+import { pairTriangles } from '../../table/row-geometry.js';
 import type { GeometryColumnReader } from '../../table/table.js';
+import { tessellateSurfaceFill } from '../globe-subdivision.js';
 import { toPackedPointStyle } from '../renderers/batch-manager.js';
 import { dashSegmentLength } from '../renderers/line/dash.js';
 import {
@@ -70,11 +78,21 @@ import {
   type RowsChunkData,
   type RowsKind,
   type RowsPalette,
+  writeCollapsedInstance,
   writeRowsInstance,
 } from '../renderers/rows/rows-format.js';
 import { applyRuleColor, evaluateStyleRuleValue, type StyleRuleChannel } from '../style-rule.js';
 import { anchorElevationMeters } from '../terrain/anchor.js';
 import type { TerrainContext } from '../terrain/context.js';
+import { polygonTessellationStep, ringsIntersect, tessellateRings } from '../terrain/polygon.js';
+import {
+  crossingParameters,
+  type MercatorRect,
+  mercatorX,
+  mercatorY,
+  type TessellationStep,
+} from '../terrain/tessellation.js';
+import { tilingSignature } from '../terrain/tiling.js';
 
 /** The key of the created zoom in the attributes of a row */
 const CREATED_ZOOM_KEY = drawPropertyKey('createdZoom');
@@ -305,6 +323,135 @@ export interface RowPackContext {
   readonly strings: ValueStringCache;
   readonly pixelRatio: PixelRatioInput | undefined;
   readonly terrain: TerrainContext;
+}
+
+/**
+ * How the rows packed for the drawing in one draw are cut for the surface they are drawn on (the
+ * terrain, the globe). Every row packed with one surface is cut alike, so the fills of rows next
+ * to each other lie on one mesh
+ *
+ * @internal
+ */
+export interface RowsSurface {
+  /** The step the fills and their outlines are cut on, its coarsening included (null: none) */
+  readonly fill: TessellationStep | null;
+  /** The longest piece of a segment of a line, in Mercator units (0: the segments are whole) */
+  readonly linePiece: number;
+  /**
+   * Whether the triangles of the fills are turned to face the camera on their front (the
+   * terrain discards the back faces of the fills)
+   */
+  readonly orient: boolean;
+}
+
+/**
+ * The room a line or a polygon row packed for a surface that cuts it leaves after its instances
+ * and its coordinates, as a share of them: the cut of a row follows its position (the mesh lines
+ * a polygon crosses, the pieces of a line), so a row moved or cut again for a step close to the
+ * one it was packed for still fits its place, and is written there rather than drawn from the
+ * delta of its layer. A first value, to be set from measured data
+ *
+ * @internal
+ */
+export const SURFACE_ROOM = 0.25;
+
+/**
+ * The most pieces one segment of a line is cut into (a guard against a runaway: a segment longer
+ * than this many pieces is cut into pieces longer than the piece of the surface)
+ *
+ * @internal
+ */
+export const MAX_SEGMENT_PIECES = 1024;
+
+/**
+ * The fingerprint of how a row is cut for a surface: two packings of a row with the same
+ * fingerprint cut it alike, so a row whose fingerprint did not change keeps its packing when the
+ * surface changes. For a polygon, the step of its fill and the configuration of the tiles of the
+ * terrain covering its extent (`tilingSignature`); for a line, the piece; for any other row,
+ * nothing
+ *
+ * @returns A 32-bit hash of the fingerprint (0 for a row the surface does not cut)
+ * @internal
+ */
+export function rowSurfaceKey(group: RowGroup, row: number, surface: RowsSurface | null): number {
+  if (!surface) return 0;
+  switch (rowType(group.data, row)) {
+    case 'LineString':
+    case 'Freehand':
+    case 'MultiLineString':
+      return surface.linePiece > 0 ? hashString(`l${surface.linePiece}`) : 0;
+    case 'Polygon':
+    case 'MultiPolygon':
+    case 'Circle': {
+      const step = surface.fill;
+      if (!step) return 0;
+      const b = group.data.rowBounds;
+      const at = row * 4;
+      if (Number.isNaN(b[at])) return 0;
+      // Mercator y decreases as the latitude increases
+      const x0 = mercatorX(b[at]);
+      const y0 = mercatorY(b[at + 3]);
+      const x1 = mercatorX(b[at + 2]);
+      const y1 = mercatorY(b[at + 1]);
+      let key = tilingSignature(
+        step.tiling ?? null,
+        step.region ?? null,
+        step.coarsen && step.coarsen > 1 ? step.coarsen : 1,
+        step.grid,
+        x0,
+        y0,
+        x1,
+        y1,
+      );
+      // Without the index of the tiles, the region still decides what is cut
+      if (!step.tiling && step.region) key += `|${regionRelation(step.region, x0, y0, x1, y1)}`;
+      return hashString(`f${key}`);
+    }
+    default:
+      return 0;
+  }
+}
+
+/** How an extent lies to a region: inside it, outside it, or across its edge (with the edge) */
+function regionRelation(
+  region: MercatorRect,
+  x0: number,
+  y0: number,
+  x1: number,
+  y1: number,
+): string {
+  if (x0 >= region.x0 && x1 <= region.x1 && y0 >= region.y0 && y1 <= region.y1) return 'i';
+  if (x1 < region.x0 || x0 > region.x1 || y1 < region.y0 || y0 > region.y1) return 'o';
+  return `${region.x0},${region.y0},${region.x1},${region.y1}`;
+}
+
+/** The 32-bit FNV-1a hash of a string (never 0, which a row the surface does not cut has) */
+function hashString(text: string): number {
+  let hash = 0x811c9dc5;
+  for (let i = 0; i < text.length; i++) {
+    hash ^= text.charCodeAt(i);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return hash === 0 ? 1 : hash;
+}
+
+/**
+ * The number of pieces of equal length a segment is cut into for a piece of the surface
+ *
+ * @param piece The longest piece, in Mercator units (0: the segment is whole)
+ * @internal
+ */
+export function segmentPieces(
+  lng0: number,
+  lat0: number,
+  lng1: number,
+  lat1: number,
+  piece: number,
+): number {
+  if (!(piece > 0)) return 1;
+  const length = Math.hypot(mercatorX(lng1) - mercatorX(lng0), mercatorY(lat1) - mercatorY(lat0));
+  if (!(length > piece)) return 1;
+  return Math.min(MAX_SEGMENT_PIECES, Math.ceil(length / piece));
 }
 
 /**
@@ -1097,6 +1244,8 @@ export class RowsStyles {
 export interface RowsPackContext extends RowPackContext {
   /** The styles of the layer as the values of a palette */
   readonly rowsStyles: RowsStyles;
+  /** How the rows are cut for the surface (none on a flat map) */
+  readonly surface?: RowsSurface | null;
   /**
    * The source of the pictures a row of the group packed is drawn with (undefined for a row
    * drawn as its built-in kind)
@@ -1123,6 +1272,11 @@ export class RowsDraft {
   readonly rowFirst: Int32Array;
   readonly pointFirst: Int32Array;
   readonly coordFirst: Int32Array;
+  /**
+   * Whether a row a surface cuts leaves room after it (a chunk being built); a row packed to be
+   * written into its place in a chunk leaves none (it takes the room its place has)
+   */
+  leavesRoom = true;
 
   /**
    * @param rows The rows of the chunk
@@ -1175,7 +1329,12 @@ export class RowsDraft {
     return this.coordCount++;
   }
 
-  /** Adds an instance (and to the instances of the points, for a point or a picture) */
+  /**
+   * Adds an instance (and to the instances of the points, for a point or a picture)
+   *
+   * @param t0 The start of the piece of a segment it draws (0: its start)
+   * @param t1 The end of the piece (1: its end)
+   */
   instance(
     kind: RowsKind,
     row: number,
@@ -1184,16 +1343,51 @@ export class RowsDraft {
     i2: number,
     i3: number,
     extra = 0,
+    t0 = 0,
+    t1 = 1,
   ): void {
     if ((this.instanceCount + 1) * ROWS_INSTANCE_FLOATS > this.instances.length) {
       this.instances = grown(this.instances, (this.instanceCount + 1) * ROWS_INSTANCE_FLOATS);
     }
-    writeRowsInstance(this.instances, this.instanceCount++, kind, row, i0, i1, i2, i3, extra);
+    writeRowsInstance(
+      this.instances,
+      this.instanceCount++,
+      kind,
+      row,
+      i0,
+      i1,
+      i2,
+      i3,
+      extra,
+      t0,
+      t1,
+    );
     if (kind === ROWS_KIND.point || kind === ROWS_KIND.sprite) {
       if ((this.pointCount + 1) * ROWS_INSTANCE_FLOATS > this.points.length) {
         this.points = grown(this.points, (this.pointCount + 1) * ROWS_INSTANCE_FLOATS);
       }
       writeRowsInstance(this.points, this.pointCount++, kind, row, i0, i1, i2, i3, extra);
+    }
+  }
+
+  /**
+   * Leaves room after the instances and the coordinates of a row: instances that draw nothing
+   * (`writeCollapsedInstance`) and copies of its last coordinate, which a write in place of the
+   * row may take
+   */
+  room(row: number, first: number, coordFirst: number, share: number): void {
+    const instances = Math.ceil((this.instanceCount - first) * share);
+    const coords = Math.ceil((this.coordCount - coordFirst) * share);
+    if (instances === 0 || this.coordCount === coordFirst) return;
+    const last = this.coordCount - 1;
+    const x = this.coords[last * 2];
+    const y = this.coords[last * 2 + 1];
+    for (let c = 0; c < coords; c++) this.coord(x, y);
+    for (let i = 0; i < instances; i++) {
+      if ((this.instanceCount + 1) * ROWS_INSTANCE_FLOATS > this.instances.length) {
+        this.instances = grown(this.instances, (this.instanceCount + 1) * ROWS_INSTANCE_FLOATS);
+      }
+      writeCollapsedInstance(this.instances, this.instanceCount++, row, last);
     }
   }
 
@@ -1292,6 +1486,10 @@ export function collectRow(
   const styleAt = i * ROWS_ROW_STYLE_FLOATS;
   draft.rowStyles.fill(0, styleAt, styleAt + ROWS_ROW_STYLE_FLOATS);
   draft.setRowStyle(i, -1);
+  const first = draft.instanceCount;
+  const coordFirst = draft.coordCount;
+  // A row a surface cuts leaves room for its cut to change
+  const surface = context.surface;
   if (rowHasGeometry(group, row)) {
     const type = rowType(data, row);
     switch (type) {
@@ -1303,11 +1501,15 @@ export function collectRow(
       case 'Freehand':
       case 'MultiLineString':
         collectLineRow(group, row, styleAt, draft, origin, context);
+        if (surface && surface.linePiece > 0 && draft.leavesRoom) {
+          draft.room(row, first, coordFirst, SURFACE_ROOM);
+        }
         break;
       case 'Polygon':
       case 'MultiPolygon':
       case 'Circle':
         collectPolygonRow(group, row, styleAt, draft, origin, context);
+        if (surface?.fill && draft.leavesRoom) draft.room(row, first, coordFirst, SURFACE_ROOM);
         break;
       default: {
         // A custom type drawn with pictures holds points
@@ -1446,6 +1648,7 @@ function collectLineRow(
   const style = context.rowsStyles.line(data.styles[row], type, ruleColor);
   writeRowStyle(draft, styleAt, style, rowCreatedZoom(group, row));
   const dashed = context.slots.line(data.styles[row], type, ruleColor).stroke.lineStyle !== 'solid';
+  const piece = context.surface?.linePiece ?? 0;
   const coords = reader.coords;
   const stride = reader.stride;
   for (let k = 0; k < parts.length; k += 2) {
@@ -1459,18 +1662,24 @@ function collectLineRow(
     // The length of the part before each segment, as the dashes measure it (zoom 0)
     let before = 0;
     for (let s = 0; s < n - 1; s++) {
-      draft.instance(
-        ROWS_KIND.segment,
-        row,
-        s > 0 ? base + s - 1 : -1,
-        base + s,
-        base + s + 1,
-        s + 2 < n ? base + s + 2 : -1,
-        dashed ? before : 0,
-      );
+      const a = (start + s) * stride;
+      const b = (start + s + 1) * stride;
+      // A segment cut for the surface is drawn in pieces of equal length, in their order
+      const pieces = segmentPieces(coords[a], coords[a + 1], coords[b], coords[b + 1], piece);
+      for (let p = 0; p < pieces; p++) {
+        draft.instance(
+          ROWS_KIND.segment,
+          row,
+          s > 0 ? base + s - 1 : -1,
+          base + s,
+          base + s + 1,
+          s + 2 < n ? base + s + 2 : -1,
+          dashed ? before : 0,
+          p / pieces,
+          (p + 1) / pieces,
+        );
+      }
       if (dashed) {
-        const a = (start + s) * stride;
-        const b = (start + s + 1) * stride;
         before += dashSegmentLength(coords[a], coords[a + 1], coords[b], coords[b + 1], 0);
       }
     }
@@ -1495,6 +1704,11 @@ function collectPolygonRow(
     context.slots.ruleColorOf(group, row, context.strings),
   );
   writeRowStyle(draft, styleAt, style, plan.createdZoom);
+  const surface = context.surface;
+  if (surface?.fill) {
+    collectSurfacePolygonRow(plan, row, draft, origin, context, surface, surface.fill);
+    return;
+  }
   const solidOutline = slot.hasStroke && !slot.dashedStroke;
   const dashedOutline = slot.hasStroke && slot.dashedStroke;
   for (const part of plan.parts) {
@@ -1557,4 +1771,168 @@ function collectPolygonRow(
       }
     }
   }
+}
+
+/**
+ * Packs a polygon row cut for a surface: for each of its polygons, its fill cut on the step of
+ * the surface (the triangles of its triangulation cut on the mesh, paired again), then its rings
+ * cut on the step its fill was cut on, so the outline lies on the same mesh as the edge of the
+ * fill. On the terrain the triangles are turned to face the camera on their front
+ */
+function collectSurfacePolygonRow(
+  plan: PolygonRowPlan,
+  row: number,
+  draft: RowsDraft,
+  origin: readonly [number, number],
+  context: RowsPackContext,
+  surface: RowsSurface,
+  base: TessellationStep,
+): void {
+  const { slot, triangles } = plan;
+  const solidOutline = slot.hasStroke && !slot.dashedStroke;
+  const dashedOutline = slot.hasStroke && slot.dashedStroke;
+  plan.parts.forEach((part, partIndex) => {
+    const fill = part.triangleTo > part.triangleFrom && slot.fillColor[3] > 0;
+    if (!fill && !slot.hasStroke) return;
+    const { coords, stride, runs } = part;
+    // The coordinates of the rings as the triangulation numbers them, and the rings
+    const flat: number[] = [];
+    const rings: Array<Array<[number, number]>> = [];
+    for (let k = 0; k < runs.length; k += 2) {
+      const ring: Array<[number, number]> = [];
+      for (let c = runs[k]; c < runs[k + 1]; c++) {
+        flat.push(coords[c * stride], coords[c * stride + 1]);
+        ring.push([coords[c * stride], coords[c * stride + 1]]);
+      }
+      rings.push(ring);
+    }
+    let step: TessellationStep | null = null;
+    // The coordinates of the rings as they are: the first ones of the cut of the fill (which
+    // keeps them, in their order, before the points it adds)
+    let ringCoords = -1;
+    // 1. The fill: its triangles cut on the mesh, paired again
+    if (fill) {
+      const indices: number[] = [];
+      for (let t = part.triangleFrom; t < part.triangleTo; t += 4) {
+        const a = triangles[t] - part.base;
+        const b = triangles[t + 1] - part.base;
+        const c = triangles[t + 2] - part.base;
+        const d = triangles[t + 3] - part.base;
+        indices.push(a, b, c);
+        if (d !== c) indices.push(c, b, d);
+      }
+      const cut = tessellateSurfaceFill(context.terrain, undefined, partIndex, flat, indices, base);
+      step = cut.step;
+      const first = draft.coordCount;
+      ringCoords = first;
+      const points = cut.flatCoords;
+      for (let i = 0; i < points.length; i += 2) {
+        draft.coord(points[i] - origin[0], points[i + 1] - origin[1], -1);
+      }
+      pairTriangles(cut.indices, 0, cut.indices.length, 0, (a, b, c, d) => {
+        // The front of the pair faces the camera: a negative cross product on the Mercator plane
+        // (y down), as the cut of the terrain turns its triangles (`pushOriented`)
+        if (surface.orient && crossOnMercator(points, a, b, c) > 0) {
+          draft.instance(ROWS_KIND.fill, row, first + a, first + c, first + b, first + d);
+        } else {
+          draft.instance(ROWS_KIND.fill, row, first + a, first + b, first + c, first + d);
+        }
+      });
+    }
+    // 2. The outline: the rings cut on the step of the fill (on the step of the polygon when it
+    // has no fill), each ring its edges in order (a solid outline between the points of its cut,
+    // as coordinates of their own)
+    if (!solidOutline && !dashedOutline) return;
+    const ringStep = step ?? polygonTessellationStep(base, flat);
+    if (dashedOutline) {
+      // A dashed outline: each edge of the rings drawn in its pieces between the points it is cut
+      // at, as a segment of a line cut for the surface, so the dashes of an edge are drawn over
+      // the whole edge whatever the length of its pieces
+      if (ringCoords < 0) {
+        ringCoords = draft.coordCount;
+        for (let i = 0; i < flat.length; i += 2) {
+          draft.coord(flat[i] - origin[0], flat[i + 1] - origin[1], -1);
+        }
+      }
+      const cuts = ringEdgeCuts(rings, ringStep);
+      let ringBase = ringCoords;
+      rings.forEach((ring, r) => {
+        const count = ring.length;
+        const at = (j: number) => ringBase + (((j % count) + count) % count);
+        let before = 0;
+        for (let j = 0; j < count; j++) {
+          const ts = cuts?.[r][j] ?? NO_CUTS;
+          for (let k = 0; k <= ts.length; k++) {
+            draft.instance(
+              ROWS_KIND.dashedOutline,
+              row,
+              j > 0 ? at(j - 1) : -1,
+              at(j),
+              at(j + 1),
+              j + 1 < count ? at(j + 2) : -1,
+              before,
+              k > 0 ? ts[k - 1] : 0,
+              k < ts.length ? ts[k] : 1,
+            );
+          }
+          const [lng0, lat0] = ring[j];
+          const [lng1, lat1] = ring[(j + 1) % count];
+          before += dashSegmentLength(lng0, lat0, lng1, lat1, 0);
+        }
+        ringBase += count;
+      });
+      return;
+    }
+    for (const ring of tessellateRings(rings, ringStep)) {
+      const count = ring.length;
+      if (count < 2) continue;
+      const ringBase = draft.coordCount;
+      for (const [lng, lat] of ring) draft.coord(lng - origin[0], lat - origin[1], -1);
+      const at = (j: number) => ringBase + (((j % count) + count) % count);
+      for (let j = 0; j < count; j++) {
+        draft.instance(ROWS_KIND.outline, row, at(j - 1), at(j), at(j + 1), at(j + 2));
+      }
+    }
+  });
+}
+
+/** An edge not cut */
+const NO_CUTS: readonly number[] = [];
+
+/**
+ * Where each edge of the rings of a polygon is cut on a step, as {@link tessellateRings} cuts
+ * them: the parameters along each edge (ascending, between 0 and 1) of the points it adds (null
+ * when the rings are outside the region and are not cut)
+ */
+function ringEdgeCuts(
+  rings: ReadonlyArray<ReadonlyArray<[number, number]>>,
+  step: TessellationStep,
+): number[][][] | null {
+  if (!(step.grid > 0)) return null;
+  if (step.region && !ringsIntersect(rings as Array<Array<[number, number]>>, step.region)) {
+    return null;
+  }
+  const grid = step.coarsen && step.coarsen > 1 ? step.grid * step.coarsen : step.grid;
+  return rings.map((ring) =>
+    ring.map((a, j) => {
+      const b = ring[(j + 1) % ring.length];
+      const out: number[] = [];
+      for (const t of crossingParameters(a, b, grid, step.region)) {
+        if (t <= 0 || t >= 1 || t === out[out.length - 1]) continue;
+        out.push(t);
+      }
+      return out;
+    }),
+  );
+}
+
+/** The cross product of the triangle of three points of a flat array, on the Mercator plane */
+function crossOnMercator(points: readonly number[], a: number, b: number, c: number): number {
+  const ax = mercatorX(points[a * 2]);
+  const ay = mercatorY(points[a * 2 + 1]);
+  const bx = mercatorX(points[b * 2]);
+  const by = mercatorY(points[b * 2 + 1]);
+  const cx = mercatorX(points[c * 2]);
+  const cy = mercatorY(points[c * 2 + 1]);
+  return (bx - ax) * (cy - ay) - (cx - ax) * (by - ay);
 }

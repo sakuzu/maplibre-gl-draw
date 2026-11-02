@@ -105,6 +105,12 @@ writing it. Its changes are listed after those of 3.0.0.
   pictures (`RowSpriteSource`, `RowSprite`, `RowSpriteScaleStop`).
   `LayerTableView.getRowStyle` reads the style of a row, shared and
   frozen, without a copy.
+- A layer held as rows is drawn on the terrain and on the globe as on a
+  flat map, a chunk of rows of every kind in one draw: its fills and its
+  lines are cut to follow the ground and the sphere, its points stand on
+  the ground at the elevation the hit testing takes and are drawn faint
+  where the terrain hides them, and the points on the far side of the
+  globe are not drawn.
 - Features selected in bulk and turned or resized are drawn during the drag
   as they are written once let go: an image, a type resized by its scale
   and a feature with a rotation or a scale keep their shape and change

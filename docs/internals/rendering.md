@@ -1727,6 +1727,14 @@ the path of maplibre's layers.
   changes (`RetainedInvalidationWatch`), and the chunks of the
   datasets when the fill cell differs from the one they were baked with
   (`needsRetessellation`)
+- A layer held as rows is drawn in one draw per chunk on the globe as on a
+  flat map (`RowsRenderer`), with a program of its own for each projection
+  variant, both compiled when the renderer is made: the projection of the
+  library reads of the prelude of maplibre only its uniforms
+  (`rowsProjectionPrelude`). Its fills and outlines are cut with the fill
+  cell and its lines in pieces no longer than the line cell (see
+  [Layers held as rows](#layers-held-as-rows)); a point or a picture on
+  the far side of the globe is not drawn
 - On a flat map the cells are 0: nothing is cut, one station is drawn per
   segment and the vertex data is exactly what it was
 - While the terrain is drawn its step takes precedence and the globe adds
@@ -1959,6 +1967,48 @@ selected. The test steps along the segment from the camera to the anchor
 `depthAtPoint` is avoided because it waits on `readPixels`. Ghosting is
 applied only on paths redrawn on every draw, never baked into retained
 batches, and the editing UI of the current selection is never ghosted.
+The points of the layers held as rows, which are drawn from chunks kept
+over the draws, take the same test in their vertex shader on every draw
+(`TERRAIN_OCCLUSION_GLSL`, the formula and the constants of `occlusion.ts`),
+reading the ground along the segment from the DEM atlas.
+
+### Layers held as rows
+
+A layer held as rows is drawn in one draw per chunk on the terrain as on a
+flat map (`table-retained.ts`, `RowsRenderer`), so the draws of a frame are
+the chunks in view whatever the number of rows and the order of their
+kinds. The rows of a chunk are cut for the surface (`table-surface.ts`,
+`RowsSurface`):
+
+- The fill of a polygon is cut on the mesh of the terrain (or the fill
+  cell of the globe), its triangles paired again and turned to face the
+  camera on their front, and the program discards their back faces on
+  the terrain. One coarsening holds for the whole draw: decided from the
+  cells of the fills in view when the step changes, by powers of 2, made
+  finer again only once the cells fall to a quarter
+- A solid outline is its rings cut on the step of the fill, as coordinates
+  of their own. A dashed outline and a line keep their coordinates and are
+  drawn in pieces, `[t0, t1]` of their segments: an outline between the
+  points where its edges cross the mesh, a line in pieces of equal length
+  no longer than the step of the mesh at `LINE_PIECE_ZOOM` (11) on the
+  terrain, the line cell on the globe. Two pieces that meet take the
+  direction of the line from the points of the segment a share of it
+  before and after, and a piece draws the dashes of its whole segment, so
+  the dashes do not depend on how the segment is cut
+- When the surface changes, each row of a chunk in view whose fingerprint
+  changed (`rowSurfaceKey`: the tiles of the terrain covering its extent,
+  the step, the piece) is packed again into its place, a row at a time
+  within the budget, the chunk drawn as it is until then. A row cut for a
+  surface leaves room after it (`SURFACE_ROOM`), and one that does not fit
+  makes its chunk build again; a row written in place that does not fit is
+  drawn from the delta of its layer
+- A point takes the elevation of its anchor from the heights of its chunk
+  (one float per coordinate, `RowsRenderer.setHeights`), written on the
+  CPU with `anchorElevationMeters`, the elevation hit testing projects it
+  with, and read again only for the rows under the tiles of the terrain
+  that came or went. A point being moved reads the DEM atlas where it is
+  drawn until it is written. Points stand on the ground also where the
+  fills and lines are drawn flat
 
 ### Terrain state per instance
 
