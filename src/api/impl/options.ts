@@ -133,14 +133,13 @@ const STROKE = record({
   dashArray: numbers,
 });
 const POINT = record({
-  shape: oneOf('circle', 'square', 'triangle', 'star', 'icon'),
+  shape: oneOf('circle', 'square', 'triangle', 'star'),
   size: nonNegative,
   fillColor: color,
   fillOpacity: opacity,
   strokeColor: color,
   strokeWidth: nonNegative,
   strokeOpacity: opacity,
-  iconId: string,
 });
 const MARK = record({
   shape: oneOf('circle', 'square', 'triangle', 'star'),
@@ -572,7 +571,7 @@ export function toAppliedDefaults(
     lineStyle,
     pointColor: point.pointColor ?? defaultCss(marker.fillColor),
     pointRadius: point.pointRadius ?? marker.size / 2,
-    pointShape: point.pointShape ?? (marker.shape === 'icon' ? 'circle' : marker.shape),
+    pointShape: point.pointShape ?? marker.shape,
     pointOpacity: point.pointOpacity ?? 1,
     pointStrokeColor: point.pointStrokeColor ?? defaultCss(marker.strokeColor),
     pointStrokeWidth: point.pointStrokeWidth ?? marker.strokeWidth,

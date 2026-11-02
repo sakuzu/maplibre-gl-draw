@@ -180,7 +180,7 @@ describe('classifyRow', () => {
     const resolver: RetainedStyleResolver = {
       getPointStyle: (f, layer) => {
         const style = base.getPointStyle(f, layer);
-        return f?.style?.pointShape === 'square' ? { ...style, shape: 'icon' as never } : style;
+        return f?.style?.pointShape === 'square' ? { ...style, shape: 'hexagon' as never } : style;
       },
       getLineStringStrokeStyle: (f, layer) => base.getLineStringStrokeStyle(f, layer),
       getPolygonStyles: (f, layer) => base.getPolygonStyles(f, layer),

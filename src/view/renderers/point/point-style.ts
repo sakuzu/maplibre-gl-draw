@@ -15,7 +15,7 @@ import { toColor } from '../../../shared/color.js';
 import type { FeatureStyle } from '../../../store/types.js';
 import type { PointShape, PointStyle } from './point-shape.js';
 
-/** The shapes a feature may name (`'icon'` belongs to the defaults of an extension) */
+/** The shapes a feature may name */
 const FEATURE_POINT_SHAPES: ReadonlySet<string> = new Set(['circle', 'square', 'triangle', 'star']);
 
 /**

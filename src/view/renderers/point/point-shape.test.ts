@@ -238,9 +238,9 @@ describe('shapes of PointShapeRenderer', () => {
     expect(stroke[0][1]).toBeCloseTo(1.2, 6);
   });
 
-  it('keeps drawing the icon shape as a circle', () => {
-    const [iconFill] = uploadedVertices('icon');
+  it('draws a shape it does not know as a circle', () => {
+    const [strayFill] = uploadedVertices('hexagon' as never);
     const [circleFill] = uploadedVertices('circle');
-    expect(iconFill).toEqual(circleFill);
+    expect(strayFill).toEqual(circleFill);
   });
 });

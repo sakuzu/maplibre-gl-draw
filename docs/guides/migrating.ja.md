@@ -761,6 +761,11 @@ draw.options.update({
 });
 ```
 
+`selectionStyle` のハンドルと印の形は、ライブラリーが描く `'circle'`、
+`'square'`、`'triangle'`、`'star'` のどれかです。ライブラリーが円で
+描いていた形 `'icon'` と、その `iconId` は無くなりました。代わりに
+`'circle'` を渡してください。
+
 自前のストアは変えなくて構いません。レイヤーの項目をリストで持つ
 ストアは、変更の前と後のリストから `diffItemOrder` で
 `DocumentChange.order` を作ります。

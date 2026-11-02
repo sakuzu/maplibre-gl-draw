@@ -138,7 +138,8 @@ function generateNormalizedSquareStrokeVertices(
  *
  * The circle and the square fill the radius. The triangle and the star are inscribed in the
  * outer edge (`outerRatio`) and fill the inside of the stroke band, the same boundaries the
- * instanced renderer draws with its distance function. `'icon'` is drawn as a circle.
+ * instanced renderer draws with its distance function. A shape it does not know is drawn as a
+ * circle.
  */
 function generateFillVertices(shape: PointShape, outerRatio: number): ShapeVertex[] {
   switch (shape) {
@@ -192,8 +193,8 @@ function toVertexData(vertices: ShapeVertex[]): Float32Array {
 }
 
 /**
- * The point renderer core uses for point markers (circles, squares, triangles and stars; the
- * shape `'icon'` is drawn as a circle), shared with custom feature renderers.
+ * The point renderer core uses for point markers (circles, squares, triangles and stars),
+ * shared with custom feature renderers.
  *
  * Draws a billboard of a size in CSS px at a `[lng, lat]` position in degrees, converting to
  * clip space on the GPU. Call `ensureShader`, `setOffsetUniforms` and `setProjectionData`

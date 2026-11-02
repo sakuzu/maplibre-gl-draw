@@ -507,6 +507,5 @@ describe('FeatureDrawer#getPointStyle and the shape of a point', () => {
     const stray = { pointShape: 'hexagon' } as unknown as FeatureStyle;
 
     expect(drawer.getPointStyle(pointWith(stray)).shape).toBe('circle');
-    expect(drawer.getPointStyle(pointWith({ pointShape: 'icon' } as never)).shape).toBe('circle');
   });
 });

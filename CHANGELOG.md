@@ -467,6 +467,10 @@ writing it. Its changes are listed after those of 3.0.0.
 - The function `getStyleRuleChannel(type)` of the main entry, which knew
   the built-in types only: `draw.extensions.featureTypes.getStyleRuleChannel(type)`
   answers for the custom types too.
+- The shape `'icon'` of `PointShape` and of the handles and markers of
+  `selectionStyle`, and their `iconId`, which the library drew as a
+  circle: a handle or a marker is a `'circle'`, a `'square'`, a
+  `'triangle'` or a `'star'`.
 
 ### Fixed in 3.0.0
 

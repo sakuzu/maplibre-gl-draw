@@ -751,6 +751,11 @@ draw.options.update({
 });
 ```
 
+The handles and markers of `selectionStyle` take the shapes the library
+draws, `'circle'`, `'square'`, `'triangle'` and `'star'`. The shape
+`'icon'` and its `iconId`, which the library drew as a circle, are gone:
+give `'circle'` in their place.
+
 A store of your own needs no change. A store that keeps the items of its
 layers as lists makes `DocumentChange.order` from the lists before and
 after with `diffItemOrder`.

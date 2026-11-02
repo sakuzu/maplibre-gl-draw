@@ -780,12 +780,12 @@ describe('BatchManager the instanced point shapes', () => {
     manager.processFeature(makePoint('a', [0, 0]), false);
     current = 'star';
     manager.processFeature(makePoint('b', [0, 0]), false);
-    current = 'icon';
+    current = 'hexagon' as never;
     manager.processFeature(makePoint('c', [0, 0]), false);
     manager.endFrame();
 
     expect(calls.map((c) => c.shape)).toEqual(['triangle', 'star']);
-    // 'icon' is not an instanced shape: it goes through the per-point renderer
+    // A shape outside the instanced ones goes through the per-point renderer
     expect(drawPointShape).toHaveBeenCalledTimes(1);
   });
 });
@@ -889,7 +889,7 @@ describe('BatchManager the opacity of the layer', () => {
     const drawPointShape = vi.spyOn(drawer, 'drawPointShape').mockImplementation(() => {});
     vi.spyOn(drawer, 'getPointStyle').mockImplementation(() => ({
       ...DEFAULT_FEATURE_STYLE_CONFIG.point.point,
-      shape: 'icon',
+      shape: 'hexagon' as never,
     }));
     const h = createOpacityManager(drawer);
     h.manager.beginFrame({} as ProjectionData, 14, LAYER_AT_HALF);
@@ -954,7 +954,7 @@ describe('BatchManager the opacity of the layer', () => {
     const drawPointShape = vi.spyOn(drawer, 'drawPointShape').mockImplementation(() => {});
     vi.spyOn(drawer, 'getPointStyle').mockImplementation(() => ({
       ...DEFAULT_FEATURE_STYLE_CONFIG.point.point,
-      shape: 'icon',
+      shape: 'hexagon' as never,
     }));
     const h = createOpacityManager(drawer);
     h.manager.beginFrame({} as ProjectionData, 14, undefined, { scale: 0.25, opacity: 0.5 });

@@ -194,7 +194,7 @@ export interface SelectionStyleOptions {
     /** The handle */
     point: {
       /** The shape */
-      shape: 'circle' | 'square' | 'triangle' | 'star' | 'icon';
+      shape: 'circle' | 'square' | 'triangle' | 'star';
       /** The size in CSS pixels */
       size: number;
       /** The fill color (a CSS color) */
@@ -207,8 +207,6 @@ export interface SelectionStyleOptions {
       strokeWidth: number;
       /** The opacity of the outline, from 0 to 1 */
       strokeOpacity: number;
-      /** The icon, for the `icon` shape */
-      iconId?: string;
     };
   };
   /** The rotate handle above the box */
@@ -216,7 +214,7 @@ export interface SelectionStyleOptions {
     /** The handle */
     point: {
       /** The shape */
-      shape: 'circle' | 'square' | 'triangle' | 'star' | 'icon';
+      shape: 'circle' | 'square' | 'triangle' | 'star';
       /** The size in CSS pixels */
       size: number;
       /** The fill color (a CSS color) */
@@ -229,8 +227,6 @@ export interface SelectionStyleOptions {
       strokeWidth: number;
       /** The opacity of the outline, from 0 to 1 */
       strokeOpacity: number;
-      /** The icon, for the `icon` shape */
-      iconId?: string;
     };
     /**
      * The distance between the handle and the box, in CSS pixels, laid on the ground as the
@@ -256,7 +252,7 @@ export interface SelectionStyleOptions {
     /** A vertex handle */
     point: {
       /** The shape */
-      shape: 'circle' | 'square' | 'triangle' | 'star' | 'icon';
+      shape: 'circle' | 'square' | 'triangle' | 'star';
       /** The size in CSS pixels */
       size: number;
       /** The fill color (a CSS color) */
@@ -269,13 +265,11 @@ export interface SelectionStyleOptions {
       strokeWidth: number;
       /** The opacity of the outline, from 0 to 1 */
       strokeOpacity: number;
-      /** The icon, for the `icon` shape */
-      iconId?: string;
     };
     /** A selected vertex */
     selected: {
       /** The shape */
-      shape: 'circle' | 'square' | 'triangle' | 'star' | 'icon';
+      shape: 'circle' | 'square' | 'triangle' | 'star';
       /** The size in CSS pixels */
       size: number;
       /** The fill color (a CSS color) */
@@ -288,13 +282,11 @@ export interface SelectionStyleOptions {
       strokeWidth: number;
       /** The opacity of the outline, from 0 to 1 */
       strokeOpacity: number;
-      /** The icon, for the `icon` shape */
-      iconId?: string;
     };
     /** A vertex of another feature that moves along with a shared vertex */
     followed: {
       /** The shape */
-      shape: 'circle' | 'square' | 'triangle' | 'star' | 'icon';
+      shape: 'circle' | 'square' | 'triangle' | 'star';
       /** The size in CSS pixels */
       size: number;
       /** The fill color (a CSS color) */
@@ -307,8 +299,6 @@ export interface SelectionStyleOptions {
       strokeWidth: number;
       /** The opacity of the outline, from 0 to 1 */
       strokeOpacity: number;
-      /** The icon, for the `icon` shape */
-      iconId?: string;
     };
   };
   /** The midpoint handles, which add a vertex when dragged */
@@ -316,7 +306,7 @@ export interface SelectionStyleOptions {
     /** The handle */
     point: {
       /** The shape */
-      shape: 'circle' | 'square' | 'triangle' | 'star' | 'icon';
+      shape: 'circle' | 'square' | 'triangle' | 'star';
       /** The size in CSS pixels */
       size: number;
       /** The fill color (a CSS color) */
@@ -329,8 +319,6 @@ export interface SelectionStyleOptions {
       strokeWidth: number;
       /** The opacity of the outline, from 0 to 1 */
       strokeOpacity: number;
-      /** The icon, for the `icon` shape */
-      iconId?: string;
     };
   };
   /** The radius handle of a circle */
@@ -338,7 +326,7 @@ export interface SelectionStyleOptions {
     /** The handle */
     point: {
       /** The shape */
-      shape: 'circle' | 'square' | 'triangle' | 'star' | 'icon';
+      shape: 'circle' | 'square' | 'triangle' | 'star';
       /** The size in CSS pixels */
       size: number;
       /** The fill color (a CSS color) */
@@ -351,8 +339,6 @@ export interface SelectionStyleOptions {
       strokeWidth: number;
       /** The opacity of the outline, from 0 to 1 */
       strokeOpacity: number;
-      /** The icon, for the `icon` shape */
-      iconId?: string;
     };
   };
   /** The center marker of a circle */
@@ -360,7 +346,7 @@ export interface SelectionStyleOptions {
     /** The marker */
     point: {
       /** The shape */
-      shape: 'circle' | 'square' | 'triangle' | 'star' | 'icon';
+      shape: 'circle' | 'square' | 'triangle' | 'star';
       /** The size in CSS pixels */
       size: number;
       /** The fill color (a CSS color) */
@@ -373,8 +359,6 @@ export interface SelectionStyleOptions {
       strokeWidth: number;
       /** The opacity of the outline, from 0 to 1 */
       strokeOpacity: number;
-      /** The icon, for the `icon` shape */
-      iconId?: string;
     };
   };
   /**

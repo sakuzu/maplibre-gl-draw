@@ -371,10 +371,13 @@ describe('DisplayChunkSet', () => {
     // A point shape without instancing goes to immediate mode
     const { renderers } = createRenderers();
     const styles = renderers.styles;
-    const iconRenderers: RetainedRendererSet = {
+    const strayRenderers: RetainedRendererSet = {
       ...renderers,
       styles: {
-        getPointStyle: (feature) => ({ ...styles.getPointStyle(feature), shape: 'icon' }),
+        getPointStyle: (feature) => ({
+          ...styles.getPointStyle(feature),
+          shape: 'hexagon' as never,
+        }),
         getLineStringStrokeStyle: (feature) => ({
           ...styles.getLineStringStrokeStyle(feature),
           lineStyle: 'dashed',
@@ -397,7 +400,7 @@ describe('DisplayChunkSet', () => {
     );
     set.replace(chunksOf(features));
     const drawnIds = (): string[] => {
-      const frame = frameFor(iconRenderers, LEFT);
+      const frame = frameFor(strayRenderers, LEFT);
       frame.terrain.cameraMoving = drawn !== null;
       set.draw(frame);
       return vi.mocked(frame.target.processFeature).mock.calls.map(([feature]) => feature.id);

@@ -63,8 +63,8 @@ export type Color = [number, number, number, number];
 export type PointShape = SdfPointShape;
 
 /**
- * The instanced shape a point style is drawn with, or null for a shape the instanced renderer
- * does not draw (`'icon'`, which goes through the per-point renderer)
+ * The instanced shape a point style is drawn with, or null for a value that is not one of its
+ * shapes (a style that was not validated), which goes through the per-point renderer
  *
  * The retained batches (Store and datasets) and the immediate batches all decide
  * with this function, so the three paths agree on which points are instanced.

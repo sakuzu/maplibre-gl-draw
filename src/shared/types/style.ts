@@ -19,14 +19,12 @@ export type Color = [number, number, number, number];
  * The built-in renderers draw `'circle'`, `'square'`, `'triangle'` (equilateral, a vertex
  * pointing up) and `'star'` (a five-pointed star, a tip pointing up). The triangle and the star
  * are inscribed in the circle the `'circle'` shape of the same style draws (the size plus the
- * stroke), and their stroke is drawn inside that outline. `'icon'` is a name for an extension
- * renderer to draw (with `iconId` of {@link PointStyle}); the built-in renderers draw it as a
- * circle.
+ * stroke), and their stroke is drawn inside that outline.
  *
  * Hit testing does not look at the shape: a triangle or a star is hit like the circle that
  * encloses it.
  */
-export type PointShape = 'circle' | 'square' | 'triangle' | 'star' | 'icon';
+export type PointShape = 'circle' | 'square' | 'triangle' | 'star';
 
 /**
  * How a point marker or a handle is drawn: its shape, size, fill and outline
@@ -49,8 +47,6 @@ export interface PointStyle {
   strokeWidth: number;
   /** The opacity of the outline, from 0 to 1 */
   strokeOpacity: number;
-  /** The identifier of the icon, for the `'icon'` shape */
-  iconId?: string;
 }
 
 /** The dash pattern of a line: solid, dashed or dotted. */

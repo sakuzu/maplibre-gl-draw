@@ -527,8 +527,6 @@ attributes, so differences in style do not split the batch.
   color, radius, stroke color, stroke width), with opacity multiplied into
   the alpha of the colors
 - A point whose stroke opacity is 0 is treated as having stroke width 0
-- `icon` does not support instancing and is drawn individually (as a
-  circle) by `PointShapeRenderer`
 
 ### Batching lines
 
@@ -961,7 +959,6 @@ The `immediate` kind covers:
 - Dashed and dotted lines, and polygons with a dashed outline (the dash
   cutting depends on the zoom). With the terrain on, the drape paints them
   instead
-- The point shape `icon` (no instancing)
 - Kinds retained mode does not handle, such as Image
 - Feature types added with `draw.extensions.featureTypes`
 - Features with a companion, which need a hook right before the feature
@@ -1473,8 +1470,8 @@ type DatasetZoomScale = (zoom: number) => { scale: number; opacity: number };
 - It applies per dataset, never to the Store, and multiplies with the
   render scale
 - Every path of the dataset gets the same factors. The features drawn in
-  immediate mode (dashed lines and outlines, the point shape `icon`, every
-  feature when the retained renderers are missing) and the selection
+  immediate mode (dashed lines and outlines, every feature when the
+  retained renderers are missing) and the selection
   highlight, with the feature it redraws over it, take them through the
   optional `factors` of `BatchManager.beginFrame`, which combines them with
   the factors of the layer (`combineDrawFactors`)

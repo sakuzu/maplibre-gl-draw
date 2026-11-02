@@ -66,8 +66,8 @@ import {
 
 /** Style that is swapped in per feature */
 interface StyleSpec {
-  /** Shape of the point ('icon' stands for a shape without instancing support) */
-  pointShape?: PointShape | 'icon';
+  /** Shape of the point ('hexagon' stands for a shape without instancing support) */
+  pointShape?: PointShape | 'hexagon';
   lineStyle?: SDFStrokeStyle['lineStyle'];
   strokeWidth?: number;
   strokeOpacity?: number;
@@ -525,7 +525,7 @@ describe('classifyFeature', () => {
       square: { pointShape: 'square' },
       triangle: { pointShape: 'triangle' },
       star: { pointShape: 'star' },
-      icon: { pointShape: 'icon' },
+      hexagon: { pointShape: 'hexagon' },
     });
 
     expect(
@@ -540,9 +540,9 @@ describe('classifyFeature', () => {
     expect(classifyFeature(makeFeature('star', 'Point'), styles.resolver, empty, companions)).toBe(
       'point',
     );
-    expect(classifyFeature(makeFeature('icon', 'Point'), styles.resolver, empty, companions)).toBe(
-      'immediate',
-    );
+    expect(
+      classifyFeature(makeFeature('hexagon', 'Point'), styles.resolver, empty, companions),
+    ).toBe('immediate');
     expect(
       classifyFeature(makeFeature('circle', 'MultiPoint'), styles.resolver, empty, companions),
     ).toBe('point');
