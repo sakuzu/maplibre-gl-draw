@@ -102,7 +102,7 @@ writing it. Its changes are listed after those of 3.0.0.
   drawn with the rows of their layer. In `/kasane` too,
   `listSelectedRows`, `DraggedRows` (read with
   `draw.rendered.getDraggedRows()`) and the types of the
-  pictures (`RowSpriteSource`, `RowSprite`, `RowSpriteDistanceScale`).
+  pictures (`RowSpriteSource`, `RowSprite`, `RowSpriteScaleStop`).
   `LayerTableView.getRowStyle` reads the style of a row, shared and
   frozen, without a copy.
 - Features selected in bulk and turned or resized are drawn during the drag

@@ -372,17 +372,27 @@ export interface RowSprite {
 }
 
 /**
- * How the size of the pictures follows the distance of their point from the camera, in a
- * pitched view: `clamp(base + factor * w0 / w, min, max)`, where `w0` is the distance of the
- * center of the screen and `w` the distance of the point (1 on the globe)
+ * The most stops {@link RowSpriteSource.distanceScale} has
+ *
+ * @internal
+ */
+export const ROW_SPRITE_SCALE_MAX_STOPS = 8;
+
+/**
+ * One stop of how the size of the pictures follows the distance of their point from the camera
+ * ({@link RowSpriteSource.distanceScale})
  *
  * @experimental
  */
-export interface RowSpriteDistanceScale {
-  readonly base: number;
-  readonly factor: number;
-  readonly min: number;
-  readonly max: number;
+export interface RowSpriteScaleStop {
+  /**
+   * The distance of the center of the screen from the camera divided by the distance of the
+   * point: 1 for a point as far as the center, more for a point nearer the camera, less for one
+   * farther from it
+   */
+  readonly distanceRatio: number;
+  /** The factor the size of the picture is multiplied by at that ratio */
+  readonly scale: number;
 }
 
 /**
@@ -409,8 +419,15 @@ export interface RowSpriteSource {
    * the extension (asked once per style)
    */
   sprite(style: PublicFeatureStyle | undefined): RowSprite | null;
-  /** How the size follows the distance from the camera (the same size everywhere when omitted) */
-  readonly distanceScale?: RowSpriteDistanceScale;
+  /**
+   * How the size of the pictures follows the distance of their point from the camera in a pitched
+   * view, as stops of a curve: from 1 to 8 stops in ascending order of `distanceRatio`, the factor
+   * linear between two stops and that of the first or the last stop beyond them. The same size
+   * everywhere when omitted or empty, and on the globe. Stops the library cannot read (more than
+   * 8, not in ascending order, not finite) are told once in the console and draw the same size
+   * everywhere
+   */
+  readonly distanceScale?: readonly RowSpriteScaleStop[];
   /**
    * True when the texture holds its colors multiplied by their alpha (a canvas uploaded with
    * `UNPACK_PREMULTIPLY_ALPHA_WEBGL`): they are divided back before they are blended as the other

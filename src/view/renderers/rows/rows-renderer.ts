@@ -39,6 +39,7 @@ import { type RetainedDrawRun, retainedDrawRun } from '../draw-run.js';
 import { bindRowState, type RowStateBinding, RowStateUniforms } from '../row-state.js';
 import type { RowsCopies } from './rows-copies.js';
 import {
+  ROW_SPRITE_SCALE_MAX_STOPS,
   ROWS_COORD_WIDTH,
   ROWS_INSTANCE_BYTES,
   ROWS_INSTANCE_FLOATS,
@@ -46,6 +47,7 @@ import {
   ROWS_ROW_STYLE_WIDTH,
   ROWS_STYLE_TEXELS,
   ROWS_STYLE_WIDTH,
+  type RowSpriteScaleStop,
   type RowsChunkData,
   type RowsChunkLayout,
   type RowsPalette,
@@ -134,7 +136,8 @@ interface RowsUniformLocations {
   readonly screenRatio: WebGLUniformLocation | null;
   readonly cameraToCenterW: WebGLUniformLocation | null;
   readonly bearing: WebGLUniformLocation | null;
-  readonly spriteScale: WebGLUniformLocation | null;
+  readonly spriteScaleStops: WebGLUniformLocation | null;
+  readonly spriteScaleCount: WebGLUniformLocation | null;
   readonly opacity: WebGLUniformLocation | null;
   readonly cullBack: WebGLUniformLocation | null;
   readonly sprites: WebGLUniformLocation | null;
@@ -163,7 +166,8 @@ interface RowsUniformMemo {
   coordWidth: number;
   rowBase: number;
   rowStyleWidth: number;
-  spriteScale: string;
+  /** The stops of the distance scale written (null before any) */
+  spriteScale: readonly RowSpriteScaleStop[] | undefined | null;
   spritePremultiplied: number;
 }
 
@@ -176,7 +180,7 @@ function emptyMemo(): RowsUniformMemo {
     coordWidth: Number.NaN,
     rowBase: Number.NaN,
     rowStyleWidth: Number.NaN,
-    spriteScale: '',
+    spriteScale: null,
     spritePremultiplied: Number.NaN,
   };
 }
@@ -215,6 +219,8 @@ export class RowsRenderer {
   private readonly cornerBuffer: WebGLBuffer | null;
   /** The picture drawn for the sprites of a chunk whose texture is not there */
   private emptySprites: WebGLTexture | null = null;
+  /** The stops of the distance scale of the sprites, as they are written to their uniform */
+  private readonly spriteScaleStops = new Float32Array(ROW_SPRITE_SCALE_MAX_STOPS * 2);
   /** The chunks waiting to be written, in the order they were made */
   private readonly queued = new Set<RowsChunk>();
   /** The chunks with writes in place waiting to be uploaded */
@@ -778,14 +784,12 @@ export class RowsRenderer {
       memo.rowBase = rowBase;
     }
     const scale = chunk.data.sprites?.distanceScale;
-    const spriteScale = scale ? `${scale.base},${scale.factor},${scale.min},${scale.max}` : '';
-    if (locations.spriteScale && (stale || memo.spriteScale !== spriteScale)) {
-      if (scale) {
-        gl.uniform4f(locations.spriteScale, scale.base, scale.factor, scale.min, scale.max);
-      } else {
-        gl.uniform4f(locations.spriteScale, 1, 0, 1, 1);
-      }
-      memo.spriteScale = spriteScale;
+    if (stale || memo.spriteScale !== scale) {
+      const count = writeSpriteScaleStops(scale, this.spriteScaleStops);
+      if (locations.spriteScaleStops)
+        gl.uniform2fv(locations.spriteScaleStops, this.spriteScaleStops);
+      if (locations.spriteScaleCount) gl.uniform1i(locations.spriteScaleCount, count);
+      memo.spriteScale = scale;
     }
     const premultiplied = chunk.data.sprites?.premultipliedAlpha === true ? 1 : 0;
     if (locations.spritePremultiplied && (stale || memo.spritePremultiplied !== premultiplied)) {
@@ -1135,7 +1139,8 @@ function locationsOf(gl: WebGL2RenderingContext, program: WebGLProgram): RowsUni
     screenRatio: at('u_screen_ratio'),
     cameraToCenterW: at('u_camera_to_center_w'),
     bearing: at('u_bearing'),
-    spriteScale: at('u_sprite_scale'),
+    spriteScaleStops: at('u_sprite_scale_stops'),
+    spriteScaleCount: at('u_sprite_scale_count'),
     opacity: at('u_opacity'),
     cullBack: at('u_cull_back'),
     sprites: at('u_sprites'),
@@ -1172,4 +1177,42 @@ function paddedRange(values: Float32Array, from: number, to: number): Float32Arr
   const out = new Float32Array(to - from);
   if (from < values.length) out.set(values.subarray(from));
   return out;
+}
+
+/** The distance scales already told in the console as ones the library cannot read */
+const unreadSpriteScales = new WeakSet<readonly RowSpriteScaleStop[]>();
+
+/**
+ * Writes the stops of a distance scale into `out` (2 floats each), and returns how many the
+ * shader reads: 0 for none, and for stops it cannot read, which are told once in the console
+ *
+ * @internal
+ */
+export function writeSpriteScaleStops(
+  stops: readonly RowSpriteScaleStop[] | undefined,
+  out: Float32Array,
+): number {
+  out.fill(0);
+  if (!stops || stops.length === 0) return 0;
+  let readable = stops.length <= ROW_SPRITE_SCALE_MAX_STOPS;
+  for (let i = 0; readable && i < stops.length; i++) {
+    const stop = stops[i];
+    if (!Number.isFinite(stop.distanceRatio) || !Number.isFinite(stop.scale)) readable = false;
+    else if (i > 0 && !(stop.distanceRatio > stops[i - 1].distanceRatio)) readable = false;
+  }
+  if (!readable) {
+    if (!unreadSpriteScales.has(stops)) {
+      unreadSpriteScales.add(stops);
+      console.warn(
+        `The distanceScale of the pictures of a renderer has stops the library cannot read (${JSON.stringify(stops)}): ` +
+          `from 1 to ${ROW_SPRITE_SCALE_MAX_STOPS} finite stops in ascending order of distanceRatio; the pictures are drawn at the same size everywhere`,
+      );
+    }
+    return 0;
+  }
+  for (let i = 0; i < stops.length; i++) {
+    out[i * 2] = stops[i].distanceRatio;
+    out[i * 2 + 1] = stops[i].scale;
+  }
+  return stops.length;
 }

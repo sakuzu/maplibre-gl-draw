@@ -37,7 +37,13 @@ import { DASH_COEFFICIENTS } from '../line/dash.js';
 import { POINT_AA_PADDING_PX, POINT_MIN_OUTER_PX } from '../point/point-instance.js';
 import { POINT_SDF_GLSL } from '../point/point-sdf.js';
 import { ROW_HIDDEN_POSITION_GLSL, ROW_STATE_GLSL } from '../row-state.js';
-import { ROWS_KIND, ROWS_KIND_SHIFT, ROWS_ROW_MASK, ROWS_STYLE_TEXELS } from './rows-format.js';
+import {
+  ROW_SPRITE_SCALE_MAX_STOPS,
+  ROWS_KIND,
+  ROWS_KIND_SHIFT,
+  ROWS_ROW_MASK,
+  ROWS_STYLE_TEXELS,
+} from './rows-format.js';
 
 /** A float literal of GLSL */
 function glslFloat(value: number): string {
@@ -107,8 +113,10 @@ uniform float u_screen_ratio;
 uniform float u_camera_to_center_w;
 // The bearing of the map (degrees)
 uniform float u_bearing;
-// How the size of the sprites follows the distance: base, factor, min, max (factor 0: it does not)
-uniform vec4 u_sprite_scale;
+// How the size of the sprites follows the distance: stops of (distance ratio, factor), in
+// ascending order of the ratio, u_sprite_scale_count of them (0: it does not)
+uniform vec2 u_sprite_scale_stops[${ROW_SPRITE_SCALE_MAX_STOPS}];
+uniform int u_sprite_scale_count;
 
 flat out int v_kind;
 // The color (the fill of a point)
@@ -241,6 +249,22 @@ void drawPoint(int style) {
     v_geom = vec4(offsetPx, 0.0, 0.0);
 }
 
+// The factor of the size of a sprite at a ratio of distances: linear between two stops, that of
+// the first or the last stop beyond them
+float spriteDistanceScale(float distanceRatio) {
+    vec2 first = u_sprite_scale_stops[0];
+    if (distanceRatio <= first.x) return first.y;
+    for (int i = 1; i < ${ROW_SPRITE_SCALE_MAX_STOPS}; i++) {
+        if (i >= u_sprite_scale_count) break;
+        vec2 next = u_sprite_scale_stops[i];
+        if (distanceRatio <= next.x) {
+            vec2 previous = u_sprite_scale_stops[i - 1];
+            return mix(previous.y, next.y, (distanceRatio - previous.x) / max(next.x - previous.x, 1e-9));
+        }
+    }
+    return u_sprite_scale_stops[u_sprite_scale_count - 1].y;
+}
+
 void drawSprite(int style) {
     g_anchor_elevation_m = 0.0;
     g_anchor_elevation_on = 1.0;
@@ -255,12 +279,8 @@ void drawSprite(int style) {
     vec4 uv = rowsStyle(style, 0);
     vec4 shape = rowsStyle(style, 1);
     float ratio = 1.0;
-    if (u_sprite_scale.y != 0.0 && u_camera_to_center_w > 0.0 && centerClip.w > 0.0) {
-        ratio = clamp(
-            u_sprite_scale.x + u_sprite_scale.y * (u_camera_to_center_w / centerClip.w),
-            u_sprite_scale.z,
-            u_sprite_scale.w
-        );
+    if (u_sprite_scale_count > 0 && u_camera_to_center_w > 0.0 && centerClip.w > 0.0) {
+        ratio = spriteDistanceScale(u_camera_to_center_w / centerClip.w);
         ratio = mix(ratio, 1.0, u_projection_transition);
     }
     vec2 halfPx = shape.xy * u_size_scale * ratio;

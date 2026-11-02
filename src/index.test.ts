@@ -308,7 +308,7 @@ const KASANE = [
   'RowsMove',
   'rowsOfGeoJSON',
   'RowSprite',
-  'RowSpriteDistanceScale',
+  'RowSpriteScaleStop',
   'RowSpriteSource',
   'RowValues',
   'rowValuesOf',

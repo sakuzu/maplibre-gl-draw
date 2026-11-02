@@ -113,7 +113,7 @@ export type { FeatureRendererRows } from '../api/extension/render.js';
 // Pictures of points drawn with the rows
 export type {
   RowSprite,
-  RowSpriteDistanceScale,
+  RowSpriteScaleStop,
   RowSpriteSource,
 } from '../view/renderers/rows/rows-format.js';
 

@@ -15,7 +15,7 @@
  */
 
 import type { ProjectionData } from 'maplibre-gl';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { GpuLedger } from '../../gpu-ledger.js';
 import { beginRenderFrame } from '../../shaders/frame.js';
 import type { ShaderData } from '../../shaders/helpers.js';
@@ -29,7 +29,7 @@ import {
   readRowsInstance,
   writeRowsInstance,
 } from './rows-format.js';
-import { RowsRenderer } from './rows-renderer.js';
+import { RowsRenderer, writeSpriteScaleStops } from './rows-renderer.js';
 import { buildRowsFragmentSource, buildRowsVertexSource } from './rows-shader.js';
 
 const SHADER_DATA: ShaderData = { vertexShaderPrelude: '', define: '', variantName: 'mercator' };
@@ -176,6 +176,42 @@ describe('the shaders of the drawing in one draw', () => {
       expect(vertex.includes(`kind == ${kind}`) || kind === ROWS_KIND.sprite).toBe(true);
     }
     expect(fragment).toContain('texture(u_sprites');
+  });
+});
+
+describe('the stops of the distance scale of the sprites', () => {
+  it('writes the stops a shader reads, two floats each, and how many there are', () => {
+    const out = new Float32Array(16).fill(9);
+    const stops = [
+      { distanceRatio: 0.25, scale: 0.5 },
+      { distanceRatio: 1, scale: 1 },
+      { distanceRatio: 3, scale: 2 },
+    ];
+    expect(writeSpriteScaleStops(stops, out)).toBe(3);
+    expect(Array.from(out.slice(0, 8))).toEqual([0.25, 0.5, 1, 1, 3, 2, 0, 0]);
+    expect(writeSpriteScaleStops(undefined, out)).toBe(0);
+    expect(writeSpriteScaleStops([], out)).toBe(0);
+    expect(Array.from(out)).toEqual(new Array(16).fill(0));
+  });
+
+  it('draws the same size everywhere for stops it cannot read, told once', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const out = new Float32Array(16);
+      const unordered = [
+        { distanceRatio: 2, scale: 1 },
+        { distanceRatio: 1, scale: 2 },
+      ];
+      const tooMany = Array.from({ length: 9 }, (_, i) => ({ distanceRatio: i, scale: 1 }));
+      const notFinite = [{ distanceRatio: Number.NaN, scale: 1 }];
+      for (const stops of [unordered, tooMany, notFinite]) {
+        expect(writeSpriteScaleStops(stops, out)).toBe(0);
+      }
+      expect(writeSpriteScaleStops(unordered, out)).toBe(0);
+      expect(warn).toHaveBeenCalledTimes(3);
+    } finally {
+      warn.mockRestore();
+    }
   });
 });
 
@@ -406,7 +442,10 @@ describe('RowsRenderer', () => {
       texture: pictures,
       revision: 1,
       sprite: () => null,
-      distanceScale: { base: 0.5, factor: 0.5, min: 0, max: 4 },
+      distanceScale: [
+        { distanceRatio: 0.5, scale: 0.75 },
+        { distanceRatio: 2, scale: 1.5 },
+      ],
     };
     const chunk = renderer.createChunk({ ...chunkData(2), sprites });
     renderer.flushUploads();
@@ -420,10 +459,11 @@ describe('RowsRenderer', () => {
     );
     expect(unit).toBeGreaterThanOrEqual(0);
     expect(calls[unit + 1]).toEqual({ name: 'bindTexture', args: ['TEXTURE_2D'.length, pictures] });
-    const scale = calls.find(
-      (c) => c.name === 'uniform4f' && (c.args[0] as { name: string }).name === 'u_sprite_scale',
-    );
-    expect(scale?.args.slice(1)).toEqual([0.5, 0.5, 0, 4]);
+    const uniformOf = (from: Call[], method: string, name: string) =>
+      from.find((c) => c.name === method && (c.args[0] as { name: string }).name === name);
+    const stops = uniformOf(calls, 'uniform2fv', 'u_sprite_scale_stops');
+    expect(Array.from(stops?.args[1] as Float32Array).slice(0, 5)).toEqual([0.5, 0.75, 2, 1.5, 0]);
+    expect(uniformOf(calls, 'uniform1i', 'u_sprite_scale_count')?.args[1]).toBe(2);
     // A chunk without pictures binds the empty picture of the renderer, and no scale
     const plain = renderer.createChunk(chunkData(2));
     renderer.flushUploads();
@@ -431,10 +471,7 @@ describe('RowsRenderer', () => {
     renderer.drawRange(plain, 0, 2, 14, PROJECTION, binding());
     const after = mock.calls.slice(before);
     expect(after.some((c) => c.name === 'bindTexture' && c.args[1] === pictures)).toBe(false);
-    const none = after.find(
-      (c) => c.name === 'uniform4f' && (c.args[0] as { name: string }).name === 'u_sprite_scale',
-    );
-    expect(none?.args.slice(1)).toEqual([1, 0, 1, 1]);
+    expect(uniformOf(after, 'uniform1i', 'u_sprite_scale_count')?.args[1]).toBe(0);
   });
 
   it('writes the values of the styles before the chunks, and the writes in place after them', () => {
