@@ -456,7 +456,7 @@ export function buildFrameState(input: FrameBuildInput): FrameState {
 
   // In a wide band the polygons and lines are drawn flat (the reason is surfacesFlattened in
   // terrain/context.ts). It is the same band and the same reason as turning off the depth.
-  // Symbols (points, handles, text quads) are out of scope, so stopping it here does not
+  // Symbols (points, handles, billboard quads) are out of scope, so stopping it here does not
   // break the agreement between the anchor projection and the hit testing.
   setTerrainSurfacesFlattened(terrainContext, terrainState.active && wideFallback);
 

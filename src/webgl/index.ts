@@ -67,10 +67,10 @@ export { applyDrawBlendState } from '../view/layer/blend.js';
 export { drawBillboardsWithoutDepth } from '../view/renderers/point/billboard-depth.js';
 
 // Quads
-export type { QuadDrapeGlyphs } from '../view/terrain/drape/quad.js';
+export type { QuadDrapeContent } from '../view/terrain/drape/quad.js';
 export type { QuadVertices } from '../view/shaders/quad.js';
-export { computeQuadVertices, drawQuadSurfaceOnTerrain, QuadShader } from '../view/shaders/quad.js';
-export { QUAD_GLYPH_STRIDE } from '../view/terrain/drape/quad-glyphs.js';
+export { computeQuadVertices, drawQuadOnTerrain, QuadShader } from '../view/shaders/quad.js';
+export { QUAD_DRAPE_TEXTURE_UNITS } from '../view/terrain/drape/quad.js';
 
 // Lines
 export type { SDFStrokeOptions, SDFStrokeStyle } from '../view/renderers/line/sdf-line.js';
@@ -92,12 +92,7 @@ export type { Coordinate } from '../shared/types/model.js';
 export type { BlendCapableGL } from '../view/layer/blend.js';
 export type { DashSegment } from '../view/renderers/line/dash.js';
 export type { ProjectionUniformLocations } from '../view/shaders/projection.js';
-export type {
-  DrapeQuadCorners,
-  QuadDrapeColor,
-  QuadDrapeFill,
-  QuadDrapeSurface,
-} from '../view/terrain/drape/quad.js';
+export type { DrapeQuadCorners } from '../view/terrain/drape/quad.js';
 export type {
   MercatorRect,
   TessellationStep,

@@ -851,7 +851,7 @@ draw.extensions.companionProviders.add(halo);
 地形の上に描く部品は、描画の呼び出しの描画の文脈か、その `terrain` を
 受け取ります。描く前に `ProjectionUniformManager` や `QuadShader` の
 `setTerrain(ctx)` を呼び、`terrainTessellationStep(ctx)` と
-`drawQuadSurfaceOnTerrain(ctx, ...)` にも渡します。描画の文脈はその
+`drawQuadOnTerrain(ctx, ...)` にも渡します。描画の文脈はその
 呼び出しの間だけ有効なので、呼び出しごとにそのときのものを渡して
 ください。`null` を渡すと、地形なしで描きます。ライブラリーが渡した
 ものでないオブジェクトを渡すと、`viewUniforms` と同じく、コード
@@ -879,6 +879,44 @@ function pathOnTerrain(
   const step = terrainTessellationStep(ctx);
   // path を送って描く
   return step ? densifyPath(coordinates, step) : coordinates;
+}
+```
+
+地図の上に平らに置く独自の四角は、
+`drawQuadOnTerrain(ctx, corners, content, opacity)` で、画像と同じく
+地形の上に塗れます。起伏に沿い、
+尾根の向こうでは隠れます。ライブラリーは、地面の画素ごとに四角の中の
+位置と、隣の画素までのその変わり方を求めます。中身 (`QuadDrapeContent`)
+は、その位置の色を GLSL の関数 `quadDrapeColor` で返し、関数が読む
+uniform とテクスチャーを `QUAD_DRAPE_TEXTURE_UNITS` の単位に結びます。
+四角を地形に貼れない所 (地形が無い、標高がまだ届いていない) では
+`false` を返すので、描画器は `QuadShader` のときと同じく別の描き方で
+描きます。
+
+```ts
+import type { RenderContext } from '@sakuzu/maplibre-gl-draw';
+import {
+  computeQuadVertices,
+  drawQuadOnTerrain,
+  type QuadDrapeContent,
+} from '@sakuzu/maplibre-gl-draw/webgl';
+
+// どの描画でも同じ GLSL の文字列を渡す (ライブラリーはこれごとにプログラムを作る)
+const SOLID_GLSL = `
+uniform vec4 u_solid_color;
+vec4 quadDrapeColor(vec2 uv, vec2 uvDx, vec2 uvDy, float shade) {
+  return vec4(u_solid_color.rgb * shade * u_solid_color.a, u_solid_color.a);
+}`;
+
+function drawSolidQuad(ctx: RenderContext, center: [number, number]): boolean {
+  const content: QuadDrapeContent = {
+    glsl: SOLID_GLSL,
+    bind(gl, uniform) {
+      gl.uniform4f(uniform('u_solid_color'), 0.2, 0.4, 0.8, 0.6);
+    },
+  };
+  const corners = computeQuadVertices(center[0], center[1], 0.01, 0.01, 0);
+  return drawQuadOnTerrain(ctx, corners, content, ctx.opacity);
 }
 ```
 

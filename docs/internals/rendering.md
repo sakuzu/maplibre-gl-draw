@@ -1900,6 +1900,19 @@ one go. The runs of a cell are in draw order, so a section stops at the end
 of its range. The selection highlight is accumulated over all sections and
 overlaid once, by the last one, so it is neither buried nor doubled.
 
+The drape of a quad does not know what the quad shows. A content
+(`QuadDrapeContent`) gives a GLSL function of the position in the quad,
+`quadDrapeColor(uv, uvDx, uvDy, shade)`, which returns a premultiplied
+color, and binds the uniforms and the textures it reads, on the units of
+`QUAD_DRAPE_TEXTURE_UNITS` (1 to 4 and 10 to 15; the DEMs of the tile and
+of its neighbours are on 0, 5 and 7 to 9, the DEM atlas on 6). The drape
+owns the corners, the terrain mesh and the cut into tiles, the inverse
+bilinear (u, v) and its derivatives, taken before any branch, the depth,
+the shading, the smoothing of the edge and the opacity, and keeps one
+program for each GLSL of a content. An image is drawn as such a content
+(`QuadImageContent` in `shaders/quad.ts`), and an extension draws its
+quads through the same entry point, `drawQuadOnTerrain` of `/webgl`.
+
 ### Terrain shading of fills
 
 While terrain is shown, polygon fills are multiplied by the same shading as

@@ -904,7 +904,7 @@ them ([styles](styles.md#a-features-own-style)).
 The parts that draw on the terrain take the render context of the draw
 call, or its `terrain`: `setTerrain(ctx)` on a
 `ProjectionUniformManager` or a `QuadShader` before drawing, and
-`terrainTessellationStep(ctx)` and `drawQuadSurfaceOnTerrain(ctx, ...)`.
+`terrainTessellationStep(ctx)` and `drawQuadOnTerrain(ctx, ...)`.
 The render context is valid for its draw call only, so pass the one of
 each call. Given `null`, they draw without terrain; given an object the
 library did not hand out, they throw a `DrawError` with the code
@@ -932,6 +932,44 @@ function pathOnTerrain(
   const step = terrainTessellationStep(ctx);
   // upload the path and draw it
   return step ? densifyPath(coordinates, step) : coordinates;
+}
+```
+
+A quad of your own laid flat on the map is painted on the terrain with
+`drawQuadOnTerrain(ctx, corners, content, opacity)`, as an image is: it
+follows the relief and hides behind a ridge. The library finds the
+position in the quad of each pixel of the ground and its change from one
+pixel to the next; the content (`QuadDrapeContent`) gives the color there
+as a GLSL function, `quadDrapeColor`, and binds the uniforms and the
+textures it reads, on the units of `QUAD_DRAPE_TEXTURE_UNITS`. It returns
+`false` where the quad cannot be draped (no terrain, the elevations not
+arrived yet), and the renderer then draws the quad another way, as with
+`QuadShader`.
+
+```ts
+import type { RenderContext } from '@sakuzu/maplibre-gl-draw';
+import {
+  computeQuadVertices,
+  drawQuadOnTerrain,
+  type QuadDrapeContent,
+} from '@sakuzu/maplibre-gl-draw/webgl';
+
+// One GLSL string for every draw: the library builds a program for each
+const SOLID_GLSL = `
+uniform vec4 u_solid_color;
+vec4 quadDrapeColor(vec2 uv, vec2 uvDx, vec2 uvDy, float shade) {
+  return vec4(u_solid_color.rgb * shade * u_solid_color.a, u_solid_color.a);
+}`;
+
+function drawSolidQuad(ctx: RenderContext, center: [number, number]): boolean {
+  const content: QuadDrapeContent = {
+    glsl: SOLID_GLSL,
+    bind(gl, uniform) {
+      gl.uniform4f(uniform('u_solid_color'), 0.2, 0.4, 0.8, 0.6);
+    },
+  };
+  const corners = computeQuadVertices(center[0], center[1], 0.01, 0.01, 0);
+  return drawQuadOnTerrain(ctx, corners, content, ctx.opacity);
 }
 ```
 

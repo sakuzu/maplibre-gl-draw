@@ -31,7 +31,7 @@ export type EdgeName = (typeof EDGE_NAMES)[number];
  * it as u_dem_atlas as is. Overwriting it here would make whatever is drawn after the drape
  * rendering (a preview being drawn, dashed lines and so on) look elevations up in a broken
  * texture and fly off screen. 1 to 4 are used by the data textures (renderer.ts) and the
- * contents of the quads (quad.ts).
+ * contents of the quads (QUAD_DRAPE_TEXTURE_UNITS in quad.ts, which has 10 to 15 too).
  */
 export const EDGE_UNITS: Record<EdgeName, number> = { top: 5, bottom: 7, left: 8, right: 9 };
 

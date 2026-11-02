@@ -20,7 +20,7 @@ import { createRenderContext } from '../../api/impl/render-context.js';
 import type { FrameDrawContext } from '../../extension/renderers.js';
 import { beginRenderFrame } from '../shaders/frame.js';
 import { ProjectionUniformManager } from '../shaders/projection.js';
-import { drawQuadSurfaceOnTerrain } from '../shaders/quad.js';
+import { drawQuadOnTerrain } from '../shaders/quad.js';
 import { terrainStateOf } from './binding.js';
 import { releaseTerrainContext, TerrainContext, type TerrainRenderState } from './context.js';
 import { terrainTessellationStep } from './polygon.js';
@@ -135,16 +135,16 @@ describe('the terrain behind a render context', () => {
     );
   });
 
-  it('paints no surface without terrain', () => {
-    const corners = [
-      [0, 1],
-      [1, 1],
-      [0, 0],
-      [1, 0],
-    ] as unknown as Parameters<typeof drawQuadSurfaceOnTerrain>[1];
-    const surface = {} as Parameters<typeof drawQuadSurfaceOnTerrain>[2];
-    expect(drawQuadSurfaceOnTerrain(renderContextOver(terrain), corners, surface, 1)).toBe(false);
-    expect(() => drawQuadSurfaceOnTerrain({} as TerrainSurface, corners, surface, 1)).toThrow(
+  it('drapes no quad without terrain', () => {
+    const corners = {
+      topLeft: [0, 1],
+      topRight: [1, 1],
+      bottomLeft: [0, 0],
+      bottomRight: [1, 0],
+    } as const;
+    const content = { glsl: '', bind: () => {} };
+    expect(drawQuadOnTerrain(renderContextOver(terrain), corners, content, 1)).toBe(false);
+    expect(() => drawQuadOnTerrain({} as TerrainSurface, corners, content, 1)).toThrow(
       expect.objectContaining({ code: 'invalid-input' }),
     );
   });

@@ -47,7 +47,29 @@ import { QuadDrapeRenderer } from '../terrain/drape/quad.js';
 import { DrapeRenderer } from '../terrain/drape/renderer.js';
 import { BulkFramesRenderer } from '../ui/bulk-frames.js';
 import { SAMPLER_PRECISION_GLSL, type ShaderData } from './helpers.js';
-import { QuadShader } from './quad.js';
+import { QuadImageContent, QuadShader } from './quad.js';
+
+/**
+ * A content of a draped quad that reads its texture in a loop, with `textureGrad` and the
+ * derivatives the library gives it
+ */
+const BLURRED_CONTENT = {
+  glsl: `
+uniform sampler2D u_blur_texture;
+uniform vec2 u_blur_step;
+
+vec4 quadDrapeColor(vec2 uv, vec2 uvDx, vec2 uvDy, float shade) {
+    vec4 sum = vec4(0.0);
+    for (int i = -2; i <= 2; i++) {
+        vec2 at = clamp(uv + float(i) * u_blur_step, 0.0, 1.0);
+        sum += textureGrad(u_blur_texture, at, uvDx, uvDy);
+    }
+    vec4 color = sum / 5.0;
+    return vec4(color.rgb * shade * color.a, color.a);
+}
+`,
+  bind: () => {},
+};
 
 /** One program as the renderers give it to GL */
 interface RecordedProgram {
@@ -211,8 +233,9 @@ function recordPrograms(shaderData: ShaderData): RecordedProgram[] {
   });
   withLabel('QuadDrapeRenderer', () => {
     const quad = new QuadDrapeRenderer(gl);
-    expect(quad.ensure(shaderData, 16)).toBe(true);
-    expect(quad.ensureSurface(shaderData, 16)).toBe(true);
+    expect(quad.ensure(new QuadImageContent(), shaderData, 16)).toBe(true);
+    // A content as the contract allows it: textures read in a loop with the derivatives given
+    expect(quad.ensure(BLURRED_CONTENT, shaderData, 16)).toBe(true);
   });
   withLabel('DemAtlas', () => {
     expect(new DemAtlas(gl).ensureProgram()).toBe(true);
@@ -289,8 +312,8 @@ describe('shader programs on a real WebGL2', () => {
       ),
     );
     // 12 renderers with one program each (the frames of the features selected in bulk among
-    // them) and the drape of a quad with two (image and surface); the image and the surface share
-    // one call site. The point, the line and the polygon
+    // them) and the drape of a quad with one for each content (an image and a content that reads
+    // its texture in a loop); the contents share one call site. The point, the line and the polygon
     // renderers also build the variant that draws rows held as columns at the same call site;
     // each variant is recorded with the program it is a variant of. The renderer of the rows
     // drawn in one draw links its program without waiting for it (`gl.createProgram`), which

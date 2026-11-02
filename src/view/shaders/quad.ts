@@ -13,7 +13,9 @@
  * three ways.
  *
  * 1. Analytic drape (the preferred one). `terrain/drape/quad.ts` paints it as
- *    pixels of the ground surface. Burying and clipping cannot occur by
+ *    pixels of the ground surface, with the picture as its content
+ *    (`QuadImageContent`, the same entry point an extension paints its quads
+ *    through, `drawQuadOnTerrain`). Burying and clipping cannot occur by
  *    construction, and behind a ridge it is hidden by the depth of the terrain
  *    mesh
  * 2. Subdivision (degraded). On frames where the resources for the analytic
@@ -31,8 +33,8 @@ import type { RenderContext } from '../../api/extension/render.js';
 import { globeGridOf } from '../globe-subdivision.js';
 import { terrainStateOf } from '../terrain/binding.js';
 import type { TerrainContext } from '../terrain/context.js';
-import type { DrapeQuadCorners, QuadDrapeSurface } from '../terrain/drape/quad.js';
-import { quadMercatorCorners } from '../terrain/drape/quad.js';
+import type { DrapeQuadCorners, QuadDrapeContent } from '../terrain/drape/quad.js';
+import { QUAD_DRAPE_TEXTURE_UNITS, quadMercatorCorners } from '../terrain/drape/quad.js';
 import {
   getQuadDrapeFrame,
   isTerrainElevationActive,
@@ -69,6 +71,40 @@ export interface QuadVertices {
 }
 
 /**
+ * The GLSL of a picture as the content of a draped quad: the texel at (u, v), darkened by the
+ * relief as the fill is
+ */
+const QUAD_IMAGE_GLSL = `
+uniform sampler2D u_image_texture;
+
+vec4 quadDrapeColor(vec2 uv, vec2 uvDx, vec2 uvDy, float shade) {
+    vec4 color = texture(u_image_texture, clamp(uv, 0.0, 1.0));
+    return vec4(color.rgb * shade * color.a, color.a);
+}
+`;
+
+/** The texture unit the picture is bound to */
+const QUAD_IMAGE_TEXTURE_UNIT = QUAD_DRAPE_TEXTURE_UNITS[0];
+
+/**
+ * A picture as the content of a draped quad (one kept by each QuadShader, given the texture of
+ * the quad it draws)
+ *
+ * @internal
+ */
+export class QuadImageContent implements QuadDrapeContent {
+  readonly glsl = QUAD_IMAGE_GLSL;
+  /** The texture of the picture of the quad being drawn */
+  texture: WebGLTexture | null = null;
+
+  bind(gl: WebGL2RenderingContext, uniform: (name: string) => WebGLUniformLocation | null): void {
+    gl.activeTexture(gl.TEXTURE0 + QUAD_IMAGE_TEXTURE_UNIT);
+    gl.bindTexture(gl.TEXTURE_2D, this.texture);
+    gl.uniform1i(uniform('u_image_texture'), QUAD_IMAGE_TEXTURE_UNIT);
+  }
+}
+
+/**
  * Draws a textured quad on the map, such as a picture pasted onto it, following pitch,
  * globe and terrain.
  *
@@ -93,6 +129,9 @@ export class QuadShader {
 
   // Stores the uniforms for offset mode
   private offsetUniforms: OffsetUniforms | null = null;
+
+  /** The picture as the content of the analytic drape */
+  private imageContent = new QuadImageContent();
 
   // The resources of the subdivision path (terrain present, no analytic drape)
   private gridVao: WebGLVertexArrayObject | null = null;
@@ -275,8 +314,10 @@ void main() {
     const terrain = this.terrain;
     const terrainOn = terrain !== null && isTerrainElevationActive(terrain);
     if (terrain && terrainOn) {
-      const frame = getQuadDrapeFrame(terrain);
-      if (frame?.renderer.drawQuad(vertices, texture, opacity, frame)) return;
+      this.imageContent.texture = texture;
+      const drawn = drawQuadOnTerrainState(terrain, vertices, this.imageContent, opacity);
+      this.imageContent.texture = null;
+      if (drawn) return;
     }
 
     const gl = this.gl;
@@ -520,51 +561,52 @@ void main() {
 }
 
 /**
- * Paints a quad with a fill and text as pixels of the terrain surface.
+ * Paints a quad as pixels of the terrain surface, with what it shows given by a content of the
+ * caller's.
  *
- * Used by custom renderers that draw text on a filled quad. The fill is decided by a
- * rectangle fill and the text by an SDF atlas lookup, both within the same
- * fragment, so a mismatch of subdivision between the fill and the text cannot
- * occur.
+ * Where a quad drawn by its four corners would cut through the terrain, this paints the pixels of
+ * the ground inside the quad: it follows the relief, and what lies behind a ridge is hidden by
+ * the ridge. The content decides the color at each position in the quad
+ * ({@link QuadDrapeContent}); the library gives it the position, its change between pixels and the
+ * shading of the terrain, and applies the opacity. `QuadShader` draws its picture through it.
  *
- * Returns false on draws with no terrain and on draws that have terrain but
- * no entry point for the analytic drape (the DEM has not arrived, the shader
- * cannot be built). The caller falls back to the conventional way of drawing
- * (the fill texture + a separate draw of the text).
+ * Returns false on draws with no terrain and on draws that have terrain but cannot drape the quad
+ * (the DEM has not arrived, the program of the content cannot be built). The caller then draws
+ * the quad another way.
  *
  * @param terrain - The render context of the draw call, or its `terrain`
  * @param corners - The corners of the quad in degrees
- * @param surface - The fill and the text
+ * @param content - What the quad shows
  * @param opacity - The opacity, 0..1
  * @returns true if it was painted; false when the caller must draw it another way
  * @throws `DrawError` with the code `invalid-input` when `terrain` is an object the instance did
  *   not give a renderer, as `viewUniforms` does
  */
-export function drawQuadSurfaceOnTerrain(
+export function drawQuadOnTerrain(
   terrain: RenderContext | TerrainSurface,
   corners: DrapeQuadCorners,
-  surface: QuadDrapeSurface,
+  content: QuadDrapeContent,
   opacity: number,
 ): boolean {
   const state = terrainStateOf(terrain);
-  return state !== null && drawQuadSurfaceOnTerrainState(state, corners, surface, opacity);
+  return state !== null && drawQuadOnTerrainState(state, corners, content, opacity);
 }
 
 /**
- * {@link drawQuadSurfaceOnTerrain} over the terrain state of an instance
+ * {@link drawQuadOnTerrain} over the terrain state of an instance
  *
  * @internal
  */
-export function drawQuadSurfaceOnTerrainState(
+export function drawQuadOnTerrainState(
   terrain: TerrainContext,
   corners: DrapeQuadCorners,
-  surface: QuadDrapeSurface,
+  content: QuadDrapeContent,
   opacity: number,
 ): boolean {
   if (!isTerrainElevationActive(terrain)) return false;
   const frame = getQuadDrapeFrame(terrain);
   if (!frame) return false;
-  return frame.renderer.drawSurface(corners, surface, opacity, frame);
+  return frame.renderer.drawQuad(corners, content, opacity, frame);
 }
 
 /** The valid range of the latitude */

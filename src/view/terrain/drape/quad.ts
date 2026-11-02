@@ -2,35 +2,28 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * Analytic drape for textured quads
+ * Analytic drape for quads
  *
- * An Image (a picture pasted onto the map) and a quad with a fill and text are features that
- * "fill the inside of a rectangle determined by four corners". Previously only
- * those 4 vertices were drawn as a TRIANGLE_STRIP, so wherever the terrain rose
- * above the plane spanned by the four corners it always cut through. The essence
- * of the problem is the absence of subdivision, so turning off the depth test does
- * not fix it (turning it off instead makes images behind a ridge show through).
+ * A quad (a rectangle given by its four corners, such as an image pasted onto the map) fills the
+ * inside of its four corners. Drawn as those 4 vertices in a TRIANGLE_STRIP, it always cuts
+ * through the terrain wherever the terrain rises above the plane spanned by the corners. The
+ * essence of the problem is the absence of subdivision, so turning off the depth test does not
+ * fix it (turning it off instead makes what lies behind a ridge show through).
  *
- * Here we solve it with the same idea as for polygons and lines. We draw a terrain
- * mesh built by the same rules as MapLibre's, and for each pixel solve "is this
- * ground point inside the quad" by inverse bilinear interpolation; if it is inside,
- * the resulting (u, v) determines the content. Because it is painted as ground
- * pixels, burying and dropouts cannot occur by construction, occlusion follows
- * directly from the depth of the terrain mesh, and shading is applied with the same
- * formula as the fill.
+ * Here we solve it with the same idea as for polygons and lines. We draw a terrain mesh built by
+ * the same rules as MapLibre's, and for each pixel solve "is this ground point inside the quad"
+ * by inverse bilinear interpolation; if it is inside, the resulting (u, v) determines the color.
+ * Because it is painted as ground pixels, burying and dropouts cannot occur by construction,
+ * occlusion follows directly from the depth of the terrain mesh, and shading is applied with the
+ * same formula as the fill.
  *
- * There are two ways of deciding the content.
+ * What the quad shows at (u, v) is not decided here: the caller gives a content
+ * ({@link QuadDrapeContent}), a GLSL function of (u, v) and of its derivatives with the uniforms
+ * and the textures it reads. This module owns the corners, the mesh, the cut into tiles, (u, v)
+ * and its derivatives, the depth, the shading of the terrain, the smoothing of the edge of the
+ * quad and the opacity. One program is built for each content (its GLSL) and kept.
  *
- * - Image (`drawQuad`). The texture is looked up with (u, v)
- * - Fill + text (`drawSurface`). The fill is a rectangle (color + border)
- *   produced analytically, and the text looks up the glyph's occupancy rectangle
- *   from (u, v) within the same per-pixel evaluation and references the SDF atlas.
- *   Because the fill and the text become pixels of a single surface, no
- *   subdivision mismatch between the two can occur, and since SDF is
- *   resolution-independent the text stays crisp even on a huge quad
- *
- * Because quads are few in number, textures are bound one at a time in draw order
- * (there is no need to pack styles into a texture as for polygons and lines).
+ * Because quads are few in number, they are drawn one at a time in draw order.
  */
 
 import type { ProjectionData } from 'maplibre-gl';
@@ -50,7 +43,6 @@ import {
   type TerrainMeshBuffers,
   TILE_EXTENT,
 } from './mesh.js';
-import { binQuadGlyphs } from './quad-glyphs.js';
 import { DRAPE_LIFT_RATIO, type DrapeLight } from './renderer.js';
 import {
   applyDrapeProjectionUniforms,
@@ -63,23 +55,25 @@ import {
 } from './shared.js';
 import { buildTileKeySet, resolveTileEdges, wrappedTileKey } from './stitch.js';
 
-/** Texture units */
+/** The texture unit of the DEM of the tile being drawn */
 const UNIT_TERRAIN = 0;
-const UNIT_TEXTURE = 1;
-const UNIT_ATLAS = 2;
-const UNIT_GLYPH = 3;
-const UNIT_BIN = 4;
 
-/** Width of the glyph data texture (texels). Even, because one glyph takes 2 texels */
-const GLYPH_TEX_WIDTH = 256;
-
-/** Number of glyph data textures kept (LRU) */
-const GLYPH_CACHE_LIMIT = 64;
+/**
+ * The texture units a {@link QuadDrapeContent} binds its textures to: 1 to 4 and 10 to 15.
+ *
+ * The draw of a draped quad reads the DEM of its tile on the unit 0 and the DEMs of the tiles
+ * next to it on the units 5, 7, 8 and 9 (`EDGE_UNITS`), and the DEM atlas stays bound to the unit
+ * 6 through the frame (`TERRAIN_ATLAS_TEXTURE_UNIT`), where other drawing reads it. WebGL2
+ * guarantees 16 units to a fragment shader.
+ */
+export const QUAD_DRAPE_TEXTURE_UNITS: readonly number[] = Object.freeze([
+  1, 2, 3, 4, 10, 11, 12, 13, 14, 15,
+]);
 
 /**
  * The (u, v) that represents "there is no solution"
  *
- * It is merely a value that tips the test to "outside the range". Because fwidth
+ * It is merely a value that tips the test to "outside the range". Because the derivatives
  * must be taken under uniform control flow, failure is expressed as a value rather
  * than by discard. An extremely large value would make the derivatives of
  * neighboring pixels blow up, so it is kept just large enough to be recognized as
@@ -99,71 +93,65 @@ export interface DrapeQuadCorners {
   readonly bottomRight: readonly [number, number];
 }
 
-/** A color as RGBA, each 0..1, not premultiplied. */
-export type QuadDrapeColor = readonly [number, number, number, number];
-
 /**
- * The fill of a draped quad: a background color and a border.
+ * What a quad draped on the terrain shows: a GLSL function of the position in the quad, and the
+ * uniforms and the textures it reads ({@link drawQuadOnTerrain}).
  *
- * Painted analytically instead of being baked into a Canvas. The border occupies
- * "borderWidth inward", the same extent as Canvas's
- * `strokeRect(bw/2, bw/2, w - bw, h - bw)`.
- */
-export interface QuadDrapeFill {
-  /** Background color */
-  readonly color: QuadDrapeColor;
-  /** Border color */
-  readonly borderColor: QuadDrapeColor;
-  /** Border width (in the quad's local 0..1 coordinates. Separate for x and y) */
-  readonly border: readonly [number, number];
-}
-
-/**
- * The text of a draped quad, as glyphs of an SDF atlas the caller owns.
+ * The library draws the terrain under the quad and, for each pixel, finds the position `(u, v)`
+ * in the quad (from `(0, 0)` at `topLeft` to `(1, 1)` at `bottomRight`), its change from one pixel
+ * to the next, the depth and the shading of the terrain. It smooths the edge of the quad over a
+ * pixel and applies the opacity. What the quad shows at `(u, v)` is the content's.
  *
- * The glyph atlas owned by the caller is referenced as is. It is not
- * held a second time here.
+ * `glsl` is GLSL ES 3.00, put into the fragment shader after the declarations of the library
+ * (`precision highp float`, `highp int` and `highp sampler2D`). It declares the uniforms and the
+ * samplers it reads and defines the function
+ *
+ * ```glsl
+ * vec4 quadDrapeColor(vec2 uv, vec2 uvDx, vec2 uvDy, float shade)
+ * ```
+ *
+ * - `uv`: the position in the quad, from 0 to 1 inside it (a little outside it on the pixels of
+ *   its edge)
+ * - `uvDx`, `uvDy`: the change of `uv` from one pixel to the next along the x and the y of the
+ *   screen, taken before any branch. The function is called once for each pixel of the quad, so
+ *   `texture` may read there; in a loop or a branch of its own, read with `textureGrad` and these
+ *   two, and do not call `dFdx`, `dFdy` or `fwidth`, which are undefined there
+ * - `shade`: the factor of the shading of the terrain at the pixel (1 without shading). Multiply
+ *   the colors that show the relief by it
+ * - it returns the color with its alpha premultiplied (`vec4(rgb * a, a)`)
+ *
+ * Give the names `glsl` declares a prefix of its own: a name the shader of the library has
+ * already (such as `u_opacity`, `quadUV` or `terrainShade`) keeps the program from being built.
+ * One program is built for each distinct `glsl` and kept, so build the string once and pass the
+ * same one at every draw.
+ *
+ * @example A content that fills the quad with one color, darkened by the relief
+ * ```ts
+ * const solid = (rgba: [number, number, number, number]): QuadDrapeContent => ({
+ *   glsl: `
+ *     uniform vec4 u_solid_color;
+ *     vec4 quadDrapeColor(vec2 uv, vec2 uvDx, vec2 uvDy, float shade) {
+ *       return vec4(u_solid_color.rgb * shade * u_solid_color.a, u_solid_color.a);
+ *     }`,
+ *   bind(gl, uniform) {
+ *     gl.uniform4f(uniform('u_solid_color'), rgba[0], rgba[1], rgba[2], rgba[3]);
+ *   },
+ * });
+ * ```
  */
-export interface QuadDrapeGlyphs {
-  /** The texture of the SDF atlas */
-  readonly atlas: WebGLTexture;
-  /** Width of the atlas (texels) */
-  readonly atlasWidth: number;
-  /** Height of the atlas (texels) */
-  readonly atlasHeight: number;
+export interface QuadDrapeContent {
+  /** The GLSL of the content: its declarations and `quadDrapeColor` */
+  readonly glsl: string;
   /**
-   * Glyph array (8 elements per glyph)
+   * Sets the uniforms `glsl` reads and binds its textures, with the program of the content in
+   * use. Called once per draw, before the tiles under the quad are drawn. Textures are bound to
+   * the units of {@link QUAD_DRAPE_TEXTURE_UNITS} only.
    *
-   * The occupancy rectangle (x0, y0, x1, y1) is in the quad's local 0..1
-   * coordinates, and the following 4 elements are the atlas UV (u0, v0, u1, v1).
+   * @param gl - The WebGL context of the map
+   * @param uniform - The location of a uniform `glsl` declares, by its name (null for one the
+   *   program does not use)
    */
-  readonly glyphs: Float32Array;
-  /** Number of glyphs */
-  readonly glyphCount: number;
-  /** Key telling whether repacking is needed (content, style, size, atlas version) */
-  readonly key: string;
-  /** Number of atlas texels per 1 unit of local coordinates (x, y) */
-  readonly atlasTexelsPerUnit: readonly [number, number];
-  /** Color of the letterform */
-  readonly color: QuadDrapeColor;
-  /** Color of the halo (outline) */
-  readonly haloColor: QuadDrapeColor;
-  /** Width of the halo (in units of the SDF value. 0 means no halo) */
-  readonly haloWidth: number;
-  /** Isosurface of the letterform (SDF value) */
-  readonly edge: number;
-  /** Change of the SDF value per atlas texel (= 1 / the radius of the distance field) */
-  readonly valuePerTexel: number;
-  /** Bias for mip selection (negative is toward the sharper side) */
-  readonly lodBias: number;
-}
-
-/** What {@link drawQuadSurfaceOnTerrain} paints inside a quad: a fill and optional text. */
-export interface QuadDrapeSurface {
-  /** The fill (background and border) */
-  readonly fill: QuadDrapeFill;
-  /** Text (null if there is none) */
-  readonly text: QuadDrapeGlyphs | null;
+  bind(gl: WebGL2RenderingContext, uniform: (name: string) => WebGLUniformLocation | null): void;
 }
 
 /**
@@ -286,54 +274,13 @@ uniform float u_shade_strength;
 uniform float u_tile_meters;
 `;
 
-/** The fragment shader that pastes an image */
-const IMAGE_FRAGMENT_SOURCE =
-  `#version 300 es
-precision highp float;
-precision highp sampler2D;
-
-in vec2 v_tile;
-
-${QUAD_COMMON_UNIFORMS_GLSL}
-uniform sampler2D u_texture;
-
-out vec4 fragColor;
-
-` +
-  TERRAIN_SAMPLE_GLSL +
-  TERRAIN_SHADE_GLSL +
-  QUAD_UV_GLSL +
-  `
-void main() {
-    // Take the derivatives before entering a branch (under uniform control flow)
-    vec2 uv = quadUV(v_tile);
-    vec2 w = max(fwidth(uv), vec2(1e-8));
-
-    // The edge is smoothed with one pixel of coverage (the billboard's edge does
-    // not turn jagged)
-    vec2 cover = clamp((0.5 - abs(uv - 0.5)) / w + 0.5, 0.0, 1.0);
-    float coverage = cover.x * cover.y;
-    if (coverage <= 0.0) discard;
-
-    vec4 color = texture(u_texture, clamp(uv, 0.0, 1.0));
-    float alpha = color.a * u_opacity * coverage;
-    if (alpha <= 0.0) discard;
-
-    fragColor = vec4(color.rgb * terrainShade(v_tile), alpha);
-}`;
-
 /**
- * The fragment shader that paints fill + text
+ * The fragment shader of a quad with the GLSL of its content (`QuadDrapeContent.glsl`)
  *
- * The fill is a rectangular fill, and the text references the SDF atlas at the
- * same pixel. Compositing is accumulated premultiplied and converted back to
- * straight at the end (because the frame's blend state is `applyDrawBlendState`
- * = RGB straight, A additive).
- *
- * Shading is applied only to the fill. The text gives priority to legibility and
- * is unshaded, just like lines and points.
+ * The content returns a premultiplied color, and it is converted back to straight at the end
+ * (because the frame's blend state is `applyDrawBlendState` = RGB straight, A additive).
  */
-const SURFACE_FRAGMENT_SOURCE =
+const FRAGMENT_SOURCE = (contentGlsl: string): string =>
   `#version 300 es
 precision highp float;
 precision highp int;
@@ -343,26 +290,6 @@ in vec2 v_tile;
 
 ${QUAD_COMMON_UNIFORMS_GLSL}
 
-// Fill
-uniform vec4 u_fill_color;
-uniform vec4 u_border_color;
-uniform vec2 u_border;
-
-// Text (u_grid = 0 means there is no text)
-uniform sampler2D u_atlas;
-uniform sampler2D u_glyph_tex;
-uniform sampler2D u_bin_tex;
-uniform int u_glyph_tex_width;
-uniform int u_grid;
-uniform vec2 u_atlas_size;
-uniform vec2 u_atlas_texels;
-uniform vec4 u_text_color;
-uniform vec4 u_halo_color;
-uniform float u_halo_width;
-uniform float u_sdf_edge;
-uniform float u_sdf_value_per_texel;
-uniform float u_lod_scale;
-
 out vec4 fragColor;
 
 ` +
@@ -370,79 +297,25 @@ out vec4 fragColor;
   TERRAIN_SHADE_GLSL +
   QUAD_UV_GLSL +
   `
-vec4 fetchGlyph(int i) {
-    return texelFetch(u_glyph_tex, ivec2(i % u_glyph_tex_width, i / u_glyph_tex_width), 0);
-}
-
-// Compose on top (premultiplied alpha)
-vec4 over(vec4 below, vec3 rgb, float a) {
-    return vec4(rgb * a + below.rgb * (1.0 - a), a + below.a * (1.0 - a));
-}
+${contentGlsl}
 
 void main() {
     // Take the derivatives before entering a branch (under uniform control flow)
     vec2 uv = quadUV(v_tile);
-    vec2 dux = dFdx(uv);
-    vec2 duy = dFdy(uv);
-    vec2 w = max(abs(dux) + abs(duy), vec2(1e-8));
+    vec2 uvDx = dFdx(uv);
+    vec2 uvDy = dFdy(uv);
+    vec2 w = max(abs(uvDx) + abs(uvDy), vec2(1e-8));
 
+    // The edge is smoothed with one pixel of coverage (the billboard's edge does
+    // not turn jagged)
     vec2 cover = clamp((0.5 - abs(uv - 0.5)) / w + 0.5, 0.0, 1.0);
     float coverage = cover.x * cover.y;
     if (coverage <= 0.0) discard;
 
-    // --- Fill (background + border) ---
-    bool onBorder = uv.x < u_border.x || uv.x > 1.0 - u_border.x
-                 || uv.y < u_border.y || uv.y > 1.0 - u_border.y;
-    vec4 fill = onBorder ? u_border_color : u_fill_color;
-    float shade = terrainShade(v_tile);
-    vec4 acc = vec4(fill.rgb * shade * fill.a, fill.a);
-
-    // --- Text (references the SDF atlas) ---
-    if (u_grid > 0) {
-        // The gradient in atlas space. It is constant regardless of the glyph, so
-        // it is taken only once outside the branch. Derivatives cannot be used
-        // inside a branch, so texture lookups pass this gradient explicitly with
-        // textureGrad (the mip bias is expressed by shrinking the gradient).
-        vec2 tx = dux * u_atlas_texels;
-        vec2 ty = duy * u_atlas_texels;
-        vec2 gx = tx / u_atlas_size * u_lod_scale;
-        vec2 gy = ty / u_atlas_size * u_lod_scale;
-        float texelsPerPixel = sqrt(dot(tx, tx) + dot(ty, ty));
-        float gamma = max(0.5 * texelsPerPixel * u_sdf_value_per_texel, 0.001);
-
-        float gridF = float(u_grid);
-        ivec2 cell = ivec2(clamp(floor(uv * gridF), 0.0, gridF - 1.0));
-        vec4 bin = texelFetch(u_bin_tex, cell, 0);
-        int start = int(bin.x);
-        int count = int(bin.y);
-
-        // For overlapping glyphs the maximum of the distance field is taken (this
-        // combines them in the same way as drawing all halos and then all
-        // letterforms in two passes)
-        float dist = 0.0;
-        for (int i = 0; i < count; i++) {
-            int slot = (start + i) * 2;
-            vec4 rect = fetchGlyph(slot);
-            if (uv.x < rect.x || uv.x > rect.z || uv.y < rect.y || uv.y > rect.w) continue;
-            vec4 auv = fetchGlyph(slot + 1);
-            vec2 t = (uv - rect.xy) / max(rect.zw - rect.xy, vec2(1e-9));
-            dist = max(dist, textureGrad(u_atlas, mix(auv.xy, auv.zw, t), gx, gy).r);
-        }
-
-        if (dist > 0.0) {
-            if (u_halo_width > 0.0) {
-                float haloEdge = u_sdf_edge - u_halo_width;
-                float haloAlpha = smoothstep(haloEdge - gamma, haloEdge + gamma, dist);
-                acc = over(acc, u_halo_color.rgb, u_halo_color.a * haloAlpha);
-            }
-            float textAlpha = smoothstep(u_sdf_edge - gamma, u_sdf_edge + gamma, dist);
-            acc = over(acc, u_text_color.rgb, u_text_color.a * textAlpha);
-        }
-    }
-
-    float alpha = acc.a * u_opacity * coverage;
+    vec4 color = quadDrapeColor(uv, uvDx, uvDy, terrainShade(v_tile));
+    float alpha = color.a * u_opacity * coverage;
     if (alpha <= 0.0) discard;
-    fragColor = vec4(acc.rgb / max(acc.a, 1e-4), alpha);
+    fragColor = vec4(color.rgb / max(color.a, 1e-4), alpha);
 }`;
 
 /** Longitude -> Mercator x */
@@ -542,51 +415,25 @@ export function solveQuadUV(
   return [u, v];
 }
 
-/** A shader program paired with its uniform locations */
+/**
+ * The program of one content, paired with its uniform locations
+ *
+ * `program` is null when it could not be built for the variant: it is not built again until the
+ * variant changes.
+ */
 interface ProgramSlot {
-  program: WebGLProgram;
+  program: WebGLProgram | null;
   variantName: string;
+  /** The locations of the uniforms of the library */
   locations: UniformSet;
+  /**
+   * Looks up a uniform of the content, kept once looked up (the function handed to
+   * `QuadDrapeContent.bind`)
+   */
+  uniform: (name: string) => WebGLUniformLocation | null;
 }
 
-/** The complete set of glyph data textures */
-interface GlyphBuffers {
-  glyphTex: WebGLTexture;
-  binTex: WebGLTexture;
-  /** Height of the glyph data texture (rows) */
-  glyphRows: number;
-  /** Grid subdivision count of the bins (per side) */
-  grid: number;
-  /** Key of the packed content */
-  key: string;
-  /** Serial number of the most recent use (LRU) */
-  usedAt: number;
-}
-
-/** The uniforms specific to pasting an image */
-const IMAGE_UNIFORMS = ['u_texture'] as const;
-
-/** The uniforms specific to fill + text */
-const SURFACE_UNIFORMS = [
-  'u_fill_color',
-  'u_border_color',
-  'u_border',
-  'u_atlas',
-  'u_glyph_tex',
-  'u_bin_tex',
-  'u_glyph_tex_width',
-  'u_grid',
-  'u_atlas_size',
-  'u_atlas_texels',
-  'u_text_color',
-  'u_halo_color',
-  'u_halo_width',
-  'u_sdf_edge',
-  'u_sdf_value_per_texel',
-  'u_lod_scale',
-] as const;
-
-/** The uniforms that both fragment shaders have */
+/** The uniforms of the library in the programs of every content */
 const QUAD_COMMON_UNIFORMS = [
   ...DRAPE_PROJECTION_UNIFORMS,
   ...DRAPE_TERRAIN_UNIFORMS,
@@ -603,17 +450,13 @@ const QUAD_COMMON_UNIFORMS = [
 ] as const;
 
 /**
- * The renderer that pastes textured quads onto the ground surface
+ * The renderer that pastes quads onto the ground surface, each with the content it is given
  */
 export class QuadDrapeRenderer {
   private gl: WebGL2RenderingContext;
-  private imageSlot: ProgramSlot | null = null;
-  private surfaceSlot: ProgramSlot | null = null;
+  /** The program of each content, by its GLSL */
+  private programs = new Map<string, ProgramSlot>();
   private mesh: TerrainMeshBuffers | null = null;
-  private glyphCache = new Map<string, GlyphBuffers>();
-  /** A 1x1 texture bound to the samplers in frames that have no text */
-  private placeholderTex: WebGLTexture | null = null;
-  private useCounter = 0;
   /** The most recent failure reason (for diagnostics) */
   lastError = '';
 
@@ -637,194 +480,93 @@ export class QuadDrapeRenderer {
   }
 
   /**
-   * Allocates a shader (one per fragment shader body)
+   * Allocates the program of a content for the shader variant (kept for each content)
    */
-  private ensureProgram(
-    slot: ProgramSlot | null,
-    fragmentSource: string,
-    extraUniforms: readonly string[],
-    shaderData: ShaderData,
-  ): ProgramSlot | null {
+  private ensureProgram(contentGlsl: string, shaderData: ShaderData): ProgramSlot {
     const gl = this.gl;
-    if (slot && slot.variantName === shaderData.variantName) return slot;
-    if (slot) gl.deleteProgram(slot.program);
+    const kept = this.programs.get(contentGlsl);
+    if (kept && kept.variantName === shaderData.variantName) return kept;
+    if (kept?.program) gl.deleteProgram(kept.program);
 
-    let program: WebGLProgram;
+    let program: WebGLProgram | null = null;
     try {
       program = createProgram(
         gl,
         VERTEX_SOURCE(shaderData.vertexShaderPrelude, shaderData.define),
-        fragmentSource,
+        FRAGMENT_SOURCE(contentGlsl),
       );
     } catch (error) {
       this.lastError = `shader: ${String(error)}`;
-      return null;
     }
 
     const locations: UniformSet = {};
-    for (const name of [...QUAD_COMMON_UNIFORMS, ...extraUniforms]) {
-      locations[name] = gl.getUniformLocation(program, name);
+    if (program) {
+      for (const name of QUAD_COMMON_UNIFORMS) {
+        locations[name] = gl.getUniformLocation(program, name);
+      }
     }
-    return { program, variantName: shaderData.variantName, locations };
+    const contentLocations = new Map<string, WebGLUniformLocation | null>();
+    const built = program;
+    const slot: ProgramSlot = {
+      program,
+      variantName: shaderData.variantName,
+      locations,
+      uniform(name) {
+        if (!built) return null;
+        let location = contentLocations.get(name);
+        if (location === undefined) {
+          location = gl.getUniformLocation(built, name);
+          contentLocations.set(name, location);
+        }
+        return location;
+      },
+    };
+    this.programs.set(contentGlsl, slot);
+    return slot;
   }
 
   /**
-   * Allocates the shader and the mesh (the image path. Kept for existing callers)
-   */
-  ensure(shaderData: ShaderData, meshSize: number): boolean {
-    if (!this.ensureMesh(meshSize)) return false;
-    this.imageSlot = this.ensureProgram(
-      this.imageSlot,
-      IMAGE_FRAGMENT_SOURCE,
-      IMAGE_UNIFORMS,
-      shaderData,
-    );
-    return this.imageSlot !== null;
-  }
-
-  /**
-   * Allocates the shader and the mesh of the fill and text path
-   */
-  ensureSurface(shaderData: ShaderData, meshSize: number): boolean {
-    if (!this.ensureMesh(meshSize)) return false;
-    this.surfaceSlot = this.ensureProgram(
-      this.surfaceSlot,
-      SURFACE_FRAGMENT_SOURCE,
-      SURFACE_UNIFORMS,
-      shaderData,
-    );
-    return this.surfaceSlot !== null;
-  }
-
-  /**
-   * Pastes an image onto a single quad
+   * Allocates the program of a content and the mesh
    *
-   * @returns true if it could be pasted (the caller then does not perform the
-   *   conventional flat drawing). false is returned only when the resources
-   *   cannot be prepared, in which case the caller falls back to the degraded
-   *   path.
+   * @returns false when either cannot be prepared
+   */
+  ensure(content: QuadDrapeContent, shaderData: ShaderData, meshSize: number): boolean {
+    if (!this.ensureMesh(meshSize)) return false;
+    return this.ensureProgram(content.glsl, shaderData).program !== null;
+  }
+
+  /**
+   * Paints a single quad with a content
+   *
+   * @returns true if it could be painted (the caller then does not draw it another way). false
+   *   is returned only when the resources cannot be prepared (the mesh, the program of the
+   *   content), in which case the caller falls back to another path.
    */
   drawQuad(
     corners: DrapeQuadCorners,
-    texture: WebGLTexture,
+    content: QuadDrapeContent,
     opacity: number,
     frame: QuadDrapeFrame,
   ): boolean {
-    if (!this.ensure(frame.shaderData, frame.meshSize)) return false;
-    const slot = this.imageSlot;
-    if (!slot) return false;
+    if (!this.ensureMesh(frame.meshSize)) return false;
+    const slot = this.ensureProgram(content.glsl, frame.shaderData);
+    if (!slot.program) return false;
 
-    return this.drawTiles(corners, opacity, frame, slot, (set) => {
-      const gl = this.gl;
-      gl.activeTexture(gl.TEXTURE0 + UNIT_TEXTURE);
-      gl.bindTexture(gl.TEXTURE_2D, texture);
-      if (set.u_texture) gl.uniform1i(set.u_texture, UNIT_TEXTURE);
+    return this.drawTiles(corners, opacity, frame, slot.program, slot.locations, () => {
+      content.bind(this.gl, slot.uniform);
     });
   }
 
   /**
-   * Paints fill and text onto a single quad
-   *
-   * The fill is a rectangular fill, and the text looks up the SDF atlas within
-   * the same per-pixel evaluation.
-   *
-   * @returns true if it could be painted. false is returned only when the
-   *   resources cannot be prepared.
-   */
-  drawSurface(
-    corners: DrapeQuadCorners,
-    surface: QuadDrapeSurface,
-    opacity: number,
-    frame: QuadDrapeFrame,
-  ): boolean {
-    const gl = this.gl;
-    if (!this.ensureSurface(frame.shaderData, frame.meshSize)) return false;
-    const slot = this.surfaceSlot;
-    if (!slot) return false;
-
-    const text = surface.text && surface.text.glyphCount > 0 ? surface.text : null;
-    const glyphs = text ? this.ensureGlyphBuffers(text) : null;
-
-    return this.drawTiles(corners, opacity, frame, slot, (set) => {
-      const fill = surface.fill;
-      setColorUniform(gl, set.u_fill_color, fill.color);
-      setColorUniform(gl, set.u_border_color, fill.borderColor);
-      if (set.u_border) gl.uniform2f(set.u_border, fill.border[0], fill.border[1]);
-
-      if (!text || !glyphs) {
-        if (set.u_grid) gl.uniform1i(set.u_grid, 0);
-        // A sampler that is not bound leads to undefined behavior, so something is
-        // bound even when there is no text (there is no fill texture, so the bin
-        // stands in for it)
-        this.bindPlaceholderSamplers(set);
-        return;
-      }
-
-      gl.activeTexture(gl.TEXTURE0 + UNIT_ATLAS);
-      gl.bindTexture(gl.TEXTURE_2D, text.atlas);
-      if (set.u_atlas) gl.uniform1i(set.u_atlas, UNIT_ATLAS);
-
-      gl.activeTexture(gl.TEXTURE0 + UNIT_GLYPH);
-      gl.bindTexture(gl.TEXTURE_2D, glyphs.glyphTex);
-      if (set.u_glyph_tex) gl.uniform1i(set.u_glyph_tex, UNIT_GLYPH);
-
-      gl.activeTexture(gl.TEXTURE0 + UNIT_BIN);
-      gl.bindTexture(gl.TEXTURE_2D, glyphs.binTex);
-      if (set.u_bin_tex) gl.uniform1i(set.u_bin_tex, UNIT_BIN);
-
-      if (set.u_glyph_tex_width) gl.uniform1i(set.u_glyph_tex_width, GLYPH_TEX_WIDTH);
-      if (set.u_grid) gl.uniform1i(set.u_grid, glyphs.grid);
-      if (set.u_atlas_size) gl.uniform2f(set.u_atlas_size, text.atlasWidth, text.atlasHeight);
-      if (set.u_atlas_texels) {
-        gl.uniform2f(set.u_atlas_texels, text.atlasTexelsPerUnit[0], text.atlasTexelsPerUnit[1]);
-      }
-      setColorUniform(gl, set.u_text_color, text.color);
-      setColorUniform(gl, set.u_halo_color, text.haloColor);
-      if (set.u_halo_width) gl.uniform1f(set.u_halo_width, text.haloWidth);
-      if (set.u_sdf_edge) gl.uniform1f(set.u_sdf_edge, text.edge);
-      if (set.u_sdf_value_per_texel) gl.uniform1f(set.u_sdf_value_per_texel, text.valuePerTexel);
-      if (set.u_lod_scale) gl.uniform1f(set.u_lod_scale, 2 ** text.lodBias);
-    });
-  }
-
-  /**
-   * Binds a 1x1 texture to the samplers when there is no text
-   *
-   * If drawing happens with a sampler left unbound and a texture of a different
-   * type remains on that unit, it is regarded as incomplete and the whole draw
-   * call is dropped. Even for pixels that do not read text, having something
-   * bound is safer.
-   */
-  private bindPlaceholderSamplers(set: UniformSet): void {
-    const gl = this.gl;
-    if (!this.placeholderTex) {
-      this.placeholderTex = createDataTexture(gl, 1, 1);
-      if (this.placeholderTex) {
-        gl.bindTexture(gl.TEXTURE_2D, this.placeholderTex);
-        gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, 1, 1, gl.RGBA, gl.FLOAT, new Float32Array(4));
-        gl.bindTexture(gl.TEXTURE_2D, null);
-      }
-    }
-    for (const [name, unit] of [
-      ['u_atlas', UNIT_ATLAS],
-      ['u_glyph_tex', UNIT_GLYPH],
-      ['u_bin_tex', UNIT_BIN],
-    ] as const) {
-      gl.activeTexture(gl.TEXTURE0 + unit);
-      gl.bindTexture(gl.TEXTURE_2D, this.placeholderTex);
-      if (set[name]) gl.uniform1i(set[name], unit);
-    }
-  }
-
-  /**
-   * Draws the tiles the quad covers (the skeleton shared by image and fill)
+   * Draws the tiles the quad covers
    */
   private drawTiles(
     corners: DrapeQuadCorners,
     opacity: number,
     frame: QuadDrapeFrame,
-    slot: ProgramSlot,
-    bindContent: (set: UniformSet) => void,
+    program: WebGLProgram,
+    set: UniformSet,
+    bindContent: () => void,
   ): boolean {
     const gl = this.gl;
     if (frame.tiles.length === 0) return false;
@@ -845,10 +587,8 @@ export class QuadDrapeRenderer {
     // A quad with zero area is not drawn (the inverse bilinear cannot be solved)
     if (!(maxX > minX) || !(maxY > minY)) return true;
 
-    gl.useProgram(slot.program);
-    const set = slot.locations;
-
-    bindContent(set);
+    gl.useProgram(program);
+    bindContent();
 
     if (set.u_opacity) gl.uniform1f(set.u_opacity, opacity);
     if (set.u_light_dir) {
@@ -927,135 +667,19 @@ export class QuadDrapeRenderer {
   }
 
   /**
-   * Allocates the glyph data textures (no repacking if the key is the same)
-   */
-  private ensureGlyphBuffers(text: QuadDrapeGlyphs): GlyphBuffers | null {
-    const gl = this.gl;
-    this.useCounter++;
-
-    const cached = this.glyphCache.get(text.key);
-    if (cached) {
-      cached.usedAt = this.useCounter;
-      return cached;
-    }
-
-    const bins = binQuadGlyphs(text.glyphs, text.glyphCount);
-    if (bins.grid === 0 || bins.entryCount === 0) return null;
-
-    // 2 texels per glyph. The width is even, so a glyph never straddles two rows
-    const texels = bins.entryCount * 2;
-    const glyphRows = Math.max(1, Math.ceil(texels / GLYPH_TEX_WIDTH));
-
-    const glyphTex = createDataTexture(gl, GLYPH_TEX_WIDTH, glyphRows);
-    const binTex = createDataTexture(gl, bins.grid, bins.grid);
-    if (!glyphTex || !binTex) {
-      if (glyphTex) gl.deleteTexture(glyphTex);
-      if (binTex) gl.deleteTexture(binTex);
-      this.lastError = 'glyph-texture-alloc-failed';
-      return null;
-    }
-
-    const payload = new Float32Array(GLYPH_TEX_WIDTH * glyphRows * 4);
-    payload.set(bins.entries.subarray(0, Math.min(bins.entries.length, payload.length)));
-    gl.bindTexture(gl.TEXTURE_2D, glyphTex);
-    gl.texSubImage2D(
-      gl.TEXTURE_2D,
-      0,
-      0,
-      0,
-      GLYPH_TEX_WIDTH,
-      glyphRows,
-      gl.RGBA,
-      gl.FLOAT,
-      payload,
-    );
-
-    gl.bindTexture(gl.TEXTURE_2D, binTex);
-    gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, bins.grid, bins.grid, gl.RGBA, gl.FLOAT, bins.cells);
-    gl.bindTexture(gl.TEXTURE_2D, null);
-
-    const entry: GlyphBuffers = {
-      glyphTex,
-      binTex,
-      glyphRows,
-      grid: bins.grid,
-      key: text.key,
-      usedAt: this.useCounter,
-    };
-    this.glyphCache.set(text.key, entry);
-    this.evictGlyphBuffers();
-    return entry;
-  }
-
-  /**
-   * Discards glyph data textures that are not in use (LRU)
-   */
-  private evictGlyphBuffers(): void {
-    if (this.glyphCache.size <= GLYPH_CACHE_LIMIT) return;
-    const gl = this.gl;
-    const sorted = [...this.glyphCache.entries()].sort((a, b) => a[1].usedAt - b[1].usedAt);
-    for (const [key, entry] of sorted) {
-      if (this.glyphCache.size <= GLYPH_CACHE_LIMIT) break;
-      gl.deleteTexture(entry.glyphTex);
-      gl.deleteTexture(entry.binTex);
-      this.glyphCache.delete(key);
-    }
-  }
-
-  /**
    * Releases the resources
    */
   dispose(): void {
     const gl = this.gl;
-    for (const slot of [this.imageSlot, this.surfaceSlot]) {
-      if (slot) gl.deleteProgram(slot.program);
+    for (const slot of this.programs.values()) {
+      if (slot.program) gl.deleteProgram(slot.program);
     }
-    this.imageSlot = null;
-    this.surfaceSlot = null;
+    this.programs.clear();
     if (this.mesh) {
       disposeTerrainMeshBuffers(gl, this.mesh);
       this.mesh = null;
     }
-    for (const entry of this.glyphCache.values()) {
-      gl.deleteTexture(entry.glyphTex);
-      gl.deleteTexture(entry.binTex);
-    }
-    this.glyphCache.clear();
-    if (this.placeholderTex) {
-      gl.deleteTexture(this.placeholderTex);
-      this.placeholderTex = null;
-    }
   }
-}
-
-/** Writes a color uniform (shaped so that a readonly tuple can be passed as is) */
-function setColorUniform(
-  gl: WebGL2RenderingContext,
-  location: WebGLUniformLocation | null,
-  color: QuadDrapeColor,
-): void {
-  if (!location) return;
-  gl.uniform4f(location, color[0], color[1], color[2], color[3]);
-}
-
-/**
- * Creates a float texture used only for indexed lookups (the same manner as the
- * polygon and line drape)
- */
-function createDataTexture(
-  gl: WebGL2RenderingContext,
-  width: number,
-  height: number,
-): WebGLTexture | null {
-  const texture = gl.createTexture();
-  if (!texture) return null;
-  gl.bindTexture(gl.TEXTURE_2D, texture);
-  gl.texStorage2D(gl.TEXTURE_2D, 1, gl.RGBA32F, width, height);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-  return texture;
 }
 
 /** Maps a Mercator coordinate into the tile's 0..1 space and writes it to a uniform */

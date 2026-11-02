@@ -849,6 +849,13 @@ draw.options.update({
   `offsetUniformsAt(ctx, position)` がある位置からの差の値を渡します
   (`calculateOffsetUniforms` の写しの代わり)。`ShaderData` と
   `OffsetUniforms` は `/webgl` の型です
+- 地形の上に塗る四角には、見せる物を渡します。
+  `drawQuadSurfaceOnTerrain(ctx, corners, surface, opacity)` とその
+  決まった形の中身 (`QuadDrapeSurface`) の代わりに、
+  `drawQuadOnTerrain(ctx, corners, content, opacity)` が
+  `QuadDrapeContent` を受けます。四角の中の位置の色を返す GLSL の関数と、
+  その関数が読む uniform を設定しテクスチャーを結ぶ `bind` です
+  ([独自の地物の型](custom-types.ja.md#自分のシェーダー))
 - `ctx.terrain` は `TerrainSurface` になりました (前は `TerrainAnchors`)。
   `occlusionOpacity(lngLat)` は前の `ghostOpacity` です。`project` は
   無くなりました。位置がどこに描かれるかは、地形があれば地形の上で、

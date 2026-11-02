@@ -846,6 +846,14 @@ drawn. Each change below names what replaces what is gone.
   `offsetUniformsAt(ctx, position)` the offsets from a position (in
   place of a copy of `calculateOffsetUniforms`), and `ShaderData` and
   `OffsetUniforms` are types of `/webgl`
+- A quad painted on the terrain is given what it shows: in place of
+  `drawQuadSurfaceOnTerrain(ctx, corners, surface, opacity)` and its
+  surface of one fixed kind (`QuadDrapeSurface`),
+  `drawQuadOnTerrain(ctx, corners, content, opacity)` takes a
+  `QuadDrapeContent`, a GLSL function that
+  gives the color at a position in the quad and a `bind` that sets the
+  uniforms and binds the textures it reads
+  ([custom feature types](custom-types.md#your-own-shaders))
 - `ctx.terrain` is a `TerrainSurface` (was `TerrainAnchors`):
   `occlusionOpacity(lngLat)` was `ghostOpacity`, and `project` is gone,
   since `ctx.screen.project(lngLat)` answers where a position is drawn,

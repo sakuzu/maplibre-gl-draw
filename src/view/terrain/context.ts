@@ -329,8 +329,8 @@ export class TerrainContext {
   /**
    * The entry point of this frame's quad analytic drape (null when the terrain is disabled)
    *
-   * Images and the fill of text quads are drawn by QuadShader. CustomLayer puts it here
-   * every frame and QuadShader reads it and enters the path that "pastes it as ground pixels".
+   * CustomLayer puts it here every frame, and `drawQuadOnTerrain` (QuadShader for an Image, and
+   * the quads of extensions) reads it and enters the path that "pastes it as ground pixels".
    * It is always reset to null at the end of the frame, so it is never read from outside
    * rendering.
    *

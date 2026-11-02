@@ -196,7 +196,7 @@ export function getTerrainCoarsening(context: TerrainContext): number {
  * Gets the handle of the quad analytic drape for this frame (null when the terrain is
  * disabled)
  *
- * QuadShader (Image, and the fill of text quads) reads it.
+ * `drawQuadOnTerrain` (and through it QuadShader, for an Image) reads it.
  */
 export function getQuadDrapeFrame(context: TerrainContext): QuadDrapeFrame | null {
   return context.quadDrapeFrame;

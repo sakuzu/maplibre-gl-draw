@@ -146,7 +146,7 @@ export class ProjectionUniformManager {
    *
    * Only renderers with true stop applying the elevation on a frame that draws
    * polygons and lines flat (the zoomed-out band; surfacesFlattened in
-   * `terrain/context.ts`). Symbols such as points, handles and text quads
+   * `terrain/context.ts`). Symbols such as points, handles and billboard quads
    * are determined by a single vertex and do not interpolate in between, so
    * they do not create cliffs. Stopping the elevation would only put them out
    * of step with hit testing (the anchor projection).

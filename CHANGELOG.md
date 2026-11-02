@@ -281,7 +281,7 @@ writing it. Its changes are listed after those of 3.0.0.
   cannot read, which is drawn transparent, give a warning in the console
   once (for the type, or for each part of each renderer). The parts of
   `/webgl` that draw on the terrain (`setTerrain`,
-  `terrainTessellationStep`, `drawQuadSurfaceOnTerrain`) throw a
+  `terrainTessellationStep`, `drawQuadOnTerrain`) throw a
   `DrawError` with the code `invalid-input` for an object the instance did
   not give a renderer, as `viewUniforms` does (`null` still draws without
   terrain); they drew without terrain.
@@ -471,6 +471,13 @@ writing it. Its changes are listed after those of 3.0.0.
   `selectionStyle`, and their `iconId`, which the library drew as a
   circle: a handle or a marker is a `'circle'`, a `'square'`, a
   `'triangle'` or a `'star'`.
+- `drawQuadSurfaceOnTerrain` of `/webgl`, which painted quads of one
+  fixed kind on the terrain, and its types `QuadDrapeSurface`,
+  `QuadDrapeFill`, `QuadDrapeGlyphs`, `QuadDrapeColor` and
+  `QUAD_GLYPH_STRIDE`: `drawQuadOnTerrain` paints a quad with what its
+  caller gives it to show (`QuadDrapeContent`, a GLSL function of the
+  position in the quad and the uniforms and textures it reads, bound on
+  `QUAD_DRAPE_TEXTURE_UNITS`). An image is drawn so too.
 
 ### Fixed in 3.0.0
 
