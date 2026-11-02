@@ -75,17 +75,17 @@ function boardFootprint(feature: { geometry: unknown }): Footprint {
 const renderer = { onAdd: vi.fn(), draw: vi.fn(), onRemove: vi.fn() };
 
 /** The type of the signboards, which declares the fields of its rotation and its size */
-const CARD: FeatureTypeDefinition = {
-  type: 'card',
+const BOARD: FeatureTypeDefinition = {
+  type: 'board',
   geometry: 'Point',
   renderer,
   footprint: boardFootprint,
   transformFields: { angleDegreesKey: ANGLE, scaleKey: SIZE, uniformScale: true },
 };
 
-/** A label box: the same footprint, no field declared */
-const LABEL: FeatureTypeDefinition = {
-  type: 'label',
+/** A plaque: the same footprint, no field declared */
+const PLAQUE: FeatureTypeDefinition = {
+  type: 'plaque',
   geometry: 'Point',
   renderer,
   footprint: boardFootprint,
@@ -145,8 +145,8 @@ function open(store: Store, features: readonly StoredFeature[]): Opened {
   const draw = createDrawOnEngine(engine, { store, initDefaultLayer: false });
   engine.enterDefaultMode();
   opened.push(draw);
-  draw.extensions.featureTypes.add(CARD);
-  draw.extensions.featureTypes.add(LABEL);
+  draw.extensions.featureTypes.add(BOARD);
+  draw.extensions.featureTypes.add(PLAQUE);
   store.transact(() => {
     for (const feature of features) store.createFeature(feature);
   });
@@ -241,7 +241,7 @@ function turned(angle: unknown): number {
 
 describe.each(STORE_KINDS)('the handles of a footprint laid on the map over %s', (_, makeStore) => {
   it('are the resize handles on the corners of the selection box and the rotate handle above it', () => {
-    const view = open(makeStore(), [featureOf('c', 'card', [0, 0])]);
+    const view = open(makeStore(), [featureOf('c', 'board', [0, 0])]);
     const { selectionScope } = view.engine.context;
     const feature = view.store.getFeature('c') as StoredFeature;
     const box = boxOf([feature]);
@@ -306,7 +306,7 @@ describe.each(STORE_KINDS)('the handles of a footprint laid on the map over %s',
   });
 
   it('turn a single feature around its position and write the rotation it declares, from 0', () => {
-    const view = open(makeStore(), [featureOf('c', 'card', [0, 0])]);
+    const view = open(makeStore(), [featureOf('c', 'board', [0, 0])]);
     view.draw.selection.set('feature', ['c']);
     const box = boxOf([view.store.getFeature('c') as StoredFeature]);
     // A quarter turn clockwise around the position [0, 0]: the handle above it taken to its east
@@ -321,7 +321,7 @@ describe.each(STORE_KINDS)('the handles of a footprint laid on the map over %s',
   });
 
   it('add the turn to the rotation a feature has', () => {
-    const view = open(makeStore(), [featureOf('c', 'card', [0, 0], { [ANGLE]: 30 })]);
+    const view = open(makeStore(), [featureOf('c', 'board', [0, 0], { [ANGLE]: 30 })]);
     view.draw.selection.set('feature', ['c']);
     const handle = rotateHandleOf(boxOf([view.store.getFeature('c') as StoredFeature]));
     drag(view, handle, [Math.hypot(handle[0], handle[1]), 0]);
@@ -332,7 +332,7 @@ describe.each(STORE_KINDS)('the handles of a footprint laid on the map over %s',
   });
 
   it('scale a feature from the corner across and write the size it declares, from 1', () => {
-    const view = open(makeStore(), [featureOf('c', 'card', [0, 0])]);
+    const view = open(makeStore(), [featureOf('c', 'board', [0, 0])]);
     view.draw.selection.set('feature', ['c']);
     const [, s, e] = boxOf([view.store.getFeature('c') as StoredFeature]);
     // The south-east handle taken twice as far from the corner across, the north-west corner of
@@ -349,8 +349,8 @@ describe.each(STORE_KINDS)('the handles of a footprint laid on the map over %s',
 
   it('write the fields of several features selected, by the same drag', () => {
     const view = open(makeStore(), [
-      featureOf('a', 'card', [0, 0]),
-      featureOf('b', 'card', [0, -0.5], { [ANGLE]: 10 }),
+      featureOf('a', 'board', [0, 0]),
+      featureOf('b', 'board', [0, -0.5], { [ANGLE]: 10 }),
     ]);
     view.draw.selection.set('feature', ['a', 'b']);
     const box = boxOf(['a', 'b'].map((id) => view.store.getFeature(id) as StoredFeature));
@@ -367,7 +367,7 @@ describe.each(STORE_KINDS)('the handles of a footprint laid on the map over %s',
 
   it('change only the geometry of a type that declares no field, whatever keys it has', () => {
     const view = open(makeStore(), [
-      featureOf('l1', 'label', [0, 0], { 'maplibre-gl-draw:rotation': 20 }),
+      featureOf('l1', 'plaque', [0, 0], { 'maplibre-gl-draw:rotation': 20 }),
     ]);
     view.draw.selection.set('feature', ['l1']);
     const box = boxOf([view.store.getFeature('l1') as StoredFeature]);
@@ -379,7 +379,7 @@ describe.each(STORE_KINDS)('the handles of a footprint laid on the map over %s',
   });
 
   it('are written by the edits of the Store as by the drags', () => {
-    const view = open(makeStore(), [featureOf('c', 'card', [0, 0])]);
+    const view = open(makeStore(), [featureOf('c', 'board', [0, 0])]);
     view.store.applyEdits([
       { kind: 'rotate', target: { featureIds: ['c'] }, center: [0, 0], angleDegrees: 45 },
       {
@@ -402,7 +402,7 @@ describe('the handles of a footprint laid on the map, of features selected in bu
     const ids = ['a', 'b', 'c', 'd'];
     const view = open(
       store,
-      ids.map((id, i) => featureOf(id, 'card', [i, 0], i === 1 ? { [ANGLE]: 15 } : {})),
+      ids.map((id, i) => featureOf(id, 'board', [i, 0], i === 1 ? { [ANGLE]: 15 } : {})),
     );
     store.setSelection('feature', ids);
     expect(store.getSelectedRows()?.count).toBe(4);
@@ -439,10 +439,10 @@ describe('the handles a custom type adds', () => {
     seen: HandleContext[] = [],
     drawHandles?: FeatureTypeDefinition['drawHandles'],
   ): Opened {
-    const view = open(new DrawStore(new TableContractStore()), [featureOf('c', 'card', [0, 0])]);
-    view.draw.extensions.featureTypes.remove('card');
+    const view = open(new DrawStore(new TableContractStore()), [featureOf('c', 'board', [0, 0])]);
+    view.draw.extensions.featureTypes.remove('board');
     view.draw.extensions.featureTypes.add({
-      ...CARD,
+      ...BOARD,
       handles(_feature, ctx) {
         seen.push(ctx);
         return handles;
@@ -467,7 +467,7 @@ describe('the handles a custom type adds', () => {
       }
       // The kind "other", a size not above 0 (-1 and 0), no kind, and the kind "scale"
       expect(warn).toHaveBeenCalledTimes(4);
-      expect(String(warn.mock.calls[0]?.[0])).toContain('feature type "card"');
+      expect(String(warn.mock.calls[0]?.[0])).toContain('feature type "board"');
     } finally {
       warn.mockRestore();
     }
@@ -499,7 +499,7 @@ describe('the handles a custom type adds', () => {
     const view = withHandles(seen);
     view.draw.selection.set('feature', ['c']);
     const before = view.draw.rendered.getSelectionBox('c');
-    // A press inside the card and a move, not let go yet
+    // A press inside the board and a move, not let go yet
     const router = view.engine.inputRouter;
     router.dispatch(event<MouseNormalizedEvent>(view.engine, 'mousemove', [0, 0]));
     router.dispatch(event<MouseNormalizedEvent>(view.engine, 'mousedown', [0, 0]));
@@ -537,7 +537,7 @@ describe('the handles a custom type adds', () => {
   });
 
   it('give a handle provider the same context', () => {
-    const view = open(new DrawStore(new TableContractStore()), [featureOf('c', 'card', [0, 0])]);
+    const view = open(new DrawStore(new TableContractStore()), [featureOf('c', 'board', [0, 0])]);
     const seen: HandleContext[] = [];
     view.draw.extensions.handleProviders.add({
       name: 'grips',
@@ -634,9 +634,9 @@ describe('the fields a custom type declares', () => {
   it('are let go of with the type, and with the instance', () => {
     const store = new DrawStore(new TableContractStore());
     const view = open(store, []);
-    expect(store.transformFields?.of('card')).toEqual(CARD.transformFields);
-    view.draw.extensions.featureTypes.remove('card');
-    expect(store.transformFields?.of('card')).toBeUndefined();
+    expect(store.transformFields?.of('board')).toEqual(BOARD.transformFields);
+    view.draw.extensions.featureTypes.remove('board');
+    expect(store.transformFields?.of('board')).toBeUndefined();
     view.draw.destroy();
     expect(store.transformFields).toBeNull();
   });

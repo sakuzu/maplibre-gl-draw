@@ -399,7 +399,7 @@ describe('the answers of a custom feature type and a companion provider from the
     ).toThrow(/renderer\.rows\.draw/);
     expect(() =>
       engine.extensions.collections.companionProviders.add({
-        name: 'leaders',
+        name: 'rings',
         has: () => false,
         rows: { has: 'yes' as never },
         draw: () => {},
@@ -851,8 +851,8 @@ describe('the overlays', () => {
 
 describe('a companion provider', () => {
   it('keeps the hit it returned and gives it back to onClick with the click', () => {
-    const own = { id: 'label', distancePx: 3 };
-    const filled: Hit = { kind: 'companion', id: 'label', featureId: 'f', distancePx: 3 };
+    const own = { id: 'ring', distancePx: 3 };
+    const filled: Hit = { kind: 'companion', id: 'ring', featureId: 'f', distancePx: 3 };
     const onClick = vi.fn(() => true);
     const feature = { id: 'f', type: 'Point', geometry: { type: 'Point', coordinates: [1, 1] } };
     const deps = {
@@ -862,7 +862,7 @@ describe('a companion provider', () => {
       surface: createTerrainSurface,
     } as unknown as AdapterDeps;
     const provider = adaptCompanionProvider(
-      { name: 'labels', has: () => true, draw() {}, hitTest: () => own, onClick },
+      { name: 'rings', has: () => true, draw() {}, hitTest: () => own, onClick },
       deps,
     );
     const registry = createFeatureCompanionRegistry();
@@ -878,7 +878,7 @@ describe('a companion provider', () => {
         tolerancePx: 4,
       },
     );
-    expect(hit?.id).toBe('label');
+    expect(hit?.id).toBe('ring');
     const click = {
       type: 'click',
       point: { x: 5, y: 5 },

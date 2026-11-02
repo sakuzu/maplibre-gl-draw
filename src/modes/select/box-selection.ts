@@ -118,8 +118,9 @@ export function boxRects(start: Coordinate, end: Coordinate): Rect[] {
  * - Point: whether the center coordinate is inside the box
  * - LineString: intersection test between the geometry and the box
  * - Polygon: intersection test between the geometry and the box
- * - Text/Image: intersection test between the OBB (the bounding box that accounts for rotation)
- *   and the box
+ * - Image: intersection test between the OBB (the bounding box that accounts for rotation) and
+ *   the box
+ * - A custom type: the test of its definition (`boxSelect`), else the one of its geometry
  */
 export function isFeatureInBox(
   feature: Feature,

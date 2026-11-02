@@ -141,7 +141,7 @@ export interface CompanionProviderRows {
 }
 
 /**
- * An extension that draws a companion one step below a feature, such as a leader line, and
+ * An extension that draws a companion one step below a feature, such as a ring around it, and
  * hit tests it at the same step.
  */
 export interface CompanionProvider {

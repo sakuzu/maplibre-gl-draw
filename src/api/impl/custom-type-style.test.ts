@@ -8,7 +8,7 @@
  *   `features.getAppliedStyle` puts the layer rule and the style of the feature over it, in place
  *   of the defaults of its geometry; the keys it leaves out keep those defaults
  * - The layer rule colors the channel of the type only: the one it declares
- *   (`styleRuleChannel`), so a box on a Point drawn with a paper of `fillColor` that declares
+ *   (`styleRuleChannel`), so a box on a Point filled with `fillColor` that declares
  *   `'fill'` is colored by the rule, and its outline is not; a type that declares none takes the
  *   channel of the geometry of the feature, as a built-in type of that geometry does (`pointColor`
  *   for a Point, `strokeColor` for a LineString, `fillColor` for a Polygon)
@@ -36,8 +36,8 @@ import type { Feature, FeatureStyle, FeatureStyleResolved } from '../model.js';
 import { createDrawOnEngine } from './create-draw.js';
 import { createEngine, type Engine } from './engine.js';
 
-/** The look of a card without a style of its own: a pale paper with a darker edge */
-const CARD_LOOK: FeatureStyle = {
+/** The look of a board without a style of its own: a pale fill with a darker edge */
+const BOARD_LOOK: FeatureStyle = {
   fillColor: '#fff3c4',
   fillOpacity: 1,
   strokeColor: '#c9a227',
@@ -60,13 +60,13 @@ function rendererOf(type: string): FeatureTypeDefinition['renderer'] {
   };
 }
 
-/** A card: a paper laid on the map around its point, with a look of its own */
-const CARD: FeatureTypeDefinition = {
-  type: 'card',
+/** A board: a box laid on the map around its point, with a look of its own */
+const BOARD: FeatureTypeDefinition = {
+  type: 'board',
   geometry: 'Point',
-  defaultStyle: CARD_LOOK,
+  defaultStyle: BOARD_LOOK,
   styleRuleChannel: 'fill',
-  renderer: rendererOf('card'),
+  renderer: rendererOf('board'),
 };
 
 /** A pin: a type that declares no look */
@@ -198,7 +198,7 @@ function open(store: Store, features: readonly StoredFeature[]): Opened {
     renderers.set(type, renderer);
     return register(type, renderer);
   });
-  draw.extensions.featureTypes.addMany([CARD, PIN, TRAIL, PLOT, SWATH]);
+  draw.extensions.featureTypes.addMany([BOARD, PIN, TRAIL, PLOT, SWATH]);
   store.transact(() => {
     for (const feature of features) store.createFeature(feature);
   });
@@ -225,8 +225,8 @@ function drawnLook(view: Opened, id: string, context = frame()): FeatureStyleRes
 
 describe.each(STORE_KINDS)('the look of a custom type over %s', (_, makeStore) => {
   it('is the look the type declares, under the layer rule and the style of the feature', () => {
-    const view = open(makeStore(), [featureOf('c', 'card')]);
-    expect(view.draw.features.getAppliedStyle('c')).toMatchObject(CARD_LOOK);
+    const view = open(makeStore(), [featureOf('c', 'board')]);
+    expect(view.draw.features.getAppliedStyle('c')).toMatchObject(BOARD_LOOK);
     // The keys the type leaves out keep the defaults of its geometry
     expect(view.draw.features.getAppliedStyle('c')).toMatchObject({
       lineStyle: 'solid',
@@ -236,19 +236,19 @@ describe.each(STORE_KINDS)('the look of a custom type over %s', (_, makeStore) =
   });
 
   it('takes the color of the layer rule as its fill, and keeps its outline', () => {
-    const view = open(makeStore(), [featureOf('c', 'card')]);
+    const view = open(makeStore(), [featureOf('c', 'board')]);
     view.draw.layers.update('l', { styleRule: { kind: 'single', color: '#00ff00' } });
     expect(view.draw.features.getAppliedStyle('c')).toMatchObject({
-      ...CARD_LOOK,
+      ...BOARD_LOOK,
       fillColor: '#00ff00',
     });
   });
 
   it('takes the style of the feature over the layer rule', () => {
-    const view = open(makeStore(), [featureOf('c', 'card', { fillColor: '#123456' })]);
+    const view = open(makeStore(), [featureOf('c', 'board', { fillColor: '#123456' })]);
     view.draw.layers.update('l', { styleRule: { kind: 'single', color: '#00ff00' } });
     expect(view.draw.features.getAppliedStyle('c')).toMatchObject({
-      ...CARD_LOOK,
+      ...BOARD_LOOK,
       fillColor: '#123456',
     });
   });
@@ -300,8 +300,8 @@ describe.each(STORE_KINDS)('the look of a custom type over %s', (_, makeStore) =
 
   it('is read by the renderer from its render context as getAppliedStyle answers it', () => {
     const view = open(makeStore(), [
-      featureOf('c', 'card'),
-      featureOf('d', 'card', { strokeWidth: 3 }),
+      featureOf('c', 'board'),
+      featureOf('d', 'board', { strokeWidth: 3 }),
       featureOf('p', 'pin'),
     ]);
     view.draw.layers.update('l', { styleRule: { kind: 'single', color: '#00ff00' } });
@@ -311,10 +311,10 @@ describe.each(STORE_KINDS)('the look of a custom type over %s', (_, makeStore) =
   });
 
   it('is the same object however many times a frame reads it, until it changes', () => {
-    const view = open(makeStore(), [featureOf('c', 'card')]);
+    const view = open(makeStore(), [featureOf('c', 'board')]);
     const context = frame();
     const first = drawnLook(view, 'c', context);
-    const { feature, ctx } = lastRead('card') ?? {};
+    const { feature, ctx } = lastRead('board') ?? {};
     if (!feature || !ctx) throw new Error('not drawn');
     expect(ctx.appliedStyle(feature)).toBe(first);
     // The next frame reads the same look while nothing changed
@@ -345,7 +345,7 @@ describe('the channel of the rule of a type, the one judgment of the instance', 
       'fill',
     ]);
     // Declared, and else by the geometry of the definition
-    expect(['card', 'pin', 'trail', 'plot', 'swath'].map(channelOf)).toEqual([
+    expect(['board', 'pin', 'trail', 'plot', 'swath'].map(channelOf)).toEqual([
       'fill',
       'point',
       'stroke',
@@ -394,7 +394,7 @@ describe('the declaration of the look of a type', () => {
         type: 'Point',
         geometry: 'Point',
         renderer: rendererOf('Point'),
-        defaultStyle: CARD_LOOK,
+        defaultStyle: BOARD_LOOK,
       }),
     ).toThrow(expect.objectContaining({ code: 'invalid-input' }));
     expect(() =>

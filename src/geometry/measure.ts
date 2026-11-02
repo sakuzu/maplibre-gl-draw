@@ -186,7 +186,7 @@ function scanlineCrossings(polygon: AreaCoordinates, lat: number): number[] {
 }
 
 /**
- * Returns a representative point that lies inside a polygon, such as a label anchor.
+ * Returns a representative point that lies inside a polygon.
  *
  * If the {@link centroid} is inside the polygon, it is returned. If it is outside (a
  * concave shape, or a centroid in a hole), a horizontal scanline is drawn at the latitude of

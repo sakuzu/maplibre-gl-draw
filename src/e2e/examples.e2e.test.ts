@@ -1524,7 +1524,7 @@ describe('the examples', () => {
     // Selected: the handle is drawn there with the look of a vertex handle
     expect((await colorsAround(page, first)).some(isWhite)).toBe(true);
 
-    // The first vertex back in the middle of the map, clear of the panels (the layer of the cards
+    // The first vertex back in the middle of the map, clear of the panels (the layer of the boards
     // makes the panel of the layers taller)
     await page.evaluate(
       (center) =>
@@ -1546,14 +1546,14 @@ describe('the examples', () => {
     await close();
   });
 
-  it('custom-feature-types lays a card on the map, colors its paper by the rule and widens it by its east edge', {
+  it('custom-feature-types lays a board on the map, colors its fill by the rule and widens it by its east edge', {
     timeout: TIMEOUT,
   }, async () => {
     const { page, close } = await openExample('custom-feature-types');
-    const card = await page.evaluate(() => {
+    const board = await page.evaluate(() => {
       const { draw, map } = window as unknown as E2EWindow;
       draw.selection.clear();
-      const [hill] = draw.features.list({ type: 'Card' });
+      const [hill] = draw.features.list({ type: 'Board' });
       map.jumpTo({
         center: (hill.geometry as GeoJSON.Point).coordinates as [number, number],
         zoom: 14,
@@ -1561,8 +1561,8 @@ describe('the examples', () => {
       return hill;
     });
     await settle(page);
-    const center = (card.geometry as GeoJSON.Point).coordinates;
-    // The paper takes the color of the rule of its layer for its topic (#ffd6a5), though the
+    const center = (board.geometry as GeoJSON.Point).coordinates;
+    // The fill takes the color of the rule of its layer for its topic (#ffd6a5), though the
     // geometry is a Point: the type declares that the rule colors its fill
     const peach = (await colorsAround(page, center)).some(
       ([r, g, b]) => r > 240 && g > 200 && g < 225 && b > 150 && b < 180,
@@ -1573,7 +1573,7 @@ describe('the examples', () => {
     // which widens it alone
     await page.evaluate(
       (id) => (window as unknown as E2EWindow).draw.selection.set('feature', [id]),
-      card.id,
+      board.id,
     );
     await settle(page);
     await still(page);
@@ -1583,16 +1583,16 @@ describe('the examples', () => {
       if (box?.kind !== 'ground') return null;
       const { topRight, bottomRight } = box.corners;
       return [(topRight[0] + bottomRight[0]) / 2, (topRight[1] + bottomRight[1]) / 2];
-    }, card.id);
+    }, board.id);
     if (!east) throw new Error('no selection box laid on the map');
     const from = await pageOf(page, east);
     await drag(page, from, { x: from.x + 60, y: from.y });
     const after = await page.evaluate(
       (id) => (window as unknown as E2EWindow).draw.features.get(id)?.properties,
-      card.id,
+      board.id,
     );
-    expect(after?.cardWidth as number).toBeGreaterThan(120);
-    expect(after?.cardScale).toBeUndefined();
+    expect(after?.boardWidth as number).toBeGreaterThan(120);
+    expect(after?.boardScale).toBeUndefined();
     await close();
   });
 

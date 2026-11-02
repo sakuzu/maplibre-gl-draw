@@ -1612,7 +1612,7 @@ the rows.
 
 ## Delegating point rendering
 
-To show points as something other than a circle (an icon drawn by an
+To show points as something other than a circle (a picture drawn by an
 extension, say), the extension draws the picture and the core only stops
 drawing the point. This is `DatasetOptions.externalPointRender`:
 
@@ -1908,7 +1908,7 @@ The Lambert term is normalized against flat ground, so hue is kept and only
 lightness changes. The light comes from 335 degrees (northwest), anchored
 to the viewport, at 45 degrees elevation with strength 0.45, matching the
 hillshade defaults; light from the southeast would make the relief look
-inverted. Lines, points, labels and handles are not shaded.
+inverted. Lines, points and handles are not shaded.
 
 The same formula (`terrain/shade.ts`) is used on the vertex displacement
 path and in the zoomed-out fallback, reading the DEM atlas instead of tile

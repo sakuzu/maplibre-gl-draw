@@ -116,8 +116,8 @@ here as well.
   marker (see "The marker of a point" below), a line or an area as its
   strategy tests it, with the click tolerance. So a feature always wins
   over its own companion, even when the companion is drawn from the
-  position of the feature and hit with a padding of its own (a leader
-  line)
+  position of the feature and hit with a padding of its own (a line
+  drawn out from it)
 - When no provider is registered at all, the detour never happens. This is
   an O(1) check at the entry of the traversal, so the cost and the path of
   the plain traversal do not change
@@ -185,7 +185,7 @@ Only visible features among `orderedFeatures` are kept.
 
 The search radius is by default the equivalent of `clickTolerance`
 (6 px). A type whose strategy treats a wider area as a hit (a point drawn
-with a large icon, for instance) would drop out of the candidates before
+with a large picture, for instance) would drop out of the candidates before
 it ever reached the precise test.
 
 A type can therefore register, in CSS pixels, how far from its indexed
@@ -379,7 +379,7 @@ entries within one notification does not matter.
 - A type added with `draw.extensions.featureTypes` is measured with the
   `getBoundingBox` of its engine handler, and adding it re-measures the
   features of that type. When its extent changes for a reason the Store
-  does not see (a font that arrives later, for example), the extension
+  does not see (an image that arrives later, for example), the extension
   calls `ctx.invalidate({ type })`, which reaches `invalidateType(type)`
 - `setTileSize()` re-derives every feature, since the extent of an Image
   depends on the tile size
@@ -419,12 +419,12 @@ within `toleranceLngLat`. The distance is that same local distance.
 
 The index holds a Point as the point itself, and the strategy looks only
 at the anchor. A point type whose drawn footprint is larger than the
-tolerance circle (an icon, a label beside it) extends both stages. It
-registers `candidateReachPx` so that the first stage keeps it as a
-candidate from as far away as its footprint reaches, and a strategy that
-tests the footprint itself. Testing the icon and the label as two separate
-rectangles, rather than one rectangle around both, keeps the empty space
-beside a narrow icon from answering clicks.
+tolerance circle extends both stages. It registers `candidateReachPx` so
+that the first stage keeps it as a candidate from as far away as its
+footprint reaches, and a strategy that tests the footprint itself. A
+footprint made of several parts is best tested part by part: one
+rectangle around all of them would let the empty space between them
+answer clicks.
 
 ### LineString and Freehand
 

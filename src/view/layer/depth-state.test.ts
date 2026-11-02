@@ -47,7 +47,7 @@ describe('recording of the depth test', () => {
   });
 
   it('drawing symbols never asks GL for the state', () => {
-    // On a map with thousands of labels, a query per glyph becomes a synchronous
+    // With thousands of billboards, a query per billboard becomes a synchronous
     // GPU round-trip and a frame reaches tens of seconds.
     const rec = createGL(true);
     syncDepthTestEnabled(rec.gl);

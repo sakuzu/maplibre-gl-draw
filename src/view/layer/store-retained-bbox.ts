@@ -88,14 +88,15 @@ function walkCoordinates(value: unknown, visit: (lng: number, lat: number) => vo
  * Computes the rectangle occupied by a feature that spreads around its anchor
  *
  * A kind where "coordinates is a single anchor point and the body spreads around it", such as
- * Note / Text, degenerates into a point of zero area when only the coordinates are walked. The
+ * Image or a custom type laid around a Point, degenerates into a point of zero area when only the
+ * coordinates are walked. The
  * whole chunk would then be thinned away the moment the center of the map enters it (= the moment
  * the anchor leaves the expanded viewport), and a feature that should cover the whole screen
  * would disappear entirely.
  *
- * The rectangle it actually occupies is already known to the calculator registered by the
- * extension (for Note, the selection box including the rotation) and to the size computation of
- * Image. That is folded into an AABB and used.
+ * The rectangle it actually occupies is already known to the calculator registered for a custom
+ * type (its selection box, including its rotation) and to the size computation of Image. That is
+ * folded into an AABB and used.
  *
  * @returns null for a kind where walking the raw coordinates is enough (Point / LineString /
  *   Polygon and so on) and when the computation did not produce finite values (the caller then

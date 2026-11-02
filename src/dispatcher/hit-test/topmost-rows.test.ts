@@ -241,7 +241,7 @@ describe('the hit testing of the companions of the rows held as columns', () => 
 
   /**
    * A provider of a line drawn for each feature it names, along the latitude it gives, from
-   * longitude 0 to 100 (a callout away from its feature), answered from the rows when `rows`
+   * longitude 0 to 100 (a band away from its feature), answered from the rows when `rows`
    */
   function registerLines(lines: Record<string, number>, options: { rows?: boolean } = {}) {
     const has = vi.fn((f: Feature) => f.id in lines);
@@ -366,23 +366,23 @@ describe('the hit testing of the companions of the rows held as columns', () => 
   });
 
   /**
-   * A provider of a line along the latitude in the attribute `callout` of a feature, from
+   * A provider of a line along the latitude in the attribute `band` of a feature, from
    * longitude 0 to 100, answered from the rows; it counts the rows it is asked about
    */
-  function registerCallouts(id = 'callouts') {
+  function registerBands(id = 'bands') {
     const asked = { rows: 0 };
     const hitTest = vi.fn<FeatureCompanionProvider['hitTest']>((f, point, context) => {
-      const lat = f.properties.callout;
+      const lat = f.properties.band;
       if (typeof lat !== 'number') return null;
       const y = context.project([0, lat]).y;
-      return Math.abs(point.y - y) <= context.tolerancePx ? { id: `callout-of-${f.id}` } : null;
+      return Math.abs(point.y - y) <= context.tolerancePx ? { id: `band-of-${f.id}` } : null;
     });
     companions.register({
       id,
-      has: (f) => typeof f.properties.callout === 'number',
+      has: (f) => typeof f.properties.band === 'number',
       hasRow: (view: LayerTableView, handle: number) => {
         asked.rows++;
-        return typeof view.getRowValue(handle, 'callout') === 'number';
+        return typeof view.getRowValue(handle, 'band') === 'number';
       },
       draw: () => {},
       hitTest,
@@ -405,7 +405,7 @@ describe('the hit testing of the companions of the rows held as columns', () => 
   it('does not walk the rows of a layer on each hit: the rows with companions are kept', () => {
     layer('l');
     adoptGrid('l', 20_000, () => ({}));
-    const { asked } = registerCallouts();
+    const { asked } = registerBands();
     const hitTest = companionTester();
     // Found once, on the first hit
     expect(rowId(hitTest(at(10, 10)))).toBe('p2010');
@@ -423,14 +423,14 @@ describe('the hit testing of the companions of the rows held as columns', () => 
 
   it('asks only the rows with companions in front of the row hit', () => {
     layer('l');
-    // Every 1000th row has a callout along latitude 30.5, between the rows of the grid
-    adoptGrid('l', 20_000, (i) => (i % 1000 === 0 ? { properties: { callout: 30.5 } } : {}));
-    const { hitTest } = registerCallouts();
+    // Every 1000th row has a band along latitude 30.5, between the rows of the grid
+    adoptGrid('l', 20_000, (i) => (i % 1000 === 0 ? { properties: { band: 30.5 } } : {}));
+    const { hitTest } = registerBands();
     const companionHit = companionTester()(at(150.5, 30.5));
     expect(companionHit?.kind === 'companion' && companionHit.companion.featureId).toBe('p19000');
     expect(hitTest).toHaveBeenCalledTimes(1);
     hitTest.mockClear();
-    // On the row p10000 (row 50 of the grid): the rows with callouts in front of it only
+    // On the row p10000 (row 50 of the grid): the rows with bands in front of it only
     expect(rowId(companionTester()(at(0, 50)))).toBe('p10000');
     expect(hitTest.mock.calls.map(([f]) => f.id)).toEqual(
       Array.from({ length: 9 }, (_, k) => `p${19000 - k * 1000}`),
@@ -440,12 +440,12 @@ describe('the hit testing of the companions of the rows held as columns', () => 
   it('asks again only the row written for the rows with companions', () => {
     layer('l');
     adopt('l', [feature('a', 'Polygon', square(0, 0)), feature('b', 'Polygon', square(20, 0))]);
-    const { asked } = registerCallouts();
+    const { asked } = registerBands();
     const hitTest = companionTester();
     expect(hitTest(at(60, 50))).toBeNull();
     tables.writer.apply({
       handles: Int32Array.of(tables.tables.findRow('a') as number),
-      fields: new Map([['property:callout', [50]]]),
+      fields: new Map([['property:band', [50]]]),
     });
     asked.rows = 0;
     const hit = hitTest(at(60, 50));
@@ -455,18 +455,18 @@ describe('the hit testing of the companions of the rows held as columns', () => 
 
   it('finds the rows with companions again when the rows or the providers change', () => {
     layer('l');
-    adopt('l', [feature('a', 'Polygon', square(0, 0), { properties: { callout: 50 } })]);
+    adopt('l', [feature('a', 'Polygon', square(0, 0), { properties: { band: 50 } })]);
     const hitTest = companionTester();
     // No provider yet
     expect(hitTest(at(60, 50))).toBeNull();
-    registerCallouts();
+    registerBands();
     const first = hitTest(at(60, 50));
     expect(first?.kind === 'companion' && first.companion.featureId).toBe('a');
-    // A row comes in front of it, with a callout
+    // A row comes in front of it, with a band
     const builder = createRowBlockDataBuilder({ targetRows: 2 });
     builder.addRow(
       rowOfFeature(
-        feature('b', 'Polygon', square(20, 0), { properties: { callout: 50 } }),
+        feature('b', 'Polygon', square(20, 0), { properties: { band: 50 } }),
         orderKey(5),
       ),
     );

@@ -867,8 +867,8 @@ drawn. Each change below names what replaces what is gone.
   of its definition, as for a built-in type. It colored `fillColor` of
   every custom type: a type of points or of lines that declares none now
   has the rule color in `pointColor` or in `strokeColor`, and a type
-  drawn as a card or a box on a Point with its paper in `fillColor`
-  declares `styleRuleChannel: 'fill'` to keep it. The function
+  that draws a box on a Point filled with `fillColor` declares
+  `styleRuleChannel: 'fill'` to keep it. The function
   `getStyleRuleChannel(type)` of the main entry, which knew the built-in
   types only, is gone: `draw.extensions.featureTypes.getStyleRuleChannel(type)`
   answers for every type, as the library colors

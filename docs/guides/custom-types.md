@@ -260,8 +260,8 @@ sketches applied:
   geometry of its definition, as for a built-in type: `pointColor` for a
   Point, `strokeColor` for a LineString and `fillColor` for a Polygon.
   The zone above, a Polygon, takes the color of the rule as its fill and
-  keeps its outline. A card or a box drawn on a Point, whose paper is
-  `fillColor`, declares `styleRuleChannel: 'fill'`. A feature whose style
+  keeps its outline. A type that draws a box on a Point filled with
+  `fillColor` declares `styleRuleChannel: 'fill'`. A feature whose style
   sets the key keeps its own color
 - `defaultStyle` is checked as the style of a feature is, and an invalid
   one is refused with `invalid-input`. It is copied when the type is
@@ -428,9 +428,9 @@ const signboard: FeatureTypeDefinition = {
 ```
 
 `boardFootprint` lays the box on the map from its size in pixels at the
-zoom it was made at, its angle and its scale, as `cardFootprint` of the
-card of the example [Custom feature types](../examples/custom-feature-types.md)
-(`card.ts`) does; `eastMiddleOf` and `widthFromCenter` below are written
+zoom it was made at, its angle and its scale, as the one of the board of
+the example [Custom feature types](../examples/custom-feature-types.md)
+(`board.ts`) does; `eastMiddleOf` and `widthFromCenter` below are written
 out there too.
 
 A rotation adds its angle to `boardAngle`, within [0, 360), and a resize
@@ -628,7 +628,7 @@ that is already overridden cannot be overridden again until it is put
 back.
 
 `appliesTo(feature)` narrows an override to some features of the type,
-such as the points that carry an icon. A feature for which it returns
+such as the points that carry a picture. A feature for which it returns
 false keeps the built-in type entirely: it is drawn in batches with the
 other built-in features, and keeps the built-in hit test, box
 selection, selection box, handles, snapping candidates and extent. The others
@@ -638,15 +638,15 @@ ignores it: a custom type takes every feature of its type.
 
 <!-- docs-check:
 declare const draw: import('@sakuzu/maplibre-gl-draw').Draw;
-declare const iconRenderer: import('@sakuzu/maplibre-gl-draw').FeatureRenderer;
+declare const pictureRenderer: import('@sakuzu/maplibre-gl-draw').FeatureRenderer;
 -->
 
 ```ts
 draw.extensions.featureTypes.override({
   type: 'Point',
   geometry: 'Point',
-  renderer: iconRenderer,
-  appliesTo: (feature) => typeof feature.properties.icon === 'string',
+  renderer: pictureRenderer,
+  appliesTo: (feature) => typeof feature.properties.picture === 'string',
 });
 ```
 
@@ -659,8 +659,8 @@ is in one member of each, `rows`, experimental with its types in `/kasane`
 - `renderer.rows.sprites` gives the pictures a renderer draws its points
   with: a texture, the rectangle of the picture of a style, and its size on
   screen. Such a point is then drawn with the other rows of its layer, in
-  their order and in their draw, so a layer where points with icons and areas
-  alternate is drawn in a few draws
+  their order and in their draw, so a layer where points drawn as pictures
+  and areas alternate is drawn in a few draws
 - `rows.appliesTo(view, handle)` gives the answer of `appliesTo` from the
   row, read from the `LayerTableView` of the layer (`getRowValue`,
   `getRowType`). Without it, a feature is made from each row of the type to

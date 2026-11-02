@@ -1206,8 +1206,8 @@ describe('features.list and count by extent', () => {
 });
 
 describe('the extensions of two draw instances', () => {
-  const card: FeatureTypeDefinition = {
-    type: 'Card',
+  const board: FeatureTypeDefinition = {
+    type: 'Board',
     geometry: 'Polygon',
     renderer: { onAdd() {}, draw() {}, onRemove() {} },
     footprint: (feature) => ({
@@ -1227,17 +1227,17 @@ describe('the extensions of two draw instances', () => {
     const editor = engineWithDraw();
     const preview = engineWithDraw();
 
-    preview.extensions.collections.featureTypes.add(card);
+    preview.extensions.collections.featureTypes.add(board);
     const editorHandles = handles('aux');
     editor.extensions.collections.handleProviders.add(editorHandles);
     // The same name on the other instance is a registration of its own
     preview.extensions.collections.handleProviders.add(handles('aux'));
 
-    expect(preview.extensions.collections.featureTypes.has('Card')).toBe(true);
-    expect(editor.extensions.collections.featureTypes.has('Card')).toBe(false);
+    expect(preview.extensions.collections.featureTypes.has('Board')).toBe(true);
+    expect(editor.extensions.collections.featureTypes.has('Board')).toBe(false);
     const extensionsOf = (engine: Engine) => engine.context.selectionScope.extensions;
-    expect(extensionsOf(preview).getBoundingBoxCalculator('Card')).toBeDefined();
-    expect(extensionsOf(editor).getBoundingBoxCalculator('Card')).toBeUndefined();
+    expect(extensionsOf(preview).getBoundingBoxCalculator('Board')).toBeDefined();
+    expect(extensionsOf(editor).getBoundingBoxCalculator('Board')).toBeUndefined();
     expect(editor.extensions.collections.handleProviders.get('aux')).toBe(editorHandles);
     expect(editor.context.selectionScope.auxiliaryHandles.list()).toHaveLength(1);
     expect(preview.context.selectionScope.auxiliaryHandles.list()).toHaveLength(1);
@@ -1249,8 +1249,8 @@ describe('the extensions of two draw instances', () => {
   it('leave the other instance alone when one is destroyed', () => {
     const editor = engineWithDraw();
     const preview = engineWithDraw();
-    editor.extensions.collections.featureTypes.add(card);
-    preview.extensions.collections.featureTypes.add(card);
+    editor.extensions.collections.featureTypes.add(board);
+    preview.extensions.collections.featureTypes.add(board);
     editor.extensions.collections.handleProviders.add(handles('aux'));
     preview.extensions.collections.handleProviders.add(handles('aux'));
 
@@ -1258,10 +1258,12 @@ describe('the extensions of two draw instances', () => {
 
     expect(preview.context.selectionScope.auxiliaryHandles.list()).toEqual([]);
     expect(
-      preview.context.selectionScope.extensions.getBoundingBoxCalculator('Card'),
+      preview.context.selectionScope.extensions.getBoundingBoxCalculator('Board'),
     ).toBeUndefined();
     expect(editor.context.selectionScope.auxiliaryHandles.list()).toHaveLength(1);
-    expect(editor.context.selectionScope.extensions.getBoundingBoxCalculator('Card')).toBeDefined();
+    expect(
+      editor.context.selectionScope.extensions.getBoundingBoxCalculator('Board'),
+    ).toBeDefined();
     editor.destroy();
   });
 });

@@ -57,9 +57,9 @@ export interface FeatureTypeHandler {
    * The additional reach for narrowing down candidates (in CSS pixels)
    *
    * The first stage of hit testing narrows down candidates with a radius equivalent to
-   * clickTolerance, so when the hitTest strategy of this type treats a wider area as a hit
-   * (icons and the like), the candidate is dropped before the precise test is reached.
-   * Registering "how far from the center a hit can occur" here widens the candidate search
+   * clickTolerance, so when the hitTest strategy of this type treats a wider area as a hit (a
+   * picture drawn around a point, say), the candidate is dropped before the precise test is
+   * reached. Registering "how far from the center a hit can occur" here widens the candidate search
    * radius by that much.
    *
    * The test itself is still decided by the hitTest strategy as before (only the number of

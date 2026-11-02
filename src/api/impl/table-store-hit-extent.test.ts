@@ -45,7 +45,7 @@ const box: FeatureTypeDefinition = {
   },
 };
 
-/** A type hit 30 pixels around its point (its icon), beyond the tolerance of a click */
+/** A type hit 30 pixels around its point (its picture), beyond the tolerance of a click */
 const pin: FeatureTypeDefinition = {
   type: 'pin',
   geometry: 'Point',

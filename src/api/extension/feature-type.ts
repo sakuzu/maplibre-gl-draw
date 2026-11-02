@@ -145,7 +145,7 @@ export interface FeatureTypeDefinition {
   readonly geometry: Geometry['type'];
   /**
    * How far beyond its geometry a feature of this type can be hit, in pixels, such as the
-   * half size of an icon drawn on a point. The candidates of a hit test are gathered this much
+   * half size of a picture drawn on a point. The candidates of a hit test are gathered this much
    * farther out; 0 when it is left out.
    */
   readonly hitPaddingPx?: number;
@@ -172,8 +172,8 @@ export interface FeatureTypeDefinition {
    * `'fill'` for a Polygon, a MultiPolygon or any other geometry.
    * `draw.extensions.featureTypes.getStyleRuleChannel(type)` answers it.
    *
-   * A type drawn as a card or a box on a Point, whose paper is `fillColor`, declares `'fill'` so
-   * that the rule colors its paper. `draw.features.getAppliedStyle` and the render context
+   * A type that draws a box on a Point filled with `fillColor` declares `'fill'` so that the rule
+   * colors its fill. `draw.features.getAppliedStyle` and the render context
    * (`ctx.appliedStyle(feature)`) answer with it. A definition given to `override` cannot have it
    * (a built-in type keeps the channel of its type): `override` throws `invalid-input`.
    */

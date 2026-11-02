@@ -328,7 +328,8 @@ export function centroid(
 }
 
 /**
- * Returns a point that always lies inside a polygon, such as the anchor of a label.
+ * Returns a point that always lies inside a polygon, unlike its centroid, which a concave shape
+ * or a hole can leave outside it.
  *
  * @param polygon The Polygon or MultiPolygon, or a feature whose geometry is one; coordinates
  *   in degrees

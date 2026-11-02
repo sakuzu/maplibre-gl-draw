@@ -7,9 +7,8 @@ aside: false
 Feature types the library does not have: a route, a line with style
 keys of its own, which its definition draws, hits and takes into a
 selection box, with a section of the panel on the right for its keys;
-and a card, a paper card laid on the map around a point, which the
-library turns and scales, and whose paper the rule of its layer
-colors.
+and a board laid flat on the map around a point, which the library
+turns and scales, and whose fill the rule of its layer colors.
 
 ```example
 custom-feature-types
@@ -37,8 +36,8 @@ one, as the library takes a feature of an unknown type into a box by its
 positions. Turn it on again: the routes are drawn and hit as before,
 with the looks they had.
 
-The two cards stand in a layer of their own, Cards, whose rule colors
-their paper by their topic. Select one: the resize handles on the
+The two boards stand in a layer of their own, Boards, whose rule colors
+their fill by their topic. Select one: the resize handles on the
 corners of its selection box scale it and keep its shape, the handle
 above it turns it, and the handle in the middle of its east edge widens
 it alone. It grows and shrinks with the map from the zoom it was made at.
@@ -64,22 +63,22 @@ the library, so the page adds a section for the route's keys with
 color, a slider and a toggle, and `onchange` writes the key that changed
 into the style of the selected routes.
 
-The card (`card.ts`) is drawn on a Point. Its width and height are
+The board (`board.ts`) is drawn on a Point. Its width and height are
 pixels at the zoom it was made at, which its footprint turns into meters
 with `pixelsToMeters` and lays on the map with `metersToDegrees` of
-`/geometry`, turned by its angle (`cardFootprint`). Its `transformFields`
+`/geometry`, turned by its angle (`boardFootprint`). Its `transformFields`
 name the keys the handles of the selection box write, its rotation and
 its scale, which the footprint reads. Its `handles` give a `resize`
 handle in the middle of the east edge of the selection box
 (`eastMiddleOf`), whose drag writes its width (`widthFromCenter`). It
 declares its look in `defaultStyle` and that the rule colors its fill
 (`styleRuleChannel: 'fill'`), and its renderer draws with
-`ctx.appliedStyle(feature)`, the paper colored by the rule (7).
+`ctx.appliedStyle(feature)`, the fill colored by the rule (7).
 
 ::: code-group
 <<< @/../examples/custom-feature-types/main.ts
 <<< @/../examples/custom-feature-types/route.ts
-<<< @/../examples/custom-feature-types/card.ts
+<<< @/../examples/custom-feature-types/board.ts
 <<< @/../examples/custom-feature-types/data.ts
 <<< @/../examples/custom-feature-types/index.html
 :::

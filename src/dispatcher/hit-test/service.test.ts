@@ -155,8 +155,8 @@ describe('the extra reach for narrowing down the candidates (registerCandidateRe
   /**
    * A Point strategy that counts anything within 3 degrees (= 30px) of the center as a hit
    *
-   * It stands in for a type whose test area is wider than clickTolerance (5px), such as an
-   * icon.
+   * It stands in for a type whose test area is wider than clickTolerance (5px), such as a
+   * picture drawn around a point.
    */
   const wideStrategy: HitTestStrategy = {
     geometryType: 'Point',

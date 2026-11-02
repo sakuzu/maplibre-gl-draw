@@ -25,7 +25,7 @@
  * types (`setCustomBoundingBoxCalculator`) and the same tile size.
  *
  * The extent of a type registered with a custom bounding box calculator can change for
- * reasons outside the Store (a font that arrives later, for example). Its owner announces
+ * reasons outside the Store (an image that arrives later, for example). Its owner announces
  * that with invalidateType(), which re-derives the features of that type from the Store.
  */
 

@@ -4,7 +4,7 @@
 /**
  * Deciding whether a symbol is occluded by the terrain (whether to ghost it)
  *
- * Points, icons and billboard labels are drawn without a depth test. A billboard's front/back
+ * Points and other billboards are drawn without a depth test. A billboard's front/back
  * order is decided by the depth of its single center point, so enabling depth makes the whole
  * thing disappear as soon as it sinks a few meters into the ground (confirmed by measurement).
  * On the other hand, a symbol behind a mountain stays clearly visible, which is misread as

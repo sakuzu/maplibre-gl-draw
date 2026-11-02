@@ -305,7 +305,7 @@ export function createTopmostHitTester(deps: TopmostHitTestDeps): HitTestTopmost
       getStyleRuleChannel(type) === 'point' && deps.pointMarkerReachPx
         ? Math.max(tolerance, deps.pointMarkerReachPx(style) * degreesPerPixel)
         : tolerance;
-    // A type that registered an extra reach (an icon around a point) is looked for as far, its
+    // A type that registered an extra reach (a picture around a point) is looked for as far, its
     // pixels measured as the features are (from the tolerance of the click)
     const extraReach = hitTestService.maxCandidateReachPx?.() ?? 0;
     const clickPx = deps.clickTolerancePx ?? DEFAULT_HIT_TEST_OPTIONS.clickTolerance;

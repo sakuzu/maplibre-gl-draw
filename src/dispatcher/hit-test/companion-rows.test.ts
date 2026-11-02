@@ -36,17 +36,17 @@ import {
 import { companionRowsOf } from './companion-rows.js';
 
 /**
- * A provider of a callout for each row with a number in its attribute `callout`, answered from
+ * A provider of a band for each row with a number in its attribute `band`, answered from
  * the rows; it counts the rows it is asked about
  */
-function registerCallouts(companions: FeatureCompanionRegistry, id = 'callouts') {
+function registerBands(companions: FeatureCompanionRegistry, id = 'bands') {
   const asked = { rows: 0 };
   const provider: FeatureCompanionProvider = {
     id,
-    has: (f) => typeof f.properties.callout === 'number',
+    has: (f) => typeof f.properties.band === 'number',
     hasRow: (view: LayerTableView, handle: number) => {
       asked.rows++;
-      return typeof view.getRowValue(handle, 'callout') === 'number';
+      return typeof view.getRowValue(handle, 'band') === 'number';
     },
     draw: () => {},
     hitTest: () => null,
@@ -58,7 +58,7 @@ function registerCallouts(companions: FeatureCompanionRegistry, id = 'callouts')
 
 /**
  * The rows with companions as walking every row of the layer in its order finds them: the rows
- * read with a geometry and a number in their attribute `callout`
+ * read with a geometry and a number in their attribute `band`
  */
 function walked(internals: FeatureTablesInternals, table: LayerTable): string[] {
   const order = table.rowOrder();
@@ -68,7 +68,7 @@ function walked(internals: FeatureTablesInternals, table: LayerTable): string[] 
     const row = order.rows[i];
     if (!rowHasGeometry(group, row)) continue;
     const read = rowFeatureToRead(internals.readContext, table.layerId, group, row);
-    if (typeof read.properties.callout === 'number') out.push(read.id);
+    if (typeof read.properties.band === 'number') out.push(read.id);
   }
   return out;
 }
@@ -96,18 +96,18 @@ function kept(
 describe('the rows with companions of a layer held as rows', () => {
   it('asks again only the rows written, not the rows of the layer', () => {
     const count = 100_000;
-    const callouts = new Set([10, 20_000, 40_000, 60_000, 99_000]);
+    const bands = new Set([10, 20_000, 40_000, 60_000, 99_000]);
     const features = Array.from({ length: count }, (_, i) =>
       feature(
         `p${i}`,
         'Point',
         [i % 200, Math.floor(i / 200)],
-        callouts.has(i) ? { properties: { callout: 1 } } : {},
+        bands.has(i) ? { properties: { band: 1 } } : {},
       ),
     );
     const { internals, table, tables, writer } = tablesOfFeatures('l', features, 4096);
     const companions = createFeatureCompanionRegistry();
-    const { asked } = registerCallouts(companions);
+    const { asked } = registerBands(companions);
     const handleOf = (id: string): number => tables.findRow(id) as number;
     const ids = (): string[] => kept(internals, table, companions);
     const expectWalked = (): void => {
@@ -131,12 +131,12 @@ describe('the rows with companions of a layer held as rows', () => {
     expectWalked();
     expect(asked.rows).toBe(1);
 
-    // A row given a callout, and one whose callout is taken off
-    writer.apply(rowPatch([handleOf('p30000')], { 'property:callout': [2] }));
+    // A row given a band, and one whose band is taken off
+    writer.apply(rowPatch([handleOf('p30000')], { 'property:band': [2] }));
     asked.rows = 0;
     expect(ids()).toEqual(['p10', 'p20000', 'p30000', 'p40000', 'p60000', 'p99000']);
     expect(asked.rows).toBe(1);
-    writer.apply(rowPatch([handleOf('p40000')], { 'property:callout': [undefined] }));
+    writer.apply(rowPatch([handleOf('p40000')], { 'property:band': [undefined] }));
     asked.rows = 0;
     expect(ids()).toEqual(['p10', 'p20000', 'p30000', 'p60000', 'p99000']);
     expect(asked.rows).toBe(1);
@@ -165,14 +165,14 @@ describe('the rows with companions of a layer held as rows', () => {
     asked.rows = 0;
     expect(ids()).toEqual(['p10', 'p30000', 'p20000', 'p60000', 'p99000']);
     expect(asked.rows).toBe(1);
-    writer.apply(rowPatch([handleOf('p20000')], { 'property:callout': [undefined] }));
+    writer.apply(rowPatch([handleOf('p20000')], { 'property:band': [undefined] }));
     asked.rows = 0;
     expect(ids()).toEqual(['p10', 'p30000', 'p60000', 'p99000']);
     expect(asked.rows).toBe(1);
 
     // The undo of the writes of a row
     const p10 = handleOf('p10');
-    const write = rowPatch([p10], { 'property:callout': [undefined] }, [1]);
+    const write = rowPatch([p10], { 'property:band': [undefined] }, [1]);
     const undo = internals.readValues(write);
     writer.apply(write);
     asked.rows = 0;
@@ -188,7 +188,7 @@ describe('the rows with companions of a layer held as rows', () => {
       const random = seededRandom(seed);
       const reference = randomReference(random, 240, layerIds);
       for (const row of reference.rows.values()) {
-        if (random() < 0.15) row.properties = { ...row.properties, callout: 1 };
+        if (random() < 0.15) row.properties = { ...row.properties, band: 1 };
       }
       const { tables, writer, internals, groupHandleOf } = tablesOfReference(
         reference,
@@ -197,7 +197,7 @@ describe('the rows with companions of a layer held as rows', () => {
       );
       const writes = randomRowWrites(random, { tables, writer, internals, reference, layerIds });
       const companions = createFeatureCompanionRegistry();
-      registerCallouts(companions);
+      registerBands(companions);
       let second: (() => void) | null = null;
       /** The writes that can be undone, the last one last */
       const undos: RowValues[] = [];
@@ -227,10 +227,10 @@ describe('the rows with companions of a layer held as rows', () => {
           // rows put into the delta
           writes.step(step);
         } else if (pick < 0.6) {
-          // A callout given or taken off
+          // A band given or taken off
           const handle = someRow();
           if (handle !== undefined) {
-            write(rowPatch([handle], { 'property:callout': [random() < 0.5 ? 1 : undefined] }));
+            write(rowPatch([handle], { 'property:band': [random() < 0.5 ? 1 : undefined] }));
           }
         } else if (pick < 0.68) {
           // A row deleted or written again with its key moved
@@ -269,7 +269,7 @@ describe('the rows with companions of a layer held as rows', () => {
               geometry: row.geometry,
               order: referenceKey(base + k),
               style: row.style,
-              properties: random() < 0.5 ? { callout: 1 } : {},
+              properties: random() < 0.5 ? { band: 1 } : {},
             });
           }
           blocks++;
@@ -289,7 +289,7 @@ describe('the rows with companions of a layer held as rows', () => {
               geometry: handles.map((_, k) => ({ type: 'Point', coordinates: [k, k] })),
               order: handles.map((_, k) => referenceKey(base + k)),
               style: handles.map(() => ({})),
-              'property:callout': handles.map((_, k) => (k % 9 === 0 ? 1 : undefined)),
+              'property:band': handles.map((_, k) => (k % 9 === 0 ? 1 : undefined)),
             }),
           );
           if (random() < 0.5) internals.addQueuedRowBlocks();
@@ -298,7 +298,7 @@ describe('the rows with companions of a layer held as rows', () => {
           if (second) {
             second();
             second = null;
-          } else second = registerCallouts(companions, 'more').unregister;
+          } else second = registerBands(companions, 'more').unregister;
         }
         // Several writes between two hits now and then
         if (random() < 0.7) check(step);
@@ -310,10 +310,7 @@ describe('the rows with companions of a layer held as rows', () => {
   it('keeps the rows with companions of each layer of a row moved between layers', () => {
     const { internals, tables, writer } = tablesOfFeatures(
       'a',
-      [
-        feature('x', 'Point', [0, 0], { properties: { callout: 1 } }),
-        feature('y', 'Point', [1, 0]),
-      ],
+      [feature('x', 'Point', [0, 0], { properties: { band: 1 } }), feature('y', 'Point', [1, 0])],
       8,
     );
     const builder = createRowBlockDataBuilder({ targetRows: 8 });
@@ -321,7 +318,7 @@ describe('the rows with companions of a layer held as rows', () => {
     writer.addRowBlocks('b', builder.finish());
     internals.addQueuedRowBlocks();
     const companions = createFeatureCompanionRegistry();
-    registerCallouts(companions);
+    registerBands(companions);
     const a = internals.layerTable('a') as LayerTable;
     const b = internals.layerTable('b') as LayerTable;
     const ids = (table: LayerTable) => kept(internals, table, companions);
@@ -343,16 +340,16 @@ describe('the rows with companions of a layer held as rows', () => {
     );
     expect(ids(a)).toEqual([]);
     expect(ids(b)).toEqual(['x']);
-    move(rowPatch([x], { 'property:callout': [undefined] }));
+    move(rowPatch([x], { 'property:band': [undefined] }));
     expect(ids(b)).toEqual([]);
-    // Back to its layer, and its callout again
+    // Back to its layer, and its band again
     writer.apply(moves.pop() as RowValues);
     writer.apply(moves.pop() as RowValues);
     for (const table of [a, b]) expect(ids(table)).toEqual(walked(internals, table));
     expect(ids(a)).toEqual(['x']);
     internals.flushVersions();
     for (const table of [a, b]) expect(ids(table)).toEqual(walked(internals, table));
-    const fields = new Map<RowField, unknown[]>([['property:callout', [1]]]);
+    const fields = new Map<RowField, unknown[]>([['property:band', [1]]]);
     writer.apply({ handles: Int32Array.of(tables.findRow('z') as number), fields });
     expect(ids(b)).toEqual(['z']);
   });

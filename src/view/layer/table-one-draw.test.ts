@@ -682,7 +682,7 @@ describe('the drawing of a layer held as rows in one draw per chunk', () => {
   });
 });
 
-describe('the check of the classification of a row written in place (7.2 of the design, J13)', () => {
+describe('the check of the classification of a row written in place', () => {
   /** A layer drawn in one draw whose writes in place reach the renderer, as the instance does */
   function written(features: Feature[]) {
     const setUp = setup(features, 1000);
@@ -695,8 +695,8 @@ describe('the check of the classification of a row written in place (7.2 of the 
     const { internals, tables, writer, renderer, frame, deps, table } = written(features);
     const companions: string[] = [];
     deps.companions.register({
-      id: 'leader',
-      has: (f) => f.properties?.leader === true,
+      id: 'ring',
+      has: (f) => f.properties?.ring === true,
       draw: (f) => {
         companions.push(f.id);
       },
@@ -709,7 +709,7 @@ describe('the check of the classification of a row written in place (7.2 of the 
     const handle = tables.findRow(line.id) as number;
     writer.apply({
       handles: Int32Array.of(handle),
-      fields: new Map([['property:leader', [true]]]),
+      fields: new Map([['property:ring', [true]]]),
     });
     let atOnce = false;
     for (let i = 0; i < 4; i++) {

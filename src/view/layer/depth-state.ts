@@ -4,15 +4,14 @@
 /**
  * Remembering the state of the depth test
  *
- * Symbols (point billboards and SDF glyphs) must not be clipped by the depth of the terrain, so
- * the depth test is disabled while they are drawn and then restored
- * (`renderers/point/billboard-depth.ts`). That "restored" value must not be obtained by asking
- * `gl.isEnabled` every time. A WebGL state query synchronously round-trips to the GPU process, so
- * on a map with thousands of labels it becomes thousands of round-trips in a single frame and
- * rendering stalls for tens of seconds.
+ * Billboards must not be clipped by the depth of the terrain, so the depth test is disabled while
+ * they are drawn and then restored (`renderers/point/billboard-depth.ts`). That "restored" value
+ * must not be obtained by asking `gl.isEnabled` every time. A WebGL state query synchronously
+ * round-trips to the GPU process, so with thousands of billboards drawn it becomes thousands of
+ * round-trips in a single frame and rendering stalls for tens of seconds.
  *
  * Only CustomLayer and the analysis drape switch the depth test. The side that switches it records
- * the value here, and the symbol side reads that record. The record belongs to the WebGL context
+ * the value here, and the billboard side reads that record. The record belongs to the WebGL context
  * whose state it mirrors (one entry per context), so two maps never read each other's value, and
  * two draw instances on one map share the context's true state. CustomLayer also reads the actual
  * state once at the start of a frame and syncs to it.

@@ -868,8 +868,8 @@ draw.options.update({
   `'stroke'`、`'point'`) か、宣言が無ければ組み込みの型と同じく定義の
   幾何の鍵を塗ります。前はどの独自の型でも `fillColor` を塗っていました。
   宣言しない点や線の型では、規則の色が `pointColor` か `strokeColor` に
-  入るようになります。Point の上に紙を `fillColor` で描くカードや箱の
-  型は、`styleRuleChannel: 'fill'` を宣言すると前と同じになります。
+  入るようになります。Point の上に `fillColor` で塗った箱を描く型は、
+  `styleRuleChannel: 'fill'` を宣言すると前と同じになります。
   組み込みの型しか知らなかった主の入口の関数 `getStyleRuleChannel(type)` は
   無くなりました。`draw.extensions.featureTypes.getStyleRuleChannel(type)`
   が、ライブラリーが塗るのと同じく、どの型にも答えます

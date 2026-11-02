@@ -144,16 +144,16 @@ describe('the roles of the fields of a feature', () => {
 describe('the roles of the fields of a feature of a custom type', () => {
   it('are the fields its type declares, and none when it declares none, whatever keys it has', () => {
     const fields = createTransformFieldsRegistry();
-    fields.register('Card', {
-      angleDegreesKey: 'cardAngle',
-      scaleKey: 'cardScale',
+    fields.register('Board', {
+      angleDegreesKey: 'boardAngle',
+      scaleKey: 'boardScale',
       uniformScale: true,
     });
     fields.register('Banner', {});
     const has = () => true;
-    expect(transformRolesOf('Card', () => false, fields)).toEqual({
-      angleDegrees: 'cardAngle',
-      size: 'cardScale',
+    expect(transformRolesOf('Board', () => false, fields)).toEqual({
+      angleDegrees: 'boardAngle',
+      size: 'boardScale',
       uniformScale: true,
     });
     expect(transformRolesOf('Banner', has, fields)).toEqual({ uniformScale: false });
@@ -171,41 +171,44 @@ describe('the roles of the fields of a feature of a custom type', () => {
 
   it('start the fields a feature does not have from 0 and 1', () => {
     const fields = createTransformFieldsRegistry();
-    fields.register('Card', {
-      angleDegreesKey: 'cardAngle',
-      scaleKey: 'cardScale',
+    fields.register('Board', {
+      angleDegreesKey: 'boardAngle',
+      scaleKey: 'boardScale',
       uniformScale: true,
     });
-    const card = feature('Card', {});
-    const start = transformStartOf(card, fields);
+    const board = feature('Board', {});
+    const start = transformStartOf(board, fields);
     const rotated = transformedUpdates(
       DEFAULT_TRANSFORMS,
       { kind: 'rotate', center: [139.7, 35.6], angleDegrees: 30 },
       start,
-      card,
+      board,
     );
-    expect(rotated?.properties?.cardAngle).toBeCloseTo(30, 9);
+    expect(rotated?.properties?.boardAngle).toBeCloseTo(30, 9);
     const scaled = transformedUpdates(
       DEFAULT_TRANSFORMS,
       { kind: 'scale', center: [139.7, 35.6], eastFactor: 2, northFactor: 2, sizeFactor: 2 },
       start,
-      card,
+      board,
     );
-    expect(scaled?.properties?.cardScale).toBeCloseTo(2, 9);
+    expect(scaled?.properties?.boardScale).toBeCloseTo(2, 9);
   });
 
   it('add the keys the types declare to the keys read, and let them go with their type', () => {
     const fields = createTransformFieldsRegistry();
-    const remove = fields.register('Card', { angleDegreesKey: 'cardAngle', scaleKey: 'cardScale' });
+    const remove = fields.register('Board', {
+      angleDegreesKey: 'boardAngle',
+      scaleKey: 'boardScale',
+    });
     expect(transformRoleFields(fields)).toEqual([
       ROTATION,
       SCALE,
       RADIUS,
-      'cardAngle',
-      'cardScale',
+      'boardAngle',
+      'boardScale',
     ]);
     remove();
-    expect(fields.of('Card')).toBeUndefined();
+    expect(fields.of('Board')).toBeUndefined();
     expect(transformRoleFields(fields)).toEqual([ROTATION, SCALE, RADIUS]);
   });
 });

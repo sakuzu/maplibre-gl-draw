@@ -289,7 +289,7 @@ describe('shader programs on a real WebGL2', () => {
       ),
     );
     // 12 renderers with one program each (the frames of the features selected in bulk among
-    // them) and the drape of a quad with two (image and paper); the image and the paper share
+    // them) and the drape of a quad with two (image and surface); the image and the surface share
     // one call site. The point, the line and the polygon
     // renderers also build the variant that draws rows held as columns at the same call site;
     // each variant is recorded with the program it is a variant of. The renderer of the rows

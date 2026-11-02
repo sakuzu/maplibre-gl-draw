@@ -292,9 +292,9 @@ writing it. Its changes are listed after those of 3.0.0.
   `strokeColor` for a LineString or a MultiLineString, and `fillColor`
   for a Polygon or any other geometry. It went to `fillColor` for every
   custom type: the rule color of a custom type of points or of lines that
-  declares no channel changes, and a type drawn as a card or a box on a
-  Point with its paper in `fillColor` declares `styleRuleChannel: 'fill'`
-  to keep it.
+  declares no channel changes, and a type that draws a box on a Point
+  filled with `fillColor` declares `styleRuleChannel: 'fill'` to keep
+  it.
 
 - `FeatureStyleResolved` has every key of the style the library defines,
   each required, and no more: a style key an extension adds to
@@ -517,7 +517,7 @@ writing it. Its changes are listed after those of 3.0.0.
   not.
 - The companions of the features of a layer held as rows are hit where
   they are drawn: the hit test asked the rows themselves only, so a click
-  on a companion (a callout line away from its feature) went through it.
+  on a companion (a line drawn away from its feature) went through it.
   The rows are now asked as the features are, from the front, each row
   itself and then its companions.
 

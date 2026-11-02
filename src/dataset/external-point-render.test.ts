@@ -157,8 +157,8 @@ describe('externalPointRender (the retained path)', () => {
     const manager = createManager();
     manager.add({
       id: 'c1',
-      rows: [point('plain', [0, 0]), point('icon', [1, 1])],
-      externalPointRender: (feature) => feature.id === 'icon',
+      rows: [point('plain', [0, 0]), point('pictured', [1, 1])],
+      externalPointRender: (feature) => feature.id === 'pictured',
     });
 
     const { points } = drawRetained(manager);
@@ -171,7 +171,7 @@ describe('externalPointRender (the retained path)', () => {
     const manager = createManager();
     manager.add({
       id: 'c1',
-      rows: [point('icon', [1, 1])],
+      rows: [point('pictured', [1, 1])],
       externalPointRender: () => true,
     });
 
@@ -225,7 +225,7 @@ describe('externalPointRender (the retained path)', () => {
             [1, 1],
           ],
         }),
-        point('icon', [2, 2]),
+        point('pictured', [2, 2]),
       ],
       externalPointRender: () => true,
     });
@@ -243,8 +243,8 @@ describe('externalPointRender (the immediate path)', () => {
     const manager = createManager();
     manager.add({
       id: 'c1',
-      rows: [point('plain', [0, 0]), point('icon', [1, 1])],
-      externalPointRender: (feature) => feature.id === 'icon',
+      rows: [point('plain', [0, 0]), point('pictured', [1, 1])],
+      externalPointRender: (feature) => feature.id === 'pictured',
     });
 
     expect(drawImmediate(manager)[0].map((f) => f.id)).toEqual(['plain']);
@@ -254,7 +254,7 @@ describe('externalPointRender (the immediate path)', () => {
     const manager = createManager();
     manager.add({
       id: 'c1',
-      rows: [point('icon', [0, 0])],
+      rows: [point('pictured', [0, 0])],
       externalPointRender: () => true,
     });
 
@@ -274,13 +274,13 @@ describe('setExternalPointRender (replacing it afterwards)', () => {
     const manager = createManager();
     const dataset = manager.add({
       id: 'c1',
-      rows: [point('plain', [0, 0]), point('icon', [1, 1])],
+      rows: [point('plain', [0, 0]), point('pictured', [1, 1])],
     });
 
     // Draw once to have the retained batches built (no predicate yet, so both points go in)
     expect(drawRetained(manager).points).toHaveLength(2);
 
-    dataset.setExternalPointRender((feature) => feature.id === 'icon');
+    dataset.setExternalPointRender((feature) => feature.id === 'pictured');
 
     // Without dropping them there would be no rebuild and the second record would be empty
     const { points } = drawRetained(manager);
@@ -292,8 +292,8 @@ describe('setExternalPointRender (replacing it afterwards)', () => {
     const manager = createManager();
     const dataset = manager.add({
       id: 'c1',
-      rows: [point('plain', [0, 0]), point('icon', [1, 1])],
-      externalPointRender: (feature) => feature.id === 'icon',
+      rows: [point('plain', [0, 0]), point('pictured', [1, 1])],
+      externalPointRender: (feature) => feature.id === 'pictured',
     });
 
     expect(drawRetained(manager).points).toHaveLength(1);
@@ -307,12 +307,12 @@ describe('setExternalPointRender (replacing it afterwards)', () => {
     const manager = createManager();
     const dataset = manager.add({
       id: 'c1',
-      rows: [point('plain', [0, 0]), point('icon', [1, 1])],
+      rows: [point('plain', [0, 0]), point('pictured', [1, 1])],
     });
 
-    expect(drawImmediate(manager)[0].map((f) => f.id)).toEqual(['plain', 'icon']);
+    expect(drawImmediate(manager)[0].map((f) => f.id)).toEqual(['plain', 'pictured']);
 
-    dataset.setExternalPointRender((feature) => feature.id === 'icon');
+    dataset.setExternalPointRender((feature) => feature.id === 'pictured');
 
     expect(drawImmediate(manager)[0].map((f) => f.id)).toEqual(['plain']);
   });
@@ -321,9 +321,9 @@ describe('setExternalPointRender (replacing it afterwards)', () => {
     const manager = createManager();
     const dataset = manager.add({
       id: 'c1',
-      rows: [point('icon', [0, 0], { style: { pointColor: '#0000ff', pointRadius: 5 } })],
+      rows: [point('pictured', [0, 0], { style: { pointColor: '#0000ff', pointRadius: 5 } })],
     });
-    dataset.setSelectedIds(['icon']);
+    dataset.setSelectedIds(['pictured']);
 
     // While there is no predicate, the original point is drawn over the halo
     expect(drawImmediate(manager)[1]).toHaveLength(2);
@@ -352,11 +352,11 @@ describe('externalPointRender (the selection path)', () => {
     const manager = createManager();
     const dataset = manager.add({
       id: 'c1',
-      rows: [point('icon', [0, 0], { style: { pointColor: '#0000ff', pointRadius: 5 } })],
+      rows: [point('pictured', [0, 0], { style: { pointColor: '#0000ff', pointRadius: 5 } })],
       externalPointRender: () => true,
     });
 
-    dataset.setSelectedIds(['icon']);
+    dataset.setSelectedIds(['pictured']);
     const frames = drawImmediate(manager);
 
     // There is no ordinary drawing; only the frame of the overpaint is opened
@@ -385,14 +385,14 @@ describe('externalPointRender (the selection path)', () => {
     const manager = createManager();
     const dataset = manager.add({
       id: 'c1',
-      rows: [point('plain', [0, 0]), point('icon', [1, 1])],
-      externalPointRender: (feature) => feature.id === 'icon',
+      rows: [point('plain', [0, 0]), point('pictured', [1, 1])],
+      externalPointRender: (feature) => feature.id === 'pictured',
     });
 
-    dataset.setSelectedIds(['plain', 'icon']);
+    dataset.setSelectedIds(['plain', 'pictured']);
     const highlighted = drawImmediate(manager)[1];
 
     // 2 halos + the overpaint is only the one for plain
-    expect(highlighted.map((f) => f.id)).toEqual(['plain', 'plain', 'icon']);
+    expect(highlighted.map((f) => f.id)).toEqual(['plain', 'plain', 'pictured']);
   });
 });

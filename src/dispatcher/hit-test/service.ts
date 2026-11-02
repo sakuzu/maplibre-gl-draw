@@ -176,7 +176,7 @@ export interface HitTestService {
    * candidates
    *
    * The first stage narrows down the candidates with a radius equivalent to clickTolerance,
-   * so a type whose per-type strategy tests a wider area than that (icons and the like)
+   * so a type whose per-type strategy tests a wider area than that (a picture around a point)
    * would drop out of the candidates before it ever reaches the precise test. Widening the
    * search radius by the registered distance lets such a type reach the second stage
    * regardless of the state or the zoom.

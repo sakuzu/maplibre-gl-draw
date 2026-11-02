@@ -4,14 +4,14 @@
 /**
  * Resolution of the rendering pixel ratio (pixelRatio)
  *
- * Line widths, point sizes and glyphs are baked in by converting CSS pixels into physical
+ * Line widths and point sizes are baked in by converting CSS pixels into physical
  * pixels, so the ratio of the backing store being drawn into is required. It normally matches
  * `window.devicePixelRatio`, but it does not match when a maplibre Map is brought up with an
  * arbitrary `pixelRatio` (such as a temporary instance mounted off-screen for a high-
  * resolution export). It can therefore be injected through Options, and all references are
  * collected into this helper.
  *
- * There are situations where the ratio itself needs to move at run time (as in the paper
+ * There are situations where the ratio itself needs to move at run time (as in a print
  * preview, where, while it is shown scaled down on the screen, the dimensions fixed in screen
  * pixels should shrink by the same ratio), so the injected value accepts three forms: a
  * number, a function that returns a value each time it is called, and a provider object.
@@ -25,13 +25,12 @@
  * - Dimensions fixed in screen pixels (`resolvePixelRatio`) ... those whose thickness on the
  *   screen does not change when the zoom changes. Point sizes, the line width of features
  *   that have no createdZoom, line widths that go through `u_width`, and so on. They do not
- *   shrink when the camera pulls back, so they have to be shrunk with renderScale in the
- *   paper preview
+ *   shrink when the camera pulls back, so they have to be shrunk with renderScale in a print
+ *   preview
  * - Dimensions that scale with the zoom (`resolveContentPixelRatio`) ... those that the
  *   shader multiplies by `2^(zoom - createdZoom)`, line widths given in meters, and so on.
  *   They already shrink by the same ratio when the camera pulls back, so multiplying by
- *   renderScale shrinks them twice (the 2026-08-10 defect where only the outlines of notes
- *   thinned down to 1/k² in the paper preview)
+ *   renderScale shrinks them twice (to 1/k² in a print preview)
  *
  * The side that bakes the value in chooses between the two by whether the shader scales that
  * value with the zoom.
@@ -108,7 +107,7 @@ export function resolvePixelRatio(pixelRatio?: PixelRatioInput): number {
  *
  * Used for "dimensions that already scale with the zoom of the camera", such as line widths
  * that the shader multiplies by `2^(zoom - createdZoom)` and line widths given in meters. When
- * it is used as in the paper preview, where "the camera pulls back by δ and 2^-δ is passed to
+ * it is used as in a print preview, where "the camera pulls back by δ and 2^-δ is passed to
  * renderScale", applying the factor here would apply the same reduction twice.
  *
  * When no provider is passed (a number, a function, or unspecified) there is no notion of a

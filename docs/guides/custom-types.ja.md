@@ -249,8 +249,8 @@ ctx.point.draw(
   `strokeColor`、`'point'` は `pointColor`) か、宣言が無ければ組み込みの型と
   同じく定義の幾何の鍵です。Point は `pointColor`、LineString は
   `strokeColor`、Polygon は `fillColor` です。上の区域は Polygon なので、
-  規則の色を塗りにとり、縁はそのままです。Point の上に紙を `fillColor` で
-  描くカードや箱は、`styleRuleChannel: 'fill'` を宣言します。スタイルに
+  規則の色を塗りにとり、縁はそのままです。Point の上に `fillColor` で塗った
+  箱を描く型は、`styleRuleChannel: 'fill'` を宣言します。スタイルに
   その鍵を持つ地物は自分の色のままです
 - `defaultStyle` は地物のスタイルと同じように確かめられ、正しくないものは
   `invalid-input` で拒まれます。型を足したときに写されるので、変えるには
@@ -407,8 +407,8 @@ const signboard: FeatureTypeDefinition = {
 
 `boardFootprint` は、作ったときのズームでのピクセルの大きさと角度と倍率
 から、箱を地図の上に置きます。例
-[Custom feature types](../examples/custom-feature-types.ja.md) のカード
-(`card.ts`) の `cardFootprint` と同じです。下の `eastMiddleOf` と
+[Custom feature types](../examples/custom-feature-types.ja.md) の看板
+(`board.ts`) の `boardFootprint` と同じです。下の `eastMiddleOf` と
 `widthFromCenter` も、そこに書いてあります。
 
 回転は `boardAngle` に角度を足して 0 以上 360 未満に収め、大きさ変えは
@@ -592,7 +592,7 @@ restore();
 これまでどおり拒みます。差し替えている型は、戻すまで重ねて差し替え
 られません。
 
-`appliesTo(feature)` は、アイコンを持つ点のように、差し替えを型の
+`appliesTo(feature)` は、絵を持つ点のように、差し替えを型の
 一部の地物に絞ります。これが false を返す地物は、組み込みの型を
 そのまま使います。ほかの組み込みの地物とまとめて描かれ、組み込みの
 当たり判定、範囲選択、枠、ハンドル、吸着の候補、広がりが残ります。
@@ -602,15 +602,15 @@ restore();
 
 <!-- docs-check:
 declare const draw: import('@sakuzu/maplibre-gl-draw').Draw;
-declare const iconRenderer: import('@sakuzu/maplibre-gl-draw').FeatureRenderer;
+declare const pictureRenderer: import('@sakuzu/maplibre-gl-draw').FeatureRenderer;
 -->
 
 ```ts
 draw.extensions.featureTypes.override({
   type: 'Point',
   geometry: 'Point',
-  renderer: iconRenderer,
-  appliesTo: (feature) => typeof feature.properties.icon === 'string',
+  renderer: pictureRenderer,
+  appliesTo: (feature) => typeof feature.properties.picture === 'string',
 });
 ```
 
@@ -621,7 +621,7 @@ draw.extensions.featureTypes.override({
 
 - `renderer.rows.sprites` は、描画器が点を描く絵を渡します。渡すのは、
   テクスチャと、書式ごとの絵の範囲と、画面の上の大きさです。こうした点は、
-  レイヤーのほかの行と一緒に、行の順に同じ描画で描かれるので、アイコンの点と
+  レイヤーのほかの行と一緒に、行の順に同じ描画で描かれるので、絵で描く点と
   面が交互に並ぶレイヤーも少ない描画で描けます
 - `rows.appliesTo(view, handle)` は、`appliesTo` と同じ答えを行から返します。
   行はレイヤーの `LayerTableView` で読みます (`getRowValue`、`getRowType`)。

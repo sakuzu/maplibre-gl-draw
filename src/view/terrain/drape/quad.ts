@@ -331,7 +331,7 @@ void main() {
  * = RGB straight, A additive).
  *
  * Shading is applied only to the fill. The text gives priority to legibility and
- * is unshaded, just like labels, lines and points.
+ * is unshaded, just like lines and points.
  */
 const SURFACE_FRAGMENT_SOURCE =
   `#version 300 es

@@ -121,20 +121,20 @@ function point(lngLat: [number, number], style: Feature['style'] = {}): Feature 
 
 /**
  * Adds a companion to the given features that is hit anywhere within `radiusPx` of the
- * position of its feature, as the padding of a leader line starting there is
+ * position of its feature, as the padding of a ring drawn around it is
  *
  * @returns The IDs of the features whose companion received a click
  */
 function companionOf(ids: string[], radiusPx: number, consume = true, hits: Hit[] = []): string[] {
   const clicked: string[] = [];
   draw.extensions.companionProviders.add({
-    name: 'lead',
+    name: 'ring',
     has: (feature) => ids.includes(feature.id),
     draw() {},
     hitTest(feature, ctx) {
       const [x, y] = ctx.screen.project((feature.geometry as Point).coordinates);
       const distancePx = Math.hypot(ctx.point[0] - x, ctx.point[1] - y);
-      return distancePx <= radiusPx ? { id: `lead-${feature.id}`, distancePx } : null;
+      return distancePx <= radiusPx ? { id: `ring-${feature.id}`, distancePx } : null;
     },
     onClick(feature, hit) {
       clicked.push(feature.id);
@@ -203,7 +203,7 @@ describe('a Point type that takes only some points', () => {
     draw.extensions.featureTypes.override({
       type: 'Point',
       geometry: 'Point',
-      appliesTo: (feature) => feature.properties.icon === true,
+      appliesTo: (feature) => feature.properties.picture === true,
       renderer: { onAdd() {}, draw() {}, onRemove() {} },
       hitTest(feature, ctx) {
         tolerances.push(ctx.tolerancePx);
@@ -213,20 +213,20 @@ describe('a Point type that takes only some points', () => {
       },
     });
     const plain = point([0, 0]);
-    const icon = draw.features.create({
+    const pictured = draw.features.create({
       type: 'Point',
       geometry: { type: 'Point', coordinates: [3, 0] },
-      properties: { icon: true },
+      properties: { picture: true },
     });
-    if (!icon) throw new Error('no feature');
-    const clicked = companionOf([plain.id, icon.id], 100);
+    if (!pictured) throw new Error('no feature');
+    const clicked = companionOf([plain.id, pictured.id], 100);
     draw.setMode('select');
 
     pointerClick([0.07, 0]);
     expect(draw.selection.get().ids).toEqual([plain.id]);
     // The test of the type is not widened by the marker of the built-in point
     pointerClick([3.07, 0]);
-    expect(clicked).toEqual([icon.id]);
+    expect(clicked).toEqual([pictured.id]);
     expect(new Set(tolerances)).toEqual(new Set([6]));
   });
 });
@@ -347,7 +347,7 @@ describe('the hits the library gives out', () => {
     draw.on('map.clicked', (payload) => clicks.push(payload));
     draw.setMode('select');
     pointerClick([0.5, 0]);
-    const expected = { kind: 'companion', id: `lead-${p.id}`, featureId: p.id };
+    const expected = { kind: 'companion', id: `ring-${p.id}`, featureId: p.id };
     expect(hits).toEqual([expect.objectContaining(expected)]);
     expect(hits[0].distancePx).toBeCloseTo(50, 0);
     expect(clicks.map((click) => click.hit)).toEqual([expect.objectContaining(expected)]);

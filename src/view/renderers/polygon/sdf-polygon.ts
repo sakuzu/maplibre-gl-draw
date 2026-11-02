@@ -656,8 +656,8 @@ void main() {
     // Blending is non-premultiplied, so the factor is applied to the alpha only
     if (v_type < 0.5) {
         // Fill: output with the same terrain shading as the ground applied to the brightness
-        // (1.0 when there is no terrain). It is not applied to the outline (lines, points,
-        // labels and handles are by convention unshaded)
+        // (1.0 when there is no terrain). It is not applied to the outline (lines, points and
+        // handles are by convention unshaded)
         fragColor = vec4(v_color.rgb * terrainFillShade(), v_color.a * u_opacity);
     } else {
         // Stroke: anti-aliasing with the HHAA method

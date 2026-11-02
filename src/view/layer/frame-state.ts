@@ -147,8 +147,8 @@ export interface FrameState {
  *
  * The elevation settlement of maplibre "rewrites the zoom number while keeping the spatial
  * position of the camera fixed". Since the screen does not move by a single pixel, nothing
- * should change size either. This rendering, however, derives the line widths, the labels,
- * the point sizes and the drape factors from the zoom number, so a step in the number is a
+ * should change size either. This rendering, however, derives the line widths, the point
+ * sizes and the drape factors from the zoom number, so a step in the number is a
  * resize of every element, that is, a jolt that anyone can see. A first version that blended
  * it in with a time-constant smoothing turned into "a 250 ms breath on every settlement" and
  * was rejected.

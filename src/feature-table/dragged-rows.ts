@@ -2,13 +2,12 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * The rows being dragged, as what follows them reads them (11.3 of the design)
+ * The rows being dragged, as what follows them reads them
  *
  * Rows dragged in bulk are not written while they are dragged: they are drawn moved by the state
  * of their rows (a moving set: the edit that moves, rotates or scales them, then a translation).
- * What is drawn with a row by an extension (a label, the head of an arrow, the text of a note,
- * the direction of a point) reads here whether its row is dragged and where, to be drawn moved
- * the same way: a position is moved by the computation the rows are written with once let go
+ * What an extension draws with a row reads here whether its row is dragged and where, to be drawn
+ * moved the same way: a position is moved by the computation the rows are written with once let go
  * (the one of the library, in float64).
  */
 

@@ -156,8 +156,8 @@ is never the geometry of a feature.
 { "type": "Point", "coordinates": [139.6917, 35.6895] }
 ```
 
-The library draws a point as a marker. It does not draw labels or icons; a
-renderer of your own can keep what it needs in style keys of its own (see
+The library draws a point as a marker. A renderer of your own that draws
+it otherwise can keep what it needs in style keys of its own (see
 [style](#style)).
 
 ### LineString

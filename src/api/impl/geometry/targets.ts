@@ -84,9 +84,9 @@ export function toSplitPaths(feature: Feature): Coordinate[][] {
  * The feature types that are targets of the buffer.
  *
  * The types that can be reduced to the GeometryInput of the geometry module, plus Circle,
- * which is handled as a special case. The other types such as Freehand / Image / Text are
- * excluded from the targets because the meaning of their coordinates does not match a
- * geometry (an image is a rectangle, a text is an anchor point).
+ * which is handled as a special case. The other types, such as Freehand, Image and the custom
+ * types, are excluded from the targets because the meaning of their coordinates does not match a
+ * geometry (an image is a rectangle, a custom type may read its point as an anchor only).
  */
 const BUFFERABLE_TYPES: ReadonlySet<string> = new Set([
   'Point',

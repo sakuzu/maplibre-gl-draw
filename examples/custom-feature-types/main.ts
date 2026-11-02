@@ -7,10 +7,10 @@
 // each vertex, whose mark it draws. The panel on the
 // right has no style fields for a type it does not know, so the page adds a section for the
 // route's keys. A switch in the card of actions at the bottom left, with the key U, unregisters
-// the type and registers it again. A "Card" (card.ts) is a paper card laid on the map around a
+// the type and registers it again. A "Board" (board.ts) is a board laid flat on the map around a
 // point: the library draws its selection box and turns and scales it with the handles of the box,
 // a handle in the middle of its east edge changes its width, and the rule of its layer colors its
-// paper.
+// fill.
 
 import { createDraw } from '@sakuzu/maplibre-gl-draw';
 import { createDrawUI } from '@sakuzu/maplibre-gl-draw-ui';
@@ -20,8 +20,8 @@ import 'maplibre-gl/dist/maplibre-gl.css';
 import '../maplibre-setup.ts';
 import { BASEMAPS, basemapStyle, initialBasemapId } from '../basemap.ts';
 import '../example.css';
-import { cardType } from './card.ts';
-import { HILL_CARD, HILL_ROUTE, RIVER_CARD, RIVER_ROUTE } from './data.ts';
+import { boardType } from './board.ts';
+import { HILL_BOARD, HILL_ROUTE, RIVER_BOARD, RIVER_ROUTE } from './data.ts';
 import { routeLook, routeType } from './route.ts';
 
 const map = new maplibregl.Map({
@@ -49,11 +49,11 @@ const river = draw.features.create({
   style: { routeColor: '#1f6feb', routeWidth: 5, routeDashed: false },
 });
 
-// 7. The cards, in a layer of their own whose rule colors their paper by their topic. The card
+// 7. The boards, in a layer of their own whose rule colors their fill by their topic. The board
 // type declares that the rule colors its fill, though its geometry is a Point
-draw.extensions.featureTypes.add(cardType);
-const notes = draw.layers.create({
-  name: 'Cards',
+draw.extensions.featureTypes.add(boardType);
+const boards = draw.layers.create({
+  name: 'Boards',
   styleRule: {
     kind: 'categorical',
     property: 'topic',
@@ -62,15 +62,15 @@ const notes = draw.layers.create({
   },
 });
 for (const [topic, place] of [
-  ['hill', HILL_CARD],
-  ['river', RIVER_CARD],
+  ['hill', HILL_BOARD],
+  ['river', RIVER_BOARD],
 ] as const) {
   draw.features.create({
-    type: 'Card',
+    type: 'Board',
     geometry: { type: 'Point', coordinates: place },
-    layerId: notes?.id,
+    layerId: boards?.id,
     properties: {
-      name: `Card of the ${topic} route`,
+      name: `Board of the ${topic} route`,
       topic,
       'maplibre-gl-draw:createdZoom': 14,
     },

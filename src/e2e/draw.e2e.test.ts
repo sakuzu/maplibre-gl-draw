@@ -479,32 +479,32 @@ describe('a point with a companion under the real pointer', () => {
     const position = await lngLatOf(page, CENTER);
     const id = await page.evaluate((coordinates) => {
       const { draw } = window as unknown as E2EWindow;
-      const w = window as unknown as { e2eLeadClicks: string[] };
-      w.e2eLeadClicks = [];
+      const w = window as unknown as { e2eRingClicks: string[] };
+      w.e2eRingClicks = [];
       const feature = draw.features.create({
         type: 'Point',
         geometry: { type: 'Point', coordinates },
       });
       if (!feature) throw new Error('no feature');
-      // Hit within 60 px of the point, as the padding of a leader line starting there
+      // Hit within 60 px of the point, as the padding of a ring drawn around it
       draw.extensions.companionProviders.add({
-        name: 'e2e-lead',
+        name: 'e2e-ring',
         has: (f) => f.id === feature.id,
         draw() {},
         hitTest(f, ctx) {
           const [x, y] = ctx.screen.project((f.geometry as { coordinates: number[] }).coordinates);
           const distancePx = Math.hypot(ctx.point[0] - x, ctx.point[1] - y);
-          return distancePx <= 60 ? { id: 'lead', distancePx } : null;
+          return distancePx <= 60 ? { id: 'ring', distancePx } : null;
         },
         onClick(f) {
-          w.e2eLeadClicks.push(f.id);
+          w.e2eRingClicks.push(f.id);
           return true;
         },
       });
       return feature.id;
     }, position);
-    const leadClicks = () =>
-      page.evaluate(() => (window as unknown as { e2eLeadClicks: string[] }).e2eLeadClicks);
+    const ringClicks = () =>
+      page.evaluate(() => (window as unknown as { e2eRingClicks: string[] }).e2eRingClicks);
 
     try {
       // The center and the outline of the marker (6 px and a 2 px outline by default), beyond
@@ -514,15 +514,15 @@ describe('a point with a companion under the real pointer', () => {
         await click(page, p);
         expect(await selectedIds(page)).toEqual([id]);
       }
-      expect(await leadClicks()).toEqual([]);
+      expect(await ringClicks()).toEqual([]);
 
       // Away from the marker the companion takes the click, and the selection stays
       await click(page, at(40, 0));
-      expect(await leadClicks()).toEqual([id]);
+      expect(await ringClicks()).toEqual([id]);
       expect(await selectedIds(page)).toEqual([id]);
     } finally {
       await page.evaluate(() =>
-        (window as unknown as E2EWindow).draw.extensions.companionProviders.remove('e2e-lead'),
+        (window as unknown as E2EWindow).draw.extensions.companionProviders.remove('e2e-ring'),
       );
     }
   });

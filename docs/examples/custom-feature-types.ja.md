@@ -6,8 +6,8 @@ aside: false
 
 ライブラリーにない地物の型です。ルートは独自のスタイルのキーを持つ線で、
 その定義が描き方、当たり判定、範囲選択を決めます。右のパネルには、
-そのキーのための節を足します。カードは、点の周りの地図の上に置く紙の
-カードです。ライブラリーが回して大きさを変え、レイヤーの規則が紙を
+そのキーのための節を足します。看板は、点の周りの地図の上に平らに置く
+板です。ライブラリーが回して大きさを変え、レイヤーの規則が色を
 塗ります。
 
 ```example
@@ -34,10 +34,10 @@ custom-feature-types
 位置で範囲選択に入れるからです。もう一度入れると、ルートは前と同じ
 見た目で描かれ、クリックで選べるようになります。
 
-2 枚のカードは、自分のレイヤー Cards にあり、その規則が話題ごとに紙を
+2 枚の看板は、自分のレイヤー Boards にあり、その規則が話題ごとに色を
 塗ります。1 枚を選ぶと、選択の枠の角の大きさを変えるハンドルは形を
 保ったまま大きさを変え、上のハンドルは回し、東の辺の真ん中のハンドルは
-幅だけを広げます。カードは、作ったときのズームから地図に合わせて大きく
+幅だけを広げます。看板は、作ったときのズームから地図に合わせて大きく
 なったり小さくなったりします。
 
 ## コード
@@ -58,20 +58,20 @@ custom-feature-types
 ための節を足します (4)。`fields` の欄 (色、スライダー、スイッチ) は UI が
 描き、`onchange` は変わったキーを選んだルートのスタイルに書き込みます。
 
-カード (`card.ts`) は Point の上に描きます。幅と高さは作ったときの
+看板 (`board.ts`) は Point の上に描きます。幅と高さは作ったときの
 ズームでのピクセルで、外形は `/geometry` の `pixelsToMeters` でメートルに
 直し、`metersToDegrees` で地図の上に置き、角度で回します
-(`cardFootprint`)。`transformFields` は、選択の枠のハンドルが書く鍵
+(`boardFootprint`)。`transformFields` は、選択の枠のハンドルが書く鍵
 (回転と倍率) を名指し、外形がそれを読みます。`handles` は、選択の枠の
 東の辺の真ん中に `resize` のハンドルを出し (`eastMiddleOf`)、その
 ドラッグが幅を書きます (`widthFromCenter`)。見た目を `defaultStyle` で
 宣言し、規則が塗りを塗ることを宣言し (`styleRuleChannel: 'fill'`)、
-描画器は `ctx.appliedStyle(feature)` で、規則が塗った紙を描きます (7)。
+描画器は `ctx.appliedStyle(feature)` で、規則の色に塗った板を描きます (7)。
 
 ::: code-group
 <<< @/../examples/custom-feature-types/main.ts
 <<< @/../examples/custom-feature-types/route.ts
-<<< @/../examples/custom-feature-types/card.ts
+<<< @/../examples/custom-feature-types/board.ts
 <<< @/../examples/custom-feature-types/data.ts
 <<< @/../examples/custom-feature-types/index.html
 :::

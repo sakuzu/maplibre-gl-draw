@@ -245,7 +245,7 @@ export interface DatasetHoverPayload {
  *
  * It reports to the outside that the contents, the style or the visibility of a dataset
  * changed. It exists so that a host that builds another representation from the contents of a
- * dataset, such as label rendering, gets a trigger to rebuild it.
+ * dataset gets a trigger to rebuild it.
  *
  * - features: the rows were replaced (setRows, setTable, or a provider result applied). The
  *   rows are new, and so are the drawn rows
@@ -375,7 +375,7 @@ export interface Dataset {
    *
    * The narrowing uses the spatial index (rbush), so however many tens of thousands are held,
    * the cost is proportional to the number that intersect. It is the entry point for a caller
-   * who wants to "walk only what is visible" (collecting label candidates, for example).
+   * who wants to "walk only what is visible".
    *
    * @param bounds The range in degrees (`minX` / `maxX` are longitudes, `minY` / `maxY`
    *   latitudes)

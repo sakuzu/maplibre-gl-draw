@@ -1,11 +1,11 @@
 // SPDX-FileCopyrightText: 2026 SAKAIDA Atsushi
 // SPDX-License-Identifier: AGPL-3.0-only
 
-// The feature type "Card" of the custom-feature-types example: a paper card laid on the map
+// The feature type "Board" of the custom-feature-types example: a board laid flat on the map
 // around a point. Its size is given in pixels at the zoom it was made at, so it grows and shrinks
 // with the map like a drawn shape. The library draws and hits its selection box, and turns and
 // scales it with the handles of the box (the fields of transformFields); a handle in the middle
-// of its east edge changes its width alone. Its paper takes the color of the rule of its layer.
+// of its east edge changes its width alone. Its fill takes the color of the rule of its layer.
 
 import type {
   Feature,
@@ -17,32 +17,32 @@ import type {
 import { metersToDegrees, pixelsToMeters } from '@sakuzu/maplibre-gl-draw/geometry';
 import type { Point } from 'geojson';
 
-/** The keys of `properties` a card keeps its size, its rotation and its scale under */
-const WIDTH_KEY = 'cardWidth';
-const HEIGHT_KEY = 'cardHeight';
-const ANGLE_KEY = 'cardAngle';
-const SCALE_KEY = 'cardScale';
+/** The keys of `properties` a board keeps its size, its rotation and its scale under */
+const WIDTH_KEY = 'boardWidth';
+const HEIGHT_KEY = 'boardHeight';
+const ANGLE_KEY = 'boardAngle';
+const SCALE_KEY = 'boardScale';
 
-/** The size of a card without one of its own, in pixels at the zoom it was made at */
+/** The size of a board without one of its own, in pixels at the zoom it was made at */
 const DEFAULT_WIDTH_PX = 120;
 const DEFAULT_HEIGHT_PX = 80;
-/** The narrowest a drag of the east edge makes a card, in pixels at that zoom */
+/** The narrowest a drag of the east edge makes a board, in pixels at that zoom */
 const MIN_WIDTH_PX = 40;
-/** The zoom a card without one is taken as made at */
+/** The zoom a board without one is taken as made at */
 const DEFAULT_ZOOM = 14;
 
-/** A number of the properties of a card, or the default when it is not a finite number */
+/** A number of the properties of a board, or the default when it is not a finite number */
 function numberOf(feature: Feature, key: string, fallback: number): number {
   const value = feature.properties[key];
   return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
 }
 
-/** The position of a card */
+/** The position of a board */
 function centerOf(feature: Feature): Position {
   return (feature.geometry as Point).coordinates;
 }
 
-/** The zoom a card was made at, which its sizes in pixels are given at */
+/** The zoom a board was made at, which its sizes in pixels are given at */
 function zoomOf(feature: Feature): number {
   return numberOf(feature, 'maplibre-gl-draw:createdZoom', DEFAULT_ZOOM);
 }
@@ -60,11 +60,11 @@ function offsetOf(center: Position, east: number, north: number, angle: number):
 }
 
 /**
- * What a card covers: its four corners laid on the map. Its width and height are pixels at the
+ * What a board covers: its four corners laid on the map. Its width and height are pixels at the
  * zoom it was made at, times its scale, which `pixelsToMeters` turns into meters on the ground
  * by the formula the library draws such sizes by, and `metersToDegrees` lays at its latitude
  */
-export function cardFootprint(feature: Feature): GroundFootprint {
+export function boardFootprint(feature: Feature): GroundFootprint {
   const center = centerOf(feature);
   const scale = numberOf(feature, SCALE_KEY, 1);
   const angle = numberOf(feature, ANGLE_KEY, 0);
@@ -84,7 +84,7 @@ export function cardFootprint(feature: Feature): GroundFootprint {
   };
 }
 
-/** The middle of the east edge of a box laid on the map (the selection box of a card) */
+/** The middle of the east edge of a box laid on the map (the selection box of a board) */
 export function eastMiddleOf(box: Footprint): Position {
   if (box.kind === 'screen') return box.position;
   const { topRight, bottomRight } = box.corners;
@@ -92,7 +92,7 @@ export function eastMiddleOf(box: Footprint): Position {
 }
 
 /**
- * The width of a card, in pixels at the zoom it was made at and before its scale, that puts its
+ * The width of a board, in pixels at the zoom it was made at and before its scale, that puts its
  * east edge at the pointer: twice the distance from its center to the pointer along its turned
  * width
  */
@@ -108,11 +108,11 @@ export function widthFromCenter(feature: Feature, pointer: Position): number {
   return Math.max(MIN_WIDTH_PX, width);
 }
 
-/** The card type */
-export const cardType: FeatureTypeDefinition = {
-  type: 'Card',
+/** The board type */
+export const boardType: FeatureTypeDefinition = {
+  type: 'Board',
   geometry: 'Point',
-  // The look of a card without a style of its own: a pale yellow paper with a darker edge
+  // The look of a board without a style of its own: a pale yellow fill with a darker edge
   defaultStyle: {
     fillColor: '#fff3a8',
     fillOpacity: 1,
@@ -120,16 +120,16 @@ export const cardType: FeatureTypeDefinition = {
     strokeWidth: 1,
     strokeOpacity: 1,
   },
-  // The rule of the layer colors the paper (fillColor), though the geometry is a Point, whose
+  // The rule of the layer colors the fill (fillColor), though the geometry is a Point, whose
   // channel would be the marker (pointColor)
   styleRuleChannel: 'fill',
-  // The renderer draws the look the library puts together (the paper colored by the rule, the
-  // style of the card over it) at the corners of the footprint
+  // The renderer draws the look the library puts together (the fill colored by the rule, the
+  // style of the board over it) at the corners of the footprint
   renderer: {
     onAdd() {},
     draw(feature, ctx) {
       const look = ctx.appliedStyle(feature);
-      const { topLeft, topRight, bottomRight, bottomLeft } = cardFootprint(feature).corners;
+      const { topLeft, topRight, bottomRight, bottomLeft } = boardFootprint(feature).corners;
       const ring = [topLeft, topRight, bottomRight, bottomLeft, topLeft];
       ctx.fill.draw([ring], { color: look.fillColor, opacity: look.fillOpacity * ctx.opacity });
       ctx.line.draw(
@@ -145,14 +145,14 @@ export const cardType: FeatureTypeDefinition = {
     },
     onRemove() {},
   },
-  // A click inside the card selects it
+  // A click inside the board selects it
   hitTest(feature, ctx) {
-    const { topLeft, topRight, bottomRight, bottomLeft } = cardFootprint(feature).corners;
+    const { topLeft, topRight, bottomRight, bottomLeft } = boardFootprint(feature).corners;
     const corners = [topLeft, topRight, bottomRight, bottomLeft].map((c) => ctx.screen.project(c));
     return insidePolygon(ctx.point, corners) ? { distancePx: 0 } : null;
   },
-  footprint: (feature) => cardFootprint(feature),
-  // The resize and rotate handles of the selection box turn the card and scale it, keeping its
+  footprint: (feature) => boardFootprint(feature),
+  // The resize and rotate handles of the selection box turn the board and scale it, keeping its
   // shape: they write these keys, which the footprint reads
   transformFields: { angleDegreesKey: ANGLE_KEY, scaleKey: SCALE_KEY, uniformScale: true },
   // A handle in the middle of the east edge of the selection box, drawn as a resize handle, which

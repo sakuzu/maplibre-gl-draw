@@ -355,11 +355,11 @@ Each item has the same five parts.
   to the anchor and reports occlusion when the ground rises above it. The
   step follows `stepGrid` (the terrain mesh spacing). Billboards are not
   depth-tested at all: their order comes from the depth of one centre
-  point, so a depth test would hide a whole label buried a few metres into
-  the ground.
+  point, so a depth test would hide a whole billboard buried a few metres
+  into the ground.
 - Symptoms when it breaks — if `depthAtPoint` were used, rendering would
   stall in proportion to the number of symbols, reaching seconds per draw
-  on label-heavy maps.
+  on maps with many of them.
 - Check when upgrading — `src/view/terrain/occlusion.test.ts`.
 - Conditions for removal — a public upstream occlusion query (such as the
   internal `isLocationOccluded`) could be considered. A synchronous
@@ -840,7 +840,7 @@ Each item has the same five parts.
   `MAX_TEXTURE_SIZE` and get mipmaps.
 - Symptoms when it breaks — an upload outside `render` would desynchronize
   maplibre's cache, and a later upstream upload could skip a pixel store
-  call: a raster or icon premultiplied twice (dark halos) or flipped.
+  call: a raster or image premultiplied twice (dark halos) or flipped.
   Inheriting the values instead of setting them would give images dark
   translucent edges or turn them upside down depending on what maplibre
   uploaded last.

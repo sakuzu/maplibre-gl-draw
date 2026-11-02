@@ -20,8 +20,8 @@
  * coordinates, while this one reads the DEM atlas with the Mercator relative
  * coordinates handed over from the vertex.
  *
- * It is applied only to polygon fills. Lines, points, labels and handles are
- * left unshaded for readability (the same convention as the drape path).
+ * It is applied only to polygon fills. Lines, points and handles are left
+ * unshaded for readability (the same convention as the drape path).
  */
 
 import { TERRAIN_SHADE_CORE_GLSL } from '../terrain/shade.js';

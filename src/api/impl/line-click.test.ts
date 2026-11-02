@@ -153,10 +153,10 @@ type Extras = 'companion' | 'handles' | 'input' | 'point override';
 
 function register(target: Draw, extras: readonly Extras[]): void {
   if (extras.includes('companion')) {
-    // A companion of every feature that is hit nowhere, as leader lines are for a feature that
-    // has none
+    // A companion of every feature that is hit nowhere, as a companion drawn only for some
+    // features is for the others
     target.extensions.companionProviders.add({
-      name: 'lead',
+      name: 'ring',
       has: () => true,
       draw() {},
       hitTest: () => null,
@@ -193,7 +193,7 @@ function register(target: Draw, extras: readonly Extras[]): void {
     target.extensions.featureTypes.override({
       type: 'Point',
       geometry: 'Point',
-      appliesTo: (feature) => feature.properties.icon !== undefined,
+      appliesTo: (feature) => feature.properties.picture !== undefined,
       renderer: { onAdd() {}, draw() {}, onRemove() {} },
       hitPaddingPx: 70,
       hitTest: () => null,

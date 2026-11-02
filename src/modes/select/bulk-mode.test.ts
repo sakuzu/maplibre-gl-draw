@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * The select mode over features selected in bulk (11.3 of the design, F10): a press on one of
+ * The select mode over features selected in bulk: a press on one of
  * them drags them all, without narrowing the selection, by the state of their rows, and writes
  * them once let go; the handles of their frame rotate and resize them; a box over many rows
  * selects them in bulk; a cancelled box puts back the features selected in bulk before it; the
@@ -393,7 +393,7 @@ describe('the select mode over features selected in bulk', () => {
     store.transact(() => {
       store.createFeature(point('img', 'Image', 13, { 'maplibre-gl-draw:imageFileId': 'i' }));
       store.createFeature(
-        point('card', 'Card', 15, {
+        point('board', 'Board', 15, {
           'maplibre-gl-draw:scale': 1,
           'maplibre-gl-draw:rotation': 0,
         }),
@@ -403,17 +403,17 @@ describe('the select mode over features selected in bulk', () => {
     const handleOf = (id: string) => tables.findRow(id) as number;
     const read = (id: string) => tables.get('l')?.getRow(handleOf(id)) as Feature;
     const at = (feature: Feature) => (feature.geometry as { coordinates: number[] }).coordinates;
-    store.setSelection('feature', [...ids, 'img', 'card']);
+    store.setSelection('feature', [...ids, 'img', 'board']);
 
-    // A resize from a corner: the image and the card keep their shape and scale by their values
+    // A resize from a corner: the image and the board keep their shape and scale by their values
     const ne = computeResizeHandles(marginedFrame()).find((handle) => handle.type === 'resize-ne');
     const [x, y] = (ne as { position: [number, number] }).position;
-    const before = new Map(['img', 'card'].map((id) => [id, read(id)]));
+    const before = new Map(['img', 'board'].map((id) => [id, read(id)]));
     mode.onDragStart(drag('dragstart', x, y, [x, y]));
     mode.onDragMove(drag('dragmove', x + 3, y + 2, [x, y]));
     let dragged = draggedRowsOf(tables);
     const drawnAt = new Map(
-      ['img', 'card'].map((id) => [
+      ['img', 'board'].map((id) => [
         id,
         {
           position: dragged?.position(handleOf(id), at(before.get(id) as Feature)),
@@ -422,7 +422,7 @@ describe('the select mode over features selected in bulk', () => {
       ]),
     );
     mode.onDragEnd(drag('dragend', x + 3, y + 2, [x, y]));
-    for (const id of ['img', 'card']) {
+    for (const id of ['img', 'board']) {
       const after = read(id);
       const drawn = drawnAt.get(id);
       expect(at(after)[0]).toBeCloseTo(drawn?.position?.[0] as number, 9);
@@ -431,7 +431,7 @@ describe('the select mode over features selected in bulk', () => {
       expect(drawn?.scale).not.toBe(1);
     }
 
-    // A rotation: the card turns by its rotation
+    // A rotation: the board turns by its rotation
     const rotate = computeRotateHandle(
       marginedFrame(),
       DEFAULT_SELECTION_CONFIG.rotateHandle.distance,
@@ -442,11 +442,11 @@ describe('the select mode over features selected in bulk', () => {
     mode.onDragStart(drag('dragstart', rotate[0], rotate[1], rotate as [number, number]));
     mode.onDragMove(drag('dragmove', to[0], to[1], rotate as [number, number]));
     dragged = draggedRowsOf(tables);
-    const turned = dragged?.rotation(handleOf('card'));
+    const turned = dragged?.rotation(handleOf('board'));
     expect(turned).not.toBe(0);
     mode.onDragEnd(drag('dragend', to[0], to[1], rotate as [number, number]));
     // Its rotation of 0 takes the angle, within [0, 360)
-    expect(read('card').properties['maplibre-gl-draw:rotation']).toBeCloseTo(
+    expect(read('board').properties['maplibre-gl-draw:rotation']).toBeCloseTo(
       ((turned as number) + 360) % 360,
       9,
     );

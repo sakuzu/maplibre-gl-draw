@@ -298,7 +298,7 @@ describe('a width that scales with the zoom (positive, relative to createdZoom)'
 
 describe('the equivalence of the print preview', () => {
   /**
-   * That the paper (factor 1, content zoom zc) and the preview (factor 1/k, display zoom
+   * That the print (factor 1, content zoom zc) and the preview (factor 1/k, display zoom
    * zc - δ) look the same is checked with the formula of the effective width the GPU computes.
    *
    *   effective width = the baked width x 2^(zoom - createdZoom)   (positive)
@@ -314,24 +314,24 @@ describe('the equivalence of the print preview', () => {
     return baked >= 0 ? baked * 2 ** (zoom - createdZoom) : -baked;
   }
 
-  it('makes a width that scales with the zoom 1/k of the paper', () => {
-    const paper = effective(bakedPolygonWidth(1, CSS_WIDTH), contentZoom);
+  it('makes a width that scales with the zoom 1/k of the print', () => {
+    const print = effective(bakedPolygonWidth(1, CSS_WIDTH), contentZoom);
     const preview = effective(bakedPolygonWidth(1 / k, CSS_WIDTH), displayZoom);
-    expect(preview).toBeCloseTo(paper / k, 5);
+    expect(preview).toBeCloseTo(print / k, 5);
   });
 
-  it('makes a width fixed in screen pixels 1/k of the paper as well', () => {
-    const paper = effective(bakedPolygonWidth(1, -CSS_WIDTH), contentZoom);
+  it('makes a width fixed in screen pixels 1/k of the print as well', () => {
+    const print = effective(bakedPolygonWidth(1, -CSS_WIDTH), contentZoom);
     const preview = effective(bakedPolygonWidth(1 / k, -CSS_WIDTH), displayZoom);
-    expect(preview).toBeCloseTo(paper / k, 5);
+    expect(preview).toBeCloseTo(print / k, 5);
   });
 
-  it('makes it 1/k of the paper on the enlarging side (k < 1) as well', () => {
+  it('makes it 1/k of the print on the enlarging side (k < 1) as well', () => {
     const kSmall = 1 / 1.2711;
     const deltaSmall = Math.log2(kSmall);
     const zoom = contentZoom - deltaSmall;
-    const paper = effective(bakedPolygonWidth(1, CSS_WIDTH), contentZoom);
+    const print = effective(bakedPolygonWidth(1, CSS_WIDTH), contentZoom);
     const preview = effective(bakedPolygonWidth(1 / kSmall, CSS_WIDTH), zoom);
-    expect(preview).toBeCloseTo(paper / kSmall, 5);
+    expect(preview).toBeCloseTo(print / kSmall, 5);
   });
 });
