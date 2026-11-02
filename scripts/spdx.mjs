@@ -23,11 +23,7 @@ import { join } from 'node:path';
 
 const ROOT = new URL('..', import.meta.url).pathname;
 const HOLDER = '2026 SAKAIDA Atsushi';
-const LICENSE = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8')).license.startsWith(
-  'SEE LICENSE',
-)
-  ? 'LicenseRef-Kasika-Commercial'
-  : 'AGPL-3.0-only';
+const LICENSE = 'AGPL-3.0-only';
 
 const CODE = /\.(ts|mts|cts|js|mjs|cjs)$/;
 const EXT = /\.(ts|mts|cts|js|mjs|cjs|css|html|svelte)$/;
