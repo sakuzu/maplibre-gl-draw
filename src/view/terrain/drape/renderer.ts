@@ -99,6 +99,22 @@ export const DRAPE_EDGE_START_UNIT = 10;
  */
 export const DRAPE_RANK_UNIT = 11;
 
+/**
+ * The texture units of the keys of the points drawn among the elements of the drape of the rows
+ * (`DrapeSplit`): after the table of the ranks
+ */
+export const DRAPE_SPLIT_LOW_UNIT = 12;
+export const DRAPE_SPLIT_BOUNDS_UNIT = 13;
+
+/** A key past every key, for no bound */
+export const DRAPE_SPLIT_NONE = 2 ** 25;
+
+/**
+ * The slots of a partition in the keys of the split (`DrapeSplit`): a key is the place of the
+ * partition from the first one of the layer times this, plus the slot
+ */
+export const DRAPE_SPLIT_SLOTS = 32_768;
+
 /** The copies a range holds (a ref is its range times this, plus its copy) */
 const COPY_RANGE_SIZE = 2_097_152;
 
@@ -301,6 +317,18 @@ uniform int u_order_base;
 uniform float u_ranged;
 uniform vec3 u_paint_from;
 uniform vec3 u_paint_to;
+// The split at the points drawn among the elements (DrapeSplit): 0 none, 1 the bound (the key of
+// the first element after the lowest point of each pixel that paints it, written to every channel,
+// the pass writing one of them), 2 the elements of a segment: those from the bound of channel
+// u_split_from of each pixel (-1: from the first) up to the one of channel u_split_to (-1: to the
+// end). The points left in each pixel the lowest of their keys over 2^24 (a depth; 1 for none). A
+// key is the place of the partition from u_split_place times ${DRAPE_SPLIT_SLOTS}, plus the slot
+uniform int u_split;
+uniform int u_split_from;
+uniform int u_split_to;
+uniform highp sampler2D u_split_low;
+uniform highp sampler2D u_split_bounds;
+uniform float u_split_place;
 #endif
 
 out vec4 fragColor;
@@ -380,6 +408,31 @@ bool rankLess(vec3 a, vec3 b) {
     if (a.x != b.x) return a.x < b.x;
     if (a.y != b.y) return a.y < b.y;
     return a.z < b.z;
+}
+
+// The lowest key of the points of the pixel (2^24 for none), the bound the pass of the bounds
+// finds (${DRAPE_SPLIT_NONE}.0 for none), and the keys the segment drawn paints from and up to
+float g_low = 16777216.0;
+float g_bound = ${DRAPE_SPLIT_NONE}.0;
+float g_from = -1.0;
+float g_to = ${DRAPE_SPLIT_NONE}.0;
+
+// How the split treats a run of a rank: 0 painted, 1 left out, 2 left out with every run after it,
+// 3 the bound if it paints the pixel
+int splitStep(vec3 rank) {
+    if (u_split == 0) return 0;
+    float key = (rank.x - u_split_place) * ${DRAPE_SPLIT_SLOTS}.0 + rank.y;
+    if (u_split == 1) {
+        if (g_bound < ${DRAPE_SPLIT_NONE}.0) return 2;
+        return key > g_low ? 3 : 1;
+    }
+    if (key >= g_to) return 2;
+    return key < g_from ? 1 : 0;
+}
+
+// Takes a run that paints the pixel as the bound
+void splitBound(vec3 rank) {
+    g_bound = (rank.x - u_split_place) * ${DRAPE_SPLIT_SLOTS}.0 + rank.y;
 }
 #endif
 
@@ -498,6 +551,23 @@ void main() {
         jacobianInverse = mat2(dpdy.y, -dpdx.y, -dpdy.x, dpdx.x) / det;
     }
 
+    if (u_split > 0) {
+        ivec2 at = ivec2(gl_FragCoord.xy);
+        g_low = texelFetch(u_split_low, at, 0).r * 16777216.0;
+        // No point in the pixel: no bound
+        if (u_split == 1 && g_low >= 16777216.0) {
+            fragColor = vec4(${DRAPE_SPLIT_NONE}.0);
+            return;
+        }
+        if (u_split == 2) {
+            vec4 bounds = texelFetch(u_split_bounds, at, 0);
+            g_from = u_split_from < 0 ? -1.0 : bounds[u_split_from];
+            g_to = u_split_to < 0 ? ${DRAPE_SPLIT_NONE}.0 : bounds[u_split_to];
+            // Nothing from a bound the pixel does not have
+            if (g_from >= ${DRAPE_SPLIT_NONE}.0) discard;
+        }
+    }
+
     ivec2 cell = ivec2(clamp(floor(p * u_cells), vec2(0.0), vec2(u_cells - 1.0)));
     vec4 cellData = fetchData(u_cell_tex, u_cell_base + cell.y * int(u_cells) + cell.x);
     vec2 origin = vec2(cell) / u_cells;
@@ -546,7 +616,9 @@ void main() {
     for (int l = 0; l < ${DRAPE_MAX_MOVING + 1}; l++) {
         if (l < lists && counts[l] > 0) any = true;
     }
-    if (!any) discard;
+    // The pass of the bounds writes every pixel of the ground it reaches (its depth keeps the
+    // ground in front, which holds no bound)
+    if (!any && u_split != 1) discard;
 
     if (lists == 1) {
         // No moving partition: the runs of the cell, in the order of the drape. A copy is hidden
@@ -559,6 +631,15 @@ void main() {
                 if (!rankLess(rank.xyz, u_paint_to)) break;
                 if (rankLess(rank.xyz, u_paint_from)) continue;
                 if ((int(rank.w + 0.5) & 1) != 0) continue;
+                int side = splitStep(rank.xyz);
+                if (side == 2) break;
+                if (side == 1) continue;
+                if (side == 3) {
+                    vec4 probe = vec4(0.0);
+                    paintRun(run, p, origin, jacobianInverse, u_dash_tile_px, p, probe, shade);
+                    if (probe.a > 0.0) splitBound(rank.xyz);
+                    continue;
+                }
             } else if ((int(copyState(ref) + 0.5) & 1) != 0) {
                 continue;
             }
@@ -598,11 +679,25 @@ void main() {
                 if (rankLess(rank.xyz, u_paint_from)) continue;
             }
             if ((int(rank.w + 0.5) & 1) != 0) continue;
+            int side = splitStep(rank.xyz);
+            if (side == 2) break;
+            if (side == 1) continue;
+            if (side == 3) {
+                vec4 probe = vec4(0.0);
+                paintRun(run, places[best], origins[best], jinvs[best],
+                    best == 0 ? u_dash_tile_px : u_dash_coarse_px, p, probe, shade);
+                if (probe.a > 0.0) splitBound(rank.xyz);
+                continue;
+            }
             paintRun(run, places[best], origins[best], jinvs[best],
                 best == 0 ? u_dash_tile_px : u_dash_coarse_px, p, acc, shade);
         }
     }
 
+    if (u_split == 1) {
+        fragColor = vec4(g_bound);
+        return;
+    }
     if (acc.a <= 0.0) discard;
     fragColor = acc * u_opacity;
 }
@@ -816,6 +911,25 @@ export interface DrapeRankRange {
   readonly to: readonly [number, number, number];
 }
 
+/**
+ * A draw of the drape of the rows split at the points drawn among its elements (`DrapeSplit`):
+ * the pass of the bounds, or a segment, with the textures of the lowest keys of the points and of
+ * the bounds, and the place of the first partition of the layer the keys count from
+ */
+export interface DrapeSplitDraw {
+  /** The pass of the bounds (into the texture of the bounds), or a segment painted */
+  readonly pass: 'bounds' | 'segment';
+  /**
+   * A segment: the channels of the bounds of each pixel its elements go from (-1: from the
+   * first) and up to (-1: to the end)
+   */
+  readonly from: number;
+  readonly to: number;
+  readonly low: WebGLTexture;
+  readonly bounds: WebGLTexture;
+  readonly place: number;
+}
+
 /** The positions that have already been transferred */
 interface UploadMark {
   builderId: number;
@@ -946,6 +1060,12 @@ export class DrapeRenderer {
             'u_moving_back[0]',
             'u_moving_tiles[0]',
             'u_dash_coarse_px',
+            'u_split',
+            'u_split_from',
+            'u_split_to',
+            'u_split_low',
+            'u_split_bounds',
+            'u_split_place',
           ]
         : []),
     ];
@@ -1087,6 +1207,7 @@ export class DrapeRenderer {
     opacity: number,
     ranks: DrapeRankRange | null,
     moving: DrapeMovingDraw | null = null,
+    split: DrapeSplitDraw | null = null,
   ): void {
     if (!this.rows || !this.rankTex) return;
     const factors = this.rowFactors;
@@ -1104,6 +1225,24 @@ export class DrapeRenderer {
         if (set.u_paint_from) gl.uniform3f(set.u_paint_from, ...ranks.from);
         if (set.u_paint_to) gl.uniform3f(set.u_paint_to, ...ranks.to);
       }
+      const bounding = split?.pass === 'bounds';
+      if (set.u_split) gl.uniform1i(set.u_split, split ? (bounding ? 1 : 2) : 0);
+      if (set.u_split_from) gl.uniform1i(set.u_split_from, split?.from ?? -1);
+      if (set.u_split_to) gl.uniform1i(set.u_split_to, split?.to ?? -1);
+      // The units of the keys always hold textures of their kinds (a texture of another kind on
+      // the unit of a sampler fails the draw, whether the sampler is read or not); the pass of
+      // the bounds draws into its texture, so a texture of one texel stands for it
+      const empty = this.emptySplit();
+      gl.activeTexture(gl.TEXTURE0 + DRAPE_SPLIT_LOW_UNIT);
+      gl.bindTexture(gl.TEXTURE_2D, split ? split.low : empty.low);
+      if (set.u_split_low) gl.uniform1i(set.u_split_low, DRAPE_SPLIT_LOW_UNIT);
+      gl.activeTexture(gl.TEXTURE0 + DRAPE_SPLIT_BOUNDS_UNIT);
+      gl.bindTexture(
+        gl.TEXTURE_2D,
+        split && !bounding ? split.bounds : (empty.bounds as WebGLTexture),
+      );
+      if (set.u_split_bounds) gl.uniform1i(set.u_split_bounds, DRAPE_SPLIT_BOUNDS_UNIT);
+      if (set.u_split_place) gl.uniform1f(set.u_split_place, split?.place ?? 0);
       const count = moving?.count ?? 0;
       if (set.u_moving_count) gl.uniform1i(set.u_moving_count, count);
       if (moving && count > 0) {
@@ -1119,6 +1258,27 @@ export class DrapeRenderer {
         }
       }
     });
+  }
+
+  /** The textures of one texel bound for the keys of the split when a draw has none */
+  private splitEmpty: { low: WebGLTexture | null; bounds: WebGLTexture | null } | null = null;
+
+  private emptySplit(): { low: WebGLTexture | null; bounds: WebGLTexture | null } {
+    if (this.splitEmpty) return this.splitEmpty;
+    const gl = this.gl;
+    const low = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, low);
+    gl.texStorage2D(gl.TEXTURE_2D, 1, gl.DEPTH_COMPONENT32F, 1, 1);
+    const bounds = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, bounds);
+    gl.texStorage2D(gl.TEXTURE_2D, 1, gl.RGBA32F, 1, 1);
+    for (const texture of [low, bounds]) {
+      gl.bindTexture(gl.TEXTURE_2D, texture);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+    }
+    this.splitEmpty = { low, bounds };
+    return this.splitEmpty;
   }
 
   /** The factors of the sources of the drape of the rows (source 0: the layer drawn) */
@@ -1262,6 +1422,11 @@ export class DrapeRenderer {
     }
     this.rankTex = null;
     this.rankTexSize = [0, 0];
+    if (this.splitEmpty) {
+      gl.deleteTexture(this.splitEmpty.low);
+      gl.deleteTexture(this.splitEmpty.bounds);
+      this.splitEmpty = null;
+    }
     this.rowsUploaded = { storage: -1, copies: -1 };
     this.edgeTex = null;
     this.edgeStartTex = null;

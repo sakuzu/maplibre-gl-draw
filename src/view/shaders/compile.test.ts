@@ -226,6 +226,9 @@ function recordPrograms(shaderData: ShaderData): RecordedProgram[] {
     const renderer = new RowsRenderer(mapStub, gl);
     renderer.ensureShader(shaderData);
     expect(renderer.ready).toBe(true);
+    // The variants that draw the keys of the points and the points of one segment of each pixel
+    // among the drape of the rows, for the variant of the frame
+    expect(renderer.keyedReady).toBe(true);
   });
   withLabel('QuadShader', () => new QuadShader(gl).ensureShader(shaderData));
   withLabel('DrapeRenderer', () => {
@@ -322,10 +325,11 @@ describe('shader programs on a real WebGL2', () => {
     // each variant is recorded with the program it is a variant of. The renderer of the rows
     // drawn in one draw links its programs without waiting for them (`gl.createProgram`), which
     // the count of the call sites does not see; they are recorded among the programs: one for
-    // the flat map and one for the globe, from its own preludes, whatever prelude maplibre gives
+    // the flat map and one for the globe, from its own preludes, whatever prelude maplibre gives,
+    // and the two variants that split the drape of the rows at its points for the prelude given
     expect(sites).toHaveLength(13);
     const programs = recordPrograms(preludes[0]);
-    expect(programs).toHaveLength(23);
+    expect(programs).toHaveLength(25);
   });
 
   it('builds every program that moves rows with their moving set', () => {
@@ -344,6 +348,8 @@ describe('shader programs on a real WebGL2', () => {
       'PointInstanceRenderer (rows) #2',
       'RowsRenderer #1',
       'RowsRenderer #2',
+      'RowsRenderer #3',
+      'RowsRenderer #4',
       'SDFLineRenderer (rows) #2',
       'SDFPolygonRenderer (rows) #2',
     ]);
@@ -353,7 +359,7 @@ describe('shader programs on a real WebGL2', () => {
     'compiles and links every program with the Mercator and the globe prelude',
     async () => {
       const programs = preludes.flatMap((prelude) => recordPrograms(prelude));
-      expect(programs.length).toBe(46);
+      expect(programs.length).toBe(50);
       const failures = (await compileOnPage(page, programs)).filter((result) => !result.ok);
       expect(failures).toEqual([]);
     },

@@ -134,11 +134,12 @@ uniform mat4 u_projection_fallback_matrix;
  * @param define The defines of the projection variant
  * @internal
  */
-export function buildRowsVertexSource(prelude: string, define: string): string {
+export function buildRowsVertexSource(prelude: string, define: string, keyed = false): string {
   const dashed = DASH_COEFFICIENTS.dashed;
   const dotted = DASH_COEFFICIENTS.dotted;
   return `#version 300 es
 #define TABLE_ROWS
+${keyed ? '#define ROWS_KEY' : ''}
 ${prelude}
 ${define}
 ${getProjectionTransitionUniform(prelude)}${OFFSET_MODE_GLSL}${TERRAIN_SHADE_VERTEX_GLSL}${ROW_STATE_GLSL}${TERRAIN_OCCLUSION_GLSL}
@@ -213,6 +214,13 @@ flat out vec4 v_dash_next;
 // position along it, and for a dashed one its position on the line (CSS px). An edge of an
 // outline: the signed distance. A sprite: the texture coordinates
 out vec4 v_geom;
+#ifdef ROWS_KEY
+// The key of the place of the row in the order of the drape it is drawn among, in the variant
+// that writes the keys of the points: u_key_add + u_key_mul * row
+uniform highp uint u_key_add;
+uniform highp uint u_key_mul;
+flat out highp uint v_key;
+#endif
 
 // The state of the row of the instance: its moving set moves every coordinate read
 uint g_row_state = 0u;
@@ -653,6 +661,9 @@ void main() {
     v_dash_next = vec4(1.0, 0.0, ${glslFloat(FAR)}, 2.0 * ${glslFloat(FAR)});
     v_geom = vec4(0.0);
 
+#ifdef ROWS_KEY
+    v_key = u_key_add + u_key_mul * uint(row);
+#endif
     // The state of the row: a hidden row draws nothing, a moving one is moved by its set
     uint rowState = readRowState(float(row));
     if (rowStateHidden(rowState)) {
@@ -689,11 +700,17 @@ void main() {
 /**
  * The fragment shader source
  *
+ * @param variant `color`: the colors. `key`: the keys of the points and the sprites (their order
+ *   among the elements of a drape, `terrain/drape/split.ts`): each pixel a point covers writes
+ *   the key of its row over 2^24 as its depth, so a test of the depth keeps the lowest key.
+ *   `segment`: the colors of the points of one segment of each pixel, those whose keys lie
+ *   between two bounds of the pixel (`u_split_bounds`)
  * @internal
  */
-export function buildRowsFragmentSource(): string {
+export function buildRowsFragmentSource(variant: RowsFragmentVariant = 'color'): string {
   return `#version 300 es
 precision highp float;
+${variant === 'key' ? '#define ROWS_KEY' : variant === 'segment' ? '#define ROWS_SEGMENT' : ''}
 
 flat in int v_kind;
 flat in vec4 v_color;
@@ -714,6 +731,21 @@ uniform sampler2D u_sprites;
 // 1 when the pictures hold their colors multiplied by their alpha (they are divided back)
 uniform float u_sprite_premultiplied;
 
+#if defined(ROWS_KEY) || defined(ROWS_SEGMENT)
+flat in highp uint v_key;
+// The bounds of each pixel (keys of the elements of the drape, ascending; 2^25 for none)
+uniform highp sampler2D u_split_bounds;
+#endif
+#ifdef ROWS_KEY
+// The bound of each pixel the keys start from (its place in the bounds; -1 for none)
+uniform int u_split_floor;
+#endif
+#ifdef ROWS_SEGMENT
+// The channels of the bounds of each pixel the keys drawn go from (-1: from the first) and up to
+// (-1: to the end)
+uniform int u_split_from;
+uniform int u_split_to;
+#endif
 out vec4 fragColor;
 
 const float AA = 0.5;
@@ -848,6 +880,44 @@ vec4 shadeFill() {
     return vec4(v_color.rgb * terrainFillShade(), v_color.a * u_opacity);
 }
 
+vec4 shadeSprite() {
+    vec4 texel = texture(u_sprites, v_geom.xy);
+    if (u_sprite_premultiplied > 0.5 && texel.a > 0.0) texel.rgb /= texel.a;
+    return vec4(texel.rgb, texel.a * u_opacity * v_params.x);
+}
+
+#if defined(ROWS_KEY) || defined(ROWS_SEGMENT)
+vec4 shadeSymbol() {
+    if (v_kind == ${ROWS_KIND.point}) return shadePoint();
+    if (v_kind == ${ROWS_KIND.sprite}) return shadeSprite();
+    discard;
+    return vec4(0.0);
+}
+#endif
+
+#ifdef ROWS_KEY
+// A pixel a point or a sprite leaves as it is (nothing of it there) writes no key, nor a pixel
+// where its key is under the bound the keys start from
+void main() {
+    vec4 color = shadeSymbol();
+    if (color.a <= 0.0) discard;
+    if (u_split_floor >= 0) {
+        vec4 bounds = texelFetch(u_split_bounds, ivec2(gl_FragCoord.xy), 0);
+        if (float(v_key) < bounds[u_split_floor]) discard;
+    }
+    fragColor = vec4(0.0);
+    gl_FragDepth = float(v_key) * ${glslFloat(2 ** -24)};
+}
+#elif defined(ROWS_SEGMENT)
+void main() {
+    vec4 color = shadeSymbol();
+    float key = float(v_key);
+    vec4 bounds = texelFetch(u_split_bounds, ivec2(gl_FragCoord.xy), 0);
+    if (u_split_from >= 0 && key < bounds[u_split_from]) discard;
+    if (u_split_to >= 0 && key >= bounds[u_split_to]) discard;
+    fragColor = color;
+}
+#else
 void main() {
     if (v_kind == ${ROWS_KIND.point}) {
         fragColor = shadePoint();
@@ -858,12 +928,19 @@ void main() {
     } else if (v_kind == ${ROWS_KIND.fill}) {
         fragColor = shadeFill();
     } else {
-        vec4 texel = texture(u_sprites, v_geom.xy);
-        if (u_sprite_premultiplied > 0.5 && texel.a > 0.0) texel.rgb /= texel.a;
-        fragColor = vec4(texel.rgb, texel.a * u_opacity * v_params.x);
+        fragColor = shadeSprite();
     }
-}`;
 }
+#endif`;
+}
+
+/**
+ * The fragment variants of the program: the colors, the keys of the points, the colors of the
+ * points of one segment (`buildRowsFragmentSource`)
+ *
+ * @internal
+ */
+export type RowsFragmentVariant = 'color' | 'key' | 'segment';
 
 /** The miter limit the segments and the outlines use (the one of the other renderers) */
 export const ROWS_MITER_LIMIT = RENDERING_DEFAULTS.MITER_LIMIT;
