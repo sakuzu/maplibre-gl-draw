@@ -15,11 +15,10 @@
  * - The time to read the row blocks as the Worker of a page does: decompress a part (fzstd, as in
  *   a browser), read the row block, make it a row block of the tables (the triangles copied from
  *   the cache of the file, or made without one). Then, for the same rows, the
- *   way before: rows made objects again and given to the builder of the row blocks, and the
- *   files of the trial of bench/stage0 when they were made (`node bench/stage0/make-blocks.ts`)
+ *   way before: rows made objects again and given to the builder of the row blocks
  */
 
-import { existsSync, readFileSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { zstdCompressSync } from 'node:zlib';
 import {
@@ -43,7 +42,6 @@ import {
 import { decompress } from 'fzstd';
 import type { Feature } from 'geojson';
 import { describe, it } from 'vitest';
-import { decodeFile } from '../stage0/decode-work.ts';
 
 const MEASURE = process.env.TABANE_MEASURE === '1';
 const DATA = join(import.meta.dirname, '..', 'data');
@@ -205,32 +203,6 @@ describe.skipIf(!MEASURE)('Tabane measured', () => {
       builderPass();
       result.builderPer1000Ms = round((builderPass() / rows.length) * 1000);
 
-      // The trial before (bench/stage0), on its files of the same rows when they were made
-      const stage0 = join(DATA, 'stage0', file);
-      if (existsSync(stage0)) {
-        const head = JSON.parse(readFileSync(join(stage0, 'head.ndjson'), 'utf8')) as {
-          manifest: string;
-        };
-        const manifest = JSON.parse(readFileSync(join(stage0, head.manifest), 'utf8')) as {
-          files: { name: string }[];
-        };
-        const stageFiles = manifest.files.map(
-          (f) => new Uint8Array(readFileSync(join(stage0, f.name))),
-        );
-        decodeFile(stageFiles[0]);
-        const sum = { decode: 0, blocks: 0, rows: 0 };
-        for (const bytes of stageFiles) {
-          const d = decodeFile(bytes);
-          sum.decode += d.times.unzipMs + d.times.decodeMs;
-          sum.blocks += d.times.rowsMs + d.times.addMs + d.times.finishMs;
-          sum.rows += d.rows;
-        }
-        result.stage0Per1000Ms = {
-          decode: round((sum.decode / sum.rows) * 1000),
-          blocks: round((sum.blocks / sum.rows) * 1000),
-          all: round(((sum.decode + sum.blocks) / sum.rows) * 1000),
-        };
-      }
       console.log(JSON.stringify(result, null, 1));
     }, 600_000);
   }
