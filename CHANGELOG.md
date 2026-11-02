@@ -111,6 +111,19 @@ writing it. Its changes are listed after those of 3.0.0.
   the ground at the elevation the hit testing takes and are drawn faint
   where the terrain hides them, and the points on the far side of the
   globe are not drawn.
+- Zoomed in on the terrain (past zoom 11, or at any zoom for a light
+  layer), the polygons and the lines of a layer held as rows paint the
+  ground as those of the other features do, without the gaps and the
+  lines sunk into a slope of the fills cut on the mesh, and keep the
+  order of the rows: a point, a picture or a row drawn at once between
+  two of them is drawn over the first and under the second where they
+  meet on the screen, and the draws of a frame do not follow the number
+  of the rows where they do not meet. A row written in place is drawn
+  where it is now in the next frames, the tiles it touches drawn again
+  alone, and the rows of a moving set (a drag of the features selected
+  in bulk) are drawn moved on the ground and where they were written
+  once let go. A layer too heavy for it is drawn as before, and the
+  datasets keep being drawn on the ground.
 - Features selected in bulk and turned or resized are drawn during the drag
   as they are written once let go: an image, a type resized by its scale
   and a feature with a rotation or a scale keep their shape and change

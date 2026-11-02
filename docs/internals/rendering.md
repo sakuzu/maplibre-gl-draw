@@ -1837,7 +1837,8 @@ pixel is inside a polygon or how far it is from a line.
   through transient ones, so batches are not re-baked back and forth
 - A layer held as rows is not collected: it is drawn from its rows alone,
   at its place in the order (`isLayerDrawnFromRows`, the one test the
-  layer loop of the draw and the drape share). The features of its rows
+  layer loop of the draw and the drape share), on a drape of its own (see
+  [Layers held as rows](#layers-held-as-rows)). The features of its rows
   held (selected, dragged) are what is read of the rows, not another path
   of drawing them, so a row held is drawn once
 - Dashed and dotted lines and outlines are elements too. Their style
@@ -2009,6 +2010,72 @@ kinds. The rows of a chunk are cut for the surface (`table-surface.ts`,
   that came or went. A point being moved reads the DEM atlas where it is
   drawn until it is written. Points stand on the ground also where the
   fills and lines are drawn flat
+
+#### The drape of the rows
+
+In the band of the analytic drape (above `TERRAIN_ANALYTIC_MIN_ZOOM`, or
+at any zoom when the polygons and lines of the rows have at most
+`DRAPE_WIDE_EDGE_BUDGET` edges), the polygons and the lines of the layers
+held as rows paint the ground on a drape of their own (`table-drape.ts`,
+`TableDrape`), and the chunks draw only the points of their rows, from the
+instances of their points (`RowsRenderer.drawPointsRange`). It is apart
+from the drape of the other elements, so a layer of rows too heavy for it
+(over the vertex budget, too many tiles over the work of a cell) is drawn
+by its chunks and the datasets stay on theirs. Entering the band waits
+for the tiles of the view; while many rows are dragged the band is kept
+as it was when they were taken.
+
+- Its index is made of partitions (`terrain/drape/partitioned.ts`,
+  `PartitionedDrapeIndex`): a row group of a layer, with the rows of the
+  delta placed among its rows, and the rows of the delta after the last
+  group. A tile holds the bins of each partition that touches it, on one
+  grid and one quantization decided from the sum over them, and joins
+  the runs of a cell in the order of the partitions. Every tile and every
+  partition of a tile keep their places in the arrays with room to grow;
+  the arrays are packed again once the places left behind are half of
+  them, or they near what the textures hold
+- An element is a copy of a row, and a run names its copy: the copy of a
+  row of a group is numbered from its handle (`DrapeCopyIndex`; given
+  when it first comes in, kept when the row moves to another group or the
+  group to its next version, given back when no version keeps it and
+  given again once no tile names it), the copy of a row of the delta has
+  its copy number in the delta. The style of a copy, its rank (its
+  partition, its slot, its order at the slot) and its state are texels of
+  the tables of the copies (`DrapeCopyTables`), a region per range of
+  copies, and the place of each partition in the order is a texel of the
+  same table, read on a twelfth unit (`DRAPE_RANK_UNIT`)
+- A write of a row in place bins again its partition in the tiles its
+  box touches, before and after, and joins those tiles again; a write of
+  its color, and a change of its state (hidden), writes its texels. A next
+  version of a group that replaces it alone keeps its partition: only the
+  tiles of the rows that came from the delta or were dropped are binned
+  again. A new order of the partitions writes the table of the order and
+  joins the tiles again
+- The order: each layer paints the ranks of its partitions, and what the
+  drape does not draw (points, pictures, rows drawn at once) is drawn at
+  its place in between (`TableDrapePainter`). A run of such rows that an
+  element after it covers in a tile (its box, widened by how far its
+  markers reach on the screen, meets the box of an element after it in a
+  cell of the tile) is a break: the drape is painted up to it in the tiles
+  it meets, then it is drawn. A run nothing after it covers waits and is
+  drawn with the next break or at the end of the layer, over the drape
+  painted under it: what is painted later does not meet it. The drape of
+  the other elements is painted up to each entry of the order before it
+  while the rows are draped, so a dataset above a layer of rows is drawn
+  over its points
+- The rows of a moving set (and, for the features selected in bulk, the
+  rows selected before they are dragged) are a moving partition: indexed
+  where they were taken from on tiles one step coarser than the tiles
+  drawn, at most `DRAPE_MAX_MOVING` of them. The fragment moves the pixel
+  back by the motion of the set (an affine map fitted per tile drawn in
+  float64, with its inverse for the distances on the screen), reads the
+  cell there, and merges its runs with those of the tile by rank. Once
+  its index holds the tiles the view needs, its rows are hidden in their
+  partitions and drawn by their moving copies; a row let go of stays drawn
+  by its moving copy, with the motion the set had, until its partition is
+  binned again where it was written
+- Its draws: one per tile at the end of a layer, and one per tile a break
+  meets
 
 ### Terrain state per instance
 
