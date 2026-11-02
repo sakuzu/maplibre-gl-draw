@@ -282,6 +282,114 @@ export function drapeSelectionKey(datasetId: string, featureId: string): string 
   return `${datasetId}\u0000${featureId}`;
 }
 
+/**
+ * An element of a partition of a partitioned drape (`partitioned.ts`): it names the copy it draws
+ * (its texels in the tables of the styles and of the ranks and states) and its place in its
+ * partition, in the order of the partition
+ */
+export interface DrapePartitionElement extends DrapeElement {
+  /** The copy the element draws (`drapeCopyRef`: its range and its number in the range) */
+  readonly ref: number;
+  /** Its place in its partition (`drapePosition`), increasing in the order of the partition */
+  readonly position: number;
+}
+
+/** The number of copy numbers a range holds (21 bits; the ref is exact in a float32) */
+export const DRAPE_COPY_RANGE_SIZE = 2 ** 21;
+
+/**
+ * The ref of a copy: its range in the upper bits and its number in the range in the lower 21
+ * (a float32 holds the integers to 2^24 exactly, so up to 8 ranges)
+ */
+export function drapeCopyRef(range: number, copy: number): number {
+  return range * DRAPE_COPY_RANGE_SIZE + copy;
+}
+
+/** The factor of the place of a row in its partition (`2r + 1`) over the order of the things at the same place */
+export const DRAPE_POSITION_SLOTS = 2 ** 16;
+
+/**
+ * The place of an element in its partition: the slot (`2r + 1` for row `r`, `2p` for what comes
+ * just before row `p`) and the order `k` of the things at the same slot
+ */
+export function drapePosition(slot: number, k = 0): number {
+  return slot * DRAPE_POSITION_SLOTS + k;
+}
+
+/** What the elements of a partition hold in a tile, at a step of the quantization */
+export interface DrapePartitionEstimate {
+  /** The edges near the tile */
+  readonly edges: number;
+  /** The elements that touch the tile */
+  readonly count: number;
+  /** The widest margin of their outlines (in-tile coordinates) */
+  readonly maxMargin: number;
+}
+
+/**
+ * Estimates what the elements of a partition hold in a tile (the tile decides its grid and its
+ * quantization from the sum over its partitions)
+ *
+ * @param quantizeLevel 0 for the original geometry
+ */
+export function estimateDrapePartition(
+  elements: readonly DrapePartitionElement[],
+  tile: DrapeTile,
+  quantizeLevel: number,
+  zoom: number,
+): DrapePartitionEstimate {
+  const picked = pickElements(elements, undefined, tile, 2 ** tile.z, quantizeLevel, zoom);
+  return {
+    edges: picked.edgeEstimate,
+    count: picked.indices.length,
+    maxMargin: picked.maxMargin,
+  };
+}
+
+/**
+ * Bins the elements of a partition into a tile with the grid and the quantization the tile
+ * decided for all of its partitions: the runs name the copies of the elements
+ * (`DrapePartitionElement.ref`) and keep their places
+ */
+export function binDrapePartition(
+  elements: readonly DrapePartitionElement[],
+  tile: DrapeTile,
+  options: { grid: number; quantizeLevel: number; zoom: number },
+): TileBins {
+  const scale = 2 ** tile.z;
+  const picked = pickElements(
+    elements,
+    undefined,
+    tile,
+    scale,
+    options.quantizeLevel,
+    options.zoom,
+  );
+  if (picked.indices.length === 0) {
+    return {
+      ...emptyBins(options.grid, picked.edgeEstimate, false),
+      runPositions: new Float64Array(0),
+    };
+  }
+  return assembleBins(elements, picked, tile, scale, options.grid, options.zoom, true);
+}
+
+/**
+ * The quantization of a tile for the edges near it at the original geometry: 0 when they are
+ * few enough, otherwise the finest step at which the estimate fits `DRAPE_MAX_EDGES_PER_TILE`
+ * (never coarser than the floor of the tile)
+ *
+ * @param estimate The edges near the tile at a step of the quantization (0 for the original)
+ */
+export function drapeQuantizeLevel(tileZ: number, estimate: (level: number) => number): number {
+  if (estimate(0) <= DRAPE_LOD_TRIGGER) return 0;
+  const floorLevel = tileZ + DRAPE_MIN_SAMPLES_LOG2;
+  for (let level = tileZ + DRAPE_TILE_SAMPLES_LOG2; level >= floorLevel; level--) {
+    if (estimate(level) <= DRAPE_MAX_EDGES_PER_TILE) return level;
+  }
+  return floorLevel;
+}
+
 /** The binning result for a single tile */
 export interface TileBins {
   /** The number of divisions of the grid (per side) */
@@ -290,6 +398,11 @@ export interface TileBins {
   readonly cells: Int32Array;
   /** (elementIndex, edgeStart, edgeCount, baseInside) per run */
   readonly runs: Float32Array;
+  /**
+   * The place of the element of each run in its partition (`DrapePartitionElement.position`),
+   * for the bins of a partition (absent otherwise)
+   */
+  readonly runPositions?: Float64Array;
   /** (x0, y0, x1, y1) per edge. In-tile 0..1 coordinates */
   readonly edges: Float32Array;
   /**
@@ -470,6 +583,7 @@ function assembleBins(
   scale: number,
   grid: number,
   zoom: number,
+  partition = false,
 ): TileBins {
   const tileX = tile.x;
   const tileY = tile.y;
@@ -565,6 +679,9 @@ function assembleBins(
   const runs: number[] = [];
   const edges: number[] = [];
   const edgeStarts: number[] = [];
+  // The elements of a partition are named by their copies, and each run keeps the place of its
+  // element in the partition (the order of the partitions is joined over them)
+  const positions: number[] | null = partition ? [] : null;
   for (let c = 0; c < cellCount; c++) {
     const list = cellRuns[c];
     cells[c * 2] = runs.length / 4;
@@ -593,7 +710,13 @@ function assembleBins(
           edgeCount++;
         }
       }
-      runs.push(list[i], edgeStart, edgeCount, list[i + 1]);
+      if (positions) {
+        const element = elements[list[i]] as DrapePartitionElement;
+        runs.push(element.ref, edgeStart, edgeCount, list[i + 1]);
+        positions.push(element.position);
+      } else {
+        runs.push(list[i], edgeStart, edgeCount, list[i + 1]);
+      }
       runCount++;
       if (edgeCount > maxEdgesPerCell) maxEdgesPerCell = edgeCount;
     }
@@ -606,6 +729,7 @@ function assembleBins(
     grid,
     cells,
     runs: new Float32Array(runs),
+    ...(positions ? { runPositions: new Float64Array(positions) } : {}),
     edges: new Float32Array(edges),
     edgeStarts: new Float32Array(edgeStarts),
     overflow: false,
