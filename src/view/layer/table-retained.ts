@@ -163,6 +163,17 @@ import {
   writePolygonRow,
 } from './table-collect.js';
 import {
+  rowsBox,
+  TABLE_DRAPE_POINT_REACH_PX,
+  TableDrape,
+  type TableDrapeDebug,
+  type TableDrapeFrame,
+  type TableDrapeFrameInput,
+  type TableDrapeLayer,
+  TableDrapePainter,
+  type TableDrapeRank,
+} from './table-drape.js';
+import {
   classifyRow,
   type OrderedChunkRange,
   partitionRowGroup,
@@ -261,6 +272,8 @@ export interface TableLayerFrame {
   readonly zoom: number;
   /** The range to draw, on one copy of the world (everything when undefined) */
   readonly bounds: BoundingBox | undefined;
+  /** Whether it is the first copy of the world drawn in the frame (true when undefined) */
+  readonly firstCopy?: boolean;
 }
 
 /**
@@ -509,6 +522,19 @@ interface FreshDrawing {
   ): { kind: TableRunKind | null; source: RowSpriteSource | undefined };
 }
 
+/** The runs of rows with points of a chunk, between the rows a drape draws (`pointRunsOf`) */
+interface PointRuns {
+  readonly key: string;
+  readonly group: RowGroup;
+  /** Per run: its first row, its end (exclusive) and its last row with points, in the chunk */
+  readonly runs: Int32Array;
+  /** The Mercator box of each run (minX, minY, maxX, maxY) */
+  readonly boxes: Float64Array;
+  /** How far the markers of each run reach on the screen beyond their positions (CSS px) */
+  readonly reach: Float32Array;
+  readonly count: number;
+}
+
 /** The frame of the chunk scheduler, set once per layer */
 interface SchedulerFrame {
   bounds: BoundingBox;
@@ -551,6 +577,14 @@ export class TableLayerRenderer {
   private byKind = false;
   /** The surface the rows are cut for, decided once per frame */
   private readonly surfaces = new TableSurface();
+  /** The drape of the polygons and the lines of the rows on the terrain (`table-drape.ts`) */
+  readonly drape = new TableDrape();
+  /** The drape of the frame (null when the rows are drawn by their chunks) */
+  private drapeFrame: TableDrapeFrame | null = null;
+  /** Draws a layer on the drape, in the order of its rows */
+  private readonly painter = new TableDrapePainter();
+  /** The runs of rows with points of each chunk drawn on the drape, for the breaks */
+  private readonly pointRuns = new WeakMap<object, PointRuns>();
   /** The frame the surface was decided in */
   private surfaceFrame = -1;
   /** How the rows of each chunk drawn in one draw are cut */
@@ -692,7 +726,9 @@ export class TableLayerRenderer {
 
   /** Whether the last frame left a build unfinished */
   get hasPendingWork(): boolean {
-    return this.pending || this.renderers?.rows?.hasPendingUploads === true;
+    return (
+      this.pending || this.renderers?.rows?.hasPendingUploads === true || this.drape.hasPendingWork
+    );
   }
 
   /**
@@ -1124,6 +1160,15 @@ export class TableLayerRenderer {
    */
   rowsWritten(layerId: string, writes: readonly InPlaceRowWrite[]): void {
     if (writes.length === 0) return;
+    // The drape makes the partitions of the rows written again with them
+    const table = this.layers.get(layerId)?.tables?.layerTable(layerId);
+    if (table) {
+      for (const write of writes) {
+        const group =
+          write.group === table.delta.handle ? table.delta.group : table.group(write.group);
+        if (group) this.drape.rowsWritten(layerId, group, [write.row]);
+      }
+    }
     let groups = this.written.get(layerId);
     if (!groups) {
       groups = new Map();
@@ -1208,6 +1253,73 @@ export class TableLayerRenderer {
   endFrame(): void {
     if (this.hasPendingWork) this.options.requestRepaint();
   }
+
+  /**
+   * Prepares the drape of the polygons and the lines of the layers held as rows for a frame on
+   * the terrain (`table-drape.ts`): the layers drawn in the last frame, in their order
+   *
+   * @returns The drape of the frame (null when the rows are drawn by their chunks)
+   */
+  planDrape(
+    tables: FeatureTablesInternals | null,
+    layerOrder: readonly string[],
+    input: TableDrapeFrameInput,
+  ): TableDrapeFrame | null {
+    const layers: TableDrapeLayer[] = [];
+    if (tables) {
+      for (const layerId of layerOrder) {
+        const cache = this.layers.get(layerId);
+        const table = tables.layerTable(layerId);
+        const { slots, layer, deps } = cache ?? {};
+        if (!cache || !table || !slots || !layer || !deps || cache.tables !== tables) continue;
+        // A layer not drawn in the last frame is not on the drape
+        if (cache.drawnFrame < this.frameCount - 1) continue;
+        const view = tables.view(layerId);
+        const companions = deps.companions as FeatureCompanionRegistry;
+        layers.push({
+          layerId,
+          table,
+          slots,
+          strings: tables.strings,
+          generation: `${cache.generation}:${cache.styleGeneration}`,
+          classify: (group, row) =>
+            classifyRow(group, row, {
+              slots,
+              customTypes: deps.customRenderers,
+              companions,
+              featureOf: (rows, r) => rowFeatureToRead(tables.readContext, layerId, rows, r),
+              view,
+              layer,
+              oneDraw: true,
+              onSprite: () => {},
+            }),
+          inserts: this.deltaInserts(table),
+        });
+      }
+    }
+    this.drapeFrame = this.drape.planFrame(tables, layers, input);
+    this.drapeDraws = this.drapeFrameDraws;
+    this.drapeBreaks = this.drapeFrameBreaks;
+    this.drapeFrameDraws = 0;
+    this.drapeFrameBreaks = 0;
+    return this.drapeFrame;
+  }
+
+  /** What the drape of the rows did in the last frame (for the measurements) */
+  drapeDiagnostics(): TableDrapeDebug & { binCount: number; draws: number; breaks: number } {
+    return {
+      ...this.drape.debug,
+      binCount: this.drape.index.binCount,
+      draws: this.drapeDraws,
+      breaks: this.drapeBreaks,
+    };
+  }
+
+  /** The draws of the drape of the rows and the breaks among them, in the last frame */
+  private drapeDraws = 0;
+  private drapeBreaks = 0;
+  private drapeFrameDraws = 0;
+  private drapeFrameBreaks = 0;
 
   /**
    * Draws a layer held as rows, in the order of its rows
@@ -1340,6 +1452,25 @@ export class TableLayerRenderer {
     const run = renderers.run;
     const started = chunkClock();
     run?.begin();
+    // On the drape, the chunks draw their points alone, between the parts of the drape
+    const drapeFrame = drawing === 'one-draw' ? this.drapeFrame : null;
+    this.painter.begin(
+      drapeFrame && {
+        ...drapeFrame,
+        enter: () => {
+          run?.end();
+          drapeFrame.enter();
+        },
+        leave: () => {
+          drapeFrame.leave();
+          run?.begin();
+        },
+      },
+      table.layerId,
+      pass.factors.opacity,
+      // The drape is painted once, with the first copy of the world drawn
+      frame.firstCopy !== false,
+    );
     try {
       for (let g = 0; g < table.groupCount; g++) {
         const group = table.groupAt(g);
@@ -1394,7 +1525,12 @@ export class TableLayerRenderer {
       // The rows of the delta of a layer without groups, or after its last one
       pass.inserts = inserts.get(-1) ?? null;
       pass.insertAt = 0;
+      pass.group = null;
       this.drawInserts(Number.MAX_SAFE_INTEGER);
+      // The drape is painted to the end of the layer, and what waits is drawn over it
+      this.painter.end();
+      this.drapeFrameDraws += this.painter.draws;
+      this.drapeFrameBreaks += this.painter.breaks;
       // The chunks of the next versions of the groups, built without being drawn
       pass.inserts = null;
       this.advanceVersions(cache, tables, table, layer, deps, drawing, settled);
@@ -1496,6 +1632,7 @@ export class TableLayerRenderer {
 
   /** A next version replaced its groups: its chunks are the ones of its groups from now */
   private versionSwapped(version: GroupVersion): void {
+    this.drape.versionSwapped(version);
     const caches = this.pendingCaches.get(version) ?? [];
     this.pendingCaches.delete(version);
     const cache = this.layers.get(version.layer.layerId);
@@ -1612,6 +1749,8 @@ export class TableLayerRenderer {
 
   /** Releases every GPU resource (the batches are built again on the next draw) */
   dispose(renderers?: RetainedRendererSet): void {
+    this.drape.releaseGpu();
+    this.drapeFrame = null;
     if (renderers) this.renderers = renderers;
     for (const detach of this.attached.values()) detach();
     this.attached.clear();
@@ -2339,8 +2478,10 @@ export class TableLayerRenderer {
           ? this.movedViews
           : NO_VIEWS;
       if (chunk.type === 'rows' && chunk.batches && !chunk.job) {
-        // Cut again for the surface, and the elevations of its points read again
-        this.cutForSurface(chunk);
+        // Cut again for the surface, and the elevations of its points read again. On the drape
+        // the polygons and the lines are not drawn from the chunk: they are cut again once the
+        // layer leaves it (drawn as they are until then), and the points keep their elevations
+        if (!this.painter.active) this.cutForSurface(chunk);
         if (chunk.batches) this.updateHeights(chunk);
       }
       const pending =
@@ -2583,7 +2724,7 @@ export class TableLayerRenderer {
     if (!inserts || !pass.drawing) return;
     while (pass.insertAt < inserts.length && inserts[pass.insertAt].at <= row) {
       const insert = inserts[pass.insertAt++];
-      this.drawDeltaRange(insert.from, insert.to);
+      this.drawDeltaRange(insert.from, insert.to, insert);
     }
   }
 
@@ -2591,6 +2732,22 @@ export class TableLayerRenderer {
   private drawOneDrawRange(state: OneDrawRowsChunk, from: number, to: number): void {
     const pass = this.pass;
     const { projectionData, zoom } = pass.frame as TableLayerFrame;
+    if (this.painter.active) {
+      // On the drape the chunk draws its points alone, at their places among the parts of the
+      // drape
+      const group = pass.group as RowGroup;
+      const layerId = pass.layerId;
+      this.drawPointsOnDrape(
+        state.batches as RowsGpuChunk,
+        group,
+        state.range.from,
+        from,
+        to,
+        (row) => this.drape.rankOfRow(layerId, group, row),
+      );
+      this.recordRange('rows', state.range.from + from, state.range.from + to);
+      return;
+    }
     (pass.renderers as RetainedRendererSet).rows?.drawRange(
       state.batches as RowsGpuChunk,
       from,
@@ -2603,6 +2760,135 @@ export class TableLayerRenderer {
     this.recordRange('rows', state.range.from + from, state.range.from + to);
   }
 
+  /**
+   * Draws the points of rows `[from, to)` of a chunk drawn in one draw on the drape: each run of
+   * rows with points between two rows the drape draws is a run of the painter (drawn after the
+   * drape painted under it, and before what is painted over it)
+   *
+   * @param base The row of the group the chunk starts at
+   * @param rankOf The rank of a row of the group in the order of the drape
+   */
+  private drawPointsOnDrape(
+    gpu: RowsGpuChunk,
+    group: RowGroup,
+    base: number,
+    from: number,
+    to: number,
+    rankOf: (row: number) => TableDrapeRank | null,
+  ): void {
+    const pass = this.pass;
+    const rows = (pass.renderers as RetainedRendererSet).rows;
+    if (!rows || !gpu.uploaded) return;
+    const runs = this.pointRunsOf(
+      gpu,
+      group,
+      base,
+      pass.groupCache?.group === group ? pass.groupCache : pass.delta,
+    );
+    if (runs.count === 0) return;
+    const { projectionData, zoom } = pass.frame as TableLayerFrame;
+    const binding = pass.binding as RowStateBinding;
+    const factors = pass.factors;
+    const draw = (a: number, b: number): void =>
+      rows.drawPointsRange(gpu, a, b, zoom, projectionData, binding, factors);
+    const pointFirst = gpu.data.pointFirst;
+    for (let i = 0; i < runs.count; i++) {
+      const a = Math.max(runs.runs[i * 3] as number, from);
+      const b = Math.min(runs.runs[i * 3 + 1] as number, to);
+      if (b <= a || (pointFirst[b] as number) <= (pointFirst[a] as number)) continue;
+      const last = Math.min(runs.runs[i * 3 + 2] as number, b - 1);
+      const first = rankOf(base + a);
+      const lastRank = rankOf(base + last);
+      if (!first || !lastRank) {
+        draw(a, b);
+        continue;
+      }
+      const at = i * 4;
+      this.painter.run(
+        first,
+        lastRank,
+        {
+          minX: runs.boxes[at] as number,
+          minY: runs.boxes[at + 1] as number,
+          maxX: runs.boxes[at + 2] as number,
+          maxY: runs.boxes[at + 3] as number,
+        },
+        runs.reach[i] as number,
+        gpu,
+        a,
+        b,
+        draw,
+      );
+    }
+  }
+
+  /**
+   * The runs of rows with points of a chunk, between the rows the drape draws, with their boxes:
+   * kept for the chunk while its rows and their kinds do not change
+   */
+  private pointRunsOf(
+    gpu: RowsGpuChunk,
+    group: RowGroup,
+    base: number,
+    groupCache: GroupCache | null,
+  ): PointRuns {
+    const key = `${group.mark}|${this.drape.kindsGeneration(group)}`;
+    const held = this.pointRuns.get(gpu);
+    if (held && held.key === key && held.group === group) return held;
+    const data = gpu.data;
+    const context = this.pass.context;
+    const runs: number[] = [];
+    const boxes: number[] = [];
+    const reaches: number[] = [];
+    let start = -1;
+    let last = -1;
+    let reach = 0;
+    const close = (end: number): void => {
+      if (start < 0) return;
+      const box = rowsBox(group, base + start, base + end);
+      if (box) {
+        runs.push(start, end, last);
+        boxes.push(box.minX, box.minY, box.maxX, box.maxY);
+        reaches.push(reach);
+      }
+      start = -1;
+      reach = 0;
+    };
+    for (let r = 0; r < data.rows; r++) {
+      const row = base + r;
+      if (this.drape.drapesRow(group, row)) {
+        close(r);
+        continue;
+      }
+      if ((data.pointFirst[r + 1] as number) > (data.pointFirst[r] as number)) {
+        if (start < 0) start = r;
+        last = r;
+        // How far the marker reaches on the screen: its radius and its outline, or a picture
+        let rowReach = TABLE_DRAPE_POINT_REACH_PX;
+        if (context && !groupCache?.sprites.has(row)) {
+          const slot = context.slots.point(
+            group.data.styles[row] as number,
+            rowType(group.data, row),
+            context.slots.ruleColorOf(group, row, context.strings),
+          );
+          rowReach = (slot.packed[8] as number) + (slot.packed[9] as number) + 1;
+        }
+        reach = Math.max(reach, rowReach);
+      }
+    }
+    close(data.rows);
+    const out: PointRuns = {
+      key,
+      group,
+      runs: Int32Array.from(runs),
+      boxes: Float64Array.from(boxes),
+      reach: Float32Array.from(reaches),
+      count: runs.length / 3,
+    };
+    this.pointRuns.set(gpu, out);
+    return out;
+  }
+
   /** Draws the rows `[from, to)` of a retained chunk of the group being drawn */
   private drawRange(state: RetainedRowsChunk, from: number, to: number): void {
     const pass = this.pass;
@@ -2610,6 +2896,33 @@ export class TableLayerRenderer {
     const renderers = pass.renderers as RetainedRendererSet;
     const { projectionData, zoom } = pass.frame as TableLayerFrame;
     const binding = pass.binding as RowStateBinding;
+    if (this.painter.active) {
+      // On the drape the polygons and the lines are the drape's, and a chunk of points is a run
+      // of the painter
+      if (batches.kind === 'point') {
+        const group = pass.group as RowGroup;
+        const base = state.range.from;
+        const first = this.drape.rankOfRow(pass.layerId, group, base + from);
+        const last = this.drape.rankOfRow(pass.layerId, group, base + to - 1);
+        const box = rowsBox(group, base + from, base + to);
+        const draw = (a: number, b: number): void =>
+          renderers.point.drawRetainedRange?.(
+            batches.batch as RetainedPointBatch,
+            a,
+            b,
+            projectionData,
+            binding,
+            pass.factors,
+          );
+        if (first && last && box) {
+          this.painter.run(first, last, box, TABLE_DRAPE_POINT_REACH_PX, state, from, to, draw);
+        } else {
+          draw(from, to);
+        }
+      }
+      this.recordRange(state.range.kind, state.range.from + from, state.range.from + to);
+      return;
+    }
     switch (batches.kind) {
       case 'point':
         renderers.point.drawRetainedRange?.(
@@ -2702,6 +3015,11 @@ export class TableLayerRenderer {
     let part = from;
     for (let at = this.nextInsert(); ; at = this.nextInsert()) {
       const end = at !== null && at > part && at < to ? at : to;
+      // On the drape, a break: what is drawn at once comes after the drape painted under it
+      if (this.painter.active) {
+        const rank = this.drape.rankOfRow(layerId, group, part);
+        if (rank) this.painter.breakAt(rank, rowsBox(group, part, end), TABLE_DRAPE_POINT_REACH_PX);
+      }
       this.drawAtOnce(group, part, end, (i) =>
         chunk.features && i - from < chunk.filled ? chunk.features[i - from] : null,
       );
@@ -2865,10 +3183,15 @@ export class TableLayerRenderer {
    * chunks they are packed in, when the layer is drawn in one draw and they are on the GPU; at
    * once from their features otherwise
    */
-  private drawDeltaRange(from: number, to: number): void {
+  private drawDeltaRange(from: number, to: number, insert?: DeltaInsert): void {
     const pass = this.pass;
     const group = pass.deltaGroup;
     if (!group || to <= from) return;
+    // On the drape, the rank of a row of the delta is its place before a row of the group
+    const groupHandle = pass.group?.handle ?? -1;
+    const layerId = pass.layerId;
+    const rankOf = (row: number): TableDrapeRank | null =>
+      insert ? this.drape.rankOfInsert(layerId, groupHandle, insert.at, row - insert.from) : null;
     const cache = pass.delta;
     const record = (kind: TableRunKind, a: number, b: number): void => {
       this.record?.push({
@@ -2883,7 +3206,12 @@ export class TableLayerRenderer {
     };
     this.writeStats.cuts++;
     const chunks = pass.oneDraw && cache?.binding ? cache.oneDraw?.chunks : undefined;
+    const breakAt = (a: number, b: number): void => {
+      const rank = this.painter.active ? rankOf(a) : null;
+      if (rank) this.painter.breakAt(rank, rowsBox(group, a, b), TABLE_DRAPE_POINT_REACH_PX);
+    };
     if (!chunks) {
+      breakAt(from, to);
       this.drawAtOnce(group, from, to, () => null);
       record('immediate', from, to);
       return;
@@ -2896,7 +3224,20 @@ export class TableLayerRenderer {
       const b = Math.min(to, chunk.range.to);
       if (b <= a) continue;
       const gpu = chunk.type === 'rows' ? chunk.batches : null;
-      if (gpu?.uploaded && rows) {
+      if (gpu?.uploaded && rows && this.painter.active) {
+        const binding = pass.binding;
+        pass.binding = (cache as GroupCache).binding;
+        this.drawPointsOnDrape(
+          gpu,
+          group,
+          chunk.range.from,
+          a - chunk.range.from,
+          b - chunk.range.from,
+          rankOf,
+        );
+        pass.binding = binding;
+        record('rows', a, b);
+      } else if (gpu?.uploaded && rows) {
         rows.drawRange(
           gpu,
           a - chunk.range.from,
@@ -2908,6 +3249,7 @@ export class TableLayerRenderer {
         );
         record('rows', a, b);
       } else {
+        breakAt(a, b);
         this.drawAtOnce(group, a, b, () => null);
         record('immediate', a, b);
       }

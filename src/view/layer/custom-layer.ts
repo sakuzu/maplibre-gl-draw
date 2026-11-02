@@ -858,6 +858,8 @@ export function createCustomLayer(deps: CustomLayerDeps): CustomLayerInterface {
       retainedAvailable: engine.storeRetainedCache !== null,
       overlayRenderers: dynamicOverlayRenderers,
       segments: slots.segments,
+      tableRetained: shown.getShown() ? engine.shownTableRetained : engine.tableRetained,
+      timeSlicing: renderingConfig.timeSlicing,
     });
   }
 

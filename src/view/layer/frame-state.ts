@@ -17,6 +17,7 @@ import type {
   FrameDrawContext,
   LayeredOverlayRenderer,
 } from '../../extension/index.js';
+import { featureTablesInternals } from '../../feature-table/feature-tables.js';
 import { type ScreenScaleFrame, setScreenScaleFrame } from '../../shared/math/index.js';
 import { isLocallyHidden } from '../../store/local-visibility.js';
 import type { Store } from '../../store/store.js';
@@ -55,9 +56,12 @@ import {
   type PendingQuad,
   TERRAIN_ANALYTIC_MIN_ZOOM,
 } from './drape-planner.js';
+import { applyDrapeGlState, applySegmentDepthState } from './gl-state.js';
 import type { RenderLayersView } from './render.js';
 import type { Renderers } from './renderers.js';
 import type { RenderSegment } from './slots.js';
+import type { TableDrapeFrame } from './table-drape.js';
+import type { TableLayerRenderer } from './table-retained.js';
 
 /**
  * One copy of the world drawn in this frame
@@ -135,6 +139,11 @@ export interface FrameState {
    * interleaved between the sections
    */
   readonly drapeFallbackQuads: Feature[];
+  /**
+   * The drape of the polygons and the lines of the layers held as rows (null when they are drawn
+   * by their chunks)
+   */
+  readonly tableDrape: TableDrapeFrame | null;
   /** The stored copy (lngShift 0); what everything outside the copies is drawn with */
   readonly baseCopy: CopyPass;
   /** The copies of the world in view (one, or two across the antimeridian) */
@@ -298,6 +307,10 @@ export interface FrameBuildInput {
   retainedAvailable: boolean;
   overlayRenderers: readonly EngineOverlayRenderer[];
   segments: readonly RenderSegment[];
+  /** The drawing of the layers held as rows of the frame (its drape is planned here) */
+  tableRetained?: TableLayerRenderer | null;
+  /** Whether the work that does not fit in a frame is spread over later frames */
+  timeSlicing?: boolean;
 }
 
 /**
@@ -490,6 +503,31 @@ export function buildFrameState(input: FrameBuildInput): FrameState {
   if (drapeUsable) drape.reportImmediate(features.length);
 
   const drapeLight = resolveDrapeLight(map.getBearing());
+  // The drape of the layers held as rows: their polygons and lines on the ground, in their order
+  const tableDrape =
+    input.tableRetained?.planDrape(
+      terrainState.active && mapTerrain ? (featureTablesInternals(store.tables) ?? null) : null,
+      store.getLayerOrder(),
+      {
+        gl,
+        mapTerrain,
+        shaderData,
+        getProjectionData: renderOptions.getProjectionData,
+        zoom,
+        rawZoom,
+        dpr,
+        contentDpr,
+        light: drapeLight,
+        dragging: store.getDragState() !== null,
+        timeSlicing: input.timeSlicing !== false,
+        enter: () => applyDrapeGlState(gl),
+        leave: () => {
+          restoreBlendState();
+          applySegmentDepthState(gl, terrainContext, { terrainState, wideFallback });
+        },
+        requestRepaint: () => map.triggerRepaint?.(),
+      },
+    ) ?? null;
   const drapeDraws = drape.buildDraws({
     drapeUsable,
     shaderData,
@@ -553,6 +591,7 @@ export function buildFrameState(input: FrameBuildInput): FrameState {
     drapeEntryStarts: drape.tileStore.entryStarts,
     pendingQuads: drapeDraws.pendingQuads,
     drapeFallbackQuads: drapeDraws.fallbackQuads,
+    tableDrape,
     baseCopy,
     copies,
   };
@@ -648,13 +687,13 @@ export function planCopies(
   const viewCopies = filter.getCopies();
   if (viewCopies.length === 1 && viewCopies[0].lngShift === 0) return [baseCopy];
 
-  return viewCopies.map((viewCopy) => {
+  return viewCopies.map((viewCopy, index) => {
     let visibleIds: Set<string> | null = null;
     const getVisibleIds = (): Set<string> => {
       if (!visibleIds) visibleIds = filter.getVisibleIdsIn(viewCopy.bounds);
       return visibleIds;
     };
-    const view: RenderLayersView = { bounds: viewCopy.bounds, getVisibleIds };
+    const view: RenderLayersView = { bounds: viewCopy.bounds, getVisibleIds, first: index === 0 };
     const features = options.useRetained
       ? []
       : options.displayList

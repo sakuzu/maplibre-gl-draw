@@ -17,6 +17,7 @@ import {
   type FeatureTablesInternals,
   featureTablesInternals,
 } from '../../feature-table/feature-tables.js';
+import { isLayerDrawnFromRows } from '../../feature-table/held-order.js';
 import { rowType } from '../../feature-table/row-read.js';
 import { BULK_MOVE_SET } from '../../feature-table/row-state.js';
 import { isInteractionBlocked } from '../../store/lock.js';
@@ -50,7 +51,7 @@ import {
   restoreSegmentGlState,
   resumeDrapeGlState,
 } from './gl-state.js';
-import { renderLayers } from './render.js';
+import { ABOVE_STORE_ENTRY, renderLayers } from './render.js';
 import type { Renderers } from './renderers.js';
 import type { StoreRetainedCache } from './store-retained.js';
 import type { TableLayerRenderer } from './table-retained.js';
@@ -122,14 +123,30 @@ export function drapeRangeOf(
   return { from, to: Math.max(from, to) };
 }
 
+/** Paints the drape of a slot in parts (`beginDrapeSegment`) */
+interface DrapeSegmentPainter {
+  /** Paints the elements up to `at` (exclusive), with the images placed up to it */
+  paintTo(at: number): void;
+  /** Paints the rest of the slot, and on the last slot the selection highlight */
+  finish(): void;
+}
+
 /**
  * Sectioned drawing of the analytic drape (the element range of this slot, and the images
- * interleaved into that range)
+ * interleaved into that range), in parts: up to a place in the range, and the rest. A slot
+ * draws it whole before its layers; where the layers held as rows are draped, it is painted up
+ * to each entry of the order before the entry is drawn (`renderSegment`)
+ *
+ * @returns null when the drape is not drawn in this frame
  */
-function drawDrapeSegment(deps: FrameRenderDeps, f: FrameState, index: number): void {
+function beginDrapeSegment(
+  deps: FrameRenderDeps,
+  f: FrameState,
+  index: number,
+): DrapeSegmentPainter | null {
   const { gl, renderers: r, store, drape } = deps;
   const drapeRenderer = drape.renderer;
-  if (!drapeRenderer || !f.drapeUsable) return;
+  if (!drapeRenderer || !f.drapeUsable) return null;
   const first = index === 0;
   const last = index === f.segments.length - 1;
 
@@ -147,19 +164,17 @@ function drawDrapeSegment(deps: FrameRenderDeps, f: FrameState, index: number): 
         );
       }
     }
-    return;
+    return null;
   }
 
   let range = drapeRangeOf(f, index);
   if (range === null) {
     // A transient state where the index does not fit the current order. The first slot draws
     // every element
-    if (!first) return;
+    if (!first) return null;
     range = { from: 0, to: f.drapeElementsTotal };
   }
   const { from, to } = range;
-
-  applyDrapeGlState(gl);
 
   const drawSegment = (paintFrom: number, paintTo: number, emitSelection: boolean): void => {
     for (const tileDraw of f.drapeTileDraws) {
@@ -179,43 +194,89 @@ function drawDrapeSegment(deps: FrameRenderDeps, f: FrameState, index: number): 
   // Pick only the images that fall into the range of this slot (an image whose position equals
   // the start of the range belongs to this slot; one that equals the end is picked only by the
   // last slot)
+  const quads = f.pendingQuads.filter(
+    (pendingQuad) => pendingQuad.at >= from && (last ? pendingQuad.at <= to : pendingQuad.at < to),
+  );
   let paintCursor = from;
-  for (const pendingQuad of f.pendingQuads) {
-    const inRange = pendingQuad.at >= from && (last ? pendingQuad.at <= to : pendingQuad.at < to);
-    if (!inRange) continue;
-    if (pendingQuad.at > paintCursor) {
-      drawSegment(paintCursor, pendingQuad.at, false);
-      paintCursor = pendingQuad.at;
+  let nextQuad = 0;
+
+  /** Paints up to `at`, with the images placed at or before it (the last one: every image) */
+  const paint = (at: number, final: boolean): void => {
+    applyDrapeGlState(gl);
+    while (nextQuad < quads.length) {
+      const pendingQuad = quads[nextQuad] as (typeof quads)[number];
+      if (!final && pendingQuad.at > at) break;
+      nextQuad++;
+      if (pendingQuad.at > paintCursor) {
+        drawSegment(paintCursor, pendingQuad.at, false);
+        paintCursor = pendingQuad.at;
+      }
+      // Interleave the image. The quad drape draws with normal compositing (not premultiplied),
+      // so the blending is restored, and the depth test is left raised for the next section
+      // (keepDepthTest is true until the foreground). Afterwards the assumptions of the drape are
+      // established again.
+      f.restoreBlendState();
+      r.featureDrawer.drawFeature(
+        pendingQuad.feature,
+        f.defaultProjectionData,
+        f.zoom,
+        store.getLayer(pendingQuad.feature.layerId) ?? undefined,
+      );
+      resumeDrapeGlState(gl);
     }
-    // Interleave the image. The quad drape draws with normal compositing (not premultiplied),
-    // so the blending is restored, and the depth test is left raised for the next section
-    // (keepDepthTest is true until the foreground). Afterwards the assumptions of the drape are
-    // established again.
+    if (final) {
+      // The final section. The remaining elements, and on the last slot the selection highlight
+      // of every element, are drawn on top (the coverage of the selection accumulates regardless
+      // of the range, so raising it once is enough). Nothing is drawn when no element is left
+      // and there is no selection either (this skips a pointless evaluation of every pixel)
+      const hasDrapeSelection = last && drape.hasSelection;
+      if (to > paintCursor || hasDrapeSelection) drawSegment(paintCursor, to, last);
+      paintCursor = to;
+    } else if (at > paintCursor) {
+      drawSegment(paintCursor, at, false);
+      paintCursor = at;
+    }
+
     f.restoreBlendState();
-    r.featureDrawer.drawFeature(
-      pendingQuad.feature,
-      f.defaultProjectionData,
-      f.zoom,
-      store.getLayer(pendingQuad.feature.layerId) ?? undefined,
-    );
-    resumeDrapeGlState(gl);
-  }
 
-  // The final section. The remaining elements, and on the last slot the selection highlight of
-  // every element, are drawn on top (the coverage of the selection accumulates regardless of
-  // the range, so raising it once is enough). Nothing is drawn when no element is left and
-  // there is no selection either (this skips a pointless evaluation of every pixel)
-  const hasDrapeSelection = last && drape.hasSelection;
-  if (to > paintCursor || hasDrapeSelection) {
-    drawSegment(paintCursor, to, last);
-  }
+    // Back to the depth state of the layer rendering. What the drape could not paint (the
+    // geometry being drawn, the features of extensions) is drawn next, by the vertex
+    // displacement path, and the terrain must hide it as it does in a frame without the drape.
+    // Symbols switch the depth test off themselves.
+    applySegmentDepthState(gl, deps.terrainContext, f);
+  };
 
-  f.restoreBlendState();
+  let finished = false;
+  return {
+    paintTo: (at) => {
+      if (finished) return;
+      paint(Math.min(Math.max(at, from), to), false);
+    },
+    finish: () => {
+      if (finished) return;
+      finished = true;
+      paint(to, true);
+    },
+  };
+}
 
-  // Back to the depth state of the layer rendering. What the drape could not paint (the
-  // geometry being drawn, the features of extensions) is drawn next, by the vertex displacement path, and the terrain must hide it
-  // as it does in a frame without the drape. Symbols switch the depth test off themselves.
-  applySegmentDepthState(gl, deps.terrainContext, f);
+/**
+ * Where the drape of the other elements is painted to before an entry of the order is drawn,
+ * while the layers held as rows are draped: up to the start of a layer held as rows, and to the
+ * end of any other entry (its elements are under what it draws itself, as in a slot that paints
+ * its drape whole)
+ */
+function drapeStopOf(
+  f: FrameState,
+  position: Map<string, number>,
+  layerId: string,
+  rows: boolean,
+): number | undefined {
+  if (rows) return f.drapeEntryStarts.get(layerId);
+  const at = position.get(layerId);
+  if (at === undefined) return undefined;
+  const next = f.layerOrder[at + 1];
+  return next === undefined ? f.drapeAboveStoreStart : f.drapeEntryStarts.get(next);
 }
 
 /** One slot (the drape of its segment and the layer rendering) */
@@ -228,7 +289,34 @@ export function renderSegment(deps: FrameRenderDeps, f: FrameState, index: numbe
   applySegmentGlState(gl, deps.terrainContext, f);
   applyCopy(deps, f.baseCopy);
 
-  drawDrapeSegment(deps, f, index);
+  // The drape of the elements of the other entries: painted whole before the layers, or, where
+  // the layers held as rows are draped too, up to each entry before it is drawn
+  const drapeSegment = beginDrapeSegment(deps, f, index);
+  let beforeEntry: ((layerId: string) => void) | undefined;
+  if (drapeSegment && f.tableDrape) {
+    const position = new Map<string, number>();
+    f.layerOrder.forEach((id, i) => {
+      position.set(id, i);
+    });
+    const tables = featureTablesInternals(store.tables);
+    // The datasets below the order are drawn over their part of the drape
+    const firstEntry = f.layerOrder[segment.from];
+    drapeSegment.paintTo(
+      index === 0 && firstEntry !== undefined ? (f.drapeEntryStarts.get(firstEntry) ?? 0) : 0,
+    );
+    beforeEntry = (layerId) => {
+      if (layerId === ABOVE_STORE_ENTRY) {
+        drapeSegment.finish();
+        return;
+      }
+      const layer = store.getLayer(layerId);
+      const rows = layer !== undefined && isLayerDrawnFromRows(store.tables, layer);
+      const stop = drapeStopOf(f, position, layerId, rows && tables !== undefined);
+      if (stop !== undefined) drapeSegment.paintTo(stop);
+    };
+  } else {
+    drapeSegment?.finish();
+  }
 
   // Per-layer rendering (only the segment of this slot), once per copy of the world in view
   for (const copy of f.copies) {
@@ -250,7 +338,13 @@ export function renderSegment(deps: FrameRenderDeps, f: FrameState, index: numbe
       { from: segment.from, to: segment.to, first, last },
       copy.view,
       deps.tableRetained ?? undefined,
+      beforeEntry,
     );
+    // The rest of the drape of the slot, once (the copies after the first draw over it)
+    if (beforeEntry) {
+      drapeSegment?.finish();
+      beforeEntry = undefined;
+    }
   }
   applyCopy(deps, f.baseCopy);
 

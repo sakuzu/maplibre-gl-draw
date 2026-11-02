@@ -74,6 +74,8 @@ import type { TableLayerRenderer } from './table-retained.js';
  *   copy, each with its own range
  * @param tableRetained The drawing of the layers held as rows of columns (such layers are not
  *   drawn when omitted)
+ * @param beforeEntry Called before each entry of the order is drawn (the drape of the elements
+ *   of the other entries is painted up to it where the layers held as rows are draped)
  */
 export function renderLayers(
   r: Renderers,
@@ -92,6 +94,7 @@ export function renderLayers(
   range?: RenderLayersRange,
   view?: RenderLayersView,
   tableRetained?: TableLayerRenderer,
+  beforeEntry?: (layerId: string) => void,
 ): void {
   const fullOrder = store.getLayerOrder();
   // When a segment (slot) is given, only the entries of that segment are drawn. The datasets
@@ -161,6 +164,7 @@ export function renderLayers(
   }
 
   for (const layerId of layerOrder) {
+    beforeEntry?.(layerId);
     // The layer is needed to evaluate the style rule (layer.styleRule), so it is passed to the
     // frame of the batch.
     const layer = store.getLayer(layerId);
@@ -193,7 +197,12 @@ export function renderLayers(
           tables,
           table,
           layer,
-          { projectionData: defaultProjectionData, zoom, bounds: viewportBounds },
+          {
+            projectionData: defaultProjectionData,
+            zoom,
+            bounds: viewportBounds,
+            firstCopy: view === undefined || view.first !== false,
+          },
           {
             renderers: rowRenderers,
             batchManager: r.batchManager,
@@ -280,9 +289,16 @@ export function renderLayers(
   // Insertion point 2: in front of every layer of the Store (behind the selection UI and
   // tentative)
   if (drawAbove) {
+    beforeEntry?.(ABOVE_STORE_ENTRY);
     datasets?.draw('above-store', r.batchManager, defaultProjectionData, zoom, viewportBounds);
   }
 }
+
+/**
+ * The entry `beforeEntry` of `renderLayers` is called with before the datasets above the order
+ * are drawn
+ */
+export const ABOVE_STORE_ENTRY = '';
 
 /**
  * The context of the custom renderers for one layer (the context of the frame with the opacity
@@ -302,6 +318,8 @@ export function layerRendererContext(base: FrameDrawContext, layer: Layer): Fram
 export interface RenderLayersView {
   /** The range to draw, in stored longitudes (thins the chunks) */
   readonly bounds: BoundingBox;
+  /** Whether it is the first copy drawn in the frame (true when undefined) */
+  readonly first?: boolean;
   /** The ids of the features inside `bounds` (thins the immediate chunks one by one) */
   readonly getVisibleIds: () => ReadonlySet<string>;
 }

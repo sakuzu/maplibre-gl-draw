@@ -83,6 +83,35 @@ export interface TableDiagnostics {
   setVersionBudgetWhileMoving(ms: number): void;
   /** The bytes the GPU holds per renderer (`points`, `lines`, `polygons`, `rows`, `row-state`) */
   gpuBytesByRenderer(): Readonly<Record<string, number>>;
+  /** What the drape of the polygons and the lines of the rows did in the last frame */
+  drape(): TableDrapeDiagnostics;
+}
+
+/**
+ * What the drape of the polygons and the lines of the layers held as rows did in the last frame
+ * on the terrain
+ *
+ * @internal
+ */
+export interface TableDrapeDiagnostics {
+  /** Whether the rows were draped, and why not when they were not */
+  readonly used: boolean;
+  readonly reason: string;
+  /** The partitions (row groups) and the elements (copies of rows) of the drape */
+  readonly partitions: number;
+  readonly elements: number;
+  /** The tiles drawn */
+  readonly tiles: number;
+  /** The tiles built from nothing and the partitions binned again in tiles, in the frame */
+  readonly built: number;
+  readonly rebinned: number;
+  /** The partitions binned into tiles since the instance was made */
+  readonly binCount: number;
+  readonly unfitTiles: number;
+  readonly truncatedCells: number;
+  /** The draws of the drape in the frame, and the breaks of the order among them */
+  readonly draws: number;
+  readonly breaks: number;
 }
 
 /**
@@ -236,6 +265,24 @@ function createTableDiagnostics(
     },
     setVersionBudgetWhileMoving(ms) {
       customLayer.getTableRenderer()?.setVersionBudgetWhileMoving(ms);
+    },
+    drape(): TableDrapeDiagnostics {
+      const renderer = customLayer.getTableRenderer();
+      const drape = renderer?.drapeDiagnostics();
+      return Object.freeze({
+        used: drape?.used ?? false,
+        reason: drape?.reason ?? 'none',
+        partitions: drape?.partitions ?? 0,
+        elements: drape?.elements ?? 0,
+        tiles: drape?.tiles ?? 0,
+        built: drape?.built ?? 0,
+        rebinned: drape?.rebinned ?? 0,
+        binCount: drape?.binCount ?? 0,
+        unfitTiles: drape?.unfitTiles ?? 0,
+        truncatedCells: drape?.truncatedCells ?? 0,
+        draws: drape?.draws ?? 0,
+        breaks: drape?.breaks ?? 0,
+      });
     },
   };
 }

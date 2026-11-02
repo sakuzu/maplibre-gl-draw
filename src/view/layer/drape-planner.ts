@@ -127,7 +127,7 @@ export const DRAPE_WIDE_EDGE_BUDGET = 20_000;
 const marginZoom = (zoom: number): number => Math.round(zoom) + 0.5;
 
 /** One tile of the plan (the DEM is looked up again on every draw, so it is not held here) */
-interface DrapePlanTile {
+export interface DrapePlanTile {
   tile: RenderableTerrainTile;
   cellOffset: number;
   grid: number;
@@ -481,74 +481,9 @@ export class DrapePlanner {
           fallbackQuads.push(quadFeature);
         }
       } else {
-        // The DEM is looked up once per tile in this frame. The same tile also shows up as the
-        // constraint source of a neighbour, so the repeated lookups are folded here
-        const frameTerrain = new Map<RenderableTerrainTile, TerrainTileData | null>();
-        const terrainOf = (tile: RenderableTerrainTile): TerrainTileData | null => {
-          const hit = frameTerrain.get(tile);
-          if (hit !== undefined) return hit;
-          const data = mapTerrain ? getTerrainTileData(mapTerrain, tile) : null;
-          frameTerrain.set(tile, data);
-          return data;
-        };
-
-        // Fix the tiles that are actually drawn in this frame first. The "neighbour" of the
-        // stitching is taken from here. Treating a tile that is not drawn as a neighbour would
-        // constrain to a polyline that nobody draws
-        const drawable: Array<{
-          plan: DrapePlanTile;
-          terrain: TerrainTileData;
-          projection: ProjectionData;
-        }> = [];
-        for (const planTile of drapePlan.tiles) {
-          // The DEM texture and matrix are the values of this frame. Baking them in would keep
-          // solving the ground with the coarse elevation of the moment the parent tile stood in.
-          const data = terrainOf(planTile.tile);
-          if (!data) continue;
-
-          // getProjectionData throws when the shape of tileID does not match. This keeps the
-          // whole rendering from failing if it changes between versions.
-          let tileProjection: ProjectionData | null = null;
-          try {
-            tileProjection = getProjectionData({
-              tileID: planTile.tile.tileID as Parameters<typeof getProjectionData>[0]['tileID'],
-            });
-          } catch {
-            tileProjection = null;
-          }
-          if (!tileProjection) continue;
-          drawable.push({ plan: planTile, terrain: data, projection: tileProjection });
-        }
-
-        const drawnKeys = buildTileKeySet(drawable.map((d) => d.plan.tile));
-        const drawnByKey = new Map<string, RenderableTerrainTile>();
-        for (const item of drawable) drawnByKey.set(wrappedTileKey(item.plan.tile), item.plan.tile);
-
-        // The step, the coordinate transform, the spacing and the DEM of the constraint target
-        // are all derived here. They all come from the same single moment of the terrain tile
-        // state, so the mismatch "the DEM is new but the step is old" cannot happen. An edge
-        // whose neighbour DEM cannot be looked up drops the constraint itself (keeping only the
-        // spacing would constrain to a polyline that samples its own DEM coarsely, and the crack
-        // would come back just there)
-        const segmentMeshSize = drapePlan.meshSize;
-        for (const item of drawable) {
-          const edges = resolveTileEdges(drawnKeys, item.plan.tile, segmentMeshSize, (n) => {
-            const neighbor = drawnByKey.get(wrappedTileKey(n));
-            return neighbor ? terrainOf(neighbor) : null;
-          });
-          tileDraws.push({
-            draw: {
-              tileID: item.plan.tile.tileID,
-              terrain: item.terrain,
-              cellOffset: item.plan.cellOffset,
-              grid: item.plan.grid,
-              groundMeters: item.plan.groundMeters,
-              tileZ: item.plan.tile.z,
-              edges,
-            },
-            projection: item.projection,
-          });
-        }
+        tileDraws.push(
+          ...drapeTileDrawsOf(mapTerrain, drapePlan.tiles, drapePlan.meshSize, getProjectionData),
+        );
 
         // The breaks of the stacking order (images). The element list is cut at the positions of
         // the images, each section is drawn as a range, and the quad drape of the image is
@@ -851,4 +786,88 @@ function bakedLayerOpacityKey(store: Store, datasetCount: number): string {
     }
   }
   return key;
+}
+
+/**
+ * The draw instructions of the tiles of a plan for this frame: the DEM of each tile looked up
+ * now, the tiles without one or without a projection left out, and the stitching of each edge to
+ * the tiles drawn next to it resolved from the same moment of the terrain
+ *
+ * @internal
+ */
+export function drapeTileDrawsOf(
+  mapTerrain: MapTerrain,
+  planTiles: readonly DrapePlanTile[],
+  meshSize: number,
+  getProjectionData: CustomRenderMethodInput['getProjectionData'],
+): DrapeTileDrawEntry[] {
+  // The DEM is looked up once per tile in this frame. The same tile also shows up as the
+  // constraint source of a neighbour, so the repeated lookups are folded here
+  const frameTerrain = new Map<RenderableTerrainTile, TerrainTileData | null>();
+  const terrainOf = (tile: RenderableTerrainTile): TerrainTileData | null => {
+    const hit = frameTerrain.get(tile);
+    if (hit !== undefined) return hit;
+    const data = mapTerrain ? getTerrainTileData(mapTerrain, tile) : null;
+    frameTerrain.set(tile, data);
+    return data;
+  };
+
+  // Fix the tiles that are actually drawn in this frame first. The "neighbour" of the
+  // stitching is taken from here. Treating a tile that is not drawn as a neighbour would
+  // constrain to a polyline that nobody draws
+  const drawable: Array<{
+    plan: DrapePlanTile;
+    terrain: TerrainTileData;
+    projection: ProjectionData;
+  }> = [];
+  for (const planTile of planTiles) {
+    // The DEM texture and matrix are the values of this frame. Baking them in would keep
+    // solving the ground with the coarse elevation of the moment the parent tile stood in.
+    const data = terrainOf(planTile.tile);
+    if (!data) continue;
+
+    // getProjectionData throws when the shape of tileID does not match. This keeps the
+    // whole rendering from failing if it changes between versions.
+    let tileProjection: ProjectionData | null = null;
+    try {
+      tileProjection = getProjectionData({
+        tileID: planTile.tile.tileID as Parameters<typeof getProjectionData>[0]['tileID'],
+      });
+    } catch {
+      tileProjection = null;
+    }
+    if (!tileProjection) continue;
+    drawable.push({ plan: planTile, terrain: data, projection: tileProjection });
+  }
+
+  const drawnKeys = buildTileKeySet(drawable.map((d) => d.plan.tile));
+  const drawnByKey = new Map<string, RenderableTerrainTile>();
+  for (const item of drawable) drawnByKey.set(wrappedTileKey(item.plan.tile), item.plan.tile);
+
+  // The step, the coordinate transform, the spacing and the DEM of the constraint target
+  // are all derived here. They all come from the same single moment of the terrain tile
+  // state, so the mismatch "the DEM is new but the step is old" cannot happen. An edge
+  // whose neighbour DEM cannot be looked up drops the constraint itself (keeping only the
+  // spacing would constrain to a polyline that samples its own DEM coarsely, and the crack
+  // would come back just there)
+  const tileDraws: DrapeTileDrawEntry[] = [];
+  for (const item of drawable) {
+    const edges = resolveTileEdges(drawnKeys, item.plan.tile, meshSize, (n) => {
+      const neighbor = drawnByKey.get(wrappedTileKey(n));
+      return neighbor ? terrainOf(neighbor) : null;
+    });
+    tileDraws.push({
+      draw: {
+        tileID: item.plan.tile.tileID,
+        terrain: item.terrain,
+        cellOffset: item.plan.cellOffset,
+        grid: item.plan.grid,
+        groundMeters: item.plan.groundMeters,
+        tileZ: item.plan.tile.z,
+        edges,
+      },
+      projection: item.projection,
+    });
+  }
+  return tileDraws;
 }
