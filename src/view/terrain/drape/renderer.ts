@@ -51,6 +51,13 @@ import {
   TILE_EXTENT,
 } from './mesh.js';
 import {
+  DRAPE_COPY_RANGES,
+  type DrapeCopyTables,
+  type DrapeSlotArray,
+  type DrapeSlotStorage,
+  PARTITIONED_DATA_WIDTH,
+} from './partitioned.js';
+import {
   applyDrapeProjectionUniforms,
   applyDrapeTerrainUniforms,
   DRAPE_PROJECTION_UNIFORMS,
@@ -85,6 +92,15 @@ const UNIT_STYLE = 4;
  * them (WebGL2 guarantees 16 units to a fragment shader).
  */
 export const DRAPE_EDGE_START_UNIT = 10;
+
+/**
+ * The texture unit of the table of the ranks and states of the copies (the drape of the rows
+ * only): after the starts of the edges, the twelfth unit
+ */
+export const DRAPE_RANK_UNIT = 11;
+
+/** The copies a range holds (a ref is its range times this, plus its copy) */
+const COPY_RANGE_SIZE = 2_097_152;
 
 /** The pixels of a 512-pixel tile, the size the dash patterns are measured in */
 const DASH_TILE_PX = 512;
@@ -264,6 +280,22 @@ uniform float u_emit_selection;
 // subdividing path measures it: in pixels of the flat map at the zoom of the frame
 uniform float u_dash_world_px;
 uniform float u_dash_tile_px;
+#ifdef ROWS_DRAPE
+// The drape of rows: a run names a copy (its range in the upper bits, its number in the range
+// in the lower 21), whose style is read at the first texel of its range in the style table, and
+// whose place in the order and state at the first texel of its range in the table of the ranks:
+// (its partition, its slot, its order at the slot, its state). The place of each partition in
+// the order is a texel of the same table, from u_order_base
+uniform sampler2D u_rank_tex;
+uniform int u_style_base[${DRAPE_COPY_RANGES}];
+uniform int u_rank_base[${DRAPE_COPY_RANGES}];
+uniform int u_order_base;
+// The ranks painted, [u_paint_from, u_paint_to) as (place of the partition, slot, order at the
+// slot), when u_ranged is 1 (everything otherwise)
+uniform float u_ranged;
+uniform vec3 u_paint_from;
+uniform vec3 u_paint_to;
+#endif
 
 out vec4 fragColor;
 
@@ -336,6 +368,15 @@ float strokeCoverage(float halfWidth, float dist) {
     return clamp(max(halfWidth, 0.5) + 0.5 - dist, 0.0, 1.0) * ink;
 }
 
+#ifdef ROWS_DRAPE
+// Whether a rank comes before another (the place of the partition, then the slot, then the order)
+bool rankLess(vec3 a, vec3 b) {
+    if (a.x != b.x) return a.x < b.x;
+    if (a.y != b.y) return a.y < b.y;
+    return a.z < b.z;
+}
+#endif
+
 // Compose on top (premultiplied alpha)
 vec4 over(vec4 below, vec3 rgb, float a) {
     return vec4(rgb * a + below.rgb * (1.0 - a), a + below.a * (1.0 - a));
@@ -379,11 +420,29 @@ void main() {
 
     for (int r = 0; r < runCount; r++) {
         vec4 run = fetchData(u_run_tex, runStart + r);
-        int elementIndex = int(run.x);
         int edgeStart = int(run.y);
         int edgeCount = int(run.z);
         bool inside = run.w > 0.5;
 
+#ifdef ROWS_DRAPE
+        // A copy: hidden by its state (nothing of the index changes), and painted within the
+        // ranks of the draw. The runs of a cell are in the order of the drape, so the draw is
+        // done once it passes the end of its ranks
+        int ref = int(run.x + 0.5);
+        int copyRange = ref / ${COPY_RANGE_SIZE};
+        int copy = ref - copyRange * ${COPY_RANGE_SIZE};
+        vec4 rank = fetchData(u_rank_tex, u_rank_base[copyRange] + copy);
+        if (u_ranged > 0.5) {
+            vec3 key = vec3(fetchData(u_rank_tex, u_order_base + int(rank.x + 0.5)).x, rank.y, rank.z);
+            if (!rankLess(key, u_paint_to)) break;
+            if (rankLess(key, u_paint_from)) continue;
+        }
+        if ((int(rank.w + 0.5) & 1) != 0) continue;
+        bool paints = true;
+        bool selected = false;
+        int styleAt = u_style_base[copyRange] + copy * ${DRAPE_STYLE_TEXELS};
+#else
+        int elementIndex = int(run.x);
         // Range drawing. Only the elements in u_paint_range are painted. The coverage
         // of the selection is accumulated from outside the range as well, but only by
         // the segment that composes it (u_emit_selection); the other segments skip it.
@@ -400,6 +459,7 @@ void main() {
         if (!paints && !selected) continue;
 
         int styleAt = elementIndex * ${DRAPE_STYLE_TEXELS};
+#endif
         vec4 fill = fetchData(u_style_tex, styleAt);
         vec4 stroke = fetchData(u_style_tex, styleAt + 1);
         vec4 params = fetchData(u_style_tex, styleAt + 2);
@@ -516,6 +576,24 @@ void main() {
     fragColor = acc * u_opacity;
 }`;
 
+/**
+ * The pixel shader of the drape of the rows: the drape that reads its elements as copies
+ * (`partitioned.ts`), their styles, ranks and states from the tables of the copies
+ */
+export const ROWS_DRAPE_FRAGMENT_SOURCE = DRAPE_FRAGMENT_SOURCE.replace(
+  '#version 300 es\n',
+  '#version 300 es\n#define ROWS_DRAPE\n',
+);
+
+/**
+ * The ranks a draw of the drape of the rows paints, `[from, to)`, each as (the place of its
+ * partition in the order, its slot, its order at the slot)
+ */
+export interface DrapeRankRange {
+  readonly from: readonly [number, number, number];
+  readonly to: readonly [number, number, number];
+}
+
 /** The positions that have already been transferred */
 interface UploadMark {
   builderId: number;
@@ -555,7 +633,24 @@ export class DrapeRenderer {
   /** MAX_TEXTURE_SIZE of the context (read once, 0 = not read yet) */
   private maxTextureSize = 0;
 
-  constructor(gl: WebGL2RenderingContext) {
+  /** The table of the ranks and states of the copies (the drape of the rows) */
+  private rankTex: WebGLTexture | null = null;
+  private rankTexSize: [number, number] = [0, 0];
+  /** The arrays the textures of the drape of the rows were written from, whole */
+  private rowsUploaded: { storage: number; copies: number } = { storage: -1, copies: -1 };
+  /** The first texels of the ranges of the copies and of the table of the order */
+  private readonly styleBase = new Int32Array(DRAPE_COPY_RANGES);
+  private readonly rankBase = new Int32Array(DRAPE_COPY_RANGES);
+  private orderBase = 0;
+
+  /**
+   * @param rows Whether it draws the rows: elements read as copies from the tables of the
+   *   copies (`uploadRows`), painted by ranks (`drawRowsTile`)
+   */
+  constructor(
+    gl: WebGL2RenderingContext,
+    readonly rows = false,
+  ) {
     this.gl = gl;
   }
 
@@ -581,7 +676,7 @@ export class DrapeRenderer {
       this.program = createProgram(
         gl,
         VERTEX_SOURCE(shaderData.vertexShaderPrelude, shaderData.define),
-        DRAPE_FRAGMENT_SOURCE,
+        this.rows ? ROWS_DRAPE_FRAGMENT_SOURCE : DRAPE_FRAGMENT_SOURCE,
       );
     } catch (error) {
       this.lastError = `shader: ${String(error)}`;
@@ -615,6 +710,17 @@ export class DrapeRenderer {
       'u_dash_world_px',
       'u_dash_tile_px',
       ...EDGE_CONSTRAIN_UNIFORMS,
+      ...(this.rows
+        ? [
+            'u_rank_tex',
+            'u_style_base[0]',
+            'u_rank_base[0]',
+            'u_order_base',
+            'u_ranged',
+            'u_paint_from',
+            'u_paint_to',
+          ]
+        : []),
     ];
     this.locations = {};
     for (const name of names) {
@@ -703,6 +809,80 @@ export class DrapeRenderer {
   }
 
   /**
+   * Writes the arrays of a partitioned index and the tables of its copies to the GPU: the texels
+   * written since the last upload, or everything when the arrays were packed again, a region of
+   * the tables moved or a texture had to grow (the drape of the rows)
+   *
+   * @returns false when a table does not fit in a texture of this GPU
+   */
+  uploadRows(storage: DrapeSlotStorage, copies: DrapeCopyTables): boolean {
+    const whole = this.rowsUploaded.storage !== storage.id;
+    const wholeCopies = this.rowsUploaded.copies !== copies.id;
+    this.rowsUploaded = { storage: storage.id, copies: copies.id };
+    this.edgeTex = this.uploadSlots(this.edgeTex, 'edgeTexSize', storage.edges, whole);
+    this.edgeStartTex = this.uploadSlots(
+      this.edgeStartTex,
+      'edgeStartTexSize',
+      storage.edgeStarts,
+      whole,
+    );
+    this.runTex = this.uploadSlots(this.runTex, 'runTexSize', storage.runs, whole);
+    this.cellTex = this.uploadSlots(this.cellTex, 'cellTexSize', storage.cells, whole);
+    this.styleTex = this.uploadSlots(this.styleTex, 'styleTexSize', copies.styles, wholeCopies);
+    this.rankTex = this.uploadSlots(this.rankTex, 'rankTexSize', copies.ranks, wholeCopies);
+    this.styleBase.set(copies.styleBase);
+    this.rankBase.set(copies.rankBase);
+    this.orderBase = copies.orderBase;
+    const ok =
+      this.edgeTex !== null &&
+      this.edgeStartTex !== null &&
+      this.runTex !== null &&
+      this.cellTex !== null &&
+      this.styleTex !== null &&
+      this.rankTex !== null;
+    // What failed is written whole next time
+    if (!ok) this.rowsUploaded = { storage: -1, copies: -1 };
+    return ok;
+  }
+
+  /**
+   * Draws a single tile of the drape of the rows
+   *
+   * @param ranks The ranks painted (null: every rank)
+   * @param opacity The opacity of the layer drawn, applied to each element
+   */
+  drawRowsTile(
+    draw: DrapeTileDraw,
+    projectionData: ProjectionData,
+    light: DrapeLight,
+    zoom: number,
+    pixelRatio: number,
+    opacity: number,
+    ranks: DrapeRankRange | null,
+  ): void {
+    if (!this.rows || !this.rankTex) return;
+    const factors = this.rowFactors;
+    factors[0] = opacity;
+    factors[1] = 1;
+    this.drawTile(draw, projectionData, light, zoom, factors, pixelRatio, 1, undefined, () => {
+      const gl = this.gl;
+      const set = this.locations;
+      this.bindData(DRAPE_RANK_UNIT, this.rankTex, set.u_rank_tex);
+      if (set['u_style_base[0]']) gl.uniform1iv(set['u_style_base[0]'], this.styleBase);
+      if (set['u_rank_base[0]']) gl.uniform1iv(set['u_rank_base[0]'], this.rankBase);
+      if (set.u_order_base) gl.uniform1i(set.u_order_base, this.orderBase);
+      if (set.u_ranged) gl.uniform1f(set.u_ranged, ranks ? 1 : 0);
+      if (ranks) {
+        if (set.u_paint_from) gl.uniform3f(set.u_paint_from, ...ranks.from);
+        if (set.u_paint_to) gl.uniform3f(set.u_paint_to, ...ranks.to);
+      }
+    });
+  }
+
+  /** The factors of the sources of the drape of the rows (source 0: the layer drawn) */
+  private readonly rowFactors = new Float32Array(DRAPE_MAX_SOURCES * 2).fill(1);
+
+  /**
    * Draws a single tile
    *
    * @param projectionData The ProjectionData of that tile
@@ -722,6 +902,7 @@ export class DrapeRenderer {
     pixelRatio = 1,
     opacity = 1,
     segment?: DrapeDrawSegment,
+    extra?: () => void,
   ): void {
     const gl = this.gl;
     const program = this.program;
@@ -802,6 +983,7 @@ export class DrapeRenderer {
     // The step and the DEM are written from one and the same value (see the note in
     // edge-constrain.ts)
     applyEdgeConstrainUniforms(gl, set, draw.edges, draw.terrain);
+    extra?.();
 
     // The ground surface is one-sided, but a slope is sometimes seen from behind.
     // No culling is applied
@@ -832,9 +1014,13 @@ export class DrapeRenderer {
       this.runTex,
       this.cellTex,
       this.styleTex,
+      this.rankTex,
     ]) {
       if (texture) gl.deleteTexture(texture);
     }
+    this.rankTex = null;
+    this.rankTexSize = [0, 0];
+    this.rowsUploaded = { storage: -1, copies: -1 };
     this.edgeTex = null;
     this.edgeStartTex = null;
     this.runTex = null;
@@ -867,6 +1053,73 @@ export class DrapeRenderer {
       this.maxTextureSize = Number.isFinite(max) && max > 0 ? max : 4096;
     }
     return this.maxTextureSize;
+  }
+
+  /**
+   * Writes an array of slots to its texture: the rows of the texels written since the last
+   * upload, or everything (`whole`, and when the texture is made again to grow)
+   */
+  private uploadSlots(
+    texture: WebGLTexture | null,
+    sizeField:
+      | 'edgeTexSize'
+      | 'edgeStartTexSize'
+      | 'runTexSize'
+      | 'cellTexSize'
+      | 'styleTexSize'
+      | 'rankTexSize',
+    array: DrapeSlotArray,
+    whole: boolean,
+  ): WebGLTexture | null {
+    const gl = this.gl;
+    const width = PARTITIONED_DATA_WIDTH;
+    const channels = array.channels;
+    const neededRows = Math.max(1, Math.ceil(array.top / width));
+    const maxRows = this.textureSizeLimit();
+    let target = texture;
+    let all = whole;
+    if (!target || this[sizeField][1] < neededRows) {
+      if (target) gl.deleteTexture(target);
+      this[sizeField] = [0, 0];
+      if (neededRows > maxRows) {
+        this.lastError = `texture-limit: ${sizeField} needs ${neededRows} rows of ${maxRows}`;
+        return null;
+      }
+      target = gl.createTexture();
+      if (!target) return null;
+      const rows = Math.min(maxRows, Math.max(1, Math.ceil(neededRows * 1.5)));
+      gl.bindTexture(gl.TEXTURE_2D, target);
+      gl.texStorage2D(gl.TEXTURE_2D, 1, channels === 4 ? gl.RGBA32F : gl.R32F, width, rows);
+      if (gl.getError() !== gl.NO_ERROR) {
+        gl.deleteTexture(target);
+        this.lastError = `texture-alloc-failed: ${sizeField}`;
+        return null;
+      }
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+      this[sizeField] = [width, rows];
+      all = true;
+    } else {
+      gl.bindTexture(gl.TEXTURE_2D, target);
+    }
+    const from = all ? 0 : Math.min(array.dirtyFrom, array.top);
+    const to = all ? array.top : Math.min(array.dirtyTo, array.top);
+    array.clean();
+    if (to <= from) return target;
+    const fromRow = Math.floor(from / width);
+    const toRow = Math.ceil(to / width);
+    const rows = toRow - fromRow;
+    const needed = rows * width * channels;
+    const offset = fromRow * width * channels;
+    const payload =
+      array.data.length >= offset + needed
+        ? array.data.subarray(offset, offset + needed)
+        : padTo(array.data.subarray(offset), needed);
+    const format = channels === 4 ? gl.RGBA : gl.RED;
+    gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, fromRow, width, rows, format, gl.FLOAT, payload);
+    return target;
   }
 
   /**

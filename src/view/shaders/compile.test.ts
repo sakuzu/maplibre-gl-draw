@@ -231,6 +231,9 @@ function recordPrograms(shaderData: ShaderData): RecordedProgram[] {
   withLabel('DrapeRenderer', () => {
     expect(new DrapeRenderer(gl).ensure(shaderData, 16)).toBe(true);
   });
+  withLabel('DrapeRenderer (rows)', () => {
+    expect(new DrapeRenderer(gl, true).ensure(shaderData, 16)).toBe(true);
+  });
   withLabel('QuadDrapeRenderer', () => {
     const quad = new QuadDrapeRenderer(gl);
     expect(quad.ensure(new QuadImageContent(), shaderData, 16)).toBe(true);
@@ -312,7 +315,8 @@ describe('shader programs on a real WebGL2', () => {
       ),
     );
     // 12 renderers with one program each (the frames of the features selected in bulk among
-    // them) and the drape of a quad with one for each content (an image and a content that reads
+    // them; the drape builds the variant that draws the rows at the same call site, recorded
+    // apart) and the drape of a quad with one for each content (an image and a content that reads
     // its texture in a loop); the contents share one call site. The point, the line and the polygon
     // renderers also build the variant that draws rows held as columns at the same call site;
     // each variant is recorded with the program it is a variant of. The renderer of the rows
@@ -321,7 +325,7 @@ describe('shader programs on a real WebGL2', () => {
     // the flat map and one for the globe, from its own preludes, whatever prelude maplibre gives
     expect(sites).toHaveLength(13);
     const programs = recordPrograms(preludes[0]);
-    expect(programs).toHaveLength(22);
+    expect(programs).toHaveLength(23);
   });
 
   it('builds every program that moves rows with their moving set', () => {
@@ -349,7 +353,7 @@ describe('shader programs on a real WebGL2', () => {
     'compiles and links every program with the Mercator and the globe prelude',
     async () => {
       const programs = preludes.flatMap((prelude) => recordPrograms(prelude));
-      expect(programs.length).toBe(44);
+      expect(programs.length).toBe(46);
       const failures = (await compileOnPage(page, programs)).filter((result) => !result.ok);
       expect(failures).toEqual([]);
     },

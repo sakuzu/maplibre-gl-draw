@@ -640,12 +640,48 @@ export class RowsRenderer {
     rowState: RowStateBinding,
     factors: RetainedDrawFactors = NEUTRAL_DRAW_FACTORS,
   ): void {
+    this.drawInstances(chunk, false, fromRow, toRow, zoom, projectionData, rowState, factors);
+  }
+
+  /**
+   * Draws the points of the rows `[fromRow, toRow)` of a chunk alone, in one draw: the instances
+   * of its points (where a drape draws the polygons and the lines of the rows)
+   *
+   * @param rowState The state of the rows of the group of the chunk
+   * @param factors The factors of the drawing (the opacity of the layer)
+   */
+  drawPointsRange(
+    chunk: RowsChunk,
+    fromRow: number,
+    toRow: number,
+    zoom: number,
+    projectionData: ProjectionData,
+    rowState: RowStateBinding,
+    factors: RetainedDrawFactors = NEUTRAL_DRAW_FACTORS,
+  ): void {
+    this.drawInstances(chunk, true, fromRow, toRow, zoom, projectionData, rowState, factors);
+  }
+
+  /** Draws the instances of rows `[fromRow, toRow)` of a chunk (of its points alone, or all) */
+  private drawInstances(
+    chunk: RowsChunk,
+    points: boolean,
+    fromRow: number,
+    toRow: number,
+    zoom: number,
+    projectionData: ProjectionData,
+    rowState: RowStateBinding,
+    factors: RetainedDrawFactors,
+  ): void {
     const program = this.current;
     if (!chunk.uploaded || !program || !this.poll(program)) return;
     const data = chunk.data;
-    const first = data.rowFirst[fromRow];
-    const count = data.rowFirst[toRow] - first;
-    if (count <= 0 || !chunk.vao || !data.palette.gpu || !chunk.coords || !chunk.rowStyles) return;
+    const starts = points ? data.pointFirst : data.rowFirst;
+    const first = starts[fromRow];
+    const count = starts[toRow] - first;
+    const buffer = points ? chunk.pointBuffer : chunk.instanceBuffer;
+    if (count <= 0 || !buffer || !chunk.vao || !data.palette.gpu || !chunk.coords) return;
+    if (!chunk.rowStyles) return;
 
     const gl = this.gl;
     const run = this.run;
@@ -672,10 +708,13 @@ export class RowsRenderer {
     this.bindTextures(chunk);
 
     run.bindVertexArray(chunk.vao);
-    if (chunk.pointedFirst !== first) {
-      gl.bindBuffer(gl.ARRAY_BUFFER, chunk.instanceBuffer);
+    // The attributes point at the instances of the chunk or at those of its points alone, from
+    // the first one drawn (a negative mark: of the points)
+    const pointed = points ? -1 - first : first;
+    if (chunk.pointedFirst !== pointed) {
+      gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
       pointInstanceAttribs(gl, first, false);
-      chunk.pointedFirst = first;
+      chunk.pointedFirst = pointed;
     }
     gl.drawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, count);
     run.release();

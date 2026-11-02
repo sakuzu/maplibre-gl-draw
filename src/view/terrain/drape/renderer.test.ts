@@ -18,7 +18,13 @@
 
 import { describe, expect, it } from 'vitest';
 import { TERRAIN_ATLAS_TEXTURE_UNIT } from '../state.js';
-import { DRAPE_EDGE_START_UNIT, DRAPE_FRAGMENT_SOURCE, EDGE_UNITS } from './renderer.js';
+import {
+  DRAPE_EDGE_START_UNIT,
+  DRAPE_FRAGMENT_SOURCE,
+  DRAPE_RANK_UNIT,
+  EDGE_UNITS,
+  ROWS_DRAPE_FRAGMENT_SOURCE,
+} from './renderer.js';
 
 /** The starting position of the scan (the run loop) */
 const loopStart = DRAPE_FRAGMENT_SOURCE.indexOf('for (int r = 0');
@@ -87,5 +93,39 @@ describe('the texture units of the edge DEMs', () => {
     expect(taken).not.toContain(DRAPE_EDGE_START_UNIT);
     // WebGL2 guarantees 16 units to a fragment shader
     expect(DRAPE_EDGE_START_UNIT).toBeLessThan(16);
+  });
+});
+
+describe('the drape of the rows', () => {
+  it('keeps the units of the fragment within 12, the table of the ranks on a unit of its own', () => {
+    const taken = [
+      0,
+      1,
+      2,
+      3,
+      4,
+      TERRAIN_ATLAS_TEXTURE_UNIT,
+      ...Object.values(EDGE_UNITS),
+      DRAPE_EDGE_START_UNIT,
+    ];
+    expect(taken).not.toContain(DRAPE_RANK_UNIT);
+    const units = new Set([...taken, DRAPE_RANK_UNIT]);
+    expect(units.size).toBe(12);
+    expect(Math.max(...units)).toBeLessThan(12);
+  });
+
+  it('reads a run as a copy: its state hides it, its rank ends the draw', () => {
+    expect(ROWS_DRAPE_FRAGMENT_SOURCE.split('\n')[1]).toBe('#define ROWS_DRAPE');
+    const loop = ROWS_DRAPE_FRAGMENT_SOURCE.slice(
+      ROWS_DRAPE_FRAGMENT_SOURCE.indexOf('for (int r = 0'),
+    );
+    const rows = loop.slice(loop.indexOf('#ifdef ROWS_DRAPE'), loop.indexOf('#else'));
+    // The state (hidden) is read from the texel of the copy, not from the index
+    expect(rows).toContain('u_rank_base[copyRange] + copy');
+    expect(rows).toContain('& 1) != 0) continue;');
+    // The runs of a cell are in the order of the drape: the draw is done past its ranks
+    expect(rows).toContain('if (!rankLess(key, u_paint_to)) break;');
+    // The style of a copy is read from the region of its range
+    expect(rows).toContain('u_style_base[copyRange] + copy');
   });
 });
