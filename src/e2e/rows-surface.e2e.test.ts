@@ -7,7 +7,7 @@
  *
  * - On the relief of the test terrain, pitched, a point is drawn where maplibre projects the
  *   ground under it (`map.project`), and a click there finds it: the point is drawn at the
- *   elevation the hit testing takes
+ *   elevation the hit testing takes. A point the peak hides from the camera is drawn faint
  * - On the globe a point on the near side is drawn and one on the far side is not, and a line
  *   on the far side neither
  */
