@@ -294,7 +294,17 @@ function editor(live: ReturnType<typeof drawn>, features: Feature[]) {
   const group = live.table.groupAt(0);
   const tell = (row: number, what: number, extra: Partial<InPlaceRowWrite> = {}): void => {
     live.renderer.rowsWritten('layer', [
-      { group: group.handle, row, what, sameShape: true, from: 0, to: 0, keys: [], ...extra },
+      {
+        group: group.handle,
+        row,
+        handle: group.data.handles[row],
+        what,
+        sameShape: true,
+        from: 0,
+        to: 0,
+        keys: [],
+        ...extra,
+      },
     ]);
   };
   return {

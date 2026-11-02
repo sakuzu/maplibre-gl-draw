@@ -356,6 +356,15 @@ export class LayerTable {
     return this.revision;
   }
 
+  /**
+   * Changes whenever the rows read outside the groups but the delta may have changed: the new
+   * rows read before their groups are taken in, and which rows of the delta are drawn only
+   * (`touchPending`)
+   */
+  get pendingRowsRevision(): number {
+    return this.pendingRevision;
+  }
+
   /** The handles of the row groups, in the order of the layer */
   get groupHandles(): readonly RowGroupHandle[] {
     return this.order;

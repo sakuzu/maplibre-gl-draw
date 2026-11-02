@@ -125,6 +125,7 @@ import {
 import type { TableSelection } from './selection.js';
 import { StyleTable } from './style-table.js';
 import {
+  type DeltaRowsChange,
   type GroupHandle,
   type InPlaceRowWrite,
   ROW_WRITE_GEOMETRY,
@@ -522,11 +523,12 @@ export interface FeatureTablesInternals {
   ): () => void;
   /**
    * Calls `listener` when the rows of the delta of a layer came in, left or were made again, so
-   * the drawing packs them again before its next frame
+   * the drawing packs them again before its next frame: with the rows that left it and the rows
+   * that came into it (told once the rows that left are read again where they are read)
    *
    * @returns The function that stops the calls
    */
-  onDeltaChanged(listener: (layerId: string) => void): () => void;
+  onDeltaChanged(listener: (layerId: string, change: DeltaRowsChange) => void): () => void;
   /**
    * Puts rows of groups into the delta of their layer as they are: rows whose change the
    * drawing could not write into their places (more coordinates than the place holds, another
@@ -870,7 +872,7 @@ class FeatureTablesStore implements FeatureTablesInternals {
   private readonly writeListeners = new Set<
     (layerId: string, writes: readonly InPlaceRowWrite[]) => void
   >();
-  private readonly deltaListeners = new Set<(layerId: string) => void>();
+  private readonly deltaListeners = new Set<(layerId: string, change: DeltaRowsChange) => void>();
   private readonly touchListeners = new Set<(layerId: string, bounds: BoundingBox) => void>();
   readonly groupsDue = new Set<RowGroupHandle>();
   private readonly versions: GroupVersions;
@@ -1938,7 +1940,7 @@ class FeatureTablesStore implements FeatureTablesInternals {
     };
   }
 
-  onDeltaChanged(listener: (layerId: string) => void): () => void {
+  onDeltaChanged(listener: (layerId: string, change: DeltaRowsChange) => void): () => void {
     this.deltaListeners.add(listener);
     return () => {
       this.deltaListeners.delete(listener);
@@ -3742,6 +3744,7 @@ class FeatureTablesStore implements FeatureTablesInternals {
     return {
       group: group.handle,
       row,
+      handle: data.handles[row],
       what,
       sameShape: shape.sameShape,
       from: shape.from,
@@ -4038,7 +4041,9 @@ class FeatureTablesStore implements FeatureTablesInternals {
     for (const handle of leaving) {
       if (this.ids.deltaLayer(handle) < 0) this.refreshCopies(handle);
     }
-    for (const listener of this.deltaListeners) listener(layer.layerId);
+    if (this.deltaListeners.size === 0) return;
+    const change: DeltaRowsChange = { leaving, coming };
+    for (const listener of this.deltaListeners) listener(layer.layerId, change);
   }
 
   /**

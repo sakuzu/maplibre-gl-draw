@@ -512,8 +512,20 @@ describe('the drawing of a layer held as rows in one draw per chunk', () => {
     group.data.styles[0] = group.data.styles[1];
     const write = { sameShape: true, from: 0, to: 0, keys: [] };
     renderer.rowsWritten('layer', [
-      { group: group.handle, row: 0, what: ROW_WRITE_STYLE, ...write },
-      { group: group.handle, row: 2, what: ROW_WRITE_STYLE, ...write },
+      {
+        group: group.handle,
+        row: 0,
+        handle: group.data.handles[0],
+        what: ROW_WRITE_STYLE,
+        ...write,
+      },
+      {
+        group: group.handle,
+        row: 2,
+        handle: group.data.handles[2],
+        what: ROW_WRITE_STYLE,
+        ...write,
+      },
     ]);
     expect(data.rowStyle[0]).not.toBe(data.rowStyle[1]);
     frame();
@@ -604,7 +616,14 @@ describe('the drawing of a layer held as rows in one draw per chunk', () => {
       planarCoordinates,
     );
     renderer.rowsWritten('layer', [
-      { group: group.handle, row, what: ROW_WRITE_GEOMETRY, ...longer, keys: [] },
+      {
+        group: group.handle,
+        row,
+        handle: group.data.handles[row],
+        what: ROW_WRITE_GEOMETRY,
+        ...longer,
+        keys: [],
+      },
     ]);
     for (let i = 0; i < 4; i++) {
       const { record } = frame();
@@ -633,6 +652,7 @@ describe('the drawing of a layer held as rows in one draw per chunk', () => {
       {
         group: group.handle,
         row,
+        handle: group.data.handles[row],
         what: ROW_WRITE_STYLE,
         sameShape: true,
         from: 0,

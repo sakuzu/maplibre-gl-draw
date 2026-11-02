@@ -25,6 +25,17 @@ export type RowGroupHandle = number;
 export type GroupHandle = number;
 
 /**
+ * The rows of the delta of a layer that changed when it was made again: the rows that left it
+ * and the rows that came into it (the rows that stay keep their values)
+ *
+ * @internal
+ */
+export interface DeltaRowsChange {
+  readonly leaving: ReadonlySet<RowHandle>;
+  readonly coming: readonly { readonly handle: RowHandle }[];
+}
+
+/**
  * The time a frame gives the work done a step at a time (the same shape as the budget of the
  * builds of the chunks, so one budget can be shared by both). Only the time spent in the steps
  * is counted
@@ -58,6 +69,11 @@ export interface InPlaceRowWrite {
   /** The row group and the row */
   readonly group: RowGroupHandle;
   readonly row: number;
+  /**
+   * The handle of the row: what names it once the rows of its group are made again in the same
+   * write (the rows of the delta, whose places then change)
+   */
+  readonly handle: RowHandle;
   /** What was written: `ROW_WRITE_GEOMETRY`, `ROW_WRITE_STYLE`, ... */
   readonly what: number;
   /**

@@ -437,7 +437,7 @@ describe('the hit testing of the companions of the rows held as columns', () => 
     );
   });
 
-  it('finds the rows with companions again when a row is written', () => {
+  it('asks again only the row written for the rows with companions', () => {
     layer('l');
     adopt('l', [feature('a', 'Polygon', square(0, 0)), feature('b', 'Polygon', square(20, 0))]);
     const { asked } = registerCallouts();
@@ -450,7 +450,7 @@ describe('the hit testing of the companions of the rows held as columns', () => 
     asked.rows = 0;
     const hit = hitTest(at(60, 50));
     expect(hit?.kind === 'companion' && hit.companion.featureId).toBe('a');
-    expect(asked.rows).toBe(2);
+    expect(asked.rows).toBe(1);
   });
 
   it('finds the rows with companions again when the rows or the providers change', () => {
