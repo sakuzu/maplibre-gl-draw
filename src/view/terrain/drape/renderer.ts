@@ -102,6 +102,12 @@ export const DRAPE_RANK_UNIT = 11;
 /** The copies a range holds (a ref is its range times this, plus its copy) */
 const COPY_RANGE_SIZE = 2_097_152;
 
+/** The moving partitions a draw of the drape of the rows merges at most */
+export const DRAPE_MAX_MOVING = 4;
+
+/** The tiles of the index of a moving partition a tile drawn reads at most */
+export const DRAPE_MOVING_TILES = 4;
+
 /** The pixels of a 512-pixel tile, the size the dash patterns are measured in */
 const DASH_TILE_PX = 512;
 
@@ -382,6 +388,225 @@ vec4 over(vec4 below, vec3 rgb, float a) {
     return vec4(rgb * a + below.rgb * (1.0 - a), a + below.a * (1.0 - a));
 }
 
+#ifdef ROWS_DRAPE
+// The moving partitions (rows being moved, rotated or resized), at most 4: each has an index of
+// its own at the place its rows were taken from, on tiles one step coarser than the tile drawn,
+// and the map from the position in the tile drawn back to the position there (in units of its
+// tiles), with the inverse of its linear part
+uniform int u_moving_count;
+uniform mat3 u_moving_xf[${DRAPE_MAX_MOVING}];
+uniform mat2 u_moving_back[${DRAPE_MAX_MOVING}];
+// The tiles of the index of each moving partition: (x, y, grid, first cell), 4 for each (a grid
+// of 0 for none)
+uniform vec4 u_moving_tiles[${DRAPE_MAX_MOVING * DRAPE_MOVING_TILES}];
+// The pixels of a dash pattern per unit of a tile of the moving partitions
+uniform float u_dash_coarse_px;
+
+// The rank of a copy and its state: (place of its partition in the order, slot, order at the
+// slot, state)
+vec4 copyRank(int ref) {
+    int copyRange = ref / ${COPY_RANGE_SIZE};
+    int copy = ref - copyRange * ${COPY_RANGE_SIZE};
+    vec4 rank = fetchData(u_rank_tex, u_rank_base[copyRange] + copy);
+    float order = fetchData(u_rank_tex, u_order_base + int(rank.x + 0.5)).x;
+    return vec4(order, rank.y, rank.z, rank.w);
+}
+
+// The state of a copy
+float copyState(int ref) {
+    int copyRange = ref / ${COPY_RANGE_SIZE};
+    int copy = ref - copyRange * ${COPY_RANGE_SIZE};
+    return fetchData(u_rank_tex, u_rank_base[copyRange] + copy).w;
+}
+
+// Paints one run over what is composed: its edges in the coordinates of the tile of its index
+// (q the pixel there, origin the origin of its cell, jinv from a displacement there to screen
+// pixels), the shading of the ground at the pixel of the tile drawn (p)
+void paintRun(vec4 run, vec2 q, vec2 origin, mat2 jinv, float dashTilePx, vec2 p,
+        inout vec4 acc, inout float shade) {
+    int ref = int(run.x + 0.5);
+    int edgeStart = int(run.y);
+    int edgeCount = int(run.z);
+    bool inside = run.w > 0.5;
+    int copyRange = ref / ${COPY_RANGE_SIZE};
+    int copy = ref - copyRange * ${COPY_RANGE_SIZE};
+    int styleAt = u_style_base[copyRange] + copy * ${DRAPE_STYLE_TEXELS};
+    vec4 fill = fetchData(u_style_tex, styleAt);
+    vec4 stroke = fetchData(u_style_tex, styleAt + 1);
+    vec4 params = fetchData(u_style_tex, styleAt + 2);
+    vec4 dashSpec = fetchData(u_style_tex, styleAt + ${DRAPE_DASH_TEXEL});
+    int source = int(params.z);
+    vec2 factors = source >= 0 && source < ${DRAPE_MAX_SOURCES}
+        ? u_source_factors[source]
+        : vec2(1.0, 1.0);
+    float widthScale = params.w >= 0.0 ? exp2(u_zoom - params.w) : 1.0;
+    float halfWidth = params.x * 0.5 * factors.y * widthScale;
+    bool isPolygon = params.y < 0.5;
+    bool dashed = dashSpec.w > 0.0;
+    float dashLength = 0.0;
+    float dashPeriod = 1.0;
+    if (dashed) {
+        float w = 2.0 * halfWidth / dashSpec.w;
+        dashLength = max(dashSpec.x, dashSpec.y * w);
+        dashPeriod = dashLength + max(w + 1.0, dashSpec.z * w);
+    }
+    bool wantsEdges = !dashed || (isPolygon && fill.a > 0.0);
+    float minDist = 1.0e9;
+    float dashDist = 1.0e9;
+    for (int e = 0; e < edgeCount; e++) {
+        vec4 seg = fetchData(u_edge_tex, edgeStart + e);
+        vec2 a = seg.xy;
+        vec2 b = seg.zw;
+        if (crosses(origin, q, a, b)) inside = !inside;
+        vec2 sa = jinv * (a - q);
+        vec2 sb = jinv * (b - q);
+        if (wantsEdges) minDist = min(minDist, length(closestVector(sa, sb)));
+        if (dashed) {
+            int at = edgeStart + e;
+            float start = texelFetch(
+                u_edge_start_tex, ivec2(at % u_data_width, at / u_data_width), 0
+            ).r * u_dash_world_px;
+            float len = length(b - a) * dashTilePx;
+            dashDist = min(dashDist, dashDistance(sa, sb, start, len, dashLength, dashPeriod));
+        }
+    }
+    float strokeDist = dashed ? dashDist : minDist;
+    if (isPolygon && fill.a > 0.0) {
+        float signedDist = inside ? -minDist : minDist;
+        float coverage = clamp(0.5 - signedDist, 0.0, 1.0);
+        if (coverage > 0.0) {
+            if (shade < 0.0) shade = terrainShade(p);
+            acc = over(acc, fill.rgb * shade, fill.a * coverage * factors.x);
+        }
+    }
+    if (halfWidth > 0.0 && stroke.a > 0.0) {
+        float coverage = strokeCoverage(halfWidth, strokeDist);
+        if (coverage > 0.0) acc = over(acc, stroke.rgb, stroke.a * coverage * factors.x);
+    }
+}
+
+void main() {
+    vec2 p = v_tile;
+    vec2 dpdx = dFdx(p);
+    vec2 dpdy = dFdy(p);
+    float det = dpdx.x * dpdy.y - dpdy.x * dpdx.y;
+    mat2 jacobianInverse;
+    if (abs(det) < 1e-24) {
+        float s = max(max(length(dpdx), length(dpdy)), 1e-12);
+        jacobianInverse = mat2(1.0 / s, 0.0, 0.0, 1.0 / s);
+    } else {
+        jacobianInverse = mat2(dpdy.y, -dpdx.y, -dpdy.x, dpdx.x) / det;
+    }
+
+    ivec2 cell = ivec2(clamp(floor(p * u_cells), vec2(0.0), vec2(u_cells - 1.0)));
+    vec4 cellData = fetchData(u_cell_tex, u_cell_base + cell.y * int(u_cells) + cell.x);
+    vec2 origin = vec2(cell) / u_cells;
+    vec4 acc = vec4(0.0);
+    float shade = -1.0;
+
+    // The lists of runs of the pixel: 0 is the cell of the tile drawn, 1 to 4 the cells of the
+    // moving partitions at the place the pixel is moved back to
+    int starts[${DRAPE_MAX_MOVING + 1}];
+    int counts[${DRAPE_MAX_MOVING + 1}];
+    vec2 places[${DRAPE_MAX_MOVING + 1}];
+    vec2 origins[${DRAPE_MAX_MOVING + 1}];
+    mat2 jinvs[${DRAPE_MAX_MOVING + 1}];
+    starts[0] = int(cellData.x);
+    counts[0] = int(cellData.y);
+    places[0] = p;
+    origins[0] = origin;
+    jinvs[0] = jacobianInverse;
+    int lists = 1;
+    for (int m = 0; m < ${DRAPE_MAX_MOVING}; m++) {
+        if (m >= u_moving_count) break;
+        vec2 q = (u_moving_xf[m] * vec3(p, 1.0)).xy;
+        vec2 tileOf = floor(q);
+        int found = -1;
+        for (int t = 0; t < ${DRAPE_MOVING_TILES}; t++) {
+            vec4 tile = u_moving_tiles[m * ${DRAPE_MOVING_TILES} + t];
+            if (tile.z > 0.0 && tile.x == tileOf.x && tile.y == tileOf.y) found = t;
+        }
+        starts[lists] = 0;
+        counts[lists] = 0;
+        places[lists] = q - tileOf;
+        jinvs[lists] = jacobianInverse * u_moving_back[m];
+        origins[lists] = vec2(0.0);
+        if (found >= 0) {
+            vec4 tile = u_moving_tiles[m * ${DRAPE_MOVING_TILES} + found];
+            float grid = tile.z;
+            ivec2 c = ivec2(clamp(floor(places[lists] * grid), vec2(0.0), vec2(grid - 1.0)));
+            vec4 data = fetchData(u_cell_tex, int(tile.w) + c.y * int(grid) + c.x);
+            starts[lists] = int(data.x);
+            counts[lists] = int(data.y);
+            origins[lists] = vec2(c) / grid;
+        }
+        lists++;
+    }
+    bool any = false;
+    for (int l = 0; l < ${DRAPE_MAX_MOVING + 1}; l++) {
+        if (l < lists && counts[l] > 0) any = true;
+    }
+    if (!any) discard;
+
+    if (lists == 1) {
+        // No moving partition: the runs of the cell, in the order of the drape. A copy is hidden
+        // by its state, and the draw is done past its ranks
+        for (int r = 0; r < counts[0]; r++) {
+            vec4 run = fetchData(u_run_tex, starts[0] + r);
+            int ref = int(run.x + 0.5);
+            if (u_ranged > 0.5) {
+                vec4 rank = copyRank(ref);
+                if (!rankLess(rank.xyz, u_paint_to)) break;
+                if (rankLess(rank.xyz, u_paint_from)) continue;
+                if ((int(rank.w + 0.5) & 1) != 0) continue;
+            } else if ((int(copyState(ref) + 0.5) & 1) != 0) {
+                continue;
+            }
+            paintRun(run, p, origin, jacobianInverse, u_dash_tile_px, p, acc, shade);
+        }
+    } else {
+        // The lists merged by rank: each step paints the run of the lowest rank among the heads
+        int at[${DRAPE_MAX_MOVING + 1}];
+        vec4 heads[${DRAPE_MAX_MOVING + 1}];
+        vec4 headRuns[${DRAPE_MAX_MOVING + 1}];
+        for (int l = 0; l < ${DRAPE_MAX_MOVING + 1}; l++) {
+            at[l] = 0;
+            heads[l] = vec4(1.0e30);
+            if (l < lists && counts[l] > 0) {
+                headRuns[l] = fetchData(u_run_tex, starts[l]);
+                heads[l] = copyRank(int(headRuns[l].x + 0.5));
+            }
+        }
+        int total = 0;
+        for (int l = 0; l < ${DRAPE_MAX_MOVING + 1}; l++) total += l < lists ? counts[l] : 0;
+        for (int step = 0; step < total; step++) {
+            int best = -1;
+            for (int l = 0; l < ${DRAPE_MAX_MOVING + 1}; l++) {
+                if (l >= lists || at[l] >= counts[l]) continue;
+                if (best < 0 || rankLess(heads[l].xyz, heads[best].xyz)) best = l;
+            }
+            if (best < 0) break;
+            vec4 run = headRuns[best];
+            vec4 rank = heads[best];
+            at[best]++;
+            if (at[best] < counts[best]) {
+                headRuns[best] = fetchData(u_run_tex, starts[best] + at[best]);
+                heads[best] = copyRank(int(headRuns[best].x + 0.5));
+            }
+            if (u_ranged > 0.5) {
+                if (!rankLess(rank.xyz, u_paint_to)) break;
+                if (rankLess(rank.xyz, u_paint_from)) continue;
+            }
+            if ((int(rank.w + 0.5) & 1) != 0) continue;
+            paintRun(run, places[best], origins[best], jinvs[best],
+                best == 0 ? u_dash_tile_px : u_dash_coarse_px, p, acc, shade);
+        }
+    }
+
+    if (acc.a <= 0.0) discard;
+    fragColor = acc * u_opacity;
+}
+#else
 void main() {
     vec2 p = v_tile;
 
@@ -420,29 +645,11 @@ void main() {
 
     for (int r = 0; r < runCount; r++) {
         vec4 run = fetchData(u_run_tex, runStart + r);
+        int elementIndex = int(run.x);
         int edgeStart = int(run.y);
         int edgeCount = int(run.z);
         bool inside = run.w > 0.5;
 
-#ifdef ROWS_DRAPE
-        // A copy: hidden by its state (nothing of the index changes), and painted within the
-        // ranks of the draw. The runs of a cell are in the order of the drape, so the draw is
-        // done once it passes the end of its ranks
-        int ref = int(run.x + 0.5);
-        int copyRange = ref / ${COPY_RANGE_SIZE};
-        int copy = ref - copyRange * ${COPY_RANGE_SIZE};
-        vec4 rank = fetchData(u_rank_tex, u_rank_base[copyRange] + copy);
-        if (u_ranged > 0.5) {
-            vec3 key = vec3(fetchData(u_rank_tex, u_order_base + int(rank.x + 0.5)).x, rank.y, rank.z);
-            if (!rankLess(key, u_paint_to)) break;
-            if (rankLess(key, u_paint_from)) continue;
-        }
-        if ((int(rank.w + 0.5) & 1) != 0) continue;
-        bool paints = true;
-        bool selected = false;
-        int styleAt = u_style_base[copyRange] + copy * ${DRAPE_STYLE_TEXELS};
-#else
-        int elementIndex = int(run.x);
         // Range drawing. Only the elements in u_paint_range are painted. The coverage
         // of the selection is accumulated from outside the range as well, but only by
         // the segment that composes it (u_emit_selection); the other segments skip it.
@@ -459,7 +666,6 @@ void main() {
         if (!paints && !selected) continue;
 
         int styleAt = elementIndex * ${DRAPE_STYLE_TEXELS};
-#endif
         vec4 fill = fetchData(u_style_tex, styleAt);
         vec4 stroke = fetchData(u_style_tex, styleAt + 1);
         vec4 params = fetchData(u_style_tex, styleAt + 2);
@@ -574,7 +780,8 @@ void main() {
 
     if (acc.a <= 0.0) discard;
     fragColor = acc * u_opacity;
-}`;
+}
+#endif`;
 
 /**
  * The pixel shader of the drape of the rows: the drape that reads its elements as copies
@@ -584,6 +791,21 @@ export const ROWS_DRAPE_FRAGMENT_SOURCE = DRAPE_FRAGMENT_SOURCE.replace(
   '#version 300 es\n',
   '#version 300 es\n#define ROWS_DRAPE\n',
 );
+
+/**
+ * The moving partitions a tile of the drape of the rows reads: for each, the map from the
+ * position in the tile drawn back to the position in the tiles of its index (a column-major
+ * 3 x 3, in units of those tiles), the inverse of its linear part, and its tiles (x, y, grid,
+ * first cell; a grid of 0 for none)
+ */
+export interface DrapeMovingDraw {
+  readonly count: number;
+  readonly xf: Float32Array;
+  readonly back: Float32Array;
+  readonly tiles: Float32Array;
+  /** The zoom of the tiles of the indices of the moving partitions */
+  readonly tileZ: number;
+}
 
 /**
  * The ranks a draw of the drape of the rows paints, `[from, to)`, each as (the place of its
@@ -719,6 +941,11 @@ export class DrapeRenderer {
             'u_ranged',
             'u_paint_from',
             'u_paint_to',
+            'u_moving_count',
+            'u_moving_xf[0]',
+            'u_moving_back[0]',
+            'u_moving_tiles[0]',
+            'u_dash_coarse_px',
           ]
         : []),
     ];
@@ -859,6 +1086,7 @@ export class DrapeRenderer {
     pixelRatio: number,
     opacity: number,
     ranks: DrapeRankRange | null,
+    moving: DrapeMovingDraw | null = null,
   ): void {
     if (!this.rows || !this.rankTex) return;
     const factors = this.rowFactors;
@@ -875,6 +1103,20 @@ export class DrapeRenderer {
       if (ranks) {
         if (set.u_paint_from) gl.uniform3f(set.u_paint_from, ...ranks.from);
         if (set.u_paint_to) gl.uniform3f(set.u_paint_to, ...ranks.to);
+      }
+      const count = moving?.count ?? 0;
+      if (set.u_moving_count) gl.uniform1i(set.u_moving_count, count);
+      if (moving && count > 0) {
+        if (set['u_moving_xf[0]']) {
+          gl.uniformMatrix3fv(set['u_moving_xf[0]'], false, moving.xf);
+        }
+        if (set['u_moving_back[0]']) {
+          gl.uniformMatrix2fv(set['u_moving_back[0]'], false, moving.back);
+        }
+        if (set['u_moving_tiles[0]']) gl.uniform4fv(set['u_moving_tiles[0]'], moving.tiles);
+        if (set.u_dash_coarse_px) {
+          gl.uniform1f(set.u_dash_coarse_px, DASH_TILE_PX * 2 ** (zoom - moving.tileZ));
+        }
       }
     });
   }

@@ -116,16 +116,18 @@ describe('the drape of the rows', () => {
 
   it('reads a run as a copy: its state hides it, its rank ends the draw', () => {
     expect(ROWS_DRAPE_FRAGMENT_SOURCE.split('\n')[1]).toBe('#define ROWS_DRAPE');
-    const loop = ROWS_DRAPE_FRAGMENT_SOURCE.slice(
-      ROWS_DRAPE_FRAGMENT_SOURCE.indexOf('for (int r = 0'),
+    const rows = ROWS_DRAPE_FRAGMENT_SOURCE.slice(
+      ROWS_DRAPE_FRAGMENT_SOURCE.indexOf('#ifdef ROWS_DRAPE\n// The moving partitions'),
+      ROWS_DRAPE_FRAGMENT_SOURCE.lastIndexOf('#else'),
     );
-    const rows = loop.slice(loop.indexOf('#ifdef ROWS_DRAPE'), loop.indexOf('#else'));
-    // The state (hidden) is read from the texel of the copy, not from the index
+    // The state (hidden) and the rank are read from the texel of the copy, not from the index
     expect(rows).toContain('u_rank_base[copyRange] + copy');
     expect(rows).toContain('& 1) != 0) continue;');
     // The runs of a cell are in the order of the drape: the draw is done past its ranks
-    expect(rows).toContain('if (!rankLess(key, u_paint_to)) break;');
+    expect(rows).toContain('if (!rankLess(rank.xyz, u_paint_to)) break;');
     // The style of a copy is read from the region of its range
     expect(rows).toContain('u_style_base[copyRange] + copy');
+    // The moving partitions are merged with the cell by rank
+    expect(rows).toContain('rankLess(heads[l].xyz, heads[best].xyz)');
   });
 });

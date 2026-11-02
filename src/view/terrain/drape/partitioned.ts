@@ -43,6 +43,7 @@ import {
   type DrapePartitionEstimate,
   type DrapeTile,
   drapeCellWorkBudget,
+  drapeMarginOf,
   drapeQuantizeLevel,
   estimateDrapePartition,
   type TileBins,
@@ -57,9 +58,6 @@ export const DRAPE_STATE_HIDDEN = 1;
 
 /** The factor of the place of a partition in the order over the place of an element in it */
 const ORDER_KEY_FACTOR = 2 ** 34;
-
-/** The side of the coarse grid of a tile the covers are kept on */
-export const DRAPE_COVER_CELLS = 16;
 
 /** The tiles kept at most (beyond it, the arrays are packed again with the tiles in view) */
 const MAX_CACHED_TILES = 96;
@@ -417,8 +415,10 @@ interface TileState {
   truncatedCells: number;
   maxRunsPerCell: number;
   maxEdgesPerCell: number;
-  /** The key of the last run (the highest in the order) of each cell of the coarse grid */
-  readonly cover: Float64Array;
+  /** The key of the last run (the highest in the order) of each cell */
+  cover: Float64Array;
+  /** The key of each run joined, in the order of the place of the tile in the array of runs */
+  runKeys: Float64Array;
   lastUsed: number;
 }
 
@@ -478,10 +478,32 @@ function boxesMeet(a: DrapeBounds, b: DrapeBounds, margin: number): boolean {
  * @internal
  */
 export class PartitionedDrapeIndex {
-  readonly storage = new DrapeSlotStorage();
+  readonly storage: DrapeSlotStorage;
+  /** Whether it packs the arrays again (the index that owns them) */
+  private readonly owner: boolean;
+  /** The indices that write in the same arrays (their tiles are dropped when they are packed) */
+  private readonly sharing: PartitionedDrapeIndex[] = [];
+
+  /**
+   * @param shared The index whose arrays it writes in (its tiles are dropped whenever that one
+   *   packs them again; it never packs them itself)
+   */
+  constructor(shared?: PartitionedDrapeIndex) {
+    this.storage = shared?.storage ?? new DrapeSlotStorage();
+    this.owner = shared === undefined;
+    shared?.sharing.push(this);
+  }
+
+  /** Forgets every tile without leaving their places behind (the arrays were packed again) */
+  private forgetTiles(): void {
+    this.tiles.clear();
+    this.revision++;
+  }
   private readonly partitions = new Map<number, DrapePartitionSource>();
   /** The place of each partition in the order */
   private readonly orderOf = new Map<number, number>();
+  /** The element of each copy */
+  private readonly elementOf = new Map<number, DrapePartitionElement>();
   private readonly tiles = new Map<string, TileState>();
   private frame = 0;
   /** The tiles of the view of the last preparation */
@@ -523,6 +545,8 @@ export class PartitionedDrapeIndex {
   setPartition(source: DrapePartitionSource, changed: readonly DrapeBounds[] | null): void {
     const before = this.partitions.get(source.id);
     this.partitions.set(source.id, source);
+    if (before) for (const element of before.elements) this.elementOf.delete(element.ref);
+    for (const element of source.elements) this.elementOf.set(element.ref, element);
     const boxes: DrapeBounds[] = [];
     if (changed) boxes.push(...changed);
     else {
@@ -545,7 +569,10 @@ export class PartitionedDrapeIndex {
 
   /** Takes a partition out */
   removePartition(id: number): void {
-    if (!this.partitions.delete(id)) return;
+    const before = this.partitions.get(id);
+    if (!before) return;
+    this.partitions.delete(id);
+    for (const element of before.elements) this.elementOf.delete(element.ref);
     this.orderOf.delete(id);
     for (const state of this.tiles.values()) {
       const part = state.parts.get(id);
@@ -595,9 +622,9 @@ export class PartitionedDrapeIndex {
    */
   maxKeyIn(tile: DrapeTile, box: DrapeBounds): number {
     const state = this.tiles.get(drapeTileKey(tile));
-    if (!state) return Number.NEGATIVE_INFINITY;
+    if (!state || state.cover.length === 0) return Number.NEGATIVE_INFINITY;
     const scale = 2 ** tile.z;
-    const n = DRAPE_COVER_CELLS;
+    const n = Math.max(1, state.grid);
     const x0 = Math.max(0, Math.floor((box.minX * scale - tile.x) * n));
     const x1 = Math.min(n - 1, Math.floor((box.maxX * scale - tile.x) * n));
     const y0 = Math.max(0, Math.floor((box.minY * scale - tile.y) * n));
@@ -612,10 +639,64 @@ export class PartitionedDrapeIndex {
     return max;
   }
 
+  /**
+   * Whether an element after a key in the order (`rankKey`) is drawn within a Mercator box in a
+   * tile: an element of a cell the box meets whose box, widened by the reach of its outline,
+   * meets it
+   *
+   * @param zoom The zoom the reach of the outlines is taken at
+   */
+  coversBox(tile: DrapeTile, box: DrapeBounds, afterKey: number, zoom: number): boolean {
+    const state = this.tiles.get(drapeTileKey(tile));
+    if (!state?.runSlot || state.cover.length === 0) return false;
+    const scale = 2 ** tile.z;
+    const n = Math.max(1, state.grid);
+    const x0 = Math.max(0, Math.floor((box.minX * scale - tile.x) * n));
+    const x1 = Math.min(n - 1, Math.floor((box.maxX * scale - tile.x) * n));
+    const y0 = Math.max(0, Math.floor((box.minY * scale - tile.y) * n));
+    const y1 = Math.min(n - 1, Math.floor((box.maxY * scale - tile.y) * n));
+    const cells = this.storage.cells.data;
+    const runs = this.storage.runs.data;
+    const runBase = state.runSlot.offset;
+    const cellBase = (state.cellSlot as Slot).offset;
+    for (let y = y0; y <= y1; y++) {
+      for (let x = x0; x <= x1; x++) {
+        const c = y * n + x;
+        if ((state.cover[c] as number) <= afterKey) continue;
+        const at = (cellBase + c) * 4;
+        const start = cells[at] as number;
+        const count = cells[at + 1] as number;
+        for (let r = count - 1; r >= 0; r--) {
+          const local = start + r - runBase;
+          if ((state.runKeys[local] as number) <= afterKey) break;
+          const element = this.elementOf.get(runs[(start + r) * 4] as number);
+          if (!element) return true;
+          const margin = drapeMarginOf(element.strokeWidthPx, element.widthZoom, zoom) / scale;
+          const b = element.bounds;
+          if (
+            b.minX - margin <= box.maxX &&
+            b.maxX + margin >= box.minX &&
+            b.minY - margin <= box.maxY &&
+            b.maxY + margin >= box.minY
+          ) {
+            return true;
+          }
+        }
+      }
+    }
+    return false;
+  }
+
   /** Throws every tile away (the partitions are kept) */
   clearTiles(): void {
+    if (!this.owner) {
+      for (const state of [...this.tiles.values()]) this.dropTile(state);
+      this.revision++;
+      return;
+    }
     this.tiles.clear();
     this.storage.reset();
+    for (const index of this.sharing) index.forgetTiles();
     this.revision++;
   }
 
@@ -713,7 +794,8 @@ export class PartitionedDrapeIndex {
       truncatedCells: 0,
       maxRunsPerCell: 0,
       maxEdgesPerCell: 0,
-      cover: new Float64Array(DRAPE_COVER_CELLS * DRAPE_COVER_CELLS),
+      cover: new Float64Array(0),
+      runKeys: new Float64Array(0),
       lastUsed: this.frame,
     };
     this.tiles.set(key, state);
@@ -885,9 +967,11 @@ export class PartitionedDrapeIndex {
     const cellBase = state.cellSlot.offset;
     const runData = runs.data;
     const cellData = cells.data;
+    if (state.cover.length !== cellCount) state.cover = new Float64Array(cellCount);
+    if (state.runKeys.length < total) state.runKeys = new Float64Array(total);
+    const runKeys = state.runKeys;
     const cover = state.cover;
     cover.fill(Number.NEGATIVE_INFINITY);
-    const coverOf = DRAPE_COVER_CELLS / grid;
 
     let written = 0;
     let truncated = 0;
@@ -920,6 +1004,7 @@ export class PartitionedDrapeIndex {
           work += 1 + edgesOfRun;
           if (edgesOfRun > maxEdges) maxEdges = edgesOfRun;
           lastKey = order + (bins.runPositions?.[from + i] ?? 0);
+          runKeys[written] = lastKey;
           written++;
           count++;
         }
@@ -931,18 +1016,7 @@ export class PartitionedDrapeIndex {
       cellData[at + 1] = count;
       cellData[at + 2] = 0;
       cellData[at + 3] = 0;
-      if (count > 0) {
-        const cx = Math.floor((c % grid) * coverOf);
-        const cy = Math.floor(Math.floor(c / grid) * coverOf);
-        // A cell finer than the coarse grid falls in one coarse cell, a coarser one covers several
-        const span = Math.max(1, Math.round(coverOf));
-        for (let y = cy; y < Math.min(DRAPE_COVER_CELLS, cy + span); y++) {
-          for (let x = cx; x < Math.min(DRAPE_COVER_CELLS, cx + span); x++) {
-            const k = y * DRAPE_COVER_CELLS + x;
-            if (lastKey > (cover[k] as number)) cover[k] = lastKey;
-          }
-        }
-      }
+      cover[c] = lastKey;
     }
     runs.touch(runBase, runBase + written);
     cells.touch(cellBase, cellBase + cellCount);
@@ -966,6 +1040,7 @@ export class PartitionedDrapeIndex {
    * others written again from their bins (nothing is binned again)
    */
   private compactIfNeeded(tiles: readonly DrapeTile[], zoom: number, edgeLimit: number): void {
+    if (!this.owner) return;
     const { edges, runs, cells } = this.storage;
     const crowded =
       this.tiles.size > MAX_CACHED_TILES ||
@@ -978,6 +1053,8 @@ export class PartitionedDrapeIndex {
     const kept = [...this.tiles.values()].filter((state) => keep.has(state.key));
     this.tiles.clear();
     this.storage.reset();
+    // The indices that write in the same arrays build their tiles again
+    for (const index of this.sharing) index.forgetTiles();
     for (const state of kept) {
       this.tiles.set(state.key, state);
       state.runSlot = null;
