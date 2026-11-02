@@ -27,8 +27,9 @@
  *
  * In both, the rows that cannot be in a chunk (images, custom types, features with companions,
  * shapes that are not instanced, and by kind the dashed lines) are drawn at once, from features
- * made from the rows and kept up to a number, the rows in view only: a chunk of them out of view
- * is skipped, and the rows in view of a chunk of many rows are found in an index of their boxes.
+ * made from the rows and kept up to a number, the rows in view only, by the extent of what is
+ * drawn of them (`table-extents.ts`): a chunk of them out of view is skipped, and the rows in view
+ * of a chunk of many rows are found in an index of their extents.
  *
  * The chunks are built over the frames within a budget (`view/retained/chunk-scheduler.ts`),
  * and a chunk invalidated (a new rendering pixel ratio, a new style rule) keeps drawing until the
@@ -88,6 +89,7 @@ import {
   moveEnuPosition,
 } from '../../geometry/enu-transforms.js';
 import type { SelectionUIConfig } from '../../shared/config/selection.js';
+import type { ScreenScaleFrame } from '../../shared/math/screen-scale.js';
 import type { BoundingBox, Feature, Layer } from '../../shared/types/model.js';
 import type { PixelRatioInput } from '../../shared/utils/pixel-ratio.js';
 import { resolvePixelRatio } from '../../shared/utils/pixel-ratio.js';
@@ -142,6 +144,7 @@ import type { DrapeBounds } from '../terrain/drape/geometry.js';
 import { isTerrainCameraMoving } from '../terrain/state.js';
 import { type MercatorRect, mercatorX, mercatorY } from '../terrain/tessellation.js';
 import type { BulkFramesRenderer, PointFrameExtent } from '../ui/bulk-frames.js';
+import type { SelectionExtensionRegistry } from '../ui/selection-ui/index.js';
 import { drawImmediateFeatures, type StoreRetainedDrawDeps } from './store-retained-immediate.js';
 import {
   collectRow,
@@ -177,6 +180,7 @@ import {
   TableDrapePainter,
   type TableDrapeRank,
 } from './table-drape.js';
+import { RowExtents, reachDegrees, widened } from './table-extents.js';
 import {
   classifyRow,
   type OrderedChunkRange,
@@ -317,6 +321,16 @@ export interface TableLayerRendererOptions {
    * is rotated and scaled with (none when it is left out)
    */
   readonly transformFields?: () => TransformFieldsRegistry | null;
+  /**
+   * The footprints of the custom types of the instance, which the rows drawn at once are drawn in
+   * view by (an Image alone has an extent of its own when it is left out)
+   */
+  readonly extensions?: SelectionExtensionRegistry;
+  /**
+   * The scale of the frame being drawn, which a footprint of the screen is laid on the ground
+   * with (Web Mercator at the zoom of the frame when it is left out or gives none)
+   */
+  readonly screenScale?: () => ScreenScaleFrame | null;
 }
 
 /** The batches of a retained chunk of rows */
@@ -359,13 +373,18 @@ interface ImmediateRowsChunk {
   /** The rows filled so far */
   filled: number;
   /**
-   * The union of the bboxes of its rows (null when no row has one): it only widens as its rows
-   * are written, so a row moved out of it is not culled with it
+   * The union of the extents of its rows (`table-extents.ts`; the bboxes of their positions until
+   * the extents are read, null when no row has one): it only widens as its rows are written, so a
+   * row moved out of it is not culled with it
    */
   bounds: BoundingBox | null;
+  /** How far a row of it reaches on the screen around its extent at most, in pixels */
+  reachPx: number;
+  /** The generation of the extents of the rows its bounds were made of (-1: not read yet) */
+  extentsGeneration: number;
   /**
-   * The bboxes of its rows in a spatial index, made when the chunk has many rows and the view
-   * holds only a part of it (dropped when one of its rows is written by its geometry)
+   * The extents of its rows in a spatial index, made when the chunk has many rows and the view
+   * holds only a part of it (dropped when one of its rows is written)
    */
   index: PackedRTree | null;
 }
@@ -623,6 +642,10 @@ export class TableLayerRenderer {
    * the tests and the measurements: the work of a frame follows the rows in view)
    */
   readonly atOnceStats = { visited: 0, drawn: 0 };
+  /** The extents of the rows drawn at once, read once per row and again once it is written */
+  private readonly rowExtents: RowExtents;
+  /** The scale of the frame of the layer being drawn (a footprint of the screen is laid with it) */
+  private scaleFrame: ScreenScaleFrame = { zoom: 0, centerLatitude: 0, transition: 0 };
   /** The time of the last pass before the main one, and of the drawing of the frames (ms) */
   private prerenderMs = 0;
   private drawMs = 0;
@@ -697,6 +720,7 @@ export class TableLayerRenderer {
 
   constructor(private readonly options: TableLayerRendererOptions) {
     this.versionBudgetWhileMovingMs = options.versionBudgetWhileMovingMs ?? 0;
+    this.rowExtents = new RowExtents(options.extensions);
     const stateCopies = options.keepCopies ? new WeakMap<RowStateTexture, Uint8Array>() : null;
     this.stateCopies = stateCopies;
     this.uploadState = stateCopies
@@ -1195,6 +1219,9 @@ export class TableLayerRenderer {
         const group =
           write.group === table.delta.handle ? table.delta.group : table.group(write.group);
         if (group) this.drape.rowsWritten(layerId, group, [write.row]);
+        // Its extent is read again (its footprint may follow any of what was written)
+        if (group && (write.what & ~ROW_WRITE_STATE) !== 0)
+          this.rowExtents.forget(group, write.row);
       }
     }
     let groups = this.written.get(layerId);
@@ -1417,6 +1444,11 @@ export class TableLayerRenderer {
 
     const bounds = frame.bounds ?? WORLD;
     setViewsOf(this.translations, this.transforms, bounds, this.setViews);
+    this.scaleFrame = this.options.screenScale?.() ?? {
+      zoom: frame.zoom,
+      centerLatitude: 0,
+      transition: 0,
+    };
     const settled = !isTerrainCameraMoving(this.options.terrain);
     // The surface the rows are cut for, once per frame
     if (this.surfaceFrame !== this.frameCount) {
@@ -1778,6 +1810,8 @@ export class TableLayerRenderer {
    */
   reclassify(): void {
     for (const cache of this.layers.values()) cache.slots = null;
+    // A custom type came or went, and with it a footprint
+    this.rowExtents.clear();
   }
 
   /** Releases every GPU resource (the batches are built again on the next draw) */
@@ -1876,12 +1910,29 @@ export class TableLayerRenderer {
             ? rowFeatureToRead(cache.tables.readContext, cache.layer?.id ?? '', group, row)
             : null;
         }
-        if ((write.what & ROW_WRITE_GEOMETRY) !== 0) {
-          // Its extent widens, and its rows are found in view by their boxes as written
-          const b = group.data.rowBounds;
-          const at = row * 4;
-          if (!Number.isNaN(b[at])) {
-            chunk.bounds = widenBounds(chunk.bounds, b[at], b[at + 1], b[at + 2], b[at + 3]);
+        if ((write.what & ~ROW_WRITE_STATE) !== 0) {
+          // The extent of the chunk widens by the one of the row as written, and its rows are
+          // found in view by their extents as written
+          if (chunk.extentsGeneration === this.rowExtents.generation && cache.tables) {
+            const tables = cache.tables;
+            const local = row - chunk.range.from;
+            const extents = this.rowExtents.read(group, row, () =>
+              chunk.features && local < chunk.filled && chunk.features[local]
+                ? chunk.features[local]
+                : rowFeatureToRead(tables.readContext, cache.layer?.id ?? '', group, row),
+            );
+            const b = extents.boxes;
+            const at = row * 4;
+            if (!Number.isNaN(b[at])) {
+              chunk.bounds = widenBounds(chunk.bounds, b[at], b[at + 1], b[at + 2], b[at + 3]);
+            }
+            chunk.reachPx = Math.max(chunk.reachPx, extents.reachPx[row]);
+          } else if ((write.what & ROW_WRITE_GEOMETRY) !== 0) {
+            const b = group.data.rowBounds;
+            const at = row * 4;
+            if (!Number.isNaN(b[at])) {
+              chunk.bounds = widenBounds(chunk.bounds, b[at], b[at + 1], b[at + 2], b[at + 3]);
+            }
           }
           chunk.index = null;
         }
@@ -2293,8 +2344,9 @@ export class TableLayerRenderer {
       if (!kept) return this.makeChunk(range);
       if (!oneDraw) this.invalidateChunk(kept, true);
       if (kept.type === 'immediate') {
-        // The rows in view are found by their boxes as they are now
+        // The rows in view are found by their extents as they are now
         kept.bounds = range.bounds;
+        kept.extentsGeneration = -1;
         kept.index = null;
       }
       return [kept];
@@ -2325,7 +2377,16 @@ export class TableLayerRenderer {
   private makeChunk(range: OrderedChunkRange): TableChunk[] {
     if (range.kind === 'immediate') {
       return [
-        { type: 'immediate', range, features: null, filled: 0, bounds: range.bounds, index: null },
+        {
+          type: 'immediate',
+          range,
+          features: null,
+          filled: 0,
+          bounds: range.bounds,
+          reachPx: 0,
+          extentsGeneration: -1,
+          index: null,
+        },
       ];
     }
     if (!range.bounds) return [];
@@ -3129,9 +3190,10 @@ export class TableLayerRenderer {
    */
   private immediateInView(chunk: ImmediateRowsChunk, group: RowGroup): boolean {
     const bounds = (this.pass.frame as TableLayerFrame).bounds ?? WORLD;
-    const box = chunk.bounds;
+    if (bounds === WORLD) return chunk.bounds !== null;
+    const box = this.chunkExtent(chunk, group);
     if (!box) return false;
-    if (bounds === WORLD || meets(box, bounds)) return true;
+    if (meets(box, bounds)) return true;
     const sets = this.movingSetsOf(chunk, group);
     for (let set = 1; set <= MOVE_SETS; set++) {
       if ((sets & (1 << set)) === 0) continue;
@@ -3141,8 +3203,43 @@ export class TableLayerRenderer {
   }
 
   /**
+   * The extent of a chunk drawn at once of the group being drawn: the union of the extents of its
+   * rows (read once, from the features of the rows of a type with an extent of its own), widened by
+   * how far they reach on the screen in the frame
+   */
+  private chunkExtent(chunk: ImmediateRowsChunk, group: RowGroup): BoundingBox | null {
+    const extents = this.rowExtents;
+    if (chunk.extentsGeneration !== extents.generation) {
+      const { from, to } = chunk.range;
+      const pass = this.pass;
+      const tables = pass.tables as FeatureTablesInternals;
+      const read = extents.readRange(group, from, to, (row) => {
+        const kept =
+          chunk.features && row - from < chunk.filled ? chunk.features[row - from] : null;
+        return kept ?? rowFeatureToRead(tables.readContext, pass.layerId, group, row);
+      });
+      let box: BoundingBox | null = null;
+      let reach = 0;
+      for (let row = from; row < to; row++) {
+        const at = row * 4;
+        const b = read.boxes;
+        if (!Number.isNaN(b[at])) box = widenBounds(box, b[at], b[at + 1], b[at + 2], b[at + 3]);
+        if (read.reachPx[row] > reach) reach = read.reachPx[row];
+      }
+      chunk.bounds = box;
+      chunk.reachPx = reach;
+      chunk.extentsGeneration = extents.generation;
+      chunk.index = null;
+    }
+    const box = chunk.bounds;
+    if (!box || chunk.reachPx === 0) return box;
+    const [lng, lat] = reachDegrees(chunk.reachPx, box.minY, box.maxY, this.scaleFrame);
+    return widened(box, lng, lat);
+  }
+
+  /**
    * The rows `[from, to)` of a chunk drawn at once that may be in view, in their order, found by
-   * their boxes in the index of the chunk: for a chunk of many rows that the view does not hold
+   * their extents in the index of the chunk: for a chunk of many rows that the view does not hold
    * whole (null otherwise, when the rows of the range are walked)
    */
   private rowsInView(
@@ -3152,9 +3249,10 @@ export class TableLayerRenderer {
     to: number,
   ): number[] | null {
     const bounds = (this.pass.frame as TableLayerFrame).bounds ?? WORLD;
-    const box = chunk.bounds;
     const { range } = chunk;
-    if (bounds === WORLD || !box || range.to - range.from < IMMEDIATE_INDEX_FROM) return null;
+    if (bounds === WORLD || range.to - range.from < IMMEDIATE_INDEX_FROM) return null;
+    const box = this.chunkExtent(chunk, group);
+    if (!box) return null;
     // The moving sets of its rows that move
     let sets = 0;
     const of = this.movingSetsOf(chunk, group);
@@ -3167,15 +3265,20 @@ export class TableLayerRenderer {
       box.minY >= bounds.minY &&
       box.maxY <= bounds.maxY;
     if (held && sets === 0) return null;
-    chunk.index ??= buildPackedRTree(group.data.rowBounds.subarray(range.from * 4, range.to * 4));
+    // The extents of its rows (read with the extent of the chunk)
+    const extents = this.rowExtents.of(group);
+    chunk.index ??= buildPackedRTree(extents.boxes.subarray(range.from * 4, range.to * 4));
+    // The view widened by how far a row of the chunk reaches on the screen
+    const [lng, lat] = reachDegrees(chunk.reachPx, box.minY, box.maxY, this.scaleFrame);
     const found: number[] = [];
     const search = (view: BoundingBox): void => {
+      const reached = widened(view, lng, lat);
       searchPackedRTree(
         chunk.index as PackedRTree,
-        view.minX,
-        view.minY,
-        view.maxX,
-        view.maxY,
+        reached.minX,
+        reached.minY,
+        reached.maxX,
+        reached.maxY,
         found,
       );
     };
@@ -3254,13 +3357,19 @@ export class TableLayerRenderer {
       stats.visited++;
       const state = group.state[row];
       if ((state & STATE_HIDDEN_MASK) !== 0) continue;
-      // A row out of view is not drawn, nor its companion (a row of a moving set where the view
-      // sees it from)
+      // A row out of view is not drawn, nor its companion: by its extent, and for a row of a
+      // moving set, where the view sees it from
       if (!rowHasGeometry(group, row)) continue;
       const set = (state & STATE_MOVE_MASK) >> STATE_MOVE_SHIFT;
-      if (bounds !== WORLD && !this.rowShown(group, row, set, bounds)) continue;
-      stats.drawn++;
       let feature = kept(row);
+      if (bounds !== WORLD) {
+        const featureOf = (): Feature => {
+          feature ??= rowFeatureToRead(tables.readContext, pass.layerId, group, row);
+          return feature;
+        };
+        if (!this.rowShown(group, row, set, bounds, featureOf)) continue;
+      }
+      stats.drawn++;
       const rows = this.rowsDrawerOf(group, row, feature);
       if (rows) {
         // The features before are drawn first, and the rows of another renderer
@@ -3292,16 +3401,30 @@ export class TableLayerRenderer {
   }
 
   /**
-   * Whether a row is in view: its bbox, or for a row of a moving set that moves, its bbox where
-   * the view sees the set from
+   * Whether a row is in view: its extent (`table-extents.ts`) widened by how far it reaches on the
+   * screen in the frame, or for a row of a moving set that moves, that extent where the view sees
+   * the set from
    *
    * @param set The moving set of the row (0 for none)
+   * @param featureOf The feature of the row (made only to read its extent the first time)
    */
-  private rowShown(group: RowGroup, row: number, set: number, bounds: BoundingBox): boolean {
-    const rowBounds = group.data.rowBounds;
+  private rowShown(
+    group: RowGroup,
+    row: number,
+    set: number,
+    bounds: BoundingBox,
+    featureOf: () => Feature,
+  ): boolean {
+    const extents = this.rowExtents.read(group, row, featureOf);
+    const boxes = extents.boxes;
+    const reach = extents.reachPx[row];
+    let lng = 0;
+    let lat = 0;
+    if (reach > 0)
+      [lng, lat] = reachDegrees(reach, boxes[row * 4 + 1], boxes[row * 4 + 3], this.scaleFrame);
     const views = set > 0 ? this.setViews[set] : null;
-    if (!views) return rowInView(rowBounds, row, bounds);
-    for (const view of views) if (rowInView(rowBounds, row, view)) return true;
+    if (!views) return extentInView(boxes, row, bounds, lng, lat);
+    for (const view of views) if (extentInView(boxes, row, view, lng, lat)) return true;
     return false;
   }
 
@@ -3764,14 +3887,20 @@ function meets(a: BoundingBox, b: BoundingBox): boolean {
   return a.minX <= b.maxX && a.maxX >= b.minX && a.minY <= b.maxY && a.maxY >= b.minY;
 }
 
-/** Whether the bbox of a row meets a box */
-function rowInView(rowBounds: Float64Array, row: number, bounds: BoundingBox): boolean {
+/** Whether the extent of a row, widened by degrees of longitude and latitude, meets a box */
+function extentInView(
+  boxes: Float64Array,
+  row: number,
+  bounds: BoundingBox,
+  lng: number,
+  lat: number,
+): boolean {
   const at = row * 4;
   return (
-    rowBounds[at] <= bounds.maxX &&
-    rowBounds[at + 2] >= bounds.minX &&
-    rowBounds[at + 1] <= bounds.maxY &&
-    rowBounds[at + 3] >= bounds.minY
+    boxes[at] - lng <= bounds.maxX &&
+    boxes[at + 2] + lng >= bounds.minX &&
+    boxes[at + 1] - lat <= bounds.maxY &&
+    boxes[at + 3] + lat >= bounds.minY
   );
 }
 

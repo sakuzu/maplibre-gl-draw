@@ -98,11 +98,14 @@ function walkCoordinates(value: unknown, visit: (lng: number, lat: number) => vo
  * type (its selection box, including its rotation) and to the size computation of Image. That is
  * folded into an AABB and used.
  *
+ * The rows held as columns drawn at once take the same extent (`table-extents.ts`).
+ *
  * @returns null for a kind where walking the raw coordinates is enough (Point / LineString /
  *   Polygon and so on) and when the computation did not produce finite values (the caller then
  *   walks them as before)
+ * @internal
  */
-function computeAnchoredExtent(
+export function computeAnchoredExtent(
   feature: Feature,
   extensions: SelectionExtensionRegistry | undefined,
 ): ChunkBBox | null {

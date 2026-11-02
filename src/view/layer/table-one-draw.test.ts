@@ -45,6 +45,10 @@ import {
 import { RowsRenderer } from '../renderers/rows/rows-renderer.js';
 import { beginRenderFrame } from '../shaders/frame.js';
 import { TerrainContext } from '../terrain/context.js';
+import {
+  createSelectionExtensionRegistry,
+  type SelectionExtensionRegistry,
+} from '../ui/selection-ui/index.js';
 import type { StoreRetainedDrawDeps } from './store-retained-immediate.js';
 import { type TableDrawRecord, TableLayerRenderer } from './table-retained.js';
 
@@ -216,6 +220,7 @@ function setup(
     complete?: () => boolean;
     customRenderers?: Map<string, unknown>;
     transformFields?: TransformFieldsRegistry;
+    extensions?: SelectionExtensionRegistry;
   } = {},
 ) {
   const { internals, table, tables, writer } = tablesOfFeatures('layer', features, targetRows);
@@ -267,6 +272,7 @@ function setup(
     requestRepaint: () => {},
     buildBudgetMs: Number.POSITIVE_INFINITY,
     ...(options.transformFields && { transformFields: () => options.transformFields ?? null }),
+    ...(options.extensions && { extensions: options.extensions }),
   });
   /** One frame: the pass before the main one, then the layer; returns the ranges drawn */
   const frame = (bounds?: { minX: number; minY: number; maxX: number; maxY: number }) => {
@@ -1019,5 +1025,139 @@ describe('the rows drawn at once out of view', () => {
     expect(immediate).toContain(away.id);
     expect(immediate).not.toContain(inViewIds[1]);
     expect(immediate.length).toBe(40);
+  });
+});
+
+describe('the rows drawn at once by the extent of their footprint', () => {
+  /** The box of the view of the tests */
+  const VIEW = { minX: 0, minY: 0, maxX: 1, maxY: 1 };
+
+  /**
+   * Rows of a custom type laid on the map around their anchor, `half` degrees on each side, and
+   * rows of a custom type of a size on the screen, `halfWidthPx` by `halfHeightPx`
+   */
+  function footprints(features: Feature[], half: number) {
+    const extensions = createSelectionExtensionRegistry();
+    let read = 0;
+    extensions.registerBoundingBox('Board', (f) => {
+      read++;
+      const [x, y] = (f.geometry as { coordinates: number[] }).coordinates;
+      return {
+        topLeft: [x - half, y + half],
+        topRight: [x + half, y + half],
+        bottomRight: [x + half, y - half],
+        bottomLeft: [x - half, y - half],
+        center: [x, y],
+      };
+    });
+    extensions.registerBoundingBox('Badge', (f) => {
+      const [x, y] = (f.geometry as { coordinates: number[] }).coordinates;
+      return {
+        topLeft: [x, y],
+        topRight: [x, y],
+        bottomRight: [x, y],
+        bottomLeft: [x, y],
+        center: [x, y],
+      };
+    });
+    extensions.registerPointFrameExtent('Badge', () => ({ halfWidth: 200, halfHeight: 100 }));
+    const drawn: string[] = [];
+    const draw = (f: Feature): void => {
+      drawn.push(f.id);
+    };
+    const setUp = setup(features, features.length, {
+      customRenderers: new Map<string, unknown>([
+        ['Board', { name: 'Board', draw }],
+        ['Badge', { name: 'Badge', draw }],
+      ]),
+      extensions,
+    });
+    return { ...setUp, drawn, reads: () => read };
+  }
+
+  it('draws a row whose anchor is out of view and whose footprint on the map meets it', () => {
+    const features = [
+      feature('far', 'Board', [30, 30]),
+      // Its anchor 2 degrees east of the view, its footprint 3 degrees on each side
+      feature('over', 'Board', [3, 0.5]),
+      feature('inside', 'Board', [0.5, 0.5]),
+    ];
+    const { frame, drawn } = footprints(features, 3);
+    frame(VIEW);
+    drawn.length = 0;
+    frame(VIEW);
+    expect(drawn).toEqual(['over', 'inside']);
+  });
+
+  it('draws a row of a size on the screen as far as it reaches at the zoom of the frame', () => {
+    // At zoom 10 a pixel is 360 / 2^19 degrees: the badge reaches about 0.154 degrees
+    const features = [
+      feature('near', 'Badge', [1.1, 0.5]),
+      feature('beyond', 'Badge', [1.3, 0.5]),
+      feature('below', 'Badge', [0.5, -0.1]),
+    ];
+    const { frame, drawn } = footprints(features, 0);
+    frame(VIEW);
+    drawn.length = 0;
+    frame(VIEW);
+    expect(drawn).toEqual(['near', 'below']);
+  });
+
+  it('looks at the rows in view only and reads no footprint once read, whatever the number of rows', () => {
+    const visited: number[] = [];
+    for (const count of [2_000, 20_000]) {
+      const random = seededRandom(41);
+      const at = new Set<number>();
+      while (at.size < 40) at.add(Math.floor(random() * count));
+      const features: Feature[] = [];
+      for (let i = 0; i < count; i++) {
+        // The rows in view have their anchors out of it, west of it, their footprints over it
+        const position = at.has(i)
+          ? [-0.3, 0.05 + random() * 0.9]
+          : [5 + random() * 95, 5 + random() * 45];
+        features.push(feature(`b${i}`, 'Board', position));
+      }
+      const { frame, drawn, renderer, reads } = footprints(features, 0.5);
+      frame(VIEW);
+      frame(VIEW);
+      const before = reads();
+      drawn.length = 0;
+      frame(VIEW);
+      expect(drawn).toEqual(features.filter((_, i) => at.has(i)).map((f) => f.id));
+      // No footprint is read again in a frame of the same rows
+      expect(reads()).toBe(before);
+      visited.push(renderer.atOnceStats.visited);
+    }
+    expect(visited).toEqual([40, 40]);
+  });
+
+  it('reads the footprint of a row again once it is written', () => {
+    const features = [feature('a', 'Board', [30, 30]), feature('b', 'Board', [40, 30])];
+    const { frame, drawn, table, renderer, reads } = footprints(features, 0.5);
+    frame(VIEW);
+    frame(VIEW);
+    const group = table.groupAt(0);
+    const before = reads();
+    const written = writeRowGeometry(
+      table,
+      group,
+      1,
+      { type: 'Point', coordinates: [1.2, 0.5] },
+      planarCoordinates,
+    );
+    renderer.rowsWritten('layer', [
+      {
+        group: group.handle,
+        row: 1,
+        handle: group.data.handles[1],
+        what: ROW_WRITE_GEOMETRY,
+        ...written,
+        keys: [],
+      },
+    ]);
+    drawn.length = 0;
+    frame(VIEW);
+    expect(drawn).toEqual(['b']);
+    expect(reads()).toBe(before + 1);
   });
 });
