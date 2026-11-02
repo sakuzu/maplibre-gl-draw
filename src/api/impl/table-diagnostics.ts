@@ -8,6 +8,7 @@
  */
 
 import { featureTablesInternals } from '../../feature-table/feature-tables.js';
+import { type TableDrapeOrder, TableDrapePainter } from '../../view/layer/table-drape.js';
 import type { TableDrawRecord } from '../../view/layer/table-retained.js';
 import type { Draw } from '../draw.js';
 import type { Engine } from './engine.js';
@@ -85,6 +86,16 @@ export interface TableDiagnostics {
   gpuBytesByRenderer(): Readonly<Record<string, number>>;
   /** What the drape of the polygons and the lines of the rows did in the last frame */
   drape(): TableDrapeDiagnostics;
+  /**
+   * How the drape of the rows keeps the order among the points drawn between its elements
+   * (`split`, the default; the others to compare them), and for the split its steps (0: as many
+   * as the runs a pixel reads, up to its most) and what is past its last bound where a pixel may
+   * hold more (`over`, the default, or `breaks`)
+   */
+  setDrapeOrder(
+    order: TableDrapeOrder,
+    split?: { readonly steps?: number; readonly tail?: 'breaks' | 'over' },
+  ): void;
 }
 
 /**
@@ -112,6 +123,16 @@ export interface TableDrapeDiagnostics {
   /** The draws of the drape in the frame, and the breaks of the order among them */
   readonly draws: number;
   readonly breaks: number;
+  /** The draws of the points drawn among the drape and of their keys, in the frame */
+  readonly pointDraws: number;
+  /** The bytes of the textures of the keys of the points */
+  readonly splitBytes: number;
+  /**
+   * The most steps a split of the order took in the frame, and the most runs a pixel of the
+   * tiles its points met reads
+   */
+  readonly steps: number;
+  readonly deepest: number;
 }
 
 /**
@@ -282,7 +303,17 @@ function createTableDiagnostics(
         truncatedCells: drape?.truncatedCells ?? 0,
         draws: drape?.draws ?? 0,
         breaks: drape?.breaks ?? 0,
+        pointDraws: drape?.pointDraws ?? 0,
+        splitBytes: drape?.splitBytes ?? 0,
+        steps: drape?.steps ?? 0,
+        deepest: drape?.deepest ?? 0,
       });
+    },
+    setDrapeOrder(order, split) {
+      TableDrapePainter.order = order;
+      TableDrapePainter.steps = split?.steps ?? 0;
+      TableDrapePainter.tail = split?.tail ?? 'over';
+      engine.map.triggerRepaint?.();
     },
   };
 }

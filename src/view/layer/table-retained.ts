@@ -135,6 +135,7 @@ import {
 } from '../retained/chunk-scheduler.js';
 import { anchorElevationMeters } from '../terrain/anchor.js';
 import type { TerrainContext } from '../terrain/context.js';
+import type { DrapeBounds } from '../terrain/drape/geometry.js';
 import { isTerrainCameraMoving } from '../terrain/state.js';
 import { type MercatorRect, mercatorX, mercatorY } from '../terrain/tessellation.js';
 import type { BulkFramesRenderer, PointFrameExtent } from '../ui/bulk-frames.js';
@@ -172,6 +173,7 @@ import {
   type TableDrapeLayer,
   TableDrapePainter,
   type TableDrapeRank,
+  union,
 } from './table-drape.js';
 import {
   classifyRow,
@@ -533,6 +535,9 @@ interface PointRuns {
   /** How far the markers of each run reach on the screen beyond their positions (CSS px) */
   readonly reach: Float32Array;
   readonly count: number;
+  /** The box of every run, and the farthest reach of them (null for no run) */
+  readonly box: DrapeBounds | null;
+  readonly maxReach: number;
 }
 
 /** The frame of the chunk scheduler, set once per layer */
@@ -1300,18 +1305,36 @@ export class TableLayerRenderer {
     this.drapeFrame = this.drape.planFrame(tables, layers, input);
     this.drapeDraws = this.drapeFrameDraws;
     this.drapeBreaks = this.drapeFrameBreaks;
+    this.drapePointDraws = this.drapeFramePointDraws;
+    this.drapeSteps = this.drapeFrameSteps;
+    this.drapeDeepest = this.drapeFrameDeepest;
+    this.drapeFrameSteps = 0;
+    this.drapeFrameDeepest = 0;
     this.drapeFrameDraws = 0;
     this.drapeFrameBreaks = 0;
+    this.drapeFramePointDraws = 0;
     return this.drapeFrame;
   }
 
   /** What the drape of the rows did in the last frame (for the measurements) */
-  drapeDiagnostics(): TableDrapeDebug & { binCount: number; draws: number; breaks: number } {
+  drapeDiagnostics(): TableDrapeDebug & {
+    binCount: number;
+    draws: number;
+    breaks: number;
+    pointDraws: number;
+    splitBytes: number;
+    steps: number;
+    deepest: number;
+  } {
     return {
       ...this.drape.debug,
       binCount: this.drape.index.binCount,
       draws: this.drapeDraws,
       breaks: this.drapeBreaks,
+      pointDraws: this.drapePointDraws,
+      splitBytes: this.drape.splitBytes,
+      steps: this.drapeSteps,
+      deepest: this.drapeDeepest,
     };
   }
 
@@ -1320,6 +1343,12 @@ export class TableLayerRenderer {
   private drapeBreaks = 0;
   private drapeFrameDraws = 0;
   private drapeFrameBreaks = 0;
+  private drapePointDraws = 0;
+  private drapeFramePointDraws = 0;
+  private drapeSteps = 0;
+  private drapeDeepest = 0;
+  private drapeFrameSteps = 0;
+  private drapeFrameDeepest = 0;
 
   /**
    * Draws a layer held as rows, in the order of its rows
@@ -1470,6 +1499,8 @@ export class TableLayerRenderer {
       pass.factors.opacity,
       // The drape is painted once, with the first copy of the world drawn
       frame.firstCopy !== false,
+      // The points are drawn among the drape by their keys once their program is ready
+      drapeFrame !== null && (renderers.rows?.keyedReady ?? false),
     );
     try {
       for (let g = 0; g < table.groupCount; g++) {
@@ -1531,6 +1562,9 @@ export class TableLayerRenderer {
       this.painter.end();
       this.drapeFrameDraws += this.painter.draws;
       this.drapeFrameBreaks += this.painter.breaks;
+      this.drapeFramePointDraws += this.painter.pointDraws;
+      this.drapeFrameSteps = Math.max(this.drapeFrameSteps, this.painter.steps);
+      this.drapeFrameDeepest = Math.max(this.drapeFrameDeepest, this.painter.deepest);
       // The chunks of the next versions of the groups, built without being drawn
       pass.inserts = null;
       this.advanceVersions(cache, tables, table, layer, deps, drawing, settled);
@@ -2744,6 +2778,7 @@ export class TableLayerRenderer {
         from,
         to,
         (row) => this.drape.rankOfRow(layerId, group, row),
+        2,
       );
       this.recordRange('rows', state.range.from + from, state.range.from + to);
       return;
@@ -2767,6 +2802,8 @@ export class TableLayerRenderer {
    *
    * @param base The row of the group the chunk starts at
    * @param rankOf The rank of a row of the group in the order of the drape
+   * @param slotStep How the slot of the rank goes with the row: 2 for the rows of a group (row
+   *   `r` at `2r + 1`), 0 for rows of a delta placed at one place (one slot, in their order there)
    */
   private drawPointsOnDrape(
     gpu: RowsGpuChunk,
@@ -2775,6 +2812,7 @@ export class TableLayerRenderer {
     from: number,
     to: number,
     rankOf: (row: number) => TableDrapeRank | null,
+    slotStep: 0 | 2,
   ): void {
     const pass = this.pass;
     const rows = (pass.renderers as RetainedRendererSet).rows;
@@ -2792,6 +2830,67 @@ export class TableLayerRenderer {
     const draw = (a: number, b: number): void =>
       rows.drawPointsRange(gpu, a, b, zoom, projectionData, binding, factors);
     const pointFirst = gpu.data.pointFirst;
+    // Split by the keys of the points: the rows given whole, in one draw. The rows of a delta
+    // placed at one place share a slot with the elements placed there, so their keys do not tell
+    // their order: they are drawn run by run, each a break
+    if (this.painter.splits && slotStep === 2) {
+      const first = rankOf(base + from);
+      if (
+        !first ||
+        !runs.box ||
+        to <= from ||
+        (pointFirst[to] as number) <= (pointFirst[from] as number)
+      ) {
+        if (!first && to > from) draw(from, to);
+        return;
+      }
+      const add = first[1] - slotStep * (base + from);
+      this.painter.run(first, first, runs.box, runs.maxReach, gpu, from, to, draw, {
+        place: first[0],
+        mul: slotStep,
+        add,
+        lastSlot: add + slotStep * (base + to - 1),
+        draw: (a, b, key, floor) =>
+          rows.drawPointKeysRange(gpu, a, b, zoom, projectionData, binding, factors, key, floor),
+        drawSegment: (a, b, key, segment) =>
+          rows.drawPointSegmentRange(
+            gpu,
+            a,
+            b,
+            zoom,
+            projectionData,
+            binding,
+            factors,
+            key,
+            segment,
+          ),
+        eachRun: (from, to, each) => {
+          for (let i = 0; i < runs.count; i++) {
+            const a = Math.max(runs.runs[i * 3] as number, from);
+            const b = Math.min(runs.runs[i * 3 + 1] as number, to);
+            if (b <= a || (pointFirst[b] as number) <= (pointFirst[a] as number)) continue;
+            const last = Math.min(runs.runs[i * 3 + 2] as number, b - 1);
+            const firstRank = rankOf(base + a);
+            const lastRank = rankOf(base + last);
+            const at = i * 4;
+            each(
+              a,
+              b,
+              firstRank,
+              lastRank,
+              {
+                minX: runs.boxes[at] as number,
+                minY: runs.boxes[at + 1] as number,
+                maxX: runs.boxes[at + 2] as number,
+                maxY: runs.boxes[at + 3] as number,
+              },
+              runs.reach[i] as number,
+            );
+          }
+        },
+      });
+      return;
+    }
     for (let i = 0; i < runs.count; i++) {
       const a = Math.max(runs.runs[i * 3] as number, from);
       const b = Math.min(runs.runs[i * 3 + 1] as number, to);
@@ -2877,6 +2976,17 @@ export class TableLayerRenderer {
       }
     }
     close(data.rows);
+    let box: DrapeBounds | null = null;
+    let maxReach = 0;
+    for (let i = 0; i < boxes.length; i += 4) {
+      box = union(box, {
+        minX: boxes[i] as number,
+        minY: boxes[i + 1] as number,
+        maxX: boxes[i + 2] as number,
+        maxY: boxes[i + 3] as number,
+      });
+      maxReach = Math.max(maxReach, reaches[i / 4] as number);
+    }
     const out: PointRuns = {
       key,
       group,
@@ -2884,6 +2994,8 @@ export class TableLayerRenderer {
       boxes: Float64Array.from(boxes),
       reach: Float32Array.from(reaches),
       count: runs.length / 3,
+      box,
+      maxReach,
     };
     this.pointRuns.set(gpu, out);
     return out;
@@ -3234,6 +3346,7 @@ export class TableLayerRenderer {
           a - chunk.range.from,
           b - chunk.range.from,
           rankOf,
+          0,
         );
         pass.binding = binding;
         record('rows', a, b);

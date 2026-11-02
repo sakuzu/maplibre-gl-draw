@@ -616,6 +616,11 @@ export class PartitionedDrapeIndex {
     return { unfit: state.unfit, grid: state.grid, cellOffset: state.cellSlot.offset };
   }
 
+  /** The most runs a cell of a tile holds (0 until it is built) */
+  maxRunsPerCellOf(tile: DrapeTile): number {
+    return this.tiles.get(drapeTileKey(tile))?.maxRunsPerCell ?? 0;
+  }
+
   /**
    * The highest key in the order (`rankKey`) of the elements of a tile within a Mercator box
    * (-Infinity for none): what in the tile is drawn over what is in the box
@@ -645,8 +650,15 @@ export class PartitionedDrapeIndex {
    * meets it
    *
    * @param zoom The zoom the reach of the outlines is taken at
+   * @param deeperThan Only the cells holding more runs than this (0: every cell)
    */
-  coversBox(tile: DrapeTile, box: DrapeBounds, afterKey: number, zoom: number): boolean {
+  coversBox(
+    tile: DrapeTile,
+    box: DrapeBounds,
+    afterKey: number,
+    zoom: number,
+    deeperThan = 0,
+  ): boolean {
     const state = this.tiles.get(drapeTileKey(tile));
     if (!state?.runSlot || state.cover.length === 0) return false;
     const scale = 2 ** tile.z;
@@ -666,6 +678,7 @@ export class PartitionedDrapeIndex {
         const at = (cellBase + c) * 4;
         const start = cells[at] as number;
         const count = cells[at + 1] as number;
+        if (count <= deeperThan) continue;
         for (let r = count - 1; r >= 0; r--) {
           const local = start + r - runBase;
           if ((state.runKeys[local] as number) <= afterKey) break;
