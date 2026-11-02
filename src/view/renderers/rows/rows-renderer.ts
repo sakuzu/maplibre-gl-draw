@@ -15,10 +15,15 @@
  * maplibre starts its main pass (`prerender`): a texture written in the middle of the pass makes
  * a tiled GPU store and reload the frame. A chunk is drawn from the frame after it was written.
  *
- * The program of each projection variant is compiled when the variant is first seen, without
- * waiting for it where the context can compile in parallel (`KHR_parallel_shader_compile`):
- * `ready` tells whether the program of the current variant can draw, and the side that draws
- * the rows draws them some other way until then.
+ * The program of each projection variant (the flat map and the globe, `rowsProjectionPrelude`)
+ * is compiled when the renderer is made, before either is drawn, without waiting for it where
+ * the context can compile in parallel (`KHR_parallel_shader_compile`): `ready` tells whether the
+ * program of the variant of the frame can draw, and the side that draws the rows draws them some
+ * other way until then.
+ *
+ * A chunk with points has the elevations of the ground under them (`setHeights`), one float per
+ * coordinate, as its coordinates: written whole to a texture of its own before the main pass,
+ * read by the program while the terrain is drawn.
  */
 
 import type { Map as MapLibreMap, ProjectionData } from 'maplibre-gl';
@@ -28,6 +33,7 @@ import { type GpuLedger, textureBytes } from '../../gpu-ledger.js';
 import { getRenderFrame } from '../../shaders/frame.js';
 import {
   calculateOffsetUniforms,
+  lngLatToMercator,
   type OffsetUniforms,
   type ShaderData,
   withSamplerPrecision,
@@ -53,7 +59,15 @@ import {
   type RowsPalette,
   writeCollapsedInstance,
 } from './rows-format.js';
-import { buildRowsFragmentSource, buildRowsVertexSource, ROWS_MITER_LIMIT } from './rows-shader.js';
+import {
+  buildRowsFragmentSource,
+  buildRowsVertexSource,
+  ROWS_MITER_LIMIT,
+  ROWS_VARIANTS,
+  type RowsVariant,
+  rowsProjectionPrelude,
+  rowsVariantOf,
+} from './rows-shader.js';
 import { TexelWrites } from './rows-writes.js';
 
 /** The texture units of the program (the state of the rows is on its own unit, 1) */
@@ -61,6 +75,7 @@ const UNIT_COORDS = 0;
 const UNIT_ROW_STYLES = 2;
 const UNIT_STYLES = 3;
 const UNIT_SPRITES = 4;
+const UNIT_HEIGHTS = 5;
 
 /** The owner of the GPU memory of this renderer in the ledger */
 const LEDGER_OWNER = 'rows';
@@ -99,6 +114,13 @@ export interface RowsChunk {
   pointBuffer: WebGLBuffer | null;
   coords: SizedTexture | null;
   rowStyles: SizedTexture | null;
+  /**
+   * The elevations of the ground under the coordinates of its points (meters, one per
+   * coordinate, as the coordinates), kept to be written whole (null before any is set)
+   */
+  heightValues: Float32Array | null;
+  /** The texture of the elevations (null before they are written) */
+  heights: SizedTexture | null;
   /** The instance the instance attributes of its vertex array point at */
   pointedFirst: number;
   /** The writes in place since the last upload (null before the first) */
@@ -142,6 +164,11 @@ interface RowsUniformLocations {
   readonly cullBack: WebGLUniformLocation | null;
   readonly sprites: WebGLUniformLocation | null;
   readonly spritePremultiplied: WebGLUniformLocation | null;
+  readonly heights: WebGLUniformLocation | null;
+  readonly symbolTerrain: WebGLUniformLocation | null;
+  readonly ghostOn: WebGLUniformLocation | null;
+  readonly ghostCamera: WebGLUniformLocation | null;
+  readonly ghostNode: WebGLUniformLocation | null;
 }
 
 /** The program of one projection variant */
@@ -169,6 +196,8 @@ interface RowsUniformMemo {
   /** The stops of the distance scale written (null before any) */
   spriteScale: readonly RowSpriteScaleStop[] | undefined | null;
   spritePremultiplied: number;
+  /** The center the camera of the ghosts was written against (its uniforms, or an origin) */
+  ghostCenter: object | null;
 }
 
 function emptyMemo(): RowsUniformMemo {
@@ -182,6 +211,7 @@ function emptyMemo(): RowsUniformMemo {
     rowStyleWidth: Number.NaN,
     spriteScale: null,
     spritePremultiplied: Number.NaN,
+    ghostCenter: null,
   };
 }
 
@@ -194,6 +224,7 @@ interface BoundTextures {
   rowStyles: WebGLTexture | null;
   styles: WebGLTexture | null;
   sprites: WebGLTexture | null;
+  heights: WebGLTexture | null;
 }
 
 /**
@@ -211,14 +242,18 @@ export class RowsRenderer {
   readonly copies: RowsCopies | null;
   private readonly run: RetainedDrawRun;
   private readonly parallel: boolean;
-  /** The program of each variant, compiled once */
-  private readonly programs = new Map<string, RowsProgram>();
+  /** The program of each variant, compiled when the renderer is made */
+  private readonly programs = new Map<RowsVariant, RowsProgram>();
   /** The program of the variant of the frame */
   private current: RowsProgram | null = null;
   private offsetUniforms: OffsetUniforms | null = null;
   private readonly cornerBuffer: WebGLBuffer | null;
   /** The picture drawn for the sprites of a chunk whose texture is not there */
   private emptySprites: WebGLTexture | null = null;
+  /** The elevations bound for a chunk without any (one texel of 0) */
+  private emptyHeights: WebGLTexture | null = null;
+  /** The chunks whose elevations wait to be written */
+  private readonly heightsQueued = new Set<RowsChunk>();
   /** The stops of the distance scale of the sprites, as they are written to their uniform */
   private readonly spriteScaleStops = new Float32Array(ROW_SPRITE_SCALE_MAX_STOPS * 2);
   /** The chunks waiting to be written, in the order they were made */
@@ -232,6 +267,7 @@ export class RowsRenderer {
     rowStyles: null,
     styles: null,
     sprites: null,
+    heights: null,
   };
   private readonly originShift: [number, number] = [0, 0];
   /** One instance (or texel) being written */
@@ -263,19 +299,13 @@ export class RowsRenderer {
       gl.bufferData(gl.ARRAY_BUFFER, CORNERS, gl.STATIC_DRAW);
       ledger?.record(this.cornerBuffer, LEDGER_OWNER, 'buffer', CORNERS.byteLength);
     }
+    // Both variants are compiled now, so the first frame of the globe does not wait for one
+    for (const variant of ROWS_VARIANTS) this.programs.set(variant, this.startProgram(variant));
   }
 
-  /**
-   * Starts the compile of the program of a variant the first time it is seen, and makes it the
-   * one the next draws use
-   */
+  /** Makes the program of the variant of the projection of the frame the one the draws use */
   ensureShader(shaderData: ShaderData): void {
-    let program = this.programs.get(shaderData.variantName);
-    if (!program) {
-      program = this.startProgram(shaderData);
-      this.programs.set(shaderData.variantName, program);
-    }
-    this.current = program;
+    this.current = this.programs.get(rowsVariantOf(shaderData)) ?? null;
   }
 
   /** Sets the uniforms of the offset mode of the frame */
@@ -314,6 +344,8 @@ export class RowsRenderer {
       pointBuffer: null,
       coords: null,
       rowStyles: null,
+      heightValues: null,
+      heights: null,
       pointedFirst: -1,
       writes: null,
       disposed: false,
@@ -326,7 +358,7 @@ export class RowsRenderer {
 
   /** Whether something waits to be written by `flushUploads` */
   get hasPendingUploads(): boolean {
-    if (this.queued.size > 0 || this.patched.size > 0) return true;
+    if (this.queued.size > 0 || this.patched.size > 0 || this.heightsQueued.size > 0) return true;
     for (const palette of this.palettes) {
       if (palette.dirty.size > 0) return true;
     }
@@ -346,6 +378,24 @@ export class RowsRenderer {
     this.queued.clear();
     for (const chunk of this.patched) this.uploadPatches(chunk);
     this.patched.clear();
+    for (const chunk of this.heightsQueued) {
+      // Written once the chunk is (a chunk not written yet keeps them queued)
+      if (chunk.disposed || chunk.uploaded) {
+        this.uploadHeights(chunk);
+        this.heightsQueued.delete(chunk);
+      }
+    }
+  }
+
+  /**
+   * Sets the elevations of the ground under the coordinates of the points of a chunk (meters,
+   * one per coordinate of the chunk; the others are not read). The chunk keeps the array, and it
+   * is written whole with the next `flushUploads` (after the chunk itself)
+   */
+  setHeights(chunk: RowsChunk, values: Float32Array): void {
+    if (chunk.disposed) return;
+    chunk.heightValues = values;
+    this.heightsQueued.add(chunk);
   }
 
   /**
@@ -536,6 +586,7 @@ export class RowsRenderer {
     this.copies?.disposed(chunk);
     this.queued.delete(chunk);
     this.patched.delete(chunk);
+    this.heightsQueued.delete(chunk);
     const gl = this.gl;
     if (chunk.vao) gl.deleteVertexArray(chunk.vao);
     for (const buffer of [chunk.instanceBuffer, chunk.pointBuffer]) {
@@ -543,7 +594,7 @@ export class RowsRenderer {
       this.ledger?.release(buffer);
       gl.deleteBuffer(buffer);
     }
-    for (const texture of [chunk.coords, chunk.rowStyles]) {
+    for (const texture of [chunk.coords, chunk.rowStyles, chunk.heights]) {
       if (!texture) continue;
       this.ledger?.release(texture.texture);
       gl.deleteTexture(texture.texture);
@@ -553,6 +604,8 @@ export class RowsRenderer {
     chunk.pointBuffer = null;
     chunk.coords = null;
     chunk.rowStyles = null;
+    chunk.heights = null;
+    chunk.heightValues = null;
     chunk.uploaded = false;
     const palette = chunk.data.palette;
     // The rows of the chunk no longer use their styles
@@ -645,24 +698,22 @@ export class RowsRenderer {
       this.ledger?.release(this.cornerBuffer);
       gl.deleteBuffer(this.cornerBuffer);
     }
-    if (this.emptySprites) {
-      this.ledger?.release(this.emptySprites);
-      gl.deleteTexture(this.emptySprites);
+    for (const texture of [this.emptySprites, this.emptyHeights]) {
+      if (!texture) continue;
+      this.ledger?.release(texture);
+      gl.deleteTexture(texture);
     }
     this.emptySprites = null;
+    this.emptyHeights = null;
   }
 
   // === Programs ===
 
-  private startProgram(shaderData: ShaderData): RowsProgram {
+  private startProgram(variant: RowsVariant): RowsProgram {
     const gl = this.gl;
+    const { prelude, define } = rowsProjectionPrelude(variant);
     const vertex = gl.createShader(gl.VERTEX_SHADER) as WebGLShader;
-    gl.shaderSource(
-      vertex,
-      withSamplerPrecision(
-        buildRowsVertexSource(shaderData.vertexShaderPrelude, shaderData.define),
-      ),
-    );
+    gl.shaderSource(vertex, withSamplerPrecision(buildRowsVertexSource(prelude, define)));
     gl.compileShader(vertex);
     const fragment = gl.createShader(gl.FRAGMENT_SHADER) as WebGLShader;
     gl.shaderSource(fragment, withSamplerPrecision(buildRowsFragmentSource()));
@@ -753,9 +804,24 @@ export class RowsRenderer {
         gl.uniform1f(locations.cameraToCenterW, this.offsetUniforms?.projectionCenter[3] ?? 0);
       }
       if (locations.bearing) gl.uniform1f(locations.bearing, this.frameBearing());
-      // The back faces of the fills are kept on a flat map (the terrain discards them)
-      if (locations.cullBack) gl.uniform1f(locations.cullBack, 0);
+      if (locations.heights) gl.uniform1i(locations.heights, UNIT_HEIGHTS);
+      const terrain = this.terrain;
+      const terrainOn = terrain.renderState.active;
+      // The back faces of the fills are discarded on the terrain (the fills cut on its mesh face
+      // the camera where its ground does), as the other fills cull them there
+      if (locations.cullBack) gl.uniform1f(locations.cullBack, terrainOn ? 1 : 0);
+      // The points stand on the ground while the terrain is drawn, also where the fills and the
+      // lines are drawn flat (a point makes no cliff, and its hit testing takes the elevation)
+      if (locations.symbolTerrain) {
+        gl.uniform1f(locations.symbolTerrain, terrainOn && !terrain.elevationSuppressed ? 1 : 0);
+      }
+      const camera = terrain.anchorFrame.cameraMercator;
+      const ghost = terrainOn && !terrain.elevationSuppressed && camera !== null;
+      if (locations.ghostOn) gl.uniform1f(locations.ghostOn, ghost ? 1 : 0);
+      if (locations.ghostNode) gl.uniform1f(locations.ghostNode, terrain.renderState.stepGrid);
+      memo.ghostCenter = null;
     }
+    this.writeGhostCamera(program, chunk);
     if (locations.zoom && (stale || memo.zoom !== zoom)) {
       gl.uniform1f(locations.zoom, zoom);
       memo.zoom = zoom;
@@ -798,6 +864,25 @@ export class RowsRenderer {
     }
   }
 
+  /**
+   * Writes the camera of the test of the ghosts, as its Mercator offset from the center the
+   * offsets of the draw are taken from (written again when the center changes: a copy of the
+   * world has a center of its own)
+   */
+  private writeGhostCamera(program: RowsProgram, chunk: RowsChunk): void {
+    const locations = program.locations as RowsUniformLocations;
+    const camera = this.terrain.anchorFrame.cameraMercator;
+    if (!locations.ghostCamera || !camera) return;
+    // The offsets are taken from the center of the camera, or from the origin of the chunk
+    const center = this.offsetUniforms ?? chunk.data.origin;
+    if (program.memo.ghostCenter === center) return;
+    program.memo.ghostCenter = center;
+    const [x, y] = this.offsetUniforms
+      ? this.offsetUniforms.centerMercator
+      : lngLatToMercator(Math.fround(chunk.data.origin[0]), Math.fround(chunk.data.origin[1]));
+    this.gl.uniform3f(locations.ghostCamera, camera[0] - x, camera[1] - y, camera[2]);
+  }
+
   /** The bearing of the map, read once per frame */
   private frameBearing(): number {
     const frame = getRenderFrame();
@@ -823,6 +908,7 @@ export class RowsRenderer {
       bound.rowStyles = null;
       bound.styles = null;
       bound.sprites = null;
+      bound.heights = null;
     }
     const data = chunk.data;
     const rowStyles = (chunk.rowStyles as SizedTexture).texture;
@@ -849,6 +935,15 @@ export class RowsRenderer {
       bound.sprites = sprites;
       unitMoved = true;
     }
+    // The unit of the elevations is always given one of this renderer's textures, as the one of
+    // the pictures
+    const heights = chunk.heights?.texture ?? this.emptyHeights;
+    if (heights && bound.heights !== heights) {
+      gl.activeTexture(gl.TEXTURE0 + UNIT_HEIGHTS);
+      gl.bindTexture(gl.TEXTURE_2D, heights);
+      bound.heights = heights;
+      unitMoved = true;
+    }
     if (unitMoved) gl.activeTexture(gl.TEXTURE0);
     // The coordinates on the unit 0, which the renderers by kind bind their own to in the same
     // run: bound for every draw
@@ -862,15 +957,72 @@ export class RowsRenderer {
    * bound for the chunks without sprites), once, with the uploads
    */
   private ensureEmptySprites(): void {
-    if (this.emptySprites) return;
     const gl = this.gl;
-    const texture = gl.createTexture();
-    if (!texture) return;
-    gl.bindTexture(gl.TEXTURE_2D, texture);
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array(4));
+    if (!this.emptySprites) {
+      const texture = gl.createTexture();
+      if (!texture) return;
+      gl.bindTexture(gl.TEXTURE_2D, texture);
+      gl.texImage2D(
+        gl.TEXTURE_2D,
+        0,
+        gl.RGBA,
+        1,
+        1,
+        0,
+        gl.RGBA,
+        gl.UNSIGNED_BYTE,
+        new Uint8Array(4),
+      );
+      gl.bindTexture(gl.TEXTURE_2D, null);
+      this.ledger?.record(texture, LEDGER_OWNER, 'texture', 4);
+      this.emptySprites = texture;
+    }
+    if (!this.emptyHeights) {
+      const texture = createFloatTexture(gl, gl.R32F, 1, 1);
+      if (!texture) return;
+      gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, 1, 1, gl.RED, gl.FLOAT, new Float32Array(1));
+      gl.bindTexture(gl.TEXTURE_2D, null);
+      this.ledger?.record(texture, LEDGER_OWNER, 'texture', 4);
+      this.emptyHeights = texture;
+    }
+  }
+
+  /**
+   * Writes the elevations of a chunk whole, into a texture of the size of its coordinates (made
+   * once, written again in place)
+   */
+  private uploadHeights(chunk: RowsChunk): void {
+    const values = chunk.heightValues;
+    const coords = chunk.coords;
+    if (chunk.disposed || !values || !coords) return;
+    const gl = this.gl;
+    if (!chunk.heights) {
+      const texture = createFloatTexture(gl, gl.R32F, coords.width, coords.height);
+      if (!texture) return;
+      this.ledger?.record(
+        texture,
+        LEDGER_OWNER,
+        'texture',
+        textureBytes(coords.width, coords.height, 4),
+      );
+      chunk.heights = { texture, width: coords.width, height: coords.height };
+    } else {
+      gl.bindTexture(gl.TEXTURE_2D, chunk.heights.texture);
+    }
+    const { width, height } = chunk.heights;
+    gl.texSubImage2D(
+      gl.TEXTURE_2D,
+      0,
+      0,
+      0,
+      width,
+      height,
+      gl.RED,
+      gl.FLOAT,
+      paddedRange(values, 0, width * height),
+    );
+    this.uploadedBytes += width * height * 4;
     gl.bindTexture(gl.TEXTURE_2D, null);
-    this.ledger?.record(texture, LEDGER_OWNER, 'texture', 4);
-    this.emptySprites = texture;
   }
 
   // === Uploads ===
@@ -1145,6 +1297,11 @@ function locationsOf(gl: WebGL2RenderingContext, program: WebGLProgram): RowsUni
     cullBack: at('u_cull_back'),
     sprites: at('u_sprites'),
     spritePremultiplied: at('u_sprite_premultiplied'),
+    heights: at('u_heights'),
+    symbolTerrain: at('u_symbol_terrain'),
+    ghostOn: at('u_ghost_on'),
+    ghostCamera: at('u_ghost_camera'),
+    ghostNode: at('u_ghost_node'),
   };
 }
 

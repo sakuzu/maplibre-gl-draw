@@ -10,11 +10,12 @@
  * On the other hand, a symbol behind a mountain stays clearly visible, which is misread as
  * "being in front". So what is occluded is drawn faintly (a CesiumJS-style ghost).
  *
- * The test runs on the CPU. The segment drawn from the camera to the anchor is sampled, and if
- * the ground elevation along the way rises above the segment it is occluded. Fetching a single
- * elevation takes about 0.4us, so 24 samples along the segment cost about 10us per anchor,
- * which is enough. Solving it on the GPU would mean ray marching in the fragment shader, whose
- * cost per symbol is far larger.
+ * The segment drawn from the camera to the anchor is sampled, and if the ground elevation along
+ * the way rises above the segment it is occluded. On the CPU, fetching a single elevation takes
+ * about 0.4us, so 24 samples along the segment cost about 10us per anchor, which is enough for
+ * the symbols drawn anew every frame. The symbols drawn from buffers kept over the frames (the
+ * points of the layers held as rows) take the same formula and constants in their vertex shader
+ * (`TERRAIN_OCCLUSION_GLSL`), every frame, once per vertex rather than per fragment.
  *
  * Reading the depth buffer (MapLibre's `terrain.depthAtPoint`) is not an option: `readPixels`
  * runs for every single point, which inserts a synchronous wait and stalls rendering once per
@@ -39,6 +40,12 @@ const MAX_SAMPLES = 24;
 
 /** Lower bound on the number of samples along the segment */
 const MIN_SAMPLES = 6;
+
+/**
+ * The number of samples when the step of the terrain mesh is not known: the horizontal distance
+ * divided into this many nodes
+ */
+const NODES_WITHOUT_STEP = 16;
 
 /**
  * Margin discarded on the camera side
@@ -137,7 +144,10 @@ function computeOccluded(
 
   // The sample spacing matches the node spacing of the terrain mesh (sampling any finer only
   // goes beyond the resolution of the bilinear interpolation and adds no information)
-  const node = context.renderState.stepGrid > 0 ? context.renderState.stepGrid : horizontal / 16;
+  const node =
+    context.renderState.stepGrid > 0
+      ? context.renderState.stepGrid
+      : horizontal / NODES_WITHOUT_STEP;
   const samples = Math.min(MAX_SAMPLES, Math.max(MIN_SAMPLES, Math.ceil(horizontal / node)));
 
   // The ground just in front of the anchor is the anchor's own ground, so it is skipped
@@ -157,3 +167,56 @@ function computeOccluded(
   }
   return false;
 }
+
+/** A float literal of GLSL */
+function glslFloat(value: number): string {
+  const text = String(value);
+  return /[.eE]/.test(text) ? text : `${text}.0`;
+}
+
+/**
+ * The same test on the GPU, for symbols drawn from buffers kept over the frames (the points of
+ * the layers held as rows): the formula and the constants of {@link isAnchorOccluded}, evaluated
+ * in the vertex shader every frame, so a kept buffer never draws a ghost of an older camera.
+ *
+ * It reads the elevations of the ground along the segment from the DEM atlas
+ * (`dem_elevation_meters`, so it goes after `OFFSET_MODE_GLSL`), where the CPU version reads the
+ * ground maplibre draws (`ground.ts`). `terrainGhostOpacity` takes the anchor as its Mercator
+ * offset from the center and its height in Mercator units, and returns the opacity of the
+ * symbol: {@link TERRAIN_GHOST_OPACITY} when the terrain hides it, 1 otherwise and while
+ * `u_ghost_on` is 0.
+ *
+ * The uniforms:
+ * - `u_ghost_on`: 1 while the terrain is drawn and the camera is known
+ * - `u_ghost_camera`: the camera, its Mercator offset from the center and its height in Mercator
+ *   units
+ * - `u_ghost_node`: the node spacing of the terrain mesh in Mercator units (0 when not known)
+ *
+ * @internal
+ */
+export const TERRAIN_OCCLUSION_GLSL = `
+uniform float u_ghost_on;
+uniform vec3 u_ghost_camera;
+uniform float u_ghost_node;
+
+float terrainGhostOpacity(vec2 anchor, float anchorZ) {
+    if (u_ghost_on < 0.5) return 1.0;
+    vec3 camera = u_ghost_camera;
+    vec3 d = vec3(anchor - camera.xy, anchorZ - camera.z);
+    float horizontal = length(d.xy);
+    if (!(horizontal > 0.0)) return 1.0;
+    float node = u_ghost_node > 0.0 ? u_ghost_node : horizontal / ${glslFloat(NODES_WITHOUT_STEP)};
+    int samples = int(min(${glslFloat(MAX_SAMPLES)}, max(${glslFloat(MIN_SAMPLES)}, ceil(horizontal / node))));
+    float selfSkip = min(0.5, ${glslFloat(SELF_SKIP_NODES)} * node / horizontal);
+    float tEnd = 1.0 - selfSkip;
+    if (!(tEnd > ${glslFloat(NEAR_SKIP)})) return 1.0;
+    for (int i = 0; i < ${MAX_SAMPLES}; i++) {
+        if (i >= samples) break;
+        float t = ${glslFloat(NEAR_SKIP)} + (tEnd - ${glslFloat(NEAR_SKIP)}) * (float(i) + 0.5) / float(samples);
+        vec3 p = camera + d * t;
+        float surface = dem_elevation_meters(p.xy) * u_elevation_params.x;
+        if (surface > p.z) return ${glslFloat(TERRAIN_GHOST_OPACITY)};
+    }
+    return 1.0;
+}
+`;

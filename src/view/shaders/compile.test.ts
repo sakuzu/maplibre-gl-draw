@@ -316,11 +316,12 @@ describe('shader programs on a real WebGL2', () => {
     // its texture in a loop); the contents share one call site. The point, the line and the polygon
     // renderers also build the variant that draws rows held as columns at the same call site;
     // each variant is recorded with the program it is a variant of. The renderer of the rows
-    // drawn in one draw links its program without waiting for it (`gl.createProgram`), which
-    // the count of the call sites does not see; it is recorded among the programs
+    // drawn in one draw links its programs without waiting for them (`gl.createProgram`), which
+    // the count of the call sites does not see; they are recorded among the programs: one for
+    // the flat map and one for the globe, from its own preludes, whatever prelude maplibre gives
     expect(sites).toHaveLength(13);
     const programs = recordPrograms(preludes[0]);
-    expect(programs).toHaveLength(21);
+    expect(programs).toHaveLength(22);
   });
 
   it('builds every program that moves rows with their moving set', () => {
@@ -338,6 +339,7 @@ describe('shader programs on a real WebGL2', () => {
       'BulkFramesRenderer #1',
       'PointInstanceRenderer (rows) #2',
       'RowsRenderer #1',
+      'RowsRenderer #2',
       'SDFLineRenderer (rows) #2',
       'SDFPolygonRenderer (rows) #2',
     ]);
@@ -347,7 +349,7 @@ describe('shader programs on a real WebGL2', () => {
     'compiles and links every program with the Mercator and the globe prelude',
     async () => {
       const programs = preludes.flatMap((prelude) => recordPrograms(prelude));
-      expect(programs.length).toBe(42);
+      expect(programs.length).toBe(44);
       const failures = (await compileOnPage(page, programs)).filter((result) => !result.ok);
       expect(failures).toEqual([]);
     },

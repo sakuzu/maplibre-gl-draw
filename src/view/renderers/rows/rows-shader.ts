@@ -22,17 +22,36 @@
  *   dashes of the segments next to it that reach over the corners into its strip
  * - a sprite: a picture of a texture an extension gives, centered on its point
  *
+ * On the terrain and on the globe the same branches draw the rows cut for the surface: the fill
+ * of a polygon is triangles cut on the mesh of the surface and the outline its rings cut alike,
+ * and a line is drawn in pieces, `[t0, t1]` of its segments (`a_tail.yz`), each piece between
+ * two points of its segment on the Mercator plane. A point and a sprite take the elevation of
+ * the ground under them from the heights of their chunk (`u_heights`), which the CPU writes with
+ * the elevation the hit testing projects them with, and are drawn faint where the terrain hides
+ * them from the camera (`TERRAIN_OCCLUSION_GLSL`); on the far side of the globe they are not
+ * drawn.
+ *
+ * The program has its own projection prelude for each variant (`rowsProjectionPrelude`): it
+ * projects with the functions of the library alone and reads of the prelude maplibre gives a
+ * custom layer only its uniforms, so both variants are compiled before either is drawn.
+ *
  * The blending is the one of the layer, so the branches differ only in what they emit. The
  * shaders never read `gl_InstanceID`: a range of rows is drawn by pointing the instance
  * attributes at its first instance, so the place of an instance in a draw means nothing.
  */
 
 import { DEFAULT_TILE_SIZE, RENDERING_DEFAULTS } from '../../../shared/math/index.js';
-import { getProjectionTransitionUniform, OFFSET_MODE_GLSL } from '../../shaders/helpers.js';
+import { CENTER_PROJECTION_CONSTANTS, glslFloat32 } from '../../shaders/center-projection.js';
+import {
+  getProjectionTransitionUniform,
+  OFFSET_MODE_GLSL,
+  type ShaderData,
+} from '../../shaders/helpers.js';
 import {
   TERRAIN_SHADE_FRAGMENT_GLSL,
   TERRAIN_SHADE_VERTEX_GLSL,
 } from '../../shaders/terrain-shade.js';
+import { TERRAIN_OCCLUSION_GLSL } from '../../terrain/occlusion.js';
 import { DASH_COEFFICIENTS } from '../line/dash.js';
 import { POINT_AA_PADDING_PX, POINT_MIN_OUTER_PX } from '../point/point-instance.js';
 import { POINT_SDF_GLSL } from '../point/point-sdf.js';
@@ -55,11 +74,58 @@ function glslFloat(value: number): string {
 const FAR = 1e6;
 
 /**
+ * The width, as a share of a segment whatever its length, of the points the direction of a line
+ * is taken from where its segment is cut: the two pieces that meet there take the same direction,
+ * from the points of the segment as far before and after the cut
+ */
+const JOINT_WIDTH = 1 / 64;
+
+/**
  * The depth of the vertices of a point or a sprite in clip space: just inside the near plane,
  * so that a depth test, where one is on, never hides a symbol (exactly on the plane, rounding
  * can clip it)
  */
 const SYMBOL_DEPTH = -0.999;
+
+/**
+ * The projection variants of the program: the flat map, and the globe (with the transition
+ * between the globe and the flat map)
+ *
+ * @internal
+ */
+export type RowsVariant = 'flat' | 'globe';
+
+/** The variants, in the order they are compiled */
+export const ROWS_VARIANTS: readonly RowsVariant[] = ['flat', 'globe'];
+
+/**
+ * The variant of the program that draws in the projection of a frame (the globe where maplibre
+ * draws the globe)
+ *
+ * @internal
+ */
+export function rowsVariantOf(shaderData: Pick<ShaderData, 'define'>): RowsVariant {
+  return /#define\s+GLOBE\b/.test(shaderData.define) ? 'globe' : 'flat';
+}
+
+/**
+ * The projection prelude and the defines of a variant: the uniforms of the projection maplibre
+ * writes the values of, declared as its preludes declare them, and \`GLOBE\` on the globe
+ *
+ * @internal
+ */
+export function rowsProjectionPrelude(variant: RowsVariant): { prelude: string; define: string } {
+  if (variant === 'flat') return { prelude: 'uniform mat4 u_projection_matrix;\n', define: '' };
+  return {
+    prelude: `uniform mat4 u_projection_matrix;
+uniform highp vec4 u_projection_tile_mercator_coords;
+uniform highp vec4 u_projection_clipping_plane;
+uniform highp float u_projection_transition;
+uniform mat4 u_projection_fallback_matrix;
+`,
+    define: '#define GLOBE',
+  };
+}
 
 /**
  * The vertex shader source
@@ -75,7 +141,7 @@ export function buildRowsVertexSource(prelude: string, define: string): string {
 #define TABLE_ROWS
 ${prelude}
 ${define}
-${getProjectionTransitionUniform(prelude)}${OFFSET_MODE_GLSL}${TERRAIN_SHADE_VERTEX_GLSL}${ROW_STATE_GLSL}
+${getProjectionTransitionUniform(prelude)}${OFFSET_MODE_GLSL}${TERRAIN_SHADE_VERTEX_GLSL}${ROW_STATE_GLSL}${TERRAIN_OCCLUSION_GLSL}
 
 // The corner of the strip of 4 vertices (0 to 3)
 layout(location = 0) in float a_corner;
@@ -91,6 +157,10 @@ layout(location = 3) in vec4 a_tail;
 // The coordinates of the chunk (offsets from its origin)
 uniform sampler2D u_coords;
 uniform int u_coord_width;
+// The elevation of the ground under each coordinate of a point (meters), as the coordinates
+uniform sampler2D u_heights;
+// 1 when the points and the sprites stand on the terrain (their elevation from u_heights)
+uniform float u_symbol_terrain;
 // The style of each row of the chunk: x the number of its style, y its created zoom, z 1 when it
 // has one
 uniform sampler2D u_row_styles;
@@ -162,6 +232,53 @@ vec4 rowsProject(vec2 offset) {
     return project_position_to_clipspace_from_offset(offset, u_projection_matrix);
 }
 
+// The position at t along the segment from a to b (offsets from the origin): its ends as they
+// are, a point between them on the Mercator plane, which the lines on the terrain and on the
+// globe go along
+vec4 rowsProjectAlong(vec2 a, vec2 b, float t) {
+    if (t == 0.0) return rowsProject(a);
+    if (t == 1.0) return rowsProject(b);
+    vec2 ma = project_offset(vec3(a + origin_shift(), 0.0)).xy;
+    vec2 mb = project_offset(vec3(b + origin_shift(), 0.0)).xy;
+    return project_mercator_offset_to_clipspace(mix(ma, mb, t), u_projection_matrix);
+}
+
+// The elevation of the ground under the anchor of a point or a sprite (meters): the one the CPU
+// wrote for its coordinate, with which the hit testing projects it, or for a row a moving set
+// moves, the one of the DEM where it is drawn (the CPU writes it when the move ends)
+float rowsAnchorElevation(float index, vec2 offset) {
+    if (u_symbol_terrain < 0.5) return 0.0;
+    if (((g_row_state >> 1u) & 3u) != 0u) return dem_elevation_meters(shade_mercator_offset(offset));
+    int i = int(index + 0.5);
+    return texelFetch(u_heights, ivec2(i % u_coord_width, i / u_coord_width), 0).r;
+}
+
+// Projects the anchor of a point or a sprite at its elevation (meters), as the hit testing
+// projects it
+vec4 rowsProjectAnchor(vec2 offset, float elevation) {
+    vec2 lngLatOffset = offset + origin_shift();
+    vec2 halfLat = half_latitude_offset(lngLatOffset.y);
+    vec2 mercatorOffset = vec2(lngLatOffset.x * ${glslFloat32(CENTER_PROJECTION_CONSTANTS.perDegree)}, mercator_offset_y(halfLat));
+    return project_center_offset(mercatorOffset, lngLatOffset.x, halfLat, elevation * u_elevation_params.x, u_projection_matrix);
+}
+
+// Whether the anchor of a symbol is not drawn: behind the camera, or on the far side of the
+// globe (its depth past the far plane, as the clipping of the globe gives it)
+bool rowsAnchorHidden(vec4 clip) {
+    if (clip.w <= 0.0) return true;
+#ifdef GLOBE
+    if (u_projection_transition > 0.0 && clip.z > clip.w) return true;
+#endif
+    return false;
+}
+
+// The opacity of a symbol at an anchor and its elevation (meters): faint where the terrain
+// hides it from the camera
+float rowsGhost(vec2 offset, float elevation) {
+    if (u_ghost_on < 0.5) return 1.0;
+    return terrainGhostOpacity(shade_mercator_offset(offset), elevation * u_elevation_params.x);
+}
+
 vec2 clipToScreen(vec4 clip) {
     vec2 ndc = clip.xy / clip.w;
     return (ndc * 0.5 + 0.5) * u_viewport;
@@ -185,20 +302,19 @@ float dashLength0(vec2 a, vec2 b) {
     return length(vec2((b.x - a.x) * perDegree, (b.y - a.y) * perDegree / cosLatitude));
 }
 
-// The dash of the segment from \`from\` to \`to\` next to a dashed segment going along \`dir\` whose
-// round end is at the corner they share (at \`corner\` on the line, CSS px), as \`v_dash_prev\` and
-// \`v_dash_next\` hold it. A dash that goes on over the corner is drawn on both sides of it up to
-// the miter, so nothing of it reaches over; one cut at the corner or near it has a round end
-// that does. \`before\`: the segment is the one before the corner (its last dash), else the one
-// after it (its first dash)
-vec4 dashNeighbor(vec2 from, vec2 to, vec2 dir, float corner, vec2 pattern, float scale, bool before) {
+// The dash of the segment from \`from\` to \`to\` (on screen, \`lengthCss\` long on the line) next to
+// a dashed segment going along \`dir\` whose round end is at the corner they share (at \`corner\` on
+// the line, CSS px), as \`v_dash_prev\` and \`v_dash_next\` hold it. A dash that goes on over the
+// corner is drawn on both sides of it up to the miter, so nothing of it reaches over; one cut at
+// the corner or near it has a round end that does. \`before\`: the segment is the one before the
+// corner (its last dash), else the one after it (its first dash)
+vec4 dashNeighbor(vec2 from, vec2 to, float lengthCss, vec2 dir, float corner, vec2 pattern, bool before) {
     vec4 none = before ? vec4(1.0, 0.0, -2.0 * ${glslFloat(FAR)}, -${glslFloat(FAR)})
         : vec4(1.0, 0.0, ${glslFloat(FAR)}, 2.0 * ${glslFloat(FAR)});
-    vec2 along = clipToScreen(rowsProject(to)) - clipToScreen(rowsProject(from));
+    vec2 along = to - from;
     float px = length(along);
     if (px <= 0.0) return none;
     vec2 other = along / px;
-    float lengthCss = dashLength0(from, to) * scale;
     float perPx = lengthCss / px;
     float dash = pattern.x;
     float period = pattern.x + pattern.y;
@@ -220,14 +336,11 @@ vec4 dashNeighbor(vec2 from, vec2 to, vec2 dir, float corner, vec2 pattern, floa
 }
 
 void drawPoint(int style) {
-    // The elevation of the anchor is not read from the DEM (the drawing of points on the terrain
-    // gives it); with the terrain off it is not used
-    g_anchor_elevation_m = 0.0;
-    g_anchor_elevation_on = 1.0;
     vec2 offset = rowsCoord(a_head.x);
     emitShadeOffset(offset);
-    vec4 centerClip = rowsProject(offset);
-    if (centerClip.w <= 0.0) {
+    float elevation = rowsAnchorElevation(a_head.x, offset);
+    vec4 centerClip = rowsProjectAnchor(offset, elevation);
+    if (rowsAnchorHidden(centerClip)) {
         gl_Position = ${ROW_HIDDEN_POSITION_GLSL};
         return;
     }
@@ -245,7 +358,7 @@ void drawPoint(int style) {
     gl_Position = vec4(centerClip.xy / centerClip.w + offsetPx * u_pixel_to_clip, ${glslFloat(SYMBOL_DEPTH)}, 1.0);
     v_color = rowsStyle(style, 0);
     v_color2 = rowsStyle(style, 1);
-    v_params = vec4(radius, outer, ink, size.z);
+    v_params = vec4(radius, outer, ink * rowsGhost(offset, elevation), size.z);
     v_geom = vec4(offsetPx, 0.0, 0.0);
 }
 
@@ -266,12 +379,11 @@ float spriteDistanceScale(float distanceRatio) {
 }
 
 void drawSprite(int style) {
-    g_anchor_elevation_m = 0.0;
-    g_anchor_elevation_on = 1.0;
     vec2 offset = rowsCoord(a_head.x);
     emitShadeOffset(offset);
-    vec4 centerClip = rowsProject(offset);
-    if (centerClip.w <= 0.0) {
+    float elevation = rowsAnchorElevation(a_head.x, offset);
+    vec4 centerClip = rowsProjectAnchor(offset, elevation);
+    if (rowsAnchorHidden(centerClip)) {
         gl_Position = ${ROW_HIDDEN_POSITION_GLSL};
         return;
     }
@@ -305,13 +417,40 @@ void drawSprite(int style) {
     }
     vec2 offsetNdc = pixelOffset * u_screen_ratio * u_pixel_to_clip * vec2(1.0, -1.0);
     gl_Position = vec4(centerNdc.xy + offsetNdc, ${glslFloat(SYMBOL_DEPTH)}, 1.0);
-    v_params = vec4(ink, 0.0, 0.0, 0.0);
+    v_params = vec4(ink * rowsGhost(offset, elevation), 0.0, 0.0, 0.0);
     v_geom = vec4(mix(uv.xy, uv.zw, unit * 0.5 + 0.5), 0.0, 0.0);
+}
+
+// The miter at an end of a segment where the line goes on: its normal and the factor of its
+// length, from the normal of the segment there and the direction of the line before or after it
+// (on screen). Past the miter limit the end falls back to the normal of the segment (a bevel)
+vec3 segmentMiter(vec2 own, vec2 otherDir) {
+    vec2 otherNormal = vec2(-otherDir.y, otherDir.x);
+    vec2 avgNormal = otherNormal + own;
+    float avgLen = length(avgNormal);
+    if (avgLen > 0.001) {
+        vec2 miterNormal = avgNormal / avgLen;
+        float cosHalf = dot(miterNormal, own);
+        if (cosHalf > 0.001) {
+            float miterScale = 1.0 / cosHalf;
+            if (miterScale > u_miter_limit) return vec3(own, 1.0);
+            return vec3(miterNormal, miterScale);
+        }
+        return vec3(miterNormal, 1.0);
+    }
+    return vec3(own, 1.0);
 }
 
 void drawSegment(int kind, int style, float createdZoom, bool hasCreatedZoom) {
     int prevIdx = int(a_head.x);
     int nextIdx = int(a_tail.x);
+    // The piece of the segment drawn, [t0, t1] of it: the whole segment (0 and 1) on a flat map,
+    // a piece of a segment cut on the terrain or the globe into pieces of equal length
+    float t0 = a_tail.y;
+    float t1 = a_tail.z;
+    float span = t1 - t0;
+    bool cutStart = t0 > 0.0;
+    bool cutEnd = t1 < 1.0;
     bool atStart = g_corner < 2;
     bool atEnd = !atStart;
     float t = atStart ? 0.0 : 1.0;
@@ -320,8 +459,8 @@ void drawSegment(int kind, int style, float createdZoom, bool hasCreatedZoom) {
     vec2 startOffset = rowsCoord(a_head.y);
     vec2 endOffset = rowsCoord(a_head.z);
     emitShadeOffset(atStart ? startOffset : endOffset);
-    vec4 startClip = rowsProject(startOffset);
-    vec4 endClip = rowsProject(endOffset);
+    vec4 startClip = rowsProjectAlong(startOffset, endOffset, t0);
+    vec4 endClip = rowsProjectAlong(startOffset, endOffset, t1);
     vec2 startScreen = clipToScreen(startClip);
     vec2 endScreen = clipToScreen(endClip);
     vec4 currentClip = atStart ? startClip : endClip;
@@ -330,46 +469,41 @@ void drawSegment(int kind, int style, float createdZoom, bool hasCreatedZoom) {
     float screenSegmentLength = length(segmentVec);
     vec2 segmentDir = segmentVec / screenSegmentLength;
     vec2 normal = vec2(-segmentDir.y, segmentDir.x);
+    // The ends of the whole segment on screen, and its direction: the miter at a vertex of the
+    // line takes it for this segment, as the piece of the segment next to it there does
+    vec2 wholeStart = startScreen;
+    vec2 wholeEnd = endScreen;
+    if (cutStart || cutEnd) {
+        wholeStart = clipToScreen(rowsProject(startOffset));
+        wholeEnd = clipToScreen(rowsProject(endOffset));
+    }
+    vec2 wholeDir = cutStart || cutEnd ? normalize(wholeEnd - wholeStart) : segmentDir;
+    vec2 wholeNormal = vec2(-wholeDir.y, wholeDir.x);
 
-    float miterScale = 1.0;
-    vec2 miterNormal = normal;
+    // Where a segment is cut, the two pieces that meet there take the normal of the line there,
+    // from the points of the segment a share of it before and after the cut
+    vec3 miter = vec3(normal, 1.0);
     if (atStart) {
-        if (prevIdx >= 0) {
+        if (cutStart) {
+            vec2 dir = clipToScreen(rowsProjectAlong(startOffset, endOffset, t0 + ${glslFloat(JOINT_WIDTH)}))
+                - clipToScreen(rowsProjectAlong(startOffset, endOffset, t0 - ${glslFloat(JOINT_WIDTH)}));
+            dir = normalize(dir);
+            miter = vec3(-dir.y, dir.x, 1.0);
+        } else if (prevIdx >= 0) {
             vec2 prevScreen = clipToScreen(rowsProject(rowsCoord(a_head.x)));
-            vec2 prevDir = normalize(startScreen - prevScreen);
-            vec2 prevNormal = vec2(-prevDir.y, prevDir.x);
-            vec2 avgNormal = prevNormal + normal;
-            float avgLen = length(avgNormal);
-            if (avgLen > 0.001) {
-                miterNormal = avgNormal / avgLen;
-                float cosHalf = dot(miterNormal, normal);
-                if (cosHalf > 0.001) {
-                    miterScale = 1.0 / cosHalf;
-                    if (miterScale > u_miter_limit) {
-                        miterScale = 1.0;
-                        miterNormal = normal;
-                    }
-                }
-            }
+            miter = segmentMiter(wholeNormal, normalize(startScreen - prevScreen));
         }
+    } else if (cutEnd) {
+        vec2 dir = clipToScreen(rowsProjectAlong(startOffset, endOffset, t1 + ${glslFloat(JOINT_WIDTH)}))
+            - clipToScreen(rowsProjectAlong(startOffset, endOffset, t1 - ${glslFloat(JOINT_WIDTH)}));
+        dir = normalize(dir);
+        miter = vec3(-dir.y, dir.x, 1.0);
     } else if (nextIdx >= 0) {
         vec2 nextScreen = clipToScreen(rowsProject(rowsCoord(a_tail.x)));
-        vec2 nextDir = normalize(nextScreen - endScreen);
-        vec2 nextNormal = vec2(-nextDir.y, nextDir.x);
-        vec2 avgNormal = normal + nextNormal;
-        float avgLen = length(avgNormal);
-        if (avgLen > 0.001) {
-            miterNormal = avgNormal / avgLen;
-            float cosHalf = dot(miterNormal, normal);
-            if (cosHalf > 0.001) {
-                miterScale = 1.0 / cosHalf;
-                if (miterScale > u_miter_limit) {
-                    miterScale = 1.0;
-                    miterNormal = normal;
-                }
-            }
-        }
+        miter = segmentMiter(wholeNormal, normalize(nextScreen - endScreen));
     }
+    vec2 miterNormal = miter.xy;
+    float miterScale = miter.z;
 
     // The widths of a line, or of the dashed outline of a polygon, and its color
     bool outline = kind == ${ROWS_KIND.dashedOutline};
@@ -386,8 +520,9 @@ void drawSegment(int kind, int style, float createdZoom, bool hasCreatedZoom) {
     float expandedHalfWidth = halfWidth + 1.0;
 
     vec2 screenOffset = miterNormal * side * expandedHalfWidth * miterScale;
-    bool isStartCap = atStart && (prevIdx < 0);
-    bool isEndCap = atEnd && (nextIdx < 0);
+    // The ends of the line are round; the ends of the pieces of a cut segment are not
+    bool isStartCap = atStart && !cutStart && (prevIdx < 0);
+    bool isEndCap = atEnd && !cutEnd && (nextIdx < 0);
     vec2 capOffset = vec2(0.0);
     float linePos = t * screenSegmentLength;
     if (isStartCap) {
@@ -417,20 +552,30 @@ void drawSegment(int kind, int style, float createdZoom, bool hasCreatedZoom) {
         float dash = max(k.x, k.y * cssWidth);
         float gap = max(cssWidth + 1.0, k.z * cssWidth);
         float scale = pow(2.0, u_zoom);
-        float startCss = a_tail.w * scale;
-        float lengthCss = dashLength0(startOffset, endOffset) * scale;
+        // The dashes of the whole segment: a piece of it draws the parts of them in its strip, so
+        // a dash and its round ends are drawn whatever the lengths of the pieces
+        float wholeCss = dashLength0(startOffset, endOffset) * scale;
+        float firstCss = a_tail.w * scale;
+        float startCss = firstCss + t0 * wholeCss;
+        float lengthCss = span * wholeCss;
         float cssPerPx = lengthCss / screenSegmentLength;
         v_dash = vec3(dash, dash + gap, cssPerPx);
-        v_dash_range = vec3(startCss, startCss + lengthCss, nextIdx < 0 ? 1.0 : 0.0);
+        v_dash_range = vec3(firstCss, firstCss + wholeCss, nextIdx < 0 ? 1.0 : 0.0);
+        // The dashes of the segments before and after it whose round ends reach over its corners
         if (prevIdx >= 0) {
+            vec2 prevOffset = rowsCoord(a_head.x);
             v_dash_prev = dashNeighbor(
-                rowsCoord(a_head.x), startOffset, segmentDir, startCss, vec2(dash, gap), scale, true
+                clipToScreen(rowsProject(prevOffset)), wholeStart,
+                dashLength0(prevOffset, startOffset) * scale, wholeDir, firstCss,
+                vec2(dash, gap), true
             );
         }
         if (nextIdx >= 0) {
+            vec2 nextOffset = rowsCoord(a_tail.x);
             v_dash_next = dashNeighbor(
-                endOffset, rowsCoord(a_tail.x), segmentDir, startCss + lengthCss, vec2(dash, gap),
-                scale, false
+                wholeEnd, clipToScreen(rowsProject(nextOffset)),
+                dashLength0(endOffset, nextOffset) * scale, wholeDir, firstCss + wholeCss,
+                vec2(dash, gap), false
             );
         }
         // The position of this vertex on the line: its projection on the segment. A corner of a

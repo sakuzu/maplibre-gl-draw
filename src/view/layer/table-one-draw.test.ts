@@ -677,8 +677,9 @@ describe('the drawing of a layer held as rows in one draw per chunk', () => {
     frame();
     expect(ledger.snapshot().byOwner.rows).toBeGreaterThan(0);
     renderer.dispose();
-    // The buffer of the corners of the strip and the empty picture stay with the renderer
-    expect(ledger.snapshot().byOwner.rows).toBe(16 + 4);
+    // The buffer of the corners of the strip, the empty picture and the elevation of 0 stay with
+    // the renderer
+    expect(ledger.snapshot().byOwner.rows).toBe(16 + 4 + 4);
   });
 });
 

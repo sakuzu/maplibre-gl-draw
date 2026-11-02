@@ -234,10 +234,11 @@ describe('RowsRenderer', () => {
     expect(chunk.uploaded).toBe(true);
     expect(renderer.hasPendingUploads).toBe(false);
     // The instance and the point buffers, the textures of the coordinates, of the styles of the
-    // rows and of the values of the styles
+    // rows and of the values of the styles (and the elevation of 0 bound for the chunks without
+    // elevations, made with the first upload)
     expect(mock.count('bufferData', flush)).toBe(2);
-    expect(mock.count('texStorage2D', flush)).toBe(3);
-    expect(mock.count('texSubImage2D', flush)).toBe(3);
+    expect(mock.count('texStorage2D', flush)).toBe(4);
+    expect(mock.count('texSubImage2D', flush)).toBe(4);
 
     const draw = mock.calls.length;
     renderer.drawRange(chunk, 0, 4, 14, PROJECTION, binding());
@@ -406,7 +407,8 @@ describe('RowsRenderer', () => {
     expect(Array.from(data.coords.subarray(2, 4))).toEqual([7, 8]);
     const at = mock.calls.length;
     renderer.flushUploads();
-    expect(mock.count('texSubImage2D', at)).toBe(3);
+    // The three textures of the chunk, and the elevation of 0 made with the first upload
+    expect(mock.count('texSubImage2D', at)).toBe(4);
     expect(mock.count('bufferSubData', at)).toBe(0);
   });
 
@@ -427,8 +429,9 @@ describe('RowsRenderer', () => {
     expect(palette.gpu).not.toBeNull();
     renderer.disposeChunk(chunk);
     expect(palette.gpu).toBeNull();
-    // The corners and the empty picture (made with the first upload) stay with the renderer
-    expect(ledger.snapshot().byOwner.rows).toBe(corners + 4);
+    // The corners, the empty picture and the elevation of 0 (made with the first upload) stay
+    // with the renderer
+    expect(ledger.snapshot().byOwner.rows).toBe(corners + 8);
     renderer.dispose();
     expect(ledger.snapshot().byOwner.rows).toBeUndefined();
   });

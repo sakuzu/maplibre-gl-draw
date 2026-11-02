@@ -118,6 +118,8 @@ export const ROWS_STYLE_WIDTH = 1_024;
  * @param row The number of the row in its row group
  * @param i0 The first coordinate (-1 for none)
  * @param extra The length of the line before a dashed segment, in CSS px at zoom 0 (0 otherwise)
+ * @param t0 The start of the piece of the segment it draws (0: the start of the segment)
+ * @param t1 The end of the piece (1: the end of the segment)
  */
 export function writeRowsInstance(
   target: Float32Array,
@@ -129,6 +131,8 @@ export function writeRowsInstance(
   i2: number,
   i3: number,
   extra = 0,
+  t0 = 0,
+  t1 = 1,
 ): void {
   const base = at * ROWS_INSTANCE_FLOATS;
   target[base] = tagAsFloat(kind, row);
@@ -136,9 +140,10 @@ export function writeRowsInstance(
   target[base + 2] = i1;
   target[base + 3] = i2;
   target[base + 4] = i3;
-  // The range of the segment it draws (0 to 1: the whole segment on a flat map)
-  target[base + 5] = 0;
-  target[base + 6] = 1;
+  // The range of the segment it draws (0 to 1: the whole segment; a piece of it where the line
+  // is cut for the surface it is drawn on)
+  target[base + 5] = t0;
+  target[base + 6] = t1;
   target[base + 7] = extra;
 }
 
