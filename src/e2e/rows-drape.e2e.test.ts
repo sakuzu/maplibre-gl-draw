@@ -9,8 +9,9 @@
  *   the two pictures are the same, and at points of the slope facing the camera the pixel where
  *   maplibre projects the ground (`map.project`) is the color of the polygon
  * - The order of the rows holds on the drape: a point between two polygons is drawn over the
- *   first and under the second, a point after both over both, and the draws do not follow the
- *   number of the rows
+ *   first and under the second, a point after both over both, points and polygons one after the
+ *   other (overlapping, some translucent) are drawn as one row at a time draws them, and the
+ *   draws follow neither the number of the rows nor the points the polygons after them cover
  * - A row written in place is drawn where it is now, binning again a few tiles
  * - Rows of a moving set are drawn moved on the drape, and where they were once let go
  */
@@ -145,8 +146,208 @@ interface DrapeDiagnostics {
   reason: string;
   draws: number;
   breaks: number;
+  pointDraws: number;
+  steps: number;
+  deepest: number;
+  tiles: number;
   binCount: number;
   elements: number;
+}
+
+const COLORS = ['#d02020', '#20a020', '#2040d0', '#c08000', '#8020c0'];
+
+/**
+ * Points and small squares one after the other on a grid, each square over the right half of
+ * the point before it, one square in three translucent: the markers of the points overlap one
+ * another where the grid is seen from afar
+ */
+function alternating(n: number, spacing: number, half: number): FeatureInput[] {
+  const side = Math.ceil(Math.sqrt(n));
+  const out: FeatureInput[] = [];
+  for (let i = 0; i < n; i++) {
+    const x = SLOPE[0] - (side / 2) * spacing + (i % side) * spacing;
+    const y = SLOPE[1] - (side / 2) * spacing + Math.floor(i / side) * spacing;
+    out.push({
+      id: `p${i}`,
+      type: 'Point',
+      geometry: { type: 'Point', coordinates: [x, y] },
+      style: {
+        pointColor: COLORS[(i + 2) % COLORS.length],
+        pointRadius: 6,
+        pointStrokeWidth: 1,
+        pointStrokeColor: '#ffffff',
+      },
+    });
+    const cx = x + half;
+    out.push({
+      id: `s${i}`,
+      type: 'Polygon',
+      geometry: {
+        type: 'Polygon',
+        coordinates: [
+          [
+            [cx - half, y - half],
+            [cx + half, y - half],
+            [cx + half, y + half],
+            [cx - half, y + half],
+            [cx - half, y - half],
+          ],
+        ],
+      },
+      style: {
+        fillColor: COLORS[i % COLORS.length],
+        fillOpacity: i % 3 === 0 ? 0.55 : 1,
+        strokeColor: '#303030',
+        strokeWidth: 1,
+      },
+    });
+  }
+  return out;
+}
+
+/**
+ * On each place of a grid, a point under a stack of translucent squares shifted a little one
+ * from the other, a second point, and a last square
+ */
+function stacked(n: number, spacing: number, half: number, depth: number): FeatureInput[] {
+  const side = Math.ceil(Math.sqrt(n));
+  const out: FeatureInput[] = [];
+  const square = (id: string, cx: number, cy: number, h: number, color: string, a: number) => ({
+    id,
+    type: 'Polygon',
+    geometry: {
+      type: 'Polygon',
+      coordinates: [
+        [
+          [cx - h, cy - h],
+          [cx + h, cy - h],
+          [cx + h, cy + h],
+          [cx - h, cy + h],
+          [cx - h, cy - h],
+        ],
+      ],
+    },
+    style: { fillColor: color, fillOpacity: a, strokeColor: '#303030', strokeWidth: 1 },
+  });
+  const point = (id: string, x: number, y: number, color: string) => ({
+    id,
+    type: 'Point',
+    geometry: { type: 'Point', coordinates: [x, y] },
+    style: { pointColor: color, pointRadius: 6, pointStrokeWidth: 1, pointStrokeColor: '#ffffff' },
+  });
+  for (let i = 0; i < n; i++) {
+    const x = SLOPE[0] - (side / 2) * spacing + (i % side) * spacing;
+    const y = SLOPE[1] - (side / 2) * spacing + Math.floor(i / side) * spacing;
+    out.push(point(`p${i}`, x, y, COLORS[i % COLORS.length] as string));
+    for (let k = 0; k < depth; k++) {
+      const color = COLORS[(i + k) % COLORS.length] as string;
+      out.push(square(`s${i}-${k}`, x + (k * half) / depth, y, half, color, 0.4));
+    }
+    out.push(point(`q${i}`, x + half / 2, y, COLORS[(i + 1) % COLORS.length] as string));
+    out.push(
+      square(`t${i}`, x + half, y, half / 2, COLORS[(i + 3) % COLORS.length] as string, 0.7),
+    );
+  }
+  return out;
+}
+
+/** A frame drawn with a way of keeping the order: its draws of GL, its drape and its pixels */
+interface OrderedFrame {
+  glDraws: number;
+  drape: DrapeDiagnostics;
+  pixels: number[];
+}
+
+/**
+ * Draws a frame keeping the order of the rows one way (`TableDrapeOrder`; for the split, what
+ * is past its last bound drawn by breaks or over)
+ */
+function frameWith(
+  page: Page,
+  order: 'split' | 'each',
+  tail: 'breaks' | 'over' = 'over',
+): Promise<OrderedFrame> {
+  return page.evaluate(
+    ({ order, tail }) => {
+      const w = window as unknown as {
+        map: import('maplibre-gl').Map & { redraw(): void };
+        draw: unknown;
+        e2e: {
+          internals: {
+            tableDiagnosticsOf(draw: unknown): {
+              setDrapeOrder(order: string, split?: { tail?: string }): void;
+              drape(): unknown;
+            };
+          };
+        };
+      };
+      const hooks = w.e2e.internals.tableDiagnosticsOf(w.draw);
+      hooks.setDrapeOrder(order, { tail });
+      const map = w.map;
+      const gl = map.getCanvas().getContext('webgl2') as WebGL2RenderingContext & {
+        __draws?: { n: number };
+      };
+      if (!gl.__draws) {
+        const count = { n: 0 };
+        gl.__draws = count;
+        for (const name of [
+          'drawArrays',
+          'drawElements',
+          'drawArraysInstanced',
+          'drawElementsInstanced',
+        ] as const) {
+          const original = gl[name].bind(gl) as (...args: unknown[]) => void;
+          (gl as unknown as Record<string, unknown>)[name] = (...args: unknown[]) => {
+            count.n++;
+            original(...args);
+          };
+        }
+      }
+      map.redraw();
+      gl.__draws.n = 0;
+      map.redraw();
+      const glDraws = gl.__draws.n;
+      const pixels = new Uint8Array(gl.drawingBufferWidth * gl.drawingBufferHeight * 4);
+      gl.readPixels(
+        0,
+        0,
+        gl.drawingBufferWidth,
+        gl.drawingBufferHeight,
+        gl.RGBA,
+        gl.UNSIGNED_BYTE,
+        pixels,
+      );
+      const drape = hooks.drape();
+      hooks.setDrapeOrder('split');
+      return { glDraws, drape, pixels: Array.from(pixels) } as never;
+    },
+    { order, tail },
+  );
+}
+
+/** The pixels of a frame that are not the white of the ground */
+function paintedOf(frame: OrderedFrame): number {
+  let painted = 0;
+  for (let i = 0; i < frame.pixels.length; i += 4) {
+    if (!(frame.pixels[i] === 255 && frame.pixels[i + 1] === 255 && frame.pixels[i + 2] === 255)) {
+      painted++;
+    }
+  }
+  return painted;
+}
+
+/** The pixels of two pictures that differ by more than a step in a channel */
+function differing(a: readonly number[], b: readonly number[], step = 3): number {
+  let n = 0;
+  for (let i = 0; i < a.length; i += 4) {
+    for (let k = 0; k < 3; k++) {
+      if (Math.abs((a[i + k] as number) - (b[i + k] as number)) > step) {
+        n++;
+        break;
+      }
+    }
+  }
+  return n;
 }
 
 function drapeOf(page: Page): Promise<DrapeDiagnostics> {
@@ -373,28 +574,144 @@ describe('the drape of the rows on the relief of the terrain', () => {
   it('draws as many times whatever the number of the rows, polygons and points alternating', {
     timeout: browserTimeout(180_000),
   }, async () => {
-    // Squares with a point on each, apart from one another by more than a marker reaches on the
-    // screen: nothing after a point covers it
-    const scene = (n: number): FeatureInput[] => {
-      const out: FeatureInput[] = [];
-      for (let i = 0; i < n; i++) {
-        const x = SLOPE[0] - 0.008 + (i % 20) * 0.0008;
-        const y = SLOPE[1] - 0.006 + Math.floor(i / 20) * 0.0008;
-        out.push(squareRow(`s${i}`, [x, y], 0.0001, RED));
-        out.push(pointRow(`p${i}`, [x, y], GREEN, 3));
-      }
-      return out;
-    };
+    // Squares with a point on each, the next square over the right half of its point
     const draws: number[] = [];
     for (const n of [100, 400]) {
-      const page = await openScene(scene(n), 'rows', { ...CAMERA, pitch: 30 });
+      const page = await openScene(alternating(n, 0.0008, 0.0001), 'rows', {
+        ...CAMERA,
+        pitch: 30,
+      });
       const drape = await drapeOf(page);
       expect(drape.used, drape.reason).toBe(true);
       expect(drape.elements).toBe(n);
-      draws.push(drape.draws);
+      // One split of the drape at the points of the layer: per step, a bound and a segment in
+      // every tile, and the last segment
+      expect(drape.breaks).toBe(1);
+      expect(drape.steps).toBeGreaterThan(0);
+      expect(drape.draws).toBeLessThanOrEqual((2 * drape.steps + 1) * drape.tiles);
+      // The keys of the points and the points of each segment, in one draw per chunk
+      expect(drape.pointDraws).toBe(2 * drape.steps + 1);
+      draws.push(drape.pointDraws / (2 * drape.steps + 1));
       await page.close();
     }
     expect(draws[1]).toBe(draws[0]);
+  });
+
+  it('draws points and squares one after the other, overlapping and translucent, as one row at a time draws them', {
+    timeout: browserTimeout(900_000),
+  }, async () => {
+    // Seen from afar at the top of the view, the markers of the grid overlap one another and the
+    // squares between them
+    const page = await openScene(alternating(400, 0.0008, 0.00024), 'rows', {
+      ...CAMERA,
+      zoom: 15,
+      pitch: 60,
+    });
+    const split = await frameWith(page, 'split');
+    expect(split.drape.used, split.drape.reason).toBe(true);
+    expect(split.drape.breaks).toBe(1);
+    // Every point is a break of the order: the drape painted up to it in every tile
+    const each = await frameWith(page, 'each');
+    expect(each.drape.breaks).toBeGreaterThan(200);
+    let painted = 0;
+    for (let i = 0; i < each.pixels.length; i += 4) {
+      if (!(each.pixels[i] === 255 && each.pixels[i + 1] === 255 && each.pixels[i + 2] === 255)) {
+        painted++;
+      }
+    }
+    expect(painted).toBeGreaterThan(each.pixels.length / 4 / 20);
+    // A few pixels at the edges of the markers on the ridge may differ from frame to frame
+    expect(differing(split.pixels, each.pixels)).toBeLessThanOrEqual(painted / 10_000);
+    expect(split.glDraws).toBeLessThan(each.glDraws / 10);
+    await page.close();
+  });
+
+  it('draws points under stacks of translucent squares as one row at a time draws them', {
+    timeout: browserTimeout(900_000),
+  }, async () => {
+    // On each place, a point under six translucent squares, a second point and a last square:
+    // more elements after the first point of a pixel than the steps take where the cells are
+    // deep, what is past the last bound drawn by the breaks there
+    const page = await openScene(stacked(64, 0.0016, 0.00032, 6), 'rows', {
+      ...CAMERA,
+      zoom: 15,
+      pitch: 45,
+    });
+    const split = await frameWith(page, 'split');
+    expect(split.drape.used, split.drape.reason).toBe(true);
+    const each = await frameWith(page, 'each');
+    expect(differing(split.pixels, each.pixels)).toBeLessThanOrEqual(paintedOf(each) / 10_000);
+    await page.close();
+  });
+
+  it('draws in order by breaks, when asked, the pixels with more points between the polygons than the steps take', {
+    timeout: browserTimeout(900_000),
+  }, async () => {
+    // On each place, twelve points one after the other, each under the next translucent square:
+    // twelve elements after a point in a pixel, past the most steps a split takes
+    const out: FeatureInput[] = [];
+    for (let i = 0; i < 9; i++) {
+      const x = SLOPE[0] - 0.003 + (i % 3) * 0.003;
+      const y = SLOPE[1] - 0.003 + Math.floor(i / 3) * 0.003;
+      for (let k = 0; k < 12; k++) {
+        const at: [number, number] = [x + k * 0.00002, y];
+        out.push({
+          id: `p${i}-${k}`,
+          type: 'Point',
+          geometry: { type: 'Point', coordinates: at },
+          style: { pointColor: COLORS[(i + k) % COLORS.length], pointRadius: 8 },
+        });
+        out.push({
+          ...squareRow(`s${i}-${k}`, at, 0.00012, RED),
+          style: {
+            fillColor: COLORS[(i + k + 2) % COLORS.length],
+            fillOpacity: 0.35,
+            strokeWidth: 0,
+          },
+        });
+      }
+    }
+    const page = await openScene(out, 'rows', { ...CAMERA, zoom: 15, pitch: 30 });
+    const each = await frameWith(page, 'each');
+    // Past the last bound drawn by the breaks of the cells deeper than the steps: in order
+    const breaks = await frameWith(page, 'split', 'breaks');
+    expect(breaks.drape.used, breaks.drape.reason).toBe(true);
+    expect(breaks.drape.deepest).toBeGreaterThan(breaks.drape.steps);
+    expect(breaks.drape.breaks).toBeGreaterThan(1);
+    expect(differing(breaks.pixels, each.pixels)).toBeLessThanOrEqual(paintedOf(each) / 10_000);
+    // Past the last bound drawn as one segment (as a split draws it): the points there are over
+    // the squares after them, in the pixels with more than the steps
+    const over = await frameWith(page, 'split');
+    expect(over.drape.breaks).toBe(1);
+    const off = differing(over.pixels, each.pixels);
+    console.info(
+      `more points between the polygons than the steps take: ${off} pixels out of order`,
+    );
+    expect(off).toBeGreaterThan(paintedOf(each) / 10_000);
+    await page.close();
+  });
+
+  it('draws 2 x 10,000 points and squares one after the other at zoom 15 in a few draws', {
+    timeout: browserTimeout(300_000),
+  }, async () => {
+    const page = await openScene(alternating(10_000, 0.0004, 0.00012), 'rows', {
+      ...CAMERA,
+      zoom: 15,
+      pitch: 45,
+    });
+    const split = await frameWith(page, 'split');
+    expect(split.drape.used, split.drape.reason).toBe(true);
+    expect(split.drape.elements).toBe(10_000);
+    // The draws of the frame, recorded with the test
+    console.info(
+      `2 x 10,000 alternating, zoom 15, pitch 45: ${split.glDraws} draws of GL, drape ${split.drape.draws} over ${split.drape.tiles} tiles, points ${split.drape.pointDraws}, ${split.drape.steps} steps (the deepest pixel reads ${split.drape.deepest} runs), ${split.drape.breaks} breaks`,
+    );
+    expect(split.drape.draws).toBeLessThanOrEqual(
+      (2 * split.drape.steps + 1) * split.drape.tiles + split.drape.breaks * split.drape.tiles,
+    );
+    // The draws of GL of the whole frame (the terrain and the other layers of maplibre with them)
+    expect(split.glDraws).toBeLessThan(1_000);
+    await page.close();
   });
 
   it('draws a row written in place where it is now, binning again a few tiles', {

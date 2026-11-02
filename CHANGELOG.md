@@ -117,13 +117,17 @@ writing it. Its changes are listed after those of 3.0.0.
   lines sunk into a slope of the fills cut on the mesh, and keep the
   order of the rows: a point, a picture or a row drawn at once between
   two of them is drawn over the first and under the second where they
-  meet on the screen, and the draws of a frame do not follow the number
-  of the rows where they do not meet. A row written in place is drawn
-  where it is now in the next frames, the tiles it touches drawn again
-  alone, and the rows of a moving set (a drag of the features selected
-  in bulk) are drawn moved on the ground and where they were written
-  once let go. A layer too heavy for it is drawn as before, and the
-  datasets keep being drawn on the ground.
+  meet on the screen, and the draws of a frame follow neither the number
+  of the rows nor how many points the polygons after them cover: points
+  and polygons one after the other in a layer of tens of thousands of
+  rows are drawn in a few draws per tile of the terrain (in a pixel where
+  an element follows a point more than eight times, the points past the
+  eighth are drawn over the elements after them). A row written in
+  place is drawn where it is now in the next frames, the tiles it touches
+  drawn again alone, and the rows of a moving set (a drag of the features
+  selected in bulk) are drawn moved on the ground and where they were
+  written once let go. A layer too heavy for it is drawn as before, and
+  the datasets keep being drawn on the ground.
 - Features selected in bulk and turned or resized are drawn during the drag
   as they are written once let go: an image, a type resized by its scale
   and a feature with a rotation or a scale keep their shape and change

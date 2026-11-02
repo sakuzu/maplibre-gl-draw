@@ -2053,13 +2053,48 @@ as it was when they were taken.
   joins the tiles again
 - The order: each layer paints the ranks of its partitions, and what the
   drape does not draw (points, pictures, rows drawn at once) is drawn at
-  its place in between (`TableDrapePainter`). A run of such rows that an
-  element after it covers in a tile (its box, widened by how far its
-  markers reach on the screen, meets the box of an element after it in a
-  cell of the tile) is a break: the drape is painted up to it in the tiles
-  it meets, then it is drawn. A run nothing after it covers waits and is
-  drawn with the next break or at the end of the layer, over the drape
-  painted under it: what is painted later does not meet it. The drape of
+  its place in between (`TableDrapePainter`). The points of the chunks of
+  a layer are given whole, with their keys (the place of their partition
+  from the first one of the layer and their slot), and are split among
+  the drape pixel by pixel, in a few steps for the whole layer
+  (`terrain/drape/split.ts`, `DrapeSplit`). Step `s` draws the keys of
+  the points from bound `s` of each pixel on as a depth, the lowest kept;
+  a pass of the drape finds bound `s + 1`, the key of the first element
+  after that lowest point that paints the pixel (its own depth keeps the
+  ground in front); then the drape is painted from bound `s` to bound
+  `s + 1` and the points between them are drawn, so in every pixel the
+  elements of a segment are under its points. Two bounds are kept, in
+  the two channels of a float texture. A step takes one element after a
+  point in each pixel, so as many steps as the runs a pixel of the tiles
+  reads (those of its cell and of the cells of the moving partitions)
+  draw every pixel in order; they are at most `DRAPE_SPLIT_MAX_STEPS`
+  (8), and a tile is left out of the steps past the runs its pixels
+  read. What is past the last bound is one more segment: a pixel where
+  an element follows a point more than that many times draws the points
+  past the last bound over the elements after them there. The runs a
+  cell holds are a loose bound (a cell of a coarse tile far from the
+  camera holds tens of elements), so keeping the order there by breaks
+  (`TableDrapePainter.tail`, for the measures: a run of points an element
+  after it covers in a cell deeper than the steps is a break) makes the
+  draws follow the runs of points again
+- The draws of a split: per step, one draw of the keys and one of the
+  points per chunk, one of the bound and one of the segment per tile.
+  They follow neither the number of the rows nor how many points the
+  elements after them cover. Its textures, at the size of the target:
+  the keys (a 32-bit depth), the bounds (two 32-bit floats) and a 24-bit
+  depth (as precise as the one the ground is drawn with far from the
+  camera), 16 bytes a pixel. A key holds 2^24 places, so a layer of more
+  than 512 partitions keeps its order by the breaks below
+- A run without keys (the rows of a delta placed at one place share a
+  slot with the elements placed there; the rows drawn at once) is a
+  break of the split: what waits is split up to it, then it is drawn.
+  Until the programs of the keys are compiled, and without a float
+  target, a run of such rows that an element after it covers in a tile
+  (its box, widened by how far its markers reach on the screen, meets the
+  box of an element after it in a cell of the tile) is a break: the
+  drape is painted up to it in the tiles it meets, then it is drawn. A
+  run nothing after it covers waits and is drawn with the next break or
+  at the end of the layer, over the drape painted under it. The drape of
   the other elements is painted up to each entry of the order before it
   while the rows are draped, so a dataset above a layer of rows is drawn
   over its points
@@ -2074,8 +2109,7 @@ as it was when they were taken.
   partitions and drawn by their moving copies; a row let go of stays drawn
   by its moving copy, with the motion the set had, until its partition is
   binned again where it was written
-- Its draws: one per tile at the end of a layer, and one per tile a break
-  meets
+- Its draws without points: one per tile at the end of a layer
 
 ### Terrain state per instance
 
