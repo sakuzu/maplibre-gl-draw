@@ -46,7 +46,7 @@ import { featureTablesInternals } from '../../feature-table/feature-tables.js';
 import type { FeatureStyleConfig } from '../../shared/config/feature-style.js';
 import type { RenderingConfig } from '../../shared/config/rendering.js';
 import type { SelectionUIConfig } from '../../shared/config/selection.js';
-import { setScreenScaleFrame } from '../../shared/math/index.js';
+import { screenScaleFrameOf, setScreenScaleFrame } from '../../shared/math/index.js';
 import type { PixelRatioInput } from '../../shared/utils/pixel-ratio.js';
 import { resolveContentPixelRatio, resolvePixelRatio } from '../../shared/utils/pixel-ratio.js';
 import type { SketchView } from '../../sketches/sketch-view.js';
@@ -604,6 +604,8 @@ export function createCustomLayer(deps: CustomLayerDeps): CustomLayerInterface {
       requestRepaint: () => engine.mapInstance?.triggerRepaint(),
       keepCopies: deps.keepDrawnCopies === true,
       transformFields: () => transformFieldsOfStore(own),
+      extensions: renderScope.selection.extensions,
+      screenScale: () => (engine.mapInstance ? screenScaleFrameOf(engine.mapInstance) : null),
     });
   }
 

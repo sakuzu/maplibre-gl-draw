@@ -2010,6 +2010,25 @@ kinds. The rows of a chunk are cut for the surface (`table-surface.ts`,
   that came or went. A point being moved reads the DEM atlas where it is
   drawn until it is written. Points stand on the ground also where the
   fills and lines are drawn flat
+- The rows drawn at once (images, custom types, rows with a companion)
+  are drawn only in view, so the work of a frame follows the rows in
+  view, not the rows of the layer: a chunk of them whose extent misses the
+  view is skipped, and in a chunk of `IMMEDIATE_INDEX_FROM` (64) rows or
+  more that the view holds only in part, the rows in view are found in a
+  packed R-tree of their extents, made when first needed and dropped when
+  a row of the chunk is written (the extent of the chunk only widens
+  then). The extent of a row (`table-extents.ts`, `RowExtents`) is what is
+  drawn of it, by the rule the chunks of a Store of objects take
+  (`computeAnchoredExtent`): the box of the footprint of an Image or of a
+  custom type laid on the map, and for a footprint of a size on the
+  screen, its position widened by the half diagonal of the size, laid on
+  the ground at the scale of the frame (`metersPerPixelInFrame`); any
+  other row the box of its positions. It is read from the feature of the
+  row once, and again only after the row is written or a custom type
+  comes or goes, so no footprint is read in a frame of the same rows. A
+  row of a moving set is in view by its extent where the view sees the
+  set from (moved back by its translation and its edit); a row out of
+  view draws neither itself nor its companion
 
 #### The drape of the rows
 

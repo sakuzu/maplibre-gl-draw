@@ -147,6 +147,19 @@ function optionalGroup(
   requireFunctions(kind, group, required, names, `${path}.`);
 }
 
+/** Checks the keys a companion provider declares its answers read: an array of strings */
+function optionalClassifyKeys(kind: ExtensionKind, value: Record<string, unknown>): void {
+  const keys = (value.rows as Record<string, unknown> | undefined)?.classifyKeys;
+  if (keys === undefined) return;
+  if (!Array.isArray(keys) || keys.some((key) => typeof key !== 'string')) {
+    throw wrongShape(
+      kind,
+      'has rows.classifyKeys that is not an array of strings',
+      'rows.classifyKeys',
+    );
+  }
+}
+
 /** Checks an optional number, finite and, when asked, not negative */
 function optionalNumber(
   kind: ExtensionKind,
@@ -293,6 +306,7 @@ export function validateExtension(kind: ExtensionKind, value: unknown): void {
     }
     case 'companion provider':
       optionalGroup(kind, value, 'rows', [], ['has']);
+      optionalClassifyKeys(kind, value);
       return;
     case 'overlay':
       optionalNumber(kind, value, 'order', false);

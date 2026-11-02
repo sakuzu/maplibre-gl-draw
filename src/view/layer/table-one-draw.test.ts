@@ -27,6 +27,10 @@ import type { LayerTable } from '../../feature-table/layer-table.js';
 import { writeRowGeometry } from '../../feature-table/row-write.js';
 import { ROW_WRITE_GEOMETRY, ROW_WRITE_STYLE } from '../../feature-table/types.js';
 import type { Feature, Layer } from '../../shared/types/model.js';
+import {
+  createTransformFieldsRegistry,
+  type TransformFieldsRegistry,
+} from '../../store/transform-roles.js';
 import { createTestDrawer, feature, seededRandom, tablesOfFeatures } from '../../test-utils.js';
 import { createFeatureCompanionRegistry } from '../feature-companion.js';
 import { GpuLedger } from '../gpu-ledger.js';
@@ -41,6 +45,10 @@ import {
 import { RowsRenderer } from '../renderers/rows/rows-renderer.js';
 import { beginRenderFrame } from '../shaders/frame.js';
 import { TerrainContext } from '../terrain/context.js';
+import {
+  createSelectionExtensionRegistry,
+  type SelectionExtensionRegistry,
+} from '../ui/selection-ui/index.js';
 import type { StoreRetainedDrawDeps } from './store-retained-immediate.js';
 import { type TableDrawRecord, TableLayerRenderer } from './table-retained.js';
 
@@ -211,6 +219,8 @@ function setup(
     parallel?: boolean;
     complete?: () => boolean;
     customRenderers?: Map<string, unknown>;
+    transformFields?: TransformFieldsRegistry;
+    extensions?: SelectionExtensionRegistry;
   } = {},
 ) {
   const { internals, table, tables, writer } = tablesOfFeatures('layer', features, targetRows);
@@ -261,6 +271,8 @@ function setup(
     ledger,
     requestRepaint: () => {},
     buildBudgetMs: Number.POSITIVE_INFINITY,
+    ...(options.transformFields && { transformFields: () => options.transformFields ?? null }),
+    ...(options.extensions && { extensions: options.extensions }),
   });
   /** One frame: the pass before the main one, then the layer; returns the ranges drawn */
   const frame = (bounds?: { minX: number; minY: number; maxX: number; maxY: number }) => {
@@ -580,6 +592,49 @@ describe('the drawing of a layer held as rows in one draw per chunk', () => {
     expect(made[1].sprites).toBeNull();
   });
 
+  it('draws at once the points of an extension whose type declares a scale field, pictures or not', () => {
+    const source: RowSpriteSource = {
+      texture: null,
+      revision: 1,
+      sprite: () => ({ uv: [0, 0, 1, 1], halfWidth: 8, halfHeight: 8, direction: -1 }),
+    };
+    const features = [
+      feature('g', 'Polygon', [
+        [
+          [0, 0],
+          [1, 0],
+          [1, 1],
+          [0, 0],
+        ],
+      ]),
+      feature('a', 'Pin', [1, 1]),
+      feature('b', 'Mark', [2, 2]),
+      feature('l', 'LineString', [
+        [0, 0],
+        [1, 1],
+      ]),
+    ];
+    const transformFields = createTransformFieldsRegistry();
+    transformFields.register('Pin', { scaleKey: 'size' });
+    transformFields.register('Mark', { angleDegreesKey: 'angle' });
+    const { frame, made } = setup(features, undefined, {
+      customRenderers: new Map([
+        ['Pin', { name: 'Pin', rowSprites: source, draw: () => {} }],
+        ['Mark', { name: 'Mark', rowSprites: source, draw: () => {} }],
+      ]),
+      transformFields,
+    });
+    frame();
+    const { record } = frame();
+    // The point of the type with a scale field is drawn at once; the other one with its picture
+    expect(record.map((entry) => [entry.kind, entry.from, entry.to])).toEqual([
+      ['rows', 0, 1],
+      ['immediate', 1, 2],
+      ['rows', 2, 4],
+    ]);
+    expect(made.map((data) => data.sprites)).toEqual([null, source]);
+  });
+
   it('writes the state of the rows before the main pass, and nothing while drawing', () => {
     const { internals, frame, mock } = setup(interleaved(200, 12), 100);
     frame();
@@ -731,6 +786,76 @@ describe('the check of the classification of a row written in place', () => {
     expect(companions).toContain(line.id);
   });
 
+  it('classifies a row again on a write of a key a provider of companions declares it reads, and only then', () => {
+    const features = interleaved(200, 24);
+    const { internals, tables, writer, renderer, frame, deps, table } = written(features);
+    const asked: number[] = [];
+    deps.companions.register({
+      id: 'ring',
+      has: (f) => f.properties?.ring === true,
+      hasRow: (view, handle) => {
+        asked.push(handle);
+        return view.getRowValue(handle, 'ring') === true;
+      },
+      classifyKeys: ['ring'],
+      draw: () => {},
+      hitTest: () => null,
+      onCompanionClick: () => undefined,
+    });
+    frame();
+    frame();
+    const line = features.find((f) => f.id.startsWith('l')) as Feature;
+    const handle = tables.findRow(line.id) as number;
+    asked.length = 0;
+    // A key it does not read: the row keeps its classification, the provider is not asked
+    writer.apply({ handles: Int32Array.of(handle), fields: new Map([['property:name', ['n']]]) });
+    for (let i = 0; i < 2; i++) {
+      const { record } = frame();
+      expect(drawnHandles(record, table)).toEqual(visibleHandles(table));
+    }
+    expect(asked).toEqual([]);
+    expect(renderer.writeStats.reclassified).toBe(0);
+    expect(internals.deltaRowCount()).toBe(0);
+    // The key it reads: classified again, drawn at once from the delta with its companion
+    writer.apply({ handles: Int32Array.of(handle), fields: new Map([['property:ring', [true]]]) });
+    let atOnce = false;
+    for (let i = 0; i < 4; i++) {
+      const { record, immediate } = frame();
+      expect(drawnHandles(record, table)).toEqual(visibleHandles(table));
+      atOnce ||= immediate.includes(line.id);
+    }
+    expect(asked).toContain(handle);
+    expect(renderer.writeStats.reclassified).toBe(1);
+    expect(internals.deltaRowCount()).toBe(1);
+    expect(atOnce).toBe(true);
+  });
+
+  it('classifies a row again on any write of its attributes while a provider of companions tells no keys', () => {
+    const features = interleaved(200, 25);
+    const { tables, writer, renderer, frame, deps } = written(features);
+    const asked: number[] = [];
+    deps.companions.register({
+      id: 'ring',
+      has: (f) => f.properties?.ring === true,
+      hasRow: (view, handle) => {
+        asked.push(handle);
+        return view.getRowValue(handle, 'ring') === true;
+      },
+      draw: () => {},
+      hitTest: () => null,
+      onCompanionClick: () => undefined,
+    });
+    frame();
+    frame();
+    const line = features.find((f) => f.id.startsWith('l')) as Feature;
+    const handle = tables.findRow(line.id) as number;
+    asked.length = 0;
+    writer.apply({ handles: Int32Array.of(handle), fields: new Map([['property:name', ['n']]]) });
+    frame();
+    expect(asked).toContain(handle);
+    expect(renderer.writeStats.reclassified).toBe(0);
+  });
+
   it('writes in place an attribute nothing classifies by, and a row only hidden or shown', () => {
     const features = interleaved(200, 22);
     const { internals, tables, writer, renderer, frame, table } = written(features);
@@ -788,5 +913,251 @@ describe('the check of the classification of a row written in place', () => {
     }
     expect(renderer.writeStats.reclassified).toBe(1);
     expect(setUp.internals.deltaRowCount()).toBe(1);
+  });
+});
+
+describe('the rows drawn at once out of view', () => {
+  /** The box of the view of the tests */
+  const VIEW = { minX: 0, minY: 0, maxX: 1, maxY: 1 };
+
+  /**
+   * Images (drawn at once) scattered over the layer in its order, `inView` of them in the view
+   * and the others far from it, each with a companion
+   */
+  function scattered(count: number, inView: number, seed: number) {
+    const random = seededRandom(seed);
+    const at = new Set<number>();
+    while (at.size < inView) at.add(Math.floor(random() * count));
+    const features: Feature[] = [];
+    for (let i = 0; i < count; i++) {
+      const position = at.has(i)
+        ? [0.05 + random() * 0.9, 0.05 + random() * 0.9]
+        : [5 + random() * 95, 5 + random() * 45];
+      features.push(feature(`i${i}`, 'Image', position));
+    }
+    // One group, so the rows are one chunk drawn at once that meets the view
+    const setUp = setup(features, count);
+    const companions: string[] = [];
+    setUp.deps.companions.register({
+      id: 'ring',
+      has: () => true,
+      draw: (f) => {
+        companions.push(f.id);
+      },
+      hitTest: () => null,
+      onCompanionClick: () => undefined,
+    });
+    const inViewIds = features.filter((_, i) => at.has(i)).map((f) => f.id);
+    return { ...setUp, features, companions, inViewIds };
+  }
+
+  it('looks at the rows in view only, as many whatever the number of the rows of the layer', () => {
+    const visited: number[] = [];
+    for (const count of [2_000, 20_000]) {
+      const { renderer, frame, companions, inViewIds } = scattered(count, 40, 31);
+      // The features of the rows are kept over the first frames
+      frame(VIEW);
+      frame(VIEW);
+      companions.length = 0;
+      const { immediate } = frame(VIEW);
+      // The rows in view, in their order, each with its companion
+      expect(immediate).toEqual(inViewIds);
+      expect(companions).toEqual(inViewIds);
+      expect(renderer.atOnceStats.drawn).toBe(40);
+      visited.push(renderer.atOnceStats.visited);
+      // Without a view, every row
+      expect(frame().immediate.length).toBe(count);
+    }
+    expect(visited).toEqual([40, 40]);
+  });
+
+  it('looks at no row of a chunk out of view, and draws the rows of a moving set where they are moved', () => {
+    const { renderer, frame, internals, features, inViewIds } = scattered(2_000, 40, 32);
+    frame(VIEW);
+    frame(VIEW);
+    // A view where no row is
+    const { immediate } = frame({ minX: -50, minY: -50, maxX: -40, maxY: -40 });
+    expect(immediate).toEqual([]);
+    expect(renderer.atOnceStats.visited).toBe(0);
+    // A row far away moved into the view, a row in view moved out of it
+    const away = features.find((f) => !inViewIds.includes(f.id)) as Feature;
+    const [ax, ay] = (away.geometry as { coordinates: number[] }).coordinates;
+    const ids = internals.ids;
+    internals.states.setMoving(Int32Array.of(ids.handleOf(away.id)), 1);
+    internals.states.setTranslation(1, 0.5 - ax, 0.5 - ay);
+    internals.states.setMoving(Int32Array.of(ids.handleOf(inViewIds[0])), 2);
+    internals.states.setTranslation(2, 30, 30);
+    const moved = frame(VIEW).immediate;
+    expect(moved).toContain(away.id);
+    expect(moved).not.toContain(inViewIds[0]);
+    expect(moved.length).toBe(40);
+  });
+
+  it('draws a row written into the view, and leaves out a row written out of it', () => {
+    const { renderer, frame, table, features, inViewIds } = scattered(2_000, 40, 33);
+    frame(VIEW);
+    frame(VIEW);
+    const group = table.groupAt(0);
+    const write = (id: string, position: number[]): void => {
+      const row = features.findIndex((f) => f.id === id);
+      const written = writeRowGeometry(
+        table,
+        group,
+        row,
+        { type: 'Point', coordinates: position },
+        planarCoordinates,
+      );
+      renderer.rowsWritten('layer', [
+        {
+          group: group.handle,
+          row,
+          handle: group.data.handles[row],
+          what: ROW_WRITE_GEOMETRY,
+          ...written,
+          keys: [],
+        },
+      ]);
+    };
+    const away = features.find((f) => !inViewIds.includes(f.id)) as Feature;
+    write(away.id, [0.5, 0.5]);
+    write(inViewIds[1], [60, 30]);
+    const { immediate } = frame(VIEW);
+    expect(immediate).toContain(away.id);
+    expect(immediate).not.toContain(inViewIds[1]);
+    expect(immediate.length).toBe(40);
+  });
+});
+
+describe('the rows drawn at once by the extent of their footprint', () => {
+  /** The box of the view of the tests */
+  const VIEW = { minX: 0, minY: 0, maxX: 1, maxY: 1 };
+
+  /**
+   * Rows of a custom type laid on the map around their anchor, `half` degrees on each side, and
+   * rows of a custom type of a size on the screen, `halfWidthPx` by `halfHeightPx`
+   */
+  function footprints(features: Feature[], half: number) {
+    const extensions = createSelectionExtensionRegistry();
+    let read = 0;
+    extensions.registerBoundingBox('Board', (f) => {
+      read++;
+      const [x, y] = (f.geometry as { coordinates: number[] }).coordinates;
+      return {
+        topLeft: [x - half, y + half],
+        topRight: [x + half, y + half],
+        bottomRight: [x + half, y - half],
+        bottomLeft: [x - half, y - half],
+        center: [x, y],
+      };
+    });
+    extensions.registerBoundingBox('Badge', (f) => {
+      const [x, y] = (f.geometry as { coordinates: number[] }).coordinates;
+      return {
+        topLeft: [x, y],
+        topRight: [x, y],
+        bottomRight: [x, y],
+        bottomLeft: [x, y],
+        center: [x, y],
+      };
+    });
+    extensions.registerPointFrameExtent('Badge', () => ({ halfWidth: 200, halfHeight: 100 }));
+    const drawn: string[] = [];
+    const draw = (f: Feature): void => {
+      drawn.push(f.id);
+    };
+    const setUp = setup(features, features.length, {
+      customRenderers: new Map<string, unknown>([
+        ['Board', { name: 'Board', draw }],
+        ['Badge', { name: 'Badge', draw }],
+      ]),
+      extensions,
+    });
+    return { ...setUp, drawn, reads: () => read };
+  }
+
+  it('draws a row whose anchor is out of view and whose footprint on the map meets it', () => {
+    const features = [
+      feature('far', 'Board', [30, 30]),
+      // Its anchor 2 degrees east of the view, its footprint 3 degrees on each side
+      feature('over', 'Board', [3, 0.5]),
+      feature('inside', 'Board', [0.5, 0.5]),
+    ];
+    const { frame, drawn } = footprints(features, 3);
+    frame(VIEW);
+    drawn.length = 0;
+    frame(VIEW);
+    expect(drawn).toEqual(['over', 'inside']);
+  });
+
+  it('draws a row of a size on the screen as far as it reaches at the zoom of the frame', () => {
+    // At zoom 10 a pixel is 360 / 2^19 degrees: the badge reaches about 0.154 degrees
+    const features = [
+      feature('near', 'Badge', [1.1, 0.5]),
+      feature('beyond', 'Badge', [1.3, 0.5]),
+      feature('below', 'Badge', [0.5, -0.1]),
+    ];
+    const { frame, drawn } = footprints(features, 0);
+    frame(VIEW);
+    drawn.length = 0;
+    frame(VIEW);
+    expect(drawn).toEqual(['near', 'below']);
+  });
+
+  it('looks at the rows in view only and reads no footprint once read, whatever the number of rows', () => {
+    const visited: number[] = [];
+    for (const count of [2_000, 20_000]) {
+      const random = seededRandom(41);
+      const at = new Set<number>();
+      while (at.size < 40) at.add(Math.floor(random() * count));
+      const features: Feature[] = [];
+      for (let i = 0; i < count; i++) {
+        // The rows in view have their anchors out of it, west of it, their footprints over it
+        const position = at.has(i)
+          ? [-0.3, 0.05 + random() * 0.9]
+          : [5 + random() * 95, 5 + random() * 45];
+        features.push(feature(`b${i}`, 'Board', position));
+      }
+      const { frame, drawn, renderer, reads } = footprints(features, 0.5);
+      frame(VIEW);
+      frame(VIEW);
+      const before = reads();
+      drawn.length = 0;
+      frame(VIEW);
+      expect(drawn).toEqual(features.filter((_, i) => at.has(i)).map((f) => f.id));
+      // No footprint is read again in a frame of the same rows
+      expect(reads()).toBe(before);
+      visited.push(renderer.atOnceStats.visited);
+    }
+    expect(visited).toEqual([40, 40]);
+  });
+
+  it('reads the footprint of a row again once it is written', () => {
+    const features = [feature('a', 'Board', [30, 30]), feature('b', 'Board', [40, 30])];
+    const { frame, drawn, table, renderer, reads } = footprints(features, 0.5);
+    frame(VIEW);
+    frame(VIEW);
+    const group = table.groupAt(0);
+    const before = reads();
+    const written = writeRowGeometry(
+      table,
+      group,
+      1,
+      { type: 'Point', coordinates: [1.2, 0.5] },
+      planarCoordinates,
+    );
+    renderer.rowsWritten('layer', [
+      {
+        group: group.handle,
+        row: 1,
+        handle: group.data.handles[1],
+        what: ROW_WRITE_GEOMETRY,
+        ...written,
+        keys: [],
+      },
+    ]);
+    drawn.length = 0;
+    frame(VIEW);
+    expect(drawn).toEqual(['b']);
+    expect(reads()).toBe(before + 1);
   });
 });

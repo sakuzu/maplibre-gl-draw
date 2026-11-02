@@ -622,7 +622,9 @@ draw.extensions.featureTypes.override({
 - `renderer.rows.sprites` は、描画器が点を描く絵を渡します。渡すのは、
   テクスチャと、書式ごとの絵の範囲と、画面の上の大きさです。こうした点は、
   レイヤーのほかの行と一緒に、行の順に同じ描画で描かれるので、絵で描く点と
-  面が交互に並ぶレイヤーも少ない描画で描けます
+  面が交互に並ぶレイヤーも少ない描画で描けます。大きさの欄
+  (`transformFields.scaleKey`) を宣言する型の点は、絵があっても `draw` で
+  描きます。絵は点の書式で選ぶもので、大きさについて行かないためです
 - `rows.appliesTo(view, handle)` は、`appliesTo` と同じ答えを行から返します。
   行はレイヤーの `LayerTableView` で読みます (`getRowValue`、`getRowType`)。
   無いときは、描くために行を分けるたびに、その型の行ごとに地物を作って
@@ -807,6 +809,11 @@ draw.extensions.companionProviders.add(halo);
   ください。行で持つレイヤーでは、`rows.has(view, handle)` (実験的。型は
   `/kasane` にあります) が同じ答えを行から返します。無いときは、描く
   ために行を分けるたびに、行ごとに地物を作って `has` に尋ねます
+- `rows.classifyKeys` (実験的) は、`has` と `rows.has` の答えが読む
+  `properties` の鍵を挙げます。挙げると、行のほかの属性を書いたときは
+  尋ね直さずに描きます。無いときは、行のどの属性を書いても、その行に
+  ついて尋ね直します。答えが読むのに挙げていない鍵を書くと、その行は
+  前の答えのまま描かれます
 - `draw` は、地物そのものの直前に呼ばれます
 - `hitTest` は、付き物が自分に付けた ID と距離 `{ id, distancePx }` か、
   `null` を返します。ライブラリーは、そこから外に渡す `Hit`

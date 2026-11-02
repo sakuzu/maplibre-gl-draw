@@ -249,11 +249,14 @@ describe('features.list and features.count over a Store of rows', () => {
     expect(fromRows.count({ layerId: 'l1' })).toBe(6);
   });
 
-  it('counts the features of a layer or a group without reading the rows, the deleted ones left out', () => {
+  it('counts every feature, or the features of a layer or a group, without reading the rows, the deleted ones left out', () => {
     rows.deleteFeature('c');
     objects.deleteFeature('c');
     const tables = rows.tables as NonNullable<Store['tables']>;
     const scan = vi.spyOn(tables, 'scan');
+    expect(fromRows.count()).toBe(fromObjects.count());
+    expect(fromRows.count({})).toBe(fromObjects.count({}));
+    expect(fromRows.count()).toBe(6);
     const filters: FeatureFilter[] = [
       { layerId: 'l1' },
       { layerId: 'l2' },

@@ -954,5 +954,28 @@ describe('a companion provider', () => {
       deps,
     );
     expect(fromFeatures.hasRow).toBeUndefined();
+    expect(fromRows.classifyKeys).toBeUndefined();
+  });
+
+  it('takes the keys its answers read from rows.classifyKeys, as they are when it is added', () => {
+    const deps = {
+      store: { getFeature: () => undefined, getDragState: () => null },
+      screen: {},
+      customLayer: { getGL: () => null },
+      surface: createTerrainSurface,
+    } as unknown as AdapterDeps;
+    const classifyKeys = ['ring'];
+    const provider = adaptCompanionProvider(
+      {
+        name: 'rows',
+        has: () => false,
+        rows: { has: () => false, classifyKeys },
+        draw() {},
+        hitTest: () => null,
+      },
+      deps,
+    );
+    classifyKeys.push('name');
+    expect(provider.classifyKeys).toEqual(['ring']);
   });
 });

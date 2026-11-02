@@ -184,6 +184,21 @@ describe('narrowing down with has', () => {
   });
 });
 
+describe('the keys the providers read', () => {
+  it('a write of attributes may change the answer when a provider reads a key written or tells no keys', () => {
+    expect(registry.readsKeys(new Set(['ring']))).toBe(false);
+    const unregister = registry.register(stubProvider('p1', [], { classifyKeys: ['ring'] }));
+    expect(registry.readsKeys(new Set(['name']))).toBe(false);
+    expect(registry.readsKeys(new Set(['name', 'ring']))).toBe(true);
+    registry.register(stubProvider('p2', [], { classifyKeys: [] }));
+    expect(registry.readsKeys(new Set(['name']))).toBe(false);
+    registry.register(stubProvider('p3', []));
+    expect(registry.readsKeys(new Set(['name']))).toBe(true);
+    unregister();
+    expect(registry.readsKeys(new Set(['ring']))).toBe(true);
+  });
+});
+
 describe('the calling convention of rendering', () => {
   it('closes the batch before drawing and reopens it once drawing is done', () => {
     const draw = vi.fn();
