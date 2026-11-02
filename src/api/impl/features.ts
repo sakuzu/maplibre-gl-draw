@@ -14,7 +14,12 @@ import { describeStyleProblem } from '../../shared/style-validation.js';
 import { getBoundingBox } from '../../shared/utils/feature-bbox.js';
 import { setOwnProperty } from '../../shared/utils/own-property.js';
 import { featureUpdatesOfPatch, mergedKeys, propertiesPatchOf } from '../../store/feature-edits.js';
-import { forEachMatchingRow, type RowFilter, rowMatcher } from '../../store/feature-stream.js';
+import {
+  forEachMatchingRow,
+  layerIdsInOrder,
+  type RowFilter,
+  rowMatcher,
+} from '../../store/feature-stream.js';
 import { featuresInStackingOrder } from '../../store/item-lists.js';
 import { isFeatureLocked } from '../../store/lock.js';
 import { listEveryFeatureInOrder } from '../../store/ordering.js';
@@ -129,13 +134,18 @@ export function createFeatures(deps: ResourceDeps): FeaturesCollection {
   };
 
   /**
-   * The number of the rows of a layer or of the members of a group, read from the tables without
-   * reading the rows (the deleted ones left out), when the filter names a layer, a group or both
-   * and nothing else (undefined otherwise)
+   * The number of the rows of every layer, of a layer or of the members of a group, read from the
+   * tables without reading the rows (the deleted ones left out), when the filter names nothing, a
+   * layer, a group or both and nothing else (undefined otherwise)
    */
   const countByPlace = (entries: Array<[string, unknown]>): number | undefined => {
     const tables = store.tables;
-    if (!tables || entries.length === 0) return undefined;
+    if (!tables) return undefined;
+    if (entries.length === 0) {
+      let count = 0;
+      for (const layerId of layerIdsInOrder(store)) count += tables.get(layerId)?.rowCount ?? 0;
+      return count;
+    }
     if (entries.some(([key]) => key !== 'layerId' && key !== 'groupId')) return undefined;
     const { layerId, groupId } = Object.fromEntries(entries) as {
       layerId?: unknown;
