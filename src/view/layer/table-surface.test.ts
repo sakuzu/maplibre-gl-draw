@@ -558,6 +558,32 @@ describe('the drawing of the rows on the terrain and on the globe', () => {
       expect(counts.get('texSubImage2D') ?? 0).toBeGreaterThan(0);
       expect(record.every((entry) => entry.kind === 'rows')).toBe(true);
       expect(group.gpuState[0] & 1).toBe(1);
+      // Rows of a moving set, moved, turned and resized: the state and the motion of the set
+      // reach the program in the frame they are set in, the rows drawn in one draw
+      const moved = Int32Array.of(group.data.handles[2], group.data.handles[3]);
+      internals.states.setMoving(moved, 1);
+      for (const edit of [
+        { kind: 'translate', from: [CENTER[0], CENTER[1]], to: [CENTER[0] + 0.01, CENTER[1]] },
+        { kind: 'rotate', center: [CENTER[0], CENTER[1]], angleDegrees: 30 },
+        {
+          kind: 'scale',
+          center: [CENTER[0], CENTER[1]],
+          eastFactor: 2,
+          northFactor: 2,
+          sizeFactor: 2,
+        },
+      ] as const) {
+        if (edit.kind === 'translate') internals.states.setTranslation(1, 0.01, 0);
+        else internals.states.setTransform(1, edit as never);
+        prepare();
+        mock.start();
+        const drawn = frame({ globe });
+        const set = mock.stop();
+        expect((set.get('uniform2fv') ?? 0) + (set.get('uniform4fv') ?? 0)).toBeGreaterThan(0);
+        expect(drawn.every((entry) => entry.kind === 'rows')).toBe(true);
+        expect(drawn.reduce((sum, entry) => sum + entry.to - entry.from, 0)).toBe(200);
+        expect((group.gpuState[2] >> 1) & 3).toBe(1);
+      }
     }
   });
 });
