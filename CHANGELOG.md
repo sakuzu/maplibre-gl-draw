@@ -96,10 +96,13 @@ writing it. Its changes are listed after those of 3.0.0.
   layer held as rows, without making their features, in one member `rows`
   of each of its types, whose types are in `/kasane`:
   `FeatureTypeDefinition.rows.appliesTo` (`FeatureTypeRows`),
-  `CompanionProvider.rows.has` (`CompanionProviderRows`), and
+  `CompanionProvider.rows.has` (`CompanionProviderRows`) with
+  `classifyKeys`, the keys of `properties` its answers read, so that a
+  write of other attributes of a row asks them nothing again, and
   `FeatureRenderer.rows` (`FeatureRendererRows`) with `draw`, which draws
   the rows, and `sprites`, the pictures of the points a renderer draws,
-  drawn with the rows of their layer. In `/kasane` too,
+  drawn with the rows of their layer (the points of a type that declares
+  a scale field are drawn by `draw`). In `/kasane` too,
   `listSelectedRows`, `DraggedRows` (read with
   `draw.rendered.getDraggedRows()`) and the types of the
   pictures (`RowSpriteSource`, `RowSprite`, `RowSpriteScaleStop`).

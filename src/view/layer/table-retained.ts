@@ -76,6 +76,7 @@ import {
   ROW_WRITE_GEOMETRY,
   ROW_WRITE_STATE,
   ROW_WRITE_STYLE,
+  ROW_WRITE_VALUES,
   type RowGroupHandle,
 } from '../../feature-table/types.js';
 import type { GroupVersion, GroupVersionReceiver } from '../../feature-table/versions.js';
@@ -896,6 +897,7 @@ export class TableLayerRenderer {
           view,
           layer,
           oneDraw,
+          transformFields: this.options.transformFields?.() ?? null,
           onSprite: (_r, found) => {
             source = found;
           },
@@ -1276,6 +1278,7 @@ export class TableLayerRenderer {
         if (cache.drawnFrame < this.frameCount - 1) continue;
         const view = tables.view(layerId);
         const companions = deps.companions as FeatureCompanionRegistry;
+        const transformFields = this.options.transformFields?.() ?? null;
         layers.push({
           layerId,
           table,
@@ -1291,6 +1294,7 @@ export class TableLayerRenderer {
               view,
               layer,
               oneDraw: true,
+              transformFields,
               onSprite: () => {},
             }),
           inserts: this.deltaInserts(table),
@@ -1820,8 +1824,8 @@ export class TableLayerRenderer {
     const group = groupCache.group;
     const drawn = this.writeIsDrawn(cache, write);
     // What the classification of a row reads (its type, its style, and what an extension reads
-    // of its feature) may have changed with any write but of its state
-    const classified = (write.what & ~ROW_WRITE_STATE) !== 0;
+    // of its feature) may have changed
+    const classified = this.writeClassifies(cache, group, row, write);
     const stats = this.writeStats;
     let oneDrawChunk: OneDrawRowsChunk | null = null;
     for (const [held, oneDraw] of [
@@ -1940,6 +1944,32 @@ export class TableLayerRenderer {
     return false;
   }
 
+  /**
+   * Whether a write may change the classification of its row: a write of its geometry or its
+   * style, or of attributes an extension may classify it by (a renderer of its type that may
+   * refuse some of its features, a provider of companions that reads a key written or does not
+   * tell the keys it reads). A write of its state only, or of attributes no extension reads,
+   * changes nothing of it
+   */
+  private writeClassifies(
+    cache: LayerCache,
+    group: RowGroup,
+    row: number,
+    write: PendingWrite,
+  ): boolean {
+    if ((write.what & ~(ROW_WRITE_STATE | ROW_WRITE_VALUES)) !== 0) return true;
+    if ((write.what & ROW_WRITE_VALUES) === 0) return false;
+    const deps = cache.deps;
+    if (!deps) return true;
+    const renderer = deps.customRenderers.get(rowType(group.data, row)) as
+      | Pick<FeatureTypeRenderer, 'appliesTo'>
+      | undefined;
+    if (renderer?.appliesTo) return true;
+    const companions = deps.companions as FeatureCompanionRegistry;
+    if (!companions.any()) return false;
+    return write.keys === null || companions.readsKeys(write.keys);
+  }
+
   /** Whether a write changes what is drawn of a row (its geometry, its style, its rule color) */
   private writeIsDrawn(cache: LayerCache, write: PendingWrite): boolean {
     if ((write.what & (ROW_WRITE_GEOMETRY | ROW_WRITE_STYLE)) !== 0) return true;
@@ -1978,6 +2008,7 @@ export class TableLayerRenderer {
       view: tables.view(layer.id),
       layer,
       oneDraw,
+      transformFields: this.options.transformFields?.() ?? null,
       onSprite: (_r, found) => {
         source = found;
       },
@@ -2176,6 +2207,7 @@ export class TableLayerRenderer {
     const oneDraw = drawing === 'one-draw';
     const sprites = new Map<number, RowSpriteSource>();
     const view = tables.view(table.layerId);
+    const transformFields = this.options.transformFields?.() ?? null;
     const ranges = partitionRowGroup(
       group,
       (row) =>
@@ -2187,6 +2219,7 @@ export class TableLayerRenderer {
           view,
           layer,
           oneDraw,
+          transformFields,
           onSprite: (r, source) => sprites.set(r, source),
         }),
       undefined,
@@ -3304,6 +3337,7 @@ export class TableLayerRenderer {
       }
       const sprites = new Map<number, RowSpriteSource>();
       const view = tables.view(layerId);
+      const transformFields = this.options.transformFields?.() ?? null;
       const ranges = partitionRowGroup(
         group,
         (row) =>
@@ -3315,6 +3349,7 @@ export class TableLayerRenderer {
             view,
             layer,
             oneDraw: true,
+            transformFields,
             onSprite: (r, source) => sprites.set(r, source),
           }),
         DELTA_CHUNK_VERTICES,

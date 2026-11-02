@@ -828,6 +828,8 @@ export function adaptCompanionProvider(
     ...(provider.rows && {
       hasRow: (view: LayerTableView, handle: number) => provider.rows?.has(view, handle) === true,
     }),
+    // The keys the answers read, as they are when it is added
+    ...(provider.rows?.classifyKeys && { classifyKeys: [...provider.rows.classifyKeys] }),
     draw(feature, projectionData, zoom, context) {
       drawCompanion(draw, feature, projectionData, zoom, context);
     },

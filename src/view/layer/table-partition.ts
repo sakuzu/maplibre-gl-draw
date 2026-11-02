@@ -22,6 +22,7 @@ import type { RowGroup } from '../../feature-table/layer-table.js';
 import { geometryAt } from '../../feature-table/layer-table.js';
 import { rowHasGeometry, rowType } from '../../feature-table/row-read.js';
 import type { BoundingBox, Feature, Layer } from '../../shared/types/model.js';
+import type { TransformFieldsRegistry } from '../../store/transform-roles.js';
 import { CHUNK_TARGET_VERTICES } from '../../table/partition.js';
 import type { FeatureCompanionRegistry } from '../feature-companion.js';
 import type { RowSpriteSource } from '../renderers/rows/rows-format.js';
@@ -68,12 +69,18 @@ export interface RowClassifyContext {
    * Whether the rows are classified for the drawing in one draw: every row it draws is `rows`,
    * and only the rows it cannot draw are `immediate`. Besides the rows the runs retain, it draws
    * the dashed and dotted lines, the polygons with a dashed outline, and the points an extension
-   * draws with pictures it gives (`rowSprites`); these are the only rows whose answer is not the
-   * one of `classifyFeature`
+   * draws with pictures it gives (`rowSprites`, unless its type declares a scale field); these
+   * are the only rows whose answer is not the one of `classifyFeature`
    */
   readonly oneDraw?: boolean;
   /** Receives each row drawn with the pictures of an extension, with their source */
   readonly onSprite?: (row: number, source: RowSpriteSource) => void;
+  /**
+   * The fields the custom types declare: a row of a type that declares a scale field is drawn at
+   * once, also where its renderer gives pictures (a picture is chosen by the style of a point,
+   * and does not follow its scale)
+   */
+  readonly transformFields?: TransformFieldsRegistry | null;
 }
 
 /** A renderer of a custom type, as the classification reads it */
@@ -150,7 +157,11 @@ export function classifyRow(
   };
   const view = context.view;
   const custom = renderer !== undefined && rendererTakesRow(renderer, view, group, row, featureOf);
-  if (custom && !(oneDraw && renderer?.rowSprites)) return 'immediate';
+  const sprites =
+    oneDraw &&
+    renderer?.rowSprites !== undefined &&
+    context.transformFields?.of(type)?.scaleKey === undefined;
+  if (custom && !sprites) return 'immediate';
 
   // A feature with a companion is drawn at once (the companion is drawn right before it)
   if (rowHasCompanion(context.companions, view, group, row, featureOf)) return 'immediate';

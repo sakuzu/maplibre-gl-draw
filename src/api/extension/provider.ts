@@ -138,6 +138,15 @@ export interface CompanionProviderRows {
    * ask `has` whenever the rows are classified for the drawing, so a provider should have it.
    */
   has(view: LayerTableView, handle: RowHandle): boolean;
+  /**
+   * The keys of `properties` the answers of `has` and `CompanionProvider.has` read, so that a
+   * write of other attributes of a row is drawn without asking them again. Without it, they are
+   * asked again for a row whenever any of its attributes is written. A write of the geometry, the
+   * style or the type of a row asks them again in either case. A key the answers read that is left
+   * out here keeps the row drawn with the answer it had (its companion drawn or not drawn) after
+   * a write of that key. It is read once, when the provider is added.
+   */
+  readonly classifyKeys?: readonly string[];
 }
 
 /**

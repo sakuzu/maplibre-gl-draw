@@ -660,7 +660,10 @@ is in one member of each, `rows`, experimental with its types in `/kasane`
   with: a texture, the rectangle of the picture of a style, and its size on
   screen. Such a point is then drawn with the other rows of its layer, in
   their order and in their draw, so a layer where points drawn as pictures
-  and areas alternate is drawn in a few draws
+  and areas alternate is drawn in a few draws. The points of a type that
+  declares a scale field (`transformFields.scaleKey`) are drawn by `draw`
+  all the same: a picture is chosen by the style of a point, and does not
+  follow its scale
 - `rows.appliesTo(view, handle)` gives the answer of `appliesTo` from the
   row, read from the `LayerTableView` of the layer (`getRowValue`,
   `getRowType`). Without it, a feature is made from each row of the type to
@@ -855,6 +858,12 @@ draw.extensions.companionProviders.add(halo);
   (experimental, its types in `/kasane`) gives the same answer from the
   row; without it, a feature is made from each row to ask `has` whenever
   the rows are sorted for the drawing
+- `rows.classifyKeys` (experimental) names the keys of `properties` the
+  answers of `has` and `rows.has` read. A write of other attributes of a
+  row is then drawn without asking them again; without it, they are asked
+  again for a row whenever any of its attributes is written. A key they
+  read that is left out keeps the row drawn with the answer it had after
+  a write of that key
 - `draw` is called just before the feature itself
 - `hitTest` returns the ID the companion gives itself and the distance,
   `{ id, distancePx }`, or `null`. The library makes the `Hit` it gives

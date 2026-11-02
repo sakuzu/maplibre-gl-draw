@@ -99,6 +99,13 @@ export interface FeatureCompanionProvider {
    */
   hasRow?(view: LayerTableView, handle: RowHandle): boolean;
   /**
+   * The keys of `properties` the answers of `has` and `hasRow` read. Optional: with them, a write
+   * in place of other attributes of a row held as rows keeps the classification of the row (the
+   * provider is not asked again); without them, the row is classified again on every write of its
+   * attributes
+   */
+  classifyKeys?: readonly string[];
+  /**
    * Called immediately before the feature itself (= one z step lower).
    *
    * core flushes the batch in progress before and after the call, so what is drawn always
@@ -202,6 +209,14 @@ export interface FeatureCompanionRegistry {
    * @param featureOf Makes the feature of the row
    */
   hasRow(view: LayerTableView, handle: RowHandle, featureOf: () => Feature): boolean;
+  /**
+   * Whether a write of attributes of a row may change whether it has companions: a provider reads
+   * one of the keys written (`classifyKeys`), or does not tell the keys it reads (false when no
+   * provider is registered)
+   *
+   * @param keys The keys of `properties` written
+   */
+  readsKeys(keys: ReadonlySet<string>): boolean;
 }
 
 /**
@@ -256,6 +271,15 @@ export function createFeatureCompanionRegistry(): FeatureCompanionRegistry {
         }
         feature ??= featureOf();
         if (provider.has(feature)) return true;
+      }
+      return false;
+    },
+
+    readsKeys(keys: ReadonlySet<string>): boolean {
+      for (const provider of providers.values()) {
+        const read = provider.classifyKeys;
+        if (!read) return true;
+        for (const key of read) if (keys.has(key)) return true;
       }
       return false;
     },

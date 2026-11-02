@@ -74,6 +74,16 @@ const INVALID: Array<[ExtensionKind, unknown, string | undefined]> = [
   ],
   ['companion provider', { name: 'c', has: noop, hitTest: noop }, 'draw'],
   ['companion provider', { ...(VALID['companion provider'] as object), onClick: 1 }, 'onClick'],
+  [
+    'companion provider',
+    { ...(VALID['companion provider'] as object), rows: { has: noop, classifyKeys: 'ring' } },
+    'rows.classifyKeys',
+  ],
+  [
+    'companion provider',
+    { ...(VALID['companion provider'] as object), rows: { has: noop, classifyKeys: [1] } },
+    'rows.classifyKeys',
+  ],
 ];
 
 describe('validateExtension', () => {
@@ -81,6 +91,10 @@ describe('validateExtension', () => {
     for (const [kind, value] of Object.entries(VALID)) {
       expect(() => validateExtension(kind as ExtensionKind, value)).not.toThrow();
     }
+    const rows = { has: noop, classifyKeys: ['ring'] };
+    expect(() =>
+      validateExtension('companion provider', { ...(VALID['companion provider'] as object), rows }),
+    ).not.toThrow();
   });
 
   it.each(INVALID)('refuses a %s of the wrong shape', (kind, value, member) => {

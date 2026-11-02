@@ -27,6 +27,10 @@ import type { LayerTable } from '../../feature-table/layer-table.js';
 import { writeRowGeometry } from '../../feature-table/row-write.js';
 import { ROW_WRITE_GEOMETRY, ROW_WRITE_STYLE } from '../../feature-table/types.js';
 import type { Feature, Layer } from '../../shared/types/model.js';
+import {
+  createTransformFieldsRegistry,
+  type TransformFieldsRegistry,
+} from '../../store/transform-roles.js';
 import { createTestDrawer, feature, seededRandom, tablesOfFeatures } from '../../test-utils.js';
 import { createFeatureCompanionRegistry } from '../feature-companion.js';
 import { GpuLedger } from '../gpu-ledger.js';
@@ -211,6 +215,7 @@ function setup(
     parallel?: boolean;
     complete?: () => boolean;
     customRenderers?: Map<string, unknown>;
+    transformFields?: TransformFieldsRegistry;
   } = {},
 ) {
   const { internals, table, tables, writer } = tablesOfFeatures('layer', features, targetRows);
@@ -261,6 +266,7 @@ function setup(
     ledger,
     requestRepaint: () => {},
     buildBudgetMs: Number.POSITIVE_INFINITY,
+    ...(options.transformFields && { transformFields: () => options.transformFields ?? null }),
   });
   /** One frame: the pass before the main one, then the layer; returns the ranges drawn */
   const frame = (bounds?: { minX: number; minY: number; maxX: number; maxY: number }) => {
@@ -580,6 +586,49 @@ describe('the drawing of a layer held as rows in one draw per chunk', () => {
     expect(made[1].sprites).toBeNull();
   });
 
+  it('draws at once the points of an extension whose type declares a scale field, pictures or not', () => {
+    const source: RowSpriteSource = {
+      texture: null,
+      revision: 1,
+      sprite: () => ({ uv: [0, 0, 1, 1], halfWidth: 8, halfHeight: 8, direction: -1 }),
+    };
+    const features = [
+      feature('g', 'Polygon', [
+        [
+          [0, 0],
+          [1, 0],
+          [1, 1],
+          [0, 0],
+        ],
+      ]),
+      feature('a', 'Pin', [1, 1]),
+      feature('b', 'Mark', [2, 2]),
+      feature('l', 'LineString', [
+        [0, 0],
+        [1, 1],
+      ]),
+    ];
+    const transformFields = createTransformFieldsRegistry();
+    transformFields.register('Pin', { scaleKey: 'size' });
+    transformFields.register('Mark', { angleDegreesKey: 'angle' });
+    const { frame, made } = setup(features, undefined, {
+      customRenderers: new Map([
+        ['Pin', { name: 'Pin', rowSprites: source, draw: () => {} }],
+        ['Mark', { name: 'Mark', rowSprites: source, draw: () => {} }],
+      ]),
+      transformFields,
+    });
+    frame();
+    const { record } = frame();
+    // The point of the type with a scale field is drawn at once; the other one with its picture
+    expect(record.map((entry) => [entry.kind, entry.from, entry.to])).toEqual([
+      ['rows', 0, 1],
+      ['immediate', 1, 2],
+      ['rows', 2, 4],
+    ]);
+    expect(made.map((data) => data.sprites)).toEqual([null, source]);
+  });
+
   it('writes the state of the rows before the main pass, and nothing while drawing', () => {
     const { internals, frame, mock } = setup(interleaved(200, 12), 100);
     frame();
@@ -729,6 +778,76 @@ describe('the check of the classification of a row written in place', () => {
     expect(internals.deltaRowCount()).toBe(1);
     expect(atOnce).toBe(true);
     expect(companions).toContain(line.id);
+  });
+
+  it('classifies a row again on a write of a key a provider of companions declares it reads, and only then', () => {
+    const features = interleaved(200, 24);
+    const { internals, tables, writer, renderer, frame, deps, table } = written(features);
+    const asked: number[] = [];
+    deps.companions.register({
+      id: 'ring',
+      has: (f) => f.properties?.ring === true,
+      hasRow: (view, handle) => {
+        asked.push(handle);
+        return view.getRowValue(handle, 'ring') === true;
+      },
+      classifyKeys: ['ring'],
+      draw: () => {},
+      hitTest: () => null,
+      onCompanionClick: () => undefined,
+    });
+    frame();
+    frame();
+    const line = features.find((f) => f.id.startsWith('l')) as Feature;
+    const handle = tables.findRow(line.id) as number;
+    asked.length = 0;
+    // A key it does not read: the row keeps its classification, the provider is not asked
+    writer.apply({ handles: Int32Array.of(handle), fields: new Map([['property:name', ['n']]]) });
+    for (let i = 0; i < 2; i++) {
+      const { record } = frame();
+      expect(drawnHandles(record, table)).toEqual(visibleHandles(table));
+    }
+    expect(asked).toEqual([]);
+    expect(renderer.writeStats.reclassified).toBe(0);
+    expect(internals.deltaRowCount()).toBe(0);
+    // The key it reads: classified again, drawn at once from the delta with its companion
+    writer.apply({ handles: Int32Array.of(handle), fields: new Map([['property:ring', [true]]]) });
+    let atOnce = false;
+    for (let i = 0; i < 4; i++) {
+      const { record, immediate } = frame();
+      expect(drawnHandles(record, table)).toEqual(visibleHandles(table));
+      atOnce ||= immediate.includes(line.id);
+    }
+    expect(asked).toContain(handle);
+    expect(renderer.writeStats.reclassified).toBe(1);
+    expect(internals.deltaRowCount()).toBe(1);
+    expect(atOnce).toBe(true);
+  });
+
+  it('classifies a row again on any write of its attributes while a provider of companions tells no keys', () => {
+    const features = interleaved(200, 25);
+    const { tables, writer, renderer, frame, deps } = written(features);
+    const asked: number[] = [];
+    deps.companions.register({
+      id: 'ring',
+      has: (f) => f.properties?.ring === true,
+      hasRow: (view, handle) => {
+        asked.push(handle);
+        return view.getRowValue(handle, 'ring') === true;
+      },
+      draw: () => {},
+      hitTest: () => null,
+      onCompanionClick: () => undefined,
+    });
+    frame();
+    frame();
+    const line = features.find((f) => f.id.startsWith('l')) as Feature;
+    const handle = tables.findRow(line.id) as number;
+    asked.length = 0;
+    writer.apply({ handles: Int32Array.of(handle), fields: new Map([['property:name', ['n']]]) });
+    frame();
+    expect(asked).toContain(handle);
+    expect(renderer.writeStats.reclassified).toBe(0);
   });
 
   it('writes in place an attribute nothing classifies by, and a row only hidden or shown', () => {
