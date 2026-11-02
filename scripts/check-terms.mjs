@@ -3,10 +3,11 @@
 
 // Checks that core does not describe or depend on any particular extension.
 //
-// Core is a general drawing library. Its documentation, comments and examples must not
+// Core is a general drawing library. Its documentation, comments, tests and examples must not
 // name an extension package, its plugins or its feature types, nor describe how such an
 // extension is built. This script greps the tracked text of the repository for a list of
-// terms that would leak that, and fails when any is found outside the allowed places.
+// terms that would leak that, and fails when any is found outside the allowed places. The
+// messages of the commits are checked against the same lists by scripts/check-commit-terms.mjs.
 //
 // It also fails on the retired names of scripts/term-map.json, so that a rename done with
 // scripts/rename-terms.mjs leaves nothing of the old name behind.
@@ -16,53 +17,44 @@
 //
 // Usage: node scripts/check-terms.mjs
 
-import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
-import { join, relative } from 'node:path';
+import { execFileSync } from 'node:child_process';
+import { existsSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { readTermLists, within } from './terms-local.mjs';
 
 const ROOT = new URL('..', import.meta.url).pathname;
+/** What is checked: these files, and the files under these directories */
 const SCAN = [
   'README.md',
+  'README.ja.md',
   'CONTRIBUTING.md',
   'CONTRIBUTING.ja.md',
   'SECURITY.md',
   'CHANGELOG.md',
-  'docs',
-  'src',
-  'examples',
-  'scripts',
-  'ui',
+  'docs/',
+  'src/',
+  'examples/',
+  'scripts/',
+  'ui/',
+  'playground/',
 ];
-const SKIP_DIRS = new Set(['node_modules', 'dist', 'public', '.pack']);
 /** Generated output that is not written by hand, and the local list of terms itself */
-const SKIP_PATHS = ['docs/reference/api', 'scripts/terms.local'];
+const SKIP_PATHS = ['docs/reference/api/', 'scripts/terms.local/'];
 const EXT = /\.(md|ts|mts|mjs|js|html|css|json|svelte)$/;
 
 /**
- * Terms that name or describe an extension
- *
- * The lists are not kept in this repository, because they would themselves describe the
- * extensions they guard against. A maintainer links them into scripts/terms.local/, which git
- * ignores. The `extension` of every file is read:
- * `{ "extension": [{ "source": "<regular expression>", "flags": "i" }, ...] }`, and the other keys
- * of a file are left to other checks. Without a list, only the retired names are checked.
+ * Terms that name or describe an extension, from the lists of scripts/terms.local/
+ * (scripts/terms-local.mjs reads them). Without a list, only the retired names are checked.
  */
-const LOCAL_DIR = join(ROOT, 'scripts/terms.local');
-const localLists = existsSync(LOCAL_DIR)
-  ? readdirSync(LOCAL_DIR)
-      .filter((f) => f.endsWith('.json'))
-      .sort()
-      .map((f) => JSON.parse(readFileSync(join(LOCAL_DIR, f), 'utf8')))
-  : [];
-const TERMS = localLists
-  .flatMap((list) => list.extension ?? [])
-  .map((t) => new RegExp(t.source, t.flags ?? ''));
+const LISTS = readTermLists(ROOT);
+const TERMS = LISTS.terms;
 
 /** Retired names: the old side of every rename in scripts/term-map.json */
 const RETIRED = JSON.parse(readFileSync(join(ROOT, 'scripts/term-map.json'), 'utf8')).retired.map(
   (source) => new RegExp(source),
 );
 /** Where the retired names are looked for: everything written by hand */
-const RETIRED_SCAN = [...SCAN, 'README.ja.md', 'playground', 'bench'];
+const RETIRED_SCAN = [...SCAN, 'bench/'];
 /** The files that list the renames themselves */
 const RENAME_FILES = new Set(['scripts/term-map.json', 'scripts/rename-terms.mjs']);
 
@@ -74,63 +66,47 @@ const ALLOW = [
   { file: 'scripts/check-terms.mjs', pattern: /./ },
 ];
 
-function* walk(path) {
-  const st = statSync(path);
-  if (st.isDirectory()) {
-    for (const name of readdirSync(path)) {
-      if (SKIP_DIRS.has(name)) continue;
-      if (SKIP_PATHS.includes(relative(ROOT, join(path, name)))) continue;
-      yield* walk(join(path, name));
-    }
-  } else if (EXT.test(path)) {
-    yield path;
-  }
+/** The tracked files and the new files git does not ignore, relative to the root */
+function trackedFiles() {
+  return execFileSync('git', ['ls-files', '--cached', '--others', '--exclude-standard'], {
+    cwd: ROOT,
+    encoding: 'utf8',
+    maxBuffer: 1 << 28,
+  })
+    .split('\n')
+    .filter((file) => file !== '' && EXT.test(file) && existsSync(join(ROOT, file)))
+    .filter((file) => !SKIP_PATHS.some((skip) => file.startsWith(skip)));
 }
 
+const files = trackedFiles();
 const hits = [];
-for (const entry of SCAN) {
-  let abs;
-  try {
-    abs = join(ROOT, entry);
-    statSync(abs);
-  } catch {
-    continue;
-  }
-  for (const file of walk(abs)) {
-    const rel = relative(ROOT, file);
-    const lines = readFileSync(file, 'utf8').split('\n');
-    lines.forEach((line, i) => {
-      for (const term of TERMS) {
-        if (!term.test(line)) continue;
-        if (ALLOW.some((a) => a.file === rel && a.pattern.test(line))) continue;
-        hits.push(`${rel}:${i + 1}: ${line.trim().slice(0, 120)}  [${term.source}]`);
-      }
-    });
-  }
-}
-
 const retiredHits = [];
-for (const entry of RETIRED_SCAN) {
-  let abs;
-  try {
-    abs = join(ROOT, entry);
-    statSync(abs);
-  } catch {
-    continue;
-  }
-  for (const file of walk(abs)) {
-    const rel = relative(ROOT, file);
-    if (RENAME_FILES.has(rel)) continue;
-    const lines = readFileSync(file, 'utf8').split('\n');
-    lines.forEach((line, i) => {
+for (const rel of files) {
+  const scanned = within(rel, SCAN);
+  const retiredScanned = within(rel, RETIRED_SCAN) && !RENAME_FILES.has(rel);
+  if (!scanned && !retiredScanned) continue;
+  const lines = readFileSync(join(ROOT, rel), 'utf8').split('\n');
+  lines.forEach((line, i) => {
+    if (scanned) {
+      for (const term of TERMS) {
+        if (within(rel, term.skip) || !term.pattern.test(line)) continue;
+        if (ALLOW.some((a) => a.file === rel && a.pattern.test(line))) continue;
+        if (LISTS.allowLine(rel, line)) continue;
+        hits.push(`${rel}:${i + 1}: ${line.trim().slice(0, 120)}  [${term.pattern.source}]`);
+      }
+    }
+    if (retiredScanned) {
       for (const term of RETIRED) {
         if (term.test(line)) {
           retiredHits.push(`${rel}:${i + 1}: ${line.trim().slice(0, 120)}  [${term.source}]`);
         }
       }
-    });
-  }
+    }
+  });
 }
+
+/** Allowances of the lists that no line needs any more: they are taken out of the list */
+const unused = LISTS.unusedAllowances();
 
 if (hits.length > 0) {
   console.error('check-terms: text that names or describes an extension:');
@@ -142,8 +118,12 @@ if (retiredHits.length > 0) {
   for (const h of retiredHits) console.error(`  ${h}`);
   console.error(`check-terms: ${retiredHits.length} hit(s)`);
 }
-if (hits.length > 0 || retiredHits.length > 0) process.exit(1);
-if (localLists.length === 0) {
+if (unused.length > 0) {
+  console.error('check-terms: allowances of scripts/terms.local/ that no line needs any more:');
+  for (const a of unused) console.error(`  ${a}`);
+}
+if (hits.length > 0 || retiredHits.length > 0 || unused.length > 0) process.exit(1);
+if (LISTS.count === 0) {
   console.log('check-terms: ok (retired names only; scripts/terms.local/ has no list)');
 } else {
   console.log('check-terms: ok');

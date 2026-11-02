@@ -90,13 +90,15 @@ extension mechanism).
 Names that stand for a concept specific to a particular extension are not
 allowed.
 
-The same holds for documentation, comments, tests and examples: describe
-extension points in general terms and do not describe the features or the
-structure of any particular extension.
+The same holds for documentation, comments, tests, examples and commit
+messages: describe extension points in general terms and do not describe
+the features or the structure of any particular extension.
 
 `npm run check:terms` (part of `npm run lint`) is the gate for this rule.
 It searches the documentation, sources, tests and examples for words that
 name or describe a particular extension and fails when it finds one.
+`npm run check:commit-terms` (part of `npm run lint` too) searches the
+messages of the commits not yet on `main` for the same words.
 
 ## Package structure
 
@@ -217,9 +219,10 @@ npm run typecheck:examples  # examples, playground, bench against src/ types
 npm test           # vitest
 npm run test:e2e   # end-to-end tests on a real maplibre map (about 10 s)
 npm run build      # emit dist/
-npm run lint       # biome lint, then check:layers and check:terms
+npm run lint       # biome lint, then check:layers, check:terms and check:commit-terms
 npm run check:layers  # layer rules and import cycles
 npm run check:terms   # no word that names a particular extension
+npm run check:commit-terms  # the same in the messages of the commits not on main
 npm run docs:api   # generate the API reference (Markdown) into docs/api/
 npm run docs:check # the documentation gate (docs/internals/releasing.md)
 npm run build:site # build the GitHub Pages site into site-dist/

@@ -87,12 +87,15 @@ maplibre-gl-draw (core, 本リポジトリ)
 
 特定の拡張に固有の概念を表す名前は使えません。
 
-ドキュメント、コメント、テスト、examples でも同じです。拡張点は一般的な
-語で説明し、特定の拡張の機能や構造は書きません。
+ドキュメント、コメント、テスト、examples、コミットのメッセージでも
+同じです。拡張点は一般的な語で説明し、特定の拡張の機能や構造は
+書きません。
 
 この規則は `npm run check:terms` (`npm run lint` に含まれます) で検査
 します。ドキュメント、ソース、テスト、examples から特定の拡張を名指し
 したり説明したりする語を探し、見つかれば失敗します。
+`npm run check:commit-terms` (これも `npm run lint` に含まれます) は、
+`main` にまだ無いコミットのメッセージから同じ語を探します。
 
 ## パッケージの構成
 
@@ -202,9 +205,10 @@ npm run typecheck:examples  # 例と playground と bench を src/ の型で確�
 npm test           # vitest
 npm run test:e2e   # 実際の maplibre の地図での E2E テスト (約 10 秒)
 npm run build      # dist/ を生成
-npm run lint       # biome lint のあと check:layers と check:terms
+npm run lint       # biome lint のあと check:layers、check:terms、check:commit-terms
 npm run check:layers  # 層の規則と import の循環
 npm run check:terms   # 特定の拡張を指す語が無いこと
+npm run check:commit-terms  # main に無いコミットのメッセージにも無いこと
 npm run docs:api   # API リファレンスを docs/api/ に生成 (サイト用の Markdown)
 npm run docs:check # ドキュメントの門 (docs/internals/releasing.md)
 npm run build:site # GitHub Pages のサイトを site-dist/ に組み立てる
