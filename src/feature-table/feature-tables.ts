@@ -157,7 +157,7 @@ const RETAIN_TOKENS = 100;
 /** The bytes of the rows the deletions keep, at most, when the options do not tell */
 const RETAIN_BYTES = 64 * 1024 * 1024;
 
-/** The bytes a row kept is counted as (4.10 of the design: a polygon of five corners) */
+/** The bytes a row kept is counted as (a polygon of five corners) */
 const RETAINED_ROW_BYTES = 342;
 
 /**
@@ -724,7 +724,7 @@ interface DeltaInput {
 }
 
 /**
- * New rows of a layer built into row groups of their own (6.5 of the design): a run of keys no
+ * New rows of a layer built into row groups of their own: a run of keys no
  * row of the layer is within, at a place between two groups (or before the first, after the
  * last), gathered over the writes that continue it
  */

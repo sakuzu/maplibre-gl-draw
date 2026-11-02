@@ -1620,7 +1620,7 @@ export class TableLayerRenderer {
       if (!held || !chunk) continue;
       if (classified && !this.classifiedAs(cache, groupCache, row, chunk.range.kind, oneDraw)) {
         // Another kind of run (drawn at once, by another kind, with other pictures): the row is
-        // drawn from the delta (J13 of the design)
+        // drawn from the delta
         stats.reclassified++;
         return false;
       }
@@ -1735,7 +1735,7 @@ export class TableLayerRenderer {
   /**
    * Whether a row is classified as its chunk was cut: the kind of its run (and in one draw the
    * source of its pictures) as it is now. A write that changes it cannot be written in place
-   * (J13 of the design)
+   *
    */
   private classifiedAs(
     cache: LayerCache,

@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * A box drawn over a Store of rows (9.2 of the design): while it is drawn, the rows in it are
+ * A box drawn over a Store of rows: while it is drawn, the rows in it are
  * marked in their state (selected in bulk) and not held, and the selection UI shows them as a
  * Store of objects shows the features its box selects while it is drawn. Let go, the rows are
  * selected and held, and the marks are gone.

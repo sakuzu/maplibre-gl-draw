@@ -3,7 +3,7 @@
 
 /**
  * End-to-end tests of a move of many rows held as features and of a box drawn over rows, on the
- * real maplibre and WebGL of the browser (14.3 of the design)
+ * real maplibre and WebGL of the browser
  *
  * - Many rows held moved as a whole in the middle of an edit are drawn moved by their state and
  *   the translation of their moving set, their rows not written (9.4): the picture is compared

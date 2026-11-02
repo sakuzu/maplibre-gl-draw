@@ -247,7 +247,7 @@ describe('the in-memory Store of rows', () => {
   });
 });
 
-describe('the order of the in-memory Store of rows (stage 3b)', () => {
+describe('the order of the in-memory Store of rows', () => {
   /** The ids of the items of the layer in their order */
   const items = (tables: NonNullable<ReturnType<typeof setup>['tables']>, store: Store) => {
     const view = tables.get('layer');

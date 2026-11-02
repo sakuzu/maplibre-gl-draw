@@ -7,7 +7,7 @@
  * - Writes of every kind at random, groups of features put in another place, with the next
  *   versions made in between, on the main thread and in a Worker: every read gives the
  *   reference, every value of the positions included, in layers of `xy`, `xyz`, `xym` and `xyzm`
- *   (14.2 of the design)
+ *
  * - A write of a `z` or an `m` only is written in place and draws nothing again
  * - The values read are the values written back: `snapshot` and `apply` keep the `z` and the `m`
  * - The dimensions of a layer raised: no value is lost, before and after the next versions

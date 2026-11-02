@@ -3,7 +3,7 @@
 
 /**
  * The Store of rows against the Store of objects, written by the same operations at random
- * (14.2 of the design, stage 3a)
+ *
  *
  * The operations of the Store (create, delete, the style, an attribute, the geometry, another
  * layer, a group), the edits in the middle of a drag and their end or undoing, and the selection
@@ -235,7 +235,7 @@ function itemsOf(store: Store, layerId: string): string[] {
   return layer && layer.kind !== 'table' ? [...layer.items] : [];
 }
 
-describe('the Store of rows against the Store of objects, with the order (stage 3b)', () => {
+describe('the Store of rows against the Store of objects, with the order', () => {
   it('reads the same after items put in other places, grouped and ungrouped at random', () => {
     for (const seed of [11, 12, 13, 14, 15]) {
       const random = seededRandom(seed);

@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * The exports of a Store of rows (10.2 of the design): every feature is made from its row one at
+ * The exports of a Store of rows: every feature is made from its row one at
  * a time, in the order the rows are drawn, without listing the features; the layers and the
  * groups carry the items and the members read from the rows. What is exported loads into a Store
  * of objects as the same document. Emptying the document deletes the rows a layer at a time.

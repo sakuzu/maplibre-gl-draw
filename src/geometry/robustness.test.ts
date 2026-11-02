@@ -4,14 +4,14 @@
 /**
  * Robustness suite (the device that decides whether to adopt GEOS)
  *
- * This is the robustness side of the decision device in section 13 of the design
- * document. Instead of real data (administrative boundaries, meshes), it generates
- * synthetic data deterministically that reproduces their characteristics (exclaves,
- * holes, jagged outlines with thousands of vertices, blocks that share edges) and
- * pathological inputs (self-intersections, slivers, duplicated vertices, nearly
- * collinear points, extreme differences in magnitude), and verifies that the
- * boolean operations and the buffer throw no exception and return topologically
- * valid results.
+ * This is the robustness side of that decision device (see "Why there is no GEOS"
+ * in docs/internals/architecture.md). Instead of real data (administrative
+ * boundaries, meshes), it generates synthetic data deterministically that
+ * reproduces their characteristics (exclaves, holes, jagged outlines with thousands
+ * of vertices, blocks that share edges) and pathological inputs
+ * (self-intersections, slivers, duplicated vertices, nearly collinear points,
+ * extreme differences in magnitude), and verifies that the boolean operations and
+ * the buffer throw no exception and return topologically valid results.
  *
  * The random numbers come from an in-house fixed-seed implementation; Math.random
  * is not used. Every run takes the same input and produces the same result.

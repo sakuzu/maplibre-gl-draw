@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * The features drawn over rows for this client (`FeatureTables.showInPlace`, 9.7 of the design)
+ * The features drawn over rows for this client (`FeatureTables.showInPlace`)
  *
  * - A feature is drawn in the place of the row of its id (a row of the delta drawn and not read),
  *   and the row is not drawn while it is; a feature of no row is drawn at the end of its layer

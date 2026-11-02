@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * The hits of the rows held as columns, tested on their columns (J9 of the design)
+ * The hits of the rows held as columns, tested on their columns
  *
  * - A row of a built-in type is hit on its column read in place, by the test of its type: the
  *   same answer, and the same distance, as the feature of the row (the tolerance, the ends of a

@@ -533,7 +533,7 @@ describe.each(STORE_KINDS)('on %s', (_kind, createStore) => {
     });
 
     // A Store of rows marks the rows in the box while it is drawn and selects them when it is
-    // let go (9.2 of the design): the selection does not follow the box (see below)
+    // let go: the selection does not follow the box (see below)
     it.skipIf(rows)('returns a box selection to the selection it started from', () => {
       context.spatialIndex = { findNear: () => [], findInBounds: () => [] };
       store.setSelection('feature', ['f1']);

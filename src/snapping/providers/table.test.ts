@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * The snapping to the rows held as columns (9.9 of the design)
+ * The snapping to the rows held as columns
  *
  * - The vertices and the edges of the rows, read on their columns, are the candidates the Store
  *   providers give for the same features (the vertex references, the closing vertex of a ring,

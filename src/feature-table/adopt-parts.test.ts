@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * The rows of a layer built in parts (6.8 of the design): rows cut into runs of their keys that
+ * The rows of a layer built in parts: rows cut into runs of their keys that
  * follow each other, each run built into row groups by a builder of its own (as several Workers
  * build the parts of a file at once) and taken in run by run, read as the rows one builder
  * builds: the same rows in the same order, the same items and values. The runs taken in out of

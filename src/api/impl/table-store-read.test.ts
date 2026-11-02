@@ -4,7 +4,7 @@
 /**
  * What reads every feature of a Store of rows without listing them: `features.list` up to a
  * limit, `features.count`, the lock checked when a layer is deleted, and the numbers of the
- * names generated (10.1 and 10.2 of the design). Each answer is compared with the one of an
+ * names generated. Each answer is compared with the one of an
  * in-memory Store of objects holding the same features.
  */
 

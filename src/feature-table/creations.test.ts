@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * Many new rows written at once (6.5 of the design, J12)
+ * Many new rows written at once
  *
  * - New rows whose keys are a run no row of the layer is within, at a place between two groups,
  *   are built into row groups of their own and never go to the delta: an import of thousands of

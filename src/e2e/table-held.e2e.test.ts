@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * End-to-end tests of the rows held as features, drawn in one draw per chunk (14.3 of the design)
+ * End-to-end tests of the rows held as features, drawn in one draw per chunk
  *
  * Rows of an in-memory Store of rows are drawn, then held as features (`tables.hold`, without a
  * selection, so no handle is drawn over them), on the real maplibre and WebGL of the browser,

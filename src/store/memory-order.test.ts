@@ -4,7 +4,7 @@
 /**
  * The moves of the items a Store of objects notifies (`order`): made back from the last one,
  * they put the items of the layers and the groups as they were before the transaction, whatever
- * the writes of it (13.6 of the design)
+ * the writes of it
  */
 
 import { describe, expect, it } from 'vitest';

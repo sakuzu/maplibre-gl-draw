@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * The writes of the operations on a selection of many rows (11.1 of the design)
+ * The writes of the operations on a selection of many rows
  *
  * An operation on many rows selected is planned here as a write of this client (`RowWrite`): the
  * values of the rows, where they go, and the values they had before (read before anything is

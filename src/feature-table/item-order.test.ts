@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * The changes of the order a Store of rows notifies (`order`, 13.6 of the design): a write of
+ * The changes of the order a Store of rows notifies (`order`): a write of
  * few rows tells a move per item, which made back from the last one puts the items as they were;
  * a write of many rows tells one move of the rows per layer, whose values before written back
  * put them back; new keys of groups of features tell the groups moved

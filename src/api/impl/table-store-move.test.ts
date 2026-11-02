@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * A drag of many features held as rows (9.4 of the design): from `moveOpenedByStateFrom` rows held,
+ * A drag of many features held as rows: from `moveOpenedByStateFrom` rows held,
  * the rows of the selection are drawn moved by their state while the drag goes on, their features
  * follow the pointer, and the rows are written once, when the drag ends. With fewer, the rows are
  * written in the middle of the drag, as before.

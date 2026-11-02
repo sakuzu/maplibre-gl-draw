@@ -4,10 +4,10 @@
 /**
  * Performance suite (the device that decides whether to adopt GEOS)
  *
- * This is the performance side of the decision device in section 13 of the design
- * document. It measures the scale criterion, "10,000 items in a dataset", with
- * the fusion of a mesh, the intersection of a mesh with a polygon, and the buffer
- * of a line with a high vertex count.
+ * This is the performance side of that decision device (see "Why there is no GEOS"
+ * in docs/internals/architecture.md). It measures the scale criterion, "10,000
+ * items in a dataset", with the fusion of a mesh, the intersection of a mesh with a
+ * polygon, and the buffer of a line with a high vertex count.
  *
  * The purpose is to record measured values, and the thresholds are set at 3 times
  * the design values to absorb CI variation. Measured values are written to the

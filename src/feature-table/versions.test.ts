@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * The next versions of the row groups (6.3 to 6.5 of the design)
+ * The next versions of the row groups
  *
  * - The next versions take the rows of the deltas, and every read stays the same
  * - A version waits for every side that draws the rows; the writes made meanwhile are kept: the
@@ -16,7 +16,7 @@
  *   meanwhile is dropped, and made again
  * - The rows moved far and the values written in place past the limit make their groups due
  * - Writes of every kind at random, with the versions started, built and swapped at random
- *   between them: every read of the tables gives the reference (14.2 of the design)
+ *   between them: every read of the tables gives the reference
  */
 
 import { describe, expect, it } from 'vitest';

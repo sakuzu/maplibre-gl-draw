@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * `draw.groups.create` and `draw.groups.restore` in a layer held as rows (13.4 of the design): a
+ * `draw.groups.create` and `draw.groups.restore` in a layer held as rows: a
  * group needs features in every layer, and a group this client deleted is kept with its rows
  * deleted, by the token of the deletion, and brought back at the place it had.
  */

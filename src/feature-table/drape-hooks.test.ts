@@ -3,7 +3,7 @@
 
 /**
  * What a side that draws the rows in tiles (a draped drawing) reads of the deltas and the
- * versions (J11 and E1 of the design), seen by a fake drape that keeps one element per copy of
+ * versions, seen by a fake drape that keeps one element per copy of
  * a row
  *
  * - A version goes through built, uploaded and swapped; a side that does not wait for part of
@@ -14,7 +14,7 @@
  *   again around it, and given again once it leaves
  * - The extent of the rows whose drawing changed is told: rows coming into the delta, written
  *   in place, groups replaced
- * - A row of a delta moved far is found where it is now (7.4 of the design)
+ * - A row of a delta moved far is found where it is now
  */
 
 import { describe, expect, it } from 'vitest';

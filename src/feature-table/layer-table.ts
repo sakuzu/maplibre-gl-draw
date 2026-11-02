@@ -293,7 +293,7 @@ export class LayerTable {
   /** The places of the rows of the delta, and what they were found with */
   private places: DeltaPlaces | null = null;
   private placesKey = '';
-  /** The group of each row moved since its group was built, by handle (7.4 of the design) */
+  /** The group of each row moved since its group was built, by handle */
   private readonly moved = new Map<number, RowGroup>();
   /** The rows of the layer changed since their groups were built */
   readonly delta: DeltaRows;

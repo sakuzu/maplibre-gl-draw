@@ -20,7 +20,7 @@
  *   drawn, from the frame it is given
  * - The next versions of the groups: their chunks are built without being drawn, and they are
  *   swapped in the pass before the main one of the frame they are up in; every frame draws the
- *   rows of the layer in their order, once each (14.1 of the design, 6.3)
+ *   rows of the layer in their order, once each
  */
 
 import { utf8ColumnFromStrings } from '@sakuzu/tabane';

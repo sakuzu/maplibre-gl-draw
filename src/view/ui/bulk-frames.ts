@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * The frames of the features selected in bulk, one per row, drawn on the GPU (11.6 of the design)
+ * The frames of the features selected in bulk, one per row, drawn on the GPU
  *
  * Features selected one by one get a frame each from the selection UI, made on the CPU from each
  * feature. Many features selected at once get the same frames drawn from the extents of their

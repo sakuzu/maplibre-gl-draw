@@ -46,7 +46,7 @@ function totalArea(parts: MultiPolygonCoordinates[]): number {
  *
  * It is checked as a relative error. The spherical area is a discrete sum over
  * edges, so when cutting adds vertices the measure itself moves in its lowest
- * digits (section 13 of the design document). A loss of topology does not happen
+ * digits. A loss of topology does not happen
  * at that digit, so a deviation beyond 10^-5 means a polygon was dropped.
  */
 function expectAreaPreserved(parts: MultiPolygonCoordinates[], area: AreaCoordinates): void {

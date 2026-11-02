@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * The select mode over features selected in bulk (`Selection.bulk`, 11 of the design)
+ * The select mode over features selected in bulk (`Selection.bulk`)
  *
  * - A box drawn over a Store of rows finds the rows in it on their columns: the rows whose extent
  *   is in the box are in it, the others are tested as the features they are, by the test of

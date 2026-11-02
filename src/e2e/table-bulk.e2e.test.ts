@@ -3,7 +3,7 @@
 
 /**
  * End-to-end tests of features selected in bulk, on the real maplibre and WebGL of the browser
- * (11.3, 11.4 and 11.6 of the design)
+ *
  *
  * A Store of rows that opens at most 3 features for the selection selects the rows of the scene in
  * bulk; a Store of objects holding the same features selects them one by one. The pictures are

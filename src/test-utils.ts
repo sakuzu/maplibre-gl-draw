@@ -815,7 +815,7 @@ export function expectTablesMatch(
       continue;
     }
     // Every row, the deleted ones included until the next version of their group leaves them out
-    // (nothing keeps them: 4.8 of the design)
+    // (nothing keeps them)
     const internals = featureTablesInternals(tables);
     const present = rows.filter((row) => {
       if (!row.deleted) return true;

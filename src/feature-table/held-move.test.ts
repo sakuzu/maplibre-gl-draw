@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * Many rows held moved as a whole in the middle of an edit (9.4 of the design): from
+ * Many rows held moved as a whole in the middle of an edit: from
  * `moveOpenedByStateFrom` rows held, a row held moved as a whole is drawn moved by its state and
  * the translation of its moving set, its row is not written until the edit ends, and its feature
  * takes every value written. Fewer rows, or another change than a move, write the row as before.

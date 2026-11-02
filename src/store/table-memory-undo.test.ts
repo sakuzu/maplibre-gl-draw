@@ -2,12 +2,12 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * What the undo of a Store of rows relies on (11.7 and 13.5 of the design, stage 3b, the side of
- * core): the rows a deletion of this client deletes are kept by the token of the notification
- * until it is let go of, a deleted row written not deleted is back where it was, the values of
- * rows read and written back through the Store (`restoreRows`) put the rows back, a layer deleted
- * and created again gets its rows back, and the ids of the rows deleted that nothing keeps are
- * forgotten (a handle is given again), with no growth over a long run of imports and deletions
+ * What the undo of a Store of rows relies on: the rows a deletion of this client deletes are kept
+ * by the token of the notification until it is let go of, a deleted row written not deleted is back
+ * where it was, the values of rows read and written back through the Store (`restoreRows`) put the
+ * rows back, a layer deleted and created again gets its rows back, and the ids of the rows deleted
+ * that nothing keeps are forgotten (a handle is given again), with no growth over a long run of
+ * imports and deletions
  */
 
 import { describe, expect, it } from 'vitest';

@@ -2,8 +2,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * Every row taken out of the tables to come back (`FeatureTablesWriter.clear`; 13.7 of the design
- * of the tables: a version put back and the document read again from the start)
+ * Every row taken out of the tables to come back (`FeatureTablesWriter.clear`: a version put back
+ * and the document read again from the start)
  *
  * - The rows opened as features, the features shown in place and the features selected in bulk are
  *   let go of; it is told as a replacement of the document with the rows opened no longer

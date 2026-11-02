@@ -13,7 +13,7 @@
  * - What the drawing could not write into its place goes to the delta as it is
  * - The change written is returned by layer
  * - Writes of every kind at random, applied to the tables and to a reference sorted by the keys:
- *   every read of the tables gives the reference (14.2 of the design, the delta)
+ *   every read of the tables gives the reference
  */
 
 import { utf8ColumnFromStrings } from '@sakuzu/tabane';

@@ -4,8 +4,7 @@
 /**
  * The order of the items of an instance over an in-memory Store of rows: the moves, the groups
  * made and undone, the features taken out of a group and the results of the geometry operations
- * put where their inputs were, through the public API, by the items around a place (13.4 and 13.6
- * of the design)
+ * put where their inputs were, through the public API, by the items around a place
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';

@@ -2,14 +2,14 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * The groups of features written (`writer.applyGroups`, 8.4 of the design)
+ * The groups of features written (`writer.applyGroups`)
  *
  * - A new group, and rows that join it
  * - A new key of a group puts its members, which follow each other at the place of the group, in
  *   their new order: the row groups are cut at the runs of the members and at their new place,
  *   no row is written, and the order before is read until the version is swapped in
- * - A version of a row group being made is dropped by a reorder of its rows (F7), and a version
- *   made with the keys before a reorder is dropped when it comes to be swapped (G12)
+ * - A version of a row group being made is dropped by a reorder of its rows, and a version made
+ *   with the keys before a reorder is dropped when it comes to be swapped
  * - A reorder still waiting is made again with its keys and the new ones
  * - A group hidden hides its members, the ones of the delta too
  * - A group deleted is taken out once no row names it

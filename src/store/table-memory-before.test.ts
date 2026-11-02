@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * The values before of the writes of rows that are not features (13.4 of the design): every way
+ * The values before of the writes of rows that are not features: every way
  * the in-memory Store of rows writes rows of this client (its writes of features, its writer, the
  * writes for this client, the moves of the items, the groups created and deleted) notifies the
  * rows that are not held with the values they had (`previousValues`), and those values written back

@@ -4,8 +4,8 @@
 /**
  * `draw.captureImage`: the image of the map is taken in the frame the map draws next, with the
  * state of this client left out of that frame only; the size asked for is covered by the map, cut
- * at its middle (13.7 of the design of the tables: the thumbnail of a large map is taken from the
- * screen). The pixels themselves are checked by the end-to-end test.
+ * at its middle (the thumbnail of a large map is taken from the screen). The pixels themselves are
+ * checked by the end-to-end test.
  */
 
 import type { Map as MapLibreMap } from 'maplibre-gl';

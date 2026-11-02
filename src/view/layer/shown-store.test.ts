@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * The Store the drawing reads (13.7 of the design of the tables): another document shown in place
+ * The Store the drawing reads: another document shown in place
  * of the document gives the reads of the document, and the state of this client is left out while
  * it is shown and while a frame is taken as an image
  */

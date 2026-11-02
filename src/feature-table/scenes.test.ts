@@ -2,10 +2,10 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * Scenes of the deltas and the versions at their edges (14.4 of the design)
+ * Scenes of the deltas and the versions at their edges
  *
  * - Every group of a layer due at once: the versions held at once stay within their bytes, and
- *   every group gets its next version over the frames (D4)
+ *   every group gets its next version over the frames
  * - A group whose rows all left is taken out
  * - A layer of rows of its delta only gets its first group
  * - A row deleted keeps its key through the versions (it is not dropped yet)

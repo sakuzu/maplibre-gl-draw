@@ -3,7 +3,7 @@
 
 /**
  * End-to-end tests of the rows of the delta drawn at their places, and of the next versions of
- * the row groups swapped in (14.3 of the design)
+ * the row groups swapped in
  *
  * Rows are drawn in one draw per chunk, then written through the writer of their tables so that
  * they go to the delta of their layer: rows put in another place of the order (half transparent,

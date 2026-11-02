@@ -95,7 +95,7 @@ export const FOLD_INLINE_ROWS = 8192;
  */
 export const PENDING_VERSION_BYTES = 64 * 1024 * 1024;
 
-/** The bytes a row of a version is counted as (4.10 of the design: a polygon of 5 corners) */
+/** The bytes a row of a version is counted as (a polygon of 5 corners) */
 const ROW_BYTES = 342;
 
 /**
@@ -136,7 +136,7 @@ export interface GroupVersion {
   readonly stays: Set<RowHandle>;
   /**
    * The groups of features its rows name, and the versions of their keys it was made with (a
-   * version whose rows are in the order of other keys is dropped, G12 of the design)
+   * version whose rows are in the order of other keys is dropped)
    */
   readonly keys: ReadonlyMap<GroupHandle, number>;
   /**
@@ -460,7 +460,7 @@ export class GroupVersions {
     }
   }
 
-  /** Marks a group due when many of its rows moved since it was built (7.4 of the design) */
+  /** Marks a group due when many of its rows moved since it was built */
   checkMoved(group: RowGroup): void {
     const moved = Math.max(MOVED_ROWS_MIN, group.data.length * MOVED_ROWS_SHARE);
     if (group.unindexedCount > moved) this.markDue(group.handle);
@@ -728,8 +728,7 @@ export class GroupVersions {
   /**
    * Starts a version that puts the rows of groups in another order (the keys of groups of
    * features changed): its groups are the groups cut at the runs of the members, built already,
-   * and the keys go in when it is swapped. A version of the groups being made is dropped (F7 of
-   * the design)
+   * and the keys go in when it is swapped. A version of the groups being made is dropped
    */
   startReorder(
     layer: LayerTable,

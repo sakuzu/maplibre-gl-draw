@@ -2,8 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * The edges and the vertices of the rows read on their columns, for tracing and snapping (9.9
- * of the design)
+ * The edges and the vertices of the rows read on their columns, for tracing and snapping
  *
  * - The graph a trace walks, built from the edges of the rows read on their columns, is the graph
  *   built from the features of the rows
