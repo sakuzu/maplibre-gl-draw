@@ -723,12 +723,59 @@ bool rowsGroundBounds(vec2 lo, vec2 hi, vec2 m0, vec2 m1, vec2 m2, vec2 m3,
     vec4 pad = 0.5 + 0.0001 * (abs(low) + abs(high));
     low -= pad;
     high += pad;
+#ifdef GLOBE
+    // On the globe the ground between the corners rises over the chord between them by up to
+    // the sagitta of the arc: taken as ground higher up, the box holds it
+    if (u_projection_transition > 0.0) {
+        vec2 extent = hi - lo;
+        float meters = max(extent.x, extent.y) * ${glslFloat(2 * Math.PI * 6_371_008.8)};
+        high += meters * meters / ${glslFloat(8 * 6_371_008.8)};
+        // Where the globe is seen as a sphere, the ground drawn was found not to lie where its
+        // elevation puts it on the sphere: the box takes the ground anywhere from as far under
+        // the sea as the highest ground is over it, to that height over its own
+        vec4 most = max(abs(low), abs(high));
+        low = min(low, vec4(0.0)) - most;
+        high = max(high, vec4(0.0)) + most;
+    }
+#endif
     return met;
 }
 
 // Projects a Mercator offset from the center at an elevation (meters)
 vec4 rowsProjectMercator(vec2 mercatorOffset, float elevation) {
     vec2 halfLat = half_latitude_of_mercator_offset(mercatorOffset.y);
+#ifdef GLOBE
+    // On the globe the ground is lifted over the sphere by its meters, and on the plane it is
+    // mixed with by its Mercator units, as maplibre draws the terrain
+    if (u_projection_transition > 0.0) {
+        vec4 center = u_projection_center;
+        vec2 halfLng = offset_sine_cosine(
+            wrapped_longitude_offset(mercatorOffset.x * 360.0) * ${glslFloat32(CENTER_PROJECTION_CONSTANTS.halfDegree)});
+        vec3 sphere = sphere_offset(halfLat, halfLng);
+        vec4 c = u_center_sine_cosine;
+        vec3 centerOnSphere = vec3(c.z * c.y, c.x, c.w * c.y);
+        float lift = elevation / ${glslFloat32(CENTER_PROJECTION_CONSTANTS.globeRadius)};
+        vec3 offset = sphere + (centerOnSphere + sphere) * lift;
+        vec4 globe = u_projection_matrix * vec4(offset, 0.0);
+        vec3 position = centerOnSphere + offset;
+        float clipping = 1.0 - (dot(position, u_projection_clipping_plane.xyz) + u_projection_clipping_plane.w);
+        if (u_projection_transition > ${glslFloat32(CENTER_PROJECTION_CONSTANTS.globeOnly)}) {
+            float w = center.w + globe.w;
+            return vec4(center.x + globe.x, center.y + globe.y, clipping * w, w);
+        }
+        vec4 plane = u_projection_fallback_matrix
+            * vec4(mercatorOffset, elevation * u_elevation_params.x, 0.0);
+        float t = u_projection_transition;
+        float s = 1.0 - t;
+        float globeW = (u_projection_matrix * vec4(position, 1.0)).w;
+        float depth = clamp((t - 0.2) / 0.8, 0.0, 1.0);
+        return vec4(
+            center.x + (plane.x * s + globe.x * t),
+            center.y + (plane.y * s + globe.y * t),
+            depth * clipping * globeW,
+            center.w + (plane.w * s + globe.w * t));
+    }
+#endif
     return project_center_offset(mercatorOffset, mercatorOffset.x * 360.0, halfLat,
         elevation * u_elevation_params.x, u_projection_matrix);
 }

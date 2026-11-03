@@ -376,7 +376,6 @@ export class RowsRenderer {
    * frame (its compile starts at the first call)
    */
   get groundReady(): boolean {
-    if (this.variant !== 'flat') return false;
     let program = this.groundPrograms.get(this.variant);
     if (!program) {
       program = this.startProgram(this.variant, 'ground');
