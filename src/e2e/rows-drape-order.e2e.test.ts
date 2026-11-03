@@ -7,6 +7,7 @@
  */
 
 import { appendFileSync, writeFileSync } from 'node:fs';
+import { loadavg } from 'node:os';
 import type { Browser, Page } from 'playwright-core';
 import { afterAll, beforeAll, describe, it } from 'vitest';
 import { browserTimeout } from '../test-utils.js';
@@ -131,13 +132,14 @@ function square(
 
 async function openScene(features: FeatureInput[], camera: Record<string, unknown>) {
   const page = await openMapPage(browser, bundle, camera as never);
-  await page.evaluate(async (exaggeration) => {
+  // The test terrain as the map takes it by default (not exaggerated)
+  await page.evaluate(async () => {
     const w = window as unknown as {
       map: import('maplibre-gl').Map;
-      e2e: { terrain: { addTestTerrain(map: unknown, exaggeration: number): Promise<void> } };
+      e2e: { terrain: { addTestTerrain(map: unknown): Promise<void> } };
     };
-    await w.e2e.terrain.addTestTerrain(w.map, exaggeration);
-  }, EXAGGERATION);
+    await w.e2e.terrain.addTestTerrain(w.map);
+  });
   await load(page, { kind: 'rows', features }, camera.zoom as number, camera.center as never);
   await page.evaluate((c) => {
     const map = (window as unknown as { map: import('maplibre-gl').Map }).map;
@@ -180,6 +182,10 @@ interface Measure {
   steps: number;
   deepest: number;
   frameMs: number;
+  /** The shortest time of a frame with the work of the GPU (the least disturbed by the machine) */
+  minMs: number;
+  /** The times of every frame with the work of the GPU */
+  totals: number[];
   pixels: number[];
 }
 
@@ -306,6 +312,8 @@ async function measure(page: Page, way: Way, frames: number): Promise<Measure> {
         deepest: drape.deepest as number,
         frameMs: times[Math.floor(times.length / 2)] as number,
         totalMs: totals[Math.floor(totals.length / 2)] as number,
+        minMs: totals[0] as number,
+        totals,
         pixels: Array.from(pixels),
       };
     },
@@ -363,7 +371,7 @@ async function ghostPoints(page: Page, features: FeatureInput[]): Promise<string
     .filter((f) => f.type === 'Point')
     .map((f) => (f.geometry as { coordinates: [number, number] }).coordinates);
   return page.evaluate(
-    ({ anchors, exaggeration }) => {
+    ({ anchors }) => {
       const w = window as unknown as {
         map: import('maplibre-gl').Map;
         e2e: {
@@ -389,7 +397,7 @@ async function ghostPoints(page: Page, features: FeatureInput[]): Promise<string
       const Mercator = w.e2e.maplibregl;
       const ground = (x: number, y: number): number => {
         const ll = new Mercator.MercatorCoordinate(x, y, 0).toLngLat();
-        return w.e2e.terrain.testElevation(ll.lng, ll.lat) * exaggeration;
+        return w.e2e.terrain.testElevation(ll.lng, ll.lat);
       };
       const canvas = map.getCanvas();
       let hidden = 0;
@@ -398,7 +406,7 @@ async function ghostPoints(page: Page, features: FeatureInput[]): Promise<string
       for (const [lng, lat] of anchors) {
         const at = Mercator.MercatorCoordinate.fromLngLat(
           { lng, lat },
-          w.e2e.terrain.testElevation(lng, lat) * exaggeration,
+          w.e2e.terrain.testElevation(lng, lat),
         );
         const meter = at.meterInMercatorCoordinateUnits();
         const screen = map.project([lng, lat]);
@@ -426,12 +434,9 @@ async function ghostPoints(page: Page, features: FeatureInput[]): Promise<string
       }
       return `${hidden} of ${anchors.length}, in view ${hiddenInView} of ${inView}`;
     },
-    { anchors, exaggeration: EXAGGERATION },
+    { anchors },
   );
 }
-
-/** The exaggeration of the test terrain (none: the terrain is never exaggerated) */
-const EXAGGERATION = 1;
 
 const WAYS: Way[] = [
   { order: 'breaks' },
@@ -460,7 +465,7 @@ async function measureScene(
       ? await measure(page, { order: reference }, 1)
       : null;
   const line = (m: Measure, diff: number | null) =>
-    `${m.order.padEnd(7)} used=${m.used}(${m.reason}) gl=${m.glDraws} drape=${m.drapeDraws} points=${m.pointDraws} breaks=${m.breaks} steps=${m.steps} deepest=${m.deepest} ms=${m.frameMs.toFixed(1)} total=${m.totalMs.toFixed(1)}${diff === null ? '' : ` diff=${diff}`}`;
+    `${m.order.padEnd(7)} used=${m.used}(${m.reason}) gl=${m.glDraws} drape=${m.drapeDraws} points=${m.pointDraws} breaks=${m.breaks} steps=${m.steps} deepest=${m.deepest} ms=${m.frameMs.toFixed(1)} total=${m.totalMs.toFixed(1)} min=${m.minMs.toFixed(1)}${diff === null ? '' : ` diff=${diff}`}`;
   rows.push(`ghost points: ${await ghostPoints(page, features)}`);
   if (each) {
     let painted = 0;
@@ -473,10 +478,49 @@ async function measureScene(
   }
   const images = process.env.DRAPE_ORDER_IMAGES;
   if (images && each) await writeImage(page, each.pixels, `${images}/${name}-each.png`);
-  for (const way of ways) {
-    const m = await measure(page, way, Number(process.env.DRAPE_ORDER_FRAMES ?? 3));
-    rows.push(line(m, each ? differing(m.pixels, each.pixels) : null));
-    if (images) await writeImage(page, m.pixels, `${images}/${name}-${m.order}.png`);
+  // The ways measured in turn, as many rounds as asked: the time of a frame drawn by the GPU of
+  // the machine (SwiftShader) moves with what else the machine does, so each way is summed up by
+  // the median of its medians and the shortest of its frames over the rounds
+  const rounds = Number(process.env.DRAPE_ORDER_ROUNDS ?? 1);
+  const summary = new Map<string, { totals: number[]; mins: number[]; frames: number[] }>();
+  for (let round = 0; round < rounds; round++) {
+    for (const way of ways) {
+      const m = await measure(page, way, Number(process.env.DRAPE_ORDER_FRAMES ?? 3));
+      rows.push(line(m, each ? differing(m.pixels, each.pixels) : null));
+      const kept = summary.get(m.order) ?? { totals: [], mins: [], frames: [] };
+      kept.totals.push(m.totalMs);
+      kept.frames.push(...m.totals);
+      kept.mins.push(m.minMs);
+      summary.set(m.order, kept);
+      if (images && round === 0) {
+        await writeImage(page, m.pixels, `${images}/${name}-${m.order}.png`);
+      }
+    }
+  }
+  rows.push(
+    `load of the machine at the end: ${loadavg()
+      .map((l) => l.toFixed(1))
+      .join(' ')}`,
+  );
+  if (rounds > 1) {
+    for (const [order, kept] of summary) {
+      const totals = [...kept.totals].sort((a, b) => a - b);
+      const frames = [...kept.frames].sort((a, b) => a - b);
+      const at = (q: number) => (frames[Math.floor(q * (frames.length - 1))] as number).toFixed(1);
+      rows.push(
+        `summary ${order} median=${(totals[Math.floor(totals.length / 2)] as number).toFixed(1)} min=${Math.min(...kept.mins).toFixed(1)} rounds=${totals.length} frames: p25=${at(0.25)} p50=${at(0.5)}`,
+      );
+      // Against the split measured in the same round (the load of the machine moves both)
+      const split = summary.get('splitauto');
+      if (split && order !== 'splitauto') {
+        const ratios = kept.totals
+          .map((t, i) => t / (split.totals[i] as number))
+          .sort((a, b) => a - b);
+        rows.push(
+          `summary ${order}/splitauto ratio median=${(ratios[Math.floor(ratios.length / 2)] as number).toFixed(3)} all=${ratios.map((r) => r.toFixed(2)).join(',')}`,
+        );
+      }
+    }
   }
   const out = process.env.DRAPE_ORDER_OUT;
   if (out) appendFileSync(out, `${name}\n${rows.join('\n')}\n`);
@@ -532,24 +576,26 @@ describe.skipIf(!process.env.DRAPE_ORDER_OUT)(
     }
     if (scenes.includes('large')) {
       const zooms = (process.env.DRAPE_ORDER_ZOOMS ?? '15,13.5,12').split(',').map(Number);
-      for (const zoom of zooms) {
-        it(`alternating points and squares, 2 x 10,000, zoom ${zoom}, pitch 45`, {
-          timeout: browserTimeout(3_600_000),
-        }, async () => {
-          const ways: Way[] = pick([
-            ...[2, 4].map((steps): Way => ({ order: 'split', steps })),
-            { order: 'split' },
-            ...(process.env.DRAPE_ORDER_BREAKS ? [{ order: 'breaks' } as Way] : []),
-          ]);
-          await measureScene(
-            `large-z${zoom}-p45`,
-            alternating(10_000, 0.0004, 0.00012),
-            { center: SLOPE, zoom, pitch: 45, bearing: 0 },
-            ways,
-            (process.env.DRAPE_ORDER_REFERENCE as 'each' | 'each-near' | undefined) ?? null,
-          );
-        });
-      }
+      const pitches = (process.env.DRAPE_ORDER_PITCHES ?? '45').split(',').map(Number);
+      for (const pitch of pitches)
+        for (const zoom of zooms) {
+          it(`alternating points and squares, 2 x 10,000, zoom ${zoom}, pitch ${pitch}`, {
+            timeout: browserTimeout(3_600_000),
+          }, async () => {
+            const ways: Way[] = pick([
+              ...[2, 4].map((steps): Way => ({ order: 'split', steps })),
+              { order: 'split' },
+              ...(process.env.DRAPE_ORDER_BREAKS ? [{ order: 'breaks' } as Way] : []),
+            ]);
+            await measureScene(
+              `large-z${zoom}-p${pitch}`,
+              alternating(10_000, 0.0004, 0.00012),
+              { center: SLOPE, zoom, pitch, bearing: 0 },
+              ways,
+              (process.env.DRAPE_ORDER_REFERENCE as 'each' | 'each-near' | undefined) ?? null,
+            );
+          });
+        }
     }
   },
 );

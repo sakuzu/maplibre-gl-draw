@@ -211,7 +211,7 @@ export interface TableDrapeTile {
    * partitions it reads): the most elements a pixel can have after a point
    */
   readonly depth: number;
-  /** The range of the elevations of the ground of the tile (meters, the exaggeration included) */
+  /** The range of the elevations of the ground of the tile (meters) */
   readonly elevation: readonly [number, number];
   /**
    * The planes of the elevations of the ground of the blocks of the tile, `DRAPE_GROUND_BLOCKS`
@@ -2209,8 +2209,8 @@ function keysFit(keys: TableDrapeKeys, place0: number): boolean {
 }
 
 /**
- * The range of the elevations of the ground of a tile drawn (meters, the exaggeration included),
- * as maplibre keeps it for its DEM tile; a wide one when it does not
+ * The range of the elevations of the ground of a tile drawn (meters), as maplibre keeps it for its
+ * DEM tile; a wide one when it does not
  */
 function elevationRangeOf(terrain: unknown, tileID: unknown): readonly [number, number] {
   const range = (
@@ -2234,8 +2234,8 @@ interface DemLike {
 }
 
 /**
- * The planes of the elevations of the ground of the blocks of a tile drawn (meters, the
- * exaggeration included): fitted to the texels of the DEM its mesh reads in each block (the mesh
+ * The planes of the elevations of the ground of the blocks of a tile drawn (meters, as the DEM
+ * gives them): fitted to the texels of the DEM its mesh reads in each block (the mesh
  * samples the DEM between four texels, and its cells may reach out of the block), with how far
  * they are from it at most. The mesh interpolates the texels, and a plane interpolated is the
  * plane, so no elevation of its ground in a block is further from the plane of the block. Read
@@ -2245,7 +2245,6 @@ function elevationBlocksOf(terrain: unknown, tileID: unknown): Float32Array | nu
   const holder = terrain as {
     tileManager?: { getSourceTile(id: unknown, fallback: boolean): unknown };
     sourceCache?: { getSourceTile(id: unknown, fallback: boolean): unknown };
-    exaggeration?: number;
   };
   const manager = holder.tileManager ?? holder.sourceCache;
   const source = manager?.getSourceTile(tileID, true) as
@@ -2267,7 +2266,6 @@ function elevationBlocksOf(terrain: unknown, tileID: unknown): Float32Array | nu
   const fx = to.x / scale - from.x;
   const fy = to.y / scale - from.y;
   const dim = dem.dim;
-  const exaggeration = holder.exaggeration ?? 1;
   const out = new Float32Array(DRAPE_GROUND_BLOCK_TEXELS * 4);
   // A position of the mesh in a block reads the texels around it (its cell of the mesh may reach
   // out of the block)
@@ -2289,7 +2287,7 @@ function elevationBlocksOf(terrain: unknown, tileID: unknown): Float32Array | nu
       for (let x = x0; x <= x1; x++) {
         su += uOf(x);
         sv += vOf(y);
-        sh += dem.get(x, y) * exaggeration;
+        sh += dem.get(x, y);
         count++;
       }
     }
@@ -2305,7 +2303,7 @@ function elevationBlocksOf(terrain: unknown, tileID: unknown): Float32Array | nu
       const dv = vOf(y) - mv;
       for (let x = x0; x <= x1; x++) {
         const du = uOf(x) - mu;
-        const dh = dem.get(x, y) * exaggeration - mh;
+        const dh = dem.get(x, y) - mh;
         suu += du * du;
         svv += dv * dv;
         suv += du * dv;
@@ -2324,7 +2322,7 @@ function elevationBlocksOf(terrain: unknown, tileID: unknown): Float32Array | nu
     let reach = 0;
     for (let y = y0; y <= y1; y++) {
       for (let x = x0; x <= x1; x++) {
-        const off = Math.abs(dem.get(x, y) * exaggeration - (a + b * uOf(x) + c * vOf(y)));
+        const off = Math.abs(dem.get(x, y) - (a + b * uOf(x) + c * vOf(y)));
         if (off > reach) reach = off;
       }
     }

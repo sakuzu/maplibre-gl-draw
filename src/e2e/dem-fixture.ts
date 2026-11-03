@@ -108,11 +108,12 @@ export interface TestTerrainOptions {
 /**
  * Puts the test terrain on a map and waits until every tile of it has arrived
  *
- * @param exaggeration The vertical exaggeration of the terrain
+ * @param exaggeration The vertical exaggeration of the terrain (none given: the terrain as the map
+ *   takes it by default, not exaggerated)
  */
 export async function addTestTerrain(
   map: MapLibre.Map,
-  exaggeration: number,
+  exaggeration?: number,
   options: TestTerrainOptions = {},
 ): Promise<void> {
   map.addSource(TEST_DEM_SOURCE, {
@@ -122,7 +123,11 @@ export async function addTestTerrain(
     maxzoom: DEM_MAX_ZOOM,
     encoding: 'terrarium',
   });
-  map.setTerrain({ source: TEST_DEM_SOURCE, exaggeration });
+  map.setTerrain(
+    exaggeration === undefined
+      ? { source: TEST_DEM_SOURCE }
+      : { source: TEST_DEM_SOURCE, exaggeration },
+  );
   await new Promise<void>((resolve, reject) => {
     const timer = setTimeout(() => reject(new Error('the terrain did not load')), 20_000);
     map.once('idle', () => {
