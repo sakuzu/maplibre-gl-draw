@@ -991,6 +991,49 @@ describe('the drape of the rows on the relief of the terrain', () => {
     await page.close();
   });
 
+  it('keeps drawing the rows as they are packed while they are packed again across the band', {
+    timeout: browserTimeout(600_000),
+  }, async () => {
+    // Enough edges for the band to end at zoom 11 (more than the wide budget of the drape)
+    const features: FeatureInput[] = [];
+    for (let i = 0; i < 6400; i++) {
+      const x = SLOPE[0] - 0.04 + (i % 80) * 0.001;
+      const y = SLOPE[1] - 0.04 + Math.floor(i / 80) * 0.001;
+      features.push(squareRow(`s${i}`, [x, y], 0.0004, RED));
+    }
+    const near = { ...CAMERA, zoom: 13, pitch: 40 };
+    const far = { ...CAMERA, zoom: 10.5, pitch: 40 };
+    const places: Array<[number, number]> = [];
+    for (let k = -3; k <= 3; k++) places.push([SLOPE[0] + k * 0.005, SLOPE[1] + 0.0002]);
+    const page = await openScene(features, 'rows', near);
+    const inBand = await drapeOf(page);
+    expect(inBand.used, inBand.reason).toBe(true);
+    const jumpAndRead = async (camera: typeof CAMERA): Promise<string[][]> => {
+      await page.evaluate((c) => {
+        (window as unknown as { map: import('maplibre-gl').Map }).map.jumpTo(c);
+      }, camera);
+      const frames = await nextFrames(page, places, 12);
+      return frames.map((frame) => frame.map((c) => String(hueOf(c))));
+    };
+    // Out of the band: the rows packed for the ground are drawn reading it until they are cut
+    // again for the terrain, then as they are cut; red where they are in every frame
+    const out = await jumpAndRead(far);
+    const outDrape = await drapeOf(page);
+    expect(outDrape.reason).toBe('wide-zoom');
+    const reds = (frames: string[][]) => frames.map((f) => f.filter((h) => h === 'red').length);
+    const settledOut = reds(out)[out.length - 1] as number;
+    expect(settledOut).toBeGreaterThan(0);
+    for (const n of reds(out)) expect(n).toBeGreaterThanOrEqual(settledOut - 1);
+    await idle(page);
+    // Into the band: the rows cut for the terrain are drawn as they are cut until they are packed
+    // for the ground
+    const back = await jumpAndRead(near);
+    const settledIn = reds(back)[back.length - 1] as number;
+    expect(settledIn).toBeGreaterThan(0);
+    for (const n of reds(back)) expect(n).toBeGreaterThanOrEqual(settledIn - 1);
+    await page.close();
+  });
+
   it('draws the rows of a moving set moved on the drape, and back where they were', {
     timeout: browserTimeout(120_000),
   }, async () => {

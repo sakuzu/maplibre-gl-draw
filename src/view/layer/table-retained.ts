@@ -375,6 +375,12 @@ interface ChunkCut {
   target: number;
   readonly keys: Int32Array;
   at: number;
+  /**
+   * The generation the rows were cut for before the last check was done, and the frame it was
+   * done in: the rows it wrote reach the GPU with the next frame
+   */
+  before: number;
+  doneFrame: number;
 }
 
 /** A chunk of rows drawn at once */
@@ -788,7 +794,14 @@ export class TableLayerRenderer {
           this.packContext(pass.groupCache as GroupCache),
           (pass.renderers as RetainedRendererSet).rows as RowsRenderer,
           (chunk, keys) => {
-            this.chunkCuts.set(chunk, { generation, target: generation, keys, at: 0 });
+            this.chunkCuts.set(chunk, {
+              generation,
+              target: generation,
+              keys,
+              at: 0,
+              before: generation,
+              doneFrame: -1,
+            });
             this.writeHeights(group, chunk, null);
           },
         );
@@ -2858,6 +2871,8 @@ export class TableLayerRenderer {
       this.invalidateChunk(chunk, true);
       this.pending = true;
     } else if (result === 'done') {
+      cut.before = cut.generation;
+      cut.doneFrame = this.frameCount;
       cut.generation = generation;
       cut.at = 0;
     } else {
@@ -3119,8 +3134,13 @@ export class TableLayerRenderer {
     if (pass.groundInBand) {
       reads =
         current || ((cut as ChunkCut).target === surfaces.generation && (cut as ChunkCut).at > 0);
+    } else if (!cut) {
+      reads = false;
+    } else if (!current) {
+      reads = surfaces.isGround(cut.generation);
     } else {
-      reads = !current && surfaces.isGround((cut as ChunkCut).generation);
+      // Cut again in this frame: the rows it wrote reach the GPU with the next one
+      reads = cut.doneFrame === this.frameCount && surfaces.isGround(cut.before);
     }
     if (reads) this.groundDrawnLast = true;
     return reads;
