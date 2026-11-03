@@ -908,11 +908,7 @@ out vec4 fragColor;
   TERRAIN_SHADE_GLSL +
   `
 void main() {
-#ifdef DEBUG_NOSHADE
-    fragColor = vec4(v_tile, 1.0, u_ground_slot + 1.0);
-#else
     fragColor = vec4(v_tile, terrainShade(v_tile), u_ground_slot + 1.0);
-#endif
 }`;
 
 /**
@@ -1057,10 +1053,7 @@ export class DrapeRenderer {
         this.groundProgram = createProgram(
           gl,
           VERTEX_SOURCE(shaderData.vertexShaderPrelude, shaderData.define),
-          GROUND_FRAGMENT_SOURCE.replace(
-            '#version 300 es\n',
-            `#version 300 es\n${(globalThis as { __rowsGroundDebug?: string }).__rowsGroundDebug ?? ''}\n`,
-          ),
+          GROUND_FRAGMENT_SOURCE,
         );
       } catch {
         this.groundProgram = null;

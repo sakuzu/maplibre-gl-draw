@@ -1409,9 +1409,6 @@ export class TableLayerRenderer {
         if (drawn.length >= DRAPE_GROUND_MAX_SLOTS) break;
         const slot = drawn.length;
         if (
-          !(globalThis as { __rowsGroundDebug?: string }).__rowsGroundDebug?.includes(
-            'DEBUG_NOGROUND',
-          ) &&
           !frame.renderer.drawGroundTile(tile.entry.draw, tile.entry.projection, frame.light, slot)
         ) {
           continue;

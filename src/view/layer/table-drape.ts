@@ -2274,7 +2274,7 @@ function elevationBlocksOf(terrain: unknown, tileID: unknown): Float32Array | nu
   const cell = 1 / getTerrainMeshSize(terrain as Parameters<typeof getTerrainMeshSize>[0]) / scale;
   // The plane of the elevations of the texels a part of the tile reads, in units of the tile
   // (a + b u + c v), and how far they are from it at most
-  const fit = (u0: number, v0: number, u1: number, v1: number, at: number): void => {
+  const fitBlock = (u0: number, v0: number, u1: number, v1: number, at: number): void => {
     const y0 = Math.max(-1, Math.floor((fy + v0 / scale - cell) * dim - 0.5));
     const y1 = Math.min(dim, Math.floor((fy + v1 / scale + cell) * dim - 0.5) + 1);
     const x0 = Math.max(-1, Math.floor((fx + u0 / scale - cell) * dim - 0.5));
@@ -2336,12 +2336,13 @@ function elevationBlocksOf(terrain: unknown, tileID: unknown): Float32Array | nu
   };
   const n = DRAPE_GROUND_BLOCKS;
   for (let by = 0; by < n; by++) {
-    for (let bx = 0; bx < n; bx++) fit(bx / n, by / n, (bx + 1) / n, (by + 1) / n, by * n + bx);
+    for (let bx = 0; bx < n; bx++)
+      fitBlock(bx / n, by / n, (bx + 1) / n, (by + 1) / n, by * n + bx);
   }
   const m = DRAPE_GROUND_COARSE_BLOCKS;
   for (let cy = 0; cy < m; cy++) {
     for (let cx = 0; cx < m; cx++) {
-      fit(cx / m, cy / m, (cx + 1) / m, (cy + 1) / m, n * n + cy * m + cx);
+      fitBlock(cx / m, cy / m, (cx + 1) / m, (cy + 1) / m, n * n + cy * m + cx);
     }
   }
   byTile.set(key, out);

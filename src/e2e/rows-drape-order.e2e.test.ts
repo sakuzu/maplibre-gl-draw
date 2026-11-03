@@ -131,9 +131,6 @@ function square(
 
 async function openScene(features: FeatureInput[], camera: Record<string, unknown>) {
   const page = await openMapPage(browser, bundle, camera as never);
-  await page.evaluate((debug) => {
-    (globalThis as { __rowsGroundDebug?: string }).__rowsGroundDebug = debug;
-  }, process.env.DRAPE_GROUND_DEBUG ?? '');
   await page.evaluate(async (exaggeration) => {
     const w = window as unknown as {
       map: import('maplibre-gl').Map;
@@ -223,7 +220,7 @@ function nameOf(way: Way): string {
 async function measure(page: Page, way: Way, frames: number): Promise<Measure> {
   log(`measure ${nameOf(way)}`);
   return page.evaluate(
-    async ({ way, frames, name, debug }) => {
+    async ({ way, frames, name }) => {
       const w = window as unknown as {
         map: import('maplibre-gl').Map & { redraw(): void };
         draw: unknown;
@@ -237,7 +234,6 @@ async function measure(page: Page, way: Way, frames: number): Promise<Measure> {
         };
       };
       const hooks = w.e2e.internals.tableDiagnosticsOf(w.draw);
-      (globalThis as { __rowsGroundDebug?: string }).__rowsGroundDebug = debug;
       hooks.setDrapeOrder(way.order, { steps: way.steps ?? 0, tail: way.tail ?? 'over' });
       const map = w.map;
       const gl = map.getCanvas().getContext('webgl2') as WebGL2RenderingContext & {
@@ -313,7 +309,7 @@ async function measure(page: Page, way: Way, frames: number): Promise<Measure> {
         pixels: Array.from(pixels),
       };
     },
-    { way, frames, name: nameOf(way), debug: process.env.DRAPE_GROUND_DEBUG ?? '' },
+    { way, frames, name: nameOf(way) },
   );
 }
 

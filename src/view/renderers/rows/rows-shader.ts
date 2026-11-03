@@ -151,7 +151,6 @@ export function buildRowsVertexSource(
 #define TABLE_ROWS
 ${keyed ? '#define ROWS_KEY' : ''}
 ${ground ? '#define ROWS_GROUND' : ''}
-${ground ? ((globalThis as { __rowsGroundDebug?: string }).__rowsGroundDebug ?? '') : ''}
 ${prelude}
 ${define}
 ${getProjectionTransitionUniform(prelude)}${OFFSET_MODE_GLSL}${TERRAIN_SHADE_VERTEX_GLSL}${ROW_STATE_GLSL}${TERRAIN_OCCLUSION_GLSL}
@@ -744,10 +743,6 @@ vec4 rowsProjectMercator(vec2 mercatorOffset, float elevation) {
 
 // Emits the corner of a box on the screen (device px): its origin and its two axes
 void rowsEmitBox(vec2 origin, vec2 axisX, vec2 axisY) {
-#ifdef DEBUG_TINY
-    axisX = vec2(0.0);
-    axisY = vec2(0.0);
-#endif
     vec2 unit = quadCorner() * 0.5 + 0.5;
     vec2 at = origin + axisX * unit.x + axisY * unit.y;
     gl_Position = vec4(at / u_viewport * 2.0 - 1.0, ${glslFloat(SYMBOL_DEPTH)}, 1.0);
@@ -923,12 +918,6 @@ void main() {
     bool hasCreatedZoom = rowStyle.z > 0.5;
 
 #ifdef ROWS_GROUND
-#ifdef DEBUG_NOHULL
-    if (kind != ${ROWS_KIND.point} && kind != ${ROWS_KIND.sprite}) {
-        gl_Position = ${ROW_HIDDEN_POSITION_GLSL};
-        return;
-    }
-#endif
     if (kind == ${ROWS_KIND.fill}) {
         drawGroundFill(style);
         return;
@@ -969,11 +958,9 @@ export function buildRowsFragmentSource(variant: RowsFragmentVariant = 'color'):
     segment: '#define ROWS_SEGMENT',
     ground: '#define ROWS_GROUND',
   };
-  const debug = (globalThis as { __rowsGroundDebug?: string }).__rowsGroundDebug ?? '';
   return `#version 300 es
 precision highp float;
 ${defines[variant]}
-${debug}
 
 flat in int v_kind;
 flat in vec4 v_color;
@@ -1261,9 +1248,6 @@ mat2 groundToScreenOf(vec2 dx, vec2 dy) {
 }
 
 vec4 shadeGroundFill() {
-#ifdef DEBUG_CHEAP
-    return vec4(1.0, 0.0, 0.0, 0.02);
-#endif
     vec2 q;
     float shade;
     vec2 stepX;
@@ -1286,9 +1270,6 @@ vec4 shadeGroundFill() {
 // a pixel near a corner taken by the one of the two edges on its side of the bisector of the
 // corner on the screen, and a piece of a segment taking the pixels nearest to it
 vec4 shadeGroundEdge() {
-#ifdef DEBUG_CHEAP
-    return vec4(0.0, 0.0, 1.0, 0.02);
-#endif
     vec2 q;
     float shade;
     vec2 stepX;
