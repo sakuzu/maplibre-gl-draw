@@ -69,8 +69,12 @@ import {
 import type { RetainedStyleResolver } from '../renderers/retained.js';
 import {
   ROWS_DASH,
+  ROWS_EDGE_FRINGE,
+  ROWS_EDGE_INSIDE_LEFT,
   ROWS_INSTANCE_FLOATS,
   ROWS_KIND,
+  ROWS_PAIR_EDGE_BITS,
+  ROWS_PAIR_EDGES,
   ROWS_ROW_STYLE_FLOATS,
   ROWS_STYLE_FLOATS,
   type RowSprite,
@@ -342,7 +346,26 @@ export interface RowsSurface {
    * terrain discards the back faces of the fills)
    */
   readonly orient: boolean;
+  /**
+   * Whether the polygons and the lines read the ground seen at each pixel (the drape band of
+   * the terrain): they are packed whole, their pairs of triangles knowing which of their edges
+   * are on the outline and their outlines which side is inside, with the edges that draw the
+   * soft edge of a fill whose outline does not
+   */
+  readonly ground?: boolean;
 }
+
+/**
+ * The surface of the polygons and the lines that read the ground seen at each pixel
+ *
+ * @internal
+ */
+export const GROUND_SURFACE: RowsSurface = {
+  fill: null,
+  linePiece: 0,
+  orient: false,
+  ground: true,
+};
 
 /**
  * The room a line or a polygon row packed for a surface that cuts it leaves after its instances
@@ -383,6 +406,8 @@ export function rowSurfaceKey(group: RowGroup, row: number, surface: RowsSurface
     case 'Polygon':
     case 'MultiPolygon':
     case 'Circle': {
+      // Packed whole, with what the reading of the ground needs
+      if (surface.ground) return GROUND_KEY;
       const step = surface.fill;
       if (!step) return 0;
       const b = group.data.rowBounds;
@@ -411,6 +436,9 @@ export function rowSurfaceKey(group: RowGroup, row: number, surface: RowsSurface
       return 0;
   }
 }
+
+/** The fingerprint of a polygon packed for the ground seen at each pixel */
+const GROUND_KEY = hashString('ground');
 
 /** How an extent lies to a region: inside it, outside it, or across its edge (with the edge) */
 function regionRelation(
@@ -1711,6 +1739,9 @@ function collectPolygonRow(
   }
   const solidOutline = slot.hasStroke && !slot.dashedStroke;
   const dashedOutline = slot.hasStroke && slot.dashedStroke;
+  // Read on the ground: the pairs know their edges on the outline, the outlines the side of the
+  // inside, and the soft edge of the fill is drawn by its outline or by edges of its own
+  const ground = surface?.ground === true;
   for (const part of plan.parts) {
     const fill = part.triangleTo > part.triangleFrom && slot.fillColor[3] > 0;
     if (!fill && !slot.hasStroke) continue;
@@ -1726,6 +1757,7 @@ function collectPolygonRow(
         );
       }
     }
+    const rings = ground ? groundRingsOf(coords, stride, runs) : null;
     // 1. The fill, in the pairs of triangles of its triangulation
     if (fill) {
       const shift = base - part.base;
@@ -1737,19 +1769,53 @@ function collectPolygonRow(
           triangles[t + 1] + shift,
           triangles[t + 2] + shift,
           triangles[t + 3] + shift,
+          rings
+            ? pairEdges(
+                rings,
+                triangles[t] - part.base,
+                triangles[t + 1] - part.base,
+                triangles[t + 2] - part.base,
+                triangles[t + 3] - part.base,
+              )
+            : 0,
         );
       }
     }
-    // 2. The outline: the edges of every ring
+    // 2. The soft edge of the fill outside it, where the outline does not draw it
+    if (rings && fill && !solidOutline) {
+      let ringBase = base;
+      for (let k = 0; k < runs.length; k += 2) {
+        const count = runs[k + 1] - runs[k];
+        const at = (j: number) => ringBase + (((j % count) + count) % count);
+        const side = rings.insideLeft[k / 2] ? ROWS_EDGE_INSIDE_LEFT : 0;
+        for (let j = 0; j < count; j++) {
+          draft.instance(
+            ROWS_KIND.fringe,
+            row,
+            at(j - 1),
+            at(j),
+            at(j + 1),
+            at(j + 2),
+            side | ROWS_EDGE_FRINGE,
+          );
+        }
+        ringBase += count;
+      }
+    }
+    // 3. The outline: the edges of every ring
     if (solidOutline || dashedOutline) {
       let ringBase = base;
       for (let k = 0; k < runs.length; k += 2) {
         const count = runs[k + 1] - runs[k];
         const at = (j: number) => ringBase + (((j % count) + count) % count);
         let before = 0;
+        // Read on the ground, a solid outline draws the soft edge of the fill too
+        const flags = rings
+          ? (rings.insideLeft[k / 2] ? ROWS_EDGE_INSIDE_LEFT : 0) | (fill ? ROWS_EDGE_FRINGE : 0)
+          : 0;
         for (let j = 0; j < count; j++) {
           if (solidOutline) {
-            draft.instance(ROWS_KIND.outline, row, at(j - 1), at(j), at(j + 1), at(j + 2));
+            draft.instance(ROWS_KIND.outline, row, at(j - 1), at(j), at(j + 1), at(j + 2), flags);
             continue;
           }
           // A dashed ring is a line from its first coordinate around back to it, with a round
@@ -1771,6 +1837,78 @@ function collectPolygonRow(
       }
     }
   }
+}
+
+/**
+ * The rings of a polygon as its fill and its outline number their coordinates (one after the
+ * other): where each starts, how many coordinates it has, and whether the inside of the polygon
+ * is on the left of its edges (on the map with the north up: the outer ring counterclockwise,
+ * a hole clockwise)
+ */
+interface GroundRings {
+  readonly starts: number[];
+  readonly counts: number[];
+  readonly insideLeft: boolean[];
+}
+
+function groundRingsOf(
+  coords: ArrayLike<number>,
+  stride: number,
+  runs: ArrayLike<number>,
+): GroundRings {
+  const starts: number[] = [];
+  const counts: number[] = [];
+  const insideLeft: boolean[] = [];
+  let next = 0;
+  for (let k = 0; k < runs.length; k += 2) {
+    const from = runs[k] as number;
+    const to = runs[k + 1] as number;
+    starts.push(next);
+    counts.push(to - from);
+    next += to - from;
+    // Twice the signed area of the ring (positive counterclockwise), from its first point
+    let area = 0;
+    const x0 = coords[from * stride] as number;
+    const y0 = coords[from * stride + 1] as number;
+    for (let c = from + 1; c + 1 < to; c++) {
+      const ax = (coords[c * stride] as number) - x0;
+      const ay = (coords[c * stride + 1] as number) - y0;
+      const bx = (coords[(c + 1) * stride] as number) - x0;
+      const by = (coords[(c + 1) * stride + 1] as number) - y0;
+      area += ax * by - ay * bx;
+    }
+    // The outer ring holds the inside, a hole leaves it out
+    insideLeft.push(k === 0 ? area > 0 : area < 0);
+  }
+  return { starts, counts, insideLeft };
+}
+
+/** Whether two coordinates of the rings are the ends of an edge of the outline */
+function onOutline(rings: GroundRings, a: number, b: number): boolean {
+  if (a === b) return false;
+  for (let k = 0; k < rings.starts.length; k++) {
+    const start = rings.starts[k] as number;
+    const count = rings.counts[k] as number;
+    if (a < start || a >= start + count) continue;
+    if (b < start || b >= start + count) return false;
+    const d = (((b - a) % count) + count) % count;
+    return d === 1 || d === count - 1;
+  }
+  return false;
+}
+
+/** What a pair of triangles a b c and c b d knows of its edges on the outline */
+function pairEdges(rings: GroundRings, a: number, b: number, c: number, d: number): number {
+  const bits = ROWS_PAIR_EDGE_BITS;
+  let edges = ROWS_PAIR_EDGES;
+  if (onOutline(rings, a, b)) edges |= bits.ab;
+  if (onOutline(rings, b, c)) edges |= bits.bc;
+  if (onOutline(rings, c, a)) edges |= bits.ca;
+  if (d !== c) {
+    if (onOutline(rings, b, d)) edges |= bits.bd;
+    if (onOutline(rings, d, c)) edges |= bits.dc;
+  }
+  return edges;
 }
 
 /**

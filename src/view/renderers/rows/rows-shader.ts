@@ -63,8 +63,12 @@ import { POINT_SDF_GLSL } from '../point/point-sdf.js';
 import { ROW_HIDDEN_POSITION_GLSL, ROW_STATE_GLSL } from '../row-state.js';
 import {
   ROW_SPRITE_SCALE_MAX_STOPS,
+  ROWS_EDGE_FRINGE,
+  ROWS_EDGE_INSIDE_LEFT,
   ROWS_KIND,
   ROWS_KIND_SHIFT,
+  ROWS_PAIR_EDGE_BITS,
+  ROWS_PAIR_EDGES,
   ROWS_ROW_MASK,
   ROWS_STYLE_TEXELS,
 } from './rows-format.js';
@@ -669,9 +673,10 @@ void drawFill(int style) {
 uniform highp sampler2D u_ground_tiles;
 uniform highp sampler2D u_ground_blocks;
 uniform int u_ground_count;
-// A fill: its four corners (Mercator offsets from the center). An edge: its ends, the points
-// before and after it (its own ends for none), and the piece of it drawn with whether a point
-// is before and after it
+// A fill: its four corners (Mercator offsets from the center), and in v_gc.x what it knows of its
+// edges on the outline (ROWS_PAIR_EDGES). An edge: its ends, the points before and after it (its
+// own ends for none), the piece of it drawn with whether a point is before and after it, and in
+// v_params.z what an edge of an outline knows (ROWS_EDGE_INSIDE_LEFT, ROWS_EDGE_FRINGE)
 flat out vec4 v_ga;
 flat out vec4 v_gb;
 flat out vec4 v_gc;
@@ -769,6 +774,7 @@ void drawGroundFill(int style) {
     }
     v_ga = vec4(m0, m1);
     v_gb = vec4(m2, m3);
+    v_gc = vec4(a_tail.w, 0.0, 0.0, 0.0);
     v_color = rowsStyle(style, 0);
     v_params = vec4(0.0);
     // The box on the screen of the corners between where the ground may be
@@ -804,24 +810,32 @@ void drawGroundFill(int style) {
 }
 
 void drawGroundEdge(int kind, int style, float createdZoom, bool hasCreatedZoom) {
-    bool outline = kind == ${ROWS_KIND.outline};
+    bool segment = kind == ${ROWS_KIND.segment};
     bool dashedOutline = kind == ${ROWS_KIND.dashedOutline};
+    // An outline or a fringe goes round its ring: it always has a point before and after it
+    bool ring = kind == ${ROWS_KIND.outline} || kind == ${ROWS_KIND.fringe};
     int prevIdx = int(a_head.x);
     int nextIdx = int(a_tail.x);
-    float t0 = outline ? 0.0 : a_tail.y;
-    float t1 = outline ? 1.0 : a_tail.z;
-    vec2 ma = shade_mercator_offset(rowsCoord(a_head.y));
-    vec2 mb = shade_mercator_offset(rowsCoord(a_head.z));
-    emitShadeOffset(rowsCoord(a_head.y));
-    bool hasPrev = outline || prevIdx >= 0;
-    bool hasNext = outline || nextIdx >= 0;
-    vec2 mp = hasPrev ? shade_mercator_offset(rowsCoord(a_head.x)) : ma;
-    vec2 mn = hasNext ? shade_mercator_offset(rowsCoord(a_tail.x)) : mb;
-    // The widths and the color, as the segments and the outlines take them
-    vec4 widths = rowsStyle(style, outline || dashedOutline ? 2 : 1);
-    vec4 color = rowsStyle(style, outline ? 1 : (dashedOutline ? 3 : 0));
+    float t0 = ring ? 0.0 : a_tail.y;
+    float t1 = ring ? 1.0 : a_tail.z;
+    vec2 offsetA = rowsCoord(a_head.y);
+    vec2 offsetB = rowsCoord(a_head.z);
+    vec2 ma = shade_mercator_offset(offsetA);
+    vec2 mb = shade_mercator_offset(offsetB);
+    emitShadeOffset(offsetA);
+    bool hasPrev = ring || prevIdx >= 0;
+    bool hasNext = ring || nextIdx >= 0;
+    vec2 offsetP = hasPrev ? rowsCoord(a_head.x) : offsetA;
+    vec2 offsetN = hasNext ? rowsCoord(a_tail.x) : offsetB;
+    vec2 mp = shade_mercator_offset(offsetP);
+    vec2 mn = shade_mercator_offset(offsetN);
+    // The widths and the color of the line or of the outline, as the segments and the outlines
+    // take them (a fringe draws no outline)
+    bool polygonLine = !segment;
+    vec4 widths = rowsStyle(style, polygonLine ? 2 : 1);
+    vec4 color = rowsStyle(style, kind == ${ROWS_KIND.outline} ? 1 : (dashedOutline ? 3 : 0));
     float strokeWidth = hasCreatedZoom ? widths.x : widths.y;
-    float lineWidth = (outline
+    float lineWidth = (kind == ${ROWS_KIND.outline}
         ? (strokeWidth >= 0.0 ? strokeWidth * pow(2.0, u_zoom - createdZoom) : -strokeWidth)
         : (strokeWidth > 0.0
             ? strokeWidth * pow(2.0, u_zoom - createdZoom)
@@ -829,17 +843,44 @@ void drawGroundEdge(int kind, int style, float createdZoom, bool hasCreatedZoom)
     float ink = clamp(lineWidth, 0.0, 1.0);
     lineWidth = max(lineWidth, 1.0);
     float halfWidth = lineWidth / 2.0;
+    bool fringe = kind == ${ROWS_KIND.fringe};
+    if (fringe) ink = 0.0;
+    float flags = ring ? a_tail.w : 0.0;
+    // The soft edge of the fill outside the polygon, in the color of the fill
+    bool softEdge = ring && (int(flags + 0.5) & ${ROWS_EDGE_FRINGE}) != 0;
     v_color = vec4(color.rgb, color.a * ink);
-    v_params = vec4(halfWidth, 0.0, 0.0, 0.0);
+    v_color2 = softEdge ? rowsStyle(style, 0) : vec4(0.0);
+    v_params = vec4(halfWidth, 0.0, flags, 0.0);
     v_ga = vec4(ma, mb);
     v_gb = vec4(mp, mn);
     v_gc = vec4(t0, t1, hasPrev ? 1.0 : 0.0, hasNext ? 1.0 : 0.0);
+    // A dashed line or outline: the pattern as the segments take it (CSS px), where the segment
+    // starts on the line, and the lengths of the segments before it, of it and after it on the line
+    int pattern = int(widths.w + 0.5);
+    if (pattern > 0 && !ring) {
+        float cssWidth = widths.z
+            * (hasCreatedZoom ? pow(2.0, u_zoom - createdZoom) : 1.0)
+            * u_size_scale;
+        vec3 k = pattern == 1
+            ? vec3(${glslFloat(DASH_COEFFICIENTS.dashed.a)}, ${glslFloat(DASH_COEFFICIENTS.dashed.b)}, ${glslFloat(DASH_COEFFICIENTS.dashed.c)})
+            : vec3(${glslFloat(DASH_COEFFICIENTS.dotted.a)}, ${glslFloat(DASH_COEFFICIENTS.dotted.b)}, ${glslFloat(DASH_COEFFICIENTS.dotted.c)});
+        float dash = max(k.x, k.y * cssWidth);
+        float gap = max(cssWidth + 1.0, k.z * cssWidth);
+        float scale = pow(2.0, u_zoom);
+        v_dash = vec3(dash, dash + gap, a_tail.w * scale);
+        v_dash_range = vec3(
+            hasPrev ? dashLength0(offsetP, offsetA) * scale : 0.0,
+            dashLength0(offsetA, offsetB) * scale,
+            hasNext ? dashLength0(offsetB, offsetN) * scale : 0.0
+        );
+    }
 
     vec2 pa = mix(ma, mb, t0);
     vec2 pb = mix(ma, mb, t1);
     vec4 low;
     vec4 high;
-    if (!rowsGroundBounds(min(pa, pb), max(pa, pb), pa, pb, pa, pb, low, high) || ink <= 0.0) {
+    if (!rowsGroundBounds(min(pa, pb), max(pa, pb), pa, pb, pa, pb, low, high)
+        || (ink <= 0.0 && !softEdge)) {
         gl_Position = ${ROW_HIDDEN_POSITION_GLSL};
         return;
     }
@@ -922,8 +963,15 @@ void main() {
         drawGroundFill(style);
         return;
     }
-    if (kind == ${ROWS_KIND.segment} || kind == ${ROWS_KIND.dashedOutline} || kind == ${ROWS_KIND.outline}) {
+    if (kind == ${ROWS_KIND.segment} || kind == ${ROWS_KIND.dashedOutline}
+        || kind == ${ROWS_KIND.outline} || kind == ${ROWS_KIND.fringe}) {
         drawGroundEdge(kind, style, createdZoom, hasCreatedZoom);
+        return;
+    }
+#else
+    // The soft edges of the fills are drawn only where the ground is read
+    if (kind == ${ROWS_KIND.fringe}) {
+        gl_Position = ${ROW_HIDDEN_POSITION_GLSL};
         return;
     }
 #endif
@@ -1247,68 +1295,163 @@ mat2 groundToScreenOf(vec2 dx, vec2 dy) {
     return mat2(dy.y, -dx.y, -dy.x, dx.x) / det;
 }
 
-vec4 shadeGroundFill() {
-    vec2 q;
-    float shade;
-    vec2 stepX;
-    vec2 stepY;
-    bool seen = groundHere(q, shade, stepX, stepY);
-    if (!seen) discard;
-    if (!inTriangle(q, v_ga.xy, v_ga.zw, v_gb.xy) && !inTriangle(q, v_ga.zw, v_gb.xy, v_gb.zw)) {
-        discard;
-    }
-    if (groundBroken(stepX, stepY)) {
-        // A pixel seen through a crack has no ground of its own
-        bool lone = false;
-        groundToScreen(ivec2(gl_FragCoord.xy), q, lone);
-        if (lone) discard;
-    }
-    return vec4(v_color.rgb * shade, v_color.a * u_opacity);
+// The shortest vector from the pixel (the origin) to a segment on the screen
+vec2 groundClosest(vec2 a, vec2 b) {
+    vec2 ab = b - a;
+    float len2 = dot(ab, ab);
+    float t = len2 > 0.0 ? clamp(-dot(a, ab) / len2, 0.0, 1.0) : 0.0;
+    return a + ab * t;
 }
 
-// An edge of an outline or a segment of a line: the distance on the screen from the pixel to it,
-// a pixel near a corner taken by the one of the two edges on its side of the bisector of the
-// corner on the screen, and a piece of a segment taking the pixels nearest to it
-vec4 shadeGroundEdge() {
-    vec2 q;
-    float shade;
+float groundCross(vec2 a, vec2 b) {
+    return a.x * b.y - a.y * b.x;
+}
+
+// The screen distance from the pixel to the dashes of a pattern on a segment, as the drape
+// measures it (terrain/drape/renderer.ts): sa and sb are its ends on the screen around the pixel,
+// start and len where it starts on the line and how long it is, dash and period those of the
+// pattern (CSS px on the flat map at the zoom of the frame). The place on the line is taken
+// where the pixel is nearest to the segment on the screen, and the dash there and the next one
+// are measured, each a segment with round ends
+float groundDashDistance(vec2 sa, vec2 sb, float start, float len, float dash, float period) {
+    if (len <= 0.0) return 1.0e9;
+    vec2 ab = sb - sa;
+    float len2 = dot(ab, ab);
+    float u = len2 > 0.0 ? clamp(-dot(sa, ab) / len2, 0.0, 1.0) : 0.0;
+    float k = floor((start + u * len) / period);
+    float best = 1.0e9;
+    for (int i = 0; i < 2; i++) {
+        float from = (k + float(i)) * period;
+        float u0 = (from - start) / len;
+        float u1 = (from + dash - start) / len;
+        if (u1 <= 0.0 || u0 >= 1.0) continue;
+        u0 = clamp(u0, 0.0, 1.0);
+        u1 = clamp(u1, 0.0, 1.0);
+        best = min(best, length(groundClosest(sa + ab * u0, sa + ab * u1)));
+    }
+    return best;
+}
+
+// The ground of the pixel and the map from a displacement on it to one on the screen (false for
+// a pixel where no ground is seen, or seen through a crack between two tiles)
+bool groundAndScreen(out vec2 q, out float shade, out mat2 toScreen) {
     vec2 stepX;
     vec2 stepY;
     bool seen = groundHere(q, shade, stepX, stepY);
-    if (!seen) discard;
-    vec2 a = v_ga.xy;
-    vec2 b = v_ga.zw;
-    mat2 toScreen = groundToScreenOf(stepX, stepY);
+    toScreen = groundToScreenOf(stepX, stepY);
+    if (!seen) return false;
     if (groundBroken(stepX, stepY)) {
         // Across an edge of the ground, the steps are taken on the side the ground goes on
         bool lone = false;
         toScreen = groundToScreen(ivec2(gl_FragCoord.xy), q, lone);
-        if (lone) discard;
+        if (lone) return false;
     }
+    return true;
+}
+
+// A pair of triangles of a fill: the pixels whose ground is in one of them, softened as the drape
+// softens the edge of a fill (half a pixel in and out of it) within its edges on the outline
+vec4 shadeGroundFill() {
+    vec2 q;
+    float shade;
+    mat2 toScreen;
+    if (!groundAndScreen(q, shade, toScreen)) discard;
+    vec2 a = v_ga.xy;
+    vec2 b = v_ga.zw;
+    vec2 c = v_gb.xy;
+    vec2 d = v_gb.zw;
+    if (!inTriangle(q, a, b, c) && !inTriangle(q, b, c, d)) discard;
+    float coverage = 1.0;
+    int edges = int(v_gc.x + 0.5);
+    if ((edges & ${ROWS_PAIR_EDGES}) != 0 && edges > ${ROWS_PAIR_EDGES}) {
+        vec2 sa = toScreen * (a - q);
+        vec2 sb = toScreen * (b - q);
+        vec2 sc = toScreen * (c - q);
+        vec2 sd = toScreen * (d - q);
+        float dist = 1.0e9;
+        if ((edges & ${ROWS_PAIR_EDGE_BITS.ab}) != 0) dist = min(dist, length(groundClosest(sa, sb)));
+        if ((edges & ${ROWS_PAIR_EDGE_BITS.bc}) != 0) dist = min(dist, length(groundClosest(sb, sc)));
+        if ((edges & ${ROWS_PAIR_EDGE_BITS.ca}) != 0) dist = min(dist, length(groundClosest(sc, sa)));
+        if ((edges & ${ROWS_PAIR_EDGE_BITS.bd}) != 0) dist = min(dist, length(groundClosest(sb, sd)));
+        if ((edges & ${ROWS_PAIR_EDGE_BITS.dc}) != 0) dist = min(dist, length(groundClosest(sd, sc)));
+        coverage = clamp(0.5 + dist, 0.0, 1.0);
+    }
+    return vec4(v_color.rgb * shade, v_color.a * coverage * u_opacity);
+}
+
+// An edge of an outline (or of a fringe) or a segment of a line: the pixels that are nearer to it
+// than to the edges before and after it (the one that ends at the corner they share taking the
+// ties, so each pixel is drawn by one of them, as the drape takes the nearest edge), measured to
+// its dashes where it is dashed. An outline draws the soft edge of the fill outside its polygon
+// under it, as the drape does
+vec4 shadeGroundEdge() {
+    vec2 q;
+    float shade;
+    mat2 toScreen;
+    if (!groundAndScreen(q, shade, toScreen)) discard;
+    vec2 a = v_ga.xy;
+    vec2 b = v_ga.zw;
+    vec2 p = v_gb.xy;
+    vec2 n = v_gb.zw;
+    float t0 = v_gc.x;
+    float t1 = v_gc.y;
+    bool before = v_gc.z > 0.5 && t0 == 0.0;
+    bool after = v_gc.w > 0.5 && t1 == 1.0;
     vec2 sa = toScreen * (a - q);
     vec2 sb = toScreen * (b - q);
     vec2 ab = sb - sa;
     float len2 = dot(ab, ab);
     float u = len2 > 0.0 ? clamp(-dot(sa, ab) / len2, 0.0, 1.0) : 0.0;
-    float d = length(sa + ab * u);
-    if (d >= v_params.x + 0.5) discard;
-    float t0 = v_gc.x;
-    float t1 = v_gc.y;
+    // A piece of a segment takes the pixels nearest to it
     if (u < t0 || u > t1 || (u == t1 && t1 < 1.0)) discard;
-    if (t0 == 0.0 && v_gc.z > 0.5) {
-        vec2 d1 = toScreen * (a - v_gb.xy);
-        vec2 d2 = toScreen * (b - a);
-        vec2 n = (dot(d1, d1) > 0.0 ? normalize(d1) : vec2(0.0)) + (dot(d2, d2) > 0.0 ? normalize(d2) : vec2(0.0));
-        if (dot(-sa, n) < 0.0) discard;
+    float dist = length(sa + ab * u);
+    float own = dist;
+    float prevDist = 1.0e9;
+    float nextDist = 1.0e9;
+    if (v_dash.y > 0.0) {
+        float start = v_dash.z;
+        float len = v_dash_range.y;
+        own = groundDashDistance(sa, sb, start, len, v_dash.x, v_dash.y);
+        if (before) {
+            prevDist = groundDashDistance(toScreen * (p - q), sa, start - v_dash_range.x,
+                v_dash_range.x, v_dash.x, v_dash.y);
+        }
+        if (after) {
+            nextDist = groundDashDistance(sb, toScreen * (n - q), start + len, v_dash_range.z,
+                v_dash.x, v_dash.y);
+        }
+    } else {
+        if (before) prevDist = length(groundClosest(toScreen * (p - q), sa));
+        if (after) nextDist = length(groundClosest(sb, toScreen * (n - q)));
     }
-    if (t1 == 1.0 && v_gc.w > 0.5) {
-        vec2 d1 = toScreen * (b - a);
-        vec2 d2 = toScreen * (v_gb.zw - b);
-        vec2 n = (dot(d1, d1) > 0.0 ? normalize(d1) : vec2(0.0)) + (dot(d2, d2) > 0.0 ? normalize(d2) : vec2(0.0));
-        if (dot(-sb, n) >= 0.0) discard;
+    if (own >= prevDist || own > nextDist) discard;
+
+    // The outline, where its dashes are (the whole of it when it is solid)
+    float strokeAlpha = v_color.a * clamp(v_params.x + 0.5 - own, 0.0, 1.0);
+    // The soft edge of the fill outside the polygon: which side is inside, at a corner the side
+    // of the two edges there (both for a convex corner, either for a reflex one). On the Mercator
+    // plane the y goes to the south, so the left of an edge on the map is the right of it here
+    float fillAlpha = 0.0;
+    int flags = int(v_params.z + 0.5);
+    if ((flags & ${ROWS_EDGE_FRINGE}) != 0 && v_color2.a > 0.0) {
+        float side = (flags & ${ROWS_EDGE_INSIDE_LEFT}) != 0 ? -1.0 : 1.0;
+        bool inside = groundCross(b - a, q - a) * side > 0.0;
+        if (u <= 0.0) {
+            bool inPrev = groundCross(a - p, q - p) * side > 0.0;
+            bool convex = groundCross(a - p, b - p) * side > 0.0;
+            inside = convex ? inside && inPrev : inside || inPrev;
+        } else if (u >= 1.0) {
+            bool inNext = groundCross(n - b, q - b) * side > 0.0;
+            bool convex = groundCross(b - a, n - a) * side > 0.0;
+            inside = convex ? inside && inNext : inside || inNext;
+        }
+        if (!inside) fillAlpha = v_color2.a * clamp(0.5 - dist, 0.0, 1.0);
     }
-    float coverage = clamp(v_params.x + 0.5 - d, 0.0, 1.0);
-    return vec4(v_color.rgb, v_color.a * coverage * u_opacity);
+    float alpha = strokeAlpha + fillAlpha * (1.0 - strokeAlpha);
+    if (alpha <= 0.0) discard;
+    vec3 rgb = (v_color.rgb * strokeAlpha + v_color2.rgb * shade * fillAlpha * (1.0 - strokeAlpha))
+        / alpha;
+    return vec4(rgb, alpha * u_opacity);
 }
 #endif
 
@@ -1350,7 +1493,7 @@ void main() {
     } else if (v_kind == ${ROWS_KIND.fill}) {
         fragColor = shadeGroundFill();
     } else if (v_kind == ${ROWS_KIND.segment} || v_kind == ${ROWS_KIND.dashedOutline}
-        || v_kind == ${ROWS_KIND.outline}) {
+        || v_kind == ${ROWS_KIND.outline} || v_kind == ${ROWS_KIND.fringe}) {
         fragColor = shadeGroundEdge();
     } else {
         fragColor = shadeSprite();

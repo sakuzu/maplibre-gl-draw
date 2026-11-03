@@ -42,7 +42,33 @@ export const ROWS_KIND = {
   sprite: 4,
   /** An edge of a dashed outline of a polygon, drawn as a segment of a line */
   dashedOutline: 5,
+  /**
+   * An edge of the outline of a polygon that draws the soft edge of its fill outside it, and no
+   * outline (the same four coordinates): only where the polygons read the ground seen at each
+   * pixel, for a polygon whose outline does not draw that edge itself (none, or dashed)
+   */
+  fringe: 6,
 } as const;
+
+/**
+ * Where the polygons read the ground seen at each pixel, what a pair of triangles of a fill
+ * knows of its edges (the last word of its instance): `ROWS_PAIR_EDGES` once known, and a bit
+ * for each of its edges on the outline of the polygon (a b, b c, c a, b d, d c for the
+ * triangles a b c and c b d). 0 on a surface that does not read the ground: no edge is known
+ */
+export const ROWS_PAIR_EDGES = 1;
+/** The bits of the edges of a pair of triangles on the outline of its polygon */
+export const ROWS_PAIR_EDGE_BITS = { ab: 2, bc: 4, ca: 8, bd: 16, dc: 32 } as const;
+
+/**
+ * Where the polygons read the ground seen at each pixel, what an edge of an outline knows (the
+ * last word of an instance of an outline or of a fringe): the inside of its polygon is on its
+ * left (going from its start to its end, on the map with the north up), and whether it draws
+ * the soft edge of the fill outside the polygon. 0 on a surface that does not read the ground
+ */
+export const ROWS_EDGE_INSIDE_LEFT = 1;
+/** An edge that draws the soft edge of the fill of its polygon outside it */
+export const ROWS_EDGE_FRINGE = 2;
 
 /** The kind of an instance */
 export type RowsKind = (typeof ROWS_KIND)[keyof typeof ROWS_KIND];

@@ -385,14 +385,14 @@ async function openScene(
   camera: typeof CAMERA = CAMERA,
 ): Promise<Page> {
   const page = await openMapPage(browser, bundle, camera);
+  // The test terrain as the map takes it by default (not exaggerated)
   await page.evaluate(async () => {
     const w = window as unknown as {
       map: import('maplibre-gl').Map;
-      e2e: {
-        terrain: { addTestTerrain(map: unknown, exaggeration: number): Promise<void> };
-      };
+      e2e: { terrain: { addTestTerrain(map: unknown): Promise<void> } };
     };
-    await w.e2e.terrain.addTestTerrain(w.map, 1.5);
+    (globalThis as { __drapeOrderForMeasures?: string }).__drapeOrderForMeasures = 'ground';
+    await w.e2e.terrain.addTestTerrain(w.map);
   });
   await load(page, { kind, features }, camera.zoom, camera.center);
   await page.evaluate((c) => {
@@ -512,6 +512,58 @@ describe('the drape of the rows on the relief of the terrain', () => {
         BLUE,
         5,
       ),
+      // A fill without an outline, translucent, with a hole
+      {
+        id: 'holed',
+        type: 'Polygon',
+        geometry: {
+          type: 'Polygon',
+          coordinates: [
+            [
+              [SLOPE[0] - 0.005, SLOPE[1] - 0.004],
+              [SLOPE[0] - 0.001, SLOPE[1] - 0.0045],
+              [SLOPE[0] - 0.0015, SLOPE[1] - 0.001],
+              [SLOPE[0] - 0.0045, SLOPE[1] - 0.0005],
+              [SLOPE[0] - 0.005, SLOPE[1] - 0.004],
+            ],
+            [
+              [SLOPE[0] - 0.0035, SLOPE[1] - 0.003],
+              [SLOPE[0] - 0.0035, SLOPE[1] - 0.002],
+              [SLOPE[0] - 0.0025, SLOPE[1] - 0.002],
+              [SLOPE[0] - 0.0025, SLOPE[1] - 0.003],
+              [SLOPE[0] - 0.0035, SLOPE[1] - 0.003],
+            ],
+          ],
+        },
+        style: { fillColor: hex(ORANGE), fillOpacity: 0.6, strokeWidth: 0 },
+      },
+      // Dashed and dotted lines with corners
+      {
+        ...lineRow(
+          'dashed-line',
+          [
+            [SLOPE[0] - 0.007, SLOPE[1] + 0.004],
+            [SLOPE[0] - 0.002, SLOPE[1] + 0.0025],
+            [SLOPE[0] + 0.001, SLOPE[1] + 0.0045],
+          ],
+          GREEN,
+          4,
+        ),
+        style: { strokeColor: hex(GREEN), strokeWidth: 4, lineStyle: 'dashed' },
+      },
+      {
+        ...lineRow(
+          'dotted-line',
+          [
+            [SLOPE[0] + 0.002, SLOPE[1] + 0.001],
+            [SLOPE[0] + 0.0045, SLOPE[1] + 0.003],
+            [SLOPE[0] + 0.007, SLOPE[1] + 0.0005],
+          ],
+          ORANGE,
+          5,
+        ),
+        style: { strokeColor: hex(ORANGE), strokeWidth: 5, lineStyle: 'dotted' },
+      },
     ];
     const objects = await openScene(features, 'objects');
     const expected = await readFrame(objects);
@@ -521,20 +573,29 @@ describe('the drape of the rows on the relief of the terrain', () => {
     expect(drape.used, drape.reason).toBe(true);
     const drawn = await readFrame(rows);
     let differing = 0;
+    let differingOffSeams = 0;
     let painted = 0;
     const a = drawn.pixels;
     const b = expected.pixels;
+    const whiteish = (p: readonly number[], i: number): boolean =>
+      (p[i] as number) >= 235 && (p[i + 1] as number) >= 235 && (p[i + 2] as number) >= 235;
     for (let i = 0; i < a.length; i += 4) {
       if (!(a[i] === 255 && a[i + 1] === 255 && a[i + 2] === 255)) painted++;
       for (let k = 0; k < 3; k++) {
         if (Math.abs((a[i + k] as number) - (b[i + k] as number)) > 8) {
           differing++;
+          if (!whiteish(a, i) && !whiteish(b, i)) differingOffSeams++;
           break;
         }
       }
     }
     expect(painted).toBeGreaterThan(a.length / 4 / 10);
-    expect(differing / painted).toBeLessThan(0.002);
+    // The rows read the ground seen at each pixel, the objects are painted on the tiles: they
+    // differ where the mesh of the tiles has a crack (the drape of the objects shows the white
+    // under it, the rows the ground seen through it) and in single pixels of the soft edges where
+    // the ground is seen at a slant
+    expect(differing / painted).toBeLessThan(0.01);
+    expect(differingOffSeams / painted).toBeLessThan(0.006);
 
     // The ground of the slope facing the camera is the color of the polygon
     const places: Array<[number, number]> = [];

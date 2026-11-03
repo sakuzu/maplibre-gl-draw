@@ -39,7 +39,7 @@ import {
   type TessellationStep,
 } from '../terrain/tessellation.js';
 import { TERRAIN_ANALYTIC_MIN_ZOOM } from './drape-planner.js';
-import type { RowsSurface } from './table-collect.js';
+import { GROUND_SURFACE, type RowsSurface } from './table-collect.js';
 
 /**
  * The zoom whose step of the terrain mesh is the piece a line on the terrain is cut into: the
@@ -153,9 +153,16 @@ export class TableSurface {
     return regions;
   }
 
-  /** Decides no surface: the rows are packed as they are on the flat map */
-  flat(): void {
-    this.set('flat', null);
+  /**
+   * Decides the surface of a frame whose polygons and lines read the ground seen at each pixel:
+   * packed whole, with what the reading of the ground needs (`GROUND_SURFACE`)
+   *
+   * @param terrain The terrain state of the draw instance (its elevations are followed, for the
+   *   points)
+   */
+  ground(terrain: TerrainContext): void {
+    this.trackElevations(terrain);
+    this.set('ground', GROUND_SURFACE);
   }
 
   private set(key: string, surface: RowsSurface | null): void {

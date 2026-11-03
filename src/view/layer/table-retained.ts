@@ -1589,8 +1589,9 @@ export class TableLayerRenderer {
     if (this.surfaceFrame !== this.frameCount) {
       this.surfaceFrame = this.frameCount;
       // Where the polygons and the lines read the ground seen at each pixel, they are not cut
-      if (TableDrapePainter.order === 'ground') this.surfaces.flat();
-      else {
+      if (this.drapeFrame && TableDrapePainter.order === 'ground') {
+        this.surfaces.ground(this.options.terrain);
+      } else {
         this.surfaces.update(this.options.terrain, bounds, {
           forEachFill: (view, visit) => this.forEachFill(view, visit),
         });
