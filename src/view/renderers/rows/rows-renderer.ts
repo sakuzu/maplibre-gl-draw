@@ -83,8 +83,13 @@ const UNIT_SPRITES = 4;
 const UNIT_HEIGHTS = 5;
 /** The units of the ground seen at each pixel and of its tiles (the variant reading the ground) */
 const UNIT_GROUND = 8;
+/** The unit of the depth of the ground seen at each pixel */
+const UNIT_GROUND_DEPTH = 7;
 const UNIT_GROUND_TILES = 9;
 const UNIT_GROUND_BLOCKS = 10;
+
+/** The slots of tiles the tables of the ground are first made with */
+const GROUND_FIRST_SLOTS = 64;
 
 /** The owner of the GPU memory of this renderer in the ledger */
 const LEDGER_OWNER = 'rows';
@@ -179,6 +184,7 @@ interface RowsUniformLocations {
   readonly ghostCamera: WebGLUniformLocation | null;
   readonly ghostNode: WebGLUniformLocation | null;
   readonly ground: WebGLUniformLocation | null;
+  readonly groundDepth: WebGLUniformLocation | null;
   readonly groundTiles: WebGLUniformLocation | null;
   readonly groundBlocks: WebGLUniformLocation | null;
   readonly groundCount: WebGLUniformLocation | null;
@@ -193,6 +199,8 @@ interface RowsUniformLocations {
  */
 export interface RowsGround {
   readonly texture: WebGLTexture;
+  /** The depth of the ground seen at each pixel, which the polygons and the lines take */
+  readonly depth: WebGLTexture;
   readonly boxes: Float64Array;
   readonly ranges: Float32Array;
   /**
@@ -284,7 +292,9 @@ export class RowsRenderer {
   private ground: RowsGround | null = null;
   private groundTiles: WebGLTexture | null = null;
   private groundBlocks: WebGLTexture | null = null;
-  private readonly groundTexels = new Float32Array(DRAPE_GROUND_MAX_SLOTS * 2 * 4);
+  private groundTexels = new Float32Array(0);
+  /** The slots of tiles the tables of the ground hold */
+  private groundSlots = 0;
   /** The ground and the center the tiles of the ground were written for, and the blocks */
   private groundWritten: {
     ground: RowsGround | null;
@@ -800,6 +810,55 @@ export class RowsRenderer {
   }
 
   /**
+   * Gives the tables of the tiles of the ground room for its tiles (as many as the terrain is
+   * drawn with: they grow, by powers of two)
+   *
+   * @returns false when they cannot be given their storage
+   */
+  prepareGround(ground: RowsGround): boolean {
+    if (ground.count <= this.groundSlots && this.groundTiles && this.groundBlocks) return true;
+    const gl = this.gl;
+    const slots = Math.min(
+      DRAPE_GROUND_MAX_SLOTS,
+      Math.max(GROUND_FIRST_SLOTS, 2 ** Math.ceil(Math.log2(Math.max(1, ground.count)))),
+    );
+    if (ground.count > slots) return false;
+    this.releaseGroundTables();
+    const tiles = createFloatTexture(gl, gl.RGBA32F, 2, slots);
+    const blocks = createFloatTexture(gl, gl.RGBA32F, DRAPE_GROUND_BLOCK_TEXELS, slots);
+    if (!tiles || !blocks || gl.getError() === gl.OUT_OF_MEMORY) {
+      if (tiles) gl.deleteTexture(tiles);
+      if (blocks) gl.deleteTexture(blocks);
+      return false;
+    }
+    this.groundTiles = tiles;
+    this.groundBlocks = blocks;
+    this.groundSlots = slots;
+    this.groundTexels = new Float32Array(slots * 2 * 4);
+    this.ledger?.record(tiles, LEDGER_OWNER, 'texture', textureBytes(2, slots, 16));
+    this.ledger?.record(
+      blocks,
+      LEDGER_OWNER,
+      'texture',
+      textureBytes(DRAPE_GROUND_BLOCK_TEXELS, slots, 16),
+    );
+    this.groundWritten.ground = null;
+    this.groundWritten.blocks = null;
+    return true;
+  }
+
+  private releaseGroundTables(): void {
+    const gl = this.gl;
+    this.ledger?.release(this.groundTiles);
+    this.ledger?.release(this.groundBlocks);
+    if (this.groundTiles) gl.deleteTexture(this.groundTiles);
+    if (this.groundBlocks) gl.deleteTexture(this.groundBlocks);
+    this.groundTiles = null;
+    this.groundBlocks = null;
+    this.groundSlots = 0;
+  }
+
+  /**
    * Binds the ground seen at each pixel and writes its tiles, as Mercator offsets from the center
    * the offsets of the draws are taken from (written again when the ground or the center
    * changes), and the ranges of their blocks (written again when the tiles change)
@@ -810,31 +869,8 @@ export class RowsRenderer {
     const locations = program.locations as RowsUniformLocations;
     const center = this.offsetUniforms?.centerMercator ?? [0, 0];
     const written = this.groundWritten;
-    if (!this.groundTiles || !this.groundBlocks) {
-      this.groundTiles = createFloatTexture(gl, gl.RGBA32F, 2, DRAPE_GROUND_MAX_SLOTS);
-      this.groundBlocks = createFloatTexture(
-        gl,
-        gl.RGBA32F,
-        DRAPE_GROUND_BLOCK_TEXELS,
-        DRAPE_GROUND_MAX_SLOTS,
-      );
-      this.ledger?.record(
-        this.groundTiles,
-        LEDGER_OWNER,
-        'texture',
-        textureBytes(2, DRAPE_GROUND_MAX_SLOTS, 16),
-      );
-      this.ledger?.record(
-        this.groundBlocks,
-        LEDGER_OWNER,
-        'texture',
-        textureBytes(DRAPE_GROUND_BLOCK_TEXELS, DRAPE_GROUND_MAX_SLOTS, 16),
-      );
-      written.ground = null;
-      written.blocks = null;
-    }
     if (!this.groundTiles || !this.groundBlocks) return;
-    const count = Math.min(ground.count, DRAPE_GROUND_MAX_SLOTS);
+    const count = Math.min(ground.count, this.groundSlots);
     gl.activeTexture(gl.TEXTURE0 + UNIT_GROUND_BLOCKS);
     gl.bindTexture(gl.TEXTURE_2D, this.groundBlocks);
     if (written.blocks !== ground.blocks && count > 0) {
@@ -875,8 +911,11 @@ export class RowsRenderer {
     }
     gl.activeTexture(gl.TEXTURE0 + UNIT_GROUND);
     gl.bindTexture(gl.TEXTURE_2D, ground.texture);
+    gl.activeTexture(gl.TEXTURE0 + UNIT_GROUND_DEPTH);
+    gl.bindTexture(gl.TEXTURE_2D, ground.depth);
     gl.activeTexture(gl.TEXTURE0);
     if (locations.ground) gl.uniform1i(locations.ground, UNIT_GROUND);
+    if (locations.groundDepth) gl.uniform1i(locations.groundDepth, UNIT_GROUND_DEPTH);
     if (locations.groundTiles) gl.uniform1i(locations.groundTiles, UNIT_GROUND_TILES);
     if (locations.groundBlocks) gl.uniform1i(locations.groundBlocks, UNIT_GROUND_BLOCKS);
     if (locations.groundCount) gl.uniform1i(locations.groundCount, ground.count);
@@ -893,12 +932,7 @@ export class RowsRenderer {
     }
     this.programs.clear();
     this.groundPrograms.clear();
-    this.ledger?.release(this.groundTiles);
-    this.ledger?.release(this.groundBlocks);
-    if (this.groundTiles) gl.deleteTexture(this.groundTiles);
-    if (this.groundBlocks) gl.deleteTexture(this.groundBlocks);
-    this.groundTiles = null;
-    this.groundBlocks = null;
+    this.releaseGroundTables();
     this.current = null;
     for (const palette of this.palettes) this.deletePaletteTexture(palette);
     this.palettes.clear();
@@ -1515,6 +1549,7 @@ function locationsOf(gl: WebGL2RenderingContext, program: WebGLProgram): RowsUni
     ghostCamera: at('u_ghost_camera'),
     ghostNode: at('u_ghost_node'),
     ground: at('u_ground'),
+    groundDepth: at('u_ground_depth'),
     groundTiles: at('u_ground_tiles'),
     groundBlocks: at('u_ground_blocks'),
     groundCount: at('u_ground_count'),

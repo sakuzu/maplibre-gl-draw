@@ -54,7 +54,6 @@ import {
 import {
   DRAPE_GROUND_BLOCKS,
   DRAPE_GROUND_COARSE_BLOCKS,
-  DRAPE_GROUND_MAX_SLOTS,
   DRAPE_GROUND_PLACE_STEPS,
   DRAPE_GROUND_SHADE_RANGE,
 } from '../../terrain/drape/ground-buffer.js';
@@ -683,8 +682,7 @@ bool rowsGroundBounds(vec2 lo, vec2 hi, vec2 m0, vec2 m1, vec2 m2, vec2 m3,
     low = vec4(1e9);
     high = vec4(-1e9);
     bool met = false;
-    for (int s = 0; s < ${DRAPE_GROUND_MAX_SLOTS}; s++) {
-        if (s >= u_ground_count) break;
+    for (int s = 0; s < u_ground_count; s++) {
         vec4 box = texelFetch(u_ground_tiles, ivec2(0, s), 0);
         float margin = box.z / 64.0;
         if (hi.x < box.x - margin || lo.x > box.x + box.z + margin
@@ -1018,6 +1016,10 @@ flat in vec4 v_gc;
 // the tiles of the slots (rows-shader.ts, the vertex stage)
 uniform highp usampler2D u_ground;
 uniform highp sampler2D u_ground_tiles;
+// The depth of the ground seen at each pixel: the polygons and the lines take it as their own, so
+// the 3D layers of the map in front of the ground hide them as they hide the ground (the points
+// and the sprites keep the depth of their markers)
+uniform highp sampler2D u_ground_depth;
 #endif
 out vec4 fragColor;
 
@@ -1427,13 +1429,16 @@ vec4 shadeGroundEdge() {
 
 #if defined(ROWS_GROUND)
 void main() {
+    gl_FragDepth = gl_FragCoord.z;
     if (v_kind == ${ROWS_KIND.point}) {
         fragColor = shadePoint();
     } else if (v_kind == ${ROWS_KIND.fill}) {
         fragColor = shadeGroundFill();
+        gl_FragDepth = texelFetch(u_ground_depth, ivec2(gl_FragCoord.xy), 0).r;
     } else if (v_kind == ${ROWS_KIND.segment} || v_kind == ${ROWS_KIND.dashedOutline}
         || v_kind == ${ROWS_KIND.outline} || v_kind == ${ROWS_KIND.fringe}) {
         fragColor = shadeGroundEdge();
+        gl_FragDepth = texelFetch(u_ground_depth, ivec2(gl_FragCoord.xy), 0).r;
     } else {
         fragColor = shadeSprite();
     }

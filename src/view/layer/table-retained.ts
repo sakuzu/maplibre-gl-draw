@@ -155,6 +155,7 @@ import { isTerrainCameraMoving } from '../terrain/state.js';
 import { type MercatorRect, mercatorX, mercatorY } from '../terrain/tessellation.js';
 import type { BulkFramesRenderer, PointFrameExtent } from '../ui/bulk-frames.js';
 import type { SelectionExtensionRegistry } from '../ui/selection-ui/index.js';
+import { setDepthTestEnabled } from './depth-state.js';
 import { drawImmediateFeatures, type StoreRetainedDrawDeps } from './store-retained-immediate.js';
 import {
   collectRow,
@@ -1414,7 +1415,14 @@ export class TableLayerRenderer {
       const ranges = new Float32Array(frame.tiles.length * 2);
       const drawn: TableDrapeFrame['tiles'][number][] = [];
       for (const tile of frame.tiles) {
-        if (drawn.length >= DRAPE_GROUND_MAX_SLOTS) break;
+        if (drawn.length >= DRAPE_GROUND_MAX_SLOTS) {
+          // More tiles than a slot holds: the ground is not usable
+          ground.end();
+          frame.leave();
+          this.pass.renderers?.run?.begin();
+          ground.fail();
+          return false;
+        }
         const slot = drawn.length;
         if (
           !frame.renderer.drawGroundTile(tile.entry.draw, tile.entry.projection, frame.light, slot)
@@ -1465,6 +1473,7 @@ export class TableLayerRenderer {
       ground.drawnFrame = now;
       this.groundState = {
         texture: ground.texture as WebGLTexture,
+        depth: ground.depthTexture as WebGLTexture,
         boxes,
         ranges,
         blocks,
@@ -1472,7 +1481,11 @@ export class TableLayerRenderer {
       };
     }
     if (!this.groundState) return false;
-    rows.setGround(this.groundState);
+    // The tables of the tiles grow with them; where they cannot, the ground is not usable
+    if (!rows.prepareGround(this.groundState)) {
+      ground.fail();
+      return false;
+    }
     return true;
   }
 
@@ -3053,7 +3066,9 @@ export class TableLayerRenderer {
       return;
     }
     const rows = (pass.renderers as RetainedRendererSet).rows;
-    rows?.setGround(this.chunkReadsGround(state.batches as RowsGpuChunk) ? this.groundState : null);
+    const reads = this.chunkReadsGround(state.batches as RowsGpuChunk);
+    rows?.setGround(reads ? this.groundState : null);
+    if (reads) this.enterGroundDepth();
     rows?.drawRange(
       state.batches as RowsGpuChunk,
       from,
@@ -3063,7 +3078,27 @@ export class TableLayerRenderer {
       pass.binding as RowStateBinding,
       pass.factors,
     );
+    if (reads) this.leaveGroundDepth();
     this.recordRange('rows', state.range.from + from, state.range.from + to);
+  }
+
+  /**
+   * Puts the depth state of a draw that reads the ground: its polygons and lines take the depth
+   * of the ground seen at each pixel, tested against the depth of the map (LEQUAL, not written),
+   * so the 3D layers of the map in front of the ground hide them; no offset (the depth is the one
+   * of the ground drawn, lifted as the drape lifts it)
+   */
+  private enterGroundDepth(): void {
+    const gl = this.options.gl;
+    setDepthTestEnabled(gl, true);
+    gl.depthFunc(gl.LEQUAL);
+    gl.depthMask(false);
+    gl.disable(gl.POLYGON_OFFSET_FILL);
+  }
+
+  /** Back to the depth state of the layers (and their blending) */
+  private leaveGroundDepth(): void {
+    this.drapeFrame?.leave();
   }
 
   /**
@@ -3741,7 +3776,9 @@ export class TableLayerRenderer {
         record('rows', a, b);
       } else if (gpu?.uploaded && rows) {
         // The rows of the delta are packed as a whole for the surface of the frame
-        rows.setGround(pass.groundRead && pass.groundInBand ? this.groundState : null);
+        const reads = pass.groundRead && pass.groundInBand;
+        rows.setGround(reads ? this.groundState : null);
+        if (reads) this.enterGroundDepth();
         rows.drawRange(
           gpu,
           a - chunk.range.from,
@@ -3751,6 +3788,7 @@ export class TableLayerRenderer {
           (cache as GroupCache).binding as RowStateBinding,
           pass.factors,
         );
+        if (reads) this.leaveGroundDepth();
         record('rows', a, b);
       } else {
         breakAt(a, b);

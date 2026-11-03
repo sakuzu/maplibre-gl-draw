@@ -614,6 +614,13 @@ export class TableDrape {
       inBand = false;
       reason = 'vertex-budget';
     }
+    // The ground not usable at the size of the target: the rows are drawn as out of the band
+    if (
+      ground &&
+      this.ground?.unusableAt(input.gl.drawingBufferWidth, input.gl.drawingBufferHeight)
+    ) {
+      return this.unused('ground-unusable');
+    }
     if (!inBand && !(ground && keepGround)) return this.unused(reason);
 
     const tiles = getRenderableTerrainTiles(input.mapTerrain);

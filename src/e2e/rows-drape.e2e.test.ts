@@ -610,6 +610,80 @@ describe('the drape of the rows on the relief of the terrain', () => {
     await rows.close();
   });
 
+  it('hides the polygons read on the ground behind a 3D layer of the map, and not behind the ground', {
+    timeout: browserTimeout(180_000),
+  }, async () => {
+    // A tall box of the map in front of a polygon of the rows, on the slope facing the camera
+    const base: [number, number] = [SLOPE[0], SLOPE[1] - 0.0035];
+    const half = 0.0006;
+    const page = await openScene([squareRow('slope', SLOPE, 0.006, RED)]);
+    const drape = await drapeOf(page);
+    expect(drape.used, drape.reason).toBe(true);
+    const before = await readFrame(page, [base]);
+    await page.evaluate(
+      ({ base, half }) => {
+        const map = (window as unknown as { map: import('maplibre-gl').Map }).map;
+        const [x, y] = base;
+        map.addSource('box', {
+          type: 'geojson',
+          data: {
+            type: 'Feature',
+            properties: {},
+            geometry: {
+              type: 'Polygon',
+              coordinates: [
+                [
+                  [x - half, y - half],
+                  [x + half, y - half],
+                  [x + half, y + half],
+                  [x - half, y + half],
+                  [x - half, y - half],
+                ],
+              ],
+            },
+          },
+        });
+        // Under the layer of the engine, as a 3D layer of a base map is
+        const engine = map.getLayersOrder().find((id) => map.getLayer(id)?.type === 'custom');
+        map.addLayer(
+          {
+            id: 'box',
+            type: 'fill-extrusion',
+            source: 'box',
+            paint: {
+              'fill-extrusion-color': '#2040d0',
+              'fill-extrusion-height': 600,
+              'fill-extrusion-opacity': 1,
+            },
+          },
+          engine,
+        );
+      },
+      { base, half },
+    );
+    await idle(page);
+    const after = await readFrame(page, [base]);
+    // Up the screen from the foot of the box, its face is in front of the polygon
+    const [width, at] = await page.evaluate((place) => {
+      const map = (window as unknown as { map: import('maplibre-gl').Map }).map;
+      const p = map.project(place);
+      const ratio = map.getCanvas().width / map.getCanvas().clientWidth;
+      return [map.getCanvas().width, [Math.round(p.x * ratio), Math.round(p.y * ratio)]] as const;
+    }, base);
+    const height = after.pixels.length / 4 / width;
+    const colorAt = (pixels: number[], x: number, y: number): number[] => {
+      const i = ((height - 1 - y) * width + x) * 4;
+      return [pixels[i] as number, pixels[i + 1] as number, pixels[i + 2] as number];
+    };
+    const face = colorAt(after.pixels, at[0] as number, (at[1] as number) - 25);
+    expect(hueOf(colorAt(before.pixels, at[0] as number, (at[1] as number) - 25))).toBe('red');
+    expect(hueOf(face), `the face of the box: ${face}`).not.toBe('red');
+    // Away from the box, the polygon is not hidden by the ground it is on
+    const away = colorAt(after.pixels, (at[0] as number) + 150, (at[1] as number) - 60);
+    expect(hueOf(away), `away from the box: ${away}`).toBe('red');
+    await page.close();
+  });
+
   it('keeps the order: a point between two polygons over the first and under the second', {
     timeout: browserTimeout(120_000),
   }, async () => {

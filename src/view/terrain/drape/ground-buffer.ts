@@ -27,8 +27,11 @@ export const DRAPE_GROUND_SHADE_RANGE = 2;
 /** The owner of the texture of the ground in the ledger of the GPU */
 const LEDGER_OWNER = 'ground';
 
-/** The slots of tiles the ground holds at most */
-export const DRAPE_GROUND_MAX_SLOTS = 128;
+/**
+ * The slots of tiles the ground holds at most: a slot is kept in 16 bits, plus one (as many
+ * tiles as maplibre draws the terrain with, which are far fewer)
+ */
+export const DRAPE_GROUND_MAX_SLOTS = 65_534;
 
 /**
  * The blocks of a tile on a side the ranges of the elevations of its ground are kept for: a
@@ -51,11 +54,12 @@ export const DRAPE_GROUND_BLOCK_TEXELS =
  */
 export class DrapeGroundBuffer {
   private ground: WebGLTexture | null = null;
-  private depth: WebGLRenderbuffer | null = null;
+  private depth: WebGLTexture | null = null;
   private target: WebGLFramebuffer | null = null;
   private width = 0;
   private height = 0;
-  private failed = false;
+  /** The size of the target the ground could not be made or used at ('' for none) */
+  private failedSize = '';
   private previous: WebGLFramebuffer | null = null;
   private previousViewport: Int32Array | null = null;
   /** The bytes the texture and the depth hold */
@@ -73,25 +77,38 @@ export class DrapeGroundBuffer {
     return this.ground;
   }
 
+  /** The texture of the depth of the ground seen at each pixel (null before `ensure`) */
+  get depthTexture(): WebGLTexture | null {
+    return this.depth;
+  }
+
   /**
    * Makes the texture the size of the viewport of the target bound now (again when it changed)
    *
    * @returns false when it cannot be made
    */
   ensure(): boolean {
-    if (this.failed) return false;
     const gl = this.gl;
     const viewport = gl.getParameter(gl.VIEWPORT) as Int32Array;
     const width = (viewport[0] as number) + (viewport[2] as number);
     const height = (viewport[1] as number) + (viewport[3] as number);
     if (width <= 0 || height <= 0) return false;
+    if (this.unusableAt(width, height)) return false;
     if (this.ground && width === this.width && height === this.height) return true;
     this.release();
+    const max = gl.getParameter(gl.MAX_TEXTURE_SIZE) as number;
+    if (width > max || height > max) {
+      this.fail(width, height);
+      return false;
+    }
     const ground = gl.createTexture();
-    const depth = gl.createRenderbuffer();
+    const depth = gl.createTexture();
     const target = gl.createFramebuffer();
     if (!ground || !depth || !target) {
-      this.failed = true;
+      if (ground) gl.deleteTexture(ground);
+      if (depth) gl.deleteTexture(depth);
+      if (target) gl.deleteFramebuffer(target);
+      this.fail(width, height);
       return false;
     }
     const previous = gl.getParameter(gl.FRAMEBUFFER_BINDING) as WebGLFramebuffer | null;
@@ -102,13 +119,21 @@ export class DrapeGroundBuffer {
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-    gl.bindRenderbuffer(gl.RENDERBUFFER, depth);
-    gl.renderbufferStorage(gl.RENDERBUFFER, gl.DEPTH_COMPONENT24, width, height);
-    gl.bindRenderbuffer(gl.RENDERBUFFER, null);
+    // The depth of the ground seen, which the polygons and the lines take as their own (the 3D
+    // layers of the map in front of the ground hide them as they hide the ground)
+    gl.bindTexture(gl.TEXTURE_2D, depth);
+    gl.texStorage2D(gl.TEXTURE_2D, 1, gl.DEPTH_COMPONENT24, width, height);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
     gl.bindFramebuffer(gl.FRAMEBUFFER, target);
     gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, ground, 0);
-    gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.RENDERBUFFER, depth);
-    const complete = gl.checkFramebufferStatus(gl.FRAMEBUFFER) === gl.FRAMEBUFFER_COMPLETE;
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.TEXTURE_2D, depth, 0);
+    // The storage could not be given (the memory of the GPU), or the target cannot be drawn into
+    const complete =
+      gl.checkFramebufferStatus(gl.FRAMEBUFFER) === gl.FRAMEBUFFER_COMPLETE &&
+      gl.getError() !== gl.OUT_OF_MEMORY;
     gl.bindFramebuffer(gl.FRAMEBUFFER, previous);
     gl.bindTexture(gl.TEXTURE_2D, null);
     this.ground = ground;
@@ -121,10 +146,24 @@ export class DrapeGroundBuffer {
     this.ledger?.record(depth, LEDGER_OWNER, 'texture', width * height * 4);
     if (!complete) {
       this.release();
-      this.failed = true;
+      this.fail(width, height);
       return false;
     }
     return true;
+  }
+
+  /**
+   * Takes the ground as not usable at a size of the target (it could not be made, or what reads
+   * it could not be given its storage): the rows are drawn as out of the drape band while the
+   * target keeps that size
+   */
+  fail(width = this.width, height = this.height): void {
+    this.failedSize = `${width}x${height}`;
+  }
+
+  /** Whether the ground was found not usable at a size of the target */
+  unusableAt(width: number, height: number): boolean {
+    return this.failedSize === `${width}x${height}`;
   }
 
   /**
@@ -170,7 +209,7 @@ export class DrapeGroundBuffer {
     this.ledger?.release(this.ground);
     this.ledger?.release(this.depth);
     if (this.ground) gl.deleteTexture(this.ground);
-    if (this.depth) gl.deleteRenderbuffer(this.depth);
+    if (this.depth) gl.deleteTexture(this.depth);
     if (this.target) gl.deleteFramebuffer(this.target);
     this.ground = null;
     this.depth = null;
