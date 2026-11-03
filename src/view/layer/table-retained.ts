@@ -187,6 +187,7 @@ import {
   type TableDrapeFrame,
   type TableDrapeFrameInput,
   type TableDrapeLayer,
+  type TableDrapeOrder,
   TableDrapePainter,
   type TableDrapeRank,
   union,
@@ -1578,6 +1579,12 @@ export class TableLayerRenderer {
       transition: 0,
     };
     const settled = !isTerrainCameraMoving(this.options.terrain);
+    // A temporary switch for measuring the ways of the order of the drape in a browser, to be
+    // removed with the prototype: a page sets globalThis.__drapeOrderForMeasures to one of the
+    // ways ('ground', 'split', 'each', 'each-near') and asks for a frame
+    const asked = (globalThis as { __drapeOrderForMeasures?: TableDrapeOrder })
+      .__drapeOrderForMeasures;
+    if (asked) TableDrapePainter.order = asked;
     // The surface the rows are cut for, once per frame
     if (this.surfaceFrame !== this.frameCount) {
       this.surfaceFrame = this.frameCount;
