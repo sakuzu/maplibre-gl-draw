@@ -577,9 +577,11 @@ describe.skipIf(!process.env.DRAPE_ORDER_OUT)(
     if (scenes.includes('large')) {
       const zooms = (process.env.DRAPE_ORDER_ZOOMS ?? '15,13.5,12').split(',').map(Number);
       const pitches = (process.env.DRAPE_ORDER_PITCHES ?? '45').split(',').map(Number);
+      // Fewer of them for the pictures of one row at a time (DRAPE_ORDER_LARGE)
+      const count = Number(process.env.DRAPE_ORDER_LARGE ?? 10_000);
       for (const pitch of pitches)
         for (const zoom of zooms) {
-          it(`alternating points and squares, 2 x 10,000, zoom ${zoom}, pitch ${pitch}`, {
+          it(`alternating points and squares, 2 x ${count}, zoom ${zoom}, pitch ${pitch}`, {
             timeout: browserTimeout(3_600_000),
           }, async () => {
             const ways: Way[] = pick([
@@ -588,8 +590,8 @@ describe.skipIf(!process.env.DRAPE_ORDER_OUT)(
               ...(process.env.DRAPE_ORDER_BREAKS ? [{ order: 'breaks' } as Way] : []),
             ]);
             await measureScene(
-              `large-z${zoom}-p${pitch}`,
-              alternating(10_000, 0.0004, 0.00012),
+              `large${count === 10_000 ? '' : count}-z${zoom}-p${pitch}`,
+              alternating(count, 0.0004, 0.00012),
               { center: SLOPE, zoom, pitch, bearing: 0 },
               ways,
               (process.env.DRAPE_ORDER_REFERENCE as 'each' | 'each-near' | undefined) ?? null,
