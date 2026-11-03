@@ -1003,34 +1003,88 @@ describe('the drape of the rows on the relief of the terrain', () => {
     }
     const near = { ...CAMERA, zoom: 13, pitch: 40 };
     const far = { ...CAMERA, zoom: 10.5, pitch: 40 };
-    const places: Array<[number, number]> = [];
-    for (let k = -3; k <= 3; k++) places.push([SLOPE[0] + k * 0.005, SLOPE[1] + 0.0002]);
     const page = await openScene(features, 'rows', near);
     const inBand = await drapeOf(page);
     expect(inBand.used, inBand.reason).toBe(true);
-    const jumpAndRead = async (camera: typeof CAMERA): Promise<string[][]> => {
-      await page.evaluate((c) => {
-        (window as unknown as { map: import('maplibre-gl').Map }).map.jumpTo(c);
-      }, camera);
-      const frames = await nextFrames(page, places, 12);
-      return frames.map((frame) => frame.map((c) => String(hueOf(c))));
+    // Jumps and draws frames at once (each right after the other, as a page asking for frames
+    // does), the pixels of each on a grid of every 8th pixel
+    const jumpAndDraw = (camera: typeof CAMERA, frames: number): Promise<number[][]> =>
+      page.evaluate(
+        ({ c, frames }) => {
+          const map = (window as unknown as { map: import('maplibre-gl').Map & { redraw(): void } })
+            .map;
+          map.jumpTo(c);
+          const gl = map.getCanvas().getContext('webgl2') as WebGL2RenderingContext;
+          const out: number[][] = [];
+          for (let f = 0; f < frames; f++) {
+            map.redraw();
+            const width = gl.drawingBufferWidth;
+            const height = gl.drawingBufferHeight;
+            const pixels = new Uint8Array(width * height * 4);
+            gl.readPixels(0, 0, width, height, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
+            const grid: number[] = [];
+            for (let y = 0; y < height; y += 8) {
+              for (let x = 0; x < width; x += 8) {
+                const at = (y * width + x) * 4;
+                grid.push(pixels[at] as number, pixels[at + 1] as number, pixels[at + 2] as number);
+              }
+            }
+            out.push(grid);
+          }
+          return out;
+        },
+        { c: camera, frames },
+      );
+    // The samples where the rows are in one frame and not in the other (the terrain under them
+    // may change as its tiles come)
+    const differ = (a: number[], b: number[]): number => {
+      let n = 0;
+      for (let i = 0; i < a.length; i += 3) {
+        const inA = hueOf(a.slice(i, i + 3)) === 'red';
+        const inB = hueOf(b.slice(i, i + 3)) === 'red';
+        if (inA !== inB) n++;
+      }
+      return n;
     };
-    // Out of the band: the rows packed for the ground are drawn reading it until they are cut
-    // again for the terrain, then as they are cut; red where they are in every frame
-    const out = await jumpAndRead(far);
-    const outDrape = await drapeOf(page);
-    expect(outDrape.reason).toBe('wide-zoom');
-    const reds = (frames: string[][]) => frames.map((f) => f.filter((h) => h === 'red').length);
-    const settledOut = reds(out)[out.length - 1] as number;
-    expect(settledOut).toBeGreaterThan(0);
-    for (const n of reds(out)) expect(n).toBeGreaterThanOrEqual(settledOut - 1);
+    const across = async (camera: typeof CAMERA, what: string, strict: boolean): Promise<void> => {
+      const frames = await jumpAndDraw(camera, 8);
+      // The last frame drawn: the rows cut for the surface of the frame or packed for the ground
+      const last = frames[frames.length - 1] as number[];
+      const rows = last.reduce(
+        (n, _, i, all) => (i % 3 === 0 && hueOf(all.slice(i, i + 3)) === 'red' ? n + 1 : n),
+        0,
+      );
+      expect(rows, what).toBeGreaterThan(50);
+      const off = frames.map((frame) => differ(frame, last));
+      const counts = frames.map((frame) =>
+        frame.reduce(
+          (n, _, i, all) => (i % 3 === 0 && hueOf(all.slice(i, i + 3)) === 'red' ? n + 1 : n),
+          0,
+        ),
+      );
+      const note = `${what}: ${off.join(', ')} differ, ${counts.join(', ')} of the rows`;
+      for (let f = 0; f < frames.length; f++) {
+        // No frame leaves the rows out
+        expect(counts[f] as number, note).toBeGreaterThan(rows * 0.8);
+        // Out of the band, every frame from the jump on draws them where the last one does
+        // (within a few samples of their soft edges). Into it, the rows are drawn as they were
+        // cut until their packing for the ground starts (the first frame)
+        if (strict || f > 0) expect(off[f] as number, note).toBeLessThan(rows / 50);
+      }
+      await idle(page);
+    };
+    // The tiles of the terrain of both views loaded first (what is measured is the rows)
+    await jumpAndDraw(far, 1);
     await idle(page);
+    await jumpAndDraw(near, 1);
+    await idle(page);
+    // Out of the band: the rows packed for the ground are drawn reading it until they are cut
+    // again for the terrain, then as they are cut
+    await across(far, 'out of the band', true);
+    expect((await drapeOf(page)).reason).toBe('wide-zoom');
     // Into the band: the rows cut for the terrain are drawn as they are cut until they are packed
     // for the ground
-    const back = await jumpAndRead(near);
-    const settledIn = reds(back)[back.length - 1] as number;
-    expect(settledIn).toBeGreaterThan(0);
-    for (const n of reds(back)) expect(n).toBeGreaterThanOrEqual(settledIn - 1);
+    await across(near, 'into the band', false);
     await page.close();
   });
 

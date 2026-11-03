@@ -399,6 +399,11 @@ export interface TableDrapeFrameInput {
   readonly light: DrapeLight;
   /** Whether many rows are being dragged (the band is not changed until they are let go) */
   readonly dragging: boolean;
+  /**
+   * Whether the polygons and the lines are drawn flat in this frame (the wide band of the
+   * terrain): they are then drawn without the terrain whatever they are packed for
+   */
+  readonly flattened: boolean;
   readonly timeSlicing: boolean;
   readonly enter: () => void;
   readonly leave: () => void;
@@ -567,7 +572,8 @@ export class TableDrape {
    * they are painted on the drape of the rows, binned into the tiles here.
    *
    * @param keepGround Whether a frame is wanted out of the band too: rows packed for the ground
-   *   are still drawn (they read it until they are cut again for the terrain)
+   *   are still drawn (they read it until they are cut again for the terrain, unless the frame
+   *   draws the polygons and the lines flat)
    * @returns The frame (null when the rows are drawn by their chunks as they are cut)
    */
   planFrame(
@@ -621,7 +627,9 @@ export class TableDrape {
     ) {
       return this.unused('ground-unusable');
     }
-    if (!inBand && !(ground && keepGround)) return this.unused(reason);
+    // Out of the band, the rows packed for the ground read it until they are cut again for the
+    // terrain; where the polygons and the lines are drawn flat, they are drawn so at once
+    if (!inBand && !(ground && keepGround && !input.flattened)) return this.unused(reason);
 
     const tiles = getRenderableTerrainTiles(input.mapTerrain);
     if (tiles.length === 0) return this.unused('no-dem-tiles');

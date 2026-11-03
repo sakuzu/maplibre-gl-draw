@@ -519,6 +519,7 @@ export function buildFrameState(input: FrameBuildInput): FrameState {
         contentDpr,
         light: drapeLight,
         dragging: store.getDragState() !== null,
+        flattened: terrainState.active && wideFallback,
         timeSlicing: input.timeSlicing !== false,
         enter: () => applyDrapeGlState(gl),
         leave: () => {
