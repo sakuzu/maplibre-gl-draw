@@ -153,6 +153,11 @@ export class TableSurface {
     return regions;
   }
 
+  /** Decides no surface: the rows are packed as they are on the flat map */
+  flat(): void {
+    this.set('flat', null);
+  }
+
   private set(key: string, surface: RowsSurface | null): void {
     if (key === this.key) return;
     this.key = key;

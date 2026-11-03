@@ -65,6 +65,25 @@ function stacked(n: number, spacing: number, half: number, depth: number): Featu
   return out;
 }
 
+/**
+ * On each place of a grid, `depth` points and `depth` translucent squares one after the other,
+ * all over the pixel of the place: a point, then a square over it, `depth` times
+ */
+function deep(n: number, spacing: number, half: number, depth: number): FeatureInput[] {
+  const side = Math.ceil(Math.sqrt(n));
+  const out: FeatureInput[] = [];
+  for (let i = 0; i < n; i++) {
+    const x = SLOPE[0] - (side / 2) * spacing + (i % side) * spacing;
+    const y = SLOPE[1] - (side / 2) * spacing + Math.floor(i / side) * spacing;
+    for (let k = 0; k < depth; k++) {
+      const shift = (k - depth / 2) * half * 0.02;
+      out.push(point(`d${i}-${k}`, [x + shift, y - shift], k));
+      out.push(square(`e${i}-${k}`, [x - shift, y + shift], half, k + 2, 0.45));
+    }
+  }
+  return out;
+}
+
 function point(id: string, at: [number, number], color: number): FeatureInput {
   return {
     id,
@@ -112,13 +131,16 @@ function square(
 
 async function openScene(features: FeatureInput[], camera: Record<string, unknown>) {
   const page = await openMapPage(browser, bundle, camera as never);
-  await page.evaluate(async () => {
+  await page.evaluate((debug) => {
+    (globalThis as { __rowsGroundDebug?: string }).__rowsGroundDebug = debug;
+  }, process.env.DRAPE_GROUND_DEBUG ?? '');
+  await page.evaluate(async (exaggeration) => {
     const w = window as unknown as {
       map: import('maplibre-gl').Map;
       e2e: { terrain: { addTestTerrain(map: unknown, exaggeration: number): Promise<void> } };
     };
-    await w.e2e.terrain.addTestTerrain(w.map, 1.5);
-  });
+    await w.e2e.terrain.addTestTerrain(w.map, exaggeration);
+  }, EXAGGERATION);
   await load(page, { kind: 'rows', features }, camera.zoom as number, camera.center as never);
   await page.evaluate((c) => {
     const map = (window as unknown as { map: import('maplibre-gl').Map }).map;
@@ -151,6 +173,7 @@ async function idle(page: Page): Promise<void> {
 
 interface Measure {
   order: string;
+  totalMs: number;
   used: boolean;
   reason: string;
   glDraws: number;
@@ -168,9 +191,23 @@ interface Measure {
  * runs a pixel reads, up to its most) and what is past its last bound
  */
 interface Way {
-  order: 'split' | 'breaks' | 'each' | 'each-near';
+  order: 'split' | 'breaks' | 'each' | 'each-near' | 'ground';
   steps?: number;
   tail?: 'breaks' | 'over';
+}
+
+/** A way named as `nameOf` names it */
+function wayOf(name: string): Way {
+  if (name === 'breaks' || name === 'each' || name === 'each-near' || name === 'ground') {
+    return { order: name };
+  }
+  const match = /^split(auto|\d+)(\+breaks)?$/.exec(name);
+  if (!match) throw new Error(`no way ${name}`);
+  return {
+    order: 'split',
+    ...(match[1] === 'auto' ? {} : { steps: Number(match[1]) }),
+    ...(match[2] ? { tail: 'breaks' as const } : {}),
+  };
 }
 
 function nameOf(way: Way): string {
@@ -186,7 +223,7 @@ function nameOf(way: Way): string {
 async function measure(page: Page, way: Way, frames: number): Promise<Measure> {
   log(`measure ${nameOf(way)}`);
   return page.evaluate(
-    async ({ way, frames, name }) => {
+    async ({ way, frames, name, debug }) => {
       const w = window as unknown as {
         map: import('maplibre-gl').Map & { redraw(): void };
         draw: unknown;
@@ -200,6 +237,7 @@ async function measure(page: Page, way: Way, frames: number): Promise<Measure> {
         };
       };
       const hooks = w.e2e.internals.tableDiagnosticsOf(w.draw);
+      (globalThis as { __rowsGroundDebug?: string }).__rowsGroundDebug = debug;
       hooks.setDrapeOrder(way.order, { steps: way.steps ?? 0, tail: way.tail ?? 'over' });
       const map = w.map;
       const gl = map.getCanvas().getContext('webgl2') as WebGL2RenderingContext & {
@@ -221,29 +259,43 @@ async function measure(page: Page, way: Way, frames: number): Promise<Measure> {
           };
         }
       }
-      // Warm up (the programs of the split compile at their first frame)
+      // Warm up (the programs of the split compile at their first frame, and the rows are packed
+      // again for the surface of the way)
+      for (let i = 0; i < 400; i++) {
+        map.redraw();
+        if (!(w.draw as { hasPendingWork(): boolean }).hasPendingWork()) break;
+      }
       map.redraw();
       gl.finish();
       if (way.order === 'split') {
         map.redraw();
         gl.finish();
       }
+      if (way.order === 'ground') {
+        map.redraw();
+        gl.finish();
+      }
       const times: number[] = [];
+      const totals: number[] = [];
       let draws = 0;
       const width = gl.drawingBufferWidth;
       const height = gl.drawingBufferHeight;
       const pixels = new Uint8Array(width * height * 4);
+      const one = new Uint8Array(4);
       for (let i = 0; i < frames; i++) {
         gl.__count.n = 0;
         const t0 = performance.now();
         map.redraw();
         times.push(performance.now() - t0);
         draws = gl.__count.n;
-        // The pixels of the last frame, read before it is shown
+        // The pixels of the last frame, read before it is shown; a pixel of every frame read, so
+        // that the time of the frame holds the work of the GPU
         if (i === frames - 1) gl.readPixels(0, 0, width, height, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
-        gl.finish();
+        else gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, one);
+        totals.push(performance.now() - t0);
       }
       times.sort((a, b) => a - b);
+      totals.sort((a, b) => a - b);
       const drape = hooks.drape();
       hooks.setDrapeOrder('split');
       return {
@@ -257,10 +309,11 @@ async function measure(page: Page, way: Way, frames: number): Promise<Measure> {
         steps: drape.steps as number,
         deepest: drape.deepest as number,
         frameMs: times[Math.floor(times.length / 2)] as number,
+        totalMs: totals[Math.floor(totals.length / 2)] as number,
         pixels: Array.from(pixels),
       };
     },
-    { way, frames, name: nameOf(way) },
+    { way, frames, name: nameOf(way), debug: process.env.DRAPE_GROUND_DEBUG ?? '' },
   );
 }
 
@@ -304,6 +357,86 @@ async function writeImage(page: Page, pixels: number[], file: string): Promise<v
   writeFileSync(file, Buffer.from(url.split(',')[1] as string, 'base64'));
 }
 
+/**
+ * The points of a scene the terrain hides from the camera, and of them those in view: the segment
+ * from the camera to the point, at its elevation on the test terrain (exaggerated as the scene
+ * is), meets the ground
+ */
+async function ghostPoints(page: Page, features: FeatureInput[]): Promise<string> {
+  const anchors = features
+    .filter((f) => f.type === 'Point')
+    .map((f) => (f.geometry as { coordinates: [number, number] }).coordinates);
+  return page.evaluate(
+    ({ anchors, exaggeration }) => {
+      const w = window as unknown as {
+        map: import('maplibre-gl').Map;
+        e2e: {
+          maplibregl: typeof import('maplibre-gl');
+          terrain: { testElevation(lng: number, lat: number): number };
+        };
+      };
+      const map = w.map;
+      type CameraTransform = {
+        getCameraLngLat(): { lng: number; lat: number };
+        getCameraAltitude(): number;
+      };
+      const holder = map as unknown as {
+        transform?: CameraTransform;
+        painter?: { transform?: CameraTransform };
+      };
+      const transform = (holder.transform ?? holder.painter?.transform) as CameraTransform;
+      const cameraLngLat = transform.getCameraLngLat();
+      const camera = w.e2e.maplibregl.MercatorCoordinate.fromLngLat(
+        cameraLngLat,
+        transform.getCameraAltitude(),
+      );
+      const Mercator = w.e2e.maplibregl;
+      const ground = (x: number, y: number): number => {
+        const ll = new Mercator.MercatorCoordinate(x, y, 0).toLngLat();
+        return w.e2e.terrain.testElevation(ll.lng, ll.lat) * exaggeration;
+      };
+      const canvas = map.getCanvas();
+      let hidden = 0;
+      let hiddenInView = 0;
+      let inView = 0;
+      for (const [lng, lat] of anchors) {
+        const at = Mercator.MercatorCoordinate.fromLngLat(
+          { lng, lat },
+          w.e2e.terrain.testElevation(lng, lat) * exaggeration,
+        );
+        const meter = at.meterInMercatorCoordinateUnits();
+        const screen = map.project([lng, lat]);
+        const shown =
+          screen.x >= 0 &&
+          screen.y >= 0 &&
+          screen.x <= canvas.clientWidth &&
+          screen.y <= canvas.clientHeight;
+        if (shown) inView++;
+        let occluded = false;
+        for (let i = 1; i < 64; i++) {
+          const t = i / 64;
+          const x = camera.x + (at.x - camera.x) * t;
+          const y = camera.y + (at.y - camera.y) * t;
+          const z = (camera.z ?? 0) + (at.z - (camera.z ?? 0)) * t;
+          if (ground(x, y) * meter > z + 2 * meter) {
+            occluded = true;
+            break;
+          }
+        }
+        if (occluded) {
+          hidden++;
+          if (shown) hiddenInView++;
+        }
+      }
+      return `${hidden} of ${anchors.length}, in view ${hiddenInView} of ${inView}`;
+    },
+    { anchors, exaggeration: EXAGGERATION },
+  );
+}
+
+/** The exaggeration of the test terrain (none: the terrain is never exaggerated) */
+const EXAGGERATION = 1;
+
 const WAYS: Way[] = [
   { order: 'breaks' },
   ...[1, 2, 3, 4, 8].map((steps): Way => ({ order: 'split', steps })),
@@ -326,9 +459,13 @@ async function measureScene(
   const page = await openScene(features, camera);
   log('loaded');
   const rows: string[] = [];
-  const each = reference ? await measure(page, { order: reference }, 1) : null;
+  const each =
+    reference && !process.env.DRAPE_ORDER_NOREF
+      ? await measure(page, { order: reference }, 1)
+      : null;
   const line = (m: Measure, diff: number | null) =>
-    `${m.order.padEnd(7)} used=${m.used}(${m.reason}) gl=${m.glDraws} drape=${m.drapeDraws} points=${m.pointDraws} breaks=${m.breaks} steps=${m.steps} deepest=${m.deepest} ms=${m.frameMs.toFixed(1)}${diff === null ? '' : ` diff=${diff}`}`;
+    `${m.order.padEnd(7)} used=${m.used}(${m.reason}) gl=${m.glDraws} drape=${m.drapeDraws} points=${m.pointDraws} breaks=${m.breaks} steps=${m.steps} deepest=${m.deepest} ms=${m.frameMs.toFixed(1)} total=${m.totalMs.toFixed(1)}${diff === null ? '' : ` diff=${diff}`}`;
+  rows.push(`ghost points: ${await ghostPoints(page, features)}`);
   if (each) {
     let painted = 0;
     for (let i = 0; i < each.pixels.length; i += 4) {
@@ -341,7 +478,7 @@ async function measureScene(
   const images = process.env.DRAPE_ORDER_IMAGES;
   if (images && each) await writeImage(page, each.pixels, `${images}/${name}-each.png`);
   for (const way of ways) {
-    const m = await measure(page, way, way.order === 'split' ? 5 : 1);
+    const m = await measure(page, way, Number(process.env.DRAPE_ORDER_FRAMES ?? 3));
     rows.push(line(m, each ? differing(m.pixels, each.pixels) : null));
     if (images) await writeImage(page, m.pixels, `${images}/${name}-${m.order}.png`);
   }
@@ -355,6 +492,9 @@ describe.skipIf(!process.env.DRAPE_ORDER_OUT)(
   'the order of the points among the drape of the rows (measures)',
   () => {
     const scenes = (process.env.DRAPE_ORDER_SCENES ?? 'small,stacked,large').split(',');
+    const asked = process.env.DRAPE_ORDER_WAYS;
+    const pick = (ways: Way[]): Way[] =>
+      asked ? asked.split(',').map((name) => wayOf(name)) : [...ways, { order: 'ground' }];
     if (scenes.includes('small')) {
       it('alternating points and squares, 2 x 400, zoom 15, pitch 60, against the reference', {
         timeout: browserTimeout(3_600_000),
@@ -363,7 +503,7 @@ describe.skipIf(!process.env.DRAPE_ORDER_OUT)(
           'small-z15-p60',
           alternating(400, 0.0008, 0.00024),
           { center: SLOPE, zoom: 15, pitch: 60, bearing: 0 },
-          WAYS,
+          pick(WAYS),
           'each',
         );
       });
@@ -376,27 +516,41 @@ describe.skipIf(!process.env.DRAPE_ORDER_OUT)(
           'stacked-z15-p45',
           stacked(100, 0.0016, 0.00032, 6),
           { center: SLOPE, zoom: 15, pitch: 45, bearing: 0 },
-          WAYS,
+          pick(WAYS),
+          'each',
+        );
+      });
+    }
+    if (scenes.includes('deep')) {
+      it('points and translucent squares 20 times one after the other on a pixel, zoom 15, pitch 45, against the reference', {
+        timeout: browserTimeout(3_600_000),
+      }, async () => {
+        await measureScene(
+          'deep-z15-p45',
+          deep(36, 0.0016, 0.0003, 20),
+          { center: SLOPE, zoom: 15, pitch: 45, bearing: 0 },
+          pick([{ order: 'split' }]),
           'each',
         );
       });
     }
     if (scenes.includes('large')) {
-      for (const zoom of [15, 13.5, 12]) {
+      const zooms = (process.env.DRAPE_ORDER_ZOOMS ?? '15,13.5,12').split(',').map(Number);
+      for (const zoom of zooms) {
         it(`alternating points and squares, 2 x 10,000, zoom ${zoom}, pitch 45`, {
           timeout: browserTimeout(3_600_000),
         }, async () => {
-          const ways: Way[] = [
+          const ways: Way[] = pick([
             ...[2, 4].map((steps): Way => ({ order: 'split', steps })),
             { order: 'split' },
             ...(process.env.DRAPE_ORDER_BREAKS ? [{ order: 'breaks' } as Way] : []),
-          ];
+          ]);
           await measureScene(
             `large-z${zoom}-p45`,
             alternating(10_000, 0.0004, 0.00012),
             { center: SLOPE, zoom, pitch: 45, bearing: 0 },
             ways,
-            process.env.DRAPE_ORDER_REFERENCE ? 'each-near' : null,
+            (process.env.DRAPE_ORDER_REFERENCE as 'each' | 'each-near' | undefined) ?? null,
           );
         });
       }

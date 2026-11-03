@@ -76,6 +76,12 @@ import {
   drapeMercatorY,
 } from '../terrain/drape/geometry.js';
 import {
+  DRAPE_GROUND_BLOCK_TEXELS,
+  DRAPE_GROUND_BLOCKS,
+  DRAPE_GROUND_COARSE_BLOCKS,
+  DrapeGroundBuffer,
+} from '../terrain/drape/ground-buffer.js';
+import {
   DRAPE_STATE_HIDDEN,
   DrapeCopyTables,
   type DrapePartitionSource,
@@ -187,6 +193,8 @@ export interface TableDrapeFrame {
   readonly moving: readonly TableDrapeMovingCover[];
   /** The keys of the points that split the drape (null when they cannot be drawn) */
   readonly split: DrapeSplit | null;
+  /** The ground seen at each pixel (the polygons and the lines read it in the order of the rows) */
+  readonly ground: DrapeGroundBuffer | null;
 }
 
 /** A tile of the frame of the drape of the rows */
@@ -203,6 +211,15 @@ export interface TableDrapeTile {
    * partitions it reads): the most elements a pixel can have after a point
    */
   readonly depth: number;
+  /** The range of the elevations of the ground of the tile (meters, the exaggeration included) */
+  readonly elevation: readonly [number, number];
+  /**
+   * The planes of the elevations of the ground of the blocks of the tile, `DRAPE_GROUND_BLOCKS`
+   * on a side, row by row from its north west corner, then of its coarser blocks: a + b u + c v
+   * in units of the tile and how far the ground is from it at most (meters, 4 numbers a block;
+   * null when its DEM is not read)
+   */
+  readonly blocks: Float32Array | null;
 }
 
 /** A moving partition drawn in a frame: where its elements are drawn, and their highest key */
@@ -412,6 +429,7 @@ export class TableDrape {
   private renderer: DrapeRenderer | null = null;
   /** The keys of the points drawn among the rows (`DrapeSplit`) */
   private split: DrapeSplit | null = null;
+  private ground: DrapeGroundBuffer | null = null;
   /** The partitions by layer and by group handle (-1: after the last group) */
   private readonly partitions = new Map<string, Map<number, PartitionState>>();
   private readonly freeIds: number[] = [];
@@ -433,6 +451,11 @@ export class TableDrape {
   /** The bytes of the textures of the keys of the points */
   get splitBytes(): number {
     return this.split?.bytes ?? 0;
+  }
+
+  /** The bytes of the texture of the ground seen at each pixel */
+  get groundBytes(): number {
+    return this.ground?.bytes ?? 0;
   }
 
   /** Whether the last frame left tiles to build (the next frames build them) */
@@ -647,9 +670,12 @@ export class TableDrape {
         pixels: tilePixels(entry.projection, width, height),
         moving: this.movingDrawOf(tile, moving),
         depth: this.index.maxRunsPerCellOf(tile) + this.movingDepthOf(tile, moving),
+        elevation: elevationRangeOf(input.mapTerrain, entry.draw.tileID),
+        blocks: elevationBlocksOf(input.mapTerrain, entry.draw.tileID),
       });
     }
     this.split ??= new DrapeSplit(input.gl);
+    this.ground ??= new DrapeGroundBuffer(input.gl);
     this.usedLast = true;
     debug.used = true;
     debug.reason = 'ok';
@@ -665,6 +691,7 @@ export class TableDrape {
       drape: this,
       moving: moving.map((m) => ({ box: m.box, maxKey: m.set.maxKey })),
       split: this.split,
+      ground: this.ground,
     };
   }
 
@@ -953,6 +980,8 @@ export class TableDrape {
     this.renderer = null;
     this.split?.release();
     this.split = null;
+    this.ground?.release();
+    this.ground = null;
     this.index.clearTiles();
   }
 
@@ -1620,7 +1649,7 @@ interface PendingDraw {
  *
  * @internal
  */
-export type TableDrapeOrder = 'split' | 'breaks' | 'each' | 'each-near';
+export type TableDrapeOrder = 'split' | 'breaks' | 'each' | 'each-near' | 'ground';
 
 /**
  * Draws a layer held as rows on its drape, in the order of its rows: the drape is painted tile by
@@ -2177,6 +2206,146 @@ function keysFit(keys: TableDrapeKeys, place0: number): boolean {
   const place = keys.place - place0;
   if (place < 0 || place >= DRAPE_SPLIT_MAX_PLACES) return false;
   return keys.add >= 0 && keys.lastSlot < DRAPE_SPLIT_SLOTS;
+}
+
+/**
+ * The range of the elevations of the ground of a tile drawn (meters, the exaggeration included),
+ * as maplibre keeps it for its DEM tile; a wide one when it does not
+ */
+function elevationRangeOf(terrain: unknown, tileID: unknown): readonly [number, number] {
+  const range = (
+    terrain as {
+      getMinMaxElevation?(id: unknown): {
+        minElevation: number | null;
+        maxElevation: number | null;
+      };
+    }
+  ).getMinMaxElevation?.(tileID);
+  if (!range || range.minElevation === null || range.maxElevation === null) return [-500, 9000];
+  return [range.minElevation, range.maxElevation];
+}
+
+/** The ranges of the blocks of the tiles, by the DEM they are read from and the tile */
+const blocksByDem = new WeakMap<object, Map<string, Float32Array>>();
+
+interface DemLike {
+  readonly dim: number;
+  get(x: number, y: number): number;
+}
+
+/**
+ * The planes of the elevations of the ground of the blocks of a tile drawn (meters, the
+ * exaggeration included): fitted to the texels of the DEM its mesh reads in each block (the mesh
+ * samples the DEM between four texels, and its cells may reach out of the block), with how far
+ * they are from it at most. The mesh interpolates the texels, and a plane interpolated is the
+ * plane, so no elevation of its ground in a block is further from the plane of the block. Read
+ * once for a tile and its DEM
+ */
+function elevationBlocksOf(terrain: unknown, tileID: unknown): Float32Array | null {
+  const holder = terrain as {
+    tileManager?: { getSourceTile(id: unknown, fallback: boolean): unknown };
+    sourceCache?: { getSourceTile(id: unknown, fallback: boolean): unknown };
+    exaggeration?: number;
+  };
+  const manager = holder.tileManager ?? holder.sourceCache;
+  const source = manager?.getSourceTile(tileID, true) as
+    | { dem?: DemLike; tileID?: { canonical: { x: number; y: number; z: number } } }
+    | undefined;
+  const dem = source?.dem;
+  const from = source?.tileID?.canonical;
+  const to = (tileID as { canonical?: { x: number; y: number; z: number } }).canonical;
+  if (!dem || !from || !to || to.z < from.z) return null;
+  let byTile = blocksByDem.get(dem);
+  if (!byTile) {
+    byTile = new Map();
+    blocksByDem.set(dem, byTile);
+  }
+  const key = `${to.z}/${to.x}/${to.y}`;
+  const kept = byTile.get(key);
+  if (kept) return kept;
+  const scale = 2 ** (to.z - from.z);
+  const fx = to.x / scale - from.x;
+  const fy = to.y / scale - from.y;
+  const dim = dem.dim;
+  const exaggeration = holder.exaggeration ?? 1;
+  const out = new Float32Array(DRAPE_GROUND_BLOCK_TEXELS * 4);
+  // A position of the mesh in a block reads the texels around it (its cell of the mesh may reach
+  // out of the block)
+  const cell = 1 / getTerrainMeshSize(terrain as Parameters<typeof getTerrainMeshSize>[0]) / scale;
+  // The plane of the elevations of the texels a part of the tile reads, in units of the tile
+  // (a + b u + c v), and how far they are from it at most
+  const fit = (u0: number, v0: number, u1: number, v1: number, at: number): void => {
+    const y0 = Math.max(-1, Math.floor((fy + v0 / scale - cell) * dim - 0.5));
+    const y1 = Math.min(dim, Math.floor((fy + v1 / scale + cell) * dim - 0.5) + 1);
+    const x0 = Math.max(-1, Math.floor((fx + u0 / scale - cell) * dim - 0.5));
+    const x1 = Math.min(dim, Math.floor((fx + u1 / scale + cell) * dim - 0.5) + 1);
+    const uOf = (x: number): number => ((x + 0.5) / dim - fx) * scale;
+    const vOf = (y: number): number => ((y + 0.5) / dim - fy) * scale;
+    let count = 0;
+    let su = 0;
+    let sv = 0;
+    let sh = 0;
+    for (let y = y0; y <= y1; y++) {
+      for (let x = x0; x <= x1; x++) {
+        su += uOf(x);
+        sv += vOf(y);
+        sh += dem.get(x, y) * exaggeration;
+        count++;
+      }
+    }
+    const mu = su / count;
+    const mv = sv / count;
+    const mh = sh / count;
+    let suu = 0;
+    let svv = 0;
+    let suv = 0;
+    let suh = 0;
+    let svh = 0;
+    for (let y = y0; y <= y1; y++) {
+      const dv = vOf(y) - mv;
+      for (let x = x0; x <= x1; x++) {
+        const du = uOf(x) - mu;
+        const dh = dem.get(x, y) * exaggeration - mh;
+        suu += du * du;
+        svv += dv * dv;
+        suv += du * dv;
+        suh += du * dh;
+        svh += dv * dh;
+      }
+    }
+    const det = suu * svv - suv * suv;
+    let b = 0;
+    let c = 0;
+    if (det > 1e-30) {
+      b = (suh * svv - svh * suv) / det;
+      c = (svh * suu - suh * suv) / det;
+    }
+    const a = mh - b * mu - c * mv;
+    let reach = 0;
+    for (let y = y0; y <= y1; y++) {
+      for (let x = x0; x <= x1; x++) {
+        const off = Math.abs(dem.get(x, y) * exaggeration - (a + b * uOf(x) + c * vOf(y)));
+        if (off > reach) reach = off;
+      }
+    }
+    out[at * 4] = a;
+    out[at * 4 + 1] = b;
+    out[at * 4 + 2] = c;
+    // The rounding of the plane to 32-bit floats, over the tile
+    out[at * 4 + 3] = reach + 1e-6 * (Math.abs(a) + Math.abs(b) + Math.abs(c));
+  };
+  const n = DRAPE_GROUND_BLOCKS;
+  for (let by = 0; by < n; by++) {
+    for (let bx = 0; bx < n; bx++) fit(bx / n, by / n, (bx + 1) / n, (by + 1) / n, by * n + bx);
+  }
+  const m = DRAPE_GROUND_COARSE_BLOCKS;
+  for (let cy = 0; cy < m; cy++) {
+    for (let cx = 0; cx < m; cx++) {
+      fit(cx / m, cy / m, (cx + 1) / m, (cy + 1) / m, n * n + cy * m + cx);
+    }
+  }
+  byTile.set(key, out);
+  return out;
 }
 
 /**

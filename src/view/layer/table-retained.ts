@@ -126,7 +126,11 @@ import {
   type RowsChunkData,
   RowsPalette,
 } from '../renderers/rows/rows-format.js';
-import type { RowsChunk as RowsGpuChunk, RowsRenderer } from '../renderers/rows/rows-renderer.js';
+import type {
+  RowsChunk as RowsGpuChunk,
+  RowsGround,
+  RowsRenderer,
+} from '../renderers/rows/rows-renderer.js';
 import {
   advanceChunkBuild,
   type ChunkBuildBudget,
@@ -138,9 +142,15 @@ import {
   type RetainedChunkJob,
   type RetainedChunkState,
 } from '../retained/chunk-scheduler.js';
+import { getRenderFrame } from '../shaders/frame.js';
 import { anchorElevationMeters } from '../terrain/anchor.js';
 import type { TerrainContext } from '../terrain/context.js';
 import type { DrapeBounds } from '../terrain/drape/geometry.js';
+import {
+  DRAPE_GROUND_BLOCK_TEXELS,
+  DRAPE_GROUND_MAX_SLOTS,
+} from '../terrain/drape/ground-buffer.js';
+import { DRAPE_LIFT_RATIO } from '../terrain/drape/renderer.js';
 import { isTerrainCameraMoving } from '../terrain/state.js';
 import { type MercatorRect, mercatorX, mercatorY } from '../terrain/tessellation.js';
 import type { BulkFramesRenderer, PointFrameExtent } from '../ui/bulk-frames.js';
@@ -541,6 +551,8 @@ interface DrawPass {
   settled: boolean;
   /** Whether the layer is drawn in one draw (the rows of the delta in one draw too) */
   oneDraw: boolean;
+  /** Whether its polygons and lines read the ground seen at each pixel (they are not cut) */
+  groundRead: boolean;
 }
 
 /** A drawing made again from the rows of a layer, for the checks (its styles resolved afresh) */
@@ -696,6 +708,7 @@ export class TableLayerRenderer {
     tables: null,
     settled: true,
     oneDraw: false,
+    groundRead: false,
   };
   /** The frame the chunks of the layer being drawn are built and drawn in (set per layer) */
   private readonly schedule: SchedulerFrame = {
@@ -1374,6 +1387,96 @@ export class TableLayerRenderer {
     return this.drapeFrame;
   }
 
+  /**
+   * Draws the ground seen at each pixel once per frame, and gives it to the renderer of the rows
+   *
+   * @returns false when it cannot be drawn (the drape is used as it is)
+   */
+  private drawGround(frame: TableDrapeFrame): boolean {
+    const ground = frame.ground;
+    const rows = this.pass.renderers?.rows;
+    if (!ground || !rows) return false;
+    const now = getRenderFrame();
+    if (ground.drawnFrame !== now) {
+      if (!ground.ensure()) return false;
+      this.pass.renderers?.run?.end();
+      frame.enter();
+      ground.begin();
+      const boxes = new Float64Array(frame.tiles.length * 3);
+      const ranges = new Float32Array(frame.tiles.length * 2);
+      const drawn: TableDrapeFrame['tiles'][number][] = [];
+      for (const tile of frame.tiles) {
+        if (drawn.length >= DRAPE_GROUND_MAX_SLOTS) break;
+        const slot = drawn.length;
+        if (
+          !(globalThis as { __rowsGroundDebug?: string }).__rowsGroundDebug?.includes(
+            'DEBUG_NOGROUND',
+          ) &&
+          !frame.renderer.drawGroundTile(tile.entry.draw, tile.entry.projection, frame.light, slot)
+        ) {
+          continue;
+        }
+        drawn.push(tile);
+        boxes[slot * 3] = tile.box.minX;
+        boxes[slot * 3 + 1] = tile.box.minY;
+        boxes[slot * 3 + 2] = tile.box.maxX - tile.box.minX;
+        // The lift of the ground over the terrain
+        const lift = tile.entry.draw.groundMeters * DRAPE_LIFT_RATIO;
+        ranges[slot * 2] = tile.elevation[0];
+        ranges[slot * 2 + 1] = tile.elevation[1] + lift;
+        this.groundDraws++;
+      }
+      // The ranges of the blocks, written again when the tiles or their DEM change
+      const same =
+        this.groundTilesDrawn.length === drawn.length &&
+        drawn.every(
+          (tile, i) =>
+            this.groundTilesDrawn[i]?.blocks === tile.blocks &&
+            this.groundTilesDrawn[i]?.tile === tile.tile,
+        );
+      let blocks = this.groundState?.blocks ?? null;
+      if (!same || !blocks) {
+        const perSlot = DRAPE_GROUND_BLOCK_TEXELS * 4;
+        blocks = new Float32Array(Math.max(1, drawn.length) * perSlot);
+        for (let slot = 0; slot < drawn.length; slot++) {
+          const tile = drawn[slot] as TableDrapeFrame['tiles'][number];
+          const lift = tile.entry.draw.groundMeters * DRAPE_LIFT_RATIO;
+          const [low, high] = tile.elevation;
+          for (let b = 0; b < perSlot; b += 4) {
+            // The ground is lifted over the terrain; without the DEM read, the range of the tile
+            const at = slot * perSlot + b;
+            blocks[at] = (tile.blocks ? (tile.blocks[b] as number) : (low + high) / 2) + lift;
+            blocks[at + 1] = tile.blocks ? (tile.blocks[b + 1] as number) : 0;
+            blocks[at + 2] = tile.blocks ? (tile.blocks[b + 2] as number) : 0;
+            blocks[at + 3] = tile.blocks ? (tile.blocks[b + 3] as number) : (high - low) / 2;
+          }
+        }
+        this.groundTilesDrawn = drawn;
+      }
+      const count = drawn.length;
+      ground.end();
+      frame.leave();
+      this.pass.renderers?.run?.begin();
+      ground.drawnFrame = now;
+      this.groundState = {
+        texture: ground.texture as WebGLTexture,
+        boxes,
+        ranges,
+        blocks,
+        count,
+      };
+    }
+    if (!this.groundState) return false;
+    rows.setGround(this.groundState);
+    return true;
+  }
+
+  /** The ground of the frame given to the renderer of the rows, and the tiles it was drawn of */
+  private groundState: RowsGround | null = null;
+  private groundTilesDrawn: TableDrapeFrame['tiles'][number][] = [];
+  /** The draws of the ground in the last frames (for the measurements) */
+  groundDraws = 0;
+
   /** What the drape of the rows did in the last frame (for the measurements) */
   drapeDiagnostics(): TableDrapeDebug & {
     binCount: number;
@@ -1481,9 +1584,13 @@ export class TableLayerRenderer {
     // The surface the rows are cut for, once per frame
     if (this.surfaceFrame !== this.frameCount) {
       this.surfaceFrame = this.frameCount;
-      this.surfaces.update(this.options.terrain, bounds, {
-        forEachFill: (view, visit) => this.forEachFill(view, visit),
-      });
+      // Where the polygons and the lines read the ground seen at each pixel, they are not cut
+      if (TableDrapePainter.order === 'ground') this.surfaces.flat();
+      else {
+        this.surfaces.update(this.options.terrain, bounds, {
+          forEachFill: (view, visit) => this.forEachFill(view, visit),
+        });
+      }
     }
 
     // The drawing of each group: the one of the layer, or the other while its chunks in view
@@ -1546,7 +1653,19 @@ export class TableLayerRenderer {
     const started = chunkClock();
     run?.begin();
     // On the drape, the chunks draw their points alone, between the parts of the drape
-    const drapeFrame = drawing === 'one-draw' ? this.drapeFrame : null;
+    let drapeFrame = drawing === 'one-draw' ? this.drapeFrame : null;
+    // Or, where the polygons and the lines read the ground seen at each pixel, the chunks draw
+    // every row in its order
+    pass.groundRead = false;
+    if (
+      drapeFrame &&
+      TableDrapePainter.order === 'ground' &&
+      renderers.rows?.groundReady &&
+      this.drawGround(drapeFrame)
+    ) {
+      pass.groundRead = true;
+      drapeFrame = null;
+    }
     this.painter.begin(
       drapeFrame && {
         ...drapeFrame,
@@ -1634,6 +1753,8 @@ export class TableLayerRenderer {
       this.advanceVersions(cache, tables, table, layer, deps, drawing, settled);
     } finally {
       run?.end();
+      if (pass.groundRead) renderers.rows?.setGround(null);
+      pass.groundRead = false;
       this.drawMs += chunkClock() - started;
       // Nothing of the layer is held past its drawing
       pass.frame = null;

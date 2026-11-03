@@ -40,6 +40,10 @@ import {
 } from '../../shaders/helpers.js';
 import { ProjectionUniformManager } from '../../shaders/projection.js';
 import { TerrainContext } from '../../terrain/context.js';
+import {
+  DRAPE_GROUND_BLOCK_TEXELS,
+  DRAPE_GROUND_MAX_SLOTS,
+} from '../../terrain/drape/ground-buffer.js';
 import { NEUTRAL_DRAW_FACTORS, type RetainedDrawFactors } from '../draw-factors.js';
 import { type RetainedDrawRun, retainedDrawRun } from '../draw-run.js';
 import { bindRowState, type RowStateBinding, RowStateUniforms } from '../row-state.js';
@@ -79,6 +83,10 @@ const UNIT_SPRITES = 4;
 const UNIT_HEIGHTS = 5;
 /** The unit of the bounds of the segments (after the one of the DEM atlas) */
 const UNIT_SPLIT_BOUNDS = 7;
+/** The units of the ground seen at each pixel and of its tiles (the variant reading the ground) */
+const UNIT_GROUND = 8;
+const UNIT_GROUND_TILES = 9;
+const UNIT_GROUND_BLOCKS = 10;
 
 /** The owner of the GPU memory of this renderer in the ledger */
 const LEDGER_OWNER = 'rows';
@@ -178,6 +186,29 @@ interface RowsUniformLocations {
   readonly splitFrom: WebGLUniformLocation | null;
   readonly splitTo: WebGLUniformLocation | null;
   readonly splitFloor: WebGLUniformLocation | null;
+  readonly ground: WebGLUniformLocation | null;
+  readonly groundTiles: WebGLUniformLocation | null;
+  readonly groundBlocks: WebGLUniformLocation | null;
+  readonly groundCount: WebGLUniformLocation | null;
+}
+
+/**
+ * The ground seen at each pixel the polygons and the lines read (`DrapeGroundBuffer`): its
+ * texture, and its tiles by slot as their Mercator boxes (x, y of the corner and the side) and
+ * the ranges of the elevations of their ground (meters)
+ *
+ * @internal
+ */
+export interface RowsGround {
+  readonly texture: WebGLTexture;
+  readonly boxes: Float64Array;
+  readonly ranges: Float32Array;
+  /**
+   * The ranges of the blocks of each slot (`DRAPE_GROUND_BLOCK_TEXELS` of min and max), a new
+   * array when the tiles change
+   */
+  readonly blocks: Float32Array;
+  readonly count: number;
 }
 
 /**
@@ -296,6 +327,25 @@ export class RowsRenderer {
    */
   private readonly keyedPrograms = new Map<RowsVariant, RowsProgram>();
   private readonly segmentPrograms = new Map<RowsVariant, RowsProgram>();
+  /** The programs that read the ground seen at each pixel, by variant (made when first asked) */
+  private readonly groundPrograms = new Map<RowsVariant, RowsProgram>();
+  /** The ground the polygons and the lines read in the draws now (null: they are drawn as cut) */
+  private ground: RowsGround | null = null;
+  private groundTiles: WebGLTexture | null = null;
+  private groundBlocks: WebGLTexture | null = null;
+  private readonly groundTexels = new Float32Array(DRAPE_GROUND_MAX_SLOTS * 2 * 4);
+  /** The ground and the center the tiles of the ground were written for, and the blocks */
+  private groundWritten: {
+    ground: RowsGround | null;
+    blocks: Float32Array | null;
+    x: number;
+    y: number;
+  } = {
+    ground: null,
+    blocks: null,
+    x: 0,
+    y: 0,
+  };
   private variant: RowsVariant = 'flat';
   private offsetUniforms: OffsetUniforms | null = null;
   private readonly cornerBuffer: WebGLBuffer | null;
@@ -378,6 +428,28 @@ export class RowsRenderer {
     // Both asked, so both compile at once
     const ready = this.poll(keyed);
     return this.poll(segment) && ready;
+  }
+
+  /**
+   * Whether the program that reads the ground seen at each pixel can draw in the variant of the
+   * frame (its compile starts at the first call)
+   */
+  get groundReady(): boolean {
+    if (this.variant !== 'flat') return false;
+    let program = this.groundPrograms.get(this.variant);
+    if (!program) {
+      program = this.startProgram(this.variant, 'ground');
+      this.groundPrograms.set(this.variant, program);
+    }
+    return this.poll(program);
+  }
+
+  /**
+   * Makes the polygons and the lines of the draws that follow read the ground seen at each pixel
+   * (null: drawn as they are cut)
+   */
+  setGround(ground: RowsGround | null): void {
+    this.ground = ground;
   }
 
   /** Sets the uniforms of the offset mode of the frame */
@@ -804,7 +876,10 @@ export class RowsRenderer {
       floor?: RowsKeyFloor | null;
     } | null = null,
   ): void {
-    const program = keyed ? keyed.program : this.current;
+    const groundProgram =
+      !keyed && !points && this.ground ? (this.groundPrograms.get(this.variant) ?? null) : null;
+    const reading = groundProgram !== null && this.poll(groundProgram);
+    const program = keyed ? keyed.program : reading ? groundProgram : this.current;
     if (!chunk.uploaded || !program || !this.poll(program)) return;
     const data = chunk.data;
     const starts = points ? data.pointFirst : data.rowFirst;
@@ -853,6 +928,7 @@ export class RowsRenderer {
         if (locations.splitTo) gl.uniform1i(locations.splitTo, segment.to);
       }
     }
+    if (reading) this.bindGround(program);
     bindRowState(
       run,
       program.rowState as RowStateUniforms,
@@ -875,6 +951,77 @@ export class RowsRenderer {
     run.release();
   }
 
+  /**
+   * Binds the ground seen at each pixel and writes its tiles, as Mercator offsets from the center
+   * the offsets of the draws are taken from (written again when the ground or the center
+   * changes), and the ranges of their blocks (written again when the tiles change)
+   */
+  private bindGround(program: RowsProgram): void {
+    const gl = this.gl;
+    const ground = this.ground as RowsGround;
+    const locations = program.locations as RowsUniformLocations;
+    const center = this.offsetUniforms?.centerMercator ?? [0, 0];
+    const written = this.groundWritten;
+    if (!this.groundTiles || !this.groundBlocks) {
+      this.groundTiles = createFloatTexture(gl, gl.RGBA32F, 2, DRAPE_GROUND_MAX_SLOTS);
+      this.groundBlocks = createFloatTexture(
+        gl,
+        gl.RGBA32F,
+        DRAPE_GROUND_BLOCK_TEXELS,
+        DRAPE_GROUND_MAX_SLOTS,
+      );
+      written.ground = null;
+      written.blocks = null;
+    }
+    if (!this.groundTiles || !this.groundBlocks) return;
+    const count = Math.min(ground.count, DRAPE_GROUND_MAX_SLOTS);
+    gl.activeTexture(gl.TEXTURE0 + UNIT_GROUND_BLOCKS);
+    gl.bindTexture(gl.TEXTURE_2D, this.groundBlocks);
+    if (written.blocks !== ground.blocks && count > 0) {
+      gl.texSubImage2D(
+        gl.TEXTURE_2D,
+        0,
+        0,
+        0,
+        DRAPE_GROUND_BLOCK_TEXELS,
+        count,
+        gl.RGBA,
+        gl.FLOAT,
+        ground.blocks,
+      );
+      written.blocks = ground.blocks;
+    }
+    gl.activeTexture(gl.TEXTURE0 + UNIT_GROUND_TILES);
+    gl.bindTexture(gl.TEXTURE_2D, this.groundTiles);
+    if (written.ground !== ground || written.x !== center[0] || written.y !== center[1]) {
+      const texels = this.groundTexels;
+      for (let s = 0; s < count; s++) {
+        const at = s * 8;
+        texels[at] = (ground.boxes[s * 3] as number) - center[0];
+        texels[at + 1] = (ground.boxes[s * 3 + 1] as number) - center[1];
+        texels[at + 2] = ground.boxes[s * 3 + 2] as number;
+        texels[at + 3] = 0;
+        texels[at + 4] = ground.ranges[s * 2] as number;
+        texels[at + 5] = ground.ranges[s * 2 + 1] as number;
+        texels[at + 6] = 0;
+        texels[at + 7] = 0;
+      }
+      if (count > 0) {
+        gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, 2, count, gl.RGBA, gl.FLOAT, texels);
+      }
+      written.ground = ground;
+      written.x = center[0];
+      written.y = center[1];
+    }
+    gl.activeTexture(gl.TEXTURE0 + UNIT_GROUND);
+    gl.bindTexture(gl.TEXTURE_2D, ground.texture);
+    gl.activeTexture(gl.TEXTURE0);
+    if (locations.ground) gl.uniform1i(locations.ground, UNIT_GROUND);
+    if (locations.groundTiles) gl.uniform1i(locations.groundTiles, UNIT_GROUND_TILES);
+    if (locations.groundBlocks) gl.uniform1i(locations.groundBlocks, UNIT_GROUND_BLOCKS);
+    if (locations.groundCount) gl.uniform1i(locations.groundCount, ground.count);
+  }
+
   /** Releases every program, chunk and texture */
   dispose(): void {
     const gl = this.gl;
@@ -883,6 +1030,7 @@ export class RowsRenderer {
       ...this.programs.values(),
       ...this.keyedPrograms.values(),
       ...this.segmentPrograms.values(),
+      ...this.groundPrograms.values(),
     ]) {
       if (program.vertex) gl.deleteShader(program.vertex);
       if (program.fragment) gl.deleteShader(program.fragment);
@@ -891,6 +1039,11 @@ export class RowsRenderer {
     this.programs.clear();
     this.keyedPrograms.clear();
     this.segmentPrograms.clear();
+    this.groundPrograms.clear();
+    if (this.groundTiles) gl.deleteTexture(this.groundTiles);
+    if (this.groundBlocks) gl.deleteTexture(this.groundBlocks);
+    this.groundTiles = null;
+    this.groundBlocks = null;
     this.current = null;
     for (const palette of this.palettes) this.deletePaletteTexture(palette);
     this.palettes.clear();
@@ -915,9 +1068,13 @@ export class RowsRenderer {
   ): RowsProgram {
     const gl = this.gl;
     const { prelude, define } = rowsProjectionPrelude(variant);
-    const keyed = fragmentVariant !== 'color';
+    const keyed = fragmentVariant === 'key' || fragmentVariant === 'segment';
+    const ground = fragmentVariant === 'ground';
     const vertex = gl.createShader(gl.VERTEX_SHADER) as WebGLShader;
-    gl.shaderSource(vertex, withSamplerPrecision(buildRowsVertexSource(prelude, define, keyed)));
+    gl.shaderSource(
+      vertex,
+      withSamplerPrecision(buildRowsVertexSource(prelude, define, keyed, ground)),
+    );
     gl.compileShader(vertex);
     const fragment = gl.createShader(gl.FRAGMENT_SHADER) as WebGLShader;
     gl.shaderSource(fragment, withSamplerPrecision(buildRowsFragmentSource(fragmentVariant)));
@@ -1512,6 +1669,10 @@ function locationsOf(gl: WebGL2RenderingContext, program: WebGLProgram): RowsUni
     splitFrom: at('u_split_from'),
     splitTo: at('u_split_to'),
     splitFloor: at('u_split_floor'),
+    ground: at('u_ground'),
+    groundTiles: at('u_ground_tiles'),
+    groundBlocks: at('u_ground_blocks'),
+    groundCount: at('u_ground_count'),
   };
 }
 

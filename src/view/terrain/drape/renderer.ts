@@ -888,6 +888,34 @@ export const ROWS_DRAPE_FRAGMENT_SOURCE = DRAPE_FRAGMENT_SOURCE.replace(
 );
 
 /**
+ * The shader of the pass of the ground seen at each pixel (`DrapeGroundBuffer`): the place in the
+ * tile drawn, the shading of the terrain there and the slot of the tile plus one
+ */
+export const GROUND_FRAGMENT_SOURCE =
+  `#version 300 es
+precision highp float;
+precision highp int;
+precision highp sampler2D;
+
+in vec2 v_tile;
+uniform vec3 u_light_dir;
+uniform float u_shade_strength;
+uniform float u_tile_meters;
+uniform float u_ground_slot;
+out vec4 fragColor;
+` +
+  TERRAIN_SAMPLE_GLSL +
+  TERRAIN_SHADE_GLSL +
+  `
+void main() {
+#ifdef DEBUG_NOSHADE
+    fragColor = vec4(v_tile, 1.0, u_ground_slot + 1.0);
+#else
+    fragColor = vec4(v_tile, terrainShade(v_tile), u_ground_slot + 1.0);
+#endif
+}`;
+
+/**
  * The moving partitions a tile of the drape of the rows reads: for each, the map from the
  * position in the tile drawn back to the position in the tiles of its index (a column-major
  * 3 x 3, in units of those tiles), the inverse of its linear part, and its tiles (x, y, grid,
@@ -946,6 +974,9 @@ interface UploadMark {
 export class DrapeRenderer {
   private gl: WebGL2RenderingContext;
   private program: WebGLProgram | null = null;
+  /** The program of the pass of the ground (the drape of the rows) */
+  private groundProgram: WebGLProgram | null = null;
+  private groundLocations: Record<string, WebGLUniformLocation | null> = {};
   private variantName = '';
   private mesh: TerrainMeshBuffers | null = null;
 
@@ -1020,6 +1051,36 @@ export class DrapeRenderer {
       return false;
     }
     this.variantName = shaderData.variantName;
+    if (this.rows) {
+      if (this.groundProgram) gl.deleteProgram(this.groundProgram);
+      try {
+        this.groundProgram = createProgram(
+          gl,
+          VERTEX_SOURCE(shaderData.vertexShaderPrelude, shaderData.define),
+          GROUND_FRAGMENT_SOURCE.replace(
+            '#version 300 es\n',
+            `#version 300 es\n${(globalThis as { __rowsGroundDebug?: string }).__rowsGroundDebug ?? ''}\n`,
+          ),
+        );
+      } catch {
+        this.groundProgram = null;
+      }
+      this.groundLocations = {};
+      if (this.groundProgram) {
+        for (const name of [
+          ...DRAPE_PROJECTION_UNIFORMS,
+          ...DRAPE_TERRAIN_UNIFORMS,
+          ...EDGE_CONSTRAIN_UNIFORMS,
+          'u_light_dir',
+          'u_shade_strength',
+          'u_tile_meters',
+          'u_drape_lift_m',
+          'u_ground_slot',
+        ]) {
+          this.groundLocations[name] = gl.getUniformLocation(this.groundProgram, name);
+        }
+      }
+    }
 
     const names = [
       ...DRAPE_PROJECTION_UNIFORMS,
@@ -1260,6 +1321,43 @@ export class DrapeRenderer {
     });
   }
 
+  /**
+   * Draws a tile into the ground seen at each pixel (`DrapeGroundBuffer`, bound by the caller)
+   *
+   * @returns false when the program of the ground is not there
+   */
+  drawGroundTile(
+    draw: DrapeTileDraw,
+    projectionData: ProjectionData,
+    light: DrapeLight,
+    slot: number,
+  ): boolean {
+    const gl = this.gl;
+    const program = this.groundProgram;
+    const mesh = this.mesh;
+    if (!program || !mesh) return false;
+    gl.useProgram(program);
+    const set = this.groundLocations;
+    applyDrapeProjectionUniforms(gl, set, projectionData);
+    applyDrapeTerrainUniforms(gl, set, draw.terrain, UNIT_TERRAIN);
+    if (set.u_light_dir) {
+      gl.uniform3f(set.u_light_dir, light.direction[0], light.direction[1], light.direction[2]);
+    }
+    if (set.u_shade_strength) gl.uniform1f(set.u_shade_strength, light.strength);
+    if (set.u_tile_meters) gl.uniform1f(set.u_tile_meters, draw.groundMeters);
+    if (set.u_drape_lift_m) {
+      gl.uniform1f(set.u_drape_lift_m, draw.groundMeters * DRAPE_LIFT_RATIO);
+    }
+    if (set.u_ground_slot) gl.uniform1f(set.u_ground_slot, slot);
+    applyEdgeConstrainUniforms(gl, set, draw.edges, draw.terrain);
+    gl.disable(gl.CULL_FACE);
+    gl.bindVertexArray(mesh.vao);
+    gl.drawElements(gl.TRIANGLES, mesh.indexCount, gl.UNSIGNED_INT, 0);
+    gl.bindVertexArray(null);
+    gl.activeTexture(gl.TEXTURE0);
+    return true;
+  }
+
   /** The textures of one texel bound for the keys of the split when a draw has none */
   private splitEmpty: { low: WebGLTexture | null; bounds: WebGLTexture | null } | null = null;
 
@@ -1405,6 +1503,10 @@ export class DrapeRenderer {
     if (this.program) {
       gl.deleteProgram(this.program);
       this.program = null;
+    }
+    if (this.groundProgram) {
+      gl.deleteProgram(this.groundProgram);
+      this.groundProgram = null;
     }
     if (this.mesh) {
       disposeTerrainMeshBuffers(gl, this.mesh);

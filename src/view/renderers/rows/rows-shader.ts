@@ -51,6 +51,11 @@ import {
   TERRAIN_SHADE_FRAGMENT_GLSL,
   TERRAIN_SHADE_VERTEX_GLSL,
 } from '../../shaders/terrain-shade.js';
+import {
+  DRAPE_GROUND_BLOCKS,
+  DRAPE_GROUND_COARSE_BLOCKS,
+  DRAPE_GROUND_MAX_SLOTS,
+} from '../../terrain/drape/ground-buffer.js';
 import { TERRAIN_OCCLUSION_GLSL } from '../../terrain/occlusion.js';
 import { DASH_COEFFICIENTS } from '../line/dash.js';
 import { POINT_AA_PADDING_PX, POINT_MIN_OUTER_PX } from '../point/point-instance.js';
@@ -134,12 +139,19 @@ uniform mat4 u_projection_fallback_matrix;
  * @param define The defines of the projection variant
  * @internal
  */
-export function buildRowsVertexSource(prelude: string, define: string, keyed = false): string {
+export function buildRowsVertexSource(
+  prelude: string,
+  define: string,
+  keyed = false,
+  ground = false,
+): string {
   const dashed = DASH_COEFFICIENTS.dashed;
   const dotted = DASH_COEFFICIENTS.dotted;
   return `#version 300 es
 #define TABLE_ROWS
 ${keyed ? '#define ROWS_KEY' : ''}
+${ground ? '#define ROWS_GROUND' : ''}
+${ground ? ((globalThis as { __rowsGroundDebug?: string }).__rowsGroundDebug ?? '') : ''}
 ${prelude}
 ${define}
 ${getProjectionTransitionUniform(prelude)}${OFFSET_MODE_GLSL}${TERRAIN_SHADE_VERTEX_GLSL}${ROW_STATE_GLSL}${TERRAIN_OCCLUSION_GLSL}
@@ -647,6 +659,233 @@ void drawFill(int style) {
     v_color = rowsStyle(style, 0);
 }
 
+#ifdef ROWS_GROUND
+// The polygons and the lines read the ground seen at each pixel (terrain/drape/ground-buffer.ts):
+// each is drawn as a box on the screen that holds every pixel whose ground it may cover, and the
+// fragment tells from that ground whether the pixel is in it or how far it is from it. The tiles
+// of the ground, two texels for slot s: its box (the Mercator offset of its corner from the
+// center, and its side) and the range of the elevations of its ground (meters); the ranges of its
+// blocks, a line of texels (DRAPE_GROUND_BLOCKS on a side, row by row from its north west corner,
+// then the coarser ones)
+uniform highp sampler2D u_ground_tiles;
+uniform highp sampler2D u_ground_blocks;
+uniform int u_ground_count;
+// A fill: its four corners (Mercator offsets from the center). An edge: its ends, the points
+// before and after it (its own ends for none), and the piece of it drawn with whether a point
+// is before and after it
+flat out vec4 v_ga;
+flat out vec4 v_gb;
+flat out vec4 v_gc;
+
+// Where the ground may be at the corners of a polygon or a line, for the box on the screen that
+// holds it (meters): low and high at each of four corners (Mercator offsets from the center, in
+// a box from lo to hi). The ground of each block of a tile is within a reach of a plane, and a
+// plane interpolated between the corners is the plane, so the ground anywhere between the corners
+// is between what low and high give there (the planes of the blocks the box meets, or of the
+// coarser blocks for a box over many, or the range of the whole tile for a box over many of them;
+// a tile met by the box widened by a share of it, as the mesh at the edge of a tile takes the
+// elevations of the tile next to it). False when the box meets no tile
+bool rowsGroundBounds(vec2 lo, vec2 hi, vec2 m0, vec2 m1, vec2 m2, vec2 m3,
+        out vec4 low, out vec4 high) {
+    low = vec4(1e9);
+    high = vec4(-1e9);
+    bool met = false;
+    for (int s = 0; s < ${DRAPE_GROUND_MAX_SLOTS}; s++) {
+        if (s >= u_ground_count) break;
+        vec4 box = texelFetch(u_ground_tiles, ivec2(0, s), 0);
+        float margin = box.z / 64.0;
+        if (hi.x < box.x - margin || lo.x > box.x + box.z + margin
+            || hi.y < box.y - margin || lo.y > box.y + box.z + margin) continue;
+        met = true;
+        vec2 from = (lo - box.xy) / box.z;
+        vec2 to = (hi - box.xy) / box.z;
+        vec4 us = (vec4(m0.x, m1.x, m2.x, m3.x) - box.x) / box.z;
+        vec4 vs = (vec4(m0.y, m1.y, m2.y, m3.y) - box.y) / box.z;
+        int base = 0;
+        float n = ${glslFloat(DRAPE_GROUND_BLOCKS)};
+        ivec2 a = ivec2(clamp(floor(from * n), 0.0, n - 1.0));
+        ivec2 b = ivec2(clamp(floor(to * n), 0.0, n - 1.0));
+        ivec2 span = b - a + 1;
+        if (span.x * span.y > 16) {
+            base = ${DRAPE_GROUND_BLOCKS * DRAPE_GROUND_BLOCKS};
+            n = ${glslFloat(DRAPE_GROUND_COARSE_BLOCKS)};
+            a = ivec2(clamp(floor(from * n), 0.0, n - 1.0));
+            b = ivec2(clamp(floor(to * n), 0.0, n - 1.0));
+            span = b - a + 1;
+        }
+        if (span.x * span.y > 16) {
+            vec4 range = texelFetch(u_ground_tiles, ivec2(1, s), 0);
+            low = min(low, vec4(range.x));
+            high = max(high, vec4(range.y));
+            continue;
+        }
+        int width = int(n);
+        for (int k = 0; k < 16; k++) {
+            if (k >= span.x * span.y) break;
+            ivec2 at = a + ivec2(k % span.x, k / span.x);
+            vec4 plane = texelFetch(u_ground_blocks, ivec2(base + at.y * width + at.x, s), 0);
+            vec4 h = plane.x + plane.y * us + plane.z * vs;
+            low = min(low, h - plane.w);
+            high = max(high, h + plane.w);
+        }
+    }
+    vec4 pad = 0.5 + 0.0001 * (abs(low) + abs(high));
+    low -= pad;
+    high += pad;
+    return met;
+}
+
+// Projects a Mercator offset from the center at an elevation (meters)
+vec4 rowsProjectMercator(vec2 mercatorOffset, float elevation) {
+    vec2 halfLat = half_latitude_of_mercator_offset(mercatorOffset.y);
+    return project_center_offset(mercatorOffset, mercatorOffset.x * 360.0, halfLat,
+        elevation * u_elevation_params.x, u_projection_matrix);
+}
+
+// Emits the corner of a box on the screen (device px): its origin and its two axes
+void rowsEmitBox(vec2 origin, vec2 axisX, vec2 axisY) {
+#ifdef DEBUG_TINY
+    axisX = vec2(0.0);
+    axisY = vec2(0.0);
+#endif
+    vec2 unit = quadCorner() * 0.5 + 0.5;
+    vec2 at = origin + axisX * unit.x + axisY * unit.y;
+    gl_Position = vec4(at / u_viewport * 2.0 - 1.0, ${glslFloat(SYMBOL_DEPTH)}, 1.0);
+}
+
+// Emits the corner of the whole screen
+void rowsEmitScreen() {
+    gl_Position = vec4(quadCorner(), ${glslFloat(SYMBOL_DEPTH)}, 1.0);
+}
+
+void drawGroundFill(int style) {
+    vec2 m0 = shade_mercator_offset(rowsCoord(a_head.x));
+    vec2 m1 = shade_mercator_offset(rowsCoord(a_head.y));
+    vec2 m2 = shade_mercator_offset(rowsCoord(a_head.z));
+    vec2 m3 = shade_mercator_offset(rowsCoord(a_tail.x));
+    emitShadeOffset(rowsCoord(a_head.x));
+    vec2 lo = min(min(m0, m1), min(m2, m3));
+    vec2 hi = max(max(m0, m1), max(m2, m3));
+    vec4 low;
+    vec4 high;
+    if (!rowsGroundBounds(lo, hi, m0, m1, m2, m3, low, high)) {
+        gl_Position = ${ROW_HIDDEN_POSITION_GLSL};
+        return;
+    }
+    v_ga = vec4(m0, m1);
+    v_gb = vec4(m2, m3);
+    v_color = rowsStyle(style, 0);
+    v_params = vec4(0.0);
+    // The box on the screen of the corners between where the ground may be
+    vec2 slo = vec2(1e30);
+    vec2 shi = vec2(-1e30);
+    int behind = 0;
+    for (int k = 0; k < 8; k++) {
+        int c = k / 2;
+        vec2 m = c == 0 ? m0 : (c == 1 ? m1 : (c == 2 ? m2 : m3));
+        vec4 clip = rowsProjectMercator(m, (k & 1) == 0 ? low[c] : high[c]);
+        if (clip.w <= 1e-6) {
+            behind++;
+            continue;
+        }
+        vec2 at = clipToScreen(clip);
+        slo = min(slo, at);
+        shi = max(shi, at);
+    }
+    if (behind == 8) {
+        gl_Position = ${ROW_HIDDEN_POSITION_GLSL};
+        return;
+    }
+    if (behind > 0) {
+        rowsEmitScreen();
+        return;
+    }
+    slo -= 1.0;
+    shi += 1.0;
+    // The step of the ground from a pixel to the next one near the fill, at most
+    vec2 extent = hi - lo;
+    v_params.y = max(extent.x, extent.y) / max(min(shi.x - slo.x, shi.y - slo.y) - 2.0, 1.0);
+    rowsEmitBox(slo, vec2(shi.x - slo.x, 0.0), vec2(0.0, shi.y - slo.y));
+}
+
+void drawGroundEdge(int kind, int style, float createdZoom, bool hasCreatedZoom) {
+    bool outline = kind == ${ROWS_KIND.outline};
+    bool dashedOutline = kind == ${ROWS_KIND.dashedOutline};
+    int prevIdx = int(a_head.x);
+    int nextIdx = int(a_tail.x);
+    float t0 = outline ? 0.0 : a_tail.y;
+    float t1 = outline ? 1.0 : a_tail.z;
+    vec2 ma = shade_mercator_offset(rowsCoord(a_head.y));
+    vec2 mb = shade_mercator_offset(rowsCoord(a_head.z));
+    emitShadeOffset(rowsCoord(a_head.y));
+    bool hasPrev = outline || prevIdx >= 0;
+    bool hasNext = outline || nextIdx >= 0;
+    vec2 mp = hasPrev ? shade_mercator_offset(rowsCoord(a_head.x)) : ma;
+    vec2 mn = hasNext ? shade_mercator_offset(rowsCoord(a_tail.x)) : mb;
+    // The widths and the color, as the segments and the outlines take them
+    vec4 widths = rowsStyle(style, outline || dashedOutline ? 2 : 1);
+    vec4 color = rowsStyle(style, outline ? 1 : (dashedOutline ? 3 : 0));
+    float strokeWidth = hasCreatedZoom ? widths.x : widths.y;
+    float lineWidth = (outline
+        ? (strokeWidth >= 0.0 ? strokeWidth * pow(2.0, u_zoom - createdZoom) : -strokeWidth)
+        : (strokeWidth > 0.0
+            ? strokeWidth * pow(2.0, u_zoom - createdZoom)
+            : (strokeWidth < 0.0 ? -strokeWidth : 0.0))) * u_size_scale;
+    float ink = clamp(lineWidth, 0.0, 1.0);
+    lineWidth = max(lineWidth, 1.0);
+    float halfWidth = lineWidth / 2.0;
+    v_color = vec4(color.rgb, color.a * ink);
+    v_params = vec4(halfWidth, 0.0, 0.0, 0.0);
+    v_ga = vec4(ma, mb);
+    v_gb = vec4(mp, mn);
+    v_gc = vec4(t0, t1, hasPrev ? 1.0 : 0.0, hasNext ? 1.0 : 0.0);
+
+    vec2 pa = mix(ma, mb, t0);
+    vec2 pb = mix(ma, mb, t1);
+    vec4 low;
+    vec4 high;
+    if (!rowsGroundBounds(min(pa, pb), max(pa, pb), pa, pb, pa, pb, low, high) || ink <= 0.0) {
+        gl_Position = ${ROW_HIDDEN_POSITION_GLSL};
+        return;
+    }
+    vec4 ca0 = rowsProjectMercator(pa, low.x);
+    vec4 ca1 = rowsProjectMercator(pa, high.x);
+    vec4 cb0 = rowsProjectMercator(pb, low.y);
+    vec4 cb1 = rowsProjectMercator(pb, high.y);
+    int behind = (ca0.w <= 1e-6 ? 1 : 0) + (ca1.w <= 1e-6 ? 1 : 0)
+        + (cb0.w <= 1e-6 ? 1 : 0) + (cb1.w <= 1e-6 ? 1 : 0);
+    if (behind == 4) {
+        gl_Position = ${ROW_HIDDEN_POSITION_GLSL};
+        return;
+    }
+    if (behind > 0) {
+        rowsEmitScreen();
+        return;
+    }
+    vec2 sa0 = clipToScreen(ca0);
+    vec2 sa1 = clipToScreen(ca1);
+    vec2 sb0 = clipToScreen(cb0);
+    vec2 sb1 = clipToScreen(cb1);
+    // A box along the piece on the screen that holds the four, widened by the half width
+    vec2 along = (sb0 + sb1) * 0.5 - (sa0 + sa1) * 0.5;
+    float length2 = dot(along, along);
+    vec2 dir = length2 > 1e-12 ? along * inversesqrt(length2) : vec2(1.0, 0.0);
+    vec2 nrm = vec2(-dir.y, dir.x);
+    vec2 o = sa0;
+    vec4 p = vec4(dot(sa1 - o, dir), dot(sb0 - o, dir), dot(sb1 - o, dir), 0.0);
+    vec4 n = vec4(dot(sa1 - o, nrm), dot(sb0 - o, nrm), dot(sb1 - o, nrm), 0.0);
+    float reach = halfWidth + 2.0;
+    // The step of the ground from a pixel to the next one near the piece
+    float onScreen = max(length(along), 1.0);
+    v_params.y = max(length(pb - pa) / onScreen, 1e-12);
+    float dLo = min(min(p.x, p.y), min(p.z, p.w)) - reach;
+    float dHi = max(max(p.x, p.y), max(p.z, p.w)) + reach;
+    float nLo = min(min(n.x, n.y), min(n.z, n.w)) - reach;
+    float nHi = max(max(n.x, n.y), max(n.z, n.w)) + reach;
+    rowsEmitBox(o + dir * dLo + nrm * nLo, dir * (dHi - dLo), nrm * (nHi - nLo));
+}
+#endif
+
 void main() {
     int kind = int(a_tag >> ${ROWS_KIND_SHIFT}u);
     int row = int(a_tag & ${ROWS_ROW_MASK}u);
@@ -683,6 +922,22 @@ void main() {
     float createdZoom = rowStyle.y;
     bool hasCreatedZoom = rowStyle.z > 0.5;
 
+#ifdef ROWS_GROUND
+#ifdef DEBUG_NOHULL
+    if (kind != ${ROWS_KIND.point} && kind != ${ROWS_KIND.sprite}) {
+        gl_Position = ${ROW_HIDDEN_POSITION_GLSL};
+        return;
+    }
+#endif
+    if (kind == ${ROWS_KIND.fill}) {
+        drawGroundFill(style);
+        return;
+    }
+    if (kind == ${ROWS_KIND.segment} || kind == ${ROWS_KIND.dashedOutline} || kind == ${ROWS_KIND.outline}) {
+        drawGroundEdge(kind, style, createdZoom, hasCreatedZoom);
+        return;
+    }
+#endif
     if (kind == ${ROWS_KIND.point}) {
         drawPoint(style);
     } else if (kind == ${ROWS_KIND.segment} || kind == ${ROWS_KIND.dashedOutline}) {
@@ -708,9 +963,17 @@ void main() {
  * @internal
  */
 export function buildRowsFragmentSource(variant: RowsFragmentVariant = 'color'): string {
+  const defines: Record<RowsFragmentVariant, string> = {
+    color: '',
+    key: '#define ROWS_KEY',
+    segment: '#define ROWS_SEGMENT',
+    ground: '#define ROWS_GROUND',
+  };
+  const debug = (globalThis as { __rowsGroundDebug?: string }).__rowsGroundDebug ?? '';
   return `#version 300 es
 precision highp float;
-${variant === 'key' ? '#define ROWS_KEY' : variant === 'segment' ? '#define ROWS_SEGMENT' : ''}
+${defines[variant]}
+${debug}
 
 flat in int v_kind;
 flat in vec4 v_color;
@@ -745,6 +1008,15 @@ uniform int u_split_floor;
 // (-1: to the end)
 uniform int u_split_from;
 uniform int u_split_to;
+#endif
+#ifdef ROWS_GROUND
+flat in vec4 v_ga;
+flat in vec4 v_gb;
+flat in vec4 v_gc;
+// The ground seen at each pixel (its place in its tile, the shading there, its slot plus one) and
+// the tiles of the slots (rows-shader.ts, the vertex stage)
+uniform highp sampler2D u_ground;
+uniform highp sampler2D u_ground_tiles;
 #endif
 out vec4 fragColor;
 
@@ -886,6 +1158,179 @@ vec4 shadeSprite() {
     return vec4(texel.rgb, texel.a * u_opacity * v_params.x);
 }
 
+#ifdef ROWS_GROUND
+// The ground seen at a pixel: its Mercator offset from the center and the shading there (false
+// where no ground is seen)
+bool groundOf(ivec2 at, out vec2 q, out float shade) {
+    ivec2 size = textureSize(u_ground, 0);
+    vec4 g = texelFetch(u_ground, clamp(at, ivec2(0), size - 1), 0);
+    q = vec2(0.0);
+    shade = 1.0;
+    if (g.w < 0.5) return false;
+    int slot = int(g.w - 0.5);
+    vec4 box = texelFetch(u_ground_tiles, ivec2(0, slot), 0);
+    q = box.xy + g.xy * box.z;
+    shade = g.z;
+    return true;
+}
+
+// The step of the ground from a pixel to the next one along an axis: the shorter of the steps
+// forward and back where the ground is seen (across the edge of a ridge, the other side is far).
+// A pixel whose ground is far from both of its neighbors while they are near each other is a
+// pixel seen through a crack between two tiles (lone: no ground of its own there)
+vec2 groundStep(ivec2 at, ivec2 axis, vec2 q, inout bool lone) {
+    vec2 forward;
+    vec2 back;
+    float shade;
+    bool hasForward = groundOf(at + axis, forward, shade);
+    bool hasBack = groundOf(at - axis, back, shade);
+    vec2 a = hasForward ? forward - q : vec2(0.0);
+    vec2 b = hasBack ? q - back : vec2(0.0);
+    if (hasForward && hasBack) {
+        vec2 across = forward - back;
+        float near = min(dot(a, a), dot(b, b));
+        if (near > 4.0 * dot(across, across)) lone = true;
+    }
+    if (!hasForward || dot(a, a) == 0.0) return b;
+    if (!hasBack || dot(b, b) == 0.0) return a;
+    return dot(a, a) <= dot(b, b) ? a : b;
+}
+
+// The map from a displacement on the ground (Mercator) to one on the screen (device px) at a pixel
+mat2 groundToScreen(ivec2 at, vec2 q, inout bool lone) {
+    vec2 dx = groundStep(at, ivec2(1, 0), q, lone);
+    vec2 dy = groundStep(at, ivec2(0, 1), q, lone);
+    float det = dx.x * dy.y - dy.x * dx.y;
+    if (abs(det) < 1e-36) {
+        float s = max(max(length(dx), length(dy)), 1e-20);
+        return mat2(1.0 / s, 0.0, 0.0, 1.0 / s);
+    }
+    return mat2(dy.y, -dx.y, -dy.x, dx.x) / det;
+}
+
+// Which side of an edge a point is on, with the edge taken in one order whatever the triangle
+// (so two triangles that share it find the same value, of opposite signs), and the sign that
+// turns it toward the inside of a triangle of orientation o
+bool insideEdge(vec2 a, vec2 b, vec2 q, float o) {
+    bool swap = a.x > b.x || (a.x == b.x && a.y > b.y);
+    vec2 lo = swap ? b : a;
+    vec2 hi = swap ? a : b;
+    float e = (hi.x - lo.x) * (q.y - lo.y) - (hi.y - lo.y) * (q.x - lo.x);
+    float side = swap ? -o : o;
+    float v = e * side;
+    // On the edge, one of the two triangles takes the point
+    return v > 0.0 || (v == 0.0 && side > 0.0);
+}
+
+bool inTriangle(vec2 q, vec2 a, vec2 b, vec2 c) {
+    float area = (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);
+    if (area == 0.0) return false;
+    float o = area > 0.0 ? 1.0 : -1.0;
+    return insideEdge(a, b, q, o) && insideEdge(b, c, q, o) && insideEdge(c, a, q, o);
+}
+
+// The ground of the pixel of the fragment, read in the same way by every fragment of a quad, with
+// its steps to the next pixels of the quad (dFdx, dFdy): false where no ground is seen
+bool groundHere(out vec2 q, out float shade, out vec2 stepX, out vec2 stepY) {
+    ivec2 size = textureSize(u_ground, 0);
+    vec4 g = texelFetch(u_ground, clamp(ivec2(gl_FragCoord.xy), ivec2(0), size - 1), 0);
+    int slot = max(int(g.w - 0.5), 0);
+    vec4 box = texelFetch(u_ground_tiles, ivec2(0, slot), 0);
+    q = box.xy + g.xy * box.z;
+    shade = g.z;
+    stepX = dFdx(q);
+    stepY = dFdy(q);
+    return g.w >= 0.5;
+}
+
+// Whether the steps of the quad may cross an edge of the ground seen (a ridge, a crack between
+// tiles): longer than the steps the polygon or the line expects near it (v_params.y)
+bool groundBroken(vec2 stepX, vec2 stepY) {
+    float most = 8.0 * v_params.y;
+    return max(dot(stepX, stepX), dot(stepY, stepY)) > most * most;
+}
+
+// The map from a displacement on the ground to one on the screen from the steps of the quad
+mat2 groundToScreenOf(vec2 dx, vec2 dy) {
+    float det = dx.x * dy.y - dy.x * dx.y;
+    if (abs(det) < 1e-36) {
+        float s = max(max(length(dx), length(dy)), 1e-20);
+        return mat2(1.0 / s, 0.0, 0.0, 1.0 / s);
+    }
+    return mat2(dy.y, -dx.y, -dy.x, dx.x) / det;
+}
+
+vec4 shadeGroundFill() {
+#ifdef DEBUG_CHEAP
+    return vec4(1.0, 0.0, 0.0, 0.02);
+#endif
+    vec2 q;
+    float shade;
+    vec2 stepX;
+    vec2 stepY;
+    bool seen = groundHere(q, shade, stepX, stepY);
+    if (!seen) discard;
+    if (!inTriangle(q, v_ga.xy, v_ga.zw, v_gb.xy) && !inTriangle(q, v_ga.zw, v_gb.xy, v_gb.zw)) {
+        discard;
+    }
+    if (groundBroken(stepX, stepY)) {
+        // A pixel seen through a crack has no ground of its own
+        bool lone = false;
+        groundToScreen(ivec2(gl_FragCoord.xy), q, lone);
+        if (lone) discard;
+    }
+    return vec4(v_color.rgb * shade, v_color.a * u_opacity);
+}
+
+// An edge of an outline or a segment of a line: the distance on the screen from the pixel to it,
+// a pixel near a corner taken by the one of the two edges on its side of the bisector of the
+// corner on the screen, and a piece of a segment taking the pixels nearest to it
+vec4 shadeGroundEdge() {
+#ifdef DEBUG_CHEAP
+    return vec4(0.0, 0.0, 1.0, 0.02);
+#endif
+    vec2 q;
+    float shade;
+    vec2 stepX;
+    vec2 stepY;
+    bool seen = groundHere(q, shade, stepX, stepY);
+    if (!seen) discard;
+    vec2 a = v_ga.xy;
+    vec2 b = v_ga.zw;
+    mat2 toScreen = groundToScreenOf(stepX, stepY);
+    if (groundBroken(stepX, stepY)) {
+        // Across an edge of the ground, the steps are taken on the side the ground goes on
+        bool lone = false;
+        toScreen = groundToScreen(ivec2(gl_FragCoord.xy), q, lone);
+        if (lone) discard;
+    }
+    vec2 sa = toScreen * (a - q);
+    vec2 sb = toScreen * (b - q);
+    vec2 ab = sb - sa;
+    float len2 = dot(ab, ab);
+    float u = len2 > 0.0 ? clamp(-dot(sa, ab) / len2, 0.0, 1.0) : 0.0;
+    float d = length(sa + ab * u);
+    if (d >= v_params.x + 0.5) discard;
+    float t0 = v_gc.x;
+    float t1 = v_gc.y;
+    if (u < t0 || u > t1 || (u == t1 && t1 < 1.0)) discard;
+    if (t0 == 0.0 && v_gc.z > 0.5) {
+        vec2 d1 = toScreen * (a - v_gb.xy);
+        vec2 d2 = toScreen * (b - a);
+        vec2 n = (dot(d1, d1) > 0.0 ? normalize(d1) : vec2(0.0)) + (dot(d2, d2) > 0.0 ? normalize(d2) : vec2(0.0));
+        if (dot(-sa, n) < 0.0) discard;
+    }
+    if (t1 == 1.0 && v_gc.w > 0.5) {
+        vec2 d1 = toScreen * (b - a);
+        vec2 d2 = toScreen * (v_gb.zw - b);
+        vec2 n = (dot(d1, d1) > 0.0 ? normalize(d1) : vec2(0.0)) + (dot(d2, d2) > 0.0 ? normalize(d2) : vec2(0.0));
+        if (dot(-sb, n) >= 0.0) discard;
+    }
+    float coverage = clamp(v_params.x + 0.5 - d, 0.0, 1.0);
+    return vec4(v_color.rgb, v_color.a * coverage * u_opacity);
+}
+#endif
+
 #if defined(ROWS_KEY) || defined(ROWS_SEGMENT)
 vec4 shadeSymbol() {
     if (v_kind == ${ROWS_KIND.point}) return shadePoint();
@@ -917,6 +1362,19 @@ void main() {
     if (u_split_to >= 0 && key >= bounds[u_split_to]) discard;
     fragColor = color;
 }
+#elif defined(ROWS_GROUND)
+void main() {
+    if (v_kind == ${ROWS_KIND.point}) {
+        fragColor = shadePoint();
+    } else if (v_kind == ${ROWS_KIND.fill}) {
+        fragColor = shadeGroundFill();
+    } else if (v_kind == ${ROWS_KIND.segment} || v_kind == ${ROWS_KIND.dashedOutline}
+        || v_kind == ${ROWS_KIND.outline}) {
+        fragColor = shadeGroundEdge();
+    } else {
+        fragColor = shadeSprite();
+    }
+}
 #else
 void main() {
     if (v_kind == ${ROWS_KIND.point}) {
@@ -940,7 +1398,7 @@ void main() {
  *
  * @internal
  */
-export type RowsFragmentVariant = 'color' | 'key' | 'segment';
+export type RowsFragmentVariant = 'color' | 'key' | 'segment' | 'ground';
 
 /** The miter limit the segments and the outlines use (the one of the other renderers) */
 export const ROWS_MITER_LIMIT = RENDERING_DEFAULTS.MITER_LIMIT;
