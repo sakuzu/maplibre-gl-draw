@@ -53,7 +53,6 @@ import { drawPropertyKey } from '../../shared/properties.js';
 import type { Coordinate } from '../../store/types.js';
 import type { GpuLedger } from '../gpu-ledger.js';
 import { dashCoefficientsOf } from '../renderers/line/dash.js';
-import type { RowsKey, RowsKeyFloor, RowsSegment } from '../renderers/rows/rows-renderer.js';
 import type { ShaderData } from '../shaders/helpers.js';
 import {
   getRenderableTerrainTiles,
@@ -92,14 +91,11 @@ import { canDrape } from '../terrain/drape/pass.js';
 import {
   DRAPE_MAX_MOVING,
   DRAPE_MOVING_TILES,
-  DRAPE_SPLIT_SLOTS,
   type DrapeLight,
   type DrapeMovingDraw,
   type DrapeRankRange,
   DrapeRenderer,
-  type DrapeSplitDraw,
 } from '../terrain/drape/renderer.js';
-import { DRAPE_SPLIT_MAX_KEY, DrapeSplit } from '../terrain/drape/split.js';
 import { circumferenceAtLatitude, tileCenterLatitude } from '../terrain/metrics.js';
 import {
   DRAPE_WIDE_EDGE_BUDGET,
@@ -192,10 +188,14 @@ export interface TableDrapeFrame {
   readonly drape: TableDrape;
   /** The moving partitions drawn, for the breaks of the order */
   readonly moving: readonly TableDrapeMovingCover[];
-  /** The keys of the points that split the drape (null when they cannot be drawn) */
-  readonly split: DrapeSplit | null;
   /** The ground seen at each pixel (the polygons and the lines read it in the order of the rows) */
   readonly ground: DrapeGroundBuffer | null;
+  /**
+   * Whether the frame is in the drape band. Out of it, a frame is planned only for the rows
+   * still packed for the ground while they are cut again for the terrain (zoomed out of the
+   * band), which read the ground until they are
+   */
+  readonly inBand: boolean;
 }
 
 /** A tile of the frame of the drape of the rows */
@@ -428,8 +428,6 @@ export class TableDrape {
   readonly copies = new DrapeCopyTables();
   readonly mainCopies = new DrapeCopyIndex();
   private renderer: DrapeRenderer | null = null;
-  /** The keys of the points drawn among the rows (`DrapeSplit`) */
-  private split: DrapeSplit | null = null;
   private ground: DrapeGroundBuffer | null = null;
   /** The ledger of the GPU memory the texture of the ground is recorded in */
   ledger: GpuLedger | undefined;
@@ -450,11 +448,6 @@ export class TableDrape {
   private pendingWork = false;
   /** The tables the partitions are of */
   private tables: FeatureTablesInternals | null = null;
-
-  /** The bytes of the textures of the keys of the points */
-  get splitBytes(): number {
-    return this.split?.bytes ?? 0;
-  }
 
   /** The bytes of the texture of the ground seen at each pixel */
   get groundBytes(): number {
@@ -565,15 +558,23 @@ export class TableDrape {
   }
 
   /**
-   * Prepares the drape of the rows for a frame: takes in what changed in the layers, decides
-   * whether it is used (the band, the budgets), builds the tiles of the view within the budget,
-   * writes them to the GPU and gives the draws of the frame (null when it is not used: the
-   * layers are drawn by their chunks)
+   * Plans the drape of the rows for a frame on the terrain
+   *
+   * In the band (zoomed in past `TERRAIN_ANALYTIC_MIN_ZOOM`, or few enough edges, as the drape of
+   * the other elements decides it), the polygons and the lines of the rows read the ground seen
+   * at each pixel (`TableDrapePainter.order` 'ground'): the frame holds the tiles of the
+   * terrain the ground is drawn of. For the references of the measures ('each', 'each-near'),
+   * they are painted on the drape of the rows, binned into the tiles here.
+   *
+   * @param keepGround Whether a frame is wanted out of the band too: rows packed for the ground
+   *   are still drawn (they read it until they are cut again for the terrain)
+   * @returns The frame (null when the rows are drawn by their chunks as they are cut)
    */
   planFrame(
     tables: FeatureTablesInternals | null,
     layers: readonly TableDrapeLayer[],
     input: TableDrapeFrameInput,
+    keepGround = false,
   ): TableDrapeFrame | null {
     const debug = this.debug;
     debug.built = 0;
@@ -603,55 +604,64 @@ export class TableDrape {
       }
     }
     debug.elements = elements;
-    if (elements === 0) return this.unused('no-drapeable-rows');
+    const ground = TableDrapePainter.order === 'ground';
     // The band, as the drape of the other elements decides it; while many rows are dragged it
     // stays as it was when they were taken
     const band = input.rawZoom > TERRAIN_ANALYTIC_MIN_ZOOM || edges <= DRAPE_WIDE_EDGE_BUDGET;
-    if (!(input.dragging ? this.usedLast : band)) return this.unused('wide-zoom');
-    if (!canDrape({ vertexCount: vertices })) return this.unused('vertex-budget');
+    let inBand = elements > 0 && (input.dragging ? this.usedLast : band);
+    let reason = elements === 0 ? 'no-drapeable-rows' : 'wide-zoom';
+    if (inBand && !canDrape({ vertexCount: vertices })) {
+      inBand = false;
+      reason = 'vertex-budget';
+    }
+    if (!inBand && !(ground && keepGround)) return this.unused(reason);
 
     const tiles = getRenderableTerrainTiles(input.mapTerrain);
     if (tiles.length === 0) return this.unused('no-dem-tiles');
     const drapeTiles: DrapeTile[] = tiles.map((t) => ({ x: t.x, y: t.y, z: t.z }));
-    const budget = input.timeSlicing ? TABLE_DRAPE_BUDGET_MS : Number.POSITIVE_INFINITY;
-    const prepared = this.index.prepare(drapeTiles, budget, marginZoom(input.zoom));
-    debug.built = prepared.built;
-    debug.rebinned = prepared.rebinned;
-    debug.unfitTiles = prepared.unfitTiles;
-    debug.truncatedCells = prepared.truncatedCells;
-    this.pendingWork = prepared.pending;
-    if (prepared.pending) input.requestRepaint();
-    else this.mainCopies.release();
-    // A tile too heavy for the drape is not drawn by it: the layers are then drawn by their
-    // chunks, all of them, so that no part of them goes missing and the order holds (the first
-    // of the two ways of the table-objects design; the other, the chunks drawn in those tiles
-    // alone, waits for the measures of how many tiles it concerns)
-    if (prepared.overflow || prepared.unfitTiles > 0) return this.unused('cell-overflow');
-    // Entering the band waits for the tiles of the view (the chunks draw meanwhile); in the band
-    // a tile not built yet is left for a frame
-    if (!this.usedLast && !prepared.complete) return this.unused('building');
-
-    // The moving partitions: their rows taken in, their indices built for the view
-    const moving = this.updateMoving(tables, drapeTiles, input, prepared.complete);
+    let moving: ActiveMoving[] = [];
+    if (!ground) {
+      const budget = input.timeSlicing ? TABLE_DRAPE_BUDGET_MS : Number.POSITIVE_INFINITY;
+      const prepared = this.index.prepare(drapeTiles, budget, marginZoom(input.zoom));
+      debug.built = prepared.built;
+      debug.rebinned = prepared.rebinned;
+      debug.unfitTiles = prepared.unfitTiles;
+      debug.truncatedCells = prepared.truncatedCells;
+      this.pendingWork = prepared.pending;
+      if (prepared.pending) input.requestRepaint();
+      else this.mainCopies.release();
+      if (prepared.overflow || prepared.unfitTiles > 0) return this.unused('cell-overflow');
+      if (!this.usedLast && !prepared.complete) return this.unused('building');
+      // The moving partitions: their rows taken in, their indices built for the view
+      moving = this.updateMoving(tables, drapeTiles, input, prepared.complete);
+    } else {
+      this.pendingWork = false;
+    }
 
     this.renderer ??= new DrapeRenderer(input.gl, true);
     const meshSize = getTerrainMeshSize(input.mapTerrain);
     if (!this.renderer.ensure(input.shaderData, meshSize)) {
       return this.unused(this.renderer.lastError || 'ensure-failed');
     }
-    if (!this.renderer.uploadRows(this.index.storage, this.copies)) {
+    if (!ground && !this.renderer.uploadRows(this.index.storage, this.copies)) {
       return this.unused('texture-limit');
     }
     const planTiles: DrapePlanTile[] = [];
     const tileOf = new Map<unknown, DrapeTile>();
     for (let i = 0; i < tiles.length; i++) {
       const tile = tiles[i] as (typeof tiles)[number];
-      const entry = this.index.entryOf(tile);
-      if (!entry || entry.unfit) continue;
+      // The ground reads no index: its tiles are those of the terrain drawn
+      const entry = ground ? null : this.index.entryOf(tile);
+      if (!ground && (!entry || entry.unfit)) continue;
       if (!getTerrainTileData(input.mapTerrain, tile)) continue;
       const groundMeters =
         circumferenceAtLatitude(tileCenterLatitude(tile.y, tile.z)) / 2 ** tile.z;
-      planTiles.push({ tile, cellOffset: entry.cellOffset, grid: entry.grid, groundMeters });
+      planTiles.push({
+        tile,
+        cellOffset: entry?.cellOffset ?? 0,
+        grid: entry?.grid ?? 1,
+        groundMeters,
+      });
       tileOf.set(tile.tileID, drapeTiles[i] as DrapeTile);
     }
     const draws = drapeTileDrawsOf(input.mapTerrain, planTiles, meshSize, input.getProjectionData);
@@ -671,17 +681,16 @@ export class TableDrape {
           maxY: (tile.y + 1) * size,
         },
         pixels: tilePixels(entry.projection, width, height),
-        moving: this.movingDrawOf(tile, moving),
-        depth: this.index.maxRunsPerCellOf(tile) + this.movingDepthOf(tile, moving),
+        moving: ground ? null : this.movingDrawOf(tile, moving),
+        depth: ground ? 0 : this.index.maxRunsPerCellOf(tile) + this.movingDepthOf(tile, moving),
         elevation: elevationRangeOf(input.mapTerrain, entry.draw.tileID),
-        blocks: elevationBlocksOf(input.mapTerrain, entry.draw.tileID),
+        blocks: ground ? elevationBlocksOf(input.mapTerrain, entry.draw.tileID) : null,
       });
     }
-    this.split ??= new DrapeSplit(input.gl);
     this.ground ??= new DrapeGroundBuffer(input.gl, this.ledger);
-    this.usedLast = true;
-    debug.used = true;
-    debug.reason = 'ok';
+    this.usedLast = inBand;
+    debug.used = inBand;
+    debug.reason = inBand ? 'ok' : reason;
     debug.tiles = frameTiles.length;
     return {
       renderer: this.renderer,
@@ -693,8 +702,8 @@ export class TableDrape {
       leave: input.leave,
       drape: this,
       moving: moving.map((m) => ({ box: m.box, maxKey: m.set.maxKey })),
-      split: this.split,
       ground: this.ground,
+      inBand,
     };
   }
 
@@ -981,8 +990,6 @@ export class TableDrape {
   releaseGpu(): void {
     this.renderer?.dispose();
     this.renderer = null;
-    this.split?.release();
-    this.split = null;
     this.ground?.release();
     this.ground = null;
     this.index.clearTiles();
@@ -1590,91 +1597,39 @@ function tilePixels(projection: ProjectionData, width: number, height: number): 
 
 // === Drawing the order ===
 
-/**
- * The keys of the points of a run of rows (`DrapeSplit`): the place of the partition of the rows
- * in the order, the slot of row `r` of their group (`mul * r + add`), and what draws the keys of
- * rows `[from, to)` with the key of row `r` being `key.add + key.mul * r`
- */
-export interface TableDrapeKeys {
-  readonly place: number;
-  readonly mul: number;
-  readonly add: number;
-  /** The slot of the last row drawn with these keys */
-  readonly lastSlot: number;
-  readonly draw: (from: number, to: number, key: RowsKey, floor: RowsKeyFloor | null) => void;
-  /** Draws the points of rows `[from, to)` of one segment of each pixel */
-  readonly drawSegment: (from: number, to: number, key: RowsKey, segment: RowsSegment) => void;
-  /**
-   * Calls `each` for the runs of rows with points within rows `[from, to)`, in their order: the
-   * rows of the run, the ranks of its first and last rows (null for a row without a place in
-   * the order of the drape), its Mercator box and how far its markers reach beyond it on the
-   * screen (CSS px)
-   */
-  readonly eachRun: (
-    from: number,
-    to: number,
-    each: (
-      a: number,
-      b: number,
-      first: TableDrapeRank | null,
-      last: TableDrapeRank | null,
-      box: DrapeBounds,
-      reachPx: number,
-    ) => void,
-  ) => void;
-}
-
 /** A run of rows the drape does not draw, waiting to be drawn */
 interface PendingDraw {
   readonly target: object;
   from: number;
   to: number;
   readonly draw: (from: number, to: number) => void;
-  /** The rank of its first row */
-  readonly first: TableDrapeRank;
-  /** The keys of its points (split), with the key of its rows */
-  readonly keys: TableDrapeKeys | null;
-  readonly key: RowsKey | null;
 }
 
 /**
- * How the order of a layer drawn on the drape is kept among what the drape does not draw
+ * How the order of a layer held as rows is kept on the terrain, in the drape band
  *
- * - split: the keys of the points in each pixel split the drape there (`DrapeSplit`): the drape is
- *   painted under the points of each pixel, the points are drawn, and the drape is painted over
- *   them. The draws do not follow the number of the points
- * - breaks: a run of points an element after it covers is a break, where the drape is painted up
- *   to it in the tiles it meets
- * - each: every run of points is a break, the drape painted up to it in every tile (the
- *   reference of the tests: one row at a time, wherever its markers are on the screen)
- * - each-near: every run of points is a break, the drape painted up to it in the tiles it meets
- *   (a reference faster to draw, but for the markers over the ground of a tile far from them)
+ * - ground: the polygons and the lines read the ground seen at each pixel and are drawn with the
+ *   points in the order of the rows, in one draw a chunk (`DrapeGroundBuffer`)
+ * - each: the polygons and the lines are on the drape of the rows, and every run of points is a
+ *   break, the drape painted up to it in every tile (one row at a time, wherever its markers
+ *   are on the screen: the reference of the measures)
+ * - each-near: as each, the drape painted up to a break in the tiles it meets (a reference
+ *   faster to draw, but for the markers over the ground of a tile far from them)
  *
  * @internal
  */
-export type TableDrapeOrder = 'split' | 'breaks' | 'each' | 'each-near' | 'ground';
+export type TableDrapeOrder = 'ground' | 'each' | 'each-near';
 
 /**
- * Draws a layer held as rows on its drape, in the order of its rows: the drape is painted tile by
- * tile, and what the drape does not draw is drawn in between (`TableDrapeOrder`)
+ * Draws a layer held as rows on its drape in the order of its rows, for the references of the
+ * measures (`each`, `each-near`): the drape is painted tile by tile up to each run of what the
+ * drape does not draw, which is drawn next
  *
  * @internal
  */
 export class TableDrapePainter {
-  /** How the order is kept (split, unless the measures ask for another) */
-  static order: TableDrapeOrder = 'split';
-  /**
-   * The steps of a split (0: as many as the runs a pixel of the tiles reads, up to
-   * `DRAPE_SPLIT_MAX_STEPS`; another number for the measures)
-   */
-  static steps = 0;
-  /**
-   * What is past the last bound of a split where a pixel may hold more elements after a point
-   * than the steps: drawn as one segment, the points there over the elements after them past
-   * the last bound (`over`), or by the breaks of the cells that deep (`breaks`: in order, but
-   * the draws follow the runs of points met there, for the measures)
-   */
-  static tail: 'breaks' | 'over' = 'over';
+  /** How the order is kept (the ground, unless the measures ask for a reference) */
+  static order: TableDrapeOrder = 'ground';
 
   private frame: TableDrapeFrame | null = null;
   private opacity = 1;
@@ -1686,19 +1641,13 @@ export class TableDrapePainter {
   private readonly pending: PendingDraw[] = [];
   /** The box of what waits (Mercator; null for nothing) */
   private pendingBox: DrapeBounds | null = null;
-  /** How the order of the layer is kept */
-  private mode: TableDrapeOrder = 'split';
+  /** Whether the drape is painted in every tile up to a break (each) or in those it meets */
+  private everyTile = true;
   /** The draws of the drape of the last layer, and the breaks (for the tests) */
   draws = 0;
   breaks = 0;
-  /** The draws of the points and of their keys of the last layer (for the measures) */
+  /** The draws of the points of the last layer (for the measures) */
   pointDraws = 0;
-  /**
-   * The most steps a split of the last layer took, and the most runs a pixel of the tiles its
-   * points met reads (for the measures)
-   */
-  steps = 0;
-  deepest = 0;
 
   /** Whether the drape is painted (false on a copy of the world after the first) */
   private paints = true;
@@ -1708,15 +1657,8 @@ export class TableDrapePainter {
    *
    * @param paints Whether the drape is painted: a copy of the world after the first draws only
    *   what the drape does not (the drape is drawn per tile once, on every copy)
-   * @param keys Whether the keys of the points can be drawn (the split)
    */
-  begin(
-    frame: TableDrapeFrame | null,
-    layerId: string,
-    opacity: number,
-    paints = true,
-    keys = false,
-  ): boolean {
+  begin(frame: TableDrapeFrame | null, layerId: string, opacity: number, paints = true): boolean {
     this.paints = paints;
     this.frame = null;
     this.pending.length = 0;
@@ -1724,8 +1666,6 @@ export class TableDrapePainter {
     this.draws = 0;
     this.breaks = 0;
     this.pointDraws = 0;
-    this.steps = 0;
-    this.deepest = 0;
     if (!frame) return false;
     const range = frame.drape.layerRange(layerId);
     if (!range) return false;
@@ -1733,12 +1673,7 @@ export class TableDrapePainter {
     this.opacity = opacity;
     this.layerFrom = [range.from[0], range.from[1], range.from[2]];
     this.layerTo = [range.to[0], range.to[1], range.to[2]];
-    const order = TableDrapePainter.order;
-    this.mode =
-      order === 'split' &&
-      (!keys || !frame.split || range.to[0] - range.from[0] > DRAPE_SPLIT_MAX_PLACES)
-        ? 'breaks'
-        : order;
+    this.everyTile = TableDrapePainter.order !== 'each-near';
     const n = frame.tiles.length;
     if (this.cursors.length < n * 3) {
       this.cursors = new Float64Array(n * 3);
@@ -1757,37 +1692,30 @@ export class TableDrapePainter {
     return this.frame !== null;
   }
 
-  /** Whether the points are given whole, with their keys (no need to cut them into runs) */
-  get splits(): boolean {
-    return this.frame !== null && this.paints && this.mode === 'split';
-  }
-
   /**
-   * A run of rows the drape does not draw, ranked `[first, last]`, within a Mercator box: kept,
-   * and drawn after the drape painted under it and before the drape painted over it
+   * A run of rows the drape does not draw, ranked from `first`, within a Mercator box: a break,
+   * drawn after the drape painted under it and before the drape painted over it
    *
-   * @param target What draws it (consecutive runs of one target are drawn in one draw)
+   * @param target What draws it
    * @param reachPx The reach of what is drawn beyond the box on the screen (CSS px)
-   * @param keys The keys of its points (null when they cannot be drawn: it is a break)
    */
   run(
     first: TableDrapeRank,
-    last: TableDrapeRank,
     box: DrapeBounds,
     reachPx: number,
     target: object,
     from: number,
     to: number,
     draw: (from: number, to: number) => void,
-    keys: TableDrapeKeys | null = null,
   ): void {
     const frame = this.frame;
     if (!frame || !this.paints) {
       draw(from, to);
       return;
     }
-    if (this.mode === 'split') this.runSplit(first, target, from, to, draw, keys);
-    else this.runBreaks(first, last, box, reachPx, target, from, to, draw);
+    this.pending.push({ target, from, to, draw });
+    this.pendingBox = this.everyTile ? null : union(this.pendingBox, box);
+    this.flush(first, reachPx);
   }
 
   /**
@@ -1797,11 +1725,8 @@ export class TableDrapePainter {
    */
   breakAt(rank: TableDrapeRank, box: DrapeBounds | null, reachPx: number): void {
     if (!this.frame) return;
-    if (this.mode === 'split') {
-      this.flushSplit(rank);
-      return;
-    }
-    this.pendingBox = box && this.pendingBox ? union(this.pendingBox, box) : null;
+    this.pendingBox =
+      box && this.pendingBox && !this.everyTile ? union(this.pendingBox, box) : null;
     this.flush(rank, reachPx);
   }
 
@@ -1809,103 +1734,9 @@ export class TableDrapePainter {
   end(): void {
     const frame = this.frame;
     if (!frame) return;
-    if (this.mode === 'split' && this.paints) {
-      this.flushSplit(this.layerTo);
-    } else {
-      this.paint(this.layerTo, null, 0);
-      this.drawPending();
-    }
+    this.paint(this.layerTo, null, 0);
+    this.drawPending();
     this.frame = null;
-  }
-
-  // --- breaks ---
-
-  private runBreaks(
-    first: TableDrapeRank,
-    last: TableDrapeRank,
-    box: DrapeBounds,
-    reachPx: number,
-    target: object,
-    from: number,
-    to: number,
-    draw: (from: number, to: number) => void,
-  ): void {
-    const each = this.mode === 'each';
-    const covered = each || this.mode === 'each-near' || this.covers(last, box, reachPx);
-    this.push(first, target, from, to, draw, null);
-    this.pendingBox = each ? null : union(this.pendingBox, box);
-    if (covered) this.flush(first, reachPx);
-  }
-
-  /**
-   * Whether an element after rank `last` covers a box in a tile (a moving partition anywhere it
-   * meets the box)
-   */
-  private covers(
-    last: TableDrapeRank,
-    box: DrapeBounds,
-    reachPx: number,
-    only: Uint8Array | null = null,
-    deeperThan = 0,
-  ): boolean {
-    const frame = this.frame as TableDrapeFrame;
-    const lastKey = frame.drape.keyOf(last);
-    let movingCovers = false;
-    // A moving partition drawn over the run where its rows are drawn now
-    for (const moving of frame.moving) {
-      if (moving.maxKey <= lastKey) continue;
-      // The reach on the screen, in Mercator units of the tile seen smallest
-      let perUnit = Number.POSITIVE_INFINITY;
-      for (const tile of frame.tiles) {
-        const pixels = tile.pixels / (tile.box.maxX - tile.box.minX);
-        if (pixels > 0 && pixels < perUnit) perUnit = pixels;
-      }
-      const margin = Number.isFinite(perUnit) ? (reachPx * frame.dpr) / perUnit : 1;
-      if (
-        box.minX - margin <= moving.box.maxX &&
-        box.maxX + margin >= moving.box.minX &&
-        box.minY - margin <= moving.box.maxY &&
-        box.maxY + margin >= moving.box.minY
-      ) {
-        movingCovers = true;
-      }
-    }
-    if (movingCovers) return true;
-    for (let t = 0; t < frame.tiles.length; t++) {
-      if (only && !only[t]) continue;
-      const tile = frame.tiles[t] as TableDrapeTile;
-      const reached = reach(box, tile, reachPx * frame.dpr);
-      // The cells of a tile reading moving partitions may be deeper than they hold
-      const deeper = tile.moving ? 0 : deeperThan;
-      if (reached && frame.drape.index.coversBox(tile.tile, reached, lastKey, frame.zoom, deeper)) {
-        return true;
-      }
-    }
-    return false;
-  }
-
-  /** Keeps a run to be drawn (with the run before it when they follow each other) */
-  private push(
-    first: TableDrapeRank,
-    target: object,
-    from: number,
-    to: number,
-    draw: (from: number, to: number) => void,
-    keys: TableDrapeKeys | null,
-  ): void {
-    const tail = this.pending[this.pending.length - 1];
-    if (
-      tail &&
-      tail.target === target &&
-      tail.draw === draw &&
-      tail.keys === keys &&
-      tail.to <= from
-    ) {
-      tail.to = to;
-      return;
-    }
-    const key = keys ? this.keyOf(keys) : null;
-    this.pending.push({ target, from, to, draw, first, keys, key });
   }
 
   /** Paints the drape up to a rank where what waits meets it, and draws what waits */
@@ -1938,15 +1769,15 @@ export class TableDrapePainter {
         frame.enter();
         entered = true;
       }
-      this.paintTile(t, rank, null);
+      this.paintTile(t, rank);
       this.cursors.set(rank, t * 3);
       this.cursorKeys[t] = key;
     }
     if (entered) frame.leave();
   }
 
-  /** Paints a tile from its cursor up to a rank (split at the keys of the points, or not) */
-  private paintTile(t: number, rank: TableDrapeRank, split: DrapeSplitDraw | null): void {
+  /** Paints a tile from its cursor up to a rank */
+  private paintTile(t: number, rank: TableDrapeRank): void {
     const frame = this.frame as TableDrapeFrame;
     const tile = frame.tiles[t] as TableDrapeTile;
     const from = this.cursors.subarray(t * 3, t * 3 + 3);
@@ -1959,256 +1790,9 @@ export class TableDrapePainter {
       this.opacity,
       { from: [from[0] as number, from[1] as number, from[2] as number], to: rank },
       tile.moving,
-      split,
     );
     this.draws++;
   }
-
-  // --- split ---
-
-  /**
-   * Draws what is left of a split past its last bound (channel `floor` of the bounds of each
-   * pixel): the runs of the points in their order, the drape of the tiles the points meet
-   * painted up to a run an element after it covers in a tile deeper than the steps (in the
-   * others, nothing after a point is left past the last bound), and what waits drawn after it
-   */
-  private tailBreaks(
-    items: readonly PendingDraw[],
-    rank: TableDrapeRank,
-    met: readonly number[],
-    steps: number,
-    floor: number,
-    bounds: WebGLTexture,
-    low: WebGLTexture,
-    place: number,
-  ): void {
-    const frame = this.frame as TableDrapeFrame;
-    const deep = new Uint8Array(frame.tiles.length);
-    for (const t of met) if ((frame.tiles[t] as TableDrapeTile).depth > steps) deep[t] = 1;
-    const cursors = new Float64Array(met.length * 3);
-    for (let i = 0; i < met.length; i++) {
-      const t = met[i] as number;
-      cursors.set(this.cursors.subarray(t * 3, t * 3 + 3), i * 3);
-    }
-    const draw: DrapeSplitDraw = {
-      pass: 'segment',
-      from: floor,
-      to: -1,
-      low,
-      bounds,
-      place,
-    };
-    const segment: RowsSegment = { bounds, from: floor, to: -1 };
-    const waiting: Array<{ item: PendingDraw; a: number; b: number }> = [];
-    let box: DrapeBounds | null = null;
-    let reachMost = 0;
-    const paintTo = (to: TableDrapeRank, within: DrapeBounds | null): void => {
-      const key = frame.drape.keyOf(to);
-      let entered = false;
-      for (let i = 0; i < met.length; i++) {
-        const t = met[i] as number;
-        const tile = frame.tiles[t] as TableDrapeTile;
-        const from: TableDrapeRank = [
-          cursors[i * 3] as number,
-          cursors[i * 3 + 1] as number,
-          cursors[i * 3 + 2] as number,
-        ];
-        if (frame.drape.keyOf(from) >= key) continue;
-        if (within && !reach(within, tile, reachMost * frame.dpr)) continue;
-        if (!entered) {
-          frame.enter();
-          entered = true;
-        }
-        frame.renderer.drawRowsTile(
-          tile.entry.draw,
-          tile.entry.projection,
-          frame.light,
-          frame.zoom,
-          frame.dpr,
-          this.opacity,
-          { from, to },
-          tile.moving,
-          draw,
-        );
-        this.draws++;
-        cursors.set(to, i * 3);
-      }
-      if (entered) frame.leave();
-    };
-    const drawWaiting = (): void => {
-      for (const { item, a, b } of waiting) {
-        (item.keys as TableDrapeKeys).drawSegment(a, b, item.key as RowsKey, segment);
-        this.pointDraws++;
-      }
-      waiting.length = 0;
-      box = null;
-      reachMost = 0;
-    };
-    for (const item of items) {
-      (item.keys as TableDrapeKeys).eachRun(item.from, item.to, (a, b, first, last, runBox, px) => {
-        // A run without ranks waits for the next break
-        const covered =
-          first !== null && last !== null && this.covers(last, runBox, px, deep, steps);
-        const tail = waiting[waiting.length - 1];
-        // The rows between two runs of an item have no points: one draw for both
-        if (tail && tail.item === item) tail.b = b;
-        else waiting.push({ item, a, b });
-        box = union(box, runBox);
-        reachMost = Math.max(reachMost, px);
-        if (covered) {
-          this.breaks++;
-          paintTo(first as TableDrapeRank, box);
-          drawWaiting();
-        }
-      });
-    }
-    paintTo(rank, null);
-    drawWaiting();
-  }
-
-  /** The key of the rows of a run with keys: `add + mul * row` (`DrapeSplit`) */
-  private keyOf(keys: TableDrapeKeys): RowsKey {
-    return {
-      add: (keys.place - this.layerFrom[0]) * DRAPE_SPLIT_SLOTS + keys.add,
-      mul: keys.mul,
-    };
-  }
-
-  private runSplit(
-    first: TableDrapeRank,
-    target: object,
-    from: number,
-    to: number,
-    draw: (from: number, to: number) => void,
-    keys: TableDrapeKeys | null,
-  ): void {
-    if (!keys || !keysFit(keys, this.layerFrom[0])) {
-      // Without the keys of its points, a break: what waits is drawn with the drape up to it
-      this.flushSplit(first);
-      draw(from, to);
-      this.pointDraws++;
-      return;
-    }
-    this.push(first, target, from, to, draw, keys);
-  }
-
-  /**
-   * Paints the drape up to a rank with what waits drawn among it, in segments of each pixel
-   * (`DrapeSplit`), step by step: the lowest keys of the points from the bound of the step on,
-   * the next bound of each pixel (the first element after that lowest point that paints it) found
-   * by a pass of the drape, then the drape and the points of the segment between the two bounds.
-   * What is past the last bound is drawn as one segment, by the breaks where a pixel may hold
-   * more elements after a point than the steps
-   */
-  private flushSplit(rank: TableDrapeRank): void {
-    const frame = this.frame as TableDrapeFrame;
-    const split = frame.split;
-    if (this.pending.length === 0) {
-      this.paint(rank, null, 0);
-      return;
-    }
-    frame.enter();
-    if (!split?.ensure()) {
-      frame.leave();
-      // The keys cannot be drawn: each run is a break
-      const items = this.pending.splice(0);
-      for (const item of items) {
-        this.paint(item.first, null, 0);
-        item.draw(item.from, item.to);
-        this.pointDraws++;
-      }
-      this.paint(rank, null, 0);
-      this.pendingBox = null;
-      return;
-    }
-    frame.leave();
-    this.breaks++;
-    const items = this.pending.splice(0);
-    this.pendingBox = null;
-    const low = split.lowTexture as WebGLTexture;
-    const bounds = split.boundsTexture as WebGLTexture;
-    const place = this.layerFrom[0];
-    const key = frame.drape.keyOf(rank);
-    // Every tile not painted up to the rank: a marker on the screen may be over the ground of a
-    // tile its position is far from (past a ridge, at the horizon), and the bounds of a pixel are
-    // those of the ground seen there
-    const met: number[] = [];
-    let deepest = 0;
-    for (let t = 0; t < frame.tiles.length; t++) {
-      if ((this.cursorKeys[t] as number) >= key) continue;
-      met.push(t);
-      deepest = Math.max(deepest, (frame.tiles[t] as TableDrapeTile).depth);
-    }
-    // A pixel holds at most as many elements as the runs it reads, and a step takes one of them
-    // after a point
-    const steps =
-      TableDrapePainter.steps > 0
-        ? TableDrapePainter.steps
-        : Math.max(1, Math.min(deepest, DRAPE_SPLIT_MAX_STEPS));
-    this.steps = Math.max(this.steps, steps);
-    this.deepest = Math.max(this.deepest, deepest);
-    // A tile whose pixels read at most d runs has no bound past bound d: its last segment is
-    // segment d, and it is left out of the steps after it
-    const depthOf = (t: number): number => (frame.tiles[t] as TableDrapeTile).depth;
-    const segment = (step: number, from: number, to: number): void => {
-      const draw: DrapeSplitDraw = { pass: 'segment', from, to, low, bounds, place };
-      frame.enter();
-      for (const t of met) if (depthOf(t) >= step) this.paintTile(t, rank, draw);
-      frame.leave();
-      const points: RowsSegment = { bounds, from, to };
-      for (const item of items) {
-        (item.keys as TableDrapeKeys).drawSegment(item.from, item.to, item.key as RowsKey, points);
-        this.pointDraws++;
-      }
-    };
-    // Bound s + 1 is in channel (s + 1) % 2, and segment s goes from bound s to bound s + 1
-    for (let s = 0; s < steps; s++) {
-      // The lowest keys of the points from bound s on
-      split.beginLow();
-      const floor = s > 0 ? { bounds, at: s % 2 } : null;
-      for (const item of items) {
-        (item.keys as TableDrapeKeys).draw(item.from, item.to, item.key as RowsKey, floor);
-        this.pointDraws++;
-      }
-      split.end();
-      // Bound s + 1
-      frame.enter();
-      split.beginBounds((s + 1) % 2);
-      const pass: DrapeSplitDraw = { pass: 'bounds', from: -1, to: -1, low, bounds, place };
-      for (const t of met) if (depthOf(t) > s) this.paintTile(t, rank, pass);
-      split.end();
-      frame.leave();
-      segment(s, s > 0 ? s % 2 : -1, (s + 1) % 2);
-    }
-    if (deepest > steps && TableDrapePainter.tail === 'breaks') {
-      // A pixel of a tile deeper than the steps may have an element after a point past the last
-      // bound: from it on, the order is kept by the breaks of the cells that deep
-      const left = met.filter((t) => depthOf(t) >= steps);
-      this.tailBreaks(items, rank, left, steps, steps % 2, bounds, low, place);
-    } else {
-      segment(steps, steps % 2, -1);
-    }
-    for (const t of met) {
-      this.cursors.set(rank, t * 3);
-      this.cursorKeys[t] = key;
-    }
-  }
-}
-
-/** The most steps a split takes (`TableDrapePainter`) */
-const DRAPE_SPLIT_MAX_STEPS = 8;
-
-/**
- * The places of partitions a layer can have for its points to be split by their keys (a key over
- * 2^24 is exact in a depth, and holds the place from the first one times the slots)
- */
-const DRAPE_SPLIT_MAX_PLACES = Math.floor((DRAPE_SPLIT_MAX_KEY + 1) / DRAPE_SPLIT_SLOTS);
-
-/** Whether the keys of a run fit the keys of the split */
-function keysFit(keys: TableDrapeKeys, place0: number): boolean {
-  const place = keys.place - place0;
-  if (place < 0 || place >= DRAPE_SPLIT_MAX_PLACES) return false;
-  return keys.add >= 0 && keys.lastSlot < DRAPE_SPLIT_SLOTS;
 }
 
 /**

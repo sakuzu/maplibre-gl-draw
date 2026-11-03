@@ -226,9 +226,8 @@ function recordPrograms(shaderData: ShaderData): RecordedProgram[] {
     const renderer = new RowsRenderer(mapStub, gl);
     renderer.ensureShader(shaderData);
     expect(renderer.ready).toBe(true);
-    // The variants that draw the keys of the points and the points of one segment of each pixel
-    // among the drape of the rows, for the variant of the frame
-    expect(renderer.keyedReady).toBe(true);
+    // The variant whose polygons and lines read the ground seen at each pixel (the drape band)
+    expect(renderer.groundReady).toBe(true);
   });
   withLabel('QuadShader', () => new QuadShader(gl).ensureShader(shaderData));
   withLabel('DrapeRenderer', () => {
@@ -326,8 +325,10 @@ describe('shader programs on a real WebGL2', () => {
     // drawn in one draw links its programs without waiting for them (`gl.createProgram`), which
     // the count of the call sites does not see; they are recorded among the programs: one for
     // the flat map and one for the globe, from its own preludes, whatever prelude maplibre gives,
-    // and the two variants that split the drape of the rows at its points for the prelude given
-    expect(sites).toHaveLength(13);
+    // and the variant whose polygons and lines read the ground seen at each pixel for the prelude
+    // given. The drape of the rows builds the pass of the ground seen at each pixel at a call site
+    // of its own
+    expect(sites).toHaveLength(14);
     const programs = recordPrograms(preludes[0]);
     expect(programs).toHaveLength(25);
   });
@@ -349,7 +350,6 @@ describe('shader programs on a real WebGL2', () => {
       'RowsRenderer #1',
       'RowsRenderer #2',
       'RowsRenderer #3',
-      'RowsRenderer #4',
       'SDFLineRenderer (rows) #2',
       'SDFPolygonRenderer (rows) #2',
     ]);

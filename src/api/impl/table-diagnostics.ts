@@ -87,15 +87,10 @@ export interface TableDiagnostics {
   /** What the drape of the polygons and the lines of the rows did in the last frame */
   drape(): TableDrapeDiagnostics;
   /**
-   * How the drape of the rows keeps the order among the points drawn between its elements
-   * (`split`, the default; the others to compare them), and for the split its steps (0: as many
-   * as the runs a pixel reads, up to its most) and what is past its last bound where a pixel may
-   * hold more (`over`, the default, or `breaks`)
+   * How the polygons and the lines of the rows keep their order on the terrain (`ground`, the
+   * default; `each` and `each-near`, the references one row at a time on the drape of the rows)
    */
-  setDrapeOrder(
-    order: TableDrapeOrder,
-    split?: { readonly steps?: number; readonly tail?: 'breaks' | 'over' },
-  ): void;
+  setDrapeOrder(order: TableDrapeOrder): void;
 }
 
 /**
@@ -120,19 +115,13 @@ export interface TableDrapeDiagnostics {
   readonly binCount: number;
   readonly unfitTiles: number;
   readonly truncatedCells: number;
-  /** The draws of the drape in the frame, and the breaks of the order among them */
+  /** The draws of the drape in the frame, and the breaks of the order among them (references) */
   readonly draws: number;
   readonly breaks: number;
-  /** The draws of the points drawn among the drape and of their keys, in the frame */
+  /** The draws of the points drawn among the drape in the frame (references) */
   readonly pointDraws: number;
-  /** The bytes of the textures of the keys of the points */
-  readonly splitBytes: number;
-  /**
-   * The most steps a split of the order took in the frame, and the most runs a pixel of the
-   * tiles its points met reads
-   */
-  readonly steps: number;
-  readonly deepest: number;
+  /** The bytes of the ground seen at each pixel */
+  readonly groundBytes: number;
 }
 
 /**
@@ -304,15 +293,11 @@ function createTableDiagnostics(
         draws: drape?.draws ?? 0,
         breaks: drape?.breaks ?? 0,
         pointDraws: drape?.pointDraws ?? 0,
-        splitBytes: drape?.splitBytes ?? 0,
-        steps: drape?.steps ?? 0,
-        deepest: drape?.deepest ?? 0,
+        groundBytes: drape?.groundBytes ?? 0,
       });
     },
-    setDrapeOrder(order, split) {
+    setDrapeOrder(order) {
       TableDrapePainter.order = order;
-      TableDrapePainter.steps = split?.steps ?? 0;
-      TableDrapePainter.tail = split?.tail ?? 'over';
       engine.map.triggerRepaint?.();
     },
   };

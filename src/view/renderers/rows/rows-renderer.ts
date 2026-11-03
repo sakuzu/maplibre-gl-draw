@@ -81,8 +81,6 @@ const UNIT_ROW_STYLES = 2;
 const UNIT_STYLES = 3;
 const UNIT_SPRITES = 4;
 const UNIT_HEIGHTS = 5;
-/** The unit of the bounds of the segments (after the one of the DEM atlas) */
-const UNIT_SPLIT_BOUNDS = 7;
 /** The units of the ground seen at each pixel and of its tiles (the variant reading the ground) */
 const UNIT_GROUND = 8;
 const UNIT_GROUND_TILES = 9;
@@ -180,12 +178,6 @@ interface RowsUniformLocations {
   readonly ghostOn: WebGLUniformLocation | null;
   readonly ghostCamera: WebGLUniformLocation | null;
   readonly ghostNode: WebGLUniformLocation | null;
-  readonly keyAdd: WebGLUniformLocation | null;
-  readonly keyMul: WebGLUniformLocation | null;
-  readonly splitBounds: WebGLUniformLocation | null;
-  readonly splitFrom: WebGLUniformLocation | null;
-  readonly splitTo: WebGLUniformLocation | null;
-  readonly splitFloor: WebGLUniformLocation | null;
   readonly ground: WebGLUniformLocation | null;
   readonly groundTiles: WebGLUniformLocation | null;
   readonly groundBlocks: WebGLUniformLocation | null;
@@ -209,41 +201,6 @@ export interface RowsGround {
    */
   readonly blocks: Float32Array;
   readonly count: number;
-}
-
-/**
- * The bound of each pixel the keys of the points start from (`drawPointKeysRange`): the texture
- * of the bounds, and the place of the bound in them
- *
- * @internal
- */
-export interface RowsKeyFloor {
-  readonly bounds: WebGLTexture;
-  readonly at: number;
-}
-
-/**
- * The segment of the points a draw of the variant that draws one segment draws (`RowsKey`, and
- * `buildRowsFragmentSource('segment')`): the texture of the bounds of each pixel, and the
- * channels of the bounds the keys drawn go from (-1: from the first) and up to (-1: to the end)
- *
- * @internal
- */
-export interface RowsSegment {
-  readonly bounds: WebGLTexture;
-  readonly from: number;
-  readonly to: number;
-}
-
-/**
- * The key a draw of the variant that writes the keys of the points gives each row: `add + mul *
- * row` (row: the number of the row in its group)
- *
- * @internal
- */
-export interface RowsKey {
-  readonly add: number;
-  readonly mul: number;
 }
 
 /** The program of one projection variant */
@@ -321,12 +278,6 @@ export class RowsRenderer {
   private readonly programs = new Map<RowsVariant, RowsProgram>();
   /** The program of the variant of the frame */
   private current: RowsProgram | null = null;
-  /**
-   * The programs that write the keys of the points and that draw the points of one segment, by
-   * variant (made when first asked for)
-   */
-  private readonly keyedPrograms = new Map<RowsVariant, RowsProgram>();
-  private readonly segmentPrograms = new Map<RowsVariant, RowsProgram>();
   /** The programs that read the ground seen at each pixel, by variant (made when first asked) */
   private readonly groundPrograms = new Map<RowsVariant, RowsProgram>();
   /** The ground the polygons and the lines read in the draws now (null: they are drawn as cut) */
@@ -408,26 +359,6 @@ export class RowsRenderer {
   ensureShader(shaderData: ShaderData): void {
     this.variant = rowsVariantOf(shaderData);
     this.current = this.programs.get(this.variant) ?? null;
-  }
-
-  /**
-   * Whether the program that writes the keys of the points can draw in the variant of the frame
-   * (its compile starts at the first call: false until it is done, and for good when it failed)
-   */
-  get keyedReady(): boolean {
-    let keyed = this.keyedPrograms.get(this.variant);
-    if (!keyed) {
-      keyed = this.startProgram(this.variant, 'key');
-      this.keyedPrograms.set(this.variant, keyed);
-    }
-    let segment = this.segmentPrograms.get(this.variant);
-    if (!segment) {
-      segment = this.startProgram(this.variant, 'segment');
-      this.segmentPrograms.set(this.variant, segment);
-    }
-    // Both asked, so both compile at once
-    const ready = this.poll(keyed);
-    return this.poll(segment) && ready;
   }
 
   /**
@@ -806,59 +737,6 @@ export class RowsRenderer {
     this.drawInstances(chunk, true, fromRow, toRow, zoom, projectionData, rowState, factors);
   }
 
-  /**
-   * Draws the keys of the points of the rows `[fromRow, toRow)` of a chunk, in one draw: where
-   * they cover a pixel, the key of their row (`RowsKey`) plus one as an unsigned integer, and the
-   * key over 2^24 as the depth (`buildRowsFragmentSource(true)`). Nothing is drawn while the
-   * program is not ready (`keyedReady`)
-   *
-   * @param floor The bound of each pixel the keys start from (a point under it writes no key;
-   *   null for none)
-   */
-  drawPointKeysRange(
-    chunk: RowsChunk,
-    fromRow: number,
-    toRow: number,
-    zoom: number,
-    projectionData: ProjectionData,
-    rowState: RowStateBinding,
-    factors: RetainedDrawFactors,
-    key: RowsKey,
-    floor: RowsKeyFloor | null = null,
-  ): void {
-    const program = this.keyedPrograms.get(this.variant);
-    if (!program || !this.poll(program)) return;
-    this.drawInstances(chunk, true, fromRow, toRow, zoom, projectionData, rowState, factors, {
-      program,
-      key,
-      floor,
-    });
-  }
-
-  /**
-   * Draws the points of the rows `[fromRow, toRow)` of a chunk whose keys (`RowsKey`) fall in one
-   * segment of each pixel (`RowsSegment`), in one draw
-   */
-  drawPointSegmentRange(
-    chunk: RowsChunk,
-    fromRow: number,
-    toRow: number,
-    zoom: number,
-    projectionData: ProjectionData,
-    rowState: RowStateBinding,
-    factors: RetainedDrawFactors,
-    key: RowsKey,
-    segment: RowsSegment,
-  ): void {
-    const program = this.segmentPrograms.get(this.variant);
-    if (!program || !this.poll(program)) return;
-    this.drawInstances(chunk, true, fromRow, toRow, zoom, projectionData, rowState, factors, {
-      program,
-      key,
-      segment,
-    });
-  }
-
   /** Draws the instances of rows `[fromRow, toRow)` of a chunk (of its points alone, or all) */
   private drawInstances(
     chunk: RowsChunk,
@@ -869,17 +747,11 @@ export class RowsRenderer {
     projectionData: ProjectionData,
     rowState: RowStateBinding,
     factors: RetainedDrawFactors,
-    keyed: {
-      program: RowsProgram;
-      key: RowsKey;
-      segment?: RowsSegment;
-      floor?: RowsKeyFloor | null;
-    } | null = null,
   ): void {
     const groundProgram =
-      !keyed && !points && this.ground ? (this.groundPrograms.get(this.variant) ?? null) : null;
+      !points && this.ground ? (this.groundPrograms.get(this.variant) ?? null) : null;
     const reading = groundProgram !== null && this.poll(groundProgram);
-    const program = keyed ? keyed.program : reading ? groundProgram : this.current;
+    const program = reading ? groundProgram : this.current;
     if (!chunk.uploaded || !program || !this.poll(program)) return;
     const data = chunk.data;
     const starts = points ? data.pointFirst : data.rowFirst;
@@ -904,30 +776,6 @@ export class RowsRenderer {
       );
     }
     this.writeUniforms(program, chunk, zoom, factors);
-    if (keyed) {
-      const locations = program.locations as RowsUniformLocations;
-      if (locations.keyAdd) gl.uniform1ui(locations.keyAdd, keyed.key.add);
-      if (locations.keyMul) gl.uniform1ui(locations.keyMul, keyed.key.mul);
-      const segment = keyed.segment;
-      const floor = keyed.floor;
-      if (locations.splitFloor) gl.uniform1i(locations.splitFloor, floor ? floor.at : -1);
-      // The sampler of the bounds is always on its own unit (on the unit of a sampler of another
-      // kind it would fail the draw, read or not)
-      if (locations.splitBounds) gl.uniform1i(locations.splitBounds, UNIT_SPLIT_BOUNDS);
-      if (floor) {
-        gl.activeTexture(gl.TEXTURE0 + UNIT_SPLIT_BOUNDS);
-        gl.bindTexture(gl.TEXTURE_2D, floor.bounds);
-        gl.activeTexture(gl.TEXTURE0);
-      }
-      if (segment) {
-        gl.activeTexture(gl.TEXTURE0 + UNIT_SPLIT_BOUNDS);
-        gl.bindTexture(gl.TEXTURE_2D, segment.bounds);
-        gl.activeTexture(gl.TEXTURE0);
-        if (locations.splitBounds) gl.uniform1i(locations.splitBounds, UNIT_SPLIT_BOUNDS);
-        if (locations.splitFrom) gl.uniform1i(locations.splitFrom, segment.from);
-        if (locations.splitTo) gl.uniform1i(locations.splitTo, segment.to);
-      }
-    }
     if (reading) this.bindGround(program);
     bindRowState(
       run,
@@ -1038,19 +886,12 @@ export class RowsRenderer {
   dispose(): void {
     const gl = this.gl;
     for (const chunk of [...this.queued]) this.disposeChunk(chunk);
-    for (const program of [
-      ...this.programs.values(),
-      ...this.keyedPrograms.values(),
-      ...this.segmentPrograms.values(),
-      ...this.groundPrograms.values(),
-    ]) {
+    for (const program of [...this.programs.values(), ...this.groundPrograms.values()]) {
       if (program.vertex) gl.deleteShader(program.vertex);
       if (program.fragment) gl.deleteShader(program.fragment);
       gl.deleteProgram(program.program);
     }
     this.programs.clear();
-    this.keyedPrograms.clear();
-    this.segmentPrograms.clear();
     this.groundPrograms.clear();
     this.ledger?.release(this.groundTiles);
     this.ledger?.release(this.groundBlocks);
@@ -1082,13 +923,9 @@ export class RowsRenderer {
   ): RowsProgram {
     const gl = this.gl;
     const { prelude, define } = rowsProjectionPrelude(variant);
-    const keyed = fragmentVariant === 'key' || fragmentVariant === 'segment';
     const ground = fragmentVariant === 'ground';
     const vertex = gl.createShader(gl.VERTEX_SHADER) as WebGLShader;
-    gl.shaderSource(
-      vertex,
-      withSamplerPrecision(buildRowsVertexSource(prelude, define, keyed, ground)),
-    );
+    gl.shaderSource(vertex, withSamplerPrecision(buildRowsVertexSource(prelude, define, ground)));
     gl.compileShader(vertex);
     const fragment = gl.createShader(gl.FRAGMENT_SHADER) as WebGLShader;
     gl.shaderSource(fragment, withSamplerPrecision(buildRowsFragmentSource(fragmentVariant)));
@@ -1677,12 +1514,6 @@ function locationsOf(gl: WebGL2RenderingContext, program: WebGLProgram): RowsUni
     ghostOn: at('u_ghost_on'),
     ghostCamera: at('u_ghost_camera'),
     ghostNode: at('u_ghost_node'),
-    keyAdd: at('u_key_add'),
-    keyMul: at('u_key_mul'),
-    splitBounds: at('u_split_bounds'),
-    splitFrom: at('u_split_from'),
-    splitTo: at('u_split_to'),
-    splitFloor: at('u_split_floor'),
     ground: at('u_ground'),
     groundTiles: at('u_ground_tiles'),
     groundBlocks: at('u_ground_blocks'),

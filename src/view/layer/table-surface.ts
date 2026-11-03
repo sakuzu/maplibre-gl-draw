@@ -57,6 +57,9 @@ export const LINE_PIECE_ZOOM = TERRAIN_ANALYTIC_MIN_ZOOM;
  */
 const FINER_MARGIN = 4;
 
+/** The generations of the surface that read the ground whose numbers are kept */
+const GROUND_GENERATIONS_KEPT = 8;
+
 /** The generations of the elevations whose changed regions are kept */
 const KEPT_ELEVATION_CHANGES = 8;
 
@@ -170,6 +173,21 @@ export class TableSurface {
     this.key = key;
     this.surface = surface;
     this.generation++;
+    if (surface?.ground) {
+      this.groundGenerations.push(this.generation);
+      if (this.groundGenerations.length > GROUND_GENERATIONS_KEPT) this.groundGenerations.shift();
+    }
+  }
+
+  /** The last generations whose surface was the one that reads the ground */
+  private readonly groundGenerations: number[] = [];
+
+  /**
+   * Whether a generation of the surface read the ground seen at each pixel (of the last ones; an
+   * older one is taken as cut for the terrain)
+   */
+  isGround(generation: number): boolean {
+    return this.groundGenerations.includes(generation);
   }
 
   /** Records the tiles of the terrain that came or went with a new generation of the elevations */

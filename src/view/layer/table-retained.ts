@@ -552,8 +552,14 @@ interface DrawPass {
   settled: boolean;
   /** Whether the layer is drawn in one draw (the rows of the delta in one draw too) */
   oneDraw: boolean;
-  /** Whether its polygons and lines read the ground seen at each pixel (they are not cut) */
+  /** Whether the ground seen at each pixel is drawn for the chunks of the layer */
   groundRead: boolean;
+  /**
+   * Whether the frame is in the drape band (every chunk packed or being packed for the ground
+   * reads it), or out of it (the chunks still packed for the ground read it until they are cut
+   * again for the terrain)
+   */
+  groundInBand: boolean;
 }
 
 /** A drawing made again from the rows of a layer, for the checks (its styles resolved afresh) */
@@ -710,6 +716,7 @@ export class TableLayerRenderer {
     settled: true,
     oneDraw: false,
     groundRead: false,
+    groundInBand: false,
   };
   /** The frame the chunks of the layer being drawn are built and drawn in (set per layer) */
   private readonly schedule: SchedulerFrame = {
@@ -1375,14 +1382,13 @@ export class TableLayerRenderer {
         });
       }
     }
-    this.drapeFrame = this.drape.planFrame(tables, layers, input);
+    // Out of the band, a frame is planned while rows packed for the ground are drawn (they read
+    // it until they are cut again for the terrain)
+    this.drapeFrame = this.drape.planFrame(tables, layers, input, this.groundDrawnLast);
+    this.groundDrawnLast = false;
     this.drapeDraws = this.drapeFrameDraws;
     this.drapeBreaks = this.drapeFrameBreaks;
     this.drapePointDraws = this.drapeFramePointDraws;
-    this.drapeSteps = this.drapeFrameSteps;
-    this.drapeDeepest = this.drapeFrameDeepest;
-    this.drapeFrameSteps = 0;
-    this.drapeFrameDeepest = 0;
     this.drapeFrameDraws = 0;
     this.drapeFrameBreaks = 0;
     this.drapeFramePointDraws = 0;
@@ -1482,9 +1488,7 @@ export class TableLayerRenderer {
     draws: number;
     breaks: number;
     pointDraws: number;
-    splitBytes: number;
-    steps: number;
-    deepest: number;
+    groundBytes: number;
   } {
     return {
       ...this.drape.debug,
@@ -1492,9 +1496,7 @@ export class TableLayerRenderer {
       draws: this.drapeDraws,
       breaks: this.drapeBreaks,
       pointDraws: this.drapePointDraws,
-      splitBytes: this.drape.splitBytes,
-      steps: this.drapeSteps,
-      deepest: this.drapeDeepest,
+      groundBytes: this.drape.groundBytes,
     };
   }
 
@@ -1505,10 +1507,8 @@ export class TableLayerRenderer {
   private drapeFrameBreaks = 0;
   private drapePointDraws = 0;
   private drapeFramePointDraws = 0;
-  private drapeSteps = 0;
-  private drapeDeepest = 0;
-  private drapeFrameSteps = 0;
-  private drapeFrameDeepest = 0;
+  /** Whether a chunk read the ground in the last frame (a frame is planned for it out of the band) */
+  private groundDrawnLast = false;
 
   /**
    * Draws a layer held as rows, in the order of its rows
@@ -1581,8 +1581,8 @@ export class TableLayerRenderer {
     };
     const settled = !isTerrainCameraMoving(this.options.terrain);
     // A temporary switch for measuring the ways of the order of the drape in a browser, to be
-    // removed with the prototype: a page sets globalThis.__drapeOrderForMeasures to one of the
-    // ways ('ground', 'split', 'each', 'each-near') and asks for a frame
+    // removed once the ground is measured: a page sets globalThis.__drapeOrderForMeasures to one
+    // of the ways ('ground', 'each', 'each-near') and asks for a frame
     const asked = (globalThis as { __drapeOrderForMeasures?: TableDrapeOrder })
       .__drapeOrderForMeasures;
     if (asked) TableDrapePainter.order = asked;
@@ -1590,7 +1590,7 @@ export class TableLayerRenderer {
     if (this.surfaceFrame !== this.frameCount) {
       this.surfaceFrame = this.frameCount;
       // Where the polygons and the lines read the ground seen at each pixel, they are not cut
-      if (this.drapeFrame && TableDrapePainter.order === 'ground') {
+      if (this.drapeFrame?.inBand && TableDrapePainter.order === 'ground') {
         this.surfaces.ground(this.options.terrain);
       } else {
         this.surfaces.update(this.options.terrain, bounds, {
@@ -1658,29 +1658,28 @@ export class TableLayerRenderer {
     const run = renderers.run;
     const started = chunkClock();
     run?.begin();
-    // On the drape, the chunks draw their points alone, between the parts of the drape
-    let drapeFrame = drawing === 'one-draw' ? this.drapeFrame : null;
-    // Or, where the polygons and the lines read the ground seen at each pixel, the chunks draw
-    // every row in its order
+    // Where the polygons and the lines read the ground seen at each pixel, the chunks draw every
+    // row in its order (`chunkReadsGround`). For the references of the measures, the chunks draw
+    // their points alone, between the parts of the drape of the rows
+    const drapeFrame = drawing === 'one-draw' ? this.drapeFrame : null;
     pass.groundRead = false;
-    if (
-      drapeFrame &&
-      TableDrapePainter.order === 'ground' &&
-      renderers.rows?.groundReady &&
-      this.drawGround(drapeFrame)
-    ) {
-      pass.groundRead = true;
-      drapeFrame = null;
+    pass.groundInBand = false;
+    if (drapeFrame && TableDrapePainter.order === 'ground') {
+      if (renderers.rows?.groundReady && this.drawGround(drapeFrame)) {
+        pass.groundRead = true;
+        pass.groundInBand = drapeFrame.inBand;
+      }
     }
+    const painted = drapeFrame?.inBand && TableDrapePainter.order !== 'ground' ? drapeFrame : null;
     this.painter.begin(
-      drapeFrame && {
-        ...drapeFrame,
+      painted && {
+        ...painted,
         enter: () => {
           run?.end();
-          drapeFrame.enter();
+          painted.enter();
         },
         leave: () => {
-          drapeFrame.leave();
+          painted.leave();
           run?.begin();
         },
       },
@@ -1688,8 +1687,6 @@ export class TableLayerRenderer {
       pass.factors.opacity,
       // The drape is painted once, with the first copy of the world drawn
       frame.firstCopy !== false,
-      // The points are drawn among the drape by their keys once their program is ready
-      drapeFrame !== null && (renderers.rows?.keyedReady ?? false),
     );
     try {
       for (let g = 0; g < table.groupCount; g++) {
@@ -1752,8 +1749,6 @@ export class TableLayerRenderer {
       this.drapeFrameDraws += this.painter.draws;
       this.drapeFrameBreaks += this.painter.breaks;
       this.drapeFramePointDraws += this.painter.pointDraws;
-      this.drapeFrameSteps = Math.max(this.drapeFrameSteps, this.painter.steps);
-      this.drapeFrameDeepest = Math.max(this.drapeFrameDeepest, this.painter.deepest);
       // The chunks of the next versions of the groups, built without being drawn
       pass.inserts = null;
       this.advanceVersions(cache, tables, table, layer, deps, drawing, settled);
@@ -1761,6 +1756,7 @@ export class TableLayerRenderer {
       run?.end();
       if (pass.groundRead) renderers.rows?.setGround(null);
       pass.groundRead = false;
+      pass.groundInBand = false;
       this.drawMs += chunkClock() - started;
       // Nothing of the layer is held past its drawing
       pass.frame = null;
@@ -3052,12 +3048,13 @@ export class TableLayerRenderer {
         from,
         to,
         (row) => this.drape.rankOfRow(layerId, group, row),
-        2,
       );
       this.recordRange('rows', state.range.from + from, state.range.from + to);
       return;
     }
-    (pass.renderers as RetainedRendererSet).rows?.drawRange(
+    const rows = (pass.renderers as RetainedRendererSet).rows;
+    rows?.setGround(this.chunkReadsGround(state.batches as RowsGpuChunk) ? this.groundState : null);
+    rows?.drawRange(
       state.batches as RowsGpuChunk,
       from,
       to,
@@ -3070,14 +3067,37 @@ export class TableLayerRenderer {
   }
 
   /**
+   * Whether a chunk of the layer being drawn reads the ground seen at each pixel. In the drape
+   * band, a chunk packed for the ground does, and one being packed for it again (its rows read
+   * the ground whether they are packed for it yet or still cut for the terrain); a chunk whose
+   * packing for the ground has not started is drawn as it is cut, as out of the band. Out of the
+   * band (zoomed out of it), a chunk still packed for the ground, wholly or in part, reads it
+   * until it is cut again for the terrain
+   */
+  private chunkReadsGround(gpu: RowsGpuChunk): boolean {
+    const pass = this.pass;
+    if (!pass.groundRead) return false;
+    const surfaces = this.surfaces;
+    const cut = this.chunkCuts.get(gpu);
+    const current = !cut || cut.generation === surfaces.generation;
+    let reads: boolean;
+    if (pass.groundInBand) {
+      reads =
+        current || ((cut as ChunkCut).target === surfaces.generation && (cut as ChunkCut).at > 0);
+    } else {
+      reads = !current && surfaces.isGround((cut as ChunkCut).generation);
+    }
+    if (reads) this.groundDrawnLast = true;
+    return reads;
+  }
+
+  /**
    * Draws the points of rows `[from, to)` of a chunk drawn in one draw on the drape: each run of
    * rows with points between two rows the drape draws is a run of the painter (drawn after the
    * drape painted under it, and before what is painted over it)
    *
    * @param base The row of the group the chunk starts at
    * @param rankOf The rank of a row of the group in the order of the drape
-   * @param slotStep How the slot of the rank goes with the row: 2 for the rows of a group (row
-   *   `r` at `2r + 1`), 0 for rows of a delta placed at one place (one slot, in their order there)
    */
   private drawPointsOnDrape(
     gpu: RowsGpuChunk,
@@ -3086,7 +3106,6 @@ export class TableLayerRenderer {
     from: number,
     to: number,
     rankOf: (row: number) => TableDrapeRank | null,
-    slotStep: 0 | 2,
   ): void {
     const pass = this.pass;
     const rows = (pass.renderers as RetainedRendererSet).rows;
@@ -3104,82 +3123,18 @@ export class TableLayerRenderer {
     const draw = (a: number, b: number): void =>
       rows.drawPointsRange(gpu, a, b, zoom, projectionData, binding, factors);
     const pointFirst = gpu.data.pointFirst;
-    // Split by the keys of the points: the rows given whole, in one draw. The rows of a delta
-    // placed at one place share a slot with the elements placed there, so their keys do not tell
-    // their order: they are drawn run by run, each a break
-    if (this.painter.splits && slotStep === 2) {
-      const first = rankOf(base + from);
-      if (
-        !first ||
-        !runs.box ||
-        to <= from ||
-        (pointFirst[to] as number) <= (pointFirst[from] as number)
-      ) {
-        if (!first && to > from) draw(from, to);
-        return;
-      }
-      const add = first[1] - slotStep * (base + from);
-      this.painter.run(first, first, runs.box, runs.maxReach, gpu, from, to, draw, {
-        place: first[0],
-        mul: slotStep,
-        add,
-        lastSlot: add + slotStep * (base + to - 1),
-        draw: (a, b, key, floor) =>
-          rows.drawPointKeysRange(gpu, a, b, zoom, projectionData, binding, factors, key, floor),
-        drawSegment: (a, b, key, segment) =>
-          rows.drawPointSegmentRange(
-            gpu,
-            a,
-            b,
-            zoom,
-            projectionData,
-            binding,
-            factors,
-            key,
-            segment,
-          ),
-        eachRun: (from, to, each) => {
-          for (let i = 0; i < runs.count; i++) {
-            const a = Math.max(runs.runs[i * 3] as number, from);
-            const b = Math.min(runs.runs[i * 3 + 1] as number, to);
-            if (b <= a || (pointFirst[b] as number) <= (pointFirst[a] as number)) continue;
-            const last = Math.min(runs.runs[i * 3 + 2] as number, b - 1);
-            const firstRank = rankOf(base + a);
-            const lastRank = rankOf(base + last);
-            const at = i * 4;
-            each(
-              a,
-              b,
-              firstRank,
-              lastRank,
-              {
-                minX: runs.boxes[at] as number,
-                minY: runs.boxes[at + 1] as number,
-                maxX: runs.boxes[at + 2] as number,
-                maxY: runs.boxes[at + 3] as number,
-              },
-              runs.reach[i] as number,
-            );
-          }
-        },
-      });
-      return;
-    }
     for (let i = 0; i < runs.count; i++) {
       const a = Math.max(runs.runs[i * 3] as number, from);
       const b = Math.min(runs.runs[i * 3 + 1] as number, to);
       if (b <= a || (pointFirst[b] as number) <= (pointFirst[a] as number)) continue;
-      const last = Math.min(runs.runs[i * 3 + 2] as number, b - 1);
       const first = rankOf(base + a);
-      const lastRank = rankOf(base + last);
-      if (!first || !lastRank) {
+      if (!first) {
         draw(a, b);
         continue;
       }
       const at = i * 4;
       this.painter.run(
         first,
-        lastRank,
         {
           minX: runs.boxes[at] as number,
           minY: runs.boxes[at + 1] as number,
@@ -3289,7 +3244,6 @@ export class TableLayerRenderer {
         const group = pass.group as RowGroup;
         const base = state.range.from;
         const first = this.drape.rankOfRow(pass.layerId, group, base + from);
-        const last = this.drape.rankOfRow(pass.layerId, group, base + to - 1);
         const box = rowsBox(group, base + from, base + to);
         const draw = (a: number, b: number): void =>
           renderers.point.drawRetainedRange?.(
@@ -3300,8 +3254,8 @@ export class TableLayerRenderer {
             binding,
             pass.factors,
           );
-        if (first && last && box) {
-          this.painter.run(first, last, box, TABLE_DRAPE_POINT_REACH_PX, state, from, to, draw);
+        if (first && box) {
+          this.painter.run(first, box, TABLE_DRAPE_POINT_REACH_PX, state, from, to, draw);
         } else {
           draw(from, to);
         }
@@ -3782,11 +3736,12 @@ export class TableLayerRenderer {
           a - chunk.range.from,
           b - chunk.range.from,
           rankOf,
-          0,
         );
         pass.binding = binding;
         record('rows', a, b);
       } else if (gpu?.uploaded && rows) {
+        // The rows of the delta are packed as a whole for the surface of the frame
+        rows.setGround(pass.groundRead && pass.groundInBand ? this.groundState : null);
         rows.drawRange(
           gpu,
           a - chunk.range.from,
