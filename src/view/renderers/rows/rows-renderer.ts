@@ -970,6 +970,18 @@ export class RowsRenderer {
         DRAPE_GROUND_BLOCK_TEXELS,
         DRAPE_GROUND_MAX_SLOTS,
       );
+      this.ledger?.record(
+        this.groundTiles,
+        LEDGER_OWNER,
+        'texture',
+        textureBytes(2, DRAPE_GROUND_MAX_SLOTS, 16),
+      );
+      this.ledger?.record(
+        this.groundBlocks,
+        LEDGER_OWNER,
+        'texture',
+        textureBytes(DRAPE_GROUND_BLOCK_TEXELS, DRAPE_GROUND_MAX_SLOTS, 16),
+      );
       written.ground = null;
       written.blocks = null;
     }
@@ -1040,6 +1052,8 @@ export class RowsRenderer {
     this.keyedPrograms.clear();
     this.segmentPrograms.clear();
     this.groundPrograms.clear();
+    this.ledger?.release(this.groundTiles);
+    this.ledger?.release(this.groundBlocks);
     if (this.groundTiles) gl.deleteTexture(this.groundTiles);
     if (this.groundBlocks) gl.deleteTexture(this.groundBlocks);
     this.groundTiles = null;

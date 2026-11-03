@@ -51,6 +51,7 @@ import { generateCirclePolygon } from '../../geometry/circle.js';
 import { type EnuEdit, inverseEnuEdit, moveEnuPosition } from '../../geometry/enu-transforms.js';
 import { drawPropertyKey } from '../../shared/properties.js';
 import type { Coordinate } from '../../store/types.js';
+import type { GpuLedger } from '../gpu-ledger.js';
 import { dashCoefficientsOf } from '../renderers/line/dash.js';
 import type { RowsKey, RowsKeyFloor, RowsSegment } from '../renderers/rows/rows-renderer.js';
 import type { ShaderData } from '../shaders/helpers.js';
@@ -430,6 +431,8 @@ export class TableDrape {
   /** The keys of the points drawn among the rows (`DrapeSplit`) */
   private split: DrapeSplit | null = null;
   private ground: DrapeGroundBuffer | null = null;
+  /** The ledger of the GPU memory the texture of the ground is recorded in */
+  ledger: GpuLedger | undefined;
   /** The partitions by layer and by group handle (-1: after the last group) */
   private readonly partitions = new Map<string, Map<number, PartitionState>>();
   private readonly freeIds: number[] = [];
@@ -675,7 +678,7 @@ export class TableDrape {
       });
     }
     this.split ??= new DrapeSplit(input.gl);
-    this.ground ??= new DrapeGroundBuffer(input.gl);
+    this.ground ??= new DrapeGroundBuffer(input.gl, this.ledger);
     this.usedLast = true;
     debug.used = true;
     debug.reason = 'ok';

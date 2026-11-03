@@ -55,6 +55,8 @@ import {
   DRAPE_GROUND_BLOCKS,
   DRAPE_GROUND_COARSE_BLOCKS,
   DRAPE_GROUND_MAX_SLOTS,
+  DRAPE_GROUND_PLACE_STEPS,
+  DRAPE_GROUND_SHADE_RANGE,
 } from '../../terrain/drape/ground-buffer.js';
 import { TERRAIN_OCCLUSION_GLSL } from '../../terrain/occlusion.js';
 import { DASH_COEFFICIENTS } from '../line/dash.js';
@@ -1050,7 +1052,7 @@ flat in vec4 v_gb;
 flat in vec4 v_gc;
 // The ground seen at each pixel (its place in its tile, the shading there, its slot plus one) and
 // the tiles of the slots (rows-shader.ts, the vertex stage)
-uniform highp sampler2D u_ground;
+uniform highp usampler2D u_ground;
 uniform highp sampler2D u_ground_tiles;
 #endif
 out vec4 fragColor;
@@ -1194,18 +1196,25 @@ vec4 shadeSprite() {
 }
 
 #ifdef ROWS_GROUND
+// The ground a texel of the ground holds (terrain/drape/ground-buffer.ts): its Mercator offset
+// from the center, from its tile (the first one where none is seen) and its place in it, and the
+// shading there
+void groundPlace(uvec4 g, out vec2 q, out float shade) {
+    int slot = max(int(g.x) - 1, 0);
+    vec4 box = texelFetch(u_ground_tiles, ivec2(0, slot), 0);
+    q = box.xy + vec2(g.yz) / ${glslFloat(DRAPE_GROUND_PLACE_STEPS)} * box.z;
+    shade = float(g.w) / ${glslFloat(DRAPE_GROUND_PLACE_STEPS)} * ${glslFloat(DRAPE_GROUND_SHADE_RANGE)};
+}
+
 // The ground seen at a pixel: its Mercator offset from the center and the shading there (false
 // where no ground is seen)
 bool groundOf(ivec2 at, out vec2 q, out float shade) {
     ivec2 size = textureSize(u_ground, 0);
-    vec4 g = texelFetch(u_ground, clamp(at, ivec2(0), size - 1), 0);
+    uvec4 g = texelFetch(u_ground, clamp(at, ivec2(0), size - 1), 0);
     q = vec2(0.0);
     shade = 1.0;
-    if (g.w < 0.5) return false;
-    int slot = int(g.w - 0.5);
-    vec4 box = texelFetch(u_ground_tiles, ivec2(0, slot), 0);
-    q = box.xy + g.xy * box.z;
-    shade = g.z;
+    if (g.x == 0u) return false;
+    groundPlace(g, q, shade);
     return true;
 }
 
@@ -1268,14 +1277,11 @@ bool inTriangle(vec2 q, vec2 a, vec2 b, vec2 c) {
 // its steps to the next pixels of the quad (dFdx, dFdy): false where no ground is seen
 bool groundHere(out vec2 q, out float shade, out vec2 stepX, out vec2 stepY) {
     ivec2 size = textureSize(u_ground, 0);
-    vec4 g = texelFetch(u_ground, clamp(ivec2(gl_FragCoord.xy), ivec2(0), size - 1), 0);
-    int slot = max(int(g.w - 0.5), 0);
-    vec4 box = texelFetch(u_ground_tiles, ivec2(0, slot), 0);
-    q = box.xy + g.xy * box.z;
-    shade = g.z;
+    uvec4 g = texelFetch(u_ground, clamp(ivec2(gl_FragCoord.xy), ivec2(0), size - 1), 0);
+    groundPlace(g, q, shade);
     stepX = dFdx(q);
     stepY = dFdy(q);
-    return g.w >= 0.5;
+    return g.x != 0u;
 }
 
 // Whether the steps of the quad may cross an edge of the ground seen (a ridge, a crack between

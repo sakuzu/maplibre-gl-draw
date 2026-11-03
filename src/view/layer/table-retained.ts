@@ -738,6 +738,7 @@ export class TableLayerRenderer {
 
   constructor(private readonly options: TableLayerRendererOptions) {
     this.versionBudgetWhileMovingMs = options.versionBudgetWhileMovingMs ?? 0;
+    this.drape.ledger = options.ledger;
     this.rowExtents = new RowExtents(options.extensions);
     const stateCopies = options.keepCopies ? new WeakMap<RowStateTexture, Uint8Array>() : null;
     this.stateCopies = stateCopies;

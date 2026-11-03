@@ -44,6 +44,7 @@ import {
   EDGE_CONSTRAIN_UNIFORMS,
   EDGE_UNITS,
 } from './edge-constrain.js';
+import { DRAPE_GROUND_PLACE_STEPS, DRAPE_GROUND_SHADE_RANGE } from './ground-buffer.js';
 import {
   createTerrainMeshBuffers,
   disposeTerrainMeshBuffers,
@@ -888,8 +889,9 @@ export const ROWS_DRAPE_FRAGMENT_SOURCE = DRAPE_FRAGMENT_SOURCE.replace(
 );
 
 /**
- * The shader of the pass of the ground seen at each pixel (`DrapeGroundBuffer`): the place in the
- * tile drawn, the shading of the terrain there and the slot of the tile plus one
+ * The shader of the pass of the ground seen at each pixel (`DrapeGroundBuffer`): the slot of the
+ * tile plus one, the place in the tile drawn and the shading of the terrain there, as unsigned
+ * 16-bit integers
  */
 export const GROUND_FRAGMENT_SOURCE =
   `#version 300 es
@@ -902,13 +904,20 @@ uniform vec3 u_light_dir;
 uniform float u_shade_strength;
 uniform float u_tile_meters;
 uniform float u_ground_slot;
-out vec4 fragColor;
+out uvec4 fragColor;
 ` +
   TERRAIN_SAMPLE_GLSL +
   TERRAIN_SHADE_GLSL +
   `
 void main() {
-    fragColor = vec4(v_tile, terrainShade(v_tile), u_ground_slot + 1.0);
+    vec2 place = clamp(v_tile, 0.0, 1.0) * ${DRAPE_GROUND_PLACE_STEPS}.0 + 0.5;
+    float shade = clamp(terrainShade(v_tile) / ${DRAPE_GROUND_SHADE_RANGE}.0, 0.0, 1.0);
+    fragColor = uvec4(
+        uint(u_ground_slot + 1.5),
+        uint(place.x),
+        uint(place.y),
+        uint(shade * ${DRAPE_GROUND_PLACE_STEPS}.0 + 0.5)
+    );
 }`;
 
 /**
