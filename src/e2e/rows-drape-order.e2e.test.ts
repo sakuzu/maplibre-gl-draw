@@ -179,8 +179,6 @@ interface Measure {
   drapeDraws: number;
   pointDraws: number;
   breaks: number;
-  steps: number;
-  deepest: number;
   frameMs: number;
   /** The shortest time of a frame with the work of the GPU (the least disturbed by the machine) */
   minMs: number;
@@ -189,34 +187,19 @@ interface Measure {
   pixels: number[];
 }
 
-/**
- * A way of keeping the order measured: the mode, and for the split its steps (0: as many as the
- * runs a pixel reads, up to its most) and what is past its last bound
- */
+/** A way of keeping the order measured (`TableDrapeOrder`) */
 interface Way {
-  order: 'split' | 'breaks' | 'each' | 'each-near' | 'ground';
-  steps?: number;
-  tail?: 'breaks' | 'over';
+  order: 'ground' | 'each' | 'each-near';
 }
 
 /** A way named as `nameOf` names it */
 function wayOf(name: string): Way {
-  if (name === 'breaks' || name === 'each' || name === 'each-near' || name === 'ground') {
-    return { order: name };
-  }
-  const match = /^split(auto|\d+)(\+breaks)?$/.exec(name);
-  if (!match) throw new Error(`no way ${name}`);
-  return {
-    order: 'split',
-    ...(match[1] === 'auto' ? {} : { steps: Number(match[1]) }),
-    ...(match[2] ? { tail: 'breaks' as const } : {}),
-  };
+  if (name === 'ground' || name === 'each' || name === 'each-near') return { order: name };
+  throw new Error(`no way ${name}`);
 }
 
 function nameOf(way: Way): string {
-  if (way.order !== 'split') return way.order;
-  const tail = way.tail === 'breaks' ? '+breaks' : '';
-  return `split${way.steps ? way.steps : 'auto'}${tail}`;
+  return way.order;
 }
 
 /**
@@ -233,14 +216,14 @@ async function measure(page: Page, way: Way, frames: number): Promise<Measure> {
         e2e: {
           internals: {
             tableDiagnosticsOf(draw: unknown): {
-              setDrapeOrder(order: string, split?: { steps?: number; tail?: string }): void;
+              setDrapeOrder(order: string): void;
               drape(): Record<string, unknown>;
             };
           };
         };
       };
       const hooks = w.e2e.internals.tableDiagnosticsOf(w.draw);
-      hooks.setDrapeOrder(way.order, { steps: way.steps ?? 0, tail: way.tail ?? 'over' });
+      hooks.setDrapeOrder(way.order);
       const map = w.map;
       const gl = map.getCanvas().getContext('webgl2') as WebGL2RenderingContext & {
         __count?: { n: number };
@@ -261,7 +244,7 @@ async function measure(page: Page, way: Way, frames: number): Promise<Measure> {
           };
         }
       }
-      // Warm up (the programs of the split compile at their first frame, and the rows are packed
+      // Warm up (the programs compile at their first frame, and the rows are packed
       // again for the surface of the way)
       for (let i = 0; i < 400; i++) {
         map.redraw();
@@ -269,10 +252,6 @@ async function measure(page: Page, way: Way, frames: number): Promise<Measure> {
       }
       map.redraw();
       gl.finish();
-      if (way.order === 'split') {
-        map.redraw();
-        gl.finish();
-      }
       if (way.order === 'ground') {
         map.redraw();
         gl.finish();
@@ -299,7 +278,7 @@ async function measure(page: Page, way: Way, frames: number): Promise<Measure> {
       times.sort((a, b) => a - b);
       totals.sort((a, b) => a - b);
       const drape = hooks.drape();
-      hooks.setDrapeOrder('split');
+      hooks.setDrapeOrder('ground');
       return {
         order: name,
         used: drape.used as boolean,
@@ -308,8 +287,6 @@ async function measure(page: Page, way: Way, frames: number): Promise<Measure> {
         drapeDraws: drape.draws as number,
         pointDraws: drape.pointDraws as number,
         breaks: drape.breaks as number,
-        steps: drape.steps as number,
-        deepest: drape.deepest as number,
         frameMs: times[Math.floor(times.length / 2)] as number,
         totalMs: totals[Math.floor(totals.length / 2)] as number,
         minMs: totals[0] as number,
@@ -438,12 +415,7 @@ async function ghostPoints(page: Page, features: FeatureInput[]): Promise<string
   );
 }
 
-const WAYS: Way[] = [
-  { order: 'breaks' },
-  ...[1, 2, 3, 4, 8].map((steps): Way => ({ order: 'split', steps })),
-  { order: 'split' },
-  { order: 'split', tail: 'breaks' },
-];
+const WAYS: Way[] = [{ order: 'ground' }];
 
 /**
  * Measures every way in a scene, against a reference when asked: every run a break, the drape
@@ -465,7 +437,7 @@ async function measureScene(
       ? await measure(page, { order: reference }, 1)
       : null;
   const line = (m: Measure, diff: number | null) =>
-    `${m.order.padEnd(7)} used=${m.used}(${m.reason}) gl=${m.glDraws} drape=${m.drapeDraws} points=${m.pointDraws} breaks=${m.breaks} steps=${m.steps} deepest=${m.deepest} ms=${m.frameMs.toFixed(1)} total=${m.totalMs.toFixed(1)} min=${m.minMs.toFixed(1)}${diff === null ? '' : ` diff=${diff}`}`;
+    `${m.order.padEnd(7)} used=${m.used}(${m.reason}) gl=${m.glDraws} drape=${m.drapeDraws} points=${m.pointDraws} breaks=${m.breaks} ms=${m.frameMs.toFixed(1)} total=${m.totalMs.toFixed(1)} min=${m.minMs.toFixed(1)}${diff === null ? '' : ` diff=${diff}`}`;
   rows.push(`ghost points: ${await ghostPoints(page, features)}`);
   if (each) {
     let painted = 0;
@@ -510,16 +482,6 @@ async function measureScene(
       rows.push(
         `summary ${order} median=${(totals[Math.floor(totals.length / 2)] as number).toFixed(1)} min=${Math.min(...kept.mins).toFixed(1)} rounds=${totals.length} frames: p25=${at(0.25)} p50=${at(0.5)}`,
       );
-      // Against the split measured in the same round (the load of the machine moves both)
-      const split = summary.get('splitauto');
-      if (split && order !== 'splitauto') {
-        const ratios = kept.totals
-          .map((t, i) => t / (split.totals[i] as number))
-          .sort((a, b) => a - b);
-        rows.push(
-          `summary ${order}/splitauto ratio median=${(ratios[Math.floor(ratios.length / 2)] as number).toFixed(3)} all=${ratios.map((r) => r.toFixed(2)).join(',')}`,
-        );
-      }
     }
   }
   const out = process.env.DRAPE_ORDER_OUT;
@@ -534,7 +496,7 @@ describe.skipIf(!process.env.DRAPE_ORDER_OUT)(
     const scenes = (process.env.DRAPE_ORDER_SCENES ?? 'small,stacked,large').split(',');
     const asked = process.env.DRAPE_ORDER_WAYS;
     const pick = (ways: Way[]): Way[] =>
-      asked ? asked.split(',').map((name) => wayOf(name)) : [...ways, { order: 'ground' }];
+      asked ? asked.split(',').map((name) => wayOf(name)) : ways;
     if (scenes.includes('small')) {
       it('alternating points and squares, 2 x 400, zoom 15, pitch 60, against the reference', {
         timeout: browserTimeout(3_600_000),
@@ -569,7 +531,7 @@ describe.skipIf(!process.env.DRAPE_ORDER_OUT)(
           'deep-z15-p45',
           deep(36, 0.0016, 0.0003, 20),
           { center: SLOPE, zoom: 15, pitch: 45, bearing: 0 },
-          pick([{ order: 'split' }]),
+          pick(WAYS),
           'each',
         );
       });
@@ -584,11 +546,7 @@ describe.skipIf(!process.env.DRAPE_ORDER_OUT)(
           it(`alternating points and squares, 2 x ${count}, zoom ${zoom}, pitch ${pitch}`, {
             timeout: browserTimeout(3_600_000),
           }, async () => {
-            const ways: Way[] = pick([
-              ...[2, 4].map((steps): Way => ({ order: 'split', steps })),
-              { order: 'split' },
-              ...(process.env.DRAPE_ORDER_BREAKS ? [{ order: 'breaks' } as Way] : []),
-            ]);
+            const ways: Way[] = pick(WAYS);
             await measureScene(
               `large${count === 10_000 ? '' : count}-z${zoom}-p${pitch}`,
               alternating(count, 0.0004, 0.00012),

@@ -2,18 +2,20 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * End-to-end tests of the drape of the polygons and the lines of a Store of rows on the relief of
- * the test terrain (`dem-fixture.ts`), zoomed in past the analytic band and pitched:
+ * End-to-end tests of the polygons and the lines of a Store of rows read on the ground of the
+ * relief of the test terrain (`dem-fixture.ts`), zoomed in past the analytic band and pitched:
  *
- * - The polygons and the lines of the rows paint the ground as those of a Store of objects do:
- *   the two pictures are the same, and at points of the slope facing the camera the pixel where
- *   maplibre projects the ground (`map.project`) is the color of the polygon
- * - The order of the rows holds on the drape: a point between two polygons is drawn over the
- *   first and under the second, a point after both over both, points and polygons one after the
- *   other (overlapping, some translucent) are drawn as one row at a time draws them, and the
- *   draws follow neither the number of the rows nor the points the polygons after them cover
- * - A row written in place is drawn where it is now, binning again a few tiles
- * - Rows of a moving set are drawn moved on the drape, and where they were once let go
+ * - They paint the ground as those of a Store of objects do (on the flat map and on the globe):
+ *   the two pictures differ only in single pixels of the soft edges, and at points of the slope
+ *   facing the camera the pixel where maplibre projects the ground (`map.project`) is the color of
+ *   the polygon
+ * - The order of the rows holds: a point between two polygons is drawn over the first and under
+ *   the second, a picture among them where it is, and points and polygons one after the other
+ *   (overlapping, translucent, twenty deep on a pixel) as one row at a time on the drape draws
+ *   them (nothing inside a difference), in draws that do not follow the number of the rows
+ * - A 3D layer of the map in front of the ground hides them, the ground they are on does not
+ * - A row written in place is drawn where it is now; rows of a moving set are drawn moved, and
+ *   where they were once let go
  */
 
 import type { Browser, Page } from 'playwright-core';
@@ -147,8 +149,6 @@ interface DrapeDiagnostics {
   draws: number;
   breaks: number;
   pointDraws: number;
-  steps: number;
-  deepest: number;
   tiles: number;
   binCount: number;
   elements: number;
@@ -259,30 +259,26 @@ interface OrderedFrame {
 }
 
 /**
- * Draws a frame keeping the order of the rows one way (`TableDrapeOrder`; for the split, what
- * is past its last bound drawn by breaks or over)
+ * Draws a frame keeping the order of the rows one way (`TableDrapeOrder`: the ground, or the
+ * reference one row at a time on the drape of the rows, built over the frames it takes)
  */
-function frameWith(
-  page: Page,
-  order: 'split' | 'each',
-  tail: 'breaks' | 'over' = 'over',
-): Promise<OrderedFrame> {
+function frameWith(page: Page, order: 'ground' | 'each'): Promise<OrderedFrame> {
   return page.evaluate(
-    ({ order, tail }) => {
+    ({ order }) => {
       const w = window as unknown as {
         map: import('maplibre-gl').Map & { redraw(): void };
-        draw: unknown;
+        draw: { hasPendingWork(): boolean };
         e2e: {
           internals: {
             tableDiagnosticsOf(draw: unknown): {
-              setDrapeOrder(order: string, split?: { tail?: string }): void;
-              drape(): unknown;
+              setDrapeOrder(order: string): void;
+              drape(): { used: boolean };
             };
           };
         };
       };
       const hooks = w.e2e.internals.tableDiagnosticsOf(w.draw);
-      hooks.setDrapeOrder(order, { tail });
+      hooks.setDrapeOrder(order);
       const map = w.map;
       const gl = map.getCanvas().getContext('webgl2') as WebGL2RenderingContext & {
         __draws?: { n: number };
@@ -303,6 +299,11 @@ function frameWith(
           };
         }
       }
+      // The reference builds its drape over the frames; the ground packs the rows again
+      for (let i = 0; i < 400; i++) {
+        map.redraw();
+        if (!w.draw.hasPendingWork() && hooks.drape().used) break;
+      }
       map.redraw();
       gl.__draws.n = 0;
       map.redraw();
@@ -318,10 +319,56 @@ function frameWith(
         pixels,
       );
       const drape = hooks.drape();
-      hooks.setDrapeOrder('split');
+      hooks.setDrapeOrder('ground');
       return { glDraws, drape, pixels: Array.from(pixels) } as never;
     },
-    { order, tail },
+    { order },
+  );
+}
+
+/**
+ * The pixels of two frames that differ by more than a step in a channel, and of them those inside
+ * a difference: the 5 x 5 pixels around them all differ (out of order, not a soft edge)
+ */
+function differingInside(
+  a: readonly number[],
+  b: readonly number[],
+  width: number,
+): { differing: number; inside: number } {
+  const height = a.length / 4 / width;
+  const off = new Uint8Array(width * height);
+  let differing = 0;
+  for (let p = 0; p < width * height; p++) {
+    for (let k = 0; k < 3; k++) {
+      if (Math.abs((a[p * 4 + k] as number) - (b[p * 4 + k] as number)) > 24) {
+        off[p] = 1;
+        differing++;
+        break;
+      }
+    }
+  }
+  let inside = 0;
+  for (let y = 2; y < height - 2; y++) {
+    for (let x = 2; x < width - 2; x++) {
+      let all = true;
+      for (let dy = -2; dy <= 2 && all; dy++) {
+        for (let dx = -2; dx <= 2; dx++) {
+          if (!off[(y + dy) * width + x + dx]) {
+            all = false;
+            break;
+          }
+        }
+      }
+      if (all) inside++;
+    }
+  }
+  return { differing, inside };
+}
+
+/** The width of the canvas of a page (device pixels) */
+function canvasWidthOf(page: Page): Promise<number> {
+  return page.evaluate(
+    () => (window as unknown as { map: import('maplibre-gl').Map }).map.getCanvas().width,
   );
 }
 
@@ -364,20 +411,6 @@ function differingOffSeams(
   return { differing, offSeams, painted };
 }
 
-/** The pixels of two pictures that differ by more than a step in a channel */
-function differing(a: readonly number[], b: readonly number[], step = 3): number {
-  let n = 0;
-  for (let i = 0; i < a.length; i += 4) {
-    for (let k = 0; k < 3; k++) {
-      if (Math.abs((a[i + k] as number) - (b[i + k] as number)) > step) {
-        n++;
-        break;
-      }
-    }
-  }
-  return n;
-}
-
 function drapeOf(page: Page): Promise<DrapeDiagnostics> {
   return page.evaluate(() => {
     const w = window as unknown as {
@@ -412,6 +445,7 @@ async function openScene(
   kind: 'rows' | 'objects' = 'rows',
   camera: typeof CAMERA = CAMERA,
   globe = false,
+  images: Record<string, string> = {},
 ): Promise<Page> {
   const page = await openMapPage(browser, bundle, camera);
   // The test terrain as the map takes it by default (not exaggerated)
@@ -423,7 +457,7 @@ async function openScene(
     if (globe) w.map.setProjection({ type: 'globe' });
     await w.e2e.terrain.addTestTerrain(w.map);
   }, globe);
-  await load(page, { kind, features }, camera.zoom, camera.center);
+  await load(page, { kind, features, images }, camera.zoom, camera.center);
   await page.evaluate((c) => {
     const map = (window as unknown as { map: import('maplibre-gl').Map }).map;
     map.jumpTo(c);
@@ -666,6 +700,46 @@ describe('the drape of the rows on the relief of the terrain', () => {
     await rows.close();
   });
 
+  it('draws a picture of the rows on the terrain at its place among the polygons read on the ground', {
+    timeout: browserTimeout(120_000),
+  }, async () => {
+    const at: [number, number] = [SLOPE[0], SLOPE[1] - 0.001];
+    const covered: [number, number] = [at[0] + 0.0012, at[1]];
+    const page = await openScene(
+      [
+        squareRow('under', SLOPE, 0.005, RED),
+        {
+          id: 'picture',
+          type: 'Image',
+          geometry: { type: 'Point', coordinates: at },
+          properties: {
+            'maplibre-gl-draw:createdZoom': CAMERA.zoom,
+            'maplibre-gl-draw:imageFileId': 'green',
+            'maplibre-gl-draw:imageWidth': 400,
+            'maplibre-gl-draw:imageHeight': 400,
+          },
+          style: { imageOpacity: 1 },
+        },
+        // Over the east part of the picture
+        squareRow('over', covered, 0.0008, BLUE),
+      ],
+      'rows',
+      CAMERA,
+      false,
+      { green: hex(GREEN) },
+    );
+    const drape = await drapeOf(page);
+    expect(drape.used, drape.reason).toBe(true);
+    const [atPicture, atCovered] = (await readFrame(page, [at, covered])).at;
+    expect(hueOf(atPicture as number[]), `the picture over the first polygon: ${atPicture}`).toBe(
+      'green',
+    );
+    expect(hueOf(atCovered as number[]), `the second polygon over the picture: ${atCovered}`).toBe(
+      'blue',
+    );
+    await page.close();
+  });
+
   it('hides the polygons read on the ground behind a 3D layer of the map, and not behind the ground', {
     timeout: browserTimeout(180_000),
   }, async () => {
@@ -757,8 +831,9 @@ describe('the drape of the rows on the relief of the terrain', () => {
     const [atA, atB] = (await readFrame(page, [a, b])).at;
     expect(hueOf(atA as number[]), `under the second polygon: ${atA}`).toBe('blue');
     expect(hueOf(atB as number[]), `over both: ${atB}`).toBe('orange');
-    // The point covered is a break of the order; the point over everything waits for the end
-    expect(drape.breaks).toBe(1);
+    // Read on the ground, the rows draw no drape and no break of the order
+    expect(drape.draws).toBe(0);
+    expect(drape.breaks).toBe(0);
     await page.close();
   });
 
@@ -772,17 +847,10 @@ describe('the drape of the rows on the relief of the terrain', () => {
         ...CAMERA,
         pitch: 30,
       });
-      const drape = await drapeOf(page);
-      expect(drape.used, drape.reason).toBe(true);
-      expect(drape.elements).toBe(n);
-      // One split of the drape at the points of the layer: per step, a bound and a segment in
-      // every tile, and the last segment
-      expect(drape.breaks).toBe(1);
-      expect(drape.steps).toBeGreaterThan(0);
-      expect(drape.draws).toBeLessThanOrEqual((2 * drape.steps + 1) * drape.tiles);
-      // The keys of the points and the points of each segment, in one draw per chunk
-      expect(drape.pointDraws).toBe(2 * drape.steps + 1);
-      draws.push(drape.pointDraws / (2 * drape.steps + 1));
+      const ground = await frameWith(page, 'ground');
+      expect(ground.drape.used, ground.drape.reason).toBe(true);
+      expect(ground.drape.elements).toBe(n);
+      draws.push(ground.glDraws);
       await page.close();
     }
     expect(draws[1]).toBe(draws[0]);
@@ -798,53 +866,45 @@ describe('the drape of the rows on the relief of the terrain', () => {
       zoom: 15,
       pitch: 60,
     });
-    const split = await frameWith(page, 'split');
-    expect(split.drape.used, split.drape.reason).toBe(true);
-    expect(split.drape.breaks).toBe(1);
+    const ground = await frameWith(page, 'ground');
+    expect(ground.drape.used, ground.drape.reason).toBe(true);
     // Every point is a break of the order: the drape painted up to it in every tile
     const each = await frameWith(page, 'each');
     expect(each.drape.breaks).toBeGreaterThan(200);
-    let painted = 0;
-    for (let i = 0; i < each.pixels.length; i += 4) {
-      if (!(each.pixels[i] === 255 && each.pixels[i + 1] === 255 && each.pixels[i + 2] === 255)) {
-        painted++;
-      }
-    }
-    expect(painted).toBeGreaterThan(each.pixels.length / 4 / 20);
-    // A few pixels at the edges of the markers on the ridge may differ from frame to frame
-    expect(differing(split.pixels, each.pixels)).toBeLessThanOrEqual(painted / 10_000);
-    expect(split.glDraws).toBeLessThan(each.glDraws / 10);
+    expect(paintedOf(each)).toBeGreaterThan(each.pixels.length / 4 / 20);
+    // In order everywhere: what differs is the soft edges, nothing inside a difference
+    const off = differingInside(ground.pixels, each.pixels, await canvasWidthOf(page));
+    expect(off.inside, `out of order: ${JSON.stringify(off)}`).toBe(0);
+    expect(ground.glDraws).toBeLessThan(each.glDraws / 10);
     await page.close();
   });
 
   it('draws points under stacks of translucent squares as one row at a time draws them', {
     timeout: browserTimeout(900_000),
   }, async () => {
-    // On each place, a point under six translucent squares, a second point and a last square:
-    // more elements after the first point of a pixel than the steps take where the cells are
-    // deep, what is past the last bound drawn by the breaks there
+    // On each place, a point under six translucent squares, a second point and a last square
     const page = await openScene(stacked(64, 0.0016, 0.00032, 6), 'rows', {
       ...CAMERA,
       zoom: 15,
       pitch: 45,
     });
-    const split = await frameWith(page, 'split');
-    expect(split.drape.used, split.drape.reason).toBe(true);
+    const ground = await frameWith(page, 'ground');
+    expect(ground.drape.used, ground.drape.reason).toBe(true);
     const each = await frameWith(page, 'each');
-    expect(differing(split.pixels, each.pixels)).toBeLessThanOrEqual(paintedOf(each) / 10_000);
+    const off = differingInside(ground.pixels, each.pixels, await canvasWidthOf(page));
+    expect(off.inside, `out of order: ${JSON.stringify(off)}`).toBe(0);
     await page.close();
   });
 
-  it('draws in order by breaks, when asked, the pixels with more points between the polygons than the steps take', {
+  it('draws points and translucent squares twenty times one after the other on a pixel as one row at a time draws them', {
     timeout: browserTimeout(900_000),
   }, async () => {
-    // On each place, twelve points one after the other, each under the next translucent square:
-    // twelve elements after a point in a pixel, past the most steps a split takes
+    // On each place, twenty points one after the other, each under the next translucent square
     const out: FeatureInput[] = [];
     for (let i = 0; i < 9; i++) {
       const x = SLOPE[0] - 0.003 + (i % 3) * 0.003;
       const y = SLOPE[1] - 0.003 + Math.floor(i / 3) * 0.003;
-      for (let k = 0; k < 12; k++) {
+      for (let k = 0; k < 20; k++) {
         const at: [number, number] = [x + k * 0.00002, y];
         out.push({
           id: `p${i}-${k}`,
@@ -863,22 +923,11 @@ describe('the drape of the rows on the relief of the terrain', () => {
       }
     }
     const page = await openScene(out, 'rows', { ...CAMERA, zoom: 15, pitch: 30 });
+    const ground = await frameWith(page, 'ground');
+    expect(ground.drape.used, ground.drape.reason).toBe(true);
     const each = await frameWith(page, 'each');
-    // Past the last bound drawn by the breaks of the cells deeper than the steps: in order
-    const breaks = await frameWith(page, 'split', 'breaks');
-    expect(breaks.drape.used, breaks.drape.reason).toBe(true);
-    expect(breaks.drape.deepest).toBeGreaterThan(breaks.drape.steps);
-    expect(breaks.drape.breaks).toBeGreaterThan(1);
-    expect(differing(breaks.pixels, each.pixels)).toBeLessThanOrEqual(paintedOf(each) / 10_000);
-    // Past the last bound drawn as one segment (as a split draws it): the points there are over
-    // the squares after them, in the pixels with more than the steps
-    const over = await frameWith(page, 'split');
-    expect(over.drape.breaks).toBe(1);
-    const off = differing(over.pixels, each.pixels);
-    console.info(
-      `more points between the polygons than the steps take: ${off} pixels out of order`,
-    );
-    expect(off).toBeGreaterThan(paintedOf(each) / 10_000);
+    const off = differingInside(ground.pixels, each.pixels, await canvasWidthOf(page));
+    expect(off.inside, `out of order: ${JSON.stringify(off)}`).toBe(0);
     await page.close();
   });
 
@@ -890,22 +939,16 @@ describe('the drape of the rows on the relief of the terrain', () => {
       zoom: 15,
       pitch: 45,
     });
-    const split = await frameWith(page, 'split');
-    expect(split.drape.used, split.drape.reason).toBe(true);
-    expect(split.drape.elements).toBe(10_000);
-    // The draws of the frame, recorded with the test
-    console.info(
-      `2 x 10,000 alternating, zoom 15, pitch 45: ${split.glDraws} draws of GL, drape ${split.drape.draws} over ${split.drape.tiles} tiles, points ${split.drape.pointDraws}, ${split.drape.steps} steps (the deepest pixel reads ${split.drape.deepest} runs), ${split.drape.breaks} breaks`,
-    );
-    expect(split.drape.draws).toBeLessThanOrEqual(
-      (2 * split.drape.steps + 1) * split.drape.tiles + split.drape.breaks * split.drape.tiles,
-    );
+    const ground = await frameWith(page, 'ground');
+    expect(ground.drape.used, ground.drape.reason).toBe(true);
+    expect(ground.drape.elements).toBe(10_000);
     // The draws of GL of the whole frame (the terrain and the other layers of maplibre with them)
-    expect(split.glDraws).toBeLessThan(1_000);
+    console.info(`2 x 10,000 alternating, zoom 15, pitch 45: ${ground.glDraws} draws of GL`);
+    expect(ground.glDraws).toBeLessThan(100);
     await page.close();
   });
 
-  it('draws a row written in place where it is now, binning again a few tiles', {
+  it('draws a row written in place where it is now', {
     timeout: browserTimeout(120_000),
   }, async () => {
     const features: FeatureInput[] = [];
@@ -942,13 +985,9 @@ describe('the drape of the rows on the relief of the terrain', () => {
       });
     }, to);
     await idle(page);
-    const after = await drapeOf(page);
     const [atOld, atNew] = (await readFrame(page, [from, to])).at;
     expect(hueOf(atNew as number[]), `where it is now: ${atNew}`).toBe('red');
     expect(hueOf(atOld as number[]), `where it was: ${atOld}`).not.toBe('red');
-    // The partition of the row in the tiles its boxes touch, before and after
-    expect(after.binCount - before.binCount).toBeGreaterThan(0);
-    expect(after.binCount - before.binCount).toBeLessThanOrEqual(8);
     await page.close();
   });
 
