@@ -179,7 +179,7 @@ function glslFloat(value: number): string {
 
 /**
  * The same test on the GPU, for symbols drawn from buffers kept over the frames (the points of
- * the layers held as rows): the formula and the constants of {@link isAnchorOccluded}, evaluated
+ * the layers held as rows): the formula and the constants of the test on the CPU, evaluated
  * in the vertex shader every frame, so a kept buffer never draws a ghost of an older camera.
  *
  * It reads the elevations of the ground along the segment from the DEM atlas

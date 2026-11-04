@@ -24,6 +24,7 @@ import { MOVE_SETS } from '../../feature-table/row-state.js';
 import type { RowHandle } from '../../feature-table/types.js';
 import { type EnuEdit, inverseEnuEdit, moveEnuPosition } from '../../geometry/enu-transforms.js';
 import type { BoundingBox } from '../../store/types.js';
+import { type GpuLedger, textureBytes } from '../gpu-ledger.js';
 import { getRenderFrame } from '../shaders/frame.js';
 import type { RetainedDrawRun } from './draw-run.js';
 import {
@@ -409,6 +410,17 @@ export function createRowStateTexture(
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
   return { texture, width, height, rows };
+}
+
+/**
+ * Records a texture of the state of rows in the ledger of an instance (the textures of the
+ * extensions are their own)
+ *
+ * @internal
+ */
+export function recordRowStateTexture(ledger: GpuLedger | undefined, state: RowStateTexture): void {
+  const { texture, width, height } = state;
+  ledger?.record(texture, 'row-state', 'texture', textureBytes(width, height, 1));
 }
 
 /**

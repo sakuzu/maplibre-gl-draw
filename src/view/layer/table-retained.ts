@@ -96,7 +96,7 @@ import {
 } from '../../store/transform-roles.js';
 import { buildPackedRTree, type PackedRTree, searchPackedRTree } from '../../table/packed-rtree.js';
 import type { FeatureCompanionRegistry } from '../feature-companion.js';
-import { type GpuLedger, textureBytes } from '../gpu-ledger.js';
+import type { GpuLedger } from '../gpu-ledger.js';
 import {
   layerDrawFactors,
   NEUTRAL_DRAW_FACTORS,
@@ -114,6 +114,7 @@ import {
   movedViewsOf,
   type RowStateBinding,
   type RowStateTexture,
+  recordRowStateTexture,
   uploadRowState,
 } from '../renderers/row-state.js';
 import { drawnRowText, type RowsCopies } from '../renderers/rows/rows-copies.js';
@@ -2662,14 +2663,7 @@ export class TableLayerRenderer {
         const group = groupCache.group;
         if (!groupCache.texture) {
           const created = createRowStateTexture(this.options.gl, group.data.length);
-          if (created) {
-            this.options.ledger?.record(
-              created.texture,
-              'row-state',
-              'texture',
-              textureBytes(created.width, created.height, 1),
-            );
-          }
+          if (created) recordRowStateTexture(this.options.ledger, created);
           groupCache.texture = created;
           groupCache.uploadedVersion = -1;
         }

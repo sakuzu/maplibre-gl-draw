@@ -51,6 +51,7 @@ const KASANE_CATEGORIES = [
 /** The sections of src/webgl/index.ts, which are its categories (in this order) */
 const WEBGL_CATEGORIES = [
   'Shaders and projection',
+  'The origin of what is kept on the GPU',
   'Blending and billboards',
   'Quads',
   'Lines',
