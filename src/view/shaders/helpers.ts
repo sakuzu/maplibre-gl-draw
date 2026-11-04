@@ -87,6 +87,101 @@ export function withSamplerPrecision(source: string): string {
   return `${match[0]}${SAMPLER_PRECISION_GLSL}\n${source.slice(match[0].length)}`;
 }
 
+/** `COMPLETION_STATUS_KHR` of `KHR_parallel_shader_compile` */
+const COMPLETION_STATUS_KHR = 0x91b1;
+
+/**
+ * A program being compiled and linked, which a frame need not wait for
+ *
+ * Asking whether a program linked waits for the driver, up to seconds for a large shader. Where the
+ * context has `KHR_parallel_shader_compile`, `done` tells without waiting; without it, it is true
+ * at once and `take` waits.
+ */
+export class ProgramCompile {
+  readonly #gl: WebGL2RenderingContext;
+  readonly #parallel: boolean;
+  readonly #vertex: WebGLShader;
+  readonly #fragment: WebGLShader;
+  readonly #program: WebGLProgram;
+  #taken = false;
+
+  /**
+   * @param gl The WebGL2 context
+   * @param vertexSource The vertex shader source, starting with \`#version 300 es\`
+   * @param fragmentSource The fragment shader source, starting with \`#version 300 es\`
+   * @param transformFeedbackVaryings The outputs a transform feedback captures, one buffer each
+   */
+  constructor(
+    gl: WebGL2RenderingContext,
+    vertexSource: string,
+    fragmentSource: string,
+    transformFeedbackVaryings?: readonly string[],
+  ) {
+    this.#gl = gl;
+    this.#parallel = !!gl.getExtension?.('KHR_parallel_shader_compile');
+    this.#vertex = gl.createShader(gl.VERTEX_SHADER) as WebGLShader;
+    gl.shaderSource(this.#vertex, withSamplerPrecision(vertexSource));
+    gl.compileShader(this.#vertex);
+    this.#fragment = gl.createShader(gl.FRAGMENT_SHADER) as WebGLShader;
+    gl.shaderSource(this.#fragment, withSamplerPrecision(fragmentSource));
+    gl.compileShader(this.#fragment);
+    this.#program = gl.createProgram() as WebGLProgram;
+    gl.attachShader(this.#program, this.#vertex);
+    gl.attachShader(this.#program, this.#fragment);
+    if (transformFeedbackVaryings) {
+      gl.transformFeedbackVaryings(
+        this.#program,
+        [...transformFeedbackVaryings],
+        gl.SEPARATE_ATTRIBS,
+      );
+    }
+    gl.linkProgram(this.#program);
+  }
+
+  /** Whether \`take\` answers without waiting */
+  get done(): boolean {
+    if (this.#taken || !this.#parallel) return true;
+    return this.#gl.getProgramParameter(this.#program, COMPLETION_STATUS_KHR) === true;
+  }
+
+  /**
+   * The linked program, once (waiting for it when it is not \`done\`)
+   *
+   * @throws Error with the info log when a shader fails to compile or the program fails to link
+   */
+  take(): WebGLProgram {
+    const gl = this.#gl;
+    this.#taken = true;
+    if (!gl.getProgramParameter(this.#program, gl.LINK_STATUS)) {
+      const log = [
+        gl.getShaderInfoLog(this.#vertex),
+        gl.getShaderInfoLog(this.#fragment),
+        gl.getProgramInfoLog(this.#program),
+      ]
+        .filter((text) => text)
+        .join('\n');
+      this.#release();
+      gl.deleteProgram(this.#program);
+      throw new Error(`Program link error: ${log}`);
+    }
+    this.#release();
+    return this.#program;
+  }
+
+  /** Lets go of a program not taken */
+  dispose(): void {
+    if (this.#taken) return;
+    this.#taken = true;
+    this.#release();
+    this.#gl.deleteProgram(this.#program);
+  }
+
+  #release(): void {
+    this.#gl.deleteShader(this.#vertex);
+    this.#gl.deleteShader(this.#fragment);
+  }
+}
+
 /**
  * Compiles and links a WebGL2 program from a vertex and a fragment shader source.
  *

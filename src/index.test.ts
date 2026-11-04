@@ -349,6 +349,7 @@ const WEBGL = [
   'OffsetUniforms',
   'offsetUniformsAt',
   'PointHitTestStrategy',
+  'ProgramCompile',
   'ProjectionUniformLocations',
   'ProjectionUniformManager',
   'QUAD_DRAPE_TEXTURE_UNITS',

@@ -36,7 +36,8 @@ writing it. Its changes are listed after those of 3.0.0.
   the library: `rebasedRetainedOrigin`, `retainedOriginErrorPx`,
   `RETAINED_ORIGIN_TOLERANCE_PX`, and `rowStateMovedViews` for the rows
   moved on the GPU. `createProgram` takes the outputs a transform feedback
-  captures.
+  captures, and `ProgramCompile` links a program a frame need not wait
+  for (`KHR_parallel_shader_compile`).
 - The entry `@sakuzu/maplibre-gl-draw/kasane`, experimental (it may
   change in a minor release): `createTableStore`, an in-memory store that
   holds its features as rows, and `createFeatureTables`, the tables for a

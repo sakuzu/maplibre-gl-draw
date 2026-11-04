@@ -60,6 +60,7 @@ export {
   calculateLngLatOffset,
   createProgram,
   OFFSET_MODE_GLSL,
+  ProgramCompile,
 } from '../view/shaders/helpers.js';
 export { ProjectionUniformManager } from '../view/shaders/projection.js';
 export type { ViewUniforms } from '../view/shaders/view-uniforms.js';
