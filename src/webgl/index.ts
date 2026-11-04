@@ -69,6 +69,7 @@ export { offsetUniformsAt, viewUniforms } from '../view/shaders/view-uniforms.js
 export {
   rebasedRetainedOrigin,
   RETAINED_ORIGIN_TOLERANCE_PX,
+  retainedOriginErrorPx,
 } from '../view/shaders/retained-origin.js';
 
 // Blending and billboards

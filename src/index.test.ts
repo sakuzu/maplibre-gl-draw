@@ -357,6 +357,7 @@ const WEBGL = [
   'QuadVertices',
   'rebasedRetainedOrigin',
   'RETAINED_ORIGIN_TOLERANCE_PX',
+  'retainedOriginErrorPx',
   'ROW_STATE_GLSL',
   'ROW_STATE_TEXTURE_UNIT',
   'RowStateBinding',
