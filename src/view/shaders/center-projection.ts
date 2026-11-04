@@ -94,19 +94,15 @@ function horner(x: string, coefficients: readonly number[]): string {
 const C = CENTER_PROJECTION_CONSTANTS;
 
 /**
- * The GLSL of the offsets from the center (included in `OFFSET_MODE_GLSL`)
- *
- * It reads `u_center_sine_cosine` and `u_projection_center`, and on the globe the uniforms of
- * maplibre's prelude (`u_projection_transition`, `u_projection_fallback_matrix`,
- * `u_projection_clipping_plane`).
+ * The GLSL of the functions of the offsets from the center: sin and cos of half an offset, the
+ * Mercator y of a latitude offset and back, and on the globe (`GLOBE`) the offset on the unit
+ * sphere. It reads `u_center_sine_cosine` alone, so a fragment stage can take it too
  *
  * @internal
  */
-export const CENTER_OFFSET_GLSL = `
+export const CENTER_OFFSET_FUNCTIONS_GLSL = `
 // sin and cos of the latitude, sin and cos of the longitude of u_center_lnglat (float64 on the CPU)
 uniform vec4 u_center_sine_cosine;
-// The center in clip space, as maplibre projects it in the frame (float64 on the CPU)
-uniform vec4 u_projection_center;
 
 // sin and cos of an angle in radians (|x| <= PI / 2), by polynomials
 vec2 offset_sine_cosine(float x) {
@@ -203,6 +199,24 @@ vec3 sphere_offset(vec2 halfLat, vec2 halfLng) {
     return vec3(c.z * dCos + dSinLng * cosLat, dSin, c.w * dCos + dCosLng * cosLat);
 }
 #endif
+
+`;
+
+/**
+ * The GLSL of the offsets from the center (included in `OFFSET_MODE_GLSL`): the functions of the
+ * offsets (`CENTER_OFFSET_FUNCTIONS_GLSL`) and the projection of a position given by its offsets
+ *
+ * It reads `u_center_sine_cosine` and `u_projection_center`, and on the globe the uniforms of
+ * maplibre's prelude (`u_projection_transition`, `u_projection_fallback_matrix`,
+ * `u_projection_clipping_plane`).
+ *
+ * @internal
+ */
+export const CENTER_OFFSET_GLSL =
+  CENTER_OFFSET_FUNCTIONS_GLSL +
+  `
+// The center in clip space, as maplibre projects it in the frame (float64 on the CPU)
+uniform vec4 u_projection_center;
 
 // The position in clip space of a position given by its offsets from the center: its Mercator
 // offset, its longitude offset, sin and cos of half its latitude offset, and its elevation (in

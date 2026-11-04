@@ -41,7 +41,11 @@
  */
 
 import { DEFAULT_TILE_SIZE, RENDERING_DEFAULTS } from '../../../shared/math/index.js';
-import { CENTER_PROJECTION_CONSTANTS, glslFloat32 } from '../../shaders/center-projection.js';
+import {
+  CENTER_OFFSET_FUNCTIONS_GLSL,
+  CENTER_PROJECTION_CONSTANTS,
+  glslFloat32,
+} from '../../shaders/center-projection.js';
 import {
   getProjectionTransitionUniform,
   OFFSET_MODE_GLSL,
@@ -1024,15 +1028,20 @@ void main() {
  *
  * @param variant `color`: the colors. `ground`: the polygons and the lines read the ground seen at
  *   each pixel (terrain/drape/ground-depth.ts)
+ * @param define The defines of the projection (`GLOBE` on the globe), which the ground reads
  * @internal
  */
-export function buildRowsFragmentSource(variant: RowsFragmentVariant = 'color'): string {
+export function buildRowsFragmentSource(
+  variant: RowsFragmentVariant = 'color',
+  define = '',
+): string {
   const defines: Record<RowsFragmentVariant, string> = {
     color: '',
     ground: '#define ROWS_GROUND',
   };
   return `#version 300 es
 precision highp float;
+${define}
 ${defines[variant]}
 
 flat in int v_kind;
@@ -1060,11 +1069,6 @@ flat in vec4 v_gb;
 flat in vec4 v_gc;
 // The size of the drawing buffer (device pixels)
 uniform vec2 u_viewport;
-// The ground of each pixel read back from the depth of the terrain maplibre draws
-// (terrain/drape/ground-depth.ts): the polygons and the lines take its depth, so the 3D layers of
-// the map in front of the ground hide them as they hide the ground (the points and the sprites
-// keep the depth of their markers)
-${GROUND_DEPTH_GLSL}
 #endif
 out vec4 fragColor;
 
@@ -1207,6 +1211,13 @@ vec4 shadeSprite() {
 }
 
 #ifdef ROWS_GROUND
+// The ground of each pixel read back from the depth of the terrain maplibre draws
+// (terrain/drape/ground-depth.ts): the polygons and the lines take its depth, so the 3D layers of
+// the map in front of the ground hide them as they hide the ground (the points and the sprites
+// keep the depth of their markers)
+${CENTER_OFFSET_FUNCTIONS_GLSL}
+${GROUND_DEPTH_GLSL}
+
 // The ground seen at a pixel: its Mercator offset from the center (false where no ground is seen)
 bool groundOf(ivec2 at, out vec2 q) {
     float z;

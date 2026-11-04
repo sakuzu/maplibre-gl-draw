@@ -43,8 +43,7 @@ import { TerrainContext } from '../../terrain/context.js';
 import {
   DRAPE_GROUND_BLOCK_TEXELS,
   DRAPE_GROUND_MAX_SLOTS,
-  groundRiseOf,
-  groundUnprojectOf,
+  groundProjectionOf,
 } from '../../terrain/drape/ground-depth.js';
 import { NEUTRAL_DRAW_FACTORS, type RetainedDrawFactors } from '../draw-factors.js';
 import { type RetainedDrawRun, retainedDrawRun } from '../draw-run.js';
@@ -188,7 +187,13 @@ interface RowsUniformLocations {
   readonly ghostNode: WebGLUniformLocation | null;
   readonly groundDepth: WebGLUniformLocation | null;
   readonly groundUnproject: WebGLUniformLocation | null;
-  readonly groundRise: WebGLUniformLocation | null;
+  readonly groundLift: WebGLUniformLocation | null;
+  readonly groundTransition: WebGLUniformLocation | null;
+  readonly groundGlobe: WebGLUniformLocation | null;
+  readonly groundMain: WebGLUniformLocation | null;
+  readonly groundMainCenter: WebGLUniformLocation | null;
+  readonly groundFallback: WebGLUniformLocation | null;
+  readonly groundFallbackCenter: WebGLUniformLocation | null;
   readonly groundTiles: WebGLUniformLocation | null;
   readonly groundBlocks: WebGLUniformLocation | null;
   readonly groundCount: WebGLUniformLocation | null;
@@ -317,18 +322,24 @@ export class RowsRenderer {
     y: 0,
   };
   /**
-   * The projection the ground is read back with (`groundUnprojectOf`, `groundRiseOf`), and what
-   * it was formed from (formed again when they change)
+   * The projection the ground is read back with (`groundProjectionOf`), as its uniforms take it,
+   * and what it was formed from (formed again when they change)
    */
   private readonly groundProjection = {
     version: 0,
     frame: -1,
-    matrix: null as ArrayLike<number> | null,
+    data: null as ProjectionData | null,
     center: null as OffsetUniforms | null,
     liftMeters: Number.NaN,
     scale: Number.NaN,
     unproject: new Float32Array(16),
-    rise: 0,
+    globe: new Float32Array(16),
+    main: new Float32Array(16),
+    mainCenter: new Float32Array(4),
+    fallback: new Float32Array(16),
+    fallbackCenter: new Float32Array(4),
+    transition: 0,
+    lift: 0,
   };
   private variant: RowsVariant = 'flat';
   private offsetUniforms: OffsetUniforms | null = null;
@@ -940,23 +951,31 @@ export class RowsRenderer {
     if (locations.groundTiles) gl.uniform1i(locations.groundTiles, UNIT_GROUND_TILES);
     if (locations.groundBlocks) gl.uniform1i(locations.groundBlocks, UNIT_GROUND_BLOCKS);
     if (locations.groundCount) gl.uniform1i(locations.groundCount, ground.count);
-    const projection = this.groundProjectionOf(projectionData.mainMatrix, ground.liftMeters);
+    const projection = this.groundProjectionOf(projectionData, ground.liftMeters);
     if (program.memo.groundVersion !== projection.version) {
-      if (locations.groundUnproject) {
-        gl.uniformMatrix4fv(locations.groundUnproject, false, projection.unproject);
+      const at = locations;
+      if (at.groundUnproject) gl.uniformMatrix4fv(at.groundUnproject, false, projection.unproject);
+      if (at.groundLift) gl.uniform1f(at.groundLift, projection.lift);
+      if (at.groundTransition) gl.uniform1f(at.groundTransition, projection.transition);
+      if (at.groundGlobe) gl.uniformMatrix4fv(at.groundGlobe, false, projection.globe);
+      if (at.groundMain) gl.uniformMatrix4fv(at.groundMain, false, projection.main);
+      if (at.groundMainCenter) gl.uniform4fv(at.groundMainCenter, projection.mainCenter);
+      if (at.groundFallback) gl.uniformMatrix4fv(at.groundFallback, false, projection.fallback);
+      if (at.groundFallbackCenter) {
+        gl.uniform4fv(at.groundFallbackCenter, projection.fallbackCenter);
       }
-      if (locations.groundRise) gl.uniform1f(locations.groundRise, projection.rise);
       program.memo.groundVersion = projection.version;
     }
   }
 
   /**
-   * The projection the ground is read back with in the frame: the inverse of the projection of
-   * the rows relative to the center of the view, and the lift of the ground over the terrain (none
-   * can be read back where it has no inverse: the inverse is left 0)
+   * The projection the ground is read back with in the frame (`groundProjectionOf`: on the flat
+   * map, on the globe and in the transition), relative to the center of the view, and the lift of
+   * the ground over the terrain (none can be read back where it has no inverse: the inverse is
+   * left 0)
    */
   private groundProjectionOf(
-    matrix: ArrayLike<number>,
+    data: ProjectionData,
     liftMeters: number,
   ): RowsRenderer['groundProjection'] {
     const formed = this.groundProjection;
@@ -965,7 +984,7 @@ export class RowsRenderer {
     const frame = getRenderFrame();
     if (
       formed.frame === frame &&
-      formed.matrix === matrix &&
+      formed.data === data &&
       formed.center === center &&
       formed.liftMeters === liftMeters &&
       formed.scale === scale
@@ -973,18 +992,28 @@ export class RowsRenderer {
       return formed;
     }
     formed.frame = frame;
-    formed.matrix = matrix;
+    formed.data = data;
     formed.center = center;
     formed.liftMeters = liftMeters;
     formed.scale = scale;
     formed.version++;
-    const clipCenter = center?.projectionCenter ?? null;
-    if (!clipCenter || !groundUnprojectOf(matrix, clipCenter, formed.unproject)) {
+    const read = center
+      ? groundProjectionOf(data, center.centerLngLat, center.centerMercator, scale, liftMeters)
+      : null;
+    if (!read) {
       formed.unproject.fill(0);
-      formed.rise = 0;
+      formed.transition = 0;
+      formed.lift = 0;
       return formed;
     }
-    formed.rise = groundRiseOf(scale, liftMeters, clipCenter[3]);
+    formed.unproject.set(read.unproject);
+    formed.globe.set(read.globe);
+    formed.main.set(read.main);
+    formed.mainCenter.set(read.mainCenter);
+    formed.fallback.set(read.fallback);
+    formed.fallbackCenter.set(read.fallbackCenter);
+    formed.transition = read.transition;
+    formed.lift = read.lift;
     return formed;
   }
 
@@ -1029,7 +1058,10 @@ export class RowsRenderer {
     gl.shaderSource(vertex, withSamplerPrecision(buildRowsVertexSource(prelude, define, ground)));
     gl.compileShader(vertex);
     const fragment = gl.createShader(gl.FRAGMENT_SHADER) as WebGLShader;
-    gl.shaderSource(fragment, withSamplerPrecision(buildRowsFragmentSource(fragmentVariant)));
+    gl.shaderSource(
+      fragment,
+      withSamplerPrecision(buildRowsFragmentSource(fragmentVariant, ground ? define : '')),
+    );
     gl.compileShader(fragment);
     const program = gl.createProgram() as WebGLProgram;
     gl.attachShader(program, vertex);
@@ -1617,7 +1649,13 @@ function locationsOf(gl: WebGL2RenderingContext, program: WebGLProgram): RowsUni
     ghostNode: at('u_ghost_node'),
     groundDepth: at('u_ground_depth'),
     groundUnproject: at('u_ground_unproject'),
-    groundRise: at('u_ground_rise'),
+    groundLift: at('u_ground_lift'),
+    groundTransition: at('u_ground_transition'),
+    groundGlobe: at('u_ground_globe'),
+    groundMain: at('u_ground_main'),
+    groundMainCenter: at('u_ground_main_center'),
+    groundFallback: at('u_ground_fallback'),
+    groundFallbackCenter: at('u_ground_fallback_center'),
     groundTiles: at('u_ground_tiles'),
     groundBlocks: at('u_ground_blocks'),
     groundCount: at('u_ground_count'),

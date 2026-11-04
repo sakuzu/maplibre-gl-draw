@@ -19,6 +19,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { GpuLedger } from '../../gpu-ledger.js';
 import { beginRenderFrame } from '../../shaders/frame.js';
 import { calculateOffsetUniforms, type ShaderData } from '../../shaders/helpers.js';
+import { TerrainContext } from '../../terrain/context.js';
 import { DRAPE_GROUND_BLOCK_TEXELS } from '../../terrain/drape/ground-depth.js';
 import { ROW_STATE_WIDTH, type RowStateBinding } from '../row-state.js';
 import {
@@ -449,7 +450,10 @@ describe('RowsRenderer', () => {
       (mock.gl as unknown as Record<string, number>).drawingBufferWidth = width;
       (mock.gl as unknown as Record<string, number>).drawingBufferHeight = height;
       const ledger = new GpuLedger();
-      const renderer = new RowsRenderer(null, mock.gl, 1, undefined, ledger);
+      // The terrain of the frame: its Mercator units of a meter of elevation
+      const terrain = new TerrainContext();
+      terrain.renderState = { ...terrain.renderState, elevationScale: 1 / 32_000_000 };
+      const renderer = new RowsRenderer(null, mock.gl, 1, terrain, ledger);
       renderer.ensureShader(SHADER_DATA);
       expect(renderer.groundReady).toBe(true);
       const before = ledger.snapshot().byOwner.rows ?? 0;

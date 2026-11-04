@@ -1033,16 +1033,20 @@ Each item has the same five parts.
   checks its size against the canvas from `_fboDepthTexture.size`; the
   shader of the rows (`GROUND_DEPTH_GLSL` in
   `src/view/terrain/drape/ground-depth.ts`) unpacks it, interpolates it to
-  the device pixel and takes it back through the inverse of the flat
-  projection to the ground. Where the texture cannot be taken, and on the
-  globe, the rows are drawn as out of the band.
+  the device pixel and takes it back to the ground through the projection
+  of `projectTileFor3D` (on the flat map, on the globe and in the
+  transition). Where the texture cannot be taken, the rows are drawn as
+  out of the band.
 - Symptoms when it breaks — a changed packing reads the ground at the
   wrong place: the polygons and the lines of the rows in the drape band
   slide along the rays of the camera or vanish; a texture no longer
   handed out, or of another size, draws them as out of the band.
 - Check when upgrading — `src/view/terrain/drape/ground-depth.test.ts`
-  packs as the 6.11.1 shader does; compare `terrain_depth.fragment.glsl`,
-  `drawDepth`, `getFramebuffer` and `getTerrainData` with the new source.
+  packs as the 6.11.1 shader does, and
+  `src/view/terrain/drape/ground-depth-gpu.test.ts` reads it back on a
+  real WebGL2; compare `terrain_depth.fragment.glsl`, `drawDepth`,
+  `getFramebuffer`, `getTerrainData` and `interpolateProjectionFor3D`
+  with the new source.
 - Conditions for removal — none while the ground of a pixel is read back
   from the depth MapLibre draws.
 

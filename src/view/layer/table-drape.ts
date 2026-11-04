@@ -52,7 +52,6 @@ import { type EnuEdit, inverseEnuEdit, moveEnuPosition } from '../../geometry/en
 import { drawPropertyKey } from '../../shared/properties.js';
 import type { Coordinate } from '../../store/types.js';
 import { dashCoefficientsOf } from '../renderers/line/dash.js';
-import { rowsVariantOf } from '../renderers/rows/rows-shader.js';
 import type { ShaderData } from '../shaders/helpers.js';
 import {
   getRenderableTerrainTiles,
@@ -566,9 +565,8 @@ export class TableDrape {
    * the other elements decides it), the polygons and the lines of the rows read the ground seen
    * at each pixel (`TableDrapePainter.order` 'ground'), read back from the depth of the terrain
    * maplibre draws: the frame holds it and the tiles of the terrain drawn. Where that depth
-   * cannot be taken (`getTerrainDepth`), or on the globe (the ground is read back through the
-   * inverse of the projection of the flat map), no frame is planned, and the rows are drawn as
-   * out of the band. For the references of the measures ('each', 'each-near'),
+   * cannot be taken (`getTerrainDepth`), no frame is planned, and the rows are drawn as out of the
+   * band. For the references of the measures ('each', 'each-near'),
    * they are painted on the drape of the rows, binned into the tiles here.
    *
    * @param keepGround Whether a frame is wanted out of the band too: rows packed for the ground
@@ -623,9 +621,6 @@ export class TableDrape {
     // Out of the band, the rows packed for the ground read it until they are cut again for the
     // terrain; where the polygons and the lines are drawn flat, they are drawn so at once
     if (!inBand && !(ground && keepGround && !input.flattened)) return this.unused(reason);
-    // The ground is read back through the inverse of the projection of the flat map: on the
-    // globe the rows are drawn as out of the band
-    if (ground && rowsVariantOf(input.shaderData) === 'globe') return this.unused('ground-globe');
 
     const tiles = getRenderableTerrainTiles(input.mapTerrain);
     if (tiles.length === 0) return this.unused('no-dem-tiles');
