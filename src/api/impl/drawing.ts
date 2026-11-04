@@ -53,6 +53,9 @@ export function createDrawing(
           bytes: memory.bytes,
           bufferBytes: memory.bufferBytes,
           textureBytes: memory.textureBytes,
+          peakBytes: memory.peakBytes,
+          allocations: memory.allocations,
+          byOwner: memory.byOwner,
         });
       },
       terrain(): TerrainDiagnostics {

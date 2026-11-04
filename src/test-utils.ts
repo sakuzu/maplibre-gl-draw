@@ -58,6 +58,7 @@ import { MemoryStore } from './store/memory.js';
 import type { Store } from './store/store.js';
 import { createTableStore } from './store/table-memory.js';
 import { createRowBlockDataBuilder, type RowInput } from './table/row-group-builder.js';
+import { GpuLedger } from './view/gpu-ledger.js';
 import { FeatureDrawer } from './view/renderers/drawer.js';
 import type { ImageRenderer } from './view/renderers/image.js';
 import type { SDFLineRenderer } from './view/renderers/line/sdf-line.js';
@@ -328,6 +329,7 @@ export function createModeHarness(options: {
     map,
     store,
     terrain: {} as TerrainContext,
+    gpu: new GpuLedger(),
     pixelRatio: { resolve: () => 1, getScaleFactor: () => 1 },
     autoNameGenerator,
     messages: resolveMessages(),

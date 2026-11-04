@@ -57,6 +57,28 @@ export interface TerrainSurface {
   generation(): number;
 }
 
+/**
+ * The ledger of the GPU memory of the instance, for what an extension allocates with the context
+ * it is given: what it records is in `draw.memory` and `draw.debug.gpu()`.
+ *
+ * Record every buffer and texture when its storage is given (`bufferData`, `texStorage2D`), under
+ * a name of your own, and release it when it is deleted. Recording the same object again replaces
+ * its size.
+ */
+export interface GpuMemoryRecord {
+  /**
+   * Records a buffer or a texture
+   *
+   * @param object - The buffer or the texture
+   * @param owner - The name it is counted under
+   * @param kind - What it is
+   * @param bytes - Its size
+   */
+  record(object: object | null, owner: string, kind: 'buffer' | 'texture', bytes: number): void;
+  /** Takes a deleted buffer or texture out */
+  release(object: object | null): void;
+}
+
 /** The automatic names of new features, layers and groups. */
 export interface NameGenerator {
   /**
@@ -116,6 +138,8 @@ export interface ScreenContext {
 export interface ExtensionContext {
   /** The whole public API; an extension reads and writes the document through it */
   readonly draw: Draw;
+  /** The ledger of the GPU memory, for what the extension allocates */
+  readonly gpu: GpuMemoryRecord;
   /** The Store, to read the document and the state and to subscribe to their changes */
   readonly store: StoreView;
   /**

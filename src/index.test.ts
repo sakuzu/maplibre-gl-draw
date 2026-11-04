@@ -103,6 +103,7 @@ const MAIN = [
   'FileData',
   'FillRenderer',
   'GpuMemoryDiagnostics',
+  'GpuMemoryRecord',
   'DocumentSize',
   'CaptureImageOptions',
   'MemoryBytes',

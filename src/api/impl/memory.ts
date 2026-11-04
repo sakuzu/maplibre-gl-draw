@@ -121,6 +121,8 @@ function rowsSize(size: { readonly rows: number; readonly positions: number }): 
  */
 interface InstanceMemory {
   gpuBytes(): number;
+  peakGpuBytes(): number;
+  gpuAllocations(): number;
   jsBytes(): number;
 }
 
@@ -138,12 +140,14 @@ const instances = new Set<InstanceMemory>();
 export function createMemory(deps: {
   readonly store: StoreView;
   readonly shownStores: () => readonly StoreView[];
-  readonly gpuBytes: () => number;
+  readonly gpu: () => { bytes: number; peakBytes: number; allocations: number };
 }): { memory: MemoryResource; dispose: () => void } {
   /** The limit set (null: the one of the device) */
   let limit: number | null = null;
   const instance: InstanceMemory = {
-    gpuBytes: deps.gpuBytes,
+    gpuBytes: () => deps.gpu().bytes,
+    peakGpuBytes: () => deps.gpu().peakBytes,
+    gpuAllocations: () => deps.gpu().allocations,
     jsBytes: () => {
       let bytes = 0;
       for (const store of deps.shownStores()) bytes += documentJsBytes(store);
@@ -155,13 +159,19 @@ export function createMemory(deps: {
     get(): MemoryUsage {
       let jsBytes = 0;
       let gpuBytes = 0;
+      let peakGpuBytes = 0;
+      let gpuAllocations = 0;
       for (const each of instances) {
         jsBytes += each.jsBytes();
         gpuBytes += each.gpuBytes();
+        peakGpuBytes += each.peakGpuBytes();
+        gpuAllocations += each.gpuAllocations();
       }
       return Object.freeze({
         jsBytes,
         gpuBytes,
+        peakGpuBytes,
+        gpuAllocations,
         bytes: jsBytes + gpuBytes,
         limitBytes: limit ?? deviceMemoryLimitBytes(),
       });

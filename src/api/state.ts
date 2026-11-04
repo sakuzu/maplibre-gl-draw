@@ -164,6 +164,12 @@ export interface GpuMemoryDiagnostics {
   readonly bufferBytes: number;
   /** The bytes of the textures (and of the render buffers the drawing draws into) */
   readonly textureBytes: number;
+  /** The most bytes held at once since the instance was made */
+  readonly peakBytes: number;
+  /** The allocations made since the instance was made */
+  readonly allocations: number;
+  /** The bytes by what holds them */
+  readonly byOwner: Readonly<Record<string, number>>;
 }
 
 /**

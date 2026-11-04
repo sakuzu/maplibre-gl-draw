@@ -35,7 +35,10 @@ writing it. Its changes are listed after those of 3.0.0.
   What is kept on the GPU as offsets from an origin follows the rule of
   the library: `rebasedRetainedOrigin`, `retainedOriginErrorPx`,
   `RETAINED_ORIGIN_TOLERANCE_PX`, and `rowStateMovedViews` for the rows
-  moved on the GPU. `createProgram` takes the outputs a transform feedback
+  moved on the GPU. An extension records what it allocates in the ledger
+  of the instance (`ExtensionContext.gpu`, `GpuMemoryRecord`), and
+  `draw.memory.get()` and `draw.debug.gpu()` tell the most bytes held at
+  once and the allocations made. `createProgram` takes the outputs a transform feedback
   captures, and `ProgramCompile` links a program a frame need not wait
   for (`KHR_parallel_shader_compile`).
 - The entry `@sakuzu/maplibre-gl-draw/kasane`, experimental (it may
