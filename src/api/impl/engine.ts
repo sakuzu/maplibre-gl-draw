@@ -33,7 +33,7 @@ import {
 import type { EngineModeContext } from '../../modes/handler.js';
 import type { ModeManager } from '../../modes/manager.js';
 import { SelectMode } from '../../modes/select/mode.js';
-import { createCoordinateTransform } from '../../shared/math/index.js';
+import { createCoordinateTransform, getAnchorProjector } from '../../shared/math/index.js';
 import { SketchController } from '../../sketches/sketch-controller.js';
 import { SnapIndicatorRenderer } from '../../snapping/indicator.js';
 import { createDisplaySnapProviders } from '../../snapping/providers/display.js';
@@ -259,6 +259,13 @@ export function createEngine(
     companions: featureCompanions,
     // A point of a layer held as rows is hit on its marker, as the points of the Store are
     pointMarkerReachPx: (style) => pointMarkerReachPx(style, featureStyle.point.point),
+    // On the terrain a point of a layer held as rows is hit where it is drawn on the screen,
+    // with the anchor projection of this map, as the points of the Store are
+    anchors: {
+      project: (lng, lat) => getAnchorProjector(map)?.project(lng, lat) ?? null,
+      searchBoxes: (point, reachPx, near) =>
+        getAnchorProjector(map)?.searchBoxes?.(point.x, point.y, reachPx, near) ?? null,
+    },
   };
   const hitTestTopmost = createTopmostHitTester(topmostDeps);
 

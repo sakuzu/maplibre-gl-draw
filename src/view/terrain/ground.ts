@@ -28,7 +28,9 @@ import {
   getTerrainElevationMeters,
   type RenderableTerrainTile,
   type TerrainLike,
+  type TerrainTileSource,
 } from './detect.js';
+import type { MercatorRect } from './tessellation.js';
 
 /** The part of the map the ground elevation is asked from (`Map.queryTerrainElevation`) */
 export interface TerrainElevationQuery {
@@ -44,40 +46,88 @@ function tileKey(wrap: number, z: number, x: number, y: number): number {
   return ((wrap + MAX_WRAP) * size + y) * size + x;
 }
 
+/** The DEM a tile drawn is drawn with, as the coverage tells them apart */
+interface TileDem {
+  /** The DEM tile and the data that arrived for it (empty while none has) */
+  readonly id: string;
+  /** One pixel of the DEM, in Mercator units (0 while none has arrived) */
+  readonly pixel: number;
+}
+
 /**
- * The terrain tiles maplibre draws in the current frame, indexed for a point lookup
+ * The terrain tiles maplibre draws in the current frame, indexed for a point lookup, with the
+ * DEM each is drawn with
  *
  * A point is covered here exactly when maplibre's coverage index (`wrap/z/x/y`, searched from
  * the finest zoom) finds a drawn tile for it, which is when `queryTerrainElevation` samples the
  * drawn surface.
+ *
+ * The elevations under a tile change when the tile comes or goes, and also while the tiles drawn
+ * stay the same: its DEM arrives after it is first drawn (it is flat until then), and a finer
+ * DEM replaces the coarser one it is drawn with meanwhile. Each update tells where
+ * (`changedRegions`), so what baked an elevation reads again only what lies there.
  */
 export class TerrainCoverage {
-  /** Identifies the tile set (it changes whenever the set changes) */
+  /** Identifies the tile set (it changes whenever the set changes, not when a DEM arrives) */
   key = '';
+  /**
+   * Where the elevations may have changed in the last update that changed something (Mercator,
+   * on the copy of the world of each tile): the tiles that came or went and the tiles drawn
+   * with another DEM, each with a pixel of its DEM around it (maplibre fills the border of the
+   * neighbouring DEM tiles in place when one arrives)
+   */
+  changedRegions: readonly MercatorRect[] = [];
   /** The zoom levels present, finest first (the order maplibre searches them in) */
   private zooms: number[] = [];
   private tiles = new Set<number>();
+  /** The DEM of each tile drawn, by the name of the tile (`wrap/z/x/y`) */
+  private dems = new Map<string, TileDem>();
+  /** A number for each elevation data seen (by the identity of the object: a reload makes one) */
+  private readonly demSerials = new WeakMap<object, number>();
+  private nextDemSerial = 1;
 
   /**
-   * Replaces the tile set
+   * Replaces the tile set and the DEM each tile is drawn with
    *
-   * @returns Whether the set changed
+   * @param sourceOf The DEM a tile is drawn with (null while none has arrived). Without it only
+   *   the tile set is compared
+   * @returns Whether the elevations may have changed (the set changed, or a tile is drawn with
+   *   another DEM)
    */
-  update(tiles: readonly RenderableTerrainTile[]): boolean {
+  update(
+    tiles: readonly RenderableTerrainTile[],
+    sourceOf?: (tile: RenderableTerrainTile) => TerrainTileSource | null,
+  ): boolean {
     let key = '';
-    for (const tile of tiles) key += `${tile.wrap ?? 0}/${tile.z}/${tile.x}/${tile.y},`;
-    if (key === this.key) return false;
-
-    this.key = key;
-    this.tiles = new Set();
-    const zooms = new Set<number>();
+    const dems = new Map<string, TileDem>();
     for (const tile of tiles) {
-      const wrap = tile.wrap ?? 0;
-      if (Math.abs(wrap) > MAX_WRAP) continue;
-      this.tiles.add(tileKey(wrap, tile.z, tile.x, tile.y));
-      zooms.add(tile.z);
+      const name = `${tile.wrap ?? 0}/${tile.z}/${tile.x}/${tile.y}`;
+      key += `${name},`;
+      const source = sourceOf?.(tile) ?? null;
+      dems.set(
+        name,
+        source
+          ? { id: `${source.key}#${this.demSerial(source.dem)}`, pixel: demPixel(source) }
+          : NO_DEM,
+      );
     }
-    this.zooms = [...zooms].sort((a, b) => b - a);
+    const changed = changedTiles(this.dems, dems);
+    if (key === this.key && changed.length === 0) return false;
+
+    this.changedRegions = changed;
+    this.dems = dems;
+    if (key !== this.key) {
+      this.key = key;
+      this.tiles = new Set();
+      const zooms = new Set<number>();
+      for (const tile of tiles) {
+        const wrap = tile.wrap ?? 0;
+        if (Math.abs(wrap) > MAX_WRAP) continue;
+        this.tiles.add(tileKey(wrap, tile.z, tile.x, tile.y));
+        zooms.add(tile.z);
+      }
+      this.zooms = [...zooms].sort((a, b) => b - a);
+    }
     return true;
   }
 
@@ -88,10 +138,22 @@ export class TerrainCoverage {
    */
   clear(): boolean {
     if (this.key === '') return false;
+    this.changedRegions = changedTiles(this.dems, new Map());
     this.key = '';
     this.zooms = [];
     this.tiles = new Set();
+    this.dems = new Map();
     return true;
+  }
+
+  /** The number of an elevation data */
+  private demSerial(dem: object): number {
+    let serial = this.demSerials.get(dem);
+    if (serial === undefined) {
+      serial = this.nextDemSerial++;
+      this.demSerials.set(dem, serial);
+    }
+    return serial;
   }
 
   /**
@@ -117,6 +179,45 @@ export class TerrainCoverage {
     }
     return false;
   }
+}
+
+/** The DEM of a tile drawn while none has arrived for it (it is drawn flat) */
+const NO_DEM: TileDem = { id: '', pixel: 0 };
+
+/** One pixel of a DEM tile, in Mercator units */
+function demPixel(source: TerrainTileSource): number {
+  return 1 / (2 ** source.z * source.dim);
+}
+
+/**
+ * The regions of the tiles whose elevations may have changed between two updates: those that
+ * came, went or are drawn with another DEM, each with a pixel of its DEMs around it
+ */
+function changedTiles(
+  before: ReadonlyMap<string, TileDem>,
+  after: ReadonlyMap<string, TileDem>,
+): MercatorRect[] {
+  const regions: MercatorRect[] = [];
+  for (const [name, dem] of after) {
+    const old = before.get(name);
+    if (old?.id !== dem.id) regions.push(tileRegion(name, Math.max(dem.pixel, old?.pixel ?? 0)));
+  }
+  for (const [name, dem] of before) {
+    if (!after.has(name)) regions.push(tileRegion(name, dem.pixel));
+  }
+  return regions;
+}
+
+/** The Mercator rectangle of a tile named `wrap/z/x/y`, grown by a margin on every side */
+function tileRegion(name: string, margin: number): MercatorRect {
+  const [wrap, z, x, y] = name.split('/').map(Number);
+  const size = 1 / 2 ** z;
+  return {
+    x0: wrap + x * size - margin,
+    y0: y * size - margin,
+    x1: wrap + (x + 1) * size + margin,
+    y1: (y + 1) * size + margin,
+  };
 }
 
 /**

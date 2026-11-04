@@ -52,11 +52,16 @@ import {
   type FeatureTablesInternals,
   featureTablesInternals,
 } from '../../feature-table/feature-tables.js';
-import { hitTestLayerTable, type TableRowHit } from '../../feature-table/hit-test.js';
+import {
+  hitTestLayerTable,
+  type TableRowHit,
+  type TableScreenHit,
+} from '../../feature-table/hit-test.js';
 import type { LayerTable, RowGroup } from '../../feature-table/layer-table.js';
 import { rowFeatureToRead } from '../../feature-table/row-read.js';
 import { STATE_UNHIT_MASK } from '../../feature-table/row-state.js';
 import type { LngLat, ScreenPoint } from '../../shared/math/index.js';
+import { wrapLongitude } from '../../shared/math/longitude.js';
 import { getDisplayFeatures } from '../../store/local-visibility.js';
 import type { Store } from '../../store/store.js';
 import type { Coordinate, Feature, FeatureStyle, FeatureType, Layer } from '../../store/types.js';
@@ -196,6 +201,31 @@ export interface TopmostHitTestDeps {
    * columns: a point is hit anywhere on its marker. Only the click tolerance when omitted
    */
   pointMarkerReachPx?(style: FeatureStyle | undefined): number;
+  /**
+   * The anchor projection of the points (terrain aware), for the rows held as columns: their
+   * points are drawn without a depth test, so they are hit where they are drawn on the screen,
+   * as the points of the Store are (`AnchorScreenProjector` of the HitTestService). When
+   * omitted, or while it answers null (no terrain), they are hit at the coordinate of the click
+   */
+  anchors?: TopmostAnchorProjector;
+}
+
+/**
+ * The anchor projection the rows held as columns are hit with on the screen
+ *
+ * @internal
+ */
+export interface TopmostAnchorProjector {
+  /**
+   * Where the anchor of a position is drawn on the screen, with the elevation it is drawn at
+   * (null when it is not usable, or behind the camera)
+   */
+  project(lng: number, lat: number): ScreenPoint | null;
+  /**
+   * The boxes that hold every position whose anchor is drawn within `reachPx` of a point of the
+   * screen (`AnchorProjector.searchBoxes`); null when the projection is not usable
+   */
+  searchBoxes(point: ScreenPoint, reachPx: number, near: LngLat): number[] | null;
 }
 
 /**
@@ -297,6 +327,7 @@ export function createTopmostHitTester(deps: TopmostHitTestDeps): HitTestTopmost
     copies: readonly Coordinate[],
     tolerance: number,
     skip: ((group: RowGroup, row: number) => boolean) | undefined,
+    onScreen: TableScreenHit | undefined,
   ): { hit: TableRowHit; coordinate: Coordinate } | null => {
     // A point is hit anywhere on its marker: the candidates are looked for as far as the
     // largest marker of the styles of the rows reaches
@@ -325,10 +356,39 @@ export function createTopmostHitTester(deps: TopmostHitTestDeps): HitTestTopmost
         test,
         // A row of a group hidden by this client is not hit
         skip,
+        onScreen,
       });
       if (hit) return { hit, coordinate };
     }
     return null;
+  };
+
+  /**
+   * How the points of the rows are hit on the screen at a click (undefined where they are hit at
+   * the coordinate: without the anchor projection, or without terrain)
+   */
+  const screenHitOf = (
+    tables: FeatureTablesInternals,
+    point: ScreenPoint,
+    near: LngLat,
+  ): TableScreenHit | undefined => {
+    const anchors = deps.anchors;
+    if (!anchors) return undefined;
+    const clickPx = deps.clickTolerancePx ?? DEFAULT_HIT_TEST_OPTIONS.clickTolerance;
+    const markerReach = deps.pointMarkerReachPx;
+    // As far as at the coordinate: the tolerance of the click, or the marker where it is larger
+    const reachPx = (style: FeatureStyle): number =>
+      markerReach ? Math.max(clickPx, markerReach(style)) : clickPx;
+    const boxes = anchors.searchBoxes(point, Math.max(clickPx, maxMarkerReach(tables, deps)), near);
+    if (!boxes) return undefined;
+    return {
+      boxes: storedCopiesOfBoxes(boxes),
+      distancePx: (lng, lat) => {
+        const at = anchors.project(lng, lat);
+        return at ? Math.hypot(at.x - point.x, at.y - point.y) : null;
+      },
+      reachPx,
+    };
   };
 
   /**
@@ -359,6 +419,8 @@ export function createTopmostHitTester(deps: TopmostHitTestDeps): HitTestTopmost
       (groupHandle >= 0 && tables.groups.isLocked(groupHandle)) ||
       layer.locked === true;
     const distancePx = (): number => {
+      // A point hit on the screen is measured there
+      if (hit.screenDistancePx !== undefined) return hit.screenDistancePx;
       const distance = hit.shape
         ? (hitTestService.distanceOfShape?.(hit.type, hit.shape, coordinate, hit.tolerance) ?? 0)
         : (hitTestService.hitTestAll(point, unproject, [hit.feature as Feature])[0]?.distance ?? 0);
@@ -391,11 +453,12 @@ export function createTopmostHitTester(deps: TopmostHitTestDeps): HitTestTopmost
     hold: boolean,
     context: CompanionHitContext | null,
     visible: VisibilityLookup,
+    onScreen: TableScreenHit | undefined,
   ): TopHit | null => {
     const layer = store.getLayer(table.layerId);
     if (!layer || layer.visible === false || store.isHidden(table.layerId)) return null;
     const skip = hiddenGroupRows(tables);
-    const front = frontRowOf(tables, table, copies, tolerance, skip);
+    const front = frontRowOf(tables, table, copies, tolerance, skip, onScreen);
     const rowHit = (): TopHit | null =>
       front ? rowHitOf(tables, table, layer, front, point, hold) : null;
     const companions = deps.companions;
@@ -472,6 +535,8 @@ export function createTopmostHitTester(deps: TopmostHitTestDeps): HitTestTopmost
     //    side, so it is performed only once, at the moment a layer entry is first met.
     let storeHits: Set<string> | undefined;
     let byLayer: Map<string, Feature[]> | undefined;
+    // How the points of the rows are hit on the screen, worked out at the first layer of rows
+    let onScreen: TableScreenHit | undefined | null = null;
     const layerOrder = store.getLayerOrder();
 
     for (let i = layerOrder.length - 1; i >= 0; i--) {
@@ -480,6 +545,7 @@ export function createTopmostHitTester(deps: TopmostHitTestDeps): HitTestTopmost
       // A layer held as rows is tested on its rows: each row itself, then its companions
       const table = tables?.layerTable(entryId);
       if (tables && table) {
+        if (onScreen === null) onScreen = screenHitOf(tables, point, lngLat);
         const hit = rowsOf(
           tables,
           table,
@@ -489,6 +555,7 @@ export function createTopmostHitTester(deps: TopmostHitTestDeps): HitTestTopmost
           options?.hold === true,
           companion,
           visible,
+          onScreen,
         );
         if (hit) return hit;
         continue;
@@ -555,6 +622,28 @@ function maxMarkerReach(
   }
   MARKER_REACH.set(tables, { revision: styles.revision, reach });
   return reach;
+}
+
+/**
+ * Boxes on the copy of the world drawn, brought onto the copies the rows are stored on
+ * (longitudes in [-180, 180]): each box moved by whole turns until its middle is in that range,
+ * and given again on the neighbouring copy where it runs past ±180 (as `clickCopies` does with a
+ * click)
+ */
+function storedCopiesOfBoxes(boxes: readonly number[]): number[] {
+  const out: number[] = [];
+  for (let at = 0; at + 3 < boxes.length; at += 4) {
+    const middle = (boxes[at] + boxes[at + 2]) / 2;
+    const shift = wrapLongitude(middle) - middle;
+    const minX = boxes[at] + shift;
+    const maxX = boxes[at + 2] + shift;
+    const minY = boxes[at + 1];
+    const maxY = boxes[at + 3];
+    out.push(minX, minY, maxX, maxY);
+    if (maxX > 180) out.push(minX - 360, minY, maxX - 360, maxY);
+    if (minX < -180) out.push(minX + 360, minY, maxX + 360, maxY);
+  }
+  return out;
 }
 
 /**

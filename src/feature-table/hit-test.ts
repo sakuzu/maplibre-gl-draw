@@ -52,7 +52,39 @@ export interface TableHitInput {
   test(feature: Feature, coordinate: Coordinate, tolerance: number): boolean;
   /** Whether a row is left out besides its state (its group hidden by this client) */
   skip?(group: RowGroup, row: number): boolean;
+  /**
+   * The points drawn without a depth test (on the terrain), hit where they are drawn on the
+   * screen: absent where they are hit at the coordinate, as the rows of the other types
+   */
+  readonly onScreen?: TableScreenHit;
 }
+
+/**
+ * How the points of the rows are hit on the screen: the anchor of each point projected as it is
+ * drawn (its position and the ground elevation under it), compared with the click
+ *
+ * The line of sight under the click can meet a ridge in front of a point that is still drawn
+ * behind it, so the coordinate of the click is no measure of a point there.
+ *
+ * @internal
+ */
+export interface TableScreenHit {
+  /**
+   * The boxes (degrees, `[minX, minY, maxX, maxY]` one after another, on the copies of the world
+   * the rows are stored on) that hold every position whose point may be drawn under the click
+   */
+  readonly boxes: readonly number[];
+  /**
+   * The distance on the screen (CSS px) from the click to where the anchor of a position is
+   * drawn; null where it is not drawn (behind the camera)
+   */
+  distancePx(lng: number, lat: number): number | null;
+  /** How far from the click on the screen a point of a style is hit (CSS px) */
+  reachPx(style: FeatureStyle): number;
+}
+
+/** The types whose rows are hit on the screen when {@link TableHitInput.onScreen} is given */
+const SCREEN_TYPES: ReadonlySet<FeatureType> = new Set<FeatureType>(['Point', 'MultiPoint']);
 
 /**
  * A row hit
@@ -70,6 +102,8 @@ export interface TableRowHit {
   readonly shape: HitShape | null;
   /** The feature it was tested as (null when it was tested by its shape) */
   readonly feature: Feature | null;
+  /** The distance on the screen from the click (CSS px), for a point hit on the screen */
+  readonly screenDistancePx?: number;
 }
 
 /**
@@ -85,16 +119,37 @@ export function hitTestLayerTable(
   const [x, y] = input.coordinate;
   const reach = input.reach;
   const candidates: Array<{ group: RowGroup; row: number }> = [];
-  internals.searchRowBoxes(table, x - reach, y - reach, x + reach, y + reach, (group, row) => {
+  const take = (group: RowGroup, row: number): void => {
     if ((group.state[row] & STATE_UNHIT_MASK) !== 0) return;
     if (input.skip?.(group, row)) return;
     candidates.push({ group, row });
-  });
+  };
+  const onScreen = input.onScreen;
+  if (onScreen) {
+    // The rows near the click, and the points along the line of sight under it
+    internals.searchRowBoxesIn(
+      table,
+      [x - reach, y - reach, x + reach, y + reach, ...onScreen.boxes],
+      take,
+    );
+  } else {
+    internals.searchRowBoxes(table, x - reach, y - reach, x + reach, y + reach, take);
+  }
   // The front first: the rows are found in the order they are drawn
   for (let i = candidates.length - 1; i >= 0; i--) {
     const { group, row } = candidates[i];
     const type = rowType(group.data, row);
-    const tolerance = input.toleranceOf(type, internals.styles.get(group.data.styles[row]));
+    const style = internals.styles.get(group.data.styles[row]);
+    const tolerance = input.toleranceOf(type, style);
+    if (onScreen && SCREEN_TYPES.has(type)) {
+      // A point is hit where its anchor is drawn, never at the coordinate
+      const distance = screenDistanceOf(group, row, onScreen);
+      if (distance !== null && distance <= onScreen.reachPx(style)) {
+        const shape = rowHitShape(group, row);
+        return { group, row, type, tolerance, shape, feature: null, screenDistancePx: distance };
+      }
+      continue;
+    }
     const shape = rowHitShape(group, row);
     let hit = shape ? input.testShape(type, shape, input.coordinate, tolerance) : null;
     if (hit === null) {
@@ -107,6 +162,24 @@ export function hitTestLayerTable(
     if (hit) return { group, row, type, tolerance, shape, feature: null };
   }
   return null;
+}
+
+/**
+ * The distance on the screen from the click to the nearest point of a row, as its anchors are
+ * drawn (null when none is drawn)
+ */
+function screenDistanceOf(group: RowGroup, row: number, onScreen: TableScreenHit): number | null {
+  const at = geometryAt(group, row);
+  if (!at) return null;
+  const { reader } = at;
+  const coords = reader.coords;
+  const stride = reader.stride;
+  let nearest: number | null = null;
+  for (let v = reader.vertexStart(at.at); v < reader.vertexStart(at.at + 1); v++) {
+    const distance = onScreen.distancePx(coords[v * stride], coords[v * stride + 1]);
+    if (distance !== null && (nearest === null || distance < nearest)) nearest = distance;
+  }
+  return nearest;
 }
 
 /**

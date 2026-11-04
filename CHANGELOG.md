@@ -553,6 +553,16 @@ writing it. Its changes are listed after those of 3.0.0.
   on a companion (a line drawn away from its feature) went through it.
   The rows are now asked as the features are, from the front, each row
   itself and then its companions.
+- The points on the terrain stand on the ground as soon as its DEM
+  arrives: a point drawn before the DEM of its tile arrived, or while a
+  coarser DEM stood in for it, kept that elevation (0 m, or the coarser
+  one) until a zoom changed the tiles of the terrain drawn. The
+  elevations are read again when the DEM of a tile drawn arrives or is
+  replaced by a finer one, for the points under that tile only.
+- The points of a layer held as rows are hit on the terrain where they are
+  drawn, as the points of the other features are: they were hit at the
+  position the click unprojects to, so a point drawn faint behind a ridge
+  could not be selected, the line of sight landing on the ridge in front.
 
 ### Migration to 3.0.0
 

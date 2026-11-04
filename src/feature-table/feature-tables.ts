@@ -478,6 +478,18 @@ export interface FeatureTablesInternals {
     visit: (group: RowGroup, row: number) => void,
   ): void;
   /**
+   * The rows of a layer whose boxes meet one of several boxes, each once, in the order of the
+   * layer (as {@link FeatureTablesInternals.searchRowBoxes} for one)
+   *
+   * @param boxes The boxes, `[minX, minY, maxX, maxY]` one after another
+   * @param visit Receives each row, in order, with the group it is read from
+   */
+  searchRowBoxesIn(
+    table: LayerTable,
+    boxes: readonly number[],
+    visit: (group: RowGroup, row: number) => void,
+  ): void;
+  /**
    * Sets how the box of the rows of a type is worked out from their features (the type of an
    * extension that covers more than its positions); undefined puts it back to its positions
    */
@@ -1009,35 +1021,55 @@ class FeatureTablesStore implements FeatureTablesInternals {
     maxY: number,
     visit: (group: RowGroup, row: number) => void,
   ): void {
-    table.visitInOrder(this.rowsInBox(table, minX, minY, maxX, maxY), visit);
+    table.visitInOrder(this.rowsInBoxes(table, [minX, minY, maxX, maxY]), visit);
   }
 
-  /** The rows of a layer whose boxes meet a box, by the group they are read from */
-  private rowsInBox(
+  searchRowBoxesIn(
     table: LayerTable,
-    minX: number,
-    minY: number,
-    maxX: number,
-    maxY: number,
-  ): Map<RowGroup, number[]> {
+    boxes: readonly number[],
+    visit: (group: RowGroup, row: number) => void,
+  ): void {
+    table.visitInOrder(this.rowsInBoxes(table, boxes), visit);
+  }
+
+  /**
+   * The rows of a layer whose boxes meet one of the boxes (`[minX, minY, maxX, maxY]` one after
+   * another), each once, by the group they are read from
+   */
+  private rowsInBoxes(table: LayerTable, boxes: readonly number[]): Map<RowGroup, number[]> {
     const found = new Map<RowGroup, number[]>();
+    // A row found in a box before is not taken again (one box needs no check)
+    const seen = boxes.length > 4 ? new Set<RowHandle>() : null;
     // The rows found come by neighbourhoods, often many of one group after another: the group of
     // the last row and its list are kept
     let lastGroup: RowGroup | null = null;
     let lastRows: number[] = [];
-    for (const handle of this.rowBoxes.search(table.serial, minX, minY, maxX, maxY)) {
-      const place = this.placeOf(handle);
-      if (!place || place.layer !== table) continue;
-      if (place.group !== lastGroup) {
-        lastGroup = place.group;
-        let rows = found.get(place.group);
-        if (!rows) {
-          rows = [];
-          found.set(place.group, rows);
+    for (let at = 0; at + 3 < boxes.length; at += 4) {
+      const handles = this.rowBoxes.search(
+        table.serial,
+        boxes[at],
+        boxes[at + 1],
+        boxes[at + 2],
+        boxes[at + 3],
+      );
+      for (const handle of handles) {
+        if (seen) {
+          if (seen.has(handle)) continue;
+          seen.add(handle);
         }
-        lastRows = rows;
+        const place = this.placeOf(handle);
+        if (!place || place.layer !== table) continue;
+        if (place.group !== lastGroup) {
+          lastGroup = place.group;
+          let rows = found.get(place.group);
+          if (!rows) {
+            rows = [];
+            found.set(place.group, rows);
+          }
+          lastRows = rows;
+        }
+        lastRows.push(place.row);
       }
-      lastRows.push(place.row);
     }
     return found;
   }

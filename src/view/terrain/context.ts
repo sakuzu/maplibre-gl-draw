@@ -415,11 +415,21 @@ export class TerrainContext {
   elevationCache = new Map<string, number>();
 
   /**
+   * The lowest and the highest ground of the terrain tiles drawn in the frame (meters, the
+   * elevations of the anchors), read once per frame by the hit testing of the anchors
+   * (undefined until it is read, null where the terrain cannot tell)
+   *
+   * @internal
+   */
+  groundRange: { min: number; max: number } | null | undefined = undefined;
+
+  /**
    * The generation of the DEM coverage
    *
-   * When the set of DEM tiles being drawn changes (a tile arrives, or the zoom changes), the
-   * already baked elevations become stale. Retained batches fetch the elevations again on a
-   * change of this value.
+   * When the set of DEM tiles being drawn changes (a tile arrives, or the zoom changes), or a
+   * tile drawn is drawn with another DEM (its DEM arrived, or a finer one replaced a coarser
+   * one), the already baked elevations become stale. Retained batches fetch the elevations
+   * again on a change of this value, those under `coverage.changedRegions` where they can tell.
    *
    * @internal
    */
@@ -513,6 +523,7 @@ export class TerrainContext {
     this.anchorFrame = INACTIVE_ANCHOR_FRAME;
     this.viewFrame = NO_VIEW_FRAME;
     this.elevationCache = new Map();
+    this.groundRange = undefined;
     this.occlusionCache = new Map();
     this.coverage.clear();
     this.fillCache.clear();

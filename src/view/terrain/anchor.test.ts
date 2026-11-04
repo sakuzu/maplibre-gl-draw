@@ -176,6 +176,39 @@ describe('anchor position computation', () => {
     );
     expect(getAnchorElevationGeneration(context)).toBe(first + 1);
   });
+
+  it('advances the generation when the DEM of a tile drawn arrives, the tiles staying the same', () => {
+    // maplibre draws its tiles before their DEM arrives (flat), and reads a coarser DEM until
+    // the finer one arrives (`getSourceTile(tileID, true)`)
+    const tileID = { canonical: { x: 0, y: 0, z: 1 }, wrap: 0 };
+    let source: { tileID: { key: string; canonical: { z: number } }; dem?: object } | undefined;
+    const terrain = {
+      getTerrainData: () => null,
+      getElevationForLngLatZoom: () => 0,
+      tileManager: {
+        getRenderableTiles: () => [{ tileID }],
+        getSourceTile: (id: unknown, searchForDEM: boolean) =>
+          id === tileID && searchForDEM ? source : undefined,
+      },
+    } as unknown as TerrainLike;
+    applyFrame(terrain);
+    const first = getAnchorElevationGeneration(context);
+    applyFrame(terrain);
+    expect(getAnchorElevationGeneration(context)).toBe(first);
+
+    // The coarser DEM arrives
+    source = { tileID: { key: 'z0', canonical: { z: 0 } }, dem: { dim: 256 } };
+    applyFrame(terrain);
+    expect(getAnchorElevationGeneration(context)).toBe(first + 1);
+    applyFrame(terrain);
+    expect(getAnchorElevationGeneration(context)).toBe(first + 1);
+
+    // The finer DEM replaces it
+    source = { tileID: { key: 'z1', canonical: { z: 1 } }, dem: { dim: 256 } };
+    applyFrame(terrain);
+    expect(getAnchorElevationGeneration(context)).toBe(first + 2);
+    expect(context.coverage.changedRegions).toHaveLength(1);
+  });
 });
 
 describe('injection into hit testing', () => {
