@@ -231,8 +231,10 @@ Import from the main entry unless you need one of the others.
   made objects at once: a store of rows and the building of its rows in a
   Worker. It is experimental and may change in a minor release
 - `@sakuzu/maplibre-gl-draw/webgl`: the building blocks for writing your
-  own shaders. It may change in a minor release; the main entry,
-  `/geometry` and `/table` follow semantic versioning
+  own shaders: the projection, the marks the terrain hides, and the rows
+  being dragged, drawn as the library draws them. It may change in a
+  minor release; the main entry, `/geometry` and `/table` follow semantic
+  versioning
 
 ## Compatibility
 

@@ -927,6 +927,49 @@ function drawSolidQuad(ctx: RenderContext, center: [number, number]): boolean {
 }
 ```
 
+地形の上に深度なしで印を描くシェーダーは、地形が隠す印を
+`TERRAIN_OCCLUSION_GLSL` で薄くします。CPU の `occlusionOpacity` と
+同じことです。頂点シェーダーの `OFFSET_MODE_GLSL` の後に置くと、
+`terrain_occlusion_opacity(offset, elevationMeters)` が、印を投影する
+差と、その下の地面の高さから、印の不透明度を返します。同じ式と同じ
+定数の判定を、シェーダーが地面を読む DEM のアトラスの上で行うので、
+バッファーに持った印は、カメラが動いても CPU の仕事が要りません。
+uniform は `TerrainOcclusionUniforms` が描くたびに書きます。位置が
+アトラスの外にあるときや、視線が地面をかすめるときは、
+`occlusionOpacity` と違う答えになることがあります。
+
+行で持つレイヤーの地物をまとめてドラッグしている間、ライブラリーは
+その行を GPU で動かして描き、離した後に書きます。行ごとに何かを描く
+シェーダー (点に添える印など) は、`ROW_STATE_GLSL` で同じように動かせます。
+
+- インスタンスごとに、自分のテクスチャー (`createRowStateTexture`) の
+  行の番号を持たせます。テクスチャーには、`draw.rendered.getDraggedRows()`
+  が渡す行の `rowStateOf(dragged, handle)` を書きます (`uploadRowState`)
+- 描く前に、テクスチャーをユニット `ROW_STATE_TEXTURE_UNIT` に結び、
+  `RowStateUniforms.write(rowStateBindingOf(dragged, texture), origin)`
+  で uniform を書きます
+- 頂点シェーダーでは、`rowStateMove(readRowState(row), offset)` が投影
+  する差を返します。ライブラリーが行の点を動かすのと同じく、移し、回し、
+  拡大縮小した差です
+
+binding はドラッグの動きを写して持ちます。ドラッグが終わってから
+行の位置を読み直すまでは、同じ binding で描くと、最後に描いた所に
+描けます。
+
+```glsl
+in vec2 a_offset;
+in float a_row;
+in float a_elevation_meters;
+out float v_opacity;
+
+void main() {
+    vec2 offset = rowStateMove(readRowState(a_row), a_offset);
+    vec4 clip = project_position_to_clipspace_from_offset(offset, u_projection_matrix);
+    v_opacity = terrain_occlusion_opacity(offset, a_elevation_meters);
+    gl_Position = clip;
+}
+```
+
 ## 関連する例
 
 - [Custom feature types](../examples/custom-feature-types.ja.md) では、

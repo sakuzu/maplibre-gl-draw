@@ -48,9 +48,9 @@ import { type RetainedDrawRun, retainedDrawRun } from '../draw-run.js';
 import {
   bindRowState,
   ROW_HIDDEN_POSITION_GLSL,
-  ROW_STATE_GLSL,
   type RowStateBinding,
   RowStateUniforms,
+  TABLE_ROWS_GLSL,
 } from '../row-state.js';
 import type { PolygonRendererScope } from './batch.js';
 import { buildEarcutInput } from './earcut-input.js';
@@ -520,7 +520,7 @@ export class SDFPolygonRenderer {
 ${rows ? '#define TABLE_ROWS' : ''}
 ${prelude}
 ${define}
-${projTransitionUniform}${OFFSET_MODE_GLSL}${TERRAIN_SHADE_VERTEX_GLSL}${ROW_STATE_GLSL}
+${projTransitionUniform}${OFFSET_MODE_GLSL}${TERRAIN_SHADE_VERTEX_GLSL}${TABLE_ROWS_GLSL}
 
 layout(location = 0) in vec2 a_pos;       // current position (relative, 64-bit on CPU)
 layout(location = 1) in vec4 a_color;     // color (RGBA)

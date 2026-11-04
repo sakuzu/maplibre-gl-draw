@@ -55,6 +55,7 @@ const WEBGL_CATEGORIES = [
   'Quads',
   'Lines',
   'Terrain',
+  'Rows being dragged',
   'Hit testing',
   'Supporting types',
 ];

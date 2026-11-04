@@ -22,7 +22,10 @@
  * symbol.
  */
 
+import type { RenderContext } from '../../api/extension/render.js';
+import type { OffsetUniforms } from '../shaders/helpers.js';
 import { drawnLongitude } from './anchor.js';
+import { terrainStateOf } from './binding.js';
 import type { TerrainContext } from './context.js';
 import type { TerrainLike } from './detect.js';
 import { groundElevationMeters } from './ground.js';
@@ -181,18 +184,17 @@ function glslFloat(value: number): string {
  *
  * It reads the elevations of the ground along the segment from the DEM atlas
  * (`dem_elevation_meters`, so it goes after `OFFSET_MODE_GLSL`), where the CPU version reads the
- * ground maplibre draws (`ground.ts`). `terrainGhostOpacity` takes the anchor as its Mercator
- * offset from the center and its height in Mercator units, and returns the opacity of the
- * symbol: {@link TERRAIN_GHOST_OPACITY} when the terrain hides it, 1 otherwise and while
- * `u_ghost_on` is 0.
+ * ground maplibre draws (`ground.ts`). `terrain_occlusion_opacity` takes the anchor as the offset
+ * it is projected from and the elevation of its ground in meters, and returns the opacity of the
+ * symbol: 0.35 when the terrain hides it, 1 otherwise and while `u_ghost_on` is 0.
+ * `terrainGhostOpacity` is the same test of an anchor given as its Mercator offset from the center
+ * and its height in Mercator units.
  *
- * The uniforms:
+ * The uniforms, which {@link TerrainOcclusionUniforms} writes:
  * - `u_ghost_on`: 1 while the terrain is drawn and the camera is known
  * - `u_ghost_camera`: the camera, its Mercator offset from the center and its height in Mercator
  *   units
  * - `u_ghost_node`: the node spacing of the terrain mesh in Mercator units (0 when not known)
- *
- * @internal
  */
 export const TERRAIN_OCCLUSION_GLSL = `
 uniform float u_ghost_on;
@@ -219,4 +221,80 @@ float terrainGhostOpacity(vec2 anchor, float anchorZ) {
     }
     return 1.0;
 }
+
+float terrain_occlusion_opacity(vec2 offset, float elevationMeters) {
+    if (u_ghost_on < 0.5) return 1.0;
+    return terrainGhostOpacity(shade_mercator_offset(offset), elevationMeters * u_elevation_params.x);
+}
 `;
+
+/**
+ * The uniforms of {@link TERRAIN_OCCLUSION_GLSL} of a program
+ *
+ * It writes them with the projection of the draw: the camera is written from the center the
+ * offsets of the draw are taken from, on the copy of the world nearest to it, as the origin of the
+ * DEM atlas is.
+ */
+export class TerrainOcclusionUniforms {
+  readonly #gl: WebGL2RenderingContext;
+  readonly #on: WebGLUniformLocation | null;
+  readonly #camera: WebGLUniformLocation | null;
+  readonly #node: WebGLUniformLocation | null;
+
+  constructor(gl: WebGL2RenderingContext, program: WebGLProgram) {
+    this.#gl = gl;
+    this.#on = gl.getUniformLocation(program, 'u_ghost_on');
+    this.#camera = gl.getUniformLocation(program, 'u_ghost_camera');
+    this.#node = gl.getUniformLocation(program, 'u_ghost_node');
+  }
+
+  /**
+   * Whether a draw reads the terrain at all: nothing is hidden while this is false
+   *
+   * @param ctx - The render context of the draw
+   */
+  static activeIn(ctx: RenderContext): boolean {
+    return ghostsDrawn(terrainStateOf(ctx));
+  }
+
+  /**
+   * Writes the uniforms of a draw; the program is in use
+   *
+   * @param ctx - The render context of the draw
+   * @param center - The center the offsets of the draw are taken from
+   */
+  write(ctx: RenderContext, center: OffsetUniforms): void {
+    this.writeState(terrainStateOf(ctx), center);
+  }
+
+  /**
+   * {@link write} of the terrain state of an instance
+   *
+   * @internal
+   */
+  writeState(terrain: TerrainContext | null, center: OffsetUniforms): void {
+    const gl = this.#gl;
+    const on = ghostsDrawn(terrain);
+    if (this.#on) gl.uniform1f(this.#on, on ? 1 : 0);
+    if (!on) return;
+    const state = terrain as TerrainContext;
+    const camera = state.anchorFrame.cameraMercator as readonly [number, number, number];
+    const dx = camera[0] - center.centerMercator[0];
+    if (this.#camera) {
+      gl.uniform3f(
+        this.#camera,
+        dx - Math.round(dx),
+        camera[1] - center.centerMercator[1],
+        camera[2],
+      );
+    }
+    if (this.#node) gl.uniform1f(this.#node, state.renderState.stepGrid);
+  }
+}
+
+/** Whether the terrain is drawn with a camera the test can look from */
+function ghostsDrawn(terrain: TerrainContext | null): boolean {
+  if (!terrain) return false;
+  const { renderState, elevationSuppressed, anchorFrame } = terrain;
+  return renderState.active && !elevationSuppressed && anchorFrame.cameraMercator !== null;
+}

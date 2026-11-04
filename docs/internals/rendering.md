@@ -1971,7 +1971,9 @@ batches, and the editing UI of the current selection is never ghosted.
 The points of the layers held as rows, which are drawn from chunks kept
 over the draws, take the same test in their vertex shader on every draw
 (`TERRAIN_OCCLUSION_GLSL`, the formula and the constants of `occlusion.ts`),
-reading the ground along the segment from the DEM atlas.
+reading the ground along the segment from the DEM atlas. `/webgl` gives the
+same test to the renderers of extensions, with its uniforms
+(`TerrainOcclusionUniforms`).
 
 ### Layers held as rows
 

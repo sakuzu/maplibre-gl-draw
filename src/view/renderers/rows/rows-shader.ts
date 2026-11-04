@@ -60,7 +60,7 @@ import { TERRAIN_OCCLUSION_GLSL } from '../../terrain/occlusion.js';
 import { DASH_COEFFICIENTS } from '../line/dash.js';
 import { POINT_AA_PADDING_PX, POINT_MIN_OUTER_PX } from '../point/point-instance.js';
 import { POINT_SDF_GLSL } from '../point/point-sdf.js';
-import { ROW_HIDDEN_POSITION_GLSL, ROW_STATE_GLSL } from '../row-state.js';
+import { ROW_HIDDEN_POSITION_GLSL, TABLE_ROWS_GLSL } from '../row-state.js';
 import {
   ROW_SPRITE_SCALE_MAX_STOPS,
   ROWS_EDGE_FRINGE,
@@ -151,7 +151,7 @@ export function buildRowsVertexSource(prelude: string, define: string, ground = 
 ${ground ? '#define ROWS_GROUND' : ''}
 ${prelude}
 ${define}
-${getProjectionTransitionUniform(prelude)}${OFFSET_MODE_GLSL}${TERRAIN_SHADE_VERTEX_GLSL}${ROW_STATE_GLSL}${TERRAIN_OCCLUSION_GLSL}
+${getProjectionTransitionUniform(prelude)}${OFFSET_MODE_GLSL}${TERRAIN_SHADE_VERTEX_GLSL}${TABLE_ROWS_GLSL}${TERRAIN_OCCLUSION_GLSL}
 
 // The corner of the strip of 4 vertices (0 to 3)
 layout(location = 0) in float a_corner;
@@ -285,8 +285,7 @@ bool rowsAnchorHidden(vec4 clip) {
 // The opacity of a symbol at an anchor and its elevation (meters): faint where the terrain
 // hides it from the camera
 float rowsGhost(vec2 offset, float elevation) {
-    if (u_ghost_on < 0.5) return 1.0;
-    return terrainGhostOpacity(shade_mercator_offset(offset), elevation * u_elevation_params.x);
+    return terrain_occlusion_opacity(offset, elevation);
 }
 
 vec2 clipToScreen(vec4 clip) {

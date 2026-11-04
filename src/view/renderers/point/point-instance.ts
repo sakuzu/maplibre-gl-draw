@@ -45,9 +45,9 @@ import { type RetainedDrawRun, retainedDrawRun } from '../draw-run.js';
 import {
   bindRowState,
   ROW_HIDDEN_POSITION_GLSL,
-  ROW_STATE_GLSL,
   type RowStateBinding,
   RowStateUniforms,
+  TABLE_ROWS_GLSL,
 } from '../row-state.js';
 import {
   disableDepthForBillboards,
@@ -663,7 +663,7 @@ export class PointInstanceRenderer {
 ${rows ? '#define TABLE_ROWS' : ''}
 ${prelude}
 ${define}
-${projTransitionUniform}${OFFSET_MODE_GLSL}${ROW_STATE_GLSL}
+${projTransitionUniform}${OFFSET_MODE_GLSL}${TABLE_ROWS_GLSL}
 layout(location = 0) in vec2 a_quad;             // billboard vertex (±1)
 layout(location = 1) in vec2 a_instance_lnglat_offset;  // offset from center (64-bit on CPU)
 layout(location = 2) in vec4 a_instance_fill_color;     // fill color

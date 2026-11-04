@@ -96,6 +96,7 @@ export function withSamplerPrecision(source: string): string {
  * @param gl The WebGL2 context
  * @param vertexSource The vertex shader source, starting with `#version 300 es`
  * @param fragmentSource The fragment shader source, starting with `#version 300 es`
+ * @param transformFeedbackVaryings The outputs a transform feedback captures, one buffer each
  * @returns The linked program
  * @throws Error with the info log when a shader fails to compile or the program fails to link
  */
@@ -103,6 +104,7 @@ export function createProgram(
   gl: WebGL2RenderingContext,
   vertexSource: string,
   fragmentSource: string,
+  transformFeedbackVaryings?: readonly string[],
 ): WebGLProgram {
   const vertexShader = gl.createShader(gl.VERTEX_SHADER)!;
   gl.shaderSource(vertexShader, withSamplerPrecision(vertexSource));
@@ -121,6 +123,9 @@ export function createProgram(
   const program = gl.createProgram()!;
   gl.attachShader(program, vertexShader);
   gl.attachShader(program, fragmentShader);
+  if (transformFeedbackVaryings) {
+    gl.transformFeedbackVaryings(program, [...transformFeedbackVaryings], gl.SEPARATE_ATTRIBS);
+  }
   gl.linkProgram(program);
 
   gl.deleteShader(vertexShader);

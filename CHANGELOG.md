@@ -22,6 +22,16 @@ writing it. Its changes are listed after those of 3.0.0.
 
 ### Added in 3.0.0
 
+- `/webgl` draws marks of a shader of its own as the library draws its
+  points: `TERRAIN_OCCLUSION_GLSL` fades the marks the terrain hides, the
+  test of `occlusionOpacity` run in the vertex shader on the DEM atlas
+  (its uniforms written by `TerrainOcclusionUniforms`); `ROW_STATE_GLSL`
+  moves what is drawn with the rows being dragged as their points move,
+  with a texture of the state of the rows (`createRowStateTexture`,
+  `uploadRowState`, `deleteRowStateTexture`, `RowStateTexture`, the unit
+  `ROW_STATE_TEXTURE_UNIT`), the byte of a row being dragged
+  (`rowStateOf`), the moves of the drag (`rowStateBindingOf`,
+  `RowStateBinding`) and the uniforms (`RowStateUniforms`).
 - The entry `@sakuzu/maplibre-gl-draw/kasane`, experimental (it may
   change in a minor release): `createTableStore`, an in-memory store that
   holds its features as rows, and `createFeatureTables`, the tables for a

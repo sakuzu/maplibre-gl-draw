@@ -101,7 +101,7 @@ import {
 } from '../../store/transform-roles.js';
 import { buildPackedRTree, type PackedRTree, searchPackedRTree } from '../../table/packed-rtree.js';
 import type { FeatureCompanionRegistry } from '../feature-companion.js';
-import type { GpuLedger } from '../gpu-ledger.js';
+import { type GpuLedger, textureBytes } from '../gpu-ledger.js';
 import {
   layerDrawFactors,
   NEUTRAL_DRAW_FACTORS,
@@ -2611,7 +2611,8 @@ export class TableLayerRenderer {
     this.releaseChunks(groupCache, 'by-kind');
     this.releaseChunks(groupCache, 'one-draw');
     if (groupCache.texture) {
-      deleteRowStateTexture(this.options.gl, groupCache.texture, this.options.ledger);
+      this.options.ledger?.release(groupCache.texture.texture);
+      deleteRowStateTexture(this.options.gl, groupCache.texture);
       groupCache.texture = null;
       groupCache.binding = null;
     }
@@ -2662,11 +2663,16 @@ export class TableLayerRenderer {
       for (const groupCache of caches) {
         const group = groupCache.group;
         if (!groupCache.texture) {
-          groupCache.texture = createRowStateTexture(
-            this.options.gl,
-            group.data.length,
-            this.options.ledger,
-          );
+          const created = createRowStateTexture(this.options.gl, group.data.length);
+          if (created) {
+            this.options.ledger?.record(
+              created.texture,
+              'row-state',
+              'texture',
+              textureBytes(created.width, created.height, 1),
+            );
+          }
+          groupCache.texture = created;
           groupCache.uploadedVersion = -1;
         }
         const texture = groupCache.texture;

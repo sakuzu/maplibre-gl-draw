@@ -36,9 +36,9 @@ import { RetainedDrawRun } from '../renderers/draw-run.js';
 import {
   bindRowState,
   ROW_HIDDEN_POSITION_GLSL,
-  ROW_STATE_GLSL,
   type RowStateBinding,
   RowStateUniforms,
+  TABLE_ROWS_GLSL,
 } from '../renderers/row-state.js';
 import {
   createProgram,
@@ -337,7 +337,7 @@ export function buildBulkFramesVertexSource(prelude: string, define: string): st
 #define TABLE_ROWS
 ${prelude}
 ${define}
-${getProjectionTransitionUniform(prelude)}${OFFSET_MODE_GLSL}${ROW_STATE_GLSL}
+${getProjectionTransitionUniform(prelude)}${OFFSET_MODE_GLSL}${TABLE_ROWS_GLSL}
 
 // The extent of the row from the origin of its group: west, south, east, north
 layout(location = 0) in vec4 a_bounds;
