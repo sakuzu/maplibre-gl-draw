@@ -19,6 +19,7 @@ import type { StrokeStyle } from '../../shared/types/style.js';
 import type { PixelRatioInput } from '../../shared/utils/pixel-ratio.js';
 import { resolveContentPixelRatio, resolvePixelRatio } from '../../shared/utils/pixel-ratio.js';
 import { getSurfaceTessellationStep } from '../globe-subdivision.js';
+import type { GpuLedger } from '../gpu-ledger.js';
 import type { OffsetUniforms, ShaderData } from '../shaders/helpers.js';
 import {
   calculateLngLatOffset,
@@ -157,6 +158,8 @@ export class StrokeRenderer {
   // at construction)
   private vao: WebGLVertexArrayObject | null = null;
   private vertexBuffer: WebGLBuffer | null = null;
+  /** Where the bytes of the vertex buffer are recorded (nothing is recorded until `useLedger`) */
+  private ledger: GpuLedger | undefined;
 
   constructor(
     map: MapLibreMap,
@@ -174,6 +177,17 @@ export class StrokeRenderer {
     this.vertexBuffer = gl.createBuffer();
     this.vao = gl.createVertexArray();
     this.setupVAO();
+  }
+
+  /**
+   * Records the GPU memory this renderer allocates from now on (its vertex buffer holds nothing
+   * before its first draw)
+   *
+   * @internal
+   */
+  useLedger(ledger: GpuLedger): this {
+    this.ledger = ledger;
+    return this;
   }
 
   /**
@@ -622,6 +636,7 @@ void main() {
     // Transfer the vertex data (the VAO and the vertex buffer are reused)
     gl.bindBuffer(gl.ARRAY_BUFFER, this.vertexBuffer);
     gl.bufferData(gl.ARRAY_BUFFER, vertexData, gl.DYNAMIC_DRAW);
+    this.ledger?.record(this.vertexBuffer, 'strokes', 'buffer', vertexData.byteLength);
     gl.bindVertexArray(this.vao);
 
     gl.useProgram(this.program);
@@ -705,6 +720,7 @@ void main() {
       this.vao = null;
     }
     if (this.vertexBuffer) {
+      this.ledger?.release(this.vertexBuffer);
       this.gl.deleteBuffer(this.vertexBuffer);
       this.vertexBuffer = null;
     }

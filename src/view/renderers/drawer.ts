@@ -16,6 +16,7 @@ import { coordinatesOf } from '../../shared/utils/coordinates.js';
 import { getCircleRadius, getCreatedZoom } from '../../shared/utils/property.js';
 import type { Coordinate, Feature, FeatureStyle, Layer } from '../../store/types.js';
 import { StyleRuleCache } from '../cache/style-rule.js';
+import type { GpuLedger } from '../gpu-ledger.js';
 import type { OffsetUniforms, ShaderData } from '../shaders/helpers.js';
 import { applyRuleColor, type StyleRuleChannel } from '../style-rule.js';
 import type { TerrainContext } from '../terrain/context.js';
@@ -45,6 +46,8 @@ export interface FeatureDrawerDeps {
   styleRules?: StyleRuleCache;
   /** The terrain state of the draw instance (an inactive one draws flat) */
   terrain?: TerrainContext;
+  /** Where the GPU memory of the fills is recorded (nothing is recorded when omitted) */
+  ledger?: GpuLedger;
 }
 
 /**
@@ -69,7 +72,7 @@ export class FeatureDrawer {
     this.imageRenderer = deps.imageRenderer;
     this.featureStyle = deps.featureStyle;
     this.styleRules = deps.styleRules ?? new StyleRuleCache();
-    this.fillShaderManager = new FillShaderManager(deps.gl, deps.terrain);
+    this.fillShaderManager = new FillShaderManager(deps.gl, deps.terrain, deps.ledger);
   }
 
   /**

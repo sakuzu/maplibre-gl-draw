@@ -51,6 +51,7 @@ import { generateCirclePolygon } from '../../geometry/circle.js';
 import { type EnuEdit, inverseEnuEdit, moveEnuPosition } from '../../geometry/enu-transforms.js';
 import { drawPropertyKey } from '../../shared/properties.js';
 import type { Coordinate } from '../../store/types.js';
+import type { GpuLedger } from '../gpu-ledger.js';
 import { dashCoefficientsOf } from '../renderers/line/dash.js';
 import { rowsVariantOf } from '../renderers/rows/rows-shader.js';
 import type { ShaderData } from '../shaders/helpers.js';
@@ -456,6 +457,12 @@ export class TableDrape {
   /** The tables the partitions are of */
   private tables: FeatureTablesInternals | null = null;
 
+  /**
+   * @param ledger Where the GPU memory of the drape is recorded (nothing is recorded when
+   *   omitted)
+   */
+  constructor(private readonly ledger?: GpuLedger) {}
+
   /** Whether the last frame left tiles to build (the next frames build them) */
   get hasPendingWork(): boolean {
     return this.pendingWork;
@@ -659,7 +666,7 @@ export class TableDrape {
       this.pendingWork = false;
     }
 
-    this.renderer ??= new DrapeRenderer(input.gl, true);
+    this.renderer ??= new DrapeRenderer(input.gl, true).useLedger(this.ledger);
     const meshSize = getTerrainMeshSize(input.mapTerrain);
     if (!this.renderer.ensure(input.shaderData, meshSize)) {
       return this.unused(this.renderer.lastError || 'ensure-failed');

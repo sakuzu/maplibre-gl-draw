@@ -27,6 +27,7 @@ import type { CustomRenderMethodInput, Map as MapLibreMap, ProjectionData } from
 import { isLocallyHidden } from '../../store/local-visibility.js';
 import type { Store } from '../../store/store.js';
 import type { Feature } from '../../store/types.js';
+import type { GpuLedger } from '../gpu-ledger.js';
 import { layerDrawFactors } from '../renderers/draw-factors.js';
 import type { RetainedStyleResolver } from '../renderers/retained.js';
 import type { TerrainContext } from '../terrain/context.js';
@@ -189,6 +190,8 @@ export interface DrapePlannerDeps {
   store: Store;
   terrain: TerrainContext;
   datasets?: DrapePlannerDatasets;
+  /** Where the GPU memory of the drape is recorded (nothing is recorded when omitted) */
+  ledger?: GpuLedger;
   /**
    * Whether the work that does not fit in a frame is spread over later frames (true when
    * omitted; the `timeSlicing` of the rendering settings)
@@ -362,7 +365,9 @@ export class DrapePlanner {
 
   /** The quad drape renderer (created on first use) */
   quadRenderer(gl: WebGL2RenderingContext): QuadDrapeRenderer {
-    if (!this.quadDrapeRenderer) this.quadDrapeRenderer = new QuadDrapeRenderer(gl);
+    if (!this.quadDrapeRenderer) {
+      this.quadDrapeRenderer = new QuadDrapeRenderer(gl).useLedger(this.deps.ledger);
+    }
     return this.quadDrapeRenderer;
   }
 
@@ -667,7 +672,9 @@ export class DrapePlanner {
       return false;
     }
 
-    if (!this.drapeRenderer) this.drapeRenderer = new DrapeRenderer(gl);
+    if (!this.drapeRenderer) {
+      this.drapeRenderer = new DrapeRenderer(gl).useLedger(this.deps.ledger);
+    }
     const meshSize = getTerrainMeshSize(terrain);
 
     const planTiles: DrapePlanTile[] = [];

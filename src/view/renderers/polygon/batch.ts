@@ -84,11 +84,14 @@ export class PolygonBatchRenderer {
   private vertexBuffer: WebGLBuffer | null = null;
   private indexBuffer: WebGLBuffer | null = null;
   private vao: WebGLVertexArrayObject | null = null;
+  /** Where the bytes of the buffers are recorded (nothing is recorded when omitted) */
+  private readonly ledger: GpuLedger | undefined;
 
   constructor(gl: WebGL2RenderingContext, scope: PolygonRendererScope = {}) {
     this.gl = gl;
     this.terrain = scope.terrain ?? new TerrainContext();
     this.earcutCache = scope.earcut ?? new EarcutCache();
+    this.ledger = scope.gpu;
     this.projectionUniformManager = new ProjectionUniformManager(gl, {
       surface: true,
     }).useTerrainState(this.terrain);
@@ -214,6 +217,7 @@ void main() {
     // Transfer the vertex data
     gl.bindBuffer(gl.ARRAY_BUFFER, this.vertexBuffer);
     gl.bufferData(gl.ARRAY_BUFFER, vertexData, gl.DYNAMIC_DRAW);
+    this.ledger?.record(this.vertexBuffer, 'polygons', 'buffer', vertexData.byteLength);
 
     // Draw
     gl.useProgram(this.program);
@@ -223,6 +227,7 @@ void main() {
     // The ELEMENT_ARRAY_BUFFER binding is VAO state, so the transfer is done after
     // binding the VAO
     gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, indexData, gl.DYNAMIC_DRAW);
+    this.ledger?.record(this.indexBuffer, 'polygons', 'buffer', indexData.byteLength);
     drawFillWithTerrainCull(gl, this.terrain, () => {
       gl.drawElements(gl.TRIANGLES, indexData.length, gl.UNSIGNED_INT, 0);
     });
@@ -362,10 +367,12 @@ void main() {
       this.program = null;
     }
     if (this.vertexBuffer) {
+      this.ledger?.release(this.vertexBuffer);
       gl.deleteBuffer(this.vertexBuffer);
       this.vertexBuffer = null;
     }
     if (this.indexBuffer) {
+      this.ledger?.release(this.indexBuffer);
       gl.deleteBuffer(this.indexBuffer);
       this.indexBuffer = null;
     }

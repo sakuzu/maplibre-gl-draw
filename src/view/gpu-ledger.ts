@@ -5,21 +5,29 @@
  * The ledger of the GPU memory the drawing allocates (`GpuLedger`)
  *
  * WebGL does not tell how much GPU memory a page uses. The renderers of core record here the
- * size of every buffer and texture they allocate (`bufferData`, `texStorage2D`, `texImage2D`)
- * and take it out when they delete it, so the drawing can tell what it holds, per renderer.
+ * size of every buffer, texture and render buffer they allocate (`bufferData`, `texStorage2D`,
+ * `texImage2D`, `renderbufferStorage`) and take it out when they delete it, so the drawing can
+ * tell what it holds, per renderer. Nothing core allocates on the GPU is left out of it
+ * (`gpu-ledger-coverage.test.ts` counts the allocations of a GL and compares them with it).
  *
  * It is a lower bound of what the page uses: what maplibre allocates (the tiles of the base
- * map, the elevation data) is not in it, nor what the driver keeps after a delete until it
- * frees it, nor the work textures of the analytic drape.
+ * map, the elevation data) is not in it, nor what an extension allocates with the context it
+ * is given, nor what the driver keeps after a delete until it frees it.
  */
 
 /** A buffer or a texture, as the ledger keys it */
 type GpuObject = object;
 
+/**
+ * What an allocation is: a buffer, a texture, or a render buffer (counted with the textures: it
+ * holds the texels of a target as a texture does)
+ */
+export type GpuObjectKind = 'buffer' | 'texture' | 'renderbuffer';
+
 /** One allocation */
 interface Entry {
   readonly owner: string;
-  readonly kind: 'buffer' | 'texture';
+  readonly kind: GpuObjectKind;
   readonly bytes: number;
 }
 
@@ -31,10 +39,20 @@ export interface GpuMemorySnapshot {
   readonly bytes: number;
   /** The bytes of the buffers */
   readonly bufferBytes: number;
-  /** The bytes of the textures */
+  /** The bytes of the textures (and of the render buffers) */
   readonly textureBytes: number;
   /** The bytes per renderer */
   readonly byOwner: Readonly<Record<string, number>>;
+}
+
+/**
+ * A ledger and the owner a part records its allocations under in it
+ *
+ * @internal
+ */
+export interface GpuLedgerOwner {
+  readonly ledger: GpuLedger;
+  readonly owner: string;
 }
 
 /**
@@ -49,10 +67,10 @@ export class GpuLedger {
   private readonly owners = new Map<string, number>();
 
   /**
-   * Records the size of a buffer or a texture (a later record of the same object replaces the
-   * earlier one, as `bufferData` replaces the storage of a buffer)
+   * Records the size of a buffer, a texture or a render buffer (a later record of the same object
+   * replaces the earlier one, as `bufferData` replaces the storage of a buffer)
    */
-  record(object: GpuObject | null, owner: string, kind: 'buffer' | 'texture', bytes: number): void {
+  record(object: GpuObject | null, owner: string, kind: GpuObjectKind, bytes: number): void {
     if (!object) return;
     this.release(object);
     const entry: Entry = { owner, kind, bytes: Math.max(0, bytes) };
@@ -60,7 +78,7 @@ export class GpuLedger {
     this.add(entry, 1);
   }
 
-  /** Takes a deleted buffer or texture out */
+  /** Takes a deleted buffer, texture or render buffer out */
   release(object: GpuObject | null): void {
     if (!object) return;
     const entry = this.entries.get(object);
@@ -98,4 +116,27 @@ export class GpuLedger {
  */
 export function textureBytes(width: number, height: number, bytesPerTexel: number): number {
   return Math.max(0, width) * Math.max(0, height) * bytesPerTexel;
+}
+
+/**
+ * The bytes of a texture of a size with the whole chain of its mipmaps (`generateMipmap`): each
+ * level half the size of the one before, rounded down and at least 1, down to 1 x 1
+ *
+ * @internal
+ */
+export function mipmappedTextureBytes(
+  width: number,
+  height: number,
+  bytesPerTexel: number,
+): number {
+  let w = Math.max(0, Math.floor(width));
+  let h = Math.max(0, Math.floor(height));
+  if (w === 0 || h === 0) return 0;
+  let bytes = 0;
+  for (;;) {
+    bytes += w * h * bytesPerTexel;
+    if (w === 1 && h === 1) return bytes;
+    w = Math.max(1, w >> 1);
+    h = Math.max(1, h >> 1);
+  }
 }

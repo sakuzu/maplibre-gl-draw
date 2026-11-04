@@ -162,7 +162,7 @@ export interface GpuMemoryDiagnostics {
   readonly bytes: number;
   /** The bytes of the buffers */
   readonly bufferBytes: number;
-  /** The bytes of the textures */
+  /** The bytes of the textures (and of the render buffers the drawing draws into) */
   readonly textureBytes: number;
 }
 

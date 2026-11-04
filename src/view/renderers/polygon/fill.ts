@@ -11,6 +11,7 @@
 import earcut from 'earcut';
 import type { ProjectionData } from 'maplibre-gl';
 import type { Coordinate } from '../../../store/types.js';
+import type { GpuLedger } from '../../gpu-ledger.js';
 import type { OffsetUniforms, ShaderData } from '../../shaders/helpers.js';
 import {
   calculateLngLatOffset,
@@ -51,12 +52,20 @@ export class FillShaderManager {
   private vao: WebGLVertexArrayObject | null = null;
   private vertexBuffer: WebGLBuffer | null = null;
   private indexBuffer: WebGLBuffer | null = null;
+  /** Where the bytes of the buffers are recorded (nothing is recorded when omitted) */
+  private readonly ledger: GpuLedger | undefined;
 
   /**
    * @param terrain The terrain state of the draw instance (an inactive one draws flat)
+   * @param ledger Where the bytes of the buffers are recorded
    */
-  constructor(gl: WebGL2RenderingContext, terrain: TerrainContext = new TerrainContext()) {
+  constructor(
+    gl: WebGL2RenderingContext,
+    terrain: TerrainContext = new TerrainContext(),
+    ledger?: GpuLedger,
+  ) {
     this.gl = gl;
+    this.ledger = ledger;
     this.projectionUniformManager = new ProjectionUniformManager(gl, {
       surface: true,
     }).useTerrainState(terrain);
@@ -218,9 +227,11 @@ void main() {
 
     gl.bindBuffer(gl.ARRAY_BUFFER, this.vertexBuffer);
     gl.bufferData(gl.ARRAY_BUFFER, vertexData, gl.DYNAMIC_DRAW);
+    this.ledger?.record(this.vertexBuffer, 'fills', 'buffer', vertexData.byteLength);
 
     gl.bindVertexArray(this.vao);
     gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, indexData, gl.DYNAMIC_DRAW);
+    this.ledger?.record(this.indexBuffer, 'fills', 'buffer', indexData.byteLength);
 
     gl.useProgram(this.program);
 
@@ -251,10 +262,12 @@ void main() {
       this.vao = null;
     }
     if (this.vertexBuffer) {
+      this.ledger?.release(this.vertexBuffer);
       this.gl.deleteBuffer(this.vertexBuffer);
       this.vertexBuffer = null;
     }
     if (this.indexBuffer) {
+      this.ledger?.release(this.indexBuffer);
       this.gl.deleteBuffer(this.indexBuffer);
       this.indexBuffer = null;
     }

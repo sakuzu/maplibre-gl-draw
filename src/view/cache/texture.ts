@@ -13,6 +13,10 @@
  */
 
 import { isEmbeddedImageDataUrl } from '../../shared/utils/embedded-image.js';
+import { type GpuLedger, mipmappedTextureBytes } from '../gpu-ledger.js';
+
+/** The owner the textures of the images are recorded under in the GPU ledger */
+const IMAGES_OWNER = 'images';
 
 /**
  * Cache entry
@@ -57,10 +61,13 @@ export class TextureCache {
   private disposed = false;
   /** MAX_TEXTURE_SIZE of the context (read once, 0 = not read yet) */
   private maxTextureSize = 0;
+  /** Where the bytes of the textures are recorded (nothing is recorded when omitted) */
+  private readonly ledger: GpuLedger | undefined;
 
-  constructor(gl: WebGL2RenderingContext, maxCacheSize = 500) {
+  constructor(gl: WebGL2RenderingContext, maxCacheSize = 500, ledger?: GpuLedger) {
     this.gl = gl;
     this.maxCacheSize = maxCacheSize;
+    this.ledger = ledger;
   }
 
   /**
@@ -153,8 +160,16 @@ export class TextureCache {
       this.evictOldestImage();
     }
 
-    const texture = uploadRgbaTexture(this.gl, this.fitToTextureSize(img), true);
+    const source = this.fitToTextureSize(img);
+    const texture = uploadRgbaTexture(this.gl, source, true);
     if (!texture) return null;
+    // RGBA8 with the chain of its mipmaps
+    this.ledger?.record(
+      texture,
+      IMAGES_OWNER,
+      'texture',
+      mipmappedTextureBytes(source.width, source.height, 4),
+    );
 
     const entry: CacheEntry = {
       texture,
@@ -169,7 +184,7 @@ export class TextureCache {
   /**
    * The image itself, or a copy scaled down to MAX_TEXTURE_SIZE when it is larger
    */
-  private fitToTextureSize(img: HTMLImageElement): TexImageSource {
+  private fitToTextureSize(img: HTMLImageElement): HTMLImageElement | HTMLCanvasElement {
     if (this.maxTextureSize === 0) {
       const max = Number(this.gl.getParameter(this.gl.MAX_TEXTURE_SIZE));
       this.maxTextureSize = Number.isFinite(max) && max > 0 ? max : 4096;
@@ -217,9 +232,7 @@ export class TextureCache {
 
     if (oldestKey) {
       const entry = this.imageCache.get(oldestKey);
-      if (entry) {
-        this.gl.deleteTexture(entry.texture);
-      }
+      if (entry) this.deleteTexture(entry.texture);
       this.imageCache.delete(oldestKey);
     }
   }
@@ -232,7 +245,7 @@ export class TextureCache {
     this.failedImages.delete(src);
     const entry = this.imageCache.get(src);
     if (entry) {
-      this.gl.deleteTexture(entry.texture);
+      this.deleteTexture(entry.texture);
       this.imageCache.delete(src);
     }
   }
@@ -241,11 +254,15 @@ export class TextureCache {
    * Clears the whole cache
    */
   clear(): void {
-    for (const entry of this.imageCache.values()) {
-      this.gl.deleteTexture(entry.texture);
-    }
+    for (const entry of this.imageCache.values()) this.deleteTexture(entry.texture);
     this.imageCache.clear();
     this.decodedImages.clear();
+  }
+
+  /** Deletes the texture of an image */
+  private deleteTexture(texture: WebGLTexture): void {
+    this.ledger?.release(texture);
+    this.gl.deleteTexture(texture);
   }
 
   /**
