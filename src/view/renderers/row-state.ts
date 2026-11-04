@@ -14,7 +14,7 @@
  * The other paths (the features of the Store, the datasets, immediate mode) draw with the
  * programs without the define, which neither have the attribute nor read the texture.
  *
- * A renderer of an extension that draws something with each row (a label of a point) reads the
+ * A renderer of an extension that draws something with each row (a mark of a point) reads the
  * same GLSL and the same uniforms from the second entry, with a texture of its own holding the
  * byte of the row of each of its instances (`rowStateOf`), so what it draws moves as the rows do.
  */
