@@ -43,7 +43,7 @@ import { TerrainContext } from '../../terrain/context.js';
 import {
   DRAPE_GROUND_BLOCK_TEXELS,
   DRAPE_GROUND_MAX_SLOTS,
-  groundLiftOf,
+  groundRiseOf,
   groundUnprojectOf,
 } from '../../terrain/drape/ground-depth.js';
 import { NEUTRAL_DRAW_FACTORS, type RetainedDrawFactors } from '../draw-factors.js';
@@ -188,7 +188,7 @@ interface RowsUniformLocations {
   readonly ghostNode: WebGLUniformLocation | null;
   readonly groundDepth: WebGLUniformLocation | null;
   readonly groundUnproject: WebGLUniformLocation | null;
-  readonly groundLift: WebGLUniformLocation | null;
+  readonly groundRise: WebGLUniformLocation | null;
   readonly groundTiles: WebGLUniformLocation | null;
   readonly groundBlocks: WebGLUniformLocation | null;
   readonly groundCount: WebGLUniformLocation | null;
@@ -205,7 +205,7 @@ interface RowsUniformLocations {
 export interface RowsGround {
   /** The depth of the terrain maplibre draws (`getTerrainDepth`) */
   readonly depth: WebGLTexture;
-  /** The lift of the depth the polygons and the lines take, at the center of the view (meters) */
+  /** The lift of the ground over the terrain at the center of the view (meters) */
   readonly liftMeters: number;
   readonly boxes: Float64Array;
   readonly ranges: Float32Array;
@@ -317,7 +317,7 @@ export class RowsRenderer {
     y: 0,
   };
   /**
-   * The projection the ground is read back with (`groundUnprojectOf`, `groundLiftOf`), and what
+   * The projection the ground is read back with (`groundUnprojectOf`, `groundRiseOf`), and what
    * it was formed from (formed again when they change)
    */
   private readonly groundProjection = {
@@ -328,7 +328,7 @@ export class RowsRenderer {
     liftMeters: Number.NaN,
     scale: Number.NaN,
     unproject: new Float32Array(16),
-    lift: new Float32Array(4),
+    rise: 0,
   };
   private variant: RowsVariant = 'flat';
   private offsetUniforms: OffsetUniforms | null = null;
@@ -945,15 +945,15 @@ export class RowsRenderer {
       if (locations.groundUnproject) {
         gl.uniformMatrix4fv(locations.groundUnproject, false, projection.unproject);
       }
-      if (locations.groundLift) gl.uniform4fv(locations.groundLift, projection.lift);
+      if (locations.groundRise) gl.uniform1f(locations.groundRise, projection.rise);
       program.memo.groundVersion = projection.version;
     }
   }
 
   /**
    * The projection the ground is read back with in the frame: the inverse of the projection of
-   * the rows relative to the center of the view, and the lift of the depth the polygons and the
-   * lines take (none can be read back where it has no inverse: the inverse is left 0)
+   * the rows relative to the center of the view, and the lift of the ground over the terrain (none
+   * can be read back where it has no inverse: the inverse is left 0)
    */
   private groundProjectionOf(
     matrix: ArrayLike<number>,
@@ -981,10 +981,10 @@ export class RowsRenderer {
     const clipCenter = center?.projectionCenter ?? null;
     if (!clipCenter || !groundUnprojectOf(matrix, clipCenter, formed.unproject)) {
       formed.unproject.fill(0);
-      formed.lift.fill(0);
+      formed.rise = 0;
       return formed;
     }
-    groundLiftOf(matrix, scale, liftMeters, clipCenter[3], formed.lift);
+    formed.rise = groundRiseOf(scale, liftMeters, clipCenter[3]);
     return formed;
   }
 
@@ -1617,7 +1617,7 @@ function locationsOf(gl: WebGL2RenderingContext, program: WebGLProgram): RowsUni
     ghostNode: at('u_ghost_node'),
     groundDepth: at('u_ground_depth'),
     groundUnproject: at('u_ground_unproject'),
-    groundLift: at('u_ground_lift'),
+    groundRise: at('u_ground_rise'),
     groundTiles: at('u_ground_tiles'),
     groundBlocks: at('u_ground_blocks'),
     groundCount: at('u_ground_count'),

@@ -12,17 +12,13 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import {
-  mercatorMatrix,
-  mercatorOf,
-  type TestCamera,
-} from '../../../test-support/glsl-projection.js';
+import { mercatorMatrix, type TestCamera } from '../../../test-support/glsl-projection.js';
 import { calculateOffsetUniforms } from '../../shaders/helpers.js';
 import { metersToMercatorScale } from '../metrics.js';
 import {
   GROUND_DEPTH_JUMP,
   groundDepthDigit,
-  groundLiftOf,
+  groundRiseOf,
   groundUnprojectOf,
   packGroundDepth,
   unpackGroundDepth,
@@ -152,19 +148,28 @@ function drawDepth(
   };
 }
 
-/** The operations of `ground_at` (GROUND_DEPTH_GLSL), for a place of the screen in device px */
+/**
+ * The operations of `ground_at` (GROUND_DEPTH_GLSL), for a place of the screen in device px, the
+ * ground lifted by `rise` (`groundRiseOf`; none by default). The depth is the one read, less half a
+ * step of a digit read halfway (as the shader takes it), lifted
+ */
 function groundAt(
   frame: Frame,
   texture: DepthTexture,
   viewport: readonly [number, number],
   fx: number,
   fy: number,
+  rise = 0,
 ): { q: [number, number]; z: number } | null {
   const size = [texture.width, texture.height];
+  let slack = 0;
   const depthAt = (i: number, j: number): number => {
     const ci = Math.min(Math.max(i, 0), texture.width - 1);
     const cj = Math.min(Math.max(j, 0), texture.height - 1);
     const [r, g, b, a] = texture.texel(ci, cj);
+    if (a === 128) slack = Math.max(slack, 0.5 / 256);
+    if (b === 128) slack = Math.max(slack, 0.5 / 65_536);
+    if (g === 128) slack = Math.max(slack, 0.5 / 16_777_216);
     return unpackGroundDepth(r, g, b, a) ?? 2;
   };
   const u = frame.unproject;
@@ -281,10 +286,21 @@ function groundAt(
         (u[12 + i] as number),
     ),
   );
-  if ((h[3] as number) <= 0) return null;
+  const hw = h[3] as number;
+  if (hw <= 0) return null;
+  const p = [0, 1, 2].map((i) => F32((h[i] as number) / hw));
+  const eye = [8, 9, 10, 11].map((i) => u[i] as number);
+  const camera = [0, 1, 2].map((i) => F32((eye[i] as number) / (eye[3] as number)));
+  const share = Math.min(
+    Math.max(F32(rise / F32(hw * Math.max((camera[2] as number) - (p[2] as number), 1e-30))), 0),
+    0.5,
+  );
   return {
-    q: [F32((h[0] as number) / (h[3] as number)), F32((h[1] as number) / (h[3] as number))],
-    z,
+    q: [
+      F32((p[0] as number) + ((camera[0] as number) - (p[0] as number)) * share),
+      F32((p[1] as number) + ((camera[1] as number) - (p[1] as number)) * share),
+    ],
+    z: F32(z - slack + (share * hw) / ((1 - share) * (eye[3] as number))),
   };
 }
 
@@ -443,32 +459,46 @@ describe('the ground read back from the depth', () => {
   });
 });
 
-describe('groundLiftOf', () => {
-  it('lifts the depth of the ground by the lift there, larger the further it is', () => {
+describe('groundRiseOf', () => {
+  it('lifts the ground read back along the ray of the pixel, more the further it is', () => {
     const camera = cameraOf(60);
     const frame = frameOf(camera);
     const scale = metersToMercatorScale(camera.center[1]);
-    const lift = new Float32Array(4);
-    const meters = 0.5;
+    const plane: Plane = { a: 200 * scale, b: 0.1, c: -0.05 };
+    const texture = drawDepth(frame, camera.width, camera.height, () => plane);
+    const viewport = [camera.width, camera.height] as const;
+    const meters = 2;
     const centerW = frame.uniforms.projectionCenter[3];
-    groundLiftOf(frame.matrix, scale, meters, centerW, lift);
-    const [cx, cy] = mercatorOf(camera.center[0], camera.center[1]);
-    expect(cx).toBeGreaterThan(0);
-    expect(cy).toBeGreaterThan(0);
-    for (const offset of [0, 200, -200]) {
-      const p = [0, offset / frame.worldSize, 100 * scale];
-      const clip = clipOf(frame, p[0] as number, p[1] as number, p[2] as number);
-      const z = clip[2] / clip[3];
-      const lifted = (z + (lift[2] as number)) / (1 + (lift[3] as number));
-      // The position lifted by the lift at the center times its distance over that of the center
-      const raised = clipOf(
+    const rise = groundRiseOf(scale, meters, centerW);
+    for (const [x, y] of [
+      [640, 100],
+      [640, 360],
+      [200, 650],
+    ] as const) {
+      const ndcX = ((x + 0.5) / viewport[0]) * 2 - 1;
+      const ndcY = ((y + 0.5) / viewport[1]) * 2 - 1;
+      const on = meet(frame, plane, ndcX, ndcY);
+      const w = clipOf(frame, on[0], on[1], on[2])[3];
+      // The place of the ray of the pixel lifted over the ground by the lift at the center times
+      // its distance over that of the center
+      const lifted = meet(
         frame,
-        p[0] as number,
-        p[1] as number,
-        (p[2] as number) + meters * (clip[3] / centerW) * scale,
+        { ...plane, a: plane.a + meters * (w / centerW) * scale },
+        ndcX,
+        ndcY,
       );
-      expect(lifted).toBeLessThan(z);
-      expect(lifted).toBeCloseTo(raised[2] / raised[3], 9);
+      const read = groundAt(frame, texture, viewport, x + 0.5, y + 0.5, rise) as {
+        q: [number, number];
+        z: number;
+      };
+      const next = meet(frame, plane, ndcX + 2 / viewport[0], ndcY);
+      const pixel = Math.hypot(next[0] - on[0], next[1] - on[1]);
+      const error = Math.hypot(read.q[0] - lifted[0], read.q[1] - lifted[1]) / pixel;
+      // As the ground read back (the depth read halfway at its second digit moves it most)
+      expect(error, `${x}, ${y}`).toBeLessThan(0.2);
+      const clip = clipOf(frame, lifted[0], lifted[1], lifted[2]);
+      expect(read.z).toBeLessThan(depthOf(frame, on));
+      expect(Math.abs(read.z - clip[2] / clip[3])).toBeLessThan(1e-5);
     }
   });
 });

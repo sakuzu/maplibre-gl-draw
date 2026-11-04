@@ -1427,7 +1427,7 @@ export class TableLayerRenderer {
       if (tiles.length > DRAPE_GROUND_MAX_SLOTS) return false;
       const boxes = new Float64Array(tiles.length * 3);
       const ranges = new Float32Array(tiles.length * 2);
-      // The lift of the depth taken at the center of the view: the one the drape gives the ground
+      // The lift of the ground over the terrain at the center of the view: the one the drape gives
       // of the finest tile drawn
       let finest = Number.POSITIVE_INFINITY;
       for (let slot = 0; slot < tiles.length; slot++) {

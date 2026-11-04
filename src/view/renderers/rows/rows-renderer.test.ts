@@ -489,7 +489,7 @@ describe('RowsRenderer', () => {
             (c.args[0] as { name: string }).name === 'u_ground_unproject',
         );
       expect(matrices).toHaveLength(1);
-      expect((matrices[0]?.args[2] as Float32Array).some((v) => v !== 0)).toBe(true);
+      expect((matrices[0] as Call).args[2] as Float32Array).not.toEqual(new Float32Array(16));
       renderer.disposeChunk(chunk);
       renderer.dispose();
       expect(ledger.snapshot().byOwner.rows).toBeUndefined();

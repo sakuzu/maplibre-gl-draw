@@ -1060,11 +1060,10 @@ flat in vec4 v_gb;
 flat in vec4 v_gc;
 // The size of the drawing buffer (device pixels)
 uniform vec2 u_viewport;
-// The lift of the depth the polygons and the lines take over the ground read back, as a step of
-// the clip space over its w (terrain/drape/ground-depth.ts, groundLiftOf): they take the depth of
-// the ground so, and the 3D layers of the map in front of the ground hide them as they hide the
-// ground (the points and the sprites keep the depth of their markers)
-uniform vec4 u_ground_lift;
+// The ground of each pixel read back from the depth of the terrain maplibre draws
+// (terrain/drape/ground-depth.ts): the polygons and the lines take its depth, so the 3D layers of
+// the map in front of the ground hide them as they hide the ground (the points and the sprites
+// keep the depth of their markers)
 ${GROUND_DEPTH_GLSL}
 #endif
 out vec4 fragColor;
@@ -1282,10 +1281,9 @@ bool groundHere(out vec2 q, out vec2 stepX, out vec2 stepY) {
 }
 
 // The depth the polygons and the lines take at the pixel of the fragment: that of the ground read
-// back, lifted over it
+// back (lifted over the terrain)
 float groundFragDepth() {
-    float z = (g_ground_depth + u_ground_lift.z) / (1.0 + u_ground_lift.w);
-    return gl_DepthRange.near + gl_DepthRange.diff * clamp(z * 0.5 + 0.5, 0.0, 1.0);
+    return gl_DepthRange.near + gl_DepthRange.diff * clamp(g_ground_depth * 0.5 + 0.5, 0.0, 1.0);
 }
 
 // Whether the steps of the quad may cross an edge of the ground seen (a ridge, a crack between

@@ -17,8 +17,10 @@
  *
  * - The depth is packed by MapLibre as the digits of base 256 of the depth, the most significant
  *   in alpha, each digit d written as the byte nearest to 255 d / 256. A byte s is the digit s
- *   below 128 and s + 1 above it (128 is either 128 or 129, taken as halfway). A byte of 255 in
- *   alpha is never written for a depth below 1: it is the white of no terrain.
+ *   below 128 and s + 1 above it (128 is either 128 or 129, taken as halfway: the ground there
+ *   is read up to half a step of the digit along the ray, and the depth the polygons and the
+ *   lines take is that much nearer, so the terrain the map drew there never hides them). A byte
+ *   of 255 in alpha is never written for a depth below 1: it is the white of no terrain.
  * - A pixel of the screen is a part of a texel (the texels are CSS pixels). The depth there is
  *   interpolated between the four texels around it, bilinear where they are on one surface (the
  *   depth of a plane is affine on the screen, so this is exact on a plane). Where they are not
@@ -32,9 +34,10 @@
  *   elevation (in Mercator units) put through the matrix of the frame, plus the center in clip
  *   space. It is formed on the CPU in float64 (`groundUnprojectOf`), so only offsets are held in
  *   32-bit floats.
- * - The depth the polygons and the lines take (the 3D layers of the map in front of the ground
- *   hide them as they hide the ground) is that of the position read back, lifted over it as the
- *   drape lifts its ground (`groundLiftOf`), so it wins against the terrain the map drew there.
+ * - The ground is taken lifted over the terrain as the drape lifts its ground (`groundRiseOf`):
+ *   the place on the ray of the pixel that far over the position read back. Its depth is the one
+ *   the polygons and the lines take (the 3D layers of the map in front of the ground hide them as
+ *   they hide the ground), and it wins against the terrain the map drew there.
  */
 
 import { glslFloat32 } from '../../shaders/center-projection.js';
@@ -143,26 +146,18 @@ export function groundUnprojectOf(
 }
 
 /**
- * The lift of the depth the polygons and the lines take, as a step of the clip space over its w:
- * the position read back is lifted over the ground by `liftMeters` at the center of the view and
- * by as much more as it is further from the camera (the drape lifts the ground of a tile by a
- * share of its size, and the tiles maplibre draws are larger the further they are), so the depth
- * there is (z + l.z) / (1 + l.w) for the z of the clip space over its w
+ * The lift of the ground read back over the terrain, as the drape lifts its ground (`u_ground_rise`
+ * of `GROUND_DEPTH_GLSL`): `liftMeters` at the center of the view, and as much more as the ground
+ * is further from the camera (the drape lifts the ground of a tile by a share of its size, and the
+ * tiles maplibre draws are larger the further they are), in Mercator units of elevation over the
+ * w of the clip space
  *
- * @param matrix The matrix of the frame (`mainMatrix`, column-major)
  * @param elevationScale The Mercator units of a meter of elevation in the frame
  * @param liftMeters The lift at the center of the view (meters)
  * @param centerW The w of the clip space of the center of the view
  */
-export function groundLiftOf(
-  matrix: ArrayLike<number>,
-  elevationScale: number,
-  liftMeters: number,
-  centerW: number,
-  out: Float32Array,
-): void {
-  const step = centerW > 0 ? (liftMeters * elevationScale) / centerW : 0;
-  for (let i = 0; i < 4; i++) out[i] = (matrix[8 + i] as number) * step;
+export function groundRiseOf(elevationScale: number, liftMeters: number, centerW: number): number {
+  return centerW > 0 ? (liftMeters * elevationScale) / centerW : 0;
 }
 
 /** The inverse of a 4 x 4 matrix (column-major, float64; null where it has none) */
@@ -224,14 +219,20 @@ function invert4(m: Float64Array): Float64Array | null {
  *
  * - `u_ground_depth`: the depth of the terrain MapLibre draws (RGBA8, a texel a CSS pixel)
  * - `u_ground_unproject`: `groundUnprojectOf`
+ * - `u_ground_rise`: `groundRiseOf`
  *
- * `ground_at(frag, q, z)` gives the Mercator offset from the center of the ground seen at a
- * place of the screen (device pixels, as `gl_FragCoord`) and the depth there (the z of the clip
- * space over its w), false where no ground is seen.
+ * `ground_at(frag, q, depth)` gives the Mercator offset from the center of the ground seen at a
+ * place of the screen (device pixels, as `gl_FragCoord`), lifted, and the depth there (the z of the
+ * clip space over its w, taken no further than it was drawn at), false where no ground is seen.
  */
 export const GROUND_DEPTH_GLSL = `
 uniform highp sampler2D u_ground_depth;
 uniform highp mat4 u_ground_unproject;
+uniform float u_ground_rise;
+
+// The most a depth read since it was reset may be further than it was drawn at: half a step of a
+// digit read halfway
+float g_ground_slack = 0.0;
 
 // The depth of a texel, from the digits of base 256 MapLibre packs it into (a byte s holds the
 // digit s below 128, s + 1 above it, and 128 or 129 at 128); 2.0 for the white of no terrain
@@ -239,9 +240,12 @@ float ground_depth_at(ivec2 at, ivec2 size) {
     vec4 t = texelFetch(u_ground_depth, clamp(at, ivec2(0), size - 1), 0);
     vec3 s = floor(t.abg * 255.0 + 0.5);
     if (s.x > 254.5) return 2.0;
-    vec3 digit = s + step(128.5, s) + 0.5 * (step(127.5, s) - step(128.5, s));
-    return dot(digit, vec3(${glslFloat32(DIGIT_WEIGHTS[0])}, ${glslFloat32(DIGIT_WEIGHTS[1])},
-        ${glslFloat32(DIGIT_WEIGHTS[2])})) + t.r * ${glslFloat32(DIGIT_WEIGHTS[2])};
+    vec3 halfway = step(127.5, s) - step(128.5, s);
+    vec3 digit = s + step(128.5, s) + 0.5 * halfway;
+    vec3 weights = vec3(${glslFloat32(DIGIT_WEIGHTS[0])}, ${glslFloat32(DIGIT_WEIGHTS[1])},
+        ${glslFloat32(DIGIT_WEIGHTS[2])});
+    g_ground_slack = max(g_ground_slack, 0.5 * dot(halfway, weights));
+    return dot(digit, weights) + t.r * ${glslFloat32(DIGIT_WEIGHTS[2])};
 }
 
 // The w of a point of the clip space over the w of the clip space (one over its distance from
@@ -263,11 +267,16 @@ float ground_outer_step(ivec2 at, ivec2 axis, float depth, float iw, vec2 c, vec
     return next - depth;
 }
 
-// The ground seen at a place of the screen (device pixels): its Mercator offset from the center
-// and the depth there (the z of the clip space over its w); false where none is seen
-bool ground_at(vec2 frag, out vec2 q, out float z) {
+// The ground seen at a place of the screen (device pixels), lifted over the terrain as the drape
+// lifts its ground: its Mercator offset from the center and the depth there (the z of the clip
+// space over its w), no further than it was drawn at (less half a step of a digit where one was
+// read halfway: that depth is taken by the polygons and the lines, tested against the depth of
+// the terrain the map drew); false where none is seen
+bool ground_at(vec2 frag, out vec2 q, out float depth) {
     q = vec2(0.0);
-    z = 1.0;
+    depth = 1.0;
+    float z = 1.0;
+    g_ground_slack = 0.0;
     ivec2 size = textureSize(u_ground_depth, 0);
     vec2 ndc01 = frag / u_viewport;
     // The texels are at the centers of the CSS pixels of the same screen
@@ -328,7 +337,16 @@ bool ground_at(vec2 frag, out vec2 q, out float z) {
     }
     vec4 h = u_ground_unproject * vec4(ndc, z, 1.0);
     if (h.w <= 0.0) return false;
-    q = h.xy / h.w;
+    vec3 p = h.xyz / h.w;
+    // The camera: the point the clip space has at its w of 0 (x and y of 0), and the share of the
+    // way to it the lift takes (the lift grows with the distance from the camera, 1 / h.w)
+    vec4 eye = u_ground_unproject[2];
+    vec3 camera = eye.xyz / eye.w;
+    float s = clamp(u_ground_rise / (h.w * max(camera.z - p.z, 1e-30)), 0.0, 0.5);
+    q = p.xy + (camera.xy - p.xy) * s;
+    // The depth of the place that far toward the camera on the ray: (1 - s) of the position over
+    // its w and s of the camera, (0, 0, 1 / eye.w, 0) in the clip space
+    depth = z - g_ground_slack + s * h.w / ((1.0 - s) * eye.w);
     return true;
 }
 `;
