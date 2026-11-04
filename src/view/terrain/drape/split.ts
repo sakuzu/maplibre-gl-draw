@@ -23,11 +23,15 @@
  * a pixel holds no more elements after a point than the steps (each step takes one of them).
  */
 
+import { type GpuLedger, textureBytes } from '../../gpu-ledger.js';
 import { setDepthTestEnabled } from '../../layer/depth-state.js';
 import { DRAPE_SPLIT_NONE } from './renderer.js';
 
 /** The largest key the depth holds exactly (a key over 2^24 is an exact float below 1) */
 export const DRAPE_SPLIT_MAX_KEY = 2 ** 24 - 1;
+
+/** The owner the split records its textures under in the GPU ledger */
+const DRAPE_SPLIT_OWNER = 'drape-split';
 
 /**
  * The textures of the lowest keys of the points and of the bounds, and the framebuffers that
@@ -48,7 +52,14 @@ export class DrapeSplit {
   /** The bytes the textures hold */
   bytes = 0;
 
-  constructor(private readonly gl: WebGL2RenderingContext) {}
+  /**
+   * @param ledger Where the bytes of the textures and of the render buffer are recorded (nothing
+   *   is recorded when omitted)
+   */
+  constructor(
+    private readonly gl: WebGL2RenderingContext,
+    private readonly ledger?: GpuLedger,
+  ) {}
 
   /** The texture of the lowest keys (null before `ensure`) */
   get lowTexture(): WebGLTexture | null {
@@ -92,12 +103,21 @@ export class DrapeSplit {
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, low);
     gl.texStorage2D(gl.TEXTURE_2D, 1, gl.DEPTH_COMPONENT32F, width, height);
+    this.ledger?.record(low, DRAPE_SPLIT_OWNER, 'texture', textureBytes(width, height, 4));
     nearest(gl);
     gl.bindTexture(gl.TEXTURE_2D, bounds);
     gl.texStorage2D(gl.TEXTURE_2D, 1, gl.RG32F, width, height);
+    this.ledger?.record(bounds, DRAPE_SPLIT_OWNER, 'texture', textureBytes(width, height, 8));
     nearest(gl);
     gl.bindRenderbuffer(gl.RENDERBUFFER, boundsDepth);
     gl.renderbufferStorage(gl.RENDERBUFFER, gl.DEPTH_COMPONENT24, width, height);
+    // A depth of 24 bits takes 4 bytes a texel
+    this.ledger?.record(
+      boundsDepth,
+      DRAPE_SPLIT_OWNER,
+      'renderbuffer',
+      textureBytes(width, height, 4),
+    );
     gl.bindRenderbuffer(gl.RENDERBUFFER, null);
     gl.bindFramebuffer(gl.FRAMEBUFFER, lowTarget);
     gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.TEXTURE_2D, low, 0);
@@ -192,6 +212,9 @@ export class DrapeSplit {
   /** Releases the textures and the framebuffers */
   release(): void {
     const gl = this.gl;
+    this.ledger?.release(this.low);
+    this.ledger?.release(this.bounds);
+    this.ledger?.release(this.boundsDepth);
     if (this.low) gl.deleteTexture(this.low);
     if (this.bounds) gl.deleteTexture(this.bounds);
     if (this.boundsDepth) gl.deleteRenderbuffer(this.boundsDepth);

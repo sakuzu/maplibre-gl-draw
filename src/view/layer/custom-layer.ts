@@ -406,12 +406,13 @@ export function createCustomLayer(deps: CustomLayerDeps): CustomLayerInterface {
    */
   const renderScope = createRenderScope(deps.selectionScope);
   const terrainContext = renderScope.terrain;
-  const terrainResolver = new TerrainResolver(map, terrainContext);
+  const terrainResolver = new TerrainResolver(map, terrainContext, renderScope.gpu);
   const drape = new DrapePlanner({
     map,
     store,
     terrain: terrainContext,
     datasets,
+    ledger: renderScope.gpu,
     // Read at each build, so a change of the rendering switches applies to the next one
     get timeSlicing() {
       return renderingConfig.timeSlicing;

@@ -51,6 +51,7 @@ import { generateCirclePolygon } from '../../geometry/circle.js';
 import { type EnuEdit, inverseEnuEdit, moveEnuPosition } from '../../geometry/enu-transforms.js';
 import { drawPropertyKey } from '../../shared/properties.js';
 import type { Coordinate } from '../../store/types.js';
+import type { GpuLedger } from '../gpu-ledger.js';
 import { dashCoefficientsOf } from '../renderers/line/dash.js';
 import type { RowsKey, RowsKeyFloor, RowsSegment } from '../renderers/rows/rows-renderer.js';
 import type { ShaderData } from '../shaders/helpers.js';
@@ -430,6 +431,12 @@ export class TableDrape {
   /** The tables the partitions are of */
   private tables: FeatureTablesInternals | null = null;
 
+  /**
+   * @param ledger Where the GPU memory of the drape and of its split is recorded (nothing is
+   *   recorded when omitted)
+   */
+  constructor(private readonly ledger?: GpuLedger) {}
+
   /** The bytes of the textures of the keys of the points */
   get splitBytes(): number {
     return this.split?.bytes ?? 0;
@@ -608,7 +615,7 @@ export class TableDrape {
     // The moving partitions: their rows taken in, their indices built for the view
     const moving = this.updateMoving(tables, drapeTiles, input, prepared.complete);
 
-    this.renderer ??= new DrapeRenderer(input.gl, true);
+    this.renderer ??= new DrapeRenderer(input.gl, true).useLedger(this.ledger);
     const meshSize = getTerrainMeshSize(input.mapTerrain);
     if (!this.renderer.ensure(input.shaderData, meshSize)) {
       return this.unused(this.renderer.lastError || 'ensure-failed');
@@ -649,7 +656,7 @@ export class TableDrape {
         depth: this.index.maxRunsPerCellOf(tile) + this.movingDepthOf(tile, moving),
       });
     }
-    this.split ??= new DrapeSplit(input.gl);
+    this.split ??= new DrapeSplit(input.gl, this.ledger);
     this.usedLast = true;
     debug.used = true;
     debug.reason = 'ok';

@@ -33,6 +33,7 @@
  * the exaggerated elevation.
  */
 
+import { type GpuLedger, textureBytes } from '../gpu-ledger.js';
 import { createProgram } from '../shaders/helpers.js';
 import {
   getRenderableTerrainTiles,
@@ -81,6 +82,9 @@ export interface DemAtlasResult {
 }
 
 const QUAD = new Float32Array([0, 0, 1, 0, 0, 1, 1, 1]);
+
+/** The owner the atlas and its quad are recorded under in the GPU ledger */
+const DEM_ATLAS_OWNER = 'dem-atlas';
 
 const VERTEX_SOURCE = `#version 300 es
 layout(location = 0) in vec2 a_corner;
@@ -150,8 +154,12 @@ export class DemAtlas {
   /** The number of bakes done (diagnostics and tests) */
   bakeCount = 0;
 
-  constructor(gl: WebGL2RenderingContext) {
+  /** Where the bytes of the atlas and of its quad are recorded (nothing when omitted) */
+  private readonly ledger: GpuLedger | undefined;
+
+  constructor(gl: WebGL2RenderingContext, ledger?: GpuLedger) {
     this.gl = gl;
+    this.ledger = ledger;
   }
 
   /**
@@ -321,6 +329,7 @@ export class DemAtlas {
       this.vao = null;
     }
     if (this.quadBuffer) {
+      this.ledger?.release(this.quadBuffer);
       gl.deleteBuffer(this.quadBuffer);
       this.quadBuffer = null;
     }
@@ -329,6 +338,7 @@ export class DemAtlas {
       this.framebuffer = null;
     }
     if (this.texture) {
+      this.ledger?.release(this.texture);
       gl.deleteTexture(this.texture);
       this.texture = null;
     }
@@ -362,6 +372,7 @@ export class DemAtlas {
     gl.bindVertexArray(this.vao);
     gl.bindBuffer(gl.ARRAY_BUFFER, this.quadBuffer);
     gl.bufferData(gl.ARRAY_BUFFER, QUAD, gl.STATIC_DRAW);
+    this.ledger?.record(this.quadBuffer, DEM_ATLAS_OWNER, 'buffer', QUAD.byteLength);
     gl.enableVertexAttribArray(0);
     gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 8, 0);
     gl.bindVertexArray(null);
@@ -373,12 +384,16 @@ export class DemAtlas {
     const gl = this.gl;
     if (this.texture && this.textureWidth === width && this.textureHeight === height) return true;
 
-    if (this.texture) gl.deleteTexture(this.texture);
+    if (this.texture) {
+      this.ledger?.release(this.texture);
+      gl.deleteTexture(this.texture);
+    }
     if (this.framebuffer) gl.deleteFramebuffer(this.framebuffer);
 
     const texture = gl.createTexture();
     gl.bindTexture(gl.TEXTURE_2D, texture);
     gl.texStorage2D(gl.TEXTURE_2D, 1, gl.RGBA8, width, height);
+    this.ledger?.record(texture, DEM_ATLAS_OWNER, 'texture', textureBytes(width, height, 4));
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
@@ -393,6 +408,7 @@ export class DemAtlas {
     gl.bindFramebuffer(gl.FRAMEBUFFER, prevFbo);
 
     if (!complete) {
+      this.ledger?.release(texture);
       gl.deleteTexture(texture);
       gl.deleteFramebuffer(framebuffer);
       this.texture = null;

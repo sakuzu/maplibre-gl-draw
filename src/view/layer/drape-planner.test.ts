@@ -111,8 +111,12 @@ vi.mock('../terrain/drape/bin-store.js', () => ({
 
 vi.mock('../terrain/drape/renderer.js', () => ({
   DRAPE_MAX_SOURCES: 8,
+  DRAPE_OWNER: 'drape',
   DrapeRenderer: class {
     lastError = '';
+    useLedger(): this {
+      return this;
+    }
     upload(): boolean {
       return fake.upload;
     }

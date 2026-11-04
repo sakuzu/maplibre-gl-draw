@@ -8,6 +8,8 @@
  * It improves performance by eliminating per-frame VAO/buffer creation and deletion.
  */
 
+import type { GpuLedgerOwner } from '../gpu-ledger.js';
+
 /**
  * Cached geometry
  */
@@ -34,10 +36,20 @@ export class BufferCache {
   private gl: WebGL2RenderingContext;
   private cache: Map<string, CachedGeometry> = new Map();
   private maxCacheSize: number;
+  /** Where the bytes of the buffers are recorded (nothing is recorded when omitted) */
+  private readonly ledger: GpuLedgerOwner | undefined;
 
-  constructor(gl: WebGL2RenderingContext, maxCacheSize = 2000) {
+  constructor(gl: WebGL2RenderingContext, maxCacheSize = 2000, ledger?: GpuLedgerOwner) {
     this.gl = gl;
     this.maxCacheSize = maxCacheSize;
+    this.ledger = ledger;
+  }
+
+  /** Deletes the VAO and the buffer of an entry */
+  private deleteEntry(cached: CachedGeometry): void {
+    this.gl.deleteVertexArray(cached.vao);
+    this.ledger?.ledger.release(cached.buffer);
+    this.gl.deleteBuffer(cached.buffer);
   }
 
   /**
@@ -67,10 +79,7 @@ export class BufferCache {
     }
 
     // Delete the stale cache entry if there is one
-    if (cached) {
-      this.gl.deleteVertexArray(cached.vao);
-      this.gl.deleteBuffer(cached.buffer);
-    }
+    if (cached) this.deleteEntry(cached);
 
     // Check the cache size
     if (this.cache.size >= this.maxCacheSize) {
@@ -87,6 +96,7 @@ export class BufferCache {
     const buffer = gl.createBuffer()!;
     gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
     gl.bufferData(gl.ARRAY_BUFFER, vertices, gl.STATIC_DRAW);
+    this.ledger?.ledger.record(buffer, this.ledger.owner, 'buffer', vertices.byteLength);
 
     for (const attr of attributes) {
       gl.enableVertexAttribArray(attr.index);
@@ -133,8 +143,7 @@ export class BufferCache {
   invalidate(key: string): void {
     const cached = this.cache.get(key);
     if (cached) {
-      this.gl.deleteVertexArray(cached.vao);
-      this.gl.deleteBuffer(cached.buffer);
+      this.deleteEntry(cached);
       this.cache.delete(key);
     }
   }
@@ -159,10 +168,7 @@ export class BufferCache {
    * Clears the whole cache
    */
   clear(): void {
-    for (const cached of this.cache.values()) {
-      this.gl.deleteVertexArray(cached.vao);
-      this.gl.deleteBuffer(cached.buffer);
-    }
+    for (const cached of this.cache.values()) this.deleteEntry(cached);
     this.cache.clear();
   }
 

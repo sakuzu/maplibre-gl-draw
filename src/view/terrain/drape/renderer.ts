@@ -29,6 +29,7 @@ import {
   SELECTION_HIGHLIGHT_RGB,
   SELECTION_HIGHLIGHT_STROKE_EXTRA,
 } from '../../../shared/config/selection-highlight.js';
+import { type GpuLedger, type GpuLedgerOwner, textureBytes } from '../../gpu-ledger.js';
 import type { ShaderData } from '../../shaders/helpers.js';
 import { createProgram } from '../../shaders/helpers.js';
 import type { TerrainTileData } from '../detect.js';
@@ -941,6 +942,13 @@ interface UploadMark {
 }
 
 /**
+ * The owner the drape records its textures and its mesh under in the GPU ledger
+ *
+ * @internal
+ */
+export const DRAPE_OWNER = 'drape';
+
+/**
  * The renderer of the analytic drape
  */
 export class DrapeRenderer {
@@ -979,6 +987,9 @@ export class DrapeRenderer {
   private readonly rankBase = new Int32Array(DRAPE_COPY_RANGES);
   private orderBase = 0;
 
+  /** Where the bytes of the textures and of the mesh are recorded (nothing until `useLedger`) */
+  private ledger: GpuLedgerOwner | undefined;
+
   /**
    * @param rows Whether it draws the rows: elements read as copies from the tables of the
    *   copies (`uploadRows`), painted by ranks (`drawRowsTile`)
@@ -991,14 +1002,37 @@ export class DrapeRenderer {
   }
 
   /**
+   * Records the GPU memory this renderer allocates from now on (call it before the first
+   * `ensure`: it holds nothing before)
+   *
+   * @internal
+   */
+  useLedger(ledger: GpuLedger | undefined): this {
+    this.ledger = ledger ? { ledger, owner: DRAPE_OWNER } : undefined;
+    return this;
+  }
+
+  /** Records the bytes of a texture made (nothing when there is no ledger) */
+  private recordTexture(texture: WebGLTexture | null, bytes: number): void {
+    this.ledger?.ledger.record(texture, DRAPE_OWNER, 'texture', bytes);
+  }
+
+  /** Deletes a texture and takes it out of the ledger */
+  private deleteTexture(texture: WebGLTexture | null): void {
+    if (!texture) return;
+    this.ledger?.ledger.release(texture);
+    this.gl.deleteTexture(texture);
+  }
+
+  /**
    * Allocates the shader and the mesh
    */
   ensure(shaderData: ShaderData, meshSize: number): boolean {
     const gl = this.gl;
 
     if (!this.mesh || this.mesh.meshSize !== meshSize) {
-      if (this.mesh) disposeTerrainMeshBuffers(gl, this.mesh);
-      this.mesh = createTerrainMeshBuffers(gl, meshSize);
+      if (this.mesh) disposeTerrainMeshBuffers(gl, this.mesh, this.ledger);
+      this.mesh = createTerrainMeshBuffers(gl, meshSize, this.ledger);
       if (!this.mesh) {
         this.lastError = 'mesh-alloc-failed';
         return false;
@@ -1269,9 +1303,11 @@ export class DrapeRenderer {
     const low = gl.createTexture();
     gl.bindTexture(gl.TEXTURE_2D, low);
     gl.texStorage2D(gl.TEXTURE_2D, 1, gl.DEPTH_COMPONENT32F, 1, 1);
+    this.recordTexture(low, 4);
     const bounds = gl.createTexture();
     gl.bindTexture(gl.TEXTURE_2D, bounds);
     gl.texStorage2D(gl.TEXTURE_2D, 1, gl.RGBA32F, 1, 1);
+    this.recordTexture(bounds, 16);
     for (const texture of [low, bounds]) {
       gl.bindTexture(gl.TEXTURE_2D, texture);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
@@ -1407,7 +1443,7 @@ export class DrapeRenderer {
       this.program = null;
     }
     if (this.mesh) {
-      disposeTerrainMeshBuffers(gl, this.mesh);
+      disposeTerrainMeshBuffers(gl, this.mesh, this.ledger);
       this.mesh = null;
     }
     for (const texture of [
@@ -1418,13 +1454,13 @@ export class DrapeRenderer {
       this.styleTex,
       this.rankTex,
     ]) {
-      if (texture) gl.deleteTexture(texture);
+      this.deleteTexture(texture);
     }
     this.rankTex = null;
     this.rankTexSize = [0, 0];
     if (this.splitEmpty) {
-      gl.deleteTexture(this.splitEmpty.low);
-      gl.deleteTexture(this.splitEmpty.bounds);
+      this.deleteTexture(this.splitEmpty.low);
+      this.deleteTexture(this.splitEmpty.bounds);
       this.splitEmpty = null;
     }
     this.rowsUploaded = { storage: -1, copies: -1 };
@@ -1486,7 +1522,7 @@ export class DrapeRenderer {
     let target = texture;
     let all = whole;
     if (!target || this[sizeField][1] < neededRows) {
-      if (target) gl.deleteTexture(target);
+      this.deleteTexture(target);
       this[sizeField] = [0, 0];
       if (neededRows > maxRows) {
         this.lastError = `texture-limit: ${sizeField} needs ${neededRows} rows of ${maxRows}`;
@@ -1502,6 +1538,7 @@ export class DrapeRenderer {
         this.lastError = `texture-alloc-failed: ${sizeField}`;
         return null;
       }
+      this.recordTexture(target, textureBytes(width, rows, channels * 4));
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
@@ -1553,7 +1590,7 @@ export class DrapeRenderer {
 
     let target = texture;
     if (!target || size[0] !== width || size[1] < neededRows) {
-      if (target) gl.deleteTexture(target);
+      this.deleteTexture(target);
       this[sizeField] = [0, 0];
       this.uploaded[markField] = 0;
       // A table taller than the GPU allows cannot be allocated (texStorage2D would fail with
@@ -1574,6 +1611,7 @@ export class DrapeRenderer {
         this.lastError = `texture-alloc-failed: ${markField}`;
         return null;
       }
+      this.recordTexture(target, textureBytes(width, rows, channels * 4));
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);

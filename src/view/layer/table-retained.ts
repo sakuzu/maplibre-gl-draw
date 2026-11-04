@@ -618,7 +618,7 @@ export class TableLayerRenderer {
   /** The surface the rows are cut for, decided once per frame */
   private readonly surfaces = new TableSurface();
   /** The drape of the polygons and the lines of the rows on the terrain (`table-drape.ts`) */
-  readonly drape = new TableDrape();
+  readonly drape: TableDrape;
   /** The drape of the frame (null when the rows are drawn by their chunks) */
   private drapeFrame: TableDrapeFrame | null = null;
   /** Draws a layer on the drape, in the order of its rows */
@@ -723,6 +723,7 @@ export class TableLayerRenderer {
   ) => void;
 
   constructor(private readonly options: TableLayerRendererOptions) {
+    this.drape = new TableDrape(options.ledger);
     this.versionBudgetWhileMovingMs = options.versionBudgetWhileMovingMs ?? 0;
     this.rowExtents = new RowExtents(options.extensions);
     const stateCopies = options.keepCopies ? new WeakMap<RowStateTexture, Uint8Array>() : null;

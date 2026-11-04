@@ -15,6 +15,7 @@ import type { PointShape, PointStyle } from '../../../shared/types/style.js';
 import type { PixelRatioInput } from '../../../shared/utils/pixel-ratio.js';
 import { resolvePixelRatio } from '../../../shared/utils/pixel-ratio.js';
 import { BufferCache } from '../../cache/buffer.js';
+import type { GpuLedger } from '../../gpu-ledger.js';
 import type { OffsetUniforms, ShaderData } from '../../shaders/helpers.js';
 import {
   calculateLngLatOffset,
@@ -39,6 +40,9 @@ interface ShapeVertex {
 
 // Number of segments that approximate a circle
 const CIRCLE_SEGMENTS = RENDERING_DEFAULTS.CIRCLE_SEGMENTS;
+
+/** The owner the vertex buffers of the shapes are recorded under in the GPU ledger */
+const POINT_SHAPES_OWNER = 'point-shapes';
 
 /**
  * Generates the vertices of a normalized circle (for TRIANGLE_FAN)
@@ -226,18 +230,26 @@ export class PointShapeRenderer {
   private pixelRatio: PixelRatioInput | undefined;
   /** The terrain state of the draw instance this renderer belongs to */
   private readonly terrain: TerrainContext;
+  /** Where the bytes of the vertex buffers are recorded (nothing is recorded when omitted) */
+  private readonly ledger: GpuLedger | undefined;
 
   constructor(
     _map: MapLibreMap,
     gl: WebGL2RenderingContext,
     pixelRatio?: PixelRatioInput,
     terrain: TerrainContext = new TerrainContext(),
+    ledger?: GpuLedger,
   ) {
     this.gl = gl;
     this.pixelRatio = pixelRatio;
     this.terrain = terrain;
+    this.ledger = ledger;
     this.projectionUniformManager = new ProjectionUniformManager(gl).useTerrainState(terrain);
-    this.bufferCache = new BufferCache(gl);
+    this.bufferCache = new BufferCache(
+      gl,
+      undefined,
+      ledger ? { ledger, owner: POINT_SHAPES_OWNER } : undefined,
+    );
   }
 
   /**
@@ -550,7 +562,9 @@ void main() {
 
     const buffer = gl.createBuffer();
     gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
-    gl.bufferData(gl.ARRAY_BUFFER, toVertexData(vertices), gl.STATIC_DRAW);
+    const vertexData = toVertexData(vertices);
+    gl.bufferData(gl.ARRAY_BUFFER, vertexData, gl.STATIC_DRAW);
+    this.ledger?.record(buffer, POINT_SHAPES_OWNER, 'buffer', vertexData.byteLength);
 
     gl.enableVertexAttribArray(0);
     gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
@@ -558,6 +572,7 @@ void main() {
     gl.drawArrays(drawMode, 0, vertices.length);
 
     gl.bindVertexArray(null);
+    this.ledger?.release(buffer);
     gl.deleteBuffer(buffer);
     gl.deleteVertexArray(vao);
   }

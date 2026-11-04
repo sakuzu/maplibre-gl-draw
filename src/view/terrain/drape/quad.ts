@@ -27,6 +27,7 @@
  */
 
 import type { ProjectionData } from 'maplibre-gl';
+import type { GpuLedger, GpuLedgerOwner } from '../../gpu-ledger.js';
 import { setDepthTestEnabled } from '../../layer/depth-state.js';
 import type { ShaderData } from '../../shaders/helpers.js';
 import { createProgram } from '../../shaders/helpers.js';
@@ -43,7 +44,7 @@ import {
   type TerrainMeshBuffers,
   TILE_EXTENT,
 } from './mesh.js';
-import { DRAPE_LIFT_RATIO, type DrapeLight } from './renderer.js';
+import { DRAPE_LIFT_RATIO, DRAPE_OWNER, type DrapeLight } from './renderer.js';
 import {
   applyDrapeProjectionUniforms,
   applyDrapeTerrainUniforms,
@@ -459,9 +460,22 @@ export class QuadDrapeRenderer {
   private mesh: TerrainMeshBuffers | null = null;
   /** The most recent failure reason (for diagnostics) */
   lastError = '';
+  /** Where the bytes of the mesh are recorded (nothing is recorded until `useLedger`) */
+  private ledger: GpuLedgerOwner | undefined;
 
   constructor(gl: WebGL2RenderingContext) {
     this.gl = gl;
+  }
+
+  /**
+   * Records the GPU memory this renderer allocates from now on (call it before the first draw:
+   * it holds nothing before)
+   *
+   * @internal
+   */
+  useLedger(ledger: GpuLedger | undefined): this {
+    this.ledger = ledger ? { ledger, owner: DRAPE_OWNER } : undefined;
+    return this;
   }
 
   /**
@@ -470,8 +484,8 @@ export class QuadDrapeRenderer {
   private ensureMesh(meshSize: number): boolean {
     const gl = this.gl;
     if (this.mesh && this.mesh.meshSize === meshSize) return true;
-    if (this.mesh) disposeTerrainMeshBuffers(gl, this.mesh);
-    this.mesh = createTerrainMeshBuffers(gl, meshSize);
+    if (this.mesh) disposeTerrainMeshBuffers(gl, this.mesh, this.ledger);
+    this.mesh = createTerrainMeshBuffers(gl, meshSize, this.ledger);
     if (!this.mesh) {
       this.lastError = 'mesh-alloc-failed';
       return false;
@@ -676,7 +690,7 @@ export class QuadDrapeRenderer {
     }
     this.programs.clear();
     if (this.mesh) {
-      disposeTerrainMeshBuffers(gl, this.mesh);
+      disposeTerrainMeshBuffers(gl, this.mesh, this.ledger);
       this.mesh = null;
     }
   }
