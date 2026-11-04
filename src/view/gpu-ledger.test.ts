@@ -31,7 +31,12 @@ describe('GpuLedger', () => {
     ledger.record(buffer, 'polygons', 'buffer', 300);
     expect(ledger.snapshot().bytes).toBe(300);
     ledger.release(buffer);
-    expect(ledger.snapshot()).toMatchObject({ bytes: 0, bufferBytes: 0, textureBytes: 0, byOwner: {} });
+    expect(ledger.snapshot()).toMatchObject({
+      bytes: 0,
+      bufferBytes: 0,
+      textureBytes: 0,
+      byOwner: {},
+    });
   });
 
   it('ignores a missing object', () => {
