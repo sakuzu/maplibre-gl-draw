@@ -103,6 +103,7 @@ export {
   ROW_STATE_TEXTURE_UNIT,
   RowStateUniforms,
   rowStateBindingOf,
+  rowStateMovedViews,
   rowStateOf,
   uploadRowState,
 } from '../view/renderers/row-state.js';

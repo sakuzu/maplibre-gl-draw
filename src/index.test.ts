@@ -361,6 +361,7 @@ const WEBGL = [
   'ROW_STATE_TEXTURE_UNIT',
   'RowStateBinding',
   'rowStateBindingOf',
+  'rowStateMovedViews',
   'rowStateOf',
   'RowStateTexture',
   'RowStateUniforms',

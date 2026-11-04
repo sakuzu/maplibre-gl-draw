@@ -22,7 +22,8 @@
 import { type DraggedRows, draggedRowMotionsOf } from '../../feature-table/dragged-rows.js';
 import { MOVE_SETS } from '../../feature-table/row-state.js';
 import type { RowHandle } from '../../feature-table/types.js';
-import type { EnuEdit } from '../../geometry/enu-transforms.js';
+import { type EnuEdit, inverseEnuEdit, moveEnuPosition } from '../../geometry/enu-transforms.js';
+import type { BoundingBox } from '../../store/types.js';
 import { getRenderFrame } from '../shaders/frame.js';
 import type { RetainedDrawRun } from './draw-run.js';
 import {
@@ -501,4 +502,63 @@ export function rowStateBindingOf(
     }
   }
   return { texture, translations, transforms };
+}
+
+/**
+ * The regions a view sees the rows moved on the GPU by a binding from: the view moved back by the
+ * move of each moving set. A batch of such rows takes its origin near them while they are moved
+ * (`rebasedRetainedOrigin`).
+ *
+ * @param binding - The moves the rows are drawn with
+ * @param view - The view, longitude and latitude
+ * @returns The regions, none when no set moves by more than a translation
+ */
+export function rowStateMovedViews(binding: RowStateBinding, view: BoundingBox): BoundingBox[] {
+  const views: BoundingBox[] = [];
+  if (binding.transforms) movedViewsOf(binding.transforms, view, views);
+  return views;
+}
+
+/**
+ * The regions the view sees the rows of the moving sets from: the view moved back by the edit of
+ * each set (for a scaling, by its factors and by its size), as the extents of its corners, the
+ * middles of its sides and its center (appended to `out`)
+ *
+ * @internal
+ */
+export function movedViewsOf(
+  transforms: ReadonlyArray<EnuEdit | null>,
+  view: BoundingBox,
+  out: BoundingBox[],
+): void {
+  for (const edit of transforms) {
+    if (edit) movedBackViews(edit, view, out);
+  }
+}
+
+/**
+ * The regions a view is seen from before an edit (appended to `out`), as `movedViewsOf`
+ *
+ * @internal
+ */
+export function movedBackViews(edit: EnuEdit, view: BoundingBox, out: BoundingBox[]): void {
+  const back = inverseEnuEdit(edit);
+  for (const uniform of edit.kind === 'scale' ? [false, true] : [false]) {
+    let minX = Infinity;
+    let minY = Infinity;
+    let maxX = -Infinity;
+    let maxY = -Infinity;
+    for (const fx of [0, 0.5, 1]) {
+      for (const fy of [0, 0.5, 1]) {
+        const x = view.minX + (view.maxX - view.minX) * fx;
+        const y = Math.max(-90, Math.min(90, view.minY + (view.maxY - view.minY) * fy));
+        const p = moveEnuPosition(back, [x, y], uniform);
+        minX = Math.min(minX, p[0] as number);
+        minY = Math.min(minY, p[1] as number);
+        maxX = Math.max(maxX, p[0] as number);
+        maxY = Math.max(maxY, p[1] as number);
+      }
+    }
+    if (minX <= maxX && minY <= maxY) out.push({ minX, minY, maxX, maxY });
+  }
 }
