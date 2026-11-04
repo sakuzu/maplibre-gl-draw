@@ -511,6 +511,79 @@ describe('the drawing of the rows on the terrain and on the globe', () => {
     expect(heights.size).toBe(0);
   });
 
+  it('writes the elevations of the points again when the DEM under them arrives, and only there', () => {
+    // maplibre draws the tiles of the view before their DEM arrives: flat until it does, with
+    // the tiles drawn staying the same
+    const near = tileAt(CENTER[0], CENTER[1], 11);
+    const far = tileAt(CENTER[0] + 60, CENTER[1], 11);
+    const tiles = [near, far].map((canonical) => ({ tileID: { canonical, wrap: 0 } }));
+    const name = (t: { x: number; y: number; z: number }) => `${t.z}/${t.x}/${t.y}`;
+    const dems = new Map<string, object>();
+    const source = {
+      getTerrainData: () => null,
+      getElevationForLngLatZoom: (lngLat: { lng: number; lat: number }) =>
+        dems.has(name(tileAt(lngLat.lng, lngLat.lat, 11)))
+          ? (lngLat.lng - CENTER[0]) * 10_000 + 100
+          : 0,
+      tileManager: {
+        getRenderableTiles: () => tiles,
+        getSourceTile: (tileID: { canonical: { x: number; y: number; z: number } }) => {
+          const dem = dems.get(name(tileID.canonical));
+          return (
+            dem && { tileID: { key: name(tileID.canonical), canonical: tileID.canonical }, dem }
+          );
+        },
+      },
+    } as unknown as TerrainLike;
+    const { frame, heights, made, table } = setup(features(400, 'alternating'));
+    const group = table.groupAt(0);
+    const pointElevations = (): Array<{ written: number; drawnAt: number }> => {
+      const out: Array<{ written: number; drawnAt: number }> = [];
+      for (const [chunk, values] of heights) {
+        const data = made.find((d) => d.rowFirst === chunk.data.rowFirst) as RowsChunkData;
+        for (let i = 0; i < data.instanceCount; i++) {
+          const { kind, row, indices } = readRowsInstance(data.instances, i);
+          if (kind !== ROWS_KIND.point) continue;
+          const lng = group.data.rowBounds[row * 4];
+          const lat = group.data.rowBounds[row * 4 + 1];
+          // What the hit testing projects the point with in the same frame
+          out.push({
+            written: values[indices[0]],
+            drawnAt: anchorElevationMeters(terrain, lng, lat),
+          });
+        }
+      }
+      return out;
+    };
+    terrainFrame(source);
+    frame();
+    terrainFrame(source);
+    frame();
+    const flat = pointElevations();
+    expect(flat.length).toBeGreaterThan(0);
+    expect(flat.every(({ written }) => written === 0)).toBe(true);
+
+    // The DEM under the points arrives: their elevations are written again, as the hit testing
+    // reads them
+    heights.clear();
+    dems.set(name(near), {});
+    terrainFrame(source);
+    frame();
+    const ground = pointElevations();
+    expect(ground.length).toBe(flat.length);
+    for (const { written, drawnAt } of ground) {
+      expect(drawnAt).not.toBe(0);
+      expect(written).toBeCloseTo(drawnAt, 4);
+    }
+
+    // The DEM of a tile far away arrives: no chunk under it reads its points again
+    heights.clear();
+    dems.set(name(far), {});
+    terrainFrame(source);
+    frame();
+    expect(heights.size).toBe(0);
+  });
+
   it('packs again, in their places, the rows a new step of the terrain cuts otherwise', () => {
     const source = slopeTerrain(() => [tileAt(CENTER[0], CENTER[1], 11)]);
     const { frame, patched, made } = setup(features(400, 'alternating'));

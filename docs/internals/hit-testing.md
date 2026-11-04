@@ -741,6 +741,16 @@ screen position of the click. No geographic search is involved.
 - While the projector returns null (terrain disabled, no view drawn yet), the
   whole path falls back to the geographic one. Hit testing without terrain
   is unchanged
+- The points of a layer held as rows are tested the same way, with the
+  same projection (the `anchors` of the topmost hit tester). The rows are
+  too many to project every one, so their candidates come from the index
+  of the row boxes, searched in boxes along the line of sight under the
+  click, between the lowest and the highest ground of the terrain drawn
+  (`anchorSearchBoxes` in `src/view/terrain/anchor.ts`). The other types of
+  the rows keep the geographic path. The drawing reads the elevations of
+  these points from what it baked (`table-retained.ts`), rewritten under
+  every drawn tile whose DEM arrives or is replaced, so the drawn and the
+  hit elevations come from the same lookup
 - Vertex handles already share the anchor of the selection UI drawing, so
   they need no special path
 

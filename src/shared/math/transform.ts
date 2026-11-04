@@ -119,6 +119,17 @@ export interface AnchorProjector {
    * when it cannot be used.
    */
   project(lng: number, lat: number): ScreenPoint | null;
+  /**
+   * The boxes that hold every position whose anchor is drawn within `reachPx` CSS pixels of a
+   * point of the screen, on the ground along the line of sight under it (an anchor behind a
+   * ridge is drawn, and far from the position the point unprojects to): where the hit testing
+   * looks for the anchors it compares on the screen
+   *
+   * @param near The position the point unprojects to
+   * @returns The boxes, `[minLng, minLat, maxLng, maxLat]` one after another, the longitudes on
+   *   the copy of the world drawn under the point; null when it cannot be used (as `project`)
+   */
+  searchBoxes?(x: number, y: number, reachPx: number, near: LngLat): number[] | null;
 }
 
 /**

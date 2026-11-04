@@ -60,14 +60,22 @@ import { nearestLongitude } from '../../shared/math/longitude.js';
 import { clipOfPosition } from '../shaders/center-projection.js';
 import type { OffsetUniforms, ProjectionMatrices } from '../shaders/helpers.js';
 import { INACTIVE_ANCHOR_FRAME, type TerrainContext, type ViewFrame } from './context.js';
-import { getRenderableTerrainTiles, type TerrainLike } from './detect.js';
+import {
+  getRenderableTerrainTiles,
+  getTerrainElevationRange,
+  getTerrainTileSource,
+  type TerrainLike,
+} from './detect.js';
 import { groundElevationMeters, type TerrainElevationQuery } from './ground.js';
+import { latFromMercatorY, lngFromMercatorX, mercatorX, mercatorY } from './tessellation.js';
 
 /**
  * Returns a number that changes whenever the elevations {@link anchorElevationMeters} returns
- * may have changed (the DEM coverage changed).
+ * may have changed: the terrain tiles drawn changed, or a tile drawn is drawn with another DEM
+ * (its DEM arrived, or a finer one replaced the coarser one it was drawn with).
  *
- * Compare it between frames to know when positions baked with elevations must be rebuilt.
+ * Compare it between frames to know when positions baked with elevations must be rebuilt. The
+ * regions the last advance concerns are `context.coverage.changedRegions`.
  *
  * @param context The terrain state of the draw instance
  * @returns The generation number
@@ -77,14 +85,18 @@ export function getAnchorElevationGeneration(context: TerrainContext): number {
 }
 
 /**
- * Advances the generation by looking at whether the DEM coverage changed
+ * Advances the generation by looking at whether the DEM coverage changed: the tile set, or the
+ * DEM a tile of it is drawn with
  *
- * The comparison uses a string listing the identifiers of the tile set. The number of tiles
- * per frame is a few dozen, so building it every frame is negligible.
+ * The tiles drawn are a few dozen per frame, so comparing them every frame is negligible. The
+ * DEMs are compared by the tile maplibre reads each tile's elevations from, so the generation
+ * advances when the DEM arrives, not on every frame it takes to arrive.
  */
 function syncCoverage(context: TerrainContext, terrain: TerrainLike | null): void {
   const changed = terrain
-    ? context.coverage.update(getRenderableTerrainTiles(terrain))
+    ? context.coverage.update(getRenderableTerrainTiles(terrain), (tile) =>
+        getTerrainTileSource(terrain, tile),
+      )
     : context.coverage.clear();
   if (changed) context.elevationGeneration++;
 }
@@ -129,6 +141,7 @@ export function setAnchorFrame(
   };
 
   context.elevationCache.clear();
+  context.groundRange = undefined;
   context.occlusionCache.clear();
   syncCoverage(context, terrain);
 }
@@ -144,6 +157,7 @@ export function clearAnchorFrame(context: TerrainContext): void {
   context.anchorFrame = INACTIVE_ANCHOR_FRAME;
   if (context.elevationCache.size > 0) context.elevationCache = new Map();
   if (context.occlusionCache.size > 0) context.occlusionCache = new Map();
+  context.groundRange = undefined;
   syncCoverage(context, null);
 }
 
@@ -382,6 +396,243 @@ export function unprojectOnView(
   return at && Math.hypot(x - at.x, y - at.y) <= UNPROJECT_MISS_PX ? { lng, lat } : null;
 }
 
+/** The steps of Newton's method of {@link positionAtElevation} at most */
+const LEVEL_STEPS = 24;
+
+/** How many times a step of {@link positionAtElevation} is halved before it gives up */
+const LEVEL_BACKTRACKS = 12;
+
+/**
+ * Meters added below and above the ground of the frame the line of sight is searched between
+ * (the rounding of the elevations, which are bilinear between the pixels of the DEM)
+ */
+const GROUND_PADDING_METERS = 1;
+
+/** The boxes a line of sight is searched in at most */
+const SIGHT_MAX_BOXES = 128;
+
+/**
+ * The factor the reach of a box is grown by: the reach is measured at the ends of each box, and
+ * the projection bends a little between them (the perspective, the globe)
+ */
+const SIGHT_REACH_MARGIN = 1.5;
+
+/**
+ * The position at a given elevation drawn at a point of the screen: the inverse of
+ * {@link projectAnchorAt}, found by Newton's method from `near`, each step halved while it does
+ * not bring the position closer (a plane at a fixed elevation can be seen up to its horizon
+ * only, so a full step may land beyond it)
+ *
+ * @returns null when no position at that elevation is drawn there (the line of sight does not
+ *   reach the elevation in front of the camera)
+ */
+function positionAtElevation(
+  context: TerrainContext,
+  x: number,
+  y: number,
+  elevation: number,
+  near: { lng: number; lat: number },
+): { lng: number; lat: number } | null {
+  let lng = near.lng;
+  let lat = near.lat;
+  let at = projectAnchorAt(context, lng, lat, elevation);
+  if (!at) return null;
+  let error = Math.hypot(x - at.x, y - at.y);
+  for (let step = 0; step < LEVEL_STEPS && error > UNPROJECT_TOLERANCE_PX; step++) {
+    const jacobian = jacobianAt(context, lng, lat, elevation, at);
+    if (!jacobian) return null;
+    const { a, b, c, d, det } = jacobian;
+    const dx = x - at.x;
+    const dy = y - at.y;
+    const dLng = (d * dx - b * dy) / det;
+    const dLat = (a * dy - c * dx) / det;
+    let scale = 1;
+    let moved = false;
+    for (let k = 0; k < LEVEL_BACKTRACKS; k++, scale /= 2) {
+      const nextLng = lng + dLng * scale;
+      const nextLat = Math.max(-90, Math.min(90, lat + dLat * scale));
+      const next = projectAnchorAt(context, nextLng, nextLat, elevation);
+      if (!next) continue;
+      const nextError = Math.hypot(x - next.x, y - next.y);
+      if (nextError < error) {
+        lng = nextLng;
+        lat = nextLat;
+        at = next;
+        error = nextError;
+        moved = true;
+        break;
+      }
+    }
+    if (!moved) break;
+  }
+  return error <= UNPROJECT_MISS_PX ? { lng, lat } : null;
+}
+
+/**
+ * The derivatives of {@link projectAnchorAt} at a position (screen pixels per degree), null where
+ * they cannot be taken (behind the camera, or where the projection folds)
+ */
+function jacobianAt(
+  context: TerrainContext,
+  lng: number,
+  lat: number,
+  elevation: number,
+  at: ScreenPoint,
+): { a: number; b: number; c: number; d: number; det: number } | null {
+  const h = UNPROJECT_STEP_DEGREES;
+  const east = projectAnchorAt(context, lng + h, lat, elevation);
+  const north = projectAnchorAt(context, lng, lat + h, elevation);
+  if (!east || !north) return null;
+  const a = (east.x - at.x) / h;
+  const b = (north.x - at.x) / h;
+  const c = (east.y - at.y) / h;
+  const d = (north.y - at.y) / h;
+  const det = a * d - b * c;
+  if (!Number.isFinite(det) || det === 0) return null;
+  return { a, b, c, d, det };
+}
+
+/**
+ * The lowest and the highest ground of the terrain drawn in the frame (meters, as
+ * {@link anchorElevationMeters} gives it), read once per frame; null where the terrain cannot
+ * tell
+ */
+function groundRange(context: TerrainContext): { min: number; max: number } | null {
+  const terrain = context.anchorFrame.terrain;
+  if (!terrain) return null;
+  if (context.groundRange === undefined) {
+    context.groundRange = getTerrainElevationRange(terrain, getRenderableTerrainTiles(terrain));
+  }
+  return context.groundRange;
+}
+
+/** A position on a line of sight: Mercator x and y, and the elevation in meters */
+interface SightPoint {
+  readonly x: number;
+  readonly y: number;
+  readonly elevation: number;
+}
+
+/**
+ * The boxes that hold every position an anchor drawn within `reachPx` of a point of the screen
+ * can stand at: what the hit testing of points drawn without a depth test looks for candidates
+ * in
+ *
+ * Such a point is seen even behind a ridge, so the position the click unprojects to (the
+ * ground in front) can be far from it. What it can be is a position on the ground along the
+ * line of sight under the point, between the lowest and the highest ground of the terrain
+ * drawn: the line of sight is followed between the elevations it crosses them at (or the camera,
+ * when the camera is between them), and cut into boxes along it, each grown by the reach in
+ * degrees at its ends, so the boxes stay narrow around the line of sight.
+ *
+ * @param x The point of the screen, in CSS pixels
+ * @param y The point of the screen, in CSS pixels
+ * @param reachPx How far on the screen from the point an anchor is looked for
+ * @param near The position the point unprojects to (the ground the line of sight meets)
+ * @returns The boxes, `[minLng, minLat, maxLng, maxLat]` one after another (the longitudes on
+ *   the copy of the world drawn under the point), or null when the anchors are projected
+ *   without terrain or the terrain cannot tell the range of its ground
+ * @internal
+ */
+export function anchorSearchBoxes(
+  context: TerrainContext,
+  x: number,
+  y: number,
+  reachPx: number,
+  near: { lng: number; lat: number },
+): number[] | null {
+  if (!isAnchorActive(context)) return null;
+  const range = groundRange(context);
+  if (!range) return null;
+  const low = range.min - GROUND_PADDING_METERS;
+  const high = range.max + GROUND_PADDING_METERS;
+  const nearLng = drawnLongitude(context, near.lng);
+
+  // The ends of the stretch of the line of sight between the two elevations
+  const ends: SightPoint[] = [];
+  for (const elevation of [high, low]) {
+    const at = positionAtElevation(context, x, y, elevation, { lng: nearLng, lat: near.lat });
+    if (at) ends.push(sightPointOf(at.lng, at.lat, elevation));
+  }
+  const frame = context.anchorFrame;
+  const camera = frame.cameraMercator;
+  if (ends.length < 2 && camera && frame.elevationScale > 0) {
+    // A camera between the two elevations: the line of sight starts there
+    const elevation = camera[2] / frame.elevationScale;
+    if (elevation >= low && elevation <= high) {
+      const cameraLng = nearestLongitude(lngFromMercatorX(camera[0]), nearLng);
+      ends.push({ x: mercatorX(cameraLng), y: camera[1], elevation });
+    }
+  }
+  if (ends.length < 2) {
+    // The ground the line of sight meets is on the stretch
+    ends.push(sightPointOf(nearLng, near.lat, anchorElevationMeters(context, near.lng, near.lat)));
+  }
+  const from = ends[0];
+  const to = ends[ends.length - 1];
+
+  const pointAt = (t: number): SightPoint => ({
+    x: from.x + (to.x - from.x) * t,
+    y: from.y + (to.y - from.y) * t,
+    elevation: from.elevation + (to.elevation - from.elevation) * t,
+  });
+  // The reach in degrees around a position of the line of sight (0 where it cannot be taken:
+  // at the camera, where the reach on the ground is none)
+  const reachAt = (point: SightPoint): { lng: number; lat: number } => {
+    const lng = lngFromMercatorX(point.x);
+    const lat = latFromMercatorY(point.y);
+    const at = projectAnchorAt(context, lng, lat, point.elevation);
+    const jacobian = at && jacobianAt(context, lng, lat, point.elevation, at);
+    if (!jacobian) return { lng: 0, lat: 0 };
+    const { a, b, c, d, det } = jacobian;
+    const scale = (reachPx * SIGHT_REACH_MARGIN) / Math.abs(det);
+    return { lng: (Math.abs(d) + Math.abs(b)) * scale, lat: (Math.abs(c) + Math.abs(a)) * scale };
+  };
+
+  const boxes: number[] = [];
+  const length = Math.hypot(
+    lngFromMercatorX(to.x) - lngFromMercatorX(from.x),
+    latFromMercatorY(to.y) - latFromMercatorY(from.y),
+  );
+  let t = 0;
+  let start = pointAt(0);
+  let reach = reachAt(start);
+  for (let count = 1; count <= SIGHT_MAX_BOXES; count++) {
+    // Each box about as long as it is wide, the last one to the end of the stretch
+    const span = 2 * Math.max(reach.lng, reach.lat);
+    const step = length > 0 ? Math.max(1 / SIGHT_MAX_BOXES, span / length) : 1;
+    const next = count === SIGHT_MAX_BOXES ? 1 : Math.min(1, t + step);
+    const end = pointAt(next);
+    const endReach = reachAt(end);
+    const reachLng = Math.max(reach.lng, endReach.lng);
+    const reachLat = Math.max(reach.lat, endReach.lat);
+    const lng0 = lngFromMercatorX(start.x);
+    const lng1 = lngFromMercatorX(end.x);
+    const lat0 = latFromMercatorY(start.y);
+    const lat1 = latFromMercatorY(end.y);
+    boxes.push(
+      Math.min(lng0, lng1) - reachLng,
+      Math.max(-90, Math.min(lat0, lat1) - reachLat),
+      Math.max(lng0, lng1) + reachLng,
+      Math.min(90, Math.max(lat0, lat1) + reachLat),
+    );
+    if (next >= 1) break;
+    t = next;
+    start = end;
+    reach = endReach;
+  }
+  return boxes;
+}
+
+/** The latitudes Web Mercator reaches */
+const MAX_MERCATOR_LATITUDE = 85.0511287798066;
+
+/** A position of the line of sight in Mercator (the latitude held within Web Mercator) */
+function sightPointOf(lng: number, lat: number, elevation: number): SightPoint {
+  const held = Math.max(-MAX_MERCATOR_LATITUDE, Math.min(MAX_MERCATOR_LATITUDE, lat));
+  return { x: mercatorX(lng), y: mercatorY(held), elevation };
+}
+
 /**
  * Injects the anchor projection into the hit testing side (once when the layer is created)
  *
@@ -395,6 +646,7 @@ export function unprojectOnView(
 export function installAnchorProjector(map: MapLibreMap, context: TerrainContext): void {
   const projector: AnchorProjector = {
     project: (lng, lat) => projectAnchor(context, lng, lat),
+    searchBoxes: (x, y, reachPx, near) => anchorSearchBoxes(context, x, y, reachPx, near),
   };
   setAnchorProjector(map, projector);
   // The view of the frame drawn last, which every conversion between the map and the screen

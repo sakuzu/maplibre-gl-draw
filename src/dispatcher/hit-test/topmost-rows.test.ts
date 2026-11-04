@@ -22,6 +22,7 @@ import {
   createFeatureTablesStore,
   featureTablesInternals,
 } from '../../feature-table/feature-tables.js';
+import { getAnchorProjector } from '../../shared/math/index.js';
 import { DrawStore, RELEASE_DELAY_MS } from '../../store/draw-store.js';
 import { MemoryContractStore } from '../../store/memory.js';
 import { RBushSpatialIndex } from '../../store/spatial/spatial-index.js';
@@ -33,8 +34,23 @@ import {
   type FeatureCompanionProvider,
   type FeatureCompanionRegistry,
 } from '../../view/feature-companion.js';
+import {
+  clearAnchorFrame,
+  installAnchorProjector,
+  projectAnchor,
+  setAnchorFrame,
+  uninstallAnchorProjector,
+} from '../../view/terrain/anchor.js';
+import { TerrainContext } from '../../view/terrain/context.js';
+import type { TerrainLike } from '../../view/terrain/detect.js';
 import { HitTestServiceImpl } from './service.js';
-import { createTopmostHitTester, POINTER_HOLD_MS, POINTER_OWNER, type TopHit } from './topmost.js';
+import {
+  createTopmostHitTester,
+  POINTER_HOLD_MS,
+  POINTER_OWNER,
+  type TopHit,
+  type TopmostAnchorProjector,
+} from './topmost.js';
 
 const square = (x: number, y: number) => [
   [
@@ -477,5 +493,139 @@ describe('the hit testing of the companions of the rows held as columns', () => 
     // The providers go
     companions.clear();
     expect(hitTest(at(60, 50))).toBeNull();
+  });
+});
+
+describe('the hit testing of the points of the rows on the terrain', () => {
+  /** A tester whose points of the rows are hit on the screen with an anchor projection */
+  function screenTester(anchors: TopmostAnchorProjector) {
+    const service = new HitTestServiceImpl(store, new RBushSpatialIndex());
+    return createTopmostHitTester({
+      store,
+      hitTestService: service,
+      unproject,
+      toleranceLngLat: () => 0.5,
+      getZoom: () => 3,
+      clickTolerancePx: 5,
+      anchors,
+    });
+  }
+
+  it('hits a point drawn behind a ridge where it is drawn, far from the click unprojected', () => {
+    // The click (100, 0) unprojects to longitude 10, on the ridge in front; the point stands at
+    // longitude 40 and its anchor is drawn just beside the click
+    layer('l');
+    adopt('l', [feature('ghost', 'Point', [40, 0])]);
+    const anchors: TopmostAnchorProjector = {
+      project: (lng, lat) => (lng === 40 ? { x: 102, y: 1 } : at(lng, lat)),
+      searchBoxes: () => [39, -1, 41, 1],
+    };
+    const hit = screenTester(anchors)({ x: 100, y: 0 });
+    expect(rowId(hit)).toBe('ghost');
+    if (hit?.kind !== 'row') throw new Error('row');
+    // Measured on the screen, where it was hit
+    expect(hit.distancePx()).toBeCloseTo(Math.hypot(2, 1), 6);
+    // At the coordinate of the click it is not found: the test would protect nothing otherwise
+    expect(tester()({ x: 100, y: 0 })).toBeNull();
+  });
+
+  it('does not hit a point drawn away from the click, near it in degrees, and lets the rows behind be hit', () => {
+    layer('l');
+    adopt('l', [feature('fill', 'Polygon', square(5, -5)), feature('point', 'Point', [10, 0])]);
+    const anchors: TopmostAnchorProjector = {
+      // Drawn far from the click on the screen (on the other side of a mountain)
+      project: () => ({ x: 600, y: 600 }),
+      searchBoxes: () => [9, -1, 11, 1],
+    };
+    expect(rowId(screenTester(anchors)(at(10, 0)))).toBe('fill');
+    // At the coordinate the point in front is hit
+    expect(rowId(tester()(at(10, 0)))).toBe('point');
+  });
+
+  it('hits the points at the coordinate as before where the projection is not usable', () => {
+    layer('l');
+    adopt('l', [feature('point', 'Point', [10, 0])]);
+    const anchors: TopmostAnchorProjector = {
+      project: () => null,
+      searchBoxes: () => null,
+    };
+    expect(rowId(screenTester(anchors)(at(10, 0.2)))).toBe('point');
+  });
+
+  it('hits a point behind a ridge with the anchor projection the drawing uses', () => {
+    // A ground that rises to 2,000 m and falls back to 0 (a ridge), with the anchors projected
+    // as the drawing projects them, through the projector of the map
+    const context = new TerrainContext();
+    const map = {} as never;
+    installAnchorProjector(map, context);
+    try {
+      const ridge = (lat: number) => (lat > 0.001 && lat < 0.002 ? 2000 : 0);
+      const terrain = {
+        getTerrainData: () => null,
+        getElevationForLngLatZoom: (lngLat: { lng: number; lat: number }) => ridge(lngLat.lat),
+        getMinMaxElevation: () => ({ minElevation: 0, maxElevation: 2000 }),
+        tileManager: {
+          getRenderableTiles: () => [{ tileID: { canonical: { x: 0, y: 0, z: 0 } } }],
+        },
+      } as unknown as TerrainLike;
+      // Mercator to the screen (0.001 degrees about 110 px), seen from the south: 2,000 m lift
+      // a position up the screen by about 100 px, so the ridge hides the ground just north of
+      // it, where the point stands
+      const m = new Array(16).fill(0);
+      m[0] = 1e5;
+      m[5] = -1e5;
+      m[9] = 6667;
+      m[10] = 1;
+      m[12] = -0.5e5;
+      m[13] = 0.5e5;
+      m[15] = 1;
+      setAnchorFrame(context, {
+        terrain,
+        zoom: 14,
+        elevationScale: 1 / 4e7,
+        projection: { mainMatrix: m } as never,
+        offsetUniforms: {
+          centerLngLat: [0, 0],
+          centerLngLat64: [0, 0],
+          centerMercator: [0.5, 0.5],
+          projectionCenter: [0, 0, 0, 1],
+        },
+        width: 800,
+        height: 600,
+      });
+      const projector = getAnchorProjector(map);
+      const anchors: TopmostAnchorProjector = {
+        project: (lng, lat) => projector?.project(lng, lat) ?? null,
+        searchBoxes: (point, reachPx, near) =>
+          projector?.searchBoxes?.(point.x, point.y, reachPx, near) ?? null,
+      };
+      // The point behind the ridge, on the ground at 0 m
+      layer('l');
+      adopt('l', [feature('behind', 'Point', [0.0005, 0.0025])]);
+      const drawn = projectAnchor(context, 0.0005, 0.0025);
+      expect(drawn).not.toBeNull();
+      if (!drawn) return;
+      // The top of the ridge is drawn over it
+      const top = projectAnchor(context, 0.0005, 0.0015);
+      expect(top && Math.abs(top.y - drawn.y)).toBeLessThan(20);
+      // The click there unprojects onto the ridge, about 100 m in front of the point
+      const onRidge = { lng: 0.0005, lat: 0.0015 };
+      const service = new HitTestServiceImpl(store, new RBushSpatialIndex());
+      const hitTest = (withAnchors: boolean) =>
+        createTopmostHitTester({
+          store,
+          hitTestService: service,
+          unproject: () => onRidge,
+          toleranceLngLat: () => 1e-5,
+          getZoom: () => 14,
+          clickTolerancePx: 5,
+          ...(withAnchors && { anchors }),
+        })(drawn);
+      expect(rowId(hitTest(true))).toBe('behind');
+      expect(hitTest(false)).toBeNull();
+    } finally {
+      uninstallAnchorProjector(map);
+      clearAnchorFrame(context);
+    }
   });
 });

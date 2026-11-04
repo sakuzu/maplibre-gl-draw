@@ -13,7 +13,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { anchorElevationMeters, clearAnchorFrame, setAnchorFrame } from './anchor.js';
 import { TerrainContext } from './context.js';
-import type { RenderableTerrainTile, TerrainLike } from './detect.js';
+import type { RenderableTerrainTile, TerrainLike, TerrainTileSource } from './detect.js';
 import { groundElevationMeters, TerrainCoverage } from './ground.js';
 
 function tile(z: number, x: number, y: number, wrap = 0): RenderableTerrainTile {
@@ -66,6 +66,50 @@ describe('TerrainCoverage', () => {
     const coverage = new TerrainCoverage();
     coverage.update([tile(0, 0, 0)]);
     expect(coverage.covers(0, 89)).toBe(false);
+  });
+
+  it('reports a DEM that arrives for a tile drawn, and where, while the tiles stay the same', () => {
+    const coverage = new TerrainCoverage();
+    const tiles = [tile(4, 3, 5), tile(4, 9, 9)];
+    // Every tile drawn before its DEM arrives
+    const dems = new Map<string, TerrainTileSource>();
+    const sourceOf = (t: RenderableTerrainTile) => dems.get(`${t.z}/${t.x}/${t.y}`) ?? null;
+    expect(coverage.update(tiles, sourceOf)).toBe(true);
+    expect(coverage.update(tiles, sourceOf)).toBe(false);
+
+    // The DEM of one tile arrives: only that tile, a pixel of its DEM around it
+    dems.set('4/3/5', { key: '3/1/2', dem: {}, z: 3, dim: 256 });
+    expect(coverage.update(tiles, sourceOf)).toBe(true);
+    const pixel = 1 / (2 ** 3 * 256);
+    expect(coverage.changedRegions).toHaveLength(1);
+    const [region] = coverage.changedRegions;
+    expect(region.x0).toBeCloseTo(3 / 16 - pixel, 12);
+    expect(region.y0).toBeCloseTo(5 / 16 - pixel, 12);
+    expect(region.x1).toBeCloseTo(4 / 16 + pixel, 12);
+    expect(region.y1).toBeCloseTo(6 / 16 + pixel, 12);
+    // The same DEM on the next frame is no change
+    expect(coverage.update(tiles, sourceOf)).toBe(false);
+
+    // A finer DEM replaces it, and then the same tile loaded again (a new data)
+    dems.set('4/3/5', { key: '4/3/5', dem: {}, z: 4, dim: 256 });
+    expect(coverage.update(tiles, sourceOf)).toBe(true);
+    expect(coverage.changedRegions).toHaveLength(1);
+    dems.set('4/3/5', { key: '4/3/5', dem: {}, z: 4, dim: 256 });
+    expect(coverage.update(tiles, sourceOf)).toBe(true);
+    expect(coverage.changedRegions).toHaveLength(1);
+    // The tiles drawn stayed the same through all of it
+    expect(coverage.key).toBe('0/4/3/5,0/4/9/9,');
+  });
+
+  it('reports the tiles that came or went as the regions that changed', () => {
+    const coverage = new TerrainCoverage();
+    coverage.update([tile(2, 0, 0), tile(2, 1, 0)]);
+    expect(coverage.update([tile(2, 1, 0), tile(2, 2, 0)])).toBe(true);
+    const lefts = coverage.changedRegions.map((region) => region.x0).sort();
+    // The tile that came (x 2) and the tile that went (x 0)
+    expect(lefts).toEqual([0, 0.5]);
+    expect(coverage.clear()).toBe(true);
+    expect(coverage.changedRegions).toHaveLength(2);
   });
 });
 

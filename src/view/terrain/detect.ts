@@ -52,6 +52,33 @@ export interface TerrainLike {
    * elevation comes from `map.queryTerrainElevation`, which samples the drawn tile.
    */
   getElevationForLngLatZoom?(lngLat: TerrainLngLat, zoom: number): number;
+  /**
+   * The lowest and the highest ground of the DEM a terrain tile is drawn with (in meters, after
+   * the exaggeration factor is applied); null values while no DEM has arrived for it
+   */
+  getMinMaxElevation?(tileID: unknown): {
+    minElevation: number | null;
+    maxElevation: number | null;
+  };
+}
+
+/**
+ * The DEM tile a terrain tile is drawn with: its own once it has arrived, a coarser one that has
+ * until then (maplibre's `getSourceTile(tileID, true)`, what `getTerrainData` and
+ * `queryTerrainElevation` read)
+ */
+export interface TerrainTileSource {
+  /** The key of the DEM tile */
+  readonly key: string;
+  /**
+   * The elevation data of the DEM tile (a new object when the tile is loaded again; maplibre
+   * fills its border in place when a neighbour arrives)
+   */
+  readonly dem: object;
+  /** The zoom of the DEM tile */
+  readonly z: number;
+  /** The number of pixels of the DEM tile on a side */
+  readonly dim: number;
 }
 
 /**
@@ -201,6 +228,81 @@ export function getTerrainMeshSize(terrain: TerrainLike): number {
 
 interface TileManagerLike {
   getRenderableTiles?: () => Array<{ tileID?: unknown }>;
+  getSourceTile?: (tileID: unknown, searchForDEM?: boolean) => SourceTileLike | undefined;
+}
+
+/** The necessary part of a DEM tile of maplibre */
+interface SourceTileLike {
+  tileID?: { key?: unknown; canonical?: { z?: unknown } };
+  dem?: { dim?: unknown } | null;
+}
+
+/** The tile manager of the terrain (`tileManager` in v6, `sourceCache` in v5) */
+function terrainTileManager(terrain: TerrainLike): TileManagerLike | undefined {
+  const holder = terrain as unknown as {
+    tileManager?: TileManagerLike;
+    sourceCache?: TileManagerLike;
+  };
+  return holder.tileManager ?? holder.sourceCache;
+}
+
+/**
+ * The DEM tile a terrain tile is drawn with (null while no DEM has arrived for it, or where the
+ * terrain cannot tell)
+ *
+ * It is what tells the elevations of a tile changed while the tiles drawn stay the same: the DEM
+ * arrives after the tile is first drawn, and a finer one replaces the coarser one drawn until
+ * then.
+ */
+export function getTerrainTileSource(
+  terrain: TerrainLike,
+  tile: RenderableTerrainTile,
+): TerrainTileSource | null {
+  const manager = terrainTileManager(terrain);
+  if (!manager || typeof manager.getSourceTile !== 'function') return null;
+  let source: SourceTileLike | undefined;
+  try {
+    source = manager.getSourceTile(tile.tileID, true);
+  } catch {
+    return null;
+  }
+  const dem = source?.dem;
+  const key = source?.tileID?.key;
+  const z = source?.tileID?.canonical?.z;
+  if (!dem || typeof dem !== 'object' || typeof z !== 'number' || !Number.isFinite(z)) return null;
+  const dim = typeof dem.dim === 'number' && dem.dim > 0 ? dem.dim : 1;
+  return { key: String(key), dem, z, dim };
+}
+
+/**
+ * The lowest and the highest ground of the terrain tiles drawn, in meters as the anchors read
+ * it (`getMinMaxElevation` of maplibre, the exaggeration included)
+ *
+ * A tile whose DEM has not arrived is drawn flat, at 0. null when the terrain cannot tell the
+ * range of a tile.
+ */
+export function getTerrainElevationRange(
+  terrain: TerrainLike,
+  tiles: readonly RenderableTerrainTile[],
+): { min: number; max: number } | null {
+  if (typeof terrain.getMinMaxElevation !== 'function' || tiles.length === 0) return null;
+  let min = Number.POSITIVE_INFINITY;
+  let max = Number.NEGATIVE_INFINITY;
+  for (const tile of tiles) {
+    let range: { minElevation: number | null; maxElevation: number | null };
+    try {
+      range = terrain.getMinMaxElevation(tile.tileID);
+    } catch {
+      return null;
+    }
+    const low = range?.minElevation;
+    const high = range?.maxElevation;
+    const known = typeof low === 'number' && typeof high === 'number';
+    if (known && !(Number.isFinite(low) && Number.isFinite(high))) return null;
+    min = Math.min(min, known ? low : 0);
+    max = Math.max(max, known ? high : 0);
+  }
+  return { min, max };
 }
 
 /**
@@ -222,11 +324,7 @@ export function getMapTerrain(map: MapLibreMap | null | undefined): TerrainLike 
  * result is returned.
  */
 export function getRenderableTerrainTiles(terrain: TerrainLike): RenderableTerrainTile[] {
-  const holder = terrain as unknown as {
-    tileManager?: TileManagerLike;
-    sourceCache?: TileManagerLike;
-  };
-  const manager = holder.tileManager ?? holder.sourceCache;
+  const manager = terrainTileManager(terrain);
   if (!manager || typeof manager.getRenderableTiles !== 'function') return [];
 
   let tiles: Array<{ tileID?: unknown }>;

@@ -208,12 +208,22 @@ Each item has the same five parts.
   `src/view/layer/drape-planner.ts` stores only the tile ID, the row number
   and the ground size; the DEM texture and matrix are looked up again on
   every draw. `QuadDrapeFrame` in `src/view/terrain/drape/quad.ts` takes a
-  lookup function for the same reason.
+  lookup function for the same reason. The elevations baked on the CPU (the
+  anchors of points) follow the same swap: `TerrainCoverage` in
+  `src/view/terrain/ground.ts` compares, every frame, the DEM tile each
+  drawn tile is read from (`getSourceTile(tileID, true)` through
+  `getTerrainTileSource` in `detect.ts`, with the identity of its `dem`),
+  so the anchor generation advances when a DEM arrives or a finer one
+  replaces the parent, and the points are read again under those tiles
+  only (`changedRegions`).
 - Symptoms when it breaks — if the texture and matrix were cached in the
   plan, the ground would keep the coarse parent's elevations and disagree
   with maplibre's mesh: polygons and lines lose to depth and disappear, or
   float like a tent over summits. Moving the zoom (which changes the tile
-  IDs) would fix it, while moving the bearing would not.
+  IDs) would fix it, while moving the bearing would not. If the DEM tile
+  were not compared, the points baked before their DEM arrived would stay
+  at 0 m (in a pitched view, off the slope by an amount in proportion to
+  its elevation) until a zoom changes the tile IDs.
 - Check when upgrading — manual. Reload a terrain map several times and
   see that the polygon fill covers the same pixels every time and after a
   zoom round trip.
@@ -232,6 +242,11 @@ Each item has the same five parts.
   flat rendering. `getRenderableTerrainTiles()` tries `tileManager` and
   then the v5 `sourceCache`, and returns an empty list when neither exists.
   `getCameraMercator()` looks at both transform locations.
+  `getTerrainTileSource()` asks the tile manager for the DEM tile a drawn
+  tile is read from (`getSourceTile`), and `getTerrainElevationRange()`
+  asks `terrain.getMinMaxElevation` for the lowest and the highest ground
+  of the drawn tiles (the hit testing of points follows the line of sight
+  between them); each answers null where the method is missing.
   `getTerrainTileData()` reads `texture`, `u_terrain_matrix`,
   `u_terrain_unpack` and `u_terrain_dim` from `TerrainData` and rejects them
   unless the matrix has 16 elements and the unpack vector 4. No values are

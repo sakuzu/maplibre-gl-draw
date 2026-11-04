@@ -16,8 +16,9 @@
  *   each other always lie on one mesh
  * - the piece of the lines: on the terrain a length the camera does not change (the step of the
  *   mesh at {@link LINE_PIECE_ZOOM}), on the globe the cell of the globe for the lines
- * - the elevations of the points: the tiles of the terrain drawn changed (`elevationGeneration`),
- *   and the regions of the tiles that came or went, kept for the last generations so a chunk
+ * - the elevations of the points: the tiles of the terrain drawn or their DEMs changed
+ *   (`elevationGeneration`), and the regions of the tiles that came, went or are drawn with
+ *   another DEM (`TerrainCoverage.changedRegions`), kept for the last generations so a chunk
  *   reads again only the points under them
  *
  * A new surface advances `generation`: the chunks cut for an older one are cut again, a row at a
@@ -100,8 +101,6 @@ export class TableSurface {
   /** The index of the tiles of the terrain seen last, and a number for each new one */
   private tiling: object | null = null;
   private tilingCount = 0;
-  /** The tiles of the terrain drawn, as the coverage names them, at the generation seen last */
-  private tiles = new Set<string>();
   private elevationGeneration = -1;
   private readonly changes: ElevationChange[] = [];
 
@@ -190,19 +189,17 @@ export class TableSurface {
     return this.groundGenerations.includes(generation);
   }
 
-  /** Records the tiles of the terrain that came or went with a new generation of the elevations */
+  /**
+   * Records where the elevations changed with a new generation of the elevations: the tiles of
+   * the terrain that came or went, and those drawn with another DEM (`changedRegions`)
+   */
   private trackElevations(terrain: TerrainContext): void {
     const generation = terrain.elevationGeneration;
     if (generation === this.elevationGeneration) return;
-    const tiles = new Set(terrain.coverageKey.split(',').filter((tile) => tile !== ''));
-    const regions: MercatorRect[] = [];
-    for (const tile of tiles) if (!this.tiles.has(tile)) regions.push(tileRect(tile));
-    for (const tile of this.tiles) if (!tiles.has(tile)) regions.push(tileRect(tile));
     // The first generation seen, or a jump of more than one: everything is read again
     const known = this.elevationGeneration >= 0 && generation === this.elevationGeneration + 1;
-    this.changes.push({ generation, regions: known ? regions : null });
+    this.changes.push({ generation, regions: known ? terrain.coverage.changedRegions : null });
     if (this.changes.length > KEPT_ELEVATION_CHANGES) this.changes.shift();
-    this.tiles = tiles;
     this.elevationGeneration = generation;
   }
 }
@@ -251,11 +248,4 @@ function coarsened(base: TessellationStep, factor: number): TessellationStep {
   // On the index of the tiles the factor is kept small (the cut stays on the nodes of the mesh)
   if (base.tiling) return { ...base, coarsen: Math.min(factor, TERRAIN_MAX_TILED_COARSEN) };
   return { grid: base.grid * factor, maxPoints: base.maxPoints, region: base.region };
-}
-
-/** The Mercator rectangle of a tile named as the coverage names it (`wrap/z/x/y`) */
-function tileRect(tile: string): MercatorRect {
-  const [wrap, z, x, y] = tile.split('/').map(Number);
-  const size = 1 / 2 ** z;
-  return { x0: wrap + x * size, y0: y * size, x1: wrap + (x + 1) * size, y1: (y + 1) * size };
 }
