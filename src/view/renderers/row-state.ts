@@ -13,9 +13,17 @@
  *
  * The other paths (the features of the Store, the datasets, immediate mode) draw with the
  * programs without the define, which neither have the attribute nor read the texture.
+ *
+ * A renderer of an extension that draws something with each row (a mark of a point) reads the
+ * same GLSL and the same uniforms from the second entry, with a texture of its own holding the
+ * byte of the row of each of its instances (`rowStateOf`), so what it draws moves as the rows do.
  */
 
-import type { EnuEdit } from '../../geometry/enu-transforms.js';
+import { type DraggedRows, draggedRowMotionsOf } from '../../feature-table/dragged-rows.js';
+import { MOVE_SETS } from '../../feature-table/row-state.js';
+import type { RowHandle } from '../../feature-table/types.js';
+import { type EnuEdit, inverseEnuEdit, moveEnuPosition } from '../../geometry/enu-transforms.js';
+import type { BoundingBox } from '../../store/types.js';
 import { type GpuLedger, textureBytes } from '../gpu-ledger.js';
 import { getRenderFrame } from '../shaders/frame.js';
 import type { RetainedDrawRun } from './draw-run.js';
@@ -31,18 +39,34 @@ import {
 /** The width of the texture of the state of a row group (rows per texture line) */
 export const ROW_STATE_WIDTH = 128;
 
-/** The texture unit the state of the rows is bound to */
+/**
+ * The texture unit `RowStateUniforms` points `u_row_state` of `ROW_STATE_GLSL` to: bind the
+ * texture of the state of the rows (`RowStateTexture.texture`) there before drawing.
+ */
 export const ROW_STATE_TEXTURE_UNIT = 1;
 
 /**
- * The GLSL of the variant that reads the state of the rows (`TABLE_ROWS`)
+ * The GLSL that reads the state of the rows and moves a position of a row as the library draws it
+ * while it is dragged; include it in a vertex shader after `OFFSET_MODE_GLSL`.
  *
- * It declares the texture, its width and the translation of each moving set, and the functions
- * that read the state of the row of the vertex. The attribute of the number of the row is
- * declared by each program at its own location.
+ * Each instance (or vertex) carries the number of its row, which picks one byte of the texture of
+ * the state of the rows (`createRowStateTexture`, `uploadRowState`; `rowStateOf` gives the byte of
+ * a row being dragged). The functions:
+ *
+ * - `uint readRowState(float row)`: the byte of a row
+ * - `bool rowStateHidden(uint state)`: whether the row is hidden (bit 1 of the byte)
+ * - `vec2 rowStateMove(uint state, vec2 offset)`: an offset in degrees from the origin of what is
+ *   drawn, moved as the rows of the library are moved by the drag of their moving set: moved,
+ *   turned or scaled as the drag is written once it is let go, then translated. Give what it
+ *   returns to `project_position_to_clipspace_from_offset`. A row moved so gives its offsets from
+ *   the center the projection takes them from, so every position a vertex projects after it must be
+ *   of the same row
+ *
+ * The uniforms, which `RowStateUniforms` writes: `u_row_state` (the texture, read on the unit
+ * `ROW_STATE_TEXTURE_UNIT`), `u_row_state_width`, `u_state_translate`, `u_state_transformed`
+ * and those of the motions.
  */
 export const ROW_STATE_GLSL = `
-#ifdef TABLE_ROWS
 uniform highp usampler2D u_row_state;
 uniform int u_row_state_width;
 // The translation of each moving set in degrees of longitude and latitude (set 0 is none)
@@ -101,6 +125,18 @@ vec2 rowStateMove(uint state, vec2 offset) {
     }
     return offset + u_state_translate[moveSet];
 }
+`;
+
+/**
+ * The GLSL of the variant of the programs of the library that draws the rows (`#define
+ * TABLE_ROWS`): `ROW_STATE_GLSL` when it is defined, nothing otherwise. The attribute of the number
+ * of the row is declared by each program at its own location.
+ *
+ * @internal
+ */
+export const TABLE_ROWS_GLSL = `
+#ifdef TABLE_ROWS
+${ROW_STATE_GLSL}
 #endif
 `;
 
@@ -108,44 +144,46 @@ vec2 rowStateMove(uint state, vec2 offset) {
 export const ROW_HIDDEN_POSITION_GLSL = 'vec4(2.0, 2.0, 2.0, 1.0)';
 
 /**
- * The texture of the state of the rows of a group
- *
- * @internal
+ * A texture of the state of rows, one byte per row (an `R8UI` texture `width` rows wide), which
+ * `ROW_STATE_GLSL` reads by the number of a row.
  */
 export interface RowStateTexture {
   readonly texture: WebGLTexture;
+  /** The rows per line of the texture */
   readonly width: number;
+  /** The lines of the texture */
   readonly height: number;
   /** The number of rows it holds */
   readonly rows: number;
 }
 
 /**
- * What a draw of rows binds: the texture of the group and the translations of the moving sets
- *
- * @internal
+ * What a draw of rows reads: the texture of the state of its rows, and how each moving set moves
+ * (`rowStateBindingOf`). It keeps the moves it was made with: drawing with the same binding draws
+ * the rows where they were drawn when it was made.
  */
 export interface RowStateBinding {
   readonly texture: RowStateTexture;
-  /** `[dLng, dLat]` of the sets 0 to 3 (set 0 is always 0) */
+  /** `[dLng, dLat]` of the moving sets 0 to 3, in degrees (set 0 is always 0) */
   readonly translations: Float32Array;
   /**
    * The edit that moves, rotates or scales each of the sets 0 to 3, applied before the
    * translation (null for none)
+   *
+   * @internal
    */
   readonly transforms?: ReadonlyArray<EnuEdit | null>;
 }
 
 /**
- * The uniforms of the state of the rows in one program, with the values written to them last
+ * Looks up and writes the uniforms of `ROW_STATE_GLSL` in one program.
  *
- * The draws of a run of rows go through here once per range drawn, but the unit of the texture
- * never changes, the width of the texture is the same for every group, and the translations of
- * the moving sets change once per layer at most. Writes of the same values are skipped, and
- * everything is written again once the frame changes (`shaders/frame.ts`). A program made again
- * gets a new instance (its uniforms start from their initial values).
+ * A value the same as the one written last is not written again; everything is written again
+ * once per draw of the map. Make a new one for a program made again.
  *
- * @internal
+ * The draws of a run of rows of the library go through here once per range drawn, but the unit of
+ * the texture never changes, the width of the texture is the same for every group, and the
+ * translations of the moving sets change once per layer at most (`shaders/frame.ts`).
  */
 export class RowStateUniforms {
   private readonly state: WebGLUniformLocation | null;
@@ -164,6 +202,10 @@ export class RowStateUniforms {
   private readonly motionValues = new MotionStateValues();
   private readonly writtenMotions = new MotionStateValues(Number.NaN);
 
+  /**
+   * @param gl - The WebGL context of the map
+   * @param program - The program that includes `ROW_STATE_GLSL`
+   */
   constructor(
     private readonly gl: WebGL2RenderingContext,
     program: WebGLProgram,
@@ -179,12 +221,12 @@ export class RowStateUniforms {
   }
 
   /**
-   * Writes the uniforms for a draw (the program in use must be the one of these uniforms)
+   * Writes the uniforms for a draw; the program in use must be the one given to the constructor.
    *
-   * @param origin The origin the offsets of the batch drawn are taken from, `[lng, lat]` in
-   *   degrees
-   * @param center The center the projection takes the offsets from (`u_center_lnglat`: the camera
-   *   center, or the origin of the batch)
+   * @param binding - The state of the rows drawn
+   * @param origin - The position the offsets drawn are taken from, `[lng, lat]` in degrees
+   * @param center - The center the projection takes the offsets from (`centerLngLat` of the
+   *   `OffsetUniforms` given to `ProjectionUniformManager.setUniforms`); the origin when omitted
    */
   write(
     binding: RowStateBinding,
@@ -346,15 +388,15 @@ export function bindRowState(
 }
 
 /**
- * Creates the texture of the state of `rows` rows (all 0: shown, not moving)
+ * Creates a texture of the state of rows, every byte 0 (shown, not moving).
  *
- * @returns null when the texture cannot be created
- * @internal
+ * @param gl - The WebGL context of the map
+ * @param rows - The number of rows
+ * @returns The texture, or null when it cannot be created
  */
 export function createRowStateTexture(
   gl: WebGL2RenderingContext,
   rows: number,
-  ledger?: GpuLedger,
 ): RowStateTexture | null {
   const width = ROW_STATE_WIDTH;
   const height = Math.max(1, Math.ceil(rows / width));
@@ -367,20 +409,34 @@ export function createRowStateTexture(
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-  ledger?.record(texture, 'row-state', 'texture', textureBytes(width, height, 1));
   return { texture, width, height, rows };
 }
 
 /**
- * Uploads the state of every row
+ * Records a texture of the state of rows in the ledger of an instance (the textures of the
+ * extensions are their own)
  *
- * A line of the texture is `ROW_STATE_WIDTH` bytes, but the alignment of the rows of an upload
+ * @internal
+ */
+export function recordRowStateTexture(ledger: GpuLedger | undefined, state: RowStateTexture): void {
+  const { texture, width, height } = state;
+  ledger?.record(texture, 'row-state', 'texture', textureBytes(width, height, 1));
+}
+
+/**
+ * Writes the byte of every row of a texture of the state of rows. It binds the texture to the
+ * active texture unit.
+ *
+ * A line of the texture is `width` bytes, but the alignment of the rows of an upload
  * (`UNPACK_ALIGNMENT`) is a state of the context shared with maplibre, so it is set to 1 for the
  * upload and put back after it: the upload is right whatever the alignment was.
  *
- * @param state One byte per row (at least `texture.rows`)
- * @param scratch An array of `width * height` bytes the upload is laid out in (made when omitted)
- * @internal
+ * @param gl - The WebGL context of the map
+ * @param texture - The texture
+ * @param state - One byte per row (at least `texture.rows`; `rowStateOf` gives the byte of a row
+ *   being dragged)
+ * @param scratch - An array of `width * height` bytes the upload is laid out in (made when
+ *   omitted)
  */
 export function uploadRowState(
   gl: WebGL2RenderingContext,
@@ -410,15 +466,111 @@ export function uploadRowState(
 }
 
 /**
- * Deletes the texture of the state of a group
+ * Deletes a texture of the state of rows.
+ *
+ * @param gl - The WebGL context of the map
+ * @param texture - The texture
+ */
+export function deleteRowStateTexture(gl: WebGL2RenderingContext, texture: RowStateTexture): void {
+  gl.deleteTexture(texture.texture);
+}
+
+/**
+ * The byte of the state of the row of a handle that tells how it moves while it is dragged (its
+ * moving set, and whether it keeps its shape), to write in a texture of the state of rows at the
+ * number an instance drawn with the row carries.
+ *
+ * @param dragged - The rows being dragged (`draw.rendered.getDraggedRows()`)
+ * @param handle - The handle of the row
+ * @returns The byte; 0 for a row not dragged, or when no row is (`dragged` is null). Its lowest
+ *   bit is 0: set it (`| 1`) to hide the row (`rowStateHidden`)
+ */
+export function rowStateOf(dragged: DraggedRows | null, handle: RowHandle): number {
+  if (!dragged) return 0;
+  return draggedRowMotionsOf(dragged)?.gpuStateOf(handle) ?? 0;
+}
+
+/**
+ * What a draw of rows reads: a texture of the state of its rows, and how each moving set of the
+ * rows being dragged moves now. The moves are copied: keep the binding to draw the rows where they
+ * are now after the drag ends.
+ *
+ * @param dragged - The rows being dragged (`draw.rendered.getDraggedRows()`); null when no row is
+ * @param texture - The texture of the state of the rows drawn
+ */
+export function rowStateBindingOf(
+  dragged: DraggedRows | null,
+  texture: RowStateTexture,
+): RowStateBinding {
+  const translations = new Float32Array((MOVE_SETS + 1) * 2);
+  const transforms: Array<EnuEdit | null> = new Array(MOVE_SETS + 1).fill(null);
+  const moves = dragged ? draggedRowMotionsOf(dragged) : undefined;
+  if (moves) {
+    for (let set = 1; set <= MOVE_SETS; set++) {
+      const [dLng, dLat] = moves.translation(set);
+      translations[set * 2] = dLng;
+      translations[set * 2 + 1] = dLat;
+      transforms[set] = moves.transform(set);
+    }
+  }
+  return { texture, translations, transforms };
+}
+
+/**
+ * The regions a view sees the rows moved on the GPU by a binding from: the view moved back by the
+ * move of each moving set. A batch of such rows takes its origin near them while they are moved
+ * (`rebasedRetainedOrigin`).
+ *
+ * @param binding - The moves the rows are drawn with
+ * @param view - The view, longitude and latitude
+ * @returns The regions, none when no set moves by more than a translation
+ */
+export function rowStateMovedViews(binding: RowStateBinding, view: BoundingBox): BoundingBox[] {
+  const views: BoundingBox[] = [];
+  if (binding.transforms) movedViewsOf(binding.transforms, view, views);
+  return views;
+}
+
+/**
+ * The regions the view sees the rows of the moving sets from: the view moved back by the edit of
+ * each set (for a scaling, by its factors and by its size), as the extents of its corners, the
+ * middles of its sides and its center (appended to `out`)
  *
  * @internal
  */
-export function deleteRowStateTexture(
-  gl: WebGL2RenderingContext,
-  texture: RowStateTexture,
-  ledger?: GpuLedger,
+export function movedViewsOf(
+  transforms: ReadonlyArray<EnuEdit | null>,
+  view: BoundingBox,
+  out: BoundingBox[],
 ): void {
-  ledger?.release(texture.texture);
-  gl.deleteTexture(texture.texture);
+  for (const edit of transforms) {
+    if (edit) movedBackViews(edit, view, out);
+  }
+}
+
+/**
+ * The regions a view is seen from before an edit (appended to `out`), as `movedViewsOf`
+ *
+ * @internal
+ */
+export function movedBackViews(edit: EnuEdit, view: BoundingBox, out: BoundingBox[]): void {
+  const back = inverseEnuEdit(edit);
+  for (const uniform of edit.kind === 'scale' ? [false, true] : [false]) {
+    let minX = Infinity;
+    let minY = Infinity;
+    let maxX = -Infinity;
+    let maxY = -Infinity;
+    for (const fx of [0, 0.5, 1]) {
+      for (const fy of [0, 0.5, 1]) {
+        const x = view.minX + (view.maxX - view.minX) * fx;
+        const y = Math.max(-90, Math.min(90, view.minY + (view.maxY - view.minY) * fy));
+        const p = moveEnuPosition(back, [x, y], uniform);
+        minX = Math.min(minX, p[0] as number);
+        minY = Math.min(minY, p[1] as number);
+        maxX = Math.max(maxX, p[0] as number);
+        maxY = Math.max(maxY, p[1] as number);
+      }
+    }
+    if (minX <= maxX && minY <= maxY) out.push({ minX, minY, maxX, maxY });
+  }
 }

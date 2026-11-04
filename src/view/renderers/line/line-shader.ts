@@ -17,7 +17,7 @@
  */
 
 import { getProjectionTransitionUniform, OFFSET_MODE_GLSL } from '../../shaders/helpers.js';
-import { ROW_HIDDEN_POSITION_GLSL, ROW_STATE_GLSL } from '../row-state.js';
+import { ROW_HIDDEN_POSITION_GLSL, TABLE_ROWS_GLSL } from '../row-state.js';
 
 /**
  * The vertex shader source of the SDF line program
@@ -35,7 +35,7 @@ export function buildLineVertexSource(prelude: string, define: string, rows = fa
 ${rows ? '#define TABLE_ROWS' : ''}
 ${prelude}
 ${define}
-${projTransitionUniform}${OFFSET_MODE_GLSL}${ROW_STATE_GLSL}
+${projTransitionUniform}${OFFSET_MODE_GLSL}${TABLE_ROWS_GLSL}
 
 // Strip vertex attributes
 layout(location = 0) in float a_side;    // 1=left, -1=right

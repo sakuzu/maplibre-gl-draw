@@ -294,6 +294,8 @@ describe('the GL calls per draw', () => {
     console.log(
       `[one draw] draws ${draws}, GL calls ${total(counts)}, per draw ${(total(counts) / draws).toFixed(2)}\n  ${breakdown(counts, draws)}`,
     );
+    // The textures of the state of the rows are counted
+    expect(held['row-state'] ?? 0).toBeGreaterThan(0);
     // A chunk per 40,000 coordinates or per group: a few draws rather than 7,500
     expect(draws).toBeGreaterThan(0);
     expect(draws).toBeLessThan(20);

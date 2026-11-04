@@ -98,7 +98,7 @@ export function createDrawOnEngine(
       const other = engine.customLayer.getShown();
       return other ? [view, other] : [view];
     },
-    gpuBytes: () => engine.customLayer.getGpuMemory().bytes,
+    gpu: () => engine.customLayer.getGpuMemory(),
   });
 
   const members: Draw = {

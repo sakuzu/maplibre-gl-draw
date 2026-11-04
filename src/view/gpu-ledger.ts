@@ -12,7 +12,8 @@
  *
  * It is a lower bound of what the page uses: what maplibre allocates (the tiles of the base
  * map, the elevation data) is not in it, nor what an extension allocates with the context it
- * is given, nor what the driver keeps after a delete until it frees it.
+ * does not record (`ExtensionContext.gpu`), nor what the driver keeps after a delete until it
+ * frees it.
  */
 
 /** A buffer or a texture, as the ledger keys it */
@@ -43,6 +44,10 @@ export interface GpuMemorySnapshot {
   readonly textureBytes: number;
   /** The bytes per renderer */
   readonly byOwner: Readonly<Record<string, number>>;
+  /** The most bytes held at once since the ledger was made */
+  readonly peakBytes: number;
+  /** The allocations recorded since the ledger was made (a new size of an object is one) */
+  readonly allocations: number;
 }
 
 /**
@@ -65,6 +70,8 @@ export class GpuLedger {
   private bufferBytes = 0;
   private textureBytes = 0;
   private readonly owners = new Map<string, number>();
+  private peakBytes = 0;
+  private allocations = 0;
 
   /**
    * Records the size of a buffer, a texture or a render buffer (a later record of the same object
@@ -76,6 +83,8 @@ export class GpuLedger {
     const entry: Entry = { owner, kind, bytes: Math.max(0, bytes) };
     this.entries.set(object, entry);
     this.add(entry, 1);
+    this.allocations++;
+    this.peakBytes = Math.max(this.peakBytes, this.bufferBytes + this.textureBytes);
   }
 
   /** Takes a deleted buffer, texture or render buffer out */
@@ -98,6 +107,8 @@ export class GpuLedger {
       bufferBytes: this.bufferBytes,
       textureBytes: this.textureBytes,
       byOwner: Object.freeze(byOwner),
+      peakBytes: this.peakBytes,
+      allocations: this.allocations,
     });
   }
 

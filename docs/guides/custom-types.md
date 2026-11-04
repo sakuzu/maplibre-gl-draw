@@ -982,6 +982,59 @@ function drawSolidQuad(ctx: RenderContext, center: [number, number]): boolean {
 }
 ```
 
+A shader that draws marks on the terrain without depth fades the ones
+the terrain hides, as `occlusionOpacity` does on the CPU, with
+`TERRAIN_OCCLUSION_GLSL`: after `OFFSET_MODE_GLSL` in the vertex shader,
+`terrain_occlusion_opacity(offset, elevationMeters)` gives the opacity
+of a mark from the offset it is projected from and the height of the
+ground under it. It is the same test, with the same constants, taken
+on the DEM atlas the shaders read the ground from, so marks kept in a
+buffer need no work on the CPU when the camera moves.
+`TerrainOcclusionUniforms` writes its uniforms for a draw. Where
+a position is out of the atlas, or the line of sight grazes the ground,
+it may decide otherwise than `occlusionOpacity`.
+
+While features of a layer held as rows are dragged in bulk, the library
+draws their rows moved on the GPU, and writes them once they are let
+go. A shader that draws something with each row (a mark of a point)
+moves it the same way with `ROW_STATE_GLSL`:
+
+- each instance carries the number of a row in a texture of your own
+  (`createRowStateTexture`), filled with `rowStateOf(dragged, handle)`
+  of the rows `draw.rendered.getDraggedRows()` gives (`uploadRowState`)
+- before drawing, bind the texture to the unit `ROW_STATE_TEXTURE_UNIT`
+  and write the uniforms with
+  `RowStateUniforms.write(rowStateBindingOf(dragged, texture), origin)`
+- in the vertex shader, `rowStateMove(readRowState(row), offset)` gives
+  the offset to project, moved, turned or scaled as the library moves
+  the points of the rows
+
+The binding copies the moves of the drag: keep it to draw the rows
+where they were drawn last, from the end of the drag until you read
+their positions again.
+
+```glsl
+in vec2 a_offset;
+in float a_row;
+in float a_elevation_meters;
+out float v_opacity;
+
+void main() {
+    vec2 offset = rowStateMove(readRowState(a_row), a_offset);
+    vec4 clip = project_position_to_clipspace_from_offset(offset, u_projection_matrix);
+    v_opacity = terrain_occlusion_opacity(offset, a_elevation_meters);
+    gl_Position = clip;
+}
+```
+
+Marks kept in a buffer as float32 offsets from an origin are off on the
+screen by a share of their distance from it, which grows with the zoom.
+`rebasedRetainedOrigin(origin, extent, view, zoom, movedViews)` tells
+when to write them again from a new origin, as the library does for its
+own batches: `null` while the error of what is seen is within
+`RETAINED_ORIGIN_TOLERANCE_PX`. Ask it while the camera is at rest, and
+pass `rowStateMovedViews(binding, view)` for the rows being dragged.
+
 ## Related example
 
 - [Custom feature types](../examples/custom-feature-types.md) adds a

@@ -13,10 +13,17 @@
 
 import type { Position } from 'geojson';
 import type { FeatureTables, RowHandle } from '../api/tables.js';
-import { moveEnuPosition } from '../geometry/enu-transforms.js';
+import { type EnuEdit, moveEnuPosition } from '../geometry/enu-transforms.js';
 import { featureTablesInternals } from './feature-tables.js';
 import { rowType } from './row-read.js';
-import { MOVE_SETS, STATE_BY_VALUES, STATE_MOVE_MASK, STATE_MOVE_SHIFT } from './row-state.js';
+import {
+  GPU_STATE_MOVE_SHIFT,
+  GPU_STATE_UNIFORM,
+  MOVE_SETS,
+  STATE_BY_VALUES,
+  STATE_MOVE_MASK,
+  STATE_MOVE_SHIFT,
+} from './row-state.js';
 
 /**
  * The rows being dragged and how they are moved, while they are drawn moved and not written yet
@@ -47,6 +54,37 @@ export interface DraggedRows {
 }
 
 /**
+ * How the rows being dragged are moved, as the GPU moves them (the state of the rows of
+ * `view/renderers/row-state.ts`)
+ *
+ * @internal
+ */
+export interface DraggedRowMotions {
+  /**
+   * The bits of the byte the GPU reads for the row of a handle that tell how it moves: its moving
+   * set, and whether it keeps its shape (0 for a row not dragged)
+   */
+  gpuStateOf(handle: RowHandle): number;
+  /** The translation of a moving set (1 to 3), `[dLng, dLat]` in degrees */
+  translation(set: number): [number, number];
+  /** The edit that moves, rotates or scales a moving set before its translation (null for none) */
+  transform(set: number): EnuEdit | null;
+}
+
+/** The motions behind each `DraggedRows` made here */
+const motions = new WeakMap<DraggedRows, DraggedRowMotions>();
+
+/**
+ * How the rows being dragged are moved, as the GPU moves them
+ *
+ * @returns undefined for an object `draggedRowsOf` did not make
+ * @internal
+ */
+export function draggedRowMotionsOf(dragged: DraggedRows): DraggedRowMotions | undefined {
+  return motions.get(dragged);
+}
+
+/**
  * The rows being dragged of tables (null when no row is: nothing is drawn moved)
  *
  * @param tables - The tables of a Store that holds its features as rows (`StoreView.tables`)
@@ -71,7 +109,7 @@ export function draggedRowsOf(tables: FeatureTables | undefined): DraggedRows | 
     const place = internals.placeOf(handle);
     return place ? rowType(place.group.data, place.row) === 'Circle' : false;
   };
-  return {
+  const dragged: DraggedRows = {
     has: (handle) => setOf(handle) > 0,
     position(handle, position) {
       const set = setOf(handle);
@@ -93,4 +131,14 @@ export function draggedRowsOf(tables: FeatureTables | undefined): DraggedRows | 
       return edit?.kind === 'scale' ? edit.sizeFactor : 1;
     },
   };
+  motions.set(dragged, {
+    gpuStateOf(handle) {
+      const set = setOf(handle);
+      if (set === 0) return 0;
+      return (set << GPU_STATE_MOVE_SHIFT) | (keepsShape(handle) ? GPU_STATE_UNIFORM : 0);
+    },
+    translation: (set) => states.translation(set),
+    transform: (set) => states.transform(set),
+  });
+  return dragged;
 }

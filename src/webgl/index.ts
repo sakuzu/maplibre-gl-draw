@@ -10,8 +10,11 @@
  * more. This entry holds the values of the GPU of the view a render context draws
  * ({@link viewUniforms}, {@link offsetUniformsAt}), the GLSL of the projection, the uniforms
  * that go with it, the quad shader, and the rules the shared renderers follow for dashes and
- * terrain. The parts that draw on the terrain take the render context of the draw call (or its
- * `terrain`). Unlike the main entry, it may change in a minor release.
+ * terrain. Marks drawn without depth fade where the terrain hides them
+ * ({@link TERRAIN_OCCLUSION_GLSL}), and what is drawn with the rows being dragged moves as they do
+ * ({@link ROW_STATE_GLSL}), as the library draws its points. The parts that draw on the terrain
+ * take the render context of the draw call (or its `terrain`). Unlike the main entry, it may
+ * change in a minor release.
  *
  * ```ts
  * import {
@@ -57,10 +60,18 @@ export {
   calculateLngLatOffset,
   createProgram,
   OFFSET_MODE_GLSL,
+  ProgramCompile,
 } from '../view/shaders/helpers.js';
 export { ProjectionUniformManager } from '../view/shaders/projection.js';
 export type { ViewUniforms } from '../view/shaders/view-uniforms.js';
 export { offsetUniformsAt, viewUniforms } from '../view/shaders/view-uniforms.js';
+
+// The origin of what is kept on the GPU
+export {
+  rebasedRetainedOrigin,
+  RETAINED_ORIGIN_TOLERANCE_PX,
+  retainedOriginErrorPx,
+} from '../view/shaders/retained-origin.js';
 
 // Blending and billboards
 export { applyDrawBlendState } from '../view/layer/blend.js';
@@ -81,13 +92,29 @@ export {
 } from '../view/renderers/line/dash.js';
 
 // Terrain
+export { TERRAIN_OCCLUSION_GLSL, TerrainOcclusionUniforms } from '../view/terrain/occlusion.js';
 export { terrainTessellationStep } from '../view/terrain/polygon.js';
 export { densifyPath } from '../view/terrain/tessellation.js';
+
+// Rows being dragged
+export type { RowStateBinding, RowStateTexture } from '../view/renderers/row-state.js';
+export {
+  createRowStateTexture,
+  deleteRowStateTexture,
+  ROW_STATE_GLSL,
+  ROW_STATE_TEXTURE_UNIT,
+  RowStateUniforms,
+  rowStateBindingOf,
+  rowStateMovedViews,
+  rowStateOf,
+  uploadRowState,
+} from '../view/renderers/row-state.js';
 
 // Hit testing
 export { PointHitTestStrategy } from '../dispatcher/hit-test/strategies/point.js';
 
 // Supporting types
+export type { BoundingBox } from '../store/types.js';
 export type { Coordinate } from '../shared/types/model.js';
 export type { BlendCapableGL } from '../view/layer/blend.js';
 export type { DashSegment } from '../view/renderers/line/dash.js';

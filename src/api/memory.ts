@@ -33,6 +33,10 @@ export interface MemoryBytes {
 export interface MemoryUsage extends MemoryBytes {
   /** The most bytes the documents may take on this device (`draw.memory.setLimit`) */
   readonly limitBytes: number;
+  /** The most GPU bytes an instance held at once, added over the instances */
+  readonly peakGpuBytes: number;
+  /** The allocations of GPU memory made so far, added over the instances */
+  readonly gpuAllocations: number;
 }
 
 /**

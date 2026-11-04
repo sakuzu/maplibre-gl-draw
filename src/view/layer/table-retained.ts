@@ -82,12 +82,7 @@ import {
   type RowGroupHandle,
 } from '../../feature-table/types.js';
 import type { GroupVersion, GroupVersionReceiver } from '../../feature-table/versions.js';
-import {
-  applyEnuEdit,
-  type EnuEdit,
-  inverseEnuEdit,
-  moveEnuPosition,
-} from '../../geometry/enu-transforms.js';
+import { applyEnuEdit, type EnuEdit } from '../../geometry/enu-transforms.js';
 import type { SelectionUIConfig } from '../../shared/config/selection.js';
 import type { ScreenScaleFrame } from '../../shared/math/screen-scale.js';
 import type { BoundingBox, Feature, Layer } from '../../shared/types/model.js';
@@ -115,8 +110,11 @@ import type { RetainedRendererSet } from '../renderers/retained.js';
 import {
   createRowStateTexture,
   deleteRowStateTexture,
+  movedBackViews,
+  movedViewsOf,
   type RowStateBinding,
   type RowStateTexture,
+  recordRowStateTexture,
   uploadRowState,
 } from '../renderers/row-state.js';
 import { drawnRowText, type RowsCopies } from '../renderers/rows/rows-copies.js';
@@ -1647,7 +1645,8 @@ export class TableLayerRenderer {
     const schedule = this.schedule;
     schedule.bounds = bounds;
     schedule.zoom = frame.zoom;
-    movedViewsOf(this.transforms, bounds, this.movedViews);
+    this.movedViews.length = 0;
+    if (bounds !== WORLD) movedViewsOf(this.transforms, bounds, this.movedViews);
     schedule.movedViews = NO_VIEWS;
     schedule.settled = settled;
     schedule.budget = budget;
@@ -2611,7 +2610,8 @@ export class TableLayerRenderer {
     this.releaseChunks(groupCache, 'by-kind');
     this.releaseChunks(groupCache, 'one-draw');
     if (groupCache.texture) {
-      deleteRowStateTexture(this.options.gl, groupCache.texture, this.options.ledger);
+      this.options.ledger?.release(groupCache.texture.texture);
+      deleteRowStateTexture(this.options.gl, groupCache.texture);
       groupCache.texture = null;
       groupCache.binding = null;
     }
@@ -2662,11 +2662,9 @@ export class TableLayerRenderer {
       for (const groupCache of caches) {
         const group = groupCache.group;
         if (!groupCache.texture) {
-          groupCache.texture = createRowStateTexture(
-            this.options.gl,
-            group.data.length,
-            this.options.ledger,
-          );
+          const created = createRowStateTexture(this.options.gl, group.data.length);
+          if (created) recordRowStateTexture(this.options.ledger, created);
+          groupCache.texture = created;
           groupCache.uploadedVersion = -1;
         }
         const texture = groupCache.texture;
@@ -4149,7 +4147,7 @@ function anyRowsDrawer(renderers: ReadonlyMap<string, unknown>): boolean {
 
 /**
  * The regions the view sees the rows of each moving set from (into `out`, by set): the view moved
- * back by the translation of the set, then by its edit as `movedViewsOf` moves it back; null for a
+ * back by the translation of the set, then by its edit as `movedBackViews` moves it back; null for a
  * set that does not move, and for every set when the view is the whole world
  */
 function setViewsOf(
@@ -4176,46 +4174,6 @@ function setViewsOf(
     if (edit) movedBackViews(edit, shifted, views);
     else views.push(shifted);
     out[set] = views;
-  }
-}
-
-/**
- * The regions the view sees the rows of the moving sets from: the view moved back by the edit of
- * each set (for a scaling, by its factors and by its size), as the extents of its corners, the
- * middles of its sides and its center (into `out`)
- */
-function movedViewsOf(
-  transforms: ReadonlyArray<EnuEdit | null>,
-  view: BoundingBox,
-  out: BoundingBox[],
-): void {
-  out.length = 0;
-  if (view === WORLD) return;
-  for (const edit of transforms) {
-    if (edit) movedBackViews(edit, view, out);
-  }
-}
-
-/** The regions a view is seen from before an edit (appended to `out`), as `movedViewsOf` */
-function movedBackViews(edit: EnuEdit, view: BoundingBox, out: BoundingBox[]): void {
-  const back = inverseEnuEdit(edit);
-  for (const uniform of edit.kind === 'scale' ? [false, true] : [false]) {
-    let minX = Infinity;
-    let minY = Infinity;
-    let maxX = -Infinity;
-    let maxY = -Infinity;
-    for (const fx of [0, 0.5, 1]) {
-      for (const fy of [0, 0.5, 1]) {
-        const x = view.minX + (view.maxX - view.minX) * fx;
-        const y = Math.max(-90, Math.min(90, view.minY + (view.maxY - view.minY) * fy));
-        const p = moveEnuPosition(back, [x, y], uniform);
-        minX = Math.min(minX, p[0] as number);
-        minY = Math.min(minY, p[1] as number);
-        maxX = Math.max(maxX, p[0] as number);
-        maxY = Math.max(maxY, p[1] as number);
-      }
-    }
-    if (minX <= maxX && minY <= maxY) out.push({ minX, minY, maxX, maxY });
   }
 }
 

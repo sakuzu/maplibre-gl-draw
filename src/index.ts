@@ -213,6 +213,7 @@ export { diffItemOrder } from './api/model.js';
 export type {
   ExtensionContext,
   FootprintContext,
+  GpuMemoryRecord,
   HandleContext,
   ModeContext,
   NameGenerator,

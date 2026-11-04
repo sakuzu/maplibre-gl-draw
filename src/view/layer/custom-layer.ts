@@ -56,7 +56,7 @@ import { transformFieldsOfStore } from '../../store/transform-roles.js';
 import type { Feature, StoreChange } from '../../store/types.js';
 import type { FeatureCompanionRegistry } from '../feature-companion.js';
 import { updateGlobeSubdivision } from '../globe-subdivision.js';
-import type { GpuMemorySnapshot } from '../gpu-ledger.js';
+import type { GpuLedger, GpuMemorySnapshot } from '../gpu-ledger.js';
 import { beginRenderFrame } from '../shaders/frame.js';
 import { installAnchorProjector, uninstallAnchorProjector } from '../terrain/anchor.js';
 import {
@@ -214,6 +214,8 @@ export interface CustomLayerInterface extends BaseCustomLayerInterface {
   setEditingHidden(hidden: boolean): void;
   /** The GPU memory the renderers of this instance hold (what they recorded allocating) */
   getGpuMemory(): GpuMemorySnapshot;
+  /** The ledger of this instance, for what the extensions allocate */
+  getGpuLedger(): GpuLedger;
   /**
    * The drawing of the layers held as rows of columns (null while the GPU side is not built),
    * for the hooks of measurement
@@ -1039,6 +1041,10 @@ export function createCustomLayer(deps: CustomLayerDeps): CustomLayerInterface {
 
     getGpuMemory(): GpuMemorySnapshot {
       return renderScope.gpu.snapshot();
+    },
+
+    getGpuLedger(): GpuLedger {
+      return renderScope.gpu;
     },
 
     getShown(): StoreContractView | null {

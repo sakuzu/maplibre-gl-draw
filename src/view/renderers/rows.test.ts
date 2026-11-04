@@ -170,10 +170,9 @@ describe('the texture of the state of the rows', () => {
     expect(mock.alignment()).toBe(4);
   });
 
-  it('is an integer texture read without filtering, and is counted in the ledger', () => {
+  it('is an integer texture read without filtering', () => {
     const mock = createGL();
-    const ledger = new GpuLedger();
-    const texture = createRowStateTexture(mock.gl, 300, ledger);
+    const texture = createRowStateTexture(mock.gl, 300);
     if (!texture) throw new Error('texture');
     expect(mock.of('texStorage2D')[0].args).toEqual([
       CONSTANTS.TEXTURE_2D,
@@ -182,9 +181,8 @@ describe('the texture of the state of the rows', () => {
       ROW_STATE_WIDTH,
       3,
     ]);
-    expect(ledger.snapshot().byOwner['row-state']).toBe(ROW_STATE_WIDTH * 3);
-    deleteRowStateTexture(mock.gl, texture, ledger);
-    expect(ledger.snapshot().bytes).toBe(0);
+    deleteRowStateTexture(mock.gl, texture);
+    expect(mock.of('deleteTexture')[0].args).toEqual([texture.texture]);
   });
 });
 

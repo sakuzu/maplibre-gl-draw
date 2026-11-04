@@ -368,14 +368,22 @@ Each item has the same five parts.
 - What we rely on — avoidance. `isAnchorOccluded` in
   `src/view/terrain/occlusion.ts` steps along the segment from the camera
   to the anchor and reports occlusion when the ground rises above it. The
-  step follows `stepGrid` (the terrain mesh spacing). Billboards are not
-  depth-tested at all: their order comes from the depth of one centre
-  point, so a depth test would hide a whole billboard buried a few metres
-  into the ground.
+  step follows `stepGrid` (the terrain mesh spacing). The same test, from
+  the same constants, has a GLSL version (`TERRAIN_OCCLUSION_GLSL`) that
+  takes its samples from the DEM atlas, for symbols kept in a buffer and
+  drawn many in one draw; the camera it reads is the one of
+  `getCameraMercator` (item 11), written as a uniform by
+  `TerrainOcclusionUniforms`. The CPU version reads the ground of
+  `map.queryTerrainElevation` (item 8), so the two can differ where a
+  sample is out of the atlas or the line of sight grazes the ground.
+  Billboards are not depth-tested at all: their order comes from the
+  depth of one centre point, so a depth test would hide a whole billboard
+  buried a few metres into the ground.
 - Symptoms when it breaks — if `depthAtPoint` were used, rendering would
   stall in proportion to the number of symbols, reaching seconds per draw
   on maps with many of them.
-- Check when upgrading — `src/view/terrain/occlusion.test.ts`.
+- Check when upgrading — `src/view/terrain/occlusion.test.ts` and
+  `src/view/terrain/occlusion-gpu.test.ts`.
 - Conditions for removal — a public upstream occlusion query (such as the
   internal `isLocationOccluded`) could be considered. A synchronous
   `readPixels` stays rejected.

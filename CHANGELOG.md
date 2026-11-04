@@ -22,6 +22,25 @@ writing it. Its changes are listed after those of 3.0.0.
 
 ### Added in 3.0.0
 
+- `/webgl` draws marks of a shader of its own as the library draws its
+  points: `TERRAIN_OCCLUSION_GLSL` fades the marks the terrain hides, the
+  test of `occlusionOpacity` run in the vertex shader on the DEM atlas
+  (its uniforms written by `TerrainOcclusionUniforms`); `ROW_STATE_GLSL`
+  moves what is drawn with the rows being dragged as their points move,
+  with a texture of the state of the rows (`createRowStateTexture`,
+  `uploadRowState`, `deleteRowStateTexture`, `RowStateTexture`, the unit
+  `ROW_STATE_TEXTURE_UNIT`), the byte of a row being dragged
+  (`rowStateOf`), the moves of the drag (`rowStateBindingOf`,
+  `RowStateBinding`) and the uniforms (`RowStateUniforms`).
+  What is kept on the GPU as offsets from an origin follows the rule of
+  the library: `rebasedRetainedOrigin`, `retainedOriginErrorPx`,
+  `RETAINED_ORIGIN_TOLERANCE_PX`, and `rowStateMovedViews` for the rows
+  moved on the GPU. An extension records what it allocates in the ledger
+  of the instance (`ExtensionContext.gpu`, `GpuMemoryRecord`), and
+  `draw.memory.get()` and `draw.debug.gpu()` tell the most bytes held at
+  once and the allocations made. `createProgram` takes the outputs a transform feedback
+  captures, and `ProgramCompile` links a program a frame need not wait
+  for (`KHR_parallel_shader_compile`).
 - The entry `@sakuzu/maplibre-gl-draw/kasane`, experimental (it may
   change in a minor release): `createTableStore`, an in-memory store that
   holds its features as rows, and `createFeatureTables`, the tables for a
