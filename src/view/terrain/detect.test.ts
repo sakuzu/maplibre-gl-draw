@@ -12,6 +12,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  getTerrainDepth,
   getTerrainExaggeration,
   getTerrainTileData,
   type RenderableTerrainTile,
@@ -57,5 +58,44 @@ describe('getTerrainTileData', () => {
   it('carries the exaggeration into the data the drape binds', () => {
     const data = getTerrainTileData(createTerrain({ exaggeration: 1.5 }), TILE);
     expect(data?.exaggeration).toBe(1.5);
+  });
+});
+
+describe('getTerrainDepth', () => {
+  const depthTexture = {} as WebGLTexture;
+  const ratio = (globalThis as { devicePixelRatio?: number }).devicePixelRatio;
+  const withDepth = (size: unknown, texture: unknown = depthTexture): TerrainLike =>
+    ({
+      getTerrainData: () => ({ depthTexture }),
+      _fboDepthTexture: { texture, size },
+    }) as unknown as TerrainLike;
+
+  it('takes the depth MapLibre drew at the size of the canvas over the ratio of the device', () => {
+    (globalThis as { devicePixelRatio?: number }).devicePixelRatio = 2;
+    try {
+      const depth = getTerrainDepth(withDepth([640, 360.5]), TILE, 1280, 721);
+      expect(depth).toEqual({ texture: depthTexture, width: 640, height: 360 });
+    } finally {
+      (globalThis as { devicePixelRatio?: number }).devicePixelRatio = ratio;
+    }
+  });
+
+  it('takes none of another size, of a texture not its own, or where there is none', () => {
+    (globalThis as { devicePixelRatio?: number }).devicePixelRatio = 2;
+    try {
+      // Not drawn again yet after the canvas changed its size
+      expect(getTerrainDepth(withDepth([600, 360]), TILE, 1280, 720)).toBeNull();
+      // The stand in of 1 x 1 before the first depth is drawn
+      expect(getTerrainDepth(withDepth([640, 360], {}), TILE, 1280, 720)).toBeNull();
+      expect(getTerrainDepth(createTerrain(), TILE, 1280, 720)).toBeNull();
+      const throwing = {
+        getTerrainData: () => {
+          throw new Error('no');
+        },
+      } as TerrainLike;
+      expect(getTerrainDepth(throwing, TILE, 1280, 720)).toBeNull();
+    } finally {
+      (globalThis as { devicePixelRatio?: number }).devicePixelRatio = ratio;
+    }
   });
 });

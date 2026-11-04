@@ -51,13 +51,15 @@ import { generateCirclePolygon } from '../../geometry/circle.js';
 import { type EnuEdit, inverseEnuEdit, moveEnuPosition } from '../../geometry/enu-transforms.js';
 import { drawPropertyKey } from '../../shared/properties.js';
 import type { Coordinate } from '../../store/types.js';
-import type { GpuLedger } from '../gpu-ledger.js';
 import { dashCoefficientsOf } from '../renderers/line/dash.js';
+import { rowsVariantOf } from '../renderers/rows/rows-shader.js';
 import type { ShaderData } from '../shaders/helpers.js';
 import {
   getRenderableTerrainTiles,
+  getTerrainDepth,
   getTerrainMeshSize,
   getTerrainTileData,
+  type TerrainDepth,
 } from '../terrain/detect.js';
 import {
   DRAPE_POSITION_SLOTS,
@@ -79,8 +81,7 @@ import {
   DRAPE_GROUND_BLOCK_TEXELS,
   DRAPE_GROUND_BLOCKS,
   DRAPE_GROUND_COARSE_BLOCKS,
-  DrapeGroundBuffer,
-} from '../terrain/drape/ground-buffer.js';
+} from '../terrain/drape/ground-depth.js';
 import {
   DRAPE_STATE_HIDDEN,
   DrapeCopyTables,
@@ -188,8 +189,12 @@ export interface TableDrapeFrame {
   readonly drape: TableDrape;
   /** The moving partitions drawn, for the breaks of the order */
   readonly moving: readonly TableDrapeMovingCover[];
-  /** The ground seen at each pixel (the polygons and the lines read it in the order of the rows) */
-  readonly ground: DrapeGroundBuffer | null;
+  /**
+   * The depth of the terrain maplibre draws, the ground seen at each pixel is read back from (the
+   * polygons and the lines read it in the order of the rows; null for the references of the
+   * measures)
+   */
+  readonly ground: TerrainDepth | null;
   /**
    * Whether the frame is in the drape band. Out of it, a frame is planned only for the rows
    * still packed for the ground while they are cut again for the terrain (zoomed out of the
@@ -433,9 +438,6 @@ export class TableDrape {
   readonly copies = new DrapeCopyTables();
   readonly mainCopies = new DrapeCopyIndex();
   private renderer: DrapeRenderer | null = null;
-  private ground: DrapeGroundBuffer | null = null;
-  /** The ledger of the GPU memory the texture of the ground is recorded in */
-  ledger: GpuLedger | undefined;
   /** The partitions by layer and by group handle (-1: after the last group) */
   private readonly partitions = new Map<string, Map<number, PartitionState>>();
   private readonly freeIds: number[] = [];
@@ -453,11 +455,6 @@ export class TableDrape {
   private pendingWork = false;
   /** The tables the partitions are of */
   private tables: FeatureTablesInternals | null = null;
-
-  /** The bytes of the texture of the ground seen at each pixel */
-  get groundBytes(): number {
-    return this.ground?.bytes ?? 0;
-  }
 
   /** Whether the last frame left tiles to build (the next frames build them) */
   get hasPendingWork(): boolean {
@@ -567,8 +564,11 @@ export class TableDrape {
    *
    * In the band (zoomed in past `TERRAIN_ANALYTIC_MIN_ZOOM`, or few enough edges, as the drape of
    * the other elements decides it), the polygons and the lines of the rows read the ground seen
-   * at each pixel (`TableDrapePainter.order` 'ground'): the frame holds the tiles of the
-   * terrain the ground is drawn of. For the references of the measures ('each', 'each-near'),
+   * at each pixel (`TableDrapePainter.order` 'ground'), read back from the depth of the terrain
+   * maplibre draws: the frame holds it and the tiles of the terrain drawn. Where that depth
+   * cannot be taken (`getTerrainDepth`), or on the globe (the ground is read back through the
+   * inverse of the projection of the flat map), no frame is planned, and the rows are drawn as
+   * out of the band. For the references of the measures ('each', 'each-near'),
    * they are painted on the drape of the rows, binned into the tiles here.
    *
    * @param keepGround Whether a frame is wanted out of the band too: rows packed for the ground
@@ -620,19 +620,26 @@ export class TableDrape {
       inBand = false;
       reason = 'vertex-budget';
     }
-    // The ground not usable at the size of the target: the rows are drawn as out of the band
-    if (
-      ground &&
-      this.ground?.unusableAt(input.gl.drawingBufferWidth, input.gl.drawingBufferHeight)
-    ) {
-      return this.unused('ground-unusable');
-    }
     // Out of the band, the rows packed for the ground read it until they are cut again for the
     // terrain; where the polygons and the lines are drawn flat, they are drawn so at once
     if (!inBand && !(ground && keepGround && !input.flattened)) return this.unused(reason);
+    // The ground is read back through the inverse of the projection of the flat map: on the
+    // globe the rows are drawn as out of the band
+    if (ground && rowsVariantOf(input.shaderData) === 'globe') return this.unused('ground-globe');
 
     const tiles = getRenderableTerrainTiles(input.mapTerrain);
     if (tiles.length === 0) return this.unused('no-dem-tiles');
+    // The depth of the terrain the ground is read back from: where it cannot be taken, the rows
+    // are drawn as out of the band
+    const groundDepth = ground
+      ? getTerrainDepth(
+          input.mapTerrain,
+          tiles[0] as (typeof tiles)[number],
+          input.gl.drawingBufferWidth,
+          input.gl.drawingBufferHeight,
+        )
+      : null;
+    if (ground && !groundDepth) return this.unused('ground-depth');
     const drapeTiles: DrapeTile[] = tiles.map((t) => ({ x: t.x, y: t.y, z: t.z }));
     let moving: ActiveMoving[] = [];
     if (!ground) {
@@ -702,7 +709,6 @@ export class TableDrape {
         blocks: ground ? elevationBlocksOf(input.mapTerrain, entry.draw.tileID) : null,
       });
     }
-    this.ground ??= new DrapeGroundBuffer(input.gl, this.ledger);
     this.usedLast = inBand;
     debug.used = inBand;
     debug.reason = inBand ? 'ok' : reason;
@@ -717,7 +723,7 @@ export class TableDrape {
       leave: input.leave,
       drape: this,
       moving: moving.map((m) => ({ box: m.box, maxKey: m.set.maxKey })),
-      ground: this.ground,
+      ground: groundDepth,
       inBand,
     };
   }
@@ -1005,8 +1011,6 @@ export class TableDrape {
   releaseGpu(): void {
     this.renderer?.dispose();
     this.renderer = null;
-    this.ground?.release();
-    this.ground = null;
     this.index.clearTiles();
   }
 
@@ -1623,8 +1627,9 @@ interface PendingDraw {
 /**
  * How the order of a layer held as rows is kept on the terrain, in the drape band
  *
- * - ground: the polygons and the lines read the ground seen at each pixel and are drawn with the
- *   points in the order of the rows, in one draw a chunk (`DrapeGroundBuffer`)
+ * - ground: the polygons and the lines read the ground seen at each pixel, read back from the
+ *   depth of the terrain maplibre draws, and are drawn with the points in the order of the rows,
+ *   in one draw a chunk (terrain/drape/ground-depth.ts)
  * - each: the polygons and the lines are on the drape of the rows, and every run of points is a
  *   break, the drape painted up to it in every tile (one row at a time, wherever its markers
  *   are on the screen: the reference of the measures)

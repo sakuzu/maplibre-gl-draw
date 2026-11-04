@@ -326,11 +326,10 @@ describe('shader programs on a real WebGL2', () => {
     // the count of the call sites does not see; they are recorded among the programs: one for
     // the flat map and one for the globe, from its own preludes, whatever prelude maplibre gives,
     // and the variant whose polygons and lines read the ground seen at each pixel for the prelude
-    // given. The drape of the rows builds the pass of the ground seen at each pixel at a call site
-    // of its own
-    expect(sites).toHaveLength(14);
+    // given
+    expect(sites).toHaveLength(13);
     const programs = recordPrograms(preludes[0]);
-    expect(programs).toHaveLength(25);
+    expect(programs).toHaveLength(24);
   });
 
   it('builds every program that moves rows with their moving set', () => {
@@ -359,7 +358,7 @@ describe('shader programs on a real WebGL2', () => {
     'compiles and links every program with the Mercator and the globe prelude',
     async () => {
       const programs = preludes.flatMap((prelude) => recordPrograms(prelude));
-      expect(programs.length).toBe(50);
+      expect(programs.length).toBe(48);
       const failures = (await compileOnPage(page, programs)).filter((result) => !result.ok);
       expect(failures).toEqual([]);
     },

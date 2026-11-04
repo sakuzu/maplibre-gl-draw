@@ -1013,6 +1013,39 @@ Each item has the same five parts.
 - Conditions for removal — none while the engine draws the globe of
   maplibre.
 
+## 31. The Ground of a Pixel Is Read Back from the Depth of the Terrain
+
+- Upstream behavior — on a map with terrain, `maybeDrawDepth`
+  (`render/painter.ts:666`) calls `drawDepth`
+  (`webgl/draw/draw_terrain.ts`) before the layers are drawn, whenever
+  the camera or the terrain tiles changed: the terrain mesh is drawn with
+  `projectTileFor3D` into `terrain.getFramebuffer()`, a texture the size
+  of the canvas over the global `devicePixelRatio` (one texel a CSS
+  pixel), cleared white. Each texel holds the z over the w of the clip
+  space packed by `terrain_depth.fragment.glsl` into the bytes of an
+  RGBA8 texel, the digits of base 256 with the most significant in alpha.
+  `getTerrainData` (`render/terrain.ts:378`) hands the texture to the
+  shaders as `depthTexture` (`_fboDepthTexture`, or a 1 x 1 stand in
+  before the first depth is drawn).
+- What we rely on — assumption. Where the polygons and the lines of the
+  rows read the ground seen at each pixel in the drape band,
+  `getTerrainDepth` in `src/view/terrain/detect.ts` takes that texture and
+  checks its size against the canvas from `_fboDepthTexture.size`; the
+  shader of the rows (`GROUND_DEPTH_GLSL` in
+  `src/view/terrain/drape/ground-depth.ts`) unpacks it, interpolates it to
+  the device pixel and takes it back through the inverse of the flat
+  projection to the ground. Where the texture cannot be taken, and on the
+  globe, the rows are drawn as out of the band.
+- Symptoms when it breaks — a changed packing reads the ground at the
+  wrong place: the polygons and the lines of the rows in the drape band
+  slide along the rays of the camera or vanish; a texture no longer
+  handed out, or of another size, draws them as out of the band.
+- Check when upgrading — `src/view/terrain/drape/ground-depth.test.ts`
+  packs as the 6.11.1 shader does; compare `terrain_depth.fragment.glsl`,
+  `drawDepth`, `getFramebuffer` and `getTerrainData` with the new source.
+- Conditions for removal — none while the ground of a pixel is read back
+  from the depth MapLibre draws.
+
 ## When Upgrading the Version
 
 When moving to a new maplibre version, do the following.

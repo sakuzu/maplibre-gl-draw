@@ -68,7 +68,8 @@ uniform float u_shade_strength;
   DEM_SAMPLE_GLSL +
   TERRAIN_SHADE_CORE_GLSL +
   `
-float terrainFillShade() {
+// The shading at a Mercator offset from the center
+float terrainShadeAt(vec2 offset) {
     if (u_shade_strength <= 0.0) return 1.0;
 
     // The sample width is one texel of the DEM atlas. rect.zw = 1/width, 1/height
@@ -85,14 +86,18 @@ float terrainFillShade() {
     // gradient goes thin there, but since the atlas covers the terrain tiles in view, this
     // does not happen in the range where the polygon fill is applied (only the coarse tiles
     // on the horizon side fall outside the range).
-    float ex1 = dem_elevation_meters(v_shade_offset + vec2(texel.x, 0.0));
-    float ex0 = dem_elevation_meters(v_shade_offset - vec2(texel.x, 0.0));
-    float ey1 = dem_elevation_meters(v_shade_offset + vec2(0.0, texel.y));
-    float ey0 = dem_elevation_meters(v_shade_offset - vec2(0.0, texel.y));
+    float ex1 = dem_elevation_meters(offset + vec2(texel.x, 0.0));
+    float ex0 = dem_elevation_meters(offset - vec2(texel.x, 0.0));
+    float ey1 = dem_elevation_meters(offset + vec2(0.0, texel.y));
+    float ey0 = dem_elevation_meters(offset - vec2(0.0, texel.y));
 
     float dzdEast = (ex1 - ex0) / (2.0 * texel.x * meters);
     // Mercator y points south, so flip north
     float dzdNorth = -(ey1 - ey0) / (2.0 * texel.y * meters);
     return terrainShadeFromGradient(dzdEast, dzdNorth);
+}
+
+float terrainFillShade() {
+    return terrainShadeAt(v_shade_offset);
 }
 `;

@@ -43,7 +43,9 @@ import { TerrainContext } from '../../terrain/context.js';
 import {
   DRAPE_GROUND_BLOCK_TEXELS,
   DRAPE_GROUND_MAX_SLOTS,
-} from '../../terrain/drape/ground-buffer.js';
+  groundLiftOf,
+  groundUnprojectOf,
+} from '../../terrain/drape/ground-depth.js';
 import { NEUTRAL_DRAW_FACTORS, type RetainedDrawFactors } from '../draw-factors.js';
 import { type RetainedDrawRun, retainedDrawRun } from '../draw-run.js';
 import { bindRowState, type RowStateBinding, RowStateUniforms } from '../row-state.js';
@@ -81,9 +83,10 @@ const UNIT_ROW_STYLES = 2;
 const UNIT_STYLES = 3;
 const UNIT_SPRITES = 4;
 const UNIT_HEIGHTS = 5;
-/** The units of the ground seen at each pixel and of its tiles (the variant reading the ground) */
-const UNIT_GROUND = 8;
-/** The unit of the depth of the ground seen at each pixel */
+/**
+ * The units of the depth of the terrain the ground is read back from and of the tables of its
+ * tiles (the variant reading the ground)
+ */
 const UNIT_GROUND_DEPTH = 7;
 const UNIT_GROUND_TILES = 9;
 const UNIT_GROUND_BLOCKS = 10;
@@ -183,24 +186,27 @@ interface RowsUniformLocations {
   readonly ghostOn: WebGLUniformLocation | null;
   readonly ghostCamera: WebGLUniformLocation | null;
   readonly ghostNode: WebGLUniformLocation | null;
-  readonly ground: WebGLUniformLocation | null;
   readonly groundDepth: WebGLUniformLocation | null;
+  readonly groundUnproject: WebGLUniformLocation | null;
+  readonly groundLift: WebGLUniformLocation | null;
   readonly groundTiles: WebGLUniformLocation | null;
   readonly groundBlocks: WebGLUniformLocation | null;
   readonly groundCount: WebGLUniformLocation | null;
 }
 
 /**
- * The ground seen at each pixel the polygons and the lines read (`DrapeGroundBuffer`): its
- * texture, and its tiles by slot as their Mercator boxes (x, y of the corner and the side) and
- * the ranges of the elevations of their ground (meters)
+ * The ground the polygons and the lines read at each pixel (terrain/drape/ground-depth.ts): the
+ * depth of the terrain maplibre draws, which it is read back from, and its tiles by slot as their
+ * Mercator boxes (x, y of the corner and the side) and the ranges of the elevations of their
+ * ground (meters)
  *
  * @internal
  */
 export interface RowsGround {
-  readonly texture: WebGLTexture;
-  /** The depth of the ground seen at each pixel, which the polygons and the lines take */
+  /** The depth of the terrain maplibre draws (`getTerrainDepth`) */
   readonly depth: WebGLTexture;
+  /** The lift of the depth the polygons and the lines take, at the center of the view (meters) */
+  readonly liftMeters: number;
   readonly boxes: Float64Array;
   readonly ranges: Float32Array;
   /**
@@ -238,6 +244,8 @@ interface RowsUniformMemo {
   spritePremultiplied: number;
   /** The center the camera of the ghosts was written against (its uniforms, or an origin) */
   ghostCenter: object | null;
+  /** The version of the projection the ground is read back with that was written */
+  groundVersion: number;
 }
 
 function emptyMemo(): RowsUniformMemo {
@@ -252,6 +260,7 @@ function emptyMemo(): RowsUniformMemo {
     spriteScale: null,
     spritePremultiplied: Number.NaN,
     ghostCenter: null,
+    groundVersion: -1,
   };
 }
 
@@ -306,6 +315,20 @@ export class RowsRenderer {
     blocks: null,
     x: 0,
     y: 0,
+  };
+  /**
+   * The projection the ground is read back with (`groundUnprojectOf`, `groundLiftOf`), and what
+   * it was formed from (formed again when they change)
+   */
+  private readonly groundProjection = {
+    version: 0,
+    frame: -1,
+    matrix: null as ArrayLike<number> | null,
+    center: null as OffsetUniforms | null,
+    liftMeters: Number.NaN,
+    scale: Number.NaN,
+    unproject: new Float32Array(16),
+    lift: new Float32Array(4),
   };
   private variant: RowsVariant = 'flat';
   private offsetUniforms: OffsetUniforms | null = null;
@@ -785,7 +808,7 @@ export class RowsRenderer {
       );
     }
     this.writeUniforms(program, chunk, zoom, factors);
-    if (reading) this.bindGround(program);
+    if (reading) this.bindGround(program, projectionData);
     bindRowState(
       run,
       program.rowState as RowStateUniforms,
@@ -858,11 +881,13 @@ export class RowsRenderer {
   }
 
   /**
-   * Binds the ground seen at each pixel and writes its tiles, as Mercator offsets from the center
-   * the offsets of the draws are taken from (written again when the ground or the center
-   * changes), and the ranges of their blocks (written again when the tiles change)
+   * Binds the depth of the terrain the ground is read back from, writes the projection it is read
+   * back with (formed once a frame, and again when its matrix or its center changes), and writes its
+   * tiles, as Mercator offsets from the center the offsets of the draws are taken from (written
+   * again when the ground or the center changes), and the ranges of their blocks (written again
+   * when the tiles change)
    */
-  private bindGround(program: RowsProgram): void {
+  private bindGround(program: RowsProgram, projectionData: ProjectionData): void {
     const gl = this.gl;
     const ground = this.ground as RowsGround;
     const locations = program.locations as RowsUniformLocations;
@@ -908,16 +933,59 @@ export class RowsRenderer {
       written.x = center[0];
       written.y = center[1];
     }
-    gl.activeTexture(gl.TEXTURE0 + UNIT_GROUND);
-    gl.bindTexture(gl.TEXTURE_2D, ground.texture);
     gl.activeTexture(gl.TEXTURE0 + UNIT_GROUND_DEPTH);
     gl.bindTexture(gl.TEXTURE_2D, ground.depth);
     gl.activeTexture(gl.TEXTURE0);
-    if (locations.ground) gl.uniform1i(locations.ground, UNIT_GROUND);
     if (locations.groundDepth) gl.uniform1i(locations.groundDepth, UNIT_GROUND_DEPTH);
     if (locations.groundTiles) gl.uniform1i(locations.groundTiles, UNIT_GROUND_TILES);
     if (locations.groundBlocks) gl.uniform1i(locations.groundBlocks, UNIT_GROUND_BLOCKS);
     if (locations.groundCount) gl.uniform1i(locations.groundCount, ground.count);
+    const projection = this.groundProjectionOf(projectionData.mainMatrix, ground.liftMeters);
+    if (program.memo.groundVersion !== projection.version) {
+      if (locations.groundUnproject) {
+        gl.uniformMatrix4fv(locations.groundUnproject, false, projection.unproject);
+      }
+      if (locations.groundLift) gl.uniform4fv(locations.groundLift, projection.lift);
+      program.memo.groundVersion = projection.version;
+    }
+  }
+
+  /**
+   * The projection the ground is read back with in the frame: the inverse of the projection of
+   * the rows relative to the center of the view, and the lift of the depth the polygons and the
+   * lines take (none can be read back where it has no inverse: the inverse is left 0)
+   */
+  private groundProjectionOf(
+    matrix: ArrayLike<number>,
+    liftMeters: number,
+  ): RowsRenderer['groundProjection'] {
+    const formed = this.groundProjection;
+    const center = this.offsetUniforms;
+    const scale = this.terrain.renderState.elevationScale;
+    const frame = getRenderFrame();
+    if (
+      formed.frame === frame &&
+      formed.matrix === matrix &&
+      formed.center === center &&
+      formed.liftMeters === liftMeters &&
+      formed.scale === scale
+    ) {
+      return formed;
+    }
+    formed.frame = frame;
+    formed.matrix = matrix;
+    formed.center = center;
+    formed.liftMeters = liftMeters;
+    formed.scale = scale;
+    formed.version++;
+    const clipCenter = center?.projectionCenter ?? null;
+    if (!clipCenter || !groundUnprojectOf(matrix, clipCenter, formed.unproject)) {
+      formed.unproject.fill(0);
+      formed.lift.fill(0);
+      return formed;
+    }
+    groundLiftOf(matrix, scale, liftMeters, clipCenter[3], formed.lift);
+    return formed;
   }
 
   /** Releases every program, chunk and texture */
@@ -1547,8 +1615,9 @@ function locationsOf(gl: WebGL2RenderingContext, program: WebGLProgram): RowsUni
     ghostOn: at('u_ghost_on'),
     ghostCamera: at('u_ghost_camera'),
     ghostNode: at('u_ghost_node'),
-    ground: at('u_ground'),
     groundDepth: at('u_ground_depth'),
+    groundUnproject: at('u_ground_unproject'),
+    groundLift: at('u_ground_lift'),
     groundTiles: at('u_ground_tiles'),
     groundBlocks: at('u_ground_blocks'),
     groundCount: at('u_ground_count'),

@@ -261,6 +261,73 @@ export function getRenderableTerrainTiles(terrain: TerrainLike): RenderableTerra
 }
 
 /**
+ * The depth of the terrain MapLibre draws each frame (`getTerrainDepth`): the texture, and its
+ * size in texels
+ */
+export interface TerrainDepth {
+  readonly texture: WebGLTexture;
+  readonly width: number;
+  readonly height: number;
+}
+
+/**
+ * The texture MapLibre draws the depth of its terrain into, once a frame the camera or the tiles
+ * of the terrain changed in, before the layers are drawn (`maybeDrawDepth` of its painter): the
+ * terrain mesh seen from the camera of the frame, one texel a CSS pixel of the map (the size of
+ * the canvas over `devicePixelRatio`), each texel the depth of the clip space (its z over its w)
+ * packed into the four bytes of an RGBA8 texel, white where no terrain is drawn
+ * (`terrain_depth.fragment.glsl`). `getTerrainData` hands it to the shaders of MapLibre as
+ * `depthTexture`.
+ *
+ * Null where it cannot be taken: no `depthTexture` in the data of the tile, one that is not a
+ * texture, or one not of the size of the canvas now (MapLibre's 1 x 1 stand in before the first
+ * depth is drawn, or a depth not drawn again yet after the canvas changed its size). The size is
+ * read from the texture object that holds it (its `size`), the only place it is kept.
+ *
+ * @param tile Any tile of the terrain drawn (the depth is one for the frame)
+ * @param drawingWidth The width of the drawing buffer (device pixels)
+ * @param drawingHeight The height of the drawing buffer (device pixels)
+ */
+export function getTerrainDepth(
+  terrain: TerrainLike,
+  tile: RenderableTerrainTile,
+  drawingWidth: number,
+  drawingHeight: number,
+): TerrainDepth | null {
+  let data: unknown;
+  try {
+    data = terrain.getTerrainData(tile.tileID);
+  } catch {
+    return null;
+  }
+  if (!data || typeof data !== 'object') return null;
+  const texture = (data as { depthTexture?: unknown }).depthTexture;
+  if (!isTexture(texture)) return null;
+  const holder = (terrain as unknown as { _fboDepthTexture?: unknown })._fboDepthTexture;
+  if (!holder || typeof holder !== 'object') return null;
+  const own = holder as { texture?: unknown; size?: unknown };
+  if (own.texture !== texture || !Array.isArray(own.size) || own.size.length < 2) return null;
+  // MapLibre makes it the size of the canvas over the ratio of the device, which may not be a
+  // whole number: the texture takes the whole part (as the viewport it is drawn with does)
+  const width = Math.trunc(own.size[0] as number);
+  const height = Math.trunc(own.size[1] as number);
+  const ratio = (globalThis as { devicePixelRatio?: number }).devicePixelRatio;
+  const dpr = typeof ratio === 'number' && Number.isFinite(ratio) && ratio > 0 ? ratio : 1;
+  if (!(width > 0 && height > 0)) return null;
+  if (width !== Math.trunc(drawingWidth / dpr) || height !== Math.trunc(drawingHeight / dpr)) {
+    return null;
+  }
+  return { texture, width, height };
+}
+
+/** Whether a value is a WebGL texture (any object where the class is not there, as in tests) */
+function isTexture(value: unknown): value is WebGLTexture {
+  if (!value || typeof value !== 'object') return false;
+  const kind = (globalThis as { WebGLTexture?: abstract new () => object }).WebGLTexture;
+  return typeof kind === 'function' ? value instanceof kind : true;
+}
+
+/**
  * Extracts the DEM rendering data for one tile (null when something is missing)
  */
 export function getTerrainTileData(

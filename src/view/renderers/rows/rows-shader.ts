@@ -54,9 +54,8 @@ import {
 import {
   DRAPE_GROUND_BLOCKS,
   DRAPE_GROUND_COARSE_BLOCKS,
-  DRAPE_GROUND_PLACE_STEPS,
-  DRAPE_GROUND_SHADE_RANGE,
-} from '../../terrain/drape/ground-buffer.js';
+  GROUND_DEPTH_GLSL,
+} from '../../terrain/drape/ground-depth.js';
 import { TERRAIN_OCCLUSION_GLSL } from '../../terrain/occlusion.js';
 import { DASH_COEFFICIENTS } from '../line/dash.js';
 import { POINT_AA_PADDING_PX, POINT_MIN_OUTER_PX } from '../point/point-instance.js';
@@ -651,7 +650,7 @@ void drawFill(int style) {
 }
 
 #ifdef ROWS_GROUND
-// The polygons and the lines read the ground seen at each pixel (terrain/drape/ground-buffer.ts):
+// The polygons and the lines read the ground seen at each pixel (terrain/drape/ground-depth.ts):
 // each is drawn as a box on the screen that holds every pixel whose ground it may cover, and the
 // fragment tells from that ground whether the pixel is in it or how far it is from it. The tiles
 // of the ground, two texels for slot s: its box (the Mercator offset of its corner from the
@@ -1024,7 +1023,7 @@ void main() {
  * The fragment shader source
  *
  * @param variant `color`: the colors. `ground`: the polygons and the lines read the ground seen at
- *   each pixel (terrain/drape/ground-buffer.ts)
+ *   each pixel (terrain/drape/ground-depth.ts)
  * @internal
  */
 export function buildRowsFragmentSource(variant: RowsFragmentVariant = 'color'): string {
@@ -1059,14 +1058,14 @@ uniform float u_sprite_premultiplied;
 flat in vec4 v_ga;
 flat in vec4 v_gb;
 flat in vec4 v_gc;
-// The ground seen at each pixel (its place in its tile, the shading there, its slot plus one) and
-// the tiles of the slots (rows-shader.ts, the vertex stage)
-uniform highp usampler2D u_ground;
-uniform highp sampler2D u_ground_tiles;
-// The depth of the ground seen at each pixel: the polygons and the lines take it as their own, so
-// the 3D layers of the map in front of the ground hide them as they hide the ground (the points
-// and the sprites keep the depth of their markers)
-uniform highp sampler2D u_ground_depth;
+// The size of the drawing buffer (device pixels)
+uniform vec2 u_viewport;
+// The lift of the depth the polygons and the lines take over the ground read back, as a step of
+// the clip space over its w (terrain/drape/ground-depth.ts, groundLiftOf): they take the depth of
+// the ground so, and the 3D layers of the map in front of the ground hide them as they hide the
+// ground (the points and the sprites keep the depth of their markers)
+uniform vec4 u_ground_lift;
+${GROUND_DEPTH_GLSL}
 #endif
 out vec4 fragColor;
 
@@ -1209,26 +1208,10 @@ vec4 shadeSprite() {
 }
 
 #ifdef ROWS_GROUND
-// The ground a texel of the ground holds (terrain/drape/ground-buffer.ts): its Mercator offset
-// from the center, from its tile (the first one where none is seen) and its place in it, and the
-// shading there
-void groundPlace(uvec4 g, out vec2 q, out float shade) {
-    int slot = max(int(g.x) - 1, 0);
-    vec4 box = texelFetch(u_ground_tiles, ivec2(0, slot), 0);
-    q = box.xy + vec2(g.yz) / ${glslFloat(DRAPE_GROUND_PLACE_STEPS)} * box.z;
-    shade = float(g.w) / ${glslFloat(DRAPE_GROUND_PLACE_STEPS)} * ${glslFloat(DRAPE_GROUND_SHADE_RANGE)};
-}
-
-// The ground seen at a pixel: its Mercator offset from the center and the shading there (false
-// where no ground is seen)
-bool groundOf(ivec2 at, out vec2 q, out float shade) {
-    ivec2 size = textureSize(u_ground, 0);
-    uvec4 g = texelFetch(u_ground, clamp(at, ivec2(0), size - 1), 0);
-    q = vec2(0.0);
-    shade = 1.0;
-    if (g.x == 0u) return false;
-    groundPlace(g, q, shade);
-    return true;
+// The ground seen at a pixel: its Mercator offset from the center (false where no ground is seen)
+bool groundOf(ivec2 at, out vec2 q) {
+    float z;
+    return ground_at(vec2(at) + 0.5, q, z);
 }
 
 // The step of the ground from a pixel to the next one along an axis: the shorter of the steps
@@ -1238,9 +1221,8 @@ bool groundOf(ivec2 at, out vec2 q, out float shade) {
 vec2 groundStep(ivec2 at, ivec2 axis, vec2 q, inout bool lone) {
     vec2 forward;
     vec2 back;
-    float shade;
-    bool hasForward = groundOf(at + axis, forward, shade);
-    bool hasBack = groundOf(at - axis, back, shade);
+    bool hasForward = groundOf(at + axis, forward);
+    bool hasBack = groundOf(at - axis, back);
     vec2 a = hasForward ? forward - q : vec2(0.0);
     vec2 b = hasBack ? q - back : vec2(0.0);
     if (hasForward && hasBack) {
@@ -1286,15 +1268,24 @@ bool inTriangle(vec2 q, vec2 a, vec2 b, vec2 c) {
     return insideEdge(a, b, q, o) && insideEdge(b, c, q, o) && insideEdge(c, a, q, o);
 }
 
+// The depth of the clip space over its w the ground of the pixel of the fragment is read back
+// from (where it is seen)
+float g_ground_depth = 1.0;
+
 // The ground of the pixel of the fragment, read in the same way by every fragment of a quad, with
 // its steps to the next pixels of the quad (dFdx, dFdy): false where no ground is seen
-bool groundHere(out vec2 q, out float shade, out vec2 stepX, out vec2 stepY) {
-    ivec2 size = textureSize(u_ground, 0);
-    uvec4 g = texelFetch(u_ground, clamp(ivec2(gl_FragCoord.xy), ivec2(0), size - 1), 0);
-    groundPlace(g, q, shade);
+bool groundHere(out vec2 q, out vec2 stepX, out vec2 stepY) {
+    bool seen = ground_at(gl_FragCoord.xy, q, g_ground_depth);
     stepX = dFdx(q);
     stepY = dFdy(q);
-    return g.x != 0u;
+    return seen;
+}
+
+// The depth the polygons and the lines take at the pixel of the fragment: that of the ground read
+// back, lifted over it
+float groundFragDepth() {
+    float z = (g_ground_depth + u_ground_lift.z) / (1.0 + u_ground_lift.w);
+    return gl_DepthRange.near + gl_DepthRange.diff * clamp(z * 0.5 + 0.5, 0.0, 1.0);
 }
 
 // Whether the steps of the quad may cross an edge of the ground seen (a ridge, a crack between
@@ -1353,10 +1344,10 @@ float groundDashDistance(vec2 sa, vec2 sb, float start, float len, float dash, f
 
 // The ground of the pixel and the map from a displacement on it to one on the screen (false for
 // a pixel where no ground is seen, or seen through a crack between two tiles)
-bool groundAndScreen(out vec2 q, out float shade, out mat2 toScreen) {
+bool groundAndScreen(out vec2 q, out mat2 toScreen) {
     vec2 stepX;
     vec2 stepY;
-    bool seen = groundHere(q, shade, stepX, stepY);
+    bool seen = groundHere(q, stepX, stepY);
     toScreen = groundToScreenOf(stepX, stepY);
     if (!seen) return false;
     if (groundBroken(stepX, stepY)) {
@@ -1372,9 +1363,8 @@ bool groundAndScreen(out vec2 q, out float shade, out mat2 toScreen) {
 // softens the edge of a fill (half a pixel in and out of it) within its edges on the outline
 vec4 shadeGroundFill() {
     vec2 q;
-    float shade;
     mat2 toScreen;
-    if (!groundAndScreen(q, shade, toScreen)) discard;
+    if (!groundAndScreen(q, toScreen)) discard;
     vec2 a = v_ga.xy;
     vec2 b = v_ga.zw;
     vec2 c = v_gb.xy;
@@ -1395,7 +1385,7 @@ vec4 shadeGroundFill() {
         if ((edges & ${ROWS_PAIR_EDGE_BITS.dc}) != 0) dist = min(dist, length(groundClosest(sd, sc)));
         coverage = clamp(0.5 + dist, 0.0, 1.0);
     }
-    return vec4(v_color.rgb * shade, v_color.a * coverage * u_opacity);
+    return vec4(v_color.rgb * terrainShadeAt(q), v_color.a * coverage * u_opacity);
 }
 
 // An edge of an outline (or of a fringe) or a segment of a line: the pixels that are nearer to it
@@ -1405,9 +1395,8 @@ vec4 shadeGroundFill() {
 // under it, as the drape does
 vec4 shadeGroundEdge() {
     vec2 q;
-    float shade;
     mat2 toScreen;
-    if (!groundAndScreen(q, shade, toScreen)) discard;
+    if (!groundAndScreen(q, toScreen)) discard;
     vec2 a = v_ga.xy;
     vec2 b = v_ga.zw;
     vec2 p = v_gb.xy;
@@ -1468,6 +1457,7 @@ vec4 shadeGroundEdge() {
     }
     float alpha = strokeAlpha + fillAlpha * (1.0 - strokeAlpha);
     if (alpha <= 0.0) discard;
+    float shade = fillAlpha > 0.0 ? terrainShadeAt(q) : 1.0;
     vec3 rgb = (v_color.rgb * strokeAlpha + v_color2.rgb * shade * fillAlpha * (1.0 - strokeAlpha))
         / alpha;
     return vec4(rgb, alpha * u_opacity);
@@ -1481,11 +1471,11 @@ void main() {
         fragColor = shadePoint();
     } else if (v_kind == ${ROWS_KIND.fill}) {
         fragColor = shadeGroundFill();
-        gl_FragDepth = texelFetch(u_ground_depth, ivec2(gl_FragCoord.xy), 0).r;
+        gl_FragDepth = groundFragDepth();
     } else if (v_kind == ${ROWS_KIND.segment} || v_kind == ${ROWS_KIND.dashedOutline}
         || v_kind == ${ROWS_KIND.outline} || v_kind == ${ROWS_KIND.fringe}) {
         fragColor = shadeGroundEdge();
-        gl_FragDepth = texelFetch(u_ground_depth, ivec2(gl_FragCoord.xy), 0).r;
+        gl_FragDepth = groundFragDepth();
     } else {
         fragColor = shadeSprite();
     }

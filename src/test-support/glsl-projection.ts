@@ -574,6 +574,9 @@ export interface TestCamera {
   bearing?: number;
   width: number;
   height: number;
+  /** The near and the far plane of the Mercator matrix (pixels; 1 and 100 times the distance) */
+  near?: number;
+  far?: number;
 }
 
 const FOV = 0.6435011087932844;
@@ -589,7 +592,7 @@ export function mercatorMatrix(camera: TestCamera): number[] {
   const worldSize = 512 * 2 ** camera.zoom;
   const [cx, cy] = mercatorOf(camera.center[0], camera.center[1]);
   const d = cameraDistance(camera.height);
-  let m = perspective(FOV, camera.width / camera.height, 1, d * 100);
+  let m = perspective(FOV, camera.width / camera.height, camera.near ?? 1, camera.far ?? d * 100);
   m = multiply(m, scaling(1, -1, 1));
   m = multiply(m, translation(0, 0, -d));
   m = multiply(m, rotationX((camera.pitch ?? 0) * DEG));

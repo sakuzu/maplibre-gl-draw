@@ -18,7 +18,8 @@ import type { ProjectionData } from 'maplibre-gl';
 import { describe, expect, it, vi } from 'vitest';
 import { GpuLedger } from '../../gpu-ledger.js';
 import { beginRenderFrame } from '../../shaders/frame.js';
-import type { ShaderData } from '../../shaders/helpers.js';
+import { calculateOffsetUniforms, type ShaderData } from '../../shaders/helpers.js';
+import { DRAPE_GROUND_BLOCK_TEXELS } from '../../terrain/drape/ground-depth.js';
 import { ROW_STATE_WIDTH, type RowStateBinding } from '../row-state.js';
 import {
   ROWS_INSTANCE_BYTES,
@@ -37,6 +38,8 @@ const PROJECTION = {
   mainMatrix: new Float32Array(16),
   projectionTransition: 0,
 } as unknown as ProjectionData;
+/** A matrix of a view that can be inverted */
+const MATRIX = [2, 0, 0, 0, 0, 2, 0, 0, 0, 0, 1, 1, 0, 0, -1, 0];
 
 interface Call {
   readonly name: string;
@@ -434,6 +437,65 @@ describe('RowsRenderer', () => {
     expect(ledger.snapshot().byOwner.rows).toBe(corners + 8);
     renderer.dispose();
     expect(ledger.snapshot().byOwner.rows).toBeUndefined();
+  });
+
+  it('reads the ground from the depth of the terrain with tables of its tiles alone', () => {
+    const held: number[] = [];
+    for (const [width, height] of [
+      [800, 600],
+      [2560, 1440],
+    ]) {
+      const mock = recordingGL();
+      (mock.gl as unknown as Record<string, number>).drawingBufferWidth = width;
+      (mock.gl as unknown as Record<string, number>).drawingBufferHeight = height;
+      const ledger = new GpuLedger();
+      const renderer = new RowsRenderer(null, mock.gl, 1, undefined, ledger);
+      renderer.ensureShader(SHADER_DATA);
+      expect(renderer.groundReady).toBe(true);
+      const before = ledger.snapshot().byOwner.rows ?? 0;
+      const depth = { id: 'depth' } as unknown as WebGLTexture;
+      const ground = {
+        depth,
+        liftMeters: 0.4,
+        boxes: new Float64Array(30),
+        ranges: new Float32Array(20),
+        blocks: new Float32Array(DRAPE_GROUND_BLOCK_TEXELS * 4 * 10),
+        count: 10,
+      };
+      expect(renderer.prepareGround(ground)).toBe(true);
+      held.push((ledger.snapshot().byOwner.rows ?? 0) - before);
+      const chunk = renderer.createChunk(chunkData(4));
+      renderer.flushUploads();
+      beginRenderFrame();
+      renderer.setOffsetUniforms(calculateOffsetUniforms([139, 35], { mainMatrix: MATRIX }));
+      renderer.setGround(ground);
+      const draw = mock.calls.length;
+      renderer.drawRange(
+        chunk,
+        0,
+        4,
+        14,
+        { ...PROJECTION, mainMatrix: MATRIX } as never,
+        binding(),
+      );
+      // The depth of the terrain is bound, the inverse of the projection and the lift written
+      const bound = mock.calls.slice(draw).filter((c) => c.name === 'bindTexture');
+      expect(bound.some((c) => c.args[1] === depth)).toBe(true);
+      const matrices = mock.calls
+        .slice(draw)
+        .filter(
+          (c) =>
+            c.name === 'uniformMatrix4fv' &&
+            (c.args[0] as { name: string }).name === 'u_ground_unproject',
+        );
+      expect(matrices).toHaveLength(1);
+      expect((matrices[0]?.args[2] as Float32Array).some((v) => v !== 0)).toBe(true);
+      renderer.disposeChunk(chunk);
+      renderer.dispose();
+      expect(ledger.snapshot().byOwner.rows).toBeUndefined();
+    }
+    // The tables of 64 tiles, whatever the size of the screen: two texels and the blocks a tile
+    expect(held).toEqual([64 * 2 * 16 + 64 * DRAPE_GROUND_BLOCK_TEXELS * 16, held[0]]);
   });
 
   it('draws the pictures of an extension from its texture, sized by its distance scale', () => {

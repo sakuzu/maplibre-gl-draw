@@ -149,7 +149,7 @@ import type { DrapeBounds } from '../terrain/drape/geometry.js';
 import {
   DRAPE_GROUND_BLOCK_TEXELS,
   DRAPE_GROUND_MAX_SLOTS,
-} from '../terrain/drape/ground-buffer.js';
+} from '../terrain/drape/ground-depth.js';
 import { DRAPE_LIFT_RATIO } from '../terrain/drape/renderer.js';
 import { isTerrainCameraMoving } from '../terrain/state.js';
 import { type MercatorRect, mercatorX, mercatorY } from '../terrain/tessellation.js';
@@ -559,7 +559,7 @@ interface DrawPass {
   settled: boolean;
   /** Whether the layer is drawn in one draw (the rows of the delta in one draw too) */
   oneDraw: boolean;
-  /** Whether the ground seen at each pixel is drawn for the chunks of the layer */
+  /** Whether the ground seen at each pixel is read for the chunks of the layer */
   groundRead: boolean;
   /**
    * Whether the frame is in the drape band (every chunk packed or being packed for the ground
@@ -752,7 +752,6 @@ export class TableLayerRenderer {
 
   constructor(private readonly options: TableLayerRendererOptions) {
     this.versionBudgetWhileMovingMs = options.versionBudgetWhileMovingMs ?? 0;
-    this.drape.ledger = options.ledger;
     this.rowExtents = new RowExtents(options.extensions);
     const stateCopies = options.keepCopies ? new WeakMap<RowStateTexture, Uint8Array>() : null;
     this.stateCopies = stateCopies;
@@ -1410,39 +1409,29 @@ export class TableLayerRenderer {
   }
 
   /**
-   * Draws the ground seen at each pixel once per frame, and gives it to the renderer of the rows
+   * Gives the renderer of the rows the ground of the frame (once a frame): the depth of the
+   * terrain maplibre draws, the ground seen at each pixel is read back from, and the tables of the
+   * tiles of the terrain drawn, by which the polygons and the lines find the boxes on the screen
+   * that hold their ground
    *
-   * @returns false when it cannot be drawn (the drape is used as it is)
+   * @returns false when it cannot be given (the drape is used as it is)
    */
   private drawGround(frame: TableDrapeFrame): boolean {
-    const ground = frame.ground;
+    const depth = frame.ground;
     const rows = this.pass.renderers?.rows;
-    if (!ground || !rows) return false;
+    if (!depth || !rows) return false;
     const now = getRenderFrame();
-    if (ground.drawnFrame !== now) {
-      if (!ground.ensure()) return false;
-      this.pass.renderers?.run?.end();
-      frame.enter();
-      ground.begin();
-      const boxes = new Float64Array(frame.tiles.length * 3);
-      const ranges = new Float32Array(frame.tiles.length * 2);
-      const drawn: TableDrapeFrame['tiles'][number][] = [];
-      for (const tile of frame.tiles) {
-        if (drawn.length >= DRAPE_GROUND_MAX_SLOTS) {
-          // More tiles than a slot holds: the ground is not usable
-          ground.end();
-          frame.leave();
-          this.pass.renderers?.run?.begin();
-          ground.fail();
-          return false;
-        }
-        const slot = drawn.length;
-        if (
-          !frame.renderer.drawGroundTile(tile.entry.draw, tile.entry.projection, frame.light, slot)
-        ) {
-          continue;
-        }
-        drawn.push(tile);
+    if (this.groundFrame !== now || this.groundState?.depth !== depth.texture) {
+      const tiles = frame.tiles;
+      // More tiles than the tables hold: the ground is not read
+      if (tiles.length > DRAPE_GROUND_MAX_SLOTS) return false;
+      const boxes = new Float64Array(tiles.length * 3);
+      const ranges = new Float32Array(tiles.length * 2);
+      // The lift of the depth taken at the center of the view: the one the drape gives the ground
+      // of the finest tile drawn
+      let finest = Number.POSITIVE_INFINITY;
+      for (let slot = 0; slot < tiles.length; slot++) {
+        const tile = tiles[slot] as TableDrapeFrame['tiles'][number];
         boxes[slot * 3] = tile.box.minX;
         boxes[slot * 3 + 1] = tile.box.minY;
         boxes[slot * 3 + 2] = tile.box.maxX - tile.box.minX;
@@ -1450,12 +1439,12 @@ export class TableLayerRenderer {
         const lift = tile.entry.draw.groundMeters * DRAPE_LIFT_RATIO;
         ranges[slot * 2] = tile.elevation[0];
         ranges[slot * 2 + 1] = tile.elevation[1] + lift;
-        this.groundDraws++;
+        finest = Math.min(finest, tile.entry.draw.groundMeters);
       }
       // The ranges of the blocks, written again when the tiles or their DEM change
       const same =
-        this.groundTilesDrawn.length === drawn.length &&
-        drawn.every(
+        this.groundTilesDrawn.length === tiles.length &&
+        tiles.every(
           (tile, i) =>
             this.groundTilesDrawn[i]?.blocks === tile.blocks &&
             this.groundTilesDrawn[i]?.tile === tile.tile,
@@ -1463,9 +1452,9 @@ export class TableLayerRenderer {
       let blocks = this.groundState?.blocks ?? null;
       if (!same || !blocks) {
         const perSlot = DRAPE_GROUND_BLOCK_TEXELS * 4;
-        blocks = new Float32Array(Math.max(1, drawn.length) * perSlot);
-        for (let slot = 0; slot < drawn.length; slot++) {
-          const tile = drawn[slot] as TableDrapeFrame['tiles'][number];
+        blocks = new Float32Array(Math.max(1, tiles.length) * perSlot);
+        for (let slot = 0; slot < tiles.length; slot++) {
+          const tile = tiles[slot] as TableDrapeFrame['tiles'][number];
           const lift = tile.entry.draw.groundMeters * DRAPE_LIFT_RATIO;
           const [low, high] = tile.elevation;
           for (let b = 0; b < perSlot; b += 4) {
@@ -1477,36 +1466,28 @@ export class TableLayerRenderer {
             blocks[at + 3] = tile.blocks ? (tile.blocks[b + 3] as number) : (high - low) / 2;
           }
         }
-        this.groundTilesDrawn = drawn;
+        this.groundTilesDrawn = [...tiles];
       }
-      const count = drawn.length;
-      ground.end();
-      frame.leave();
-      this.pass.renderers?.run?.begin();
-      ground.drawnFrame = now;
+      this.groundFrame = now;
       this.groundState = {
-        texture: ground.texture as WebGLTexture,
-        depth: ground.depthTexture as WebGLTexture,
+        depth: depth.texture,
+        liftMeters: Number.isFinite(finest) ? finest * DRAPE_LIFT_RATIO : 0,
         boxes,
         ranges,
         blocks,
-        count,
+        count: tiles.length,
       };
     }
     if (!this.groundState) return false;
-    // The tables of the tiles grow with them; where they cannot, the ground is not usable
-    if (!rows.prepareGround(this.groundState)) {
-      ground.fail();
-      return false;
-    }
-    return true;
+    // The tables of the tiles grow with them; where they cannot, the ground is not read
+    return rows.prepareGround(this.groundState);
   }
 
-  /** The ground of the frame given to the renderer of the rows, and the tiles it was drawn of */
+  /** The ground of the frame given to the renderer of the rows, and the tiles of its tables */
   private groundState: RowsGround | null = null;
   private groundTilesDrawn: TableDrapeFrame['tiles'][number][] = [];
-  /** The draws of the ground in the last frames (for the measurements) */
-  groundDraws = 0;
+  /** The frame the ground was given in */
+  private groundFrame = -1;
 
   /** What the drape of the rows did in the last frame (for the measurements) */
   drapeDiagnostics(): TableDrapeDebug & {
@@ -1514,7 +1495,6 @@ export class TableLayerRenderer {
     draws: number;
     breaks: number;
     pointDraws: number;
-    groundBytes: number;
   } {
     return {
       ...this.drape.debug,
@@ -1522,7 +1502,6 @@ export class TableLayerRenderer {
       draws: this.drapeDraws,
       breaks: this.drapeBreaks,
       pointDraws: this.drapePointDraws,
-      groundBytes: this.drape.groundBytes,
     };
   }
 
@@ -3101,7 +3080,7 @@ export class TableLayerRenderer {
    * Puts the depth state of a draw that reads the ground: its polygons and lines take the depth
    * of the ground seen at each pixel, tested against the depth of the map (LEQUAL, not written),
    * so the 3D layers of the map in front of the ground hide them; no offset (the depth is the one
-   * of the ground drawn, lifted as the drape lifts it)
+   * of the ground read back, lifted as the drape lifts it)
    */
   private enterGroundDepth(): void {
     const gl = this.options.gl;

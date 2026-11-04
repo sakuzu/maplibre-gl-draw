@@ -120,8 +120,6 @@ export interface TableDrapeDiagnostics {
   readonly breaks: number;
   /** The draws of the points drawn among the drape in the frame (references) */
   readonly pointDraws: number;
-  /** The bytes of the ground seen at each pixel */
-  readonly groundBytes: number;
 }
 
 /**
@@ -293,7 +291,6 @@ function createTableDiagnostics(
         draws: drape?.draws ?? 0,
         breaks: drape?.breaks ?? 0,
         pointDraws: drape?.pointDraws ?? 0,
-        groundBytes: drape?.groundBytes ?? 0,
       });
     },
     setDrapeOrder(order) {
