@@ -970,6 +970,14 @@ void main() {
 }
 ```
 
+バッファーに原点からの float32 の差で持った印は、原点からの距離に応じて
+画面でずれ、ずれはズームとともに大きくなります。
+`rebasedRetainedOrigin(origin, extent, view, zoom, movedViews)` は、
+ライブラリーが自分の塊に使う規則で、新しい原点から書き直す時を教えます。
+見ている所の誤差が `RETAINED_ORIGIN_TOLERANCE_PX` の内なら `null` を
+返します。カメラが止まっている間に呼び、ドラッグ中の行には
+`rowStateMovedViews(binding, view)` を渡します。
+
 ## 関連する例
 
 - [Custom feature types](../examples/custom-feature-types.ja.md) では、

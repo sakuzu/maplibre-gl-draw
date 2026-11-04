@@ -32,6 +32,11 @@ writing it. Its changes are listed after those of 3.0.0.
   `ROW_STATE_TEXTURE_UNIT`), the byte of a row being dragged
   (`rowStateOf`), the moves of the drag (`rowStateBindingOf`,
   `RowStateBinding`) and the uniforms (`RowStateUniforms`).
+  What is kept on the GPU as offsets from an origin follows the rule of
+  the library: `rebasedRetainedOrigin`, `retainedOriginErrorPx`,
+  `RETAINED_ORIGIN_TOLERANCE_PX`, and `rowStateMovedViews` for the rows
+  moved on the GPU. `createProgram` takes the outputs a transform feedback
+  captures.
 - The entry `@sakuzu/maplibre-gl-draw/kasane`, experimental (it may
   change in a minor release): `createTableStore`, an in-memory store that
   holds its features as rows, and `createFeatureTables`, the tables for a

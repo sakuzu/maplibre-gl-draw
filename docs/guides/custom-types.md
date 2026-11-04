@@ -1027,6 +1027,14 @@ void main() {
 }
 ```
 
+Marks kept in a buffer as float32 offsets from an origin are off on the
+screen by a share of their distance from it, which grows with the zoom.
+`rebasedRetainedOrigin(origin, extent, view, zoom, movedViews)` tells
+when to write them again from a new origin, as the library does for its
+own batches: `null` while the error of what is seen is within
+`RETAINED_ORIGIN_TOLERANCE_PX`. Ask it while the camera is at rest, and
+pass `rowStateMovedViews(binding, view)` for the rows being dragged.
+
 ## Related example
 
 - [Custom feature types](../examples/custom-feature-types.md) adds a
