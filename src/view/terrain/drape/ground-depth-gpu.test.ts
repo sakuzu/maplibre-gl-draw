@@ -13,19 +13,15 @@
  * (`test-support/ground-depth-scene.ts`), and a place is held to it in device pixels (the step of
  * the ground to the next pixel there).
  *
- * The scenes: the flat map at pitches 0, 45 and 70, at device pixel ratios 1 and 2, with and
- * without the DEM atlas (without it a depth whose second digit is read halfway is not picked);
- * the edge of a ridge in front of the ground behind it, and the sky; the globe alone at zooms 6
- * and 9; the transition at its middle; the ground lifted.
+ * The scenes, on the flat map (on the globe the ground is not read back): pitches 0, 45 and 70,
+ * at device pixel ratios 1 and 2, with and without the DEM atlas (without it a depth whose second
+ * digit is read halfway is not picked); the edge of a ridge in front of the ground behind it, and
+ * the sky; the depth of the ground lifted.
  */
 
 import type { Browser, Page } from 'playwright-core';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import {
-  type FrameProjection,
-  frameProjection,
-  type TestCamera,
-} from '../../../test-support/glsl-projection.js';
+import { frameProjection, type TestCamera } from '../../../test-support/glsl-projection.js';
 import {
   type GroundScene,
   groundClipOf,
@@ -33,7 +29,6 @@ import {
 } from '../../../test-support/ground-depth-scene.js';
 import { launchWebGlBrowser } from '../../../test-support/webgl-page.js';
 import { browserTimeout } from '../../../test-utils.js';
-import { CENTER_OFFSET_FUNCTIONS_GLSL } from '../../shaders/center-projection.js';
 import {
   calculateOffsetUniforms,
   DEM_SAMPLE_GLSL,
@@ -46,13 +41,11 @@ const WIDTH = 1280;
 const HEIGHT = 720;
 
 /** The vertex shader that reads the ground of places of the screen */
-function sourceOf(globe: boolean): string {
+function sourceOf(): string {
   return withSamplerPrecision(`#version 300 es
 precision highp float;
-${globe ? '#define GLOBE' : ''}
 uniform vec2 u_viewport;
 ${DEM_SAMPLE_GLSL}
-${CENTER_OFFSET_FUNCTIONS_GLSL}
 ${GROUND_DEPTH_GLSL}
 in vec2 a_frag;
 out vec4 v_ground;
@@ -163,11 +156,11 @@ async function readOnPage(page: Page, run: Run): Promise<number[]> {
   }, run);
 }
 
-/** A frame of a camera and a transition */
-function sceneOf(camera: TestCamera, transition: number, liftMeters = 0): GroundScene {
-  const projection: FrameProjection = frameProjection(
+/** A frame of a camera on the flat map, and the lift of the ground at its center */
+function sceneOf(camera: TestCamera, liftMeters = 0): GroundScene {
+  const projection = frameProjection(
     { ...camera, near: camera.height / 50, far: camera.height * 30 },
-    transition,
+    0,
   );
   const uniforms = calculateOffsetUniforms(camera.center, {
     ...projection,
@@ -175,8 +168,7 @@ function sceneOf(camera: TestCamera, transition: number, liftMeters = 0): Ground
   } as never);
   const scale = metersToMercatorScale(uniforms.centerLngLat[1]);
   const read = groundProjectionOf(
-    projection,
-    uniforms.centerLngLat,
+    projection.mainMatrix,
     uniforms.centerMercator,
     scale,
     liftMeters,
@@ -199,24 +191,6 @@ function uniformsOf(scene: GroundScene, viewport: readonly [number, number], atl
     { name: 'u_viewport', method: 'uniform2f', args: [viewport[0], viewport[1]] },
     { name: 'u_ground_unproject', method: 'uniformMatrix4fv', args: [false, f(r.unproject)] },
     { name: 'u_ground_lift', method: 'uniform1f', args: [r.lift] },
-    { name: 'u_ground_transition', method: 'uniform1f', args: [r.transition] },
-    { name: 'u_ground_globe', method: 'uniformMatrix4fv', args: [false, f(r.globe)] },
-    { name: 'u_ground_main', method: 'uniformMatrix4fv', args: [false, f(r.main)] },
-    { name: 'u_ground_main_center', method: 'uniform4fv', args: [f(r.mainCenter)] },
-    { name: 'u_ground_fallback', method: 'uniformMatrix4fv', args: [false, f(r.fallback)] },
-    { name: 'u_ground_fallback_center', method: 'uniform4fv', args: [f(r.fallbackCenter)] },
-    {
-      name: 'u_center_sine_cosine',
-      method: 'uniform4fv',
-      args: [
-        f(
-          [scene.uniforms.centerLngLat[1], scene.uniforms.centerLngLat[0]].flatMap((d) => [
-            Math.sin((d * Math.PI) / 180),
-            Math.cos((d * Math.PI) / 180),
-          ]),
-        ),
-      ],
-    },
     { name: 'u_elevation_params', method: 'uniform2f', args: [scene.scale, 0] },
     { name: 'u_terrain_on', method: 'uniform1f', args: [1] },
     { name: 'u_dem_atlas_rect', method: 'uniform4fv', args: [f(atlas?.rect ?? [0, 0, 1, 1])] },
@@ -268,6 +242,11 @@ interface Reading {
   count: number;
   /** The texels whose second digit is 128 (read halfway or picked) */
   halfway: number;
+  /**
+   * With the lift: the largest distance of the depth taken from that of the ground lifted, as a
+   * share of the step of the lift in the depth
+   */
+  depthWorst: number;
 }
 
 async function readScene(
@@ -325,13 +304,13 @@ async function readScene(
     }
   }
   const out = await readOnPage(page, {
-    source: sourceOf(scene.read.transition > 0),
+    source: sourceOf(),
     depth: { width: css[0], height: css[1], bytes },
     atlas,
     uniforms: uniformsOf(scene, viewport, atlas),
     frags,
   });
-  const reading: Reading = { worst: 0, missing: 0, extra: 0, count: 0, halfway };
+  const reading: Reading = { worst: 0, missing: 0, extra: 0, count: 0, halfway, depthWorst: 0 };
   for (let k = 0; k < frags.length / 2; k++) {
     const fx = frags[k * 2] as number;
     const fy = frags[k * 2 + 1] as number;
@@ -343,13 +322,9 @@ async function readScene(
     const t = (fy / viewport[1]) * css[1] - 0.5;
     const nearestRow = Math.round(t);
     const row = Math.floor(t);
-    const lifted = (dx: number, dy: number): number => {
-      const e = ground(dx, dy, row) ?? ground(dx, dy, nearestRow) ?? -1e9;
-      if (!options.lifted) return e;
-      const w = groundClipOf(scene, [dx, dy, e])[3];
-      return e + scene.read.lift * w;
-    };
-    const meet = groundMeet(scene, x, y, lifted);
+    const elevation = (dx: number, dy: number): number =>
+      ground(dx, dy, row) ?? ground(dx, dy, nearestRow) ?? -1e9;
+    const meet = groundMeet(scene, x, y, elevation);
     const seen = (out[k * 4 + 3] as number) > 0.5;
     const expected =
       meet !== null && ground(meet.u[0] as number, meet.u[1] as number, nearestRow) !== null;
@@ -361,7 +336,19 @@ async function readScene(
       reading.missing++;
       continue;
     }
-    const next = groundMeet(scene, x + 2 / viewport[0], y, lifted);
+    if (options.lifted) {
+      // The depth of the ground lifted by the lift at the center times its distance over that of
+      // the center
+      const lifted = groundMeet(scene, x, y, (dx, dy) => {
+        const e = elevation(dx, dy);
+        return e + scene.read.lift * groundClipOf(scene, [dx, dy, e])[3];
+      });
+      if (lifted) {
+        const share = Math.abs((out[k * 4 + 2] as number) - lifted.z) / Math.abs(meet.z - lifted.z);
+        reading.depthWorst = Math.max(reading.depthWorst, share);
+      }
+    }
+    const next = groundMeet(scene, x + 2 / viewport[0], y, elevation);
     if (!next) continue;
     const pixel = Math.hypot(
       (next.u[0] as number) - (meet.u[0] as number),
@@ -406,7 +393,7 @@ describe('the GLSL that reads the ground back from the depth, on a real WebGL2',
       timeout: browserTimeout(60_000),
     }, async () => {
       for (const ratio of [1, 2]) {
-        const scene = sceneOf({ center: CENTER, zoom: 15, pitch, width: WIDTH, height: HEIGHT }, 0);
+        const scene = sceneOf({ center: CENTER, zoom: 15, pitch, width: WIDTH, height: HEIGHT });
         const k = scene.scale;
         // A slope rising 1 in 5 to the east and 1 in 10 to the north, 300 m at the center
         const ground: Ground = (dx, dy) => 300 + (0.2 * dx) / k - (0.1 * dy) / k;
@@ -425,10 +412,7 @@ describe('the GLSL that reads the ground back from the depth, on a real WebGL2',
   }, async () => {
     // Near the camera at a high pitch the depth steps little from a pixel to the next: a digit
     // read halfway moves the ground the most there
-    const scene = sceneOf(
-      { center: CENTER, zoom: 14.5, pitch: 62, width: WIDTH, height: HEIGHT },
-      0,
-    );
+    const scene = sceneOf({ center: CENTER, zoom: 14.5, pitch: 62, width: WIDTH, height: HEIGHT });
     const k = scene.scale;
     const ground: Ground = (dx, dy) => 400 + (0.1 * dx) / k + (0.15 * dy) / k;
     const windows: Window[] = [];
@@ -445,7 +429,7 @@ describe('the GLSL that reads the ground back from the depth, on a real WebGL2',
   it('takes the nearer surface across the edge of a ridge, and no ground under the sky', {
     timeout: browserTimeout(60_000),
   }, async () => {
-    const scene = sceneOf({ center: CENTER, zoom: 15, pitch: 60, width: WIDTH, height: HEIGHT }, 0);
+    const scene = sceneOf({ center: CENTER, zoom: 15, pitch: 60, width: WIDTH, height: HEIGHT });
     // The ridge in front (high) up to row 400 of the texels, the ground behind it above, the sky
     // over row 420
     const ground: Ground = (_dx, _dy, row) =>
@@ -456,57 +440,18 @@ describe('the GLSL that reads the ground back from the depth, on a real WebGL2',
     expect(read.worst).toBeLessThan(0.3);
   });
 
-  for (const zoom of [6, 9]) {
-    it(`reads the ground of the globe alone at zoom ${zoom}`, {
-      timeout: browserTimeout(60_000),
-    }, async () => {
-      const scene = sceneOf(
-        { center: CENTER, zoom, pitch: 30, bearing: 15, width: WIDTH, height: HEIGHT },
-        1,
-      );
-      expect(scene.read.transition).toBe(1);
-      const ground: Ground = () => 500;
-      const read = await readScene(page, scene, 1, ground, windowsOf(1));
-      expect(read.missing + read.extra).toBe(0);
-      expect(read.count).toBeGreaterThan(0);
-      // maplibre's near plane is half a pixel from the camera on the globe: the depth drawn, a
-      // 32-bit float, steps by a few hundredths of a pixel along the ray there
-      expect(read.worst).toBeLessThan(0.1);
-    });
-  }
-
-  it('reads the ground in the transition between the globe and the flat map', {
+  it('takes the depth of the ground lifted, more the further it is, at the place of the ground', {
     timeout: browserTimeout(60_000),
   }, async () => {
-    const scene = sceneOf(
-      { center: CENTER, zoom: 11.5, pitch: 45, bearing: 15, width: WIDTH, height: HEIGHT },
-      0.5,
-    );
+    // The lift of the drape (1 / 2,500 of the tile drawn there)
+    const scene = sceneOf({ center: CENTER, zoom: 15, pitch: 55, width: WIDTH, height: HEIGHT }, 1);
     const ground: Ground = () => 500;
-    const read = await readScene(page, scene, 1, ground, windowsOf(1));
+    const read = await readScene(page, scene, 1, ground, windowsOf(1), { lifted: true });
     expect(read.missing + read.extra).toBe(0);
-    expect(read.count).toBeGreaterThan(0);
+    // The place is the ground itself, where maplibre projects it
     expect(read.worst).toBeLessThan(0.05);
+    // The depth is that of the ground lifted, within a tenth of the step of the lift
+    expect(read.depthWorst).toBeGreaterThan(0);
+    expect(read.depthWorst).toBeLessThan(0.1);
   });
-
-  for (const transition of [0, 1]) {
-    it(`lifts the ground along the ray of the pixel, more the further it is (transition ${transition})`, {
-      timeout: browserTimeout(60_000),
-    }, async () => {
-      // The lifts of the drape (1 / 2,500 of the tiles drawn there)
-      const zoom = transition > 0 ? 9 : 15;
-      const scene = sceneOf(
-        { center: CENTER, zoom, pitch: 55, width: WIDTH, height: HEIGHT },
-        transition,
-        transition > 0 ? 30 : 1,
-      );
-      const ground: Ground = () => 500;
-      const read = await readScene(page, scene, 1, ground, windowsOf(1), { lifted: true });
-      expect(read.missing + read.extra).toBe(0);
-      // The lift is taken along the ray by the projection linearized at the center, to the first
-      // order: on the globe it moves the ground far from the center (by more than a pixel where it
-      // is seen at a slant) a few hundredths of a pixel off, over the steps of its depth
-      expect(read.worst).toBeLessThan(transition > 0 ? 0.15 : 0.05);
-    });
-  }
 });

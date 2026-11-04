@@ -6,8 +6,8 @@
  *
  * - The depth is packed as MapLibre packs it (`packGroundDepth`, its `terrain_depth` shader) and
  *   read back as the shader of the rows reads its bytes (`unpackGroundDepth`)
- * - What the ground is read back with (`groundProjectionOf`) takes the clip space of a place back
- *   to it: exactly on the flat map and on the globe alone, to the first order in the transition
+ * - What the ground is read back with on the flat map (`groundProjectionOf`) takes the clip
+ *   space of a place back to it
  *
  * The GLSL itself runs on a real WebGL2 in `ground-depth-gpu.test.ts`.
  */
@@ -65,121 +65,51 @@ describe('the depth MapLibre packs', () => {
 describe('groundProjectionOf', () => {
   const camera: TestCamera = {
     center: [138.72, 35.36],
-    zoom: 11.5,
+    zoom: 14.5,
     pitch: 50,
     bearing: 20,
     width: 1280,
     height: 720,
   };
 
-  function sceneOf(transition: number, zoom = camera.zoom): GroundScene {
-    const projection = frameProjection({ ...camera, zoom }, transition);
+  function sceneOf(): GroundScene {
+    const projection = frameProjection(camera, 0);
     const uniforms = calculateOffsetUniforms(camera.center, {
       ...projection,
       clippingPlane: [...projection.clippingPlane],
     } as never);
     const scale = metersToMercatorScale(uniforms.centerLngLat[1]);
-    const read = groundProjectionOf(
-      projection,
-      uniforms.centerLngLat,
-      uniforms.centerMercator,
-      scale,
-      0.5,
-    );
+    const read = groundProjectionOf(projection.mainMatrix, uniforms.centerMercator, scale, 0.5);
     expect(read).not.toBeNull();
     return { projection, uniforms, scale, read: read as NonNullable<typeof read> };
   }
 
-  /** The place a point of the clip space stands for by the projection read back linearized */
-  function linear(scene: GroundScene, clip: readonly number[]): number[] {
+  it('takes the clip space back to the place, from the depth less 1', () => {
+    const scene = sceneOf();
     const u = scene.read.unproject;
-    const w = clip[3] as number;
-    const h = [0, 1, 2, 3].map(
-      (i) =>
-        ((u[i] as number) * (clip[0] as number)) / w +
-        ((u[4 + i] as number) * (clip[1] as number)) / w +
-        (u[8 + i] as number) * ((clip[2] as number) / w - 1) +
-        (u[12 + i] as number),
-    );
-    return [0, 1, 2].map((i) => (h[i] as number) / (h[3] as number));
-  }
-
-  const places = [
-    [0, 0, 0],
-    [2e-4, -1e-4, 800],
-    [-3e-4, 2e-4, 2500],
-  ];
-
-  it('takes the clip space back to the place on the flat map', () => {
-    const scene = sceneOf(0);
-    expect(scene.read.transition).toBe(0);
-    for (const place of places) {
-      const back = linear(scene, groundClipOf(scene, place));
-      expect(Math.abs((back[0] as number) - (place[0] as number))).toBeLessThan(1e-12);
-      expect(Math.abs((back[1] as number) - (place[1] as number))).toBeLessThan(1e-12);
-      expect(Math.abs((back[2] as number) - (place[2] as number))).toBeLessThan(1e-4);
-    }
-  });
-
-  it('linearizes the globe and the transition at the center, to the first order', () => {
-    for (const transition of [0.5, 1]) {
-      const scene = sceneOf(transition);
-      expect(scene.read.transition).toBe(F32(transition));
-      for (const place of places) {
-        const back = linear(scene, groundClipOf(scene, place));
-        // The curvature of the sphere over the offsets: of their square (radians)
-        const reach = Math.hypot(place[0] as number, place[1] as number) * 2 * Math.PI;
-        const bound = 2 * reach * reach;
-        expect(Math.abs((back[0] as number) - (place[0] as number))).toBeLessThan(bound + 1e-12);
-        expect(Math.abs((back[1] as number) - (place[1] as number))).toBeLessThan(bound + 1e-12);
-      }
-    }
-  });
-
-  it('inverts the projection of the unit sphere on the globe alone', () => {
-    const scene = sceneOf(1, 6);
-    const g = scene.read.globe;
-    const [lng0, lat0] = scene.uniforms.centerLngLat.map((d) => (d * Math.PI) / 180) as [
-      number,
-      number,
-    ];
-    const sphereOf = (u: readonly number[]): number[] => {
-      const [cx, cy] = scene.uniforms.centerMercator;
-      const lng = lng0 + (u[0] as number) * 2 * Math.PI;
-      const lat = Math.atan(Math.sinh(Math.PI * (1 - 2 * (cy + (u[1] as number)))));
-      expect(cx).toBeGreaterThan(0);
-      const lift = 1 + (u[2] as number) / 6_371_008.8;
-      return [
-        Math.sin(lng) * Math.cos(lat) * lift,
-        Math.sin(lat) * lift,
-        Math.cos(lng) * Math.cos(lat) * lift,
-      ];
-    };
-    const center = sphereOf([0, 0, 0]);
-    expect(Math.abs((center[1] as number) - Math.sin(lat0))).toBeLessThan(1e-9);
     for (const place of [
-      [1e-3, -2e-3, 400],
-      [-0.01, 0.02, 3000],
+      [0, 0, 0],
+      [2e-6, -1e-6, 800],
+      [-3e-6, 2e-6, 2500],
     ]) {
       const clip = groundClipOf(scene, place);
       const w = clip[3] as number;
       const h = [0, 1, 2, 3].map(
         (i) =>
-          ((g[i] as number) * (clip[0] as number)) / w +
-          ((g[4 + i] as number) * (clip[1] as number)) / w +
-          (g[8 + i] as number) * ((clip[2] as number) / w - 1) +
-          (g[12 + i] as number),
+          ((u[i] as number) * (clip[0] as number)) / w +
+          ((u[4 + i] as number) * (clip[1] as number)) / w +
+          (u[8 + i] as number) * ((clip[2] as number) / w - 1) +
+          (u[12 + i] as number),
       );
-      const at = sphereOf(place);
-      for (let i = 0; i < 3; i++) {
-        const offset = (at[i] as number) - (center[i] as number);
-        expect(Math.abs((h[i] as number) / (h[3] as number) - offset)).toBeLessThan(1e-11);
-      }
+      const back = [0, 1, 2].map((i) => (h[i] as number) / (h[3] as number));
+      expect(Math.abs((back[0] as number) - (place[0] as number))).toBeLessThan(1e-14);
+      expect(Math.abs((back[1] as number) - (place[1] as number))).toBeLessThan(1e-14);
+      expect(Math.abs((back[2] as number) - (place[2] as number))).toBeLessThan(1e-4);
     }
   });
 
   it('gives the lift over the w of the clip space of the center', () => {
-    const scene = sceneOf(0);
+    const scene = sceneOf();
     const center = groundClipOf(scene, [0, 0, 0]);
     expect(scene.read.lift).toBeCloseTo(0.5 / (center[3] as number), 12);
   });

@@ -33,20 +33,20 @@
  *   camera is taken, with the steps to the texels next to it on the same surface (along an axis
  *   where none of the four is, to the texel on its other side). A pixel whose nearest texel on
  *   the screen is white has no ground.
- * - The depth is taken back to the ground through the projection the terrain is drawn with
- *   (maplibre's `projectTileFor3D`), relative to the center of the view (`groundProjectionOf`,
- *   formed on the CPU in float64, so only offsets are held in 32-bit floats): on the flat map by
- *   its inverse, on the globe alone by the inverse of its projection of the unit sphere and the
- *   offset on the sphere turned into the Mercator offset, in the transition by the projection
- *   linearized at the center, put right by the projection itself.
- * - The ground is taken lifted over the terrain as the drape lifts its ground: the place on the
- *   ray of the pixel that far over the place read back (the lift at the center, `liftMeters`,
- *   and more as the place is further from the camera). Its depth is the one the polygons and the
- *   lines take (the 3D layers of the map in front of the ground hide them as they hide the
- *   ground), and it wins against the terrain the map drew there.
+ * - The depth is taken back to the ground through the inverse of the projection the terrain is
+ *   drawn with (maplibre's `projectTileFor3D`) on the flat map, relative to the center of the
+ *   view (`groundProjectionOf`, formed on the CPU in float64, so only offsets are held in 32-bit
+ *   floats). While maplibre draws the globe (the globe alone and the transition), the ground is
+ *   not read back and the rows are drawn as out of the band (maplibre-coupling.md, item 31).
+ * - The polygons and the lines are drawn at the place read back, where maplibre projects the
+ *   ground, and take the depth of the ground lifted over the terrain as the drape lifts its
+ *   ground: of the place on the ray of the pixel that far over the place read back (the lift at
+ *   the center, `liftMeters`, and more as the place is further from the camera). The 3D layers of
+ *   the map in front of the ground hide them as they hide the ground, and they win against the
+ *   terrain the map drew there.
  */
 
-import { CENTER_PROJECTION_CONSTANTS, glslFloat32 } from '../../shaders/center-projection.js';
+import { glslFloat32 } from '../../shaders/center-projection.js';
 
 /**
  * The blocks of a tile on a side the ranges of the elevations of its ground are kept for: a
@@ -123,199 +123,60 @@ export function packGroundDepth(depth: number): [number, number, number, number]
   return [byte(x), byte(y), byte(z), byte(w)];
 }
 
-/** The radius of the sphere of the globe (maplibre's, meters) */
-const GLOBE_RADIUS = 6_371_008.8;
-
 /**
- * What the ground is read back with in a frame (`groundProjectionOf`), as the uniforms of
- * `GROUND_DEPTH_GLSL` take it (matrices column-major)
+ * What the ground is read back with in a frame of the flat map (`groundProjectionOf`), as the
+ * uniforms of `GROUND_DEPTH_GLSL` take it
  *
  * A place on the ground is its Mercator offset from the center of the view and its elevation in
  * meters, u = (dx, dy, e). The projection the depth of the terrain is drawn with (maplibre's
- * `projectTileFor3D`) takes u to the clip space: on the flat map, the matrix of the frame times
- * (dx, dy, e k, 0) plus the center (k the Mercator units of a meter); on the globe, the matrix of
- * the unit sphere times the offset of the place on the sphere, lifted by its elevation, plus the
- * center; in the transition, the two mixed by it, every component.
+ * `projectTileFor3D`) takes u to the clip space: the matrix of the frame times (dx, dy, e k, 0)
+ * plus the center (k the Mercator units of a meter). While maplibre draws the globe the ground is
+ * not read back (maplibre-coupling.md, item 31).
  *
- * The depth of the ground is near 1 (it crowds to 1 far from the camera, more so as the near
- * plane is nearer: maplibre puts it half a pixel from the camera on the globe), so it is held as
- * its distance from 1: the inverses take (x, y, z - 1, 1) for a point of the clip space over its
- * w (their last column is the sum of their last two, in float64), and the matrices of the
- * transition give (x, y, w - z, w) (their third row is the difference of their last two). No
- * difference of two numbers near 1 is then formed in a 32-bit float.
+ * The depth of the ground is near 1 (it crowds to 1 far from the camera), so it is held as its
+ * distance from 1: the inverse takes (x, y, z - 1, 1) for a point of the clip space over its w
+ * (its last column is the sum of its last two, in float64). No difference of two numbers near 1
+ * is then formed in a 32-bit float.
  */
 export interface GroundProjection {
-  /**
-   * The inverse of the projection linearized at the center of the view (the projection itself on
-   * the flat map): (x, y, z - 1, 1) of a point of the clip space to (u, 1) over its w
-   */
+  /** The inverse of the projection (column-major): (x, y, z - 1, 1) to (u, 1) over its w */
   readonly unproject: Float64Array;
-  /**
-   * On the globe alone: the inverse of its projection of the offsets on the unit sphere from the
-   * center (lifted), (x, y, z - 1, 1) to (the offset, 1) over its w (0 otherwise)
-   */
-  readonly globe: Float64Array;
-  /**
-   * In the transition: the matrices of the globe and of the flat map, and their centers, giving
-   * (x, y, w - z, w)
-   */
-  readonly main: Float64Array;
-  readonly mainCenter: Float64Array;
-  readonly fallback: Float64Array;
-  readonly fallbackCenter: Float64Array;
-  /** The transition of the frame, as a 32-bit float (0: the flat map) */
-  readonly transition: number;
   /** The lift of the ground at the center over the w of the clip space of the center (meters) */
   readonly lift: number;
 }
 
-/** The part of the projection of a frame the ground is read back with */
-export interface GroundProjectionInput {
-  readonly mainMatrix: ArrayLike<number>;
-  readonly fallbackMatrix?: ArrayLike<number>;
-  readonly projectionTransition?: number;
-}
-
 /**
- * Forms in float64 what the ground is read back with in a frame (null where the projection has
- * no inverse)
+ * Forms in float64 what the ground is read back with in a frame of the flat map (null where the
+ * projection has no inverse)
  *
- * @param centerLngLat The center the offsets are taken from (rounded to 32-bit floats)
- * @param centerMercator Its Mercator coordinates
+ * @param matrix The matrix of the frame (`mainMatrix`, column-major)
+ * @param centerMercator The Mercator coordinates of the center the offsets are taken from
  * @param elevationScale The Mercator units of a meter of elevation in the frame
  * @param liftMeters The lift of the ground over the terrain at the center (meters)
  */
 export function groundProjectionOf(
-  projection: GroundProjectionInput,
-  centerLngLat: readonly [number, number],
+  matrix: ArrayLike<number>,
   centerMercator: readonly [number, number],
   elevationScale: number,
   liftMeters: number,
 ): GroundProjection | null {
-  const t = Math.fround(projection.projectionTransition ?? 0);
-  const flat = !(t > 0) || !projection.fallbackMatrix;
-  const plane = flat ? projection.mainMatrix : (projection.fallbackMatrix as ArrayLike<number>);
   const k = elevationScale;
-  const fallbackCenter = transform(plane, centerMercator[0], centerMercator[1], 0, 1);
-  const linear = new Float64Array(16);
-  const main = new Float64Array(16);
-  const fallback = new Float64Array(16);
-  const mainCenter = new Float64Array(4);
-  const globe = new Float64Array(16);
-  for (let i = 0; i < 16; i++) fallback[i] = plane[i] as number;
-  // The flat map: (dx, dy, e k, 0) through the matrix, plus the center
-  const flatColumns = [
-    [plane[0], plane[1], plane[2], plane[3]],
-    [plane[4], plane[5], plane[6], plane[7]],
-    [
-      (plane[8] as number) * k,
-      (plane[9] as number) * k,
-      (plane[10] as number) * k,
-      (plane[11] as number) * k,
-    ],
-    fallbackCenter,
-  ] as number[][];
-  let columns = flatColumns;
-  if (!flat) {
-    const m = projection.mainMatrix;
-    for (let i = 0; i < 16; i++) main[i] = m[i] as number;
-    const lat = (centerLngLat[1] * Math.PI) / 180;
-    const lng = (centerLngLat[0] * Math.PI) / 180;
-    const [sinLat, cosLat, sinLng, cosLng] = [
-      Math.sin(lat),
-      Math.cos(lat),
-      Math.sin(lng),
-      Math.cos(lng),
-    ];
-    const center = [sinLng * cosLat, sinLat, cosLng * cosLat];
-    const at = transform(m, center[0] as number, center[1] as number, center[2] as number, 1);
-    mainCenter.set(at);
-    // The offsets on the unit sphere of a Mercator offset east and south, and of a meter up
-    const east = [2 * Math.PI * cosLng * cosLat, 0, -2 * Math.PI * sinLng * cosLat];
-    const south = [
-      -2 * Math.PI * cosLat * -sinLng * sinLat,
-      -2 * Math.PI * cosLat * cosLat,
-      -2 * Math.PI * cosLat * -cosLng * sinLat,
-    ];
-    const up = center.map((v) => v / GLOBE_RADIUS);
-    const globeColumns = [
-      transform(m, east[0] as number, east[1] as number, east[2] as number, 0),
-      transform(m, south[0] as number, south[1] as number, south[2] as number, 0),
-      transform(m, up[0] as number, up[1] as number, up[2] as number, 0),
-      at,
-    ];
-    if (t > Math.fround(GLOBE_ONLY)) {
-      columns = globeColumns;
-      const sphere = new Float64Array(16);
-      for (let i = 0; i < 12; i++) sphere[i] = m[i] as number;
-      sphere.set(at, 12);
-      const inverse = invert4(sphere);
-      if (!inverse) return null;
-      globe.set(fromOne(inverse));
-    } else {
-      columns = flatColumns.map((column, c) =>
-        column.map((v, i) => v * (1 - t) + ((globeColumns[c] as number[])[i] as number) * t),
-      );
-    }
+  const m = new Float64Array(16);
+  for (let i = 0; i < 8; i++) m[i] = matrix[i] as number;
+  for (let i = 8; i < 12; i++) m[i] = (matrix[i] as number) * k;
+  for (let i = 0; i < 4; i++) {
+    m[12 + i] =
+      (matrix[i] as number) * centerMercator[0] +
+      (matrix[4 + i] as number) * centerMercator[1] +
+      (matrix[12 + i] as number);
   }
-  for (let c = 0; c < 4; c++) linear.set(columns[c] as number[], c * 4);
-  const centerW = linear[15] as number;
-  const unproject = invert4(linear);
-  if (!unproject) return null;
-  return {
-    unproject: fromOne(unproject),
-    globe,
-    main: wLessZ(main),
-    mainCenter: wLessZ(mainCenter),
-    fallback: wLessZ(fallback),
-    fallbackCenter: wLessZ(Float64Array.from(fallbackCenter)),
-    transition: flat ? 0 : t,
-    lift: centerW > 0 ? liftMeters / centerW : 0,
-  };
-}
-
-/**
- * An inverse that takes (x, y, z, 1), made to take (x, y, z - 1, 1): its last column the sum of
- * its last two
- */
-function fromOne(m: Float64Array): Float64Array {
-  for (let i = 0; i < 4; i++) m[12 + i] = (m[12 + i] as number) + (m[8 + i] as number);
-  return m;
-}
-
-/** A matrix (or a vector) of the clip space, made to give w - z in place of z */
-function wLessZ(m: Float64Array): Float64Array {
-  for (let c = 0; c < m.length; c += 4) m[c + 2] = (m[c + 3] as number) - (m[c + 2] as number);
-  return m;
-}
-
-/** Over this transition maplibre draws the globe alone */
-const GLOBE_ONLY = 0.999;
-
-/** atan(u) / u in u²: 1, -1/3, 1/5, ... (|u| < 0.4, to a 32-bit float) */
-const ATAN_SERIES = (() => {
-  const coefficients = Array.from({ length: 12 }, (_, k) => (k % 2 === 0 ? 1 : -1) / (2 * k + 1));
-  let out = glslFloat32(coefficients[coefficients.length - 1] as number);
-  for (let i = coefficients.length - 2; i >= 0; i--) {
-    out = `${glslFloat32(coefficients[i] as number)} + u2 * (${out})`;
-  }
-  return out;
-})();
-
-/** A matrix (column-major) times a vector, in float64 */
-function transform(
-  m: ArrayLike<number>,
-  x: number,
-  y: number,
-  z: number,
-  w: number,
-): [number, number, number, number] {
-  return [
-    (m[0] as number) * x + (m[4] as number) * y + (m[8] as number) * z + (m[12] as number) * w,
-    (m[1] as number) * x + (m[5] as number) * y + (m[9] as number) * z + (m[13] as number) * w,
-    (m[2] as number) * x + (m[6] as number) * y + (m[10] as number) * z + (m[14] as number) * w,
-    (m[3] as number) * x + (m[7] as number) * y + (m[11] as number) * z + (m[15] as number) * w,
-  ];
+  const centerW = m[15] as number;
+  const inverse = invert4(m);
+  if (!inverse) return null;
+  // To take (x, y, z - 1, 1): the last column the sum of the last two
+  for (let i = 0; i < 4; i++)
+    inverse[12 + i] = (inverse[12 + i] as number) + (inverse[8 + i] as number);
+  return { unproject: inverse, lift: centerW > 0 ? liftMeters / centerW : 0 };
 }
 
 /** The inverse of a 4 x 4 matrix (column-major, float64; null where it has none) */
@@ -372,118 +233,28 @@ function invert4(m: Float64Array): Float64Array | null {
 }
 
 /**
- * The GLSL that reads the ground of a pixel of the screen back from the depth MapLibre draws (for
- * a fragment stage that declares `u_viewport`, the size of the drawing buffer, and takes
- * `DEM_SAMPLE_GLSL`, the DEM atlas, before it, and `CENTER_OFFSET_FUNCTIONS_GLSL` on the globe)
+ * The GLSL that reads the ground of a pixel of the screen back from the depth MapLibre draws on
+ * the flat map (for a fragment stage that declares `u_viewport`, the size of the drawing buffer,
+ * and takes `DEM_SAMPLE_GLSL`, the DEM atlas, before it)
  *
  * - `u_ground_depth`: the depth of the terrain MapLibre draws (RGBA8, a texel a CSS pixel)
- * - `u_ground_unproject`, `u_ground_lift`, and on the globe `u_ground_transition`,
- *   `u_ground_globe`, `u_ground_main`, `u_ground_main_center`, `u_ground_fallback`,
- *   `u_ground_fallback_center`: `groundProjectionOf`
+ * - `u_ground_unproject`, `u_ground_lift`: `groundProjectionOf`
  *
  * `ground_at(frag, q, depth)` gives the Mercator offset from the center of the ground seen at a
- * place of the screen (device pixels, as `gl_FragCoord`), lifted, and the depth there (the z of the
- * clip space over its w, taken no further than it was drawn at), false where no ground is seen.
- *
- * A point of the clip space is taken back to its place on the ground (`ground_place`): on the
- * flat map through the inverse of the projection; on the globe alone through the inverse of the
- * projection of the unit sphere, the offset on the sphere then turned into the Mercator offset
- * and the elevation in the terms of the offsets (no difference of numbers near 1 is formed); in
- * the transition from the projection linearized at the center, put right by the projection
- * itself (`ground_forward`) three times.
+ * place of the screen (device pixels, as `gl_FragCoord`) and the depth the polygons and the lines
+ * take there (the z of the clip space over its w of the ground lifted, taken no further than it was
+ * drawn at), false where no ground is seen.
  */
 export const GROUND_DEPTH_GLSL = `
 uniform highp sampler2D u_ground_depth;
 uniform highp mat4 u_ground_unproject;
 uniform float u_ground_lift;
-#ifdef GLOBE
-uniform float u_ground_transition;
-uniform highp mat4 u_ground_globe;
-uniform highp mat4 u_ground_main;
-uniform vec4 u_ground_main_center;
-uniform highp mat4 u_ground_fallback;
-uniform vec4 u_ground_fallback_center;
-#endif
-
-// The place a point of the clip space over its w, (x, y, z - 1), stands for by the projection
-// linearized at the center (the projection itself on the flat map): its Mercator offset and its
-// elevation (meters)
-vec3 ground_linear(vec3 p) {
-    vec4 h = u_ground_unproject * vec4(p, 1.0);
-    return h.xyz / h.w;
-}
-
-#ifdef GLOBE
-// The angle of (x, y) from the x axis (radians), by its series near it
-float ground_angle(float y, float x) {
-    float u = y / x;
-    if (x > 0.0 && abs(u) < 0.4) {
-        float u2 = u * u;
-        return u * (${ATAN_SERIES});
-    }
-    return atan(y, x);
-}
-
-// The place of a point of the clip space over its w, (x, y, z - 1), on the globe alone
-vec3 ground_globe_alone(vec3 p) {
-    vec4 h = u_ground_globe * vec4(p, 1.0);
-    // The offset of the point from the center on the unit sphere (lifted by its elevation)
-    vec3 d = h.xyz / h.w;
-    vec4 c = u_center_sine_cosine;
-    vec3 center = vec3(c.z * c.y, c.x, c.w * c.y);
-    float len = length(center + d);
-    // Its distance from the center of the sphere less 1
-    float rise = (2.0 * dot(center, d) + dot(d, d)) / (len + 1.0);
-    // East of the meridian of the center, and toward its axis less cos of its latitude
-    float east = d.x * c.w - d.z * c.z;
-    float along = d.x * c.z + d.z * c.w;
-    float toward = c.y + along;
-    float radial = sqrt(east * east + toward * toward);
-    float radialStep = (east * east + along * (2.0 * c.y + along)) / (radial + c.y);
-    // sin and cos of the latitude offset (times the distance from the center of the sphere), and
-    // of its half
-    float sinD = d.y * c.y - radialStep * c.x;
-    float cosD = radial * c.y + (c.x + d.y) * c.x;
-    vec2 halfLat = vec2(sinD, len + cosD) * inversesqrt(sinD * sinD + (len + cosD) * (len + cosD));
-    return vec3(ground_angle(east, toward) * ${glslFloat32(1 / (2 * Math.PI))},
-        mercator_offset_y(halfLat), rise * ${glslFloat32(GLOBE_RADIUS)});
-}
-
-// The clip space of a place in the transition, as maplibre's projectTileFor3D gives it, as
-// (x, y, w - z, w)
-vec4 ground_forward(vec3 u) {
-    vec2 halfLat = half_latitude_of_mercator_offset(u.y);
-    vec2 halfLng = offset_sine_cosine(wrapped_longitude_offset(u.x * 360.0)
-        * ${glslFloat32(CENTER_PROJECTION_CONSTANTS.halfDegree)});
-    vec3 sphere = sphere_offset(halfLat, halfLng);
-    vec4 c = u_center_sine_cosine;
-    vec3 center = vec3(c.z * c.y, c.x, c.w * c.y);
-    vec3 offset = sphere + (center + sphere) * (u.z / ${glslFloat32(GLOBE_RADIUS)});
-    vec4 globe = u_ground_main * vec4(offset, 0.0) + u_ground_main_center;
-    vec4 plane = u_ground_fallback * vec4(u.xy, u.z * u_elevation_params.x, 0.0)
-        + u_ground_fallback_center;
-    return mix(plane, globe, u_ground_transition);
-}
-#endif
 
 // The place on the ground a point of the clip space over its w, (x, y, z - 1), stands for: its
 // Mercator offset and its elevation (meters)
 vec3 ground_place(vec3 p) {
-#ifdef GLOBE
-    if (u_ground_transition > ${glslFloat32(CENTER_PROJECTION_CONSTANTS.globeOnly)}) {
-        return ground_globe_alone(p);
-    }
-    if (u_ground_transition > 0.0) {
-        vec3 target = ground_linear(p);
-        vec3 u = target;
-        for (int i = 0; i < 3; i++) {
-            vec4 clip = ground_forward(u);
-            u += target - ground_linear(vec3(clip.xy, -clip.z) / clip.w);
-        }
-        return u;
-    }
-#endif
-    return ground_linear(p);
+    vec4 h = u_ground_unproject * vec4(p, 1.0);
+    return h.xyz / h.w;
 }
 
 // Whether a Mercator offset is in the DEM atlas
@@ -558,11 +329,11 @@ float ground_outer_step(ivec2 at, ivec2 axis, float depth, float iw, vec2 c, vec
     return next - depth;
 }
 
-// The ground seen at a place of the screen (device pixels), lifted over the terrain as the drape
-// lifts its ground: its Mercator offset from the center and the depth there (the z of the clip
-// space over its w), no further than it was drawn at (less half a step of a digit where one was
-// read halfway: that depth is taken by the polygons and the lines, tested against the depth of
-// the terrain the map drew); false where none is seen
+// The ground seen at a place of the screen (device pixels): its Mercator offset from the center,
+// and the depth there (the z of the clip space over its w) of the ground lifted over the terrain
+// as the drape lifts its ground, no further than it was drawn at (less half a step of a digit
+// where one was read halfway: that depth is taken by the polygons and the lines, tested against
+// the depth of the terrain the map drew); false where none is seen
 bool ground_at(vec2 frag, out vec2 q, out float depth) {
     q = vec2(0.0);
     depth = 1.0;
@@ -629,13 +400,13 @@ bool ground_at(vec2 frag, out vec2 q, out float depth) {
     }
     vec4 h = u_ground_unproject * vec4(ndc, z, 1.0);
     if (h.w <= 0.0) return false;
-    // Lifted: the depth on the ray of the pixel where the elevation is the lift more (the lift
+    q = h.xy / h.w;
+    // The depth taken: on the ray of the pixel where the elevation is the lift more (the lift
     // grows with the distance from the camera, 1 / h.w), by the step of the elevation with the
     // depth there
     vec4 b = u_ground_unproject[2];
     float rate = (b.z * h.w - h.z * b.w) / (h.w * h.w);
     float lifted = rate < 0.0 ? z + (u_ground_lift / h.w) / rate : z;
-    q = ground_place(vec3(ndc, lifted)).xy;
     depth = 1.0 + (lifted - g_ground_slack);
     return true;
 }

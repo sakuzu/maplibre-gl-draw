@@ -5,10 +5,9 @@
  * End-to-end tests of the polygons and the lines of a Store of rows read on the ground of the
  * relief of the test terrain (`dem-fixture.ts`), zoomed in past the analytic band and pitched:
  *
- * - They paint the ground as those of a Store of objects do (on the flat map and on the globe):
- *   the two pictures differ only in single pixels of the soft edges, and at points of the slope
- *   facing the camera the pixel where maplibre projects the ground (`map.project`) is the color of
- *   the polygon
+ * - They are drawn where maplibre projects the ground (`map.project`): the centers of lines within
+ *   half a pixel of it, and at points of the slope facing the camera the pixel there is the color
+ *   of the polygon. While maplibre draws the globe they are drawn as out of the band, in order
  * - The order of the rows holds: a point between two polygons is drawn over the first and under
  *   the second, a picture among them where it is, and points and polygons one after the other
  *   (overlapping, translucent, twenty deep on a pixel) as one row at a time on the drape draws
@@ -140,6 +139,132 @@ function hueOf(c: readonly number[]): 'red' | 'green' | 'blue' | 'orange' | 'whi
   if (b > 2 * r && b > 1.5 * g && b > 60) return 'blue';
   if (r > 1.2 * g && g > 2 * b && r > 100) return 'orange';
   return null;
+}
+
+/** The Mercator coordinates of a longitude and a latitude */
+function mercatorOf([lng, lat]: readonly [number, number]): [number, number] {
+  return [(lng + 180) / 360, 0.5 - Math.asinh(Math.tan((lat * Math.PI) / 180)) / (2 * Math.PI)];
+}
+
+/** The longitude and the latitude of Mercator coordinates */
+function lngLatOf([x, y]: readonly [number, number]): [number, number] {
+  return [x * 360 - 180, (Math.atan(Math.sinh(Math.PI * (1 - 2 * y))) * 180) / Math.PI];
+}
+
+/** The width of the lines held to where maplibre projects them (CSS px) */
+const LINE_WIDTH = 3;
+
+/**
+ * How far the centers of blue lines of `LINE_WIDTH` on the white ground are from where maplibre
+ * projects places on them (`map.project`, which takes the ground under them), in device px, by
+ * thirds of the screen from the top (far from the camera) to the bottom
+ *
+ * The places of a line are given in their order along it. The line is read across it at each,
+ * from its pixels, by the share of blue of each (from white to the blue): its center is where
+ * that share weighs. Places by the ends of a run, by the edges of the canvas, hidden behind the
+ * ground in front (where maplibre finds the ground elsewhere: `map.unproject`), by another line,
+ * or where the line read across is not of its width (hidden in part) are left out.
+ */
+async function lineOffsets(
+  page: Page,
+  lines: ReadonlyArray<ReadonlyArray<readonly [number, number]>>,
+): Promise<{ count: number; bands: Array<{ count: number; worst: number }> }> {
+  // The places, and the runs of them along each line
+  const places: Array<[number, number]> = [];
+  const runs: Array<[number, number]> = [];
+  for (const line of lines) {
+    const start = places.length;
+    for (const place of line) places.push([place[0], place[1]]);
+    runs.push([start, places.length]);
+  }
+  const { pixels, projected, width, height } = await page.evaluate(
+    (list) =>
+      new Promise<{ pixels: number[]; projected: number[][]; width: number; height: number }>(
+        (resolve) => {
+          const map = (window as unknown as { map: import('maplibre-gl').Map }).map;
+          map.once('render', () => {
+            const gl = map.getCanvas().getContext('webgl2') as WebGL2RenderingContext;
+            const w = gl.drawingBufferWidth;
+            const h = gl.drawingBufferHeight;
+            const px = new Uint8Array(w * h * 4);
+            gl.readPixels(0, 0, w, h, gl.RGBA, gl.UNSIGNED_BYTE, px);
+            const ratio = w / map.getCanvas().clientWidth;
+            // Where maplibre projects each place, and the place it finds the ground at there (a
+            // place hidden behind the ground in front is not found again)
+            const projected = list.map(([lng, lat]) => {
+              const p = map.project([lng, lat]);
+              const back = map.unproject(p);
+              return [p.x * ratio, p.y * ratio, back.lng - lng, back.lat - lat];
+            });
+            resolve({ pixels: Array.from(px), projected, width: w, height: h });
+          });
+          map.triggerRepaint();
+        },
+      ),
+    places,
+  );
+  // The share of blue of a place of the canvas (device px, y down), between its four pixels
+  const blueAt = (x: number, y: number): number => {
+    const at = (i: number, j: number): number => {
+      const ci = Math.min(Math.max(i, 0), width - 1);
+      const cj = Math.min(Math.max(j, 0), height - 1);
+      const r = pixels[((height - 1 - cj) * width + ci) * 4] as number;
+      return Math.min(Math.max((255 - r) / (255 - (BLUE[0] as number)), 0), 1);
+    };
+    const i = Math.floor(x - 0.5);
+    const j = Math.floor(y - 0.5);
+    const fx = x - 0.5 - i;
+    const fy = y - 0.5 - j;
+    return (
+      (at(i, j) * (1 - fx) + at(i + 1, j) * fx) * (1 - fy) +
+      (at(i, j + 1) * (1 - fx) + at(i + 1, j + 1) * fx) * fy
+    );
+  };
+  const bands = [0, 1, 2].map(() => ({ count: 0, worst: 0 }));
+  let count = 0;
+  const step = 0.25;
+  for (const [from, to] of runs) {
+    for (let k = from + 2; k < to - 2; k++) {
+      const p = projected[k] as [number, number, number, number];
+      // Hidden behind the ground in front: maplibre finds the ground elsewhere there
+      if (Math.hypot(p[2], p[3]) > 1e-6) continue;
+      // By another line (where they cross, the line read across meets the other)
+      let near = false;
+      for (const [otherFrom, otherTo] of runs) {
+        if (otherFrom === from) continue;
+        for (let o = otherFrom; o < otherTo && !near; o++) {
+          const q = projected[o] as [number, number];
+          if (Math.hypot(q[0] - p[0], q[1] - p[1]) < 8) near = true;
+        }
+      }
+      if (near) continue;
+      const before = projected[k - 1] as [number, number];
+      const after = projected[k + 1] as [number, number];
+      const tx = after[0] - before[0];
+      const ty = after[1] - before[1];
+      const length = Math.hypot(tx, ty);
+      if (!(length > 0)) continue;
+      const nx = -ty / length;
+      const ny = tx / length;
+      if (p[0] < 8 || p[1] < 8 || p[0] > width - 8 || p[1] > height - 8) continue;
+      let sum = 0;
+      let moment = 0;
+      for (let s = -6; s <= 6; s += step) {
+        const ink = blueAt(p[0] + nx * s, p[1] + ny * s);
+        sum += ink * step;
+        moment += ink * s * step;
+      }
+      // The whole width of the line across it, and nothing more
+      if (Math.abs(sum - LINE_WIDTH) > 0.3) continue;
+      const offset = Math.abs(moment / sum);
+      const band = Math.min(2, Math.floor((p[1] / height) * 3));
+      const entry = bands[band] as { count: number; worst: number };
+      entry.count++;
+      entry.worst = Math.max(entry.worst, offset);
+      count++;
+    }
+  }
+  return { count, bands };
 }
 
 /** What the drape of the rows did in the last frame */
@@ -373,7 +498,7 @@ function canvasWidthOf(page: Page): Promise<number> {
 }
 
 /** The pixels of a frame that are not the white of the ground */
-function paintedOf(frame: OrderedFrame): number {
+function paintedOf(frame: Pick<OrderedFrame, 'pixels'>): number {
   let painted = 0;
   for (let i = 0; i < frame.pixels.length; i += 4) {
     if (!(frame.pixels[i] === 255 && frame.pixels[i + 1] === 255 && frame.pixels[i + 2] === 255)) {
@@ -381,34 +506,6 @@ function paintedOf(frame: OrderedFrame): number {
     }
   }
   return painted;
-}
-
-/**
- * The pixels of the rows that differ from those of the objects by more than 8 in a channel, the
- * painted pixels, and the differing ones off the seams of the tiles: where the mesh of the tiles
- * has a crack, the drape of the objects shows the white under it and the rows may show the
- * ground seen through it (a white pixel in either picture)
- */
-function differingOffSeams(
-  a: readonly number[],
-  b: readonly number[],
-): { differing: number; offSeams: number; painted: number } {
-  let differing = 0;
-  let offSeams = 0;
-  let painted = 0;
-  const whiteish = (p: readonly number[], i: number): boolean =>
-    (p[i] as number) >= 235 && (p[i + 1] as number) >= 235 && (p[i + 2] as number) >= 235;
-  for (let i = 0; i < a.length; i += 4) {
-    if (!(a[i] === 255 && a[i + 1] === 255 && a[i + 2] === 255)) painted++;
-    for (let k = 0; k < 3; k++) {
-      if (Math.abs((a[i + k] as number) - (b[i + k] as number)) > 8) {
-        differing++;
-        if (!whiteish(a, i) && !whiteish(b, i)) offSeams++;
-        break;
-      }
-    }
-  }
-  return { differing, offSeams, painted };
 }
 
 function drapeOf(page: Page): Promise<DrapeDiagnostics> {
@@ -556,7 +653,7 @@ function moveRows(page: Page, handles: number[], set: number, dLng: number, dLat
 }
 
 describe('the drape of the rows on the relief of the terrain', () => {
-  it('paints the polygons and the lines of the rows as those of a Store of objects', {
+  it('paints the polygons and the lines of the rows, the slope facing the camera in its color', {
     timeout: browserTimeout(180_000),
   }, async () => {
     const features = [
@@ -628,22 +725,11 @@ describe('the drape of the rows on the relief of the terrain', () => {
         style: { strokeColor: hex(ORANGE), strokeWidth: 5, lineStyle: 'dotted' },
       },
     ];
-    const objects = await openScene(features, 'objects');
-    const expected = await readFrame(objects);
-    await objects.close();
     const rows = await openScene(features);
     const drape = await drapeOf(rows);
     expect(drape.used, drape.reason).toBe(true);
     const drawn = await readFrame(rows);
-    const off = differingOffSeams(drawn.pixels, expected.pixels);
-    expect(off.painted).toBeGreaterThan(drawn.pixels.length / 4 / 10);
-    // Measured (the same in every run): 842 pixels off the seams and 1,054 in all of 169,371
-    // painted, in single pixels of the soft edges of the lines, of the dots and of the outlines
-    // on the slopes seen at a slant (the ground is read in 16-bit places and its steps from pixel
-    // to pixel, the drape of the objects from the tiles drawn) and the cracks of the mesh. A
-    // fifth over them for the drivers
-    expect(off.offSeams / off.painted).toBeLessThan(0.006);
-    expect(off.differing / off.painted).toBeLessThan(0.0075);
+    expect(paintedOf({ pixels: drawn.pixels })).toBeGreaterThan(drawn.pixels.length / 4 / 10);
 
     // The ground of the slope facing the camera is the color of the polygon
     const places: Array<[number, number]> = [];
@@ -652,53 +738,139 @@ describe('the drape of the rows on the relief of the terrain', () => {
     }
     const inside = (await readFrame(rows, places)).at.filter((c) => (c[0] as number) >= 0);
     expect(inside.length).toBeGreaterThan(40);
-    // The few white pixels are the seams of the tiles the drape of the objects shows as well
     const painted2 = inside.map(hueOf).filter((h) => h === 'red' || h === 'green' || h === 'blue');
     expect(painted2.length).toBeGreaterThan(inside.length * 0.95);
     await rows.close();
   });
 
-  it('paints the polygons and the lines of the rows as those of a Store of objects on the globe', {
+  it('draws the lines of the rows where maplibre projects the ground under them', {
     timeout: browserTimeout(180_000),
   }, async () => {
-    // Zoomed out where the globe is drawn as a sphere, few enough rows for the drape band
-    const camera = { center: SLOPE, zoom: 9.5, pitch: 40, bearing: 20 };
-    const features = [
-      squareRow('slope', SLOPE, 0.12, RED, { strokeColor: hex(BLUE), strokeWidth: 3 }),
-      squareRow('dashed', [SLOPE[0] + 0.15, SLOPE[1] - 0.05], 0.05, GREEN, {
-        strokeColor: hex(ORANGE),
-        strokeWidth: 4,
-        lineStyle: 'dashed',
-      }),
-      lineRow(
-        'line',
-        [
-          [SLOPE[0] - 0.2, SLOPE[1] - 0.1],
-          [SLOPE[0] + 0.2, SLOPE[1] + 0.08],
-        ],
-        BLUE,
-        5,
+    // Lines along the rows and the columns of the nodes of the terrain mesh (of the tiles of zoom
+    // 8, so of the finer tiles too), near the camera, at the center and far from it, on the white
+    // ground. At a node, the mesh maplibre draws and the DEM maplibre projects a place with
+    // (`map.project`) are at the same elevation; between the nodes the flat triangles of the mesh
+    // part from the DEM by meters on the ridges of the test terrain. The centers of the lines are
+    // read at the nodes of the tiles drawn under them
+    const node = 1 / (2 ** 8 * 128);
+    const [cx, cy] = mercatorOf(SLOPE);
+    const rows = [-1, 0, 1, 2, 3].map((k) => (Math.round(cy / node) + k) * node);
+    const columns = [-3, -2, -1, 0, 1, 2, 3].map((k) => (Math.round(cx / node) + k) * node);
+    const reach = 0.01 / 360;
+    const lines: Array<Array<[number, number]>> = [
+      ...rows.map(
+        (y): Array<[number, number]> => [lngLatOf([cx - reach, y]), lngLatOf([cx + reach, y])],
+      ),
+      ...columns.map(
+        (x): Array<[number, number]> => [lngLatOf([x, cy - reach]), lngLatOf([x, cy + reach])],
       ),
     ];
-    const objects = await openScene(features, 'objects', camera, true);
-    const expected = await readFrame(objects);
-    await objects.close();
-    const rows = await openScene(features, 'rows', camera, true);
-    const drape = await drapeOf(rows);
-    expect(drape.used, drape.reason).toBe(true);
-    const projection = await rows.evaluate(
-      () => (window as unknown as { map: import('maplibre-gl').Map }).map.getProjection()?.type,
+    const page = await openScene(
+      lines.map((places, i) => lineRow(`line-${i}`, places, BLUE, LINE_WIDTH)),
     );
-    expect(projection).toBe('globe');
-    const drawn = await readFrame(rows);
-    const off = differingOffSeams(drawn.pixels, expected.pixels);
-    expect(off.painted).toBeGreaterThan(drawn.pixels.length / 4 / 20);
-    // Measured (the same in every run): 70 pixels off the seams and 92 in all of 72,585 painted,
-    // in single pixels of the soft edges; a fifth over them for the drivers
-    expect(off.offSeams / off.painted).toBeLessThan(0.0012);
-    expect(off.differing / off.painted).toBeLessThan(0.0016);
-    await rows.close();
+    const drape = await drapeOf(page);
+    expect(drape.used, drape.reason).toBe(true);
+    // The tiles of the terrain drawn: every one at zoom 8 or finer (their nodes hold those of the
+    // rows and the columns of the lines)
+    const tiles = await page.evaluate(() => {
+      const w = window as unknown as {
+        map: unknown;
+        e2e: {
+          internals: {
+            getMapTerrain(map: unknown): unknown;
+            getRenderableTerrainTiles(terrain: unknown): Array<{ x: number; y: number; z: number }>;
+          };
+        };
+      };
+      const terrain = w.e2e.internals.getMapTerrain(w.map);
+      return w.e2e.internals.getRenderableTerrainTiles(terrain).map(({ x, y, z }) => ({ x, y, z }));
+    });
+    expect(Math.min(...tiles.map((t) => t.z))).toBeGreaterThanOrEqual(8);
+    // The places read: the nodes on the lines of the tile drawn under each
+    const runs: Array<Array<[number, number]>> = [];
+    const along = (from: [number, number], to: [number, number]): void => {
+      const run: Array<[number, number]> = [];
+      const steps = 4000;
+      let last = '';
+      for (let i = 0; i <= steps; i++) {
+        const t = i / steps;
+        const x = from[0] + (to[0] - from[0]) * t;
+        const y = from[1] + (to[1] - from[1]) * t;
+        const tile = tiles.find((c) => {
+          const size = 1 / 2 ** c.z;
+          return x >= c.x * size && x < (c.x + 1) * size && y >= c.y * size && y < (c.y + 1) * size;
+        });
+        if (!tile) continue;
+        const step = 1 / (2 ** tile.z * 128);
+        const at: [number, number] =
+          from[0] === to[0] ? [x, Math.round(y / step) * step] : [Math.round(x / step) * step, y];
+        const key = `${at[0]},${at[1]}`;
+        if (key === last) continue;
+        last = key;
+        run.push(lngLatOf(at));
+      }
+      runs.push(run);
+    };
+    for (const y of rows) along([cx - reach, y], [cx + reach, y]);
+    for (const x of columns) along([x, cy - reach], [x, cy + reach]);
+    const read = await lineOffsets(page, runs);
+    // Measured (the same in every run), at 296 nodes: 0.07 px at most far from the camera (the top
+    // third of the screen, 25 nodes), 0.25 at the center (187) and 0.18 near the camera (84)
+    expect(read.count).toBeGreaterThan(200);
+    for (const band of read.bands) {
+      expect(band.count, JSON.stringify(read.bands)).toBeGreaterThan(20);
+      // Within half a pixel of where maplibre projects the ground
+      expect(band.worst, JSON.stringify(read.bands)).toBeLessThan(0.5);
+    }
+    await page.close();
   });
+
+  for (const [what, camera] of [
+    ['on the globe alone', { center: SLOPE, zoom: 9.5, pitch: 40, bearing: 20 }],
+    ['in the transition of the globe', { center: SLOPE, zoom: 11.5, pitch: 45, bearing: 20 }],
+  ] as const) {
+    it(`draws the rows as out of the band ${what}, in their order`, {
+      timeout: browserTimeout(180_000),
+    }, async () => {
+      // While maplibre draws the globe the ground is not read back (maplibre-coupling.md, item
+      // 31): the rows are drawn as they are cut for the surface, in the order of the rows. A
+      // point under a larger square drawn after it is hidden whole, one drawn last is seen
+      const span = camera.zoom < 10 ? 0.04 : 0.006;
+      const a: [number, number] = [SLOPE[0] - span / 2, SLOPE[1]];
+      const b: [number, number] = [SLOPE[0] + span / 2, SLOPE[1]];
+      const page = await openScene(
+        [
+          squareRow('under', SLOPE, span, RED),
+          pointRow('between', a, GREEN, 5),
+          squareRow('over', a, span * 0.45, BLUE),
+          pointRow('top', b, ORANGE, 8),
+        ],
+        'rows',
+        camera,
+        true,
+      );
+      const projection = await page.evaluate(() => {
+        const map = (window as unknown as { map: import('maplibre-gl').Map }).map;
+        return map.getProjection()?.type;
+      });
+      expect(projection).toBe('globe');
+      const drape = await drapeOf(page);
+      expect(drape.used).toBe(false);
+      expect(drape.reason).toBe('ground-globe');
+      const { pixels } = await readFrame(page);
+      const hues = { red: 0, green: 0, blue: 0, orange: 0 };
+      for (let i = 0; i < pixels.length; i += 4) {
+        const hue = hueOf([pixels[i] as number, pixels[i + 1] as number, pixels[i + 2] as number]);
+        if (hue && hue !== 'white') hues[hue]++;
+      }
+      expect(hues.red, JSON.stringify(hues)).toBeGreaterThan(100);
+      expect(hues.blue, JSON.stringify(hues)).toBeGreaterThan(50);
+      expect(hues.orange, JSON.stringify(hues)).toBeGreaterThan(50);
+      // The point between is under the square over it
+      expect(hues.green, JSON.stringify(hues)).toBe(0);
+      await page.close();
+    });
+  }
 
   it('draws a picture of the rows on the terrain at its place among the polygons read on the ground', {
     timeout: browserTimeout(120_000),

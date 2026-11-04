@@ -7,18 +7,12 @@
  *
  * A place is its Mercator offset from the center of the view and its elevation in meters,
  * u = (dx, dy, e). Its clip space is the one maplibre's `projectTileFor3D` draws the depth of the
- * terrain with: on the flat map the Mercator matrix of the frame, on the globe the matrix of the
- * unit sphere of the place lifted by its elevation, in the transition the two mixed by it (every
- * component).
+ * terrain with on the flat map: the Mercator matrix of the frame.
  */
 
 import type { OffsetUniforms } from '../view/shaders/helpers.js';
 import type { GroundProjection } from '../view/terrain/drape/ground-depth.js';
 import type { FrameProjection } from './glsl-projection.js';
-
-/** The radius of the sphere of the globe (maplibre's) */
-const RADIUS = 6_371_008.8;
-const DEG = Math.PI / 180;
 
 /** A frame, and what the ground is read back with in it */
 export interface GroundScene {
@@ -47,31 +41,13 @@ export function groundClipOf(
   scene: GroundScene,
   u: readonly number[],
 ): [number, number, number, number] {
-  const t = Math.fround(scene.projection.projectionTransition);
   const [cx, cy] = scene.uniforms.centerMercator;
-  const dx = u[0] as number;
-  const dy = u[1] as number;
-  const e = u[2] as number;
-  const plane = t > 0 ? scene.projection.fallbackMatrix : scene.projection.mainMatrix;
-  const flat = transform(plane, [cx + dx, cy + dy, e * scene.scale, 1]);
-  if (!(t > 0)) return flat;
-  const lng = (scene.uniforms.centerLngLat[0] + dx * 360) * DEG;
-  const lat = Math.atan(Math.sinh(Math.PI * (1 - 2 * (cy + dy))));
-  const lift = 1 + e / RADIUS;
-  const sphere = [
-    Math.sin(lng) * Math.cos(lat) * lift,
-    Math.sin(lat) * lift,
-    Math.cos(lng) * Math.cos(lat) * lift,
+  return transform(scene.projection.mainMatrix, [
+    cx + (u[0] as number),
+    cy + (u[1] as number),
+    (u[2] as number) * scene.scale,
     1,
-  ];
-  const globe = transform(scene.projection.mainMatrix, sphere);
-  if (t > Math.fround(0.999)) return globe;
-  return [0, 1, 2, 3].map((i) => (flat[i] as number) * (1 - t) + (globe[i] as number) * t) as [
-    number,
-    number,
-    number,
-    number,
-  ];
+  ]);
 }
 
 /** The point of the clip space over its w of a place */

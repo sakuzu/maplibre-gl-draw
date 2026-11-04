@@ -52,6 +52,7 @@ import { type EnuEdit, inverseEnuEdit, moveEnuPosition } from '../../geometry/en
 import { drawPropertyKey } from '../../shared/properties.js';
 import type { Coordinate } from '../../store/types.js';
 import { dashCoefficientsOf } from '../renderers/line/dash.js';
+import { rowsVariantOf } from '../renderers/rows/rows-shader.js';
 import type { ShaderData } from '../shaders/helpers.js';
 import {
   getRenderableTerrainTiles,
@@ -565,9 +566,9 @@ export class TableDrape {
    * the other elements decides it), the polygons and the lines of the rows read the ground seen
    * at each pixel (`TableDrapePainter.order` 'ground'), read back from the depth of the terrain
    * maplibre draws: the frame holds it and the tiles of the terrain drawn. Where that depth
-   * cannot be taken (`getTerrainDepth`), no frame is planned, and the rows are drawn as out of the
-   * band. For the references of the measures ('each', 'each-near'),
-   * they are painted on the drape of the rows, binned into the tiles here.
+   * cannot be taken (`getTerrainDepth`), and while maplibre draws the globe, no frame is planned,
+   * and the rows are drawn as out of the band. For the references of the tests ('each',
+   * 'each-near'), they are painted on the drape of the rows, binned into the tiles here.
    *
    * @param keepGround Whether a frame is wanted out of the band too: rows packed for the ground
    *   are still drawn (they read it until they are cut again for the terrain, unless the frame
@@ -621,6 +622,9 @@ export class TableDrape {
     // Out of the band, the rows packed for the ground read it until they are cut again for the
     // terrain; where the polygons and the lines are drawn flat, they are drawn so at once
     if (!inBand && !(ground && keepGround && !input.flattened)) return this.unused(reason);
+    // While maplibre draws the globe (the globe alone and the transition) the ground is not read
+    // back: the rows are drawn as out of the band (maplibre-coupling.md, item 31)
+    if (ground && rowsVariantOf(input.shaderData) === 'globe') return this.unused('ground-globe');
 
     const tiles = getRenderableTerrainTiles(input.mapTerrain);
     if (tiles.length === 0) return this.unused('no-dem-tiles');
@@ -1627,7 +1631,7 @@ interface PendingDraw {
  *   in one draw a chunk (terrain/drape/ground-depth.ts)
  * - each: the polygons and the lines are on the drape of the rows, and every run of points is a
  *   break, the drape painted up to it in every tile (one row at a time, wherever its markers
- *   are on the screen: the reference of the measures)
+ *   are on the screen: the reference of the tests)
  * - each-near: as each, the drape painted up to a break in the tiles it meets (a reference
  *   faster to draw, but for the markers over the ground of a tile far from them)
  *
@@ -1637,13 +1641,16 @@ export type TableDrapeOrder = 'ground' | 'each' | 'each-near';
 
 /**
  * Draws a layer held as rows on its drape in the order of its rows, for the references of the
- * measures (`each`, `each-near`): the drape is painted tile by tile up to each run of what the
+ * tests (`each`, `each-near`): the drape is painted tile by tile up to each run of what the
  * drape does not draw, which is drawn next
  *
  * @internal
  */
 export class TableDrapePainter {
-  /** How the order is kept (the ground, unless the measures ask for a reference) */
+  /**
+   * How the order is kept (the ground, unless a test asks for a reference through its hooks,
+   * `setDrapeOrder`)
+   */
   static order: TableDrapeOrder = 'ground';
 
   private frame: TableDrapeFrame | null = null;

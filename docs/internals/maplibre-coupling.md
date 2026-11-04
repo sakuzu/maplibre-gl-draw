@@ -1033,10 +1033,23 @@ Each item has the same five parts.
   checks its size against the canvas from `_fboDepthTexture.size`; the
   shader of the rows (`GROUND_DEPTH_GLSL` in
   `src/view/terrain/drape/ground-depth.ts`) unpacks it, interpolates it to
-  the device pixel and takes it back to the ground through the projection
-  of `projectTileFor3D` (on the flat map, on the globe and in the
-  transition). Where the texture cannot be taken, the rows are drawn as
-  out of the band.
+  the device pixel and takes it back to the ground through the inverse of
+  the projection of `projectTileFor3D` on the flat map. Where the texture
+  cannot be taken, and while maplibre draws the globe (the globe alone and
+  the transition, a `projectionTransition` over 0), the rows are drawn as
+  out of the band. Once the globe has given way to the flat map
+  (`projectionTransition` of 0), the ground is read back again.
+- Why not on the globe — maplibre puts the near plane of the globe half a
+  pixel from the camera, so one step of the second digit of the depth
+  moves the ground by about 18 pixels along the ray. Of the two depths a
+  second digit of 128 stands for, the one on the ground is picked by the
+  DEM atlas; outside the atlas (the coarse tiles far from the camera) it
+  cannot be picked, and the ground is read off by up to half of that. A
+  reading tried on the globe (the inverse of the projection of the unit
+  sphere on the globe alone, and in the transition the projection
+  linearized at the center put right by the projection itself three
+  times) cost about 80 ms a frame for the drawing of the rows alone on an
+  Apple M3 Max at zoom 11.3, and broke the edges of the polygons there.
 - Symptoms when it breaks — a changed packing reads the ground at the
   wrong place: the polygons and the lines of the rows in the drape band
   slide along the rays of the camera or vanish; a texture no longer
@@ -1045,8 +1058,7 @@ Each item has the same five parts.
   packs as the 6.11.1 shader does, and
   `src/view/terrain/drape/ground-depth-gpu.test.ts` reads it back on a
   real WebGL2; compare `terrain_depth.fragment.glsl`, `drawDepth`,
-  `getFramebuffer`, `getTerrainData` and `interpolateProjectionFor3D`
-  with the new source.
+  `getFramebuffer` and `getTerrainData` with the new source.
 - Conditions for removal — none while the ground of a pixel is read back
   from the depth MapLibre draws.
 
