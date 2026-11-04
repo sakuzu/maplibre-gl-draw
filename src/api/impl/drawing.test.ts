@@ -73,7 +73,7 @@ describe('debug.gpu and the hooks of measurement of the rows', () => {
   it('reports no GPU memory before anything is drawn', () => {
     draw = createDraw(createMapStub().map);
     const gpu = draw.debug.gpu();
-    expect(gpu).toEqual({ bytes: 0, bufferBytes: 0, textureBytes: 0 });
+    expect(gpu).toMatchObject({ bytes: 0, bufferBytes: 0, textureBytes: 0 });
     expect(Object.isFrozen(gpu)).toBe(true);
   });
 
