@@ -14,17 +14,24 @@ import {
   readTabaneBlock,
   readTabaneBlockFile,
   readValue,
+  type TabaneRow,
   type TabaneRowBlock,
+  tabaneKeysOf,
   tabaneRowSuffixOf,
   tabaneRowsOf,
+  type Utf8Column,
   utf8String,
   writeTabaneBlocks,
 } from '@sakuzu/tabane';
 import type { Polygon } from 'geojson';
 import { describe, expect, it } from 'vitest';
 import { rowsOfGeoJSON } from '../../api/geojson-rows.js';
-import type { FeatureTables } from '../../api/tables.js';
-import { featureTablesInternals } from '../../feature-table/feature-tables.js';
+import { copyTableStore, type FeatureTables } from '../../api/tables.js';
+import {
+  type FeatureTablesInternals,
+  featureTablesInternals,
+} from '../../feature-table/feature-tables.js';
+import { compareKeys, keyAfter } from '../../store/order-keys.js';
 import { createTableStore } from '../../store/table-memory.js';
 import { rowPatch, seededRandom } from '../../test-utils.js';
 import { createRowBlockDataBuilder } from '../row-group-builder.js';
@@ -206,6 +213,37 @@ function variety(): TabaneFeatureRow[] {
   ];
 }
 
+/** The key of row `i` of the first block of a run that follows the key `V` */
+const numberedKey = (i: number) => `V${tabaneRowSuffixOf(0)}${tabaneRowSuffixOf(i)}`;
+
+/** The texts of a column of `n` entries */
+function textsOf(column: Utf8Column, n: number): string[] {
+  return Array.from({ length: n }, (_, r) => utf8String(column, r));
+}
+
+/** A row block of rows, the first block of a run that follows the key `V` */
+function rowBlockOf(rows: readonly TabaneRow[]): TabaneRowBlock {
+  const [block] = writeTabaneBlocks({
+    parent: 'l',
+    head: 'V',
+    columns: TABANE_FEATURE_COLUMNS,
+    rows,
+  });
+  return readTabaneBlock(block.content)[0];
+}
+
+/** Points numbered from `from`, one for each key (without one, a row has the key of its place) */
+function pointsOf(keys: readonly (string | undefined)[], from = 1): TabaneRow[] {
+  return keys.map((key, i) => ({
+    ...tabaneRowOf({
+      id: formatTabaneId({ origin: ORIGIN, number: from + i }),
+      type: 'Point',
+      geometry: { type: 'Point', coordinates: [from + i, 0] },
+    }),
+    ...(key !== undefined && { key }),
+  }));
+}
+
 describe('a row block as a row block of the tables', () => {
   /** Every column the builder of the blocks makes of the same rows, compared */
   function expectSameBlock(a: RowBlockData, b: RowBlockData): void {
@@ -274,6 +312,19 @@ describe('a row block as a row block of the tables', () => {
       expectSameBlock(rowBlockDataOfTabane(file.rowBlocks[0], { caches: file.caches }), built);
       expectSameBlock(rowBlockDataOfTabane(readTabaneBlock(written.block.content)[0]), built);
     }
+  });
+
+  it('holds the columns the builder makes of rows of keys of their own', () => {
+    const rows = buildings(30, 7);
+    // Keys no head gives, then keys of the head and numbers that do not follow each other
+    const keys = rows.map((_, i) => (i < 20 ? `A${tabaneRowSuffixOf(i * 7)}` : numberedKey(i * 2)));
+    const rowBlock = rowBlockOf(rows.map((row, i) => ({ ...tabaneRowOf(row), key: keys[i] })));
+    expect(rowBlock.keys).toEqual(keys);
+    const builder = createRowBlockDataBuilder({ targetRows: 1000 });
+    rows.forEach((row, i) => {
+      builder.addRow({ ...row, order: keys[i] });
+    });
+    expectSameBlock(rowBlockDataOfTabane(rowBlock), builder.finish()[0]);
   });
 
   it('keeps the triangles of the polygons in a cache of the file, which the name does not depend on', () => {
@@ -352,6 +403,221 @@ describe('a row block as a row block of the tables', () => {
       expect(feature?.visible).toBe(rows[k].visible ?? true);
       expect(feature?.locked).toBe(rows[k].locked ?? false);
     }
+  });
+});
+
+describe('a row block that writes the key of each row', () => {
+  const id = (number: number) => formatTabaneId({ origin: ORIGIN, number });
+
+  /** A Store of rows with one layer `l` */
+  function setup() {
+    const { store, writer } = createTableStore();
+    store.createLayer({
+      id: 'l',
+      name: 'l',
+      visible: true,
+      locked: false,
+      opacity: 1,
+      kind: 'table',
+      metadata: undefined,
+      styleRule: undefined,
+    });
+    const tables = store.tables as FeatureTables;
+    const internals = featureTablesInternals(tables) as FeatureTablesInternals;
+    /** Takes in row blocks as the tables read them */
+    const add = (...rowBlocks: readonly TabaneRowBlock[]) => {
+      const blocks = rowBlocks.map((rowBlock) => rowBlockDataOfTabane(rowBlock));
+      writer.addRowBlocks('l', blocks);
+      internals.addQueuedRowBlocks();
+      return blocks;
+    };
+    const handleOf = (number: number) => tables.findRow(id(number)) as number;
+    /** The keys of the rows of numbers, as the tables read them */
+    const keysOf = (...numbers: readonly number[]) =>
+      tables
+        .readValues(
+          rowPatch(numbers.map(handleOf), {
+            order: numbers.map(() => 0),
+          }),
+        )
+        .fields.get('order');
+    return {
+      store,
+      writer,
+      tables,
+      internals,
+      add,
+      handleOf,
+      keysOf,
+      items: () => itemsOf(tables),
+    };
+  }
+
+  /** The ids of the items of the layer `l` in their order */
+  function itemsOf(tables: FeatureTables): (string | undefined)[] {
+    const view = tables.get('l');
+    if (!view) return [];
+    const refs = view.listItems(0, view.itemCount);
+    return Array.from(refs.handles, (h, i) =>
+      refs.kinds[i] === 0 ? tables.getRowId(h) : tables.getGroupId(h),
+    );
+  }
+
+  it('reads the key of each row, and the key its place gives a row without one', () => {
+    const rowBlock = rowBlockOf(
+      pointsOf(['A5', undefined, numberedKey(3), numberedKey(9), 'a-b', 'あ']),
+    );
+    const keys = ['A5', numberedKey(1), numberedKey(3), numberedKey(9), 'a-b', 'あ'];
+    expect(rowBlock.keys).toEqual(keys);
+    const data = rowBlockDataOfTabane(rowBlock);
+    expect(textsOf(data.itemKeys, 6)).toEqual(keys);
+    expect(textsOf(data.memberKeys, 6)).toEqual(['', '', '', '', '', '']);
+    expect(Array.from(data.groups)).toEqual([-1, -1, -1, -1, -1, -1]);
+  });
+
+  it('leaves the keys of rows that follow each other to the head and the number of the first', () => {
+    const rowBlock = rowBlockOf(pointsOf([numberedKey(5), numberedKey(6), numberedKey(7)]));
+    expect(rowBlock.keys).toBe(null);
+    expect(rowBlock.place.firstIndex).toBe(5);
+    const data = rowBlockDataOfTabane(rowBlock);
+    expect(textsOf(data.itemKeys, 3)).toEqual([numberedKey(5), numberedKey(6), numberedKey(7)]);
+    expect(textsOf(data.itemKeys, 3)).toEqual(tabaneKeysOf(rowBlock));
+  });
+
+  it('is taken as it is when its rows are in the order of their keys', () => {
+    const { add, internals, handleOf, items, keysOf } = setup();
+    const [data] = add(rowBlockOf(pointsOf(['A5', numberedKey(3), numberedKey(9), 'a-b', 'あ'])));
+    expect(items()).toEqual([1, 2, 3, 4, 5].map(id));
+    for (const number of [1, 2, 3, 4, 5]) {
+      expect(internals.placeOf(handleOf(number))?.group.data).toBe(data);
+    }
+    expect(keysOf(1, 3, 5)).toEqual(['A5', numberedKey(9), 'あ']);
+  });
+
+  it('puts rows out of the order of their keys at the places of their keys', () => {
+    const { add, internals, items, keysOf } = setup();
+    add(rowBlockOf(pointsOf(['q7', 'A5', 'Z'])));
+    expect(items()).toEqual([id(2), id(3), id(1)]);
+    internals.flushVersions();
+    expect(items()).toEqual([id(2), id(3), id(1)]);
+    expect(keysOf(1, 2, 3)).toEqual(['q7', 'A5', 'Z']);
+  });
+
+  it('orders rows of the same key by their ids', () => {
+    const { add, items } = setup();
+    add(rowBlockOf(pointsOf(['m', 'm']).reverse()));
+    expect(items()).toEqual([id(1), id(2)]);
+  });
+
+  it('is put among other row blocks by the keys of its rows, with those of a head', () => {
+    const { add, internals, items } = setup();
+    const first = pointsOf(['c1', 'e1'], 1);
+    const before = pointsOf(['a1', 'b1'], 3);
+    const within = pointsOf(['d1', 'f1'], 5);
+    const follows = rowBlockOf(pointsOf([undefined, undefined], 7));
+    expect(follows.keys).toBe(null);
+    add(rowBlockOf(first), rowBlockOf(before), rowBlockOf(within), follows);
+    // The keys of a head (`V`) come before the small letters
+    const order = [7, 8, 3, 4, 1, 5, 2, 6].map(id);
+    expect(items()).toEqual(order);
+    internals.flushVersions();
+    expect(items()).toEqual(order);
+  });
+
+  it('is compared with the keys of the groups of features', () => {
+    const { store, add, tables, writer, internals, items, keysOf } = setup();
+    add(rowBlockOf(pointsOf(['A5', 'G1', 'G2', 'q7'])));
+    store.createGroup({
+      id: 'g',
+      layerId: 'l',
+      name: 'g',
+      featureIds: [id(2), id(3)],
+      visible: true,
+      locked: false,
+    });
+    internals.flushVersions();
+    // The group takes the key of its first member
+    const group = tables.findGroup('g') as number;
+    expect(writer.getGroupOrder(group)).toBe('G1');
+    expect(items()).toEqual([id(1), 'g', id(4)]);
+    // A key before the key of the group, the same key (then the ids decide) and a key after it
+    add(rowBlockOf(pointsOf(['B1', 'G1', 'H1'], 5)));
+    const order = [id(1), id(5), id(6), 'g', id(7), id(4)];
+    expect(items()).toEqual(order);
+    internals.flushVersions();
+    expect(items()).toEqual(order);
+    // The group moved past the last row: its members move, their keys do not
+    store.moveItem('g', { layerId: 'l', above: null });
+    internals.flushVersions();
+    expect(items()).toEqual([id(1), id(5), id(6), id(7), id(4), 'g']);
+    expect(writer.getGroupOrder(group)).toBe(keyAfter('q7'));
+    expect(keysOf(2, 3)).toEqual(['G1', 'G2']);
+  });
+
+  it('keeps the keys of its rows when they are read and written back', () => {
+    const { add, tables, writer, internals, handleOf, items, keysOf } = setup();
+    const [data] = add(rowBlockOf(pointsOf(['A5', 'G1', numberedKey(9), 'q7'])));
+    const handles = [1, 2, 3, 4].map(handleOf);
+    const read = tables.readValues(rowPatch(handles, { order: [0, 0, 0, 0] }));
+    // The same keys move no row
+    writer.apply(read);
+    expect(internals.placeOf(handleOf(2))?.group.data).toBe(data);
+    expect(items()).toEqual([1, 2, 3, 4].map(id));
+    // Moved, and put back by the keys read before
+    writer.apply(rowPatch([handleOf(4)], { order: ['A1'] }));
+    expect(items()).toEqual([4, 1, 2, 3].map(id));
+    writer.apply(read);
+    expect(items()).toEqual([1, 2, 3, 4].map(id));
+    internals.flushVersions();
+    expect(items()).toEqual([1, 2, 3, 4].map(id));
+    expect(keysOf(1, 2, 3, 4)).toEqual(['A5', 'G1', numberedKey(9), 'q7']);
+  });
+
+  it('keeps the key of a row written, in the next versions of the rows', () => {
+    const { add, writer, internals, handleOf, items, keysOf } = setup();
+    add(rowBlockOf(pointsOf(['A5', 'G1', numberedKey(9), 'q7'])));
+    writer.apply(rowPatch([handleOf(2)], { 'property:name': ['x'] }));
+    internals.flushVersions();
+    expect(items()).toEqual([1, 2, 3, 4].map(id));
+    expect(keysOf(1, 2, 3, 4)).toEqual(['A5', 'G1', numberedKey(9), 'q7']);
+    const place = internals.placeOf(handleOf(2));
+    expect(place && utf8String(place.group.data.itemKeys, place.row)).toBe('G1');
+  });
+
+  it('makes a key between two keys of rows', () => {
+    const { store, add, items, keysOf } = setup();
+    add(rowBlockOf(pointsOf(['A5', 'G1', 'q7'])));
+    store.moveItem(id(3), { layerId: 'l', above: id(2) });
+    expect(items()).toEqual([1, 3, 2].map(id));
+    const [below, moved, above] = keysOf(1, 3, 2) as string[];
+    expect(compareKeys(below, moved)).toBeLessThan(0);
+    expect(compareKeys(moved, above)).toBeLessThan(0);
+  });
+
+  it('keeps the keys of its rows in a copy of the Store', () => {
+    const { store, add, items, keysOf } = setup();
+    add(rowBlockOf(pointsOf(['A5', 'G1', numberedKey(9), 'q7'])));
+    const copy = copyTableStore(store);
+    while (copy.copyNext());
+    const tables = copy.store.tables as FeatureTables;
+    featureTablesInternals(tables)?.addQueuedRowBlocks();
+    expect(itemsOf(tables)).toEqual(items());
+    const handles = [1, 2, 3, 4].map((n) => tables.findRow(id(n)) as number);
+    expect(
+      tables.readValues(rowPatch(handles, { order: [0, 0, 0, 0] })).fields.get('order'),
+    ).toEqual(keysOf(1, 2, 3, 4));
+  });
+
+  it('keeps the keys of its rows written again as rows of another head', () => {
+    const keys = ['A5', numberedKey(3), numberedKey(9), 'q7'];
+    const [block] = writeTabaneBlocks({
+      parent: 'l',
+      head: 'W',
+      columns: TABANE_FEATURE_COLUMNS,
+      rows: tabaneRowsOf(rowBlockOf(pointsOf(keys))),
+    });
+    const data = rowBlockDataOfTabane(readTabaneBlock(block.content)[0]);
+    expect(textsOf(data.itemKeys, 4)).toEqual(keys);
   });
 });
 

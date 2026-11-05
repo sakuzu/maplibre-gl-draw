@@ -7,12 +7,13 @@
  * The columns of a row block read are the columns of a feature (`columns.ts`), and they are taken
  * as columns: the points of the geometry are the coordinates of its children, the types, the
  * styles and the attributes are taken as they are. What is made here is what the columns of a
- * row block leave to the reader: the ids and the keys as text (from their runs), the hashes of the
- * ids, the flags, the bbox of every row and the spatial index (they depend on the system of the
- * coordinates of the reader), and the fills of the rows that draw a ring around their point (they
- * depend on the types of the reader). The fills of the polygons are copied from the cache of their
- * triangles that follows the row block in its file (`triangles.ts`) when it fits the rows, and made
- * otherwise.
+ * row block leave to the reader: the ids as text (from their runs), the keys as text (the key of
+ * each row of a row block that writes them, or else its head and the numbers of its rows), the
+ * hashes of the ids, the flags, the bbox of every row and the spatial index (they depend on the
+ * system of the coordinates of the reader), and the fills of the rows that draw a ring around their
+ * point (they depend on the types of the reader). The fills of the polygons are copied from the
+ * cache of their triangles that follows the row block in its file (`triangles.ts`) when it fits the
+ * rows, and made otherwise.
  *
  * A pure module: it depends on nothing outside `/table` but its error and `@sakuzu/tabane`, so it
  * runs in a Worker as well.
