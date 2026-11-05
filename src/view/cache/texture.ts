@@ -13,16 +13,24 @@
  */
 
 import { isEmbeddedImageDataUrl } from '../../shared/utils/embedded-image.js';
-import { type GpuLedger, mipmappedTextureBytes } from '../gpu-ledger.js';
+import { type GpuLedger, giveStorage, mipmappedTextureBytes } from '../gpu-ledger.js';
 
 /** The owner the textures of the images are recorded under in the GPU ledger */
 const IMAGES_OWNER = 'images';
+
+/**
+ * How long the texture of an image not drawn stays (ms). It is made again from the decoded image
+ * when it is drawn
+ */
+const IMAGE_RETENTION_MS = 30_000;
 
 /**
  * Cache entry
  */
 interface CacheEntry {
   texture: WebGLTexture;
+  /** The image decoded, to make the texture again */
+  source: HTMLImageElement;
   width: number;
   height: number;
   lastUsed: number;
@@ -173,6 +181,7 @@ export class TextureCache {
 
     const entry: CacheEntry = {
       texture,
+      source: img,
       width: img.width,
       height: img.height,
       lastUsed: Date.now(),
@@ -214,6 +223,20 @@ export class TextureCache {
       };
     }
     return null;
+  }
+
+  /**
+   * Deletes the textures of the images not drawn for a while, keeping the images decoded
+   *
+   * @param now - The time, as `Date.now`
+   */
+  sweep(now: number): void {
+    for (const [src, entry] of this.imageCache) {
+      if (now - entry.lastUsed < IMAGE_RETENTION_MS) continue;
+      this.decodedImages.set(src, entry.source);
+      this.deleteTexture(entry.texture);
+      this.imageCache.delete(src);
+    }
   }
 
   /**
@@ -304,7 +327,9 @@ export function uploadRgbaTexture(
   gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
   gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
   gl.bindTexture(gl.TEXTURE_2D, texture);
-  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, source);
+  giveStorage(gl, texture, () =>
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, source),
+  );
 
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);

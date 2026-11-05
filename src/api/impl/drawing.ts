@@ -53,7 +53,9 @@ export function createDrawing(
           bytes: memory.bytes,
           bufferBytes: memory.bufferBytes,
           textureBytes: memory.textureBytes,
+          rowBytes: memory.rowBytes,
           peakBytes: memory.peakBytes,
+          leakedBytes: memory.leakedBytes,
           allocations: memory.allocations,
           byOwner: memory.byOwner,
         });

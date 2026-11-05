@@ -149,6 +149,14 @@ document included. `gpuBytes` is what the drawing allocated on the GPU;
 browser does not tell the heap of the page everywhere). The base map and
 the rest of the page are not in it.
 
+What the drawing holds on the GPU outside the rows, the part that does
+not follow the size of the document, has a limit for the instance:
+`rendering.gpuLimitBytes`, 64 MB when it is left out. The library and the
+extensions together read it: `draw.debug.gpu()` tells `bytes` and
+`rowBytes`, and an extension compares `ctx.gpu.heldBytes` with
+`ctx.gpu.limitBytes` before it allocates. Give the value for the devices
+of your users, as the library does not know what they can spare.
+
 `draw.memory.estimate` gives what a document of a size would take, held
 as the Store of the instance holds its features, so a page can stop what
 would pass the limit before it starts: a map to open, a print, a version

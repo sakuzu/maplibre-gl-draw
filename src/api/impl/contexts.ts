@@ -32,7 +32,7 @@ import type { StoreSpatialIndex } from '../../store/spatial/store-spatial-index.
 import type { Store } from '../../store/store.js';
 import type { Feature as StoredFeature, TentativeState } from '../../store/types.js';
 import { isWritableLayer } from '../../store/writable-layer.js';
-import type { GpuLedger } from '../../view/gpu-ledger.js';
+import { DEFAULT_GPU_LIMIT_BYTES, type GpuLedger } from '../../view/gpu-ledger.js';
 import { anchorElevationMeters, getAnchorElevationGeneration } from '../../view/terrain/anchor.js';
 import { bindTerrainState } from '../../view/terrain/binding.js';
 import type { TerrainContext } from '../../view/terrain/context.js';
@@ -343,8 +343,15 @@ export function createExtensionContext(
     once: (event, listener) => subscribe(event, listener, true),
     terrain: createTerrainSurface(services.terrain),
     gpu: {
-      record: (object, owner, kind, bytes) => services.gpu.record(object, owner, kind, bytes),
+      record: (object, owner, kind, bytes, rows = false) =>
+        services.gpu.record(object, owner, kind, bytes, rows),
       release: (object) => services.gpu.release(object),
+      get heldBytes() {
+        return services.gpu.outsideRowBytes;
+      },
+      get limitBytes() {
+        return services.getDraw().options.get().rendering?.gpuLimitBytes ?? DEFAULT_GPU_LIMIT_BYTES;
+      },
     },
     names: createNameGenerator(services.autoNameGenerator),
     messages: services.messages,

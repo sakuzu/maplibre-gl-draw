@@ -164,8 +164,15 @@ export interface GpuMemoryDiagnostics {
   readonly bufferBytes: number;
   /** The bytes of the textures (and of the render buffers the drawing draws into) */
   readonly textureBytes: number;
+  /** The bytes of what is drawn of the features of the document, in proportion to them */
+  readonly rowBytes: number;
   /** The most bytes held at once since the instance was made */
   readonly peakBytes: number;
+  /**
+   * The bytes the instances of the page left behind when they were destroyed, which were then
+   * deleted: anything but 0 is a part that does not give back what it holds
+   */
+  readonly leakedBytes: number;
   /** The allocations made since the instance was made */
   readonly allocations: number;
   /** The bytes by what holds them */

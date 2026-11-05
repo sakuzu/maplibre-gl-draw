@@ -22,6 +22,16 @@ writing it. Its changes are listed after those of 3.0.0.
 
 ### Added in 3.0.0
 
+- A draw instance gives back what it holds whatever way an allocation ends: a
+  build of the renderers or a program that fails leaves nothing behind, and the
+  textures of the images not drawn for 30 seconds go, made again from the
+  decoded image. `draw.debug.gpu()` tells `leakedBytes`, what the instances of
+  the page left behind when they were destroyed, which is deleted then
+- `rendering.gpuLimitBytes`: the most bytes an instance holds on the GPU
+  outside the rows, of the library and of the extensions together (64 MB
+  when it is left out). `ctx.gpu.heldBytes` and `ctx.gpu.limitBytes` tell an
+  extension where it stands, and `ctx.gpu.record` takes whether what it records
+  holds rows. `draw.debug.gpu()` tells `rowBytes`.
 - `/webgl` draws marks of a shader of its own as the library draws its
   points: `TERRAIN_OCCLUSION_GLSL` fades the marks the terrain hides, the
   test of `occlusionOpacity` run in the vertex shader on the DEM atlas

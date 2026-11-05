@@ -29,7 +29,7 @@
 import type { Map as MapLibreMap, ProjectionData } from 'maplibre-gl';
 import type { PixelRatioInput } from '../../../shared/utils/pixel-ratio.js';
 import { resolvePixelRatio } from '../../../shared/utils/pixel-ratio.js';
-import { type GpuLedger, textureBytes } from '../../gpu-ledger.js';
+import { type GpuLedger, giveStorage, textureBytes } from '../../gpu-ledger.js';
 import { getRenderFrame } from '../../shaders/frame.js';
 import {
   calculateOffsetUniforms,
@@ -1276,16 +1276,18 @@ export class RowsRenderer {
       const texture = gl.createTexture();
       if (!texture) return;
       gl.bindTexture(gl.TEXTURE_2D, texture);
-      gl.texImage2D(
-        gl.TEXTURE_2D,
-        0,
-        gl.RGBA,
-        1,
-        1,
-        0,
-        gl.RGBA,
-        gl.UNSIGNED_BYTE,
-        new Uint8Array(4),
+      giveStorage(gl, texture, () =>
+        gl.texImage2D(
+          gl.TEXTURE_2D,
+          0,
+          gl.RGBA,
+          1,
+          1,
+          0,
+          gl.RGBA,
+          gl.UNSIGNED_BYTE,
+          new Uint8Array(4),
+        ),
       );
       gl.bindTexture(gl.TEXTURE_2D, null);
       this.ledger?.record(texture, LEDGER_OWNER, 'texture', 4);
@@ -1637,7 +1639,7 @@ function createFloatTexture(
   const texture = gl.createTexture();
   if (!texture) return null;
   gl.bindTexture(gl.TEXTURE_2D, texture);
-  gl.texStorage2D(gl.TEXTURE_2D, 1, internalFormat, width, height);
+  giveStorage(gl, texture, () => gl.texStorage2D(gl.TEXTURE_2D, 1, internalFormat, width, height));
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);

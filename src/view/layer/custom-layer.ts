@@ -217,6 +217,11 @@ export interface CustomLayerInterface extends BaseCustomLayerInterface {
   /** The ledger of this instance, for what the extensions allocate */
   getGpuLedger(): GpuLedger;
   /**
+   * The instance is gone: what is still in the ledger was left behind. It is deleted, and told
+   * (`leakedBytes`)
+   */
+  drainGpu(): void;
+  /**
    * The drawing of the layers held as rows of columns (null while the GPU side is not built),
    * for the hooks of measurement
    */
@@ -673,20 +678,22 @@ export function createCustomLayer(deps: CustomLayerDeps): CustomLayerInterface {
     const { gl, mapInstance } = engine;
     if (engine.renderers || !gl || !mapInstance || gl.isContextLost()) return;
 
-    engine.renderers = initRenderers({
-      gl,
-      map: mapInstance,
-      store,
-      spatialIndex: drawnIndex,
-      featureStyle,
-      selectionConfig,
-      renderingConfig,
-      customFeatureHandlers,
-      pixelRatio,
-      scope: renderScope,
-      onImageError: deps.onImageError,
-      keepCopies: deps.keepDrawnCopies === true,
-    });
+    engine.renderers = renderScope.gpu.scope(gl, () =>
+      initRenderers({
+        gl,
+        map: mapInstance,
+        store,
+        spatialIndex: drawnIndex,
+        featureStyle,
+        selectionConfig,
+        renderingConfig,
+        customFeatureHandlers,
+        pixelRatio,
+        scope: renderScope,
+        onImageError: deps.onImageError,
+        keepCopies: deps.keepDrawnCopies === true,
+      }),
+    );
 
     if (renderingConfig.storeRetained !== false) {
       engine.storeRetainedCache = new StoreRetainedCache(store, {
@@ -790,6 +797,7 @@ export function createCustomLayer(deps: CustomLayerDeps): CustomLayerInterface {
     // Declare the switch to a new frame (this invalidates the memoized uniforms held by each
     // renderer; see shaders/frame.ts)
     beginRenderFrame();
+    engine.renderers?.textureCache.sweep(Date.now());
 
     // While the camera is moving, the re-baking of the retained batches is deferred (read by
     // dataset/chunk-set.ts)
@@ -1045,6 +1053,16 @@ export function createCustomLayer(deps: CustomLayerDeps): CustomLayerInterface {
 
     getGpuLedger(): GpuLedger {
       return renderScope.gpu;
+    },
+
+    drainGpu(): void {
+      const { gpu } = renderScope;
+      if (!gpu.audit()) console.warn('The sums of the GPU ledger do not agree with what it holds');
+      if (!engine.gl) return;
+      const left = gpu.drain(engine.gl);
+      if (Object.keys(left).length > 0) {
+        console.warn('GPU memory left behind by a destroyed instance, now deleted:', left);
+      }
     },
 
     getShown(): StoreContractView | null {

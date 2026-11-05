@@ -226,6 +226,7 @@ const RUNTIME_CHECKS: Readonly<Record<string, (value: unknown, what: string) => 
     pixelRatio: positive,
     cacheGeometry: bool,
     timeSlicing: bool,
+    gpuLimitBytes: positive,
   }),
   isExternalEntry: func,
 };

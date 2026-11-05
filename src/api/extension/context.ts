@@ -64,6 +64,10 @@ export interface TerrainSurface {
  * Record every buffer and texture when its storage is given (`bufferData`, `texStorage2D`), under
  * a name of your own, and release it when it is deleted. Recording the same object again replaces
  * its size.
+ *
+ * What is held outside the rows has a limit for the whole instance (`rendering.gpuLimitBytes`):
+ * before allocating such a thing, compare `heldBytes` and what it takes with `limitBytes`, and past
+ * it do not allocate, or draw another way. The library refuses nothing by itself.
  */
 export interface GpuMemoryRecord {
   /**
@@ -73,10 +77,22 @@ export interface GpuMemoryRecord {
    * @param owner - The name it is counted under
    * @param kind - What it is
    * @param bytes - Its size
+   * @param rows - Whether it holds what is drawn of the features of the document, in proportion to
+   *   them: such a thing is out of `heldBytes` (false when it is left out)
    */
-  record(object: object | null, owner: string, kind: 'buffer' | 'texture', bytes: number): void;
+  record(
+    object: object | null,
+    owner: string,
+    kind: 'buffer' | 'texture',
+    bytes: number,
+    rows?: boolean,
+  ): void;
   /** Takes a deleted buffer or texture out */
   release(object: object | null): void;
+  /** The bytes the instance holds outside the rows: of the library and of every extension */
+  readonly heldBytes: number;
+  /** The most bytes the instance may hold outside the rows (`rendering.gpuLimitBytes`) */
+  readonly limitBytes: number;
 }
 
 /** The automatic names of new features, layers and groups. */

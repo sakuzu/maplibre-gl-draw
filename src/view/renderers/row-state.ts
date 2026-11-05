@@ -24,7 +24,7 @@ import { MOVE_SETS } from '../../feature-table/row-state.js';
 import type { RowHandle } from '../../feature-table/types.js';
 import { type EnuEdit, inverseEnuEdit, moveEnuPosition } from '../../geometry/enu-transforms.js';
 import type { BoundingBox } from '../../store/types.js';
-import { type GpuLedger, textureBytes } from '../gpu-ledger.js';
+import { type GpuLedger, giveStorage, textureBytes } from '../gpu-ledger.js';
 import { getRenderFrame } from '../shaders/frame.js';
 import type { RetainedDrawRun } from './draw-run.js';
 import {
@@ -403,7 +403,7 @@ export function createRowStateTexture(
   const texture = gl.createTexture();
   if (!texture) return null;
   gl.bindTexture(gl.TEXTURE_2D, texture);
-  gl.texStorage2D(gl.TEXTURE_2D, 1, gl.R8UI, width, height);
+  giveStorage(gl, texture, () => gl.texStorage2D(gl.TEXTURE_2D, 1, gl.R8UI, width, height));
   // An integer texture is read with texelFetch and must not be filtered
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);

@@ -153,6 +153,13 @@ const thumbnail = await draw.captureImage({
 位置の数からの見積もりです (ページのヒープは、どのブラウザーでも
 わかるわけではありません)。基図とページのほかの部分は入りません。
 
+行の外の GPU の量、つまり文書の大きさに比例しない分には、instance ごとの上限が
+あります。`rendering.gpuLimitBytes` で渡し、省くと 64 MB です。ライブラリーと
+拡張はこの値を一緒に読みます。`draw.debug.gpu()` は `bytes` と `rowBytes` を
+答え、拡張は割り当ての前に `ctx.gpu.heldBytes` と `ctx.gpu.limitBytes` を
+比べます。端末がどれだけ空けられるかはライブラリーには分からないので、利用者の
+端末に合わせた値を渡してください。
+
 `draw.memory.estimate` は、ある大きさの文書が、インスタンスの Store が
 地物を持つ形で取る量を返します。上限を超えるもの (開く地図、印刷、
 見る版) を、始める前に止められます。

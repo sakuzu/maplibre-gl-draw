@@ -29,7 +29,12 @@ import {
   SELECTION_HIGHLIGHT_RGB,
   SELECTION_HIGHLIGHT_STROKE_EXTRA,
 } from '../../../shared/config/selection-highlight.js';
-import { type GpuLedger, type GpuLedgerOwner, textureBytes } from '../../gpu-ledger.js';
+import {
+  type GpuLedger,
+  type GpuLedgerOwner,
+  giveStorage,
+  textureBytes,
+} from '../../gpu-ledger.js';
 import type { ShaderData } from '../../shaders/helpers.js';
 import { createProgram } from '../../shaders/helpers.js';
 import type { TerrainTileData } from '../detect.js';
@@ -1365,7 +1370,10 @@ export class DrapeRenderer {
       if (!target) return null;
       const rows = Math.min(maxRows, Math.max(1, Math.ceil(neededRows * 1.5)));
       gl.bindTexture(gl.TEXTURE_2D, target);
-      gl.texStorage2D(gl.TEXTURE_2D, 1, channels === 4 ? gl.RGBA32F : gl.R32F, width, rows);
+      const made = target;
+      giveStorage(gl, made, () =>
+        gl.texStorage2D(gl.TEXTURE_2D, 1, channels === 4 ? gl.RGBA32F : gl.R32F, width, rows),
+      );
       if (gl.getError() !== gl.NO_ERROR) {
         gl.deleteTexture(target);
         this.lastError = `texture-alloc-failed: ${sizeField}`;
@@ -1437,7 +1445,10 @@ export class DrapeRenderer {
       // Allocate a few extra rows (so it is not recreated on every increase)
       const rows = Math.min(maxRows, Math.max(1, Math.ceil(neededRows * 1.5)));
       gl.bindTexture(gl.TEXTURE_2D, target);
-      gl.texStorage2D(gl.TEXTURE_2D, 1, channels === 4 ? gl.RGBA32F : gl.R32F, width, rows);
+      const made = target;
+      giveStorage(gl, made, () =>
+        gl.texStorage2D(gl.TEXTURE_2D, 1, channels === 4 ? gl.RGBA32F : gl.R32F, width, rows),
+      );
       // Only the allocation is checked (it is rare; getError is a synchronous round trip)
       if (gl.getError() !== gl.NO_ERROR) {
         gl.deleteTexture(target);

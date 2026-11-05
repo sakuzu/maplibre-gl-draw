@@ -10,7 +10,7 @@
  * immediate mode.
  */
 
-import { type GpuLedger, textureBytes } from '../../gpu-ledger.js';
+import { type GpuLedger, giveStorage, textureBytes } from '../../gpu-ledger.js';
 import { calculateLngLatOffset } from '../../shaders/helpers.js';
 import { INSTANCE_BYTES, type LineBatchArrays, ROW_LINE_BYTES } from './line-geometry.js';
 import type { LineBatchShape, RetainedLineBatch } from './line-types.js';
@@ -118,8 +118,10 @@ export function createCoordTexture(
   const texture = gl.createTexture();
   if (!texture) return null;
   gl.bindTexture(gl.TEXTURE_2D, texture);
-  gl.texStorage2D(gl.TEXTURE_2D, 1, gl.RGBA32F, texSize, texSize);
-  gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, texSize, texSize, gl.RGBA, gl.FLOAT, texData);
+  giveStorage(gl, texture, () => {
+    gl.texStorage2D(gl.TEXTURE_2D, 1, gl.RGBA32F, texSize, texSize);
+    gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, texSize, texSize, gl.RGBA, gl.FLOAT, texData);
+  });
   setCoordTextureParams(gl);
   return texture;
 }
@@ -175,7 +177,7 @@ export class ImmediateCoordTexture {
 
       const texture = gl.createTexture()!;
       gl.bindTexture(gl.TEXTURE_2D, texture);
-      gl.texStorage2D(gl.TEXTURE_2D, 1, gl.RGBA32F, size, size);
+      giveStorage(gl, texture, () => gl.texStorage2D(gl.TEXTURE_2D, 1, gl.RGBA32F, size, size));
       setCoordTextureParams(gl);
       this.ledger?.record(texture, 'lines', 'texture', textureBytes(size, size, 16));
 

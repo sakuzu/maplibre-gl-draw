@@ -191,7 +191,13 @@ export class QuadShader<C extends QuadDrapeContent = QuadImageContent> {
     this.gl = gl;
     this.content = content ?? (new QuadImageContent() as QuadDrapeContent as C);
     this.projectionUniformManager = new ProjectionUniformManager(gl);
-    this.setupBuffers();
+    try {
+      this.setupBuffers();
+    } catch (error) {
+      // Nothing is in a ledger yet: what was made goes here
+      this.dispose();
+      throw error;
+    }
   }
 
   /**

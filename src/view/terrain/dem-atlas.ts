@@ -33,7 +33,7 @@
  * the exaggerated elevation.
  */
 
-import { type GpuLedger, textureBytes } from '../gpu-ledger.js';
+import { type GpuLedger, giveStorage, textureBytes } from '../gpu-ledger.js';
 import { createProgram } from '../shaders/helpers.js';
 import {
   getRenderableTerrainTiles,
@@ -392,7 +392,9 @@ export class DemAtlas {
 
     const texture = gl.createTexture();
     gl.bindTexture(gl.TEXTURE_2D, texture);
-    gl.texStorage2D(gl.TEXTURE_2D, 1, gl.RGBA8, width, height);
+    if (texture) {
+      giveStorage(gl, texture, () => gl.texStorage2D(gl.TEXTURE_2D, 1, gl.RGBA8, width, height));
+    }
     this.ledger?.record(texture, DEM_ATLAS_OWNER, 'texture', textureBytes(width, height, 4));
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
