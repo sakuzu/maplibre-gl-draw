@@ -126,6 +126,10 @@ export interface DrapeQuadCorners {
  * One program is built for each distinct `glsl` and kept, so build the string once and pass the
  * same one at every draw.
  *
+ * `QuadShader` paints the same content where the quad is not draped: on the plane and on the globe
+ * there is no terrain, so `shade` is 1, and the edge of the quad is the edge of its triangles, not
+ * smoothed.
+ *
  * @example A content that fills the quad with one color, darkened by the relief
  * ```ts
  * const solid = (rgba: [number, number, number, number]): QuadDrapeContent => ({

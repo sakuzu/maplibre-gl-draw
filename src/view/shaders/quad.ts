@@ -4,18 +4,20 @@
 /**
  * QuadShader
  *
- * A shader for drawing a textured quad (a quadrilateral).
- * Projects its corners from their offsets from the center of the view (OFFSET_MODE_GLSL), with
- * pitch, roll and the globe, without the precision problems of absolute coordinates.
+ * A shader for drawing a quad (a quadrilateral) with a content: a picture, or whatever a GLSL
+ * function paints at a position in the quad (`QuadDrapeContent`, the same content the analytic
+ * drape paints). Projects its corners from their offsets from the center of the view
+ * (OFFSET_MODE_GLSL), with pitch, roll and the globe, without the precision problems of absolute
+ * coordinates.
  *
  * On frames where terrain (3D) is enabled, a billboard with only four corners
  * lets the terrain poke through from the inside, so the drawing is split into
  * three ways.
  *
  * 1. Analytic drape (the preferred one). `terrain/drape/quad.ts` paints it as
- *    pixels of the ground surface, with the picture as its content
- *    (`QuadImageContent`, the same entry point an extension paints its quads
- *    through, `drawQuadOnTerrain`). Burying and clipping cannot occur by
+ *    pixels of the ground surface, with its content (the same entry point an
+ *    extension paints its quads through, `drawQuadOnTerrain`). Burying and
+ *    clipping cannot occur by
  *    construction, and behind a ridge it is hidden by the depth of the terrain
  *    mesh
  * 2. Subdivision (degraded). On frames where the resources for the analytic
@@ -106,10 +108,7 @@ const QUAD_TEX_COORDS = new Float32Array([
 ]);
 
 /**
- * A picture as the content of a draped quad (one kept by each QuadShader, given the texture of
- * the quad it draws)
- *
- * @internal
+ * A picture as the content of a quad: set the texture of the quad before it is drawn.
  */
 export class QuadImageContent implements QuadDrapeContent {
   readonly glsl = QUAD_IMAGE_GLSL;
@@ -124,14 +123,16 @@ export class QuadImageContent implements QuadDrapeContent {
 }
 
 /**
- * Draws a textured quad on the map, such as a picture pasted onto it, following pitch,
- * globe and terrain.
+ * Draws a quad on the map with a content, following pitch, globe and terrain: a picture pasted
+ * onto it (`QuadImageContent`, the content by default), or the content given.
  *
  * Call `ensureShader` with the shader data of the view being drawn and `setOffsetUniforms` before
  * `draw`. On terrain the quad is painted as ground pixels when possible, otherwise it is
- * subdivided to the terrain mesh.
+ * subdivided to the terrain mesh, where a content is given a shading of 1.
  */
-export class QuadShader {
+export class QuadShader<C extends QuadDrapeContent = QuadImageContent> {
+  /** What the quads show: set what it reads before each `draw` */
+  readonly content: C;
   private gl: WebGL2RenderingContext;
   private program: WebGLProgram | null = null;
   private variantName = '';
@@ -145,14 +146,20 @@ export class QuadShader {
   private projectionUniformManager: ProjectionUniformManager;
 
   // Uniform locations (renderer-specific)
-  private textureLoc: WebGLUniformLocation | null = null;
   private opacityLoc: WebGLUniformLocation | null = null;
+  /** The locations of the uniforms of the content, by their names */
+  private contentUniforms = new Map<string, WebGLUniformLocation | null>();
+  private readonly contentUniform = (name: string): WebGLUniformLocation | null => {
+    let location = this.contentUniforms.get(name);
+    if (location === undefined) {
+      location = this.program ? this.gl.getUniformLocation(this.program, name) : null;
+      this.contentUniforms.set(name, location);
+    }
+    return location;
+  };
 
   // Stores the uniforms for offset mode
   private offsetUniforms: OffsetUniforms | null = null;
-
-  /** The picture as the content of the analytic drape */
-  private imageContent = new QuadImageContent();
 
   // The resources of the subdivision path (terrain present, no analytic drape)
   private gridVao: WebGLVertexArrayObject | null = null;
@@ -175,9 +182,14 @@ export class QuadShader {
    */
   private terrain: TerrainContext | null = null;
 
-  /** @param gl - The WebGL context of the map */
-  constructor(gl: WebGL2RenderingContext) {
+  /**
+   * @param gl - The WebGL context of the map
+   * @param content - What the quads show (`QuadImageContent` when left out). Its GLSL is compiled
+   *   into the program of the quads, and into the one of the analytic drape
+   */
+  constructor(gl: WebGL2RenderingContext, content?: C) {
     this.gl = gl;
+    this.content = content ?? (new QuadImageContent() as QuadDrapeContent as C);
     this.projectionUniformManager = new ProjectionUniformManager(gl);
     this.setupBuffers();
   }
@@ -272,8 +284,8 @@ export class QuadShader {
     this.projectionUniformManager.getLocations(this.program);
 
     // Obtain the renderer-specific uniform locations
-    this.textureLoc = this.gl.getUniformLocation(this.program, 'u_texture');
     this.opacityLoc = this.gl.getUniformLocation(this.program, 'u_opacity');
+    this.contentUniforms.clear();
   }
 
   /**
@@ -296,13 +308,18 @@ void main() {
 
     const fragmentSource = `#version 300 es
 precision highp float;
-uniform sampler2D u_texture;
+precision highp int;
+precision highp sampler2D;
 uniform float u_opacity;
 in vec2 v_texCoord;
 out vec4 fragColor;
+${this.content.glsl}
 void main() {
-    vec4 color = texture(u_texture, v_texCoord);
-    fragColor = vec4(color.rgb, color.a * u_opacity);
+    vec2 uvDx = dFdx(v_texCoord);
+    vec2 uvDy = dFdy(v_texCoord);
+    // A content answers with premultiplied alpha, which the blending of the frame does not take
+    vec4 color = quadDrapeColor(v_texCoord, uvDx, uvDy, 1.0);
+    fragColor = vec4(color.rgb / max(color.a, 1e-4), color.a * u_opacity);
 }`;
 
     return createProgram(this.gl, vertexSource, fragmentSource);
@@ -317,30 +334,21 @@ void main() {
   }
 
   /**
-   * Draws a quad
+   * Draws a quad with the content as it stands
    *
    * @param vertices The four vertices of the quad (WGS84 coordinates [lng, lat])
-   * @param texture The texture
    * @param opacity The opacity
    * @param projectionData MapLibre's ProjectionData
    */
-  draw(
-    vertices: QuadVertices,
-    texture: WebGLTexture,
-    opacity: number,
-    projectionData: ProjectionData,
-  ): void {
+  draw(vertices: QuadVertices, opacity: number, projectionData: ProjectionData): void {
     if (!this.program) return;
 
     // On frames where terrain is enabled, first try the analytic drape (painting it as
     // pixels of the ground surface). If it succeeds, the billboard is not drawn.
     const terrain = this.terrain;
     const terrainOn = terrain !== null && isTerrainElevationActive(terrain);
-    if (terrain && terrainOn) {
-      this.imageContent.texture = texture;
-      const drawn = drawQuadOnTerrainState(terrain, vertices, this.imageContent, opacity);
-      this.imageContent.texture = null;
-      if (drawn) return;
+    if (terrain && terrainOn && drawQuadOnTerrainState(terrain, vertices, this.content, opacity)) {
+      return;
     }
 
     const gl = this.gl;
@@ -353,12 +361,7 @@ void main() {
       gl.uniform1f(this.opacityLoc, opacity);
     }
 
-    // Bind the texture
-    gl.activeTexture(gl.TEXTURE0);
-    gl.bindTexture(gl.TEXTURE_2D, texture);
-    if (this.textureLoc) {
-      gl.uniform1i(this.textureLoc, 0);
-    }
+    this.content.bind(gl, this.contentUniform);
 
     // Compute the relative coordinates on the CPU side (offset mode: computed at 64-bit
     // precision), which the shader's project_position_to_clipspace_from_offset projects
@@ -366,7 +369,6 @@ void main() {
 
     if (terrain && terrainOn && this.drawSubdivided(terrain, vertices, centerLngLat)) {
       gl.bindVertexArray(null);
-      gl.bindTexture(gl.TEXTURE_2D, null);
       return;
     }
 
@@ -380,7 +382,6 @@ void main() {
       this.drawOnGlobe(globeGridOf(terrain, 'fill'), vertices, centerLngLat)
     ) {
       gl.bindVertexArray(null);
-      gl.bindTexture(gl.TEXTURE_2D, null);
       return;
     }
 
@@ -409,7 +410,6 @@ void main() {
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
 
     gl.bindVertexArray(null);
-    gl.bindTexture(gl.TEXTURE_2D, null);
   }
 
   /**

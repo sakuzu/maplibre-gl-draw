@@ -355,6 +355,7 @@ const WEBGL = [
   'ProjectionUniformManager',
   'QUAD_DRAPE_TEXTURE_UNITS',
   'QuadDrapeContent',
+  'QuadImageContent',
   'QuadShader',
   'QuadVertices',
   'rebasedRetainedOrigin',

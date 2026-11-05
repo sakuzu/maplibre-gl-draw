@@ -147,7 +147,9 @@ export class ImageRenderer {
 
     // Draw
     const opacity = (feature.style.imageOpacity ?? 1.0) * opacityFactor;
-    this.quadShader.draw(vertices, textureInfo.texture, opacity, projectionData);
+    this.quadShader.content.texture = textureInfo.texture;
+    this.quadShader.draw(vertices, opacity, projectionData);
+    this.quadShader.content.texture = null;
   }
 
   /**
