@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import { describe, expect, it, vi } from 'vitest';
-import { ProgramCompile } from './helpers.js';
+import { ProgramLink } from './helpers.js';
 
 /** A GL whose program is done, and links, as a test says */
 function glOf(parallel: boolean, state: { done: boolean; linked: boolean }) {
@@ -32,11 +32,11 @@ function glOf(parallel: boolean, state: { done: boolean; linked: boolean }) {
 
 const SOURCE = '#version 300 es\nvoid main() {}';
 
-describe('ProgramCompile', () => {
+describe('ProgramLink', () => {
   it('tells it is done without asking whether it linked, where the context compiles in parallel', () => {
     const state = { done: false, linked: true };
     const gl = glOf(true, state);
-    const compile = new ProgramCompile(gl, SOURCE, SOURCE);
+    const compile = new ProgramLink(gl, SOURCE, SOURCE);
     expect(compile.done).toBe(false);
     state.done = true;
     expect(compile.done).toBe(true);
@@ -47,7 +47,7 @@ describe('ProgramCompile', () => {
 
   it('is done at once without the extension, the wait left to take', () => {
     const gl = glOf(false, { done: false, linked: true });
-    const compile = new ProgramCompile(gl, SOURCE, SOURCE);
+    const compile = new ProgramLink(gl, SOURCE, SOURCE);
     expect(compile.done).toBe(true);
     expect(gl.getProgramParameter).not.toHaveBeenCalled();
     compile.take();
@@ -56,20 +56,20 @@ describe('ProgramCompile', () => {
 
   it('gives the captured outputs before linking', () => {
     const gl = glOf(false, { done: true, linked: true });
-    new ProgramCompile(gl, SOURCE, SOURCE, ['v_out']);
+    new ProgramLink(gl, SOURCE, SOURCE, ['v_out']);
     expect(gl.transformFeedbackVaryings).toHaveBeenCalledWith(expect.anything(), ['v_out'], 4);
   });
 
   it('throws the log when it did not link, and lets go of the program', () => {
     const gl = glOf(false, { done: true, linked: false });
-    const compile = new ProgramCompile(gl, SOURCE, SOURCE);
+    const compile = new ProgramLink(gl, SOURCE, SOURCE);
     expect(() => compile.take()).toThrow('the log');
     expect(gl.deleteProgram).toHaveBeenCalledTimes(1);
   });
 
   it('lets go of a program not taken, once', () => {
     const gl = glOf(false, { done: true, linked: true });
-    const compile = new ProgramCompile(gl, SOURCE, SOURCE);
+    const compile = new ProgramLink(gl, SOURCE, SOURCE);
     compile.dispose();
     compile.dispose();
     expect(gl.deleteProgram).toHaveBeenCalledTimes(1);

@@ -15,7 +15,6 @@ import type { ExtensionKind } from './validate-extension.js';
 import { validateExtension } from './validate-extension.js';
 
 const noop = (): void => {};
-const renderer = { onAdd: noop, draw: noop, onRemove: noop };
 
 /** A value of the right shape for each kind */
 const VALID: Record<ExtensionKind, unknown> = {
@@ -28,8 +27,8 @@ const VALID: Record<ExtensionKind, unknown> = {
     exclusive: { isActive: noop },
   },
   mode: () => ({}),
-  'feature type': { type: 't', geometry: 'Point', renderer, hitPaddingPx: 4 },
-  overlay: { name: 'o', onAdd: noop, draw: noop, onRemove: noop, order: -1 },
+  'feature type': { type: 't', geometry: 'Point', render: noop, hitPaddingPx: 4 },
+  overlay: { name: 'o', draw: noop, order: -1 },
   'snap provider': { name: 's', candidates: () => [] },
   'handle provider': { name: 'h', handles: () => [], onHandleDrag: () => null },
   'companion provider': { name: 'c', has: () => false, draw: noop, hitTest: () => null },
@@ -56,13 +55,12 @@ const INVALID: Array<[ExtensionKind, unknown, string | undefined]> = [
     'exclusive.finish',
   ],
   ['mode', {}, undefined],
-  ['feature type', { type: 't', renderer }, 'geometry'],
-  ['feature type', { type: 't', geometry: 'Circle', renderer }, 'geometry'],
-  ['feature type', { type: 't', geometry: 'Point' }, 'renderer'],
-  ['feature type', { type: 't', geometry: 'Point', renderer: { draw: noop } }, 'renderer.onAdd'],
+  ['feature type', { type: 't', render: noop }, 'geometry'],
+  ['feature type', { type: 't', geometry: 'Circle', render: noop }, 'geometry'],
+  ['feature type', { type: 't', geometry: 'Point', render: 1 }, 'render'],
   ['feature type', { ...(VALID['feature type'] as object), hitPaddingPx: -1 }, 'hitPaddingPx'],
   ['feature type', { ...(VALID['feature type'] as object), handles: [] }, 'handles'],
-  ['overlay', { name: 'o', draw: noop }, 'onAdd'],
+  ['overlay', { name: 'o' }, 'draw'],
   ['overlay', { ...(VALID.overlay as object), order: Number.NaN }, 'order'],
   ['overlay', { ...(VALID.overlay as object), drawVertices: true }, 'drawVertices'],
   ['snap provider', { name: 's' }, 'candidates'],
@@ -126,8 +124,8 @@ describe('draw.extensions refuses a wrong shape', () => {
     const attempts: Array<() => unknown> = [
       () => extensions.plugins.add({ name: 'p' } as never),
       () => extensions.modes.add('m', {} as never),
-      () => extensions.featureTypes.add({ type: 't', geometry: 'Point' } as never),
-      () => extensions.overlays.add({ name: 'o', draw: noop } as never),
+      () => extensions.featureTypes.add({ type: 't', geometry: 'Point', render: 1 } as never),
+      () => extensions.overlays.add({ name: 'o' } as never),
       () => extensions.snapProviders.add({ name: 's' } as never),
       () => extensions.handleProviders.add({ name: 'h', handles: noop } as never),
       () => extensions.companionProviders.add({ name: 'c', has: noop } as never),

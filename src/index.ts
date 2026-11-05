@@ -213,7 +213,6 @@ export { diffItemOrder } from './api/model.js';
 export type {
   ExtensionContext,
   FootprintContext,
-  GpuMemoryRecord,
   HandleContext,
   ModeContext,
   NameGenerator,
@@ -248,7 +247,6 @@ export type {
   SnapProvider,
 } from './api/extension/provider.js';
 export type {
-  FeatureRenderer,
   FillRenderer,
   LineRenderer,
   OverlayRenderer,

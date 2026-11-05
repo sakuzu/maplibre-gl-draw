@@ -72,13 +72,13 @@ function boardFootprint(feature: { geometry: unknown }): Footprint {
   };
 }
 
-const renderer = { onAdd: vi.fn(), draw: vi.fn(), onRemove: vi.fn() };
+const render = vi.fn();
 
 /** The type of the signboards, which declares the fields of its rotation and its size */
 const BOARD: FeatureTypeDefinition = {
   type: 'board',
   geometry: 'Point',
-  renderer,
+  render,
   footprint: boardFootprint,
   transformFields: { angleDegreesKey: ANGLE, scaleKey: SIZE, uniformScale: true },
 };
@@ -87,7 +87,7 @@ const BOARD: FeatureTypeDefinition = {
 const PLAQUE: FeatureTypeDefinition = {
   type: 'plaque',
   geometry: 'Point',
-  renderer,
+  render,
   footprint: boardFootprint,
 };
 
@@ -271,7 +271,7 @@ describe.each(STORE_KINDS)('the handles of a footprint laid on the map over %s',
     view.draw.extensions.featureTypes.add({
       type: 'mark',
       geometry: 'Point',
-      renderer,
+      render,
       footprint: (feature) => ({
         kind: 'screen',
         position: (feature.geometry as GeoJSON.Point).coordinates,
@@ -611,7 +611,7 @@ describe('the fields a custom type declares', () => {
         view.draw.extensions.featureTypes.add({
           type: 'odd',
           geometry: 'Point',
-          renderer,
+          render,
           transformFields: transformFields as never,
         }),
       ).toThrow(DrawError);
@@ -624,7 +624,7 @@ describe('the fields a custom type declares', () => {
       view.draw.extensions.featureTypes.override({
         type: 'Point',
         geometry: 'Point',
-        renderer,
+        render,
         transformFields: { angleDegreesKey: ANGLE },
       }),
     ).toThrow(expect.objectContaining({ code: 'invalid-input' }));

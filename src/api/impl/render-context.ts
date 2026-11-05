@@ -11,11 +11,12 @@
  */
 
 import type { Position } from 'geojson';
-import type { Map as MaplibreMap, ProjectionData } from 'maplibre-gl';
+import type { ProjectionData } from 'maplibre-gl';
 import type {
   EngineOverlayRenderer,
   FeatureTypeRenderer,
   FrameDrawContext,
+  GpuRowsSource,
   LayeredOverlayRenderer,
 } from '../../extension/renderers.js';
 import { parseColor, toColor } from '../../shared/color.js';
@@ -27,14 +28,15 @@ import { bindTerrainState } from '../../view/terrain/binding.js';
 import type { TerrainContext } from '../../view/terrain/context.js';
 import type { ScreenContext, TerrainSurface } from '../extension/context.js';
 import type {
-  FeatureRenderer,
   FillRenderer,
   LineRenderer,
   OverlayRenderer,
   PointRenderer,
   RenderContext,
 } from '../extension/render.js';
+import type { FeatureRenderer, OverlayContext } from '../extension/webgl.js';
 import type { Feature, FeatureStyleResolved } from '../model.js';
+import type { GpuPart } from './gpu-parts.js';
 
 // ============================================================================
 // The surface of the terrain
@@ -132,7 +134,6 @@ function colorOf(
  * @internal
  */
 export function createRenderContext(
-  gl: WebGL2RenderingContext,
   base: FrameDrawContext,
   projection: ProjectionData,
   zoom: number,
@@ -193,7 +194,6 @@ export function createRenderContext(
     },
   };
   const context: RenderContext = {
-    gl,
     screen,
     opacity: base.opacity,
     terrain: surface,
@@ -225,12 +225,6 @@ export interface RenderAdapterDeps {
   appliedStyle(feature: StoredFeature): FeatureStyleResolved;
 }
 
-/** The map and the WebGL context a renderer was added with */
-interface Attachment {
-  map: MaplibreMap;
-  gl: WebGL2RenderingContext;
-}
-
 /**
  * Remembers the last render context, so that the features drawn one after another in a frame
  * share one
@@ -243,23 +237,11 @@ function createContextCache(deps: RenderAdapterDeps) {
     zoom: number;
     context: RenderContext;
   } | null = null;
-  return (
-    gl: WebGL2RenderingContext,
-    base: FrameDrawContext,
-    projection: ProjectionData,
-    zoom: number,
-  ): RenderContext => {
-    if (
-      last &&
-      last.base === base &&
-      last.projection === projection &&
-      last.zoom === zoom &&
-      last.context.gl === gl
-    ) {
+  return (base: FrameDrawContext, projection: ProjectionData, zoom: number): RenderContext => {
+    if (last && last.base === base && last.projection === projection && last.zoom === zoom) {
       return last.context;
     }
     const context = createRenderContext(
-      gl,
       base,
       projection,
       zoom,
@@ -274,47 +256,61 @@ function createContextCache(deps: RenderAdapterDeps) {
 }
 
 /**
- * The renderer of the engine that draws the features of a custom type through a renderer of
- * the contract
+ * The renderer of the engine that draws the features of a custom type with the shared renderers
  *
  * @internal
  */
-export function adaptFeatureRenderer(
+export function adaptFeatureRender(
   type: string,
-  renderer: FeatureRenderer,
+  render: ((feature: Feature, ctx: RenderContext) => void) | undefined,
   deps: RenderAdapterDeps,
 ): FeatureTypeRenderer {
-  let attachment: Attachment | null = null;
   const contextFor = createContextCache(deps);
   return {
     name: type,
-    onAdd(gl, map) {
-      attachment = { map, gl };
-      renderer.onAdd(map, gl);
+    onAdd() {},
+    draw(feature, projectionData, zoom, context) {
+      render?.(feature as unknown as Feature, contextFor(context, projectionData, zoom));
+    },
+    onRemove() {},
+  };
+}
+
+/**
+ * The renderer of the engine that draws the features of a custom type through what a definition
+ * prepared (`ctx.webgl.addFeatureRenderer`): the renderers of the types given one definition share
+ * its resources, and what holds its rows
+ *
+ * @internal
+ */
+export function adaptGpuFeatureRenderer(
+  type: string,
+  part: GpuPart<FeatureRenderer>,
+  deps: RenderAdapterDeps,
+): FeatureTypeRenderer {
+  let attached: WebGL2RenderingContext | null = null;
+  const contextFor = createContextCache(deps);
+  return {
+    name: type,
+    onAdd(gl) {
+      attached = gl;
+      part.attach(gl);
     },
     draw(feature, projectionData, zoom, context) {
-      if (!attachment) return;
-      renderer.draw(
-        feature as unknown as Feature,
-        contextFor(attachment.gl, context, projectionData, zoom),
+      part.draw((renderer) =>
+        renderer.render(feature as unknown as Feature, contextFor(context, projectionData, zoom)),
       );
     },
     onRemove() {
-      if (!attachment) return;
-      const { map, gl } = attachment;
-      attachment = null;
-      renderer.onRemove(map, gl);
+      if (attached) part.detach(attached);
+      attached = null;
     },
-    // The pictures of the points drawn with the rows, as the renderer gives them
-    ...(renderer.rows?.sprites && { rowSprites: renderer.rows.sprites }),
-    // The rows it holds on the GPU, when the renderer holds them so
-    ...(renderer.rows?.gpu && {
-      gpuRows: renderer.rows.gpu,
-      gpuRowsContext(projectionData, zoom, context) {
-        if (!attachment) return null;
-        return contextFor(attachment.gl, context, projectionData, zoom);
-      },
-    }),
+    get gpuRows(): GpuRowsSource | undefined {
+      return part.gpuRows;
+    },
+    gpuRowsContext(projectionData, zoom, context) {
+      return part.drawing ? contextFor(context, projectionData, zoom) : null;
+    },
   };
 }
 
@@ -330,8 +326,7 @@ export function createFrameContexts(
 ): (frame: FrameDrawContext, projection: ProjectionData, zoom: number) => RenderContext | null {
   const contextFor = createContextCache(deps);
   return (frame, projection, zoom) => {
-    const gl = getGl();
-    return gl ? contextFor(gl, frame, projection, zoom) : null;
+    return getGl() ? contextFor(frame, projection, zoom) : null;
   };
 }
 
@@ -352,9 +347,8 @@ export function createCompanionDrawer(
     zoom: number,
     context: FrameDrawContext,
   ): void => {
-    const gl = getGl();
-    if (!gl) return;
-    draw(feature as Feature, contextFor(gl, context, projectionData, zoom));
+    if (!getGl()) return;
+    draw(feature as Feature, contextFor(context, projectionData, zoom));
   };
 }
 
@@ -374,10 +368,19 @@ export interface OverlayHost {
  * @internal
  */
 export interface OverlayStack {
-  /** Adds an overlay; returns the function that removes it */
+  /** Adds an overlay that draws with the shared renderers; returns the function that removes it */
   add(overlay: OverlayRenderer): () => void;
+  /** Adds what a definition prepared; returns the function that removes it */
+  addPart(part: GpuPart<(context: OverlayContext) => void>): () => void;
   /** The WebGL context of the map, while the overlays are on it */
   gl(): WebGL2RenderingContext | null;
+}
+
+/** An overlay of the stack, with the resources it draws with */
+interface StackedOverlay {
+  readonly overlay: OverlayRenderer;
+  readonly part: GpuPart<(context: OverlayContext) => void> | null;
+  readonly seq: number;
 }
 
 /**
@@ -391,16 +394,16 @@ export interface OverlayStack {
  * @internal
  */
 export function createOverlayStack(host: OverlayHost, deps: RenderAdapterDeps): OverlayStack {
-  const overlays: Array<{ overlay: OverlayRenderer; seq: number }> = [];
+  const overlays: StackedOverlay[] = [];
   let seq = 0;
-  let attachment: Attachment | null = null;
+  let attached: WebGL2RenderingContext | null = null;
   let removeRenderers: (() => void) | null = null;
   const contextFor = createContextCache(deps);
+  /** The contexts of the copies of the world, one cache for each so that a frame reuses them */
+  const copyContexts: Array<ReturnType<typeof createContextCache>> = [];
 
-  const sorted = (): OverlayRenderer[] =>
-    [...overlays]
-      .sort((a, b) => (a.overlay.order ?? 0) - (b.overlay.order ?? 0) || a.seq - b.seq)
-      .map((entry) => entry.overlay);
+  const sorted = (): StackedOverlay[] =>
+    [...overlays].sort((a, b) => (a.overlay.order ?? 0) - (b.overlay.order ?? 0) || a.seq - b.seq);
 
   const each = (
     projectionData: ProjectionData,
@@ -408,24 +411,41 @@ export function createOverlayStack(host: OverlayHost, deps: RenderAdapterDeps): 
     context: FrameDrawContext,
     call: (overlay: OverlayRenderer, ctx: RenderContext) => void,
   ): void => {
-    if (!attachment) return;
-    const ctx = contextFor(attachment.gl, context, projectionData, zoom);
-    for (const overlay of sorted()) {
+    if (!attached) return;
+    const ctx = contextFor(context, projectionData, zoom);
+    for (const { overlay } of sorted()) {
       call(overlay, ctx);
-      applyDrawBlendState(attachment.gl);
+      applyDrawBlendState(attached);
     }
   };
 
-  const onAdd = (gl: WebGL2RenderingContext, map: MaplibreMap): void => {
-    if (attachment) return;
-    attachment = { gl, map };
-    for (const overlay of sorted()) overlay.onAdd(map, gl);
+  /** The context of an overlay of a definition: the one of the frame, with the copies of the world */
+  const overlayContext = (
+    ctx: RenderContext,
+    projectionData: ProjectionData,
+    zoom: number,
+    frame: FrameDrawContext,
+  ): OverlayContext => {
+    const copies = frame.copyProjections ?? [projectionData];
+    const worldCopies = copies.map((projection, index) => {
+      if (projection === projectionData) return ctx;
+      copyContexts[index] ??= createContextCache(deps);
+      return copyContexts[index](frame, projection, zoom);
+    });
+    (ctx as { worldCopies?: readonly RenderContext[] }).worldCopies = worldCopies;
+    return ctx as OverlayContext;
+  };
+
+  const onAdd = (gl: WebGL2RenderingContext): void => {
+    if (attached) return;
+    attached = gl;
+    for (const { part } of sorted()) part?.attach(gl);
   };
   const onRemove = (): void => {
-    if (!attachment) return;
-    const { map, gl } = attachment;
-    attachment = null;
-    for (const overlay of sorted()) overlay.onRemove(map, gl);
+    if (!attached) return;
+    const gl = attached;
+    attached = null;
+    for (const { part } of sorted()) part?.detach(gl);
   };
 
   const above: EngineOverlayRenderer = {
@@ -433,7 +453,9 @@ export function createOverlayStack(host: OverlayHost, deps: RenderAdapterDeps): 
     order: 'overlay',
     onAdd,
     draw(projectionData, zoom, context) {
-      each(projectionData, zoom, context, (overlay, ctx) => overlay.draw(ctx));
+      each(projectionData, zoom, context, (overlay, ctx) => {
+        overlay.draw(overlayContext(ctx, projectionData, zoom, context));
+      });
     },
     onRemove,
     hasPendingWork: () => overlays.some((entry) => entry.overlay.hasPendingWork?.() === true),
@@ -453,35 +475,49 @@ export function createOverlayStack(host: OverlayHost, deps: RenderAdapterDeps): 
     },
   };
 
-  return {
-    add(overlay) {
-      const entry = { overlay, seq: seq++ };
-      overlays.push(entry);
-      if (!removeRenderers) {
-        const removeAbove = host.addOverlay(above);
-        const removePerLayer = host.addOverlay(perLayer);
-        removeRenderers = () => {
-          removePerLayer();
-          removeAbove();
-        };
-      } else if (attachment) {
-        overlay.onAdd(attachment.map, attachment.gl);
-      }
-      return () => {
-        const index = overlays.indexOf(entry);
-        if (index === -1) return;
-        if (overlays.length === 1 && removeRenderers) {
-          // The last one goes with the renderers of the engine, which release it
-          const remove = removeRenderers;
-          removeRenderers = null;
-          remove();
-          overlays.splice(overlays.indexOf(entry), 1);
-          return;
-        }
-        overlays.splice(index, 1);
-        if (attachment) overlay.onRemove(attachment.map, attachment.gl);
+  const addEntry = (entry: StackedOverlay): (() => void) => {
+    overlays.push(entry);
+    if (!removeRenderers) {
+      const removeAbove = host.addOverlay(above);
+      const removePerLayer = host.addOverlay(perLayer);
+      removeRenderers = () => {
+        removePerLayer();
+        removeAbove();
       };
+    } else if (attached) {
+      entry.part?.attach(attached);
+    }
+    return () => {
+      const index = overlays.indexOf(entry);
+      if (index === -1) return;
+      if (overlays.length === 1 && removeRenderers) {
+        // The last one goes with the renderers of the engine, which release it
+        const remove = removeRenderers;
+        removeRenderers = null;
+        remove();
+        overlays.splice(overlays.indexOf(entry), 1);
+        return;
+      }
+      overlays.splice(index, 1);
+      if (attached) entry.part?.detach(attached);
+    };
+  };
+
+  return {
+    add: (overlay) => addEntry({ overlay, part: null, seq: seq++ }),
+    addPart(part) {
+      const entry: StackedOverlay = {
+        part,
+        seq: seq++,
+        overlay: {
+          name: `gpu-overlay:${seq}`,
+          draw(ctx) {
+            part.draw((drawing) => drawing(ctx as OverlayContext));
+          },
+        },
+      };
+      return addEntry(entry);
     },
-    gl: () => attachment?.gl ?? null,
+    gl: () => attached,
   };
 }

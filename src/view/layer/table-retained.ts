@@ -32,7 +32,7 @@
  * of a chunk of many rows are found in an index of their extents.
  *
  * In the drawing in one draw, the rows of a type whose renderer holds its rows on the GPU
- * (`GpuRows`) make a chunk of their own, which is given its rows once, within the budget, and
+ * (`GpuRowBuffer`) make a chunk of their own, which is given its rows once, within the budget, and
  * draws any range of them in one call, without walking them. The rows it does not hold (not yet,
  * or because it refused them) and a range it does not draw are drawn at once, in their place, so
  * the order never changes. What it holds is the memory of the extension: a chunk is only told to
@@ -60,8 +60,8 @@
  */
 
 import type { ProjectionData } from 'maplibre-gl';
-import type { GpuRowChange, GpuRows, GpuRowsSource } from '../../api/extension/render.js';
-import type { FeatureTypeRenderer } from '../../extension/renderers.js';
+import type { GpuRowBuffer } from '../../api/extension/webgl.js';
+import type { FeatureTypeRenderer, GpuRowsSource, HeldGpuRows } from '../../extension/renderers.js';
 import type { FeatureTablesInternals } from '../../feature-table/feature-tables.js';
 import {
   geometryAt,
@@ -93,6 +93,7 @@ import {
 import type { GroupVersion, GroupVersionReceiver } from '../../feature-table/versions.js';
 import { applyEnuEdit, type EnuEdit } from '../../geometry/enu-transforms.js';
 import type { SelectionUIConfig } from '../../shared/config/selection.js';
+import { DrawError } from '../../shared/draw-error.js';
 import type { ScreenScaleFrame } from '../../shared/math/screen-scale.js';
 import type { BoundingBox, Feature, Layer } from '../../shared/types/model.js';
 import type { PixelRatioInput } from '../../shared/utils/pixel-ratio.js';
@@ -105,6 +106,7 @@ import {
 } from '../../store/transform-roles.js';
 import { buildPackedRTree, type PackedRTree, searchPackedRTree } from '../../table/packed-rtree.js';
 import type { FeatureCompanionRegistry } from '../feature-companion.js';
+import { GpuResources } from '../gpu.js';
 import type { GpuLedger } from '../gpu-ledger.js';
 import {
   layerDrawFactors,
@@ -118,12 +120,10 @@ import { type RetainedPolygonBatch, ROW_POLYGON_STRIDE } from '../renderers/poly
 import type { RetainedRendererSet } from '../renderers/retained.js';
 import {
   createRowStateTexture,
-  deleteRowStateTexture,
   movedBackViews,
   movedViewsOf,
   type RowStateBinding,
   type RowStateTexture,
-  recordRowStateTexture,
   uploadRowState,
 } from '../renderers/row-state.js';
 import { drawnRowText, type RowsCopies } from '../renderers/rows/rows-copies.js';
@@ -435,7 +435,7 @@ interface ExtensionRowsChunk extends AtOnceRows {
   /** What makes what holds its rows */
   readonly source: GpuRowsSource;
   /** What holds its rows (null until a row is given to it, and once it is released) */
-  held: GpuRows | null;
+  held: HeldGpuRows | null;
   /** The first rows of the chunk it holds */
   taken: number;
   /** `gpuRowsReleases` when it last refused rows (-1 when it did not) */
@@ -744,6 +744,8 @@ export class TableLayerRenderer {
   };
   /** The times what holds rows of an extension was released (rows refused are given again then) */
   private gpuRowsReleases = 0;
+  /** What the textures of the state of the rows are allocated with */
+  private readonly rowStateGpu: GpuResources;
   /** The frame from which a chunk that released nothing looks again for one to release */
   private nextGpuRowsLook = 0;
   private readonly scratch: { parts: number[]; coords: Float32Array } = {
@@ -806,6 +808,11 @@ export class TableLayerRenderer {
 
   constructor(private readonly options: TableLayerRendererOptions) {
     this.drape = new TableDrape(options.ledger);
+    this.rowStateGpu = new GpuResources({
+      gl: options.gl,
+      ledger: options.ledger,
+      owner: 'row-state',
+    });
     this.versionBudgetWhileMovingMs = options.versionBudgetWhileMovingMs ?? 0;
     this.rowExtents = new RowExtents(options.extensions);
     const stateCopies = options.keepCopies ? new WeakMap<RowStateTexture, Uint8Array>() : null;
@@ -2172,7 +2179,7 @@ export class TableLayerRenderer {
           if (chunk.type === 'extension') chunk.readingGeneration = -1;
           // What an extension holds is written in the same frame; a row it cannot hold as written
           // is drawn from the delta
-          if (chunk.type === 'extension' && !this.writeExtensionRow(chunk, group, row, write)) {
+          if (chunk.type === 'extension' && !this.writeExtensionRow(chunk, group, row)) {
             stats.rebuilt++;
             return false;
           }
@@ -2280,20 +2287,10 @@ export class TableLayerRenderer {
    *
    * @returns false when it cannot hold the row as written
    */
-  private writeExtensionRow(
-    chunk: ExtensionRowsChunk,
-    group: RowGroup,
-    row: number,
-    write: PendingWrite,
-  ): boolean {
+  private writeExtensionRow(chunk: ExtensionRowsChunk, group: RowGroup, row: number): boolean {
     const index = row - chunk.range.from;
     if (!chunk.held || index >= chunk.taken) return true;
-    const change: GpuRowChange = {
-      geometry: (write.what & ROW_WRITE_GEOMETRY) !== 0,
-      style: (write.what & ROW_WRITE_STYLE) !== 0,
-      values: (write.what & ROW_WRITE_VALUES) !== 0,
-    };
-    if (!chunk.held.update(index, group.data.handles[row], change)) return false;
+    if (!chunk.held.buffer.update(index, group.data.handles[row])) return false;
     this.writeStats.inPlace++;
     return true;
   }
@@ -2734,12 +2731,23 @@ export class TableLayerRenderer {
     );
   }
 
+  /** A texture of the state of rows (null on a lost context: it is made in a later frame) */
+  private createStateTexture(rows: number): RowStateTexture | null {
+    try {
+      return createRowStateTexture(this.rowStateGpu, rows);
+    } catch (error) {
+      if (error instanceof DrawError) return null;
+      throw error;
+    }
+  }
+
   /** Releases what holds the rows of a chunk (the rows are given again when it is in view) */
   private releaseGpuRows(chunk: ExtensionRowsChunk): void {
     chunk.waiting = true;
     chunk.refusedAt = -1;
     chunk.taken = 0;
     if (!chunk.held) return;
+    // All that the buffer made goes here: it has nothing to release by itself
     chunk.held.release();
     chunk.held = null;
     this.gpuRowsReleases++;
@@ -2760,8 +2768,7 @@ export class TableLayerRenderer {
     this.releaseChunks(groupCache, 'by-kind');
     this.releaseChunks(groupCache, 'one-draw');
     if (groupCache.texture) {
-      this.options.ledger.release(groupCache.texture.texture);
-      deleteRowStateTexture(this.options.gl, groupCache.texture);
+      this.rowStateGpu.release(groupCache.texture.texture);
       groupCache.texture = null;
       groupCache.binding = null;
     }
@@ -2812,9 +2819,7 @@ export class TableLayerRenderer {
       for (const groupCache of caches) {
         const group = groupCache.group;
         if (!groupCache.texture) {
-          const created = createRowStateTexture(this.options.gl, group.data.length);
-          if (created) recordRowStateTexture(this.options.ledger, created);
-          groupCache.texture = created;
+          groupCache.texture = this.createStateTexture(group.data.length);
           groupCache.uploadedVersion = -1;
         }
         const texture = groupCache.texture;
@@ -2849,7 +2854,7 @@ export class TableLayerRenderer {
       chunk.empty = rowsHidden(group, chunk.range);
       if (chunk.empty) this.releaseGpuRows(chunk);
       if (!chunk.held || chunk.taken === 0) continue;
-      chunk.held.setStates(0, group.gpuState.subarray(from, from + chunk.taken));
+      chunk.held.buffer.setStates(0, group.gpuState.subarray(from, from + chunk.taken));
     }
   }
 
@@ -3673,7 +3678,7 @@ export class TableLayerRenderer {
     if (!held || !ctx) return false;
     const run = (pass.renderers as RetainedRendererSet).run;
     run?.end();
-    const drawn = held.draw(from - chunk.range.from, to - chunk.range.from, ctx);
+    const drawn = held.buffer.render(from - chunk.range.from, to - chunk.range.from, ctx);
     // Re-establish the blend state that the external renderer may have rewritten
     deps.restoreBlendState?.();
     run?.begin();
@@ -3749,7 +3754,6 @@ export class TableLayerRenderer {
   ): void {
     const { from, to } = chunk.range;
     const count = to - from;
-    if (chunk.held?.hasPendingWork()) this.pending = true;
     if (chunk.taken >= count || !settled) return;
     if (chunk.refusedAt !== -1) {
       if (chunk.refusedAt === this.gpuRowsReleases) {
@@ -3763,30 +3767,42 @@ export class TableLayerRenderer {
     const budget = this.budget as ChunkBuildBudget;
     (this.layers.get(this.pass.layerId) as LayerCache).holdsGpuRows = true;
     while (chunk.taken < count && budget.canStep()) {
-      const held = chunk.held ?? chunk.source.create(view);
-      chunk.held = held;
-      let took: number;
+      let refused = false;
       try {
-        took = budget.step((deadline) => this.addRows(chunk, held, group, deadline));
+        const held = chunk.held ?? chunk.source.create(view);
+        chunk.held = held;
+        budget.step((deadline) => {
+          const before = chunk.taken;
+          const given = this.addRows(chunk, held.buffer, group, deadline);
+          // Back before its time with rows left, it refused them
+          refused = chunk.taken - before < given && performance.now() < deadline;
+        });
       } catch (error) {
         // Nothing of a range that failed stays: its rows are drawn one by one from here
         this.releaseGpuRows(chunk);
         chunk.refusedAt = this.gpuRowsReleases;
+        if (isRefusal(error)) {
+          this.releaseIdleGpuRows();
+          return;
+        }
         throw error;
       }
-      if (took > 0) continue;
-      if (held.hasPendingWork()) break;
+      if (!refused) continue;
       chunk.refusedAt = this.gpuRowsReleases;
       this.releaseIdleGpuRows();
       return;
     }
-    if (chunk.taken < count || chunk.held?.hasPendingWork()) this.pending = true;
+    if (chunk.taken < count) this.pending = true;
   }
 
-  /** Gives what holds the rows of a chunk the rows it does not hold yet, and their state */
+  /**
+   * Gives what holds the rows of a chunk the rows it does not hold yet, and their state
+   *
+   * @returns The number of rows given
+   */
   private addRows(
     chunk: ExtensionRowsChunk,
-    held: GpuRows,
+    held: GpuRowBuffer,
     group: RowGroup,
     deadline: number,
   ): number {
@@ -3796,7 +3812,7 @@ export class TableLayerRenderer {
     const count = Math.max(0, Math.min(took, to - first));
     if (count > 0) held.setStates(chunk.taken, group.gpuState.subarray(first, first + count));
     chunk.taken += count;
-    return count;
+    return to - first;
   }
 
   /**
@@ -4128,7 +4144,6 @@ export class TableLayerRenderer {
       if (b <= a) continue;
       if (chunk.type === 'extension') {
         breakAt(a, b);
-        if (chunk.held?.hasPendingWork()) this.pending = true;
         const held = Math.min(b, chunk.range.from + chunk.taken);
         let start = a;
         if (held > a && this.drawHeldRows(chunk, a, held)) {
@@ -4261,7 +4276,7 @@ export class TableLayerRenderer {
           // A delta is small: given its rows at once
           cache.holdsGpuRows = true;
           chunk.held = chunk.source.create(view);
-          this.addRows(chunk, chunk.held, group, Number.POSITIVE_INFINITY);
+          this.addRows(chunk, chunk.held.buffer, group, Number.POSITIVE_INFINITY);
         }
         if (chunk.type !== 'rows') continue;
         const origin = normalizeOrigin(chunkOrigin(chunk));
@@ -4395,6 +4410,11 @@ function rowsHidden(group: RowGroup, range: OrderedChunkRange): boolean {
 }
 
 /** The renderer of a custom type whose rows are held by a source */
+/** Whether a range was refused room on the GPU: its rows are drawn one by one, and it is no error */
+function isRefusal(error: unknown): boolean {
+  return error instanceof DrawError && error.code === 'too-large';
+}
+
 function rendererOfGpuRows(
   renderers: ReadonlyMap<string, unknown>,
   source: GpuRowsSource,

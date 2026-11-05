@@ -32,7 +32,7 @@ import {
   launchWebGlBrowser,
   openMaplibrePage,
 } from '../../test-support/webgl-page.js';
-import { browserTimeout } from '../../test-utils.js';
+import { browserTimeout, gpuOf } from '../../test-utils.js';
 import { GpuLedger } from '../gpu-ledger.js';
 import { AnchoredOutlineRenderer } from '../renderers/anchored-outline.js';
 import { SDFLineRenderer } from '../renderers/line/sdf-line.js';
@@ -240,7 +240,7 @@ function recordPrograms(shaderData: ShaderData): RecordedProgram[] {
     // The variant whose polygons and lines read the ground seen at each pixel (the drape band)
     expect(renderer.groundReady).toBe(true);
   });
-  withLabel('QuadShader', () => new QuadShader(gl, new GpuLedger()).ensureShader(shaderData));
+  withLabel('QuadShader', () => new QuadShader(gpuOf(gl)).ensureShader(shaderData));
   withLabel('DrapeRenderer', () => {
     expect(new DrapeRenderer(gl, new GpuLedger()).ensure(shaderData, 16)).toBe(true);
   });

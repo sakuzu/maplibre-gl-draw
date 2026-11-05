@@ -105,15 +105,9 @@ export { ITEM_GROUP, ITEM_ROW } from '../api/tables.js';
 export { listSelectedRows } from '../store/bulk-selection.js';
 export type { DraggedRows } from '../feature-table/dragged-rows.js';
 
-// What the extensions answer and draw from the rows
+// What the extensions answer from the rows
 export type { FeatureTypeRows } from '../api/extension/feature-type.js';
 export type { CompanionProviderRows } from '../api/extension/provider.js';
-export type {
-  FeatureRendererRows,
-  GpuRowChange,
-  GpuRows,
-  GpuRowsSource,
-} from '../api/extension/render.js';
 
 // Pictures of points drawn with the rows
 export type {

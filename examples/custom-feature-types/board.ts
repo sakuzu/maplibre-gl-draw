@@ -123,27 +123,23 @@ export const boardType: FeatureTypeDefinition = {
   // The rule of the layer colors the fill (fillColor), though the geometry is a Point, whose
   // channel would be the marker (pointColor)
   styleRuleChannel: 'fill',
-  // The renderer draws the look the library puts together (the fill colored by the rule, the
-  // style of the board over it) at the corners of the footprint
-  renderer: {
-    onAdd() {},
-    draw(feature, ctx) {
-      const look = ctx.appliedStyle(feature);
-      const { topLeft, topRight, bottomRight, bottomLeft } = boardFootprint(feature).corners;
-      const ring = [topLeft, topRight, bottomRight, bottomLeft, topLeft];
-      ctx.fill.draw([ring], { color: look.fillColor, opacity: look.fillOpacity * ctx.opacity });
-      ctx.line.draw(
-        ring,
-        {
-          width: look.strokeWidth,
-          color: look.strokeColor,
-          opacity: look.strokeOpacity * ctx.opacity,
-          lineStyle: look.lineStyle,
-        },
-        { closed: true, referenceZoom: zoomOf(feature) },
-      );
-    },
-    onRemove() {},
+  // It draws the look the library puts together (the fill colored by the rule, the style of the
+  // board over it) at the corners of the footprint
+  render(feature, ctx) {
+    const look = ctx.appliedStyle(feature);
+    const { topLeft, topRight, bottomRight, bottomLeft } = boardFootprint(feature).corners;
+    const ring = [topLeft, topRight, bottomRight, bottomLeft, topLeft];
+    ctx.fill.draw([ring], { color: look.fillColor, opacity: look.fillOpacity * ctx.opacity });
+    ctx.line.draw(
+      ring,
+      {
+        width: look.strokeWidth,
+        color: look.strokeColor,
+        opacity: look.strokeOpacity * ctx.opacity,
+        lineStyle: look.lineStyle,
+      },
+      { closed: true, referenceZoom: zoomOf(feature) },
+    );
   },
   // A click inside the board selects it
   hitTest(feature, ctx) {

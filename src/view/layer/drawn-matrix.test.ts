@@ -487,7 +487,7 @@ function customType(type: string): FeatureTypeDefinition {
   return {
     type,
     geometry: 'Point',
-    renderer: { onAdd: () => {}, draw: () => {}, onRemove: () => {} },
+    render: vi.fn(),
     bbox: (feature) => {
       const [x, y] = (feature.geometry as Point).coordinates as [number, number];
       return [x - 0.002, y - 0.001, x + 0.002, y + 0.001];

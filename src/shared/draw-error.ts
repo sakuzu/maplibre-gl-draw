@@ -16,13 +16,15 @@
  * - `unsupported-format`: a source that cannot be read
  * - `invalid-state`: a call that is not possible in the current situation, such as deleting
  *   a feature while it is being drawn, or any call on an instance that was destroyed
+ * - `too-large`: what was asked for does not fit under a limit
  */
 export type DrawErrorCode =
   | 'not-found'
   | 'already-exists'
   | 'invalid-input'
   | 'unsupported-format'
-  | 'invalid-state';
+  | 'invalid-state'
+  | 'too-large';
 
 /**
  * The error a method throws when an argument is wrong; the method has changed nothing.
@@ -32,6 +34,11 @@ export class DrawError extends Error {
   readonly code: DrawErrorCode;
   /** More about the cause, such as the ID that was not found */
   readonly details?: unknown;
+  /**
+   * For `too-large`: true when the same call can succeed later, once others hold less, and false
+   * when it cannot (it is over the part of the limit of the caller)
+   */
+  readonly retryable?: boolean;
 
   /**
    * Creates the error
@@ -39,11 +46,13 @@ export class DrawError extends Error {
    * @param code - Why it is thrown
    * @param message - A description in English, for logs
    * @param details - More about the cause
+   * @param retryable - Whether the same call can succeed later
    */
-  constructor(code: DrawErrorCode, message: string, details?: unknown) {
+  constructor(code: DrawErrorCode, message: string, details?: unknown, retryable?: boolean) {
     super(message);
     this.name = 'DrawError';
     this.code = code;
     if (details !== undefined) this.details = details;
+    if (retryable !== undefined) this.retryable = retryable;
   }
 }

@@ -73,7 +73,6 @@ function renderContextOver(terrain: TerrainContext): RenderContext {
     opacity: 1,
   } as unknown as FrameDrawContext;
   return createRenderContext(
-    {} as WebGL2RenderingContext,
     base,
     PROJECTION,
     14,

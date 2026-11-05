@@ -18,8 +18,8 @@
  * A row without a geometry draws nothing and joins the run it is in.
  */
 
-import type { GpuRowsSource } from '../../api/extension/render.js';
 import type { LayerTableView } from '../../api/tables.js';
+import type { GpuRowsSource } from '../../extension/renderers.js';
 import type { RowGroup } from '../../feature-table/layer-table.js';
 import { geometryAt } from '../../feature-table/layer-table.js';
 import { rowHasGeometry, rowType } from '../../feature-table/row-read.js';
@@ -37,7 +37,7 @@ const CIRCLE_VERTICES = 65;
 /**
  * The kind of a chunk of rows: a kind of the runs of the features (`RunKind`), `rows`, a chunk of
  * the drawing in one draw that holds rows of every kind, or `extension`, rows an extension holds
- * on the GPU and draws (`GpuRows`)
+ * on the GPU and draws (`GpuRowBuffer`)
  *
  * @internal
  */

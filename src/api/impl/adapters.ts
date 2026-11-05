@@ -85,7 +85,7 @@ import { toPosition, toScreenPoint } from './contexts.js';
 import { toPointerEvent } from './input.js';
 import type { RenderAdapterDeps } from './render-context.js';
 import {
-  adaptFeatureRenderer,
+  adaptFeatureRender,
   createCompanionDrawer,
   createFrameContexts,
 } from './render-context.js';
@@ -451,7 +451,12 @@ export function installFeatureType(
   const appliesToRow = appliesTo && rows ? rows.appliesTo.bind(rows) : undefined;
 
   try {
-    const renderer = adaptFeatureRenderer(type, definition.renderer, deps);
+    const render = definition.render?.bind(definition);
+    const renderer = {
+      ...adaptFeatureRender(type, render, deps),
+      // The pictures of the points drawn with the rows, as the definition gives them
+      ...(definition.rows?.sprites && { rowSprites: definition.rows.sprites }),
+    };
     add(
       deps.customLayer.registerFeatureRenderer(
         type,

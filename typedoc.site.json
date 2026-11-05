@@ -42,6 +42,7 @@
     "The order of the rows",
     "Build row blocks in a Worker",
     "Rows written as blocks named by their content, and their manifests (Tabane)",
+    "What a plugin draws with, and what it holds on the GPU",
     "Shaders and projection",
     "Blending and billboards",
     "Quads",

@@ -84,7 +84,7 @@ describe('a custom feature type', () => {
     geometry: 'Point',
     // The hit test reaches 30 px, beyond the click tolerance
     hitPaddingPx: 30,
-    renderer: { onAdd: vi.fn(), draw: vi.fn(), onRemove: vi.fn() },
+    render: vi.fn(),
     hitTest: vi.fn((feature: Feature, ctx) => {
       const [x, y] = ctx.screen.project((feature.geometry as GeoJSON.Point).coordinates);
       const distancePx = Math.hypot(x - ctx.point[0], y - ctx.point[1]);
@@ -129,17 +129,12 @@ describe('a custom feature type', () => {
     const adapter = registered as unknown as FeatureTypeRenderer;
     const map = {} as MapLibreMap;
     adapter.onAdd(GL, map);
-    expect(definition.renderer.onAdd).toHaveBeenCalledWith(map, GL);
 
     const base = baseContext();
     const feature = engine.context.store.getFeature('p1');
     adapter.draw(feature as never, PROJECTION, 12, base);
-    const [drawn, ctx] = definition.renderer.draw.mock.calls[0] as unknown as [
-      Feature,
-      RenderContext,
-    ];
+    const [drawn, ctx] = definition.render.mock.calls[0] as unknown as [Feature, RenderContext];
     expect(drawn.id).toBe('p1');
-    expect(ctx.gl).toBe(GL);
     // The screen of the frame is the screen of the extensions, read while the frame is drawn
     let screen: ScreenContext | null = null;
     engine.extensions.collections.plugins.add({
@@ -247,7 +242,6 @@ describe('a custom feature type', () => {
     );
 
     adapter.onRemove();
-    expect(definition.renderer.onRemove).toHaveBeenCalledWith(map, GL);
   });
 
   it('is hit by its hit test, which selects it in select mode', () => {
@@ -329,7 +323,7 @@ describe('the pictures of the points of a custom feature type', () => {
       type: 'Point',
       geometry: 'Point',
       appliesTo: () => true,
-      renderer: { onAdd: vi.fn(), draw: vi.fn(), onRemove: vi.fn(), rows: { sprites: rowSprites } },
+      rows: { appliesTo: () => true, sprites: rowSprites },
     });
     expect((registered as unknown as FeatureTypeRenderer).rowSprites).toBe(rowSprites);
     engine.destroy();
@@ -346,19 +340,18 @@ describe('the answers of a custom feature type and a companion provider from the
       return register(type, r);
     });
     const appliesToRow = vi.fn(() => true);
-    const gpu = { create: vi.fn() };
     engine.extensions.collections.featureTypes.override({
       type: 'Point',
       geometry: 'Point',
       appliesTo: () => true,
       rows: { appliesTo: appliesToRow },
-      renderer: { onAdd: vi.fn(), draw: vi.fn(), onRemove: vi.fn(), rows: { gpu } },
+      render: vi.fn(),
     });
     engine.extensions.collections.featureTypes.add({
       type: 'pin',
       geometry: 'Point',
       rows: { appliesTo: appliesToRow },
-      renderer: { onAdd: vi.fn(), draw: vi.fn(), onRemove: vi.fn() },
+      render: vi.fn(),
     });
     const [point, pin] = registered;
     const view = {} as LayerTableView;
@@ -366,22 +359,18 @@ describe('the answers of a custom feature type and a companion provider from the
     expect(appliesToRow).toHaveBeenCalledWith(view, 3);
     // A type added takes every feature of its type: it is not asked
     expect(pin.appliesToRow).toBeUndefined();
-    expect(point.gpuRows).toBe(gpu);
-    expect(typeof point.gpuRowsContext).toBe('function');
-    expect(pin.gpuRows).toBeUndefined();
-    expect(pin.gpuRowsContext).toBeUndefined();
     engine.destroy();
   });
 
   it('refuses the rows of a type, of a renderer or of a companion provider of the wrong shape', () => {
     const engine = engineWithDraw();
-    const renderer = { onAdd: vi.fn(), draw: vi.fn(), onRemove: vi.fn() };
+    const render = vi.fn();
     expect(() =>
       engine.extensions.collections.featureTypes.add({
         type: 'pin',
         geometry: 'Point',
         rows: { appliesTo: true as never },
-        renderer,
+        render,
       }),
     ).toThrow(/rows\.appliesTo/);
     expect(() =>
@@ -389,16 +378,9 @@ describe('the answers of a custom feature type and a companion provider from the
         type: 'pin',
         geometry: 'Point',
         rows: true as never,
-        renderer,
+        render,
       }),
     ).toThrow(/rows/);
-    expect(() =>
-      engine.extensions.collections.featureTypes.add({
-        type: 'pin',
-        geometry: 'Point',
-        renderer: { ...renderer, rows: { gpu: {} as never } },
-      }),
-    ).toThrow(/renderer\.rows\.gpu\.create/);
     expect(() =>
       engine.extensions.collections.companionProviders.add({
         name: 'rings',
@@ -421,7 +403,7 @@ describe('the footprint of a custom feature type', () => {
     locked: false,
     visible: true,
   };
-  const renderer = { onAdd: vi.fn(), draw: vi.fn(), onRemove: vi.fn() };
+  const render = vi.fn();
   /** A diamond 0.2 degrees around the first position of a feature, laid on the map */
   const diamond = (feature: Feature): Footprint => {
     const geometry = feature.geometry as GeoJSON.Point | GeoJSON.Polygon;
@@ -464,7 +446,7 @@ describe('the footprint of a custom feature type', () => {
     engine.extensions.collections.featureTypes.add({
       type: 'shape',
       geometry: 'Point',
-      renderer,
+      render,
       footprint: (feature) => diamond(feature),
     });
     const { extensions } = engine.context.selectionScope;
@@ -486,7 +468,7 @@ describe('the footprint of a custom feature type', () => {
     engine.extensions.collections.featureTypes.add({
       type: 'shape',
       geometry: 'Polygon',
-      renderer,
+      render,
       footprint: () => ({ kind: 'screen', position: [1.5, 1.5], halfWidthPx: 20, halfHeightPx: 8 }),
     });
     const { extensions } = engine.context.selectionScope;
@@ -510,7 +492,7 @@ describe('the footprint of a custom feature type', () => {
     engine.extensions.collections.featureTypes.add({
       type: 'shape',
       geometry: 'Polygon',
-      renderer,
+      render,
       footprint: (_feature, ctx) => {
         contexts.push(ctx);
         return null;
@@ -532,7 +514,7 @@ describe('the footprint of a custom feature type', () => {
     engine.extensions.collections.featureTypes.add({
       type: 'shape',
       geometry: 'Polygon',
-      renderer,
+      render,
       footprint: () => given as Footprint | null,
     });
     const { extensions } = engine.context.selectionScope;
@@ -567,7 +549,7 @@ describe('the footprint of a custom feature type', () => {
       engine.extensions.collections.featureTypes.add({
         type: 'wrong',
         geometry: 'Point',
-        renderer,
+        render,
         footprint: [] as never,
       }),
     ).toThrow(/footprint/);
@@ -581,11 +563,11 @@ describe('the extent of a custom feature type', () => {
     const draw = createDrawOnEngine(engine);
     engine.enterDefaultMode();
     let reach = 2;
-    const renderer = { onAdd: vi.fn(), draw: vi.fn(), onRemove: vi.fn() };
+    const render = vi.fn();
     const remove = draw.extensions.featureTypes.add({
       type: 'wide',
       geometry: 'Point',
-      renderer,
+      render,
       // A disc of `reach` degrees drawn around the point
       bbox(feature) {
         const [x, y] = (feature.geometry as GeoJSON.Point).coordinates;
@@ -634,7 +616,7 @@ describe('the extent of a custom feature type', () => {
       engine.extensions.collections.featureTypes.add({
         type: 'wrong',
         geometry: 'Point',
-        renderer: { onAdd: vi.fn(), draw: vi.fn(), onRemove: vi.fn() },
+        render: vi.fn(),
         bbox: [0, 0, 1, 1] as never,
       }),
     ).toThrow(/bbox/);
@@ -644,7 +626,7 @@ describe('the extent of a custom feature type', () => {
 
 describe('the start and the end of a handle drag', () => {
   const handle: Handle = { id: 'h', position: [1, 1], kind: 'resize' };
-  const renderer = { onAdd: vi.fn(), draw: vi.fn(), onRemove: vi.fn() };
+  const render = vi.fn();
 
   function setUp() {
     const engine = engineWithDraw();
@@ -730,7 +712,7 @@ describe('the start and the end of a handle drag', () => {
     engine.extensions.collections.featureTypes.add({
       type: 'grip',
       geometry: 'Point',
-      renderer,
+      render,
       handles: () => [handle],
       onHandleDrag: () => ({ properties: { moved: true } }),
       onHandleDragStart,
@@ -815,10 +797,8 @@ describe('the overlays', () => {
     const overlay = (name: string, order?: number) => ({
       name,
       ...(order !== undefined && { order }),
-      onAdd: () => calls.push(`add ${name}`),
       draw: (ctx: RenderContext) => calls.push(`draw ${name} ${ctx.screen.zoom}`),
       drawForLayer: (layerId: string) => calls.push(`layer ${name} ${layerId}`),
-      onRemove: () => calls.push(`remove ${name}`),
     });
     const removeA = stack.add(overlay('a', 1));
     const removeB = stack.add(overlay('b'));
@@ -841,10 +821,8 @@ describe('the overlays', () => {
       'layer a l1',
     ]);
 
-    calls.length = 0;
     removeB();
     removeC();
-    expect(calls).toEqual(['remove b', 'remove c']);
     expect(removed).toEqual([]);
     removeA();
     expect(removed).toHaveLength(2);

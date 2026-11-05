@@ -97,7 +97,7 @@ const COMPLETION_STATUS_KHR = 0x91b1;
  * context has `KHR_parallel_shader_compile`, `done` tells without waiting; without it, it is true
  * at once and `take` waits.
  */
-export class ProgramCompile {
+export class ProgramLink {
   readonly #gl: WebGL2RenderingContext;
   readonly #parallel: boolean;
   readonly #vertex: WebGLShader;

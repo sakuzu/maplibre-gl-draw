@@ -19,6 +19,7 @@
  * byte of the row of each of its instances (`rowStateOf`), so what it draws moves as the rows do.
  */
 
+import type { Gpu, GpuContext } from '../../api/extension/webgl.js';
 import { type DraggedRows, draggedRowMotionsOf } from '../../feature-table/dragged-rows.js';
 import { MOVE_SETS } from '../../feature-table/row-state.js';
 import type { RowHandle } from '../../feature-table/types.js';
@@ -29,7 +30,6 @@ import {
   moveEnuPosition,
 } from '../../geometry/enu-transforms.js';
 import type { BoundingBox } from '../../store/types.js';
-import { type GpuLedger, giveStorage, textureBytes } from '../gpu-ledger.js';
 import { getRenderFrame } from '../shaders/frame.js';
 import type { RetainedDrawRun } from './draw-run.js';
 import {
@@ -228,7 +228,7 @@ export class RowStateUniforms {
    * @param program - The program that includes `ROW_STATE_GLSL`
    */
   constructor(
-    private readonly gl: WebGL2RenderingContext,
+    private readonly gl: GpuContext,
     program: WebGLProgram,
   ) {
     this.state = gl.getUniformLocation(program, 'u_row_state');
@@ -428,37 +428,22 @@ export function bindRowState(
 /**
  * Creates a texture of the state of rows, every byte 0 (shown, not moving).
  *
- * @param gl - The WebGL context of the map
+ * @param gpu - What it is allocated with
  * @param rows - The number of rows
- * @returns The texture, or null when it cannot be created
+ * @returns The texture
+ * @throws `DrawError` as `Gpu.texture` does
  */
-export function createRowStateTexture(
-  gl: WebGL2RenderingContext,
-  rows: number,
-): RowStateTexture | null {
+export function createRowStateTexture(gpu: Gpu, rows: number): RowStateTexture {
+  const { gl } = gpu;
   const width = ROW_STATE_WIDTH;
   const height = Math.max(1, Math.ceil(rows / width));
-  const texture = gl.createTexture();
-  if (!texture) return null;
-  gl.bindTexture(gl.TEXTURE_2D, texture);
-  giveStorage(gl, texture, () => gl.texStorage2D(gl.TEXTURE_2D, 1, gl.R8UI, width, height));
+  const texture = gpu.texture(width, height, gl.R8UI);
   // An integer texture is read with texelFetch and must not be filtered
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
   return { texture, width, height, rows };
-}
-
-/**
- * Records a texture of the state of rows in the ledger of an instance (the textures of the
- * extensions are their own)
- *
- * @internal
- */
-export function recordRowStateTexture(ledger: GpuLedger, state: RowStateTexture): void {
-  const { texture, width, height } = state;
-  ledger.record(texture, 'row-state', 'texture', textureBytes(width, height, 1));
 }
 
 /**
@@ -477,7 +462,7 @@ export function recordRowStateTexture(ledger: GpuLedger, state: RowStateTexture)
  *   omitted)
  */
 export function uploadRowState(
-  gl: WebGL2RenderingContext,
+  gl: GpuContext,
   texture: RowStateTexture,
   state: Uint8Array,
   scratch?: Uint8Array,
@@ -501,16 +486,6 @@ export function uploadRowState(
     data,
   );
   gl.pixelStorei(gl.UNPACK_ALIGNMENT, alignment);
-}
-
-/**
- * Deletes a texture of the state of rows.
- *
- * @param gl - The WebGL context of the map
- * @param texture - The texture
- */
-export function deleteRowStateTexture(gl: WebGL2RenderingContext, texture: RowStateTexture): void {
-  gl.deleteTexture(texture.texture);
 }
 
 /**

@@ -27,6 +27,7 @@
  */
 
 import type { ProjectionData } from 'maplibre-gl';
+import type { GpuContext } from '../../../api/extension/webgl.js';
 import type { GpuLedger, GpuLedgerOwner } from '../../gpu-ledger.js';
 import { setDepthTestEnabled } from '../../layer/depth-state.js';
 import type { ShaderData } from '../../shaders/helpers.js';
@@ -156,7 +157,7 @@ export interface QuadDrapeContent {
    * @param uniform - The location of a uniform `glsl` declares, by its name (null for one the
    *   program does not use)
    */
-  bind(gl: WebGL2RenderingContext, uniform: (name: string) => WebGLUniformLocation | null): void;
+  bind(gl: GpuContext, uniform: (name: string) => WebGLUniformLocation | null): void;
 }
 
 /**

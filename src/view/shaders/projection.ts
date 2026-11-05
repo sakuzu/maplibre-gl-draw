@@ -12,6 +12,7 @@
 import type { ProjectionData } from 'maplibre-gl';
 import type { TerrainSurface } from '../../api/extension/context.js';
 import type { RenderContext } from '../../api/extension/render.js';
+import type { GpuContext } from '../../api/extension/webgl.js';
 import { terrainStateOf } from '../terrain/binding.js';
 import type { TerrainContext } from '../terrain/context.js';
 import type { TerrainShadeLight } from '../terrain/shade.js';
@@ -135,7 +136,7 @@ function createMemo(): ProjectionUniformMemo {
  * A class that manages the projection-related uniforms in one place
  */
 export class ProjectionUniformManager {
-  private gl: WebGL2RenderingContext;
+  private gl: GpuContext;
   private locations: ProjectionUniformLocations | null = null;
   private memo: ProjectionUniformMemo = createMemo();
   /** The uniforms of the center [0, 0], for the draws given none */
@@ -166,7 +167,7 @@ export class ProjectionUniformManager {
    * @param options - `surface`: whether the renderer draws things stuck to the ground (areas
    *   and lines), which lie flat on the views that draw them flat
    */
-  constructor(gl: WebGL2RenderingContext, options: { surface?: boolean } = {}) {
+  constructor(gl: GpuContext, options: { surface?: boolean } = {}) {
     this.gl = gl;
     this.surface = options.surface === true;
   }

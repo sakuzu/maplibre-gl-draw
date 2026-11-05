@@ -162,12 +162,12 @@ into two layers: layer 1 is the main entry (with `/geometry` and
   rows fills (`StoreView.tables`, `Store.applyRows`, `DocumentChange.rows`,
   `DocumentChange.opened`, and the rows moved at once of
   `ItemOrderChange`), and the field `rows` through which an extension
-  answers and draws from the rows (of `FeatureTypeDefinition`,
-  `FeatureRenderer` and `CompanionProvider`), carry the `@experimental`
-  tag, and their types are exported by `/kasane` only.
+  answers from the rows (of `FeatureTypeDefinition` and
+  `CompanionProvider`), carry the `@experimental` tag, and their types are
+  exported by `/kasane` only.
 - Layer 2, the building blocks for custom shaders (`src/webgl/index.ts`).
   Parts tied to the shaders and the terrain drawing of core: the GLSL
-  snippet and the projection uniforms, `createProgram`, `QuadShader`, the
+  snippet and the projection uniforms, `Gpu`, `QuadShader`, the
   blend and billboard helpers, the input types of the shared line
   renderer, the dash and terrain subdivision rules, and
   `PointHitTestStrategy`. Pure math that is not tied to them (oriented

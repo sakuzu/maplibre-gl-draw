@@ -27,7 +27,7 @@ writing it. Its changes are listed after those of 3.0.0.
   drawn from a smaller picture until there is room for the whole one, and a
   table of the drape that does not fit leaves the frame without the analytic
   drape
-- `QuadShader` takes the ledger it records in, `new QuadShader(gl, ctx.gpu,
+- `QuadShader` is made with what it allocates with, `new QuadShader(gpu,
   content)`: nothing of the library allocates on the GPU outside a ledger
 - A draw instance gives back what it holds whatever way an allocation ends: a
   build of the renderers or a program that fails leaves nothing behind, and the
@@ -36,28 +36,23 @@ writing it. Its changes are listed after those of 3.0.0.
   the page left behind when they were destroyed, which is deleted then
 - `rendering.gpuLimitBytes`: the most bytes an instance holds on the GPU
   outside the rows, of the library and of the extensions together (64 MB
-  when it is left out). `ctx.gpu.heldBytes` and `ctx.gpu.limitBytes` tell an
-  extension where it stands, and `ctx.gpu.record` takes whether what it records
-  holds rows. `draw.debug.gpu()` tells `rowBytes`.
+  when it is left out). `gpu.memory()` tells an extension where it stands, and
+  `draw.debug.gpu()` tells `rowBytes`.
 - `/webgl` draws marks of a shader of its own as the library draws its
   points: `TERRAIN_OCCLUSION_GLSL` fades the marks the terrain hides, the
   test of `occlusionOpacity` run in the vertex shader on the DEM atlas
   (its uniforms written by `TerrainOcclusionUniforms`); `ROW_STATE_GLSL`
   moves what is drawn with the rows being dragged as their points move,
   with a texture of the state of the rows (`createRowStateTexture`,
-  `uploadRowState`, `deleteRowStateTexture`, `RowStateTexture`, the unit
+  `uploadRowState`, `RowStateTexture`, the unit
   `ROW_STATE_TEXTURE_UNIT`), the byte of a row being dragged
   (`rowStateOf`), the moves of the drag (`rowStateBindingOf`,
   `RowStateBinding`) and the uniforms (`RowStateUniforms`).
   What is kept on the GPU as offsets from an origin follows the rule of
   the library: `rebasedRetainedOrigin`, `retainedOriginErrorPx`,
   `RETAINED_ORIGIN_TOLERANCE_PX`, and `rowStateMovedViews` for the rows
-  moved on the GPU. An extension records what it allocates in the ledger
-  of the instance (`ExtensionContext.gpu`, `GpuMemoryRecord`), and
-  `draw.memory.get()` and `draw.debug.gpu()` tell the most bytes held at
-  once and the allocations made. `createProgram` takes the outputs a transform feedback
-  captures, and `ProgramCompile` links a program a frame need not wait
-  for (`KHR_parallel_shader_compile`).
+  moved on the GPU. `draw.memory.get()` and `draw.debug.gpu()` tell the most
+  bytes held at once and the allocations made.
 - The entry `@sakuzu/maplibre-gl-draw/kasane`, experimental (it may
   change in a minor release): `createTableStore`, an in-memory store that
   holds its features as rows, and `createFeatureTables`, the tables for a
@@ -135,12 +130,12 @@ writing it. Its changes are listed after those of 3.0.0.
   `CompanionProvider.rows.has` (`CompanionProviderRows`) with
   `classifyKeys`, the keys of `properties` its answers read, so that a
   write of other attributes of a row asks them nothing again, and
-  `FeatureRenderer.rows` (`FeatureRendererRows`) with `gpu`, which holds
-  the rows of a type on the GPU and draws any range of them in one call,
-  in the order of the layer and within a limit of its own (`GpuRowsSource`,
-  `GpuRows`, `GpuRowChange`), and `sprites`, the pictures of the points a
-  renderer draws, drawn with the rows of their layer (the points of a type
-  that declares a scale field are drawn by `draw`). `ROW_STATE_GLSL` of
+  `FeatureTypeRows.sprites`, the pictures of the points a type draws, drawn
+  with the rows of their layer (the points of a type that declares a scale
+  field are drawn by `render`). `rows` of what `prepare` returns holds the
+  rows of a type on the GPU and draws any range of them in one call, in the
+  order of the layer (`GpuRowBuffer`, `GpuRowBufferFactory` of `/webgl`).
+  `ROW_STATE_GLSL` of
   `/webgl` reads what the drag of a row does to its angle and its size
   (`rowStateRotation`, `rowStateScale`). In `/kasane` too,
   `listSelectedRows`, `DraggedRows` (read with
@@ -333,6 +328,34 @@ writing it. Its changes are listed after those of 3.0.0.
 
 ### Changed in 3.0.0
 
+- What an extension holds on the GPU is allocated by the library. A type
+  draws with the shared renderers through `render(feature, ctx)` of its
+  definition, in place of `renderer` (`onAdd`, `draw`, `onRemove`), and
+  `OverlayRenderer` has no `onAdd` and no `onRemove`: it holds nothing on the
+  GPU. What draws with WebGL of its own goes through `ctx.webgl` of a plugin
+  (`Webgl`), with `addFeatureRenderer(type, { gpuShare, prepare })` and
+  `addOverlay({ gpuShare, prepare })`. `prepare(gpu)` returns what draws (a
+  `FeatureRenderer`, or a function of an `OverlayContext`), runs again with a
+  new `gpu` after a lost context, and has no counterpart: the library gives
+  everything back on removal, on `draw.destroy()`, on a lost context and on
+  an exception from `prepare` or from drawing. `RenderContext.gl` is `gpu.gl`
+  (`GpuContext`, without the calls that make or delete resources), and
+  everything is made with `gpu.buffer`, `gpu.texture`, `gpu.vertexArray`,
+  `gpu.transformFeedback`, `gpu.fence`, `gpu.program` and `gpu.compile`, which
+  links a program a frame need not wait for (`KHR_parallel_shader_compile`)
+  and takes the outputs a transform feedback captures. `gpu.release` gives
+  something back early, `gpu.memory()` tells what it holds, and `gpu.signal`
+  stops when the resources end. What follows the number of features goes through
+  `gpu.rows`, out of the share, under what the device has left (`draw.memory`).
+  `gpuShare` is a fraction of
+  `rendering.gpuLimitBytes`, above 0 and at most 1, and the shares added may
+  sum to at most 0.9. A refusal is a `DrawError` with the new code `too-large`
+  (`retryable` when only the room of the whole instance is short), a `gpu`
+  that stopped throws `invalid-state`, and a program that does not link throws
+  `invalid-input` with the log in the message. The types are in `/webgl`
+  (`Gpu`, `GpuContext`, `GpuDefinition`, `FeatureRenderer`, `OverlayContext`,
+  `ProgramCompile`, `RowRef`), which no longer exports `createProgram`, and
+  `createRowStateTexture(gpu, rows)` returns the texture or throws.
 - While a selected feature is dragged as a whole, its handles follow it:
   the resize, rotate and vertex handles of the library and the handles of
   an extension (`resize` drawn by the library, `custom` drawn by
@@ -654,6 +677,11 @@ writing it. Its changes are listed after those of 3.0.0.
 | `ctx.line.draw(..., { createdZoom })` | `{ referenceZoom }` |
 | `setUniforms(projection, zoom, offset)` | `setUniforms(projection, offset)` |
 | `QuadShader.draw(..., zoom)` | `draw(vertices, opacity, projection)` |
+| `FeatureTypeDefinition.renderer` | `render`, `ctx.webgl.addFeatureRenderer` |
+| `OverlayRenderer.onAdd`, `onRemove` | `ctx.webgl.addOverlay` |
+| `RenderContext.gl` | `gpu.gl` |
+| `createProgram` of `/webgl` | `gpu.program` |
+| `new QuadShader(gl, ...)` | `new QuadShader(gpu, content)` |
 
 ### Added in 2.3.0
 

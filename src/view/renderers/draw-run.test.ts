@@ -18,6 +18,7 @@
 
 import type { Map as MapLibreMap, ProjectionData } from 'maplibre-gl';
 import { describe, expect, it } from 'vitest';
+import { gpuOf } from '../../test-utils.js';
 import { GpuLedger } from '../gpu-ledger.js';
 import { beginRenderFrame } from '../shaders/frame.js';
 import type { ShaderData } from '../shaders/helpers.js';
@@ -84,7 +85,7 @@ const projection = (): ProjectionData =>
   }) as unknown as ProjectionData;
 
 function binding(mock: Mock, rows: number, translations = new Float32Array(8)): RowStateBinding {
-  const texture = createRowStateTexture(mock.gl, rows);
+  const texture = createRowStateTexture(gpuOf(mock.gl), rows);
   if (!texture) throw new Error('texture');
   return { texture, translations };
 }

@@ -11,10 +11,11 @@
  * (`gpu-ledger-coverage.test.ts` counts the allocations of a GL and compares them with it).
  *
  * It is a lower bound of what the page uses: what maplibre allocates (the tiles of the base
- * map, the elevation data) is not in it, nor what an extension allocates with the context it
- * does not record (`ExtensionContext.gpu`), nor what the driver keeps after a delete until it
- * frees it: these are numbers kept in JavaScript, which say what was asked and given back, not
- * when the driver gave the memory back.
+ * map, the elevation data) is not in it, nor what the driver keeps after a delete until it frees
+ * it: these are numbers kept in JavaScript, which say what was asked and given back, not when the
+ * driver gave the memory back. An extension allocates through a `Gpu` (`gpu.ts`), which records
+ * here what it makes, the objects that hold no bytes of their own (a program, a vertex array, a
+ * transform feedback, a sync) included, so that one left behind is found as well.
  *
  * An allocation has an owner, and the ledger belongs to one draw instance: `record` takes no
  * object without an owner. What a part fails to give back is found when the instance is destroyed
@@ -47,14 +48,22 @@ const ROW_OWNERS: ReadonlySet<string> = new Set([
 /** What the ledgers of the page found left behind so far, for `leakedBytes` */
 const leaked = { bytes: 0, objects: 0 };
 
-/** A buffer or a texture, as the ledger keys it */
+/** A GL object, as the ledger keys it */
 type GpuObject = object;
 
 /**
- * What an allocation is: a buffer, a texture, or a render buffer (counted with the textures: it
- * holds the texels of a target as a texture does)
+ * What an allocation is: a buffer, a texture, a render buffer (counted with the textures: it holds
+ * the texels of a target as a texture does), or an object that holds no bytes of its own, recorded
+ * under its owner so that it is given back as well
  */
-export type GpuObjectKind = 'buffer' | 'texture' | 'renderbuffer';
+export type GpuObjectKind =
+  | 'buffer'
+  | 'texture'
+  | 'renderbuffer'
+  | 'vertex-array'
+  | 'transform-feedback'
+  | 'sync'
+  | 'program';
 
 /** One allocation */
 interface Entry {
@@ -77,6 +86,8 @@ export interface GpuMemorySnapshot {
   readonly textureBytes: number;
   /** The bytes of what is drawn of the features of the document, in proportion to them */
   readonly rowBytes: number;
+  /** The GL objects recorded, those without bytes of their own too */
+  readonly objects: number;
   /** The bytes per renderer */
   readonly byOwner: Readonly<Record<string, number>>;
   /** The most bytes held at once since the ledger was made */
@@ -115,8 +126,8 @@ export class GpuLedger {
   private allocations = 0;
 
   /**
-   * Records the size of a buffer, a texture or a render buffer (a later record of the same object
-   * replaces the earlier one, as `bufferData` replaces the storage of a buffer)
+   * Records a GL object with its size (a later record of the same object replaces the earlier one,
+   * as `bufferData` replaces the storage of a buffer)
    *
    * @param rows - Whether it holds rows (the owners of core tell it when it is left out)
    */
@@ -133,11 +144,11 @@ export class GpuLedger {
     const entry: Entry = { owner, kind, bytes: Math.max(0, bytes), rows };
     this.entries.set(object, entry);
     this.add(entry, 1);
-    this.allocations++;
+    if (entry.bytes > 0) this.allocations++;
     this.peakBytes = Math.max(this.peakBytes, this.bufferBytes + this.textureBytes);
   }
 
-  /** Takes a deleted buffer, texture or render buffer out */
+  /** Takes a deleted GL object out */
   release(object: GpuObject | null): void {
     if (!object) return;
     const entry = this.entries.get(object);
@@ -156,7 +167,7 @@ export class GpuLedger {
     const owners = new Map<string, number>();
     for (const entry of this.entries.values()) {
       if (entry.kind === 'buffer') buffers += entry.bytes;
-      else textures += entry.bytes;
+      else if (entry.bytes > 0) textures += entry.bytes;
       if (entry.rows) rows += entry.bytes;
       owners.set(entry.owner, (owners.get(entry.owner) ?? 0) + entry.bytes);
     }
@@ -217,6 +228,11 @@ export class GpuLedger {
     return Math.max(0, this.limitBytes - this.outsideRowBytes);
   }
 
+  /** The bytes of the rows, out of the limit of the instance */
+  get rowBytesHeld(): number {
+    return this.rowBytes;
+  }
+
   /** The bytes held outside the rows, which the limit of the instance holds */
   get outsideRowBytes(): number {
     return this.bufferBytes + this.textureBytes - this.rowBytes;
@@ -233,6 +249,7 @@ export class GpuLedger {
       bufferBytes: this.bufferBytes,
       textureBytes: this.textureBytes,
       rowBytes: this.rowBytes,
+      objects: this.entries.size,
       byOwner: Object.freeze(byOwner),
       peakBytes: this.peakBytes,
       leakedBytes: leaked.bytes,
@@ -267,11 +284,31 @@ export function giveStorage(
   }
 }
 
-/** Deletes a buffer, a texture or a render buffer */
-function deleteObject(gl: WebGL2RenderingContext, object: GpuObject, kind: GpuObjectKind): void {
-  if (kind === 'buffer') gl.deleteBuffer(object as WebGLBuffer);
-  else if (kind === 'texture') gl.deleteTexture(object as WebGLTexture);
-  else gl.deleteRenderbuffer(object as WebGLRenderbuffer);
+/** The call that deletes each kind of object */
+const DELETE: Readonly<
+  Record<GpuObjectKind, (gl: WebGL2RenderingContext, object: GpuObject) => void>
+> = {
+  buffer: (gl, object) => gl.deleteBuffer(object as WebGLBuffer),
+  texture: (gl, object) => gl.deleteTexture(object as WebGLTexture),
+  renderbuffer: (gl, object) => gl.deleteRenderbuffer(object as WebGLRenderbuffer),
+  'vertex-array': (gl, object) => gl.deleteVertexArray(object as WebGLVertexArrayObject),
+  'transform-feedback': (gl, object) =>
+    gl.deleteTransformFeedback(object as WebGLTransformFeedback),
+  sync: (gl, object) => gl.deleteSync(object as WebGLSync),
+  program: (gl, object) => gl.deleteProgram(object as WebGLProgram),
+};
+
+/**
+ * Deletes a GL object
+ *
+ * @internal
+ */
+export function deleteObject(
+  gl: WebGL2RenderingContext,
+  object: GpuObject,
+  kind: GpuObjectKind,
+): void {
+  DELETE[kind](gl, object);
 }
 
 /**

@@ -194,7 +194,7 @@ function register(target: Draw, extras: readonly Extras[]): void {
       type: 'Point',
       geometry: 'Point',
       appliesTo: (feature) => feature.properties.picture !== undefined,
-      renderer: { onAdd() {}, draw() {}, onRemove() {} },
+      render() {},
       hitPaddingPx: 70,
       hitTest: () => null,
     });

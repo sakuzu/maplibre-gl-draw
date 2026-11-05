@@ -8,7 +8,7 @@
  */
 
 import { describe, expect, it, vi } from 'vitest';
-import { GpuLedger } from '../gpu-ledger.js';
+import { gpuOf } from '../../test-utils.js';
 import type { QuadDrapeContent } from '../terrain/drape/quad.js';
 import { computeQuadVertices, QuadImageContent, QuadShader } from './quad.js';
 
@@ -50,7 +50,7 @@ describe('a quad with a content', () => {
   it('compiles the GLSL of the content into its fragment shader', () => {
     const { gl, sources } = fakeGL();
     const content: QuadDrapeContent = { glsl: FILL_GLSL, bind: vi.fn() };
-    new QuadShader(gl, new GpuLedger(), content).ensureShader(SHADER);
+    new QuadShader(gpuOf(gl), content).ensureShader(SHADER);
     const fragment = sources.find((source) => source.includes('fragColor'));
     expect(fragment).toContain('uniform vec4 u_fill_color');
     expect(fragment).toContain('quadDrapeColor(v_texCoord, uvDx, uvDy, 1.0)');
@@ -63,7 +63,7 @@ describe('a quad with a content', () => {
       glsl: FILL_GLSL,
       bind: (_gl, uniform) => seen.push(uniform('u_fill_color')),
     };
-    const shader = new QuadShader(gl, new GpuLedger(), content);
+    const shader = new QuadShader(gpuOf(gl), content);
     shader.ensureShader(SHADER);
     shader.draw(VERTICES, 1, PROJECTION);
     shader.draw(VERTICES, 0.5, PROJECTION);
@@ -73,7 +73,7 @@ describe('a quad with a content', () => {
 
   it('allocates nothing for what it shows when it draws', () => {
     const { gl, calls } = fakeGL();
-    const shader = new QuadShader(gl, new GpuLedger(), { glsl: FILL_GLSL, bind: vi.fn() });
+    const shader = new QuadShader(gpuOf(gl), { glsl: FILL_GLSL, bind: vi.fn() });
     shader.ensureShader(SHADER);
     calls.length = 0;
     shader.draw(VERTICES, 1, PROJECTION);
@@ -82,7 +82,7 @@ describe('a quad with a content', () => {
 
   it('shows a picture by default, from the texture its content is given', () => {
     const { gl, calls } = fakeGL();
-    const shader = new QuadShader(gl, new GpuLedger());
+    const shader = new QuadShader<QuadImageContent>(gpuOf(gl));
     expect(shader.content).toBeInstanceOf(QuadImageContent);
     shader.ensureShader(SHADER);
     shader.content.texture = {} as WebGLTexture;

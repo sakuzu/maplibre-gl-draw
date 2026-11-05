@@ -44,13 +44,13 @@ function engineWithDraw(): Engine {
   return engine;
 }
 
-const renderer = { onAdd() {}, draw() {}, onRemove() {} };
+const render = (): void => {};
 
 function featureType(type: string): FeatureTypeDefinition {
-  return { type, geometry: 'Point', renderer };
+  return { type, geometry: 'Point', render };
 }
 function overlay(name: string): OverlayRenderer {
-  return { name, onAdd() {}, draw() {}, onRemove() {} };
+  return { name, draw() {} };
 }
 function snapProvider(name: string): SnapProvider {
   return { name, candidates: () => [] };
@@ -253,7 +253,7 @@ describe('extensions.featureTypes.override', () => {
     const restore = instance.extensions.featureTypes.override({
       type: 'Polygon',
       geometry: 'Polygon',
-      renderer,
+      render,
       hitTest,
     });
     expect(registered).toEqual(['Polygon']);
@@ -277,7 +277,7 @@ describe('extensions.featureTypes.override', () => {
 
   it('keeps the built-in hit test for a definition without one, and is removed by name', () => {
     const { instance, removed, selected, input } = setUp();
-    instance.extensions.featureTypes.override({ type: 'Polygon', geometry: 'Polygon', renderer });
+    instance.extensions.featureTypes.override({ type: 'Polygon', geometry: 'Polygon', render });
     input.click([0.5, 0.5]);
     expect(selected()).toHaveLength(1);
     expect(instance.extensions.featureTypes.remove('Polygon')).toBe(true);
@@ -290,7 +290,7 @@ describe('extensions.featureTypes.override', () => {
     instance.extensions.plugins.add(
       plugin('overrider', {
         onAdd(ctx: PluginContext) {
-          ctx.extensions.featureTypes.override({ type: 'Circle', geometry: 'Point', renderer });
+          ctx.extensions.featureTypes.override({ type: 'Circle', geometry: 'Point', render });
         },
       }),
     );
@@ -308,7 +308,7 @@ describe('extensions.featureTypes.override', () => {
     instance.extensions.featureTypes.override({
       type: 'Point',
       geometry: 'Point',
-      renderer,
+      render,
       footprint: (feature) => {
         const [x, y] = (feature.geometry as GeoJSON.Point).coordinates;
         return {
@@ -325,7 +325,7 @@ describe('extensions.featureTypes.override', () => {
     instance.extensions.featureTypes.override({
       type: 'Image',
       geometry: 'Point',
-      renderer,
+      render,
       footprint: (feature) => ({
         kind: 'screen',
         position: (feature.geometry as GeoJSON.Point).coordinates,
@@ -374,7 +374,7 @@ describe('extensions.featureTypes.override', () => {
     instance.extensions.featureTypes.override({
       type: 'Polygon',
       geometry: 'Polygon',
-      renderer,
+      render,
       appliesTo: (feature) => feature.properties.kind === 'special',
       hitTest,
       footprint: (feature) => ({
@@ -455,7 +455,7 @@ describe('extensions.featureTypes.override', () => {
     instance.extensions.featureTypes.add({
       type: 'pin',
       geometry: 'Point',
-      renderer,
+      render,
       appliesTo: () => false,
       hitTest,
     });
@@ -470,11 +470,11 @@ describe('extensions.featureTypes.override', () => {
     expect(errorOf(() => types.override(featureType('pin'))).code).toBe('invalid-input');
     expect(errorOf(() => types.override(featureType('MultiPoint'))).code).toBe('invalid-input');
     expect(
-      errorOf(() => types.override({ type: 'Circle', geometry: 'Polygon', renderer })).code,
+      errorOf(() => types.override({ type: 'Circle', geometry: 'Polygon', render })).code,
     ).toBe('invalid-input');
-    expect(errorOf(() => types.override({ type: 'Image', geometry: 'Point' } as never)).code).toBe(
-      'invalid-input',
-    );
+    expect(
+      errorOf(() => types.override({ type: 'Image', geometry: 'Point', render: 1 } as never)).code,
+    ).toBe('invalid-input');
     types.override(featureType('Image'));
     expect(errorOf(() => types.override(featureType('Image'))).code).toBe('already-exists');
     expect(types.has('Image')).toBe(true);
@@ -1209,7 +1209,7 @@ describe('the extensions of two draw instances', () => {
   const board: FeatureTypeDefinition = {
     type: 'Board',
     geometry: 'Polygon',
-    renderer: { onAdd() {}, draw() {}, onRemove() {} },
+    render: vi.fn(),
     footprint: (feature) => ({
       kind: 'screen',
       position: (feature.geometry as GeoJSON.Polygon).coordinates[0][0],

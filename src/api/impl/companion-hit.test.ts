@@ -204,7 +204,7 @@ describe('a Point type that takes only some points', () => {
       type: 'Point',
       geometry: 'Point',
       appliesTo: (feature) => feature.properties.picture === true,
-      renderer: { onAdd() {}, draw() {}, onRemove() {} },
+      render() {},
       hitTest(feature, ctx) {
         tolerances.push(ctx.tolerancePx);
         const [x, y] = ctx.screen.project((feature.geometry as Point).coordinates);
@@ -359,7 +359,7 @@ describe('the hits the library gives out', () => {
     draw.extensions.featureTypes.add({
       type: 'pin',
       geometry: 'Point',
-      renderer: { onAdd() {}, draw() {}, onRemove() {} },
+      render() {},
       hitTest(feature, ctx) {
         const [x, y] = ctx.screen.project((feature.geometry as Point).coordinates);
         const distancePx = Math.hypot(ctx.point[0] - x, ctx.point[1] - y);

@@ -8,8 +8,9 @@ draw のインスタンスは、組み込みの型 (`Point`、`LineString`、
 あります。1 つは地物の上に描く重ね描きです。残りは提供者で、どの型にも
 吸着の候補、ハンドル、付き物を足します。
 
-描画器は地図の WebGL の文脈を受け取りますが、たいていはライブラリーの
-共有の描画器で描き、シェーダーを書きません。
+型はライブラリーの共有の描画器で描き、シェーダーを書きません。WebGL を
+自分で使うものは、プラグインを通します
+([自分のシェーダー](#自分のシェーダー))。
 
 ## 最小のコード
 
@@ -26,17 +27,13 @@ function verticesOf(feature: Feature): Position[] {
 const route: FeatureTypeDefinition = {
   type: 'Route',
   geometry: 'LineString',
-  renderer: {
-    onAdd() {},
-    draw(feature, ctx) {
-      ctx.line.draw(verticesOf(feature), {
-        width: 3,
-        color: '#e64d1a',
-        opacity: ctx.opacity,
-        lineStyle: 'dashed',
-      });
-    },
-    onRemove() {},
+  render(feature, ctx) {
+    ctx.line.draw(verticesOf(feature), {
+      width: 3,
+      color: '#e64d1a',
+      opacity: ctx.opacity,
+      lineStyle: 'dashed',
+    });
   },
 };
 
@@ -82,10 +79,10 @@ GeoJSON の図形であるふつうの地物です。ほかの地物と同じよ
 型の名前を文書に書いておいてください
 ([自動の名前](drawing.ja.md#ほかの言語の名前))。
 
-描画器は、地物ごとに自分の値を要することがよくあります。印の大きさ
+型は、地物ごとに自分の値を要することがよくあります。印の大きさ
 などです。そうした値は、ライブラリーが決めていない鍵で `style` か
 `properties` に置きます。値はそのまま保存、書き出し、読み込みされ、
-ライブラリーは検査しません。描画器は、値を使う前に確かめてください。
+ライブラリーは検査しません。`render` は、値を使う前に確かめてください。
 `style` の鍵は、宣言のマージで TypeScript に伝えます。
 
 ```ts
@@ -98,22 +95,12 @@ declare module '@sakuzu/maplibre-gl-draw' {
 const ends = feature.style.routeEnds === 'dot' ? 'dot' : 'none';
 ```
 
-## 描画器
+## 描き方
 
-`FeatureRenderer` は 3 つのメソッドを持ちます。引数の順は MapLibre の
-カスタムレイヤーと同じです。
-
-- `onAdd(map, gl)` は、描画器が地図に載るときに呼ばれます。自分の GL の
-  オブジェクトを持つ描画器は、ここで作ります
-- `draw(feature, ctx)` は、その型の見えている地物ごとに 1 回、重なりの
-  順のその地物の位置で呼ばれます。描いたものは、後ろの地物と前の地物の
-  間に入ります
-- `onRemove(map, gl)` は、`onAdd` で作ったものを解放します
-
-`onAdd` と `onRemove` は 2 回以上来ることがあります。描画は壊されて
-作り直されることがあるためです。地図がスタイルを変えたときや、WebGL の
-文脈が失われて戻ったときです。`onRemove` の後にもう一度 `onAdd` を受けられるように
-してください。
+定義の `render(feature, ctx)` は、その型の見えている地物ごとに 1 回、
+重なりの順のその地物の位置で呼ばれます。描いたものは、後ろの地物と前の
+地物の間に入ります。文脈の共有の描画器で描くので、型は GPU に何も持たず、
+作るものも解放するものもありません。
 
 `RenderContext` は、描画器が描くのに要るものを持ちます。
 
@@ -133,19 +120,24 @@ const ends = feature.style.routeEnds === 'dot' ? 'dot' : 'none';
   `draw.features.getAppliedStyle` の答えと同じです
   ([型の見た目](#型の見た目) を参照)
 - `terrain` は地面の高さです ([地形](#地形) を参照)
-- `gl` は WebGL の文脈で、自分でシェーダーを書く描画器のためのもの
-  です。そうした描画器は、描いている画面の GPU の値を `/webgl` で読みます
-  ([自分のシェーダー](#自分のシェーダー) を参照)
 
 面を塗り、縁を描く型です。
 
 ```ts
-import type { FeatureRenderer } from '@sakuzu/maplibre-gl-draw';
 import type { Polygon } from 'geojson';
 
-const zoneRenderer: FeatureRenderer = {
-  onAdd() {},
-  draw(feature, ctx) {
+draw.extensions.featureTypes.add({
+  type: 'Zone',
+  geometry: 'Polygon',
+  // 自分のスタイルを持たない区域の見た目
+  defaultStyle: {
+    fillColor: '#2563eb',
+    fillOpacity: 0.2,
+    strokeColor: '#2563eb',
+    strokeWidth: 2,
+    lineStyle: 'dotted',
+  },
+  render(feature, ctx) {
     const rings = (feature.geometry as Polygon).coordinates;
     const look = ctx.appliedStyle(feature);
     // The zoom the feature was drawn at, from which its width follows the map
@@ -167,21 +159,6 @@ const zoneRenderer: FeatureRenderer = {
       );
     }
   },
-  onRemove() {},
-};
-
-draw.extensions.featureTypes.add({
-  type: 'Zone',
-  geometry: 'Polygon',
-  // 自分のスタイルを持たない区域の見た目
-  defaultStyle: {
-    fillColor: '#2563eb',
-    fillOpacity: 0.2,
-    strokeColor: '#2563eb',
-    strokeWidth: 2,
-    lineStyle: 'dotted',
-  },
-  renderer: zoneRenderer,
 });
 ```
 
@@ -224,16 +201,16 @@ ctx.point.draw(
 ```
 
 表示が経度 ±180 度の子午線をまたぐと、描画は世界の写しをそれぞれ
-見せ、`draw` は写しごとに 1 回呼ばれます。描くものを地図のカメラから
+見せ、`render` は写しごとに 1 回呼ばれます。描くものを地図のカメラから
 ではなく、地物と窓口から計算してください。そうすれば正しい写しに
 描かれます。
 
 ### 型の見た目
 
 型は、その地物の見た目を `defaultStyle` (`FeatureStyle`) で宣言し、
-描画器は `feature.style` と自分の既定ではなく
+`render` は `feature.style` と自分の既定ではなく
 `ctx.appliedStyle(feature)` で描きます。見た目はライブラリーが組み立て、
-描画器にも `draw.features.getAppliedStyle(id)` にも同じ組み立て方で
+`render` にも `draw.features.getAppliedStyle(id)` にも同じ組み立て方で
 答えます。そのため、インスペクターのパネルは描かれているものを見せます。
 `getAppliedStyle` は下書きを当てない文書の値について答え、描く文脈は
 下書きを当てた描く地物について答えます。
@@ -274,7 +251,7 @@ ctx.point.draw(
 
 <!-- docs-check:
 declare function verticesOf(feature: Feature): Position[];
-declare const routeRenderer: import('@sakuzu/maplibre-gl-draw').FeatureRenderer;
+declare const drawRoute: import('@sakuzu/maplibre-gl-draw').FeatureTypeDefinition['render'];
 -->
 
 ```ts
@@ -293,7 +270,7 @@ function segmentDistance(p: ScreenPoint, a: ScreenPoint, b: ScreenPoint) {
 const hitRoute: FeatureTypeDefinition = {
   type: 'Route',
   geometry: 'LineString',
-  renderer: routeRenderer,
+  render: drawRoute,
   hitTest(feature, ctx) {
     const points = verticesOf(feature).map((v) => ctx.screen.project(v));
     let best = Number.POSITIVE_INFINITY;
@@ -384,18 +361,18 @@ const hitRoute: FeatureTypeDefinition = {
 declare function boardFootprint(
   feature: Feature,
 ): import('@sakuzu/maplibre-gl-draw').Footprint;
-declare const boardRenderer: import('@sakuzu/maplibre-gl-draw').FeatureRenderer;
+declare const drawBoard: import('@sakuzu/maplibre-gl-draw').FeatureTypeDefinition['render'];
 -->
 
 ```ts
 import type { FeatureTypeDefinition } from '@sakuzu/maplibre-gl-draw';
 
 // 看板。位置の周りに地図の上に置く箱で、`boardAngle` で回り、
-// `boardScale` で大きくなる。外形と描画器はこの 2 つを読む
+// `boardScale` で大きくなる。外形と `render` はこの 2 つを読む
 const signboard: FeatureTypeDefinition = {
   type: 'Signboard',
   geometry: 'Point',
-  renderer: boardRenderer,
+  render: drawBoard,
   footprint: (feature) => boardFootprint(feature),
   transformFields: {
     angleDegreesKey: 'boardAngle',
@@ -501,7 +478,7 @@ const signboardWithWidth: FeatureTypeDefinition = {
 
 <!-- docs-check:
 declare function verticesOf(feature: Feature): Position[];
-declare const routeRenderer: import('@sakuzu/maplibre-gl-draw').FeatureRenderer;
+declare const drawRoute: import('@sakuzu/maplibre-gl-draw').FeatureTypeDefinition['render'];
 -->
 
 ```ts
@@ -510,7 +487,7 @@ import type { FeatureTypeDefinition } from '@sakuzu/maplibre-gl-draw';
 const reshapeRoute: FeatureTypeDefinition = {
   type: 'Route',
   geometry: 'LineString',
-  renderer: routeRenderer,
+  render: drawRoute,
   handles(feature) {
     return verticesOf(feature).map((position, index) => ({
       kind: 'custom',
@@ -565,7 +542,7 @@ const reshapeRoute: FeatureTypeDefinition = {
 組み込みの型の代わりに定義を置きます。差し替えられる型は `Point`、
 `LineString`、`Polygon`、`Circle`、`Freehand`、`Image` です。定義は、
 組み込みの型が持つ `geometry` を持ちます。円と画像は `Point`、
-手書きの線は `LineString` です。その型の地物は、以後その描画器で
+手書きの線は `LineString` です。その型の地物は、以後その `render` で
 描かれます。定義の `hitTest`、`boxSelect`、`footprint`、`bbox`、
 `snapCandidates` は、あれば組み込みの型のものに代わります。
 定義が省いたメンバーは、組み込みの型のものが残ります。`handles` は、
@@ -573,14 +550,14 @@ const reshapeRoute: FeatureTypeDefinition = {
 
 <!-- docs-check:
 declare const draw: import('@sakuzu/maplibre-gl-draw').Draw;
-declare const pointRenderer: import('@sakuzu/maplibre-gl-draw').FeatureRenderer;
+declare const drawPoint: import('@sakuzu/maplibre-gl-draw').FeatureTypeDefinition['render'];
 -->
 
 ```ts
 const restore = draw.extensions.featureTypes.override({
   type: 'Point',
   geometry: 'Point',
-  renderer: pointRenderer,
+  render: drawPoint,
 });
 
 // 組み込みの点に戻ります
@@ -602,49 +579,36 @@ restore();
 
 <!-- docs-check:
 declare const draw: import('@sakuzu/maplibre-gl-draw').Draw;
-declare const pictureRenderer: import('@sakuzu/maplibre-gl-draw').FeatureRenderer;
+declare const drawPicture: import('@sakuzu/maplibre-gl-draw').FeatureTypeDefinition['render'];
 -->
 
 ```ts
 draw.extensions.featureTypes.override({
   type: 'Point',
   geometry: 'Point',
-  renderer: pictureRenderer,
+  render: drawPicture,
   appliesTo: (feature) => typeof feature.properties.picture === 'string',
 });
 ```
 
-行で持つレイヤーでは、このような描画器が受け持つ点は `draw` で 1 つずつ、
-前後の行の間に描かれます。定義と描画器が行ごとに地物を作らずに行そのもの
-から行うことは、それぞれの 1 つの欄 `rows` にあります。実験的で、型は
-`/kasane` にあります (`FeatureTypeRows`、`FeatureRendererRows`)。
+行で持つレイヤーでは、このような定義が受け持つ点は `render` で 1 つずつ、
+前後の行の間に描かれます。定義が行ごとに地物を作らずに行そのものから行う
+ことは、欄 `rows` にあります。実験的で、型は `/kasane` にあります
+(`FeatureTypeRows`)。
 
-- `renderer.rows.sprites` は、描画器が点を描く絵を渡します。渡すのは、
+- `rows.sprites` は、型が点を描く絵を渡します。渡すのは、
   テクスチャと、書式ごとの絵の範囲と、画面の上の大きさです。こうした点は、
   レイヤーのほかの行と一緒に、行の順に同じ描画で描かれるので、絵で描く点と
   面が交互に並ぶレイヤーも少ない描画で描けます。大きさの欄
-  (`transformFields.scaleKey`) を宣言する型の点は、絵があっても `draw` で
+  (`transformFields.scaleKey`) を宣言する型の点は、絵があっても `render` で
   描きます。絵は点の書式で選ぶもので、大きさについて行かないためです
 - `rows.appliesTo(view, handle)` は、`appliesTo` と同じ答えを行から返します。
   行はレイヤーの `LayerTableView` で読みます (`getRowValue`、`getRowType`)。
   無いときは、描くために行を分けるたびに、その型の行ごとに地物を作って
   `appliesTo` に尋ねます
-- `renderer.rows.gpu` は、行の多い型の行を GPU に持ちます。`create(view)` は、
-  レイヤーの行の範囲ごとに `GpuRows` を作ります。`GpuRows` は行を 1 度だけ
-  受け (`add`。渡された時刻まで)、書かれた行 (`update`) と行の状態
-  (`setStates`) を受け、毎フレーム行の範囲を、レイヤーの順の位置に描きます
-  (`draw`)。1 フレームの仕事は行の数に比例しません。同じオブジェクトを返す
-  型は、行が交互に並んでいても 1 つの範囲に入ります。無いときは、行の地物を
-  作り、上限まで覚えて `draw` で描きます
 
-`renderer.rows.gpu` は持つメモリーの持ち主です。プラグインの `ctx.gpu` に
-記録し、`add` で受ける行を減らして、自分の上限のバイトの内に収めます。断った
-行、付き物のある行、`draw` が `false` を返した範囲は、同じ位置に `draw` で
-描かれます。上限に達するとフレームは遅くなりますが、絵は変わりません。行を
-断ると、しばらく画面に出ていない範囲を手放し、画面に戻った時に行を渡し直し
-ます。`release` は、範囲が要らなくなった時、レイヤーが無くなった時、
-インスタンスの破棄とコンテキストの喪失の時に呼ばれ、持つ量は描画器自身が持つ
-分だけに戻ります。
+行の多い型は、行を GPU に持つこともできます
+([GPU に持つ行](#gpu-に持つ行))。
 
 ## 地形
 
@@ -667,9 +631,10 @@ draw.extensions.featureTypes.override({
 ## 重ね描き
 
 重ね描きは、1 つの地物ではないものを描きます。選択の上の印、格子、
-自分のプレビューなどです。描画器と同じ `onAdd`、`draw`、`onRemove` を
-同じ決まりで持ち、ほかに `name` を持ちます。
-`draw.extensions.overlays.add` で足し、返る関数で外します。
+自分のプレビューなどです。`name` と `draw` を持ち、共有の描画器で描き、
+GPU に何も持ちません。`draw.extensions.overlays.add` で足し、返る関数で
+外します。WebGL を自分で使う重ね描きは、`ctx.webgl.addOverlay` で足します
+([自分のシェーダー](#自分のシェーダー))。
 
 どの経路にも、その始まりに印を付ける重ね描きです。
 
@@ -682,7 +647,6 @@ import type { OverlayRenderer } from '@sakuzu/maplibre-gl-draw';
 
 const routeStarts: OverlayRenderer = {
   name: 'route-starts',
-  onAdd() {},
   draw(ctx) {
     for (const feature of draw.features.list({ type: 'Route' })) {
       const [start] = verticesOf(feature);
@@ -698,7 +662,6 @@ const routeStarts: OverlayRenderer = {
       });
     }
   },
-  onRemove() {},
 };
 
 draw.extensions.overlays.add(routeStarts);
@@ -845,18 +808,81 @@ draw.extensions.companionProviders.add(halo);
 
 ## 自分のシェーダー
 
-共有の描画器は、線、面、点の印を描きます。それ以外のものは、描画器が
-`ctx.gl` で自分のシェーダーをコンパイルして描きます。位置は、
-`/webgl` の `viewUniforms(ctx)` が渡す描いている画面の GPU の値、`shader` (地図の
-投影の関数)、`projection`、`offset` (精度を落とさずにカメラの近くを
-描くための表示の中心) で決めます。`offsetUniformsAt(ctx, position)` は、
-ほかの位置からの差の値を渡します。中心から遠い形を、その形の位置の
-周りで描くときに使います。
+共有の描画器は、線、面、点の印を描きます。それ以外のものは、プラグインが
+`ctx.webgl` を通して WebGL を自分で使って描きます。
+`addFeatureRenderer(type, definition)` は、`ctx.extensions.featureTypes`
+で足した型の地物を順の位置に描き、`addOverlay(definition)` は、すべての
+地物、重ね描き、選択の枠の上に、1 フレームに 1 回描きます。定義は、GPU に
+持ってよい割合 (`gpuShare`) を決め、`prepare(gpu)` で資源を作って、それで
+描くものを返します。
 
-入口 `@sakuzu/maplibre-gl-draw/webgl` には、ライブラリーのシェーダーの
-土台になっている部品があります。投影の GLSL とその uniform のための
-`ProjectionUniformManager`、`createProgram`、`QuadShader`、共有の描画器
-が破線と地形に使う規則です ([webgl の入口](../api/webgl/index.md))。
+<!-- docs-check:
+declare function vertexSource(prelude: string, offsetMode: string): string;
+declare const FRAGMENT_SOURCE: string;
+-->
+
+```ts
+import type { Plugin } from '@sakuzu/maplibre-gl-draw';
+import {
+  OFFSET_MODE_GLSL,
+  ProjectionUniformManager,
+  viewUniforms,
+} from '@sakuzu/maplibre-gl-draw/webgl';
+
+const ribbons = (options: { gpuShare: number }): Plugin => ({
+  name: 'ribbons',
+  onAdd(ctx) {
+    ctx.extensions.featureTypes.add({ type: 'Ribbon', geometry: 'LineString' });
+    ctx.webgl.addFeatureRenderer('Ribbon', {
+      gpuShare: options.gpuShare,
+      prepare(gpu) {
+        const { gl } = gpu;
+        const uniforms = new ProjectionUniformManager(gl);
+        const vertices = gpu.buffer(65536);
+        let program: WebGLProgram | null = null;
+        let variant = '';
+        return {
+          render(_feature, context) {
+            const view = viewUniforms(context);
+            // 地図の投影はプログラムに組み込まれる
+            if (view.shader.variantName !== variant) {
+              if (program) gpu.release(program);
+              const vertex = vertexSource(view.shader.vertexShaderPrelude, OFFSET_MODE_GLSL);
+              program = gpu.program(vertex, FRAGMENT_SOURCE);
+              uniforms.getLocations(program);
+              variant = view.shader.variantName;
+            }
+            gl.useProgram(program);
+            uniforms.setTerrain(context);
+            uniforms.setUniforms(view.projection, view.offset);
+            gl.bindBuffer(gl.ARRAY_BUFFER, vertices);
+            // 地物の位置を書いて描く
+          },
+        };
+      },
+    });
+  },
+});
+```
+
+`prepare` は、型には `render(feature, context)` と、任意で `rows` を持つ
+オブジェクトを返し、重ね描きには `OverlayContext` を受ける関数を返します。
+`OverlayContext` は描画の文脈で、見えている世界の写しごとの文脈
+`worldCopies` も持ちます。`prepare` は地図が WebGL の文脈を渡した時に
+走り、失われた文脈が戻ると新しい `gpu` でもう一度走ります。資源を作るのに
+要るものは、プラグインが持ち続けてください。同じ定義を複数の型に渡すと、
+行が交互に並んでいても、`prepare` は 1 回で、行の範囲も 1 つです。
+
+描くものの位置は、描いている画面の GPU の値で決めます。`/webgl` の
+`viewUniforms(ctx)` は、`shader` (地図の投影の関数)、`projection`、
+`offset` (精度を落とさずにカメラの近くを描くための表示の中心) を渡します。
+`offsetUniformsAt(ctx, position)` は、ほかの位置からの差の値を渡します。
+中心から遠い形を、その形の位置の周りで描くときに使います。
+
+入口 `@sakuzu/maplibre-gl-draw/webgl` には、`ctx.webgl` の型と、
+ライブラリーのシェーダーの土台になっている部品があります。投影の GLSL と
+その uniform のための `ProjectionUniformManager`、`QuadShader`、共有の
+描画器が破線と地形に使う規則です ([webgl の入口](../api/webgl/index.md))。
 主の入口と違い、マイナーリリースで変わることがあります
 ([版](../reference/README.md))。
 
@@ -878,19 +904,21 @@ draw.extensions.companionProviders.add(halo);
 import type { RenderContext } from '@sakuzu/maplibre-gl-draw';
 import {
   densifyPath,
+  type GpuContext,
   type ProjectionUniformManager,
   terrainTessellationStep,
   viewUniforms,
 } from '@sakuzu/maplibre-gl-draw/webgl';
 
 function pathOnTerrain(
+  gl: GpuContext,
   ctx: RenderContext,
   program: WebGLProgram,
   uniforms: ProjectionUniformManager,
   coordinates: [number, number][],
 ): [number, number][] {
   const view = viewUniforms(ctx);
-  ctx.gl.useProgram(program);
+  gl.useProgram(program);
   uniforms.setTerrain(ctx);
   uniforms.setUniforms(view.projection, view.offset);
   const step = terrainTessellationStep(ctx);
@@ -939,8 +967,9 @@ function drawSolidQuad(ctx: RenderContext, center: [number, number]): boolean {
 
 `QuadShader` は、四角がどこにあっても同じように中身を描きます。地形の上では
 `drawQuadOnTerrain` を通り、平らな地図と地球儀の上では同じ `quadDrapeColor`
-を `shade` が 1 の値で呼びます。中身は作るときに渡します
-(`new QuadShader(gl, ctx.gpu, content)`。省くと `QuadImageContent` の画像です)。中身が
+を `shade` が 1 の値で呼びます。中身は、資源を割り当てる `gpu` と一緒に
+作るときに渡します
+(`new QuadShader(gpu, content)`。省くと `QuadImageContent` の画像です)。中身が
 読む値を設定してから `draw(vertices, opacity, projection)` を呼びます。
 
 地形の上に深度なしで印を描くシェーダーは、地形が隠す印を
@@ -958,7 +987,8 @@ uniform は `TerrainOcclusionUniforms` が描くたびに書きます。位置�
 その行を GPU で動かして描き、離した後に書きます。行ごとに何かを描く
 シェーダー (点に添える印など) は、`ROW_STATE_GLSL` で同じように動かせます。
 
-- インスタンスごとに、自分のテクスチャー (`createRowStateTexture`) の
+- インスタンスごとに、自分のテクスチャー
+  (`createRowStateTexture(gpu, rows)`。`gpu.texture` と同じく例外を投げます) の
   行の番号を持たせます。テクスチャーには、`draw.rendered.getDraggedRows()`
   が渡す行の `rowStateOf(dragged, handle)` を書きます (`uploadRowState`)
 - 描く前に、テクスチャーをユニット `ROW_STATE_TEXTURE_UNIT` に結び、
@@ -994,6 +1024,73 @@ void main() {
 返します。カメラが止まっている間に呼び、ドラッグ中の行には
 `rowStateMovedViews(binding, view)` を渡します。
 
+### プラグインが GPU に持つもの
+
+すべて `gpu` を通して作ります。`gpu` は、作ったものをプラグインの名前で
+インスタンスに記録します。
+
+- `gpu.buffer`、`gpu.texture`、`gpu.vertexArray`、`gpu.transformFeedback`、
+  `gpu.fence` は資源を作ります。`gpu.program` はプログラムをリンクして
+  待ちます。`gpu.compile` はフレームを止めずにリンクします
+- `gpu.rows` は地物の数に比例するものを作る `gpu` です。`gpuShare` の外で、
+  端末に残る量 (`draw.memory`) までです。`gpu` と一緒に解放されます
+- `gpu.gl` (`GpuContext`) は、資源を作る呼び出しと消す呼び出しを除いた
+  WebGL の文脈です。`bufferSubData` や `texSubImage2D` のように、作ったものに
+  書く呼び出しは残っています
+- `gpu.release(resource)` は、要らなくなったものを早めに返します
+- `gpu.memory()` は、持っている量と、`limitBytes` に今持てる最大を答えます
+- `gpu.signal` は資源が終わると止まります。`fetch` に渡してください
+
+ライブラリーは、プラグインが外された時、`draw.destroy()` の時、文脈が
+失われた時、`prepare` や描画が例外を投げた時に、すべてを返します。解放の
+ための呼び出しはありません。例外を投げた定義はコンソールに伝えられ、失われた
+文脈が戻るか、プラグインを足し直すまで呼ばれません。ほかの描画は続きます。
+
+`gpuShare` は `rendering.gpuLimitBytes` に対する割合で、0 より大きく 1 以下
+です。値はプラグインのオプションに置きます。プラグインはバイト数を持ちません。
+足した定義の割合の合計は 0.9 までで、残りはライブラリーのものです。超えると
+`addFeatureRenderer` と `addOverlay` はコード `too-large` の `DrawError` を
+投げます。
+
+割合を超える割り当ては、コード `too-large` の `DrawError` を投げ、何も
+持ちません。`retryable` が true になるのは、インスタンス全体の空きが足りない
+時だけです。`draw.options.update` で `rendering.gpuLimitBytes` を変えると
+すぐに従います。持っているものは解放されず、次の割り当てが断られます。止まった
+`gpu` は `invalid-state` を投げるので、遅れて届いた結果は何も残しません。
+リンクできないプログラムは、ログをメッセージに入れた `invalid-input` を
+投げます。
+
+### GPU に持つ行
+
+行で持つレイヤーでは、行の多い型は行を GPU に持ちます。1 フレームの仕事は
+行の数に比例しません。`prepare` の返すものの
+`rows: (view, gpu) => GpuRowBuffer` が、レイヤーの行の範囲ごとに持ち手を
+作ります。無いときは、行の地物を作り、上限まで覚えて `render` で描きます。
+`GpuRowBuffer` は行と同じく実験的で、行を受け取った順の番号で呼びます。
+
+- `add(rows, stopAtMilliseconds)` は、受け取った行の続きをレイヤーの順に
+  受け、受けた数を返します
+- `update(index, row)` は、書かれた行を、その書き込みを見せるフレームで
+  受けます。`false` を返すと、その行は順の位置で `render` が描き、
+  `setStates` はこの番号の行を隠します
+- `setStates(from, states)` は、`ROW_STATE_GLSL` が読む行の状態のバイトを、
+  行を受けた時と、周りの行の状態が変わるたびに受けます
+- `render(from, to, context)` は、行 `[from, to)` を順のこの位置に描きます。
+  ほかの行に挟まれた範囲の部分ごと、世界の写しごとに呼ばれます。`false` を
+  返すと、このフレームではそれらを `render(feature, context)` が描きます
+
+範囲の `gpu` が作るものは、すべて行です。`gpuShare` の外にあり、端末の上限
+(`draw.memory`) に従い、範囲と一緒に返されるので、範囲に解放するものは
+ありません。ライブラリーは、断りと中断を時刻で見分けます。
+`stopAtMilliseconds` より前に、渡された行より少ない数で `add` が戻れば、
+残りを断ったことになります。その時刻を過ぎていれば、残りの行は後のフレームで
+渡し直されます。`add` を抜ける `too-large` も断りです。
+
+断った行、付き物のある行、`false` を返した範囲は、同じ位置に `render` で
+描かれます。上限に達するとフレームは遅くなりますが、絵は変わりません。行を
+断ると、しばらく画面に出ていない範囲を落とし、画面に戻った時に行を渡し直し
+ます。範囲は行からいつでも作り直せます。
+
 ## 関連する例
 
 - [Custom feature types](../examples/custom-feature-types.ja.md) では、
@@ -1007,8 +1104,12 @@ void main() {
   [TransformFields](../api/maplibre-gl-draw/interfaces/TransformFields.md)、
   [Handle](../api/maplibre-gl-draw/type-aliases/Handle.md)、
   [HandleContext](../api/maplibre-gl-draw/interfaces/HandleContext.md)
-- [FeatureRenderer](../api/maplibre-gl-draw/interfaces/FeatureRenderer.md)
-  と [RenderContext](../api/maplibre-gl-draw/interfaces/RenderContext.md)
+- [RenderContext](../api/maplibre-gl-draw/interfaces/RenderContext.md)
+- [Webgl](../api/webgl/interfaces/Webgl.md)、
+  [GpuDefinition](../api/webgl/interfaces/GpuDefinition.md)、
+  [Gpu](../api/webgl/interfaces/Gpu.md)、
+  [FeatureRenderer](../api/webgl/interfaces/FeatureRenderer.md)、
+  [GpuRowBuffer](../api/webgl/interfaces/GpuRowBuffer.md)
 - [LineRenderer](../api/maplibre-gl-draw/interfaces/LineRenderer.md)、
   [FillRenderer](../api/maplibre-gl-draw/interfaces/FillRenderer.md)、
   [PointRenderer](../api/maplibre-gl-draw/interfaces/PointRenderer.md)

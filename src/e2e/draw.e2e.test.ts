@@ -1038,13 +1038,9 @@ describe('a custom feature type that draws with the shared fill alone', () => {
         draw.extensions.featureTypes.add({
           type: 'E2EFillOnly',
           geometry: 'Polygon',
-          renderer: {
-            onAdd() {},
-            draw(feature, ctx) {
-              const rings = (feature.geometry as { coordinates: number[][][] }).coordinates;
-              ctx.fill.draw(rings, { color: '#ff0000', opacity: 1 });
-            },
-            onRemove() {},
+          render(feature, ctx) {
+            const rings = (feature.geometry as { coordinates: number[][][] }).coordinates;
+            ctx.fill.draw(rings, { color: '#ff0000', opacity: 1 });
           },
         });
       }

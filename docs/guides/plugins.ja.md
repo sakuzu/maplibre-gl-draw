@@ -130,6 +130,9 @@ console.log(counter?.count());
   ([地形](terrain.ja.md))
 - `invalidate` は、文書の外の何かが見た目を変えたときに、地物を描き
   直させます
+- `webgl` は、WebGL を自分で使って描くためのものです。GPU に持つものは
+  プラグインと一緒に無くなります
+  ([自分のシェーダー](custom-types.ja.md#自分のシェーダー))
 
 描いている途中の形は、アプリケーションと同じく `ctx.draw.drawing` です。
 地図からの入力と同じように頂点を置き、プレビューを動かし、形を描き終えます
@@ -566,7 +569,8 @@ draw.setMode('draw_rectangle');
 起きません。`remove(name)` は同じことを名前で行います。
 
 - プラグインを外すと、まず `onRemove` が呼ばれ、次に
-  `ctx.extensions` で足したものが外れ、購読が終わります
+  `ctx.extensions` と `ctx.webgl` で足したものが外れ、GPU に持っていた
+  ものが返され、購読が終わります
 - 有効なモードを外すと、先に `select` に入ります
 - 組み込みのモードと地物の型の名前は使われているので、`add` はそれら
   に `already-exists` を投げます

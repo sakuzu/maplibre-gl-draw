@@ -9,6 +9,7 @@
 
 import { describe, expect, it } from 'vitest';
 import { applyEnuEdit, type EnuEdit } from '../../geometry/enu-transforms.js';
+import { gpuOf } from '../../test-utils.js';
 import { moveOffsetFloat32 } from './row-motion.js';
 import {
   createRowStateTexture,
@@ -163,7 +164,7 @@ describe('what the edit of a moving set does to a row besides its position', () 
         },
       },
     ) as unknown as WebGL2RenderingContext;
-    const texture = createRowStateTexture(gl, 1);
+    const texture = createRowStateTexture(gpuOf(gl), 1);
     if (!texture) throw new Error('texture');
     const translations = new Float32Array(8);
     const uniforms = new RowStateUniforms(gl, {} as WebGLProgram);

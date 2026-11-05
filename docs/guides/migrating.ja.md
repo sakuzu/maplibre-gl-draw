@@ -832,11 +832,28 @@ draw.options.update({
   ました)、排他的な操作は
   `exclusive` です。`exclusive` は `isActive()` (前は `isBusy`) を必ず
   持ち、`finish`、`cancel`、`container` を持てます
-- 型、その描画器、付き物の提供者が、行で持つレイヤーの行から答えて描く
-  ものは、それぞれの 1 つの欄 `rows` にあります (実験的)。
-  `rows.appliesTo` は前の `appliesToRow`、`renderer.rows.sprites` は前の
+- 型と付き物の提供者が、行で持つレイヤーの行から答えて描くものは、
+  それぞれの 1 つの欄 `rows` にあります (実験的)。
+  `rows.appliesTo` は前の `appliesToRow`、`rows.sprites` は前の
   `rowSprites`、付き物の提供者の `rows.has` は前の `hasRow` です。
-  `drawRows` の代わりに `renderer.rows.gpu` が行を GPU に持ちます
+  `drawRows` の代わりに、`prepare` の返すものの `rows` が行を GPU に持ちます
+- 型は、`renderer` の代わりに定義の `render(feature, ctx)` で、共有の描画器を
+  使って描きます。主の入口に `FeatureRenderer` はありません。`OverlayRenderer`
+  に `onAdd` と `onRemove` は無く、GPU に何も持ちません
+- WebGL を自分で使う型と重ね描きは、プラグインの `ctx.webgl` を通します。
+  `addFeatureRenderer(type, { gpuShare, prepare })` と
+  `addOverlay({ gpuShare, prepare })` で、型は `/webgl` にあります。`onAdd` で
+  作っていたものは `prepare(gpu)` で作ります。ライブラリーは、外した時、
+  `draw.destroy()` の時、文脈が失われた時、例外の時にすべてを返すので、
+  `onRemove` で解放していたものに呼び出しは要りません。文脈が失われた後は、
+  `prepare` が新しい `gpu` でもう一度走ります
+  ([プラグインが GPU に持つもの](custom-types.ja.md#プラグインが-gpu-に持つもの))
+- `RenderContext.gl` は `gpu.gl` (`GpuContext`) で、資源を作る呼び出しと消す
+  呼び出しはありません。`gpu.buffer`、`gpu.texture`、`gpu.vertexArray`、
+  `gpu.transformFeedback`、`gpu.fence`、`gpu.program`、`gpu.compile` が作り
+  ます。`createProgram` は `gpu.program` になり、`/webgl` から無くなりました。
+  `QuadShader` は `new QuadShader(gpu, content)` です。断りはコード
+  `too-large` の `DrawError` です
 - 描く文脈は、`ctx.zoom` と `ctx.pixelRatio` の代わりに描いている画面
   `ctx.screen` (プラグインの `screen` と同じもの) を持ちます。
   `ctx.screen.zoom` と `ctx.screen.pixelRatio` を読んでください

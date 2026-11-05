@@ -828,12 +828,29 @@ drawn. Each change below names what replaces what is gone.
   is `exclusive`,
   whose `isActive()` (was `isBusy`) it must have, with `finish`, `cancel`
   and `container`
-- What a type, its renderer and a companion provider answer and draw
-  from the rows of a layer held as rows is in one member `rows` of each
-  (experimental): `rows.appliesTo` was `appliesToRow`,
-  `renderer.rows.sprites` was `rowSprites`, `renderer.rows.gpu` holds the rows
-  on the GPU in place of `drawRows`, and `rows.has` of a companion provider
-  was `hasRow`
+- What a type and a companion provider answer and draw from the rows of a
+  layer held as rows is in one member `rows` of each (experimental):
+  `rows.appliesTo` was `appliesToRow`, `rows.sprites` was `rowSprites`, and
+  `rows.has` of a companion provider was `hasRow`. `rows` of what `prepare`
+  returns holds the rows on the GPU in place of `drawRows`
+- A type draws with the shared renderers through `render(feature, ctx)` of
+  its definition, in place of `renderer`: the main entry has no
+  `FeatureRenderer`, and `OverlayRenderer` has no `onAdd` and no `onRemove`
+  and holds nothing on the GPU
+- A type or an overlay with WebGL of its own goes through `ctx.webgl` of a
+  plugin, `addFeatureRenderer(type, { gpuShare, prepare })` and
+  `addOverlay({ gpuShare, prepare })`, whose types are in `/webgl`: what
+  `onAdd` made, `prepare(gpu)` makes. The library gives everything back on
+  removal, on `draw.destroy()`, on a lost context and on an exception, so
+  what `onRemove` released goes without a hook, and `prepare` runs again
+  with a new `gpu` after a lost context
+  ([what a plugin holds on the GPU](custom-types.md#what-a-plugin-holds-on-the-gpu))
+- `RenderContext.gl` is `gpu.gl` (`GpuContext`), without the calls that make
+  or delete resources: `gpu.buffer`, `gpu.texture`, `gpu.vertexArray`,
+  `gpu.transformFeedback`, `gpu.fence`, `gpu.program` and `gpu.compile` make
+  them. `createProgram` is `gpu.program` and is gone from `/webgl`, a
+  `QuadShader` is `new QuadShader(gpu, content)`, and a refusal is a
+  `DrawError` with the code `too-large`
 - The render context has the screen of the view it draws, `ctx.screen` (the
   same object as the `screen` of a plugin), in place of `ctx.zoom` and
   `ctx.pixelRatio`: read `ctx.screen.zoom` and `ctx.screen.pixelRatio`

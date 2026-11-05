@@ -16,6 +16,7 @@ import type { PixelRatioInput } from '../../shared/utils/pixel-ratio.js';
 import type { SpatialIndex } from '../../store/spatial/spatial-index.js';
 import type { Store } from '../../store/store.js';
 import { TextureCache } from '../cache/texture.js';
+import { GpuResources } from '../gpu.js';
 import { AnchoredOutlineRenderer } from '../renderers/anchored-outline.js';
 import { BatchManager } from '../renderers/batch-manager.js';
 import { FeatureDrawer } from '../renderers/drawer.js';
@@ -112,7 +113,9 @@ export function initRenderers(deps: InitRenderersDeps): Renderers {
   } = deps;
   const textureCache = new TextureCache(gl, scope.gpu);
   const terrain = scope.terrain;
-  const quadShader = new QuadShader(gl, scope.gpu).useTerrainState(terrain);
+  const quadShader = new QuadShader(
+    new GpuResources({ gl, ledger: scope.gpu, owner: 'images' }),
+  ).useTerrainState(terrain);
   const imageRenderer = new ImageRenderer(
     mapInstance,
     gl,

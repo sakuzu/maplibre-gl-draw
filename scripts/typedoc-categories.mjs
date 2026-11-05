@@ -42,7 +42,7 @@ const KASANE_CATEGORIES = [
   'Features of GeoJSON read as rows',
   'The order of the rows',
   'Features selected in bulk and dragged',
-  'What the extensions answer and draw from the rows',
+  'What the extensions answer from the rows',
   'Pictures of points drawn with the rows',
   'Build row blocks in a Worker',
   'Features as the rows of Tabane blocks (@sakuzu/tabane), and the blocks read as row blocks',
@@ -50,6 +50,7 @@ const KASANE_CATEGORIES = [
 
 /** The sections of src/webgl/index.ts, which are its categories (in this order) */
 const WEBGL_CATEGORIES = [
+  'What a plugin draws with, and what it holds on the GPU',
   'Shaders and projection',
   'The origin of what is kept on the GPU',
   'Blending and billboards',

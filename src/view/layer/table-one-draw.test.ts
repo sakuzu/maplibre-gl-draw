@@ -22,13 +22,10 @@
 import { planarCoordinates } from '@sakuzu/tabane';
 import type { ProjectionData } from 'maplibre-gl';
 import { beforeEach, describe, expect, it } from 'vitest';
-import type {
-  GpuRowChange,
-  GpuRows,
-  GpuRowsSource,
-  RenderContext,
-} from '../../api/extension/render.js';
+import type { RenderContext } from '../../api/extension/render.js';
+import type { GpuRowBuffer } from '../../api/extension/webgl.js';
 import type { LayerTableView, RowField } from '../../api/tables.js';
+import type { GpuRowsSource, HeldGpuRows } from '../../extension/renderers.js';
 import type { LayerTable } from '../../feature-table/layer-table.js';
 import { writeRowGeometry } from '../../feature-table/row-write.js';
 import { ROW_WRITE_GEOMETRY, ROW_WRITE_STYLE } from '../../feature-table/types.js';
@@ -90,6 +87,7 @@ function recordingGL(options: { parallel?: boolean; complete?: () => boolean } =
   const target: Record<string, unknown> = {
     drawingBufferWidth: 800,
     drawingBufferHeight: 600,
+    R8UI: 0x8232,
   };
   const gl = new Proxy(target, {
     get(t, prop: string) {
@@ -1183,7 +1181,7 @@ describe('the rows an extension holds on the GPU', () => {
   interface Held {
     readonly rows: number[];
     readonly states: number[];
-    readonly writes: Array<[number, number, GpuRowChange]>;
+    readonly writes: Array<[number, number]>;
     /** The calls of `setStates` */
     stateCalls: number;
     released: boolean;
@@ -1198,8 +1196,6 @@ describe('the rows an extension holds on the GPU', () => {
     fits?: () => boolean;
     /** Whether a call of `draw` draws */
     draws?: () => boolean;
-    /** Whether it takes no rows yet, with work left */
-    busy?: () => boolean;
     /** Whether a call of `add` throws, once it made its buffer */
     fails?: () => boolean;
   }
@@ -1217,15 +1213,18 @@ describe('the rows an extension holds on the GPU', () => {
     const log: string[] = [];
     let usedBytes = 0;
     const source: GpuRowsSource = {
-      create(_view: LayerTableView): GpuRows {
+      create(_view: LayerTableView): HeldGpuRows {
         const held: Held = { rows: [], states: [], writes: [], stateCalls: 0, released: false };
         made.push(held);
         const buffers: Array<{ buffer: WebGLBuffer; bytes: number }> = [];
-        return {
-          add(rows) {
-            if (options.busy?.()) return 0;
+        const buffer: GpuRowBuffer = {
+          add(rows, stopAtMilliseconds) {
             const room = Math.floor(((options.limitBytes ?? Infinity) - usedBytes) / ROW_BYTES);
             const count = Math.min(rows.length, room, options.rowsPerCall ?? Infinity);
+            // Stopped by the clock, not by a refusal: it comes back past its time
+            if (count === options.rowsPerCall && Number.isFinite(stopAtMilliseconds)) {
+              while (performance.now() <= stopAtMilliseconds);
+            }
             if (count <= 0) return 0;
             const buffer = gl().createBuffer();
             const bytes = count * ROW_BYTES;
@@ -1236,21 +1235,23 @@ describe('the rows an extension holds on the GPU', () => {
             held.rows.push(...rows.subarray(0, count));
             return count;
           },
-          update(index, row, change) {
-            held.writes.push([index, row, change]);
+          update(index, row) {
+            held.writes.push([index, row]);
             return options.fits?.() ?? true;
           },
           setStates(from, states) {
             held.stateCalls++;
             for (let i = 0; i < states.length; i++) held.states[from + i] = states[i];
           },
-          draw(from, to, ctx) {
+          render(from, to, ctx) {
             expect(ctx).toBe(CONTEXT);
             if (options.draws && !options.draws()) return false;
             log.push(`held ${made.indexOf(held)} ${from}-${to}`);
             return true;
           },
-          hasPendingWork: () => options.busy?.() === true,
+        };
+        return {
+          buffer,
           release() {
             expect(held.released).toBe(false);
             held.released = true;
@@ -1450,20 +1451,7 @@ describe('the rows an extension holds on the GPU', () => {
     expect(made).toHaveLength(1);
   });
 
-  it('tells a call that took nothing with work left from a refusal', () => {
-    let busy = true;
-    const { frame, made, renderer } = layer(ribbonRows(2), { busy: () => busy });
-    frame();
-    expect(renderer.hasPendingWork).toBe(true);
-    frame();
-    expect(renderer.hasPendingWork).toBe(true);
-    busy = false;
-    frame();
-    expect(made[0].rows).toHaveLength(2);
-    expect(renderer.hasPendingWork).toBe(false);
-  });
-
-  it('gives the frame of the writes the rows as written, by what changed, also out of view', () => {
+  it('gives the frame of the writes the rows as written, also out of view', () => {
     const features = ribbonRows(3);
     const { frame, made, tables, writer, log } = layer(features);
     frame();
@@ -1472,13 +1460,13 @@ describe('the rows an extension holds on the GPU', () => {
     log.length = 0;
     frame({ minX: 50, minY: 50, maxX: 51, maxY: 51 });
     expect(log).toEqual([]);
-    expect(made[0].writes).toEqual([[1, handle, { geometry: false, style: false, values: true }]]);
+    expect(made[0].writes).toEqual([[1, handle]]);
     writer.apply({
       handles: Int32Array.of(handle),
       fields: new Map([['style', [{ strokeColor: '#00ff00' }]]]),
     });
     frame();
-    expect(made[0].writes[1]).toEqual([1, handle, { geometry: false, style: true, values: false }]);
+    expect(made[0].writes[1]).toEqual([1, handle]);
     expect(made).toHaveLength(1);
   });
 

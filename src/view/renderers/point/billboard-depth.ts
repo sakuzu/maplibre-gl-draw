@@ -32,6 +32,7 @@
  * billboards drawn in a frame the frame reaches tens of seconds).
  */
 
+import type { GpuContext } from '../../../api/extension/webgl.js';
 import { isDepthTestEnabled, setDepthTestEnabled } from '../../layer/depth-state.js';
 
 /**
@@ -43,7 +44,7 @@ import { isDepthTestEnabled, setDepthTestEnabled } from '../../layer/depth-state
  * @param gl The WebGL context of the map
  * @param draw The drawing to run
  */
-export function drawBillboardsWithoutDepth(gl: WebGL2RenderingContext, draw: () => void): void {
+export function drawBillboardsWithoutDepth(gl: GpuContext, draw: () => void): void {
   const depthWasEnabled = disableDepthForBillboards(gl);
   try {
     draw();
@@ -59,7 +60,7 @@ export function drawBillboardsWithoutDepth(gl: WebGL2RenderingContext, draw: () 
  *
  * @internal
  */
-export function disableDepthForBillboards(gl: WebGL2RenderingContext): boolean {
+export function disableDepthForBillboards(gl: GpuContext): boolean {
   const depthWasEnabled = isDepthTestEnabled(gl);
   if (depthWasEnabled) setDepthTestEnabled(gl, false);
   return depthWasEnabled;
@@ -71,9 +72,6 @@ export function disableDepthForBillboards(gl: WebGL2RenderingContext): boolean {
  *
  * @internal
  */
-export function restoreDepthAfterBillboards(
-  gl: WebGL2RenderingContext,
-  depthWasEnabled: boolean,
-): void {
+export function restoreDepthAfterBillboards(gl: GpuContext, depthWasEnabled: boolean): void {
   if (depthWasEnabled) setDepthTestEnabled(gl, true);
 }

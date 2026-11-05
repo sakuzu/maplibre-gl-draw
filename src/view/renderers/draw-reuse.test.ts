@@ -12,6 +12,7 @@
 
 import type { Map as MapLibreMap, ProjectionData } from 'maplibre-gl';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { gpuOf } from '../../test-utils.js';
 import { GpuLedger } from '../gpu-ledger.js';
 import { isDepthTestEnabled, setDepthTestEnabled } from '../layer/depth-state.js';
 import { beginRenderFrame } from '../shaders/frame.js';
@@ -114,7 +115,7 @@ function expectedShifts(): number[][] {
 }
 
 function binding(gl: WebGL2RenderingContext): RowStateBinding {
-  const texture = createRowStateTexture(gl, 2);
+  const texture = createRowStateTexture(gpuOf(gl), 2);
   if (!texture) throw new Error('texture');
   return { texture, translations: new Float32Array(8) };
 }

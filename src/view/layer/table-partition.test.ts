@@ -12,8 +12,8 @@
  */
 
 import { describe, expect, it, vi } from 'vitest';
-import type { GpuRowsSource } from '../../api/extension/render.js';
 import type { LayerTableView } from '../../api/tables.js';
+import type { GpuRowsSource } from '../../extension/renderers.js';
 import { rowFeature } from '../../feature-table/row-read.js';
 import { drawPropertyKey } from '../../shared/properties.js';
 import type { Feature, Layer } from '../../shared/types/model.js';

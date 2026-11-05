@@ -9,8 +9,9 @@ three more kinds of extension for things that are not features of your
 own type: overlays, which draw above the features, and providers, which
 add snapping candidates, handles and companions to any type.
 
-The renderers receive the WebGL context of the map, but most of them
-draw through the shared renderers of the library and write no shader.
+A type draws through the shared renderers of the library and writes no
+shader. What needs WebGL of its own goes through a plugin
+([Your own shaders](#your-own-shaders)).
 
 ## The smallest example
 
@@ -27,17 +28,13 @@ function verticesOf(feature: Feature): Position[] {
 const route: FeatureTypeDefinition = {
   type: 'Route',
   geometry: 'LineString',
-  renderer: {
-    onAdd() {},
-    draw(feature, ctx) {
-      ctx.line.draw(verticesOf(feature), {
-        width: 3,
-        color: '#e64d1a',
-        opacity: ctx.opacity,
-        lineStyle: 'dashed',
-      });
-    },
-    onRemove() {},
+  render(feature, ctx) {
+    ctx.line.draw(verticesOf(feature), {
+      width: 3,
+      color: '#e64d1a',
+      opacity: ctx.opacity,
+      lineStyle: 'dashed',
+    });
   },
 };
 
@@ -87,10 +84,10 @@ gives one in `autoName.typeNames` under the same key, so a type that is
 shown to users should say its name in its documentation, for the host
 to translate ([automatic names](drawing.md#names-in-another-language)).
 
-A renderer often needs values of its own for each feature, such as the
+A type often needs values of its own for each feature, such as the
 size of a marker. Keep them in `style` or in `properties` under keys
 that the library does not define. They are stored, exported and loaded
-back as they are, and the library does not check them, so the renderer
+back as they are, and the library does not check them, so `render`
 checks a value before it uses it. Declare the style keys for TypeScript
 by declaration merging:
 
@@ -104,21 +101,13 @@ declare module '@sakuzu/maplibre-gl-draw' {
 const ends = feature.style.routeEnds === 'dot' ? 'dot' : 'none';
 ```
 
-## The renderer
+## Drawing
 
-A `FeatureRenderer` has three methods, in the order of a MapLibre
-custom layer:
-
-- `onAdd(map, gl)` is called when the renderer is put on the map. A
-  renderer that has GL objects of its own creates them here
-- `draw(feature, ctx)` is called once for every visible feature of the
-  type, in the place of the feature in the stacking order, so what it
-  draws lands between the features behind and in front
-- `onRemove(map, gl)` releases what `onAdd` created
-
-`onAdd` and `onRemove` can arrive more than once: the drawing is torn
-down and built again when the map changes its style and when the WebGL
-context is lost and restored. Accept `onAdd` again after `onRemove`.
+`render(feature, ctx)` of the definition is called once for every
+visible feature of the type, in the place of the feature in the stacking
+order, so what it draws lands between the features behind and in front.
+It draws with the shared renderers of the context, so a type holds
+nothing on the GPU and has nothing to make or to release.
 
 The `RenderContext` carries what a renderer needs to draw:
 
@@ -139,19 +128,24 @@ The `RenderContext` carries what a renderer needs to draw:
   `draw.features.getAppliedStyle` answers it (see
   [The look of a type](#the-look-of-a-type))
 - `terrain`, the heights of the ground (see [Terrain](#terrain))
-- `gl`, the WebGL context, for a renderer that writes its own shaders,
-  which reads the values of the GPU of the view through `/webgl` (see
-  [Your own shaders](#your-own-shaders))
 
 A type that fills an area and outlines it:
 
 ```ts
-import type { FeatureRenderer } from '@sakuzu/maplibre-gl-draw';
 import type { Polygon } from 'geojson';
 
-const zoneRenderer: FeatureRenderer = {
-  onAdd() {},
-  draw(feature, ctx) {
+draw.extensions.featureTypes.add({
+  type: 'Zone',
+  geometry: 'Polygon',
+  // The look of a zone without a style of its own
+  defaultStyle: {
+    fillColor: '#2563eb',
+    fillOpacity: 0.2,
+    strokeColor: '#2563eb',
+    strokeWidth: 2,
+    lineStyle: 'dotted',
+  },
+  render(feature, ctx) {
     const rings = (feature.geometry as Polygon).coordinates;
     const look = ctx.appliedStyle(feature);
     // The zoom the feature was drawn at, from which its width follows the map
@@ -173,21 +167,6 @@ const zoneRenderer: FeatureRenderer = {
       );
     }
   },
-  onRemove() {},
-};
-
-draw.extensions.featureTypes.add({
-  type: 'Zone',
-  geometry: 'Polygon',
-  // The look of a zone without a style of its own
-  defaultStyle: {
-    fillColor: '#2563eb',
-    fillOpacity: 0.2,
-    strokeColor: '#2563eb',
-    strokeWidth: 2,
-    lineStyle: 'dotted',
-  },
-  renderer: zoneRenderer,
 });
 ```
 
@@ -232,16 +211,16 @@ ctx.point.draw(
 ```
 
 When the view crosses the ±180 degree meridian, a drawing shows each
-copy of the world, and `draw` is called once per copy. Compute what you
+copy of the world, and `render` is called once per copy. Compute what you
 draw from the feature and the context, not from the camera of the map,
 and it lands on the right copy.
 
 ### The look of a type
 
 A type declares the look of its features in `defaultStyle`, a
-`FeatureStyle`, and its renderer draws with `ctx.appliedStyle(feature)`
+`FeatureStyle`, and its `render` draws with `ctx.appliedStyle(feature)`
 rather than with `feature.style` and defaults of its own. The library
-puts the look together, the same way for the renderer and for
+puts the look together, the same way for `render` and for
 `draw.features.getAppliedStyle(id)`, so an inspector panel shows what is
 drawn. `getAppliedStyle` answers for the values of the document, without
 the sketches; the render context answers for the feature it draws, the
@@ -286,7 +265,7 @@ feature):
 
 <!-- docs-check:
 declare function verticesOf(feature: Feature): Position[];
-declare const routeRenderer: import('@sakuzu/maplibre-gl-draw').FeatureRenderer;
+declare const drawRoute: import('@sakuzu/maplibre-gl-draw').FeatureTypeDefinition['render'];
 -->
 
 ```ts
@@ -305,7 +284,7 @@ function segmentDistance(p: ScreenPoint, a: ScreenPoint, b: ScreenPoint) {
 const hitRoute: FeatureTypeDefinition = {
   type: 'Route',
   geometry: 'LineString',
-  renderer: routeRenderer,
+  render: drawRoute,
   hitTest(feature, ctx) {
     const points = verticesOf(feature).map((v) => ctx.screen.project(v));
     let best = Number.POSITIVE_INFINITY;
@@ -405,7 +384,7 @@ size, and whether a scaling keeps their shape:
 declare function boardFootprint(
   feature: Feature,
 ): import('@sakuzu/maplibre-gl-draw').Footprint;
-declare const boardRenderer: import('@sakuzu/maplibre-gl-draw').FeatureRenderer;
+declare const drawBoard: import('@sakuzu/maplibre-gl-draw').FeatureTypeDefinition['render'];
 -->
 
 ```ts
@@ -413,11 +392,11 @@ import type { FeatureTypeDefinition } from '@sakuzu/maplibre-gl-draw';
 
 // A signboard: a box laid on the map around its position, turned by
 // `boardAngle` and grown by `boardScale`, which its footprint and its
-// renderer read
+// `render` read
 const signboard: FeatureTypeDefinition = {
   type: 'Signboard',
   geometry: 'Point',
-  renderer: boardRenderer,
+  render: drawBoard,
   footprint: (feature) => boardFootprint(feature),
   transformFields: {
     angleDegreesKey: 'boardAngle',
@@ -531,7 +510,7 @@ the marks of its handles:
 
 <!-- docs-check:
 declare function verticesOf(feature: Feature): Position[];
-declare const routeRenderer: import('@sakuzu/maplibre-gl-draw').FeatureRenderer;
+declare const drawRoute: import('@sakuzu/maplibre-gl-draw').FeatureTypeDefinition['render'];
 -->
 
 ```ts
@@ -540,7 +519,7 @@ import type { FeatureTypeDefinition } from '@sakuzu/maplibre-gl-draw';
 const reshapeRoute: FeatureTypeDefinition = {
   type: 'Route',
   geometry: 'LineString',
-  renderer: routeRenderer,
+  render: drawRoute,
   handles(feature) {
     return verticesOf(feature).map((position, index) => ({
       kind: 'custom',
@@ -599,7 +578,7 @@ in the place of a built-in type of the same name: `Point`,
 `LineString`, `Polygon`, `Circle`, `Freehand` or `Image`. The
 definition has the `geometry` the built-in type holds (`Point` for a
 circle and an image, `LineString` for a freehand line). The features
-of the type are then drawn by its renderer. Its `hitTest`, `boxSelect`,
+of the type are then drawn by its `render`. Its `hitTest`, `boxSelect`,
 `footprint`, `bbox` and `snapCandidates` replace those of the
 built-in type when it has them; for the members it leaves out, the
 built-in type keeps its own. Its `handles` are shown with the handles
@@ -607,14 +586,14 @@ of the built-in type:
 
 <!-- docs-check:
 declare const draw: import('@sakuzu/maplibre-gl-draw').Draw;
-declare const pointRenderer: import('@sakuzu/maplibre-gl-draw').FeatureRenderer;
+declare const drawPoint: import('@sakuzu/maplibre-gl-draw').FeatureTypeDefinition['render'];
 -->
 
 ```ts
 const restore = draw.extensions.featureTypes.override({
   type: 'Point',
   geometry: 'Point',
-  renderer: pointRenderer,
+  render: drawPoint,
 });
 
 // The built-in points come back
@@ -638,54 +617,39 @@ ignores it: a custom type takes every feature of its type.
 
 <!-- docs-check:
 declare const draw: import('@sakuzu/maplibre-gl-draw').Draw;
-declare const pictureRenderer: import('@sakuzu/maplibre-gl-draw').FeatureRenderer;
+declare const drawPicture: import('@sakuzu/maplibre-gl-draw').FeatureTypeDefinition['render'];
 -->
 
 ```ts
 draw.extensions.featureTypes.override({
   type: 'Point',
   geometry: 'Point',
-  renderer: pictureRenderer,
+  render: drawPicture,
   appliesTo: (feature) => typeof feature.properties.picture === 'string',
 });
 ```
 
-On a layer held as rows, the points such a renderer takes are drawn one at a
-time by `draw`, each between the rows around it. What a definition and its
-renderer do from the rows themselves, without making a feature of each row,
-is in one member of each, `rows`, experimental with its types in `/kasane`
-(`FeatureTypeRows`, `FeatureRendererRows`):
+On a layer held as rows, the points such a definition takes are drawn one
+at a time by `render`, each between the rows around it. What a definition
+does from the rows themselves, without making a feature of each row, is in
+its member `rows`, experimental with its type in `/kasane`
+(`FeatureTypeRows`):
 
-- `renderer.rows.sprites` gives the pictures a renderer draws its points
-  with: a texture, the rectangle of the picture of a style, and its size on
+- `rows.sprites` gives the pictures a type draws its points with: a
+  texture, the rectangle of the picture of a style, and its size on
   screen. Such a point is then drawn with the other rows of its layer, in
   their order and in their draw, so a layer where points drawn as pictures
   and areas alternate is drawn in a few draws. The points of a type that
-  declares a scale field (`transformFields.scaleKey`) are drawn by `draw`
+  declares a scale field (`transformFields.scaleKey`) are drawn by `render`
   all the same: a picture is chosen by the style of a point, and does not
   follow its scale
 - `rows.appliesTo(view, handle)` gives the answer of `appliesTo` from the
   row, read from the `LayerTableView` of the layer (`getRowValue`,
   `getRowType`). Without it, a feature is made from each row of the type to
   ask `appliesTo` whenever the rows are sorted for the drawing
-- `renderer.rows.gpu` holds the rows of a type on the GPU, for a type with
-  many rows. `create(view)` makes a `GpuRows` for a range of rows of a layer.
-  It is given the rows once (`add`, within the time it is told), what is
-  written of them (`update`) and their state (`setStates`), and every frame it
-  draws a range of them (`draw`), in their place in the order of the layer:
-  the work of a frame does not follow the rows. Types that give the same
-  object share a range, also where their rows alternate. Without it, the
-  features of the rows are made, kept up to a limit, and drawn by `draw`
 
-`renderer.rows.gpu` owns the memory it holds: it records it with
-`ctx.gpu` of the plugin and keeps it under a limit of its own in bytes, by
-taking fewer rows in `add`. A row it refuses, a row with a companion and a
-range `draw` answers `false` for are drawn by `draw`, in the same place, so
-reaching the limit makes frames slower and changes nothing of the picture.
-When rows are refused, the ranges not in view for a while are released, and
-given their rows again once they come back. `release` comes when a range is
-not needed, when a layer leaves, and when the instance goes or the context is
-lost, so what is held goes back to what the renderer itself keeps.
+A type of many rows can also hold them on the GPU
+([Rows held on the GPU](#rows-held-on-the-gpu)).
 
 ## Terrain
 
@@ -710,10 +674,11 @@ Outside the drawing, a plugin reads the same terrain through
 ## Overlays
 
 An overlay draws what is not one feature: marks over the selection, a
-grid, a preview of your own. It has the `onAdd`, `draw` and `onRemove`
-of a renderer, with the same rules, and a `name`. Add it with
+grid, a preview of your own. It has a `name` and a `draw`, draws with the
+shared renderers and holds nothing on the GPU. Add it with
 `draw.extensions.overlays.add`, which returns the function that
-removes it.
+removes it. An overlay with WebGL of its own is added with
+`ctx.webgl.addOverlay` ([Your own shaders](#your-own-shaders)).
 
 An overlay that marks where every route starts:
 
@@ -726,7 +691,6 @@ import type { OverlayRenderer } from '@sakuzu/maplibre-gl-draw';
 
 const routeStarts: OverlayRenderer = {
   name: 'route-starts',
-  onAdd() {},
   draw(ctx) {
     for (const feature of draw.features.list({ type: 'Route' })) {
       const [start] = verticesOf(feature);
@@ -742,7 +706,6 @@ const routeStarts: OverlayRenderer = {
       });
     }
   },
-  onRemove() {},
 };
 
 draw.extensions.overlays.add(routeStarts);
@@ -900,22 +863,85 @@ draw.extensions.companionProviders.add(halo);
 ## Your own shaders
 
 The shared renderers cover lines, areas and point markers. For
-anything else, a renderer compiles its own shaders with `ctx.gl`, and
-positions them with the values of the GPU of the view, which
-`viewUniforms(ctx)` of `/webgl` gives: `shader` (the projection
-functions of the map), `projection`, and `offset` (the center of the
-view, for drawing near the camera without losing precision).
+anything else, a plugin draws with WebGL of its own through `ctx.webgl`:
+`addFeatureRenderer(type, definition)` draws the features of a type
+added with `ctx.extensions.featureTypes`, at their place in the order,
+and `addOverlay(definition)` draws above every feature, overlay and
+selection box, once in a frame. A definition says the part of the GPU it
+may hold (`gpuShare`), and `prepare(gpu)` makes the resources and
+returns what draws with them:
+
+<!-- docs-check:
+declare function vertexSource(prelude: string, offsetMode: string): string;
+declare const FRAGMENT_SOURCE: string;
+-->
+
+```ts
+import type { Plugin } from '@sakuzu/maplibre-gl-draw';
+import {
+  OFFSET_MODE_GLSL,
+  ProjectionUniformManager,
+  viewUniforms,
+} from '@sakuzu/maplibre-gl-draw/webgl';
+
+const ribbons = (options: { gpuShare: number }): Plugin => ({
+  name: 'ribbons',
+  onAdd(ctx) {
+    ctx.extensions.featureTypes.add({ type: 'Ribbon', geometry: 'LineString' });
+    ctx.webgl.addFeatureRenderer('Ribbon', {
+      gpuShare: options.gpuShare,
+      prepare(gpu) {
+        const { gl } = gpu;
+        const uniforms = new ProjectionUniformManager(gl);
+        const vertices = gpu.buffer(65536);
+        let program: WebGLProgram | null = null;
+        let variant = '';
+        return {
+          render(_feature, context) {
+            const view = viewUniforms(context);
+            // The projection of the map is compiled into the program
+            if (view.shader.variantName !== variant) {
+              if (program) gpu.release(program);
+              const vertex = vertexSource(view.shader.vertexShaderPrelude, OFFSET_MODE_GLSL);
+              program = gpu.program(vertex, FRAGMENT_SOURCE);
+              uniforms.getLocations(program);
+              variant = view.shader.variantName;
+            }
+            gl.useProgram(program);
+            uniforms.setTerrain(context);
+            uniforms.setUniforms(view.projection, view.offset);
+            gl.bindBuffer(gl.ARRAY_BUFFER, vertices);
+            // write the positions of the feature and draw them
+          },
+        };
+      },
+    });
+  },
+});
+```
+
+For a type, `prepare` returns an object with `render(feature, context)`
+and optionally `rows`; for an overlay, a function of an `OverlayContext`,
+a render context with `worldCopies`, one more for each copy of the world
+in view. It runs once the map gives a WebGL context, and again with a new
+`gpu` when a lost context is back, so what it takes to make the resources
+stays with the plugin. A definition given to several types is one
+`prepare` and one range of rows, also where their rows alternate.
+
+The values of the GPU of the view position what is drawn.
+`viewUniforms(ctx)` of `/webgl` gives `shader` (the projection functions
+of the map), `projection`, and `offset` (the center of the view, for
+drawing near the camera without losing precision).
 `offsetUniformsAt(ctx, position)` gives the offsets from another
 position, for a shape far from the center drawn around its own
 position.
 
-The entry `@sakuzu/maplibre-gl-draw/webgl` has the parts the shaders of
-the library are built on: the GLSL of the projection and
-`ProjectionUniformManager` for its uniforms, `createProgram`,
-`QuadShader`, and the rules the shared renderers follow for dashes and
-terrain ([the webgl entry](../api/webgl/index.md)). It may change in a
-minor release, unlike the main entry
-([versions](../reference/README.md)).
+The entry `@sakuzu/maplibre-gl-draw/webgl` has the types of `ctx.webgl`
+and the parts the shaders of the library are built on: the GLSL of the
+projection and `ProjectionUniformManager` for its uniforms, `QuadShader`,
+and the rules the shared renderers follow for dashes and terrain
+([the webgl entry](../api/webgl/index.md)). It may change in a minor
+release, unlike the main entry ([versions](../reference/README.md)).
 
 A shader takes its colors as numbers: read the CSS colors of
 `ctx.appliedStyle(feature)` with `parseCssColor` of the main entry,
@@ -935,19 +961,21 @@ library did not hand out, they throw a `DrawError` with the code
 import type { RenderContext } from '@sakuzu/maplibre-gl-draw';
 import {
   densifyPath,
+  type GpuContext,
   type ProjectionUniformManager,
   terrainTessellationStep,
   viewUniforms,
 } from '@sakuzu/maplibre-gl-draw/webgl';
 
 function pathOnTerrain(
+  gl: GpuContext,
   ctx: RenderContext,
   program: WebGLProgram,
   uniforms: ProjectionUniformManager,
   coordinates: [number, number][],
 ): [number, number][] {
   const view = viewUniforms(ctx);
-  ctx.gl.useProgram(program);
+  gl.useProgram(program);
   uniforms.setTerrain(ctx);
   uniforms.setUniforms(view.projection, view.offset);
   const step = terrainTessellationStep(ctx);
@@ -997,7 +1025,7 @@ function drawSolidQuad(ctx: RenderContext, center: [number, number]): boolean {
 `QuadShader` draws a content the same way wherever the quad is: on the
 terrain through `drawQuadOnTerrain`, and on the plane and on the globe with
 the same `quadDrapeColor`, with a `shade` of 1. Give it the content when it
-is made with the ledger it records in (`new QuadShader(gl, ctx.gpu, content)`,
+is made, with the `gpu` it allocates with (`new QuadShader(gpu, content)`,
 a picture with `QuadImageContent` when left out), set what the content
 reads, and call `draw(vertices, opacity, projection)`.
 
@@ -1019,7 +1047,8 @@ go. A shader that draws something with each row (a mark of a point)
 moves it the same way with `ROW_STATE_GLSL`:
 
 - each instance carries the number of a row in a texture of your own
-  (`createRowStateTexture`), filled with `rowStateOf(dragged, handle)`
+  (`createRowStateTexture(gpu, rows)`, which throws as `gpu.texture` does),
+  filled with `rowStateOf(dragged, handle)`
   of the rows `draw.rendered.getDraggedRows()` gives (`uploadRowState`)
 - before drawing, bind the texture to the unit `ROW_STATE_TEXTURE_UNIT`
   and write the uniforms with
@@ -1054,6 +1083,81 @@ own batches: `null` while the error of what is seen is within
 `RETAINED_ORIGIN_TOLERANCE_PX`. Ask it while the camera is at rest, and
 pass `rowStateMovedViews(binding, view)` for the rows being dragged.
 
+### What a plugin holds on the GPU
+
+Everything is made through the `gpu`, which records it under the name of
+the plugin in the ledger of the instance:
+
+- `gpu.buffer`, `gpu.texture`, `gpu.vertexArray`, `gpu.transformFeedback`
+  and `gpu.fence` make the resources. `gpu.program` links a program and
+  waits for it; `gpu.compile` links one without stopping a frame
+- `gpu.rows` is a `gpu` for what follows the number of features: it is out
+  of `gpuShare`, under what the device has left (`draw.memory`), and goes
+  with the `gpu`
+- `gpu.gl` (`GpuContext`) is the WebGL context without the calls that make
+  and delete resources. Writing into what is made stays, as `bufferSubData`
+  and `texSubImage2D`
+- `gpu.release(resource)` gives something back early
+- `gpu.memory()` tells what it holds, and in `limitBytes` the most it can
+  hold now
+- `gpu.signal` stops when the resources end: pass it to `fetch`
+
+The library gives everything back when the plugin is removed, on
+`draw.destroy()`, when the context is lost, and when `prepare` or the
+drawing throws, so there is no hook that releases. A definition that threw
+is told in the console and is not asked again until a lost context is back
+or the plugin is added again; the rest of the drawing goes on.
+
+`gpuShare` is a fraction of `rendering.gpuLimitBytes`, above 0 and at
+most 1. The value belongs in the options of the plugin, which holds no
+number of bytes. The shares of the definitions added may sum to at most 0.9, as
+the rest stays with the library: past it `addFeatureRenderer` and
+`addOverlay` throw a `DrawError` with the code `too-large`.
+
+An allocation past the share throws a `DrawError` with the code `too-large`
+and holds nothing; its `retryable` is true only when the room of the whole
+instance is short. A change of `rendering.gpuLimitBytes` through
+`draw.options.update` is followed at once: what is held is not released,
+and the next allocation is refused. A `gpu` that has stopped throws
+`invalid-state`, so a result that arrives late leaves nothing behind. A
+program that does not link throws `invalid-input` with the log in the
+message.
+
+### Rows held on the GPU
+
+On a layer held as rows, a type of many rows holds them on the GPU, so that
+the work of a frame does not follow the rows. What `prepare` returns has
+`rows: (view, gpu) => GpuRowBuffer`, which makes what holds one range of
+rows of a layer. Without it, the features of the rows are made, kept up to
+a limit, and drawn by `render`. A `GpuRowBuffer` is experimental, as the
+rows are, and names a row by its index in what it took:
+
+- `add(rows, stopAtMilliseconds)` takes rows after the ones it took, in the
+  order of the layer, and returns how many
+- `update(index, row)` takes a row as it was written, in the frame that
+  shows the write. Answering `false`, it leaves the row to `render`, at its
+  place in the order, and `setStates` hides the row at this index
+- `setStates(from, states)` takes the state of rows, the byte
+  `ROW_STATE_GLSL` reads, when they are taken and for every change around
+  them
+- `render(from, to, context)` draws the rows `[from, to)` at this place of
+  the order, for each part of the range between other rows and for each
+  copy of the world. Answering `false`, it leaves them to `render(feature,
+  context)` in this frame
+
+All that the `gpu` of a range makes is rows: it is out of `gpuShare`, limited
+by the limit of the device (`draw.memory`), and given back with the range,
+so a range has nothing to release. The library tells a refusal from a stop
+by the clock: `add` back before `stopAtMilliseconds` with fewer rows than
+given refused them, and past it the rows left are given again in a later
+frame. A `too-large` thrown through `add` is a refusal too.
+
+A row refused, a row with a companion and a range that answers `false` are
+drawn by `render` in the same place, so reaching the limit makes frames
+slower and changes nothing of the picture. When rows are refused, the
+ranges not in view for a while are dropped, and given their rows again once
+they come back: a range can be made again from the rows at any time.
+
 ## Related example
 
 - [Custom feature types](../examples/custom-feature-types.md) adds a
@@ -1068,8 +1172,12 @@ pass `rowStateMovedViews(binding, view)` for the rows being dragged.
   [TransformFields](../api/maplibre-gl-draw/interfaces/TransformFields.md),
   [Handle](../api/maplibre-gl-draw/type-aliases/Handle.md) and
   [HandleContext](../api/maplibre-gl-draw/interfaces/HandleContext.md)
-- [FeatureRenderer](../api/maplibre-gl-draw/interfaces/FeatureRenderer.md)
-  and [RenderContext](../api/maplibre-gl-draw/interfaces/RenderContext.md)
+- [RenderContext](../api/maplibre-gl-draw/interfaces/RenderContext.md)
+- [Webgl](../api/webgl/interfaces/Webgl.md),
+  [GpuDefinition](../api/webgl/interfaces/GpuDefinition.md),
+  [Gpu](../api/webgl/interfaces/Gpu.md),
+  [FeatureRenderer](../api/webgl/interfaces/FeatureRenderer.md) and
+  [GpuRowBuffer](../api/webgl/interfaces/GpuRowBuffer.md)
 - [LineRenderer](../api/maplibre-gl-draw/interfaces/LineRenderer.md),
   [FillRenderer](../api/maplibre-gl-draw/interfaces/FillRenderer.md) and
   [PointRenderer](../api/maplibre-gl-draw/interfaces/PointRenderer.md)
