@@ -232,6 +232,52 @@ describe('writer.apply', () => {
     expect(internals.styles.size).toBe(2);
     expect(internals.styles.capacity).toBeLessThanOrEqual(3);
   });
+
+  it('gives a row the style the row before it in the patch leaves, as its last user', () => {
+    const { tables, writer, internals } = tablesOfFeatures('layer', points(3));
+    const [a, b, c] = ['p0', 'p1', 'p2'].map((id) => internals.ids.handleOf(id));
+    const red = { pointColor: '#ff0000' };
+    const green = { pointColor: '#00ff00' };
+    writer.apply(patchOf([a], 'style', [red]));
+    writer.apply(patchOf([a, b], 'style', [green, { ...red }]));
+    const view = tables.get('layer');
+    expect(view?.getRow(a)?.style).toEqual(green);
+    expect(view?.getRow(b)?.style).toEqual(red);
+    expect(view?.getRow(c)?.style).toEqual({});
+    // Each style is counted for its rows alone: the write holds none of them when it ends
+    expect(internals.styles.size).toBe(3);
+    expect(internals.styles.usesOf(internals.styles.intern(red))).toBe(1);
+    expect(internals.styles.usesOf(internals.styles.intern(green))).toBe(1);
+  });
+
+  it('swaps the styles of two rows in a patch', () => {
+    const { tables, writer, internals } = tablesOfFeatures('layer', points(2));
+    const [a, b] = ['p0', 'p1'].map((id) => internals.ids.handleOf(id));
+    const red = { pointColor: '#ff0000' };
+    const green = { pointColor: '#00ff00' };
+    writer.apply(patchOf([a, b], 'style', [red, green]));
+    writer.apply(patchOf([a, b], 'style', [green, red]));
+    expect(tables.get('layer')?.getRow(a)?.style).toEqual(green);
+    expect(tables.get('layer')?.getRow(b)?.style).toEqual(red);
+    expect(internals.styles.size).toBe(2);
+  });
+
+  it('leaves a style to the rows that hold it when a patch places its row elsewhere', () => {
+    const { tables, writer, internals } = tablesOfFeatures('layer', points(2));
+    const a = internals.ids.handleOf('p0');
+    const red = { pointColor: '#ff0000' };
+    writer.apply({
+      handles: Int32Array.of(a),
+      fields: new Map<RowField, unknown[]>([
+        ['style', [red]],
+        ['order', [orderKey(5)]],
+      ]),
+    });
+    expect(internals.placeOf(a)?.group.delta).toBe(true);
+    expect(tables.get('layer')?.getRow(a)?.style).toEqual(red);
+    expect(internals.styles.size).toBe(2);
+    expect(internals.styles.usesOf(internals.styles.intern(red))).toBe(1);
+  });
 });
 
 describe('writes at random against a list of features', () => {
