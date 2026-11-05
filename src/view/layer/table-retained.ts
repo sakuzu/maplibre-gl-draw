@@ -324,7 +324,7 @@ export interface TableLayerRendererOptions {
   /** The terrain state of the draw instance (the camera moving, the elevations of points) */
   readonly terrain: TerrainContext;
   /** Where the textures of the state of the rows are recorded */
-  readonly ledger?: GpuLedger;
+  readonly ledger: GpuLedger;
   /** The rendering pixel ratio (read from window when omitted) */
   readonly pixelRatio?: PixelRatioInput;
   /** The time the builds may take in a frame ({@link TABLE_BUILD_BUDGET_MS} when omitted) */
@@ -2760,7 +2760,7 @@ export class TableLayerRenderer {
     this.releaseChunks(groupCache, 'by-kind');
     this.releaseChunks(groupCache, 'one-draw');
     if (groupCache.texture) {
-      this.options.ledger?.release(groupCache.texture.texture);
+      this.options.ledger.release(groupCache.texture.texture);
       deleteRowStateTexture(this.options.gl, groupCache.texture);
       groupCache.texture = null;
       groupCache.binding = null;
@@ -3765,7 +3765,15 @@ export class TableLayerRenderer {
     while (chunk.taken < count && budget.canStep()) {
       const held = chunk.held ?? chunk.source.create(view);
       chunk.held = held;
-      const took = budget.step((deadline) => this.addRows(chunk, held, group, deadline));
+      let took: number;
+      try {
+        took = budget.step((deadline) => this.addRows(chunk, held, group, deadline));
+      } catch (error) {
+        // Nothing of a range that failed stays: its rows are drawn one by one from here
+        this.releaseGpuRows(chunk);
+        chunk.refusedAt = this.gpuRowsReleases;
+        throw error;
+      }
       if (took > 0) continue;
       if (held.hasPendingWork()) break;
       chunk.refusedAt = this.gpuRowsReleases;

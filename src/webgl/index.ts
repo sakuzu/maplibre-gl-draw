@@ -79,7 +79,7 @@ export { drawBillboardsWithoutDepth } from '../view/renderers/point/billboard-de
 
 // Quads
 export type { QuadDrapeContent } from '../view/terrain/drape/quad.js';
-export type { QuadVertices } from '../view/shaders/quad.js';
+export type { QuadShaderLedger, QuadVertices } from '../view/shaders/quad.js';
 export {
   computeQuadVertices,
   drawQuadOnTerrain,

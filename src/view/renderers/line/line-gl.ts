@@ -139,16 +139,10 @@ export class ImmediateCoordTexture {
   texture: WebGLTexture | null = null;
   size = 0;
 
-  private ledger: GpuLedger | undefined;
-
-  constructor(private readonly gl: WebGL2RenderingContext) {}
-
-  /** Records the memory of the texture from now on, and the texture it holds already */
-  useLedger(ledger: GpuLedger): void {
-    this.ledger = ledger;
-    if (this.texture)
-      ledger.record(this.texture, 'lines', 'texture', textureBytes(this.size, this.size, 16));
-  }
+  constructor(
+    private readonly gl: WebGL2RenderingContext,
+    private readonly ledger: GpuLedger,
+  ) {}
 
   /**
    * Uploads the coordinates (returns with the texture bound to TEXTURE_2D)
@@ -167,7 +161,7 @@ export class ImmediateCoordTexture {
 
     if (!this.texture || texSize > this.size) {
       if (this.texture) {
-        this.ledger?.release(this.texture);
+        this.ledger.release(this.texture);
         gl.deleteTexture(this.texture);
       }
 
@@ -179,7 +173,7 @@ export class ImmediateCoordTexture {
       gl.bindTexture(gl.TEXTURE_2D, texture);
       giveStorage(gl, texture, () => gl.texStorage2D(gl.TEXTURE_2D, 1, gl.RGBA32F, size, size));
       setCoordTextureParams(gl);
-      this.ledger?.record(texture, 'lines', 'texture', textureBytes(size, size, 16));
+      this.ledger.record(texture, 'lines', 'texture', textureBytes(size, size, 16));
 
       this.texture = texture;
       this.size = size;
@@ -194,7 +188,7 @@ export class ImmediateCoordTexture {
   /** Deletes the texture */
   dispose(): void {
     if (this.texture) {
-      this.ledger?.release(this.texture);
+      this.ledger.release(this.texture);
       this.gl.deleteTexture(this.texture);
       this.texture = null;
       this.size = 0;
@@ -215,7 +209,7 @@ export interface RetainedLineBatchOptions {
    */
   readonly stationBuffer: WebGLBuffer;
   /** Where the GPU memory is recorded */
-  readonly ledger?: GpuLedger;
+  readonly ledger: GpuLedger;
   /**
    * For a batch of rows held as columns: where the instances of each row start (rows + 1
    * entries). Its instances then carry the number of their row
@@ -246,7 +240,7 @@ export function createRetainedLineBatch(
   const texture = createCoordTexture(gl, arrays.texData, arrays.texSize, limit);
   if (!texture) return null;
   const { ledger, rowFirst, stationBuffer } = options;
-  ledger?.record(texture, 'lines', 'texture', textureBytes(arrays.texSize, arrays.texSize, 16));
+  ledger.record(texture, 'lines', 'texture', textureBytes(arrays.texSize, arrays.texSize, 16));
 
   const vao = gl.createVertexArray()!;
   gl.bindVertexArray(vao);
@@ -260,7 +254,7 @@ export function createRetainedLineBatch(
   const instanceBuffer = gl.createBuffer()!;
   gl.bindBuffer(gl.ARRAY_BUFFER, instanceBuffer);
   gl.bufferData(gl.ARRAY_BUFFER, arrays.instanceData, gl.STATIC_DRAW);
-  ledger?.record(instanceBuffer, 'lines', 'buffer', arrays.instanceData.byteLength);
+  ledger.record(instanceBuffer, 'lines', 'buffer', arrays.instanceData.byteLength);
   setupInstanceAttribs(gl, rowFirst !== undefined);
 
   gl.bindVertexArray(null);
@@ -335,11 +329,11 @@ export function patchRetainedCoordTexels(
 export function deleteRetainedLineBatch(
   gl: WebGL2RenderingContext,
   batch: RetainedLineBatch,
-  ledger?: GpuLedger,
+  ledger: GpuLedger,
 ): void {
   // The buffer of the stations is shared and stays (the renderer deletes it)
-  ledger?.release(batch.instanceBuffer);
-  ledger?.release(batch.texture);
+  ledger.release(batch.instanceBuffer);
+  ledger.release(batch.texture);
   gl.deleteVertexArray(batch.vao);
   gl.deleteBuffer(batch.instanceBuffer);
   gl.deleteTexture(batch.texture);

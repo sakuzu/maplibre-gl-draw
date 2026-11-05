@@ -190,8 +190,8 @@ export interface DrapePlannerDeps {
   store: Store;
   terrain: TerrainContext;
   datasets?: DrapePlannerDatasets;
-  /** Where the GPU memory of the drape is recorded (nothing is recorded when omitted) */
-  ledger?: GpuLedger;
+  /** Where the GPU memory of the drape is recorded */
+  ledger: GpuLedger;
   /**
    * Whether the work that does not fit in a frame is spread over later frames (true when
    * omitted; the `timeSlicing` of the rendering settings)
@@ -366,7 +366,7 @@ export class DrapePlanner {
   /** The quad drape renderer (created on first use) */
   quadRenderer(gl: WebGL2RenderingContext): QuadDrapeRenderer {
     if (!this.quadDrapeRenderer) {
-      this.quadDrapeRenderer = new QuadDrapeRenderer(gl).useLedger(this.deps.ledger);
+      this.quadDrapeRenderer = new QuadDrapeRenderer(gl, this.deps.ledger);
     }
     return this.quadDrapeRenderer;
   }
@@ -673,7 +673,7 @@ export class DrapePlanner {
     }
 
     if (!this.drapeRenderer) {
-      this.drapeRenderer = new DrapeRenderer(gl).useLedger(this.deps.ledger);
+      this.drapeRenderer = new DrapeRenderer(gl, this.deps.ledger);
     }
     const meshSize = getTerrainMeshSize(terrain);
 

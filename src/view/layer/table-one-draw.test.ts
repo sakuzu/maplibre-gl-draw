@@ -237,7 +237,7 @@ function setup(
   const { internals, table, tables, writer } = tablesOfFeatures('layer', features, targetRows);
   const mock = recordingGL(options);
   const ledger = new GpuLedger();
-  const rows = new RowsRenderer(null, mock.gl, 1, terrain, ledger);
+  const rows = new RowsRenderer(null, mock.gl, ledger, 1, terrain);
   rows.ensureShader({ vertexShaderPrelude: '', define: '', variantName: 'mercator' });
   const made: RowsChunkData[] = [];
   const released: RowsChunkLayout[] = [];
@@ -1200,6 +1200,8 @@ describe('the rows an extension holds on the GPU', () => {
     draws?: () => boolean;
     /** Whether it takes no rows yet, with work left */
     busy?: () => boolean;
+    /** Whether a call of `add` throws, once it made its buffer */
+    fails?: () => boolean;
   }
 
   /**
@@ -1230,6 +1232,7 @@ describe('the rows an extension holds on the GPU', () => {
             ledger().record(buffer, 'ribbons', 'buffer', bytes);
             buffers.push({ buffer, bytes });
             usedBytes += bytes;
+            if (options.fails?.()) throw new Error('no memory');
             held.rows.push(...rows.subarray(0, count));
             return count;
           },
@@ -1713,6 +1716,15 @@ describe('the rows an extension holds on the GPU', () => {
   });
 
   describe('what it holds goes back', () => {
+    it('when taking rows fails: the range is released, and its rows are drawn one by one', () => {
+      const { frame, made, heldBytes, ledger } = layer(ribbonRows(2), { fails: () => true });
+      expect(() => frame()).toThrow('no memory');
+      expect(made[0].released).toBe(true);
+      expect(heldBytes()).toBe(0);
+      expect(ledger.audit()).toBe(true);
+      expect(() => frame()).not.toThrow();
+    });
+
     it('when the rows of a chunk are all hidden, and comes back when one is shown', () => {
       const { frame, made, heldBytes, internals, tables, log } = layer(ribbonRows(2));
       frame();

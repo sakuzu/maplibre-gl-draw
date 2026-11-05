@@ -204,6 +204,19 @@ export class GpuLedger {
     }
   }
 
+  /** The most bytes the instance may hold outside the rows (`rendering.gpuLimitBytes`) */
+  limitBytes = DEFAULT_GPU_LIMIT_BYTES;
+
+  /** Whether more may be held outside the rows, by what everything holds */
+  fits(bytes: number): boolean {
+    return this.outsideRowBytes + bytes <= this.limitBytes;
+  }
+
+  /** The bytes that may be held more outside the rows */
+  get roomBytes(): number {
+    return Math.max(0, this.limitBytes - this.outsideRowBytes);
+  }
+
   /** The bytes held outside the rows, which the limit of the instance holds */
   get outsideRowBytes(): number {
     return this.bufferBytes + this.textureBytes - this.rowBytes;

@@ -14,6 +14,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { DEFAULT_FEATURE_STYLE_CONFIG } from '../shared/config/feature-style.js';
 import type { BoundingBox, Feature } from '../shared/types/model.js';
 import { displayFeature } from '../test-utils.js';
+import { GpuLedger } from '../view/gpu-ledger.js';
 import { FeatureDrawer } from '../view/renderers/drawer.js';
 import type { ImageRenderer } from '../view/renderers/image.js';
 import type { RetainedLineBatch } from '../view/renderers/line/line-types.js';
@@ -77,6 +78,7 @@ function createRenderers(): {
       },
     },
     styles: new FeatureDrawer({
+      ledger: new GpuLedger(),
       gl: createStubGL(),
       map: {} as never,
       sdfLineRenderer: {} as SDFLineRenderer,

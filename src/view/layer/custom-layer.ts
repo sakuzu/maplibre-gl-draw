@@ -91,6 +91,8 @@ import { TerrainResolver } from './terrain-resolver.js';
  * @internal
  */
 export interface CustomLayerDeps {
+  /** The most bytes the instance holds on the GPU outside the rows */
+  gpuLimitBytes?: number;
   map: MapLibreMap;
   store: Store;
   /**
@@ -412,6 +414,7 @@ export function createCustomLayer(deps: CustomLayerDeps): CustomLayerInterface {
    * them). The renderers receive the parts they need at construction.
    */
   const renderScope = createRenderScope(deps.selectionScope);
+  if (deps.gpuLimitBytes !== undefined) renderScope.gpu.limitBytes = deps.gpuLimitBytes;
   const terrainContext = renderScope.terrain;
   const terrainResolver = new TerrainResolver(map, terrainContext, renderScope.gpu);
   const drape = new DrapePlanner({

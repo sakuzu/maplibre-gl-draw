@@ -12,6 +12,7 @@
 import type { Map as MapLibreMap } from 'maplibre-gl';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Store } from '../../store/store.js';
+import { GpuLedger } from '../gpu-ledger.js';
 import type { RetainedStyleResolver } from '../renderers/retained.js';
 import { TerrainContext } from '../terrain/context.js';
 import type { RenderableTerrainTile } from '../terrain/detect.js';
@@ -114,9 +115,6 @@ vi.mock('../terrain/drape/renderer.js', () => ({
   DRAPE_OWNER: 'drape',
   DrapeRenderer: class {
     lastError = '';
-    useLedger(): this {
-      return this;
-    }
     upload(): boolean {
       return fake.upload;
     }
@@ -141,6 +139,7 @@ function createPlanner(options: { timeSlicing?: boolean } = {}) {
   };
   const map = { triggerRepaint: vi.fn() };
   const planner = new DrapePlanner({
+    ledger: new GpuLedger(),
     map: map as unknown as MapLibreMap,
     timeSlicing: options.timeSlicing,
     store: {

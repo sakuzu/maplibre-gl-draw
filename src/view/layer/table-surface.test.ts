@@ -205,11 +205,10 @@ function setup(features: Feature[], targetRows?: number) {
   const { internals, table, tables, writer } = tablesOfFeatures('layer', features, targetRows);
   const mock = countingGL();
   const ledger = new GpuLedger();
-  const point = new PointInstanceRenderer({} as MapLibreMap, mock.gl, 1, terrain, ledger);
-  const line = new SDFLineRenderer({} as MapLibreMap, mock.gl, 1, terrain);
-  line.useLedger(ledger);
-  const polygon = new SDFPolygonRenderer(mock.gl, 1, { terrain, gpu: ledger });
-  const rows = new RowsRenderer(null, mock.gl, 1, terrain, ledger);
+  const point = new PointInstanceRenderer({} as MapLibreMap, mock.gl, ledger, 1, terrain);
+  const line = new SDFLineRenderer({} as MapLibreMap, mock.gl, ledger, 1, terrain);
+  const polygon = new SDFPolygonRenderer(mock.gl, { terrain, gpu: ledger }, 1);
+  const rows = new RowsRenderer(null, mock.gl, ledger, 1, terrain);
   const made: RowsChunkData[] = [];
   const heights = new Map<RowsChunk, Float32Array>();
   const createChunk = rows.createChunk.bind(rows);

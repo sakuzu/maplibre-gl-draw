@@ -456,9 +456,9 @@ export function createRowStateTexture(
  *
  * @internal
  */
-export function recordRowStateTexture(ledger: GpuLedger | undefined, state: RowStateTexture): void {
+export function recordRowStateTexture(ledger: GpuLedger, state: RowStateTexture): void {
   const { texture, width, height } = state;
-  ledger?.record(texture, 'row-state', 'texture', textureBytes(width, height, 1));
+  ledger.record(texture, 'row-state', 'texture', textureBytes(width, height, 1));
 }
 
 /**

@@ -360,6 +360,7 @@ const WEBGL = [
   'QuadDrapeContent',
   'QuadImageContent',
   'QuadShader',
+  'QuadShaderLedger',
   'QuadVertices',
   'rebasedRetainedOrigin',
   'RETAINED_ORIGIN_TOLERANCE_PX',

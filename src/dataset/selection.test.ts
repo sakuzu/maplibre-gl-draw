@@ -14,6 +14,7 @@ import { DEFAULT_FEATURE_STYLE_CONFIG } from '../shared/config/feature-style.js'
 import { SELECTION_HIGHLIGHT_COLOR } from '../shared/config/selection-highlight.js';
 import type { BoundingBox, Feature } from '../shared/types/model.js';
 import { toRow } from '../test-utils.js';
+import { GpuLedger } from '../view/gpu-ledger.js';
 import { FeatureDrawer } from '../view/renderers/drawer.js';
 import type { ImageRenderer } from '../view/renderers/image.js';
 import type { SDFLineRenderer } from '../view/renderers/line/sdf-line.js';
@@ -65,6 +66,7 @@ const POLYGON = feature(
 
 function createStyles(): FeatureDrawer {
   return new FeatureDrawer({
+    ledger: new GpuLedger(),
     gl: {
       createBuffer: (): object => ({}),
       createVertexArray: (): object => ({}),

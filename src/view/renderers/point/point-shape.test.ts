@@ -14,6 +14,7 @@
 
 import type { Map as MapLibreMap, ProjectionData } from 'maplibre-gl';
 import { describe, expect, it } from 'vitest';
+import { GpuLedger } from '../../gpu-ledger.js';
 import { syncDepthTestEnabled } from '../../layer/depth-state.js';
 import type { ShaderData } from '../../shaders/helpers.js';
 import { STAR_INNER_RATIO } from './point-sdf.js';
@@ -147,7 +148,7 @@ function drawOnce(
   shape: PointShape = 'circle',
   featureId?: string,
 ): void {
-  const renderer = new PointShapeRenderer({} as unknown as MapLibreMap, gl, 1);
+  const renderer = new PointShapeRenderer({} as unknown as MapLibreMap, gl, new GpuLedger(), 1);
   renderer.ensureShader(SHADER_DATA);
   renderer.setProjectionData(PROJECTION_DATA);
   renderer.draw(

@@ -32,6 +32,7 @@ import type { Feature, Layer } from '../shared/types/model.js';
 import { MemoryStore } from '../store/memory.js';
 import { RBushSpatialIndex } from '../store/spatial/spatial-index.js';
 import { feature, tablesOfFeatures } from '../test-utils.js';
+import { TextureCache } from './cache/texture.js';
 import { createFeatureCompanionRegistry } from './feature-companion.js';
 import { GpuLedger } from './gpu-ledger.js';
 import { createRenderScope } from './layer/render-scope.js';
@@ -554,6 +555,89 @@ describe('the GPU ledger holds everything core allocates', () => {
     }
   });
 
+  describe('under the limit of the instance', () => {
+    /** An image decoded, of a size */
+    const decoded = (width: number, height: number) =>
+      ({ width, height }) as unknown as HTMLImageElement;
+
+    /** A cache with an image waiting for its upload */
+    function cacheOf(mock: StorageGL, ledger: GpuLedger, images: Record<string, HTMLImageElement>) {
+      const cache = new TextureCache(mock.gl, ledger);
+      const internals = cache as unknown as {
+        decodedImages: Map<string, HTMLImageElement>;
+        uploadImage(src: string, img: HTMLImageElement): { texture: object } | null;
+      };
+      for (const [src, img] of Object.entries(images)) internals.decodedImages.set(src, img);
+      return { cache, upload: (src: string) => internals.uploadImage(src, images[src] as never) };
+    }
+
+    it('makes the texture of an image whole while it fits', () => {
+      const mock = storageGL();
+      const ledger = new GpuLedger();
+      ledger.limitBytes = 10_000_000;
+      const { upload } = cacheOf(mock, ledger, { a: decoded(1000, 1000) });
+      upload('a');
+      expect(mock.textureBytes()).toBeGreaterThan(4_000_000);
+      expect(ledger.outsideRowBytes).toBe(mock.textureBytes());
+    });
+
+    it('gives up the images not on the screen for one that does not fit', () => {
+      const mock = storageGL();
+      const ledger = new GpuLedger();
+      ledger.limitBytes = 6_000_000;
+      const images = { a: decoded(1000, 1000), b: decoded(1000, 1000) };
+      const { cache, upload } = cacheOf(mock, ledger, images);
+      const now = vi.spyOn(Date, 'now').mockReturnValue(1_000_000);
+      upload('a');
+      now.mockReturnValue(1_010_000);
+      upload('b');
+      expect(ledger.outsideRowBytes).toBeLessThanOrEqual(6_000_000);
+      expect(cache.getImageTextureSync('a')).toBeNull();
+      expect(cache.getImageTextureSync('b')).not.toBeNull();
+      now.mockRestore();
+    });
+
+    it('draws an image on the screen from a smaller picture past the limit, and whole again', () => {
+      const mock = storageGL();
+      const ledger = new GpuLedger();
+      ledger.limitBytes = 6_000_000;
+      const images = { a: decoded(1000, 1000), b: decoded(1000, 1000) };
+      const { cache, upload } = cacheOf(mock, ledger, images);
+      upload('a');
+      const reduced = upload('b');
+      expect(reduced).not.toBeNull();
+      expect(ledger.outsideRowBytes).toBeLessThanOrEqual(6_000_000);
+      // The room comes back: its whole texture is made again
+      ledger.limitBytes = 20_000_000;
+      cache.sweep(Date.now());
+      expect(cache.getImageTextureSync('b')).toBeNull();
+      expect(upload('b')).not.toBeNull();
+      expect(ledger.outsideRowBytes).toBeGreaterThan(9_000_000);
+    });
+
+    it('waits with an image when next to nothing is left', () => {
+      const mock = storageGL();
+      const ledger = new GpuLedger();
+      ledger.limitBytes = 100;
+      const { upload } = cacheOf(mock, ledger, { a: decoded(1000, 1000) });
+      expect(upload('a')).toBeNull();
+      expect(mock.textureBytes()).toBe(0);
+    });
+
+    it('holds a table of the drape under the limit, or draws the frame without the drape', () => {
+      const mock = storageGL();
+      const ledger = new GpuLedger();
+      const renderer = new DrapeRenderer(mock.gl, ledger, false) as unknown as {
+        rowsUnderLimit(width: number, channels: number, needed: number, most: number): number;
+      };
+      ledger.limitBytes = 1_000_000;
+      // A row of 1,024 texels of 16 bytes is 16 KB: 40 rows fit, 60 with the extra rows do not
+      expect(renderer.rowsUnderLimit(1024, 4, 10, 4096)).toBe(15);
+      expect(renderer.rowsUnderLimit(1024, 4, 50, 4096)).toBe(50);
+      expect(renderer.rowsUnderLimit(1024, 4, 100, 4096)).toBe(0);
+    });
+  });
+
   it('when the features of the Store are drawn one by one', () => {
     const mock = storageGL();
     const { renderers, ledger, projectionData } = engine(mock);
@@ -890,7 +974,7 @@ describe('the GPU ledger holds everything core allocates', () => {
     for (const rows of [false, true]) {
       const mock = storageGL();
       const ledger = new GpuLedger();
-      const renderer = new DrapeRenderer(mock.gl, rows).useLedger(ledger);
+      const renderer = new DrapeRenderer(mock.gl, ledger, rows);
       expect(renderer.ensure(SHADER_DATA, 64)).toBe(true);
       expect(mock.bufferBytes()).toBeGreaterThan(0);
       expectLedgerMatches(mock, ledger);
@@ -922,7 +1006,7 @@ describe('the GPU ledger holds everything core allocates', () => {
   it('when the drape of the quads makes its mesh', () => {
     const mock = storageGL();
     const ledger = new GpuLedger();
-    const renderer = new QuadDrapeRenderer(mock.gl).useLedger(ledger);
+    const renderer = new QuadDrapeRenderer(mock.gl, ledger);
     renderer.ensure({ glsl: '', bind: () => {} }, SHADER_DATA, 64);
     expect(mock.bufferBytes()).toBeGreaterThan(0);
     expectLedgerMatches(mock, ledger);
@@ -975,5 +1059,19 @@ describe('the sources that allocate on the GPU', () => {
     }
     expect(allocating).toBeGreaterThan(10);
     expect(unrecorded).toEqual([]);
+  });
+
+  it('take the ledger as something they cannot go without', () => {
+    const optional: string[] = [];
+    for (const path of librarySources()) {
+      if (
+        /ledger\?[.:]|ledger: GpuLedger(Owner)? \| (undefined|null)/.test(
+          readFileSync(path, 'utf8'),
+        )
+      ) {
+        optional.push(relative(SRC, path));
+      }
+    }
+    expect(optional).toEqual([]);
   });
 });

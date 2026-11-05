@@ -9,6 +9,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { GpuLedger } from '../gpu-ledger.js';
 import { TextureCache } from './texture.js';
 
 const PNG = 'data:image/png;base64,iVBORw0KGgo=';
@@ -101,7 +102,7 @@ describe('TextureCache', () => {
 
   it('is created without touching the DOM', () => {
     vi.stubGlobal('document', undefined);
-    expect(() => new TextureCache(createGl().gl)).not.toThrow();
+    expect(() => new TextureCache(createGl().gl, new GpuLedger())).not.toThrow();
   });
 });
 
@@ -124,7 +125,7 @@ describe('TextureCache images', () => {
 
   it('decodes once per src and touches no GL until a render asks again', async () => {
     const g = createGl();
-    const cache = new TextureCache(g.gl);
+    const cache = new TextureCache(g.gl, new GpuLedger());
     const ready = vi.fn();
 
     expect(cache.acquireImageTexture(PNG, ready)).toBeNull();
@@ -146,7 +147,7 @@ describe('TextureCache images', () => {
 
   it('uploads straight and not premultiplied, and gives the pixel store and binding back', () => {
     const g = createGl();
-    const cache = new TextureCache(g.gl);
+    const cache = new TextureCache(g.gl, new GpuLedger());
     cache.acquireImageTexture(PNG);
     images[0].onload?.();
     cache.acquireImageTexture(PNG);
@@ -160,7 +161,7 @@ describe('TextureCache images', () => {
 
   it('drops a decode that finishes after dispose', () => {
     const g = createGl();
-    const cache = new TextureCache(g.gl);
+    const cache = new TextureCache(g.gl, new GpuLedger());
     cache.acquireImageTexture(PNG);
     cache.dispose();
     images[0].onload?.();
@@ -171,7 +172,7 @@ describe('TextureCache images', () => {
 
   it('scales an image larger than MAX_TEXTURE_SIZE down to fit', () => {
     const g = createGl(1024);
-    const cache = new TextureCache(g.gl);
+    const cache = new TextureCache(g.gl, new GpuLedger());
     cache.acquireImageTexture(PNG);
     images[0].width = 4000;
     images[0].height = 2000;
@@ -186,7 +187,7 @@ describe('TextureCache images', () => {
 
   it('does not decode a failed src again every frame', async () => {
     const g = createGl();
-    const cache = new TextureCache(g.gl);
+    const cache = new TextureCache(g.gl, new GpuLedger());
     const failed = vi.fn();
     cache.acquireImageTexture(PNG, undefined, failed);
     images[0].onerror?.();
@@ -205,7 +206,7 @@ describe('TextureCache images', () => {
 
   it('refuses a src that is not an embedded image', async () => {
     const g = createGl();
-    const cache = new TextureCache(g.gl);
+    const cache = new TextureCache(g.gl, new GpuLedger());
     const failed = vi.fn();
     cache.acquireImageTexture('https://example.com/a.png', undefined, failed);
     await Promise.resolve();

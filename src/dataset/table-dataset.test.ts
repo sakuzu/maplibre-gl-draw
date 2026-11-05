@@ -32,6 +32,7 @@ import type {
   TableMixedGeometry,
 } from '../table/types.js';
 import { toRow } from '../test-utils.js';
+import { GpuLedger } from '../view/gpu-ledger.js';
 import { FeatureDrawer } from '../view/renderers/drawer.js';
 import type { ImageRenderer } from '../view/renderers/image.js';
 import { toLineInstanceColor } from '../view/renderers/line/line-geometry.js';
@@ -148,6 +149,7 @@ function createProbe(options: { packed?: boolean } = {}): {
         : {}),
     },
     styles: new FeatureDrawer({
+      ledger: new GpuLedger(),
       gl: createStubGL(),
       map: {} as never,
       sdfLineRenderer: {} as SDFLineRenderer,

@@ -60,6 +60,7 @@ import { createTableStore } from '../../store/table-memory.js';
 import type { Coordinate, Feature, Layer } from '../../store/types.js';
 import { createMapStub, createTestDrawer, memoryGL } from '../../test-utils.js';
 import { createFeatureCompanionRegistry } from '../feature-companion.js';
+import { GpuLedger } from '../gpu-ledger.js';
 import { toPointInstanceData } from '../renderers/batch-manager.js';
 import { retainedDrawRun } from '../renderers/draw-run.js';
 import type { FeatureDrawer } from '../renderers/drawer.js';
@@ -559,12 +560,13 @@ function tableDrawing(store: Store, drawer: FeatureDrawer, repaint: Repaint) {
   if (!tables) throw new Error('not a Store of rows');
   const mock = memoryGL();
   const terrain = new TerrainContext();
-  const rows = new RowsRenderer(null, mock.gl, 1, terrain);
+  const rows = new RowsRenderer(null, mock.gl, new GpuLedger(), 1, terrain);
   rows.ensureShader({ vertexShaderPrelude: '', define: '', variantName: 'mercator' });
   const out: string[] = [];
   const rawOut: string[] = [];
   let shownRaw: string[] = [];
   const renderer = new TableLayerRenderer({
+    ledger: new GpuLedger(),
     gl: mock.gl,
     terrain,
     requestRepaint: () => repaint.request(),

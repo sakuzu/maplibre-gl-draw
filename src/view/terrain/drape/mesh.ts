@@ -82,7 +82,7 @@ export function buildTerrainMeshArrays(meshSize: number): {
 export function createTerrainMeshBuffers(
   gl: WebGL2RenderingContext,
   meshSize: number,
-  ledger?: GpuLedgerOwner,
+  ledger: GpuLedgerOwner,
 ): TerrainMeshBuffers | null {
   const { vertices, indices } = buildTerrainMeshArrays(meshSize);
 
@@ -94,13 +94,13 @@ export function createTerrainMeshBuffers(
   gl.bindVertexArray(vao);
   gl.bindBuffer(gl.ARRAY_BUFFER, vertexBuffer);
   gl.bufferData(gl.ARRAY_BUFFER, vertices, gl.STATIC_DRAW);
-  ledger?.ledger.record(vertexBuffer, ledger.owner, 'buffer', vertices.byteLength);
+  ledger.ledger.record(vertexBuffer, ledger.owner, 'buffer', vertices.byteLength);
   gl.enableVertexAttribArray(0);
   // The integer attribute is read as a float (the shader side is a vec2)
   gl.vertexAttribPointer(0, 2, gl.SHORT, false, 4, 0);
   gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indexBuffer);
   gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, indices, gl.STATIC_DRAW);
-  ledger?.ledger.record(indexBuffer, ledger.owner, 'buffer', indices.byteLength);
+  ledger.ledger.record(indexBuffer, ledger.owner, 'buffer', indices.byteLength);
   gl.bindVertexArray(null);
 
   return { vao, vertexBuffer, indexBuffer, indexCount: indices.length, meshSize };
@@ -112,10 +112,10 @@ export function createTerrainMeshBuffers(
 export function disposeTerrainMeshBuffers(
   gl: WebGL2RenderingContext,
   mesh: TerrainMeshBuffers,
-  ledger?: GpuLedgerOwner,
+  ledger: GpuLedgerOwner,
 ): void {
-  ledger?.ledger.release(mesh.vertexBuffer);
-  ledger?.ledger.release(mesh.indexBuffer);
+  ledger.ledger.release(mesh.vertexBuffer);
+  ledger.ledger.release(mesh.indexBuffer);
   gl.deleteVertexArray(mesh.vao);
   gl.deleteBuffer(mesh.vertexBuffer);
   gl.deleteBuffer(mesh.indexBuffer);

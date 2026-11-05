@@ -140,15 +140,15 @@ export class AnchoredOutlineRenderer {
 
   private vao: WebGLVertexArrayObject | null;
   private vertexBuffer: WebGLBuffer | null;
-  /** Where the bytes of the vertex buffer are recorded (nothing is recorded when omitted) */
-  private readonly ledger: GpuLedger | undefined;
+  /** Where the bytes of the vertex buffer are recorded */
+  private readonly ledger: GpuLedger;
 
   constructor(
     _map: MapLibreMap,
     gl: WebGL2RenderingContext,
+    ledger: GpuLedger,
     pixelRatio?: PixelRatioInput,
     terrain: TerrainContext = new TerrainContext(),
-    ledger?: GpuLedger,
   ) {
     this.gl = gl;
     this.pixelRatio = pixelRatio;
@@ -285,7 +285,7 @@ void main() {
 
     gl.bindBuffer(gl.ARRAY_BUFFER, this.vertexBuffer);
     gl.bufferData(gl.ARRAY_BUFFER, data, gl.DYNAMIC_DRAW);
-    this.ledger?.record(this.vertexBuffer, 'outlines', 'buffer', data.byteLength);
+    this.ledger.record(this.vertexBuffer, 'outlines', 'buffer', data.byteLength);
     gl.bindVertexArray(this.vao);
     gl.useProgram(this.program);
     this.projectionUniformManager.setUniforms(projectionData, this.offsetUniforms);
@@ -332,7 +332,7 @@ void main() {
       this.vao = null;
     }
     if (this.vertexBuffer) {
-      this.ledger?.release(this.vertexBuffer);
+      this.ledger.release(this.vertexBuffer);
       this.gl.deleteBuffer(this.vertexBuffer);
       this.vertexBuffer = null;
     }

@@ -17,6 +17,7 @@
 
 import type { Map as MapLibreMap, ProjectionData } from 'maplibre-gl';
 import { describe, expect, it } from 'vitest';
+import { GpuLedger } from '../gpu-ledger.js';
 import { beginRenderFrame } from '../shaders/frame.js';
 import type { ShaderData } from '../shaders/helpers.js';
 import { calculateOffsetUniforms } from '../shaders/helpers.js';
@@ -197,7 +198,7 @@ function lineItems(lng: number, lat: number): LineBatchItem[] {
 describe('memoizing uniforms in the retained rendering of points', () => {
   it('writes the matrix only once no matter how many chunks are drawn in one frame', () => {
     const mock = createMockGL();
-    const renderer = new PointInstanceRenderer({} as MapLibreMap, mock.gl);
+    const renderer = new PointInstanceRenderer({} as MapLibreMap, mock.gl, new GpuLedger());
     renderer.ensureShader(SHADER_DATA);
 
     const projectionData = createProjectionData();
@@ -228,7 +229,7 @@ describe('memoizing uniforms in the retained rendering of points', () => {
 
   it('rewrites u_origin_shift with its own origin for each chunk', () => {
     const mock = createMockGL();
-    const renderer = new PointInstanceRenderer({} as MapLibreMap, mock.gl);
+    const renderer = new PointInstanceRenderer({} as MapLibreMap, mock.gl, new GpuLedger());
     renderer.ensureShader(SHADER_DATA);
 
     const projectionData = createProjectionData();
@@ -255,7 +256,7 @@ describe('memoizing uniforms in the retained rendering of points', () => {
 
   it('rewrites the matrix when the frame changes', () => {
     const mock = createMockGL();
-    const renderer = new PointInstanceRenderer({} as MapLibreMap, mock.gl);
+    const renderer = new PointInstanceRenderer({} as MapLibreMap, mock.gl, new GpuLedger());
     renderer.ensureShader(SHADER_DATA);
 
     const projectionData = createProjectionData();
@@ -278,7 +279,7 @@ describe('memoizing uniforms in the retained rendering of points', () => {
 
   it('rewrites the matrix even in the same frame when the ProjectionData changes', () => {
     const mock = createMockGL();
-    const renderer = new PointInstanceRenderer({} as MapLibreMap, mock.gl);
+    const renderer = new PointInstanceRenderer({} as MapLibreMap, mock.gl, new GpuLedger());
     renderer.ensureShader(SHADER_DATA);
 
     const first = createProjectionData();
@@ -295,7 +296,7 @@ describe('memoizing uniforms in the retained rendering of points', () => {
 
   it('throws away the memo when the shader is rebuilt', () => {
     const mock = createMockGL();
-    const renderer = new PointInstanceRenderer({} as MapLibreMap, mock.gl);
+    const renderer = new PointInstanceRenderer({} as MapLibreMap, mock.gl, new GpuLedger());
     renderer.ensureShader(SHADER_DATA);
 
     const projectionData = createProjectionData();
@@ -318,7 +319,7 @@ describe('memoizing uniforms in the retained rendering of points', () => {
 describe('memoizing uniforms in the retained rendering of lines', () => {
   it('writes the matrix and viewport once in a frame, rewriting only the origin shift', () => {
     const mock = createMockGL();
-    const renderer = new SDFLineRenderer({} as MapLibreMap, mock.gl);
+    const renderer = new SDFLineRenderer({} as MapLibreMap, mock.gl, new GpuLedger());
     renderer.ensureShader(SHADER_DATA);
 
     const projectionData = createProjectionData();
@@ -348,7 +349,7 @@ describe('memoizing uniforms in the retained rendering of lines', () => {
 
   it('rewrites both the matrix and the viewport when the frame changes', () => {
     const mock = createMockGL();
-    const renderer = new SDFLineRenderer({} as MapLibreMap, mock.gl);
+    const renderer = new SDFLineRenderer({} as MapLibreMap, mock.gl, new GpuLedger());
     renderer.ensureShader(SHADER_DATA);
 
     const projectionData = createProjectionData();

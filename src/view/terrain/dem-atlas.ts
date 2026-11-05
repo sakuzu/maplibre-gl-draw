@@ -154,10 +154,10 @@ export class DemAtlas {
   /** The number of bakes done (diagnostics and tests) */
   bakeCount = 0;
 
-  /** Where the bytes of the atlas and of its quad are recorded (nothing when omitted) */
-  private readonly ledger: GpuLedger | undefined;
+  /** Where the bytes of the atlas and of its quad are recorded */
+  private readonly ledger: GpuLedger;
 
-  constructor(gl: WebGL2RenderingContext, ledger?: GpuLedger) {
+  constructor(gl: WebGL2RenderingContext, ledger: GpuLedger) {
     this.gl = gl;
     this.ledger = ledger;
   }
@@ -329,7 +329,7 @@ export class DemAtlas {
       this.vao = null;
     }
     if (this.quadBuffer) {
-      this.ledger?.release(this.quadBuffer);
+      this.ledger.release(this.quadBuffer);
       gl.deleteBuffer(this.quadBuffer);
       this.quadBuffer = null;
     }
@@ -338,7 +338,7 @@ export class DemAtlas {
       this.framebuffer = null;
     }
     if (this.texture) {
-      this.ledger?.release(this.texture);
+      this.ledger.release(this.texture);
       gl.deleteTexture(this.texture);
       this.texture = null;
     }
@@ -372,7 +372,7 @@ export class DemAtlas {
     gl.bindVertexArray(this.vao);
     gl.bindBuffer(gl.ARRAY_BUFFER, this.quadBuffer);
     gl.bufferData(gl.ARRAY_BUFFER, QUAD, gl.STATIC_DRAW);
-    this.ledger?.record(this.quadBuffer, DEM_ATLAS_OWNER, 'buffer', QUAD.byteLength);
+    this.ledger.record(this.quadBuffer, DEM_ATLAS_OWNER, 'buffer', QUAD.byteLength);
     gl.enableVertexAttribArray(0);
     gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 8, 0);
     gl.bindVertexArray(null);
@@ -385,7 +385,7 @@ export class DemAtlas {
     if (this.texture && this.textureWidth === width && this.textureHeight === height) return true;
 
     if (this.texture) {
-      this.ledger?.release(this.texture);
+      this.ledger.release(this.texture);
       gl.deleteTexture(this.texture);
     }
     if (this.framebuffer) gl.deleteFramebuffer(this.framebuffer);
@@ -395,7 +395,7 @@ export class DemAtlas {
     if (texture) {
       giveStorage(gl, texture, () => gl.texStorage2D(gl.TEXTURE_2D, 1, gl.RGBA8, width, height));
     }
-    this.ledger?.record(texture, DEM_ATLAS_OWNER, 'texture', textureBytes(width, height, 4));
+    this.ledger.record(texture, DEM_ATLAS_OWNER, 'texture', textureBytes(width, height, 4));
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
@@ -410,7 +410,7 @@ export class DemAtlas {
     gl.bindFramebuffer(gl.FRAMEBUFFER, prevFbo);
 
     if (!complete) {
-      this.ledger?.release(texture);
+      this.ledger.release(texture);
       gl.deleteTexture(texture);
       gl.deleteFramebuffer(framebuffer);
       this.texture = null;

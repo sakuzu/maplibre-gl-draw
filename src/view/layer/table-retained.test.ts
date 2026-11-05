@@ -32,6 +32,7 @@ import {
   tablesOfFeatures,
 } from '../../test-utils.js';
 import { createFeatureCompanionRegistry } from '../feature-companion.js';
+import { GpuLedger } from '../gpu-ledger.js';
 import type { RetainedRendererSet } from '../renderers/retained.js';
 import { TerrainContext } from '../terrain/context.js';
 import { setTerrainCameraMoving } from '../terrain/state.js';
@@ -187,6 +188,7 @@ function setup(features: Feature[], targetRows?: number) {
   const { internals, table } = tablesOfFeatures('layer', features, targetRows);
   const mocks = createRenderers();
   const renderer = new TableLayerRenderer({
+    ledger: new GpuLedger(),
     gl: createGL(),
     terrain,
     requestRepaint: () => {},
@@ -322,6 +324,7 @@ describe('the order of the drawing of a layer held as rows', () => {
     const { internals, table } = tablesOfFeatures('layer', interleaved(200, 8), 20);
     const mocks = createRenderers();
     const renderer = new TableLayerRenderer({
+      ledger: new GpuLedger(),
       gl: createGL(),
       terrain,
       requestRepaint: () => {},
@@ -354,6 +357,7 @@ describe('the order of the drawing of a layer held as rows', () => {
     writer.addRowBlocks('layer', builder.finish());
     const mocks = createRenderers();
     const renderer = new TableLayerRenderer({
+      ledger: new GpuLedger(),
       gl: createGL(),
       terrain,
       requestRepaint: () => {},
@@ -481,7 +485,12 @@ describe('the state of the rows', () => {
     const { internals, table } = tablesOfFeatures('layer', features);
     const gl = createGL();
     const mocks = createRenderers();
-    const renderer = new TableLayerRenderer({ gl, terrain, requestRepaint: () => {} });
+    const renderer = new TableLayerRenderer({
+      ledger: new GpuLedger(),
+      gl,
+      terrain,
+      requestRepaint: () => {},
+    });
     const draw = (): void => {
       renderer.beginFrame();
       renderer.drawLayer(
@@ -538,7 +547,12 @@ describe('the state of the rows', () => {
       drawn.push(f);
       return true;
     };
-    const renderer = new TableLayerRenderer({ gl: createGL(), terrain, requestRepaint: () => {} });
+    const renderer = new TableLayerRenderer({
+      ledger: new GpuLedger(),
+      gl: createGL(),
+      terrain,
+      requestRepaint: () => {},
+    });
     const ids = internals.ids;
     internals.states.setHidden(Int32Array.of(ids.handleOf('a')), true);
     internals.states.setMoving(Int32Array.of(ids.handleOf('b')), 1);
@@ -592,6 +606,7 @@ describe('the rows drawn at once while they are dragged in bulk', () => {
       internals.states.setTransform(2, transform);
       internals.states.setTranslation(2, 0.5, -0.25);
       const renderer = new TableLayerRenderer({
+        ledger: new GpuLedger(),
         gl: createGL(),
         terrain,
         requestRepaint: () => {},
@@ -661,6 +676,7 @@ describe('the rows of a layer of xyz with an extension that answers from feature
       return true;
     };
     const renderer = new TableLayerRenderer({
+      ledger: new GpuLedger(),
       gl: createGL(),
       terrain,
       requestRepaint: () => {},

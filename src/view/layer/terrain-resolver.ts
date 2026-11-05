@@ -53,10 +53,10 @@ export class TerrainResolver {
   /** Key of the conditions under which the tile step index was built most recently */
   private tilingCacheKey = '';
 
-  /** Where the bytes of the DEM atlas are recorded (nothing is recorded when omitted) */
-  private readonly ledger: GpuLedger | undefined;
+  /** Where the bytes of the DEM atlas are recorded */
+  private readonly ledger: GpuLedger;
 
-  constructor(map: MapLibreMap, terrainContext: TerrainContext, ledger?: GpuLedger) {
+  constructor(map: MapLibreMap, terrainContext: TerrainContext, ledger: GpuLedger) {
     this.map = map;
     this.terrainContext = terrainContext;
     this.ledger = ledger;

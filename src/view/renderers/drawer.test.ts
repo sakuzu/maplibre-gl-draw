@@ -20,6 +20,7 @@ import type { FeatureCoordinates } from '../../shared/types/model.js';
 import { geometryFromCoordinates } from '../../shared/utils/coordinates.js';
 import type { Coordinate, Feature, FeatureStyle, Layer, StyleRule } from '../../store/types.js';
 import { StyleRuleCache } from '../cache/style-rule.js';
+import { GpuLedger } from '../gpu-ledger.js';
 import { FeatureDrawer } from './drawer.js';
 import type { ImageRenderer } from './image.js';
 import type { SDFLineRenderer } from './line/sdf-line.js';
@@ -49,6 +50,7 @@ let styleRules = new StyleRuleCache();
  */
 function createDrawer(featureStyle: FeatureStyleConfig): FeatureDrawer {
   return new FeatureDrawer({
+    ledger: new GpuLedger(),
     gl: createStubGL(),
     map: {} as never,
     sdfLineRenderer: {} as SDFLineRenderer,
@@ -175,6 +177,7 @@ describe('FeatureDrawer#drawFeature iteration over the parts of the Multi kinds'
     } as unknown as PointShapeRenderer;
 
     const drawer = new FeatureDrawer({
+      ledger: new GpuLedger(),
       gl: createStubGL(),
       map: {} as never,
       sdfLineRenderer,
@@ -406,6 +409,7 @@ describe('FeatureDrawer evaluation of style rules', () => {
     // first one evaluated
     const layer = makeLayer(rule);
     const first = new FeatureDrawer({
+      ledger: new GpuLedger(),
       gl: createStubGL(),
       map: {} as never,
       sdfLineRenderer: {} as SDFLineRenderer,
@@ -415,6 +419,7 @@ describe('FeatureDrawer evaluation of style rules', () => {
       styleRules: new StyleRuleCache(),
     });
     const second = new FeatureDrawer({
+      ledger: new GpuLedger(),
       gl: createStubGL(),
       map: {} as never,
       sdfLineRenderer: {} as SDFLineRenderer,
@@ -436,6 +441,7 @@ describe('FeatureDrawer#drawFeature and the opacity of the layer', () => {
   it('passes the opacity of the layer to the image renderer', () => {
     const draw = vi.fn();
     const drawer = new FeatureDrawer({
+      ledger: new GpuLedger(),
       gl: createStubGL(),
       map: { triggerRepaint: () => {} } as never,
       sdfLineRenderer: {} as SDFLineRenderer,

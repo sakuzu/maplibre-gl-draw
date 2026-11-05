@@ -10,6 +10,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
+import { GpuLedger } from '../../gpu-ledger.js';
 import { createCoordTexture, ImmediateCoordTexture } from './line-gl.js';
 
 function createGlStub() {
@@ -36,7 +37,7 @@ function createGlStub() {
 describe('ImmediateCoordTexture', () => {
   it('allocates a power of two and uploads only the size of the data', () => {
     const { gl, storage, uploads } = createGlStub();
-    const texture = new ImmediateCoordTexture(gl);
+    const texture = new ImmediateCoordTexture(gl, new GpuLedger());
 
     expect(texture.upload(new Float32Array(5 * 5 * 4), 5, 4096)).toBe(true);
 
@@ -47,7 +48,7 @@ describe('ImmediateCoordTexture', () => {
 
   it('reuses the texture while the data fits and reallocates when it grows', () => {
     const { gl, storage, uploads, deleted } = createGlStub();
-    const texture = new ImmediateCoordTexture(gl);
+    const texture = new ImmediateCoordTexture(gl, new GpuLedger());
 
     texture.upload(new Float32Array(64), 4, 4096);
     const first = texture.texture;
@@ -62,7 +63,7 @@ describe('ImmediateCoordTexture', () => {
 
   it('refuses data larger than the limit and never allocates past it', () => {
     const { gl, storage } = createGlStub();
-    const texture = new ImmediateCoordTexture(gl);
+    const texture = new ImmediateCoordTexture(gl, new GpuLedger());
 
     expect(texture.upload(new Float32Array(0), 9, 8)).toBe(false);
     expect(storage).toEqual([]);
@@ -72,7 +73,7 @@ describe('ImmediateCoordTexture', () => {
 
   it('deletes the texture on dispose', () => {
     const { gl, deleted } = createGlStub();
-    const texture = new ImmediateCoordTexture(gl);
+    const texture = new ImmediateCoordTexture(gl, new GpuLedger());
     texture.upload(new Float32Array(0), 2, 4096);
     const allocated = texture.texture;
 

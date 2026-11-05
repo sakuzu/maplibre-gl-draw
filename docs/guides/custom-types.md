@@ -997,8 +997,8 @@ function drawSolidQuad(ctx: RenderContext, center: [number, number]): boolean {
 `QuadShader` draws a content the same way wherever the quad is: on the
 terrain through `drawQuadOnTerrain`, and on the plane and on the globe with
 the same `quadDrapeColor`, with a `shade` of 1. Give it the content when it
-is made (`new QuadShader(gl, content)`, a picture with `QuadImageContent`
-when left out), set what the content reads, and call
+is made with the ledger it records in (`new QuadShader(gl, ctx.gpu, content)`,
+a picture with `QuadImageContent` when left out), set what the content reads, and call
 `draw(vertices, opacity, projection)`.
 
 A shader that draws marks on the terrain without depth fades the ones

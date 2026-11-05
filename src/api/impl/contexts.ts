@@ -32,7 +32,7 @@ import type { StoreSpatialIndex } from '../../store/spatial/store-spatial-index.
 import type { Store } from '../../store/store.js';
 import type { Feature as StoredFeature, TentativeState } from '../../store/types.js';
 import { isWritableLayer } from '../../store/writable-layer.js';
-import { DEFAULT_GPU_LIMIT_BYTES, type GpuLedger } from '../../view/gpu-ledger.js';
+import type { GpuLedger } from '../../view/gpu-ledger.js';
 import { anchorElevationMeters, getAnchorElevationGeneration } from '../../view/terrain/anchor.js';
 import { bindTerrainState } from '../../view/terrain/binding.js';
 import type { TerrainContext } from '../../view/terrain/context.js';
@@ -350,7 +350,7 @@ export function createExtensionContext(
         return services.gpu.outsideRowBytes;
       },
       get limitBytes() {
-        return services.getDraw().options.get().rendering?.gpuLimitBytes ?? DEFAULT_GPU_LIMIT_BYTES;
+        return services.gpu.limitBytes;
       },
     },
     names: createNameGenerator(services.autoNameGenerator),

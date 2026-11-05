@@ -110,9 +110,9 @@ export function initRenderers(deps: InitRenderersDeps): Renderers {
     scope,
     onImageError,
   } = deps;
-  const textureCache = new TextureCache(gl, undefined, scope.gpu);
+  const textureCache = new TextureCache(gl, scope.gpu);
   const terrain = scope.terrain;
-  const quadShader = new QuadShader(gl).useTerrainState(terrain).useLedger(scope.gpu);
+  const quadShader = new QuadShader(gl, scope.gpu).useTerrainState(terrain);
   const imageRenderer = new ImageRenderer(
     mapInstance,
     gl,
@@ -122,45 +122,42 @@ export function initRenderers(deps: InitRenderersDeps): Renderers {
     onImageError,
   );
 
-  const strokeRenderer = new StrokeRenderer(mapInstance, gl, pixelRatio, terrain).useLedger(
-    scope.gpu,
-  );
+  const strokeRenderer = new StrokeRenderer(mapInstance, gl, scope.gpu, pixelRatio, terrain);
   const outlineRenderer = new AnchoredOutlineRenderer(
     mapInstance,
     gl,
+    scope.gpu,
     pixelRatio,
     terrain,
-    scope.gpu,
   );
-  const sdfLineRenderer = new SDFLineRenderer(mapInstance, gl, pixelRatio, terrain);
-  sdfLineRenderer.useLedger(scope.gpu);
+  const sdfLineRenderer = new SDFLineRenderer(mapInstance, gl, scope.gpu, pixelRatio, terrain);
   const pointShapeRenderer = new PointShapeRenderer(
     mapInstance,
     gl,
+    scope.gpu,
     pixelRatio,
     terrain,
-    scope.gpu,
   );
   const pointInstanceRenderer = new PointInstanceRenderer(
     mapInstance,
     gl,
+    scope.gpu,
     pixelRatio,
     terrain,
-    scope.gpu,
   );
   const polygonScope = { terrain, earcut: scope.earcut, gpu: scope.gpu };
   const polygonBatchRenderer = new PolygonBatchRenderer(gl, polygonScope);
-  const sdfPolygonRenderer = new SDFPolygonRenderer(gl, pixelRatio, polygonScope);
+  const sdfPolygonRenderer = new SDFPolygonRenderer(gl, polygonScope, pixelRatio);
   const rowsRenderer = new RowsRenderer(
     mapInstance,
     gl,
+    scope.gpu,
     pixelRatio,
     terrain,
-    scope.gpu,
     deps.keepCopies ? new RowsCopies() : null,
   );
-  const bulkFramesRenderer = new BulkFramesRenderer(gl, pixelRatio, scope.gpu);
-  const fillShaderManager = new FillShaderManager(gl, terrain, scope.gpu);
+  const bulkFramesRenderer = new BulkFramesRenderer(gl, scope.gpu, pixelRatio);
+  const fillShaderManager = new FillShaderManager(gl, scope.gpu, terrain);
 
   const selectionExtensions = scope.selection.extensions;
   const selectionUIRenderer = new SelectionUIRenderer(
@@ -217,9 +214,9 @@ export function initRenderers(deps: InitRenderersDeps): Renderers {
   const boxSelectionRenderer = new BoxSelectionRenderer(
     mapInstance,
     gl,
+    scope.gpu,
     renderingConfig.boxSelectionStyle,
     pixelRatio,
-    scope.gpu,
   );
 
   const viewportFilter = new ViewportFilter({ map: mapInstance, spatialIndex });

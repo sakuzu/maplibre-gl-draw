@@ -16,6 +16,7 @@ import { DEFAULT_FEATURE_STYLE_CONFIG } from '../shared/config/feature-style.js'
 import { coordinatesOf } from '../shared/utils/coordinates.js';
 import type { BoundingBox, Feature, StyleRule } from '../store/types.js';
 import { toRow } from '../test-utils.js';
+import { GpuLedger } from '../view/gpu-ledger.js';
 import { createBatchManager } from '../view/renderers/batch-manager.js';
 import { FeatureDrawer } from '../view/renderers/drawer.js';
 import type { ImageRenderer } from '../view/renderers/image.js';
@@ -111,6 +112,7 @@ function createRealBatch(): {
   } as unknown as SDFPolygonRenderer;
 
   const featureDrawer = new FeatureDrawer({
+    ledger: new GpuLedger(),
     gl: createStubGL(),
     map: {} as never,
     sdfLineRenderer: {} as SDFLineRenderer,

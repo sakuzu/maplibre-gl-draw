@@ -12,6 +12,7 @@
 
 import type { Map as MapLibreMap, ProjectionData } from 'maplibre-gl';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { GpuLedger } from '../gpu-ledger.js';
 import { isDepthTestEnabled, setDepthTestEnabled } from '../layer/depth-state.js';
 import { beginRenderFrame } from '../shaders/frame.js';
 import { calculateOffsetUniforms, type ShaderData } from '../shaders/helpers.js';
@@ -122,9 +123,9 @@ describe('the gap of the origin of a retained batch', () => {
   it('is written into one array per renderer, with the gap of each batch', () => {
     const { gl } = createGL();
     const camera = calculateOffsetUniforms(CAMERA, projection());
-    const point = new PointInstanceRenderer({} as MapLibreMap, gl, 1);
-    const line = new SDFLineRenderer({} as MapLibreMap, gl, 1);
-    const polygon = new SDFPolygonRenderer(gl, 1);
+    const point = new PointInstanceRenderer({} as MapLibreMap, gl, new GpuLedger(), 1);
+    const line = new SDFLineRenderer({} as MapLibreMap, gl, new GpuLedger(), 1);
+    const polygon = new SDFPolygonRenderer(gl, { gpu: new GpuLedger() }, 1);
     for (const renderer of [point, line, polygon]) {
       renderer.ensureShader(SHADER_DATA);
       renderer.setOffsetUniforms(camera);

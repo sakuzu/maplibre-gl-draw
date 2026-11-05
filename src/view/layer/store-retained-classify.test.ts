@@ -15,6 +15,7 @@ import type { FeatureCoordinates } from '../../shared/types/model.js';
 import { geometryFromCoordinates } from '../../shared/utils/coordinates.js';
 import type { Feature, FeatureStyle } from '../../store/types.js';
 import { createFeatureCompanionRegistry } from '../feature-companion.js';
+import { GpuLedger } from '../gpu-ledger.js';
 import { FeatureDrawer } from '../renderers/drawer.js';
 import type { ImageRenderer } from '../renderers/image.js';
 import type { SDFLineRenderer } from '../renderers/line/sdf-line.js';
@@ -64,6 +65,7 @@ describe('classifyFeature with the style resolution of the renderer', () => {
       vertexAttribPointer: (): void => {},
     } as unknown as WebGL2RenderingContext;
     return new FeatureDrawer({
+      ledger: new GpuLedger(),
       gl,
       map: {} as never,
       sdfLineRenderer: {} as SDFLineRenderer,

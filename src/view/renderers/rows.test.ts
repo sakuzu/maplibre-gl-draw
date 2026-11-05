@@ -190,7 +190,7 @@ describe('a point batch of rows', () => {
   it('draws a range of rows with the variant of the rows, from the first instance of the range', () => {
     const mock = createGL();
     const ledger = new GpuLedger();
-    const renderer = new PointInstanceRenderer({} as MapLibreMap, mock.gl, 1, undefined, ledger);
+    const renderer = new PointInstanceRenderer({} as MapLibreMap, mock.gl, ledger, 1, undefined);
     renderer.ensureShader(SHADER_DATA);
     const instances = new Float32Array(5 * ROW_POINT_STRIDE);
     // Rows 0, 1, 2 have 1, 2 and 2 instances (row 1 is a MultiPoint)
@@ -227,7 +227,7 @@ describe('a point batch of rows', () => {
 
   it('draws nothing for an empty range', () => {
     const mock = createGL();
-    const renderer = new PointInstanceRenderer({} as MapLibreMap, mock.gl, 1);
+    const renderer = new PointInstanceRenderer({} as MapLibreMap, mock.gl, new GpuLedger(), 1);
     renderer.ensureShader(SHADER_DATA);
     const batch = renderer.buildRetainedRows(
       new Float32Array(ROW_POINT_STRIDE * 2),
@@ -246,8 +246,7 @@ describe('a line batch of rows', () => {
   it('draws a range of rows from the first instance of the range', () => {
     const mock = createGL();
     const ledger = new GpuLedger();
-    const renderer = new SDFLineRenderer({} as MapLibreMap, mock.gl, 1);
-    renderer.useLedger(ledger);
+    const renderer = new SDFLineRenderer({} as MapLibreMap, mock.gl, ledger, 1);
     renderer.ensureShader(SHADER_DATA);
     const instanceCount = 6;
     const batch = renderer.buildRetainedRows(
@@ -282,7 +281,7 @@ describe('a polygon batch of rows', () => {
   it('is one buffer of its size, filled in slices, and draws a range of rows as one range of indices', () => {
     const mock = createGL();
     const ledger = new GpuLedger();
-    const renderer = new SDFPolygonRenderer(mock.gl, 1, { gpu: ledger });
+    const renderer = new SDFPolygonRenderer(mock.gl, { gpu: ledger }, 1);
     renderer.ensureShader(SHADER_DATA);
     const batch = renderer.createRetainedRows(10, 30, [0, 0], Int32Array.of(0, 12, 30));
     if (!batch) throw new Error('batch');

@@ -24,6 +24,12 @@ const IMAGES_OWNER = 'images';
  */
 const IMAGE_RETENTION_MS = 30_000;
 
+/** How long an image drawn last counts as on the screen (ms): it is not given up for another */
+const IMAGE_DRAWN_MS = 2_000;
+
+/** The side a picture is not made smaller than: under it the image waits for room */
+const SMALLEST_SIDE = 16;
+
 /**
  * Cache entry
  */
@@ -31,6 +37,10 @@ interface CacheEntry {
   texture: WebGLTexture;
   /** The image decoded, to make the texture again */
   source: HTMLImageElement;
+  /** The bytes of the texture */
+  bytes: number;
+  /** The bytes of the texture of the whole image, more than `bytes` when it had no room */
+  wholeBytes: number;
   width: number;
   height: number;
   lastUsed: number;
@@ -69,10 +79,10 @@ export class TextureCache {
   private disposed = false;
   /** MAX_TEXTURE_SIZE of the context (read once, 0 = not read yet) */
   private maxTextureSize = 0;
-  /** Where the bytes of the textures are recorded (nothing is recorded when omitted) */
-  private readonly ledger: GpuLedger | undefined;
+  /** Where the bytes of the textures are recorded */
+  private readonly ledger: GpuLedger;
 
-  constructor(gl: WebGL2RenderingContext, maxCacheSize = 500, ledger?: GpuLedger) {
+  constructor(gl: WebGL2RenderingContext, ledger: GpuLedger, maxCacheSize = 500) {
     this.gl = gl;
     this.maxCacheSize = maxCacheSize;
     this.ledger = ledger;
@@ -168,26 +178,64 @@ export class TextureCache {
       this.evictOldestImage();
     }
 
-    const source = this.fitToTextureSize(img);
+    // Under the limit of the instance: what is not on the screen goes first, and an image with no
+    // room left is drawn from a smaller picture
+    const whole = this.fitToTextureSize(img);
+    const wholeBytes = mipmappedTextureBytes(whole.width, whole.height, 4);
+    this.makeRoom(wholeBytes);
+    const source = this.ledger.fits(wholeBytes) ? whole : this.fitToRoom(img, wholeBytes);
+    if (!source) return null;
     const texture = uploadRgbaTexture(this.gl, source, true);
     if (!texture) return null;
     // RGBA8 with the chain of its mipmaps
-    this.ledger?.record(
-      texture,
-      IMAGES_OWNER,
-      'texture',
-      mipmappedTextureBytes(source.width, source.height, 4),
-    );
+    const bytes = mipmappedTextureBytes(source.width, source.height, 4);
+    this.ledger.record(texture, IMAGES_OWNER, 'texture', bytes);
 
     const entry: CacheEntry = {
       texture,
       source: img,
+      bytes,
+      wholeBytes,
       width: img.width,
       height: img.height,
       lastUsed: Date.now(),
     };
     this.imageCache.set(src, entry);
     return { texture, width: img.width, height: img.height };
+  }
+
+  /** Gives up the textures of the images not on the screen until a size fits, the oldest first */
+  private makeRoom(bytes: number): void {
+    if (this.ledger.fits(bytes)) return;
+    const now = Date.now();
+    const oldest = [...this.imageCache].sort((a, b) => a[1].lastUsed - b[1].lastUsed);
+    for (const [src, entry] of oldest) {
+      if (this.ledger.fits(bytes) || now - entry.lastUsed < IMAGE_DRAWN_MS) return;
+      this.forgetTexture(src, entry);
+    }
+  }
+
+  /** Deletes the texture of an image, keeping the image decoded to make it again */
+  private forgetTexture(src: string, entry: CacheEntry): void {
+    this.decodedImages.set(src, entry.source);
+    this.deleteTexture(entry.texture);
+    this.imageCache.delete(src);
+  }
+
+  /**
+   * A copy of an image as large as the room of the limit allows, or null when too little is left
+   * to make one
+   */
+  private fitToRoom(img: HTMLImageElement, wholeBytes: number): HTMLCanvasElement | null {
+    const scale = Math.sqrt(this.ledger.roomBytes / wholeBytes);
+    const width = Math.floor(img.width * scale);
+    const height = Math.floor(img.height * scale);
+    if (Math.min(width, height) < SMALLEST_SIDE) return null;
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    canvas.getContext('2d')?.drawImage(img, 0, 0, width, height);
+    return canvas;
   }
 
   /**
@@ -232,10 +280,10 @@ export class TextureCache {
    */
   sweep(now: number): void {
     for (const [src, entry] of this.imageCache) {
-      if (now - entry.lastUsed < IMAGE_RETENTION_MS) continue;
-      this.decodedImages.set(src, entry.source);
-      this.deleteTexture(entry.texture);
-      this.imageCache.delete(src);
+      // An image drawn from a smaller picture takes the whole one once there is room
+      const room =
+        entry.bytes < entry.wholeBytes && this.ledger.fits(entry.wholeBytes - entry.bytes);
+      if (room || now - entry.lastUsed >= IMAGE_RETENTION_MS) this.forgetTexture(src, entry);
     }
   }
 
@@ -284,7 +332,7 @@ export class TextureCache {
 
   /** Deletes the texture of an image */
   private deleteTexture(texture: WebGLTexture): void {
-    this.ledger?.release(texture);
+    this.ledger.release(texture);
     this.gl.deleteTexture(texture);
   }
 

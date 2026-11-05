@@ -220,8 +220,9 @@ export interface GpuRowChange {
 /**
  * A range of rows of a layer an extension holds on the GPU and draws (`GpuRowsSource.create`)
  *
- * It owns the memory it holds: it records it (`ExtensionContext.gpu`) and keeps it under the
- * limit it sets itself, by taking fewer rows. A row it does not take, and a row of a frame it does
+ * It owns the memory it holds: it records it as rows (`ExtensionContext.gpu`, `rows` true: it is
+ * out of the limit of the instance) and keeps it under the limit it sets itself, by taking fewer
+ * rows. It lets go of everything in `release`, also of what a call that throws had made. A row it does not take, and a row of a frame it does
  * not draw, is drawn by `FeatureRenderer.draw`, in its place in the order: taking fewer rows
  * makes a frame slower, and changes nothing of the picture. What it holds can be made again from
  * the rows, so the instance may release it at any time.

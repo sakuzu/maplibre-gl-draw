@@ -22,6 +22,7 @@ import type { Map as MapLibreMap, ProjectionData } from 'maplibre-gl';
 import { describe, expect, it } from 'vitest';
 import { createPixelRatioSource } from '../../shared/utils/pixel-ratio.js';
 import type { Coordinate } from '../../store/types.js';
+import { GpuLedger } from '../gpu-ledger.js';
 import type { ShaderData } from '../shaders/helpers.js';
 import type { LineBatchItem, LineBatchShape } from './line/line-types.js';
 import { SDFLineRenderer } from './line/sdf-line.js';
@@ -224,7 +225,7 @@ function bakedLineWidth(scale: number, strokeWidth: number): number {
   const source = createPixelRatioSource(BASE_DPR);
   source.setScaleFactor(scale);
   const mock = createRecordingGL();
-  const renderer = new SDFLineRenderer({} as MapLibreMap, mock.gl, source);
+  const renderer = new SDFLineRenderer({} as MapLibreMap, mock.gl, new GpuLedger(), source);
   renderer.ensureShader(SHADER_DATA);
 
   mock.reset();
@@ -239,7 +240,7 @@ function bakedPolygonWidth(scale: number, strokeWidth: number): number {
   const source = createPixelRatioSource(BASE_DPR);
   source.setScaleFactor(scale);
   const mock = createRecordingGL();
-  const renderer = new SDFPolygonRenderer(mock.gl, source);
+  const renderer = new SDFPolygonRenderer(mock.gl, { gpu: new GpuLedger() }, source);
   renderer.ensureShader(SHADER_DATA);
 
   mock.reset();

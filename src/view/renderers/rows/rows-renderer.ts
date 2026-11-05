@@ -285,7 +285,7 @@ export class RowsRenderer {
   private readonly map: MapLibreMap | null;
   private readonly pixelRatio: PixelRatioInput | undefined;
   private readonly terrain: TerrainContext;
-  private readonly ledger: GpuLedger | undefined;
+  private readonly ledger: GpuLedger;
   /** What is kept of what the GPU holds, for the checks of what is drawn (null without them) */
   readonly copies: RowsCopies | null;
   private readonly run: RetainedDrawRun;
@@ -364,9 +364,9 @@ export class RowsRenderer {
   constructor(
     map: MapLibreMap | null,
     gl: WebGL2RenderingContext,
+    ledger: GpuLedger,
     pixelRatio?: PixelRatioInput,
     terrain: TerrainContext = new TerrainContext(),
-    ledger?: GpuLedger,
     copies: RowsCopies | null = null,
   ) {
     this.gl = gl;
@@ -381,7 +381,7 @@ export class RowsRenderer {
     if (this.cornerBuffer) {
       gl.bindBuffer(gl.ARRAY_BUFFER, this.cornerBuffer);
       gl.bufferData(gl.ARRAY_BUFFER, CORNERS, gl.STATIC_DRAW);
-      ledger?.record(this.cornerBuffer, LEDGER_OWNER, 'buffer', CORNERS.byteLength);
+      ledger.record(this.cornerBuffer, LEDGER_OWNER, 'buffer', CORNERS.byteLength);
     }
     // Both variants are compiled now, so the first frame of the globe does not wait for one
     for (const variant of ROWS_VARIANTS) this.programs.set(variant, this.startProgram(variant));
@@ -697,12 +697,12 @@ export class RowsRenderer {
     if (chunk.vao) gl.deleteVertexArray(chunk.vao);
     for (const buffer of [chunk.instanceBuffer, chunk.pointBuffer]) {
       if (!buffer) continue;
-      this.ledger?.release(buffer);
+      this.ledger.release(buffer);
       gl.deleteBuffer(buffer);
     }
     for (const texture of [chunk.coords, chunk.rowStyles, chunk.heights]) {
       if (!texture) continue;
-      this.ledger?.release(texture.texture);
+      this.ledger.release(texture.texture);
       gl.deleteTexture(texture.texture);
     }
     chunk.vao = null;
@@ -856,8 +856,8 @@ export class RowsRenderer {
     this.groundBlocks = blocks;
     this.groundSlots = slots;
     this.groundTexels = new Float32Array(slots * 2 * 4);
-    this.ledger?.record(tiles, LEDGER_OWNER, 'texture', textureBytes(2, slots, 16));
-    this.ledger?.record(
+    this.ledger.record(tiles, LEDGER_OWNER, 'texture', textureBytes(2, slots, 16));
+    this.ledger.record(
       blocks,
       LEDGER_OWNER,
       'texture',
@@ -870,8 +870,8 @@ export class RowsRenderer {
 
   private releaseGroundTables(): void {
     const gl = this.gl;
-    this.ledger?.release(this.groundTiles);
-    this.ledger?.release(this.groundBlocks);
+    this.ledger.release(this.groundTiles);
+    this.ledger.release(this.groundBlocks);
     if (this.groundTiles) gl.deleteTexture(this.groundTiles);
     if (this.groundBlocks) gl.deleteTexture(this.groundBlocks);
     this.groundTiles = null;
@@ -1005,12 +1005,12 @@ export class RowsRenderer {
     for (const palette of this.palettes) this.deletePaletteTexture(palette);
     this.palettes.clear();
     if (this.cornerBuffer) {
-      this.ledger?.release(this.cornerBuffer);
+      this.ledger.release(this.cornerBuffer);
       gl.deleteBuffer(this.cornerBuffer);
     }
     for (const texture of [this.emptySprites, this.emptyHeights]) {
       if (!texture) continue;
-      this.ledger?.release(texture);
+      this.ledger.release(texture);
       gl.deleteTexture(texture);
     }
     this.emptySprites = null;
@@ -1290,7 +1290,7 @@ export class RowsRenderer {
         ),
       );
       gl.bindTexture(gl.TEXTURE_2D, null);
-      this.ledger?.record(texture, LEDGER_OWNER, 'texture', 4);
+      this.ledger.record(texture, LEDGER_OWNER, 'texture', 4);
       this.emptySprites = texture;
     }
     if (!this.emptyHeights) {
@@ -1298,7 +1298,7 @@ export class RowsRenderer {
       if (!texture) return;
       gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, 1, 1, gl.RED, gl.FLOAT, new Float32Array(1));
       gl.bindTexture(gl.TEXTURE_2D, null);
-      this.ledger?.record(texture, LEDGER_OWNER, 'texture', 4);
+      this.ledger.record(texture, LEDGER_OWNER, 'texture', 4);
       this.emptyHeights = texture;
     }
   }
@@ -1315,7 +1315,7 @@ export class RowsRenderer {
     if (!chunk.heights) {
       const texture = createFloatTexture(gl, gl.R32F, coords.width, coords.height);
       if (!texture) return;
-      this.ledger?.record(
+      this.ledger.record(
         texture,
         LEDGER_OWNER,
         'texture',
@@ -1357,7 +1357,7 @@ export class RowsRenderer {
       this.deletePaletteTexture(palette);
       const texture = createFloatTexture(gl, gl.RGBA32F, ROWS_STYLE_WIDTH, lines);
       if (!texture) return;
-      this.ledger?.record(
+      this.ledger.record(
         texture,
         LEDGER_OWNER,
         'texture',
@@ -1402,7 +1402,7 @@ export class RowsRenderer {
 
   private deletePaletteTexture(palette: RowsPalette): void {
     if (!palette.gpu) return;
-    this.ledger?.release(palette.gpu.texture);
+    this.ledger.release(palette.gpu.texture);
     this.gl.deleteTexture(palette.gpu.texture);
     palette.gpu = null;
   }
@@ -1417,7 +1417,7 @@ export class RowsRenderer {
     const instanceBuffer = gl.createBuffer();
     gl.bindBuffer(gl.ARRAY_BUFFER, instanceBuffer);
     gl.bufferData(gl.ARRAY_BUFFER, instances, gl.STATIC_DRAW);
-    this.ledger?.record(instanceBuffer, LEDGER_OWNER, 'buffer', instances.byteLength);
+    this.ledger.record(instanceBuffer, LEDGER_OWNER, 'buffer', instances.byteLength);
     this.uploadedBytes += instances.byteLength;
     chunk.instanceBuffer = instanceBuffer;
 
@@ -1426,7 +1426,7 @@ export class RowsRenderer {
       const pointBuffer = gl.createBuffer();
       gl.bindBuffer(gl.ARRAY_BUFFER, pointBuffer);
       gl.bufferData(gl.ARRAY_BUFFER, points, gl.STATIC_DRAW);
-      this.ledger?.record(pointBuffer, LEDGER_OWNER, 'buffer', points.byteLength);
+      this.ledger.record(pointBuffer, LEDGER_OWNER, 'buffer', points.byteLength);
       this.uploadedBytes += points.byteLength;
       chunk.pointBuffer = pointBuffer;
     }
@@ -1480,7 +1480,7 @@ export class RowsRenderer {
     const height = Math.max(1, Math.ceil(count / width));
     const texture = createFloatTexture(gl, internalFormat, width, height);
     if (!texture) return null;
-    this.ledger?.record(texture, LEDGER_OWNER, 'texture', textureBytes(width, height, floats * 4));
+    this.ledger.record(texture, LEDGER_OWNER, 'texture', textureBytes(width, height, floats * 4));
     this.uploadedBytes += width * height * floats * 4;
     gl.texSubImage2D(
       gl.TEXTURE_2D,

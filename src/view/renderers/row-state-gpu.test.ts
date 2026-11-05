@@ -57,6 +57,7 @@ import {
   type ShaderData,
   uploadRowState,
 } from '../../webgl/index.js';
+import { GpuLedger } from '../gpu-ledger.js';
 import {
   calculateOffsetUniforms,
   getProjectionTransitionUniform,
@@ -208,7 +209,7 @@ function pointRowProgram(shaderData: ShaderData): { vertex: string; fragment: st
     getTerrain: () => null,
     transform: { tileSize: 512 },
   } as never;
-  const renderer = new PointInstanceRenderer(map, gl);
+  const renderer = new PointInstanceRenderer(map, gl, new GpuLedger());
   renderer.ensureShader(shaderData);
   linked.length = 0;
   expect(renderer.ensureRowProgram()).toBe(true);

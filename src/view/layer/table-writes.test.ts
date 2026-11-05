@@ -39,6 +39,7 @@ import {
   tablesOfFeatures,
 } from '../../test-utils.js';
 import { createFeatureCompanionRegistry } from '../feature-companion.js';
+import { GpuLedger } from '../gpu-ledger.js';
 import { retainedDrawRun } from '../renderers/draw-run.js';
 import type { RetainedRendererSet } from '../renderers/retained.js';
 import {
@@ -103,7 +104,7 @@ function drawn(features: readonly Feature[], options: DrawnOptions = {}) {
   );
   const view = { layer: options.layer ?? LAYER };
   const mock = memoryGL();
-  const rows = new RowsRenderer(null, mock.gl, 1, terrain);
+  const rows = new RowsRenderer(null, mock.gl, new GpuLedger(), 1, terrain);
   rows.ensureShader({ vertexShaderPrelude: '', define: '', variantName: 'mercator' });
   const made: RowsChunk[] = [];
   const createChunk = rows.createChunk.bind(rows);
@@ -129,6 +130,7 @@ function drawn(features: readonly Feature[], options: DrawnOptions = {}) {
     companions: createFeatureCompanionRegistry(),
   };
   const renderer = new TableLayerRenderer({
+    ledger: new GpuLedger(),
     gl: mock.gl,
     terrain,
     requestRepaint: () => {},

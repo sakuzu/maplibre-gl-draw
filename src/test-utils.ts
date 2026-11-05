@@ -513,6 +513,7 @@ export function createTestDrawer(featureStyle = DEFAULT_FEATURE_STYLE_CONFIG): F
     vertexAttribPointer: (): void => {},
   } as unknown as WebGL2RenderingContext;
   return new FeatureDrawer({
+    ledger: new GpuLedger(),
     gl,
     map: {} as never,
     sdfLineRenderer: {} as SDFLineRenderer,

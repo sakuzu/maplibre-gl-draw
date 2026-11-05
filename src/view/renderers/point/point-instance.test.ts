@@ -19,6 +19,7 @@
 
 import type { Map as MapLibreMap, ProjectionData } from 'maplibre-gl';
 import { describe, expect, it } from 'vitest';
+import { GpuLedger } from '../../gpu-ledger.js';
 import type { ShaderData } from '../../shaders/helpers.js';
 import type { PointInstanceDataFull } from './point-instance.js';
 import {
@@ -192,7 +193,7 @@ function instanceUpload(mock: RecordingGL): Float32Array {
 }
 
 function createRenderer(mock: RecordingGL): PointInstanceRenderer {
-  const renderer = new PointInstanceRenderer({} as MapLibreMap, mock.gl, 1);
+  const renderer = new PointInstanceRenderer({} as MapLibreMap, mock.gl, new GpuLedger(), 1);
   renderer.ensureShader(SHADER_DATA);
   renderer.setProjectionData(createProjectionData());
   return renderer;

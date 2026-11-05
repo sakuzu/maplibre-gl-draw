@@ -22,6 +22,13 @@ writing it. Its changes are listed after those of 3.0.0.
 
 ### Added in 3.0.0
 
+- The images and the tables of the drape are under `rendering.gpuLimitBytes`:
+  past it the images off the screen are given up, an image on the screen is
+  drawn from a smaller picture until there is room for the whole one, and a
+  table of the drape that does not fit leaves the frame without the analytic
+  drape
+- `QuadShader` takes the ledger it records in, `new QuadShader(gl, ctx.gpu,
+  content)`: nothing of the library allocates on the GPU outside a ledger
 - A draw instance gives back what it holds whatever way an allocation ends: a
   build of the renderers or a program that fails leaves nothing behind, and the
   textures of the images not drawn for 30 seconds go, made again from the

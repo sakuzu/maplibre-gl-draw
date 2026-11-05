@@ -33,6 +33,7 @@ import {
   openMaplibrePage,
 } from '../../test-support/webgl-page.js';
 import { browserTimeout } from '../../test-utils.js';
+import { GpuLedger } from '../gpu-ledger.js';
 import { AnchoredOutlineRenderer } from '../renderers/anchored-outline.js';
 import { SDFLineRenderer } from '../renderers/line/sdf-line.js';
 import { PointInstanceRenderer } from '../renderers/point/point-instance.js';
@@ -193,60 +194,70 @@ function recordPrograms(shaderData: ShaderData): RecordedProgram[] {
     build();
   };
 
-  withLabel('StrokeRenderer', () => new StrokeRenderer(mapStub, gl).ensureShader(shaderData));
+  withLabel('StrokeRenderer', () =>
+    new StrokeRenderer(mapStub, gl, new GpuLedger()).ensureShader(shaderData),
+  );
   withLabel('AnchoredOutlineRenderer', () =>
-    new AnchoredOutlineRenderer(mapStub, gl).ensureShader(shaderData),
+    new AnchoredOutlineRenderer(mapStub, gl, new GpuLedger()).ensureShader(shaderData),
   );
   withLabel('PointInstanceRenderer', () =>
-    new PointInstanceRenderer(mapStub, gl).ensureShader(shaderData),
+    new PointInstanceRenderer(mapStub, gl, new GpuLedger()).ensureShader(shaderData),
   );
   withLabel('PointInstanceRenderer (rows)', () => {
-    const renderer = new PointInstanceRenderer(mapStub, gl);
+    const renderer = new PointInstanceRenderer(mapStub, gl, new GpuLedger());
     renderer.ensureShader(shaderData);
     expect(renderer.ensureRowProgram()).toBe(true);
   });
   withLabel('PointShapeRenderer', () =>
-    new PointShapeRenderer(mapStub, gl).ensureShader(shaderData),
+    new PointShapeRenderer(mapStub, gl, new GpuLedger()).ensureShader(shaderData),
   );
-  withLabel('SDFPolygonRenderer', () => new SDFPolygonRenderer(gl).ensureShader(shaderData));
+  withLabel('SDFPolygonRenderer', () =>
+    new SDFPolygonRenderer(gl, { gpu: new GpuLedger() }).ensureShader(shaderData),
+  );
   withLabel('SDFPolygonRenderer (rows)', () => {
-    const renderer = new SDFPolygonRenderer(gl);
+    const renderer = new SDFPolygonRenderer(gl, { gpu: new GpuLedger() });
     renderer.ensureShader(shaderData);
     expect(renderer.ensureRowProgram()).toBe(true);
   });
-  withLabel('PolygonBatchRenderer', () => new PolygonBatchRenderer(gl).ensureShader(shaderData));
-  withLabel('FillShaderManager', () => new FillShaderManager(gl).ensureShader(shaderData));
-  withLabel('SDFLineRenderer', () => new SDFLineRenderer(mapStub, gl).ensureShader(shaderData));
+  withLabel('PolygonBatchRenderer', () =>
+    new PolygonBatchRenderer(gl, { gpu: new GpuLedger() }).ensureShader(shaderData),
+  );
+  withLabel('FillShaderManager', () =>
+    new FillShaderManager(gl, new GpuLedger()).ensureShader(shaderData),
+  );
+  withLabel('SDFLineRenderer', () =>
+    new SDFLineRenderer(mapStub, gl, new GpuLedger()).ensureShader(shaderData),
+  );
   withLabel('SDFLineRenderer (rows)', () => {
-    const renderer = new SDFLineRenderer(mapStub, gl);
+    const renderer = new SDFLineRenderer(mapStub, gl, new GpuLedger());
     renderer.ensureShader(shaderData);
     expect(renderer.ensureRowProgram()).toBe(true);
   });
   withLabel('RowsRenderer', () => {
-    const renderer = new RowsRenderer(mapStub, gl);
+    const renderer = new RowsRenderer(mapStub, gl, new GpuLedger());
     renderer.ensureShader(shaderData);
     expect(renderer.ready).toBe(true);
     // The variant whose polygons and lines read the ground seen at each pixel (the drape band)
     expect(renderer.groundReady).toBe(true);
   });
-  withLabel('QuadShader', () => new QuadShader(gl).ensureShader(shaderData));
+  withLabel('QuadShader', () => new QuadShader(gl, new GpuLedger()).ensureShader(shaderData));
   withLabel('DrapeRenderer', () => {
-    expect(new DrapeRenderer(gl).ensure(shaderData, 16)).toBe(true);
+    expect(new DrapeRenderer(gl, new GpuLedger()).ensure(shaderData, 16)).toBe(true);
   });
   withLabel('DrapeRenderer (rows)', () => {
-    expect(new DrapeRenderer(gl, true).ensure(shaderData, 16)).toBe(true);
+    expect(new DrapeRenderer(gl, new GpuLedger(), true).ensure(shaderData, 16)).toBe(true);
   });
   withLabel('QuadDrapeRenderer', () => {
-    const quad = new QuadDrapeRenderer(gl);
+    const quad = new QuadDrapeRenderer(gl, new GpuLedger());
     expect(quad.ensure(new QuadImageContent(), shaderData, 16)).toBe(true);
     // A content as the contract allows it: textures read in a loop with the derivatives given
     expect(quad.ensure(BLURRED_CONTENT, shaderData, 16)).toBe(true);
   });
   withLabel('DemAtlas', () => {
-    expect(new DemAtlas(gl).ensureProgram()).toBe(true);
+    expect(new DemAtlas(gl, new GpuLedger()).ensureProgram()).toBe(true);
   });
   withLabel('BulkFramesRenderer', () => {
-    const renderer = new BulkFramesRenderer(gl);
+    const renderer = new BulkFramesRenderer(gl, new GpuLedger());
     renderer.ensureShader(shaderData);
     expect(renderer.ensureProgram()).toBe(true);
   });
