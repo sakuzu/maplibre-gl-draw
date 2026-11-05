@@ -40,6 +40,7 @@ const fake = {
   overflow: false,
   packId: 1 as number | null,
   upload: true,
+  lastError: '',
   drapedDatasets: new Set<string>(['c1']),
   /** Number of calls of collectDrapeElements */
   collects: 0,
@@ -114,7 +115,9 @@ vi.mock('../terrain/drape/renderer.js', () => ({
   DRAPE_MAX_SOURCES: 8,
   DRAPE_OWNER: 'drape',
   DrapeRenderer: class {
-    lastError = '';
+    get lastError(): string {
+      return fake.lastError;
+    }
     upload(): boolean {
       return fake.upload;
     }
@@ -258,6 +261,15 @@ describe('DrapePlanner reasons', () => {
     const limit = createPlanner();
     expect(limit.frame()).toBe(false);
     expect(limit.reason()).toBe('texture-limit');
+  });
+
+  it('tells a table refused by the limit of the instance, and draws without the drape', () => {
+    fake.upload = false;
+    fake.lastError = 'gpu-limit: edgeTexSize needs 10 rows';
+    const limit = createPlanner();
+    expect(limit.frame()).toBe(false);
+    expect(limit.reason()).toBe('gpu-limit');
+    fake.lastError = '';
   });
 
   it('reports no-dem-tiles without a previous plan, and keeps a usable plan (stale-plan)', () => {

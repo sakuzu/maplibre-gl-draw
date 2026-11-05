@@ -672,7 +672,9 @@ export class TableDrape {
       return this.unused(this.renderer.lastError || 'ensure-failed');
     }
     if (!ground && !this.renderer.uploadRows(this.index.storage, this.copies)) {
-      return this.unused('texture-limit');
+      return this.unused(
+        this.renderer.lastError.startsWith('gpu-limit') ? 'gpu-limit' : 'texture-limit',
+      );
     }
     const planTiles: DrapePlanTile[] = [];
     const tileOf = new Map<unknown, DrapeTile>();
