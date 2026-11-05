@@ -998,8 +998,8 @@ function drawSolidQuad(ctx: RenderContext, center: [number, number]): boolean {
 terrain through `drawQuadOnTerrain`, and on the plane and on the globe with
 the same `quadDrapeColor`, with a `shade` of 1. Give it the content when it
 is made with the ledger it records in (`new QuadShader(gl, ctx.gpu, content)`,
-a picture with `QuadImageContent` when left out), set what the content reads, and call
-`draw(vertices, opacity, projection)`.
+a picture with `QuadImageContent` when left out), set what the content
+reads, and call `draw(vertices, opacity, projection)`.
 
 A shader that draws marks on the terrain without depth fades the ones
 the terrain hides, as `occlusionOpacity` does on the CPU, with
