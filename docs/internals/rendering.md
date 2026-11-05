@@ -266,8 +266,8 @@ created by one function, `buildGpuResources`, and dropped by one function,
 CPU-side state (the Store subscription, the triangulation and style rule
 caches, the collected drape elements) is outside the pair.
 
-- `onAdd` builds the pair and `onRemove` releases it. Feature type
-  renderers and overlay renderers (`draw.extensions.overlays`) stay registered
+- `onAdd` builds the pair and `onRemove` releases it. The feature type
+  renderers and the overlay renderers of the engine stay registered
   across a removal and receive `onAdd` again when the layer comes back; an
   overlay added before the layer is on the map receives its `onAdd` when
   the engine is built
@@ -281,11 +281,20 @@ caches, the collected drape elements) is outside the pair.
   add it back. The slots return through `attachSlotLayers()` on the
   `styledata` of the restored style, and `onAdd` builds everything again
 
-A renderer, including an extension's, must therefore create its GL objects
-in `onAdd` (or lazily while drawing), release them in `onRemove`, and accept
-`onAdd` again. `disposeRenderers` (`view/layer/renderers.ts`) lists every
-member of `Renderers` with a `dispose()`, and a missing member is a compile
-error.
+A renderer of the library must therefore create its GL objects in `onAdd`
+(or lazily while drawing), release them in `onRemove`, and accept `onAdd`
+again. `disposeRenderers` (`view/layer/renderers.ts`) lists every member of
+`Renderers` with a `dispose()`, and a missing member is a compile error.
+
+An extension has no such pair. What it holds is made through a `Gpu`
+(`GpuResources`, `view/gpu.ts`), which records each object in the ledger of
+the instance before it is made, refuses what does not fit, and deletes
+everything when it closes. A definition of `ctx.webgl` is one `GpuPart`
+(`api/impl/gpu-parts.ts`), whatever number of types and overlays use it: it
+runs `prepare` when the map gives a context, keeps what it holds through a
+change of style, and closes the `Gpu` when the last use goes, when the
+context is lost, and when `prepare` or the drawing throws. A lost context
+comes back with `prepare` on a new `Gpu`.
 
 ### Copies of the world across the antimeridian
 
@@ -650,6 +659,35 @@ by their own renderer. So `renderLayers` flushes the core batches with
 with `beginFrame()` after it. Without that flush, every custom feature of a
 layer would be painted first and the core batches over them afterwards,
 putting core features on top regardless of the order.
+
+### Rows held by an extension
+
+On a layer held as rows, a definition of `ctx.webgl` whose `prepare` returns
+`rows` holds the rows of its type on the GPU itself (`GpuRowBuffer`), so that a
+frame does no work for each of them. They make a chunk of their own
+(`extension`), cut where the source changes; the types given the same
+definition share it. The chunk has no batches:
+
+- It gives its rows with `add` within the budget of the builds, once it is in
+  view, after its extents are read a slice at a time. Its state goes with
+  `setStates`, when its rows are taken and when the state of the group changes,
+  and a write goes with `update` in the frame that shows it
+- It draws with one `render` for each part between the rows of the delta, and
+  it is culled by the chunk: a frame does not walk its rows
+- A row it does not hold, and a range `render` refuses, is drawn at once in its
+  place, so the order does not depend on what the extension holds. A write it
+  refuses moves the row to the delta
+
+Each chunk opens a `Gpu` of its own for rows, out of `gpuShare` and under the
+limit of the device (`draw.memory`), and closing it gives back all the range
+made, so a `GpuRowBuffer` has nothing to release. `add` says nothing of why it
+stopped: back before the deadline with fewer rows than given, it refused them,
+and a `too-large` thrown through it is a refusal too; past the deadline, the
+rows left go in a later frame. The core closes the `Gpu` when a chunk leaves,
+when the rows of a chunk are all hidden, when a layer is not drawn in a frame,
+and when rows are refused and another chunk was out of view for
+`GPU_ROWS_IDLE_FRAMES`. A refused chunk asks for no frames: it gives its rows
+again only after a release.
 
 ### Companion drawing
 
@@ -1860,7 +1898,8 @@ pixel is inside a polygon or how far it is from a line.
 `DrapePlanner.planFrame()` decides per draw whether the drape is used, and
 records the reason in the diagnostic values (`getTerrainDrapeDebug`):
 `terrain-off`, `wide-zoom`, `no-drapeable-features`, `vertex-budget`,
-`cell-overflow`, `no-dem-tiles`, `stale-plan`, `texture-limit` or `ok`.
+`cell-overflow`, `no-dem-tiles`, `stale-plan`, `texture-limit`, `gpu-limit`
+or `ok`.
 
 - The elements are collected before the band is decided, because the band
   depends on their cost. Dataset is folded behind a key (feature
@@ -2163,7 +2202,10 @@ allocation beyond it fails and leaves a texture that samples as zeros, so a
 part of the map would silently vanish. A line batch's coordinate texture is
 never built past it, images are scaled down, and the drape lays out its
 tables in rows of 2,048 texels; when a table would still be too tall, or an
-allocation fails, the view is drawn without the drape (`texture-limit`).
+allocation fails, the view is drawn without the drape (`texture-limit`), and
+so it is when a table does not fit under `rendering.gpuLimitBytes`
+(`gpu-limit`): the vertices of the polygons and the lines are moved to the
+ground, in the order of the layer.
 
 ### Uniforms written once per draw of the map
 

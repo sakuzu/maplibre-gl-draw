@@ -226,6 +226,7 @@ const RUNTIME_CHECKS: Readonly<Record<string, (value: unknown, what: string) => 
     pixelRatio: positive,
     cacheGeometry: bool,
     timeSlicing: bool,
+    gpuLimitBytes: positive,
   }),
   isExternalEntry: func,
 };
@@ -688,6 +689,7 @@ export function toEngineOptions(
     trace: runtime.tracing,
     topology: runtime.topology,
     pixelRatio: runtime.rendering?.pixelRatio,
+    gpuLimitBytes: runtime.rendering?.gpuLimitBytes,
     isExternalEntry,
   };
   if (options.defaultMode !== undefined) result.defaultMode = options.defaultMode;
@@ -857,6 +859,9 @@ export function createOptions(
       if (rendering.timeSlicing !== undefined) {
         engine.runtime.setTimeSlicing(rendering.timeSlicing);
         rebuild = true;
+      }
+      if (rendering.gpuLimitBytes !== undefined) {
+        engine.customLayer.getGpuLedger().limitBytes = rendering.gpuLimitBytes;
       }
     }
     if (patch.isExternalEntry !== undefined) {

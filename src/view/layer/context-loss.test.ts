@@ -287,6 +287,39 @@ describe('the lifetime of the GPU resources', () => {
     vi.unstubAllGlobals();
   });
 
+  it('deletes what an instance destroyed left in the ledger, and tells it', () => {
+    const { gl, stats, map, layer } = setup();
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    layer.onAdd?.(map, gl);
+    const ledger = layer.getGpuLedger();
+    const left = gl.createBuffer() as object;
+    ledger.record(left, 'a part that forgets', 'buffer', 1_000);
+    const before = ledger.snapshot().leakedBytes;
+
+    layer.onRemove?.(map, gl);
+    // What the layer made is back; only what the part forgot is left when the instance is gone
+    expect(ledger.snapshot().byOwner).toEqual({ 'a part that forgets': 1_000 });
+    const deleted = stats.deleted;
+    layer.drainGpu();
+
+    expect(stats.deleted).toBe(deleted + 1);
+    expect(ledger.snapshot().bytes).toBe(0);
+    expect(ledger.snapshot().leakedBytes - before).toBe(1_000);
+    expect(ledger.audit()).toBe(true);
+    expect(warn).toHaveBeenCalled();
+    warn.mockRestore();
+  });
+
+  it('leaves nothing to delete when an instance gave everything back', () => {
+    const { gl, map, layer } = setup();
+    layer.onAdd?.(map, gl);
+    layer.onRemove?.(map, gl);
+    const ledger = layer.getGpuLedger();
+    const before = ledger.snapshot().leakedBytes;
+    layer.drainGpu();
+    expect(ledger.snapshot().leakedBytes).toBe(before);
+  });
+
   it('removing the layer deletes every GL object it created', () => {
     const { gl, stats, map, layer } = setup();
     layer.onAdd?.(map, gl);

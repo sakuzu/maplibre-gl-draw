@@ -36,10 +36,10 @@ export class BufferCache {
   private gl: WebGL2RenderingContext;
   private cache: Map<string, CachedGeometry> = new Map();
   private maxCacheSize: number;
-  /** Where the bytes of the buffers are recorded (nothing is recorded when omitted) */
-  private readonly ledger: GpuLedgerOwner | undefined;
+  /** Where the bytes of the buffers are recorded */
+  private readonly ledger: GpuLedgerOwner;
 
-  constructor(gl: WebGL2RenderingContext, maxCacheSize = 2000, ledger?: GpuLedgerOwner) {
+  constructor(gl: WebGL2RenderingContext, ledger: GpuLedgerOwner, maxCacheSize = 2000) {
     this.gl = gl;
     this.maxCacheSize = maxCacheSize;
     this.ledger = ledger;
@@ -48,7 +48,7 @@ export class BufferCache {
   /** Deletes the VAO and the buffer of an entry */
   private deleteEntry(cached: CachedGeometry): void {
     this.gl.deleteVertexArray(cached.vao);
-    this.ledger?.ledger.release(cached.buffer);
+    this.ledger.ledger.release(cached.buffer);
     this.gl.deleteBuffer(cached.buffer);
   }
 
@@ -96,7 +96,7 @@ export class BufferCache {
     const buffer = gl.createBuffer()!;
     gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
     gl.bufferData(gl.ARRAY_BUFFER, vertices, gl.STATIC_DRAW);
-    this.ledger?.ledger.record(buffer, this.ledger.owner, 'buffer', vertices.byteLength);
+    this.ledger.ledger.record(buffer, this.ledger.owner, 'buffer', vertices.byteLength);
 
     for (const attr of attributes) {
       gl.enableVertexAttribArray(attr.index);

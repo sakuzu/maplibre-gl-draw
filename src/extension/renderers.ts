@@ -13,6 +13,8 @@
  */
 
 import type { Map as MapLibreMap, ProjectionData } from 'maplibre-gl';
+import type { RenderContext } from '../api/extension/render.js';
+import type { GpuRowBuffer } from '../api/extension/webgl.js';
 import type { LayerTableView, RowHandle } from '../api/tables.js';
 import type { Feature } from '../shared/types/model.js';
 import type { SDFLineRenderer } from '../view/renderers/line/sdf-line.js';
@@ -46,6 +48,11 @@ export interface FrameDrawContext {
    */
   pixelRatio: number;
   /**
+   * The projection data of each copy of the world in view, the stored copy too, for what is drawn
+   * on all of them (`OverlayContext.worldCopies`). Set once the copies of the frame are planned
+   */
+  copyProjections?: readonly ProjectionData[];
+  /**
    * The terrain state of the draw instance being drawn
    *
    * A renderer that owns a `ProjectionUniformManager` or a `QuadShader` passes it with
@@ -75,6 +82,25 @@ export interface FrameDrawContext {
   fillShaderManager: FillShaderManager;
   /** Point shape rendering */
   pointShapeRenderer: PointShapeRenderer;
+}
+
+/**
+ * A range of rows held on the GPU, with what gives back all that it made
+ *
+ * @internal
+ */
+export interface HeldGpuRows {
+  readonly buffer: GpuRowBuffer;
+  release(): void;
+}
+
+/**
+ * Makes what holds one range of the rows of a layer
+ *
+ * @internal
+ */
+export interface GpuRowsSource {
+  create(view: LayerTableView): HeldGpuRows;
 }
 
 /**
@@ -130,17 +156,18 @@ export interface FeatureTypeRenderer {
   appliesToRow?(view: LayerTableView, handle: RowHandle): boolean;
 
   /**
-   * Draws rows it draws one after the other at once, from the rows (the ones not hidden and in
-   * view, of its type, without a companion), in place of `draw` for each of their features.
-   * Optional: without it, the features of the rows are made and drawn by `draw`
+   * What holds its rows on the GPU, for the layers held as rows (`FeatureRenderer.rows`).
+   * Optional: without it, the features of the rows are made and drawn by `draw`. Renderers of
+   * types given one definition have the same one
    */
-  drawRows?(
-    view: LayerTableView,
-    handles: Int32Array,
+  readonly gpuRows?: GpuRowsSource | undefined;
+
+  /** The context `gpuRows` draws with (null while it is not on the map) */
+  gpuRowsContext?(
     projectionData: ProjectionData,
     zoom: number,
     context: FrameDrawContext,
-  ): void;
+  ): RenderContext | null;
 
   /**
    * The pictures it draws its points with, for the layers held as rows: such a point is drawn

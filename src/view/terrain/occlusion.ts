@@ -23,6 +23,7 @@
  */
 
 import type { RenderContext } from '../../api/extension/render.js';
+import type { GpuContext } from '../../api/extension/webgl.js';
 import type { OffsetUniforms } from '../shaders/helpers.js';
 import { drawnLongitude } from './anchor.js';
 import { terrainStateOf } from './binding.js';
@@ -236,12 +237,12 @@ float terrain_occlusion_opacity(vec2 offset, float elevationMeters) {
  * DEM atlas is.
  */
 export class TerrainOcclusionUniforms {
-  readonly #gl: WebGL2RenderingContext;
+  readonly #gl: GpuContext;
   readonly #on: WebGLUniformLocation | null;
   readonly #camera: WebGLUniformLocation | null;
   readonly #node: WebGLUniformLocation | null;
 
-  constructor(gl: WebGL2RenderingContext, program: WebGLProgram) {
+  constructor(gl: GpuContext, program: WebGLProgram) {
     this.#gl = gl;
     this.#on = gl.getUniformLocation(program, 'u_ghost_on');
     this.#camera = gl.getUniformLocation(program, 'u_ghost_camera');

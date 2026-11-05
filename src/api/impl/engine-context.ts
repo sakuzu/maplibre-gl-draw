@@ -101,6 +101,8 @@ export interface EngineOptions {
   isExternalEntry?: (entryId: string) => boolean;
   /** The pixel ratio to draw with, instead of the one of the map */
   pixelRatio?: number;
+  /** The most bytes the instance holds on the GPU outside the rows */
+  gpuLimitBytes?: number;
   /** The strings the engine shows */
   messages?: Partial<Messages>;
   /**
@@ -158,6 +160,7 @@ export interface Context {
       | 'snap'
       | 'trace'
       | 'pixelRatio'
+      | 'gpuLimitBytes'
       | 'isExternalEntry'
       | 'messages'
       | 'keepDrawnCopies'

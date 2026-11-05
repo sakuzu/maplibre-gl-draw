@@ -97,7 +97,7 @@ const COMPLETION_STATUS_KHR = 0x91b1;
  * context has `KHR_parallel_shader_compile`, `done` tells without waiting; without it, it is true
  * at once and `take` waits.
  */
-export class ProgramCompile {
+export class ProgramLink {
   readonly #gl: WebGL2RenderingContext;
   readonly #parallel: boolean;
   readonly #vertex: WebGLShader;
@@ -205,14 +205,19 @@ export function createProgram(
   gl.shaderSource(vertexShader, withSamplerPrecision(vertexSource));
   gl.compileShader(vertexShader);
   if (!gl.getShaderParameter(vertexShader, gl.COMPILE_STATUS)) {
-    throw new Error(`Vertex shader error: ${gl.getShaderInfoLog(vertexShader)}`);
+    const log = gl.getShaderInfoLog(vertexShader);
+    gl.deleteShader(vertexShader);
+    throw new Error(`Vertex shader error: ${log}`);
   }
 
   const fragmentShader = gl.createShader(gl.FRAGMENT_SHADER)!;
   gl.shaderSource(fragmentShader, withSamplerPrecision(fragmentSource));
   gl.compileShader(fragmentShader);
   if (!gl.getShaderParameter(fragmentShader, gl.COMPILE_STATUS)) {
-    throw new Error(`Fragment shader error: ${gl.getShaderInfoLog(fragmentShader)}`);
+    const log = gl.getShaderInfoLog(fragmentShader);
+    gl.deleteShader(vertexShader);
+    gl.deleteShader(fragmentShader);
+    throw new Error(`Fragment shader error: ${log}`);
   }
 
   const program = gl.createProgram()!;
@@ -227,7 +232,9 @@ export function createProgram(
   gl.deleteShader(fragmentShader);
 
   if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
-    throw new Error(`Program link error: ${gl.getProgramInfoLog(program)}`);
+    const log = gl.getProgramInfoLog(program);
+    gl.deleteProgram(program);
+    throw new Error(`Program link error: ${log}`);
   }
 
   return program;

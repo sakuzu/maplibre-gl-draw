@@ -32,8 +32,9 @@
 import type { ProjectionData } from 'maplibre-gl';
 import type { TerrainSurface } from '../../api/extension/context.js';
 import type { RenderContext } from '../../api/extension/render.js';
+import type { Gpu, GpuContext } from '../../api/extension/webgl.js';
+import { DrawError } from '../../shared/draw-error.js';
 import { globeGridOf } from '../globe-subdivision.js';
-import type { GpuLedger } from '../gpu-ledger.js';
 import { terrainStateOf } from '../terrain/binding.js';
 import type { TerrainContext } from '../terrain/context.js';
 import type { DrapeQuadCorners, QuadDrapeContent } from '../terrain/drape/quad.js';
@@ -46,7 +47,6 @@ import {
 import type { OffsetUniforms } from './helpers.js';
 import {
   calculateLngLatOffset,
-  createProgram,
   getProjectionTransitionUniform,
   OFFSET_MODE_GLSL,
 } from './helpers.js';
@@ -89,9 +89,6 @@ vec4 quadDrapeColor(vec2 uv, vec2 uvDx, vec2 uvDy, float shade) {
 /** The texture unit the picture is bound to */
 const QUAD_IMAGE_TEXTURE_UNIT = QUAD_DRAPE_TEXTURE_UNITS[0];
 
-/** The owner the buffers of a quad are recorded under in the GPU ledger */
-const QUAD_OWNER = 'images';
-
 /** The bytes of the positions of the four corners (4 vertices of 2 floats) */
 const QUAD_POSITION_BYTES = 8 * 4;
 
@@ -115,7 +112,7 @@ export class QuadImageContent implements QuadDrapeContent {
   /** The texture of the picture of the quad being drawn */
   texture: WebGLTexture | null = null;
 
-  bind(gl: WebGL2RenderingContext, uniform: (name: string) => WebGLUniformLocation | null): void {
+  bind(gl: GpuContext, uniform: (name: string) => WebGLUniformLocation | null): void {
     gl.activeTexture(gl.TEXTURE0 + QUAD_IMAGE_TEXTURE_UNIT);
     gl.bindTexture(gl.TEXTURE_2D, this.texture);
     gl.uniform1i(uniform('u_image_texture'), QUAD_IMAGE_TEXTURE_UNIT);
@@ -133,14 +130,14 @@ export class QuadImageContent implements QuadDrapeContent {
 export class QuadShader<C extends QuadDrapeContent = QuadImageContent> {
   /** What the quads show: set what it reads before each `draw` */
   readonly content: C;
-  private gl: WebGL2RenderingContext;
+  private gl: GpuContext;
+  /** What its resources are allocated with */
+  private readonly gpu: Gpu;
   private program: WebGLProgram | null = null;
   private variantName = '';
   private vao: WebGLVertexArrayObject | null = null;
   private positionBuffer: WebGLBuffer | null = null;
   private texCoordBuffer: WebGLBuffer | null = null;
-  /** Where the bytes of the buffers are recorded (nothing is recorded until `useLedger`) */
-  private ledger: GpuLedger | null = null;
 
   // Projection uniform management
   private projectionUniformManager: ProjectionUniformManager;
@@ -183,15 +180,22 @@ export class QuadShader<C extends QuadDrapeContent = QuadImageContent> {
   private terrain: TerrainContext | null = null;
 
   /**
-   * @param gl - The WebGL context of the map
+   * @param gpu - What its resources are allocated with
    * @param content - What the quads show (`QuadImageContent` when left out). Its GLSL is compiled
    *   into the program of the quads, and into the one of the analytic drape
    */
-  constructor(gl: WebGL2RenderingContext, content?: C) {
-    this.gl = gl;
+  constructor(gpu: Gpu, content?: C) {
+    this.gpu = gpu;
+    this.gl = gpu.gl;
     this.content = content ?? (new QuadImageContent() as QuadDrapeContent as C);
-    this.projectionUniformManager = new ProjectionUniformManager(gl);
-    this.setupBuffers();
+    this.projectionUniformManager = new ProjectionUniformManager(gpu.gl);
+    try {
+      this.setupBuffers();
+    } catch (error) {
+      // What was made goes here: the owner of the `gpu` may go on without it
+      this.dispose();
+      throw error;
+    }
   }
 
   /**
@@ -218,38 +222,21 @@ export class QuadShader<C extends QuadDrapeContent = QuadImageContent> {
   }
 
   /**
-   * Records the bytes of the buffers in the GPU ledger of an instance, those made already and
-   * those made later
-   *
-   * @internal
-   */
-  useLedger(ledger: GpuLedger): this {
-    this.ledger = ledger;
-    ledger.record(this.positionBuffer, QUAD_OWNER, 'buffer', QUAD_POSITION_BYTES);
-    ledger.record(this.texCoordBuffer, QUAD_OWNER, 'buffer', QUAD_TEX_COORDS.byteLength);
-    return this;
-  }
-
-  /**
    * Initializes the buffers
    */
   private setupBuffers(): void {
     const gl = this.gl;
 
-    this.vao = gl.createVertexArray();
+    this.vao = this.gpu.vertexArray();
     gl.bindVertexArray(this.vao);
 
-    // The position buffer (updated dynamically)
-    this.positionBuffer = gl.createBuffer();
-    gl.bindBuffer(gl.ARRAY_BUFFER, this.positionBuffer);
-    gl.bufferData(gl.ARRAY_BUFFER, QUAD_POSITION_BYTES, gl.DYNAMIC_DRAW); // 4 vertices x 2 components
+    // The position buffer (updated dynamically): 4 vertices x 2 components
+    this.positionBuffer = this.gpu.buffer(QUAD_POSITION_BYTES);
     gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
     gl.enableVertexAttribArray(0);
 
     // The texture coordinate buffer (fixed)
-    this.texCoordBuffer = gl.createBuffer();
-    gl.bindBuffer(gl.ARRAY_BUFFER, this.texCoordBuffer);
-    gl.bufferData(gl.ARRAY_BUFFER, QUAD_TEX_COORDS, gl.STATIC_DRAW);
+    this.texCoordBuffer = this.gpu.buffer(QUAD_TEX_COORDS);
     gl.vertexAttribPointer(1, 2, gl.FLOAT, false, 0, 0);
     gl.enableVertexAttribArray(1);
 
@@ -273,9 +260,7 @@ export class QuadShader<C extends QuadDrapeContent = QuadImageContent> {
   }): void {
     if (this.variantName === shaderData.variantName) return;
 
-    if (this.program) {
-      this.gl.deleteProgram(this.program);
-    }
+    if (this.program) this.gpu.release(this.program);
 
     this.program = this.createQuadProgram(shaderData.vertexShaderPrelude, shaderData.define);
     this.variantName = shaderData.variantName;
@@ -322,7 +307,7 @@ void main() {
     fragColor = vec4(color.rgb / max(color.a, 1e-4), color.a * u_opacity);
 }`;
 
-    return createProgram(this.gl, vertexSource, fragmentSource);
+    return this.gpu.program(vertexSource, fragmentSource);
   }
 
   /**
@@ -493,12 +478,15 @@ void main() {
     }
 
     gl.bindVertexArray(this.gridVao);
-    gl.bindBuffer(gl.ARRAY_BUFFER, this.gridPositionBuffer);
     if (this.gridPositionCapacity < needed) {
-      gl.bufferData(gl.ARRAY_BUFFER, offsets.subarray(0, needed), gl.DYNAMIC_DRAW);
-      this.ledger?.record(this.gridPositionBuffer, QUAD_OWNER, 'buffer', needed * 4);
+      if (this.gridPositionBuffer) this.gpu.release(this.gridPositionBuffer);
+      this.gridPositionBuffer = this.gpu.buffer(offsets.subarray(0, needed), {
+        usage: gl.DYNAMIC_DRAW,
+      });
+      gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
       this.gridPositionCapacity = needed;
     } else {
+      gl.bindBuffer(gl.ARRAY_BUFFER, this.gridPositionBuffer);
       gl.bufferSubData(gl.ARRAY_BUFFER, 0, offsets.subarray(0, needed));
     }
 
@@ -510,77 +498,58 @@ void main() {
    * Uploads the texture coordinates and indices of the grid to the GPU
    */
   private uploadGridStatics(grid: QuadGridGeometry): boolean {
-    const gl = this.gl;
+    try {
+      this.uploadGrid(grid);
+    } catch (error) {
+      // Without room for the grid the quad is drawn by its four corners
+      if (error instanceof DrawError) return false;
+      throw error;
+    }
+    return true;
+  }
 
-    if (!this.gridVao) {
-      this.gridVao = gl.createVertexArray();
-      this.gridPositionBuffer = gl.createBuffer();
-      this.gridTexCoordBuffer = gl.createBuffer();
-      this.gridIndexBuffer = gl.createBuffer();
-      if (
-        !this.gridVao ||
-        !this.gridPositionBuffer ||
-        !this.gridTexCoordBuffer ||
-        !this.gridIndexBuffer
-      ) {
-        return false;
-      }
-      gl.bindVertexArray(this.gridVao);
-      gl.bindBuffer(gl.ARRAY_BUFFER, this.gridPositionBuffer);
+  private uploadGrid(grid: QuadGridGeometry): void {
+    const gl = this.gl;
+    if (!this.gridVao) this.gridVao = this.gpu.vertexArray();
+    gl.bindVertexArray(this.gridVao);
+    // A first buffer of the positions, for the vertex array: the grid grows it in its place
+    if (!this.gridPositionBuffer) {
+      this.gridPositionBuffer = this.gpu.buffer(4);
       gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
       gl.enableVertexAttribArray(0);
-      gl.bindBuffer(gl.ARRAY_BUFFER, this.gridTexCoordBuffer);
-      gl.vertexAttribPointer(1, 2, gl.FLOAT, false, 0, 0);
-      gl.enableVertexAttribArray(1);
-      gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, this.gridIndexBuffer);
-      gl.bindVertexArray(null);
-      this.gridPositionCapacity = 0;
+      this.gridPositionCapacity = 1;
     }
-
-    gl.bindVertexArray(this.gridVao);
-    gl.bindBuffer(gl.ARRAY_BUFFER, this.gridTexCoordBuffer);
-    gl.bufferData(gl.ARRAY_BUFFER, grid.texCoords, gl.STATIC_DRAW);
-    this.ledger?.record(this.gridTexCoordBuffer, QUAD_OWNER, 'buffer', grid.texCoords.byteLength);
-    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, this.gridIndexBuffer);
-    gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, grid.indices, gl.STATIC_DRAW);
-    this.ledger?.record(this.gridIndexBuffer, QUAD_OWNER, 'buffer', grid.indices.byteLength);
+    if (this.gridTexCoordBuffer) this.gpu.release(this.gridTexCoordBuffer);
+    this.gridTexCoordBuffer = this.gpu.buffer(grid.texCoords);
+    gl.vertexAttribPointer(1, 2, gl.FLOAT, false, 0, 0);
+    gl.enableVertexAttribArray(1);
+    if (this.gridIndexBuffer) this.gpu.release(this.gridIndexBuffer);
+    this.gridIndexBuffer = this.gpu.buffer(grid.indices, { target: gl.ELEMENT_ARRAY_BUFFER });
     gl.bindVertexArray(null);
-    return true;
   }
 
   /**
    * Disposes of the resources
    */
   dispose(): void {
-    const gl = this.gl;
-
-    if (this.program) {
-      gl.deleteProgram(this.program);
-      this.program = null;
+    const made = [
+      this.program,
+      this.vao,
+      this.positionBuffer,
+      this.texCoordBuffer,
+      this.gridVao,
+      this.gridPositionBuffer,
+      this.gridTexCoordBuffer,
+      this.gridIndexBuffer,
+    ];
+    for (const resource of made) {
+      if (resource) this.gpu.release(resource);
     }
-    if (this.vao) {
-      gl.deleteVertexArray(this.vao);
-      this.vao = null;
-    }
-    if (this.positionBuffer) {
-      this.ledger?.release(this.positionBuffer);
-      gl.deleteBuffer(this.positionBuffer);
-      this.positionBuffer = null;
-    }
-    if (this.texCoordBuffer) {
-      this.ledger?.release(this.texCoordBuffer);
-      gl.deleteBuffer(this.texCoordBuffer);
-      this.texCoordBuffer = null;
-    }
-    if (this.gridVao) {
-      gl.deleteVertexArray(this.gridVao);
-      this.gridVao = null;
-    }
-    for (const buffer of [this.gridPositionBuffer, this.gridTexCoordBuffer, this.gridIndexBuffer]) {
-      if (!buffer) continue;
-      this.ledger?.release(buffer);
-      gl.deleteBuffer(buffer);
-    }
+    this.program = null;
+    this.vao = null;
+    this.positionBuffer = null;
+    this.texCoordBuffer = null;
+    this.gridVao = null;
     this.gridPositionBuffer = null;
     this.gridTexCoordBuffer = null;
     this.gridIndexBuffer = null;

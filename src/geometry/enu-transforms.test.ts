@@ -19,7 +19,13 @@
 
 import type { Geometry, LineString, Point, Polygon } from 'geojson';
 import { describe, expect, it } from 'vitest';
-import { acceptsEnuEdit, applyEnuEdit, type EnuEdit, type EnuValues } from './enu-transforms.js';
+import {
+  acceptsEnuEdit,
+  applyEnuEdit,
+  type EnuEdit,
+  type EnuValues,
+  enuEditTurn,
+} from './enu-transforms.js';
 
 /** The tolerance of a position that comes back, in degrees (about 0.1 mm) */
 const TOLERANCE = 1e-9;
@@ -95,6 +101,27 @@ describe('the computation of the library', () => {
       { kind: 'scale', center: [139.7, 35.6], eastFactor: 1, northFactor: 1, sizeFactor: 1 },
     ];
     for (const edit of edits) expect(applyEnuEdit(edit, values)).toBe(values);
+  });
+
+  it('tells what an edit does to an angle and a size as it writes them', () => {
+    const center: [number, number] = [139.7, 35.6];
+    const edits: EnuEdit[] = [
+      { kind: 'translate', from: center, to: [139.8, 35.6] },
+      { kind: 'rotate', center, angleDegrees: 30 },
+      { kind: 'rotate', center, angleDegrees: 0 },
+      { kind: 'scale', center, eastFactor: 2, northFactor: 3, sizeFactor: 2.5 },
+      { kind: 'scale', center, eastFactor: 1, northFactor: 1, sizeFactor: 1 },
+    ];
+    for (const edit of edits) {
+      const values: EnuValues = { geometry: tokyoLine(), angleDegrees: 10, size: 4 };
+      const written = applyEnuEdit(edit, values);
+      const turn = enuEditTurn(edit);
+      expect(written.angleDegrees).toBeCloseTo(10 + turn.angleDegrees, 9);
+      expect(written.size).toBeCloseTo(4 * turn.sizeFactor, 9);
+    }
+    expect(enuEditTurn(edits[0])).toEqual({ angleDegrees: 0, sizeFactor: 1 });
+    expect(enuEditTurn(edits[1])).toEqual({ angleDegrees: 30, sizeFactor: 1 });
+    expect(enuEditTurn(edits[3])).toEqual({ angleDegrees: 0, sizeFactor: 2.5 });
   });
 
   it('keeps a latitude past the one of Mercator, and computes a point at a pole', () => {

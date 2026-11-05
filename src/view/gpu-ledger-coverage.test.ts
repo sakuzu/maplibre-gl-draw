@@ -32,6 +32,7 @@ import type { Feature, Layer } from '../shared/types/model.js';
 import { MemoryStore } from '../store/memory.js';
 import { RBushSpatialIndex } from '../store/spatial/spatial-index.js';
 import { feature, tablesOfFeatures } from '../test-utils.js';
+import { TextureCache } from './cache/texture.js';
 import { createFeatureCompanionRegistry } from './feature-companion.js';
 import { GpuLedger } from './gpu-ledger.js';
 import { createRenderScope } from './layer/render-scope.js';
@@ -40,7 +41,7 @@ import type { StoreRetainedDrawDeps } from './layer/store-retained-immediate.js'
 import { TableLayerRenderer } from './layer/table-retained.js';
 import { TerrainResolver } from './layer/terrain-resolver.js';
 import { beginRenderFrame } from './shaders/frame.js';
-import { calculateOffsetUniforms, type ShaderData } from './shaders/helpers.js';
+import { calculateOffsetUniforms, createProgram, type ShaderData } from './shaders/helpers.js';
 import { TerrainContext } from './terrain/context.js';
 import { DemAtlas } from './terrain/dem-atlas.js';
 import { DrapePackBuilder } from './terrain/drape/bin-store.js';
@@ -363,8 +364,11 @@ class FakeImage {
 }
 
 /** The renderers of an instance on the counting GL, with their shaders made for a view */
-function engine(mock: StorageGL, store = new MemoryStore()) {
-  const scope = createRenderScope(createSelectionScope());
+function engine(
+  mock: StorageGL,
+  store = new MemoryStore(),
+  scope = createRenderScope(createSelectionScope()),
+) {
   const renderers = initRenderers({
     gl: mock.gl,
     map: mapStub(),
@@ -423,6 +427,59 @@ function square(x: number, y: number, s: number): [number, number][] {
 // The tests
 // ---------------------------------------------------------------------------
 
+/** The calls that give something storage */
+const ALLOCATIONS = ['bufferData', 'texStorage2D', 'texImage2D', 'renderbufferStorage'];
+
+/** Counts the calls that make and delete what the GL holds */
+function countingCalls(mock: { gl: WebGL2RenderingContext }) {
+  const counts = new Map<string, number>();
+  const gl = mock.gl as unknown as Record<string, (...args: unknown[]) => unknown>;
+  const count = (name: string): void => {
+    const call = gl[name] as (...args: unknown[]) => unknown;
+    gl[name] = (...args) => {
+      counts.set(name, (counts.get(name) ?? 0) + 1);
+      return call(...args);
+    };
+  };
+  for (const what of ['Buffer', 'Texture', 'Program', 'Shader']) {
+    for (const name of [`create${what}`, `delete${what}`]) count(name);
+  }
+  for (const name of ALLOCATIONS) count(name);
+  return {
+    created: (what: string): number => counts.get(`create${what}`) ?? 0,
+    deleted: (what: string): number => counts.get(`delete${what}`) ?? 0,
+    allocations: (): number => ALLOCATIONS.reduce((sum, name) => sum + (counts.get(name) ?? 0), 0),
+  };
+}
+
+/** Has a GL throw at the step-th allocation, as a driver out of memory would fail it */
+function failingAt(mock: { gl: WebGL2RenderingContext }, step: number): void {
+  let left = step;
+  const gl = mock.gl as unknown as Record<string, (...args: unknown[]) => unknown>;
+  for (const name of ALLOCATIONS) {
+    const call = gl[name] as (...args: unknown[]) => unknown;
+    gl[name] = (...args) => {
+      left--;
+      if (left === 0) throw new Error('no memory');
+      return call(...args);
+    };
+  }
+}
+
+/** Has a GL refuse a shader or the link of a program */
+function failingProgram(
+  mock: { gl: WebGL2RenderingContext },
+  failing: 'vertex' | 'fragment' | 'link',
+): void {
+  const gl = mock.gl as unknown as Record<string, unknown>;
+  let compiled = 0;
+  gl.getShaderParameter = () => {
+    compiled++;
+    return !(failing === 'vertex' ? compiled === 1 : failing === 'fragment' && compiled === 2);
+  };
+  gl.getProgramParameter = () => failing !== 'link';
+}
+
 describe('the GPU ledger holds everything core allocates', () => {
   beforeEach(() => {
     images = [];
@@ -449,6 +506,136 @@ describe('the GPU ledger holds everything core allocates', () => {
     disposeRenderers(renderers);
     expect(mock.bufferBytes() + mock.textureBytes()).toBe(0);
     expect(ledger.snapshot().bytes).toBe(0);
+  });
+
+  it('gives everything back through making and disposing the renderers, again and again', () => {
+    const mock = storageGL();
+    const counted = countingCalls(mock);
+    for (let round = 0; round < 3; round++) {
+      const { renderers, ledger } = engine(mock);
+      expectLedgerMatches(mock, ledger);
+      disposeRenderers(renderers);
+      expect(ledger.snapshot().bytes).toBe(0);
+      expect(ledger.audit()).toBe(true);
+    }
+    expect(mock.bufferBytes() + mock.textureBytes()).toBe(0);
+    expect(counted.created('Buffer')).toBe(counted.deleted('Buffer'));
+    expect(counted.created('Texture')).toBe(counted.deleted('Texture'));
+    expect(counted.created('Program')).toBe(counted.deleted('Program'));
+    expect(counted.created('Shader')).toBe(counted.deleted('Shader'));
+  });
+
+  it('leaves nothing when making the renderers fails at any allocation', () => {
+    // The allocations of a whole making, counted once
+    const whole = storageGL();
+    const total = countingCalls(whole);
+    engine(whole);
+    const steps = total.allocations();
+    expect(steps).toBeGreaterThan(3);
+    for (let step = 1; step <= steps; step++) {
+      const mock = storageGL();
+      const scope = createRenderScope(createSelectionScope());
+      failingAt(mock, step);
+      expect(() => scope.gpu.scope(mock.gl, () => engine(mock, undefined, scope))).toThrow(
+        'no memory',
+      );
+      expect(scope.gpu.snapshot().bytes).toBe(0);
+      expect(mock.bufferBytes() + mock.textureBytes()).toBe(0);
+    }
+  });
+
+  it('frees the shaders and the program of a program that does not build', () => {
+    for (const failing of ['vertex', 'fragment', 'link'] as const) {
+      const mock = storageGL();
+      const counted = countingCalls(mock);
+      failingProgram(mock, failing);
+      expect(() => createProgram(mock.gl, 'v', 'f')).toThrow();
+      expect(counted.created('Shader')).toBe(counted.deleted('Shader'));
+      expect(counted.created('Program')).toBe(counted.deleted('Program'));
+    }
+  });
+
+  describe('under the limit of the instance', () => {
+    /** An image decoded, of a size */
+    const decoded = (width: number, height: number) =>
+      ({ width, height }) as unknown as HTMLImageElement;
+
+    /** A cache with an image waiting for its upload */
+    function cacheOf(mock: StorageGL, ledger: GpuLedger, images: Record<string, HTMLImageElement>) {
+      const cache = new TextureCache(mock.gl, ledger);
+      const internals = cache as unknown as {
+        decodedImages: Map<string, HTMLImageElement>;
+        uploadImage(src: string, img: HTMLImageElement): { texture: object } | null;
+      };
+      for (const [src, img] of Object.entries(images)) internals.decodedImages.set(src, img);
+      return { cache, upload: (src: string) => internals.uploadImage(src, images[src] as never) };
+    }
+
+    it('makes the texture of an image whole while it fits', () => {
+      const mock = storageGL();
+      const ledger = new GpuLedger();
+      ledger.limitBytes = 10_000_000;
+      const { upload } = cacheOf(mock, ledger, { a: decoded(1000, 1000) });
+      upload('a');
+      expect(mock.textureBytes()).toBeGreaterThan(4_000_000);
+      expect(ledger.outsideRowBytes).toBe(mock.textureBytes());
+    });
+
+    it('gives up the images not on the screen for one that does not fit', () => {
+      const mock = storageGL();
+      const ledger = new GpuLedger();
+      ledger.limitBytes = 6_000_000;
+      const images = { a: decoded(1000, 1000), b: decoded(1000, 1000) };
+      const { cache, upload } = cacheOf(mock, ledger, images);
+      const now = vi.spyOn(Date, 'now').mockReturnValue(1_000_000);
+      upload('a');
+      now.mockReturnValue(1_010_000);
+      upload('b');
+      expect(ledger.outsideRowBytes).toBeLessThanOrEqual(6_000_000);
+      expect(cache.getImageTextureSync('a')).toBeNull();
+      expect(cache.getImageTextureSync('b')).not.toBeNull();
+      now.mockRestore();
+    });
+
+    it('draws an image on the screen from a smaller picture past the limit, and whole again', () => {
+      const mock = storageGL();
+      const ledger = new GpuLedger();
+      ledger.limitBytes = 6_000_000;
+      const images = { a: decoded(1000, 1000), b: decoded(1000, 1000) };
+      const { cache, upload } = cacheOf(mock, ledger, images);
+      upload('a');
+      const reduced = upload('b');
+      expect(reduced).not.toBeNull();
+      expect(ledger.outsideRowBytes).toBeLessThanOrEqual(6_000_000);
+      // The room comes back: its whole texture is made again
+      ledger.limitBytes = 20_000_000;
+      cache.sweep(Date.now());
+      expect(cache.getImageTextureSync('b')).toBeNull();
+      expect(upload('b')).not.toBeNull();
+      expect(ledger.outsideRowBytes).toBeGreaterThan(9_000_000);
+    });
+
+    it('waits with an image when next to nothing is left', () => {
+      const mock = storageGL();
+      const ledger = new GpuLedger();
+      ledger.limitBytes = 100;
+      const { upload } = cacheOf(mock, ledger, { a: decoded(1000, 1000) });
+      expect(upload('a')).toBeNull();
+      expect(mock.textureBytes()).toBe(0);
+    });
+
+    it('holds a table of the drape under the limit, or draws the frame without the drape', () => {
+      const mock = storageGL();
+      const ledger = new GpuLedger();
+      const renderer = new DrapeRenderer(mock.gl, ledger, false) as unknown as {
+        rowsUnderLimit(width: number, channels: number, needed: number, most: number): number;
+      };
+      ledger.limitBytes = 1_000_000;
+      // A row of 1,024 texels of 16 bytes is 16 KB: 40 rows fit, 60 with the extra rows do not
+      expect(renderer.rowsUnderLimit(1024, 4, 10, 4096)).toBe(15);
+      expect(renderer.rowsUnderLimit(1024, 4, 50, 4096)).toBe(50);
+      expect(renderer.rowsUnderLimit(1024, 4, 100, 4096)).toBe(0);
+    });
   });
 
   it('when the features of the Store are drawn one by one', () => {
@@ -658,6 +845,15 @@ describe('the GPU ledger holds everything core allocates', () => {
       renderers.imageRenderer.draw(image, projectionData, 14);
       expectLedgerMatches(mock, ledger);
 
+      // Not drawn for a while, its texture goes; drawn again, it comes back from the decoded image
+      renderers.textureCache.sweep(Date.now() + 1_000);
+      expect(mock.textureBytes()).toBe(levelBytes(300, 100, 4, 9));
+      renderers.textureCache.sweep(Date.now() + 60_000);
+      expect(mock.textureBytes()).toBe(0);
+      expectLedgerMatches(mock, ledger);
+      renderers.imageRenderer.draw(image, projectionData, 14);
+      expect(mock.textureBytes()).toBe(levelBytes(300, 100, 4, 9));
+
       renderers.textureCache.clear();
       expect(mock.textureBytes()).toBe(0);
       expectLedgerMatches(mock, ledger);
@@ -778,7 +974,7 @@ describe('the GPU ledger holds everything core allocates', () => {
     for (const rows of [false, true]) {
       const mock = storageGL();
       const ledger = new GpuLedger();
-      const renderer = new DrapeRenderer(mock.gl, rows).useLedger(ledger);
+      const renderer = new DrapeRenderer(mock.gl, ledger, rows);
       expect(renderer.ensure(SHADER_DATA, 64)).toBe(true);
       expect(mock.bufferBytes()).toBeGreaterThan(0);
       expectLedgerMatches(mock, ledger);
@@ -810,7 +1006,7 @@ describe('the GPU ledger holds everything core allocates', () => {
   it('when the drape of the quads makes its mesh', () => {
     const mock = storageGL();
     const ledger = new GpuLedger();
-    const renderer = new QuadDrapeRenderer(mock.gl).useLedger(ledger);
+    const renderer = new QuadDrapeRenderer(mock.gl, ledger);
     renderer.ensure({ glsl: '', bind: () => {} }, SHADER_DATA, 64);
     expect(mock.bufferBytes()).toBeGreaterThan(0);
     expectLedgerMatches(mock, ledger);
@@ -863,5 +1059,19 @@ describe('the sources that allocate on the GPU', () => {
     }
     expect(allocating).toBeGreaterThan(10);
     expect(unrecorded).toEqual([]);
+  });
+
+  it('take the ledger as something they cannot go without', () => {
+    const optional: string[] = [];
+    for (const path of librarySources()) {
+      if (
+        /ledger\?[.:]|ledger: GpuLedger(Owner)? \| (undefined|null)/.test(
+          readFileSync(path, 'utf8'),
+        )
+      ) {
+        optional.push(relative(SRC, path));
+      }
+    }
+    expect(optional).toEqual([]);
   });
 });

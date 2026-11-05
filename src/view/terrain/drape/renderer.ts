@@ -29,7 +29,12 @@ import {
   SELECTION_HIGHLIGHT_RGB,
   SELECTION_HIGHLIGHT_STROKE_EXTRA,
 } from '../../../shared/config/selection-highlight.js';
-import { type GpuLedger, type GpuLedgerOwner, textureBytes } from '../../gpu-ledger.js';
+import {
+  type GpuLedger,
+  type GpuLedgerOwner,
+  giveStorage,
+  textureBytes,
+} from '../../gpu-ledger.js';
 import type { ShaderData } from '../../shaders/helpers.js';
 import { createProgram } from '../../shaders/helpers.js';
 import type { TerrainTileData } from '../detect.js';
@@ -874,40 +879,32 @@ export class DrapeRenderer {
   private readonly rankBase = new Int32Array(DRAPE_COPY_RANGES);
   private orderBase = 0;
 
-  /** Where the bytes of the textures and of the mesh are recorded (nothing until `useLedger`) */
-  private ledger: GpuLedgerOwner | undefined;
+  /** Where the bytes of the textures and of the mesh are recorded */
+  private readonly ledger: GpuLedgerOwner;
 
   /**
    * @param rows Whether it draws the rows: elements read as copies from the tables of the
    *   copies (`uploadRows`), painted by ranks (`drawRowsTile`)
+   * @internal
    */
   constructor(
     gl: WebGL2RenderingContext,
+    ledger: GpuLedger,
     readonly rows = false,
   ) {
     this.gl = gl;
-  }
-
-  /**
-   * Records the GPU memory this renderer allocates from now on (call it before the first
-   * `ensure`: it holds nothing before)
-   *
-   * @internal
-   */
-  useLedger(ledger: GpuLedger | undefined): this {
-    this.ledger = ledger ? { ledger, owner: DRAPE_OWNER } : undefined;
-    return this;
+    this.ledger = { ledger, owner: DRAPE_OWNER };
   }
 
   /** Records the bytes of a texture made (nothing when there is no ledger) */
   private recordTexture(texture: WebGLTexture | null, bytes: number): void {
-    this.ledger?.ledger.record(texture, DRAPE_OWNER, 'texture', bytes);
+    this.ledger.ledger.record(texture, DRAPE_OWNER, 'texture', bytes);
   }
 
   /** Deletes a texture and takes it out of the ledger */
   private deleteTexture(texture: WebGLTexture | null): void {
     if (!texture) return;
-    this.ledger?.ledger.release(texture);
+    this.ledger.ledger.release(texture);
     this.gl.deleteTexture(texture);
   }
 
@@ -1322,6 +1319,23 @@ export class DrapeRenderer {
     if (location) gl.uniform1i(location, unit);
   }
 
+  /**
+   * The rows of a data texture under the limit of the instance: a few extra (so that it is not made
+   * again on every increase) while there is room for them, or 0 when the rows needed do not fit.
+   * The frame is then drawn without the analytic drape, as with a table taller than the GPU allows
+   */
+  private rowsUnderLimit(
+    width: number,
+    channels: number,
+    neededRows: number,
+    maxRows: number,
+  ): number {
+    const { ledger } = this.ledger;
+    const rows = Math.min(maxRows, Math.max(1, Math.ceil(neededRows * 1.5)));
+    if (ledger.fits(textureBytes(width, rows, channels * 4))) return rows;
+    return ledger.fits(textureBytes(width, neededRows, channels * 4)) ? neededRows : 0;
+  }
+
   /** The tallest data texture this GPU allows (MAX_TEXTURE_SIZE, read once) */
   private textureSizeLimit(): number {
     if (this.maxTextureSize === 0) {
@@ -1361,11 +1375,18 @@ export class DrapeRenderer {
         this.lastError = `texture-limit: ${sizeField} needs ${neededRows} rows of ${maxRows}`;
         return null;
       }
+      const rows = this.rowsUnderLimit(width, channels, neededRows, maxRows);
+      if (rows === 0) {
+        this.lastError = `gpu-limit: ${sizeField} needs ${neededRows} rows`;
+        return null;
+      }
       target = gl.createTexture();
       if (!target) return null;
-      const rows = Math.min(maxRows, Math.max(1, Math.ceil(neededRows * 1.5)));
       gl.bindTexture(gl.TEXTURE_2D, target);
-      gl.texStorage2D(gl.TEXTURE_2D, 1, channels === 4 ? gl.RGBA32F : gl.R32F, width, rows);
+      const made = target;
+      giveStorage(gl, made, () =>
+        gl.texStorage2D(gl.TEXTURE_2D, 1, channels === 4 ? gl.RGBA32F : gl.R32F, width, rows),
+      );
       if (gl.getError() !== gl.NO_ERROR) {
         gl.deleteTexture(target);
         this.lastError = `texture-alloc-failed: ${sizeField}`;
@@ -1432,12 +1453,18 @@ export class DrapeRenderer {
         this.lastError = `texture-limit: ${markField} needs ${neededRows} rows of ${maxRows}`;
         return null;
       }
+      const rows = this.rowsUnderLimit(width, channels, neededRows, maxRows);
+      if (rows === 0) {
+        this.lastError = `gpu-limit: ${markField} needs ${neededRows} rows`;
+        return null;
+      }
       target = gl.createTexture();
       if (!target) return null;
-      // Allocate a few extra rows (so it is not recreated on every increase)
-      const rows = Math.min(maxRows, Math.max(1, Math.ceil(neededRows * 1.5)));
       gl.bindTexture(gl.TEXTURE_2D, target);
-      gl.texStorage2D(gl.TEXTURE_2D, 1, channels === 4 ? gl.RGBA32F : gl.R32F, width, rows);
+      const made = target;
+      giveStorage(gl, made, () =>
+        gl.texStorage2D(gl.TEXTURE_2D, 1, channels === 4 ? gl.RGBA32F : gl.R32F, width, rows),
+      );
       // Only the allocation is checked (it is rare; getError is a synchronous round trip)
       if (gl.getError() !== gl.NO_ERROR) {
         gl.deleteTexture(target);

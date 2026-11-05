@@ -83,7 +83,7 @@ const SHAPES: Readonly<
     ],
   },
   overlay: {
-    required: ['onAdd', 'draw', 'onRemove'],
+    required: ['draw'],
     optional: ['drawForLayer', 'drawVertices', 'hasPendingWork'],
   },
   'snap provider': { required: ['candidates'], optional: [] },
@@ -293,10 +293,7 @@ export function validateExtension(kind: ExtensionKind, value: unknown): void {
       if (typeof value.geometry !== 'string' || !GEOMETRY_TYPES.has(value.geometry)) {
         throw wrongShape(kind, 'must name a kind of GeoJSON geometry in geometry', 'geometry');
       }
-      const renderer = value.renderer;
-      if (!isObject(renderer)) throw wrongShape(kind, 'must have a renderer', 'renderer');
-      requireFunctions(kind, renderer, ['onAdd', 'draw', 'onRemove'], [], 'renderer.');
-      optionalGroup(kind, renderer, 'rows', ['draw'], [], 'renderer.');
+      requireFunctions(kind, value, [], ['render']);
       optionalGroup(kind, value, 'rows', [], ['appliesTo']);
       optionalNumber(kind, value, 'hitPaddingPx', true);
       optionalTransformFields(kind, value);

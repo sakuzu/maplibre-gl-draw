@@ -97,8 +97,8 @@ export class BulkFramesRenderer {
 
   constructor(
     private readonly gl: WebGL2RenderingContext,
+    private readonly ledger: GpuLedger,
     private readonly pixelRatio?: PixelRatioInput,
-    private readonly ledger?: GpuLedger,
   ) {
     this.projection = new ProjectionUniformManager(gl, { surface: true });
     this.run = new RetainedDrawRun(gl);
@@ -278,7 +278,7 @@ export class BulkFramesRenderer {
     gl.bindVertexArray(vao);
     gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
     gl.bufferData(gl.ARRAY_BUFFER, values, gl.STATIC_DRAW);
-    this.ledger?.record(buffer, 'bulk-frames', 'buffer', values.byteLength);
+    this.ledger.record(buffer, 'bulk-frames', 'buffer', values.byteLength);
     gl.enableVertexAttribArray(0);
     gl.vertexAttribPointer(0, 4, gl.FLOAT, false, STRIDE, 0);
     gl.vertexAttribDivisor(0, 1);
@@ -305,7 +305,7 @@ export class BulkFramesRenderer {
   }
 
   private release(frames: GroupFrames): void {
-    this.ledger?.release(frames.buffer);
+    this.ledger.release(frames.buffer);
     this.gl.deleteBuffer(frames.buffer);
     this.gl.deleteVertexArray(frames.vao);
   }

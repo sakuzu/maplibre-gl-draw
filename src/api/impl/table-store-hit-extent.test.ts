@@ -31,7 +31,7 @@ let store: Store;
 const box: FeatureTypeDefinition = {
   type: 'box',
   geometry: 'Point',
-  renderer: { onAdd: () => {}, draw: () => {}, onRemove: () => {} },
+  render: vi.fn(),
   bbox: (feature) => {
     const [x, y] = (feature.geometry as Point).coordinates as [number, number];
     return [x - 0.5, y - 0.5, x + 0.5, y + 0.5];
@@ -50,7 +50,7 @@ const pin: FeatureTypeDefinition = {
   type: 'pin',
   geometry: 'Point',
   hitPaddingPx: 30,
-  renderer: { onAdd: () => {}, draw: () => {}, onRemove: () => {} },
+  render: vi.fn(),
   hitTest: (feature, ctx) => {
     const [x, y] = ctx.screen.project((feature.geometry as Point).coordinates as [number, number]);
     const distancePx = Math.hypot(x - ctx.point[0], y - ctx.point[1]);

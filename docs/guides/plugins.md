@@ -131,6 +131,8 @@ instance:
   ([terrain](terrain.md))
 - `invalidate`, which asks for features to be drawn again when
   something outside the document changed their look
+- `webgl`, for drawing with WebGL of its own. What the plugin holds on
+  the GPU goes with it ([your own shaders](custom-types.md#your-own-shaders))
 
 The shape being drawn is `ctx.draw.drawing`, as for an application: it
 places a vertex, moves the preview and finishes the shape as the input of
@@ -570,7 +572,8 @@ The function that `add` returns removes what it added, and calling it
 again does nothing. `remove(name)` does the same by name.
 
 - Removing a plugin calls its `onRemove`, then removes what it added
-  through `ctx.extensions` and ends its subscriptions
+  through `ctx.extensions` and `ctx.webgl`, gives back what it holds on
+  the GPU and ends its subscriptions
 - Removing the active mode enters `select` first
 - The names of the built-in modes and feature types are taken, so
   `add` throws `already-exists` for them

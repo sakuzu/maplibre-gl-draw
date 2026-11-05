@@ -17,6 +17,7 @@
 import type { Map as MapLibreMap, ProjectionData } from 'maplibre-gl';
 import { describe, expect, it } from 'vitest';
 import type { Coordinate } from '../../store/types.js';
+import { GpuLedger } from '../gpu-ledger.js';
 import type { ShaderData } from '../shaders/helpers.js';
 import type { LineBatchItem, LineBatchShape } from './line/line-types.js';
 import { SDFLineRenderer } from './line/sdf-line.js';
@@ -211,7 +212,7 @@ function lineItem(strokeWidth: number, featureId: string): LineBatchItem {
 describe('negative line widths in SDFLineRenderer', () => {
   it('puts a negative width into a_extra.y while keeping it negative', () => {
     const mock = createRecordingGL();
-    const renderer = new SDFLineRenderer({} as MapLibreMap, mock.gl);
+    const renderer = new SDFLineRenderer({} as MapLibreMap, mock.gl, new GpuLedger());
     renderer.ensureShader(SHADER_DATA);
 
     mock.reset();
@@ -223,7 +224,7 @@ describe('negative line widths in SDFLineRenderer', () => {
 
   it('preserves the sign when fixed and variable widths are mixed in one batch', () => {
     const mock = createRecordingGL();
-    const renderer = new SDFLineRenderer({} as MapLibreMap, mock.gl);
+    const renderer = new SDFLineRenderer({} as MapLibreMap, mock.gl, new GpuLedger());
     renderer.ensureShader(SHADER_DATA);
 
     mock.reset();
@@ -241,7 +242,7 @@ describe('negative line widths in SDFLineRenderer', () => {
 
   it('preserves a negative width in a retained-mode batch as well', () => {
     const mock = createRecordingGL();
-    const renderer = new SDFLineRenderer({} as MapLibreMap, mock.gl);
+    const renderer = new SDFLineRenderer({} as MapLibreMap, mock.gl, new GpuLedger());
     renderer.ensureShader(SHADER_DATA);
 
     mock.reset();
@@ -276,7 +277,7 @@ describe('negative outline widths in SDFPolygonRenderer', () => {
   }
 
   function drawPolygons(mock: RecordingGL, polygons: SDFPolygonBatchData[]): Float32Array {
-    const renderer = new SDFPolygonRenderer(mock.gl);
+    const renderer = new SDFPolygonRenderer(mock.gl, { gpu: new GpuLedger() });
     renderer.ensureShader(SHADER_DATA);
 
     mock.reset();

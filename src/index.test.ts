@@ -89,7 +89,6 @@ const MAIN = [
   'ItemListOptions',
   'FeaturePatch',
   'FeatureStyleSample',
-  'FeatureRenderer',
   'FeaturesCollection',
   'featuresToGeoJSON',
   'FeatureStyle',
@@ -103,7 +102,6 @@ const MAIN = [
   'FileData',
   'FillRenderer',
   'GpuMemoryDiagnostics',
-  'GpuMemoryRecord',
   'DocumentSize',
   'CaptureImageOptions',
   'MemoryBytes',
@@ -269,7 +267,6 @@ const KASANE = [
   'createFeatureTables',
   'createRowBlockBuilder',
   'createRowValues',
-  'FeatureRendererRows',
   'FeatureTypeRows',
   'createTableStore',
   'DraggedRows',
@@ -335,20 +332,25 @@ const WEBGL = [
   'calculateLngLatOffset',
   'computeQuadVertices',
   'Coordinate',
-  'createProgram',
   'createRowStateTexture',
   'dashPattern',
   'DashSegment',
   'DEFAULT_TILE_SIZE',
-  'deleteRowStateTexture',
   'densifyPath',
   'DrapeQuadCorners',
   'drawBillboardsWithoutDepth',
   'drawQuadOnTerrain',
+  'FeatureRenderer',
+  'Gpu',
+  'GpuContext',
+  'GpuDefinition',
+  'GpuRowBuffer',
+  'GpuRowBufferFactory',
   'MercatorRect',
   'OFFSET_MODE_GLSL',
   'OffsetUniforms',
   'offsetUniformsAt',
+  'OverlayContext',
   'PointHitTestStrategy',
   'ProgramCompile',
   'ProjectionUniformLocations',
@@ -363,6 +365,7 @@ const WEBGL = [
   'retainedOriginErrorPx',
   'ROW_STATE_GLSL',
   'ROW_STATE_TEXTURE_UNIT',
+  'RowRef',
   'RowStateBinding',
   'rowStateBindingOf',
   'rowStateMovedViews',
@@ -381,6 +384,7 @@ const WEBGL = [
   'uploadRowState',
   'ViewUniforms',
   'viewUniforms',
+  'Webgl',
   'WidthUnit',
 ];
 
@@ -635,16 +639,16 @@ describe('the emitted declarations', () => {
     expect(errors).toEqual([]);
   }, 60_000);
 
-  it('export every named type that a layer 1 declaration refers to, from layer 1 or /kasane', () => {
+  it('export every named type that a layer 1 declaration refers to, from layer 1 or its entries', () => {
     setup();
-    // The fields of layer 1 that a Store of rows fills (`StoreView.tables`, `Store.applyRows`,
+    // What a plugin draws with WebGL of its own (`PluginContext.webgl`) is in /webgl. The fields of layer 1 that a Store of rows fills (`StoreView.tables`, `Store.applyRows`,
     // `DocumentChange.rows`, the moves of many rows of `ItemOrderChange`) are experimental, and
     // their types are exported by /kasane only
     expect(
       findForgottenExports(
         program,
         files,
-        [main, geometry, table, kasane],
+        [main, geometry, table, kasane, webgl],
         [main, geometry, table],
       ),
     ).toEqual([]);

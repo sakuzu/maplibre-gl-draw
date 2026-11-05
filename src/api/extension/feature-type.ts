@@ -8,13 +8,14 @@
 
 import type { Geometry, Position } from 'geojson';
 import type { BBox } from '../../geometry/types.js';
+import type { RowSpriteSource } from '../../view/renderers/rows/rows-format.js';
 import type { ScreenPoint } from '../events.js';
 import type { Feature, FeaturePatch, FeatureStyle } from '../model.js';
 import type { LayerTableView, RowHandle } from '../tables.js';
 import type { FootprintContext, HandleContext, PointContext } from './context.js';
 import type { DrawPointerEvent } from './mode.js';
 import type { Hit, SnapCandidate } from './provider.js';
-import type { FeatureRenderer, RenderContext } from './render.js';
+import type { RenderContext } from './render.js';
 import type { TransformFields } from './store.js';
 
 /**
@@ -80,6 +81,12 @@ export type Handle = ResizeHandle | CustomHandle;
  * @experimental
  */
 export interface FeatureTypeRows {
+  /**
+   * The pictures it draws its points with: a point it takes whose style has a picture here is
+   * drawn with the other rows of its layer, in their order and in their draw. A point whose style
+   * has none is drawn by `render`.
+   */
+  readonly sprites?: RowSpriteSource;
   /**
    * Whether the definition takes the feature of a row: the answer `appliesTo` gives for the
    * feature of the row (the two must agree). It is read with `appliesTo` only, and as it, only in
@@ -149,8 +156,12 @@ export interface FeatureTypeDefinition {
    * farther out; 0 when it is left out.
    */
   readonly hitPaddingPx?: number;
-  /** How the features of this type are drawn */
-  readonly renderer: FeatureRenderer;
+  /**
+   * Draws a feature of this type at its place in the order, with the shared renderers of the
+   * context. A type that draws with WebGL of its own leaves it out and adds what draws with
+   * `ctx.webgl.addFeatureRenderer`.
+   */
+  render?(feature: Feature, ctx: RenderContext): void;
   /**
    * The look of a feature of this type whose style and layer rule leave a key out, in place of
    * the defaults of its geometry (the `style` option), which still fill the keys it leaves out.

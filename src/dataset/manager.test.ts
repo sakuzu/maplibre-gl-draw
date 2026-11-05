@@ -14,6 +14,7 @@ import { DEFAULT_FEATURE_STYLE_CONFIG } from '../shared/config/feature-style.js'
 import { coordinatesOf } from '../shared/utils/coordinates.js';
 import type { BoundingBox, Coordinate, Feature } from '../store/types.js';
 import { toRow } from '../test-utils.js';
+import { GpuLedger } from '../view/gpu-ledger.js';
 import { FeatureDrawer } from '../view/renderers/drawer.js';
 import type { ImageRenderer } from '../view/renderers/image.js';
 import type { RetainedLineBatch } from '../view/renderers/line/line-types.js';
@@ -732,6 +733,7 @@ describe('the pending work of DatasetManager', () => {
         disposeRetained: (): void => {},
       },
       styles: new FeatureDrawer({
+        ledger: new GpuLedger(),
         gl: {
           createBuffer: (): object => ({}),
           createVertexArray: (): object => ({}),

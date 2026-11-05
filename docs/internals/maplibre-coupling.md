@@ -773,8 +773,10 @@ Each item has the same five parts.
   `buildGpuResources` / `releaseGpuResources`, run by `onAdd` /
   `onRemove`, so a layer removed and added again comes back whole; overlay
   renderers and custom feature renderers stay registered and receive
-  `onAdd` again. After a restore, `attachSlotLayers()` (item 22) adds the
-  slots back on the restored style's `styledata`. The layer also listens to
+  `onAdd` again, and what an extension prepared with `ctx.webgl` is
+  prepared again on a new `Gpu` after a lost context. After a restore,
+  `attachSlotLayers()` (item 22) adds the slots back on the restored
+  style's `styledata`. The layer also listens to
   `webglcontextlost` / `webglcontextrestored` on the canvas (these are GL
   context events, not input, so the input normalizer does not handle them)
   for a version that would keep custom layers through a loss. It does not

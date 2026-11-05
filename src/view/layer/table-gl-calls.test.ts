@@ -142,10 +142,9 @@ function projection(): ProjectionData {
 /** The real renderers on the counting GL */
 function realRenderers(gl: WebGL2RenderingContext, terrain: TerrainContext) {
   const ledger = new GpuLedger();
-  const point = new PointInstanceRenderer({} as MapLibreMap, gl, 1, terrain, ledger);
-  const line = new SDFLineRenderer({} as MapLibreMap, gl, 1, terrain);
-  line.useLedger(ledger);
-  const polygon = new SDFPolygonRenderer(gl, 1, { terrain, gpu: ledger });
+  const point = new PointInstanceRenderer({} as MapLibreMap, gl, ledger, 1, terrain);
+  const line = new SDFLineRenderer({} as MapLibreMap, gl, ledger, 1, terrain);
+  const polygon = new SDFPolygonRenderer(gl, { terrain, gpu: ledger }, 1);
   point.ensureShader(SHADER_DATA);
   line.ensureShader(SHADER_DATA);
   polygon.ensureShader(SHADER_DATA);
@@ -203,6 +202,7 @@ describe('the GL calls per draw', () => {
       companions: createFeatureCompanionRegistry(),
     };
     const tableRenderer = new TableLayerRenderer({
+      ledger: new GpuLedger(),
       gl: mock.gl,
       terrain,
       requestRepaint: () => {},
@@ -249,7 +249,7 @@ describe('the GL calls per draw', () => {
     const mock = countingGL();
     const terrain = new TerrainContext();
     const { renderers, camera, ledger } = realRenderers(mock.gl, terrain);
-    const rows = new RowsRenderer(null, mock.gl, 1, terrain, ledger);
+    const rows = new RowsRenderer(null, mock.gl, ledger, 1, terrain);
     rows.ensureShader(SHADER_DATA);
     const deps: StoreRetainedDrawDeps = {
       renderers: { ...renderers, rows },

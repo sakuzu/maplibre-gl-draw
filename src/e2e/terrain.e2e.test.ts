@@ -22,6 +22,7 @@ import type { Browser, Page } from 'playwright-core';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { PluginContext } from '../index.js';
 import { browserTimeout } from '../test-utils.js';
+import { GpuLedger } from '../view/gpu-ledger.js';
 import {
   type Bundle,
   bundlePage,
@@ -325,7 +326,7 @@ void main() {
       const terrain = getMapTerrain(map);
       if (!terrain) throw new Error('no terrain');
 
-      const atlas = new DemAtlas(gl);
+      const atlas = new DemAtlas(gl, new GpuLedger());
       const center = map.getCenter();
       const result = atlas.build(terrain, (center.lng + 180) / 360, true);
       if (!result) throw new Error('the atlas was not built');

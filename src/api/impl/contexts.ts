@@ -32,7 +32,6 @@ import type { StoreSpatialIndex } from '../../store/spatial/store-spatial-index.
 import type { Store } from '../../store/store.js';
 import type { Feature as StoredFeature, TentativeState } from '../../store/types.js';
 import { isWritableLayer } from '../../store/writable-layer.js';
-import type { GpuLedger } from '../../view/gpu-ledger.js';
 import { anchorElevationMeters, getAnchorElevationGeneration } from '../../view/terrain/anchor.js';
 import { bindTerrainState } from '../../view/terrain/binding.js';
 import type { TerrainContext } from '../../view/terrain/context.js';
@@ -179,7 +178,6 @@ export interface ContextServices {
   /** The terrain state of the instance */
   readonly terrain: TerrainContext;
   /** The ledger of the GPU memory of the instance */
-  readonly gpu: GpuLedger;
   /** The pixel ratio the drawing uses */
   readonly pixelRatio: PixelRatioProvider;
   readonly autoNameGenerator: AutoNameGenerator;
@@ -342,10 +340,6 @@ export function createExtensionContext(
     },
     once: (event, listener) => subscribe(event, listener, true),
     terrain: createTerrainSurface(services.terrain),
-    gpu: {
-      record: (object, owner, kind, bytes) => services.gpu.record(object, owner, kind, bytes),
-      release: (object) => services.gpu.release(object),
-    },
     names: createNameGenerator(services.autoNameGenerator),
     messages: services.messages,
     screen,
@@ -489,7 +483,6 @@ export function createModeContext(
     off: base.off,
     once: base.once,
     terrain: base.terrain,
-    gpu: base.gpu,
     names: base.names,
     messages: base.messages,
     screen: base.screen,

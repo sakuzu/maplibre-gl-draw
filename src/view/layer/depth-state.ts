@@ -17,13 +17,15 @@
  * state once at the start of a frame and syncs to it.
  */
 
+import type { GpuContext } from '../../api/extension/webgl.js';
+
 /** The recorded depth test state of each WebGL context */
-const depthTestState = new WeakMap<WebGL2RenderingContext, boolean>();
+const depthTestState = new WeakMap<object, boolean>();
 
 /**
  * Switch the depth test and record the new state
  */
-export function setDepthTestEnabled(gl: WebGL2RenderingContext, enabled: boolean): void {
+export function setDepthTestEnabled(gl: GpuContext, enabled: boolean): void {
   if (enabled) gl.enable(gl.DEPTH_TEST);
   else gl.disable(gl.DEPTH_TEST);
   depthTestState.set(gl, enabled);
@@ -32,7 +34,7 @@ export function setDepthTestEnabled(gl: WebGL2RenderingContext, enabled: boolean
 /**
  * The recorded state of the depth test of a context (false when nothing was recorded yet)
  */
-export function isDepthTestEnabled(gl: WebGL2RenderingContext): boolean {
+export function isDepthTestEnabled(gl: GpuContext): boolean {
   return depthTestState.get(gl) === true;
 }
 
@@ -41,6 +43,6 @@ export function isDepthTestEnabled(gl: WebGL2RenderingContext): boolean {
  *
  * This is the only place that asks GL. It happens once per frame, so the cost is negligible.
  */
-export function syncDepthTestEnabled(gl: WebGL2RenderingContext): void {
+export function syncDepthTestEnabled(gl: GpuContext): void {
   depthTestState.set(gl, gl.isEnabled(gl.DEPTH_TEST));
 }

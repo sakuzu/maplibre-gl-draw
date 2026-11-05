@@ -18,6 +18,8 @@
 
 import type { Map as MapLibreMap, ProjectionData } from 'maplibre-gl';
 import { describe, expect, it } from 'vitest';
+import { gpuOf } from '../../test-utils.js';
+import { GpuLedger } from '../gpu-ledger.js';
 import { beginRenderFrame } from '../shaders/frame.js';
 import type { ShaderData } from '../shaders/helpers.js';
 import { retainedDrawRun } from './draw-run.js';
@@ -83,7 +85,7 @@ const projection = (): ProjectionData =>
   }) as unknown as ProjectionData;
 
 function binding(mock: Mock, rows: number, translations = new Float32Array(8)): RowStateBinding {
-  const texture = createRowStateTexture(mock.gl, rows);
+  const texture = createRowStateTexture(gpuOf(mock.gl), rows);
   if (!texture) throw new Error('texture');
   return { texture, translations };
 }
@@ -91,11 +93,11 @@ function binding(mock: Mock, rows: number, translations = new Float32Array(8)): 
 /** The renderers of a context, with a point batch and a line batch of rows */
 function setup() {
   const mock = createGL();
-  const point = new PointInstanceRenderer({} as MapLibreMap, mock.gl, 1);
+  const point = new PointInstanceRenderer({} as MapLibreMap, mock.gl, new GpuLedger(), 1);
   point.ensureShader(SHADER_DATA);
-  const line = new SDFLineRenderer({} as MapLibreMap, mock.gl, 1);
+  const line = new SDFLineRenderer({} as MapLibreMap, mock.gl, new GpuLedger(), 1);
   line.ensureShader(SHADER_DATA);
-  const polygon = new SDFPolygonRenderer(mock.gl, 1);
+  const polygon = new SDFPolygonRenderer(mock.gl, { gpu: new GpuLedger() }, 1);
   polygon.ensureShader(SHADER_DATA);
   const points = point.buildRetainedRows(
     new Float32Array(4 * ROW_POINT_STRIDE),

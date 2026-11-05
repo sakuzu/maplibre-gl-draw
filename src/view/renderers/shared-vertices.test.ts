@@ -124,8 +124,7 @@ const LINE_ITEM = {
 };
 
 function lineRenderer(mock: Mock, ledger: GpuLedger): SDFLineRenderer {
-  const renderer = new SDFLineRenderer({} as MapLibreMap, mock.gl, 1);
-  renderer.useLedger(ledger);
+  const renderer = new SDFLineRenderer({} as MapLibreMap, mock.gl, ledger, 1);
   renderer.ensureShader(SHADER_DATA);
   return renderer;
 }
@@ -222,7 +221,7 @@ const POINT = {
 };
 
 function pointRenderer(mock: Mock, ledger: GpuLedger): PointInstanceRenderer {
-  const renderer = new PointInstanceRenderer({} as MapLibreMap, mock.gl, 1, undefined, ledger);
+  const renderer = new PointInstanceRenderer({} as MapLibreMap, mock.gl, ledger, 1, undefined);
   renderer.ensureShader(SHADER_DATA);
   return renderer;
 }

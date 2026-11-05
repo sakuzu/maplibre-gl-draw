@@ -16,6 +16,7 @@ import { SELECTION_HIGHLIGHT_COLOR } from '../shared/config/selection-highlight.
 import type { PixelRatioInput } from '../shared/utils/pixel-ratio.js';
 import { createPixelRatioSource } from '../shared/utils/pixel-ratio.js';
 import type { BoundingBox, Feature, StyleRule } from '../store/types.js';
+import { GpuLedger } from '../view/gpu-ledger.js';
 import type { RetainedDrawFactors } from '../view/renderers/draw-factors.js';
 import { FeatureDrawer } from '../view/renderers/drawer.js';
 import type { ImageRenderer } from '../view/renderers/image.js';
@@ -161,6 +162,7 @@ function createRetainedProbe(): RetainedProbe {
       },
     },
     styles: new FeatureDrawer({
+      ledger: new GpuLedger(),
       gl: createStubGL(),
       map: {} as never,
       sdfLineRenderer: {} as SDFLineRenderer,

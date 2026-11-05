@@ -14,6 +14,7 @@ import type { LayerTable } from '../../feature-table/layer-table.js';
 import { drawPropertyKey } from '../../shared/properties.js';
 import type { Feature, Layer } from '../../shared/types/model.js';
 import { createTestDrawer, feature, tablesOfFeatures } from '../../test-utils.js';
+import { GpuLedger } from '../gpu-ledger.js';
 import { buildLineBatchArrays, ROW_LINE_STRIDE } from '../renderers/line/line-geometry.js';
 import { buildPointInstanceData, ROW_POINT_STRIDE } from '../renderers/point/point-instance.js';
 import { ROW_POLYGON_STRIDE, SDFPolygonRenderer } from '../renderers/polygon/sdf-polygon.js';
@@ -221,7 +222,7 @@ function storePolygonArrays(polygons: ReturnType<typeof collectPolygons>): {
       return () => undefined;
     },
   }) as unknown as WebGL2RenderingContext;
-  const renderer = new SDFPolygonRenderer(gl, RATIO);
+  const renderer = new SDFPolygonRenderer(gl, { gpu: new GpuLedger() }, RATIO);
   renderer.ensureShader({ vertexShaderPrelude: '', define: '', variantName: 'mercator' });
   renderer.buildRetained(polygons, { origin: ORIGIN });
   return { vertices: uploads[0] as Float32Array, indices: uploads[1] as Uint32Array };

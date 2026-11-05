@@ -26,6 +26,7 @@ import type { Store } from '../../store/store.js';
 import type { Feature, Layer } from '../../store/types.js';
 import { createTestDrawer, feature, tablesOfFeatures } from '../../test-utils.js';
 import { createFeatureCompanionRegistry } from '../feature-companion.js';
+import { GpuLedger } from '../gpu-ledger.js';
 import { createBatchManager } from '../renderers/batch-manager.js';
 import { SDFLineRenderer } from '../renderers/line/sdf-line.js';
 import { PointInstanceRenderer } from '../renderers/point/point-instance.js';
@@ -123,15 +124,15 @@ function setup(options: { rows?: boolean } = {}) {
   const mock = recordingGL();
   const gl = mock.gl;
   const terrain = new TerrainContext();
-  const point = new PointInstanceRenderer({} as MapLibreMap, gl, 1, terrain);
-  const line = new SDFLineRenderer({} as MapLibreMap, gl, 1, terrain);
-  const polygon = new SDFPolygonRenderer(gl, 1, { terrain });
-  const fill = new PolygonBatchRenderer(gl, { terrain });
+  const point = new PointInstanceRenderer({} as MapLibreMap, gl, new GpuLedger(), 1, terrain);
+  const line = new SDFLineRenderer({} as MapLibreMap, gl, new GpuLedger(), 1, terrain);
+  const polygon = new SDFPolygonRenderer(gl, { gpu: new GpuLedger(), ...{ terrain } }, 1);
+  const fill = new PolygonBatchRenderer(gl, { gpu: new GpuLedger(), ...{ terrain } });
   point.ensureShader(SHADER_DATA);
   const linePrograms = programsOf(mock, () => line.ensureShader(SHADER_DATA));
   polygon.ensureShader(SHADER_DATA);
   const fillPrograms = programsOf(mock, () => fill.ensureShader(SHADER_DATA));
-  const rows = options.rows ? new RowsRenderer(null, gl, 1, terrain) : undefined;
+  const rows = options.rows ? new RowsRenderer(null, gl, new GpuLedger(), 1, terrain) : undefined;
   rows?.ensureShader(SHADER_DATA);
   const manager = createBatchManager({
     gl,
@@ -260,6 +261,7 @@ describe('the features drawn at once among the retained chunks', () => {
     const { mock, terrain, deps, camera, draws } = setup();
     const { internals, table } = tablesOfFeatures('layer', scene());
     const tableRenderer = new TableLayerRenderer({
+      ledger: new GpuLedger(),
       gl: mock.gl,
       terrain,
       requestRepaint: () => {},
@@ -290,6 +292,7 @@ describe('the features drawn at once among the retained chunks', () => {
     const { mock, terrain, deps, camera, draws } = setup({ rows: true });
     const { internals, table } = tablesOfFeatures('layer', scene());
     const tableRenderer = new TableLayerRenderer({
+      ledger: new GpuLedger(),
       gl: mock.gl,
       terrain,
       requestRepaint: () => {},

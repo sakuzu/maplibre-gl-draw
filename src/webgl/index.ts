@@ -18,34 +18,42 @@
  *
  * ```ts
  * import {
- *   createProgram, OFFSET_MODE_GLSL, ProjectionUniformManager, viewUniforms,
+ *   OFFSET_MODE_GLSL, ProjectionUniformManager, viewUniforms,
  * } from '@sakuzu/maplibre-gl-draw/webgl';
  *
- * let program: WebGLProgram | null = null;
- * let uniforms: ProjectionUniformManager | null = null;
- * draw.extensions.overlays.add({
+ * draw.extensions.plugins.add({
  *   name: 'my-shader',
- *   onAdd: () => {},
- *   draw(ctx) {
- *     const view = viewUniforms(ctx);
- *     if (!program) {
- *       const vertex = vertexSource(view.shader.vertexShaderPrelude, OFFSET_MODE_GLSL);
- *       program = createProgram(ctx.gl, vertex, fragmentSource);
- *       uniforms = new ProjectionUniformManager(ctx.gl);
- *       uniforms.getLocations(program);
- *     }
- *     ctx.gl.useProgram(program);
- *     uniforms?.setTerrain(ctx);
- *     uniforms?.setUniforms(view.projection, view.offset);
- *     // bind the buffers of your shape and draw it
+ *   onAdd(ctx) {
+ *     ctx.webgl.addOverlay({
+ *       gpuShare: 0.01,
+ *       prepare(gpu) {
+ *         const { gl } = gpu;
+ *         let program: WebGLProgram | null = null;
+ *         const uniforms = new ProjectionUniformManager(gl);
+ *         return (context) => {
+ *           const view = viewUniforms(context);
+ *           if (!program) {
+ *             const vertex = vertexSource(view.shader.vertexShaderPrelude, OFFSET_MODE_GLSL);
+ *             program = gpu.program(vertex, fragmentSource);
+ *             uniforms.getLocations(program);
+ *           }
+ *           gl.useProgram(program);
+ *           uniforms.setTerrain(context);
+ *           uniforms.setUniforms(view.projection, view.offset);
+ *           // bind the buffers of your shape and draw it
+ *         };
+ *       },
+ *     });
  *   },
- *   onRemove: (_map, gl) => gl.deleteProgram(program),
  * });
  * ```
  *
+ * What `gpu` makes is recorded under the name of the plugin, refused past the limit of the
+ * instance, and given back with the plugin: nothing here has a counterpart to release it.
+ *
  * Read next: the guide
  * [custom feature types](https://sakuzu.github.io/maplibre-gl-draw/guides/custom-types). The
- * parts used most are {@link viewUniforms}, {@link createProgram}, {@link OFFSET_MODE_GLSL} and
+ * parts used most are {@link Gpu}, {@link viewUniforms}, {@link OFFSET_MODE_GLSL} and
  * {@link ProjectionUniformManager}.
  *
  * @module webgl
@@ -53,15 +61,24 @@
 
 // biome-ignore-all assist/source/organizeImports: the exports are grouped by section
 
+// What a plugin draws with, and what it holds on the GPU
+export type {
+  FeatureRenderer,
+  Gpu,
+  GpuContext,
+  GpuDefinition,
+  GpuRowBuffer,
+  GpuRowBufferFactory,
+  OverlayContext,
+  ProgramCompile,
+  RowRef,
+  Webgl,
+} from '../api/extension/webgl.js';
+
 // Shaders and projection
 export { DEFAULT_TILE_SIZE } from '../shared/math/constants.js';
 export type { OffsetUniforms, ShaderData } from '../view/shaders/helpers.js';
-export {
-  calculateLngLatOffset,
-  createProgram,
-  OFFSET_MODE_GLSL,
-  ProgramCompile,
-} from '../view/shaders/helpers.js';
+export { calculateLngLatOffset, OFFSET_MODE_GLSL } from '../view/shaders/helpers.js';
 export { ProjectionUniformManager } from '../view/shaders/projection.js';
 export type { ViewUniforms } from '../view/shaders/view-uniforms.js';
 export { offsetUniformsAt, viewUniforms } from '../view/shaders/view-uniforms.js';
@@ -105,7 +122,6 @@ export { densifyPath } from '../view/terrain/tessellation.js';
 export type { RowStateBinding, RowStateTexture } from '../view/renderers/row-state.js';
 export {
   createRowStateTexture,
-  deleteRowStateTexture,
   ROW_STATE_GLSL,
   ROW_STATE_TEXTURE_UNIT,
   RowStateUniforms,

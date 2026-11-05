@@ -7,7 +7,6 @@
 
 import type {
   Feature,
-  FeatureRenderer,
   FeatureTypeDefinition,
   Position,
   ScreenPoint,
@@ -15,7 +14,7 @@ import type {
 import type { LineString } from 'geojson';
 
 // The style keys of a route. Core keeps a key it does not define with the feature (stored,
-// exported and loaded back) and does not read it; the type declares them, and its renderer
+// exported and loaded back) and does not read it; the type declares them, and its `render`
 // checks their values, which can arrive from anywhere
 declare module '@sakuzu/maplibre-gl-draw' {
   interface FeatureStyle {
@@ -42,22 +41,6 @@ export function routeLook(feature: Feature): typeof ROUTE_DEFAULTS {
   };
 }
 
-// Drawn in the feature's place in the layer order. The shared renderers are ready for the draw
-// (shader and projection), so the renderer creates no GL object of its own
-const routeRenderer: FeatureRenderer = {
-  onAdd() {},
-  draw(feature, ctx) {
-    const look = routeLook(feature);
-    ctx.line.draw(verticesOf(feature), {
-      width: look.routeWidth,
-      color: look.routeColor,
-      opacity: ctx.opacity,
-      lineStyle: look.routeDashed ? 'dashed' : 'solid',
-    });
-  },
-  onRemove() {},
-};
-
 function verticesOf(feature: Feature): Position[] {
   return (feature.geometry as LineString).coordinates;
 }
@@ -75,7 +58,17 @@ function segmentDistance(p: ScreenPoint, a: ScreenPoint, b: ScreenPoint): number
 export const routeType: FeatureTypeDefinition = {
   type: 'Route',
   geometry: 'LineString',
-  renderer: routeRenderer,
+  // Drawn in the feature's place in the layer order. The shared renderers are ready for the draw
+  // (shader and projection), so the type holds nothing on the GPU
+  render(feature, ctx) {
+    const look = routeLook(feature);
+    ctx.line.draw(verticesOf(feature), {
+      width: look.routeWidth,
+      color: look.routeColor,
+      opacity: ctx.opacity,
+      lineStyle: look.routeDashed ? 'dashed' : 'solid',
+    });
+  },
   // A click within the click tolerance of the line, or within its half width, hits it
   hitTest(feature, ctx) {
     const points = verticesOf(feature).map((v) => ctx.screen.project(v));

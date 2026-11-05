@@ -16,6 +16,7 @@
  * - `no-dem-tiles`: no tile of the view has a DEM or an index yet
  * - `stale-plan`: the previous plan is kept while the index of the view is being built
  * - `texture-limit`: the tables do not fit in the textures of this GPU
+ * - `gpu-limit`: the tables do not fit under the limit of the instance
  * - `ok`: the plan was built from the tiles of this frame
  *
  * The state that carries over between frames (the collected elements, the tile index, the plan,
@@ -190,8 +191,8 @@ export interface DrapePlannerDeps {
   store: Store;
   terrain: TerrainContext;
   datasets?: DrapePlannerDatasets;
-  /** Where the GPU memory of the drape is recorded (nothing is recorded when omitted) */
-  ledger?: GpuLedger;
+  /** Where the GPU memory of the drape is recorded */
+  ledger: GpuLedger;
   /**
    * Whether the work that does not fit in a frame is spread over later frames (true when
    * omitted; the `timeSlicing` of the rendering settings)
@@ -366,7 +367,7 @@ export class DrapePlanner {
   /** The quad drape renderer (created on first use) */
   quadRenderer(gl: WebGL2RenderingContext): QuadDrapeRenderer {
     if (!this.quadDrapeRenderer) {
-      this.quadDrapeRenderer = new QuadDrapeRenderer(gl).useLedger(this.deps.ledger);
+      this.quadDrapeRenderer = new QuadDrapeRenderer(gl, this.deps.ledger);
     }
     return this.quadDrapeRenderer;
   }
@@ -673,7 +674,7 @@ export class DrapePlanner {
     }
 
     if (!this.drapeRenderer) {
-      this.drapeRenderer = new DrapeRenderer(gl).useLedger(this.deps.ledger);
+      this.drapeRenderer = new DrapeRenderer(gl, this.deps.ledger);
     }
     const meshSize = getTerrainMeshSize(terrain);
 
@@ -758,9 +759,13 @@ export class DrapePlanner {
 
     const uploaded = this.drapeRenderer?.upload(pack) ?? false;
     if (!uploaded) {
-      // The tables do not fit in the textures of this GPU: the frame is drawn without the
-      // analytic drape, like an index over its budget
-      setTerrainDrapeDebug(context, { ...debugBase, used: false, reason: 'texture-limit' });
+      // The tables do not fit in the textures of this GPU, or under the limit of the instance: the
+      // frame is drawn without the analytic drape, like an index over its budget, by the vertices
+      // moved to the ground
+      const reason = this.drapeRenderer?.lastError.startsWith('gpu-limit')
+        ? 'gpu-limit'
+        : 'texture-limit';
+      setTerrainDrapeDebug(context, { ...debugBase, used: false, reason });
       this.plan = { tiles: [], excluded: collected.excluded, usable: false, meshSize };
       return false;
     }

@@ -15,6 +15,7 @@
 
 import type { Map as MapLibreMap, ProjectionData } from 'maplibre-gl';
 import { describe, expect, it } from 'vitest';
+import { GpuLedger } from '../gpu-ledger.js';
 import type { ShaderData } from '../shaders/helpers.js';
 import type { LineBatchItem } from './line/line-types.js';
 import { SDFLineRenderer } from './line/sdf-line.js';
@@ -270,7 +271,7 @@ const POINTS: PointInstanceDataFull[] = [
 describe('retained mode of SDFLineRenderer', () => {
   it('creates the coordinate texture, the instance buffer and the VAO when building', () => {
     const mock = createMockGL();
-    const renderer = new SDFLineRenderer({} as MapLibreMap, mock.gl);
+    const renderer = new SDFLineRenderer({} as MapLibreMap, mock.gl, new GpuLedger());
     renderer.ensureShader(SHADER_DATA);
 
     const before = mock.live();
@@ -285,7 +286,7 @@ describe('retained mode of SDFLineRenderer', () => {
 
   it('does neither texture creation nor bufferData when drawing', () => {
     const mock = createMockGL();
-    const renderer = new SDFLineRenderer({} as MapLibreMap, mock.gl);
+    const renderer = new SDFLineRenderer({} as MapLibreMap, mock.gl, new GpuLedger());
     renderer.ensureShader(SHADER_DATA);
     const batch = renderer.buildRetainedBatch(LINE_ITEMS, { lineStyle: 'solid' });
     if (!batch) throw new Error('batch');
@@ -301,7 +302,7 @@ describe('retained mode of SDFLineRenderer', () => {
 
   it('releases every resource it built when disposed', () => {
     const mock = createMockGL();
-    const renderer = new SDFLineRenderer({} as MapLibreMap, mock.gl);
+    const renderer = new SDFLineRenderer({} as MapLibreMap, mock.gl, new GpuLedger());
     renderer.ensureShader(SHADER_DATA);
 
     const before = mock.live();
@@ -314,7 +315,7 @@ describe('retained mode of SDFLineRenderer', () => {
 
   it('does not build when the shader is not initialized or the input is empty', () => {
     const mock = createMockGL();
-    const renderer = new SDFLineRenderer({} as MapLibreMap, mock.gl);
+    const renderer = new SDFLineRenderer({} as MapLibreMap, mock.gl, new GpuLedger());
 
     expect(renderer.buildRetainedBatch(LINE_ITEMS, { lineStyle: 'solid' })).toBeNull();
 
@@ -324,7 +325,7 @@ describe('retained mode of SDFLineRenderer', () => {
 
   it('allows the reference zoom of the line width to be fixed', () => {
     const mock = createMockGL();
-    const renderer = new SDFLineRenderer({} as MapLibreMap, mock.gl);
+    const renderer = new SDFLineRenderer({} as MapLibreMap, mock.gl, new GpuLedger());
     renderer.ensureShader(SHADER_DATA);
 
     const fixed = renderer.buildRetainedBatch(LINE_ITEMS, { lineStyle: 'solid' }, { widthZoom: 0 });
@@ -336,7 +337,7 @@ describe('retained mode of SDFLineRenderer', () => {
 
   it('allows the origin of the relative coordinates to be set, defaulting to the first', () => {
     const mock = createMockGL();
-    const renderer = new SDFLineRenderer({} as MapLibreMap, mock.gl);
+    const renderer = new SDFLineRenderer({} as MapLibreMap, mock.gl, new GpuLedger());
     renderer.ensureShader(SHADER_DATA);
 
     expect(
@@ -349,7 +350,7 @@ describe('retained mode of SDFLineRenderer', () => {
 describe('retained mode of SDFPolygonRenderer', () => {
   it('creates vertex buffer, index buffer and VAO when building, releasing them on dispose', () => {
     const mock = createMockGL();
-    const renderer = new SDFPolygonRenderer(mock.gl);
+    const renderer = new SDFPolygonRenderer(mock.gl, { gpu: new GpuLedger() });
     renderer.ensureShader(SHADER_DATA);
 
     const before = mock.live();
@@ -365,7 +366,7 @@ describe('retained mode of SDFPolygonRenderer', () => {
 
   it('does not call bufferData when drawing', () => {
     const mock = createMockGL();
-    const renderer = new SDFPolygonRenderer(mock.gl);
+    const renderer = new SDFPolygonRenderer(mock.gl, { gpu: new GpuLedger() });
     renderer.ensureShader(SHADER_DATA);
     const batch = renderer.buildRetained(POLYGONS);
     if (!batch) throw new Error('batch');
@@ -379,7 +380,7 @@ describe('retained mode of SDFPolygonRenderer', () => {
 
   it('produces the same number of indices as drawBatch in immediate mode', () => {
     const mock = createMockGL();
-    const renderer = new SDFPolygonRenderer(mock.gl);
+    const renderer = new SDFPolygonRenderer(mock.gl, { gpu: new GpuLedger() });
     renderer.ensureShader(SHADER_DATA);
 
     const immediate = renderer.drawBatch(POLYGONS, createProjectionData(), 12, [800, 600]);
@@ -390,7 +391,7 @@ describe('retained mode of SDFPolygonRenderer', () => {
 
   it('does not build when the shader is not initialized or the input is empty', () => {
     const mock = createMockGL();
-    const renderer = new SDFPolygonRenderer(mock.gl);
+    const renderer = new SDFPolygonRenderer(mock.gl, { gpu: new GpuLedger() });
 
     expect(renderer.buildRetained(POLYGONS)).toBeNull();
 
@@ -402,7 +403,7 @@ describe('retained mode of SDFPolygonRenderer', () => {
 describe('retained mode of PointInstanceRenderer', () => {
   it('creates one set of resources when building and releases them when disposed', () => {
     const mock = createMockGL();
-    const renderer = new PointInstanceRenderer({} as MapLibreMap, mock.gl);
+    const renderer = new PointInstanceRenderer({} as MapLibreMap, mock.gl, new GpuLedger());
     renderer.ensureShader(SHADER_DATA);
 
     const before = mock.live();
@@ -420,7 +421,7 @@ describe('retained mode of PointInstanceRenderer', () => {
 
   it('draws even points without an outline with the same single set of resources', () => {
     const mock = createMockGL();
-    const renderer = new PointInstanceRenderer({} as MapLibreMap, mock.gl);
+    const renderer = new PointInstanceRenderer({} as MapLibreMap, mock.gl, new GpuLedger());
     renderer.ensureShader(SHADER_DATA);
 
     const before = mock.live();
@@ -436,7 +437,7 @@ describe('retained mode of PointInstanceRenderer', () => {
 
   it('completes in one draw without calling bufferData when drawing', () => {
     const mock = createMockGL();
-    const renderer = new PointInstanceRenderer({} as MapLibreMap, mock.gl);
+    const renderer = new PointInstanceRenderer({} as MapLibreMap, mock.gl, new GpuLedger());
     renderer.ensureShader(SHADER_DATA);
     const batch = renderer.buildRetained(POINTS, 'circle');
     if (!batch) throw new Error('batch');
@@ -451,7 +452,7 @@ describe('retained mode of PointInstanceRenderer', () => {
 
   it('does not build when the shader is not initialized or the input is empty', () => {
     const mock = createMockGL();
-    const renderer = new PointInstanceRenderer({} as MapLibreMap, mock.gl);
+    const renderer = new PointInstanceRenderer({} as MapLibreMap, mock.gl, new GpuLedger());
 
     expect(renderer.buildRetained(POINTS, 'circle')).toBeNull();
 
@@ -463,7 +464,7 @@ describe('retained mode of PointInstanceRenderer', () => {
 describe('the draw-time factors (u_size_scale / u_opacity)', () => {
   it('lines: the factors go into the uniforms; omitted and immediate mode return to 1', () => {
     const mock = createMockGL();
-    const renderer = new SDFLineRenderer({} as MapLibreMap, mock.gl);
+    const renderer = new SDFLineRenderer({} as MapLibreMap, mock.gl, new GpuLedger());
     renderer.ensureShader(SHADER_DATA);
     const batch = renderer.buildRetainedBatch(LINE_ITEMS, { lineStyle: 'solid' });
     if (!batch) throw new Error('batch');
@@ -494,7 +495,7 @@ describe('the draw-time factors (u_size_scale / u_opacity)', () => {
 
   it('polygons: the factors go into the uniforms; omitted and immediate mode return to 1', () => {
     const mock = createMockGL();
-    const renderer = new SDFPolygonRenderer(mock.gl);
+    const renderer = new SDFPolygonRenderer(mock.gl, { gpu: new GpuLedger() });
     renderer.ensureShader(SHADER_DATA);
     const batch = renderer.buildRetained(POLYGONS);
     if (!batch) throw new Error('batch');
@@ -521,7 +522,7 @@ describe('the draw-time factors (u_size_scale / u_opacity)', () => {
 
   it('points: the factors go into the uniforms; omitted and immediate mode return to 1', () => {
     const mock = createMockGL();
-    const renderer = new PointInstanceRenderer({} as MapLibreMap, mock.gl);
+    const renderer = new PointInstanceRenderer({} as MapLibreMap, mock.gl, new GpuLedger());
     renderer.ensureShader(SHADER_DATA);
     renderer.setProjectionData(createProjectionData());
     const batch = renderer.buildRetained(POINTS, 'circle');

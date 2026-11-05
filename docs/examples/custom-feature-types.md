@@ -44,7 +44,7 @@ it alone. It grows and shrinks with the map from the zoom it was made at.
 
 ## Code
 
-The definition (`route.ts`) gives the type its renderer, which draws the
+The definition (`route.ts`) gives the type its `render`, which draws the
 line with the shared line renderer of the library, its hit test, its box
 selection, its selection box and the handles on its vertices. The
 library draws the resize and rotate handles of its box; the handles on
@@ -54,7 +54,7 @@ the vertices are `custom` handles, whose marks the type draws itself
 adds with `ui.actions.add` (6). The style keys of a route (`routeColor`,
 `routeWidth`, `routeDashed`) are declared by declaration merging on
 `FeatureStyle`: core keeps a key it
-does not define with the feature, and the renderer checks the value
+does not define with the feature, and `render` checks the value
 before using it.
 
 The inspector of the standard UI has style fields only for the types of
@@ -72,7 +72,7 @@ its scale, which the footprint reads. Its `handles` give a `resize`
 handle in the middle of the east edge of the selection box
 (`eastMiddleOf`), whose drag writes its width (`widthFromCenter`). It
 declares its look in `defaultStyle` and that the rule colors its fill
-(`styleRuleChannel: 'fill'`), and its renderer draws with
+(`styleRuleChannel: 'fill'`), and its `render` draws with
 `ctx.appliedStyle(feature)`, the fill colored by the rule (7).
 
 ::: code-group
@@ -86,7 +86,7 @@ declares its look in `defaultStyle` and that the rule colors its fill
 ## Related
 
 - [Custom feature types](../guides/custom-types.md): the definition of a
-  type, its renderer and its hit test
+  type, how it is drawn and its hit test
 - [`FeatureTypeDefinition`](../api/maplibre-gl-draw/interfaces/FeatureTypeDefinition.md)
   and [`FeatureStyle`](../api/maplibre-gl-draw/interfaces/FeatureStyle.md)
 - [A section of the inspector](../../ui/README.md#inspector) of the

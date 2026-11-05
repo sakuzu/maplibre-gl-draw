@@ -27,6 +27,7 @@
  */
 
 import type { ProjectionData } from 'maplibre-gl';
+import type { GpuContext } from '../../../api/extension/webgl.js';
 import type { GpuLedger, GpuLedgerOwner } from '../../gpu-ledger.js';
 import { setDepthTestEnabled } from '../../layer/depth-state.js';
 import type { ShaderData } from '../../shaders/helpers.js';
@@ -156,7 +157,7 @@ export interface QuadDrapeContent {
    * @param uniform - The location of a uniform `glsl` declares, by its name (null for one the
    *   program does not use)
    */
-  bind(gl: WebGL2RenderingContext, uniform: (name: string) => WebGLUniformLocation | null): void;
+  bind(gl: GpuContext, uniform: (name: string) => WebGLUniformLocation | null): void;
 }
 
 /**
@@ -464,22 +465,13 @@ export class QuadDrapeRenderer {
   private mesh: TerrainMeshBuffers | null = null;
   /** The most recent failure reason (for diagnostics) */
   lastError = '';
-  /** Where the bytes of the mesh are recorded (nothing is recorded until `useLedger`) */
-  private ledger: GpuLedgerOwner | undefined;
+  /** Where the bytes of the mesh are recorded */
+  private readonly ledger: GpuLedgerOwner;
 
-  constructor(gl: WebGL2RenderingContext) {
+  /** @internal */
+  constructor(gl: WebGL2RenderingContext, ledger: GpuLedger) {
     this.gl = gl;
-  }
-
-  /**
-   * Records the GPU memory this renderer allocates from now on (call it before the first draw:
-   * it holds nothing before)
-   *
-   * @internal
-   */
-  useLedger(ledger: GpuLedger | undefined): this {
-    this.ledger = ledger ? { ledger, owner: DRAPE_OWNER } : undefined;
-    return this;
+    this.ledger = { ledger, owner: DRAPE_OWNER };
   }
 
   /**

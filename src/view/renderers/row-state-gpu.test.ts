@@ -43,7 +43,7 @@ import {
   launchWebGlBrowser,
   openMaplibrePage,
 } from '../../test-support/webgl-page.js';
-import { browserTimeout, internalsOf } from '../../test-utils.js';
+import { browserTimeout, gpuOf, internalsOf } from '../../test-utils.js';
 import {
   calculateLngLatOffset,
   createRowStateTexture,
@@ -57,6 +57,7 @@ import {
   type ShaderData,
   uploadRowState,
 } from '../../webgl/index.js';
+import { GpuLedger } from '../gpu-ledger.js';
 import {
   calculateOffsetUniforms,
   getProjectionTransitionUniform,
@@ -208,7 +209,7 @@ function pointRowProgram(shaderData: ShaderData): { vertex: string; fragment: st
     getTerrain: () => null,
     transform: { tileSize: 512 },
   } as never;
-  const renderer = new PointInstanceRenderer(map, gl);
+  const renderer = new PointInstanceRenderer(map, gl, new GpuLedger());
   renderer.ensureShader(shaderData);
   linked.length = 0;
   expect(renderer.ensureRowProgram()).toBe(true);
@@ -451,7 +452,7 @@ describe('a shader of its own drawn with the rows being dragged', () => {
   ): { draw: Draw; binding: ReturnType<typeof rowStateBindingOf>; bytes: number[] } {
     const dragged = draggedRowsOf(tables);
     const recorded = recordingGl();
-    const texture = createRowStateTexture(recorded.gl, POINTS.length);
+    const texture = createRowStateTexture(gpuOf(recorded.gl), POINTS.length);
     if (!texture) throw new Error('texture');
     const state = bytes ?? POINTS.map((p) => rowStateOf(dragged, handleOf(p.id)));
     uploadRowState(recorded.gl, texture, Uint8Array.from(state));

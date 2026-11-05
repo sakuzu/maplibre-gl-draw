@@ -33,15 +33,14 @@ export class BoxSelectionRenderer {
   constructor(
     map: MapLibreMap,
     gl: WebGL2RenderingContext,
+    ledger: GpuLedger,
     styleConfig?: BoxSelectionStyleConfig,
     pixelRatio?: PixelRatioInput,
-    ledger?: GpuLedger,
   ) {
     // The rubber band is a rectangle on the screen, so it is never given elevation: its
     // renderers are built without the draw instance's terrain (they draw flat)
-    this.strokeRenderer = new StrokeRenderer(map, gl, pixelRatio);
-    if (ledger) this.strokeRenderer.useLedger(ledger);
-    this.fillShaderManager = new FillShaderManager(gl, undefined, ledger);
+    this.strokeRenderer = new StrokeRenderer(map, gl, ledger, pixelRatio);
+    this.fillShaderManager = new FillShaderManager(gl, ledger);
     this.styleConfig = styleConfig ?? DEFAULT_BOX_SELECTION_STYLE_CONFIG;
   }
 

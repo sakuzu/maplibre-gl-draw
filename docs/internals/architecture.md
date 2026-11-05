@@ -1031,7 +1031,8 @@ the plugin adds.
    function that removes the plugin. A name that is taken throws
    `already-exists`.
 2. Removing it runs `onRemove`, then removes what it added through its
-   context and ends the event subscriptions it made there.
+   context, gives back what it holds on the GPU, and ends the event
+   subscriptions it made there.
 3. `draw.destroy()` removes the extensions first, so each plugin can
    release timers and subscriptions it holds outside the instance.
 
@@ -1052,7 +1053,9 @@ The host installs each into the registries the engine reads, through the
 adapters of `src/api/impl/adapters.ts` and `render-context.ts`: a feature
 type becomes a `FeatureTypeHandler` of `src/extension/`, whose renderer is
 handed a `RenderContext` made from the `FrameDrawContext` of the view
-being drawn.
+being drawn. What draws with WebGL of its own comes through `ctx.webgl` of
+a plugin: a definition is one `GpuPart` of `src/api/impl/gpu-parts.ts`,
+which holds the `Gpu` it allocates with (`src/view/gpu.ts`).
 The look the type declares (`defaultStyle`) goes to the `AppliedStyles` of
 the host (`src/api/impl/applied-style.ts`), which answers both
 `RenderContext.appliedStyle` and `draw.features.getAppliedStyle`.
@@ -1132,10 +1135,12 @@ because it would freeze the internal structure for the outside.
   rule functions. The geometry and table entries belong to it too. It
   follows semver.
 - Layer 2, the building blocks for custom shaders, in
-  `src/webgl/index.ts`. Parts tied to the shaders and the terrain drawing
-  of core: the GLSL snippet and the projection uniforms, `createProgram`,
-  `QuadShader`, the blend and billboard helpers, the input types of the
-  shared line renderer, the dash and terrain subdivision rules, and
+  `src/webgl/index.ts`. What a plugin draws with WebGL of its own through
+  (`Webgl`, `Gpu`, `FeatureRenderer` and the types around them), and parts
+  tied to the shaders and the terrain drawing of core: the GLSL snippet and
+  the projection uniforms, `QuadShader`, the blend and billboard helpers,
+  the input types of the shared line renderer, the dash and terrain
+  subdivision rules, and
   `PointHitTestStrategy`. Pure math that is not tied to them (oriented
   boxes, contrast colors) is not published; a size in pixels at a zoom
   turned into meters is `pixelsToMeters` of `/geometry`, so that an

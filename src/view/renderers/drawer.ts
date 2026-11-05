@@ -46,8 +46,8 @@ export interface FeatureDrawerDeps {
   styleRules?: StyleRuleCache;
   /** The terrain state of the draw instance (an inactive one draws flat) */
   terrain?: TerrainContext;
-  /** Where the GPU memory of the fills is recorded (nothing is recorded when omitted) */
-  ledger?: GpuLedger;
+  /** Where the GPU memory of the fills is recorded */
+  ledger: GpuLedger;
 }
 
 /**
@@ -72,7 +72,7 @@ export class FeatureDrawer {
     this.imageRenderer = deps.imageRenderer;
     this.featureStyle = deps.featureStyle;
     this.styleRules = deps.styleRules ?? new StyleRuleCache();
-    this.fillShaderManager = new FillShaderManager(deps.gl, deps.terrain, deps.ledger);
+    this.fillShaderManager = new FillShaderManager(deps.gl, deps.ledger, deps.terrain);
   }
 
   /**

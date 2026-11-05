@@ -32,8 +32,8 @@ export interface TentativeRendererDeps {
   tentativeStyle: TentativeStyle;
   /** The terrain state of the draw instance (an inactive one draws flat) */
   terrain?: TerrainContext;
-  /** Where the GPU memory of the fills is recorded (nothing is recorded when omitted) */
-  ledger?: GpuLedger;
+  /** Where the GPU memory of the fills is recorded */
+  ledger: GpuLedger;
 }
 
 /**
@@ -80,7 +80,7 @@ export class TentativeRenderer {
     this.circleRadiusHandleStyle = deps.tentativeStyle.circleRadiusHandle;
     // The fill color for Tentative (translucent pink)
     this.fillColor = [1.0, 0.176, 0.333, 0.2];
-    this.fillShaderManager = new FillShaderManager(deps.gl, deps.terrain, deps.ledger);
+    this.fillShaderManager = new FillShaderManager(deps.gl, deps.ledger, deps.terrain);
   }
 
   /**

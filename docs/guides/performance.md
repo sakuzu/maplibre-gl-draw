@@ -103,8 +103,8 @@ that draw takes. Keep the default on an interactive map.
 
 A complete draw is not yet a complete picture: the tiles and the DEM of
 the map arrive asynchronously, and some work cannot be done in one draw
-at all (the answer of a provider, an overlay renderer that prepares its
-resources over several draws). `draw.hasPendingWork()` tells whether
+at all (the answer of a provider, an overlay that prepares its data over
+several draws). `draw.hasPendingWork()` tells whether
 such work remains. The map fires `idle` even when this library asked for
 another draw during the last one, so wait for `idle` and then for
 `hasPendingWork()` to be false after a draw:
@@ -148,6 +148,19 @@ document included. `gpuBytes` is what the drawing allocated on the GPU;
 `jsBytes` is an estimate from the features and their positions (a
 browser does not tell the heap of the page everywhere). The base map and
 the rest of the page are not in it.
+
+What the drawing holds on the GPU outside the rows, the part that does
+not follow the size of the document, has a limit for the instance:
+`rendering.gpuLimitBytes`, 64 MB when it is left out. The library and the
+extensions together read it: `draw.debug.gpu()` tells `bytes` and
+`rowBytes`, what follows the features (`gpu.rows`) is out of the limit, under
+what the device has left, and an extension holds a share of the limit
+(`gpuShare`), past which an
+allocation is refused ([what a plugin holds on the
+GPU](custom-types.md#what-a-plugin-holds-on-the-gpu)). A change through
+`draw.options.update` is followed at once: what is held is not released,
+and the next allocation is refused. Give the value for the devices of your
+users, as the library does not know what they can spare.
 
 `draw.memory.estimate` gives what a document of a size would take, held
 as the Store of the instance holds its features, so a page can stop what
@@ -215,12 +228,10 @@ reads the ratio in effect, the scale included, from its context:
 ```ts
 draw.extensions.overlays.add({
   name: 'outline',
-  onAdd: () => {},
   draw(ctx) {
     const widthInDevicePixels = 2 * ctx.screen.pixelRatio;
     // draw with that width
   },
-  onRemove: () => {},
 });
 ```
 

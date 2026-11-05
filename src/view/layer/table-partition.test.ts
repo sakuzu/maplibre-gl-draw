@@ -13,6 +13,7 @@
 
 import { describe, expect, it, vi } from 'vitest';
 import type { LayerTableView } from '../../api/tables.js';
+import type { GpuRowsSource } from '../../extension/renderers.js';
 import { rowFeature } from '../../feature-table/row-read.js';
 import { drawPropertyKey } from '../../shared/properties.js';
 import type { Feature, Layer } from '../../shared/types/model.js';
@@ -405,6 +406,7 @@ describe('the classification and the chunks of the drawing in one draw', () => {
     const group = table.groupAt(0);
     const slots = new RowStyleSlots(resolver, internals.styles, undefined);
     const sprites = new Map<number, RowSpriteSource>();
+    const gpuRows = new Map<number, GpuRowsSource>();
     const context = {
       slots,
       customTypes,
@@ -413,10 +415,12 @@ describe('the classification and the chunks of the drawing in one draw', () => {
         rowFeature(internals.readContext, 'layer', g, row),
       oneDraw: true,
       onSprite: (row: number, s: RowSpriteSource) => sprites.set(row, s),
+      onGpuRows: (row: number, s: GpuRowsSource) => gpuRows.set(row, s),
     };
     return {
       group,
       sprites,
+      gpuRows,
       classify: (row: number) => classifyRow(group, row, context),
       rows: features.map((_, row) => classifyRow(group, row, context)),
       features: features.map((f) => classifyFeature(f, resolver, customTypes, companions)),
@@ -478,6 +482,52 @@ describe('the classification and the chunks of the drawing in one draw', () => {
       companions,
     });
     expect(result.rows).toEqual(['immediate']);
+  });
+
+  it('keeps the rows an extension holds on the GPU in chunks of their own, by their source', () => {
+    const held = { create: vi.fn() };
+    const other = { create: vi.fn() };
+    const features = [
+      feature('a', 'Ribbon', [0, 0]),
+      feature('b', 'Sticker', [1, 1]),
+      feature('c', 'Marker', [2, 2]),
+      feature('d', 'Point', [3, 3]),
+      feature('e', 'Ribbon', [4, 4]),
+    ];
+    const companions = createFeatureCompanionRegistry();
+    companions.register({
+      id: 'c',
+      has: (f: Feature) => f.id === 'e',
+    } as unknown as FeatureCompanionProvider);
+    const result = oneDrawKinds(features, {
+      customTypes: new Map([
+        ['Ribbon', { gpuRows: held }],
+        ['Sticker', { gpuRows: held }],
+        ['Marker', { gpuRows: other }],
+      ]),
+      companions,
+    });
+    // A row with a companion is drawn at once, and only the drawing in one draw asks a source
+    expect(result.rows).toEqual(['extension', 'extension', 'extension', 'rows', 'immediate']);
+    const ranges = partitionRowGroup(result.group, result.classify, undefined, (row) =>
+      result.gpuRows.get(row),
+    );
+    expect(ranges.map((r) => [r.kind, r.from, r.to, r.gpuRows])).toEqual([
+      ['extension', 0, 2, held],
+      ['extension', 2, 3, other],
+      ['rows', 3, 4, undefined],
+      ['immediate', 4, 5, undefined],
+    ]);
+  });
+
+  it('asks a renderer that holds rows on the GPU which rows it takes', () => {
+    const held = { create: vi.fn() };
+    const features = [feature('a', 'Point', [0, 0]), feature('b', 'Point', [1, 1])];
+    const result = oneDrawKinds(features, {
+      customTypes: new Map([['Point', { gpuRows: held, appliesTo: (f: Feature) => f.id === 'a' }]]),
+    });
+    expect(result.rows).toEqual(['extension', 'rows']);
+    expect([...result.gpuRows.keys()]).toEqual([0]);
   });
 
   it('ends a chunk only at a row drawn at once, at the limit of coordinates and at another source of pictures', () => {

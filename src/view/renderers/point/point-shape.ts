@@ -230,26 +230,22 @@ export class PointShapeRenderer {
   private pixelRatio: PixelRatioInput | undefined;
   /** The terrain state of the draw instance this renderer belongs to */
   private readonly terrain: TerrainContext;
-  /** Where the bytes of the vertex buffers are recorded (nothing is recorded when omitted) */
-  private readonly ledger: GpuLedger | undefined;
+  /** Where the bytes of the vertex buffers are recorded */
+  private readonly ledger: GpuLedger;
 
   constructor(
     _map: MapLibreMap,
     gl: WebGL2RenderingContext,
+    ledger: GpuLedger,
     pixelRatio?: PixelRatioInput,
     terrain: TerrainContext = new TerrainContext(),
-    ledger?: GpuLedger,
   ) {
     this.gl = gl;
     this.pixelRatio = pixelRatio;
     this.terrain = terrain;
     this.ledger = ledger;
     this.projectionUniformManager = new ProjectionUniformManager(gl).useTerrainState(terrain);
-    this.bufferCache = new BufferCache(
-      gl,
-      undefined,
-      ledger ? { ledger, owner: POINT_SHAPES_OWNER } : undefined,
-    );
+    this.bufferCache = new BufferCache(gl, { ledger, owner: POINT_SHAPES_OWNER });
   }
 
   /**
@@ -564,7 +560,7 @@ void main() {
     gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
     const vertexData = toVertexData(vertices);
     gl.bufferData(gl.ARRAY_BUFFER, vertexData, gl.STATIC_DRAW);
-    this.ledger?.record(buffer, POINT_SHAPES_OWNER, 'buffer', vertexData.byteLength);
+    this.ledger.record(buffer, POINT_SHAPES_OWNER, 'buffer', vertexData.byteLength);
 
     gl.enableVertexAttribArray(0);
     gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
@@ -572,7 +568,7 @@ void main() {
     gl.drawArrays(drawMode, 0, vertices.length);
 
     gl.bindVertexArray(null);
-    this.ledger?.release(buffer);
+    this.ledger.release(buffer);
     gl.deleteBuffer(buffer);
     gl.deleteVertexArray(vao);
   }

@@ -66,7 +66,7 @@ custom-feature-types
 東の辺の真ん中に `resize` のハンドルを出し (`eastMiddleOf`)、その
 ドラッグが幅を書きます (`widthFromCenter`)。見た目を `defaultStyle` で
 宣言し、規則が塗りを塗ることを宣言し (`styleRuleChannel: 'fill'`)、
-描画器は `ctx.appliedStyle(feature)` で、規則の色に塗った板を描きます (7)。
+`render` は `ctx.appliedStyle(feature)` で、規則の色に塗った板を描きます (7)。
 
 ::: code-group
 <<< @/../examples/custom-feature-types/main.ts

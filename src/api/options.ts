@@ -154,6 +154,15 @@ export interface RenderingOptions {
   cacheGeometry?: boolean;
   /** Whether work that does not fit in one drawing is spread over the next ones; true when it is left out */
   timeSlicing?: boolean;
+  /**
+   * The most bytes the instance holds on the GPU outside the rows: the bytes that do not follow
+   * the size of the document, of the library and of the extensions together. The parts of an
+   * extension take their shares of it and allocate under it; what the application allows depends
+   * on the device.
+   *
+   * @defaultValue 64 MB (64,000,000 bytes), what a phone can spare
+   */
+  gpuLimitBytes?: number;
 }
 
 /**

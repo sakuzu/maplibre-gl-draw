@@ -62,10 +62,10 @@ The public symbols fall into two layers.
 Layer 1 is the public API, the main entry: what an application needs to
 use the library, and what an extension needs to plug in (`Plugin`,
 `PluginContext`, `ModeFactory`, `ModeHandler`, `FeatureTypeDefinition`,
-`FeatureRenderer` with its `RenderContext`, `OverlayRenderer` and the
-providers). It also includes the functions for style rules and the
-check for the keys of the library in `properties`. The geometry and
-table entries follow the same rules as layer 1.
+`RenderContext`, `OverlayRenderer` and the providers). It also includes
+the functions for style rules and the check for the keys of the library
+in `properties`. The geometry and table entries follow the same rules as
+layer 1.
 
 Layer 2 is two entries. `@sakuzu/maplibre-gl-draw/kasane` holds the
 parts in the words of the rows, for a store that holds the features of
@@ -73,11 +73,12 @@ its layers as rows of columns; the fields of layer 1 such a store fills
 (`StoreView.tables`, `Store.applyRows`, `DocumentChange.rows` and
 `DocumentChange.opened`) are marked experimental, and an application
 that reads and writes features does not need them.
-`@sakuzu/maplibre-gl-draw/webgl` holds building blocks for people who
-write their own shaders and want them to draw the way the library does.
-Most overlays do not need it, because the context of a renderer already
-passes the shared renderers. Prefer an extension point of layer 1 when
-one does the job.
+`@sakuzu/maplibre-gl-draw/webgl` holds what a plugin draws with WebGL of
+its own through (`Webgl`, `Gpu`, `GpuDefinition`, `FeatureRenderer` and
+`GpuRowBuffer`) and building blocks for people who write their own shaders
+and want them to draw the way the library does. Most overlays do not need
+it, because the render context already passes the shared renderers.
+Prefer an extension point of layer 1 when one does the job.
 
 The lists are fixed in the entry files (`src/index.ts`,
 `src/geometry/index.ts`, `src/table/index.ts`, `src/kasane/index.ts` and

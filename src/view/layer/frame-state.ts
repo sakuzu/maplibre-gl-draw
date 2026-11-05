@@ -557,6 +557,7 @@ export function buildFrameState(input: FrameBuildInput): FrameState {
     interleavedQuadIds,
     transition: defaultProjectionData.projectionTransition ?? 0,
   });
+  customRendererContext.copyProjections = copies.map((copy) => copy.projectionData);
 
   return {
     segments: input.segments.slice(),

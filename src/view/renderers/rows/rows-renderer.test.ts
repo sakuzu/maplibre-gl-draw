@@ -222,7 +222,7 @@ describe('the stops of the distance scale of the sprites', () => {
 describe('RowsRenderer', () => {
   it('writes a chunk only when the uploads are flushed, and draws it after that', () => {
     const mock = recordingGL();
-    const renderer = new RowsRenderer(null, mock.gl, 1);
+    const renderer = new RowsRenderer(null, mock.gl, new GpuLedger(), 1);
     renderer.ensureShader(SHADER_DATA);
     expect(renderer.ready).toBe(true);
     const chunk = renderer.createChunk(chunkData(4));
@@ -259,7 +259,7 @@ describe('RowsRenderer', () => {
 
   it('draws a range of rows by pointing the instance attributes at its first instance', () => {
     const mock = recordingGL();
-    const renderer = new RowsRenderer(null, mock.gl, 1);
+    const renderer = new RowsRenderer(null, mock.gl, new GpuLedger(), 1);
     renderer.ensureShader(SHADER_DATA);
     const chunk = renderer.createChunk(chunkData(4));
     renderer.flushUploads();
@@ -292,7 +292,7 @@ describe('RowsRenderer', () => {
   it('does not wait for the program where the context compiles in parallel', () => {
     let complete = false;
     const mock = recordingGL({ parallel: true, complete: () => complete });
-    const renderer = new RowsRenderer(null, mock.gl, 1);
+    const renderer = new RowsRenderer(null, mock.gl, new GpuLedger(), 1);
     renderer.ensureShader(SHADER_DATA);
     expect(renderer.ready).toBe(false);
     expect(renderer.compiling).toBe(true);
@@ -315,7 +315,7 @@ describe('RowsRenderer', () => {
 
   it('writes rows in place when they fit their places, the rest of a place collapsed', () => {
     const mock = recordingGL();
-    const renderer = new RowsRenderer(null, mock.gl, 1);
+    const renderer = new RowsRenderer(null, mock.gl, new GpuLedger(), 1);
     renderer.ensureShader(SHADER_DATA);
     const data = chunkData(4);
     const chunk = renderer.createChunk(data);
@@ -368,7 +368,7 @@ describe('RowsRenderer', () => {
 
   it('uploads a texel written many times once, and only the texels written', () => {
     const mock = recordingGL();
-    const renderer = new RowsRenderer(null, mock.gl, 1);
+    const renderer = new RowsRenderer(null, mock.gl, new GpuLedger(), 1);
     renderer.ensureShader(SHADER_DATA);
     const data = chunkData(4);
     const chunk = renderer.createChunk(data);
@@ -387,7 +387,7 @@ describe('RowsRenderer', () => {
 
   it('keeps none of the packed arrays of a chunk once they are on the GPU', () => {
     const mock = recordingGL();
-    const renderer = new RowsRenderer(null, mock.gl, 1);
+    const renderer = new RowsRenderer(null, mock.gl, new GpuLedger(), 1);
     renderer.ensureShader(SHADER_DATA);
     const data = chunkData(4);
     const chunk = renderer.createChunk(data);
@@ -403,7 +403,7 @@ describe('RowsRenderer', () => {
 
   it('writes into the packed arrays of a chunk not uploaded yet', () => {
     const mock = recordingGL();
-    const renderer = new RowsRenderer(null, mock.gl, 1);
+    const renderer = new RowsRenderer(null, mock.gl, new GpuLedger(), 1);
     renderer.ensureShader(SHADER_DATA);
     const data = chunkData(3);
     const chunk = renderer.createChunk(data);
@@ -419,7 +419,7 @@ describe('RowsRenderer', () => {
   it('records what it allocates in the ledger and takes it out when released', () => {
     const mock = recordingGL();
     const ledger = new GpuLedger();
-    const renderer = new RowsRenderer(null, mock.gl, 1, undefined, ledger);
+    const renderer = new RowsRenderer(null, mock.gl, ledger, 1, undefined);
     renderer.ensureShader(SHADER_DATA);
     const corners = ledger.snapshot().byOwner.rows;
     const palette = new RowsPalette();
@@ -453,7 +453,7 @@ describe('RowsRenderer', () => {
       // The terrain of the frame: its Mercator units of a meter of elevation
       const terrain = new TerrainContext();
       terrain.renderState = { ...terrain.renderState, elevationScale: 1 / 32_000_000 };
-      const renderer = new RowsRenderer(null, mock.gl, 1, terrain, ledger);
+      const renderer = new RowsRenderer(null, mock.gl, ledger, 1, terrain);
       renderer.ensureShader(SHADER_DATA);
       expect(renderer.groundReady).toBe(true);
       const before = ledger.snapshot().byOwner.rows ?? 0;
@@ -504,7 +504,7 @@ describe('RowsRenderer', () => {
 
   it('draws the pictures of an extension from its texture, sized by its distance scale', () => {
     const mock = recordingGL();
-    const renderer = new RowsRenderer(null, mock.gl, 1);
+    const renderer = new RowsRenderer(null, mock.gl, new GpuLedger(), 1);
     renderer.ensureShader(SHADER_DATA);
     const pictures = { id: 'pictures' } as unknown as WebGLTexture;
     const sprites: RowSpriteSource = {
@@ -545,7 +545,7 @@ describe('RowsRenderer', () => {
 
   it('writes the values of the styles before the chunks, and the writes in place after them', () => {
     const mock = recordingGL();
-    const renderer = new RowsRenderer(null, mock.gl, 1);
+    const renderer = new RowsRenderer(null, mock.gl, new GpuLedger(), 1);
     renderer.ensureShader(SHADER_DATA);
     const palette = new RowsPalette();
     const chunk = renderer.createChunk(chunkData(3, palette));
@@ -569,7 +569,7 @@ describe('RowsRenderer', () => {
 
   it('makes a chunk released before its upload without writing it', () => {
     const mock = recordingGL();
-    const renderer = new RowsRenderer(null, mock.gl, 1);
+    const renderer = new RowsRenderer(null, mock.gl, new GpuLedger(), 1);
     const chunk = renderer.createChunk(chunkData(2));
     renderer.disposeChunk(chunk);
     const at = mock.calls.length;

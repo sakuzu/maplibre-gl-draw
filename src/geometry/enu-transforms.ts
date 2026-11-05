@@ -63,6 +63,18 @@ export type EnuEdit =
     };
 
 /**
+ * What an edit does to the angle and the size of a feature, whatever its geometry
+ *
+ * @internal
+ */
+export interface EnuEditTurn {
+  /** The degrees added to the angle of a feature, and taken from its bearing */
+  readonly angleDegrees: number;
+  /** The factor of its size */
+  readonly sizeFactor: number;
+}
+
+/**
  * The values of a feature an edit changes (the shape of `TransformValues` of the Store)
  *
  * @internal
@@ -74,6 +86,9 @@ export interface EnuValues {
   readonly size?: number | null;
   readonly uniformScale?: boolean;
 }
+
+/** What an edit that neither turns nor scales does */
+const NO_TURN: EnuEditTurn = { angleDegrees: 0, sizeFactor: 1 };
 
 const DEGREE = Math.PI / 180;
 const RADIAN = 180 / Math.PI;
@@ -425,17 +440,32 @@ export function applyEnuEdit<V extends EnuValues>(edit: EnuEdit, values: V): V {
   const motion = cachedMotion(edit, values.uniformScale === true);
   const out: { -readonly [K in keyof EnuValues]: EnuValues[K] } = { ...values };
   if (motion) out.geometry = moveGeometry(motion, values.geometry);
+  const turn = enuEditTurn(edit);
   if (edit.kind === 'rotate') {
     if ('angleDegrees' in values) {
-      out.angleDegrees = withinTurn((values.angleDegrees ?? 0) + edit.angleDegrees);
+      out.angleDegrees = withinTurn((values.angleDegrees ?? 0) + turn.angleDegrees);
     }
     if ('bearingDegrees' in values && typeof values.bearingDegrees === 'number') {
-      out.bearingDegrees = withinTurn(values.bearingDegrees - edit.angleDegrees);
+      out.bearingDegrees = withinTurn(values.bearingDegrees - turn.angleDegrees);
     }
   } else if (edit.kind === 'scale') {
-    if ('size' in values) out.size = (values.size ?? 1) * edit.sizeFactor;
+    if ('size' in values) out.size = (values.size ?? 1) * turn.sizeFactor;
   }
   return out as V;
+}
+
+/**
+ * What an edit does to the angle and the size of a feature: the values {@link applyEnuEdit} writes
+ * them with once an edit is applied, so what follows an edit on the GPU while it lasts ends where
+ * the feature does
+ *
+ * @internal
+ */
+export function enuEditTurn(edit: EnuEdit): EnuEditTurn {
+  if (doesNothing(edit)) return NO_TURN;
+  if (edit.kind === 'rotate') return { angleDegrees: edit.angleDegrees, sizeFactor: 1 };
+  if (edit.kind === 'scale') return { angleDegrees: 0, sizeFactor: edit.sizeFactor };
+  return NO_TURN;
 }
 
 /**

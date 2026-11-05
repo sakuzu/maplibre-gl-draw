@@ -48,15 +48,11 @@ const BOARD_LOOK: FeatureStyle = {
 /** What each renderer of the types read from its render context, by type */
 const reads = new Map<string, Array<{ feature: Feature; ctx: RenderContext }>>();
 
-function rendererOf(type: string): FeatureTypeDefinition['renderer'] {
-  return {
-    onAdd() {},
-    draw(feature, ctx) {
-      const list = reads.get(type) ?? [];
-      list.push({ feature, ctx });
-      reads.set(type, list);
-    },
-    onRemove() {},
+function rendererOf(type: string): FeatureTypeDefinition['render'] {
+  return (feature, ctx) => {
+    const list = reads.get(type) ?? [];
+    list.push({ feature, ctx });
+    reads.set(type, list);
   };
 }
 
@@ -66,28 +62,28 @@ const BOARD: FeatureTypeDefinition = {
   geometry: 'Point',
   defaultStyle: BOARD_LOOK,
   styleRuleChannel: 'fill',
-  renderer: rendererOf('board'),
+  render: rendererOf('board'),
 };
 
 /** A pin: a type that declares no look */
 const PIN: FeatureTypeDefinition = {
   type: 'pin',
   geometry: 'Point',
-  renderer: rendererOf('pin'),
+  render: rendererOf('pin'),
 };
 
 /** A trail: a type of lines that declares no look */
 const TRAIL: FeatureTypeDefinition = {
   type: 'trail',
   geometry: 'LineString',
-  renderer: rendererOf('trail'),
+  render: rendererOf('trail'),
 };
 
 /** A plot: a type of areas that declares no look */
 const PLOT: FeatureTypeDefinition = {
   type: 'plot',
   geometry: 'Polygon',
-  renderer: rendererOf('plot'),
+  render: rendererOf('plot'),
 };
 
 /** A route: a type of lines whose rule colors its fill */
@@ -95,7 +91,7 @@ const SWATH: FeatureTypeDefinition = {
   type: 'swath',
   geometry: 'LineString',
   styleRuleChannel: 'fill',
-  renderer: rendererOf('swath'),
+  render: rendererOf('swath'),
 };
 
 const PROJECTION = { mainMatrix: new Float32Array(16) } as unknown as ProjectionData;
@@ -358,7 +354,7 @@ describe('the channel of the rule of a type, the one judgment of the instance', 
     view.draw.extensions.featureTypes.override({
       type: 'Image',
       geometry: 'Point',
-      renderer: rendererOf('Image'),
+      render: rendererOf('Image'),
     });
     expect(channelOf('Image')).toBe('fill');
     // A type removed is a name no type has
@@ -374,7 +370,7 @@ describe('the declaration of the look of a type', () => {
       view.draw.extensions.featureTypes.add({
         type: 'bad',
         geometry: 'Point',
-        renderer: rendererOf('bad'),
+        render: rendererOf('bad'),
         defaultStyle,
       } as never);
     expect(() => add('yellow')).toThrow(expect.objectContaining({ code: 'invalid-input' }));
@@ -393,7 +389,7 @@ describe('the declaration of the look of a type', () => {
       view.draw.extensions.featureTypes.override({
         type: 'Point',
         geometry: 'Point',
-        renderer: rendererOf('Point'),
+        render: rendererOf('Point'),
         defaultStyle: BOARD_LOOK,
       }),
     ).toThrow(expect.objectContaining({ code: 'invalid-input' }));
@@ -401,7 +397,7 @@ describe('the declaration of the look of a type', () => {
       view.draw.extensions.featureTypes.override({
         type: 'Point',
         geometry: 'Point',
-        renderer: rendererOf('Point'),
+        render: rendererOf('Point'),
         styleRuleChannel: 'fill',
       }),
     ).toThrow(expect.objectContaining({ code: 'invalid-input' }));
@@ -413,7 +409,7 @@ describe('the declaration of the look of a type', () => {
       view.draw.extensions.featureTypes.add({
         type: 'bad',
         geometry: 'Point',
-        renderer: rendererOf('bad'),
+        render: rendererOf('bad'),
         styleRuleChannel: 'outline',
       } as never),
     ).toThrow(expect.objectContaining({ code: 'invalid-input' }));
@@ -426,7 +422,7 @@ describe('the declaration of the look of a type', () => {
     const remove = view.draw.extensions.featureTypes.add({
       type: 'slip',
       geometry: 'Point',
-      renderer: rendererOf('slip'),
+      render: rendererOf('slip'),
       defaultStyle: look,
     });
     look.fillColor = '#000000';
@@ -455,23 +451,19 @@ describe('a color a shared renderer cannot read', () => {
     view.draw.extensions.featureTypes.add({
       type: 'scribble',
       geometry: 'Point',
-      renderer: {
-        onAdd() {},
-        draw(feature, ctx) {
-          const at = (feature.geometry as unknown as { coordinates: [number, number] }).coordinates;
-          ctx.line.draw([at, at], { width: 1, color: 'tomatoes', opacity: 1, lineStyle: 'solid' });
-          ctx.fill.draw([[at, at, at]], { color: 'not a color', opacity: 1 });
-          ctx.point.draw(at, {
-            shape: 'circle',
-            size: 4,
-            fillColor: '#ff0000',
-            fillOpacity: 1,
-            strokeColor: 'nope',
-            strokeWidth: 1,
-            strokeOpacity: 1,
-          });
-        },
-        onRemove() {},
+      render(feature, ctx) {
+        const at = (feature.geometry as unknown as { coordinates: [number, number] }).coordinates;
+        ctx.line.draw([at, at], { width: 1, color: 'tomatoes', opacity: 1, lineStyle: 'solid' });
+        ctx.fill.draw([[at, at, at]], { color: 'not a color', opacity: 1 });
+        ctx.point.draw(at, {
+          shape: 'circle',
+          size: 4,
+          fillColor: '#ff0000',
+          fillOpacity: 1,
+          strokeColor: 'nope',
+          strokeWidth: 1,
+          strokeOpacity: 1,
+        });
       },
     });
     const renderer = view.renderers.get('scribble');

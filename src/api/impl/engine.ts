@@ -297,6 +297,7 @@ export function createEngine(
 
   // 3. Create the CustomLayer
   const customLayer = createCustomLayer({
+    gpuLimitBytes: options.gpuLimitBytes,
     map,
     store,
     sketches: sketches.view,

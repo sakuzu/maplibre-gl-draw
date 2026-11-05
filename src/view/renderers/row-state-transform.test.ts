@@ -9,8 +9,14 @@
 
 import { describe, expect, it } from 'vitest';
 import { applyEnuEdit, type EnuEdit } from '../../geometry/enu-transforms.js';
+import { gpuOf } from '../../test-utils.js';
 import { moveOffsetFloat32 } from './row-motion.js';
-import { MotionStateValues, ROW_STATE_GLSL } from './row-state.js';
+import {
+  createRowStateTexture,
+  MotionStateValues,
+  ROW_STATE_GLSL,
+  RowStateUniforms,
+} from './row-state.js';
 
 /** Where a position is drawn: moved by the motion of a slot, from the origin to the camera */
 function drawnAt(
@@ -108,5 +114,66 @@ describe('the uniforms of the motions of the moving sets', () => {
     ]) {
       expect(ROW_STATE_GLSL).toContain(name);
     }
+  });
+});
+
+describe('what the edit of a moving set does to a row besides its position', () => {
+  const rotate: EnuEdit = { kind: 'rotate', center: [139.7, 35.6], angleDegrees: 30 };
+  const scale: EnuEdit = {
+    kind: 'scale',
+    center: [139.7, 35.6],
+    eastFactor: 2,
+    northFactor: 2,
+    sizeFactor: 2.5,
+  };
+
+  it('is the degrees and the factor the edit writes once it is applied, for each set', () => {
+    const values = new MotionStateValues();
+    values.set([null, rotate, scale, null], [139.7, 35.6], [139.7, 35.6]);
+    expect(Array.from(values.rotateScale)).toEqual([0, 1, 30, 1, 0, 2.5, 0, 1]);
+    const written = applyEnuEdit(rotate, {
+      geometry: { type: 'Point', coordinates: [139.7, 35.6] },
+      angleDegrees: 0,
+    });
+    expect(values.rotateScale[2]).toBe(written.angleDegrees);
+    values.set(undefined, [0, 0], [0, 0]);
+    expect(Array.from(values.rotateScale)).toEqual([0, 1, 0, 1, 0, 1, 0, 1]);
+  });
+
+  it('is read by the GLSL by the moving set of the byte of the row', () => {
+    expect(ROW_STATE_GLSL).toContain('uniform vec2 u_state_rotate_scale[4];');
+    expect(ROW_STATE_GLSL).toContain('float rowStateRotation(uint state)');
+    expect(ROW_STATE_GLSL).toContain('float rowStateScale(uint state)');
+  });
+
+  it('is written once its values change, and with the frame', () => {
+    const written: number[][] = [];
+    const gl = new Proxy(
+      {},
+      {
+        get: (_t, prop: string) => {
+          if (/^[A-Z_0-9]+$/.test(prop)) return 1;
+          return (...args: unknown[]) => {
+            if (prop === 'getUniformLocation') return { name: args[1] };
+            if (prop === 'createTexture') return {};
+            if (prop === 'uniform2fv' && (args[0] as { name: string }).name.endsWith('_scale')) {
+              written.push(Array.from(args[1] as Float32Array));
+            }
+            return undefined;
+          };
+        },
+      },
+    ) as unknown as WebGL2RenderingContext;
+    const texture = createRowStateTexture(gpuOf(gl), 1);
+    if (!texture) throw new Error('texture');
+    const translations = new Float32Array(8);
+    const uniforms = new RowStateUniforms(gl, {} as WebGLProgram);
+    uniforms.write({ texture, translations, transforms: [null, rotate] });
+    uniforms.write({ texture, translations, transforms: [null, rotate] });
+    expect(written).toEqual([[0, 1, 30, 1, 0, 1, 0, 1]]);
+    uniforms.write({ texture, translations, transforms: [null, scale] });
+    expect(written[1]).toEqual([0, 1, 0, 2.5, 0, 1, 0, 1]);
+    uniforms.write({ texture, translations, transforms: [null, null] });
+    expect(written[2]).toEqual([0, 1, 0, 1, 0, 1, 0, 1]);
   });
 });

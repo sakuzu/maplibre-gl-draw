@@ -17,6 +17,7 @@ import type { Map as MapLibreMap } from 'maplibre-gl';
 import type { HitTestTopmost } from '../../dispatcher/hit-test/topmost.js';
 import type { ExtensionInputRoute } from '../../dispatcher/input-router.js';
 import type { MouseNormalizedEvent } from '../../dispatcher/types.js';
+import { featureTablesInternals } from '../../feature-table/feature-tables.js';
 import type { BBox } from '../../geometry/types.js';
 import type { PluginInteractions } from '../../modes/handler.js';
 import type { ModeManager } from '../../modes/manager.js';
@@ -64,8 +65,9 @@ import {
   styleRuleChannelOfType,
 } from './extensions.js';
 import { preparePatch } from './features.js';
+import { createGpuParts } from './gpu-parts.js';
 import { bridgeMode, createInputRoute, deliverPointerLeave, toPointerEvent } from './input.js';
-import { createOverlayStack, terrainSurfaceOf } from './render-context.js';
+import { adaptGpuFeatureRenderer, createOverlayStack, terrainSurfaceOf } from './render-context.js';
 import { validateExtension } from './validate-extension.js';
 
 /**
@@ -128,6 +130,9 @@ export interface ExtensionHost {
  *
  * @internal
  */
+/** How long what the rest of the page takes is kept, in milliseconds */
+const ROW_ROOM_READ_MS = 1_000;
+
 export function createExtensionHost(deps: ExtensionHostDeps): ExtensionHost {
   const { map, context, customLayer, modeManager, featureCompanions } = deps;
   const { store } = context;
@@ -196,6 +201,22 @@ export function createExtensionHost(deps: ExtensionHostDeps): ExtensionHost {
     appliedStyle,
   };
   const overlays = createOverlayStack(customLayer, adapterDeps);
+  const rowRoom = { limitBytes: 0, readAt: Number.NEGATIVE_INFINITY };
+  const gpuParts = createGpuParts({
+    ledger: customLayer.getGpuLedger(),
+    // What the device has left once the rest of the page is counted, the heap of the documents
+    // and the other instances among it: the sum stays under the limit of the device. Reading the
+    // rest may walk a document, and it moves slowly, so an allocation does not read it each time
+    rowLimitBytes: () => {
+      const now = performance.now();
+      if (now >= rowRoom.readAt + ROW_ROOM_READ_MS) {
+        const { limitBytes, bytes } = getDraw().memory.get();
+        rowRoom.limitBytes = limitBytes - (bytes - customLayer.getGpuLedger().rowBytesHeld);
+        rowRoom.readAt = now;
+      }
+      return rowRoom.limitBytes;
+    },
+  });
 
   /** An installer that installs nothing once the instance is destroyed */
   const guarded = <T>(installer: Installer<T>): Installer<T> => ({
@@ -285,7 +306,6 @@ export function createExtensionHost(deps: ExtensionHostDeps): ExtensionHost {
     map,
     store,
     terrain,
-    gpu: customLayer.getGpuLedger(),
     pixelRatio: context.pixelRatioSource,
     autoNameGenerator: context.autoNameGenerator,
     messages: context.messages,
@@ -361,12 +381,37 @@ export function createExtensionHost(deps: ExtensionHostDeps): ExtensionHost {
       off: base.off,
       once: base.once,
       terrain: base.terrain,
-      gpu: base.gpu,
       names: base.names,
       messages: base.messages,
       screen: base.screen,
       invalidate: base.invalidate,
       extensions: createExtensionsCollections(registries, (remove) => added.push(remove)),
+      webgl: {
+        addOverlay(definition) {
+          const part = gpuParts.add(definition, plugin.name);
+          const remove = overlays.addPart(part);
+          added.push(() => {
+            remove();
+            part.release();
+          });
+        },
+        addFeatureRenderer(featureType, definition) {
+          if (!registries.featureTypes.has(featureType)) {
+            throw new DrawError('not-found', `There is no feature type ${featureType}`);
+          }
+          const part = gpuParts.add(definition, plugin.name);
+          const remove = customLayer.registerFeatureRenderer(
+            featureType,
+            adaptGpuFeatureRenderer(featureType, part, adapterDeps),
+          );
+          added.push(() => {
+            remove();
+            part.release();
+          });
+        },
+        rows: (layerId) => featureTablesInternals(store.tables)?.view(layerId),
+        draggedRows: () => getDraw().rendered.getDraggedRows(),
+      },
       emit: (event, payload) => deps.emitPluginEvent(event, payload),
     };
     try {

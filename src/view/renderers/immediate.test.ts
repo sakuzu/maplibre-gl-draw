@@ -18,6 +18,7 @@ import type { Map as MapLibreMap, ProjectionData } from 'maplibre-gl';
 import { describe, expect, it } from 'vitest';
 import type { Coordinate } from '../../store/types.js';
 import { EarcutCache } from '../cache/earcut.js';
+import { GpuLedger } from '../gpu-ledger.js';
 import type { ShaderData } from '../shaders/helpers.js';
 import type { LineBatchItem, LineBatchShape } from './line/line-types.js';
 import { SDFLineRenderer } from './line/sdf-line.js';
@@ -266,7 +267,7 @@ const FILL_AND_STROKE = {
 describe('immediate mode of SDFLineRenderer', () => {
   it('does not recreate the coordinate texture or instance buffer when drawing twice', () => {
     const mock = createRecordingGL();
-    const renderer = new SDFLineRenderer({} as MapLibreMap, mock.gl);
+    const renderer = new SDFLineRenderer({} as MapLibreMap, mock.gl, new GpuLedger());
     renderer.ensureShader(SHADER_DATA);
 
     // The first time: only the coordinate texture is newly allocated
@@ -289,7 +290,7 @@ describe('immediate mode of SDFLineRenderer', () => {
 
   it('transfers the coordinates with texSubImage2D rather than texImage2D', () => {
     const mock = createRecordingGL();
-    const renderer = new SDFLineRenderer({} as MapLibreMap, mock.gl);
+    const renderer = new SDFLineRenderer({} as MapLibreMap, mock.gl, new GpuLedger());
     renderer.ensureShader(SHADER_DATA);
 
     mock.reset();
@@ -302,7 +303,7 @@ describe('immediate mode of SDFLineRenderer', () => {
 
   it('draws line after line from the same scratch arrays (no allocation per line)', () => {
     const mock = createRecordingGL();
-    const renderer = new SDFLineRenderer({} as MapLibreMap, mock.gl);
+    const renderer = new SDFLineRenderer({} as MapLibreMap, mock.gl, new GpuLedger());
     renderer.ensureShader(SHADER_DATA);
     const style = {
       width: 2,
@@ -343,7 +344,7 @@ describe('immediate mode of SDFLineRenderer', () => {
 describe('immediate mode of FillShaderManager', () => {
   it('issues a draw call with indexed rendering', () => {
     const mock = createRecordingGL();
-    const manager = new FillShaderManager(mock.gl);
+    const manager = new FillShaderManager(mock.gl, new GpuLedger());
     manager.ensureShader(SHADER_DATA);
 
     mock.reset();
@@ -368,7 +369,7 @@ describe('immediate mode of FillShaderManager', () => {
 
   it('does not recreate the VAO, vertex buffer or index buffer when drawing twice', () => {
     const mock = createRecordingGL();
-    const manager = new FillShaderManager(mock.gl);
+    const manager = new FillShaderManager(mock.gl, new GpuLedger());
     manager.ensureShader(SHADER_DATA);
 
     mock.reset();
@@ -386,7 +387,7 @@ describe('immediate mode of FillShaderManager', () => {
 
   it('creates only two buffers and one VAO at construction', () => {
     const mock = createRecordingGL();
-    new FillShaderManager(mock.gl);
+    new FillShaderManager(mock.gl, new GpuLedger());
 
     // The vertex buffer + the index buffer + the VAO
     expect(mock.created()).toEqual({ textures: 0, buffers: 2, vaos: 1 });
@@ -409,14 +410,14 @@ describe('immediate mode of StrokeRenderer', () => {
 
   it('creates one vertex buffer and one VAO at construction', () => {
     const mock = createRecordingGL();
-    new StrokeRenderer({} as MapLibreMap, mock.gl);
+    new StrokeRenderer({} as MapLibreMap, mock.gl, new GpuLedger());
 
     expect(mock.created()).toEqual({ textures: 0, buffers: 1, vaos: 1 });
   });
 
   it('does not recreate the VAO or the vertex buffer when drawing twice', () => {
     const mock = createRecordingGL();
-    const renderer = new StrokeRenderer({} as MapLibreMap, mock.gl);
+    const renderer = new StrokeRenderer({} as MapLibreMap, mock.gl, new GpuLedger());
     renderer.ensureShader(SHADER_DATA);
 
     mock.reset();
@@ -447,11 +448,17 @@ describe('the triangulation cache of two draw instances', () => {
     // with the first one's indices (out of range, or a broken fill)
     const first = createRecordingGL();
     const second = createRecordingGL();
-    const firstRenderer = new SDFPolygonRenderer(first.gl, undefined, {
-      earcut: new EarcutCache(),
+    const firstRenderer = new SDFPolygonRenderer(first.gl, {
+      gpu: new GpuLedger(),
+      ...{
+        earcut: new EarcutCache(),
+      },
     });
-    const secondRenderer = new SDFPolygonRenderer(second.gl, undefined, {
-      earcut: new EarcutCache(),
+    const secondRenderer = new SDFPolygonRenderer(second.gl, {
+      gpu: new GpuLedger(),
+      ...{
+        earcut: new EarcutCache(),
+      },
     });
     firstRenderer.ensureShader(SHADER_DATA);
     secondRenderer.ensureShader(SHADER_DATA);
@@ -495,7 +502,7 @@ describe('immediate mode of SDFPolygonRenderer', () => {
 
   it('builds an index sequence where the outline comes after the fill', () => {
     const mock = createRecordingGL();
-    const renderer = new SDFPolygonRenderer(mock.gl);
+    const renderer = new SDFPolygonRenderer(mock.gl, { gpu: new GpuLedger() });
     renderer.ensureShader(SHADER_DATA);
 
     const polygons: SDFPolygonBatchData[] = [
@@ -557,7 +564,7 @@ describe('immediate mode of SDFPolygonRenderer', () => {
 
   it('orders "fill -> outline" by the input order of the polygons for several polygons', () => {
     const mock = createRecordingGL();
-    const renderer = new SDFPolygonRenderer(mock.gl);
+    const renderer = new SDFPolygonRenderer(mock.gl, { gpu: new GpuLedger() });
     renderer.ensureShader(SHADER_DATA);
 
     const second: Coordinate[] = SQUARE.map(([lng, lat]) => [lng + 10, lat + 10]);
@@ -586,7 +593,7 @@ describe('immediate mode of SDFPolygonRenderer', () => {
 
   it('does not recreate the VAO, vertex buffer or index buffer when drawing twice', () => {
     const mock = createRecordingGL();
-    const renderer = new SDFPolygonRenderer(mock.gl);
+    const renderer = new SDFPolygonRenderer(mock.gl, { gpu: new GpuLedger() });
     // The vertex buffer + the index buffer + the VAO are created only once, at construction
     expect(mock.created()).toEqual({ textures: 0, buffers: 2, vaos: 1 });
 

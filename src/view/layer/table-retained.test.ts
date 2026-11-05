@@ -13,7 +13,6 @@
 
 import type { ProjectionData } from 'maplibre-gl';
 import { beforeEach, describe, expect, it } from 'vitest';
-import type { LayerTableView } from '../../api/tables.js';
 import { draggedRowsOf } from '../../feature-table/dragged-rows.js';
 import {
   createFeatureTablesStore,
@@ -33,6 +32,7 @@ import {
   tablesOfFeatures,
 } from '../../test-utils.js';
 import { createFeatureCompanionRegistry } from '../feature-companion.js';
+import { GpuLedger } from '../gpu-ledger.js';
 import type { RetainedRendererSet } from '../renderers/retained.js';
 import { TerrainContext } from '../terrain/context.js';
 import { setTerrainCameraMoving } from '../terrain/state.js';
@@ -188,6 +188,7 @@ function setup(features: Feature[], targetRows?: number) {
   const { internals, table } = tablesOfFeatures('layer', features, targetRows);
   const mocks = createRenderers();
   const renderer = new TableLayerRenderer({
+    ledger: new GpuLedger(),
     gl: createGL(),
     terrain,
     requestRepaint: () => {},
@@ -323,6 +324,7 @@ describe('the order of the drawing of a layer held as rows', () => {
     const { internals, table } = tablesOfFeatures('layer', interleaved(200, 8), 20);
     const mocks = createRenderers();
     const renderer = new TableLayerRenderer({
+      ledger: new GpuLedger(),
       gl: createGL(),
       terrain,
       requestRepaint: () => {},
@@ -355,6 +357,7 @@ describe('the order of the drawing of a layer held as rows', () => {
     writer.addRowBlocks('layer', builder.finish());
     const mocks = createRenderers();
     const renderer = new TableLayerRenderer({
+      ledger: new GpuLedger(),
       gl: createGL(),
       terrain,
       requestRepaint: () => {},
@@ -482,7 +485,12 @@ describe('the state of the rows', () => {
     const { internals, table } = tablesOfFeatures('layer', features);
     const gl = createGL();
     const mocks = createRenderers();
-    const renderer = new TableLayerRenderer({ gl, terrain, requestRepaint: () => {} });
+    const renderer = new TableLayerRenderer({
+      ledger: new GpuLedger(),
+      gl,
+      terrain,
+      requestRepaint: () => {},
+    });
     const draw = (): void => {
       renderer.beginFrame();
       renderer.drawLayer(
@@ -539,7 +547,12 @@ describe('the state of the rows', () => {
       drawn.push(f);
       return true;
     };
-    const renderer = new TableLayerRenderer({ gl: createGL(), terrain, requestRepaint: () => {} });
+    const renderer = new TableLayerRenderer({
+      ledger: new GpuLedger(),
+      gl: createGL(),
+      terrain,
+      requestRepaint: () => {},
+    });
     const ids = internals.ids;
     internals.states.setHidden(Int32Array.of(ids.handleOf('a')), true);
     internals.states.setMoving(Int32Array.of(ids.handleOf('b')), 1);
@@ -593,6 +606,7 @@ describe('the rows drawn at once while they are dragged in bulk', () => {
       internals.states.setTransform(2, transform);
       internals.states.setTranslation(2, 0.5, -0.25);
       const renderer = new TableLayerRenderer({
+        ledger: new GpuLedger(),
         gl: createGL(),
         terrain,
         requestRepaint: () => {},
@@ -619,119 +633,6 @@ describe('the rows drawn at once while they are dragged in bulk', () => {
       expect(properties['maplibre-gl-draw:rotation']).toBe(transform.kind === 'rotate' ? 40 : 10);
       expect(properties['maplibre-gl-draw:scale']).toBe(transform.kind === 'scale' ? 3 : 2);
     }
-  });
-});
-
-describe('the rows an extension draws from the rows', () => {
-  /** Markers of a custom type and dashed lines drawn at once, interleaved */
-  function scene(): Feature[] {
-    const dashed = (id: string, y: number): Feature =>
-      feature(
-        id,
-        'LineString',
-        [
-          [0, y],
-          [1, y],
-        ],
-        { style: { lineStyle: 'dashed' } },
-      );
-    return [
-      feature('m0', 'Marker', [0, 0], { properties: { kind: 'row' } }),
-      feature('m1', 'Marker', [1, 0], { properties: { kind: 'row' } }),
-      dashed('d2', 1),
-      feature('m3', 'Marker', [2, 0], { properties: { kind: 'row' } }),
-      feature('m4', 'Marker', [3, 0], { properties: { kind: 'feature' } }),
-      feature('m5', 'Marker', [4, 0], { properties: { kind: 'row' } }),
-    ];
-  }
-
-  function drawScene(options: { appliesToRow?: boolean; hide?: string; move?: string } = {}) {
-    const { internals, table } = tablesOfFeatures('layer', scene());
-    const mocks = createRenderers();
-    const calls: string[] = [];
-    let made = 0;
-    mocks.deps.batchManager.processFeature = (f: Feature) => {
-      calls.push(`feature ${f.id}`);
-      return true;
-    };
-    const renderer = {
-      name: 'markers',
-      onAdd: () => {},
-      onRemove: () => {},
-      draw: (f: Feature) => calls.push(`draw ${f.id}`),
-      appliesTo: (f: Feature) => {
-        made++;
-        return f.properties.kind === 'row' || f.properties.kind === 'feature';
-      },
-      ...(options.appliesToRow && {
-        appliesToRow: (view: LayerTableView, handle: number) =>
-          ['row', 'feature'].includes(view.getRowValue(handle, 'kind') as string),
-      }),
-      drawRows: (view: LayerTableView, handles: Int32Array) => {
-        calls.push(`rows ${Array.from(handles, (h) => internals.ids.idOf(h)).join(',')}`);
-        void view;
-      },
-    };
-    mocks.deps.customRenderers.set('Marker', renderer as never);
-    // A companion of the row m4: it is drawn from its feature, with its companion
-    mocks.deps.companions.register({
-      id: 'c',
-      has: (f: Feature) => f.id === 'm4',
-      hasRow: (view: LayerTableView, handle: number) =>
-        view.getRowValue(handle, 'kind') === 'feature',
-      draw: (f: Feature) => calls.push(`companion ${f.id}`),
-      hitTest: () => null,
-      onCompanionClick: () => true,
-    });
-    const ids = internals.ids;
-    if (options.hide) internals.states.setHidden(Int32Array.of(ids.handleOf(options.hide)), true);
-    if (options.move) {
-      internals.states.setMoving(Int32Array.of(ids.handleOf(options.move)), 2);
-      internals.states.setTranslation(2, 1, 1);
-    }
-    const layerRenderer = new TableLayerRenderer({
-      gl: createGL(),
-      terrain,
-      requestRepaint: () => {},
-      buildBudgetMs: Number.POSITIVE_INFINITY,
-    });
-    for (let i = 0; i < 2; i++) {
-      calls.length = 0;
-      made = 0;
-      layerRenderer.beginFrame();
-      layerRenderer.drawLayer(
-        internals,
-        table,
-        LAYER,
-        { projectionData: PROJECTION, zoom: 10, bounds: undefined },
-        mocks.deps,
-      );
-      layerRenderer.endFrame();
-    }
-    return { calls, made: () => made };
-  }
-
-  it('draws runs of them by drawRows, in the order of the layer between the features drawn at once', () => {
-    const { calls } = drawScene({ appliesToRow: true });
-    expect(calls).toEqual([
-      'rows m0,m1',
-      'feature d2',
-      'rows m3',
-      'companion m4',
-      'draw m4',
-      'rows m5',
-    ]);
-  });
-
-  it('skips the hidden rows, and gives a row being dragged as it is written', () => {
-    expect(drawScene({ appliesToRow: true, hide: 'm1' }).calls[0]).toBe('rows m0');
-    expect(drawScene({ appliesToRow: true, move: 'm0' }).calls[0]).toBe('rows m0,m1');
-  });
-
-  it('makes no feature to classify and draw them when the renderer answers from the rows', () => {
-    const { made } = drawScene({ appliesToRow: true });
-    // The feature of m4 (drawn by draw with its companion) is asked once, when it is drawn
-    expect(made()).toBe(1);
   });
 });
 
@@ -775,6 +676,7 @@ describe('the rows of a layer of xyz with an extension that answers from feature
       return true;
     };
     const renderer = new TableLayerRenderer({
+      ledger: new GpuLedger(),
       gl: createGL(),
       terrain,
       requestRepaint: () => {},

@@ -40,6 +40,7 @@ import {
   tablesOfFeatures,
 } from '../../test-utils.js';
 import { createFeatureCompanionRegistry } from '../feature-companion.js';
+import { GpuLedger } from '../gpu-ledger.js';
 import { retainedDrawRun } from '../renderers/draw-run.js';
 import type { RetainedRendererSet } from '../renderers/retained.js';
 import { type RowsChunk, RowsRenderer } from '../renderers/rows/rows-renderer.js';
@@ -113,7 +114,7 @@ function features(count: number, seed: number): Feature[] {
 function setup(list: Feature[], targetRows = 16, versions = false) {
   const tables = tablesOfFeatures('layer', list, targetRows);
   const mock = memoryGL();
-  const rows = new RowsRenderer(null, mock.gl, 1, terrain);
+  const rows = new RowsRenderer(null, mock.gl, new GpuLedger(), 1, terrain);
   rows.ensureShader({ vertexShaderPrelude: '', define: '', variantName: 'mercator' });
   const made: RowsChunk[] = [];
   const createChunk = rows.createChunk.bind(rows);
@@ -158,6 +159,7 @@ function setup(list: Feature[], targetRows = 16, versions = false) {
     companions: createFeatureCompanionRegistry(),
   };
   const renderer = new TableLayerRenderer({
+    ledger: new GpuLedger(),
     gl: mock.gl,
     terrain,
     requestRepaint: () => {},

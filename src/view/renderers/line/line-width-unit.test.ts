@@ -13,6 +13,7 @@
 import type { Map as MapLibreMap, ProjectionData } from 'maplibre-gl';
 import { describe, expect, it } from 'vitest';
 import { metersPerPixelAtZoom } from '../../../shared/math/ground-scale.js';
+import { GpuLedger } from '../../gpu-ledger.js';
 import type { ShaderData } from '../../shaders/helpers.js';
 import type { SDFStrokeOptions } from './line-types.js';
 import { SDFLineRenderer } from './sdf-line.js';
@@ -62,7 +63,7 @@ function recordingGL(): { gl: WebGL2RenderingContext; widths: number[] } {
 /** The `u_width` a draw of a line at latitude 35 sets, in physical pixels at a ratio of 1 */
 function widthOf(width: number, options: SDFStrokeOptions, zoom: number): number | undefined {
   const { gl, widths } = recordingGL();
-  const renderer = new SDFLineRenderer({} as MapLibreMap, gl, 1);
+  const renderer = new SDFLineRenderer({} as MapLibreMap, gl, new GpuLedger(), 1);
   renderer.ensureShader(SHADER_DATA);
   renderer.draw(
     [

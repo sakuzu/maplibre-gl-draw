@@ -377,7 +377,7 @@ export class SDFPolygonRenderer {
   /** The variant of the program that draws rows held as columns (made on its first use) */
   private rowProgram: RowPolygonProgram | null = null;
   /** Where the GPU memory this renderer allocates is recorded */
-  private readonly ledger: GpuLedger | undefined;
+  private readonly ledger: GpuLedger;
   /** The run of the retained draws of the context (shared with the other renderers) */
   private readonly run: RetainedDrawRun;
   /**
@@ -409,8 +409,8 @@ export class SDFPolygonRenderer {
 
   constructor(
     gl: WebGL2RenderingContext,
+    scope: PolygonRendererScope,
     pixelRatio?: PixelRatioInput,
-    scope: PolygonRendererScope = {},
   ) {
     this.gl = gl;
     this.pixelRatio = pixelRatio;
@@ -776,7 +776,7 @@ void main() {
     // Transfer the data to the buffer
     gl.bindBuffer(gl.ARRAY_BUFFER, this.vertexBuffer);
     gl.bufferData(gl.ARRAY_BUFFER, vertexData, gl.DYNAMIC_DRAW);
-    this.ledger?.record(this.vertexBuffer, 'polygons', 'buffer', vertexData.byteLength);
+    this.ledger.record(this.vertexBuffer, 'polygons', 'buffer', vertexData.byteLength);
 
     // Draw
     this.run.useProgram(this.program);
@@ -790,7 +790,7 @@ void main() {
     // The ELEMENT_ARRAY_BUFFER binding is VAO state, so the transfer is done after
     // binding the VAO
     gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, indexData, gl.DYNAMIC_DRAW);
-    this.ledger?.record(this.indexBuffer, 'polygons', 'buffer', indexData.byteLength);
+    this.ledger.record(this.indexBuffer, 'polygons', 'buffer', indexData.byteLength);
     drawFillWithTerrainCull(gl, this.terrain, () => {
       gl.drawElements(gl.TRIANGLES, indexData.length, gl.UNSIGNED_INT, 0);
     });
@@ -842,7 +842,7 @@ void main() {
     const vertexBuffer = gl.createBuffer()!;
     gl.bindBuffer(gl.ARRAY_BUFFER, vertexBuffer);
     gl.bufferData(gl.ARRAY_BUFFER, vertexData, gl.STATIC_DRAW);
-    this.ledger?.record(vertexBuffer, 'polygons', 'buffer', vertexData.byteLength);
+    this.ledger.record(vertexBuffer, 'polygons', 'buffer', vertexData.byteLength);
 
     this.setupVertexAttribs();
 
@@ -850,7 +850,7 @@ void main() {
     const indexBuffer = gl.createBuffer()!;
     gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indexBuffer);
     gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, indexData, gl.STATIC_DRAW);
-    this.ledger?.record(indexBuffer, 'polygons', 'buffer', indexData.byteLength);
+    this.ledger.record(indexBuffer, 'polygons', 'buffer', indexData.byteLength);
 
     gl.bindVertexArray(null);
 
@@ -944,14 +944,14 @@ void main() {
     const vertexBuffer = gl.createBuffer()!;
     gl.bindBuffer(gl.ARRAY_BUFFER, vertexBuffer);
     gl.bufferData(gl.ARRAY_BUFFER, vertexBytes, gl.STATIC_DRAW);
-    this.ledger?.record(vertexBuffer, 'polygons', 'buffer', vertexBytes);
+    this.ledger.record(vertexBuffer, 'polygons', 'buffer', vertexBytes);
     this.setupVertexAttribs(true);
 
     const indexBytes = indexCount * 4;
     const indexBuffer = gl.createBuffer()!;
     gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indexBuffer);
     gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, indexBytes, gl.STATIC_DRAW);
-    this.ledger?.record(indexBuffer, 'polygons', 'buffer', indexBytes);
+    this.ledger.record(indexBuffer, 'polygons', 'buffer', indexBytes);
 
     gl.bindVertexArray(null);
     return {
@@ -1060,8 +1060,8 @@ void main() {
    */
   disposeRetained(batch: RetainedPolygonBatch): void {
     const gl = this.gl;
-    this.ledger?.release(batch.vertexBuffer);
-    this.ledger?.release(batch.indexBuffer);
+    this.ledger.release(batch.vertexBuffer);
+    this.ledger.release(batch.indexBuffer);
     gl.deleteVertexArray(batch.vao);
     gl.deleteBuffer(batch.vertexBuffer);
     gl.deleteBuffer(batch.indexBuffer);
@@ -1411,12 +1411,12 @@ void main() {
     }
     this.disposeRowProgram();
     if (this.vertexBuffer) {
-      this.ledger?.release(this.vertexBuffer);
+      this.ledger.release(this.vertexBuffer);
       gl.deleteBuffer(this.vertexBuffer);
       this.vertexBuffer = null;
     }
     if (this.indexBuffer) {
-      this.ledger?.release(this.indexBuffer);
+      this.ledger.release(this.indexBuffer);
       gl.deleteBuffer(this.indexBuffer);
       this.indexBuffer = null;
     }

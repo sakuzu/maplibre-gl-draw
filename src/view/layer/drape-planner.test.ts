@@ -12,6 +12,7 @@
 import type { Map as MapLibreMap } from 'maplibre-gl';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Store } from '../../store/store.js';
+import { GpuLedger } from '../gpu-ledger.js';
 import type { RetainedStyleResolver } from '../renderers/retained.js';
 import { TerrainContext } from '../terrain/context.js';
 import type { RenderableTerrainTile } from '../terrain/detect.js';
@@ -39,6 +40,7 @@ const fake = {
   overflow: false,
   packId: 1 as number | null,
   upload: true,
+  lastError: '',
   drapedDatasets: new Set<string>(['c1']),
   /** Number of calls of collectDrapeElements */
   collects: 0,
@@ -113,9 +115,8 @@ vi.mock('../terrain/drape/renderer.js', () => ({
   DRAPE_MAX_SOURCES: 8,
   DRAPE_OWNER: 'drape',
   DrapeRenderer: class {
-    lastError = '';
-    useLedger(): this {
-      return this;
+    get lastError(): string {
+      return fake.lastError;
     }
     upload(): boolean {
       return fake.upload;
@@ -141,6 +142,7 @@ function createPlanner(options: { timeSlicing?: boolean } = {}) {
   };
   const map = { triggerRepaint: vi.fn() };
   const planner = new DrapePlanner({
+    ledger: new GpuLedger(),
     map: map as unknown as MapLibreMap,
     timeSlicing: options.timeSlicing,
     store: {
@@ -259,6 +261,15 @@ describe('DrapePlanner reasons', () => {
     const limit = createPlanner();
     expect(limit.frame()).toBe(false);
     expect(limit.reason()).toBe('texture-limit');
+  });
+
+  it('tells a table refused by the limit of the instance, and draws without the drape', () => {
+    fake.upload = false;
+    fake.lastError = 'gpu-limit: edgeTexSize needs 10 rows';
+    const limit = createPlanner();
+    expect(limit.frame()).toBe(false);
+    expect(limit.reason()).toBe('gpu-limit');
+    fake.lastError = '';
   });
 
   it('reports no-dem-tiles without a previous plan, and keeps a usable plan (stale-plan)', () => {

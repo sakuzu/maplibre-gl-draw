@@ -178,6 +178,8 @@ export function createDrawOnEngine(
       } finally {
         memory.dispose();
         destroyed = true;
+        // Extensions may give back what they share in a microtask of their removal
+        queueMicrotask(() => engine.customLayer.drainGpu());
       }
     },
   };

@@ -461,7 +461,7 @@ export class TableDrape {
    * @param ledger Where the GPU memory of the drape is recorded (nothing is recorded when
    *   omitted)
    */
-  constructor(private readonly ledger?: GpuLedger) {}
+  constructor(private readonly ledger: GpuLedger) {}
 
   /** Whether the last frame left tiles to build (the next frames build them) */
   get hasPendingWork(): boolean {
@@ -666,13 +666,15 @@ export class TableDrape {
       this.pendingWork = false;
     }
 
-    this.renderer ??= new DrapeRenderer(input.gl, true).useLedger(this.ledger);
+    this.renderer ??= new DrapeRenderer(input.gl, this.ledger, true);
     const meshSize = getTerrainMeshSize(input.mapTerrain);
     if (!this.renderer.ensure(input.shaderData, meshSize)) {
       return this.unused(this.renderer.lastError || 'ensure-failed');
     }
     if (!ground && !this.renderer.uploadRows(this.index.storage, this.copies)) {
-      return this.unused('texture-limit');
+      return this.unused(
+        this.renderer.lastError.startsWith('gpu-limit') ? 'gpu-limit' : 'texture-limit',
+      );
     }
     const planTiles: DrapePlanTile[] = [];
     const tileOf = new Map<unknown, DrapeTile>();

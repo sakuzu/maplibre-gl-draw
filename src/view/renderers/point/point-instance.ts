@@ -582,7 +582,7 @@ export class PointInstanceRenderer {
   /** The terrain state of the draw instance this renderer belongs to */
   private readonly terrain: TerrainContext;
   /** Where the GPU memory this renderer allocates is recorded */
-  private readonly ledger: GpuLedger | undefined;
+  private readonly ledger: GpuLedger;
   /** The run of the retained draws of the context (shared with the other renderers) */
   private readonly run: RetainedDrawRun;
   /**
@@ -594,9 +594,9 @@ export class PointInstanceRenderer {
   constructor(
     _map: MapLibreMap,
     gl: WebGL2RenderingContext,
+    ledger: GpuLedger,
     pixelRatio?: PixelRatioInput,
     terrain: TerrainContext = new TerrainContext(),
-    ledger?: GpuLedger,
   ) {
     this.gl = gl;
     this.pixelRatio = pixelRatio;
@@ -608,7 +608,7 @@ export class PointInstanceRenderer {
     if (this.quadBuffer) {
       gl.bindBuffer(gl.ARRAY_BUFFER, this.quadBuffer);
       gl.bufferData(gl.ARRAY_BUFFER, generateQuadVertices(), gl.STATIC_DRAW);
-      ledger?.record(this.quadBuffer, 'points', 'buffer', QUAD_BYTES);
+      ledger.record(this.quadBuffer, 'points', 'buffer', QUAD_BYTES);
     }
   }
 
@@ -1003,7 +1003,7 @@ void main() {
 
     gl.bindBuffer(gl.ARRAY_BUFFER, this.instanceBuffer);
     gl.bufferData(gl.ARRAY_BUFFER, instanceData, gl.DYNAMIC_DRAW);
-    this.ledger?.record(this.instanceBuffer, 'points', 'buffer', instanceData.byteLength);
+    this.ledger.record(this.instanceBuffer, 'points', 'buffer', instanceData.byteLength);
 
     this.run.useProgram(this.program);
     this.setProjectionUniforms(this.program);
@@ -1048,7 +1048,7 @@ void main() {
     gl.bindBuffer(gl.ARRAY_BUFFER, instanceBuffer);
     const data = buildPointInstanceData(points, origin, this.pixelRatio, this.terrain, shape);
     gl.bufferData(gl.ARRAY_BUFFER, data, gl.STATIC_DRAW);
-    this.ledger?.record(instanceBuffer, 'points', 'buffer', data.byteLength);
+    this.ledger.record(instanceBuffer, 'points', 'buffer', data.byteLength);
 
     const vao = this.createVAOWith(instanceBuffer);
 
@@ -1085,7 +1085,7 @@ void main() {
     gl.bindBuffer(gl.ARRAY_BUFFER, instanceBuffer);
     const data = buildPackedPointInstanceData(points, origin, this.pixelRatio, this.terrain, shape);
     gl.bufferData(gl.ARRAY_BUFFER, data, gl.STATIC_DRAW);
-    this.ledger?.record(instanceBuffer, 'points', 'buffer', data.byteLength);
+    this.ledger.record(instanceBuffer, 'points', 'buffer', data.byteLength);
 
     const vao = this.createVAOWith(instanceBuffer);
 
@@ -1123,7 +1123,7 @@ void main() {
     gl.bindBuffer(gl.ARRAY_BUFFER, instanceBuffer);
     const data = instances.subarray(0, count * ROW_POINT_STRIDE);
     gl.bufferData(gl.ARRAY_BUFFER, data, gl.STATIC_DRAW);
-    this.ledger?.record(instanceBuffer, 'points', 'buffer', data.byteLength);
+    this.ledger.record(instanceBuffer, 'points', 'buffer', data.byteLength);
     const vao = this.createVAOWith(instanceBuffer, true);
     return {
       shape: 'circle',
@@ -1246,7 +1246,7 @@ void main() {
 
     // The buffer of the billboard is shared and stays (`dispose` deletes it)
     gl.deleteVertexArray(batch.vao);
-    this.ledger?.release(batch.instanceBuffer);
+    this.ledger.release(batch.instanceBuffer);
     gl.deleteBuffer(batch.instanceBuffer);
   }
 
@@ -1284,12 +1284,12 @@ void main() {
     this.disposePrograms();
 
     if (this.instanceBuffer) {
-      this.ledger?.release(this.instanceBuffer);
+      this.ledger.release(this.instanceBuffer);
       gl.deleteBuffer(this.instanceBuffer);
       this.instanceBuffer = null;
     }
     if (this.quadBuffer) {
-      this.ledger?.release(this.quadBuffer);
+      this.ledger.release(this.quadBuffer);
       gl.deleteBuffer(this.quadBuffer);
       this.quadBuffer = null;
     }

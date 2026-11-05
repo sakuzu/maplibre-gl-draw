@@ -107,7 +107,7 @@ GeoJSON のファイルは `draw.document.load` で 1 度に読めます。
 
 描く 1 回が完全でも、絵が完全とは限りません。地図のタイルと DEM は
 非同期に届きますし、描く 1 回の中では終えられない仕事もあります
-(provider の応答や、何回かの描画にかけて資源を用意するオーバーレイの
+(provider の応答や、何回かの描画にかけてデータを用意するオーバーレイの
 描画)。そうした仕事が残っているかどうかは `draw.hasPendingWork()`
 でわかります。地図は、このライブラリーが直前の 1 回で次の描画を
 求めていても `idle` を発火するので、`idle` を待ったあと、描いた
@@ -152,6 +152,16 @@ const thumbnail = await draw.captureImage({
 `gpuBytes` は描画が GPU に割り当てた量で、`jsBytes` は地物とその
 位置の数からの見積もりです (ページのヒープは、どのブラウザーでも
 わかるわけではありません)。基図とページのほかの部分は入りません。
+
+行の外の GPU の量、つまり文書の大きさに比例しない分には、instance ごとの上限が
+あります。`rendering.gpuLimitBytes` で渡し、省くと 64 MB です。ライブラリーと
+拡張はこの値を一緒に読みます。`draw.debug.gpu()` は `bytes` と `rowBytes` を
+答えます。地物の数に比例する分 (`gpu.rows`) はこの上限の外で、端末に残る量までです。
+拡張はこの値の割合 (`gpuShare`) を持ち、それを超える割り当ては断られます
+([プラグインが GPU に持つもの](custom-types.ja.md#プラグインが-gpu-に持つもの))。
+`draw.options.update` で変えるとすぐに従います。持っているものは解放されず、
+次の割り当てが断られます。端末がどれだけ空けられるかはライブラリーには分からない
+ので、利用者の端末に合わせた値を渡してください。
 
 `draw.memory.estimate` は、ある大きさの文書が、インスタンスの Store が
 地物を持つ形で取る量を返します。上限を超えるもの (開く地図、印刷、
@@ -221,12 +231,10 @@ draw.options.update({ rendering: { renderScale: 1 } });
 ```ts
 draw.extensions.overlays.add({
   name: 'outline',
-  onAdd: () => {},
   draw(ctx) {
     const widthInDevicePixels = 2 * ctx.screen.pixelRatio;
     // その幅で描く
   },
-  onRemove: () => {},
 });
 ```
 

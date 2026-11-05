@@ -10,6 +10,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
+import { GpuLedger } from '../gpu-ledger.js';
 import { computeAtlasLayout, DemAtlas, tileMercatorX } from './dem-atlas.js';
 import type { RenderableTerrainTile } from './detect.js';
 
@@ -105,7 +106,7 @@ describe('DemAtlas bakes only when what it reads changed', () => {
   it('reuses the atlas on the frames after every tile has arrived', () => {
     const { gl, counts } = createGl();
     const { terrain } = createTerrain();
-    const atlas = new DemAtlas(gl);
+    const atlas = new DemAtlas(gl, new GpuLedger());
 
     const first = atlas.build(terrain, 0.5, true);
     const drawsPerBake = counts.drawArrays;
@@ -120,7 +121,7 @@ describe('DemAtlas bakes only when what it reads changed', () => {
   it('bakes every frame while tiles are loading (DEM textures change in place)', () => {
     const { gl } = createGl();
     const { terrain } = createTerrain();
-    const atlas = new DemAtlas(gl);
+    const atlas = new DemAtlas(gl, new GpuLedger());
 
     for (let frame = 0; frame < 3; frame++) atlas.build(terrain, 0.5, false);
     // The first frame after they have all arrived bakes once more, then it is reused
@@ -133,7 +134,7 @@ describe('DemAtlas bakes only when what it reads changed', () => {
   it('bakes again when a DEM texture or the exaggeration changes', () => {
     const { gl } = createGl();
     const { terrain, textures } = createTerrain();
-    const atlas = new DemAtlas(gl);
+    const atlas = new DemAtlas(gl, new GpuLedger());
     atlas.build(terrain, 0.5, true);
 
     textures.set('12/3638/1613', { id: 'c' });
@@ -148,7 +149,7 @@ describe('DemAtlas bakes only when what it reads changed', () => {
   it('bakes again after dispose', () => {
     const { gl } = createGl();
     const { terrain } = createTerrain();
-    const atlas = new DemAtlas(gl);
+    const atlas = new DemAtlas(gl, new GpuLedger());
     atlas.build(terrain, 0.5, true);
     atlas.dispose();
     atlas.build(terrain, 0.5, true);

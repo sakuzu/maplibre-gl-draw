@@ -14,6 +14,7 @@
 
 import type { Map as MapLibreMap, ProjectionData } from 'maplibre-gl';
 import { describe, expect, it } from 'vitest';
+import { gpuOf } from '../../test-utils.js';
 import { GpuLedger } from '../gpu-ledger.js';
 import type { ShaderData } from '../shaders/helpers.js';
 import { ROW_LINE_STRIDE } from './line/line-geometry.js';
@@ -22,7 +23,6 @@ import { PointInstanceRenderer, ROW_POINT_STRIDE } from './point/point-instance.
 import { ROW_POLYGON_STRIDE, SDFPolygonRenderer } from './polygon/sdf-polygon.js';
 import {
   createRowStateTexture,
-  deleteRowStateTexture,
   ROW_STATE_WIDTH,
   type RowStateBinding,
   uploadRowState,
@@ -138,7 +138,7 @@ const projection = (): ProjectionData =>
   }) as unknown as ProjectionData;
 
 function binding(gl: WebGL2RenderingContext, rows: number): RowStateBinding {
-  const texture = createRowStateTexture(gl, rows);
+  const texture = createRowStateTexture(gpuOf(gl), rows);
   if (!texture) throw new Error('texture');
   return { texture, translations: new Float32Array(8) };
 }
@@ -146,7 +146,7 @@ function binding(gl: WebGL2RenderingContext, rows: number): RowStateBinding {
 describe('the texture of the state of the rows', () => {
   it('is uploaded with an alignment of 1 and puts the alignment of the context back', () => {
     const mock = createGL(4);
-    const texture = createRowStateTexture(mock.gl, ROW_STATE_WIDTH + 3);
+    const texture = createRowStateTexture(gpuOf(mock.gl), ROW_STATE_WIDTH + 3);
     if (!texture) throw new Error('texture');
     expect(texture.height).toBe(2);
     mock.clear();
@@ -172,8 +172,8 @@ describe('the texture of the state of the rows', () => {
 
   it('is an integer texture read without filtering', () => {
     const mock = createGL();
-    const texture = createRowStateTexture(mock.gl, 300);
-    if (!texture) throw new Error('texture');
+    const gpu = gpuOf(mock.gl);
+    const texture = createRowStateTexture(gpu, 300);
     expect(mock.of('texStorage2D')[0].args).toEqual([
       CONSTANTS.TEXTURE_2D,
       1,
@@ -181,7 +181,7 @@ describe('the texture of the state of the rows', () => {
       ROW_STATE_WIDTH,
       3,
     ]);
-    deleteRowStateTexture(mock.gl, texture);
+    gpu.release(texture.texture);
     expect(mock.of('deleteTexture')[0].args).toEqual([texture.texture]);
   });
 });
@@ -190,7 +190,7 @@ describe('a point batch of rows', () => {
   it('draws a range of rows with the variant of the rows, from the first instance of the range', () => {
     const mock = createGL();
     const ledger = new GpuLedger();
-    const renderer = new PointInstanceRenderer({} as MapLibreMap, mock.gl, 1, undefined, ledger);
+    const renderer = new PointInstanceRenderer({} as MapLibreMap, mock.gl, ledger, 1, undefined);
     renderer.ensureShader(SHADER_DATA);
     const instances = new Float32Array(5 * ROW_POINT_STRIDE);
     // Rows 0, 1, 2 have 1, 2 and 2 instances (row 1 is a MultiPoint)
@@ -227,7 +227,7 @@ describe('a point batch of rows', () => {
 
   it('draws nothing for an empty range', () => {
     const mock = createGL();
-    const renderer = new PointInstanceRenderer({} as MapLibreMap, mock.gl, 1);
+    const renderer = new PointInstanceRenderer({} as MapLibreMap, mock.gl, new GpuLedger(), 1);
     renderer.ensureShader(SHADER_DATA);
     const batch = renderer.buildRetainedRows(
       new Float32Array(ROW_POINT_STRIDE * 2),
@@ -246,8 +246,7 @@ describe('a line batch of rows', () => {
   it('draws a range of rows from the first instance of the range', () => {
     const mock = createGL();
     const ledger = new GpuLedger();
-    const renderer = new SDFLineRenderer({} as MapLibreMap, mock.gl, 1);
-    renderer.useLedger(ledger);
+    const renderer = new SDFLineRenderer({} as MapLibreMap, mock.gl, ledger, 1);
     renderer.ensureShader(SHADER_DATA);
     const instanceCount = 6;
     const batch = renderer.buildRetainedRows(
@@ -282,7 +281,7 @@ describe('a polygon batch of rows', () => {
   it('is one buffer of its size, filled in slices, and draws a range of rows as one range of indices', () => {
     const mock = createGL();
     const ledger = new GpuLedger();
-    const renderer = new SDFPolygonRenderer(mock.gl, 1, { gpu: ledger });
+    const renderer = new SDFPolygonRenderer(mock.gl, { gpu: ledger }, 1);
     renderer.ensureShader(SHADER_DATA);
     const batch = renderer.createRetainedRows(10, 30, [0, 0], Int32Array.of(0, 12, 30));
     if (!batch) throw new Error('batch');

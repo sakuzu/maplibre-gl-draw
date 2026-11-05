@@ -158,17 +158,20 @@ export class StrokeRenderer {
   // at construction)
   private vao: WebGLVertexArrayObject | null = null;
   private vertexBuffer: WebGLBuffer | null = null;
-  /** Where the bytes of the vertex buffer are recorded (nothing is recorded until `useLedger`) */
-  private ledger: GpuLedger | undefined;
+  /** Where the bytes of the vertex buffer are recorded */
+  private readonly ledger: GpuLedger;
 
+  /** @internal */
   constructor(
     map: MapLibreMap,
     gl: WebGL2RenderingContext,
+    ledger: GpuLedger,
     pixelRatio?: PixelRatioInput,
     terrain: TerrainContext = new TerrainContext(),
   ) {
     this.map = map;
     this.gl = gl;
+    this.ledger = ledger;
     this.pixelRatio = pixelRatio;
     this.terrain = terrain;
     this.projectionUniformManager = new ProjectionUniformManager(gl, {
@@ -177,17 +180,6 @@ export class StrokeRenderer {
     this.vertexBuffer = gl.createBuffer();
     this.vao = gl.createVertexArray();
     this.setupVAO();
-  }
-
-  /**
-   * Records the GPU memory this renderer allocates from now on (its vertex buffer holds nothing
-   * before its first draw)
-   *
-   * @internal
-   */
-  useLedger(ledger: GpuLedger): this {
-    this.ledger = ledger;
-    return this;
   }
 
   /**
@@ -636,7 +628,7 @@ void main() {
     // Transfer the vertex data (the VAO and the vertex buffer are reused)
     gl.bindBuffer(gl.ARRAY_BUFFER, this.vertexBuffer);
     gl.bufferData(gl.ARRAY_BUFFER, vertexData, gl.DYNAMIC_DRAW);
-    this.ledger?.record(this.vertexBuffer, 'strokes', 'buffer', vertexData.byteLength);
+    this.ledger.record(this.vertexBuffer, 'strokes', 'buffer', vertexData.byteLength);
     gl.bindVertexArray(this.vao);
 
     gl.useProgram(this.program);
@@ -720,7 +712,7 @@ void main() {
       this.vao = null;
     }
     if (this.vertexBuffer) {
-      this.ledger?.release(this.vertexBuffer);
+      this.ledger.release(this.vertexBuffer);
       this.gl.deleteBuffer(this.vertexBuffer);
       this.vertexBuffer = null;
     }

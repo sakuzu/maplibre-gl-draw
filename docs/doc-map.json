@@ -99,9 +99,12 @@
       "src/extension/**",
       "src/api/extension/feature-type.ts",
       "src/api/extension/render.ts",
+      "src/api/extension/webgl.ts",
       "src/api/extension/provider.ts",
       "src/api/impl/adapters.ts",
+      "src/api/impl/gpu-parts.ts",
       "src/api/impl/render-context.ts",
+      "src/view/gpu.ts",
       "src/webgl/**",
       "examples/custom-feature-types/**"
     ],

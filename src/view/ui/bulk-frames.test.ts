@@ -10,6 +10,7 @@
 import { describe, expect, it } from 'vitest';
 import type { RowGroup } from '../../feature-table/layer-table.js';
 import { DEFAULT_SELECTION_CONFIG } from '../../shared/config/selection.js';
+import { GpuLedger } from '../gpu-ledger.js';
 import type { RowStateBinding } from '../renderers/row-state.js';
 import { BulkFramesRenderer, buildBulkFramesVertexSource } from './bulk-frames.js';
 
@@ -55,7 +56,7 @@ const PROJECTION = { mainMatrix: [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1
 describe('the frames of the features selected in bulk', () => {
   it('give each row its extent from the origin of its group, and a row of one position its marker', () => {
     const { gl, calls } = recordingGl();
-    const renderer = new BulkFramesRenderer(gl, 2);
+    const renderer = new BulkFramesRenderer(gl, new GpuLedger(), 2);
     renderer.ensureShader(SHADER as never);
     renderer.setScreenScale({ zoom: 10, centerLatitude: 0, transition: 0 });
     const group = groupOf([
@@ -86,7 +87,7 @@ describe('the frames of the features selected in bulk', () => {
 
   it('make the instances of a group again only when its rows change', () => {
     const { gl, calls } = recordingGl();
-    const renderer = new BulkFramesRenderer(gl);
+    const renderer = new BulkFramesRenderer(gl, new GpuLedger());
     renderer.ensureShader(SHADER as never);
     renderer.setScreenScale({ zoom: 10, centerLatitude: 0, transition: 0 });
     const group = groupOf([0, 0, 1, 1]);
@@ -133,7 +134,7 @@ describe('the frames of the features selected in bulk', () => {
     const source = buildBulkFramesVertexSource('', '');
     expect(source).toContain('bool marker = a_meta.y > 0.0 && u_rotating < 0.5');
     const { gl, calls } = recordingGl();
-    const renderer = new BulkFramesRenderer(gl);
+    const renderer = new BulkFramesRenderer(gl, new GpuLedger());
     renderer.ensureShader(SHADER as never);
     renderer.setScreenScale({ zoom: 10, centerLatitude: 0, transition: 0 });
     const draw = () =>

@@ -19,12 +19,17 @@
  * byte of the row of each of its instances (`rowStateOf`), so what it draws moves as the rows do.
  */
 
+import type { Gpu, GpuContext } from '../../api/extension/webgl.js';
 import { type DraggedRows, draggedRowMotionsOf } from '../../feature-table/dragged-rows.js';
 import { MOVE_SETS } from '../../feature-table/row-state.js';
 import type { RowHandle } from '../../feature-table/types.js';
-import { type EnuEdit, inverseEnuEdit, moveEnuPosition } from '../../geometry/enu-transforms.js';
+import {
+  type EnuEdit,
+  enuEditTurn,
+  inverseEnuEdit,
+  moveEnuPosition,
+} from '../../geometry/enu-transforms.js';
 import type { BoundingBox } from '../../store/types.js';
-import { type GpuLedger, textureBytes } from '../gpu-ledger.js';
 import { getRenderFrame } from '../shaders/frame.js';
 import type { RetainedDrawRun } from './draw-run.js';
 import {
@@ -61,10 +66,14 @@ export const ROW_STATE_TEXTURE_UNIT = 1;
  *   returns to `project_position_to_clipspace_from_offset`. A row moved so gives its offsets from
  *   the center the projection takes them from, so every position a vertex projects after it must be
  *   of the same row
+ * - `float rowStateRotation(uint state)`: the degrees the drag of the moving set of the row adds to
+ *   an angle of the row (0 for a row not moving), as it is written once the drag is let go
+ * - `float rowStateScale(uint state)`: the factor the drag multiplies a size of the row by (1 for a
+ *   row not moving), as it is written once the drag is let go
  *
  * The uniforms, which `RowStateUniforms` writes: `u_row_state` (the texture, read on the unit
- * `ROW_STATE_TEXTURE_UNIT`), `u_row_state_width`, `u_state_translate`, `u_state_transformed`
- * and those of the motions.
+ * `ROW_STATE_TEXTURE_UNIT`), `u_row_state_width`, `u_state_translate`, `u_state_transformed`,
+ * `u_state_rotate_scale` and those of the motions.
  */
 export const ROW_STATE_GLSL = `
 uniform highp usampler2D u_row_state;
@@ -74,6 +83,9 @@ uniform vec2 u_state_translate[4];
 // The sets moved by the motion of an edit (bit k: set k has one), before their translation
 // (row-motion.ts)
 uniform int u_state_transformed;
+// What the edit of each moving set does to a row besides its position: the degrees added to an
+// angle and the factor of a size (set 0 is none)
+uniform vec2 u_state_rotate_scale[4];
 
 uint readRowState(float row) {
     int index = int(row + 0.5);
@@ -86,6 +98,14 @@ bool rowStateHidden(uint state) {
 
 vec2 rowStateTranslation(uint state) {
     return u_state_translate[int((state >> 1u) & 3u)];
+}
+
+float rowStateRotation(uint state) {
+    return u_state_rotate_scale[int((state >> 1u) & 3u)].x;
+}
+
+float rowStateScale(uint state) {
+    return u_state_rotate_scale[int((state >> 1u) & 3u)].y;
 }
 
 // The sine and the cosine of an angle, by their series for a small one: the built-in functions of
@@ -190,6 +210,7 @@ export class RowStateUniforms {
   private readonly width: WebGLUniformLocation | null;
   private readonly translate: WebGLUniformLocation | null;
   private readonly transformed: WebGLUniformLocation | null;
+  private readonly rotateScale: WebGLUniformLocation | null;
   private readonly motionRows: WebGLUniformLocation | null;
   private readonly motionOffsets: WebGLUniformLocation | null;
   private readonly motionFrom: WebGLUniformLocation | null;
@@ -207,13 +228,14 @@ export class RowStateUniforms {
    * @param program - The program that includes `ROW_STATE_GLSL`
    */
   constructor(
-    private readonly gl: WebGL2RenderingContext,
+    private readonly gl: GpuContext,
     program: WebGLProgram,
   ) {
     this.state = gl.getUniformLocation(program, 'u_row_state');
     this.width = gl.getUniformLocation(program, 'u_row_state_width');
     this.translate = gl.getUniformLocation(program, 'u_state_translate');
     this.transformed = gl.getUniformLocation(program, 'u_state_transformed');
+    this.rotateScale = gl.getUniformLocation(program, 'u_state_rotate_scale');
     this.motionRows = gl.getUniformLocation(program, 'u_motion_rows');
     this.motionOffsets = gl.getUniformLocation(program, 'u_motion_offsets');
     this.motionFrom = gl.getUniformLocation(program, 'u_motion_from');
@@ -255,6 +277,9 @@ export class RowStateUniforms {
       gl.uniform1i(this.transformed, values.flags);
     }
     if (values.flags === 0 && !stale && written.flags === 0) return;
+    if (this.rotateScale && (stale || !sameValues(written.rotateScale, values.rotateScale))) {
+      gl.uniform2fv(this.rotateScale, values.rotateScale);
+    }
     const motion = values.motion;
     const before = written.motion;
     if (this.motionRows && (stale || !sameValues(before.rows, motion.rows))) {
@@ -318,10 +343,15 @@ export class MotionStateValues {
   /** Bit k: set k has a motion */
   flags = 0;
   readonly motion: MotionUniformValues;
+  /** The degrees added to an angle and the factor of a size, of the sets 0 to 3 */
+  readonly rotateScale = new Float32Array(8);
 
   constructor(fill = 0) {
     this.motion = new MotionUniformValues(fill);
-    if (Number.isNaN(fill)) this.flags = -1;
+    if (Number.isNaN(fill)) {
+      this.flags = -1;
+      this.rotateScale.fill(fill);
+    }
   }
 
   /**
@@ -336,6 +366,13 @@ export class MotionStateValues {
     this.flags = 0;
     // The projection takes the offsets from the center as a float32 (u_center_lnglat)
     const k: [number, number] = [Math.fround(center[0]), Math.fround(center[1])];
+    const rotateScale = this.rotateScale;
+    for (let set = 0; set < 4; set++) {
+      const edit = transforms?.[set] ?? null;
+      const turn = edit ? enuEditTurn(edit) : null;
+      rotateScale[set * 2] = turn?.angleDegrees ?? 0;
+      rotateScale[set * 2 + 1] = turn?.sizeFactor ?? 1;
+    }
     for (let set = 1; set < 4 && 2 * (set - 1) + 1 < MOTION_SLOTS; set++) {
       const edit = transforms?.[set] ?? null;
       if (!edit) continue;
@@ -355,6 +392,7 @@ export class MotionStateValues {
   copy(other: MotionStateValues): void {
     this.flags = other.flags;
     this.motion.copy(other.motion);
+    this.rotateScale.set(other.rotateScale);
   }
 }
 
@@ -390,37 +428,22 @@ export function bindRowState(
 /**
  * Creates a texture of the state of rows, every byte 0 (shown, not moving).
  *
- * @param gl - The WebGL context of the map
+ * @param gpu - What it is allocated with
  * @param rows - The number of rows
- * @returns The texture, or null when it cannot be created
+ * @returns The texture
+ * @throws `DrawError` as `Gpu.texture` does
  */
-export function createRowStateTexture(
-  gl: WebGL2RenderingContext,
-  rows: number,
-): RowStateTexture | null {
+export function createRowStateTexture(gpu: Gpu, rows: number): RowStateTexture {
+  const { gl } = gpu;
   const width = ROW_STATE_WIDTH;
   const height = Math.max(1, Math.ceil(rows / width));
-  const texture = gl.createTexture();
-  if (!texture) return null;
-  gl.bindTexture(gl.TEXTURE_2D, texture);
-  gl.texStorage2D(gl.TEXTURE_2D, 1, gl.R8UI, width, height);
+  const texture = gpu.texture(width, height, gl.R8UI);
   // An integer texture is read with texelFetch and must not be filtered
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
   return { texture, width, height, rows };
-}
-
-/**
- * Records a texture of the state of rows in the ledger of an instance (the textures of the
- * extensions are their own)
- *
- * @internal
- */
-export function recordRowStateTexture(ledger: GpuLedger | undefined, state: RowStateTexture): void {
-  const { texture, width, height } = state;
-  ledger?.record(texture, 'row-state', 'texture', textureBytes(width, height, 1));
 }
 
 /**
@@ -439,7 +462,7 @@ export function recordRowStateTexture(ledger: GpuLedger | undefined, state: RowS
  *   omitted)
  */
 export function uploadRowState(
-  gl: WebGL2RenderingContext,
+  gl: GpuContext,
   texture: RowStateTexture,
   state: Uint8Array,
   scratch?: Uint8Array,
@@ -463,16 +486,6 @@ export function uploadRowState(
     data,
   );
   gl.pixelStorei(gl.UNPACK_ALIGNMENT, alignment);
-}
-
-/**
- * Deletes a texture of the state of rows.
- *
- * @param gl - The WebGL context of the map
- * @param texture - The texture
- */
-export function deleteRowStateTexture(gl: WebGL2RenderingContext, texture: RowStateTexture): void {
-  gl.deleteTexture(texture.texture);
 }
 
 /**

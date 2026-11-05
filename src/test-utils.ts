@@ -58,6 +58,7 @@ import { MemoryStore } from './store/memory.js';
 import type { Store } from './store/store.js';
 import { createTableStore } from './store/table-memory.js';
 import { createRowBlockDataBuilder, type RowInput } from './table/row-group-builder.js';
+import { GpuResources } from './view/gpu.js';
 import { GpuLedger } from './view/gpu-ledger.js';
 import { FeatureDrawer } from './view/renderers/drawer.js';
 import type { ImageRenderer } from './view/renderers/image.js';
@@ -329,7 +330,6 @@ export function createModeHarness(options: {
     map,
     store,
     terrain: {} as TerrainContext,
-    gpu: new GpuLedger(),
     pixelRatio: { resolve: () => 1, getScaleFactor: () => 1 },
     autoNameGenerator,
     messages: resolveMessages(),
@@ -513,6 +513,7 @@ export function createTestDrawer(featureStyle = DEFAULT_FEATURE_STYLE_CONFIG): F
     vertexAttribPointer: (): void => {},
   } as unknown as WebGL2RenderingContext;
   return new FeatureDrawer({
+    ledger: new GpuLedger(),
     gl,
     map: {} as never,
     sdfLineRenderer: {} as SDFLineRenderer,
@@ -1142,3 +1143,10 @@ export const STORE_KINDS: ReadonlyArray<readonly [string, () => Store]> = [
   ['a Store of objects', () => new MemoryStore()],
   ['a Store of rows', () => createTableStore().store],
 ];
+
+/**
+ * What a part allocates with on a stub of a context, with a ledger of its own
+ */
+export function gpuOf(gl: WebGL2RenderingContext, ledger = new GpuLedger()): GpuResources {
+  return new GpuResources({ gl, ledger, owner: 'test' });
+}
