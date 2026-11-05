@@ -10,7 +10,7 @@ import type { Position } from 'geojson';
 import type { Map as MaplibreMap } from 'maplibre-gl';
 import type { RowSpriteSource } from '../../view/renderers/rows/rows-format.js';
 import type { Feature, FeatureStyleResolved, LineStyle, PointShape } from '../model.js';
-import type { LayerTableView } from '../tables.js';
+import type { LayerTableView, RowHandle } from '../tables.js';
 import type { ScreenContext, TerrainSurface } from './context.js';
 
 /**
@@ -177,14 +177,118 @@ export interface FeatureRendererRows {
    */
   readonly sprites?: RowSpriteSource;
   /**
-   * Draws features of rows, from the rows: the rows `FeatureRenderer.draw` would draw one after
-   * the other, in that order (rows next to each other in the order of the layer, of the same
-   * type, not hidden and in view). A row with a companion is drawn by `FeatureRenderer.draw`. A
-   * row being dragged in bulk is given as it is written: read where it is drawn with
-   * `draw.rendered.getDraggedRows()`. Without it, the instance makes the features of the rows
-   * (keeping them up to a limit) and draws them by `FeatureRenderer.draw`.
+   * How it holds the rows it draws on the GPU: the rows it takes that have no companion are
+   * given to it once, and every frame it draws a range of them, in the order of the layer, with
+   * no work for each row. Without it, the instance makes the features of the rows (keeping them
+   * up to a limit) and draws them by `FeatureRenderer.draw`.
+   *
+   * Types that give the same object have their rows in one range, also where the rows of the
+   * types alternate. Given with `sprites`, it is the one used.
    */
-  draw?(view: LayerTableView, handles: Int32Array, ctx: RenderContext): void;
+  readonly gpu?: GpuRowsSource;
+}
+
+/**
+ * Makes what holds a range of rows of a layer on the GPU (`FeatureRendererRows.gpu`)
+ *
+ * @experimental
+ */
+export interface GpuRowsSource {
+  /**
+   * Makes what holds one range of the rows of a layer, empty. A layer has as many as it has ranges
+   * of such rows between the rows drawn otherwise.
+   *
+   * @param view - The rows of the layer
+   */
+  create(view: LayerTableView): GpuRows;
+}
+
+/**
+ * What a write changed of a row held on the GPU (`GpuRows.update`)
+ *
+ * @experimental
+ */
+export interface GpuRowChange {
+  /** Whether its geometry changed */
+  readonly geometry: boolean;
+  /** Whether its style changed */
+  readonly style: boolean;
+  /** Whether its attributes changed */
+  readonly values: boolean;
+}
+
+/**
+ * A range of rows of a layer an extension holds on the GPU and draws (`GpuRowsSource.create`)
+ *
+ * It owns the memory it holds: it records it (`ExtensionContext.gpu`) and keeps it under the
+ * limit it sets itself, by taking fewer rows. A row it does not take, and a row of a frame it does
+ * not draw, is drawn by `FeatureRenderer.draw`, in its place in the order: taking fewer rows
+ * makes a frame slower, and changes nothing of the picture. What it holds can be made again from
+ * the rows, so the instance may release it at any time.
+ *
+ * A row is named by its index: the rows it took, counted from 0 in the order it took them.
+ *
+ * @experimental
+ */
+export interface GpuRows {
+  /**
+   * Takes rows, after the ones it took. They are in the order of the layer; a row without a
+   * geometry is among them, takes its index, and draws nothing.
+   *
+   * A row taken draws as it reads now, with the state `setStates` gives right after this call.
+   * When it takes fewer rows than it is given, the ones left are given again in a later frame
+   * while {@link GpuRows.hasPendingWork} is true. When that is false it refused them: they are
+   * drawn by `FeatureRenderer.draw`, and given again once the instance released something.
+   *
+   * @param rows - The rows, read during the call only
+   * @param stopAtMilliseconds - When to stop, on the clock of `performance.now()` (`Infinity` for
+   *   no limit): this is how the work of a frame stays within its budget. Taking a row past it is
+   *   allowed, so that a call always takes one when it can.
+   * @returns The number of rows it took, the first ones of `rows`
+   */
+  add(rows: Int32Array, stopAtMilliseconds: number): number;
+  /**
+   * Takes a row as it was written, in the frame that shows the write. A write of a row out of view
+   * comes here too.
+   *
+   * @param index - The index of the row
+   * @param row - The row
+   * @param change - What was written
+   * @returns false when it cannot hold the row as written: the row is drawn from elsewhere, in the
+   *   same place in the order, and `setStates` hides the row at this index
+   */
+  update(index: number, row: RowHandle, change: GpuRowChange): boolean;
+  /**
+   * Takes the state of rows: the byte `ROW_STATE_GLSL` of `@sakuzu/maplibre-gl-draw/webgl` reads
+   * for each row, from whether the row is hidden and how it moves. The rows of a range are given
+   * together, once when they are taken, and once for every change of the state of the rows around
+   * them.
+   *
+   * @param from - The index of the first row
+   * @param states - One byte per row, read during the call only
+   */
+  setStates(from: number, states: Uint8Array): void;
+  /**
+   * Draws the rows `[from, to)` in their order, at the place of the order this call has among
+   * what the layer draws. The hidden rows are among them, and the rows out of view. It may be
+   * called more than once in a frame: for the parts of a range with other rows between them, and
+   * for each copy of the world.
+   *
+   * @param from - The index of the first row
+   * @param to - The end of the rows (exclusive)
+   * @param ctx - The context of the frame
+   * @returns false when it did not draw them: they are drawn by `FeatureRenderer.draw`, in this
+   *   frame
+   */
+  draw(from: number, to: number, ctx: RenderContext): boolean;
+  /** Whether some of its work has not finished yet, so that another frame is needed. */
+  hasPendingWork(): boolean;
+  /**
+   * Releases what it holds. Nothing is called on it after this. It may come after
+   * `FeatureRenderer.onRemove`, and after the context was lost, so the renderer must keep it safe
+   * to call then, and take what it holds out of `ExtensionContext.gpu`.
+   */
+  release(): void;
 }
 
 /**

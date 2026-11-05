@@ -35,7 +35,6 @@ import type {
   RenderContext,
 } from '../extension/render.js';
 import type { Feature, FeatureStyleResolved } from '../model.js';
-import type { LayerTableView } from '../tables.js';
 
 // ============================================================================
 // The surface of the terrain
@@ -308,15 +307,12 @@ export function adaptFeatureRenderer(
     },
     // The pictures of the points drawn with the rows, as the renderer gives them
     ...(renderer.rows?.sprites && { rowSprites: renderer.rows.sprites }),
-    // The rows drawn at once, from the rows, when the renderer draws them so
-    ...(renderer.rows?.draw && {
-      drawRows(view: LayerTableView, handles: Int32Array, projectionData, zoom, context) {
-        if (!attachment) return;
-        renderer.rows?.draw?.(
-          view,
-          handles,
-          contextFor(attachment.gl, context, projectionData, zoom),
-        );
+    // The rows it holds on the GPU, when the renderer holds them so
+    ...(renderer.rows?.gpu && {
+      gpuRows: renderer.rows.gpu,
+      gpuRowsContext(projectionData, zoom, context) {
+        if (!attachment) return null;
+        return contextFor(attachment.gl, context, projectionData, zoom);
       },
     }),
   };

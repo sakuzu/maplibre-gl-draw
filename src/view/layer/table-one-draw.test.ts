@@ -22,7 +22,13 @@
 import { planarCoordinates } from '@sakuzu/tabane';
 import type { ProjectionData } from 'maplibre-gl';
 import { beforeEach, describe, expect, it } from 'vitest';
-import type { RowField } from '../../api/tables.js';
+import type {
+  GpuRowChange,
+  GpuRows,
+  GpuRowsSource,
+  RenderContext,
+} from '../../api/extension/render.js';
+import type { LayerTableView, RowField } from '../../api/tables.js';
 import type { LayerTable } from '../../feature-table/layer-table.js';
 import { writeRowGeometry } from '../../feature-table/row-write.js';
 import { ROW_WRITE_GEOMETRY, ROW_WRITE_STYLE } from '../../feature-table/types.js';
@@ -50,7 +56,11 @@ import {
   type SelectionExtensionRegistry,
 } from '../ui/selection-ui/index.js';
 import type { StoreRetainedDrawDeps } from './store-retained-immediate.js';
-import { type TableDrawRecord, TableLayerRenderer } from './table-retained.js';
+import {
+  GPU_ROWS_IDLE_FRAMES,
+  type TableDrawRecord,
+  TableLayerRenderer,
+} from './table-retained.js';
 
 const LAYER: Layer = {
   id: 'layer',
@@ -221,6 +231,7 @@ function setup(
     customRenderers?: Map<string, unknown>;
     transformFields?: TransformFieldsRegistry;
     extensions?: SelectionExtensionRegistry;
+    buildBudgetMs?: number;
   } = {},
 ) {
   const { internals, table, tables, writer } = tablesOfFeatures('layer', features, targetRows);
@@ -270,7 +281,7 @@ function setup(
     terrain,
     ledger,
     requestRepaint: () => {},
-    buildBudgetMs: Number.POSITIVE_INFINITY,
+    buildBudgetMs: options.buildBudgetMs ?? Number.POSITIVE_INFINITY,
     ...(options.transformFields && { transformFields: () => options.transformFields ?? null }),
     ...(options.extensions && { extensions: options.extensions }),
   });
@@ -1159,5 +1170,678 @@ describe('the rows drawn at once by the extent of their footprint', () => {
     frame(VIEW);
     expect(drawn).toEqual(['b']);
     expect(reads()).toBe(before + 1);
+  });
+});
+
+describe('the rows an extension holds on the GPU', () => {
+  /** The bytes a row of the tests takes */
+  const ROW_BYTES = 100;
+  const CONTEXT = {} as RenderContext;
+  const VIEW = { minX: -1, minY: -1, maxX: 2, maxY: 2 };
+
+  /** What one range of rows holds */
+  interface Held {
+    readonly rows: number[];
+    readonly states: number[];
+    readonly writes: Array<[number, number, GpuRowChange]>;
+    /** The calls of `setStates` */
+    stateCalls: number;
+    released: boolean;
+  }
+
+  interface Options {
+    /** The bytes every range together may hold */
+    limitBytes?: number;
+    /** The rows a call of `add` takes at most, before its time is up */
+    rowsPerCall?: number;
+    /** Whether a call of `update` holds the row as written */
+    fits?: () => boolean;
+    /** Whether a call of `draw` draws */
+    draws?: () => boolean;
+    /** Whether it takes no rows yet, with work left */
+    busy?: () => boolean;
+  }
+
+  /**
+   * An extension that holds rows as the contract asks: it allocates a buffer for the rows of each
+   * call of `add`, records it, and never goes over its limit
+   */
+  function ribbons(
+    gl: () => WebGL2RenderingContext,
+    ledger: () => GpuLedger,
+    options: Options = {},
+  ) {
+    const made: Held[] = [];
+    const log: string[] = [];
+    let usedBytes = 0;
+    const source: GpuRowsSource = {
+      create(_view: LayerTableView): GpuRows {
+        const held: Held = { rows: [], states: [], writes: [], stateCalls: 0, released: false };
+        made.push(held);
+        const buffers: Array<{ buffer: WebGLBuffer; bytes: number }> = [];
+        return {
+          add(rows) {
+            if (options.busy?.()) return 0;
+            const room = Math.floor(((options.limitBytes ?? Infinity) - usedBytes) / ROW_BYTES);
+            const count = Math.min(rows.length, room, options.rowsPerCall ?? Infinity);
+            if (count <= 0) return 0;
+            const buffer = gl().createBuffer();
+            const bytes = count * ROW_BYTES;
+            ledger().record(buffer, 'ribbons', 'buffer', bytes);
+            buffers.push({ buffer, bytes });
+            usedBytes += bytes;
+            held.rows.push(...rows.subarray(0, count));
+            return count;
+          },
+          update(index, row, change) {
+            held.writes.push([index, row, change]);
+            return options.fits?.() ?? true;
+          },
+          setStates(from, states) {
+            held.stateCalls++;
+            for (let i = 0; i < states.length; i++) held.states[from + i] = states[i];
+          },
+          draw(from, to, ctx) {
+            expect(ctx).toBe(CONTEXT);
+            if (options.draws && !options.draws()) return false;
+            log.push(`held ${made.indexOf(held)} ${from}-${to}`);
+            return true;
+          },
+          hasPendingWork: () => options.busy?.() === true,
+          release() {
+            expect(held.released).toBe(false);
+            held.released = true;
+            for (const { buffer, bytes } of buffers) {
+              ledger().release(buffer);
+              usedBytes -= bytes;
+            }
+          },
+        };
+      },
+    };
+    const type = (name: string, of: GpuRowsSource = source) => ({
+      name,
+      draw: (f: Feature) => log.push(`one ${f.id}`),
+      gpuRows: of,
+      gpuRowsContext: () => CONTEXT,
+    });
+    return { source, made, log, type, used: () => usedBytes };
+  }
+
+  /** A layer of rows held by an extension: `Ribbon` and `Sticker` give the same source */
+  function layer(features: Feature[], options: Options & { buildBudgetMs?: number } = {}) {
+    let gl: WebGL2RenderingContext | null = null;
+    let ledger: GpuLedger | null = null;
+    const held = ribbons(
+      () => gl as WebGL2RenderingContext,
+      () => ledger as GpuLedger,
+      options,
+    );
+    const customRenderers = new Map<string, unknown>([
+      ['Ribbon', held.type('Ribbon')],
+      ['Sticker', held.type('Sticker')],
+    ]);
+    const setUp = setup(features, 100_000, {
+      customRenderers,
+      ...(options.buildBudgetMs !== undefined && { buildBudgetMs: options.buildBudgetMs }),
+    });
+    gl = setUp.mock.gl;
+    ledger = setUp.ledger;
+    setUp.internals.onRowsWritten((layerId, writes) => setUp.renderer.rowsWritten(layerId, writes));
+    /** The bytes of the extension the ledger holds */
+    const heldBytes = (): number => setUp.ledger.snapshot().byOwner.ribbons ?? 0;
+    return { ...setUp, ...held, customRenderers, heldBytes };
+  }
+
+  function ribbonRows(count: number, type = 'Ribbon'): Feature[] {
+    return Array.from({ length: count }, (_, i) => feature(`r${i}`, type, [i * 0.001, 0]));
+  }
+
+  const dashed = (id: string): Feature =>
+    feature(
+      id,
+      'LineString',
+      [
+        [0, 0],
+        [1, 1],
+      ],
+      { style: { lineStyle: 'dashed' } },
+    );
+
+  const ranges = (record: TableDrawRecord[]): Array<[string, number, number]> =>
+    record.map((entry) => [entry.kind, entry.from, entry.to]);
+
+  it('gives the rows once and draws them in one call, between the rows drawn otherwise', () => {
+    const features = [
+      feature('p', 'Point', [0, 0]),
+      feature('a', 'Ribbon', [0, 0]),
+      feature('b', 'Sticker', [0.1, 0]),
+      feature('c', 'Ribbon', [0.2, 0]),
+      dashed('d'),
+      feature('e', 'Ribbon', [0.3, 0]),
+    ];
+    const { frame, made, log, table, tables } = layer(features);
+    frame();
+    log.length = 0;
+    const { record } = frame();
+    expect(ranges(record)).toEqual([
+      ['rows', 0, 1],
+      ['extension', 1, 4],
+      ['rows', 4, 5],
+      ['extension', 5, 6],
+    ]);
+    expect(drawnHandles(record, table)).toEqual(visibleHandles(table));
+    // Rows of two types that give the same source are one range, whatever their order
+    expect(made.map((held) => held.rows)).toEqual([
+      ['a', 'b', 'c'].map((id) => tables.findRow(id)),
+      [tables.findRow('e')],
+    ]);
+    expect(log).toEqual(['held 0 0-3', 'held 1 0-1']);
+    // Every row was given once, with its state
+    expect(made.map((held) => held.states)).toEqual([[0, 0, 0], [0]]);
+  });
+
+  it('cuts a range where another source holds the rows', () => {
+    const features = [feature('a', 'Ribbon', [0, 0]), feature('b', 'Other', [0.1, 0])];
+    const { frame, customRenderers, type, made } = layer(features);
+    const other = ribbons(
+      () => ({ createBuffer: () => ({}) }) as never,
+      () => new GpuLedger(),
+    );
+    customRenderers.set('Other', type('Other', other.source));
+    frame();
+    const { record } = frame();
+    expect(ranges(record)).toEqual([
+      ['extension', 0, 1],
+      ['extension', 1, 2],
+    ]);
+    expect(made).toHaveLength(1);
+    expect(other.made).toHaveLength(1);
+  });
+
+  it('draws a row with a companion from its feature, in its place', () => {
+    const features = ribbonRows(3);
+    const { frame, deps, log, made } = layer(features);
+    deps.companions.register({
+      id: 'ring',
+      has: (f) => f.id === 'r1',
+      draw: () => {},
+      hitTest: () => null,
+      onCompanionClick: () => undefined,
+    });
+    frame();
+    log.length = 0;
+    const { record } = frame();
+    expect(ranges(record)).toEqual([
+      ['extension', 0, 1],
+      ['immediate', 1, 2],
+      ['extension', 2, 3],
+    ]);
+    expect(log).toEqual(['held 0 0-1', 'one r1', 'held 1 0-1']);
+    expect(made).toHaveLength(2);
+  });
+
+  it('draws by the features while the drawing in one draw is not there, and makes nothing', () => {
+    const { frame, made, log, renderer, heldBytes } = layer(ribbonRows(3));
+    renderer.setDrawingByKind(true);
+    frame();
+    log.length = 0;
+    const { record } = frame();
+    expect(ranges(record)).toEqual([['immediate', 0, 3]]);
+    expect(log).toEqual(['one r0', 'one r1', 'one r2']);
+    expect(made).toEqual([]);
+    expect(heldBytes()).toBe(0);
+  });
+
+  it('does no work for each row in a frame: the calls are the same for 1,000 rows and 10,000', () => {
+    const steady = (count: number) => {
+      const { frame, made, log, renderer } = layer(ribbonRows(count));
+      frame();
+      frame();
+      log.length = 0;
+      const at = made[0].rows.length;
+      const states = made[0].states.length;
+      const { calls, record, immediate } = frame();
+      expect(made).toHaveLength(1);
+      expect(made[0].rows.length).toBe(at);
+      expect(made[0].states.length).toBe(states);
+      expect(immediate).toEqual([]);
+      expect(renderer.atOnceStats.visited).toBe(0);
+      expect(renderer.hasPendingWork).toBe(false);
+      return { calls: calls.length, drawn: log, ranges: record.length, rows: at };
+    };
+    const small = steady(1_000);
+    const large = steady(10_000);
+    expect(small.rows).toBe(1_000);
+    expect(large.rows).toBe(10_000);
+    expect(large.calls).toBe(small.calls);
+    expect(large.ranges).toBe(1);
+    expect(large.drawn).toEqual(['held 0 0-10000']);
+    expect(small.drawn).toEqual(['held 0 0-1000']);
+  });
+
+  it('gives the rows within the budget, and draws the rows it does not hold yet from their features', () => {
+    const { frame, made, log, renderer, table } = layer(ribbonRows(10), {
+      rowsPerCall: 3,
+      buildBudgetMs: 0,
+    });
+    // The first step of the frame reads the extents
+    expect(ranges(frame().record)).toEqual([['immediate', 0, 10]]);
+    const taken: number[] = [];
+    for (let i = 0; i < 4; i++) {
+      log.length = 0;
+      const { record } = frame();
+      taken.push(made[0].rows.length);
+      expect(drawnHandles(record, table)).toEqual(visibleHandles(table));
+      if (i === 0) {
+        expect(ranges(record)).toEqual([
+          ['extension', 0, 3],
+          ['immediate', 3, 10],
+        ]);
+        expect(log[0]).toBe('held 0 0-3');
+        expect(log[1]).toBe('one r3');
+      }
+      expect(renderer.hasPendingWork).toBe(i < 3);
+    }
+    expect(taken).toEqual([3, 6, 9, 10]);
+    expect(made).toHaveLength(1);
+  });
+
+  it('tells a call that took nothing with work left from a refusal', () => {
+    let busy = true;
+    const { frame, made, renderer } = layer(ribbonRows(2), { busy: () => busy });
+    frame();
+    expect(renderer.hasPendingWork).toBe(true);
+    frame();
+    expect(renderer.hasPendingWork).toBe(true);
+    busy = false;
+    frame();
+    expect(made[0].rows).toHaveLength(2);
+    expect(renderer.hasPendingWork).toBe(false);
+  });
+
+  it('gives the frame of the writes the rows as written, by what changed, also out of view', () => {
+    const features = ribbonRows(3);
+    const { frame, made, tables, writer, log } = layer(features);
+    frame();
+    const handle = tables.findRow('r1') as number;
+    writer.apply({ handles: Int32Array.of(handle), fields: new Map([['property:name', ['n']]]) });
+    log.length = 0;
+    frame({ minX: 50, minY: 50, maxX: 51, maxY: 51 });
+    expect(log).toEqual([]);
+    expect(made[0].writes).toEqual([[1, handle, { geometry: false, style: false, values: true }]]);
+    writer.apply({
+      handles: Int32Array.of(handle),
+      fields: new Map([['style', [{ strokeColor: '#00ff00' }]]]),
+    });
+    frame();
+    expect(made[0].writes[1]).toEqual([1, handle, { geometry: false, style: true, values: false }]);
+    expect(made).toHaveLength(1);
+  });
+
+  it('draws a row it cannot hold as written from the delta, in its place between two calls', () => {
+    const { frame, made, tables, writer, log, internals, table } = layer(ribbonRows(4), {
+      fits: () => false,
+    });
+    frame();
+    writer.apply({
+      handles: Int32Array.of(tables.findRow('r1') as number),
+      fields: new Map([['property:name', ['n']]]),
+    });
+    log.length = 0;
+    const { record } = frame();
+    expect(internals.deltaRowCount()).toBe(1);
+    expect(drawnHandles(record, table)).toEqual(visibleHandles(table));
+    // The row hidden in its range, and the row of the delta held by a range of its own
+    expect(made[0].states).toEqual([0, 1, 0, 0].map((hidden, i) => made[0].states[i] | hidden));
+    expect(made[1].rows).toEqual([tables.findRow('r1')]);
+    expect(log).toEqual(['held 0 0-2', 'held 1 0-1', 'held 0 2-4']);
+  });
+
+  it('takes a row its renderer stops taking out of its range, and draws it in its place', () => {
+    const features = ribbonRows(3);
+    const { frame, made, tables, writer, deps, log, table, internals } = layer(features);
+    deps.companions.register({
+      id: 'ring',
+      has: (f) => f.properties?.ring === true,
+      hasRow: (view, handle) => view.getRowValue(handle, 'ring') === true,
+      classifyKeys: ['ring'],
+      draw: () => {},
+      hitTest: () => null,
+      onCompanionClick: () => undefined,
+    });
+    frame();
+    writer.apply({
+      handles: Int32Array.of(tables.findRow('r1') as number),
+      fields: new Map([['property:ring', [true]]]),
+    });
+    log.length = 0;
+    const { record } = frame();
+    expect(internals.deltaRowCount()).toBe(1);
+    expect(drawnHandles(record, table)).toEqual(visibleHandles(table));
+    // The row hidden in its range comes before the place of its row of the delta
+    expect(log).toEqual(['held 0 0-2', 'one r1', 'held 0 2-3']);
+    expect(made).toHaveLength(1);
+  });
+
+  it('gives the state of the rows when it changes, and not in the frames after', () => {
+    const { frame, made, internals, tables } = layer(ribbonRows(3));
+    frame();
+    expect(made[0].stateCalls).toBe(1);
+    internals.states.setHidden(Int32Array.of(tables.findRow('r2') as number), true);
+    frame();
+    expect(made[0].states[2] & 1).toBe(1);
+    expect(made[0].states[0] & 1).toBe(0);
+    expect(made[0].stateCalls).toBe(2);
+    frame();
+    frame();
+    expect(made[0].stateCalls).toBe(2);
+    internals.states.setMoving(Int32Array.of(tables.findRow('r0') as number), 2);
+    frame();
+    expect(made[0].states[0]).not.toBe(0);
+    expect(made[0].stateCalls).toBe(3);
+  });
+
+  it('draws a chunk out of view that a moving set brings into it', () => {
+    const features = [feature('a', 'Ribbon', [10, 10])];
+    const { frame, log, internals, tables } = layer(features);
+    frame();
+    log.length = 0;
+    frame(VIEW);
+    expect(log).toEqual([]);
+    internals.states.setMoving(Int32Array.of(tables.findRow('a') as number), 2);
+    internals.states.setTranslation(2, -10, -10);
+    frame(VIEW);
+    expect(log).toEqual(['held 0 0-1']);
+  });
+
+  it('gives no rows to a chunk out of view, and gives them once it comes into view', () => {
+    const { frame, made, heldBytes, log } = layer([feature('a', 'Ribbon', [10, 10])]);
+    frame(VIEW);
+    frame(VIEW);
+    expect(made).toEqual([]);
+    expect(heldBytes()).toBe(0);
+    frame({ minX: 9, minY: 9, maxX: 11, maxY: 11 });
+    expect(heldBytes()).toBe(ROW_BYTES);
+    expect(log).toEqual(['held 0 0-1']);
+  });
+
+  it('reads the extents of the rows within the budget, not in one frame', () => {
+    const extensions = createSelectionExtensionRegistry();
+    let read = 0;
+    extensions.registerBoundingBox('Ribbon', (f) => {
+      read++;
+      const [x, y] = (f.geometry as { coordinates: number[] }).coordinates;
+      return {
+        topLeft: [x - 1, y + 1],
+        topRight: [x + 1, y + 1],
+        bottomRight: [x + 1, y - 1],
+        bottomLeft: [x - 1, y - 1],
+        center: [x, y],
+      };
+    });
+    const held = ribbons(
+      () => mockGl,
+      () => setUp.ledger,
+    );
+    const setUp = setup(ribbonRows(2_000), 100_000, {
+      customRenderers: new Map([['Ribbon', held.type('Ribbon')]]),
+      extensions,
+      buildBudgetMs: 0,
+    });
+    const mockGl = setUp.mock.gl;
+    const reads: number[] = [];
+    for (let i = 0; i < 5; i++) {
+      const before = read;
+      setUp.frame(VIEW);
+      reads.push(read - before);
+    }
+    // The first frame goes to the slices of the extents, one for each frame while its budget lasts
+    expect(Math.max(...reads)).toBeLessThanOrEqual(512);
+    expect(read).toBe(2_000);
+  });
+
+  describe('at its limit', () => {
+    it('holds up to the limit exactly, and draws nothing else of them from their features', () => {
+      const { frame, made, log, heldBytes, renderer } = layer(ribbonRows(5), {
+        limitBytes: 5 * ROW_BYTES,
+      });
+      frame();
+      log.length = 0;
+      const { record } = frame();
+      expect(ranges(record)).toEqual([['extension', 0, 5]]);
+      expect(heldBytes()).toBe(5 * ROW_BYTES);
+      expect(made[0].rows).toHaveLength(5);
+      expect(renderer.hasPendingWork).toBe(false);
+    });
+
+    it('draws the row past the limit from its feature, in its place, and asks for no more frames', () => {
+      const { frame, made, log, heldBytes, renderer, table } = layer(ribbonRows(5), {
+        limitBytes: 4 * ROW_BYTES,
+      });
+      frame();
+      expect(renderer.hasPendingWork).toBe(false);
+      for (let i = 0; i < 3; i++) {
+        log.length = 0;
+        const { record } = frame();
+        expect(ranges(record)).toEqual([
+          ['extension', 0, 4],
+          ['immediate', 4, 5],
+        ]);
+        expect(log).toEqual(['held 0 0-4', 'one r4']);
+        expect(drawnHandles(record, table)).toEqual(visibleHandles(table));
+        expect(heldBytes()).toBe(4 * ROW_BYTES);
+        expect(renderer.hasPendingWork).toBe(false);
+      }
+      expect(made).toHaveLength(1);
+    });
+
+    it('draws every row from its feature when it refuses the first one', () => {
+      const { frame, log, heldBytes, renderer } = layer(ribbonRows(3), { limitBytes: 0 });
+      frame();
+      log.length = 0;
+      const { record } = frame();
+      expect(ranges(record)).toEqual([['immediate', 0, 3]]);
+      expect(log).toEqual(['one r0', 'one r1', 'one r2']);
+      expect(heldBytes()).toBe(0);
+      expect(renderer.hasPendingWork).toBe(false);
+    });
+
+    it('asks a refusal again only once something was released', () => {
+      const features = [...ribbonRows(2), dashed('d'), feature('z', 'Ribbon', [0, 0])];
+      const { frame, made, internals, tables } = layer(features, { limitBytes: 2 * ROW_BYTES });
+      frame();
+      frame();
+      expect(made.map((held) => held.rows.length)).toEqual([2, 0]);
+      // The rows of the first chunk hidden: released, and the room goes to the other
+      internals.states.setHidden(
+        Int32Array.from(['r0', 'r1'].map((id) => tables.findRow(id) as number)),
+        true,
+      );
+      frame();
+      frame();
+      expect(made[0].released).toBe(true);
+      expect(made[1].rows).toEqual([tables.findRow('z')]);
+    });
+
+    it('releases what was not in view for the longest for the rows in view, and only then', () => {
+      const far = feature('far', 'Ribbon', [100, 50]);
+      const older = feature('older', 'Ribbon', [100, 60]);
+      const features = [far, dashed('d1'), older, dashed('d2'), feature('near', 'Ribbon', [0, 0])];
+      const { frame, made, heldBytes, tables, renderer } = layer(features, {
+        limitBytes: 2 * ROW_BYTES,
+      });
+      const near = { minX: -1, minY: -1, maxX: 1, maxY: 1 };
+      frame({ minX: 99, minY: 49, maxX: 101, maxY: 61 });
+      expect(heldBytes()).toBe(2 * ROW_BYTES);
+      // The chunk in view is refused: nothing is idle for long enough yet
+      for (let i = 0; i < GPU_ROWS_IDLE_FRAMES - 2; i++) frame(near);
+      expect(made.some((held) => held.released)).toBe(false);
+      expect(renderer.hasPendingWork).toBe(false);
+      for (let i = 0; i < 70; i++) frame(near);
+      const released = made.filter((held) => held.released);
+      expect(released).toHaveLength(1);
+      expect(heldBytes()).toBe(2 * ROW_BYTES);
+      expect(made[made.length - 1].rows).toEqual([tables.findRow('near')]);
+    });
+
+    it('survives a failed allocation told after it took rows: the rows are drawn from their features', () => {
+      let failed = false;
+      const { frame, log, renderer, table } = layer(ribbonRows(3), { draws: () => !failed });
+      frame();
+      failed = true;
+      log.length = 0;
+      const { record } = frame();
+      expect(ranges(record)).toEqual([['immediate', 0, 3]]);
+      expect(log).toEqual(['one r0', 'one r1', 'one r2']);
+      expect(drawnHandles(record, table)).toEqual(visibleHandles(table));
+      expect(renderer.hasPendingWork).toBe(false);
+    });
+
+    it('keeps the features of the rows it does not draw, up to the limit, as for the rows drawn at once', () => {
+      let draws = true;
+      const { frame, renderer, log } = layer(ribbonRows(3), { draws: () => draws });
+      frame();
+      frame();
+      expect(renderer.atOnceStats.visited).toBe(0);
+      draws = false;
+      log.length = 0;
+      frame();
+      expect(log).toEqual(['one r0', 'one r1', 'one r2']);
+      expect(renderer.checkCopies()).toEqual([]);
+    });
+  });
+
+  describe('what it holds goes back', () => {
+    it('when the rows of a chunk are all hidden, and comes back when one is shown', () => {
+      const { frame, made, heldBytes, internals, tables, log } = layer(ribbonRows(2));
+      frame();
+      expect(heldBytes()).toBe(2 * ROW_BYTES);
+      const handles = Int32Array.from(['r0', 'r1'].map((id) => tables.findRow(id) as number));
+      internals.states.setHidden(handles, true);
+      log.length = 0;
+      frame();
+      expect(heldBytes()).toBe(0);
+      expect(made[0].released).toBe(true);
+      expect(log).toEqual([]);
+      internals.states.setHidden(handles, false);
+      frame();
+      frame();
+      expect(heldBytes()).toBe(2 * ROW_BYTES);
+      expect(made).toHaveLength(2);
+    });
+
+    it('when a layer is not drawn any more, and comes back when it is drawn', () => {
+      const { renderer, frame, made, heldBytes } = layer(ribbonRows(2));
+      frame();
+      expect(heldBytes()).toBe(2 * ROW_BYTES);
+      // A frame that draws other layers only
+      renderer.prerender();
+      beginRenderFrame();
+      renderer.beginFrame();
+      renderer.endFrame();
+      expect(heldBytes()).toBe(0);
+      expect(made[0].released).toBe(true);
+      frame();
+      expect(heldBytes()).toBe(2 * ROW_BYTES);
+    });
+
+    it('when the rows of a layer leave the tables', () => {
+      const { frame, heldBytes, writer, renderer, made } = layer(ribbonRows(2));
+      frame();
+      writer.clear();
+      renderer.prerender();
+      expect(heldBytes()).toBe(0);
+      expect(made[0].released).toBe(true);
+    });
+
+    it('when the instance is destroyed or the context lost, once for each range', () => {
+      const features = [...ribbonRows(2), dashed('d'), feature('z', 'Sticker', [0, 0])];
+      const { frame, heldBytes, renderer, deps, made } = layer(features);
+      frame();
+      expect(heldBytes()).toBe(3 * ROW_BYTES);
+      renderer.dispose(deps.renderers);
+      expect(heldBytes()).toBe(0);
+      expect(made.every((held) => held.released)).toBe(true);
+    });
+
+    it('when the rows of a delta are packed again', () => {
+      const { frame, heldBytes, tables, writer, made } = layer(ribbonRows(4), {
+        fits: () => false,
+      });
+      frame();
+      const handle = tables.findRow('r1') as number;
+      const write = (value: string) =>
+        writer.apply({
+          handles: Int32Array.of(handle),
+          fields: new Map([['property:name', [value]]]),
+        });
+      write('a');
+      frame();
+      const held = heldBytes();
+      write('b');
+      frame();
+      write('c');
+      frame();
+      expect(heldBytes()).toBe(held);
+      expect(made.filter((range) => !range.released)).toHaveLength(2);
+    });
+
+    it('when a style rule changes: the rows are given again, and never held twice', () => {
+      const { frame, heldBytes, made, deps, internals, table, renderer, ledger } = layer(
+        ribbonRows(3),
+      );
+      frame();
+      const ruled: Layer = {
+        ...LAYER,
+        styleRule: {
+          kind: 'categorical',
+          property: 'class',
+          map: { a: '#ff0000' },
+          other: '#00ff00',
+        },
+      };
+      renderer.prerender();
+      beginRenderFrame();
+      renderer.beginFrame();
+      renderer.drawLayer(
+        internals,
+        table,
+        ruled,
+        { projectionData: PROJECTION, zoom: 10, bounds: undefined },
+        deps,
+      );
+      renderer.endFrame();
+      expect(made).toHaveLength(2);
+      expect(made[0].released).toBe(true);
+      expect(heldBytes()).toBe(3 * ROW_BYTES);
+      expect(ledger.snapshot().peakBytes).toBeLessThan(6 * ROW_BYTES);
+    });
+
+    it('when its renderer changes: what the source of before holds is released', () => {
+      const { frame, renderer, customRenderers, type, made, heldBytes } = layer(ribbonRows(2));
+      frame();
+      const other = ribbons(
+        () => ({ createBuffer: () => ({}) }) as never,
+        () => new GpuLedger(),
+      );
+      customRenderers.set('Ribbon', type('Ribbon', other.source));
+      renderer.reclassify();
+      frame();
+      frame();
+      frame();
+      expect(made[0].released).toBe(true);
+      expect(heldBytes()).toBe(0);
+      expect(other.made[0].rows).toHaveLength(2);
+    });
+  });
+
+  it('passes the checks of what is drawn against the rows', () => {
+    const features = [...ribbonRows(3), dashed('d'), feature('z', 'Sticker', [0, 0])];
+    const { frame, renderer } = layer(features);
+    frame();
+    frame();
+    expect(renderer.checkCopies()).toEqual([]);
+    expect(renderer.checkRebuild()).toEqual([]);
   });
 });

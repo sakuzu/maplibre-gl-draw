@@ -13,6 +13,7 @@
  */
 
 import type { Map as MapLibreMap, ProjectionData } from 'maplibre-gl';
+import type { GpuRowsSource, RenderContext } from '../api/extension/render.js';
 import type { LayerTableView, RowHandle } from '../api/tables.js';
 import type { Feature } from '../shared/types/model.js';
 import type { SDFLineRenderer } from '../view/renderers/line/sdf-line.js';
@@ -130,17 +131,17 @@ export interface FeatureTypeRenderer {
   appliesToRow?(view: LayerTableView, handle: RowHandle): boolean;
 
   /**
-   * Draws rows it draws one after the other at once, from the rows (the ones not hidden and in
-   * view, of its type, without a companion), in place of `draw` for each of their features.
+   * What holds its rows on the GPU, for the layers held as rows (`FeatureRendererRows.gpu`).
    * Optional: without it, the features of the rows are made and drawn by `draw`
    */
-  drawRows?(
-    view: LayerTableView,
-    handles: Int32Array,
+  readonly gpuRows?: GpuRowsSource;
+
+  /** The context `gpuRows` draws with (null while it is not on the map) */
+  gpuRowsContext?(
     projectionData: ProjectionData,
     zoom: number,
     context: FrameDrawContext,
-  ): void;
+  ): RenderContext | null;
 
   /**
    * The pictures it draws its points with, for the layers held as rows: such a point is drawn

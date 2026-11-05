@@ -11,7 +11,7 @@
  * - in one draw (`renderers/rows/`), on a flat map, on the terrain and on the globe: a chunk
  *   holds rows of every kind, points, lines, dashed lines, polygons and the points an extension
  *   draws with pictures, and is drawn in one draw whatever kinds its rows are; it ends only where
- *   a row is drawn at once
+ *   a row is drawn at once or held by an extension
  * - by kind, while the program of the drawing in one draw is not ready (and where it cannot be
  *   made): a chunk is a run of rows of one kind, and polygons, solid lines and points are
  *   retained batches of the renderers of their kinds (`table-collect.ts`)
@@ -30,6 +30,14 @@
  * made from the rows and kept up to a number, the rows in view only, by the extent of what is
  * drawn of them (`table-extents.ts`): a chunk of them out of view is skipped, and the rows in view
  * of a chunk of many rows are found in an index of their extents.
+ *
+ * In the drawing in one draw, the rows of a type whose renderer holds its rows on the GPU
+ * (`GpuRows`) make a chunk of their own, which is given its rows once, within the budget, and
+ * draws any range of them in one call, without walking them. The rows it does not hold (not yet,
+ * or because it refused them) and a range it does not draw are drawn at once, in their place, so
+ * the order never changes. What it holds is the memory of the extension: a chunk is only told to
+ * release it, when it is not needed any more, and when rows are refused and it was not drawn for a
+ * while (`GPU_ROWS_IDLE_FRAMES`).
  *
  * The chunks are built over the frames within a budget (`view/retained/chunk-scheduler.ts`),
  * and a chunk invalidated (a new rendering pixel ratio, a new style rule) keeps drawing until the
@@ -52,6 +60,7 @@
  */
 
 import type { ProjectionData } from 'maplibre-gl';
+import type { GpuRowChange, GpuRows, GpuRowsSource } from '../../api/extension/render.js';
 import type { FeatureTypeRenderer } from '../../extension/renderers.js';
 import type { FeatureTablesInternals } from '../../feature-table/feature-tables.js';
 import {
@@ -195,8 +204,6 @@ import {
   classifyRow,
   type OrderedChunkRange,
   partitionRowGroup,
-  rendererTakesRow,
-  rowHasCompanion,
   type TableRunKind,
 } from './table-partition.js';
 import { TableSurface } from './table-surface.js';
@@ -219,6 +226,16 @@ export const IMMEDIATE_CACHE_LIMIT = 50_000;
 
 /** The rows packed between two looks at the clock */
 const SLICE_ROWS = 512;
+
+/**
+ * For how many frames a chunk that holds rows of an extension is not drawn before it may release
+ * them, when the extension refuses rows of a chunk in view (about 30 seconds at 60 frames a
+ * second; a first estimate)
+ */
+export const GPU_ROWS_IDLE_FRAMES = 1_800;
+
+/** The frames between two looks for a chunk to release, when none could release its rows */
+const GPU_ROWS_LOOK_FRAMES = 60;
 
 /** From how many rows a chunk drawn at once finds its rows in view in an index of their boxes */
 const IMMEDIATE_INDEX_FROM = 64;
@@ -380,9 +397,8 @@ interface ChunkCut {
   doneFrame: number;
 }
 
-/** A chunk of rows drawn at once */
-interface ImmediateRowsChunk {
-  readonly type: 'immediate';
+/** What a chunk whose rows may be drawn at once holds */
+interface AtOnceRows {
   readonly range: OrderedChunkRange;
   /** The feature of each row (null for a row without one), filled over the frames */
   features: Array<Feature | null> | null;
@@ -405,12 +421,47 @@ interface ImmediateRowsChunk {
   index: PackedRTree | null;
 }
 
+/** A chunk of rows drawn at once */
+interface ImmediateRowsChunk extends AtOnceRows {
+  readonly type: 'immediate';
+}
+
+/**
+ * A chunk of rows an extension holds on the GPU (its features are made only for the rows it does
+ * not draw)
+ */
+interface ExtensionRowsChunk extends AtOnceRows {
+  readonly type: 'extension';
+  /** What makes what holds its rows */
+  readonly source: GpuRowsSource;
+  /** What holds its rows (null until a row is given to it, and once it is released) */
+  held: GpuRows | null;
+  /** The first rows of the chunk it holds */
+  taken: number;
+  /** `gpuRowsReleases` when it last refused rows (-1 when it did not) */
+  refusedAt: number;
+  /** Whether it meets the view and is not given its rows yet (`builtInView`) */
+  waiting: boolean;
+  /** Whether every row of it is hidden: it holds nothing and draws nothing until one is shown */
+  empty: boolean;
+  /** The frame it was last in view */
+  shownFrame: number;
+  /** The generation of the extents being read a slice at a time, and the rows read of them */
+  readingGeneration: number;
+  readingAt: number;
+  /** The union of the extents read so far, and how far they reach on the screen */
+  readingBounds: BoundingBox | null;
+  readingReachPx: number;
+}
+
+/** A chunk whose rows may be drawn at once */
+type AtOnceChunk = ImmediateRowsChunk | ExtensionRowsChunk;
 /** A chunk of the drawing by kind */
 type KindChunk = RetainedRowsChunk | ImmediateRowsChunk;
 /** A chunk of the drawing in one draw */
-type OneDrawChunk = OneDrawRowsChunk | ImmediateRowsChunk;
+type OneDrawChunk = OneDrawRowsChunk | ImmediateRowsChunk | ExtensionRowsChunk;
 /** A chunk of either drawing */
-type TableChunk = KindChunk | OneDrawRowsChunk;
+type TableChunk = KindChunk | OneDrawChunk;
 
 /**
  * The two ways a layer held as rows is drawn: in one draw per chunk with rows of every kind
@@ -486,6 +537,8 @@ interface LayerCache {
   /** The drawing the layer was drawn with last, and the frame */
   drawing: Drawing;
   drawnFrame: number;
+  /** Whether rows of it may be held by an extension */
+  holdsGpuRows: boolean;
 }
 
 /** A row written in place, waiting for the pass before the main one of the next frame */
@@ -689,6 +742,10 @@ export class TableLayerRenderer {
     reclassified: 0,
     cuts: 0,
   };
+  /** The times what holds rows of an extension was released (rows refused are given again then) */
+  private gpuRowsReleases = 0;
+  /** The frame from which a chunk that released nothing looks again for one to release */
+  private nextGpuRowsLook = 0;
   private readonly scratch: { parts: number[]; coords: Float32Array } = {
     parts: [],
     coords: new Float32Array(2),
@@ -847,7 +904,7 @@ export class TableLayerRenderer {
           ...(groupCache.oneDraw?.chunks ?? []),
         ];
         for (const chunk of chunks) {
-          if (chunk.type !== 'immediate' || !chunk.features) continue;
+          if (!isAtOnce(chunk) || !chunk.features) continue;
           for (let i = 0; i < chunk.filled; i++) {
             const kept = chunk.features[i];
             const row = chunk.range.from + i;
@@ -1345,7 +1402,25 @@ export class TableLayerRenderer {
 
   /** Ends a frame: another one is asked for when a build is left */
   endFrame(): void {
+    this.releaseUndrawnGpuRows();
     if (this.hasPendingWork) this.options.requestRepaint();
+  }
+
+  /**
+   * Releases what extensions hold of the layers the frame did not draw: a layer that left the
+   * document or was hidden holds nothing (given its rows again when it is drawn again)
+   */
+  private releaseUndrawnGpuRows(): void {
+    for (const cache of this.layers.values()) {
+      if (!cache.holdsGpuRows || cache.drawnFrame === this.frameCount) continue;
+      cache.holdsGpuRows = false;
+      const caches = cache.delta ? [...cache.groups.values(), cache.delta] : cache.groups.values();
+      for (const groupCache of caches) {
+        for (const chunk of allChunks(groupCache)) {
+          if (chunk.type === 'extension') this.releaseGpuRows(chunk);
+        }
+      }
+    }
   }
 
   /**
@@ -1870,6 +1945,8 @@ export class TableLayerRenderer {
       const groupCache = caches[i];
       if (groupCache?.group === group) cache.groups.set(group.handle, groupCache);
     });
+    // Its chunks may hold rows of an extension
+    cache.holdsGpuRows = true;
   }
 
   /** A next version was dropped: its chunks are released */
@@ -1923,6 +2000,8 @@ export class TableLayerRenderer {
     const context = this.packContext(groupCache, cache);
     const group = groupCache.group;
     for (const chunk of groupCache.oneDraw.chunks) {
+      // An extension is given its rows again, drawn at once until then
+      if (chunk.type === 'extension') this.invalidateChunk(chunk, false);
       if (chunk.type !== 'rows') continue;
       if (chunk.job) {
         this.invalidateChunk(chunk, true);
@@ -2051,13 +2130,13 @@ export class TableLayerRenderer {
     ] as const) {
       const chunk = held?.chunks.find((c) => row >= c.range.from && row < c.range.to);
       if (!held || !chunk) continue;
-      if (classified && !this.classifiedAs(cache, groupCache, row, chunk.range.kind, oneDraw)) {
+      if (classified && !this.classifiedAs(cache, groupCache, row, chunk.range, oneDraw)) {
         // Another kind of run (drawn at once, by another kind, with other pictures): the row is
         // drawn from the delta
         stats.reclassified++;
         return false;
       }
-      if (chunk.type === 'immediate') {
+      if (isAtOnce(chunk)) {
         if (chunk.features && row - chunk.range.from < chunk.filled && cache.tables) {
           // The feature kept for the row is made again from its columns
           chunk.features[row - chunk.range.from] = rowHasGeometry(group, row)
@@ -2089,6 +2168,14 @@ export class TableLayerRenderer {
             }
           }
           chunk.index = null;
+          // The extents being read a slice at a time are read again with the row as written
+          if (chunk.type === 'extension') chunk.readingGeneration = -1;
+          // What an extension holds is written in the same frame; a row it cannot hold as written
+          // is drawn from the delta
+          if (chunk.type === 'extension' && !this.writeExtensionRow(chunk, group, row, write)) {
+            stats.rebuilt++;
+            return false;
+          }
         }
       } else if (chunk.type === 'retained') {
         // The batches by kind hold their rows: built again (drawn until then)
@@ -2188,6 +2275,30 @@ export class TableLayerRenderer {
   }
 
   /**
+   * Tells what holds the rows of a chunk that one of them was written (nothing to tell for a row
+   * it does not hold yet: it reads the row when it takes it)
+   *
+   * @returns false when it cannot hold the row as written
+   */
+  private writeExtensionRow(
+    chunk: ExtensionRowsChunk,
+    group: RowGroup,
+    row: number,
+    write: PendingWrite,
+  ): boolean {
+    const index = row - chunk.range.from;
+    if (!chunk.held || index >= chunk.taken) return true;
+    const change: GpuRowChange = {
+      geometry: (write.what & ROW_WRITE_GEOMETRY) !== 0,
+      style: (write.what & ROW_WRITE_STYLE) !== 0,
+      values: (write.what & ROW_WRITE_VALUES) !== 0,
+    };
+    if (!chunk.held.update(index, group.data.handles[row], change)) return false;
+    this.writeStats.inPlace++;
+    return true;
+  }
+
+  /**
    * Whether a write may change the classification of its row: a write of its geometry or its
    * style, or of attributes an extension may classify it by (a renderer of its type that may
    * refuse some of its features, a provider of companions that reads a key written or does not
@@ -2228,14 +2339,14 @@ export class TableLayerRenderer {
 
   /**
    * Whether a row is classified as its chunk was cut: the kind of its run (and in one draw the
-   * source of its pictures) as it is now. A write that changes it cannot be written in place
-   *
+   * source of its pictures, or of what holds it on the GPU) as it is now. A write that changes it
+   * cannot be written in place
    */
   private classifiedAs(
     cache: LayerCache,
     groupCache: GroupCache,
     row: number,
-    kind: TableRunKind,
+    range: OrderedChunkRange,
     oneDraw: boolean,
   ): boolean {
     const tables = cache.tables;
@@ -2243,6 +2354,7 @@ export class TableLayerRenderer {
     const layer = cache.layer;
     if (!tables || !deps || !layer || !cache.slots) return false;
     let source: RowSpriteSource | undefined;
+    let gpuRows: GpuRowsSource | undefined;
     const now = classifyRow(groupCache.group, row, {
       slots: cache.slots,
       customTypes: deps.customRenderers,
@@ -2255,9 +2367,14 @@ export class TableLayerRenderer {
       onSprite: (_r, found) => {
         source = found;
       },
+      onGpuRows: (_r, found) => {
+        gpuRows = found;
+      },
     });
+    const kind = range.kind;
     // A row without a geometry joins the run it is in
     if (now !== null && now !== kind) return false;
+    if (now === 'extension') return gpuRows === range.gpuRows;
     return !oneDraw || kind !== 'rows' || source === groupCache.sprites.get(row);
   }
 
@@ -2332,6 +2449,7 @@ export class TableLayerRenderer {
         bounds: WORLD,
         drawing: 'one-draw',
         drawnFrame: -1,
+        holdsGpuRows: false,
       };
       this.layers.set(table.layerId, cache);
     }
@@ -2449,6 +2567,7 @@ export class TableLayerRenderer {
     const group = groupCache.group;
     const oneDraw = drawing === 'one-draw';
     const sprites = new Map<number, RowSpriteSource>();
+    const gpuRows = new Map<number, GpuRowsSource>();
     const view = tables.view(table.layerId);
     const transformFields = this.options.transformFields?.() ?? null;
     const ranges = partitionRowGroup(
@@ -2464,9 +2583,10 @@ export class TableLayerRenderer {
           oneDraw,
           transformFields,
           onSprite: (r, source) => sprites.set(r, source),
+          onGpuRows: (r, source) => gpuRows.set(r, source),
         }),
       undefined,
-      oneDraw ? (row) => sprites.get(row) : undefined,
+      oneDraw ? (row) => sprites.get(row) ?? gpuRows.get(row) : undefined,
     );
     if (oneDraw) groupCache.sprites = sprites;
     const next: GroupChunks<TableChunk> = held
@@ -2495,9 +2615,11 @@ export class TableLayerRenderer {
     for (const chunk of [...held.chunks, ...drawn]) byRange.set(rangeKey(chunk.range), chunk);
     const chunks = ranges.flatMap((range) => {
       const kept = byRange.get(rangeKey(range));
-      if (!kept) return this.makeChunk(range);
+      if (!kept || (kept.type === 'extension' && kept.source !== range.gpuRows)) {
+        return this.makeChunk(range);
+      }
       if (!oneDraw) this.invalidateChunk(kept, true);
-      if (kept.type === 'immediate') {
+      if (isAtOnce(kept)) {
         // The rows in view are found by their extents as they are now
         kept.bounds = range.bounds;
         kept.extentsGeneration = -1;
@@ -2529,17 +2651,32 @@ export class TableLayerRenderer {
 
   /** A chunk for a range of rows (none for a range without a bbox) */
   private makeChunk(range: OrderedChunkRange): TableChunk[] {
-    if (range.kind === 'immediate') {
+    const atOnce: AtOnceRows = {
+      range,
+      features: null,
+      filled: 0,
+      bounds: range.bounds,
+      reachPx: 0,
+      extentsGeneration: -1,
+      index: null,
+    };
+    if (range.kind === 'immediate') return [{ type: 'immediate', ...atOnce }];
+    if (range.kind === 'extension') {
       return [
         {
-          type: 'immediate',
-          range,
-          features: null,
-          filled: 0,
-          bounds: range.bounds,
-          reachPx: 0,
-          extentsGeneration: -1,
-          index: null,
+          type: 'extension',
+          ...atOnce,
+          source: range.gpuRows as GpuRowsSource,
+          held: null,
+          taken: 0,
+          refusedAt: -1,
+          waiting: true,
+          empty: false,
+          shownFrame: this.frameCount,
+          readingGeneration: -1,
+          readingAt: 0,
+          readingBounds: null,
+          readingReachPx: 0,
         },
       ];
     }
@@ -2562,10 +2699,12 @@ export class TableLayerRenderer {
   }
 
   private invalidateChunk(chunk: TableChunk, keepDrawing: boolean): void {
-    if (chunk.type === 'immediate') {
+    if (isAtOnce(chunk)) {
       this.cachedFeatures -= chunk.filled;
       chunk.features = null;
       chunk.filled = 0;
+      // Given its rows again from the rows as they are, drawn at once until then
+      if (chunk.type === 'extension') this.releaseGpuRows(chunk);
       return;
     }
     const renderers = this.renderers;
@@ -2593,6 +2732,17 @@ export class TableLayerRenderer {
       { disposeBatches: (batches) => disposeBatch(batches, renderers) },
       keepDrawing,
     );
+  }
+
+  /** Releases what holds the rows of a chunk (the rows are given again when it is in view) */
+  private releaseGpuRows(chunk: ExtensionRowsChunk): void {
+    chunk.waiting = true;
+    chunk.refusedAt = -1;
+    chunk.taken = 0;
+    if (!chunk.held) return;
+    chunk.held.release();
+    chunk.held = null;
+    this.gpuRowsReleases++;
   }
 
   /** Releases the chunks of a group for a drawing */
@@ -2672,6 +2822,7 @@ export class TableLayerRenderer {
         if (groupCache.uploadedVersion !== group.stateVersion) {
           this.uploadState(this.options.gl, texture, group.gpuState);
           groupCache.uploadedVersion = group.stateVersion;
+          this.writeExtensionStates(groupCache);
         }
         // The binding is kept with the group (the translations and the transforms are the arrays
         // of the renderer)
@@ -2683,6 +2834,22 @@ export class TableLayerRenderer {
           };
         }
       }
+    }
+  }
+
+  /**
+   * Gives what holds rows of an extension in a group the state of its rows as they are; what it
+   * holds of a chunk whose rows are all hidden (deleted, in the delta) is released
+   */
+  private writeExtensionStates(groupCache: GroupCache): void {
+    const group = groupCache.group;
+    for (const chunk of allChunks(groupCache)) {
+      if (chunk.type !== 'extension') continue;
+      const { from } = chunk.range;
+      chunk.empty = rowsHidden(group, chunk.range);
+      if (chunk.empty) this.releaseGpuRows(chunk);
+      if (!chunk.held || chunk.taken === 0) continue;
+      chunk.held.setStates(0, group.gpuState.subarray(from, from + chunk.taken));
     }
   }
 
@@ -2762,6 +2929,10 @@ export class TableLayerRenderer {
       if (chunk.type === 'immediate') {
         if (!pass.drawing) continue;
         this.drawImmediate(tables, chunk, settled);
+        continue;
+      }
+      if (chunk.type === 'extension') {
+        this.drawExtension(tables, chunk, settled, true);
         continue;
       }
       // A chunk that holds rows moved by an edit is built around where the view sees them from
@@ -2967,6 +3138,8 @@ export class TableLayerRenderer {
       this.drawInserts(chunk.range.from);
       if (chunk.type === 'immediate') {
         this.drawImmediate(tables, chunk, settled);
+      } else if (chunk.type === 'extension') {
+        this.drawExtension(tables, chunk, settled, false);
       } else if (chunk.batches && meets(chunk.bounds, bounds)) {
         if (chunk.type === 'rows') this.drawOneDraw(chunk);
         else this.drawRetained(chunk);
@@ -3346,12 +3519,29 @@ export class TableLayerRenderer {
     chunk: ImmediateRowsChunk,
     settled: boolean,
   ): void {
+    const group = this.pass.group as RowGroup;
+    const { from, to } = chunk.range;
+    this.fillFeatures(tables, chunk, settled);
+    // A chunk out of view draws nothing (the rows of the delta within it are drawn)
+    const shown = this.immediateInView(chunk, group);
+    // Drawn in parts at the places of the rows of the delta within the chunk
+    let part = from;
+    for (let at = this.nextInsert(); ; at = this.nextInsert()) {
+      const end = at !== null && at > part && at < to ? at : to;
+      if (shown) this.drawPartAtOnce(chunk, group, part, end);
+      if (end >= to) break;
+      this.drawInserts(end);
+      part = end;
+    }
+  }
+
+  /** Makes the features of the rows of a chunk over the frames, within the budget, while they fit */
+  private fillFeatures(tables: FeatureTablesInternals, chunk: AtOnceRows, settled: boolean): void {
     const pass = this.pass;
     const layerId = pass.layerId;
     const group = pass.group as RowGroup;
     const { from, to } = chunk.range;
     const count = to - from;
-    // The features of the rows are made over the frames, within the budget, while they fit
     const limit = this.options.immediateCacheLimit ?? IMMEDIATE_CACHE_LIMIT;
     if (settled && chunk.filled < count && this.cachedFeatures + count - chunk.filled <= limit) {
       chunk.features ??= new Array(count).fill(null);
@@ -3362,11 +3552,9 @@ export class TableLayerRenderer {
           const end = Math.min(count, chunk.filled + SLICE_ROWS);
           for (let i = chunk.filled; i < end; i++) {
             const row = from + i;
-            // A row an extension draws from the rows needs no feature
-            features[i] =
-              rowHasGeometry(group, row) && !this.rowsDrawerOf(group, row, null)
-                ? rowFeatureToRead(tables.readContext, layerId, group, row)
-                : null;
+            features[i] = rowHasGeometry(group, row)
+              ? rowFeatureToRead(tables.readContext, layerId, group, row)
+              : null;
           }
           this.cachedFeatures += end - chunk.filled;
           chunk.filled = end;
@@ -3376,29 +3564,256 @@ export class TableLayerRenderer {
     if (chunk.filled < count && settled && this.cachedFeatures + count - chunk.filled <= limit) {
       this.pending = true;
     }
+  }
 
-    // A chunk out of view draws nothing (the rows of the delta within it are drawn)
-    const shown = this.immediateInView(chunk, group);
+  /** Draws the rows `[part, end)` of a chunk at once, the ones in view */
+  private drawPartAtOnce(chunk: AtOnceChunk, group: RowGroup, part: number, end: number): void {
+    const { from } = chunk.range;
     const kept = (i: number): Feature | null =>
       chunk.features && i - from < chunk.filled ? chunk.features[i - from] : null;
-    // Drawn in parts at the places of the rows of the delta within the chunk
+    const rows = this.rowsInView(chunk, group, part, end);
+    // On the drape, a break: what is drawn at once comes after the drape painted under it
+    if (this.painter.active && (rows === null || rows.length > 0)) {
+      const rank = this.drape.rankOfRow(this.pass.layerId, group, part);
+      const box = rows === null ? rowsBox(group, part, end) : boxOfRows(group, rows);
+      if (rank) this.painter.breakAt(rank, box, TABLE_DRAPE_POINT_REACH_PX);
+    }
+    // While the extents of an extension are read a slice at a time, a row not read yet is taken
+    // to reach as far as its positions: reading it here would read them all in this frame
+    const reading =
+      chunk.type === 'extension' && chunk.extentsGeneration !== this.rowExtents.generation;
+    this.drawAtOnce(group, part, end, kept, rows, reading);
+    this.recordRange('immediate', part, end);
+  }
+
+  // === The rows an extension holds on the GPU ===
+
+  /**
+   * Gives a chunk of the group being drawn its rows, and draws it: the rows it holds in one call
+   * for each part between the rows of the delta, without walking them, and the others at once
+   *
+   * @param build Whether it is given its rows (not for the chunks of a cut being replaced)
+   */
+  private drawExtension(
+    tables: FeatureTablesInternals,
+    chunk: ExtensionRowsChunk,
+    settled: boolean,
+    build: boolean,
+  ): void {
+    const pass = this.pass;
+    const group = pass.group as RowGroup;
+    const { from, to } = chunk.range;
+    if (settled && !chunk.empty) this.readExtensionExtents(tables, chunk, group);
+    const shown = !chunk.empty && this.immediateInView(chunk, group);
+    if (shown) chunk.shownFrame = this.frameCount;
+    if (build) {
+      if (shown) this.giveRows(tables, chunk, group, settled);
+      chunk.waiting = shown && chunk.taken < to - from && chunk.refusedAt === -1;
+    }
+    if (!pass.drawing) return;
     let part = from;
     for (let at = this.nextInsert(); ; at = this.nextInsert()) {
       const end = at !== null && at > part && at < to ? at : to;
-      if (shown) {
-        const rows = this.rowsInView(chunk, group, part, end);
-        // On the drape, a break: what is drawn at once comes after the drape painted under it
-        if (this.painter.active && (rows === null || rows.length > 0)) {
-          const rank = this.drape.rankOfRow(layerId, group, part);
-          const box = rows === null ? rowsBox(group, part, end) : boxOfRows(group, rows);
-          if (rank) this.painter.breakAt(rank, box, TABLE_DRAPE_POINT_REACH_PX);
-        }
-        this.drawAtOnce(group, part, end, kept, rows);
-        this.recordRange('immediate', part, end);
-      }
+      if (shown) this.drawExtensionPart(tables, chunk, group, part, end, settled);
       if (end >= to) break;
       this.drawInserts(end);
       part = end;
+    }
+  }
+
+  /** Draws the rows `[part, end)` of a chunk: the ones it holds, then the others at once */
+  private drawExtensionPart(
+    tables: FeatureTablesInternals,
+    chunk: ExtensionRowsChunk,
+    group: RowGroup,
+    part: number,
+    end: number,
+    settled: boolean,
+  ): void {
+    const held = Math.min(end, chunk.range.from + chunk.taken);
+    let next = part;
+    if (held > part) {
+      // On the drape, a break: what the extension draws comes after the drape painted under it
+      if (this.painter.active) {
+        const rank = this.drape.rankOfRow(this.pass.layerId, group, part);
+        if (rank) this.painter.breakAt(rank, chunk.bounds, TABLE_DRAPE_POINT_REACH_PX);
+      }
+      if (this.drawHeldRows(chunk, part, held)) {
+        this.recordRange('extension', part, held);
+        next = held;
+      }
+    }
+    if (end <= next) return;
+    // Rows it does not draw keep their features, as the rows drawn at once; the features of rows
+    // about to be given to it are made for the frame only
+    const notDrawn = next === part && held > part;
+    if (notDrawn || chunk.refusedAt !== -1) this.fillFeatures(tables, chunk, settled);
+    this.drawPartAtOnce(chunk, group, next, end);
+  }
+
+  /**
+   * Has an extension draw rows it holds, outside the run of the retained draws
+   *
+   * @param from The first row, of the group of the chunk
+   * @param to The end of the rows, of the group of the chunk (exclusive)
+   * @returns Whether it drew them
+   */
+  private drawHeldRows(chunk: ExtensionRowsChunk, from: number, to: number): boolean {
+    const pass = this.pass;
+    const deps = pass.deps as StoreRetainedDrawDeps;
+    const frame = pass.frame as TableLayerFrame;
+    const held = chunk.held;
+    const ctx = held
+      ? rendererOfGpuRows(deps.customRenderers, chunk.source)?.gpuRowsContext?.(
+          frame.projectionData,
+          frame.zoom,
+          deps.customRendererContext,
+        )
+      : null;
+    if (!held || !ctx) return false;
+    const run = (pass.renderers as RetainedRendererSet).run;
+    run?.end();
+    const drawn = held.draw(from - chunk.range.from, to - chunk.range.from, ctx);
+    // Re-establish the blend state that the external renderer may have rewritten
+    deps.restoreBlendState?.();
+    run?.begin();
+    return drawn;
+  }
+
+  /**
+   * Reads the extents of the rows of a chunk a slice at a time, within the budget of the frames
+   * (reading the extent of a row may make its feature): the chunk is taken for in view until they
+   * are read
+   */
+  private readExtensionExtents(
+    tables: FeatureTablesInternals,
+    chunk: ExtensionRowsChunk,
+    group: RowGroup,
+  ): void {
+    const extents = this.rowExtents;
+    const generation = extents.generation;
+    if (chunk.extentsGeneration === generation) return;
+    if (chunk.readingGeneration !== generation) {
+      chunk.readingGeneration = generation;
+      chunk.readingAt = 0;
+      chunk.readingBounds = null;
+      chunk.readingReachPx = 0;
+    }
+    const { from, to } = chunk.range;
+    const count = to - from;
+    const layerId = this.pass.layerId;
+    const budget = this.budget as ChunkBuildBudget;
+    while (chunk.readingAt < count && budget.canStep()) {
+      budget.step(() => {
+        const start = from + chunk.readingAt;
+        const end = Math.min(to, start + SLICE_ROWS);
+        const read = extents.readRange(group, start, end, (row) =>
+          rowFeatureToRead(tables.readContext, layerId, group, row),
+        );
+        const b = read.boxes;
+        for (let row = start; row < end; row++) {
+          const at = row * 4;
+          if (!Number.isNaN(b[at])) {
+            chunk.readingBounds = widenBounds(
+              chunk.readingBounds,
+              b[at],
+              b[at + 1],
+              b[at + 2],
+              b[at + 3],
+            );
+          }
+          chunk.readingReachPx = Math.max(chunk.readingReachPx, read.reachPx[row]);
+        }
+        chunk.readingAt = end - from;
+      });
+    }
+    if (chunk.readingAt < count) {
+      this.pending = true;
+      return;
+    }
+    chunk.bounds = chunk.readingBounds;
+    chunk.reachPx = chunk.readingReachPx;
+    chunk.extentsGeneration = generation;
+    chunk.index = null;
+  }
+
+  /**
+   * Gives what holds the rows of a chunk the rows it does not hold yet, within the budget. Rows
+   * it refuses are given again only once something was released, so a refusal costs no frame
+   */
+  private giveRows(
+    tables: FeatureTablesInternals,
+    chunk: ExtensionRowsChunk,
+    group: RowGroup,
+    settled: boolean,
+  ): void {
+    const { from, to } = chunk.range;
+    const count = to - from;
+    if (chunk.held?.hasPendingWork()) this.pending = true;
+    if (chunk.taken >= count || !settled) return;
+    if (chunk.refusedAt !== -1) {
+      if (chunk.refusedAt === this.gpuRowsReleases) {
+        this.releaseIdleGpuRows();
+        return;
+      }
+      chunk.refusedAt = -1;
+    }
+    const view = tables.view(this.pass.layerId);
+    if (!view) return;
+    const budget = this.budget as ChunkBuildBudget;
+    (this.layers.get(this.pass.layerId) as LayerCache).holdsGpuRows = true;
+    while (chunk.taken < count && budget.canStep()) {
+      const held = chunk.held ?? chunk.source.create(view);
+      chunk.held = held;
+      const took = budget.step((deadline) => this.addRows(chunk, held, group, deadline));
+      if (took > 0) continue;
+      if (held.hasPendingWork()) break;
+      chunk.refusedAt = this.gpuRowsReleases;
+      this.releaseIdleGpuRows();
+      return;
+    }
+    if (chunk.taken < count || chunk.held?.hasPendingWork()) this.pending = true;
+  }
+
+  /** Gives what holds the rows of a chunk the rows it does not hold yet, and their state */
+  private addRows(
+    chunk: ExtensionRowsChunk,
+    held: GpuRows,
+    group: RowGroup,
+    deadline: number,
+  ): number {
+    const { to } = chunk.range;
+    const first = chunk.range.from + chunk.taken;
+    const took = held.add(group.data.handles.subarray(first, to), deadline);
+    const count = Math.max(0, Math.min(took, to - first));
+    if (count > 0) held.setStates(chunk.taken, group.gpuState.subarray(first, first + count));
+    chunk.taken += count;
+    return count;
+  }
+
+  /**
+   * Rows were refused: releases what the chunk not in view for the longest holds, when that is
+   * long enough, so the rows in view can be held instead (the chunk is given its rows again when
+   * it comes back into view). One chunk at a time: the rows refused are given again in the next
+   * frame, and the ones left refused release the next chunk
+   */
+  private releaseIdleGpuRows(): void {
+    if (this.frameCount < this.nextGpuRowsLook) return;
+    let oldest: ExtensionRowsChunk | null = null;
+    for (const cache of this.layers.values()) {
+      for (const groupCache of cache.groups.values()) {
+        for (const chunk of allChunks(groupCache)) {
+          if (chunk.type !== 'extension' || !chunk.held) continue;
+          if (this.frameCount - chunk.shownFrame < GPU_ROWS_IDLE_FRAMES) continue;
+          if (!oldest || chunk.shownFrame < oldest.shownFrame) oldest = chunk;
+        }
+      }
+    }
+    if (oldest) {
+      this.releaseGpuRows(oldest);
+      this.pending = true;
+    } else {
+      this.nextGpuRowsLook = this.frameCount + GPU_ROWS_LOOK_FRAMES;
     }
   }
 
@@ -3406,9 +3821,13 @@ export class TableLayerRenderer {
    * Whether a chunk drawn at once of the group being drawn meets the view: its extent, or for the
    * rows of a moving set in it, the extent the view sees them from
    */
-  private immediateInView(chunk: ImmediateRowsChunk, group: RowGroup): boolean {
+  private immediateInView(chunk: AtOnceChunk, group: RowGroup): boolean {
     const bounds = (this.pass.frame as TableLayerFrame).bounds ?? WORLD;
     if (bounds === WORLD) return chunk.bounds !== null;
+    // Rows of an extension whose extents are not read yet may be in view
+    if (chunk.type === 'extension' && chunk.extentsGeneration !== this.rowExtents.generation) {
+      return chunk.bounds !== null;
+    }
     const box = this.chunkExtent(chunk, group);
     if (!box) return false;
     if (meets(box, bounds)) return true;
@@ -3425,7 +3844,7 @@ export class TableLayerRenderer {
    * rows (read once, from the features of the rows of a type with an extent of its own), widened by
    * how far they reach on the screen in the frame
    */
-  private chunkExtent(chunk: ImmediateRowsChunk, group: RowGroup): BoundingBox | null {
+  private chunkExtent(chunk: AtOnceRows, group: RowGroup): BoundingBox | null {
     const extents = this.rowExtents;
     if (chunk.extentsGeneration !== extents.generation) {
       const { from, to } = chunk.range;
@@ -3461,7 +3880,7 @@ export class TableLayerRenderer {
    * whole (null otherwise, when the rows of the range are walked)
    */
   private rowsInView(
-    chunk: ImmediateRowsChunk,
+    chunk: AtOnceChunk,
     group: RowGroup,
     from: number,
     to: number,
@@ -3469,6 +3888,9 @@ export class TableLayerRenderer {
     const bounds = (this.pass.frame as TableLayerFrame).bounds ?? WORLD;
     const { range } = chunk;
     if (bounds === WORLD || range.to - range.from < IMMEDIATE_INDEX_FROM) return null;
+    if (chunk.type === 'extension' && chunk.extentsGeneration !== this.rowExtents.generation) {
+      return null;
+    }
     const box = this.chunkExtent(chunk, group);
     if (!box) return null;
     // The moving sets of its rows that move
@@ -3525,6 +3947,7 @@ export class TableLayerRenderer {
    * @param kept The feature kept for a row (null when none is)
    * @param candidates The rows of `[from, to)` that may be in view, in their order (every row of
    *   it when omitted)
+   * @param byPositions Whether a row whose extent is not read is taken to cover its positions
    */
   private drawAtOnce(
     group: RowGroup,
@@ -3532,6 +3955,7 @@ export class TableLayerRenderer {
     to: number,
     kept: (row: number) => Feature | null,
     candidates?: readonly number[] | null,
+    byPositions = false,
   ): void {
     const pass = this.pass;
     const frame = pass.frame as TableLayerFrame;
@@ -3540,9 +3964,6 @@ export class TableLayerRenderer {
     const deps = pass.deps as StoreRetainedDrawDeps;
     const stats = this.atOnceStats;
     const features: Feature[] = [];
-    // The rows an extension draws from the rows, consecutive ones of one renderer at a time
-    let drawer: FeatureTypeRenderer | null = null;
-    const handles: number[] = [];
     let ended = false;
     const end = (): void => {
       if (ended) return;
@@ -3554,20 +3975,6 @@ export class TableLayerRenderer {
       end();
       drawImmediateFeatures(features, pass.layer as Layer, frame.projectionData, frame.zoom, deps);
       features.length = 0;
-    };
-    const drawRows = (): void => {
-      const view = tables.view(pass.layerId);
-      if (!drawer || handles.length === 0 || !view) return;
-      end();
-      drawer.drawRows?.(
-        view,
-        Int32Array.from(handles),
-        frame.projectionData,
-        frame.zoom,
-        deps.customRendererContext,
-      );
-      deps.restoreBlendState?.();
-      handles.length = 0;
     };
     const count = candidates ? candidates.length : to - from;
     for (let k = 0; k < count; k++) {
@@ -3585,22 +3992,11 @@ export class TableLayerRenderer {
           feature ??= rowFeatureToRead(tables.readContext, pass.layerId, group, row);
           return feature;
         };
-        if (!this.rowShown(group, row, set, bounds, featureOf)) continue;
+        if (!this.rowShown(group, row, set, bounds, featureOf, byPositions)) continue;
       }
       stats.drawn++;
-      const rows = this.rowsDrawerOf(group, row, feature);
-      if (rows) {
-        // The features before are drawn first, and the rows of another renderer
-        drawFeatures();
-        if (rows !== drawer) drawRows();
-        drawer = rows;
-        handles.push(group.data.handles[row]);
-        continue;
-      }
       // A row not kept is made when it is in view
       feature ??= rowFeatureToRead(tables.readContext, pass.layerId, group, row);
-      drawRows();
-      drawer = null;
       features.push(
         set > 0
           ? movedFeature(
@@ -3614,7 +4010,6 @@ export class TableLayerRenderer {
       );
     }
     drawFeatures();
-    drawRows();
     if (ended) (pass.renderers as RetainedRendererSet).run?.begin();
   }
 
@@ -3625,6 +4020,7 @@ export class TableLayerRenderer {
    *
    * @param set The moving set of the row (0 for none)
    * @param featureOf The feature of the row (made only to read its extent the first time)
+   * @param byPositions Whether an extent not read stays so: the box of the positions is taken
    */
   private rowShown(
     group: RowGroup,
@@ -3632,10 +4028,12 @@ export class TableLayerRenderer {
     set: number,
     bounds: BoundingBox,
     featureOf: () => Feature,
+    byPositions = false,
   ): boolean {
-    const extents = this.rowExtents.read(group, row, featureOf);
-    const boxes = extents.boxes;
-    const reach = extents.reachPx[row];
+    const unread = byPositions && this.rowExtents.of(group).known[row] === 0;
+    const extents = unread ? null : this.rowExtents.read(group, row, featureOf);
+    const boxes = extents?.boxes ?? group.data.rowBounds;
+    const reach = extents?.reachPx[row] ?? 0;
     let lng = 0;
     let lat = 0;
     if (reach > 0)
@@ -3644,37 +4042,6 @@ export class TableLayerRenderer {
     if (!views) return extentInView(boxes, row, bounds, lng, lat);
     for (const view of views) if (extentInView(boxes, row, view, lng, lat)) return true;
     return false;
-  }
-
-  /**
-   * The renderer that draws a row at once from the rows (`drawRows`): the one of its type, when
-   * it takes the row and the row has no companion (null otherwise, and when no renderer draws
-   * from the rows)
-   *
-   * @param kept The feature kept for the row (read by an extension that answers from a feature)
-   */
-  private rowsDrawerOf(
-    group: RowGroup,
-    row: number,
-    kept: Feature | null,
-  ): FeatureTypeRenderer | null {
-    const pass = this.pass;
-    const deps = pass.deps;
-    const tables = pass.tables;
-    if (!deps || !tables || !anyRowsDrawer(deps.customRenderers)) return null;
-    const renderer = deps.customRenderers.get(rowType(group.data, row)) as
-      | FeatureTypeRenderer
-      | undefined;
-    if (!renderer?.drawRows) return null;
-    let feature = kept;
-    const featureOf = (): Feature => {
-      feature ??= rowFeatureToRead(tables.readContext, pass.layerId, group, row);
-      return feature;
-    };
-    const view = tables.view(pass.layerId);
-    if (!rendererTakesRow(renderer, view, group, row, featureOf)) return null;
-    if (rowHasCompanion(deps.companions, view, group, row, featureOf)) return null;
-    return renderer;
   }
 
   // === The rows of the delta ===
@@ -3751,6 +4118,22 @@ export class TableLayerRenderer {
       const a = Math.max(next, chunk.range.from);
       const b = Math.min(to, chunk.range.to);
       if (b <= a) continue;
+      if (chunk.type === 'extension') {
+        breakAt(a, b);
+        if (chunk.held?.hasPendingWork()) this.pending = true;
+        const held = Math.min(b, chunk.range.from + chunk.taken);
+        let start = a;
+        if (held > a && this.drawHeldRows(chunk, a, held)) {
+          record('extension', a, held);
+          start = held;
+        }
+        if (b > start) {
+          this.drawAtOnce(group, start, b, () => null);
+          record('immediate', start, b);
+        }
+        next = b;
+        continue;
+      }
       const gpu = chunk.type === 'rows' ? chunk.batches : null;
       if (gpu?.uploaded && rows && this.painter.active) {
         const binding = pass.binding;
@@ -3800,7 +4183,11 @@ export class TableLayerRenderer {
     const rows = this.renderers?.rows ?? null;
     for (const [layerId, cache] of this.layers) {
       const table = cache.tables?.layerTable(layerId);
-      if (!table) continue;
+      if (!table) {
+        // A layer that left: what is held for it is released
+        if (cache.tables) this.releaseLayer(layerId, cache);
+        continue;
+      }
       const group = table.delta.group;
       const held = cache.delta;
       const palette = cache.rowsStyles?.palette;
@@ -3836,6 +4223,7 @@ export class TableLayerRenderer {
         continue;
       }
       const sprites = new Map<number, RowSpriteSource>();
+      const gpuRows = new Map<number, GpuRowsSource>();
       const view = tables.view(layerId);
       const transformFields = this.options.transformFields?.() ?? null;
       const ranges = partitionRowGroup(
@@ -3851,15 +4239,22 @@ export class TableLayerRenderer {
             oneDraw: true,
             transformFields,
             onSprite: (r, source) => sprites.set(r, source),
+            onGpuRows: (r, source) => gpuRows.set(r, source),
           }),
         DELTA_CHUNK_VERTICES,
-        (row) => sprites.get(row),
+        (row) => sprites.get(row) ?? gpuRows.get(row),
       );
       deltaCache.sprites = sprites;
       const chunks = ranges.flatMap((range) => this.makeChunk(range)) as OneDrawChunk[];
       deltaCache.oneDraw = { chunks, generation: cache.generation, retiring: null };
       const context = this.packContext(deltaCache, cache);
       for (const chunk of chunks) {
+        if (chunk.type === 'extension' && view) {
+          // A delta is small: given its rows at once
+          cache.holdsGpuRows = true;
+          chunk.held = chunk.source.create(view);
+          this.addRows(chunk, chunk.held, group, Number.POSITIVE_INFINITY);
+        }
         if (chunk.type !== 'rows') continue;
         const origin = normalizeOrigin(chunkOrigin(chunk));
         chunk.batches = packRowsChunk(group, chunk.range, origin, context, rows);
@@ -3867,6 +4262,14 @@ export class TableLayerRenderer {
         this.writeHeights(group, chunk.batches, null);
       }
     }
+  }
+
+  /** Releases what is held for a layer that left its tables */
+  private releaseLayer(layerId: string, cache: LayerCache): void {
+    for (const groupCache of cache.groups.values()) this.disposeGroup(groupCache);
+    if (cache.delta) this.disposeGroup(cache.delta);
+    if (cache.rowsStyles) this.renderers?.rows?.retirePalette(cache.rowsStyles.palette);
+    this.layers.delete(layerId);
   }
 
   /**
@@ -3887,7 +4290,7 @@ export class TableLayerRenderer {
       const held = this.choices[g] === 'one-draw' ? groupCache.oneDraw : groupCache.byKind;
       if (!held) continue;
       for (const chunk of held.chunks) {
-        if (chunk.type === 'immediate' || !chunk.batches) continue;
+        if (isAtOnce(chunk) || !chunk.batches) continue;
         if (chunk.type === 'retained' && !chunk.batches.batch) continue;
         if (!meets(chunk.bounds, bounds)) continue;
         visible.push(chunk);
@@ -3954,16 +4357,46 @@ function* allChunks(groupCache: GroupCache): Generator<TableChunk> {
   }
 }
 
+/** Whether the rows of a chunk may be drawn at once */
+function isAtOnce(chunk: TableChunk): chunk is AtOnceChunk {
+  return chunk.type === 'immediate' || chunk.type === 'extension';
+}
+
 /**
  * Whether every chunk of a drawing that meets the view has its batches (the rows drawn at once
- * need none)
+ * need none), and every extension in view was given its rows (or refused them)
  */
 function builtInView(chunks: readonly TableChunk[], bounds: BoundingBox): boolean {
   for (const chunk of chunks) {
     if (chunk.type === 'immediate') continue;
+    if (chunk.type === 'extension') {
+      if (chunk.waiting && chunk.bounds && meets(chunk.bounds, bounds)) return false;
+      continue;
+    }
     if (!chunk.batches && meets(chunk.bounds, bounds)) return false;
   }
   return true;
+}
+
+/** Whether every row of a range is hidden */
+function rowsHidden(group: RowGroup, range: OrderedChunkRange): boolean {
+  for (let row = range.from; row < range.to; row++) {
+    if ((group.state[row] & STATE_HIDDEN_MASK) === 0) return false;
+  }
+  return true;
+}
+
+/** The renderer of a custom type whose rows are held by a source */
+function rendererOfGpuRows(
+  renderers: ReadonlyMap<string, unknown>,
+  source: GpuRowsSource,
+): FeatureTypeRenderer | null {
+  for (const renderer of renderers.values()) {
+    if ((renderer as FeatureTypeRenderer).gpuRows === source) {
+      return renderer as FeatureTypeRenderer;
+    }
+  }
+  return null;
 }
 
 /**
@@ -4135,14 +4568,6 @@ function holdsBulkMark(groupCache: GroupCache): boolean {
     groupCache.bulkMarked = group.gpuState.some((state) => (state & GPU_STATE_BULK) !== 0);
   }
   return groupCache.bulkMarked;
-}
-
-/** Whether a renderer of a custom type draws rows from the rows (`drawRows`) */
-function anyRowsDrawer(renderers: ReadonlyMap<string, unknown>): boolean {
-  for (const renderer of renderers.values()) {
-    if ((renderer as FeatureTypeRenderer).drawRows) return true;
-  }
-  return false;
 }
 
 /**
@@ -4506,6 +4931,8 @@ function kindText(kind: TableRunKind): string {
       return 'in one draw';
     case 'immediate':
       return 'at once';
+    case 'extension':
+      return 'by an extension';
     default:
       return `by kind (${kind})`;
   }
