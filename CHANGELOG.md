@@ -457,8 +457,12 @@ writing it. Its changes are listed after those of 3.0.0.
   view of a render context. `ShaderData` and `OffsetUniforms` are types
   of `/webgl`.
 - `ProjectionUniformManager.setUniforms(projection, offset, originShift?)`
-  and `QuadShader.draw(vertices, texture, opacity, projection)` of
-  `/webgl` no longer take the zoom, which they did not read.
+  of `/webgl` no longer takes the zoom, which it did not read.
+- `QuadShader` of `/webgl` draws a content (`QuadDrapeContent`, the one
+  `drawQuadOnTerrain` takes), given to its constructor, on the plane, on the
+  globe and on the terrain alike: `draw(vertices, opacity, projection)` no
+  longer takes a texture or the zoom. A picture is `QuadImageContent`, the
+  content by default: set its `texture` before the draw.
 - `TerrainAnchors` is `TerrainSurface`, the surface of the terrain:
   `occlusionOpacity` (was `ghostOpacity`), `elevation` and `generation`.
   Its `project` is gone: `ScreenContext.project` answers where a position
@@ -628,7 +632,7 @@ writing it. Its changes are listed after those of 3.0.0.
 | `ShaderData`, `OffsetUniforms` of the main entry | the same of `/webgl` |
 | `ctx.line.draw(..., { createdZoom })` | `{ referenceZoom }` |
 | `setUniforms(projection, zoom, offset)` | `setUniforms(projection, offset)` |
-| `QuadShader.draw(..., projection, zoom)` | `draw(..., projection)` |
+| `QuadShader.draw(..., zoom)` | `draw(vertices, opacity, projection)` |
 
 ### Added in 2.3.0
 

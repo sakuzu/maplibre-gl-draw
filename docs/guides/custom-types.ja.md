@@ -927,6 +927,12 @@ function drawSolidQuad(ctx: RenderContext, center: [number, number]): boolean {
 }
 ```
 
+`QuadShader` は、四角がどこにあっても同じように中身を描きます。地形の上では
+`drawQuadOnTerrain` を通り、平らな地図と地球儀の上では同じ `quadDrapeColor`
+を `shade` が 1 の値で呼びます。中身は作るときに渡します
+(`new QuadShader(gl, content)`。省くと `QuadImageContent` の画像です)。中身が
+読む値を設定してから `draw(vertices, opacity, projection)` を呼びます。
+
 地形の上に深度なしで印を描くシェーダーは、地形が隠す印を
 `TERRAIN_OCCLUSION_GLSL` で薄くします。CPU の `occlusionOpacity` と
 同じことです。頂点シェーダーの `OFFSET_MODE_GLSL` の後に置くと、
