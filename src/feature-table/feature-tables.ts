@@ -3170,12 +3170,15 @@ class FeatureTablesStore implements FeatureTablesInternals {
     // The values are made what the columns hold before anything is written
     const styles = fields.get('style');
     // A style given to many rows (a change of the style of many rows gives each kind of row the
-    // same object) is made canonical once
+    // same object) is made canonical once. The patch counts as a user of each until its rows are
+    // written: a row that leaves a style as its last user would otherwise take back the number a
+    // later row of the patch is given
     const internedStyles = new Map<unknown, number>();
     const styleNumbers = styles?.map((style) => {
       let number = internedStyles.get(style);
       if (number === undefined) {
         number = this.styles.intern((style ?? {}) as FeatureStyle);
+        this.styles.retain(number);
         internedStyles.set(style, number);
       }
       return number;
@@ -3314,10 +3317,8 @@ class FeatureTablesStore implements FeatureTablesInternals {
       if (!place) created = true;
     }
 
-    // A style interned for a row that kept its own is not held by any row
-    for (const style of internedStyles.values()) {
-      if (this.styles.usesOf(style) === 0) this.styles.release(style);
-    }
+    // A style interned for a row that kept its own is not held by any row, and goes here
+    for (const style of internedStyles.values()) this.styles.release(style);
     for (const group of touched) {
       if (group.delta) continue;
       if (overrideBytesOf(group) > OVERRIDE_BYTES_LIMIT) {
