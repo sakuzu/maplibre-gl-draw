@@ -668,12 +668,24 @@ is in one member of each, `rows`, experimental with its types in `/kasane`
   row, read from the `LayerTableView` of the layer (`getRowValue`,
   `getRowType`). Without it, a feature is made from each row of the type to
   ask `appliesTo` whenever the rows are sorted for the drawing
-- `renderer.rows.draw(view, handles, ctx)` draws the rows the renderer draws
-  one at a time from the rows: consecutive rows of the type, not hidden and in
-  view, in the order of the layer. Without it, the features of such rows are
-  made, kept up to a limit, and drawn by `draw`. A row being dragged in bulk
-  is given as it is written; `draw.rendered.getDraggedRows()` tells where it is
-  drawn
+- `renderer.rows.gpu` holds the rows of a type on the GPU, for a type with
+  many rows. `create(view)` makes a `GpuRows` for a range of rows of a layer.
+  It is given the rows once (`add`, within the time it is told), what is
+  written of them (`update`) and their state (`setStates`), and every frame it
+  draws a range of them (`draw`), in their place in the order of the layer:
+  the work of a frame does not follow the rows. Types that give the same
+  object share a range, also where their rows alternate. Without it, the
+  features of the rows are made, kept up to a limit, and drawn by `draw`
+
+`renderer.rows.gpu` owns the memory it holds: it records it with
+`ctx.gpu` of the plugin and keeps it under a limit of its own in bytes, by
+taking fewer rows in `add`. A row it refuses, a row with a companion and a
+range `draw` answers `false` for are drawn by `draw`, in the same place, so
+reaching the limit makes frames slower and changes nothing of the picture.
+When rows are refused, the ranges not in view for a while are released, and
+given their rows again once they come back. `release` comes when a range is
+not needed, when a layer leaves, and when the instance goes or the context is
+lost, so what is held goes back to what the renderer itself keeps.
 
 ## Terrain
 

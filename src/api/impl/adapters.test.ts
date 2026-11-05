@@ -346,13 +346,13 @@ describe('the answers of a custom feature type and a companion provider from the
       return register(type, r);
     });
     const appliesToRow = vi.fn(() => true);
-    const drawRows = vi.fn();
+    const gpu = { create: vi.fn() };
     engine.extensions.collections.featureTypes.override({
       type: 'Point',
       geometry: 'Point',
       appliesTo: () => true,
       rows: { appliesTo: appliesToRow },
-      renderer: { onAdd: vi.fn(), draw: vi.fn(), onRemove: vi.fn(), rows: { draw: drawRows } },
+      renderer: { onAdd: vi.fn(), draw: vi.fn(), onRemove: vi.fn(), rows: { gpu } },
     });
     engine.extensions.collections.featureTypes.add({
       type: 'pin',
@@ -366,8 +366,10 @@ describe('the answers of a custom feature type and a companion provider from the
     expect(appliesToRow).toHaveBeenCalledWith(view, 3);
     // A type added takes every feature of its type: it is not asked
     expect(pin.appliesToRow).toBeUndefined();
-    expect(typeof point.drawRows).toBe('function');
-    expect(pin.drawRows).toBeUndefined();
+    expect(point.gpuRows).toBe(gpu);
+    expect(typeof point.gpuRowsContext).toBe('function');
+    expect(pin.gpuRows).toBeUndefined();
+    expect(pin.gpuRowsContext).toBeUndefined();
     engine.destroy();
   });
 
@@ -394,9 +396,9 @@ describe('the answers of a custom feature type and a companion provider from the
       engine.extensions.collections.featureTypes.add({
         type: 'pin',
         geometry: 'Point',
-        renderer: { ...renderer, rows: { draw: 1 as never } },
+        renderer: { ...renderer, rows: { gpu: {} as never } },
       }),
-    ).toThrow(/renderer\.rows\.draw/);
+    ).toThrow(/renderer\.rows\.gpu\.create/);
     expect(() =>
       engine.extensions.collections.companionProviders.add({
         name: 'rings',

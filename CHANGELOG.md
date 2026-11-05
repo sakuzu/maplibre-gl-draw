@@ -128,10 +128,14 @@ writing it. Its changes are listed after those of 3.0.0.
   `CompanionProvider.rows.has` (`CompanionProviderRows`) with
   `classifyKeys`, the keys of `properties` its answers read, so that a
   write of other attributes of a row asks them nothing again, and
-  `FeatureRenderer.rows` (`FeatureRendererRows`) with `draw`, which draws
-  the rows, and `sprites`, the pictures of the points a renderer draws,
-  drawn with the rows of their layer (the points of a type that declares
-  a scale field are drawn by `draw`). In `/kasane` too,
+  `FeatureRenderer.rows` (`FeatureRendererRows`) with `gpu`, which holds
+  the rows of a type on the GPU and draws any range of them in one call,
+  in the order of the layer and within a limit of its own (`GpuRowsSource`,
+  `GpuRows`, `GpuRowChange`), and `sprites`, the pictures of the points a
+  renderer draws, drawn with the rows of their layer (the points of a type
+  that declares a scale field are drawn by `draw`). `ROW_STATE_GLSL` of
+  `/webgl` reads what the drag of a row does to its angle and its size
+  (`rowStateRotation`, `rowStateScale`). In `/kasane` too,
   `listSelectedRows`, `DraggedRows` (read with
   `draw.rendered.getDraggedRows()`) and the types of the
   pictures (`RowSpriteSource`, `RowSprite`, `RowSpriteScaleStop`).

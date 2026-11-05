@@ -108,7 +108,12 @@ export type { DraggedRows } from '../feature-table/dragged-rows.js';
 // What the extensions answer and draw from the rows
 export type { FeatureTypeRows } from '../api/extension/feature-type.js';
 export type { CompanionProviderRows } from '../api/extension/provider.js';
-export type { FeatureRendererRows } from '../api/extension/render.js';
+export type {
+  FeatureRendererRows,
+  GpuRowChange,
+  GpuRows,
+  GpuRowsSource,
+} from '../api/extension/render.js';
 
 // Pictures of points drawn with the rows
 export type {

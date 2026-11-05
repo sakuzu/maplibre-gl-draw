@@ -296,7 +296,10 @@ export function validateExtension(kind: ExtensionKind, value: unknown): void {
       const renderer = value.renderer;
       if (!isObject(renderer)) throw wrongShape(kind, 'must have a renderer', 'renderer');
       requireFunctions(kind, renderer, ['onAdd', 'draw', 'onRemove'], [], 'renderer.');
-      optionalGroup(kind, renderer, 'rows', ['draw'], [], 'renderer.');
+      optionalGroup(kind, renderer, 'rows', [], [], 'renderer.');
+      if (isObject(renderer.rows)) {
+        optionalGroup(kind, renderer.rows, 'gpu', [], ['create'], 'renderer.rows.');
+      }
       optionalGroup(kind, value, 'rows', [], ['appliesTo']);
       optionalNumber(kind, value, 'hitPaddingPx', true);
       optionalTransformFields(kind, value);

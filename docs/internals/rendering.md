@@ -651,6 +651,30 @@ with `beginFrame()` after it. Without that flush, every custom feature of a
 layer would be painted first and the core batches over them afterwards,
 putting core features on top regardless of the order.
 
+### Rows held by an extension
+
+On a layer held as rows, a renderer with `rows.gpu` holds the rows of its type
+on the GPU itself (`GpuRows`), so that a frame does no work for each of them.
+They make a chunk of their own (`extension`), cut where the source changes;
+the types that give the same source share it. The chunk has no batches:
+
+- It gives its rows with `add` within the budget of the builds, once it is in
+  view, after its extents are read a slice at a time. Its state goes with
+  `setStates`, when its rows are taken and when the state of the group changes,
+  and a write goes with `update` in the frame that shows it
+- It draws with one `draw` for each part between the rows of the delta, and it
+  is culled by the chunk: a frame does not walk its rows
+- A row it does not hold, and a range `draw` refuses, is drawn at once in its
+  place, so the order does not depend on what the extension holds. A write it
+  refuses moves the row to the delta
+
+The memory belongs to the extension, which records it and keeps it under its
+own limit by taking fewer rows. The core only tells it when to let go: when a
+chunk leaves, when the rows of a chunk are all hidden, when a layer is not
+drawn in a frame, and when rows are refused and another chunk was out of view
+for `GPU_ROWS_IDLE_FRAMES`. A refused chunk asks for no frames: it gives its
+rows again only after a release.
+
 ### Companion drawing
 
 A feature companion (`view/feature-companion.ts`, added through

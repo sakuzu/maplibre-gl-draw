@@ -834,9 +834,9 @@ draw.options.update({
   持ち、`finish`、`cancel`、`container` を持てます
 - 型、その描画器、付き物の提供者が、行で持つレイヤーの行から答えて描く
   ものは、それぞれの 1 つの欄 `rows` にあります (実験的)。
-  `rows.appliesTo` は前の `appliesToRow`、`renderer.rows.draw` と
-  `renderer.rows.sprites` は前の `drawRows` と `rowSprites`、付き物の
-  提供者の `rows.has` は前の `hasRow` です
+  `rows.appliesTo` は前の `appliesToRow`、`renderer.rows.sprites` は前の
+  `rowSprites`、付き物の提供者の `rows.has` は前の `hasRow` です。
+  `drawRows` の代わりに `renderer.rows.gpu` が行を GPU に持ちます
 - 描く文脈は、`ctx.zoom` と `ctx.pixelRatio` の代わりに描いている画面
   `ctx.screen` (プラグインの `screen` と同じもの) を持ちます。
   `ctx.screen.zoom` と `ctx.screen.pixelRatio` を読んでください

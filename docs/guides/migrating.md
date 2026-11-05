@@ -830,9 +830,10 @@ drawn. Each change below names what replaces what is gone.
   and `container`
 - What a type, its renderer and a companion provider answer and draw
   from the rows of a layer held as rows is in one member `rows` of each
-  (experimental): `rows.appliesTo` was `appliesToRow`, `renderer.rows.draw`
-  and `renderer.rows.sprites` were `drawRows` and `rowSprites`, and
-  `rows.has` of a companion provider was `hasRow`
+  (experimental): `rows.appliesTo` was `appliesToRow`,
+  `renderer.rows.sprites` was `rowSprites`, `renderer.rows.gpu` holds the rows
+  on the GPU in place of `drawRows`, and `rows.has` of a companion provider
+  was `hasRow`
 - The render context has the screen of the view it draws, `ctx.screen` (the
   same object as the `screen` of a plugin), in place of `ctx.zoom` and
   `ctx.pixelRatio`: read `ctx.screen.zoom` and `ctx.screen.pixelRatio`
