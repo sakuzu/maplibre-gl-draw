@@ -1884,7 +1884,8 @@ pixel is inside a polygon or how far it is from a line.
 `DrapePlanner.planFrame()` decides per draw whether the drape is used, and
 records the reason in the diagnostic values (`getTerrainDrapeDebug`):
 `terrain-off`, `wide-zoom`, `no-drapeable-features`, `vertex-budget`,
-`cell-overflow`, `no-dem-tiles`, `stale-plan`, `texture-limit` or `ok`.
+`cell-overflow`, `no-dem-tiles`, `stale-plan`, `texture-limit`, `gpu-limit`
+or `ok`.
 
 - The elements are collected before the band is decided, because the band
   depends on their cost. Dataset is folded behind a key (feature
@@ -2187,7 +2188,10 @@ allocation beyond it fails and leaves a texture that samples as zeros, so a
 part of the map would silently vanish. A line batch's coordinate texture is
 never built past it, images are scaled down, and the drape lays out its
 tables in rows of 2,048 texels; when a table would still be too tall, or an
-allocation fails, the view is drawn without the drape (`texture-limit`).
+allocation fails, the view is drawn without the drape (`texture-limit`), and
+so it is when a table does not fit under `rendering.gpuLimitBytes`
+(`gpu-limit`): the vertices of the polygons and the lines are moved to the
+ground, in the order of the layer.
 
 ### Uniforms written once per draw of the map
 
