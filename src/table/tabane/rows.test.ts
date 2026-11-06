@@ -259,7 +259,6 @@ describe('a row block as a row block of the tables', () => {
     expect(a.geometry).toEqual(b.geometry);
     expect(a.rowBounds).toEqual(b.rowBounds);
     expect(a.triangles).toEqual(b.triangles);
-    expect(a.index).toEqual(b.index);
     expect(a.vertexCount).toBe(b.vertexCount);
     for (let r = 0; r < a.length; r++) {
       const sa = a.styleDictionary as NonNullable<RowBlockData['styleDictionary']>;

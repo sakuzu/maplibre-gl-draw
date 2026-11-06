@@ -9,8 +9,8 @@
  * styles and the attributes are taken as they are. What is made here is what the columns of a
  * row block leave to the reader: the ids as text (from their runs), the keys as text (the key of
  * each row of a row block that writes them, or else its head and the numbers of its rows), the
- * hashes of the ids, the flags, the bbox of every row and the spatial index (they depend on the
- * system of the coordinates of the reader), and the fills of the rows that draw a ring around their
+ * hashes of the ids, the flags, the bbox of every row (it depends on the system of
+ * the coordinates of the reader), and the fills of the rows that draw a ring around their
  * point (they depend on the types of the reader). The fills of the polygons are copied from the
  * cache of their triangles that follows the row block in its file (`triangles.ts`) when it fits the
  * rows, and made otherwise.
@@ -29,7 +29,6 @@ import {
   keyColumn,
   planarCoordinates,
   readValue,
-  sortKeyOf,
   strideOf,
   type TabaneCache,
   type TabaneRowBlock,
@@ -38,7 +37,6 @@ import {
 } from '@sakuzu/tabane';
 import { circleRowRings } from '../../shared/circle-rings.js';
 import { DrawError } from '../../shared/draw-error.js';
-import { buildPackedRTree } from '../packed-rtree.js';
 import {
   polygonRanges,
   ringOffsetsOf,
@@ -70,7 +68,7 @@ export interface RowBlockOfTabaneOptions {
    * fewer dimensions gets NaN for the others, one of more is refused
    */
   readonly dimensions?: CoordinateDimensions;
-  /** The system of the coordinates of the bbox and the spatial index (the plane when omitted) */
+  /** The system of the coordinates of the bbox (the plane when omitted) */
   readonly coordinateSystem?: CoordinateSystem;
   /** The rings the rows of some types draw around their point (the Circles when omitted) */
   readonly rings?: RowRings;
@@ -296,7 +294,6 @@ export function rowBlockDataOfTabane(
     properties,
     rowBounds,
     triangles,
-    index: buildPackedRTree(rowBounds, undefined, sortKeyOf(system)),
     vertexCount,
   };
 }

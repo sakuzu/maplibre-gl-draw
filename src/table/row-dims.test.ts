@@ -8,7 +8,7 @@
  *
  * - A position shorter than the dimensions gets NaN, a longer one is refused
  * - The groups of the same rows in every dimensions draw and index the same: the bboxes, the
- *   triangles and the spatial index are made of `x` and `y` only
+ *   triangles are made of `x` and `y` only
  * - A `z` costs 8 bytes per coordinate, a `z` and an `m` 16, and `xy` nothing: the bytes of the
  *   groups of `xy` are the ones they were before the dimensions (their hash is pinned)
  * - A merge copies the coordinates with their values, into more dimensions with NaN
@@ -217,7 +217,6 @@ describe('the row groups of every dimensions', () => {
         expect(group.geometry.children.every((child) => child.dimensions === dims)).toBe(true);
         expect(group.rowBounds).toEqual(other.rowBounds);
         expect(group.triangles).toEqual(other.triangles);
-        expect(group.index).toEqual(other.index);
         expect(group.vertexCount).toBe(other.vertexCount);
         expect(Array.from(group.geometry.types)).toEqual(Array.from(other.geometry.types));
         expect(Array.from(group.geometry.offsets)).toEqual(Array.from(other.geometry.offsets));
@@ -237,7 +236,8 @@ describe('the row groups of every dimensions', () => {
   });
 
   it('of xy hold the bytes they held before the dimensions', () => {
-    // The hashes of the groups built before the coordinates had dimensions (the same rows)
+    // The hashes of the groups built before the coordinates had dimensions (the same rows), of
+    // every array the groups hold now
     expect(hashOf(build(randomRows(3000, 7)))).toBe(PINNED.mixed);
     expect(hashOf(build(randomRows(3000, 8), { targetRows: 100, targetVertices: 900 }))).toBe(
       PINNED.small,
@@ -356,7 +356,7 @@ describe('a merge of row groups of dimensions', () => {
 
 /** The hashes of the groups of xy, taken from the version before the dimensions */
 const PINNED = {
-  mixed: '2cca5ebcc537112afec355837cf39ece2dec71d5ac1f218d6907c2d38d7f5dbd',
-  small: 'b39a1553ed817e77dcf77fbf31d0466e852ec82e3e345b9ba0b02dd9268ca59c',
-  merged: '34cc8d4661df224d7985211a009ec1e74a16a6596bab5ba5ce9b6272d2d255f7',
+  mixed: '7ce5fbb4c506ae76116ba6042941b8bc732f298e4aa85dd1e5e7c4c2eba9d72b',
+  small: 'e752844839528e3698375cc584bd3c1667b0cd4f3d956ade96dabd512475c89e',
+  merged: 'e72e9a9b7b144ad92c9d305dcaf9e2e7e3fcc799972785dd51c92c4948d94e84',
 };

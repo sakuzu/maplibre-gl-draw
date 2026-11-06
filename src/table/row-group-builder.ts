@@ -7,7 +7,7 @@
  * The rows are added in any order. `finish` puts them in the order of the layer
  * (`compareRowKeys`), cuts them into groups of at most a target number of rows and of
  * coordinates, and computes for every group what the main thread would otherwise compute: the
- * hashes of the ids, the bbox of every row, the triangulation of the fills, the spatial index,
+ * hashes of the ids, the bbox of every row, the triangulation of the fills,
  * and the form of every attribute column (dense or sparse). The styles are written as their
  * canonical bytes, shared within a group; the main thread numbers them in its table of styles.
  *
@@ -22,7 +22,6 @@ import {
   hashByteRun,
   hashUtf8,
   planarCoordinates,
-  sortKeyOf,
   strideOf,
   type Utf8Column,
   Utf8ColumnBuilder,
@@ -33,7 +32,6 @@ import {
 import type { Geometry } from 'geojson';
 import { circleRowRings } from '../shared/circle-rings.js';
 import { DrawError } from '../shared/draw-error.js';
-import { buildPackedRTree } from './packed-rtree.js';
 import {
   polygonRanges,
   type RowGeometry,
@@ -103,8 +101,8 @@ export interface RowBlockBuilderOptions {
    */
   readonly dimensions?: CoordinateDimensions;
   /**
-   * The system of the coordinates the bbox of the rows and their spatial index are made in (the
-   * plane when omitted). A function: a Worker passes its own
+   * The system of the coordinates the bbox of the rows is made in (the plane when omitted). A
+   * function: a Worker passes its own
    */
   readonly coordinateSystem?: CoordinateSystem;
   /**
@@ -328,9 +326,6 @@ export function blockTransferList(groups: readonly RowBlockData[]): ArrayBuffer[
     add(group.triangles.wideRows);
     add(group.triangles.wideOffsets);
     add(group.triangles.wideIndices);
-    add(group.index.boxes);
-    add(group.index.indices);
-    add(group.index.levelBounds);
   }
   return [...buffers];
 }
@@ -593,7 +588,6 @@ function buildGroup(
     properties: { keys: keysOfProperties, columns },
     rowBounds,
     triangles: triangles.finish(),
-    index: buildPackedRTree(rowBounds, undefined, sortKeyOf(shape.coordinates)),
     vertexCount,
   };
 }

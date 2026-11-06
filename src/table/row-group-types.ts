@@ -14,7 +14,6 @@
  */
 
 import type { PropertyColumns, Utf8Column } from '@sakuzu/tabane';
-import type { PackedRTree } from './packed-rtree.js';
 import type { TableMixedGeometry } from './types.js';
 
 /** The bit of {@link RowBlockData.flags} of a row that is shown */
@@ -117,8 +116,6 @@ export interface RowBlockData extends RowBlock {
   readonly rowBounds: Float64Array;
   /** The triangulation of the fills of the rows */
   readonly triangles: TriangleCache;
-  /** The spatial index of the rows of the group (it holds the numbers of the rows in the group) */
-  readonly index: PackedRTree;
   /** The total number of coordinates of the rows */
   readonly vertexCount: number;
 }

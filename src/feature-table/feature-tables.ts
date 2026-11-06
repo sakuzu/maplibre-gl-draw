@@ -179,6 +179,9 @@ const PLACE_FIELDS: ReadonlySet<string> = new Set([
 /** The fields a new row is written with: a deleted row written all of them is created again */
 const CREATE_FIELDS: readonly RowField[] = ['type', 'layerId', 'geometry', 'order'];
 
+/** The fields a box of a row is made of, apart from what a box of its type reads */
+const BOX_FIELDS: readonly RowField[] = ['type', 'layerId', 'groupId', 'geometry'];
+
 /** The fields of the rows of a row group taken in, told as written (with their attributes) */
 const ADDED_FIELDS: readonly RowField[] = [
   'type',
@@ -3127,13 +3130,39 @@ class FeatureTablesStore implements FeatureTablesInternals {
   }
 
   /**
+   * Marks the rows a patch may give another box: every row of a patch that writes what a box is
+   * made of (the geometry, the type, the layer, the group or whether it is deleted). A patch of the
+   * attributes and the style marks only the rows whose box is not their bbox: a box of its type
+   * reads the feature, and so does the box of a row held or an image
+   */
+  private markBoxes(patch: RowValues): void {
+    const { handles, fields, deleted } = patch;
+    if (deleted || BOX_FIELDS.some((field) => fields.has(field))) {
+      this.rowBoxes.mark(handles);
+      return;
+    }
+    for (const handle of handles) {
+      const place = this.placeOf(handle);
+      if (!place) {
+        this.rowBoxes.markOne(handle);
+        continue;
+      }
+      const held = this.heldRows.get(handle);
+      const type = held ? held.feature.type : rowType(place.group.data, place.row);
+      if (held || type === 'Image' || this.rowBoxCalculators.has(type)) {
+        this.rowBoxes.markOne(handle);
+      }
+    }
+  }
+
+  /**
    * Writes values of rows: every value is checked before anything is written; then the rows are
    * written in place, and the rows placed elsewhere and the new ones are put in the delta of
    * their layer, and the drawing is told
    */
   private applyPatch(patch: RowValues, changes: Map<string, LayerChangeDraft>): void {
     const { handles, fields, deleted } = patch;
-    this.rowBoxes.mark(handles);
+    this.markBoxes(patch);
     const n = handles.length;
     const checked = this.checkRows(patch);
     const groupHandles = checked.groupHandles;
@@ -3576,7 +3605,6 @@ class FeatureTablesStore implements FeatureTablesInternals {
       targetVertices: UNBOUNDED,
       dimensions: dims,
       ringVertices: circleRowRings.ringVertices,
-      coordinateSystem: this.coordinates,
     });
     return data;
   }
@@ -4026,7 +4054,6 @@ class FeatureTablesStore implements FeatureTablesInternals {
       targetVertices: UNBOUNDED,
       dimensions: layer.dims,
       ringVertices: circleRowRings.ringVertices,
-      coordinateSystem: this.coordinates,
     });
     const marks = this.writeMarks;
     const group =

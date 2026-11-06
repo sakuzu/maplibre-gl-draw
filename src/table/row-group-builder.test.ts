@@ -8,7 +8,6 @@ import { describe, expect, it } from 'vitest';
 import { generateCirclePolygon } from '../geometry/circle.js';
 import { drawPropertyKey } from '../shared/properties.js';
 import { buildEarcutInput } from '../view/renderers/polygon/earcut-input.js';
-import { searchPackedRTree } from './packed-rtree.js';
 import { pairTriangles } from './row-geometry.js';
 import {
   blockTransferList,
@@ -372,15 +371,6 @@ describe('createRowBlockDataBuilder', () => {
     expect(readValue(column('rare'), 8)).toBe('x');
   });
 
-  it('indexes the rows of a group by their bbox', () => {
-    const builder = createRowBlockDataBuilder();
-    for (let i = 0; i < 50; i++)
-      builder.addRow(row(`r${i}`, `k${String(i).padStart(2, '0')}`, point(i, i)));
-    const [group] = builder.finish();
-    const hits = searchPackedRTree(group.index, 9.5, 9.5, 12.5, 12.5).sort((a, b) => a - b);
-    expect(hits).toEqual([10, 11, 12]);
-  });
-
   it('refuses an id added twice and a group it is not given', () => {
     const builder = createRowBlockDataBuilder();
     builder.addRow(row('a', 'a', point(0, 0)));
@@ -402,6 +392,6 @@ describe('createRowBlockDataBuilder', () => {
     expect(new Set(buffers).size).toBe(buffers.length);
     expect(buffers).toContain(groups[0].ids.bytes.buffer);
     expect(buffers).toContain(groups[1].properties.columns[0].tags.buffer);
-    expect(buffers).toContain(groups[1].index.boxes.buffer);
+    expect(buffers).toContain(groups[1].rowBounds.buffer);
   });
 });

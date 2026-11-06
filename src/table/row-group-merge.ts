@@ -10,8 +10,7 @@
  * columns as they are, so nothing is computed again for a row that did not change: its
  * triangles are copied from the cache of its group (earcut runs only where a row was built), its
  * bbox is copied, its attributes are copied as their bytes (no value is decoded and written
- * again), and only the spatial index of the new groups is built. A merge too large for
- * one group is cut into groups of the target sizes at once.
+ * again). A merge too large for one group is cut into groups of the target sizes at once.
  *
  * The rows of the sources must hold the numbers of the table of styles of the document (a group
  * built in a Worker gets them when it is taken in), so a merge keeps the numbers as they are.
@@ -22,10 +21,7 @@
 
 import {
   type CoordinateDimensions,
-  type CoordinateSystem,
   dimsWithin,
-  planarCoordinates,
-  sortKeyOf,
   Utf8ColumnBuilder,
   VALUE_ABSENT,
   type ValueColumn,
@@ -33,7 +29,6 @@ import {
   valueEntryOf,
 } from '@sakuzu/tabane';
 import { DrawError } from '../shared/draw-error.js';
-import { buildPackedRTree } from './packed-rtree.js';
 import { rowGeometryOfColumn, WIDE_VERTICES } from './row-geometry.js';
 import {
   ChildBuilder,
@@ -83,11 +78,6 @@ export interface RowBlockMerge {
    * when omitted)
    */
   readonly ringVertices?: number;
-  /**
-   * The system of the coordinates the spatial index of the new row blocks is made in (the plane when
-   * omitted). A function: a Worker passes its own
-   */
-  readonly coordinateSystem?: CoordinateSystem;
 }
 
 /**
@@ -133,7 +123,6 @@ export function mergeRowBlockData(merge: RowBlockDataMerge): RowBlockData[] {
   const shape: MergeShape = {
     dims,
     ringVertices: merge.ringVertices ?? 1,
-    sortKey: sortKeyOf(merge.coordinateSystem ?? planarCoordinates),
   };
   const keys = isKeySource(merge.groups)
     ? merge.groups
@@ -186,7 +175,6 @@ export function mergeRowBlockData(merge: RowBlockDataMerge): RowBlockData[] {
 interface MergeShape {
   readonly dims: CoordinateDimensions;
   readonly ringVertices: number;
-  readonly sortKey: ((centerX: number, centerY: number) => number) | undefined;
 }
 
 /**
@@ -398,7 +386,6 @@ function copyRows(
       wideOffsets: Int32Array.from(wideOffsets),
       wideIndices: Uint32Array.from(wide),
     },
-    index: buildPackedRTree(rowBounds, undefined, shape.sortKey),
     vertexCount,
   };
 }

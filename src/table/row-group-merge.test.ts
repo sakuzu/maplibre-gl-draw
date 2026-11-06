@@ -16,7 +16,6 @@ import { readValue, utf8ColumnLength, utf8String } from '@sakuzu/tabane';
 import type { Geometry } from 'geojson';
 import { describe, expect, it } from 'vitest';
 import { seededRandom } from '../test-utils.js';
-import { searchPackedRTree } from './packed-rtree.js';
 import { createRowBlockDataBuilder, type RowInput } from './row-group-builder.js';
 import { mergeRowBlockData } from './row-group-merge.js';
 import { ROW_FLAG_LOCKED, ROW_FLAG_VISIBLE, type RowBlockData } from './row-group-types.js';
@@ -216,11 +215,6 @@ describe('mergeRowBlockData', () => {
       expect(got.map((row) => ({ ...row, handle: 0 }))).toEqual(
         want.map((row) => ({ ...row, handle: 0 })),
       );
-      // The spatial index finds the rows by their bboxes
-      const index = merged[0].index;
-      const found: number[] = [];
-      searchPackedRTree(index, -1, -1, 20, 20, found);
-      expect(found.length).toBe(merged[0].length - countNoBounds(merged[0]));
       expect(merged[0].vertexCount).toBe(expected[0].vertexCount);
     }
   });
@@ -326,9 +320,3 @@ describe('mergeRowBlockData', () => {
     );
   });
 });
-
-function countNoBounds(group: RowBlockData): number {
-  let n = 0;
-  for (let r = 0; r < group.length; r++) if (Number.isNaN(group.rowBounds[r * 4])) n++;
-  return n;
-}

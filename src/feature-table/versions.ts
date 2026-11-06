@@ -44,7 +44,7 @@ import type { GroupHandle, RowGroupHandle, RowHandle, TableWorkBudget } from './
  * `@sakuzu/maplibre-gl-draw/table` subpath, run there on copies of the columns.
  *
  * What is handed over can be posted as it is: it holds no function. The Worker gives the
- * system of the coordinates to the builder and the merge when the tables are given one
+ * system of the coordinates to the builder when the tables are given one
  * (`FeatureTablesOptions.coordinateSystem`); the builder draws the rings of the Circles by
  * default.
  *
@@ -539,9 +539,7 @@ export class GroupVersions {
     const rows = merge.rows.length / 2;
     const worker = host.worker;
     if (worker && rows > FOLD_INLINE_ROWS) {
-      // What is posted holds no function: the Worker has its own system of coordinates
-      const { coordinateSystem: _coordinates, ...posted } = merge;
-      worker.merge({ ...posted, groups: host.groupKeyList() }).then(
+      worker.merge({ ...merge, groups: host.groupKeyList() }).then(
         (built) => {
           if (version.status !== 'building') return;
           // The keys of the groups of features of its rows changed meanwhile: dropped (the
@@ -638,7 +636,6 @@ export class GroupVersions {
       cutPast: 2,
       dimensions: layer.dims,
       ringVertices: host.ringVertices,
-      coordinateSystem: host.coordinates,
     };
   }
 

@@ -223,6 +223,33 @@ describe('the features kept of rows', () => {
     expect(store.getFeature('p3')).toBe(calculated[calculated.length - 1]);
   });
 
+  it('marks no box a write of the attributes of a row leaves as it is', () => {
+    const { store, internals } = storeWith(10);
+    const boxes = (internals as unknown as { rowBoxes: { mark(): void; markOne(): void } })
+      .rowBoxes;
+    expect(internals.rowBoxIndexSize().rows).toBe(10);
+    const marks = [vi.spyOn(boxes, 'mark'), vi.spyOn(boxes, 'markOne')];
+    const marked = () => marks.reduce((n, spy) => n + spy.mock.calls.length, 0);
+    store.updateFeature('p3', { properties: { n: 30 } });
+    expect(marked()).toBe(0);
+    store.updateFeature('p3', {
+      geometry: { type: 'Point', coordinates: [50, 50] },
+    });
+    expect(marked()).toBeGreaterThan(0);
+    // The box of a type is told of the attributes it may read
+    const seen: number[] = [];
+    internals.setRowBoxCalculator('Point', (feature) => {
+      seen.push(feature.properties.n as number);
+      const [x, y] = (feature.geometry as { coordinates: number[] }).coordinates;
+      return { minX: x - 1, minY: y - 1, maxX: x + 1, maxY: y + 1 };
+    });
+    internals.rowBoxIndexSize();
+    seen.length = 0;
+    store.updateFeature('p3', { properties: { n: 31 } });
+    internals.rowBoxIndexSize();
+    expect(seen).toEqual([31]);
+  });
+
   it('makes a row tested as a feature once, for the test and for its distance', () => {
     const { store, cache } = storeWith(0);
     store.createFeature({
