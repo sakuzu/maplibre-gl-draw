@@ -18,7 +18,7 @@
 
 import { describe, expect, it, vi } from 'vitest';
 import type { FeatureTablesWorker } from '../api/tables.js';
-import { createRowBlockDataBuilder } from '../table/row-group-builder.js';
+import { createRowBlockDataBuilder, ROW_BLOCK_TARGET_ROWS } from '../table/row-group-builder.js';
 import {
   expectTablesMatch,
   referenceKey as key,
@@ -174,6 +174,27 @@ describe('many new rows written at once', () => {
       })).concat([{ id: 'after', order: key(91_000) }]),
     );
     expect(internals.deltaRowCount()).toBe(202);
+    expectTablesMatch(tables, reference, ['a'], groupHandleOf);
+    internals.flushVersions();
+    expect(internals.deltaRowCount()).toBe(0);
+    expectTablesMatch(tables, reference, ['a'], groupHandleOf);
+  });
+
+  it('gather within the range of a group once the delta is large, and go into it at once', () => {
+    const reference = pointsReference(20);
+    const setup = tablesOfReference(reference, ['a'], 10);
+    const { tables, internals, groupHandleOf } = setup;
+    const within = (from: number, count: number) =>
+      Array.from({ length: count }, (_, i) => ({
+        id: `in${from + i}`,
+        order: `${key(3000)}${String(from + i).padStart(6, '0')}`,
+      }));
+    // Into the delta until it holds a group of rows
+    create(setup, reference, within(0, ROW_BLOCK_TARGET_ROWS));
+    expect(internals.deltaRowCount()).toBe(ROW_BLOCK_TARGET_ROWS);
+    // Past it, the rows that follow are read from where they gather
+    create(setup, reference, within(ROW_BLOCK_TARGET_ROWS, 100));
+    expect(internals.deltaRowCount()).toBe(ROW_BLOCK_TARGET_ROWS);
     expectTablesMatch(tables, reference, ['a'], groupHandleOf);
     internals.flushVersions();
     expect(internals.deltaRowCount()).toBe(0);

@@ -1836,7 +1836,8 @@ class FeatureTablesStore implements FeatureTablesInternals {
   /**
    * Takes new rows of one write into a creation when their keys are a run no row of the layer is
    * within, at a place between two groups: a new one when they are many, or the creation at the
-   * same place whose rows they follow
+   * same place whose rows they follow. Past the size of a group of the delta, a run gathers wherever
+   * it is, and goes into the delta when it is taken in
    *
    * @returns Whether they were taken (they go to the delta otherwise)
    */
@@ -1846,7 +1847,11 @@ class FeatureTablesStore implements FeatureTablesInternals {
     order.sort((a, b) => compareRowKeys(keys, a, keys, b, this.groups));
     const first = order[0];
     const last = order[order.length - 1];
-    if (!this.withinGap(layer, keys, first, keys, last)) return false;
+    // A delta is made again whole for each write into it: past the size of a group, the rows of a
+    // run among the rows of the layer gather too, and go into it a group at a time when they are
+    // taken in, so that many of them written a part at a time do not make it again for each part
+    const large = layer.delta.length >= ROW_BLOCK_TARGET_ROWS;
+    if (!large && !this.withinGap(layer, keys, first, keys, last)) return false;
     const cmp = (a: RowKeySource, i: number, b: RowKeySource, j: number): number =>
       compareRowKeys(a, i, b, j, this.groups);
     // The creation whose rows these follow, with no row of the layer between them
@@ -1865,10 +1870,10 @@ class FeatureTablesStore implements FeatureTablesInternals {
         target = creation;
       }
     }
-    if (target && !this.withinGap(layer, target.first, 0, keys, last)) target = null;
+    if (target && !large && !this.withinGap(layer, target.first, 0, keys, last)) target = null;
     // Rows of the delta within the run (from the last row of the creation continued)
     const from = target ? target.last : keys;
-    if (this.deltaWithin(layer, from, target ? 0 : first, keys, last)) return false;
+    if (!large && this.deltaWithin(layer, from, target ? 0 : first, keys, last)) return false;
     if (target && target.rows.length >= ROW_BLOCK_TARGET_ROWS) target = null;
     if (!target) {
       if (rows.length < CREATE_GROUP_MIN_ROWS) return false;
