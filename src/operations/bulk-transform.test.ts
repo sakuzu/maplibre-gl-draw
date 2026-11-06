@@ -224,9 +224,30 @@ describe('moving, rotating and resizing features selected in bulk', () => {
     expect(xys(bulk.store, bulk.tables)).toEqual(xys(plain.store, plain.tables));
   });
 
-  it('are refused when a feature selected is locked', () => {
+  it('leave a locked feature as it is and write the others', () => {
     const features = featuresOf(12, 10, false);
     features[3].locked = true;
+    const bulk = storeOf(features, 3);
+    const ids = features.map((feature) => feature.id);
+    bulk.store.setSelection('feature', ids);
+    const geometries = (): string[] =>
+      rowsOf(bulk.store, bulk.tables, ids).map((row) =>
+        JSON.stringify((row as { geometry: unknown }).geometry),
+      );
+    const before = geometries();
+    expect(
+      transformBulkSelection(bulk.store, { kind: 'translate', from: [139, 35], to: [140, 36] }),
+    ).toBe(true);
+    const after = geometries();
+    features.forEach((_, i) => {
+      if (i === 3) expect(after[i]).toEqual(before[i]);
+      else expect(after[i]).not.toEqual(before[i]);
+    });
+  });
+
+  it('write nothing when every feature selected is locked', () => {
+    const features = featuresOf(12, 10, false);
+    for (const feature of features) feature.locked = true;
     const bulk = storeOf(features, 3);
     bulk.store.setSelection(
       'feature',

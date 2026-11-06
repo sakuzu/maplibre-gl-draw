@@ -14,19 +14,16 @@
  * - The rows are planned in the step that writes them, from the values they have then. A row
  *   changed from elsewhere meanwhile is written from its values with that change (the move is
  *   made to what it is then); a row deleted meanwhile is left out; a row locked meanwhile is left
- *   as it is (`skipLocked`), and leaves the moving set with the others of its step. A locked row
- *   when the drag is let go refuses the whole, as before
+ *   as it is, and leaves the moving set with the others of its step
  * - Another write of this client finishes the rest at once before it is made (the Store, see
  *   `Store.beginSlicedWrite`), so the writes keep their order; a write from elsewhere does not
  * - The end is told once, when the last rows are written (`onDone`): the end of the drag is
  *   announced then, so what keeps a drag as one step of the history keeps all the steps
  */
 
-import type { BulkOperation } from '../feature-table/bulk-plan.js';
 import { TableSelection } from '../feature-table/selection.js';
 import { BULK_SLICE_BUDGET_MS, BULK_SLICE_ROWS } from '../store/row-steps.js';
 import type { SlicedWrite, Store } from '../store/store.js';
-import { rowsLocked } from './bulk-selection.js';
 import type { BulkKinds } from './bulk-transform.js';
 
 export { BULK_SLICE_BUDGET_MS, BULK_SLICE_ROWS };
@@ -49,15 +46,10 @@ export interface SlicedWriteOptions {
   readonly now?: () => number;
 }
 
-/** An operation that leaves a row locked meanwhile as it is */
-function skippingLocked(op: BulkOperation): BulkOperation {
-  return op.kind === 'rows' ? { ...op, skipLocked: true } : op;
-}
-
 /**
  * Writes the kinds of rows of an operation in steps; the first step is made now
  *
- * @returns false when refused at once (no rows, or a row locked): `onDone(false)` was called
+ * @returns false when refused at once (no rows): `onDone(false)` was called
  * @internal
  */
 export function writeKindsInSlices(
@@ -66,14 +58,13 @@ export function writeKindsInSlices(
   kinds: BulkKinds,
   options: SlicedWriteOptions,
 ): boolean {
-  if (rows.count === 0 || rowsLocked(store, rows)) {
+  if (rows.count === 0) {
     options.onDone(false);
     return false;
   }
   const budget = options.budgetMs ?? BULK_SLICE_BUDGET_MS;
   const schedule = options.schedule ?? ((step: () => void) => void setTimeout(step, 0));
   const now = options.now ?? (() => performance.now());
-  const ops = kinds.map((kind) => skippingLocked(kind.op));
   let kind = 0;
   let at = 0;
   let written = false;
@@ -85,7 +76,7 @@ export function writeKindsInSlices(
       store.transact(() => {
         while (kind < kinds.length) {
           const list = kinds[kind].rows;
-          const op = ops[kind];
+          const { op } = kinds[kind];
           if (at >= list.length) {
             kind++;
             at = 0;

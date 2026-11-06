@@ -76,9 +76,9 @@ export interface BulkRowReader {
  *
  * - `delete`: the rows not locked are deleted
  * - `update`: a change made once per kind of row (`RowStyleSample`), written to every row of the
- *   kind; refused (null) when a row is locked and the change is not of `locked` or `visible` only
- * - `rows`: values of fields made per row from its values (a move, a rotation, a resize);
- *   refused when a row is locked (or the row left as it is, with `skipLocked`)
+ *   kind; a locked row is left as it is, unless the change is of `locked` or `visible` only
+ * - `rows`: values of fields made per row from its values (a move, a rotation, a resize); a locked
+ *   row is left as it is
  * - `place`: the rows put in a place, in their order (another layer, a group)
  *
  * @internal
@@ -89,11 +89,6 @@ export type BulkOperation =
   | {
       readonly kind: 'rows';
       readonly fields: readonly RowField[];
-      /**
-       * Whether a locked row is left as it is rather than refusing the whole (a write made in
-       * steps, where a row can be locked from elsewhere between two of them)
-       */
-      readonly skipLocked?: boolean;
       /** The values of the fields of a row, in the order of `fields` (null: the row is not written) */
       readonly write: (handle: RowHandle, read: BulkRowReader) => readonly unknown[] | null;
     }
@@ -143,12 +138,6 @@ function planDelete(
   return { patch, before: internals.readValues(patch) };
 }
 
-/** A kind of row (its type, its style and its created zoom), and the rows of the selection in it */
-interface Kind {
-  readonly sample: RowStyleSample;
-  count: number;
-}
-
 function planUpdate(
   internals: FeatureTablesInternals,
   make: (sample: RowStyleSample) => RowUpdate | null,
@@ -159,7 +148,9 @@ function planUpdate(
   // once each, without a string or a list made per row
   const handlesIn = rows.handles;
   const kindAt = new Int32Array(handlesIn.length).fill(-1);
-  const kinds: Kind[] = [];
+  const lockedAt = new Uint8Array(handlesIn.length);
+  /** The kinds of row (a type, a style and a created zoom) of the selection */
+  const kinds: RowStyleSample[] = [];
   /** The kinds by the type and the number of the style (their created zooms apart) */
   const kindsByType: number[][][] = [];
   /** The number of each type met, and the numbers of the types of the group of the row before */
@@ -167,14 +158,13 @@ function planUpdate(
   let typesOf: RowGroup['data'] | null = null;
   let typeIdOf: number[] = [];
   const isLocked = lockReader(internals, containers);
-  let locked = false;
   for (let j = 0; j < handlesIn.length; j++) {
     const place = internals.placeOf(handlesIn[j]);
     if (!place) continue;
     const { group, row } = place;
     const data = group.data;
     if ((data.flags[row] & ROW_FLAG_DELETED) !== 0) continue;
-    if (!locked && isLocked(place)) locked = true;
+    if (isLocked(place)) lockedAt[j] = 1;
     if (data !== typesOf) {
       typesOf = data;
       typeIdOf = data.typeNames.map((name) => {
@@ -201,7 +191,7 @@ function planUpdate(
     }
     let k = -1;
     for (let c = 0; c < ofKey.length; c++) {
-      if (kinds[ofKey[c]].sample.createdZoom === createdZoom) {
+      if (kinds[ofKey[c]].createdZoom === createdZoom) {
         k = ofKey[c];
         break;
       }
@@ -209,27 +199,28 @@ function planUpdate(
     if (k < 0) {
       k = kinds.length;
       const type = rowType(data, row);
-      kinds.push({
-        sample: { type, style: internals.styles.get(styleNumber), createdZoom },
-        count: 0,
-      });
+      kinds.push({ type, style: internals.styles.get(styleNumber), createdZoom });
       ofKey.push(k);
     }
-    kinds[k].count++;
     kindAt[j] = k;
   }
-  const updates: Array<RowUpdate | null> = kinds.map((kind) => make(kind.sample));
-  if (!updates.some((update) => update !== null)) return null;
-  // A locked row refuses a change other than of its lock and its visibility (as features.update)
-  if (locked) {
-    for (const update of updates) {
-      if (update && (update.style !== undefined || update.properties !== undefined)) return null;
-    }
-  }
+  const updates: Array<RowUpdate | null> = kinds.map((kind) => make(kind));
+  // A locked row takes no change other than of its lock and its visibility (as features.update):
+  // it is left as it is, and the others are written
+  const leavesLocked = updates.map(
+    (update) => update?.style !== undefined || update?.properties !== undefined,
+  );
+  const writes = (j: number): boolean => {
+    const k = kindAt[j];
+    return k >= 0 && updates[k] !== null && !(lockedAt[j] === 1 && leavesLocked[k]);
+  };
+  const counts = new Int32Array(kinds.length);
+  for (let j = 0; j < handlesIn.length; j++) if (writes(j)) counts[kindAt[j]]++;
   // The fields written: the style, the attributes, shown, locked
   const fieldNames = new Set<RowField>();
-  for (const update of updates) {
-    if (!update) continue;
+  for (let k = 0; k < kinds.length; k++) {
+    const update = updates[k];
+    if (!update || counts[k] === 0) continue;
     if (update.style !== undefined) fieldNames.add('style');
     for (const key of Object.keys(update.properties ?? {})) fieldNames.add(`property:${key}`);
     if (update.visible !== undefined) fieldNames.add('visible');
@@ -241,13 +232,14 @@ function planUpdate(
   let total = 0;
   for (let k = 0; k < kinds.length; k++) {
     offsets[k] = total;
-    if (updates[k]) total += kinds[k].count;
+    total += counts[k];
   }
+  if (total === 0) return null;
   const handles = new Int32Array(total);
   const kindOf = new Int32Array(total);
   for (let j = 0; j < handlesIn.length; j++) {
+    if (!writes(j)) continue;
     const k = kindAt[j];
-    if (k < 0 || !updates[k]) continue;
     const at = offsets[k]++;
     handles[at] = handlesIn[j];
     kindOf[at] = k;
@@ -363,11 +355,7 @@ function planRows(
   const columns = op.fields.map(() => [] as unknown[]);
   for (const handle of rows.handles) {
     const place = livePlaceOf(internals, handle);
-    if (!place) continue;
-    if (isRowLocked(internals, containers, handle)) {
-      if (op.skipLocked) continue;
-      return null;
-    }
+    if (!place || isRowLocked(internals, containers, handle)) continue;
     const values = op.write(handle, readerOf(internals, place));
     if (!values) continue;
     handles.push(handle);

@@ -14,10 +14,10 @@
  */
 
 import type { DragNormalizedEvent } from '../../dispatcher/types.js';
-import { bulkSelectionLocked } from '../../operations/bulk-selection.js';
+import type { TableSelection } from '../../feature-table/selection.js';
 import type { HandleType } from '../../shared/config/constants.js';
 import type { EngineSignals, EventEmitter } from '../../shared/utils/event-emitter.js';
-import { isInteractionBlocked } from '../../store/lock.js';
+import { editableFeatures } from '../../store/lock.js';
 import type { Feature, SelectionBulk } from '../../store/types.js';
 import type { HandleHitResult } from '../../view/ui/handle-test.js';
 import { getSelectedFeatureIds } from '../../view/ui/helper.js';
@@ -77,12 +77,16 @@ export class SelectModeDragHandler {
 
   /**
    * Start a drag operation
+   *
+   * @param pressedLocked Whether the press is on a locked feature of the selection, which moves
+   *   nothing (the others are moved by a press on them, on the frame or on a handle)
    */
   startDrag(
     hitResult: HandleHitResult,
     event: DragNormalizedEvent,
     context: EngineModeContext,
     bbox: BoundingBoxCoords | null,
+    pressedLocked = false,
   ): void {
     const { store } = context;
     this.scope = context.selectionScope;
@@ -121,10 +125,14 @@ export class SelectModeDragHandler {
     //   - readOnly: writes are no-ops, so move/resize/rotate/vertex are not started
     //   - interaction lock: the all-feature operation suppression the application applies, for
     //     example in a read-only state
-    //   - feature locked: the individual lock on that feature (itself / its group / its layer)
-    if (selectedFeatures.some((f) => isInteractionBlocked(f, store))) {
+    //   - feature locked: the individual lock on that feature (itself / its group / its layer).
+    //     A locked feature stays where it is and the others are dragged; nothing starts when all
+    //     are locked, or when the press is on a locked one
+    const moving = editableFeatures(selectedFeatures, store);
+    if (moving.length === 0 || pressedLocked) {
       return;
     }
+    const movingIds = moving.map((feature) => feature.id);
 
     // A vertex drag is planned first: a feature or a vertex that is gone starts nothing
     let vertexPlan: VertexDragPlan | null = null;
@@ -148,7 +156,7 @@ export class SelectModeDragHandler {
     // putting them on the editing scope of drag.started / drag.ended would
     // have the record of the commit transaction swallowed by that scope.
     if (hitResult.type !== 'auxiliary') {
-      this.announce(hitResult.type, [...selectedIds], context.eventEmitter);
+      this.announce(hitResult.type, movingIds, context.eventEmitter);
     }
 
     // Disable MapLibre's map dragging
@@ -162,22 +170,22 @@ export class SelectModeDragHandler {
     // from its candidates (snapping to itself pulls the cursor back, shifting by the grab offset
     // and making it look like it vibrates); the start of the drag was snapped leaving out the
     // same (SelectMode.getDragTargets)
-    const targets = dragTargetsOfHit(hitResult, selectedIds, store);
+    const targets = dragTargetsOfHit(hitResult, movingIds, store);
     switch (hitResult.type) {
       case 'move':
-        this.begin(startMoveDrag(event, [...selectedIds], store));
+        this.begin(startMoveDrag(event, movingIds, store));
         store.setDragState({ operation: 'move', ...targets });
         break;
 
       case 'resize':
-        this.begin(
-          startResizeDrag(event, hitResult.handle!, bbox, selectedFeatures, context.map, store),
-        );
+        this.begin(startResizeDrag(event, hitResult.handle!, bbox, moving, context.map, store));
         store.setDragState({ operation: 'resize', ...targets });
         break;
 
       case 'rotate':
-        this.begin(startRotateDrag(event, bbox, selectedFeatures, store, this.scope, targets));
+        this.begin(
+          startRotateDrag(event, bbox, selectedFeatures, moving, store, this.scope, targets),
+        );
         break;
 
       case 'vertex':
@@ -205,10 +213,10 @@ export class SelectModeDragHandler {
 
   /**
    * Start a drag of the features selected in bulk: a move by a press on one of them, a rotation
-   * or a resize by a handle of their frame. Nothing starts while the selection cannot be edited
-   * (read-only, the interaction lock, a feature locked)
+   * or a resize by a handle of their frame. Nothing starts without rows to drag
    *
    * @param bbox The frame of their extent (without its margin)
+   * @param rows The rows the drag moves (`movableBulkRows`; none on a press on a locked one)
    * @returns Whether the drag started
    */
   startBulkDrag(
@@ -216,15 +224,12 @@ export class SelectModeDragHandler {
     event: DragNormalizedEvent,
     context: EngineModeContext,
     bbox: BoundingBoxCoords,
+    rows: TableSelection,
   ): boolean {
     const { store } = context;
     this.scope = context.selectionScope;
-    const rows = store.getSelectedRows();
     const bulk = store.getSelection().bulk;
-    if (!rows || !bulk) return false;
-    if (store.isReadOnly() || store.isInteractionLocked() || bulkSelectionLocked(store)) {
-      return false;
-    }
+    if (!bulk || rows.count === 0) return false;
     if (hitResult.type !== 'move' && hitResult.type !== 'rotate' && hitResult.type !== 'resize') {
       return false;
     }

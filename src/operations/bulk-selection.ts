@@ -12,22 +12,13 @@
  */
 
 import type { RowStyleSample, RowUpdate } from '../feature-table/bulk-plan.js';
-import { isRowLocked, livePlaceOf, rowsByLayerInOrder } from '../feature-table/bulk-rows.js';
+import { livePlaceOf, rowsByLayerInOrder } from '../feature-table/bulk-rows.js';
 import { featureTablesInternals } from '../feature-table/feature-tables.js';
 import { TableSelection } from '../feature-table/selection.js';
 import type { AutoNameGenerator } from '../shared/utils/name-generator.js';
 import { itemNeighbors } from '../store/item-lists.js';
 import type { Store } from '../store/store.js';
 import type { ItemPlacement, TableGroup } from '../store/types.js';
-
-/** What the rows read of the layers and the groups, and what this client hides */
-function containersOf(store: Store) {
-  return {
-    layerVisible: (layerId: string) => store.getLayer(layerId)?.visible === true,
-    layerLocked: (layerId: string) => store.getLayer(layerId)?.locked === true,
-    hidden: (id: string) => store.isHidden(id),
-  };
-}
 
 /**
  * Deletes the features selected in bulk that are not locked, and clears the selection, as one
@@ -56,15 +47,14 @@ export function bulkSelectionLocked(store: Store): boolean {
 }
 
 /**
- * Whether any of these rows is locked (itself, its group or its layer)
+ * The rows of the features selected in bulk that a drag or a key moves: the ones not locked (the
+ * locked ones stay where they are), none while read-only or under the interaction lock
  *
  * @internal
  */
-export function rowsLocked(store: Store, rows: TableSelection): boolean {
-  const internals = featureTablesInternals(store.tables);
-  if (!internals) return false;
-  const containers = containersOf(store);
-  return rows.handles.some((handle) => isRowLocked(internals, containers, handle));
+export function movableBulkRows(store: Store): TableSelection {
+  if (store.isReadOnly() || store.isInteractionLocked()) return TableSelection.empty;
+  return store.getUnlockedSelectedRows() ?? TableSelection.empty;
 }
 
 /**
@@ -194,8 +184,10 @@ export function placeBulkSelection(store: Store, to: ItemPlacement): boolean {
  * Changes the features selected in bulk: a change is made once per kind of feature (its type,
  * its style and its created zoom) and written to every feature of the kind
  *
+ * A locked feature is left as it is, unless the change is of its lock or its visibility only.
+ *
  * @returns false when nothing is written, or the change is refused (read-only, the interaction
- *   lock, a feature locked for a change other than of its lock or its visibility)
+ *   lock)
  * @internal
  */
 export function updateBulkSelection(

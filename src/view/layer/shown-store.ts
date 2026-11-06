@@ -62,6 +62,7 @@ const EDITING_READS: ReadonlyMap<PropertyKey, unknown> = new Map<PropertyKey, un
   ['getFollowedVertices', () => null],
   ['getSelectedRows', () => null],
   ['isSelectedRowLocked', () => false],
+  ['getUnlockedSelectedRows', () => null],
 ]);
 
 /**

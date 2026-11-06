@@ -551,6 +551,12 @@ export interface Store extends StoreView, UiState {
    */
   isSelectedRowLocked(): boolean;
   /**
+   * The rows of the features selected in bulk that are not locked (themselves, their group or
+   * their layer), null while the selection holds its features: read once after each change of
+   * the document
+   */
+  getUnlockedSelectedRows(): TableSelection | null;
+  /**
    * Puts back a selection read before (`getSelection`, a notification): what is no longer there
    * or cannot be seen is left out
    */

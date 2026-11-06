@@ -25,8 +25,10 @@ import type {
 import { rowsByLayerInOrder } from '../../feature-table/bulk-rows.js';
 import { featureTablesInternals } from '../../feature-table/feature-tables.js';
 import { TableSelection } from '../../feature-table/selection.js';
+import { movableBulkRows } from '../../operations/bulk-selection.js';
 import { createCoordinateTransform } from '../../shared/math/index.js';
 import { getDisplayFeatures } from '../../store/local-visibility.js';
+import { isFeatureLocked } from '../../store/lock.js';
 import type { BoxSelection, Coordinate, DragTargets, Mode, Selection } from '../../store/types.js';
 import { isPointInSelectionFrame } from '../../view/ui/bounds.js';
 import type { HandleHitResult } from '../../view/ui/handle-test.js';
@@ -49,7 +51,11 @@ import { handleSelectClick, handleSelectDoubleClick } from './click-handler.js';
 import { updateCursorForSelection } from './cursor-handler.js';
 import { bulkDragTargets, dragTargetsOfHit } from './drag/operation.js';
 import { SelectModeDragHandler } from './drag-handler.js';
-import { getAuxiliaryHandlesCallback, getGlobalAuxiliaryHandlesCallback } from './hit-helpers.js';
+import {
+  getAuxiliaryHandlesCallback,
+  getGlobalAuxiliaryHandlesCallback,
+  isLockedFeatureAt,
+} from './hit-helpers.js';
 import {
   handleDeleteShortcut,
   handleEscapeShortcut,
@@ -86,7 +92,7 @@ type Grab =
       hit: HandleHitResult;
       /** The frame of their extent (without its margin) */
       frame: BoundingBoxCoords;
-      /** Their rows */
+      /** The rows the drag moves: the ones not locked, none on a press on a locked one */
       rows: TableSelection;
     }
   /** A handle of the selected features */
@@ -95,8 +101,10 @@ type Grab =
       hit: HandleHitResult;
       /** The frame of the selected features */
       bbox: BoundingBoxCoords;
-      /** The selected features, with group / layer selections resolved */
+      /** The selected features it changes: those not locked, with group / layer selections resolved */
       selectedIds: readonly string[];
+      /** Whether the press is on a locked one of the selected features (it moves nothing) */
+      pressedLocked: boolean;
     }
   /** A handle that does not belong to the selection */
   | { kind: 'global'; hit: HandleHitResult }
@@ -387,10 +395,10 @@ export class SelectMode implements EngineModeHandler {
         return;
       }
       case 'bulk':
-        this.#dragHandler.startBulkDrag(grab.hit, event, this.#context, grab.frame);
+        this.#dragHandler.startBulkDrag(grab.hit, event, this.#context, grab.frame, grab.rows);
         return;
       case 'handle':
-        this.#dragHandler.startDrag(grab.hit, event, this.#context, grab.bbox);
+        this.#dragHandler.startDrag(grab.hit, event, this.#context, grab.bbox, grab.pressedLocked);
         return;
       case 'global':
         this.#dragHandler.startDrag(grab.hit, event, this.#context, null);
@@ -404,7 +412,9 @@ export class SelectMode implements EngineModeHandler {
           getSelectedFeatures(store),
           this.#context.selectionScope.extensions,
         );
-        this.#dragHandler.startDrag(MOVE, event, this.#context, bbox);
+        const feature = store.getFeature(grab.featureId);
+        const pressedLocked = feature !== undefined && isFeatureLocked(feature, store);
+        this.#dragHandler.startDrag(MOVE, event, this.#context, bbox, pressedLocked);
         return;
       }
     }
@@ -481,7 +491,16 @@ export class SelectMode implements EngineModeHandler {
             this.#context.selectionScope,
             getAuxiliaryHandlesCallback(selectedFeatures, this.#context.selectionScope),
           );
-          if (hit) return { kind: 'handle', hit, bbox, selectedIds };
+          if (hit) {
+            return {
+              kind: 'handle',
+              hit,
+              bbox,
+              selectedIds: this.#unlockedIds(selectedIds),
+              pressedLocked:
+                hit.type === 'move' && isLockedFeatureAt(point, selectedFeatures, this.#context),
+            };
+          }
         }
       }
     }
@@ -511,8 +530,17 @@ export class SelectMode implements EngineModeHandler {
     return {
       kind: 'feature',
       featureId,
-      selectedIds: selectedIds.includes(featureId) ? selectedIds : [featureId],
+      selectedIds: selectedIds.includes(featureId) ? this.#unlockedIds(selectedIds) : [featureId],
     };
+  }
+
+  /** Those of these selected features a drag changes: the ones not locked */
+  #unlockedIds(ids: readonly string[]): string[] {
+    const { store } = this.#context;
+    return ids.filter((id) => {
+      const feature = store.getFeature(id);
+      return feature !== undefined && !isFeatureLocked(feature, store);
+    });
   }
 
   onDragMove(event: DragNormalizedEvent): void {
@@ -570,7 +598,8 @@ export class SelectMode implements EngineModeHandler {
 
   /**
    * What a press grabs of the features selected in bulk: a handle of their frame, or one of them
-   * (a move of them all: the selection is not narrowed to it). Null when the press is on neither
+   * (a move of them all but the locked ones: the selection is not narrowed to it; a press on a
+   * locked one moves nothing). Null when the press is on neither
    */
   #bulkGrabOf(
     point: { x: number; y: number },
@@ -588,7 +617,8 @@ export class SelectMode implements EngineModeHandler {
       this.#context.selectionStyle,
       this.#context.selectionScope,
     );
-    if (hit && hit.type !== 'move') return { kind: 'bulk', hit, frame, rows };
+    const moved = movableBulkRows(store);
+    if (hit && hit.type !== 'move') return { kind: 'bulk', hit, frame, rows: moved };
     // A press on one of them (not made a feature)
     const top = this.#context.hitTestTopmost(point, {
       orderedFeatures: getDisplayFeatures(store),
@@ -600,7 +630,12 @@ export class SelectMode implements EngineModeHandler {
           ? store.tables?.findRow(top.feature.id)
           : undefined;
     if (handle === undefined || !rows.has(handle)) return null;
-    return { kind: 'bulk', hit: MOVE, frame, rows };
+    return {
+      kind: 'bulk',
+      hit: MOVE,
+      frame,
+      rows: moved.has(handle) ? moved : TableSelection.empty,
+    };
   }
 
   onDragEnd(event: DragNormalizedEvent): void {

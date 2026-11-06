@@ -30,7 +30,6 @@ import {
   transformValuesOf,
 } from '../store/transform-roles.js';
 import type { RowField } from '../store/types.js';
-import { rowsLocked } from './bulk-selection.js';
 import { transformsOf } from './transform-features.js';
 
 /**
@@ -76,13 +75,12 @@ export type BulkKinds = ReadonlyArray<{
 }>;
 
 /**
- * Writes the kinds of rows of an operation, in one transaction
+ * Writes the kinds of rows of an operation, in one transaction: a locked row is left as it is
  *
  * @internal
  */
 export function writeKinds(store: Store, rows: TableSelection, kinds: BulkKinds): boolean {
-  // A locked feature refuses the whole of it, as a drag does not start then
-  if (rows.count === 0 || rowsLocked(store, rows)) return false;
+  if (rows.count === 0) return false;
   let written = false;
   store.transact(() => {
     for (const kind of kinds) {
@@ -96,7 +94,7 @@ export function writeKinds(store: Store, rows: TableSelection, kinds: BulkKinds)
 /**
  * Moves, rotates or scales the features selected in bulk by an edit, as a drag of them does
  *
- * @returns false when nothing is written, or the edit is refused
+ * @returns false when nothing is written (every feature locked, too), or the edit is refused
  * @internal
  */
 export function transformBulkSelection(

@@ -184,7 +184,7 @@ export class DrawStore implements Store {
   /** Whether the selection is being written here (its notification does not prune it) */
   #selecting = false;
   /** Whether a feature selected in bulk is locked, as read last (null: to be read again) */
-  #bulkLocked: boolean | null = null;
+  #bulkUnlocked: TableSelection | null = null;
   /** The selection as this Store told it last (what a change of it tells as the one before) */
   #toldSelection: Selection;
   /**
@@ -479,17 +479,23 @@ export class DrawStore implements Store {
   }
 
   isSelectedRowLocked(): boolean {
+    const rows = this.getSelectedRows();
+    const unlocked = this.getUnlockedSelectedRows();
+    return rows !== null && unlocked !== null && unlocked.count < rows.count;
+  }
+
+  getUnlockedSelectedRows(): TableSelection | null {
     this.#restoring?.finish();
     const bulk = this.#bulk;
     const internals = featureTablesInternals(this.#contract.tables);
-    if (!bulk || !internals) return false;
-    if (this.#bulkLocked === null) {
+    if (!bulk || !internals) return null;
+    if (this.#bulkUnlocked === null) {
       const containers = this.#containers();
-      this.#bulkLocked = bulk.rows.handles.some((handle) =>
-        isRowLocked(internals, containers, handle),
+      this.#bulkUnlocked = bulk.rows.filter(
+        (handle) => !isRowLocked(internals, containers, handle),
       );
     }
-    return this.#bulkLocked;
+    return this.#bulkUnlocked;
   }
 
   selectRows(rows: TableSelection): void {
@@ -804,7 +810,7 @@ export class DrawStore implements Store {
       next && internals && next.rows.count > 0
         ? { type: next.type, rows: next.rows, summary: summaryOf(internals, next.rows) }
         : null;
-    this.#bulkLocked = null;
+    this.#bulkUnlocked = null;
     // What moves them on the terrain starts being built once they are selected
     if (internals && (this.#bulk || had) && !before.equals(after)) {
       internals.bulkSelected(this.#bulk?.rows ?? null);
@@ -1166,7 +1172,7 @@ export class DrawStore implements Store {
    * did not come from a transaction of this Store)
    */
   #receive(changes: StoreChange): void {
-    this.#bulkLocked = null;
+    this.#bulkUnlocked = null;
     // The notification of a restore written in steps goes into the one this Store holds
     const run = <T>(fn: () => T, source: UpdateSource): T =>
       this.#restoring ? this.#bus.continueHeld(fn) : this.#bus.transact(fn, source);

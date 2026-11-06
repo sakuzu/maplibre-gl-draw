@@ -13,6 +13,7 @@
  *   in the same task the set is let go of (the drawing takes both in the same frame)
  * - The arrow keys move them by the same moving set, and the moves made while a key is held are
  *   written once, a moment after the last one (one step of the history), as one move
+ * - A locked feature stays where it is: its row is not in the moving set, and the others move
  */
 
 import type { DragNormalizedEvent } from '../../dispatcher/types.js';
@@ -21,6 +22,7 @@ import type { RowGroup } from '../../feature-table/layer-table.js';
 import { rowGeometry, rowProperties, rowType } from '../../feature-table/row-read.js';
 import { BULK_MOVE_SET, STATE_UNHIT_MASK } from '../../feature-table/row-state.js';
 import { TableSelection } from '../../feature-table/selection.js';
+import { movableBulkRows } from '../../operations/bulk-selection.js';
 import { writeKindsInSlices } from '../../operations/bulk-sliced.js';
 import {
   type BulkKinds,
@@ -389,9 +391,9 @@ export class BulkNudge {
     center: readonly [number, number],
     step: (from: readonly [number, number]) => [number, number],
   ): boolean {
-    const rows = context.store.getSelectedRows();
+    const rows = movableBulkRows(context.store);
     const states = featureTablesInternals(context.store.tables)?.states;
-    if (!rows || !states) return false;
+    if (rows.count === 0 || !states) return false;
     if (this.#rows && !this.#rows.equals(rows)) this.flush();
     if (!this.#rows) {
       // A write of a drag let go before, still under way, is made first (it shares the set)

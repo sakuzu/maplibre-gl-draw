@@ -10,9 +10,29 @@
  * those independent of the selection (getGlobalHandles).
  */
 
+import { getDisplayFeatures } from '../../store/local-visibility.js';
+import { isFeatureLocked } from '../../store/lock.js';
 import type { Feature } from '../../store/types.js';
 import type { AuxiliaryHandlesCallback } from '../../view/ui/handle-test.js';
 import type { SelectionScope } from '../../view/ui/selection-scope.js';
+import type { EngineModeContext } from '../handler.js';
+
+/**
+ * Whether the topmost feature at a point is one of these features and locked: a press on it moves
+ * nothing, though the others of the selection it is in can be moved
+ */
+export function isLockedFeatureAt(
+  point: { x: number; y: number },
+  features: readonly Feature[],
+  context: EngineModeContext,
+): boolean {
+  const { store } = context;
+  const locked = features.filter((feature) => isFeatureLocked(feature, store));
+  if (locked.length === 0) return false;
+  const top = context.hitTestTopmost(point, { orderedFeatures: getDisplayFeatures(store) });
+  const id = top?.kind === 'store' ? top.feature.id : top?.kind === 'row' ? top.id : undefined;
+  return locked.some((feature) => feature.id === id);
+}
 
 /**
  * Obtain the callback that enumerates the auxiliary handles provided by extension

@@ -216,8 +216,10 @@ What each part does when it is dragged:
 - Every drag is one change: while it lasts, `feature.updated` arrives with
   `intermediate: true`, and the release writes the final state.
   `drag.started` and `drag.ended` mark its start and end
-- A locked feature can be selected but shows no handles and does not move
-  ([Layers and groups](layers.md))
+- A locked feature can be selected but does not move
+  ([Layers and groups](layers.md)). Alone it shows no handles. With others
+  it stays where it is while they move, the box and the handles stand
+  around all of them, and a press on it moves nothing
 
 The colors and sizes of the selection box and the handles are the
 `selectionStyle` option. For a line or polygon with very many vertices the
@@ -315,7 +317,9 @@ feature shows its selection box and the selection one box with its handles,
 as for several features. A press on one of them moves them all, and the
 handles of the box rotate and resize them all; they are written once, when
 they are let go. The arrow keys move them too, and the moves of a key held
-are written once, a moment after the last press (one step of an undo).
+are written once, a moment after the last press (one step of an undo). A
+locked feature among them stays where it is, as it does among features
+selected one by one, and one locked while they are dragged stays too.
 
 The verbs of `draw.selection` act on them (`delete`, `group`, `ungroup`,
 `move`, `update`). `selection.features(filter, { limit, after })` reads
@@ -340,9 +344,10 @@ click. In `select` mode:
 | Shift+Cmd/Ctrl+G | ungroup |
 
 An arrow key moves the selected features by that distance on screen, as
-one change. Nothing moves while a selected feature is locked or the
-instance is read-only or under the interaction lock; then, and without a
-selection, the key is left to the map, which pans. A double click on a
+one change. A locked feature stays where it is and the others move. Nothing
+moves when every selected feature is locked or the instance is read-only
+or under the interaction lock; then, and without a selection, the key is
+left to the map, which pans. A double click on a
 feature does not zoom the map.
 
 A key the library uses, in any mode, has its default action prevented

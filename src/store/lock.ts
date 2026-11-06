@@ -76,6 +76,18 @@ export function isInteractionBlocked(feature: Feature, store: InteractionGateSto
 }
 
 /**
+ * The features of a selection an edit of it changes: the ones not locked, which the locked ones
+ * stay behind (none while read-only or under the interaction lock)
+ */
+export function editableFeatures(
+  features: readonly Feature[],
+  store: InteractionGateStore,
+): Feature[] {
+  if (store.isReadOnly() || store.isInteractionLocked()) return [];
+  return features.filter((feature) => !isFeatureLocked(feature, store));
+}
+
+/**
  * Whether the group is effectively locked: by itself or by the layer it belongs to
  *
  * @param findLayerOfGroup A function that returns the layer the group belongs to

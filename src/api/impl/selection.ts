@@ -285,17 +285,13 @@ export function createSelection(
         }
         if (made) prepared.push({ feature, patch: made });
       }
-      if (prepared.length === 0 || store.isReadOnly()) return false;
-      if (
-        prepared.some(
-          ({ feature, patch: made }) =>
-            featureLocked(store, feature) && !onlyLockOrVisibility(made),
-        )
-      ) {
-        return false;
-      }
+      // A locked feature is left as it is, unless only its lock or its visibility changes
+      const written = prepared.filter(
+        ({ feature, patch: made }) => !featureLocked(store, feature) || onlyLockOrVisibility(made),
+      );
+      if (written.length === 0 || store.isReadOnly()) return false;
       store.applyEdits(
-        prepared.map(({ feature, patch: made }) => ({
+        written.map(({ feature, patch: made }) => ({
           kind: 'set',
           featureId: feature.id,
           patch: made,

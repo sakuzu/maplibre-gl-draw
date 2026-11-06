@@ -5,6 +5,7 @@
  * The record of the writes a drag makes, for its commit or its abort
  */
 
+import { isFeatureLocked } from '../../../store/lock.js';
 import type { Feature } from '../../../store/types.js';
 import type { DragStore } from './operation.js';
 
@@ -98,21 +99,23 @@ export class IntermediateWrites {
       this.clearRecords();
       return;
     }
-    if (store) {
-      const ids = [...this.pending.keys()];
-      store.transact(() => {
-        for (const id of ids) {
-          const origin = this.origins.get(id);
-          const written = this.written.get(id);
-          const feature = store.getFeature(id);
-          if (!origin || !written || !feature || !holdsFields(feature, written)) continue;
-          store.updateFeature(id, origin, { isIntermediate: true });
-        }
-      });
-      store.abortIntermediateUpdates?.(ids);
-    }
+    if (store) this.restore(store, [...this.pending.keys()]);
     this.pending.clear();
     this.clearRecords();
+  }
+
+  /** Puts features back as they were when the drag started, and announces the discard */
+  private restore(store: DragStore, ids: readonly string[]): void {
+    store.transact(() => {
+      for (const id of ids) {
+        const origin = this.origins.get(id);
+        const written = this.written.get(id);
+        const feature = store.getFeature(id);
+        if (!origin || !written || !feature || !holdsFields(feature, written)) continue;
+        store.updateFeature(id, origin, { isIntermediate: true });
+      }
+    });
+    store.abortIntermediateUpdates?.([...ids]);
   }
 
   /**
@@ -129,18 +132,27 @@ export class IntermediateWrites {
    *
    * Only the features that still exist are committed. A feature can disappear during a drag (a
    * deletion from outside, the public API, a plugin); its record is not committed but discarded like
-   * an aborted drag, so the commit never updates a missing feature and never lands halfway.
+   * an aborted drag, so the commit never updates a missing feature and never lands halfway. A
+   * feature locked during the drag goes back as an aborted drag puts it back, and the others are
+   * committed.
    */
   commit(store: DragStore): void {
     if (this.pending.size === 0) return;
 
     const vanished: string[] = [];
+    const locked: string[] = [];
     for (const id of this.pending.keys()) {
-      if (!store.getFeature(id)) vanished.push(id);
+      const feature = store.getFeature(id);
+      if (!feature) vanished.push(id);
+      else if (isFeatureLocked(feature, store)) locked.push(id);
     }
     if (vanished.length > 0) {
       store.abortIntermediateUpdates?.(vanished);
       for (const id of vanished) this.pending.delete(id);
+    }
+    if (locked.length > 0) {
+      this.restore(store, locked);
+      for (const id of locked) this.pending.delete(id);
     }
 
     if (this.pending.size > 0) {

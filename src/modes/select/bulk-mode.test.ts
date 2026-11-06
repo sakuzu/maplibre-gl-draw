@@ -454,8 +454,27 @@ describe('the select mode over features selected in bulk', () => {
     expect(draggedRowsOf(tables)).toBeNull();
   });
 
-  it('starts no drag while a feature selected is locked, and keeps the selection', () => {
+  it('drags the others of a selection with a locked feature, which is not in the moving set', () => {
     store.updateFeature('f2', { locked: true });
+    store.setSelection('feature', ids);
+    top = rowHit('f3');
+    mode.onDragStart(drag('dragstart', 6.5, 0.5, [6.5, 0.5]));
+    expect(store.getDragState()?.operation).toBe('move');
+    expect(ids.map(movingSetOf)).toEqual(ids.map((id) => (id === 'f2' ? 0 : BULK_MOVE_SET)));
+    expect(store.getSelection().bulk?.count).toBe(6);
+  });
+
+  it('starts no drag by a press on a locked feature, and keeps the selection', () => {
+    store.updateFeature('f2', { locked: true });
+    store.setSelection('feature', ids);
+    top = rowHit('f2');
+    mode.onDragStart(drag('dragstart', 4.5, 0.5, [4.5, 0.5]));
+    expect(store.getDragState()).toBeNull();
+    expect(store.getSelection().bulk?.count).toBe(6);
+  });
+
+  it('starts no drag while every feature selected is locked, and keeps the selection', () => {
+    for (const id of ids) store.updateFeature(id, { locked: true });
     store.setSelection('feature', ids);
     top = rowHit('f3');
     mode.onDragStart(drag('dragstart', 6.5, 0.5, [6.5, 0.5]));
@@ -500,6 +519,29 @@ describe('the select mode over features selected in bulk', () => {
     vi.advanceTimersByTime(BULK_NUDGE_COMMIT_MS + 10);
     expect(corners()[0][0]).toBeCloseTo(before[0][0] + east, 9);
     expect(changes.slice(count).filter((change) => change.rows)).toHaveLength(1);
+    expect(ids.map(movingSetOf)).toEqual(ids.map(() => 0));
+  });
+
+  it('moves the others by the arrow keys, and leaves a locked feature', () => {
+    vi.useFakeTimers();
+    store.updateFeature('f2', { locked: true });
+    store.setSelection('feature', ids);
+    const before = corners();
+    mode.onKeyDown(key('ArrowRight'));
+    expect(ids.map(movingSetOf)).toEqual(ids.map((id) => (id === 'f2' ? 0 : BULK_MOVE_SET)));
+    vi.advanceTimersByTime(BULK_NUDGE_COMMIT_MS + 10);
+    const after = corners();
+    ids.forEach((id, i) => {
+      if (id === 'f2') expect(after[i]).toEqual(before[i]);
+      else expect(after[i]).not.toEqual(before[i]);
+    });
+  });
+
+  it('leaves the arrow keys to the map while every feature selected is locked', () => {
+    vi.useFakeTimers();
+    for (const id of ids) store.updateFeature(id, { locked: true });
+    store.setSelection('feature', ids);
+    mode.onKeyDown(key('ArrowRight'));
     expect(ids.map(movingSetOf)).toEqual(ids.map(() => 0));
   });
 });

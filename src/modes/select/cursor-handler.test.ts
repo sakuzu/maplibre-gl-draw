@@ -145,5 +145,25 @@ describe.each(STORE_KINDS)('on %s', (_kind, createStore) => {
       updateCursorForSelection(centerEvent, context, DEFAULT_SELECTION_CONFIG);
       expect(canvas.style.cursor).toBe('pointer');
     });
+
+    it('a selection with a locked feature shows the move cursor, but not over that feature', () => {
+      store.createFeature({ ...polygon('f2', 'l1'), locked: true });
+      store.setSelection('feature', ['f1', 'f2']);
+      hit = store.getFeature('f1') ?? null;
+      updateCursorForSelection(centerEvent, context, DEFAULT_SELECTION_CONFIG);
+      expect(canvas.style.cursor).toBe('move');
+      hit = store.getFeature('f2') ?? null;
+      updateCursorForSelection(centerEvent, context, DEFAULT_SELECTION_CONFIG);
+      expect(canvas.style.cursor).toBe('pointer');
+    });
+
+    it('a selection of locked features only shows no operation cursor', () => {
+      store.createFeature({ ...polygon('f2', 'l1'), locked: true });
+      store.updateFeature('f1', { locked: true });
+      store.setSelection('feature', ['f1', 'f2']);
+      hit = null;
+      updateCursorForSelection(centerEvent, context, DEFAULT_SELECTION_CONFIG);
+      expect(canvas.style.cursor).toBe('default');
+    });
   });
 });

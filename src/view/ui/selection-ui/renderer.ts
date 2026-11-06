@@ -157,7 +157,11 @@ export class SelectionUIRenderer {
     if (features.length > 1 && initialFeatureBboxes) {
       for (const feature of features) {
         const featureInitialBbox = initialFeatureBboxes.get(feature.id);
-        if (!featureInitialBbox) continue;
+        // A locked feature does not turn with the others
+        if (!featureInitialBbox) {
+          this.#drawIndividualBoundingBox(feature, zoom);
+          continue;
+        }
         const rotatedFeatureBbox = rotateBoundingBox(
           featureInitialBbox,
           currentAngle,

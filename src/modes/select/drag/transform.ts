@@ -126,24 +126,27 @@ export class RotateDrag implements DragOperation {
 /**
  * Start a rotate drag from the rotation handle, and set the DragState it draws from
  *
+ * @param selected The selected features: the frame turned around their center
+ * @param features The ones the rotation turns (the locked ones stay)
  * @param targets The features the rotation turns, as its drag state records them (snapping
  *   leaves them out)
  */
 export function startRotateDrag(
   event: DragNormalizedEvent,
   bbox: BoundingBoxCoords,
+  selected: Feature[],
   features: Feature[],
   store: DragStore,
   scope: DragScope,
   targets: DragTargets,
 ): RotateDrag {
   const fields = transformFieldsOfStore(store);
-  const center = rotationCenterOf(bbox, features, fields);
+  const center = rotationCenterOf(bbox, selected, fields);
   const drag = new RotateDrag(center, dragStartLngLat(event), startsOf(features, fields));
 
   // On a multiple selection, also save the initialBbox of each feature
   let initialFeatureBboxes: Map<string, BoundingBoxCoords> | undefined;
-  if (features.length > 1) {
+  if (selected.length > 1) {
     initialFeatureBboxes = new Map();
     for (const feature of features) {
       const featureBbox = computeBoundingBox(feature, scope?.extensions);

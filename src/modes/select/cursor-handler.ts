@@ -14,6 +14,7 @@
  */
 
 import type { MouseNormalizedEvent } from '../../dispatcher/types.js';
+import { movableBulkRows } from '../../operations/bulk-selection.js';
 import type { SelectionUIConfig } from '../../shared/config/selection.js';
 import { createCoordinateTransform } from '../../shared/math/index.js';
 import { getDisplayFeatures } from '../../store/local-visibility.js';
@@ -30,7 +31,11 @@ import {
   getSelectedFeatures,
 } from '../../view/ui/helper.js';
 import type { EngineModeContext } from '../handler.js';
-import { getAuxiliaryHandlesCallback, getGlobalAuxiliaryHandlesCallback } from './hit-helpers.js';
+import {
+  getAuxiliaryHandlesCallback,
+  getGlobalAuxiliaryHandlesCallback,
+  isLockedFeatureAt,
+} from './hit-helpers.js';
 
 export function updateCursorForSelection(
   event: MouseNormalizedEvent,
@@ -46,13 +51,14 @@ export function updateCursorForSelection(
 
   // Handle hit test on the selected features
   // No operation cursor (move / resize, etc.) is shown for a selection whose editing operations
-  // are suppressed (effective lock / read-only / interaction lock). Dragging is rejected by
-  // startDrag with the same predicate, so the cursor alone would be a lie suggesting it is
-  // possible. It falls through to the feature hit test below (pointer), matching the operation
-  // that is actually possible: "it can be selected by clicking".
+  // are all suppressed (every feature locked / read-only / interaction lock), nor over a locked
+  // feature of a selection the others of which can be moved. Dragging is rejected by startDrag
+  // with the same predicate, so the cursor alone would be a lie suggesting it is possible. It
+  // falls through to the feature hit test below (pointer), matching the operation that is
+  // actually possible: "it can be selected by clicking".
   if (selectedIds.length > 0) {
     const selectedFeatures = getSelectedFeatures(store);
-    const blocked = selectedFeatures.some((f) => isInteractionBlocked(f, store));
+    const blocked = selectedFeatures.every((f) => isInteractionBlocked(f, store));
     const bbox = blocked
       ? null
       : computeSelectionBoundingBox(selectedFeatures, context.selectionScope.extensions);
@@ -73,7 +79,10 @@ export function updateCursorForSelection(
         getAuxiliaryHandles,
       );
 
-      if (handleHit) {
+      if (
+        handleHit &&
+        !(handleHit.type === 'move' && isLockedFeatureAt(event.point, selectedFeatures, context))
+      ) {
         canvas.style.cursor = getCursorForHandle(handleHit);
         return;
       }
@@ -82,7 +91,7 @@ export function updateCursorForSelection(
 
   // Features selected in bulk: the handles of their frame (not while they cannot be edited)
   const bulk = store.getSelection().bulk;
-  if (bulk && !store.isReadOnly() && !store.isInteractionLocked() && !store.isSelectedRowLocked()) {
+  if (bulk && movableBulkRows(store).count > 0) {
     const bulkHit = hitTestBulkHandles(
       event.point,
       bulk,

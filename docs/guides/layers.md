@@ -212,8 +212,12 @@ draw.layers.update(layerId, { locked: true });
 - A locked feature can be selected, and `selection.features()` includes it
 - It cannot be moved, resized, rotated, vertex-edited or deleted, it shows
   no handles, and box selection skips it
+- Selected with others, it stays where it is while they are dragged or
+  moved with the arrow keys; a press on it moves nothing
 - `update` returns `null` for a locked item when the patch changes anything
   other than `locked` and `visible`, and `delete` and `move` return `false`
+- `selection.update` and `selection.delete` leave the locked features as
+  they are and change the others
 - The Delete key keeps locked features: a selected group loses only its
   unlocked features, and a layer that holds a locked item is not deleted
 - The geometry operations refuse locked features

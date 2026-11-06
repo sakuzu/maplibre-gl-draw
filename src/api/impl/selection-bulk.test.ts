@@ -242,6 +242,52 @@ describe('the verbs of the selection over features selected in bulk', () => {
     }
   });
 
+  it('leave the locked features as they are and change the others, as one by one', () => {
+    for (let seed = 60; seed <= 66; seed++) {
+      const { bulk, single } = pair(seed);
+      const ids = pick(bulk.draw, bulk.next, 0.6);
+      if (ids.length <= 6) continue;
+      const locked = ids.filter((_, i) => i % 5 === 0);
+      for (const { draw } of [bulk, single]) {
+        for (const id of locked) draw.features.update(id, { locked: true });
+        draw.selection.set('feature', ids);
+      }
+      const seen = locked.map((id) => JSON.stringify(bulk.draw.features.get(id)));
+      expect(bulk.draw.selection.get().bulk).toBeDefined();
+      expect(single.draw.selection.get().bulk).toBeUndefined();
+      for (const { draw } of [bulk, single]) {
+        const patch = { style: { strokeColor: '#123456' }, properties: { changed: true } };
+        expect(draw.selection.update(patch)).toBe(true);
+      }
+      expect(snapshot(bulk.draw)).toEqual(snapshot(single.draw));
+      expect(locked.map((id) => JSON.stringify(bulk.draw.features.get(id)))).toEqual(seen);
+      expect(bulk.draw.features.get(ids[1])?.style.strokeColor).toBe('#123456');
+      // Their lock and their visibility change
+      for (const { draw } of [bulk, single]) {
+        expect(draw.selection.update({ locked: false })).toBe(true);
+      }
+      expect(snapshot(bulk.draw)).toEqual(snapshot(single.draw));
+      expect(bulk.draw.features.get(locked[0])?.locked).toBe(false);
+    }
+  });
+
+  it('change nothing when every feature selected is locked, but their lock', () => {
+    const { bulk, single } = pair(67);
+    const ids = pick(bulk.draw, bulk.next, 0.6);
+    for (const { draw } of [bulk, single]) {
+      for (const id of ids) draw.features.update(id, { locked: true });
+      draw.selection.set('feature', ids);
+      const before = snapshot(draw);
+      expect(draw.selection.update({ style: { strokeColor: '#123456' } })).toBe(false);
+      // A change with its lock is of more than its lock: it is left as it is too
+      expect(draw.selection.update({ style: { strokeColor: '#123456' }, locked: false })).toBe(
+        false,
+      );
+      expect(snapshot(draw)).toEqual(before);
+      expect(draw.selection.update({ locked: false })).toBe(true);
+    }
+  });
+
   it('group as the same features selected one by one in their order, and ungroup', () => {
     for (let seed = 20; seed <= 26; seed++) {
       const { bulk, single } = pair(seed);

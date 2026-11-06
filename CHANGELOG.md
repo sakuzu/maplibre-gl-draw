@@ -328,6 +328,11 @@ writing it. Its changes are listed after those of 3.0.0.
 
 ### Changed in 3.0.0
 
+- A locked feature among the selected features stays as it is and the
+  others change, as `selection.delete` already did: a drag, the arrow keys
+  and `selection.update` leave it alone in place of refusing the whole, the
+  box and the handles stand around all of them, and a press on it moves
+  nothing. A feature locked during a drag stays where it was once let go
 - What an extension holds on the GPU is allocated by the library. A type
   draws with the shared renderers through `render(feature, ctx)` of its
   definition, in place of `renderer` (`onAdd`, `draw`, `onRemove`), and

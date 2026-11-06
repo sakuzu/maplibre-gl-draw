@@ -7,7 +7,6 @@
  * Responsible for handling keyboard shortcuts in select mode
  */
 
-import { bulkSelectionLocked } from '../../operations/bulk-selection.js';
 import { groupSelection, ungroupSelection } from '../../operations/layer-operations.js';
 import { deleteSelection } from '../../operations/selection-operations.js';
 import {
@@ -17,7 +16,7 @@ import {
 } from '../../operations/transform-features.js';
 import { createCoordinateTransform, offsetOnTangentPlane } from '../../shared/math/index.js';
 import { coordinatesOf, mapCoordinatesDeep } from '../../shared/utils/coordinates.js';
-import { isInteractionBlocked } from '../../store/lock.js';
+import { editableFeatures } from '../../store/lock.js';
 import type { TransformEdit } from '../../store/store.js';
 import { transformFieldsOfStore } from '../../store/transform-roles.js';
 import type { Feature } from '../../store/types.js';
@@ -86,8 +85,9 @@ export function handleDeleteShortcut(context: EngineModeContext): boolean {
  * of the frame drawn last (on the plane tangent to the sphere of the map there). On a map turned
  * flat and untilted the selection moves by those pixels on the screen; tilted, it moves by the
  * same length on the ground, foreshortened as the map is.
- * One key press is one committed change (one notification). Like a drag, nothing moves while any
- * selected feature is blocked (read-only, the interaction lock or a lock of its own).
+ * One key press is one committed change (one notification). Like a drag, a locked feature stays
+ * where it is and the others move; nothing moves while read-only, under the interaction lock, or
+ * when every selected feature is locked.
  *
  * @returns whether the key was used (a selection was moved); otherwise the key is left to
  *   the map (MapLibre pans with it)
@@ -121,9 +121,6 @@ export function handleNudgeShortcut(
   const bulk = store.getSelection().bulk;
   if (bulk) {
     if (!bulkNudge || !bulk.bbox) return false;
-    if (store.isReadOnly() || store.isInteractionLocked() || bulkSelectionLocked(store)) {
-      return false;
-    }
     const [west, south, east, north] = bulk.bbox;
     return bulkNudge.add(context, [(west + east) / 2, (south + north) / 2], pressed);
   }
@@ -132,7 +129,8 @@ export function handleNudgeShortcut(
     .map((id) => store.getFeature(id))
     .filter((f): f is Feature => f !== undefined);
   if (features.length === 0) return false;
-  if (features.some((f) => isInteractionBlocked(f, store))) return false;
+  const moving = editableFeatures(features, store);
+  if (moving.length === 0) return false;
 
   const center = selectionCenterOf(features);
   if (!center) return false;
@@ -141,7 +139,7 @@ export function handleNudgeShortcut(
   const fields = transformFieldsOfStore(store);
 
   store.transact(() => {
-    for (const feature of features) {
+    for (const feature of moving) {
       const start = transformStartOf(feature, fields);
       const updates = transformedUpdates(transforms, edit, start, feature);
       if (updates?.geometry) store.updateFeature(feature.id, { geometry: updates.geometry });

@@ -141,11 +141,22 @@ describe('the write in steps of a drag of features selected in bulk', () => {
     expect(written.flat()).toHaveLength(COUNT);
   });
 
-  it('is refused at once when a row is locked when it starts', () => {
-    const { store, rows, done, steps } = setup();
+  it('leaves a row locked when it starts as it is, and writes the others', () => {
+    const { store, steps, written, done, start, x } = setup();
     store.updateFeature('f5', { locked: true });
+    expect(start()).toBe(true);
+    while (steps.length > 0) steps.shift()?.();
+    expect(done).toEqual([true]);
+    expect(x(5)).toBeCloseTo(0.005, 9);
+    expect(x(6)).toBeCloseTo(1.006, 9);
+    expect(written.flat()).toHaveLength(COUNT);
+    expect(store.slicedWritePending).toBe(false);
+  });
+
+  it('is refused at once without rows', () => {
+    const { store, done, steps } = setup();
     expect(
-      writeKindsInSlices(store, rows, transformKinds(store, EAST_ONE_DEGREE, rows) as BulkKinds, {
+      writeKindsInSlices(store, TableSelection.empty, [], {
         onDone: (wrote) => done.push(wrote),
         schedule: (step) => steps.push(step),
       }),

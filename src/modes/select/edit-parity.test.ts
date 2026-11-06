@@ -8,8 +8,9 @@
  * one `document.changed`, and keeps the selection as it was (its features, or the features
  * selected in bulk); the vertices selected stay selected through a drag of their feature and of
  * themselves, and are let go by a move with the arrow keys; a drag cancelled writes nothing (the
- * shapes, and the rows of features selected in bulk, are as they were); a locked feature, a
- * read-only document and a hidden layer give nothing to drag.
+ * shapes, and the rows of features selected in bulk, are as they were); a locked feature alone, a
+ * read-only document and a hidden layer give nothing to drag; a locked feature among others stays
+ * where it is while they move, one by one and in bulk alike.
  *
  * The drags go through the input router of an instance as the pointer gives them, and are read
  * from the instance: its events and the Store it reads. The shapes are read for the way they
@@ -610,6 +611,17 @@ describe('the drags of features selected in bulk (MV-3, RT-4, RS-5)', () => {
     return view.draw.selection.get().bulk?.bbox ?? [];
   }
 
+  /** The box of the selected features, one by one or in bulk */
+  function frameOf(view: Opened): readonly number[] {
+    const boxes = ids.map((id) => boxOf(view.store, id));
+    return [
+      Math.min(...boxes.map((box) => box[0])),
+      Math.min(...boxes.map((box) => box[1])),
+      Math.max(...boxes.map((box) => box[2])),
+      Math.max(...boxes.map((box) => box[3])),
+    ];
+  }
+
   /** The first corner of each square, as its row reads it */
   function corners(view: Opened): number[][] {
     return ids.map((id) => ringOf(view.store, id)[0] ?? []);
@@ -691,17 +703,102 @@ describe('the drags of features selected in bulk (MV-3, RT-4, RS-5)', () => {
     }
   }
 
-  it('gives nothing to drag while one of them is locked', () => {
-    const view = open(bulkStore(), [
-      ...squares.slice(0, 5),
-      { ...squares[5], locked: true } as Feature,
-    ]);
-    view.draw.selection.set('feature', ids);
-    expect(view.draw.selection.get().bulk?.count).toBe(6);
-    const before = corners(view);
-    const changes = drag(view, [-0.85, -0.05], [-0.65, 0.15]);
-    expect(changes).toHaveLength(0);
-    expect(corners(view)).toEqual(before);
-    expect(view.drags).toEqual([]);
+  /** The squares selected with the last one locked, one by one or in bulk */
+  const lockedOne: Array<[string, () => Store]> = [
+    ['one by one', () => new DrawStore(new TableContractStore())],
+    ['in bulk', bulkStore],
+  ];
+  const withLast = (over: Partial<Feature>): Feature[] => [
+    ...squares.slice(0, 5),
+    { ...squares[5], ...over } as Feature,
+  ];
+
+  for (const [name, make] of lockedOne) {
+    describe(`a locked feature among others selected ${name}`, () => {
+      const openLocked = (): Opened => {
+        const view = open(make(), withLast({ locked: true }));
+        view.draw.selection.set('feature', ids);
+        return view;
+      };
+
+      for (const [drags, path] of [
+        [
+          'a move',
+          () =>
+            [
+              [-0.85, -0.05],
+              [-0.65, 0.15],
+            ] as [LngLat, LngLat],
+        ],
+        [
+          'a rotation',
+          (view: Opened) => [rotateHandleOf(frameOf(view)), [0.5, -0.4]] as [LngLat, LngLat],
+        ],
+        [
+          'a resize',
+          (view: Opened) => {
+            const handle = southEastHandleOf(frameOf(view));
+            return [handle, [handle[0] + 0.3, handle[1]]] as [LngLat, LngLat];
+          },
+        ],
+      ] as const) {
+        it(`stays where it is in ${drags} of the others`, () => {
+          const view = openLocked();
+          const before = corners(view);
+          const [from, to] = path(view);
+          expect(drag(view, from, to).length).toBeGreaterThan(0);
+          const after = corners(view);
+          expect(after[5]).toEqual(before[5]);
+          expect(after.slice(1, 5)).not.toEqual(before.slice(1, 5));
+        });
+      }
+
+      it('moves nothing by a press on it, and the map does not pan', () => {
+        const view = openLocked();
+        const before = corners(view);
+        const on = centerOf(view.store, 'f5');
+        expect(drag(view, on, [on[0] + 0.2, on[1]])).toHaveLength(0);
+        expect(corners(view)).toEqual(before);
+        expect(view.drags).toEqual([]);
+        expect(view.draw.selection.count()).toBe(6);
+      });
+
+      it('moves nothing when every feature is locked', () => {
+        const view = open(
+          make(),
+          squares.map((square) => ({ ...square, locked: true }) as Feature),
+        );
+        view.draw.selection.set('feature', ids);
+        const before = corners(view);
+        expect(drag(view, [-0.85, -0.05], [-0.65, 0.15])).toHaveLength(0);
+        expect(corners(view)).toEqual(before);
+        expect(view.drags).toEqual([]);
+      });
+
+      it('leaves one locked during the drag where it was, and writes the others', () => {
+        const view = open(make(), squares);
+        view.draw.selection.set('feature', ids);
+        const before = corners(view);
+        pressAndMove(view, [-0.85, -0.05], [-0.65, 0.15]);
+        view.store.updateFeature('f5', { locked: true });
+        view.engine.inputRouter.dispatch(
+          event<DragNormalizedEvent>(view.engine, 'dragend', [-0.65, 0.15], [-0.85, -0.05]),
+        );
+        vi.runAllTimers();
+        const after = corners(view);
+        expect(after[5]).toEqual(before[5]);
+        expect((after[0]?.[0] as number) - (before[0]?.[0] as number)).toBeCloseTo(0.2, 2);
+      });
+    });
+  }
+
+  it('gives the same shapes to a drag one by one and in bulk with a locked feature', () => {
+    const shapes = lockedOne.map(([, make]) => {
+      const view = open(make(), withLast({ locked: true }));
+      view.draw.selection.set('feature', ids);
+      drag(view, [-0.85, -0.05], [-0.65, 0.15]);
+      return corners(view);
+    });
+    expect(shapes[0]).toEqual(shapes[1]);
   });
 });

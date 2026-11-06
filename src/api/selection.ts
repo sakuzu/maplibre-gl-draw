@@ -94,12 +94,13 @@ export interface SelectionResource {
    * `features.updateMany` does, in one change. The patch is the same for every feature, or made
    * by a function once per kind of feature (`FeatureStyleSample`: the type, the style and the zoom
    * it was created at) and given to every feature of the kind: a selection of many features asks
-   * for a few patches. A patch that changes the geometry is refused.
+   * for a few patches. A patch that changes the geometry is refused. A locked feature is left as
+   * it is and the others are changed, unless the patch is of `locked` and `visible` only.
    *
    * @param patch - The patch, or the function that makes it for a kind of feature (null: the kind
    *   is left as it is)
-   * @returns False when nothing is changed, or the change is refused (read-only, the interaction
-   *   lock, a locked feature for a change other than of `locked` and `visible`)
+   * @returns False when nothing is changed (every feature is locked, too), or the change is
+   *   refused (read-only, the interaction lock)
    * @throws `DrawError` with the code `invalid-input` when a patch has another shape or changes
    *   the geometry
    */

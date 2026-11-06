@@ -362,12 +362,13 @@ export function renderForeground(deps: FrameRenderDeps, f: FrameState): void {
   if (f.quadDrapeFrame) f.quadDrapeFrame.keepDepthTest = false;
 
   // Selection UI
-  // When the editing interaction is blocked (an effective lock, an interaction lock or
-  // read-only), only the selection box is drawn and no handles appear (the same look as
-  // locked). The box is shown even in read-only or under an interaction lock (so that a viewer
-  // also gets the on-map feedback of "what is selected", in the same grammar as the read-only
-  // mode of someone with edit permission).
-  const selectionLocked = f.selectedFeatures.some((feature) =>
+  // When the editing interaction is blocked for the whole selection (every feature locked, an
+  // interaction lock or read-only), only the selection box is drawn and no handles appear (the
+  // same look as locked); a selection some of which can be edited has its handles, over the
+  // extent of it all. The box is shown even in read-only or under an interaction lock (so that a
+  // viewer also gets the on-map feedback of "what is selected", in the same grammar as the
+  // read-only mode of someone with edit permission).
+  const selectionLocked = f.selectedFeatures.every((feature) =>
     isInteractionBlocked(feature, store),
   );
   // Features selected in bulk (and the rows a box marks past the limit): their frames are drawn
@@ -381,7 +382,9 @@ export function renderForeground(deps: FrameRenderDeps, f: FrameState): void {
       (store.getBoxSelection() !== null && tables.states.bulkHandles().size > store.holdLimit));
   const bulkLocked =
     bulk !== undefined &&
-    (store.isReadOnly() || store.isInteractionLocked() || store.isSelectedRowLocked());
+    (store.isReadOnly() ||
+      store.isInteractionLocked() ||
+      store.getUnlockedSelectedRows()?.count === 0);
   const bulkMovement: BulkMovement | null = tables
     ? {
         translation: tables.states.translation(BULK_MOVE_SET),
