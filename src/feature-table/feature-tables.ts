@@ -4309,7 +4309,6 @@ function oneKey(keys: RowKeySource, row: number): RowKeySource {
   };
 }
 
-/** The union of two extents (null when both are) */
 /**
  * The rows of a delta made again, two numbers each (the source and the row there): the rows that
  * stay of the delta before (source 0 when it has one), then the rows built
@@ -4370,6 +4369,7 @@ function deltaRowsInOrder(
   return pairs;
 }
 
+/** The union of two extents (null when both are) */
 function unionBounds(a: BoundingBox | null, b: BoundingBox | null): BoundingBox | null {
   if (!a) return b;
   if (!b) return a;
