@@ -401,7 +401,7 @@ describe('the row groups taken in while the drawing holds the reorder of a group
     const written = setupOf.writer.getGroupOrder(handle) as string;
     expect(setupOf.internals.writtenOrders.get(handle)).toBe(written);
     // After the last row in the order drawn, and around the new key of the group
-    const low = `${key(9)}0`;
+    const low = `${written.slice(0, -1)}0`;
     const high = `${written}z`;
     expect(compareKeys(low, key(9))).toBeGreaterThan(0);
     expect(compareKeys(low, written)).toBeLessThan(0);

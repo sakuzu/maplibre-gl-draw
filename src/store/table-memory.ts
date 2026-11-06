@@ -2058,9 +2058,8 @@ function reconcile(
 
 /**
  * The keys of the order of items put at the end of a container one after the other: a run of new
- * items gets its keys at once (`keysBetween`: short, where keys made one after the other grow by
- * a character every few dozen items), and an item that keeps its key puts the ones after it after
- * it when it is the last
+ * items gets its keys at once (`keysBetween`), and an item that keeps its key puts the ones after
+ * it after it when it is the last
  */
 class EndKeys {
   /** The last key of the container before the items */

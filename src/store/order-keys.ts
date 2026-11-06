@@ -4,10 +4,14 @@
 /**
  * Keys of the order of the items of a layer (fractional indexes)
  *
- * A key is a string compared by its UTF-8 bytes. A key after another is made by raising its last
- * character to the next digit of `0-9A-Za-z` (in the order of their bytes), or by adding a digit
- * when it cannot be raised, so a long run of items added at the end keeps its keys short.
+ * A key is a string compared by its UTF-8 bytes. A key at an end of a container is made by the
+ * Tabane format, whose keys count up and down from the first key and do not grow, so a long run
+ * of items added at an end keeps its keys short. A key that does not read as one of those, which
+ * may be any string, gets a key by its last character: the next digit of `0-9A-Za-z` (in the order
+ * of their bytes), or one more digit when it cannot be raised.
  */
+
+import { tabaneKeyAfter, tabaneKeyBefore } from '@sakuzu/tabane';
 
 /** The digits of the keys, in the order of their bytes */
 const DIGITS = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';
@@ -22,6 +26,11 @@ export const FIRST_KEY = 'V';
  */
 export function keyAfter(key: string | null | undefined): string {
   if (!key) return FIRST_KEY;
+  return tabaneKeyAfter(key) ?? raisedKey(key);
+}
+
+/** A key that comes after `key`, by its last character */
+function raisedKey(key: string): string {
   const last = key.charCodeAt(key.length - 1);
   // The next digit above the last character, when there is one
   for (let d = 0; d < DIGITS.length; d++) {
@@ -93,10 +102,19 @@ export function keyBetween(below: string | null, above: string | null): string {
 }
 
 /**
- * A key that comes before `key`: its last character lowered to the digit below it (with the last
- * digit after it when that is the first digit, which no key ends with)
+ * A key that comes before `key`
+ *
+ * @internal
  */
-function keyBefore(key: string): string {
+export function keyBefore(key: string): string {
+  return tabaneKeyBefore(key) ?? loweredKey(key);
+}
+
+/**
+ * A key that comes before `key`, by its last character: lowered to the digit below it (with the
+ * last digit after it when that is the first digit, which no key ends with)
+ */
+function loweredKey(key: string): string {
   const last = key.charCodeAt(key.length - 1);
   for (let d = CODES.length - 1; d >= 1; d--) {
     if (CODES[d] >= last) continue;
@@ -106,24 +124,66 @@ function keyBefore(key: string): string {
   return keyBetween(null, key);
 }
 
+/** `n` keys in their order between two keys (see {@link keyBetween}), made in halves */
+function keysInHalves(below: string | null, above: string | null, n: number): string[] {
+  if (n <= 0) return [];
+  if (n === 1) return [keyBetween(below, above)];
+  const half = n >> 1;
+  const middle = keyBetween(below, above);
+  return [
+    ...keysInHalves(below, middle, half),
+    middle,
+    ...keysInHalves(middle, above, n - half - 1),
+  ];
+}
+
+/** `n` keys in their order after `key` with no bound above, each the next one */
+function keysAfter(key: string | null, n: number): string[] {
+  const keys: string[] = [];
+  let last = key;
+  while (keys.length < n) {
+    const next = last ? tabaneKeyAfter(last) : FIRST_KEY;
+    if (next === null) {
+      // A key that does not read as one of the keys counted: the rest in halves, up to the next
+      const rest = n - keys.length;
+      const end = raisedKey(last as string);
+      return [...keys, ...(rest === 1 ? [end] : keysInHalves(last, end, rest))];
+    }
+    keys.push(next);
+    last = next;
+  }
+  return keys;
+}
+
+/** `n` keys in their order before `key` with no bound below, each the next one down */
+function keysBefore(key: string, n: number): string[] {
+  const keys: string[] = [];
+  let first = key;
+  while (keys.length < n) {
+    const next = tabaneKeyBefore(first);
+    if (next === null) {
+      const rest = n - keys.length;
+      const made = rest === 1 ? [loweredKey(first)] : keysInHalves(null, first, rest);
+      return [...made, ...keys.reverse()];
+    }
+    keys.push(next);
+    first = next;
+  }
+  return keys.reverse();
+}
+
 /**
- * `n` keys in their order between two keys (see {@link keyBetween}), made in halves so that many
- * keys put in one place stay short
+ * `n` keys in their order between two keys, made in halves so that many keys put in one place stay
+ * short (see {@link keyBetween}); with no bound at one side, the keys next to the key at the other
+ * (see {@link keyAfter}), and from the first key when there is none
  *
  * @internal
  */
 export function keysBetween(below: string | null, above: string | null, n: number): string[] {
   if (n <= 0) return [];
-  // One key at an end: the next one (an item put at the front or the back again and again grows
-  // its key by a character every few dozen times)
-  if (n === 1 && above === null) return [keyAfter(below)];
-  if (n === 1 && below === null && above !== null) return [keyBefore(above)];
-  if (n === 1) return [keyBetween(below, above)];
-  // Many at the front: between the last key and the next one, in halves
-  if (above === null) return keysBetween(below, keyAfter(below), n);
-  const half = n >> 1;
-  const middle = keyBetween(below, above);
-  return [...keysBetween(below, middle, half), middle, ...keysBetween(middle, above, n - half - 1)];
+  if (above === null) return keysAfter(below, n);
+  if (below === null) return keysBefore(above, n);
+  return keysInHalves(below, above, n);
 }
 
 /**
