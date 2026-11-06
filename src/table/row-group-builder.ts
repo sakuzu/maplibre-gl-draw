@@ -339,7 +339,9 @@ export function blockTransferList(groups: readonly RowBlockData[]): ArrayBuffer[
  * @internal
  */
 export class ChildBuilder {
-  coords: number[] = [];
+  /** The coordinates added, in the first `size` values */
+  private coords = new Float64Array(1024);
+  private size = 0;
   level0: number[] = [0];
   level1: number[] = [0];
   level2: number[] = [0];
@@ -359,8 +361,8 @@ export class ChildBuilder {
 
   /** Adds the geometry of a row (of the dimensions of the column); returns its row in the child */
   add(geometry: RowGeometry): number {
-    for (let k = 0; k < geometry.coords.length; k++) this.coords.push(geometry.coords[k]);
-    const vertices = this.coords.length / this.stride;
+    this.addCoords(geometry.coords);
+    const vertices = this.size / this.stride;
     switch (this.type) {
       case 'Point':
         break;
@@ -410,10 +412,8 @@ export class ChildBuilder {
       first = level[first];
       end = level[end];
     }
-    const out = this.coords;
-    const from = column.coords;
-    for (let k = first * this.stride; k < end * this.stride; k++) out.push(from[k]);
-    const vertices = out.length / this.stride;
+    this.addCoords(column.coords.subarray(first * this.stride, end * this.stride));
+    const vertices = this.size / this.stride;
     const [l0, l1, l2] = levels;
     switch (this.type) {
       case 'Point':
@@ -448,8 +448,20 @@ export class ChildBuilder {
     return this.rows++;
   }
 
+  /** Adds coordinates after the ones added */
+  private addCoords(values: Float64Array): void {
+    const end = this.size + values.length;
+    if (end > this.coords.length) {
+      const grown = new Float64Array(Math.max(end, this.coords.length * 2));
+      grown.set(this.coords.subarray(0, this.size));
+      this.coords = grown;
+    }
+    this.coords.set(values, this.size);
+    this.size = end;
+  }
+
   finish(): TableGeometry {
-    const coords = new Float64Array(this.coords);
+    const coords = this.coords.slice(0, this.size);
     const dims = this.dims;
     switch (this.type) {
       case 'Point':

@@ -4027,19 +4027,21 @@ class FeatureTablesStore implements FeatureTablesInternals {
     const sources: RowBlockData[] = [];
     /** The rows of the delta that stay as they are, in their order */
     const stay: number[] = [];
-    /** The marks of the rows that stay */
+    /** The marks of the rows made again of their values */
     const marksOf = new Map<RowHandle, number>();
     const inputs: RowInput[] = [];
     const comingHandles = new Set(coming.map((entry) => entry.handle));
+    const keysKept = old !== null && layer.deltaKeysRevision === this.groups.revision;
     if (old) {
       sources.push(old.data);
       for (let r = 0; r < old.data.length; r++) {
         const handle = old.data.handles[r];
         if (leaving.has(handle) || comingHandles.has(handle)) continue;
-        marksOf.set(handle, old.marks[r]);
         if (old.values?.has(r) || old.geometries?.geometry(r) || old.geometries?.rowTriangles(r)) {
+          marksOf.set(handle, old.marks[r]);
           inputs.push(rowInputOf(this.readContext, old, r));
         } else {
+          if (!keysKept) marksOf.set(handle, old.marks[r]);
           stay.push(r);
         }
       }
@@ -4047,7 +4049,6 @@ class FeatureTablesStore implements FeatureTablesInternals {
     for (const entry of coming) inputs.push(entry.input);
     const built = inputs.length > 0 ? this.buildRows(inputs, layer.dims) : null;
     if (built) sources.push(built);
-    const keysKept = old !== null && layer.deltaKeysRevision === this.groups.revision;
     const pairs = keysKept
       ? deltaRowsInOrder(old.data, stay, built, this.groups)
       : deltaRowsOf(old !== null, stay, built);
@@ -4073,7 +4074,9 @@ class FeatureTablesStore implements FeatureTablesInternals {
         // A row held as a feature stays in the delta until it is no longer held, and a feature
         // drawn over a row as long as it is drawn
         if (this.heldRows.has(handle) || this.drawnOnlyRows.has(handle)) kept[r] = 1;
-        const mark = marksOf.get(handle);
+        // A row of the delta before, in the order of the rows when they are found in their order
+        const mark =
+          keysKept && pairs[r * 2] === 0 ? old.marks[pairs[r * 2 + 1]] : marksOf.get(handle);
         if (mark !== undefined) group.marks[r] = mark;
         else if (this.drawnOnlyRows.has(handle)) {
           // A feature drawn over the rows is not a value written: it has the mark of now, and
