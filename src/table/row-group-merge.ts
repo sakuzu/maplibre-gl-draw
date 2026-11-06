@@ -29,7 +29,7 @@ import {
   valueEntryOf,
 } from '@sakuzu/tabane';
 import { DrawError } from '../shared/draw-error.js';
-import { rowGeometryOfColumn, WIDE_VERTICES } from './row-geometry.js';
+import { WIDE_VERTICES } from './row-geometry.js';
 import {
   ChildBuilder,
   type GroupEntry,
@@ -347,9 +347,7 @@ function copyRows(
       childIndex.set(column.type, target);
     }
     childTypes[r] = target;
-    childRows[r] = children[target].add(
-      rowGeometryOfColumn(column, data.geometry.offsets[row], shape.dims),
-    );
+    childRows[r] = children[target].addOfColumn(column, data.geometry.offsets[row]);
     vertexCount += vertices[pair];
   }
 
@@ -381,10 +379,10 @@ function copyRows(
     rowBounds,
     triangles: {
       offsets: triangleOffsets,
-      indices: Uint16Array.from(narrow),
-      wideRows: Int32Array.from(wideRows),
-      wideOffsets: Int32Array.from(wideOffsets),
-      wideIndices: Uint32Array.from(wide),
+      indices: new Uint16Array(narrow),
+      wideRows: new Int32Array(wideRows),
+      wideOffsets: new Int32Array(wideOffsets),
+      wideIndices: new Uint32Array(wide),
     },
     vertexCount,
   };

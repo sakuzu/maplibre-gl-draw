@@ -293,6 +293,8 @@ export class LayerTable {
   /** The places of the rows of the delta, and what they were found with */
   private places: DeltaPlaces | null = null;
   private placesKey = '';
+  /** The revision of the keys of the groups of features the rows of the delta are in the order of */
+  deltaKeysRevision = -1;
   /** The group of each row moved since its group was built, by handle */
   private readonly moved = new Map<number, RowGroup>();
   /** The rows of the layer changed since their groups were built */
@@ -307,7 +309,7 @@ export class LayerTable {
   private pendingRevision = 0;
   /** The rows read outside the groups, and what they were found with */
   private extras: ReadExtras | null = null;
-  private extrasKey = '';
+  private extrasAt = { revision: -1, delta: -1, keys: -1, pending: -1 };
 
   /** Told of the rows whose boxes were written again in place (the index of the boxes of the rows) */
   onRowBox: ((handle: number) => void) | null = null;
@@ -615,8 +617,16 @@ export class LayerTable {
    * groups of features changed)
    */
   private readExtras(): ReadExtras {
-    const key = `${this.revision}:${this.delta.revision}:${this.groupKeys.revision ?? 0}:${this.pendingRevision}`;
-    if (this.extras && this.extrasKey === key) return this.extras;
+    const keys = this.groupKeys.revision ?? 0;
+    if (
+      this.extras &&
+      this.extrasAt.revision === this.revision &&
+      this.extrasAt.delta === this.delta.revision &&
+      this.extrasAt.keys === keys &&
+      this.extrasAt.pending === this.pendingRevision
+    ) {
+      return this.extras;
+    }
     const delta = this.delta.group;
     const pending = (this.pendingSource?.() ?? [])
       .filter((group) => group.data.length > 0)
@@ -690,7 +700,12 @@ export class LayerTable {
       runStarts,
       runEnds,
     };
-    this.extrasKey = key;
+    this.extrasAt = {
+      revision: this.revision,
+      delta: this.delta.revision,
+      keys,
+      pending: this.pendingRevision,
+    };
     return this.extras;
   }
 
@@ -714,6 +729,41 @@ export class LayerTable {
     this.places = { groups, cuts };
     this.placesKey = key;
     return this.places;
+  }
+
+  /** The places of the rows of the delta when they are known still (null when they are not) */
+  placesOfDelta(): DeltaPlaces | null {
+    const key = `${this.revision}:${this.delta.revision}:${this.groupKeys.revision ?? 0}`;
+    return this.places && this.placesKey === key ? this.places : null;
+  }
+
+  /**
+   * Keeps the places of the rows that stayed when the delta was made again: the groups and their
+   * keys are the same, so only the rows that came in are looked for
+   *
+   * @param before The places of the rows before
+   * @param pairs The rows of the delta now, two numbers each: the source and the row there (the
+   *   source 0 is the delta before)
+   */
+  carryDeltaPlaces(before: DeltaPlaces, pairs: Int32Array): void {
+    const n = pairs.length / 2;
+    const groups = new Int32Array(n).fill(-1);
+    const cuts = new Int32Array(n);
+    const data = this.delta.group?.data;
+    for (let k = 0; k < n; k++) {
+      if (pairs[k * 2] === 0) {
+        const row = pairs[k * 2 + 1];
+        groups[k] = before.groups[row];
+        cuts[k] = before.cuts[row];
+        continue;
+      }
+      const place = this.positionOfKey(data as RowBlockData, k);
+      if (!place) continue;
+      groups[k] = this.orderOf(place.group);
+      cuts[k] = (place.slot + 1) >> 1;
+    }
+    this.places = { groups, cuts };
+    this.placesKey = `${this.revision}:${this.delta.revision}:${this.groupKeys.revision ?? 0}`;
   }
 
   /**
@@ -1027,18 +1077,18 @@ export class LayerTable {
   }
 
   /** Whether the row `k` read outside the groups comes before row `r` of the group at `g` */
-  private extraBefore(k: number, g: number, r: number): boolean {
-    const places = this.readExtras().places;
+  private extraBefore(k: number, g: number, r: number, places = this.readExtras().places): boolean {
     return places.groups[k] < g || (places.groups[k] === g && places.cuts[k] <= r);
   }
 
   /** The last row read outside the groups that comes before row `r` of the group at `g` (-1) */
   private lastExtraBefore(g: number, r: number): number {
+    const extras = this.readExtras();
     let lo = 0;
-    let hi = this.readExtras().rows.length;
+    let hi = extras.rows.length;
     while (lo < hi) {
       const mid = (lo + hi) >> 1;
-      if (this.extraBefore(mid, g, r)) lo = mid + 1;
+      if (this.extraBefore(mid, g, r, extras.places)) lo = mid + 1;
       else hi = mid;
     }
     return lo - 1;

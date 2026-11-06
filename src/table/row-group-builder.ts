@@ -36,6 +36,7 @@ import {
   polygonRanges,
   type RowGeometry,
   ringOffsetsOf,
+  rowGeometryOfColumn,
   toRowGeometry,
   triangulateRow,
   WIDE_VERTICES,
@@ -394,8 +395,61 @@ export class ChildBuilder {
     return this.rows++;
   }
 
+  /**
+   * Adds the geometry of row `at` of a column as it is held there; returns its row in the column.
+   * A column of other dimensions is read as `add` reads a row
+   */
+  addOfColumn(column: TableGeometry, at: number): number {
+    if ((column.dimensions ?? 'xy') !== this.dims) {
+      return this.add(rowGeometryOfColumn(column, at, this.dims));
+    }
+    const levels = column.offsets ?? [];
+    let first = at;
+    let end = at + 1;
+    for (const level of levels) {
+      first = level[first];
+      end = level[end];
+    }
+    const out = this.coords;
+    const from = column.coords;
+    for (let k = first * this.stride; k < end * this.stride; k++) out.push(from[k]);
+    const vertices = out.length / this.stride;
+    const [l0, l1, l2] = levels;
+    switch (this.type) {
+      case 'Point':
+        break;
+      case 'LineString':
+      case 'MultiPoint':
+        this.level0.push(vertices);
+        break;
+      case 'Polygon':
+      case 'MultiLineString': {
+        let last = this.level1[this.level1.length - 1];
+        for (let r = l0[at]; r < l0[at + 1]; r++) {
+          last += l1[r + 1] - l1[r];
+          this.level1.push(last);
+        }
+        this.level0.push(this.level1.length - 1);
+        break;
+      }
+      case 'MultiPolygon': {
+        let last = this.level2[this.level2.length - 1];
+        for (let p = l0[at]; p < l0[at + 1]; p++) {
+          for (let r = l1[p]; r < l1[p + 1]; r++) {
+            last += l2[r + 1] - l2[r];
+            this.level2.push(last);
+          }
+          this.level1.push(this.level2.length - 1);
+        }
+        this.level0.push(this.level1.length - 1);
+        break;
+      }
+    }
+    return this.rows++;
+  }
+
   finish(): TableGeometry {
-    const coords = Float64Array.from(this.coords);
+    const coords = new Float64Array(this.coords);
     const dims = this.dims;
     switch (this.type) {
       case 'Point':
@@ -406,7 +460,7 @@ export class ChildBuilder {
           type: this.type,
           coords,
           dimensions: dims,
-          offsets: [Int32Array.from(this.level0)],
+          offsets: [new Int32Array(this.level0)],
         };
       case 'Polygon':
       case 'MultiLineString':
@@ -414,7 +468,7 @@ export class ChildBuilder {
           type: this.type,
           coords,
           dimensions: dims,
-          offsets: [Int32Array.from(this.level0), Int32Array.from(this.level1)],
+          offsets: [new Int32Array(this.level0), new Int32Array(this.level1)],
         };
       case 'MultiPolygon':
         return {
@@ -422,9 +476,9 @@ export class ChildBuilder {
           coords,
           dimensions: dims,
           offsets: [
-            Int32Array.from(this.level0),
-            Int32Array.from(this.level1),
-            Int32Array.from(this.level2),
+            new Int32Array(this.level0),
+            new Int32Array(this.level1),
+            new Int32Array(this.level2),
           ],
         };
     }

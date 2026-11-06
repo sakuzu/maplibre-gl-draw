@@ -12,6 +12,7 @@
  * - A row of the delta written again is written in place there, with the write mark of the write
  * - What the drawing could not write into its place goes to the delta as it is
  * - The change written is returned by layer
+ * - Rows that come in a few at a time find their places among the rows that stay
  * - Writes of every kind at random, applied to the tables and to a reference sorted by the keys:
  *   every read of the tables gives the reference
  */
@@ -50,6 +51,24 @@ describe('the delta of a layer', () => {
     expect(tables.get('a')?.listDrawnRows([-100, -100, 100, 100]).includes(handle)).toBe(true);
     const drawn = Array.from(tables.get('a')?.listDrawnRows([-100, -100, 100, 100]) ?? []);
     expect(drawn.filter((h) => h === handle)).toHaveLength(1);
+  });
+
+  it('keeps the rows and their places in order as rows come in a few at a time', () => {
+    const random = seededRandom(21);
+    const reference = referenceOf(random, 120, ['a']);
+    const { tables, writer, internals, groupHandleOf } = tablesOf(reference, ['a']);
+    for (let part = 0; part < 12; part++) {
+      const ids = Array.from({ length: 5 }, (_, i) => `r${part * 5 + i}`);
+      const handles = ids.map((id) => tables.findRow(id) as number);
+      const orders = ids.map(() => key(Math.floor(random() * 1_000_000)));
+      writer.apply(patchOf(handles, { order: orders }));
+      ids.forEach((id, i) => {
+        (reference.rows.get(id) as ReferenceRow).order = orders[i];
+      });
+      // Read between the writes, so that the places are known when the delta is made again
+      expectTablesMatch(tables, reference, ['a'], groupHandleOf);
+    }
+    expect(internals.deltaRowCount()).toBe(60);
   });
 
   it('reads a row moved to another layer there, and a new row at its place', () => {

@@ -74,7 +74,7 @@ import {
   ROW_FLAG_VISIBLE,
   type RowBlockData,
 } from '../table/row-group-types.js';
-import { compareRowKeys, type RowKeySource } from '../table/row-keys.js';
+import { compareRowKeys, type GroupKeySource, type RowKeySource } from '../table/row-keys.js';
 import { type BulkOperation, planBulk } from './bulk-plan.js';
 import type { RowContainers } from './bulk-rows.js';
 import { FeatureCache } from './feature-cache.js';
@@ -4025,7 +4025,8 @@ class FeatureTablesStore implements FeatureTablesInternals {
     const delta = layer.delta;
     const old = delta.group;
     const sources: RowBlockData[] = [];
-    const pairs: number[] = [];
+    /** The rows of the delta that stay as they are, in their order */
+    const stay: number[] = [];
     /** The marks of the rows that stay */
     const marksOf = new Map<RowHandle, number>();
     const inputs: RowInput[] = [];
@@ -4039,22 +4040,22 @@ class FeatureTablesStore implements FeatureTablesInternals {
         if (old.values?.has(r) || old.geometries?.geometry(r) || old.geometries?.rowTriangles(r)) {
           inputs.push(rowInputOf(this.readContext, old, r));
         } else {
-          pairs.push(0, r);
+          stay.push(r);
         }
       }
     }
     for (const entry of coming) inputs.push(entry.input);
-    if (inputs.length > 0) {
-      const built = this.buildRows(inputs, layer.dims);
-      if (built) {
-        sources.push(built);
-        for (let r = 0; r < built.length; r++) pairs.push(sources.length - 1, r);
-      }
-    }
+    const built = inputs.length > 0 ? this.buildRows(inputs, layer.dims) : null;
+    if (built) sources.push(built);
+    const keysKept = old !== null && layer.deltaKeysRevision === this.groups.revision;
+    const pairs = keysKept
+      ? deltaRowsInOrder(old.data, stay, built, this.groups)
+      : deltaRowsOf(old !== null, stay, built);
     const merged = mergeRowBlockData({
       sources,
-      rows: Int32Array.from(pairs),
+      rows: pairs,
       groups: this.groups,
+      sort: !keysKept,
       targetRows: UNBOUNDED,
       targetVertices: UNBOUNDED,
       dimensions: layer.dims,
@@ -4099,7 +4100,10 @@ class FeatureTablesStore implements FeatureTablesInternals {
       }
       for (let r = 0; r < group.data.length; r++) this.writeState(group, r);
     }
+    const places = keysKept ? layer.placesOfDelta() : null;
     delta.rebuild(group, kept);
+    layer.deltaKeysRevision = this.groups.revision;
+    if (places) layer.carryDeltaPlaces(places, pairs);
     layer.touchItems();
     this.touch(layer.layerId, unionBounds(old?.bounds ?? null, group?.bounds ?? null));
     // The copies the rows leaving the delta had in their groups are read again
@@ -4303,6 +4307,66 @@ function oneKey(keys: RowKeySource, row: number): RowKeySource {
 }
 
 /** The union of two extents (null when both are) */
+/**
+ * The rows of a delta made again, two numbers each (the source and the row there): the rows that
+ * stay of the delta before (source 0 when it has one), then the rows built
+ */
+function deltaRowsOf(hasOld: boolean, stay: readonly number[], built: RowBlockData | null) {
+  const pairs = new Int32Array((stay.length + (built?.length ?? 0)) * 2);
+  let at = 0;
+  for (const r of stay) {
+    pairs[at++] = 0;
+    pairs[at++] = r;
+  }
+  const source = hasOld ? 1 : 0;
+  for (let r = 0; r < (built?.length ?? 0); r++) {
+    pairs[at++] = source;
+    pairs[at++] = r;
+  }
+  return pairs;
+}
+
+/**
+ * The rows of a delta made again in the order of the layer, as {@link deltaRowsOf} gives them: the
+ * rows that stay are in that order, so only the rows built are looked for among them
+ */
+function deltaRowsInOrder(
+  old: RowBlockData,
+  stay: readonly number[],
+  built: RowBlockData | null,
+  groups: GroupKeySource,
+): Int32Array {
+  const count = built?.length ?? 0;
+  const pairs = new Int32Array((stay.length + count) * 2);
+  const order = new Int32Array(count);
+  for (let r = 0; r < count; r++) order[r] = r;
+  if (built) order.sort((a, b) => compareRowKeys(built, a, built, b, groups));
+  let at = 0;
+  let next = 0;
+  for (let k = 0; k < count; k++) {
+    const row = order[k];
+    // The first row that stays after the row built
+    let lo = next;
+    let hi = stay.length;
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1;
+      if (compareRowKeys(old, stay[mid], built as RowBlockData, row, groups) < 0) lo = mid + 1;
+      else hi = mid;
+    }
+    for (; next < lo; next++) {
+      pairs[at++] = 0;
+      pairs[at++] = stay[next];
+    }
+    pairs[at++] = 1;
+    pairs[at++] = row;
+  }
+  for (; next < stay.length; next++) {
+    pairs[at++] = 0;
+    pairs[at++] = stay[next];
+  }
+  return pairs;
+}
+
 function unionBounds(a: BoundingBox | null, b: BoundingBox | null): BoundingBox | null {
   if (!a) return b;
   if (!b) return a;
