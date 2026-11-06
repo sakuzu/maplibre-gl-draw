@@ -116,7 +116,12 @@ export function createSelection(
       if (!SELECTION_TYPES.includes(type)) {
         throw invalidInput('type must be feature, group or layer');
       }
-      const selectable = requireItems(type, ids).filter((id) => isShown(store, type, id));
+      // Each item is read once: a feature of the rows is made of them for the read
+      const selectable = requireIds(ids).filter((id) => {
+        const item = getItem(store, type, id);
+        if (!item) throw notFound(type, id);
+        return isShown(store, type, id, item);
+      });
       if (selectable.length === 0) return false;
       store.setSelection(type, selectable);
       return true;

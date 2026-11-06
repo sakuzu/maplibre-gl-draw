@@ -249,7 +249,12 @@ export function layerLocked(store: Store, layer: Layer): boolean {
  * Whether an item can be seen: it exists, its own visible flag and the ones of its group and
  * layer are on, and this client hides none of them
  */
-export function isShown(store: Store, type: SelectionType, id: string): boolean {
+export function isShown(
+  store: Store,
+  type: SelectionType,
+  id: string,
+  read?: Feature | Group | Layer,
+): boolean {
   const layerShown = (layerId: string): boolean =>
     store.getLayer(layerId)?.visible === true && !store.isHidden(layerId);
   const groupShown = (group: Group): boolean =>
@@ -259,7 +264,7 @@ export function isShown(store: Store, type: SelectionType, id: string): boolean 
     const group = store.getGroup(id);
     return group !== undefined && groupShown(group);
   }
-  const feature = store.getFeature(id);
+  const feature = (read as Feature | undefined) ?? store.getFeature(id);
   if (!feature?.visible || store.isHidden(id)) return false;
   if (feature.groupId) {
     const group = store.getGroup(feature.groupId);
