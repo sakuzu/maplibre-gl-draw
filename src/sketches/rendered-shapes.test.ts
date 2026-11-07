@@ -77,6 +77,21 @@ describe('the shape of a feature', () => {
     expect(position(store.getFeature('a'))).toEqual([139, 35]);
   });
 
+  it('reads the rows dragged once for each change of how they move', () => {
+    const { store, states, handleOf } = rowsSetup();
+    const shapes = new RenderedShapes(store);
+    states.setMoving(Int32Array.of(handleOf('a')), BULK_MOVE_SET);
+    states.setTranslation(BULK_MOVE_SET, 0.5, 0);
+    const dragged = shapes.draggedRows();
+    expect(shapes.draggedRows()).toBe(dragged);
+    states.setTranslation(BULK_MOVE_SET, 1, 0);
+    expect(shapes.draggedRows()).not.toBe(dragged);
+    expect(position(shapes.get('a'))).toEqual([140, 35]);
+    states.setMoving(Int32Array.of(handleOf('a')), 0);
+    expect(shapes.draggedRows()).toBeNull();
+    expect(position(shapes.get('a'))).toEqual([139, 35]);
+  });
+
   it('holds the rotation and the radius the write of the drag gives', () => {
     const { store, states, handleOf } = rowsSetup();
     const shapes = new RenderedShapes(store);

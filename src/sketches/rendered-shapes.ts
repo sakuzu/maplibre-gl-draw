@@ -22,7 +22,7 @@ import type { DraggedRows } from '../feature-table/dragged-rows.js';
 import { draggedFeatureOf, draggedRowsOf } from '../feature-table/dragged-rows.js';
 import type { FeatureTablesInternals } from '../feature-table/feature-tables.js';
 import { featureTablesInternals } from '../feature-table/feature-tables.js';
-import { BULK_MOVE_SET } from '../feature-table/row-state.js';
+import { BULK_MOVE_SET, type RowStateSets } from '../feature-table/row-state.js';
 import { forEachSnapRow, type SnapRow } from '../feature-table/snap-rows.js';
 import type { EnuEdit } from '../geometry/enu-transforms.js';
 import type { TentativeState } from '../shared/types/model.js';
@@ -110,6 +110,12 @@ class RowsExclusion extends Set<string> {
 export class RenderedShapes {
   readonly #store: Store;
   #sketches: ShapeSketches | null = null;
+  /** The rows being dragged as read last, and the revision of the motions they were read at */
+  #draggedRead: {
+    readonly states: RowStateSets;
+    readonly revision: number;
+    readonly dragged: DraggedRows | null;
+  } | null = null;
 
   constructor(store: Store) {
     this.#store = store;
@@ -147,9 +153,19 @@ export class RenderedShapes {
     return feature && tables && dragged ? draggedFeatureOf(feature, tables, dragged) : feature;
   }
 
-  /** The rows being dragged and where each is drawn, while they are not written yet */
+  /**
+   * The rows being dragged and where each is drawn, while they are not written yet (read once for
+   * each change of how they move: a frame reads it for each feature it asks for)
+   */
   draggedRows(): DraggedRows | null {
-    return draggedRowsOf(this.#store.tables);
+    const tables = this.#store.tables;
+    const states = featureTablesInternals(tables)?.states;
+    if (!states) return null;
+    const read = this.#draggedRead;
+    if (read?.states === states && read.revision === states.revision) return read.dragged;
+    const dragged = draggedRowsOf(tables);
+    this.#draggedRead = { states, revision: states.revision, dragged };
+    return dragged;
   }
 
   /** The shape being drawn: it has no ID, and no feature of the document holds it */
