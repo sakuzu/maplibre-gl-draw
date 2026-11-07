@@ -41,7 +41,7 @@ import { computeSelectionBoundingBox, getSelectedFeatureIds } from '../../view/u
 import type { BoundingBoxCoords } from '../../view/ui/selection-ui/index.js';
 import type { EngineModeContext, EngineModeHandler, SnapInputKind } from '../handler.js';
 import { queryFeaturesInBox } from './box-selection.js';
-import { BulkNudge, queryRowsInBox } from './bulk.js';
+import { queryRowsInBox } from './bulk.js';
 import { handleSelectClick, handleSelectDoubleClick } from './click-handler.js';
 import { updateCursorForSelection } from './cursor-handler.js';
 import { bulkDragTargets, dragTargetsOfHit } from './drag/operation.js';
@@ -52,6 +52,7 @@ import {
   isLockedFeatureAt,
   selectedHandleFeatures,
 } from './hit-helpers.js';
+import { Nudge } from './nudge.js';
 import {
   handleDeleteShortcut,
   handleEscapeShortcut,
@@ -140,8 +141,8 @@ export class SelectMode implements EngineModeHandler {
   #dragHandler = new SelectModeDragHandler();
   /** The rows of a Store of rows marked as in the box being drawn */
   #boxMarked: TableSelection = TableSelection.empty;
-  /** The moves of the arrow keys over features selected in bulk, waiting to be written */
-  readonly #nudge = new BulkNudge();
+  /** The moves of the arrow keys, waiting to be written */
+  readonly #nudge = new Nudge();
 
   // ============================================================================
   // Lifecycle

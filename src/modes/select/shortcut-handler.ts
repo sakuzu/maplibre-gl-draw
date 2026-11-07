@@ -9,20 +9,13 @@
 
 import { groupSelection, ungroupSelection } from '../../operations/layer-operations.js';
 import { deleteSelection } from '../../operations/selection-operations.js';
-import {
-  transformedUpdates,
-  transformStartOf,
-  transformsOf,
-} from '../../operations/transform-features.js';
 import { createCoordinateTransform, offsetOnTangentPlane } from '../../shared/math/index.js';
 import { coordinatesOf, mapCoordinatesDeep } from '../../shared/utils/coordinates.js';
 import { editableFeatures } from '../../store/lock.js';
-import type { TransformEdit } from '../../store/store.js';
-import { transformFieldsOfStore } from '../../store/transform-roles.js';
 import type { Feature } from '../../store/types.js';
 import { getSelectedFeatureIds } from '../../view/ui/helper.js';
 import type { EngineModeContext } from '../handler.js';
-import type { BulkNudge } from './bulk.js';
+import type { Nudge } from './nudge.js';
 
 /** The distance an arrow key moves the selection (pixels; with Shift, NUDGE_LARGE) */
 const NUDGE_SMALL = 1;
@@ -85,7 +78,8 @@ export function handleDeleteShortcut(context: EngineModeContext): boolean {
  * of the frame drawn last (on the plane tangent to the sphere of the map there). On a map turned
  * flat and untilted the selection moves by those pixels on the screen; tilted, it moves by the
  * same length on the ground, foreshortened as the map is.
- * One key press is one committed change (one notification). Like a drag, a locked feature stays
+ * The presses are shown by a sketch of this client and written once, a moment after the last one
+ * (`Nudge`): the presses of a key held are one change. Like a drag, a locked feature stays
  * where it is and the others move; nothing moves while read-only, under the interaction lock, or
  * when every selected feature is locked.
  *
@@ -96,7 +90,7 @@ export function handleNudgeShortcut(
   context: EngineModeContext,
   key: string,
   modifiers: { shift: boolean; ctrl: boolean; alt: boolean; meta: boolean },
-  bulkNudge?: BulkNudge,
+  nudge: Nudge,
 ): boolean {
   const direction = ARROW_DIRECTIONS[key];
   if (!direction || modifiers.ctrl || modifiers.alt || modifiers.meta) return false;
@@ -116,13 +110,13 @@ export function handleNudgeShortcut(
     return offsetOnTangentPlane(from, east * meters, north * meters);
   };
 
-  // Features selected in bulk: moved by their moving set while the keys are pressed, and written
-  // once a moment after the last press (the presses of a key held are one change)
+  // Features selected in bulk: the rows are not listed, and the presses start from the center of
+  // their frame
   const bulk = store.getSelection().bulk;
   if (bulk) {
-    if (!bulkNudge || !bulk.bbox) return false;
+    if (!bulk.bbox) return false;
     const [west, south, east, north] = bulk.bbox;
-    return bulkNudge.add(context, [(west + east) / 2, (south + north) / 2], pressed);
+    return nudge.add(context, null, [(west + east) / 2, (south + north) / 2], pressed);
   }
 
   const features = getSelectedFeatureIds(store)
@@ -134,18 +128,12 @@ export function handleNudgeShortcut(
 
   const center = selectionCenterOf(features);
   if (!center) return false;
-  const edit: TransformEdit = { kind: 'translate', from: center, to: pressed(center) };
-  const transforms = transformsOf(store);
-  const fields = transformFieldsOfStore(store);
-
-  store.transact(() => {
-    for (const feature of moving) {
-      const start = transformStartOf(feature, fields);
-      const updates = transformedUpdates(transforms, edit, start, feature);
-      if (updates?.geometry) store.updateFeature(feature.id, { geometry: updates.geometry });
-    }
-  });
-  return true;
+  return nudge.add(
+    context,
+    moving.map((feature) => feature.id),
+    center,
+    pressed,
+  );
 }
 
 /** The center of the extent of the positions of features (null without a position) */

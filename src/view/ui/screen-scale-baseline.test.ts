@@ -15,13 +15,15 @@
 import type { Map as MapLibreMap } from 'maplibre-gl';
 import { describe, expect, it } from 'vitest';
 import type { EngineModeContext } from '../../modes/handler.js';
+import { Nudge } from '../../modes/select/nudge.js';
 import { handleNudgeShortcut } from '../../modes/select/shortcut-handler.js';
 import { DEFAULT_SELECTION_CONFIG } from '../../shared/config/selection.js';
 import { createCoordinateTransform } from '../../shared/math/index.js';
 import { coordinatesOf } from '../../shared/utils/coordinates.js';
 import { getBoundingBox } from '../../shared/utils/feature-bbox.js';
-import { MemoryContractStore } from '../../store/memory.js';
+import { MemoryStore } from '../../store/memory.js';
 import type { Feature } from '../../store/types.js';
+import { createSketches } from '../../test-utils.js';
 import { splitIntoDashes } from '../renderers/line/dash.js';
 import { StrokeRenderer } from '../renderers/stroke.js';
 import { hitTestHandles } from './handle-test.js';
@@ -214,7 +216,7 @@ describe('the arrow keys on a flat Web Mercator view', () => {
 
   function moved(key: string, shift: boolean): { x: number; y: number } {
     const map = mercatorMap();
-    const store = new MemoryContractStore();
+    const store = new MemoryStore();
     store.transact(() => {
       store.createLayer({
         id: 'l',
@@ -234,8 +236,11 @@ describe('the arrow keys on a flat Web Mercator view', () => {
     // the screen where the scale of Web Mercator is another)
     const position = () => coordinatesOf(store.getFeature('f') as Feature) as [number, number];
     const before = map.project(position());
-    const context = { store, map } as unknown as EngineModeContext;
-    expect(handleNudgeShortcut(context, key, { ...NO_MODIFIERS, shift })).toBe(true);
+    const context = { store, map, sketches: createSketches(store) } as unknown as EngineModeContext;
+    const nudge = new Nudge();
+    expect(handleNudgeShortcut(context, key, { ...NO_MODIFIERS, shift }, nudge)).toBe(true);
+    // The press is written once the moves of the keys are
+    nudge.flush();
     const after = map.project(position());
     return { x: after.x - before.x, y: after.y - before.y };
   }

@@ -11,8 +11,7 @@
  *   draws their rows moved by a moving set (`sketches/sketch-motion.ts`), and written once on the
  *   CPU with the same edit when the drag is let go, in the same task the set is let go of (the
  *   drawing takes both in the same frame)
- * - The arrow keys move them by the same moving set, and the moves made while a key is held are
- *   written once, a moment after the last one (one step of the history), as one move
+ * - The arrow keys move them by a sketch of `{ selection: true }` as well (`nudge.ts`)
  * - A locked feature stays where it is: its row is not in the moving set, and the others move
  */
 
@@ -21,13 +20,8 @@ import type { RowGroup } from '../../feature-table/layer-table.js';
 import { rowGeometry, rowProperties, rowType } from '../../feature-table/row-read.js';
 import { BULK_MOVE_SET, STATE_UNHIT_MASK } from '../../feature-table/row-state.js';
 import { TableSelection } from '../../feature-table/selection.js';
-import { movableBulkRows } from '../../operations/bulk-selection.js';
 import { writeKindsInSlices } from '../../operations/bulk-sliced.js';
-import {
-  type BulkKinds,
-  transformBulkSelection,
-  transformKinds,
-} from '../../operations/bulk-transform.js';
+import { type BulkKinds, transformKinds } from '../../operations/bulk-transform.js';
 import type { TransformEdit } from '../../store/store.js';
 import type { BoxSelection, Feature } from '../../store/types.js';
 import { ROW_FLAG_DELETED, ROW_FLAG_LOCKED } from '../../table/row-group-types.js';
@@ -177,110 +171,4 @@ export function writeBulkEdit(
     },
     onDone: release,
   });
-}
-
-// ============================================================================
-// The arrow keys
-// ============================================================================
-
-/** How long after the last arrow key the moves are written (ms) */
-export const BULK_NUDGE_COMMIT_MS = 300;
-
-/**
- * The moves of the arrow keys over features selected in bulk: shown by their moving set while the
- * keys are pressed, and written once, `BULK_NUDGE_COMMIT_MS` after the last press (the presses of
- * a key held are one step of the history)
- *
- * The presses make one move (`translate`): from the center of the frame of the features when the
- * first key is pressed, to where the presses took it.
- *
- * @internal
- */
-export class BulkNudge {
-  #rows: TableSelection | null = null;
-  #from: [number, number] = [0, 0];
-  #to: [number, number] = [0, 0];
-  #timer: ReturnType<typeof setTimeout> | null = null;
-  #context: EngineModeContext | null = null;
-
-  /** Whether moves are waiting to be written */
-  get active(): boolean {
-    return this.#rows !== null;
-  }
-
-  /**
-   * Adds the move of a press of a key; the moves are written a moment after the last one
-   *
-   * @param center The center of the frame of the features (where the first press starts from)
-   * @param step Where a press takes a point: given the point the presses took the center to so far
-   * @returns false when nothing is selected in bulk or the selection cannot be moved
-   */
-  add(
-    context: EngineModeContext,
-    center: readonly [number, number],
-    step: (from: readonly [number, number]) => [number, number],
-  ): boolean {
-    const rows = movableBulkRows(context.store);
-    const states = featureTablesInternals(context.store.tables)?.states;
-    if (rows.count === 0 || !states) return false;
-    if (this.#rows && !this.#rows.equals(rows)) this.flush();
-    if (!this.#rows) {
-      // A write of a drag let go before, still under way, is made first (it shares the set)
-      context.store.finishSlicedWrite();
-      // A sketch moves them now
-      if (states.movingCount(BULK_MOVE_SET) > 0) return false;
-      this.#rows = rows;
-      this.#context = context;
-      this.#from = [center[0], center[1]];
-      this.#to = [center[0], center[1]];
-      states.setMoving(rows.handles, BULK_MOVE_SET);
-    }
-    this.#to = step(this.#to);
-    states.setTransform(BULK_MOVE_SET, this.#edit());
-    context.map.triggerRepaint();
-    if (this.#timer !== null) clearTimeout(this.#timer);
-    this.#timer = setTimeout(() => {
-      this.#timer = null;
-      this.flush();
-    }, BULK_NUDGE_COMMIT_MS);
-    return true;
-  }
-
-  /** The move shown so far */
-  #edit(): TransformEdit {
-    return { kind: 'translate', from: [...this.#from], to: [...this.#to] };
-  }
-
-  /** Writes the moves waiting now (one change), and takes the rows out of the moving set */
-  flush(): void {
-    if (this.#timer !== null) clearTimeout(this.#timer);
-    this.#timer = null;
-    const rows = this.#rows;
-    const context = this.#context;
-    this.#rows = null;
-    this.#context = null;
-    if (!rows || !context) return;
-    const store = context.store;
-    try {
-      if (this.#from[0] !== this.#to[0] || this.#from[1] !== this.#to[1]) {
-        transformBulkSelection(store, this.#edit(), rows);
-      }
-    } finally {
-      featureTablesInternals(store.tables)?.states.setMoving(rows.handles, 0);
-      context.map.triggerRepaint();
-    }
-  }
-
-  /** Drops the moves waiting, unwritten (the rows go back where they are) */
-  cancel(): void {
-    if (this.#timer !== null) clearTimeout(this.#timer);
-    this.#timer = null;
-    const rows = this.#rows;
-    const context = this.#context;
-    this.#rows = null;
-    this.#context = null;
-    if (!rows || !context) return;
-    featureTablesInternals(context.store.tables)?.states.setMoving(rows.handles, 0);
-    context.map.triggerRepaint();
-  }
 }

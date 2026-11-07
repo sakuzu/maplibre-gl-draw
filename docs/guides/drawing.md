@@ -343,8 +343,11 @@ click. In `select` mode:
 | Cmd/Ctrl+G | group the selection |
 | Shift+Cmd/Ctrl+G | ungroup |
 
-An arrow key moves the selected features by that distance on screen, as
-one change. A locked feature stays where it is and the others move. Nothing
+An arrow key moves the selected features by that distance on screen. The
+presses are shown before they are written, and written as one change a
+moment (300 ms) after the last one, when the page is hidden, when the
+selection changes, or before another key, a press or a drag. A locked
+feature stays where it is and the others move. Nothing
 moves when every selected feature is locked or the instance is read-only
 or under the interaction lock; then, and without a selection, the key is
 left to the map, which pans. A double click on a

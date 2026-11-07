@@ -586,12 +586,15 @@ describe.each(KINDS)('the selection UI laid on the map over a Store of %s', (kin
       return pointOf(page, position);
     };
     const start = await positionOf();
+    // The document is read once the moves of the keys are written, a moment after the last press
     await page.keyboard.press('Shift+ArrowUp');
+    await page.waitForTimeout(400);
     await settle(page);
     const up = await positionOf();
     expect(up[0] - start[0]).toBeCloseTo(0, 1);
     expect(up[1] - start[1]).toBeCloseTo(-10, 1);
     await page.keyboard.press('Shift+ArrowRight');
+    await page.waitForTimeout(400);
     await settle(page);
     const right = await positionOf();
     expect(right[0] - up[0]).toBeCloseTo(10, 1);

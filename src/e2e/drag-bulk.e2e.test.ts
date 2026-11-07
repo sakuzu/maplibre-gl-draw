@@ -11,7 +11,7 @@
  * which moves, turns or resizes their rows by the state of their rows (their moving set), written
  * once let go, and the arrow keys move them by the same set, written a moment after the last press.
  * Over a Store of objects, the same features are selected one by one, shown by a sketch of them and
- * written once let go. A move from a press on one of them, a rotation and a resize from the handles
+ * written once let go, the arrow keys a moment after the last press. A move from a press on one of them, a rotation and a resize from the handles
  * of their frame, and the arrow keys; in the middle, once let go (or written) and once cancelled
  * with Escape:
  *
@@ -469,22 +469,11 @@ describe.each(KINDS)('many features selected over a Store of %s', (kind) => {
       }
       // Nothing was written while the reads were made
       expect(mid.unchanged).toBe(true);
-      if (bulk) {
-        // Shown by the moving set and not written yet: read, hit and told as before the presses
-        // (this holds the behavior as it is)
-        expect(mid.geometry).toEqual(selected.geometry);
-        expect(mid.hit).toBeNull();
-        expect(sequenceOf(midEvents)).toEqual([]);
-      } else {
-        // Each press written at once
-        expect(mid.geometry).not.toEqual(selected.geometry);
-        expect(mid.hit).toBe('b1');
-        expect(sequenceOf(midEvents)).toEqual([
-          ...stepWrites('U'),
-          ...stepWrites('U'),
-          ...stepWrites('U'),
-        ]);
-      }
+      // Shown by a sketch of this client and not written yet: read, hit and told as before the
+      // presses
+      expect(mid.geometry).toEqual(selected.geometry);
+      expect(mid.hit).toBeNull();
+      expect(sequenceOf(midEvents)).toEqual([]);
       await mark(page);
       return { selected, mid, edge };
     }
@@ -504,13 +493,12 @@ describe.each(KINDS)('many features selected over a Store of %s', (kind) => {
       expect(end.geometry).not.toEqual(selected.geometry);
       expectHitsAsDrawn(end.hits);
       expect(await featureAt(page, edge)).toBe('b1');
+      // Written once, a moment after the last press
       if (bulk) {
-        // Written once, a moment after the last press
         expect(sequenceOf(end.events)).toEqual(['D']);
         expect(rowsWritten(end.events)).toEqual([IDS.length]);
       } else {
-        expect(sequenceOf(end.events)).toEqual([]);
-        expect(end.geometry).toEqual(mid.geometry);
+        expect(sequenceOf(end.events)).toEqual(stepWrites('U'));
       }
     });
 
@@ -528,13 +516,12 @@ describe.each(KINDS)('many features selected over a Store of %s', (kind) => {
       for (const i of [I_FRAME, I_RESIZE, I_ROTATE]) expect((end.drawn[i] as Drawn).count).toBe(0);
       expect(end.geometry).not.toEqual(selected.geometry);
       expectHitsAsDrawn(end.hits);
+      // The moves waiting are written before the selection is cleared
       if (bulk) {
-        // The moves waiting are written before the selection is cleared
         expect(sequenceOf(end.events)).toEqual(['D']);
         expect(rowsWritten(end.events)).toEqual([IDS.length]);
       } else {
-        expect(sequenceOf(end.events)).toEqual([]);
-        expect(end.geometry).toEqual(mid.geometry);
+        expect(sequenceOf(end.events)).toEqual(stepWrites('U'));
       }
     });
   });

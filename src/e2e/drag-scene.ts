@@ -621,10 +621,6 @@ export function sequenceOf(recorded: readonly Recorded[]): string[] {
   return out;
 }
 
-/** A sequence repeated */
-export const times = (n: number, sequence: readonly string[]): string[] =>
-  Array.from({ length: n }, () => sequence).flat();
-
 /** Selects features (none: clears the selection) */
 export const select = (page: Page, ids: string[]): Promise<void> =>
   page.evaluate((i) => {

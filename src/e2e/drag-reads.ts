@@ -61,7 +61,6 @@ import {
   sequenceOf,
   shiftOf,
   square,
-  times,
 } from './drag-scene.js';
 import { type Bundle, bundlePage, launchBrowser, settle } from './harness.js';
 
@@ -591,7 +590,7 @@ function describeDrags(group: DragReadsGroup): void {
     // The arrow keys move the feature as a whole, with the drags of the group that do
     if (group !== 'moves') return;
 
-    it('moves the selection with the arrow keys, each press written at once', {
+    it('moves the selection with the arrow keys, the presses written once', {
       timeout: SCENES_TIMEOUT,
     }, async () => {
       await load(page, polygonScene(kind), ZOOM);
@@ -603,11 +602,16 @@ function describeDrags(group: DragReadsGroup): void {
       await page.mouse.up();
       await settle(page);
       await mark(page);
-      await page.keyboard.press('Shift+ArrowRight');
-      await page.keyboard.press('Shift+ArrowDown');
+      // Shift held: another key writes the moves waiting
+      await page.keyboard.down('Shift');
+      await page.keyboard.press('ArrowRight');
+      await page.keyboard.press('ArrowDown');
+      await page.keyboard.up('Shift');
+      // Past the moment the moves of the keys are written
+      await page.waitForTimeout(400);
       await settle(page);
       const moved = await frame(page, COLORS);
-      expect(sequenceOf(await events(page))).toEqual(times(2, ['U p', 'D']));
+      expect(sequenceOf(await events(page))).toEqual(['U p', 'D']);
       for (const i of [I_FILL, I_OUTLINE, I_FRAME, I_RESIZE, I_ROTATE, I_VERTEX, I_MIDPOINT]) {
         expect((moved[i] as Drawn).count).toBe((selected[i] as Drawn).count);
         expectNear(shiftOf(moved[i] as Drawn, selected[i] as Drawn), [10, 10], 1);

@@ -38,8 +38,9 @@ import { bulkFrame } from '../../view/ui/handle-test.js';
 import { computeResizeHandles, computeRotateHandle } from '../../view/ui/handles.js';
 import { createSelectionScope } from '../../view/ui/selection-scope.js';
 import type { EngineModeContext } from '../handler.js';
-import { BULK_MOVE_SET, BULK_NUDGE_COMMIT_MS } from './bulk.js';
+import { BULK_MOVE_SET } from './bulk.js';
 import { SelectMode } from './mode.js';
+import { NUDGE_COMMIT_MS } from './nudge.js';
 
 /** A square of one degree at (x, y) */
 function square(id: string, x: number, y: number, extra: Partial<Feature> = {}): Feature {
@@ -520,7 +521,7 @@ describe('the select mode over features selected in bulk', () => {
     const east = offsetOnTangentPlane(from, 5 * PLANE.metersPerPixel(from), 0)[0] - from[0];
     expect((shown.to[0] as number) - from[0]).toBeCloseTo(east, 9);
     expect(shown.to[1]).toBe(shown.from[1]);
-    vi.advanceTimersByTime(BULK_NUDGE_COMMIT_MS + 10);
+    vi.advanceTimersByTime(NUDGE_COMMIT_MS + 10);
     expect(corners()[0][0]).toBeCloseTo(before[0][0] + east, 9);
     expect(changes.slice(count).filter((change) => change.rows)).toHaveLength(1);
     expect(ids.map(movingSetOf)).toEqual(ids.map(() => 0));
@@ -533,12 +534,62 @@ describe('the select mode over features selected in bulk', () => {
     const before = corners();
     mode.onKeyDown(key('ArrowRight'));
     expect(ids.map(movingSetOf)).toEqual(ids.map((id) => (id === 'f2' ? 0 : BULK_MOVE_SET)));
-    vi.advanceTimersByTime(BULK_NUDGE_COMMIT_MS + 10);
+    vi.advanceTimersByTime(NUDGE_COMMIT_MS + 10);
     const after = corners();
     ids.forEach((id, i) => {
       if (id === 'f2') expect(after[i]).toEqual(before[i]);
       else expect(after[i]).not.toEqual(before[i]);
     });
+  });
+
+  it('writes the moves of the arrow keys once the selection changes, nothing before', () => {
+    vi.useFakeTimers();
+    store.setSelection('feature', ids);
+    const before = corners();
+    const count = changes.length;
+    for (let i = 0; i < 3; i++) mode.onKeyDown(key('ArrowRight'));
+    expect(corners()).toEqual(before);
+    expect(changes.slice(count).filter((change) => change.rows)).toHaveLength(0);
+    // The rows the presses moved are written, in one write, before the selection is followed
+    store.setSelection(null, []);
+    expect(corners()[0][0]).toBeGreaterThan(before[0][0]);
+    expect(changes.slice(count).filter((change) => change.rows)).toHaveLength(1);
+    expect(ids.map(movingSetOf)).toEqual(ids.map(() => 0));
+    expect(context.sketches.count()).toBe(0);
+    vi.advanceTimersByTime(NUDGE_COMMIT_MS + 10);
+    expect(changes.slice(count).filter((change) => change.rows)).toHaveLength(1);
+  });
+
+  it('writes the moves of the arrow keys when the page is hidden', () => {
+    vi.useFakeTimers();
+    const page = new EventTarget();
+    vi.stubGlobal('addEventListener', page.addEventListener.bind(page));
+    vi.stubGlobal('removeEventListener', page.removeEventListener.bind(page));
+    try {
+      store.setSelection('feature', ids);
+      const before = corners();
+      mode.onKeyDown(key('ArrowRight'));
+      expect(corners()).toEqual(before);
+      page.dispatchEvent(new Event('pagehide'));
+      expect(corners()[0][0]).toBeGreaterThan(before[0][0]);
+      expect(context.sketches.count()).toBe(0);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('drops the moves of the arrow keys on a change of the state from outside', () => {
+    vi.useFakeTimers();
+    store.setSelection('feature', ids);
+    const before = corners();
+    const count = changes.length;
+    mode.onKeyDown(key('ArrowRight'));
+    mode.onExternalStateChange();
+    vi.advanceTimersByTime(NUDGE_COMMIT_MS + 10);
+    expect(corners()).toEqual(before);
+    expect(changes.slice(count).filter((change) => change.rows)).toHaveLength(0);
+    expect(ids.map(movingSetOf)).toEqual(ids.map(() => 0));
+    expect(context.sketches.count()).toBe(0);
   });
 
   it('leaves the arrow keys to the map while every feature selected is locked', () => {

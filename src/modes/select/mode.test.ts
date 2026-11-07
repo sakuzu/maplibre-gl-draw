@@ -12,6 +12,7 @@
  * effects of onMouseDown / onDragStart on dragPan and on the selection are verified here.
  */
 
+import type { Polygon } from 'geojson';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { HitTestResult } from '../../dispatcher/hit-test/strategies/base.js';
 import type { TopHit } from '../../dispatcher/hit-test/topmost.js';
@@ -27,7 +28,7 @@ import { offsetOnTangentPlane, setScreenScaleFrame } from '../../shared/math/ind
 import { coordinatesOf } from '../../shared/utils/coordinates.js';
 import { RenderedShapes } from '../../sketches/rendered-shapes.js';
 import type { Store } from '../../store/store.js';
-import type { Feature } from '../../store/types.js';
+import type { Feature, StoreChange } from '../../store/types.js';
 import { referenceTranslate } from '../../test-support/enu-reference.js';
 import {
   createSketches,
@@ -40,6 +41,7 @@ import type { AuxiliaryHandleProvider } from '../../view/ui/auxiliary-handles.js
 import { createSelectionScope } from '../../view/ui/selection-scope.js';
 import type { EngineModeContext } from '../handler.js';
 import { SelectMode } from './mode.js';
+import { NUDGE_COMMIT_MS } from './nudge.js';
 
 describe.each(STORE_KINDS)('on %s', (_kind, createStore) => {
   /** Whether the Store holds its features as rows */
@@ -660,6 +662,7 @@ describe.each(STORE_KINDS)('on %s', (_kind, createStore) => {
     }
 
     it('moves the selection by one pixel (ten with Shift) and uses the key', () => {
+      vi.useFakeTimers();
       store.setSelection('feature', ['f1']);
       // The press moves the features from the center of their frame, by a pixel of the scale of
       // the frame on the ground there (the mock map draws 1 degree as 10 pixels)
@@ -672,6 +675,9 @@ describe.each(STORE_KINDS)('on %s', (_kind, createStore) => {
       ];
       const right = arrow('ArrowRight');
       const used = mode.onKeyDown(right.event);
+      // Shown by a sketch, and written a moment after the last press
+      expect(firstVertex()).toEqual([0, 0]);
+      vi.advanceTimersByTime(NUDGE_COMMIT_MS + 10);
       const pressed = offsetOnTangentPlane(center, planeMetersPerPixel(10)(center), 0);
       const expected = referenceTranslate([0, 0], center, pressed);
       expect(Math.abs((firstVertex()[0] as number) - expected[0])).toBeLessThan(1e-9);
@@ -680,7 +686,53 @@ describe.each(STORE_KINDS)('on %s', (_kind, createStore) => {
       expect(used).toBe(true);
 
       mode.onKeyDown(arrow('ArrowUp', true).event);
+      vi.advanceTimersByTime(NUDGE_COMMIT_MS + 10);
       expect(firstVertex()[1]).toBeCloseTo(1);
+      vi.useRealTimers();
+    });
+
+    it('writes the presses of the arrow keys once, a moment after the last, as one change', () => {
+      vi.useFakeTimers();
+      store.setSelection('feature', ['f1']);
+      const written: StoreChange[] = [];
+      const stop = store.subscribe((change) => {
+        if (change.features || change.rows) written.push(change);
+      });
+      for (let i = 0; i < 4; i++) mode.onKeyDown(arrow('ArrowRight').event);
+      // Shown by a sketch of this client, the Store unwritten
+      expect(firstVertex()).toEqual([0, 0]);
+      expect(written).toHaveLength(0);
+      expect(context.sketches.count()).toBe(1);
+      expect(
+        (context.shapes.get('f1')?.geometry as Polygon | undefined)?.coordinates[0]?.[0]?.[0],
+      ).toBeGreaterThan(0);
+      vi.advanceTimersByTime(NUDGE_COMMIT_MS - 50);
+      mode.onKeyDown(arrow('ArrowRight').event);
+      vi.advanceTimersByTime(NUDGE_COMMIT_MS - 50);
+      expect(written).toHaveLength(0);
+      vi.advanceTimersByTime(100);
+      expect(written).toHaveLength(1);
+      expect(firstVertex()[0]).toBeGreaterThan(0);
+      expect(context.sketches.count()).toBe(0);
+      stop();
+      vi.useRealTimers();
+    });
+
+    it('writes the presses of the arrow keys once the selection changes or another key comes', () => {
+      vi.useFakeTimers();
+      store.setSelection('feature', ['f1']);
+      mode.onKeyDown(arrow('ArrowRight').event);
+      store.setSelection(null, []);
+      const moved = firstVertex()[0] as number;
+      expect(moved).toBeGreaterThan(0);
+      expect(context.sketches.count()).toBe(0);
+
+      store.setSelection('feature', ['f1']);
+      mode.onKeyDown(arrow('ArrowRight').event);
+      mode.onKeyDown(arrow('Shift').event);
+      expect(firstVertex()[0]).toBeGreaterThan(moved);
+      expect(context.sketches.count()).toBe(0);
+      vi.useRealTimers();
     });
 
     it('leaves the key to the map without a selection or while the feature is locked', () => {

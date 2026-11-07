@@ -223,6 +223,8 @@ export class SketchController {
   #dragged: string | null = null;
   /** The features selected the drag of this client edits (it ends with the last of them) */
   #draggedSelected: readonly string[] = [];
+  /** The sketch the arrow keys of this client show, and what writes it once the selection changes */
+  #nudged: { readonly id: string; readonly write: () => void } | null = null;
   /** What the drag of this client edits as read last, and what it was read from */
   #draggedRead: {
     readonly sketch: Sketch;
@@ -335,6 +337,14 @@ export class SketchController {
       vertices.set(featureId, verticesOf(entry.sketch.edits, featureId));
     }
     entry.dragVertices = vertices;
+  }
+
+  /**
+   * Sets the sketch the arrow keys of this client show (null when none does): once the selection
+   * changes, `write` writes it, before the sketches follow the selection
+   */
+  setNudged(id: string | null, write: (() => void) | null = null): void {
+    this.#nudged = id === null || write === null ? null : { id, write };
   }
 
   /**
@@ -921,10 +931,18 @@ export class SketchController {
         return;
       }
       if (changes.reset === true) {
+        this.#nudged = null;
         for (const entry of [...this.#entries.values()]) {
           this.#end(entry.sketch.id, 'document-replaced');
         }
         return;
+      }
+      // The moves of the arrow keys are written once the selection changes, before the sketches
+      // follow it
+      const nudged = this.#nudged;
+      if (changes.selection !== undefined && nudged) {
+        this.#nudged = null;
+        if (this.#entries.has(nudged.id)) nudged.write();
       }
       const store = this.#store;
       const readOnly = store.isReadOnly();

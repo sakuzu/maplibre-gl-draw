@@ -343,6 +343,13 @@ writing it. Its changes are listed after those of 3.0.0.
   midpoint adds its vertex once let go, and Esc adds none. Esc on a handle of an
   extension writes nothing, and its `onHandleDrag` is not called for the end;
   a drag whose last `onHandleDrag` gives no patch writes nothing
+- The arrow keys of the select mode are shown by a sketch of this client, of
+  the features selected one by one as of the ones selected in bulk: the
+  document does not change while the keys are pressed, and the presses are
+  written once, in one write, a moment (300 ms) after the last one, when the
+  page is hidden (`pagehide`), when the selection changes, or before another
+  key, a press or a drag. The presses of a key held over features selected one
+  by one are one change then, as they are in bulk
 - `intermediate` of `feature.updated`, `isIntermediate` of the changes and of
   `Store.updateFeature`, `Store.abortIntermediateUpdates`, `OpenedApplyOptions`
   and the option `moveOpenedByStateFrom` are gone: nothing writes in the middle
