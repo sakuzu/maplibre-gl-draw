@@ -415,6 +415,8 @@ describe('a drag of a vertex over a Store of rows', () => {
     const geometry = internals?.sketchGeometryOf('a') as { coordinates: number[][][] };
     near(geometry.coordinates[0][1], [2, 0]);
     expect(internals?.checkSketches(new Set(['a']))).toEqual([]);
+    // The row is drawn by its sketch: what reads the rows drawn goes on reading it
+    expect(draw.getStore().tables?.get('l')?.listDrawnRows([-180, -90, 180, 90])).toHaveLength(1);
   });
 });
 

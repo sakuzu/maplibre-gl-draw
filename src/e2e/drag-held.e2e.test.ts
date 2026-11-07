@@ -3,18 +3,15 @@
 
 /**
  * End-to-end tests of what every place that reads an edit in progress shows and answers, for a
- * drag of many features selected one by one, on either side of the number of rows held from
- * which a row held moved as a whole by a write in the middle of an edit is drawn moved by its
- * state, on the real maplibre and WebGL of the browser
+ * drag of many features selected one by one, on the real maplibre and WebGL of the browser
  *
  * A hundred small squares are in the scene; 99 of them or all of them are selected. A move from a
  * press on one of them, and a rotation from the rotate handle of their frame, are shown by a sketch
  * whatever their number, and written once let go: over the Store of rows of the library their rows
  * are held as features and drawn moved by the moving set of the sketch. A handle of a handle
- * provider in the middle of one square selected alone writes in the middle: it moves the square as
- * a whole by one translation, with the others held besides up to 99 or 100 rows, and from 100 rows
- * held the row keeps its values and is drawn moved by the state of its row. In the middle, once let
- * go and once cancelled with Escape:
+ * provider in the middle of one square selected alone moves the square as a whole, with the others
+ * held besides up to 99 or 100 rows, and is shown by a sketch too. In the middle, once let go and
+ * once cancelled with Escape:
  *
  * - the fills and the outlines drawn, and the frames of the selection and its handles
  * - the hit test, held over a grid of the map to the frame
@@ -255,27 +252,8 @@ interface Reads {
   firstSketched: unknown;
   last: unknown;
   lastSketched: unknown;
-  /** The translation of the moving set of the rows held (null over a Store of objects) */
-  translation: [number, number] | null;
   events: Recorded[];
 }
-
-/**
- * The translation the rows held moved as a whole are drawn moved by, in degrees: that of their
- * moving set (set 1; null over a Store of objects)
- */
-const heldTranslation = (page: Page): Promise<[number, number] | null> =>
-  page.evaluate(() => {
-    const w = window as unknown as {
-      store: import('../index.js').Store;
-      e2e: {
-        internals: {
-          featureTablesInternals: typeof import('../feature-table/feature-tables.js').featureTablesInternals;
-        };
-      };
-    };
-    return w.e2e.internals.featureTablesInternals(w.store.tables)?.states.translation(1) ?? null;
-  });
 
 async function readAll(page: Page): Promise<Reads> {
   return {
@@ -284,7 +262,6 @@ async function readAll(page: Page): Promise<Reads> {
     firstSketched: await geometryOf(page, IDS[0] as string, true),
     last: await geometryOf(page, IDS[COUNT - 1] as string),
     lastSketched: await geometryOf(page, IDS[COUNT - 1] as string, true),
-    translation: await heldTranslation(page),
     events: await events(page),
   };
 }
@@ -502,7 +479,7 @@ describe.each(KINDS)('many features dragged over a Store of %s', (kind) => {
       await mark(page);
       await pressAndMove(page, grabbed, BY, STEPS);
       const mid = await readAll(page);
-      await expectHitsAsDrawn(page, 'in the middle');
+      await expectLeftOut(page, IDS.slice(1));
       const image = await capture(page, [FIRST]);
       await mark(page);
       if (cancelled) await cancelAndRelease(page);
@@ -512,7 +489,7 @@ describe.each(KINDS)('many features dragged over a Store of %s', (kind) => {
       await expectHitsAsDrawn(page, 'once ended');
       await hold(page, []);
 
-      // The middle: the square drawn as it goes, read and told so, and nothing else moved
+      // The middle: the square drawn as it goes, nothing written, and nothing else moved
       expectNear(shiftOf(mid.drawn[I_FIRST] as Drawn, selected.drawn[I_FIRST] as Drawn), FOLLOWS);
       expectSame(mid.drawn[I_FILL] as Drawn, selected.drawn[I_FILL] as Drawn, 0.01, 0.5);
       expectSame(mid.drawn[I_LAST] as Drawn, selected.drawn[I_LAST] as Drawn, 0.01, 0.5);
@@ -522,34 +499,24 @@ describe.each(KINDS)('many features dragged over a Store of %s', (kind) => {
       // the handles drawn over the square, so it shows all of its fill
       expect((image[0] as Drawn).box).toEqual((mid.drawn[I_FIRST] as Drawn).box);
       expectNear((image[0] as Drawn).center, (mid.drawn[I_FIRST] as Drawn).center as MapPoint);
-      expect(mid.first).not.toEqual(selected.first);
-      expect(mid.firstSketched).toEqual(mid.first);
+      expect(mid.first).toEqual(selected.first);
+      expect(mid.firstSketched).not.toEqual(selected.first);
       expect(mid.last).toEqual(selected.last);
-      if (kind === 'rows') {
-        // From 100 rows held, the row of the square moved as a whole by one translation keeps its
-        // values in the middle and is drawn moved by the translation of the moving set of the
-        // rows held; below it the row is written
-        expect(selected.translation).toEqual([0, 0]);
-        const [dx, dy] = mid.translation as [number, number];
-        if (n >= 100) {
-          expect(dx).toBeLessThan(0);
-          expect(dy).toBeGreaterThan(0);
-        } else {
-          expect([dx, dy]).toEqual([0, 0]);
-        }
-      }
       const snaps = mid.events.filter((e) => e.name === 'snap.changed');
       expect(snaps.filter((e) => e.snapFeature === IDS[0])).toEqual([]);
-      expect(sequenceOf(mid.events)).toEqual(
-        Array.from({ length: STEPS - 1 }, () => [`I ${IDS[0]}`, 'D']).flat(),
-      );
-      // Once ended (let go, or cancelled: the provider takes the end of the drag as its last
-      // patch), written as the middle showed it last
-      expect(end.first).toEqual(mid.first);
+      expect(sequenceOf(mid.events)).toEqual([]);
       expect(end.firstSketched).toEqual(end.first);
-      if (kind === 'rows') expect(end.translation).toEqual([0, 0]);
-      expectSame(end.drawn[I_FIRST] as Drawn, mid.drawn[I_FIRST] as Drawn);
       expectSame(end.drawn[I_FILL] as Drawn, selected.drawn[I_FILL] as Drawn, 0.01, 0.5);
+      if (cancelled) {
+        // Cancelled: nothing was written, and the square is drawn where it was
+        expect(end.first).toEqual(selected.first);
+        expectSame(end.drawn[I_FIRST] as Drawn, selected.drawn[I_FIRST] as Drawn);
+        expect(sequenceOf(end.events)).toEqual([]);
+        return;
+      }
+      // Let go: written as the middle showed it last
+      expect(end.first).toEqual(mid.firstSketched);
+      expectSame(end.drawn[I_FIRST] as Drawn, mid.drawn[I_FIRST] as Drawn);
       expect(sequenceOf(end.events)).toEqual([`U ${IDS[0]}`, 'D']);
     }
 
@@ -559,7 +526,7 @@ describe.each(KINDS)('many features dragged over a Store of %s', (kind) => {
       await run(false);
     });
 
-    it('is drawn, hit and read as it goes in its middle, and written once cancelled', {
+    it('is drawn, hit and read as it goes in its middle, and as before once cancelled', {
       timeout: SCENES_TIMEOUT,
     }, async () => {
       await run(true);

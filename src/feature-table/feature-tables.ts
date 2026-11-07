@@ -4374,6 +4374,9 @@ function writtenOverSketch(field: RowField): boolean {
   return field.startsWith('property:') && !CLASSIFY_KEYS.has(field.slice('property:'.length));
 }
 
+/** What makes a row not drawn, a sketch drawn over it aside */
+const DRAWN_HIDDEN_MASK = STATE_HIDDEN_MASK & ~STATE_HIDDEN_SKETCH;
+
 /** A write in place that leaves the shape of the row (shared, never changed) */
 const SAME_SHAPE: GeometryWrite = Object.freeze({ sameShape: true, from: 0, to: 0 });
 
@@ -4468,7 +4471,8 @@ class LayerTableViewImpl implements LayerTableView {
   listDrawnRows(bbox: BBox): Int32Array {
     const out: number[] = [];
     this.store.searchRowBoxes(this.table, bbox[0], bbox[1], bbox[2], bbox[3], (group, row) => {
-      if ((group.state[row] & STATE_HIDDEN_MASK) === 0) out.push(group.data.handles[row]);
+      // A row a sketch is drawn over is drawn, by its sketch
+      if ((group.state[row] & DRAWN_HIDDEN_MASK) === 0) out.push(group.data.handles[row]);
     });
     return Int32Array.from(out);
   }
