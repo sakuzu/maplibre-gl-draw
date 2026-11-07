@@ -125,7 +125,7 @@ describe('the write mark of a Store of rows', () => {
     store.transact(() => {
       store.updateFeature('p1', { properties: { n: 10 } });
       store.updateFeature('p4', { properties: { n: 40 } });
-      store.updateFeature('p2', { properties: { n: 20 } }, { isIntermediate: true });
+      store.updateFeature('p2', { properties: { n: 20 } });
     });
     expect(given).toEqual([before + 1]);
     expect(store.getFeature('p2')?.properties).toEqual({ n: 20 });

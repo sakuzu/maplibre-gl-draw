@@ -295,7 +295,6 @@ function emitResourceEvents(hub: EventHub, changes: StoreChange, store: Store): 
       feature: update.feature as Feature,
       previous: update.previous as Feature,
       source,
-      intermediate: update.isIntermediate === true,
     });
   }
   for (const feature of features?.deleted ?? []) {

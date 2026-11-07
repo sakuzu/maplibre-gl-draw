@@ -2,17 +2,12 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * End-to-end tests of a move of many rows held as features and of a box drawn over rows, on the
- * real maplibre and WebGL of the browser
+ * End-to-end tests of a box drawn over rows, on the real maplibre and WebGL of the browser
  *
- * - Many rows held moved as a whole in the middle of an edit are drawn moved by their state and
- *   the translation of their moving set, their rows not written (9.4): the picture is compared
- *   with the rows moved, drawn from the start. Once the edit ends, the rows are written, and the
- *   picture is compared again
- * - While a box is drawn over rows with Shift, the rows in it are marked and not selected (9.2):
- *   the picture in the middle of the drag (the rows, the rubber band, the frames of the selection
- *   UI and its handles) is compared with the one of a Store of objects holding the same features
- *   in the middle of the same drag, which selects the features in the box
+ * While a box is drawn over rows with Shift, the rows in it are marked and not selected (9.2): the
+ * picture in the middle of the drag (the rows, the rubber band, the frames of the selection UI and
+ * its handles) is compared with the one of a Store of objects holding the same features in the
+ * middle of the same drag, which selects the features in the box
  *
  * The rows drawn in one draw and the features of the Store differ by the tolerance of the other
  * comparisons of the drawing in one draw.
@@ -40,9 +35,6 @@ const CAMERA: Camera = { center: CENTER, zoom: 14 };
  * differ by more than `level` (as in the comparisons of the drawing in one draw)
  */
 const TOLERANCE = { level: 2, share: 0.001 };
-
-/** The translation of the move, in degrees */
-const MOVE: [number, number] = [0.0008, -0.0005];
 
 let browser: Browser;
 let bundle: Bundle;
@@ -113,40 +105,10 @@ function scene(): SceneFeature[] {
   return out;
 }
 
-/** The rows moved: every building and point, the fill and two lines */
-const MOVED = [
-  ...Array.from({ length: 6 }, (_, i) => `building${i}`),
-  ...Array.from({ length: 6 }, (_, i) => `point${i}`),
-  'line1',
-  'line4',
-  'fill',
-];
-
-/** A geometry moved by a translation */
-function moved(
-  geometry: SceneFeature['geometry'],
-  [dx, dy]: [number, number],
-): SceneFeature['geometry'] {
-  const walk = (value: unknown): unknown =>
-    Array.isArray(value) && typeof value[0] === 'number'
-      ? [(value[0] as number) + dx, (value[1] as number) + dy]
-      : Array.isArray(value)
-        ? value.map(walk)
-        : value;
-  return { type: geometry.type, coordinates: walk(geometry.coordinates) };
-}
-
-/** The features of the scene with the ones named moved */
-function movedScene(features: SceneFeature[], ids: string[]): SceneFeature[] {
-  return features.map((f) =>
-    ids.includes(f.id) ? { ...f, geometry: moved(f.geometry, MOVE) } : f,
-  );
-}
-
 /**
  * Makes a new instance over a Store of its own holding a scene: its rows (`rows`, an in-memory
- * Store of rows that moves the rows held by their state from 2 rows held) or its features
- * (`store`, an in-memory Store of objects), and waits until everything is drawn
+ * Store of rows) or its features (`store`, an in-memory Store of objects), and waits until
+ * everything is drawn
  */
 async function open(page: Page, features: SceneFeature[], form: 'rows' | 'store'): Promise<void> {
   await page.evaluate(
@@ -176,7 +138,7 @@ async function open(page: Page, features: SceneFeature[], form: 'rows' | 'store'
       };
       let store: Contract;
       if (form === 'rows') {
-        const made = w.e2e.tables.createTableStore({ moveOpenedByStateFrom: 2 });
+        const made = w.e2e.tables.createTableStore();
         store = made.store as unknown as Contract;
         store.createLayer({ ...layer, kind: 'table' } as never);
         const builder = w.e2e.tables.createRowBlockBuilder({});
@@ -299,57 +261,7 @@ async function differing(page: Page, a: string, b: string, level: number): Promi
   );
 }
 
-/**
- * Holds rows of the Store of rows of the page without a selection (no handle is drawn over them)
- * and writes their geometries moved, in the middle of an edit, or at its end
- *
- * @returns Whether the rows still hold their geometries before the move
- */
-async function moveHeld(
-  page: Page,
-  features: SceneFeature[],
-  ids: string[],
-  intermediate: boolean,
-): Promise<boolean> {
-  const geometries = movedScene(features, ids).filter((f) => ids.includes(f.id));
-  const before = features.filter((f) => ids.includes(f.id));
-  return page.evaluate(
-    ({ geometries, before, intermediate }) => {
-      const w = window as unknown as {
-        store: import('../index.js').Store;
-        e2e: {
-          internals: {
-            featureTablesInternals: typeof import('../feature-table/feature-tables.js').featureTablesInternals;
-          };
-        };
-      };
-      const store = w.store;
-      const tables = store.tables as import('../kasane/index.js').FeatureTables;
-      const internals = w.e2e.internals.featureTablesInternals(tables);
-      if (!internals) throw new Error('the Store of the page holds no rows');
-      internals.open(
-        'e2e',
-        geometries.map((f) => f.id),
-      );
-      store.transact(() => {
-        for (const f of geometries) {
-          store.updateFeature(
-            f.id,
-            { geometry: f.geometry } as never,
-            intermediate ? { isIntermediate: true } : undefined,
-          );
-        }
-      });
-      return before.every((f) => {
-        const row = tables.get('rows')?.getRow(tables.findRow(f.id) ?? -1);
-        return JSON.stringify(row?.geometry) === JSON.stringify(f.geometry);
-      });
-    },
-    { geometries, before, intermediate },
-  );
-}
-
-describe('a move of many rows held and a box drawn over rows', () => {
+describe('a box drawn over rows', () => {
   let page: Page;
 
   beforeAll(async () => {
@@ -358,31 +270,6 @@ describe('a move of many rows held and a box drawn over rows', () => {
 
   afterAll(async () => {
     await page?.close();
-  });
-
-  it('draws many rows held moved by their state as the rows moved, and writes them at the end', {
-    timeout: browserTimeout(120_000),
-  }, async () => {
-    const features = scene();
-    await open(page, movedScene(features, MOVED), 'rows');
-    const built = await capture(page, 'move-built');
-
-    await open(page, features, 'rows');
-    // In the middle of the move: the rows are not written
-    expect(await moveHeld(page, features, MOVED, true)).toBe(true);
-    const live = await capture(page, 'move-live');
-    const differs = await differing(page, 'move-live', 'move-built', TOLERANCE.level);
-    console.log(`[move] in the middle: ${live} pixels drawn, ${differs} differ`);
-    expect(live).toBeGreaterThan(0);
-    expect(built).toBeGreaterThan(0);
-    expect(differs).toBeLessThanOrEqual(Math.floor(built * TOLERANCE.share));
-
-    // At its end: the rows are written, and drawn so
-    expect(await moveHeld(page, features, MOVED, false)).toBe(false);
-    const ended = await capture(page, 'move-ended');
-    const after = await differing(page, 'move-ended', 'move-built', TOLERANCE.level);
-    console.log(`[move] at the end: ${ended} pixels drawn, ${after} differ`);
-    expect(after).toBeLessThanOrEqual(Math.floor(built * TOLERANCE.share));
   });
 
   it('shows the rows in a box being drawn as a Store of objects shows the features it selects', {

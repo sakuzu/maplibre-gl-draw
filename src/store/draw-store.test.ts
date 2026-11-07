@@ -424,13 +424,8 @@ describe('the invariants of the selection', () => {
     store.updateFeature('f1', { properties: { name: 'x' } });
     expect(store.getVertexSelection()).not.toBeNull();
 
-    // A drag (its frames and its commit) keeps it
+    // The commit of a drag keeps it
     store.setDragState({ operation: 'vertex' });
-    store.updateFeature(
-      'f1',
-      { geometry: { type: 'Point', coordinates: [1, 1] } },
-      { isIntermediate: true },
-    );
     store.updateFeature('f1', { geometry: { type: 'Point', coordinates: [1, 1] } });
     store.setDragState(null);
     expect(store.getVertexSelection()).not.toBeNull();

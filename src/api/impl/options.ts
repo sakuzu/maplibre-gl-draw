@@ -232,8 +232,8 @@ const RUNTIME_CHECKS: Readonly<Record<string, (value: unknown, what: string) => 
 };
 
 /**
- * The members of the public Store the instance calls; `abortIntermediateUpdates`,
- * `getMaxNameNumber`, `recordNameNumber` and `acceptsId` are optional
+ * The members of the public Store the instance calls; `getMaxNameNumber`, `recordNameNumber` and
+ * `acceptsId` are optional
  */
 const STORE_METHODS = [
   'getFeature',

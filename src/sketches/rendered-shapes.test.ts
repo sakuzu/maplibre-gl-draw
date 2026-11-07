@@ -10,7 +10,7 @@
 
 import { describe, expect, it } from 'vitest';
 import type { FeatureTables } from '../api/tables.js';
-import { BULK_MOVE_SET, HELD_MOVE_SET } from '../feature-table/row-state.js';
+import { BULK_MOVE_SET } from '../feature-table/row-state.js';
 import { DrawStore } from '../store/draw-store.js';
 import { TableContractStore } from '../store/table-memory.js';
 import type { Feature } from '../store/types.js';
@@ -111,15 +111,6 @@ describe('the shape of a feature', () => {
       sizeFactor: 2,
     });
     expect(shapes.get('b')?.properties['maplibre-gl-draw:radiusMeters']).toBe(20);
-  });
-
-  it('is not moved twice for a feature held moved as a whole, written where it is moved to', () => {
-    const { store, states, tables, handleOf } = rowsSetup();
-    const shapes = new RenderedShapes(store);
-    internalsOf(tables).open('test', ['a']);
-    states.setMoving(Int32Array.of(handleOf('a')), HELD_MOVE_SET);
-    states.setTranslation(HELD_MOVE_SET, 1, 0);
-    expect(position(shapes.get('a'))).toEqual([139, 35]);
   });
 
   it('is moved for a feature held that is dragged with the rows selected in bulk', () => {

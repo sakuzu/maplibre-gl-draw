@@ -186,48 +186,6 @@ describe('MemoryStore', () => {
         expect(coordinatesOf(changes.features?.updated?.[0].previous)).toEqual([0, 0]);
         expect(coordinatesOf(changes.features?.updated?.[0].feature)).toEqual([5, 5]);
       });
-
-      it('is applied as usual even with isIntermediate', () => {
-        store.updateFeature(
-          'feature-1',
-          { geometry: { type: 'Point', coordinates: [5, 5] } },
-          { isIntermediate: true },
-        );
-
-        expect(coordinatesOf(store.getFeature('feature-1'))).toEqual([5, 5]);
-      });
-
-      it('isIntermediate is passed through to StoreChange', () => {
-        const listener = vi.fn();
-        store.subscribe(listener);
-
-        store.updateFeature(
-          'feature-1',
-          { geometry: { type: 'Point', coordinates: [5, 5] } },
-          { isIntermediate: true },
-        );
-
-        const changes: StoreChange = listener.mock.calls[0][0];
-        expect(changes.features?.updated?.[0].isIntermediate).toBe(true);
-      });
-
-      it('adds no key when there are no options or isIntermediate is false', () => {
-        const listener = vi.fn();
-        store.subscribe(listener);
-
-        store.updateFeature('feature-1', { geometry: { type: 'Point', coordinates: [5, 5] } });
-        store.updateFeature('feature-1', { geometry: { type: 'Point', coordinates: [6, 6] } }, {});
-        store.updateFeature(
-          'feature-1',
-          { geometry: { type: 'Point', coordinates: [7, 7] } },
-          { isIntermediate: false },
-        );
-
-        for (const call of listener.mock.calls) {
-          const changes: StoreChange = call[0];
-          expect(changes.features?.updated?.[0]).not.toHaveProperty('isIntermediate');
-        }
-      });
     });
 
     describe('deleteFeature', () => {
@@ -838,26 +796,19 @@ describe('MemoryStore', () => {
       expect(changes.features?.created).toHaveLength(2);
     });
 
-    it('each entry keeps its assertion when intermediate and final updates are mixed', () => {
+    it('each entry keeps its value when a feature is written twice in a transaction', () => {
       store.createFeature(createTestFeature('feature-1'));
       const listener = vi.fn();
       store.subscribe(listener);
 
       store.transact(() => {
-        store.updateFeature(
-          'feature-1',
-          { geometry: { type: 'Point', coordinates: [1, 1] } },
-          { isIntermediate: true },
-        );
+        store.updateFeature('feature-1', { geometry: { type: 'Point', coordinates: [1, 1] } });
         store.updateFeature('feature-1', { geometry: { type: 'Point', coordinates: [2, 2] } });
       });
 
       const changes: StoreChange = listener.mock.calls[0][0];
       const updated = changes.features?.updated ?? [];
       expect(updated).toHaveLength(2);
-      expect(updated[0].isIntermediate).toBe(true);
-      // The last (final) entry carries no flag, and its value is the final value
-      expect(updated[1]).not.toHaveProperty('isIntermediate');
       expect(coordinatesOf(updated[1].feature)).toEqual([2, 2]);
     });
 

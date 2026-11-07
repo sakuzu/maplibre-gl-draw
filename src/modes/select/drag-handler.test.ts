@@ -8,8 +8,8 @@
  * (options.topology.sharedVertexDrag). It verifies that, on a vertex drag in select mode, other
  * features that have a vertex exactly matching the dragged vertex (tolerance 0) follow along by
  * the same amount of movement. By default (with the option disabled) only the main feature moves,
- * as before. The second half covers the declaration of intermediate updates during a drag and
- * the commit in endDrag.
+ * as before. The second half covers the drags writing nothing while they go on, and the commit
+ * in endDrag.
  *
  * Because SelectModeDragHandler is driven in the 3 stages startDrag / updateDrag / endDrag, the
  * drag sequences are assembled and invoked in the same manner as mode.test.ts (MemoryStore + a
@@ -603,12 +603,11 @@ describe.each(STORE_KINDS)('on %s', (_kind, createStore) => {
 
       dragVertex('f1', { ring: 0, index: 1 }, [10, 0], [11, 2]);
 
-      // A drag frame moves both in one notification too; the commit is the one without
-      // intermediate updates
+      // Nothing is written by a frame of the drag: the commit moves both in one notification
       const combined = batches.filter((changes) => {
         const updated = changes.features?.updated ?? [];
         const ids = new Set(updated.map((u) => u.id));
-        return ids.has('f1') && ids.has('f2') && updated.every((u) => !u.isIntermediate);
+        return ids.has('f1') && ids.has('f2');
       });
       expect(combined).toHaveLength(1);
       // The commit batch is emitted last (in endDrag)
@@ -792,7 +791,7 @@ describe.each(STORE_KINDS)('on %s', (_kind, createStore) => {
     });
   });
 
-  describe('intermediate updates during a drag and the commit in endDrag', () => {
+  describe('nothing written during a drag, and the commit in endDrag', () => {
     type FeatureUpdate = NonNullable<NonNullable<StoreChange['features']>['updated']>[number];
 
     let batches: StoreChange[];
@@ -809,9 +808,9 @@ describe.each(STORE_KINDS)('on %s', (_kind, createStore) => {
       return changes.features?.updated ?? [];
     }
 
-    /** The commit batches (batches where not a single entry carries isIntermediate) */
+    /** The commit batches: nothing else is written */
     function commitBatches(): StoreChange[] {
-      return batches.filter((changes) => updatesOf(changes).every((u) => !u.isIntermediate));
+      return batches;
     }
 
     /** Start a move drag */
@@ -1015,31 +1014,6 @@ describe.each(STORE_KINDS)('on %s', (_kind, createStore) => {
       expect(commits).toHaveLength(1);
       expect(new Set(updatesOf(commits[0]).map((u) => u.id))).toEqual(new Set(['f1', 'f2']));
     });
-
-    describe('an abort that never reaches a commit (abortIntermediateUpdates)', () => {
-      let abortSpy: ReturnType<typeof vi.fn<(ids: string[]) => void>>;
-
-      beforeEach(() => {
-        abortSpy = vi.fn<(ids: string[]) => void>();
-        (
-          store as unknown as { abortIntermediateUpdates?: (ids: string[]) => void }
-        ).abortIntermediateUpdates = abortSpy;
-      });
-
-      it('after committing in endDrag it does not notify a discard', () => {
-        startVertexDrag('f1', { ring: 0, index: 1 }, [10, 0]);
-        handler.updateDrag(dragEvent(11, 2, [10, 0]), context);
-        handler.endDrag(context);
-
-        expect(abortSpy).not.toHaveBeenCalled();
-      });
-
-      it('a reset without a drag notifies nothing', () => {
-        handler.reset(store);
-
-        expect(abortSpy).not.toHaveBeenCalled();
-      });
-    });
   });
 
   describe('a feature that disappears during a drag', () => {
@@ -1079,9 +1053,7 @@ describe.each(STORE_KINDS)('on %s', (_kind, createStore) => {
       store.deleteFeature('f2');
       store.subscribe((changes) => {
         const updated = changes.features?.updated ?? [];
-        if (updated.length > 0 && updated.every((u) => !u.isIntermediate)) {
-          committed.push(updated.map((u) => u.id));
-        }
+        if (updated.length > 0) committed.push(updated.map((u) => u.id));
       });
 
       handler.endDrag(context);

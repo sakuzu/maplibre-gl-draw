@@ -126,58 +126,6 @@ describe('the rows held as features', () => {
     expect(emitted).toHaveLength(0);
   });
 
-  it('show an edit in its middle, and keep the values of others for when it ends', () => {
-    const { writer, internals, at, row } = setup();
-    internals.open('core:selection', ['p8']);
-    const start = internals.getOpenedFeature('p8') as Feature;
-    const moved = (x: number): Feature => ({
-      ...start,
-      geometry: { type: 'Point', coordinates: [x, 8] },
-    });
-    writer.applyOpened('p8', moved(80), { intermediate: true });
-    expect(row('p8')?.geometry).toEqual({ type: 'Point', coordinates: [80, 8] });
-    // Another moves it and colors it meanwhile: the move waits, the color is shown
-    writer.apply(
-      patchOf(at('p8'), {
-        geometry: { type: 'Point', coordinates: [-8, -8] },
-        style: { pointColor: '#00ff00' },
-      }),
-    );
-    expect(row('p8')?.geometry).toEqual({ type: 'Point', coordinates: [80, 8] });
-    expect(row('p8')?.style).toEqual({ pointColor: '#00ff00' });
-    expect(internals.getOpenedFeature('p8')?.geometry).toEqual({
-      type: 'Point',
-      coordinates: [80, 8],
-    });
-    writer.applyOpened(
-      'p8',
-      { ...moved(81), style: { pointColor: '#00ff00' } },
-      { intermediate: true },
-    );
-    // The edit is undone: the values before it are written back as an end (the values of others
-    // among them)
-    const committed = internals.heldCommitted('p8');
-    expect(committed?.geometry).toEqual({ type: 'Point', coordinates: [-8, -8] });
-    writer.applyOpened('p8', committed as Feature);
-    expect(row('p8')?.geometry).toEqual({ type: 'Point', coordinates: [-8, -8] });
-    expect(row('p8')?.style).toEqual({ pointColor: '#00ff00' });
-  });
-
-  it('show the values before an edit when they are no longer held in its middle', () => {
-    const { internals, writer, at, row } = setup();
-    internals.open('core:selection', ['p9']);
-    const start = internals.getOpenedFeature('p9') as Feature;
-    writer.applyOpened(
-      'p9',
-      { ...start, geometry: { type: 'Point', coordinates: [90, 9] }, properties: { n: 99 } },
-      { intermediate: true },
-    );
-    writer.apply(patchOf(at('p9'), { geometry: { type: 'Point', coordinates: [-9, -9] } }));
-    internals.open('core:selection', []);
-    expect(row('p9')?.geometry).toEqual({ type: 'Point', coordinates: [-9, -9] });
-    expect(row('p9')?.properties).toEqual({ n: 9 });
-  });
-
   it('keep their copies in the delta until they are no longer held', () => {
     const { tables, writer, internals, at } = setup(40);
     internals.open('core:selection', ['p2']);

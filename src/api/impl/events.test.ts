@@ -122,19 +122,9 @@ describe('the events of the features', () => {
 
     expect(payloadsOf(events, 'feature.created')).toEqual([{ feature: created, source: 'local' }]);
     expect(payloadsOf(events, 'feature.updated')).toEqual([
-      { feature: updated, previous: created, source: 'local', intermediate: false },
+      { feature: updated, previous: created, source: 'local' },
     ]);
     expect(payloadsOf(events, 'feature.deleted')).toEqual([{ feature: updated, source: 'local' }]);
-  });
-
-  it('feature.updated tells an update in the middle of a drag', () => {
-    const created = draw.features.create(pointInput()) as Feature;
-    store.updateFeature(
-      created.id,
-      { geometry: { type: 'Point', coordinates: [1, 1] } },
-      { isIntermediate: true },
-    );
-    expect(payloadsOf(events, 'feature.updated')[0].intermediate).toBe(true);
   });
 
   it('feature.moved tells the layer or the group a feature left and entered', () => {

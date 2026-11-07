@@ -13,9 +13,6 @@
  * - The writes of the features go to the rows: a write of a feature held writes its feature
  *   (`applyOpened`), a write of a row that is not held writes the row (`apply`). A new feature is
  *   put at the end of its layer (or of its group), with a key after the last one
- * - The writes in the middle of an edit (`isIntermediate`) are shown and kept apart from the
- *   values others write meanwhile; `abortIntermediateUpdates` writes back the values without
- *   them
  * - One notification per outermost transaction. A row is in it once: as a change of its feature
  *   when it is held when the transaction ends, as a change of its row otherwise. A row created
  *   and held in the same transaction is a feature created
@@ -108,7 +105,6 @@ import type {
   StoreChange,
   TableGroup,
   TableLayer,
-  UpdateFeatureOptions,
   UpdateSource,
   VertexSelection,
 } from './types.js';
@@ -259,8 +255,7 @@ export class TableContractStore implements StoreContract {
       addRowBlocks: (layerId, blocks) => marks.write(() => writer.addRowBlocks(layerId, blocks)),
       apply: (patch, options) => marks.write(() => writer.apply(patch, options)),
       applyGroups: (patch, options) => marks.write(() => writer.applyGroups(patch, options)),
-      applyOpened: (id, feature, options) =>
-        marks.write(() => writer.applyOpened(id, feature, options)),
+      applyOpened: (id, feature) => marks.write(() => writer.applyOpened(id, feature)),
       clear: () => marks.write(() => writer.clear()),
     };
     const own = this.#writer;
@@ -273,7 +268,7 @@ export class TableContractStore implements StoreContract {
       raiseDimensions: (layerId, dimensions) => own.raiseDimensions(layerId, dimensions),
       apply: (patch, options) => this.transact(() => this.#applyRows(patch, options)),
       applyGroups: (patch, options) => this.#applyGroups(patch, options),
-      applyOpened: (id, feature, options) => own.applyOpened(id, feature, options),
+      applyOpened: (id, feature) => own.applyOpened(id, feature),
       getGroupOrder: (groupHandle) => own.getGroupOrder(groupHandle),
       clear: () => this.transact(() => own.clear(), 'remote'),
     };
@@ -467,7 +462,7 @@ export class TableContractStore implements StoreContract {
     });
   }
 
-  updateFeature(id: string, updates: Partial<Feature>, options?: UpdateFeatureOptions): boolean {
+  updateFeature(id: string, updates: Partial<Feature>): boolean {
     return this.#apply(() => {
       const handle = this.tables.findRow(id);
       if (handle === undefined) throw new Error(`Feature with id "${id}" not found`);
@@ -496,16 +491,8 @@ export class TableContractStore implements StoreContract {
       }
       if (place.size > 0) this.#write(handle, place);
       const moved = this.#internals.getOpenedFeature(id) as Feature;
-      if (options?.isIntermediate) {
-        this.writer.applyOpened(id, { ...moved, ...updates, id, layerId, groupId } as Feature, {
-          intermediate: true,
-        });
-        return;
-      }
-      // The values an edit ends with: over the values without the ones of its middle
-      const committed = this.#internals.heldCommitted(id) ?? moved;
       this.writer.applyOpened(id, {
-        ...committed,
+        ...moved,
         ...updates,
         id,
         layerId: moved.layerId,
@@ -683,16 +670,6 @@ export class TableContractStore implements StoreContract {
       row.properties.set(key, value);
       row.fields.set(`property:${key}`, value);
     }
-  }
-
-  abortIntermediateUpdates(ids: string[]): void {
-    this.transact(() => {
-      for (const id of ids) {
-        const committed = this.#internals.heldCommitted(id);
-        const held = this.#internals.getOpenedFeature(id);
-        if (committed && held && committed !== held) this.writer.applyOpened(id, committed);
-      }
-    });
   }
 
   deleteFeature(id: string): boolean {

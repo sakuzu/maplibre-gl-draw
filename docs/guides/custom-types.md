@@ -469,10 +469,10 @@ the selection (`ctx.selectionStyle`). Place a handle on the box from
 `ctx.selectionBox`, so that it sits where the library draws the box.
 
 A drag of a handle calls `onHandleDrag` for every move of the pointer and
-once more when the drag ends, and the `FeaturePatch` it returns is
-applied to the feature. The patches of the moves are intermediate
-updates; the one of the end is the one that stays. The ID tells the
-handles of the type apart. A `resize` handle in the middle of the east
+once more when the pointer is let go. The `FeaturePatch` of each move is
+shown by a sketch and nothing is written; the one of the end is written
+with them, in one write. A drag cut short (Esc) writes nothing. The ID
+tells the handles of the type apart. A `resize` handle in the middle of the east
 edge of the signboard that changes its width alone:
 
 <!-- docs-check: continue

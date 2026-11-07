@@ -213,11 +213,9 @@ What each part does when it is dragged:
   test all follow that path
 - A single-coordinate feature (a one-point `MultiPoint`) shows its vertex
   handles but no corners or rotation handle
-- Every drag is one change. A move, a rotation and a resize are shown by a
-  sketch, and the document does not change until the release writes the
-  final state. While the other drags last, `feature.updated` arrives with
-  `intermediate: true`. `drag.started` and `drag.ended` mark the start and
-  the end of a drag
+- Every drag is one change. A drag is shown by a sketch, and the document
+  does not change until the release writes the final state. `drag.started`
+  and `drag.ended` mark the start and the end of a drag
 - A locked feature can be selected but does not move
   ([Layers and groups](layers.md)). Alone it shows no handles. With others
   it stays where it is while they move, the box and the handles stand

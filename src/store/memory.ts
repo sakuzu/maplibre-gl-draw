@@ -52,7 +52,6 @@ import type {
   Selection,
   SelectionType,
   StoreChange,
-  UpdateFeatureOptions,
   UpdateSource,
   VertexSelection,
 } from './types.js';
@@ -143,8 +142,8 @@ export class MemoryContractStore implements StoreContract {
   createFeature(feature: Feature): boolean {
     return this.#apply(() => this.#document.createFeature(feature));
   }
-  updateFeature(id: string, updates: Partial<Feature>, options?: UpdateFeatureOptions): boolean {
-    return this.#apply(() => this.#document.updateFeature(id, updates, options));
+  updateFeature(id: string, updates: Partial<Feature>): boolean {
+    return this.#apply(() => this.#document.updateFeature(id, updates));
   }
   applyEdits(edits: readonly FeatureEdit[]): EditResult {
     // Every edit is checked before one is written
@@ -375,11 +374,6 @@ export class MemoryDocumentStore implements DocumentStore {
   /**
    * Updates a feature
    *
-   * options.isIntermediate has no effect on the application of the update (an intermediate
-   * state is applied as usual). Only when it is set is it passed through to
-   * StoreChange.features.updated, so that the receiver can tell an intermediate update from
-   * a final one.
-   *
    * When layerId or groupId changes the container of the feature (its group, or else its
    * layer), the feature leaves the order of the old container at once. It joins the group at
    * the tail at once; it joins the order of its layer at the tail at the end of the
@@ -388,7 +382,7 @@ export class MemoryDocumentStore implements DocumentStore {
    * is accepted, because replaying recorded changes can set groupId before the group is
    * created again (createGroup then lists the feature from its featureIds).
    */
-  updateFeature(id: string, updates: Partial<Feature>, options?: UpdateFeatureOptions): void {
+  updateFeature(id: string, updates: Partial<Feature>): void {
     const previous = this.#features.get(id);
     if (!previous) {
       throw new Error(`Feature with id "${id}" not found`);
@@ -412,19 +406,7 @@ export class MemoryDocumentStore implements DocumentStore {
       }
     });
 
-    this.#bus.merge({
-      features: {
-        updated: [
-          {
-            id,
-            feature: updated,
-            previous,
-            // Add the key only for an intermediate state (a final update has no such key)
-            ...(options?.isIntermediate ? { isIntermediate: true } : {}),
-          },
-        ],
-      },
-    });
+    this.#bus.merge({ features: { updated: [{ id, feature: updated, previous }] } });
   }
 
   deleteFeature(id: string): void {

@@ -375,19 +375,6 @@ export interface FeatureTables {
 }
 
 /**
- * The options of {@link FeatureTablesWriter.applyOpened}.
- */
-export interface OpenedApplyOptions {
-  /**
-   * Whether the values are a state in the middle of an edit (a drag), always followed by the
-   * values it ends with: the rows show them, and the values of others written meanwhile into the
-   * fields it writes are kept apart until it ends (written when it is no longer opened without
-   * an end, the row is shown with its values before the edit)
-   */
-  readonly intermediate?: boolean;
-}
-
-/**
  * The writing side of the features held as rows: kept by the implementation of the Store only.
  */
 export interface FeatureTablesWriter {
@@ -515,7 +502,7 @@ export interface FeatureTablesWriter {
    * @throws `DrawError` with the code `invalid-state` when the row is not opened, or
    *   `invalid-input` when the feature names another id, layer or group
    */
-  applyOpened(id: string, feature: Feature, options?: OpenedApplyOptions): void;
+  applyOpened(id: string, feature: Feature): void;
   /**
    * The key of the order of a group of features: where the group stands among the items of its
    * layer (the key of the order of a row, a fractional index, compared byte by byte; its members

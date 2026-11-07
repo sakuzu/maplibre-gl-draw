@@ -19,8 +19,7 @@
  * - the fills and the outlines drawn, and the frames of the selection and its handles
  * - the hit test, held over a grid of the map to the frame
  * - the snapping: none of the features dragged is a candidate of its own drag, from its start on
- * - the events of the features, the document and the drags, with their marks of intermediate
- *   writes
+ * - the events of the features, the document and the drags
  * - `features.get`, which reads the document, and `rendered.get`, which reads what is drawn
  * - the image of the map taken in the middle of a drag
  *
@@ -311,11 +310,11 @@ async function expectLeftOut(page: Page, left: readonly string[]): Promise<void>
   expect(answers.ids).toEqual(left);
 }
 
-/** The events of each kind, counted: the features updated (final and intermediate) and the rest */
+/** The events of each kind, counted: the features updated and the rest */
 function counted(recorded: readonly Recorded[]): Record<string, number> {
   const out: Record<string, number> = {};
   for (const e of sequenceOf(recorded)) {
-    const key = e.startsWith('U ') ? 'U' : e.startsWith('I ') ? 'I' : e;
+    const key = e.startsWith('U ') ? 'U' : e;
     out[key] = (out[key] ?? 0) + 1;
   }
   return out;

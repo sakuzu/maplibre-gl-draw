@@ -43,7 +43,6 @@ const CONTRACT: ReadonlySet<string> = new Set<keyof Store>([
   'transact',
   'createFeature',
   'updateFeature',
-  'abortIntermediateUpdates',
   'deleteFeature',
   'createLayer',
   'updateLayer',

@@ -19,8 +19,8 @@ const logger: Plugin = {
     ctx.on('feature.created', ({ feature, source }) => {
       console.log('created', feature.id, feature.type, source);
     });
-    ctx.on('feature.updated', ({ feature, intermediate }) => {
-      if (!intermediate) console.log('changed', feature.id);
+    ctx.on('feature.updated', ({ feature }) => {
+      console.log('changed', feature.id);
     });
     ctx.on('feature.deleted', ({ feature }) => {
       console.log('deleted', feature.id);
@@ -201,9 +201,8 @@ drag, the Delete key, a load, another plugin, or a Store you supplied.
 
 - `document.changed` arrives once per transaction that changed the
   document, with everything it changed and its `source`
-- `feature.updated` carries `intermediate: true` while a drag of a
-  vertex or a handle goes on, and a final update follows; a move, a
-  resize and a rotation write once, when they are let go
+- A drag writes once, when it is let go, whatever it edits: what is
+  seen in its middle is a sketch (`draw.rendered`)
 - `drag.started` and `drag.ended` surround a move, a resize, a
   rotation or a vertex drag of the select mode
 - A listener cannot stop or rewrite a change. To keep a change from

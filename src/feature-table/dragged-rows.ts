@@ -21,7 +21,6 @@ import { rowType } from './row-read.js';
 import {
   GPU_STATE_MOVE_SHIFT,
   GPU_STATE_UNIFORM,
-  HELD_MOVE_SET,
   MOVE_SETS,
   STATE_BY_VALUES,
   STATE_MOVE_MASK,
@@ -165,10 +164,6 @@ export function draggedFeatureOf(
 ): Feature {
   const handle = tables.findRow(feature.id);
   if (handle === undefined || !dragged.has(handle)) return feature;
-  const states = featureTablesInternals(tables)?.states;
-  if (states && (states.stateOf(handle) & STATE_MOVE_MASK) >> STATE_MOVE_SHIFT === HELD_MOVE_SET) {
-    return feature;
-  }
   const move = (value: unknown): unknown => {
     if (!Array.isArray(value)) return value;
     if (typeof value[0] === 'number') return dragged.position(handle, value as Position);

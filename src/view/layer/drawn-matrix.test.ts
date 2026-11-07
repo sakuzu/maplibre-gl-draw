@@ -1132,7 +1132,6 @@ const undo: Step = {
         again.push(() => draw.features.create(f));
       }
       for (const u of change.features?.updated ?? []) {
-        if (u.isIntermediate) continue;
         back.push(() => draw.features.update(u.id, patchOf(u.feature, u.previous)));
         again.push(() => draw.features.update(u.id, patchOf(u.previous, u.feature)));
       }

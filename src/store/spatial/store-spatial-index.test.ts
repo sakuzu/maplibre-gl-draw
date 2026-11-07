@@ -66,13 +66,10 @@ function stubStore() {
       features.set(feature.id, feature);
       emit({ source: 'remote', features: { created: [feature] } });
     },
-    remoteUpdate(feature: Feature, isIntermediate?: boolean) {
+    remoteUpdate(feature: Feature) {
       const previous = features.get(feature.id) as Feature;
       features.set(feature.id, feature);
-      emit({
-        source: 'remote',
-        features: { updated: [{ id: feature.id, feature, previous, isIntermediate }] },
-      });
+      emit({ source: 'remote', features: { updated: [{ id: feature.id, feature, previous }] } });
     },
     /** Replaces the whole document; the notification says only that it was replaced */
     remoteReplace(next: Feature[]) {
@@ -111,16 +108,12 @@ describe('StoreSpatialIndex', () => {
     expect(index.findNear([2, 2], 0)).toEqual([]);
   });
 
-  it('follows the intermediate updates of a drag', () => {
+  it('follows an update of the shape', () => {
     const store = memoryStore();
     const index = new StoreSpatialIndex(store);
     store.createFeature(point('a', 1, 1));
 
-    store.updateFeature(
-      'a',
-      { geometry: { type: 'Point', coordinates: [3, 3] } },
-      { isIntermediate: true },
-    );
+    store.updateFeature('a', { geometry: { type: 'Point', coordinates: [3, 3] } });
 
     expect(index.findNear([3, 3], 0)).toEqual(['a']);
   });
@@ -173,7 +166,7 @@ describe('StoreSpatialIndex', () => {
     remote.remoteCreate(point('r', 1, 1));
     expect(index.findNear([1, 1], 0)).toEqual(['r']);
 
-    remote.remoteUpdate(point('r', 2, 2), true);
+    remote.remoteUpdate(point('r', 2, 2));
     expect(index.findNear([2, 2], 0)).toEqual(['r']);
 
     remote.remoteUpdate(point('r', 3, 3));

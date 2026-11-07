@@ -52,9 +52,9 @@ function square(id: string, x: number): Feature {
 
 const IDS = ['a', 'b', 'c', 'd'];
 
-function setup(from: number): FeatureTables {
+function setup(): FeatureTables {
   vi.useFakeTimers();
-  store = createTableStore({ moveOpenedByStateFrom: from }).store;
+  store = createTableStore().store;
   store.createLayer({
     id: 'rows',
     name: 'rows',
@@ -158,11 +158,8 @@ function expectCornerNear(actual: number[] | undefined, expected: readonly numbe
 }
 
 describe('a drag of features held as rows', () => {
-  it.each([
-    ['many', 3],
-    ['few', 10],
-  ])('draws %s rows moved by their state, and writes them once at its end', (_many, from) => {
-    const tables = setup(from);
+  it('draws the rows moved by their state, and writes them once at its end', () => {
+    const tables = setup();
     draw.selection.set('feature', IDS);
     dragSelection(() => {
       IDS.forEach((id, i) => {

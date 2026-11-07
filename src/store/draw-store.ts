@@ -83,7 +83,6 @@ import type {
   SelectionType,
   StoreChange,
   TentativeState,
-  UpdateFeatureOptions,
   UpdateSource,
   VertexSelection,
 } from './types.js';
@@ -265,11 +264,8 @@ export class DrawStore implements Store {
       return true;
     });
   }
-  updateFeature(id: string, updates: Partial<Feature>, options?: UpdateFeatureOptions): boolean {
-    return this.#write(() => this.#contract.updateFeature(id, updates, options));
-  }
-  abortIntermediateUpdates(ids: string[]): void {
-    this.#contract.abortIntermediateUpdates?.(ids);
+  updateFeature(id: string, updates: Partial<Feature>): boolean {
+    return this.#write(() => this.#contract.updateFeature(id, updates));
   }
   applyEdits(edits: readonly FeatureEdit[]): EditResult | null {
     if (this.#contract.isReadOnly() || !this.#takesWrites()) return null;
@@ -1348,8 +1344,8 @@ export class DrawStore implements Store {
     const local = changes.source !== 'remote';
     for (const entry of changes.features?.updated ?? []) {
       if (entry.id !== featureId) continue;
-      // The frames and the commit of a local drag keep the vertices being dragged selected
-      if (local && (entry.isIntermediate || this.#drawing.getDragState() !== null)) continue;
+      // The commit of a local drag keeps the vertices being dragged selected
+      if (local && this.#drawing.getDragState() !== null) continue;
       if (sameCoordinates(coordinatesOf(entry.feature), coordinatesOf(entry.previous))) continue;
       this.#endVertexSelection();
       return;

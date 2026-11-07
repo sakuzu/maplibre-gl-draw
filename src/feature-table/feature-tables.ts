@@ -36,7 +36,6 @@ import type {
   ItemHandles,
   LayerRowsChange,
   LayerTableView,
-  OpenedApplyOptions,
   RowApplyOptions,
   RowCursor,
   RowField,
@@ -78,10 +77,9 @@ import { compareRowKeys, type GroupKeySource, type RowKeySource } from '../table
 import { type BulkOperation, planBulk } from './bulk-plan.js';
 import type { RowContainers } from './bulk-rows.js';
 import { FeatureCache } from './feature-cache.js';
-import { featureFields, featureWithFields } from './feature-fields.js';
+import { featureFields } from './feature-fields.js';
 import { groupRunCuts, rowGroupsHolding } from './group-runs.js';
 import { GroupTable } from './group-table.js';
-import { translationBetween } from './held-move.js';
 import { IdIndex } from './id-index.js';
 import {
   groupKeyMoves,
@@ -103,7 +101,6 @@ import {
 } from './row-read.js';
 import { noteRowState } from './row-skips.js';
 import {
-  HELD_MOVE_SET,
   RowStateSets,
   STATE_HIDDEN_DELETED,
   STATE_HIDDEN_DELTA,
@@ -229,13 +226,6 @@ export interface FeatureTablesInternalOptions extends FeatureTablesOptions {
   /** The number of strings read from the columns that are kept (50,000 when omitted) */
   readonly stringCacheSize?: number;
   /**
-   * The number of rows opened as features from which a row opened moved as a whole in the middle
-   * of an edit (a drag of the selection) is drawn moved by its state rather than written in every
-   * frame: its feature takes every value written, and its row is written once, with the values
-   * the edit ends with (100 when omitted; `Infinity`: every row is written)
-   */
-  readonly moveOpenedByStateFrom?: number;
-  /**
    * Runs a slice of the build of the index of the boxes of the rows while the page is idle
    * (`requestIdleCallback`, or a timer, when omitted): a test runs the slices itself
    */
@@ -319,7 +309,7 @@ export function createFeatureTablesStore(options: FeatureTablesInternalOptions =
     raiseDimensions: (layerId, dimensions) => store.raiseDimensions(layerId, dimensions),
     apply: (values, options) => store.apply(values, options),
     applyGroups: (patch, options) => store.applyGroups(patch, options),
-    applyOpened: (id, feature, options) => store.applyOpened(id, feature, options),
+    applyOpened: (id, feature) => store.applyOpened(id, feature),
     lookup: (id) => store.lookup(id),
     createRestoreToken: () => store.createRestoreToken(),
     forget: (handles) => store.forget(handles),
@@ -639,11 +629,6 @@ export interface FeatureTablesInternals {
   /** The handles of the rows held as features */
   heldHandles(): IterableIterator<RowHandle>;
   /**
-   * The values of a row held without the ones an edit wrote in its middle and did not end
-   * (undefined for an id not held): what an undone edit writes back
-   */
-  heldCommitted(id: string): Feature | undefined;
-  /**
    * Makes rows features for this client: the rows `owner` names are now these (the ones it named
    * before and no other owner names are no longer). A row held is a {@link Feature} the Store
    * gives as it is (`getOpenedFeature`) until it is no longer held; it stays a row of the table, drawn
@@ -783,20 +768,7 @@ export type RowBoxCalculator = (feature: Feature, tileSize: number) => BoundingB
 interface HeldRow {
   /** The feature given for it */
   feature: Feature;
-  /** Its values without the ones an edit wrote in its middle and did not end */
-  committed: Feature;
-  /** The fields an edit wrote in its middle and did not end */
-  readonly intermediate: Set<RowField>;
-  /**
-   * The geometry its row holds while the row is drawn moved by its state (the moving set of the
-   * rows held, `HELD_MOVE_SET`): the geometry of its feature is this one moved as a whole, and is
-   * not written to the row (undefined while the row is written)
-   */
-  moved: { readonly geometry: Feature['geometry'] } | undefined;
 }
-
-/** The number of rows held from which a row held moved as a whole is moved by its state */
-const MOVE_HELD_BY_STATE_FROM = 100;
 
 /** A feature drawn over a row for this client */
 /** The owner of the features drawn for the sketches (`showSketches`), among the owners of `showInPlace` */
@@ -930,8 +902,6 @@ class FeatureTablesStore implements FeatureTablesInternals {
    * does)
    */
   private readonly deletedGroups = new Set<GroupHandle>();
-  /** `FeatureTablesInternalOptions.moveOpenedByStateFrom` */
-  private readonly moveHeldByStateFrom: number;
   /** `FeatureTablesOptions.dimensionsOf` */
   private readonly declaredDims: ((layerId: string) => CoordinateDimensions) | undefined;
   /** The system of the coordinates of the rows (`FeatureTablesOptions.coordinates`) */
@@ -967,7 +937,6 @@ class FeatureTablesStore implements FeatureTablesInternals {
     this.versions = new GroupVersions(this.versionHost());
     this.retainTokens = options.restoreLimit?.tokens ?? RETAIN_TOKENS;
     this.retainBytes = options.restoreLimit?.bytes ?? RETAIN_BYTES;
-    this.moveHeldByStateFrom = options.moveOpenedByStateFrom ?? MOVE_HELD_BY_STATE_FROM;
     this.rowBoxes = new RowBoxIndex(
       {
         boxOf: (handle, out, inBuild) => this.rowBoxOf(handle, out, inBuild),
@@ -1201,10 +1170,7 @@ class FeatureTablesStore implements FeatureTablesInternals {
     this.featureCache.clear();
     // The rows opened as features are let go of, without writing them (their rows go)
     const removed: string[] = [];
-    for (const [handle, held] of this.heldRows) {
-      this.stopMove(handle, held);
-      removed.push(held.feature.id);
-    }
+    for (const held of this.heldRows.values()) removed.push(held.feature.id);
     this.heldRows.clear();
     this.holders.clear();
     // The features drawn in the places of rows, and the marks of the rows selected in bulk and
@@ -2070,41 +2036,27 @@ class FeatureTablesStore implements FeatureTablesInternals {
 
   /**
    * Writes values of rows (see `FeatureTablesWriter.apply`). A row held as a feature gets its
-   * feature written too, notified as a change of the feature rather than of the row; the fields
-   * an edit of it writes in its middle are kept for when the edit ends (`OpenedApplyOptions`)
+   * feature written too, notified as a change of the feature rather than of the row
    */
   apply(patch: RowValues, options: RowApplyOptions = {}): RowsChange {
     // A part of a write made in several parts: its changes of the order are told at its end
     const watch = this.partsWatch ? null : this.watchOrder(patch);
     const drafts = new Map<string, LayerChangeDraft>();
-    const heldWritten: Array<{ handle: RowHandle; fields: Map<RowField, unknown> }> = [];
+    const heldWritten: RowHandle[] = [];
     if (this.heldRows.size === 0) {
       this.applyPatch(patch, drafts);
     } else {
-      // The rows held are written one at a time, without the fields an edit holds apart
+      // The rows held are written one at a time
       const plain: number[] = [];
-      const kept: Array<{ i: number; handle: RowHandle; fields: Map<RowField, unknown> }> = [];
+      const held: number[] = [];
       for (let i = 0; i < patch.handles.length; i++) {
-        const handle = patch.handles[i];
-        if (!this.heldRows.has(handle)) {
-          plain.push(i);
-          continue;
-        }
-        const fields = new Map<RowField, unknown>();
-        for (const [field, values] of patch.fields) fields.set(field, values[i]);
-        kept.push({ i, handle, fields });
+        (this.heldRows.has(patch.handles[i]) ? held : plain).push(i);
       }
       this.checkRows(patch);
       if (plain.length > 0) this.applyPatch(subsetPatch(patch, plain), drafts);
-      for (const { i, handle, fields } of kept) {
-        const held = this.heldRows.get(handle) as HeldRow;
-        const written = new Map<RowField, readonly unknown[]>();
-        for (const [field, value] of fields) {
-          if (!held.intermediate.has(field)) written.set(field, [value]);
-        }
-        const deleted = patch.deleted?.[i] ? Uint8Array.of(1) : undefined;
-        this.applyPatch({ handles: Int32Array.of(handle), fields: written, deleted }, drafts);
-        heldWritten.push({ handle, fields });
+      for (const i of held) {
+        this.applyPatch(subsetPatch(patch, [i]), drafts);
+        heldWritten.push(patch.handles[i]);
       }
     }
     const features = this.heldChanges(heldWritten, drafts);
@@ -2450,18 +2402,17 @@ class FeatureTablesStore implements FeatureTablesInternals {
   /**
    * The changes of the features of rows held that a write wrote, taken out of the rows written:
    * a row deleted is no longer held (by any owner), and its feature is deleted; the feature of a
-   * row written is made again from the row (which keeps the values of an edit in its middle), and
-   * the values the edit ends with are written over what was written
+   * row written is made again from the row
    */
   private heldChanges(
-    written: ReadonlyArray<{ handle: RowHandle; fields: Map<RowField, unknown> }>,
+    written: readonly RowHandle[],
     drafts: Map<string, LayerChangeDraft>,
   ): StoreChange['features'] | null {
     if (written.length === 0) return null;
     const updated: Array<{ id: string; feature: Feature; previous: Feature }> = [];
     const deletedFeatures: Feature[] = [];
     const handles = new Set<RowHandle>();
-    for (const { handle, fields } of written) {
+    for (const handle of written) {
       const held = this.heldRows.get(handle);
       if (!held) continue;
       handles.add(handle);
@@ -2472,11 +2423,7 @@ class FeatureTablesStore implements FeatureTablesInternals {
         continue;
       }
       const previous = held.feature;
-      const read = rowFeature(this.readContext, place.layer.layerId, place.group, place.row);
-      // A row drawn moved by its state does not hold the geometry of its feature
-      held.feature = held.moved ? { ...read, geometry: previous.geometry } : read;
-      if (held.moved) held.moved = { geometry: read.geometry };
-      held.committed = featureWithFields(held.committed, fields);
+      held.feature = rowFeature(this.readContext, place.layer.layerId, place.group, place.row);
       updated.push({ id: previous.id, feature: held.feature, previous });
     }
     // A row is in the change of its feature or of its row, not both
@@ -2611,16 +2558,7 @@ class FeatureTablesStore implements FeatureTablesInternals {
     return this.heldRows.keys();
   }
 
-  /**
-   * The values of a row held without the ones of an edit in its middle (undefined for an id not
-   * held)
-   */
-  heldCommitted(id: string): Feature | undefined {
-    const handle = this.ids.handleOf(id);
-    return handle >= 0 ? this.heldRows.get(handle)?.committed : undefined;
-  }
-
-  applyOpened(id: string, feature: Feature, options: OpenedApplyOptions = {}): void {
+  applyOpened(id: string, feature: Feature): void {
     const handle = this.ids.handleOf(id);
     const held = handle >= 0 ? this.heldRows.get(handle) : undefined;
     if (!held) throw new DrawError('invalid-state', `FeatureTables: the row "${id}" is not opened`);
@@ -2639,55 +2577,10 @@ class FeatureTablesStore implements FeatureTablesInternals {
         `FeatureTables: the layer and the group of "${id}" are written with apply, with its key`,
       );
     }
-    const translation = options.intermediate ? this.heldTranslation(held, feature) : null;
-    let fields: Map<RowField, unknown>;
-    if (translation) {
-      // Moved as a whole among many rows held: the row keeps its values without the ones of the
-      // edit, and is drawn moved by its state
-      fields = new Map([['geometry', feature.geometry]]);
-      if (!held.moved) {
-        this.writeHeldRow(handle, featureFields(held.feature, held.committed));
-        held.moved = { geometry: held.committed.geometry };
-        this.states.setMoving(Int32Array.of(handle), HELD_MOVE_SET);
-      }
-      this.states.setTranslation(HELD_MOVE_SET, translation[0], translation[1]);
-    } else {
-      fields = featureFields(held.feature, feature);
-      this.writeHeldRow(handle, featureFields(this.heldRowValues(held), feature));
-      this.stopMove(handle, held);
-    }
+    this.writeHeldRow(handle, featureFields(held.feature, feature));
     const previous = held.feature;
     held.feature = feature;
-    if (options.intermediate) {
-      for (const field of fields.keys()) held.intermediate.add(field);
-    } else {
-      held.committed = feature;
-      held.intermediate.clear();
-    }
-    this.onChange?.({
-      features: {
-        updated: [
-          { id, feature, previous, ...(options.intermediate === true && { isIntermediate: true }) },
-        ],
-      },
-    });
-  }
-
-  /**
-   * The translation a write in the middle of an edit moves a row held by as a whole, when it is
-   * drawn moved by its state: many rows are held, and the write changes nothing but the geometry
-   * the row holds without the edit, moved as a whole (null when the row is to be written)
-   */
-  private heldTranslation(held: HeldRow, feature: Feature): [number, number] | null {
-    if (this.heldRows.size < this.moveHeldByStateFrom) return null;
-    const fields = featureFields(held.committed, feature);
-    if (fields.size !== 1 || !fields.has('geometry')) return null;
-    return translationBetween((held.moved ?? held.committed).geometry, feature.geometry);
-  }
-
-  /** The values the row of a row held holds, as its feature has them */
-  private heldRowValues(held: HeldRow): Feature {
-    return held.moved ? { ...held.feature, geometry: held.moved.geometry } : held.feature;
+    this.onChange?.({ features: { updated: [{ id, feature, previous }] } });
   }
 
   /** Writes fields of a row held, as its feature has them */
@@ -2696,16 +2589,6 @@ class FeatureTablesStore implements FeatureTablesInternals {
     const columns = new Map<RowField, readonly unknown[]>();
     for (const [field, value] of fields) columns.set(field, [value]);
     this.applyPatch({ handles: Int32Array.of(handle), fields: columns }, new Map());
-  }
-
-  /**
-   * Takes a row held out of the moving set of the rows held, once its row is written (the set is
-   * let go of with the last of them, `RowStateSets`)
-   */
-  private stopMove(handle: RowHandle, held: HeldRow): void {
-    if (!held.moved) return;
-    held.moved = undefined;
-    this.states.setMoving(Int32Array.of(handle), 0);
   }
 
   // === The features drawn over rows for this client ===
@@ -3040,12 +2923,7 @@ class FeatureTablesStore implements FeatureTablesInternals {
     if (!place) return null;
     this.rowBoxes.markOne(handle);
     const feature = rowFeature(this.readContext, place.layer.layerId, place.group, place.row);
-    this.heldRows.set(handle, {
-      feature,
-      committed: feature,
-      intermediate: new Set(),
-      moved: undefined,
-    });
+    this.heldRows.set(handle, { feature });
     // Its copy in the delta stays there until it is no longer held
     if (place.group.delta) {
       place.layer.delta.setKept(place.row, true);
@@ -3072,10 +2950,6 @@ class FeatureTablesStore implements FeatureTablesInternals {
     if (!held) return undefined;
     this.rowBoxes.markOne(handle);
     this.heldRows.delete(handle);
-    if (held.intermediate.size > 0) {
-      this.writeHeldRow(handle, featureFields(this.heldRowValues(held), held.committed));
-    }
-    this.stopMove(handle, held);
     const serial = this.ids.deltaLayer(handle);
     if (serial >= 0) {
       this.layerList[serial].delta.setKept(this.ids.deltaSlot(handle), false);
@@ -3087,8 +2961,6 @@ class FeatureTablesStore implements FeatureTablesInternals {
   /** Takes a row out of every owner, without writing it (it was deleted) */
   private forgetHeld(handle: RowHandle): void {
     this.rowBoxes.markOne(handle);
-    const held = this.heldRows.get(handle);
-    if (held) this.stopMove(handle, held);
     this.heldRows.delete(handle);
     for (const [owner, handles] of [...this.holders]) {
       if (!handles.has(handle)) continue;

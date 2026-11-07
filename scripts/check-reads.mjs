@@ -48,7 +48,6 @@ const READS = {
   'states.translation(': /\bstates\.translation\(/g,
   'states.transform(': /\bstates\.transform\(/g,
   BULK_MOVE_SET: /\bBULK_MOVE_SET\b/g,
-  HELD_MOVE_SET: /\bHELD_MOVE_SET\b/g,
   'draggedRowsOf(': /\bdraggedRowsOf\(/g,
   'appliedFeature(': /\.appliedFeature\(/g,
   'drawnFeature(': /\.drawnFeature\(/g,

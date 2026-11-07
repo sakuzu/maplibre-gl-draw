@@ -19,8 +19,8 @@ const logger: Plugin = {
     ctx.on('feature.created', ({ feature, source }) => {
       console.log('created', feature.id, feature.type, source);
     });
-    ctx.on('feature.updated', ({ feature, intermediate }) => {
-      if (!intermediate) console.log('changed', feature.id);
+    ctx.on('feature.updated', ({ feature }) => {
+      console.log('changed', feature.id);
     });
     ctx.on('feature.deleted', ({ feature }) => {
       console.log('deleted', feature.id);
@@ -201,9 +201,8 @@ ctx.draw.transact(
 
 - `document.changed` は、文書を変えた取引ごとに 1 回、その取引で
   変わったものの全部と `source` を持って届きます
-- `feature.updated` は、頂点やハンドルのドラッグの途中では
-  `intermediate: true` を持ち、その後に確定の更新が届きます。移動、
-  拡縮、回転は離したときに 1 度だけ書き込まれます
+- ドラッグは何を編集しても離したときに 1 度だけ書き込まれます。途中に
+  見えるのは下書きです (`draw.rendered`)
 - `drag.started` と `drag.ended` は、選択モードの移動、拡縮、回転、
   頂点のドラッグの前後に届きます
 - 受け手は変化を止めることも書き換えることもできません。変化を起こさ

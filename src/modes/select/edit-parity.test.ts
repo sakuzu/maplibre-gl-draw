@@ -295,7 +295,6 @@ describe.each(STORE_KINDS)('the drags of the select mode over %s', (_, makeStore
       const changes = drag(view, IN_A, [IN_A[0] + 0.3, IN_A[1] + 0.2]);
       expect(changes).toHaveLength(1);
       expect(updatedIds(changes[0])).toEqual(['a']);
-      expect(changes[0]?.features?.updated?.[0]?.isIntermediate).toBeFalsy();
       // Moved east and north by about as far as the pointer
       const after = centerOf(view.store, 'a');
       expect(after[0] - before[0]).toBeCloseTo(0.3, 2);

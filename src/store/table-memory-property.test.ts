@@ -205,13 +205,7 @@ describe('the Store of rows against the Store of objects', () => {
           }));
           const end = random() < 0.5;
           both((s) => {
-            for (const geometry of frames)
-              s.updateFeature(id, { geometry }, { isIntermediate: true });
-            if (end) s.updateFeature(id, { geometry: frames[2] });
-            else {
-              s.updateFeature(id, { geometry: start }, { isIntermediate: true });
-              s.abortIntermediateUpdates?.([id]);
-            }
+            s.updateFeature(id, { geometry: end ? frames[2] : start });
           });
         }
         if (JSON.stringify(contents(rows)) !== JSON.stringify(contents(objects))) {

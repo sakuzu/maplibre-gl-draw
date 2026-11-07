@@ -19,8 +19,7 @@
  * - the hit test, held over a grid of the map to the frame, and at the places of a feature before
  *   and after the edit
  * - the snapping: none of the features edited is a candidate of its own drag
- * - the events of the features, the document and the drags, with their marks of intermediate
- *   writes
+ * - the events of the features, the document and the drags
  * - `features.get`, which reads the document, and `rendered.get`, which reads what is drawn
  * - the image of the map taken in the middle of a drag
  *

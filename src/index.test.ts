@@ -285,7 +285,6 @@ const KASANE = [
   'LayerTableView',
   'listSelectedRows',
   'mergeRowBlock',
-  'OpenedApplyOptions',
   'ROW_BLOCK_TARGET_ROWS',
   'ROW_BLOCK_TARGET_VERTICES',
   'RowApplyOptions',

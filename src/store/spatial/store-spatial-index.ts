@@ -16,8 +16,7 @@
  *   with `reset` (the whole document replaced from elsewhere) rebuilds the index from the Store
  * - an update of the properties (the radius of a Circle, the scale and rotation of an Image)
  *   re-indexes the feature like an update of the coordinates
- * - the intermediate updates of a drag are Store updates too (isIntermediate), so the shape
- *   being dragged is the shape that is indexed
+ * - a drag writes the Store once let go, so the shape that is indexed is the one written
  *
  * A Store that holds its features as rows has the features of the rows held (selected, edited)
  * only: they come and go with `held`, and the rows themselves are found in the index of the

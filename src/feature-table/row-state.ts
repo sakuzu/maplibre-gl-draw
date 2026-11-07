@@ -80,14 +80,8 @@ export const GPU_STATE_UNIFORM = 16;
 export const MOVE_SETS = 3;
 
 /**
- * The moving set of the rows held as features moved as a whole among many rows held: the feature
- * of such a row is written where it is moved to, and its row is drawn moved by this set
- */
-export const HELD_MOVE_SET = 1;
-
-/**
  * The moving set the features selected in bulk are moved with, by a sketch of this client or by
- * the arrow keys (set 1 is the one of the rows opened as features moved as a whole)
+ * the arrow keys
  */
 export const BULK_MOVE_SET = 2;
 

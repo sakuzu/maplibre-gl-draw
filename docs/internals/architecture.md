@@ -382,15 +382,6 @@ marks a change a replaced Store applied from outside the instance. The
 source is only a label: it never changes which events are emitted or how
 they are grouped; the transaction does.
 
-An entry of `features.updated` may carry `isIntermediate: true`. It marks an
-intermediate state of an edit in progress, such as each step of a drag of a
-vertex. The
-memory store applies it like any update; a replacement Store can
-use the flag to choose between a persistence path and a transient path.
-When a drag ends without committing (a mode switch, an external reset), the
-optional `abortIntermediateUpdates(ids)` tells the store to discard the
-uncommitted part.
-
 ### Transactions, accumulation and folding
 
 `transact(fn, source)` groups writes: listeners get one notification per
@@ -529,17 +520,16 @@ updates a derived structure by hand.
      sketches.remove(id): nothing is written
 ```
 
-A move, a rotation and a resize go so. The drags of a vertex, a midpoint, a
-radius and a handle write through the Store: each step with
-`{ isIntermediate: true }`, the last difference committed in one
-`store.transact()` on dragend (features following a shared vertex commit in
-the same step), and `store.abortIntermediateUpdates?(ids)` on an abort.
+Every drag goes so: a vertex, a midpoint and the features following a shared
+vertex by the edits of those vertices, a radius and a handle by the fields
+they set. What a vertex edit writes is the vertices it names over the feature
+as it is then, so a vertex another writer moved meanwhile stays where it put
+it.
 
 Dragging an auxiliary handle announces neither `drag.started` nor
-`drag.ended`. Core writes nothing to the Store for such a drag; the
-provider commits in its own transaction. A listener that opened an editing
-scope on `drag.started` would otherwise fold the provider's commit into the
-scope and lose it.
+`drag.ended`. Its provider gives the patches core shows and writes, or writes
+in its own transaction. A listener that opened an editing scope on
+`drag.started` would otherwise fold that write into the scope and lose it.
 
 These flows keep the Flux rules: input always passes the InputRouter, state
 changes always pass the Store, and the view updates from its subscription.

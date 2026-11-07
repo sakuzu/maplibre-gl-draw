@@ -170,47 +170,6 @@ describe('the in-memory Store of rows', () => {
     expect(store.getSelection().ids).toEqual([]);
   });
 
-  it('shows a drag in its middle, and an undone drag shows what others wrote meanwhile', () => {
-    const { store, writer, tables } = setup();
-    store.setSelection('feature', ['p3']);
-    const at = (x: number) => ({ type: 'Point' as const, coordinates: [x, 3] });
-    store.updateFeature('p3', { geometry: at(30) }, { isIntermediate: true });
-    expect(store.getFeature('p3')?.geometry).toEqual(at(30));
-    // Another moves it and colors it meanwhile
-    store.transact(() => {
-      writer.apply({
-        handles: Int32Array.of(tables.findRow('p3') ?? -1),
-        fields: new Map<RowField, unknown[]>([
-          ['geometry', [at(-3)]],
-          ['style', [{ pointColor: '#00ff00' }]],
-        ]),
-      });
-    }, 'remote');
-    expect(store.getFeature('p3')?.geometry).toEqual(at(30));
-    expect(store.getFeature('p3')?.style).toEqual({ pointColor: '#00ff00' });
-    // The drag writes the values it started from and is undone
-    store.updateFeature('p3', { geometry: at(3) }, { isIntermediate: true });
-    store.abortIntermediateUpdates?.(['p3']);
-    expect(store.getFeature('p3')?.geometry).toEqual(at(-3));
-    expect(store.getFeature('p3')?.style).toEqual({ pointColor: '#00ff00' });
-  });
-
-  it('writes the end of a drag over what others wrote meanwhile', () => {
-    const { store, writer, tables } = setup();
-    store.setSelection('feature', ['p3']);
-    const at = (x: number) => ({ type: 'Point' as const, coordinates: [x, 3] });
-    store.updateFeature('p3', { geometry: at(30) }, { isIntermediate: true });
-    store.transact(() => {
-      writer.apply({
-        handles: Int32Array.of(tables.findRow('p3') ?? -1),
-        fields: new Map<RowField, unknown[]>([['geometry', [at(-3)]]]),
-      });
-    }, 'remote');
-    store.updateFeature('p3', { geometry: at(31) });
-    store.setSelection(null, []);
-    expect(store.getFeature('p3')?.geometry).toEqual(at(31));
-  });
-
   it('selects more rows than the limit in bulk, and opens up to the limit', () => {
     const { store } = setup(0);
     const ids: string[] = [];

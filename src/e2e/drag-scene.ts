@@ -72,8 +72,6 @@ export interface Recorded {
   name: string;
   /** The ID of the feature, for the events of a feature */
   id?: string;
-  /** `intermediate` of `feature.updated` */
-  intermediate?: boolean;
   /** The geometry type of the feature of `preview.changed` (null when it is cleared) */
   preview?: string | null;
   /** The number of positions of the feature of `preview.changed` */
@@ -272,7 +270,7 @@ export async function load(
         return n;
       };
       draw.on('feature.updated', (e) =>
-        recorded.push({ name: 'feature.updated', id: e.feature.id, intermediate: e.intermediate }),
+        recorded.push({ name: 'feature.updated', id: e.feature.id }),
       );
       draw.on('feature.created', (e) =>
         recorded.push({ name: 'feature.created', id: e.feature.id }),
@@ -607,13 +605,13 @@ export async function eventsNamed(page: Page, name: string): Promise<Recorded[]>
 
 /**
  * The events of the features and the drags recorded, in order, as short words: `U` and `I` for a
- * feature updated (final and intermediate) followed by its ID, `D` for a change of the document,
+ * feature updated followed by its ID, `D` for a change of the document,
  * and the drags with their kind (the snaps and the selection of vertices left out)
  */
 export function sequenceOf(recorded: readonly Recorded[]): string[] {
   const out: string[] = [];
   for (const e of recorded) {
-    if (e.name === 'feature.updated') out.push(`${e.intermediate ? 'I' : 'U'} ${e.id}`);
+    if (e.name === 'feature.updated') out.push(`U ${e.id}`);
     else if (e.name === 'document.changed') out.push('D');
     else if (e.name === 'drag.started') out.push(`start ${e.kind}`);
     else if (e.name === 'drag.ended') out.push(`end ${e.kind}${e.cancelled ? ' cancelled' : ''}`);

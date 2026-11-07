@@ -331,14 +331,22 @@ writing it. Its changes are listed after those of 3.0.0.
 
 ### Changed in 3.0.0
 
-- A move, a rotation and a resize of the select mode are shown by a sketch of
-  this client: the document does not change while they go on, `draw.sketches`
-  lists the sketch, `draw.rendered` reads the features where they are drawn,
-  and one write gives the features the values the sketch leaves them with once
-  let go, over what they are then. `feature.updated` with `intermediate: true`
-  is told for the other drags only. What the drag edits is not hit while it
-  goes on. A drag whose features are all deleted, locked or hidden meanwhile
-  writes nothing, and `drag.ended` says it was cancelled
+- Every drag of the select mode (a move, a rotation, a resize, a vertex, a
+  midpoint, the radius of a Circle, a handle of an extension) is shown by a
+  sketch of this client: the document does not change while it goes on,
+  `draw.sketches` lists the sketch, `draw.rendered` reads the features where
+  they are drawn, and one write gives the features the values the sketch leaves
+  them with once let go, over what they are then (a vertex another writer moved
+  meanwhile stays where it put it). What the drag edits is not hit while it
+  goes on. A drag whose features are all deleted, locked, hidden or no longer
+  selected meanwhile writes nothing, and `drag.ended` says it was cancelled. A
+  midpoint adds its vertex once let go, and Esc adds none. Esc on a handle of an
+  extension writes nothing, and its `onHandleDrag` is not called for the end;
+  a drag whose last `onHandleDrag` gives no patch writes nothing
+- `intermediate` of `feature.updated`, `isIntermediate` of the changes and of
+  `Store.updateFeature`, `Store.abortIntermediateUpdates`, `OpenedApplyOptions`
+  and the option `moveOpenedByStateFrom` are gone: nothing writes in the middle
+  of a drag
 - A sketch of this client of one edit `translate`, `rotate` or `scale` draws the
   rows of a Store of rows by a moving set, whatever their number: their values
   are not touched, and a read makes the shape where it is drawn

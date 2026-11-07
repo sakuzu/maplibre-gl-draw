@@ -655,23 +655,6 @@ export type UpdateSource =
   | (string & Record<never, never>);
 
 /**
- * Options of `updateFeature` on the Store, for the updates of an edit in progress
- */
-export interface UpdateFeatureOptions {
-  /**
-   * Indicates that this update is an intermediate state in the middle of an edit
-   * operation.
-   *
-   * An intermediate state is always overwritten by the committing update that follows
-   * (the one without options).
-   * MemoryStore ignores it and applies the update as usual, and passes it through to
-   * isIntermediate of StoreChange.features.updated. An external store can look at this
-   * flag to decide whether to keep the update or to hold it apart until the commit.
-   */
-  isIntermediate?: boolean;
-}
-
-/**
  * One change notification of the Store: everything one transaction changed
  *
  * `subscribe` of the Store delivers one per outermost transaction (or per write outside
@@ -697,15 +680,6 @@ export interface StoreChange {
       id: string;
       feature: Feature;
       previous: Feature;
-      /**
-       * A flag indicating whether an edit is in progress (being dragged / being drawn)
-       *
-       * When true, this change is an intermediate state that is not yet committed, and it
-       * is always overwritten by the committing update that follows. An external store
-       * can look at this flag to decide whether to keep the update or to hold it apart
-       * until the commit.
-       */
-      isIntermediate?: boolean;
     }>;
     deleted?: Feature[];
   };

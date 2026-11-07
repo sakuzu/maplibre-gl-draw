@@ -246,7 +246,7 @@ async function drawHeld(
         const updates: Record<string, unknown> = {};
         if (edit.geometry) updates.geometry = edit.geometry;
         if (edit.style) updates.style = edit.style;
-        store.updateFeature(edit.id, updates as never, { isIntermediate: true });
+        store.updateFeature(edit.id, updates as never);
       }
       const pixels = await settle();
       w.captured ??= {};

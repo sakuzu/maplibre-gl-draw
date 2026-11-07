@@ -51,7 +51,6 @@ import type {
   SelectionType,
   StoreChange,
   TentativeState,
-  UpdateFeatureOptions,
   UpdateSource,
   VertexRef,
   VertexSelection,
@@ -123,26 +122,8 @@ export interface DocumentStore {
    * A change of `layerId` or `groupId` moves the feature from its old container to the new
    * one (appended at the end, unless the caller lists it itself within the same
    * transaction). A `layerId` that names a layer that does not exist throws.
-   *
-   * @param options An optional argument that conveys the nature of the update. Setting
-   *   isIntermediate declares that this is "an intermediate state in the middle of an
-   *   edit operation" (it is always overwritten by the committing update that follows).
-   *   The application itself does not change depending on whether options is given.
    */
-  updateFeature(id: string, updates: Partial<Feature>, options?: UpdateFeatureOptions): void;
-  /**
-   * Discards uncommitted intermediate states (optional to implement)
-   *
-   * Called from the mode side when an edit operation is interrupted before a sequence of
-   * updates with isIntermediate reaches its commit (an updateFeature without options). A
-   * store implementation that holds intermediate states separately instead of applying
-   * them to the real data discards the intermediate state of the relevant feature here
-   * and returns to the committed state. An implementation that applies them to the real
-   * data as they are (MemoryStore) does not have to implement it: before calling it, the
-   * mode writes the values the features had when the operation started back as a last
-   * intermediate update, so the real data is already back at the start.
-   */
-  abortIntermediateUpdates?(ids: string[]): void;
+  updateFeature(id: string, updates: Partial<Feature>): void;
   /**
    * Deletes a feature and removes it from its container
    *
@@ -460,9 +441,7 @@ export interface Store extends StoreView, UiState {
   /** Creates features, one after the other in the order given (see the public `Store.createFeatures`) */
   createFeatures(features: readonly Feature[]): boolean;
   /** Updates a feature (see {@link DocumentStore.updateFeature}) */
-  updateFeature(id: string, updates: Partial<Feature>, options?: UpdateFeatureOptions): boolean;
-  /** Discards uncommitted intermediate states (see DocumentStore) */
-  abortIntermediateUpdates?(ids: string[]): void;
+  updateFeature(id: string, updates: Partial<Feature>): boolean;
   /**
    * Applies edits of features as one transaction, all of them or none (see the public
    * `Store.applyEdits`): null when it was refused because the Store is read-only

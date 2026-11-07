@@ -6,9 +6,9 @@
  * what draws and what picks reads them from
  *
  * The shape of a feature on the screen is held nowhere: it is made here from where the edits under
- * way are kept. That is the value of the Store with the writes in the middle of an edit, the
- * sketches applied over it, and the rows drawn moved by their state (a sketch of this client that
- * moves them, the arrow keys), which are made a shape with the computation the GPU draws them with;
+ * way are kept. That is the value of the Store, the sketches applied over it, and the rows drawn
+ * moved by their state (a sketch of this client that moves them, the arrow keys), which are made a
+ * shape with the computation the GPU draws them with;
  * a shape being drawn is read here as well, and has no ID of its own. A reader names what it reads here and never picks a place: each reader that differs
  * from the shape itself has its own read, which says how.
  *
@@ -136,8 +136,8 @@ export class RenderedShapes {
   // ==========================================================================
 
   /**
-   * A feature as it is seen: the value of the Store with the writes in the middle of an edit, the
-   * sketches applied over it, moved where its row is drawn while its row is moved by its state.
+   * A feature as it is seen: the value of the Store, the sketches applied over it, moved where its
+   * row is drawn while its row is moved by its state.
    * A feature a sketch creates is read by the ID it is drawn with
    */
   get(id: string): Feature | undefined {
@@ -221,9 +221,8 @@ export class RenderedShapes {
   // ==========================================================================
 
   /**
-   * A feature as a hit reads it: the value of the Store with the writes in the middle of an edit.
-   * What a sketch with an owner moves is hit where the document has it, and the rows moved by
-   * their state where they are written
+   * A feature as a hit reads it: the value of the Store. What a sketch with an owner moves is hit
+   * where the document has it, and the rows moved by their state where they are written
    */
   hitFeature(id: string): Feature | undefined {
     return this.#store.getFeature(id);

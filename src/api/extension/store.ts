@@ -298,14 +298,8 @@ export interface Store extends StoreView {
    * A Store without it is given the features one at a time.
    */
   createFeatures?(features: readonly Feature[]): boolean;
-  /** Changes the fields given of a feature; `isIntermediate` marks an edit in progress. */
-  updateFeature(
-    id: string,
-    updates: Partial<Feature>,
-    options?: { isIntermediate?: boolean },
-  ): boolean;
-  /** Drops the intermediate updates of these features that were not followed by a final one. */
-  abortIntermediateUpdates?(ids: string[]): void;
+  /** Changes the fields given of a feature. */
+  updateFeature(id: string, updates: Partial<Feature>): boolean;
   /**
    * Applies edits of features, one after the other in the order given, as one transaction:
    * every edit applies over the feature as the edits before it leave it, and the edits apply all

@@ -69,8 +69,6 @@ export interface DocumentChange {
       id: string;
       feature: Feature;
       previous: Feature;
-      /** True while a drag or a drawing is in progress; a final update always follows */
-      isIntermediate?: boolean;
     }>;
     deleted?: Feature[];
   };
@@ -157,8 +155,8 @@ export interface DocumentChange {
 export interface DrawEvents {
   /** A feature was created */
   'feature.created': { feature: Feature; source: string };
-  /** A feature changed; `intermediate` is true while a drag is in progress */
-  'feature.updated': { feature: Feature; previous: Feature; source: string; intermediate: boolean };
+  /** A feature changed */
+  'feature.updated': { feature: Feature; previous: Feature; source: string };
   /** A feature was deleted */
   'feature.deleted': { feature: Feature; source: string };
   /**

@@ -223,6 +223,12 @@ export class SketchController {
   #dragged: string | null = null;
   /** The features selected the drag of this client edits (it ends with the last of them) */
   #draggedSelected: readonly string[] = [];
+  /** What the drag of this client edits as read last, and what it was read from */
+  #draggedRead: {
+    readonly sketch: Sketch;
+    readonly rows: TableSelection | undefined;
+    readonly features: DraggedFeatures;
+  } | null = null;
 
   constructor(deps: SketchControllerDeps) {
     this.#deps = deps;
@@ -331,14 +337,25 @@ export class SketchController {
     entry.dragVertices = vertices;
   }
 
-  /** What the drag of this client edits (null when no drag is shown by a sketch) */
+  /**
+   * What the drag of this client edits (null when no drag is shown by a sketch), read once for each
+   * change of its sketch: a frame of the snapping asks it for each feature it reads
+   */
   dragged(): DraggedFeatures | null {
     const entry = this.#dragged === null ? undefined : this.#entries.get(this.#dragged);
     if (!entry) return null;
+    const rows = this.#motions.get(entry.sketch.id)?.rows;
+    const read = this.#draggedRead;
+    if (read?.sketch === entry.sketch && read.rows === rows) return read.features;
+    const features = this.#draggedOf(entry, rows);
+    this.#draggedRead = { sketch: entry.sketch, rows, features };
+    return features;
+  }
+
+  #draggedOf(entry: Entry, rows: TableSelection | undefined): DraggedFeatures {
     const tables = this.#store.tables;
     const listed = this.#touchedBy(entry);
     const ids = new Set(listed);
-    const rows = this.#motions.get(entry.sketch.id)?.rows;
     return {
       ids: listed,
       hasFeature(id) {

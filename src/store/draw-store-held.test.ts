@@ -78,13 +78,7 @@ describe('the rows held for the selection', () => {
       let writes = 0;
       for (let frame = 1; frame <= 3; frame++) {
         for (const [i, id] of ids.entries()) {
-          store.updateFeature(
-            id,
-            { geometry: square(id, i * 2 + frame * 0.1).geometry },
-            {
-              isIntermediate: true,
-            },
-          );
+          store.updateFeature(id, { geometry: square(id, i * 2 + frame * 0.1).geometry });
           writes++;
         }
       }
