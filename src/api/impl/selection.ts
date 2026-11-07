@@ -6,7 +6,7 @@
  */
 
 import type { RowUpdate } from '../../feature-table/bulk-plan.js';
-import { rowsByLayerInOrder } from '../../feature-table/bulk-rows.js';
+import { firstRowsInOrder, rowsByLayerInOrder } from '../../feature-table/bulk-rows.js';
 import { featureTablesInternals, readWithoutKeeping } from '../../feature-table/feature-tables.js';
 import { TableSelection } from '../../feature-table/selection.js';
 import { groupSelection, ungroupSelection } from '../../operations/layer-operations.js';
@@ -109,6 +109,18 @@ export function createSelection(
     return out;
   };
 
+  /** The first rows selected in bulk that match a filter, in stacking order */
+  const firstRows = (
+    filter: Parameters<SelectionResource['count']>[0],
+    limit: number,
+  ): number[] => {
+    const found = bulkRows();
+    const layerIds = store.getSelection().bulk?.layerIds;
+    const matches = found && layerIds ? featureRowMatcher(store, filter) : null;
+    if (!found || !layerIds || !matches) return [];
+    return firstRowsInOrder(found.internals, found.rows, layerIds, limit, matches);
+  };
+
   return {
     get: () => store.getSelection(),
 
@@ -116,8 +128,19 @@ export function createSelection(
       if (!SELECTION_TYPES.includes(type)) {
         throw invalidInput('type must be feature, group or layer');
       }
+      const list = requireIds(ids);
+      // Many features of rows are selected in bulk: read on their columns, no feature is made
+      const tables = store.tables;
+      if (type === 'feature' && tables && list.length > store.holdLimit) {
+        const handles = list.map((id) => tables.findRow(id) ?? -1);
+        if (handles.every((handle) => handle >= 0)) {
+          if (!list.some((id) => isShown(store, type, id))) return false;
+          store.selectRows(TableSelection.of(handles));
+          return true;
+        }
+      }
       // Each item is read once: a feature of the rows is made of them for the read
-      const selectable = requireIds(ids).filter((id) => {
+      const selectable = list.filter((id) => {
         const item = getItem(store, type, id);
         if (!item) throw notFound(type, id);
         return isShown(store, type, id, item);
@@ -213,7 +236,7 @@ export function createSelection(
             'The features selected in bulk are read up to a limit: pass { limit }',
           );
         }
-        const rows = matchingRows(filter);
+        const rows = page.after === undefined ? firstRows(filter, page.limit) : matchingRows(filter);
         let from = 0;
         if (page.after !== undefined) {
           const after = store.tables?.findRow(page.after);

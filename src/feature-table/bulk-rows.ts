@@ -173,3 +173,31 @@ export function rowsByLayerInOrder(
   }
   return out;
 }
+
+/**
+ * The first rows of a selection in the order `rowsByLayerInOrder` gives them, up to `limit` that
+ * match: the reading stops there, so a read of a few rows does not cost the rows selected
+ *
+ * @param layerIds - The layers of the rows, in the order they are first met in the set
+ * @internal
+ */
+export function firstRowsInOrder(
+  internals: FeatureTablesInternals,
+  rows: TableSelection,
+  layerIds: readonly string[],
+  limit: number,
+  matches: (handle: RowHandle) => boolean,
+): number[] {
+  const out: number[] = [];
+  for (const layerId of layerIds) {
+    const order = internals.layerTable(layerId)?.rowOrder();
+    if (!order) continue;
+    for (let i = 0; i < order.handles.length; i++) {
+      if (out.length >= limit) return out;
+      const handle = order.handles[i];
+      if ((order.groups[i].data.flags[order.rows[i]] & ROW_FLAG_DELETED) !== 0) continue;
+      if (rows.has(handle) && matches(handle)) out.push(handle);
+    }
+  }
+  return out;
+}
