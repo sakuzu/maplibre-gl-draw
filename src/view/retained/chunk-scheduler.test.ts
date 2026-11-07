@@ -220,6 +220,16 @@ describe('createChunkBuildBudget', () => {
 });
 
 describe('advanceChunkBuild', () => {
+  it('builds a chunk out of view only when rows of it moved on the GPU are seen', () => {
+    const { h } = host();
+    const away = state('away', 100);
+    advanceChunkBuild(away, frame(), h);
+    expect(away.batches).toBeNull();
+    const seenFrom = { minX: 90, minY: 0, maxX: 110, maxY: 1 };
+    advanceChunkBuild(away, { ...frame(), movedViews: [seenFrom] }, h);
+    expect(away.batches).toBe('away#1');
+  });
+
   it('does for one chunk what advanceChunkBuilds does for each, with one frame for all', () => {
     for (const steps of [1, 3]) {
       for (const ms of [0, Number.POSITIVE_INFINITY]) {

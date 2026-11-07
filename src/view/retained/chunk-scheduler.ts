@@ -215,7 +215,11 @@ export function advanceChunkBuild<S extends RetainedChunkState<B>, B>(
   host: ChunkSchedulerHost<S, B>,
 ): boolean {
   const { bounds, zoom, settled, budget, movedViews } = frame;
-  if (!intersects(state.bounds, bounds)) return false;
+  // A chunk out of view is skipped, unless rows of it moved on the GPU are seen (its extent meets a
+  // region the view sees them from)
+  if (!intersects(state.bounds, bounds) && !movedViews?.some((v) => intersects(state.bounds, v))) {
+    return false;
+  }
   let pending = false;
 
   // A chunk seen far from its origin at high zoom is built again around the view (the batches

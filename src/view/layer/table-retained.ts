@@ -3133,6 +3133,17 @@ export class TableLayerRenderer {
     return known.sets;
   }
 
+  /**
+   * Whether a chunk of the group being drawn is seen: its extent meets the view, or it holds rows
+   * moved by an edit and meets a region the view sees them from
+   */
+  private seen(chunk: Extract<TableChunk, { bounds: BoundingBox }>, bounds: BoundingBox): boolean {
+    if (meets(chunk.bounds, bounds)) return true;
+    if (this.movedViews.length === 0) return false;
+    if (!this.holdsMovedRows(chunk, this.pass.group as RowGroup)) return false;
+    return this.movedViews.some((view) => meets(chunk.bounds, view));
+  }
+
   /** Draws the chunks of the group being drawn for a drawing as they are built, in view */
   private drawBuilt(
     tables: FeatureTablesInternals,
@@ -3146,7 +3157,7 @@ export class TableLayerRenderer {
         this.drawImmediate(tables, chunk, settled);
       } else if (chunk.type === 'extension') {
         this.drawExtension(tables, chunk, settled, false);
-      } else if (chunk.batches && meets(chunk.bounds, bounds)) {
+      } else if (chunk.batches && this.seen(chunk, bounds)) {
         if (chunk.type === 'rows') this.drawOneDraw(chunk);
         else this.drawRetained(chunk);
       }
@@ -3989,6 +4000,10 @@ export class TableLayerRenderer {
     const deps = pass.deps as StoreRetainedDrawDeps;
     const stats = this.atOnceStats;
     const features: Feature[] = [];
+    // What the terrain keeps of a feature is kept by its ID: a feature drawn moved here is cut again
+    // in each frame, and nothing of it is kept
+    const { fillCache } = this.options.terrain;
+    const moved: string[] = [];
     let ended = false;
     const end = (): void => {
       if (ended) return;
@@ -3998,7 +4013,10 @@ export class TableLayerRenderer {
     const drawFeatures = (): void => {
       if (features.length === 0) return;
       end();
+      for (const id of moved) fillCache.delete(id);
       drawImmediateFeatures(features, pass.layer as Layer, frame.projectionData, frame.zoom, deps);
+      for (const id of moved) fillCache.delete(id);
+      moved.length = 0;
       features.length = 0;
     };
     const count = candidates ? candidates.length : to - from;
@@ -4022,6 +4040,7 @@ export class TableLayerRenderer {
       stats.drawn++;
       // A row not kept is made when it is in view
       feature ??= rowFeatureToRead(tables.readContext, pass.layerId, group, row);
+      if (set > 0) moved.push(feature.id);
       features.push(
         set > 0
           ? movedFeature(
