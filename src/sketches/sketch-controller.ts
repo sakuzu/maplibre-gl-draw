@@ -442,8 +442,8 @@ export class SketchController {
    * in bulk), and the sketch ends `committed`, told once it is written. What it drew is compared
    * with what is written (`sketch-commits`)
    *
-   * @param keepRows Whether the rows it moves stay in their moving set, given to `write` to take
-   *   out of it (a write in steps takes each row out as it writes it)
+   * @param keepRows Whether the rows it edits are given to `write`, the ones in a moving set staying
+   *   there for it to take them out (a write in steps takes each row out as it writes it)
    * @throws DrawError `not-found` when there is no sketch with this ID
    */
   commitWith(id: string, write: (kept: TableSelection | null) => void, keepRows = false): void {
@@ -452,7 +452,12 @@ export class SketchController {
       const drawn = this.#commitCheck
         ? this.#drawnBefore([{ entry, creates: [], edits: [] }])
         : null;
-      const kept = keepRows ? (this.#motions.get(id)?.rows ?? null) : null;
+      // What is written is every row it edits, a row drawn on the slow path too (one another sketch
+      // edits as well is in no moving set)
+      const motion = this.#motions.get(id);
+      const kept = keepRows
+        ? (this.#store.getUnlockedSelectedRows() ?? motion?.rows ?? null)
+        : null;
       if (kept) this.#motions.delete(id);
       this.#end(id, 'committed');
       this.#refresh();

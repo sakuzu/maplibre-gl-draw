@@ -307,4 +307,28 @@ describe('the rows of a drag', () => {
     near(corner(draw.features.get('a') as unknown as Feature), [2, 0]);
     near(corner(draw.features.get('b') as unknown as Feature), [3, 0]);
   });
+
+  it('of the features selected in bulk are written with a row another sketch edits too', () => {
+    open('rows', ['a', 'b'], 1);
+    draw.selection.set('feature', ['a', 'b']);
+    press([2.5, 0.5]);
+    const other = { kind: 'translate', target: { featureIds: ['b'] }, from: [0, 0], to: [0, 0] };
+    draw.sketches.add({ owner: 'someone', edits: [other] as never });
+    expect(setOf('b')).toBe(0);
+    near(corner(draw.rendered.get('b') as unknown as Feature), [5, 0]);
+    letGo(2.5, 0.5);
+    near(corner(draw.features.get('a') as unknown as Feature), [2, 0]);
+    near(corner(draw.features.get('b') as unknown as Feature), [5, 0]);
+  });
+
+  it('of a selection no longer in bulk are written as the features selected', () => {
+    open('rows', ['a', 'b'], 1);
+    draw.selection.set('feature', ['a', 'b']);
+    press([2.5, 0.5]);
+    draw.selection.set('feature', ['a']);
+    expect(draw.selection.get().bulk).toBeUndefined();
+    letGo(2.5, 0.5);
+    near(corner(draw.features.get('a') as unknown as Feature), [2, 0]);
+    near(corner(draw.features.get('b') as unknown as Feature), [3, 0]);
+  });
 });
