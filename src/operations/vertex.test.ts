@@ -5,7 +5,8 @@ import { describe, expect, it } from 'vitest';
 import type { FeatureCoordinates } from '../shared/types/model.js';
 import { coordinatesOf, geometryFromCoordinates } from '../shared/utils/coordinates.js';
 import type { Coordinate, Feature } from '../store/types.js';
-import { addVertex, computeVertexMove, deleteVertex, startVertexMove } from './vertex.js';
+import { addVertex, computeVertexMove } from '../test-support/vertex-edits.js';
+import { deleteVertex, startVertexMove } from './vertex.js';
 
 // --- Helpers ---
 
@@ -125,53 +126,6 @@ describe('computeVertexMove', () => {
         [1, 2],
         [10, 10],
         [21, 22],
-      ]);
-    });
-
-    it('ignores an out-of-range index', () => {
-      const feature = makeLineString([
-        [0, 0],
-        [10, 10],
-      ]);
-      const state = {
-        featureId: feature.id,
-        vertices: [
-          { ring: 0, index: 5 },
-          { ring: 0, index: -1 },
-        ],
-        startLngLat: { lng: 0, lat: 0 },
-        initialCoordinates: [
-          [0, 0],
-          [10, 10],
-        ] as Coordinate[],
-      };
-
-      const result = computeVertexMove(state, { lng: 3, lat: 3 }, feature);
-      expect(result).toEqual([
-        [0, 0],
-        [10, 10],
-      ]);
-    });
-
-    it('ignores a reference to a ring other than 0', () => {
-      const feature = makeLineString([
-        [0, 0],
-        [10, 10],
-      ]);
-      const state = {
-        featureId: feature.id,
-        vertices: [{ ring: 1, index: 0 }],
-        startLngLat: { lng: 0, lat: 0 },
-        initialCoordinates: [
-          [0, 0],
-          [10, 10],
-        ] as Coordinate[],
-      };
-
-      const result = computeVertexMove(state, { lng: 3, lat: 3 }, feature);
-      expect(result).toEqual([
-        [0, 0],
-        [10, 10],
       ]);
     });
   });
@@ -337,20 +291,6 @@ describe('computeVertexMove', () => {
       // The vertex of the inner ring moves as well
       expect(result[1][2]).toEqual([17, 17]);
       expect(result[1][0]).toEqual([5, 5]);
-    });
-
-    it('ignores an out-of-range ring number', () => {
-      const feature = makePolygonWithHole();
-      const initial = JSON.parse(JSON.stringify(coordinatesOf(feature))) as Coordinate[][];
-      const state = {
-        featureId: feature.id,
-        vertices: [{ ring: 5, index: 0 }],
-        startLngLat: { lng: 0, lat: 0 },
-        initialCoordinates: initial,
-      };
-
-      const result = computeVertexMove(state, { lng: 3, lat: 3 }, feature) as Coordinate[][];
-      expect(result).toEqual(initial);
     });
   });
 

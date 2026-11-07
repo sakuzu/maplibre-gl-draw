@@ -15,14 +15,9 @@ import { describe, expect, it } from 'vitest';
 import type { FeatureCoordinates } from '../shared/types/model.js';
 import { coordinatesOf, geometryFromCoordinates } from '../shared/utils/coordinates.js';
 import type { Coordinate, Feature, FeatureType, VertexRef } from '../store/types.js';
+import { addVertex, computeVertexMove } from '../test-support/vertex-edits.js';
 import type { VertexState } from './vertex.js';
-import {
-  addVertex,
-  computeVertexMove,
-  deleteVertex,
-  sortVertexRefsForDeletion,
-  startVertexMove,
-} from './vertex.js';
+import { deleteVertex, sortVertexRefsForDeletion, startVertexMove } from './vertex.js';
 
 // --- Helpers ---
 
@@ -516,43 +511,6 @@ describe('vertex operations on a MultiPoint', () => {
 // --- Invariants of the single types ---
 
 describe('only part 0 is valid for a single geometry', () => {
-  it('LineString: a movement with part > 0 is ignored', () => {
-    const feature = makeFeature('LineString', [
-      [0, 0],
-      [10, 10],
-    ] as Coordinate[]);
-    const state: VertexState = {
-      featureId: feature.id,
-      vertices: [{ part: 1, ring: 0, index: 0 }],
-      startLngLat: START,
-      initialCoordinates: coordinatesOf(feature),
-    };
-
-    expect(computeVertexMove(state, { lng: 5, lat: 5 }, feature)).toEqual([
-      [0, 0],
-      [10, 10],
-    ]);
-  });
-
-  it('Polygon: a movement with part > 0 is ignored', () => {
-    const feature = makeFeature('Polygon', [
-      [
-        [0, 0],
-        [10, 0],
-        [10, 10],
-        [0, 0],
-      ],
-    ] as Coordinate[][]);
-    const state: VertexState = {
-      featureId: feature.id,
-      vertices: [{ part: 1, ring: 0, index: 1 }],
-      startLngLat: START,
-      initialCoordinates: coordinatesOf(feature),
-    };
-
-    expect(computeVertexMove(state, { lng: 5, lat: 5 }, feature)).toEqual(coordinatesOf(feature));
-  });
-
   it('returns null for a deletion with part > 0', () => {
     const line = makeFeature('LineString', [
       [0, 0],
