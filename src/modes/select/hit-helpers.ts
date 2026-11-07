@@ -10,12 +10,20 @@
  * those independent of the selection (getGlobalHandles).
  */
 
-import { getDisplayFeatures } from '../../store/local-visibility.js';
 import { isFeatureLocked } from '../../store/lock.js';
 import type { Feature } from '../../store/types.js';
 import type { AuxiliaryHandlesCallback } from '../../view/ui/handle-test.js';
+import { getSelectedFeatureIds } from '../../view/ui/helper.js';
 import type { SelectionScope } from '../../view/ui/selection-scope.js';
 import type { EngineModeContext } from '../handler.js';
+
+/**
+ * The selected features the handles of the selection are grabbed on (a group / layer selection is
+ * resolved to its members)
+ */
+export function selectedHandleFeatures(context: EngineModeContext): Feature[] {
+  return context.shapes.handleFeatures(getSelectedFeatureIds(context.store));
+}
 
 /**
  * Whether the topmost feature at a point is one of these features and locked: a press on it moves
@@ -29,7 +37,7 @@ export function isLockedFeatureAt(
   const { store } = context;
   const locked = features.filter((feature) => isFeatureLocked(feature, store));
   if (locked.length === 0) return false;
-  const top = context.hitTestTopmost(point, { orderedFeatures: getDisplayFeatures(store) });
+  const top = context.hitTestTopmost(point);
   const id = top?.kind === 'store' ? top.feature.id : top?.kind === 'row' ? top.id : undefined;
   return locked.some((feature) => feature.id === id);
 }

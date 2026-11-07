@@ -19,6 +19,7 @@ import { createTopmostHitTester, type TopHit } from '../../dispatcher/hit-test/t
 import type { MouseNormalizedEvent } from '../../dispatcher/types.js';
 import { DEFAULT_SELECTION_CONFIG } from '../../shared/config/selection.js';
 import { setScreenScaleFrame } from '../../shared/math/index.js';
+import { RenderedShapes } from '../../sketches/rendered-shapes.js';
 import { RBushSpatialIndex } from '../../store/spatial/spatial-index.js';
 import type { Store } from '../../store/store.js';
 import type { Feature } from '../../store/types.js';
@@ -130,6 +131,7 @@ describe.each(STORE_KINDS)('on %s', (_kind, createStore) => {
     holds = [];
     context = {
       store,
+      shapes: new RenderedShapes(store),
       map: makeMap(),
       hitTestTopmost: (_point: unknown, options?: { hold?: boolean }) => {
         holds.push(options?.hold === true);

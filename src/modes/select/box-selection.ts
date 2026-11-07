@@ -26,7 +26,7 @@ export function queryFeaturesInBox(
   context: EngineModeContext,
   limit = Number.POSITIVE_INFINITY,
 ): string[] {
-  const { store, spatialIndex, boxSelectionRegistry } = context;
+  const { store, shapes, spatialIndex, boxSelectionRegistry } = context;
   const rects = boxRects(boxSelection.startPoint, boxSelection.endPoint);
 
   // First obtain the candidates quickly with rbush (from each part of a box that crosses the
@@ -51,7 +51,7 @@ export function queryFeaturesInBox(
   // inconsistency where box selection alone could select while ignoring locks and hiding).
   const hitIds: string[] = [];
   for (const id of candidateIds) {
-    const feature = store.getFeature(id);
+    const feature = shapes.hitFeature(id);
     if (!feature) continue;
     if (!feature.visible || feature.locked) continue;
     // What this client has hidden locally is excluded from the box selection targets too

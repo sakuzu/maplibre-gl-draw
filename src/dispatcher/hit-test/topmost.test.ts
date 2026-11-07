@@ -266,19 +266,6 @@ describe('the short circuit when there is no dataset', () => {
   });
 });
 
-describe('passing orderedFeatures in', () => {
-  it('uses the list that was passed in as it is (it does not fetch from the Store again)', () => {
-    createLayer('l1');
-    createFeature(polygon('f1', 'l1'));
-    putDataset('below', 'below-store');
-
-    const orderedFeatures = [store.getFeature('f1') as Feature];
-    const top = createTester()(CENTER, { orderedFeatures });
-
-    expect(top).toEqual({ kind: 'store', feature: orderedFeatures[0] });
-  });
-});
-
 describe('the z order and the consumption of the companions (feature companion)', () => {
   /** A polygon at a position away from the center (the test of the feature itself always
    * fails) */

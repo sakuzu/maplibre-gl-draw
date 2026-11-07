@@ -189,6 +189,7 @@ export function createExtensionHost(deps: ExtensionHostDeps): ExtensionHost {
       if (!feature || store.isReadOnly()) return;
       store.updateFeature(featureId, preparePatch(feature, patch), { isIntermediate: !final });
     },
+    shapes: context.shapes,
     selectionBoxOf: (featureId) => getDraw().rendered.getSelectionBox(featureId),
     selectionStyle: () =>
       toSelectionStyle(

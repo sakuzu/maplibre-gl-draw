@@ -62,7 +62,7 @@ import { rowFeatureToRead } from '../../feature-table/row-read.js';
 import { STATE_UNHIT_MASK } from '../../feature-table/row-state.js';
 import type { LngLat, ScreenPoint } from '../../shared/math/index.js';
 import { wrapLongitude } from '../../shared/math/longitude.js';
-import { getDisplayFeatures } from '../../store/local-visibility.js';
+import { RenderedShapes } from '../../sketches/rendered-shapes.js';
 import type { Store } from '../../store/store.js';
 import type { Coordinate, Feature, FeatureStyle, FeatureType, Layer } from '../../store/types.js';
 import { ROW_FLAG_LOCKED } from '../../table/row-group-types.js';
@@ -121,13 +121,6 @@ export type TopHit =
  */
 export interface TopmostHitTestOptions {
   /**
-   * The list of the features of the Store in display order
-   *
-   * When the caller already holds `getDisplayFeatures(store)`, passing it avoids fetching
-   * it again. When omitted, this function fetches it itself.
-   */
-  orderedFeatures?: Feature[];
-  /**
    * Whether a row held as columns that is hit is made a feature of the Store and returned as
    * one (`kind: 'store'`): only where the feature is needed (a click, a double click, a press
    * that drags). Without it a row is returned as a row, and nothing is made of it
@@ -165,6 +158,8 @@ export type HitTestTopmost = (point: ScreenPoint, options?: TopmostHitTestOption
  */
 export interface TopmostHitTestDeps {
   store: Store;
+  /** The shapes as they are seen, which name what a hit reads (of the Store alone when omitted) */
+  shapes?: RenderedShapes;
   /** The candidate narrowing and the precise test on the Store side */
   hitTestService: HitTestService;
   /** From screen coordinates to geographic coordinates */
@@ -235,6 +230,7 @@ export interface TopmostAnchorProjector {
  */
 export function createTopmostHitTester(deps: TopmostHitTestDeps): HitTestTopmost {
   const { store, hitTestService, unproject, toleranceLngLat, datasets } = deps;
+  const shapes = deps.shapes ?? new RenderedShapes(store);
 
   const test: DisplayHitTestFn = (feature, coordinate, tolerance) =>
     hitTestService.hitTestFeature(feature, coordinate, tolerance);
@@ -482,12 +478,12 @@ export function createTopmostHitTester(deps: TopmostHitTestDeps): HitTestTopmost
   };
 
   return (point, options) => {
-    const orderedFeatures = options?.orderedFeatures ?? getDisplayFeatures(store);
+    const orderedFeatures = shapes.hitFeatures();
     const companion = companionContext(point);
     // Within one hit test, the visibility of a layer or a group is looked up only once per
     // container.
     const visible = createVisibilityLookup(store);
-    const tables = featureTablesInternals(store.tables);
+    const tables = shapes.hitRows();
 
     // On a map with no dataset at all (none is visible) and no layer held as rows, the cost is
     // kept the same as the conventional path. The spatial index is queried only once as well.

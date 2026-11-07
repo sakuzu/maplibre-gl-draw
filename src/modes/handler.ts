@@ -66,6 +66,8 @@ export interface EngineModeContext {
   map: MapLibreMap;
   /** The Store of the document; a mode writes features through it */
   store: import('../store/store.js').Store;
+  /** The shapes as they are seen: what hits and what snaps reads them here */
+  shapes: import('../sketches/rendered-shapes.js').RenderedShapes;
   /**
    * The queries of the spatial index (it is derived from the Store, so a mode only reads it)
    */

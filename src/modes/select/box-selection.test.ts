@@ -10,6 +10,7 @@
 
 import { describe, expect, it } from 'vitest';
 import { PointBoxSelectionStrategy } from '../../dispatcher/hit-test/box-strategies.js';
+import { RenderedShapes } from '../../sketches/rendered-shapes.js';
 import { StoreSpatialIndex } from '../../store/spatial/store-spatial-index.js';
 import type { BoxSelection, Feature } from '../../store/types.js';
 import { STORE_KINDS } from '../../test-utils.js';
@@ -73,6 +74,7 @@ describe.each(STORE_KINDS)('on %s', (_kind, createStore) => {
 
       const context = {
         store,
+        shapes: new RenderedShapes(store),
         spatialIndex: { findInBounds: () => ['f1', 'f2', 'f3', 'f4'] },
         boxSelectionRegistry: {
           get: (t: string) => (t === 'Point' ? new PointBoxSelectionStrategy() : undefined),
@@ -116,6 +118,7 @@ describe.each(STORE_KINDS)('on %s', (_kind, createStore) => {
 
       const context = {
         store,
+        shapes: new RenderedShapes(store),
         spatialIndex: { findInBounds: () => ['f1', 'f2', 'f3'] },
         boxSelectionRegistry: {
           get: (t: string) => (t === 'Point' ? new PointBoxSelectionStrategy() : undefined),
@@ -176,6 +179,7 @@ describe.each(STORE_KINDS)('on %s', (_kind, createStore) => {
       store.createFeature(point('far', 'l1', [0, 5]));
       const context = {
         store,
+        shapes: new RenderedShapes(store),
         spatialIndex: new StoreSpatialIndex(store),
         boxSelectionRegistry: {
           get: (t: string) => (t === 'Point' ? new PointBoxSelectionStrategy() : undefined),

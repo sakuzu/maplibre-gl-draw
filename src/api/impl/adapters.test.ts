@@ -836,7 +836,8 @@ describe('a companion provider', () => {
     const onClick = vi.fn(() => true);
     const feature = { id: 'f', type: 'Point', geometry: { type: 'Point', coordinates: [1, 1] } };
     const deps = {
-      store: { getFeature: () => feature, getDragState: () => null },
+      store: { getFeature: () => feature },
+      shapes: { draggedIds: () => [] },
       screen: {},
       customLayer: { getGL: () => null },
       surface: createTerrainSurface,
@@ -878,10 +879,8 @@ describe('a companion provider', () => {
     const contexts: PointContext[] = [];
     let dragged: string[] | null = null;
     const deps = {
-      store: {
-        getFeature: () => undefined,
-        getDragState: () => (dragged ? { operation: 'move', movingFeatureIds: dragged } : null),
-      },
+      store: { getFeature: () => undefined },
+      shapes: { draggedIds: () => dragged ?? [] },
       screen: {},
       customLayer: { getGL: () => null },
       surface: createTerrainSurface,
@@ -915,7 +914,8 @@ describe('a companion provider', () => {
 
   it('answers from the rows with its rows.has, and has none without it', () => {
     const deps = {
-      store: { getFeature: () => undefined, getDragState: () => null },
+      store: { getFeature: () => undefined },
+      shapes: { draggedIds: () => [] },
       screen: {},
       customLayer: { getGL: () => null },
       surface: createTerrainSurface,
@@ -939,7 +939,8 @@ describe('a companion provider', () => {
 
   it('takes the keys its answers read from rows.classifyKeys, as they are when it is added', () => {
     const deps = {
-      store: { getFeature: () => undefined, getDragState: () => null },
+      store: { getFeature: () => undefined },
+      shapes: { draggedIds: () => [] },
       screen: {},
       customLayer: { getGL: () => null },
       surface: createTerrainSurface,

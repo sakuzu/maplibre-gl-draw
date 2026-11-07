@@ -25,6 +25,7 @@ import { STATE_BULK } from '../../feature-table/row-state.js';
 import { DEFAULT_SELECTION_CONFIG } from '../../shared/config/selection.js';
 import { offsetOnTangentPlane, setScreenScaleFrame } from '../../shared/math/index.js';
 import { coordinatesOf } from '../../shared/utils/coordinates.js';
+import { RenderedShapes } from '../../sketches/rendered-shapes.js';
 import type { Store } from '../../store/store.js';
 import type { Feature } from '../../store/types.js';
 import { referenceTranslate } from '../../test-support/enu-reference.js';
@@ -156,6 +157,7 @@ describe.each(STORE_KINDS)('on %s', (_kind, createStore) => {
     holds = [];
     context = {
       store,
+      shapes: new RenderedShapes(store),
       map,
       hitTestService: { hitTest: () => hit },
       // A stub for the unified z traversal (it returns only Store features). Select mode looks at

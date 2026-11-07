@@ -12,9 +12,10 @@ import type { DragNormalizedEvent } from '../../dispatcher/types.js';
 import type { EngineModeContext } from '../../modes/handler.js';
 import { SelectModeDragHandler } from '../../modes/select/drag-handler.js';
 import { MemoryContractStore, MemoryStore } from '../../store/memory.js';
+import type { Store } from '../../store/store.js';
 import { createMapStub, createSyntheticInput } from '../../test-utils.js';
 import type { HandleHitResult } from '../../view/ui/handle-test.js';
-import { computeSelectionBoundingBox, getSelectedFeatures } from '../../view/ui/helper.js';
+import { computeSelectionBoundingBox, getSelectedFeatureIds } from '../../view/ui/helper.js';
 import type { Draw } from '../draw.js';
 import { createDraw } from '../draw.js';
 import { DrawError } from '../errors.js';
@@ -24,6 +25,10 @@ import { createDrawOnEngine } from './create-draw.js';
 import type { Engine } from './engine.js';
 import { createEngine } from './engine.js';
 import { createEventHub } from './events.js';
+
+/** The selected features, read from the Store */
+const selectedOf = (store: Store) =>
+  getSelectedFeatureIds(store).flatMap((id) => store.getFeature(id) ?? []);
 
 type Recorded = { [K in keyof DrawEvents]: [K, DrawEvents[K]] }[keyof DrawEvents];
 
@@ -659,7 +664,7 @@ describe('the signals of the engine', () => {
       dragStartPoint: { x: 0, y: 0 },
       dragStartLngLat: { lng: 0, lat: 0 },
     });
-    const bbox = computeSelectionBoundingBox(getSelectedFeatures(engineStore));
+    const bbox = computeSelectionBoundingBox(selectedOf(engineStore));
     const handler = new SelectModeDragHandler();
 
     handler.startDrag({ type: 'move' } as HandleHitResult, drag(0, 0), context, bbox);

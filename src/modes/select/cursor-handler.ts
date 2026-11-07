@@ -17,7 +17,6 @@ import type { MouseNormalizedEvent } from '../../dispatcher/types.js';
 import { movableBulkRows } from '../../operations/bulk-selection.js';
 import type { SelectionUIConfig } from '../../shared/config/selection.js';
 import { createCoordinateTransform } from '../../shared/math/index.js';
-import { getDisplayFeatures } from '../../store/local-visibility.js';
 import { isInteractionBlocked } from '../../store/lock.js';
 import {
   getCursorForHandle,
@@ -25,16 +24,13 @@ import {
   hitTestGlobalAuxiliaryHandles,
   hitTestHandles,
 } from '../../view/ui/handle-test.js';
-import {
-  computeSelectionBoundingBox,
-  getSelectedFeatureIds,
-  getSelectedFeatures,
-} from '../../view/ui/helper.js';
+import { computeSelectionBoundingBox, getSelectedFeatureIds } from '../../view/ui/helper.js';
 import type { EngineModeContext } from '../handler.js';
 import {
   getAuxiliaryHandlesCallback,
   getGlobalAuxiliaryHandlesCallback,
   isLockedFeatureAt,
+  selectedHandleFeatures,
 } from './hit-helpers.js';
 
 export function updateCursorForSelection(
@@ -57,7 +53,7 @@ export function updateCursorForSelection(
   // falls through to the feature hit test below (pointer), matching the operation that is
   // actually possible: "it can be selected by clicking".
   if (selectedIds.length > 0) {
-    const selectedFeatures = getSelectedFeatures(store);
+    const selectedFeatures = selectedHandleFeatures(context);
     const blocked = selectedFeatures.every((f) => isInteractionBlocked(f, store));
     const bbox = blocked
       ? null
@@ -128,8 +124,7 @@ export function updateCursorForSelection(
   // When a dataset is in the foreground, the cursor becomes pointer only when it
   // can fire click / hover (interactive). Showing pointer for a dataset that merely occludes
   // would be a lie suggesting "it can be pressed".
-  const orderedFeatures = getDisplayFeatures(store);
-  const top = context.hitTestTopmost(event.point, { orderedFeatures });
+  const top = context.hitTestTopmost(event.point);
 
   canvas.style.cursor =
     top === null || (top.kind === 'dataset' && !top.dataset.interactive) ? 'default' : 'pointer';

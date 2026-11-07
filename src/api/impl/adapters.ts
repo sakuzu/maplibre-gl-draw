@@ -31,6 +31,7 @@ import {
 } from '../../dispatcher/hit-test/strategies/index.js';
 import type { DragNormalizedEvent } from '../../dispatcher/types.js';
 import { createCoordinateTransform } from '../../shared/math/index.js';
+import type { RenderedShapes } from '../../sketches/rendered-shapes.js';
 import type { SnapTargetsRegistry } from '../../snapping/custom-targets.js';
 import type {
   SnapCandidate as EngineSnapCandidate,
@@ -119,6 +120,8 @@ export interface AdapterDeps extends RenderAdapterDeps {
   registerSnapProvider(provider: EngineSnapProvider): () => void;
   /** Applies a patch of a handle drag to a feature; `final` is false while the drag goes on */
   applyPatch(featureId: string, patch: FeaturePatch, final: boolean): void;
+  /** The shapes as they are seen */
+  readonly shapes: RenderedShapes;
   /** The selection box of a feature as it is drawn (`draw.rendered.getSelectionBox`) */
   selectionBoxOf(featureId: string): Footprint | null;
   /** The look of the selection as it is now */
@@ -143,9 +146,11 @@ function degreesPerPixel(map: MapLibreMap, point: { x: number; y: number }): num
  * What a hit test leaves out: the features this client drags as a whole (none when it drags
  * none)
  */
-function hitExclusion(store: Pick<Store, 'getDragState'>): Pick<PointContext, 'excludeIds'> {
-  const moving = store.getDragState()?.movingFeatureIds;
-  return moving && moving.length > 0 ? { excludeIds: new Set(moving) } : {};
+function hitExclusion(
+  shapes: Pick<RenderedShapes, 'draggedIds'>,
+): Pick<PointContext, 'excludeIds'> {
+  const moving = shapes.draggedIds();
+  return moving.length > 0 ? { excludeIds: new Set(moving) } : {};
 }
 
 /** What a hit test of the contract receives, for a position and a tolerance in degrees */
@@ -162,7 +167,7 @@ function hitContextAt(
       lngLat: [coordinate[0], coordinate[1]],
       tolerancePx: toleranceLngLat / degPerPx,
       screen: deps.screen,
-      ...hitExclusion(deps.store),
+      ...hitExclusion(deps.shapes),
     },
     degPerPx,
   };
@@ -844,7 +849,7 @@ export function adaptCompanionProvider(
         lngLat: toPosition(context.unproject(point)),
         tolerancePx: context.tolerancePx,
         screen: deps.screen,
-        ...hitExclusion(deps.store),
+        ...hitExclusion(deps.shapes),
       });
       if (!hit) return null;
       // The hit the library gives out, filled in from what the provider answered

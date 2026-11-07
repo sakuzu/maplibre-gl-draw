@@ -29,7 +29,6 @@ export {
 export {
   computeSelectionBoundingBox,
   getSelectedFeatureIds,
-  getSelectedFeatures,
 } from './helper.js';
 // Computing and drawing the selection UI
 export type {

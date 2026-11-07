@@ -22,6 +22,7 @@ import { destinationPoint, haversineDistanceMeters } from '../../geometry/distan
 import { DEFAULT_TOPOLOGY_CONFIG } from '../../shared/config/topology.js';
 import { setScreenScaleFrame } from '../../shared/math/index.js';
 import { coordinatesOf as featureCoordinates } from '../../shared/utils/coordinates.js';
+import { RenderedShapes } from '../../sketches/rendered-shapes.js';
 import type { SnapDisableKey } from '../../snapping/types.js';
 import { DEFAULT_SNAP_OPTIONS } from '../../snapping/types.js';
 import { StoreSpatialIndex } from '../../store/spatial/store-spatial-index.js';
@@ -34,10 +35,14 @@ import type {
   AuxiliaryHandleProvider,
 } from '../../view/ui/auxiliary-handles.js';
 import type { HandleHitResult } from '../../view/ui/handle-test.js';
-import { computeSelectionBoundingBox, getSelectedFeatures } from '../../view/ui/helper.js';
+import { computeSelectionBoundingBox, getSelectedFeatureIds } from '../../view/ui/helper.js';
 import { createSelectionScope } from '../../view/ui/selection-scope.js';
 import type { EngineModeContext } from '../handler.js';
 import { SelectModeDragHandler } from './drag-handler.js';
+
+/** The selected features, read from the Store */
+const selectedOf = (store: Store) =>
+  getSelectedFeatureIds(store).flatMap((id) => store.getFeature(id) ?? []);
 
 describe.each(STORE_KINDS)('on %s', (_kind, createStore) => {
   // A polygon that is a translated unit square (a closed ring)
@@ -139,7 +144,7 @@ describe.each(STORE_KINDS)('on %s', (_kind, createStore) => {
     modifiers?: Partial<typeof NO_MODIFIERS>,
   ) {
     store.setSelection('feature', [featureId]);
-    const bbox = computeSelectionBoundingBox(getSelectedFeatures(store));
+    const bbox = computeSelectionBoundingBox(selectedOf(store));
     const hit: HandleHitResult = { type: 'vertex', featureId, vertexRef };
     const event = dragEvent(from[0], from[1]);
     if (modifiers) event.modifiers = { ...NO_MODIFIERS, ...modifiers };
@@ -206,6 +211,7 @@ describe.each(STORE_KINDS)('on %s', (_kind, createStore) => {
     map = makeMap();
     context = {
       store,
+      shapes: new RenderedShapes(store),
       spatialIndex,
       map,
       plugins: undefined,
@@ -812,14 +818,14 @@ describe.each(STORE_KINDS)('on %s', (_kind, createStore) => {
     /** Start a move drag */
     function startMoveDrag(featureIds: string[], from: Coordinate): void {
       store.setSelection('feature', featureIds);
-      const bbox = computeSelectionBoundingBox(getSelectedFeatures(store));
+      const bbox = computeSelectionBoundingBox(selectedOf(store));
       handler.startDrag({ type: 'move' }, dragEvent(from[0], from[1]), context, bbox);
     }
 
     /** Start a radius change drag on a Circle */
     function startRadiusDrag(featureId: string, from: Coordinate): void {
       store.setSelection('feature', [featureId]);
-      const bbox = computeSelectionBoundingBox(getSelectedFeatures(store));
+      const bbox = computeSelectionBoundingBox(selectedOf(store));
       handler.startDrag({ type: 'radius', featureId }, dragEvent(from[0], from[1]), context, bbox);
     }
 
@@ -854,7 +860,7 @@ describe.each(STORE_KINDS)('on %s', (_kind, createStore) => {
         style: {},
       });
       store.setSelection('feature', ['f1']);
-      const bbox = computeSelectionBoundingBox(getSelectedFeatures(store));
+      const bbox = computeSelectionBoundingBox(selectedOf(store));
 
       handler.startDrag({ type: 'rotate' }, dragEvent(5, 20), context, bbox);
       expect(store.getDragState()?.movingFeatureIds).toEqual(['f1']);
@@ -1060,7 +1066,7 @@ describe.each(STORE_KINDS)('on %s', (_kind, createStore) => {
 
     function startMoveDrag(featureIds: string[], from: Coordinate): void {
       store.setSelection('feature', featureIds);
-      const bbox = computeSelectionBoundingBox(getSelectedFeatures(store));
+      const bbox = computeSelectionBoundingBox(selectedOf(store));
       handler.startDrag({ type: 'move' }, dragEvent(from[0], from[1]), context, bbox);
     }
 
@@ -1129,7 +1135,7 @@ describe.each(STORE_KINDS)('on %s', (_kind, createStore) => {
         style: {},
       });
       store.setSelection('feature', ['c1']);
-      const bbox = computeSelectionBoundingBox(getSelectedFeatures(store));
+      const bbox = computeSelectionBoundingBox(selectedOf(store));
       handler.startDrag({ type: 'radius', featureId: 'c1' }, dragEvent(0, 0), context, bbox);
       handler.updateDrag(dragEvent(1, 0, [0, 0]), context);
       store.deleteFeature('c1');
@@ -1144,7 +1150,7 @@ describe.each(STORE_KINDS)('on %s', (_kind, createStore) => {
         startMoveDrag(['f1', 'f2'], [0, 0]);
         handler.endDrag(context);
         store.setSelection('feature', ['f1', 'f2']);
-        const bbox = computeSelectionBoundingBox(getSelectedFeatures(store));
+        const bbox = computeSelectionBoundingBox(selectedOf(store));
         const hit: HandleHitResult = type === 'resize' ? { type, handle: 'resize-se' } : { type };
         handler.startDrag(hit, dragEvent(110, 100), context, bbox);
         handler.updateDrag(dragEvent(120, 90, [110, 100]), context);
@@ -1198,7 +1204,7 @@ describe.each(STORE_KINDS)('on %s', (_kind, createStore) => {
     /** Start an auxiliary handle drag */
     function startAuxiliaryDrag(from: Coordinate, hit: AuxiliaryHandleHit = HIT): void {
       store.setSelection('feature', ['f1']);
-      const bbox = computeSelectionBoundingBox(getSelectedFeatures(store));
+      const bbox = computeSelectionBoundingBox(selectedOf(store));
       const hitResult: HandleHitResult = {
         type: 'auxiliary',
         featureId: hit.featureId,
@@ -1227,7 +1233,7 @@ describe.each(STORE_KINDS)('on %s', (_kind, createStore) => {
           eventEmitter: { emit, on: vi.fn(), off: vi.fn() },
         };
         store.setSelection('feature', ['f1']);
-        const bbox = computeSelectionBoundingBox(getSelectedFeatures(store));
+        const bbox = computeSelectionBoundingBox(selectedOf(store));
         handler.startDrag(
           { type: 'auxiliary', featureId: 'f1', auxiliary: HIT },
           dragEvent(5, 5),
@@ -1524,7 +1530,7 @@ describe.each(STORE_KINDS)('on %s', (_kind, createStore) => {
   describe('an aborted drag (cancel, mode switch, external change)', () => {
     function startMoveDrag(featureIds: string[], from: Coordinate, ctx = context): void {
       store.setSelection('feature', featureIds);
-      const bbox = computeSelectionBoundingBox(getSelectedFeatures(store));
+      const bbox = computeSelectionBoundingBox(selectedOf(store));
       handler.startDrag({ type: 'move' }, dragEvent(from[0], from[1]), ctx, bbox);
     }
 
@@ -1575,7 +1581,7 @@ describe.each(STORE_KINDS)('on %s', (_kind, createStore) => {
         style: {},
       });
       store.setSelection('feature', ['c1']);
-      const bbox = computeSelectionBoundingBox(getSelectedFeatures(store));
+      const bbox = computeSelectionBoundingBox(selectedOf(store));
       handler.startDrag({ type: 'radius', featureId: 'c1' }, dragEvent(0, 0), context, bbox);
       handler.updateDrag(dragEvent(1, 0, [0, 0]), context);
 

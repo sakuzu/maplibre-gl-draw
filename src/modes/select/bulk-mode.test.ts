@@ -28,6 +28,7 @@ import {
   offsetOnTangentPlane,
   setScreenScaleFrame,
 } from '../../shared/math/index.js';
+import { RenderedShapes } from '../../sketches/rendered-shapes.js';
 import { DrawStore } from '../../store/draw-store.js';
 import { TableContractStore } from '../../store/table-memory.js';
 import type { Feature, StoreChange } from '../../store/types.js';
@@ -163,6 +164,7 @@ beforeEach(() => {
   for (const strategy of createCoreBoxSelectionStrategies()) registry.register(strategy);
   context = {
     store,
+    shapes: new RenderedShapes(store),
     map: makeMap(),
     hitTestTopmost: () => top,
     plugins: undefined,

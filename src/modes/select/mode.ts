@@ -27,7 +27,6 @@ import { featureTablesInternals } from '../../feature-table/feature-tables.js';
 import { TableSelection } from '../../feature-table/selection.js';
 import { movableBulkRows } from '../../operations/bulk-selection.js';
 import { createCoordinateTransform } from '../../shared/math/index.js';
-import { getDisplayFeatures } from '../../store/local-visibility.js';
 import { isFeatureLocked } from '../../store/lock.js';
 import type { BoxSelection, Coordinate, DragTargets, Mode, Selection } from '../../store/types.js';
 import { isPointInSelectionFrame } from '../../view/ui/bounds.js';
@@ -38,11 +37,7 @@ import {
   hitTestGlobalAuxiliaryHandles,
   hitTestHandles,
 } from '../../view/ui/handle-test.js';
-import {
-  computeSelectionBoundingBox,
-  getSelectedFeatureIds,
-  getSelectedFeatures,
-} from '../../view/ui/helper.js';
+import { computeSelectionBoundingBox, getSelectedFeatureIds } from '../../view/ui/helper.js';
 import type { BoundingBoxCoords } from '../../view/ui/selection-ui/index.js';
 import type { EngineModeContext, EngineModeHandler, SnapInputKind } from '../handler.js';
 import { queryFeaturesInBox } from './box-selection.js';
@@ -55,6 +50,7 @@ import {
   getAuxiliaryHandlesCallback,
   getGlobalAuxiliaryHandlesCallback,
   isLockedFeatureAt,
+  selectedHandleFeatures,
 } from './hit-helpers.js';
 import {
   handleDeleteShortcut,
@@ -250,8 +246,7 @@ export class SelectMode implements EngineModeHandler {
     // The moves of the arrow keys waiting are written before anything else is grabbed
     this.#nudge.flush();
 
-    const orderedFeatures = getDisplayFeatures(store);
-    const selectedFeatures = getSelectedFeatures(store);
+    const selectedFeatures = selectedHandleFeatures(this.#context);
     const transform = createCoordinateTransform(map);
 
     // Features selected in bulk: the handles of their frame and its inside
@@ -334,7 +329,7 @@ export class SelectMode implements EngineModeHandler {
     // Nothing is grabbed when a dataset is in the foreground. dragPan is also
     // left alive so that the map can be panned even from on top of the data. A row held as
     // columns stops the pan as a feature does, locked or not (nothing is made of it here)
-    const top = this.#context.hitTestTopmost(event.point, { orderedFeatures });
+    const top = this.#context.hitTestTopmost(event.point);
     if (top?.kind === 'store' || top?.kind === 'row') {
       map.dragPan.disable();
       return true;
@@ -409,7 +404,7 @@ export class SelectMode implements EngineModeHandler {
           store.setSelection('feature', [grab.featureId]);
         }
         const bbox = computeSelectionBoundingBox(
-          getSelectedFeatures(store),
+          selectedHandleFeatures(this.#context),
           this.#context.selectionScope.extensions,
         );
         const feature = store.getFeature(grab.featureId);
@@ -475,7 +470,7 @@ export class SelectMode implements EngineModeHandler {
 
     // A handle hit on the selected features -> the corresponding drag operation
     if (selectedIds.length > 0) {
-      const selectedFeatures = getSelectedFeatures(store);
+      const selectedFeatures = selectedHandleFeatures(this.#context);
       if (selectedFeatures.length > 0) {
         const bbox = computeSelectionBoundingBox(
           selectedFeatures,
@@ -520,10 +515,7 @@ export class SelectMode implements EngineModeHandler {
     // When no handle was hit: the feature pressed -> move operation. When a dataset is in the
     // foreground, nothing is grabbed (dragPan is alive, so it becomes a map pan). A row held as
     // columns is made a feature to drag it
-    const top = this.#context.hitTestTopmost(point, {
-      orderedFeatures: getDisplayFeatures(store),
-      hold,
-    });
+    const top = this.#context.hitTestTopmost(point, { hold });
     const featureId =
       top?.kind === 'store' ? top.feature.id : !hold && top?.kind === 'row' ? top.id : undefined;
     if (featureId === undefined) return null;
@@ -620,9 +612,7 @@ export class SelectMode implements EngineModeHandler {
     const moved = movableBulkRows(store);
     if (hit && hit.type !== 'move') return { kind: 'bulk', hit, frame, rows: moved };
     // A press on one of them (not made a feature)
-    const top = this.#context.hitTestTopmost(point, {
-      orderedFeatures: getDisplayFeatures(store),
-    });
+    const top = this.#context.hitTestTopmost(point);
     const handle =
       top?.kind === 'row'
         ? top.handle

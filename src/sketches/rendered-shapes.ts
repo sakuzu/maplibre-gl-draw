@@ -21,11 +21,14 @@
 import type { DraggedRows } from '../feature-table/dragged-rows.js';
 import { draggedFeatureOf, draggedRowsOf } from '../feature-table/dragged-rows.js';
 import type { FeatureTablesInternals } from '../feature-table/feature-tables.js';
+import { featureTablesInternals } from '../feature-table/feature-tables.js';
 import { BULK_MOVE_SET } from '../feature-table/row-state.js';
+import { forEachSnapRow, type SnapRow } from '../feature-table/snap-rows.js';
 import type { EnuEdit } from '../geometry/enu-transforms.js';
 import type { TentativeState } from '../shared/types/model.js';
+import { getDisplayFeatures } from '../store/local-visibility.js';
 import type { Store } from '../store/store.js';
-import type { Feature } from '../store/types.js';
+import type { BoundingBox, DragTargets, Feature } from '../store/types.js';
 import type { SketchView } from './sketch-view.js';
 
 /**
@@ -80,6 +83,23 @@ export function rowMotionOf(tables: FeatureTablesInternals, set: number): RowMot
  */
 export function bulkRowMotionOf(tables: FeatureTablesInternals): RowMotion {
   return rowMotionOf(tables, BULK_ROWS_SET);
+}
+
+/**
+ * The features snapping leaves out while features selected in bulk are moved: the ones listed,
+ * and the rows being moved (asked by id; the rows are not listed)
+ */
+class RowsExclusion extends Set<string> {
+  constructor(
+    ids: readonly string[],
+    private readonly moving: (id: string) => boolean,
+  ) {
+    super(ids);
+  }
+
+  override has(id: string): boolean {
+    return super.has(id) || this.moving(id);
+  }
 }
 
 /**
@@ -167,5 +187,80 @@ export class RenderedShapes {
   /** The IDs the features the sketches create are drawn with */
   createdIds(): readonly string[] {
     return this.#sketches?.view.creates().map((create) => create.key) ?? [];
+  }
+
+  // ==========================================================================
+  // What is hit
+  // ==========================================================================
+
+  /**
+   * A feature as a hit reads it: the value of the Store with the writes in the middle of an edit.
+   * What a sketch moves is hit where the document has it, and the rows moved by their state where
+   * they are written
+   */
+  hitFeature(id: string): Feature | undefined {
+    return this.#store.getFeature(id);
+  }
+
+  /** The features a hit tests, in the stacking order: those shown, each as `hitFeature` reads it */
+  hitFeatures(): Feature[] {
+    return getDisplayFeatures(this.#store);
+  }
+
+  /** The rows a hit tests, read where they are written and left out by their state */
+  hitRows(): FeatureTablesInternals | undefined {
+    return featureTablesInternals(this.#store.tables);
+  }
+
+  /** The features of these IDs the handles of the selection are grabbed on, as a hit reads them */
+  handleFeatures(ids: readonly string[]): Feature[] {
+    return ids.flatMap((id) => this.hitFeature(id) ?? []);
+  }
+
+  /** What this client drags as a whole, which the hit tests of the extensions leave out */
+  draggedIds(): readonly string[] {
+    return this.#store.getDragState()?.movingFeatureIds ?? [];
+  }
+
+  // ==========================================================================
+  // What is snapped to
+  // ==========================================================================
+
+  /** A feature as the snapping reads it: as a hit reads it */
+  snapFeature(id: string): Feature | undefined {
+    return this.hitFeature(id);
+  }
+
+  /**
+   * Calls `visit` with every row the snapping reads whose bbox meets a box: shown, not held as a
+   * feature, not left out by `shown` and `skip`
+   *
+   * @param shown Whether the rows of a layer and a group are shown
+   * @param skip Whether a row is left out, by its ID
+   */
+  forEachSnapRow(
+    bbox: BoundingBox,
+    shown: (layerId: string, groupId: string | undefined) => boolean,
+    skip: (id: string) => boolean,
+    visit: (row: SnapRow) => void,
+  ): void {
+    forEachSnapRow(this.#store.tables, bbox, shown, skip, visit);
+  }
+
+  /**
+   * What the snapping leaves out while a drag goes on: the features and the rows it changes as a
+   * whole (the rows are asked by ID, they are not listed). Undefined when it leaves out none
+   */
+  snapExclusion(targets: DragTargets | null): ReadonlySet<string> | undefined {
+    const moving = targets?.movingFeatureIds;
+    const movingRows = targets?.movingRows;
+    const tables = this.#store.tables;
+    if (movingRows && tables) {
+      return new RowsExclusion(moving ?? [], (id) => {
+        const handle = tables.findRow(id);
+        return handle !== undefined && movingRows.has(handle);
+      });
+    }
+    return moving && moving.length > 0 ? new Set(moving) : undefined;
   }
 }

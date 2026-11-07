@@ -94,17 +94,6 @@ function featureIdsInLayer(store: Store, layerId: string): string[] {
 }
 
 /**
- * Obtain the selected features (a group / layer selection is resolved to its members)
- *
- * @internal
- */
-export function getSelectedFeatures(store: Store): Feature[] {
-  return getSelectedFeatureIds(store)
-    .map((id) => store.getFeature(id))
-    .filter((f): f is Feature => f !== undefined);
-}
-
-/**
  * Compute the bounding box from the selected features
  * When there are features other than Point, the bbox is computed from those alone
  *

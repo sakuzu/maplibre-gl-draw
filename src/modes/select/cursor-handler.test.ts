@@ -15,6 +15,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import type { MouseNormalizedEvent } from '../../dispatcher/types.js';
 import { DEFAULT_SELECTION_CONFIG } from '../../shared/config/selection.js';
 import { setScreenScaleFrame } from '../../shared/math/index.js';
+import { RenderedShapes } from '../../sketches/rendered-shapes.js';
 import type { Store } from '../../store/store.js';
 import type { Feature } from '../../store/types.js';
 import { planeScaleFrame, STORE_KINDS } from '../../test-utils.js';
@@ -101,6 +102,7 @@ describe.each(STORE_KINDS)('on %s', (_kind, createStore) => {
     holds = [];
     context = {
       store,
+      shapes: new RenderedShapes(store),
       map: makeMap(canvas),
       hitTestService: { hitTest: () => hit },
       // A stub for the unified z traversal (it returns only Store features)
