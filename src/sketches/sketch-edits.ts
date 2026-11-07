@@ -55,6 +55,17 @@ export function isCreateEdit(edit: SketchEdit): edit is CreateEdit {
 }
 
 /**
+ * Whether an edit of a sketch is a shape being drawn: an edit `create` that says how many of its
+ * vertices are placed (`placedVertexCount`), drawn with the look of a shape being drawn and not as
+ * the feature it creates
+ *
+ * @internal
+ */
+export function isDrawingEdit(edit: SketchEdit): boolean {
+  return edit.kind === 'create' && edit.placedVertexCount !== undefined;
+}
+
+/**
  * Whether an edit names the features selected (`{ selection: true }`)
  *
  * @internal

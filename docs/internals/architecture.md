@@ -283,9 +283,10 @@ The state is split along one line. The contracts are in
   selection, the mode, read-only, the interaction lock and the locally
   hidden ids. A host replaces it through `Options.store`, and core reads
   and writes it only through the members of the public `Store`.
-- The drawing state (the tentative geometry, box selection, drag state and
-  the vertices that follow a shared vertex drag) is read by the drawing
-  only. Core owns it around whatever holds the rest, and it is never part
+- The drawing state (box selection, drag state and the vertices that
+  follow a shared vertex drag) is read by the drawing only. The shape a
+  drawing mode draws is a sketch of this client (`draw.sketches`), not a
+  state of the Store. Core owns it around whatever holds the rest, and it is never part
   of the document.
 - `Store` is what core works with: both, behind one gate. Its document
   writes return what the contract returned, and `false` when read-only
@@ -364,7 +365,7 @@ optional category per kind of change:
   holds its features as rows, the rows written, the values they had
   before, what keeps the rows and groups deleted, and the rows opened as
   features for this client
-- `selection`, `editing`, `tentative`, `mode`, `metadata` and `files`
+- `selection`, `editing`, `mode`, `metadata` and `files`
 - `uiStateChanged`: a state without a category of its own changed (drag
   state, box selection, vertex selection, read-only, the interaction lock,
   local hiding)
@@ -778,7 +779,7 @@ kinds above.
   guide, and prefers the nearer within a rank. It also computes the nearest
   point on a segment, so a provider only puts candidates forward.
 - Guides exist only while drawing lines and polygons, derived from the
-  committed vertices of the tentative shape.
+  placed vertices of the shape being drawn (its sketch).
 - Vertex enumeration shares the handle computation of the selection UI
   (`view/ui/handles.ts`), so holes and Multi parts are targets as they are.
 - The InputRouter leaves out what the drag an input belongs to changes
@@ -910,8 +911,8 @@ nothing.
 
 Read-only leaves three things alone.
 
-- The local-state setters (selection, mode, editing, tentative, drag,
-  vertex selection, local hiding). A viewer can still select, inspect and
+- The local-state setters (selection, mode, editing, drag, vertex
+  selection, local hiding). A viewer can still select, inspect and
   hide things locally.
 - Changes applied to the Store of the host directly. A replacement store
   applies changes from outside below the gate, so a read-only client still
@@ -955,7 +956,8 @@ start of each interaction:
   blocked selection, so the cursor never promises a drag.
 - Mode changes. `ModeManager.setMode` refuses any mode but `select` while
   the lock is on. `draw.setInteractionLocked(true)` during drawing switches to
-  `select`, and the drawing handler's `onStop` clears the tentative shape.
+  `select`, and the drawing handler's `onStop` removes the sketch of the
+  shape being drawn.
 
 ### Local visibility: where hiding applies
 

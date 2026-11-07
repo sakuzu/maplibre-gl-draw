@@ -193,7 +193,7 @@ describe('a double click finishes the shape', () => {
 
     expect(rings()).toEqual([[A, B, C, A]]);
     expect(manager.getMode()).toBe('select');
-    expect(store.getTentative()).toBeNull();
+    expect(harness.shapes.drawing()).toBeNull();
   });
 
   it('adds the new position of a polygon once, then finishes it', () => {

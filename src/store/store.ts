@@ -50,7 +50,6 @@ import type {
   Selection,
   SelectionType,
   StoreChange,
-  TentativeState,
   UpdateSource,
   VertexRef,
   VertexSelection,
@@ -260,12 +259,6 @@ export interface UiState {
   /** Ends the editing of features */
   endEditing(ids: string[]): void;
 
-  // Tentative (the temporary geometry while drawing)
-  /** The geometry being drawn, or null when nothing is being drawn */
-  getTentative(): TentativeState | null;
-  /** Sets or clears the geometry being drawn */
-  setTentative(state: TentativeState | null): void;
-
   // Box selection
   /** The box selection in progress, or null */
   getBoxSelection(): BoxSelection | null;
@@ -364,8 +357,6 @@ export interface StoreView {
   getSelection(): Selection;
   /** The IDs of the features being edited (their vertex handles are shown) */
   getEditingIds(): readonly string[];
-  /** The geometry being drawn, or null when nothing is being drawn */
-  getTentative(): TentativeState | null;
   /** The box selection in progress, or null */
   getBoxSelection(): BoxSelection | null;
   /** The drag in progress, or null */

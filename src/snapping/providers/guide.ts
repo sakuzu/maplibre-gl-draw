@@ -60,7 +60,7 @@ export interface GuideSnapProviderDeps {
   /** The Store of the draw instance */
   store: Store;
   /** The shapes as they are seen, which read the drawing in progress */
-  shapes: Pick<RenderedShapes, 'tentative'>;
+  shapes: Pick<RenderedShapes, 'drawing'>;
 }
 
 /**
@@ -177,7 +177,7 @@ export function createSteppedGuideSnapProvider(
     candidates(_bbox: BoundingBox, ctx: SnapProviderContext): SnapCandidate[] {
       if (!GUIDE_MODES.has(deps.store.getMode())) return [];
 
-      const tentative = deps.shapes.tentative();
+      const tentative = deps.shapes.drawing();
       if (!tentative) return [];
 
       const confirmed = getConfirmedTentativeVertices(tentative);

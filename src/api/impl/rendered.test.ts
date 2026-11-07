@@ -18,6 +18,7 @@ import { createMapStub, internalsOf } from '../../test-utils.js';
 import { selectionBoxOf } from '../../view/ui/bounds.js';
 import type { Draw } from '../draw.js';
 import type { Feature } from '../model.js';
+import type { Sketch } from '../sketches.js';
 import type { FeatureTables } from '../tables.js';
 import { createDrawOnEngine } from './create-draw.js';
 import type { Engine } from './engine.js';
@@ -91,7 +92,6 @@ describe('draw.rendered', () => {
             type: 'Point',
             geometry: { type: 'Point', coordinates: [3, 4] },
           },
-          placedVertexCount: 1,
           below: null,
         },
       ],
@@ -375,17 +375,21 @@ describe('rendered.changed', () => {
   it('tells a change of the shape being drawn, which has no ID, with no IDs', () => {
     const told: (readonly string[])[] = [];
     draw.on('rendered.changed', ({ ids }) => told.push(ids));
-    engine.context.store.setTentative({
-      type: 'LineString',
-      coordinates: [[0, 0]],
-      layerId: engine.context.getActiveLayerId(),
-      confirmedCount: 1,
-    });
+    // A shape being drawn: a sketch of an edit create with its vertices placed so far
+    const sketch = draw.sketches.add({
+      edits: [
+        {
+          kind: 'create',
+          feature: { type: 'LineString', geometry: { type: 'LineString', coordinates: [[0, 0]] } },
+          placedVertexCount: 1,
+        },
+      ],
+    }) as Sketch;
     drawFrame();
     expect(told).toEqual([[]]);
     drawFrame();
     expect(told).toHaveLength(1);
-    engine.context.store.setTentative(null);
+    draw.sketches.remove(sketch.id);
     drawFrame();
     expect(told).toEqual([[], []]);
   });
@@ -398,7 +402,6 @@ describe('rendered.changed', () => {
         {
           kind: 'create',
           feature: { type: 'Point', geometry: { type: 'Point', coordinates: [3, 4] } },
-          placedVertexCount: 1,
           below: null,
         },
       ],

@@ -582,6 +582,8 @@ export function pageOf(options: FeatureListOptions): {
  * store: with the ID given when the input has none, in the layer given when it names neither layer
  * nor group
  *
+ * @param partial - Whether it is a shape being drawn, whose geometry may have fewer positions than
+ *   a feature (a line of one, a ring of fewer than four)
  * @throws DrawError as `features.create` does for a wrong input
  * @internal
  */
@@ -590,11 +592,13 @@ export function prepareFeatureInput(
   input: FeatureInput,
   id: string,
   layerId: string,
+  partial = false,
 ): StoredFeature {
   return prepareFeature(
     { store, generateId: () => id, getActiveLayerId: () => layerId },
     input,
     new Set(),
+    partial,
   );
 }
 
@@ -603,6 +607,7 @@ function prepareFeature(
   deps: Pick<ResourceDeps, 'store' | 'generateId' | 'getActiveLayerId'>,
   input: FeatureInput,
   pending: ReadonlySet<string>,
+  partial = false,
 ): StoredFeature {
   const { store } = deps;
   requireRecord(input, 'The input');
@@ -611,7 +616,7 @@ function prepareFeature(
   if (typeof input.type !== 'string' || input.type === '') {
     throw invalidInput('type must be a non-empty string');
   }
-  const geometryProblem = describeGeometryProblem(input.type, input.geometry);
+  const geometryProblem = describeGeometryProblem(input.type, input.geometry, partial);
   if (geometryProblem) throw invalidInput(`The input has ${geometryProblem}`);
   if (input.properties !== undefined && !isRecord(input.properties)) {
     throw invalidInput('properties must be an object');

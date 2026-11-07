@@ -56,13 +56,13 @@ const DOCUMENT_READS: ReadonlySet<PropertyKey> = new Set<keyof StoreContractView
 const NO_SELECTION: Selection = Object.freeze({ type: null, ids: Object.freeze([]) as never });
 const NO_IDS: readonly string[] = Object.freeze([]);
 const NO_HIDDEN: ReadonlySet<string> = new Set();
+const NO_DRAWINGS: readonly TentativeState[] = Object.freeze([]);
 
 /** The reads of the state of this client, and what they give while it is left out */
 const EDITING_READS: ReadonlyMap<PropertyKey, unknown> = new Map<PropertyKey, unknown>([
   ['getSelection', () => NO_SELECTION],
   ['getEditingIds', () => NO_IDS],
   ['getVertexSelection', () => null],
-  ['getTentative', () => null],
   ['getBoxSelection', () => null],
   ['getDragState', () => null],
   ['getFollowedVertices', () => null],
@@ -83,8 +83,8 @@ export interface DrawnShapes {
   shown(id: string): Feature | undefined;
   /** The features shown, as they are seen, in the stacking order */
   displayed(): Feature[];
-  /** The shape being drawn */
-  tentative(): TentativeState | null;
+  /** The shapes being drawn, in the order they are drawn */
+  drawings(): readonly TentativeState[];
 }
 
 /**
@@ -168,7 +168,7 @@ export function createShownStore(
       return feature?.visible && !isLocallyHidden(feature, store) ? feature : undefined;
     },
     displayed: () => getDisplayFeatures(store),
-    tentative: () => (shown === null && !editingHidden ? shapes.tentative() : null),
+    drawings: () => (shown === null && !editingHidden ? shapes.drawings() : NO_DRAWINGS),
   };
   return {
     store,

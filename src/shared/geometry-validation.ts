@@ -92,6 +92,8 @@ function polygonProblem(rings: Coordinate[][]): string | null {
  * @param type - the feature type
  * @param coordinates - the coordinates to check
  * @param positionValues - the most values of a position (2 when omitted: `x` and `y`)
+ * @param partial - whether the coordinates are of a shape being drawn: a line may have one
+ *   position and a ring fewer than four, its first and last apart
  * @returns a short phrase that reads after "has" (for example "malformed coordinates"), or
  *   null
  */
@@ -99,6 +101,7 @@ export function describeCoordinateProblem(
   type: string,
   coordinates: unknown,
   positionValues = 2,
+  partial = false,
 ): string | null {
   const depth = coordinateDepth(coordinates, positionValues);
   if (depth < 0) return 'malformed coordinates';
@@ -106,6 +109,7 @@ export function describeCoordinateProblem(
   if (expected !== undefined && depth !== expected) {
     return `coordinates that do not match the type ${type}`;
   }
+  if (partial) return null;
 
   switch (type) {
     case 'LineString':
@@ -143,9 +147,15 @@ const GEOMETRY_KINDS: ReadonlySet<string> = new Set([
  *
  * @param type - the feature type
  * @param geometry - the geometry to check
+ * @param partial - whether it is the geometry of a shape being drawn, which may have fewer
+ *   positions (see {@link describeCoordinateProblem})
  * @returns a short phrase that reads after "has", or null
  */
-export function describeGeometryProblem(type: string, geometry: unknown): string | null {
+export function describeGeometryProblem(
+  type: string,
+  geometry: unknown,
+  partial = false,
+): string | null {
   if (typeof geometry !== 'object' || geometry === null || Array.isArray(geometry)) {
     return 'no geometry object';
   }
@@ -157,6 +167,6 @@ export function describeGeometryProblem(type: string, geometry: unknown): string
   if (expected !== undefined && kind !== expected) {
     return `a ${kind} geometry that does not match the type ${type}`;
   }
-  const problem = describeCoordinateProblem(kind, coordinates);
+  const problem = describeCoordinateProblem(kind, coordinates, 2, partial);
   return problem ? `a ${kind} geometry with ${problem}` : null;
 }

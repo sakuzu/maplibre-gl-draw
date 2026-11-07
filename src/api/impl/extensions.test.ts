@@ -817,7 +817,7 @@ describe('ModeContext.commitFeature', () => {
 
   it('keeps the name and the ID given, and the ID of the preview', () => {
     ctx.preview.set({ type: 'Point', geometry: { type: 'Point', coordinates: [1, 1] } });
-    const pending = engine.context.store.getTentative()?.pendingFeatureId;
+    const pending = engine.context.shapes.drawing()?.pendingFeatureId;
     expect(pending).toEqual(expect.any(String));
     const feature = ctx.commitFeature({
       type: 'Point',
@@ -826,7 +826,9 @@ describe('ModeContext.commitFeature', () => {
     });
     expect(feature?.id).toBe(pending);
     expect(feature?.properties.name).toBe('mine');
-    expect(engine.context.store.getTentative()).toBeNull();
+    // The sketch that showed it ended with the write
+    expect(engine.context.shapes.drawing()).toBeNull();
+    expect(engine.sketches.count()).toBe(0);
   });
 
   it('falls back to another writable layer when the active one is locked', () => {
@@ -857,7 +859,7 @@ describe('ModeContext.commitFeature', () => {
     expect(
       ctx.commitFeature({ type: 'Point', geometry: { type: 'Point', coordinates: [1, 1] } }),
     ).toBeNull();
-    expect(store.getTentative()).toBeNull();
+    expect(engine.context.shapes.drawing()).toBeNull();
     expect(engine.modeManager.getMode()).toBe('select');
   });
 
@@ -1081,7 +1083,7 @@ describe('the built-in modes written to the contract', () => {
   it('draws a circle with two clicks', () => {
     engine.modeManager.setMode('draw_circle');
     createSyntheticInput(engine).click([1, 1]);
-    expect(engine.context.store.getTentative()?.type).toBe('Circle');
+    expect(engine.context.shapes.drawing()?.type).toBe('Circle');
     createSyntheticInput(engine).click([1, 1.5]);
     const [feature] = engine.context.store.listFeatures();
     expect(feature.type).toBe('Circle');
@@ -1093,7 +1095,7 @@ describe('the built-in modes written to the contract', () => {
     engine.modeManager.setMode('draw_circle');
     createSyntheticInput(engine).click([1, 1]);
     createSyntheticInput(engine).key('Escape');
-    expect(engine.context.store.getTentative()).toBeNull();
+    expect(engine.context.shapes.drawing()).toBeNull();
     expect(engine.modeManager.getMode()).toBe('draw_circle');
     createSyntheticInput(engine).key('Escape');
     expect(engine.modeManager.getMode()).toBe('select');
@@ -1126,12 +1128,15 @@ describe('what a drawing mode reads and shows', () => {
       },
       { confirmedVertices: 2, highlightVertex: 0 },
     );
-    const tentative = draw.getStore() as unknown as {
-      getTentative(): { confirmedCount?: number; highlightedVertexIndex?: number } | null;
-    };
-    expect(tentative.getTentative()).toEqual(
-      expect.objectContaining({ confirmedCount: 2, highlightedVertexIndex: 0 }),
-    );
+    // A sketch of this client shows it, with the vertices placed and the one to close on
+    const [sketch] = draw.sketches.list();
+    expect(sketch?.owner).toBeNull();
+    expect(sketch?.edits[0]).toMatchObject({
+      kind: 'create',
+      placedVertexCount: 2,
+      highlightedVertexIndex: 0,
+    });
+
     expect(ctx.draw.drawing.isDrawing()).toBe(true);
     ctx.preview.clear();
     expect(ctx.draw.drawing.isDrawing()).toBe(false);
@@ -1289,11 +1294,12 @@ describe('drawing.cancel', () => {
     input.click([0, 0]);
     input.move([1, 1]);
     expect(context.draw.drawing.isDrawing()).toBe(true);
-    const previews: unknown[] = [];
-    draw.on('preview.changed', ({ feature }) => previews.push(feature));
+    const ended: string[] = [];
+    draw.on('sketch.removed', ({ reason }) => ended.push(reason));
     expect(context.draw.drawing.cancel()).toBe(true);
     expect(context.draw.drawing.isDrawing()).toBe(false);
-    expect(previews).toEqual([null]);
+    // The sketch that showed the shape is removed
+    expect(ended).toEqual(['cancelled']);
     expect(engine.modeManager.getMode()).toBe('draw_line');
     expect(context.draw.drawing.cancel()).toBe(false);
     expect(engine.modeManager.getMode()).toBe('draw_line');
@@ -1301,7 +1307,7 @@ describe('drawing.cancel', () => {
     // The mode dropped its vertices: the next click starts a new shape
     input.click([2, 2]);
     input.move([3, 3]);
-    const coordinates = engine.context.store.getTentative()?.coordinates as number[][];
+    const coordinates = engine.context.shapes.drawing()?.coordinates as number[][];
     expect(coordinates).toHaveLength(2);
     expect(coordinates[0]).toEqual([2, 2]);
 

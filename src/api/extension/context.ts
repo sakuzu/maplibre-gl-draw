@@ -217,7 +217,12 @@ export interface ModeContext extends ExtensionContext {
    * @returns The new feature, or `null` when it is refused (read-only, a lock)
    */
   commitFeature(input: FeatureInput): Feature | null;
-  /** Shows the shape being drawn before it is created. */
+  /**
+   * Shows the shape being drawn before it is created: a sketch of this client of an edit `create`
+   * (`draw.sketches`), whose feature has the ID `commitFeature` gives the feature it creates, in
+   * the writable layer. Nothing is written while it is shown; `commitFeature` ends the sketch with
+   * the feature it writes. While no layer can be written, the shape stays as it was shown last.
+   */
   readonly preview: {
     /**
      * Shows this shape as the one being drawn.

@@ -77,7 +77,7 @@ import type { TableLayerRenderer } from './table-retained.js';
  *   drawn when omitted)
  * @param beforeEntry Called before each entry of the order is drawn (the drape of the elements
  *   of the other entries is painted up to it where the layers held as rows are draped)
- * @param tentative The shape being drawn, drawn with its layer (none when omitted)
+ * @param drawings The shapes being drawn, each drawn with its layer (none when omitted)
  */
 export function renderLayers(
   r: Renderers,
@@ -97,7 +97,7 @@ export function renderLayers(
   view?: RenderLayersView,
   tableRetained?: TableLayerRenderer,
   beforeEntry?: (layerId: string) => void,
-  tentative: TentativeState | null = null,
+  drawings: readonly TentativeState[] = [],
 ): void {
   const fullOrder = store.getLayerOrder();
   // When a segment (slot) is given, only the entries of that segment are drawn. The datasets
@@ -275,8 +275,10 @@ export function renderLayers(
     }
 
     // Tentative rendering
-    if (tentative && tentative.layerId === layerId) {
-      r.tentativeRenderer.drawGeometry(tentative, defaultProjectionData, zoom);
+    for (const drawing of drawings) {
+      if (drawing.layerId === layerId) {
+        r.tentativeRenderer.drawGeometry(drawing, defaultProjectionData, zoom);
+      }
     }
 
     // Layer-aware overlay rendering (an overlay is not content of the layer, so it keeps the

@@ -526,7 +526,7 @@ function expectMiddle(edit: Edit, r: Run): void {
   const started = edit.started ? [`start ${edit.started}`] : [];
   expect(sequenceOf(r.midEvents)).toEqual(started);
   expectNoSnapToItself(r.midEvents);
-  expect(r.midEvents.filter((e) => e.name === 'preview.changed')).toEqual([]);
+  expect(r.midEvents.filter((e) => e.name === 'drawing')).toEqual([]);
 }
 
 function describeDrags(group: DragReadsGroup): void {

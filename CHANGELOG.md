@@ -360,6 +360,14 @@ writing it. Its changes are listed after those of 3.0.0.
 - The edit `create` of a sketch takes the feature alone: `placedVertexCount`
   left out places every vertex, and `below` left out puts the feature at the
   front of its layer or group, where `features.create` puts a new feature
+- The shape a drawing mode draws is a sketch of this client of an edit
+  `create` (`ModeContext.preview`): `sketch.added`, `sketch.updated` and
+  `sketch.removed` (`committed` once the feature is created, `cancelled` once
+  it is dropped) tell it, nothing is written while it is drawn, and
+  `commitFeature` writes the feature with the ID of the sketch. An edit
+  `create` with `placedVertexCount` is a shape being drawn: drawn with the look
+  of `previewStyle` in its layer, not as a feature, with a geometry that may
+  have fewer positions than a feature, checked as one when it is committed
 - A locked feature among the selected features stays as it is and the
   others change, as `selection.delete` already did: a drag, the arrow keys
   and `selection.update` leave it alone in place of refusing the whole, the
@@ -580,6 +588,10 @@ writing it. Its changes are listed after those of 3.0.0.
 
 ### Removed in 3.0.0
 
+- The event `preview.changed`: the shape being drawn is a sketch of this
+  client, told by `sketch.added`, `sketch.updated` and `sketch.removed`, and
+  `rendered.changed` tells with no IDs that a draw drew it changed.
+
 - `DocumentChange.layerReorder` and `DocumentChange.groupReorder`: the
   order inside a layer or a group is told by `DocumentChange.order`.
 - `HitTestContext` and `SnapContext`: a hit test and the snapping
@@ -697,6 +709,7 @@ writing it. Its changes are listed after those of 3.0.0.
 | `features.get(id, { applySketches })` | `draw.rendered.get(id)` |
 | `draggedRowsOf(tables)` of `/kasane` | `draw.rendered.getDraggedRows()` |
 | `ExtensionContext.drawing` | `ctx.draw.drawing` |
+| `preview.changed` | `sketch.added`, `sketch.updated`, `sketch.removed` |
 | `getStyleRuleChannel(type)` | `featureTypes.getStyleRuleChannel(type)` |
 | `interaction.onDrawCommit` | `Plugin.onFeatureCommit` |
 | `interaction.onFeatureClick` | `selectMode.onSelectedFeatureClick` |

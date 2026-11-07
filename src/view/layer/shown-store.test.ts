@@ -68,7 +68,6 @@ describe('the Store the drawing reads', () => {
     expect(shown.store.getFeature('a')).toBeUndefined();
     // The selection of the document is not drawn on the other one
     expect(shown.store.getSelection()).toEqual({ type: null, ids: [] });
-    expect(shown.store.getTentative()).toBeNull();
     expect(shown.store.getDragState()).toBeNull();
     // Writes and the rest go to the Store of the instance
     expect(shown.store.holdLimit).toBe(own.holdLimit);

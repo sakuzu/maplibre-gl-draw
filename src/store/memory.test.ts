@@ -1072,28 +1072,8 @@ describe('MemoryStore', () => {
   });
 
   // ============================================================
-  // Tentative/BoxSelection/DragState
+  // BoxSelection/DragState
   // ============================================================
-
-  describe('Tentative', () => {
-    it('sets and gets the tentative state', () => {
-      const tentative = {
-        type: 'Point' as const,
-        coordinates: [0, 0] as [number, number],
-        layerId: 'layer-1',
-      };
-      store.setTentative(tentative);
-
-      expect(store.getTentative()).toMatchObject(tentative);
-    });
-
-    it('clears the tentative state', () => {
-      store.setTentative({ type: 'Point', coordinates: [0, 0], layerId: 'layer-1' });
-      store.setTentative(null);
-
-      expect(store.getTentative()).toBeNull();
-    });
-  });
 
   describe('BoxSelection', () => {
     it('sets and gets the boxSelection state', () => {

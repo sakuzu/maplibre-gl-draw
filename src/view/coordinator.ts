@@ -57,7 +57,6 @@ function shouldRepaint(changes: StoreChange): boolean {
     changes.groups || // group changes (show/hide)
     changes.order || // items put in another place of the order
     changes.selection || // selection state changes
-    changes.tentative || // changes to the transient state while drawing
     changes.uiStateChanged || // changes to the UI state (dragState, boxSelection)
     // the whole document replaced
     changes.reset

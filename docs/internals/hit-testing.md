@@ -376,8 +376,8 @@ entries within one notification does not matter.
 - A sketch is not written, so the index keeps a feature it edits where the
   document has it, and what the drag of this client edits is left out of the
   hit tests while it goes on.
-  The tentative geometry of a drawing mode is not a feature and is not
-  indexed
+  The shape a drawing mode draws (a sketch of an edit `create`) is not a
+  feature of the document and is not indexed
 - A type added with `draw.extensions.featureTypes` is measured with the
   `getBoundingBox` of its engine handler, and adding it re-measures the
   features of that type. When its extent changes for a reason the Store

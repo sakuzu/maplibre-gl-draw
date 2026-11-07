@@ -16,9 +16,53 @@
 
 import type { SketchOverlay } from '../feature-table/feature-tables.js';
 import { featureTablesInternals } from '../feature-table/feature-tables.js';
+import { DRAW_PROPERTY_KEYS } from '../shared/properties.js';
+import type { TentativeState } from '../shared/types/model.js';
+import { coordinatesOf } from '../shared/utils/coordinates.js';
 import { rowPlaceKeysOf } from '../store/row-places.js';
 import type { Store } from '../store/store.js';
 import type { Feature, ItemPlacement, StoreChange } from '../store/types.js';
+import type { CreateEdit } from './sketch-edits.js';
+
+/**
+ * A shape being drawn, as a sketch of an edit `create` with its vertices placed so far gives it: it
+ * has no ID of the document, and is drawn with the look of a shape being drawn in the layer it will
+ * be created in
+ *
+ * @internal
+ */
+export interface ShapeBeingDrawn extends TentativeState {
+  /** Who draws it: `null` for this client */
+  readonly owner: string | null;
+}
+
+/**
+ * The shape being drawn of an edit `create` of a sketch, over the feature it creates
+ *
+ * @internal
+ */
+export function shapeBeingDrawnOf(
+  feature: Feature,
+  edit: CreateEdit,
+  owner: string | null,
+): ShapeBeingDrawn {
+  const shape: ShapeBeingDrawn = {
+    owner,
+    type: feature.type,
+    coordinates: coordinatesOf(feature) as TentativeState['coordinates'],
+    layerId: feature.layerId,
+    pendingFeatureId: feature.id,
+  };
+  if (edit.placedVertexCount !== undefined) shape.confirmedCount = edit.placedVertexCount;
+  if (edit.highlightedVertexIndex !== undefined) {
+    shape.highlightedVertexIndex = edit.highlightedVertexIndex;
+  }
+  const radius = feature.properties[DRAW_PROPERTY_KEYS.radiusMeters];
+  const angle = feature.properties[DRAW_PROPERTY_KEYS.radiusHandleAngle];
+  if (typeof radius === 'number') shape.radiusMeters = radius;
+  if (typeof angle === 'number') shape.radiusHandleAngle = angle;
+  return shape;
+}
 
 /**
  * A feature a sketch creates, as it is drawn
@@ -56,6 +100,8 @@ export class SketchView {
   #creates: readonly DrawnCreate[] = [];
   /** The same, by the ID they are drawn with */
   #createByKey = new Map<string, DrawnCreate>();
+  /** The shapes being drawn, in the order they are drawn */
+  #drawings: readonly ShapeBeingDrawn[] = [];
   readonly #listeners = new Set<(change: StoreChange) => void>();
   readonly #redraws = new Set<() => void>();
 
@@ -81,6 +127,11 @@ export class SketchView {
   /** The features sketches create, as they are drawn */
   creates(): readonly DrawnCreate[] {
     return this.#creates;
+  }
+
+  /** The shapes being drawn, in the order they are drawn (they have no ID of the document) */
+  drawings(): readonly ShapeBeingDrawn[] {
+    return this.#drawings;
   }
 
   /** The IDs of the features drawn for the sketches */
@@ -120,10 +171,18 @@ export class SketchView {
   }
 
   /**
-   * Sets what the sketches draw: the features they edit as they leave them, and the features they
-   * create
+   * Sets what the sketches draw: the features they edit as they leave them, the features they
+   * create, and the shapes being drawn (a change of them asks for the next frame)
    */
-  set(live: ReadonlyMap<string, Feature>, creates: readonly DrawnCreate[]): void {
+  set(
+    live: ReadonlyMap<string, Feature>,
+    creates: readonly DrawnCreate[],
+    drawings: readonly ShapeBeingDrawn[] = [],
+  ): void {
+    if (drawings.length > 0 || this.#drawings.length > 0) {
+      this.#drawings = drawings;
+      this.redraw();
+    }
     const before = this.#live;
     const createsBefore = this.#createByKey;
     if (live.size === 0 && before.size === 0 && creates.length === 0 && createsBefore.size === 0) {

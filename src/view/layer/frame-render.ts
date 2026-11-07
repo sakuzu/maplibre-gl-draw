@@ -342,7 +342,7 @@ export function renderSegment(deps: FrameRenderDeps, f: FrameState, index: numbe
       copy.view,
       deps.tableRetained ?? undefined,
       beforeEntry,
-      deps.shapes.tentative(),
+      deps.shapes.drawings(),
     );
     // The rest of the drape of the slot, once (the copies after the first draw over it)
     if (beforeEntry) {
@@ -398,7 +398,7 @@ export function renderForeground(deps: FrameRenderDeps, f: FrameState): void {
     map,
     scope: deps.selectionScope,
   };
-  const tentative = deps.shapes.tentative();
+  const drawings = deps.shapes.drawings();
   const boxSelection = store.getBoxSelection();
   const globalHandlesShown =
     store.getMode() === 'select' && !store.isReadOnly() && !store.isInteractionLocked();
@@ -460,10 +460,8 @@ export function renderForeground(deps: FrameRenderDeps, f: FrameState): void {
       selectionUIDeps,
     );
 
-    // Draw the vertices of the tentative in the foreground
-    if (tentative) {
-      r.tentativeRenderer.drawVertices(tentative);
-    }
+    // Draw the vertices of the shapes being drawn in the foreground
+    for (const drawing of drawings) r.tentativeRenderer.drawVertices(drawing);
 
     // Draw the vertices of the layer-aware renderers in the foreground
     for (const renderer of f.layerAwareRenderers) {

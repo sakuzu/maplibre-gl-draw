@@ -147,7 +147,7 @@ export interface EngineModeContext {
    * The active layer when it exists, is not locked, is visible and is not locally hidden,
    * otherwise the first such layer, otherwise an empty string. A mode reads it when it
    * commits a feature; when it is an empty string the mode must not create the feature: it
-   * discards the drawing (clears the tentative state) and returns to select.
+   * discards the drawing (removes the shape it shows) and returns to select.
    */
   getCurrentLayerId: () => string;
   /**

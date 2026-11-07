@@ -14,9 +14,13 @@ import type { FeatureEdit, FeatureInput } from './model.js';
  * `create` is a feature that is not in the document yet: it is drawn in the place `below` names
  * (just above that item of its layer or group; at the back for `null`, at the front where
  * `features.create` puts a new feature when it is left out) and written by `features.create` when
- * the sketch is committed. `placedVertexCount` is the number of vertices placed so far, the ones
- * after it following the pointer (every vertex when it is left out), and
- * `highlightedVertexIndex` the vertex shown as the one to close the shape on.
+ * the sketch is committed. With `placedVertexCount` it is a shape being drawn: drawn with the look
+ * of the option `previewStyle` in its layer, in place of the feature (the vertices up to
+ * `placedVertexCount` placed and the line to them solid, the ones after it following the pointer
+ * and dashed, `highlightedVertexIndex` the vertex shown as the one to close the shape on), with no
+ * ID `draw.rendered` reads it by, and its geometry may have fewer positions than a feature (a line
+ * of one, a ring of fewer than four), checked as a feature when it is committed. A drawing mode
+ * shows the shape it draws so (`ModeContext.preview`).
  */
 export type SketchEdit =
   | FeatureEdit
@@ -24,7 +28,10 @@ export type SketchEdit =
       kind: 'create';
       /** The feature as it will be created */
       feature: FeatureInput;
-      /** The number of vertices placed so far (every vertex when it is left out) */
+      /**
+       * The number of vertices placed so far, for a shape being drawn (left out: a feature drawn as
+       * it will be created, every vertex placed)
+       */
       placedVertexCount?: number;
       /** The vertex shown as the one to close the shape on */
       highlightedVertexIndex?: number;
@@ -180,7 +187,9 @@ export interface SketchesCollection {
    *
    * @returns True when it was written, false when it is a sketch with an owner or the write
    *   is refused (read-only)
-   * @throws `DrawError` with the code `not-found` when there is no sketch with this ID
+   * @throws `DrawError` with the code `not-found` when there is no sketch with this ID, or
+   *   `invalid-input` when a shape being drawn it creates is not yet a feature (a line of one
+   *   position, a ring of fewer than four)
    */
   commit(id: string): boolean;
   /**

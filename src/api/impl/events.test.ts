@@ -21,6 +21,7 @@ import { createDraw } from '../draw.js';
 import { DrawError } from '../errors.js';
 import type { DrawEvents } from '../events.js';
 import type { Feature, Group } from '../model.js';
+import type { Sketch } from '../sketches.js';
 import { createDrawOnEngine } from './create-draw.js';
 import type { Engine } from './engine.js';
 import { createEngine } from './engine.js';
@@ -58,7 +59,6 @@ const ALL_EVENTS: ReadonlyArray<keyof DrawEvents> = [
   'interactionLock.changed',
   'options.changed',
   'snap.changed',
-  'preview.changed',
   'map.clicked',
   'dataset.clicked',
   'dataset.added',
@@ -344,7 +344,8 @@ describe('document.changed', () => {
     draw.selection.set('feature', [a.id]);
     draw.selection.clear();
     draw.setMode('draw_line');
-    store.setTentative({ type: 'LineString', coordinates: [[0, 0]], layerId: 'x' });
+    draw.drawing.addVertex([0, 0]);
+    draw.drawing.moveTo([1, 1]);
     draw.setMode('select');
     draw.hidden.add(a.id);
     draw.hidden.remove(a.id);
@@ -689,63 +690,85 @@ describe('the signals of the engine', () => {
   });
 });
 
-describe('preview.changed', () => {
+describe('the shape being drawn, shown by a sketch of this client', () => {
   let engine: Engine;
-  let signals: Recorded[];
   let local: Draw;
+  let told: Array<[string, Sketch, string | undefined]>;
 
   beforeEach(() => {
     engine = createEngine(createMapStub().map, {}, { deferDefaultMode: true });
     local = createDrawOnEngine(engine);
     engine.enterDefaultMode();
-    signals = record(local);
+    told = [];
+    local.on('sketch.added', ({ sketch }) => told.push(['added', sketch, undefined]));
+    local.on('sketch.updated', ({ sketch }) => told.push(['updated', sketch, undefined]));
+    local.on('sketch.removed', ({ sketch, reason }) => told.push(['removed', sketch, reason]));
   });
 
   afterEach(() => local.destroy());
 
+  /** The edit create of a sketch */
+  const createOf = (sketch: Sketch) =>
+    sketch.edits[0] as Extract<Sketch['edits'][number], { kind: 'create' }>;
   const shapes = () =>
-    payloadsOf(signals, 'preview.changed').map(({ feature }) =>
-      feature ? (feature.geometry as { coordinates: unknown }).coordinates : null,
+    told.map(([what, sketch]) =>
+      what === 'removed'
+        ? null
+        : (createOf(sketch).feature.geometry as { coordinates: unknown }).coordinates,
     );
 
-  it('fires at each change of the shape being drawn, and null when it is created', () => {
+  it('is told at each change, and ends committed with the feature it creates', () => {
     local.setMode('draw_line');
     const input = createSyntheticInput(engine);
+    const signals = record(local);
     input.click([0, 0]);
     input.move([0.5, 0.5]);
     input.click([1, 1]);
-    const [first] = payloadsOf(signals, 'preview.changed');
-    expect(first.feature).toMatchObject({ type: 'LineString', layerId: expect.any(String) });
-    expect(typeof first.feature?.id).toBe('string');
-    const count = shapes().length;
-    expect(count).toBeGreaterThanOrEqual(3);
+    const [first] = told;
+    expect(first?.[0]).toBe('added');
+    expect(first?.[1].owner).toBeNull();
+    expect(createOf(first?.[1] as Sketch).feature).toMatchObject({
+      type: 'LineString',
+      layerId: expect.any(String),
+    });
+    expect(typeof createOf(first?.[1] as Sketch).feature.id).toBe('string');
+    expect(told.length).toBeGreaterThanOrEqual(3);
     const all = shapes();
     const last = all[all.length - 1] as number[][];
     expect(last[0]).toEqual([0, 0]);
     expect(last[1][0]).toBeCloseTo(1);
     expect(last[1][1]).toBeCloseTo(1);
+    // Nothing is written while it is drawn
+    expect(payloadsOf(signals, 'document.changed')).toEqual([]);
 
     input.key('Enter');
-    expect(shapes()[shapes().length - 1]).toBeNull();
+    expect(told[told.length - 1]?.[0]).toBe('removed');
+    expect(told[told.length - 1]?.[2]).toBe('committed');
     const created = payloadsOf(signals, 'feature.created');
     expect(created).toHaveLength(1);
-    expect(created[0].feature.id).toBe(first.feature?.id);
+    expect(created[0].feature.id).toBe(createOf(first?.[1] as Sketch).feature.id);
+    expect(payloadsOf(signals, 'document.changed')).toHaveLength(1);
+    expect(local.sketches.count()).toBe(0);
   });
 
-  it('fires null once when the drawing is cancelled, and nothing when there was none', () => {
+  it('ends cancelled once when the drawing is cancelled, and nothing when there was none', () => {
     local.setMode('draw_line');
     const input = createSyntheticInput(engine);
+    const signals = record(local);
     input.click([0, 0]);
     input.move([0.5, 0.5]);
-    const before = shapes().length;
+    const before = told.length;
     input.key('Escape');
-    expect(shapes().slice(before)).toEqual([null]);
+    expect(told.slice(before).map(([what, , reason]) => [what, reason])).toEqual([
+      ['removed', 'cancelled'],
+    ]);
 
     local.setMode('select');
-    expect(shapes()).toHaveLength(before + 1);
+    expect(told).toHaveLength(before + 1);
+    expect(payloadsOf(signals, 'document.changed')).toEqual([]);
   });
 
-  it('carries the options the shape was shown with, and none when it is cleared', () => {
+  it('holds the vertices placed and the one to close on that the shape was shown with', () => {
     local.extensions.modes.add('custom', (ctx) => ({
       onClick(event) {
         ctx.preview.set(
@@ -775,30 +798,35 @@ describe('preview.changed', () => {
     input.move([2, 2]);
     input.key('x');
     // The click moves the pointer first
-    const changes = payloadsOf(signals, 'preview.changed').slice(-3);
-    expect(changes[0]).toMatchObject({ confirmedVertices: 1, highlightVertex: 0 });
-    expect(changes[0].feature?.type).toBe('LineString');
-    expect(Object.keys(changes[1]).sort()).toEqual(['feature']);
-    expect(changes[2]).toEqual({ feature: null });
+    const changes = told.slice(-3);
+    expect(createOf(changes[0]?.[1] as Sketch)).toMatchObject({
+      placedVertexCount: 1,
+      highlightedVertexIndex: 0,
+    });
+    expect(createOf(changes[0]?.[1] as Sketch).feature.type).toBe('LineString');
+    // Shown without options: every vertex placed, none to close on
+    expect(createOf(changes[1]?.[1] as Sketch).placedVertexCount).toBe(2);
+    expect(createOf(changes[1]?.[1] as Sketch).highlightedVertexIndex).toBeUndefined();
+    expect(changes[2]?.[0]).toBe('removed');
   });
 
-  it('carries the placed vertices of a built-in line', () => {
+  it('holds the placed vertices of a built-in line', () => {
     local.setMode('draw_line');
     const input = createSyntheticInput(engine);
     input.click([0, 0]);
     input.move([0.5, 0.5]);
-    const changes = payloadsOf(signals, 'preview.changed');
-    expect(changes[changes.length - 1]?.confirmedVertices).toBe(1);
+    expect(createOf(told[told.length - 1]?.[1] as Sketch).placedVertexCount).toBe(1);
+    // The shape being drawn has no ID of the document, and is read by the shapes
+    expect(engine.context.shapes.drawing()?.confirmedCount).toBe(1);
   });
 
-  it('carries the radius of a circle', () => {
+  it('holds the radius of a circle', () => {
     local.setMode('draw_circle');
     const input = createSyntheticInput(engine);
     input.click([0, 0]);
     input.move([0.01, 0]);
-    const changes = payloadsOf(signals, 'preview.changed');
-    const last = changes[changes.length - 1]?.feature;
-    expect(last?.type).toBe('Circle');
-    expect(last?.properties?.['maplibre-gl-draw:radiusMeters']).toBeGreaterThan(0);
+    const last = createOf(told[told.length - 1]?.[1] as Sketch).feature;
+    expect(last.type).toBe('Circle');
+    expect(last.properties?.['maplibre-gl-draw:radiusMeters']).toBeGreaterThan(0);
   });
 });

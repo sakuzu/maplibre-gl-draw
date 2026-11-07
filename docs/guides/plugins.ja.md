@@ -516,7 +516,9 @@ draw.setMode('draw_rectangle');
 - `preview.set(feature, options)` は描いている途中の形を見せ、
   `preview.clear()` は隠します。`confirmedVertices` は、その頂点まで
   の線を実線に、残りを破線にします。`highlightVertex` は、面を閉じる
-  最初の頂点のような頂点を目立たせます
+  最初の頂点のような頂点を目立たせます。形はこの端末の `create` の
+  編集を持つ下書き (`draw.sketches`) で、`commitFeature` は書き込む
+  地物と一緒にそれを終えます
 - `hitTest(point)` は画面の点にある一番手前の地物かデータセットの行を
   返し、`snap(point)` はその点が吸着する先を返します
 - `cursor.set(cursor)` と `cursor.reset()` は地図のカーソルを変えます。

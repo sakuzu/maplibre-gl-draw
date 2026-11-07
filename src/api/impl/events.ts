@@ -16,22 +16,18 @@
  */
 
 import { TabaneError } from '@sakuzu/tabane';
-import { DRAW_PROPERTY_KEYS } from '../../shared/properties.js';
-import { geometryFromCoordinates } from '../../shared/utils/coordinates.js';
 import type { EngineSignals, EventEmitter } from '../../shared/utils/event-emitter.js';
 import type { Store } from '../../store/store.js';
 import type {
-  FeatureCoordinates,
   ItemOrderChange,
   ItemPosition,
   StoreChange,
   VertexSelection as StoredVertexSelection,
-  TentativeState,
 } from '../../store/types.js';
 import { DrawError } from '../errors.js';
 import type { DocumentChange, DrawEventListener, DrawEvents } from '../events.js';
 import type { Hit } from '../extension/provider.js';
-import type { Feature, FeatureInput } from '../model.js';
+import type { Feature } from '../model.js';
 import type { SnapResult } from '../state.js';
 import { toDatasetRow } from './rows.js';
 
@@ -89,7 +85,6 @@ const LIBRARY_EVENT_KEYS = {
   'interactionLock.changed': true,
   'options.changed': true,
   'snap.changed': true,
-  'preview.changed': true,
   'map.clicked': true,
   'dataset.clicked': true,
   'dataset.added': true,
@@ -223,58 +218,9 @@ export function connectStoreEvents(hub: EventHub, store: Store): () => void {
       hub.emit('interactionLock.changed', { locked });
     }
 
-    // The shape being drawn, once per notification that set or cleared it
-    const tentative = changes.tentative;
-    if (tentative && (tentative.state !== null || tentative.previous !== null)) {
-      hub.emit('preview.changed', toPreviewPayload(tentative.state));
-    }
-
     const change = toDocumentChange(changes);
     if (change) hub.emit('document.changed', change);
   });
-}
-
-/**
- * The payload of `preview.changed`: the shape being drawn, with the options `preview.set` was
- * given (each left out when it was not given, both when the shape is cleared)
- *
- * @internal
- */
-export function toPreviewPayload(state: TentativeState | null): DrawEvents['preview.changed'] {
-  const payload: DrawEvents['preview.changed'] = { feature: toPreviewFeature(state) };
-  if (state?.confirmedCount !== undefined) payload.confirmedVertices = state.confirmedCount;
-  if (state?.highlightedVertexIndex !== undefined) {
-    payload.highlightVertex = state.highlightedVertexIndex;
-  }
-  return payload;
-}
-
-/**
- * The shape being drawn in the shape of the API: its type, geometry and layer, the ID it will
- * be created with, and the radius of a circle
- *
- * @internal
- */
-export function toPreviewFeature(state: TentativeState | null): FeatureInput | null {
-  if (!state) return null;
-  const coordinates = structuredClone(state.coordinates) as FeatureCoordinates;
-  const feature: FeatureInput = {
-    type: state.type,
-    geometry: geometryFromCoordinates(state.type, coordinates),
-    layerId: state.layerId,
-  };
-  if (state.pendingFeatureId !== undefined) feature.id = state.pendingFeatureId;
-  const properties: Record<string, number> = {};
-  if (state.radiusMeters !== undefined) {
-    properties[DRAW_PROPERTY_KEYS.radiusMeters] = state.radiusMeters;
-  }
-  if (state.radiusHandleAngle !== undefined) {
-    properties[DRAW_PROPERTY_KEYS.radiusHandleAngle] = state.radiusHandleAngle;
-  }
-  if (Object.keys(properties).length > 0) {
-    feature.properties = properties as FeatureInput['properties'];
-  }
-  return feature;
 }
 
 /** Whether a list of IDs holds the same IDs as a set */

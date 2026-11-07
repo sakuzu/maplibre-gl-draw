@@ -15,7 +15,6 @@ import type { Hit } from './extension/provider.js';
 import type { StoreView, UpdateSource } from './extension/store.js';
 import type {
   Feature,
-  FeatureInput,
   FeatureValues,
   FileData,
   Group,
@@ -274,20 +273,6 @@ export interface DrawEvents {
   'options.changed': { options: Readonly<RuntimeOptions>; previous: Readonly<RuntimeOptions> };
   /** The snapping target changed */
   'snap.changed': { result: SnapResult | null };
-  /**
-   * The shape being drawn changed, or was cleared (`feature` is `null`). It fires once per
-   * change, with no throttling: at each vertex, at each move of the pointer that moves the
-   * shape, and when the shape is created, cancelled or left. `feature` has the type, the
-   * geometry and the layer of the shape, the ID it will be created with, and the radius of a
-   * circle; it is a copy that the drawing does not change afterwards. `confirmedVertices` and
-   * `highlightVertex` are the options the shape was shown with (`ModeContext.preview.set`):
-   * each is left out when it was not given, and both when the shape is cleared.
-   */
-  'preview.changed': {
-    feature: FeatureInput | null;
-    confirmedVertices?: number;
-    highlightVertex?: number;
-  };
   /**
    * A click on the map in the select mode, whether it hit something or not. `lngLat` is the
    * position of the pointer before snapping, and `hit` the frontmost thing under it (a feature,

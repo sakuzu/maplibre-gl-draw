@@ -27,10 +27,11 @@ import { DRAW_PROPERTY_KEYS, getDrawProperty } from '../../shared/properties.js'
 import { coordinatesOf } from '../../shared/utils/coordinates.js';
 import type { AutoNameGenerator } from '../../shared/utils/name-generator.js';
 import type { PixelRatioProvider } from '../../shared/utils/pixel-ratio.js';
+import type { SketchController } from '../../sketches/sketch-controller.js';
 import type { SnapResult as StoredSnapResult } from '../../snapping/types.js';
 import type { StoreSpatialIndex } from '../../store/spatial/store-spatial-index.js';
 import type { Store } from '../../store/store.js';
-import type { Feature as StoredFeature, TentativeState } from '../../store/types.js';
+import type { Feature as StoredFeature } from '../../store/types.js';
 import { isWritableLayer } from '../../store/writable-layer.js';
 import { anchorElevationMeters, getAnchorElevationGeneration } from '../../view/terrain/anchor.js';
 import { bindTerrainState } from '../../view/terrain/binding.js';
@@ -38,6 +39,7 @@ import type { TerrainContext } from '../../view/terrain/context.js';
 import { anchorGhostOpacity } from '../../view/terrain/occlusion.js';
 import type { SelectionExtensionRegistry } from '../../view/ui/selection-ui/extension-registry.js';
 import type { Draw } from '../draw.js';
+import { DrawError } from '../errors.js';
 import type { DrawEvents, ScreenPoint } from '../events.js';
 import type {
   ExtensionContext,
@@ -50,6 +52,7 @@ import type { Hit } from '../extension/provider.js';
 import type { ExtensionsCollections } from '../extensions.js';
 import type { Feature, FeatureInput, Layer } from '../model.js';
 import type { SelectionStyleOptions } from '../options.js';
+import type { SketchEdit } from '../sketches.js';
 import type { SnapResult } from '../state.js';
 import { mergeOptions } from './options.js';
 import { toDatasetRow } from './rows.js';
@@ -137,30 +140,6 @@ export function toSelectionStyle(
     },
   };
   return mergeOptions(resolved, (given ?? {}) as object) as Required<SelectionStyleOptions>;
-}
-
-/**
- * The shape being drawn, as the engine keeps it, for a feature input of the contract
- *
- * @internal
- */
-export function toTentative(
-  input: FeatureInput,
-  layerId: string,
-  pendingFeatureId: string | undefined,
-): TentativeState {
-  const state: TentativeState = {
-    type: input.type,
-    coordinates: coordinatesOf(input) as TentativeState['coordinates'],
-    layerId,
-  };
-  if (pendingFeatureId !== undefined) state.pendingFeatureId = pendingFeatureId;
-  const properties = input.properties ?? {};
-  const radius = properties[DRAW_PROPERTY_KEYS.radiusMeters];
-  const angle = properties[DRAW_PROPERTY_KEYS.radiusHandleAngle];
-  if (typeof radius === 'number') state.radiusMeters = radius;
-  if (typeof angle === 'number') state.radiusHandleAngle = angle;
-  return state;
 }
 
 // ============================================================================
@@ -373,6 +352,8 @@ export interface ModeServices extends ContextServices {
   listTraceRows(bbox: BBox): Array<{ datasetId: string; rowIndex: number; feature: StoredFeature }>;
   /** The writable layer, or an empty string when no layer can be written */
   getWritableLayerId(): string;
+  /** The sketches of the instance: the shape a mode draws is shown by one of them */
+  readonly sketches: SketchController;
   /** Generates the ID of a new feature */
   generateId(): string;
   /** Tells the plugins that a drawing mode created a feature (`interaction.onFeatureCommit`) */
@@ -463,15 +444,23 @@ export function createModeContext(
   const base = createExtensionContext(services, screen, subscriptions);
   /** The ID the shape being drawn will have once it is committed */
   let pendingId: string | null = null;
+  /** The sketch of this client that shows the shape being drawn (null: none) */
+  let drawing: string | null = null;
   /** The cursor the mode set while it was entered, which `cursor.reset` goes back to */
   let modeCursor = '';
   let entering = false;
   /** Whether the mode has set a cursor, which is taken back when it is left */
   let cursorSet = false;
 
+  const { sketches } = services;
+  /** The sketch of the shape being drawn, when it is still there */
+  const drawingSketch = (): string | null =>
+    drawing !== null && sketches.has(drawing) ? drawing : null;
   const clearPreview = (): void => {
     pendingId = null;
-    if (store.getTentative() !== null) store.setTentative(null);
+    const id = drawingSketch();
+    drawing = null;
+    if (id !== null) sketches.remove(id);
   };
 
   const context: ModeContext = {
@@ -519,32 +508,48 @@ export function createModeContext(
         properties[DRAW_PROPERTY_KEYS.createdZoom] = map.getZoom();
       }
       const id = input.id ?? pendingId ?? undefined;
-      const feature = store.transact(() => {
-        const created = services.getDraw().features.create({
+      let feature: Feature | null = null;
+      const write = (): void => {
+        feature = services.getDraw().features.create({
           ...input,
           ...(id !== undefined && { id }),
           layerId,
           properties: properties as FeatureInput['properties'],
         });
-        clearPreview();
-        return created;
-      });
-      if (feature) services.notifyDrawCommit(feature);
-      return feature;
+      };
+      // The sketch of the shape being drawn ends committed with the write that creates it
+      const sketch = drawingSketch();
+      pendingId = null;
+      drawing = null;
+      if (sketch !== null) sketches.commitWith(sketch, () => store.transact(write));
+      else store.transact(write);
+      const created = feature as Feature | null;
+      if (created) services.notifyDrawCommit(created);
+      return created;
     },
     preview: {
       set(feature, options) {
         if (feature.id !== undefined) pendingId = feature.id;
         pendingId ??= services.generateId();
         const layerId = feature.layerId ?? services.getWritableLayerId();
-        const state = toTentative(feature, layerId, pendingId);
-        if (options?.confirmedVertices !== undefined) {
-          state.confirmedCount = options.confirmedVertices;
+        // While no layer can be written, the shape stays as it was shown last
+        if (layerId === '') return;
+        const edit: SketchEdit = {
+          kind: 'create',
+          feature: { ...feature, id: pendingId, layerId },
+          placedVertexCount: options?.confirmedVertices ?? vertexCountOf(feature),
+          ...(options?.highlightVertex !== undefined && {
+            highlightedVertexIndex: options.highlightVertex,
+          }),
+        };
+        const id = drawingSketch();
+        try {
+          if (id !== null) sketches.update(id, { edits: [edit] });
+          else drawing = sketches.add({ edits: [edit] })?.id ?? null;
+        } catch (error) {
+          // A shape that cannot be a feature of its layer stays as it was shown last
+          if (!(error instanceof DrawError)) throw error;
         }
-        if (options?.highlightVertex !== undefined) {
-          state.highlightedVertexIndex = options.highlightVertex;
-        }
-        store.setTentative(state);
       },
       clear: clearPreview,
     },
@@ -596,4 +601,24 @@ export function createModeContext(
       cursorSet = false;
     },
   };
+}
+
+/**
+ * The number of vertices of the shape of a feature input: every position of a line, the positions
+ * of the outer ring of an area without the one that closes it, one for a point
+ */
+function vertexCountOf(input: FeatureInput): number {
+  const coordinates = coordinatesOf(input) as unknown;
+  if (!Array.isArray(coordinates) || typeof coordinates[0] === 'number') return 1;
+  const first = coordinates[0] as unknown;
+  if (Array.isArray(first) && Array.isArray(first[0])) {
+    // An area: its outer ring, closed or not
+    const ring = first as number[][];
+    const closed =
+      ring.length > 1 &&
+      ring[0][0] === ring[ring.length - 1][0] &&
+      ring[0][1] === ring[ring.length - 1][1];
+    return closed ? ring.length - 1 : ring.length;
+  }
+  return coordinates.length;
 }

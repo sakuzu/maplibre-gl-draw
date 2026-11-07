@@ -14,6 +14,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { ModifierKeys } from '../dispatcher/types.js';
 import { EventEmitterImpl } from '../shared/utils/event-emitter.js';
+import { RenderedShapes } from '../sketches/rendered-shapes.js';
 import { MemoryStore } from '../store/memory.js';
 import { RBushSpatialIndex } from '../store/spatial/spatial-index.js';
 import type { BoundingBox, Coordinate } from '../store/types.js';
@@ -372,13 +373,16 @@ describe('SnapService', () => {
       const store = new MemoryStore();
       store.setMode('draw_line');
       const anchor: Coordinate = [ORIGIN.lng, ORIGIN.lat];
-      store.setTentative({
+      // The shape being drawn, as a sketch of this client shows it
+      const shapes = new RenderedShapes(store);
+      shapes.drawing = () => ({
+        owner: null,
         type: 'LineString',
         coordinates: [anchor, anchor],
         layerId: 'l1',
         confirmedCount: 1,
       });
-      return createSnapService({ store, spatialIndex: new RBushSpatialIndex(), options });
+      return createSnapService({ store, spatialIndex: new RBushSpatialIndex(), options, shapes });
     }
 
     /** A cursor 100 px from ORIGIN at a bearing of 15 degrees (off every 45-degree guide) */

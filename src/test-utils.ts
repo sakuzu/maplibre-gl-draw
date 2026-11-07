@@ -15,7 +15,7 @@ import type { ExtensionsCollections } from './api/extensions.js';
 import { createAppliedStyles } from './api/impl/applied-style.js';
 import type { ModeServices } from './api/impl/contexts.js';
 import { createModeContext, createScreenContext } from './api/impl/contexts.js';
-import { createFeatures } from './api/impl/features.js';
+import { createFeatures, prepareFeatureInput } from './api/impl/features.js';
 import { createGroups } from './api/impl/groups.js';
 import { bridgeMode, createInputRoute } from './api/impl/input.js';
 import { createLayers } from './api/impl/layers.js';
@@ -53,7 +53,7 @@ import {
 import type { Feature } from './shared/types/model.js';
 import { EventEmitterImpl } from './shared/utils/event-emitter.js';
 import { AutoNameGenerator } from './shared/utils/name-generator.js';
-import type { RenderedShapes } from './sketches/rendered-shapes.js';
+import { RenderedShapes } from './sketches/rendered-shapes.js';
 import { SketchController } from './sketches/sketch-controller.js';
 import type { SnapResult } from './snapping/types.js';
 import { MemoryStore } from './store/memory.js';
@@ -320,6 +320,17 @@ export function createModeHarness(options: {
   const { store, map, modeManager } = options;
   const deps = createResourceDeps(store);
   const autoNameGenerator = new AutoNameGenerator(store, options.autoName !== false);
+  let nextSketch = 0;
+  const sketches = new SketchController({
+    store,
+    generateId: () => `sketch-${nextSketch++}`,
+    getActiveLayerId: () => store.listLayers()[0]?.id ?? '',
+    prepareFeature: (input, id, layerId, partial) =>
+      prepareFeatureInput(store, input, id, layerId, partial),
+  });
+  sketches.attach();
+  const shapes = new RenderedShapes(store);
+  shapes.useSketches(sketches);
   const collections = {} as ExtensionsCollections;
   const features = createFeatures(deps);
   const groups = createGroups(deps);
@@ -365,6 +376,7 @@ export function createModeHarness(options: {
     getWritableLayerId:
       options.getWritableLayerId ??
       (() => store.listLayers().find((l) => l.visible && !l.locked)?.id ?? ''),
+    sketches,
     generateId: deps.generateId,
     notifyDrawCommit: () => {},
     scaleWithZoom: options.scaleWithZoom ?? false,
@@ -377,6 +389,10 @@ export function createModeHarness(options: {
   });
   return {
     draw,
+    /** The sketches the modes show the shape they draw by */
+    sketches,
+    /** The shapes as they are seen: the shape a mode draws is `shapes.drawing()` */
+    shapes,
     route: createInputRoute(() => []),
     /** A new context of a mode */
     modeContext: () => createModeContext(services, screen).context,

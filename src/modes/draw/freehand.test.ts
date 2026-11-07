@@ -287,11 +287,11 @@ describe('cancel of a freehand stroke (dragcancel)', () => {
     for (const coord of points.slice(1, 4)) {
       normalizer.emit(makeDragEvent('dragmove', coord, start));
     }
-    expect(store.getTentative()).not.toBeNull();
+    expect(harness.shapes.drawing()).not.toBeNull();
 
     normalizer.emit({ ...makeDragEvent('dragcancel', points[3], start), pointerType: 'touch' });
 
-    expect(store.getTentative()).toBeNull();
+    expect(harness.shapes.drawing()).toBeNull();
     expect(map.dragPan.isEnabled()).toBe(true);
     // The stroke does not hang: what follows the cancel draws nothing
     normalizer.emit(makeDragEvent('dragmove', points[4], start));

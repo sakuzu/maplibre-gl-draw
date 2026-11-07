@@ -22,6 +22,7 @@ import type { BBox } from '../../geometry/types.js';
 import type { PluginInteractions } from '../../modes/handler.js';
 import type { ModeManager } from '../../modes/manager.js';
 import { createCoordinateTransform } from '../../shared/math/index.js';
+import type { SketchController } from '../../sketches/sketch-controller.js';
 import { DrawStore } from '../../store/draw-store.js';
 import { createTransformFieldsRegistry } from '../../store/transform-roles.js';
 import type { BoundingBox, Feature as StoredFeature } from '../../store/types.js';
@@ -80,6 +81,8 @@ export interface ExtensionHostDeps {
   readonly customLayer: CustomLayerInterface;
   readonly modeManager: ModeManager;
   readonly featureCompanions: FeatureCompanionRegistry;
+  /** The sketches of the instance (the shape a mode draws is one of them) */
+  readonly sketches: SketchController;
   /** The frontmost hit at a point, with the click tolerance */
   readonly hitTestTopmost: HitTestTopmost;
   /** A frontmost hit tester with another tolerance, in pixels */
@@ -344,6 +347,7 @@ export function createExtensionHost(deps: ExtensionHostDeps): ExtensionHost {
       return deps.listTraceRows({ minX: bbox[0], minY: bbox[1], maxX: bbox[2], maxY: bbox[3] });
     },
     getWritableLayerId: context.getWritableLayerId,
+    sketches: deps.sketches,
     generateId: context.generateFeatureId,
     // Read when a feature is committed, so a change of the option applies at once
     get scaleWithZoom() {

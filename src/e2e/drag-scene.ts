@@ -72,9 +72,12 @@ export interface Recorded {
   name: string;
   /** The ID of the feature, for the events of a feature */
   id?: string;
-  /** The geometry type of the feature of `preview.changed` (null when it is cleared) */
+  /**
+   * The geometry type of the shape being drawn a sketch of `drawing` tells (null when it is
+   * cleared)
+   */
   preview?: string | null;
-  /** The number of positions of the feature of `preview.changed` */
+  /** The number of positions of the shape being drawn a sketch of `drawing` tells */
   positions?: number;
   /** The feature of the target of `snap.changed` (null for none, or no result) */
   snapFeature?: string | null;
@@ -278,13 +281,26 @@ export async function load(
       draw.on('feature.deleted', (e) =>
         recorded.push({ name: 'feature.deleted', id: e.feature.id }),
       );
-      draw.on('preview.changed', (e) =>
+      // The shape being drawn: a sketch of an edit create with its vertices placed so far, told
+      // as it is added, changed and removed
+      const drawingOf = (sketch: import('../index.js').Sketch) => {
+        for (const edit of sketch.edits) {
+          if (edit.kind === 'create' && edit.placedVertexCount !== undefined) return edit.feature;
+        }
+        return undefined;
+      };
+      const drawing = (sketch: import('../index.js').Sketch, removed: boolean) => {
+        const feature = drawingOf(sketch);
+        if (!feature) return;
         recorded.push({
-          name: 'preview.changed',
-          preview: e.feature ? e.feature.type : null,
-          positions: e.feature ? positions(e.feature.geometry as Geometry) : 0,
-        }),
-      );
+          name: 'drawing',
+          preview: removed ? null : feature.type,
+          positions: removed ? 0 : positions(feature.geometry as Geometry),
+        });
+      };
+      draw.on('sketch.added', (e) => drawing(e.sketch, false));
+      draw.on('sketch.updated', (e) => drawing(e.sketch, false));
+      draw.on('sketch.removed', (e) => drawing(e.sketch, true));
       draw.on('snap.changed', (e) =>
         recorded.push({
           name: 'snap.changed',

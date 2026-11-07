@@ -171,12 +171,12 @@ function makeKeyOriginal(key: string): KeyboardEvent {
  * @internal
  */
 export function createDrawingResource(
-  engine: Pick<Engine, 'map' | 'context' | 'modeManager' | 'inputRouter'>,
+  engine: Pick<Engine, 'map' | 'context' | 'modeManager' | 'inputRouter' | 'sketches'>,
 ): DrawingResource {
-  const { map, modeManager, inputRouter } = engine;
-  const { store } = engine.context;
+  const { map, modeManager, inputRouter, sketches } = engine;
+  const { shapes } = engine.context;
 
-  const isDrawing = (): boolean => store.getTentative() !== null;
+  const isDrawing = (): boolean => shapes.drawing() !== null;
   const isActive = (): boolean => isDrawing() || modeManager.getHandler()?.writesFeatures === true;
 
   const pointer = (type: 'mousemove' | 'click', [lng, lat]: [number, number]) => {
@@ -229,9 +229,11 @@ export function createDrawingResource(
 
     cancel() {
       if (!isDrawing()) return false;
-      // The mode drops what it was drawing (onCancel of a mode of the contract)
+      // The mode drops what it was drawing (onCancel of a mode of the contract), and the shape
+      // it showed with it
       modeManager.notifyStateReset();
-      if (store.getTentative() !== null) store.setTentative(null);
+      const drawings = sketches.ownDrawings();
+      if (drawings.length > 0) sketches.removeMany(drawings.map((sketch) => sketch.id));
       return true;
     },
 

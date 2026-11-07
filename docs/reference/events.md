@@ -112,7 +112,6 @@ change is made.
 | `drag.started` | `{ kind; featureIds; bulk? }` |
 | `drag.ended` | `{ kind; featureIds; bulk?; cancelled }` |
 | `snap.changed` | `{ result: SnapResult \| null }` |
-| `preview.changed` | `{ feature; confirmedVertices?; highlightVertex? }` |
 | `map.clicked` | `{ lngLat; point; hit: Hit \| null }` |
 | `dataset.clicked` | `{ datasetId; rowIndex; row; lngLat; point }` |
 | `image.requested` | `{ lngLat; zoom; layerId }` |
@@ -379,20 +378,6 @@ draw.on('options.changed', ({ options, previous }) => {
 Fires while drawing or editing, when the target of the snapping changes.
 When the pointer leaves every target, it fires once with `result: null`.
 Use it for a status line such as "snapped to a vertex".
-
-### preview.changed
-
-Fires every time the shape being drawn changes: at each vertex, at each
-move of the pointer that moves the shape, and once with `feature: null`
-when the shape is created, discarded or left. Nothing is throttled.
-`feature` has the type, the geometry and the layer of the shape, the ID it
-will be created with, and the radius of a circle. `confirmedVertices` and
-`highlightVertex` are the options the shape was shown with
-(`ModeContext.preview.set`): how many vertices from the start are placed,
-and the vertex drawn highlighted. Each is left out when the mode did not
-give it, and both are left out when the shape is cleared. Use it to show
-the length while drawing, or to share the shape with other users and
-draw it for them as the drawing user sees it.
 
 ### map.clicked
 

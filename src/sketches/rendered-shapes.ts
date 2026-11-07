@@ -9,7 +9,8 @@
  * way are kept. That is the value of the Store, the sketches applied over it, and the rows drawn
  * moved by their state (a sketch of this client that moves them, the arrow keys), which are made a
  * shape with the computation the GPU draws them with;
- * a shape being drawn is read here as well, and has no ID of its own. A reader names what it reads here and never picks a place: each reader that differs
+ * a shape being drawn (a sketch of an edit `create` with its vertices placed so far) is read here as
+ * well, and has no ID of its own. A reader names what it reads here and never picks a place: each reader that differs
  * from the shape itself has its own read, which says how.
  *
  * What the GPU moves stays with the GPU: the rows are drawn by the bits of their state and the
@@ -25,12 +26,14 @@ import { featureTablesInternals } from '../feature-table/feature-tables.js';
 import { BULK_MOVE_SET, type RowStateSets } from '../feature-table/row-state.js';
 import { forEachSnapRow, type SnapRow } from '../feature-table/snap-rows.js';
 import type { EnuEdit } from '../geometry/enu-transforms.js';
-import type { TentativeState } from '../shared/types/model.js';
 import { getDisplayFeatures } from '../store/local-visibility.js';
 import type { Store } from '../store/store.js';
 import type { BoundingBox, DragTargets, Feature } from '../store/types.js';
 import type { DraggedFeatures } from './sketch-controller.js';
-import type { SketchView } from './sketch-view.js';
+import type { ShapeBeingDrawn, SketchView } from './sketch-view.js';
+
+/** No shape being drawn */
+const NO_DRAWINGS: readonly ShapeBeingDrawn[] = Object.freeze([]);
 
 /**
  * What the shapes read of the sketches
@@ -179,9 +182,21 @@ export class RenderedShapes {
     return dragged;
   }
 
-  /** The shape being drawn: it has no ID, and no feature of the document holds it */
-  tentative(): TentativeState | null {
-    return this.#store.getTentative();
+  /**
+   * The shapes being drawn, in the order they are drawn: they have no ID, and no feature of the
+   * document holds them
+   */
+  drawings(): readonly ShapeBeingDrawn[] {
+    return this.#sketches?.view.drawings() ?? NO_DRAWINGS;
+  }
+
+  /** The shape this client draws (the last one it added; null when it draws none) */
+  drawing(): ShapeBeingDrawn | null {
+    const drawings = this.drawings();
+    for (let i = drawings.length - 1; i >= 0; i--) {
+      if (drawings[i].owner === null) return drawings[i];
+    }
+    return null;
   }
 
   // ==========================================================================

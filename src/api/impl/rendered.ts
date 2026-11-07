@@ -24,7 +24,7 @@ import { featureTablesInternals } from '../../feature-table/feature-tables.js';
 import type { SelectionUIConfig } from '../../shared/config/selection.js';
 import { createCoordinateTransform } from '../../shared/math/index.js';
 import type { RenderedShapes } from '../../sketches/rendered-shapes.js';
-import { featureIdsOfEdit } from '../../sketches/sketch-edits.js';
+import { featureIdsOfEdit, isDrawingEdit } from '../../sketches/sketch-edits.js';
 import type { Store } from '../../store/store.js';
 import { selectionBoxOf } from '../../view/ui/bounds.js';
 import type { SelectionExtensionRegistry } from '../../view/ui/selection-ui/extension-registry.js';
@@ -130,7 +130,11 @@ export function createRendered(deps: RenderedDeps): {
   };
   // The features the sketches create, by the IDs they are drawn with
   let created: readonly string[] = NO_IDS;
+  // Whether a shape being drawn changed: it has no ID
+  let drawingChanged = false;
   const sketchChanged = (sketch: Sketch, ended: boolean): void => {
+    // A shape being drawn has no ID
+    if (sketch.edits.some(isDrawingEdit)) drawingChanged = true;
     for (const id of created) changed.add(id);
     created = shapes.createdIds();
     for (const id of created) changed.add(id);
@@ -143,8 +147,6 @@ export function createRendered(deps: RenderedDeps): {
     touched.set(sketch.id, now);
     for (const id of now) changed.add(id);
   };
-  // Whether the shape being drawn changed: it has no ID
-  let drawingChanged = false;
 
   // The rows in a moving set, and the changes of them read last
   let moving: readonly string[] = NO_IDS;
@@ -193,9 +195,6 @@ export function createRendered(deps: RenderedDeps): {
     events.on('sketch.added', ({ sketch }) => sketchChanged(sketch, false)),
     events.on('sketch.updated', ({ sketch }) => sketchChanged(sketch, false)),
     events.on('sketch.removed', ({ sketch }) => sketchChanged(sketch, true)),
-    events.on('preview.changed', () => {
-      drawingChanged = true;
-    }),
     // Told once the frame that draws the changes is drawn, with the values of that frame
     deps.onFrameDrawn(() => {
       const moved = rowsMoved();

@@ -228,7 +228,7 @@ describe('tracing of the line drawing mode', () => {
     input.click(P0);
     input.move(P2);
 
-    const tentative = store.getTentative();
+    const tentative = engine.context.shapes.drawing();
     expect(tentative?.coordinates).toEqual([P0, P1, P2]);
     // The confirmed part remains a single point (the path and the cursor point are unconfirmed)
     expect(tentative?.confirmedCount).toBe(1);
@@ -241,7 +241,7 @@ describe('tracing of the line drawing mode', () => {
     input.move(P2);
     input.move(AWAY);
 
-    expect(store.getTentative()?.coordinates).toEqual([P0, AWAY]);
+    expect(engine.context.shapes.drawing()?.coordinates).toEqual([P0, AWAY]);
   });
 
   it('inserts nothing when tracing is disabled', () => {
@@ -386,7 +386,7 @@ describe('tracing of the polygon drawing mode', () => {
     input.click(P0);
     input.move(P2);
 
-    const tentative = store.getTentative();
+    const tentative = engine.context.shapes.drawing();
     expect(tentative?.type).toBe('Polygon');
     expect((tentative!.coordinates as Coordinate[][])[0]).toEqual([P0, P1, P2, P0]);
     expect(tentative?.confirmedCount).toBe(1);

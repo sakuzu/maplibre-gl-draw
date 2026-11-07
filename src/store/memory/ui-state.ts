@@ -7,13 +7,12 @@
  * - MemoryClientState: the state of this client that the Store contract holds (selection,
  *   editing, vertex selection, mode, read-only, interaction lock, local visibility). The
  *   in-memory Store keeps it next to the document.
- * - MemoryDrawingState: the state only the drawing reads (the geometry being drawn, the box
- *   selection, the drag, the vertices that follow along). Core keeps it around whatever Store
+ * - MemoryDrawingState: the state only the drawing reads (the box selection, the drag, the
+ *   vertices that follow along). Core keeps it around whatever Store
  *   holds the rest.
  *
  * Each setter merges its change into the ChangeBus it was given: the selection, the editing
- * and the mode with their categories, the geometry being drawn with `tentative`, and the rest
- * with the uiStateChanged flag.
+ * and the mode with their categories, and the rest with the uiStateChanged flag.
  */
 
 import type {
@@ -22,7 +21,6 @@ import type {
   Mode,
   Selection,
   SelectionType,
-  TentativeState,
   VertexSelection,
 } from '../types.js';
 import type { ChangeBus } from './change-bus.js';
@@ -175,25 +173,12 @@ export class MemoryClientState {
 export class MemoryDrawingState {
   readonly #bus: ChangeBus;
 
-  #tentative: TentativeState | null = null;
   #boxSelection: BoxSelection | null = null;
   #dragState: DragState | null = null;
   #followedVertices: VertexSelection[] | null = null;
 
   constructor(bus: ChangeBus) {
     this.#bus = bus;
-  }
-
-  // Tentative
-
-  getTentative(): TentativeState | null {
-    return this.#tentative;
-  }
-
-  setTentative(state: TentativeState | null): void {
-    const previous = this.#tentative;
-    this.#tentative = state ? { ...state, coordinates: [...state.coordinates] } : null;
-    this.#bus.merge({ tentative: { state: this.#tentative, previous } });
   }
 
   // BoxSelection

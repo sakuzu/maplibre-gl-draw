@@ -43,6 +43,11 @@ const CONTRACT: ReadonlySet<string> = new Set<keyof Store>([
   'transact',
   'createFeature',
   'updateFeature',
+  'applyEdits',
+  // Optional: read when a sketch (the shape being drawn among them) is checked and applied
+  'transforms',
+  'getVertexIds',
+  'findVertices',
   'deleteFeature',
   'createLayer',
   'updateLayer',

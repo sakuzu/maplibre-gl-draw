@@ -518,6 +518,58 @@ for (const kind of KINDS) {
       expect(failures).toEqual([]);
     });
 
+    it('draws a shape being drawn apart from the features, and writes it once it is a feature', () => {
+      const { draw, engine, failures } = open(kind);
+      line(draw);
+      const shape = (coordinates: number[][]): SketchEdit => ({
+        kind: 'create',
+        feature: { type: 'LineString', geometry: { type: 'LineString', coordinates }, id: 's' },
+        placedVertexCount: 1,
+        highlightedVertexIndex: 0,
+      });
+      // A line of one position is a shape being drawn
+      const sketch = draw.sketches.add({ edits: [shape([[5, 5]])] }) as Sketch;
+      expect(sketch).not.toBeNull();
+      const view = engine.sketches.view;
+      expect(view.creates()).toEqual([]);
+      expect(view.drawings()).toEqual([
+        expect.objectContaining({
+          owner: null,
+          type: 'LineString',
+          coordinates: [[5, 5]],
+          layerId: 'default-layer',
+          confirmedCount: 1,
+          highlightedVertexIndex: 0,
+          pendingFeatureId: 's',
+        }),
+      ]);
+      expect(engine.context.shapes.drawing()?.coordinates).toEqual([[5, 5]]);
+      // Not yet a feature: committing it throws, and changes nothing
+      expect(() => draw.sketches.commit(sketch.id)).toThrow(
+        expect.objectContaining({ code: 'invalid-input' }),
+      );
+      expect(draw.sketches.has(sketch.id)).toBe(true);
+      draw.sketches.update(sketch.id, {
+        edits: [
+          shape([
+            [5, 5],
+            [6, 6],
+          ]),
+        ],
+      });
+      expect(draw.sketches.commit(sketch.id)).toBe(true);
+      expect(draw.features.get('s')?.geometry).toEqual({
+        type: 'LineString',
+        coordinates: [
+          [5, 5],
+          [6, 6],
+        ],
+      });
+      expect(view.drawings()).toEqual([]);
+      expect(engine.context.shapes.drawing()).toBeNull();
+      expect(failures).toEqual([]);
+    });
+
     it('ends the sketches of this client when the document becomes read-only, and all when it is replaced', () => {
       const { draw, events, failures } = open(kind);
       const a = line(draw);

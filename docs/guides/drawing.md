@@ -94,20 +94,24 @@ draw.options.update({
 });
 ```
 
-`preview.changed` fires every time that shape changes, and once with
-`feature: null` when it is created, discarded or left. It is not
+The shape is a sketch of this client (`draw.sketches`) of one edit
+`create`: the feature it will create, with `placedVertexCount` (how many
+vertices from the start are placed) and `highlightedVertexIndex` (the vertex
+drawn highlighted) when the mode gave it. Nothing is written while it is
+drawn. `sketch.added` tells the first shape, `sketch.updated` every change,
+and `sketch.removed` its end, `committed` once the feature is created and
+`cancelled` once it is discarded or the mode is left. `rendered.changed`
+tells, with no IDs, that a draw of the map drew it changed. They are not
 throttled, so a listener that does heavy work waits for the next draw
-itself. Besides `feature`, it carries `confirmedVertices` (how many
-vertices from the start are placed) and `highlightVertex` (the vertex
-drawn highlighted) when the mode gave them. Use it to show the length
-while drawing, or to share the shape with other users.
+itself. Use them to show the length while drawing.
 
 ```ts
 import { length } from '@sakuzu/maplibre-gl-draw/geometry';
 
-draw.on('preview.changed', ({ feature }) => {
-  if (feature?.geometry.type === 'LineString') {
-    console.log(`${Math.round(length(feature.geometry))} m`);
+draw.on('sketch.updated', ({ sketch }) => {
+  const edit = sketch.edits[0];
+  if (edit?.kind === 'create' && edit.feature.geometry.type === 'LineString') {
+    console.log(`${Math.round(length(edit.feature.geometry))} m`);
   }
 });
 ```

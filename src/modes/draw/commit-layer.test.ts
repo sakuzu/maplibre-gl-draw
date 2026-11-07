@@ -69,6 +69,8 @@ let imageRequests: unknown[];
 let clickAt: (lng: number, lat: number) => void;
 /** Presses a key in the current mode, through the same route */
 let pressKey: (key: string) => void;
+/** The shapes as they are seen, where the shape being drawn is read */
+let shapes: ReturnType<typeof createModeHarness>['shapes'];
 
 beforeEach(() => {
   store = new MemoryStore();
@@ -94,6 +96,7 @@ beforeEach(() => {
     getWritableLayerId,
   });
   manager.registerMode('select', () => ({ modeName: 'select' }));
+  shapes = harness.shapes;
   harness.register('draw_point', drawPointMode);
   harness.register('draw_line', drawLineMode);
   harness.register('draw_polygon', drawPolygonMode);
@@ -239,7 +242,8 @@ describe('losing the layer while drawing', () => {
     expect(() => pressKey('Enter')).not.toThrow();
     expect(store.getMode()).toBe('select');
     expect(store.listFeatures()).toEqual([]);
-    expect(store.getTentative()).toBeNull();
+    // The shape being drawn went with the drawing
+    expect(shapes.drawing()).toBeNull();
   });
 
   it('discards a point and returns to select when the layer was locally hidden', () => {

@@ -36,24 +36,35 @@ function start(store: MemoryStore) {
     getCanvas: () => canvas,
     getZoom: () => 10,
   } as unknown as MapLibreMap;
+  store.createLayer({
+    id: 'l1',
+    name: 'l1',
+    visible: true,
+    locked: false,
+    opacity: 1,
+    items: [],
+    styleRule: undefined,
+    metadata: undefined,
+  });
   const modeManager = new ModeManagerImpl(store);
   const harness = createModeHarness({ store, map, modeManager, getWritableLayerId: () => 'l1' });
   const mode = drawCircleMode(harness.modeContext());
   mode.onEnter?.();
-  return mode;
+  return { mode, harness };
 }
 
 describe('the radius handle of the circle drawing mode', () => {
   it('the handle lands on the pointer at a high latitude (60 deg, 100 km, 45 deg)', () => {
     const store = new MemoryStore();
-    const mode = start(store);
+    const { mode, harness } = start(store);
     const center: Coordinate = [10, 60];
     const target = destinationPoint(center, 100_000, 45);
 
     mode.onClick?.(pointer(center));
     mode.onPointerMove?.(pointer(target));
 
-    const tentative = store.getTentative();
+    // The shape being drawn, shown by a sketch of this client
+    const tentative = harness.shapes.drawing();
     expect(tentative?.type).toBe('Circle');
     if (tentative?.type !== 'Circle') return;
     const handle = destinationPoint(

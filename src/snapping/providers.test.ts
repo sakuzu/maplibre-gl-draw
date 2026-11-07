@@ -114,7 +114,7 @@ const WIDE_BBOX = { minX: -1, minY: -1, maxX: 1, maxY: 1 };
 function vertexCandidates(ctx: SnapProviderContext = providerContext()): SnapCandidate[] {
   return createStoreVertexSnapProvider({
     store,
-    shapes: new RenderedShapes(store),
+    shapes: shapesOf(store),
     spatialIndex,
     snapTargets,
   }).candidates(WIDE_BBOX, ctx);
@@ -123,7 +123,7 @@ function vertexCandidates(ctx: SnapProviderContext = providerContext()): SnapCan
 function edgeCandidates(ctx: SnapProviderContext = providerContext()): SnapSegmentCandidate[] {
   return createStoreEdgeSnapProvider({
     store,
-    shapes: new RenderedShapes(store),
+    shapes: shapesOf(store),
     spatialIndex,
     snapTargets,
   })
@@ -137,7 +137,7 @@ function intersectionCandidates(
 ): SnapPointCandidate[] {
   return createStoreIntersectionSnapProvider({
     store,
-    shapes: new RenderedShapes(store),
+    shapes: shapesOf(store),
     spatialIndex,
     snapTargets,
   })
@@ -150,7 +150,23 @@ function coordsOf(candidates: SnapCandidate[]): Coordinate[] {
   return candidates.map((c) => (isSegmentCandidate(c) ? c.start : c.coordinate));
 }
 
+/** The shape being drawn the shapes read (a sketch of this client shows it in the instance) */
+let drawn: TentativeState | null = null;
+
+/** Sets the shape being drawn */
+function drawingNow(state: TentativeState | null): void {
+  drawn = state;
+}
+
+/** The shapes of a Store, which read the shape being drawn set with `drawingNow` */
+function shapesOf(store: MemoryStore): RenderedShapes {
+  const shapes = new RenderedShapes(store);
+  shapes.drawing = () => (drawn ? { ...drawn, owner: null } : null);
+  return shapes;
+}
+
 beforeEach(() => {
+  drawn = null;
   store = new MemoryStore();
   spatialIndex = new RBushSpatialIndex();
   store.createLayer(makeLayer('l1'));
@@ -581,7 +597,7 @@ describe('the built-in edge provider', () => {
 
     const candidates = createStoreEdgeSnapProvider({
       store,
-      shapes: new RenderedShapes(store),
+      shapes: shapesOf(store),
       spatialIndex,
     })
       .candidates({ minX: -0.01, minY: -0.01, maxX: 0.01, maxY: 0.01 }, providerContext())
@@ -634,7 +650,7 @@ describe('the built-in intersection provider', () => {
 
     const candidates = createStoreIntersectionSnapProvider({
       store,
-      shapes: new RenderedShapes(store),
+      shapes: shapesOf(store),
       spatialIndex,
       snapTargets,
       messages: { snapIntersection: '交点' },
@@ -649,7 +665,7 @@ describe('the built-in intersection provider', () => {
     addCrossingLines();
 
     const descriptions = createBuiltInSnapProviders(
-      { store, shapes: new RenderedShapes(store), spatialIndex, snapTargets },
+      { store, shapes: shapesOf(store), spatialIndex, snapTargets },
       { messages: { snapIntersection: '交点' } },
     )
       .flatMap((provider) => provider.candidates(WIDE_BBOX, providerContext()))
@@ -785,8 +801,8 @@ describe('the built-in guide provider', () => {
     options?: { northStepDegrees?: number },
   ): SnapSegmentCandidate[] {
     store.setMode(mode);
-    store.setTentative(tentative);
-    return guideProvider({ store, shapes: new RenderedShapes(store) }, options)
+    drawingNow(tentative);
+    return guideProvider({ store, shapes: shapesOf(store) }, options)
       .candidates(WIDE_BBOX, providerContext())
       .filter(isSegmentCandidate);
   }
@@ -858,7 +874,7 @@ describe('the built-in guide provider', () => {
 
   it('takes the descriptions from the messages table given to it', () => {
     store.setMode('draw_line');
-    store.setTentative(
+    drawingNow(
       lineTentative(
         [
           [0, 0],
@@ -869,7 +885,7 @@ describe('the built-in guide provider', () => {
       ),
     );
     const candidates = guideProvider(
-      { store, shapes: new RenderedShapes(store) },
+      { store, shapes: shapesOf(store) },
       { messages: { snapNorth: '北基準', snapExtension: '延長線' } },
     )
       .candidates(WIDE_BBOX, providerContext())
@@ -1007,9 +1023,9 @@ describe('the step angle of the built-in guide provider', () => {
   /** The rounded bearings of the north-based guides of the built-in set */
   function builtInGuideBearings(getNorthStepDegrees?: () => number): number[] {
     store.setMode('draw_line');
-    store.setTentative(FIRST_POINT);
+    drawingNow(FIRST_POINT);
     const guide = createBuiltInSnapProviders(
-      { store, shapes: new RenderedShapes(store), spatialIndex, snapTargets },
+      { store, shapes: shapesOf(store), spatialIndex, snapTargets },
       { getNorthStepDegrees },
     )[3];
     return guide
@@ -1034,9 +1050,9 @@ describe('the step angle of the built-in guide provider', () => {
   it('reads the step at every query, so a change applies without rebuilding the provider', () => {
     let step = 45;
     store.setMode('draw_line');
-    store.setTentative(FIRST_POINT);
+    drawingNow(FIRST_POINT);
     const guide = createBuiltInSnapProviders(
-      { store, shapes: new RenderedShapes(store), spatialIndex, snapTargets },
+      { store, shapes: shapesOf(store), spatialIndex, snapTargets },
       { getNorthStepDegrees: () => step },
     )[3];
 
@@ -1050,12 +1066,12 @@ describe('the step angle of the built-in guide provider', () => {
     (step) => {
       expect(builtInGuideBearings(() => step)).toHaveLength(8);
       store.setMode('draw_line');
-      store.setTentative(FIRST_POINT);
+      drawingNow(FIRST_POINT);
       expect(
-        guideProvider(
-          { store, shapes: new RenderedShapes(store) },
-          { northStepDegrees: step },
-        ).candidates(WIDE_BBOX, providerContext()),
+        guideProvider({ store, shapes: shapesOf(store) }, { northStepDegrees: step }).candidates(
+          WIDE_BBOX,
+          providerContext(),
+        ),
       ).toHaveLength(8);
     },
   );

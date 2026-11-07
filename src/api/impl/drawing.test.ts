@@ -24,6 +24,7 @@ import {
 import type { Draw } from '../draw.js';
 import { createDraw } from '../draw.js';
 import { DrawError } from '../errors.js';
+import type { Sketch } from '../sketches.js';
 import { createDrawOnEngine } from './create-draw.js';
 import { createEngine } from './engine.js';
 import { tableDiagnosticsOf } from './table-diagnostics.js';
@@ -136,7 +137,13 @@ describe('drawing', () => {
     draw = createDraw(createMapStub().map);
     draw.setMode('draw_polygon');
     const previews: unknown[] = [];
-    draw.on('preview.changed', ({ feature }) => previews.push(feature?.geometry));
+    // The shape being drawn is a sketch of this client of an edit create
+    const shown = ({ sketch }: { sketch: Sketch }) => {
+      const edit = sketch.edits[0];
+      if (edit?.kind === 'create') previews.push(edit.feature.geometry);
+    };
+    draw.on('sketch.added', shown);
+    draw.on('sketch.updated', shown);
     draw.drawing.addVertex([0, 0]);
     draw.drawing.addVertex([1, 0]);
     draw.drawing.moveTo([1, 1]);

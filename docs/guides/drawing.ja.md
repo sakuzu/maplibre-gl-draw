@@ -93,20 +93,24 @@ draw.options.update({
 });
 ```
 
-その形が変わるたびに `preview.changed` が届き、形が作られたとき、
-捨てられたとき、モードを離れたときには `feature: null` で 1 回届きます。
-間引きはしないので、重い処理をするリスナーは自分で次に描くときまで
-待ってください。`feature` のほかに、モードが渡したときは
-`confirmedVertices` (始めから何個の頂点が置かれたか) と
-`highlightVertex` (強調して描く頂点) も届きます。描いている途中の長さを
-表示したり、形をほかの利用者と共有したりするのに使います。
+その形は、この端末の 1 つの `create` の編集を持つ下書き (`draw.sketches`)
+です。作られる地物と、モードが渡したときは `placedVertexCount` (始めから
+何個の頂点が置かれたか) と `highlightedVertexIndex` (強調して描く頂点) を
+持ちます。描いている間は何も書き込まれません。最初の形は `sketch.added`、
+変わるたびに `sketch.updated`、終わりは `sketch.removed` で届き、地物が
+作られたときは `committed`、捨てられたときとモードを離れたときは
+`cancelled` です。地図の描画がその変化を描いたことは、ID なしの
+`rendered.changed` で届きます。間引きはしないので、重い処理をする
+リスナーは自分で次に描くときまで待ってください。描いている途中の長さを
+表示するのに使います。
 
 ```ts
 import { length } from '@sakuzu/maplibre-gl-draw/geometry';
 
-draw.on('preview.changed', ({ feature }) => {
-  if (feature?.geometry.type === 'LineString') {
-    console.log(`${Math.round(length(feature.geometry))} m`);
+draw.on('sketch.updated', ({ sketch }) => {
+  const edit = sketch.edits[0];
+  if (edit?.kind === 'create' && edit.feature.geometry.type === 'LineString') {
+    console.log(`${Math.round(length(edit.feature.geometry))} m`);
   }
 });
 ```

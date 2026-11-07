@@ -74,6 +74,7 @@ import {
   checkSketchEdits,
   featureEditsOf,
   featureIdsOfEdit,
+  isDrawingEdit,
   isSelectionEdit,
   isVertexEdit,
   mapVertices,
@@ -84,7 +85,12 @@ import {
   withoutVertices,
 } from './sketch-edits.js';
 import { rowsByValues, type SketchMotion } from './sketch-motion.js';
-import { type DrawnCreate, SketchView } from './sketch-view.js';
+import {
+  type DrawnCreate,
+  type ShapeBeingDrawn,
+  SketchView,
+  shapeBeingDrawnOf,
+} from './sketch-view.js';
 
 /** The keys of the input of a sketch */
 const INPUT_KEYS: readonly string[] = ['id', 'edits', 'owner'];
@@ -119,9 +125,15 @@ export interface SketchControllerDeps {
    *
    * @param id The ID it gets when its input has none
    * @param layerId The layer it goes into when its input names neither layer nor group
+   * @param partial Whether it is a shape being drawn, whose geometry may have fewer positions
    * @throws DrawError as `features.create` does for a wrong input
    */
-  readonly prepareFeature: (input: FeatureInput, id: string, layerId: string) => Feature;
+  readonly prepareFeature: (
+    input: FeatureInput,
+    id: string,
+    layerId: string,
+    partial?: boolean,
+  ) => Feature;
 }
 
 /**
@@ -710,8 +722,8 @@ export class SketchController {
           ? this.#deps.getActiveLayerId()
           : undefined;
       if (layerId !== undefined) createLayers.set(i, layerId);
-      // The input is checked as it is created
-      this.#deps.prepareFeature(input, createKey(id, i), layerId ?? '');
+      // The input is checked as it is created (a shape being drawn may have fewer positions)
+      this.#deps.prepareFeature(input, createKey(id, i), layerId ?? '', isDrawingEdit(edit));
     });
     // The vertices of a Store that gives its vertices IDs are kept by their IDs
     const getVertexIds = store.getVertexIds;
@@ -1196,7 +1208,7 @@ export class SketchController {
       const own = store.getFeature(id);
       if (own && this.#shown(own)) drawn.set(id, feature);
     }
-    this.view.set(drawn, this.#drawnCreates());
+    this.view.set(drawn, this.#drawnCreates(), this.#drawings());
   }
 
   /**
@@ -1294,12 +1306,15 @@ export class SketchController {
     };
   }
 
-  /** The features the sketches create, as they are drawn (the ones whose layer is not shown left out) */
+  /**
+   * The features the sketches create, as they are drawn (the ones whose layer is not shown left
+   * out, and the shapes being drawn, which are drawn apart)
+   */
   #drawnCreates(): DrawnCreate[] {
     const out: DrawnCreate[] = [];
     for (const entry of this.#ordered()) {
       entry.sketch.edits.forEach((edit, i) => {
-        if (edit.kind !== 'create') return;
+        if (edit.kind !== 'create' || isDrawingEdit(edit)) return;
         const key = createKey(entry.sketch.id, i);
         let feature: Feature;
         try {
@@ -1320,6 +1335,44 @@ export class SketchController {
           },
         });
       });
+    }
+    return out;
+  }
+
+  /**
+   * The shapes being drawn (`isDrawingEdit`), in the order they are drawn: in the layer each will
+   * be created in, whatever its layer shows; a shape whose layer or group is gone is left out
+   */
+  #drawings(): ShapeBeingDrawn[] {
+    const out: ShapeBeingDrawn[] = [];
+    for (const entry of this.#ordered()) {
+      entry.sketch.edits.forEach((edit, i) => {
+        if (edit.kind !== 'create' || !isDrawingEdit(edit)) return;
+        const key = createKey(entry.sketch.id, i);
+        let feature: Feature;
+        try {
+          feature = this.#deps.prepareFeature(
+            edit.feature,
+            key,
+            entry.createLayers.get(i) ?? '',
+            true,
+          );
+        } catch {
+          return;
+        }
+        out.push(shapeBeingDrawnOf(feature, edit, entry.sketch.owner));
+      });
+    }
+    return out;
+  }
+
+  /** The sketches of this client that hold a shape being drawn, in the order they were added */
+  ownDrawings(): Sketch[] {
+    const out: Sketch[] = [];
+    for (const entry of this.#entries.values()) {
+      if (entry.sketch.owner === null && entry.sketch.edits.some(isDrawingEdit)) {
+        out.push(entry.sketch);
+      }
     }
     return out;
   }

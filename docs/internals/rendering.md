@@ -83,9 +83,9 @@ interface RenderCoordinator {
 `shouldRepaint(changes)` is true when the `StoreChange` carry any of
 `features`, `rows` and `opened` (a Store that holds its features as
 rows), `layers` (including the order between layers), `groups`, `order`
-(the items put in another place), `selection`, `tentative` (the
-in-progress geometry of a drawing mode), `uiStateChanged` (drag state,
-box selection) or `reset`.
+(the items put in another place), `selection`, `uiStateChanged` (drag
+state, box selection) or `reset`. The sketches, the shape being drawn
+among them, ask for the next draw themselves.
 
 The coordinator only schedules a draw. What the draw redraws, and what
 it rebuilds, is decided by the custom layer from its own Store

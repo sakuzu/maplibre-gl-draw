@@ -294,7 +294,8 @@ export function createEngine(
     store,
     generateId: context.generateFeatureId,
     getActiveLayerId: context.getActiveLayerId,
-    prepareFeature: (input, id, layerId) => prepareFeatureInput(store, input, id, layerId),
+    prepareFeature: (input, id, layerId, partial) =>
+      prepareFeatureInput(store, input, id, layerId, partial),
   });
   context.shapes.useSketches(sketches);
 
@@ -360,6 +361,7 @@ export function createEngine(
     customLayer,
     modeManager,
     featureCompanions,
+    sketches,
     // The event hub is made once the engine is set up, before any plugin is added
     emitPluginEvent: <K extends keyof DrawEvents>(event: K, payload: DrawEvents[K]) =>
       emitPluginEvent(events, event, payload),

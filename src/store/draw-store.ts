@@ -82,7 +82,6 @@ import type {
   SelectionBulk,
   SelectionType,
   StoreChange,
-  TentativeState,
   UpdateSource,
   VertexSelection,
 } from './types.js';
@@ -638,13 +637,6 @@ export class DrawStore implements Store {
   // ============================================================================
   // The state only the drawing reads (kept here)
   // ============================================================================
-
-  getTentative(): TentativeState | null {
-    return this.#drawing.getTentative();
-  }
-  setTentative(state: TentativeState | null): void {
-    this.#drawing.setTentative(state);
-  }
 
   getBoxSelection(): BoxSelection | null {
     return this.#drawing.getBoxSelection();

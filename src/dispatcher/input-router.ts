@@ -447,7 +447,7 @@ export function createInputRouter(deps: InputRouterDeps): InputRouter {
     if (!handler) return false;
 
     // The single place where the longitude of the input is decided (see toStoredCopy)
-    const event = toStoredCopy(input, firstTentativeCoordinate(context.shapes.tentative()));
+    const event = toStoredCopy(input, firstTentativeCoordinate(context.shapes.drawing()));
 
     switch (event.type) {
       case 'click':

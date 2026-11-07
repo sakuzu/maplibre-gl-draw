@@ -12,7 +12,7 @@
  *   colors, and the frame of the selection around the feature finished
  * - the hit test: nothing where the shape being drawn is, the feature once finished
  * - the snapping: the pointer is pulled to another feature, and never to the shape being drawn
- * - the events of the shape being drawn (`preview.changed`), of the features and the document
+ * - the events of the shape being drawn (the sketch that shows it), of the features and the document
  * - `features.list` and `features.get`, and the mode
  * - the image of the map taken while the shape is drawn (without the shape)
  *
@@ -205,10 +205,13 @@ const reset = async (page: Page): Promise<void> => {
   await settle(page);
 };
 
-/** The `preview.changed` events, as the type and the number of positions they tell */
+/**
+ * The events of the sketch of the shape being drawn, as the type and the number of positions they
+ * tell
+ */
 const previews = (recorded: readonly Recorded[]): string[] =>
   recorded
-    .filter((e) => e.name === 'preview.changed')
+    .filter((e) => e.name === 'drawing')
     .map((e) => (e.preview ? `${e.preview} ${e.positions}` : 'cleared'));
 
 /** The targets of the `snap.changed` events */
@@ -226,7 +229,7 @@ interface Drawing {
   drop(page: Page): Promise<void>;
   /** A point on the shape being drawn, off its vertices */
   on: MapPoint;
-  /** The `preview.changed` told while the shape is drawn, the last one */
+  /** The shape being drawn told while the shape is drawn, the last one */
   lastPreview: string | null;
   /** The type of the feature finished, and its number of positions */
   created: { type: string; positions: number } | null;

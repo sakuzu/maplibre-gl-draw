@@ -202,8 +202,8 @@ describe('a Store of the host', () => {
     expect(document.getMode()).toBe('draw_line');
     expect(document.isReadOnly()).toBe(true);
     // The drawing state stays with core
-    store.setTentative({ type: 'LineString', coordinates: [[0, 0]], layerId: 'l1' });
-    expect(store.getTentative()).not.toBeNull();
+    store.setDragState({ operation: 'move', movingFeatureIds: ['f1'] });
+    expect(store.getDragState()).not.toBeNull();
   });
 
   it('applies a change made on the Store of the host (from elsewhere) even while read-only', () => {

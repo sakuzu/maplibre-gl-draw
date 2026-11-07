@@ -518,7 +518,9 @@ A `ModeContext` has everything of the context of a plugin but
 - `preview.set(feature, options)` shows the shape being drawn, and
   `preview.clear()` hides it. `confirmedVertices` draws the line up to
   that vertex solid and the rest dashed, and `highlightVertex` marks a
-  vertex, such as the first one that closes an area
+  vertex, such as the first one that closes an area. The shape is a
+  sketch of this client of an edit `create` (`draw.sketches`), which
+  `commitFeature` ends with the feature it writes
 - `hitTest(point)` returns the topmost feature or dataset row at a
   point on the screen, and `snap(point)` where that point snaps to
 - `cursor.set(cursor)` and `cursor.reset()` change the cursor of the

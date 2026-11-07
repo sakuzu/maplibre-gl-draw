@@ -571,12 +571,11 @@ export interface TableGroup extends GroupFields {
 export type Group = ObjectGroup | TableGroup;
 
 /**
- * The geometry being drawn, before it is committed as a feature
+ * The geometry being drawn, before it is committed as a feature, as the renderer of a shape being
+ * drawn reads it
  *
- * A drawing mode keeps it in the Store while the user draws, and it is cleared when the
- * feature is committed or the drawing is cancelled. It is local state of this instance; a
- * subscriber that wants the drawing in progress reads it from the notifications of the Store
- * ({@link StoreChange.tentative}).
+ * A drawing mode shows it by a sketch of this client of an edit `create` (`draw.sketches`), and it
+ * goes with the sketch when the feature is committed or the drawing is cancelled.
  */
 export interface TentativeState {
   /** The type of the feature being drawn */
@@ -725,11 +724,6 @@ export interface StoreChange {
   editing?: {
     started?: string[];
     ended?: string[];
-  };
-  /** The new geometry being drawn and the one before it (null when there is none) */
-  tentative?: {
-    state: TentativeState | null;
-    previous: TentativeState | null;
   };
   /** The new mode and the one before it */
   mode?: {

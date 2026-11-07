@@ -430,8 +430,7 @@ function appendChanges(target: StoreChange, changes: StoreChange, index: UpdateI
     if (changes.editing.ended) t.ended = appendField(t.ended, changes.editing.ended);
   }
 
-  // tentative / mode / metadata (overwritten)
-  if (changes.tentative) target.tentative = changes.tentative;
+  // mode / metadata (overwritten)
   if (changes.mode) target.mode = changes.mode;
   if (changes.uiStateChanged) target.uiStateChanged = true;
   if (changes.reset === true) target.reset = true;
