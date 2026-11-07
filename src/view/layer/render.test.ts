@@ -126,7 +126,6 @@ function runRenderLayers(
     getLayerOrder: (): string[] => layerOrder,
     // A layer is looked up to evaluate the style rule, but these tests do not use the rule
     getLayer: makeGetLayer(layerIds ?? layerOrder),
-    getTentative: (): null => null,
   } as unknown as Store;
 
   const customRenderers = new Map<string, FeatureTypeHandler['renderer']>();
@@ -449,7 +448,6 @@ describe('viewport of renderLayers', () => {
     const store = {
       getLayerOrder: (): string[] => ['layer-1'],
       getLayer: makeGetLayer(['layer-1']),
-      getTentative: (): null => null,
     } as unknown as Store;
 
     renderLayers(
@@ -514,7 +512,6 @@ describe('renderLayers and the retained mode of the Store', () => {
     const store = {
       getLayerOrder: (): string[] => layerOrder,
       getLayer: makeGetLayer(layerOrder),
-      getTentative: (): null => null,
     } as unknown as Store;
 
     return { r, store };
@@ -616,7 +613,6 @@ describe('renderLayers and the visible id set of immediate chunks', () => {
     const store = {
       getLayerOrder: (): string[] => layerOrder,
       getLayer: makeGetLayer(layerOrder),
-      getTentative: (): null => null,
     } as unknown as Store;
 
     renderLayers(
@@ -708,7 +704,6 @@ describe('renderLayers and the opacity of the layers', () => {
               metadata: undefined,
             } as Layer)
           : undefined,
-      getTentative: (): null => null,
     } as unknown as Store;
   }
 

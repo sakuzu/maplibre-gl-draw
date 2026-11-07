@@ -111,7 +111,6 @@ function run(options: {
     getLayerOrder: (): string[] => options.layerOrder,
     getLayer: (id: string): Layer | undefined =>
       options.layerOrder.includes(id) ? makeLayer(id) : undefined,
-    getTentative: (): null => null,
   } as unknown as Store;
 
   // The renderer of a custom type (as an external renderer may do) rewrites
