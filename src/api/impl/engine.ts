@@ -304,6 +304,7 @@ export function createEngine(
     map,
     store,
     sketches: sketches.view,
+    shapes: context.shapes,
     spatialIndex,
     featureStyle,
     selectionConfig: selectionStyle,

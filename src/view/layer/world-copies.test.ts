@@ -23,6 +23,7 @@ import { DEFAULT_FEATURE_STYLE_CONFIG } from '../../shared/config/feature-style.
 import { DEFAULT_RENDERING_CONFIG } from '../../shared/config/rendering.js';
 import { DEFAULT_SELECTION_CONFIG } from '../../shared/config/selection.js';
 import { coordinatesOf, geometryFromCoordinates } from '../../shared/utils/coordinates.js';
+import { RenderedShapes } from '../../sketches/rendered-shapes.js';
 import { MemoryStore } from '../../store/memory.js';
 import { StoreSpatialIndex } from '../../store/spatial/store-spatial-index.js';
 import type { Feature } from '../../store/types.js';
@@ -249,6 +250,7 @@ function setup(center: number, halfWidth: number, lngs: Record<string, number>) 
   const layer = createCustomLayer({
     map,
     store,
+    shapes: new RenderedShapes(store),
     spatialIndex,
     featureStyle: DEFAULT_FEATURE_STYLE_CONFIG,
     selectionConfig: DEFAULT_SELECTION_CONFIG,

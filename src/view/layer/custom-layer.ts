@@ -49,7 +49,7 @@ import type { SelectionUIConfig } from '../../shared/config/selection.js';
 import { screenScaleFrameOf, setScreenScaleFrame } from '../../shared/math/index.js';
 import type { PixelRatioInput } from '../../shared/utils/pixel-ratio.js';
 import { resolveContentPixelRatio, resolvePixelRatio } from '../../shared/utils/pixel-ratio.js';
-import { RenderedShapes } from '../../sketches/rendered-shapes.js';
+import type { RenderedShapes } from '../../sketches/rendered-shapes.js';
 import type { SketchView } from '../../sketches/sketch-view.js';
 import type { SpatialIndex } from '../../store/spatial/spatial-index.js';
 import type { Store, StoreContractView } from '../../store/store.js';
@@ -97,10 +97,9 @@ export interface CustomLayerDeps {
   map: MapLibreMap;
   store: Store;
   /**
-   * The shapes as they are seen (those of the Store alone when omitted), which everything drawn
-   * reads
+   * The shapes as they are seen, which everything drawn reads
    */
-  shapes?: RenderedShapes;
+  shapes: RenderedShapes;
   /**
    * What the sketches of the document draw (none drawn when omitted): a Store of objects is read
    * with them, and a Store of rows draws them among its rows
@@ -369,7 +368,7 @@ export function createCustomLayer(deps: CustomLayerDeps): CustomLayerInterface {
 
   // The drawing reads the Store through a view of it, which gives the document shown in place of
   // the document while there is one, and leaves the state of this client out while asked
-  const shapes = deps.shapes ?? new RenderedShapes(own);
+  const { shapes } = deps;
   const shown = createShownStore(own, shapes);
   const { store, drawn } = shown;
   // The features the sketches draw are drawn wherever they are (the index of the Store places them

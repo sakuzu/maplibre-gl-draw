@@ -20,6 +20,7 @@ import type { EngineOverlayRenderer } from '../../extension/index.js';
 import { DEFAULT_FEATURE_STYLE_CONFIG } from '../../shared/config/feature-style.js';
 import { DEFAULT_RENDERING_CONFIG } from '../../shared/config/rendering.js';
 import { DEFAULT_SELECTION_CONFIG } from '../../shared/config/selection.js';
+import { RenderedShapes } from '../../sketches/rendered-shapes.js';
 import { MemoryStore } from '../../store/memory.js';
 import { RBushSpatialIndex } from '../../store/spatial/spatial-index.js';
 import { createFeatureCompanionRegistry } from '../feature-companion.js';
@@ -198,6 +199,7 @@ function setup() {
   const layer = createCustomLayer({
     map,
     store,
+    shapes: new RenderedShapes(store),
     spatialIndex: new RBushSpatialIndex(),
     featureStyle: DEFAULT_FEATURE_STYLE_CONFIG,
     selectionConfig: DEFAULT_SELECTION_CONFIG,
