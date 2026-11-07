@@ -29,7 +29,7 @@ import { StoreSpatialIndex } from '../../store/spatial/store-spatial-index.js';
 import type { Store } from '../../store/store.js';
 import type { Coordinate, Feature, StoreChange, VertexRef } from '../../store/types.js';
 import { referenceTranslate } from '../../test-support/enu-reference.js';
-import { planeScaleFrame, STORE_KINDS } from '../../test-utils.js';
+import { createSketches, planeScaleFrame, STORE_KINDS } from '../../test-utils.js';
 import type {
   AuxiliaryHandleHit,
   AuxiliaryHandleProvider,
@@ -209,9 +209,11 @@ describe.each(STORE_KINDS)('on %s', (_kind, createStore) => {
       for (const { id } of changes.features?.updated ?? []) indexUpdates.push(id);
     });
     map = makeMap();
+    const shapes = new RenderedShapes(store);
     context = {
       store,
-      shapes: new RenderedShapes(store),
+      shapes,
+      sketches: createSketches(store, shapes),
       spatialIndex,
       map,
       plugins: undefined,
@@ -931,21 +933,19 @@ describe.each(STORE_KINDS)('on %s', (_kind, createStore) => {
       expect(batches).toHaveLength(0);
     });
 
-    it('a move drag also goes intermediate -> commit, with several features in 1 transaction', () => {
+    it('a move drag writes nothing in its middle, and several features in 1 transaction', () => {
       putFeature(square('f2', 100, 50));
       watchFeatureBatches();
 
       startMoveDrag(['f1', 'f2'], [0, 0]);
       handler.updateDrag(dragEvent(3, 4, [0, 0]), context);
+      expect(batches).toHaveLength(0);
       handler.endDrag(context);
 
-      // One drag frame is one batch of intermediates for both; the commit is both in 1 batch
-      const commits = commitBatches();
-      expect(commits).toHaveLength(1);
-      expect(updatesOf(commits[0]).map((u) => u.id)).toEqual(['f1', 'f2']);
-      const intermediates = batches.filter((c) => updatesOf(c).some((u) => u.isIntermediate));
-      expect(intermediates).toHaveLength(1);
-      expect(updatesOf(intermediates[0]).map((u) => u.id)).toEqual(['f1', 'f2']);
+      // The commit is both in 1 batch
+      expect(batches).toHaveLength(1);
+      expect(commitBatches()).toHaveLength(1);
+      expect(updatesOf(batches[0]).map((u) => u.id)).toEqual(['f1', 'f2']);
       expectRingNear('f1', movedSquare(0, 0, [0, 0], [3, 4]));
       expectRingNear('f2', movedSquare(100, 50, [0, 0], [3, 4]));
     });
@@ -1561,11 +1561,24 @@ describe.each(STORE_KINDS)('on %s', (_kind, createStore) => {
         store as unknown as { abortIntermediateUpdates?: (ids: string[]) => void }
       ).abortIntermediateUpdates = (ids) => calls.push(`abort:${ids.join(',')}`);
 
+      startVertexDrag('f1', { ring: 0, index: 1 }, [10, 0]);
+      handler.updateDrag(dragEvent(11, 2, [10, 0]), context);
+      handler.reset(store);
+
+      expect(calls).toEqual(['f1:intermediate', 'f1:intermediate', 'abort:f1']);
+    });
+
+    it('writes nothing for a move: nothing was written in its middle', () => {
+      const calls: string[] = [];
+      store.subscribe((changes) => {
+        for (const u of changes.features?.updated ?? []) calls.push(u.id);
+      });
+
       startMoveDrag(['f1'], [0, 0]);
       handler.updateDrag(dragEvent(3, 4, [0, 0]), context);
       handler.reset(store);
 
-      expect(calls).toEqual(['f1:intermediate', 'f1:intermediate', 'abort:f1']);
+      expect(calls).toEqual([]);
     });
 
     it('restores the properties a resize or radius drag changed', () => {

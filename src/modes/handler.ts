@@ -103,6 +103,11 @@ export interface EngineModeContext {
   getClickPosition?(): [number, number] | null;
   /** The emitter of the signals of the engine (the drag, the image request) */
   eventEmitter: import('../shared/utils/event-emitter.js').EventEmitter;
+  /**
+   * The sketches of this draw instance: a move, a rotation and a resize of the select mode are
+   * shown by a sketch while they are dragged
+   */
+  sketches: import('../sketches/sketch-controller.js').SketchController;
   /** The resolved colors and sizes of the selection UI */
   selectionStyle: import('../shared/config/selection.js').SelectionUIConfig;
   /**

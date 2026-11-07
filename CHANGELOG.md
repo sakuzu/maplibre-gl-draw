@@ -331,6 +331,17 @@ writing it. Its changes are listed after those of 3.0.0.
 
 ### Changed in 3.0.0
 
+- A move, a rotation and a resize of the select mode are shown by a sketch of
+  this client: the document does not change while they go on, `draw.sketches`
+  lists the sketch, `draw.rendered` reads the features where they are drawn,
+  and one write gives the features the values the sketch leaves them with once
+  let go, over what they are then. `feature.updated` with `intermediate: true`
+  is told for the other drags only. What the drag edits is not hit while it
+  goes on. A drag whose features are all deleted, locked or hidden meanwhile
+  writes nothing, and `drag.ended` says it was cancelled
+- A sketch of this client of one edit `translate`, `rotate` or `scale` draws the
+  rows of a Store of rows by a moving set, whatever their number: their values
+  are not touched, and a read makes the shape where it is drawn
 - A locked feature among the selected features stays as it is and the
   others change, as `selection.delete` already did: a drag, the arrow keys
   and `selection.update` leave it alone in place of refusing the whole, the

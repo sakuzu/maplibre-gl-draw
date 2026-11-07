@@ -298,15 +298,18 @@ export function createTopmostHitTester(deps: TopmostHitTestDeps): HitTestTopmost
   };
 
   /**
-   * The rows a hit leaves out besides their state: the rows of a group hidden by this client
-   * (undefined when none is hidden)
+   * The rows a hit leaves out besides their state: the rows of a group hidden by this client, and
+   * what the drag of this client edits (undefined when it leaves out none)
    */
-  const hiddenGroupRows = (
+  const rowsLeftOut = (
     tables: FeatureTablesInternals,
   ): ((group: RowGroup, row: number) => boolean) | undefined => {
     const hidden = store.listHidden();
-    if (hidden.size === 0) return undefined;
+    const dragged = shapes.hitRowsLeftOut();
+    if (hidden.size === 0 && !dragged) return undefined;
     return (group, row) => {
+      if (dragged?.(group.data.handles[row] as number)) return true;
+      if (hidden.size === 0) return false;
       const groupHandle = group.data.groups[row];
       const groupId = groupHandle >= 0 ? tables.groups.idOf(groupHandle) : undefined;
       return groupId !== undefined && hidden.has(groupId);
@@ -453,7 +456,7 @@ export function createTopmostHitTester(deps: TopmostHitTestDeps): HitTestTopmost
   ): TopHit | null => {
     const layer = store.getLayer(table.layerId);
     if (!layer || layer.visible === false || store.isHidden(table.layerId)) return null;
-    const skip = hiddenGroupRows(tables);
+    const skip = rowsLeftOut(tables);
     const front = frontRowOf(tables, table, copies, tolerance, skip, onScreen);
     const rowHit = (): TopHit | null =>
       front ? rowHitOf(tables, table, layer, front, point, hold) : null;

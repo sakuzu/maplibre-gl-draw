@@ -272,12 +272,20 @@ boundary are what a listener that records changes goes by (see
 
 ## Drags
 
-A drag (moving, resizing or rotating features, moving vertices, dragging a
-handle) writes the features on every pointer move, each move a
-transaction of its own. The updates of those moves carry
-`intermediate: true` in `feature.updated` (`isIntermediate` in
-`document.changed`). When the pointer is released, one more update with
-`intermediate: false` writes the final state.
+A drag that moves, resizes or rotates features is shown by a sketch of this
+client (`sketch.added`, `sketch.updated` and `sketch.removed`): the document
+does not change while it goes on, `draw.rendered` reads the features where
+they are drawn, and one transaction writes them when the pointer is released.
+A drag cancelled writes nothing. A drag whose sketch ends by itself, its
+features deleted, locked or hidden, writes nothing either, and `drag.ended`
+says it was cancelled.
+
+The other drags (moving a vertex, a midpoint, the radius of a Circle, a
+handle) write the features on every pointer move, each move a transaction of
+its own. The updates of those moves carry `intermediate: true` in
+`feature.updated` (`isIntermediate` in `document.changed`). When the pointer
+is released, one more update with `intermediate: false` writes the final
+state.
 
 A listener that does expensive work on changes skips the updates with
 `intermediate: true`, or waits for `drag.ended`.

@@ -403,9 +403,10 @@ draw.on('document.changed', () => {
 });
 ```
 
-A drag writes intermediate states while the pointer moves, and each of
-them is a change, so debounce the save as above, or wait for the update
-without `isIntermediate` that ends the drag.
+A drag of a vertex or a handle writes intermediate states while the pointer
+moves, and each of them is a change, so debounce the save as above, or wait
+for the update without `isIntermediate` that ends the drag. A move, a resize
+and a rotation write once, when they are let go.
 
 To make several writes of your own one change, wrap them in
 `draw.transact`. They then arrive as one `document.changed`, with the
@@ -504,8 +505,8 @@ document, or to put an earlier state of it back, is in every
 - `source` tells where it came from: `'local'` for edits and calls of the
   API, `'load'` for a load of any format, `'remote'` for a store of your
   own, and any value you pass to `transact`
-- an update in the middle of a drag carries `isIntermediate: true`; the
-  update without it that follows ends the drag
+- an update in the middle of a drag of a vertex or a handle carries
+  `isIntermediate: true`; the update without it that follows ends the drag
 
 Layers, groups, and the group of a deleted feature come in the same change
 as the features. A change you apply from a listener can carry a source of

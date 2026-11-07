@@ -526,12 +526,17 @@ export function createCustomLayer(deps: CustomLayerDeps): CustomLayerInterface {
     displayList.invalidate();
     engine.unsubscribeStore = store.subscribe(followStore);
     // What the sketches draw of a Store of objects is told as the Store tells its changes
-    engine.unsubscribeSketches =
-      sketches?.onChange((changes) => {
-        if (shown.getShown() !== null) return;
-        followStore(changes);
-        engine.mapInstance?.triggerRepaint();
-      }) ?? null;
+    const stopFollowing = sketches?.onChange((changes) => {
+      if (shown.getShown() !== null) return;
+      followStore(changes);
+      engine.mapInstance?.triggerRepaint();
+    });
+    // The rows they move on the GPU tell no change of the Store
+    const stopRedraws = sketches?.onRedraw(() => engine.mapInstance?.triggerRepaint());
+    engine.unsubscribeSketches = () => {
+      stopFollowing?.();
+      stopRedraws?.();
+    };
 
     // The row groups given to the tables are taken in over the frames: a frame is asked for
     // when they start waiting. The rows written in place are written into the chunks that draw

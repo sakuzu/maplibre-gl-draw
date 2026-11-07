@@ -7,16 +7,15 @@
  * - A box drawn over a Store of rows finds the rows in it on their columns: the rows whose extent
  *   is in the box are in it, the others are tested as the features they are, by the test of
  *   their type (the rows on the sides of the box only)
- * - A drag of the features selected in bulk moves, rotates or resizes their rows by the state of
- *   their rows: they are in one moving set, drawn moved by the edit of the drag (`translate`,
- *   `rotate`, `scale`), and written once on the CPU with the same edit when the drag is let go,
- *   in the same task the set is let go of (the drawing takes both in the same frame)
+ * - A drag of the features selected in bulk is shown by a sketch of `{ selection: true }`, which
+ *   draws their rows moved by a moving set (`sketches/sketch-motion.ts`), and written once on the
+ *   CPU with the same edit when the drag is let go, in the same task the set is let go of (the
+ *   drawing takes both in the same frame)
  * - The arrow keys move them by the same moving set, and the moves made while a key is held are
  *   written once, a moment after the last one (one step of the history), as one move
  * - A locked feature stays where it is: its row is not in the moving set, and the others move
  */
 
-import type { DragNormalizedEvent } from '../../dispatcher/types.js';
 import { featureTablesInternals } from '../../feature-table/feature-tables.js';
 import type { RowGroup } from '../../feature-table/layer-table.js';
 import { rowGeometry, rowProperties, rowType } from '../../feature-table/row-read.js';
@@ -26,23 +25,14 @@ import { movableBulkRows } from '../../operations/bulk-selection.js';
 import { writeKindsInSlices } from '../../operations/bulk-sliced.js';
 import {
   type BulkKinds,
-  rowsByValues,
   transformBulkSelection,
   transformKinds,
 } from '../../operations/bulk-transform.js';
-import { rotateEditOf } from '../../operations/rotate.js';
-import { type ScaleState, scaleEditOf, startScale } from '../../operations/scale.js';
-import type { HandleType } from '../../shared/config/constants.js';
-import { createCoordinateTransform } from '../../shared/math/index.js';
-import type { BoundingBoxCoords } from '../../shared/types/selection-box.js';
 import type { TransformEdit } from '../../store/store.js';
 import type { BoxSelection, Feature } from '../../store/types.js';
 import { ROW_FLAG_DELETED, ROW_FLAG_LOCKED } from '../../table/row-group-types.js';
 import type { EngineModeContext } from '../handler.js';
 import { boxRects, isFeatureInBox } from './box-selection.js';
-import type { IntermediateWrites } from './drag/intermediate-writes.js';
-import type { DragOperation, DragStore } from './drag/operation.js';
-import { bulkDragTargets, dragStartLngLat } from './drag/operation.js';
 
 export { BULK_MOVE_SET };
 
@@ -147,207 +137,46 @@ function rowAsFeature(id: string, layerId: string, group: RowGroup, row: number)
 }
 
 // ============================================================================
-// The drags
+// The write of a drag
 // ============================================================================
 
-/** What the drags of the features selected in bulk move: their rows, by their moving set */
-abstract class BulkDrag implements DragOperation {
-  abstract readonly type: 'move' | 'rotate' | 'resize';
-  #ended = false;
-
-  constructor(
-    protected readonly context: EngineModeContext,
-    protected readonly rows: TableSelection,
-  ) {
-    // A write of a drag let go before, still under way, is made first (its rows leave the moving
-    // set it shares, which is let go of with the last of them: the rows enter it still)
-    context.store.finishSlicedWrite();
-    featureTablesInternals(context.store.tables)?.states.setMoving(rows.handles, BULK_MOVE_SET);
-  }
-
-  abstract update(event: DragNormalizedEvent, store: DragStore, writes: IntermediateWrites): void;
-
-  /** The writes of the rows where the drag let them go (null: nothing to write) */
-  protected abstract kinds(store: DragStore): BulkKinds | null;
-
-  /**
-   * Ends the drag. Committed, the rows are written where they are drawn, in steps
-   * (`bulk-sliced.ts`): each row leaves the moving set in the task it is written in, and the
-   * moving set is let go of with the last of them (`RowStateSets`); then `done` is called. Not
-   * committed, the rows leave the moving set at once
-   */
-  end(store: DragStore, committed: boolean, done?: () => void): void {
-    if (this.#ended) return;
-    this.#ended = true;
-    const states = featureTablesInternals(store.tables)?.states;
-    const release = (): void => {
-      states?.setMoving(this.rows.handles, 0);
-      states?.setByValues(this.rows.handles, false);
-      this.context.map.triggerRepaint();
-      done?.();
-    };
-    let kinds: BulkKinds | null = null;
-    try {
-      kinds = committed ? this.kinds(store) : null;
-    } finally {
-      if (!kinds) release();
-    }
-    if (!kinds) return;
-    writeKindsInSlices(store, this.rows, kinds, {
-      onWritten: (rows) => {
-        states?.setMoving(Int32Array.from(rows), 0);
-        this.context.map.triggerRepaint();
-      },
-      onDone: release,
-    });
-  }
-}
-
-/** Sets the edit the moving set of the features selected in bulk is drawn moved by */
-function showEdit(context: EngineModeContext, edit: TransformEdit): void {
-  featureTablesInternals(context.store.tables)?.states.setTransform(BULK_MOVE_SET, edit);
-  context.map.triggerRepaint();
-}
-
 /**
- * The move of the features selected in bulk: their moving set is moved from the point the drag
- * started at to the pointer, and their rows are written by the same edit once let go
+ * Writes a drag of features selected in bulk let go, by the edit its sketch shows them moved by, in
+ * steps (`bulk-sliced.ts`): the rows stay in their moving set, each leaves it in the task it is
+ * written in, and the moving set is let go of with the last of them (`RowStateSets`); then `done`
+ * is called
  *
+ * @param rows The rows, in their moving set
  * @internal
  */
-export class BulkMoveDrag extends BulkDrag {
-  readonly type = 'move' as const;
-  readonly #start: { lng: number; lat: number };
-  #edit: TransformEdit | null = null;
-
-  constructor(context: EngineModeContext, rows: TableSelection, event: DragNormalizedEvent) {
-    super(context, rows);
-    this.#start = dragStartLngLat(event);
+export function writeBulkEdit(
+  context: EngineModeContext,
+  rows: TableSelection,
+  edit: TransformEdit,
+  done: () => void,
+): void {
+  const { store, map } = context;
+  const states = featureTablesInternals(store.tables)?.states;
+  const release = (): void => {
+    states?.setMoving(rows.handles, 0);
+    states?.setByValues(rows.handles, false);
+    map.triggerRepaint();
+    done();
+  };
+  let kinds: BulkKinds | null = null;
+  try {
+    kinds = transformKinds(store, edit, rows);
+  } finally {
+    if (!kinds) release();
   }
-
-  update(event: DragNormalizedEvent): void {
-    this.#edit = {
-      kind: 'translate',
-      from: [this.#start.lng, this.#start.lat],
-      to: [event.lngLat.lng, event.lngLat.lat],
-    };
-    showEdit(this.context, this.#edit);
-  }
-
-  protected kinds(store: DragStore): BulkKinds | null {
-    const edit = this.#edit;
-    if (edit?.kind !== 'translate') return null;
-    if (edit.from[0] === edit.to[0] && edit.from[1] === edit.to[1]) return null;
-    return transformKinds(store, edit, this.rows);
-  }
-}
-
-/**
- * The rotation of the features selected in bulk around the center of their frame: their moving
- * set is turned by the angle of the pointer, and their rows are written by the same edit once
- * let go
- *
- * @internal
- */
-export class BulkRotateDrag extends BulkDrag {
-  readonly type = 'rotate' as const;
-  readonly #center: [number, number];
-  readonly #start: { lng: number; lat: number };
-  #edit: TransformEdit | null = null;
-
-  constructor(
-    context: EngineModeContext,
-    rows: TableSelection,
-    event: DragNormalizedEvent,
-    bbox: BoundingBoxCoords,
-  ) {
-    super(context, rows);
-    // The rows turned by their rotation are drawn so, as they are written once let go
-    featureTablesInternals(context.store.tables)?.states.setByValues(
-      rowsByValues(context.store, rows, 'rotate'),
-      true,
-    );
-    this.#center = [bbox.center[0], bbox.center[1]];
-    this.#start = dragStartLngLat(event);
-    context.store.setDragState({
-      operation: 'rotate',
-      ...bulkDragTargets(rows),
-      rotateInfo: {
-        initialBbox: {
-          topLeft: bbox.topLeft,
-          topRight: bbox.topRight,
-          bottomRight: bbox.bottomRight,
-          bottomLeft: bbox.bottomLeft,
-          center: bbox.center,
-        },
-        currentAngle: 0,
-        center: this.#center,
-      },
-    });
-  }
-
-  update(event: DragNormalizedEvent, store: DragStore): void {
-    const edit = rotateEditOf(this.#center, this.#start, event.lngLat);
-    this.#edit = edit;
-    showEdit(this.context, edit);
-    const dragState = store.getDragState();
-    if (dragState?.rotateInfo) {
-      store.setDragState({
-        ...dragState,
-        rotateInfo: { ...dragState.rotateInfo, currentAngle: (edit.angleDegrees * Math.PI) / 180 },
-      });
-    }
-  }
-
-  protected kinds(store: DragStore): BulkKinds | null {
-    const edit = this.#edit;
-    if (edit?.kind !== 'rotate' || edit.angleDegrees === 0) return null;
-    return transformKinds(store, edit, this.rows);
-  }
-}
-
-/**
- * The resize of the features selected in bulk from a handle of their frame: their moving set is
- * scaled by the factors of the pointer, and their rows are written by the same edit once let go
- *
- * @internal
- */
-export class BulkResizeDrag extends BulkDrag {
-  readonly type = 'resize' as const;
-  readonly #state: ScaleState;
-  #edit: TransformEdit | null = null;
-
-  constructor(
-    context: EngineModeContext,
-    rows: TableSelection,
-    event: DragNormalizedEvent,
-    handle: HandleType,
-    bbox: BoundingBoxCoords,
-  ) {
-    super(context, rows);
-    // The rows that keep their shape are drawn so, as they are written once let go
-    featureTablesInternals(context.store.tables)?.states.setByValues(
-      rowsByValues(context.store, rows, 'scale'),
-      true,
-    );
-    // A frame thinner than a pixel along an axis is not stretched along it, as the resize drag
-    // of features takes it
-    const transform = createCoordinateTransform(context.map);
-    this.#state = startScale(handle, dragStartLngLat(event), bbox, (lngLat) =>
-      transform.metersPerPixel(lngLat),
-    );
-    context.store.setDragState({ operation: 'resize', ...bulkDragTargets(rows) });
-  }
-
-  update(event: DragNormalizedEvent): void {
-    this.#edit = scaleEditOf(this.#state, event.lngLat);
-    showEdit(this.context, this.#edit);
-  }
-
-  protected kinds(store: DragStore): BulkKinds | null {
-    if (!this.#edit) return null;
-    return transformKinds(store, this.#edit, this.rows);
-  }
+  if (!kinds) return;
+  writeKindsInSlices(store, rows, kinds, {
+    onWritten: (written) => {
+      states?.setMoving(Int32Array.from(written), 0);
+      map.triggerRepaint();
+    },
+    onDone: release,
+  });
 }
 
 // ============================================================================
@@ -398,6 +227,8 @@ export class BulkNudge {
     if (!this.#rows) {
       // A write of a drag let go before, still under way, is made first (it shares the set)
       context.store.finishSlicedWrite();
+      // A sketch moves them now
+      if (states.movingCount(BULK_MOVE_SET) > 0) return false;
       this.#rows = rows;
       this.#context = context;
       this.#from = [center[0], center[1]];

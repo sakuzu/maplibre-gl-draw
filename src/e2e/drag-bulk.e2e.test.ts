@@ -7,12 +7,13 @@
  * the browser
  *
  * Over the Store of rows of the library, opening at most 3 features for the selection, the five
- * features of the scene are selected in bulk: a drag moves, turns or resizes their rows by the
- * state of their rows (their moving set), written once let go, and the arrow keys move them by
- * the same set, written a moment after the last press. Over a Store of objects, the same features
- * are selected one by one and written in every frame. A move from a press on one of them, a
- * rotation and a resize from the handles of their frame, and the arrow keys; in the middle, once
- * let go (or written) and once cancelled with Escape:
+ * features of the scene are selected in bulk: a drag is shown by a sketch of the features selected,
+ * which moves, turns or resizes their rows by the state of their rows (their moving set), written
+ * once let go, and the arrow keys move them by the same set, written a moment after the last press.
+ * Over a Store of objects, the same features are selected one by one, shown by a sketch of them and
+ * written once let go. A move from a press on one of them, a rotation and a resize from the handles
+ * of their frame, and the arrow keys; in the middle, once let go (or written) and once cancelled
+ * with Escape:
  *
  * - the fills and the outlines drawn, and the frame of the selection and its handles
  * - the hit test, held over a grid of the map to the frame, and at the places of a feature before
@@ -20,7 +21,7 @@
  * - the snapping: none of the features edited is a candidate of its own drag
  * - the events of the features, the document and the drags, with their marks of intermediate
  *   writes
- * - `features.get`, with the sketches applied and without
+ * - `features.get`, which reads the document, and `rendered.get`, which reads what is drawn
  * - the image of the map taken in the middle of a drag
  *
  * Every expectation is the behavior of the library as it is, to hold it while the places that
@@ -365,27 +366,16 @@ describe.each(KINDS)('many features selected over a Store of %s', (kind) => {
       // The image taken in the middle of the drag shows the features where they are dragged.
       // This holds the behavior as it is, which nothing decides yet: it may change later
       expectSame(image[0] as Drawn, mid.drawn[I_FILL] as Drawn, 0.05);
-      // The rows of a bulk drag are seen where they are drawn, and read where they are written
-      if (!bulk) expect(mid.sketched).toEqual(mid.geometry);
       expectNoSnapToThemselves(
         mid.events.slice(mid.events.findIndex((e) => e.name === 'drag.started') + 1),
       );
-      if (bulk) {
-        // Their rows are drawn moved by their state and written once let go: read, hit and told
-        // as they were before the drag in its middle (this holds the behavior as it is)
-        expect(mid.geometry).toEqual(selected.geometry);
-        expect(places).toEqual(IDS);
-        if (edit.moves) expect(movedHit).toBeNull();
-        expect(sequenceOf(mid.events)).toEqual([`start ${started}`]);
-      } else {
-        expect(mid.geometry).not.toEqual(selected.geometry);
-        expectHitsAsDrawn(mid.hits);
-        if (edit.moves) expect(movedHit).toBe('b1');
-        expect(sequenceOf(mid.events)).toEqual([
-          `start ${started}`,
-          ...Array.from({ length: STEPS - 1 }, () => stepWrites('I')).flat(),
-        ]);
-      }
+      // Shown by a sketch and written once let go: seen where they are drawn, read as they were
+      // before the drag, told nothing and not hit anywhere in its middle
+      expect(mid.sketched).not.toEqual(mid.geometry);
+      expect(mid.geometry).toEqual(selected.geometry);
+      expect(places).toEqual(IDS.map(() => null));
+      if (edit.moves) expect(movedHit).toBeNull();
+      expect(sequenceOf(mid.events)).toEqual([`start ${started}`]);
       return { selected, mid, end };
     }
 
@@ -395,7 +385,7 @@ describe.each(KINDS)('many features selected over a Store of %s', (kind) => {
       const { selected, mid, end } = await run(false);
       const started = edit.moves ? 'feature' : 'handle';
       expect(end.geometry).not.toEqual(selected.geometry);
-      if (!bulk) expect(end.geometry).toEqual(mid.geometry);
+      if (!bulk) expect(end.geometry).toEqual(mid.sketched);
       expect(end.sketched).toEqual(end.geometry);
       expectSame(end.drawn[I_FILL] as Drawn, mid.drawn[I_FILL] as Drawn);
       expectSame(end.drawn[I_OUTLINE] as Drawn, mid.drawn[I_OUTLINE] as Drawn);
@@ -422,12 +412,8 @@ describe.each(KINDS)('many features selected over a Store of %s', (kind) => {
         expectSame(end.drawn[i] as Drawn, selected.drawn[i] as Drawn, 0.05);
       }
       expectHitsAsDrawn(end.hits);
-      if (bulk) {
-        // Nothing was written: the moving set is let go of
-        expect(sequenceOf(end.events)).toEqual([`end ${started} cancelled`]);
-      } else {
-        expect(sequenceOf(end.events)).toEqual([...stepWrites('I'), `end ${started} cancelled`]);
-      }
+      // Nothing was written
+      expect(sequenceOf(end.events)).toEqual([`end ${started} cancelled`]);
     });
   });
 

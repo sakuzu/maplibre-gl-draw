@@ -201,8 +201,9 @@ drag, the Delete key, a load, another plugin, or a Store you supplied.
 
 - `document.changed` arrives once per transaction that changed the
   document, with everything it changed and its `source`
-- `feature.updated` carries `intermediate: true` while a drag goes on;
-  a final update always follows
+- `feature.updated` carries `intermediate: true` while a drag of a
+  vertex or a handle goes on, and a final update follows; a move, a
+  resize and a rotation write once, when they are let go
 - `drag.started` and `drag.ended` surround a move, a resize, a
   rotation or a vertex drag of the select mode
 - A listener cannot stop or rewrite a change. To keep a change from

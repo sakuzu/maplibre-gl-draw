@@ -508,7 +508,7 @@ describe('the handles a custom type adds', () => {
     expect(view.store.getDragState()?.operation).toBe('move');
     // The selection UI asks for the handles of the feature drawn, which the drag moved
     const provider = view.engine.context.selectionScope.auxiliaryHandles.list()[0];
-    const moved = view.store.getFeature('c') as StoredFeature;
+    const moved = view.draw.rendered.get('c') as StoredFeature;
     const [x, y] = (moved.geometry as { coordinates: number[] }).coordinates;
     expect(x).toBeCloseTo(0.2, 9);
     expect(y).toBeCloseTo(0.1, 9);

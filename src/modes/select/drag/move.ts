@@ -3,78 +3,36 @@
 
 /**
  * Move drag: moves the selected features from the point the drag started at to the pointer, by
- * the edit `translate` as the Store computes it
+ * the edit `translate` of the sketch of the drag
  */
 
 import type { DragNormalizedEvent } from '../../../dispatcher/types.js';
-import {
-  type TransformStart,
-  transformedUpdates,
-  transformStartOf,
-  transformsOf,
-} from '../../../operations/transform-features.js';
-import { transformFieldsOfStore } from '../../../store/transform-roles.js';
-import type { IntermediateWrites } from './intermediate-writes.js';
-import type { DragOperation, DragStore } from './operation.js';
+import type { TransformEdit } from '../../../store/store.js';
+import type { SketchDrag } from './operation.js';
 import { dragStartLngLat } from './operation.js';
 
-/**
- * State of a move operation
- */
-export interface MoveState {
-  /** Coordinate at the start of the drag */
-  startLngLat: { lng: number; lat: number };
-  /** IDs of the features being dragged */
-  featureIds: string[];
-  /** The values of the features at the start */
-  starts: Map<string, TransformStart>;
-}
-
 /** @internal */
-export class MoveDrag implements DragOperation {
+export class MoveDrag implements SketchDrag {
   readonly type = 'move' as const;
+  readonly start: TransformEdit;
 
-  constructor(private readonly state: MoveState) {}
+  constructor(private readonly from: { lng: number; lat: number }) {
+    this.start = this.#edit(from);
+  }
 
-  update(event: DragNormalizedEvent, store: DragStore, writes: IntermediateWrites): void {
-    const { startLngLat } = this.state;
-    const transforms = transformsOf(store);
-    const edit = {
-      kind: 'translate' as const,
-      from: [startLngLat.lng, startLngLat.lat],
-      to: [event.lngLat.lng, event.lngLat.lat],
-    };
+  editAt(event: DragNormalizedEvent): TransformEdit {
+    return this.#edit(event.lngLat);
+  }
 
-    for (const id of this.state.featureIds) {
-      const feature = store.getFeature(id);
-      const start = this.state.starts.get(id);
-      if (feature && start) {
-        const updates = transformedUpdates(transforms, edit, start, feature);
-        if (updates) writes.write(store, id, updates);
-      }
-    }
+  /** The move from the point the drag started at to a point */
+  #edit(to: { lng: number; lat: number }): TransformEdit {
+    return { kind: 'translate', from: [this.from.lng, this.from.lat], to: [to.lng, to.lat] };
   }
 }
 
 /**
- * Start a move drag of the given features
+ * Start a move drag
  */
-export function startMoveDrag(
-  event: DragNormalizedEvent,
-  featureIds: string[],
-  store: DragStore,
-): MoveDrag {
-  const starts = new Map<string, TransformStart>();
-  const fields = transformFieldsOfStore(store);
-
-  for (const id of featureIds) {
-    const feature = store.getFeature(id);
-    if (feature) starts.set(id, transformStartOf(feature, fields));
-  }
-
-  return new MoveDrag({
-    startLngLat: dragStartLngLat(event),
-    featureIds: [...featureIds],
-    starts,
-  });
+export function startMoveDrag(event: DragNormalizedEvent): MoveDrag {
+  return new MoveDrag(dragStartLngLat(event));
 }

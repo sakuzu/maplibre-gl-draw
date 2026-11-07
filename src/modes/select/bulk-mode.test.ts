@@ -33,7 +33,7 @@ import { DrawStore } from '../../store/draw-store.js';
 import { TableContractStore } from '../../store/table-memory.js';
 import type { Feature, StoreChange } from '../../store/types.js';
 import { referenceTranslate } from '../../test-support/enu-reference.js';
-import { planeMetersPerPixel, planeScaleFrame } from '../../test-utils.js';
+import { createSketches, planeMetersPerPixel, planeScaleFrame } from '../../test-utils.js';
 import { bulkFrame } from '../../view/ui/handle-test.js';
 import { computeResizeHandles, computeRotateHandle } from '../../view/ui/handles.js';
 import { createSelectionScope } from '../../view/ui/selection-scope.js';
@@ -162,9 +162,11 @@ beforeEach(() => {
   emitted = [];
   const registry = new BoxSelectionStrategyRegistry();
   for (const strategy of createCoreBoxSelectionStrategies()) registry.register(strategy);
+  const shapes = new RenderedShapes(store);
   context = {
     store,
-    shapes: new RenderedShapes(store),
+    shapes,
+    sketches: createSketches(store, shapes),
     map: makeMap(),
     hitTestTopmost: () => top,
     plugins: undefined,

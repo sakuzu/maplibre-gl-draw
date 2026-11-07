@@ -7,9 +7,9 @@
  *
  * The shape of a feature on the screen is held nowhere: it is made here from where the edits under
  * way are kept. That is the value of the Store with the writes in the middle of an edit, the
- * sketches applied over it, and the rows drawn moved by their state, which are made a shape with
- * the computation the GPU draws them with; a shape being drawn is read here as well, and has no ID
- * of its own. A reader names what it reads here and never picks a place: each reader that differs
+ * sketches applied over it, and the rows drawn moved by their state (a sketch of this client that
+ * moves them, the arrow keys), which are made a shape with the computation the GPU draws them with;
+ * a shape being drawn is read here as well, and has no ID of its own. A reader names what it reads here and never picks a place: each reader that differs
  * from the shape itself has its own read, which says how.
  *
  * What the GPU moves stays with the GPU: the rows are drawn by the bits of their state and the
@@ -29,6 +29,7 @@ import type { TentativeState } from '../shared/types/model.js';
 import { getDisplayFeatures } from '../store/local-visibility.js';
 import type { Store } from '../store/store.js';
 import type { BoundingBox, DragTargets, Feature } from '../store/types.js';
+import type { DraggedFeatures } from './sketch-controller.js';
 import type { SketchView } from './sketch-view.js';
 
 /**
@@ -41,6 +42,8 @@ export interface ShapeSketches {
   readonly view: SketchView;
   /** A feature of the Store as the sketches edit it (the feature itself when none does) */
   appliedFeature(id: string): Feature | undefined;
+  /** What the drag of this client edits (null when no drag is shown by a sketch) */
+  dragged(): DraggedFeatures | null;
 }
 
 /**
@@ -116,6 +119,8 @@ export class RenderedShapes {
     readonly revision: number;
     readonly dragged: DraggedRows | null;
   } | null = null;
+  /** The features made where their rows are drawn, while the rows move the same way */
+  readonly #moved = new Map<string, { readonly from: Feature; readonly feature: Feature }>();
 
   constructor(store: Store) {
     this.#store = store;
@@ -150,7 +155,12 @@ export class RenderedShapes {
     const feature =
       sketches?.appliedFeature(id) ?? sketches?.view.drawnFeature(id) ?? this.#store.getFeature(id);
     const tables = this.#store.tables;
-    return feature && tables && dragged ? draggedFeatureOf(feature, tables, dragged) : feature;
+    if (!feature || !tables || !dragged) return feature;
+    const known = this.#moved.get(id);
+    if (known?.from === feature) return known.feature;
+    const moved = draggedFeatureOf(feature, tables, dragged);
+    if (moved !== feature) this.#moved.set(id, { from: feature, feature: moved });
+    return moved;
   }
 
   /**
@@ -163,6 +173,7 @@ export class RenderedShapes {
     if (!states) return null;
     const read = this.#draggedRead;
     if (read?.states === states && read.revision === states.revision) return read.dragged;
+    this.#moved.clear();
     const dragged = draggedRowsOf(tables);
     this.#draggedRead = { states, revision: states.revision, dragged };
     return dragged;
@@ -211,21 +222,35 @@ export class RenderedShapes {
 
   /**
    * A feature as a hit reads it: the value of the Store with the writes in the middle of an edit.
-   * What a sketch moves is hit where the document has it, and the rows moved by their state where
-   * they are written
+   * What a sketch with an owner moves is hit where the document has it, and the rows moved by
+   * their state where they are written
    */
   hitFeature(id: string): Feature | undefined {
     return this.#store.getFeature(id);
   }
 
-  /** The features a hit tests, in the stacking order: those shown, each as `hitFeature` reads it */
+  /**
+   * The features a hit tests, in the stacking order: those shown, each as `hitFeature` reads it,
+   * without what the drag of this client edits
+   */
   hitFeatures(): Feature[] {
-    return getDisplayFeatures(this.#store);
+    const features = getDisplayFeatures(this.#store);
+    const dragged = this.#sketches?.dragged();
+    return dragged ? features.filter((feature) => !dragged.hasFeature(feature.id)) : features;
   }
 
   /** The rows a hit tests, read where they are written and left out by their state */
   hitRows(): FeatureTablesInternals | undefined {
     return featureTablesInternals(this.#store.tables);
+  }
+
+  /**
+   * Whether a hit leaves out the row of a handle besides its state: what the drag of this client
+   * edits (null when it leaves out none)
+   */
+  hitRowsLeftOut(): ((handle: number) => boolean) | null {
+    const dragged = this.#sketches?.dragged();
+    return dragged ? (handle) => dragged.hasRow(handle) : null;
   }
 
   /** The features of these IDs the handles of the selection are grabbed on, as a hit reads them */

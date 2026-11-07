@@ -4,17 +4,19 @@
 /**
  * The shape shared by the drag operations of select mode
  *
- * Each kind of drag (move, resize, rotate, vertex, midpoint, radius, auxiliary handle) is one
- * DragOperation. SelectModeDragHandler decides which kind a drag is, starts it, and forwards
- * every frame to it. The operation computes the new values and writes them through
- * IntermediateWrites, which keeps what a commit or an abort needs.
+ * Each kind of drag is one operation, which SelectModeDragHandler decides, starts, and forwards
+ * every frame to. A move, a rotation and a resize are shown by a sketch of this client (a
+ * `SketchDrag`): the operation gives the edit of the pointer, the Store is not written while the
+ * drag goes on, and the handler writes the sketch once let go. The other drags (vertex, midpoint,
+ * radius, auxiliary handle) are a `DragOperation`: it computes the new values and writes them
+ * through IntermediateWrites, which keeps what a commit or an abort needs.
  */
 
 import type { DragNormalizedEvent } from '../../../dispatcher/types.js';
 import { edgesOfVertex } from '../../../shared/utils/feature-segments.js';
+import type { TransformEdit } from '../../../store/store.js';
 import type { DragOperationType, DragTargets, Feature, VertexRef } from '../../../store/types.js';
 import type { HandleHitResult } from '../../../view/ui/handle-test.js';
-import { getSelectedFeatureIds } from '../../../view/ui/helper.js';
 import type { EngineModeContext } from '../../handler.js';
 import type { IntermediateWrites } from './intermediate-writes.js';
 
@@ -42,13 +44,40 @@ export interface DragOperation {
    * hand the drag to someone else need it
    */
   finish?(event?: DragNormalizedEvent): void;
-  /**
-   * Called once when the drag ends: committed (let go) or not (cancelled, aborted). Only the
-   * operations that write once at the end need it (the drags of features selected in bulk).
-   * `done` is called once what the end writes is written, possibly in a later task (the drag's
-   * end is announced then)
-   */
-  end?(store: DragStore, committed: boolean, done?: () => void): void;
+}
+
+/**
+ * One running drag shown by a sketch of this client, of the features selected or of the ones
+ * selected in bulk alike
+ *
+ * @internal
+ */
+export interface SketchDrag {
+  /** The kind of the operation (the value of DragState.operation) */
+  readonly type: 'move' | 'rotate' | 'resize';
+  /** The edit of a pointer that has not moved */
+  readonly start: TransformEdit;
+  /** The edit of the pointer of one frame of the drag */
+  editAt(event: DragNormalizedEvent): TransformEdit;
+  /** Called with each edit the sketch shows */
+  shown?(edit: TransformEdit, store: DragStore): void;
+}
+
+/**
+ * Whether the edit of a drag shown by a sketch moves nothing (the pointer is where it started):
+ * such a drag writes nothing once let go
+ *
+ * @internal
+ */
+export function movesNothing(edit: TransformEdit): boolean {
+  switch (edit.kind) {
+    case 'translate':
+      return edit.from[0] === edit.to[0] && edit.from[1] === edit.to[1];
+    case 'rotate':
+      return edit.angleDegrees === 0;
+    default:
+      return edit.eastFactor === 1 && edit.northFactor === 1 && edit.sizeFactor === 1;
+  }
 }
 
 /**
@@ -56,16 +85,6 @@ export interface DragOperation {
  */
 export function dragStartLngLat(event: DragNormalizedEvent): { lng: number; lat: number } {
   return event.dragStartLngLat ?? event.lngLat;
-}
-
-/**
- * The selected features, with group / layer selections resolved to their member features
- * (so that a group is moved / resized / rotated as one)
- */
-export function selectedFeaturesOf(store: DragStore): Feature[] {
-  return getSelectedFeatureIds(store)
-    .map((id) => store.getFeature(id))
-    .filter((f): f is Feature => f !== undefined);
 }
 
 /**

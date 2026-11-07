@@ -39,12 +39,14 @@
  * - `sketches`: each feature a sketch edits that is shown is drawn as the sketches leave it in the
  *   place of the feature, once, and the feature itself is not drawn (over a Store of rows, its row
  *   is hidden by the mark of the sketches, `STATE_HIDDEN_SKETCH`, and the sketch is drawn at its keys);
- *   no other feature is drawn otherwise. The features sketches create are not read. Once each
- *   notification of the Store has gone out and each operation of the sketches is done
+ *   no other feature is drawn otherwise. The rows a sketch moves on the GPU are in its moving set,
+ *   which moves by its edit. The features sketches create are not read. Once each notification of
+ *   the Store has gone out and each operation of the sketches is done
  * - `sketch-commits`: when a sketch of this client is committed with no write of the Store since
  *   the sketches were last applied, each feature it edits (and creates) that it drew, and that no
  *   sketch with an owner edits, is written with the geometry it was drawn with, to the bit
- *   (over a Store of rows, as the rows read them). At each commit
+ *   (over a Store of rows, as the rows read them; the rows drawn on the GPU are not read). At each
+ *   commit
  *
  * The two checks of the drawing of the rows read what the GPU holds from copies the drawing keeps
  * only while one of them runs (decided when the instance is created), and pass over what the
@@ -139,6 +141,7 @@ export function checkSketches(target: ConsistencyTarget): string[] {
     if (!expected.has(id)) problems.push(`the feature "${id}" is drawn as a sketch it has not`);
   }
   problems.push(...(target.checkDrawnSketches?.(expected) ?? []));
+  problems.push(...sketches.checkMotions());
   return problems;
 }
 

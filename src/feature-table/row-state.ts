@@ -86,10 +86,13 @@ export const MOVE_SETS = 3;
 export const HELD_MOVE_SET = 1;
 
 /**
- * The moving set the features selected in bulk are dragged with (set 1 is the one of the rows
- * opened as features moved as a whole)
+ * The moving set the features selected in bulk are moved with, by a sketch of this client or by
+ * the arrow keys (set 1 is the one of the rows opened as features moved as a whole)
  */
 export const BULK_MOVE_SET = 2;
+
+/** The moving set of the rows of the features a sketch of this client names */
+export const SKETCH_MOVE_SET = 3;
 
 /**
  * The byte the GPU reads for the copy of the state of a row
@@ -151,6 +154,11 @@ export class RowStateSets {
   /** Changes with every row put into a moving set or taken out of one */
   get movingRevision(): number {
     return this.membersRevision;
+  }
+
+  /** The number of rows in a moving set */
+  movingCount(set: number): number {
+    return this.members[set] ?? 0;
   }
 
   /** The rows in a moving set, walked once for each change of them */

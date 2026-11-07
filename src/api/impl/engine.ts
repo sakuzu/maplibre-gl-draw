@@ -401,6 +401,7 @@ export function createEngine(
     featureCompanions,
     selectionScope: context.selectionScope,
     eventEmitter,
+    sketches,
     selectionStyle,
     topology,
     trace,

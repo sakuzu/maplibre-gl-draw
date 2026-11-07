@@ -2,10 +2,9 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * A drag of many features held as rows: from `moveOpenedByStateFrom` rows held,
- * the rows of the selection are drawn moved by their state while the drag goes on, their features
- * follow the pointer, and the rows are written once, when the drag ends. With fewer, the rows are
- * written in the middle of the drag, as before.
+ * A drag of features held as rows: whatever their number, the rows of the selection are drawn moved
+ * by their state while the drag goes on, the document does not change, and the rows are written
+ * once, when the drag ends.
  */
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -126,6 +125,12 @@ function featureCorner(id: string): number[] | undefined {
     ?.coordinates[0][0];
 }
 
+/** The first corner of the square of a feature, as it is drawn */
+function drawnCorner(id: string): number[] | undefined {
+  return (draw.rendered.get(id)?.geometry as { coordinates: number[][][] } | undefined)
+    ?.coordinates[0][0];
+}
+
 /** Whether a row is in a moving set */
 function moving(tables: FeatureTables, id: string): boolean {
   const state = featureTablesInternals(tables)?.states.stateOf(tables.findRow(id) ?? -1) ?? 0;
@@ -135,9 +140,6 @@ function moving(tables: FeatureTables, id: string): boolean {
 /**
  * Drags the selection by the body of the square of `a` one degree to the east along its parallel,
  * and reads the middle of the drag
- *
- * A move along a parallel turns the positions about the axis of the poles: every one moves by the
- * same degrees of longitude, so the rows held are moved by one translation of the degrees.
  */
 function dragSelection(read: () => void): void {
   const router = engine.inputRouter;
@@ -155,38 +157,25 @@ function expectCornerNear(actual: number[] | undefined, expected: readonly numbe
   expect(Math.abs((actual?.[1] as number) - (expected[1] as number))).toBeLessThan(1e-9);
 }
 
-describe('a drag of many features held as rows', () => {
-  it('moves the rows by their state in the middle of the drag, and writes them at its end', () => {
-    const tables = setup(3);
+describe('a drag of features held as rows', () => {
+  it.each([
+    ['many', 3],
+    ['few', 10],
+  ])('draws %s rows moved by their state, and writes them once at its end', (_many, from) => {
+    const tables = setup(from);
     draw.selection.set('feature', IDS);
     dragSelection(() => {
       IDS.forEach((id, i) => {
         expect(rowCorner(tables, id)).toEqual([i, 0]);
-        expectCornerNear(featureCorner(id), [i + 1, 0]);
+        expect(featureCorner(id)).toEqual([i, 0]);
+        expectCornerNear(drawnCorner(id), [i + 1, 0]);
         expect(moving(tables, id)).toBe(true);
       });
-      const [dLng, dLat] = featureTablesInternals(tables)?.states.translation(1) ?? [];
-      expect(Math.abs((dLng as number) - 1)).toBeLessThan(1e-9);
-      expect(Math.abs(dLat as number)).toBeLessThan(1e-9);
     });
     IDS.forEach((id, i) => {
       expectCornerNear(rowCorner(tables, id), [i + 1, 0]);
       expectCornerNear(featureCorner(id), [i + 1, 0]);
       expect(moving(tables, id)).toBe(false);
-    });
-  });
-
-  it('writes the rows in the middle of the drag when fewer rows are held', () => {
-    const tables = setup(10);
-    draw.selection.set('feature', IDS);
-    dragSelection(() => {
-      IDS.forEach((id, i) => {
-        expectCornerNear(rowCorner(tables, id), [i + 1, 0]);
-        expect(moving(tables, id)).toBe(false);
-      });
-    });
-    IDS.forEach((id, i) => {
-      expectCornerNear(rowCorner(tables, id), [i + 1, 0]);
     });
   });
 });

@@ -653,6 +653,7 @@ describe('the signals of the engine', () => {
       spatialIndex: engine.context.spatialIndex,
       map: { dragPan, getCanvas: () => ({ style: {} }), getZoom: () => 10 },
       eventEmitter,
+      sketches: engine.sketches,
       selectionScope: engine.context.selectionScope,
     } as unknown as EngineModeContext;
     const drag = (lng: number, lat: number): DragNormalizedEvent => ({

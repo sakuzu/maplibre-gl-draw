@@ -54,6 +54,7 @@ export class SketchView {
   /** The same, by the ID they are drawn with */
   #createByKey = new Map<string, DrawnCreate>();
   readonly #listeners = new Set<(change: StoreChange) => void>();
+  readonly #redraws = new Set<() => void>();
 
   constructor(store: Store) {
     this.#store = store;
@@ -95,6 +96,24 @@ export class SketchView {
     return () => {
       this.#listeners.delete(listener);
     };
+  }
+
+  /**
+   * Follows what the sketches draw where no change of the Store tells it: the rows they move on
+   * the GPU
+   *
+   * @returns The function that stops it
+   */
+  onRedraw(listener: () => void): () => void {
+    this.#redraws.add(listener);
+    return () => {
+      this.#redraws.delete(listener);
+    };
+  }
+
+  /** Asks for the next frame: the rows the sketches move on the GPU moved */
+  redraw(): void {
+    for (const listener of [...this.#redraws]) listener();
   }
 
   /**

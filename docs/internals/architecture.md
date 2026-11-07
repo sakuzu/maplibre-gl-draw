@@ -383,7 +383,8 @@ source is only a label: it never changes which events are emitted or how
 they are grouped; the transaction does.
 
 An entry of `features.updated` may carry `isIntermediate: true`. It marks an
-intermediate state of an edit in progress, such as each step of a drag. The
+intermediate state of an edit in progress, such as each step of a drag of a
+vertex. The
 memory store applies it like any update; a replacement Store can
 use the flag to choose between a persistence path and a transient path.
 When a drag ends without committing (a mode switch, an external reset), the
@@ -513,17 +514,26 @@ updates a derived structure by hand.
 ```text
 1. InputNormalizer: mousedown, mousemove past the threshold -> dragstart
 2. SelectMode.onDragStart:
-     store.startEditing(ids); store.setDragState({ operation: 'move' })
      signals the start (drag.started)
+     sketches.add({ edits: [translate] })
+     store.setDragState({ operation: 'move' })
 3. During the drag:
-     store.updateFeature(id, changes, { isIntermediate: true })
+     sketches.setMovingEdit(id, edit): nothing is written. The rows of a
+     Store of rows are drawn moved by a moving set, the features of a Store
+     of objects as the sketch leaves them
 4. On dragend:
-     the last difference is committed in one store.transact()
-     (features following a shared vertex commit in the same step)
-     store.endEditing(ids); signals the end (drag.ended)
+     the values the sketch gives over the features as they are now are
+     written in one store.transact(), and the sketch ends committed
+     (the rows selected in bulk in steps); signals the end (drag.ended)
 5. On an abort that does not go through dragend:
-     store.abortIntermediateUpdates?(ids)
+     sketches.remove(id): nothing is written
 ```
+
+A move, a rotation and a resize go so. The drags of a vertex, a midpoint, a
+radius and a handle write through the Store: each step with
+`{ isIntermediate: true }`, the last difference committed in one
+`store.transact()` on dragend (features following a shared vertex commit in
+the same step), and `store.abortIntermediateUpdates?(ids)` on an abort.
 
 Dragging an auxiliary handle announces neither `drag.started` nor
 `drag.ended`. Core writes nothing to the Store for such a drag; the

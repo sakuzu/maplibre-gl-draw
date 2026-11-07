@@ -2,12 +2,12 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * The values a drag that moves, rotates or scales features writes over each of them
+ * The values a move of features written at once (the arrow keys) writes over each of them
  *
- * A drag takes the values of its features when it starts (their geometry and the fields of their
- * roles, `store/transform-roles.ts`) and, on every frame, computes them again from those with the
- * edit of the pointer by the computation of the Store (`Store.transforms`, or the one of the
- * library), so what it writes is what the edit applied once to the features would write.
+ * It takes the values of its features (their geometry and the fields of their roles,
+ * `store/transform-roles.ts`) and computes them with the edit by the computation of the Store
+ * (`Store.transforms`, or the one of the library), so what it writes is what the edit applied to
+ * the features would write.
  */
 
 import { DEFAULT_TRANSFORMS } from '../store/feature-edits.js';
@@ -21,7 +21,7 @@ import {
 import type { Feature } from '../store/types.js';
 
 /**
- * The values of a feature when a drag starts
+ * The values of a feature an edit starts from
  *
  * @internal
  */
@@ -33,7 +33,7 @@ export interface TransformStart {
 }
 
 /**
- * The values of a feature a drag starts from (a copy of its geometry is not made: the Store
+ * The values of a feature an edit starts from (a copy of its geometry is not made: the Store
  * never changes an object it gave)
  *
  * @param fields The fields the custom types of the instance declare
@@ -61,11 +61,10 @@ export function transformsOf(store: {
 }
 
 /**
- * The fields a drag writes over a feature for an edit: its geometry, and the fields of its roles
- * merged into its `properties` as they are now (null when the computation does not take the edit:
- * the frame writes nothing)
+ * The fields an edit writes over a feature: its geometry, and the fields of its roles
+ * merged into its `properties` as they are now (null when the computation does not take the edit)
  *
- * @param edit The edit of the pointer (null: the values the drag started from)
+ * @param edit The edit (null: the values it started from)
  * @internal
  */
 export function transformedUpdates(
@@ -77,8 +76,7 @@ export function transformedUpdates(
   if (edit && !transforms.accepts(edit)) return null;
   const after = edit ? transforms.apply(edit, start.values) : start.values;
   const updates: Partial<Feature> = { geometry: after.geometry as Feature['geometry'] };
-  // A field the edit leaves as it was is put back as the feature had it when the drag started
-  // (an earlier frame may have written it)
+  // A field the edit leaves as it was is put back as the feature had it when it started
   const properties = (feature.properties ?? {}) as Record<string, unknown>;
   let next: Record<string, unknown> | null = null;
   for (const [key, value] of [

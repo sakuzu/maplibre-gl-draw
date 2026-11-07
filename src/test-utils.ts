@@ -53,6 +53,8 @@ import {
 import type { Feature } from './shared/types/model.js';
 import { EventEmitterImpl } from './shared/utils/event-emitter.js';
 import { AutoNameGenerator } from './shared/utils/name-generator.js';
+import type { RenderedShapes } from './sketches/rendered-shapes.js';
+import { SketchController } from './sketches/sketch-controller.js';
 import type { SnapResult } from './snapping/types.js';
 import { MemoryStore } from './store/memory.js';
 import type { Store } from './store/store.js';
@@ -249,6 +251,24 @@ export function createMapStub(options: { boxZoomEnabled?: boolean } = {}) {
     canvasListenerCount: () => count(canvasListeners),
     isBoxZoomEnabled: () => boxZoomEnabled,
   };
+}
+
+/**
+ * The sketches of an instance, for a test of a mode without an engine, read by the shapes given
+ */
+export function createSketches(store: Store, shapes?: RenderedShapes): SketchController {
+  let next = 0;
+  const sketches = new SketchController({
+    store,
+    generateId: () => `sketch-${next++}`,
+    getActiveLayerId: () => '',
+    prepareFeature: () => {
+      throw new Error('a mode tested here creates no feature by a sketch');
+    },
+  });
+  sketches.attach();
+  shapes?.useSketches(sketches);
+  return sketches;
 }
 
 /**

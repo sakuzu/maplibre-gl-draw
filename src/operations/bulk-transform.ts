@@ -33,37 +33,6 @@ import type { RowField } from '../store/types.js';
 import { transformsOf } from './transform-features.js';
 
 /**
- * The rows of a selection of many rows that a drag turns (`rotate`) or scales (`scale`) by their
- * values, which are drawn so while they are dragged (`setByValues` of the state of the rows): the
- * rows whose type gives them a rotation, and the ones that keep their shape
- *
- * @internal
- */
-export function rowsByValues(
-  store: Store,
-  rows: TableSelection,
-  kind: 'rotate' | 'scale',
-): Int32Array {
-  const internals = featureTablesInternals(store.tables);
-  if (!internals) return new Int32Array(0);
-  const fields = transformFieldsOfStore(store);
-  const out: number[] = [];
-  for (const handle of rows.handles) {
-    const place = livePlaceOf(internals, handle);
-    const view = place ? store.tables?.get(place.layer.layerId) : undefined;
-    const type = view?.getRowType(handle);
-    if (!view || type === null || type === undefined) continue;
-    const roles = transformRolesOf(
-      type,
-      (key) => view.getRowValue(handle, key) !== undefined,
-      fields,
-    );
-    if (kind === 'rotate' ? roles.angleDegrees !== undefined : roles.uniformScale) out.push(handle);
-  }
-  return Int32Array.from(out);
-}
-
-/**
  * The writes of an operation on features selected in bulk, by kind of row: the rows of a kind
  * (ascending) and the operation that writes them
  *

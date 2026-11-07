@@ -30,6 +30,7 @@ import type { Store } from '../../store/store.js';
 import type { Feature } from '../../store/types.js';
 import { referenceTranslate } from '../../test-support/enu-reference.js';
 import {
+  createSketches,
   internalsOf,
   planeMetersPerPixel,
   planeScaleFrame,
@@ -155,9 +156,11 @@ describe.each(STORE_KINDS)('on %s', (_kind, createStore) => {
     hit = null;
     rowTop = null;
     holds = [];
+    const shapes = new RenderedShapes(store);
     context = {
       store,
-      shapes: new RenderedShapes(store),
+      shapes,
+      sketches: createSketches(store, shapes),
       map,
       hitTestService: { hitTest: () => hit },
       // A stub for the unified z traversal (it returns only Store features). Select mode looks at
@@ -501,7 +504,7 @@ describe.each(STORE_KINDS)('on %s', (_kind, createStore) => {
     }
 
     function firstVertex(): number[] {
-      return (coordinatesOf(store.getFeature('f1')!) as number[][][])[0][0];
+      return (coordinatesOf(context.shapes.get('f1')!) as number[][][])[0][0];
     }
 
     it('abandons a move drag: no drag state is left, dragPan comes back, later moves do nothing', () => {

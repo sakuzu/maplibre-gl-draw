@@ -30,7 +30,12 @@ import { createEngine } from '../api/impl/engine.js';
 import type { ConsistencyFailure } from '../api/options.js';
 import type { Sketch, SketchEdit } from '../api/sketches.js';
 import { featureTablesInternals } from '../feature-table/feature-tables.js';
-import { STATE_HIDDEN_SKETCH } from '../feature-table/row-state.js';
+import {
+  SKETCH_MOVE_SET,
+  STATE_HIDDEN_SKETCH,
+  STATE_MOVE_MASK,
+  STATE_MOVE_SHIFT,
+} from '../feature-table/row-state.js';
 import { MemoryStore } from '../store/memory.js';
 import type { FeatureEdit, Store } from '../store/store.js';
 import { createTableStore } from '../store/table-memory.js';
@@ -591,11 +596,20 @@ for (const kind of KINDS) {
     it('runs the checks of the sketches, which find what is drawn broken', () => {
       const { engine, draw, failures } = open(kind, ['sketches', 'sketch-commits']);
       const a = line(draw);
-      const sketch = draw.sketches.add({
-        edits: [
-          { kind: 'translate', target: { featureIds: [a.id] }, from: [0, 0], to: [0.5, 0.5] },
-        ],
-      }) as Sketch;
+      const shape: SketchEdit = {
+        kind: 'set',
+        featureId: a.id,
+        patch: {
+          geometry: {
+            type: 'LineString',
+            coordinates: [
+              [0.5, 0.5],
+              [1.5, 1.5],
+            ],
+          },
+        },
+      };
+      const sketch = draw.sketches.add({ edits: [shape] }) as Sketch;
       expect(failures).toEqual([]);
       // The sketch hidden no more, or drawn as something else
       const tables = featureTablesInternals(draw.getStore().tables);
@@ -612,11 +626,7 @@ for (const kind of KINDS) {
       failures.length = 0;
       // A commit that writes other than what was drawn
       draw.sketches.remove(sketch.id);
-      const second = draw.sketches.add({
-        edits: [
-          { kind: 'translate', target: { featureIds: [a.id] }, from: [0, 0], to: [0.5, 0.5] },
-        ],
-      }) as Sketch;
+      const second = draw.sketches.add({ edits: [shape] }) as Sketch;
       expect(failures).toEqual([]);
       // Drawn otherwise than the sketch leaves it
       const drawn = engine.sketches.view.liveFeatures().get(a.id) as Feature;
@@ -643,6 +653,91 @@ for (const kind of KINDS) {
     });
   });
 }
+
+describe('a sketch of one edit that moves rows', () => {
+  const translate = (ids: string[], by: number): SketchEdit => ({
+    kind: 'translate',
+    target: { featureIds: ids },
+    from: [0, 0],
+    to: [by, 0],
+  });
+
+  /** The bits of the state of the row of a feature */
+  function stateOf(draw: Draw, id: string): number {
+    const tables = draw.getStore().tables;
+    return featureTablesInternals(tables)?.states.stateOf(tables?.findRow(id) ?? -1) ?? 0;
+  }
+
+  const setOf = (draw: Draw, id: string): number =>
+    (stateOf(draw, id) & STATE_MOVE_MASK) >> STATE_MOVE_SHIFT;
+
+  it('draws them moved by a moving set, their values untouched, and writes them once', () => {
+    const { draw, failures } = open('rows');
+    const a = line(draw);
+    const sketch = draw.sketches.add({ edits: [translate([a.id], 1)] }) as Sketch;
+    expect(setOf(draw, a.id)).toBe(SKETCH_MOVE_SET);
+    expect(stateOf(draw, a.id) & STATE_HIDDEN_SKETCH).toBe(0);
+    expect(coordinatesOf(draw.features.get(a.id))[0]).toEqual([0, 0]);
+    expect(coordinatesOf(draw.rendered.get(a.id))[0]?.[0]).toBeCloseTo(1, 9);
+    draw.sketches.update(sketch.id, { edits: [translate([a.id], 2)] });
+    expect(coordinatesOf(draw.rendered.get(a.id))[0]?.[0]).toBeCloseTo(2, 9);
+    expect(draw.sketches.commit(sketch.id)).toBe(true);
+    expect(setOf(draw, a.id)).toBe(0);
+    expect(coordinatesOf(draw.features.get(a.id))[0]?.[0]).toBeCloseTo(2, 9);
+    expect(failures).toEqual([]);
+  });
+
+  it('leaves them where they are once removed', () => {
+    const { draw, failures } = open('rows');
+    const a = line(draw);
+    const sketch = draw.sketches.add({ edits: [translate([a.id], 1)] }) as Sketch;
+    draw.sketches.remove(sketch.id);
+    expect(setOf(draw, a.id)).toBe(0);
+    expect(coordinatesOf(draw.rendered.get(a.id))[0]).toEqual([0, 0]);
+    expect(failures).toEqual([]);
+  });
+
+  it('draws a row another sketch edits too on the slow path, both applied', () => {
+    const { draw, failures } = open('rows');
+    const a = line(draw);
+    const b = line(draw, 10);
+    draw.sketches.add({ edits: [translate([a.id, b.id], 1)] });
+    expect(setOf(draw, b.id)).toBe(SKETCH_MOVE_SET);
+    const other = draw.sketches.add({ owner: 'other', edits: [translate([b.id], 2)] }) as Sketch;
+    expect(setOf(draw, a.id)).toBe(SKETCH_MOVE_SET);
+    expect(setOf(draw, b.id)).toBe(0);
+    expect(stateOf(draw, b.id) & STATE_HIDDEN_SKETCH).not.toBe(0);
+    expect(coordinatesOf(draw.rendered.get(b.id))[0]?.[0]).toBeCloseTo(13, 9);
+    draw.sketches.remove(other.id);
+    expect(setOf(draw, b.id)).toBe(SKETCH_MOVE_SET);
+    expect(stateOf(draw, b.id) & STATE_HIDDEN_SKETCH).toBe(0);
+    expect(failures).toEqual([]);
+  });
+
+  it('draws the rows of a sketch that finds the moving set taken on the slow path', () => {
+    const { draw, failures } = open('rows');
+    const a = line(draw);
+    const b = line(draw, 10);
+    draw.sketches.add({ edits: [translate([a.id], 1)] });
+    draw.sketches.add({ edits: [translate([b.id], 1)] });
+    expect(setOf(draw, a.id)).toBe(SKETCH_MOVE_SET);
+    expect(setOf(draw, b.id)).toBe(0);
+    expect(stateOf(draw, b.id) & STATE_HIDDEN_SKETCH).not.toBe(0);
+    expect(coordinatesOf(draw.rendered.get(b.id))[0]?.[0]).toBeCloseTo(11, 9);
+    expect(failures).toEqual([]);
+  });
+
+  it('runs the checks of the sketches, which find a row out of its moving set', () => {
+    const { draw, failures } = open('rows', ['sketches']);
+    const a = line(draw);
+    draw.sketches.add({ edits: [translate([a.id], 1)] });
+    expect(failures).toEqual([]);
+    const tables = draw.getStore().tables;
+    featureTablesInternals(tables)?.states.setMoving(Int32Array.of(tables?.findRow(a.id) ?? -1), 0);
+    line(draw, 30);
+    expect(failures.map((f) => f.check)).toContain('sketches');
+  });
+});
 
 describe('the checks of the sketches as a failure', () => {
   it('throws from the operation that found them', () => {
