@@ -5,20 +5,18 @@
  * The shape shared by the drag operations of select mode
  *
  * Each kind of drag is one operation, which SelectModeDragHandler decides, starts, and forwards
- * every frame to. A move, a rotation, a resize, a drag of vertices and of a radius are shown by a
- * sketch of this client (a `SketchDrag`): the operation gives the edits of the pointer, the Store is
- * not written while the drag goes on, and the handler writes the sketch once let go. The drag of an
- * auxiliary handle is a `DragOperation`: it hands the drag to the handle.
+ * every frame to. Every drag is shown by a sketch of this client (a `SketchDrag`): the operation
+ * gives the edits of the pointer, the Store is not written while the drag goes on, and the handler
+ * writes the sketch once let go.
  */
 
 import type { SketchEdit } from '../../../api/sketches.js';
 import type { DragNormalizedEvent } from '../../../dispatcher/types.js';
 import { edgesOfVertex } from '../../../shared/utils/feature-segments.js';
 import type { TransformEdit } from '../../../store/store.js';
-import type { DragOperationType, DragTargets, Feature, VertexRef } from '../../../store/types.js';
+import type { DragTargets, Feature, VertexRef } from '../../../store/types.js';
 import type { HandleHitResult } from '../../../view/ui/handle-test.js';
 import type { EngineModeContext } from '../../handler.js';
-import type { IntermediateWrites } from './intermediate-writes.js';
 
 /** The Store a drag writes to */
 export type DragStore = EngineModeContext['store'];
@@ -28,23 +26,6 @@ export type DragStore = EngineModeContext['store'];
  * types, the tile size of the map, and the auxiliary handle providers). Null before a drag starts
  */
 export type DragScope = EngineModeContext['selectionScope'] | null;
-
-/**
- * One running drag operation
- *
- * @internal
- */
-export interface DragOperation {
-  /** The kind of the operation (the value of DragState.operation) */
-  readonly type: NonNullable<DragOperationType>;
-  /** Apply one frame of the drag */
-  update(event: DragNormalizedEvent, store: DragStore, writes: IntermediateWrites): void;
-  /**
-   * Called when the drag ends or is aborted (possibly more than once). Only operations that
-   * hand the drag to someone else need it
-   */
-  finish?(event?: DragNormalizedEvent): void;
-}
 
 /**
  * What a drag that moves, rotates or scales features edits: the features listed, or the ones
@@ -62,7 +43,7 @@ export type DragTarget = { readonly featureIds: readonly string[] } | { readonly
  */
 export interface SketchDrag {
   /** The kind of the operation (the value of DragState.operation) */
-  readonly type: 'move' | 'rotate' | 'resize' | 'vertex' | 'midpoint' | 'radius';
+  readonly type: 'move' | 'rotate' | 'resize' | 'vertex' | 'midpoint' | 'radius' | 'auxiliary';
   /** The edits of a pointer that has not moved */
   readonly start: readonly SketchEdit[];
   /**
@@ -74,7 +55,7 @@ export interface SketchDrag {
   /** The edits of the pointer of one frame of the drag */
   editsAt(event: DragNormalizedEvent): readonly SketchEdit[];
   /** Whether these edits of the sketch leave everything as it is: nothing is written then */
-  movesNothing(edits: readonly SketchEdit[]): boolean;
+  movesNothing(edits: readonly SketchEdit[], store: DragStore): boolean;
   /** Called with the edits the sketch shows */
   shown?(edits: readonly SketchEdit[], store: DragStore): void;
 }

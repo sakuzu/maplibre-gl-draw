@@ -9,7 +9,8 @@
  * shown: core draws a `resize` handle as it draws the resize handles and hits it at that size,
  * and draws no `custom` handle (the extension draws it) and hits it at the size the extension
  * declares. core delegates their drags, and knows nothing at all about the meaning of a handle
- * (it only carries its kind, its position and its identifier).
+ * (it only carries its kind, its position and its identifier): what a drag changes is the patches
+ * the provider gives, shown by a sketch of this client and written once let go.
  *
  * There are two ways to emit handles: those bound to the selected feature (getHandles) and
  * those that can always be emitted regardless of the selection (getGlobalHandles). The
@@ -25,6 +26,7 @@ import type { ProjectionData } from 'maplibre-gl';
 import type { DragNormalizedEvent } from '../../dispatcher/types.js';
 import type { FrameDrawContext } from '../../extension/renderers.js';
 import type { LngLat, ScreenPoint } from '../../shared/math/index.js';
+import type { FeaturePatch } from '../../store/store.js';
 import type { Coordinate, Feature } from '../../store/types.js';
 
 /**
@@ -132,9 +134,20 @@ export interface AuxiliaryHandleProvider {
    * move / end to the same provider. When false, core does not start a drag.
    */
   onHandleDragStart(hit: AuxiliaryHandleHit, event: DragNormalizedEvent): boolean;
-  /** Called for each move of a drag this provider accepted */
-  onHandleDragMove(event: DragNormalizedEvent): void;
-  /** Called at the end of a drag this provider accepted */
+  /**
+   * Called for each move of a drag this provider accepted
+   *
+   * @returns The patch shown over the feature the handle is on (a sketch of this client: nothing
+   *   is written), nothing for no change
+   */
+  onHandleDragMove(event: DragNormalizedEvent): FeaturePatch | null | undefined | void;
+  /**
+   * Called when a drag this provider accepted is let go, before it ends
+   *
+   * @returns The last patch, written with the patches shown; nothing writes nothing of them
+   */
+  onHandleDragRelease?(event: DragNormalizedEvent): FeaturePatch | null | undefined | void;
+  /** Called at the end of a drag this provider accepted, let go or cut short */
   onHandleDragEnd(event: DragNormalizedEvent): void;
   /**
    * Draws the `custom` handles of the provider core shows: called by the selection UI only, in the

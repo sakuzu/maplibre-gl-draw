@@ -118,8 +118,6 @@ export interface AdapterDeps extends RenderAdapterDeps {
   };
   /** Registers a provider of snapping candidates with the snapping of the instance */
   registerSnapProvider(provider: EngineSnapProvider): () => void;
-  /** Applies a patch of a handle drag to a feature; `final` is false while the drag goes on */
-  applyPatch(featureId: string, patch: FeaturePatch, final: boolean): void;
   /** The shapes as they are seen */
   readonly shapes: RenderedShapes;
   /** The selection box of a feature as it is drawn (`draw.rendered.getSelectionBox`) */
@@ -733,7 +731,7 @@ export function adaptHandleProvider(
     AdapterDeps,
     | 'store'
     | 'screen'
-    | 'applyPatch'
+    | 'shapes'
     | 'selectionBoxOf'
     | 'selectionStyle'
     | 'customLayer'
@@ -751,15 +749,16 @@ export function adaptHandleProvider(
     const given = feature ? provider.handles(feature, ctx) : (provider.globalHandles?.(ctx) ?? []);
     return takenHandles(given, label, warned);
   };
-  const drag = (event: DragNormalizedEvent, final: boolean): void => {
-    if (!active) return;
-    const feature = active.featureId ? deps.store.getFeature(active.featureId) : undefined;
+  /** The patch of a position of the pointer, asked with the feature the patches before it leave */
+  const drag = (event: DragNormalizedEvent): FeaturePatch | null => {
+    if (!active) return null;
+    const feature = active.featureId ? deps.shapes.get(active.featureId) : undefined;
     const patch = provider.onHandleDrag(
       (feature as Feature | undefined) ?? null,
       active.handle,
       toPointerEvent(event),
     );
-    if (patch && feature) deps.applyPatch(feature.id, patch, final);
+    return feature && !deps.store.isReadOnly() ? patch : null;
   };
   const contextOf = createFrameContexts(deps, () => deps.customLayer.getGL());
   const draw = provider.drawHandles?.bind(provider);
@@ -795,23 +794,18 @@ export function adaptHandleProvider(
       active = { featureId: hit.featureId, handle };
       return true;
     },
-    onHandleDragMove(event) {
-      drag(event, false);
-    },
+    onHandleDragMove: drag,
+    onHandleDragRelease: drag,
     onHandleDragEnd(event) {
       const ended = active;
-      try {
-        drag(event, true);
-      } finally {
-        active = null;
-        if (ended && provider.onHandleDragEnd) {
-          const feature = ended.featureId ? deps.store.getFeature(ended.featureId) : undefined;
-          provider.onHandleDragEnd(
-            (feature as Feature | undefined) ?? null,
-            ended.handle,
-            toPointerEvent(event),
-          );
-        }
+      active = null;
+      if (ended && provider.onHandleDragEnd) {
+        const feature = ended.featureId ? deps.store.getFeature(ended.featureId) : undefined;
+        provider.onHandleDragEnd(
+          (feature as Feature | undefined) ?? null,
+          ended.handle,
+          toPointerEvent(event),
+        );
       }
     },
   };

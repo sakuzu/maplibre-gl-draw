@@ -94,10 +94,12 @@ export interface HandleProvider {
    * The change a drag of one of its handles makes.
    *
    * It is called for every move of the pointer during the drag, with the feature as it is then
-   * (the patches of the earlier moves applied), and once more when the drag ends, at the
-   * position the pointer is let go: the patch of each move is applied as an intermediate change
-   * (`intermediate: true`), and the patch of the end is the final one, which stays. It is not
-   * called for a drag that `onHandleDragStart` refused.
+   * (the patches of the earlier moves applied), and once more when the pointer is let go, at that
+   * position: the patch of each move is shown by a sketch (`draw.sketches`) and nothing is written
+   * while the drag goes on, and the patch of the end is written with them, in one write. A drag
+   * whose last call gives no patch writes nothing, and so does one cut short (Esc): the sketch
+   * goes, and this is not called for the end. It is not called for a drag that
+   * `onHandleDragStart` refused.
    *
    * @param feature - The feature the handle is on; `null` for a handle of `globalHandles`
    * @returns The patch to apply to the feature, or `null` for no change

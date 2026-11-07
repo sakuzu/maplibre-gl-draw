@@ -64,7 +64,6 @@ import {
   OVERRIDABLE_TYPES,
   styleRuleChannelOfType,
 } from './extensions.js';
-import { preparePatch } from './features.js';
 import { createGpuParts } from './gpu-parts.js';
 import { bridgeMode, createInputRoute, deliverPointerLeave, toPointerEvent } from './input.js';
 import { adaptGpuFeatureRenderer, createOverlayStack, terrainSurfaceOf } from './render-context.js';
@@ -184,11 +183,6 @@ export function createExtensionHost(deps: ExtensionHostDeps): ExtensionHost {
     spatialIndex: context.spatialIndex,
     surface: (state) => terrainSurfaceOf(state, createTerrainSurface),
     registerSnapProvider: (provider) => context.snapService.register(provider),
-    applyPatch(featureId, patch, final) {
-      const feature = store.getFeature(featureId);
-      if (!feature || store.isReadOnly()) return;
-      store.updateFeature(featureId, preparePatch(feature, patch), { isIntermediate: !final });
-    },
     shapes: context.shapes,
     selectionBoxOf: (featureId) => getDraw().rendered.getSelectionBox(featureId),
     selectionStyle: () =>

@@ -256,7 +256,7 @@ describe('a custom feature type', () => {
     expect(engine.context.store.getSelection().ids).toEqual([]);
   });
 
-  it('shows its handles, and a drag of one applies the patch of onHandleDrag', () => {
+  it('shows its handles, and a drag of one gives the patch of onHandleDrag', () => {
     const { store, selectionScope } = engine.context;
     const provider = selectionScope.auxiliaryHandles.list()[0];
     const feature = store.getFeature('p1');
@@ -266,10 +266,6 @@ describe('a custom feature type', () => {
       { kind: 'resize', id: 'corner', position: [1.5, 1], cursor: 'ew-resize' },
     ]);
 
-    const updates: Array<boolean | undefined> = [];
-    store.subscribe((changes) => {
-      for (const update of changes.features?.updated ?? []) updates.push(update.isIntermediate);
-    });
     expect(
       provider.onHandleDragStart(
         { providerId: provider.id, handleId: 'corner', featureId: 'p1' },
@@ -277,6 +273,7 @@ describe('a custom feature type', () => {
       ),
     ).toBe(true);
     provider.onHandleDragMove(drag('dragmove', 1.7, 1));
+    const patch = provider.onHandleDragRelease?.(drag('dragend', 2, 1));
     provider.onHandleDragEnd(drag('dragend', 2, 1));
 
     expect(definition.onHandleDrag).toHaveBeenLastCalledWith(
@@ -284,9 +281,7 @@ describe('a custom feature type', () => {
       handle,
       expect.objectContaining({ lngLat: [2, 1] }),
     );
-    expect(store.getFeature('p1')?.properties.size).toBe(2);
-    expect(updates[0]).toBe(true);
-    expect(updates[updates.length - 1]).not.toBe(true);
+    expect(patch).toEqual({ properties: { size: 2 } });
   });
 
   it('offers its snapping candidates, keeping a kind of its own', () => {
@@ -675,10 +670,11 @@ describe('the start and the end of a handle drag', () => {
     accept = true;
     expect(provider.onHandleDragStart(hit('grips'), drag('dragstart', 1, 1))).toBe(true);
     provider.onHandleDragMove(drag('dragmove', 2, 1));
+    provider.onHandleDragRelease?.(drag('dragend', 3, 1));
     provider.onHandleDragEnd(drag('dragend', 3, 1));
     // A second end, with no drag going on, is not announced
     provider.onHandleDragEnd(drag('dragend', 4, 1));
-    expect(calls).toEqual(['start f h 1', 'drag f 2', 'drag f 3', 'end 3 h 3']);
+    expect(calls).toEqual(['start f h 1', 'drag f 2', 'drag f 3', 'end undefined h 3']);
     engine.destroy();
   });
 
@@ -740,7 +736,7 @@ describe('the start and the end of a handle drag', () => {
       expect.objectContaining({ lngLat: [1, 1] }),
     );
     expect(onHandleDragEnd).toHaveBeenCalledWith(
-      expect.objectContaining({ id: 'g', properties: { moved: true } }),
+      expect.objectContaining({ id: 'g' }),
       handle,
       expect.objectContaining({ lngLat: [2, 1] }),
     );

@@ -16,9 +16,8 @@
  * are then are written once let go, through the writes of the Store (the rows selected in bulk in steps,
  * `bulk.ts`). A drag cancelled removes its sketch. A sketch that ends by itself (its features
  * deleted, locked, hidden or no longer selected, the document made read-only) stops the drag, which
- * writes nothing.
- * The record of the intermediate writes of the other drags, for the commit or the abort, is
- * drag/intermediate-writes.ts.
+ * writes nothing. The drag of an auxiliary handle is delegated to its provider, and the patches the
+ * provider gives are shown and written the same way.
  */
 
 import type { SketchEdit } from '../../api/sketches.js';
@@ -30,19 +29,17 @@ import type { EngineSignals, EventEmitter } from '../../shared/utils/event-emitt
 import type { SketchController } from '../../sketches/sketch-controller.js';
 import { isSelectionEdit } from '../../sketches/sketch-edits.js';
 import { editableFeatures } from '../../store/lock.js';
-import type { TransformEdit } from '../../store/store.js';
+import type { FeaturePatch, TransformEdit } from '../../store/store.js';
 import type { Feature, SelectionBulk } from '../../store/types.js';
 import type { HandleHitResult } from '../../view/ui/handle-test.js';
 import { getSelectedFeatureIds } from '../../view/ui/helper.js';
 import type { BoundingBoxCoords } from '../../view/ui/selection-ui/index.js';
 import type { EngineModeContext } from '../handler.js';
 import { writeBulkEdit } from './bulk.js';
-import { type AuxiliaryDrag, resolveAuxiliaryDrag } from './drag/auxiliary.js';
-import { IntermediateWrites } from './drag/intermediate-writes.js';
+import { type AuxiliaryDrag, PatchDrag, resolveAuxiliaryDrag } from './drag/auxiliary.js';
 import { startMoveDrag } from './drag/move.js';
 import {
   bulkDragTargets,
-  type DragOperation,
   type DragScope,
   dragTargetsOfHit,
   type SketchDrag,
@@ -78,12 +75,10 @@ interface ShownDrag {
  * @internal
  */
 export class SelectModeDragHandler {
-  /** The running drag operation */
-  private operation: DragOperation | null = null;
+  /** The running drag of an auxiliary handle */
+  private operation: AuxiliaryDrag | null = null;
   /** The running drag shown by a sketch */
   private shown: ShownDrag | null = null;
-  /** The intermediate writes of the running drag, committed or aborted when it ends */
-  private readonly writes = new IntermediateWrites();
   /**
    * The features announced by drag.started, while drag.ended has not been sent for them
    *
@@ -130,7 +125,6 @@ export class SelectModeDragHandler {
       if (!globalDrag) return;
 
       context.map.dragPan.disable();
-      this.writes.discard(store);
       this.operation = globalDrag;
       store.setDragState({ operation: 'auxiliary', ...dragTargetsOfHit(hitResult, [], store) });
       return;
@@ -178,20 +172,16 @@ export class SelectModeDragHandler {
       if (!auxiliaryDrag) return;
     }
 
-    // Announce that the drag has started. Auxiliary handles are excluded: core writes no
-    // intermediate updates to the Store and the provider commits through its own transaction, so
-    // putting them on the editing scope of drag.started / drag.ended would
-    // have the record of the commit transaction swallowed by that scope.
+    // Announce that the drag has started. Auxiliary handles are excluded: what ends their drag is
+    // one write, of core or of the provider through its own transaction, so putting them on the
+    // editing scope of drag.started / drag.ended would have the record of that transaction
+    // swallowed by that scope.
     if (hitResult.type !== 'auxiliary') {
       this.announce(hitResult.type, movingIds, context.eventEmitter);
     }
 
     // Disable MapLibre's map dragging
     context.map.dragPan.disable();
-
-    // Make sure no record from the previous drag remains (normally emptied by the reset in
-    // endDrag)
-    this.writes.discard(store);
 
     // What the drag changes, recorded in its drag state (here and below). Snapping excludes it
     // from its candidates (snapping to itself pulls the cursor back, shifting by the grab offset
@@ -249,7 +239,7 @@ export class SelectModeDragHandler {
 
       case 'auxiliary':
         // Delegation is already done above (we only get here when it was accepted)
-        this.begin(auxiliaryDrag);
+        this.operation = auxiliaryDrag;
         store.setDragState({ operation: 'auxiliary', ...targets });
         break;
     }
@@ -280,7 +270,6 @@ export class SelectModeDragHandler {
     if (hitResult.type === 'resize' && !hitResult.handle) return false;
     this.announce(hitResult.type, [], context.eventEmitter, bulk);
     context.map.dragPan.disable();
-    this.writes.discard(store);
     const target = { selection: true } as const;
     const targets = bulkDragTargets(rows);
     if (hitResult.type === 'move') {
@@ -328,11 +317,26 @@ export class SelectModeDragHandler {
   }
 
   /**
-   * Make a started operation the running one. An operation that could not start (its feature
-   * or vertex is gone) leaves the handler as it was
+   * Shows a patch of the drag of an auxiliary handle over the ones before it: the first one adds the
+   * sketch of the drag, and a sketch refused or ended shows no more
    */
-  private begin(operation: DragOperation | null): void {
-    if (operation) this.operation = operation;
+  private showPatch(context: EngineModeContext, patch: FeaturePatch): void {
+    const featureId = this.operation?.featureId;
+    if (featureId === null || featureId === undefined) return;
+    const { sketches, store } = context;
+    const shown = this.shown;
+    if (!shown) {
+      store.finishSlicedWrite();
+      const drag = new PatchDrag(featureId, patch);
+      const id = addSketch(sketches, drag.start);
+      if (id !== null) sketches.setDragged(id, drag.selected);
+      this.shown = { drag, sketches, id };
+      return;
+    }
+    if (!this.sketchGoesOn()) return;
+    const drag = shown.drag as PatchDrag;
+    drag.add(patch);
+    shown.sketches.setDragEdits(shown.id as string, drag.editsAt());
   }
 
   /**
@@ -342,16 +346,15 @@ export class SelectModeDragHandler {
    */
   updateDrag(event: DragNormalizedEvent, context: EngineModeContext): void {
     const { store } = context;
-    const shown = this.shown;
-    if (shown) {
-      if (!this.sketchGoesOn()) return;
-      const edits = shown.drag.editsAt(event);
-      if (shown.sketches.setDragEdits(shown.id as string, edits)) shown.drag.shown?.(edits, store);
+    if (this.operation) {
+      const patch = this.operation.update(event);
+      if (patch) this.showPatch(context, patch);
       return;
     }
-    // One frame of a drag is one change: the updates of every feature it moves reach the
-    // subscribers in a single notification
-    store.transact(() => this.operation?.update(event, store, this.writes));
+    const shown = this.shown;
+    if (!shown || !this.sketchGoesOn()) return;
+    const edits = shown.drag.editsAt(event);
+    if (shown.sketches.setDragEdits(shown.id as string, edits)) shown.drag.shown?.(edits, store);
   }
 
   /**
@@ -375,27 +378,28 @@ export class SelectModeDragHandler {
    */
   endDrag(context: EngineModeContext, event?: DragNormalizedEvent): void {
     const { store } = context;
-    const wasAuxiliary = this.operation?.type === 'auxiliary';
+    const auxiliary = this.operation;
 
     // The drag always ends: whatever the delegate, the commit or a plugin throws, map dragging
     // is re-enabled and the drag state is cleared, so that the UI never stays stuck in a drag.
     try {
-      // Tell a delegate that the drag has ended (for an auxiliary handle core has written
-      // nothing to the Store)
-      this.operation?.finish?.(event);
-      // Commit the intermediate updates made during the drag in a single transaction before
-      // announcing drag.ended (listeners see the state after the commit). If no feature was
-      // touched, do nothing.
-      this.writes.commit(store);
+      // The delegate gives the last patch, shown with the ones before it (none: nothing is written)
+      if (auxiliary) {
+        const patch = auxiliary.release(event);
+        if (patch) this.showPatch(context, patch);
+        else this.dropSketch();
+      }
 
       // The sketch of the drag is written now (the features selected in bulk in steps over
       // several tasks): the end of the drag is announced once it is written (paired with
       // drag.started, with the same IDs even when the selection changed during the drag;
       // auxiliary handles are excluded)
       const goesOn = this.sketchGoesOn();
-      const announce = wasAuxiliary ? null : this.takeEndAnnouncement(false);
+      const announce = auxiliary ? null : this.takeEndAnnouncement(false);
       if (goesOn) this.writeSketch(context, () => announce?.());
       else announce?.();
+      // Tell a delegate that the drag has ended, once what it edited is written
+      auxiliary?.finish(event);
     } finally {
       // Re-enable MapLibre's map dragging
       context.map.dragPan.enable();
@@ -403,6 +407,14 @@ export class SelectModeDragHandler {
       store.setDragState(null);
       this.reset(store);
     }
+  }
+
+  /** Removes the sketch of the drag running, nothing written */
+  private dropSketch(): void {
+    const shown = this.shown;
+    if (shown?.id == null) return;
+    if (shown.sketches.has(shown.id)) shown.sketches.remove(shown.id);
+    shown.id = null;
   }
 
   /**
@@ -417,7 +429,7 @@ export class SelectModeDragHandler {
     const { drag, sketches, id } = this.shown as ShownDrag & { id: string };
     (this.shown as ShownDrag).id = null;
     const edits = sketches.get(id)?.edits;
-    if (!edits || drag.movesNothing(edits)) {
+    if (!edits || drag.movesNothing(edits, store)) {
       sketches.remove(id);
       done();
       return;
@@ -465,20 +477,16 @@ export class SelectModeDragHandler {
    *   well. The cleanup is the same whether the drag was committed or aborted.
    */
   reset(store?: EngineModeContext['store']): void {
-    // Even on an abort (mode switch / a change from outside), end is delivered to the delegate
-    // exactly once. When coming through endDrag it has already been delivered, so nothing
-    // happens here.
-    this.operation?.finish?.();
     // The sketch of a drag that did not end is removed, nothing written
     const shown = this.shown;
-    if (shown) {
-      if (shown.id !== null && shown.sketches.has(shown.id)) shown.sketches.remove(shown.id);
-      shown.sketches.setDragged(null);
-    }
-
+    this.dropSketch();
+    shown?.sketches.setDragged(null);
     this.shown = null;
+    // Even on an abort (mode switch / a change from outside), end is delivered to the delegate
+    // exactly once, without a last patch. When coming through endDrag it has already been
+    // delivered, so nothing happens here.
+    this.operation?.finish();
     this.operation = null;
-    this.writes.discard(store);
     store?.setFollowedVertices?.(null);
     // An aborted drag still closes what drag.started opened (after the features are restored)
     this.announceEnd(true);

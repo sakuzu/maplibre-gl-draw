@@ -13,11 +13,11 @@
  *
  * - the fill and the outline drawn, and the frame of the selection and its handles
  * - the hit test, held over a grid of the map to the frame (a feature is hit where it is drawn,
- *   nothing where nothing is drawn; what a drag shown by a sketch edits is not hit in its middle)
+ *   nothing where nothing is drawn; what a drag edits is not hit in its middle)
  * - the cursor over the handles (the hit test of the handles)
  * - the snapping: the feature being dragged is no candidate of its own drag, from its start on
- * - the events of the features and the drags, with their marks of intermediate writes: a move, a
- *   rotation and a resize are shown by a sketch and write nothing in their middle
+ * - the events of the features and the drags: every drag is shown by a sketch and writes nothing
+ *   in its middle
  * - `features.get`, which reads the document, and `rendered.get`, which reads what is drawn
  * - the selected vertices
  * - the image of the map taken in the middle of a drag
@@ -172,14 +172,10 @@ interface Edit {
   cursor: string;
   /** The kind of `drag.started` (null: none is told) */
   started: string | null;
-  /** Whether it is shown by a sketch: it writes nothing in its middle, and is not hit there */
-  sketch?: boolean;
   /** The handle drawn under the pointer in the middle of the drag */
   carried: number | null;
   /** The other handles drawn in the middle of the drag (the others are not drawn) */
   shown?: number[];
-  /** What Escape leaves */
-  escape: 'restored' | 'last patch written';
   /** Whether a vertex is selected before the drag (to see whether it stays selected) */
   vertexSelected?: boolean;
   /** How far the feature is moved as a whole, when it follows the pointer */
@@ -251,11 +247,9 @@ const EDITS: Edit[] = [
     by: [120, 60],
     cursor: 'move',
     started: 'feature',
-    sketch: true,
     carried: null,
     // The handles follow the feature as it is moved, as they stand at rest
     shown: [I_RESIZE, I_ROTATE, I_VERTEX, I_MIDPOINT],
-    escape: 'restored',
     vertexSelected: true,
     follows: [120, 60],
   },
@@ -267,10 +261,8 @@ const EDITS: Edit[] = [
     by: [80, 60],
     cursor: 'grab',
     started: 'handle',
-    sketch: true,
     carried: null,
     shown: [I_ROTATE],
-    escape: 'restored',
   },
   {
     name: 'a resize from the south-east handle',
@@ -283,10 +275,8 @@ const EDITS: Edit[] = [
     by: [30, 25],
     cursor: 'se-resize',
     started: 'handle',
-    sketch: true,
     carried: null,
     shown: [I_RESIZE],
-    escape: 'restored',
   },
   {
     name: 'a resize inward from the south-east handle, over the corner of the feature',
@@ -300,10 +290,8 @@ const EDITS: Edit[] = [
     by: [-40, -32],
     cursor: 'se-resize',
     started: 'handle',
-    sketch: true,
     carried: null,
     shown: [I_RESIZE],
-    escape: 'restored',
   },
   {
     name: 'a vertex',
@@ -313,9 +301,7 @@ const EDITS: Edit[] = [
     by: [30, -24],
     cursor: 'pointer',
     started: 'vertex',
-    sketch: true,
     carried: I_VERTEX,
-    escape: 'restored',
     vertexSelected: true,
   },
   {
@@ -331,9 +317,7 @@ const EDITS: Edit[] = [
     by: [0, 30],
     cursor: 'crosshair',
     started: 'vertex',
-    sketch: true,
     carried: I_VERTEX,
-    escape: 'restored',
   },
   {
     name: 'the radius of a circle',
@@ -343,9 +327,7 @@ const EDITS: Edit[] = [
     by: [40, 0],
     cursor: 'pointer',
     started: 'handle',
-    sketch: true,
     carried: I_RADIUS,
-    escape: 'restored',
   },
   {
     name: 'a handle of a handle provider',
@@ -358,7 +340,6 @@ const EDITS: Edit[] = [
     started: null,
     carried: null,
     shown: [I_RESIZE, I_ROTATE, I_VERTEX, I_MIDPOINT],
-    escape: 'last patch written',
     // The provider moves it from where the drag started: a step of the pointer after the press
     follows: [(60 * (STEPS - 1)) / STEPS, (30 * (STEPS - 1)) / STEPS],
   },
@@ -477,12 +458,11 @@ async function run(page: Page, kind: StoreKind, edit: Edit, cancelled: boolean):
   await pressAndMove(page, grabbed, edit.by, STEPS);
   const mid = await frame(page, COLORS);
   const midGeometry = await geometryOf(page, 'p', true);
-  // A drag shown by a sketch leaves the document as it was, and the others write it
-  expect(await geometryOf(page, 'p')).toEqual(edit.sketch ? geometry : midGeometry);
+  // A drag is shown by a sketch, and leaves the document as it was
+  expect(await geometryOf(page, 'p')).toEqual(geometry);
   const midRadius = await propertyOf(page, 'p', RADIUS_KEY, true);
-  expect(await propertyOf(page, 'p', RADIUS_KEY)).toEqual(edit.sketch ? radius : midRadius);
-  if (edit.sketch) await expectNoHits(page);
-  else await expectHitsAsDrawn(page);
+  expect(await propertyOf(page, 'p', RADIUS_KEY)).toEqual(radius);
+  await expectNoHits(page);
   const image = await capture(page, [FILL]);
   const midEvents = await events(page);
   if (edit.vertexSelected) expect(await vertexSelection(page)).toEqual(SELECTED_VERTEX);
@@ -543,13 +523,9 @@ function expectMiddle(edit: Edit, r: Run): void {
   // The image taken in the middle of the drag shows the feature where it is dragged. This holds
   // the behavior as it is, which nothing decides yet: it may change later
   expectSame(r.image[0] as Drawn, r.mid[I_FILL] as Drawn, 0.05);
-  // The events: a write in the middle for each move of the pointer after the first, which starts
-  // the drag; none for a drag shown by a sketch
+  // The events: nothing is written in the middle
   const started = edit.started ? [`start ${edit.started}`] : [];
-  expect(sequenceOf(r.midEvents)).toEqual([
-    ...started,
-    ...(edit.sketch ? [] : times(STEPS - 1, ['I p', 'D'])),
-  ]);
+  expect(sequenceOf(r.midEvents)).toEqual(started);
   expectNoSnapToItself(r.midEvents);
   expect(r.midEvents.filter((e) => e.name === 'preview.changed')).toEqual([]);
 }
@@ -602,18 +578,8 @@ function describeDrags(group: DragReadsGroup): void {
         const r = await run(page, kind, edit, true);
         expectMiddle(edit, r);
         const ended = edit.started ? [`end ${edit.started} cancelled`] : [];
-        if (edit.escape === 'last patch written') {
-          // The handle of a provider takes the end of the drag as its last patch, written
-          expect(r.endGeometry).toEqual(r.midGeometry);
-          expectSame(r.end[I_FILL] as Drawn, r.mid[I_FILL] as Drawn);
-          expect(sequenceOf(r.endEvents)).toEqual(['U p', 'D', ...ended]);
-          return;
-        }
-        // The feature goes back in a write in the middle (and a Store of rows writes its row
-        // back); a sketch was never written
-        const rewritten = kind === 'rows' ? ['I p', 'D', 'U p', 'D'] : ['I p', 'D'];
-        const back = edit.sketch ? [] : rewritten;
-        expect(sequenceOf(r.endEvents)).toEqual([...back, ...ended]);
+        // A sketch was never written
+        expect(sequenceOf(r.endEvents)).toEqual(ended);
         expect(r.endRadius).toEqual(r.radius);
         expectSame(r.end[I_FILL] as Drawn, r.selected[I_FILL] as Drawn);
         expectSame(r.end[I_FRAME] as Drawn, r.selected[I_FRAME] as Drawn);

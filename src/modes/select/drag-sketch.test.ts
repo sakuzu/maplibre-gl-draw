@@ -24,7 +24,7 @@ import {
   STATE_MOVE_SHIFT,
 } from '../../feature-table/row-state.js';
 import { MemoryStore } from '../../store/memory.js';
-import type { Store } from '../../store/store.js';
+import type { FeaturePatch, Store } from '../../store/store.js';
 import { createTableStore } from '../../store/table-memory.js';
 import type { Feature } from '../../store/types.js';
 import { createMapStub } from '../../test-utils.js';
@@ -265,6 +265,100 @@ describe.each(KINDS)('a drag of vertices over a Store of %s', (kind) => {
     expect(hit()).toBe(false);
     letGoAt(2, -1, CORNER);
     expect(hit()).toBe(true);
+  });
+});
+
+describe.each(KINDS)('a drag of a handle of a provider over a Store of %s', (kind) => {
+  const FROM_HANDLE: [number, number] = [0.5, 3];
+  /** The patches the handle gives, by the position of the pointer */
+  let patchAt: (lng: number) => FeaturePatch | null;
+  let ended: Array<number | undefined>;
+
+  beforeEach(() => {
+    open(kind, ['a']);
+    patchAt = (lng) => ({ properties: { at: lng } });
+    ended = [];
+    draw.extensions.handleProviders.add({
+      name: 'grip',
+      handles: () => [{ id: 'g', kind: 'resize', position: FROM_HANDLE }],
+      onHandleDrag: (_feature, _handle, pointer) => patchAt(pointer.lngLat[0] as number),
+      onHandleDragEnd: (feature) => {
+        ended.push(feature?.properties.at as number | undefined);
+      },
+    });
+    draw.selection.set('feature', ['a']);
+  });
+
+  function pressHandle(...moves: readonly number[]): void {
+    const router = engine.inputRouter;
+    const [lng, lat] = FROM_HANDLE;
+    router.dispatch(event<MouseNormalizedEvent>('mousedown', lng, lat));
+    router.dispatch(event<DragNormalizedEvent>('dragstart', lng, lat, FROM_HANDLE));
+    for (const x of moves) {
+      router.dispatch(event<DragNormalizedEvent>('dragmove', x, lat, FROM_HANDLE));
+    }
+  }
+
+  const letGoHandle = (lng: number): void => {
+    engine.inputRouter.dispatch(
+      event<DragNormalizedEvent>('dragend', lng, FROM_HANDLE[1], FROM_HANDLE),
+    );
+  };
+
+  it('shows its patches, writes nothing while it goes on, and writes once let go', () => {
+    pressHandle(1, 2);
+    expect(writes).toEqual([]);
+    expect(draw.features.get('a')?.properties.at).toBeUndefined();
+    expect(draw.rendered.get('a')?.properties.at).toBe(2);
+    letGoHandle(3);
+    expect(writes).toEqual(['document.changed']);
+    expect(draw.features.get('a')?.properties.at).toBe(3);
+    expect(ended).toEqual([3]);
+    expect(draw.sketches.count()).toBe(0);
+  });
+
+  it('keeps what the patches of the earlier moves changed', () => {
+    let move = 0;
+    patchAt = () => ({ properties: { [`key${++move}`]: move } });
+    pressHandle(1, 2);
+    letGoHandle(3);
+    expect(draw.features.get('a')?.properties).toMatchObject({ key1: 1, key2: 2, key3: 3 });
+  });
+
+  it('writes nothing once cancelled, and tells the end to the provider', () => {
+    pressHandle(1, 2);
+    engine.modeManager.getHandler()?.onDragCancel?.(event('dragcancel', 2, 3, FROM_HANDLE));
+    expect(writes).toEqual([]);
+    expect(draw.rendered.get('a')?.properties.at).toBeUndefined();
+    expect(ended).toEqual([undefined]);
+    letGoHandle(2);
+    expect(ended).toEqual([undefined]);
+  });
+
+  it('writes nothing when its last call gives no patch', () => {
+    pressHandle(1);
+    patchAt = () => null;
+    letGoHandle(2);
+    expect(writes).toEqual([]);
+    expect(draw.sketches.count()).toBe(0);
+  });
+
+  it('writes nothing when its patches give the feature what it has', () => {
+    draw.features.update('a', { properties: { at: 5 } });
+    writes.length = 0;
+    pressHandle(1);
+    letGoHandle(5);
+    expect(writes).toEqual([]);
+    expect(draw.sketches.count()).toBe(0);
+  });
+
+  it('writes nothing once its feature is locked', () => {
+    pressHandle(1);
+    draw.features.update('a', { locked: true });
+    writes.length = 0;
+    letGoHandle(2);
+    expect(writes).toEqual([]);
+    expect(draw.features.get('a')?.properties.at).toBeUndefined();
   });
 });
 
