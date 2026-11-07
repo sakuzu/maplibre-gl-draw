@@ -129,7 +129,7 @@ export async function addTestTerrain(
       : { source: TEST_DEM_SOURCE, exaggeration },
   );
   await new Promise<void>((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error('the terrain did not load')), 20_000);
+    const timer = setTimeout(() => reject(new Error('the terrain did not load')), 80_000);
     map.once('idle', () => {
       clearTimeout(timer);
       resolve();

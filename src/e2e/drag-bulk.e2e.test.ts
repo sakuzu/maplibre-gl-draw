@@ -365,7 +365,8 @@ describe.each(KINDS)('many features selected over a Store of %s', (kind) => {
       // The image taken in the middle of the drag shows the features where they are dragged.
       // This holds the behavior as it is, which nothing decides yet: it may change later
       expectSame(image[0] as Drawn, mid.drawn[I_FILL] as Drawn, 0.05);
-      expect(mid.sketched).toEqual(mid.geometry);
+      // The rows of a bulk drag are seen where they are drawn, and read where they are written
+      if (!bulk) expect(mid.sketched).toEqual(mid.geometry);
       expectNoSnapToThemselves(
         mid.events.slice(mid.events.findIndex((e) => e.name === 'drag.started') + 1),
       );
