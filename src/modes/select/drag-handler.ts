@@ -177,7 +177,13 @@ export class SelectModeDragHandler {
     // editing scope of drag.started / drag.ended would have the record of that transaction
     // swallowed by that scope.
     if (hitResult.type !== 'auxiliary') {
-      this.announce(hitResult.type, movingIds, context.eventEmitter);
+      // The features a shared vertex takes along are dragged too
+      const followers = vertexPlan?.followers.map((state) => state.featureId) ?? [];
+      this.announce(
+        hitResult.type,
+        [...new Set([...movingIds, ...followers])],
+        context.eventEmitter,
+      );
     }
 
     // Disable MapLibre's map dragging

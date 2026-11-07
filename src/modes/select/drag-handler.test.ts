@@ -595,6 +595,16 @@ describe.each(STORE_KINDS)('on %s', (_kind, createStore) => {
       enableSharedVertexDrag(true);
     });
 
+    it('announces the features that follow along with the one grabbed', () => {
+      const emit = vi.fn();
+      context.eventEmitter = { emit, on: vi.fn(), off: vi.fn() } as never;
+      startVertexDrag('f1', { ring: 0, index: 1 }, [10, 0]);
+      expect(emit).toHaveBeenCalledWith('drag.started', {
+        kind: 'vertex',
+        featureIds: ['f1', 'f2'],
+      });
+    });
+
     it('on commit, the updates of the 2 features ride on a single StoreChange', () => {
       const batches: StoreChange[] = [];
       store.subscribe((changes) => {
