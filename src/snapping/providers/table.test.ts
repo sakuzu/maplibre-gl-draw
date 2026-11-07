@@ -14,6 +14,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
+import { RenderedShapes } from '../../sketches/rendered-shapes.js';
 import { MemoryStore } from '../../store/memory.js';
 import { StoreSpatialIndex } from '../../store/spatial/store-spatial-index.js';
 import type { Store } from '../../store/store.js';
@@ -147,6 +148,7 @@ function stores(features: Feature[]) {
   const snapTargets = createSnapTargetsRegistry();
   const deps = (store: Store) => ({
     store,
+    shapes: new RenderedShapes(store),
     spatialIndex: new StoreSpatialIndex(store),
     snapTargets,
   });

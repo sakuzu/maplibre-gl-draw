@@ -15,6 +15,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { initialBearingDegrees } from '../geometry/distance.js';
 import type { ObjectLayer } from '../shared/types/model.js';
 import { coordinatesOf, geometryFromCoordinates } from '../shared/utils/coordinates.js';
+import { RenderedShapes } from '../sketches/rendered-shapes.js';
 import { MemoryStore } from '../store/memory.js';
 import { RBushSpatialIndex } from '../store/spatial/spatial-index.js';
 import type {
@@ -111,14 +112,21 @@ function providerContext(overrides: Partial<SnapProviderContext> = {}): SnapProv
 const WIDE_BBOX = { minX: -1, minY: -1, maxX: 1, maxY: 1 };
 
 function vertexCandidates(ctx: SnapProviderContext = providerContext()): SnapCandidate[] {
-  return createStoreVertexSnapProvider({ store, spatialIndex, snapTargets }).candidates(
-    WIDE_BBOX,
-    ctx,
-  );
+  return createStoreVertexSnapProvider({
+    store,
+    shapes: new RenderedShapes(store),
+    spatialIndex,
+    snapTargets,
+  }).candidates(WIDE_BBOX, ctx);
 }
 
 function edgeCandidates(ctx: SnapProviderContext = providerContext()): SnapSegmentCandidate[] {
-  return createStoreEdgeSnapProvider({ store, spatialIndex, snapTargets })
+  return createStoreEdgeSnapProvider({
+    store,
+    shapes: new RenderedShapes(store),
+    spatialIndex,
+    snapTargets,
+  })
     .candidates(WIDE_BBOX, ctx)
     .filter(isSegmentCandidate);
 }
@@ -127,7 +135,12 @@ function intersectionCandidates(
   ctx: SnapProviderContext = providerContext(),
   bbox = WIDE_BBOX,
 ): SnapPointCandidate[] {
-  return createStoreIntersectionSnapProvider({ store, spatialIndex, snapTargets })
+  return createStoreIntersectionSnapProvider({
+    store,
+    shapes: new RenderedShapes(store),
+    spatialIndex,
+    snapTargets,
+  })
     .candidates(bbox, ctx)
     .filter((c): c is SnapPointCandidate => !isSegmentCandidate(c));
 }
@@ -566,7 +579,11 @@ describe('the built-in edge provider', () => {
       [6, 6],
     ]);
 
-    const candidates = createStoreEdgeSnapProvider({ store, spatialIndex })
+    const candidates = createStoreEdgeSnapProvider({
+      store,
+      shapes: new RenderedShapes(store),
+      spatialIndex,
+    })
       .candidates({ minX: -0.01, minY: -0.01, maxX: 0.01, maxY: 0.01 }, providerContext())
       .filter(isSegmentCandidate);
 
@@ -617,6 +634,7 @@ describe('the built-in intersection provider', () => {
 
     const candidates = createStoreIntersectionSnapProvider({
       store,
+      shapes: new RenderedShapes(store),
       spatialIndex,
       snapTargets,
       messages: { snapIntersection: '交点' },
@@ -631,7 +649,7 @@ describe('the built-in intersection provider', () => {
     addCrossingLines();
 
     const descriptions = createBuiltInSnapProviders(
-      { store, spatialIndex, snapTargets },
+      { store, shapes: new RenderedShapes(store), spatialIndex, snapTargets },
       { messages: { snapIntersection: '交点' } },
     )
       .flatMap((provider) => provider.candidates(WIDE_BBOX, providerContext()))
@@ -768,7 +786,7 @@ describe('the built-in guide provider', () => {
   ): SnapSegmentCandidate[] {
     store.setMode(mode);
     store.setTentative(tentative);
-    return guideProvider({ store }, options)
+    return guideProvider({ store, shapes: new RenderedShapes(store) }, options)
       .candidates(WIDE_BBOX, providerContext())
       .filter(isSegmentCandidate);
   }
@@ -851,7 +869,7 @@ describe('the built-in guide provider', () => {
       ),
     );
     const candidates = guideProvider(
-      { store },
+      { store, shapes: new RenderedShapes(store) },
       { messages: { snapNorth: '北基準', snapExtension: '延長線' } },
     )
       .candidates(WIDE_BBOX, providerContext())
@@ -991,7 +1009,7 @@ describe('the step angle of the built-in guide provider', () => {
     store.setMode('draw_line');
     store.setTentative(FIRST_POINT);
     const guide = createBuiltInSnapProviders(
-      { store, spatialIndex, snapTargets },
+      { store, shapes: new RenderedShapes(store), spatialIndex, snapTargets },
       { getNorthStepDegrees },
     )[3];
     return guide
@@ -1018,7 +1036,7 @@ describe('the step angle of the built-in guide provider', () => {
     store.setMode('draw_line');
     store.setTentative(FIRST_POINT);
     const guide = createBuiltInSnapProviders(
-      { store, spatialIndex, snapTargets },
+      { store, shapes: new RenderedShapes(store), spatialIndex, snapTargets },
       { getNorthStepDegrees: () => step },
     )[3];
 
@@ -1034,10 +1052,10 @@ describe('the step angle of the built-in guide provider', () => {
       store.setMode('draw_line');
       store.setTentative(FIRST_POINT);
       expect(
-        guideProvider({ store }, { northStepDegrees: step }).candidates(
-          WIDE_BBOX,
-          providerContext(),
-        ),
+        guideProvider(
+          { store, shapes: new RenderedShapes(store) },
+          { northStepDegrees: step },
+        ).candidates(WIDE_BBOX, providerContext()),
       ).toHaveLength(8);
     },
   );

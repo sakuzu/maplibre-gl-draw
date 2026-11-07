@@ -308,18 +308,7 @@ export function createInputRouter(deps: InputRouterDeps): InputRouter {
           }
         : undefined;
 
-    const moving = targets?.movingFeatureIds;
-    const movingRows = targets?.movingRows;
-    const tables = context.store.tables;
-    const excludeFeatureIds =
-      movingRows && tables
-        ? new RowsExclusion(moving ?? [], (id) => {
-            const handle = tables.findRow(id);
-            return handle !== undefined && movingRows.has(handle);
-          })
-        : moving && moving.length > 0
-          ? new Set(moving)
-          : undefined;
+    const excludeFeatureIds = context.shapes.snapExclusion(targets);
 
     const preferFeature = modeManager.getHandler()?.getSnapPreference?.() ?? undefined;
 
@@ -458,7 +447,7 @@ export function createInputRouter(deps: InputRouterDeps): InputRouter {
     if (!handler) return false;
 
     // The single place where the longitude of the input is decided (see toStoredCopy)
-    const event = toStoredCopy(input, firstTentativeCoordinate(context.store.getTentative()));
+    const event = toStoredCopy(input, firstTentativeCoordinate(context.shapes.tentative()));
 
     switch (event.type) {
       case 'click':
@@ -632,21 +621,4 @@ export function createInputRouter(deps: InputRouterDeps): InputRouter {
       return pointerHeld;
     },
   };
-}
-
-/**
- * The features snapping leaves out while features selected in bulk are moved: the ones listed,
- * and the rows being moved (asked by id; the rows are not listed)
- */
-class RowsExclusion extends Set<string> {
-  constructor(
-    ids: readonly string[],
-    private readonly moving: (id: string) => boolean,
-  ) {
-    super(ids);
-  }
-
-  override has(id: string): boolean {
-    return super.has(id) || this.moving(id);
-  }
 }

@@ -28,6 +28,7 @@ import { DEFAULT_TILE_SIZE } from '../shared/math/index.js';
 import { nearestLongitude, wrapLongitude } from '../shared/math/longitude.js';
 import type { EventEmitter } from '../shared/utils/event-emitter.js';
 import { isSameVertexRef } from '../shared/utils/vertex-ref.js';
+import { RenderedShapes } from '../sketches/rendered-shapes.js';
 import type { SpatialIndex } from '../store/spatial/spatial-index.js';
 import type { Store } from '../store/store.js';
 import type { BoundingBox, Coordinate, VertexRef } from '../store/types.js';
@@ -70,6 +71,8 @@ import {
 export interface SnapServiceDeps {
   /** The Store (for the built-in providers) */
   store?: Store;
+  /** The shapes as they are seen, which name what the snapping reads (of the Store when omitted) */
+  shapes?: RenderedShapes;
   /** The SpatialIndex (for the built-in providers) */
   spatialIndex?: SpatialIndex;
   /** The snapping candidates of the custom feature types of this draw instance */
@@ -198,7 +201,12 @@ export function createSnapService(deps: SnapServiceDeps = {}): SnapService {
   if (deps.store && deps.spatialIndex) {
     providers.push(
       ...createBuiltInSnapProviders(
-        { store: deps.store, spatialIndex: deps.spatialIndex, snapTargets: deps.snapTargets },
+        {
+          store: deps.store,
+          shapes: deps.shapes ?? new RenderedShapes(deps.store),
+          spatialIndex: deps.spatialIndex,
+          snapTargets: deps.snapTargets,
+        },
         {
           tileSize,
           ...deps.guide,

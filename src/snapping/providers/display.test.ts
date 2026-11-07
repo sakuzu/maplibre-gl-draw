@@ -18,6 +18,7 @@ import type { Dataset, DatasetRow } from '../../dataset/types.js';
 import { resolveMessages } from '../../messages.js';
 import type { ObjectLayer } from '../../shared/types/model.js';
 import { coordinatesOf, geometryFromCoordinates } from '../../shared/utils/coordinates.js';
+import { RenderedShapes } from '../../sketches/rendered-shapes.js';
 import { MemoryStore } from '../../store/memory.js';
 import { RBushSpatialIndex } from '../../store/spatial/spatial-index.js';
 import type { BoundingBox, Coordinate, Feature, FeatureCoordinates } from '../../store/types.js';
@@ -63,6 +64,7 @@ beforeEach(() => {
   });
   enabled = true;
   providers = createDisplaySnapProviders({
+    shapes: new RenderedShapes(store),
     datasets,
     store,
     spatialIndex,
@@ -336,6 +338,7 @@ describe('the intersection provider of datasets', () => {
 
   it('takes the description from the messages table given to it', () => {
     const localized = createDisplaySnapProviders({
+      shapes: new RenderedShapes(store),
       datasets,
       store,
       spatialIndex,
@@ -358,6 +361,7 @@ describe('the intersection provider of datasets', () => {
   it('takes the description from a resolved table of an instance (Options.messages)', () => {
     // The draw instance passes the table it resolved from Options.messages
     const localized = createDisplaySnapProviders({
+      shapes: new RenderedShapes(store),
       datasets,
       store,
       spatialIndex,

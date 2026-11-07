@@ -14,7 +14,6 @@
  */
 
 import {
-  forEachSnapRow,
   rowHasEdges,
   rowSegmentsInBBox,
   rowVerticesInBBox,
@@ -41,11 +40,10 @@ export function forEachTargetRow(
   ctx: SnapProviderContext,
   visit: (row: SnapRow) => void,
 ): void {
-  const { store } = deps;
+  const { store, shapes } = deps;
   if (!store.tables) return;
   const hidden = store.listHidden();
-  forEachSnapRow(
-    store.tables,
+  shapes.forEachSnapRow(
     bbox,
     (layerId, groupId) => {
       if (!store.getLayer(layerId)?.visible || hidden.has(layerId)) return false;

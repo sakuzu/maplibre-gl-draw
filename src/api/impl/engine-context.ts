@@ -330,6 +330,7 @@ export function createContext(map: MapLibreMap, options: EngineOptions = {}): Co
 
   const snapService: SnapService = createSnapService({
     store,
+    shapes,
     spatialIndex,
     snapTargets,
     eventEmitter,

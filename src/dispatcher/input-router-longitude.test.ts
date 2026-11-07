@@ -14,6 +14,7 @@ import type { Map as MapLibreMap } from 'maplibre-gl';
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { EngineModeContext, EngineModeHandler } from '../modes/handler.js';
 import type { ModeManager } from '../modes/manager.js';
+import { RenderedShapes } from '../sketches/rendered-shapes.js';
 import { MemoryStore } from '../store/memory.js';
 import type { TentativeState } from '../store/types.js';
 import { createInputRouter } from './input-router.js';
@@ -100,7 +101,7 @@ function startRouter() {
   const router = createInputRouter({
     normalizer: normalizer as unknown as Parameters<typeof createInputRouter>[0]['normalizer'],
     modeManager: { getHandler: () => mode } as unknown as ModeManager,
-    context: { store, map } as unknown as EngineModeContext,
+    context: { store, shapes: new RenderedShapes(store), map } as unknown as EngineModeContext,
     map,
     notifyMapClick: (payload) => mapClicks.push(payload),
   });

@@ -177,7 +177,7 @@ export function createBuiltInSnapProviders(
     createStoreEdgeSnapProvider(deps),
     createStoreIntersectionSnapProvider({ ...deps, messages }),
     createSteppedGuideSnapProvider(
-      { store: deps.store },
+      { store: deps.store, shapes: deps.shapes },
       options.getNorthStepDegrees ?? (() => DEFAULT_SNAP_OPTIONS.guideStepDegrees),
       { tileSize: options.tileSize, messages },
     ),

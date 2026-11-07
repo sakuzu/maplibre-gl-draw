@@ -242,6 +242,7 @@ export function createEngine(
   const unproject = (p: { x: number; y: number }) => view.unproject(p);
   const topmostDeps: Parameters<typeof createTopmostHitTester>[0] = {
     store,
+    shapes: context.shapes,
     hitTestService,
     unproject,
     // The same bearing-independent tolerance as the HitTestService
@@ -276,6 +277,7 @@ export function createEngine(
   const displaySnap = createDisplaySnapProviders({
     datasets,
     store,
+    shapes: context.shapes,
     spatialIndex,
     snapTargets: context.snapTargets,
     isEnabled: () => snapService.isDatasetsEnabled(),
@@ -391,6 +393,7 @@ export function createEngine(
   const modeContext: EngineModeContext = {
     map,
     store,
+    shapes: context.shapes,
     spatialIndex,
     hitTestService,
     hitTestTopmost,

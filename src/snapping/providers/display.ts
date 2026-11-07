@@ -26,6 +26,7 @@ import type { DatasetManager } from '../../dataset/manager.js';
 import type { Dataset } from '../../dataset/types.js';
 import { segmentIntersection } from '../../geometry/split.js';
 import { MESSAGES_EN, type Messages } from '../../messages.js';
+import type { RenderedShapes } from '../../sketches/rendered-shapes.js';
 import type { SpatialIndex } from '../../store/spatial/spatial-index.js';
 import { RBushSpatialIndex } from '../../store/spatial/spatial-index.js';
 import type { Store } from '../../store/store.js';
@@ -55,6 +56,8 @@ export interface DisplaySnapProviderDeps {
   datasets: DatasetManager;
   /** The Store (used as the counterpart of an intersection) */
   store: Store;
+  /** The shapes as they are seen, which name what the snapping reads */
+  shapes: RenderedShapes;
   /** The SpatialIndex (used as the counterpart of an intersection) */
   spatialIndex: SpatialIndex;
   /** Whether snapping to the data is enabled (options.datasets of SnapService) */
@@ -256,7 +259,12 @@ export function createDisplaySnapProviders(deps: DisplaySnapProviderDeps): Displ
     const groups: SegmentGroup[] = [];
 
     for (const feature of queryFeatures(
-      { store: deps.store, spatialIndex: deps.spatialIndex, snapTargets: deps.snapTargets },
+      {
+        store: deps.store,
+        shapes: deps.shapes,
+        spatialIndex: deps.spatialIndex,
+        snapTargets: deps.snapTargets,
+      },
       bbox,
       ctx,
     )) {

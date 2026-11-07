@@ -32,6 +32,7 @@ import { initialBearingDegrees } from '../../geometry/distance.js';
 import { EARTH_RADIUS_METERS, toRadians } from '../../geometry/units.js';
 import { type Messages, resolveMessages } from '../../messages.js';
 import { DEFAULT_TILE_SIZE } from '../../shared/math/index.js';
+import type { RenderedShapes } from '../../sketches/rendered-shapes.js';
 import type { Store } from '../../store/store.js';
 import type { BoundingBox, Coordinate, TentativeState } from '../../store/types.js';
 import { degreesPerPixel } from '../geometry.js';
@@ -58,6 +59,8 @@ const GUIDE_LENGTH_PIXELS = 4096;
 export interface GuideSnapProviderDeps {
   /** The Store of the draw instance */
   store: Store;
+  /** The shapes as they are seen, which read the drawing in progress */
+  shapes: Pick<RenderedShapes, 'tentative'>;
 }
 
 /**
@@ -174,7 +177,7 @@ export function createSteppedGuideSnapProvider(
     candidates(_bbox: BoundingBox, ctx: SnapProviderContext): SnapCandidate[] {
       if (!GUIDE_MODES.has(deps.store.getMode())) return [];
 
-      const tentative = deps.store.getTentative();
+      const tentative = deps.shapes.tentative();
       if (!tentative) return [];
 
       const confirmed = getConfirmedTentativeVertices(tentative);

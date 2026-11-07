@@ -23,6 +23,7 @@ import {
   makeRefFactory,
 } from '../../shared/utils/feature-segments.js';
 import { hasVertexRef } from '../../shared/utils/vertex-ref.js';
+import type { RenderedShapes } from '../../sketches/rendered-shapes.js';
 import { isLocallyHidden } from '../../store/local-visibility.js';
 import type { SpatialIndex } from '../../store/spatial/spatial-index.js';
 import type { Store } from '../../store/store.js';
@@ -48,6 +49,8 @@ export {
  */
 export interface StoreSnapProviderDeps {
   store: Store;
+  /** The shapes as they are seen, which name what the snapping reads */
+  shapes: RenderedShapes;
   spatialIndex: SpatialIndex;
   /**
    * The snapping candidates of the custom feature types of this draw instance (when omitted,
@@ -90,7 +93,7 @@ export function queryFeatures(
     if (id === ctx.excludeFeatureId) continue;
     if (ctx.excludeFeatureIds?.has(id)) continue;
 
-    const feature = deps.store.getFeature(id);
+    const feature = deps.shapes.snapFeature(id);
     if (!feature) continue;
     if (!isSnapVisible(feature, deps.store)) continue;
 

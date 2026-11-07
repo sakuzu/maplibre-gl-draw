@@ -20,6 +20,7 @@ import type { ModeManager } from '../modes/manager.js';
 import { SelectMode } from '../modes/select/mode.js';
 import type { FeatureCoordinates, ObjectLayer } from '../shared/types/model.js';
 import { geometryFromCoordinates } from '../shared/utils/coordinates.js';
+import { RenderedShapes } from '../sketches/rendered-shapes.js';
 import { createSnapService } from '../snapping/service.js';
 import type { SnapContext, SnapService } from '../snapping/types.js';
 import { MemoryStore } from '../store/memory.js';
@@ -180,7 +181,7 @@ function startRouter(
   const modeManager = {
     getHandler: () => mode,
   } as unknown as ModeManager;
-  const context = { store, map } as unknown as EngineModeContext;
+  const context = { store, shapes: new RenderedShapes(store), map } as unknown as EngineModeContext;
 
   const router = createInputRouter({
     normalizer: normalizer as unknown as Parameters<typeof createInputRouter>[0]['normalizer'],
@@ -578,7 +579,7 @@ describe('Snapping of InputRouter', () => {
     const router = createInputRouter({
       normalizer: normalizer as unknown as Parameters<typeof createInputRouter>[0]['normalizer'],
       modeManager: { getHandler: () => mode } as unknown as ModeManager,
-      context: { store, map } as unknown as EngineModeContext,
+      context: { store, shapes: new RenderedShapes(store), map } as unknown as EngineModeContext,
       map,
     });
     router.start();

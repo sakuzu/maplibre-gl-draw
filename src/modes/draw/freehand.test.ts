@@ -20,6 +20,7 @@ import { bridgeMode } from '../../api/impl/input.js';
 import { createInputRouter } from '../../dispatcher/input-router.js';
 import type { DragNormalizedEvent, NormalizedEvent } from '../../dispatcher/types.js';
 import { coordinatesOf } from '../../shared/utils/coordinates.js';
+import { RenderedShapes } from '../../sketches/rendered-shapes.js';
 import { createSnapService } from '../../snapping/service.js';
 import type { SnapService } from '../../snapping/types.js';
 import { MemoryStore } from '../../store/memory.js';
@@ -150,6 +151,7 @@ function setup(): void {
   const context = {
     map,
     store,
+    shapes: new RenderedShapes(store),
     spatialIndex,
     autoNameGenerator: { generateName: () => undefined },
     generateFeatureId: () => `f${++idCounter}`,
