@@ -840,7 +840,8 @@ export class SketchController {
       return false;
     }
     const writes = entries.map((entry) => {
-      const creates: Array<{ feature: Feature; below: string | null; key: string }> = [];
+      const creates: Array<{ feature: Feature; below: string | null | undefined; key: string }> =
+        [];
       entry.sketch.edits.forEach((edit, i) => {
         if (edit.kind !== 'create') return;
         const layerId = entry.createLayers.get(i) ?? '';
@@ -882,8 +883,12 @@ export class SketchController {
     return results.every((dropped) => dropped !== null);
   }
 
-  /** Puts a feature just created just above an item of its layer or group (at the back for null) */
-  #place(feature: Feature, below: string | null): void {
+  /**
+   * Puts a feature just created just above an item of its layer or group (at the back for null; it
+   * stays at the front where it was created for undefined)
+   */
+  #place(feature: Feature, below: string | null | undefined): void {
+    if (below === undefined) return;
     const store = this.#store;
     const { layerId, groupId } = feature;
     const now = itemNeighbors(store, layerId, groupId, feature.id);

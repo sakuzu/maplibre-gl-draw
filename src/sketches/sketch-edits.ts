@@ -103,13 +103,17 @@ function checkCreate(edit: Record<string, unknown>): void {
   }
   if (!isRecord(edit.feature))
     throw invalidInput('The feature of an edit create must be an object');
-  if (!isIndex(edit.placedVertexCount)) {
+  if (edit.placedVertexCount !== undefined && !isIndex(edit.placedVertexCount)) {
     throw invalidInput('placedVertexCount must be an integer from 0');
   }
   if (edit.highlightedVertexIndex !== undefined && !isIndex(edit.highlightedVertexIndex)) {
     throw invalidInput('highlightedVertexIndex must be an integer from 0');
   }
-  if (edit.below !== null && (typeof edit.below !== 'string' || edit.below === '')) {
+  if (
+    edit.below !== undefined &&
+    edit.below !== null &&
+    (typeof edit.below !== 'string' || edit.below === '')
+  ) {
     throw invalidInput('below must be the ID of an item, or null');
   }
 }

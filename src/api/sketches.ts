@@ -12,10 +12,11 @@ import type { FeatureEdit, FeatureInput } from './model.js';
  * being drawn (`create`).
  *
  * `create` is a feature that is not in the document yet: it is drawn in the place `below` names
- * (just above that item of its layer or group; at the back for `null`) and written by
- * `features.create` when the sketch is committed. `placedVertexCount` is the number of vertices
- * placed so far, the ones after it following the pointer, and `highlightedVertexIndex` the
- * vertex shown as the one to close the shape on.
+ * (just above that item of its layer or group; at the back for `null`, at the front where
+ * `features.create` puts a new feature when it is left out) and written by `features.create` when
+ * the sketch is committed. `placedVertexCount` is the number of vertices placed so far, the ones
+ * after it following the pointer (every vertex when it is left out), and
+ * `highlightedVertexIndex` the vertex shown as the one to close the shape on.
  */
 export type SketchEdit =
   | FeatureEdit
@@ -23,12 +24,15 @@ export type SketchEdit =
       kind: 'create';
       /** The feature as it will be created */
       feature: FeatureInput;
-      /** The number of vertices placed so far */
-      placedVertexCount: number;
+      /** The number of vertices placed so far (every vertex when it is left out) */
+      placedVertexCount?: number;
       /** The vertex shown as the one to close the shape on */
       highlightedVertexIndex?: number;
-      /** The item of the layer or the group the feature goes just above (`null`: at the back) */
-      below: string | null;
+      /**
+       * The item of the layer or the group the feature goes just above (`null`: at the back; left
+       * out: at the front)
+       */
+      below?: string | null;
     };
 
 /**

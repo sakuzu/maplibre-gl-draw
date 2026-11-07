@@ -357,6 +357,9 @@ writing it. Its changes are listed after those of 3.0.0.
 - A sketch of this client of one edit `translate`, `rotate` or `scale` draws the
   rows of a Store of rows by a moving set, whatever their number: their values
   are not touched, and a read makes the shape where it is drawn
+- The edit `create` of a sketch takes the feature alone: `placedVertexCount`
+  left out places every vertex, and `below` left out puts the feature at the
+  front of its layer or group, where `features.create` puts a new feature
 - A locked feature among the selected features stays as it is and the
   others change, as `selection.delete` already did: a drag, the arrow keys
   and `selection.update` leave it alone in place of refusing the whole, the

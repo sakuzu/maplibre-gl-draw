@@ -492,6 +492,32 @@ for (const kind of KINDS) {
       expect(failures).toEqual([]);
     });
 
+    it('creates a feature given alone at the front of its layer, every vertex placed', () => {
+      const { draw, engine, failures } = open(kind);
+      const a = line(draw);
+      const b = line(draw, 10);
+      const items = (): string[] =>
+        draw.layers.listItems('default-layer', { offset: 0, limit: 10 });
+      const sketch = draw.sketches.add({
+        edits: [
+          {
+            kind: 'create',
+            feature: { type: 'Point', geometry: { type: 'Point', coordinates: [5, 5] }, id: 'n' },
+          },
+        ],
+      }) as Sketch;
+      expect(sketch).not.toBeNull();
+      if (kind !== 'rows') {
+        // Drawn in front of the features of its layer
+        const drawn = engine.context.shapes.drawnFeaturesInOrder().map((f) => f.geometry.type);
+        expect(drawn).toEqual(['LineString', 'LineString', 'Point']);
+      }
+      expect(draw.sketches.commit(sketch.id)).toBe(true);
+      expect(items()).toEqual([a.id, b.id, 'n']);
+      expect(draw.features.get('n')?.geometry).toEqual({ type: 'Point', coordinates: [5, 5] });
+      expect(failures).toEqual([]);
+    });
+
     it('ends the sketches of this client when the document becomes read-only, and all when it is replaced', () => {
       const { draw, events, failures } = open(kind);
       const a = line(draw);

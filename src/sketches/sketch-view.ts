@@ -30,8 +30,11 @@ export interface DrawnCreate {
   readonly key: string;
   /** The feature, with that ID */
   readonly feature: Feature;
-  /** Where it is drawn: just above the item `below` of its layer or group (at the back for null) */
-  readonly placement: ItemPlacement & { readonly below: string | null };
+  /**
+   * Where it is drawn: just above the item `below` of its layer or group (at the back for null, at
+   * the front for undefined)
+   */
+  readonly placement: ItemPlacement & { readonly below: string | null | undefined };
 }
 
 /** What the order of the features with the sketches reads of a Store of objects */
@@ -229,8 +232,8 @@ export class SketchView {
 
 /**
  * Where a feature created goes among features in stacking order: just above the item it names
- * (and the features created above that item before it), the back of its layer or group for none,
- * and the front of them when the item is not there
+ * (and the features created above that item before it), the back of its layer or group for null,
+ * and the front of them when it names none or the item is not there
  */
 function insertionIndex(
   list: readonly Feature[],
@@ -252,7 +255,8 @@ function insertionIndex(
     if (!inContainer(feature)) continue;
     if (first < 0) first = i;
     last = i;
-    if (below === null) continue;
+    // At the back, or at the front of the features created there before it
+    if (below === null || below === undefined) continue;
     const made = creates.get(feature.id);
     // The item named, the members of the group named, and the features created above it before
     if (
