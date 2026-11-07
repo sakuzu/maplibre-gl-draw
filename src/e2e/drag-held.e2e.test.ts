@@ -479,7 +479,11 @@ describe.each(KINDS)('many features dragged over a Store of %s', (kind) => {
       await mark(page);
       await pressAndMove(page, grabbed, BY, STEPS);
       const mid = await readAll(page);
-      await expectLeftOut(page, IDS.slice(1));
+      // What the drag edits is left out of the hits, and the others are hit where they are
+      const answers = await agreement(page, [FILL, LAST, FIRST], [FILL, LAST, FIRST, OUTLINE], 8);
+      expect(answers.ids).not.toContain(IDS[0]);
+      expect(answers.ids.length).toBeGreaterThan(30);
+      expect(answers.hitOutside).toEqual([]);
       const image = await capture(page, [FIRST]);
       await mark(page);
       if (cancelled) await cancelAndRelease(page);
