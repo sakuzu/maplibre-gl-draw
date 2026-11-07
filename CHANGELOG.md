@@ -240,8 +240,9 @@ writing it. Its changes are listed after those of 3.0.0.
   experimental, the rows dragged in bulk. The event
   `rendered.changed` tells the features whose shapes changed (a write of
   features or of rows, a sketch, or the rows dragged in bulk moving; a
-  change of the shape being drawn is told with no IDs), once the draw of the map that draws
-  them is done, at most once a draw; the look and the selection box,
+  change of the shape being drawn is told with no IDs), once the draw
+  of the map that draws them is done, at most once a draw; the look and
+  the selection box,
   which follows the view, are read at each draw. What is drawn around a
   feature reads it there.
 - `FeatureTypeDefinition.footprint(feature, ctx)`: what a feature of a
