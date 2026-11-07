@@ -16,6 +16,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { FrameDrawContext } from '../../extension/renderers.js';
 import { MemoryStore } from '../../store/memory.js';
 import type { Coordinate, Feature, VertexRef } from '../../store/types.js';
+import { createShownStore } from '../layer/shown-store.js';
 import type { AuxiliaryHandleProvider } from './auxiliary-handles.js';
 import { createSelectionScope } from './selection-scope.js';
 import type { SelectionUIDrawerDeps } from './selection-ui-drawer.js';
@@ -104,35 +105,35 @@ describe('renderFollowedVertices', () => {
   ];
 
   it('draws nothing when the UI state is null', () => {
-    renderFollowedVertices(null, store, PROJECTION_DATA, deps);
+    renderFollowedVertices(null, createShownStore(store).drawn, PROJECTION_DATA, deps);
     expect(drawn).toEqual([]);
   });
 
   it('draws nothing for an empty array either', () => {
-    renderFollowedVertices([], store, PROJECTION_DATA, deps);
+    renderFollowedVertices([], createShownStore(store).drawn, PROJECTION_DATA, deps);
     expect(drawn).toEqual([]);
   });
 
   it('passes the following features and vertex references through as they are', () => {
-    renderFollowedVertices(followed, store, PROJECTION_DATA, deps);
+    renderFollowedVertices(followed, createShownStore(store).drawn, PROJECTION_DATA, deps);
     expect(drawn).toEqual([{ featureId: 'f2', refs: followed[0].vertices }]);
   });
 
   it('does not draw deleted features', () => {
     store.deleteFeature('f2');
-    renderFollowedVertices(followed, store, PROJECTION_DATA, deps);
+    renderFollowedVertices(followed, createShownStore(store).drawn, PROJECTION_DATA, deps);
     expect(drawn).toEqual([]);
   });
 
   it('does not draw hidden features', () => {
     store.updateFeature('f2', { visible: false });
-    renderFollowedVertices(followed, store, PROJECTION_DATA, deps);
+    renderFollowedVertices(followed, createShownStore(store).drawn, PROJECTION_DATA, deps);
     expect(drawn).toEqual([]);
   });
 
   it('does not draw locally hidden features', () => {
     store.setLocallyHidden('f2', true);
-    renderFollowedVertices(followed, store, PROJECTION_DATA, deps);
+    renderFollowedVertices(followed, createShownStore(store).drawn, PROJECTION_DATA, deps);
     expect(drawn).toEqual([]);
   });
 });

@@ -16,6 +16,7 @@ import type {
 } from '../../extension/index.js';
 import { featureTablesInternals } from '../../feature-table/feature-tables.js';
 import { isLayerDrawnFromRows } from '../../feature-table/held-order.js';
+import type { TentativeState } from '../../shared/types/model.js';
 import type { Store } from '../../store/store.js';
 import type { BoundingBox, Feature, Layer } from '../../store/types.js';
 import type { FeatureCompanionRegistry } from '../feature-companion.js';
@@ -76,6 +77,7 @@ import type { TableLayerRenderer } from './table-retained.js';
  *   drawn when omitted)
  * @param beforeEntry Called before each entry of the order is drawn (the drape of the elements
  *   of the other entries is painted up to it where the layers held as rows are draped)
+ * @param tentative The shape being drawn, drawn with its layer (none when omitted)
  */
 export function renderLayers(
   r: Renderers,
@@ -95,6 +97,7 @@ export function renderLayers(
   view?: RenderLayersView,
   tableRetained?: TableLayerRenderer,
   beforeEntry?: (layerId: string) => void,
+  tentative: TentativeState | null = null,
 ): void {
   const fullOrder = store.getLayerOrder();
   // When a segment (slot) is given, only the entries of that segment are drawn. The datasets
@@ -103,7 +106,6 @@ export function renderLayers(
   const layerOrder = range ? fullOrder.slice(range.from, range.to) : fullOrder;
   const drawBelow = range ? range.first : true;
   const drawAbove = range ? range.last : true;
-  const tentative = store.getTentative();
 
   // Implementations without the renderers of retained mode (a test stub, for example) fall back
   // to the immediate mode used before

@@ -26,6 +26,7 @@ import {
   type MapTerrain,
   TERRAIN_ANALYTIC_MIN_ZOOM,
 } from './drape-planner.js';
+import type { DrawnShapes } from './shown-store.js';
 
 /** The answers of the fakes (reset before every test) */
 const fake = {
@@ -149,6 +150,7 @@ function createPlanner(options: { timeSlicing?: boolean } = {}) {
       getLayerOrder: () => ['layer-1'],
       getLayer: (id: string) => (id === 'layer-1' ? layer : undefined),
     } as unknown as Store,
+    shapes: { displayed: () => [] } as unknown as DrawnShapes,
     terrain,
     datasets: datasets,
   });

@@ -53,6 +53,7 @@ import {
 } from './gl-state.js';
 import { ABOVE_STORE_ENTRY, renderLayers } from './render.js';
 import type { Renderers } from './renderers.js';
+import type { DrawnShapes } from './shown-store.js';
 import type { StoreRetainedCache } from './store-retained.js';
 import type { TableLayerRenderer } from './table-retained.js';
 
@@ -68,6 +69,8 @@ export interface FrameRenderDeps {
   renderers: Renderers;
   map: MapLibreMap;
   store: Store;
+  /** The shapes the drawing reads */
+  shapes: DrawnShapes;
   terrainContext: TerrainContext;
   drape: DrapePlanner;
   customRenderers: Map<string, FeatureTypeHandler['renderer']>;
@@ -339,6 +342,7 @@ export function renderSegment(deps: FrameRenderDeps, f: FrameState, index: numbe
       copy.view,
       deps.tableRetained ?? undefined,
       beforeEntry,
+      deps.shapes.tentative(),
     );
     // The rest of the drape of the slot, once (the copies after the first draw over it)
     if (beforeEntry) {
@@ -399,7 +403,7 @@ export function renderForeground(deps: FrameRenderDeps, f: FrameState): void {
     map,
     scope: deps.selectionScope,
   };
-  const tentative = store.getTentative();
+  const tentative = deps.shapes.tentative();
   const boxSelection = store.getBoxSelection();
   const globalHandlesShown =
     store.getMode() === 'select' && !store.isReadOnly() && !store.isInteractionLocked();
@@ -456,7 +460,7 @@ export function renderForeground(deps: FrameRenderDeps, f: FrameState): void {
     // selection UI.
     renderFollowedVertices(
       store.getFollowedVertices?.() ?? null,
-      store,
+      deps.shapes,
       copy.projectionData,
       selectionUIDeps,
     );

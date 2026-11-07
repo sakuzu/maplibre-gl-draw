@@ -118,6 +118,7 @@ function setup(drapeUsable: boolean, wideFallback = false) {
       shaderInitializer: { setProjectionData: () => {}, applyOffsetUniforms: () => {} },
     },
     store: {},
+    shapes: { tentative: () => null },
     terrainContext,
     drape: {
       renderer: { drawTile: () => atDrape.push({ ...gl.state }) },

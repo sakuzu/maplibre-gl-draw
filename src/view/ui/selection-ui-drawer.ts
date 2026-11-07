@@ -21,7 +21,6 @@ import {
 import { supportsVertexEditing } from '../../shared/utils/coordinates.js';
 import { isGlobeProjection } from '../../shared/utils/map.js';
 import { summaryHasArea } from '../../store/bulk-selection.js';
-import { isLocallyHidden, type LocalHiddenStore } from '../../store/local-visibility.js';
 import type {
   Coordinate,
   DragState,
@@ -332,12 +331,10 @@ function computeThinningViewport(map: MapLibreMap): ThinningViewport {
 }
 
 /**
- * The minimal interface of the Store that drawing the following vertices needs
- *
- * It is enough to be able to look up a feature by id and to decide local visibility.
+ * What drawing the following vertices reads: a feature, when it is shown
  */
-export interface FollowedVertexStore extends LocalHiddenStore {
-  getFeature(id: string): Feature | undefined;
+export interface FollowedVertexShapes {
+  shown(id: string): Feature | undefined;
 }
 
 /**
@@ -351,7 +348,7 @@ export interface FollowedVertexStore extends LocalHiddenStore {
  */
 export function renderFollowedVertices(
   followedVertices: VertexSelection[] | null,
-  store: FollowedVertexStore,
+  shapes: FollowedVertexShapes,
   projectionData: CustomRenderMethodInput['defaultProjectionData'],
   deps: SelectionUIDrawerDeps,
 ): void {
@@ -368,10 +365,9 @@ export function renderFollowedVertices(
   selectionHandlesRenderer.setProjectionData(projectionData);
 
   for (const followed of followedVertices) {
-    const feature = store.getFeature(followed.featureId);
+    const feature = shapes.shown(followed.featureId);
     // The handles of features that disappeared or were hidden during the drag are not drawn
-    if (!feature?.visible || isLocallyHidden(feature, store)) continue;
-    selectionHandlesRenderer.drawFollowedVertexHandles(feature, followed.vertices);
+    if (feature) selectionHandlesRenderer.drawFollowedVertexHandles(feature, followed.vertices);
   }
 }
 

@@ -25,7 +25,6 @@
  */
 
 import type { CustomRenderMethodInput, Map as MapLibreMap, ProjectionData } from 'maplibre-gl';
-import { isLocallyHidden } from '../../store/local-visibility.js';
 import type { Store } from '../../store/store.js';
 import type { Feature } from '../../store/types.js';
 import type { GpuLedger } from '../gpu-ledger.js';
@@ -59,6 +58,7 @@ import {
   setDrapePaintedDatasets,
   setTerrainDrapeDebug,
 } from '../terrain/state.js';
+import type { DrawnShapes } from './shown-store.js';
 
 /** The terrain of the map as maplibre exposes it (null when there is none) */
 export type MapTerrain = ReturnType<typeof getMapTerrain>;
@@ -189,6 +189,8 @@ export interface DrapePlannerDatasets {
 export interface DrapePlannerDeps {
   map: MapLibreMap;
   store: Store;
+  /** The shapes the drawing reads */
+  shapes: DrawnShapes;
   terrain: TerrainContext;
   datasets?: DrapePlannerDatasets;
   /** Where the GPU memory of the drape is recorded */
@@ -461,7 +463,7 @@ export class DrapePlanner {
     mapTerrain: MapTerrain;
     getProjectionData: CustomRenderMethodInput['getProjectionData'];
   }): DrapeFrameDraws {
-    const { store, terrain } = this.deps;
+    const { shapes, terrain } = this.deps;
     const { mapTerrain, getProjectionData } = input;
     let ready = false;
     const tileDraws: DrapeTileDrawEntry[] = [];
@@ -482,9 +484,8 @@ export class DrapePlanner {
         // slot. They are excluded from the later layer rendering, so without a drawer only the
         // images would disappear
         for (const brk of drawnQuadBreaks) {
-          const quadFeature = store.getFeature(brk.featureId);
-          if (!quadFeature?.visible || isLocallyHidden(quadFeature, store)) continue;
-          fallbackQuads.push(quadFeature);
+          const quadFeature = shapes.shown(brk.featureId);
+          if (quadFeature) fallbackQuads.push(quadFeature);
         }
       } else {
         tileDraws.push(
@@ -496,8 +497,8 @@ export class DrapePlanner {
         // interleaved in between.
         const elementsTotal = this.tileStore.elementCount;
         for (const brk of drawnQuadBreaks) {
-          const quadFeature = store.getFeature(brk.featureId);
-          if (!quadFeature?.visible || isLocallyHidden(quadFeature, store)) continue;
+          const quadFeature = shapes.shown(brk.featureId);
+          if (!quadFeature) continue;
           pendingQuads.push({
             at: Math.min(brk.afterElements, elementsTotal),
             feature: quadFeature,
@@ -546,7 +547,7 @@ export class DrapePlanner {
     contentDpr: number,
     zoom: number,
   ): DrapeCollectResult {
-    const { store, datasets: manager } = this.deps;
+    const { store, shapes, datasets: manager } = this.deps;
     const datasets = manager?.listInternal() ?? [];
     const key = [
       this.revision,
@@ -560,7 +561,14 @@ export class DrapePlanner {
 
     let collected = this.collected;
     if (key !== this.collectKey || !collected) {
-      collected = collectDrapeElements(store, resolveStyles(), dpr, contentDpr, datasets);
+      collected = collectDrapeElements(
+        store,
+        shapes.displayed(),
+        resolveStyles(),
+        dpr,
+        contentDpr,
+        datasets,
+      );
       this.collectKey = key;
       this.collected = collected;
       this.lightEnough = collected.edgeCount <= DRAPE_WIDE_EDGE_BUDGET;

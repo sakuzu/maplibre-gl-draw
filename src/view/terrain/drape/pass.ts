@@ -21,7 +21,7 @@
 import { isLayerDrawnFromRows } from '../../../feature-table/held-order.js';
 import { coordinatesOf } from '../../../shared/utils/coordinates.js';
 import { getCreatedZoom } from '../../../shared/utils/property.js';
-import { getDisplayFeatures, isLocallyHidden } from '../../../store/local-visibility.js';
+import { isLocallyHidden } from '../../../store/local-visibility.js';
 import type { Store } from '../../../store/store.js';
 import type { Coordinate, Feature } from '../../../store/types.js';
 import { layerDrawFactors } from '../../renderers/draw-factors.js';
@@ -154,6 +154,7 @@ export interface DrapeDatasetSource {
  * time the view moves and require rebuilding the tile indices (the narrowing down within a
  * tile is done by `binTile` using the bounding boxes).
  *
+ * @param visible The features shown, as they are seen, in the stacking order
  * @param pixelRatio The rendering pixel ratio, for widths fixed in screen pixels (the rendering
  *   scale included; `resolvePixelRatio`)
  * @param contentPixelRatio The rendering pixel ratio for widths that follow the zoom (the
@@ -161,12 +162,12 @@ export interface DrapeDatasetSource {
  */
 export function collectDrapeElements(
   store: Store,
+  visible: readonly Feature[],
   styles: RetainedStyleResolver,
   pixelRatio: number,
   contentPixelRatio: number,
   datasets: readonly DrapeDatasetSource[],
 ): DrapeCollectResult {
-  const visible = getDisplayFeatures(store);
   const byLayer = new Map<string, Feature[]>();
   for (const feature of visible) {
     if (isLocallyHidden(feature, store)) continue;

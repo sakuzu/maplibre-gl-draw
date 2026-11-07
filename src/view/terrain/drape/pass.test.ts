@@ -10,6 +10,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
+import { getDisplayFeatures } from '../../../store/local-visibility.js';
 import type { Feature } from '../../../store/types.js';
 import type { RetainedStyleResolver } from '../../renderers/retained.js';
 import { drapeSelectionKey } from './binning.js';
@@ -116,7 +117,10 @@ describe('the stacking order of collectDrapeElements', () => {
     const below = fakeDataset('below', 'below-store', [polygon('b-1', 'below')]);
     const above = fakeDataset('above', 'above-store', [polygon('a-1', 'above')]);
 
-    const result = collectDrapeElements(store, styles, 1, 1, [above, below]);
+    const result = collectDrapeElements(store, getDisplayFeatures(store), styles, 1, 1, [
+      above,
+      below,
+    ]);
     expect(result.elements).toHaveLength(3);
     // The source number tells which dataset or layer it came from (datasets first,
     // then the Store layers)
@@ -133,7 +137,10 @@ describe('the stacking order of collectDrapeElements', () => {
     const below = fakeDataset('below', 'below-store', [polygon('b-1', 'below')]);
     const above = fakeDataset('above', 'above-store', [polygon('a-1', 'above')]);
 
-    const result = collectDrapeElements(store, styles, 1, 1, [below, above]);
+    const result = collectDrapeElements(store, getDisplayFeatures(store), styles, 1, 1, [
+      below,
+      above,
+    ]);
     // The stack begins after the single below-store element. A break (ext:x) has a position
     // too
     expect(result.entryStarts.get('layer-1')).toBe(1);
@@ -151,7 +158,7 @@ describe('the stacking order of collectDrapeElements', () => {
     );
     const coll = fakeDataset('coll', 'layer-order', [polygon('c-1', 'coll')]);
 
-    const result = collectDrapeElements(store, styles, 1, 1, [coll]);
+    const result = collectDrapeElements(store, getDisplayFeatures(store), styles, 1, 1, [coll]);
     expect(result.elements.map((e) => e.source)).toEqual([2, 1, 3]);
   });
 
@@ -161,7 +168,7 @@ describe('the stacking order of collectDrapeElements', () => {
       ['layer-1'],
       new Set(['layer-1']),
     );
-    const result = collectDrapeElements(store, styles, 1, 1, []);
+    const result = collectDrapeElements(store, getDisplayFeatures(store), styles, 1, 1, []);
     expect(result.elements).toHaveLength(1);
     expect([...result.excluded]).toEqual(['point-1']);
   });
@@ -172,7 +179,7 @@ describe('the stacking order of collectDrapeElements', () => {
       ...fakeDataset('hidden', 'above-store', [polygon('h-1', 'hidden')]),
       visible: false,
     };
-    const result = collectDrapeElements(store, styles, 1, 1, [hidden]);
+    const result = collectDrapeElements(store, getDisplayFeatures(store), styles, 1, 1, [hidden]);
     expect(result.elements).toHaveLength(0);
     expect(result.drapedDatasets.size).toBe(0);
   });
@@ -180,7 +187,7 @@ describe('the stacking order of collectDrapeElements', () => {
   it('puts a dataset that was put on into drapedDatasets', () => {
     const store = fakeStore([], [], new Set());
     const coll = fakeDataset('coll', 'above-store', [polygon('c-1', 'coll')]);
-    const result = collectDrapeElements(store, styles, 1, 1, [coll]);
+    const result = collectDrapeElements(store, getDisplayFeatures(store), styles, 1, 1, [coll]);
     expect([...result.drapedDatasets]).toEqual(['coll']);
   });
 });
@@ -219,7 +226,14 @@ describe('the types put on the drape', () => {
     const feature = freehand('fh-1', 'layer-1');
     const store = fakeStore([feature], ['layer-1'], new Set(['layer-1']));
 
-    const { elements, excluded } = collectDrapeElements(store, styles, 1, 1, []);
+    const { elements, excluded } = collectDrapeElements(
+      store,
+      getDisplayFeatures(store),
+      styles,
+      1,
+      1,
+      [],
+    );
 
     expect(elements).toHaveLength(1);
     // It goes on as a line (kind 1)
@@ -248,7 +262,7 @@ describe('the breaks in the stacking order (images)', () => {
       ['layer-1'],
       new Set(['layer-1']),
     );
-    const result = collectDrapeElements(store, styles, 1, 1, []);
+    const result = collectDrapeElements(store, getDisplayFeatures(store), styles, 1, 1, []);
 
     expect(result.elements).toHaveLength(2);
     expect(result.excluded.has('img-1')).toBe(true);
@@ -258,7 +272,7 @@ describe('the breaks in the stacking order (images)', () => {
 
   it('has no break when there is no image', () => {
     const store = fakeStore([polygon('p-1', 'layer-1')], ['layer-1'], new Set(['layer-1']));
-    const result = collectDrapeElements(store, styles, 1, 1, []);
+    const result = collectDrapeElements(store, getDisplayFeatures(store), styles, 1, 1, []);
     expect(result.quadBreaks).toEqual([]);
   });
 });
@@ -278,7 +292,7 @@ describe('the line width convention', () => {
     const feature = withCreatedZoom(polygon('store-1', 'layer-1'), 12);
     const store = fakeStore([feature], ['layer-1'], new Set(['layer-1']));
 
-    const { elements } = collectDrapeElements(store, styles, 2, 2, []);
+    const { elements } = collectDrapeElements(store, getDisplayFeatures(store), styles, 2, 2, []);
 
     expect(elements[0].widthZoom).toBe(12);
     // The device pixel ratio is applied to a zoom-linked width, and the rendering scale is not
@@ -290,7 +304,7 @@ describe('the line width convention', () => {
     const feature = polygon('store-1', 'layer-1');
     const store = fakeStore([feature], ['layer-1'], new Set(['layer-1']));
 
-    const { elements } = collectDrapeElements(store, styles, 2, 2, []);
+    const { elements } = collectDrapeElements(store, getDisplayFeatures(store), styles, 2, 2, []);
 
     expect(elements[0].widthZoom).toBe(-1);
     expect(elements[0].strokeWidthPx).toBe(4);
@@ -302,7 +316,9 @@ describe('the key of the selection highlight', () => {
     const store = fakeStore([], [], new Set());
     const dataset = fakeDataset('c1', 'above-store', [polygon('a-1', 'c1')]);
 
-    const { elements } = collectDrapeElements(store, styles, 1, 1, [dataset]);
+    const { elements } = collectDrapeElements(store, getDisplayFeatures(store), styles, 1, 1, [
+      dataset,
+    ]);
 
     expect(elements.map((e) => e.selectionKey)).toEqual([drapeSelectionKey('c1', 'a-1')]);
   });
@@ -311,7 +327,7 @@ describe('the key of the selection highlight', () => {
     const feature = polygon('store-1', 'layer-1');
     const store = fakeStore([feature], ['layer-1'], new Set(['layer-1']));
 
-    const { elements } = collectDrapeElements(store, styles, 1, 1, []);
+    const { elements } = collectDrapeElements(store, getDisplayFeatures(store), styles, 1, 1, []);
 
     expect(elements.map((e) => e.selectionKey)).toEqual(['']);
   });
@@ -322,7 +338,7 @@ describe('the opacity of the Store layers on the drape', () => {
     const store = fakeStore([polygon('store-1', 'layer-1')], ['layer-1'], new Set(['layer-1']), {
       'layer-1': 0.5,
     });
-    const result = collectDrapeElements(store, styles, 1, 1, []);
+    const result = collectDrapeElements(store, getDisplayFeatures(store), styles, 1, 1, []);
     expect(result.layerSources.get('layer-1')).toBe(1);
     expect(result.elements[0].fill[3]).toBe(1);
     expect(drapeLayerSource(0, 0)).toBe(1);
@@ -337,7 +353,7 @@ describe('the opacity of the Store layers on the drape', () => {
     }
     const last = layerIds[layerIds.length - 1];
     const store = fakeStore(features, layerIds, new Set(layerIds), { [last]: 0.5 });
-    const result = collectDrapeElements(store, styles, 1, 1, []);
+    const result = collectDrapeElements(store, getDisplayFeatures(store), styles, 1, 1, []);
 
     expect(drapeLayerSource(DRAPE_MAX_SOURCES - 1, 0)).toBe(0);
     expect(result.layerSources.has(last)).toBe(false);
@@ -385,7 +401,14 @@ describe('dashed outlines on the drape', () => {
       ['layer-1'],
       new Set(['layer-1']),
     );
-    const { elements, excluded } = collectDrapeElements(store, stylesOf('dashed'), 2, 3, []);
+    const { elements, excluded } = collectDrapeElements(
+      store,
+      getDisplayFeatures(store),
+      stylesOf('dashed'),
+      2,
+      3,
+      [],
+    );
 
     expect(elements).toHaveLength(2);
     expect(excluded.size).toBe(0);
@@ -396,20 +419,41 @@ describe('dashed outlines on the drape', () => {
 
   it('takes the pattern of a dotted line from the same table as the subdividing path', () => {
     const store = fakeStore([line('l-1', 'layer-1')], ['layer-1'], new Set(['layer-1']));
-    const { elements } = collectDrapeElements(store, stylesOf('dotted'), 1, 1, []);
+    const { elements } = collectDrapeElements(
+      store,
+      getDisplayFeatures(store),
+      stylesOf('dotted'),
+      1,
+      1,
+      [],
+    );
     expect(elements[0].dash).toEqual({ a: 1, b: 0.5, c: 1.2, pixelRatio: 1 });
   });
 
   it('gives a solid outline no pattern', () => {
     const store = fakeStore([line('l-1', 'layer-1')], ['layer-1'], new Set(['layer-1']));
-    const { elements } = collectDrapeElements(store, stylesOf('solid'), 1, 1, []);
+    const { elements } = collectDrapeElements(
+      store,
+      getDisplayFeatures(store),
+      stylesOf('solid'),
+      1,
+      1,
+      [],
+    );
     expect(elements[0].dash).toBeNull();
   });
 
   it('puts the dashed features of a dataset on', () => {
     const dataset = fakeDataset('d-1', 'above-store', [polygon('p-1', 'd-1'), line('l-1', 'd-1')]);
     const store = fakeStore([], [], new Set());
-    const { elements } = collectDrapeElements(store, stylesOf('dashed'), 1, 1, [dataset]);
+    const { elements } = collectDrapeElements(
+      store,
+      getDisplayFeatures(store),
+      stylesOf('dashed'),
+      1,
+      1,
+      [dataset],
+    );
 
     expect(elements).toHaveLength(2);
     expect(elements.every((element) => element.dash !== null)).toBe(true);

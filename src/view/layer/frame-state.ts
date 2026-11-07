@@ -19,7 +19,6 @@ import type {
 } from '../../extension/index.js';
 import { featureTablesInternals } from '../../feature-table/feature-tables.js';
 import { type ScreenScaleFrame, setScreenScaleFrame } from '../../shared/math/index.js';
-import { isLocallyHidden } from '../../store/local-visibility.js';
 import type { Store } from '../../store/store.js';
 import type { Feature } from '../../store/types.js';
 import {
@@ -59,6 +58,7 @@ import {
 import { applyDrapeGlState, applySegmentDepthState } from './gl-state.js';
 import type { RenderLayersView } from './render.js';
 import type { Renderers } from './renderers.js';
+import type { DrawnShapes } from './shown-store.js';
 import type { RenderSegment } from './slots.js';
 import type { TableDrapeFrame } from './table-drape.js';
 import type { TableLayerRenderer } from './table-retained.js';
@@ -289,6 +289,8 @@ export interface FrameBuildInput {
   renderers: Renderers;
   map: MapLibreMap;
   store: Store;
+  /** The shapes the drawing reads */
+  shapes: DrawnShapes;
   terrainContext: TerrainContext;
   displayList: DisplayListCache;
   drape: DrapePlanner;
@@ -320,7 +322,7 @@ export interface FrameBuildInput {
  * picks the features of the immediate path and the selection, and plans the copies of the world.
  */
 export function buildFrameState(input: FrameBuildInput): FrameState {
-  const { gl, renderers: r, map, store, terrainContext, drape, renderOptions } = input;
+  const { gl, renderers: r, map, store, shapes, terrainContext, drape, renderOptions } = input;
   const { zoom, rawZoom, dpr, contentDpr, terrainState } = input;
   const { shaderData, defaultProjectionData } = renderOptions;
   const mapTerrain = terrainState.active ? getMapTerrain(map) : null;
@@ -442,9 +444,8 @@ export function buildFrameState(input: FrameBuildInput): FrameState {
   // when part of the selection box reaches into the screen).
   const selectedFeatures: Feature[] = [];
   for (const id of selectedIds) {
-    const feature = store.getFeature(id);
-    if (!feature?.visible || isLocallyHidden(feature, store)) continue;
-    selectedFeatures.push(feature);
+    const feature = shapes.shown(id);
+    if (feature) selectedFeatures.push(feature);
   }
 
   // Compositing of translucency (alpha blending; the reason is written in blend.ts)

@@ -11,14 +11,13 @@
 
 import type { ProjectionData } from 'maplibre-gl';
 import type { FeatureTypeHandler, FrameDrawContext } from '../../extension/index.js';
-import { isLocallyHidden } from '../../store/local-visibility.js';
-import type { Store } from '../../store/store.js';
 import type { Feature, Layer } from '../../store/types.js';
 import {
   drawFeatureCompanionsInFrame,
   type FeatureCompanionRegistry,
 } from '../feature-companion.js';
 import type { RetainedRendererSet } from '../renderers/retained.js';
+import type { DrawnShapes } from './shown-store.js';
 import { customRendererOf } from './store-retained-classify.js';
 
 /**
@@ -73,7 +72,7 @@ export interface StoreRetainedDrawDeps {
  * @param visibleIds Feature ids inside the expanded viewport (no thinning when omitted)
  */
 export function drawFeaturesImmediate(
-  store: Store,
+  shapes: Pick<DrawnShapes, 'shown'>,
   featureIds: string[],
   layer: Layer | undefined,
   projectionData: ProjectionData,
@@ -85,9 +84,8 @@ export function drawFeaturesImmediate(
   for (const id of featureIds) {
     if (visibleIds && !visibleIds.has(id)) continue;
 
-    const feature = store.getFeature(id);
-    if (!feature?.visible || isLocallyHidden(feature, store)) continue;
-    features.push(feature);
+    const feature = shapes.shown(id);
+    if (feature) features.push(feature);
   }
   drawImmediateFeatures(features, layer, projectionData, zoom, deps);
 }

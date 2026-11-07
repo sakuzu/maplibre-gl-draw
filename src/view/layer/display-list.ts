@@ -15,8 +15,8 @@
  * costs in proportion to what is on screen rather than to the whole store.
  */
 
-import { type DisplayStore, getDisplayFeatures } from '../../store/local-visibility.js';
 import type { Feature, StoreChange } from '../../store/types.js';
+import type { DrawnShapes } from './shown-store.js';
 
 /**
  * Above this share of the list, the ids in view are taken by walking the list (sorting that
@@ -30,18 +30,18 @@ const SORT_SHARE_LIMIT = 0.25;
  * @internal
  */
 export class DisplayListCache {
-  private readonly store: DisplayStore;
+  private readonly shapes: Pick<DrawnShapes, 'displayed'>;
   private list: Feature[] | null = null;
   /** featureId → position in the list (built when first needed) */
   private rank: Map<string, number> | null = null;
 
-  constructor(store: DisplayStore) {
-    this.store = store;
+  constructor(shapes: Pick<DrawnShapes, 'displayed'>) {
+    this.shapes = shapes;
   }
 
-  /** The features to display, in draw order (the same list as getDisplayFeatures) */
+  /** The features to display, in draw order (`DrawnShapes.displayed`) */
   features(): Feature[] {
-    if (!this.list) this.list = getDisplayFeatures(this.store);
+    if (!this.list) this.list = this.shapes.displayed();
     return this.list;
   }
 

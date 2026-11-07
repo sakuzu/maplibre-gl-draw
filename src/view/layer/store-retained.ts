@@ -41,7 +41,6 @@
  */
 
 import type { ProjectionData } from 'maplibre-gl';
-import { getDisplayFeatures, isLocallyHidden } from '../../store/local-visibility.js';
 import type { Store } from '../../store/store.js';
 import type { BoundingBox, Feature, Layer, StoreChange } from '../../store/types.js';
 import type { FeatureCompanionRegistry } from '../feature-companion.js';
@@ -50,6 +49,7 @@ import type { RetainedRendererSet } from '../renderers/retained.js';
 import { boundsCenter, rebasedOriginOf } from '../shaders/retained-origin.js';
 import { TerrainContext } from '../terrain/context.js';
 import type { SelectionExtensionRegistry } from '../ui/selection-ui/index.js';
+import { createShownStore, type DrawnShapes } from './shown-store.js';
 import {
   bboxIntersects,
   type ChunkBBox,
@@ -90,6 +90,7 @@ export type { StoreImmediateTarget, StoreRetainedDrawDeps } from './store-retain
  */
 export class StoreRetainedCache {
   private readonly store: Store;
+  private readonly shapes: DrawnShapes;
 
   /** layerId → cache */
   private readonly layers = new Map<string, LayerCache>();
@@ -118,9 +119,14 @@ export class StoreRetainedCache {
 
   constructor(
     store: Store,
-    scope: { terrain?: TerrainContext; extensions?: SelectionExtensionRegistry } = {},
+    scope: {
+      shapes?: DrawnShapes;
+      terrain?: TerrainContext;
+      extensions?: SelectionExtensionRegistry;
+    } = {},
   ) {
     this.store = store;
+    this.shapes = scope.shapes ?? createShownStore(store).drawn;
     this.terrain = scope.terrain ?? new TerrainContext();
     this.extensions = scope.extensions;
   }
@@ -196,7 +202,7 @@ export class StoreRetainedCache {
           // the state of the run, and some of it draws without the run
           run?.end();
           drawFeaturesImmediate(
-            this.store,
+            this.shapes,
             chunk.featureIds,
             layer,
             projectionData,
@@ -242,7 +248,7 @@ export class StoreRetainedCache {
   checkCopies(): string[] {
     const problems: string[] = [];
     const display = new Map<string, string[]>();
-    for (const feature of getDisplayFeatures(this.store)) {
+    for (const feature of this.shapes.displayed()) {
       const ids = display.get(feature.layerId);
       if (ids) ids.push(feature.id);
       else display.set(feature.layerId, [feature.id]);
@@ -439,7 +445,7 @@ export class StoreRetainedCache {
   private computeChunkBBox(featureIds: readonly string[]): ChunkBBox | null {
     const features: Feature[] = [];
     for (const id of featureIds) {
-      const feature = this.store.getFeature(id);
+      const feature = this.shapes.get(id);
       if (feature) features.push(feature);
     }
     return computeFeaturesBBox(features, this.extensions);
@@ -495,7 +501,7 @@ export class StoreRetainedCache {
   private getLayerFeatures(layerId: string): Feature[] {
     if (!this.featuresByLayer) {
       const byLayer = new Map<string, Feature[]>();
-      for (const feature of getDisplayFeatures(this.store)) {
+      for (const feature of this.shapes.displayed()) {
         const list = byLayer.get(feature.layerId);
         if (list) list.push(feature);
         else byLayer.set(feature.layerId, [feature]);
@@ -519,8 +525,8 @@ export class StoreRetainedCache {
     // of properties)
     const features: Feature[] = [];
     for (const id of chunk.featureIds) {
-      const feature = this.store.getFeature(id);
-      if (!feature?.visible || isLocallyHidden(feature, this.store)) return 'mismatch';
+      const feature = this.shapes.shown(id);
+      if (!feature) return 'mismatch';
       if (
         classifyFeature(feature, styles, deps.customRenderers, deps.companions, layer) !==
         chunk.kind

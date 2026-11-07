@@ -49,6 +49,7 @@ import type { SelectionUIConfig } from '../../shared/config/selection.js';
 import { screenScaleFrameOf, setScreenScaleFrame } from '../../shared/math/index.js';
 import type { PixelRatioInput } from '../../shared/utils/pixel-ratio.js';
 import { resolveContentPixelRatio, resolvePixelRatio } from '../../shared/utils/pixel-ratio.js';
+import { RenderedShapes } from '../../sketches/rendered-shapes.js';
 import type { SketchView } from '../../sketches/sketch-view.js';
 import type { SpatialIndex } from '../../store/spatial/spatial-index.js';
 import type { Store, StoreContractView } from '../../store/store.js';
@@ -95,6 +96,11 @@ export interface CustomLayerDeps {
   gpuLimitBytes?: number;
   map: MapLibreMap;
   store: Store;
+  /**
+   * The shapes as they are seen (those of the Store alone when omitted), which everything drawn
+   * reads
+   */
+  shapes?: RenderedShapes;
   /**
    * What the sketches of the document draw (none drawn when omitted): a Store of objects is read
    * with them, and a Store of rows draws them among its rows
@@ -363,23 +369,23 @@ export function createCustomLayer(deps: CustomLayerDeps): CustomLayerInterface {
 
   // The drawing reads the Store through a view of it, which gives the document shown in place of
   // the document while there is one, and leaves the state of this client out while asked
-  const shown = createShownStore(own, deps.sketches);
-  const store = shown.store;
+  const shapes = deps.shapes ?? new RenderedShapes(own);
+  const shown = createShownStore(own, shapes);
+  const { store, drawn } = shown;
   // The features the sketches draw are drawn wherever they are (the index of the Store places them
   // where the document has them, and has none for a feature to create)
   const sketches = deps.sketches;
-  const drawnIndex: SpatialIndex = sketches
-    ? {
-        findNear: (coordinate, tolerance) => spatialIndex.findNear(coordinate, tolerance),
-        findInBounds(bounds) {
-          const ids = spatialIndex.findInBounds(bounds);
-          if (sketches.size === 0 || shown.getShown() !== null) return ids;
-          const seen = new Set(ids);
-          for (const id of sketches.ids()) if (!seen.has(id)) ids.push(id);
-          return ids;
-        },
-      }
-    : spatialIndex;
+  const drawnIndex: SpatialIndex = {
+    findNear: (coordinate, tolerance) => spatialIndex.findNear(coordinate, tolerance),
+    findInBounds(bounds) {
+      const ids = spatialIndex.findInBounds(bounds);
+      const sketched = shapes.sketchedIds();
+      if (sketched.length === 0 || shown.getShown() !== null) return ids;
+      const seen = new Set(ids);
+      for (const id of sketched) if (!seen.has(id)) ids.push(id);
+      return ids;
+    },
+  };
 
   const engine: EngineState = {
     gl: null,
@@ -398,7 +404,7 @@ export function createCustomLayer(deps: CustomLayerDeps): CustomLayerInterface {
     preparedTerrainState: null,
   };
   /** The ordered list of the features to display (the immediate path; follows the Store) */
-  const displayList = new DisplayListCache(store);
+  const displayList = new DisplayListCache(drawn);
   /** What is called once each frame is drawn */
   const frameListeners = new Set<() => void>();
   const dynamicOverlayRenderers: EngineOverlayRenderer[] = [];
@@ -420,6 +426,7 @@ export function createCustomLayer(deps: CustomLayerDeps): CustomLayerInterface {
   const drape = new DrapePlanner({
     map,
     store,
+    shapes: drawn,
     terrain: terrainContext,
     datasets,
     ledger: renderScope.gpu,
@@ -700,6 +707,7 @@ export function createCustomLayer(deps: CustomLayerDeps): CustomLayerInterface {
 
     if (renderingConfig.storeRetained !== false) {
       engine.storeRetainedCache = new StoreRetainedCache(store, {
+        shapes: drawn,
         terrain: terrainContext,
         extensions: renderScope.selection.extensions,
       });
@@ -862,6 +870,7 @@ export function createCustomLayer(deps: CustomLayerDeps): CustomLayerInterface {
       renderers: r,
       map,
       store,
+      shapes: drawn,
       terrainContext,
       displayList,
       drape,
@@ -904,6 +913,7 @@ export function createCustomLayer(deps: CustomLayerDeps): CustomLayerInterface {
       renderers: r,
       map,
       store,
+      shapes: drawn,
       terrainContext,
       drape,
       customRenderers,

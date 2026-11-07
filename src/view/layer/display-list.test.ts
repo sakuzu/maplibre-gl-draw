@@ -7,6 +7,7 @@
 
 import { describe, expect, it } from 'vitest';
 import type { DisplayStore } from '../../store/local-visibility.js';
+import { getDisplayFeatures } from '../../store/local-visibility.js';
 import type { Feature, StoreChange } from '../../store/types.js';
 import { DisplayListCache } from './display-list.js';
 
@@ -52,7 +53,7 @@ function createStore(count: number) {
 describe('DisplayListCache', () => {
   it('puts the ids in view in draw order, whichever way it takes them', () => {
     const { store } = createStore(100);
-    const cache = new DisplayListCache(store);
+    const cache = new DisplayListCache({ displayed: () => getDisplayFeatures(store) });
     const few = new Set(['f70', 'f3', 'f41']);
     const many = new Set(Array.from({ length: 60 }, (_, i) => `f${99 - i}`));
 
@@ -64,14 +65,14 @@ describe('DisplayListCache', () => {
   it('skips ids that are not displayed (locally hidden or unknown)', () => {
     const { store, hidden } = createStore(10);
     hidden.add('f2');
-    const cache = new DisplayListCache(store);
+    const cache = new DisplayListCache({ displayed: () => getDisplayFeatures(store) });
 
     expect(cache.inOrder(new Set(['f2', 'f5', 'nope'])).map((f) => f.id)).toEqual(['f5']);
   });
 
   it('reads the Store once until a change that can alter the list', () => {
     const s = createStore(10);
-    const cache = new DisplayListCache(s.store);
+    const cache = new DisplayListCache({ displayed: () => getDisplayFeatures(s.store) });
     cache.inOrder(new Set(['f1']));
     cache.inOrder(new Set(['f2']));
     cache.applyChanges({ selection: {} } as unknown as StoreChange);

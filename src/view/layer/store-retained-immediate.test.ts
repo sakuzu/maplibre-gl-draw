@@ -12,6 +12,7 @@ import type { Store } from '../../store/store.js';
 import type { Feature } from '../../store/types.js';
 import { createFeatureCompanionRegistry } from '../feature-companion.js';
 import type { RetainedRendererSet } from '../renderers/retained.js';
+import { createShownStore } from './shown-store.js';
 import { drawFeaturesImmediate, type StoreRetainedDrawDeps } from './store-retained-immediate.js';
 
 function makeFeature(id: string, type: string, visible = true): Feature {
@@ -67,7 +68,14 @@ describe('drawFeaturesImmediate', () => {
     ];
     const { store, deps, log, restored } = setup(features);
 
-    drawFeaturesImmediate(store, ['a', 'c', 'b'], undefined, PROJECTION, 10, deps);
+    drawFeaturesImmediate(
+      createShownStore(store).drawn,
+      ['a', 'c', 'b'],
+      undefined,
+      PROJECTION,
+      10,
+      deps,
+    );
 
     expect(log).toEqual(['begin', 'a', 'end', 'custom:c', 'begin', 'b', 'end']);
     expect(restored()).toBe(1);
@@ -83,7 +91,7 @@ describe('drawFeaturesImmediate', () => {
     const { store, deps, log } = setup(features, ['l']);
 
     drawFeaturesImmediate(
-      store,
+      createShownStore(store).drawn,
       ['a', 'h', 'l', 'o', 'missing'],
       undefined,
       PROJECTION,
