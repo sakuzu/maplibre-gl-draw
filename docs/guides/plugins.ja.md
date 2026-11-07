@@ -230,7 +230,8 @@ ctx.on('dataset.removed', ({ datasetId }) => forget(datasetId));
 
 地物の周りに何かを描くプラグインや、地物がどこにあるかを読むプラグインは、
 描かれている地物を `ctx.draw.rendered` から読みます。下書き
-(`draw.sketches`) が文書の上に当てられた、書く前の編集の途中の形です。
+(`draw.sketches`) が文書の上に当てられ、たくさんの選択のドラッグの行は
+描かれている所へ動いた、書く前の編集の途中の形です。
 `rendered.getSelectionBox(id)` は、その選択の枠 (外形に余白を足したもの)
 を、最後に描いた画面でライブラリーが描いて当てるとおりに渡します。
 `rendered.getFootprint(id)` は、余白の無い外形、つまりライブラリーが
