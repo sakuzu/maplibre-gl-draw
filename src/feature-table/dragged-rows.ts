@@ -13,12 +13,15 @@
 
 import type { Position } from 'geojson';
 import type { FeatureTables, RowHandle } from '../api/tables.js';
-import { type EnuEdit, moveEnuPosition } from '../geometry/enu-transforms.js';
+import { type EnuEdit, moveEnuPosition, withinTurn } from '../geometry/enu-transforms.js';
+import { DRAW_PROPERTY_KEYS } from '../shared/properties.js';
+import type { Feature } from '../shared/types/model.js';
 import { featureTablesInternals } from './feature-tables.js';
 import { rowType } from './row-read.js';
 import {
   GPU_STATE_MOVE_SHIFT,
   GPU_STATE_UNIFORM,
+  HELD_MOVE_SET,
   MOVE_SETS,
   STATE_BY_VALUES,
   STATE_MOVE_MASK,
@@ -141,4 +144,62 @@ export function draggedRowsOf(tables: FeatureTables | undefined): DraggedRows | 
     transform: (set) => states.transform(set),
   });
   return dragged;
+}
+
+/**
+ * A feature of a row being dragged, where the row is drawn: its positions moved by the computation
+ * its row is written with once let go, and the rotation, the scale and the radius it holds turned
+ * and scaled with them as that write gives them. A feature of a row held that is moved as a whole
+ * among many rows held is written where it is moved to, and is given as it is
+ *
+ * @param feature - The feature of the row, as the Store and the sketches give it
+ * @param tables - The tables of the Store
+ * @param dragged - The rows being dragged of these tables
+ * @returns The feature moved, or the feature given when its row is not dragged
+ * @internal
+ */
+export function draggedFeatureOf(
+  feature: Feature,
+  tables: FeatureTables,
+  dragged: DraggedRows,
+): Feature {
+  const handle = tables.findRow(feature.id);
+  if (handle === undefined || !dragged.has(handle)) return feature;
+  const states = featureTablesInternals(tables)?.states;
+  if (states && (states.stateOf(handle) & STATE_MOVE_MASK) >> STATE_MOVE_SHIFT === HELD_MOVE_SET) {
+    return feature;
+  }
+  const move = (value: unknown): unknown => {
+    if (!Array.isArray(value)) return value;
+    if (typeof value[0] === 'number') return dragged.position(handle, value as Position);
+    return value.map(move);
+  };
+  const geometry = feature.geometry as unknown as { type: string; coordinates?: unknown };
+  const moved = {
+    ...feature,
+    geometry: { ...geometry, coordinates: move(geometry.coordinates) },
+  } as Feature;
+  const values: Record<string, number> = {};
+  const rotation = dragged.rotation(handle);
+  if (rotation !== 0) {
+    const had = numberOf(feature, DRAW_PROPERTY_KEYS.rotation) ?? 0;
+    values[DRAW_PROPERTY_KEYS.rotation] = withinTurn(had + rotation);
+  }
+  const scale = dragged.scale(handle);
+  if (scale !== 1) {
+    if (feature.type === 'Circle') {
+      const radius = numberOf(feature, DRAW_PROPERTY_KEYS.radiusMeters);
+      if (radius !== undefined) values[DRAW_PROPERTY_KEYS.radiusMeters] = radius * scale;
+    } else {
+      values[DRAW_PROPERTY_KEYS.scale] = (numberOf(feature, DRAW_PROPERTY_KEYS.scale) ?? 1) * scale;
+    }
+  }
+  if (Object.keys(values).length === 0) return moved;
+  return { ...moved, properties: { ...feature.properties, ...values } };
+}
+
+/** A finite number of the properties of a feature */
+function numberOf(feature: Feature, key: string): number | undefined {
+  const value = feature.properties?.[key];
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
 }

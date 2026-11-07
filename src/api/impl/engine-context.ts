@@ -37,6 +37,7 @@ import type { AutoNameConfig } from '../../shared/utils/name-generator.js';
 import { AutoNameGenerator } from '../../shared/utils/name-generator.js';
 import type { PixelRatioSource } from '../../shared/utils/pixel-ratio.js';
 import { createPixelRatioSource } from '../../shared/utils/pixel-ratio.js';
+import { RenderedShapes } from '../../sketches/rendered-shapes.js';
 import {
   createSnapTargetsRegistry,
   type SnapTargetsRegistry,
@@ -132,6 +133,8 @@ export interface Context {
   store: Store;
   /** The spatial index, derived from the Store (it follows every Store change by itself) */
   spatialIndex: StoreSpatialIndex;
+  /** The shapes as they are seen, which what draws and what picks reads */
+  shapes: RenderedShapes;
   hitTestService: HitTestService;
   eventEmitter: EventEmitter;
   modeManager: ModeManager;
@@ -269,6 +272,8 @@ export function createContext(map: MapLibreMap, options: EngineOptions = {}): Co
   // Derived from the Store: it subscribes before any other component, so a listener that
   // queries it during a notification already sees the change
   const spatialIndex = new StoreSpatialIndex(store);
+  // The shapes as they are seen: what draws and what picks reads them there
+  const shapes = new RenderedShapes(store);
   // Hit testing for symbols (points) is done in screen space while terrain is enabled.
   // What is injected is the anchor projection of this map, identical to the one the rendering
   // uses. When terrain is disabled, project returns null and the conventional longitude and
@@ -384,6 +389,7 @@ export function createContext(map: MapLibreMap, options: EngineOptions = {}): Co
     map,
     store,
     spatialIndex,
+    shapes,
     hitTestService,
     eventEmitter,
     modeManager,

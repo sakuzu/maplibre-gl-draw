@@ -11,8 +11,9 @@ import type { Feature } from './model.js';
 
 /**
  * The features as this client draws them: the document with the sketches applied over it
- * (`draw.sketches`, those with an owner first, then those of this client), and their selection
- * boxes in the view drawn last. What is drawn around a feature reads it here, so that it follows
+ * (`draw.sketches`, those with an owner first, then those of this client), the rows dragged in
+ * bulk moved where they are drawn, and their selection boxes in the view drawn last. What is drawn
+ * around a feature reads it here, so that it follows
  * the feature as it is drawn, also while it is edited and not written yet; what writes reads the
  * document (`draw.features`). It tells the shapes that changed with `rendered.changed`, once a
  * draw of the map that draws the change is done; the look and the selection box are read at each
@@ -21,9 +22,11 @@ import type { Feature } from './model.js';
  */
 export interface RenderedResource {
   /**
-   * A feature as it is drawn: the feature of the document with the sketches applied over it.
+   * A feature as it is drawn: the feature of the document with the sketches applied over it,
+   * moved where it is drawn while its row is dragged in bulk. A feature a sketch creates is read
+   * by the ID it is drawn with.
    *
-   * @returns The feature, or `undefined` when there is none with this ID in the document
+   * @returns The feature, or `undefined` when none with this ID is drawn
    */
   get(id: string): Feature | undefined;
   /**

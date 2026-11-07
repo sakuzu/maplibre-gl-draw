@@ -103,6 +103,7 @@ import {
 } from './row-read.js';
 import { noteRowState } from './row-skips.js';
 import {
+  HELD_MOVE_SET,
   RowStateSets,
   STATE_HIDDEN_DELETED,
   STATE_HIDDEN_DELTA,
@@ -793,9 +794,6 @@ interface HeldRow {
    */
   moved: { readonly geometry: Feature['geometry'] } | undefined;
 }
-
-/** The moving set the rows held moved as a whole in the middle of an edit are in */
-const HELD_MOVE_SET = 1;
 
 /** The number of rows held from which a row held moved as a whole is moved by its state */
 const MOVE_HELD_BY_STATE_FROM = 100;

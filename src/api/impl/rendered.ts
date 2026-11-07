@@ -4,9 +4,9 @@
 /**
  * `draw.rendered`: the features as this client draws them, and `rendered.changed`
  *
- * A feature as it is drawn is the feature of the Store with the sketches applied over it, and its
- * selection box is made by the function the selection UI draws and hits it with
- * (`selectionBoxOf`). The features changed since the last notification are gathered from the
+ * A feature as it is drawn is made by the shapes of the instance (`RenderedShapes`), and its
+ * selection box by the function the selection UI draws and hits it with (`selectionBoxOf`). The
+ * features changed since the last notification are gathered from the
  * changes of the document (the features of a Store of objects and the rows of a Store of rows) and
  * of the sketches, and told once the draw of the map that draws them is done: the one signal of
  * the drawing that a draw is done, after which the screen answers for it. A change of the look
@@ -16,12 +16,11 @@
 
 import type { Map as MapLibreMap } from 'maplibre-gl';
 import type { DraggedRows } from '../../feature-table/dragged-rows.js';
-import { draggedRowsOf } from '../../feature-table/dragged-rows.js';
 import type { SelectionUIConfig } from '../../shared/config/selection.js';
 import { createCoordinateTransform } from '../../shared/math/index.js';
+import type { RenderedShapes } from '../../sketches/rendered-shapes.js';
 import { featureIdsOfEdit } from '../../sketches/sketch-edits.js';
 import type { Store } from '../../store/store.js';
-import type { Feature as StoredFeature } from '../../store/types.js';
 import { selectionBoxOf } from '../../view/ui/bounds.js';
 import type { SelectionExtensionRegistry } from '../../view/ui/selection-ui/extension-registry.js';
 import type { Footprint } from '../extension/feature-type.js';
@@ -39,8 +38,8 @@ import { invalidInput } from './shared.js';
 export interface RenderedDeps {
   readonly map: MapLibreMap;
   readonly store: Store;
-  /** A feature with the sketches applied, or undefined when the Store has none of this ID */
-  appliedFeature(id: string): StoredFeature | undefined;
+  /** The shapes as they are seen */
+  readonly shapes: RenderedShapes;
   /** The features selected now, which an edit of `{ selection: true }` edits */
   selectedIds(): readonly string[];
   /** The look of the selection the instance draws with (its margin is read at each call) */
@@ -62,20 +61,18 @@ export function createRendered(deps: RenderedDeps): {
   rendered: RenderedResource;
   stop(): void;
 } {
-  const { map, store, events } = deps;
-  const read = (id: string): StoredFeature | undefined =>
-    store.getFeature(id) ? deps.appliedFeature(id) : undefined;
+  const { map, store, events, shapes } = deps;
 
   const rendered: RenderedResource = {
-    get: (id) => read(id) as Feature | undefined,
+    get: (id) => shapes.get(id) as Feature | undefined,
     getMany(ids) {
       if (!Array.isArray(ids)) throw invalidInput('The IDs must be an array');
-      return ids.map((id) => read(id) as Feature | undefined);
+      return ids.map((id) => shapes.get(id) as Feature | undefined);
     },
     getSelectionBox: (id) => boxOf(id, deps.selectionStyle.box.margin),
     getFootprint: (id) => boxOf(id, 0),
     getDraggedRows(): DraggedRows | null {
-      return draggedRowsOf(store.tables);
+      return shapes.draggedRows();
     },
   };
 
@@ -84,7 +81,7 @@ export function createRendered(deps: RenderedDeps): {
    * footprint with a margin (none for the footprint itself)
    */
   function boxOf(id: string, margin: number): Footprint | null {
-    const feature = read(id);
+    const feature = shapes.get(id);
     if (!feature) return null;
     const box = selectionBoxOf(
       feature,

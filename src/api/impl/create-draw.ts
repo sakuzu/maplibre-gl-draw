@@ -75,7 +75,7 @@ export function createDrawOnEngine(
   const rendered = createRendered({
     map,
     store,
-    appliedFeature: (id) => engine.sketches.appliedFeature(id),
+    shapes: context.shapes,
     selectedIds: () => {
       const selection = store.getSelection();
       return selection.type === 'feature' ? selection.ids : [];

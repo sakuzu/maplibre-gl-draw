@@ -294,6 +294,7 @@ export function createEngine(
     getActiveLayerId: context.getActiveLayerId,
     prepareFeature: (input, id, layerId) => prepareFeatureInput(store, input, id, layerId),
   });
+  context.shapes.useSketches(sketches);
 
   // 3. Create the CustomLayer
   const customLayer = createCustomLayer({

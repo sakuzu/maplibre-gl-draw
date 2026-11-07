@@ -408,8 +408,12 @@ function moveGeometry(motion: Motion, geometry: Geometry): Geometry {
   return { ...geometry, coordinates } as Geometry;
 }
 
-/** An angle within [0, 360) */
-function withinTurn(value: number): number {
+/**
+ * An angle within [0, 360)
+ *
+ * @internal
+ */
+export function withinTurn(value: number): number {
   let r = value - FULL_TURN * Math.floor(value / FULL_TURN);
   if (r < 0) r += FULL_TURN;
   if (r >= FULL_TURN) r -= FULL_TURN;

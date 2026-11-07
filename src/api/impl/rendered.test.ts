@@ -80,6 +80,25 @@ describe('draw.rendered', () => {
     expect(draw.rendered.get('none')).toBeUndefined();
   });
 
+  it('reads a feature a sketch creates by the ID it is drawn with', () => {
+    draw.sketches.add({
+      edits: [
+        {
+          kind: 'create',
+          feature: {
+            type: 'Point',
+            geometry: { type: 'Point', coordinates: [3, 4] },
+          },
+          placedVertexCount: 1,
+          below: null,
+        },
+      ],
+    });
+    const key = engine.sketches.view.creates()[0]?.key as string;
+    expect(draw.rendered.get(key)?.geometry).toEqual({ type: 'Point', coordinates: [3, 4] });
+    expect(draw.features.get(key)).toBeUndefined();
+  });
+
   it('gives the selection box the selection UI draws: the footprint with the margin', () => {
     const a = line();
     const point = draw.features.create({
