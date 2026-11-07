@@ -387,6 +387,35 @@ describe('the verbs of the selection over features selected in bulk', () => {
     expect(single.draw.selection.count()).toBe(points);
   });
 
+  it('read the first features selected in their order, and select many ids on their rows', () => {
+    const { bulk } = pair(54);
+    const draw = bulk.draw;
+    const all = draw.features.list({}, { limit: 10_000 }).map((feature) => feature.id);
+    const hidden = all[1] as string;
+    draw.features.update(hidden, { visible: false });
+    expect(draw.selection.set('feature', all)).toBe(true);
+    const selected = draw.selection.get();
+    expect(selected.ids).toEqual([]);
+    expect(selected.bulk?.count).toBe(all.length - 1);
+    const shown = all.filter((id) => id !== hidden);
+    const first = (filter?: { type: 'Point' }) =>
+      draw.selection.features(filter, { limit: 5 }).map((feature) => feature.id);
+    expect(first()).toEqual(shown.slice(0, 5));
+    expect(first({ type: 'Point' })).toEqual(
+      draw.features
+        .list({ type: 'Point' }, { limit: 10_000 })
+        .map((feature) => feature.id)
+        .filter((id) => id !== hidden)
+        .slice(0, 5),
+    );
+    // Nothing that can be seen: nothing is selected, and the selection stays
+    for (const id of shown.slice(0, 40)) draw.features.update(id, { visible: false });
+    const kept = draw.selection.get();
+    expect(draw.selection.set('feature', [hidden, ...shown.slice(0, 40)])).toBe(false);
+    expect(draw.selection.get().bulk).toBe(kept.bulk);
+    expect(() => draw.selection.set('feature', [...all, 'nothing'])).toThrow(/nothing/);
+  });
+
   it('add and take out features, opening them once few enough, and restore a selection', () => {
     const { bulk } = pair(53);
     const ids = pick(bulk.draw, bulk.next, 0.5).slice(0, 6);

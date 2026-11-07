@@ -236,7 +236,8 @@ export function createSelection(
             'The features selected in bulk are read up to a limit: pass { limit }',
           );
         }
-        const rows = page.after === undefined ? firstRows(filter, page.limit) : matchingRows(filter);
+        const rows =
+          page.after === undefined ? firstRows(filter, page.limit) : matchingRows(filter);
         let from = 0;
         if (page.after !== undefined) {
           const after = store.tables?.findRow(page.after);
