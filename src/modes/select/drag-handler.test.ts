@@ -1144,13 +1144,13 @@ describe.each(STORE_KINDS)('on %s', (_kind, createStore) => {
     type DragCallback = (event: DragNormalizedEvent) => void;
 
     let onHandleDragStart: ReturnType<typeof vi.fn<AuxiliaryHandleProvider['onHandleDragStart']>>;
-    let onHandleDragMove: ReturnType<typeof vi.fn<DragCallback>>;
+    let onHandleDragMove: ReturnType<typeof vi.fn<AuxiliaryHandleProvider['onHandleDragMove']>>;
     let onHandleDragEnd: ReturnType<typeof vi.fn<DragCallback>>;
 
     /** Register a provider, specifying whether it accepts the delegation */
     function registerProvider(accept: boolean, id = 'p1'): void {
       onHandleDragStart = vi.fn<AuxiliaryHandleProvider['onHandleDragStart']>(() => accept);
-      onHandleDragMove = vi.fn<DragCallback>();
+      onHandleDragMove = vi.fn<AuxiliaryHandleProvider['onHandleDragMove']>();
       onHandleDragEnd = vi.fn<DragCallback>();
       context.selectionScope.auxiliaryHandles.register({
         id,
@@ -1393,12 +1393,12 @@ describe.each(STORE_KINDS)('on %s', (_kind, createStore) => {
     type DragCallback = (event: DragNormalizedEvent) => void;
 
     let onHandleDragStart: ReturnType<typeof vi.fn<AuxiliaryHandleProvider['onHandleDragStart']>>;
-    let onHandleDragMove: ReturnType<typeof vi.fn<DragCallback>>;
+    let onHandleDragMove: ReturnType<typeof vi.fn<AuxiliaryHandleProvider['onHandleDragMove']>>;
     let onHandleDragEnd: ReturnType<typeof vi.fn<DragCallback>>;
 
     function registerProvider(accept: boolean): void {
       onHandleDragStart = vi.fn<AuxiliaryHandleProvider['onHandleDragStart']>(() => accept);
-      onHandleDragMove = vi.fn<DragCallback>();
+      onHandleDragMove = vi.fn<AuxiliaryHandleProvider['onHandleDragMove']>();
       onHandleDragEnd = vi.fn<DragCallback>();
       context.selectionScope.auxiliaryHandles.register({
         id: 'p1',

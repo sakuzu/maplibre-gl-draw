@@ -140,13 +140,13 @@ export interface AuxiliaryHandleProvider {
    * @returns The patch shown over the feature the handle is on (a sketch of this client: nothing
    *   is written), nothing for no change
    */
-  onHandleDragMove(event: DragNormalizedEvent): FeaturePatch | null | undefined | void;
+  onHandleDragMove(event: DragNormalizedEvent): FeaturePatch | null | undefined;
   /**
    * Called when a drag this provider accepted is let go, before it ends
    *
    * @returns The last patch, written with the patches shown; nothing writes nothing of them
    */
-  onHandleDragRelease?(event: DragNormalizedEvent): FeaturePatch | null | undefined | void;
+  onHandleDragRelease?(event: DragNormalizedEvent): FeaturePatch | null | undefined;
   /** Called at the end of a drag this provider accepted, let go or cut short */
   onHandleDragEnd(event: DragNormalizedEvent): void;
   /**
