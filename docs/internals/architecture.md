@@ -208,12 +208,20 @@ and the rest, in `src/api/impl/`) are built on the engine.
     document before they are written. It reads and subscribes to `store/`,
     and gives the sketches of a Store of rows to its tables; `view/` reads
     what the sketches draw of a Store of objects, and `modes/` and `api/`
-    add, change and commit them.
+    add, change and commit them. `sketches/rendered-shapes.ts` makes the shapes
+    as they are seen, from the Store, the sketches and the state of the rows:
+    what draws, what hits and what snaps reads them there and picks no place
+    an edit under way is kept in, and each reader that differs from the shape
+    itself has a read of its own there. `draw.rendered` reads them there too.
 
 ### Checking the rules
 
 `npm run check:layers` (`scripts/check-layers.mjs`, part of `npm run lint`)
 reads the import statements of `src/` and checks them against the rules.
+`npm run check:reads` (`scripts/check-reads.mjs`, part of `npm run lint`)
+checks that the code that draws, hits and snaps reads the shapes where they
+are made: a direct read of the Store, of the sketches or of the state of the
+rows there is an error, unless it is in the list of the reads that stay.
 Tests, `src/e2e/`, `src/test-support/` and `src/test-utils.ts` are left out.
 
 Every area has a height. From the bottom: `geometry/`; `shared/` together

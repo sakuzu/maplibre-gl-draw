@@ -205,8 +205,9 @@ npm run typecheck:examples  # 例と playground と bench を src/ の型で確�
 npm test           # vitest
 npm run test:e2e   # 実際の maplibre の地図での E2E テスト (約 10 秒)
 npm run build      # dist/ を生成
-npm run lint       # biome lint のあと check:layers、check:terms、check:commit-terms
+npm run lint       # biome lint のあと check:layers、check:reads、check:terms、check:commit-terms
 npm run check:layers  # 層の規則と import の循環
+npm run check:reads   # 描く所、当てる所、吸着が形を作る所から読むこと
 npm run check:terms   # 特定の拡張を指す語が無いこと
 npm run check:commit-terms  # main に無いコミットのメッセージにも無いこと
 npm run docs:api   # API リファレンスを docs/api/ に生成 (サイト用の Markdown)

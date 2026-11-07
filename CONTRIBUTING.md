@@ -219,8 +219,9 @@ npm run typecheck:examples  # examples, playground, bench against src/ types
 npm test           # vitest
 npm run test:e2e   # end-to-end tests on a real maplibre map (about 10 s)
 npm run build      # emit dist/
-npm run lint       # biome lint, then check:layers, check:terms and check:commit-terms
+npm run lint       # biome lint, then check:layers, check:reads, check:terms and check:commit-terms
 npm run check:layers  # layer rules and import cycles
+npm run check:reads   # what draws, hits and snaps reads the shapes where they are made
 npm run check:terms   # no word that names a particular extension
 npm run check:commit-terms  # the same in the messages of the commits not on main
 npm run docs:api   # generate the API reference (Markdown) into docs/api/
