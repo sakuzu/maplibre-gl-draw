@@ -37,7 +37,6 @@ import type { FeatureTablesInternals } from '../../feature-table/feature-tables.
 import { geometryAt, type LayerTable, type RowGroup } from '../../feature-table/layer-table.js';
 import { rowNumber, rowType } from '../../feature-table/row-read.js';
 import {
-  BULK_MOVE_SET,
   GPU_STATE_MOVE_SHIFT,
   MOVE_SETS,
   STATE_BULK,
@@ -50,6 +49,7 @@ import type { GroupVersion } from '../../feature-table/versions.js';
 import { generateCirclePolygon } from '../../geometry/circle.js';
 import { type EnuEdit, inverseEnuEdit, moveEnuPosition } from '../../geometry/enu-transforms.js';
 import { drawPropertyKey } from '../../shared/properties.js';
+import { BULK_ROWS_SET, rowMotionOf } from '../../sketches/rendered-shapes.js';
 import type { Coordinate } from '../../store/types.js';
 import type { GpuLedger } from '../gpu-ledger.js';
 import { dashCoefficientsOf } from '../renderers/line/dash.js';
@@ -772,9 +772,9 @@ export class TableDrape {
       let inSet = false;
       for (const member of moving.members) if (member.inSet) inSet = true;
       if (inSet) {
-        const [dLng, dLat] = tables.states.translation(moving.set);
-        moving.translation = [dLng, dLat];
-        moving.transform = tables.states.transform(moving.set);
+        const motion = rowMotionOf(tables, moving.set);
+        moving.translation = [motion.translation[0], motion.translation[1]];
+        moving.transform = motion.transform;
       }
       // The rows let go of are drawn by their partitions again once those are binned
       if (settled && moving.releasing.size > 0) moving.releasing.clear();
@@ -846,7 +846,7 @@ export class TableDrape {
       }
     }
     // The rows selected in bulk are the partition of their set before they are dragged
-    if (!rows.has(BULK_MOVE_SET) && selected.length > 0) rows.set(BULK_MOVE_SET, selected);
+    if (!rows.has(BULK_ROWS_SET) && selected.length > 0) rows.set(BULK_ROWS_SET, selected);
     for (let set = 1; set <= MOVE_SETS; set++) {
       this.setMovingRows(set, rows.get(set) ?? []);
     }

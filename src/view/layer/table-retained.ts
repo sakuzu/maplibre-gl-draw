@@ -98,6 +98,7 @@ import type { ScreenScaleFrame } from '../../shared/math/screen-scale.js';
 import type { BoundingBox, Feature, Layer } from '../../shared/types/model.js';
 import type { PixelRatioInput } from '../../shared/utils/pixel-ratio.js';
 import { resolvePixelRatio } from '../../shared/utils/pixel-ratio.js';
+import { rowMotionOf } from '../../sketches/rendered-shapes.js';
 import {
   roleFieldsOf,
   type TransformFieldsRegistry,
@@ -1651,10 +1652,10 @@ export class TableLayerRenderer {
     this.translations[0] = 0;
     this.translations[1] = 0;
     for (let k = 1; k <= MOVE_SETS; k++) {
-      const [dLng, dLat] = tables.states.translation(k);
-      this.translations[k * 2] = dLng;
-      this.translations[k * 2 + 1] = dLat;
-      this.transforms[k] = tables.states.transform(k);
+      const motion = rowMotionOf(tables, k);
+      this.translations[k * 2] = motion.translation[0];
+      this.translations[k * 2 + 1] = motion.translation[1];
+      this.transforms[k] = motion.transform;
     }
 
     const bounds = frame.bounds ?? WORLD;

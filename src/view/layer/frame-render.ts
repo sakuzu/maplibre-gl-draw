@@ -19,7 +19,7 @@ import {
 } from '../../feature-table/feature-tables.js';
 import { isLayerDrawnFromRows } from '../../feature-table/held-order.js';
 import { rowType } from '../../feature-table/row-read.js';
-import { BULK_MOVE_SET } from '../../feature-table/row-state.js';
+import { bulkRowMotionOf } from '../../sketches/rendered-shapes.js';
 import { isInteractionBlocked } from '../../store/lock.js';
 import type { Store } from '../../store/store.js';
 import type { Feature } from '../../store/types.js';
@@ -389,12 +389,7 @@ export function renderForeground(deps: FrameRenderDeps, f: FrameState): void {
     (store.isReadOnly() ||
       store.isInteractionLocked() ||
       store.getUnlockedSelectedRows()?.count === 0);
-  const bulkMovement: BulkMovement | null = tables
-    ? {
-        translation: tables.states.translation(BULK_MOVE_SET),
-        transform: tables.states.transform(BULK_MOVE_SET),
-      }
-    : null;
+  const bulkMovement: BulkMovement | null = tables ? bulkRowMotionOf(tables) : null;
   const pointExtent = tables ? pointFrameExtentOf(deps, tables) : null;
   const selectionUIDeps = {
     selectionUIRenderer: r.selectionUIRenderer,
