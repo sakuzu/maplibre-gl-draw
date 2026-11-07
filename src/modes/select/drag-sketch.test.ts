@@ -362,6 +362,42 @@ describe.each(KINDS)('a drag of a handle of a provider over a Store of %s', (kin
   });
 });
 
+describe.each(KINDS)('a drag of a handle shown by a sketch of its extension over %s', (kind) => {
+  it('leaves the features of the sketch out of the hits while it goes on', () => {
+    open(kind, ['a']);
+    const FROM_HANDLE: [number, number] = [0.5, 3];
+    let sketch: string | null = null;
+    draw.extensions.handleProviders.add({
+      name: 'own',
+      handles: () => [{ id: 'g', kind: 'resize', position: FROM_HANDLE }],
+      onHandleDragStart: () => {
+        sketch = draw.sketches.add({
+          edits: [{ kind: 'set', featureId: 'a', patch: { properties: { at: 1 } } }],
+        })?.id as string;
+        return true;
+      },
+      onHandleDrag: () => null,
+      onHandleDragEnd: () => {
+        draw.sketches.remove(sketch as string);
+      },
+    });
+    draw.selection.set('feature', ['a']);
+    const { shapes } = engine.context;
+    const handle = store.tables?.findRow('a');
+    const hit = (): boolean =>
+      handle === undefined
+        ? shapes.hitFeatures().some((feature) => feature.id === 'a')
+        : shapes.hitRowsLeftOut()?.(handle) !== true;
+    const router = engine.inputRouter;
+    const [lng, lat] = FROM_HANDLE;
+    router.dispatch(event<MouseNormalizedEvent>('mousedown', lng, lat));
+    router.dispatch(event<DragNormalizedEvent>('dragstart', lng, lat, FROM_HANDLE));
+    expect(hit()).toBe(false);
+    router.dispatch(event<DragNormalizedEvent>('dragend', lng, lat, FROM_HANDLE));
+    expect(hit()).toBe(true);
+  });
+});
+
 describe('a drag of a vertex over a Store of rows', () => {
   it('draws a frame over the row of the delta it is drawn as, not making the delta again', () => {
     open('rows', ['a']);

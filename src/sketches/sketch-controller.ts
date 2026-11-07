@@ -343,13 +343,36 @@ export class SketchController {
    */
   dragged(): DraggedFeatures | null {
     const entry = this.#dragged === null ? undefined : this.#entries.get(this.#dragged);
-    if (!entry) return null;
+    if (!entry) return this.#extensionDragged();
     const rows = this.#motions.get(entry.sketch.id)?.rows;
     const read = this.#draggedRead;
     if (read?.sketch === entry.sketch && read.rows === rows) return read.features;
     const features = this.#draggedOf(entry, rows);
     this.#draggedRead = { sketch: entry.sketch, rows, features };
     return features;
+  }
+
+  /**
+   * What the drag of a handle of an extension edits by sketches of its own (null when none does):
+   * the features of the sketches of this client while it goes on
+   */
+  #extensionDragged(): DraggedFeatures | null {
+    if (this.#store.getDragState()?.operation !== 'auxiliary') return null;
+    const listed = new Set<string>();
+    for (const entry of this.#entries.values()) {
+      if (entry.sketch.owner !== null) continue;
+      for (const id of this.#touchedBy(entry)) listed.add(id);
+    }
+    if (listed.size === 0) return null;
+    const tables = this.#store.tables;
+    return {
+      ids: [...listed],
+      hasFeature: (id) => listed.has(id),
+      hasRow(handle) {
+        const id = tables?.getRowId(handle);
+        return id !== undefined && listed.has(id);
+      },
+    };
   }
 
   #draggedOf(entry: Entry, rows: TableSelection | undefined): DraggedFeatures {
