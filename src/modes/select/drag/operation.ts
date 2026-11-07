@@ -5,11 +5,10 @@
  * The shape shared by the drag operations of select mode
  *
  * Each kind of drag is one operation, which SelectModeDragHandler decides, starts, and forwards
- * every frame to. A move, a rotation, a resize and a drag of vertices are shown by a sketch of this
- * client (a `SketchDrag`): the operation gives the edits of the pointer, the Store is not written
- * while the drag goes on, and the handler writes the sketch once let go. The other drags (radius,
- * auxiliary handle) are a `DragOperation`: it computes the new values and writes them through
- * IntermediateWrites, which keeps what a commit or an abort needs.
+ * every frame to. A move, a rotation, a resize, a drag of vertices and of a radius are shown by a
+ * sketch of this client (a `SketchDrag`): the operation gives the edits of the pointer, the Store is
+ * not written while the drag goes on, and the handler writes the sketch once let go. The drag of an
+ * auxiliary handle is a `DragOperation`: it hands the drag to the handle.
  */
 
 import type { SketchEdit } from '../../../api/sketches.js';
@@ -63,7 +62,7 @@ export type DragTarget = { readonly featureIds: readonly string[] } | { readonly
  */
 export interface SketchDrag {
   /** The kind of the operation (the value of DragState.operation) */
-  readonly type: 'move' | 'rotate' | 'resize' | 'vertex' | 'midpoint';
+  readonly type: 'move' | 'rotate' | 'resize' | 'vertex' | 'midpoint' | 'radius';
   /** The edits of a pointer that has not moved */
   readonly start: readonly SketchEdit[];
   /**

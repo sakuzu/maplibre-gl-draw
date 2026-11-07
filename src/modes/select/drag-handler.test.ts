@@ -946,7 +946,7 @@ describe.each(STORE_KINDS)('on %s', (_kind, createStore) => {
       expectRingNear('f2', movedSquare(100, 50, [0, 0], [3, 4]));
     });
 
-    it('a radius drag goes intermediate -> commit, the committed value is the last radius', () => {
+    it('a radius drag writes nothing until it ends, the value written is the last radius', () => {
       putFeature({
         id: 'c1',
         type: 'Circle',
@@ -963,10 +963,8 @@ describe.each(STORE_KINDS)('on %s', (_kind, createStore) => {
       startRadiusDrag('c1', [0, 0]);
       handler.updateDrag(dragEvent(1, 0, [0, 0]), context);
       handler.updateDrag(dragEvent(2, 0, [0, 0]), context);
+      expect(batches).toHaveLength(0);
       handler.endDrag(context);
-
-      const intermediates = batches.filter((c) => updatesOf(c).some((u) => u.isIntermediate));
-      expect(intermediates).toHaveLength(2);
 
       const commits = commitBatches();
       expect(commits).toHaveLength(1);

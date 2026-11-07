@@ -11,9 +11,9 @@
  *   - radius (Circle)          -> drag/radius.ts
  *   - auxiliary handle         -> drag/auxiliary.ts
  * A move, a rotation and a resize, of the features selected or of the ones selected in bulk, and a
- * drag of vertices, are shown by a sketch of this client (`draw.sketches`): the Store is not
- * written while they go on, and the values the sketch gives over the features as they are then are
- * written once let go, through the writes of the Store (the rows selected in bulk in steps,
+ * drag of vertices or of a radius, are shown by a sketch of this client (`draw.sketches`): the
+ * Store is not written while they go on, and the values the sketch gives over the features as they
+ * are then are written once let go, through the writes of the Store (the rows selected in bulk in steps,
  * `bulk.ts`). A drag cancelled removes its sketch. A sketch that ends by itself (its features
  * deleted, locked, hidden or no longer selected, the document made read-only) stops the drag, which
  * writes nothing.
@@ -243,7 +243,7 @@ export class SelectModeDragHandler {
       }
 
       case 'radius':
-        this.begin(startRadiusDrag(hitResult.featureId!, store));
+        if (!this.beginSketch(context, startRadiusDrag(hitResult.featureId!, store))) return;
         store.setDragState({ operation: 'radius', ...targets });
         break;
 
@@ -311,13 +311,13 @@ export class SelectModeDragHandler {
    *
    * @returns Whether the drag started
    */
-  private beginSketch(context: EngineModeContext, drag: SketchDrag): boolean {
+  private beginSketch(context: EngineModeContext, drag: SketchDrag | null): boolean {
     const { store, sketches } = context;
     // A write of a drag let go before, still under way, is made first (its rows leave the moving
     // set it shares, which is let go of with the last of them: the rows enter it still)
     store.finishSlicedWrite();
-    const sketch = addSketch(sketches, drag.start);
-    if (!sketch) {
+    const sketch = drag && addSketch(sketches, drag.start);
+    if (!drag || !sketch) {
       context.map.dragPan.enable();
       this.announceEnd(true);
       return false;

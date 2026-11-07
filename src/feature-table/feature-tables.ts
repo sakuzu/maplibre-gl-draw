@@ -2772,10 +2772,11 @@ class FeatureTablesStore implements FeatureTablesInternals {
   }
 
   /**
-   * Draws features of the sketches that changed nothing but their geometry by writing it over the
-   * rows of the delta they are drawn as, as a write of a row held does: the same features, drawn
-   * over the same places, so that a frame of a drag of vertices draws again the coordinates that
-   * moved and no more. The rows stay drawn and not read: nothing is told, and no mark is stamped
+   * Draws features of the sketches that changed nothing but their geometry and their attributes by
+   * writing those over the rows of the delta they are drawn as, as a write of a row held does: the
+   * same features, drawn over the same places, so that a frame of a drag of vertices draws again the
+   * coordinates that moved and no more. The rows stay drawn and not read: nothing is told, and no
+   * mark is stamped
    *
    * @returns false when something else changed, and the delta is to be made again
    */
@@ -2785,26 +2786,26 @@ class FeatureTablesStore implements FeatureTablesInternals {
     if (!before || !entries || before.length !== sketches.length || sketches.length === 0) {
       return false;
     }
-    const writes: Array<{ place: RowPlace; geometry: Feature['geometry'] }> = [];
+    const writes: Array<{ place: RowPlace; fields: Map<RowField, readonly unknown[]> }> = [];
     for (let i = 0; i < sketches.length; i++) {
       const { feature, place: given } = sketches[i];
       const previous = before[i].feature;
       if (given !== undefined || before[i].place !== undefined) return false;
       if (previous === feature) continue;
-      const fields = featureFields(previous, feature);
-      const others = fields.size - (fields.has('geometry') ? 1 : 0);
-      if (others > 0 || previous.layerId !== feature.layerId) return false;
+      const fields = new Map<RowField, readonly unknown[]>();
+      for (const [field, value] of featureFields(previous, feature)) {
+        if (!writtenOverSketch(field)) return false;
+        fields.set(field, [value]);
+      }
+      if (previous.layerId !== feature.layerId) return false;
       if ((previous.groupId ?? undefined) !== (feature.groupId ?? undefined)) return false;
       const entry = entries.get(feature.id);
       const place = entry && this.placeOf(entry.handle);
       if (!entry || !place || !this.overSamePlace(entry)) return false;
-      if (feature.geometry !== previous.geometry) {
-        writes.push({ place, geometry: feature.geometry });
-      }
+      if (fields.size > 0) writes.push({ place, fields });
     }
     this.overlayInputs.set(SKETCH_OWNER, sketches);
-    for (const { place, geometry } of writes) {
-      const fields = new Map<RowField, readonly unknown[]>([['geometry', [geometry]]]);
+    for (const { place, fields } of writes) {
       const write = this.writeInPlace(place, 0, fields, undefined, undefined);
       if (!write) continue;
       const { layerId } = place.layer;
@@ -4493,6 +4494,12 @@ function patchColumns(fields: ReadonlyMap<RowField, readonly unknown[]>): PatchC
     locked: fields.get('locked'),
     properties,
   };
+}
+
+/** Whether a field of a feature of the sketches is written over its row of the delta */
+function writtenOverSketch(field: RowField): boolean {
+  if (field === 'geometry') return true;
+  return field.startsWith('property:') && !CLASSIFY_KEYS.has(field.slice('property:'.length));
 }
 
 /** A write in place that leaves the shape of the row (shared, never changed) */

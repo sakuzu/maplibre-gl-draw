@@ -343,6 +343,7 @@ const EDITS: Edit[] = [
     by: [40, 0],
     cursor: 'pointer',
     started: 'handle',
+    sketch: true,
     carried: I_RADIUS,
     escape: 'restored',
   },
@@ -478,7 +479,8 @@ async function run(page: Page, kind: StoreKind, edit: Edit, cancelled: boolean):
   const midGeometry = await geometryOf(page, 'p', true);
   // A drag shown by a sketch leaves the document as it was, and the others write it
   expect(await geometryOf(page, 'p')).toEqual(edit.sketch ? geometry : midGeometry);
-  const midRadius = await propertyOf(page, 'p', RADIUS_KEY);
+  const midRadius = await propertyOf(page, 'p', RADIUS_KEY, true);
+  expect(await propertyOf(page, 'p', RADIUS_KEY)).toEqual(edit.sketch ? radius : midRadius);
   if (edit.sketch) await expectNoHits(page);
   else await expectHitsAsDrawn(page);
   const image = await capture(page, [FILL]);

@@ -653,16 +653,20 @@ export const geometryOf = (
     [id, rendered] as const,
   );
 
-/** A value of the properties of a feature, as `features.get` reads it */
-export const propertyOf = (page: Page, id: string, key: string): Promise<unknown> =>
+/** A value of the properties of a feature, as `features.get` reads it, or as it is drawn */
+export const propertyOf = (
+  page: Page,
+  id: string,
+  key: string,
+  rendered = false,
+): Promise<unknown> =>
   page.evaluate(
-    ([i, k]) => {
+    ([i, k, a]) => {
       const draw = (window as unknown as SceneWindow).draw;
-      return (draw.features.get(i as string)?.properties as Record<string, unknown> | undefined)?.[
-        k as string
-      ];
+      const feature = a ? draw.rendered.get(i as string) : draw.features.get(i as string);
+      return (feature?.properties as Record<string, unknown> | undefined)?.[k as string];
     },
-    [id, key] as const,
+    [id, key, rendered] as const,
   );
 
 /** The cursor of the map canvas once the pointer is moved to a point of the map */
