@@ -6,16 +6,21 @@
  *
  * A feature as it is drawn is made by the shapes of the instance (`RenderedShapes`), and its
  * selection box by the function the selection UI draws and hits it with (`selectionBoxOf`). The
- * features changed since the last notification are gathered from the
- * changes of the document (the features of a Store of objects and the rows of a Store of rows) and
- * of the sketches, and told once the draw of the map that draws them is done: the one signal of
- * the drawing that a draw is done, after which the screen answers for it. A change of the look
- * (a layer rule, the `style` option, a type added or removed) and of the selection box with the
- * view (its margin) is not told: those are read at each draw.
+ * features changed since the last notification are gathered from the changes of the document (the
+ * features of a Store of objects and the rows of a Store of rows), of the sketches, of the rows
+ * drawn moved by their state and of the shape being drawn, and told once the draw of the map that
+ * draws them is done: the one signal of the drawing that a draw is done, after which the screen
+ * answers for it. A change of the look (a layer rule, the `style` option, a type added or removed)
+ * and of the selection box with the view (its margin) is not told: those are read at each draw.
+ *
+ * The rows moved by their state move at each draw and may be very many: their IDs are read once
+ * for each change of the rows in a moving set, and given as they are for each change of how the
+ * set moves, so that a frame of such a drag costs the same whatever their number.
  */
 
 import type { Map as MapLibreMap } from 'maplibre-gl';
 import type { DraggedRows } from '../../feature-table/dragged-rows.js';
+import { featureTablesInternals } from '../../feature-table/feature-tables.js';
 import type { SelectionUIConfig } from '../../shared/config/selection.js';
 import { createCoordinateTransform } from '../../shared/math/index.js';
 import type { RenderedShapes } from '../../sketches/rendered-shapes.js';
@@ -29,6 +34,8 @@ import type { RenderedResource } from '../rendered.js';
 import type { Sketch } from '../sketches.js';
 import type { EventHub } from './events.js';
 import { invalidInput } from './shared.js';
+
+const NO_IDS: readonly string[] = Object.freeze([]);
 
 /**
  * What the resource reads
@@ -67,7 +74,7 @@ export function createRendered(deps: RenderedDeps): {
     get: (id) => shapes.get(id) as Feature | undefined,
     getMany(ids) {
       if (!Array.isArray(ids)) throw invalidInput('The IDs must be an array');
-      return ids.map((id) => shapes.get(id) as Feature | undefined);
+      return shapes.getMany(ids) as (Feature | undefined)[];
     },
     getSelectionBox: (id) => boxOf(id, deps.selectionStyle.box.margin),
     getFootprint: (id) => boxOf(id, 0),
@@ -121,7 +128,12 @@ export function createRendered(deps: RenderedDeps): {
     }
     return [...ids];
   };
+  // The features the sketches create, by the IDs they are drawn with
+  let created: readonly string[] = NO_IDS;
   const sketchChanged = (sketch: Sketch, ended: boolean): void => {
+    for (const id of created) changed.add(id);
+    created = shapes.createdIds();
+    for (const id of created) changed.add(id);
     for (const id of touched.get(sketch.id) ?? []) changed.add(id);
     if (ended) {
       touched.delete(sketch.id);
@@ -130,6 +142,34 @@ export function createRendered(deps: RenderedDeps): {
     const now = touchedBy(sketch);
     touched.set(sketch.id, now);
     for (const id of now) changed.add(id);
+  };
+  // Whether the shape being drawn changed: it has no ID
+  let drawingChanged = false;
+
+  // The rows in a moving set, and the changes of them read last
+  let moving: readonly string[] = NO_IDS;
+  let movingRevision = 0;
+  let motionRevision = 0;
+  /**
+   * Gathers what the rows moved by their state changed
+   *
+   * @returns Whether the rows of `moving` moved, told in `moving` itself
+   */
+  const rowsMoved = (): boolean => {
+    const tables = store.tables;
+    const states = featureTablesInternals(tables)?.states;
+    if (!tables || !states) return false;
+    if (states.movingRevision !== movingRevision) {
+      movingRevision = states.movingRevision;
+      motionRevision = states.revision;
+      for (const id of moving) changed.add(id);
+      moving = states.movingHandles().flatMap((handle) => tables.getRowId(handle) ?? []);
+      for (const id of moving) changed.add(id);
+      return false;
+    }
+    if (states.revision === motionRevision) return false;
+    motionRevision = states.revision;
+    return moving.length > 0;
   };
 
   const stops = [
@@ -153,10 +193,16 @@ export function createRendered(deps: RenderedDeps): {
     events.on('sketch.added', ({ sketch }) => sketchChanged(sketch, false)),
     events.on('sketch.updated', ({ sketch }) => sketchChanged(sketch, false)),
     events.on('sketch.removed', ({ sketch }) => sketchChanged(sketch, true)),
+    events.on('preview.changed', () => {
+      drawingChanged = true;
+    }),
     // Told once the frame that draws the changes is drawn, with the values of that frame
     deps.onFrameDrawn(() => {
-      if (changed.size === 0) return;
-      const ids = [...changed];
+      const moved = rowsMoved();
+      if (changed.size === 0 && !moved && !drawingChanged) return;
+      drawingChanged = false;
+      if (moved && changed.size > 0) for (const id of moving) changed.add(id);
+      const ids = changed.size === 0 && moved ? moving : [...changed];
       changed.clear();
       events.emit('rendered.changed', { ids });
     }),

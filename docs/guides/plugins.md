@@ -230,8 +230,9 @@ ctx.on('dataset.removed', ({ datasetId }) => forget(datasetId));
 
 A plugin that draws something around a feature, or reads where it is,
 reads the feature as it is drawn from `ctx.draw.rendered`: with the
-sketches (`draw.sketches`) applied over the document, while it is edited
-and not written yet. `rendered.getSelectionBox(id)` gives
+sketches (`draw.sketches`) applied over the document and the rows dragged
+in bulk moved where they are drawn, while it is edited and not written
+yet. `rendered.getSelectionBox(id)` gives
 its selection box, the footprint with the margin, as the library draws
 and hits it in the view drawn last, and `rendered.getFootprint(id)` its
 footprint without the margin, the box the library makes it from (the

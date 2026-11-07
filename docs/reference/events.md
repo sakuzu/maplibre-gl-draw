@@ -472,18 +472,20 @@ once and `document.changed` when the transaction ends.
 The shapes of the features as this client draws them (`draw.rendered`)
 changed: `ids` lists the features a write of the document (of features,
 or of the rows of a store that holds its features as rows) or a sketch
-changed, and those created or deleted. It fires once the draw of the map
-that draws the change is done, at most once a draw, after the draw:
-`draw.rendered` and the screen of the contexts then answer for that
-view. It does not fire while the map does not draw.
+changed, those created or deleted, and the rows dragged in bulk while
+they move. A change of the shape being drawn alone, which has no ID, is
+told with no IDs. It fires once the draw of the map that draws the
+change is done, at most once a draw, after the draw: `draw.rendered`
+and the screen of the contexts then answer for that view. It does not
+fire while the map does not draw.
 
 It tells changes of the shapes only. A change of the look (a layer rule,
 the `style` option, a type added or removed) and the selection box that
 changes with the view (its margin, laid on the map at the scale of the
 view) are not told: read the look and the selection box at each draw.
-The rows dragged in bulk are not written while they are dragged; what is
-drawn with them reads where they are in each draw, with
-`draw.rendered.getDraggedRows()`.
+The rows dragged in bulk can be very many, and `ids` then lists them all
+at each draw: what is drawn with them reads where they are in each draw,
+with `draw.rendered.getDraggedRows()`.
 
 ### dataset.reordered
 

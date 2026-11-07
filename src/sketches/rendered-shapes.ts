@@ -110,14 +110,21 @@ export class RenderedShapes {
    * A feature a sketch creates is read by the ID it is drawn with
    */
   get(id: string): Feature | undefined {
+    return this.#shapeOf(id, this.draggedRows());
+  }
+
+  /** Features as they are seen, in the order of the IDs */
+  getMany(ids: readonly string[]): (Feature | undefined)[] {
+    const dragged = this.draggedRows();
+    return ids.map((id) => this.#shapeOf(id, dragged));
+  }
+
+  #shapeOf(id: string, dragged: DraggedRows | null): Feature | undefined {
     const sketches = this.#sketches;
     const feature =
       sketches?.appliedFeature(id) ?? sketches?.view.drawnFeature(id) ?? this.#store.getFeature(id);
-    if (!feature) return undefined;
     const tables = this.#store.tables;
-    if (!tables) return feature;
-    const dragged = draggedRowsOf(tables);
-    return dragged ? draggedFeatureOf(feature, tables, dragged) : feature;
+    return feature && tables && dragged ? draggedFeatureOf(feature, tables, dragged) : feature;
   }
 
   /** The rows being dragged and where each is drawn, while they are not written yet */
@@ -155,5 +162,10 @@ export class RenderedShapes {
   /** The IDs of the features the sketches draw, wherever the document has them */
   sketchedIds(): readonly string[] {
     return this.#sketches?.view.ids() ?? [];
+  }
+
+  /** The IDs the features the sketches create are drawn with */
+  createdIds(): readonly string[] {
+    return this.#sketches?.view.creates().map((create) => create.key) ?? [];
   }
 }

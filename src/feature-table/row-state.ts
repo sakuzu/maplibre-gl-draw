@@ -137,6 +137,7 @@ export class RowStateSets {
   /** The edit that moves, rotates or scales each moving set (null for none; set 0 is unused) */
   private readonly transforms: Array<EnuEdit | null> = new Array(MOVE_SETS + 1).fill(null);
   private translationRevision = 0;
+  private membersRevision = 0;
   /** The number of rows in each moving set (set 0 is unused) */
   private readonly members = new Int32Array(MOVE_SETS + 1);
 
@@ -145,6 +146,21 @@ export class RowStateSets {
   /** Changes with every change of a translation or a transform (the GPU writes its uniforms again) */
   get revision(): number {
     return this.translationRevision;
+  }
+
+  /** Changes with every row put into a moving set or taken out of one */
+  get movingRevision(): number {
+    return this.membersRevision;
+  }
+
+  /** The rows in a moving set, walked once for each change of them */
+  movingHandles(): RowHandle[] {
+    const handles: RowHandle[] = [];
+    if (this.members.every((count) => count === 0)) return handles;
+    for (let handle = 0; handle < this.bits.length; handle++) {
+      if ((this.bits[handle] & SET_MOVE_MASK) !== 0) handles.push(handle);
+    }
+    return handles;
   }
 
   /** The bits of the state of a handle, as the copy of a group holds them */
@@ -284,6 +300,7 @@ export class RowStateSets {
     const from = (bits & SET_MOVE_MASK) >> SET_MOVE_SHIFT;
     const to = (next & SET_MOVE_MASK) >> SET_MOVE_SHIFT;
     if (from === to) return 0;
+    this.membersRevision++;
     if (to > 0) this.members[to]++;
     if (from === 0) return 0;
     this.members[from]--;

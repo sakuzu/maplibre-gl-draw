@@ -10,13 +10,15 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { BULK_MOVE_SET } from '../../feature-table/row-state.js';
 import { createCoordinateTransform } from '../../shared/math/index.js';
 import { createTableStore } from '../../store/table-memory.js';
 import type { Feature as StoredFeature } from '../../store/types.js';
-import { createMapStub } from '../../test-utils.js';
+import { createMapStub, internalsOf } from '../../test-utils.js';
 import { selectionBoxOf } from '../../view/ui/bounds.js';
 import type { Draw } from '../draw.js';
 import type { Feature } from '../model.js';
+import type { FeatureTables } from '../tables.js';
 import { createDrawOnEngine } from './create-draw.js';
 import type { Engine } from './engine.js';
 import { createEngine } from './engine.js';
@@ -295,5 +297,116 @@ describe('rendered.changed', () => {
     draw.options.update({ style: { point: { pointRadius: 9 } } });
     drawFrame();
     expect(told).toHaveLength(1);
+  });
+
+  it('tells the rows moved by their state: as they start, at each motion, and as they end', () => {
+    draw.destroy();
+    const { store } = createTableStore();
+    store.createLayer({
+      id: 'rows',
+      name: 'rows',
+      visible: true,
+      locked: false,
+      opacity: 1,
+      kind: 'table',
+      styleRule: undefined,
+      metadata: undefined,
+    });
+    store.transact(() => {
+      for (const id of ['r0', 'r1', 'r2']) {
+        store.createFeature({
+          id,
+          type: 'Point',
+          geometry: { type: 'Point', coordinates: [0, 0] },
+          layerId: 'rows',
+          groupId: undefined,
+          properties: {},
+          style: {},
+          visible: true,
+          locked: false,
+        });
+      }
+    });
+    const listeners = new Set<() => void>();
+    engine = createEngine(
+      createMapStub().map,
+      { store, initDefaultLayer: false },
+      { deferDefaultMode: true },
+    );
+    engine.customLayer.onFrameDrawn = (listener) => {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    };
+    drawFrame = () => {
+      for (const listener of [...listeners]) listener();
+    };
+    draw = createDrawOnEngine(engine, { store, initDefaultLayer: false });
+    engine.enterDefaultMode();
+    drawFrame();
+    const told: (readonly string[])[] = [];
+    draw.on('rendered.changed', ({ ids }) => told.push(ids));
+    const tables = store.tables as FeatureTables;
+    const states = internalsOf(tables).states;
+    const handles = Int32Array.of(tables.findRow('r0') as number, tables.findRow('r1') as number);
+    states.setMoving(handles, BULK_MOVE_SET);
+    states.setTranslation(BULK_MOVE_SET, 1, 0);
+    drawFrame();
+    states.setTranslation(BULK_MOVE_SET, 2, 0);
+    drawFrame();
+    states.setTranslation(BULK_MOVE_SET, 3, 0);
+    drawFrame();
+    // Nothing moved since
+    drawFrame();
+    expect(told).toEqual([
+      ['r0', 'r1'],
+      ['r0', 'r1'],
+      ['r0', 'r1'],
+    ]);
+    // Their IDs are not read again at each motion
+    expect(told[2]).toBe(told[1]);
+    states.setMoving(handles, 0);
+    drawFrame();
+    expect(told).toHaveLength(4);
+    expect(told[3]).toEqual(['r0', 'r1']);
+    drawFrame();
+    expect(told).toHaveLength(4);
+  });
+
+  it('tells a change of the shape being drawn, which has no ID, with no IDs', () => {
+    const told: (readonly string[])[] = [];
+    draw.on('rendered.changed', ({ ids }) => told.push(ids));
+    engine.context.store.setTentative({
+      type: 'LineString',
+      coordinates: [[0, 0]],
+      layerId: engine.context.getActiveLayerId(),
+      confirmedCount: 1,
+    });
+    drawFrame();
+    expect(told).toEqual([[]]);
+    drawFrame();
+    expect(told).toHaveLength(1);
+    engine.context.store.setTentative(null);
+    drawFrame();
+    expect(told).toEqual([[], []]);
+  });
+
+  it('tells a feature a sketch creates, then no longer', () => {
+    const told: (readonly string[])[] = [];
+    draw.on('rendered.changed', ({ ids }) => told.push(ids));
+    const sketch = draw.sketches.add({
+      edits: [
+        {
+          kind: 'create',
+          feature: { type: 'Point', geometry: { type: 'Point', coordinates: [3, 4] } },
+          placedVertexCount: 1,
+          below: null,
+        },
+      ],
+    });
+    const key = engine.sketches.view.creates()[0]?.key as string;
+    drawFrame();
+    draw.sketches.remove(sketch?.id as string);
+    drawFrame();
+    expect(told).toEqual([[key], [key]]);
   });
 });
