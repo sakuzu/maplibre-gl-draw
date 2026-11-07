@@ -6,6 +6,7 @@
  * `scale` and `rotate` of the sketch of the drag
  */
 
+import type { SketchEdit } from '../../../api/sketches.js';
 import type { DragNormalizedEvent } from '../../../dispatcher/types.js';
 import { rotateEditOf, rotationCenterOf } from '../../../operations/rotate.js';
 import { type ScaleState, scaleEditOf, startScale } from '../../../operations/scale.js';
@@ -17,25 +18,37 @@ import type { DragState, Feature } from '../../../store/types.js';
 import type { BoundingBoxCoords } from '../../../view/ui/selection-ui/index.js';
 import { computeBoundingBox } from '../../../view/ui/selection-ui/index.js';
 import type { EngineModeContext } from '../../handler.js';
-import type { DragScope, DragStore, SketchDrag } from './operation.js';
-import { dragStartLngLat } from './operation.js';
+import type { DragScope, DragStore, DragTarget, SketchDrag } from './operation.js';
+import {
+  dragStartLngLat,
+  selectedOfTarget,
+  transformEdits,
+  transformMovesNothing,
+} from './operation.js';
 
 // === Resize operation ===
 
 /** @internal */
 export class ResizeDrag implements SketchDrag {
   readonly type = 'resize' as const;
-  readonly start: TransformEdit;
+  readonly start: readonly SketchEdit[];
+  readonly selected: readonly string[];
 
   constructor(
     private readonly state: ScaleState,
     from: { lng: number; lat: number },
+    private readonly target: DragTarget,
   ) {
-    this.start = scaleEditOf(state, from);
+    this.start = transformEdits(scaleEditOf(state, from), target);
+    this.selected = selectedOfTarget(target);
   }
 
-  editAt(event: DragNormalizedEvent): TransformEdit {
-    return scaleEditOf(this.state, event.lngLat);
+  editsAt(event: DragNormalizedEvent): readonly SketchEdit[] {
+    return transformEdits(scaleEditOf(this.state, event.lngLat), this.target);
+  }
+
+  movesNothing(edits: readonly SketchEdit[]): boolean {
+    return transformMovesNothing(edits[0] as TransformEdit);
   }
 }
 
@@ -47,12 +60,13 @@ export function startResizeDrag(
   handle: HandleType,
   bbox: BoundingBoxCoords,
   map: EngineModeContext['map'],
+  target: DragTarget,
 ): ResizeDrag {
   // A box thinner than 1 pixel on screen is not stretched along that axis
   const transform = createCoordinateTransform(map);
   const from = dragStartLngLat(event);
   const state = startScale(handle, from, bbox, (lngLat) => transform.metersPerPixel(lngLat));
-  return new ResizeDrag(state, from);
+  return new ResizeDrag(state, from, target);
 }
 
 // === Rotate operation ===
@@ -60,23 +74,31 @@ export function startResizeDrag(
 /** @internal */
 export class RotateDrag implements SketchDrag {
   readonly type = 'rotate' as const;
-  readonly start: TransformEdit;
+  readonly start: readonly SketchEdit[];
+  readonly selected: readonly string[];
 
   constructor(
     private readonly center: [number, number],
     private readonly from: { lng: number; lat: number },
     /** What the frame is drawn from during the rotation */
     readonly rotateInfo: NonNullable<DragState['rotateInfo']>,
+    private readonly target: DragTarget,
   ) {
-    this.start = rotateEditOf(center, from, from);
+    this.start = transformEdits(rotateEditOf(center, from, from), target);
+    this.selected = selectedOfTarget(target);
   }
 
-  editAt(event: DragNormalizedEvent): TransformEdit {
-    return rotateEditOf(this.center, this.from, event.lngLat);
+  editsAt(event: DragNormalizedEvent): readonly SketchEdit[] {
+    return transformEdits(rotateEditOf(this.center, this.from, event.lngLat), this.target);
   }
 
-  shown(edit: TransformEdit, store: DragStore): void {
-    if (edit.kind !== 'rotate') return;
+  movesNothing(edits: readonly SketchEdit[]): boolean {
+    return transformMovesNothing(edits[0] as TransformEdit);
+  }
+
+  shown(edits: readonly SketchEdit[], store: DragStore): void {
+    const edit = edits[0];
+    if (edit?.kind !== 'rotate') return;
     // Update the rotation angle (for drawing the bbox during the rotation)
     const dragState = store.getDragState();
     if (dragState?.rotateInfo) {
@@ -102,6 +124,7 @@ export function startRotateDrag(
   features: readonly Feature[],
   store: DragStore,
   scope: DragScope,
+  target: DragTarget,
 ): RotateDrag {
   const center = rotationCenterOf(bbox, selected, transformFieldsOfStore(store));
 
@@ -118,16 +141,21 @@ export function startRotateDrag(
   }
 
   // Save the bbox at the start of the rotation (for drawing the bbox during the rotation)
-  return new RotateDrag(center, dragStartLngLat(event), {
-    initialBbox: {
-      topLeft: bbox.topLeft,
-      topRight: bbox.topRight,
-      bottomRight: bbox.bottomRight,
-      bottomLeft: bbox.bottomLeft,
-      center: bbox.center,
-    },
-    initialFeatureBboxes,
-    currentAngle: 0,
+  return new RotateDrag(
     center,
-  });
+    dragStartLngLat(event),
+    {
+      initialBbox: {
+        topLeft: bbox.topLeft,
+        topRight: bbox.topRight,
+        bottomRight: bbox.bottomRight,
+        bottomLeft: bbox.bottomLeft,
+        center: bbox.center,
+      },
+      initialFeatureBboxes,
+      currentAngle: 0,
+      center,
+    },
+    target,
+  );
 }

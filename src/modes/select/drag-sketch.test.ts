@@ -2,11 +2,11 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * A move, a rotation and a resize of the select mode are shown by a sketch of this client: nothing
- * is written while they go on, the values the sketch gives over the features as they are then are
- * written once let go, and nothing is written when they are cancelled. Over a Store of rows the
- * rows are drawn moved by a moving set, whatever their number, their values untouched. What the
- * drag edits is not hit while it goes on.
+ * A move, a rotation, a resize and a drag of vertices of the select mode are shown by a sketch of
+ * this client: nothing is written while they go on, the values the sketch gives over the features
+ * as they are then are written once let go, and nothing is written when they are cancelled. Over a
+ * Store of rows the rows moved as a whole are drawn moved by a moving set, whatever their number,
+ * their values untouched. What the drag edits is not hit while it goes on.
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -159,6 +159,134 @@ function setOf(id: string): number {
   const state = internals?.states.stateOf(tables?.findRow(id) ?? -1) ?? 0;
   return (state & STATE_MOVE_MASK) >> STATE_MOVE_SHIFT;
 }
+
+describe.each(KINDS)('a drag of vertices over a Store of %s', (kind) => {
+  /** The second corner of the square, as the document or the drawing has it */
+  const second = (feature: unknown): number[] | undefined =>
+    (feature as Feature | undefined)?.geometry.type === 'Polygon'
+      ? ((feature as Feature).geometry as { coordinates: number[][][] }).coordinates[0][1]
+      : undefined;
+  const third = (feature: unknown): number[] | undefined =>
+    ((feature as Feature | undefined)?.geometry as { coordinates: number[][][] } | undefined)
+      ?.coordinates[0][2];
+
+  /** Presses a point and moves the pointer from it */
+  function pressAt(from: [number, number], ...moves: ReadonlyArray<[number, number]>): void {
+    const router = engine.inputRouter;
+    router.dispatch(event<MouseNormalizedEvent>('mousedown', from[0], from[1]));
+    router.dispatch(event<DragNormalizedEvent>('dragstart', from[0], from[1], from));
+    for (const [lng, lat] of moves) {
+      router.dispatch(event<DragNormalizedEvent>('dragmove', lng, lat, from));
+    }
+  }
+
+  function letGoAt(lng: number, lat: number, from: [number, number]): void {
+    engine.inputRouter.dispatch(event<DragNormalizedEvent>('dragend', lng, lat, from));
+  }
+
+  const CORNER: [number, number] = [1, 0];
+
+  beforeEach(() => {
+    open(kind, ['a']);
+    draw.selection.set('feature', ['a']);
+  });
+
+  it('writes nothing while a vertex is dragged, and writes it once let go', () => {
+    const update = vi.spyOn(store, 'updateFeature');
+    pressAt(CORNER, [1.5, -0.5], [2, -1]);
+    expect(writes).toEqual([]);
+    expect(update).not.toHaveBeenCalled();
+    near(second(draw.features.get('a')), [1, 0]);
+    near(second(draw.rendered.get('a')), [2, -1]);
+    letGoAt(2, -1, CORNER);
+    expect(writes).toEqual(['document.changed']);
+    expect(update.mock.calls.map(([id]) => id)).toEqual(['a']);
+    near(second(draw.features.get('a')), [2, -1]);
+    expect(events[events.length - 2]?.[1]).toMatchObject({ reason: 'committed' });
+    expect(events[events.length - 1]).toEqual([
+      'drag.ended',
+      { kind: 'vertex', featureIds: ['a'], cancelled: false },
+    ]);
+  });
+
+  it('writes nothing once a drag of a vertex is cancelled', () => {
+    pressAt(CORNER, [2, -1]);
+    engine.modeManager.getHandler()?.onDragCancel?.(event('dragcancel', 2, -1, CORNER));
+    expect(writes).toEqual([]);
+    near(second(draw.rendered.get('a')), [1, 0]);
+    expect(events[events.length - 1]?.[1]).toMatchObject({ cancelled: true });
+  });
+
+  it('keeps a vertex another writer moves meanwhile: both moves stay', () => {
+    pressAt(CORNER, [2, -1]);
+    const moved = structuredClone(square('a', 0).geometry) as { coordinates: number[][][] };
+    (moved.coordinates[0] as number[][])[2] = [5, 5];
+    store.updateFeature('a', { geometry: moved as Feature['geometry'] });
+    near(third(draw.rendered.get('a')), [5, 5]);
+    near(second(draw.rendered.get('a')), [2, -1]);
+    letGoAt(2, -1, CORNER);
+    near(second(draw.features.get('a')), [2, -1]);
+    near(third(draw.features.get('a')), [5, 5]);
+  });
+
+  it('adds nothing while a midpoint is dragged, and adds the vertex once let go', () => {
+    const from: [number, number] = [0.5, 0];
+    pressAt(from, [0.5, -1]);
+    expect(writes).toEqual([]);
+    const positions = (feature: unknown) =>
+      ((feature as Feature).geometry as { coordinates: number[][][] }).coordinates[0].length;
+    expect(positions(draw.features.get('a'))).toBe(5);
+    expect(positions(draw.rendered.get('a'))).toBe(6);
+    near(second(draw.rendered.get('a')), [0.5, -1]);
+    letGoAt(0.5, -1, from);
+    expect(writes).toEqual(['document.changed']);
+    expect(positions(draw.features.get('a'))).toBe(6);
+    near(second(draw.features.get('a')), [0.5, -1]);
+  });
+
+  it('adds no vertex once a drag of a midpoint is cancelled', () => {
+    const from: [number, number] = [0.5, 0];
+    pressAt(from, [0.5, -1]);
+    engine.modeManager.getHandler()?.onDragCancel?.(event('dragcancel', 0.5, -1, from));
+    expect(writes).toEqual([]);
+    const polygon = draw.features.get('a')?.geometry as { coordinates: number[][][] };
+    expect(polygon.coordinates[0]).toHaveLength(5);
+  });
+
+  it('does not hit the feature whose vertex is dragged', () => {
+    const { shapes } = engine.context;
+    const handle = store.tables?.findRow('a');
+    const hit = (): boolean =>
+      handle === undefined
+        ? shapes.hitFeatures().some((feature) => feature.id === 'a')
+        : shapes.hitRowsLeftOut()?.(handle) !== true;
+    expect(hit()).toBe(true);
+    pressAt(CORNER, [2, -1]);
+    expect(hit()).toBe(false);
+    letGoAt(2, -1, CORNER);
+    expect(hit()).toBe(true);
+  });
+});
+
+describe('a drag of a vertex over a Store of rows', () => {
+  it('draws a frame over the row of the delta it is drawn as, not making the delta again', () => {
+    open('rows', ['a']);
+    draw.selection.set('feature', ['a']);
+    const router = engine.inputRouter;
+    const from: [number, number] = [1, 0];
+    router.dispatch(event<MouseNormalizedEvent>('mousedown', 1, 0));
+    router.dispatch(event<DragNormalizedEvent>('dragstart', 1, 0, from));
+    router.dispatch(event<DragNormalizedEvent>('dragmove', 1.5, 0, from));
+    const internals = featureTablesInternals(draw.getStore().tables);
+    const delta = internals?.layerTable('l')?.delta;
+    const group = delta?.group;
+    router.dispatch(event<DragNormalizedEvent>('dragmove', 2, 0, from));
+    expect(delta?.group).toBe(group);
+    const geometry = internals?.sketchGeometryOf('a') as { coordinates: number[][][] };
+    near(geometry.coordinates[0][1], [2, 0]);
+    expect(internals?.checkSketches(new Set(['a']))).toEqual([]);
+  });
+});
 
 describe.each(KINDS)('a drag over a Store of %s', (kind) => {
   beforeEach(() => {

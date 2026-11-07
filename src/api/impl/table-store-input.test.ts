@@ -125,14 +125,14 @@ describe('the input of the user over a Store of rows', () => {
     expect(internalsOf(tables).getOpenedFeature('a')).toBeUndefined();
   });
 
-  it('writes the row of a vertex dragged, in the middle of the drag and at its end', () => {
+  it('writes the row of a vertex dragged once let go, and nothing in the middle of the drag', () => {
     const tables = store.tables;
     if (!tables) throw new Error('rows');
     createSyntheticInput(engine).click([0.25, 0.25]);
-    const updates: boolean[] = [];
+    let updates = 0;
     store.subscribe((change) => {
       for (const entry of change.features?.updated ?? []) {
-        if (entry.id === 'a') updates.push(entry.isIntermediate === true);
+        if (entry.id === 'a') updates++;
       }
     });
     const router = engine.inputRouter;
@@ -146,12 +146,12 @@ describe('the input of the user over a Store of rows', () => {
           | { coordinates: number[][][] }
           | undefined
       )?.coordinates[0][1];
-    expect(corner()).toEqual([0.6, -0.1]);
+    expect(corner()).toEqual([0.5, 0]);
     router.dispatch(event<DragNormalizedEvent>('dragmove', 0.7, -0.2, [0.5, 0]));
+    expect(updates).toBe(0);
     router.dispatch(event<DragNormalizedEvent>('dragend', 0.7, -0.2, [0.5, 0]));
     expect(corner()).toEqual([0.7, -0.2]);
-    expect(updates).toContain(true);
-    expect(updates[updates.length - 1]).toBe(false);
+    expect(updates).toBe(1);
     // Read so once it is no longer held
     store.setSelection(null, []);
     vi.advanceTimersByTime(RELEASE_DELAY_MS * 2);

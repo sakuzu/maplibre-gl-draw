@@ -253,22 +253,31 @@ export class RenderedShapes {
     return dragged ? (handle) => dragged.hasRow(handle) : null;
   }
 
-  /** The features of these IDs the handles of the selection are grabbed on, as a hit reads them */
+  /**
+   * The features of these IDs the handles of the selection are grabbed on: as they are seen, so
+   * that a handle is grabbed where it is drawn
+   */
   handleFeatures(ids: readonly string[]): Feature[] {
-    return ids.flatMap((id) => this.hitFeature(id) ?? []);
+    return this.getMany(ids).filter((feature) => feature !== undefined);
   }
 
-  /** What this client drags as a whole, which the hit tests of the extensions leave out */
+  /** What this client drags, which the hit tests of the extensions leave out */
   draggedIds(): readonly string[] {
-    return this.#store.getDragState()?.movingFeatureIds ?? [];
+    return this.#sketches?.dragged()?.ids ?? this.#store.getDragState()?.movingFeatureIds ?? [];
   }
 
   // ==========================================================================
   // What is snapped to
   // ==========================================================================
 
-  /** A feature as the snapping reads it: as a hit reads it */
+  /**
+   * A feature as the snapping reads it: as a hit reads it, and what the drag of this client edits
+   * as its sketch leaves it (the vertices and the edges a drag names are the ones of the feature
+   * it shows, and a vertex that follows along is not left behind)
+   */
   snapFeature(id: string): Feature | undefined {
+    const sketches = this.#sketches;
+    if (sketches?.dragged()?.hasFeature(id)) return sketches.appliedFeature(id);
     return this.hitFeature(id);
   }
 

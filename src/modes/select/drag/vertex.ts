@@ -2,24 +2,25 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * Vertex drags: move vertices, and insert a vertex by dragging a midpoint
+ * Vertex drags: move vertices, and insert a vertex by dragging a midpoint. Both are shown by a
+ * sketch of this client: the edits of its vertices name the vertices, and what is written once let
+ * go is those vertices over the feature as it is then
  */
 
+import type { SketchEdit } from '../../../api/sketches.js';
 import type { DragNormalizedEvent } from '../../../dispatcher/types.js';
 import { collectSharedVertexMoves } from '../../../operations/shared-vertex.js';
 import type { VertexState } from '../../../operations/vertex.js';
-import { addVertex, computeVertexMove, startVertexMove } from '../../../operations/vertex.js';
-import { geometryFromCoordinates } from '../../../shared/utils/coordinates.js';
-import { hasVertexRef } from '../../../shared/utils/vertex-ref.js';
-import type { Coordinate, DragTargets, VertexRef } from '../../../store/types.js';
+import { startVertexMove } from '../../../operations/vertex.js';
+import { getVertexPart, hasVertexRef } from '../../../shared/utils/vertex-ref.js';
+import type {
+  Coordinate,
+  DragTargets,
+  FeatureCoordinates,
+  VertexRef,
+} from '../../../store/types.js';
 import type { EngineModeContext } from '../../handler.js';
-import type { IntermediateWrites } from './intermediate-writes.js';
-import {
-  type DragOperation,
-  type DragStore,
-  dragStartLngLat,
-  vertexDragTargets,
-} from './operation.js';
+import { dragStartLngLat, type SketchDrag, vertexDragTargets } from './operation.js';
 
 /**
  * Whether the modifier key that temporarily disables shared-vertex following is held down
@@ -40,60 +41,122 @@ function isSharedVertexDragSuppressed(
   return event.modifiers?.[disableKey] === true;
 }
 
-/**
- * Reflect a vertex move state into the Store (an intermediate update during the drag; the
- * spatial index follows the Store)
- */
-function applyVertexMove(
-  state: VertexState,
-  lngLat: { lng: number; lat: number },
-  store: DragStore,
-  writes: IntermediateWrites,
-): void {
-  const feature = store.getFeature(state.featureId);
-  if (!feature) return;
+/** Where a vertex of coordinates is */
+function positionOf(kind: string, coordinates: FeatureCoordinates, ref: VertexRef): Coordinate {
+  const part = getVertexPart(ref);
+  switch (kind) {
+    case 'Point':
+      return coordinates as Coordinate;
+    case 'LineString':
+      return (coordinates as Coordinate[])[ref.index];
+    case 'MultiPoint':
+      return (coordinates as Coordinate[])[part];
+    case 'Polygon':
+      return (coordinates as Coordinate[][])[ref.ring][ref.index];
+    case 'MultiLineString':
+      return (coordinates as Coordinate[][])[part][ref.index];
+    default:
+      return (coordinates as Coordinate[][][])[part][ref.ring][ref.index];
+  }
+}
 
-  const newCoords = computeVertexMove(state, lngLat, feature);
-  writes.write(store, state.featureId, {
-    geometry: geometryFromCoordinates(feature.type, newCoords),
-  });
+/** The vertices one edit of a drag moves, and where each of them was when the drag started */
+interface MovedVertices {
+  readonly featureId: string;
+  readonly vertices: readonly VertexRef[];
+  readonly from: readonly Coordinate[];
+}
+
+/** The vertices a state moves */
+function movedVerticesOf(state: VertexState, kind: string): MovedVertices {
+  return {
+    featureId: state.featureId,
+    vertices: state.vertices,
+    from: state.vertices.map((ref) => positionOf(kind, state.initialCoordinates, ref)),
+  };
 }
 
 /**
- * A vertex move. A midpoint drag continues as a vertex move of the vertex it added, and is
- * handled the same way
+ * A move of vertices: the vertices of the feature grabbed, and the ones of the features that
+ * follow along through a shared vertex, by the edits `vertex-move` of the sketch of the drag. Each
+ * edit names the vertices it moves and where they go, so a vertex another writer moves meanwhile
+ * stays where it put it
  *
  * @internal
  */
-export class VertexDrag implements DragOperation {
+export class VertexDrag implements SketchDrag {
+  readonly type = 'vertex' as const;
+  readonly start: readonly SketchEdit[];
+  readonly selected: readonly string[];
+  readonly #moved: readonly MovedVertices[];
+
   constructor(
-    readonly type: 'vertex' | 'midpoint',
-    private readonly state: VertexState,
-    /**
-     * Vertex move states of the other features that follow along during a shared-vertex move
-     *
-     * Determined at the start of a vertex drag, only when options.topology.sharedVertexDrag is
-     * enabled. It is not re-searched during the drag (to avoid interfering with other features
-     * such as snapping).
-     */
-    private readonly followers: VertexState[] = [],
-  ) {}
+    private readonly startLngLat: { lng: number; lat: number },
+    moved: readonly MovedVertices[],
+  ) {
+    this.#moved = moved;
+    this.selected = [moved[0].featureId];
+    this.start = this.#editsBy(0, 0);
+  }
 
-  update(event: DragNormalizedEvent, store: DragStore, writes: IntermediateWrites): void {
-    const feature = store.getFeature(this.state.featureId);
-    if (!feature) return;
+  editsAt(event: DragNormalizedEvent): readonly SketchEdit[] {
+    const { lngLat } = event;
+    return this.#editsBy(lngLat.lng - this.startLngLat.lng, lngLat.lat - this.startLngLat.lat);
+  }
 
-    const newCoords = computeVertexMove(this.state, event.lngLat, feature);
-    writes.write(store, this.state.featureId, {
-      geometry: geometryFromCoordinates(feature.type, newCoords),
+  movesNothing(edits: readonly SketchEdit[]): boolean {
+    return edits.every((edit, i) => {
+      if (edit.kind !== 'vertex-move') return false;
+      const from = (this.start[i] as typeof edit | undefined)?.positions;
+      return edit.positions.every(
+        (position, k) => position[0] === from?.[k]?.[0] && position[1] === from?.[k]?.[1],
+      );
     });
+  }
 
-    // Preview update for the features following along through a shared vertex. They are written
-    // one at a time in the same manner as the main one (an intermediate updateFeature).
-    // The commit is the single transaction at the end of the drag.
-    for (const state of this.followers) {
-      applyVertexMove(state, event.lngLat, store, writes);
-    }
+  /** The edits that move the vertices by a distance in degrees */
+  #editsBy(dx: number, dy: number): readonly SketchEdit[] {
+    return this.#moved.map(({ featureId, vertices, from }) => ({
+      kind: 'vertex-move',
+      featureId,
+      vertices,
+      positions: from.map((position): Coordinate => [position[0] + dx, position[1] + dy]),
+    }));
+  }
+}
+
+/**
+ * A drag of a midpoint: a vertex inserted after the one of the hit, which follows the pointer, by
+ * the edit `vertex-insert` of the sketch of the drag
+ *
+ * @internal
+ */
+export class MidpointDrag implements SketchDrag {
+  readonly type = 'midpoint' as const;
+  readonly start: readonly SketchEdit[];
+  readonly selected: readonly string[];
+
+  constructor(
+    private readonly featureId: string,
+    private readonly after: VertexRef,
+    from: { lng: number; lat: number },
+  ) {
+    this.selected = [featureId];
+    this.start = this.#editsAt(from);
+  }
+
+  editsAt(event: DragNormalizedEvent): readonly SketchEdit[] {
+    return this.#editsAt(event.lngLat);
+  }
+
+  /** A vertex is added wherever it is let go */
+  movesNothing(): boolean {
+    return false;
+  }
+
+  #editsAt(lngLat: { lng: number; lat: number }): readonly SketchEdit[] {
+    const position: Coordinate = [lngLat.lng, lngLat.lat];
+    return [{ kind: 'vertex-insert', featureId: this.featureId, after: this.after, position }];
   }
 }
 
@@ -171,23 +234,37 @@ export function planVertexDrag(
 }
 
 /**
- * Start a planned vertex drag, and set the DragState and the followed vertices it draws from
+ * Makes the drag of a plan
+ *
+ * @internal
+ */
+export function vertexDragOf(plan: VertexDragPlan, context: EngineModeContext): VertexDrag {
+  const { store } = context;
+  const { state, followers } = plan;
+  const moved = [state, ...followers].flatMap((vertexState) => {
+    const feature = store.getFeature(vertexState.featureId);
+    return feature ? [movedVerticesOf(vertexState, feature.type)] : [];
+  });
+  return new VertexDrag(state.startLngLat, moved);
+}
+
+/**
+ * Sets the DragState and the followed vertices a planned vertex drag draws from, once it started
  *
  * @param targets The vertex the drag started from, as its drag state records it (snapping leaves
  *   it out)
  */
-export function startVertexDrag(
+export function markVertexDrag(
   plan: VertexDragPlan,
   context: EngineModeContext,
   targets: DragTargets,
-): VertexDrag {
+): void {
   const { store } = context;
-  const { state, followers } = plan;
 
   // Write the following vertices into the UI state so they are drawn in a style distinct from
   // the selected vertices. They are set back to null when the drag ends (endDrag / reset).
   store.setFollowedVertices?.(
-    followers.map((followerState) => ({
+    plan.followers.map((followerState) => ({
       featureId: followerState.featureId,
       vertices: followerState.vertices,
     })),
@@ -195,42 +272,33 @@ export function startVertexDrag(
 
   // Set the DragState (activeVertex is the vertex the drag started from)
   store.setDragState({ operation: 'vertex', ...targets });
-
-  return new VertexDrag('vertex', state, followers);
 }
 
 /**
- * Start a midpoint drag: insert a vertex at the midpoint and continue as a move of that
- * vertex, and set the DragState it draws from (the vertex added, with the two edges it splits the
- * edge into). Returns null when the feature is gone
+ * Makes the drag of a midpoint: a vertex is inserted at the midpoint and follows the pointer
+ *
+ * @internal
  */
-export function startMidpointDrag(
+export function midpointDragOf(
   event: DragNormalizedEvent,
   featureId: string,
   after: VertexRef,
-  store: DragStore,
-): VertexDrag | null {
-  const feature = store.getFeature(featureId);
-  if (!feature) return null;
+): MidpointDrag {
+  return new MidpointDrag(featureId, after, dragStartLngLat(event));
+}
 
-  const startLngLat = dragStartLngLat(event);
-
-  // Add the position of the midpoint as a new vertex
-  const newCoord: Coordinate = [startLngLat.lng, startLngLat.lat];
-  const newCoords = addVertex(feature, after, newCoord);
-
-  store.updateFeature(featureId, { geometry: geometryFromCoordinates(feature.type, newCoords) });
-
+/**
+ * Sets the DragState a drag of a midpoint draws from, once it started: the vertex added, with the
+ * two edges it splits the edge into, in the feature as the sketch shows it
+ */
+export function markMidpointDrag(
+  context: EngineModeContext,
+  featureId: string,
+  after: VertexRef,
+): void {
+  const feature = context.sketches.appliedFeature(featureId);
+  if (!feature) return;
   // The added vertex is afterIndex + 1 in the same part and same ring
-  const newVertexRef: VertexRef = { ...after, index: after.index + 1 };
-
-  // Continue as a move operation on the added vertex
-  const updatedFeature = store.getFeature(featureId);
-  if (!updatedFeature) return null;
-
-  const state = startVertexMove(updatedFeature, [newVertexRef], startLngLat);
-  if (!state) return null;
-
-  store.setDragState({ operation: 'midpoint', ...vertexDragTargets(updatedFeature, newVertexRef) });
-  return new VertexDrag('midpoint', state);
+  const added: VertexRef = { ...after, index: after.index + 1 };
+  context.store.setDragState({ operation: 'midpoint', ...vertexDragTargets(feature, added) });
 }

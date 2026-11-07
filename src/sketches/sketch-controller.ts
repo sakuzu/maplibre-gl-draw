@@ -30,7 +30,7 @@
  *
  * What a drag of the select mode shows is written by the drag, through the writes of the Store,
  * and the sketch ends with the write (`commitWith`). What the drag edits is not hit while it goes
- * on (`dragged`).
+ * on (`dragged`), and the drag ends with the selection of what it edits.
  */
 
 import type { DrawEvents } from '../api/events.js';
@@ -75,6 +75,7 @@ import {
   featureEditsOf,
   featureIdsOfEdit,
   isSelectionEdit,
+  isVertexEdit,
   mapVertices,
   vertexFeatureIds,
   vertexShapeOf,
@@ -141,10 +142,15 @@ export interface DraggedFeatures {
   hasFeature(id: string): boolean;
   /** Whether the row of a handle is one of them */
   hasRow(handle: number): boolean;
+  /** The features it names (the rows selected in bulk it edits are not listed) */
+  readonly ids: readonly string[];
 }
 
 /** The edit of a sketch that moves, rotates or scales features */
 type MovingEdit = Extract<SketchEdit, { kind: TransformEdit['kind'] }>;
+
+/** The edit of a sketch of the vertices of one feature */
+type VertexEdit = Extract<SketchEdit, { kind: 'vertex-move' | 'vertex-insert' | 'vertex-delete' }>;
 
 /** A sketch and what is kept with it */
 interface Entry {
@@ -160,6 +166,11 @@ interface Entry {
   shapes: Map<string, string>;
   /** The layer of each feature it creates whose input names neither layer nor group, by edit */
   createLayers: Map<number, string>;
+  /**
+   * The vertices its edits of vertices named when a drag took it on, by feature: the frames of the
+   * drag give a position for each of them, whichever are left
+   */
+  dragVertices?: ReadonlyMap<string, readonly VertexTarget[]>;
 }
 
 /** A sketch checked, before it is added or changed */
@@ -210,6 +221,8 @@ export class SketchController {
   readonly #motions = new Map<string, SketchMotion>();
   /** The sketch the drag of this client going on is shown by (null: none) */
   #dragged: string | null = null;
+  /** The features selected the drag of this client edits (it ends with the last of them) */
+  #draggedSelected: readonly string[] = [];
 
   constructor(deps: SketchControllerDeps) {
     this.#deps = deps;
@@ -300,9 +313,22 @@ export class SketchController {
     ).updates;
   }
 
-  /** Sets the sketch the drag of this client going on is shown by (null when none is) */
-  setDragged(id: string | null): void {
+  /**
+   * Sets the sketch the drag of this client going on is shown by (null when none is)
+   *
+   * @param selected The features selected it edits: a feature no longer selected is left out, and
+   *   it ends (`deselected`) with the last of them
+   */
+  setDragged(id: string | null, selected: readonly string[] = []): void {
     this.#dragged = id;
+    this.#draggedSelected = selected;
+    const entry = id === null ? undefined : this.#entries.get(id);
+    if (!entry) return;
+    const vertices = new Map<string, readonly VertexTarget[]>();
+    for (const featureId of vertexFeatureIds(entry.sketch.edits)) {
+      vertices.set(featureId, verticesOf(entry.sketch.edits, featureId));
+    }
+    entry.dragVertices = vertices;
   }
 
   /** What the drag of this client edits (null when no drag is shown by a sketch) */
@@ -310,9 +336,11 @@ export class SketchController {
     const entry = this.#dragged === null ? undefined : this.#entries.get(this.#dragged);
     if (!entry) return null;
     const tables = this.#store.tables;
-    const ids = new Set(this.#touchedBy(entry));
+    const listed = this.#touchedBy(entry);
+    const ids = new Set(listed);
     const rows = this.#motions.get(entry.sketch.id)?.rows;
     return {
+      ids: listed,
       hasFeature(id) {
         if (ids.has(id)) return true;
         const handle = rows ? tables?.findRow(id) : undefined;
@@ -406,17 +434,37 @@ export class SketchController {
   }
 
   /**
-   * Changes the edit of a sketch of one edit that moves, rotates or scales features, over the
-   * features it edits now: a frame of a drag. They stay the same, so only the edit is checked, and
-   * the rows moved on the GPU cost the same whatever their number
+   * Changes the edits of the sketch of a drag, over what it edits now: a frame of the drag. An edit
+   * that moves, rotates or scales features costs the same whatever their number, the rows moved on
+   * the GPU, and an edit of vertices takes the positions of the vertices alone, with no check of
+   * what it names. Any other edit is changed as `update` changes it
    *
    * @returns false when the sketch is gone or the computation of the Store does not take the edit:
-   *   the edit before stays
+   *   the edits before stay
    */
-  setMovingEdit(id: string, edit: TransformEdit): boolean {
+  setDragEdits(id: string, edits: readonly SketchEdit[]): boolean {
     const entry = this.#entries.get(id);
-    const before = entry?.sketch.edits[0];
-    if (!entry || !isMovingEdit(before) || !this.#transforms().accepts(edit)) return false;
+    if (!entry) return false;
+    const [before] = entry.sketch.edits;
+    if (isMovingEdit(before)) {
+      const edit = transformOf(edits[0]);
+      return edit !== null && this.#setMovingEdit(entry, before, edit);
+    }
+    if (edits.every(isVertexEdit)) {
+      this.#operate(() => {
+        entry.sketch = sketchOf(id, positionsGiven(entry, edits), entry.sketch.owner);
+        this.#queue('sketch.updated', { sketch: entry.sketch, dropped: 0 });
+        this.#dirty = true;
+      });
+      return true;
+    }
+    return this.update(id, { edits }) !== null;
+  }
+
+  /** Changes the edit of a sketch of one edit that moves, rotates or scales features */
+  #setMovingEdit(entry: Entry, before: MovingEdit, edit: TransformEdit): boolean {
+    if (!this.#transforms().accepts(edit)) return false;
+    const { id } = entry.sketch;
     this.#operate(() => {
       const next = { ...edit, target: before.target } as SketchEdit;
       entry.sketch = sketchOf(id, [next], entry.sketch.owner);
@@ -852,6 +900,7 @@ export class SketchController {
       this.#hidden = hidden;
       const written = all ? null : this.#writtenIds(changes);
       const selection = changes.selection !== undefined || all;
+      if (selection) this.#followDraggedSelection();
       for (const entry of [...this.#entries.values()]) {
         if (selection || hasDocumentChange(changes)) this.#followRows(entry);
         if (!this.#entries.has(entry.sketch.id)) continue;
@@ -869,6 +918,29 @@ export class SketchController {
         this.#dirty = true;
       }
     });
+  }
+
+  /**
+   * Follows the features selected the drag of this client edits: a feature no longer selected is
+   * left out, the sketch going on with the others, and it ends with the last of them
+   */
+  #followDraggedSelection(): void {
+    const entry = this.#dragged === null ? undefined : this.#entries.get(this.#dragged);
+    if (!entry || this.#draggedSelected.length === 0) return;
+    const selected = new Set(this.#store.selectedFeatureIds());
+    const left = this.#draggedSelected.filter((id) => selected.has(id));
+    if (left.length === this.#draggedSelected.length) return;
+    const gone = new Set(this.#draggedSelected.filter((id) => !selected.has(id)));
+    this.#draggedSelected = left;
+    const kept = withoutFeatures(entry.sketch.edits, gone);
+    entry.dropped += kept.dropped;
+    if (left.length === 0) {
+      this.#end(entry.sketch.id, 'deselected');
+      return;
+    }
+    entry.sketch = sketchOf(entry.sketch.id, kept.edits, entry.sketch.owner);
+    this.#dirty = true;
+    this.#queue('sketch.updated', { sketch: entry.sketch, dropped: kept.dropped });
   }
 
   /**
@@ -1412,6 +1484,33 @@ export class SketchController {
     }
     return out;
   }
+}
+
+/**
+ * The edits of a sketch of a drag with the positions a frame of the drag gives: the vertices stay
+ * the ones the sketch names (each edit given names the vertices of its feature as the drag took
+ * them on, and a vertex no longer there has left the sketch)
+ */
+function positionsGiven(entry: Entry, given: readonly SketchEdit[]): SketchEdit[] {
+  const byFeature = new Map<string, VertexEdit>();
+  for (const edit of given) if (isVertexEdit(edit)) byFeature.set(edit.featureId, edit);
+  return entry.sketch.edits.map((edit) => {
+    if (!isVertexEdit(edit)) return edit;
+    const next = byFeature.get(edit.featureId);
+    if (edit.kind === 'vertex-insert') {
+      return next?.kind === 'vertex-insert' ? { ...edit, position: next.position } : edit;
+    }
+    if (edit.kind !== 'vertex-move' || next?.kind !== 'vertex-move') return edit;
+    if (next.positions.length === edit.positions.length) {
+      return { ...edit, positions: next.positions };
+    }
+    const named = entry.dragVertices?.get(edit.featureId) ?? [];
+    const positions = edit.vertices.map((vertex, i) => {
+      const at = named.indexOf(vertex);
+      return at >= 0 ? next.positions[at] : edit.positions[i];
+    });
+    return { ...edit, positions };
+  });
 }
 
 /** Whether an edit of a sketch moves, rotates or scales features */

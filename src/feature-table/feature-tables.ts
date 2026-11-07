@@ -828,6 +828,8 @@ export interface SketchOverlay {
 interface OverlayEntry {
   /** The row of the delta it is drawn as */
   readonly handle: RowHandle;
+  /** Where the row it is drawn over was when it was drawn */
+  overPlace: { readonly group: RowGroup; readonly row: number } | undefined;
   /** Its layer */
   readonly layer: LayerTable;
   /** The row it is drawn over (undefined for a feature of no row) */
@@ -2744,6 +2746,7 @@ class FeatureTablesStore implements FeatureTablesInternals {
   }
 
   showSketches(sketches: readonly SketchOverlay[]): void {
+    if (this.writeSketchesInPlace(sketches)) return;
     const before = this.sketchedRows;
     if (sketches.length > 0) this.overlayInputs.set(SKETCH_OWNER, sketches);
     else this.overlayInputs.delete(SKETCH_OWNER);
@@ -2766,6 +2769,57 @@ class FeatureTablesStore implements FeatureTablesInternals {
       }
     }
     this.syncOverlays(owners);
+  }
+
+  /**
+   * Draws features of the sketches that changed nothing but their geometry by writing it over the
+   * rows of the delta they are drawn as, as a write of a row held does: the same features, drawn
+   * over the same places, so that a frame of a drag of vertices draws again the coordinates that
+   * moved and no more. The rows stay drawn and not read: nothing is told, and no mark is stamped
+   *
+   * @returns false when something else changed, and the delta is to be made again
+   */
+  private writeSketchesInPlace(sketches: readonly SketchOverlay[]): boolean {
+    const before = this.overlayInputs.get(SKETCH_OWNER);
+    const entries = this.overlays.get(SKETCH_OWNER);
+    if (!before || !entries || before.length !== sketches.length || sketches.length === 0) {
+      return false;
+    }
+    const writes: Array<{ place: RowPlace; geometry: Feature['geometry'] }> = [];
+    for (let i = 0; i < sketches.length; i++) {
+      const { feature, place: given } = sketches[i];
+      const previous = before[i].feature;
+      if (given !== undefined || before[i].place !== undefined) return false;
+      if (previous === feature) continue;
+      const fields = featureFields(previous, feature);
+      const others = fields.size - (fields.has('geometry') ? 1 : 0);
+      if (others > 0 || previous.layerId !== feature.layerId) return false;
+      if ((previous.groupId ?? undefined) !== (feature.groupId ?? undefined)) return false;
+      const entry = entries.get(feature.id);
+      const place = entry && this.placeOf(entry.handle);
+      if (!entry || !place || !this.overSamePlace(entry)) return false;
+      if (feature.geometry !== previous.geometry) {
+        writes.push({ place, geometry: feature.geometry });
+      }
+    }
+    this.overlayInputs.set(SKETCH_OWNER, sketches);
+    for (const { place, geometry } of writes) {
+      const fields = new Map<RowField, readonly unknown[]>([['geometry', [geometry]]]);
+      const write = this.writeInPlace(place, 0, fields, undefined, undefined);
+      if (!write) continue;
+      const { layerId } = place.layer;
+      this.touch(layerId, place.group.bounds);
+      for (const listener of this.writeListeners) listener(layerId, [write]);
+    }
+    if (writes.length > 0) this.revisionCount++;
+    return true;
+  }
+
+  /** Whether the row a feature of the sketches is drawn over is where it was when it was drawn */
+  private overSamePlace(entry: OverlayEntry): boolean {
+    if (entry.over === undefined) return entry.overPlace === undefined;
+    const place = this.placeOf(entry.over);
+    return place?.group === entry.overPlace?.group && place?.row === entry.overPlace?.row;
   }
 
   /** The rows the sketches are drawn over, as given now */
@@ -2841,7 +2895,12 @@ class FeatureTablesStore implements FeatureTablesInternals {
           coming.set(layer, list);
         }
         list.push({ handle, input });
-        next.set(feature.id, { handle, layer, over: place ? over : undefined });
+        next.set(feature.id, {
+          handle,
+          layer,
+          over: place ? over : undefined,
+          overPlace: undefined,
+        });
         this.drawnOnlyRows.add(handle);
       }
       for (const [id, previous] of before) {
@@ -2858,6 +2917,10 @@ class FeatureTablesStore implements FeatureTablesInternals {
         if (this.ids.deltaLayer(handle) < 0) this.drawnOnlyRows.delete(handle);
       }
       layer.touchPending();
+    }
+    for (const entry of this.overlays.get(SKETCH_OWNER)?.values() ?? []) {
+      const place = entry.over === undefined ? undefined : this.placeOf(entry.over);
+      entry.overPlace = place && { group: place.group, row: place.row };
     }
     // The rows drawn over are not drawn
     const overlaid = new Set<RowHandle>();

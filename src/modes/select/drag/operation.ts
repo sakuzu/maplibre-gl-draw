@@ -5,13 +5,14 @@
  * The shape shared by the drag operations of select mode
  *
  * Each kind of drag is one operation, which SelectModeDragHandler decides, starts, and forwards
- * every frame to. A move, a rotation and a resize are shown by a sketch of this client (a
- * `SketchDrag`): the operation gives the edit of the pointer, the Store is not written while the
- * drag goes on, and the handler writes the sketch once let go. The other drags (vertex, midpoint,
- * radius, auxiliary handle) are a `DragOperation`: it computes the new values and writes them
- * through IntermediateWrites, which keeps what a commit or an abort needs.
+ * every frame to. A move, a rotation, a resize and a drag of vertices are shown by a sketch of this
+ * client (a `SketchDrag`): the operation gives the edits of the pointer, the Store is not written
+ * while the drag goes on, and the handler writes the sketch once let go. The other drags (radius,
+ * auxiliary handle) are a `DragOperation`: it computes the new values and writes them through
+ * IntermediateWrites, which keeps what a commit or an abort needs.
  */
 
+import type { SketchEdit } from '../../../api/sketches.js';
 import type { DragNormalizedEvent } from '../../../dispatcher/types.js';
 import { edgesOfVertex } from '../../../shared/utils/feature-segments.js';
 import type { TransformEdit } from '../../../store/store.js';
@@ -47,6 +48,14 @@ export interface DragOperation {
 }
 
 /**
+ * What a drag that moves, rotates or scales features edits: the features listed, or the ones
+ * selected in bulk
+ *
+ * @internal
+ */
+export type DragTarget = { readonly featureIds: readonly string[] } | { readonly selection: true };
+
+/**
  * One running drag shown by a sketch of this client, of the features selected or of the ones
  * selected in bulk alike
  *
@@ -54,22 +63,30 @@ export interface DragOperation {
  */
 export interface SketchDrag {
   /** The kind of the operation (the value of DragState.operation) */
-  readonly type: 'move' | 'rotate' | 'resize';
-  /** The edit of a pointer that has not moved */
-  readonly start: TransformEdit;
-  /** The edit of the pointer of one frame of the drag */
-  editAt(event: DragNormalizedEvent): TransformEdit;
-  /** Called with each edit the sketch shows */
-  shown?(edit: TransformEdit, store: DragStore): void;
+  readonly type: 'move' | 'rotate' | 'resize' | 'vertex' | 'midpoint';
+  /** The edits of a pointer that has not moved */
+  readonly start: readonly SketchEdit[];
+  /**
+   * The features selected the drag edits: it ends when none of them is selected any more, and a
+   * feature no longer selected is left out of it (none for the features selected in bulk, which
+   * the sketch follows itself)
+   */
+  readonly selected: readonly string[];
+  /** The edits of the pointer of one frame of the drag */
+  editsAt(event: DragNormalizedEvent): readonly SketchEdit[];
+  /** Whether these edits of the sketch leave everything as it is: nothing is written then */
+  movesNothing(edits: readonly SketchEdit[]): boolean;
+  /** Called with the edits the sketch shows */
+  shown?(edits: readonly SketchEdit[], store: DragStore): void;
 }
 
 /**
- * Whether the edit of a drag shown by a sketch moves nothing (the pointer is where it started):
- * such a drag writes nothing once let go
+ * Whether the edit of a drag that moves, rotates or scales features moves nothing (the pointer is
+ * where it started): such a drag writes nothing once let go
  *
  * @internal
  */
-export function movesNothing(edit: TransformEdit): boolean {
+export function transformMovesNothing(edit: TransformEdit): boolean {
   switch (edit.kind) {
     case 'translate':
       return edit.from[0] === edit.to[0] && edit.from[1] === edit.to[1];
@@ -78,6 +95,24 @@ export function movesNothing(edit: TransformEdit): boolean {
     default:
       return edit.eastFactor === 1 && edit.northFactor === 1 && edit.sizeFactor === 1;
   }
+}
+
+/**
+ * The edits of a sketch of a drag that moves, rotates or scales features
+ *
+ * @internal
+ */
+export function transformEdits(edit: TransformEdit, target: DragTarget): readonly SketchEdit[] {
+  return [{ ...edit, target } as SketchEdit];
+}
+
+/**
+ * The features selected a drag of a target edits
+ *
+ * @internal
+ */
+export function selectedOfTarget(target: DragTarget): readonly string[] {
+  return 'featureIds' in target ? target.featureIds : [];
 }
 
 /**

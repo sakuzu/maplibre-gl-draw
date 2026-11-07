@@ -615,7 +615,7 @@ describe.each(STORE_KINDS)('on %s', (_kind, createStore) => {
       expect(batches[batches.length - 1]).toBe(combined[0]);
     });
 
-    it('even with the option disabled, one commit batch follows the intermediate updates', () => {
+    it('even with the option disabled, one commit batch is all that is written', () => {
       enableSharedVertexDrag(false);
       const batches: StoreChange[] = [];
       store.subscribe((changes) => {
@@ -624,12 +624,9 @@ describe.each(STORE_KINDS)('on %s', (_kind, createStore) => {
 
       dragVertex('f1', { ring: 0, index: 1 }, [10, 0], [11, 2]);
 
-      // One during the drag (intermediate) and one commit in endDrag
-      expect(batches).toHaveLength(2);
+      // Nothing during the drag, and one commit in endDrag
+      expect(batches).toHaveLength(1);
       expect(batches[0].features?.updated?.map((u) => u.id)).toEqual(['f1']);
-      expect(batches[0].features?.updated?.[0].isIntermediate).toBe(true);
-      expect(batches[1].features?.updated?.map((u) => u.id)).toEqual(['f1']);
-      expect(batches[1].features?.updated?.[0].isIntermediate).toBeUndefined();
     });
   });
 
@@ -878,14 +875,13 @@ describe.each(STORE_KINDS)('on %s', (_kind, createStore) => {
       expect(store.getDragState()).toBeNull();
     });
 
-    it('updates partway through a vertex drag carry isIntermediate', () => {
+    it('nothing is written partway through a vertex drag', () => {
       watchFeatureBatches();
 
       startVertexDrag('f1', { ring: 0, index: 1 }, [10, 0]);
       handler.updateDrag(dragEvent(11, 2, [10, 0]), context);
 
-      expect(batches).toHaveLength(1);
-      expect(updatesOf(batches[0])[0].isIntermediate).toBe(true);
+      expect(batches).toHaveLength(0);
     });
 
     it('endDrag issues the commit update (without the flag) exactly once', () => {
@@ -1032,16 +1028,6 @@ describe.each(STORE_KINDS)('on %s', (_kind, createStore) => {
         ).abortIntermediateUpdates = abortSpy;
       });
 
-      it('a reset that does not go through endDrag notifies the discard', () => {
-        startVertexDrag('f1', { ring: 0, index: 1 }, [10, 0]);
-        handler.updateDrag(dragEvent(11, 2, [10, 0]), context);
-
-        handler.reset(store);
-
-        expect(abortSpy).toHaveBeenCalledTimes(1);
-        expect(abortSpy).toHaveBeenCalledWith(['f1']);
-      });
-
       it('after committing in endDrag it does not notify a discard', () => {
         startVertexDrag('f1', { ring: 0, index: 1 }, [10, 0]);
         handler.updateDrag(dragEvent(11, 2, [10, 0]), context);
@@ -1105,20 +1091,14 @@ describe.each(STORE_KINDS)('on %s', (_kind, createStore) => {
       expect(committed).toEqual([['f1']]);
     });
 
-    it('the intermediate state of a vanished feature is discarded, not committed', () => {
-      const abortSpy = vi.fn<(ids: string[]) => void>();
-      (
-        store as unknown as { abortIntermediateUpdates?: (ids: string[]) => void }
-      ).abortIntermediateUpdates = abortSpy;
-
+    it('a vertex drag of a vanished feature writes nothing', () => {
       startVertexDrag('f1', { ring: 0, index: 1 }, [10, 0]);
       handler.updateDrag(dragEvent(11, 2, [10, 0]), context);
       store.deleteFeature('f1');
 
       expect(() => handler.endDrag(context)).not.toThrow();
 
-      expect(abortSpy).toHaveBeenCalledTimes(1);
-      expect(abortSpy).toHaveBeenCalledWith(['f1']);
+      expect(store.getFeature('f1')).toBeUndefined();
       expectDragCleanedUp();
     });
 
@@ -1550,25 +1530,7 @@ describe.each(STORE_KINDS)('on %s', (_kind, createStore) => {
       expect(coordinatesOf('f2')).toEqual(featureCoordinates(square('f2', 100, 100)));
     });
 
-    it('restores with an intermediate update before announcing the discard', () => {
-      const calls: string[] = [];
-      store.subscribe((changes) => {
-        for (const u of changes.features?.updated ?? []) {
-          calls.push(`${u.id}:${u.isIntermediate ? 'intermediate' : 'commit'}`);
-        }
-      });
-      (
-        store as unknown as { abortIntermediateUpdates?: (ids: string[]) => void }
-      ).abortIntermediateUpdates = (ids) => calls.push(`abort:${ids.join(',')}`);
-
-      startVertexDrag('f1', { ring: 0, index: 1 }, [10, 0]);
-      handler.updateDrag(dragEvent(11, 2, [10, 0]), context);
-      handler.reset(store);
-
-      expect(calls).toEqual(['f1:intermediate', 'f1:intermediate', 'abort:f1']);
-    });
-
-    it('writes nothing for a move: nothing was written in its middle', () => {
+    it('writes nothing for a move or a vertex: nothing was written in their middle', () => {
       const calls: string[] = [];
       store.subscribe((changes) => {
         for (const u of changes.features?.updated ?? []) calls.push(u.id);
@@ -1576,6 +1538,9 @@ describe.each(STORE_KINDS)('on %s', (_kind, createStore) => {
 
       startMoveDrag(['f1'], [0, 0]);
       handler.updateDrag(dragEvent(3, 4, [0, 0]), context);
+      handler.reset(store);
+      startVertexDrag('f1', { ring: 0, index: 1 }, [10, 0]);
+      handler.updateDrag(dragEvent(11, 2, [10, 0]), context);
       handler.reset(store);
 
       expect(calls).toEqual([]);
@@ -1635,24 +1600,42 @@ describe.each(STORE_KINDS)('on %s', (_kind, createStore) => {
       ]);
     });
 
-    it('endDrag reports the dragged features even when the selection was cleared', () => {
+    it('a drag ends with the selection of what it edits: cancelled, with nothing written', () => {
       const emit = vi.fn();
       const withPlugins = {
         ...context,
         eventEmitter: { emit, on: vi.fn(), off: vi.fn() },
       };
+      const removed: string[] = [];
+      context.sketches.setListener((event, payload) => {
+        if (event === 'sketch.removed') {
+          removed.push((payload as { reason: string }).reason);
+        }
+      });
       startMoveDrag(['f1'], [0, 0], withPlugins);
       handler.updateDrag(dragEvent(3, 4, [0, 0]), withPlugins);
       store.setSelection(null, []);
 
       handler.endDrag(withPlugins);
 
+      expect(removed).toEqual(['deselected']);
       expect(emit).toHaveBeenLastCalledWith('drag.ended', {
         kind: 'feature',
         featureIds: ['f1'],
-        cancelled: false,
+        cancelled: true,
       });
-      expectRingNear('f1', movedSquare(0, 0, [0, 0], [3, 4]));
+      expect(coordinatesOf('f1')).toEqual(featureCoordinates(square('f1', 0, 0)));
+    });
+
+    it('a feature no longer selected leaves the drag, and the others are written', () => {
+      startMoveDrag(['f1', 'f2'], [0, 0]);
+      handler.updateDrag(dragEvent(3, 4, [0, 0]), context);
+      store.setSelection('feature', ['f2']);
+
+      handler.endDrag(context);
+
+      expect(coordinatesOf('f1')).toEqual(featureCoordinates(square('f1', 0, 0)));
+      expect(coordinatesOf('f2')).not.toEqual(featureCoordinates(square('f2', 100, 100)));
     });
   });
 });

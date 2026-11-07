@@ -10,12 +10,13 @@
  *   - vertex / midpoint        -> drag/vertex.ts
  *   - radius (Circle)          -> drag/radius.ts
  *   - auxiliary handle         -> drag/auxiliary.ts
- * A move, a rotation and a resize, of the features selected or of the ones selected in bulk, are
- * shown by a sketch of this client (`draw.sketches`): the Store is not written while they go on,
- * and the values the sketch gives over the features as they are then are written once let go,
- * through the writes of the Store (the rows selected in bulk in steps, `bulk.ts`). A drag cancelled
- * removes its sketch. A sketch that ends by itself (its features deleted, locked or hidden, the
- * document made read-only) stops the drag, which writes nothing.
+ * A move, a rotation and a resize, of the features selected or of the ones selected in bulk, and a
+ * drag of vertices, are shown by a sketch of this client (`draw.sketches`): the Store is not
+ * written while they go on, and the values the sketch gives over the features as they are then are
+ * written once let go, through the writes of the Store (the rows selected in bulk in steps,
+ * `bulk.ts`). A drag cancelled removes its sketch. A sketch that ends by itself (its features
+ * deleted, locked, hidden or no longer selected, the document made read-only) stops the drag, which
+ * writes nothing.
  * The record of the intermediate writes of the other drags, for the commit or the abort, is
  * drag/intermediate-writes.ts.
  */
@@ -27,6 +28,7 @@ import type { HandleType } from '../../shared/config/constants.js';
 import { DrawError } from '../../shared/draw-error.js';
 import type { EngineSignals, EventEmitter } from '../../shared/utils/event-emitter.js';
 import type { SketchController } from '../../sketches/sketch-controller.js';
+import { isSelectionEdit } from '../../sketches/sketch-edits.js';
 import { editableFeatures } from '../../store/lock.js';
 import type { TransformEdit } from '../../store/store.js';
 import type { Feature, SelectionBulk } from '../../store/types.js';
@@ -43,23 +45,21 @@ import {
   type DragOperation,
   type DragScope,
   dragTargetsOfHit,
-  movesNothing,
   type SketchDrag,
 } from './drag/operation.js';
 import { startRadiusDrag } from './drag/radius.js';
 import { startResizeDrag, startRotateDrag } from './drag/transform.js';
 import {
+  markMidpointDrag,
+  markVertexDrag,
+  midpointDragOf,
   planVertexDrag,
-  startMidpointDrag,
-  startVertexDrag,
   type VertexDragPlan,
+  vertexDragOf,
 } from './drag/vertex.js';
 
 /** What a drag grabbed: the features, a vertex or a handle of the selection */
 type DragKind = EngineSignals['drag.started']['kind'];
-
-/** What a drag shown by a sketch edits: the features listed, or the ones selected in bulk */
-type DragTarget = { readonly featureIds: readonly string[] } | { readonly selection: true };
 
 /** A drag shown by a sketch of this client */
 interface ShownDrag {
@@ -198,35 +198,49 @@ export class SelectModeDragHandler {
     // and making it look like it vibrates); the start of the drag was snapped leaving out the
     // same (SelectMode.getDragTargets)
     const targets = dragTargetsOfHit(hitResult, movingIds, store);
+    const target = { featureIds: movingIds };
     switch (hitResult.type) {
       case 'move':
-        if (!this.beginSketch(context, startMoveDrag(event), { featureIds: movingIds })) return;
+        if (!this.beginSketch(context, startMoveDrag(event, target))) return;
         store.setDragState({ operation: 'move', ...targets });
         break;
 
       case 'resize': {
-        const drag = startResizeDrag(event, hitResult.handle!, bbox, context.map);
-        if (!this.beginSketch(context, drag, { featureIds: movingIds })) return;
+        const drag = startResizeDrag(event, hitResult.handle!, bbox, context.map, target);
+        if (!this.beginSketch(context, drag)) return;
         store.setDragState({ operation: 'resize', ...targets });
         break;
       }
 
       case 'rotate': {
-        const drag = startRotateDrag(event, bbox, selectedFeatures, moving, store, this.scope);
-        if (!this.beginSketch(context, drag, { featureIds: movingIds })) return;
+        const drag = startRotateDrag(
+          event,
+          bbox,
+          selectedFeatures,
+          moving,
+          store,
+          this.scope,
+          target,
+        );
+        if (!this.beginSketch(context, drag)) return;
         store.setDragState({ operation: 'rotate', ...targets, rotateInfo: drag.rotateInfo });
         break;
       }
 
       case 'vertex':
-        this.begin(startVertexDrag(vertexPlan!, context, targets));
+        if (!this.beginSketch(context, vertexDragOf(vertexPlan!, context))) return;
+        markVertexDrag(vertexPlan!, context, targets);
         break;
 
-      case 'midpoint':
+      case 'midpoint': {
         // The vertex dragged is the one it adds, after the one of the hit: its drag state records
-        // it once it is added (the edge of the hit is split into the edges of the vertex)
-        this.begin(startMidpointDrag(event, hitResult.featureId!, hitResult.vertexRef!, store));
+        // it once the sketch shows it (the edge of the hit is split into the edges of the vertex)
+        const featureId = hitResult.featureId!;
+        const after = hitResult.vertexRef!;
+        if (!this.beginSketch(context, midpointDragOf(event, featureId, after))) return;
+        markMidpointDrag(context, featureId, after);
         break;
+      }
 
       case 'radius':
         this.begin(startRadiusDrag(hitResult.featureId!, store));
@@ -270,15 +284,21 @@ export class SelectModeDragHandler {
     const target = { selection: true } as const;
     const targets = bulkDragTargets(rows);
     if (hitResult.type === 'move') {
-      if (!this.beginSketch(context, startMoveDrag(event), target)) return false;
+      if (!this.beginSketch(context, startMoveDrag(event, target))) return false;
       store.setDragState({ operation: 'move', ...targets });
     } else if (hitResult.type === 'rotate') {
-      const drag = startRotateDrag(event, bbox, [], [], store, this.scope);
-      if (!this.beginSketch(context, drag, target)) return false;
+      const drag = startRotateDrag(event, bbox, [], [], store, this.scope, target);
+      if (!this.beginSketch(context, drag)) return false;
       store.setDragState({ operation: 'rotate', ...targets, rotateInfo: drag.rotateInfo });
     } else {
-      const drag = startResizeDrag(event, hitResult.handle as HandleType, bbox, context.map);
-      if (!this.beginSketch(context, drag, target)) return false;
+      const drag = startResizeDrag(
+        event,
+        hitResult.handle as HandleType,
+        bbox,
+        context.map,
+        target,
+      );
+      if (!this.beginSketch(context, drag)) return false;
       store.setDragState({ operation: 'resize', ...targets });
     }
     return true;
@@ -291,18 +311,18 @@ export class SelectModeDragHandler {
    *
    * @returns Whether the drag started
    */
-  private beginSketch(context: EngineModeContext, drag: SketchDrag, target: DragTarget): boolean {
+  private beginSketch(context: EngineModeContext, drag: SketchDrag): boolean {
     const { store, sketches } = context;
     // A write of a drag let go before, still under way, is made first (its rows leave the moving
     // set it shares, which is let go of with the last of them: the rows enter it still)
     store.finishSlicedWrite();
-    const sketch = addSketch(sketches, drag.start, target);
+    const sketch = addSketch(sketches, drag.start);
     if (!sketch) {
       context.map.dragPan.enable();
       this.announceEnd(true);
       return false;
     }
-    sketches.setDragged(sketch);
+    sketches.setDragged(sketch, drag.selected);
     this.shown = { drag, sketches, id: sketch };
     return true;
   }
@@ -325,8 +345,8 @@ export class SelectModeDragHandler {
     const shown = this.shown;
     if (shown) {
       if (!this.sketchGoesOn()) return;
-      const edit = shown.drag.editAt(event);
-      if (shown.sketches.setMovingEdit(shown.id as string, edit)) shown.drag.shown?.(edit, store);
+      const edits = shown.drag.editsAt(event);
+      if (shown.sketches.setDragEdits(shown.id as string, edits)) shown.drag.shown?.(edits, store);
       return;
     }
     // One frame of a drag is one change: the updates of every feature it moves reach the
@@ -387,28 +407,30 @@ export class SelectModeDragHandler {
 
   /**
    * Writes the sketch of a drag let go, and ends it with the write: the values it gives over the
-   * features as they are now, in one transaction, or the rows selected in bulk in steps. A sketch
-   * that moves nothing, or whose edit gives a feature what it cannot have, is removed, nothing
-   * written. `done` is called once it is written
+   * features as they are now, in one transaction (the vertices it edits as a write of those
+   * vertices), or the rows selected in bulk in steps. A sketch that moves nothing, or whose edits
+   * give a feature what it cannot have, is removed, nothing written. `done` is called once it is
+   * written
    */
   private writeSketch(context: EngineModeContext, done: () => void): void {
     const { store } = context;
-    const { sketches, id } = this.shown as ShownDrag & { id: string };
+    const { drag, sketches, id } = this.shown as ShownDrag & { id: string };
     (this.shown as ShownDrag).id = null;
-    const edit = sketches.get(id)?.edits[0] as (TransformEdit & { target: DragTarget }) | undefined;
-    if (!edit || movesNothing(edit)) {
+    const edits = sketches.get(id)?.edits;
+    if (!edits || drag.movesNothing(edits)) {
       sketches.remove(id);
       done();
       return;
     }
-    if ('selection' in edit.target) {
+    const [edit] = edits;
+    if (isSelectionEdit(edit)) {
       // The end of the drag is announced after the end of the sketch, written at once or not
       let committing = true;
       let written = false;
       sketches.commitWith(
         id,
         (rows) => {
-          writeBulkEdit(context, rows ?? TableSelection.empty, edit, () => {
+          writeBulkEdit(context, rows ?? TableSelection.empty, edit as TransformEdit, () => {
             if (committing) written = true;
             else done();
           });
@@ -520,18 +542,14 @@ export class SelectModeDragHandler {
 }
 
 /**
- * Adds the sketch of a drag, of the edit of a pointer that has not moved
+ * Adds the sketch of a drag, of the edits of a pointer that has not moved
  *
  * @returns Its ID, or null when it is refused (what it edits cannot be written, or cannot take the
  *   edit)
  */
-function addSketch(
-  sketches: SketchController,
-  edit: TransformEdit,
-  target: DragTarget,
-): string | null {
+function addSketch(sketches: SketchController, edits: readonly SketchEdit[]): string | null {
   try {
-    return sketches.add({ edits: [{ ...edit, target } as SketchEdit] })?.id ?? null;
+    return sketches.add({ edits })?.id ?? null;
   } catch (error) {
     if (!(error instanceof DrawError) || error.code !== 'invalid-input') throw error;
     return null;

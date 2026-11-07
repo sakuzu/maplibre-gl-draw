@@ -6,22 +6,37 @@
  * the edit `translate` of the sketch of the drag
  */
 
+import type { SketchEdit } from '../../../api/sketches.js';
 import type { DragNormalizedEvent } from '../../../dispatcher/types.js';
 import type { TransformEdit } from '../../../store/store.js';
-import type { SketchDrag } from './operation.js';
-import { dragStartLngLat } from './operation.js';
+import type { DragTarget, SketchDrag } from './operation.js';
+import {
+  dragStartLngLat,
+  selectedOfTarget,
+  transformEdits,
+  transformMovesNothing,
+} from './operation.js';
 
 /** @internal */
 export class MoveDrag implements SketchDrag {
   readonly type = 'move' as const;
-  readonly start: TransformEdit;
+  readonly start: readonly SketchEdit[];
+  readonly selected: readonly string[];
 
-  constructor(private readonly from: { lng: number; lat: number }) {
-    this.start = this.#edit(from);
+  constructor(
+    private readonly from: { lng: number; lat: number },
+    private readonly target: DragTarget,
+  ) {
+    this.start = transformEdits(this.#edit(from), target);
+    this.selected = selectedOfTarget(target);
   }
 
-  editAt(event: DragNormalizedEvent): TransformEdit {
-    return this.#edit(event.lngLat);
+  editsAt(event: DragNormalizedEvent): readonly SketchEdit[] {
+    return transformEdits(this.#edit(event.lngLat), this.target);
+  }
+
+  movesNothing(edits: readonly SketchEdit[]): boolean {
+    return transformMovesNothing(edits[0] as TransformEdit);
   }
 
   /** The move from the point the drag started at to a point */
@@ -33,6 +48,6 @@ export class MoveDrag implements SketchDrag {
 /**
  * Start a move drag
  */
-export function startMoveDrag(event: DragNormalizedEvent): MoveDrag {
-  return new MoveDrag(dragStartLngLat(event));
+export function startMoveDrag(event: DragNormalizedEvent, target: DragTarget): MoveDrag {
+  return new MoveDrag(dragStartLngLat(event), target);
 }

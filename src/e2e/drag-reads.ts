@@ -179,7 +179,7 @@ interface Edit {
   /** The other handles drawn in the middle of the drag (the others are not drawn) */
   shown?: number[];
   /** What Escape leaves */
-  escape: 'restored' | 'vertex added' | 'last patch written';
+  escape: 'restored' | 'last patch written';
   /** Whether a vertex is selected before the drag (to see whether it stays selected) */
   vertexSelected?: boolean;
   /** How far the feature is moved as a whole, when it follows the pointer */
@@ -313,6 +313,7 @@ const EDITS: Edit[] = [
     by: [30, -24],
     cursor: 'pointer',
     started: 'vertex',
+    sketch: true,
     carried: I_VERTEX,
     escape: 'restored',
     vertexSelected: true,
@@ -330,8 +331,9 @@ const EDITS: Edit[] = [
     by: [0, 30],
     cursor: 'crosshair',
     started: 'vertex',
+    sketch: true,
     carried: I_VERTEX,
-    escape: 'vertex added',
+    escape: 'restored',
   },
   {
     name: 'the radius of a circle',
@@ -425,17 +427,6 @@ const vertexSelection = (page: Page) =>
   );
 
 const SELECTED_VERTEX = { featureId: 'p', vertices: [{ ring: 0, index: 2 }] };
-
-/** The number of positions of a geometry */
-function positionsOf(geometry: unknown): number {
-  let n = 0;
-  const walk = (v: unknown): void => {
-    if (Array.isArray(v) && typeof v[0] === 'number') n++;
-    else if (Array.isArray(v)) for (const x of v) walk(x);
-  };
-  walk((geometry as { coordinates?: unknown } | null)?.coordinates);
-  return n;
-}
 
 /** What a drag shows and answers before it, in its middle, and once it ended */
 interface Run {
@@ -551,12 +542,10 @@ function expectMiddle(edit: Edit, r: Run): void {
   // the behavior as it is, which nothing decides yet: it may change later
   expectSame(r.image[0] as Drawn, r.mid[I_FILL] as Drawn, 0.05);
   // The events: a write in the middle for each move of the pointer after the first, which starts
-  // the drag (a midpoint adds its vertex first, written); none for a drag shown by a sketch
+  // the drag; none for a drag shown by a sketch
   const started = edit.started ? [`start ${edit.started}`] : [];
-  const inserted = edit.escape === 'vertex added' ? ['U p', 'D'] : [];
   expect(sequenceOf(r.midEvents)).toEqual([
     ...started,
-    ...inserted,
     ...(edit.sketch ? [] : times(STEPS - 1, ['I p', 'D'])),
   ]);
   expectNoSnapToItself(r.midEvents);
@@ -626,16 +615,8 @@ function describeDrags(group: DragReadsGroup): void {
         expect(r.endRadius).toEqual(r.radius);
         expectSame(r.end[I_FILL] as Drawn, r.selected[I_FILL] as Drawn);
         expectSame(r.end[I_FRAME] as Drawn, r.selected[I_FRAME] as Drawn);
-        if (edit.escape === 'vertex added') {
-          // The vertex a midpoint added when it was grabbed stays, at the midpoint
-          expect(positionsOf(r.endGeometry)).toBe(positionsOf(r.geometry) + 1);
-          expect((r.end[I_VERTEX] as Drawn).count).toBeGreaterThan(
-            (r.selected[I_VERTEX] as Drawn).count,
-          );
-        } else {
-          expect(r.endGeometry).toEqual(r.geometry);
-          for (const i of HANDLES) expectSame(r.end[i] as Drawn, r.selected[i] as Drawn, 0.05);
-        }
+        expect(r.endGeometry).toEqual(r.geometry);
+        for (const i of HANDLES) expectSame(r.end[i] as Drawn, r.selected[i] as Drawn, 0.05);
       });
     });
 
