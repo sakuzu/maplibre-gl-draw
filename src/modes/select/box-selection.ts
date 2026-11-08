@@ -30,8 +30,8 @@ export function queryFeaturesInBox(
   const rects = boxRects(boxSelection.startPoint, boxSelection.endPoint);
 
   // First obtain the candidates quickly with rbush (from each part of a box that crosses the
-  // antimeridian), and the rows of a Store of rows from its tables (its spatial index has the
-  // rows held only)
+  // antimeridian), and the rows of a Store of rows from its tables (its spatial index has none of
+  // them)
   const candidateIds = new Set<string>();
   for (const rect of rects) {
     for (const id of spatialIndex.findInBounds(rect)) candidateIds.add(id);

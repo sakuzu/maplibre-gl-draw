@@ -577,7 +577,7 @@ export class SelectMode implements EngineModeHandler {
 
   /**
    * Marks the rows of a Store of rows in the box being drawn (and unmarks the ones no longer in
-   * it): they show as selected without being held as features
+   * it): they show as selected, and are selected once the box is let go
    */
   #markBox(rows: TableSelection): void {
     const { store } = this.#context;

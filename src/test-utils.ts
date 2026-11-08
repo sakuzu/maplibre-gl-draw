@@ -579,7 +579,7 @@ export function rowOfFeature(feature: Feature, order: string): RowInput {
 }
 
 /**
- * The internals of tables made by core (the rows held as features, the features drawn over rows)
+ * The internals of tables made by core (the rows, the sketches drawn over rows)
  *
  * @throws when the tables were not made by core
  */
