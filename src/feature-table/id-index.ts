@@ -69,6 +69,11 @@ export class IdIndex {
     return this.count;
   }
 
+  /** A number that changes whenever an id gets a handle or loses it */
+  get version(): number {
+    return this.changes;
+  }
+
   /** The number of handles in use (given and not freed) */
   get live(): number {
     return this.count - this.freeList.length;

@@ -669,6 +669,20 @@ export function readWithoutKeeping<T>(tables: FeatureTables | undefined, read: (
   return cache ? cache.withoutKeeping(read) : read();
 }
 
+/**
+ * Keeps the features of rows about to be selected by their IDs, found by them
+ * (`FeatureCache.keepSelected`): the selection set next finds its rows by the handles given
+ *
+ * @internal
+ */
+export function keepSelectedRows(
+  tables: FeatureTables | undefined,
+  handles: readonly RowHandle[],
+  ids: readonly string[],
+): void {
+  featureTablesInternals(tables)?.featureCache.keepSelected(handles, ids);
+}
+
 /** A row of a patch that comes into the delta of a layer */
 interface DeltaInput {
   readonly handle: RowHandle;
@@ -864,6 +878,8 @@ class FeatureTablesStore implements FeatureTablesInternals {
       writeMarks: this.writeMarks,
       readContext: this.readContext,
       placeOf: (handle) => this.placeOf(handle),
+      idsVersion: () => this.ids.version,
+      revision: () => this.revisionCount,
     });
     this.worker = options.worker;
     this.onChange = options.onChange;
@@ -1343,8 +1359,14 @@ class FeatureTablesStore implements FeatureTablesInternals {
   }
 
   handleOf(id: string): RowHandle | undefined {
-    const handle = this.ids.handleOf(id);
-    if (handle < 0) return undefined;
+    // A row selected by the handle its id was found to have, while no id got or lost a handle
+    const cache = this.featureCache;
+    let handle = cache.selectedHandleOf(id);
+    if (handle === undefined) {
+      handle = this.ids.handleOf(id);
+      if (handle < 0) return undefined;
+      cache.noteSelectedId(id, handle);
+    }
     const place = this.placeOf(handle);
     if (!place) return undefined;
     return (place.group.data.flags[place.row] & ROW_FLAG_DELETED) !== 0 ? undefined : handle;

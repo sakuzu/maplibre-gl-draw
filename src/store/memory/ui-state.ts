@@ -33,7 +33,8 @@ import type { ChangeBus } from './change-bus.js';
 export class MemoryClientState {
   readonly #bus: ChangeBus;
 
-  #selection: Selection = { type: null, ids: [] };
+  /** The IDs are frozen, and given as they are while the selection is the same */
+  #selection: Selection = { type: null, ids: Object.freeze([]) };
   #editingIds: string[] = [];
   #selectedVertices: VertexSelection | null = null;
   #mode: Mode = 'select';
@@ -56,13 +57,13 @@ export class MemoryClientState {
   // Selection
 
   getSelection(): Selection {
-    return { type: this.#selection.type, ids: [...this.#selection.ids] };
+    return { type: this.#selection.type, ids: this.#selection.ids };
   }
 
   setSelection(type: SelectionType | null, ids: string[]): void {
     const previousType = this.#selection.type;
     const previousIds = [...this.#selection.ids];
-    this.#selection = { type, ids: [...ids] };
+    this.#selection = { type, ids: Object.freeze([...ids]) };
     this.#bus.merge({
       selection: { type, ids: [...ids], previousType, previousIds },
     });

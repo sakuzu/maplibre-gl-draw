@@ -495,6 +495,33 @@ describe.each(STORES)('applyEdits of %s', (_name, make) => {
     expect(edited.notified).toEqual(updated.notified);
   });
 
+  it('writes the same fields of many features as updateFeature does them one by one', () => {
+    const edited = watched(make);
+    const edits: FeatureEdit[] = [
+      { kind: 'set', featureId: 'point', patch: { style: { strokeWidth: 3 } } },
+      { kind: 'set', featureId: 'line', patch: { style: { strokeWidth: 3 } } },
+      // Another key taken off, then the same fields again
+      { kind: 'set', featureId: 'point', patch: { properties: { kind: undefined } } },
+      { kind: 'set', featureId: 'area', patch: { style: { strokeWidth: 3 } } },
+      { kind: 'set', featureId: 'points', patch: { properties: { name: 'M' } } },
+    ];
+    edited.store.applyEdits(edits);
+    const updated = watched(make);
+    updated.store.transact(() => {
+      updated.store.updateFeature('point', { style: { pointColor: '#ff0000', strokeWidth: 3 } });
+      updated.store.updateFeature('line', { style: { strokeWidth: 3 } });
+      updated.store.updateFeature('point', { properties: { name: 'P' } });
+      updated.store.updateFeature('area', { style: { strokeWidth: 3 } });
+      updated.store.updateFeature('points', { properties: { name: 'M' } });
+    });
+    for (const id of ['point', 'line', 'area', 'points']) {
+      expect(edited.store.getFeature(id), id).toEqual(updated.store.getFeature(id));
+    }
+    expect(edited.store.getFeature('point')?.properties).toEqual({ name: 'P' });
+    expect(edited.notified).toHaveLength(1);
+    expect(edited.notified).toEqual(updated.notified);
+  });
+
   it('notifies the selected features it edits as an update does', () => {
     const edited = watched(make);
     edited.store.setSelection('feature', ['point']);

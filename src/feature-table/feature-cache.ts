@@ -8,7 +8,9 @@
  * the row group it was read in (`write-marks.ts`), and given again while the row has that mark
  * in that group: a write of the row stamps a later mark on it, and a row read in another group
  * (a next version, the delta made again, rows taken in) is made again. A small number is kept,
- * the one used longest ago going first.
+ * the one used longest ago going first; the features of the rows selected (`keepSelected`) are
+ * kept besides while the rows are selected, so that the reads of a selection of more rows than
+ * that number do not push each other out.
  *
  * - A row written in the frame of writes under way may be written again under the same mark: what
  *   is made of it then is not kept, and nothing kept is given for it
@@ -17,7 +19,9 @@
  * - Tables whose marks no keeper gives keep nothing (every write of theirs has the same mark)
  * - The reads of many rows one after the other (a page of a list, every feature in order) give
  *   what is kept and keep nothing more (`withoutKeeping`), so that they do not push out what the
- *   reads of one row at a time keep
+ *   reads of one row at a time keep; the feature of a row selected is kept by them too
+ * - The rows selected are found by their ids without the table of the ids (`selectedHandleOf`)
+ *   while no id has got or lost a handle since they were found by it
  *
  * A feature given is shared by the reads of its row: it is not to be changed. While it is checked
  * (`watch`, the check `feature-cache` of `DrawOptions.debug.checks`), what is kept is frozen, and
@@ -25,11 +29,15 @@
  */
 
 import type { Feature } from '../shared/types/model.js';
+import { ROW_FLAG_DELETED } from '../table/row-group-types.js';
 import type { RowPlace } from './feature-tables.js';
 import type { RowGroup } from './layer-table.js';
 import { type RowReadContext, rowFeature } from './row-read.js';
 import type { RowHandle } from './types.js';
 import type { WriteMarks } from './write-marks.js';
+
+/** No row selected */
+const NO_ROWS: ReadonlySet<RowHandle> = new Set();
 
 /** The most features kept */
 const FEATURE_CACHE_LIMIT = 1024;
@@ -47,6 +55,10 @@ export interface FeatureCacheHost {
   readonly readContext: RowReadContext;
   /** Where the row of a handle is read (undefined for a handle of no row) */
   placeOf(handle: RowHandle): RowPlace | undefined;
+  /** A number that changes whenever an id gets a handle or loses it (`IdIndex.version`) */
+  idsVersion(): number;
+  /** A number that changes with every change of the rows drawn (`FeatureTablesInternals.revision`) */
+  revision(): number;
 }
 
 /** A feature kept, the version of the row it was made of, and its place in the order of use */
@@ -57,9 +69,26 @@ interface Kept {
   readonly mark: number;
   /** The number of the row group it was read in (`#groupNumber`) */
   readonly group: number;
-  /** The one used before it, and after it */
+  /** The one used before it, and after it (none for the feature of a row selected) */
   older: Kept | null;
   newer: Kept | null;
+  /** Whether its row is selected: then it is not in the order of use, nor counted in the limit */
+  selected: boolean;
+}
+
+/**
+ * The handle an id selected was found to have, and the version of the ids then; the feature kept
+ * of its row last found to have the version of its row, and what the rows were then (the revision
+ * of the rows drawn and the rows stamped: while they are the same, no row was written or placed
+ * elsewhere since)
+ */
+interface FoundId {
+  readonly handle: RowHandle;
+  readonly version: number;
+  kept: Kept | null;
+  layerId: string;
+  revision: number;
+  stamped: number;
 }
 
 /**
@@ -81,6 +110,15 @@ export class FeatureCache {
   #nextGroup = 0;
   /** The depth of the reads that keep nothing (`withoutKeeping`) */
   #passing = 0;
+  /** The rows selected (`keepSelected`) */
+  #selected: ReadonlySet<RowHandle> = NO_ROWS;
+  /** The number of features kept of rows selected */
+  #selectedKept = 0;
+  /** The handles the ids of rows selected were found to have (`noteSelectedId`) */
+  #selectedIds = new Map<string, FoundId>();
+  /** What the rows were when the features of the ids selected were last found (`FoundId`) */
+  #foundRevision = -1;
+  #foundStamped = -1;
   /** Whether what is kept is checked (`watch`) */
   #watched = false;
   readonly #problems: string[] = [];
@@ -93,6 +131,146 @@ export class FeatureCache {
   /** The number of features kept */
   get size(): number {
     return this.#kept.size;
+  }
+
+  /**
+   * Keeps the features of the rows selected while they are selected, besides the number kept of
+   * the others: the ones not kept are made now (a feature of a row no longer selected goes into
+   * the order of use, as used last)
+   *
+   * @param handles The rows selected (none for no row)
+   * @param ids The id of each of them, when it is known (each is found by it from now on)
+   */
+  keepSelected(handles: readonly RowHandle[] | null, ids?: readonly string[]): void {
+    const before = this.#selected;
+    const foundBefore = this.#selectedIds;
+    // The same rows, found by the same ids: what their ids find is read again when rows were
+    // written or placed elsewhere since it was read
+    if (
+      handles &&
+      handles.length === before.size &&
+      handles.every((handle) => before.has(handle)) &&
+      (!ids || ids.every((id, i) => foundBefore.get(id)?.handle === handles[i]))
+    ) {
+      const revision = this.host.revision();
+      const stamped = this.host.writeMarks.stamped;
+      if (ids && (this.#foundRevision !== revision || this.#foundStamped !== stamped)) {
+        for (const id of ids) this.selectedFeatureOf(id);
+        this.#foundRevision = revision;
+        this.#foundStamped = stamped;
+      }
+      return;
+    }
+    const selected = handles ? new Set(handles) : NO_ROWS;
+    if (selected.size === 0 && before.size === 0) return;
+    this.#selected = selected;
+    this.#selectedIds = new Map();
+    const version = this.host.idsVersion();
+    // An id found before for a row still selected is kept, with the feature found for it
+    const byHandle = new Map<RowHandle, FoundId>();
+    if (handles && ids) {
+      handles.forEach((handle, i) => {
+        const old = foundBefore.get(ids[i]);
+        const found =
+          old && old.handle === handle && old.version === version ? old : foundId(handle, version);
+        this.#selectedIds.set(ids[i], found);
+        byHandle.set(handle, found);
+      });
+    } else {
+      for (const [id, found] of foundBefore) {
+        if (selected.has(found.handle)) this.#selectedIds.set(id, found);
+      }
+    }
+    for (const handle of before) {
+      const kept = this.#kept.get(handle);
+      if (!kept?.selected || selected.has(handle)) continue;
+      kept.selected = false;
+      this.#selectedKept--;
+      this.#append(kept);
+    }
+    const revision = this.host.revision();
+    const stamped = this.host.writeMarks.stamped;
+    for (const handle of selected) {
+      const kept = this.#kept.get(handle);
+      // Kept for the selection before: read again when it is read
+      if (kept?.selected) continue;
+      if (kept) {
+        this.#unlink(kept);
+        kept.selected = true;
+        this.#selectedKept++;
+      }
+      // Made now unless kept as its row is: the reads of the selection that follow give it (a row
+      // deleted, or of a layer whose coordinates were raised, is not made a feature)
+      const place = this.host.placeOf(handle);
+      if (!place || (place.group.data.flags[place.row] & ROW_FLAG_DELETED) !== 0) continue;
+      const layerId = place.layer.layerId;
+      if (this.host.readContext.dimensionsOf(layerId) !== 'xy') continue;
+      this.featureOf(layerId, place.group, place.row);
+      // What its id finds from now on, while no row is written or placed elsewhere
+      const found = byHandle.get(handle);
+      const made = this.#kept.get(handle);
+      if (!found || !made) continue;
+      found.kept = made;
+      found.layerId = layerId;
+      found.revision = revision;
+      found.stamped = stamped;
+    }
+    this.#foundRevision = revision;
+    this.#foundStamped = stamped;
+    this.#trim();
+  }
+
+  /**
+   * The handle an id of a row selected was found to have, while no id has got or lost a handle
+   * since (undefined otherwise: the id is looked up in the table of the ids then)
+   */
+  selectedHandleOf(id: string): RowHandle | undefined {
+    if (this.#selectedIds.size === 0) return undefined;
+    const found = this.#selectedIds.get(id);
+    return found && found.version === this.host.idsVersion() ? found.handle : undefined;
+  }
+
+  /**
+   * The feature kept of a row selected, found by its id (`selectedHandleOf`), while its row has
+   * the version it was made of: undefined otherwise, the row is read as any other then
+   */
+  selectedFeatureOf(id: string): Feature | undefined {
+    if (this.#selectedIds.size === 0) return undefined;
+    const found = this.#selectedIds.get(id);
+    if (!found || found.version !== this.host.idsVersion() || this.#watched) return undefined;
+    const kept = this.#kept.get(found.handle);
+    if (!kept) return undefined;
+    const revision = this.host.revision();
+    const stamped = this.host.writeMarks.stamped;
+    const context = this.host.readContext;
+    // No row written or placed elsewhere since it was found to have the version of its row
+    if (found.kept === kept && found.revision === revision && found.stamped === stamped) {
+      return context.dimensionsOf(found.layerId) === 'xy' ? kept.feature : undefined;
+    }
+    const place = this.host.placeOf(found.handle);
+    if (!place) return undefined;
+    const { group, row } = place;
+    const layerId = place.layer.layerId;
+    if (
+      group.marks[row] !== kept.mark ||
+      (group.data.flags[row] & ROW_FLAG_DELETED) !== 0 ||
+      this.#groupNumbers.get(group) !== kept.group ||
+      !this.host.writeMarks.settled(kept.mark) ||
+      context.dimensionsOf(layerId) !== 'xy'
+    ) {
+      return undefined;
+    }
+    found.kept = kept;
+    found.layerId = layerId;
+    found.revision = revision;
+    found.stamped = stamped;
+    return kept.feature;
+  }
+
+  /** Notes the handle an id was found to have in the table of the ids, when its row is selected */
+  noteSelectedId(id: string, handle: RowHandle): void {
+    if (this.#selected.size === 0 || !this.#selected.has(handle)) return;
+    this.#selectedIds.set(id, foundId(handle, this.host.idsVersion()));
   }
 
   /**
@@ -115,7 +293,7 @@ export class FeatureCache {
     const kept = this.#kept.get(handle);
     if (kept && kept.mark === mark && kept.group === number) {
       if (this.#watched) this.#check(kept, layerId, group, row);
-      if (this.#passing === 0 && kept !== this.#newest) {
+      if (this.#passing === 0 && !kept.selected && kept !== this.#newest) {
         this.#unlink(kept);
         this.#append(kept);
       }
@@ -123,12 +301,25 @@ export class FeatureCache {
     }
     if (kept) this.#forget(handle);
     const feature = rowFeature(context, layerId, group, row);
-    if (this.#passing > 0) return feature;
+    const selected = this.#selected.has(handle);
+    if (this.#passing > 0 && !selected) return feature;
     if (this.#watched) deepFreeze(feature);
-    const entry: Kept = { handle, feature, mark, group: number, older: null, newer: null };
+    const entry: Kept = {
+      handle,
+      feature,
+      mark,
+      group: number,
+      older: null,
+      newer: null,
+      selected,
+    };
     this.#kept.set(handle, entry);
+    if (selected) {
+      this.#selectedKept++;
+      return feature;
+    }
     this.#append(entry);
-    if (this.#kept.size > FEATURE_CACHE_LIMIT) this.#forget((this.#oldest as Kept).handle);
+    this.#trim();
     return feature;
   }
 
@@ -144,11 +335,12 @@ export class FeatureCache {
     }
   }
 
-  /** Forgets every feature kept */
+  /** Forgets every feature kept (the rows selected stay selected) */
   clear(): void {
     this.#kept.clear();
     this.#oldest = null;
     this.#newest = null;
+    this.#selectedKept = 0;
   }
 
   /**
@@ -209,7 +401,15 @@ export class FeatureCache {
     const kept = this.#kept.get(handle);
     if (!kept) return;
     this.#kept.delete(handle);
-    this.#unlink(kept);
+    if (kept.selected) this.#selectedKept--;
+    else this.#unlink(kept);
+  }
+
+  /** Forgets the ones used longest ago past the number kept of the rows not selected */
+  #trim(): void {
+    while (this.#kept.size - this.#selectedKept > FEATURE_CACHE_LIMIT) {
+      this.#forget((this.#oldest as Kept).handle);
+    }
   }
 
   #unlink(kept: Kept): void {
@@ -236,6 +436,11 @@ export class FeatureCache {
     }
     return number;
   }
+}
+
+/** An id found to have a handle, with no feature found for it yet */
+function foundId(handle: RowHandle, version: number): FoundId {
+  return { handle, version, kept: null, layerId: '', revision: -1, stamped: -1 };
 }
 
 /**

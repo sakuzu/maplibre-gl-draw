@@ -9,7 +9,9 @@
  * (up to `Store.selectionIdsLimit` of a Store of rows, every one of a Store of objects), or
  * selected in bulk by the states of their rows (`Selection.bulk`), with no IDs listed then. The
  * number, the layers and the extent of the features are read from the rows of a Store of rows
- * (no feature is made) and from the features of a Store of objects.
+ * (no feature is made) and from the features of a Store of objects. The value of the features
+ * listed by their IDs over a Store of rows is read again only once the IDs or the rows change: it
+ * is kept with the versions of the rows and of the ids it was read at (`LISTED_VALUES`).
  *
  * A target keeps the selection as it was read (the IDs, or the rows of the features selected in
  * bulk), so that selecting it again (`DrawStore.restoreSelection`) puts the same items back,
@@ -17,7 +19,10 @@
  */
 
 import { summarizeRows } from '../feature-table/bulk-rows.js';
-import { featureTablesInternals } from '../feature-table/feature-tables.js';
+import {
+  type FeatureTablesInternals,
+  featureTablesInternals,
+} from '../feature-table/feature-tables.js';
 import { TableSelection } from '../feature-table/selection.js';
 import { coordinatesBBox } from '../geometry/bbox.js';
 import { positionsOf } from '../geometry/geojson.js';
@@ -45,6 +50,20 @@ const NOTHING: SelectionValue = Object.freeze({
 /** The value of each summary of features selected in bulk (the same object for the same one) */
 const BULK_VALUES = new WeakMap<SelectionBulk, SelectionValue>();
 
+/**
+ * The value of the features listed by their IDs read last over the rows of tables, with the
+ * versions of the rows and of the ids it was read at (`listedVersions`)
+ */
+interface ListedValue {
+  /** The IDs as the Store gave them, frozen (the same array while the selection is the same) */
+  readonly source: readonly string[];
+  readonly versions: readonly [number, number, number];
+  readonly value: SelectionValue;
+}
+
+/** The value of the features listed by their IDs read last, for each tables */
+const LISTED_VALUES = new WeakMap<FeatureTablesInternals, ListedValue>();
+
 /** The selection each target names */
 const TARGETS = new WeakMap<SelectionTarget, Selection>();
 
@@ -70,21 +89,40 @@ export function valueOfSelection(store: Store, selection: Selection): SelectionV
   const { type, bulk } = selection;
   if (type === null) return NOTHING;
   if (bulk) return bulkValueOf(type, selection.ids, bulk);
-  const ids = Object.freeze([...selection.ids]) as readonly string[];
   const internals = featureTablesInternals(store.tables);
+  if (internals && type === 'feature') {
+    const known = LISTED_VALUES.get(internals);
+    const versions = listedVersions(internals);
+    if (
+      known?.versions.every((version, i) => version === versions[i]) &&
+      (known.source === selection.ids || sameIds(known.source, selection.ids))
+    ) {
+      return known.value;
+    }
+  }
+  const ids = Object.freeze([...selection.ids]) as readonly string[];
   if (internals && store.tables) {
     const rows =
       type === 'feature'
         ? TableSelection.of(ids.flatMap((id) => store.tables?.findRow(id) ?? []))
         : (store.rowsOfSelection(selection) ?? TableSelection.empty);
     const summary = summarizeRows(internals, rows);
-    return Object.freeze({
+    const value: SelectionValue = Object.freeze({
       type,
       count: type === 'feature' ? ids.length : summary.count,
       ids,
       layerIds: Object.freeze([...summary.layerIds]) as readonly string[],
       bbox: summary.bbox,
     });
+    if (type === 'feature') {
+      LISTED_VALUES.set(internals, {
+        // An array the Store may change in place is kept as a copy
+        source: Object.isFrozen(selection.ids) ? selection.ids : ids,
+        versions: listedVersions(internals),
+        value,
+      });
+    }
+    return value;
   }
   const features = selectedObjects(store, type, ids);
   const layerIds = new Set<string>();
@@ -198,6 +236,21 @@ function selectedObjects(
     }
   }
   return out;
+}
+
+/**
+ * What the value of features listed by their IDs is read from: the rows drawn (`revision`), the
+ * rows written (`WriteMarks.stamped`) and the handles of the ids (`IdIndex.version`)
+ */
+function listedVersions(internals: FeatureTablesInternals): [number, number, number] {
+  return [internals.revision, internals.writeMarks.stamped, internals.ids.version];
+}
+
+/** Whether two lists of IDs are the same, in the same order */
+function sameIds(a: readonly string[], b: readonly string[]): boolean {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
+  return true;
 }
 
 /** The union of two extents */

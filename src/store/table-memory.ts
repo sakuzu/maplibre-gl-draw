@@ -52,7 +52,7 @@ import {
 import { ItemWalk } from '../feature-table/item-walk.js';
 import { createWriteMarkKeeper, type WriteMarkKeeper } from '../feature-table/write-marks.js';
 import { ROW_FLAG_DELETED } from '../table/row-group-types.js';
-import { DrawStore } from './draw-store.js';
+import { DrawStore, SELECTION_IDS_LIMIT } from './draw-store.js';
 import {
   checkEdits,
   DEFAULT_TRANSFORMS,
@@ -273,9 +273,7 @@ export class TableContractStore implements StoreContract {
     };
     this.#bus.subscribe((changes) => this.#deliver(changes));
     // A read of the rows comes after the restore under way, finished first
-    this.#internals.setReadGate(() => {
-      if (this.#steps && !this.#inStep) this.#finishSteps();
-    });
+    this.#internals.setReadGate(() => this.#readGate());
     rowStepsOf.set(this, {
       begin: (write, onEnd) => this.#beginSteps(write, onEnd),
       finish: () => this.#finishSteps(),
@@ -306,6 +304,10 @@ export class TableContractStore implements StoreContract {
   // ==========================================================================
 
   getFeature(id: string): Feature | undefined {
+    // A read comes after the restore under way, as through the tables
+    this.#readGate();
+    const selected = this.#internals.featureCache.selectedFeatureOf(id);
+    if (selected) return selected;
     const handle = this.tables.findRow(id);
     return handle === undefined ? undefined : this.#rowFeature(handle);
   }
@@ -461,28 +463,85 @@ export class TableContractStore implements StoreContract {
 
   updateFeature(id: string, updates: Partial<Feature>): boolean {
     return this.#apply(() => {
-      const handle = this.tables.findRow(id);
-      if (handle === undefined) throw new Error(`Feature with id "${id}" not found`);
-      const current = this.#rowFeature(handle) as Feature;
-      // The place: another layer or group goes at its end, with the key of the order
-      const place = new Map<RowField, unknown>();
-      const layerId = updates.layerId ?? current.layerId;
-      const groupId = 'groupId' in updates ? updates.groupId || undefined : current.groupId;
-      if (layerId !== current.layerId || groupId !== current.groupId) {
-        if (!this.#layers.has(layerId)) throw new Error(`Layer with id "${layerId}" not found`);
-        const group = groupId ? this.#groups.get(groupId) : undefined;
-        if (groupId && !group) throw new Error(`Group with id "${groupId}" not found`);
-        if (current.groupId && current.groupId !== groupId) this.#leftGroups.add(current.groupId);
-        place.set('layerId', layerId);
-        place.set('order', keyAfter(this.#lastItemKey(layerId)));
-        place.set('groupId', group?.id ?? '');
-        place.set('member', group ? keyAfter(this.#lastMemberKey(group)) : undefined);
-      }
-      const next = { ...current, ...updates, id, layerId, groupId } as Feature;
-      const fields = featureFields(current, next);
-      for (const [field, value] of place) fields.set(field, value);
+      const { handle, fields } = this.#updatedFields(id, updates);
       if (fields.size > 0) this.#write(handle, fields);
     });
+  }
+
+  /**
+   * Updates features one after the other, as `updateFeature` does each: the ones that stay where
+   * they are and write the same fields as the one before are written in one write
+   */
+  #updateFeatures(updates: ReadonlyArray<{ id: string; updates: Partial<Feature> }>): void {
+    this.#apply(() => {
+      let run: Array<{ handle: RowHandle; fields: ReadonlyMap<RowField, unknown> }> = [];
+      let runFields = '';
+      const inRun = new Set<string>();
+      const flush = (): void => {
+        if (run.length > 0) this.#writeRows(run);
+        run = [];
+        runFields = '';
+        inRun.clear();
+      };
+      for (const { id, updates: changes } of updates) {
+        // A feature updated again is read as the write before leaves it
+        if (inRun.has(id)) flush();
+        let updated: { handle: RowHandle; fields: Map<RowField, unknown>; moved: boolean };
+        try {
+          updated = this.#updatedFields(id, changes);
+        } catch (error) {
+          flush();
+          throw error;
+        }
+        const { handle, fields, moved } = updated;
+        if (fields.size === 0) continue;
+        if (moved) {
+          // Put at the end of a layer or a group: after the writes before it
+          flush();
+          this.#write(handle, fields);
+          continue;
+        }
+        const names = [...fields.keys()].join('\u0000');
+        if (names !== runFields) {
+          flush();
+          runFields = names;
+        }
+        run.push({ handle, fields });
+        inRun.add(id);
+      }
+      flush();
+    });
+  }
+
+  /**
+   * The fields an update of a feature writes, and whether it puts the feature in another layer or
+   * group (at its end, with the key of the order)
+   */
+  #updatedFields(
+    id: string,
+    updates: Partial<Feature>,
+  ): { handle: RowHandle; fields: Map<RowField, unknown>; moved: boolean } {
+    const handle = this.tables.findRow(id);
+    const current = handle === undefined ? undefined : this.#rowFeature(handle);
+    if (handle === undefined || !current) throw new Error(`Feature with id "${id}" not found`);
+    // The place: another layer or group goes at its end, with the key of the order
+    const place = new Map<RowField, unknown>();
+    const layerId = updates.layerId ?? current.layerId;
+    const groupId = 'groupId' in updates ? updates.groupId || undefined : current.groupId;
+    if (layerId !== current.layerId || groupId !== current.groupId) {
+      if (!this.#layers.has(layerId)) throw new Error(`Layer with id "${layerId}" not found`);
+      const group = groupId ? this.#groups.get(groupId) : undefined;
+      if (groupId && !group) throw new Error(`Group with id "${groupId}" not found`);
+      if (current.groupId && current.groupId !== groupId) this.#leftGroups.add(current.groupId);
+      place.set('layerId', layerId);
+      place.set('order', keyAfter(this.#lastItemKey(layerId)));
+      place.set('groupId', group?.id ?? '');
+      place.set('member', group ? keyAfter(this.#lastMemberKey(group)) : undefined);
+    }
+    const next = { ...current, ...updates, id, layerId, groupId } as Feature;
+    const fields = featureFields(current, next);
+    for (const [field, value] of place) fields.set(field, value);
+    return { handle, fields, moved: place.size > 0 };
   }
 
   /**
@@ -503,11 +562,7 @@ export class TableContractStore implements StoreContract {
         transforms,
         this.#transformFields,
       );
-      if (updates.length > 0) {
-        this.transact(() => {
-          for (const { id, updates: fields } of updates) this.updateFeature(id, fields);
-        });
-      }
+      if (updates.length > 0) this.transact(() => this.#updateFeatures(updates));
       return { dropped };
     }
     const computed = checkEdits(edits, transforms);
@@ -1277,6 +1332,8 @@ export class TableContractStore implements StoreContract {
   }
   setSelection(type: SelectionType | null, ids: string[]): void {
     this.#client.setSelection(type, ids);
+    const rows = this.#rowsSelected(type, ids);
+    this.#internals.featureCache.keepSelected(rows?.handles ?? null, rows?.ids);
   }
   getEditingIds(): readonly string[] {
     return this.#client.getEditingIds();
@@ -1724,6 +1781,52 @@ export class TableContractStore implements StoreContract {
   #isThere(handle: RowHandle): boolean {
     const place = this.#internals.placeOf(handle);
     return !!place && (place.group.data.flags[place.row] & ROW_FLAG_DELETED) === 0;
+  }
+
+  /** Finishes the restore under way before a read of the rows */
+  #readGate(): void {
+    if (this.#steps && !this.#inStep) this.#finishSteps();
+  }
+
+  /**
+   * The rows of a selection whose features are kept while they are selected (none past the
+   * features the selection lists the IDs of, `SELECTION_IDS_LIMIT`)
+   */
+  #rowsSelected(
+    type: SelectionType | null,
+    ids: readonly string[],
+  ): { handles: RowHandle[]; ids?: string[] } | null {
+    if (type === null || ids.length === 0) return null;
+    const handles: RowHandle[] = [];
+    if (type === 'feature') {
+      if (ids.length > SELECTION_IDS_LIMIT) return null;
+      const found: string[] = [];
+      for (const id of ids) {
+        const handle = this.tables.findRow(id);
+        if (handle === undefined) continue;
+        handles.push(handle);
+        found.push(id);
+      }
+      return { handles, ids: found };
+    }
+    if (type === 'group') {
+      for (const id of ids) {
+        const group = this.#groups.get(id);
+        const handle = group ? this.#internals.groups.handleOfId(group.id) : -1;
+        const view = group ? this.tables.get(group.layerId) : undefined;
+        if (handle < 0 || !view) continue;
+        const count = view.countGroupMembers(handle);
+        if (handles.length + count > SELECTION_IDS_LIMIT) return null;
+        handles.push(...view.listGroupMembers(handle, 0, count));
+      }
+      return { handles };
+    }
+    let count = 0;
+    for (const id of ids) count += this.tables.get(id)?.rowCount ?? 0;
+    if (count > SELECTION_IDS_LIMIT) return null;
+    const cursor = this.tables.scan({ layerIds: [...ids] });
+    for (let batch = cursor.next(); batch; batch = cursor.next()) handles.push(...batch);
+    return { handles };
   }
 
   /** The feature of a row, kept or made (undefined for a deleted row) */

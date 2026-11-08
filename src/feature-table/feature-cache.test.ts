@@ -9,7 +9,8 @@
  * - A row written in the transaction under way is made every time it is read in it, and kept
  *   once the transaction ends
  * - A row held as a feature is not kept
- * - At most 1,024 features are kept, the one used longest ago going first
+ * - At most 1,024 features are kept, the one used longest ago going first; the features of the
+ *   rows selected are kept besides, made when they are selected, and found by their ids
  * - A row deleted, read in another group, or gone with the rows, gives no feature kept
  * - The reads of many rows one after the other give what is kept and keep nothing more, and so
  *   does a build of every box of the rows
@@ -134,6 +135,91 @@ describe('the features kept of rows', () => {
     const made = store.getFeature('p1');
     expect(made).not.toBe(second);
     expect(made).toEqual(second);
+  });
+
+  it('keeps the features of the rows selected besides the 1,024, while they are selected', () => {
+    const { store, cache } = storeWith(3100);
+    const ids = Array.from({ length: 2000 }, (_, i) => `p${i}`);
+    // Made when they are selected
+    store.setSelection('feature', ids);
+    expect(cache.size).toBe(2000);
+    const read = ids.map((id) => store.getFeature(id));
+    // Other reads do not push them out
+    for (let i = 2000; i < 3100; i++) store.getFeature(`p${i}`);
+    expect(cache.size).toBe(2000 + 1024);
+    ids.forEach((id, i) => {
+      expect(store.getFeature(id)).toBe(read[i]);
+    });
+    // No longer selected: they go into the order of use, as used last
+    store.setSelection('feature', ['p2500']);
+    expect(cache.size).toBe(1 + 1024);
+    expect(store.getFeature('p1999')).toBe(read[1999]);
+    expect(store.getFeature('p0')).not.toBe(read[0]);
+    store.setSelection(null, []);
+    expect(cache.size).toBe(1024);
+  });
+
+  it('finds a row selected by its id while its row has the version it was made of', () => {
+    const { store, internals } = storeWith(5);
+    store.setSelection('feature', ['p1', 'p2', 'p3']);
+    const read = store.getFeature('p1');
+    expect(store.getFeature('p1')).toBe(read);
+    // Written: made again, and kept as before once the write is over
+    store.updateFeature('p1', { properties: { n: 10 } });
+    const written = store.getFeature('p1');
+    expect(written).not.toBe(read);
+    expect(written?.properties).toEqual({ n: 10 });
+    expect(store.getFeature('p1')).toBe(written);
+    // Written in the transaction under way: the value written is read each time
+    store.transact(() => {
+      store.updateFeature('p2', { properties: { n: 20 } });
+      expect(store.getFeature('p2')?.properties).toEqual({ n: 20 });
+      store.updateFeature('p2', { properties: { n: 21 } });
+      expect(store.getFeature('p2')?.properties).toEqual({ n: 21 });
+    });
+    expect(store.getFeature('p2')?.properties).toEqual({ n: 21 });
+    // Put into the delta: the same values
+    const before = store.getFeature('p3');
+    store.transact(() => internals.toDelta([internals.ids.handleOf('p3')]));
+    expect(store.getFeature('p3')).toEqual(before);
+    // Deleted: none
+    store.deleteFeature('p3');
+    expect(store.getFeature('p3')).toBeUndefined();
+    expect(store.tables?.findRow('p3')).toBeUndefined();
+    // Created again under the same id: the row made now
+    store.createFeature({ ...point(3), properties: { n: 30 } });
+    expect(store.getFeature('p3')?.properties).toEqual({ n: 30 });
+  });
+
+  it('gives the same value of a selection listed by IDs until the IDs or the rows change', () => {
+    const { store } = storeWith(5);
+    const draw = createDraw(createMapStub().map, {
+      store: store as unknown as PublicStore,
+      initDefaultLayer: false,
+    });
+    store.updateFeature('p4', { visible: false });
+    // Checked on the rows: an unknown ID throws, a hidden feature is not selected
+    expect(() => draw.selection.set('feature', ['p1', 'missing'])).toThrow();
+    expect(draw.selection.set('feature', ['p4'])).toBe(false);
+    expect(draw.selection.set('feature', ['p2', 'p1', 'p4'])).toBe(true);
+    const value = draw.selection.value;
+    expect(value).toMatchObject({ count: 2, ids: ['p2', 'p1'], layerIds: ['a'] });
+    expect(value.bbox).toEqual([0.001, 1, 0.002, 1]);
+    expect(draw.selection.value).toBe(value);
+    // A row of another feature written: the same value
+    store.updateFeature('p3', { properties: { n: 30 } });
+    const after = draw.selection.value;
+    expect(after).toEqual(value);
+    expect(draw.selection.value).toBe(after);
+    // A feature selected moved: its extent
+    store.updateFeature('p2', { geometry: { type: 'Point', coordinates: [5, 6] } });
+    expect(draw.selection.value.bbox).toEqual([0.001, 1, 5, 6]);
+    // Another selection of the same IDs reads the same
+    draw.selection.set('feature', ['p2', 'p1']);
+    expect(draw.selection.value).toMatchObject({ count: 2, bbox: [0.001, 1, 5, 6] });
+    store.deleteFeature('p1');
+    expect(draw.selection.value).toMatchObject({ count: 1, ids: ['p2'], bbox: [5, 6, 5, 6] });
+    draw.destroy();
   });
 
   it('gives nothing kept for a row deleted, read in another group, or gone with the rows', () => {

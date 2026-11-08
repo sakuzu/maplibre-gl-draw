@@ -6,8 +6,17 @@
  */
 
 import type { RowUpdate } from '../../feature-table/bulk-plan.js';
-import { firstRowsInOrder, rowsByLayerInOrder } from '../../feature-table/bulk-rows.js';
-import { featureTablesInternals, readWithoutKeeping } from '../../feature-table/feature-tables.js';
+import {
+  firstRowsInOrder,
+  isRowShown,
+  type RowContainers,
+  rowsByLayerInOrder,
+} from '../../feature-table/bulk-rows.js';
+import {
+  featureTablesInternals,
+  keepSelectedRows,
+  readWithoutKeeping,
+} from '../../feature-table/feature-tables.js';
 import { TableSelection } from '../../feature-table/selection.js';
 import { groupSelection, ungroupSelection } from '../../operations/layer-operations.js';
 import {
@@ -170,7 +179,27 @@ export function createSelection(
           return true;
         }
       }
-      // Each item is read once: a feature of the rows is made of them for the read
+      // The features of rows are read on their rows: none is made for the check (the selection
+      // keeps the features of its rows)
+      const internals = featureTablesInternals(tables);
+      if (type === 'feature' && tables && internals) {
+        const containers = rowContainersOf(store);
+        const shown: string[] = [];
+        const handles: number[] = [];
+        for (const id of list) {
+          const handle = tables.findRow(id);
+          if (handle === undefined) throw notFound(type, id);
+          if (!isRowShown(internals, containers, handle)) continue;
+          shown.push(id);
+          handles.push(handle);
+        }
+        if (shown.length === 0) return false;
+        // The rows are found by the handles found here when the selection is set
+        keepSelectedRows(tables, handles, shown);
+        store.setSelection(type, shown);
+        return true;
+      }
+      // Each item is read once
       const selectable = list.filter((id) => {
         const item = getItem(store, type, id);
         if (!item) throw notFound(type, id);
@@ -377,6 +406,15 @@ export function createSelection(
       if (type === 'group' && ids.length > 0) return collections.groups.moveMany(ids, to);
       return false;
     },
+  };
+}
+
+/** What the document of a Store says of the layers and the groups a row is in */
+function rowContainersOf(store: ResourceDeps['store']): RowContainers {
+  return {
+    layerVisible: (layerId) => store.getLayer(layerId)?.visible === true,
+    layerLocked: (layerId) => store.getLayer(layerId)?.locked === true,
+    hidden: (id) => store.isHidden(id),
   };
 }
 
