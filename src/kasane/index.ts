@@ -9,7 +9,7 @@
  * features than can be made objects at once. A Worker builds the rows into row blocks of typed arrays
  * (`createRowBlockBuilder`), the Store adds them to its tables without a copy
  * (`writer.addRowBlocks`), and the instance draws and hit tests the layer from its rows, making a
- * feature of a row only while it is selected or edited. An application that only draws, edits and
+ * feature of a row only when one is read. An application that only draws, edits and
  * reads features needs none of it: the main entry reads the features of every layer.
  *
  * ```ts

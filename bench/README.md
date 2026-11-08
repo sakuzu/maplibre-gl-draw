@@ -186,7 +186,6 @@ and the next versions of the row groups did):
 | `worker` | `1`: merges in a Worker | `1` |
 | `bigArea` | Vertices of a large area under the rows | `0` |
 | `held` | Rows the edits of many rows select | `2000` |
-| `moveFrom` | Rows held from which a move is drawn by state | library's |
 
 The edits are `color1`, `colorSlide`, `ruleSlide`, `attr`, `point`,
 `longLine`, `corner` and `finish` (a building written in the middle of the
@@ -204,9 +203,8 @@ open (an administrative area under the buildings), for `hover`.
 The edits of many rows select `held` rows (the time to select them is an
 input) or work on `members` rows: `moveSelected` drags the rows selected as
 the select mode drags them (every row written in every frame of a drag of
-10 frames, then the end; the bytes uploaded show what a move costs, and
-`moveFrom` sets the number of rows held from which the rows moved are
-drawn by their state instead of written), `panSelected` pans the map with the
+10 frames, then the end; the bytes uploaded show what a move costs),
+`panSelected` pans the map with the
 rows selected, `group` groups and ungroups the rows, `toLayer` puts them
 in another layer and back, `order1` and `orderMany` bring one row or the
 rows to the front and send them to the back (each timed to the frame

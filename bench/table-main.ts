@@ -37,14 +37,12 @@
  */
 
 import { createDraw, type Draw, type Store } from '@sakuzu/maplibre-gl-draw';
-import type {
+import {
   createTableStore as createPublicTableStore,
-  FeatureTablesOptions,
-  FeatureTablesWorker,
-  RowField,
+  type FeatureTablesWorker,
+  type RowField,
 } from '@sakuzu/maplibre-gl-draw/kasane';
 import * as maplibregl from 'maplibre-gl';
-import * as tableMemory from '../src/store/table-memory';
 import {
   type BenchCandidates,
   type BenchFeature,
@@ -171,7 +169,6 @@ for (const [key, value] of Object.entries({
   workers: String(params.workers),
   bigArea: String(params.bigArea),
   held: String(params.held),
-  moveFrom: params.moveFrom === null ? '' : String(params.moveFrom),
   terrain: params.terrain ? '1' : '0',
 })) {
   const field = form.elements.namedItem(key) as HTMLInputElement | HTMLSelectElement | null;
@@ -256,21 +253,11 @@ function rowsWorker(): FeatureTablesWorker {
 }
 
 // The rows are held by an in-memory Store of rows: its tables are drawn, its writer adds the
-// row blocks and writes the changes of others. It is made from the module of the library that
-// holds it, with an option the library keeps to itself (the number of rows opened from which they
-// move by their state), which the declarations of its build leave out
-const createTableStore = (
-  tableMemory as unknown as {
-    createTableStore(
-      options: FeatureTablesOptions & { readonly moveOpenedByStateFrom?: number },
-    ): ReturnType<typeof createPublicTableStore>;
-  }
-).createTableStore;
+// row blocks and writes the changes of others
 const ofRows =
   params.mode === 'table'
-    ? createTableStore({
+    ? createPublicTableStore({
         ...(params.worker && { worker: rowsWorker() }),
-        ...(params.moveFrom !== null && { moveOpenedByStateFrom: params.moveFrom }),
       })
     : null;
 const tablesOfPage =
