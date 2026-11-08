@@ -24,7 +24,6 @@ import { createRowBlockDataBuilder } from '../table/row-group-builder.js';
 import { mergeRowBlock } from '../table/row-group-merge.js';
 import {
   expectTablesMatch,
-  internalsOf,
   referenceKey as key,
   type RandomGeometry,
   type ReferenceRow,
@@ -506,23 +505,19 @@ describe('the dimensions of a layer raised', () => {
     expect(dimsOfGroups(internals, 'a')).toEqual(['xyz']);
   });
 
-  it('is refused to fewer dimensions, and while a row of the layer is opened', () => {
+  it('is refused to fewer dimensions', () => {
     const { tables, writer } = smallTables('xyz', [['p', { type: 'Point', coordinates: [1, 2] }]]);
     expect(() => writer.raiseDimensions('a', 'xym')).toThrow(/cannot be lowered/);
     expect(() => writer.raiseDimensions('a', 'xy')).toThrow(/cannot be lowered/);
     const xy = smallTables('xy', [['p', { type: 'Point', coordinates: [1, 2] }]]);
-    internalsOf(xy.tables).open('owner', ['p']);
-    expect(() => xy.writer.raiseDimensions('a', 'xyz')).toThrow(/opened as a feature/);
-    internalsOf(xy.tables).open('owner', []);
     xy.writer.raiseDimensions('a', 'xyz');
     expect(tables.get('a')).toBeDefined();
   });
 });
 
 describe('the rows of a layer of z or m', () => {
-  it('are not made features: held, read as one, hit as one', () => {
+  it('are not made features: read as one, hit as one', () => {
     const { tables } = smallTables('xyz', [['p', { type: 'Point', coordinates: [1, 2, 3] }]]);
-    expect(() => internalsOf(tables).open('owner', ['p'])).toThrow(/is not a feature/);
     const handle = tables.findRow('p') as number;
     expect(() => tables.get('a')?.getRow(handle)).toThrow(/is not a feature/);
     // What is read without a feature: x and y

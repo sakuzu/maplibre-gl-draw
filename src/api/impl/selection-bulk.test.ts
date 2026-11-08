@@ -96,9 +96,9 @@ function documentOf(seed: number, count: number) {
   return { features, groups: groups.filter((group) => group.members.length > 0), next };
 }
 
-/** A draw over a Store of rows that opens at most `holdLimit` features for the selection */
-function drawOf(seed: number, count: number, holdLimit: number) {
-  const store = new DrawStore(new TableContractStore(), { holdLimit });
+/** A draw over a Store of rows that opens at most `selectionIdsLimit` features for the selection */
+function drawOf(seed: number, count: number, selectionIdsLimit: number) {
+  const store = new DrawStore(new TableContractStore(), { selectionIdsLimit });
   for (const id of ['l', 'm']) {
     store.createLayer({
       id,
@@ -168,7 +168,7 @@ function pick(draw: Draw, next: () => number, share: number): string[] {
   return all.filter(() => next() < share);
 }
 
-/** The same document twice: selected in bulk (holdLimit 3) and selected one by one */
+/** The same document twice: selected in bulk (selectionIdsLimit 3) and selected one by one */
 function pair(seed: number, count = 60) {
   const bulk = drawOf(seed, count, 3);
   const single = drawOf(seed, count, 100_000);
@@ -184,7 +184,7 @@ describe('the verbs of the selection over features selected in bulk', () => {
       const before = snapshot(bulk.draw);
       bulk.draw.selection.set('feature', ids);
       single.draw.selection.set('feature', ids);
-      expect(bulk.draw.selection.get().bulk?.count).toBe(ids.length);
+      expect(bulk.draw.selection.value.count).toBe(ids.length);
       expect(bulk.draw.selection.delete()).toBe(true);
       expect(single.draw.selection.delete()).toBe(true);
       expect(snapshot(bulk.draw)).toEqual(snapshot(single.draw));
@@ -253,8 +253,8 @@ describe('the verbs of the selection over features selected in bulk', () => {
         draw.selection.set('feature', ids);
       }
       const seen = locked.map((id) => JSON.stringify(bulk.draw.features.get(id)));
-      expect(bulk.draw.selection.get().bulk).toBeDefined();
-      expect(single.draw.selection.get().bulk).toBeUndefined();
+      expect(bulk.draw.selection.value.ids).toBeNull();
+      expect(single.draw.selection.value.ids).not.toBeNull();
       for (const { draw } of [bulk, single]) {
         const patch = { style: { strokeColor: '#123456' }, properties: { changed: true } };
         expect(draw.selection.update(patch)).toBe(true);
@@ -325,7 +325,7 @@ describe('the verbs of the selection over features selected in bulk', () => {
       expect(bulk.draw.selection.move({ layerId: 'm' })).toBe(true);
       expect(single.draw.selection.move({ layerId: 'm' })).toBe(true);
       expect(snapshot(bulk.draw)).toEqual(snapshot(single.draw));
-      expect(bulk.draw.selection.get().bulk?.layerIds).toEqual(['m']);
+      expect(bulk.draw.selection.value.layerIds).toEqual(['m']);
     }
   });
 
@@ -364,7 +364,7 @@ describe('the verbs of the selection over features selected in bulk', () => {
     const { bulk, single } = pair(52);
     expect(bulk.draw.selection.setAll({ type: 'Point' })).toBe(true);
     const points = bulk.draw.features.count({ type: 'Point' });
-    expect(bulk.draw.selection.get().bulk?.count).toBe(points);
+    expect(bulk.draw.selection.value.count).toBe(points);
     expect(bulk.draw.selection.count()).toBe(points);
     expect(bulk.draw.selection.count({ groupId: 'g1' })).toBe(
       bulk.draw.features.count({ type: 'Point', groupId: 'g1' }),
@@ -394,9 +394,9 @@ describe('the verbs of the selection over features selected in bulk', () => {
     const hidden = all[1] as string;
     draw.features.update(hidden, { visible: false });
     expect(draw.selection.set('feature', all)).toBe(true);
-    const selected = draw.selection.get();
-    expect(selected.ids).toEqual([]);
-    expect(selected.bulk?.count).toBe(all.length - 1);
+    const selected = draw.selection.value;
+    expect(selected.ids).toBeNull();
+    expect(selected.count).toBe(all.length - 1);
     const shown = all.filter((id) => id !== hidden);
     const first = (filter?: { type: 'Point' }) =>
       draw.selection.features(filter, { limit: 5 }).map((feature) => feature.id);
@@ -410,23 +410,25 @@ describe('the verbs of the selection over features selected in bulk', () => {
     );
     // Nothing that can be seen: nothing is selected, and the selection stays
     for (const id of shown.slice(0, 40)) draw.features.update(id, { visible: false });
-    const kept = draw.selection.get();
+    const kept = draw.selection.value;
     expect(draw.selection.set('feature', [hidden, ...shown.slice(0, 40)])).toBe(false);
-    expect(draw.selection.get().bulk).toBe(kept.bulk);
+    expect(draw.selection.value).toBe(kept);
     expect(() => draw.selection.set('feature', [...all, 'nothing'])).toThrow(/nothing/);
   });
 
-  it('add and take out features, opening them once few enough, and restore a selection', () => {
+  it('add and take out features, listing them once few enough, and select a target again', () => {
     const { bulk } = pair(53);
     const ids = pick(bulk.draw, bulk.next, 0.5).slice(0, 6);
     bulk.draw.selection.set('feature', ids.slice(0, 4));
-    const kept = bulk.draw.selection.get();
-    expect(kept.bulk?.count).toBe(4);
+    const kept = bulk.draw.selection.target;
+    expect(kept.count).toBe(4);
+    expect(bulk.draw.selection.value.ids).toBeNull();
     expect(bulk.draw.selection.add([ids[4]])).toBe(true);
-    expect(bulk.draw.selection.get().bulk?.count).toBe(5);
+    expect(bulk.draw.selection.value.count).toBe(5);
     expect(bulk.draw.selection.remove(ids.slice(0, 3))).toBe(true);
-    expect(bulk.draw.selection.get().ids).toEqual([ids[3], ids[4]]);
-    expect(bulk.draw.selection.restore(kept)).toBe(true);
-    expect(bulk.draw.selection.get().bulk?.count).toBe(4);
+    expect(bulk.draw.selection.value.ids).toEqual([ids[3], ids[4]]);
+    expect(bulk.draw.selection.set(kept)).toBe(true);
+    expect(bulk.draw.selection.value.ids).toBeNull();
+    expect(bulk.draw.selection.value.count).toBe(4);
   });
 });

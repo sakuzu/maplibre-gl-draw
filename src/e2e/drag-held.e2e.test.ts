@@ -169,20 +169,6 @@ async function restore(page: Page): Promise<void> {
   await idle(page);
 }
 
-/** The number of rows held as features (none over a Store of objects) */
-const heldCount = (page: Page): Promise<number> =>
-  page.evaluate(() => {
-    const w = window as unknown as {
-      store: import('../index.js').Store;
-      e2e: {
-        internals: {
-          featureTablesInternals: typeof import('../feature-table/feature-tables.js').featureTablesInternals;
-        };
-      };
-    };
-    return w.e2e.internals.featureTablesInternals(w.store.tables)?.heldCount ?? 0;
-  });
-
 /** A drag of the squares selected */
 interface Edit {
   name: string;
@@ -297,20 +283,6 @@ function counted(recorded: readonly Recorded[]): Record<string, number> {
   return out;
 }
 
-/** Holds rows of the Store of rows as features for an owner of the test, without a selection */
-const hold = (page: Page, ids: string[]): Promise<void> =>
-  page.evaluate((i) => {
-    const w = window as unknown as {
-      store: import('../index.js').Store;
-      e2e: {
-        internals: {
-          featureTablesInternals: typeof import('../feature-table/feature-tables.js').featureTablesInternals;
-        };
-      };
-    };
-    w.e2e.internals.featureTablesInternals(w.store.tables)?.open('e2e-held', i);
-  }, ids);
-
 /**
  * Registers a handle provider whose handle, in the middle of a square, moves it as a whole with
  * the pointer by one translation of its longitudes and latitudes
@@ -383,7 +355,6 @@ describe.each(KINDS)('many features dragged over a Store of %s', (kind) => {
     async function run(cancelled: boolean) {
       await restore(page);
       await select(page, ids);
-      expect(await heldCount(page)).toBe(kind === 'rows' ? n : 0);
       const selected = await readAll(page);
       await expectHitsAsDrawn(page, 'selected');
       const grabbed = await edit.grab(page, selected.drawn);
@@ -444,7 +415,6 @@ describe.each(KINDS)('many features dragged over a Store of %s', (kind) => {
         'D',
         `end ${started}`,
       ]);
-      expect(await heldCount(page)).toBe(kind === 'rows' ? n : 0);
     });
 
     it('is drawn, hit and read as it goes in its middle, and as before once cancelled', {
@@ -461,7 +431,7 @@ describe.each(KINDS)('many features dragged over a Store of %s', (kind) => {
     });
   });
 
-  describe.each([99, 100])('a handle of a handle provider on one square, %i rows held', (n) => {
+  describe('a handle of a handle provider on one square', () => {
     const BY: [number, number] = [-30, -20];
     /** The provider moves the square from where the drag started: a step after the press */
     const FOLLOWS: [number, number] = [
@@ -471,10 +441,8 @@ describe.each(KINDS)('many features dragged over a Store of %s', (kind) => {
 
     async function run(cancelled: boolean) {
       await restore(page);
-      // The first square selected, and the others held besides (over the Store of rows)
-      await hold(page, IDS.slice(1, n));
+      // The first square selected
       await select(page, [IDS[0] as string]);
-      expect(await heldCount(page)).toBe(kind === 'rows' ? n : 0);
       const selected = await readAll(page);
       await expectHitsAsDrawn(page, 'selected');
       const grabbed = await mapPointOf(page, at(-0.0063, 0.0054));
@@ -495,7 +463,6 @@ describe.each(KINDS)('many features dragged over a Store of %s', (kind) => {
       await idle(page);
       const end = await readAll(page);
       await expectHitsAsDrawn(page, 'once ended');
-      await hold(page, []);
 
       // The middle: the square drawn as it goes, nothing written, and nothing else moved
       expectNear(shiftOf(mid.drawn[I_FIRST] as Drawn, selected.drawn[I_FIRST] as Drawn), FOLLOWS);

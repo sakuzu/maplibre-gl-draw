@@ -45,7 +45,7 @@
   //
   // It keeps nothing of the drawing. The nodes are built from draw again on document.changed,
   // hidden.changed, options.changed, dataset.added, dataset.removed, dataset.reordered and the
-  // `changed` of a dataset (its visibility, its rows); the selected rows are draw.selection.get(),
+  // `changed` of a dataset (its visibility, its rows); the selected rows are draw.selection.value,
   // read again on selection.changed. Every action calls the public API of draw: the eye
   // `update({ visible })` (and shows again what this client hid) or a dataset's `setVisible`, the
   // lock `update({ locked })`, a drop `layers.reorder` (with `datasets.move` for a dataset that
@@ -140,7 +140,7 @@
       for (const off of offs) off();
     };
   });
-  const selection = $derived(follow(draw, ['selection.changed'], () => draw.selection.get()));
+  const selection = $derived(follow(draw, ['selection.changed'], () => draw.selection.value));
 
   const nodes = $derived(tree.get());
   const index = $derived(indexNodes(nodes));

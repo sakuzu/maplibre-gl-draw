@@ -42,7 +42,7 @@ export function toolbarShortcuts(
         key,
         label: messages.deleteSelection,
         group: messages.editGroup,
-        when: () => draw.selection.get().ids.length > 0,
+        when: () => (draw.selection.value.ids?.length ?? 0) > 0,
         run: (e) => !fromMapCanvas(draw, e) && draw.selection.delete(),
       });
     }

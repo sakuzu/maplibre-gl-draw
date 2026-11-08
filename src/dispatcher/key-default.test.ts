@@ -154,7 +154,7 @@ describe('the select mode', () => {
     expect(view.press('Escape')).toBe(true);
     expect(view.draw.vertexSelection.get()).toBeNull();
     expect(view.press('Escape')).toBe(true);
-    expect(view.draw.selection.get().ids).toEqual([]);
+    expect(view.draw.selection.value.ids).toEqual([]);
     expect(view.press('Escape')).toBe(false);
   });
 

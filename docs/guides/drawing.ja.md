@@ -289,8 +289,18 @@ const selected = draw.selection.features();
 選択は一度に 1 種類のものを持ち、グループやレイヤーも選べます
 (`draw.selection.set('group', [groupId])`)。`selection.features()` は、
 選んだ地物か、選んだグループやレイヤーの中の地物を返します。
-`selection.delete()` は選んでいるものを削除します。選択が変わるたびに、
-前の選択と合わせて `selection.changed` が届きます。
+`selection.value` は選んでいるものを伝えます。種類、地物の数、地物の
+レイヤーと範囲 (`bbox`)、ID です。`selection.delete()` は選んでいるものを
+削除します。選択が変わるたびに、前の選択と合わせて `selection.changed` が
+届きます。
+
+```ts
+const { type, count, ids, bbox } = draw.selection.value;
+// 何も選んでいない時は種類が 'feature' で数が 0 です
+const kept = draw.selection.target; // 今の選択
+draw.selection.clear();
+draw.selection.set(kept); // もう一度選びます
+```
 
 `selection.setAll(filter)` は絞り込みに合う地物をすべて選びます (Cmd+A は
 すべてを選びます)。`selection.count(filter)` は選んだ地物を数え、
@@ -307,10 +317,9 @@ draw.selection.update((sample) => ({
 
 ### たくさんの地物を一度に
 
-地物を行で持つストアでは、一度に地物にする数 (2,000) を超える地物はまとめて
-選ばれます。多くの地物を囲む矩形、`selection.setAll`、多くの地物を持つ
-グループやレイヤーの選択がそうです。このとき選択は ID の一覧を持たず、
-`selection.get().bulk` が数とレイヤーと範囲を伝えます。地物ごとの枠と、全体を
+地物を行で持つストアでは、2,000 件を超える地物の選択 (多くの地物を囲む
+矩形、`selection.setAll`) は ID を並べません。`selection.value.ids` は
+`null` で、値のほかの欄は少ない地物と同じに読めます。地物ごとの枠と、全体を
 囲む枠とハンドルは、複数選択と同じに表示されます。そのうちの 1 つを押して
 ドラッグするとすべてが動き、枠のハンドルですべてを回転、拡縮できます。
 書き込みは離したときに 1 回だけ行われます。矢印キーでも動かせます。押し続けた
@@ -319,11 +328,11 @@ draw.selection.update((sample) => ({
 ドラッグの途中でロックされた地物も残ります。
 
 `draw.selection` の操作 (`delete`、`group`、`ungroup`、`move`、`update`) は、
-まとめて選ばれた地物にも効きます。`selection.features(filter, { limit, after })`
+それらの地物にも効きます。`selection.features(filter, { limit, after })`
 はそれを 1 ページずつ読み、上限の無い読み出しは断ります。
-`selection.restore(selection)` は、前に読んだ選択 (まとめて選ばれた地物を
-含みます) をもう一度選びます。コピー、複製、面の演算、バッファは 2,000 件
-までの地物に使えます。それ以上の選択では使えないようにしてください。
+`selection.set(selection.target)` は、前に読んだ選択 (それらの地物を含みます)
+をもう一度選びます。選んだ地物の数で断る操作はありません。地物を読む物
+(コピーや複製) は 1 ページずつ読みます。
 
 ## キーボード
 

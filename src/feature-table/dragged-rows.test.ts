@@ -12,6 +12,7 @@ import { describe, expect, it } from 'vitest';
 import type { FeatureTables } from '../api/tables.js';
 import { listSelectedRows } from '../store/bulk-selection.js';
 import { DrawStore } from '../store/draw-store.js';
+import { selectionValueOf } from '../store/selection-value.js';
 import { TableContractStore } from '../store/table-memory.js';
 import type { Feature } from '../store/types.js';
 import { referenceRotate, referenceScale } from '../test-support/enu-reference.js';
@@ -43,7 +44,7 @@ function expectNear(actual: readonly number[] | undefined, expected: readonly nu
 }
 
 function setup() {
-  const store = new DrawStore(new TableContractStore(), { holdLimit: 2 });
+  const store = new DrawStore(new TableContractStore(), { selectionIdsLimit: 2 });
   store.createLayer({
     id: 'l',
     name: 'l',
@@ -130,14 +131,17 @@ describe('the rows dragged', () => {
     expect(dragged?.scale(handleOf('a'))).toBe(1);
   });
 
-  it('of a selection of many features are read by its summary', () => {
+  it('of a selection of many features are read by its value', () => {
     const { store, handleOf } = setup();
     store.setSelection('feature', ['a', 'b', 'c']);
-    const bulk = store.getSelection().bulk;
-    expect(Array.from(listSelectedRows(bulk as never))).toEqual(
+    const value = selectionValueOf(store);
+    expect(value.ids).toBeNull();
+    expect(Array.from(listSelectedRows(value))).toEqual(
       ['a', 'b', 'c'].map(handleOf).sort((x, y) => x - y),
     );
-    expect(listSelectedRows({ count: 0, layerIds: [], bbox: null })).toEqual(new Int32Array(0));
+    expect(
+      listSelectedRows({ type: 'feature', count: 0, ids: [], layerIds: [], bbox: null }),
+    ).toEqual(new Int32Array(0));
   });
 
   it('of a selection of many features are told once it is decided, and its end', () => {

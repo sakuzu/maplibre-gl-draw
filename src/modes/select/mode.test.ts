@@ -32,7 +32,6 @@ import type { Feature, StoreChange } from '../../store/types.js';
 import { referenceTranslate } from '../../test-support/enu-reference.js';
 import {
   createSketches,
-  internalsOf,
   planeMetersPerPixel,
   planeScaleFrame,
   STORE_KINDS,
@@ -136,7 +135,7 @@ describe.each(STORE_KINDS)('on %s', (_kind, createStore) => {
   let hit: HitTestResult | null;
   /** A row held as columns the hit returns, before the features of the Store */
   let rowTop: TopHit | null;
-  /** Whether each hit asked to hold the row it hits */
+  /** Whether each hit asked for the feature of the row it hits */
   let holds: boolean[];
   let context: EngineModeContext;
   let mode: SelectMode;
@@ -167,8 +166,8 @@ describe.each(STORE_KINDS)('on %s', (_kind, createStore) => {
       hitTestService: { hitTest: () => hit },
       // A stub for the unified z traversal (it returns only Store features). Select mode looks at
       // this rather than at hitTestService.hitTest.
-      hitTestTopmost: (_point: unknown, options?: { hold?: boolean }) => {
-        holds.push(options?.hold === true);
+      hitTestTopmost: (_point: unknown, options?: { asFeature?: boolean }) => {
+        holds.push(options?.asFeature === true);
         if (rowTop) return rowTop;
         return hit ? { kind: 'store', feature: hit.feature } : null;
       },
@@ -235,7 +234,7 @@ describe.each(STORE_KINDS)('on %s', (_kind, createStore) => {
       expect(holds.every((hold) => !hold)).toBe(true);
     });
 
-    it('asks the hit of a press that drags to hold the row it hits', () => {
+    it('asks the hit of a press that drags for the feature of the row it hits', () => {
       hit = { feature: store.getFeature('f1') as Feature, distance: 0 };
       mode.onDragStart(dragEvent());
       expect(holds).toContain(true);
@@ -790,7 +789,6 @@ describe.each(STORE_KINDS)('on %s', (_kind, createStore) => {
       mode.onDragMove(shiftDrag('dragmove', 12, 12));
       expect(marked('f1')).toBe(true);
       expect(store.getSelection()).toEqual({ type: null, ids: [] });
-      expect(internalsOf(store.tables).getOpenedFeature('f1')).toBeUndefined();
       mode.onDragEnd(shiftDrag('dragend', 12, 12));
       expect(marked('f1')).toBe(false);
       expect(store.getSelection()).toEqual({ type: 'feature', ids: ['f1'] });

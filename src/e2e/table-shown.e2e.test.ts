@@ -212,7 +212,7 @@ describe('another document shown in place of the document', () => {
         const readOnly = w.draw.isReadOnly();
         w.draw.document.setShown(null);
         w.captured.back = await w.settleFrame();
-        return { readOnly, selected: w.draw.selection.get().ids };
+        return { readOnly, selected: w.draw.selection.value.ids };
       },
       { live, version },
     );

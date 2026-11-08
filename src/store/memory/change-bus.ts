@@ -344,27 +344,6 @@ function mergeSnapshots(a: RowValues, b: RowValues): RowValues {
   return { handles: Int32Array.from(handles), fields, ...(deleted && { deleted }) };
 }
 
-/**
- * Folds the rows made features and no longer of two changes of a transaction into the difference
- * between the state before the first and after the second
- */
-export function mergeHeld(
-  a: NonNullable<StoreChange['opened']>,
-  b: NonNullable<StoreChange['opened']>,
-): NonNullable<StoreChange['opened']> {
-  const added = new Map(a.added.map((feature) => [feature.id, feature]));
-  const removed = new Set(a.removed);
-  for (const id of b.removed) {
-    if (added.has(id)) added.delete(id);
-    else removed.add(id);
-  }
-  for (const feature of b.added) {
-    if (removed.has(feature.id)) removed.delete(feature.id);
-    else added.set(feature.id, feature);
-  }
-  return { added: [...added.values()], removed: [...removed] };
-}
-
 function appendChanges(target: StoreChange, changes: StoreChange, index: UpdateIndex): void {
   // features
   if (changes.features) {
@@ -444,11 +423,6 @@ function appendChanges(target: StoreChange, changes: StoreChange, index: UpdateI
     target.previousValues = target.previousValues
       ? mergeSnapshots(target.previousValues as RowValues, changes.previousValues as RowValues)
       : changes.previousValues;
-  }
-
-  // rows made features and no longer (the difference over the transaction)
-  if (changes.opened) {
-    target.opened = target.opened ? mergeHeld(target.opened, changes.opened) : changes.opened;
   }
 
   // files

@@ -117,7 +117,6 @@ describe('the kasane subpath', () => {
         writer.apply({ handles: Int32Array.of(handle), fields: new Map([['visible', [true]]]) }),
       ),
     ).toBe('invalid-input');
-    expect(codeOf(() => writer.applyOpened('nothing', {} as never))).toBe('invalid-state');
     expect(codeOf(() => mergeRowBlock({ sources: [], rows: Int32Array.of(0, 0) }))).toBeDefined();
     expect(tables.get('l')).toBeUndefined();
   });

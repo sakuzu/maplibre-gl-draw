@@ -75,7 +75,7 @@ export function handleSelectDoubleClick(
 
   // Store features are not grabbed when a dataset is in the foreground (a row held as columns
   // is made a feature to select it)
-  const top = context.hitTestTopmost(event.point, { hold: true });
+  const top = context.hitTestTopmost(event.point, { asFeature: true });
   if (top?.kind !== 'store') return;
   event.originalEvent.preventDefault();
 
@@ -186,7 +186,7 @@ function handleFeatureClick(
   const { store } = context;
 
   // A row held as columns is made a feature to select it
-  let top = context.hitTestTopmost(event.point, { hold: true });
+  let top = context.hitTestTopmost(event.point, { asFeature: true });
 
   // A feature companion is in the foreground: the provider receives the click. When it consumes
   // it, core changes the selection in no way at all (not even clearing it as an empty click
@@ -222,8 +222,8 @@ function handleFeatureClick(
     }
   }
 
-  // Shift over features selected in bulk: the feature joins or leaves their rows (opened once
-  // few enough)
+  // Shift over features selected in bulk: the feature joins or leaves their rows (listed by
+  // their IDs once few enough)
   const rows = store.getSelectedRows();
   const handle = store.tables?.findRow(feature.id);
   if (event.modifiers.shift && rows && selection.type === 'feature' && handle !== undefined) {

@@ -328,14 +328,14 @@ export interface ToolbarSettings {
 
 /** The members of a draw instance that the toolbar uses */
 export type ToolbarDraw = Pick<Draw, 'getMode' | 'setMode' | 'isReadOnly' | 'on' | 'off'> & {
-  readonly selection: Pick<Draw['selection'], 'get' | 'delete'>;
+  readonly selection: Pick<Draw['selection'], 'value' | 'delete'>;
   readonly options: Pick<Draw['options'], 'get' | 'update'>;
 };
 
 /** The members of a draw instance that the whole interface uses */
 export type DrawUIDraw = ToolbarDraw &
   Pick<Draw, 'getMap'> & {
-    readonly selection: Pick<Draw['selection'], 'get' | 'delete' | 'clear'>;
+    readonly selection: Pick<Draw['selection'], 'value' | 'delete' | 'clear'>;
   };
 
 /**
@@ -400,7 +400,7 @@ export type LayerPanelDraw = Pick<Draw, 'on' | 'off'> & {
     Draw['features'],
     'get' | 'count' | 'update' | 'move' | 'getAppliedStyle'
   >;
-  readonly selection: Pick<Draw['selection'], 'get' | 'set' | 'clear' | 'group'>;
+  readonly selection: Pick<Draw['selection'], 'value' | 'set' | 'clear' | 'group'>;
   readonly hidden: Pick<Draw['hidden'], 'has' | 'remove'>;
   readonly datasets: Pick<Draw['datasets'], 'get' | 'list' | 'move'>;
   /** The channel a style rule colors for a type, which the colors of the features follow */

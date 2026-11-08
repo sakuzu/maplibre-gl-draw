@@ -342,13 +342,6 @@ export class GroupVersions {
     if (copy && copy.mark === mark) copy.mark = -1;
   }
 
-  /** A row of a delta is held as a feature: no version started, nor copy waiting, takes it */
-  rowHeld(handle: RowHandle): void {
-    for (const version of this.pending.values()) version.stays.add(handle);
-    const copy = this.waiting.get(handle);
-    if (copy) copy.mark = -1;
-  }
-
   /**
    * Starts the next versions of the groups due, and builds them on the main thread within the
    * budget (a large one in the Worker of the host). Without a side that draws the rows, a

@@ -6,13 +6,13 @@
  *
  * The candidates are the rows whose boxes meet the box of the click, from the one spatial index of
  * the boxes of every row (`FeatureTablesInternals.searchRowBoxes`: the box of the positions of a
- * row, the box the calculation of its type gives, or the box of the feature of a row held),
+ * row, or the box the calculation of its type gives),
  * tested from the front of the order. A candidate is
  * tested on its column, read in place as a shape, by the same test as a feature of its type: no
  * feature is made. A type whose test reads a feature (an image, the type of an extension, a
  * shape cut on the globe) is tested on the feature of the row (`FeatureCache`), given with the
  * hit for what reads it after. A hidden row (not shown, deleted, hidden by this client) is not a
- * candidate; a row a feature is drawn over for this client (`showInPlace`) is hit where it is.
+ * candidate; a row a sketch is drawn over for this client is hit where it is.
  */
 
 import { ColumnRun, type HitShape, type PositionRun } from '../shared/math/position-runs.js';

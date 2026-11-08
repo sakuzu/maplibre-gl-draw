@@ -415,39 +415,111 @@ describe('the invariants of the selection', () => {
     expect(store.getVertexSelection()).toBeNull();
   });
 
-  it('ends the vertex selection when the coordinates change other than by a drag', () => {
+  /** A line of four vertices along the x axis */
+  function line(id: string, xs: readonly number[] = [0, 1, 2, 3]): Feature {
+    return {
+      ...point(id),
+      type: 'LineString',
+      geometry: { type: 'LineString', coordinates: xs.map((x) => [x, 0]) },
+    };
+  }
+
+  it('ends the vertex selection when this client changes the coordinates other than by a drag', () => {
     const store = setup();
-    const vertices = { featureId: 'f1', vertices: [{ ring: 0, index: 0 }] };
-    store.setSelectedVertices(vertices);
+    store.createFeature(line('w'));
+    store.setSelectedVertices({ featureId: 'w', vertices: [{ ring: 0, index: 1 }] });
 
     // A property change keeps it
-    store.updateFeature('f1', { properties: { name: 'x' } });
+    store.updateFeature('w', { properties: { name: 'x' } });
     expect(store.getVertexSelection()).not.toBeNull();
 
-    // The commit of a drag keeps it
+    // The commit of a drag keeps it, a vertex added included
     store.setDragState({ operation: 'vertex' });
-    store.updateFeature('f1', { geometry: { type: 'Point', coordinates: [1, 1] } });
+    store.updateFeature('w', { geometry: line('w', [0, 9, 2, 3, 4]).geometry });
     store.setDragState(null);
-    expect(store.getVertexSelection()).not.toBeNull();
+    expect(store.getVertexSelection()).toEqual({
+      featureId: 'w',
+      vertices: [{ ring: 0, index: 1 }],
+    });
 
     // An edit that is not a drag ends it
-    store.updateFeature('f1', { geometry: { type: 'Point', coordinates: [2, 2] } });
+    store.updateFeature('w', { geometry: line('w', [0, 9, 2, 3, 5]).geometry });
     expect(store.getVertexSelection()).toBeNull();
   });
 
-  it('ends the vertex selection on a change of the coordinates from elsewhere during a drag', () => {
+  it('keeps the vertex selection by its places on a vertex moved from elsewhere, not on one added', () => {
     const document = new MemoryContractStore();
     const store = toStore(document);
     store.createLayer(layer('l1'));
-    store.createFeature(point('f1'));
-    store.setSelectedVertices({ featureId: 'f1', vertices: [{ ring: 0, index: 0 }] });
+    store.createFeature(line('w'));
+    store.setSelectedVertices({ featureId: 'w', vertices: [{ ring: 0, index: 0 }] });
     store.setDragState({ operation: 'move' });
 
+    // A vertex moved from elsewhere keeps it
     document.transact(
-      () => document.updateFeature('f1', { geometry: { type: 'Point', coordinates: [3, 3] } }),
+      () => document.updateFeature('w', { geometry: line('w', [0, 1, 2, 7]).geometry }),
       'remote',
     );
+    expect(store.getVertexSelection()).not.toBeNull();
 
+    document.transact(
+      () => document.updateFeature('w', { geometry: line('w', [0, 1, 2, 3, 4]).geometry }),
+      'remote',
+    );
+    expect(store.getVertexSelection()).toBeNull();
+  });
+
+  it('keeps the vertex selection on its vertices by their IDs, when the Store gives them', () => {
+    // The IDs of the vertices of the line, in their order
+    let ids = ['a', 'b', 'c', 'd'];
+    const document = Object.assign(new MemoryContractStore(), {
+      getVertexIds: (_featureId: string, vertices: readonly { index: number }[]) =>
+        vertices.map((vertex) => ids[vertex.index] as string),
+      findVertices: (_featureId: string, named: readonly string[]) =>
+        named.map((id) => (ids.includes(id) ? { ring: 0, index: ids.indexOf(id) } : null)),
+    });
+    const store = toStore(document);
+    store.createLayer(layer('l1'));
+    store.createFeature(line('w'));
+    store.setSelectedVertices({
+      featureId: 'w',
+      vertices: [
+        { ring: 0, index: 1 },
+        { ring: 0, index: 2 },
+      ],
+    });
+
+    // A vertex added before them from elsewhere: Delete still names the vertices selected
+    ids = ['n', 'a', 'b', 'c', 'd'];
+    document.transact(
+      () => document.updateFeature('w', { geometry: line('w', [-1, 0, 1, 2, 3]).geometry }),
+      'remote',
+    );
+    expect(store.getVertexSelection()).toEqual({
+      featureId: 'w',
+      vertices: [
+        { ring: 0, index: 2 },
+        { ring: 0, index: 3 },
+      ],
+    });
+
+    // One of them deleted: the other stays selected
+    ids = ['n', 'a', 'c', 'd'];
+    document.transact(
+      () => document.updateFeature('w', { geometry: line('w', [-1, 0, 2, 3]).geometry }),
+      'remote',
+    );
+    expect(store.getVertexSelection()).toEqual({
+      featureId: 'w',
+      vertices: [{ ring: 0, index: 2 }],
+    });
+
+    // None of them left: it ends
+    ids = ['n', 'a', 'd'];
+    document.transact(
+      () => document.updateFeature('w', { geometry: line('w', [-1, 0, 3]).geometry }),
+      'remote',
+    );
     expect(store.getVertexSelection()).toBeNull();
   });
 });

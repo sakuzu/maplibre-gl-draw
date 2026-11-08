@@ -27,6 +27,7 @@
  *     modes and the public API rely on it.
  */
 
+import type { VertexId } from '../api/state.js';
 import type { FeatureTables, RowWrite } from '../api/tables.js';
 import type { BulkOperation } from '../feature-table/bulk-plan.js';
 import {
@@ -53,6 +54,7 @@ import { ChangeBus } from './memory/change-bus.js';
 import { MemoryDrawingState } from './memory/ui-state.js';
 import { moveItemsByLists } from './move-items.js';
 import { BULK_SLICE_ROWS, type RowSteps, rowStepsOf } from './row-steps.js';
+import { valueOfSelection } from './selection-value.js';
 import type {
   EditResult,
   FeatureEdit,
@@ -81,41 +83,20 @@ import type {
   Selection,
   SelectionBulk,
   SelectionType,
+  SelectionValue,
   StoreChange,
   UpdateSource,
+  VertexRef,
   VertexSelection,
 } from './types.js';
 
 /**
- * The most features of rows held at once for the selection, the editing and the drag (a
- * selection of more is refused for now)
+ * The most features of rows the selection lists the IDs of: a selection of more is selected in
+ * bulk, by the states of its rows only (`Selection.bulk`)
  *
  * @internal
  */
-export const HOLD_LIMIT = 2000;
-
-/**
- * The owner of the rows held for the selection, the editing, the vertices selected and the
- * vertices that follow a drag
- *
- * @internal
- */
-export const SELECTION_OWNER = 'core:selection';
-
-/**
- * The owner of the rows the selection let go of, held a moment longer (a quick click elsewhere
- * and back does not make them features again)
- *
- * @internal
- */
-export const RELEASED_OWNER = 'core:released';
-
-/**
- * How long the rows the selection let go of stay held (ms)
- *
- * @internal
- */
-export const RELEASE_DELAY_MS = 100;
+export const SELECTION_IDS_LIMIT = 2000;
 
 /**
  * Returns the Store for a store option: a Store of core is used as it is, a Store of the host
@@ -133,8 +114,23 @@ export function toStore(store: StoreContract | Store): Store {
  * @internal
  */
 export interface DrawStoreOptions {
-  /** The most features of rows opened at once for the selection (`HOLD_LIMIT` when omitted) */
-  readonly holdLimit?: number;
+  /**
+   * The most features of rows the selection lists the IDs of (`SELECTION_IDS_LIMIT` when
+   * omitted)
+   */
+  readonly selectionIdsLimit?: number;
+}
+
+/**
+ * What a vertex selection names its vertices by: their IDs, when the Store gives its vertices IDs
+ * (null otherwise), the layout of the vertices of its feature (`vertexLayout`) and its coordinates
+ */
+interface VertexTargets {
+  readonly featureId: string;
+  readonly ids: readonly VertexId[] | null;
+  readonly layout: string;
+  /** The coordinates of the feature, as they were when the vertices were last named */
+  readonly coordinates: unknown;
 }
 
 /**
@@ -158,21 +154,13 @@ export class DrawStore implements Store {
   readonly #drawing = new MemoryDrawingState(this.#bus);
   /** The normalized copy of each object of the contract that gave `null` for an optional field */
   readonly #normalized = new WeakMap<object, object>();
-  /** The ids of the rows held for the selection, as last held */
-  #heldIds = new Set<string>();
   /**
-   * Whether what the rows held for the selection are read from may have changed since they were
-   * last held (the selection, the editing, the vertices selected, the vertices that follow a drag,
-   * the members of a group or a layer selected): a write of the document that changes none of it
-   * (a feature moved in the middle of a drag) does not read them again
+   * What the vertex selection names its vertices by (null while no vertex is selected): their IDs
+   * when the Store gives its vertices IDs (`getVertexIds`), and the layout of the vertices of the
+   * feature otherwise (see `#pruneVertices`)
    */
-  #heldStale = true;
-  /** The type of the selection the rows held were read from (current while they are not stale) */
-  #heldSelectionType: SelectionType | null = null;
-  /** The rows the selection let go of, held a moment longer */
-  readonly #released = new Set<string>();
-  #releaseTimer: ReturnType<typeof setTimeout> | null = null;
-  /** The features selected in bulk (null while the selection holds its features) */
+  #vertexTargets: VertexTargets | null = null;
+  /** The features selected in bulk (null while the selection lists its features) */
   #bulk: BulkState | null = null;
   /** The write of many rows made over several tasks under way, and whether a step of it runs */
   #sliced: SlicedWrite | null = null;
@@ -185,6 +173,8 @@ export class DrawStore implements Store {
   #bulkUnlocked: TableSelection | null = null;
   /** The selection as this Store told it last (what a change of it tells as the one before) */
   #toldSelection: Selection;
+  /** The value of the selection this Store told last (made when first asked) */
+  #toldValue: SelectionValue | null = null;
   /**
    * Whether the writes of this client of the document are taken (not while another document is
    * shown in its place); the writes in a transaction from elsewhere (`remote`) always are
@@ -192,11 +182,11 @@ export class DrawStore implements Store {
   #documentWritable = true;
   /** The transactions from elsewhere (`remote`) under way */
   #remoteDepth = 0;
-  readonly holdLimit: number;
+  readonly selectionIdsLimit: number;
 
   constructor(contract: StoreContract, options: DrawStoreOptions = {}) {
     this.#contract = contract;
-    this.holdLimit = options.holdLimit ?? HOLD_LIMIT;
+    this.selectionIdsLimit = options.selectionIdsLimit ?? SELECTION_IDS_LIMIT;
     this.#toldSelection = contract.getSelection();
     contract.subscribe((changes) => this.#receive(changes));
   }
@@ -460,9 +450,9 @@ export class DrawStore implements Store {
   setSelection(type: SelectionType | null, ids: string[]): void {
     // Read from the rows a restore under way leaves (see `#local`)
     this.#restoring?.finish();
-    // A selection of more features of rows than are opened at once is selected in bulk
+    // A selection of more features of rows than it lists the IDs of is selected in bulk
     const internals = featureTablesInternals(this.#contract.tables);
-    if (internals && type !== null && this.#heldCount(type, ids) > this.holdLimit) {
+    if (internals && type !== null && this.#featureCount(type, ids) > this.selectionIdsLimit) {
       this.#selectBulk(type, ids, this.#rowsOfSelection(internals, type, ids));
       return;
     }
@@ -471,6 +461,15 @@ export class DrawStore implements Store {
 
   getSelectedRows(): TableSelection | null {
     return this.#bulk?.rows ?? null;
+  }
+
+  rowsOfSelection(selection: Selection = this.getSelection()): TableSelection | null {
+    const internals = featureTablesInternals(this.#contract.tables);
+    if (!internals) return null;
+    const rows = rowsOfSummary(selection.bulk);
+    if (rows) return rows;
+    const { type, ids } = selection;
+    return type === null ? TableSelection.empty : this.#rowsOfSelection(internals, type, ids);
   }
 
   isSelectedRowLocked(): boolean {
@@ -499,7 +498,7 @@ export class DrawStore implements Store {
     if (!internals) return;
     const containers = this.#containers();
     const shown = rows.filter((handle) => isRowShown(internals, containers, handle));
-    if (shown.count > this.holdLimit) {
+    if (shown.count > this.selectionIdsLimit) {
       this.#selectBulk('feature', [], shown);
       return;
     }
@@ -590,7 +589,10 @@ export class DrawStore implements Store {
     return this.#contract.getVertexSelection();
   }
   setSelectedVertices(selection: VertexSelection | null): void {
-    this.#local(() => this.#contract.setSelectedVertices(selection), true);
+    this.#local(() => {
+      this.#contract.setSelectedVertices(selection);
+      this.#vertexTargets = selection && this.#vertexTargetsOf(selection);
+    }, true);
   }
 
   getMode(): Mode {
@@ -658,8 +660,6 @@ export class DrawStore implements Store {
   setFollowedVertices(selections: VertexSelection[] | null): void {
     this.#bus.transact(() => {
       this.#drawing.setFollowedVertices(selections);
-      this.#heldStale = true;
-      this.#syncHeld();
     }, 'local');
   }
 
@@ -732,14 +732,12 @@ export class DrawStore implements Store {
     this.#bus.transact(() => {
       fn();
       if (redraw) this.#bus.merge({ uiStateChanged: true });
-      this.#heldStale = true;
-      this.#syncHeld();
     }, 'local');
   }
 
   /**
-   * Selects items that hold their features (none in bulk): the features selected in bulk before,
-   * if any, are no longer
+   * Selects items by their IDs (none in bulk): the features selected in bulk before, if any, are
+   * no longer
    */
   #select(type: SelectionType | null, ids: string[]): void {
     this.#local(() => {
@@ -803,7 +801,6 @@ export class DrawStore implements Store {
     if (internals && (this.#bulk || had) && !before.equals(after)) {
       internals.bulkSelected(this.#bulk?.rows ?? null);
     }
-    this.#heldStale = true;
   }
 
   /**
@@ -830,11 +827,14 @@ export class DrawStore implements Store {
     ) {
       return null;
     }
+    const previousValue = this.#toldValue ?? valueOfSelection(this, previous);
+    const value = valueOfSelection(this, now);
     this.#toldSelection = {
       type: now.type,
       ids: [...now.ids],
       ...(now.bulk && { bulk: now.bulk }),
     };
+    this.#toldValue = value;
     return {
       type: now.type,
       ids: [...now.ids],
@@ -842,6 +842,8 @@ export class DrawStore implements Store {
       previousIds: [...previous.ids],
       ...(now.bulk && { bulk: now.bulk }),
       ...(previous.bulk && { previousBulk: previous.bulk }),
+      value,
+      previousValue,
     };
   }
 
@@ -984,8 +986,8 @@ export class DrawStore implements Store {
         this.#refreshSummary(changes);
         return;
       }
-      // Few enough: the features of the groups or the layers are opened again
-      this.#setBulk(rows.count > this.holdLimit ? { type: bulk.type, rows } : null);
+      // Few enough: the groups or the layers are selected by their IDs again
+      this.#setBulk(rows.count > this.selectionIdsLimit ? { type: bulk.type, rows } : null);
       this.#notifySelection(previous);
       return;
     }
@@ -1000,12 +1002,12 @@ export class DrawStore implements Store {
       this.#refreshSummary(changes);
       return;
     }
-    if (rows.count > this.holdLimit) {
+    if (rows.count > this.selectionIdsLimit) {
       this.#setBulk({ type: 'feature', rows });
       this.#notifySelection(previous);
       return;
     }
-    // Few enough: they are opened as features
+    // Few enough: they are selected by their IDs
     const ids: string[] = [];
     for (const handles of rowsByLayerInOrder(internals, rows).values()) {
       for (const handle of handles) ids.push(internals.ids.idOf(handle) as string);
@@ -1040,7 +1042,7 @@ export class DrawStore implements Store {
   /**
    * The number of features of rows a selection holds (0 for a Store without rows)
    */
-  #heldCount(type: SelectionType | null, ids: readonly string[]): number {
+  #featureCount(type: SelectionType | null, ids: readonly string[]): number {
     const tables = this.#contract.tables;
     if (!tables) return 0;
     if (type === 'group') {
@@ -1060,88 +1062,10 @@ export class DrawStore implements Store {
   }
 
   /**
-   * Holds as features the rows selected (the members of the groups and the layers selected), being
-   * edited, whose vertices are selected, and whose vertices follow a drag, before the notification
-   * of the change goes out (a Store without rows has nothing to hold)
-   */
-  #syncHeld(): void {
-    const tables = this.#contract.tables;
-    const holder = featureTablesInternals(tables);
-    if (!tables || !holder || !this.#heldStale) return;
-    this.#heldStale = false;
-    const ids = new Set<string>();
-    const selection = this.#contract.getSelection();
-    this.#heldSelectionType = selection.type;
-    // The features selected in bulk are not opened
-    if (this.#bulk) {
-      // nothing of the selection
-    } else if (selection.type === 'feature') {
-      for (const id of selection.ids) ids.add(id);
-    } else if (selection.type === 'group') {
-      for (const id of selection.ids) {
-        const group = this.#contract.getGroup(id);
-        if (group) for (const member of tableGroupMemberIds(tables, group)) ids.add(member);
-      }
-    } else if (selection.type === 'layer') {
-      for (const id of selection.ids) {
-        for (const member of tableLayerFeatureIds(tables, id)) ids.add(member);
-      }
-    }
-    for (const id of this.#contract.getEditingIds()) ids.add(id);
-    const vertices = this.#contract.getVertexSelection();
-    if (vertices) ids.add(vertices.featureId);
-    for (const followed of this.#drawing.getFollowedVertices() ?? []) ids.add(followed.featureId);
-    const before = this.#heldIds;
-    // The same features, every one held that has a row (one whose row came back after the rows
-    // were replaced is opened again)
-    if (
-      ids.size === before.size &&
-      [...ids].every(
-        (id) =>
-          before.has(id) &&
-          (holder.getOpenedFeature(id) !== undefined || tables.findRow(id) === undefined),
-      )
-    ) {
-      return;
-    }
-    this.#heldIds = ids;
-    // What the selection lets go of stays held a moment (unless it is named again meanwhile)
-    const releasedBefore = [...this.#released];
-    let released = false;
-    for (const id of before) {
-      if (ids.has(id) || this.#released.has(id)) continue;
-      this.#released.add(id);
-      released = true;
-    }
-    for (const id of ids) {
-      if (this.#released.delete(id)) released = true;
-    }
-    // A row passing from one owner to the other is named by one of them all the while
-    if (released) holder.open(RELEASED_OWNER, [...new Set([...releasedBefore, ...this.#released])]);
-    holder.open(SELECTION_OWNER, [...ids]);
-    if (!released) return;
-    holder.open(RELEASED_OWNER, [...this.#released]);
-    if (this.#releaseTimer !== null) clearTimeout(this.#releaseTimer);
-    this.#releaseTimer = setTimeout(() => {
-      this.#releaseTimer = null;
-      this.#released.clear();
-      holder.open(RELEASED_OWNER, []);
-    }, RELEASE_DELAY_MS);
-  }
-
-  /**
-   * The rows were taken out of the tables, to come back (`FeatureTablesWriter.clear`): none is
-   * opened any more, and the features selected in bulk are let go of. The features selected stay
-   * selected, and their rows are opened again when they are selected again once they are back
+   * The rows were taken out of the tables, to come back (`FeatureTablesWriter.clear`): the
+   * features selected in bulk are let go of. The features selected by their IDs stay selected
    */
   #rowsReplaced(): void {
-    this.#heldIds = new Set();
-    this.#released.clear();
-    if (this.#releaseTimer !== null) {
-      clearTimeout(this.#releaseTimer);
-      this.#releaseTimer = null;
-    }
-    this.#heldStale = true;
     if (this.#bulk) {
       this.#selecting = true;
       try {
@@ -1165,7 +1089,6 @@ export class DrawStore implements Store {
     const run = <T>(fn: () => T, source: UpdateSource): T =>
       this.#restoring ? this.#bus.continueHeld(fn) : this.#bus.transact(fn, source);
     run(() => {
-      if (this.#contract.tables && this.#changesHeld(changes)) this.#heldStale = true;
       const normalized = this.#normalizeChanges(withoutSource(changes));
       if (normalized.selection) {
         // The selection as this Store reads it, from the one it told before
@@ -1176,12 +1099,12 @@ export class DrawStore implements Store {
       this.#bus.merge(normalized);
       if (changes.reset === true && this.#contract.tables) this.#rowsReplaced();
       for (const feature of changes.features?.deleted ?? []) this.#forget(feature.id);
+      if (hasRowsDeleted(changes)) this.#forgetRowsDeleted();
       for (const group of changes.groups?.deleted ?? []) this.#forget(group.id);
       for (const layer of changes.layers?.deleted ?? []) this.#forget(layer.id);
       if (mayHide(changes)) this.#pruneInvisible();
       if (this.#bulk) this.#pruneBulk(changes);
       this.#pruneVertices(changes);
-      this.#syncHeld();
     }, changes.source ?? 'local');
   }
 
@@ -1260,48 +1183,36 @@ export class DrawStore implements Store {
     return normalized;
   }
 
-  /**
-   * Whether a notification of the contract may change the rows held for the selection: a change
-   * of the state of this client (the selection, the editing, the vertices), a deletion or a
-   * reset, and for a group or a layer selected, a change of what is in a group or a layer
-   */
-  #changesHeld(changes: StoreChange): boolean {
-    if (changes.selection || changes.editing || changes.uiStateChanged || changes.reset) {
-      return true;
-    }
-    if (changes.features?.deleted?.length) return true;
-    if (changes.groups?.deleted?.length || changes.layers?.deleted?.length) return true;
-    if (mayHide(changes)) return true;
-    // A change of the selection marks them stale above, so the type they were read from is the
-    // type of the selection now (reading the selection copies its ids)
-    const type = this.#heldSelectionType;
-    if (type !== 'group' && type !== 'layer') return false;
-    if (changes.features?.created?.length || changes.groups || changes.layers) return true;
-    for (const rows of changes.rows?.layers.values() ?? []) {
-      if (rows.created.length > 0 || rows.deleted.length > 0) return true;
-      if (rows.fields.has('groupId') || rows.fields.has('layerId')) return true;
-    }
-    return false;
-  }
-
   /** Removes an id that no longer names anything from the state of this client */
   #forget(id: string): void {
     const contract = this.#contract;
     if (contract.getFeature(id) || contract.getGroup(id) || contract.getLayer(id)) return;
     const selection = contract.getSelection();
     if (selection.ids.includes(id)) {
-      this.#heldStale = true;
       const ids = selection.ids.filter((selected) => selected !== id);
       contract.setSelection(ids.length === 0 ? null : selection.type, ids);
     }
     if (contract.getEditingIds().includes(id)) {
-      this.#heldStale = true;
       contract.endEditing([id]);
     }
     if (contract.isHidden(id)) {
       contract.setLocallyHidden(id, false);
       this.#bus.merge({ uiStateChanged: true });
     }
+  }
+
+  /**
+   * Removes the IDs of rows deleted from the state of this client (see `#forget`): the rows a
+   * notification tells by their handles, looked for among the IDs it holds
+   */
+  #forgetRowsDeleted(): void {
+    const contract = this.#contract;
+    const named = new Set<string>();
+    const selection = contract.getSelection();
+    if (selection.type === 'feature') for (const id of selection.ids) named.add(id);
+    for (const id of contract.getEditingIds()) named.add(id);
+    for (const id of contract.listHidden()) named.add(id);
+    for (const id of named) this.#forget(id);
   }
 
   /**
@@ -1315,38 +1226,105 @@ export class DrawStore implements Store {
     const shown = createShownLookup(this.#contract);
     const kept = selection.ids.filter((id) => shown(type, id));
     if (kept.length !== selection.ids.length) {
-      this.#heldStale = true;
       this.#contract.setSelection(kept.length > 0 ? type : null, kept);
     }
   }
 
   /**
-   * Ends the vertex selection when its feature is gone or its coordinates changed other than
-   * by a local drag (a change from elsewhere, an edit through the API): the indices it holds
-   * would name other vertices
+   * What a vertex selection names its vertices by: their IDs when the Store gives its vertices IDs,
+   * and the layout of the vertices of its feature (null for a feature that is not there)
+   */
+  #vertexTargetsOf(selection: VertexSelection): VertexTargets | null {
+    const feature = this.#contract.getFeature(selection.featureId);
+    if (!feature) return null;
+    const getVertexIds = this.getVertexIds;
+    return {
+      featureId: selection.featureId,
+      ids: getVertexIds && this.findVertices ? getVertexIds(feature.id, selection.vertices) : null,
+      layout: vertexLayout(feature),
+      coordinates: coordinatesOf(feature),
+    };
+  }
+
+  /**
+   * Keeps the vertex selection on its vertices after a change of its feature from elsewhere or by a
+   * local drag, and ends it when the feature is gone, or when this client changes its coordinates
+   * other than by a drag (a move by the arrow keys, an edit through the API). Named by their IDs,
+   * their places are read again (`findVertices`): a vertex that is no longer there leaves the
+   * selection, which ends once none is left, and a vertex added or moved elsewhere keeps it. Named
+   * by their places, it ends when the vertices of the feature are no longer as many in each ring
+   * and part: a vertex moved keeps it
    */
   #pruneVertices(changes: StoreChange): void {
     const vertices = this.#contract.getVertexSelection();
-    if (!vertices) return;
+    if (!vertices) {
+      this.#vertexTargets = null;
+      return;
+    }
     const featureId = vertices.featureId;
-    if (!this.#contract.getFeature(featureId)) {
+    const feature = this.#contract.getFeature(featureId);
+    if (!feature) {
       this.#endVertexSelection();
       return;
     }
-    const local = changes.source !== 'remote';
-    for (const entry of changes.features?.updated ?? []) {
-      if (entry.id !== featureId) continue;
-      // The commit of a local drag keeps the vertices being dragged selected
-      if (local && this.#drawing.getDragState() !== null) continue;
-      if (sameCoordinates(coordinatesOf(entry.feature), coordinatesOf(entry.previous))) continue;
+    const targets = this.#vertexTargets;
+    if (!targets || targets.featureId !== featureId) {
+      this.#vertexTargets = this.#vertexTargetsOf(vertices);
+      return;
+    }
+    if (!this.#featureChanged(changes, featureId)) return;
+    const coordinates = coordinatesOf(feature);
+    const remote = changes.source === 'remote';
+    const dragged = !remote && this.#drawing.getDragState() !== null;
+    if (!remote && !dragged && !sameCoordinates(coordinates, targets.coordinates)) {
       this.#endVertexSelection();
       return;
     }
+    const layout = vertexLayout(feature);
+    const findVertices = this.findVertices;
+    if (targets.ids && findVertices) {
+      const places = findVertices(featureId, targets.ids);
+      const kept: VertexRef[] = [];
+      const ids: VertexId[] = [];
+      places.forEach((place, i) => {
+        if (!place) return;
+        kept.push(place);
+        ids.push(targets.ids?.[i] as VertexId);
+      });
+      if (kept.length === 0) {
+        this.#endVertexSelection();
+        return;
+      }
+      this.#vertexTargets = { featureId, ids, layout, coordinates };
+      if (!sameVertexRefs(kept, vertices.vertices)) {
+        this.#contract.setSelectedVertices({ featureId, vertices: kept });
+        this.#bus.merge({ uiStateChanged: true });
+      }
+      return;
+    }
+    // The commit of a local drag keeps the vertices being dragged selected
+    if (layout !== targets.layout && !dragged) {
+      this.#endVertexSelection();
+      return;
+    }
+    this.#vertexTargets = { ...targets, layout, coordinates };
+  }
+
+  /** Whether a notification wrote a feature: as a feature, or as its row */
+  #featureChanged(changes: StoreChange, id: string): boolean {
+    if (changes.reset) return true;
+    if (changes.features?.updated?.some((entry) => entry.id === id)) return true;
+    const handle = changes.rows ? this.#contract.tables?.findRow(id) : undefined;
+    if (handle === undefined) return false;
+    for (const rows of changes.rows?.layers.values() ?? []) {
+      if (rows.updated.includes(handle) || rows.created.includes(handle)) return true;
+    }
+    return false;
   }
 
   /** Clears the vertex selection, marking the notification for the drawing */
   #endVertexSelection(): void {
-    this.#heldStale = true;
+    this.#vertexTargets = null;
     this.#contract.setSelectedVertices(null);
     this.#bus.merge({ uiStateChanged: true });
   }
@@ -1403,7 +1381,59 @@ function mayHide(changes: StoreChange): boolean {
     if (feature.visible !== previous.visible) return true;
     if (feature.layerId !== previous.layerId || feature.groupId !== previous.groupId) return true;
   }
+  for (const rows of changes.rows?.layers.values() ?? []) {
+    if (rows.updated.length === 0) continue;
+    if (rows.fields.has('visible') || rows.fields.has('layerId') || rows.fields.has('groupId')) {
+      return true;
+    }
+  }
   return false;
+}
+
+/** Whether a notification tells rows deleted */
+function hasRowsDeleted(changes: StoreChange): boolean {
+  for (const rows of changes.rows?.layers.values() ?? []) {
+    if (rows.deleted.length > 0) return true;
+  }
+  return false;
+}
+
+/**
+ * The layout of the vertices of a feature: how many positions each ring and part has, which a
+ * vertex selection by places keeps (a vertex moved keeps it, one added or deleted does not)
+ */
+function vertexLayout(feature: Feature): string {
+  const out: number[] = [];
+  const walk = (value: unknown): void => {
+    if (!Array.isArray(value) || value.length === 0 || typeof value[0] === 'number') return;
+    out.push(value.length);
+    for (const item of value) walk(item);
+  };
+  walk(coordinatesOf(feature));
+  return out.join(',');
+}
+
+/** Whether two nested arrays of coordinates hold the same numbers */
+function sameCoordinates(a: unknown, b: unknown): boolean {
+  if (a === b) return true;
+  if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) {
+    if (!sameCoordinates(a[i], b[i])) return false;
+  }
+  return true;
+}
+
+/** Whether two lists of vertices name the same vertices */
+function sameVertexRefs(a: readonly VertexRef[], b: readonly VertexRef[]): boolean {
+  return (
+    a.length === b.length &&
+    a.every(
+      (vertex, i) =>
+        (vertex.part ?? 0) === (b[i].part ?? 0) &&
+        vertex.ring === b[i].ring &&
+        vertex.index === b[i].index,
+    )
+  );
 }
 
 /**
@@ -1449,16 +1479,6 @@ function createShownLookup(document: StoreContract): (type: SelectionType, id: s
     if (feature.groupId && !groupShown(feature.groupId)) return false;
     return layerShown(feature.layerId);
   };
-}
-
-/** Whether two coordinate values are equal, position by position */
-function sameCoordinates(a: unknown, b: unknown): boolean {
-  if (a === b) return true;
-  if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length) return false;
-  for (let i = 0; i < a.length; i++) {
-    if (!sameCoordinates(a[i], b[i])) return false;
-  }
-  return true;
 }
 
 /** Whether a feature of the contract gives `null` for an optional field */

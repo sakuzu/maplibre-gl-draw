@@ -12,11 +12,10 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { DragNormalizedEvent, MouseNormalizedEvent } from '../../dispatcher/types.js';
-import { RELEASE_DELAY_MS } from '../../store/draw-store.js';
 import type { Store } from '../../store/store.js';
 import { createTableStore } from '../../store/table-memory.js';
 import type { Feature } from '../../store/types.js';
-import { createMapStub, createSyntheticInput, internalsOf } from '../../test-utils.js';
+import { createMapStub, createSyntheticInput } from '../../test-utils.js';
 import type { Draw } from '../draw.js';
 import { createDrawOnEngine } from './create-draw.js';
 import type { Engine } from './engine.js';
@@ -110,19 +109,14 @@ function event<T extends MouseNormalizedEvent | DragNormalizedEvent>(
 }
 
 describe('the input of the user over a Store of rows', () => {
-  it('selects a row with a click, held as a feature, and lets go of it a moment after', () => {
+  it('selects a row with a click, and a click on nothing lets go of it', () => {
     const tables = store.tables;
     if (!tables) throw new Error('rows');
     createSyntheticInput(engine).click([0.25, 0.25]);
     expect(store.getSelection()).toEqual({ type: 'feature', ids: ['a'] });
-    const held = internalsOf(tables).getOpenedFeature('a');
-    expect(held).toBeDefined();
-    expect(draw.features.get('a')).toEqual(held);
-    // A click on nothing lets go of it a moment later
+    expect(draw.features.get('a')).toMatchObject({ id: 'a', type: 'Polygon' });
     createSyntheticInput(engine).click([5, 5]);
     expect(store.getSelection().ids).toEqual([]);
-    vi.advanceTimersByTime(RELEASE_DELAY_MS * 2);
-    expect(internalsOf(tables).getOpenedFeature('a')).toBeUndefined();
   });
 
   it('writes the row of a vertex dragged once let go, and nothing in the middle of the drag', () => {
@@ -131,8 +125,9 @@ describe('the input of the user over a Store of rows', () => {
     createSyntheticInput(engine).click([0.25, 0.25]);
     let updates = 0;
     store.subscribe((change) => {
-      for (const entry of change.features?.updated ?? []) {
-        if (entry.id === 'a') updates++;
+      const handle = tables.findRow('a');
+      for (const rows of change.rows?.layers.values() ?? []) {
+        if (handle !== undefined && rows.updated.includes(handle)) updates++;
       }
     });
     const router = engine.inputRouter;
@@ -152,10 +147,8 @@ describe('the input of the user over a Store of rows', () => {
     router.dispatch(event<DragNormalizedEvent>('dragend', 0.7, -0.2, [0.5, 0]));
     expect(corner()).toEqual([0.7, -0.2]);
     expect(updates).toBe(1);
-    // Read so once it is no longer held
+    // Read so once it is no longer selected
     store.setSelection(null, []);
-    vi.advanceTimersByTime(RELEASE_DELAY_MS * 2);
-    expect(internalsOf(tables).getOpenedFeature('a')).toBeUndefined();
     expect(corner()).toEqual([0.7, -0.2]);
   });
 

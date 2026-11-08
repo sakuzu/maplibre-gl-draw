@@ -97,7 +97,7 @@ change is made.
 
 | Event | Payload |
 | --- | --- |
-| `selection.changed` | `{ selection: Selection; previous: Selection }` |
+| `selection.changed` | `{ selection; previous }` (`SelectionValue`) |
 | `vertexSelection.changed` | `{ selection; previous }` |
 | `mode.changed` | `{ mode; previous }` |
 | `hidden.changed` | `{ ids }` |
@@ -197,16 +197,17 @@ present only when the transaction changed it.
 | `previousValues` | The values the rows had before a write of this client |
 | `restoreToken` | What keeps the rows and the groups this client deleted |
 | `rows` | The rows written (experimental) |
-| `opened` | The rows opened as features for this client (experimental) |
 
-The last four come from a Store that holds its features as rows. Such a
-Store tells the rows that are not features (not selected or edited) by
-`rows`, by their handles, rather than in `features`, and many rows put in
-another place at once by one entry of `order`; `document.changed` is the
-only event that tells them. `previousValues` and `restoreToken` are what
-an undo writes back with `draw.features.restore` and `draw.groups.restore`
-(see [Saving and loading](../guides/save-load.md)). The types of `rows`
-and `opened` are in `@sakuzu/maplibre-gl-draw/kasane`.
+The last three come from a Store that holds its features as rows. Such a
+Store tells the rows written by `rows`, by their handles, rather than in
+`features`, whether they are selected or not, and many rows put in another
+place at once by one entry of `order`; `document.changed` is the only event
+that tells them. `previousValues` and `restoreToken` are what an undo writes
+back with `draw.features.restore` and `draw.groups.restore` (see
+[Saving and loading](../guides/save-load.md)). The type of `rows` is in
+`@sakuzu/maplibre-gl-draw/kasane`. `selection` is the selection as the
+Store keeps it, without the IDs of the features selected past 2,000:
+`selection.changed` gives it as `draw.selection.value` does.
 
 A listener that rebuilds a view on any change (a feature list, a legend)
 listens to `document.changed`, so that a load of 1,000 features costs one
@@ -283,9 +284,10 @@ cancelled.
 `drag.started` fires when a drag of the select mode starts, and
 `drag.ended` when it ends. They come in pairs with the same `kind` and
 `featureIds`, among them the features a shared vertex takes along. A drag of
-features selected in bulk (`Selection.bulk`) has no IDs in `featureIds`:
-`bulk` tells how many and where, and
-`listSelectedRows(bulk)` of `/kasane` reads their rows.
+features selected without their IDs listed (past 2,000) has no IDs in
+`featureIds`: `bulk`, the value of their selection (`SelectionValue`), tells
+how many and where, and `listSelectedRows(bulk)` of `/kasane` reads their
+rows.
 
 - `kind` is `feature` for moving features, `vertex` for moving or adding a
   vertex, and `handle` for the handles of the selection (resizing,
@@ -334,9 +336,12 @@ in the same `document.changed` as the features, with `layer.created` and
 
 ### selection.changed
 
-`selection` and `previous` are `{ type, ids }`, where `type` is `feature`,
-`group`, `layer` or `null` when nothing is selected. The selection holds
-only what can be seen, so hiding or deleting a selected item fires it too.
+`selection` and `previous` are what `draw.selection.value` gives
+(`SelectionValue`): the type (`feature`, `group` or `layer`; `feature` with
+the number 0 when nothing is selected), the number of the features, their
+layers and extent, and the IDs (`null` past 2,000 features of a Store that
+holds its features as rows). The selection holds only what can be seen, so
+hiding or deleting a selected item fires it too.
 
 ### vertexSelection.changed
 

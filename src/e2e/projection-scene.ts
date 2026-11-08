@@ -99,7 +99,7 @@ export async function openProjectionScene(page: Page, kind: StoreKind): Promise<
       kind,
       features: [],
       images: { color: hex(IMAGE) },
-      rowsOptions: { holdLimit: 1 },
+      rowsOptions: { selectionIdsLimit: 1 },
     },
     10,
   );

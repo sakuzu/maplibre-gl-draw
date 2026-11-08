@@ -81,9 +81,9 @@ interface RenderCoordinator {
 ```
 
 `shouldRepaint(changes)` is true when the `StoreChange` carry any of
-`features`, `rows` and `opened` (a Store that holds its features as
-rows), `layers` (including the order between layers), `groups`, `order`
-(the items put in another place), `selection`, `uiStateChanged` (drag
+`features`, `rows` (a Store that holds its features as rows), `layers`
+(including the order between layers), `groups`, `order` (the items put in
+another place), `selection`, `uiStateChanged` (drag
 state, box selection) or `reset`. The sketches, the shape being drawn
 among them, ask for the next draw themselves.
 

@@ -243,7 +243,7 @@ describe('the writes of draw.features of rows that are not selected', () => {
       if (change.source === 'local' && change.previousValues) steps.push(change.previousValues);
     });
     const start = rowsOf(draw, tables);
-    expect(draw.selection.get().ids).toEqual([]);
+    expect(draw.selection.value.ids).toEqual([]);
     draw.features.update('p2', {
       geometry: { type: 'Point', coordinates: [7, 7] },
       properties: { n: 70 },

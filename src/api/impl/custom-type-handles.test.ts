@@ -398,7 +398,7 @@ describe.each(STORE_KINDS)('the handles of a footprint laid on the map over %s',
 
 describe('the handles of a footprint laid on the map, of features selected in bulk', () => {
   it('write the fields the type declares on the rows, as one by one', () => {
-    const store = new DrawStore(new TableContractStore(), { holdLimit: 3 });
+    const store = new DrawStore(new TableContractStore(), { selectionIdsLimit: 3 });
     const ids = ['a', 'b', 'c', 'd'];
     const view = open(
       store,

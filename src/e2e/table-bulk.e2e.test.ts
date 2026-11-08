@@ -146,7 +146,7 @@ async function open(page: Page, features: SceneFeature[], form: 'rows' | 'store'
       };
       let store: Contract;
       if (form === 'rows') {
-        const made = w.e2e.tables.createTableStore({ holdLimit: 3 });
+        const made = w.e2e.tables.createTableStore({ selectionIdsLimit: 3 });
         store = made.store as unknown as Contract;
         store.createLayer({ ...layer, kind: 'table' } as never);
         const builder = w.e2e.tables.createRowBlockBuilder({});
@@ -344,7 +344,7 @@ async function dump(page: Page, scene: string, a: string, b: string, level: numb
 async function selection(page: Page): Promise<{ bulk: boolean; count: number }> {
   return page.evaluate(() => {
     const draw = (window as unknown as { draw: import('../index.js').Draw }).draw;
-    return { bulk: draw.selection.get().bulk !== undefined, count: draw.selection.count() };
+    return { bulk: draw.selection.value.ids === null, count: draw.selection.count() };
   });
 }
 

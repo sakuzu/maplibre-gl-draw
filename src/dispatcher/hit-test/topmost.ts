@@ -30,10 +30,9 @@
  *
  * A layer the Store holds as rows of columns (`store.tables`) is tested on its rows
  * (`feature-table/hit-test.ts`), read in place: a row hit is returned as it is, as a row
- * (`kind: 'row'`), and no feature of the Store is made for it. A row held as a feature (selected,
- * edited) is a feature of the Store (`kind: 'store'`). A caller that needs the feature of the row
- * it hits (a click selects it, a drag moves it) asks for it (`hold`): the row is then held as a
- * feature for a moment (`core:pointer`), until the selection holds it.
+ * (`kind: 'row'`), and no feature of the Store is made for it. A caller that needs the feature of
+ * the row it hits (a click selects it, a drag moves it) asks for it (`asFeature`): the feature of
+ * the row is made then, as the Store gives it (`kind: 'store'`, kept by the version of the row).
  *
  * When the features of a layer are examined, the companions of a feature
  * (view/feature-companion) are asked right after the test of the feature itself fails and
@@ -48,10 +47,7 @@
 import type { DisplayHitTestFn } from '../../dataset/dataset.js';
 import type { DatasetManager } from '../../dataset/manager.js';
 import type { Dataset } from '../../dataset/types.js';
-import {
-  type FeatureTablesInternals,
-  featureTablesInternals,
-} from '../../feature-table/feature-tables.js';
+import type { FeatureTablesInternals } from '../../feature-table/feature-tables.js';
 import {
   hitTestLayerTable,
   type TableRowHit,
@@ -121,26 +117,12 @@ export type TopHit =
  */
 export interface TopmostHitTestOptions {
   /**
-   * Whether a row held as columns that is hit is made a feature of the Store and returned as
-   * one (`kind: 'store'`): only where the feature is needed (a click, a double click, a press
-   * that drags). Without it a row is returned as a row, and nothing is made of it
+   * Whether a row held as columns that is hit is returned as the feature the Store makes of it
+   * (`kind: 'store'`): only where the feature is needed (a click, a double click, a press that
+   * drags). Without it a row is returned as a row, and nothing is made of it
    */
-  hold?: boolean;
+  asFeature?: boolean;
 }
-
-/**
- * The owner of the row a hit holds for a moment, until the selection holds it
- *
- * @internal
- */
-export const POINTER_OWNER = 'core:pointer';
-
-/**
- * How long a row a hit holds stays held, unless something else holds it (ms)
- *
- * @internal
- */
-export const POINTER_HOLD_MS = 100;
 
 /**
  * Returns the single frontmost hit at a screen position, across the Store, the
@@ -279,24 +261,6 @@ export function createTopmostHitTester(deps: TopmostHitTestDeps): HitTestTopmost
     return companion ? { kind: 'companion', companion } : null;
   };
 
-  /** The timer that lets go of the row a hit holds */
-  let pointerTimer: ReturnType<typeof setTimeout> | null = null;
-
-  /**
-   * Holds the row hit as a feature for a moment (until the selection holds it, or the next hit
-   * that holds one)
-   */
-  const holdForPointer = (id: string): void => {
-    const tables = featureTablesInternals(store.tables);
-    if (!tables) return;
-    if (pointerTimer !== null) clearTimeout(pointerTimer);
-    tables.open(POINTER_OWNER, [id]);
-    pointerTimer = setTimeout(() => {
-      pointerTimer = null;
-      tables.open(POINTER_OWNER, []);
-    }, POINTER_HOLD_MS);
-  };
-
   /**
    * The rows a hit leaves out besides their state: the rows of a group hidden by this client, and
    * what the drag of this client edits (undefined when it leaves out none)
@@ -391,7 +355,7 @@ export function createTopmostHitTester(deps: TopmostHitTestDeps): HitTestTopmost
   };
 
   /**
-   * What a row hit is: a row, or a feature of the Store for a row held (made one when `hold`)
+   * What a row hit is: a row, or the feature the Store makes of it (when `asFeature`)
    */
   const rowHitOf = (
     tables: FeatureTablesInternals,
@@ -399,18 +363,15 @@ export function createTopmostHitTester(deps: TopmostHitTestDeps): HitTestTopmost
     layer: Layer,
     found: { hit: TableRowHit; coordinate: Coordinate },
     point: ScreenPoint,
-    hold: boolean,
+    asFeature: boolean,
   ): TopHit => {
     const { hit, coordinate } = found;
     const data = hit.group.data;
     const handle = data.handles[hit.row];
     const id = tables.ids.idOf(handle) as string;
-    const held = tables.getOpenedFeature(id);
-    if (held) return { kind: 'store', feature: held };
-    if (hold) {
-      holdForPointer(id);
-      const feature = tables.getOpenedFeature(id);
-      if (feature) return { kind: 'store', feature };
+    if (asFeature) {
+      const feature = tables.featureCache.featureOf(table.layerId, hit.group, hit.row);
+      return { kind: 'store', feature };
     }
     const groupHandle = data.groups[hit.row];
     const locked =
@@ -449,7 +410,7 @@ export function createTopmostHitTester(deps: TopmostHitTestDeps): HitTestTopmost
     point: ScreenPoint,
     copies: readonly Coordinate[],
     tolerance: number,
-    hold: boolean,
+    asFeature: boolean,
     context: CompanionHitContext | null,
     visible: VisibilityLookup,
     onScreen: TableScreenHit | undefined,
@@ -459,7 +420,7 @@ export function createTopmostHitTester(deps: TopmostHitTestDeps): HitTestTopmost
     const skip = rowsLeftOut(tables);
     const front = frontRowOf(tables, table, copies, tolerance, skip, onScreen);
     const rowHit = (): TopHit | null =>
-      front ? rowHitOf(tables, table, layer, front, point, hold) : null;
+      front ? rowHitOf(tables, table, layer, front, point, asFeature) : null;
     const companions = deps.companions;
     if (!context || !companions) return rowHit();
 
@@ -551,7 +512,7 @@ export function createTopmostHitTester(deps: TopmostHitTestDeps): HitTestTopmost
           point,
           copies,
           tolerance,
-          options?.hold === true,
+          options?.asFeature === true,
           companion,
           visible,
           onScreen,

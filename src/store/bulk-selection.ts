@@ -10,13 +10,13 @@
  * history) puts the same rows back in the selection (`DrawStore.restoreSelection`).
  */
 
-import type { SelectionBulk as PublicSelectionBulk } from '../api/state.js';
+import type { SelectionValue as PublicSelectionValue } from '../api/state.js';
 import { summarizeRows } from '../feature-table/bulk-rows.js';
 import type { FeatureTablesInternals } from '../feature-table/feature-tables.js';
 import type { TableSelection } from '../feature-table/selection.js';
-import type { SelectionBulk } from './types.js';
+import type { SelectionBulk, SelectionValue } from './types.js';
 
-const ROWS = new WeakMap<SelectionBulk, TableSelection>();
+const ROWS = new WeakMap<object, TableSelection>();
 /** The summaries whose rows have one with an extent of an area */
 const WITH_AREA = new WeakSet<SelectionBulk>();
 
@@ -48,16 +48,27 @@ export function summaryHasArea(bulk: SelectionBulk): boolean {
 }
 
 /**
- * The handles of the rows of features selected in bulk, from the summary of the selection
- * (`Selection.bulk`, the `bulk` of `drag.started`): what a plugin reads them by, without their
- * IDs. Empty for a summary the instance did not give
+ * Keeps the rows of features selected in bulk with the value the instance gives of their
+ * selection (`listSelectedRows`)
  *
- * @param bulk - The summary of the features selected in bulk
+ * @internal
+ */
+export function keepSelectedRows(value: SelectionValue, rows: TableSelection): void {
+  ROWS.set(value, rows);
+}
+
+/**
+ * The handles of the rows of features selected in bulk, from the value of their selection
+ * (`draw.selection.value` whose `ids` is `null`, the `bulk` of `drag.started`): what a plugin
+ * reads them by, without their IDs. Empty for a value of features listed by their IDs, or one
+ * the instance did not give
+ *
+ * @param selection - The value of the selection of the features selected in bulk
  * @returns The handles of their rows, ascending
  * @experimental
  */
-export function listSelectedRows(bulk: PublicSelectionBulk): Int32Array {
-  return ROWS.get(bulk)?.handles.slice() ?? new Int32Array(0);
+export function listSelectedRows(selection: PublicSelectionValue): Int32Array {
+  return ROWS.get(selection)?.handles.slice() ?? new Int32Array(0);
 }
 
 /**

@@ -129,8 +129,9 @@ describe('the copy of a document held as rows', () => {
     const { store } = source();
     const copy = copyTableStore(store);
     while (copy.copyNext());
-    featureTablesInternals(copy.store.tables)?.flushVersions();
-    expect(featureTablesInternals(copy.store.tables)?.heldCount).toBe(0);
+    const internals = featureTablesInternals(copy.store.tables);
+    internals?.flushVersions();
+    expect(internals?.featureCache.size).toBe(0);
     expect(() => copy.store.listFeatures()).toThrow();
   });
 

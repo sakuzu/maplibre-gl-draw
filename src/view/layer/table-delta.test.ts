@@ -471,25 +471,25 @@ describe('the drawing of the rows of the delta', () => {
     }
   });
 
-  it('draws a feature drawn over a row in its place, from the frame it is given, and not the row', () => {
+  it('draws a sketch drawn over a row in its place, from the frame it is given, and not the row', () => {
     const list = features(60, 5);
     const live = setup(list);
     live.frame();
     const over = list[20];
-    internalsOf(live.tables).showInPlace('peer', [
-      { ...over, geometry: { type: 'Point', coordinates: [50, 50] } },
+    internalsOf(live.tables).showSketches([
+      { feature: { ...over, geometry: { type: 'Point', coordinates: [50, 50] } } },
     ]);
     const { record } = live.frame();
     const all = live.table.rowOrder();
     const expected: string[] = [];
     for (let i = 0; i < all.handles.length; i++) {
       const id = live.tables.getRowId(all.handles[i]) as string;
-      if (id === over.id) expected.push(`\u0000overlay\u0000peer\u0000${id}`);
+      if (id === over.id) expected.push(`\u0000overlay\u0000\u0000sketches\u0000${id}`);
       else expected.push(id);
     }
     expect(drawnIds(record, live.table)).toEqual(expected);
     // Taken away: the row is drawn again in its place
-    internalsOf(live.tables).showInPlace('peer', []);
+    internalsOf(live.tables).showSketches([]);
     expect(drawnIds(live.frame().record, live.table)).toEqual(
       shownIds(live.table, live.tables.getRowId),
     );

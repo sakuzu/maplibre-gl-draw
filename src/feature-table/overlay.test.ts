@@ -2,21 +2,21 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * The features drawn over rows for this client (`FeatureTables.showInPlace`)
+ * The sketches drawn over rows for this client (`FeatureTablesInternals.showSketches`)
  *
- * - A feature is drawn in the place of the row of its id (a row of the delta drawn and not read),
- *   and the row is not drawn while it is; a feature of no row is drawn at the end of its layer
+ * - A sketch is drawn in the place of the row of its id (a row of the delta drawn and not read),
+ *   and the row is not drawn while it is; a sketch of no row is drawn at the end of its layer
  * - Nothing is read differently: the order, the values, the scan, the rows hit (the row drawn
  *   over is hit where it is)
- * - The features of an owner are replaced by the next call; none takes them all away
- * - No next version takes a feature drawn over a row
+ * - The sketches are replaced by the next call; none takes them all away
+ * - No next version takes a sketch drawn over a row
  */
 
 import { describe, expect, it } from 'vitest';
-import type { StoreChange } from '../shared/types/model.js';
+import type { Feature, StoreChange } from '../shared/types/model.js';
 import { feature, internalsOf, tablesOfFeatures } from '../test-utils.js';
 import { hitTestLayerTable } from './hit-test.js';
-import { STATE_HIDDEN_OVERLAY } from './row-state.js';
+import { STATE_HIDDEN_SKETCH } from './row-state.js';
 
 const square = (x: number) => [
   [
@@ -43,6 +43,11 @@ function setup() {
   return { ...tables, emitted, ids };
 }
 
+/** The features as the sketches drawn over the rows */
+function sketchesOf(features: readonly Feature[]): { feature: Feature }[] {
+  return features.map((one) => ({ feature: one }));
+}
+
 /** The ids of the rows of the delta of the layer, in their order, with their places */
 function deltaIds(table: ReturnType<typeof setup>['table']): string[] {
   const delta = table.delta.group;
@@ -56,20 +61,22 @@ function deltaIds(table: ReturnType<typeof setup>['table']): string[] {
   });
 }
 
-describe('the features drawn over rows for this client', () => {
+describe('the sketches drawn over rows for this client', () => {
   it('are drawn in the places of the rows, which are not drawn, and read as before', () => {
     const { tables, internals, table, emitted, ids } = setup();
     const before = ids();
     const p3 = tables.get('layer')?.getRow(tables.findRow('p3') ?? -1);
-    tables.showInPlace('peer', [{ ...feature('p3', 'Polygon', square(30)), layerId: 'layer' }]);
+    internalsOf(tables).showSketches(
+      sketchesOf([{ ...feature('p3', 'Polygon', square(30)), layerId: 'layer' }]),
+    );
     // Drawn as a row of the delta, at the place of p3
-    expect(deltaIds(table)).toEqual(['\u0000overlay\u0000peer\u0000p3']);
+    expect(deltaIds(table)).toEqual(['\u0000overlay\u0000\u0000sketches\u0000p3']);
     const place = table.deltaPlaces();
     const p3Place = internals.placeOf(tables.findRow('p3') ?? -1);
     expect(place.groups[0]).toBe(table.orderOf(p3Place?.group.handle ?? -1));
     expect(place.cuts[0]).toBe(p3Place?.row);
     // The row drawn over is not drawn
-    expect((p3Place?.group.state[p3Place.row] ?? 0) & STATE_HIDDEN_OVERLAY).not.toBe(0);
+    expect((p3Place?.group.state[p3Place.row] ?? 0) & STATE_HIDDEN_SKETCH).not.toBe(0);
     // Read as before
     expect(ids()).toEqual(before);
     expect(tables.get('layer')?.getRow(tables.findRow('p3') ?? -1)).toEqual(p3);
@@ -95,58 +102,44 @@ describe('the features drawn over rows for this client', () => {
     expect(hit(30.5)).toBeNull();
   });
 
-  it('are replaced by the next call of their owner, and taken away by none', () => {
+  it('are replaced by the next call, and taken away by none', () => {
     const { tables, internals, table } = setup();
-    internalsOf(tables).showInPlace('peer', [
-      { ...feature('p3', 'Polygon', square(30)), layerId: 'layer' },
-      { ...feature('new', 'Polygon', square(40)), layerId: 'layer' },
-    ]);
+    internalsOf(tables).showSketches(
+      sketchesOf([
+        { ...feature('p3', 'Polygon', square(30)), layerId: 'layer' },
+        { ...feature('new', 'Polygon', square(40)), layerId: 'layer' },
+      ]),
+    );
     // A feature of no row at the end of the layer
     const places = table.deltaPlaces();
-    const newAt = deltaIds(table).indexOf('\u0000overlay\u0000peer\u0000new');
+    const newAt = deltaIds(table).indexOf('\u0000overlay\u0000\u0000sketches\u0000new');
     expect(newAt).toBeGreaterThanOrEqual(0);
     expect(places.groups[newAt]).toBe(table.groupCount - 1);
     expect(places.cuts[newAt]).toBe(table.groupAt(table.groupCount - 1).data.length);
-    internalsOf(tables).showInPlace('peer', [
-      { ...feature('p5', 'Polygon', square(50)), layerId: 'layer' },
-    ]);
-    expect(deltaIds(table)).toEqual(['\u0000overlay\u0000peer\u0000p5']);
+    internalsOf(tables).showSketches(
+      sketchesOf([{ ...feature('p5', 'Polygon', square(50)), layerId: 'layer' }]),
+    );
+    expect(deltaIds(table)).toEqual(['\u0000overlay\u0000\u0000sketches\u0000p5']);
     const p3 = internals.placeOf(tables.findRow('p3') ?? -1);
-    expect((p3?.group.state[p3.row] ?? 0) & STATE_HIDDEN_OVERLAY).toBe(0);
-    internalsOf(tables).showInPlace('peer', []);
+    expect((p3?.group.state[p3.row] ?? 0) & STATE_HIDDEN_SKETCH).toBe(0);
+    internalsOf(tables).showSketches([]);
     expect(table.delta.group).toBeNull();
     const p5 = internals.placeOf(tables.findRow('p5') ?? -1);
-    expect((p5?.group.state[p5.row] ?? 0) & STATE_HIDDEN_OVERLAY).toBe(0);
-  });
-
-  it('are kept per owner: an owner replaces only its own', () => {
-    const { tables, internals, table } = setup();
-    tables.showInPlace('a', [{ ...feature('p3', 'Polygon', square(30)), layerId: 'layer' }]);
-    tables.showInPlace('b', [{ ...feature('p5', 'Polygon', square(50)), layerId: 'layer' }]);
-    expect(deltaIds(table).sort()).toEqual([
-      '\u0000overlay\u0000a\u0000p3',
-      '\u0000overlay\u0000b\u0000p5',
-    ]);
-    tables.showInPlace('a', []);
-    expect(deltaIds(table)).toEqual(['\u0000overlay\u0000b\u0000p5']);
-    const p3 = internals.placeOf(tables.findRow('p3') ?? -1);
-    const p5 = internals.placeOf(tables.findRow('p5') ?? -1);
-    expect((p3?.group.state[p3.row] ?? 0) & STATE_HIDDEN_OVERLAY).toBe(0);
-    expect((p5?.group.state[p5.row] ?? 0) & STATE_HIDDEN_OVERLAY).not.toBe(0);
+    expect((p5?.group.state[p5.row] ?? 0) & STATE_HIDDEN_SKETCH).toBe(0);
   });
 
   it('are not taken by the next versions', () => {
     const { tables, internals, table, writer, ids } = setup();
-    internalsOf(tables).showInPlace('peer', [
-      { ...feature('p3', 'Polygon', square(30)), layerId: 'layer' },
-    ]);
+    internalsOf(tables).showSketches(
+      sketchesOf([{ ...feature('p3', 'Polygon', square(30)), layerId: 'layer' }]),
+    );
     // A row moved in the same layer goes to the delta and to the next version
     writer.apply({
       handles: Int32Array.of(tables.findRow('p1') ?? -1),
       fields: new Map([['order', ['k000009m']]]),
     });
     internals.flushVersions();
-    expect(deltaIds(table)).toEqual(['\u0000overlay\u0000peer\u0000p3']);
+    expect(deltaIds(table)).toEqual(['\u0000overlay\u0000\u0000sketches\u0000p3']);
     expect(ids()).toEqual([
       'p0',
       'p2',

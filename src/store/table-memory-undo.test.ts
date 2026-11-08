@@ -100,22 +100,32 @@ describe('the deletions of this client kept', () => {
     expect(next).toBe(handle);
   });
 
-  it('keep a feature held deleted, with the token in the notification of the feature deleted', () => {
+  it('keep a feature selected deleted, with the token in the notification of its row deleted', () => {
     const { store, tables, notified, internals } = setup();
     store.setSelection('feature', ['p3']);
     notified.length = 0;
     store.deleteFeature('p3');
-    expect(notified[0].features?.deleted?.map((f) => f.id)).toEqual(['p3']);
+    const deleted = [...(notified[0].rows?.layers.values() ?? [])].flatMap((rows) =>
+      Array.from(rows.deleted, (handle) => tables.getRowId(handle)),
+    );
+    expect(deleted).toEqual(['p3']);
     expect(notified[0].restoreToken).toBeDefined();
+    expect(store.getSelection().ids).toEqual([]);
     internals?.flushVersions();
     expect(rowsOf(tables)).toContain('p3');
   });
 
-  it('let go of the oldest past the most tokens kept', () => {
-    const { store, tables, internals } = setup(8, { restoreLimit: { tokens: 3 } });
+  it('keep every deletion until its token is let go of, however many', () => {
+    const { store, tables, internals, notified } = setup(8);
+    notified.length = 0;
     for (let i = 0; i < 6; i++) store.deleteFeature(`p${i}`);
     internals?.flushVersions();
-    // The last three deletions are kept, the first three went with the next version
+    expect(rowsOf(tables)).toEqual(['p0', 'p1', 'p2', 'p3', 'p4', 'p5', 'p6', 'p7']);
+    // Let go of, the rows of the first three go with the next version
+    for (const change of notified.slice(0, 3)) {
+      tables.release(change.restoreToken as NonNullable<typeof change.restoreToken>);
+    }
+    internals?.flushVersions();
     expect(rowsOf(tables)).toEqual(['p3', 'p4', 'p5', 'p6', 'p7']);
   });
 

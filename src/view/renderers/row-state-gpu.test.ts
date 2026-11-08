@@ -102,7 +102,7 @@ function feature(id: string, at: [number, number], type: Feature['type']): Featu
 
 /** Tables of the points, as a store that holds its features as rows has them */
 function setup() {
-  const store = new DrawStore(new TableContractStore(), { holdLimit: 2 });
+  const store = new DrawStore(new TableContractStore(), { selectionIdsLimit: 2 });
   store.createLayer({
     id: 'l',
     name: 'l',

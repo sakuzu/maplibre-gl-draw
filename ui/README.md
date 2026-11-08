@@ -8,7 +8,7 @@ shortcuts. It is built with the components of
 JavaScript API, from any framework or none.
 
 The interface keeps nothing of the drawing. The current tool is
-`draw.getMode()`, the selection is `draw.selection.get()`, and every
+`draw.getMode()`, the selection is `draw.selection.value`, and every
 button calls the public API of the draw instance, so the interface can be
 mixed with controls of your own.
 

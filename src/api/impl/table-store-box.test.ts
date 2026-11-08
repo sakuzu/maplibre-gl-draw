@@ -16,7 +16,7 @@ import { MemoryStore } from '../../store/memory.js';
 import type { Store } from '../../store/store.js';
 import { createTableStore } from '../../store/table-memory.js';
 import type { Feature, Layer } from '../../store/types.js';
-import { createMapStub, internalsOf } from '../../test-utils.js';
+import { createMapStub } from '../../test-utils.js';
 import { getBoxMarkedFeatureIds, getSelectedFeatureIds } from '../../view/ui/helper.js';
 import type { Draw } from '../draw.js';
 import type { FeatureTables } from '../tables.js';
@@ -173,16 +173,14 @@ describe('a box drawn over a Store of rows', () => {
     const tables = rows.store.tables as FeatureTables;
     drawBox(rows, CORNERS, (index) => {
       expect([...(getBoxMarkedFeatureIds(rows.store) ?? [])].sort()).toEqual(shownByObjects[index]);
-      // Marked, not selected nor held
+      // Marked, not selected
       expect(rows.store.getSelection().ids).toEqual([]);
-      expect(internalsOf(tables).getOpenedFeature('a')).toBeUndefined();
       expect(marked(tables, 'a')).toEqual([true, true]);
       expect(marked(tables, 'b')).toEqual(index === 1 ? [true, true] : [false, false]);
       expect(marked(tables, 'locked')).toEqual([false, false]);
     });
-    // Let go: selected and held, no mark left
+    // Let go: selected, no mark left
     expect(rows.store.getSelection().ids).toEqual(['a']);
-    expect(internalsOf(tables).getOpenedFeature('a')).toBeDefined();
     expect(getBoxMarkedFeatureIds(rows.store)).toBeNull();
     expect(featureTablesInternals(tables)?.states.bulkHandles().size).toBe(0);
     for (const id of ['a', 'b', 'c']) expect(marked(tables, id)).toEqual([false, false]);

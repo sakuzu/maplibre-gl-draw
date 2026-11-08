@@ -400,9 +400,17 @@ describe('the events of the state of this client', () => {
     const a = draw.features.create(pointInput()) as Feature;
     draw.selection.set('feature', [a.id]);
     draw.selection.clear();
+    const none = { type: 'feature', count: 0, ids: [], layerIds: [], bbox: null };
+    const one = {
+      type: 'feature',
+      count: 1,
+      ids: [a.id],
+      layerIds: [a.layerId],
+      bbox: [0, 0, 0, 0],
+    };
     expect(payloadsOf(events, 'selection.changed')).toEqual([
-      { selection: { type: 'feature', ids: [a.id] }, previous: { type: null, ids: [] } },
-      { selection: { type: null, ids: [] }, previous: { type: 'feature', ids: [a.id] } },
+      { selection: one, previous: none },
+      { selection: none, previous: one },
     ]);
   });
 

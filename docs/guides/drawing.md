@@ -294,8 +294,18 @@ const selected = draw.selection.features();
 The selection holds one type at a time, and it can be a group or a layer
 too (`draw.selection.set('group', [groupId])`). `selection.features()`
 returns the selected features, or the features inside the selected groups
-or layers. `selection.delete()` deletes whatever is selected, and
-`selection.changed` reports every change with the selection before it.
+or layers. `selection.value` tells what is selected: the type, the number
+of the features, their layers and extent (`bbox`), and the IDs.
+`selection.delete()` deletes whatever is selected, and `selection.changed`
+reports every change with the selection before it.
+
+```ts
+const { type, count, ids, bbox } = draw.selection.value;
+// Nothing selected: type 'feature', count 0
+const kept = draw.selection.target; // the selection as it is now
+draw.selection.clear();
+draw.selection.set(kept); // selected again
+```
 
 `selection.setAll(filter)` selects every feature that matches a filter
 (Cmd+A selects them all), `selection.count(filter)` counts the selected
@@ -313,25 +323,25 @@ draw.selection.update((sample) => ({
 
 ### Many features at once
 
-In a store that holds its features as rows, more features than are made at
-once (2,000) are selected in bulk: a box over them, `selection.setAll`, or a
-group or a layer of many features. The selection then has no list of IDs:
-`selection.get().bulk` tells how many, in which layers and where. Each
-feature shows its selection box and the selection one box with its handles,
-as for several features. A press on one of them moves them all, and the
-handles of the box rotate and resize them all; they are written once, when
-they are let go. The arrow keys move them too, and the moves of a key held
-are written once, a moment after the last press (one step of an undo). A
-locked feature among them stays where it is, as it does among features
-selected one by one, and one locked while they are dragged stays too.
+In a store that holds its features as rows, the selection of more than
+2,000 features (a box over them, `selection.setAll`) does not list their
+IDs: `selection.value.ids` is `null`, and the rest of the value is read as
+for a few features. Each feature shows its selection box and the selection
+one box with its handles, as for several features. A press on one of them
+moves them all, and the handles of the box rotate and resize them all; they
+are written once, when they are let go. The arrow keys move them too, and
+the moves of a key held are written once, a moment after the last press (one
+step of an undo). A locked feature among them stays where it is, as it does
+among features selected one by one, and one locked while they are dragged
+stays too.
 
 The verbs of `draw.selection` act on them (`delete`, `group`, `ungroup`,
 `move`, `update`). `selection.features(filter, { limit, after })` reads
 them a page at a time, and refuses to read them all without a limit.
-`selection.restore(selection)` selects again what a selection read before
-held, features selected in bulk included. Copy, duplicate, the boolean
-operations of areas and the buffer take at most 2,000 features: offer them
-for a selection of that many only.
+`selection.set(selection.target)` selects again what a target read before
+named, those features included. The number of features selected refuses
+nothing: what reads their features, a copy or a duplicate, reads them a
+page at a time.
 
 ## Keyboard
 

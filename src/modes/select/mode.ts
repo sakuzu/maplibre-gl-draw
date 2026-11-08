@@ -437,14 +437,14 @@ export class SelectMode implements EngineModeHandler {
    * extension implementation's focus, etc.); the topmost feature. Null when it grabs nothing (a
    * dataset in the foreground, or nothing at all: the drag pans the map)
    *
-   * It starts nothing: the start of the drag and `getDragTargets` both read it, and without
-   * `hold` it changes nothing either. Whether the drag then starts (read-only, a lock, a provider
+   * It starts nothing: the start of the drag and `getDragTargets` both read it, and it changes
+   * nothing either. Whether the drag then starts (read-only, a lock, a provider
    * that refuses its handle) is decided by the drag handler.
    *
-   * @param hold Whether a row held as columns that is pressed is held as a feature, to drag it
-   *   (the start of the drag); without it the row is only named
+   * @param asFeature Whether a row held as columns that is pressed is read as the feature the
+   *   Store makes of it, to drag it (the start of the drag); without it the row is only named
    */
-  #grabOf(event: DragNormalizedEvent, hold: boolean): Grab | null {
+  #grabOf(event: DragNormalizedEvent, asFeature: boolean): Grab | null {
     const { store, map, plugins } = this.#context;
     if (plugins?.isPluginInteracting()) return null;
 
@@ -515,10 +515,14 @@ export class SelectMode implements EngineModeHandler {
 
     // When no handle was hit: the feature pressed -> move operation. When a dataset is in the
     // foreground, nothing is grabbed (dragPan is alive, so it becomes a map pan). A row held as
-    // columns is made a feature to drag it
-    const top = this.#context.hitTestTopmost(point, { hold });
+    // columns is read as a feature to drag it
+    const top = this.#context.hitTestTopmost(point, { asFeature });
     const featureId =
-      top?.kind === 'store' ? top.feature.id : !hold && top?.kind === 'row' ? top.id : undefined;
+      top?.kind === 'store'
+        ? top.feature.id
+        : !asFeature && top?.kind === 'row'
+          ? top.id
+          : undefined;
     if (featureId === undefined) return null;
     return {
       kind: 'feature',
@@ -548,7 +552,7 @@ export class SelectMode implements EngineModeHandler {
       store.setBoxSelection(updatedBoxSelection);
 
       // A Store of rows marks the rows in the box instead of selecting them while the box is
-      // drawn: they are held as features, or selected in bulk, only when it is let go
+      // drawn: they are selected only when it is let go
       if (store.tables) {
         this.#markBox(queryRowsInBox(updatedBoxSelection, this.#context));
         return;
@@ -638,9 +642,9 @@ export class SelectMode implements EngineModeHandler {
       this.#markBox(TableSelection.empty);
       const internals = featureTablesInternals(store.tables);
       if (internals) {
-        // A Store of rows: more rows than are opened at once are selected in bulk
+        // A Store of rows: more rows than the selection lists the IDs of are selected in bulk
         const rows = queryRowsInBox(boxSelection, this.#context);
-        if (rows.count > store.holdLimit) {
+        if (rows.count > store.selectionIdsLimit) {
           store.selectRows(rows);
         } else {
           const ids: string[] = [];

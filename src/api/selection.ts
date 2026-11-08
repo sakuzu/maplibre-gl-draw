@@ -14,7 +14,13 @@ import type {
   Group,
   MoveTarget,
 } from './model.js';
-import type { Selection, SelectionType, VertexRef, VertexSelection } from './state.js';
+import type {
+  SelectionTarget,
+  SelectionType,
+  SelectionValue,
+  VertexRef,
+  VertexSelection,
+} from './state.js';
 
 /**
  * The selection of this client: features, groups or layers, one type at a time, and the
@@ -22,11 +28,16 @@ import type { Selection, SelectionType, VertexRef, VertexSelection } from './sta
  */
 export interface SelectionResource {
   /**
-   * The type and the IDs of what is selected. Many features selected at once in a Store that
-   * holds its features as rows have no list of IDs: `bulk` tells how many, in which layers and
-   * where.
+   * What is selected: the type, the number of features, their layers and extent, and the IDs. Past
+   * 2,000 features selected in a Store that holds its features as rows, the IDs are not listed
+   * (`ids` is `null`); the rest is read the same.
    */
-  get(): Selection;
+  readonly value: SelectionValue;
+  /**
+   * The selection now, as one value that does not list it: it names the selection as it is now
+   * (later changes of the selection do not change it), and `set(target)` selects that again.
+   */
+  readonly target: SelectionTarget;
   /**
    * Selects these items instead of the current selection.
    *
@@ -37,23 +48,22 @@ export interface SelectionResource {
    */
   set(type: SelectionType, ids: readonly string[]): boolean;
   /**
+   * Selects again what a target read before named (`selection.target`), features selected in
+   * bulk included: what is no longer there or cannot be seen is left out.
+   *
+   * @returns False when nothing of it can be selected (the selection is cleared then)
+   * @throws `DrawError` with the code `invalid-input` for a target the instance did not give
+   */
+  set(target: SelectionTarget): boolean;
+  /**
    * Selects every feature that matches a filter (every feature when it is left out), as
    * Cmd+A does. Only what can be seen is selected. In a Store that holds its features as rows,
-   * more features than are made at once are selected in bulk (`Selection.bulk`), and no ID is
-   * listed.
+   * more than 2,000 features are selected without their IDs listed (`value.ids` is `null`).
    *
    * @returns False when no feature can be selected
    * @throws `DrawError` with the code `invalid-input` when the filter has another shape
    */
   setAll(filter?: FeatureFilter): boolean;
-  /**
-   * Selects again what a selection read before held (`get`, `selection.changed`, a change of the
-   * document), features selected in bulk included: what is no longer there or cannot be seen is
-   * left out.
-   *
-   * @returns False when nothing of it can be selected (the selection is cleared then)
-   */
-  restore(selection: Selection): boolean;
   /**
    * Adds items of the selected type to the selection.
    *
@@ -75,16 +85,17 @@ export interface SelectionResource {
    * the features in it, in stacking order.
    *
    * @param options - At most `limit` features, read on after the feature `after`. Features
-   *   selected in bulk (`Selection.bulk`) are read a page at a time: they need it
-   * @throws `DrawError` with the code `invalid-state` for features selected in bulk without a
-   *   limit; `not-found` when `after` is not a selected feature; `invalid-input` when the filter
+   *   selected without their IDs listed (`value.ids` is `null`) are read a page at a time: they
+   *   need it
+   * @throws `DrawError` with the code `invalid-state` for features selected without their IDs
+   *   listed and no limit; `not-found` when `after` is not a selected feature; `invalid-input` when the filter
    *   or the options have another shape
    */
   features(filter?: FeatureFilter, options?: FeatureListOptions): Feature[];
   /**
    * The number of the selected features that match a filter (all when it is left out); for a
    * group or a layer, of the features in it. No feature is made for it, so it counts features
-   * selected in bulk too.
+   * selected without their IDs listed too.
    *
    * @throws `DrawError` with the code `invalid-input` when the filter has another shape
    */

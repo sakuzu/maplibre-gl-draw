@@ -14,7 +14,6 @@
  *   is made of it then is not kept, and nothing kept is given for it
  * - A row stamped outside a frame that raised the mark (`WriteMarks.onUnframedStamp`) has a mark
  *   that does not tell it from before: what is kept of it is forgotten
- * - A row held as a feature is not kept: it has its own feature
  * - Tables whose marks no keeper gives keep nothing (every write of theirs has the same mark)
  * - The reads of many rows one after the other (a page of a list, every feature in order) give
  *   what is kept and keep nothing more (`withoutKeeping`), so that they do not push out what the
@@ -46,8 +45,6 @@ const PROBLEM_LIMIT = 20;
 export interface FeatureCacheHost {
   readonly writeMarks: WriteMarks;
   readonly readContext: RowReadContext;
-  /** Whether the row of a handle is held as a feature */
-  isHeld(handle: RowHandle): boolean;
   /** Where the row of a handle is read (undefined for a handle of no row) */
   placeOf(handle: RowHandle): RowPlace | undefined;
 }
@@ -110,7 +107,7 @@ export class FeatureCache {
     if (context.dimensionsOf(layerId) !== 'xy') return rowFeature(context, layerId, group, row);
     const handle = group.data.handles[row];
     const mark = group.marks[row];
-    if (!this.host.writeMarks.settled(mark) || this.host.isHeld(handle)) {
+    if (!this.host.writeMarks.settled(mark)) {
       this.#forget(handle);
       return rowFeature(context, layerId, group, row);
     }
@@ -174,7 +171,7 @@ export class FeatureCache {
     for (const [handle, kept] of this.#kept) {
       if (problems.length >= PROBLEM_LIMIT) break;
       const place = this.host.placeOf(handle);
-      if (!place || this.host.isHeld(handle)) continue;
+      if (!place) continue;
       const { group, row } = place;
       if (group.marks[row] !== kept.mark || this.#groupNumbers.get(group) !== kept.group) continue;
       if (this.host.readContext.dimensionsOf(place.layer.layerId) !== 'xy') continue;

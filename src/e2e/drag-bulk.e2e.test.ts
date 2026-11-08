@@ -128,14 +128,14 @@ const scene = (kind: StoreKind): SceneSpec => ({
     style: LOOK,
   })),
   options: { selectionStyle },
-  rowsOptions: { holdLimit: 3 },
+  rowsOptions: { selectionIdsLimit: 3 },
 });
 
 /** The selection: its number and whether it is in bulk */
 const selectionOf = (page: Page): Promise<{ bulk: boolean; count: number }> =>
   page.evaluate(() => {
     const draw = (window as unknown as { draw: import('../index.js').Draw }).draw;
-    return { bulk: draw.selection.get().bulk !== undefined, count: draw.selection.count() };
+    return { bulk: draw.selection.value.ids === null, count: draw.selection.count() };
   });
 
 /** Writes the features back where the scene has them, nothing selected */

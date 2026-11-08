@@ -357,21 +357,6 @@ export interface FeatureTables {
    * with the next versions of their row blocks, and the Store may forget their ids
    */
   release(token: RestoreToken): void;
-  /**
-   * Draws features in the places of rows, for this client only: the features `owner` draws over
-   * rows are now these (the ones it drew before and does not give now are no longer drawn).
-   *
-   * A feature is drawn in the place of the row of its id in the order, and the row is not drawn
-   * while it is (it is still hit where it is); a feature of no row is drawn at the end of its
-   * layer (`layerId`). Nothing is written: the rows, what is read of
-   * them and the notifications of the document stay as they are, and a feature shown so is not
-   * a feature of the document (`getFeature` does not give it). It is how a Store shows the edits
-   * of others in their middle, before they are written.
-   *
-   * @param owner - Who draws the features (each owner has its own; an owner replaces only its own)
-   * @param features - The features it draws (none: it draws none any more)
-   */
-  showInPlace(owner: string, features: readonly Feature[]): void;
 }
 
 /**
@@ -435,8 +420,7 @@ export interface FeatureTablesWriter {
    * they are until then. The row blocks given to `addRowBlocks` from then on have the new dimensions.
    *
    * @throws `DrawError` with the code `invalid-input` when the dimensions do not hold the ones of
-   *   the layer (they are never lowered), or `invalid-state` when a row of the layer is opened as
-   *   a feature for this client (`DocumentChange.opened`)
+   *   the layer (they are never lowered)
    */
   raiseDimensions(layerId: string, dimensions: CoordinateDimensions): void;
   /**
@@ -493,17 +477,6 @@ export interface FeatureTablesWriter {
    */
   applyGroups(patch: TableGroupPatch, options?: RowApplyOptions): void;
   /**
-   * Writes the feature of a row opened, after the implementation of the Store recorded it: the
-   * feature is what the Store gives for the row from now on (`getFeature`), and its values are
-   * written to the row as `apply` writes them (the layer and the group of features are written
-   * with `apply`, with the key of the order, not here). The change is notified as an update of
-   * the feature.
-   *
-   * @throws `DrawError` with the code `invalid-state` when the row is not opened, or
-   *   `invalid-input` when the feature names another id, layer or group
-   */
-  applyOpened(id: string, feature: Feature): void;
-  /**
    * The key of the order of a group of features: where the group stands among the items of its
    * layer (the key of the order of a row, a fractional index, compared byte by byte; its members
    * follow each other at its place). It is the key last written, read at once: a new key puts
@@ -519,8 +492,8 @@ export interface FeatureTablesWriter {
    * document is replaced from elsewhere (a version of it put back, the document read again from
    * the start), and its rows come back with `addRowBlocks`.
    *
-   * The rows opened as features and the features shown in place are let go of, the features
-   * selected in bulk are no longer marked, the next versions of the row blocks and the work given to
+   * The features drawn for the sketches are let go of, the features selected are no longer
+   * marked, the next versions of the row blocks and the work given to
    * the Worker are dropped (what the Worker gives back is not taken in), the row blocks queued and the
    * new rows not built yet go, and so do the rows and the groups of features the deletions kept
    * (their tokens keep nothing any more). The groups of features stay, with the keys of their
@@ -529,10 +502,9 @@ export interface FeatureTablesWriter {
    * row block is added, so that what is kept by the handles (the values of the rows written before,
    * the rows hidden on this client) goes on; the Store forgets the ids that do not come back.
    *
-   * It is told as a replacement of the document (`DocumentChange.reset`), with the rows opened no
-   * longer (`DocumentChange.opened`). The Store of core lets go of the features selected in bulk
-   * then, and opens the rows of the features selected again when they are selected again
-   * (`setSelection` with the same features), once their rows are back.
+   * It is told as a replacement of the document (`DocumentChange.reset`). The Store of core lets
+   * go of the features selected then: they are selected again by their rows once the rows are
+   * back.
    */
   clear(): void;
 }
@@ -548,24 +520,15 @@ export interface FeatureTablesOptions {
   readonly worker?: FeatureTablesWorker;
   /**
    * Adds what the tables changed to the notification of the transaction of the Store (notified
-   * at once outside one): the rows written (`rows`), the rows made features and no longer
-   * (`opened`), and the changes of the features of the rows opened (`features`). Without it,
-   * `apply` only returns the rows written, and the rows opened and their features are not
-   * notified
+   * at once outside one): the rows written (`rows`). Without it, `apply` only returns the rows
+   * written
    */
   readonly onChange?: (change: DocumentChange) => void;
   /**
-   * Tells the Store the deleted rows nothing keeps any more (a token let go of, or the oldest
-   * ones past `restoreLimit`): it forgets them (`FeatureTablesWriter.forget`) once it no longer
-   * needs their ids
+   * Tells the Store the deleted rows nothing keeps any more (a token let go of): it forgets them
+   * (`FeatureTablesWriter.forget`) once it no longer needs their ids
    */
   readonly onRelease?: (handles: Int32Array) => void;
-  /**
-   * The most the deletions kept and not let go of may hold: tokens (100 when omitted), and bytes
-   * of the rows they keep (64 MiB when omitted, counted at the size of a row of five corners).
-   * Past it, the oldest are let go of
-   */
-  readonly restoreLimit?: { readonly tokens?: number; readonly bytes?: number };
   /**
    * The dimensions of the coordinates of the rows of a layer, read once, when the layer first
    * holds rows (`xy` for every layer when omitted): `xy`, `xyz`, `xym` or `xyzm`. The rows of a

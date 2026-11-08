@@ -33,7 +33,7 @@ function point(id: string, x: number, type: Feature['type'] = 'Point'): Feature 
 }
 
 function rowsSetup() {
-  const store = new DrawStore(new TableContractStore(), { holdLimit: 2 });
+  const store = new DrawStore(new TableContractStore(), { selectionIdsLimit: 2 });
   store.createLayer({
     id: 'l',
     name: 'l',
@@ -113,10 +113,10 @@ describe('the shape of a feature', () => {
     expect(shapes.get('b')?.properties['maplibre-gl-draw:radiusMeters']).toBe(20);
   });
 
-  it('is moved for a feature held that is dragged with the rows selected in bulk', () => {
-    const { store, states, tables, handleOf } = rowsSetup();
+  it('is moved for a feature selected that is dragged with the rows selected in bulk', () => {
+    const { store, states, handleOf } = rowsSetup();
     const shapes = new RenderedShapes(store);
-    internalsOf(tables).open('test', ['a']);
+    store.setSelection('feature', ['a']);
     states.setMoving(Int32Array.of(handleOf('a')), BULK_MOVE_SET);
     states.setTranslation(BULK_MOVE_SET, 1, 0);
     expect(position(shapes.get('a'))).toEqual([140, 35]);

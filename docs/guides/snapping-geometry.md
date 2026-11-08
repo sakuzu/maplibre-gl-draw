@@ -268,12 +268,12 @@ if (cut === null) toast('nothing left');
 
 const pieces = draw.features.split(parcelId, cutLineId);
 
-const { ids } = draw.selection.get();
+const ids = draw.selection.value.ids ?? [];
 const zones = draw.features.buffer(ids, { distanceMeters: 100 });
 draw.features.buffer([parcelId], { distanceMeters: -5, segments: 32 });
 ```
 
-To work on the selection, pass `draw.selection.get().ids`. The results
+To work on the selection, pass `draw.selection.value.ids`. The results
 are not selected; select them with `draw.selection.set('feature', ids)`
 when the user should keep working on them.
 

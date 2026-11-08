@@ -36,8 +36,8 @@ import type {
   FeatureStyleResolved,
   FeatureType,
   Layer,
-  Selection,
   SelectionType,
+  SelectionValue,
 } from '@sakuzu/maplibre-gl-draw';
 import { fillWord, type Messages } from '../messages.js';
 
@@ -373,8 +373,8 @@ export function indexNodes(
 }
 
 /** The rows the tree shows as selected: what draw has selected, of any of the three types */
-export function selectedIds(selection: Selection): string[] {
-  return selection.type ? [...selection.ids] : [];
+export function selectedIds(selection: SelectionValue): string[] {
+  return [...(selection.ids ?? [])];
 }
 
 /**
@@ -412,12 +412,13 @@ export function canDropInto(node: TreeNode, parent: TreeNode | null): boolean {
  * Whether the selected features can make a new group: two or more, all in one layer
  */
 export function canGroup(
-  selection: Selection,
+  selection: SelectionValue,
   getFeature: (id: string) => Feature | undefined,
 ): boolean {
-  if (selection.type !== 'feature' || selection.ids.length < 2) return false;
+  const ids = selection.ids;
+  if (selection.type !== 'feature' || !ids || ids.length < 2) return false;
   let layerId: string | undefined;
-  for (const id of selection.ids) {
+  for (const id of ids) {
     const feature = getFeature(id);
     if (!feature) return false;
     if (layerId === undefined) layerId = feature.layerId;

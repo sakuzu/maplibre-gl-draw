@@ -7,8 +7,7 @@
  * What snaps to the rows (the vertices and the edges near the cursor, their intersections) and
  * what traces along them reads the rows here: the rows found in the indexes of the layers, their
  * positions read in place, with the same vertex references as the vertex handles of a feature
- * of the row (`computeVertexHandles`, `forEachPart`): no row is made a feature. The rows held as
- * features are left out (they are features of the Store, found as such).
+ * of the row (`computeVertexHandles`, `forEachPart`): no row is made a feature.
  */
 
 import type { FeatureTables } from '../api/tables.js';
@@ -42,8 +41,8 @@ export interface SnapRow {
 }
 
 /**
- * Calls `visit` with every row whose bbox meets a box: shown, not held as a feature, of a layer
- * shown, not left out by `skip`
+ * Calls `visit` with every row whose bbox meets a box: shown, of a layer shown, not left out by
+ * `skip`
  *
  * @param skip Whether a row is left out (its id; the exclusions of a snap, the hidden by this
  *   client)
@@ -61,7 +60,6 @@ export function forEachSnapRow(
   const cursor = tables.scan({ bbox: [bbox.minX, bbox.minY, bbox.maxX, bbox.maxY], order: 'any' });
   for (let batch = cursor.next(); batch; batch = cursor.next()) {
     for (const handle of batch) {
-      if (internals.isHeld(handle)) continue;
       const place = internals.placeOf(handle);
       if (!place || (place.group.state[place.row] & STATE_UNHIT_MASK) !== 0) continue;
       const id = tables.getRowId(handle) as string;

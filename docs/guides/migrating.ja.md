@@ -766,6 +766,22 @@ draw.options.update({
 描いていた形 `'icon'` と、その `iconId` は無くなりました。代わりに
 `'circle'` を渡してください。
 
+選択は `selection.get()` の代わりに、1 つの値 `draw.selection.value` で
+読みます。種類、地物の数、地物のレイヤーと範囲、ID を伝えます。何も選んで
+いない時は種類が `feature` で数が 0 です。地物を行で持つストアで 2,000 件を
+超えると、ID は `null` です。`selection.changed` は値とその前の値を渡します。
+`draw.selection.target` は今の選択を指し、`draw.selection.set(target)` で
+もう一度選べます。
+
+```ts
+const { type, count, ids } = draw.selection.value;
+if (count > 0 && ids) console.log(type, ids);
+
+const kept = draw.selection.target;
+draw.selection.clear();
+draw.selection.set(kept);
+```
+
 自前のストアは変えなくて構いません。レイヤーの項目をリストで持つ
 ストアは、変更の前と後のリストから `diffItemOrder` で
 `DocumentChange.order` を作ります。
@@ -973,7 +989,7 @@ API で行った書き込みでも発火します。
 | `add(featureCollection)` | `document.load(featureCollection)` |
 | `get(id)` | `features.get(id)` |
 | `getAll()` | `document.toGeoJSON()` |
-| `getSelectedIds()` | `selection.get().ids` |
+| `getSelectedIds()` | `selection.value.ids` |
 | `delete(ids)` | `features.deleteMany(ids)` |
 | `trash()` | `selection.delete()` |
 | `setFeatureProperty(id, key, value)` | `features.update(id, patch)` |

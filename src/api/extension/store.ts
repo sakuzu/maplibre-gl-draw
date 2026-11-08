@@ -184,11 +184,7 @@ export interface GeometryTransforms {
  *   not saved, and a change from outside the instance does not carry it.
  * - A Store that holds its features as rows (`tables`) notifies the rows written as `rows`
  *   (with the values they had before, for the writes of this client: `previousValues`),
- *   and the rows opened as features (the rows selected and edited) as features, with their
- *   changes: a row is in one of the two in a notification, as it is when the outermost
- *   transaction ends (a row created and selected in one transaction is a feature created). The
- *   rows opened and no longer are notified as `opened`, which is not a change of the document; a
- *   row deleted is a feature deleted or a row deleted, never in `opened`. `listFeatures` and
+ *   whether they are selected or not; a row is in a notification once. `listFeatures` and
  *   `listFeaturesInOrder` throw: the rows are read from the tables.
  */
 export interface StoreView {

@@ -19,7 +19,14 @@ import {
   selectionOf,
 } from '../src/layers/tree.js';
 import { resolveMessages } from '../src/messages.js';
-import { builtInRuleChannel, fakeDraw, feature, group, layer } from './fake-draw.js';
+import {
+  builtInRuleChannel,
+  fakeDraw,
+  feature,
+  group,
+  layer,
+  selectionValue,
+} from './fake-draw.js';
 
 const en = resolveMessages('en');
 
@@ -283,9 +290,9 @@ describe('the selection of the tree', () => {
   const kindOf = (id: string) => kinds[id];
 
   it('mirrors what draw has selected', () => {
-    expect(selectedIds({ type: 'feature', ids: ['a', 'b'] })).toEqual(['a', 'b']);
-    expect(selectedIds({ type: 'layer', ids: ['l1'] })).toEqual(['l1']);
-    expect(selectedIds({ type: null, ids: [] })).toEqual([]);
+    expect(selectedIds(selectionValue('feature', ['a', 'b']))).toEqual(['a', 'b']);
+    expect(selectedIds(selectionValue('layer', ['l1']))).toEqual(['l1']);
+    expect(selectedIds(selectionValue(null, []))).toEqual([]);
   });
 
   it('keeps the kind of the row pressed last', () => {
@@ -302,10 +309,10 @@ describe('the selection of the tree', () => {
   it('can group two features or more of one layer', () => {
     const fake = sample();
     const get = (id: string) => fake.draw.features.get(id);
-    expect(canGroup({ type: 'feature', ids: ['a', 'b'] }, get)).toBe(true);
-    expect(canGroup({ type: 'feature', ids: ['a'] }, get)).toBe(false);
-    expect(canGroup({ type: 'feature', ids: ['a', 'e'] }, get)).toBe(false);
-    expect(canGroup({ type: 'layer', ids: ['l1', 'l2'] }, get)).toBe(false);
+    expect(canGroup(selectionValue('feature', ['a', 'b']), get)).toBe(true);
+    expect(canGroup(selectionValue('feature', ['a']), get)).toBe(false);
+    expect(canGroup(selectionValue('feature', ['a', 'e']), get)).toBe(false);
+    expect(canGroup(selectionValue('layer', ['l1', 'l2']), get)).toBe(false);
   });
 });
 

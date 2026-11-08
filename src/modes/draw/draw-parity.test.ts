@@ -156,7 +156,7 @@ describe.each(STORE_KINDS)('the shapes the drawing modes finish over %s', (_, ma
     expect(point?.type).toBe('Point');
     expect(point?.geometry).toEqual({ type: 'Point', coordinates: P });
     expect(view.draw.getMode()).toBe('select');
-    expect(view.draw.selection.get()).toEqual({ type: 'feature', ids: [point?.id] });
+    expect(view.draw.selection.value).toMatchObject({ type: 'feature', ids: [point?.id] });
   });
 
   it('finishes a line with Enter, in one document.changed, and selects it (DR-2)', () => {
@@ -171,7 +171,7 @@ describe.each(STORE_KINDS)('the shapes the drawing modes finish over %s', (_, ma
     expect(line?.geometry.type).toBe('LineString');
     expectPositions(coordinatesOf(line), [P, Q, R]);
     expect(view.draw.getMode()).toBe('select');
-    expect(view.draw.selection.get()).toEqual({ type: 'feature', ids: [line?.id] });
+    expect(view.draw.selection.value).toMatchObject({ type: 'feature', ids: [line?.id] });
   });
 
   it('finishes a line with a double click on its last vertex, in one document.changed (DR-2)', () => {
@@ -197,7 +197,7 @@ describe.each(STORE_KINDS)('the shapes the drawing modes finish over %s', (_, ma
     expectPositions((coordinatesOf(area) as unknown[])[0], [P, Q, R, P]);
     expect((coordinatesOf(area) as unknown[]).length).toBe(1);
     expect(view.draw.getMode()).toBe('select');
-    expect(view.draw.selection.get()).toEqual({ type: 'feature', ids: [area?.id] });
+    expect(view.draw.selection.value).toMatchObject({ type: 'feature', ids: [area?.id] });
   });
 
   it('places a circle by its center and a point of its edge, in one document.changed (DR-3)', () => {
@@ -213,7 +213,7 @@ describe.each(STORE_KINDS)('the shapes the drawing modes finish over %s', (_, ma
     const distance = haversineDistanceMeters(P, Q);
     expect(Math.abs(radius - distance)).toBeLessThan(distance * 0.001);
     expect(view.draw.getMode()).toBe('select');
-    expect(view.draw.selection.get()).toEqual({ type: 'feature', ids: [shape?.id] });
+    expect(view.draw.selection.value).toMatchObject({ type: 'feature', ids: [shape?.id] });
   });
 
   it('draws a freehand stroke with a drag, in one document.changed, and stays (DR-4)', () => {
@@ -233,7 +233,7 @@ describe.each(STORE_KINDS)('the shapes the drawing modes finish over %s', (_, ma
     expect(stroke?.geometry.type).toBe('LineString');
     expectPositions(coordinatesOf(stroke), [P, Q, R]);
     expect(view.draw.getMode()).toBe('draw_freehand');
-    expect(view.draw.selection.get().ids).toEqual([]);
+    expect(view.draw.selection.value.ids).toEqual([]);
   });
 
   it('asks the application for an image and writes nothing (DR-5)', () => {

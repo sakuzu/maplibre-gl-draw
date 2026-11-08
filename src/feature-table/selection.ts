@@ -4,8 +4,8 @@
 /**
  * A selection of many rows held as columns: the set of their handles
  *
- * A selection of more features than are opened at once is not made of features: it is the set
- * of the handles of its rows. The set is the one place the selection is kept; the bits the rows
+ * A selection of more features than the selection lists the IDs of is not a list of IDs: it is the
+ * set of the handles of its rows. The set is the one place the selection is kept; the bits the rows
  * are marked with for the drawing are made from it (`RowStateSets.setBulk`).
  *
  * A set never changes once made: adding and taking out rows make a new one, so a set kept for

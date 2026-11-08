@@ -208,7 +208,7 @@ describe('the snapping to the rows held as columns', () => {
     }
   });
 
-  it('leaves out the rows held as features, and the hidden rows', () => {
+  it('takes the rows selected as any row, and leaves out the hidden rows', () => {
     const features = randomFeatures(3, 14);
     const { rows } = stores(features);
     const bbox = { minX: -2, minY: -2, maxX: 2, maxY: 2 };
@@ -220,13 +220,13 @@ describe('the snapping to the rows held as columns', () => {
       );
     expect(ids().has('f0')).toBe(true);
     rows.store.setSelection('feature', ['f0']);
-    expect(ids().has('f0')).toBe(false);
-    // The Store gives it as a feature now
+    expect(ids().has('f0')).toBe(true);
+    // The Store gives no feature of its rows
     expect(
       createStoreVertexSnapProvider(rows)
         .candidates(bbox, context())
         .some((c) => c.featureId === 'f0'),
-    ).toBe(true);
+    ).toBe(false);
     rows.store.setLocallyHidden('f2', true);
     expect(ids().has('f2')).toBe(false);
     rows.store.updateFeature('f3', { visible: false });

@@ -186,8 +186,8 @@ done, so a sequence that fails is made short by taking runs of steps out
 while it goes on failing, and is then written down as a fixed sequence.
 The fixed sequences come first; then sequences made from fixed seeds,
 whose number of failures must not grow. It runs on the Store of rows
-(with the rows held for the selection let go of or kept, and selections
-in bulk) and on the Store of objects, and the differences found are
+(with selections listed by their IDs and in bulk) and on the Store of
+objects, and the differences found are
 listed in the test. Only `store-subject.ts` knows the Store, so that
 another way to write the rows is joined there.
 

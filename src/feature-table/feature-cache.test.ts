@@ -112,19 +112,11 @@ describe('the features kept of rows', () => {
     expect(store.getFeature('p1')).toBe(after);
   });
 
-  it('keeps no row held as a feature', () => {
-    const { store, internals, cache, rowOf } = storeWith(3);
-    const before = rowOf('p1');
-    internals.open('test', ['p1']);
-    const held = store.getFeature('p1');
-    expect(held).toBe(internals.getOpenedFeature('p1'));
-    expect(held).not.toBe(before);
-    // The view of its layer reads the row, made every time
-    expect(rowOf('p1')).not.toBe(rowOf('p1'));
-    expect(rowOf('p1')).toEqual(held);
-    expect(cache.size).toBe(0);
-    internals.open('test', []);
-    const read = rowOf('p1');
+  it('gives the feature of a row selected as of any row', () => {
+    const { store, rowOf } = storeWith(3);
+    store.setSelection('feature', ['p1']);
+    const read = store.getFeature('p1');
+    expect(store.getFeature('p1')).toBe(read);
     expect(rowOf('p1')).toBe(read);
   });
 

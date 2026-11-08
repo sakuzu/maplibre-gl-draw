@@ -12,7 +12,6 @@
 
 import type { Point } from 'geojson';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { RELEASE_DELAY_MS } from '../../store/draw-store.js';
 import type { Store } from '../../store/store.js';
 import { createTableStore } from '../../store/table-memory.js';
 import type { Feature } from '../../store/types.js';
@@ -101,11 +100,10 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-/** Clears the selection, lets go of the rows held, then clicks at a position */
+/** Clears the selection, then clicks at a position */
 function clickAfresh(at: [number, number]): readonly string[] {
   const input = createSyntheticInput(engine);
   input.click([3.5, -2.5]);
-  vi.advanceTimersByTime(RELEASE_DELAY_MS * 2);
   input.click(at);
   return store.getSelection().ids;
 }

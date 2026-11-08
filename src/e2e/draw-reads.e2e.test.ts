@@ -180,7 +180,7 @@ const listed = (page: Page): Promise<Array<{ id: string; type: string; positions
 
 const selectedIds = (page: Page): Promise<string[]> =>
   page.evaluate(() => [
-    ...(window as unknown as { draw: import('../index.js').Draw }).draw.selection.get().ids,
+    ...((window as unknown as { draw: import('../index.js').Draw }).draw.selection.value.ids ?? []),
   ]);
 
 /** Back to the select mode with the other feature alone, nothing selected, the map at its center */

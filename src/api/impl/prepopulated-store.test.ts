@@ -189,15 +189,15 @@ function boxSelect(target: Engine, from: [number, number], to: [number, number])
 function expectEveryFeatureSelectable(target: { engine: Engine; draw: Draw }): void {
   const input = createSyntheticInput(target.engine);
   input.click([0.5, 0.5]);
-  expect(target.draw.selection.get().ids).toEqual([POINT.id]);
+  expect(target.draw.selection.value.ids).toEqual([POINT.id]);
   input.click([-1, -0.5]);
-  expect(target.draw.selection.get().ids).toEqual([LINE.id]);
+  expect(target.draw.selection.value.ids).toEqual([LINE.id]);
   input.click([1.5, 1.5]);
-  expect(target.draw.selection.get().ids).toEqual([POLYGON.id]);
+  expect(target.draw.selection.value.ids).toEqual([POLYGON.id]);
 
   target.draw.selection.clear();
   boxSelect(target.engine, [-2, -1], [2.5, 2.5]);
-  expect([...target.draw.selection.get().ids].sort()).toEqual(
+  expect([...(target.draw.selection.value.ids ?? [])].sort()).toEqual(
     [POINT.id, LINE.id, POLYGON.id].sort(),
   );
 }

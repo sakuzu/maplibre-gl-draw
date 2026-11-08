@@ -47,7 +47,7 @@ function subjectOf(kind: StoreKind): () => TableSubject {
     case 'rows-held':
       return () => storeSubject(createTableStore().store);
     case 'rows-bulk':
-      return () => storeSubject(createTableStore({ holdLimit: 2 }).store, settle);
+      return () => storeSubject(createTableStore({ selectionIdsLimit: 2 }).store, settle);
     case 'objects':
       return () => storeSubject(new MemoryStore() as Store);
   }

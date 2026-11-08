@@ -58,9 +58,9 @@ export function getBoxMarkedFeatureIds(store: Store): readonly string[] | null {
   if (!tables || !store.getBoxSelection()) return null;
   const marked = featureTablesInternals(tables)?.states.bulkHandles();
   if (!marked) return null;
-  // More rows than are opened at once are shown by the frames of the rows marked (drawn on the
-  // GPU), as features selected in bulk are
-  if (marked.size > store.holdLimit) return [];
+  // More rows than the selection lists the IDs of are shown by the frames of the rows marked
+  // (drawn on the GPU), as features selected in bulk are
+  if (marked.size > store.selectionIdsLimit) return [];
   const ids: string[] = [];
   for (const handle of marked) {
     const id = tables.getRowId(handle);

@@ -30,9 +30,8 @@ import type { Sketch, SketchEndReason } from './sketches.js';
 import type {
   LayerStackEntry,
   Mode,
-  Selection,
-  SelectionBulk,
   SelectionType,
+  SelectionValue,
   SnapResult,
   VertexSelection,
 } from './state.js';
@@ -112,16 +111,15 @@ export interface DocumentChange {
    */
   previousValues?: FeatureValues;
   /**
-   * The new selection and the one before it; `bulk` and `previousBulk` for many features selected
-   * at once (`Selection.bulk`)
+   * The new selection and the one before it, as the Store keeps them (`Store.getSelection`). Many
+   * features selected in bulk are told with no IDs: `draw.selection.value` and
+   * `selection.changed` give their number, layers and extent
    */
   selection?: {
     type: SelectionType | null;
     ids: string[];
     previousType: SelectionType | null;
     previousIds: string[];
-    bulk?: SelectionBulk;
-    previousBulk?: SelectionBulk;
   };
   /** The IDs of the features whose editing started and ended */
   editing?: { started?: string[]; ended?: string[] };
@@ -138,14 +136,6 @@ export interface DocumentChange {
    * @experimental
    */
   rows?: RowsChange;
-  /**
-   * The rows held as columns opened as features for this client (`added`, their features) and
-   * no longer (`removed`, their ids): not a change of the document. A row is opened while it is
-   * selected or edited; a row deleted is in `features.deleted`, never in `removed`
-   *
-   * @experimental
-   */
-  opened?: { added: Feature[]; removed: string[] };
 }
 
 /**
@@ -234,27 +224,28 @@ export interface DrawEvents {
   'document.changed': DocumentChange;
   /** A document was loaded */
   'document.loaded': { result: LoadResult; source: string };
-  /** The selection changed */
-  'selection.changed': { selection: Selection; previous: Selection };
+  /** The selection changed: the new one and the one before it, as `draw.selection.value` gives them */
+  'selection.changed': { selection: SelectionValue; previous: SelectionValue };
   /** The vertex selection changed */
   'vertexSelection.changed': {
     selection: VertexSelection | null;
     previous: VertexSelection | null;
   };
   /**
-   * A drag started; `bulk` for features selected in bulk (`Selection.bulk`), whose IDs are not
-   * listed (`listSelectedRows` of `@sakuzu/maplibre-gl-draw/kasane` reads their rows)
+   * A drag started; `bulk` for features selected in bulk, whose IDs are not listed: the value of
+   * their selection (`SelectionValue.ids` is `null`; `listSelectedRows` of
+   * `@sakuzu/maplibre-gl-draw/kasane` reads their rows)
    */
   'drag.started': {
     kind: 'feature' | 'vertex' | 'handle';
     featureIds: string[];
-    bulk?: SelectionBulk;
+    bulk?: SelectionValue;
   };
   /** A drag ended; `cancelled` is true when it was cancelled */
   'drag.ended': {
     kind: 'feature' | 'vertex' | 'handle';
     featureIds: string[];
-    bulk?: SelectionBulk;
+    bulk?: SelectionValue;
     cancelled: boolean;
   };
   /** The mode changed */

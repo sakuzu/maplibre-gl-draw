@@ -89,7 +89,7 @@ describe.each(STORE_KINDS)('on %s', (_kind, createStore) => {
 
   let store: Store;
   let top: TopHit | null;
-  /** Whether each hit asked to hold the row it hits */
+  /** Whether each hit asked for the feature of the row it hits */
   let holds: boolean[] = [];
   let context: EngineModeContext;
   /** There is one companion rendering provider per draw instance */
@@ -133,8 +133,8 @@ describe.each(STORE_KINDS)('on %s', (_kind, createStore) => {
       store,
       shapes: new RenderedShapes(store),
       map: makeMap(),
-      hitTestTopmost: (_point: unknown, options?: { hold?: boolean }) => {
-        holds.push(options?.hold === true);
+      hitTestTopmost: (_point: unknown, options?: { asFeature?: boolean }) => {
+        holds.push(options?.asFeature === true);
         return top;
       },
       featureCompanions: companions,
@@ -194,7 +194,7 @@ describe.each(STORE_KINDS)('on %s', (_kind, createStore) => {
       expect(store.getSelection()).toEqual({ type: 'feature', ids: ['f1'] });
     });
 
-    it('asks the hit of a click and of a double click to hold the row it hits', () => {
+    it('asks the hit of a click and of a double click for the feature of the row it hits', () => {
       top = { kind: 'store', feature: store.getFeature('f1') as Feature };
       click();
       handleSelectDoubleClick(

@@ -361,10 +361,9 @@ optional category per kind of change:
   where it was and where it is (`ItemMove`), or many rows of a layer held
   as rows at once (`RowsMove`); the one record of the order inside the
   layers and groups
-- `rows`, `previousValues`, `restoreToken` and `opened`: from a Store that
-  holds its features as rows, the rows written, the values they had
-  before, what keeps the rows and groups deleted, and the rows opened as
-  features for this client
+- `rows`, `previousValues` and `restoreToken`: from a Store that holds its
+  features as rows, the rows written, the values they had before, and what
+  keeps the rows and groups deleted
 - `selection`, `editing`, `mode`, `metadata` and `files`
 - `uiStateChanged`: a state without a category of its own changed (drag
   state, box selection, vertex selection, read-only, the interaction lock,

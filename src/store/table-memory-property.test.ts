@@ -87,12 +87,6 @@ function checkNotification(change: StoreChange, store: Store): void {
       for (const handle of new Set(list)) put(tables.getRowId(handle) as string, 'rows');
     }
   }
-  // A row deleted is never among the rows no longer held
-  const deleted = new Set((change.features?.deleted ?? []).map((f) => f.id));
-  for (const id of change.opened?.removed ?? []) expect(deleted.has(id)).toBe(false);
-  // A row created and held is a feature created, not a row made a feature
-  const created = new Set((change.features?.created ?? []).map((f) => f.id));
-  for (const f of change.opened?.added ?? []) expect(created.has(f.id)).toBe(false);
 }
 
 describe('the Store of rows against the Store of objects', () => {

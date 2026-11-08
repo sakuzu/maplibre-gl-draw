@@ -214,9 +214,10 @@ describe.each(STORE_KINDS)('on %s', (_kind, createStore) => {
 
       expect(store.getFeature('f1')).toBeDefined();
       expect(store.getFeature('f2')).toBeDefined();
-      // The index follows the Store, which kept both features
+      // The index follows the Store, which kept both features (a Store of rows has its rows
+      // in the index of its tables, and none here)
       expect(spatial.removed).toEqual([]);
-      expect(index.findNear([0, 0], 0).sort()).toEqual(['f1', 'f2']);
+      expect(index.findNear([0, 0], 0).sort()).toEqual(store.tables ? [] : ['f1', 'f2']);
     });
 
     it('deleting a layer selection is suppressed while the interaction lock is on too', () => {

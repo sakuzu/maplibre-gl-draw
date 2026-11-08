@@ -24,7 +24,7 @@ import type { RowField } from '../api/tables.js';
 import { featureTablesInternals } from '../feature-table/feature-tables.js';
 import { circleRowRings } from '../shared/circle-rings.js';
 import { createRowBlockDataBuilder } from '../table/row-group-builder.js';
-import { HOLD_LIMIT, RELEASE_DELAY_MS } from './draw-store.js';
+import { SELECTION_IDS_LIMIT } from './draw-store.js';
 import { insertGroup } from './item-lists.js';
 import type { Store } from './store.js';
 import { createTableStore } from './table-memory.js';
@@ -100,95 +100,81 @@ describe('the in-memory Store of rows', () => {
     expect(store.getFeature('p2')).toBeUndefined();
   });
 
-  it('holds the rows selected, and notifies the writes of them as changes of features', () => {
-    const { store, notified } = setup();
+  it('notifies the writes of the rows selected as changes of rows, the features read again', () => {
+    const { store, tables, notified } = setup();
     store.setSelection('feature', ['p1', 'p3']);
-    const held = notified[notified.length - 1]?.opened;
-    expect(held?.added.map((f) => f.id)).toEqual(['p1', 'p3']);
+    expect(notified[notified.length - 1]?.features).toBeUndefined();
     const p1 = store.getFeature('p1');
     expect(store.getFeature('p1')).toBe(p1);
     notified.length = 0;
     store.updateFeature('p1', { geometry: { type: 'Point', coordinates: [9, 9] } });
     expect(notified).toHaveLength(1);
-    expect(notified[0].rows).toBeUndefined();
-    expect(notified[0].features?.updated?.map((e) => e.id)).toEqual(['p1']);
-    expect(notified[0].features?.updated?.[0].previous).toBe(p1);
-    vi.useFakeTimers();
+    expect(notified[0].features).toBeUndefined();
+    expect(Array.from(notified[0].rows?.layers.get('layer')?.updated ?? [])).toEqual([
+      tables.findRow('p1'),
+    ]);
+    expect((notified[0].previousValues as RowValues | undefined)?.fields.get('geometry')).toEqual([
+      p1?.geometry,
+    ]);
+    const after = store.getFeature('p1');
+    expect(after).not.toBe(p1);
+    expect(after?.geometry).toEqual({ type: 'Point', coordinates: [9, 9] });
     store.setSelection(null, []);
-    // Let go a moment later (a quick click elsewhere and back makes no feature again)
-    expect(store.getFeature('p1')).toBe(store.getFeature('p1'));
-    vi.advanceTimersByTime(RELEASE_DELAY_MS);
-    vi.useRealTimers();
-    expect(notified[notified.length - 1]?.opened).toEqual({ added: [], removed: ['p1', 'p3'] });
-    expect(store.getFeature('p1')?.geometry).toEqual({ type: 'Point', coordinates: [9, 9] });
+    expect(store.getFeature('p1')).toBe(after);
   });
 
-  it('keeps a row let go of held when it is selected again within a moment', () => {
-    const { store, notified } = setup();
-    vi.useFakeTimers();
-    store.setSelection('feature', ['p1']);
-    const p1 = store.getFeature('p1');
-    store.setSelection('feature', ['p2']);
-    store.setSelection('feature', ['p1']);
-    expect(store.getFeature('p1')).toBe(p1);
-    vi.advanceTimersByTime(RELEASE_DELAY_MS);
-    vi.useRealTimers();
-    expect(store.getFeature('p1')).toBe(p1);
-    const removed = notified.flatMap((change) => change.opened?.removed ?? []);
-    expect(removed).toEqual(['p2']);
-  });
-
-  it('notifies a feature created and selected in one transaction as a feature created', () => {
-    const { store, notified } = setup();
+  it('notifies a feature created and selected in one transaction as a row created', () => {
+    const { store, tables, notified } = setup();
     store.transact(() => {
       store.createFeature(point('n', 50));
       store.setSelection('feature', ['n']);
     });
     expect(notified).toHaveLength(1);
-    expect(notified[0].rows).toBeUndefined();
-    expect(notified[0].features?.created?.map((f) => f.id)).toEqual(['n']);
-    expect(notified[0].opened?.added ?? []).toEqual([]);
+    expect(notified[0].features).toBeUndefined();
+    expect(Array.from(notified[0].rows?.layers.get('layer')?.created ?? [])).toEqual([
+      tables.findRow('n'),
+    ]);
     expect(notified[0].selection?.ids).toEqual(['n']);
   });
 
-  it('takes a row held deleted from elsewhere out of the selection, as a feature deleted', () => {
+  it('takes a row selected deleted from elsewhere out of the selection, as a row deleted', () => {
     const { store, writer, tables, notified } = setup();
     store.setSelection('feature', ['p2']);
     notified.length = 0;
+    const handle = tables.findRow('p2') ?? -1;
     store.transact(() => {
       writer.apply({
-        handles: Int32Array.of(tables.findRow('p2') ?? -1),
+        handles: Int32Array.of(handle),
         fields: new Map(),
         deleted: Uint8Array.of(1),
       });
     }, 'remote');
     expect(notified).toHaveLength(1);
     expect(notified[0].source).toBe('remote');
-    expect(notified[0].features?.deleted?.map((f) => f.id)).toEqual(['p2']);
-    expect(notified[0].opened?.removed ?? []).toEqual([]);
-    expect(notified[0].rows).toBeUndefined();
+    expect(notified[0].features).toBeUndefined();
+    expect(Array.from(notified[0].rows?.layers.get('layer')?.deleted ?? [])).toEqual([handle]);
     expect(store.getSelection().ids).toEqual([]);
   });
 
-  it('selects more rows than the limit in bulk, and opens up to the limit', () => {
+  it('selects more rows than the limit in bulk, and lists them up to the limit', () => {
     const { store } = setup(0);
     const ids: string[] = [];
     store.transact(() => {
-      for (let i = 0; i <= HOLD_LIMIT; i++) {
+      for (let i = 0; i <= SELECTION_IDS_LIMIT; i++) {
         store.createFeature(point(`q${i}`, i));
         ids.push(`q${i}`);
       }
     });
     store.setSelection('feature', ids);
     expect(store.getSelection().ids).toEqual([]);
-    expect(store.getSelection().bulk?.count).toBe(HOLD_LIMIT + 1);
-    store.setSelection('feature', ids.slice(0, HOLD_LIMIT));
-    expect(store.getSelection().ids).toHaveLength(HOLD_LIMIT);
+    expect(store.getSelection().bulk?.count).toBe(SELECTION_IDS_LIMIT + 1);
+    store.setSelection('feature', ids.slice(0, SELECTION_IDS_LIMIT));
+    expect(store.getSelection().ids).toHaveLength(SELECTION_IDS_LIMIT);
     expect(store.getSelection().bulk).toBeUndefined();
   });
 
-  it('holds the members of a group selected', () => {
-    const { store, notified } = setup(0);
+  it('reads the members of a group selected from their rows', () => {
+    const { store } = setup(0);
     store.createGroup({
       id: 'g',
       layerId: 'layer',
@@ -200,9 +186,11 @@ describe('the in-memory Store of rows', () => {
     store.createFeature(point('a', 1, { groupId: 'g' }));
     store.createFeature(point('b', 2, { groupId: 'g' }));
     store.createFeature(point('c', 3));
-    notified.length = 0;
     store.setSelection('group', ['g']);
-    expect(notified[notified.length - 1]?.opened?.added.map((f) => f.id)).toEqual(['a', 'b']);
+    const rows = store.rowsOfSelection();
+    expect(
+      Array.from(rows?.handles ?? [], (handle) => store.tables?.getRowId(handle)).sort(),
+    ).toEqual(['a', 'b']);
   });
 });
 

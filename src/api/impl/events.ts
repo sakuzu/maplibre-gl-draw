@@ -17,10 +17,12 @@
 
 import { TabaneError } from '@sakuzu/tabane';
 import type { EngineSignals, EventEmitter } from '../../shared/utils/event-emitter.js';
+import { bulkSelectionValue, valueOfSelection } from '../../store/selection-value.js';
 import type { Store } from '../../store/store.js';
 import type {
   ItemOrderChange,
   ItemPosition,
+  SelectionValue,
   StoreChange,
   VertexSelection as StoredVertexSelection,
 } from '../../store/types.js';
@@ -287,21 +289,8 @@ function emitResourceEvents(hub: EventHub, changes: StoreChange, store: Store): 
     });
   }
 
-  if (changes.selection) {
-    const { bulk, previousBulk } = changes.selection;
-    hub.emit('selection.changed', {
-      selection: {
-        type: changes.selection.type,
-        ids: [...changes.selection.ids],
-        ...(bulk && { bulk }),
-      },
-      previous: {
-        type: changes.selection.previousType,
-        ids: [...changes.selection.previousIds],
-        ...(previousBulk && { bulk: previousBulk }),
-      },
-    });
-  }
+  const selection = selectionChangeOf(changes, store);
+  if (selection) hub.emit('selection.changed', selection);
 
   if (changes.mode) {
     hub.emit('mode.changed', { mode: changes.mode.mode, previous: changes.mode.previous });
@@ -328,6 +317,34 @@ function movesOf(
     if (from && to) out.set(itemId, { from, to });
   }
   return out;
+}
+
+/**
+ * The change of the selection a notification tells, as `draw.selection.value` gives the selections
+ * (null when it tells none)
+ */
+function selectionChangeOf(
+  changes: StoreChange,
+  store: Store,
+): { selection: SelectionValue; previous: SelectionValue } | null {
+  const change = changes.selection;
+  if (!change) return null;
+  return {
+    selection:
+      change.value ??
+      valueOfSelection(store, {
+        type: change.type,
+        ids: change.ids,
+        ...(change.bulk && { bulk: change.bulk }),
+      }),
+    previous:
+      change.previousValue ??
+      valueOfSelection(store, {
+        type: change.previousType,
+        ids: change.previousIds,
+        ...(change.previousBulk && { bulk: change.previousBulk }),
+      }),
+  };
 }
 
 /** Whether two vertex selections hold the same vertices of the same feature */
@@ -361,13 +378,13 @@ const DOCUMENT_KEYS = [
   'files',
 ] as const satisfies ReadonlyArray<keyof DocumentChange & keyof StoreChange>;
 
-/** The categories of the state of this client that `document.changed` carries along */
-const CLIENT_KEYS = [
-  'selection',
-  'editing',
-  'mode',
-  'restoreToken',
-] as const satisfies ReadonlyArray<keyof DocumentChange & keyof StoreChange>;
+/**
+ * The categories of the state of this client that `document.changed` carries along (and the
+ * selection, as `draw.selection.value` gives it)
+ */
+const CLIENT_KEYS = ['editing', 'mode', 'restoreToken'] as const satisfies ReadonlyArray<
+  keyof DocumentChange & keyof StoreChange
+>;
 
 /**
  * The change a notification carries, without the state that only the drawing reads (the
@@ -384,6 +401,11 @@ export function toDocumentChange(changes: StoreChange): DocumentChange | null {
   for (const key of [...DOCUMENT_KEYS, ...CLIENT_KEYS]) {
     if (changes[key] === undefined) continue;
     (change as Record<string, unknown>)[key] = changes[key];
+  }
+  // The selection as the Store keeps it, without what the instance reads of it
+  if (changes.selection) {
+    const { type, ids, previousType, previousIds } = changes.selection;
+    change.selection = { type, ids, previousType, previousIds };
   }
   change.source = changes.source ?? 'local';
   return change;
@@ -448,10 +470,19 @@ export function connectEngineEvents(
     hub.emit('error', { error: toDrawError(error), source, featureId });
   });
   listen('drag.started', ({ kind, featureIds, bulk }) => {
-    hub.emit('drag.started', { kind, featureIds: [...featureIds], ...(bulk && { bulk }) });
+    hub.emit('drag.started', {
+      kind,
+      featureIds: [...featureIds],
+      ...(bulk && { bulk: bulkSelectionValue(bulk) }),
+    });
   });
   listen('drag.ended', ({ kind, featureIds, bulk, cancelled }) => {
-    hub.emit('drag.ended', { kind, featureIds: [...featureIds], ...(bulk && { bulk }), cancelled });
+    hub.emit('drag.ended', {
+      kind,
+      featureIds: [...featureIds],
+      ...(bulk && { bulk: bulkSelectionValue(bulk) }),
+      cancelled,
+    });
   });
 
   return () => {

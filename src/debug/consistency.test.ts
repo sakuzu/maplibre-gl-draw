@@ -90,18 +90,18 @@ function over(store: Store, reads: Record<string, unknown>): Store {
   });
 }
 
-function storeOf(kind: Kind, holdLimit?: number): Store {
+function storeOf(kind: Kind, selectionIdsLimit?: number): Store {
   return kind === 'rows'
-    ? createTableStore(holdLimit === undefined ? {} : { holdLimit }).store
+    ? createTableStore(selectionIdsLimit === undefined ? {} : { selectionIdsLimit }).store
     : new MemoryStore();
 }
 
 /** A Store with the checks of the document and of the selection after each notification */
 function checked(
   kind: Kind,
-  options: { allowed?: ConsistencyCheck[]; holdLimit?: number } = {},
+  options: { allowed?: ConsistencyCheck[]; selectionIdsLimit?: number } = {},
 ): { store: Store; failures: ConsistencyFailure[] } {
-  const store = storeOf(kind, options.holdLimit);
+  const store = storeOf(kind, options.selectionIdsLimit);
   const failures: ConsistencyFailure[] = [];
   const checks = new ConsistencyChecks(
     { allowed: options.allowed ?? [], onFailure: (failure) => failures.push(failure) },
@@ -403,14 +403,14 @@ function drawnInstance(
   kind: Kind,
   options: {
     allowed?: ConsistencyCheck[];
-    holdLimit?: number;
+    selectionIdsLimit?: number;
     checks?: false | { run: ConsistencyCheck[] };
   } = {},
 ) {
   const stub = createMapStub();
   Object.assign(stub.map, { getPixelRatio: () => 1 });
   const failures: ConsistencyFailure[] = [];
-  const store = storeOf(kind, options.holdLimit);
+  const store = storeOf(kind, options.selectionIdsLimit);
   const draw = createDraw(stub.map, {
     store: store as unknown as PublicStore,
     initDefaultLayer: false,
@@ -736,7 +736,7 @@ describe('the sequences of the reference model of the rows, with every check on'
         runSteps(steps, () => {
           const { store, failures } = checked(kind === 'objects' ? 'objects' : 'rows', {
             allowed: ['id-index', 'selection'],
-            ...(kind === 'rows-bulk' && { holdLimit: 2 }),
+            ...(kind === 'rows-bulk' && { selectionIdsLimit: 2 }),
           });
           const subject = storeSubject(store, () => {
             vi.advanceTimersByTime(1_000);
@@ -785,7 +785,7 @@ describe('the sequences of the reference model of the rows drawn, with every che
         const result = runSteps(steps, () => {
           const drawn = drawnInstance('rows', {
             allowed: OLD_CHECKS,
-            ...(kind === 'rows-bulk' && { holdLimit: 2 }),
+            ...(kind === 'rows-bulk' && { selectionIdsLimit: 2 }),
           });
           if (kind === 'rows by kind') drawn.tableRenderer?.setDrawingByKind(true);
           const subject = storeSubject(drawn.store, drawn.frame);

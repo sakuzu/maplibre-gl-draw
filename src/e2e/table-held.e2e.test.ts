@@ -2,18 +2,17 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * End-to-end tests of the rows held as features, drawn in one draw per chunk
+ * End-to-end tests of the rows written, drawn in one draw per chunk
  *
- * Rows of an in-memory Store of rows are drawn, then held as features (`tables.hold`, without a
- * selection, so no handle is drawn over them), on the real maplibre and WebGL of the browser,
- * and the pictures are compared with the pictures of the rows as they are then, drawn from the
- * start:
+ * Rows of an in-memory Store of rows are drawn, then written, on the real maplibre and WebGL of
+ * the browser, and the pictures are compared with the pictures of the rows as they are then, drawn
+ * from the start:
  *
- * - held and not changed: drawn from their rows as they were
- * - in the middle of an edit that fits the places of their rows (a corner of a building moved, a
- *   point moved): written in place
- * - in the middle of an edit that does not fit (a vertex added to a line, an outline put on a
- *   fill): drawn from the delta of their layer, their copies in their groups hidden
+ * - not changed: drawn from their rows as they were
+ * - written by an edit that fits the places of their rows (a corner of a building moved, a point
+ *   moved): written in place
+ * - written by an edit that does not fit (a vertex added to a line, an outline put on a fill):
+ *   drawn from the delta of their layer, their copies in their groups hidden
  *
  * The rows written in place keep the origin of their chunk, and a chunk built again may take
  * another, so the pictures are compared with the tolerance of the other comparisons of the
@@ -53,7 +52,7 @@ interface SceneFeature {
   style?: Record<string, unknown>;
 }
 
-/** An edit of a feature held: the fields of it written in the middle of the edit */
+/** An edit of a feature: the fields of it written */
 interface SceneEdit {
   id: string;
   geometry?: SceneFeature['geometry'];
@@ -110,9 +109,6 @@ function scene(): SceneFeature[] {
   return out;
 }
 
-/** The rows held in every scene */
-const HELD = ['building0', 'point2', 'line0', 'fill', 'building3'];
-
 /** Edits that fit the places of their rows */
 function fitting(): SceneEdit[] {
   const corner = ring(-0.009, 0.004, 0.0012, 5);
@@ -151,21 +147,20 @@ function edited(features: SceneFeature[], edits: SceneEdit[]): SceneFeature[] {
 }
 
 /**
- * Draws a scene as rows of an in-memory Store of rows in a new instance, holds rows, writes edits
- * in their middle once everything is drawn, and keeps the pixels of the frame once everything is
+ * Draws a scene as rows of an in-memory Store of rows in a new instance, writes edits once
+ * everything is drawn, and keeps the pixels of the frame once everything is
  * written under `key`
  *
  * @returns The number of pixels drawn, and the rows of the delta of the layer
  */
-async function drawHeld(
+async function drawWritten(
   page: Page,
   key: string,
   features: SceneFeature[],
-  held: string[],
   edits: SceneEdit[],
 ): Promise<{ drawn: number; delta: number }> {
   return page.evaluate(
-    async ({ key, features, held, edits }) => {
+    async ({ key, features, edits }) => {
       const w = window as unknown as Record<string, unknown> & {
         map: import('maplibre-gl').Map;
         draw: import('../index.js').Draw;
@@ -240,8 +235,6 @@ async function drawHeld(
         return pixels;
       };
       await settle();
-      // Held without a selection: no handle is drawn over them
-      w.e2e.internals.featureTablesInternals(store.tables)?.open('e2e', held);
       for (const edit of edits) {
         const updates: Record<string, unknown> = {};
         if (edit.geometry) updates.geometry = edit.geometry;
@@ -256,7 +249,7 @@ async function drawHeld(
       const delta = w.e2e.internals.tableDiagnosticsOf(w.draw).editStats().deltaRows;
       return { drawn, delta };
     },
-    { key, features, held, edits },
+    { key, features, edits },
   );
 }
 
@@ -282,7 +275,7 @@ async function differing(page: Page, a: string, b: string, level: number): Promi
   );
 }
 
-describe('the rows held as features against the rows as they are drawn from the start', () => {
+describe('the rows written against the rows as they are drawn from the start', () => {
   let page: Page;
 
   beforeAll(async () => {
@@ -293,14 +286,14 @@ describe('the rows held as features against the rows as they are drawn from the 
     await page?.close();
   });
 
-  /** Holds and edits a scene, draws the scene as edited from the start, compares the pictures */
+  /** Edits a scene, draws the scene as edited from the start, compares the pictures */
   async function compare(name: string, edits: SceneEdit[]) {
     const features = scene();
-    const live = await drawHeld(page, `${name}-held`, features, HELD, edits);
-    const built = await drawHeld(page, `${name}-built`, edited(features, edits), [], []);
-    const differs = await differing(page, `${name}-held`, `${name}-built`, TOLERANCE.level);
+    const live = await drawWritten(page, `${name}-written`, features, edits);
+    const built = await drawWritten(page, `${name}-built`, edited(features, edits), []);
+    const differs = await differing(page, `${name}-written`, `${name}-built`, TOLERANCE.level);
     console.log(
-      `[rows held] ${name}: ${live.drawn} pixels drawn, ${differs} differ ` +
+      `[rows written] ${name}: ${live.drawn} pixels drawn, ${differs} differ ` +
         `(${live.delta} rows in the delta)`,
     );
     expect(live.drawn).toBeGreaterThan(0);
@@ -309,21 +302,21 @@ describe('the rows held as features against the rows as they are drawn from the 
     return live;
   }
 
-  it('draws the rows held and not changed from their rows', {
+  it('draws the rows not changed from their rows', {
     timeout: browserTimeout(90_000),
   }, async () => {
     const live = await compare('unchanged', []);
     expect(live.delta).toBe(0);
   });
 
-  it('draws the rows held in the middle of an edit that fits, written in place', {
+  it('draws the rows of an edit that fits, written in place', {
     timeout: browserTimeout(90_000),
   }, async () => {
     const live = await compare('fitting', fitting());
     expect(live.delta).toBe(0);
   });
 
-  it('draws the rows held in the middle of an edit that does not fit, from the delta', {
+  it('draws the rows of an edit that does not fit, from the delta', {
     timeout: browserTimeout(90_000),
   }, async () => {
     const live = await compare('not-fitting', notFitting());

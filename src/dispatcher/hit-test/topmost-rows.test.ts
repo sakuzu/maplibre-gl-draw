@@ -8,27 +8,27 @@
  * the stacking order. The hit is a row (`kind: 'row'`) and no feature of the Store is made; a
  * hidden row, a hidden layer and a row out of reach are not hit.
  *
- * A hit asked to hold the row (a click, a drag) makes the row a feature of the Store for a
- * moment (`core:pointer`) and returns it as one; a row held (selected) is hit as a feature of
- * the Store with or without it.
+ * A hit that asks for the feature of the row (a click, a drag) is given the feature the Store
+ * makes of the row (`kind: 'store'`); nothing is held for it, and a row selected is hit as a row
+ * otherwise.
  *
  * The companions of the rows are hit in the order they are drawn, as the companions of the
  * features are: from the front, each row itself, then its companions.
  */
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { LayerTableView } from '../../api/tables.js';
 import {
   createFeatureTablesStore,
   featureTablesInternals,
 } from '../../feature-table/feature-tables.js';
 import { getAnchorProjector } from '../../shared/math/index.js';
-import { DrawStore, RELEASE_DELAY_MS } from '../../store/draw-store.js';
+import { DrawStore } from '../../store/draw-store.js';
 import { MemoryContractStore } from '../../store/memory.js';
 import { RBushSpatialIndex } from '../../store/spatial/spatial-index.js';
 import type { Feature } from '../../store/types.js';
 import { createRowBlockDataBuilder } from '../../table/row-group-builder.js';
-import { feature, internalsOf, orderKey, rowOfFeature } from '../../test-utils.js';
+import { feature, orderKey, rowOfFeature } from '../../test-utils.js';
 import {
   createFeatureCompanionRegistry,
   type FeatureCompanionProvider,
@@ -44,13 +44,7 @@ import {
 import { TerrainContext } from '../../view/terrain/context.js';
 import type { TerrainLike } from '../../view/terrain/detect.js';
 import { HitTestServiceImpl } from './service.js';
-import {
-  createTopmostHitTester,
-  POINTER_HOLD_MS,
-  POINTER_OWNER,
-  type TopHit,
-  type TopmostAnchorProjector,
-} from './topmost.js';
+import { createTopmostHitTester, type TopHit, type TopmostAnchorProjector } from './topmost.js';
 
 const square = (x: number, y: number) => [
   [
@@ -190,47 +184,20 @@ describe('the hit testing of the rows held as columns', () => {
   });
 });
 
-describe('the hit testing that holds the row hit', () => {
-  beforeEach(() => {
-    vi.useFakeTimers();
-  });
-  afterEach(() => {
-    vi.useRealTimers();
-  });
-
-  it('makes the row hit a feature of the Store for a moment', () => {
+describe('the hit testing that asks for the feature of the row hit', () => {
+  it('returns the feature of the row hit when it is asked for, and holds nothing', () => {
     layer('l');
     adopt('l', [feature('p', 'Polygon', square(0, 0))]);
-    const hit = tester()(at(5, 5), { hold: true });
+    const hit = tester()(at(5, 5), { asFeature: true });
     expect(hit?.kind).toBe('store');
-    const held = internalsOf(tables.tables).getOpenedFeature('p');
-    expect(held).toBeDefined();
-    expect(hit?.kind === 'store' && hit.feature).toBe(held);
-    // The selection holds it before the moment is over
+    expect(hit?.kind === 'store' && hit.feature).toMatchObject({
+      id: 'p',
+      geometry: { type: 'Polygon', coordinates: square(0, 0) },
+    });
+    // Without asking, the row is a row, selected or not
+    expect(tester()(at(5, 5))?.kind).toBe('row');
     store.setSelection('feature', ['p']);
-    vi.advanceTimersByTime(POINTER_HOLD_MS);
-    expect(internalsOf(tables.tables).getOpenedFeature('p')).toBe(held);
-    store.setSelection(null, []);
-    // Let go a moment after the selection lets go of it
-    vi.advanceTimersByTime(RELEASE_DELAY_MS);
-    expect(internalsOf(tables.tables).getOpenedFeature('p')).toBeUndefined();
-    // Without the selection it is let go after the moment
-    tester()(at(5, 5), { hold: true });
-    expect(internalsOf(tables.tables).getOpenedFeature('p')).toBeDefined();
-    vi.advanceTimersByTime(POINTER_HOLD_MS);
-    expect(internalsOf(tables.tables).getOpenedFeature('p')).toBeUndefined();
-  });
-
-  it('returns a row held as a feature of the Store, held or not by the hit', () => {
-    layer('l');
-    adopt('l', [feature('p', 'Polygon', square(0, 0))]);
-    internalsOf(tables.tables).open(POINTER_OWNER, []);
-    store.setSelection('feature', ['p']);
-    const hit = tester()(at(5, 5));
-    expect(hit?.kind).toBe('store');
-    expect(hit?.kind === 'store' && hit.feature).toBe(
-      internalsOf(tables.tables).getOpenedFeature('p'),
-    );
+    expect(tester()(at(5, 5))?.kind).toBe('row');
   });
 });
 
@@ -312,7 +279,6 @@ describe('the hit testing of the companions of the rows held as columns', () => 
     expect(companionTester()(at(60, 50))?.kind).toBe('companion');
     expect(has.mock.calls.map(([f]) => f.id)).toEqual(['b']);
     expect(hitTest.mock.calls.map(([f]) => f.id)).toEqual(['b']);
-    expect(internalsOf(tables.tables).getOpenedFeature('b')).toBeUndefined();
   });
 
   it('asks a provider that answers from the features only on the features', () => {
@@ -373,12 +339,11 @@ describe('the hit testing of the companions of the rows held as columns', () => 
     expect(companionTester()(at(60, 50))).toBeNull();
   });
 
-  it('does not hold the row of a companion hit, even when asked to hold', () => {
+  it('gives a companion hit as a companion, even when the feature of a row is asked for', () => {
     layer('l');
     adopt('l', [feature('a', 'Polygon', square(0, 0))]);
     registerLines({ a: 50 });
-    expect(companionTester()(at(60, 50), { hold: true })?.kind).toBe('companion');
-    expect(internalsOf(tables.tables).getOpenedFeature('a')).toBeUndefined();
+    expect(companionTester()(at(60, 50), { asFeature: true })?.kind).toBe('companion');
   });
 
   /**

@@ -557,17 +557,12 @@ if (last) {
 リストを変える自前のストアは、変更の前と後のリストから `diffItemOrder`
 で `change.order` の移動を作ります。
 
-そうしたストアの表 (`store.tables` と、`createTableStore` の writer) には、
-ほかの端末と内容を揃えるストアのための部品が `@sakuzu/maplibre-gl-draw/kasane`
-にもう 2 つあります。
-
-- `tables.showInPlace(owner, features)` は、この端末だけで、行の位置に
-  地物を書かずに描きます。ほかの人の書き込む前の編集の途中を見せる
-  ためのものです。持ち主は自分の地物だけを置き換えます
-- `writer.clear()` は、文書がよそから置き換わるとき (最初から読み直す
-  とき)、行を `addRowBlocks` で戻す前に、表から行を全部出します。地物に
-  した行とまとめて選んだ地物を手放し、途中の仕事を捨て、ID は行の
-  handle を持ち続けます
+そうしたストアの表の writer (`@sakuzu/maplibre-gl-draw/kasane` の
+`createTableStore` の writer) には、ほかの端末と内容を揃えるストアのための
+部品がもう 1 つあります。`writer.clear()` は、文書がよそから置き換わるとき
+(最初から読み直すとき)、行を `addRowBlocks` で戻す前に、表から行を全部
+出します。まとめて選んだ地物を手放し、途中の仕事を捨て、ID は行の handle を
+持ち続けます。
 
 ## 同じ地図の上の別の文書
 

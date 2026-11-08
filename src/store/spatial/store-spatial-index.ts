@@ -18,8 +18,7 @@
  *   re-indexes the feature like an update of the coordinates
  * - a drag writes the Store once let go, so the shape that is indexed is the one written
  *
- * A Store that holds its features as rows has the features of the rows held (selected, edited)
- * only: they come and go with `held`, and the rows themselves are found in the index of the
+ * A Store that holds its features as rows has none here: its rows are found in the index of the
  * boxes of every row of the tables, which takes the same calculations of the extents of the
  * types (`setCustomBoundingBoxCalculator`) and the same tile size.
  *
@@ -29,7 +28,6 @@
  */
 
 import { featureTablesInternals } from '../../feature-table/feature-tables.js';
-import { heldFeaturesInOrder } from '../../feature-table/held-order.js';
 import type { Store } from '../store.js';
 import type { BoundingBox, Coordinate, Feature, StoreChange } from '../types.js';
 import {
@@ -138,9 +136,6 @@ export class StoreSpatialIndex implements SpatialIndex {
       this.#rebuild();
       return;
     }
-    // The rows held come and go (a Store that holds its features as rows)
-    for (const feature of changes.opened?.added ?? []) this.#refresh(feature.id);
-    for (const id of changes.opened?.removed ?? []) this.#refresh(id);
     const features = changes.features;
     if (!features) return;
 
@@ -179,19 +174,14 @@ export class StoreSpatialIndex implements SpatialIndex {
     this.#index.load(this.#features());
   }
 
-  /** The features the index holds: every feature, or the ones of the rows held */
+  /** The features the index holds: every feature (none of a Store of rows) */
   #features(): Feature[] {
     const store = this.#store;
-    return store.tables
-      ? heldFeaturesInOrder(store.tables, store.getLayerOrder())
-      : store.listFeatures();
+    return store.tables ? [] : store.listFeatures();
   }
 
-  /** The feature of an id as the index holds it (only a row held, of a Store of rows) */
+  /** The feature of an id as the index holds it (none of a Store of rows) */
   #indexed(id: string): Feature | undefined {
-    const tables = this.#store.tables;
-    return tables
-      ? featureTablesInternals(tables)?.getOpenedFeature(id)
-      : this.#store.getFeature(id);
+    return this.#store.tables ? undefined : this.#store.getFeature(id);
   }
 }

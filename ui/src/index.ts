@@ -6,7 +6,7 @@
  * the bottom of the map, with keyboard shortcuts.
  *
  * The interface keeps nothing of the drawing. It reads the draw instance and follows its events
- * (the current tool is `draw.getMode()`, the selection `draw.selection.get()`), and every button
+ * (the current tool is `draw.getMode()`, the selection `draw.selection.value`), and every button
  * calls the public API of the draw instance, so an application can mix it with controls of its
  * own and they never disagree.
  *
@@ -408,9 +408,9 @@ function selectionReveal(draw: Draw, root: HTMLElement): SelectionReveal {
     try {
       const container = map.getContainer();
       if (!container.isConnected) return;
-      const selection = draw.selection.get();
+      const selection = draw.selection.value;
       if (selection.type !== 'feature') return;
-      const geometries = selection.ids.flatMap((id) => {
+      const geometries = (selection.ids ?? []).flatMap((id) => {
         const feature = draw.features.get(id);
         return feature ? [feature.geometry] : [];
       });
@@ -426,7 +426,7 @@ function selectionReveal(draw: Draw, root: HTMLElement): SelectionReveal {
   }
   const off = draw.on('selection.changed', ({ selection }) => {
     cancel();
-    pending = selection.type === 'feature' && selection.ids.length > 0;
+    pending = selection.type === 'feature' && (selection.ids?.length ?? 0) > 0;
     if (!pending) return;
     frame = requestAnimationFrame(() => {
       frame = requestAnimationFrame(() => {

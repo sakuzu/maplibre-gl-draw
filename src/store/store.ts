@@ -503,16 +503,26 @@ export interface Store extends StoreView, UiState {
    */
   setDocumentWritable(writable: boolean): void;
 
-  /** The most features of rows opened at once for the selection: past it they are selected in bulk */
-  readonly holdLimit: number;
   /**
-   * The rows of the features selected in bulk (`Selection.bulk`), null while the selection holds
+   * The most features of rows the selection lists the IDs of: past it they are selected in bulk,
+   * by the states of their rows only (`Selection.bulk`)
+   */
+  readonly selectionIdsLimit: number;
+  /**
+   * The rows of the features selected in bulk (`Selection.bulk`), null while the selection lists
    * its features
    */
   getSelectedRows(): TableSelection | null;
   /**
-   * Selects features by their rows: opened as features up to `holdLimit`, selected in bulk past
-   * it (the rows that cannot be seen left out)
+   * The rows of the features of a selection (the one now when omitted), however it is held: the
+   * rows selected in bulk, or the rows of the features, the groups or the layers it lists (null
+   * for a Store that does not hold its features as rows). The rows that cannot be seen are left
+   * out
+   */
+  rowsOfSelection(selection?: Selection): TableSelection | null;
+  /**
+   * Selects features by their rows: listed by their IDs up to `selectionIdsLimit`, selected in
+   * bulk past it (the rows that cannot be seen left out)
    */
   selectRows(rows: TableSelection): void;
   /**

@@ -551,8 +551,8 @@ function firstPositionOf(feature: Feature | undefined): Position | null {
 
 /** The extent of the features selected (read from the selection of features in bulk) */
 function selectedBounds(draw: Draw): [number, number, number, number] | null {
-  const bulk = draw.selection.get().bulk;
-  if (bulk) return bulk.bbox;
+  const selection = draw.selection.value;
+  if (selection.ids === null) return selection.bbox;
   let bounds: [number, number, number, number] | null = null;
   const widen = (position: Position): void => {
     const [x, y] = position;

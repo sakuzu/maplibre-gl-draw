@@ -128,9 +128,12 @@ const CONTRACTS: ReadonlyArray<[string, MakeContract]> = [
 function watched(
   make: MakeContract,
   transforms?: GeometryTransforms,
-  holdLimit?: number,
+  selectionIdsLimit?: number,
 ): { store: DrawStore; notified: StoreChange[] } {
-  const store = new DrawStore(make(transforms), holdLimit === undefined ? {} : { holdLimit });
+  const store = new DrawStore(
+    make(transforms),
+    selectionIdsLimit === undefined ? {} : { selectionIdsLimit },
+  );
   filled(store);
   const notified: StoreChange[] = [];
   store.subscribe((change) => notified.push(change));

@@ -270,12 +270,12 @@ if (cut === null) toast('nothing left');
 
 const pieces = draw.features.split(parcelId, cutLineId);
 
-const { ids } = draw.selection.get();
+const ids = draw.selection.value.ids ?? [];
 const zones = draw.features.buffer(ids, { distanceMeters: 100 });
 draw.features.buffer([parcelId], { distanceMeters: -5, segments: 32 });
 ```
 
-選択しているものに対して行うときは、`draw.selection.get().ids`
+選択しているものに対して行うときは、`draw.selection.value.ids`
 を渡します。結果は選択されません。利用者がそのまま続けて作業する
 ときは、`draw.selection.set('feature', ids)` で選択します。
 

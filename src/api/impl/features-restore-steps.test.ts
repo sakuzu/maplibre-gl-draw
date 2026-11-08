@@ -13,7 +13,7 @@ import { createRowValues, rowValuesOf } from '../../kasane/index.js';
 import { BULK_SLICE_ROWS } from '../../operations/bulk-sliced.js';
 import type { Store } from '../../store/store.js';
 import { createTableStore } from '../../store/table-memory.js';
-import type { Feature, Selection, StoreChange } from '../../store/types.js';
+import type { Feature, SelectionTarget, StoreChange } from '../../store/types.js';
 import { ROW_FLAG_DELETED } from '../../table/row-group-types.js';
 import { createMapStub } from '../../test-utils.js';
 import type { Draw } from '../draw.js';
@@ -74,9 +74,9 @@ function drawOn(store: Store): Draw {
  * A layer of rows, every one of them deleted (by a write that is not a restore): the values the
  * deletion read before, which a restore brings them back with
  */
-function setup(options: { holdLimit?: number; prepare?: (draw: Draw) => void } = {}) {
+function setup(options: { selectionIdsLimit?: number; prepare?: (draw: Draw) => void } = {}) {
   const { store } = createTableStore(
-    options.holdLimit === undefined ? {} : { holdLimit: options.holdLimit },
+    options.selectionIdsLimit === undefined ? {} : { selectionIdsLimit: options.selectionIdsLimit },
   );
   store.createLayer({
     id: 'rows',
@@ -301,23 +301,23 @@ describe('draw.features.restore of many rows', () => {
   });
 
   it('writes the rest first when the selection is written in the same transaction', () => {
-    let selected: Selection | null = null;
+    let selected: SelectionTarget | null = null;
     const { draw, tables, handles, notified, before } = setup({
-      holdLimit: 10,
+      selectionIdsLimit: 10,
       prepare: (instance) => {
         instance.selection.setAll();
-        selected = instance.selection.get();
+        selected = instance.selection.target;
       },
     });
-    expect((selected as Selection | null)?.bulk?.count).toBe(COUNT);
+    expect((selected as SelectionTarget | null)?.count).toBe(COUNT);
     // The features selected in bulk put back after the rows, as an undo does
     draw.transact(() => {
       draw.features.restore(before);
-      draw.selection.restore(selected as Selection);
+      draw.selection.set(selected as SelectionTarget);
     });
     expect(rowsBack(tables, handles)).toBe(COUNT);
     expect(notified).toHaveLength(1);
-    expect(draw.selection.get().bulk?.count).toBe(COUNT);
+    expect(draw.selection.value.count).toBe(COUNT);
   });
 
   it('tells the changes of the order a write of every row at once tells', () => {

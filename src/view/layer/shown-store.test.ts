@@ -70,7 +70,7 @@ describe('the Store the drawing reads', () => {
     expect(shown.store.getSelection()).toEqual({ type: null, ids: [] });
     expect(shown.store.getDragState()).toBeNull();
     // Writes and the rest go to the Store of the instance
-    expect(shown.store.holdLimit).toBe(own.holdLimit);
+    expect(shown.store.selectionIdsLimit).toBe(own.selectionIdsLimit);
     expect(own.getSelection().ids).toEqual(['a']);
     shown.setShown(null);
     expect(shown.store.getLayerOrder()).toEqual(['live']);

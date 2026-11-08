@@ -17,8 +17,8 @@ import {
   type FeatureTablesInternals,
   featureTablesInternals,
 } from '../../feature-table/feature-tables.js';
-import { isLayerDrawnFromRows } from '../../feature-table/held-order.js';
 import { rowType } from '../../feature-table/row-read.js';
+import { isLayerDrawnFromRows } from '../../feature-table/rows-drawn.js';
 import { bulkRowMotionOf } from '../../sketches/rendered-shapes.js';
 import { isInteractionBlocked } from '../../store/lock.js';
 import type { Store } from '../../store/store.js';
@@ -383,7 +383,8 @@ export function renderForeground(deps: FrameRenderDeps, f: FrameState): void {
     tables !== undefined &&
     deps.tableRetained !== null &&
     (bulk !== undefined ||
-      (store.getBoxSelection() !== null && tables.states.bulkHandles().size > store.holdLimit));
+      (store.getBoxSelection() !== null &&
+        tables.states.bulkHandles().size > store.selectionIdsLimit));
   const bulkLocked =
     bulk !== undefined &&
     (store.isReadOnly() ||

@@ -564,19 +564,12 @@ lists, and changes them otherwise than by putting items in a place, makes
 the moves of `change.order` from the lists before and after with
 `diffItemOrder`.
 
-The tables of such a store (`store.tables`, and the writer of
-`createTableStore`) have two more parts for a store kept in step with
-others, in `@sakuzu/maplibre-gl-draw/kasane`:
-
-- `tables.showInPlace(owner, features)` draws features in the places of
-  rows, for this client only, without writing them: the edits of others
-  in their middle, before they are written. Each owner replaces only its
-  own features
-- `writer.clear()` takes every row out of the tables, when the document is
-  replaced from elsewhere (read again from the start), before its rows
-  come back with `addRowBlocks`. The rows opened as features and the
-  features selected in bulk are let go of, the work under way is dropped,
-  and the ids keep their handles
+The writer of the tables of such a store (the writer of `createTableStore`,
+in `@sakuzu/maplibre-gl-draw/kasane`) has one more part for a store kept in
+step with others: `writer.clear()` takes every row out of the tables, when
+the document is replaced from elsewhere (read again from the start), before
+its rows come back with `addRowBlocks`. The features selected in bulk are let
+go of, the work under way is dropped, and the ids keep their handles.
 
 ## Another document on the same map
 

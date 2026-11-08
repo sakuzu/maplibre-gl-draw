@@ -29,38 +29,55 @@ export type Mode = (typeof MODES)[number] | (string & {});
 /** What the selection holds: features, groups or layers. */
 export type SelectionType = 'feature' | 'group' | 'layer';
 
-/** What this client has selected: the type and the IDs. The selection holds one type at a time. */
+/**
+ * What a Store keeps of the selection of this client (`Store.getSelection`): the type and the
+ * IDs. The selection holds one type at a time. The instance reads it as {@link SelectionValue}
+ * (`draw.selection.value`).
+ */
 export interface Selection {
   /** The type of the selected items, or `null` when nothing is selected */
   type: SelectionType | null;
-  /**
-   * The IDs of the selected items. Empty for features selected in bulk (`bulk`): a group or a
-   * layer selected in bulk keeps its ID here
-   */
+  /** The IDs of the selected items */
   ids: readonly string[];
-  /**
-   * Present when more features are selected than are made at once, in a Store that holds its
-   * features as rows (a box drawn over many features, every feature, a group or a layer of many
-   * features): the selection is not a list of IDs then. `selection.count`,
-   * `selection.features` with a limit and the verbs of `draw.selection` act on it.
-   */
-  bulk?: SelectionBulk;
 }
 
 /**
- * Many features selected at once (`Selection.bulk`): how many, in which layers, and where. Kept
- * as it is, it puts the same features back in the selection (`selection.restore`).
+ * What this client has selected (`draw.selection.value`): features, groups or layers, one type
+ * at a time, how many features, in which layers and where. It is read the same however many are
+ * selected: past 2,000 features selected as features, in a Store that holds its features as rows
+ * (a box over them, every feature), the IDs are not listed (`ids` is `null`), and the number, the
+ * layers and the extent are still given.
  */
-export interface SelectionBulk {
-  /** The number of features selected */
+export interface SelectionValue {
+  /** The type of the selected items (`feature` when nothing is selected) */
+  readonly type: SelectionType;
+  /** The number of the features selected; for a group or a layer, of the features in it */
   readonly count: number;
-  /** The layers they are in */
+  /**
+   * The IDs of the selected items: of the features, or of the groups or the layers. `null` for
+   * more than 2,000 features selected as features
+   */
+  readonly ids: readonly string[] | null;
+  /** The layers the features selected are in */
   readonly layerIds: readonly string[];
   /**
-   * The extent of their geometries, as `[west, south, east, north]` in degrees (`null` when none
-   * has a geometry): the box the handles to rotate and resize them stand on
+   * The extent of the geometries of the features selected, as `[west, south, east, north]` in
+   * degrees (`null` when none has a geometry): the box the handles to rotate and resize many
+   * features stand on
    */
   readonly bbox: BBox | null;
+}
+
+/**
+ * What the selection of this client holds, as one value that does not list it
+ * (`draw.selection.target`): it names the selection as it was when it was read, and
+ * `draw.selection.set(target)` selects that again. It is not a list of IDs, so a selection of
+ * many features is named without copying them.
+ */
+export interface SelectionTarget {
+  readonly type: 'selection';
+  /** The number of the features it names */
+  readonly count: number;
 }
 
 /**

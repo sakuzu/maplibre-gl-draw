@@ -15,7 +15,7 @@ import type {
   LayeredOverlayRenderer,
 } from '../../extension/index.js';
 import { featureTablesInternals } from '../../feature-table/feature-tables.js';
-import { isLayerDrawnFromRows } from '../../feature-table/held-order.js';
+import { isLayerDrawnFromRows } from '../../feature-table/rows-drawn.js';
 import type { TentativeState } from '../../shared/types/model.js';
 import type { Store } from '../../store/store.js';
 import type { BoundingBox, Feature, Layer } from '../../store/types.js';

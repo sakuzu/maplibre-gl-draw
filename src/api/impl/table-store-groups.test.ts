@@ -179,14 +179,15 @@ describe('draw.groups.restore', () => {
     expect(() => draw.groups.restore('g')).toThrow(expect.objectContaining({ code: 'not-found' }));
   });
 
-  it('lets go of the groups of the oldest deletions past the most tokens kept', () => {
-    const { draw } = setup({ restoreLimit: { tokens: 1 } });
-    draw.groups.create({ id: 'g', featureIds: ['p1'] });
-    draw.groups.create({ id: 'h', featureIds: ['p3'] });
-    draw.groups.delete('g');
-    draw.groups.delete('h');
-    expect(() => draw.groups.restore('g')).toThrow(expect.objectContaining({ code: 'not-found' }));
-    expect(draw.groups.restore('h')).toMatchObject({ id: 'h' });
+  it('keeps the groups of every deletion until they are let go of, however many', () => {
+    const { draw } = setup();
+    // More deletions than the tokens a limit would have kept (100 before there was none)
+    for (let i = 0; i < 120; i++) {
+      draw.groups.create({ id: `g${i}`, featureIds: ['p1'] });
+      draw.groups.delete(`g${i}`);
+    }
+    expect(draw.groups.restore('g0')).toMatchObject({ id: 'g0' });
+    expect(draw.groups.restore('g119')).toMatchObject({ id: 'g119' });
   });
 
   it('keeps no group deleted from elsewhere', () => {
@@ -237,5 +238,35 @@ describe('draw.groups.restore', () => {
     expect(() => objects.groups.restore('g')).toThrow(
       expect.objectContaining({ code: 'not-found' }),
     );
+  });
+});
+
+describe('a group or a layer selected over a Store of rows', () => {
+  it('is read by the rows of its features: listed, counted, changed and given as a value', () => {
+    const { draw } = setup();
+    draw.groups.create({ id: 'g', featureIds: ['p1', 'p3'] });
+    draw.selection.set('group', ['g']);
+    expect(draw.selection.features().map((feature) => feature.id)).toEqual(['p1', 'p3']);
+    expect(draw.selection.count()).toBe(2);
+    expect(draw.selection.value).toEqual({
+      type: 'group',
+      count: 2,
+      ids: ['g'],
+      layerIds: ['rows'],
+      bbox: [1, 0, 3, 0],
+    });
+    expect(draw.selection.update({ style: { pointColor: '#ff0000' } })).toBe(true);
+    expect(draw.features.get('p3')?.style).toEqual({ pointColor: '#ff0000' });
+    expect(draw.features.get('p2')?.style).toEqual({});
+
+    draw.selection.set('layer', ['rows']);
+    expect(draw.selection.count()).toBe(5);
+    // In the stacking order of the layer, the members of the group at its place
+    const all = draw.selection.features().map((feature) => feature.id);
+    expect([...all].sort()).toEqual(['p0', 'p1', 'p2', 'p3', 'p4']);
+    expect(draw.selection.features({ type: 'Point' }, { limit: 2 }).map((f) => f.id)).toEqual(
+      all.slice(0, 2),
+    );
+    expect(draw.selection.value).toMatchObject({ type: 'layer', count: 5, ids: ['rows'] });
   });
 });

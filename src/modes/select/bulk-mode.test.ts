@@ -143,7 +143,7 @@ let changes: StoreChange[];
 const ids = Array.from({ length: 6 }, (_, i) => `f${i}`);
 
 beforeEach(() => {
-  store = new DrawStore(new TableContractStore(), { holdLimit: 3 });
+  store = new DrawStore(new TableContractStore(), { selectionIdsLimit: 3 });
   store.createLayer({
     id: 'l',
     name: 'l',

@@ -543,7 +543,7 @@ describe('operations', () => {
     await until(count, 3);
     const made = await page.evaluate(() => {
       const draw = (window as unknown as E2EWindow).draw;
-      const [id] = draw.selection.get().ids;
+      const [id] = draw.selection.value.ids ?? [];
       return id ? draw.features.get(id)?.type : undefined;
     });
     expect(['Polygon', 'MultiPolygon']).toContain(made);
@@ -562,7 +562,9 @@ describe('the overlay', () => {
     });
     expect(await mode()).toBe('select');
     expect(
-      await page.evaluate(() => (window as unknown as E2EWindow).draw.selection.get().ids.length),
+      await page.evaluate(
+        () => (window as unknown as E2EWindow).draw.selection.value.ids?.length ?? 0,
+      ),
     ).toBe(0);
 
     // The middle of the map, right of the layer panel and above the toolbar, away from features

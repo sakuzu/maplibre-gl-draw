@@ -40,7 +40,7 @@ function point(i: number): Feature {
 
 function setup() {
   const contract = new TableContractStore();
-  const store = new DrawStore(contract, { holdLimit: 3 });
+  const store = new DrawStore(contract, { selectionIdsLimit: 3 });
   store.createLayer({
     id: 'l',
     name: 'l',

@@ -92,7 +92,6 @@ import { createRowGroup, LayerTable, overrideBytesOf, type RowGroup } from './la
 import { RowBoxIndex } from './row-box-index.js';
 import {
   type RowReadContext,
-  rowFeature,
   rowGeometry,
   rowInputOf,
   rowPoint,
@@ -148,15 +147,6 @@ const CREATED_ZOOM_KEY = drawPropertyKey('createdZoom');
 
 /** The attributes the cutting of the rows into chunks reads (a write of one moves the row) */
 const CLASSIFY_KEYS: ReadonlySet<string> = new Set([CREATED_ZOOM_KEY]);
-
-/** The tokens of the deletions kept, at most, when the options do not tell (`restoreLimit`) */
-const RETAIN_TOKENS = 100;
-
-/** The bytes of the rows the deletions keep, at most, when the options do not tell */
-const RETAIN_BYTES = 64 * 1024 * 1024;
-
-/** The bytes a row kept is counted as (a polygon of five corners) */
-const RETAINED_ROW_BYTES = 342;
 
 /**
  * The share of the rows of a group deleted and kept by nothing past which the group is due for
@@ -296,10 +286,6 @@ export function createFeatureTablesStore(options: FeatureTablesInternalOptions =
       gate();
       store.release(token);
     },
-    showInPlace: (owner, features) => {
-      gate();
-      store.showInPlace(owner, features);
-    },
   };
   const writer: FeatureTablesWriter = {
     allocateHandles: (ids, hashes) => store.ids.allocate(ids, hashes),
@@ -309,7 +295,6 @@ export function createFeatureTablesStore(options: FeatureTablesInternalOptions =
     raiseDimensions: (layerId, dimensions) => store.raiseDimensions(layerId, dimensions),
     apply: (values, options) => store.apply(values, options),
     applyGroups: (patch, options) => store.applyGroups(patch, options),
-    applyOpened: (id, feature) => store.applyOpened(id, feature),
     lookup: (id) => store.lookup(id),
     createRestoreToken: () => store.createRestoreToken(),
     forget: (handles) => store.forget(handles),
@@ -459,7 +444,7 @@ export interface FeatureTablesInternals {
    * The rows of a layer whose boxes meet a box, in the order of the layer: the rows a click there
    * may hit. Every row of the tables is in one spatial index by the box it covers as it is drawn
    * (`row-box-index.ts`): the box of its positions, the box the calculation of its type gives
-   * (`setRowBoxCalculator`), or for a row held, the box of its feature
+   * (`setRowBoxCalculator`)
    *
    * @param visit Receives each row, in order, with the group it is read from
    */
@@ -622,46 +607,12 @@ export interface FeatureTablesInternals {
   setGroupHidden(groupId: string, hidden: boolean): void;
   /** Tells the listeners of `onBulkSelected` the rows of a selection of many features decided */
   bulkSelected(rows: TableSelection | null): void;
-  /** Whether the row of a handle is held as a feature */
-  isHeld(handle: RowHandle): boolean;
-  /** The number of rows held as features */
-  readonly heldCount: number;
-  /** The handles of the rows held as features */
-  heldHandles(): IterableIterator<RowHandle>;
-  /**
-   * Makes rows features for this client: the rows `owner` names are now these (the ones it named
-   * before and no other owner names are no longer). A row held is a {@link Feature} the Store
-   * gives as it is (`getOpenedFeature`) until it is no longer held; it stays a row of the table, drawn
-   * from the table while it is not changed. The change is notified as `held`, not as a change of
-   * the document. An id of no row, or of a deleted one, is not held.
-   *
-   * The instance holds the rows selected and edited (`core:selection`) and, for a moment, the row
-   * a click is on (`core:pointer`).
-   *
-   * @param owner Who holds the rows
-   * @param ids The ids of the rows it holds (none: it holds no row any more)
-   */
-  open(owner: string, ids: readonly string[]): void;
-  /** The feature of a row held (undefined for an id not held) */
-  getOpenedFeature(id: string): Feature | undefined;
-  /**
-   * Draws features in the places of rows, for this client only: the features `owner` draws over
-   * rows are now these (the ones it drew before and does not give are no longer drawn). A
-   * feature is drawn in the place of the row of its id, which is not drawn while it is (and is
-   * still hit where it is); a feature of no row is drawn at the end of its layer. Nothing is
-   * written: the rows, what is read of them and the notifications of the document stay as they
-   * are. The edits of others in their middle are shown so.
-   *
-   * @param owner Who draws the features
-   * @param features The features it draws (none: it draws none any more)
-   */
-  showInPlace(owner: string, features: readonly Feature[]): void;
   /**
    * Draws the sketches of features in the places of their rows, for this client only: the ones drawn
    * before and not given now are no longer drawn. A sketch of a feature of a row is drawn in its
-   * place, the row hidden by the mark of the sketches (`STATE_HIDDEN_SKETCH`) and the features of
-   * `showInPlace` over it not drawn while it is; a sketch of a new feature is drawn at the keys
-   * given (`SketchOverlay.place`), or at the end of its layer. Nothing is written
+   * place, the row hidden by the mark of the sketches (`STATE_HIDDEN_SKETCH`); a sketch of a new
+   * feature is drawn at the keys given (`SketchOverlay.place`), or at the end of its layer. Nothing
+   * is written
    */
   showSketches(sketches: readonly SketchOverlay[]): void;
   /**
@@ -764,14 +715,7 @@ interface Creation {
  */
 export type RowBoxCalculator = (feature: Feature, tileSize: number) => BoundingBox;
 
-/** A row held as a feature */
-interface HeldRow {
-  /** The feature given for it */
-  feature: Feature;
-}
-
-/** A feature drawn over a row for this client */
-/** The owner of the features drawn for the sketches (`showSketches`), among the owners of `showInPlace` */
+/** The owner of the features drawn for the sketches (`showSketches`) */
 const SKETCH_OWNER = '\u0000sketches';
 
 /**
@@ -787,7 +731,7 @@ export interface OverlayPlace {
 }
 
 /**
- * A feature drawn over the rows (`showInPlace`, `showSketches`): over the row of its id, or for a
+ * A feature drawn over the rows (`showSketches`): over the row of its id, or for a
  * feature of no row at the keys given (`place`), or at the end of its layer
  *
  * @internal
@@ -866,20 +810,14 @@ class FeatureTablesStore implements FeatureTablesInternals {
   private readonly worker: FeatureTablesWorker | undefined;
   private readonly onChange: ((change: StoreChange) => void) | undefined;
   private readonly onRelease: ((handles: Int32Array) => void) | undefined;
-  /** The features drawn over rows for this client, by owner and by id */
-  private readonly overlays = new Map<string, Map<string, OverlayEntry>>();
+  /** The features of the sketches drawn over rows for this client, by id */
+  private sketchEntries = new Map<string, OverlayEntry>();
   /** The rows of the deltas that are features drawn over rows (drawn, not read) */
   private readonly drawnOnlyRows = new Set<RowHandle>();
-  /** The features each owner draws over rows, as it gave them last */
-  private readonly overlayInputs = new Map<string, readonly SketchOverlay[]>();
-  /** The rows a feature of an owner other than the sketches is drawn over */
-  private overlaidRows = new Set<RowHandle>();
+  /** The features of the sketches drawn over rows, as they were given last */
+  private sketchInputs: readonly SketchOverlay[] = [];
   /** The rows a sketch is drawn over */
   private sketchedRows = new Set<RowHandle>();
-  /** The rows held as features, by owner */
-  private readonly holders = new Map<string, ReadonlySet<RowHandle>>();
-  /** The rows held, with their features */
-  private readonly heldRows = new Map<RowHandle, HeldRow>();
   /**
    * The rows each deletion of this client keeps, by token, in the order the tokens were made (a
    * token that keeps groups only has no row)
@@ -892,9 +830,6 @@ class FeatureTablesStore implements FeatureTablesInternals {
   /** The token that keeps each deleted group kept */
   private readonly groupRetainOf = new Map<GroupHandle, number>();
   private nextToken = 1;
-  /** The most tokens and bytes the deletions kept may hold (`FeatureTablesOptions.restoreLimit`) */
-  private readonly retainTokens: number;
-  private readonly retainBytes: number;
   /** The deleted rows whose ids are forgotten, freed once their rows are gone */
   private readonly forgotten = new Set<RowHandle>();
   /**
@@ -928,15 +863,12 @@ class FeatureTablesStore implements FeatureTablesInternals {
     this.featureCache = new FeatureCache({
       writeMarks: this.writeMarks,
       readContext: this.readContext,
-      isHeld: (handle) => this.heldRows.has(handle),
       placeOf: (handle) => this.placeOf(handle),
     });
     this.worker = options.worker;
     this.onChange = options.onChange;
     this.onRelease = options.onRelease;
     this.versions = new GroupVersions(this.versionHost());
-    this.retainTokens = options.restoreLimit?.tokens ?? RETAIN_TOKENS;
-    this.retainBytes = options.restoreLimit?.bytes ?? RETAIN_BYTES;
     this.rowBoxes = new RowBoxIndex(
       {
         boxOf: (handle, out, inBuild) => this.rowBoxOf(handle, out, inBuild),
@@ -952,26 +884,23 @@ class FeatureTablesStore implements FeatureTablesInternals {
   }
 
   /**
-   * The box of a row as it is drawn now, and the number of its layer (null for no row): the box of
-   * the feature of a row held, the box the calculation of its type gives (an Image, the type of an
-   * extension), or the box of its positions. A feature made for a build of every box is not kept
+   * The box of a row as it is drawn now, and the number of its layer (null for no row): the box the
+   * calculation of its type gives (an Image, the type of an extension), or the box of its
+   * positions. A feature made for a build of every box is not kept
    */
   private rowBoxOf(handle: RowHandle, out: Float64Array, inBuild: boolean): number | null {
     const place = this.placeOf(handle);
     if (!place) return null;
     const { layer, group, row } = place;
     if ((group.data.flags[row] & ROW_FLAG_DELETED) !== 0) return null;
-    const held = this.heldRows.get(handle);
-    const type = held ? held.feature.type : rowType(group.data, row);
+    const type = rowType(group.data, row);
     const calculator = this.rowBoxCalculators.get(type);
-    if (held || calculator || type === 'Image') {
-      const feature =
-        held?.feature ??
-        (inBuild
-          ? this.featureCache.withoutKeeping(() =>
-              this.featureCache.featureOf(layer.layerId, group, row),
-            )
-          : this.featureCache.featureOf(layer.layerId, group, row));
+    if (calculator || type === 'Image') {
+      const feature = inBuild
+        ? this.featureCache.withoutKeeping(() =>
+            this.featureCache.featureOf(layer.layerId, group, row),
+          )
+        : this.featureCache.featureOf(layer.layerId, group, row);
       const box = calculator
         ? calculator(feature, this.rowBoxTileSize)
         : getBoundingBox(feature, this.rowBoxTileSize);
@@ -1168,22 +1097,14 @@ class FeatureTablesStore implements FeatureTablesInternals {
   clear(): void {
     this.rowBoxes.markAll();
     this.featureCache.clear();
-    // The rows opened as features are let go of, without writing them (their rows go)
-    const removed: string[] = [];
-    for (const held of this.heldRows.values()) removed.push(held.feature.id);
-    this.heldRows.clear();
-    this.holders.clear();
     // The features drawn in the places of rows, and the marks of the rows selected in bulk and
     // dragged by their values (the marks of the rows hidden on this client stay with their
     // handles, which the rows of the same ids get again)
-    if (this.overlaidRows.size > 0)
-      this.states.setOverlaid(Int32Array.from(this.overlaidRows), false);
     if (this.sketchedRows.size > 0)
       this.states.setSketched(Int32Array.from(this.sketchedRows), false);
-    this.overlays.clear();
-    this.overlayInputs.clear();
+    this.sketchEntries = new Map();
+    this.sketchInputs = [];
     this.drawnOnlyRows.clear();
-    this.overlaidRows = new Set();
     this.sketchedRows = new Set();
     const marked = Int32Array.from(this.states.bulkHandles());
     if (marked.length > 0) {
@@ -1234,10 +1155,7 @@ class FeatureTablesStore implements FeatureTablesInternals {
     // The ids forgotten are freed now that no row holds them
     for (const handle of [...this.forgotten]) this.freeIfGone(handle);
     this.revisionCount++;
-    this.onChange?.({
-      reset: true,
-      ...(removed.length > 0 && { opened: { added: [], removed } }),
-    });
+    this.onChange?.({ reset: true });
     this.notifyWork();
   }
 
@@ -1323,14 +1241,6 @@ class FeatureTablesStore implements FeatureTablesInternals {
     if (!layer) {
       this.raisedDims.set(layerId, dims);
       return;
-    }
-    for (const handle of this.heldRows.keys()) {
-      if (this.placeOf(handle)?.layer === layer) {
-        throw new DrawError(
-          'invalid-state',
-          `FeatureTables: a row of the layer "${layerId}" is opened as a feature, which holds x and y only`,
-        );
-      }
     }
     layer.dims = dims;
     for (let g = 0; g < layer.groupCount; g++) this.versions.markDue(layer.groupAt(g).handle);
@@ -2034,32 +1944,12 @@ class FeatureTablesStore implements FeatureTablesInternals {
     this.revisionCount++;
   }
 
-  /**
-   * Writes values of rows (see `FeatureTablesWriter.apply`). A row held as a feature gets its
-   * feature written too, notified as a change of the feature rather than of the row
-   */
+  /** Writes values of rows (see `FeatureTablesWriter.apply`) */
   apply(patch: RowValues, options: RowApplyOptions = {}): RowsChange {
     // A part of a write made in several parts: its changes of the order are told at its end
     const watch = this.partsWatch ? null : this.watchOrder(patch);
     const drafts = new Map<string, LayerChangeDraft>();
-    const heldWritten: RowHandle[] = [];
-    if (this.heldRows.size === 0) {
-      this.applyPatch(patch, drafts);
-    } else {
-      // The rows held are written one at a time
-      const plain: number[] = [];
-      const held: number[] = [];
-      for (let i = 0; i < patch.handles.length; i++) {
-        (this.heldRows.has(patch.handles[i]) ? held : plain).push(i);
-      }
-      this.checkRows(patch);
-      if (plain.length > 0) this.applyPatch(subsetPatch(patch, plain), drafts);
-      for (const i of held) {
-        this.applyPatch(subsetPatch(patch, [i]), drafts);
-        heldWritten.push(patch.handles[i]);
-      }
-    }
-    const features = this.heldChanges(heldWritten, drafts);
+    this.applyPatch(patch, drafts);
     const kept = this.keepDeleted(patch, options.restoreToken);
     const change: RowsChange = { layers: finishChanges(drafts) };
     if (this.onChange) {
@@ -2075,11 +1965,10 @@ class FeatureTablesStore implements FeatureTablesInternals {
         this.onChange({
           rows: change,
           ...(options.before && { previousValues: options.before }),
-          ...(!features && extra),
+          ...extra,
         });
       }
-      if (features) this.onChange({ features, ...extra });
-      if (!hasRows && !features && Object.keys(extra).length > 0) this.onChange(extra);
+      if (!hasRows && Object.keys(extra).length > 0) this.onChange(extra);
     }
     return change;
   }
@@ -2122,7 +2011,6 @@ class FeatureTablesStore implements FeatureTablesInternals {
       else if (place) groups.add(place.group);
     }
     for (const group of groups) this.checkDeleted(group);
-    if (kept) this.limitRetained(token as number);
     return kept;
   }
 
@@ -2132,18 +2020,6 @@ class FeatureTablesStore implements FeatureTablesInternals {
     if (token === undefined) return;
     this.retainOf.delete(handle);
     this.retained.get(token)?.delete(handle);
-  }
-
-  /** Lets go of the oldest tokens past the limit of the deletions kept */
-  private limitRetained(current: number): void {
-    for (const token of [...this.retained.keys()]) {
-      const over =
-        this.retained.size > this.retainTokens ||
-        this.retainOf.size * RETAINED_ROW_BYTES > this.retainBytes;
-      if (!over) break;
-      if (token === current && this.retained.size > 1) continue;
-      this.release(token as RestoreToken);
-    }
   }
 
   release(token: RestoreToken): void {
@@ -2164,7 +2040,7 @@ class FeatureTablesStore implements FeatureTablesInternals {
     if (out.length > 0) this.onRelease?.(Int32Array.from(out));
   }
 
-  /** Keeps a group deleted with a token (the token counts among the tokens kept) */
+  /** Keeps a group deleted with a token */
   private keepGroup(group: GroupHandle, token: number): void {
     this.unkeepGroup(group);
     let set = this.retainedGroups.get(token);
@@ -2223,7 +2099,6 @@ class FeatureTablesStore implements FeatureTablesInternals {
     return (
       (group.data.flags[row] & ROW_FLAG_DELETED) !== 0 &&
       !this.retainOf.has(handle) &&
-      !this.heldRows.has(handle) &&
       !this.drawnOnlyRows.has(handle)
     );
   }
@@ -2400,51 +2275,6 @@ class FeatureTablesStore implements FeatureTablesInternals {
   }
 
   /**
-   * The changes of the features of rows held that a write wrote, taken out of the rows written:
-   * a row deleted is no longer held (by any owner), and its feature is deleted; the feature of a
-   * row written is made again from the row
-   */
-  private heldChanges(
-    written: readonly RowHandle[],
-    drafts: Map<string, LayerChangeDraft>,
-  ): StoreChange['features'] | null {
-    if (written.length === 0) return null;
-    const updated: Array<{ id: string; feature: Feature; previous: Feature }> = [];
-    const deletedFeatures: Feature[] = [];
-    const handles = new Set<RowHandle>();
-    for (const handle of written) {
-      const held = this.heldRows.get(handle);
-      if (!held) continue;
-      handles.add(handle);
-      const place = this.placeOf(handle);
-      if (!place || (place.group.data.flags[place.row] & ROW_FLAG_DELETED) !== 0) {
-        this.forgetHeld(handle);
-        deletedFeatures.push(held.feature);
-        continue;
-      }
-      const previous = held.feature;
-      held.feature = rowFeature(this.readContext, place.layer.layerId, place.group, place.row);
-      updated.push({ id: previous.id, feature: held.feature, previous });
-    }
-    // A row is in the change of its feature or of its row, not both
-    for (const draft of drafts.values()) {
-      for (const list of [draft.created, draft.updated, draft.deleted]) {
-        for (let k = list.length - 1; k >= 0; k--) if (handles.has(list[k])) list.splice(k, 1);
-      }
-    }
-    for (const [layerId, draft] of [...drafts]) {
-      if (draft.created.length + draft.updated.length + draft.deleted.length === 0) {
-        drafts.delete(layerId);
-      }
-    }
-    if (updated.length === 0 && deletedFeatures.length === 0) return null;
-    return {
-      ...(updated.length > 0 && { updated }),
-      ...(deletedFeatures.length > 0 && { deleted: deletedFeatures }),
-    };
-  }
-
-  /**
    * Checks the shape of a patch: one value per row in every field (the values are checked where
    * they are written)
    */
@@ -2466,7 +2296,7 @@ class FeatureTablesStore implements FeatureTablesInternals {
     }
   }
 
-  // === The rows held as features ===
+  // === The rows selected in bulk ===
 
   planBulk(op: BulkOperation, rows: TableSelection, containers: RowContainers): RowWrite | null {
     return planBulk(this, op, rows, containers);
@@ -2513,92 +2343,8 @@ class FeatureTablesStore implements FeatureTablesInternals {
     for (const listener of this.bulkListeners) listener(rows);
   }
 
-  open(owner: string, ids: readonly string[]): void {
-    const next = new Set<RowHandle>();
-    for (const id of ids) {
-      const handle = this.handleOf(id);
-      if (handle !== undefined) next.add(handle);
-    }
-    const before = this.holders.get(owner);
-    if (next.size === 0) this.holders.delete(owner);
-    else this.holders.set(owner, next);
-    const added: Feature[] = [];
-    const removed: string[] = [];
-    for (const handle of next) {
-      if (this.heldRows.has(handle)) continue;
-      const feature = this.holdRow(handle);
-      if (feature) added.push(feature);
-    }
-    for (const handle of before ?? []) {
-      if (next.has(handle) || !this.heldRows.has(handle) || this.namedByOwner(handle)) continue;
-      const id = this.releaseRow(handle);
-      if (id !== undefined) removed.push(id);
-    }
-    if (this.onChange && (added.length > 0 || removed.length > 0)) {
-      this.onChange({ opened: { added, removed } });
-    }
-  }
-
-  getOpenedFeature(id: string): Feature | undefined {
-    const handle = this.ids.handleOf(id);
-    return handle >= 0 ? this.heldRows.get(handle)?.feature : undefined;
-  }
-
-  /** Whether the row of a handle is held as a feature */
-  isHeld(handle: RowHandle): boolean {
-    return this.heldRows.has(handle);
-  }
-
-  get heldCount(): number {
-    return this.heldRows.size;
-  }
-
-  /** The handles of the rows held as features */
-  heldHandles(): IterableIterator<RowHandle> {
-    return this.heldRows.keys();
-  }
-
-  applyOpened(id: string, feature: Feature): void {
-    const handle = this.ids.handleOf(id);
-    const held = handle >= 0 ? this.heldRows.get(handle) : undefined;
-    if (!held) throw new DrawError('invalid-state', `FeatureTables: the row "${id}" is not opened`);
-    this.rowBoxes.markOne(handle);
-    if (feature.id !== id)
-      throw new DrawError(
-        'invalid-input',
-        `FeatureTables: the feature of "${id}" names another id`,
-      );
-    if (
-      feature.layerId !== held.feature.layerId ||
-      (feature.groupId ?? undefined) !== (held.feature.groupId ?? undefined)
-    ) {
-      throw new DrawError(
-        'invalid-input',
-        `FeatureTables: the layer and the group of "${id}" are written with apply, with its key`,
-      );
-    }
-    this.writeHeldRow(handle, featureFields(held.feature, feature));
-    const previous = held.feature;
-    held.feature = feature;
-    this.onChange?.({ features: { updated: [{ id, feature, previous }] } });
-  }
-
-  /** Writes fields of a row held, as its feature has them */
-  private writeHeldRow(handle: RowHandle, fields: ReadonlyMap<RowField, unknown>): void {
-    if (fields.size === 0) return;
-    const columns = new Map<RowField, readonly unknown[]>();
-    for (const [field, value] of fields) columns.set(field, [value]);
-    this.applyPatch({ handles: Int32Array.of(handle), fields: columns }, new Map());
-  }
-
   // === The features drawn over rows for this client ===
 
-  /**
-   * Draws features in the places of rows, for this client only (see `FeatureTables.showInPlace`): a
-   * feature is a row of the delta of its layer drawn and not read (`drawnOnlyRows`), with the
-   * keys of the row it is drawn over (at the end of its layer for a feature of no row), and the
-   * row it is drawn over is not drawn (`STATE_HIDDEN_OVERLAY`). The rows are not written
-   */
   setReadGate(gate: (() => void) | null): void {
     this.readGate = gate;
   }
@@ -2618,45 +2364,15 @@ class FeatureTablesStore implements FeatureTablesInternals {
     };
   }
 
-  showInPlace(owner: string, features: readonly Feature[]): void {
-    if (features.length > 0) {
-      this.overlayInputs.set(
-        owner,
-        features.map((feature) => ({ feature })),
-      );
-    } else this.overlayInputs.delete(owner);
-    this.syncOverlays(new Set([owner]));
-  }
-
   showSketches(sketches: readonly SketchOverlay[]): void {
     if (this.writeSketchesInPlace(sketches)) return;
-    const before = this.sketchedRows;
-    if (sketches.length > 0) this.overlayInputs.set(SKETCH_OWNER, sketches);
-    else this.overlayInputs.delete(SKETCH_OWNER);
-    const after = this.sketchedHandles();
-    // The features of the other owners drawn over a row whose sketch comes or goes are drawn again
-    const changed = new Set<RowHandle>();
-    for (const handle of before) if (!after.has(handle)) changed.add(handle);
-    for (const handle of after) if (!before.has(handle)) changed.add(handle);
-    const owners = new Set<string>([SKETCH_OWNER]);
-    if (changed.size > 0) {
-      for (const [owner, inputs] of this.overlayInputs) {
-        if (owner === SKETCH_OWNER) continue;
-        for (const input of inputs) {
-          const over = this.handleOf(input.feature.id);
-          if (over !== undefined && changed.has(over)) {
-            owners.add(owner);
-            break;
-          }
-        }
-      }
-    }
-    this.syncOverlays(owners);
+    this.sketchInputs = sketches;
+    this.syncSketches();
   }
 
   /**
    * Draws features of the sketches that changed nothing but their geometry and their attributes by
-   * writing those over the rows of the delta they are drawn as, as a write of a row held does: the
+   * writing those over the rows of the delta they are drawn as, as a write of a row does: the
    * same features, drawn over the same places, so that a frame of a drag of vertices draws again the
    * coordinates that moved and no more. The rows stay drawn and not read: nothing is told, and no
    * mark is stamped
@@ -2664,11 +2380,9 @@ class FeatureTablesStore implements FeatureTablesInternals {
    * @returns false when something else changed, and the delta is to be made again
    */
   private writeSketchesInPlace(sketches: readonly SketchOverlay[]): boolean {
-    const before = this.overlayInputs.get(SKETCH_OWNER);
-    const entries = this.overlays.get(SKETCH_OWNER);
-    if (!before || !entries || before.length !== sketches.length || sketches.length === 0) {
-      return false;
-    }
+    const before = this.sketchInputs;
+    const entries = this.sketchEntries;
+    if (before.length !== sketches.length || sketches.length === 0) return false;
     const writes: Array<{ place: RowPlace; fields: Map<RowField, readonly unknown[]> }> = [];
     for (let i = 0; i < sketches.length; i++) {
       const { feature, place: given } = sketches[i];
@@ -2687,7 +2401,7 @@ class FeatureTablesStore implements FeatureTablesInternals {
       if (!entry || !place || !this.overSamePlace(entry)) return false;
       if (fields.size > 0) writes.push({ place, fields });
     }
-    this.overlayInputs.set(SKETCH_OWNER, sketches);
+    this.sketchInputs = sketches;
     for (const { place, fields } of writes) {
       const write = this.writeInPlace(place, 0, fields, undefined, undefined);
       if (!write) continue;
@@ -2706,27 +2420,13 @@ class FeatureTablesStore implements FeatureTablesInternals {
     return place?.group === entry.overPlace?.group && place?.row === entry.overPlace?.row;
   }
 
-  /** The rows the sketches are drawn over, as given now */
-  private sketchedHandles(): Set<RowHandle> {
-    const out = new Set<RowHandle>();
-    for (const input of this.overlayInputs.get(SKETCH_OWNER) ?? []) {
-      if (input.place) continue;
-      const over = this.handleOf(input.feature.id);
-      if (over !== undefined) out.add(over);
-    }
-    return out;
-  }
-
   /**
-   * Draws again the features of owners over the rows (`showInPlace`, `showSketches`): each is a row
-   * of the delta of its layer drawn and not read (`drawnOnlyRows`), with the keys of the row it is
-   * drawn over, the keys given (`OverlayPlace`), or at the end of its layer. A row a sketch is drawn
-   * over is drawn over by the sketch only (`STATE_HIDDEN_SKETCH`), the features of the other owners
-   * over it waiting until the sketch is no longer drawn; a row a feature of another owner is drawn
-   * over is not drawn (`STATE_HIDDEN_OVERLAY`). The rows are not written
+   * Draws again the features of the sketches over the rows (`showSketches`): each is a row of the
+   * delta of its layer drawn and not read (`drawnOnlyRows`), with the keys of the row it is drawn
+   * over, the keys given (`OverlayPlace`), or at the end of its layer. A row a sketch is drawn over
+   * is not drawn (`STATE_HIDDEN_SKETCH`). The rows are not written
    */
-  private syncOverlays(owners: ReadonlySet<string>): void {
-    const sketched = this.sketchedHandles();
+  private syncSketches(): void {
     const leaving = new Map<LayerTable, Set<RowHandle>>();
     const coming = new Map<LayerTable, DeltaInput[]>();
     const leave = (layer: LayerTable, handle: RowHandle): void => {
@@ -2737,14 +2437,12 @@ class FeatureTablesStore implements FeatureTablesInternals {
       }
       set.add(handle);
     };
-    for (const owner of owners) {
-      const before = this.overlays.get(owner) ?? new Map<string, OverlayEntry>();
+    {
+      const before = this.sketchEntries;
       const next = new Map<string, OverlayEntry>();
-      for (const { feature, place: given } of this.overlayInputs.get(owner) ?? []) {
+      for (const { feature, place: given } of this.sketchInputs) {
         const over = given ? undefined : this.handleOf(feature.id);
-        // The row is drawn over by its sketch
-        if (owner !== SKETCH_OWNER && over !== undefined && sketched.has(over)) continue;
-        const id = `\u0000overlay\u0000${owner}\u0000${feature.id}`;
+        const id = `\u0000overlay\u0000${SKETCH_OWNER}\u0000${feature.id}`;
         const [handle] = this.ids.allocate(utf8ColumnFromStrings([id]));
         const place = over === undefined ? undefined : this.placeOf(over);
         const layer = this.layerOf(feature.layerId);
@@ -2790,8 +2488,7 @@ class FeatureTablesStore implements FeatureTablesInternals {
       for (const [id, previous] of before) {
         if (!next.has(id)) leave(previous.layer, previous.handle);
       }
-      if (next.size > 0) this.overlays.set(owner, next);
-      else this.overlays.delete(owner);
+      this.sketchEntries = next;
     }
     for (const layer of new Set([...leaving.keys(), ...coming.keys()])) {
       this.rebuildDelta(layer, leaving.get(layer) ?? new Set(), coming.get(layer) ?? []);
@@ -2802,49 +2499,28 @@ class FeatureTablesStore implements FeatureTablesInternals {
       }
       layer.touchPending();
     }
-    for (const entry of this.overlays.get(SKETCH_OWNER)?.values() ?? []) {
+    // The rows drawn over are not drawn
+    const sketchedNow = new Set<RowHandle>();
+    for (const entry of this.sketchEntries.values()) {
       const place = entry.over === undefined ? undefined : this.placeOf(entry.over);
       entry.overPlace = place && { group: place.group, row: place.row };
+      if (entry.over !== undefined) sketchedNow.add(entry.over);
     }
-    // The rows drawn over are not drawn
-    const overlaid = new Set<RowHandle>();
-    const sketchedNow = new Set<RowHandle>();
-    for (const [owner, entries] of this.overlays) {
-      const into = owner === SKETCH_OWNER ? sketchedNow : overlaid;
-      for (const entry of entries.values()) if (entry.over !== undefined) into.add(entry.over);
-    }
-    this.setOverRows(overlaid, this.overlaidRows, (handles, on) =>
-      this.states.setOverlaid(handles, on),
-    );
-    this.overlaidRows = overlaid;
-    this.setOverRows(sketchedNow, this.sketchedRows, (handles, on) =>
-      this.states.setSketched(handles, on),
-    );
+    const on = [...sketchedNow].filter((handle) => !this.sketchedRows.has(handle));
+    const off = [...this.sketchedRows].filter((handle) => !sketchedNow.has(handle));
+    if (on.length > 0) this.states.setSketched(Int32Array.from(on), true);
+    if (off.length > 0) this.states.setSketched(Int32Array.from(off), false);
     this.sketchedRows = sketchedNow;
     this.revisionCount++;
   }
 
-  /** Marks the rows that come into a set of rows drawn over, and unmarks the ones that leave it */
-  private setOverRows(
-    now: ReadonlySet<RowHandle>,
-    before: ReadonlySet<RowHandle>,
-    mark: (handles: Int32Array, on: boolean) => void,
-  ): void {
-    const on = [...now].filter((handle) => !before.has(handle));
-    const off = [...before].filter((handle) => !now.has(handle));
-    if (on.length > 0) mark(Int32Array.from(on), true);
-    if (off.length > 0) mark(Int32Array.from(off), false);
-  }
-
   checkSketches(expected: ReadonlySet<string>): string[] {
     const problems: string[] = [];
-    const entries = this.overlays.get(SKETCH_OWNER) ?? new Map<string, OverlayEntry>();
-    /** The features drawn over each row, of any owner */
+    const entries = this.sketchEntries;
+    /** The features drawn over each row */
     const over = new Map<RowHandle, number>();
-    for (const owned of this.overlays.values()) {
-      for (const entry of owned.values()) {
-        if (entry.over !== undefined) over.set(entry.over, (over.get(entry.over) ?? 0) + 1);
-      }
+    for (const entry of entries.values()) {
+      if (entry.over !== undefined) over.set(entry.over, (over.get(entry.over) ?? 0) + 1);
     }
     const keysOf = (place: RowPlace): string => {
       const data = place.group.data;
@@ -2893,7 +2569,7 @@ class FeatureTablesStore implements FeatureTablesInternals {
   }
 
   sketchGeometryOf(id: string): Geometry | null | undefined {
-    const entry = this.overlays.get(SKETCH_OWNER)?.get(id);
+    const entry = this.sketchEntries.get(id);
     const place = entry ? this.placeOf(entry.handle) : undefined;
     return place ? rowInputOf(this.readContext, place.group, place.row).geometry : undefined;
   }
@@ -2915,60 +2591,6 @@ class FeatureTablesStore implements FeatureTablesInternals {
     const key = group >= 0 ? (this.groups.orderOf(group) ?? '') : utf8String(data.itemKeys, row);
     // Any key the last one is a beginning of comes after it
     return `${key}~`;
-  }
-
-  /** Makes a row a feature held (null for a row that cannot be read) */
-  private holdRow(handle: RowHandle): Feature | null {
-    const place = this.placeOf(handle);
-    if (!place) return null;
-    this.rowBoxes.markOne(handle);
-    const feature = rowFeature(this.readContext, place.layer.layerId, place.group, place.row);
-    this.heldRows.set(handle, { feature });
-    // Its copy in the delta stays there until it is no longer held
-    if (place.group.delta) {
-      place.layer.delta.setKept(place.row, true);
-      this.versions.rowHeld(handle);
-    }
-    return feature;
-  }
-
-  /** Whether an owner names the row of a handle */
-  private namedByOwner(handle: RowHandle): boolean {
-    for (const handles of this.holders.values()) if (handles.has(handle)) return true;
-    return false;
-  }
-
-  /**
-   * Makes a row held a row only: the values an edit wrote in its middle and did not end are
-   * written back to the ones before it, and its copy in the delta can go to the next version of
-   * its group
-   *
-   * @returns Its id
-   */
-  private releaseRow(handle: RowHandle): string | undefined {
-    const held = this.heldRows.get(handle);
-    if (!held) return undefined;
-    this.rowBoxes.markOne(handle);
-    this.heldRows.delete(handle);
-    const serial = this.ids.deltaLayer(handle);
-    if (serial >= 0) {
-      this.layerList[serial].delta.setKept(this.ids.deltaSlot(handle), false);
-      this.notifyWork();
-    }
-    return held.feature.id;
-  }
-
-  /** Takes a row out of every owner, without writing it (it was deleted) */
-  private forgetHeld(handle: RowHandle): void {
-    this.rowBoxes.markOne(handle);
-    this.heldRows.delete(handle);
-    for (const [owner, handles] of [...this.holders]) {
-      if (!handles.has(handle)) continue;
-      const next = new Set(handles);
-      next.delete(handle);
-      if (next.size === 0) this.holders.delete(owner);
-      else this.holders.set(owner, next);
-    }
   }
 
   /**
@@ -3072,7 +2694,7 @@ class FeatureTablesStore implements FeatureTablesInternals {
    * Marks the rows a patch may give another box: every row of a patch that writes what a box is
    * made of (the geometry, the type, the layer, the group or whether it is deleted). A patch of the
    * attributes and the style marks only the rows whose box is not their bbox: a box of its type
-   * reads the feature, and so does the box of a row held or an image
+   * reads the feature, and so does the box of an image
    */
   private markBoxes(patch: RowValues): void {
     const { handles, fields, deleted } = patch;
@@ -3086,9 +2708,8 @@ class FeatureTablesStore implements FeatureTablesInternals {
         this.rowBoxes.markOne(handle);
         continue;
       }
-      const held = this.heldRows.get(handle);
-      const type = held ? held.feature.type : rowType(place.group.data, place.row);
-      if (held || type === 'Image' || this.rowBoxCalculators.has(type)) {
+      const type = rowType(place.group.data, place.row);
+      if (type === 'Image' || this.rowBoxCalculators.has(type)) {
         this.rowBoxes.markOne(handle);
       }
     }
@@ -3449,7 +3070,6 @@ class FeatureTablesStore implements FeatureTablesInternals {
         this.writtenOrders.delete(group);
       }
     }
-    if (kept) this.limitRetained(token as number);
     this.revisionCount++;
     this.notifyWork();
     if (kept) this.onChange?.({ restoreToken: token });
@@ -4005,9 +3625,8 @@ class FeatureTablesStore implements FeatureTablesInternals {
       const watched = coming.length > 0 && this.versions.watches(marks.mark);
       for (let r = 0; r < group.data.length; r++) {
         const handle = group.data.handles[r];
-        // A row held as a feature stays in the delta until it is no longer held, and a feature
-        // drawn over a row as long as it is drawn
-        if (this.heldRows.has(handle) || this.drawnOnlyRows.has(handle)) kept[r] = 1;
+        // A feature drawn over a row stays in the delta as long as it is drawn
+        if (this.drawnOnlyRows.has(handle)) kept[r] = 1;
         // A row of the delta before, in the order of the rows when they are found in their order
         const mark =
           keysKept && pairs[r * 2] === 0 ? old.marks[pairs[r * 2 + 1]] : marksOf.get(handle);
@@ -4580,20 +4199,4 @@ class LayerTableViewImpl implements LayerTableView {
   private locate(handle: RowHandle): boolean {
     return this.store.findPlace(handle) && this.store.foundLayer === this.table;
   }
-}
-
-/** The rows `rows` of a patch, as a patch */
-function subsetPatch(patch: RowValues, rows: readonly number[]): RowValues {
-  const fields = new Map<RowField, readonly unknown[]>();
-  for (const [field, values] of patch.fields) {
-    fields.set(
-      field,
-      rows.map((i) => values[i]),
-    );
-  }
-  return {
-    handles: Int32Array.from(rows, (i) => patch.handles[i]),
-    fields,
-    deleted: patch.deleted ? Uint8Array.from(rows, (i) => patch.deleted?.[i] ?? 0) : undefined,
-  };
 }

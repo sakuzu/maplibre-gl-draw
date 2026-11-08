@@ -756,6 +756,23 @@ draws, `'circle'`, `'square'`, `'triangle'` and `'star'`. The shape
 `'icon'` and its `iconId`, which the library drew as a circle, are gone:
 give `'circle'` in their place.
 
+The selection is read as one value, `draw.selection.value`, in the place
+of `selection.get()`. It gives the type, the number of the features, their
+layers and extent, and the IDs. Nothing selected is the type `feature` with
+the number 0, and past 2,000 features of a store that holds its features as
+rows the IDs are `null`. `selection.changed` gives the value and the one
+before it. `draw.selection.target` names the selection as it is, and
+`draw.selection.set(target)` selects it again:
+
+```ts
+const { type, count, ids } = draw.selection.value;
+if (count > 0 && ids) console.log(type, ids);
+
+const kept = draw.selection.target;
+draw.selection.clear();
+draw.selection.set(kept);
+```
+
 A store of your own needs no change. A store that keeps the items of its
 layers as lists makes `DocumentChange.order` from the lists before and
 after with `diffItemOrder`.
@@ -975,7 +992,7 @@ through the API as well.
 | `add(featureCollection)` | `document.load(featureCollection)` |
 | `get(id)` | `features.get(id)` |
 | `getAll()` | `document.toGeoJSON()` |
-| `getSelectedIds()` | `selection.get().ids` |
+| `getSelectedIds()` | `selection.value.ids` |
 | `delete(ids)` | `features.deleteMany(ids)` |
 | `trash()` | `selection.delete()` |
 | `setFeatureProperty(id, key, value)` | `features.update(id, patch)` |

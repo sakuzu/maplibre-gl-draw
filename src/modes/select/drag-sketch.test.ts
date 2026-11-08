@@ -64,9 +64,9 @@ let store: Store;
 let writes: string[];
 let events: Array<[string, unknown]>;
 
-function open(kind: Kind, ids: readonly string[], holdLimit?: number): void {
+function open(kind: Kind, ids: readonly string[], selectionIdsLimit?: number): void {
   vi.useFakeTimers();
-  store = kind === 'rows' ? createTableStore({ holdLimit }).store : new MemoryStore();
+  store = kind === 'rows' ? createTableStore({ selectionIdsLimit }).store : new MemoryStore();
   store.createLayer({
     id: 'l',
     name: 'l',
@@ -542,7 +542,7 @@ describe('the rows of a drag', () => {
   it('of the features selected in bulk are moved by their set, and written once', () => {
     open('rows', ['a', 'b'], 1);
     draw.selection.set('feature', ['a', 'b']);
-    expect(draw.selection.get().bulk).toBeDefined();
+    expect(draw.selection.value.ids).toBeNull();
     const applyBulk = vi.spyOn(store, 'applyBulk');
     press([2.5, 0.5]);
     expect(setOf('a')).toBe(BULK_MOVE_SET);
@@ -558,7 +558,7 @@ describe('the rows of a drag', () => {
   it('of the features selected in bulk leave out a row locked meanwhile', () => {
     open('rows', ['a', 'b'], 1);
     draw.selection.set('feature', ['a', 'b']);
-    expect(draw.selection.get().bulk).toBeDefined();
+    expect(draw.selection.value.ids).toBeNull();
     press([2.5, 0.5]);
     draw.features.update('b', { locked: true });
     expect(setOf('b')).toBe(0);
@@ -586,7 +586,7 @@ describe('the rows of a drag', () => {
     draw.selection.set('feature', ['a', 'b']);
     press([2.5, 0.5]);
     draw.selection.set('feature', ['a']);
-    expect(draw.selection.get().bulk).toBeUndefined();
+    expect(draw.selection.value.ids).not.toBeNull();
     letGo(2.5, 0.5);
     near(corner(draw.features.get('a') as unknown as Feature), [2, 0]);
     near(corner(draw.features.get('b') as unknown as Feature), [3, 0]);

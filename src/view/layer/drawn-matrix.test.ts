@@ -53,7 +53,6 @@ import { generateCirclePolygon } from '../../geometry/circle.js';
 import { createRowBlockBuilder, createRowValues } from '../../kasane/index.js';
 import { drawPropertyKey } from '../../shared/properties.js';
 import { getCircleRadius, getCreatedZoom } from '../../shared/utils/property.js';
-import { RELEASE_DELAY_MS } from '../../store/draw-store.js';
 import { getDisplayFeatures } from '../../store/local-visibility.js';
 import type { Store } from '../../store/store.js';
 import { createTableStore } from '../../store/table-memory.js';
@@ -997,9 +996,16 @@ const drawThroughMode: Step = {
     const mode =
       run.shape === 'Polygon' ? 'draw_polygon' : run.shape === 'LineString' ? 'draw_line' : null;
     if (!mode) throw new Error(`no mode for ${run.shape}`);
-    let made: Feature | undefined;
-    const off = draw.on('feature.created', ({ feature }) => {
-      made ??= feature;
+    let made: { id: string } | undefined;
+    // A Store of rows tells the row created, a Store of objects the feature created
+    const off = draw.on('document.changed', (change) => {
+      const tables = draw.getStore().tables;
+      for (const rows of change.rows?.layers.values() ?? []) {
+        const id = rows.created.length > 0 ? tables?.getRowId(rows.created[0]) : undefined;
+        if (id !== undefined) made ??= { id };
+      }
+      const created = change.features?.created?.[0];
+      if (created) made ??= created;
     });
     draw.setMode(mode);
     const coords = (
@@ -1102,8 +1108,6 @@ const clear: Step = {
   name: 'clear the selection',
   run: (run) => {
     run.client.draw.selection.clear();
-    // The rows opened are let go of after a delay
-    vi.advanceTimersByTime(RELEASE_DELAY_MS * 2);
   },
 };
 

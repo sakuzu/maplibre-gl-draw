@@ -495,7 +495,7 @@ describe.each(STORES)('applyEdits of %s', (_name, make) => {
     expect(edited.notified).toEqual(updated.notified);
   });
 
-  it('notifies the selected features it edits as features updated', () => {
+  it('notifies the selected features it edits as an update does', () => {
     const edited = watched(make);
     edited.store.setSelection('feature', ['point']);
     edited.notified.length = 0;
@@ -505,6 +505,12 @@ describe.each(STORES)('applyEdits of %s', (_name, make) => {
     updated.notified.length = 0;
     updated.store.updateFeature('point', { properties: { name: 'P', kind: 1, n: 1 } });
     expect(edited.notified).toEqual(updated.notified);
-    expect(edited.notified[0]?.features?.updated?.map((entry) => entry.id)).toEqual(['point']);
+    // A Store of rows tells the rows written, selected or not
+    if (edited.store.tables) {
+      expect(edited.notified[0]?.features).toBeUndefined();
+      expect(edited.notified[0]?.rows?.layers.size).toBe(1);
+    } else {
+      expect(edited.notified[0]?.features?.updated?.map((entry) => entry.id)).toEqual(['point']);
+    }
   });
 });

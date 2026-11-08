@@ -121,6 +121,23 @@ describe.each(STORE_KINDS)('on %s', (_kind, createStore) => {
   let context: EngineModeContext;
   let handler: SelectModeDragHandler;
 
+  /**
+   * The features a notification wrote: the features updated, and the rows written of a Store of
+   * rows, as the Store reads them then
+   */
+  function updatedOf(changes: StoreChange): Array<{ id: string; feature: Feature }> {
+    const out = (changes.features?.updated ?? []).map(({ id, feature }) => ({ id, feature }));
+    const tables = store.tables;
+    for (const rows of changes.rows?.layers.values() ?? []) {
+      for (const handle of rows.updated) {
+        const id = tables?.getRowId(handle);
+        const feature = id === undefined ? undefined : store.getFeature(id);
+        if (id !== undefined && feature) out.push({ id, feature });
+      }
+    }
+    return out;
+  }
+
   function putFeature(feature: Feature): void {
     store.createFeature(feature);
   }
@@ -206,7 +223,7 @@ describe.each(STORE_KINDS)('on %s', (_kind, createStore) => {
     spatialIndex = new StoreSpatialIndex(store);
     indexUpdates = [];
     store.subscribe((changes) => {
-      for (const { id } of changes.features?.updated ?? []) indexUpdates.push(id);
+      for (const { id } of updatedOf(changes)) indexUpdates.push(id);
     });
     map = makeMap();
     const shapes = new RenderedShapes(store);
@@ -608,14 +625,14 @@ describe.each(STORE_KINDS)('on %s', (_kind, createStore) => {
     it('on commit, the updates of the 2 features ride on a single StoreChange', () => {
       const batches: StoreChange[] = [];
       store.subscribe((changes) => {
-        if (changes.features?.updated) batches.push(changes);
+        if (updatedOf(changes).length > 0) batches.push(changes);
       });
 
       dragVertex('f1', { ring: 0, index: 1 }, [10, 0], [11, 2]);
 
       // Nothing is written by a frame of the drag: the commit moves both in one notification
       const combined = batches.filter((changes) => {
-        const updated = changes.features?.updated ?? [];
+        const updated = updatedOf(changes);
         const ids = new Set(updated.map((u) => u.id));
         return ids.has('f1') && ids.has('f2');
       });
@@ -628,14 +645,14 @@ describe.each(STORE_KINDS)('on %s', (_kind, createStore) => {
       enableSharedVertexDrag(false);
       const batches: StoreChange[] = [];
       store.subscribe((changes) => {
-        if (changes.features?.updated) batches.push(changes);
+        if (updatedOf(changes).length > 0) batches.push(changes);
       });
 
       dragVertex('f1', { ring: 0, index: 1 }, [10, 0], [11, 2]);
 
       // Nothing during the drag, and one commit in endDrag
       expect(batches).toHaveLength(1);
-      expect(batches[0].features?.updated?.map((u) => u.id)).toEqual(['f1']);
+      expect(updatedOf(batches[0]).map((u) => u.id)).toEqual(['f1']);
     });
   });
 
@@ -802,20 +819,18 @@ describe.each(STORE_KINDS)('on %s', (_kind, createStore) => {
   });
 
   describe('nothing written during a drag, and the commit in endDrag', () => {
-    type FeatureUpdate = NonNullable<NonNullable<StoreChange['features']>['updated']>[number];
-
     let batches: StoreChange[];
 
     /** Start collecting and recording only the batches that contain features.updated */
     function watchFeatureBatches(): void {
       batches = [];
       store.subscribe((changes) => {
-        if (changes.features?.updated) batches.push(changes);
+        if (updatedOf(changes).length > 0) batches.push(changes);
       });
     }
 
-    function updatesOf(changes: StoreChange): FeatureUpdate[] {
-      return changes.features?.updated ?? [];
+    function updatesOf(changes: StoreChange): Array<{ id: string; feature: Feature }> {
+      return updatedOf(changes);
     }
 
     /** The commit batches: nothing else is written */
@@ -1062,7 +1077,7 @@ describe.each(STORE_KINDS)('on %s', (_kind, createStore) => {
       handler.updateDrag(dragEvent(3, 4, [0, 0]), context);
       store.deleteFeature('f2');
       store.subscribe((changes) => {
-        const updated = changes.features?.updated ?? [];
+        const updated = updatedOf(changes);
         if (updated.length > 0) committed.push(updated.map((u) => u.id));
       });
 
@@ -1280,7 +1295,7 @@ describe.each(STORE_KINDS)('on %s', (_kind, createStore) => {
       it('core writes nothing to the Store (the provider owns the meaning of coordinates)', () => {
         const batches: StoreChange[] = [];
         store.subscribe((changes) => {
-          if (changes.features?.updated) batches.push(changes);
+          if (updatedOf(changes).length > 0) batches.push(changes);
         });
 
         startAuxiliaryDrag([5, 5]);
@@ -1513,7 +1528,7 @@ describe.each(STORE_KINDS)('on %s', (_kind, createStore) => {
     it('writes nothing for a move or a vertex: nothing was written in their middle', () => {
       const calls: string[] = [];
       store.subscribe((changes) => {
-        for (const u of changes.features?.updated ?? []) calls.push(u.id);
+        for (const u of updatedOf(changes)) calls.push(u.id);
       });
 
       startMoveDrag(['f1'], [0, 0]);

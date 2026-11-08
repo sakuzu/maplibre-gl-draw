@@ -104,7 +104,7 @@ describe('the playground', () => {
     );
     const drawing = await page.evaluate(() => {
       const { draw } = window as unknown as E2EWindow;
-      const selected = draw.selection.get().ids.map((id) => draw.features.get(id));
+      const selected = (draw.selection.value.ids ?? []).map((id) => draw.features.get(id));
       return {
         layers: draw.layers
           .list()

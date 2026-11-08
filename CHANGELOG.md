@@ -8,8 +8,9 @@ the project follows semantic versioning.
 
 3.0.0 lets a store hold the features of a layer as rows of columns, so
 that a layer of a million features is drawn, hit tested and edited
-without a million objects: a row is made a feature only while it is
-selected or edited. The layers and groups of such a store are a kind of
+without a million objects: a row is made a feature only when one is
+read, selected or not, and every write of a row is a write of the row.
+The layers and groups of such a store are a kind of
 their own (`kind: 'table'`), the stacking order is told by the moves of
 its items, and the parts in the words of the rows are in a new entry,
 `@sakuzu/maplibre-gl-draw/kasane`, which is experimental. An app over
@@ -98,31 +99,33 @@ writing it. Its changes are listed after those of 3.0.0.
   the place of its frontmost feature as `groups.create` puts it; and for
   a store that holds its features as rows, `tables` and `applyRows`. The
   fields of a store of rows
-  (`StoreView.tables`, `Store.applyRows`, `DocumentChange.rows` and
-  `DocumentChange.opened`) are experimental, and their types are in
-  `/kasane`.
+  (`StoreView.tables`, `Store.applyRows` and `DocumentChange.rows`) are
+  experimental, and their types are in `/kasane`.
 - `GroupInput.layerId`, which must be the layer of the features.
 - `draw.debug.gpu()` (`GpuMemoryDiagnostics`): the bytes of GPU memory the
   drawing holds.
 - `CoordinateDimensions` in `/table`.
-- Many features selected at once, in a store that holds its features as
-  rows: past 2,000 features (a box, every feature, a group or a layer of
-  many features), the selection has no list of IDs and tells their
-  number, layers and extent (`Selection.bulk`, `SelectionBulk`, and
-  `bulk` and `previousBulk` in `DocumentChange.selection` and
-  `selection.changed`). The verbs of `draw.selection` act on them, the
+- The selection is read as one value however many features are selected:
+  `selection.value` (`SelectionValue`) tells the type, the number of the
+  features, their layers and extent, and the IDs; past 2,000 features, in a
+  store that holds its features as rows (a box, every feature), the IDs are
+  not listed (`ids` is `null`). `selection.changed` gives the value and the
+  one before it. `selection.target` (`SelectionTarget`) names the selection
+  as it is, without listing it, and `selection.set(target)` selects it
+  again, features selected without their IDs included. The verbs of
+  `draw.selection` act on them, the
   select mode moves, rotates and resizes them by the state of their rows
   and writes them once let go, over several draws of the map (each draw
   writes the rows that fit in its time, the others drawn moved until then, and
   `drag.ended` comes after the last), and the arrow keys write the moves
   of a key held once.
-- `selection.setAll(filter)`, `selection.count(filter)`,
+- `selection.setAll(filter)`, `selection.count(filter)` and
   `selection.update(patch | make, filter)` (a patch made once per kind of
-  feature, `FeatureStyleSample`) and `selection.restore(selection)`;
-  `selection.features(filter, { limit, after })` reads the selection a
-  page at a time.
-- `drag.started` and `drag.ended` carry `bulk` for features selected in
-  bulk.
+  feature, `FeatureStyleSample`), for a selection of features, groups or
+  layers of any store; `selection.features(filter, { limit, after })` reads
+  the selection a page at a time.
+- `drag.started` and `drag.ended` carry `bulk`, the value of the selection,
+  for features selected without their IDs listed.
 - Experimental: what an extension answers and draws from the rows of a
   layer held as rows, without making their features, in one member `rows`
   of each of its types, whose types are in `/kasane`:
@@ -189,14 +192,11 @@ writing it. Its changes are listed after those of 3.0.0.
 - `draw.captureImage(options)` (`CaptureImageOptions`): an image of the map
   as it is drawn, taken in its next draw without the selection and the
   shape being drawn.
-- In `/kasane`: `FeatureTables.showInPlace(owner, features)`, features
-  drawn in the places of rows for this client only, without writing them
-  (the edits of others in their middle); `FeatureTablesWriter.clear()`,
-  every row taken out of the tables to come back, the rows opened, the
-  features selected in bulk and the work under way let go of, the ids
-  keeping their handles; and `copyTableStore` (`TableStoreCopy`), a copy
-  of a document held as rows into a new store of rows a block at a time,
-  to draw it apart without making its features.
+- In `/kasane`: `FeatureTablesWriter.clear()`, every row taken out of the
+  tables to come back, the features selected in bulk and the work under way
+  let go of, the ids keeping their handles; and `copyTableStore`
+  (`TableStoreCopy`), a copy of a document held as rows into a new store of
+  rows a block at a time, to draw it apart without making its features.
 
 - The values of the attributes (`Value`), from the main entry and from
   `/kasane`: the classes of the kinds JSON has not (`BigInteger`,
@@ -331,6 +331,22 @@ writing it. Its changes are listed after those of 3.0.0.
 
 ### Changed in 3.0.0
 
+- `selection.get()` is `selection.value` (`SelectionValue`): the type, the
+  number of the features, their layers and extent, and the IDs, `null` past
+  2,000 features in a store that holds its features as rows. Nothing selected
+  is the type `feature` and the number 0. `selection.changed` gives values.
+  `Selection` is what a store keeps (`Store.getSelection`), and
+  `DocumentChange.selection` tells it as the store keeps it
+- A store that holds its features as rows tells every write of a row as the
+  row written (`DocumentChange.rows`), selected or not: a feature selected or
+  being edited is not a feature of its own until it is let go of, and its
+  writes do not fire `feature.created` and `feature.updated`. A feature read
+  from it (`features.get`) is made of the row each time it changes
+- The vertices selected stay selected when another writer moves a vertex of
+  the feature; by their places, they end when another writer adds or deletes
+  a vertex, and by their IDs (a store that gives them, `getVertexIds` and
+  `findVertices`) they follow the vertices, the ones no longer there leaving
+  the selection
 - Every drag of the select mode (a move, a rotation, a resize, a vertex, a
   midpoint, the radius of a Circle, a handle of an extension) is shown by a
   sketch of this client: the document does not change while it goes on,
@@ -696,7 +712,10 @@ writing it. Its changes are listed after those of 3.0.0.
 | The white circle the library drew | `drawHandles`, `ctx.point.draw` |
 | `handles(feature, screen)` | `handles(feature, ctx)`, `ctx.screen` |
 | `globalHandles(screen)` | `globalHandles(ctx)`, `ctx.screen` |
-| `PreparedTable.bounds`, `SelectionBulk.bounds` | `bbox` |
+| `PreparedTable.bounds` | `bbox` |
+| `selection.get()` | `selection.value` |
+| `selection.get().type` `null` | `selection.value.count` 0 |
+| `selection.changed` `{ type, ids }` | `SelectionValue` |
 | `Dataset.getRowBounds`, `LayerTableView.getRowBounds` | `getRowBBox` |
 | `selectionStyle.boundingBox` | `selectionStyle.box` |
 | `selectionStyle.boxSelection` | `selectionStyle.selectionRectangle` |

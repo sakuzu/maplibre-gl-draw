@@ -79,20 +79,20 @@ beforeEach(() => {
 describe('draw.selection', () => {
   it('sets, adds, removes and clears', () => {
     expect(selection.set('feature', ['a'])).toBe(true);
-    expect(selection.get()).toEqual({ type: 'feature', ids: ['a'] });
+    expect(selection.value).toMatchObject({ type: 'feature', ids: ['a'] });
     expect(selection.add(['line', 'a'])).toBe(true);
-    expect(selection.get().ids).toEqual(['a', 'line']);
+    expect(selection.value.ids).toEqual(['a', 'line']);
     expect(selection.add(['a'])).toBe(false);
     expect(selection.remove(['a', 'x'])).toBe(true);
     expect(selection.remove(['a'])).toBe(false);
-    expect(selection.get().ids).toEqual(['line']);
+    expect(selection.value.ids).toEqual(['line']);
     selection.clear();
-    expect(selection.get()).toEqual({ type: null, ids: [] });
+    expect(selection.value).toMatchObject({ count: 0, ids: [] });
   });
 
   it('takes the type of the first ID when adding to nothing', () => {
     expect(selection.add(['g'])).toBe(true);
-    expect(selection.get()).toEqual({ type: 'group', ids: ['g'] });
+    expect(selection.value).toMatchObject({ type: 'group', ids: ['g'] });
   });
 
   it('throws not-found for an ID of another type and invalid-input for a wrong type', () => {
@@ -100,13 +100,13 @@ describe('draw.selection', () => {
     expect(codeOf(() => selection.set('thing' as never, ['a']))).toBe('invalid-input');
     selection.set('feature', ['a']);
     expect(codeOf(() => selection.add(['l1']))).toBe('not-found');
-    expect(selection.get().ids).toEqual(['a']);
+    expect(selection.value.ids).toEqual(['a']);
   });
 
   it('returns false when nothing given can be selected, and changes nothing', () => {
     selection.set('feature', ['a']);
     expect(selection.set('feature', ['hidden'])).toBe(false);
-    expect(selection.get().ids).toEqual(['a']);
+    expect(selection.value.ids).toEqual(['a']);
   });
 
   it('lists the selected features, and the features of a selected group or layer', () => {

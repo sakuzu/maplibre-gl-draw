@@ -22,12 +22,10 @@ import type { Geometry } from 'geojson';
 import type { ModeContext } from '../../api/extension/context.js';
 import type { DrawPointerEvent } from '../../api/extension/mode.js';
 import type { Feature as PublicFeature } from '../../api/model.js';
-import { heldFeaturesInOrder } from '../../feature-table/held-order.js';
 import { forEachSnapRow, rowHasEdges, rowSegmentsInBBox } from '../../feature-table/snap-rows.js';
 import { resolveVertexCoordinates } from '../../operations/shared-vertex.js';
 import type { TraceGraphEndpoint } from '../../operations/trace-graph.js';
 import { buildTraceGraph, findTracePath } from '../../operations/trace-graph.js';
-import { getBoundingBox } from '../../shared/utils/feature-bbox.js';
 import { degreesPerPixel } from '../../snapping/geometry.js';
 import { DEFAULT_SNAP_OPTIONS } from '../../snapping/types.js';
 import { isLocallyHidden } from '../../store/local-visibility.js';
@@ -83,7 +81,7 @@ export interface TraceSource {
   features(bbox: BoundingBox): Feature[];
   /**
    * Lists the edges of the visible rows held as columns within an extent, read on their columns
-   * (a Store that holds its features as rows; its features are the rows held)
+   * (a Store that holds its features as rows)
    */
   edges?(bbox: BoundingBox, visit: (start: Coordinate, end: Coordinate) => void): void;
 }
@@ -130,14 +128,8 @@ export function traceSourceOf(ctx: ModeContext): TraceSource {
     },
     features(bbox) {
       const extent: [number, number, number, number] = [bbox.minX, bbox.minY, bbox.maxX, bbox.maxY];
-      // A Store of rows: its features are the rows held (the others are listed as edges)
-      const features = (
-        store.tables
-          ? heldFeaturesInOrder(store.tables, store.getLayerOrder()).filter((feature) =>
-              intersectsExtent(feature, bbox),
-            )
-          : draw.features.list({ bbox: extent })
-      )
+      // A Store of rows: its rows are listed as edges
+      const features = (store.tables ? [] : draw.features.list({ bbox: extent }))
         .filter(shown)
         .map((feature) => feature as Feature);
       for (const { row } of ctx.listTraceRows(extent)) {
@@ -165,17 +157,6 @@ export function traceSourceOf(ctx: ModeContext): TraceSource {
       );
     },
   };
-}
-
-/** Whether the extent of a feature meets a box */
-function intersectsExtent(feature: PublicFeature, bbox: BoundingBox): boolean {
-  const extent = getBoundingBox(feature as Feature);
-  return (
-    extent.minX <= bbox.maxX &&
-    extent.maxX >= bbox.minX &&
-    extent.minY <= bbox.maxY &&
-    extent.maxY >= bbox.minY
-  );
 }
 
 /**

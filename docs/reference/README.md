@@ -70,8 +70,8 @@ layer 1.
 Layer 2 is two entries. `@sakuzu/maplibre-gl-draw/kasane` holds the
 parts in the words of the rows, for a store that holds the features of
 its layers as rows of columns; the fields of layer 1 such a store fills
-(`StoreView.tables`, `Store.applyRows`, `DocumentChange.rows` and
-`DocumentChange.opened`) are marked experimental, and an application
+(`StoreView.tables`, `Store.applyRows` and `DocumentChange.rows`) are
+marked experimental, and an application
 that reads and writes features does not need them.
 `@sakuzu/maplibre-gl-draw/webgl` holds what a plugin draws with WebGL of
 its own through (`Webgl`, `Gpu`, `GpuDefinition`, `FeatureRenderer` and

@@ -19,12 +19,17 @@ import { coordinatesOf, supportsVertexEditing } from '../../shared/utils/coordin
 import { forEachMatchingRow } from '../../store/feature-stream.js';
 import { isFeatureLocked } from '../../store/lock.js';
 import { listEveryFeatureInOrder } from '../../store/ordering.js';
+import {
+  selectionOfTarget,
+  selectionTargetOf,
+  selectionValueOf,
+} from '../../store/selection-value.js';
 import type { Feature as StoredFeature, VertexRef } from '../../store/types.js';
 import type { FeaturesCollection } from '../features.js';
 import type { GroupsCollection } from '../groups.js';
 import type { Feature, FeaturePatch, FeatureStyleSample } from '../model.js';
 import type { SelectionResource, VertexSelectionResource } from '../selection.js';
-import type { Selection, SelectionType } from '../state.js';
+import type { SelectionTarget, SelectionType, SelectionValue } from '../state.js';
 import {
   checkSharedPatch,
   featureMatcher,
@@ -88,6 +93,19 @@ export function createSelection(
         .filter((feature): feature is StoredFeature => feature !== undefined);
     }
     if (type === null) return [];
+    // A Store of rows: the features of the rows of the groups or the layers, by their rows
+    const internals = featureTablesInternals(store.tables);
+    const rows = internals ? store.rowsOfSelection() : null;
+    if (internals && rows) {
+      const out: StoredFeature[] = [];
+      for (const handles of rowsByLayerInOrder(internals, rows).values()) {
+        for (const handle of handles) {
+          const feature = store.getFeature(internals.ids.idOf(handle) as string);
+          if (feature) out.push(feature);
+        }
+      }
+      return out;
+    }
     const wanted = new Set(ids);
     const inside = (feature: StoredFeature): boolean =>
       type === 'group'
@@ -122,16 +140,29 @@ export function createSelection(
   };
 
   return {
-    get: () => store.getSelection(),
+    get value() {
+      return selectionValueOf(store) as SelectionValue;
+    },
 
-    set(type, ids) {
+    get target() {
+      return selectionTargetOf(store) as SelectionTarget;
+    },
+
+    set(typeOrTarget: SelectionType | SelectionTarget, ids?: readonly string[]) {
+      if (isRecord(typeOrTarget)) {
+        const selection = selectionOfTarget(typeOrTarget as SelectionTarget);
+        if (!selection) throw invalidInput('The target is not one the instance gave');
+        store.restoreSelection(selection);
+        return store.getSelection().type !== null;
+      }
+      const type = typeOrTarget as SelectionType;
       if (!SELECTION_TYPES.includes(type)) {
         throw invalidInput('type must be feature, group or layer');
       }
       const list = requireIds(ids);
       // Many features of rows are selected in bulk: read on their columns, no feature is made
       const tables = store.tables;
-      if (type === 'feature' && tables && list.length > store.holdLimit) {
+      if (type === 'feature' && tables && list.length > store.selectionIdsLimit) {
         const handles = list.map((id) => tables.findRow(id) ?? -1);
         if (handles.every((handle) => handle >= 0)) {
           if (!list.some((id) => isShown(store, type, id))) return false;
@@ -168,12 +199,6 @@ export function createSelection(
       if (ids.length === 0) return false;
       store.setSelection('feature', ids);
       return true;
-    },
-
-    restore(selection: Selection) {
-      if (!isRecord(selection)) throw invalidInput('The selection must be an object');
-      store.restoreSelection(selection as Selection);
-      return store.getSelection().type !== null;
     },
 
     add(ids) {

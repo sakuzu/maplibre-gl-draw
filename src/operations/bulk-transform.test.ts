@@ -74,9 +74,9 @@ function featuresOf(seed: number, count: number, z: boolean): Feature[] {
   return out;
 }
 
-function storeOf(features: Feature[], holdLimit: number, dims?: CoordinateDimensions) {
+function storeOf(features: Feature[], selectionIdsLimit: number, dims?: CoordinateDimensions) {
   const store = new DrawStore(new TableContractStore(dims ? { dimensionsOf: () => dims } : {}), {
-    holdLimit,
+    selectionIdsLimit,
   });
   store.createLayer({
     id: 'l',

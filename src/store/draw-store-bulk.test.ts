@@ -55,9 +55,9 @@ function layer(id: string): Layer {
   } as Layer;
 }
 
-function setup(count: number, holdLimit = 3) {
+function setup(count: number, selectionIdsLimit = 3) {
   const contract = new TableContractStore();
-  const store = new DrawStore(contract, { holdLimit });
+  const store = new DrawStore(contract, { selectionIdsLimit });
   store.createLayer(layer('l'));
   store.transact(() => {
     for (let i = 0; i < count; i++) store.createFeature(square(`f${i}`, i * 2));
@@ -78,7 +78,7 @@ function marked(tables: FeatureTables, id: string): boolean {
 }
 
 describe('features selected in bulk', () => {
-  it('are the set of their rows past the limit, neither listed nor opened', () => {
+  it('are the set of their rows past the limit, not listed', () => {
     const { store, tables, ids } = setup(6);
     store.setSelection('feature', ids.slice(0, 5));
     const selection = store.getSelection();
@@ -88,19 +88,17 @@ describe('features selected in bulk', () => {
     expect(selection.bulk?.layerIds).toEqual(['l']);
     expect(selection.bulk?.bbox).toEqual([0, 0, 9, 1]);
     expect(store.getSelectedRows()?.count).toBe(5);
-    expect(internalsOf(tables).getOpenedFeature('f0')).toBeUndefined();
     expect(marked(tables, 'f4')).toBe(true);
     expect(marked(tables, 'f5')).toBe(false);
   });
 
-  it('are opened as features up to the limit, the marks taken off', () => {
+  it('are listed by their IDs up to the limit, the marks taken off', () => {
     const { store, tables, ids } = setup(6);
     store.setSelection('feature', ids.slice(0, 5));
     store.setSelection('feature', ids.slice(0, 2));
     expect(store.getSelection()).toEqual({ type: 'feature', ids: ['f0', 'f1'] });
     expect(store.getSelectedRows()).toBeNull();
     expect(marked(tables, 'f0')).toBe(false);
-    expect(internalsOf(tables).getOpenedFeature('f0')).toBeDefined();
   });
 
   it('tell the summary now and before in the notification of the selection', () => {

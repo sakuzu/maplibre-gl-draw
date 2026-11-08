@@ -10,7 +10,7 @@
  * features. A Store that holds its features as rows reads it from the boxes of the rows the
  * tables keep, without making the features: the box of a row is the extent of its positions; a
  * Circle is read from its center and its radius; an Image, whose extent is read from its
- * attributes, and a row opened as a feature (an edit may have moved it), from their features.
+ * attributes, from its feature.
  */
 
 import { featureTablesInternals } from '../../feature-table/feature-tables.js';
@@ -95,7 +95,7 @@ export function rowsExtent(store: Store, filter: RowFilter): BBox | null {
     const { group, row } = place;
     if ((group.data.flags[row] & ROW_FLAG_DELETED) !== 0) return true;
     const type = rowType(group.data, row);
-    if (type === 'Image' || internals.isHeld(handle)) {
+    if (type === 'Image') {
       const feature = store.getFeature(tables.getRowId(handle) as string);
       if (feature) extent.addBox(featureExtent(feature));
       return true;

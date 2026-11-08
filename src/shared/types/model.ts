@@ -86,12 +86,34 @@ export interface Selection {
   type: SelectionType | null;
   /** IDs of the selected items (empty for features selected in bulk) */
   ids: readonly string[];
-  /** Many features selected at once, held as the set of their rows (see the public `Selection`) */
+  /**
+   * Many features selected at once, held as the set of their rows (see the public
+   * `SelectionValue`)
+   */
   bulk?: SelectionBulk;
 }
 
 /**
- * Many features selected at once (see the public `SelectionBulk`)
+ * The selection as the instance gives it: its type, the number of its features, their IDs (null
+ * for features selected in bulk), layers and extent (see the public `SelectionValue`)
+ */
+export interface SelectionValue {
+  readonly type: SelectionType;
+  readonly count: number;
+  readonly ids: readonly string[] | null;
+  readonly layerIds: readonly string[];
+  readonly bbox: [number, number, number, number] | null;
+}
+
+/** What names a selection as it was read, without listing it (see the public `SelectionTarget`) */
+export interface SelectionTarget {
+  readonly type: 'selection';
+  readonly count: number;
+}
+
+/**
+ * Many features selected at once: their number, layers and extent, which keep their rows
+ * (`bulk-selection.ts`)
  */
 export interface SelectionBulk {
   readonly count: number;
@@ -719,6 +741,12 @@ export interface StoreChange {
     /** Many features selected at once, and before */
     bulk?: SelectionBulk;
     previousBulk?: SelectionBulk;
+    /**
+     * The selection as the instance gives it (`draw.selection.value`), and the one it gave before
+     * (the Store of core sets them)
+     */
+    value?: SelectionValue;
+    previousValue?: SelectionValue;
   };
   /** The IDs of the features whose editing started and ended */
   editing?: {
@@ -761,13 +789,6 @@ export interface StoreChange {
    * `DocumentChange.previousValues`): a {@link RowValues}
    */
   previousValues?: FeatureValues;
-  /**
-   * The rows held as columns opened as features for this client (`added`, their features) and
-   * no longer (`removed`, their ids): not a change of the document, so what records or sends the
-   * changes of the document does not read it. A row is opened while it is selected or edited; a
-   * row deleted is in `features.deleted`, never in `removed`
-   */
-  opened?: { added: Feature[]; removed: string[] };
 }
 
 /**

@@ -15,7 +15,6 @@
  */
 
 import type { FeatureTables } from '../api/tables.js';
-import { heldFeaturesInOrder } from '../feature-table/held-order.js';
 import type { Feature, Group, Layer } from './types.js';
 
 /** The minimal interface that isLocallyHidden requires. */
@@ -28,8 +27,6 @@ export interface OrderedStore {
   listFeaturesInOrder(): Feature[];
   getLayer(id: string): Layer | undefined;
   getGroup(id: string): Group | undefined;
-  /** The stacking order (read for a Store that holds its features as rows) */
-  getLayerOrder?(): readonly string[];
   /** The rows of a Store that holds its features as rows */
   readonly tables?: FeatureTables;
 }
@@ -53,8 +50,8 @@ export function isLocallyHidden(feature: Feature, store: LocalHiddenStore): bool
 /**
  * The features the document shows, in stacking order: listFeaturesInOrder without the ones
  * whose own visible flag, or the one of their group or layer, is off. Local hiding is not
- * applied. A Store that holds its features as rows gives the features of the rows held (the
- * rows themselves are read from its tables)
+ * applied. A Store that holds its features as rows gives none (its rows are read from its
+ * tables)
  *
  * @internal
  */
@@ -77,9 +74,7 @@ export function listShownFeatures(store: OrderedStore): Feature[] {
     }
     return shown;
   };
-  const features = store.tables
-    ? heldFeaturesInOrder(store.tables, store.getLayerOrder?.() ?? [])
-    : store.listFeaturesInOrder();
+  const features = store.tables ? [] : store.listFeaturesInOrder();
   return features.filter(
     (feature) =>
       feature.visible &&

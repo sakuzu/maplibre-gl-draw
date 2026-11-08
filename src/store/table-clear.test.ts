@@ -59,7 +59,7 @@ const key = (i: number): string => `k${String(i).padStart(6, '0')}`;
 
 function setup(worker?: FeatureTablesWorker) {
   const { store, writer } = createTableStore({
-    holdLimit: 3,
+    selectionIdsLimit: 3,
     ...(worker && { worker }),
     dimensionsOf: (id) => (id === 'z' ? 'xyz' : 'xy'),
   });
@@ -113,22 +113,18 @@ function rowsBack(
 }
 
 describe('every row taken out of the tables', () => {
-  it('lets go of the rows opened and shown in place, told as a replacement of the document', () => {
+  it('lets go of the rows, told as a replacement of the document', () => {
     const s = setup();
-    const { store, writer, tables, internals, notified } = s;
+    const { store, writer, tables, notified } = s;
     const a1 = tables.findRow('a1') as number;
     store.setSelection('feature', ['a1']);
-    expect(internals.isHeld(a1)).toBe(true);
-    tables.showInPlace('peer', [{ ...point('a2', 50), layerId: 'a' }]);
     notified.length = 0;
     writer.clear();
     expect(tables.findRow('a1')).toBeUndefined();
     expect(tables.get('a')).toBeUndefined();
-    expect(internals.heldCount).toBe(0);
     expect(store.getFeature('a1')).toBeUndefined();
     const change = notified[notified.length - 1];
     expect(change.reset).toBe(true);
-    expect(change.opened?.removed).toEqual(['a1']);
     // The id keeps its handle, its row gone
     expect(writer.lookup('a1')).toEqual({ handle: a1, deleted: true });
     // The features selected stay selected, the groups and the layers stay
@@ -137,7 +133,7 @@ describe('every row taken out of the tables', () => {
     expect(store.getLayer('a')).toBeDefined();
   });
 
-  it('gives the rows that come back their handles again, and opens the selected again', () => {
+  it('gives the rows that come back their handles again, the selected read again', () => {
     const s = setup();
     const { store, writer, tables, internals } = s;
     const handles = new Map(
@@ -152,9 +148,9 @@ describe('every row taken out of the tables', () => {
     for (const id of ids) expect(tables.findRow(id)).toBe(handles.get(id));
     expect(store.getFeature('a2')?.properties).toEqual({ n: 200 });
     expect(store.getFeature('a3')?.groupId).toBe('g');
-    // The selection opens its rows again when it is selected again
-    store.setSelection('feature', ['a1']);
-    expect(internals.isHeld(handles.get('a1') as number)).toBe(true);
+    // The feature selected is read from its row again
+    expect(store.getSelection().ids).toEqual(['a1']);
+    expect(store.getFeature('a1')?.properties).toEqual({ n: 100 });
     // The id that did not come back is forgotten by the Store
     writer.forget(Int32Array.of(handles.get('a5') as number));
     expect(writer.lookup('a5')).toBeUndefined();

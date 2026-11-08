@@ -136,11 +136,17 @@ describe('draw.destroy()', () => {
 });
 
 describe('the instance after destroy', () => {
-  /** Every method of an object and of the plain objects in it, by path */
+  /** Every method and getter of an object and of the plain objects in it, by path */
   function methodsOf(target: object, prefix = ''): Array<[string, () => unknown]> {
     const found: Array<[string, () => unknown]> = [];
-    for (const [key, value] of Object.entries(target)) {
+    for (const [key, descriptor] of Object.entries(Object.getOwnPropertyDescriptors(target))) {
       const path = `${prefix}${key}`;
+      const get = descriptor.get;
+      if (get) {
+        found.push([path, () => get.call(target)]);
+        continue;
+      }
+      const value: unknown = descriptor.value;
       if (typeof value === 'function') found.push([path, value as () => unknown]);
       else if (typeof value === 'object' && value !== null) {
         found.push(...methodsOf(value, `${path}.`));

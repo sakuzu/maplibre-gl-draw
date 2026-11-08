@@ -58,8 +58,10 @@ function point(i: number, layerId = 'a'): Feature {
 }
 
 /** A Store of rows with points in a layer `a` (and an empty layer `b`) */
-function storeWith(count: number, holdLimit?: number) {
-  const { store, writer } = createTableStore(holdLimit === undefined ? {} : { holdLimit });
+function storeWith(count: number, selectionIdsLimit?: number) {
+  const { store, writer } = createTableStore(
+    selectionIdsLimit === undefined ? {} : { selectionIdsLimit },
+  );
   for (const id of ['a', 'b']) {
     store.createLayer({
       id,
@@ -117,10 +119,9 @@ describe('the write mark of a Store of rows', () => {
     expect(marksOf('p5')?.[0]).toBeLessThan(before + 1);
   });
 
-  it('goes up once when rows opened as features are written with the others', () => {
-    const { store, tables, internals, keeper, given } = storeWith(8);
+  it('goes up once when rows selected are written with the others', () => {
+    const { store, keeper, given } = storeWith(8);
     store.setSelection('feature', ['p1', 'p2']);
-    expect(internals.isHeld(tables.findRow('p1') as number)).toBe(true);
     const before = keeper.mark;
     store.transact(() => {
       store.updateFeature('p1', { properties: { n: 10 } });
@@ -183,14 +184,13 @@ describe('the write mark of a Store of rows', () => {
     const handle = tables.findRow('p1') as number;
     writer.apply(rowPatch([handle], { 'property:n': [10] }));
     writer.apply(rowPatch([handle], { 'property:n': [11] }));
-    store.setSelection('feature', ['p2']);
-    const held = store.getFeature('p2') as Feature;
-    writer.applyOpened('p2', { ...held, properties: { n: 20 } });
+    const other = tables.findRow('p2') as number;
+    writer.apply(rowPatch([other], { 'property:n': [20] }));
     expect(given).toEqual([before + 1, before + 2, before + 3]);
     // Inside a transaction, the calls are part of its frame
     store.transact(() => {
       writer.apply(rowPatch([handle], { 'property:n': [12] }));
-      writer.applyOpened('p2', { ...held, properties: { n: 21 } });
+      writer.apply(rowPatch([other], { 'property:n': [21] }));
     });
     expect(given).toEqual([before + 1, before + 2, before + 3, before + 4]);
   });
@@ -346,26 +346,6 @@ describe('the next versions with the write marks', () => {
       // p11, not written since, left the delta; p3 stays
       expect(internals.deltaRowCount()).toBe(1);
       expect(internals.placeOf(tables.findRow('p3') as number)?.group.delta).toBe(true);
-      expectTablesMatch(tables, reference, ['a'], groupHandleOf);
-      internals.flushVersions();
-      expect(internals.deltaRowCount()).toBe(0);
-      expectTablesMatch(tables, reference, ['a'], groupHandleOf);
-    }
-  });
-
-  it('leave a row of the delta held when they started or since, let go of before the swap', () => {
-    for (const when of ['before', 'after'] as const) {
-      // p11 is in the delta in the range of its own group, whose next version would take it
-      const hold = (internals: FeatureTablesInternals): void => internals.open('test', ['p11']);
-      const { tables, internals, reference, sides, groupHandleOf } = waitingVersion(
-        3,
-        when === 'before' ? hold : undefined,
-      );
-      if (when === 'after') hold(internals);
-      internals.open('test', []);
-      sides.allowAll();
-      internals.swapVersions();
-      expect(internals.placeOf(tables.findRow('p11') as number)?.group.delta).toBe(true);
       expectTablesMatch(tables, reference, ['a'], groupHandleOf);
       internals.flushVersions();
       expect(internals.deltaRowCount()).toBe(0);

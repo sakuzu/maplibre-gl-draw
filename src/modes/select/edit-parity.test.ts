@@ -148,7 +148,7 @@ function open(store: Store, features: readonly Feature[]): Opened {
 
 /** A Store of rows that selects more than 3 features in bulk */
 function bulkStore(): Store {
-  return new DrawStore(new TableContractStore(), { holdLimit: 3 });
+  return new DrawStore(new TableContractStore(), { selectionIdsLimit: 3 });
 }
 
 /** A mouse or drag event at a position, as the normalizer gives it to the input router */
@@ -225,9 +225,20 @@ function cancelledDrag(view: Opened, from: LngLat, to: LngLat, cancel: Cancel): 
   return view.changes.slice(count);
 }
 
-/** The features a `document.changed` updated, by their ids */
-function updatedIds(change: DocumentChange | undefined): string[] {
-  return (change?.features?.updated ?? []).map((entry) => entry.id).sort();
+/**
+ * The features a `document.changed` updated, by their ids: the features updated, and the rows
+ * written of a Store of rows
+ */
+function updatedIds(view: Opened, change: DocumentChange | undefined): string[] {
+  const ids = (change?.features?.updated ?? []).map((entry) => entry.id);
+  const tables = view.store.tables;
+  for (const rows of change?.rows?.layers.values() ?? []) {
+    for (const handle of rows.updated) {
+      const id = tables?.getRowId(handle);
+      if (id !== undefined) ids.push(id);
+    }
+  }
+  return ids.sort();
 }
 
 /** The positions of the outer ring of a polygon (or the point of a circle) as the Store reads it */
@@ -294,12 +305,12 @@ describe.each(STORE_KINDS)('the drags of the select mode over %s', (_, makeStore
       const before = centerOf(view.store, 'a');
       const changes = drag(view, IN_A, [IN_A[0] + 0.3, IN_A[1] + 0.2]);
       expect(changes).toHaveLength(1);
-      expect(updatedIds(changes[0])).toEqual(['a']);
+      expect(updatedIds(view, changes[0])).toEqual(['a']);
       // Moved east and north by about as far as the pointer
       const after = centerOf(view.store, 'a');
       expect(after[0] - before[0]).toBeCloseTo(0.3, 2);
       expect(after[1] - before[1]).toBeCloseTo(0.2, 2);
-      expect(view.draw.selection.get()).toEqual({ type: 'feature', ids: ['a'] });
+      expect(view.draw.selection.value).toMatchObject({ type: 'feature', ids: ['a'] });
       expect(view.drags).toEqual([
         { name: 'drag.started', kind: 'feature' },
         { name: 'drag.ended', kind: 'feature', cancelled: false },
@@ -311,10 +322,10 @@ describe.each(STORE_KINDS)('the drags of the select mode over %s', (_, makeStore
       select(view, IN_A, IN_B);
       const changes = drag(view, IN_B, [IN_B[0], IN_B[1] - 0.3]);
       expect(changes).toHaveLength(1);
-      expect(updatedIds(changes[0])).toEqual(['a', 'b']);
+      expect(updatedIds(view, changes[0])).toEqual(['a', 'b']);
       expect(centerOf(view.store, 'a')[1]).toBeCloseTo(-0.3, 2);
       expect(centerOf(view.store, 'b')[1]).toBeCloseTo(-0.3, 2);
-      expect(view.draw.selection.get()).toEqual({ type: 'feature', ids: ['a', 'b'] });
+      expect(view.draw.selection.value).toMatchObject({ type: 'feature', ids: ['a', 'b'] });
     });
   });
 
@@ -327,14 +338,14 @@ describe.each(STORE_KINDS)('the drags of the select mode over %s', (_, makeStore
       // A quarter turn clockwise: the handle above the middle taken to its east
       const changes = drag(view, handle, [center[0] + 0.5, center[1]]);
       expect(changes).toHaveLength(1);
-      expect(updatedIds(changes[0])).toEqual(['a']);
+      expect(updatedIds(view, changes[0])).toEqual(['a']);
       expect(view.drags.map(({ kind }) => kind)).toEqual(['handle', 'handle']);
       // The rectangle wider than tall is now taller than wide, about the same middle
       const [w, s, e, n] = boxOf(view.store, 'a');
       expect(n - s).toBeGreaterThan(e - w);
       expect(centerOf(view.store, 'a')[0]).toBeCloseTo(center[0], 2);
       expect(centerOf(view.store, 'a')[1]).toBeCloseTo(center[1], 2);
-      expect(view.draw.selection.get()).toEqual({ type: 'feature', ids: ['a'] });
+      expect(view.draw.selection.value).toMatchObject({ type: 'feature', ids: ['a'] });
     });
 
     it('turns the rotation of a feature that has one, in one document.changed (RT-2)', () => {
@@ -346,10 +357,10 @@ describe.each(STORE_KINDS)('the drags of the select mode over %s', (_, makeStore
         center[1],
       ]);
       expect(changes).toHaveLength(1);
-      expect(updatedIds(changes[0])).toEqual(['a']);
+      expect(updatedIds(view, changes[0])).toEqual(['a']);
       expect(view.drags.map(({ kind }) => kind)).toEqual(['handle', 'handle']);
       expect(view.store.getFeature('a')?.properties['maplibre-gl-draw:rotation']).not.toBe(0);
-      expect(view.draw.selection.get()).toEqual({ type: 'feature', ids: ['a'] });
+      expect(view.draw.selection.value).toMatchObject({ type: 'feature', ids: ['a'] });
     });
 
     it('turns several features of different types in one document.changed (RT-3)', () => {
@@ -363,10 +374,10 @@ describe.each(STORE_KINDS)('the drags of the select mode over %s', (_, makeStore
       const before = ['a', 'b', 'c'].map((id) => ringOf(view.store, id));
       const changes = drag(view, rotateHandleOf(box), [0.5, -0.2]);
       expect(changes).toHaveLength(1);
-      expect(updatedIds(changes[0])).toEqual(['a', 'b', 'c']);
+      expect(updatedIds(view, changes[0])).toEqual(['a', 'b', 'c']);
       expect(view.drags.map(({ kind }) => kind)).toEqual(['handle', 'handle']);
       expect(['a', 'b', 'c'].map((id) => ringOf(view.store, id))).not.toEqual(before);
-      expect(view.draw.selection.get()).toEqual({ type: 'feature', ids: ['a', 'b', 'c'] });
+      expect(view.draw.selection.value).toMatchObject({ type: 'feature', ids: ['a', 'b', 'c'] });
     });
   });
 
@@ -379,7 +390,7 @@ describe.each(STORE_KINDS)('the drags of the select mode over %s', (_, makeStore
       const handle = southEastHandleOf([w, s, e, n]);
       const changes = drag(view, handle, [handle[0] - 0.2, handle[1] - 0.2]);
       expect(changes).toHaveLength(1);
-      expect(updatedIds(changes[0])).toEqual(['a']);
+      expect(updatedIds(view, changes[0])).toEqual(['a']);
       expect(view.drags.map(({ kind }) => kind)).toEqual(['handle', 'handle']);
       // The north-west corner stays; the east side comes west, the south side goes south
       const after = boxOf(view.store, 'a');
@@ -389,7 +400,7 @@ describe.each(STORE_KINDS)('the drags of the select mode over %s', (_, makeStore
       expect(after[0]).toBeCloseTo(w, 6);
       expect(after[2]).toBeLessThan(e);
       expect(after[1]).toBeLessThan(s);
-      expect(view.draw.selection.get()).toEqual({ type: 'feature', ids: ['a'] });
+      expect(view.draw.selection.value).toMatchObject({ type: 'feature', ids: ['a'] });
     });
 
     it('scales the scale of a feature that has one, in one document.changed (RS-2)', () => {
@@ -398,10 +409,10 @@ describe.each(STORE_KINDS)('the drags of the select mode over %s', (_, makeStore
       const handle = southEastHandleOf(boxOf(view.store, 'a'));
       const changes = drag(view, handle, [handle[0] + 0.4, handle[1] - 0.4]);
       expect(changes).toHaveLength(1);
-      expect(updatedIds(changes[0])).toEqual(['a']);
+      expect(updatedIds(view, changes[0])).toEqual(['a']);
       expect(view.drags.map(({ kind }) => kind)).toEqual(['handle', 'handle']);
       expect(view.store.getFeature('a')?.properties['maplibre-gl-draw:scale']).toBeGreaterThan(1);
-      expect(view.draw.selection.get()).toEqual({ type: 'feature', ids: ['a'] });
+      expect(view.draw.selection.value).toMatchObject({ type: 'feature', ids: ['a'] });
     });
 
     it('scales the radius of a circle, in one document.changed (RS-3)', () => {
@@ -413,7 +424,7 @@ describe.each(STORE_KINDS)('the drags of the select mode over %s', (_, makeStore
       const handle = southEastHandleOf([-east, -north, east, north]);
       const changes = drag(view, handle, [handle[0] + 0.3, handle[1] - 0.3]);
       expect(changes).toHaveLength(1);
-      expect(updatedIds(changes[0])).toEqual(['c']);
+      expect(updatedIds(view, changes[0])).toEqual(['c']);
       expect(view.drags.map(({ kind }) => kind)).toEqual(['handle', 'handle']);
       // The north-west corner of its frame stays: the center goes south-east
       expect(ringOf(view.store, 'c')[0]?.[0]).toBeGreaterThan(0);
@@ -421,7 +432,7 @@ describe.each(STORE_KINDS)('the drags of the select mode over %s', (_, makeStore
       expect(
         view.store.getFeature('c')?.properties['maplibre-gl-draw:radiusMeters'],
       ).toBeGreaterThan(radius);
-      expect(view.draw.selection.get()).toEqual({ type: 'feature', ids: ['c'] });
+      expect(view.draw.selection.value).toMatchObject({ type: 'feature', ids: ['c'] });
     });
   });
 
@@ -431,14 +442,14 @@ describe.each(STORE_KINDS)('the drags of the select mode over %s', (_, makeStore
       select(view, IN_A);
       const changes = drag(view, [0, 0.2], [0.2, 0.5]);
       expect(changes).toHaveLength(1);
-      expect(updatedIds(changes[0])).toEqual(['a']);
+      expect(updatedIds(view, changes[0])).toEqual(['a']);
       expect(view.drags.map(({ kind }) => kind)).toEqual(['vertex', 'vertex']);
       // The vertex is under the pointer, the others stay
       const ring = ringOf(view.store, 'a');
       expect(ring[2]?.[0]).toBeCloseTo(0.2, 2);
       expect(ring[2]?.[1]).toBeCloseTo(0.5, 2);
       expect(ring[0]).toEqual([-0.8, -0.2]);
-      expect(view.draw.selection.get()).toEqual({ type: 'feature', ids: ['a'] });
+      expect(view.draw.selection.value).toMatchObject({ type: 'feature', ids: ['a'] });
     });
 
     it('writes the features that share the vertex dragged in the same document.changed (VX-3)', () => {
@@ -447,10 +458,10 @@ describe.each(STORE_KINDS)('the drags of the select mode over %s', (_, makeStore
       select(view, IN_A);
       const changes = drag(view, [0, 0.2], [0.1, 0.1]);
       expect(changes).toHaveLength(1);
-      expect(updatedIds(changes[0])).toEqual(['a', 'd']);
+      expect(updatedIds(view, changes[0])).toEqual(['a', 'd']);
       expect(ringOf(view.store, 'd')[0]?.[0]).toBeCloseTo(0.1, 2);
       expect(ringOf(view.store, 'd')[0]?.[1]).toBeCloseTo(0.1, 2);
-      expect(view.draw.selection.get()).toEqual({ type: 'feature', ids: ['a'] });
+      expect(view.draw.selection.value).toMatchObject({ type: 'feature', ids: ['a'] });
     });
 
     it('writes the radius of a circle dragged once let go, in one document.changed (RD-1)', () => {
@@ -460,12 +471,12 @@ describe.each(STORE_KINDS)('the drags of the select mode over %s', (_, makeStore
       const handle = destinationPoint([0, 0], radius, 90) as LngLat;
       const changes = drag(view, handle, [handle[0] + 0.3, handle[1]]);
       expect(changes).toHaveLength(1);
-      expect(updatedIds(changes[0])).toEqual(['c']);
+      expect(updatedIds(view, changes[0])).toEqual(['c']);
       expect(view.drags.map(({ kind }) => kind)).toEqual(['handle', 'handle']);
       expect(
         view.store.getFeature('c')?.properties['maplibre-gl-draw:radiusMeters'],
       ).toBeGreaterThan(radius);
-      expect(view.draw.selection.get()).toEqual({ type: 'feature', ids: ['c'] });
+      expect(view.draw.selection.value).toMatchObject({ type: 'feature', ids: ['c'] });
     });
   });
 
@@ -512,7 +523,7 @@ describe.each(STORE_KINDS)('the drags of the select mode over %s', (_, makeStore
       expect(after[0]).toBeGreaterThan(before[0]);
       expect(ringOf(view.store, 'a')[0]?.[0]).toBeGreaterThan(-0.8);
       expect(view.draw.vertexSelection.get()).toBeNull();
-      expect(view.draw.selection.get()).toEqual({ type: 'feature', ids: ['a'] });
+      expect(view.draw.selection.value).toMatchObject({ type: 'feature', ids: ['a'] });
     });
   });
 
@@ -549,7 +560,7 @@ describe.each(STORE_KINDS)('the drags of the select mode over %s', (_, makeStore
             name: 'drag.ended',
             cancelled: true,
           });
-          expect(view.draw.selection.get()).toEqual({ type: 'feature', ids: ['a'] });
+          expect(view.draw.selection.value).toMatchObject({ type: 'feature', ids: ['a'] });
         });
       }
     }
@@ -581,7 +592,7 @@ describe.each(STORE_KINDS)('the drags of the select mode over %s', (_, makeStore
       const view = open(makeStore(), [A(), B()]);
       view.draw.layers.update('l', { visible: false });
       select(view, IN_A);
-      expect(view.draw.selection.get().ids).toEqual([]);
+      expect(view.draw.selection.value.ids).toEqual([]);
       const before = view.store.getFeature('a')?.geometry;
       const changes = drag(view, IN_A, [IN_A[0] + 0.3, IN_A[1]]);
       expect(changes).toHaveLength(0);
@@ -601,13 +612,13 @@ describe('the drags of features selected in bulk (MV-3, RT-4, RS-5)', () => {
   function openBulk(): Opened {
     const view = open(bulkStore(), squares);
     view.draw.selection.set('feature', ids);
-    expect(view.draw.selection.get().bulk?.count).toBe(6);
+    expect(view.draw.selection.value.count).toBe(6);
     return view;
   }
 
   /** The box of the features selected in bulk */
   function boundsOf(view: Opened): readonly number[] {
-    return view.draw.selection.get().bulk?.bbox ?? [];
+    return view.draw.selection.value.bbox ?? [];
   }
 
   /** The box of the selected features, one by one or in bulk */
@@ -637,7 +648,7 @@ describe('the drags of features selected in bulk (MV-3, RT-4, RS-5)', () => {
       expect((x as number) - (before[i]?.[0] as number)).toBeCloseTo(0.2, 2);
       expect((y as number) - (before[i]?.[1] as number)).toBeCloseTo(0.2, 2);
     });
-    expect(view.draw.selection.get().bulk?.count).toBe(6);
+    expect(view.draw.selection.value.count).toBe(6);
     expect(view.drags).toEqual([
       { name: 'drag.started', kind: 'feature' },
       { name: 'drag.ended', kind: 'feature', cancelled: false },
@@ -650,7 +661,7 @@ describe('the drags of features selected in bulk (MV-3, RT-4, RS-5)', () => {
     const changes = drag(view, rotateHandleOf(boundsOf(view)), [0.5, -0.4]);
     expect(changes).toHaveLength(1);
     expect(corners(view)).not.toEqual(before);
-    expect(view.draw.selection.get().bulk?.count).toBe(6);
+    expect(view.draw.selection.value.count).toBe(6);
     expect(view.drags.map(({ kind }) => kind)).toEqual(['handle', 'handle']);
   });
 
@@ -664,7 +675,7 @@ describe('the drags of features selected in bulk (MV-3, RT-4, RS-5)', () => {
     const after = corners(view);
     expect(after[0]?.[0]).toBeCloseTo(before[0]?.[0] as number, 6);
     expect(after[5]?.[0]).toBeGreaterThan(before[5]?.[0] as number);
-    expect(view.draw.selection.get().bulk?.count).toBe(6);
+    expect(view.draw.selection.value.count).toBe(6);
   });
 
   const bulkDrags: Array<[string, (view: Opened) => [LngLat, LngLat]]> = [
@@ -697,7 +708,7 @@ describe('the drags of features selected in bulk (MV-3, RT-4, RS-5)', () => {
           name: 'drag.ended',
           cancelled: true,
         });
-        expect(view.draw.selection.get().bulk?.count).toBe(6);
+        expect(view.draw.selection.value.count).toBe(6);
       });
     }
   }

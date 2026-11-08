@@ -13,7 +13,6 @@
 import { describe, expect, it } from 'vitest';
 import type { FeatureTables, FeatureTablesWriter, RowField } from '../api/tables.js';
 import { featureTablesInternals } from '../feature-table/feature-tables.js';
-import { internalsOf } from '../test-utils.js';
 import type { Store } from './store.js';
 import { createTableStore } from './table-memory.js';
 import type { Feature, ItemMove, RowValues, StoreChange } from './types.js';
@@ -169,25 +168,12 @@ describe('the writes of the features of rows not held', () => {
     expect(stateOf(store, tables)).toEqual(start);
   });
 
-  it('give the feature before of a row written and held at the end', () => {
-    const { store, notified } = setup();
-    store.transact(() => {
-      store.updateFeature('p1', { properties: { n: 10 } });
-      store.setSelection('feature', ['p1']);
-    });
-    const change = notified[notified.length - 1];
-    const entry = change.features?.updated?.find((update) => update.id === 'p1');
-    expect(entry?.previous.properties).toEqual({ n: 1 });
-    expect(entry?.feature.properties).toEqual({ n: 10 });
-  });
-
-  it('give the values before of a row written while held and no longer held at the end', () => {
+  it('give the values before of a row selected, as of any row', () => {
     const { store, tables, notified } = setup();
     const start = stateOf(store, tables);
-    internalsOf(tables).open('test', ['p1']);
+    store.setSelection('feature', ['p1']);
     store.transact(() => {
       store.updateFeature('p1', { properties: { n: 10 }, style: { pointColor: '#0000ff' } });
-      internalsOf(tables).open('test', []);
     });
     const change = notified[notified.length - 1];
     expect(change.features?.updated ?? []).toEqual([]);
@@ -195,15 +181,6 @@ describe('the writes of the features of rows not held', () => {
     expect(before?.fields.get('property:n')).toEqual([1]);
     store.restoreRows(before as NonNullable<typeof before>);
     expect(stateOf(store, tables)).toEqual(start);
-  });
-
-  it('do not read the rows held, whose features tell their values before', () => {
-    const { store, notified } = setup();
-    store.setSelection('feature', ['p1']);
-    store.updateFeature('p1', { properties: { n: 10 } });
-    const change = notified[notified.length - 1];
-    expect(change.previousValues as RowValues | undefined).toBeUndefined();
-    expect(change.features?.updated?.[0].previous.properties).toEqual({ n: 1 });
   });
 });
 

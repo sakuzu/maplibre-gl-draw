@@ -18,7 +18,7 @@
  * two-stage arrangement). The condition for dropping is decided here by `canDrape`.
  */
 
-import { isLayerDrawnFromRows } from '../../../feature-table/held-order.js';
+import { isLayerDrawnFromRows } from '../../../feature-table/rows-drawn.js';
 import { coordinatesOf } from '../../../shared/utils/coordinates.js';
 import { getCreatedZoom } from '../../../shared/utils/property.js';
 import { isLocallyHidden } from '../../../store/local-visibility.js';

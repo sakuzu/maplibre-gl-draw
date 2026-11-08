@@ -163,7 +163,7 @@ describe('a feature and its own companion', () => {
     ] as Array<[number, number]>) {
       draw.selection.clear();
       pointerClick(at);
-      expect(draw.selection.get().ids).toEqual([p.id]);
+      expect(draw.selection.value.ids).toEqual([p.id]);
     }
     expect(clicked).toEqual([]);
   });
@@ -175,7 +175,7 @@ describe('a feature and its own companion', () => {
     draw.selection.set('feature', [other.id]);
     pointerClick([0.5, 0]);
     expect(clicked).toEqual([p.id]);
-    expect(draw.selection.get().ids).toEqual([other.id]);
+    expect(draw.selection.value.ids).toEqual([other.id]);
   });
 
   it('selects the feature when onClick leaves the click to the select mode', () => {
@@ -183,14 +183,14 @@ describe('a feature and its own companion', () => {
     const clicked = companionOf([p.id], 100, false);
     pointerClick([0.5, 0]);
     expect(clicked).toEqual([p.id]);
-    expect(draw.selection.get().ids).toEqual([p.id]);
+    expect(draw.selection.value.ids).toEqual([p.id]);
   });
 
   it('follows the size of the marker a feature names', () => {
     const p = point([0, 0], { pointRadius: 20 });
     const clicked = companionOf([p.id], 100);
     pointerClick([0.21, 0]);
-    expect(draw.selection.get().ids).toEqual([p.id]);
+    expect(draw.selection.value.ids).toEqual([p.id]);
     // Beyond the marker and its tolerance, the companion is what is under the pointer
     pointerClick([0.3, 0]);
     expect(clicked).toEqual([p.id]);
@@ -223,7 +223,7 @@ describe('a Point type that takes only some points', () => {
     draw.setMode('select');
 
     pointerClick([0.07, 0]);
-    expect(draw.selection.get().ids).toEqual([plain.id]);
+    expect(draw.selection.value.ids).toEqual([plain.id]);
     // The test of the type is not widened by the marker of the built-in point
     pointerClick([3.07, 0]);
     expect(clicked).toEqual([pictured.id]);
@@ -241,7 +241,7 @@ describe('the stacking order between features', () => {
     const high = point([0.3, 0]);
     const clicked = companionOf([low.id], 100);
     pointerClick([0.37, 0]);
-    expect(draw.selection.get().ids).toEqual([high.id]);
+    expect(draw.selection.value.ids).toEqual([high.id]);
     expect(clicked).toEqual([]);
   });
 
@@ -251,7 +251,7 @@ describe('the stacking order between features', () => {
     const clicked = companionOf([high.id], 100);
     pointerClick([0, 0]);
     expect(clicked).toEqual([high.id]);
-    expect(draw.selection.get().ids).toEqual([]);
+    expect(draw.selection.value.ids).toEqual([]);
   });
 });
 
@@ -275,7 +275,7 @@ describe('the handles of the selection', () => {
 
     pointerClick([0.3, 0.3]);
     expect(engine.context.store.getVertexSelection()?.featureId).toBe(line.id);
-    expect(draw.selection.get().ids).toEqual([line.id]);
+    expect(draw.selection.value.ids).toEqual([line.id]);
 
     pointerDrag([0.3, 0.3], [0.5, 0.6]);
     const moved = draw.features.get(line.id)?.geometry as LineString | undefined;
@@ -316,7 +316,7 @@ describe('a dataset below the document', () => {
     draw.setMode('select');
 
     pointerClick([0.07, 0]);
-    expect(draw.selection.get().ids).toEqual([p.id]);
+    expect(draw.selection.value.ids).toEqual([p.id]);
     pointerClick([0.5, 0]);
     expect(clicked).toEqual([p.id]);
     expect(rows).toEqual([]);

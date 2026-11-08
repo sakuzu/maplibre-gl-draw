@@ -37,7 +37,7 @@ export { BULK_MOVE_SET };
  *
  * A row whose extent is inside the box is in it without being made a feature (the test of a
  * point, a line, an area or a circle is met then); a row on a side of the box is made the
- * feature it is, without being opened, and tested as the features are.
+ * feature it is, and tested as the features are.
  *
  * @internal
  */

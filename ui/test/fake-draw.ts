@@ -20,9 +20,15 @@ import type {
   ObjectLayer,
   RuntimeOptions,
   SelectionType,
+  SelectionValue,
   StyleRule,
 } from '@sakuzu/maplibre-gl-draw';
 import { vi } from 'vitest';
+
+/** The value of a selection as `draw.selection.value` gives it (no layers nor extent here) */
+export function selectionValue(type: SelectionType | null, ids: readonly string[]): SelectionValue {
+  return { type: type ?? 'feature', count: ids.length, ids: [...ids], layerIds: [], bbox: null };
+}
 
 type Listener = (payload: unknown) => void;
 
@@ -258,10 +264,10 @@ export function fakeDraw(
     listeners.get(event)?.delete(listener);
   };
   const setSelection = (type: SelectionType | null, next: string[]) => {
-    const previous = { type: selType, ids };
+    const previous = selectionValue(selType, ids);
     ids = next;
     selType = next.length ? type : null;
-    emit('selection.changed', { selection: { type: selType, ids }, previous });
+    emit('selection.changed', { selection: selectionValue(selType, ids), previous });
   };
   const select = (next: string[]) => setSelection('feature', next);
   const changed = () => emit('document.changed', {});
@@ -324,7 +330,9 @@ export function fakeDraw(
     }),
     off: vi.fn(off),
     selection: {
-      get: () => ({ type: selType, ids }),
+      get value() {
+        return selectionValue(selType, ids);
+      },
       set: vi.fn((type: SelectionType, next: readonly string[]) => {
         setSelection(type, [...next]);
         return true;
@@ -636,7 +644,10 @@ export function fakeDocument(
   const setSelection = (type: SelectionType | null, ids: string[]) => {
     const previous = selection;
     selection = { type: ids.length ? type : null, ids };
-    fake.emit('selection.changed', { selection, previous });
+    fake.emit('selection.changed', {
+      selection: selectionValue(selection.type, selection.ids),
+      previous: selectionValue(previous.type, previous.ids),
+    });
   };
   const editable = (f: Feature) =>
     !readOnly &&
@@ -682,8 +693,11 @@ export function fakeDocument(
     isReadOnly: () => readOnly,
     transact: vi.fn(<T>(fn: () => T) => fn()),
   });
+  Object.defineProperty(fake.draw.selection, 'value', {
+    get: () => selectionValue(selection.type, selection.ids),
+    configurable: true,
+  });
   Object.assign(fake.draw.selection, {
-    get: () => selection,
     set: vi.fn((type: SelectionType, ids: readonly string[]) => {
       setSelection(type, [...ids]);
       return true;
