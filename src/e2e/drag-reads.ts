@@ -559,7 +559,12 @@ function describeDrags(group: DragReadsGroup): void {
         expectSame(r.end[I_FILL] as Drawn, r.mid[I_FILL] as Drawn);
         expect((r.end[I_FRAME] as Drawn).count).toBeGreaterThan(200);
         const ended = edit.started ? [`end ${edit.started}`] : [];
-        expect(sequenceOf(r.endEvents)).toEqual(['U p', 'D', ...ended]);
+        // A Store of rows tells the row written by the change of the document alone
+        expect(sequenceOf(r.endEvents)).toEqual([
+          ...(kind === 'rows' ? [] : ['U p']),
+          'D',
+          ...ended,
+        ]);
         if (edit.follows) {
           // Moved as far as the pointer: no snap pulled it
           expectNear(shiftOf(r.end[I_FILL] as Drawn, r.selected[I_FILL] as Drawn), edit.follows);
@@ -617,7 +622,7 @@ function describeDrags(group: DragReadsGroup): void {
       await page.waitForTimeout(400);
       await settle(page);
       const moved = await frame(page, COLORS);
-      expect(sequenceOf(await events(page))).toEqual(['U p', 'D']);
+      expect(sequenceOf(await events(page))).toEqual([...(kind === 'rows' ? [] : ['U p']), 'D']);
       for (const i of [I_FILL, I_OUTLINE, I_FRAME, I_RESIZE, I_ROTATE, I_VERTEX, I_MIDPOINT]) {
         expect((moved[i] as Drawn).count).toBe((selected[i] as Drawn).count);
         expectNear(shiftOf(moved[i] as Drawn, selected[i] as Drawn), [10, 10], 1);

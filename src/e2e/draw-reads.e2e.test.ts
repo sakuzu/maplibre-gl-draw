@@ -479,8 +479,8 @@ describe.each(KINDS)('the shape being drawn over a Store of %s', (kind) => {
       expect(created.type).toBe(d.created?.type);
       if ((d.created?.positions ?? 0) > 0) expect(created.positions).toBe(d.created?.positions);
       else expect(created.positions).toBeGreaterThan(2);
-      if (kind === 'rows' && !d.selects) {
-        // A row created and not opened (not selected) is told by the change of the document alone
+      if (kind === 'rows') {
+        // A row created is told by the change of the document alone, selected or not
         expect(featureEvents(recorded)).toEqual(['D']);
       } else {
         expect(featureEvents(recorded)).toEqual(['created', 'D']);

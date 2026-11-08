@@ -12,7 +12,8 @@
  * - written by an edit that fits the places of their rows (a corner of a building moved, a point
  *   moved): written in place
  * - written by an edit that does not fit (a vertex added to a line, an outline put on a fill):
- *   drawn from the delta of their layer, their copies in their groups hidden
+ *   drawn from the delta of their layer, their copies in their groups hidden, until the next
+ *   versions of their groups take them in
  *
  * The rows written in place keep the origin of their chunk, and a chunk built again may take
  * another, so the pictures are compared with the tolerance of the other comparisons of the
@@ -316,10 +317,10 @@ describe('the rows written against the rows as they are drawn from the start', (
     expect(live.delta).toBe(0);
   });
 
-  it('draws the rows of an edit that does not fit, from the delta', {
+  it('draws the rows of an edit that does not fit, taken into the next versions of their groups', {
     timeout: browserTimeout(90_000),
   }, async () => {
     const live = await compare('not-fitting', notFitting());
-    expect(live.delta).toBeGreaterThan(0);
+    expect(live.delta).toBe(0);
   });
 });
