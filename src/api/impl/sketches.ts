@@ -7,15 +7,25 @@
 
 import type { SketchController } from '../../sketches/sketch-controller.js';
 import type { SketchesCollection } from '../sketches.js';
+import type { EventHub } from './events.js';
+import { observe } from './events.js';
 import { invalidInput, requireId } from './shared.js';
 
 /**
  * Creates `draw.sketches` over the sketches of the engine
  *
+ * @param events - The hub its observable follows (the sketches tell their changes on it)
  * @internal
  */
-export function createSketches(sketches: SketchController): SketchesCollection {
+export function createSketches(sketches: SketchController, events: EventHub): SketchesCollection {
+  const observable = observe(events, ['sketch.added', 'sketch.updated', 'sketch.removed'], () =>
+    sketches.list(),
+  );
   return {
+    get value() {
+      return observable.value;
+    },
+    subscribe: observable.subscribe,
     get: (id) => sketches.get(id),
     list: () => sketches.list(),
     count: () => sketches.count(),

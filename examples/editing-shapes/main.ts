@@ -68,7 +68,7 @@ ui.actions.add({
   },
   checked: sharedVertexDrag,
 });
-draw.on('options.changed', () => ui.actions.refresh());
+draw.options.subscribe(() => ui.actions.refresh());
 
 // For the browser console and the end-to-end tests
 Object.assign(window, { map, draw, ui, SHARED });

@@ -5,11 +5,18 @@
  * `draw.hidden`: what this client hides without changing the document
  */
 
+import type { Observable } from './events.js';
+
 /**
  * The IDs of the features, groups and layers this client hides. Hiding changes only what this
  * client draws; the document and its `visible` flags stay as they are.
  */
 export interface HiddenCollection {
+  /**
+   * The IDs this client hides, as a set, told again when they change (once a transaction, after
+   * it): what `list` lists
+   */
+  readonly hiddenIds: Observable<ReadonlySet<string>>;
   /** Whether this client hides the item with this ID. */
   get(id: string): boolean;
   /** Lists the IDs this client hides. */

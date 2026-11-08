@@ -200,8 +200,11 @@ document.querySelector('#polygon')?.addEventListener('click', () => {
   draw.setMode('draw_polygon');
 });
 
-draw.on('feature.created', ({ feature }) => {
-  console.log(feature.id, feature.type, feature.geometry);
+draw.on('change', ({ features }) => {
+  for (const id of features.created) {
+    const feature = draw.features.get(id);
+    console.log(id, feature?.type, feature?.geometry);
+  }
 });
 
 // Every feature as a GeoJSON FeatureCollection

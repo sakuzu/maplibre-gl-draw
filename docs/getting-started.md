@@ -121,11 +121,15 @@ When the polygon is finished, the mode returns to `select` and the new
 polygon is selected, so the user can move it or drag its vertices right
 away.
 
-The instance tells you when a feature is created.
+The instance tells you when a feature is created: `change` lists the IDs
+of what a change created, and `draw.features.get` reads each feature.
 
 ```ts
-draw.on('feature.created', ({ feature }) => {
-  console.log('created', feature.id, feature.type);
+draw.on('change', ({ features }) => {
+  for (const id of features.created) {
+    const feature = draw.features.get(id);
+    console.log('created', id, feature?.type);
+  }
 });
 ```
 
@@ -136,10 +140,12 @@ your attributes, and the few values the library keeps under keys that
 start with `maplibre-gl-draw:`.
 
 To keep a toolbar in step with the mode (including the automatic return
-to `select`), listen to `mode.changed`.
+to `select`), subscribe to `draw.mode`. A value that changes over time,
+such as the mode or the selection, is not an event: `subscribe` calls the
+function with the value now at once, and again each time it changes.
 
 ```ts
-draw.on('mode.changed', ({ mode }) => {
+draw.mode.subscribe((mode) => {
   document
     .querySelector('#draw-polygon')
     ?.classList.toggle('active', mode === 'draw_polygon');
@@ -152,15 +158,14 @@ the same way; `draw_image` also asks your application for the image. The
 
 ## 4. Subscribe to changes
 
-`feature.created` fires once per feature. To react to every change at
-once (creating, moving, editing vertices, deleting, loading), listen to
-`document.changed`. It arrives once per transaction and carries
-everything that changed together.
+`change` covers every change (creating, moving, editing vertices,
+deleting, loading). It arrives once per transaction, however many
+features it changed, and lists the IDs of everything that changed
+together.
 
 ```ts
-draw.on('document.changed', ({ features, source }) => {
-  if (!features) return;
-  const { created = [], updated = [], deleted = [] } = features;
+draw.on('change', ({ features, source }) => {
+  const { created, updated, deleted } = features;
   console.log(
     `${created.length} created, ${updated.length} updated,`,
     `${deleted.length} deleted (${source})`,
@@ -168,10 +173,12 @@ draw.on('document.changed', ({ features, source }) => {
 });
 ```
 
-Each entry of `updated` holds the `feature` and its `previous` state.
-`source` says where the change came from, for example `'local'` for the
-user's edits and calls of the API, and `'load'` for a GeoJSON load.
-The same event covers layers, groups and the title of the document.
+`draw.features.get(id)` reads a feature as it is now, and
+`change.previous(id)`, in the listener, a feature updated or deleted as it
+was before. `source` says where the change came from, for example
+`'local'` for the user's edits and calls of the API, and `'load'` for a
+GeoJSON load. The same event covers layers and groups (`layers` and
+`groups`), and the title of the document (`document`).
 
 A few rules make the API easy to reason about.
 
@@ -225,7 +232,7 @@ the features to the ones already there. They go into the active layer,
 unless they name a layer that exists (a GeoJSON written by this library
 does). A feature that cannot be read (an unknown geometry type, invalid
 coordinates) is left out and listed in `skipped`, and the rest are
-loaded. All the loaded features arrive in one `document.changed`.
+loaded. All the loaded features arrive in one `change`.
 
 GeoJSON keeps each feature with its properties and style, but not the
 layers and groups themselves or their order. To keep those as well, use

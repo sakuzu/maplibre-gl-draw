@@ -5,7 +5,7 @@
  * What the drags of the select mode leave, which a change of how a drag is shown while it goes on
  * must keep: each drag (a move, a rotation, a resize, a vertex, a radius; of one feature, of
  * several and of features selected in bulk) writes once let go in one transaction, notified as
- * one `document.changed`, and keeps the selection as it was (its features, or the features
+ * one change of the document, and keeps the selection as it was (its features, or the features
  * selected in bulk); the vertices selected stay selected through a drag of their feature and of
  * themselves, and are let go by a move with the arrow keys; a drag cancelled writes nothing (the
  * shapes, and the rows of features selected in bulk, are as they were); a locked feature alone, a
@@ -37,6 +37,7 @@ import type { Feature } from '../../store/types.js';
 import {
   createMapStub,
   createSyntheticInput,
+  onDocumentChange,
   planeMetersPerPixel,
   STORE_KINDS,
 } from '../../test-utils.js';
@@ -99,7 +100,7 @@ interface Opened {
   engine: Engine;
   draw: Draw;
   store: Store;
-  /** The `document.changed` received, in their order */
+  /** The changes of the document received, in their order */
   changes: DocumentChange[];
   /** The names of the events of the drags received, in their order */
   drags: Array<{ name: 'drag.started' | 'drag.ended'; cancelled?: boolean; kind: string }>;
@@ -138,7 +139,7 @@ function open(store: Store, features: readonly Feature[]): Opened {
   opened.push(draw);
   const changes: DocumentChange[] = [];
   const drags: Opened['drags'] = [];
-  draw.on('document.changed', (change) => changes.push(change));
+  onDocumentChange(draw, (change) => changes.push(change));
   draw.on('drag.started', ({ kind }) => drags.push({ name: 'drag.started', kind }));
   draw.on('drag.ended', ({ kind, cancelled }) =>
     drags.push({ name: 'drag.ended', kind, cancelled }),
@@ -191,7 +192,7 @@ function pressAndMove({ engine }: Opened, from: LngLat, to: LngLat): void {
 }
 
 /**
- * A drag from a position to another, let go there; the `document.changed` received once let go
+ * A drag from a position to another, let go there; the changes of the document received once let go
  * (the writes of a release written in steps included)
  */
 function drag(view: Opened, from: LngLat, to: LngLat): DocumentChange[] {
@@ -205,7 +206,7 @@ function drag(view: Opened, from: LngLat, to: LngLat): DocumentChange[] {
 /** How a drag is cancelled: Escape (the key, or the cancel the normalizer makes of it) or a pointercancel */
 type Cancel = 'Escape' | 'dragcancel';
 
-/** A drag from a position to another, cancelled there; the `document.changed` received from the press */
+/** A drag from a position to another, cancelled there; the changes of the document received from the press */
 function cancelledDrag(view: Opened, from: LngLat, to: LngLat, cancel: Cancel): DocumentChange[] {
   const count = view.changes.length;
   pressAndMove(view, from, to);
@@ -226,7 +227,7 @@ function cancelledDrag(view: Opened, from: LngLat, to: LngLat, cancel: Cancel): 
 }
 
 /**
- * The features a `document.changed` updated, by their ids: the features updated, and the rows
+ * The features a change of the document updated, by their ids: the features updated, and the rows
  * written of a Store of rows
  */
 function updatedIds(view: Opened, change: DocumentChange | undefined): string[] {
@@ -299,7 +300,7 @@ const IN_B: LngLat = [0.6, 0];
 
 describe.each(STORE_KINDS)('the drags of the select mode over %s', (_, makeStore) => {
   describe('move (MV-1)', () => {
-    it('writes a feature moved once let go, as one document.changed, and keeps it selected', () => {
+    it('writes a feature moved once let go, as one change, and keeps it selected', () => {
       const view = open(makeStore(), [A(), B()]);
       select(view, IN_A);
       const before = centerOf(view.store, 'a');
@@ -317,7 +318,7 @@ describe.each(STORE_KINDS)('the drags of the select mode over %s', (_, makeStore
       ]);
     });
 
-    it('writes several features moved in one document.changed, and keeps them selected', () => {
+    it('writes several features moved in one change, and keeps them selected', () => {
       const view = open(makeStore(), [A(), B()]);
       select(view, IN_A, IN_B);
       const changes = drag(view, IN_B, [IN_B[0], IN_B[1] - 0.3]);
@@ -330,7 +331,7 @@ describe.each(STORE_KINDS)('the drags of the select mode over %s', (_, makeStore
   });
 
   describe('rotation (RT-1, RT-2, RT-3)', () => {
-    it('turns a feature from the rotation handle once let go, in one document.changed (RT-1)', () => {
+    it('turns a feature from the rotation handle once let go, in one change (RT-1)', () => {
       const view = open(makeStore(), [A(), B()]);
       select(view, IN_A);
       const center = centerOf(view.store, 'a');
@@ -348,7 +349,7 @@ describe.each(STORE_KINDS)('the drags of the select mode over %s', (_, makeStore
       expect(view.draw.selection.value).toMatchObject({ type: 'feature', ids: ['a'] });
     });
 
-    it('turns the rotation of a feature that has one, in one document.changed (RT-2)', () => {
+    it('turns the rotation of a feature that has one, in one change (RT-2)', () => {
       const view = open(makeStore(), [A({ properties: { 'maplibre-gl-draw:rotation': 0 } })]);
       select(view, IN_A);
       const center = centerOf(view.store, 'a');
@@ -363,7 +364,7 @@ describe.each(STORE_KINDS)('the drags of the select mode over %s', (_, makeStore
       expect(view.draw.selection.value).toMatchObject({ type: 'feature', ids: ['a'] });
     });
 
-    it('turns several features of different types in one document.changed (RT-3)', () => {
+    it('turns several features of different types in one change (RT-3)', () => {
       const view = open(makeStore(), [
         A(),
         B({ properties: { 'maplibre-gl-draw:rotation': 0 } }),
@@ -382,7 +383,7 @@ describe.each(STORE_KINDS)('the drags of the select mode over %s', (_, makeStore
   });
 
   describe('resize (RS-1, RS-2, RS-3)', () => {
-    it('stretches a feature from a corner once let go, in one document.changed (RS-1)', () => {
+    it('stretches a feature from a corner once let go, in one change (RS-1)', () => {
       const view = open(makeStore(), [A(), B()]);
       select(view, IN_A);
       const [w, s, e, n] = boxOf(view.store, 'a');
@@ -403,7 +404,7 @@ describe.each(STORE_KINDS)('the drags of the select mode over %s', (_, makeStore
       expect(view.draw.selection.value).toMatchObject({ type: 'feature', ids: ['a'] });
     });
 
-    it('scales the scale of a feature that has one, in one document.changed (RS-2)', () => {
+    it('scales the scale of a feature that has one, in one change (RS-2)', () => {
       const view = open(makeStore(), [A({ properties: { 'maplibre-gl-draw:scale': 1 } })]);
       select(view, IN_A);
       const handle = southEastHandleOf(boxOf(view.store, 'a'));
@@ -415,7 +416,7 @@ describe.each(STORE_KINDS)('the drags of the select mode over %s', (_, makeStore
       expect(view.draw.selection.value).toMatchObject({ type: 'feature', ids: ['a'] });
     });
 
-    it('scales the radius of a circle, in one document.changed (RS-3)', () => {
+    it('scales the radius of a circle, in one change (RS-3)', () => {
       const radius = 30_000;
       const view = open(makeStore(), [circle('c', [0, 0], radius)]);
       select(view, [0, 0]);
@@ -437,7 +438,7 @@ describe.each(STORE_KINDS)('the drags of the select mode over %s', (_, makeStore
   });
 
   describe('vertices and the radius (VX-1, VX-3, RD-1)', () => {
-    it('writes a vertex dragged once let go, in one document.changed (VX-1)', () => {
+    it('writes a vertex dragged once let go, in one change (VX-1)', () => {
       const view = open(makeStore(), [A(), B()]);
       select(view, IN_A);
       const changes = drag(view, [0, 0.2], [0.2, 0.5]);
@@ -452,7 +453,7 @@ describe.each(STORE_KINDS)('the drags of the select mode over %s', (_, makeStore
       expect(view.draw.selection.value).toMatchObject({ type: 'feature', ids: ['a'] });
     });
 
-    it('writes the features that share the vertex dragged in the same document.changed (VX-3)', () => {
+    it('writes the features that share the vertex dragged in the same change (VX-3)', () => {
       const view = open(makeStore(), [A(), rectangle('d', [0, 0.2], [0.3, 0.5])]);
       view.draw.options.update({ topology: { sharedVertexDrag: true } });
       select(view, IN_A);
@@ -464,7 +465,7 @@ describe.each(STORE_KINDS)('the drags of the select mode over %s', (_, makeStore
       expect(view.draw.selection.value).toMatchObject({ type: 'feature', ids: ['a'] });
     });
 
-    it('writes the radius of a circle dragged once let go, in one document.changed (RD-1)', () => {
+    it('writes the radius of a circle dragged once let go, in one change (RD-1)', () => {
       const radius = 30_000;
       const view = open(makeStore(), [circle('c', [0, 0], radius)]);
       select(view, [0, 0]);
@@ -637,7 +638,7 @@ describe('the drags of features selected in bulk (MV-3, RT-4, RS-5)', () => {
     return ids.map((id) => ringOf(view.store, id)[0] ?? []);
   }
 
-  it('writes a move once let go, in one document.changed, and keeps them selected in bulk (MV-3)', () => {
+  it('writes a move once let go, in one change, and keeps them selected in bulk (MV-3)', () => {
     const view = openBulk();
     const before = corners(view);
     const changes = drag(view, [-0.85, -0.05], [-0.65, 0.15]);
@@ -655,7 +656,7 @@ describe('the drags of features selected in bulk (MV-3, RT-4, RS-5)', () => {
     ]);
   });
 
-  it('writes a rotation once let go, in one document.changed, and keeps them selected in bulk (RT-4)', () => {
+  it('writes a rotation once let go, in one change, and keeps them selected in bulk (RT-4)', () => {
     const view = openBulk();
     const before = corners(view);
     const changes = drag(view, rotateHandleOf(boundsOf(view)), [0.5, -0.4]);
@@ -665,7 +666,7 @@ describe('the drags of features selected in bulk (MV-3, RT-4, RS-5)', () => {
     expect(view.drags.map(({ kind }) => kind)).toEqual(['handle', 'handle']);
   });
 
-  it('writes a resize once let go, in one document.changed, and keeps them selected in bulk (RS-5)', () => {
+  it('writes a resize once let go, in one change, and keeps them selected in bulk (RS-5)', () => {
     const view = openBulk();
     const before = corners(view);
     const handle = southEastHandleOf(boundsOf(view));

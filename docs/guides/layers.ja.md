@@ -63,8 +63,8 @@ const hidden = draw.layers.list({ visible: false });
 返します。レイヤーを選んでいるときの選択の削除 (`selection.delete()` と
 Delete キー) は、少なくとも 1 つのレイヤーを残します。
 
-変更すると `layer.created`、`layer.updated`、`layer.deleted`、
-`layer.reordered` が届きます。
+レイヤーの変更は `change` の `layers.created`、`layers.updated`、
+`layers.deleted` で、重なり順の変更は `layers.placed` で届きます。
 
 ## アクティブなレイヤー
 
@@ -138,8 +138,9 @@ draw.groups.move(groupId, { layerId: notes.id, index: 0 });
   `index` を断ります
 - ロックされたものの移動や、ロックされたレイヤーやグループへの移動は
   `false` を返し、何も変えません
-- 移った地物とグループごとに、元の場所と行き先を周りの項目で載せた
-  `feature.moved` と `group.moved` が届きます
+- 移った地物とグループは、`change` の `features.placed` と
+  `groups.placed` に並びます。別のレイヤーやグループへ移ったものは
+  `updated` にも並びます
 
 重なりの順は文書の一部です。`document.toJSON()` は `layerOrder` に書き
 出し、文書の `document.load` はこれを置き換えます。
@@ -193,8 +194,8 @@ const created = draw.selection.group(); // まとめられないときは null
 残っているグループの ID でグループを作ると、そのグループがいた場所に
 作られます。残っている行の ID で地物を作ったときと同じです。
 
-変更すると `group.created`、`group.updated`、`group.deleted` が
-届きます。
+グループの変更は `change` の `groups.created`、`groups.updated`、
+`groups.deleted` で届きます。
 
 ## ロック
 

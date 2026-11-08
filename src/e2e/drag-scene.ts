@@ -83,14 +83,14 @@ export interface Recorded {
   snapFeature?: string | null;
   /** The vertex of the target of `snap.changed` */
   snapVertex?: number | null;
-  /** The number of rows `document.changed` tells updated, over its layers */
+  /** The number of rows `change` tells updated, over its layers */
   rows?: number;
-  /** The features of `document.changed` updated */
+  /** The number of features `change` tells updated */
   updated?: number;
   /** `cancelled` of `drag.ended`, and the kind of `drag.started` and `drag.ended` */
   cancelled?: boolean;
   kind?: string;
-  /** The number of vertices of `vertexSelection.changed` (null when cleared) */
+  /** The number of vertices of a change of `vertexSelection` (null when cleared) */
   vertices?: number | null;
 }
 
@@ -272,17 +272,9 @@ export async function load(
         walk(geometry?.coordinates);
         return n;
       };
-      draw.on('feature.updated', (e) =>
-        recorded.push({ name: 'feature.updated', id: e.feature.id }),
-      );
-      draw.on('feature.created', (e) =>
-        recorded.push({ name: 'feature.created', id: e.feature.id }),
-      );
-      draw.on('feature.deleted', (e) =>
-        recorded.push({ name: 'feature.deleted', id: e.feature.id }),
-      );
       // The shape being drawn: a sketch of an edit create with its vertices placed so far, told
-      // as it is added, changed and removed
+      // as it is added, changed and removed (the sketches as they change; the first value is
+      // what there is when the scene starts)
       const drawingOf = (sketch: import('../index.js').Sketch) => {
         for (const edit of sketch.edits) {
           if (edit.kind === 'create' && edit.placedVertexCount !== undefined) return edit.feature;
@@ -298,9 +290,19 @@ export async function load(
           positions: removed ? 0 : positions(feature.geometry as Geometry),
         });
       };
-      draw.on('sketch.added', (e) => drawing(e.sketch, false));
-      draw.on('sketch.updated', (e) => drawing(e.sketch, false));
-      draw.on('sketch.removed', (e) => drawing(e.sketch, true));
+      let shown = new Map<string, import('../index.js').Sketch>();
+      let first = true;
+      draw.sketches.subscribe((sketches) => {
+        const next = new Map(sketches.map((sketch) => [sketch.id, sketch]));
+        if (!first) {
+          for (const [id, sketch] of shown) if (!next.has(id)) drawing(sketch, true);
+          for (const sketch of sketches) {
+            if (shown.get(sketch.id) !== sketch) drawing(sketch, false);
+          }
+        }
+        first = false;
+        shown = next;
+      });
       draw.on('snap.changed', (e) =>
         recorded.push({
           name: 'snap.changed',
@@ -308,25 +310,34 @@ export async function load(
           snapVertex: e.result?.target?.vertex?.index ?? null,
         }),
       );
-      draw.on('document.changed', (e) => {
+      // A commit: the features it created, updated and deleted (listed by ID when there are few),
+      // then the commit itself, with the number of rows it wrote
+      draw.on('change', (e) => {
+        const { created, updated, deleted } = e.features;
+        if (created.length + updated.length + deleted.length <= 100) {
+          for (const id of created) recorded.push({ name: 'created', id });
+          for (const id of updated) recorded.push({ name: 'updated', id });
+          for (const id of deleted) recorded.push({ name: 'deleted', id });
+        }
         let rows = 0;
         for (const change of e.rows?.layers.values() ?? []) rows += change.updated.length;
-        recorded.push({
-          name: 'document.changed',
-          rows,
-          updated: e.features?.updated?.length ?? 0,
-        });
+        recorded.push({ name: 'change', rows, updated: updated.length });
       });
       draw.on('drag.started', (e) => recorded.push({ name: 'drag.started', kind: e.kind }));
       draw.on('drag.ended', (e) =>
         recorded.push({ name: 'drag.ended', kind: e.kind, cancelled: e.cancelled }),
       );
-      draw.on('vertexSelection.changed', (e) =>
+      let firstVertices = true;
+      draw.vertexSelection.subscribe((selection) => {
+        if (firstVertices) {
+          firstVertices = false;
+          return;
+        }
         recorded.push({
-          name: 'vertexSelection.changed',
-          vertices: e.selection ? e.selection.vertices.length : null,
-        }),
-      );
+          name: 'vertexSelection',
+          vertices: selection ? selection.vertices.length : null,
+        });
+      });
 
       const read = (): Promise<Uint8Array> =>
         new Promise((resolve) => {
@@ -620,19 +631,19 @@ export async function eventsNamed(page: Page, name: string): Promise<Recorded[]>
 }
 
 /**
- * The events of the features and the drags recorded, in order, as short words: `U` and `I` for a
- * feature updated followed by its ID, `D` for a change of the document,
- * and the drags with their kind (the snaps and the selection of vertices left out)
+ * The commits and the drags recorded, in order, as short words: `U` followed by its ID for a
+ * feature a commit updated (listed when the commit changed 100 features or fewer), `D` for the
+ * commit itself, and the drags with their kind (the snaps and the selection of vertices left out)
  */
 export function sequenceOf(recorded: readonly Recorded[]): string[] {
   const out: string[] = [];
   for (const e of recorded) {
-    if (e.name === 'feature.updated') out.push(`U ${e.id}`);
-    else if (e.name === 'document.changed') out.push('D');
+    if (e.name === 'updated') out.push(`U ${e.id}`);
+    else if (e.name === 'change') out.push('D');
     else if (e.name === 'drag.started') out.push(`start ${e.kind}`);
     else if (e.name === 'drag.ended') out.push(`end ${e.kind}${e.cancelled ? ' cancelled' : ''}`);
-    else if (e.name === 'feature.created') out.push(`created ${e.id}`);
-    else if (e.name === 'feature.deleted') out.push(`deleted ${e.id}`);
+    else if (e.name === 'created') out.push(`created ${e.id}`);
+    else if (e.name === 'deleted') out.push(`deleted ${e.id}`);
   }
   return out;
 }

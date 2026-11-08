@@ -59,7 +59,8 @@ and `draw.hidden`, which takes the ID of a layer, a group or a feature.
 They are actions of the standard UI (6), added with `ui.actions.add`:
 each names its key and a `checked` that the card reads again after each
 press, and on `ui.actions.refresh()`, which the page calls on the events
-of core.
+of core and when what this client hides (`draw.hidden.hiddenIds`)
+changes.
 
 ::: code-group
 <<< @/../examples/read-only-viewer/main.ts

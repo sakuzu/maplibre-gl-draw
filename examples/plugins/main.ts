@@ -114,7 +114,7 @@ if (first !== null && matchMedia('(min-width: 48rem)').matches) {
 }
 
 // 7. The api of the plugin, asked by its name: how many stamps were made, after each tool
-draw.on('mode.changed', ({ mode }) => {
+draw.mode.subscribe((mode) => {
   const count = draw.extensions.plugins.getApi<StampApi>('stamp')?.count() ?? 0;
   console.log(`Mode ${mode}; ${count} stamps so far`);
 });

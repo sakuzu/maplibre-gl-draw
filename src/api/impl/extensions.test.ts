@@ -22,7 +22,7 @@ import { computeBoundingBox } from '../../view/ui/selection-ui/index.js';
 import type { Draw } from '../draw.js';
 import { createDraw } from '../draw.js';
 import { DrawError } from '../errors.js';
-import type { DocumentChange } from '../events.js';
+import type { Change } from '../events.js';
 import type { ModeContext, PluginContext } from '../extension/context.js';
 import type { FeatureTypeDefinition } from '../extension/feature-type.js';
 import type { ModeFactory } from '../extension/mode.js';
@@ -497,15 +497,15 @@ describe('extensions.plugins', () => {
           ctx.extensions.modes.add('plugin_mode', () => ({}));
           ctx.extensions.overlays.add(overlay('plugin_overlay'));
           ctx.extensions.featureTypes.add(featureType('pin'));
-          ctx.on('mode.changed', heard);
+          ctx.on('readOnly.changed', heard);
         },
         onRemove,
       }),
     );
     expect(draw.extensions.modes.has('plugin_mode')).toBe(true);
     expect(draw.extensions.overlays.has('plugin_overlay')).toBe(true);
-    draw.setMode('plugin_mode');
-    expect(heard).toHaveBeenCalledWith({ mode: 'plugin_mode', previous: 'select' });
+    draw.setReadOnly(true);
+    expect(heard).toHaveBeenCalledWith({ readOnly: true });
 
     draw.extensions.plugins.remove('p');
     expect(onRemove).toHaveBeenCalledTimes(1);
@@ -513,7 +513,7 @@ describe('extensions.plugins', () => {
     expect(draw.extensions.overlays.has('plugin_overlay')).toBe(false);
     expect(draw.extensions.featureTypes.has('pin')).toBe(false);
     heard.mockClear();
-    draw.setMode('draw_point');
+    draw.setReadOnly(false);
     expect(heard).not.toHaveBeenCalled();
   });
 
@@ -529,11 +529,11 @@ describe('extensions.plugins', () => {
     const context = ctx as unknown as PluginContext;
     const every = vi.fn();
     const first = vi.fn();
-    context.on('mode.changed', every);
-    context.once('mode.changed', first);
-    draw.setMode('draw_point');
-    context.off('mode.changed', every);
-    draw.setMode('select');
+    context.on('readOnly.changed', every);
+    context.once('readOnly.changed', first);
+    draw.setReadOnly(true);
+    context.off('readOnly.changed', every);
+    draw.setReadOnly(false);
     expect(every).toHaveBeenCalledTimes(1);
     expect(first).toHaveBeenCalledTimes(1);
   });
@@ -574,7 +574,7 @@ describe('extensions.plugins', () => {
     expect(context.names.next('Layer')).toEqual(expect.any(String));
   });
 
-  it('lets a plugin send events of its own to the subscribers of draw.on, and none of the library', () => {
+  it('has no way to send an event: the events are those of the library only', () => {
     let ctx: PluginContext | null = null;
     draw.extensions.plugins.add(
       plugin('counter', {
@@ -583,25 +583,11 @@ describe('extensions.plugins', () => {
         },
       }),
     );
-    // An event a plugin adds to DrawEvents by declaration merging; the test sends it untyped
-    const emit = (ctx as unknown as PluginContext).emit as (
-      event: string,
-      payload: unknown,
-    ) => void;
-    const received: unknown[] = [];
-    (draw.on as (event: string, listener: (payload: unknown) => void) => () => void)(
-      'counter.changed',
-      (payload) => received.push(payload),
-    );
-    emit('counter.changed', { count: 2 });
-    expect(received).toEqual([{ count: 2 }]);
-    // The events of the library are the library's to send
-    expect(() => emit('document.changed', {})).toThrow(DrawError);
-    expect(() => emit('selection.changed', {})).toThrow(
-      expect.objectContaining({ code: 'invalid-input' }),
-    );
-    expect(() => emit('', {})).toThrow(expect.objectContaining({ code: 'invalid-input' }));
-    expect(received).toHaveLength(1);
+    expect('emit' in (ctx as unknown as PluginContext)).toBe(false);
+    // A name that is not an event of the library is refused
+    expect(() =>
+      (ctx as unknown as PluginContext).on('counter.changed' as never, () => {}),
+    ).toThrow(expect.objectContaining({ code: 'invalid-input' }));
   });
 
   it('answers for the screen in the frame drawn last', () => {
@@ -1016,11 +1002,11 @@ describe('a Store that replaces its whole document', () => {
     expect(onCancel).toHaveBeenCalledTimes(1);
   });
 
-  it('carries reset to the listeners of document.changed', () => {
+  it('tells a replacement of the whole document as a change of the document itself', () => {
     const store = new ReplacingStore();
     const other = createDraw(createMapStub().map, { store: store as unknown as Store });
-    const changes: DocumentChange[] = [];
-    other.on('document.changed', (change) => changes.push(change));
+    const changes: Change[] = [];
+    other.on('change', (change) => changes.push(change));
     const layer = other.layers.list()[0];
     store.announce({
       source: 'remote',
@@ -1029,11 +1015,9 @@ describe('a Store that replaces its whole document', () => {
     });
     store.announce({ source: 'remote', reset: true });
     expect(changes).toHaveLength(2);
-    expect(changes.every((change) => change.reset === true && change.source === 'remote')).toBe(
-      true,
-    );
+    expect(changes.every((change) => change.document && change.source === 'remote')).toBe(true);
     other.layers.update(layer.id, { name: 'renamed' });
-    expect(changes[2].reset).toBeUndefined();
+    expect(changes[2].document).toBe(false);
     other.destroy();
   });
 });
@@ -1295,7 +1279,7 @@ describe('drawing.cancel', () => {
     input.move([1, 1]);
     expect(context.draw.drawing.isDrawing()).toBe(true);
     const ended: string[] = [];
-    draw.on('sketch.removed', ({ reason }) => ended.push(reason));
+    engine.events.on('sketch.removed', ({ reason }) => ended.push(reason));
     expect(context.draw.drawing.cancel()).toBe(true);
     expect(context.draw.drawing.isDrawing()).toBe(false);
     // The sketch that showed the shape is removed

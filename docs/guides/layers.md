@@ -62,8 +62,9 @@ layer that is locked or holds a locked feature or group. Deleting the
 selection (`selection.delete()` and the Delete key) with layers selected
 keeps at least one layer.
 
-Changes emit `layer.created`, `layer.updated`, `layer.deleted` and
-`layer.reordered`.
+A change of the layers is told by `change`, in `layers.created`,
+`layers.updated` and `layers.deleted`, and a change of their stacking
+order in `layers.placed`.
 
 ## The active layer
 
@@ -138,9 +139,9 @@ draw.groups.move(groupId, { layerId: notes.id, index: 0 });
   refuses an `index`
 - A move of a locked item, or into a locked layer or group, returns
   `false` and changes nothing
-- `feature.moved` and `group.moved` report each feature and group that
-  moved, with where it came from and where it went, by the items around
-  it
+- `change` lists each feature and group that moved in `features.placed`
+  and `groups.placed`, and also in `updated` when it went into another
+  layer or group
 
 The stacking order is part of the document: `document.toJSON()` writes it
 in `layerOrder`, and `document.load` of a document replaces it.
@@ -194,7 +195,8 @@ and `features.restore` or `features.move` puts its features back in it.
 A group created with the ID of such a group takes the place it had, as a
 feature created with the ID of a row deleted and kept does.
 
-Changes emit `group.created`, `group.updated` and `group.deleted`.
+A change of the groups is told by `change`, in `groups.created`,
+`groups.updated` and `groups.deleted`.
 
 ## Locking
 

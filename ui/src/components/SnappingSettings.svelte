@@ -41,7 +41,7 @@
     { kind: 'guide', word: 'snapGuide' },
   ];
 
-  const options = $derived(follow(draw, ['options.changed'], () => draw.options.get()));
+  const options = $derived(follow(draw, [draw.options], () => draw.options.get()));
   const now = $derived(options.get());
   const snapping = $derived(now.snapping ?? {});
   const enabled = $derived(snapping.enabled !== false);

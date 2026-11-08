@@ -171,7 +171,7 @@ describe('many features created at once over a Store of rows', () => {
   it('notifies the rows created once, in the order given in each layer', () => {
     const { draw, store } = instance();
     const changes: unknown[] = [];
-    draw.on('document.changed', (change) => changes.push(change));
+    draw.on('change', (change) => changes.push(change));
     const list = inputs(30);
     draw.features.createMany(list);
     expect(changes).toHaveLength(1);

@@ -18,11 +18,14 @@ const draw = createDraw(map);
 // クリックで頂点を足し、Enter か最初の頂点のクリックで終える
 draw.setMode('draw_polygon');
 
-draw.on('feature.created', ({ feature }) => {
-  console.log(feature.type, feature.properties.name);
+draw.on('change', ({ features }) => {
+  for (const id of features.created) {
+    const feature = draw.features.get(id);
+    console.log(feature?.type, feature?.properties.name);
+  }
 });
 
-draw.on('mode.changed', ({ mode }) => {
+draw.mode.subscribe((mode) => {
   console.log('mode', mode); // 多角形を描き終えると 'select'
 });
 ```
@@ -52,8 +55,8 @@ draw.on('mode.changed', ({ mode }) => {
 `false` を返し、何も変わりません。モードの無い名前を渡すと、コード
 `not-found` の `DrawError` を投げます。
 
-今のモードは `draw.getMode()` で読めます。モードが変わるたびに、
-`mode.changed` が前のモードと合わせて届きます。独自のモードは
+今のモードは `draw.getMode()` で読めます。モードが変わるたびに
+`draw.mode` が知らせます (`draw.mode.subscribe`)。独自のモードは
 `draw.extensions.modes.add` で足します ([プラグイン](plugins.ja.md))。
 
 ## 描画モード
@@ -96,21 +99,24 @@ draw.options.update({
 その形は、この端末の 1 つの `create` の編集を持つ下書き (`draw.sketches`)
 です。作られる地物と、モードが渡したときは `placedVertexCount` (始めから
 何個の頂点が置かれたか) と `highlightedVertexIndex` (強調して描く頂点) を
-持ちます。描いている間は何も書き込まれません。最初の形は `sketch.added`、
-変わるたびに `sketch.updated`、終わりは `sketch.removed` で届き、地物が
-作られたときは `committed`、捨てられたときとモードを離れたときは
-`cancelled` です。地図の描画がその変化を描いたことは、ID なしの
-`rendered.changed` で届きます。間引きはしないので、重い処理をする
-リスナーは自分で次に描くときまで待ってください。描いている途中の長さを
-表示するのに使います。
+持ちます。描いている間は何も書き込まれません。最初の形、変わるたびの形、
+終わりを `draw.sketches` が知らせます。地物が作られたとき、捨てられたとき、
+モードを離れたときに終わり、一覧から外れます。地図の描画がその変化を
+描いたことは、ID なしの `draw.rendered.changed` が知らせます。間引きは
+しないので、重い処理をする関数は自分で次に描くときまで待ってください。
+描いている途中の長さを表示するのに使います。
 
 ```ts
 import { length } from '@sakuzu/maplibre-gl-draw/geometry';
 
-draw.on('sketch.updated', ({ sketch }) => {
-  const edit = sketch.edits[0];
-  if (edit?.kind === 'create' && edit.feature.geometry.type === 'LineString') {
-    console.log(`${Math.round(length(edit.feature.geometry))} m`);
+draw.sketches.subscribe((sketches) => {
+  for (const { edits } of sketches) {
+    const edit = edits[0];
+    if (edit?.kind !== 'create') continue;
+    const { geometry } = edit.feature;
+    if (geometry.type === 'LineString') {
+      console.log(`${Math.round(length(geometry))} m`);
+    }
   }
 });
 ```
@@ -118,9 +124,9 @@ draw.on('sketch.updated', ({ sketch }) => {
 ### 描き終えた後
 
 点、線、多角形、円は、その選択と合わせて 1 つの取引で作られ、新しい
-地物が選ばれた状態で `select` に戻ります。`feature.created` と
-`selection.changed` が届き、変更の全体について `document.changed` が
-1 回届きます。
+地物が選ばれた状態で `select` に戻ります。変更の全体について `change` が
+1 回届き、新しい地物は `features.created` に入ります。新しい選択は
+`draw.selection` が知らせます。
 
 フリーハンドは違います。1 本の線 (押す、ドラッグする、離す) ごとに 1 つの
 地物になり、続けて線を引けるようにモードは `draw_freehand` の
@@ -240,8 +246,9 @@ const removed = draw.vertexSelection.delete();
 
 頂点は `VertexRef` (`{ part?, ring, index }`) で指定します
 ([Multi の形状と穴](#multi-の形状と穴) を参照)。ロックされた地物では
-`set` が `false` を返します。変わるたびに `vertexSelection.changed` が
-届きます。頂点を削除しても、地物自体は消えません。
+`set` が `false` を返します。変わるたびに `draw.vertexSelection` が
+知らせます (`draw.vertexSelection.subscribe`)。頂点を削除しても、地物自体は
+消えません。
 
 - 線は少なくとも 2 点を保ちます
 - 多角形のリングは少なくとも 4 つの位置 (閉じた三角形) を保ちます。
@@ -291,8 +298,8 @@ const selected = draw.selection.features();
 選んだ地物か、選んだグループやレイヤーの中の地物を返します。
 `selection.value` は選んでいるものを伝えます。種類、地物の数、地物の
 レイヤーと範囲 (`bbox`)、ID です。`selection.delete()` は選んでいるものを
-削除します。選択が変わるたびに、前の選択と合わせて `selection.changed` が
-届きます。
+削除します。選択が変わるたびに `draw.selection` が知らせます
+(`draw.selection.subscribe`)。
 
 ```ts
 const { type, count, ids, bbox } = draw.selection.value;
@@ -572,9 +579,9 @@ ARIA のロールもラベルも付けません。キーボードでは、削除
 ## 関連する例
 
 - [Get started](../examples/get-started.ja.md) では、標準の UI の道具で
-  描き、`document.changed` を受け取ります
+  描き、`change` を受け取ります
 - [Build your own UI](../examples/custom-ui.ja.md) では、自分のボタンから
-  `setMode` を呼び、`mode.changed` と選択を追います
+  `setMode` を呼び、`draw.mode` と `draw.selection` を追います
 - [Editing shapes](../examples/editing-shapes.ja.md) では、枠、頂点と
   中点のハンドル、穴のある面、`MultiPolygon`、いっしょに動く共有の頂点を
   見せます

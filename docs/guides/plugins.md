@@ -16,14 +16,12 @@ import type { Plugin } from '@sakuzu/maplibre-gl-draw';
 const logger: Plugin = {
   name: 'logger',
   onAdd(ctx) {
-    ctx.on('feature.created', ({ feature, source }) => {
-      console.log('created', feature.id, feature.type, source);
-    });
-    ctx.on('feature.updated', ({ feature }) => {
-      console.log('changed', feature.id);
-    });
-    ctx.on('feature.deleted', ({ feature }) => {
-      console.log('deleted', feature.id);
+    ctx.on('change', ({ features, source }) => {
+      for (const id of features.created) {
+        console.log('created', id, ctx.draw.features.get(id)?.type, source);
+      }
+      for (const id of features.updated) console.log('changed', id);
+      for (const id of features.deleted) console.log('deleted', id);
     });
   },
 };
@@ -91,8 +89,8 @@ function createCounter(): Plugin<CounterApi> {
     name: 'counter',
     api: { count: () => created },
     onAdd(ctx) {
-      ctx.on('feature.created', () => {
-        created += 1;
+      ctx.on('change', ({ features }) => {
+        created += features.created.length;
       });
     },
   };
@@ -119,8 +117,6 @@ instance:
   here ends when the plugin is removed
 - `extensions`, the same collections as `draw.extensions`. What a
   plugin adds here is removed with the plugin
-- `emit`, which sends an event of the plugin to the subscribers of
-  `draw.on` ([events of a plugin](#events-of-a-plugin))
 - `names`, the automatic names of the instance. `names.next('Layer')`
   gives the next name the way the `autoName` option says
   ([automatic names](drawing.md#automatic-names))
@@ -199,8 +195,12 @@ A plugin reacts to changes through the events, with the same names as
 change, for every write whatever made it: the API, a drawing mode, a
 drag, the Delete key, a load, another plugin, or a Store you supplied.
 
-- `document.changed` arrives once per transaction that changed the
-  document, with everything it changed and its `source`
+- `change` arrives once per transaction that changed the document, with
+  the IDs of everything it changed and its `source`
+- A value of this client that changes over time (the selection, the mode,
+  the sketches, the datasets and the others) is an observable of its
+  resource, followed with `subscribe`
+  ([values that change over time](../reference/events.md#values-that-change-over-time))
 - A drag writes once, when it is let go, whatever it edits: what is
   seen in its middle is a sketch (`draw.rendered`)
 - `drag.started` and `drag.ended` surround a move, a resize, a
@@ -210,20 +210,22 @@ drag, the Delete key, a load, another plugin, or a Store you supplied.
   read-only ([read-only](read-only.md))
 
 A plugin that works on every dataset follows them with
-`dataset.added` and `dataset.removed`. Datasets can already be there
-when the plugin is added, so it also reads `draw.datasets.list()` in
-`onAdd`:
+`draw.datasets`. Its `subscribe` calls the function with the datasets
+already there when the plugin is added, and again when one is added or
+removed and when their order changes. A subscription of an observable is
+not one of the context: the plugin stops it in `onRemove`.
 
 <!-- docs-check:
 declare const ctx: import('@sakuzu/maplibre-gl-draw').PluginContext;
-declare function follow(datasetId: string): void;
-declare function forget(datasetId: string): void;
+declare function follow(datasetIds: ReadonlySet<string>): void;
 -->
 
 ```ts
-for (const dataset of ctx.draw.datasets.list()) follow(dataset.id);
-ctx.on('dataset.added', ({ dataset }) => follow(dataset.id));
-ctx.on('dataset.removed', ({ datasetId }) => forget(datasetId));
+const stop = ctx.draw.datasets.subscribe((datasets) => {
+  follow(new Set(datasets.map((dataset) => dataset.id)));
+});
+// In onRemove
+stop();
 ```
 
 ### What is drawn
@@ -238,9 +240,9 @@ and hits it in the view drawn last, and `rendered.getFootprint(id)` its
 footprint without the margin, the box the library makes it from (the
 four corners of an image as it is drawn, say). `rendered.changed` tells
 the features whose shapes changed, once the draw of the map that draws
-them is done. It tells no change of the look nor of the selection box with
-the view: read those at each draw. What writes reads the document,
-`ctx.draw.features`.
+them is done: its value is the IDs told last. It tells no change of the
+look nor of the selection box with the view: read those at each draw.
+What writes reads the document, `ctx.draw.features`.
 
 <!-- docs-check:
 declare const ctx: import('@sakuzu/maplibre-gl-draw').PluginContext;
@@ -248,7 +250,7 @@ declare function follow(feature: import('@sakuzu/maplibre-gl-draw').Feature): vo
 -->
 
 ```ts
-ctx.on('rendered.changed', ({ ids }) => {
+ctx.draw.rendered.changed.subscribe((ids) => {
   for (const feature of ctx.draw.rendered.getMany(ids)) {
     if (feature) follow(feature);
   }
@@ -293,39 +295,55 @@ const draw = createDraw(map, { messages: { pinLabel: 'Épingle' } });
 draw.extensions.plugins.add(pins);
 ```
 
-### Events of a plugin
+### Values of a plugin
 
-A plugin tells what changes in it through the same list of events: it
-adds its events to `DrawEvents` by declaration merging, named
-`resource.pastParticiple` as the events of the library are, and sends
-them with `ctx.emit`. An application and other plugins subscribe to them
-with `draw.on` and `ctx.on`, as to any event. The events of the library
-are the library's to send: `emit` throws a `DrawError` with the code
-`invalid-input` for one of them.
+The events are the library's alone to send. A value of a plugin that
+changes over time is given to the application as an `Observable` of the
+API the plugin returns: `value` reads it, and `subscribe` calls the
+function with the value now at once and again each time it changes. An
+application and other plugins follow it as they follow the values of the
+library.
 
 ```ts
-import type { Plugin } from '@sakuzu/maplibre-gl-draw';
+import type { Observable, Plugin } from '@sakuzu/maplibre-gl-draw';
 
-declare module '@sakuzu/maplibre-gl-draw' {
-  interface DrawEvents {
-    /** The number of features the counter has seen changed */
-    'counter.changed': { count: number };
-  }
+interface CounterApi {
+  /** The number of features the counter has seen changed */
+  readonly count: Observable<number>;
 }
 
-const counter: Plugin = {
-  name: 'counter',
-  onAdd(ctx) {
-    let count = 0;
-    ctx.on('document.changed', (change) => {
-      count += change.features?.updated?.length ?? 0;
-      ctx.emit('counter.changed', { count });
-    });
-  },
-};
+function createCounter(): Plugin<CounterApi> {
+  let count = 0;
+  const runs = new Set<(value: number) => void>();
+  const observable: Observable<number> = {
+    get value() {
+      return count;
+    },
+    subscribe(run) {
+      runs.add(run);
+      run(count);
+      return () => {
+        runs.delete(run);
+      };
+    },
+  };
+  return {
+    name: 'counter',
+    api: { count: observable },
+    onAdd(ctx) {
+      ctx.on('change', ({ features }) => {
+        if (features.updated.length === 0) return;
+        count += features.updated.length;
+        for (const run of [...runs]) run(count);
+      });
+    },
+  };
+}
 
-draw.extensions.plugins.add(counter);
-draw.on('counter.changed', ({ count }) => console.log(count));
+draw.extensions.plugins.add(createCounter());
+draw.extensions.plugins
+  .getApi<CounterApi>('counter')
+  ?.count.subscribe((count) => console.log(count));
 ```
 
 ## Input

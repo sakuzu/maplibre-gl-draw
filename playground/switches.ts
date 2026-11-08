@@ -107,16 +107,10 @@ export function createSwitches(draw: Draw, map: maplibregl.Map, ja: boolean): Ac
 export function addSwitches(ui: DrawUI, draw: Draw, map: maplibregl.Map, ja: boolean): void {
   for (const action of createSwitches(draw, map, ja)) ui.actions.add(action);
   const refresh = () => ui.actions.refresh();
-  for (const event of [
-    'readOnly.changed',
-    'interactionLock.changed',
-    'layer.created',
-    'layer.deleted',
-    'dataset.added',
-    'dataset.removed',
-  ] as const) {
+  for (const event of ['readOnly.changed', 'interactionLock.changed', 'change'] as const) {
     draw.on(event, refresh);
   }
+  draw.datasets.subscribe(refresh);
   map.on('terrain', refresh);
 }
 

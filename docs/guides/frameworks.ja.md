@@ -52,8 +52,8 @@ export function DrawMap() {
     const draw = createDraw(map);
     drawRef.current = draw;
 
-    const off = draw.on('feature.created', ({ feature }) => {
-      console.log(feature.id);
+    const off = draw.on('change', ({ features }) => {
+      console.log(features.created);
     });
 
     return () => {
@@ -167,20 +167,22 @@ onBeforeUnmount(() => {
 ## 描いたものを状態に表す
 
 地物の数や選んでいるものなど、描いたものの何かを表示する
-コンポーネントは、イベントからそれを自分の状態に写します。状態には
-インスタンスや地物ではなく、数や ID の一覧のようなふつうの値を
-入れます。
+コンポーネントは、それを自分の状態に写します。文書はイベント `change`
+から、`draw.selection` のように時間で変わる値はその `Observable` から
+写します。`Observable` の `subscribe` は、渡した関数を今の値ですぐに 1 回
+呼び、値が変わるたびにまた呼びます。状態にはインスタンスや地物ではなく、
+数や ID の一覧のようなふつうの値を入れます。
 
 ```ts
-let featureCount = 0;
-let selectedIds: readonly string[] = [];
+let featureCount = draw.features.count();
+let selectedCount = 0;
 
 const stops = [
-  draw.on('document.changed', () => {
+  draw.on('change', () => {
     featureCount = draw.features.count();
   }),
-  draw.on('selection.changed', ({ selection }) => {
-    selectedIds = selection.ids;
+  draw.selection.subscribe((selection) => {
+    selectedCount = selection.count;
   }),
 ];
 
@@ -188,10 +190,16 @@ const stops = [
 for (const stop of stops) stop();
 ```
 
-`document.changed` は取引ごとに 1 回届くので、数千の地物を持つ
-ファイルを読み込んでも、状態の更新は 1 回で済みます。React では
-代入が `useState` の setter の呼び出しに、Svelte では `$state` の
-変数への代入に、Vue では `ref` への代入になります。
+`change` は取引ごとに 1 回届くので、数千の地物を持つファイルを
+読み込んでも、状態の更新は 1 回で済みます。React では代入が
+`useState` の setter の呼び出しに、Svelte では `$state` の変数への
+代入に、Vue では `ref` への代入になります。
+
+`Observable` は Svelte の store の約束も守ります。
+`const selection = draw.selection` とすれば、`$selection` がそのまま
+使えます。React では
+`useSyncExternalStore(draw.selection.subscribe, () => draw.selection.value)`
+で読めます。`subscribe` は `this` に依らないので、そのまま渡せます。
 
 ## サーバーサイドレンダリング
 

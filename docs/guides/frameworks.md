@@ -47,8 +47,8 @@ export function DrawMap() {
     const draw = createDraw(map);
     drawRef.current = draw;
 
-    const off = draw.on('feature.created', ({ feature }) => {
-      console.log(feature.id);
+    const off = draw.on('change', ({ features }) => {
+      console.log(features.created);
     });
 
     return () => {
@@ -158,20 +158,23 @@ With the standard UI, `onMounted` calls `createDrawUI(draw)` after
 ## Showing the drawing in the state
 
 A component that shows something of the drawing, such as the number of
-features or what is selected, copies it into its own state from the
-events. Keep plain values in the state (a count, a list of IDs), not the
-instance or its features.
+features or what is selected, copies it into its own state: from the
+event `change` for the document, and from the observable of a value that
+changes over time, such as `draw.selection`, whose `subscribe` calls the
+function with the value now at once and again each time it changes. Keep
+plain values in the state (a count, a list of IDs), not the instance or
+its features.
 
 ```ts
-let featureCount = 0;
-let selectedIds: readonly string[] = [];
+let featureCount = draw.features.count();
+let selectedCount = 0;
 
 const stops = [
-  draw.on('document.changed', () => {
+  draw.on('change', () => {
     featureCount = draw.features.count();
   }),
-  draw.on('selection.changed', ({ selection }) => {
-    selectedIds = selection.ids;
+  draw.selection.subscribe((selection) => {
+    selectedCount = selection.count;
   }),
 ];
 
@@ -179,10 +182,16 @@ const stops = [
 for (const stop of stops) stop();
 ```
 
-`document.changed` arrives once per transaction, so loading a file of
-thousands of features updates the state once. In React the assignments
-become calls of the setters of `useState`, in Svelte assignments to
-`$state` variables, and in Vue assignments to a `ref`.
+`change` arrives once per transaction, so loading a file of thousands of
+features updates the state once. In React the assignments become calls of
+the setters of `useState`, in Svelte assignments to `$state` variables,
+and in Vue assignments to a `ref`.
+
+An observable also keeps the contract of a Svelte store: with
+`const selection = draw.selection`, `$selection` works as it is. In React,
+`useSyncExternalStore(draw.selection.subscribe, () => draw.selection.value)`
+reads it. `subscribe` does not depend on `this`, so it is passed on as it
+is.
 
 ## Server-side rendering
 

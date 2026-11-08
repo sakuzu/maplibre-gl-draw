@@ -54,6 +54,7 @@ import type { Feature, FeatureInput, Layer } from '../model.js';
 import type { SelectionStyleOptions } from '../options.js';
 import type { SketchEdit } from '../sketches.js';
 import type { SnapResult } from '../state.js';
+import { requireEventName } from './events.js';
 import { mergeOptions } from './options.js';
 import { toDatasetRow } from './rows.js';
 
@@ -287,6 +288,7 @@ export function createExtensionContext(
     listener: (payload: DrawEvents[K]) => void,
     once: boolean,
   ): (() => void) => {
+    requireEventName(event);
     const draw = services.getDraw();
     const wrapped = once
       ? (payload: DrawEvents[K]) => {

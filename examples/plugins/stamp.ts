@@ -62,9 +62,13 @@ export function createStampPlugin(onStamp?: (count: number) => void): Plugin<Sta
       // What the plugin adds through its context is removed with it
       ctx.extensions.modes.add('stamp', stampMode);
       // After every creation, whatever made it
-      ctx.on('feature.created', ({ feature }) => {
-        if (!isStamp(feature)) return;
-        stamps += 1;
+      ctx.on('change', ({ features }) => {
+        const created = features.created.filter((id) => {
+          const feature = ctx.draw.features.get(id);
+          return feature !== undefined && isStamp(feature);
+        });
+        if (created.length === 0) return;
+        stamps += created.length;
         onStamp?.(stamps);
       });
     },

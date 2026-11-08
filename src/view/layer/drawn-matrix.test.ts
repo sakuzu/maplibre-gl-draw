@@ -57,7 +57,7 @@ import { getDisplayFeatures } from '../../store/local-visibility.js';
 import type { Store } from '../../store/store.js';
 import { createTableStore } from '../../store/table-memory.js';
 import type { Coordinate, Feature, Layer } from '../../store/types.js';
-import { createMapStub, createTestDrawer, memoryGL } from '../../test-utils.js';
+import { createMapStub, createTestDrawer, memoryGL, onDocumentChange } from '../../test-utils.js';
 import { createFeatureCompanionRegistry } from '../feature-companion.js';
 import { GpuLedger } from '../gpu-ledger.js';
 import { toPointInstanceData } from '../renderers/batch-manager.js';
@@ -998,7 +998,7 @@ const drawThroughMode: Step = {
     if (!mode) throw new Error(`no mode for ${run.shape}`);
     let made: { id: string } | undefined;
     // A Store of rows tells the row created, a Store of objects the feature created
-    const off = draw.on('document.changed', (change) => {
+    const off = onDocumentChange(draw, (change) => {
       const tables = draw.getStore().tables;
       for (const rows of change.rows?.layers.values() ?? []) {
         const id = rows.created.length > 0 ? tables?.getRowId(rows.created[0]) : undefined;
@@ -1340,7 +1340,7 @@ function runRow(shape: ShapeName, op: Operation, variant: Variant): CellResult {
     redone: [],
   }));
   for (const run of runs) {
-    run.client.draw.on('document.changed', (change) => {
+    onDocumentChange(run.client.draw, (change) => {
       run.changes.push(change);
     });
   }

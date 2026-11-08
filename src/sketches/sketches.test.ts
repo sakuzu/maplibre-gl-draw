@@ -22,11 +22,11 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Draw } from '../api/draw.js';
-import type { DrawEvents } from '../api/events.js';
 import type { Store as PublicStore } from '../api/extension/store.js';
 import { createDrawOnEngine } from '../api/impl/create-draw.js';
 import type { Engine } from '../api/impl/engine.js';
 import { createEngine } from '../api/impl/engine.js';
+import type { InstanceSignals } from '../api/impl/events.js';
 import type { ConsistencyFailure } from '../api/options.js';
 import type { Sketch, SketchEdit } from '../api/sketches.js';
 import { draggedRowMotionsOf } from '../feature-table/dragged-rows.js';
@@ -134,13 +134,8 @@ function open(kind: Kind, allowed: Array<'sketches' | 'sketch-commits'> = []): O
   engine.enterDefaultMode();
   opened.push(draw);
   const events: Array<[string, unknown]> = [];
-  for (const event of [
-    'sketch.added',
-    'sketch.updated',
-    'sketch.removed',
-    'document.changed',
-  ] as const) {
-    draw.on(event, (payload) => events.push([event, payload]));
+  for (const event of ['sketch.added', 'sketch.updated', 'sketch.removed', 'change'] as const) {
+    engine.events.on(event, (payload) => events.push([event, payload]));
   }
   return { engine, draw, store, failures, events };
 }
@@ -269,7 +264,7 @@ for (const kind of KINDS) {
       events.length = 0;
       expect(draw.sketches.commit(sketch.id)).toBe(true);
       expect(applyEdits).toHaveBeenCalledTimes(1);
-      expect(names(events)).toEqual(['document.changed', 'sketch.removed']);
+      expect(names(events)).toEqual(['change', 'sketch.removed']);
       expect(events[1][1]).toEqual({ sketch, reason: 'committed', dropped: 0 });
       expect(draw.sketches.count()).toBe(0);
       expect(coordinatesOf(draw.features.get(a.id))[1]).toEqual([1, 1]);
@@ -289,7 +284,7 @@ for (const kind of KINDS) {
       const second = draw.sketches.add({
         edits: [{ kind: 'set', featureId: a.id, patch: { properties: { n: 1 } } }],
       }) as Sketch;
-      expect(names(events)).toEqual(['document.changed', 'sketch.removed', 'sketch.added']);
+      expect(names(events)).toEqual(['change', 'sketch.removed', 'sketch.added']);
       expect(events[1][1]).toEqual({ sketch: first, reason: 'committed', dropped: 0 });
       expect(coordinatesOf(draw.features.get(a.id))[1]).toEqual([1, 1]);
       expect(draw.sketches.list()).toEqual([second]);
@@ -338,20 +333,20 @@ for (const kind of KINDS) {
       }) as Sketch;
       events.length = 0;
       draw.transact(() => draw.features.delete(a.id), { source: 'remote' });
-      expect(names(events)).toEqual(['document.changed', 'sketch.updated']);
-      const updated = events[1][1] as DrawEvents['sketch.updated'];
+      expect(names(events)).toEqual(['change', 'sketch.updated']);
+      const updated = events[1][1] as InstanceSignals['sketch.updated'];
       expect(updated.dropped).toBe(1);
       expect(updated.sketch.edits[0]).toMatchObject({ target: { featureIds: [b.id, c.id] } });
       expect(draw.sketches.get(sketch.id)).toBe(updated.sketch);
       events.length = 0;
       draw.features.update(b.id, { locked: true });
-      expect(names(events)).toEqual(['document.changed', 'sketch.updated']);
+      expect(names(events)).toEqual(['change', 'sketch.updated']);
       expect(draw.sketches.get(sketch.id)?.edits[0]).toMatchObject({
         target: { featureIds: [c.id] },
       });
       events.length = 0;
       draw.features.update(c.id, { locked: true });
-      expect(names(events)).toEqual(['document.changed', 'sketch.removed']);
+      expect(names(events)).toEqual(['change', 'sketch.removed']);
       expect(events[1][1]).toMatchObject({ reason: 'locked', dropped: 3 });
       expect(draw.sketches.count()).toBe(0);
       expect(failures).toEqual([]);
@@ -369,7 +364,7 @@ for (const kind of KINDS) {
       expect(
         events
           .filter(([name]) => name === 'sketch.removed')
-          .map(([, p]) => (p as DrawEvents['sketch.removed']).reason),
+          .map(([, p]) => (p as InstanceSignals['sketch.removed']).reason),
       ).toEqual(['deleted', 'layer-unavailable']);
       expect(failures).toEqual([]);
     });
@@ -579,7 +574,7 @@ for (const kind of KINDS) {
       const theirs = draw.sketches.add({ owner: 'other', edits: [move(b.id, [11, 1])] }) as Sketch;
       events.length = 0;
       draw.setReadOnly(true);
-      expect(events.map(([, p]) => (p as DrawEvents['sketch.removed']).reason)).toEqual([
+      expect(events.map(([, p]) => (p as InstanceSignals['sketch.removed']).reason)).toEqual([
         'read-only',
       ]);
       expect(draw.sketches.list()).toEqual([theirs]);
@@ -625,7 +620,7 @@ for (const kind of KINDS) {
       );
       events.length = 0;
       expect(draw.sketches.commitMany([u1.id, d2.id])).toBe(true);
-      expect(names(events)).toEqual(['document.changed', 'sketch.removed', 'sketch.removed']);
+      expect(names(events)).toEqual(['change', 'sketch.removed', 'sketch.removed']);
       expect(applyEdits).toHaveBeenCalledTimes(2);
       expect(coordinatesOf(draw.features.get(b.id))[1]).toEqual([11, 1]);
       expect(failures).toEqual([]);
@@ -663,7 +658,7 @@ for (const kind of KINDS) {
         draw.features.update(a.id, { properties: { n: 1 } });
         draw.sketches.commit(sketch.id);
       });
-      expect(names(events)).toEqual(['sketch.added', 'sketch.removed', 'document.changed']);
+      expect(names(events)).toEqual(['sketch.added', 'sketch.removed', 'change']);
       expect(coordinatesOf(draw.features.get(a.id))[1]).toEqual([1, 1]);
       expect(draw.features.get(a.id)?.properties).toEqual({ n: 1 });
       // A transaction that writes nothing but draws a sketch

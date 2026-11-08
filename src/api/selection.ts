@@ -5,6 +5,7 @@
  * `draw.selection` and `draw.vertexSelection`: what this client has selected
  */
 
+import type { Observable } from './events.js';
 import type {
   Feature,
   FeatureFilter,
@@ -24,9 +25,10 @@ import type {
 
 /**
  * The selection of this client: features, groups or layers, one type at a time, and the
- * verbs that act on what is selected.
+ * verbs that act on what is selected. As an observable, its value is `value`, told again each
+ * time the selection changes (once a transaction, after it).
  */
-export interface SelectionResource {
+export interface SelectionResource extends Observable<SelectionValue> {
   /**
    * What is selected: the type, the number of features, their layers and extent, and the IDs. Past
    * 2,000 features selected in a Store that holds its features as rows, the IDs are not listed
@@ -149,9 +151,10 @@ export interface SelectionResource {
 }
 
 /**
- * The selected vertices of one feature in this client.
+ * The selected vertices of one feature in this client. As an observable, its value is what `get`
+ * returns, told again each time the vertices selected change.
  */
-export interface VertexSelectionResource {
+export interface VertexSelectionResource extends Observable<VertexSelection | null> {
   /**
    * The selected vertices.
    *

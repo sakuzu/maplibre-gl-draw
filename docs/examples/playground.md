@@ -83,7 +83,8 @@ The page is in `playground/` and runs on its own with
 tools and sections through `ui.tools.add` and
 `ui.inspector.sections.add`. The switches (`switches.ts`) are added
 through `ui.actions.add`, and the page calls `ui.actions.refresh()` on
-the events of core and of the map that change what they show.
+the events of core and of the map that change what they show, and when
+the datasets (`draw.datasets`) change.
 
 ::: code-group
 <<< @/../playground/main.ts

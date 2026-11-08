@@ -5,7 +5,7 @@
 // The features come from GeoJSON, whose properties become their attributes. The page opens
 // with the market hall selected, and the panel on the right opens on its Attributes tab, which
 // lists its attributes, where a value is changed, added and removed. Code changes them with
-// features.update, and feature.updated tells the page of every change, wherever it was made.
+// features.update, and `change` tells the page of every change, wherever it was made.
 
 import { createDraw, isDrawProperty } from '@sakuzu/maplibre-gl-draw';
 import { createDrawUI } from '@sakuzu/maplibre-gl-draw-ui';
@@ -28,13 +28,18 @@ const draw = createDraw(map);
 // 1. Follow the changes of attributes, from the panel or from code. A value typed in the panel
 // is kept as the string typed ("12", not 12): convert it here when the data needs numbers.
 // The keys of the library (`maplibre-gl-draw:*`) live in the same properties and are left out
-draw.on('feature.updated', ({ feature, previous }) => {
-  const keys = new Set([...Object.keys(previous.properties), ...Object.keys(feature.properties)]);
-  for (const key of keys) {
-    const before = previous.properties[key];
-    const after = feature.properties[key];
-    if (isDrawProperty(key) || JSON.stringify(before) === JSON.stringify(after)) continue;
-    console.log(`${feature.properties.name ?? feature.id}: ${key}`, before, '->', after);
+draw.on('change', (change) => {
+  for (const id of change.features.updated) {
+    const feature = draw.features.get(id);
+    const previous = change.previous(id);
+    if (!feature || !previous) continue;
+    const keys = new Set([...Object.keys(previous.properties), ...Object.keys(feature.properties)]);
+    for (const key of keys) {
+      const before = previous.properties[key];
+      const after = feature.properties[key];
+      if (isDrawProperty(key) || JSON.stringify(before) === JSON.stringify(after)) continue;
+      console.log(`${feature.properties.name ?? feature.id}: ${key}`, before, '->', after);
+    }
   }
 });
 

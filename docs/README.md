@@ -56,7 +56,8 @@ Each guide covers one task. Read the ones you need, in any order.
   build the generated API reference
 - [reference/data-format.md](reference/data-format.md) — the native format
   and GeoJSON, per feature type
-- [reference/events.md](reference/events.md) — every event and its payload
+- [reference/events.md](reference/events.md) — every event and its
+  payload, and the values that change over time
 
 ## Internals
 

@@ -118,7 +118,9 @@ keeps its position and nothing more.
 - A layer that is not on the order is not drawn
 
 `draw.getStore().getLayerOrder()` reads the whole order, entries of the
-application included. `layer.reordered` reports its changes.
+application included. The notifications of the Store report its changes
+(`DocumentChange.layers.orderChanged`), and `change` lists the layers
+whose place in it changed (`layers.placed`).
 
 ### Containment
 

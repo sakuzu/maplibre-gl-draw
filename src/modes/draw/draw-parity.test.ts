@@ -4,7 +4,7 @@
 /**
  * What the drawing modes leave once a shape is finished, which a change of how the shape being
  * drawn is shown must keep: the feature created (its type and its positions, where the pointer
- * put them), one `document.changed` for it, and the mode and the selection after it; a point is
+ * put them), one change of the document for it, and the mode and the selection after it; a point is
  * placed by a click, a line and an area by clicks finished by Enter, a double click or a click on
  * their first vertex, a circle by its center and a point of its edge, a freehand stroke by a drag,
  * and an image is asked of the application without anything written.
@@ -23,7 +23,12 @@ import type { DragNormalizedEvent, MouseNormalizedEvent } from '../../dispatcher
 import { haversineDistanceMeters } from '../../geometry/distance.js';
 import type { Store } from '../../store/store.js';
 import type { Feature } from '../../store/types.js';
-import { createMapStub, createSyntheticInput, STORE_KINDS } from '../../test-utils.js';
+import {
+  createMapStub,
+  createSyntheticInput,
+  onDocumentChange,
+  STORE_KINDS,
+} from '../../test-utils.js';
 
 type LngLat = [number, number];
 
@@ -31,7 +36,7 @@ interface Opened {
   engine: Engine;
   draw: Draw;
   store: Store;
-  /** The `document.changed` received, in their order */
+  /** The changes of the document received, in their order */
   changes: DocumentChange[];
 }
 
@@ -64,12 +69,12 @@ function open(store: Store): Opened {
   engine.enterDefaultMode();
   opened.push(draw);
   const changes: DocumentChange[] = [];
-  draw.on('document.changed', (change) => changes.push(change));
+  onDocumentChange(draw, (change) => changes.push(change));
   return { engine, draw, store, changes };
 }
 
 /**
- * The features a list of `document.changed` created, as the Store reads them: the features it
+ * The features a list of changes of the document created, as the Store reads them: the features it
  * notified as created, and the rows it put in the stacking order from nowhere (a Store of rows
  * notifies a row not selected so)
  */
@@ -147,7 +152,7 @@ const Q: LngLat = [0.5, 0.2];
 const R: LngLat = [0.5, 0.6];
 
 describe.each(STORE_KINDS)('the shapes the drawing modes finish over %s', (_, makeStore) => {
-  it('places a point with a click, in one document.changed, and selects it (DR-1)', () => {
+  it('places a point with a click, in one change, and selects it (DR-1)', () => {
     const view = open(makeStore());
     expect(view.draw.setMode('draw_point')).toBe(true);
     clicks(view, P);
@@ -159,7 +164,7 @@ describe.each(STORE_KINDS)('the shapes the drawing modes finish over %s', (_, ma
     expect(view.draw.selection.value).toMatchObject({ type: 'feature', ids: [point?.id] });
   });
 
-  it('finishes a line with Enter, in one document.changed, and selects it (DR-2)', () => {
+  it('finishes a line with Enter, in one change, and selects it (DR-2)', () => {
     const view = open(makeStore());
     view.draw.setMode('draw_line');
     clicks(view, P, Q, R);
@@ -174,7 +179,7 @@ describe.each(STORE_KINDS)('the shapes the drawing modes finish over %s', (_, ma
     expect(view.draw.selection.value).toMatchObject({ type: 'feature', ids: [line?.id] });
   });
 
-  it('finishes a line with a double click on its last vertex, in one document.changed (DR-2)', () => {
+  it('finishes a line with a double click on its last vertex, in one change (DR-2)', () => {
     const view = open(makeStore());
     view.draw.setMode('draw_line');
     clicks(view, P, Q);
@@ -186,7 +191,7 @@ describe.each(STORE_KINDS)('the shapes the drawing modes finish over %s', (_, ma
     expect(view.draw.getMode()).toBe('select');
   });
 
-  it('finishes an area with a click on its first vertex, in one document.changed (DR-2)', () => {
+  it('finishes an area with a click on its first vertex, in one change (DR-2)', () => {
     const view = open(makeStore());
     view.draw.setMode('draw_polygon');
     clicks(view, P, Q, R, P);
@@ -200,7 +205,7 @@ describe.each(STORE_KINDS)('the shapes the drawing modes finish over %s', (_, ma
     expect(view.draw.selection.value).toMatchObject({ type: 'feature', ids: [area?.id] });
   });
 
-  it('places a circle by its center and a point of its edge, in one document.changed (DR-3)', () => {
+  it('places a circle by its center and a point of its edge, in one change (DR-3)', () => {
     const view = open(makeStore());
     view.draw.setMode('draw_circle');
     clicks(view, P, Q);
@@ -216,7 +221,7 @@ describe.each(STORE_KINDS)('the shapes the drawing modes finish over %s', (_, ma
     expect(view.draw.selection.value).toMatchObject({ type: 'feature', ids: [shape?.id] });
   });
 
-  it('draws a freehand stroke with a drag, in one document.changed, and stays (DR-4)', () => {
+  it('draws a freehand stroke with a drag, in one change, and stays (DR-4)', () => {
     const view = open(makeStore());
     view.draw.setMode('draw_freehand');
     const router = view.engine.inputRouter;

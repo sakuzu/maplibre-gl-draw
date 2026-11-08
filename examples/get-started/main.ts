@@ -32,11 +32,10 @@ const locale = new URLSearchParams(location.search).get('locale') === 'ja' ? 'ja
 const ui = createDrawUI(draw, { locale, basemaps: BASEMAPS, basemap: initialBasemapId() });
 
 // 5. Follow the changes: one event per transaction, whether a tool, the panel or code made it
-draw.on('document.changed', ({ features, source }) => {
-  if (!features) return;
+draw.on('change', ({ features, source }) => {
   console.log(
-    `${features.created?.length ?? 0} created, ${features.updated?.length ?? 0} updated,`,
-    `${features.deleted?.length ?? 0} deleted (${source})`,
+    `${features.created.length} created, ${features.updated.length} updated,`,
+    `${features.deleted.length} deleted (${source})`,
   );
 });
 

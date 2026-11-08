@@ -24,10 +24,10 @@ browser console.
 `draw.document.load` reads the GeoJSON, and each feature keeps its
 properties (2). `draw.features.update` merges `properties` key by key,
 and a key given as `undefined` is removed (3); the panel writes its
-changes with the same call. `feature.updated` carries the feature before
-and after each change (1). The keys of the library, which begin with
-`maplibre-gl-draw:`, live in the same properties, and `isDrawProperty`
-tells them apart. `createDrawUI` takes
+changes with the same call. `change` lists the features each commit
+updated, and `previous` gives each of them as it was before (1). The
+keys of the library, which begin with `maplibre-gl-draw:`, live in the
+same properties, and `isDrawProperty` tells them apart. `createDrawUI` takes
 `inspector: { tabs: ['attributes', 'style'] }`, and the first of `tabs`
 is the tab that opens (4).
 
@@ -44,6 +44,6 @@ is the tab that opens (4).
 - [`features.update`](../api/maplibre-gl-draw/interfaces/FeaturesCollection.md#update),
   which merges `properties` key by key
 - [`document.load`](../api/maplibre-gl-draw/interfaces/DocumentResource.md#load)
-- [The events of features](../reference/events.md#features),
-  `feature.updated` among them
+- [One change per commit](../reference/events.md#one-change-per-commit),
+  what `change` carries
 - [The inspector](../../ui/README.md#inspector) of the standard UI

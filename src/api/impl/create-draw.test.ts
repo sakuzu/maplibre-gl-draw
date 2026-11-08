@@ -12,7 +12,7 @@ import { createMapStub } from '../../test-utils.js';
 import type { Draw } from '../draw.js';
 import { createDraw } from '../draw.js';
 import { DrawError } from '../errors.js';
-import type { DocumentChange } from '../events.js';
+import type { Change, DocumentChange } from '../events.js';
 
 let stub: ReturnType<typeof createMapStub>;
 let draw: Draw;
@@ -240,11 +240,11 @@ describe('destroy', () => {
 });
 
 describe('document.loadMany', () => {
-  it('arrives as one document.changed with the source load, and one document.loaded per item', async () => {
+  it('arrives as one change with the source load, and one document.loaded per item', async () => {
     const saved = draw.document.toJSON();
-    const changes: DocumentChange[] = [];
+    const changes: Change[] = [];
     const loaded: string[] = [];
-    draw.on('document.changed', (change) => changes.push(change));
+    draw.on('change', (change) => changes.push(change));
     draw.on('document.loaded', ({ result, source }) => loaded.push(`${result.format}:${source}`));
     const point = (coordinates: number[]) => ({
       type: 'Feature' as const,

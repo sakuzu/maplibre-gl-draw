@@ -288,9 +288,9 @@ async function hitsAtTheirPlaces(page: Page): Promise<Array<string | null>> {
 /** The events of the features written in the middle of a drag: each step writes all of them */
 const stepWrites = (prefix: 'I' | 'U'): string[] => [...IDS.map((id) => `${prefix} ${id}`), 'D'];
 
-/** The number of rows each `document.changed` tells written */
+/** The number of rows each `change` tells written */
 const rowsWritten = (recorded: readonly Recorded[]): number[] =>
-  recorded.filter((e) => e.name === 'document.changed').map((e) => e.rows ?? 0);
+  recorded.filter((e) => e.name === 'change').map((e) => e.rows ?? 0);
 
 describe.each(KINDS)('many features selected over a Store of %s', (kind) => {
   let page: Page;

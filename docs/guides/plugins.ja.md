@@ -16,14 +16,12 @@ import type { Plugin } from '@sakuzu/maplibre-gl-draw';
 const logger: Plugin = {
   name: 'logger',
   onAdd(ctx) {
-    ctx.on('feature.created', ({ feature, source }) => {
-      console.log('created', feature.id, feature.type, source);
-    });
-    ctx.on('feature.updated', ({ feature }) => {
-      console.log('changed', feature.id);
-    });
-    ctx.on('feature.deleted', ({ feature }) => {
-      console.log('deleted', feature.id);
+    ctx.on('change', ({ features, source }) => {
+      for (const id of features.created) {
+        console.log('created', id, ctx.draw.features.get(id)?.type, source);
+      }
+      for (const id of features.updated) console.log('changed', id);
+      for (const id of features.deleted) console.log('deleted', id);
     });
   },
 };
@@ -91,8 +89,8 @@ function createCounter(): Plugin<CounterApi> {
     name: 'counter',
     api: { count: () => created },
     onAdd(ctx) {
-      ctx.on('feature.created', () => {
-        created += 1;
+      ctx.on('change', ({ features }) => {
+        created += features.created.length;
       });
     },
   };
@@ -119,8 +117,6 @@ console.log(counter?.count());
   プラグインを外すと終わります
 - `extensions` は `draw.extensions` と同じコレクションです。ここで
   足したものは、プラグインと一緒に外れます
-- `emit` は、プラグインのイベントを `draw.on` の購読者に送ります
-  ([プラグインのイベント](#プラグインのイベント))
 - `names` はインスタンスの自動の名前です。`names.next('Layer')` は、
   オプション `autoName` のとおりに次の名前を返します
   ([自動の名前](drawing.ja.md#自動の名前))
@@ -199,8 +195,12 @@ ctx.draw.transact(
 書き込んだかを問いません。API、描画モード、ドラッグ、Delete キー、
 読み込み、ほかのプラグイン、差し替えた Store のどれでも届きます。
 
-- `document.changed` は、文書を変えた取引ごとに 1 回、その取引で
-  変わったものの全部と `source` を持って届きます
+- `change` は、文書を変えた取引ごとに 1 回、その取引で変わったもの
+  すべての ID と `source` を持って届きます
+- この端末の時間で変わる値 (選択、モード、下書き、データセットなど) は
+  その資源の `Observable` で、`subscribe` で追います
+  ([時間で変わる値](../reference/events.md#values-that-change-over-time)
+  (英語))
 - ドラッグは何を編集しても離したときに 1 度だけ書き込まれます。途中に
   見えるのは下書きです (`draw.rendered`)
 - `drag.started` と `drag.ended` は、選択モードの移動、拡縮、回転、
@@ -209,21 +209,23 @@ ctx.draw.transact(
   せたくないときは、地物かレイヤーをロックするか、描画を読み取り専用に
   します ([読み取り専用](read-only.ja.md))
 
-すべてのデータセットを扱うプラグインは、`dataset.added` と
-`dataset.removed` で追いかけます。プラグインを足した時点でデータ
-セットがすでにあることもあるので、`onAdd` で `draw.datasets.list()`
-も読みます。
+すべてのデータセットを扱うプラグインは、`draw.datasets` で追いかけます。
+その `subscribe` は、プラグインを足した時点ですでにあるデータセットで
+渡した関数をすぐに 1 回呼び、データセットが追加されたとき、取り除かれた
+とき、順が変わったときにまた呼びます。`Observable` の購読は窓口の購読
+ではないので、プラグインが `onRemove` で止めます。
 
 <!-- docs-check:
 declare const ctx: import('@sakuzu/maplibre-gl-draw').PluginContext;
-declare function follow(datasetId: string): void;
-declare function forget(datasetId: string): void;
+declare function follow(datasetIds: ReadonlySet<string>): void;
 -->
 
 ```ts
-for (const dataset of ctx.draw.datasets.list()) follow(dataset.id);
-ctx.on('dataset.added', ({ dataset }) => follow(dataset.id));
-ctx.on('dataset.removed', ({ datasetId }) => forget(datasetId));
+const stop = ctx.draw.datasets.subscribe((datasets) => {
+  follow(new Set(datasets.map((dataset) => dataset.id)));
+});
+// onRemove で
+stop();
 ```
 
 ### 描かれているもの
@@ -237,9 +239,9 @@ ctx.on('dataset.removed', ({ datasetId }) => forget(datasetId));
 `rendered.getFootprint(id)` は、余白の無い外形、つまりライブラリーが
 選択の枠を作る元の箱 (描かれている画像の 4 隅など) を渡します。
 `rendered.changed` は、形が変わった地物を、それを描く 1 回を描き終えた
-ときに知らせます。見た目の変化と、画面に合わせて変わる選択の枠は知らせ
-ないので、描くたびに読んでください。書くものは文書 `ctx.draw.features`
-を読みます。
+ときに知らせます。その値は最後に知らせた ID です。見た目の変化と、
+画面に合わせて変わる選択の枠は知らせないので、描くたびに読んでください。
+書くものは文書 `ctx.draw.features` を読みます。
 
 <!-- docs-check:
 declare const ctx: import('@sakuzu/maplibre-gl-draw').PluginContext;
@@ -247,7 +249,7 @@ declare function follow(feature: import('@sakuzu/maplibre-gl-draw').Feature): vo
 -->
 
 ```ts
-ctx.on('rendered.changed', ({ ids }) => {
+ctx.draw.rendered.changed.subscribe((ids) => {
   for (const feature of ctx.draw.rendered.getMany(ids)) {
     if (feature) follow(feature);
   }
@@ -291,39 +293,54 @@ const draw = createDraw(map, { messages: { pinLabel: 'Épingle' } });
 draw.extensions.plugins.add(pins);
 ```
 
-### プラグインのイベント
+### プラグインの値
 
-プラグインは、自分の中の変化を同じイベントの一覧で知らせます。自分の
-イベントを宣言の併合で `DrawEvents` に足し、ライブラリーのイベントと
-同じく「資源.過去分詞」の名前にして、`ctx.emit` で送ります。
-アプリケーションとほかのプラグインは、どのイベントとも同じく `draw.on`
-と `ctx.on` で購読します。ライブラリーのイベントを送るのはライブラリー
-だけです。`emit` にライブラリーのイベントを渡すと、コード
-`invalid-input` の `DrawError` を投げます。
+イベントを送るのはライブラリーだけです。プラグインの時間で変わる値は、
+プラグインが返す API に `Observable` を置いてアプリケーションに渡します。
+`value` で今の値を読み、`subscribe` は渡した関数を今の値ですぐに 1 回
+呼び、値が変わるたびにまた呼びます。アプリケーションとほかの
+プラグインは、ライブラリーの値と同じようにこれを追います。
 
 ```ts
-import type { Plugin } from '@sakuzu/maplibre-gl-draw';
+import type { Observable, Plugin } from '@sakuzu/maplibre-gl-draw';
 
-declare module '@sakuzu/maplibre-gl-draw' {
-  interface DrawEvents {
-    /** 数えた、変わった地物の数 */
-    'counter.changed': { count: number };
-  }
+interface CounterApi {
+  /** 数えた、変わった地物の数 */
+  readonly count: Observable<number>;
 }
 
-const counter: Plugin = {
-  name: 'counter',
-  onAdd(ctx) {
-    let count = 0;
-    ctx.on('document.changed', (change) => {
-      count += change.features?.updated?.length ?? 0;
-      ctx.emit('counter.changed', { count });
-    });
-  },
-};
+function createCounter(): Plugin<CounterApi> {
+  let count = 0;
+  const runs = new Set<(value: number) => void>();
+  const observable: Observable<number> = {
+    get value() {
+      return count;
+    },
+    subscribe(run) {
+      runs.add(run);
+      run(count);
+      return () => {
+        runs.delete(run);
+      };
+    },
+  };
+  return {
+    name: 'counter',
+    api: { count: observable },
+    onAdd(ctx) {
+      ctx.on('change', ({ features }) => {
+        if (features.updated.length === 0) return;
+        count += features.updated.length;
+        for (const run of [...runs]) run(count);
+      });
+    },
+  };
+}
 
-draw.extensions.plugins.add(counter);
-draw.on('counter.changed', ({ count }) => console.log(count));
+draw.extensions.plugins.add(createCounter());
+draw.extensions.plugins
+  .getApi<CounterApi>('counter')
+  ?.count.subscribe((count) => console.log(count));
 ```
 
 ## 入力

@@ -45,13 +45,13 @@
     keys?: boolean;
   } = $props();
 
-  const mode = $derived(follow(draw, ['mode.changed'], () => draw.getMode()));
+  const mode = $derived(follow(draw, [draw.mode], () => draw.getMode()));
   const selected = $derived(
-    follow(draw, ['selection.changed'], () => draw.selection.value.ids?.length ?? 0),
+    follow(draw, [draw.selection], () => draw.selection.value.ids?.length ?? 0),
   );
   const readOnly = $derived(follow(draw, ['readOnly.changed'], () => draw.isReadOnly()));
   const snapOn = $derived(
-    follow(draw, ['options.changed'], () => draw.options.get().snapping?.enabled !== false),
+    follow(draw, [draw.options], () => draw.options.get().snapping?.enabled !== false),
   );
   let settings = $state<SnappingSettings>();
 

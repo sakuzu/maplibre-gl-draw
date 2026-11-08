@@ -16,7 +16,8 @@ generated from the sources. To learn how to use the library, start with
   a {@link maplibre-gl-draw!Layer | Layer} and
   a {@link maplibre-gl-draw!Group | Group} are the data model.
 - To react to changes and clicks, see the events of
-  {@link maplibre-gl-draw!DrawEvents | DrawEvents}.
+  {@link maplibre-gl-draw!DrawEvents | DrawEvents}, and to follow a value
+  that changes over time, {@link maplibre-gl-draw!Observable | Observable}.
 - To style features, see
   {@link maplibre-gl-draw!FeatureStyle | FeatureStyle} and
   {@link maplibre-gl-draw!StyleRule | StyleRule}.

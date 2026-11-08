@@ -44,7 +44,7 @@ if (row?.geometry) {
 | | Drawn features | A dataset |
 | --- | --- | --- |
 | Editing | Move, vertices, geometry | None |
-| Events | `feature.created` and others | `clicked`, `hovered`, `changed` |
+| Events | `change` and others | `clicked`, `hovered`, `changed` |
 | Selection | A selection box and handles | A highlight (`setSelectedRowIds`) |
 | Saving | `document.toJSON()` | Not saved, only its ID in the order |
 | Size | 200,000 stay editable | Tens of thousands to millions |
@@ -437,9 +437,9 @@ later one in front. Inside a dataset, the end of the array (or the last
 row of the table) is in front. `draw.datasets.list()` returns every
 dataset from the back to the front, and `draw.datasets.move` changes the
 side, the position within the side, or both. Moving never rebuilds
-anything. A move that changes the order or the side fires
-`dataset.reordered` with the IDs from the back to the front; a move that
-leaves everything where it was fires nothing.
+anything. A move that changes the order or the side tells `draw.datasets`
+again, with the datasets from the back to the front; a move that leaves
+everything where it was tells nothing.
 
 ```ts
 draw.datasets.move('parcels', { order: 'above-store' });
@@ -655,12 +655,12 @@ while it is hidden. `draw.datasets.remove(id)` lets go of everything.
 
 ## Following the datasets that come and go
 
-`dataset.added` fires when a dataset is added, with the `dataset`, and
-`dataset.removed` when one is removed, with its `datasetId`. When the
-remove event arrives, `draw.datasets.get` no longer returns it. Moving a
-dataset (that is `dataset.reordered`) and changing its rows fire
-neither. The datasets that exist before you subscribe are not announced,
-so walk `draw.datasets.list()` once, then follow the events.
+`draw.datasets` is an observable of the datasets, in stacking order:
+`subscribe` calls the function with the datasets there at once, and again
+when one is added or removed and when their order changes. When a removal
+is told, `draw.datasets.get` no longer returns the dataset removed.
+Changing the rows of a dataset does not tell it. Comparing the IDs with
+the ones followed tells which came and which went.
 
 <!-- docs-check:
 type Dataset = import('@sakuzu/maplibre-gl-draw').Dataset;
@@ -669,20 +669,22 @@ declare function watch(dataset: Dataset): () => void;
 
 ```ts
 const stops = new Map<string, () => void>();
-const follow = (dataset: Dataset): void => {
-  stops.set(dataset.id, watch(dataset));
-};
 
-for (const dataset of draw.datasets.list()) follow(dataset);
-draw.on('dataset.added', ({ dataset }) => follow(dataset));
-draw.on('dataset.removed', ({ datasetId }) => {
-  stops.get(datasetId)?.();
-  stops.delete(datasetId);
+draw.datasets.subscribe((datasets) => {
+  const ids = new Set(datasets.map((dataset) => dataset.id));
+  for (const [id, stop] of stops) {
+    if (ids.has(id)) continue;
+    stop();
+    stops.delete(id);
+  }
+  for (const dataset of datasets) {
+    if (!stops.has(dataset.id)) stops.set(dataset.id, watch(dataset));
+  }
 });
 ```
 
 A dataset removed and added again under the same ID is a new object, so
-it arrives as a remove and then an add.
+it is told as a list without it and then a list with it.
 
 ## Drawing points yourself
 
@@ -777,5 +779,5 @@ For the size at which to choose a dataset over drawn features, see
   [tableFromFeatures](../api/table/functions/tableFromFeatures.md),
   [createTableBuilder](../api/table/functions/createTableBuilder.md)
   and [prepareTable](../api/table/functions/prepareTable.md)
-- [events](../reference/events.md) for `dataset.clicked`,
-  `dataset.added`, `dataset.removed` and `dataset.reordered`
+- [events](../reference/events.md) for `dataset.clicked`, and for
+  `draw.datasets`, the value of the datasets that changes over time

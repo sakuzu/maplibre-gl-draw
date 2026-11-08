@@ -142,8 +142,9 @@ describe('drawing', () => {
       const edit = sketch.edits[0];
       if (edit?.kind === 'create') previews.push(edit.feature.geometry);
     };
-    draw.on('sketch.added', shown);
-    draw.on('sketch.updated', shown);
+    draw.sketches.subscribe((sketches) => {
+      for (const sketch of sketches) shown({ sketch });
+    });
     draw.drawing.addVertex([0, 0]);
     draw.drawing.addVertex([1, 0]);
     draw.drawing.moveTo([1, 1]);

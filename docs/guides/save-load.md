@@ -129,7 +129,7 @@ input?.addEventListener('change', async () => {
   leaves the drawing as it was
 - Once the source is read (and an image decoded), every write of the load
   is one transaction with the source `load`, whatever the format: one
-  `document.changed`, one step for a listener that records changes
+  `change`, one step for a listener that records changes
 - A document of the library is rejected as a whole, with the code
   `invalid-input`, when something in it is malformed, refers to something
   missing, or has a major version the library cannot read. A document of
@@ -165,15 +165,15 @@ input?.addEventListener('change', async () => {
   one Multi feature per geometry type
 
 Each load that reads something emits `document.loaded` with the same
-result, and each feature it adds emits `feature.created`. To react once
-per load, listen to `document.changed` or `document.loaded`
-([Events](../reference/events.md)).
+result, and one `change` that lists every feature it adds in
+`features.created`. To react once per load, listen to `change` or
+`document.loaded` ([Events](../reference/events.md)).
 
 ### Several sources at once
 
 `draw.document.loadMany(items)` reads every source first and then writes
 all of them in one transaction, so that an import of several files is one
-`document.changed`: one step to undo and one change to send. The items
+`change`: one step to undo and one change to send. The items
 are written in order, each as `load` would write it.
 
 ```ts
@@ -191,7 +191,7 @@ and nothing is written. `document.loaded` arrives once per item.
 With `layer` and `group` in the options of the items, an import of a
 folder, one layer per file and one group for the folder, is still one
 transaction: the new layers, the features and the groups arrive in one
-`document.changed` and one notification of the Store.
+`change` and one notification of the Store.
 
 ```ts
 declare const folder: { name: string; files: File[] };
@@ -387,15 +387,15 @@ mode, which asks the application for a file with `image.requested`.
 
 ## Saving as you go
 
-`document.changed` arrives once per transaction that changed the
-document, with everything that changed in it, so it is the place to save
-after each edit. A change of the selection or of the mode alone does not
-fire it:
+`change` arrives once per transaction that changed the document, with the
+IDs of everything that changed in it, so it is the place to save after
+each edit. A change of the selection or of the mode alone does not fire
+it:
 
 ```ts
 let timer: ReturnType<typeof setTimeout> | undefined;
 
-draw.on('document.changed', () => {
+draw.on('change', () => {
   clearTimeout(timer);
   timer = setTimeout(() => {
     localStorage.setItem('drawing', JSON.stringify(draw.document.toJSON()));
@@ -407,8 +407,8 @@ A drag writes once, when it is let go: what it shows in its middle is a
 sketch, and it is no change.
 
 To make several writes of your own one change, wrap them in
-`draw.transact`. They then arrive as one `document.changed`, with the
-source you name:
+`draw.transact`. They then arrive as one `change`, with the source you
+name:
 
 ```ts
 draw.transact(
@@ -430,14 +430,17 @@ declare function sendToServer(change: unknown): void;
 -->
 
 ```ts
-draw.on('document.changed', (change) => {
+draw.getStore().subscribe((change) => {
   // change.features, change.layers, change.groups, change.source ...
   sendToServer(change);
 });
 ```
 
-`draw.getStore().subscribe(listener)` delivers the same `DocumentChange`,
-and reads the document without going through the collections.
+`draw.getStore().subscribe(listener)` delivers each change in full, as a
+`DocumentChange`: the items created, updated with the ones before, and
+deleted. It also tells a change of the selection, the editing or the mode
+in their own categories. `draw.on('change', listener)` tells the same
+commit by its IDs, which the collections read.
 
 When the document itself has to live elsewhere, give the instance a store
 with the option `store`, at creation:
@@ -494,7 +497,7 @@ in [the data format reference](../reference/data-format.md).
 
 Core keeps no history of changes. What a listener needs to follow the
 document, or to put an earlier state of it back, is in every
-`DocumentChange`:
+`DocumentChange` the Store delivers (`draw.getStore().subscribe`):
 
 - every update carries the `previous` object, and deletions carry the
   deleted object

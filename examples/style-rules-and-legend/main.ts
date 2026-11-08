@@ -127,17 +127,20 @@ async function nextRule(): Promise<void> {
 
 // 5. The Attributes tab keeps what is typed as text ("45"), and graduated and continuous rules
 // read numbers only, so the page turns a number typed into `height` or `floors` into a number
-draw.on('feature.updated', ({ feature, intermediate }) => {
-  if (intermediate) return;
-  const numbers: Record<string, number> = {};
-  for (const key of ['height', 'floors']) {
-    const value = feature.properties[key];
-    if (typeof value === 'string' && value.trim() !== '' && Number.isFinite(Number(value))) {
-      numbers[key] = Number(value);
+draw.on('change', ({ features }) => {
+  for (const id of features.updated) {
+    const feature = draw.features.get(id);
+    if (!feature) continue;
+    const numbers: Record<string, number> = {};
+    for (const key of ['height', 'floors']) {
+      const value = feature.properties[key];
+      if (typeof value === 'string' && value.trim() !== '' && Number.isFinite(Number(value))) {
+        numbers[key] = Number(value);
+      }
     }
-  }
-  if (Object.keys(numbers).length > 0) {
-    draw.features.update(feature.id, { properties: numbers });
+    if (Object.keys(numbers).length > 0) {
+      draw.features.update(feature.id, { properties: numbers });
+    }
   }
 });
 

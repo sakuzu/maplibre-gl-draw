@@ -480,7 +480,7 @@ async function run(page: Page, kind: StoreKind, edit: Edit, cancelled: boolean):
   // A vertex selected stays selected, whether the drag is written or cancelled
   if (edit.vertexSelected) expect(await vertexSelection(page)).toEqual(SELECTED_VERTEX);
   for (const recorded of [midEvents, endEvents]) {
-    expect(recorded.filter((e) => e.name === 'vertexSelection.changed')).toEqual([]);
+    expect(recorded.filter((e) => e.name === 'vertexSelection')).toEqual([]);
   }
   return {
     grabbed,

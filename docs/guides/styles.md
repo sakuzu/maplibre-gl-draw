@@ -162,9 +162,10 @@ draw.options.update({ style: { polygon: { fillOpacity: 0.4 } } });
 draw.options.update({ scaleWithZoom: false });
 ```
 
-An update that changed a value fires `options.changed` with the options
-after and before it, so a control that shows an option can follow it (see
-[the event reference](../reference/events.md#optionschanged)).
+`draw.options` tells the options again after an update that changed a
+value (`draw.options.subscribe`), so a control that shows an option can
+follow it (see
+[the event reference](../reference/events.md#drawoptions)).
 
 ## Style rules
 
@@ -219,8 +220,8 @@ draw.layers.update(layerId, { styleRule: undefined });
   OKLab color space, so the middle does not turn muddy; values out of
   range take the color of the nearer end
 - `styleRule` is an ordinary field of the layer: it is saved with the
-  document, and a change of it arrives as `layer.updated` like any other
-  change
+  document, and a change of it arrives in `layers.updated` of `change`
+  like any other change
 
 A dataset takes the same rule type; see
 [Showing large data](large-data.md).

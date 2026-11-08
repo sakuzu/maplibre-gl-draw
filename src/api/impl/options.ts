@@ -23,7 +23,6 @@ import { describeStyleProblem } from '../../shared/style-validation.js';
 import type { Color, PointStyle, StrokeStyle } from '../../shared/types/style.js';
 import type { AutoNameConfig } from '../../shared/utils/name-generator.js';
 import { DrawStore } from '../../store/draw-store.js';
-import type { DrawEvents } from '../events.js';
 import type { Store } from '../extension/store.js';
 import type { FeatureStyle, FeatureStyleResolved } from '../model.js';
 import type {
@@ -34,6 +33,7 @@ import type {
 } from '../options.js';
 import type { Engine } from './engine.js';
 import type { EngineOptions } from './engine-context.js';
+import type { InstanceSignals } from './events.js';
 import { invalidInput, isRecord, onlyKeys } from './shared.js';
 
 /** The options that can only be given when the instance is created */
@@ -742,7 +742,7 @@ function assignInPlace(target: Record_, source: Record_): void {
  *
  * @internal
  */
-export interface OptionsState extends OptionsResource {
+export interface OptionsState extends Pick<OptionsResource, 'get' | 'update'> {
   /** Applies the options given at creation that the engine does not take (the render scale) */
   applyCreation(): void;
   /** The `style` option as it was given, not copied */
@@ -763,7 +763,7 @@ export function createOptions(
   engine: Engine,
   options: DrawOptions,
   setExternalEntry: (fn: ((id: string) => boolean) | undefined) => void,
-  onChanged: (payload: DrawEvents['options.changed']) => void = () => {},
+  onChanged: (payload: InstanceSignals['options.changed']) => void = () => {},
 ): OptionsState {
   const { context, map, customLayer } = engine;
   let current = runtimePart(options);

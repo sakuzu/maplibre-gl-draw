@@ -30,7 +30,6 @@ import type { FeatureCompanionRegistry } from '../../view/feature-companion.js';
 import type { CustomLayerInterface } from '../../view/layer/index.js';
 import type { Draw } from '../draw.js';
 import { DrawError } from '../errors.js';
-import type { DrawEvents } from '../events.js';
 import type { PluginContext } from '../extension/context.js';
 import type { Plugin } from '../extension/plugin.js';
 import type { Hit } from '../extension/provider.js';
@@ -87,8 +86,6 @@ export interface ExtensionHostDeps {
   readonly hitTestTopmost: HitTestTopmost;
   /** A frontmost hit tester with another tolerance, in pixels */
   hitTestTopmostWith(tolerancePx: number): HitTestTopmost;
-  /** Sends an event of a plugin to the subscribers of the instance (`PluginContext.emit`) */
-  emitPluginEvent<K extends keyof DrawEvents>(event: K, payload: DrawEvents[K]): void;
   /** The rows of the datasets to trace along (empty when snapping to them is off) */
   listTraceRows(
     bbox: BoundingBox,
@@ -411,7 +408,6 @@ export function createExtensionHost(deps: ExtensionHostDeps): ExtensionHost {
         rows: (layerId) => featureTablesInternals(store.tables)?.view(layerId),
         draggedRows: () => getDraw().rendered.getDraggedRows(),
       },
-      emit: (event, payload) => deps.emitPluginEvent(event, payload),
     };
     try {
       plugin.onAdd(pluginContext);

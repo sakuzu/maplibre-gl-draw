@@ -10,7 +10,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { BBox } from '../../geometry/index.js';
 import { tableFromFeatures } from '../../table/index.js';
 import { createMapStub } from '../../test-utils.js';
-import type { DatasetEvents, DatasetRow, DatasetsCollection } from '../datasets.js';
+import type { Dataset, DatasetEvents, DatasetRow, DatasetsCollection } from '../datasets.js';
 import type { Draw } from '../draw.js';
 import { createDraw } from '../draw.js';
 import { DrawError } from '../errors.js';
@@ -154,25 +154,28 @@ describe('the collection', () => {
   });
 });
 
-describe('the events of the instance about datasets', () => {
-  it('announces the datasets added, removed and reordered', () => {
-    const added: DrawEvents['dataset.added'][] = [];
-    const removed: DrawEvents['dataset.removed'][] = [];
-    const reordered: DrawEvents['dataset.reordered'][] = [];
-    draw.on('dataset.added', (payload) => added.push(payload));
-    draw.on('dataset.removed', (payload) => removed.push(payload));
-    draw.on('dataset.reordered', (payload) => reordered.push(payload));
+describe('the observable of the datasets', () => {
+  it('tells the datasets in stacking order when one is added, removed or reordered', () => {
+    const told: (readonly Dataset[])[] = [];
+    const stop = datasets.subscribe((list) => told.push(list));
 
     const a = datasets.add({ id: 'a', rows: [] });
     datasets.add({ id: 'b', rows: [] });
-    expect(added.map(({ dataset }) => dataset)).toEqual([a, datasets.get('b')]);
-    expect(added[0].dataset).toBe(a);
-
     datasets.move('b', { index: 0 });
-    expect(reordered).toEqual([{ order: ['b', 'a'], previous: ['a', 'b'] }]);
-
     datasets.remove('a');
-    expect(removed).toEqual([{ datasetId: 'a' }]);
+    stop();
+    datasets.remove('b');
+
+    expect(told.map((list) => list.map((dataset) => dataset.id))).toEqual([
+      [],
+      ['a'],
+      ['a', 'b'],
+      ['b', 'a'],
+      ['b'],
+    ]);
+    // The same wrapper of a dataset as the collection gives
+    expect(told[1][0]).toBe(a);
+    expect(datasets.value).toEqual([]);
   });
 });
 

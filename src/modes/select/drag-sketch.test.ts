@@ -11,10 +11,10 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Draw } from '../../api/draw.js';
-import type { DrawEvents } from '../../api/events.js';
 import { createDrawOnEngine } from '../../api/impl/create-draw.js';
 import type { Engine } from '../../api/impl/engine.js';
 import { createEngine } from '../../api/impl/engine.js';
+import type { HubEvents } from '../../api/impl/events.js';
 import type { DragNormalizedEvent, MouseNormalizedEvent } from '../../dispatcher/types.js';
 import { featureTablesInternals } from '../../feature-table/feature-tables.js';
 import {
@@ -88,11 +88,11 @@ function open(kind: Kind, ids: readonly string[], selectionIdsLimit?: number): v
   draw = createDrawOnEngine(engine, { store, initDefaultLayer: false });
   engine.enterDefaultMode();
   writes = [];
-  draw.on('document.changed', () => writes.push('document.changed'));
+  draw.on('change', () => writes.push('change'));
   events = [];
   const names = ['sketch.added', 'sketch.removed', 'drag.started', 'drag.ended'] as const;
   for (const name of names) {
-    draw.on(name, (payload: DrawEvents[typeof name]) => events.push([name, payload]));
+    engine.events.on(name, (payload: HubEvents[typeof name]) => events.push([name, payload]));
   }
 }
 
@@ -199,7 +199,7 @@ describe.each(KINDS)('a drag of vertices over a Store of %s', (kind) => {
     near(second(draw.features.get('a')), [1, 0]);
     near(second(draw.rendered.get('a')), [2, -1]);
     letGoAt(2, -1, CORNER);
-    expect(writes).toEqual(['document.changed']);
+    expect(writes).toEqual(['change']);
     expect(update.mock.calls.map(([id]) => id)).toEqual(['a']);
     near(second(draw.features.get('a')), [2, -1]);
     expect(events[events.length - 2]?.[1]).toMatchObject({ reason: 'committed' });
@@ -239,7 +239,7 @@ describe.each(KINDS)('a drag of vertices over a Store of %s', (kind) => {
     expect(positions(draw.rendered.get('a'))).toBe(6);
     near(second(draw.rendered.get('a')), [0.5, -1]);
     letGoAt(0.5, -1, from);
-    expect(writes).toEqual(['document.changed']);
+    expect(writes).toEqual(['change']);
     expect(positions(draw.features.get('a'))).toBe(6);
     near(second(draw.features.get('a')), [0.5, -1]);
   });
@@ -311,7 +311,7 @@ describe.each(KINDS)('a drag of a handle of a provider over a Store of %s', (kin
     expect(draw.features.get('a')?.properties.at).toBeUndefined();
     expect(draw.rendered.get('a')?.properties.at).toBe(2);
     letGoHandle(3);
-    expect(writes).toEqual(['document.changed']);
+    expect(writes).toEqual(['change']);
     expect(draw.features.get('a')?.properties.at).toBe(3);
     expect(ended).toEqual([3]);
     expect(draw.sketches.count()).toBe(0);
@@ -435,7 +435,7 @@ describe.each(KINDS)('a drag over a Store of %s', (kind) => {
     near(corner(draw.rendered.get('a') as unknown as Feature), [2, 0]);
     near(corner(draw.rendered.get('b') as unknown as Feature), [5, 0]);
     letGo(2.5, 0.5);
-    expect(writes).toEqual(['document.changed']);
+    expect(writes).toEqual(['change']);
     expect(update.mock.calls.map(([id]) => id)).toEqual(['a', 'b']);
     near(corner(draw.features.get('a') as unknown as Feature), [2, 0]);
     near(corner(draw.rendered.get('a') as unknown as Feature), [2, 0]);
@@ -550,7 +550,7 @@ describe('the rows of a drag', () => {
     expect(writes).toEqual([]);
     near(corner(draw.rendered.get('b') as unknown as Feature), [5, 0]);
     letGo(2.5, 0.5);
-    expect(writes).toEqual(['document.changed']);
+    expect(writes).toEqual(['change']);
     expect(setOf('a')).toBe(0);
     near(corner(draw.features.get('b') as unknown as Feature), [5, 0]);
   });

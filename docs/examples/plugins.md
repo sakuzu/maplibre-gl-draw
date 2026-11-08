@@ -37,7 +37,7 @@ zero.
 ## Code
 
 The plugin (`stamp.ts`) registers the mode `stamp` through its context,
-listens to `feature.created` to count the stars, and offers the count as
+listens to `change` to count the stars it created, and offers the count as
 its `api` (2). Everything the plugin adds through its context goes away
 with it when `plugins.remove` takes it out (5).
 

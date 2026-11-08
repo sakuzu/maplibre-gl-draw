@@ -288,7 +288,7 @@ draw.features.buffer([parcelId], { distanceMeters: -5, segments: 32 });
   渡した `Image`) や有限の数でない距離には `invalid-input` です
 - 文書が読み取り専用のときと、地物のどれかがロックされている
   ときは拒み、`null` を返して何も変えません
-- 入力の削除と結果の作成は 1 つの変更で、`document.changed` が
+- 入力の削除と結果の作成は 1 つの変更で、`change` が
   1 回届きます
 - 結果が空のときは何も変えません。重ならない面の `intersection`
   と、すべてを切り抜いてしまう `difference` は `null` を返します。

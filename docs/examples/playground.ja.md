@@ -80,8 +80,8 @@ UI がないので、切り替えもありません。
 [Custom feature types](custom-feature-types.ja.md) の例から取り、その道具と
 節を `ui.tools.add` と `ui.inspector.sections.add` で足します。切り替え
 (`switches.ts`) は `ui.actions.add` で足します。ページは、切り替えが
-出す状態を変えるコアと地図のイベントで、`ui.actions.refresh()` を
-呼びます。
+出す状態を変えるコアと地図のイベントと、データセット (`draw.datasets`)
+の変化で、`ui.actions.refresh()` を呼びます。
 
 ::: code-group
 <<< @/../playground/main.ts

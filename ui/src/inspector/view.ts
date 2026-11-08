@@ -18,19 +18,17 @@ import type {
   Layer,
 } from '@sakuzu/maplibre-gl-draw';
 import type { Messages } from '../messages.js';
+import type { FollowSource } from '../store.js';
 import { featureDescription } from './attributes.js';
 import { type MeasureRow, measure } from './measure.js';
 import { applicableOperations } from './operations.js';
 import { sharedStyleKeys } from './style.js';
 import type { InspectorDraw, InspectorSettings, InspectorTab } from './types.js';
 
-/** The events after which the inspector reads the draw instance again */
-export const INSPECTOR_EVENTS = [
-  'selection.changed',
-  'document.changed',
-  'hidden.changed',
-  'readOnly.changed',
-] as const;
+/** What the inspector reads the draw instance again after: the events and the observables */
+export function inspectorSources(draw: InspectorDraw): FollowSource[] {
+  return [draw.selection, 'change', draw.hidden.hiddenIds, 'readOnly.changed'];
+}
 
 /** One feature, with what its inspector needs */
 export interface FeatureView {

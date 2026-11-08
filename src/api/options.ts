@@ -8,6 +8,7 @@
 
 import type { ConsistencyCheckOptions } from '../debug/types.js';
 import type { Messages } from '../messages.js';
+import type { Observable } from './events.js';
 import type { Store } from './extension/store.js';
 import type { FeatureStyle, FeatureType, LineStyle } from './model.js';
 import type { Mode } from './state.js';
@@ -511,9 +512,11 @@ export interface DebugOptions {
 }
 
 /**
- * The options that can change while the instance runs.
+ * The options that can change while the instance runs. As an observable, its value is the
+ * current values (what `get` returns), told again when `update` changes one of them (an update
+ * that leaves every value as it was is not told).
  */
-export interface OptionsResource {
+export interface OptionsResource extends Observable<Readonly<RuntimeOptions>> {
   /** The current values. */
   get(): Readonly<RuntimeOptions>;
   /**

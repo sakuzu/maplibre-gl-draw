@@ -120,7 +120,7 @@
   // The inspector is open while something is selected; closing it clears the selection
   const inspectorSettings = $derived(inspector.get());
   const selected = $derived(
-    follow(draw, ['selection.changed'], () => (draw.selection.value.ids?.length ?? 0) > 0),
+    follow(draw, [draw.selection], () => (draw.selection.value.ids?.length ?? 0) > 0),
   );
 
   // The basemaps to choose from, on the right in the place of the inspector
@@ -131,7 +131,7 @@
     basemapOpen = true;
   }
   $effect(() =>
-    draw.on('selection.changed', ({ selection }) => {
+    draw.selection.subscribe((selection) => {
       if ((selection.ids?.length ?? 0) > 0) basemapOpen = false;
     }),
   );

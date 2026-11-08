@@ -9,7 +9,7 @@ import type { Map as MaplibreMap } from 'maplibre-gl';
 import type { DatasetsCollection } from './datasets.js';
 import type { DocumentResource } from './document.js';
 import type { DrawingResource } from './drawing.js';
-import type { DrawEvents } from './events.js';
+import type { DrawEvents, Observable } from './events.js';
 import type { StoreView, UpdateSource } from './extension/store.js';
 import type { ExtensionsCollections } from './extensions.js';
 import type { FeaturesCollection } from './features.js';
@@ -98,6 +98,10 @@ export interface Draw {
 
   // Mode
 
+  /**
+   * The current mode, told again each time it changes: what `getMode` returns
+   */
+  readonly mode: Observable<Mode>;
   /** The current mode. */
   getMode(): Mode;
   /**
@@ -122,7 +126,7 @@ export interface Draw {
   // Transactions and events
 
   /**
-   * Runs `fn` as one transaction: its writes arrive as one `document.changed`.
+   * Runs `fn` as one transaction: its writes arrive as one `change`.
    *
    * In nested calls the source of the outermost call wins. With `ignoreLocks`, the writes of
    * `fn` through the resources of this instance ignore the locks of the features, groups and
@@ -139,6 +143,7 @@ export interface Draw {
    * Subscribes to an event.
    *
    * @returns The function that unsubscribes
+   * @throws `DrawError` with the code `invalid-input` when there is no event of this name
    */
   on<K extends keyof DrawEvents>(event: K, listener: (payload: DrawEvents[K]) => void): () => void;
   /** Unsubscribes from an event. */

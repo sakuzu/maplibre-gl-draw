@@ -288,7 +288,7 @@ when the user should keep working on them.
 - A refusal returns `null` and changes nothing: while the document is
   read-only, or when one of the features is locked
 - Removing the inputs and creating the results is one change, which
-  arrives as one `document.changed`
+  arrives as one `change`
 - An empty result changes nothing. `intersection` of areas that do not
   overlap and `difference` that cuts everything away return `null`; a
   line that does not divide the area makes `split` return `[]`, and so

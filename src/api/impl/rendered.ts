@@ -2,7 +2,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * `draw.rendered`: the features as this client draws them, and `rendered.changed`
+ * `draw.rendered`: the features as this client draws them, and `rendered.changed`, the observable
+ * of what changed of them
  *
  * A feature as it is drawn is made by the shapes of the instance (`RenderedShapes`), and its
  * selection box by the function the selection UI draws and hits it with (`selectionBoxOf`). The
@@ -37,6 +38,7 @@ import type { Feature } from '../model.js';
 import type { RenderedResource } from '../rendered.js';
 import type { Sketch } from '../sketches.js';
 import type { EventHub } from './events.js';
+import { observe } from './events.js';
 import { invalidInput } from './shared.js';
 
 const NO_IDS: readonly string[] = Object.freeze([]);
@@ -57,7 +59,7 @@ export interface RenderedDeps {
   readonly selectionStyle: SelectionUIConfig;
   /** The custom boxes and point frames of the instance */
   readonly selectionExtensions: SelectionExtensionRegistry;
-  /** The events of the instance, which it listens to and sends `rendered.changed` on */
+  /** The events of the instance, which it listens to and tells `rendered.changed` on */
   readonly events: EventHub;
   /** Calls a listener once each frame is drawn; returns the function that stops it */
   onFrameDrawn(listener: () => void): () => void;
@@ -74,6 +76,8 @@ export function createRendered(deps: RenderedDeps): {
 } {
   const { map, store, events, shapes } = deps;
 
+  // The IDs told last: what `rendered.changed` holds
+  let told: readonly string[] = NO_IDS;
   const rendered: RenderedResource = {
     get: (id) => shapes.get(id) as Feature | undefined,
     getMany(ids) {
@@ -85,6 +89,7 @@ export function createRendered(deps: RenderedDeps): {
     getDraggedRows(): DraggedRows | null {
       return shapes.draggedRows();
     },
+    changed: observe(events, ['rendered.changed'], () => told),
   };
 
   /**
@@ -179,21 +184,10 @@ export function createRendered(deps: RenderedDeps): {
   };
 
   const stops = [
-    events.on('document.changed', (change) => {
-      const features = change.features;
-      for (const feature of features?.created ?? []) changed.add(feature.id);
-      for (const update of features?.updated ?? []) changed.add(update.id);
-      for (const feature of features?.deleted ?? []) changed.add(feature.id);
-      // The rows a Store of rows wrote, which it tells by their handles, not as features
-      const tables = store.tables;
-      if (!change.rows || !tables) return;
-      for (const rows of change.rows.layers.values()) {
-        for (const handles of [rows.created, rows.updated, rows.deleted]) {
-          for (const handle of handles) {
-            const id = tables.getRowId(handle);
-            if (id !== undefined) changed.add(id);
-          }
-        }
+    // The features a commit created, wrote and deleted (the rows of a Store of rows included)
+    events.on('change', ({ features }) => {
+      for (const ids of [features.created, features.updated, features.deleted]) {
+        for (const id of ids) changed.add(id);
       }
     }),
     events.on('sketch.added', ({ sketch }) => sketchChanged(sketch, false)),
@@ -213,6 +207,7 @@ export function createRendered(deps: RenderedDeps): {
       if (moved && changed.size > 0) for (const id of moving) changed.add(id);
       const ids = changed.size === 0 && moved ? moving : [...changed];
       changed.clear();
+      told = ids;
       events.emit('rendered.changed', { ids });
     }),
   ];

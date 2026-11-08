@@ -484,7 +484,7 @@ describe.each(KINDS)('the shape being drawn over a Store of %s', (kind) => {
         expect(featureEvents(recorded)).toEqual(['D']);
       } else {
         expect(featureEvents(recorded)).toEqual(['created', 'D']);
-        expect(recorded.find((e) => e.name === 'feature.created')?.id).toBe(created.id);
+        expect(recorded.find((e) => e.name === 'created')?.id).toBe(created.id);
       }
       if (d.mode !== 'draw_point') expect(last(previews(recorded))).toBe('cleared');
       else expect(previews(recorded)).toEqual([]);

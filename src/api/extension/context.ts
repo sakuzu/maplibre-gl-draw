@@ -167,26 +167,12 @@ export interface PluginContext extends ExtensionContext {
    * itself when the plugin is removed.
    */
   readonly extensions: ExtensionsCollections;
-  /** Drawing with WebGL of its own; what it holds on the GPU goes with the plugin */
-  readonly webgl: Webgl;
   /**
-   * Sends an event of the plugin to the subscribers of `draw.on` and `ctx.on`, at once. The
-   * plugin declares the event in `DrawEvents` by declaration merging, named
-   * `resource.pastParticiple` as the events of the library are, so that it is in the one list
-   * applications and extensions subscribe to:
-   *
-   * ```ts
-   * declare module '@sakuzu/maplibre-gl-draw' {
-   *   interface DrawEvents {
-   *     'counter.changed': { count: number };
-   *   }
-   * }
-   * ```
-   *
-   * @throws `DrawError` with the code `invalid-input` when the event is one of the library's own,
-   *   which only the library sends
+   * Drawing with WebGL of its own; what it holds on the GPU goes with the plugin. A value of the
+   * plugin that changes over time is given to the application as an `Observable` of the API the
+   * plugin returns, not as an event: the events are the library's only.
    */
-  emit<K extends keyof DrawEvents>(event: K, payload: DrawEvents[K]): void;
+  readonly webgl: Webgl;
 }
 
 /**

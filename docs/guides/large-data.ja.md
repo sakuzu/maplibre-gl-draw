@@ -45,7 +45,7 @@ if (row?.geometry) {
 | | 描いた地物 | データセット |
 | --- | --- | --- |
 | 編集 | 移動、頂点の編集、幾何演算 | できない |
-| イベント | `feature.created` など | `clicked`、`hovered`、`changed` |
+| イベント | `change` など | `clicked`、`hovered`、`changed` |
 | 選択 | 枠とハンドルの付いた選択 | 強調表示だけ (`setSelectedRowIds`) |
 | 保存 | `document.toJSON()` | されない。重なりの順の中の ID だけ |
 | 規模 | 20 万件でも編集できる | 数万件から 100 万件以上 |
@@ -433,9 +433,9 @@ UI のレイヤーパネルでは、どのデータセットもレイヤーの�
 なります。データセットの中では、配列の末尾 (表なら最後の行) が前です。
 `draw.datasets.list()` はすべてのデータセットを後ろから前の順で返し、
 `draw.datasets.move` は側、側の中の位置、またはその両方を変えます。
-動かしても何も作り直しません。順か側が変わると、ID を後ろから前の
-順に並べた `dataset.reordered` が出ます。何も変わらない移動では何も
-出ません。
+動かしても何も作り直しません。順か側が変わると、`draw.datasets` が
+後ろから前の順のデータセットをまた知らせます。何も変わらない移動では
+何も知らせません。
 
 ```ts
 draw.datasets.move('parcels', { order: 'above-store' });
@@ -648,13 +648,12 @@ for (const index of places.listDrawnRows(extent)) {
 
 ## 増えたり減ったりするデータセットを追う
 
-データセットが追加されると `dataset.added` がそのデータセットを
-付けて出て、取り除かれると `dataset.removed` がその `datasetId` を
-付けて出ます。取り除かれたイベントが届いた時点で、
-`draw.datasets.get` はもうそれを返しません。データセットの移動
-(`dataset.reordered` が出ます) や行の変更では、どちらも出ません。
-購読する前からあるデータセットは知らされないので、まず
-`draw.datasets.list()` を一度たどり、その後はイベントを追ってください。
+`draw.datasets` は、重なり順のデータセットの `Observable` です。
+`subscribe` は渡した関数を今あるデータセットですぐに 1 回呼び、
+データセットが追加されたとき、取り除かれたとき、順が変わったときに
+また呼びます。取り除かれたことが届いた時点で、`draw.datasets.get` は
+もうそれを返しません。データセットの行を変えても知らせません。追っている
+ID と比べれば、増えたものと減ったものが分かります。
 
 <!-- docs-check:
 type Dataset = import('@sakuzu/maplibre-gl-draw').Dataset;
@@ -663,20 +662,22 @@ declare function watch(dataset: Dataset): () => void;
 
 ```ts
 const stops = new Map<string, () => void>();
-const follow = (dataset: Dataset): void => {
-  stops.set(dataset.id, watch(dataset));
-};
 
-for (const dataset of draw.datasets.list()) follow(dataset);
-draw.on('dataset.added', ({ dataset }) => follow(dataset));
-draw.on('dataset.removed', ({ datasetId }) => {
-  stops.get(datasetId)?.();
-  stops.delete(datasetId);
+draw.datasets.subscribe((datasets) => {
+  const ids = new Set(datasets.map((dataset) => dataset.id));
+  for (const [id, stop] of stops) {
+    if (ids.has(id)) continue;
+    stop();
+    stops.delete(id);
+  }
+  for (const dataset of datasets) {
+    if (!stops.has(dataset.id)) stops.set(dataset.id, watch(dataset));
+  }
 });
 ```
 
 同じ ID で取り除いて追加し直したデータセットは別のオブジェクトなので、
-取り除かれたイベントの後に追加されたイベントとして届きます。
+それを含まない一覧の後に、それを含む一覧として届きます。
 
 ## 点を自分で描く
 
@@ -767,5 +768,5 @@ async function whenPictureComplete(): Promise<void> {
   [tableFromFeatures](../api/table/functions/tableFromFeatures.md)、
   [createTableBuilder](../api/table/functions/createTableBuilder.md)、
   [prepareTable](../api/table/functions/prepareTable.md)
-- `dataset.clicked`、`dataset.added`、`dataset.removed`、
-  `dataset.reordered` については [イベント](../reference/events.md)
+- `dataset.clicked` と、時間で変わるデータセットの値 `draw.datasets`
+  については [イベント](../reference/events.md)

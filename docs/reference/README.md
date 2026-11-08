@@ -11,8 +11,8 @@ declaration.
 - [data-format.md](data-format.md) — the native format and GeoJSON: the
   coordinates and properties of each feature type, versions and
   validation
-- [events.md](events.md) — every event, its payload, when it fires (once
-  per feature or once per change) and in which order
+- [events.md](events.md) — every event, its payload, when it fires and in
+  which order, and the values that change over time
 
 To learn how to use the library, start with
 [getting started](../getting-started.md) and the [guides](../README.md);

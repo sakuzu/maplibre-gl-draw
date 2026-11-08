@@ -126,7 +126,7 @@ input?.addEventListener('change', async () => {
   ものはそのまま残ります
 - ソースを読み終えた後 (画像ならデコードした後) の書き込みは、形式に
   かかわらず、出どころ `load` の 1 つのトランザクションになります。
-  `document.changed` は 1 回で、変更を記録するリスナーにとっては 1 つの
+  `change` は 1 回で、変更を記録するリスナーにとっては 1 つの
   手順です
 - ライブラリーの文書は、どこかの形が不正なとき、存在しないものを参照
   しているとき、ライブラリーが読めない major の版のときは、全体を
@@ -165,15 +165,16 @@ input?.addEventListener('change', async () => {
   形状の型ごとに多くても 1 つの Multi の地物にまとめます
 
 何かを読んだ読み込みは、同じ結果を載せて `document.loaded` を出し、
-追加した地物ごとに `feature.created` を出します。読み込み 1 回ごとに
-反応するには、`document.changed` か `document.loaded` を受けてください
+追加したすべての地物を `features.created` に並べた `change` を 1 回
+出します。読み込み 1 回ごとに反応するには、`change` か
+`document.loaded` を受けてください
 ([イベント](../reference/events.md))。
 
 ### 複数のソースをまとめて読む
 
 `draw.document.loadMany(items)` は、すべてのソースを先に読み、それから
 全部を 1 つのトランザクションで書きます。そのため、複数のファイルの
-取り込みが 1 回の `document.changed` になり、取り消すのも送るのも 1 回で
+取り込みが 1 回の `change` になり、取り消すのも送るのも 1 回で
 済みます。項目は順に、`load` と同じように書きます。
 
 ```ts
@@ -191,7 +192,7 @@ console.log(results?.length); // 読み取り専用のあいだは null
 項目のオプションに `layer` と `group` を指定すれば、ファイルごとに
 レイヤーを 1 つ、フォルダーにグループを 1 つ作る取り込みも 1 つの
 トランザクションのままです。新しいレイヤーと地物とグループは、1 回の
-`document.changed` と、Store の 1 回の通知で届きます。
+`change` と、Store の 1 回の通知で届きます。
 
 ```ts
 declare const folder: { name: string; files: File[] };
@@ -388,14 +389,14 @@ await draw.document.load(imageFile, {
 
 ## 変更のたびに保存する
 
-`document.changed` は、文書を変えたトランザクション 1 つごとに、その中で
-変わったものをすべて載せて 1 度だけ届きます。編集のたびに保存するなら、
-このイベントを使います。選択やモードだけの変更では届きません。
+`change` は、文書を変えたトランザクション 1 つごとに、その中で
+変わったものすべての ID を載せて 1 度だけ届きます。編集のたびに保存する
+なら、このイベントを使います。選択やモードだけの変更では届きません。
 
 ```ts
 let timer: ReturnType<typeof setTimeout> | undefined;
 
-draw.on('document.changed', () => {
+draw.on('change', () => {
   clearTimeout(timer);
   timer = setTimeout(() => {
     localStorage.setItem('drawing', JSON.stringify(draw.document.toJSON()));
@@ -407,8 +408,7 @@ draw.on('document.changed', () => {
 変更にはなりません。
 
 自分の複数の書き込みを 1 つの変更にするには、`draw.transact` で包みます。
-それらは、名付けた出どころを持つ 1 つの `document.changed` として
-届きます。
+それらは、名付けた出どころを持つ 1 つの `change` として届きます。
 
 ```ts
 draw.transact(
@@ -430,14 +430,17 @@ declare function sendToServer(change: unknown): void;
 -->
 
 ```ts
-draw.on('document.changed', (change) => {
+draw.getStore().subscribe((change) => {
   // change.features, change.layers, change.groups, change.source ...
   sendToServer(change);
 });
 ```
 
-`draw.getStore().subscribe(listener)` も同じ `DocumentChange` を届け
-ます。こちらはコレクションを通さずに文書を読むときにも使えます。
+`draw.getStore().subscribe(listener)` は、変更の全体を `DocumentChange`
+として届けます。作られたもの、変わる前と合わせた変わったもの、消された
+ものが入ります。選択、編集中の地物、モードの変更も、それぞれの分類で
+届けます。`draw.on('change', listener)` は同じトランザクションを ID で
+知らせ、その中身はコレクションで読みます。
 
 文書そのものを別の場所に置く必要があるときは、作るときにオプション
 `store` でインスタンスにストアを渡します。
@@ -490,7 +493,8 @@ ID だけを渡します)、その形の ID を作る `generateId` と一緒に
 ## 変更に入っているもの
 
 core は変更の履歴を持ちません。リスナーが文書を追いかけたり、前の状態に
-戻したりするのに必要なものは、すべての `DocumentChange` に入っています。
+戻したりするのに必要なものは、Store が届ける (`draw.getStore().subscribe`)
+すべての `DocumentChange` に入っています。
 
 - どの更新にも変更前の `previous` のオブジェクトが付き、削除には削除した
   オブジェクトが付きます

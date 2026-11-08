@@ -36,6 +36,7 @@ import { DrawError } from '../errors.js';
 import type { ScreenPoint } from '../events.js';
 import type { StyleRule } from '../model.js';
 import type { EventHub } from './events.js';
+import { observe } from './events.js';
 import { toBBox, toBoundingBox, toDatasetRow } from './rows.js';
 import {
   invalidInput,
@@ -427,7 +428,16 @@ export function createDatasets(
     return options;
   };
 
+  const observable = observe(
+    events,
+    ['dataset.added', 'dataset.removed', 'dataset.reordered'],
+    () => manager.list().map(wrap),
+  );
   const collection: DatasetsCollection = {
+    get value() {
+      return observable.value;
+    },
+    subscribe: observable.subscribe,
     get(id) {
       const dataset = manager.get(requireId(id));
       return dataset ? wrap(dataset) : undefined;

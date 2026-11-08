@@ -118,7 +118,8 @@ describe('draw.destroy()', () => {
       () => draw.setReadOnly(true),
       () => draw.setInteractionLocked(true),
       () => draw.options.update({ rendering: { renderScale: 2 } }),
-      () => draw.on('feature.created', () => {}),
+      () => draw.on('change', () => {}),
+      () => draw.selection.subscribe(() => {}),
       () => draw.extensions.plugins.add({ name: 'late', onAdd: lateInstall }),
       () => draw.extensions.snapProviders.add({ name: 'late', candidates: () => [] }),
     ];
@@ -222,7 +223,7 @@ describe('the instance after destroy', () => {
   });
 });
 
-describe('the dataset events of the instance', () => {
+describe('the observable of the datasets of the instance', () => {
   beforeEach(() => {
     vi.useFakeTimers();
   });
@@ -231,22 +232,17 @@ describe('the dataset events of the instance', () => {
     vi.useRealTimers();
   });
 
-  it('emits dataset.added and dataset.removed, and the same events reach a plugin', () => {
+  it('tells the datasets added and removed, to the host and to a plugin alike', () => {
     const stub = createMapStub();
     const draw = createDraw(stub.map);
+    const ids = (list: readonly { id: string }[]) => list.map((dataset) => dataset.id).join(',');
     const log: string[] = [];
-    draw.on('dataset.added', ({ dataset }) => {
-      log.push(`add ${dataset.id} ${draw.datasets.get(dataset.id) ? 'got' : 'none'}`);
-    });
-    draw.on('dataset.removed', ({ datasetId }) => {
-      log.push(`remove ${datasetId} ${draw.datasets.get(datasetId) ? 'got' : 'none'}`);
-    });
+    draw.datasets.subscribe((list) => log.push(ids(list)));
     const pluginLog: string[] = [];
     draw.extensions.plugins.add({
       name: 'follower',
       onAdd: (ctx) => {
-        ctx.on('dataset.added', ({ dataset }) => pluginLog.push(`add ${dataset.id}`));
-        ctx.on('dataset.removed', ({ datasetId }) => pluginLog.push(`remove ${datasetId}`));
+        ctx.draw.datasets.subscribe((list) => pluginLog.push(ids(list)));
       },
     });
 
@@ -255,43 +251,34 @@ describe('the dataset events of the instance', () => {
     draw.datasets.remove('roads');
     draw.datasets.remove('parcels');
 
-    expect(log).toEqual([
-      'add parcels got',
-      'add roads got',
-      'remove roads none',
-      'remove parcels none',
-    ]);
-    expect(pluginLog).toEqual(['add parcels', 'add roads', 'remove roads', 'remove parcels']);
+    expect(log).toEqual(['', 'parcels', 'parcels,roads', 'parcels', '']);
+    expect(pluginLog).toEqual(log);
   });
 
-  it('emits dataset.reordered when a move changes the order, to the host and to a plugin', () => {
+  it('tells a move that changes the order, and not one that does not', () => {
     const stub = createMapStub();
     const draw = createDraw(stub.map);
     draw.datasets.add({ id: 'parcels', rows: [] });
     draw.datasets.add({ id: 'roads', rows: [] });
-    const orders: (readonly string[])[] = [];
-    draw.on('dataset.reordered', ({ order }) => orders.push(order));
-    const pluginOrders: (readonly string[])[] = [];
-    draw.extensions.plugins.add({
-      name: 'follower',
-      onAdd: (ctx) => {
-        ctx.on('dataset.reordered', ({ order }) => pluginOrders.push(order));
-      },
-    });
+    const orders: string[][] = [];
+    draw.datasets.subscribe((list) => orders.push(list.map((dataset) => dataset.id)));
 
     draw.datasets.move('roads', { index: 0 });
     draw.datasets.move('roads', { index: 0 });
 
-    expect(orders).toEqual([['roads', 'parcels']]);
-    expect(pluginOrders).toEqual([['roads', 'parcels']]);
+    expect(orders).toEqual([
+      ['parcels', 'roads'],
+      ['roads', 'parcels'],
+    ]);
   });
 
-  it('does not emit dataset.removed when the instance is destroyed', () => {
+  it('does not tell the datasets removed when the instance is destroyed', () => {
     const stub = createMapStub();
     const draw = createDraw(stub.map);
     draw.datasets.add({ id: 'parcels', rows: [] });
     const removed = vi.fn();
-    draw.on('dataset.removed', removed);
+    draw.datasets.subscribe(removed);
+    removed.mockClear();
 
     draw.destroy();
 

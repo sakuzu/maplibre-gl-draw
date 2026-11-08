@@ -483,7 +483,8 @@ map.triggerRepaint() draw.on() and extension listeners
 The internal consumers (the spatial index, the RenderCoordinator, the view
 caches) subscribe to the Store directly. The event hub
 (`connectStoreEvents` in `src/api/impl/events.ts`) turns each notification
-into the events of `DrawEvents` for the host and the extensions. Anything
+into the events of `DrawEvents` and the signals of the observables, for
+the host and the extensions. Anything
 derived from the Store is derived by its subscriber alone; no write path
 updates a derived structure by hand.
 
@@ -497,7 +498,7 @@ updates a derived structure by hand.
 5. SelectMode: store.setSelection('feature', [id])
 6. Store: notifies { selection: {...} }
 7. RenderCoordinator: map.triggerRepaint()
-8. The event hub: emits 'selection.changed'
+8. The event hub: tells the subscribers of draw.selection
 ```
 
 ### Dragging a feature
@@ -701,8 +702,8 @@ a corner.
 
 `ModeManagerImpl` (`src/modes/manager.ts`) holds the factories and runs one
 handler at a time. The mode itself lives in the Store; the manager switches
-the handler only in its Store subscription, so the Store, the `mode.changed`
-event and the running handler always agree.
+the handler only in its Store subscription, so the Store, the observable
+`draw.mode` and the running handler always agree.
 
 `setMode(mode)` checks the request before touching the Store. Every refusal
 looks the same: the Store does not change, no event is emitted, the current
@@ -738,24 +739,30 @@ the Store and the pure math below them.
 The events of the instance are `DrawEvents` (`src/api/events.ts`), emitted
 by one event hub per instance (`createEventHub` in
 `src/api/impl/events.ts`). The host subscribes with `draw.on`, an extension
-with `on` of its context, and the names carry no prefix
-(`feature.created`). The hub has two sources.
+with `on` of its context, and the names carry no prefix (`change`). A name
+that is not one of `DrawEvents` is refused with `invalid-input`. A value
+that changes over time (the selection, the vertex selection, the mode, the
+hidden items, the options, the sketches, the datasets, the shapes as they
+are drawn) is not an event: it is an `Observable` on its resource, which
+follows a signal of the same hub that `draw.on` does not take. The hub has
+two sources.
 
-- The Store. `connectStoreEvents` turns each notification into the
-  per-item events (the created, updated, deleted and moved features, the
-  layers and groups, the reorders, the metadata, the selection, the vertex
-  selection and the mode), then emits `document.changed` once with the
-  whole change of the transaction. A load of N features emits N
-  `feature.created` and one `document.changed`, so a subscriber that
-  rebuilds a view on any change listens to `document.changed`.
+- The Store. `connectStoreEvents` turns each notification into the signals
+  of the values of this client (the selection, the mode, the vertex
+  selection, the hidden items), then `readOnly.changed` and
+  `interactionLock.changed`, then emits `change` once with the IDs of what
+  the transaction changed, when it changed the document. A load of N
+  features emits one `change` with N IDs in `features.created`.
 - The signals of the engine. The parts of the engine announce what the
   Store does not record on an internal emitter (`EngineSignals` in
   `src/shared/utils/event-emitter.ts`): `snap.change` from SnapService,
-  `dataset.click` and `map.click` from the InputRouter, the datasets that
-  come and go, `layerStack.change` from the CustomLayer, `image.request`
+  `dataset.click` and `map.click` from the InputRouter,
+  `layerStack.change` from the CustomLayer, `image.request`
   from the image mode, `load.error` when the image of an Image feature
   fails to decode, and `drag.started` and `drag.ended` from the drag of
-  select mode. `connectEngineEvents` passes them on as events.
+  select mode. `connectEngineEvents` passes them on as events. The
+  signals of the options, the sketches, the datasets and the shapes as they
+  are drawn come from their resources, on the same hub.
 
 The full list of events, their payloads and their order is in
 [events.md](../reference/events.md).
@@ -1050,7 +1057,7 @@ follow the Store, so they see every write whatever made it, and
 `drag.started` and `drag.ended` come from the drag of select mode. There
 are no "before" hooks: a listener cannot veto or rewrite a write.
 `draw.transact(fn)` wraps `fn` in `store.transact`, so several writes
-become one notification and one `document.changed`.
+become one notification and one `change`.
 
 ### Extension points
 

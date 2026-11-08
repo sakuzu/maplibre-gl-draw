@@ -18,6 +18,7 @@ import { createDocument } from './document.js';
 import { createDrawing, createDrawingResource } from './drawing.js';
 import type { Engine } from './engine.js';
 import { createEngine } from './engine.js';
+import { observe, requireEventName } from './events.js';
 import { createFeatures } from './features.js';
 import { createGroups } from './groups.js';
 import { createHidden } from './hidden.js';
@@ -101,6 +102,7 @@ export function createDrawOnEngine(
     gpu: () => engine.customLayer.getGpuMemory(),
   });
 
+  const optionsObservable = observe(events, ['options.changed'], drawOptions.get);
   const members: Draw = {
     features,
     layers: createLayers(
@@ -110,14 +112,21 @@ export function createDrawOnEngine(
     ),
     groups,
     datasets: createDatasets(engine.datasets, events, context.eventEmitter),
-    hidden: createHidden(deps),
-    sketches: createSketches(engine.sketches),
+    hidden: createHidden(deps, events),
+    sketches: createSketches(engine.sketches, events),
     rendered: rendered.rendered,
-    selection: createSelection(deps, { features, groups }),
-    vertexSelection: createVertexSelection(deps),
+    selection: createSelection(deps, { features, groups }, events),
+    vertexSelection: createVertexSelection(deps, events),
     drawing: createDrawingResource(engine),
     metadata: createMetadata(deps),
-    options: { get: drawOptions.get, update: drawOptions.update },
+    options: {
+      get value() {
+        return optionsObservable.value;
+      },
+      subscribe: optionsObservable.subscribe,
+      get: drawOptions.get,
+      update: drawOptions.update,
+    },
     document: createDocument(
       deps,
       (result, source) => events.emit('document.loaded', { result, source }),
@@ -138,6 +147,7 @@ export function createDrawOnEngine(
     getMap: () => map,
     getStore: () => view,
 
+    mode: observe(events, ['mode.changed'], () => modeManager.getMode()),
     getMode: () => modeManager.getMode(),
     setMode(mode) {
       if (typeof mode !== 'string') throw invalidInput('The mode must be a string');
@@ -161,9 +171,18 @@ export function createDrawOnEngine(
       const run = () => store.transact(fn, transactOptions?.source);
       return transactOptions?.ignoreLocks === true ? withLocksIgnored(store, run) : run();
     },
-    on: (event, listener) => events.on(event, listener),
-    off: (event, listener) => events.off(event, listener),
-    once: (event, listener) => events.once(event, listener),
+    on(event, listener) {
+      requireEventName(event);
+      return events.on(event, listener);
+    },
+    off(event, listener) {
+      requireEventName(event);
+      events.off(event, listener);
+    },
+    once(event, listener) {
+      requireEventName(event);
+      return events.once(event, listener);
+    },
 
     ...createDrawing(engine),
     captureImage: (captureOptions) =>

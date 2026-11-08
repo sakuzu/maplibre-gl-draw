@@ -50,7 +50,7 @@ const ui = createDrawUI(draw, {
 
 // 3. Measure the selection with the geometry entry: plain functions of GeoJSON geometries, in
 // meters and square meters on the ground (a circle is a point with a radius, left out here)
-draw.on('selection.changed', () => {
+draw.selection.subscribe(() => {
   const selected = draw.selection.features();
   let meters = 0;
   let squareMeters = 0;

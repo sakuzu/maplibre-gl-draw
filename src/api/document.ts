@@ -20,7 +20,7 @@ export interface DocumentResource {
    * `replace` for a document of the library and `merge` for GeoJSON when it is left out.
    *
    * The source is read (and an image decoded) first; then every write is one transaction with
-   * the source `load`, whatever the format: one `document.changed` and one notification of the
+   * the source `load`, whatever the format: one `change` and one notification of the
    * Store, one step for a subscriber that records changes. A load that fails writes nothing.
    * The layer of `options.layer` and the group of `options.group` are created in that
    * transaction too.
@@ -38,7 +38,7 @@ export interface DocumentResource {
   load(source: LoadSource, options?: LoadOptions): Promise<LoadResult | null>;
   /**
    * Reads several sources and writes all of them in one transaction with the source `load`:
-   * one `document.changed` and one notification of the Store, so that an import of several
+   * one `change` and one notification of the Store, so that an import of several
    * files is one step to undo and one change to send. Every source is read first, in order; the
    * writes then follow in the same order, each as `load` would write it, against the document
    * the earlier items left (a document of the library replaces what the earlier items wrote).

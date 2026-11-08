@@ -2,14 +2,18 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * The events: one list, `DrawEvents`, that applications and extensions subscribe to alike
+ * The events: one list, `DrawEvents`, that applications and extensions subscribe to alike, and
+ * the one shape of a value that changes over time, `Observable`
  *
- * An event is named `resource.pastParticiple`. A change of the document carries its source,
- * and `document.changed` arrives once per transaction with every change of it.
+ * A change of the document arrives as one `change` per commit, whatever it changed and however
+ * many features, with the IDs of what changed and where it came from. A value that changes over
+ * time (the selection, the mode, the features hidden here, the options, the sketches, the
+ * datasets, the shapes as they are drawn) is read and followed as an {@link Observable} on its
+ * resource, not as an event.
  */
 
 import type { Position } from 'geojson';
-import type { Dataset, DatasetRow } from './datasets.js';
+import type { DatasetRow } from './datasets.js';
 import type { DrawError } from './errors.js';
 import type { Hit } from './extension/provider.js';
 import type { StoreView, UpdateSource } from './extension/store.js';
@@ -19,36 +23,98 @@ import type {
   FileData,
   Group,
   ItemOrderChange,
-  ItemPosition,
   Layer,
   LoadResult,
   Metadata,
   RestoreToken,
 } from './model.js';
-import type { RuntimeOptions } from './options.js';
-import type { Sketch, SketchEndReason } from './sketches.js';
-import type {
-  LayerStackEntry,
-  Mode,
-  SelectionType,
-  SelectionValue,
-  SnapResult,
-  VertexSelection,
-} from './state.js';
+import type { LayerStackEntry, Mode, SelectionType, SelectionValue, SnapResult } from './state.js';
 import type { RowsChange } from './tables.js';
 
 /** A point on the screen, as `[x, y]` in CSS pixels. */
 export type ScreenPoint = [number, number];
 
 /**
- * Everything one transaction changed, as `document.changed` and the subscribers of the Store
- * receive it. It arrives once per transaction, and each category is present only when the
- * transaction changed it.
+ * A value that changes over time, in one shape: the value now, and a way to follow it. It keeps
+ * the contract of a Svelte store, so `$selection` works as it is; in React,
+ * `useSyncExternalStore(observable.subscribe, () => observable.value)` reads it.
+ */
+export interface Observable<T> {
+  /** The value now */
+  readonly value: T;
+  /**
+   * Calls `run` with the value now at once, and again each time the value changes. It does not
+   * depend on `this`.
+   *
+   * @returns The function that stops calling it
+   */
+  subscribe(run: (value: T) => void): () => void;
+}
+
+/**
+ * The IDs of what one commit created, updated, deleted and put in another place, of one kind
+ * (features, layers or groups). An ID is in one of `created` and `deleted` at most; a feature or a
+ * group put into another layer or group is in `updated` and in `placed`.
+ */
+export interface ChangedIds {
+  /** Created */
+  readonly created: readonly string[];
+  /** Changed (a feature or a group put into another layer or group included) */
+  readonly updated: readonly string[];
+  /** Deleted */
+  readonly deleted: readonly string[];
+  /**
+   * Put in another place of the stacking order: in its layer or group, or into another one. For
+   * the layers, those whose place in the stacking order of the layers changed
+   */
+  readonly placed: readonly string[];
+}
+
+/**
+ * One commit of the document: what `change` delivers, once per commit, whatever it changed and
+ * however many features. It lists the IDs of what changed; what they are now is read from the
+ * resources (`draw.features.get`), and what a feature was before the commit with `previous`, in
+ * the listener.
  *
- * `document.changed` fires only for a transaction that changed the document (features, layers,
- * groups, metadata or files); the selection, the editing and the mode are carried along when
- * the same transaction changed them. A change of the state of this client alone has its own
- * event (`selection.changed`, `mode.changed` and so on).
+ * It fires only for a commit that changed the document (its features, layers, groups, metadata or
+ * files). A change of the state of this client alone (the selection, the mode, what is hidden here)
+ * is read from the {@link Observable} of its resource.
+ */
+export interface Change {
+  /** Where the writes came from: `local` for a write of this client */
+  readonly source: UpdateSource;
+  /** The features */
+  readonly features: ChangedIds;
+  /** The layers */
+  readonly layers: ChangedIds;
+  /** The groups */
+  readonly groups: ChangedIds;
+  /** Whether the values of the document itself (its metadata or its files) changed */
+  readonly document: boolean;
+  /**
+   * The feature as it was before the commit: one updated or deleted. It is read in the listener,
+   * while the change is delivered; after, its answer is not kept.
+   *
+   * @returns The feature before, or `undefined` for one created, one the commit did not change,
+   *   and a feature written by a commit from elsewhere to a layer held as rows of columns (which
+   *   keeps no value before)
+   */
+  previous(id: string): Feature | undefined;
+  /**
+   * The rows of the layers held as rows of columns written ({@link StoreView.tables}), by layer:
+   * the same features as `features` lists, by the handles of their rows. Its type is in
+   * `@sakuzu/maplibre-gl-draw/kasane`
+   *
+   * @experimental
+   */
+  readonly rows?: RowsChange;
+}
+
+/**
+ * Everything one transaction changed, as the subscribers of the Store receive it
+ * (`StoreView.subscribe`). It arrives once per transaction, and each category is present only
+ * when the transaction changed it. The instance tells the same commit as {@link Change}
+ * (`change`).
  */
 export interface DocumentChange {
   /** Where the writes came from */
@@ -112,8 +178,8 @@ export interface DocumentChange {
   previousValues?: FeatureValues;
   /**
    * The new selection and the one before it, as the Store keeps them (`Store.getSelection`). Many
-   * features selected in bulk are told with no IDs: `draw.selection.value` and
-   * `selection.changed` give their number, layers and extent
+   * features selected in bulk are told with no IDs: `draw.selection.value` gives their number,
+   * layers and extent
    */
   selection?: {
     type: SelectionType | null;
@@ -142,95 +208,14 @@ export interface DocumentChange {
  * The events, by name, with their payloads.
  */
 export interface DrawEvents {
-  /** A feature was created */
-  'feature.created': { feature: Feature; source: string };
-  /** A feature changed */
-  'feature.updated': { feature: Feature; previous: Feature; source: string };
-  /** A feature was deleted */
-  'feature.deleted': { feature: Feature; source: string };
   /**
-   * A feature was put in another place of the stacking order: in its layer or group, into
-   * another layer or group, or out of its group. `from` and `to` are where it was and where it
-   * is, by the items just below and above it, as the Store tells them in `DocumentChange.order`.
-   * A move of a feature does not fire `feature.updated` unless its layer or its group changed.
-   * Many features held as rows put in another place at once are told by `document.changed`
-   * only (`order`)
+   * A commit of the document: once per commit that changed it (its features, layers, groups,
+   * metadata or files), whatever it changed and however many features, from this client or from
+   * elsewhere
    */
-  'feature.moved': { feature: Feature; from: ItemPosition; to: ItemPosition; source: string };
-  /** A layer was created */
-  'layer.created': { layer: Layer; source: string };
-  /**
-   * A layer changed. A change of its `items` alone (a feature or a group created, deleted or put
-   * in another place) is not told here: the moves of the order tell it
-   */
-  'layer.updated': { layer: Layer; previous: Layer; source: string };
-  /** A layer was deleted */
-  'layer.deleted': { layer: Layer; source: string };
-  /** The stacking order of the layers changed */
-  'layer.reordered': { order: readonly string[]; previous: readonly string[]; source: string };
-  /** A group was created */
-  'group.created': { group: Group; source: string };
-  /**
-   * A group changed. A change of its `featureIds` alone is not told here: the moves of the order
-   * tell it
-   */
-  'group.updated': { group: Group; previous: Group; source: string };
-  /** A group was ungrouped */
-  'group.deleted': { group: Group; source: string };
-  /**
-   * A group was put in another place of the stacking order, in its layer or into another one:
-   * where it was and where it is, by the items just below and above it, as the Store tells them in
-   * `DocumentChange.order`. A move of a group in its layer does not fire `group.updated`
-   */
-  'group.moved': { group: Group; from: ItemPosition; to: ItemPosition; source: string };
-  /** A sketch was added (`sketches.add`) */
-  'sketch.added': { sketch: Sketch };
-  /**
-   * A sketch changed: `sketches.update` changed its edits, or edits of it were left out because the
-   * features or the vertices they edit are no longer there or can no longer be written
-   * (`dropped`, the number left out then)
-   */
-  'sketch.updated': { sketch: Sketch; dropped: number };
-  /**
-   * A sketch ended: it was written, removed, or what it edits is gone (`reason`). `dropped` is the
-   * number of edits of it left out, from when it was added to its end (the edits of features that
-   * were no longer there when it was written included)
-   */
-  'sketch.removed': { sketch: Sketch; reason: SketchEndReason; dropped: number };
-  /**
-   * The shapes of features as they are drawn changed (`draw.rendered`): `ids` lists the features
-   * a write of the document (of features, or of the rows of a Store of rows) or a sketch changed
-   * since the last time, those created or deleted, and the rows dragged in bulk while they move.
-   * A change of the shape being drawn alone, which has no ID, is told with no IDs. It fires once a
-   * draw of the map that draws the change is done, at most once a draw, and its values
-   * (`rendered.get`, `rendered.getSelectionBox`) are those of that view.
-   *
-   * It tells changes of the shapes only. A change of the look (a layer rule, the `style` option, a
-   * type added or removed) and the selection box that changes with the view (its margin laid on
-   * the map at the scale of the view) are not told: read the look and the selection box at each
-   * draw. The rows dragged in bulk can be very many, and `ids` then lists them all at each draw:
-   * what is drawn with such rows reads them in each draw with `rendered.getDraggedRows`.
-   */
-  'rendered.changed': { ids: readonly string[] };
-  /** The title or the description changed */
-  'metadata.updated': { metadata: Metadata; previous: Metadata; source: string };
-  /**
-   * Every change of one transaction that changed the document (features, rows, layers, groups,
-   * metadata or files); it arrives once per such transaction, after the events of the
-   * resources. A change of the selection, the mode or another state of this client alone does
-   * not fire it. The rows of a Store that holds its features as rows written (`rows`) and many of
-   * them put in another place at once (`order`) are told by it only.
-   */
-  'document.changed': DocumentChange;
+  change: Change;
   /** A document was loaded */
   'document.loaded': { result: LoadResult; source: string };
-  /** The selection changed: the new one and the one before it, as `draw.selection.value` gives them */
-  'selection.changed': { selection: SelectionValue; previous: SelectionValue };
-  /** The vertex selection changed */
-  'vertexSelection.changed': {
-    selection: VertexSelection | null;
-    previous: VertexSelection | null;
-  };
   /**
    * A drag started; `bulk` for features selected in bulk, whose IDs are not listed: the value of
    * their selection (`SelectionValue.ids` is `null`; `listSelectedRows` of
@@ -248,20 +233,10 @@ export interface DrawEvents {
     bulk?: SelectionValue;
     cancelled: boolean;
   };
-  /** The mode changed */
-  'mode.changed': { mode: Mode; previous: Mode };
-  /** The items this client hides changed; `ids` is the whole set after the change */
-  'hidden.changed': { ids: readonly string[] };
   /** Read-only was turned on or off */
   'readOnly.changed': { readOnly: boolean };
   /** The interaction lock was turned on or off */
   'interactionLock.changed': { locked: boolean };
-  /**
-   * `draw.options.update` changed the options; `options` and `previous` are what
-   * `draw.options.get()` returns after and before the change. An update that leaves every
-   * value as it was does not fire it
-   */
-  'options.changed': { options: Readonly<RuntimeOptions>; previous: Readonly<RuntimeOptions> };
   /** The snapping target changed */
   'snap.changed': { result: SnapResult | null };
   /**
@@ -278,12 +253,6 @@ export interface DrawEvents {
     lngLat: Position;
     point: ScreenPoint;
   };
-  /** A dataset was added */
-  'dataset.added': { dataset: Dataset };
-  /** A dataset was removed */
-  'dataset.removed': { datasetId: string };
-  /** The stacking order of the datasets changed */
-  'dataset.reordered': { order: readonly string[]; previous: readonly string[] };
   /**
    * The image mode asks for an image to place at a position: the application picks a file
    * and loads it with `document.load(file, { coordinate: lngLat, zoom, layerId })`. `lngLat` is

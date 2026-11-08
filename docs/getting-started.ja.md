@@ -120,11 +120,15 @@ document.querySelector('#draw-polygon')?.addEventListener('click', () => {
 多角形を確定するとモードは `select` に戻り、新しい多角形が選ばれた状態に
 なるので、利用者はすぐに移動したり頂点をドラッグしたりできます。
 
-地物が作られると、インスタンスが知らせます。
+地物が作られると、インスタンスが知らせます。`change` は変更で作られた
+ものの ID を並べ、`draw.features.get` で各地物を読みます。
 
 ```ts
-draw.on('feature.created', ({ feature }) => {
-  console.log('created', feature.id, feature.type);
+draw.on('change', ({ features }) => {
+  for (const id of features.created) {
+    const feature = draw.features.get(id);
+    console.log('created', id, feature?.type);
+  }
 });
 ```
 
@@ -134,10 +138,12 @@ draw.on('feature.created', ({ feature }) => {
 ライブラリーが `maplibre-gl-draw:` で始まる鍵に置く少しの値が入ります。
 
 ツールバーの表示をモードに合わせる (`select` に自動で戻る場合も含めて)
-には、`mode.changed` を受け取ります。
+には、`draw.mode` を `subscribe` で追います。モードや選択のように時間で
+変わる値はイベントではありません。`subscribe` は渡した関数を今の値で
+すぐに 1 回呼び、値が変わるたびにまた呼びます。
 
 ```ts
-draw.on('mode.changed', ({ mode }) => {
+draw.mode.subscribe((mode) => {
   document
     .querySelector('#draw-polygon')
     ?.classList.toggle('active', mode === 'draw_polygon');
@@ -150,15 +156,13 @@ draw.on('mode.changed', ({ mode }) => {
 
 ## 4. 変更を受け取る
 
-`feature.created` は地物 1 件ごとに発火します。すべての変更 (作成、
-移動、頂点の編集、削除、読み込み) にまとめて対応するには、
-`document.changed` を受け取ります。このイベントは取引ごとに 1 回届き、
-一緒に変わったものをすべて含んでいます。
+`change` はすべての変更 (作成、移動、頂点の編集、削除、読み込み) を
+知らせます。このイベントは、変えた地物の数によらず取引ごとに 1 回届き、
+一緒に変わったものすべての ID を並べます。
 
 ```ts
-draw.on('document.changed', ({ features, source }) => {
-  if (!features) return;
-  const { created = [], updated = [], deleted = [] } = features;
+draw.on('change', ({ features, source }) => {
+  const { created, updated, deleted } = features;
   console.log(
     `${created.length} created, ${updated.length} updated,`,
     `${deleted.length} deleted (${source})`,
@@ -166,10 +170,12 @@ draw.on('document.changed', ({ features, source }) => {
 });
 ```
 
-`updated` の各項目には、`feature` と変わる前の `previous` が入ります。
+`draw.features.get(id)` は今の地物を読み、受け取る関数の中の
+`change.previous(id)` は、変わったか消された地物の変わる前の姿を読みます。
 `source` は変更の出どころを表し、たとえば利用者の編集と API の呼び出し
 なら `'local'`、GeoJSON の読み込みなら `'load'` です。同じイベントで、
-レイヤー、グループ、文書の題の変更も届きます。
+レイヤーとグループ (`layers` と `groups`)、文書の題 (`document`) の変更も
+届きます。
 
 API は、次の規則を押さえておくと分かりやすくなります。
 
@@ -223,7 +229,7 @@ if (saved !== null) {
 そのレイヤーに (このライブラリーが書き出した GeoJSON は指しています)、
 そうでなければアクティブなレイヤーに入ります。読めない地物 (知らない
 geometry の型や不正な座標) は除かれて `skipped` に並び、残りは読み込まれ
-ます。読み込んだ地物は、すべて 1 回の `document.changed` で届きます。
+ます。読み込んだ地物は、すべて 1 回の `change` で届きます。
 
 GeoJSON は地物ごとの属性とスタイルを保ちますが、レイヤーとグループ
 そのものや、その順序は保ちません。それも保つには独自の形式を使います。

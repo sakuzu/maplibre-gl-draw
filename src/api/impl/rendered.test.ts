@@ -17,6 +17,7 @@ import type { Feature as StoredFeature } from '../../store/types.js';
 import { createMapStub, internalsOf } from '../../test-utils.js';
 import { selectionBoxOf } from '../../view/ui/bounds.js';
 import type { Draw } from '../draw.js';
+import type { Observable } from '../events.js';
 import type { Feature } from '../model.js';
 import type { Sketch } from '../sketches.js';
 import type { FeatureTables } from '../tables.js';
@@ -45,6 +46,16 @@ beforeEach(() => {
 afterEach(() => {
   draw.destroy();
 });
+
+/** Calls a function with each value an observable tells after the one it holds when subscribed */
+function afterNow<T>(observable: Observable<T>, run: (value: T) => void): () => void {
+  let now = true;
+  const stop = observable.subscribe((value) => {
+    if (!now) run(value);
+  });
+  now = false;
+  return stop;
+}
 
 const line = (): Feature =>
   draw.features.create({
@@ -201,9 +212,13 @@ describe('draw.rendered', () => {
 });
 
 describe('rendered.changed', () => {
+  it('holds the IDs told last, none at first', () => {
+    expect(draw.rendered.changed.value).toEqual([]);
+  });
+
   it('tells the features changed once the frame that draws them is drawn, once a frame', () => {
     const told: (readonly string[])[] = [];
-    draw.on('rendered.changed', ({ ids }) => told.push(ids));
+    afterNow(draw.rendered.changed, (ids) => told.push(ids));
     const a = line();
     const b = line();
     draw.features.update(a.id, { style: { strokeWidth: 4 } });
@@ -220,7 +235,7 @@ describe('rendered.changed', () => {
     const a = line();
     const b = line();
     drawFrame();
-    draw.on('rendered.changed', ({ ids }) => told.push([...ids].sort()));
+    afterNow(draw.rendered.changed, (ids) => told.push([...ids].sort()));
     const sketch = draw.sketches.add({
       edits: [{ kind: 'set', featureId: a.id, patch: { style: { strokeWidth: 3 } } }],
     });
@@ -245,7 +260,7 @@ describe('rendered.changed', () => {
       edits: [{ kind: 'set', featureId: a.id, patch: { style: { strokeWidth: 3 } } }],
     });
     drawFrame();
-    draw.on('rendered.changed', ({ ids }) => told.push(ids));
+    afterNow(draw.rendered.changed, (ids) => told.push(ids));
     // The frame of the image reads them as written, and they are seen again once it is drawn
     engine.context.shapes.setWritten(true);
     expect(draw.rendered.get(a.id)?.style?.strokeWidth).toBeUndefined();
@@ -308,15 +323,17 @@ describe('rendered.changed', () => {
     engine.enterDefaultMode();
     drawFrame();
     const told: string[][] = [];
-    draw.on('rendered.changed', ({ ids }) => told.push([...ids].sort()));
-    const notified: boolean[] = [];
-    draw.on('document.changed', (change) => {
-      notified.push(change.rows !== undefined && (change.features?.updated ?? []).length === 0);
+    afterNow(draw.rendered.changed, (ids) => told.push([...ids].sort()));
+    const notified: string[][] = [];
+    draw.on('change', (change) => {
+      if (change.rows !== undefined) {
+        notified.push([...change.features.updated, ...change.features.deleted]);
+      }
     });
-    // Written as rows only: the change names no feature
+    // Written as rows: the change names the features of the rows
     draw.features.update('r1', { geometry: { type: 'Point', coordinates: [1, 1] } });
     draw.features.delete('r2');
-    expect(notified).toEqual([true, true]);
+    expect(notified).toEqual([['r1'], ['r2']]);
     drawFrame();
     expect(told).toEqual([['r1', 'r2']]);
     // A change of the look is read by each draw, not told
@@ -371,7 +388,7 @@ describe('rendered.changed', () => {
     engine.enterDefaultMode();
     drawFrame();
     const told: (readonly string[])[] = [];
-    draw.on('rendered.changed', ({ ids }) => told.push(ids));
+    afterNow(draw.rendered.changed, (ids) => told.push(ids));
     const tables = store.tables as FeatureTables;
     const states = internalsOf(tables).states;
     const handles = Int32Array.of(tables.findRow('r0') as number, tables.findRow('r1') as number);
@@ -401,7 +418,7 @@ describe('rendered.changed', () => {
 
   it('tells a change of the shape being drawn, which has no ID, with no IDs', () => {
     const told: (readonly string[])[] = [];
-    draw.on('rendered.changed', ({ ids }) => told.push(ids));
+    afterNow(draw.rendered.changed, (ids) => told.push(ids));
     // A shape being drawn: a sketch of an edit create with its vertices placed so far
     const sketch = draw.sketches.add({
       edits: [
@@ -423,7 +440,7 @@ describe('rendered.changed', () => {
 
   it('tells a feature a sketch creates, then no longer', () => {
     const told: (readonly string[])[] = [];
-    draw.on('rendered.changed', ({ ids }) => told.push(ids));
+    afterNow(draw.rendered.changed, (ids) => told.push(ids));
     const sketch = draw.sketches.add({
       edits: [
         {

@@ -10,11 +10,13 @@ import type { Geometry } from 'geojson';
 import type { Map as MapLibreMap } from 'maplibre-gl';
 import { expect, vi } from 'vitest';
 import type { Draw } from './api/draw.js';
+import type { DocumentChange } from './api/events.js';
 import type { ModeFactory } from './api/extension/mode.js';
 import type { ExtensionsCollections } from './api/extensions.js';
 import { createAppliedStyles } from './api/impl/applied-style.js';
 import type { ModeServices } from './api/impl/contexts.js';
 import { createModeContext, createScreenContext } from './api/impl/contexts.js';
+import { createEventHub } from './api/impl/events.js';
 import { createFeatures, prepareFeatureInput } from './api/impl/features.js';
 import { createGroups } from './api/impl/groups.js';
 import { bridgeMode, createInputRoute } from './api/impl/input.js';
@@ -137,6 +139,34 @@ export function planeScaleFrame(pixelsPerDegree: number): ScreenScaleFrame {
 export function planeMetersPerPixel(pixelsPerDegree: number): (lngLat: [number, number]) => number {
   const frame = planeScaleFrame(pixelsPerDegree);
   return (lngLat) => metersPerPixelInFrame(frame, lngLat[1]);
+}
+
+/** The categories of a notification of the Store that belong to the document */
+const DOCUMENT_CHANGE_KEYS = [
+  'features',
+  'rows',
+  'previousValues',
+  'layers',
+  'groups',
+  'order',
+  'metadata',
+  'files',
+  'reset',
+] as const;
+
+/**
+ * Calls a listener with each notification of the Store of an instance that changed the document,
+ * as the Store gives it (the instance tells the same commits as `change`)
+ *
+ * @returns The function that stops
+ */
+export function onDocumentChange(
+  draw: Pick<Draw, 'getStore'>,
+  listener: (change: DocumentChange) => void,
+): () => void {
+  return draw.getStore().subscribe((change) => {
+    if (DOCUMENT_CHANGE_KEYS.some((key) => change[key] !== undefined)) listener(change);
+  });
 }
 
 type Listener = (...args: unknown[]) => void;
@@ -339,7 +369,7 @@ export function createModeHarness(options: {
     features,
     groups,
     layers: createLayers(deps),
-    selection: createSelection(deps, { features, groups }),
+    selection: createSelection(deps, { features, groups }, createEventHub()),
     extensions: collections,
     getMap: () => map,
     getStore: () => store,

@@ -290,16 +290,15 @@ declare function save(): void;
 
 ```ts
 // 2.0
-draw.on('feature.created', ({ feature, source }) => {
-  console.log(feature.id, source);
+draw.on('change', ({ features, source }) => {
+  console.log(features.created, source);
 });
-const stop = draw.on('document.changed', () => save());
+const stop = draw.on('change', () => save());
 ```
 
 `on` は購読を解く関数を返し、`once` は 1 回だけ購読します。
-`document.changed` はレイヤー、グループ、メタデータの変化も運び
-ます。いくつかの書き込みを 1 つの変化にするには、`transact` で
-包みます。
+`change` はレイヤー、グループ、メタデータの変化も運びます。いくつかの
+書き込みを 1 つの変化にするには、`transact` で包みます。
 
 ```ts
 draw.transact(
@@ -458,7 +457,7 @@ import type { Plugin } from '@sakuzu/maplibre-gl-draw';
 const logger: Plugin = {
   name: 'logger',
   onAdd(ctx) {
-    ctx.on('feature.created', ({ feature }) => console.log(feature.id));
+    ctx.on('change', ({ features }) => console.log(features.created));
     ctx.on('drag.ended', ({ featureIds }) => console.log(featureIds));
   },
   input: {
@@ -695,16 +694,13 @@ const members = draw.groups.listMembers(groupId);
 レイヤーやグループの中の並びは、`DocumentChange.layerReorder` と
 `groupReorder` に入らなくなりました。別の場所に置いた項目は、すべて
 `DocumentChange.order` に入ります。元の場所と今の場所を、すぐ下と
-すぐ上の項目 (`ItemPosition`) で持ちます。`feature.moved` の `from`
-と `to` も `ItemPosition` になり、同じレイヤーやグループの中の移動でも
-届きます。`group.moved` が加わりました。レイヤーの `items` や
-グループの `featureIds` だけの変化では、`layer.updated` と
-`group.updated` は届かなくなりました。並びを追う画面は
-`feature.moved` と `group.moved`、または `document.changed` を
-受け取ります。
+すぐ上の項目 (`ItemPosition`) で持ちます。レイヤーの `items` や
+グループの `featureIds` だけの変化は、そのレイヤーやグループの変更では
+ありません。並びを追う画面は、`change` の `features.placed` と
+`groups.placed`、または Store の通知の `order` を読みます。
 
 ```ts
-draw.on('document.changed', (change) => {
+draw.getStore().subscribe((change) => {
   for (const move of change.order ?? []) {
     if (move.kind === 'item') console.log(move.itemId, move.from, move.to);
   }
@@ -769,7 +765,8 @@ draw.options.update({
 選択は `selection.get()` の代わりに、1 つの値 `draw.selection.value` で
 読みます。種類、地物の数、地物のレイヤーと範囲、ID を伝えます。何も選んで
 いない時は種類が `feature` で数が 0 です。地物を行で持つストアで 2,000 件を
-超えると、ID は `null` です。`selection.changed` は値とその前の値を渡します。
+超えると、ID は `null` です。選択が変わるたびに `draw.selection` が値を
+また知らせます (`draw.selection.subscribe`)。
 `draw.selection.target` は今の選択を指し、`draw.selection.set(target)` で
 もう一度選べます。
 
@@ -826,7 +823,7 @@ draw.selection.set(kept);
 - 地物の周りに描くものは、描かれている地物を `ctx.draw.rendered` で
   読みます (`get`、`getMany`、`getSelectionBox`。まとめてドラッグしている
   行は `getDraggedRows` で、前の `/kasane` の `draggedRowsOf` です)。
-  変わったことは `rendered.changed` で知ります
+  変わったことは `draw.rendered.changed` で知ります
 - `HitTestContext` と `SnapContext` は 1 つの型 `PointContext` に
   なりました。外すものが無いとき、`excludeIds` はありません
 - `ctx.drawing` は無くなりました。同じものが `ctx.draw.drawing` です
@@ -837,9 +834,9 @@ draw.selection.set(kept);
 - 地物の型の `hitTest` は距離だけ `{ distancePx }` を、付き物の提供者の
   `hitTest` は ID と距離 `{ id, distancePx }` を返します。外に渡す `Hit`
   (種類、地物の ID、`featureId`) はライブラリーが埋めます
-- プラグインは、宣言の併合で `DrawEvents` に足した自分のイベントを
-  `ctx.emit(event, payload)` で送ります。どのイベントとも同じく
-  `draw.on` で購読します
+- プラグインの時間で変わる値は、プラグインが返す API に置いた
+  `Observable` で渡します。イベントを送るのはライブラリーだけです
+  ([プラグインの値](plugins.ja.md#プラグインの値))
 - `Plugin.interaction` は役目ごとに分かれました。`onFeatureCommit(feature)`
   (前は `onDrawCommit`。`ModeContext.commitFeature` に合わせた名です) は
   プラグインの欄になり、選択モードのクリックは `selectMode`
@@ -993,10 +990,10 @@ API で行った書き込みでも発火します。
 | `delete(ids)` | `features.deleteMany(ids)` |
 | `trash()` | `selection.delete()` |
 | `setFeatureProperty(id, key, value)` | `features.update(id, patch)` |
-| `draw.create`, `draw.update` | `feature.created`, `feature.updated` |
-| `draw.delete` | `feature.deleted` |
-| `draw.selectionchange` | `selection.changed` |
-| `draw.modechange` | `mode.changed` |
+| `draw.create`, `draw.update` | `change` (`features.created`、`updated`) |
+| `draw.delete` | `change` (`features.deleted`) |
+| `draw.selectionchange` | `selection.subscribe(run)` |
+| `draw.modechange` | `mode.subscribe(run)` |
 
 | terra-draw | このライブラリー |
 | --- | --- |
@@ -1007,10 +1004,10 @@ API で行った書き込みでも発火します。
 | `removeFeatures(ids)` | `features.deleteMany(ids)` |
 | `clear()` | すべての ID で `features.deleteMany(ids)` |
 | `selectFeature(id)` | `selection.set('feature', [id])` |
-| `on('change', ...)` | `on('document.changed', ...)` |
+| `on('change', ...)` | `on('change', ...)` |
 
 選択モードは `simple_select` と `direct_select` の両方の役目を
 果たします。選んだ地物の頂点は、選択モードのままドラッグできます。
 地物に `mode` のプロパティーは要らず、地物の型が決めます。組み込みの
-取り消しはありません。イベントがすべての変化の前の状態を運びます
+取り消しはありません。Store の通知がすべての変化の前の状態を運びます
 ([保存と読み込み](save-load.ja.md) を参照)。

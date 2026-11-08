@@ -10,6 +10,7 @@ import { MemoryStore } from '../../store/memory.js';
 import type { StoreChange } from '../../store/types.js';
 import { DrawError } from '../errors.js';
 import type { HiddenCollection } from '../hidden.js';
+import { createEventHub } from './events.js';
 import { createHidden } from './hidden.js';
 
 let store: MemoryStore;
@@ -51,7 +52,7 @@ beforeEach(() => {
       locked: false,
     });
   }
-  hidden = createHidden({ store });
+  hidden = createHidden({ store }, createEventHub());
   notifications = [];
   store.subscribe((changes) => notifications.push(changes));
 });

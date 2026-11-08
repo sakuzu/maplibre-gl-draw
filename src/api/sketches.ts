@@ -5,6 +5,7 @@
  * `draw.sketches`: the edits shown before they are written
  */
 
+import type { Observable } from './events.js';
 import type { FeatureEdit, FeatureInput } from './model.js';
 
 /**
@@ -75,7 +76,7 @@ export interface SketchPatch {
 }
 
 /**
- * Why a sketch ended (`sketch.removed`).
+ * Why a sketch ended: what the instance tells inside when a sketch is no longer listed.
  *
  * - `committed`: it was written
  * - `cancelled`: it was removed without being written
@@ -110,14 +111,14 @@ export type SketchEndReason =
  * hidden or in a layer that cannot be written (`features.isEditable` reads most of it). When
  * the features of a sketch are written, the sketch is shown over what they wrote; a
  * feature of it that is deleted, locked, hidden or put into a layer that cannot be written is
- * left out, and the sketch ends once none is left (`sketch.removed`). A second sketch of this client
+ * left out, and the sketch ends once none is left (it is no longer listed). A second sketch of this client
  * of a feature commits the first one.
  *
  * A wrong argument (an ID that does not exist, an edit of the wrong shape) throws a `DrawError`
  * and changes nothing. A refusal because of the state (read-only, a lock) returns `null` or
  * `false` and changes nothing. A method whose name ends in `Many` does all of it or none of it.
  */
-export interface SketchesCollection {
+export interface SketchesCollection extends Observable<readonly Sketch[]> {
   /**
    * Gets a sketch by ID.
    *
@@ -166,8 +167,8 @@ export interface SketchesCollection {
    */
   updateMany(patches: readonly { id: string; patch: SketchPatch }[]): Sketch[] | null;
   /**
-   * Removes a sketch without writing it (`sketch.removed` with the reason `cancelled`, or
-   * `withdrawn` for a sketch with an owner).
+   * Removes a sketch without writing it (it ends `cancelled`, or `withdrawn` for a sketch with an
+   * owner, and is no longer listed).
    *
    * @returns True when it was removed
    * @throws `DrawError` with the code `not-found` when there is no sketch with this ID
@@ -182,8 +183,8 @@ export interface SketchesCollection {
    */
   removeMany(ids: readonly string[]): boolean;
   /**
-   * Writes a sketch of this client in one transaction and removes it (`sketch.removed` with the
-   * reason `committed`).
+   * Writes a sketch of this client in one transaction and removes it (it ends `committed`, and is
+   * no longer listed).
    *
    * @returns True when it was written, false when it is a sketch with an owner or the write
    *   is refused (read-only)

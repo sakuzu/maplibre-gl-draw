@@ -44,4 +44,4 @@ npm install @sakuzu/maplibre-gl-draw @sakuzu/maplibre-gl-draw-ui maplibre-gl
 - [`createDrawUI`](../../ui/README.md#use) and the options of the
   standard UI
 - [The events of the document](../reference/events.md#the-document),
-  `document.changed` among them
+  `change` among them

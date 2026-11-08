@@ -6,6 +6,8 @@
  */
 
 import type { HiddenCollection } from '../hidden.js';
+import type { EventHub } from './events.js';
+import { observe } from './events.js';
 import type { ResourceDeps } from './shared.js';
 import { isTaken, notFound, requireIds } from './shared.js';
 
@@ -14,10 +16,19 @@ import { isTaken, notFound, requireIds } from './shared.js';
  *
  * Hiding is local to this client, so read-only and the locks do not refuse it.
  *
+ * @param events - The hub its observable follows (`hidden.changed`)
  * @internal
  */
-export function createHidden(deps: Pick<ResourceDeps, 'store'>): HiddenCollection {
+export function createHidden(
+  deps: Pick<ResourceDeps, 'store'>,
+  events: EventHub,
+): HiddenCollection {
   const { store } = deps;
+  // The set told last, read again from the Store after each change of it
+  let hiddenIds: ReadonlySet<string> | null = null;
+  events.on('hidden.changed', ({ ids }) => {
+    hiddenIds = ids;
+  });
 
   /** Throws unless every ID names a feature, a group or a layer of the document */
   const requireItems = (ids: unknown): string[] => {
@@ -38,6 +49,10 @@ export function createHidden(deps: Pick<ResourceDeps, 'store'>): HiddenCollectio
   };
 
   return {
+    hiddenIds: observe(events, ['hidden.changed'], () => {
+      hiddenIds ??= new Set(store.listHidden());
+      return hiddenIds;
+    }),
     get: (id) => store.isHidden(id),
     list: () => [...store.listHidden()],
     count: () => store.listHidden().size,

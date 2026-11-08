@@ -151,9 +151,9 @@ export type InspectorDraw = Pick<Draw, 'on' | 'off' | 'transact' | 'isReadOnly'>
   >;
   readonly selection: Pick<
     Draw['selection'],
-    'value' | 'set' | 'clear' | 'delete' | 'group' | 'ungroup'
+    'value' | 'subscribe' | 'set' | 'clear' | 'delete' | 'group' | 'ungroup'
   >;
-  readonly hidden: Pick<Draw['hidden'], 'has' | 'add' | 'remove'>;
+  readonly hidden: Pick<Draw['hidden'], 'hiddenIds' | 'has' | 'add' | 'remove'>;
   readonly layers: Pick<Draw['layers'], 'get' | 'update' | 'count'>;
   readonly groups: Pick<Draw['groups'], 'get' | 'update'>;
 };

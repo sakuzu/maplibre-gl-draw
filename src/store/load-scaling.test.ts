@@ -145,18 +145,7 @@ async function measureLoadOnce(data: Data): Promise<number> {
     for (const f of store.listFeatures()) acc += f.id.length;
     if (acc < 0) throw new Error('unreachable');
   };
-  for (const ev of [
-    'layer.created',
-    'layer.updated',
-    'layer.deleted',
-    'group.created',
-    'group.updated',
-    'group.deleted',
-    'metadata.updated',
-    'document.changed',
-  ] as const) {
-    events.on(ev, emitLike);
-  }
+  events.on('change', emitLike);
 
   const start = performance.now();
   await document.load(data);

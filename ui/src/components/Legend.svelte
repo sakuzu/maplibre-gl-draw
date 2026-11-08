@@ -25,16 +25,10 @@
 
   const m = $derived(messages.get());
   const legend = $derived(
-    follow(
-      draw,
-      ['document.changed', 'dataset.added', 'dataset.removed', 'dataset.reordered'],
-      () => legendBlocks(draw, messages.get()),
-    ),
+    follow(draw, ['change', draw.datasets], () => legendBlocks(draw, messages.get())),
   );
   // A dataset tells of a change of its rule and of its rows on itself
-  const datasetList = $derived(
-    follow(draw, ['dataset.added', 'dataset.removed'], () => draw.datasets.list()),
-  );
+  const datasetList = $derived(follow(draw, [draw.datasets], () => draw.datasets.list()));
   $effect(() => {
     const refresh = legend.refresh;
     const offs = datasetList.get().map((dataset) =>

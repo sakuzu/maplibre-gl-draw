@@ -284,15 +284,15 @@ declare function save(): void;
 
 ```ts
 // 2.0
-draw.on('feature.created', ({ feature, source }) => {
-  console.log(feature.id, source);
+draw.on('change', ({ features, source }) => {
+  console.log(features.created, source);
 });
-const stop = draw.on('document.changed', () => save());
+const stop = draw.on('change', () => save());
 ```
 
 `on` returns the function that unsubscribes, and `once` subscribes to
-one occurrence. `document.changed` covers layers, groups and metadata
-too. To make several writes one change, wrap them in `transact`:
+one occurrence. `change` covers layers, groups and metadata too. To make
+several writes one change, wrap them in `transact`:
 
 ```ts
 draw.transact(
@@ -450,7 +450,7 @@ import type { Plugin } from '@sakuzu/maplibre-gl-draw';
 const logger: Plugin = {
   name: 'logger',
   onAdd(ctx) {
-    ctx.on('feature.created', ({ feature }) => console.log(feature.id));
+    ctx.on('change', ({ features }) => console.log(features.created));
     ctx.on('drag.ended', ({ featureIds }) => console.log(featureIds));
   },
   input: {
@@ -684,16 +684,14 @@ const members = draw.groups.listMembers(groupId);
 The order inside a layer or a group is no longer in
 `DocumentChange.layerReorder` and `groupReorder`. Every item put in
 another place is in `DocumentChange.order`, with where it was and where
-it is, by the items just below and above it (`ItemPosition`). The
-`from` and `to` of `feature.moved` are `ItemPosition`s too, and it fires
-for a move in the same layer or group as well; `group.moved` is new. A
-change of the `items` of a layer or the `featureIds` of a group alone no
-longer fires `layer.updated` nor `group.updated`: a view that follows
-the order listens to `feature.moved` and `group.moved`, or to
-`document.changed`.
+it is, by the items just below and above it (`ItemPosition`). A change
+of the `items` of a layer or the `featureIds` of a group alone is not an
+update of the layer or the group: a view that follows the order reads
+`features.placed` and `groups.placed` of `change`, or `order` of the
+notifications of the Store.
 
 ```ts
-draw.on('document.changed', (change) => {
+draw.getStore().subscribe((change) => {
   for (const move of change.order ?? []) {
     if (move.kind === 'item') console.log(move.itemId, move.from, move.to);
   }
@@ -760,9 +758,10 @@ The selection is read as one value, `draw.selection.value`, in the place
 of `selection.get()`. It gives the type, the number of the features, their
 layers and extent, and the IDs. Nothing selected is the type `feature` with
 the number 0, and past 2,000 features of a store that holds its features as
-rows the IDs are `null`. `selection.changed` gives the value and the one
-before it. `draw.selection.target` names the selection as it is, and
-`draw.selection.set(target)` selects it again:
+rows the IDs are `null`. `draw.selection` tells the value again each time
+it changes (`draw.selection.subscribe`). `draw.selection.target` names
+the selection as it is, and `draw.selection.set(target)` selects it
+again:
 
 ```ts
 const { type, count, ids } = draw.selection.value;
@@ -821,7 +820,7 @@ drawn. Each change below names what replaces what is gone.
 - What is drawn around a feature reads the feature as it is drawn from
   `ctx.draw.rendered` (`get`, `getMany`, `getSelectionBox`, and
   `getDraggedRows` for the rows dragged in bulk, which was
-  `draggedRowsOf` of `/kasane`), and follows `rendered.changed`
+  `draggedRowsOf` of `/kasane`), and follows `draw.rendered.changed`
 - `HitTestContext` and `SnapContext` are one type, `PointContext`, whose
   `excludeIds` is absent when the reading leaves out nothing
 - `ctx.drawing` is gone: `ctx.draw.drawing` is the same object
@@ -833,9 +832,9 @@ drawn. Each change below names what replaces what is gone.
   `{ distancePx }`, and the `hitTest` of a companion provider its ID and
   the distance, `{ id, distancePx }`; the library fills in the `Hit` it
   gives out (the kind, the ID of the feature, `featureId`)
-- A plugin sends events of its own with `ctx.emit(event, payload)`,
-  having declared them in `DrawEvents` by declaration merging, and they
-  are subscribed to with `draw.on` as every event is
+- A value of a plugin that changes over time is given as an `Observable`
+  of the API the plugin returns; the events are the library's only
+  ([values of a plugin](plugins.md#values-of-a-plugin))
 - `Plugin.interaction` is split by what each part does:
   `onFeatureCommit(feature)` (was `onDrawCommit`, named as
   `ModeContext.commitFeature`) is a member of the plugin, the clicks of
@@ -996,10 +995,10 @@ through the API as well.
 | `delete(ids)` | `features.deleteMany(ids)` |
 | `trash()` | `selection.delete()` |
 | `setFeatureProperty(id, key, value)` | `features.update(id, patch)` |
-| `draw.create`, `draw.update` | `feature.created`, `feature.updated` |
-| `draw.delete` | `feature.deleted` |
-| `draw.selectionchange` | `selection.changed` |
-| `draw.modechange` | `mode.changed` |
+| `draw.create`, `draw.update` | `change` (`features.created`, `updated`) |
+| `draw.delete` | `change` (`features.deleted`) |
+| `draw.selectionchange` | `selection.subscribe(run)` |
+| `draw.modechange` | `mode.subscribe(run)` |
 
 | terra-draw | This library |
 | --- | --- |
@@ -1010,10 +1009,10 @@ through the API as well.
 | `removeFeatures(ids)` | `features.deleteMany(ids)` |
 | `clear()` | `features.deleteMany(ids)` with every ID |
 | `selectFeature(id)` | `selection.set('feature', [id])` |
-| `on('change', ...)` | `on('document.changed', ...)` |
+| `on('change', ...)` | `on('change', ...)` |
 
 The select mode does the jobs of `simple_select` and `direct_select`:
 the vertices of a selected feature can be dragged there. A feature
 needs no `mode` property; its type decides. There is no built-in undo:
-the events carry the previous state of every change (see
-[save and load](save-load.md)).
+the notifications of the Store carry the previous state of every change
+(see [save and load](save-load.md)).

@@ -270,7 +270,31 @@ export function fakeDraw(
     emit('selection.changed', { selection: selectionValue(selType, ids), previous });
   };
   const select = (next: string[]) => setSelection('feature', next);
-  const changed = () => emit('document.changed', {});
+  const changed = () => emit('change', {});
+  /**
+   * An observable of the stand-in: read again at once and after each of the signals it follows,
+   * which the stand-in fires by the names core tells them by inside
+   */
+  const observable = <T>(signals: readonly string[], read: () => T) => ({
+    get value() {
+      return read();
+    },
+    subscribe(run: (value: T) => void) {
+      const listener = () => run(read());
+      for (const signal of signals) {
+        let set = listeners.get(signal);
+        if (!set) {
+          set = new Set();
+          listeners.set(signal, set);
+        }
+        set.add(listener);
+      }
+      run(read());
+      return () => {
+        for (const signal of signals) off(signal, listener);
+      };
+    },
+  });
 
   const putLayer = (id: string, patch: Partial<ObjectLayer>) => {
     const now = layers.get(id);
@@ -312,6 +336,7 @@ export function fakeDraw(
     }) as FeatureStyleResolved;
 
   const draw = {
+    mode: observable(['mode.changed'], () => mode),
     getMode: () => mode,
     setMode: vi.fn((next: Mode) => {
       const previous = mode;
@@ -333,6 +358,8 @@ export function fakeDraw(
       get value() {
         return selectionValue(selType, ids);
       },
+      subscribe: (run: (value: unknown) => void) =>
+        observable(['selection.changed'], () => draw.selection.value).subscribe(run),
       set: vi.fn((type: SelectionType, next: readonly string[]) => {
         setSelection(type, [...next]);
         return true;
@@ -439,6 +466,7 @@ export function fakeDraw(
       },
     },
     hidden: {
+      hiddenIds: observable(['hidden.changed'], () => new Set(hidden)),
       has: (id: string) => hidden.has(id),
       remove: vi.fn((id: string) => {
         const had = hidden.delete(id);
@@ -447,6 +475,11 @@ export function fakeDraw(
       }),
     },
     options: {
+      get value() {
+        return structuredClone(runtime);
+      },
+      subscribe: (run: (value: RuntimeOptions) => void) =>
+        observable(['options.changed'], () => structuredClone(runtime)).subscribe(run),
       get: () => structuredClone(runtime),
       // Merges the patch key by key and fires options.changed, as core does
       update: vi.fn((patch: Partial<RuntimeOptions>) => {
@@ -456,6 +489,13 @@ export function fakeDraw(
       }),
     },
     datasets: {
+      get value() {
+        return draw.datasets.list();
+      },
+      subscribe: (run: (value: unknown) => void) =>
+        observable(['dataset.added', 'dataset.removed', 'dataset.reordered'], () =>
+          draw.datasets.list(),
+        ).subscribe(run),
       get: (id: string) => datasets.find((d) => d.id === id),
       // From the back: below the layers, among them, above them
       list: () =>
@@ -505,8 +545,10 @@ export function fakeDraw(
     },
     /** The number of listeners of an event of the map */
     mapListening: (type: string) => mapListeners.get(type)?.size ?? 0,
-    /** Fires an event of the draw instance */
+    /** Fires an event of the draw instance, or a signal an observable follows */
     emit,
+    /** An observable of the stand-in, read again after the signals it follows */
+    observable,
     /** Changes the selection from outside the interface, as a click on the map would */
     select,
     /** Changes the selection of any type from outside the interface */
@@ -640,7 +682,7 @@ export function fakeDocument(
   };
   let readOnly = options.readOnly ?? false;
 
-  const changed = () => fake.emit('document.changed', {});
+  const changed = () => fake.emit('change', {});
   const setSelection = (type: SelectionType | null, ids: string[]) => {
     const previous = selection;
     selection = { type: ids.length ? type : null, ids };
@@ -747,6 +789,7 @@ export function fakeDocument(
       buffer: vi.fn(() => [add(made('Polygon', 'buffer'))]),
     },
     hidden: {
+      hiddenIds: fake.observable(['hidden.changed'], () => new Set(hidden)),
       has: (id: string) => hidden.has(id),
       add: vi.fn((id: string) => {
         hidden.add(id);

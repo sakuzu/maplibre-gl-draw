@@ -55,7 +55,8 @@ read-only-viewer
 を返します。`draw.hidden` はレイヤー、グループ、地物の ID を受け取ります。
 これらは標準の UI の操作で (6)、`ui.actions.add` で足します。それぞれが
 キーと `checked` を持ちます。カードは `checked` を、押すたびと
-`ui.actions.refresh()` のたびに読み直します。ページはコアのイベントで
+`ui.actions.refresh()` のたびに読み直します。ページはコアのイベントと、
+この端末で隠すもの (`draw.hidden.hiddenIds`) の変化で
 `ui.actions.refresh()` を呼びます。
 
 ::: code-group

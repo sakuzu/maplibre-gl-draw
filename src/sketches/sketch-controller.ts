@@ -33,7 +33,7 @@
  * on (`dragged`), and the drag ends with the selection of what it edits.
  */
 
-import type { DrawEvents } from '../api/events.js';
+import type { InstanceSignals } from '../api/impl/events.js';
 import type { FeatureInput } from '../api/model.js';
 import type {
   Sketch,
@@ -224,8 +224,9 @@ export class SketchController {
   #depth = 0;
   #dirty = false;
   /** The events of the operation under way, told once it is done */
-  #events: Array<[SketchEventName, DrawEvents[SketchEventName]]> = [];
-  #listener: (<K extends SketchEventName>(event: K, payload: DrawEvents[K]) => void) | null = null;
+  #events: Array<[SketchEventName, InstanceSignals[SketchEventName]]> = [];
+  #listener: (<K extends SketchEventName>(event: K, payload: InstanceSignals[K]) => void) | null =
+    null;
   #unsubscribe: (() => void) | null = null;
   #commitCheck: SketchCommitCheck | null = null;
   #afterOperate: (() => void) | null = null;
@@ -267,7 +268,7 @@ export class SketchController {
 
   /** Sets what the events of the sketches are told to (null: nothing) */
   setListener(
-    listener: (<K extends SketchEventName>(event: K, payload: DrawEvents[K]) => void) | null,
+    listener: (<K extends SketchEventName>(event: K, payload: InstanceSignals[K]) => void) | null,
   ): void {
     this.#listener = listener;
   }
@@ -1474,7 +1475,7 @@ export class SketchController {
     return result;
   }
 
-  #queue<K extends SketchEventName>(event: K, payload: DrawEvents[K]): void {
+  #queue<K extends SketchEventName>(event: K, payload: InstanceSignals[K]): void {
     this.#events.push([event, payload]);
   }
 

@@ -8,7 +8,7 @@
 import type { Feature as GeoJSONFeature, Geometry, Position } from 'geojson';
 import type { BBox } from '../geometry/types.js';
 import type { PreparedTable, Table } from '../table/index.js';
-import type { ScreenPoint } from './events.js';
+import type { Observable, ScreenPoint } from './events.js';
 import type { FeatureStyle, FeatureType, StyleRule } from './model.js';
 
 /**
@@ -228,9 +228,11 @@ export interface Dataset {
 }
 
 /**
- * The datasets on the map, in stacking order.
+ * The datasets on the map, in stacking order. As an observable, its value is the datasets in
+ * stacking order (what `list` returns), told again when one is added or removed, and when their
+ * order changes.
  */
-export interface DatasetsCollection {
+export interface DatasetsCollection extends Observable<readonly Dataset[]> {
   /**
    * Gets a dataset by ID.
    *

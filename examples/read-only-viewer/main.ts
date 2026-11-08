@@ -104,7 +104,7 @@ function toggleHidden(): void {
 // 6. The switches in the card of actions of the standard UI, each with its key (listed with ?,
 // and left alone while a field of the panels has the keyboard). A switch shows what `checked`
 // returns: the card reads it again after each press and on `refresh()`, which follows the events
-// of core, so that the lock and the eye of the layer panel show here too
+// of core and what this page hides, so that the lock and the eye of the layer panel show here too
 const ja = locale === 'ja';
 const blocksLocked = () => draw.layers.get(blocksId() ?? '')?.locked === true;
 const blocksHidden = () => {
@@ -143,18 +143,13 @@ ui.actions.add({
   run: toggleHidden,
   checked: blocksHidden,
 });
-for (const event of [
-  'readOnly.changed',
-  'interactionLock.changed',
-  'layer.created',
-  'layer.updated',
-  'hidden.changed',
-] as const) {
+for (const event of ['readOnly.changed', 'interactionLock.changed', 'change'] as const) {
   draw.on(event, () => ui.actions.refresh());
 }
+draw.hidden.hiddenIds.subscribe(() => ui.actions.refresh());
 
 // 7. The selection still changes: a click on a feature shows it in the inspector
-draw.on('selection.changed', () => {
+draw.selection.subscribe(() => {
   const [feature] = draw.selection.features();
   if (feature) console.log(feature.properties);
 });

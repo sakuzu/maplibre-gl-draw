@@ -60,7 +60,7 @@ const draw = createDraw(map, {
 文書への書き込みは 1 回ごとに 1 つの変更になり、イベントも
 届きます。多くの地物を作る、変える、消すときは、まとめて受け取る
 メソッドを使います。`createMany`、`updateMany`、`deleteMany` は
-1 つの取引で行うので、描画と `document.changed` は全体に対して
+1 つの取引で行うので、描画と `change` は全体に対して
 1 回で済みます。
 
 <!-- docs-check:

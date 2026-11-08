@@ -41,4 +41,4 @@ npm install @sakuzu/maplibre-gl-draw @sakuzu/maplibre-gl-draw-ui maplibre-gl
   そのオプション
 - [`createDrawUI`](../../ui/README.md#use) と標準の UI のオプション (英語)
 - [文書のイベント](../reference/events.md#the-document) (英語)。
-  `document.changed` もその 1 つです
+  `change` もその 1 つです

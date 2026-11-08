@@ -21,7 +21,7 @@ declare function showInfoPanel(features: unknown[]): void;
 draw.setInteractionLocked(true);
 draw.setReadOnly(true);
 
-draw.on('selection.changed', () => {
+draw.selection.subscribe(() => {
   showInfoPanel(draw.selection.features());
 });
 

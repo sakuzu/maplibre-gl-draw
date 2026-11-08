@@ -196,7 +196,7 @@ export interface FeaturesCollection {
    * @example Undoing the last write of this client
    * ```ts
    * const steps: FeatureValues[] = [];
-   * draw.on('document.changed', (change) => {
+   * draw.getStore().subscribe((change) => {
    *   if (change.source === 'local' && change.previousValues) steps.push(change.previousValues);
    * });
    * // Later

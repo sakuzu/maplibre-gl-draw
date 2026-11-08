@@ -158,9 +158,9 @@ draw.options.update({ style: { polygon: { fillOpacity: 0.4 } } });
 draw.options.update({ scaleWithZoom: false });
 ```
 
-値を変えた更新は、変更後と変更前の設定を持つ `options.changed` を
-発火します。設定を表示する UI は、このイベントで追随できます
-([イベントのリファレンス](../reference/events.md#optionschanged) (英語)
+値を変えた更新の後には、`draw.options` が設定をまた知らせます
+(`draw.options.subscribe`)。設定を表示する UI は、これで追随できます
+([イベントのリファレンス](../reference/events.md#drawoptions) (英語)
 を参照してください)。
 
 ## スタイル規則
@@ -216,7 +216,7 @@ draw.layers.update(layerId, { styleRule: undefined });
   混ぜるので、中間の色が濁りません。範囲外の値には、近い方の端の色が
   使われます
 - `styleRule` はレイヤーの普通の項目です。文書と一緒に保存され、変更は
-  ほかの変更と同じように `layer.updated` で届きます
+  ほかの変更と同じように `change` の `layers.updated` で届きます
 
 データセットでも同じ型の規則を使えます。
 [大量のデータを表示する](large-data.ja.md) を参照してください。

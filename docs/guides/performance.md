@@ -57,7 +57,7 @@ cases below, at creation or later with `draw.options.update`.
 Each write of the document is one change, with its events. To create,
 change or delete many features, use the methods that take several at
 once: `createMany`, `updateMany` and `deleteMany` run in one transaction,
-so the drawing and `document.changed` follow once for all of them.
+so the drawing and `change` follow once for all of them.
 
 <!-- docs-check:
 declare const inputs: import('@sakuzu/maplibre-gl-draw').FeatureInput[];

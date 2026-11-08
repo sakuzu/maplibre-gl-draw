@@ -14,7 +14,7 @@ import { LayerTable } from '../../feature-table/layer-table.js';
 import { RowSkips } from '../../feature-table/row-skips.js';
 import { createTableStore } from '../../store/table-memory.js';
 import type { ItemMove } from '../../store/types.js';
-import { createMapStub } from '../../test-utils.js';
+import { createMapStub, onDocumentChange } from '../../test-utils.js';
 import type { Draw } from '../draw.js';
 import type { DocumentChange } from '../events.js';
 import type { FeatureValues } from '../model.js';
@@ -54,7 +54,7 @@ afterEach(() => {
 /** Deletes features one write at a time, and the items just below and above each one then */
 function deleteEach(draw: Draw, ids: readonly string[]): Array<[string | null, string | null]> {
   const around: Array<[string | null, string | null]> = [];
-  const off = draw.on('document.changed', (change: DocumentChange) => {
+  const off = onDocumentChange(draw, (change: DocumentChange) => {
     for (const move of change.order ?? []) {
       if (move.kind === 'item' && move.to === null && move.from) {
         around.push([move.from.below, move.from.above]);
@@ -109,7 +109,7 @@ describe('features deleted over a Store of rows', () => {
     for (const n of [200, 20]) {
       const { draw, ids } = instance(n);
       const steps: FeatureValues[] = [];
-      const off = draw.on('document.changed', (change: DocumentChange) => {
+      const off = onDocumentChange(draw, (change: DocumentChange) => {
         if (change.previousValues) steps.push(change.previousValues as FeatureValues);
       });
       // One at a time, so that the walks pass the rows deleted before; then undone, the last first
@@ -125,7 +125,7 @@ describe('features deleted over a Store of rows', () => {
       const around = deleteEach(draw, [`f${n >> 1}`]);
       expect(around).toEqual([[`f${(n >> 1) - 1}`, `f${(n >> 1) + 1}`]]);
       const moves: ItemMove[] = [];
-      draw.on('document.changed', (change: DocumentChange) => {
+      onDocumentChange(draw, (change: DocumentChange) => {
         for (const move of change.order ?? []) if (move.kind === 'item') moves.push(move);
       });
       draw.features.delete(`f${(n >> 1) + 1}`);

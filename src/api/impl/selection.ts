@@ -39,6 +39,8 @@ import type { GroupsCollection } from '../groups.js';
 import type { Feature, FeaturePatch, FeatureStyleSample } from '../model.js';
 import type { SelectionResource, VertexSelectionResource } from '../selection.js';
 import type { SelectionTarget, SelectionType, SelectionValue } from '../state.js';
+import type { EventHub } from './events.js';
+import { observe } from './events.js';
 import {
   checkSharedPatch,
   featureMatcher,
@@ -74,8 +76,14 @@ const SELECTION_TYPES: readonly SelectionType[] = ['feature', 'group', 'layer'];
 export function createSelection(
   deps: ResourceDeps,
   collections: { features: FeaturesCollection; groups: GroupsCollection },
+  events: EventHub,
 ): SelectionResource {
   const { store } = deps;
+  const observable = observe(
+    events,
+    ['selection.changed'],
+    () => selectionValueOf(store) as SelectionValue,
+  );
 
   /** Throws unless every ID names an item of the type */
   const requireItems = (type: SelectionType, ids: unknown): string[] => {
@@ -150,8 +158,9 @@ export function createSelection(
 
   return {
     get value() {
-      return selectionValueOf(store) as SelectionValue;
+      return observable.value;
     },
+    subscribe: observable.subscribe,
 
     get target() {
       return selectionTargetOf(store) as SelectionTarget;
@@ -459,9 +468,17 @@ function firstAfter(
  *
  * @internal
  */
-export function createVertexSelection(deps: Pick<ResourceDeps, 'store'>): VertexSelectionResource {
+export function createVertexSelection(
+  deps: Pick<ResourceDeps, 'store'>,
+  events: EventHub,
+): VertexSelectionResource {
   const { store } = deps;
+  const observable = observe(events, ['vertexSelection.changed'], () => store.getVertexSelection());
   return {
+    get value() {
+      return observable.value;
+    },
+    subscribe: observable.subscribe,
     get: () => store.getVertexSelection(),
 
     set(featureId, vertices) {

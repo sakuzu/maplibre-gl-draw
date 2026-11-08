@@ -12,7 +12,7 @@
     InspectorSettings,
     InspectorTab,
   } from '../inspector/types.js';
-  import { INSPECTOR_EVENTS, readView } from '../inspector/view.js';
+  import { inspectorSources, readView } from '../inspector/view.js';
   import { fillWord, type Messages } from '../messages.js';
   import { type Box, follow } from '../store.js';
   import FeatureInspector from './FeatureInspector.svelte';
@@ -46,7 +46,7 @@
     sheet?: boolean;
   } = $props();
 
-  const view = $derived(follow(draw, INSPECTOR_EVENTS, () => readView(draw)));
+  const view = $derived(follow(draw, inspectorSources(draw), () => readView(draw)));
   const v = $derived(view.get());
   const m = $derived(messages.get());
   // The tab chosen last, kept from one feature to the next; none until one is chosen, so the

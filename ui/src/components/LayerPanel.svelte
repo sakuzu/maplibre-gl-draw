@@ -104,30 +104,18 @@
   // third of a millisecond), so a thousand rows stay well under a second
   const FEATURE_LIMIT = 1000;
   const tree = $derived(
-    // options.changed: the default look of each type gives the color of the marks
-    follow(
-      draw,
-      [
-        'document.changed',
-        'hidden.changed',
-        'options.changed',
-        'dataset.added',
-        'dataset.removed',
-        'dataset.reordered',
-      ],
-      () =>
-        buildNodes(draw, messages.get(), {
-          features: features !== false,
-          limit: features === true ? FEATURE_LIMIT : features === false ? 0 : features,
-          datasets,
-        }),
+    // The options: the default look of each type gives the color of the marks
+    follow(draw, ['change', draw.hidden.hiddenIds, draw.options, draw.datasets], () =>
+      buildNodes(draw, messages.get(), {
+        features: features !== false,
+        limit: features === true ? FEATURE_LIMIT : features === false ? 0 : features,
+        datasets,
+      }),
     ),
   );
   // A dataset tells of a change of its visibility and of its rows on itself
   const datasetList = $derived(
-    follow(draw, ['dataset.added', 'dataset.removed'], () =>
-      datasets ? draw.datasets.list() : [],
-    ),
+    follow(draw, [draw.datasets], () => (datasets ? draw.datasets.list() : [])),
   );
   $effect(() => {
     const refresh = tree.refresh;
@@ -140,7 +128,7 @@
       for (const off of offs) off();
     };
   });
-  const selection = $derived(follow(draw, ['selection.changed'], () => draw.selection.value));
+  const selection = $derived(follow(draw, [draw.selection], () => draw.selection.value));
 
   const nodes = $derived(tree.get());
   const index = $derived(indexNodes(nodes));

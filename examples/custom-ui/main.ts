@@ -3,8 +3,8 @@
 
 // custom-ui: a toolbar and a panel of your own, without the standard UI.
 // Everything the standard UI does goes through the public API of the draw instance: a button
-// calls setMode and follows `mode.changed`; the panel follows `selection.changed` and
-// `document.changed`, and writes with features.update. This page does the same with a few
+// calls setMode and follows `draw.mode`; the panel follows `draw.selection` and `change`, and
+// writes with features.update. This page does the same with a few
 // buttons and fields in plain TypeScript, styled by its own style.css.
 
 import { createDraw, type Feature, type Mode } from '@sakuzu/maplibre-gl-draw';
@@ -63,8 +63,7 @@ function showMode(mode: Mode): void {
     button.setAttribute('aria-pressed', String(button.dataset.mode === mode));
   }
 }
-draw.on('mode.changed', ({ mode }) => showMode(mode));
-showMode(draw.getMode());
+draw.mode.subscribe(showMode);
 
 // 3. The panel: the name and the color of the one feature selected
 const panel = el('form', 'panel');
@@ -109,9 +108,8 @@ function showSelection(): void {
   nameInput.disabled = !editable;
   colorInput.disabled = !editable;
 }
-draw.on('selection.changed', showSelection);
-draw.on('document.changed', showSelection);
-showSelection();
+draw.selection.subscribe(showSelection);
+draw.on('change', showSelection);
 
 // 5. A field writes its value into the feature with features.update, as the standard UI does
 nameInput.addEventListener('change', () => {

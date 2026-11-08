@@ -2,30 +2,33 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * Tests for the events of the draw instance: each event from the write that causes it, with
- * the declared payload; document.changed once per transaction and after the events of the
- * resources; on, off and once; and the signals of the engine under their names
+ * Tests for the events of the draw instance and the observables of its values: `change` once per
+ * commit with the IDs of what it changed, in the same shape over a Store of objects and a Store of
+ * rows, and the feature before it; the observables of the selection, the vertex selection, the
+ * mode, what is hidden here and the options; on, off and once; and the signals of the engine under
+ * their names
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { DragNormalizedEvent } from '../../dispatcher/types.js';
 import type { EngineModeContext } from '../../modes/handler.js';
 import { SelectModeDragHandler } from '../../modes/select/drag-handler.js';
-import { MemoryContractStore, MemoryStore } from '../../store/memory.js';
+import { MemoryStore } from '../../store/memory.js';
 import type { Store } from '../../store/store.js';
+import { createTableStore } from '../../store/table-memory.js';
 import { createMapStub, createSyntheticInput } from '../../test-utils.js';
 import type { HandleHitResult } from '../../view/ui/handle-test.js';
 import { computeSelectionBoundingBox, getSelectedFeatureIds } from '../../view/ui/helper.js';
 import type { Draw } from '../draw.js';
 import { createDraw } from '../draw.js';
 import { DrawError } from '../errors.js';
-import type { DrawEvents } from '../events.js';
+import type { Change, DrawEvents, Observable } from '../events.js';
 import type { Feature, Group } from '../model.js';
 import type { Sketch } from '../sketches.js';
 import { createDrawOnEngine } from './create-draw.js';
 import type { Engine } from './engine.js';
 import { createEngine } from './engine.js';
-import { createEventHub } from './events.js';
+import { createEventHub, observe } from './events.js';
 
 /** The selected features, read from the Store */
 const selectedOf = (store: Store) =>
@@ -34,36 +37,15 @@ const selectedOf = (store: Store) =>
 type Recorded = { [K in keyof DrawEvents]: [K, DrawEvents[K]] }[keyof DrawEvents];
 
 const ALL_EVENTS: ReadonlyArray<keyof DrawEvents> = [
-  'feature.created',
-  'feature.updated',
-  'feature.deleted',
-  'feature.moved',
-  'layer.created',
-  'layer.updated',
-  'layer.deleted',
-  'layer.reordered',
-  'group.created',
-  'group.updated',
-  'group.deleted',
-  'group.moved',
-  'metadata.updated',
-  'document.changed',
+  'change',
   'document.loaded',
-  'selection.changed',
-  'vertexSelection.changed',
   'drag.started',
   'drag.ended',
-  'mode.changed',
-  'hidden.changed',
   'readOnly.changed',
   'interactionLock.changed',
-  'options.changed',
   'snap.changed',
   'map.clicked',
   'dataset.clicked',
-  'dataset.added',
-  'dataset.removed',
-  'dataset.reordered',
   'image.requested',
   'layerStack.changed',
   'error',
@@ -81,6 +63,16 @@ function record(target: Pick<Draw, 'on'>): Recorded[] {
 const names = (events: Recorded[]) => events.map(([name]) => name);
 const payloadsOf = <K extends keyof DrawEvents>(events: Recorded[], name: K): DrawEvents[K][] =>
   events.filter(([n]) => n === name).map(([, payload]) => payload as DrawEvents[K]);
+const changesOf = (events: Recorded[]): Change[] => payloadsOf(events, 'change');
+
+/** The values an observable told, the one it holds when subscribed first */
+function told<T>(observable: Observable<T>): T[] {
+  const values: T[] = [];
+  observable.subscribe((value) => values.push(value));
+  return values;
+}
+
+const NONE = { created: [], updated: [], deleted: [], placed: [] };
 
 const pointInput = (lng = 0, lat = 0) => ({
   type: 'Point' as const,
@@ -114,233 +106,154 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-describe('the events of the features', () => {
-  it('feature.created, feature.updated and feature.deleted carry the feature and the source', () => {
+describe('change', () => {
+  it('tells the IDs of the features a commit created, updated and deleted, once per commit, with its source', () => {
     const created = draw.features.create(pointInput()) as Feature;
-    const updated = draw.features.update(created.id, { properties: { name: 'A' } }) as Feature;
+    draw.features.update(created.id, { properties: { name: 'A' } });
     draw.features.delete(created.id);
 
-    expect(payloadsOf(events, 'feature.created')).toEqual([{ feature: created, source: 'local' }]);
-    expect(payloadsOf(events, 'feature.updated')).toEqual([
-      { feature: updated, previous: created, source: 'local' },
+    const changes = changesOf(events);
+    expect(changes).toHaveLength(3);
+    expect(changes.map((change) => change.features)).toEqual([
+      { ...NONE, created: [created.id] },
+      { ...NONE, updated: [created.id] },
+      { ...NONE, deleted: [created.id] },
     ]);
-    expect(payloadsOf(events, 'feature.deleted')).toEqual([{ feature: updated, source: 'local' }]);
-  });
-
-  it('feature.moved tells the layer or the group a feature left and entered', () => {
-    const first = draw.layers.getActive()?.id as string;
-    const second = draw.layers.create({ name: 'Second' })?.id as string;
-    const a = draw.features.create(pointInput()) as Feature;
-    const b = draw.features.create(pointInput(1, 1)) as Feature;
-
-    draw.features.move(a.id, { layerId: second });
-    const group = draw.groups.create({ featureIds: [b.id] });
-    draw.features.move(b.id, { groupId: null });
-
-    const moved = payloadsOf(events, 'feature.moved');
-    expect(moved).toHaveLength(3);
-    expect(moved[0]).toMatchObject({
-      feature: { id: a.id, layerId: second },
-      from: { layerId: first, groupId: undefined, below: null, above: b.id },
-      to: { layerId: second, groupId: undefined, below: null, above: null },
-      source: 'local',
-    });
-    expect(moved[1]).toMatchObject({
-      feature: { id: b.id, groupId: group?.id },
-      from: { layerId: first, groupId: undefined },
-      to: { layerId: first, groupId: group?.id, below: null, above: null },
-    });
-    expect(moved[2]).toMatchObject({
-      from: { layerId: first, groupId: group?.id },
-      to: { layerId: first, groupId: undefined },
-    });
-  });
-
-  it('feature.moved tells a feature put in another place of its layer, by the items around it', () => {
-    const layerId = draw.layers.getActive()?.id as string;
-    const a = draw.features.create(pointInput()) as Feature;
-    const b = draw.features.create(pointInput(1, 1)) as Feature;
-    const c = draw.features.create(pointInput(2, 2)) as Feature;
-    events.length = 0;
-
-    draw.features.move(c.id, { layerId, index: 0 });
-
-    expect(payloadsOf(events, 'feature.moved')).toEqual([
-      {
-        feature: draw.features.get(c.id),
-        from: { layerId, groupId: undefined, below: b.id, above: null },
-        to: { layerId, groupId: undefined, below: null, above: a.id },
-        source: 'local',
-      },
-    ]);
-    // A move within a layer changes no field of its features
-    expect(payloadsOf(events, 'feature.updated')).toEqual([]);
-  });
-
-  it('feature.moved is not told for a move the Store leaves out of its order', () => {
-    // A Store that breaks its contract: it notifies no move of the order
-    const contract = new MemoryContractStore();
-    const subscribe = contract.subscribe.bind(contract);
-    contract.subscribe = (listener) =>
-      subscribe((changes) => {
-        const { order: _order, ...rest } = changes;
-        listener(rest);
-      });
-    const other = createDraw(createMapStub().map, { store: contract });
-    const seen = record(other);
-    const first = other.layers.getActive()?.id as string;
-    const second = other.layers.create({ name: 'Second' })?.id as string;
-    const a = other.features.create({ ...pointInput(), layerId: first }) as Feature;
-    seen.length = 0;
-    other.features.move(a.id, { layerId: second });
-    expect(payloadsOf(seen, 'feature.updated')).toHaveLength(1);
-    expect(payloadsOf(seen, 'feature.moved')).toEqual([]);
-    other.destroy();
-  });
-});
-
-describe('the events of the layers, the groups and the metadata', () => {
-  it('layer.created, layer.updated, layer.reordered and layer.deleted', () => {
-    const first = draw.layers.getActive()?.id as string;
-    const layer = draw.layers.create({ name: 'Roads' });
-    const renamed = draw.layers.update(layer?.id as string, { name: 'Streets' });
-    draw.layers.reorder([layer?.id as string, first]);
-    draw.layers.delete(layer?.id as string);
-
-    expect(payloadsOf(events, 'layer.created')).toEqual([{ layer, source: 'local' }]);
-    expect(payloadsOf(events, 'layer.updated')).toContainEqual({
-      layer: renamed,
-      previous: layer,
-      source: 'local',
-    });
-    expect(payloadsOf(events, 'layer.reordered')).toContainEqual({
-      order: [layer?.id, first],
-      previous: [first, layer?.id],
-      source: 'local',
-    });
-    expect(payloadsOf(events, 'layer.deleted')).toEqual([
-      { layer: expect.objectContaining({ id: layer?.id }), source: 'local' },
-    ]);
-  });
-
-  it('tells a change of the order by the moves only: no layer.updated nor group.updated for the items alone', () => {
-    const first = draw.layers.getActive()?.id as string;
-    const second = draw.layers.create({ name: 'Second' })?.id as string;
-    events.length = 0;
-    const a = draw.features.create(pointInput()) as Feature;
-    const b = draw.features.create(pointInput(1, 1)) as Feature;
-    const c = draw.features.create(pointInput(2, 2)) as Feature;
-    draw.features.move(a.id, { layerId: first, index: 2 });
-    draw.features.move(b.id, { layerId: second });
-    const group = draw.groups.create({ featureIds: [c.id], name: 'G' }) as Group;
-    draw.features.move(a.id, { groupId: group.id });
-    draw.features.move(a.id, { groupId: group.id, index: 0 });
-    draw.groups.move(group.id, { layerId: first, index: 0 });
-    draw.features.delete(b.id);
-
-    expect(payloadsOf(events, 'layer.updated')).toEqual([]);
-    expect(payloadsOf(events, 'group.updated')).toEqual([]);
-    for (const change of payloadsOf(events, 'document.changed')) {
-      expect(change.layers?.updated).toBeUndefined();
-      expect(change.groups?.updated).toBeUndefined();
+    for (const change of changes) {
+      expect(change.source).toBe('local');
+      expect(change.layers).toEqual(NONE);
+      expect(change.groups).toEqual(NONE);
+      expect(change.document).toBe(false);
     }
-    expect(payloadsOf(events, 'feature.moved').length).toBeGreaterThan(0);
-    // A change of a field is still told: the name of a layer, the layer of a group
-    const renamed = draw.layers.update(second, { name: 'Renamed' });
-    expect(payloadsOf(events, 'layer.updated')).toEqual([
-      { layer: renamed, previous: expect.objectContaining({ name: 'Second' }), source: 'local' },
-    ]);
-    draw.groups.move(group.id, { layerId: second });
-    expect(payloadsOf(events, 'group.updated')).toEqual([
-      {
-        group: draw.groups.get(group.id),
-        previous: expect.objectContaining({ layerId: first }),
-        source: 'local',
-      },
-    ]);
-    expect(payloadsOf(events, 'layer.updated')).toHaveLength(1);
-    const groupMoves = payloadsOf(events, 'group.moved');
-    expect(groupMoves[groupMoves.length - 1]).toMatchObject({
-      group: { id: group.id },
-      to: { layerId: second },
-    });
   });
 
-  it('group.created, group.updated and group.deleted', () => {
-    const a = draw.features.create(pointInput()) as Feature;
-    const group = draw.groups.create({ featureIds: [a.id], name: 'G' });
-    const renamed = draw.groups.update(group?.id as string, { name: 'H' });
-    draw.groups.delete(group?.id as string);
-
-    expect(payloadsOf(events, 'group.created')).toEqual([{ group, source: 'local' }]);
-    expect(payloadsOf(events, 'group.updated')).toContainEqual({
-      group: renamed,
-      previous: group,
-      source: 'local',
-    });
-    expect(payloadsOf(events, 'group.deleted')).toEqual([
-      { group: expect.objectContaining({ id: group?.id }), source: 'local' },
-    ]);
-  });
-
-  it('group.moved tells a group put in another place, by the items around it', () => {
-    const layerId = draw.layers.getActive()?.id as string;
-    const a = draw.features.create(pointInput()) as Feature;
-    const b = draw.features.create(pointInput(1, 1)) as Feature;
-    const group = draw.groups.create({ featureIds: [b.id], name: 'G' });
-    events.length = 0;
-
-    draw.groups.move(group?.id as string, { layerId, index: 0 });
-
-    expect(payloadsOf(events, 'group.moved')).toEqual([
-      {
-        group: draw.groups.get(group?.id as string),
-        from: { layerId, groupId: undefined, below: a.id, above: null },
-        to: { layerId, groupId: undefined, below: null, above: a.id },
-        source: 'local',
-      },
-    ]);
-    // A move of a group in its layer changes no field of it, nor of its members
-    expect(payloadsOf(events, 'group.updated')).toEqual([]);
-    expect(payloadsOf(events, 'feature.moved')).toEqual([]);
-  });
-
-  it('metadata.updated', () => {
-    draw.metadata.update({ title: 'Map' });
-    expect(payloadsOf(events, 'metadata.updated')).toEqual([
-      { metadata: { title: 'Map' }, previous: {}, source: 'local' },
-    ]);
-  });
-});
-
-describe('document.changed', () => {
-  it('arrives once per transaction, after the events of the resources, with its source', () => {
+  it('arrives once per transaction, last, with its source, whatever it changed', () => {
     draw.transact(
       () => {
         draw.features.create(pointInput());
+        draw.features.create(pointInput(1, 1));
         draw.layers.create({ name: 'Second' });
         draw.metadata.update({ title: 'Map' });
       },
       { source: 'script' },
     );
-    const changes = payloadsOf(events, 'document.changed');
+    const changes = changesOf(events);
     expect(changes).toHaveLength(1);
-    expect(names(events)[events.length - 1]).toBe('document.changed');
+    expect(names(events)[events.length - 1]).toBe('change');
     expect(changes[0].source).toBe('script');
-    expect(changes[0].features?.created).toHaveLength(1);
-    expect(changes[0].layers?.created).toHaveLength(1);
-    expect(changes[0].metadata?.metadata).toEqual({ title: 'Map' });
-    for (const [name, payload] of events) {
-      if (name !== 'document.changed' && 'source' in payload) {
-        expect(payload.source).toBe('script');
+    expect(changes[0].features.created).toHaveLength(2);
+    expect(changes[0].layers.created).toHaveLength(1);
+    expect(changes[0].document).toBe(true);
+  });
+
+  it('gives the feature before the commit for one updated or deleted, and none for one created', () => {
+    const created = draw.features.create(pointInput()) as Feature;
+    const before: Array<Feature | undefined> = [];
+    draw.on('change', (change) => {
+      for (const id of [...change.features.created, ...change.features.updated]) {
+        before.push(change.previous(id));
       }
+      for (const id of change.features.deleted) before.push(change.previous(id));
+    });
+    const updated = draw.features.update(created.id, { properties: { name: 'A' } }) as Feature;
+    draw.features.delete(created.id);
+    draw.features.create(pointInput(1, 1));
+    expect(before).toEqual([created, updated, undefined]);
+  });
+
+  it('tells a feature put in another place of its layer as placed, and one put into another layer or group as updated too', () => {
+    const first = draw.layers.getActive()?.id as string;
+    const second = draw.layers.create({ name: 'Second' })?.id as string;
+    const a = draw.features.create(pointInput()) as Feature;
+    const b = draw.features.create(pointInput(1, 1)) as Feature;
+    const c = draw.features.create(pointInput(2, 2)) as Feature;
+    events.length = 0;
+
+    draw.features.move(c.id, { layerId: first, index: 0 });
+    draw.features.move(a.id, { layerId: second });
+    const group = draw.groups.create({ featureIds: [b.id] }) as Group;
+
+    const [inLayer, intoLayer, intoGroup] = changesOf(events);
+    // A move within a layer changes no field of the feature
+    expect(inLayer.features).toEqual({ ...NONE, placed: [c.id] });
+    expect(intoLayer.features).toEqual({ ...NONE, updated: [a.id], placed: [a.id] });
+    expect(intoGroup.features.updated).toEqual([b.id]);
+    expect(intoGroup.features.placed).toEqual([b.id]);
+    expect(intoGroup.groups.created).toEqual([group.id]);
+    // The group created is not also placed
+    expect(intoGroup.groups.placed).toEqual([]);
+  });
+
+  it('tells the layers created, updated, deleted, and those whose place in the order changed', () => {
+    const first = draw.layers.getActive()?.id as string;
+    const second = draw.layers.create({ name: 'Roads' })?.id as string;
+    const third = draw.layers.create({ name: 'Rivers' })?.id as string;
+    draw.layers.update(second, { name: 'Streets' });
+    events.length = 0;
+    // The third layer goes to the back: the two others keep their order
+    draw.layers.reorder([third, first, second]);
+    draw.layers.delete(second);
+
+    const [reorder, deletion] = changesOf(events);
+    expect(reorder.layers).toEqual({ ...NONE, placed: [third] });
+    expect(deletion.layers.deleted).toEqual([second]);
+    // The layers after the one deleted are not placed: their order among them is the same
+    expect(deletion.layers.placed).toEqual([]);
+  });
+
+  it('tells the layers and the groups updated for a field of their own, not for their items alone', () => {
+    const first = draw.layers.getActive()?.id as string;
+    const second = draw.layers.create({ name: 'Second' })?.id as string;
+    draw.features.create(pointInput());
+    const b = draw.features.create(pointInput(1, 1)) as Feature;
+    const c = draw.features.create(pointInput(2, 2)) as Feature;
+    const group = draw.groups.create({ featureIds: [c.id], name: 'G' }) as Group;
+    events.length = 0;
+    draw.features.move(b.id, { groupId: group.id });
+    draw.groups.move(group.id, { layerId: first, index: 0 });
+    expect(changesOf(events)).toHaveLength(2);
+    for (const change of changesOf(events)) {
+      expect(change.layers.updated).toEqual([]);
+      expect(change.groups.updated).toEqual([]);
+    }
+    expect(changesOf(events)[1].groups.placed).toEqual([group.id]);
+
+    events.length = 0;
+    draw.layers.update(second, { name: 'Renamed' });
+    draw.groups.move(group.id, { layerId: second });
+    const [renamed, moved] = changesOf(events);
+    expect(renamed.layers.updated).toEqual([second]);
+    expect(moved.groups.updated).toEqual([group.id]);
+    expect(moved.groups.placed).toEqual([group.id]);
+  });
+
+  it('tells the groups created, updated and deleted', () => {
+    const a = draw.features.create(pointInput()) as Feature;
+    const group = draw.groups.create({ featureIds: [a.id], name: 'G' }) as Group;
+    draw.groups.update(group.id, { name: 'H' });
+    draw.groups.delete(group.id);
+    const [created, updated, deleted] = changesOf(events).slice(-3);
+    expect(created.groups.created).toEqual([group.id]);
+    expect(updated.groups.updated).toEqual([group.id]);
+    expect(deleted.groups.deleted).toEqual([group.id]);
+  });
+
+  it('tells a change of the metadata or of the files as a change of the document itself', () => {
+    draw.metadata.update({ title: 'Map' });
+    store.createFile({ id: 'f1', mimeType: 'image/png', dataURL: 'data:image/png;base64,' });
+    store.deleteFile('f1');
+    const changes = changesOf(events);
+    expect(changes).toHaveLength(3);
+    for (const change of changes) {
+      expect(change.document).toBe(true);
+      expect(change.features).toEqual(NONE);
     }
   });
 
   it('does not fire for a change of the selection, the mode or the drawing state alone', () => {
     const a = draw.features.create(pointInput()) as Feature;
-    const received: DrawEvents['document.changed'][] = [];
-    draw.on('document.changed', (change) => received.push(change));
+    const received: Change[] = [];
+    draw.on('change', (change) => received.push(change));
     draw.selection.set('feature', [a.id]);
     draw.selection.clear();
     draw.setMode('draw_line');
@@ -356,32 +269,7 @@ describe('document.changed', () => {
     expect(received).toEqual([]);
   });
 
-  it('carries the selection of a transaction that also changed the document', () => {
-    const received: DrawEvents['document.changed'][] = [];
-    draw.on('document.changed', (change) => received.push(change));
-    draw.transact(() => {
-      const a = draw.features.create(pointInput()) as Feature;
-      draw.selection.set('feature', [a.id]);
-    });
-    expect(received).toHaveLength(1);
-    expect(received[0].features?.created).toHaveLength(1);
-    expect(received[0].selection?.ids).toHaveLength(1);
-    expect(received[0]).not.toHaveProperty('tentative');
-    expect(received[0]).not.toHaveProperty('uiStateChanged');
-  });
-
-  it('fires for a transaction that changed the files alone', () => {
-    const received: DrawEvents['document.changed'][] = [];
-    draw.on('document.changed', (change) => received.push(change));
-    store.createFile({ id: 'f1', mimeType: 'image/png', dataURL: 'data:image/png;base64,' });
-    store.deleteFile('f1');
-    expect(received.map((change) => change.files)).toEqual([
-      { created: [expect.objectContaining({ id: 'f1' })] },
-      { deleted: [expect.objectContaining({ id: 'f1' })] },
-    ]);
-  });
-
-  it('document.loaded carries the result and the source of the writes', async () => {
+  it('document.loaded carries the result, and the features of the load arrive in one change', async () => {
     const result = await draw.document.load({
       type: 'FeatureCollection',
       features: [
@@ -389,15 +277,65 @@ describe('document.changed', () => {
       ],
     });
     expect(payloadsOf(events, 'document.loaded')).toEqual([{ result, source: 'load' }]);
-    // The features of the load arrive in one document.changed with the same source
-    const changes = payloadsOf(events, 'document.changed');
+    const changes = changesOf(events);
     expect(changes[changes.length - 1]?.source).toBe('load');
+    expect(changes[changes.length - 1]?.features.created).toEqual(result?.featureIds);
+  });
+
+  it('has the same shape over a Store of rows: the rows written by the IDs of their features', () => {
+    const rows = createTableStore().store;
+    rows.createLayer({
+      id: 'rows',
+      name: 'rows',
+      visible: true,
+      locked: false,
+      opacity: 1,
+      kind: 'table',
+      styleRule: undefined,
+      metadata: undefined,
+    });
+    const other = createDraw(createMapStub().map, { store: rows, initDefaultLayer: false });
+    const seen = record(other);
+    const before: Array<Feature | undefined> = [];
+    other.on('change', (change) => {
+      for (const id of [...change.features.updated, ...change.features.deleted]) {
+        before.push(change.previous(id));
+      }
+    });
+    const a = other.features.create({ ...pointInput(), layerId: 'rows' }) as Feature;
+    const b = other.features.create({ ...pointInput(1, 1), layerId: 'rows' }) as Feature;
+    const named = other.features.update(a.id, { properties: { name: 'A' } }) as Feature;
+    other.features.move(b.id, { layerId: 'rows', below: null, above: a.id });
+    other.features.delete(a.id);
+
+    const changes = changesOf(seen);
+    expect(changes.map((change) => change.features)).toEqual([
+      { ...NONE, created: [a.id] },
+      { ...NONE, created: [b.id] },
+      { ...NONE, updated: [a.id] },
+      { ...NONE, placed: [b.id] },
+      { ...NONE, deleted: [a.id] },
+    ]);
+    expect(changes[2].rows?.layers.get('rows')?.updated).toHaveLength(1);
+    // The feature before a write of this client, and the one deleted as it was
+    expect(before[0]).toMatchObject({ id: a.id, properties: {} });
+    expect(before[0]?.properties).not.toHaveProperty('name');
+    expect(before[1]).toMatchObject({ id: named.id, properties: { name: 'A' } });
+    other.destroy();
+  });
+
+  it('is refused for a name that is not an event of draw.on', () => {
+    for (const name of ['document.changed', 'feature.created', 'selection.changed', 42]) {
+      expect(() => draw.on(name as never, () => {})).toThrow(DrawError);
+      expect(() => draw.once(name as never, () => {})).toThrow(DrawError);
+    }
   });
 });
 
-describe('the events of the state of this client', () => {
-  it('selection.changed carries the selection and the one before it', () => {
+describe('the observables of the state of this client', () => {
+  it('the selection holds its value and tells each change of it', () => {
     const a = draw.features.create(pointInput()) as Feature;
+    const values = told(draw.selection);
     draw.selection.set('feature', [a.id]);
     draw.selection.clear();
     const none = { type: 'feature', count: 0, ids: [], layerIds: [], bbox: null };
@@ -408,41 +346,34 @@ describe('the events of the state of this client', () => {
       layerIds: [a.layerId],
       bbox: [0, 0, 0, 0],
     };
-    expect(payloadsOf(events, 'selection.changed')).toEqual([
-      { selection: one, previous: none },
-      { selection: none, previous: one },
-    ]);
+    expect(values).toEqual([none, one, none]);
+    expect(draw.selection.value).toEqual(none);
   });
 
-  it('vertexSelection.changed carries the vertices and the ones before them', () => {
+  it('the vertex selection tells the vertices selected', () => {
     const line = draw.features.create(lineInput()) as Feature;
     draw.selection.set('feature', [line.id]);
+    const values = told(draw.vertexSelection);
     draw.vertexSelection.set(line.id, [{ ring: 0, index: 1 }]);
     draw.vertexSelection.set(line.id, [{ ring: 0, index: 1 }]);
     draw.vertexSelection.clear();
-    const changes = payloadsOf(events, 'vertexSelection.changed');
-    expect(changes).toHaveLength(2);
-    expect(changes[0]).toMatchObject({
-      selection: { featureId: line.id, vertices: [{ ring: 0, index: 1 }] },
-      previous: null,
-    });
-    expect(changes[1]).toMatchObject({ selection: null, previous: { featureId: line.id } });
+    expect(values).toHaveLength(3);
+    expect(values[0]).toBeNull();
+    expect(values[1]).toMatchObject({ featureId: line.id, vertices: [{ ring: 0, index: 1 }] });
+    expect(values[2]).toBeNull();
   });
 
-  it('hidden.changed carries the whole hidden set after the change', () => {
+  it('the IDs hidden here are told as the whole set after each change', () => {
     const a = draw.features.create(pointInput()) as Feature;
     const b = draw.features.create(pointInput(1, 1)) as Feature;
+    const values = told(draw.hidden.hiddenIds);
     draw.hidden.add(a.id);
     draw.hidden.add(b.id);
     draw.hidden.add(b.id);
     draw.features.delete(a.id);
     draw.hidden.clear();
-    expect(payloadsOf(events, 'hidden.changed')).toEqual([
-      { ids: [a.id] },
-      { ids: [a.id, b.id] },
-      { ids: [b.id] },
-      { ids: [] },
-    ]);
+    expect(values.map((ids) => [...ids])).toEqual([[], [a.id], [a.id, b.id], [b.id], []]);
+    expect(draw.hidden.hiddenIds.value.size).toBe(0);
   });
 
   it('readOnly.changed and interactionLock.changed fire when the value changes', () => {
@@ -462,72 +393,80 @@ describe('the events of the state of this client', () => {
     ]);
   });
 
-  it('options.changed carries the options after and before an update that changed them', () => {
+  it('the options are told after an update that changed them, and not for one that changes nothing', () => {
     const before = draw.options.get();
-    draw.options.update({ snapping: { tolerancePx: 25 }, scaleWithZoom: false });
-    // A client state: it fires alone, with no document.changed
-    expect(names(events)).toEqual(['options.changed']);
-    const [payload] = payloadsOf(events, 'options.changed');
-    expect(payload.previous).toEqual(before);
-    expect(payload.options).toEqual(draw.options.get());
-    expect(payload.options.snapping?.tolerancePx).toBe(25);
-    expect(payload.options.scaleWithZoom).toBe(false);
-    expect(payload.previous.scaleWithZoom).toBe(true);
-  });
-
-  it('options.changed does not fire for an update that changes nothing', () => {
+    expect(draw.options.value).toEqual(before);
     const formatter = (typeName: string, n: number) => `${typeName} ${n}`;
+    const values = told(draw.options);
+    draw.options.update({ snapping: { tolerancePx: 25 }, scaleWithZoom: false });
     draw.options.update({ autoName: { formatter } });
-    events.length = 0;
     const { snapping, clickTolerance } = draw.options.get();
     draw.options.update({});
     draw.options.update({ snapping: { enabled: snapping?.enabled }, clickTolerance });
     draw.options.update({ autoName: { formatter } });
     expect(() => draw.options.update({ clickTolerance: 'far' as never })).toThrow(DrawError);
+    expect(values).toHaveLength(3);
+    expect(values[1].snapping?.tolerancePx).toBe(25);
+    expect(values[1].scaleWithZoom).toBe(false);
+    // A client state: no change of the document
     expect(events).toEqual([]);
   });
 
-  it('options.changed stops reaching a listener once the function on returned is called', () => {
-    const heard: Array<number | undefined> = [];
-    const stop = draw.on('options.changed', ({ options }) => heard.push(options.dragThreshold));
-    draw.options.update({ dragThreshold: 7 });
+  it('the mode is told at each change, and a subscriber stops once the function it was given is called', () => {
+    const values = told(draw.mode);
+    const heard: string[] = [];
+    const stop = draw.mode.subscribe((mode) => heard.push(mode));
+    draw.setMode('draw_polygon');
     stop();
-    draw.options.update({ dragThreshold: 9 });
-    expect(heard).toEqual([7]);
-    expect(payloadsOf(events, 'options.changed')).toHaveLength(2);
+    draw.setMode('select');
+    expect(values).toEqual(['select', 'draw_polygon', 'select']);
+    expect(heard).toEqual(['select', 'draw_polygon']);
+    expect(draw.mode.value).toBe('select');
   });
 
-  it('mode.changed carries the mode and the one before it', () => {
-    draw.setMode('draw_polygon');
-    expect(payloadsOf(events, 'mode.changed')).toEqual([
-      { mode: 'draw_polygon', previous: 'select' },
-    ]);
+  it('keeps calling the other subscribers when one throws, refuses a subscriber that is not a function, and does not depend on this', () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const hub = createEventHub();
+    let value = 1;
+    const observable = observe(hub, ['mode.changed'], () => value);
+    const heard: number[] = [];
+    observable.subscribe(() => {
+      throw new Error('boom');
+    });
+    const { subscribe } = observable;
+    subscribe((next) => heard.push(next));
+    value = 2;
+    hub.emit('mode.changed', { mode: 'select', previous: 'select' });
+    expect(heard).toEqual([1, 2]);
+    expect(error).toHaveBeenCalled();
+    expect(() => observable.subscribe('nope' as never)).toThrow(DrawError);
+    error.mockRestore();
   });
 });
 
 describe('on, off and once', () => {
   it('once hears the next occurrence only, and its function unsubscribes before it', () => {
-    const heard: string[] = [];
-    draw.once('mode.changed', ({ mode }) => heard.push(mode));
-    const cancel = draw.once('mode.changed', ({ mode }) => heard.push(`cancelled ${mode}`));
+    const heard: boolean[] = [];
+    draw.once('readOnly.changed', ({ readOnly }) => heard.push(readOnly));
+    const cancel = draw.once('readOnly.changed', () => heard.push(false));
     cancel();
-    draw.setMode('draw_line');
-    draw.setMode('draw_point');
-    expect(heard).toEqual(['draw_line']);
+    draw.setReadOnly(true);
+    draw.setReadOnly(false);
+    expect(heard).toEqual([true]);
   });
 
   it('off removes a listener given to on or to once, and on returns the function that does it', () => {
-    const heard: string[] = [];
-    const listener = ({ mode }: DrawEvents['mode.changed']) => heard.push(mode);
-    draw.on('mode.changed', listener);
-    draw.off('mode.changed', listener);
-    draw.once('mode.changed', listener);
-    draw.off('mode.changed', listener);
-    const stop = draw.on('mode.changed', listener);
-    draw.setMode('draw_line');
+    const heard: boolean[] = [];
+    const listener = ({ readOnly }: DrawEvents['readOnly.changed']) => heard.push(readOnly);
+    draw.on('readOnly.changed', listener);
+    draw.off('readOnly.changed', listener);
+    draw.once('readOnly.changed', listener);
+    draw.off('readOnly.changed', listener);
+    const stop = draw.on('readOnly.changed', listener);
+    draw.setReadOnly(true);
     stop();
-    draw.setMode('draw_point');
-    expect(heard).toEqual(['draw_line']);
+    draw.setReadOnly(false);
+    expect(heard).toEqual([true]);
   });
 
   it('keeps calling the other listeners when one throws, and refuses a listener that is not a function', () => {
@@ -689,12 +628,17 @@ describe('the signals of the engine', () => {
     ]);
   });
 
-  it('drops every listener when the instance is destroyed', () => {
+  it('drops every listener and subscriber when the instance is destroyed', () => {
     const heard = vi.fn();
+    const other = createDrawOnEngine(engine);
     engine.events.on('mode.changed', heard);
+    const subscriber = vi.fn();
+    other.mode.subscribe(subscriber);
+    subscriber.mockClear();
     engine.destroy();
     engine.events.emit('mode.changed', { mode: 'select', previous: 'select' });
     expect(heard).not.toHaveBeenCalled();
+    expect(subscriber).not.toHaveBeenCalled();
   });
 });
 
@@ -708,9 +652,11 @@ describe('the shape being drawn, shown by a sketch of this client', () => {
     local = createDrawOnEngine(engine);
     engine.enterDefaultMode();
     told = [];
-    local.on('sketch.added', ({ sketch }) => told.push(['added', sketch, undefined]));
-    local.on('sketch.updated', ({ sketch }) => told.push(['updated', sketch, undefined]));
-    local.on('sketch.removed', ({ sketch, reason }) => told.push(['removed', sketch, reason]));
+    engine.events.on('sketch.added', ({ sketch }) => told.push(['added', sketch, undefined]));
+    engine.events.on('sketch.updated', ({ sketch }) => told.push(['updated', sketch, undefined]));
+    engine.events.on('sketch.removed', ({ sketch, reason }) =>
+      told.push(['removed', sketch, reason]),
+    );
   });
 
   afterEach(() => local.destroy());
@@ -747,15 +693,14 @@ describe('the shape being drawn, shown by a sketch of this client', () => {
     expect(last[1][0]).toBeCloseTo(1);
     expect(last[1][1]).toBeCloseTo(1);
     // Nothing is written while it is drawn
-    expect(payloadsOf(signals, 'document.changed')).toEqual([]);
+    expect(changesOf(signals)).toEqual([]);
 
     input.key('Enter');
     expect(told[told.length - 1]?.[0]).toBe('removed');
     expect(told[told.length - 1]?.[2]).toBe('committed');
-    const created = payloadsOf(signals, 'feature.created');
-    expect(created).toHaveLength(1);
-    expect(created[0].feature.id).toBe(createOf(first?.[1] as Sketch).feature.id);
-    expect(payloadsOf(signals, 'document.changed')).toHaveLength(1);
+    const changes = changesOf(signals);
+    expect(changes).toHaveLength(1);
+    expect(changes[0].features.created).toEqual([createOf(first?.[1] as Sketch).feature.id]);
     expect(local.sketches.count()).toBe(0);
   });
 
@@ -773,7 +718,7 @@ describe('the shape being drawn, shown by a sketch of this client', () => {
 
     local.setMode('select');
     expect(told).toHaveLength(before + 1);
-    expect(payloadsOf(signals, 'document.changed')).toEqual([]);
+    expect(changesOf(signals)).toEqual([]);
   });
 
   it('holds the vertices placed and the one to close on that the shape was shown with', () => {

@@ -11,6 +11,7 @@ import { MemoryStore } from '../../store/memory.js';
 import { createResourceDeps } from '../../test-utils.js';
 import { DrawError } from '../errors.js';
 import type { SelectionResource, VertexSelectionResource } from '../selection.js';
+import { createEventHub } from './events.js';
 import { createFeatures } from './features.js';
 import { createGroups } from './groups.js';
 import { createSelection, createVertexSelection } from './selection.js';
@@ -72,8 +73,8 @@ beforeEach(() => {
     },
   ]);
   groups.create({ id: 'g', featureIds: ['b'] });
-  selection = createSelection(deps, { features, groups });
-  vertices = createVertexSelection(deps);
+  selection = createSelection(deps, { features, groups }, createEventHub());
+  vertices = createVertexSelection(deps, createEventHub());
 });
 
 describe('draw.selection', () => {
@@ -207,10 +208,11 @@ describe('draw.selection', () => {
     const target = selection.target;
     const other = new MemoryStore();
     const deps = createResourceDeps(other);
-    const otherSelection = createSelection(deps, {
-      features: createFeatures(deps),
-      groups: createGroups(deps),
-    });
+    const otherSelection = createSelection(
+      deps,
+      { features: createFeatures(deps), groups: createGroups(deps) },
+      createEventHub(),
+    );
     expect(codeOf(() => otherSelection.set(target))).toBe('invalid-input');
     expect(selection.set(target)).toBe(true);
   });

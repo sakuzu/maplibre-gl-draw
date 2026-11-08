@@ -58,7 +58,7 @@
 - [reference/data-format.md](reference/data-format.md) — 地物の型ごとの、
   独自の形式と GeoJSON の形式
 - [reference/events.md](reference/events.md) — すべてのイベントと
-  その payload
+  その payload、時間で変わる値
 
 ## 内部 (英語)
 

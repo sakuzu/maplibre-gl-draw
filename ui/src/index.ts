@@ -424,7 +424,10 @@ function selectionReveal(draw: Draw, root: HTMLElement): SelectionReveal {
       // The map is gone
     }
   }
-  const off = draw.on('selection.changed', ({ selection }) => {
+  // The selection now is not a change of it: it is not revealed
+  let following = false;
+  const off = draw.selection.subscribe((selection) => {
+    if (!following) return;
     cancel();
     pending = selection.type === 'feature' && (selection.ids?.length ?? 0) > 0;
     if (!pending) return;
@@ -435,6 +438,7 @@ function selectionReveal(draw: Draw, root: HTMLElement): SelectionReveal {
       });
     });
   });
+  following = true;
   return {
     inset(next: ShellInset) {
       if (destroyed) return;

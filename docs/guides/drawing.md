@@ -18,11 +18,14 @@ const draw = createDraw(map);
 // Click to add vertices; Enter or a click on the first vertex finishes
 draw.setMode('draw_polygon');
 
-draw.on('feature.created', ({ feature }) => {
-  console.log(feature.type, feature.properties.name);
+draw.on('change', ({ features }) => {
+  for (const id of features.created) {
+    const feature = draw.features.get(id);
+    console.log(feature?.type, feature?.properties.name);
+  }
 });
 
-draw.on('mode.changed', ({ mode }) => {
+draw.mode.subscribe((mode) => {
   console.log('mode', mode); // 'select' once the polygon is finished
 });
 ```
@@ -52,8 +55,8 @@ written (every layer is locked or hidden; see
 [Layers and groups](layers.md)). A name with no mode behind it throws a
 `DrawError` with the code `not-found`.
 
-`draw.getMode()` reads the current mode, and `mode.changed` reports every
-change with the mode before it. Modes of your own are added with
+`draw.getMode()` reads the current mode, and `draw.mode` tells every
+change of it (`draw.mode.subscribe`). Modes of your own are added with
 `draw.extensions.modes.add` ([Plugins](plugins.md)).
 
 ## Drawing modes
@@ -98,20 +101,24 @@ The shape is a sketch of this client (`draw.sketches`) of one edit
 `create`: the feature it will create, with `placedVertexCount` (how many
 vertices from the start are placed) and `highlightedVertexIndex` (the vertex
 drawn highlighted) when the mode gave it. Nothing is written while it is
-drawn. `sketch.added` tells the first shape, `sketch.updated` every change,
-and `sketch.removed` its end, `committed` once the feature is created and
-`cancelled` once it is discarded or the mode is left. `rendered.changed`
-tells, with no IDs, that a draw of the map drew it changed. They are not
-throttled, so a listener that does heavy work waits for the next draw
-itself. Use them to show the length while drawing.
+drawn. `draw.sketches` tells the first shape, every change of it, and its
+end, once the feature is created or the shape is discarded or the mode is
+left (it is no longer listed). `draw.rendered.changed` tells, with no IDs,
+that a draw of the map drew it changed. They are not throttled, so a
+subscriber that does heavy work waits for the next draw itself. Use them
+to show the length while drawing.
 
 ```ts
 import { length } from '@sakuzu/maplibre-gl-draw/geometry';
 
-draw.on('sketch.updated', ({ sketch }) => {
-  const edit = sketch.edits[0];
-  if (edit?.kind === 'create' && edit.feature.geometry.type === 'LineString') {
-    console.log(`${Math.round(length(edit.feature.geometry))} m`);
+draw.sketches.subscribe((sketches) => {
+  for (const { edits } of sketches) {
+    const edit = edits[0];
+    if (edit?.kind !== 'create') continue;
+    const { geometry } = edit.feature;
+    if (geometry.type === 'LineString') {
+      console.log(`${Math.round(length(geometry))} m`);
+    }
   }
 });
 ```
@@ -120,8 +127,8 @@ draw.on('sketch.updated', ({ sketch }) => {
 
 A point, line, polygon or circle is created in one transaction with its
 selection, and the mode returns to `select` with the new feature selected.
-`feature.created` and `selection.changed` fire for it, and
-`document.changed` once for the whole change.
+`change` fires once for the whole change, with the new feature in
+`features.created`, and `draw.selection` tells the new selection.
 
 Freehand is different: every stroke (press, drag, release) becomes its own
 feature, the mode stays `draw_freehand` so that strokes can follow one
@@ -244,8 +251,8 @@ const removed = draw.vertexSelection.delete();
 
 A vertex is named by a `VertexRef` (`{ part?, ring, index }`); see
 [Multi geometries and holes](#multi-geometries-and-holes). `set` returns
-`false` for a locked feature, and `vertexSelection.changed` reports every
-change. Deleting never removes the feature itself:
+`false` for a locked feature, and `draw.vertexSelection` tells every
+change (`draw.vertexSelection.subscribe`). Deleting never removes the feature itself:
 
 - A line keeps at least two points
 - A polygon ring keeps at least four positions (a closed triangle). The
@@ -296,8 +303,8 @@ too (`draw.selection.set('group', [groupId])`). `selection.features()`
 returns the selected features, or the features inside the selected groups
 or layers. `selection.value` tells what is selected: the type, the number
 of the features, their layers and extent (`bbox`), and the IDs.
-`selection.delete()` deletes whatever is selected, and `selection.changed`
-reports every change with the selection before it.
+`selection.delete()` deletes whatever is selected, and `draw.selection`
+tells every change (`draw.selection.subscribe`).
 
 ```ts
 const { type, count, ids, bbox } = draw.selection.value;
@@ -583,9 +590,9 @@ application offer another way to enter coordinates, such as a form.
 ## Examples
 
 - [Get started](../examples/get-started.md) draws with the tools of the
-  standard UI and listens to `document.changed`
+  standard UI and listens to `change`
 - [Build your own UI](../examples/custom-ui.md) calls `setMode` from
-  buttons of its own and follows `mode.changed` and the selection
+  buttons of its own and follows `draw.mode` and `draw.selection`
 - [Editing shapes](../examples/editing-shapes.md) shows the selection
   box, the vertex and midpoint handles, an area with a hole, a
   `MultiPolygon` and shared vertices that move together

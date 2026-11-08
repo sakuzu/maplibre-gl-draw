@@ -220,7 +220,9 @@ describe('a Store of the application with features the instance did not write', 
     );
 
     const created: unknown[] = [];
-    target.draw.on('feature.created', ({ feature }) => created.push(feature.groupId));
+    target.draw.on('change', ({ features }) => {
+      for (const id of features.created) created.push(target.draw.features.get(id)?.groupId);
+    });
     contract.transact(() => contract.createFeature(feature('p2', POINT.geometry)), 'remote');
     expect(created).toEqual([undefined]);
   });

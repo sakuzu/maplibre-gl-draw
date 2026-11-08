@@ -6,6 +6,7 @@
  */
 
 import type { DraggedRows } from '../feature-table/dragged-rows.js';
+import type { Observable } from './events.js';
 import type { Footprint } from './extension/feature-type.js';
 import type { Feature } from './model.js';
 
@@ -15,9 +16,8 @@ import type { Feature } from './model.js';
  * bulk moved where they are drawn, and their selection boxes in the view drawn last. What is drawn
  * around a feature reads it here, so that it follows
  * the feature as it is drawn, also while it is edited and not written yet; what writes reads the
- * document (`draw.features`). It tells the shapes that changed with `rendered.changed`, once a
- * draw of the map that draws the change is done; the look and the selection box are read at each
- * draw. It has no look of its own: a renderer reads the look a feature is drawn with in its render
+ * document (`draw.features`). It tells the shapes that changed with `changed`, once a draw of
+ * the map that draws the change is done; the look and the selection box are read at each draw. It has no look of its own: a renderer reads the look a feature is drawn with in its render
  * context (`RenderContext.appliedStyle`).
  */
 export interface RenderedResource {
@@ -68,4 +68,19 @@ export interface RenderedResource {
    * @experimental
    */
   getDraggedRows(): DraggedRows | null;
+  /**
+   * The features whose shapes as they are drawn changed, told once a draw of the map that draws
+   * the change is done, at most once a draw: its value is the IDs told last (none at first), and
+   * the values read in a subscriber (`get`, `getSelectionBox`) are those of that view. It lists
+   * the features a write of the document (of features, or of the rows of a Store of rows) or a
+   * sketch changed since the last time, those created or deleted, and the rows dragged in bulk
+   * while they move. A change of the shape being drawn alone, which has no ID, is told with no IDs.
+   *
+   * It tells changes of the shapes only. A change of the look (a layer rule, the `style` option, a
+   * type added or removed) and the selection box that changes with the view (its margin laid on
+   * the map at the scale of the view) are not told: read the look and the selection box at each
+   * draw. The rows dragged in bulk can be very many, and the IDs then list them all at each draw:
+   * what is drawn with such rows reads them in each draw with `getDraggedRows`.
+   */
+  readonly changed: Observable<readonly string[]>;
 }

@@ -23,8 +23,8 @@
  *
  * const draw = createDraw(map);
  * draw.setMode('draw_polygon');
- * draw.on('feature.created', ({ feature }) => {
- *   console.log(feature.id, feature.geometry);
+ * draw.on('change', ({ features }) => {
+ *   for (const id of features.created) console.log(id, draw.features.get(id)?.geometry);
  * });
  * ```
  *
@@ -42,7 +42,8 @@
  * - `draw.drawing` (addVertex, finish, cancel): {@link DrawingResource}
  * - `draw.rendered` (get, getSelectionBox): {@link RenderedResource}
  * - `draw.extensions` (plugins, modes, feature types): {@link ExtensionsCollections}
- * - events with `draw.on`: {@link DrawEvents}; errors: {@link DrawError}
+ * - events with `draw.on`: {@link DrawEvents} (a commit of the document: {@link Change}); a value
+ *   that changes over time: {@link Observable}; errors: {@link DrawError}
  *
  * Read next: [getting started](https://sakuzu.github.io/maplibre-gl-draw/getting-started),
  * then the guides for [drawing](https://sakuzu.github.io/maplibre-gl-draw/guides/drawing) and
@@ -175,7 +176,15 @@ export { MODES } from './api/state.js';
 export type { DocumentSize, MemoryBytes, MemoryResource, MemoryUsage } from './api/memory.js';
 
 // Events
-export type { DocumentChange, DrawEventListener, DrawEvents, ScreenPoint } from './api/events.js';
+export type {
+  Change,
+  ChangedIds,
+  DocumentChange,
+  DrawEventListener,
+  DrawEvents,
+  Observable,
+  ScreenPoint,
+} from './api/events.js';
 export type { Position } from 'geojson';
 
 // Errors
