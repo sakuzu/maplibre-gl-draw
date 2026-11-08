@@ -21,7 +21,8 @@
  * - the snapping: none of the features edited is a candidate of its own drag
  * - the events of the features, the document and the drags
  * - `features.get`, which reads the document, and `rendered.get`, which reads what is drawn
- * - the image of the map taken in the middle of a drag
+ * - the image of the map taken in the middle of a drag and of the arrow keys, and with sketches
+ *   with an owner: the features where they are written, the screen still drawing them as they go
  *
  * Every expectation is the behavior of the library as it is, to hold it while the places that
  * read an edit in progress are brought together.
@@ -333,6 +334,7 @@ describe.each(KINDS)('many features selected over a Store of %s', (kind) => {
       const [cx, cy] = await centerOf(page, 1);
       const movedHit = await featureAt(page, [cx + edit.by[0], cy + edit.by[1]]);
       const image = await capture(page, [FILL]);
+      const shownAfter = await frame(page, [FILL]);
       await mark(page);
       if (cancelled) await cancelAndRelease(page);
       else await release(page);
@@ -362,9 +364,12 @@ describe.each(KINDS)('many features selected over a Store of %s', (kind) => {
           expect((mid.drawn[i] as Drawn).count, `the pixels of the handles of color ${i}`).toBe(0);
         }
       }
-      // The image taken in the middle of the drag shows the features where they are dragged.
-      // This holds the behavior as it is, which nothing decides yet: it may change later
-      expectSame(image[0] as Drawn, mid.drawn[I_FILL] as Drawn, 0.05);
+      // The image taken in the middle of the drag shows the features where they are written, and
+      // the screen goes on drawing them where they are dragged. The image has none of the handles
+      // drawn over the features, so it shows a little more of their fill
+      expectSame(image[0] as Drawn, selected.drawn[I_FILL] as Drawn, 0.05);
+      expect(differs(image[0] as Drawn, mid.drawn[I_FILL] as Drawn)).toBe(true);
+      expectSame(shownAfter[0] as Drawn, mid.drawn[I_FILL] as Drawn, 0.01, 0.5);
       expectNoSnapToThemselves(
         mid.events.slice(mid.events.findIndex((e) => e.name === 'drag.started') + 1),
       );
@@ -416,6 +421,64 @@ describe.each(KINDS)('many features selected over a Store of %s', (kind) => {
     });
   });
 
+  describe('the sketches with an owner', () => {
+    it('are drawn where they move and create features, and the image shows the document', {
+      timeout: SCENES_TIMEOUT,
+    }, async () => {
+      await restore(page);
+      const before = await frame(page, [FILL]);
+      // Sketches with an owner move the features and draw a new one north of them (the test adds
+      // them as they come)
+      await page.evaluate(
+        ({ ids, created }) => {
+          const draw = (window as unknown as { draw: import('../index.js').Draw }).draw;
+          draw.sketches.add({
+            id: 'theirs-move',
+            owner: 'peer',
+            edits: [
+              {
+                kind: 'translate',
+                target: { featureIds: ids },
+                from: [0, 0],
+                to: [0.0008, -0.0008],
+              },
+            ],
+          });
+          draw.sketches.add({
+            id: 'theirs-create',
+            owner: 'peer',
+            edits: [{ kind: 'create', feature: created as never }],
+          });
+        },
+        {
+          ids: IDS,
+          created: {
+            type: 'Polygon',
+            geometry: { type: 'Polygon', coordinates: [square(0, 0.004, R)] },
+            style: LOOK,
+          },
+        },
+      );
+      const drawn = await frame(page, [FILL]);
+      const image = await capture(page, [FILL]);
+      const shownAfter = await frame(page, [FILL]);
+      await page.evaluate(() => {
+        const draw = (window as unknown as { draw: import('../index.js').Draw }).draw;
+        draw.sketches.removeMany(['theirs-move', 'theirs-create']);
+      });
+      await idle(page);
+      const end = await frame(page, [FILL]);
+      // Drawn as the sketches leave them: moved, and one more
+      expect((drawn[0] as Drawn).count).toBeGreaterThan((before[0] as Drawn).count * 1.1);
+      expect(differs(drawn[0] as Drawn, before[0] as Drawn)).toBe(true);
+      // The image shows the document: neither moved nor created
+      expectSame(image[0] as Drawn, before[0] as Drawn, 0.01, 0.5);
+      // The screen goes on drawing the sketches, and the document once they are gone
+      expectSame(shownAfter[0] as Drawn, drawn[0] as Drawn, 0.01, 0.5);
+      expectSame(end[0] as Drawn, before[0] as Drawn, 0.01, 0.5);
+    });
+  });
+
   describe('the arrow keys', () => {
     /** Three presses of Shift and an arrow key (20 px east and 10 px south), read right after */
     async function run() {
@@ -437,6 +500,7 @@ describe.each(KINDS)('many features selected over a Store of %s', (kind) => {
             map: import('maplibre-gl').Map;
             t: {
               quickFrame(c: unknown, b: unknown): Promise<Drawn[]>;
+              capture(c: unknown): Promise<Drawn[]>;
               hit(p: number[]): { kind: string; id: string } | null;
             };
           };
@@ -451,9 +515,12 @@ describe.each(KINDS)('many features selected over a Store of %s', (kind) => {
           const geometry = w.draw.features.get('b1')?.geometry ?? null;
           const hit = w.t.hit(point)?.id ?? null;
           const drawn = await w.t.quickFrame(colors, []);
+          // The image of the map, before the moves are written
+          const image = await w.t.capture([colors[0]]);
           const after = w.draw.features.get('b1')?.geometry ?? null;
           return {
             drawn,
+            image,
             geometry,
             hit,
             unchanged: JSON.stringify(after) === JSON.stringify(geometry),
@@ -469,6 +536,9 @@ describe.each(KINDS)('many features selected over a Store of %s', (kind) => {
       }
       // Nothing was written while the reads were made
       expect(mid.unchanged).toBe(true);
+      // The image shows the features where they are written, not where the keys moved them
+      expectSame(mid.image[0] as Drawn, selected.drawn[I_FILL] as Drawn, 0.05);
+      expect(differs(mid.image[0] as Drawn, mid.drawn[I_FILL] as Drawn)).toBe(true);
       // Shown by a sketch of this client and not written yet: read, hit and told as before the
       // presses
       expect(mid.geometry).toEqual(selected.geometry);

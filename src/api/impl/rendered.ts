@@ -16,6 +16,10 @@
  * The rows moved by their state move at each draw and may be very many: their IDs are read once
  * for each change of the rows in a moving set, and given as they are for each change of how the
  * set moves, so that a frame of such a drag costs the same whatever their number.
+ *
+ * A frame of an image of the map draws the shapes as they are written (`RenderedShapes.setWritten`)
+ * and they are seen again once it is drawn: what the sketches draw, the rows moved and the shapes
+ * being drawn are told with that frame, so that what read them in it reads them again.
  */
 
 import type { Map as MapLibreMap } from 'maplibre-gl';
@@ -195,6 +199,12 @@ export function createRendered(deps: RenderedDeps): {
     events.on('sketch.added', ({ sketch }) => sketchChanged(sketch, false)),
     events.on('sketch.updated', ({ sketch }) => sketchChanged(sketch, false)),
     events.on('sketch.removed', ({ sketch }) => sketchChanged(sketch, true)),
+    // A frame of an image of the map drew them as written: they are seen again
+    shapes.onSeenAgain(() => {
+      for (const id of shapes.sketchedIds()) changed.add(id);
+      for (const id of moving) changed.add(id);
+      if (shapes.drawings().length > 0) drawingChanged = true;
+    }),
     // Told once the frame that draws the changes is drawn, with the values of that frame
     deps.onFrameDrawn(() => {
       const moved = rowsMoved();

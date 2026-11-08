@@ -6,8 +6,10 @@
  *
  * The canvas of a WebGL map keeps its pixels only until the frame is shown, so the image is taken
  * in the frame itself: the next frame is asked for with the state of this client left out of it
- * (the selection, the shape being drawn), and when the map tells it drew it (`render`), its canvas
- * is copied at once onto a canvas of the size asked for, which is then encoded.
+ * (the selection, the shape being drawn), which also draws the shapes as they are written (no
+ * sketch, no row moved by its moving set; `RenderedShapes.setWritten`), and when the map tells it
+ * drew it (`render`), its canvas is copied at once onto a canvas of the size asked for, which is
+ * then encoded.
  */
 
 import type { Map as MapLibreMap } from 'maplibre-gl';

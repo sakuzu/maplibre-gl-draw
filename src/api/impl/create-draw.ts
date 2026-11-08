@@ -210,7 +210,9 @@ function attachChecks(engine: Engine, options: DrawOptions): () => void {
     checkDrawnWrites: () => engine.customLayer.checkDrawnWrites(),
     checkDrawnRebuild: () => engine.customLayer.checkDrawnRebuild(),
     sketches: engine.sketches,
-    checkDrawnSketches: (expected) => engine.customLayer.checkDrawnSketches(expected),
+    // A frame of an image of the map draws no sketch: none is expected drawn while it is drawn
+    checkDrawnSketches: (expected) =>
+      engine.customLayer.checkDrawnSketches(engine.context.shapes.written ? new Map() : expected),
   });
   store.setAfterNotify(() => checks.afterNotify());
   engine.sketches.setAfterOperate(() => checks.afterSketches());

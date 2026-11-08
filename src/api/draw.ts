@@ -162,9 +162,12 @@ export interface Draw {
   /**
    * An image of the map as it is drawn now: the base map, the document (or the document shown in
    * its place) and the datasets, as far as the map shows them, without the state of this client
-   * (the selection, its handles, the shape being drawn, the box). The image is taken in the next
-   * draw of the map, which this asks for; the draws after it draw the state of this client
-   * again. A size of another shape than the map is covered by the map, cut at its middle.
+   * (the selection, its handles, the shape being drawn, the box). The document is drawn in it as
+   * it is written: the sketches of every owner (`draw.sketches`) are not drawn, so what a drag or
+   * the arrow keys move is drawn where it was before, and a shape being drawn is not drawn. The
+   * image is taken in the next draw of the map, which this asks for; the draws after it draw the
+   * state of this client and the sketches again. A size of another shape than the map is covered
+   * by the map, cut at its middle.
    *
    * It costs one draw of the map and no other drawing of the document: a thumbnail of a document
    * too large to draw a second time is taken so.

@@ -124,8 +124,10 @@ A picture of the map as it is on the screen needs no second map:
 `draw.captureImage` takes it in the next draw of the map, without
 the selection, its handles and the shape being drawn, and scales it to
 the size asked for (a size of another shape is covered by the map and
-cut at its middle). It costs one draw, so it suits a thumbnail of a
-document too large to draw a second time:
+cut at its middle). The document is in it as it is written: what a
+drag or a sketch moves is in it where it was before. It costs one
+draw, so it suits a thumbnail of a document too large to draw a second
+time:
 
 ```ts
 const thumbnail = await draw.captureImage({

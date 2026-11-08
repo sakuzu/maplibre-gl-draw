@@ -216,7 +216,9 @@ export interface CustomLayerInterface extends BaseCustomLayerInterface {
   setShown(other: StoreContractView | null): void;
   /**
    * Leaves the state of this client (the selection, the shape being drawn, the box, the drag)
-   * out of the frames drawn, or draws it again
+   * out of the frames drawn, or draws it again. Each frame drawn while it is left out draws the
+   * shapes as they are written (`RenderedShapes.setWritten`): no sketch of any client, no shape
+   * being drawn and no row moved by its moving set, for that frame only
    */
   setEditingHidden(hidden: boolean): void;
   /** The GPU memory the renderers of this instance hold (what they recorded allocating) */
@@ -571,6 +573,8 @@ export function createCustomLayer(deps: CustomLayerDeps): CustomLayerInterface {
 
   function engineRemove(): void {
     if (!slots.detach()) return;
+    // A frame of an image of the map that was not drawn to its end
+    shapes.setWritten(false);
 
     if (engine.unsubscribeStore) {
       engine.unsubscribeStore();
@@ -628,7 +632,16 @@ export function createCustomLayer(deps: CustomLayerDeps): CustomLayerInterface {
       transformFields: () => transformFieldsOfStore(own),
       extensions: renderScope.selection.extensions,
       screenScale: () => (engine.mapInstance ? screenScaleFrameOf(engine.mapInstance) : null),
+      rowMotion: (tables, set) => shapes.rowMotion(tables, set),
     });
+  }
+
+  /**
+   * Starts a frame drawn with the shapes as they are written, while the state of this client is
+   * left out (a frame of an image of the map); the shapes are seen again once it is drawn
+   */
+  function beginWrittenFrame(): void {
+    shapes.setWritten(shown.isEditingHidden() && shown.getShown() === null);
   }
 
   /**
@@ -809,6 +822,9 @@ export function createCustomLayer(deps: CustomLayerDeps): CustomLayerInterface {
     const { gl, renderers: r } = engine;
     if (!gl || !r) return null;
 
+    // A frame of an image of the map reads the shapes as they are written (prerender began it,
+    // when it was called)
+    beginWrittenFrame();
     // Declare the switch to a new frame (this invalidates the memoized uniforms held by each
     // renderer; see shaders/frame.ts)
     beginRenderFrame();
@@ -936,6 +952,9 @@ export function createCustomLayer(deps: CustomLayerDeps): CustomLayerInterface {
       engine.tableRetained?.endFrame();
       engine.shownTableRetained?.endFrame();
       engine.frame = null;
+      // The frame is drawn: the shapes are seen as they are again, for the next frames and for
+      // what reads them between frames
+      shapes.setWritten(false);
       for (const listener of [...frameListeners]) listener();
     }
   }
@@ -982,6 +1001,9 @@ export function createCustomLayer(deps: CustomLayerDeps): CustomLayerInterface {
     prerender(): void {
       const { gl } = engine;
       if (!gl || !engine.renderers || gl.isContextLost()) return;
+      // A frame of an image of the map reads the shapes as they are written from its start: the
+      // rows written below are those of that frame
+      beginWrittenFrame();
       engine.preparedTerrainState = terrainResolver.resolve(gl);
       // The textures and buffers of the rows drawn in one draw are written here too, for the
       // same reason

@@ -14,9 +14,14 @@
  * from the shape itself has its own read, which says how.
  *
  * What the GPU moves stays with the GPU: the rows are drawn by the bits of their state and the
- * motions of their moving sets (`rowMotionOf`, `bulkRowMotionOf`), their values are not read and
- * no shape is made for them at each frame. The sketches of a Store of rows are rows of its deltas,
- * drawn among its rows.
+ * motions of their moving sets (`rowMotion`, `rowMotionOf`, `bulkRowMotionOf`), their values are
+ * not read and no shape is made for them at each frame. The sketches of a Store of rows are rows of
+ * its deltas, drawn among its rows.
+ *
+ * A frame of an image of the map reads the shapes as they are written (`setWritten`): what draws
+ * reads the value of the Store, with no sketch of any client over it, no shape being drawn and no
+ * row moved by its moving set, while the frame is drawn. What hits and what snaps reads as it does
+ * in every frame.
  */
 
 import type { DraggedRows } from '../feature-table/dragged-rows.js';
@@ -60,6 +65,12 @@ export interface RowMotion {
   /** The edit that moves, rotates or scales the rows before the translation (null for none) */
   readonly transform: EnuEdit | null;
 }
+
+/** No motion: the rows where they are written */
+const NO_MOTION: RowMotion = Object.freeze({
+  translation: Object.freeze([0, 0]) as unknown as readonly [number, number],
+  transform: null,
+});
 
 /**
  * The moving set the rows selected in bulk are in once dragged, whose rows the GPU keeps apart
@@ -124,6 +135,10 @@ export class RenderedShapes {
   } | null = null;
   /** The features made where their rows are drawn, while the rows move the same way */
   readonly #moved = new Map<string, { readonly from: Feature; readonly feature: Feature }>();
+  /** Whether what draws reads the shapes as they are written (a frame of an image of the map) */
+  #written = false;
+  /** What is told when the shapes read as written are seen as they are again */
+  readonly #seenAgain = new Set<() => void>();
 
   constructor(store: Store) {
     this.#store = store;
@@ -132,6 +147,51 @@ export class RenderedShapes {
   /** Reads the sketches of the instance */
   useSketches(sketches: ShapeSketches): void {
     this.#sketches = sketches;
+  }
+
+  // ==========================================================================
+  // The shapes as they are written
+  // ==========================================================================
+
+  /** Whether what draws reads the shapes as they are written (a frame of an image of the map) */
+  get written(): boolean {
+    return this.#written;
+  }
+
+  /**
+   * Makes what draws read the shapes as they are written, with no sketch of any client, no shape
+   * being drawn and no row moved by its moving set, or as they are seen again. The sketches leave
+   * what they draw (`SketchView.leaveOut`), and come back when the shapes are seen again
+   */
+  setWritten(written: boolean): void {
+    if (this.#written === written) return;
+    this.#written = written;
+    this.#sketches?.view.leaveOut(written);
+    if (!written) for (const listener of [...this.#seenAgain]) listener();
+  }
+
+  /**
+   * Follows the shapes being seen again after they were read as written: what was drawn of the
+   * sketches and of the rows moved changed back
+   *
+   * @returns The function that stops it
+   */
+  onSeenAgain(listener: () => void): () => void {
+    this.#seenAgain.add(listener);
+    return () => {
+      this.#seenAgain.delete(listener);
+    };
+  }
+
+  /**
+   * How a moving set of rows moves its rows as they are drawn: as the GPU moves them, and not at
+   * all while the shapes are read as written
+   *
+   * @param tables - The rows drawn (those of the document shown)
+   * @param set - The moving set (1 to 3)
+   */
+  rowMotion(tables: FeatureTablesInternals, set: number): RowMotion {
+    return this.#written ? NO_MOTION : rowMotionOf(tables, set);
   }
 
   // ==========================================================================
@@ -154,6 +214,7 @@ export class RenderedShapes {
   }
 
   #shapeOf(id: string, dragged: DraggedRows | null): Feature | undefined {
+    if (this.#written) return this.#store.getFeature(id);
     const sketches = this.#sketches;
     const feature =
       sketches?.appliedFeature(id) ?? sketches?.view.drawnFeature(id) ?? this.#store.getFeature(id);
@@ -171,6 +232,7 @@ export class RenderedShapes {
    * each change of how they move: a frame reads it for each feature it asks for)
    */
   draggedRows(): DraggedRows | null {
+    if (this.#written) return null;
     const tables = this.#store.tables;
     const states = featureTablesInternals(tables)?.states;
     if (!states) return null;
@@ -187,12 +249,16 @@ export class RenderedShapes {
    * document holds them
    */
   drawings(): readonly ShapeBeingDrawn[] {
+    if (this.#written) return NO_DRAWINGS;
     return this.#sketches?.view.drawings() ?? NO_DRAWINGS;
   }
 
-  /** The shape this client draws (the last one it added; null when it draws none) */
+  /**
+   * The shape this client draws (the last one it added; null when it draws none), which the
+   * snapping reads whether the shapes are read as written or not
+   */
   drawing(): ShapeBeingDrawn | null {
-    const drawings = this.drawings();
+    const drawings = this.#sketches?.view.drawings() ?? NO_DRAWINGS;
     for (let i = drawings.length - 1; i >= 0; i--) {
       if (drawings[i].owner === null) return drawings[i];
     }
@@ -205,6 +271,7 @@ export class RenderedShapes {
 
   /** Whether the sketches draw anything over a Store of objects */
   get sketched(): boolean {
+    if (this.#written) return false;
     const view = this.#sketches?.view;
     return view !== undefined && view.size > 0 && this.#store.tables === undefined;
   }
@@ -212,22 +279,26 @@ export class RenderedShapes {
   /** The features of a Store of objects as they are drawn, in no order */
   drawnFeatures(): Feature[] {
     const list = this.#store.listFeatures();
+    if (this.#written) return list;
     return this.#sketches?.view.unordered(list) ?? list;
   }
 
   /** The features of a Store of objects as they are drawn, in the stacking order */
   drawnFeaturesInOrder(): Feature[] {
     const list = this.#store.listFeaturesInOrder();
+    if (this.#written) return list;
     return this.#sketches?.view.ordered(list, this.#store) ?? list;
   }
 
   /** The IDs of the features the sketches draw, wherever the document has them */
   sketchedIds(): readonly string[] {
+    if (this.#written) return [];
     return this.#sketches?.view.ids() ?? [];
   }
 
   /** The IDs the features the sketches create are drawn with */
   createdIds(): readonly string[] {
+    if (this.#written) return [];
     return this.#sketches?.view.creates().map((create) => create.key) ?? [];
   }
 

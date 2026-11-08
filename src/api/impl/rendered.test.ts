@@ -236,6 +236,33 @@ describe('rendered.changed', () => {
     expect(told).toEqual([[a.id], [a.id, b.id].sort(), [a.id, b.id].sort()]);
   });
 
+  it('tells the features of the sketches once a frame of an image of the map drew them as written', () => {
+    const told: (readonly string[])[] = [];
+    const a = line();
+    line();
+    draw.sketches.add({
+      owner: 'other',
+      edits: [{ kind: 'set', featureId: a.id, patch: { style: { strokeWidth: 3 } } }],
+    });
+    drawFrame();
+    draw.on('rendered.changed', ({ ids }) => told.push(ids));
+    // The frame of the image reads them as written, and they are seen again once it is drawn
+    engine.context.shapes.setWritten(true);
+    expect(draw.rendered.get(a.id)?.style?.strokeWidth).toBeUndefined();
+    engine.context.shapes.setWritten(false);
+    expect(draw.rendered.get(a.id)?.style?.strokeWidth).toBe(3);
+    drawFrame();
+    expect(told).toEqual([[a.id]]);
+    // A frame of an image with no sketch tells nothing
+    draw.sketches.removeMany(draw.sketches.list().map((sketch) => sketch.id));
+    drawFrame();
+    told.length = 0;
+    engine.context.shapes.setWritten(true);
+    engine.context.shapes.setWritten(false);
+    drawFrame();
+    expect(told).toEqual([]);
+  });
+
   it('tells the features of the rows a Store of rows writes, and no change of the look', () => {
     draw.destroy();
     const { store } = createTableStore();

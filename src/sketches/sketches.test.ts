@@ -39,7 +39,7 @@ import {
 import { MemoryStore } from '../store/memory.js';
 import type { FeatureEdit, Store } from '../store/store.js';
 import { createTableStore } from '../store/table-memory.js';
-import type { Feature, VertexRef } from '../store/types.js';
+import type { Feature, StoreChange, VertexRef } from '../store/types.js';
 import { createMapStub } from '../test-utils.js';
 
 type Kind = 'objects' | 'rows' | 'ids';
@@ -805,6 +805,28 @@ describe('a sketch of one edit that moves rows', () => {
     expect(failures).toEqual([]);
   });
 
+  it('draws them where they are written in a frame of an image of the map', () => {
+    const { draw, engine, failures } = open('rows');
+    const a = line(draw);
+    draw.sketches.add({ edits: [translate([a.id], 1)] });
+    const shapes = engine.context.shapes;
+    const tables = featureTablesInternals(draw.getStore().tables)!;
+    expect(shapes.rowMotion(tables, SKETCH_MOVE_SET).transform).not.toBeNull();
+    shapes.setWritten(true);
+    // The row stays in its moving set, which moves it nowhere in that frame
+    expect(setOf(draw, a.id)).toBe(SKETCH_MOVE_SET);
+    expect(shapes.rowMotion(tables, SKETCH_MOVE_SET)).toEqual({
+      translation: [0, 0],
+      transform: null,
+    });
+    expect(shapes.draggedRows()).toBeNull();
+    expect(coordinatesOf(draw.rendered.get(a.id))[0]).toEqual([0, 0]);
+    shapes.setWritten(false);
+    expect(shapes.rowMotion(tables, SKETCH_MOVE_SET).transform).not.toBeNull();
+    expect(coordinatesOf(draw.rendered.get(a.id))[0]?.[0]).toBeCloseTo(1, 9);
+    expect(failures).toEqual([]);
+  });
+
   it('runs the checks of the sketches, which find a row out of its moving set', () => {
     const { draw, failures } = open('rows', ['sketches']);
     const a = line(draw);
@@ -816,6 +838,129 @@ describe('a sketch of one edit that moves rows', () => {
     expect(failures.map((f) => f.check)).toContain('sketches');
   });
 });
+
+for (const kind of KINDS) {
+  describe(`a frame of an image of the map over the Store of ${kind}`, () => {
+    /** The sketches of this client and of another one: a vertex of each line, and a line drawn */
+    function sketched(draw: Draw): { a: Feature; b: Feature } {
+      const a = line(draw);
+      const b = line(draw, 10);
+      draw.sketches.add({ edits: [move(a.id, [1, 1])] });
+      draw.sketches.add({ owner: 'other', edits: [move(b.id, [11, 1])] });
+      draw.sketches.add({
+        owner: 'other',
+        edits: [
+          {
+            kind: 'create',
+            feature: {
+              type: 'LineString',
+              geometry: {
+                type: 'LineString',
+                coordinates: [
+                  [20, 0],
+                  [21, 0],
+                ],
+              },
+            },
+          },
+        ],
+      });
+      return { a, b };
+    }
+
+    /** Whether the row of a feature is hidden by the mark of the sketches */
+    function hiddenBySketch(draw: Draw, id: string): boolean {
+      const tables = featureTablesInternals(draw.getStore().tables);
+      if (!tables) return false;
+      const place = tables.placeOf(tables.ids.handleOf(id))!;
+      return (place.group.state[place.row] & STATE_HIDDEN_SKETCH) !== 0;
+    }
+
+    it('reads the shapes as written, the sketches of every client left out, and as seen again after', () => {
+      const { draw, engine, failures } = open(kind);
+      const { a, b } = sketched(draw);
+      const shapes = engine.context.shapes;
+      const [created] = shapes.createdIds();
+      expect(created).toBeDefined();
+      const changes: StoreChange[] = [];
+      engine.sketches.view.onChange((change) => changes.push(change));
+      const rows = kind === 'rows';
+
+      shapes.setWritten(true);
+      expect(coordinatesOf(draw.rendered.get(a.id))[1]).toEqual([1, 0]);
+      expect(coordinatesOf(draw.rendered.get(b.id))[1]).toEqual([11, 0]);
+      expect(draw.rendered.get(created as string)).toBeUndefined();
+      expect(shapes.sketched).toBe(false);
+      expect(shapes.sketchedIds()).toEqual([]);
+      expect(shapes.createdIds()).toEqual([]);
+      if (rows) {
+        // The rows of the delta go, and the rows they hid are drawn
+        expect(hiddenBySketch(draw, a.id)).toBe(false);
+        expect(hiddenBySketch(draw, b.id)).toBe(false);
+        expect(changes).toEqual([]);
+      } else {
+        expect(shapes.drawnFeaturesInOrder()).toEqual(draw.getStore().listFeaturesInOrder());
+        // The drawing is told the features as the Store has them
+        const [change] = changes;
+        expect(changes).toHaveLength(1);
+        expect(change?.features?.updated?.map((u) => [u.id, u.feature]).sort()).toEqual(
+          [
+            [a.id, draw.getStore().getFeature(a.id)],
+            [b.id, draw.getStore().getFeature(b.id)],
+          ].sort(),
+        );
+        expect(change?.features?.deleted?.map((f) => f.id)).toEqual([created]);
+      }
+      // What hits reads as in every frame, and the snapping finds the shape this client draws
+      expect(shapes.hitFeature(a.id)).toBe(draw.getStore().getFeature(a.id));
+
+      shapes.setWritten(false);
+      expect(coordinatesOf(draw.rendered.get(a.id))[1]).toEqual([1, 1]);
+      expect(coordinatesOf(draw.rendered.get(b.id))[1]).toEqual([11, 1]);
+      expect(shapes.createdIds()).toEqual([created]);
+      if (rows) {
+        expect(hiddenBySketch(draw, a.id)).toBe(true);
+        expect(hiddenBySketch(draw, b.id)).toBe(true);
+      } else {
+        const change = changes[1];
+        expect(changes).toHaveLength(2);
+        expect(change?.features?.updated?.map((u) => u.id).sort()).toEqual([a.id, b.id].sort());
+        expect(change?.features?.created?.map((f) => f.id)).toEqual([created]);
+      }
+      line(draw, 30);
+      expect(failures).toEqual([]);
+    });
+
+    it('draws a sketch changed while the shapes are read as written once they are seen again', () => {
+      const { draw, engine, failures } = open(kind);
+      const a = line(draw);
+      const sketch = draw.sketches.add({ edits: [move(a.id, [1, 1])] }) as Sketch;
+      const shapes = engine.context.shapes;
+      shapes.setWritten(true);
+      draw.sketches.update(sketch.id, { edits: [move(a.id, [1, 2])] });
+      expect(coordinatesOf(draw.rendered.get(a.id))[1]).toEqual([1, 0]);
+      if (kind === 'rows') expect(hiddenBySketch(draw, a.id)).toBe(false);
+      shapes.setWritten(false);
+      expect(coordinatesOf(draw.rendered.get(a.id))[1]).toEqual([1, 2]);
+      if (kind === 'rows') {
+        expect(hiddenBySketch(draw, a.id)).toBe(true);
+        expect(
+          featureTablesInternals(draw.getStore().tables)?.sketchGeometryOf(a.id),
+        ).toMatchObject({
+          coordinates: [
+            [0, 0],
+            [1, 2],
+            [2, 0],
+          ],
+        });
+      } else {
+        expect(engine.sketches.view.drawnFeature(a.id)).toBe(draw.rendered.get(a.id));
+      }
+      line(draw, 30);
+      expect(failures).toEqual([]);
+    });
+  });
+}
 
 describe('the checks of the sketches as a failure', () => {
   it('throws from the operation that found them', () => {

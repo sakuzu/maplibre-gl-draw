@@ -98,7 +98,7 @@ import type { ScreenScaleFrame } from '../../shared/math/screen-scale.js';
 import type { BoundingBox, Feature, Layer } from '../../shared/types/model.js';
 import type { PixelRatioInput } from '../../shared/utils/pixel-ratio.js';
 import { resolvePixelRatio } from '../../shared/utils/pixel-ratio.js';
-import { rowMotionOf } from '../../sketches/rendered-shapes.js';
+import { type RowMotion, rowMotionOf } from '../../sketches/rendered-shapes.js';
 import {
   roleFieldsOf,
   type TransformFieldsRegistry,
@@ -359,6 +359,12 @@ export interface TableLayerRendererOptions {
    * with (Web Mercator at the zoom of the frame when it is left out or gives none)
    */
   readonly screenScale?: () => ScreenScaleFrame | null;
+  /**
+   * How a moving set moves its rows as they are drawn (as the GPU moves them, `rowMotionOf`, when
+   * it is left out): the shapes as they are seen give it, and give none in a frame of an image of
+   * the map
+   */
+  readonly rowMotion?: (tables: FeatureTablesInternals, set: number) => RowMotion;
 }
 
 /** The batches of a retained chunk of rows */
@@ -808,7 +814,7 @@ export class TableLayerRenderer {
   ) => void;
 
   constructor(private readonly options: TableLayerRendererOptions) {
-    this.drape = new TableDrape(options.ledger);
+    this.drape = new TableDrape(options.ledger, options.rowMotion);
     this.rowStateGpu = new GpuResources({
       gl: options.gl,
       ledger: options.ledger,
@@ -1652,7 +1658,7 @@ export class TableLayerRenderer {
     this.translations[0] = 0;
     this.translations[1] = 0;
     for (let k = 1; k <= MOVE_SETS; k++) {
-      const motion = rowMotionOf(tables, k);
+      const motion = (this.options.rowMotion ?? rowMotionOf)(tables, k);
       this.translations[k * 2] = motion.translation[0];
       this.translations[k * 2 + 1] = motion.translation[1];
       this.transforms[k] = motion.transform;

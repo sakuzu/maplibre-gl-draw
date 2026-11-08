@@ -49,7 +49,7 @@ import type { GroupVersion } from '../../feature-table/versions.js';
 import { generateCirclePolygon } from '../../geometry/circle.js';
 import { type EnuEdit, inverseEnuEdit, moveEnuPosition } from '../../geometry/enu-transforms.js';
 import { drawPropertyKey } from '../../shared/properties.js';
-import { BULK_ROWS_SET, rowMotionOf } from '../../sketches/rendered-shapes.js';
+import { BULK_ROWS_SET, type RowMotion, rowMotionOf } from '../../sketches/rendered-shapes.js';
 import type { Coordinate } from '../../store/types.js';
 import type { GpuLedger } from '../gpu-ledger.js';
 import { dashCoefficientsOf } from '../renderers/line/dash.js';
@@ -461,7 +461,18 @@ export class TableDrape {
    * @param ledger Where the GPU memory of the drape is recorded (nothing is recorded when
    *   omitted)
    */
-  constructor(private readonly ledger: GpuLedger) {}
+  /**
+   * @param ledger - Where the GPU memory of the drape is recorded
+   * @param rowMotion - How a moving set moves its rows as they are drawn (as the GPU moves them
+   *   when it is left out)
+   */
+  constructor(
+    private readonly ledger: GpuLedger,
+    private readonly rowMotion: (
+      tables: FeatureTablesInternals,
+      set: number,
+    ) => RowMotion = rowMotionOf,
+  ) {}
 
   /** Whether the last frame left tiles to build (the next frames build them) */
   get hasPendingWork(): boolean {
@@ -772,7 +783,7 @@ export class TableDrape {
       let inSet = false;
       for (const member of moving.members) if (member.inSet) inSet = true;
       if (inSet) {
-        const motion = rowMotionOf(tables, moving.set);
+        const motion = this.rowMotion(tables, moving.set);
         moving.translation = [motion.translation[0], motion.translation[1]];
         moving.transform = motion.transform;
       }

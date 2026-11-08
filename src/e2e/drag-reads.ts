@@ -20,7 +20,7 @@
  *   in its middle
  * - `features.get`, which reads the document, and `rendered.get`, which reads what is drawn
  * - the selected vertices
- * - the image of the map taken in the middle of a drag
+ * - the image of the map taken in the middle of a drag: what is dragged where it is written
  *
  * Every expectation is the behavior of the library as it is, to hold it while the places that
  * read an edit in progress are brought together. The handles drawn at sizes and distances of their
@@ -420,6 +420,7 @@ interface Run {
   midRadius: unknown;
   midEvents: Recorded[];
   image: Drawn[];
+  shownAfter: Drawn[];
   end: Drawn[];
   endGeometry: unknown;
   endRadius: unknown;
@@ -463,6 +464,7 @@ async function run(page: Page, kind: StoreKind, edit: Edit, cancelled: boolean):
   expect(await propertyOf(page, 'p', RADIUS_KEY)).toEqual(radius);
   await expectNoHits(page);
   const image = await capture(page, [FILL]);
+  const shownAfter = await frame(page, [FILL]);
   const midEvents = await events(page);
   if (edit.vertexSelected) expect(await vertexSelection(page)).toEqual(SELECTED_VERTEX);
 
@@ -490,6 +492,7 @@ async function run(page: Page, kind: StoreKind, edit: Edit, cancelled: boolean):
     midRadius,
     midEvents,
     image,
+    shownAfter,
     end,
     endGeometry,
     endRadius,
@@ -519,9 +522,12 @@ function expectMiddle(edit: Edit, r: Run): void {
       expect(drawn.count, `the pixels of the handle of color ${i}`).toBe(0);
     }
   }
-  // The image taken in the middle of the drag shows the feature where it is dragged. This holds
-  // the behavior as it is, which nothing decides yet: it may change later
-  expectSame(r.image[0] as Drawn, r.mid[I_FILL] as Drawn, 0.05);
+  // The image taken in the middle of the drag shows the feature where it is written, and the
+  // screen goes on drawing it where it is dragged. The image has none of the handles drawn over the
+  // fill, so it shows a little more of it
+  expectSame(r.image[0] as Drawn, r.selected[I_FILL] as Drawn, 0.05);
+  expect(differs(r.image[0] as Drawn, r.mid[I_FILL] as Drawn)).toBe(true);
+  expectSame(r.shownAfter[0] as Drawn, r.mid[I_FILL] as Drawn, 0.01, 0.5);
   // The events: nothing is written in the middle
   const started = edit.started ? [`start ${edit.started}`] : [];
   expect(sequenceOf(r.midEvents)).toEqual(started);

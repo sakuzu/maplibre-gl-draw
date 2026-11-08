@@ -12,6 +12,11 @@
  * hidden by the mark of the sketches (`FeatureTables` internals, `showSketches`). Over a Store of
  * objects, the drawing reads the features through this view (`ordered`, `drawnFeature`), and is
  * told which features it draws otherwise (`onChange`), as a change of the Store tells it.
+ *
+ * What the sketches draw can be left out (`leaveOut`), for a frame of an image of the map: the rows
+ * of the deltas are no longer drawn and the rows they hid are drawn again, the drawing of a Store of
+ * objects is told the features as the Store has them, and the sketches that change meanwhile are
+ * kept, drawn once they are no longer left out.
  */
 
 import type { SketchOverlay } from '../feature-table/feature-tables.js';
@@ -104,6 +109,8 @@ export class SketchView {
   #drawings: readonly ShapeBeingDrawn[] = [];
   readonly #listeners = new Set<(change: StoreChange) => void>();
   readonly #redraws = new Set<() => void>();
+  /** Whether what the sketches draw is left out (a frame of an image of the map) */
+  #leftOut = false;
 
   constructor(store: Store) {
     this.#store = store;
@@ -191,6 +198,8 @@ export class SketchView {
     this.#live = new Map(live);
     this.#creates = [...creates];
     this.#createByKey = new Map(creates.map((create) => [create.key, create]));
+    // Left out: drawn once they are no longer
+    if (this.#leftOut) return;
     const store = this.#store;
     if (store.tables) {
       this.#showRows();
@@ -199,6 +208,51 @@ export class SketchView {
     const change = this.#changeOf(before, createsBefore);
     if (!change) return;
     for (const listener of [...this.#listeners]) listener(change);
+  }
+
+  /**
+   * Leaves out what the sketches draw, or draws it again: over a Store of rows, the rows of the
+   * deltas go and the rows they hid are drawn; the drawing of a Store of objects is told each
+   * feature as the Store has it (and as the sketches leave it again once they are drawn again)
+   */
+  leaveOut(leftOut: boolean): void {
+    if (this.#leftOut === leftOut) return;
+    this.#leftOut = leftOut;
+    if (this.#live.size === 0 && this.#creates.length === 0) return;
+    const store = this.#store;
+    if (store.tables) {
+      if (leftOut) featureTablesInternals(store.tables)?.showSketches([]);
+      else this.#showRows();
+      return;
+    }
+    const change = leftOut ? this.#changeToStore() : this.#changeOf(new Map(), new Map());
+    if (!change) return;
+    for (const listener of [...this.#listeners]) listener(change);
+  }
+
+  /**
+   * The change of what the drawing of a Store of objects draws once the sketches are left out:
+   * each feature drawn otherwise as the Store has it, and the features the sketches create gone
+   */
+  #changeToStore(): StoreChange | null {
+    const store = this.#store;
+    const updated: NonNullable<NonNullable<StoreChange['features']>['updated']> = [];
+    const deleted: Feature[] = [];
+    for (const [id, previous] of this.#live) {
+      const feature = store.getFeature(id);
+      if (feature === previous) continue;
+      if (feature) updated.push({ id, feature, previous });
+      else deleted.push(previous);
+    }
+    for (const create of this.#creates) deleted.push(create.feature);
+    if (updated.length + deleted.length === 0) return null;
+    return {
+      source: 'local',
+      features: {
+        ...(updated.length > 0 ? { updated } : {}),
+        ...(deleted.length > 0 ? { deleted } : {}),
+      },
+    };
   }
 
   /** Draws the sketches among the rows of a Store of rows */

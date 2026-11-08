@@ -18,7 +18,7 @@
  * - the snapping: none of the features dragged is a candidate of its own drag, from its start on
  * - the events of the features, the document and the drags
  * - `features.get`, which reads the document, and `rendered.get`, which reads what is drawn
- * - the image of the map taken in the middle of a drag
+ * - the image of the map taken in the middle of a drag: what is dragged where it is written
  *
  * Every expectation is the behavior of the library as it is, to hold it while the places that
  * read an edit in progress are brought together, but for the snap of the start of a drag: it
@@ -392,6 +392,7 @@ describe.each(KINDS)('many features dragged over a Store of %s', (kind) => {
       const mid = await readAll(page);
       await expectLeftOut(page, lastMoves ? [] : [IDS[COUNT - 1] as string]);
       const image = await capture(page, [FILL]);
+      const shownAfter = await frame(page, [FILL]);
       await mark(page);
       if (cancelled) await cancelAndRelease(page);
       else await release(page);
@@ -411,9 +412,11 @@ describe.each(KINDS)('many features dragged over a Store of %s', (kind) => {
       expect(differs(mid.drawn[I_LAST] as Drawn, selected.drawn[I_LAST] as Drawn)).toBe(lastMoves);
       expect((mid.drawn[I_RESIZE] as Drawn).count).toBe(0);
       expect((mid.drawn[I_ROTATE] as Drawn).count > 0).toBe(!edit.moves);
-      // The image taken in the middle of the drag shows them where they are dragged. This holds
-      // the behavior as it is, which nothing decides yet: it may change later
-      expectSame(image[0] as Drawn, mid.drawn[I_FILL] as Drawn, 0.05);
+      // The image taken in the middle of the drag shows them where they are written, and the
+      // screen goes on drawing them where they are dragged
+      expectSame(image[0] as Drawn, selected.drawn[I_FILL] as Drawn, 0.05);
+      expect(differs(image[0] as Drawn, mid.drawn[I_FILL] as Drawn)).toBe(true);
+      expectSame(shownAfter[0] as Drawn, mid.drawn[I_FILL] as Drawn, 0.01, 0.5);
       // Shown by a sketch: read as they were, and seen as they go
       expect(mid.first).toEqual(selected.first);
       expect(mid.last).toEqual(selected.last);
@@ -485,6 +488,7 @@ describe.each(KINDS)('many features dragged over a Store of %s', (kind) => {
       expect(answers.ids.length).toBeGreaterThan(30);
       expect(answers.hitOutside).toEqual([]);
       const image = await capture(page, [FIRST]);
+      const shownAfter = await frame(page, [FIRST]);
       await mark(page);
       if (cancelled) await cancelAndRelease(page);
       else await release(page);
@@ -498,11 +502,12 @@ describe.each(KINDS)('many features dragged over a Store of %s', (kind) => {
       expectSame(mid.drawn[I_FILL] as Drawn, selected.drawn[I_FILL] as Drawn, 0.01, 0.5);
       expectSame(mid.drawn[I_LAST] as Drawn, selected.drawn[I_LAST] as Drawn, 0.01, 0.5);
       expect((mid.drawn[I_FRAME] as Drawn).count).toBeGreaterThan(100);
-      // The image taken in the middle of the drag shows it where it is dragged. This holds the
-      // behavior as it is, which nothing decides yet: it may change later. The image has none of
-      // the handles drawn over the square, so it shows all of its fill
-      expect((image[0] as Drawn).box).toEqual((mid.drawn[I_FIRST] as Drawn).box);
-      expectNear((image[0] as Drawn).center, (mid.drawn[I_FIRST] as Drawn).center as MapPoint);
+      // The image taken in the middle of the drag shows it where it is written, and the screen
+      // goes on drawing it where it is dragged. The image has none of the handles drawn over the
+      // square, so it shows all of its fill
+      expect((image[0] as Drawn).box).toEqual((selected.drawn[I_FIRST] as Drawn).box);
+      expectNear((image[0] as Drawn).center, (selected.drawn[I_FIRST] as Drawn).center as MapPoint);
+      expectSame(shownAfter[0] as Drawn, mid.drawn[I_FIRST] as Drawn, 0.01, 0.5);
       expect(mid.first).toEqual(selected.first);
       expect(mid.firstSketched).not.toEqual(selected.first);
       expect(mid.last).toEqual(selected.last);
