@@ -29,6 +29,7 @@ import type { Engine } from '../api/impl/engine.js';
 import { createEngine } from '../api/impl/engine.js';
 import type { ConsistencyFailure } from '../api/options.js';
 import type { Sketch, SketchEdit } from '../api/sketches.js';
+import { draggedRowMotionsOf } from '../feature-table/dragged-rows.js';
 import { featureTablesInternals } from '../feature-table/feature-tables.js';
 import {
   SKETCH_MOVE_SET,
@@ -819,7 +820,14 @@ describe('a sketch of one edit that moves rows', () => {
       translation: [0, 0],
       transform: null,
     });
-    expect(shapes.draggedRows()).toBeNull();
+    // The row is read as dragged, drawn where it is written
+    const handle = tables.ids.handleOf(a.id);
+    const inPlace = shapes.draggedRows();
+    expect(inPlace?.has(handle)).toBe(true);
+    expect(inPlace?.position(handle, [0, 0])).toEqual([0, 0]);
+    expect(draggedRowMotionsOf(inPlace!)?.translation(SKETCH_MOVE_SET)).toEqual([0, 0]);
+    expect(draggedRowMotionsOf(inPlace!)?.transform(SKETCH_MOVE_SET)).toBeNull();
+    expect(draggedRowMotionsOf(inPlace!)?.gpuStateOf(handle)).not.toBe(0);
     expect(coordinatesOf(draw.rendered.get(a.id))[0]).toEqual([0, 0]);
     shapes.setWritten(false);
     expect(shapes.rowMotion(tables, SKETCH_MOVE_SET).transform).not.toBeNull();

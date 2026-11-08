@@ -146,6 +146,31 @@ export function draggedRowsOf(tables: FeatureTables | undefined): DraggedRows | 
 }
 
 /**
+ * The rows being dragged, drawn where they are written: the same rows in the same moving sets,
+ * moved nowhere (a frame of an image of the map draws them so). What follows them reads it as it
+ * reads the rows being dragged, and draws them in place
+ *
+ * @param dragged - The rows being dragged
+ * @returns The same rows, moved nowhere
+ * @internal
+ */
+export function draggedRowsInPlace(dragged: DraggedRows): DraggedRows {
+  const gpu = motions.get(dragged);
+  const inPlace: DraggedRows = {
+    has: (handle) => dragged.has(handle),
+    position: (_handle, position) => position,
+    rotation: () => 0,
+    scale: () => 1,
+  };
+  motions.set(inPlace, {
+    gpuStateOf: (handle) => gpu?.gpuStateOf(handle) ?? 0,
+    translation: () => [0, 0],
+    transform: () => null,
+  });
+  return inPlace;
+}
+
+/**
  * A feature of a row being dragged, where the row is drawn: its positions moved by the computation
  * its row is written with once let go, and the rotation, the scale and the radius it holds turned
  * and scaled with them as that write gives them. A feature of a row held that is moved as a whole

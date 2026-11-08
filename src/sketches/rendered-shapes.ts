@@ -25,7 +25,11 @@
  */
 
 import type { DraggedRows } from '../feature-table/dragged-rows.js';
-import { draggedFeatureOf, draggedRowsOf } from '../feature-table/dragged-rows.js';
+import {
+  draggedFeatureOf,
+  draggedRowsInPlace,
+  draggedRowsOf,
+} from '../feature-table/dragged-rows.js';
 import type { FeatureTablesInternals } from '../feature-table/feature-tables.js';
 import { featureTablesInternals } from '../feature-table/feature-tables.js';
 import { BULK_MOVE_SET, type RowStateSets } from '../feature-table/row-state.js';
@@ -137,6 +141,8 @@ export class RenderedShapes {
   readonly #moved = new Map<string, { readonly from: Feature; readonly feature: Feature }>();
   /** Whether what draws reads the shapes as they are written (a frame of an image of the map) */
   #written = false;
+  /** The rows being dragged as read last, drawn where they are written */
+  #inPlace: { readonly dragged: DraggedRows; readonly inPlace: DraggedRows } | null = null;
   /** What is told when the shapes read as written are seen as they are again */
   readonly #seenAgain = new Set<() => void>();
 
@@ -229,10 +235,24 @@ export class RenderedShapes {
 
   /**
    * The rows being dragged and where each is drawn, while they are not written yet (read once for
-   * each change of how they move: a frame reads it for each feature it asks for)
+   * each change of how they move: a frame reads it for each feature it asks for). While the shapes
+   * are read as written, the same rows drawn where they are written
    */
   draggedRows(): DraggedRows | null {
-    if (this.#written) return null;
+    if (this.#written) {
+      // The same rows, drawn where they are written: what keeps the motion of the last frame that
+      // had rows dragged draws them in place too
+      const dragged = this.#draggedNow();
+      if (!dragged) return null;
+      if (this.#inPlace?.dragged !== dragged) {
+        this.#inPlace = { dragged, inPlace: draggedRowsInPlace(dragged) };
+      }
+      return this.#inPlace.inPlace;
+    }
+    return this.#draggedNow();
+  }
+
+  #draggedNow(): DraggedRows | null {
     const tables = this.#store.tables;
     const states = featureTablesInternals(tables)?.states;
     if (!states) return null;
