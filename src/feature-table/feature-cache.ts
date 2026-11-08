@@ -335,12 +335,22 @@ export class FeatureCache {
     }
   }
 
-  /** Forgets every feature kept (the rows selected stay selected) */
+  /**
+   * Forgets every feature kept, the ones found for the ids of the rows selected included (the rows
+   * selected stay selected: their features are kept again once their rows are read)
+   */
   clear(): void {
     this.#kept.clear();
     this.#oldest = null;
     this.#newest = null;
     this.#selectedKept = 0;
+    for (const found of this.#selectedIds.values()) {
+      found.kept = null;
+      found.revision = -1;
+      found.stamped = -1;
+    }
+    this.#foundRevision = -1;
+    this.#foundStamped = -1;
   }
 
   /**

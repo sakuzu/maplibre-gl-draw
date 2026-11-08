@@ -230,7 +230,7 @@ draw.setLocallyHidden(layerId, true);
 ```ts
 // 2.0
 draw.selection.set('feature', [featureId]);
-const ids = draw.selection.get().ids;
+const ids = draw.selection.value.ids;
 draw.selection.clear();
 draw.hidden.add(layerId);
 ```
@@ -425,7 +425,7 @@ if (merged) console.log(area(merged), 'm²');
 `features.union(ids)`、`features.difference(id, ids)`、
 `features.intersection(ids)`、`features.split(id, lineId)`、
 `features.buffer(ids, { distanceMeters })` です。ID を受け取り
-(選択に対して行うときは `draw.selection.get().ids` を渡します)、
+(選択に対して行うときは `draw.selection.value.ids` を渡します)、
 できた地物を返します。
 
 ## 拡張の移行

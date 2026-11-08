@@ -166,6 +166,66 @@ describe('draw.selection', () => {
     expect(selection.value.bbox).toEqual([1, 1, 1, 1]);
   });
 
+  it('gives the same value until the selection or the document changes, kept as it was given', () => {
+    const told: Array<{ bbox: unknown; layerIds: readonly string[] }> = [];
+    selection.set('feature', ['a', 'b']);
+    const value = selection.value;
+    expect(selection.value).toBe(value);
+    store.subscribe((change) => {
+      if (change.selection?.previousValue) told.push(change.selection.previousValue);
+    });
+    // Moved: the value given keeps the features as they were, the next one reads them now
+    store.updateFeature('b', { geometry: { type: 'Point', coordinates: [5, 5] } });
+    expect(value.bbox).toEqual([0, 0, 1, 1]);
+    const moved = selection.value;
+    expect(moved).not.toBe(value);
+    expect(moved.bbox).toEqual([0, 0, 5, 5]);
+    expect(selection.value).toBe(moved);
+    // Deleted with nothing read: the selection before it is told as it was
+    store.setSelection('feature', ['a', 'line']);
+    told.length = 0;
+    store.transact(() => {
+      store.deleteFeature('a');
+      store.deleteFeature('line');
+    });
+    expect(told).toHaveLength(1);
+    expect(told[0]?.bbox).toEqual([0, 0, 2, 0]);
+    expect(told[0]?.layerIds).toEqual(['l1']);
+    expect(value.bbox).toEqual([0, 0, 1, 1]);
+    // Written twice, and another feature written, before it is read: as it was given
+    store.setSelection('feature', ['b']);
+    const given = selection.value;
+    store.updateFeature('b', { geometry: { type: 'Point', coordinates: [6, 6] } });
+    store.updateFeature('hidden', { properties: { n: 1 } });
+    store.updateFeature('b', { geometry: { type: 'Point', coordinates: [7, 7] } });
+    expect(given.bbox).toEqual([5, 5, 5, 5]);
+    expect(selection.value.bbox).toEqual([7, 7, 7, 7]);
+  });
+
+  it('refuses a target another instance gave', () => {
+    selection.set('feature', ['a']);
+    const target = selection.target;
+    const other = new MemoryStore();
+    const deps = createResourceDeps(other);
+    const otherSelection = createSelection(deps, {
+      features: createFeatures(deps),
+      groups: createGroups(deps),
+    });
+    expect(codeOf(() => otherSelection.set(target))).toBe('invalid-input');
+    expect(selection.set(target)).toBe(true);
+  });
+
+  it('names a group with the number of the features in it now', () => {
+    selection.set('group', ['g']);
+    const target = selection.target;
+    expect(target.count).toBe(1);
+    expect(selection.target).toBe(target);
+    store.updateFeature('a', { groupId: 'g' });
+    expect(selection.value.count).toBe(2);
+    expect(selection.target).not.toBe(target);
+    expect(selection.target.count).toBe(2);
+  });
+
   it('moves the selected features or groups', () => {
     selection.set('feature', ['a']);
     expect(selection.move({ layerId: 'l2' })).toBe(true);

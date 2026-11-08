@@ -11,13 +11,18 @@
  * number, the layers and the extent of the features are read from the rows of a Store of rows
  * (no feature is made) and from the features of a Store of objects, there when the layers or the
  * extent are first read (a selection changed in every frame of a box costs no reading of the
- * geometries of its features). The value of the features
- * listed by their IDs over a Store of rows is read again only once the IDs or the rows change: it
- * is kept with the versions of the rows and of the ids it was read at (`LISTED_VALUES`).
+ * geometries of its features). A value is the selection as it was when it was given: the
+ * features of a Store of objects it has not read yet are read as they were before a change of the
+ * document, for the values the instance tells (`settleSelectionValues`). The same selection gives
+ * the same value until the document changes: the value of the features listed by their IDs over
+ * a Store of rows is kept with the versions of the rows and of the ids it was read at
+ * (`LISTED_VALUES`), the value of a Store of objects until a change of its document
+ * (`OBJECT_VALUES`), and the value of features selected in bulk with their summary
+ * (`BULK_VALUES`).
  *
  * A target keeps the selection as it was read (the IDs, or the rows of the features selected in
- * bulk), so that selecting it again (`DrawStore.restoreSelection`) puts the same items back,
- * without listing the rows of a selection of many.
+ * bulk) with the Store it was read from, so that selecting it again (`DrawStore.restoreSelection`)
+ * puts the same items back, without listing the rows of a selection of many.
  */
 
 import { summarizeRows } from '../feature-table/bulk-rows.js';
@@ -38,6 +43,7 @@ import type {
   SelectionBulk,
   SelectionTarget,
   SelectionValue,
+  StoreChange,
 } from './types.js';
 
 /** The value of nothing selected */
@@ -49,8 +55,12 @@ const NOTHING: SelectionValue = Object.freeze({
   bbox: null,
 });
 
-/** The value of each summary of features selected in bulk (the same object for the same one) */
-const BULK_VALUES = new WeakMap<SelectionBulk, SelectionValue>();
+/**
+ * The values of each summary of features selected in bulk: one for each type and IDs it is read
+ * as (the same object for the same ones). The selection of a group or a layer selected in bulk
+ * keeps its type and IDs, and a drag of its features (`bulkSelectionValue`) reads it as features
+ */
+const BULK_VALUES = new WeakMap<SelectionBulk, SelectionValue[]>();
 
 /**
  * The value of the features listed by their IDs read last over the rows of tables, with the
@@ -66,8 +76,44 @@ interface ListedValue {
 /** The value of the features listed by their IDs read last, for each tables */
 const LISTED_VALUES = new WeakMap<FeatureTablesInternals, ListedValue>();
 
-/** The selection each target names */
-const TARGETS = new WeakMap<SelectionTarget, Selection>();
+/** The selection each target names, with the Store it was read from */
+const TARGETS = new WeakMap<
+  SelectionTarget,
+  { readonly store: Store; readonly selection: Selection }
+>();
+
+/**
+ * What the value of a selection of a Store of objects reads its layers and extent from: the
+ * features of the selection (null until they are read, when the layers or the extent are first
+ * read), the features the changes of the document since the value was made wrote (the changes,
+ * in their order, and the number of the features they wrote; kept while the features of the
+ * selection are not read, see `settleSelectionValues`), and their extent once read
+ */
+interface ObjectsRead {
+  readonly store: Store;
+  readonly type: NonNullable<Selection['type']>;
+  readonly ids: readonly string[];
+  features: readonly Feature[] | null;
+  written: FeaturesChange[] | null;
+  writtenCount: number;
+  extent: ObjectsExtent | null;
+}
+
+/** The features a change of the document wrote */
+type FeaturesChange = NonNullable<StoreChange['features']>;
+
+/** What each value of a selection of a Store of objects reads */
+const OBJECT_READS = new WeakMap<SelectionValue, ObjectsRead>();
+
+/**
+ * The value of the selection of a Store of objects made last, with the IDs it was made of (the
+ * array the Store gave when it is frozen): given again for the same selection until the document
+ * changes (`settleSelectionValues`)
+ */
+const OBJECT_VALUES = new WeakMap<
+  Store,
+  { readonly source: readonly string[]; readonly value: SelectionValue }
+>();
 
 /** The target made last for each Store, with the selection it names */
 const LAST_TARGET = new WeakMap<Store, SelectionTarget>();
@@ -126,16 +172,49 @@ export function valueOfSelection(store: Store, selection: Selection): SelectionV
     }
     return value;
   }
-  // The layers and the extent of the features of a Store of objects are read when first asked
-  // for, not each time the selection changes: a box drawn over many features changes it in
-  // every frame, and nothing reads them then
-  const features = type === 'feature' ? null : selectedObjects(store, type, ids);
-  let extent: ObjectsExtent | null = null;
-  const extentNow = (): ObjectsExtent =>
-    (extent ??= extentOfObjects(features ?? selectedObjects(store, type, ids)));
-  return Object.freeze({
+  return objectsValueOf(store, selection, type, ids);
+}
+
+/**
+ * The value of a selection of a Store of objects: the one made last for the same selection while
+ * the document has not changed, made otherwise
+ *
+ * The layers and the extent of its features are read when first asked for, not each time the
+ * selection changes: a box drawn over many features changes it in every frame, and nothing reads
+ * them then. The features of a group or a layer are read when the value is made (its number).
+ */
+function objectsValueOf(
+  store: Store,
+  selection: Selection,
+  type: NonNullable<Selection['type']>,
+  ids: readonly string[],
+): SelectionValue {
+  const last = OBJECT_VALUES.get(store);
+  if (
+    last &&
+    last.value.type === type &&
+    (last.source === selection.ids || sameIds(last.source, selection.ids))
+  ) {
+    return last.value;
+  }
+  const read: ObjectsRead = {
+    store,
     type,
-    count: features?.length ?? ids.length,
+    ids,
+    features:
+      type === 'feature' ? null : selectedObjects(store, type, ids, (id) => store.getFeature(id)),
+    written: null,
+    writtenCount: 0,
+    extent: null,
+  };
+  const extentNow = (): ObjectsExtent => {
+    if (read.features === null) readAsGiven(read, null);
+    read.extent ??= extentOfObjects(read.features ?? []);
+    return read.extent;
+  };
+  const value: SelectionValue = Object.freeze({
+    type,
+    count: read.features?.length ?? ids.length,
     ids,
     get layerIds() {
       return extentNow().layerIds;
@@ -144,6 +223,102 @@ export function valueOfSelection(store: Store, selection: Selection): SelectionV
       return extentNow().bbox;
     },
   });
+  OBJECT_READS.set(value, read);
+  // An array the Store may change in place is kept as a copy
+  OBJECT_VALUES.set(store, { source: Object.isFrozen(selection.ids) ? selection.ids : ids, value });
+  return value;
+}
+
+/**
+ * Keeps the values of the selection of a Store of objects as they were given through a change of
+ * its document: a value whose features are not read yet keeps the features the change wrote as
+ * they were before it (only the ones it wrote: a write costs no reading of the selection), and its
+ * features are read from them and the Store once asked for. Past as many as the selection has (or
+ * `WRITTEN_LIMIT`), its features are read at once instead. The next value of the same selection is
+ * made again. Called with the notification of the change, before the selection it tells is read
+ *
+ * @param values The values the instance tells or told last, besides the one made last
+ * @internal
+ */
+export function settleSelectionValues(
+  store: Store,
+  changes: StoreChange,
+  values: readonly (SelectionValue | null)[],
+): void {
+  if (!changesDocument(changes)) return;
+  const last = OBJECT_VALUES.get(store);
+  OBJECT_VALUES.delete(store);
+  const reads = new Set<ObjectsRead>();
+  for (const value of [last?.value, ...values]) {
+    const read = value && OBJECT_READS.get(value);
+    if (read && read.features === null && read.store === store) reads.add(read);
+  }
+  if (reads.size === 0) return;
+  const features = changes.features;
+  const count =
+    (features?.created?.length ?? 0) +
+    (features?.updated?.length ?? 0) +
+    (features?.deleted?.length ?? 0);
+  for (const read of reads) {
+    // The whole document from elsewhere: what was there before is not told
+    if (changes.reset === true) {
+      readAsGiven(read, features);
+      continue;
+    }
+    if (!features || count === 0) continue;
+    if (read.writtenCount + count > Math.max(read.ids.length, WRITTEN_LIMIT)) {
+      readAsGiven(read, features);
+      continue;
+    }
+    read.written ??= [];
+    read.written.push(features);
+    read.writtenCount += count;
+  }
+}
+
+/** The features written kept for a value of a selection of objects at most (or as many as it has) */
+const WRITTEN_LIMIT = 1024;
+
+/**
+ * Reads the features of the value of a selection of objects as they were when it was given: the
+ * ones the changes since wrote (those kept, then `more`) as they were before the first of them,
+ * the others as the Store has them
+ */
+function readAsGiven(read: ObjectsRead, more: FeaturesChange | undefined | null): void {
+  const before = new Map<string, Feature | null>();
+  for (const change of [...(read.written ?? []), ...(more ? [more] : [])]) {
+    for (const [id, was] of featuresBefore(change)) if (!before.has(id)) before.set(id, was);
+  }
+  read.features = selectedObjects(read.store, read.type, read.ids, (id) => {
+    const was = before.get(id);
+    return was === undefined ? read.store.getFeature(id) : (was ?? undefined);
+  });
+  read.written = null;
+  read.writtenCount = 0;
+}
+
+/** Whether a notification changes the document (what the value of a selection reads) */
+function changesDocument(changes: StoreChange): boolean {
+  return (
+    changes.features !== undefined ||
+    changes.groups !== undefined ||
+    changes.layers !== undefined ||
+    changes.order !== undefined ||
+    changes.reset === true ||
+    changes.rows !== undefined
+  );
+}
+
+/**
+ * The features a change wrote, as they were before it: the ones deleted and the ones updated as
+ * they were, and none for the ones created
+ */
+function featuresBefore(features: FeaturesChange): Map<string, Feature | null> {
+  const out = new Map<string, Feature | null>();
+  for (const feature of features.created ?? []) out.set(feature.id, null);
+  for (const { feature, previous } of features.updated ?? []) out.set(feature.id, previous);
+  for (const feature of features.deleted ?? []) out.set(feature.id, feature);
+  return out;
 }
 
 /** The layers and the extent of features of a Store of objects */
@@ -171,30 +346,33 @@ function extentOfObjects(features: readonly Feature[]): ObjectsExtent {
  */
 export function selectionTargetOf(store: Store): SelectionTarget {
   const selection = store.getSelection();
+  // The number of the features of a group or a layer selected by its ID follows what is in it, as
+  // the one of features selected in bulk follows their rows
+  const count = valueOfSelection(store, selection).count;
   const last = LAST_TARGET.get(store);
   const named = last && TARGETS.get(last);
-  if (last && named && sameSelection(named, selection)) return last;
+  if (last && named && last.count === count && sameSelection(named.selection, selection)) {
+    return last;
+  }
   const kept: Selection = {
     type: selection.type,
     ids: Object.freeze([...selection.ids]) as readonly string[],
     ...(selection.bulk && { bulk: selection.bulk }),
   };
-  const target: SelectionTarget = Object.freeze({
-    type: 'selection',
-    count: valueOfSelection(store, selection).count,
-  });
-  TARGETS.set(target, kept);
+  const target: SelectionTarget = Object.freeze({ type: 'selection', count });
+  TARGETS.set(target, { store, selection: kept });
   LAST_TARGET.set(store, target);
   return target;
 }
 
 /**
- * The selection a target names (undefined for an object the instance did not give)
+ * The selection a target names (undefined for an object the instance of this Store did not give)
  *
  * @internal
  */
-export function selectionOfTarget(target: SelectionTarget): Selection | undefined {
-  return TARGETS.get(target);
+export function selectionOfTarget(store: Store, target: SelectionTarget): Selection | undefined {
+  const named = TARGETS.get(target);
+  return named?.store === store ? named.selection : undefined;
 }
 
 /**
@@ -214,7 +392,11 @@ function bulkValueOf(
   bulk: SelectionBulk,
 ): SelectionValue {
   const known = BULK_VALUES.get(bulk);
-  if (known) return known;
+  const found = known?.find(
+    (value) =>
+      value.type === type && (type === 'feature' || sameIds(value.ids as readonly string[], ids)),
+  );
+  if (found) return found;
   const value: SelectionValue = Object.freeze({
     type,
     count: bulk.count,
@@ -223,21 +405,26 @@ function bulkValueOf(
     layerIds: bulk.layerIds,
     bbox: bulk.bbox,
   });
-  BULK_VALUES.set(bulk, value);
+  if (known) known.push(value);
+  else BULK_VALUES.set(bulk, [value]);
   const rows = rowsOfSummary(bulk);
   if (rows) keepSelectedRows(value, rows);
   return value;
 }
 
-/** The features of a selection of a Store of objects (the members of its groups and layers) */
+/**
+ * The features of a selection of a Store of objects (the members of its groups and layers), each
+ * read by `featureOf`
+ */
 function selectedObjects(
   store: Store,
   type: NonNullable<Selection['type']>,
   ids: readonly string[],
+  featureOf: (id: string) => Feature | undefined,
 ): Feature[] {
   const out: Feature[] = [];
   const add = (id: string): void => {
-    const feature = store.getFeature(id);
+    const feature = featureOf(id);
     if (feature) out.push(feature);
   };
   const addGroup = (group: Group): void => {

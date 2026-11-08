@@ -82,7 +82,7 @@ export interface TableBenchPageParams extends TableBenchParams {
    * the pointer moves over between the buildings; 0 for none)
    */
   readonly bigArea: number;
-  /** The rows the edits of many rows held select and move or keep while panning */
+  /** The number of rows the edits of many rows select and move, or keep selected while panning */
   readonly held: number;
   /**
    * The number of rows held from which a row held moved as a whole is drawn moved by its state
@@ -100,8 +100,8 @@ export interface TableBenchPageParams extends TableBenchParams {
  * The edits a page repeats: written to the rows (`color1` to `finish`), made as the select mode
  * makes them, a feature at a time (`hover` to `delete`): the pointer moved over the map, a click
  * that selects and shows the handles, a vertex added by a drag of a midpoint, a vertex taken off
- * and put back, a feature selected and deleted; and the edits of many rows (`moveHeld` to
- * `undoRedo`): `held` rows selected and dragged, `held` rows selected while the map pans,
+ * and put back, a feature selected and deleted; and the edits of many rows (`moveSelected`
+ * to `undoRedo`): `held` rows selected and dragged, `held` rows selected while the map pans,
  * `members` rows grouped and ungrouped, put in another layer and back, one row and `members`
  * rows brought to the front and sent to the back, an edit of `members` rows undone and redone,
  * and a box drawn with Shift grown and shrunk over the map (`boxHeld`)
@@ -120,8 +120,8 @@ export const EDIT_OPS = [
   'vertexAdd',
   'vertexRemove',
   'delete',
-  'moveHeld',
-  'panHeld',
+  'moveSelected',
+  'panSelected',
   'group',
   'toLayer',
   'order1',

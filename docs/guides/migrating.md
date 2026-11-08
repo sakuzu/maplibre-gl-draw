@@ -225,7 +225,7 @@ draw.setLocallyHidden(layerId, true);
 ```ts
 // 2.0
 draw.selection.set('feature', [featureId]);
-const ids = draw.selection.get().ids;
+const ids = draw.selection.value.ids;
 draw.selection.clear();
 draw.hidden.add(layerId);
 ```
@@ -417,7 +417,7 @@ The operations that change the document are methods of `features`:
 `features.union(ids)`, `features.difference(id, ids)`,
 `features.intersection(ids)`, `features.split(id, lineId)` and
 `features.buffer(ids, { distanceMeters })`. They take the IDs (pass
-`draw.selection.get().ids` for the selection) and return the features
+`draw.selection.value.ids` for the selection) and return the features
 they made.
 
 ## Migrating an extension

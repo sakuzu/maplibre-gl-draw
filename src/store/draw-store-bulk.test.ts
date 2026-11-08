@@ -13,6 +13,7 @@ import { STATE_BULK } from '../feature-table/row-state.js';
 import { TableSelection } from '../feature-table/selection.js';
 import { internalsOf } from '../test-utils.js';
 import { DrawStore } from './draw-store.js';
+import { bulkSelectionValue, valueOfSelection } from './selection-value.js';
 import { TableContractStore } from './table-memory.js';
 import type { Feature, Layer, StoreChange } from './types.js';
 
@@ -192,6 +193,34 @@ describe('features selected in bulk', () => {
     expect(store.getSelection().bulk?.bbox).toEqual([-10, 0, 7, 1]);
   });
 
+  it('give a group read as features by a drag, and as the group by the selection, in any order', () => {
+    for (const dragFirst of [true, false]) {
+      const { store, ids } = setup(6);
+      store.createGroup({
+        id: 'g',
+        layerId: 'l',
+        name: 'g',
+        visible: true,
+        locked: false,
+        featureIds: ids.slice(0, 5),
+      } as never);
+      store.setSelection('group', ['g']);
+      // A member moved: the summary is made again, and no one read the selection since
+      store.updateFeature('f0', { geometry: square('f0', -10).geometry });
+      const selection = store.getSelection();
+      const bulk = selection.bulk as NonNullable<typeof selection.bulk>;
+      const read = () => valueOfSelection(store, store.getSelection());
+      const selected = dragFirst ? null : read();
+      // The value of a drag of the features (drag.started), with no IDs
+      const dragged = bulkSelectionValue(bulk);
+      expect(dragged).toMatchObject({ type: 'feature', count: 5, ids: null });
+      expect(bulkSelectionValue(bulk)).toBe(dragged);
+      expect(read()).toMatchObject({ type: 'group', count: 5, ids: ['g'] });
+      expect(read()).toBe(selected ?? read());
+      expect(read().bbox).toEqual([-10, 0, 9, 1]);
+    }
+  });
+
   it('are put back from a summary kept, without what is gone', () => {
     const { store, ids } = setup(7);
     store.setSelection('feature', ids.slice(0, 5));
@@ -204,6 +233,29 @@ describe('features selected in bulk', () => {
     store.setSelection(null, []);
     store.restoreSelection(kept);
     expect(store.getSelection().ids).toEqual(['f2', 'f3', 'f4']);
+  });
+
+  it('leave the selection at once when many of the rows listed are deleted from elsewhere', () => {
+    const { contract, store, ids, handleOf } = setup(40, 50);
+    store.setSelection('feature', ids.slice(0, 30));
+    let set = 0;
+    const setSelection = contract.setSelection.bind(contract);
+    contract.setSelection = (type, list) => {
+      set++;
+      setSelection(type, list);
+    };
+    const handles = Int32Array.from(ids.slice(0, 20).map(handleOf));
+    store.transact(
+      () =>
+        contract.writer.apply({
+          handles,
+          fields: new Map(),
+          deleted: new Uint8Array(handles.length).fill(1),
+        }),
+      'remote',
+    );
+    expect(set).toBe(1);
+    expect(store.getSelection().ids).toEqual(ids.slice(20, 30));
   });
 
   it('are selected by their rows, opened up to the limit', () => {

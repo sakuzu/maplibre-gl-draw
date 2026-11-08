@@ -159,7 +159,7 @@ export function createSelection(
 
     set(typeOrTarget: SelectionType | SelectionTarget, ids?: readonly string[]) {
       if (isRecord(typeOrTarget)) {
-        const selection = selectionOfTarget(typeOrTarget as SelectionTarget);
+        const selection = selectionOfTarget(store, typeOrTarget as SelectionTarget);
         if (!selection) throw invalidInput('The target is not one the instance gave');
         store.restoreSelection(selection);
         return store.getSelection().type !== null;

@@ -46,8 +46,10 @@ function point(i: number): Feature {
 }
 
 /** A Store of rows with points in a layer `a` */
-function storeWith(count: number) {
-  const { store, writer } = createTableStore();
+function storeWith(count: number, selectionIdsLimit?: number) {
+  const { store, writer } = createTableStore(
+    selectionIdsLimit === undefined ? {} : { selectionIdsLimit },
+  );
   store.createLayer({
     id: 'a',
     name: 'a',
@@ -157,6 +159,34 @@ describe('the features kept of rows', () => {
     expect(store.getFeature('p0')).not.toBe(read[0]);
     store.setSelection(null, []);
     expect(cache.size).toBe(1024);
+  });
+
+  it('keeps the features of the rows selected up to the IDs the Store lists', () => {
+    const { store, cache } = storeWith(2100, 2100);
+    store.setSelection(
+      'feature',
+      Array.from({ length: 2050 }, (_, i) => `p${i}`),
+    );
+    expect(store.getSelection().ids).toHaveLength(2050);
+    expect(cache.size).toBe(2050);
+    store.setSelection(null, []);
+    expect(cache.size).toBe(1024);
+  });
+
+  it('keeps the rows selected through the rows taken out, not the features made of them', () => {
+    const { store, writer, cache } = storeWith(1100);
+    store.setSelection('feature', ['p0', 'p1']);
+    const read = store.getFeature('p0');
+    writer.clear();
+    expect(cache.size).toBe(0);
+    // Back with other values: made again, and kept besides the others while they are selected
+    store.createFeatures([0, 1].map((i) => ({ ...point(i), properties: { n: i + 10 } })));
+    expect(store.getFeature('p0')).not.toBe(read);
+    expect(store.getFeature('p0')?.properties).toEqual({ n: 10 });
+    store.createFeatures(Array.from({ length: 1100 }, (_, i) => point(i + 2)));
+    for (let i = 2; i < 1102; i++) store.getFeature(`p${i}`);
+    store.getFeature('p1');
+    expect(cache.size).toBe(1024 + 2);
   });
 
   it('finds a row selected by its id while its row has the version it was made of', () => {

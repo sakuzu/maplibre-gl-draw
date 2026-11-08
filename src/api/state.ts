@@ -46,7 +46,8 @@ export interface Selection {
  * at a time, how many features, in which layers and where. It is read the same however many are
  * selected: past 2,000 features selected as features, in a Store that holds its features as rows
  * (a box over them, every feature), the IDs are not listed (`ids` is `null`), and the number, the
- * layers and the extent are still given.
+ * layers and the extent are still given. The same selection gives the same value until the
+ * document changes.
  */
 export interface SelectionValue {
   /** The type of the selected items (`feature` when nothing is selected) */

@@ -201,12 +201,12 @@ takes it off, and `delete` selects a feature and deletes it. `bigArea`
 puts a large area of that many vertices under every row once the map is
 open (an administrative area under the buildings), for `hover`.
 
-The edits of many rows select `held` rows (the time to hold them is an
-input) or work on `members` rows: `moveHeld` drags the rows selected as
+The edits of many rows select `held` rows (the time to select them is an
+input) or work on `members` rows: `moveSelected` drags the rows selected as
 the select mode drags them (every row written in every frame of a drag of
 10 frames, then the end; the bytes uploaded show what a move costs, and
 `moveFrom` sets the number of rows held from which the rows moved are
-drawn by their state instead of written), `panHeld` pans the map with the
+drawn by their state instead of written), `panSelected` pans the map with the
 rows selected, `group` groups and ungroups the rows, `toLayer` puts them
 in another layer and back, `order1` and `orderMany` bring one row or the
 rows to the front and send them to the back (each timed to the frame

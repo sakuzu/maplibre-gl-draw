@@ -22,7 +22,7 @@
  * feature selected go through the Store as the select mode writes them (the middle of a drag,
  * then its end).
  *
- * The edits of many rows: `held` rows selected (the time to hold them is an input) and dragged as
+ * The edits of many rows: `held` rows selected (the time to select them is an input) and dragged as
  * the select mode drags them (every row written in the middle of the drag in every frame, then
  * the end in one transaction), or kept selected while the map pans; `members` rows grouped and
  * ungrouped, put in another layer and back, brought to the front and sent to the back (one row,
@@ -395,8 +395,8 @@ function stepsOf(
     case 'vertexRemove':
     case 'delete':
       return featureSteps(target, op, inputs);
-    case 'moveHeld':
-    case 'panHeld':
+    case 'moveSelected':
+    case 'panSelected':
     case 'group':
     case 'toLayer':
     case 'order1':
@@ -647,13 +647,13 @@ function snapshotBytes(snapshot: RowValues): number {
 }
 
 /**
- * The steps of the edits of many rows: `held` rows selected and dragged or kept while the map
- * pans, `members` rows grouped, put in another layer, brought to the front and sent to the back,
+ * The steps of the edits of many rows: `held` rows selected and dragged or kept selected while the
+ * map pans, `members` rows grouped, put in another layer, brought to the front and sent to the back,
  * an edit undone and redone (the times of their inputs go to `inputs`, what they note to `notes`)
  */
 function manySteps(
   target: EditTarget,
-  op: 'moveHeld' | 'panHeld' | 'group' | 'toLayer' | 'order1' | 'orderMany' | 'undoRedo',
+  op: 'moveSelected' | 'panSelected' | 'group' | 'toLayer' | 'order1' | 'orderMany' | 'undoRedo',
   params: TableBenchPageParams,
 ): ((i: number) => Promise<void>) | string {
   const { draw, map, store, candidates, layerId } = target;
@@ -661,7 +661,7 @@ function manySteps(
   if (ids.length === 0) return 'no row';
   const held = ids.slice(0, params.held);
   const members = ids.slice(0, Math.min(params.members, ids.length));
-  /** Selects the rows held, timing it (the rows are held as features) */
+  /** Selects the rows, timing it (read on their rows, no feature is made for it) */
   const select = (): void => {
     const t0 = performance.now();
     store.setSelection('feature', held);
@@ -676,7 +676,7 @@ function manySteps(
     inputs.push(performance.now() - t0);
   };
   switch (op) {
-    case 'moveHeld': {
+    case 'moveSelected': {
       // A drag of 10 frames, ended, then another: every row written in every frame of it, as the
       // select mode writes them, the end in one transaction
       const DRAG_FRAMES = 10;
@@ -714,7 +714,7 @@ function manySteps(
         inputs.push(performance.now() - t0);
       };
     }
-    case 'panHeld':
+    case 'panSelected':
       // A pan of a few pixels per frame, back and forth, the rows selected
       return async (i) => {
         if (i === 0) select();

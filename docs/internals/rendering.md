@@ -1876,9 +1876,9 @@ pixel is inside a polygon or how far it is from a line.
 - A layer held as rows is not collected: it is drawn from its rows alone,
   at its place in the order (`isLayerDrawnFromRows`, the one test the
   layer loop of the draw and the drape share), on a drape of its own (see
-  [Layers held as rows](#layers-held-as-rows)). The features of its rows
-  held (selected, dragged) are what is read of the rows, not another path
-  of drawing them, so a row held is drawn once
+  [Layers held as rows](#layers-held-as-rows)). A row selected or dragged
+  is drawn from its row as every row is, not on another path, so each row
+  is drawn once
 - Dashed and dotted lines and outlines are elements too. Their style
   carries the coefficients of the pattern (`DRAPE_DASH_TEXEL`), the
   binning stacks the start of each edge along its path next to the edge

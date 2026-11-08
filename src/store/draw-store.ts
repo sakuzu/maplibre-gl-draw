@@ -54,7 +54,7 @@ import { ChangeBus } from './memory/change-bus.js';
 import { MemoryDrawingState } from './memory/ui-state.js';
 import { moveItemsByLists } from './move-items.js';
 import { BULK_SLICE_ROWS, type RowSteps, rowStepsOf } from './row-steps.js';
-import { valueOfSelection } from './selection-value.js';
+import { settleSelectionValues, valueOfSelection } from './selection-value.js';
 import type {
   EditResult,
   FeatureEdit,
@@ -175,6 +175,8 @@ export class DrawStore implements Store {
   #toldSelection: Selection;
   /** The value of the selection this Store told last (made when first asked) */
   #toldValue: SelectionValue | null = null;
+  /** The value this Store told last as the one before (`#toldValue` before it) */
+  #toldBefore: SelectionValue | null = null;
   /**
    * Whether the writes of this client of the document are taken (not while another document is
    * shown in its place); the writes in a transaction from elsewhere (`remote`) always are
@@ -745,7 +747,7 @@ export class DrawStore implements Store {
       this.#selecting = true;
       try {
         this.#setBulk(null);
-        this.#contract.setSelection(type, ids);
+        this.#setContractSelection(type, ids);
       } finally {
         this.#selecting = false;
       }
@@ -767,7 +769,7 @@ export class DrawStore implements Store {
       this.#selecting = true;
       try {
         this.#setBulk({ type, rows });
-        this.#contract.setSelection(
+        this.#setContractSelection(
           type === 'feature' ? null : type,
           type === 'feature' ? [] : [...ids],
         );
@@ -834,6 +836,7 @@ export class DrawStore implements Store {
       ids: [...now.ids],
       ...(now.bulk && { bulk: now.bulk }),
     };
+    this.#toldBefore = previousValue;
     this.#toldValue = value;
     return {
       type: now.type,
@@ -1015,7 +1018,7 @@ export class DrawStore implements Store {
     this.#selecting = true;
     try {
       this.#setBulk(null);
-      this.#contract.setSelection(ids.length > 0 ? 'feature' : null, ids);
+      this.#setContractSelection(ids.length > 0 ? 'feature' : null, ids);
     } finally {
       this.#selecting = false;
     }
@@ -1070,7 +1073,7 @@ export class DrawStore implements Store {
       this.#selecting = true;
       try {
         this.#setBulk(null);
-        this.#contract.setSelection(null, []);
+        this.#setContractSelection(null, []);
       } finally {
         this.#selecting = false;
       }
@@ -1085,6 +1088,8 @@ export class DrawStore implements Store {
    */
   #receive(changes: StoreChange): void {
     this.#bulkUnlocked = null;
+    // The values of the selection told keep the document as it was when they were told
+    settleSelectionValues(this, changes, [this.#toldValue, this.#toldBefore]);
     // The notification of a restore written in steps goes into the one this Store holds
     const run = <T>(fn: () => T, source: UpdateSource): T =>
       this.#restoring ? this.#bus.continueHeld(fn) : this.#bus.transact(fn, source);
@@ -1098,10 +1103,7 @@ export class DrawStore implements Store {
       }
       this.#bus.merge(normalized);
       if (changes.reset === true && this.#contract.tables) this.#rowsReplaced();
-      for (const feature of changes.features?.deleted ?? []) this.#forget(feature.id);
-      if (hasRowsDeleted(changes)) this.#forgetRowsDeleted();
-      for (const group of changes.groups?.deleted ?? []) this.#forget(group.id);
-      for (const layer of changes.layers?.deleted ?? []) this.#forget(layer.id);
+      this.#forgetDeleted(changes);
       if (mayHide(changes)) this.#pruneInvisible();
       if (this.#bulk) this.#pruneBulk(changes);
       this.#pruneVertices(changes);
@@ -1190,7 +1192,7 @@ export class DrawStore implements Store {
     const selection = contract.getSelection();
     if (selection.ids.includes(id)) {
       const ids = selection.ids.filter((selected) => selected !== id);
-      contract.setSelection(ids.length === 0 ? null : selection.type, ids);
+      this.#setContractSelection(ids.length === 0 ? null : selection.type, ids);
     }
     if (contract.getEditingIds().includes(id)) {
       contract.endEditing([id]);
@@ -1202,17 +1204,126 @@ export class DrawStore implements Store {
   }
 
   /**
-   * Removes the IDs of rows deleted from the state of this client (see `#forget`): the rows a
-   * notification tells by their handles, looked for among the IDs it holds
+   * Removes the ids that no longer name anything from the state of this client, at once (see
+   * `#forget`): only the ids the state holds are looked at, and the selection is set once however
+   * many of its items are gone
    */
-  #forgetRowsDeleted(): void {
+  #forgetAll(ids: readonly string[]): void {
+    if (ids.length === 1) {
+      this.#forget(ids[0] as string);
+      return;
+    }
     const contract = this.#contract;
-    const named = new Set<string>();
     const selection = contract.getSelection();
-    if (selection.type === 'feature') for (const id of selection.ids) named.add(id);
-    for (const id of contract.getEditingIds()) named.add(id);
-    for (const id of contract.listHidden()) named.add(id);
-    for (const id of named) this.#forget(id);
+    const editingIds = contract.getEditingIds();
+    const hidden = contract.listHidden();
+    if (selection.ids.length === 0 && editingIds.length === 0 && hidden.size === 0) return;
+    const named = new Set(ids);
+    const gone = new Set<string>();
+    const look = (id: string): void => {
+      if (!named.has(id) || gone.has(id)) return;
+      if (!contract.getFeature(id) && !contract.getGroup(id) && !contract.getLayer(id)) {
+        gone.add(id);
+      }
+    };
+    for (const id of selection.ids) look(id);
+    for (const id of editingIds) look(id);
+    for (const id of hidden) look(id);
+    if (gone.size === 0) return;
+    if (selection.ids.some((id) => gone.has(id))) {
+      const kept = selection.ids.filter((id) => !gone.has(id));
+      this.#setContractSelection(kept.length === 0 ? null : selection.type, kept);
+    }
+    const ended = editingIds.filter((id) => gone.has(id));
+    if (ended.length > 0) contract.endEditing(ended);
+    let unhidden = false;
+    for (const id of gone) {
+      if (!contract.isHidden(id)) continue;
+      contract.setLocallyHidden(id, false);
+      unhidden = true;
+    }
+    if (unhidden) this.#bus.merge({ uiStateChanged: true });
+  }
+
+  /**
+   * Removes the items a notification deleted from the state of this client (see `#forgetAll`): the
+   * features, the groups and the layers it names, and the rows it tells by their handles, looked
+   * for among the IDs the state holds
+   */
+  #forgetDeleted(changes: StoreChange): void {
+    const named: string[] = [];
+    for (const feature of changes.features?.deleted ?? []) named.push(feature.id);
+    if (hasRowsDeleted(changes)) {
+      const contract = this.#contract;
+      const selection = contract.getSelection();
+      if (selection.type === 'feature') for (const id of selection.ids) named.push(id);
+      for (const id of contract.getEditingIds()) named.push(id);
+      for (const id of contract.listHidden()) named.push(id);
+    }
+    for (const group of changes.groups?.deleted ?? []) named.push(group.id);
+    for (const layer of changes.layers?.deleted ?? []) named.push(layer.id);
+    if (named.length > 0) this.#forgetAll(named);
+  }
+
+  /** Sets the selection the contract keeps, and the rows whose features are kept for it */
+  #setContractSelection(type: SelectionType | null, ids: string[]): void {
+    this.#contract.setSelection(type, ids);
+    this.#keepSelectedRows();
+  }
+
+  /**
+   * Keeps the features of the rows the selection lists, while they are selected
+   * (`FeatureCache.keepSelected`): the rows of the features it lists, or of the groups and the
+   * layers it lists, up to the features the selection lists the IDs of (`selectionIdsLimit`);
+   * none past it, nor for a selection in bulk
+   */
+  #keepSelectedRows(): void {
+    const internals = featureTablesInternals(this.#contract.tables);
+    if (!internals) return;
+    const { type, ids } = this.#contract.getSelection();
+    const rows = this.#rowsToKeep(internals, type, ids);
+    internals.featureCache.keepSelected(rows?.handles ?? null, rows?.ids);
+  }
+
+  /** The rows of a selection whose features are kept (null for none, see `#keepSelectedRows`) */
+  #rowsToKeep(
+    internals: FeatureTablesInternals,
+    type: SelectionType | null,
+    ids: readonly string[],
+  ): { handles: number[]; ids?: string[] } | null {
+    if (type === null || ids.length === 0) return null;
+    const tables = this.#contract.tables as FeatureTables;
+    const limit = this.selectionIdsLimit;
+    const handles: number[] = [];
+    if (type === 'feature') {
+      if (ids.length > limit) return null;
+      const found: string[] = [];
+      for (const id of ids) {
+        const handle = tables.findRow(id);
+        if (handle === undefined) continue;
+        handles.push(handle);
+        found.push(id);
+      }
+      return { handles, ids: found };
+    }
+    if (type === 'group') {
+      for (const id of ids) {
+        const group = this.#contract.getGroup(id);
+        const handle = group ? internals.groups.handleOfId(group.id) : -1;
+        const view = group ? tables.get(group.layerId) : undefined;
+        if (handle < 0 || !view) continue;
+        const count = view.countGroupMembers(handle);
+        if (handles.length + count > limit) return null;
+        handles.push(...view.listGroupMembers(handle, 0, count));
+      }
+      return { handles };
+    }
+    let count = 0;
+    for (const id of ids) count += tables.get(id)?.rowCount ?? 0;
+    if (count > limit) return null;
+    const cursor = tables.scan({ layerIds: [...ids] });
+    for (let batch = cursor.next(); batch; batch = cursor.next()) handles.push(...batch);
+    return { handles };
   }
 
   /**
@@ -1226,7 +1337,7 @@ export class DrawStore implements Store {
     const shown = createShownLookup(this.#contract);
     const kept = selection.ids.filter((id) => shown(type, id));
     if (kept.length !== selection.ids.length) {
-      this.#contract.setSelection(kept.length > 0 ? type : null, kept);
+      this.#setContractSelection(kept.length > 0 ? type : null, kept);
     }
   }
 

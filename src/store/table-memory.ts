@@ -52,7 +52,7 @@ import {
 import { ItemWalk } from '../feature-table/item-walk.js';
 import { createWriteMarkKeeper, type WriteMarkKeeper } from '../feature-table/write-marks.js';
 import { ROW_FLAG_DELETED } from '../table/row-group-types.js';
-import { DrawStore, SELECTION_IDS_LIMIT } from './draw-store.js';
+import { DrawStore } from './draw-store.js';
 import {
   checkEdits,
   DEFAULT_TRANSFORMS,
@@ -1332,8 +1332,6 @@ export class TableContractStore implements StoreContract {
   }
   setSelection(type: SelectionType | null, ids: string[]): void {
     this.#client.setSelection(type, ids);
-    const rows = this.#rowsSelected(type, ids);
-    this.#internals.featureCache.keepSelected(rows?.handles ?? null, rows?.ids);
   }
   getEditingIds(): readonly string[] {
     return this.#client.getEditingIds();
@@ -1786,47 +1784,6 @@ export class TableContractStore implements StoreContract {
   /** Finishes the restore under way before a read of the rows */
   #readGate(): void {
     if (this.#steps && !this.#inStep) this.#finishSteps();
-  }
-
-  /**
-   * The rows of a selection whose features are kept while they are selected (none past the
-   * features the selection lists the IDs of, `SELECTION_IDS_LIMIT`)
-   */
-  #rowsSelected(
-    type: SelectionType | null,
-    ids: readonly string[],
-  ): { handles: RowHandle[]; ids?: string[] } | null {
-    if (type === null || ids.length === 0) return null;
-    const handles: RowHandle[] = [];
-    if (type === 'feature') {
-      if (ids.length > SELECTION_IDS_LIMIT) return null;
-      const found: string[] = [];
-      for (const id of ids) {
-        const handle = this.tables.findRow(id);
-        if (handle === undefined) continue;
-        handles.push(handle);
-        found.push(id);
-      }
-      return { handles, ids: found };
-    }
-    if (type === 'group') {
-      for (const id of ids) {
-        const group = this.#groups.get(id);
-        const handle = group ? this.#internals.groups.handleOfId(group.id) : -1;
-        const view = group ? this.tables.get(group.layerId) : undefined;
-        if (handle < 0 || !view) continue;
-        const count = view.countGroupMembers(handle);
-        if (handles.length + count > SELECTION_IDS_LIMIT) return null;
-        handles.push(...view.listGroupMembers(handle, 0, count));
-      }
-      return { handles };
-    }
-    let count = 0;
-    for (const id of ids) count += this.tables.get(id)?.rowCount ?? 0;
-    if (count > SELECTION_IDS_LIMIT) return null;
-    const cursor = this.tables.scan({ layerIds: [...ids] });
-    for (let batch = cursor.next(); batch; batch = cursor.next()) handles.push(...batch);
-    return { handles };
   }
 
   /** The feature of a row, kept or made (undefined for a deleted row) */

@@ -325,7 +325,7 @@ export function createExtensionContext(
     invalidate(filter) {
       if (filter?.type !== undefined) spatialIndex.invalidateType(filter.type);
       if (filter?.ids !== undefined) spatialIndex.invalidate(filter.ids);
-      // Every feature it holds (a Store of rows holds the rows made features only)
+      // Every feature it holds (none of a Store of rows: its rows are found by their boxes)
       if (filter?.type === undefined && filter?.ids === undefined) spatialIndex.invalidateAll();
       map.triggerRepaint();
     },

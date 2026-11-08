@@ -177,9 +177,9 @@ describe('the rows a box finds', () => {
     expect(scan(bbox, 'any')).toEqual(['p']);
   });
 
-  it('finds a row held as a feature by the box of its feature', () => {
+  it('finds a row selected and moved by the box of its row as written', () => {
     store.createFeature(point('b', 'box', [1, 1]));
-    // Selected: held as a feature, then moved
+    // Selected, then moved
     clickAfresh([1, 1]);
     draw.features.update('b', { geometry: { type: 'Point', coordinates: [2, 1] } });
     expect(scan([2.3, 1.3, 2.45, 1.45], 'any')).toEqual(['b']);
