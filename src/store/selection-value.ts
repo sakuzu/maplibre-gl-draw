@@ -9,7 +9,9 @@
  * (up to `Store.selectionIdsLimit` of a Store of rows, every one of a Store of objects), or
  * selected in bulk by the states of their rows (`Selection.bulk`), with no IDs listed then. The
  * number, the layers and the extent of the features are read from the rows of a Store of rows
- * (no feature is made) and from the features of a Store of objects. The value of the features
+ * (no feature is made) and from the features of a Store of objects, there when the layers or the
+ * extent are first read (a selection changed in every frame of a box costs no reading of the
+ * geometries of its features). The value of the features
  * listed by their IDs over a Store of rows is read again only once the IDs or the rows change: it
  * is kept with the versions of the rows and of the ids it was read at (`LISTED_VALUES`).
  *
@@ -124,20 +126,41 @@ export function valueOfSelection(store: Store, selection: Selection): SelectionV
     }
     return value;
   }
-  const features = selectedObjects(store, type, ids);
+  // The layers and the extent of the features of a Store of objects are read when first asked
+  // for, not each time the selection changes: a box drawn over many features changes it in
+  // every frame, and nothing reads them then
+  const features = type === 'feature' ? null : selectedObjects(store, type, ids);
+  let extent: ObjectsExtent | null = null;
+  const extentNow = (): ObjectsExtent =>
+    (extent ??= extentOfObjects(features ?? selectedObjects(store, type, ids)));
+  return Object.freeze({
+    type,
+    count: features?.length ?? ids.length,
+    ids,
+    get layerIds() {
+      return extentNow().layerIds;
+    },
+    get bbox() {
+      return extentNow().bbox;
+    },
+  });
+}
+
+/** The layers and the extent of features of a Store of objects */
+interface ObjectsExtent {
+  readonly layerIds: readonly string[];
+  readonly bbox: BBox | null;
+}
+
+/** The layers the features are in and the extent of their geometries */
+function extentOfObjects(features: readonly Feature[]): ObjectsExtent {
   const layerIds = new Set<string>();
   let bbox: BBox | null = null;
   for (const feature of features) {
     layerIds.add(feature.layerId);
     if (feature.geometry) bbox = unionOf(bbox, coordinatesBBox(positionsOf(feature.geometry)));
   }
-  return Object.freeze({
-    type,
-    count: type === 'feature' ? ids.length : features.length,
-    ids,
-    layerIds: Object.freeze([...layerIds]) as readonly string[],
-    bbox,
-  });
+  return { layerIds: Object.freeze([...layerIds]) as readonly string[], bbox };
 }
 
 /**

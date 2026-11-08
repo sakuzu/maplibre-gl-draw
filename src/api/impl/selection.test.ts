@@ -145,6 +145,27 @@ describe('draw.selection', () => {
     expect(selection.group()).toBeNull();
   });
 
+  it('reads the layers and the extent of the features of a Store of objects once asked for', () => {
+    selection.set('feature', ['a', 'line']);
+    selection.move({ layerId: 'l2' });
+    selection.set('feature', ['a', 'b', 'line']);
+    // A change of the selection, as each frame of a box makes, reads no feature
+    const read = vi.spyOn(store, 'getFeature');
+    store.setSelection('feature', ['a', 'b']);
+    const value = selection.value;
+    expect(value).toMatchObject({ type: 'feature', count: 2, ids: ['a', 'b'] });
+    expect(read).not.toHaveBeenCalled();
+    expect(value.bbox).toEqual([0, 0, 1, 1]);
+    expect(value.layerIds).toEqual(['l2', 'l1']);
+    expect(read).toHaveBeenCalledTimes(2);
+    // Read once for the value
+    expect(value.bbox).toEqual([0, 0, 1, 1]);
+    expect(read).toHaveBeenCalledTimes(2);
+    selection.set('group', ['g']);
+    expect(selection.value).toMatchObject({ type: 'group', count: 1, layerIds: ['l1'] });
+    expect(selection.value.bbox).toEqual([1, 1, 1, 1]);
+  });
+
   it('moves the selected features or groups', () => {
     selection.set('feature', ['a']);
     expect(selection.move({ layerId: 'l2' })).toBe(true);
