@@ -44,11 +44,15 @@ import type {
 } from '../api/tables.js';
 import { featureFields, featureWithFields } from '../feature-table/feature-fields.js';
 import {
-  createFeatureTablesStore,
+  createTables,
   type FeatureTablesInternalOptions,
   type FeatureTablesInternals,
   featureTablesInternals,
 } from '../feature-table/feature-tables.js';
+import {
+  createFeatureTablesWriter,
+  type FeatureTablesStoreWriter,
+} from '../feature-table/feature-tables-writer.js';
 import { ItemWalk } from '../feature-table/item-walk.js';
 import { createWriteMarkKeeper, type WriteMarkKeeper } from '../feature-table/write-marks.js';
 import { ROW_FLAG_DELETED } from '../table/row-group-types.js';
@@ -113,7 +117,7 @@ import type {
  *
  * @internal
  */
-export type TableStoreOptions = Omit<FeatureTablesInternalOptions, 'onChange' | 'onRelease'> & {
+export type TableStoreOptions = Omit<FeatureTablesInternalOptions, 'onRelease'> & {
   /**
    * The most features the selection lists the IDs of (`SELECTION_IDS_LIMIT` when omitted): past
    * it, the rows selected are read by their states only
@@ -200,7 +204,12 @@ export class TableContractStore implements StoreContract {
   readonly tables: FeatureTables;
   /** The writer of the tables, through which every write reads the values before it writes */
   readonly writer: FeatureTablesWriter;
-  /** The writer of the tables as they make it, its writes of values in the frames of the marks */
+  /**
+   * The writer of the features over the writer of the tables, which adds what it writes to the
+   * notification of the transaction
+   */
+  readonly #tablesWriter: FeatureTablesStoreWriter;
+  /** The writer of the features, its writes of values in the frames of the marks */
   readonly #writer: FeatureTablesWriter;
   readonly #internals: FeatureTablesInternals;
   /** The write mark of the rows, and the frames of writes */
@@ -240,14 +249,17 @@ export class TableContractStore implements StoreContract {
     takeTransformFields(this, (fields) => {
       this.#transformFields = fields;
     });
-    const { tables, writer } = createFeatureTablesStore({
+    const { tables, writer: tablesWriter } = createTables({
       ...options,
-      onChange: (change) => this.#bus.merge(change as StoreChange),
       // Nothing else needs the ids of the rows deleted that nothing keeps any more
       onRelease: (handles) => this.#writer.forget(handles),
     });
     this.tables = tables;
     this.#internals = featureTablesInternals(tables) as FeatureTablesInternals;
+    const writer = createFeatureTablesWriter(tablesWriter, this.#internals, (change) =>
+      this.#bus.merge(change),
+    );
+    this.#tablesWriter = writer;
     const marks = createWriteMarkKeeper(tables, this.#internals);
     this.#marks = marks;
     // Every write of values of the tables raises the mark of its frame (once a frame)
@@ -1418,7 +1430,7 @@ export class TableContractStore implements StoreContract {
       timer: null,
       // The order is told as by one write of every row (a part of a few rows tells each of its
       // rows created or deleted as a move of its own, read among the rows of the other parts)
-      tellOrder: this.#internals.watchOrderOf(patch),
+      tellOrder: this.#tablesWriter.watchOrderOf(patch),
     };
     this.#steps = steps;
     // The values before go with the notification as one part (the runs give none of their own)

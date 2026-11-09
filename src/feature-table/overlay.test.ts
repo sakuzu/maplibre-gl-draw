@@ -13,7 +13,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import type { Feature, StoreChange } from '../shared/types/model.js';
+import type { Feature } from '../shared/types/model.js';
 import { feature, internalsOf, tablesOfFeatures } from '../test-utils.js';
 import { hitTestLayerTable } from './hit-test.js';
 import { STATE_HIDDEN_SKETCH } from './row-state.js';
@@ -29,18 +29,13 @@ const square = (x: number) => [
 ];
 
 function setup() {
-  const emitted: StoreChange[] = [];
   const list = Array.from({ length: 12 }, (_, i) => feature(`p${i}`, 'Polygon', square(i * 2)));
-  const tables = tablesOfFeatures('layer', list, 4, {
-    onChange: (change) => emitted.push(change),
-  });
-  // What the rows added told is not gathered
-  emitted.length = 0;
+  const tables = tablesOfFeatures('layer', list, 4);
   const ids = () =>
     Array.from(tables.tables.get('layer')?.listRowHandles(0, 100) ?? [], (h) =>
       tables.tables.getRowId(h),
     );
-  return { ...tables, emitted, ids };
+  return { ...tables, ids };
 }
 
 /** The features as the sketches drawn over the rows */
@@ -63,7 +58,7 @@ function deltaIds(table: ReturnType<typeof setup>['table']): string[] {
 
 describe('the sketches drawn over rows for this client', () => {
   it('are drawn in the places of the rows, which are not drawn, and read as before', () => {
-    const { tables, internals, table, emitted, ids } = setup();
+    const { tables, internals, table, ids } = setup();
     const before = ids();
     const p3 = tables.get('layer')?.getRow(tables.findRow('p3') ?? -1);
     internalsOf(tables).showSketches(
@@ -84,7 +79,6 @@ describe('the sketches drawn over rows for this client', () => {
     const cursor = tables.scan({ layerIds: ['layer'] });
     for (let batch = cursor.next(); batch; batch = cursor.next()) scanned.push(...batch);
     expect(scanned.map((h) => tables.getRowId(h))).toEqual(before);
-    expect(emitted).toEqual([]);
     // Hit where it is, not where it is drawn
     const hit = (x: number) =>
       hitTestLayerTable(internals, table, {

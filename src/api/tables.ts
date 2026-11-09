@@ -18,6 +18,7 @@
 import type { CoordinateDimensions, CoordinateSystem, Utf8Column } from '@sakuzu/tabane';
 import type { Position } from 'geojson';
 import { createFeatureTablesStore } from '../feature-table/feature-tables.js';
+import type { TableGroupField, TableGroupPatch } from '../feature-table/tables-writer.js';
 import type { FeatureTablesWorker } from '../feature-table/versions.js';
 import type { BBox } from '../geometry/types.js';
 import type {
@@ -33,7 +34,6 @@ import { copyTableStore as copyTableStoreOf } from '../store/table-copy.js';
 import { createTableStore as createTableStoreOf } from '../store/table-memory.js';
 import type { RowBlock } from '../table/row-group-types.js';
 import { DrawError } from './errors.js';
-import type { DocumentChange } from './events.js';
 import type { GeometryTransforms, Store, StoreView, UpdateSource } from './extension/store.js';
 import type { Feature, FeatureStyle, FeatureType, FeatureValues } from './model.js';
 
@@ -45,6 +45,8 @@ export type {
   RowField,
   RowsChange,
   RowValues,
+  TableGroupField,
+  TableGroupPatch,
 };
 
 /**
@@ -203,24 +205,6 @@ export interface RowWrite {
   readonly place?: RowPlacement;
   /** The values the rows had before */
   readonly before: RowValues;
-}
-
-/**
- * A field of a group of features a {@link TableGroupPatch} writes.
- */
-export type TableGroupField = 'id' | 'name' | 'order' | 'layerId' | 'visible' | 'locked';
-
-/**
- * Values written to groups of features of a document, by the implementation of the Store: the
- * groups by their handles (the handles rows name in their row blocks, `GroupEntry.handle`).
- */
-export interface TableGroupPatch {
-  /** The groups written */
-  readonly handles: Int32Array;
-  /** The values of each field written, one per group */
-  readonly fields: ReadonlyMap<TableGroupField, readonly unknown[]>;
-  /** Non-zero for a group deleted */
-  readonly deleted?: Uint8Array;
 }
 
 /**
@@ -505,12 +489,6 @@ export interface FeatureTablesOptions {
    */
   readonly worker?: FeatureTablesWorker;
   /**
-   * Adds what the tables changed to the notification of the transaction of the Store (notified
-   * at once outside one): the rows written (`rows`). Without it, `apply` only returns the rows
-   * written
-   */
-  readonly onChange?: (change: DocumentChange) => void;
-  /**
    * Tells the Store the deleted rows nothing keeps any more (a token let go of): it forgets them
    * (`FeatureTablesWriter.forget`) once it no longer needs their ids
    */
@@ -578,7 +556,7 @@ export function createFeatureTables(options: FeatureTablesOptions = {}): {
  * ```
  */
 export function createTableStore(
-  options: Omit<FeatureTablesOptions, 'onChange' | 'onRelease'> & {
+  options: Omit<FeatureTablesOptions, 'onRelease'> & {
     readonly transforms?: GeometryTransforms;
   } = {},
 ): {
@@ -632,7 +610,7 @@ export interface TableStoreCopy {
  */
 export function copyTableStore(
   source: StoreView,
-  options: Omit<FeatureTablesOptions, 'onChange' | 'onRelease' | 'dimensionsOf'> = {},
+  options: Omit<FeatureTablesOptions, 'onRelease' | 'dimensionsOf'> = {},
 ): TableStoreCopy {
   return copyTableStoreOf(source, options);
 }

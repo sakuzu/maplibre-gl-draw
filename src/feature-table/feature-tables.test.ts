@@ -9,7 +9,6 @@
 import { utf8ColumnFromStrings } from '@sakuzu/tabane';
 import type { Geometry, Position } from 'geojson';
 import { describe, expect, expectTypeOf, it, vi } from 'vitest';
-import type { DocumentChange } from '../api/events.js';
 import type { LayerTableView } from '../api/tables.js';
 import { createRowBlockDataBuilder, type RowInput } from '../table/row-group-builder.js';
 import type { RowBlockData } from '../table/row-group-types.js';
@@ -356,9 +355,8 @@ describe('LayerTable', () => {
 });
 
 describe('adding row blocks', () => {
-  it('takes them in at once, in the order of their keys, and tells their rows created', () => {
-    const changes: DocumentChange[] = [];
-    const { tables, writer } = createFeatureTablesStore({ onChange: (c) => changes.push(c) });
+  it('takes them in at once, in the order of their keys, and returns their rows created', () => {
+    const { tables, writer } = createFeatureTablesStore();
     const internals = featureTablesInternals(tables);
     if (!internals) throw new Error('no internals');
     const before = internals.revision;
@@ -368,7 +366,6 @@ describe('adding row blocks', () => {
     expect(tables.get('layer')?.rowCount).toBe(9);
     expect(added.layers.get('layer')?.created.length).toBe(9);
     expect(added.layers.get('layer')?.fields.has('property:name')).toBe(true);
-    expect(changes.map((c) => c.rows?.layers.get('layer')?.created.length)).toEqual([9]);
     writer.addRowBlocks('layer', groups(3, { keyOffset: 20, prefix: 'z', targetRows: 3 }));
     const view = tables.get('layer');
     expect(Array.from(view?.listRowHandles(0, 12) ?? []).map((h) => tables.getRowId(h))).toEqual([

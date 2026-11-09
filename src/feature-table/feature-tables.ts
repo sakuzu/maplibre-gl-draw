@@ -21,6 +21,7 @@ import {
   isCoordinateDimensions,
   planarCoordinates,
   sortKeyOf,
+  type Utf8Column,
   utf8ColumnFromStrings,
   utf8ColumnLength,
   utf8String,
@@ -35,13 +36,11 @@ import type {
   ItemHandles,
   LayerRowsChange,
   LayerTableView,
-  RowApplyOptions,
   RowCursor,
   RowField,
   RowHandle,
   RowsChange,
   RowWrite,
-  TableGroupPatch,
   TableScanOptions,
 } from '../api/tables.js';
 import type { BBox } from '../geometry/types.js';
@@ -52,10 +51,8 @@ import type {
   Feature,
   FeatureStyle,
   FeatureType,
-  ItemOrderChange,
   RestoreToken,
   RowValues,
-  StoreChange,
 } from '../shared/types/model.js';
 import { getBoundingBox } from '../shared/utils/feature-bbox.js';
 import type { IdleScheduler } from '../shared/utils/idle.js';
@@ -78,15 +75,10 @@ import { type BulkOperation, planBulk } from './bulk-plan.js';
 import type { RowContainers } from './bulk-rows.js';
 import { FeatureCache } from './feature-cache.js';
 import { featureFields } from './feature-fields.js';
+import { createFeatureTablesWriter } from './feature-tables-writer.js';
 import { groupRunCuts, rowGroupsHolding } from './group-runs.js';
 import { GroupTable } from './group-table.js';
 import { IdIndex } from './id-index.js';
-import {
-  groupKeyMoves,
-  type ItemOrderSource,
-  ItemOrderWatch,
-  ORDER_ITEM_LIMIT,
-} from './item-order.js';
 import { ItemWalk } from './item-walk.js';
 import { createRowGroup, LayerTable, overrideBytesOf, type RowGroup } from './layer-table.js';
 import { RowBoxIndex } from './row-box-index.js';
@@ -121,6 +113,12 @@ import {
 } from './row-write.js';
 import type { TableSelection } from './selection.js';
 import { StyleTable } from './style-table.js';
+import type {
+  TableGroupPatch,
+  TablesWrite,
+  TablesWriteOptions,
+  TablesWriter,
+} from './tables-writer.js';
 import {
   type DeltaRowsChange,
   type GroupHandle,
@@ -183,6 +181,9 @@ const ADDED_FIELDS: readonly RowField[] = [
   'style',
 ];
 
+/** The rows of a write that writes none */
+const NO_ROWS: RowsChange = { layers: new Map() };
+
 /** The number of handles a scan reads at a time when not told */
 const SCAN_BATCH = 1024;
 
@@ -223,14 +224,35 @@ export interface FeatureTablesInternalOptions extends FeatureTablesOptions {
 }
 
 /**
- * Creates the tables of the features of a document, as its reading and writing sides (the
- * implementation of `createFeatureTables`)
+ * Creates the tables of the features of a document, as its reading side and the writer of the
+ * features over the writer of the tables (the implementation of `createFeatureTables`): the writer
+ * only writes, and tells nothing
  *
  * @internal
  */
 export function createFeatureTablesStore(options: FeatureTablesInternalOptions = {}): {
   tables: FeatureTables;
   writer: FeatureTablesWriter;
+} {
+  const { tables, writer } = createTables(options);
+  return {
+    tables,
+    writer: createFeatureTablesWriter(
+      writer,
+      featureTablesInternals(tables) as FeatureTablesInternals,
+    ),
+  };
+}
+
+/**
+ * Creates the tables of the features of a document, as their reading side and the writer of the
+ * tables, which returns what it wrote and tells nobody (`TablesWriter`)
+ *
+ * @internal
+ */
+export function createTables(options: FeatureTablesInternalOptions = {}): {
+  tables: FeatureTables;
+  writer: TablesWriter;
 } {
   const store = new FeatureTablesStore(options);
   // A read through the reading side lets the gate of the reads finish what is written first
@@ -323,74 +345,8 @@ export function createFeatureTablesStore(options: FeatureTablesInternalOptions =
       }
     },
   };
-  const writer: FeatureTablesWriter = {
-    allocateHandles: (ids, hashes) => {
-      try {
-        return store.ids.allocate(ids, hashes);
-      } catch (error) {
-        throw tablesError(error);
-      }
-    },
-    // The blocks are made by the builder and the merge of the library
-    addRowBlocks: (layerId, blocks) => {
-      try {
-        return store.addRowBlocks(layerId, blocks as readonly RowBlockData[]);
-      } catch (error) {
-        throw tablesError(error);
-      }
-    },
-    apply: (values, options) => {
-      try {
-        return store.apply(values, options);
-      } catch (error) {
-        throw tablesError(error);
-      }
-    },
-    applyGroups: (patch, options) => {
-      try {
-        store.applyGroups(patch, options);
-      } catch (error) {
-        throw tablesError(error);
-      }
-    },
-    lookup: (id) => {
-      try {
-        return store.lookup(id);
-      } catch (error) {
-        throw tablesError(error);
-      }
-    },
-    createRestoreToken: () => {
-      try {
-        return store.createRestoreToken();
-      } catch (error) {
-        throw tablesError(error);
-      }
-    },
-    forget: (handles) => {
-      try {
-        store.forget(handles);
-      } catch (error) {
-        throw tablesError(error);
-      }
-    },
-    getGroupOrder: (groupHandle) => {
-      try {
-        return store.getGroupOrder(groupHandle);
-      } catch (error) {
-        throw tablesError(error);
-      }
-    },
-    clear: () => {
-      try {
-        store.clear();
-      } catch (error) {
-        throw tablesError(error);
-      }
-    },
-  };
   INTERNALS.set(tables, store);
-  return { tables, writer };
+  return { tables, writer: store };
 }
 
 /**
@@ -794,12 +750,11 @@ export interface FeatureTablesInternals {
    */
   setReadGate(gate: (() => void) | null): void;
   /**
-   * Tells the changes of the order of a write made in several parts (a restore written in steps)
-   * once, as one write of the whole of it would: the items it disturbs are read now, the writes of
-   * rows tell no change of the order until the function returned is called, which tells the
-   * changes the whole write made
+   * The key of the order of a group of features last written: the one not in the order read yet
+   * (its members are read in the order before until its reorder goes in), or the one of the table
+   * of the groups (undefined for an unknown group)
    */
-  watchOrderOf(patch: RowValues): () => void;
+  getGroupOrder(group: GroupHandle): string | undefined;
 }
 
 const INTERNALS = new WeakMap<FeatureTables, FeatureTablesStore>();
@@ -942,11 +897,9 @@ interface LayerChangeDraft {
 }
 
 /** The implementation of the tables */
-class FeatureTablesStore implements FeatureTablesInternals {
+class FeatureTablesStore implements FeatureTablesInternals, TablesWriter {
   /** What a read through the reading side calls first (see `setReadGate`) */
   readGate: (() => void) | null = null;
-  /** The changes of the order of a write made in several parts, under way (`watchOrderOf`) */
-  private partsWatch: { readonly watch: ItemOrderWatch | null } | null = null;
   readonly ids = new IdIndex();
   readonly styles = new StyleTable();
   readonly groups = new GroupTable();
@@ -980,7 +933,6 @@ class FeatureTablesStore implements FeatureTablesInternals {
   readonly groupsDue = new Set<RowGroupHandle>();
   private readonly versions: GroupVersions;
   private readonly worker: FeatureTablesWorker | undefined;
-  private readonly onChange: ((change: StoreChange) => void) | undefined;
   private readonly onRelease: ((handles: Int32Array) => void) | undefined;
   /** The features of the sketches drawn over rows for this client, by id */
   private sketchEntries = new Map<string, OverlayEntry>();
@@ -1043,7 +995,6 @@ class FeatureTablesStore implements FeatureTablesInternals {
       revision: () => this.revisionCount,
     });
     this.worker = options.worker;
-    this.onChange = options.onChange;
     this.onRelease = options.onRelease;
     this.versions = new GroupVersions(this.versionHost());
     this.rowBoxes = new RowBoxIndex(
@@ -1271,7 +1222,7 @@ class FeatureTablesStore implements FeatureTablesInternals {
     this.versions.pendingBytesLimit = bytes;
   }
 
-  clear(): void {
+  clear(): TablesWrite {
     this.rowBoxes.markAll();
     this.featureCache.clear();
     // The features drawn in the places of rows, and the marks of the rows selected in bulk and
@@ -1332,8 +1283,8 @@ class FeatureTablesStore implements FeatureTablesInternals {
     // The ids forgotten are freed now that no row holds them
     for (const handle of [...this.forgotten]) this.freeIfGone(handle);
     this.revisionCount++;
-    this.onChange?.({ reset: true });
     this.notifyWork();
+    return { rows: NO_ROWS, kept: false, emptied: true };
   }
 
   size(): { readonly rows: number; readonly positions: number } {
@@ -1538,7 +1489,7 @@ class FeatureTablesStore implements FeatureTablesInternals {
    * order of their keys, overlap another group, or a reorder of the groups of the layer waits),
    * and its rows are told as created
    */
-  addRowBlocks(layerId: string, groups: readonly RowBlockData[]): RowsChange {
+  addRowBlocks(layerId: string, groups: readonly RowBlockData[]): TablesWrite {
     const dims = this.dimsOfLayer(layerId);
     for (const data of groups) {
       checkShape(data);
@@ -1572,10 +1523,9 @@ class FeatureTablesStore implements FeatureTablesInternals {
       for (const field of ADDED_FIELDS) draft.fields.add(field);
       for (const key of data.properties.keys) draft.fields.add(`property:${key}`);
     }
-    const change: RowsChange = { layers: finishChanges(drafts) };
-    this.onChange?.({ rows: change });
+    const rows: RowsChange = { layers: finishChanges(drafts) };
     this.notifyWork();
-    return change;
+    return { rows, kept: false, emptied: false };
   }
 
   get hasQueuedBlocks(): boolean {
@@ -2101,32 +2051,15 @@ class FeatureTablesStore implements FeatureTablesInternals {
   }
 
   /** Writes values of rows (see `FeatureTablesWriter.apply`) */
-  apply(patch: RowValues, options: RowApplyOptions = {}): RowsChange {
-    // A part of a write made in several parts: its changes of the order are told at its end
-    const watch = this.partsWatch ? null : this.watchOrder(patch);
+  apply(patch: RowValues, options: TablesWriteOptions = {}): TablesWrite {
     const drafts = new Map<string, LayerChangeDraft>();
     this.applyPatch(patch, drafts);
     const kept = this.keepDeleted(patch, options.restoreToken);
-    const change: RowsChange = { layers: finishChanges(drafts) };
-    if (this.onChange) {
-      // The values before, the token that keeps the rows deleted and the changes of the order go
-      // with the last of the additions to the notification
-      const order = watch?.finish() ?? [];
-      const extra: StoreChange = {
-        ...(order.length > 0 && { order }),
-        ...(kept && options.restoreToken !== undefined && { restoreToken: options.restoreToken }),
-      };
-      const hasRows = change.layers.size > 0 || options.before !== undefined;
-      if (hasRows) {
-        this.onChange({
-          rows: change,
-          ...(options.before && { previousValues: options.before }),
-          ...extra,
-        });
-      }
-      if (!hasRows && Object.keys(extra).length > 0) this.onChange(extra);
-    }
-    return change;
+    return { rows: { layers: finishChanges(drafts) }, kept, emptied: false };
+  }
+
+  allocateHandles(ids: Utf8Column, hashes?: Uint32Array): Int32Array {
+    return this.ids.allocate(ids, hashes);
   }
 
   // === The rows deleted kept, forgotten ===
@@ -2346,94 +2279,6 @@ class FeatureTablesStore implements FeatureTablesInternals {
   }
 
   /**
-   * The items of the layers and the groups a write puts rows in, takes rows from, creates or
-   * deletes rows in, kept before it to tell the changes of the order it makes (null when it makes
-   * none, or when nothing is told)
-   */
-  private watchOrder(patch: RowValues): ItemOrderWatch | null {
-    if (!this.onChange) return null;
-    const { handles, fields, deleted } = patch;
-    const layerIds = fields.get('layerId');
-    const groupIds = fields.get('groupId');
-    const orders = fields.get('order');
-    const members = fields.get('member');
-    const placeFields = !!(layerIds || groupIds || orders || members);
-    // Rows only deleted and created again, more than are told one at a time: they are told by
-    // the change of the rows alone (`ItemOrderWatch`), so nothing is kept for them (the deletion
-    // of a layer of 100,000 rows, and its undo)
-    if (!placeFields && handles.length > ORDER_ITEM_LIMIT) {
-      let flips = 0;
-      for (let i = 0; i < handles.length; i++) {
-        const place = this.placeOf(handles[i]);
-        const there = !!place && (place.group.data.flags[place.row] & ROW_FLAG_DELETED) === 0;
-        if (there ? !!deleted?.[i] : !!place && !deleted?.[i]) flips++;
-      }
-      if (flips > ORDER_ITEM_LIMIT) return null;
-    }
-    const watch = new ItemOrderWatch(this.orderSource);
-    const groupOf = (value: unknown): GroupHandle =>
-      typeof value === 'string' && value !== '' ? this.groups.handleOfId(value) : -1;
-    for (let i = 0; i < handles.length; i++) {
-      const handle = handles[i];
-      const place = this.placeOf(handle);
-      const deleting = !!deleted?.[i];
-      if (!place || (place.group.data.flags[place.row] & ROW_FLAG_DELETED) !== 0) {
-        // A new row, or a deleted one created again
-        const layerId = (layerIds?.[i] as string | undefined) ?? place?.layer.layerId;
-        if (deleting || layerId === undefined) continue;
-        watch.watchLayer(layerId);
-        watch.watchGroup(groupOf(groupIds?.[i]));
-        watch.row(handle, false);
-        continue;
-      }
-      const data = place.group.data;
-      const row = place.row;
-      const group = data.groups[row];
-      if (deleting) {
-        watch.watchLayer(place.layer.layerId);
-        watch.watchGroup(group);
-        watch.row(handle, true);
-        continue;
-      }
-      // A row there that no field of its place is written for keeps its place
-      if (!placeFields) continue;
-      const layerId = layerIds?.[i] as string | undefined;
-      const nextGroup = groupIds ? groupOf(groupIds[i]) : group;
-      const order = orders?.[i];
-      const moved =
-        (layerId !== undefined && layerId !== place.layer.layerId) ||
-        nextGroup !== group ||
-        (order !== undefined && order !== utf8String(data.itemKeys, row)) ||
-        (members !== undefined &&
-          nextGroup >= 0 &&
-          (members[i] ?? '') !== utf8String(data.memberKeys, row));
-      if (!moved) continue;
-      watch.watchLayer(place.layer.layerId);
-      if (layerId !== undefined) watch.watchLayer(layerId);
-      watch.watchGroup(group);
-      watch.watchGroup(nextGroup);
-      watch.row(handle, false);
-    }
-    if (!watch.changes) return null;
-    watch.keep();
-    return watch;
-  }
-
-  /** What the changes of the order read of the tables */
-  private get orderSource(): ItemOrderSource {
-    return {
-      walkItems: (layerId) => {
-        const layer = this.layers.get(layerId);
-        return layer ? new ItemWalk(layer, this) : null;
-      },
-      getGroupKey: (group) => this.getGroupOrder(group),
-      groups: this.groups,
-      idOf: (handle) => this.ids.idOf(handle),
-      placeOf: (handle) => this.placeOf(handle),
-    };
-  }
-
-  /**
    * Checks the shape of a patch: one value per row in every field (the values are checked where
    * they are written)
    */
@@ -2510,17 +2355,6 @@ class FeatureTablesStore implements FeatureTablesInternals {
 
   setWriteMark(mark: number): void {
     this.writeMarks.set(mark);
-  }
-
-  watchOrderOf(patch: RowValues): () => void {
-    const parts = { watch: this.watchOrder(patch) };
-    this.partsWatch = parts;
-    return () => {
-      if (this.partsWatch !== parts) return;
-      this.partsWatch = null;
-      const order = parts.watch?.finish() ?? [];
-      if (order.length > 0) this.onChange?.({ order });
-    };
   }
 
   showSketches(sketches: readonly SketchOverlay[]): void {
@@ -3104,7 +2938,7 @@ class FeatureTablesStore implements FeatureTablesInternals {
    * the order of a group puts its members in another order (`reorderGroups`), a group shown or
    * hidden makes the copies of the state of its members again
    */
-  applyGroups(patch: TableGroupPatch, options: RowApplyOptions = {}): void {
+  applyGroups(patch: TableGroupPatch, options: TablesWriteOptions = {}): TablesWrite {
     const { handles, fields, deleted } = patch;
     const n = handles.length;
     for (const [field, values] of fields) {
@@ -3202,15 +3036,6 @@ class FeatureTablesStore implements FeatureTablesInternals {
       }
     }
     if (shown.size > 0) this.refreshGroupStates(shown);
-    // The moves of the groups that are items, with the keys before (told when they are written,
-    // whenever the order of their members goes in)
-    if (this.onChange) {
-      const moves: ItemOrderChange[] = [];
-      for (const [layerId, list] of orders) {
-        moves.push(...groupKeyMoves(this.orderSource, layerId, list));
-      }
-      if (moves.length > 0) this.onChange({ order: moves });
-    }
     for (const [layerId, list] of orders) this.reorderGroups(layerId, list);
     // The new rows read from their creations are built again with the groups as they are now
     for (const creation of this.creations) this.dropReading(creation);
@@ -3231,7 +3056,7 @@ class FeatureTablesStore implements FeatureTablesInternals {
     }
     this.revisionCount++;
     this.notifyWork();
-    if (kept) this.onChange?.({ restoreToken: token });
+    return { rows: NO_ROWS, kept, emptied: false };
   }
 
   /**

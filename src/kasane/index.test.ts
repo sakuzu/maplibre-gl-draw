@@ -204,14 +204,24 @@ describe('the kasane subpath', () => {
 
     const blocks = createRowBlockBuilder();
     blocks.addRow({ id: 'a', type: 'Point', geometry: point, order: 'a0' });
-    const { writer } = createFeatureTables({
-      onChange: () => {
+    const { tables, writer } = createFeatureTables({
+      onRelease: () => {
         throw own;
       },
     });
+    writer.addRowBlocks('l', blocks.finish());
+    const token = writer.createRestoreToken();
+    writer.apply(
+      {
+        handles: Int32Array.of(tables.findRow('a') as number),
+        fields: new Map(),
+        deleted: Uint8Array.of(1),
+      },
+      { restoreToken: token },
+    );
     error = undefined;
     try {
-      writer.addRowBlocks('l', blocks.finish());
+      tables.release(token);
     } catch (thrown) {
       error = thrown;
     }

@@ -63,6 +63,12 @@ export interface ItemWalkSource {
    * omitted)
    */
   readonly writtenOrders?: ReadonlyMap<GroupHandle, string>;
+  /**
+   * The table a group is in as the walk reads it (the one of the table of the groups when
+   * omitted): what reads the order before a write of groups that gives some another table reads
+   * them in the tables the write leaves them in
+   */
+  groupTableOf?(group: GroupHandle): string | undefined;
 }
 
 /**
@@ -108,8 +114,14 @@ export class ItemWalk {
     private readonly layer: LayerTable,
     private readonly source: ItemWalkSource,
   ) {
-    for (const [group, order] of source.writtenOrders ?? []) {
-      if (source.groups.layerOf(group) === layer.layerId) this.written.set(group, order);
+    const written = source.writtenOrders;
+    if (written && written.size > 0) {
+      const tableOf = source.groupTableOf
+        ? (group: GroupHandle) => source.groupTableOf?.(group)
+        : (group: GroupHandle) => source.groups.layerOf(group);
+      for (const [group, order] of written) {
+        if (tableOf(group) === layer.layerId) this.written.set(group, order);
+      }
     }
   }
 
