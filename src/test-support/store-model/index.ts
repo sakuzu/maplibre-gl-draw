@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * The reference model of the rows: what the rewrites of a document mean, compared with a Store
+ * The reference model of the Store: what the rewrites of a document mean, compared with a Store
  * after every step of a sequence
  *
  * - `model.ts`: the model, and the steps turned into operations

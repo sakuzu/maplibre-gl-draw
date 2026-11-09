@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * The part that joins the reference model of the rows to a Store of core: the calls of each
+ * The part that joins the reference model of the Store to a Store of core: the calls of each
  * operation, and the reading of what is compared
  *
  * It is all that knows the Store, and it is kept thin: an operation is one call (or one

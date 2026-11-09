@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * The Stores of core compared with the reference model of the rows, after every step
+ * The Stores of core compared with the reference model of the Store, after every step
  *
  * The fixed sequences come first: written by hand for what a rewrite of the rows must keep, and
  * the sequences that failed made short (`shrinkSteps`) and written down. Then sequences made from
@@ -16,7 +16,7 @@
  *
  * What differs now is listed: the fixed sequences that fail, by Store (`KNOWN_FAILURES`), and the
  * number of seeds that fail, by Store (`KNOWN_RANDOM_FAILURES`). A fixed sequence must pass or fail
- * as listed, and the number of seeds that fail must not grow. With `KASANE_MODEL_REPORT` set, the
+ * as listed, and the number of seeds that fail must not grow. With `STORE_MODEL_REPORT` set, the
  * failures are printed, the random ones made short.
  */
 
@@ -243,7 +243,7 @@ const KNOWN_RANDOM_FAILURES: Readonly<Record<StoreKind, number>> = {
   objects: 30,
 };
 
-const report = Boolean(process.env.KASANE_MODEL_REPORT);
+const report = Boolean(process.env.STORE_MODEL_REPORT);
 
 beforeEach(() => {
   vi.useFakeTimers();
@@ -253,7 +253,7 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-describe('the reference model of the rows', () => {
+describe('the reference model of the Store', () => {
   it('finds a Store that writes something else than the model', () => {
     const make = (): TableSubject => {
       const subject = storeSubject(createTableStore().store);

@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * The words the reference model of the rows and a Store compared with it share
+ * The words the reference model of the Store and a Store compared with it share
  *
  * - {@link TableOperation}: one rewrite of the document (or of the selection), with its ids
  *   resolved. It is all a Store compared with the model is given, so the part that joins the

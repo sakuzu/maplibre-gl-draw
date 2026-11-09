@@ -174,9 +174,9 @@ screen pixels. The key property is that when no provider is registered,
 the route and the cost are unchanged. See [plugins](../guides/plugins.md)
 and [custom types](../guides/custom-types.md).
 
-### 17. The reference model of the rows
+### 17. The reference model of the Store
 
-`src/test-support/kasane-model/`. A small model of what the rewrites of a
+`src/test-support/store-model/`. A small model of what the rewrites of a
 document mean (the layers, their items and the members of their groups
 in order, the fields of each, and the selection), written from that
 meaning and not from a Store. A sequence of steps runs on the model and

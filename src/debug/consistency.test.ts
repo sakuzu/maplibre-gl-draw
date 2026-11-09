@@ -13,7 +13,7 @@
  * - The check of what is drawn runs once a frame is drawn
  * - Edits written by hand, a frame drawn after each, fail no check, those of the drawing of the
  *   rows run every frame (`drawing-writes`, `drawing-rebuild`)
- * - The sequences of the reference model of the rows run on both Stores with every check on, and
+ * - The sequences of the reference model of the Store run on both Stores with every check on, and
  *   drawn, a frame after each step: the checks that fail now are listed (`KNOWN_BROKEN`)
  * - The checks of the drawing of the rows find a rule of the drawing broken in the test: a write
  *   of the style of a row not told to the drawing, the styles of a new style rule not resolved
@@ -35,7 +35,7 @@ import { MemoryStore } from '../store/memory.js';
 import type { Store } from '../store/store.js';
 import { createTableStore } from '../store/table-memory.js';
 import type { Feature, Layer } from '../store/types.js';
-import { randomSteps, runSteps, storeSubject } from '../test-support/kasane-model/index.js';
+import { randomSteps, runSteps, storeSubject } from '../test-support/store-model/index.js';
 import { createMapStub, memoryGL } from '../test-utils.js';
 import type { CustomLayerInterface } from '../view/layer/custom-layer.js';
 import { TableLayerRenderer } from '../view/layer/table-retained.js';
@@ -388,7 +388,7 @@ describe('the check of what is drawn', () => {
       draw.hidden.add(ids[0]);
       expect(() => (checks as ConsistencyChecks | null)?.afterFrame()).toThrow(/\(drawing\)/);
       expect(failures.map((f) => f.check)).toEqual(['drawing']);
-      if (process.env.KASANE_MODEL_REPORT) console.log(kind, failures[0].problems);
+      if (process.env.STORE_MODEL_REPORT) console.log(kind, failures[0].problems);
       failures.length = 0;
       frame();
       expect(failures).toEqual([]);
@@ -707,7 +707,7 @@ describe('edits written by hand, a frame drawn after each, with every check on',
         // The rows are compared (the Store of objects has none)
         if (kind === 'rows') expect(compared.count()).toBeGreaterThan(0);
         compared.restore();
-        if (process.env.KASANE_MODEL_REPORT && failures.length > 0) {
+        if (process.env.STORE_MODEL_REPORT && failures.length > 0) {
           console.log(`${kind} | ${name} | ${failures[0].check}: ${failures[0].problems[0]}`);
         }
         const broken = [...new Set(failures.map((f) => f.check))].sort();
@@ -727,7 +727,7 @@ const KNOWN_BROKEN: Readonly<
   objects: [],
 };
 
-describe('the sequences of the reference model of the rows, with every check on', () => {
+describe('the sequences of the reference model of the Store, with every check on', () => {
   for (const kind of ['rows', 'rows-bulk', 'objects'] as const) {
     it(`fail no check but the known ones (${kind})`, () => {
       const broken = new Set<ConsistencyCheck>();
@@ -745,7 +745,7 @@ describe('the sequences of the reference model of the rows, with every check on'
             ...subject,
             read: () => {
               for (const failure of failures) broken.add(failure.check);
-              if (process.env.KASANE_MODEL_REPORT && failures.length > 0) {
+              if (process.env.STORE_MODEL_REPORT && failures.length > 0) {
                 console.log(
                   `${kind} | seed ${seed} | ${failures[0].check}: ${failures[0].problems[0]}`,
                 );
@@ -774,7 +774,7 @@ const KNOWN_BROKEN_DRAWN: Readonly<
   'rows by kind': [],
 };
 
-describe('the sequences of the reference model of the rows drawn, with every check on', () => {
+describe('the sequences of the reference model of the Store drawn, with every check on', () => {
   for (const kind of ['rows', 'rows-bulk', 'rows by kind'] as const) {
     it(`fail no check but the known ones, a frame drawn after each step (${kind})`, () => {
       const broken = new Set<ConsistencyCheck>();
@@ -793,7 +793,7 @@ describe('the sequences of the reference model of the rows drawn, with every che
             ...subject,
             read: () => {
               for (const failure of drawn.failures) broken.add(failure.check);
-              if (process.env.KASANE_MODEL_REPORT && drawn.failures.length > 0) {
+              if (process.env.STORE_MODEL_REPORT && drawn.failures.length > 0) {
                 const failure = drawn.failures[0];
                 console.log(
                   `${kind} drawn | seed ${seed} | ${failure.check}: ${failure.problems[0]}`,
@@ -838,7 +838,7 @@ describe('the checks of the drawing of the rows find a rule of the drawing broke
     expect(failures).toEqual([]);
     edit();
     frame();
-    if (process.env.KASANE_MODEL_REPORT) {
+    if (process.env.STORE_MODEL_REPORT) {
       for (const failure of failures) console.log(failure.check, failure.problems[0]);
     }
     draw.destroy();

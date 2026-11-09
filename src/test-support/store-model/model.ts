@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * The reference model of the rows: what the rewrites of a document mean, and nothing else
+ * The reference model of the Store: what the rewrites of a document mean, and nothing else
  *
  * It holds the document as maps and arrays (the layers in their order, the items of each layer
  * and the members of each group back to front, the fields of every layer, group and feature) and
@@ -122,7 +122,7 @@ interface ModelGroup extends GroupValues {
 }
 
 /**
- * The reference model of the rows
+ * The reference model of the Store
  */
 export class TableModel {
   readonly #layers = new Map<string, LayerValues>();
