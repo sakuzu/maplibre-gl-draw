@@ -36,6 +36,15 @@ export interface DeltaRowsChange {
 }
 
 /**
+ * Runs work of the tables when the user of the tables lets it (when the page is idle, say), with
+ * the time at which that period ends, in the clock of `performance.now()` (`whenIdle`)
+ *
+ * @returns What cancels it
+ * @internal
+ */
+export type WhenIdle = (task: (deadline: number) => void) => () => void;
+
+/**
  * The time a frame gives the work done a step at a time (the same shape as the budget of the
  * builds of the chunks, so one budget can be shared by both). Only the time spent in the steps
  * is counted

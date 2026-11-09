@@ -45,7 +45,6 @@ import type { BBox } from '../geometry/types.js';
 import { circleRowRings } from '../shared/circle-rings.js';
 import { DrawError } from '../shared/draw-error.js';
 import type { Feature, FeatureStyle, FeatureType, RowValues } from '../shared/types/model.js';
-import type { IdleScheduler } from '../shared/utils/idle.js';
 import { drawErrorOf } from '../table/draw-error-of.js';
 import { KasaneError } from '../table/kasane-error.js';
 import {
@@ -117,6 +116,7 @@ import {
   ROW_WRITE_VALUES,
   type RowGroupHandle,
   type TableWorkBudget,
+  type WhenIdle,
 } from './types.js';
 import { OVERRIDE_BYTES_LIMIT } from './value-overrides.js';
 import {
@@ -203,10 +203,11 @@ export interface FeatureTablesInternalOptions extends FeatureTablesOptions {
   /** The number of strings read from the columns that are kept (50,000 when omitted) */
   readonly stringCacheSize?: number;
   /**
-   * Runs a slice of the build of the index of the boxes of the rows while the page is idle
-   * (`requestIdleCallback`, or a timer, when omitted): a test runs the slices itself
+   * When the tables run their work, a slice at a time: the build of the index of the boxes of the
+   * rows (none: it is left to the first search). The tables of the library run it while the page
+   * is idle when omitted (`requestIdleCallback`, or a timer); a test runs the slices itself
    */
-  readonly whenIdle?: IdleScheduler;
+  readonly whenIdle?: WhenIdle;
 }
 
 /**

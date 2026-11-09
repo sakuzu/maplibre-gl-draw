@@ -7,12 +7,14 @@
  *
  * The tables (`createTables`) hold rows and know nothing of features. The library gives them what
  * they ask the user of the tables for: the boxes of the rows of an Image and of the types of the
- * extensions (`FeatureRowBoxes`), and the fields whose new value places a row again, the ones the
- * drawing cuts the rows by (the type, and the zoom a feature was created at).
+ * extensions (`FeatureRowBoxes`), the fields whose new value places a row again, the ones the
+ * drawing cuts the rows by (the type, and the zoom a feature was created at), and when the tables
+ * run their work (while the page is idle).
  */
 
 import type { FeatureTables, FeatureTablesWriter, RowField } from '../api/tables.js';
 import { drawPropertyKey } from '../shared/properties.js';
+import { whenIdle } from '../shared/utils/idle.js';
 import { FeatureRowBoxes, keepFeatureRowBoxes } from './feature-row-boxes.js';
 import {
   createTables,
@@ -37,7 +39,8 @@ export const FEATURE_RELOCATING_FIELDS: readonly RowField[] = [
 /**
  * Creates the tables of the features of a document with what the library declares of its
  * features (`createTables`): the boxes of the rows of an Image and of the types of the extensions
- * (`featureRowBoxesOf`), and the fields that place a row again
+ * (`featureRowBoxesOf`), the fields that place a row again, and the idle periods of the page for
+ * their work (unless the options give others)
  *
  * @internal
  */
@@ -50,6 +53,7 @@ export function createFeatureRowTables(options: FeatureTablesInternalOptions = {
     ...options,
     rowBoxes: boxes.boxesOf,
     relocatingFields: FEATURE_RELOCATING_FIELDS,
+    whenIdle: options.whenIdle ?? whenIdle,
   });
   const internals = featureTablesInternals(made.tables) as FeatureTablesInternals;
   boxes.attach(() => internals.refreshBoxes());

@@ -24,9 +24,8 @@
  */
 
 import RBush, { type BBox as RBushBox } from 'rbush';
-import { type IdleScheduler, idleNow, whenIdle } from '../shared/utils/idle.js';
 import { HILBERT_SIDE, hilbertIndex } from '../table/packed-rtree.js';
-import type { RowHandle } from './types.js';
+import type { RowHandle, WhenIdle } from './types.js';
 
 /**
  * What the index reads of the tables
@@ -56,9 +55,12 @@ export interface RowBoxSource {
  * @internal
  */
 export interface RowBoxIndexOptions {
-  /** Runs a slice of a build while the page is idle (`whenIdle` when omitted) */
-  readonly whenIdle?: IdleScheduler;
-  /** The clock the deadlines of the slices are read with (`idleNow` when omitted) */
+  /**
+   * Runs a slice of a build when the user of the tables lets it (none: every build is left to the
+   * first search)
+   */
+  readonly whenIdle?: WhenIdle;
+  /** The clock the deadlines of the slices are read with (`performance.now()` when omitted) */
   readonly now?: () => number;
   /**
    * The key the rows are put in order by, from the center of their boxes: that of the system of
@@ -66,6 +68,11 @@ export interface RowBoxIndexOptions {
    * over their extent when omitted)
    */
   readonly sortKey?: (centerX: number, centerY: number) => number;
+}
+
+/** The clock of the deadlines given with the slices (`WhenIdle`) */
+function clockNow(): number {
+  return typeof performance !== 'undefined' ? performance.now() : Date.now();
 }
 
 /** The bytes of a number, to read its bits */
@@ -148,7 +155,7 @@ interface Build {
  */
 export class RowBoxIndex {
   readonly #source: RowBoxSource;
-  readonly #whenIdle: IdleScheduler;
+  readonly #whenIdle: WhenIdle | undefined;
   readonly #now: () => number;
   readonly #sortKey: ((centerX: number, centerY: number) => number) | undefined;
   /** The box each handle is indexed with (minX, minY, maxX, maxY) */
@@ -170,8 +177,8 @@ export class RowBoxIndex {
 
   constructor(source: RowBoxSource, options: RowBoxIndexOptions = {}) {
     this.#source = source;
-    this.#whenIdle = options.whenIdle ?? whenIdle;
-    this.#now = options.now ?? idleNow;
+    this.#whenIdle = options.whenIdle;
+    this.#now = options.now ?? clockNow;
     this.#sortKey = options.sortKey;
     // rbush calls these unbound: they read the arrays of the index through it
     const index = this;
@@ -266,11 +273,15 @@ export class RowBoxIndex {
     return this.#marked.size > Math.max(REBUILD_FROM, this.#count / 4);
   }
 
-  /** Asks for an idle period for the next slice of a build, unless the build is small */
+  /**
+   * Asks for an idle period for the next slice of a build, unless the build is small or there are
+   * no idle periods (the build is left to the first search then)
+   */
   #scheduleBuild(): void {
-    if (this.#cancelIdle) return;
+    const whenIdle = this.#whenIdle;
+    if (!whenIdle || this.#cancelIdle) return;
     if (!this.#build && this.#source.countRows() < IDLE_BUILD_FROM) return;
-    this.#cancelIdle = this.#whenIdle((deadline) => {
+    this.#cancelIdle = whenIdle((deadline) => {
       this.#cancelIdle = null;
       if (this.advance(deadline)) this.#scheduleBuild();
     });
