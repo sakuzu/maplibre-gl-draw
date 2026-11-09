@@ -104,23 +104,23 @@ describe('the viewport across the antimeridian', () => {
 
     const ranges = getExpandedViewportRanges(map, 2);
     expect(ranges).toHaveLength(2);
-    expect(ranges[0].minX).toBeCloseTo(179.6);
-    expect(ranges[0].maxX).toBeCloseTo(180.4);
-    expect(ranges[1].minX).toBeCloseTo(-180.4);
-    expect(ranges[1].maxX).toBeCloseTo(-179.6);
+    expect(ranges[0][0]).toBeCloseTo(179.6);
+    expect(ranges[0][2]).toBeCloseTo(180.4);
+    expect(ranges[1][0]).toBeCloseTo(-180.4);
+    expect(ranges[1][2]).toBeCloseTo(-179.6);
 
     const bounds = getExpandedViewportBounds(map, 2);
-    expect(bounds.minX).toBeLessThan(-180);
-    expect(bounds.maxX).toBeGreaterThan(180);
-    expect(bounds.minY).toBeCloseTo(-0.2);
-    expect(bounds.maxY).toBeCloseTo(0.2);
+    expect(bounds[0]).toBeLessThan(-180);
+    expect(bounds[2]).toBeGreaterThan(180);
+    expect(bounds[1]).toBeCloseTo(-0.2);
+    expect(bounds[3]).toBeCloseTo(0.2);
   });
 
   it('keeps a single range away from the antimeridian', () => {
     const map = mapViewing(139.6, 35.6, 139.8, 35.8);
     const bounds = getExpandedViewportBounds(map, 2);
-    expect(bounds.minX).toBeCloseTo(139.5);
-    expect(bounds.maxX).toBeCloseTo(139.9);
+    expect(bounds[0]).toBeCloseTo(139.5);
+    expect(bounds[2]).toBeCloseTo(139.9);
   });
 });
 
@@ -129,18 +129,18 @@ describe('the viewport of a whole globe', () => {
     // maplibre's bounds of a globe in full view stop a degree or two short of its edge
     const map = mapViewing(-180, -90, 180, 48);
     const bounds = getExpandedViewportBounds(map, 2);
-    expect(bounds.minX).toBe(-180);
-    expect(bounds.maxX).toBe(180);
-    expect(bounds.maxY).toBe(90);
+    expect(bounds[0]).toBe(-180);
+    expect(bounds[2]).toBe(180);
+    expect(bounds[3]).toBe(90);
   });
 
   it('keeps the margin of latitude when only the expanded view is 360 degrees wide', () => {
     const map = mapViewing(-150, -30, 150, 40);
     const [range] = getExpandedViewportRanges(map, 2);
-    expect(range.minX).toBeCloseTo(-150);
-    expect(range.maxX).toBeCloseTo(150);
-    expect(range.minY).toBeCloseTo(-65);
-    expect(range.maxY).toBeCloseTo(75);
+    expect(range[0]).toBeCloseTo(-150);
+    expect(range[2]).toBeCloseTo(150);
+    expect(range[1]).toBeCloseTo(-65);
+    expect(range[3]).toBeCloseTo(75);
   });
 
   it('finds a point between the reported bounds and the edge of the sphere', () => {

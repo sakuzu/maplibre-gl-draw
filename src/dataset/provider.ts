@@ -13,7 +13,8 @@
  * timing (the debounce) and the order in which the responses are applied, for one dataset.
  */
 
-import type { BoundingBox, Feature } from '../shared/types/model.js';
+import type { BBox } from '../geometry/types.js';
+import type { Feature } from '../shared/types/model.js';
 import type { DatasetFeatureProvider } from './types.js';
 import { normalizeDisplayFeature } from './types.js';
 
@@ -102,15 +103,15 @@ export function tileYToLat(y: number, z: number): number {
  *
  * @internal
  */
-export function toTileRange(bounds: BoundingBox, zoom: number): TileRange {
+export function toTileRange(bounds: BBox, zoom: number): TileRange {
   const z = toZoomStage(zoom);
   return {
     z,
-    minX: lngToTileX(bounds.minX, z),
-    maxX: lngToTileX(bounds.maxX, z),
+    minX: lngToTileX(bounds[0], z),
+    maxX: lngToTileX(bounds[2], z),
     // Tile Y gets smaller towards the north, so the latitudes and minY / maxY are inverted
-    minY: latToTileY(bounds.maxY, z),
-    maxY: latToTileY(bounds.minY, z),
+    minY: latToTileY(bounds[3], z),
+    maxY: latToTileY(bounds[1], z),
   };
 }
 
@@ -131,13 +132,13 @@ export function tileRangeKey(range: TileRange): string {
  *
  * @internal
  */
-export function tileRangeBounds(range: TileRange): BoundingBox {
-  return {
-    minX: tileXToLng(range.minX, range.z),
-    maxX: tileXToLng(range.maxX + 1, range.z),
-    minY: tileYToLat(range.maxY + 1, range.z),
-    maxY: tileYToLat(range.minY, range.z),
-  };
+export function tileRangeBounds(range: TileRange): BBox {
+  return [
+    tileXToLng(range.minX, range.z),
+    tileYToLat(range.maxY + 1, range.z),
+    tileXToLng(range.maxX + 1, range.z),
+    tileYToLat(range.minY, range.z),
+  ];
 }
 
 /**
@@ -254,7 +255,7 @@ export class DisplayProviderLoader {
   }
 
   /** Schedules the call of the provider for a displayed range */
-  schedule(bounds: BoundingBox, zoom: number): void {
+  schedule(bounds: BBox, zoom: number): void {
     if (this.disposed) return;
 
     const range = toTileRange(bounds, zoom);
@@ -290,7 +291,7 @@ export class DisplayProviderLoader {
    *
    * A response in flight reaches neither the cache nor the display.
    */
-  invalidate(bounds: BoundingBox, zoom: number): void {
+  invalidate(bounds: BBox, zoom: number): void {
     if (this.disposed) return;
 
     this.cacheGeneration++;

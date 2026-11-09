@@ -33,6 +33,7 @@ export const KASANE_FILES = [
   'feature-table/value-overrides.ts',
   'feature-table/versions.ts',
   'feature-table/write-marks.ts',
+  'geometry/bbox-type.ts',
   'table/kasane-error.ts',
   'table/packed-rtree.ts',
   'table/row-group-builder.ts',

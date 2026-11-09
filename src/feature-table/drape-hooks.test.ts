@@ -18,7 +18,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import type { BoundingBox } from '../shared/types/model.js';
+import type { BBox } from '../geometry/types.js';
 import {
   referenceKey as key,
   randomReference,
@@ -166,11 +166,11 @@ describe('what a draped drawing reads of the deltas and the versions', () => {
   it('tells the extent of the rows whose drawing changed', () => {
     const reference = randomReference(seededRandom(3), 40, ['a']);
     const { tables, writer, internals } = tablesOfReference(reference, ['a'], 8);
-    const told: Array<[string, BoundingBox]> = [];
+    const told: Array<[string, BBox]> = [];
     internals.onTouched((layerId, bounds) => told.push([layerId, bounds]));
     const at = (id: string) => tables.findRow(id) as number;
-    const contains = (b: BoundingBox, x: number, y: number) =>
-      b.minX <= x && x <= b.maxX && b.minY <= y && y <= b.maxY;
+    const contains = (b: BBox, x: number, y: number) =>
+      b[0] <= x && x <= b[2] && b[1] <= y && y <= b[3];
     writer.apply(
       rowPatch([at('r1')], {
         geometry: [{ type: 'Point', coordinates: [50, 50] }],

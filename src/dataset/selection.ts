@@ -12,13 +12,14 @@
  */
 
 import type { ProjectionData } from 'maplibre-gl';
+import type { BBox } from '../geometry/types.js';
 import {
   SELECTION_HIGHLIGHT_COLOR,
   SELECTION_HIGHLIGHT_FILL_OPACITY,
   SELECTION_HIGHLIGHT_RING_EXTRA,
   SELECTION_HIGHLIGHT_STROKE_EXTRA,
 } from '../shared/config/selection-highlight.js';
-import type { BoundingBox, Coordinate, Feature } from '../shared/types/model.js';
+import type { Coordinate, Feature } from '../shared/types/model.js';
 import { getBoundingBox } from '../shared/utils/feature-bbox.js';
 import type { RetainedDrawFactors } from '../view/renderers/draw-factors.js';
 import type { PointStyle } from '../view/renderers/point/point-shape.js';
@@ -50,7 +51,7 @@ export interface SelectionHighlightInput {
    * over it take the same factors as the rest of the dataset). No factors when omitted
    */
   factors?: RetainedDrawFactors;
-  bounds: BoundingBox;
+  bounds: BBox;
   /** The selected features (in draw order) */
   selected: readonly Feature[];
   /** The style resolver of the retained renderers (undefined in immediate mode) */
@@ -141,7 +142,7 @@ export interface DisplayHitTestInput {
   /** The largest point radius given by an individual style (px; 0 when none is given) */
   maxStylePointRadius: number;
   /** The candidate rows in a range, in draw order (the spatial index) */
-  search(bounds: BoundingBox): number[];
+  search(bounds: BBox): number[];
   /** The feature of a row (without the rule colors) */
   featureAt(row: number): Feature;
   /** Whether a row survived the thinning */
@@ -184,12 +185,12 @@ export function hitTestDisplayFeatures(input: DisplayHitTestInput): DisplayRowHi
   );
   const reach = Math.max(toleranceLngLat, maxPointRadius * degreesPerPixel);
 
-  const bounds: BoundingBox = {
-    minX: coordinate[0] - reach,
-    minY: coordinate[1] - reach,
-    maxX: coordinate[0] + reach,
-    maxY: coordinate[1] + reach,
-  };
+  const bounds: BBox = [
+    coordinate[0] - reach,
+    coordinate[1] - reach,
+    coordinate[0] + reach,
+    coordinate[1] + reach,
+  ];
 
   const candidates = input.search(bounds);
   for (let i = candidates.length - 1; i >= 0; i--) {

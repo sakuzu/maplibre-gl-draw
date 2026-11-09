@@ -13,7 +13,8 @@
 
 import { describe, expect, it } from 'vitest';
 import type { ModifierKeys } from '../dispatcher/types.js';
-import type { BoundingBox, Coordinate } from '../store/types.js';
+import type { BBox } from '../geometry/types.js';
+import type { Coordinate } from '../store/types.js';
 import { degreesPerPixel } from './geometry.js';
 import { createSnapService } from './service.js';
 import type { SnapCandidate, SnapLngLat, SnapProvider } from './types.js';
@@ -25,11 +26,10 @@ const ZOOM = 14;
 function storedVertices(coordinates: Coordinate[]): SnapProvider {
   return {
     name: 'stored',
-    candidates: (bbox: BoundingBox): SnapCandidate[] =>
+    candidates: (bbox: BBox): SnapCandidate[] =>
       coordinates
         .filter(
-          ([lng, lat]) =>
-            lng >= bbox.minX && lng <= bbox.maxX && lat >= bbox.minY && lat <= bbox.maxY,
+          ([lng, lat]) => lng >= bbox[0] && lng <= bbox[2] && lat >= bbox[1] && lat <= bbox[3],
         )
         .map((coordinate) => ({ kind: 'vertex', coordinate, featureId: 'f' })),
   };

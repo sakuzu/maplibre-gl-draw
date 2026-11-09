@@ -11,12 +11,13 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import type { BoundingBox, Coordinate, Feature } from '../store/types.js';
+import type { BBox } from '../geometry/types.js';
+import type { Coordinate, Feature } from '../store/types.js';
 import type { TraceGraphEndpoint } from './trace-graph.js';
 import { buildTraceGraph, findTracePath } from './trace-graph.js';
 
 /** An extent wide enough to contain everything */
-const WIDE: BoundingBox = { minX: -1, minY: -1, maxX: 1, maxY: 1 };
+const WIDE: BBox = [-1, -1, 1, 1];
 
 /**
  * A 2 x 2 grid (the grid points are 0.0 / 0.1 / 0.2)
@@ -80,7 +81,7 @@ function pathBetween(
   features: Feature[],
   from: TraceGraphEndpoint,
   to: TraceGraphEndpoint,
-  bbox: BoundingBox = WIDE,
+  bbox: BBox = WIDE,
 ): Coordinate[] | null {
   return findTracePath(buildTraceGraph(features, bbox), from, to);
 }
@@ -104,7 +105,7 @@ describe('buildTraceGraph', () => {
   });
 
   it('does not take in edges that fall outside the extent', () => {
-    const bbox: BoundingBox = { minX: -0.01, minY: -0.01, maxX: 0.01, maxY: 0.01 };
+    const bbox: BBox = [-0.01, -0.01, 0.01, 0.01];
     const graph = buildTraceGraph(grid(), bbox);
 
     // Only the 2 edges touching the origin are left

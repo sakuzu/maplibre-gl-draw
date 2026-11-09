@@ -32,12 +32,13 @@
  */
 
 import { haversineDistanceMeters } from '../geometry/distance.js';
+import type { BBox } from '../geometry/types.js';
 import {
   collectFeatureSegments,
   hasSnapEdges,
   segmentIntersectsBBox,
 } from '../shared/utils/feature-segments.js';
-import type { BoundingBox, Coordinate, Feature } from '../store/types.js';
+import type { Coordinate, Feature } from '../store/types.js';
 
 /**
  * A connection from a node of a {@link TraceGraph} to an adjacent node, weighted by its
@@ -111,7 +112,7 @@ function nodeKey(coordinate: Coordinate): string {
  */
 export function buildTraceGraph(
   features: readonly Feature[],
-  bbox: BoundingBox,
+  bbox: BBox,
   edges?: (visit: (start: Coordinate, end: Coordinate) => void) => void,
 ): TraceGraph {
   const nodes = new Map<string, TraceGraphNode>();

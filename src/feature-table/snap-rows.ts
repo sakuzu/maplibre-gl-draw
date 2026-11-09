@@ -11,14 +11,9 @@
  */
 
 import type { FeatureTables } from '../api/tables.js';
+import type { BBox } from '../geometry/types.js';
 import type { PositionRun } from '../shared/math/position-runs.js';
-import type {
-  BoundingBox,
-  Coordinate,
-  Feature,
-  FeatureType,
-  VertexRef,
-} from '../shared/types/model.js';
+import type { Coordinate, Feature, FeatureType, VertexRef } from '../shared/types/model.js';
 import { featureTablesInternals } from './feature-tables.js';
 import { rowHitShape } from './hit-test.js';
 import { rowFeature, rowType } from './row-read.js';
@@ -50,14 +45,14 @@ export interface SnapRow {
  */
 export function forEachSnapRow(
   tables: FeatureTables | undefined,
-  bbox: BoundingBox,
+  bbox: BBox,
   shown: (layerId: string, groupId: string | undefined) => boolean,
   skip: (id: string) => boolean,
   visit: (row: SnapRow) => void,
 ): void {
   const internals = featureTablesInternals(tables);
   if (!internals || !tables) return;
-  const cursor = tables.scan({ bbox: [bbox.minX, bbox.minY, bbox.maxX, bbox.maxY], order: 'any' });
+  const cursor = tables.scan({ bbox, order: 'any' });
   for (let batch = cursor.next(); batch; batch = cursor.next()) {
     for (const handle of batch) {
       const place = internals.placeOf(handle);
@@ -90,13 +85,13 @@ export function forEachSnapRow(
  */
 export function rowVerticesInBBox(
   row: SnapRow,
-  bbox: BoundingBox,
+  bbox: BBox,
   visit: (position: Coordinate, ref: VertexRef) => void,
 ): void {
   const inside = (run: PositionRun, i: number): boolean => {
     const x = run.x(i);
     const y = run.y(i);
-    return x >= bbox.minX && x <= bbox.maxX && y >= bbox.minY && y <= bbox.maxY;
+    return x >= bbox[0] && x <= bbox[2] && y >= bbox[1] && y <= bbox[3];
   };
   switch (row.type) {
     case 'Point': {
@@ -135,7 +130,7 @@ export function rowVerticesInBBox(
  */
 export function rowSegmentsInBBox(
   row: SnapRow,
-  bbox: BoundingBox | null,
+  bbox: BBox | null,
   visit: (start: Coordinate, end: Coordinate, startRef: VertexRef, endRef: VertexRef) => void,
 ): void {
   forEachRowPart(row, (run, ring, part) => {
@@ -151,10 +146,10 @@ export function rowSegmentsInBBox(
       const by = run.y(i + 1);
       if (
         bbox &&
-        (Math.min(ax, bx) > bbox.maxX ||
-          Math.max(ax, bx) < bbox.minX ||
-          Math.min(ay, by) > bbox.maxY ||
-          Math.max(ay, by) < bbox.minY)
+        (Math.min(ax, bx) > bbox[2] ||
+          Math.max(ax, bx) < bbox[0] ||
+          Math.min(ay, by) > bbox[3] ||
+          Math.max(ay, by) < bbox[1])
       ) {
         continue;
       }

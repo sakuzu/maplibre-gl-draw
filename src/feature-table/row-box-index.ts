@@ -24,8 +24,7 @@
  * built. A small build is left to the first search.
  */
 
-import RBush from 'rbush';
-import type { BoundingBox } from '../shared/types/model.js';
+import RBush, { type BBox as RBushBox } from 'rbush';
 import { type IdleScheduler, idleNow, whenIdle } from '../shared/utils/idle.js';
 import { HILBERT_SIDE, hilbertIndex } from '../table/packed-rtree.js';
 import type { RowHandle } from './types.js';
@@ -178,7 +177,7 @@ export class RowBoxIndex {
     // rbush calls these unbound: they read the arrays of the index through it
     const index = this;
     class Tree extends RBush<number> {
-      override toBBox(item: number): BoundingBox {
+      override toBBox(item: number): RBushBox {
         const b = index.#boxes;
         const at = (item - 1) * 4;
         return { minX: b[at], minY: b[at + 1], maxX: b[at + 2], maxY: b[at + 3] };

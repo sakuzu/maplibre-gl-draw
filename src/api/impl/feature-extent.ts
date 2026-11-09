@@ -61,8 +61,8 @@ class Extent {
 export function featureExtent(feature: Feature): BBox | null {
   if (feature.type === 'Circle' || feature.type === 'Image') {
     if (coordinatesBBox(positionsOf(feature.geometry)) === null) return null;
-    const box = getBoundingBox(feature);
-    return [box.minX, box.minY, box.maxX, box.maxY];
+    // A box of its own (getBoundingBox gives a new one every time)
+    return getBoundingBox(feature);
   }
   return coordinatesBBox(positionsOf(feature.geometry));
 }

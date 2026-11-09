@@ -19,7 +19,8 @@ import {
   rowVerticesInBBox,
   type SnapRow,
 } from '../../feature-table/snap-rows.js';
-import type { BoundingBox, Coordinate, Feature } from '../../store/types.js';
+import type { BBox } from '../../geometry/types.js';
+import type { Coordinate, Feature } from '../../store/types.js';
 import type {
   SnapCandidate,
   SnapProvider,
@@ -36,7 +37,7 @@ import { isExcludedEdge, isExcludedVertex } from './shared.js';
  */
 export function forEachTargetRow(
   deps: StoreSnapProviderDeps,
-  bbox: BoundingBox,
+  bbox: BBox,
   ctx: SnapProviderContext,
   visit: (row: SnapRow) => void,
 ): void {
@@ -64,7 +65,7 @@ export function createTableVertexSnapProvider(deps: StoreSnapProviderDeps): Snap
   return {
     name: 'core:table-vertex',
 
-    candidates(bbox: BoundingBox, ctx: SnapProviderContext): SnapCandidate[] {
+    candidates(bbox: BBox, ctx: SnapProviderContext): SnapCandidate[] {
       const candidates: SnapCandidate[] = [];
       forEachTargetRow(deps, bbox, ctx, (row) => {
         // A row of the type of an extension lists its own targets, as its feature does
@@ -99,7 +100,7 @@ export function createTableEdgeSnapProvider(deps: StoreSnapProviderDeps): SnapPr
   return {
     name: 'core:table-edge',
 
-    candidates(bbox: BoundingBox, ctx: SnapProviderContext): SnapCandidate[] {
+    candidates(bbox: BBox, ctx: SnapProviderContext): SnapCandidate[] {
       const candidates: SnapCandidate[] = [];
       forEachTargetRow(deps, bbox, ctx, (row) => {
         if (customTargetsOf(deps, row) || !rowHasEdges(row.type)) return;
@@ -121,7 +122,7 @@ export function createTableEdgeSnapProvider(deps: StoreSnapProviderDeps): SnapPr
  */
 export function collectRowSegments(
   deps: StoreSnapProviderDeps,
-  bbox: BoundingBox,
+  bbox: BBox,
   ctx: SnapProviderContext,
 ): Array<{ featureId: string; segments: Array<{ start: Coordinate; end: Coordinate }> }> {
   const out: Array<{ featureId: string; segments: Array<{ start: Coordinate; end: Coordinate }> }> =

@@ -135,7 +135,9 @@ export {
 export { PointHitTestStrategy } from '../dispatcher/hit-test/strategies/point.js';
 
 // Supporting types
-export type { BoundingBox } from '../store/types.js';
+// The box of the library (`[minLng, minLat, maxLng, maxLat]` in degrees here), by its name of
+// this entry
+export type { BBox as BoundingBox } from '../geometry/types.js';
 export type { Coordinate } from '../shared/types/model.js';
 export type { BlendCapableGL } from '../view/layer/blend.js';
 export type { DashSegment } from '../view/renderers/line/dash.js';

@@ -23,6 +23,7 @@
  */
 
 import type { ModifierKeys } from '../dispatcher/types.js';
+import type { BBox } from '../geometry/types.js';
 import type { ScreenPoint } from '../shared/math/index.js';
 import { DEFAULT_TILE_SIZE } from '../shared/math/index.js';
 import { nearestLongitude, wrapLongitude } from '../shared/math/longitude.js';
@@ -31,7 +32,7 @@ import { isSameVertexRef } from '../shared/utils/vertex-ref.js';
 import { RenderedShapes } from '../sketches/rendered-shapes.js';
 import type { SpatialIndex } from '../store/spatial/spatial-index.js';
 import type { Store } from '../store/store.js';
-import type { BoundingBox, Coordinate, VertexRef } from '../store/types.js';
+import type { Coordinate, VertexRef } from '../store/types.js';
 import type { SnapTargetsRegistry } from './custom-targets.js';
 import type { DegreesPerPixel } from './geometry.js';
 import { degreesPerPixel, distanceInPixels, nearestPointOnSegment } from './geometry.js';
@@ -306,12 +307,12 @@ export function createSnapService(deps: SnapServiceDeps = {}): SnapService {
       const copyLngLat: SnapLngLat =
         copyLng === lngLat.lng ? lngLat : { lng: copyLng, lat: lngLat.lat };
 
-      const bbox: BoundingBox = {
-        minX: copyLng - toleranceLngDeg,
-        minY: lngLat.lat - toleranceLatDeg,
-        maxX: copyLng + toleranceLngDeg,
-        maxY: lngLat.lat + toleranceLatDeg,
-      };
+      const bbox: BBox = [
+        copyLng - toleranceLngDeg,
+        lngLat.lat - toleranceLatDeg,
+        copyLng + toleranceLngDeg,
+        lngLat.lat + toleranceLatDeg,
+      ];
 
       const providerCtx: SnapProviderContext = {
         ...ctx,

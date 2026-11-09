@@ -35,9 +35,10 @@ import { featureTablesInternals } from '../feature-table/feature-tables.js';
 import { BULK_MOVE_SET, type RowStateSets } from '../feature-table/row-state.js';
 import { forEachSnapRow, type SnapRow } from '../feature-table/snap-rows.js';
 import type { EnuEdit } from '../geometry/enu-transforms.js';
+import type { BBox } from '../geometry/types.js';
 import { getDisplayFeatures } from '../store/local-visibility.js';
 import type { Store } from '../store/store.js';
-import type { BoundingBox, DragTargets, Feature } from '../store/types.js';
+import type { DragTargets, Feature } from '../store/types.js';
 import type { DraggedFeatures } from './sketch-controller.js';
 import type { ShapeBeingDrawn, SketchView } from './sketch-view.js';
 
@@ -394,7 +395,7 @@ export class RenderedShapes {
    * @param skip Whether a row is left out, by its ID
    */
   forEachSnapRow(
-    bbox: BoundingBox,
+    bbox: BBox,
     shown: (layerId: string, groupId: string | undefined) => boolean,
     skip: (id: string) => boolean,
     visit: (row: SnapRow) => void,

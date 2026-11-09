@@ -16,7 +16,7 @@
  */
 
 import type { CoordinateDimensions } from '@sakuzu/tabane';
-import type { BoundingBox } from '../shared/types/model.js';
+import type { BBox } from '../geometry/bbox-type.js';
 import { KasaneError } from '../table/kasane-error.js';
 import { ROW_FLAG_DELETED, type RowBlockData } from '../table/row-group-types.js';
 import { compareRowKeys, type GroupKeySource, type RowKeySource } from '../table/row-keys.js';
@@ -57,7 +57,7 @@ export interface RowGroup {
    * The union of the bboxes of the rows (null when no row has a geometry). A row written in
    * place only widens it
    */
-  bounds: BoundingBox | null;
+  bounds: BBox | null;
   /** The column of each attribute key */
   readonly propertyIndex: ReadonlyMap<string, number>;
   /** The reader of each geometry column of the group (made on the first read) */
@@ -181,19 +181,19 @@ export function columnGeometryAt(group: RowGroup, row: number): RowGeometryAt | 
  * @internal
  */
 export function widenBounds(
-  bounds: BoundingBox | null,
+  bounds: BBox | null,
   minX: number,
   minY: number,
   maxX: number,
   maxY: number,
-): BoundingBox {
-  if (!bounds) return { minX, minY, maxX, maxY };
-  return {
-    minX: Math.min(bounds.minX, minX),
-    minY: Math.min(bounds.minY, minY),
-    maxX: Math.max(bounds.maxX, maxX),
-    maxY: Math.max(bounds.maxY, maxY),
-  };
+): BBox {
+  if (!bounds) return [minX, minY, maxX, maxY];
+  return [
+    Math.min(bounds[0], minX),
+    Math.min(bounds[1], minY),
+    Math.max(bounds[2], maxX),
+    Math.max(bounds[3], maxY),
+  ];
 }
 
 /** An item that is a row */
@@ -1299,7 +1299,7 @@ function inOrder(rows: readonly number[], length: number): Int32Array {
 }
 
 /** The union of the bboxes of the rows (null when no row has one) */
-function unionOfRows(rowBounds: Float64Array): BoundingBox | null {
+function unionOfRows(rowBounds: Float64Array): BBox | null {
   let minX = Number.POSITIVE_INFINITY;
   let minY = Number.POSITIVE_INFINITY;
   let maxX = Number.NEGATIVE_INFINITY;
@@ -1311,5 +1311,5 @@ function unionOfRows(rowBounds: Float64Array): BoundingBox | null {
     if (rowBounds[at + 2] > maxX) maxX = rowBounds[at + 2];
     if (rowBounds[at + 3] > maxY) maxY = rowBounds[at + 3];
   }
-  return minX === Number.POSITIVE_INFINITY ? null : { minX, minY, maxX, maxY };
+  return minX === Number.POSITIVE_INFINITY ? null : [minX, minY, maxX, maxY];
 }

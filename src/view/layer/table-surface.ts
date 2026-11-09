@@ -25,7 +25,7 @@
  * time, the rows whose fingerprint changed (`rowSurfaceKey`).
  */
 
-import type { BoundingBox } from '../../shared/types/model.js';
+import type { BBox } from '../../geometry/types.js';
 import { getGlobeTessellationStep, globeGridOf } from '../globe-subdivision.js';
 import type { TerrainContext } from '../terrain/context.js';
 import { getTerrainMeshSize } from '../terrain/detect.js';
@@ -78,7 +78,7 @@ interface ElevationChange {
  */
 export interface SurfaceCells {
   forEachFill(
-    view: BoundingBox,
+    view: BBox,
     visit: (minX: number, minY: number, maxX: number, maxY: number) => void,
   ): void;
 }
@@ -111,7 +111,7 @@ export class TableSurface {
    * @param view The view (the cells of the fills in it decide the coarsening)
    * @param cells The fills of the rows drawn
    */
-  update(terrain: TerrainContext, view: BoundingBox, cells: SurfaceCells): void {
+  update(terrain: TerrainContext, view: BBox, cells: SurfaceCells): void {
     this.trackElevations(terrain);
     const terrainStep = terrainStepOf(terrain);
     const base = terrainStep ?? getGlobeTessellationStep(terrain, 'fill');
@@ -212,10 +212,10 @@ function terrainLinePiece(terrain: TerrainContext): number {
 }
 
 /** The cells of the fills of the rows in view on a step */
-function fillCells(base: TessellationStep, view: BoundingBox, cells: SurfaceCells): number {
+function fillCells(base: TessellationStep, view: BBox, cells: SurfaceCells): number {
   let total = 0;
   cells.forEachFill(view, (minX, minY, maxX, maxY) => {
-    if (minX > view.maxX || maxX < view.minX || minY > view.maxY || maxY < view.minY) return;
+    if (minX > view[2] || maxX < view[0] || minY > view[3] || maxY < view[1]) return;
     // Mercator y decreases as the latitude increases
     total += cellsInRegion(
       mercatorX(minX),

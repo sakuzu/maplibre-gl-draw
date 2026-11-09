@@ -9,8 +9,9 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { BBox } from '../geometry/types.js';
 import { coordinatesOf } from '../shared/utils/coordinates.js';
-import type { BoundingBox, Feature } from '../store/types.js';
+import type { Feature } from '../store/types.js';
 import { toRow } from '../test-utils.js';
 import { createDatasetManager, type DatasetManager } from './manager.js';
 import {
@@ -51,7 +52,7 @@ describe('the pure functions of the tile keys', () => {
   });
 
   it('tile Y is smaller towards the north (the reverse of a bbox)', () => {
-    const range = toTileRange({ minX: -10, minY: 10, maxX: 10, maxY: 30 }, 5);
+    const range = toTileRange([-10, 10, 10, 30], 5);
 
     expect(range.minY).toBe(latToTileY(30, 5));
     expect(range.maxY).toBe(latToTileY(10, 5));
@@ -59,26 +60,26 @@ describe('the pure functions of the tile keys', () => {
   });
 
   it('bboxes that fall in the same tile range get the same key', () => {
-    const a = toTileRange({ minX: 139.7, minY: 35.6, maxX: 139.72, maxY: 35.62 }, 10);
-    const b = toTileRange({ minX: 139.701, minY: 35.601, maxX: 139.719, maxY: 35.619 }, 10);
+    const a = toTileRange([139.7, 35.6, 139.72, 35.62], 10);
+    const b = toTileRange([139.701, 35.601, 139.719, 35.619], 10);
 
     expect(tileRangeKey(a)).toBe(tileRangeKey(b));
   });
 
   it('a different zoom stage gives a different key', () => {
-    const bounds: BoundingBox = { minX: 139.7, minY: 35.6, maxX: 139.72, maxY: 35.62 };
+    const bounds: BBox = [139.7, 35.6, 139.72, 35.62];
 
     expect(tileRangeKey(toTileRange(bounds, 10))).not.toBe(tileRangeKey(toTileRange(bounds, 11)));
   });
 
   it('the bbox of a tile range contains the original bbox', () => {
-    const bounds: BoundingBox = { minX: 139.7, minY: 35.6, maxX: 140.2, maxY: 36.1 };
+    const bounds: BBox = [139.7, 35.6, 140.2, 36.1];
     const snapped = tileRangeBounds(toTileRange(bounds, 8));
 
-    expect(snapped.minX).toBeLessThanOrEqual(bounds.minX);
-    expect(snapped.maxX).toBeGreaterThanOrEqual(bounds.maxX);
-    expect(snapped.minY).toBeLessThanOrEqual(bounds.minY);
-    expect(snapped.maxY).toBeGreaterThanOrEqual(bounds.maxY);
+    expect(snapped[0]).toBeLessThanOrEqual(bounds[0]);
+    expect(snapped[2]).toBeGreaterThanOrEqual(bounds[2]);
+    expect(snapped[1]).toBeLessThanOrEqual(bounds[1]);
+    expect(snapped[3]).toBeGreaterThanOrEqual(bounds[3]);
   });
 });
 
@@ -125,8 +126,8 @@ function deferred(): {
 }
 
 /** A small bbox around the center coordinate (it fits in one tile at zoom 10) */
-function around(lng: number, lat: number): BoundingBox {
-  return { minX: lng - 0.01, minY: lat - 0.01, maxX: lng + 0.01, maxY: lat + 0.01 };
+function around(lng: number, lat: number): BBox {
+  return [lng - 0.01, lat - 0.01, lng + 0.01, lat + 0.01];
 }
 
 function feature(id: string): DatasetRow {
@@ -137,7 +138,7 @@ describe('the calls of the provider', () => {
   const DEBOUNCE = 200;
 
   let manager: DatasetManager;
-  let bounds: BoundingBox;
+  let bounds: BBox;
   let repaints: number;
   let fireViewportChange: () => void;
 
@@ -199,9 +200,9 @@ describe('the calls of the provider', () => {
 
     expect(provider).toHaveBeenCalledTimes(1);
     // Only the last range is requested (the bbox rounded to the tile boundaries)
-    const [requestedBounds, zoom] = provider.mock.calls[0] as unknown as [BoundingBox, number];
-    expect(requestedBounds.minX).toBeLessThanOrEqual(4);
-    expect(requestedBounds.maxX).toBeGreaterThanOrEqual(4);
+    const [requestedBounds, zoom] = provider.mock.calls[0] as unknown as [BBox, number];
+    expect(requestedBounds[0]).toBeLessThanOrEqual(4);
+    expect(requestedBounds[2]).toBeGreaterThanOrEqual(4);
     expect(zoom).toBe(10);
   });
 
@@ -231,7 +232,7 @@ describe('the calls of the provider', () => {
   });
 
   it('coming back to a fetched range restores from the cache at once, without a call', async () => {
-    const provider = vi.fn(async (b: BoundingBox) => [feature(`f${Math.round(b.minX)}`)]);
+    const provider = vi.fn(async (b: BBox) => [feature(`f${Math.round(b[0])}`)]);
     const dataset = manager.add({ id: 'c1', provider });
     await vi.advanceTimersByTimeAsync(DEBOUNCE);
     const first = dataset.getFeatures().map((f) => f.id);
@@ -429,8 +430,8 @@ describe('the calls of the provider', () => {
 });
 
 describe('DisplayProviderLoader', () => {
-  const VIEW: BoundingBox = { minX: 139.7, minY: 35.6, maxX: 139.8, maxY: 35.7 };
-  const OTHER: BoundingBox = { minX: 135.4, minY: 34.6, maxX: 135.5, maxY: 34.7 };
+  const VIEW: BBox = [139.7, 35.6, 139.8, 35.7];
+  const OTHER: BBox = [135.4, 34.6, 135.5, 34.7];
 
   beforeEach(() => {
     vi.useFakeTimers();

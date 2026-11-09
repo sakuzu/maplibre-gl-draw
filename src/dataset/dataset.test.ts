@@ -12,9 +12,10 @@
 
 import type { ProjectionData } from 'maplibre-gl';
 import { describe, expect, it, vi } from 'vitest';
+import type { BBox } from '../geometry/types.js';
 import { DEFAULT_FEATURE_STYLE_CONFIG } from '../shared/config/feature-style.js';
 import { coordinatesOf } from '../shared/utils/coordinates.js';
-import type { BoundingBox, Feature, StyleRule } from '../store/types.js';
+import type { Feature, StyleRule } from '../store/types.js';
 import { toRow } from '../test-utils.js';
 import { GpuLedger } from '../view/gpu-ledger.js';
 import { createBatchManager } from '../view/renderers/batch-manager.js';
@@ -49,7 +50,7 @@ function createStubGL(): WebGL2RenderingContext {
 }
 
 /** Viewport covering the whole globe */
-const WORLD: BoundingBox = { minX: -180, minY: -85, maxX: 180, maxY: 85 };
+const WORLD: BBox = [-180, -85, 180, 85];
 
 /** A stub that records the features pushed onto the batch per frame */
 function createBatchTarget(): { target: DisplayBatchTarget; frames: Feature[][] } {
@@ -73,10 +74,10 @@ function createBatchTarget(): { target: DisplayBatchTarget; frames: Feature[][] 
   return { target, frames };
 }
 
-function createManager(bounds: BoundingBox = WORLD): {
+function createManager(bounds: BBox = WORLD): {
   manager: DatasetManager;
   repaints: () => number;
-  setBounds: (next: BoundingBox) => void;
+  setBounds: (next: BBox) => void;
 } {
   let currentBounds = bounds;
   let repaintCount = 0;
@@ -93,7 +94,7 @@ function createManager(bounds: BoundingBox = WORLD): {
   return {
     manager,
     repaints: () => repaintCount,
-    setBounds: (next: BoundingBox) => {
+    setBounds: (next: BBox) => {
       currentBounds = next;
     },
   };
@@ -255,7 +256,7 @@ describe('adding, removing and replacing a Dataset', () => {
 
 describe('the viewport culling of a Dataset', () => {
   it('a feature outside the bbox does not go onto the batch', () => {
-    const { manager } = createManager({ minX: -1, minY: -1, maxX: 1, maxY: 1 });
+    const { manager } = createManager([-1, -1, 1, 1]);
     add(manager, {
       id: 'c1',
       rows: [point('in', [0, 0]), point('out', [50, 50]), point('edge', [1, 1])],
@@ -267,24 +268,24 @@ describe('the viewport culling of a Dataset', () => {
   });
 
   it('moving the viewport changes what goes on', () => {
-    const { manager, setBounds } = createManager({ minX: -1, minY: -1, maxX: 1, maxY: 1 });
+    const { manager, setBounds } = createManager([-1, -1, 1, 1]);
     add(manager, { id: 'c1', rows: [point('a', [0, 0]), point('b', [50, 50])] });
 
     expect(drawOnce(manager)[0].map((f) => f.id)).toEqual(['a']);
 
-    setBounds({ minX: 49, minY: 49, maxX: 51, maxY: 51 });
+    setBounds([49, 49, 51, 51]);
     expect(drawOnce(manager)[0].map((f) => f.id)).toEqual(['b']);
   });
 
   it('no frame is opened when nothing is visible', () => {
-    const { manager } = createManager({ minX: 100, minY: 10, maxX: 101, maxY: 11 });
+    const { manager } = createManager([100, 10, 101, 11]);
     add(manager, { id: 'c1', rows: [point('a', [0, 0])] });
 
     expect(drawOnce(manager)).toEqual([]);
   });
 
   it('a polygon is judged by the intersection of the bboxes', () => {
-    const { manager } = createManager({ minX: 0.5, minY: 0.1, maxX: 0.6, maxY: 0.2 });
+    const { manager } = createManager([0.5, 0.1, 0.6, 0.2]);
     add(manager, { id: 'c1', rows: [polygon('p0', 0), polygon('p9', 9)] });
 
     expect(drawOnce(manager)[0].map((f) => f.id)).toEqual(['p0']);
@@ -292,13 +293,13 @@ describe('the viewport culling of a Dataset', () => {
 
   it('collectVisible returns the features intersecting the given range in draw order', () => {
     // It is called while nothing is in the current viewport (the given range is the truth)
-    const { manager } = createManager({ minX: 100, minY: 100, maxX: 101, maxY: 101 });
+    const { manager } = createManager([100, 100, 101, 101]);
     const dataset = add(manager, {
       id: 'c1',
       rows: [point('c', [2, 2]), point('a', [0, 0]), point('far', [50, 50])],
     });
 
-    const visible = dataset.collectVisible({ minX: -1, minY: -1, maxX: 3, maxY: 3 });
+    const visible = dataset.collectVisible([-1, -1, 3, 3]);
 
     expect(visible.map((f) => f.id)).toEqual(['c', 'a']);
   });
@@ -1001,7 +1002,7 @@ describe('the selection highlight of a Dataset', () => {
   });
 
   it('a selection outside the viewport is not drawn', () => {
-    const { manager, setBounds } = createManager({ minX: -1, minY: -1, maxX: 1, maxY: 1 });
+    const { manager, setBounds } = createManager([-1, -1, 1, 1]);
     const dataset = add(manager, {
       id: 'c1',
       rows: [point('near', [0, 0]), point('far', [50, 50])],
@@ -1010,7 +1011,7 @@ describe('the selection highlight of a Dataset', () => {
     dataset.setSelectedIds(['far']);
     expect(drawOnce(manager)).toHaveLength(1);
 
-    setBounds({ minX: 49, minY: 49, maxX: 51, maxY: 51 });
+    setBounds([49, 49, 51, 51]);
     expect(drawOnce(manager)[1].map((f) => f.id)).toEqual(['far', 'far']);
   });
 

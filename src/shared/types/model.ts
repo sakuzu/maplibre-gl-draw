@@ -968,20 +968,6 @@ declare const restoreTokenBrand: unique symbol;
 export type RestoreToken = number & { readonly [restoreTokenBrand]: true };
 
 /**
- * An axis-aligned bounding box in longitude (X) and latitude (Y), in degrees
- */
-export interface BoundingBox {
-  /** The west edge (the smallest longitude) */
-  minX: number;
-  /** The south edge (the smallest latitude) */
-  minY: number;
-  /** The east edge (the largest longitude) */
-  maxX: number;
-  /** The north edge (the largest latitude) */
-  maxY: number;
-}
-
-/**
  * The metadata of the document
  *
  * Core stores, saves and exports it, and does not read it. `setMetadata` merges into it.

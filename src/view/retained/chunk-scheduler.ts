@@ -22,7 +22,7 @@
  * not use it.
  */
 
-import type { BoundingBox } from '../../shared/types/model.js';
+import type { BBox } from '../../geometry/types.js';
 import { boundsCenter, rebasedRetainedOrigin } from '../shaders/retained-origin.js';
 
 /**
@@ -53,7 +53,7 @@ export interface RetainedChunkState<B> {
    * The extent of the chunk (the culling and the default origin). A write in place of a row of
    * the chunk only widens it
    */
-  bounds: BoundingBox;
+  bounds: BBox;
   /** The batches drawn (null before the first build, or once discarded) */
   batches: B | null;
   /** The build in progress */
@@ -157,14 +157,14 @@ export interface ChunkSchedulerHost<S extends RetainedChunkState<B>, B> {
  */
 export interface ChunkSchedulerFrame {
   /** The view, in longitudes and latitudes (a chunk outside it is skipped) */
-  readonly bounds: BoundingBox;
+  readonly bounds: BBox;
   /** The zoom (for the choice of the origin) */
   readonly zoom: number;
   /**
    * The regions the view sees the rows of the chunk moved on the GPU from (the view moved back by
    * the edit of a drag): the chunk is built around them while they are dragged
    */
-  readonly movedViews?: readonly BoundingBox[];
+  readonly movedViews?: readonly BBox[];
   /**
    * Whether the camera is still. While it moves, nothing is started or stepped (a build of 20 to
    * 50 ms makes a gesture stutter, and the view it would be built for changes anyway)
@@ -299,6 +299,6 @@ export function invalidateChunk<S extends RetainedChunkState<B>, B>(
 }
 
 /** Whether two boxes meet (touching edges meet) */
-function intersects(a: BoundingBox, b: BoundingBox): boolean {
-  return a.minX <= b.maxX && a.maxX >= b.minX && a.minY <= b.maxY && a.maxY >= b.minY;
+function intersects(a: BBox, b: BBox): boolean {
+  return a[0] <= b[2] && a[2] >= b[0] && a[1] <= b[3] && a[3] >= b[1];
 }

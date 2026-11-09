@@ -14,6 +14,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
+import type { BBox } from '../../geometry/types.js';
 import { RenderedShapes } from '../../sketches/rendered-shapes.js';
 import { MemoryStore } from '../../store/memory.js';
 import { StoreSpatialIndex } from '../../store/spatial/store-spatial-index.js';
@@ -163,7 +164,7 @@ describe('the snapping to the rows held as columns', () => {
     for (let k = 0; k < 30; k++) {
       const x = random() * 2 - 1;
       const y = random() * 2 - 1;
-      const bbox = { minX: x - 0.3, minY: y - 0.3, maxX: x + 0.3, maxY: y + 0.3 };
+      const bbox: BBox = [x - 0.3, y - 0.3, x + 0.3, y + 0.3];
       const target = features[Math.floor(random() * features.length)];
       const ctx = context({
         excludeFeatureId: k % 3 === 0 ? target.id : undefined,
@@ -211,7 +212,7 @@ describe('the snapping to the rows held as columns', () => {
   it('takes the rows selected as any row, and leaves out the hidden rows', () => {
     const features = randomFeatures(3, 14);
     const { rows } = stores(features);
-    const bbox = { minX: -2, minY: -2, maxX: 2, maxY: 2 };
+    const bbox: BBox = [-2, -2, 2, 2];
     const ids = () =>
       new Set(
         createTableVertexSnapProvider(rows)
@@ -271,7 +272,7 @@ describe('the snapping to the rows held as columns', () => {
       },
     ];
     const { rows } = stores(cross);
-    const bbox = { minX: -0.5, minY: -0.5, maxX: 0.5, maxY: 0.5 };
+    const bbox: BBox = [-0.5, -0.5, 0.5, 0.5];
     const points = () =>
       createStoreIntersectionSnapProvider(rows)
         .candidates(bbox, context())

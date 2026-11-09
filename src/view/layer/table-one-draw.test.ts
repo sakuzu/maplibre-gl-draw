@@ -29,6 +29,7 @@ import type { GpuRowsSource, HeldGpuRows } from '../../extension/renderers.js';
 import type { LayerTable } from '../../feature-table/layer-table.js';
 import { writeRowGeometry } from '../../feature-table/row-write.js';
 import { ROW_WRITE_GEOMETRY, ROW_WRITE_STYLE } from '../../feature-table/types.js';
+import type { BBox } from '../../geometry/types.js';
 import type { Feature, Layer } from '../../shared/types/model.js';
 import {
   createTransformFieldsRegistry,
@@ -284,7 +285,7 @@ function setup(
     ...(options.extensions && { extensions: options.extensions }),
   });
   /** One frame: the pass before the main one, then the layer; returns the ranges drawn */
-  const frame = (bounds?: { minX: number; minY: number; maxX: number; maxY: number }) => {
+  const frame = (bounds?: BBox) => {
     renderer.prerender();
     beginRenderFrame();
     renderer.beginFrame();
@@ -433,8 +434,8 @@ describe('the drawing of a layer held as rows in one draw per chunk', () => {
 
   it('skips the chunks out of view and keeps the order of the others', () => {
     const { table, frame } = setup(interleaved(300, 6), 50);
-    frame({ minX: 0, minY: 0, maxX: 3, maxY: 3 });
-    const { record } = frame({ minX: 0, minY: 0, maxX: 3, maxY: 3 });
+    frame([0, 0, 3, 3]);
+    const { record } = frame([0, 0, 3, 3]);
     const inOneDraw = record.filter((entry) => entry.kind === 'rows');
     expect(inOneDraw.length).toBeGreaterThan(0);
     expect(coverage(inOneDraw).length).toBeLessThan(allRows(table).length);
@@ -927,7 +928,7 @@ describe('the check of the classification of a row written in place', () => {
 
 describe('the rows drawn at once out of view', () => {
   /** The box of the view of the tests */
-  const VIEW = { minX: 0, minY: 0, maxX: 1, maxY: 1 };
+  const VIEW: BBox = [0, 0, 1, 1];
 
   /**
    * Images (drawn at once) scattered over the layer in its order, `inView` of them in the view
@@ -985,7 +986,7 @@ describe('the rows drawn at once out of view', () => {
     frame(VIEW);
     frame(VIEW);
     // A view where no row is
-    const { immediate } = frame({ minX: -50, minY: -50, maxX: -40, maxY: -40 });
+    const { immediate } = frame([-50, -50, -40, -40]);
     expect(immediate).toEqual([]);
     expect(renderer.atOnceStats.visited).toBe(0);
     // A row far away moved into the view, a row in view moved out of it
@@ -1039,7 +1040,7 @@ describe('the rows drawn at once out of view', () => {
 
 describe('the rows drawn at once by the extent of their footprint', () => {
   /** The box of the view of the tests */
-  const VIEW = { minX: 0, minY: 0, maxX: 1, maxY: 1 };
+  const VIEW: BBox = [0, 0, 1, 1];
 
   /**
    * Rows of a custom type laid on the map around their anchor, `half` degrees on each side, and
@@ -1175,7 +1176,7 @@ describe('the rows an extension holds on the GPU', () => {
   /** The bytes a row of the tests takes */
   const ROW_BYTES = 100;
   const CONTEXT = {} as RenderContext;
-  const VIEW = { minX: -1, minY: -1, maxX: 2, maxY: 2 };
+  const VIEW: BBox = [-1, -1, 2, 2];
 
   /** What one range of rows holds */
   interface Held {
@@ -1458,7 +1459,7 @@ describe('the rows an extension holds on the GPU', () => {
     const handle = tables.findRow('r1') as number;
     writer.apply({ handles: Int32Array.of(handle), fields: new Map([['property:name', ['n']]]) });
     log.length = 0;
-    frame({ minX: 50, minY: 50, maxX: 51, maxY: 51 });
+    frame([50, 50, 51, 51]);
     expect(log).toEqual([]);
     expect(made[0].writes).toEqual([[1, handle]]);
     writer.apply({
@@ -1552,7 +1553,7 @@ describe('the rows an extension holds on the GPU', () => {
     frame(VIEW);
     expect(made).toEqual([]);
     expect(heldBytes()).toBe(0);
-    frame({ minX: 9, minY: 9, maxX: 11, maxY: 11 });
+    frame([9, 9, 11, 11]);
     expect(heldBytes()).toBe(ROW_BYTES);
     expect(log).toEqual(['held 0 0-1']);
   });
@@ -1662,8 +1663,8 @@ describe('the rows an extension holds on the GPU', () => {
       const { frame, made, heldBytes, tables, renderer } = layer(features, {
         limitBytes: 2 * ROW_BYTES,
       });
-      const near = { minX: -1, minY: -1, maxX: 1, maxY: 1 };
-      frame({ minX: 99, minY: 49, maxX: 101, maxY: 61 });
+      const near: BBox = [-1, -1, 1, 1];
+      frame([99, 49, 101, 61]);
       expect(heldBytes()).toBe(2 * ROW_BYTES);
       // The chunk in view is refused: nothing is idle for long enough yet
       for (let i = 0; i < GPU_ROWS_IDLE_FRAMES - 2; i++) frame(near);

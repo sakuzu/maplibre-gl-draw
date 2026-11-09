@@ -620,7 +620,7 @@ function tableDrawing(store: Store, drawer: FeatureDrawer, repaint: Repaint) {
     tentativeRenderer: { drawGeometry: () => {} },
     // The view: a range around every feature, as the expanded viewport of an instance gives it
     viewportFilter: {
-      getBounds: () => ({ minX: -20, minY: -20, maxX: 20, maxY: 20 }),
+      getBounds: () => [-20, -20, 20, 20],
       getVisibleIds: () => new Set(getDisplayFeatures(store).map((f) => f.id)),
     },
   } as unknown as Renderers;

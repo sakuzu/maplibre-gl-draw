@@ -245,7 +245,7 @@ function setup(center: number, halfWidth: number, lngs: Record<string, number>) 
   const spatialIndex = new StoreSpatialIndex(store);
   spatialIndex.setCustomBoundingBoxCalculator('Probe', (feature) => {
     const [lng, lat] = coordinatesOf(feature) as [number, number];
-    return { minX: lng, minY: lat, maxX: lng, maxY: lat };
+    return [lng, lat, lng, lat];
   });
   const layer = createCustomLayer({
     map,

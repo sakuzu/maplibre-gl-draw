@@ -16,8 +16,9 @@
 
 import type { ProjectionData } from 'maplibre-gl';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { BBox } from '../geometry/types.js';
 import { DEFAULT_FEATURE_STYLE_CONFIG } from '../shared/config/feature-style.js';
-import type { BoundingBox, StyleRule } from '../store/types.js';
+import type { StyleRule } from '../store/types.js';
 import { toRow } from '../test-utils.js';
 import { GpuLedger } from '../view/gpu-ledger.js';
 import { FeatureDrawer } from '../view/renderers/drawer.js';
@@ -198,12 +199,12 @@ describe('the cost of a dataset', () => {
 
   it(`${TOTAL} features: only the chunks in view are built, and later frames only draw`, () => {
     // The viewport covers only a part of the grid (5,000 features are expected to be visible)
-    const bounds: BoundingBox = {
-      minX: -0.01,
-      minY: -0.01,
-      maxX: (VISIBLE_COLUMNS - 1) * STEP + 0.01,
-      maxY: (VISIBLE_ROWS - 1) * STEP + 0.01,
-    };
+    const bounds: BBox = [
+      -0.01,
+      -0.01,
+      (VISIBLE_COLUMNS - 1) * STEP + 0.01,
+      (VISIBLE_ROWS - 1) * STEP + 0.01,
+    ];
 
     const manager = createDatasetManager({
       getViewportBounds: () => bounds,
@@ -245,7 +246,7 @@ describe('the cost of a dataset', () => {
   });
 
   it(`nothing is built or drawn outside the view even with ${TOTAL} features`, () => {
-    const bounds: BoundingBox = { minX: 170, minY: 70, maxX: 179, maxY: 80 };
+    const bounds: BBox = [170, 70, 179, 80];
     const manager = createDatasetManager({
       getViewportBounds: () => bounds,
       getZoom: () => 10,

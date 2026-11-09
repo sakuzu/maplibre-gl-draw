@@ -127,7 +127,7 @@ describe('StoreSpatialIndex', () => {
       store.createFeature(point('b', 5, 5));
       store.deleteFeature('b');
     });
-    expect(index.findInBounds({ minX: 0, minY: 0, maxX: 6, maxY: 6 })).toEqual(['a']);
+    expect(index.findInBounds([0, 0, 6, 6])).toEqual(['a']);
     expect(index.findNear([4, 4], 0)).toEqual(['a']);
   });
 
@@ -194,12 +194,7 @@ describe('StoreSpatialIndex', () => {
     store.createFeature({ ...point('c', 0, 0), type: 'Custom' as Feature['type'] });
     const index = new StoreSpatialIndex(store);
 
-    index.setCustomBoundingBoxCalculator('Custom', () => ({
-      minX: -1,
-      minY: -1,
-      maxX: 1,
-      maxY: 1,
-    }));
+    index.setCustomBoundingBoxCalculator('Custom', () => [-1, -1, 1, 1]);
 
     expect(index.findNear([0.5, 0.5], 0)).toEqual(['c']);
   });

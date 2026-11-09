@@ -16,9 +16,10 @@ import type {
 } from '../../extension/index.js';
 import { featureTablesInternals } from '../../feature-table/feature-tables.js';
 import { isLayerDrawnFromRows } from '../../feature-table/rows-drawn.js';
+import type { BBox } from '../../geometry/types.js';
 import type { TentativeState } from '../../shared/types/model.js';
 import type { Store } from '../../store/store.js';
-import type { BoundingBox, Feature, Layer } from '../../store/types.js';
+import type { Feature, Layer } from '../../store/types.js';
 import type { FeatureCompanionRegistry } from '../feature-companion.js';
 import { drawFeatureCompanionsInFrame } from '../feature-companion.js';
 import { layerDrawFactors } from '../renderers/draw-factors.js';
@@ -321,7 +322,7 @@ export function layerRendererContext(base: FrameDrawContext, layer: Layer): Fram
  */
 export interface RenderLayersView {
   /** The range to draw, in stored longitudes (thins the chunks) */
-  readonly bounds: BoundingBox;
+  readonly bounds: BBox;
   /** Whether it is the first copy drawn in the frame (true when undefined) */
   readonly first?: boolean;
   /** The ids of the features inside `bounds` (thins the immediate chunks one by one) */

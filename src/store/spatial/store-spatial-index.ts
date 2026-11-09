@@ -28,8 +28,9 @@
  */
 
 import { featureTablesInternals } from '../../feature-table/feature-tables.js';
+import type { BBox } from '../../geometry/types.js';
 import type { Store } from '../store.js';
-import type { BoundingBox, Coordinate, Feature, StoreChange } from '../types.js';
+import type { Coordinate, Feature, StoreChange } from '../types.js';
 import {
   type CustomBoundingBoxCalculator,
   RBushSpatialIndex,
@@ -55,7 +56,7 @@ export class StoreSpatialIndex implements SpatialIndex {
     return this.#index.findNear(coordinate, tolerance);
   }
 
-  findInBounds(bounds: BoundingBox): string[] {
+  findInBounds(bounds: BBox): string[] {
     return this.#index.findInBounds(bounds);
   }
 

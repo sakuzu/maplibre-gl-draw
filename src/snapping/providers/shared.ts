@@ -10,6 +10,7 @@
  * location was moved so that the intersection provider can reuse it.
  */
 
+import type { BBox } from '../../geometry/types.js';
 import {
   getSegmentGrid,
   querySegmentIndicesInBBox,
@@ -27,7 +28,7 @@ import type { RenderedShapes } from '../../sketches/rendered-shapes.js';
 import { isLocallyHidden } from '../../store/local-visibility.js';
 import type { SpatialIndex } from '../../store/spatial/spatial-index.js';
 import type { Store } from '../../store/store.js';
-import type { BoundingBox, Coordinate, Feature, VertexRef } from '../../store/types.js';
+import type { Coordinate, Feature, VertexRef } from '../../store/types.js';
 import { computeVertexHandles } from '../../view/ui/handles.js';
 import type { SnapTargetsRegistry } from '../custom-targets.js';
 import type { SnapProviderContext } from '../types.js';
@@ -77,13 +78,13 @@ export function isSnapVisible(feature: Feature, store: Store): boolean {
  */
 export function queryFeatures(
   deps: StoreSnapProviderDeps,
-  bbox: BoundingBox,
+  bbox: BBox,
   ctx: SnapProviderContext,
 ): Feature[] {
-  const lng = (bbox.minX + bbox.maxX) / 2;
-  const lat = (bbox.minY + bbox.maxY) / 2;
+  const lng = (bbox[0] + bbox[2]) / 2;
+  const lat = (bbox[1] + bbox[3]) / 2;
   // findNear queries a square extent, so the larger of the tolerances is used
-  const tolerance = Math.max(bbox.maxX - lng, bbox.maxY - lat);
+  const tolerance = Math.max(bbox[2] - lng, bbox[3] - lat);
 
   const features: Feature[] = [];
   const seen = new Set<string>();
@@ -152,7 +153,7 @@ function collectPartVerticesInBBox(
   ring: number,
   part: number | undefined,
   isRing: boolean,
-  bbox: BoundingBox,
+  bbox: BBox,
   out: VertexCandidate[],
 ): void {
   const closedRing = isRing && isClosedCoords(coords);
@@ -204,10 +205,7 @@ function collectPartVerticesInBBox(
  * For types without edges (Point / MultiPoint / custom types), the full listing of
  * computeVertexHandles is simply narrowed down by the bbox, as before.
  */
-export function collectVertexCandidatesInBBox(
-  feature: Feature,
-  bbox: BoundingBox,
-): VertexCandidate[] {
+export function collectVertexCandidatesInBBox(feature: Feature, bbox: BBox): VertexCandidate[] {
   const candidates: VertexCandidate[] = [];
 
   if (!hasSnapEdges(feature.type)) {

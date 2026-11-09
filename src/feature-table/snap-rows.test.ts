@@ -10,6 +10,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
+import type { BBox } from '../geometry/types.js';
 import { buildTraceGraph } from '../operations/trace-graph.js';
 import type { Feature } from '../shared/types/model.js';
 import { feature, tablesOfFeatures } from '../test-utils.js';
@@ -45,7 +46,7 @@ const features: Feature[] = [
 describe('the rows read on their columns for tracing and snapping', () => {
   it('give a trace the graph the features give', () => {
     const { tables } = tablesOfFeatures('layer', features);
-    const bbox = { minX: -1, minY: -1, maxX: 5, maxY: 5 };
+    const bbox: BBox = [-1, -1, 5, 5];
     const fromFeatures = buildTraceGraph(features, bbox);
     const fromRows = buildTraceGraph([], bbox, (visit) =>
       forEachSnapRow(
@@ -64,7 +65,7 @@ describe('the rows read on their columns for tracing and snapping', () => {
 
   it('list the vertices of a ring without its closing position', () => {
     const { tables } = tablesOfFeatures('layer', features);
-    const bbox = { minX: -1, minY: -1, maxX: 10, maxY: 10 };
+    const bbox: BBox = [-1, -1, 10, 10];
     const refs: string[] = [];
     forEachSnapRow(
       tables,

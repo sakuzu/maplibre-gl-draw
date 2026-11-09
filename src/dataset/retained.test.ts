@@ -15,7 +15,7 @@ import { DEFAULT_FEATURE_STYLE_CONFIG } from '../shared/config/feature-style.js'
 import { SELECTION_HIGHLIGHT_COLOR } from '../shared/config/selection-highlight.js';
 import type { PixelRatioInput } from '../shared/utils/pixel-ratio.js';
 import { createPixelRatioSource } from '../shared/utils/pixel-ratio.js';
-import type { BoundingBox, Feature, StyleRule } from '../store/types.js';
+import type { Feature, StyleRule } from '../store/types.js';
 import { GpuLedger } from '../view/gpu-ledger.js';
 import type { RetainedDrawFactors } from '../view/renderers/draw-factors.js';
 import { FeatureDrawer } from '../view/renderers/drawer.js';
@@ -42,6 +42,7 @@ import type { DisplayBatchTarget } from './dataset.js';
 /** The terrain state of the draw instance the probes draw into */
 const terrain = new TerrainContext();
 
+import type { BBox } from '../geometry/types.js';
 import { displayFeature, toRow } from '../test-utils.js';
 import { createDatasetManager, type DatasetManager } from './manager.js';
 import {
@@ -68,7 +69,7 @@ function createStubGL(): WebGL2RenderingContext {
 }
 
 /** Viewport covering the whole globe */
-const WORLD: BoundingBox = { minX: -180, minY: -85, maxX: 180, maxY: 85 };
+const WORLD: BBox = [-180, -85, 180, 85];
 
 /** Mock of a retained batch */
 interface MockBatch {
@@ -201,11 +202,11 @@ function createRetainedProbe(): RetainedProbe {
 }
 
 function createManager(
-  bounds: BoundingBox = WORLD,
+  bounds: BBox = WORLD,
   pixelRatio?: PixelRatioInput,
 ): {
   manager: DatasetManager;
-  setBounds: (next: BoundingBox) => void;
+  setBounds: (next: BBox) => void;
   viewportChanged: () => void;
 } {
   let currentBounds = bounds;
@@ -227,7 +228,7 @@ function createManager(
 
   return {
     manager,
-    setBounds: (next: BoundingBox) => {
+    setBounds: (next: BBox) => {
       currentBounds = next;
     },
     viewportChanged: () => handler?.(),
@@ -408,7 +409,7 @@ describe('the build and drawing of retained mode', () => {
 describe('the chunk culling of retained mode', () => {
   it('only the chunks that intersect the viewport are drawn', () => {
     const features = createGrid(1600);
-    const { manager } = createManager({ minX: -0.1, minY: -0.1, maxX: 1, maxY: 1 });
+    const { manager } = createManager([-0.1, -0.1, 1, 1]);
     const probe = createRetainedProbe();
     add(manager, { id: 'c1', rows: features });
 
@@ -424,7 +425,7 @@ describe('the chunk culling of retained mode', () => {
 
   it('moving the viewport changes which chunks are drawn', () => {
     const features = createGrid(1600);
-    const { manager, setBounds } = createManager({ minX: -0.1, minY: -0.1, maxX: 1, maxY: 1 });
+    const { manager, setBounds } = createManager([-0.1, -0.1, 1, 1]);
     const probe = createRetainedProbe();
     add(manager, { id: 'c1', rows: features });
 
@@ -432,7 +433,7 @@ describe('the chunk culling of retained mode', () => {
     const first = probe.drawn.map((b) => b.ids[0]);
 
     probe.resetDrawn();
-    setBounds({ minX: 38, minY: 38, maxX: 39, maxY: 39 });
+    setBounds([38, 38, 39, 39]);
     drawFrame(manager, probe);
     const second = probe.drawn.map((b) => b.ids[0]);
 
@@ -441,7 +442,7 @@ describe('the chunk culling of retained mode', () => {
   });
 
   it('nothing is drawn when everything is outside the viewport', () => {
-    const { manager } = createManager({ minX: 170, minY: 70, maxX: 179, maxY: 80 });
+    const { manager } = createManager([170, 70, 179, 80]);
     const probe = createRetainedProbe();
     add(manager, { id: 'c1', rows: createGrid(1600) });
 
@@ -498,12 +499,7 @@ describe('the invalidation and release of retained mode', () => {
   });
 
   it('applying a provider result releases the retained batches and rebuilds them', async () => {
-    const { manager, setBounds, viewportChanged } = createManager({
-      minX: -1,
-      minY: -1,
-      maxX: 1,
-      maxY: 1,
-    });
+    const { manager, setBounds, viewportChanged } = createManager([-1, -1, 1, 1]);
     const probe = createRetainedProbe();
     const provider = vi.fn(async () => [polygon('remote', 0)]);
     add(manager, { id: 'c1', provider });
@@ -518,7 +514,7 @@ describe('the invalidation and release of retained mode', () => {
 
     // A change of the displayed range calls the provider again, and applying it rebuilds them
     provider.mockImplementation(async () => [polygon('remote2', 50)]);
-    setBounds({ minX: 49, minY: -1, maxX: 51, maxY: 1 });
+    setBounds([49, -1, 51, 1]);
     viewportChanged();
     await flush();
 
@@ -1278,7 +1274,7 @@ describe('the origin of a chunk seen at high zoom', () => {
     expect(probe.built[0].origin).toEqual([137.85, 35.435]);
 
     probe.built.length = 0;
-    setBounds({ minX: 135.6, minY: 34.8, maxX: 135.6002, maxY: 34.8002 });
+    setBounds([135.6, 34.8, 135.6002, 34.8002]);
     manager.draw('below-store', probe.target, {} as ProjectionData, 22);
 
     const origin = probe.built[0]?.origin as [number, number];

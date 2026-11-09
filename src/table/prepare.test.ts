@@ -48,10 +48,10 @@ describe('prepareTable', () => {
       );
       expect(Array.from(rows)).toEqual(Array.from(chunk.rows));
       expect(Array.from(prepared.chunkBounds.subarray(c * 4, c * 4 + 4))).toEqual([
-        chunk.bounds.minX,
-        chunk.bounds.minY,
-        chunk.bounds.maxX,
-        chunk.bounds.maxY,
+        chunk.bounds[0],
+        chunk.bounds[1],
+        chunk.bounds[2],
+        chunk.bounds[3],
       ]);
     });
   });

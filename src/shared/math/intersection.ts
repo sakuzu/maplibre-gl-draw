@@ -9,15 +9,14 @@
  * (AABB).
  */
 
-import type { BoundingBox, Coordinate } from '../types/model.js';
+import type { BBox } from '../../geometry/types.js';
+import type { Coordinate } from '../types/model.js';
 
 /**
  * Tests whether a point is inside a rectangle
  */
-export function pointInRectangle(point: Coordinate, rect: BoundingBox): boolean {
-  return (
-    point[0] >= rect.minX && point[0] <= rect.maxX && point[1] >= rect.minY && point[1] <= rect.maxY
-  );
+export function pointInRectangle(point: Coordinate, rect: BBox): boolean {
+  return point[0] >= rect[0] && point[0] <= rect[2] && point[1] >= rect[1] && point[1] <= rect[3];
 }
 
 /**
@@ -67,11 +66,7 @@ export function segmentIntersectsSegment(
 /**
  * Tests whether a segment intersects a rectangle
  */
-export function segmentIntersectsRectangle(
-  p1: Coordinate,
-  p2: Coordinate,
-  rect: BoundingBox,
-): boolean {
+export function segmentIntersectsRectangle(p1: Coordinate, p2: Coordinate, rect: BBox): boolean {
   // When either endpoint is inside the rectangle
   if (pointInRectangle(p1, rect) || pointInRectangle(p2, rect)) {
     return true;
@@ -79,10 +74,10 @@ export function segmentIntersectsRectangle(
 
   // Intersection test against the 4 edges of the rectangle
   const corners: Coordinate[] = [
-    [rect.minX, rect.minY],
-    [rect.maxX, rect.minY],
-    [rect.maxX, rect.maxY],
-    [rect.minX, rect.maxY],
+    [rect[0], rect[1]],
+    [rect[2], rect[1]],
+    [rect[2], rect[3]],
+    [rect[0], rect[3]],
   ];
 
   for (let i = 0; i < 4; i++) {
@@ -101,10 +96,7 @@ export function segmentIntersectsRectangle(
  * Returns true when any vertex of the LineString is inside the rectangle, or when any of its
  * edges intersects the rectangle.
  */
-export function rectangleIntersectsLineString(
-  rect: BoundingBox,
-  lineString: Coordinate[],
-): boolean {
+export function rectangleIntersectsLineString(rect: BBox, lineString: Coordinate[]): boolean {
   if (lineString.length === 0) return false;
 
   // When any vertex is inside the rectangle
@@ -154,7 +146,7 @@ function pointInPolygon(point: Coordinate, ring: Coordinate[]): boolean {
  * 2. Any vertex of the rectangle is inside the polygon
  * 3. Any edge of the polygon intersects the rectangle
  */
-export function rectangleIntersectsPolygon(rect: BoundingBox, polygon: Coordinate[][]): boolean {
+export function rectangleIntersectsPolygon(rect: BBox, polygon: Coordinate[][]): boolean {
   if (polygon.length === 0 || polygon[0].length === 0) return false;
 
   const outerRing = polygon[0];
@@ -168,10 +160,10 @@ export function rectangleIntersectsPolygon(rect: BoundingBox, polygon: Coordinat
 
   // 2. Any vertex of the rectangle is inside the polygon
   const rectCorners: Coordinate[] = [
-    [rect.minX, rect.minY],
-    [rect.maxX, rect.minY],
-    [rect.maxX, rect.maxY],
-    [rect.minX, rect.maxY],
+    [rect[0], rect[1]],
+    [rect[2], rect[1]],
+    [rect[2], rect[3]],
+    [rect[0], rect[3]],
   ];
 
   for (const corner of rectCorners) {
@@ -209,7 +201,7 @@ export function rectangleIntersectsPolygon(rect: BoundingBox, polygon: Coordinat
  * @param radiusInDegrees Radius of the circle (in degrees)
  */
 export function rectangleIntersectsCircle(
-  rect: BoundingBox,
+  rect: BBox,
   center: Coordinate,
   radiusInDegrees: number,
 ): boolean {
@@ -219,8 +211,8 @@ export function rectangleIntersectsCircle(
   }
 
   // Compute the closest point of the rectangle
-  const closestX = Math.max(rect.minX, Math.min(center[0], rect.maxX));
-  const closestY = Math.max(rect.minY, Math.min(center[1], rect.maxY));
+  const closestX = Math.max(rect[0], Math.min(center[0], rect[2]));
+  const closestY = Math.max(rect[1], Math.min(center[1], rect[3]));
 
   // Compute the distance between the closest point and the center of the circle
   const dx = center[0] - closestX;
@@ -245,15 +237,15 @@ export interface OBBCorners {
  * @param rect Axis-aligned bounding box (AABB)
  * @param obb Bounding box that accounts for rotation (OBB)
  */
-export function rectangleIntersectsOBB(rect: BoundingBox, obb: OBBCorners): boolean {
+export function rectangleIntersectsOBB(rect: BBox, obb: OBBCorners): boolean {
   if (obb.corners.length !== 4) return false;
 
   // Convert the AABB into an array of vertices
   const rectCorners: Coordinate[] = [
-    [rect.minX, rect.minY],
-    [rect.maxX, rect.minY],
-    [rect.maxX, rect.maxY],
-    [rect.minX, rect.maxY],
+    [rect[0], rect[1]],
+    [rect[2], rect[1]],
+    [rect[2], rect[3]],
+    [rect[0], rect[3]],
   ];
 
   // Get the separating axes (the 2 axes of the AABB + the 2 axes of the OBB)

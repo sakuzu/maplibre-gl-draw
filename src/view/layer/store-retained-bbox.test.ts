@@ -6,15 +6,11 @@
  */
 
 import { describe, expect, it } from 'vitest';
+import type { BBox } from '../../geometry/types.js';
 import type { FeatureCoordinates } from '../../shared/types/model.js';
 import { geometryFromCoordinates } from '../../shared/utils/coordinates.js';
 import type { Coordinate, Feature } from '../../store/types.js';
-import {
-  bboxIntersects,
-  chunkBBoxToBounds,
-  computeFeaturesBBox,
-  expandBBox,
-} from './store-retained-bbox.js';
+import { bboxIntersects, computeFeaturesBBox, expandBBox } from './store-retained-bbox.js';
 
 function makeFeature(
   id: string,
@@ -35,7 +31,7 @@ function makeFeature(
 }
 
 describe('bboxIntersects', () => {
-  const viewport = { minX: 0, minY: 0, maxX: 10, maxY: 10 };
+  const viewport: BBox = [0, 0, 10, 10];
 
   it('counts touching edges as intersecting', () => {
     expect(bboxIntersects([10, 10, 20, 20], viewport)).toBe(true);
@@ -47,12 +43,6 @@ describe('bboxIntersects', () => {
     expect(bboxIntersects([0, 11, 5, 20], viewport)).toBe(false);
     expect(bboxIntersects([-20, 0, -1, 5], viewport)).toBe(false);
     expect(bboxIntersects([0, -20, 5, -1], viewport)).toBe(false);
-  });
-});
-
-describe('chunkBBoxToBounds', () => {
-  it('maps the tuple onto the BoundingBox fields', () => {
-    expect(chunkBBoxToBounds([1, 2, 3, 4])).toEqual({ minX: 1, minY: 2, maxX: 3, maxY: 4 });
   });
 });
 

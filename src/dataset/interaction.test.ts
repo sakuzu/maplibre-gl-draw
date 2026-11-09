@@ -13,8 +13,9 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { TopHit } from '../dispatcher/hit-test/topmost.js';
 import type { MouseNormalizedEvent } from '../dispatcher/types.js';
+import type { BBox } from '../geometry/types.js';
 import { coordinatesOf } from '../shared/utils/coordinates.js';
-import type { BoundingBox, Coordinate, Feature } from '../store/types.js';
+import type { Coordinate, Feature } from '../store/types.js';
 import { toRow } from '../test-utils.js';
 import { createDisplayInteractions, type DisplayInteractions } from './interaction.js';
 import { createDatasetManager, type DatasetManager } from './manager.js';
@@ -25,7 +26,7 @@ import type {
   DatasetRow,
 } from './types.js';
 
-const WORLD: BoundingBox = { minX: -180, minY: -85, maxX: 180, maxY: 85 };
+const WORLD: BBox = [-180, -85, 180, 85];
 
 function point(id: string, coord: [number, number]): DatasetRow {
   return toRow({ id, type: 'Point', coordinates: coord });

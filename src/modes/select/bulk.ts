@@ -59,7 +59,7 @@ export function queryRowsInBox(box: BoxSelection, context: EngineModeContext): T
   };
   for (const rect of boxRects(box.startPoint, box.endPoint)) {
     const cursor = tables.scan({
-      bbox: [rect.minX, rect.minY, rect.maxX, rect.maxY],
+      bbox: rect,
       order: 'any',
     });
     for (let batch = cursor.next(); batch; batch = cursor.next()) {
@@ -88,10 +88,7 @@ export function queryRowsInBox(box: BoxSelection, context: EngineModeContext): T
         const b = data.rowBounds;
         const at = row * 4;
         const inside =
-          b[at] >= rect.minX &&
-          b[at + 2] <= rect.maxX &&
-          b[at + 1] >= rect.minY &&
-          b[at + 3] <= rect.maxY;
+          b[at] >= rect[0] && b[at + 2] <= rect[2] && b[at + 1] >= rect[1] && b[at + 3] <= rect[3];
         if (inside && boxSelectionRegistry.get(type)?.insideMeetsTest === true) {
           found.add(handle);
           continue;

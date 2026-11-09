@@ -30,6 +30,7 @@ import {
   PolygonHitTestStrategy,
 } from '../../dispatcher/hit-test/strategies/index.js';
 import type { DragNormalizedEvent } from '../../dispatcher/types.js';
+import type { BBox } from '../../geometry/types.js';
 import { createCoordinateTransform } from '../../shared/math/index.js';
 import type { RenderedShapes } from '../../sketches/rendered-shapes.js';
 import type { SnapTargetsRegistry } from '../../snapping/custom-targets.js';
@@ -42,7 +43,7 @@ import type {
 import { getBoundingBox } from '../../store/spatial/index.js';
 import type { Store } from '../../store/store.js';
 import type { TransformFieldsRegistry } from '../../store/transform-roles.js';
-import type { BoundingBox, Coordinate, Feature as StoredFeature } from '../../store/types.js';
+import type { Coordinate, Feature as StoredFeature } from '../../store/types.js';
 import type {
   FeatureCompanionProvider,
   FeatureCompanionRegistry,
@@ -113,7 +114,7 @@ export interface AdapterDeps extends RenderAdapterDeps {
   readonly spatialIndex: {
     setCustomBoundingBoxCalculator(
       type: string,
-      calculator: (feature: StoredFeature, tileSize: number) => BoundingBox,
+      calculator: (feature: StoredFeature, tileSize: number) => BBox,
     ): () => void;
   };
   /** Registers a provider of snapping candidates with the snapping of the instance */
@@ -290,7 +291,7 @@ function boxSelectionOf(
     featureType: definition.type,
     intersects(feature, rect) {
       const view = createCoordinateTransform(deps.map);
-      const corners = [view.project([rect.minX, rect.minY]), view.project([rect.maxX, rect.maxY])];
+      const corners = [view.project([rect[0], rect[1]]), view.project([rect[2], rect[3]])];
       const min: ScreenPoint = [
         Math.min(corners[0].x, corners[1].x),
         Math.min(corners[0].y, corners[1].y),
@@ -299,7 +300,7 @@ function boxSelectionOf(
         Math.max(corners[0].x, corners[1].x),
         Math.max(corners[0].y, corners[1].y),
       ];
-      const center: Coordinate = [(rect.minX + rect.maxX) / 2, (rect.minY + rect.maxY) / 2];
+      const center: Coordinate = [(rect[0] + rect[2]) / 2, (rect[1] + rect[3]) / 2];
       const { ctx } = hitContextAt(deps, center, 0);
       return own(feature as Feature, { min, max }, { ...ctx, tolerancePx: 0 });
     },
@@ -629,7 +630,7 @@ export function installFeatureType(
             extent[0] <= extent[2] &&
             extent[1] <= extent[3]
           ) {
-            return { minX: extent[0], minY: extent[1], maxX: extent[2], maxY: extent[3] };
+            return extent;
           }
           if (!warnedBBox) {
             warnedBBox = true;

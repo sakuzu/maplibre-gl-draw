@@ -23,13 +23,14 @@ import type { ModeContext } from '../../api/extension/context.js';
 import type { DrawPointerEvent } from '../../api/extension/mode.js';
 import type { Feature as PublicFeature } from '../../api/model.js';
 import { forEachSnapRow, rowHasEdges, rowSegmentsInBBox } from '../../feature-table/snap-rows.js';
+import type { BBox } from '../../geometry/types.js';
 import { resolveVertexCoordinates } from '../../operations/shared-vertex.js';
 import type { TraceGraphEndpoint } from '../../operations/trace-graph.js';
 import { buildTraceGraph, findTracePath } from '../../operations/trace-graph.js';
 import { degreesPerPixel } from '../../snapping/geometry.js';
 import { DEFAULT_SNAP_OPTIONS } from '../../snapping/types.js';
 import { isLocallyHidden } from '../../store/local-visibility.js';
-import type { BoundingBox, Coordinate, Feature, VertexRef } from '../../store/types.js';
+import type { Coordinate, Feature, VertexRef } from '../../store/types.js';
 
 /**
  * The margin of the extent over which the material of the graph is collected
@@ -78,12 +79,12 @@ export interface TraceSource {
   /** The geometry of the feature or the row a snap target names, or null */
   geometryOf(anchor: TraceAnchor): Geometry | null;
   /** The visible features of the document and the rows of the datasets within an extent */
-  features(bbox: BoundingBox): Feature[];
+  features(bbox: BBox): Feature[];
   /**
    * Lists the edges of the visible rows held as columns within an extent, read on their columns
    * (a Store that holds its features as rows)
    */
-  edges?(bbox: BoundingBox, visit: (start: Coordinate, end: Coordinate) => void): void;
+  edges?(bbox: BBox, visit: (start: Coordinate, end: Coordinate) => void): void;
 }
 
 /** A feature of the document or a row, in the shape the graph is built from */
@@ -127,12 +128,11 @@ export function traceSourceOf(ctx: ModeContext): TraceSource {
       return dataset.getRow(index)?.geometry ?? null;
     },
     features(bbox) {
-      const extent: [number, number, number, number] = [bbox.minX, bbox.minY, bbox.maxX, bbox.maxY];
       // A Store of rows: its rows are listed as edges
-      const features = (store.tables ? [] : draw.features.list({ bbox: extent }))
+      const features = (store.tables ? [] : draw.features.list({ bbox }))
         .filter(shown)
         .map((feature) => feature as Feature);
-      for (const { row } of ctx.listTraceRows(extent)) {
+      for (const { row } of ctx.listTraceRows(bbox)) {
         if (row.geometry) features.push(graphFeature(String(row.id), row.geometry));
       }
       return features;
@@ -214,7 +214,7 @@ function toGraphEndpoint(source: TraceSource, anchor: TraceAnchor): TraceGraphEn
  * The bbox of the two endpoints is expanded by 20 percent of its size plus the snapping
  * tolerance.
  */
-function traceBounds(source: TraceSource, from: Coordinate, to: Coordinate): BoundingBox {
+function traceBounds(source: TraceSource, from: Coordinate, to: Coordinate): BBox {
   const minX = Math.min(from[0], to[0]);
   const maxX = Math.max(from[0], to[0]);
   const minY = Math.min(from[1], to[1]);
@@ -225,12 +225,7 @@ function traceBounds(source: TraceSource, from: Coordinate, to: Coordinate): Bou
   const marginX = (maxX - minX) * TRACE_BBOX_MARGIN_RATIO + perPixel.lng * tolerancePx;
   const marginY = (maxY - minY) * TRACE_BBOX_MARGIN_RATIO + perPixel.lat * tolerancePx;
 
-  return {
-    minX: minX - marginX,
-    minY: minY - marginY,
-    maxX: maxX + marginX,
-    maxY: maxY + marginY,
-  };
+  return [minX - marginX, minY - marginY, maxX + marginX, maxY + marginY];
 }
 
 /**

@@ -15,13 +15,14 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { createDatasetManager, type DatasetManager } from '../../dataset/manager.js';
 import type { Dataset, DatasetRow } from '../../dataset/types.js';
+import type { BBox } from '../../geometry/types.js';
 import { resolveMessages } from '../../messages.js';
 import type { ObjectLayer } from '../../shared/types/model.js';
 import { coordinatesOf, geometryFromCoordinates } from '../../shared/utils/coordinates.js';
 import { RenderedShapes } from '../../sketches/rendered-shapes.js';
 import { MemoryStore } from '../../store/memory.js';
 import { RBushSpatialIndex } from '../../store/spatial/spatial-index.js';
-import type { BoundingBox, Coordinate, Feature, FeatureCoordinates } from '../../store/types.js';
+import type { Coordinate, Feature, FeatureCoordinates } from '../../store/types.js';
 import { toRow } from '../../test-utils.js';
 import type {
   SnapCandidate,
@@ -33,9 +34,9 @@ import { isSegmentCandidate } from '../types.js';
 import { createDisplaySnapProviders, type DisplaySnapProviders } from './display.js';
 
 const ZOOM = 14;
-const WORLD: BoundingBox = { minX: -180, minY: -85, maxX: 180, maxY: 85 };
+const WORLD: BBox = [-180, -85, 180, 85];
 /** A bbox wide enough to contain every feature */
-const WIDE_BBOX: BoundingBox = { minX: -1, minY: -1, maxX: 1, maxY: 1 };
+const WIDE_BBOX: BBox = [-1, -1, 1, 1];
 
 let store: MemoryStore;
 let spatialIndex: RBushSpatialIndex;

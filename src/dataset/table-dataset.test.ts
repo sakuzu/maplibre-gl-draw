@@ -13,14 +13,9 @@
 
 import type { ProjectionData } from 'maplibre-gl';
 import { describe, expect, it, vi } from 'vitest';
+import type { BBox } from '../geometry/types.js';
 import { DEFAULT_FEATURE_STYLE_CONFIG } from '../shared/config/feature-style.js';
-import type {
-  BoundingBox,
-  Coordinate,
-  Feature,
-  FeatureStyle,
-  StyleRule,
-} from '../shared/types/model.js';
+import type { Coordinate, Feature, FeatureStyle, StyleRule } from '../shared/types/model.js';
 import { coordinatesOf } from '../shared/utils/coordinates.js';
 import { prepareTable } from '../table/prepare.js';
 import type {
@@ -54,7 +49,7 @@ import type { DisplayBatchTarget } from './dataset.js';
 import { createDatasetManager, type DatasetManager } from './manager.js';
 import type { Dataset, DatasetOptions, DatasetRow } from './types.js';
 
-const WORLD: BoundingBox = { minX: -180, minY: -85, maxX: 180, maxY: 85 };
+const WORLD: BBox = [-180, -85, 180, 85];
 
 function createStubGL(): WebGL2RenderingContext {
   return {
@@ -536,7 +531,7 @@ describe('reading the rows back', () => {
     const b = manager.add({ id: 'c', table: toTable('Polygon', rows), styleRule: RULE });
 
     expect(b.getFeatures()).toEqual(a.getFeatures());
-    const view: BoundingBox = { minX: 1, minY: 1, maxX: 5, maxY: 3 };
+    const view: BBox = [1, 1, 5, 3];
     expect(b.collectVisible(view)).toEqual(a.collectVisible(view));
 
     b.setSelectedIds(['r5', 'r1', 'r3', 'nope']);
@@ -806,7 +801,7 @@ describe('a mixed geometry column behaves as the same features', () => {
 
     expect(b.getFeatures()).toEqual(a.getFeatures());
     expect(b.getFeatures().length).toBe(rows.filter((row) => row.geometry !== null).length);
-    const view: BoundingBox = { minX: 1, minY: 1, maxX: 7, maxY: 5 };
+    const view: BBox = [1, 1, 7, 5];
     expect(b.collectVisible(view)).toEqual(a.collectVisible(view));
 
     // r3 has no child, r10 is hidden by validity
@@ -917,26 +912,21 @@ describe('reading by row matches the features', () => {
     rowsOf('Point', 40).map((row, i) =>
       row.geometry ? { ...row, geometry: [i * 0.0001, i * 0.00005] as Geometry } : row,
     );
-  const VIEW: BoundingBox = { minX: -0.001, minY: -0.001, maxX: 7, maxY: 5 };
+  const VIEW: BBox = [-0.001, -0.001, 7, 5];
 
   /** What collectVisible and getVisibleFeatureIds say is drawn in the view */
-  const drawnFeatures = (dataset: Dataset, view: BoundingBox): Feature[] => {
+  const drawnFeatures = (dataset: Dataset, view: BBox): Feature[] => {
     const drawable = dataset.getVisibleFeatureIds();
     return dataset
       .collectVisible(view)
       .filter((feature) => feature.visible && (drawable === null || drawable.has(feature.id)));
   };
   /** The bbox of the coordinates of a feature */
-  const bboxOf = (feature: Feature): BoundingBox => {
+  const bboxOf = (feature: Feature): BBox => {
     const flat = (coordinatesOf(feature) as unknown as number[]).flat(3) as number[];
     const xs = flat.filter((_, i) => i % 2 === 0);
     const ys = flat.filter((_, i) => i % 2 === 1);
-    return {
-      minX: Math.min(...xs),
-      minY: Math.min(...ys),
-      maxX: Math.max(...xs),
-      maxY: Math.max(...ys),
-    };
+    return [Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)];
   };
 
   for (const thinning of [false, true]) {
@@ -996,7 +986,7 @@ describe('reading by row matches the features', () => {
     features[1] = { ...features[1], geometry: null };
     const dataset = manager.add({ id: 'f', rows: features });
 
-    expect(dataset.collectDrawnRows({ minX: 100, minY: 60, maxX: 101, maxY: 61 })).toHaveLength(0);
+    expect(dataset.collectDrawnRows([100, 60, 101, 61])).toHaveLength(0);
     const ids = [...dataset.collectDrawnRows(WORLD)].map((row) => dataset.getRowId(row));
     expect(ids).toEqual(features.filter((f) => f.geometry !== null).map((f) => f.id));
     // A row without a geometry can still be read by its row

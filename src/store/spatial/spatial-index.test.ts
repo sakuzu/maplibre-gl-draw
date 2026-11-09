@@ -104,12 +104,7 @@ describe('RBushSpatialIndex', () => {
       ]);
       index.insert(line);
 
-      const results = index.findInBounds({
-        minX: 139.4,
-        minY: 35.4,
-        maxX: 139.6,
-        maxY: 35.6,
-      });
+      const results = index.findInBounds([139.4, 35.4, 139.6, 35.6]);
       expect(results).toContain('l1');
     });
 
@@ -125,12 +120,7 @@ describe('RBushSpatialIndex', () => {
       ]);
       index.insert(polygon);
 
-      const results = index.findInBounds({
-        minX: 4,
-        minY: 4,
-        maxX: 6,
-        maxY: 6,
-      });
+      const results = index.findInBounds([4, 4, 6, 6]);
       expect(results).toContain('p1');
     });
   });
@@ -204,12 +194,7 @@ describe('RBushSpatialIndex', () => {
       index.insert(createPoint('inside', [5, 5]));
       index.insert(createPoint('outside', [20, 20]));
 
-      const results = index.findInBounds({
-        minX: 0,
-        minY: 0,
-        maxX: 10,
-        maxY: 10,
-      });
+      const results = index.findInBounds([0, 0, 10, 10]);
       expect(results).toContain('inside');
       expect(results).not.toContain('outside');
     });
@@ -217,34 +202,19 @@ describe('RBushSpatialIndex', () => {
     it('also includes the features on the boundary', () => {
       index.insert(createPoint('edge', [10, 10]));
 
-      const results = index.findInBounds({
-        minX: 10,
-        minY: 10,
-        maxX: 20,
-        maxY: 20,
-      });
+      const results = index.findInBounds([10, 10, 20, 20]);
       expect(results).toContain('edge');
     });
 
     it('returns an empty array when searching an empty index', () => {
-      const results = index.findInBounds({
-        minX: 0,
-        minY: 0,
-        maxX: 10,
-        maxY: 10,
-      });
+      const results = index.findInBounds([0, 0, 10, 10]);
       expect(results).toEqual([]);
     });
 
     it('returns an empty array for a region where no feature exists', () => {
       index.insert(createPoint('m1', [100, 50]));
 
-      const results = index.findInBounds({
-        minX: 0,
-        minY: 0,
-        maxX: 10,
-        maxY: 10,
-      });
+      const results = index.findInBounds([0, 0, 10, 10]);
       expect(results).toEqual([]);
     });
 
@@ -256,12 +226,7 @@ describe('RBushSpatialIndex', () => {
       index.insert(line);
 
       // The BBox of the LineString is 0,0~20,20, so it intersects 5,5~15,15
-      const results = index.findInBounds({
-        minX: 5,
-        minY: 5,
-        maxX: 15,
-        maxY: 15,
-      });
+      const results = index.findInBounds([5, 5, 15, 15]);
       expect(results).toContain('l1');
     });
   });
@@ -274,12 +239,7 @@ describe('RBushSpatialIndex', () => {
 
       index.clear();
 
-      const results = index.findInBounds({
-        minX: -180,
-        minY: -90,
-        maxX: 180,
-        maxY: 90,
-      });
+      const results = index.findInBounds([-180, -90, 180, 90]);
       expect(results).toEqual([]);
     });
   });
@@ -298,21 +258,11 @@ describe('RBushSpatialIndex', () => {
         style: {},
       };
 
-      index.setCustomBoundingBoxCalculator('Marker', () => ({
-        minX: 5,
-        minY: 15,
-        maxX: 15,
-        maxY: 25,
-      }));
+      index.setCustomBoundingBoxCalculator('Marker', () => [5, 15, 15, 25]);
 
       index.insert(customFeature);
 
-      const results = index.findInBounds({
-        minX: 6,
-        minY: 16,
-        maxX: 14,
-        maxY: 24,
-      });
+      const results = index.findInBounds([6, 16, 14, 24]);
       expect(results).toContain('custom1');
     });
   });
@@ -323,10 +273,10 @@ describe('getBoundingBox', () => {
     const point = createPoint('m1', [139.7, 35.6]);
     const bbox = getBoundingBox(point);
 
-    expect(bbox.minX).toBe(139.7);
-    expect(bbox.minY).toBe(35.6);
-    expect(bbox.maxX).toBe(139.7);
-    expect(bbox.maxY).toBe(35.6);
+    expect(bbox[0]).toBe(139.7);
+    expect(bbox[1]).toBe(35.6);
+    expect(bbox[2]).toBe(139.7);
+    expect(bbox[3]).toBe(35.6);
   });
 
   it('the bounding box of a LineString is the range of its coordinates', () => {
@@ -337,10 +287,10 @@ describe('getBoundingBox', () => {
     ]);
     const bbox = getBoundingBox(line);
 
-    expect(bbox.minX).toBe(10);
-    expect(bbox.minY).toBe(20);
-    expect(bbox.maxX).toBe(30);
-    expect(bbox.maxY).toBe(50);
+    expect(bbox[0]).toBe(10);
+    expect(bbox[1]).toBe(20);
+    expect(bbox[2]).toBe(30);
+    expect(bbox[3]).toBe(50);
   });
 
   it('the bounding box of a Polygon is the range of all its vertices', () => {
@@ -355,10 +305,10 @@ describe('getBoundingBox', () => {
     ]);
     const bbox = getBoundingBox(polygon);
 
-    expect(bbox.minX).toBe(0);
-    expect(bbox.minY).toBe(0);
-    expect(bbox.maxX).toBe(10);
-    expect(bbox.maxY).toBe(10);
+    expect(bbox[0]).toBe(0);
+    expect(bbox[1]).toBe(0);
+    expect(bbox[2]).toBe(10);
+    expect(bbox[3]).toBe(10);
   });
 
   it('a Polygon with a hole also takes the inner ring coordinates into account', () => {
@@ -381,10 +331,10 @@ describe('getBoundingBox', () => {
     const bbox = getBoundingBox(polygon);
 
     // The range of the outer ring is used
-    expect(bbox.minX).toBe(0);
-    expect(bbox.minY).toBe(0);
-    expect(bbox.maxX).toBe(20);
-    expect(bbox.maxY).toBe(20);
+    expect(bbox[0]).toBe(0);
+    expect(bbox[1]).toBe(0);
+    expect(bbox[2]).toBe(20);
+    expect(bbox[3]).toBe(20);
   });
 
   it('the bounding box of a Circle reflects its radius', () => {
@@ -392,10 +342,10 @@ describe('getBoundingBox', () => {
     const bbox = getBoundingBox(circle);
 
     // It expands by the number of degrees corresponding to a radius of 1000 m
-    expect(bbox.minX).toBeLessThan(139.7);
-    expect(bbox.minY).toBeLessThan(35.6);
-    expect(bbox.maxX).toBeGreaterThan(139.7);
-    expect(bbox.maxY).toBeGreaterThan(35.6);
+    expect(bbox[0]).toBeLessThan(139.7);
+    expect(bbox[1]).toBeLessThan(35.6);
+    expect(bbox[2]).toBeGreaterThan(139.7);
+    expect(bbox[3]).toBeGreaterThan(35.6);
   });
 
   it.each([
@@ -408,10 +358,10 @@ describe('getBoundingBox', () => {
       const bbox = getBoundingBox(createCircle('c1', center, radiusMeters));
       const epsilon = 1e-9;
       for (const [lng, lat] of generateCirclePolygon(center, radiusMeters, 1024)) {
-        expect(lng).toBeGreaterThanOrEqual(bbox.minX - epsilon);
-        expect(lng).toBeLessThanOrEqual(bbox.maxX + epsilon);
-        expect(lat).toBeGreaterThanOrEqual(bbox.minY - epsilon);
-        expect(lat).toBeLessThanOrEqual(bbox.maxY + epsilon);
+        expect(lng).toBeGreaterThanOrEqual(bbox[0] - epsilon);
+        expect(lng).toBeLessThanOrEqual(bbox[2] + epsilon);
+        expect(lat).toBeGreaterThanOrEqual(bbox[1] - epsilon);
+        expect(lat).toBeLessThanOrEqual(bbox[3] + epsilon);
       }
     },
   );
@@ -420,10 +370,10 @@ describe('getBoundingBox', () => {
     const circle = createCircle('c1', [139.7, 35.6], 0);
     const bbox = getBoundingBox(circle);
 
-    expect(bbox.minX).toBe(139.7);
-    expect(bbox.minY).toBe(35.6);
-    expect(bbox.maxX).toBe(139.7);
-    expect(bbox.maxY).toBe(35.6);
+    expect(bbox[0]).toBe(139.7);
+    expect(bbox[1]).toBe(35.6);
+    expect(bbox[2]).toBe(139.7);
+    expect(bbox[3]).toBe(35.6);
   });
 
   it('the bounding box of a Freehand is the range of its coordinates', () => {
@@ -447,10 +397,10 @@ describe('getBoundingBox', () => {
     };
     const bbox = getBoundingBox(freehand);
 
-    expect(bbox.minX).toBe(5);
-    expect(bbox.minY).toBe(5);
-    expect(bbox.maxX).toBe(15);
-    expect(bbox.maxY).toBe(25);
+    expect(bbox[0]).toBe(5);
+    expect(bbox[1]).toBe(5);
+    expect(bbox[2]).toBe(15);
+    expect(bbox[3]).toBe(25);
   });
 
   it('a MultiPoint returns the union bounding box of all its parts', () => {
@@ -474,10 +424,10 @@ describe('getBoundingBox', () => {
     };
     const bbox = getBoundingBox(multiPoint);
 
-    expect(bbox.minX).toBe(-5);
-    expect(bbox.minY).toBe(5);
-    expect(bbox.maxX).toBe(30);
-    expect(bbox.maxY).toBe(40);
+    expect(bbox[0]).toBe(-5);
+    expect(bbox[1]).toBe(5);
+    expect(bbox[2]).toBe(30);
+    expect(bbox[3]).toBe(40);
   });
 
   it('a MultiLineString returns the union bounding box of all its parts', () => {
@@ -506,10 +456,10 @@ describe('getBoundingBox', () => {
     };
     const bbox = getBoundingBox(multiLine);
 
-    expect(bbox.minX).toBe(0);
-    expect(bbox.minY).toBe(-20);
-    expect(bbox.maxX).toBe(110);
-    expect(bbox.maxY).toBe(10);
+    expect(bbox[0]).toBe(0);
+    expect(bbox[1]).toBe(-20);
+    expect(bbox[2]).toBe(110);
+    expect(bbox[3]).toBe(10);
   });
 
   it('a MultiPolygon returns the union bounding box of all parts, exclaves and inner rings', () => {
@@ -555,17 +505,17 @@ describe('getBoundingBox', () => {
     };
     const bbox = getBoundingBox(multiPolygon);
 
-    expect(bbox.minX).toBe(0);
-    expect(bbox.minY).toBe(0);
-    expect(bbox.maxX).toBe(120);
-    expect(bbox.maxY).toBe(130);
+    expect(bbox[0]).toBe(0);
+    expect(bbox[1]).toBe(0);
+    expect(bbox[2]).toBe(120);
+    expect(bbox[3]).toBe(130);
   });
 
   it('an empty LineString returns the bounding box at the origin', () => {
     const line = createLineString('l1', []);
     const bbox = getBoundingBox(line);
 
-    expect(bbox).toEqual({ minX: 0, minY: 0, maxX: 0, maxY: 0 });
+    expect(bbox).toEqual([0, 0, 0, 0]);
   });
 
   it('a custom type without a calculator is measured by the extent of its coordinates', () => {
@@ -577,7 +527,7 @@ describe('getBoundingBox', () => {
       type: 'Unknown',
       geometry: { type: 'Point', coordinates: [10, 20] as Coordinate },
     };
-    expect(getBoundingBox(single)).toEqual({ minX: 10, minY: 20, maxX: 10, maxY: 20 });
+    expect(getBoundingBox(single)).toEqual([10, 20, 10, 20]);
 
     const line: Feature = {
       groupId: undefined,
@@ -593,7 +543,7 @@ describe('getBoundingBox', () => {
         ] as Coordinate[],
       },
     };
-    expect(getBoundingBox(line)).toEqual({ minX: 1, minY: -3, maxX: 5, maxY: 4 });
+    expect(getBoundingBox(line)).toEqual([1, -3, 5, 4]);
   });
 
   it('a custom type with unreadable coordinates returns the bounding box at the origin', () => {
@@ -606,7 +556,7 @@ describe('getBoundingBox', () => {
       locked: false,
       visible: true,
     } as unknown as Feature;
-    expect(getBoundingBox(odd)).toEqual({ minX: 0, minY: 0, maxX: 0, maxY: 0 });
+    expect(getBoundingBox(odd)).toEqual([0, 0, 0, 0]);
   });
 });
 
@@ -640,7 +590,7 @@ describe('the coordinate AABB cache of getBoundingBox', () => {
 
     const first = getBoundingBox(line);
     expect(reads()).toBeGreaterThan(0);
-    expect(first).toEqual({ minX: 10, minY: 20, maxX: 30, maxY: 50 });
+    expect(first).toEqual([10, 20, 30, 50]);
 
     const readsAfterFirst = reads();
     const second = getBoundingBox(line);
@@ -697,7 +647,7 @@ describe('the coordinate AABB cache of getBoundingBox', () => {
     const first = getBoundingBox(multiLine);
     const readsAfterFirst = reads();
     expect(readsAfterFirst).toBeGreaterThan(0);
-    expect(first).toEqual({ minX: 0, minY: -20, maxX: 110, maxY: 10 });
+    expect(first).toEqual([0, -20, 110, 10]);
 
     const second = getBoundingBox(multiLine);
 
@@ -729,11 +679,11 @@ describe('the coordinate AABB cache of getBoundingBox', () => {
     const second = getBoundingBox(line);
     expect(second).not.toBe(first);
 
-    first.minX = -999;
-    first.maxY = 999;
+    first[0] = -999;
+    first[3] = 999;
 
     const third = getBoundingBox(line);
-    expect(third).toEqual({ minX: 10, minY: 20, maxX: 30, maxY: 40 });
+    expect(third).toEqual([10, 20, 30, 40]);
   });
 
   it('replacing the coordinate array yields a new bounding box', () => {
@@ -743,7 +693,7 @@ describe('the coordinate AABB cache of getBoundingBox', () => {
         [30, 40],
       ]),
     );
-    expect(before).toEqual({ minX: 10, minY: 20, maxX: 30, maxY: 40 });
+    expect(before).toEqual([10, 20, 30, 40]);
 
     const after = getBoundingBox(
       createLineString('l1', [
@@ -751,7 +701,7 @@ describe('the coordinate AABB cache of getBoundingBox', () => {
         [5, 100],
       ]),
     );
-    expect(after).toEqual({ minX: -5, minY: 0, maxX: 5, maxY: 100 });
+    expect(after).toEqual([-5, 0, 5, 100]);
   });
 
   it('a Circle reflects a different radius even with the same coordinates (not cached)', () => {
@@ -759,8 +709,8 @@ describe('the coordinate AABB cache of getBoundingBox', () => {
     const small = getBoundingBox(createCircle('c1', coord, 100));
     const large = getBoundingBox(createCircle('c2', coord, 10000));
 
-    expect(large.maxX).toBeGreaterThan(small.maxX);
-    expect(large.maxY).toBeGreaterThan(small.maxY);
+    expect(large[2]).toBeGreaterThan(small[2]);
+    expect(large[3]).toBeGreaterThan(small[3]);
   });
 
   it('update on SpatialIndex replaces it with the bounding box of the new coordinate array', () => {
@@ -780,7 +730,7 @@ describe('the coordinate AABB cache of getBoundingBox', () => {
       ]),
     );
 
-    expect(index.findInBounds({ minX: -1, minY: -1, maxX: 2, maxY: 2 })).toEqual([]);
-    expect(index.findInBounds({ minX: 99, minY: 99, maxX: 102, maxY: 102 })).toContain('l1');
+    expect(index.findInBounds([-1, -1, 2, 2])).toEqual([]);
+    expect(index.findInBounds([99, 99, 102, 102])).toContain('l1');
   });
 });

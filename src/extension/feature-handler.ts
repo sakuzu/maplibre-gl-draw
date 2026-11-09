@@ -13,7 +13,8 @@
 
 import type { BoxSelectionStrategy } from '../dispatcher/hit-test/box-strategy.js';
 import type { HitTestStrategy } from '../dispatcher/hit-test/strategies/index.js';
-import type { BoundingBox, Feature } from '../shared/types/model.js';
+import type { BBox } from '../geometry/types.js';
+import type { Feature } from '../shared/types/model.js';
 import type { BoundingBoxCoords } from '../shared/types/selection-box.js';
 import type { SnapCandidate, SnapProviderContext } from '../snapping/types.js';
 import type { PointFrameExtent } from '../view/ui/selection-ui/index.js';
@@ -51,7 +52,7 @@ export interface FeatureTypeHandler {
    * @param feature The target feature
    * @param tileSize The tile size (512 by default)
    */
-  getBoundingBox?(feature: Feature, tileSize: number): BoundingBox;
+  getBoundingBox?(feature: Feature, tileSize: number): BBox;
 
   /**
    * The additional reach for narrowing down candidates (in CSS pixels)

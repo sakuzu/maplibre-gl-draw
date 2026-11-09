@@ -9,7 +9,7 @@
  * put back into the draw order (the order of the rows) before they are returned.
  */
 
-import type { BoundingBox } from '../shared/types/model.js';
+import type { BBox } from '../geometry/types.js';
 import { buildPackedRTree, type PackedRTree, searchPackedRTree } from '../table/packed-rtree.js';
 
 /**
@@ -42,9 +42,9 @@ export class DisplaySpatialIndex {
   /**
    * Returns the rows whose bbox intersects the bounding box, in draw order
    */
-  search(bounds: BoundingBox): number[] {
+  search(bounds: BBox): number[] {
     if (!this.tree) return [];
-    const rows = searchPackedRTree(this.tree, bounds.minX, bounds.minY, bounds.maxX, bounds.maxY);
+    const rows = searchPackedRTree(this.tree, bounds[0], bounds[1], bounds[2], bounds[3]);
     rows.sort((a, b) => a - b);
     return rows;
   }
@@ -55,9 +55,9 @@ export class DisplaySpatialIndex {
    * The rows are filtered before they are sorted, so a filter that drops most of what is in the
    * range keeps the sort as small as what is kept.
    */
-  searchWhere(bounds: BoundingBox, keep: (row: number) => boolean): Int32Array {
+  searchWhere(bounds: BBox, keep: (row: number) => boolean): Int32Array {
     if (!this.tree) return new Int32Array(0);
-    const hits = searchPackedRTree(this.tree, bounds.minX, bounds.minY, bounds.maxX, bounds.maxY);
+    const hits = searchPackedRTree(this.tree, bounds[0], bounds[1], bounds[2], bounds[3]);
     const rows = new Int32Array(hits.length);
     let count = 0;
     for (let i = 0; i < hits.length; i++) {

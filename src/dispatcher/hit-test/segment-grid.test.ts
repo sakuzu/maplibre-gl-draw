@@ -10,8 +10,9 @@
  */
 
 import { describe, expect, it } from 'vitest';
+import type { BBox } from '../../geometry/types.js';
 import { pointToPolylineDistance } from '../../shared/math/index.js';
-import type { BoundingBox, Coordinate } from '../../store/types.js';
+import type { Coordinate } from '../../store/types.js';
 import {
   buildSegmentGrid,
   getSegmentGrid,
@@ -210,7 +211,7 @@ describe('degenerate cases of queryDistanceWithin', () => {
 });
 
 /** Finds the indices of the segments that overlap a bbox with a full scan */
-function bruteForceIndices(coords: Coordinate[], bbox: BoundingBox): number[] {
+function bruteForceIndices(coords: Coordinate[], bbox: BBox): number[] {
   const indices: number[] = [];
   for (let i = 0; i < coords.length - 1; i++) {
     const [ax, ay] = coords[i];
@@ -219,7 +220,7 @@ function bruteForceIndices(coords: Coordinate[], bbox: BoundingBox): number[] {
     const maxX = Math.max(ax, bx);
     const minY = Math.min(ay, by);
     const maxY = Math.max(ay, by);
-    if (minX <= bbox.maxX && maxX >= bbox.minX && minY <= bbox.maxY && maxY >= bbox.minY) {
+    if (minX <= bbox[2] && maxX >= bbox[0] && minY <= bbox[3] && maxY >= bbox[1]) {
       indices.push(i);
     }
   }
@@ -240,12 +241,7 @@ describe('querySegmentIndicesInBBox', () => {
       const halfY = 0.05 + random() * 0.5;
       const cx = base[0] + (random() * 2 - 1);
       const cy = base[1] + (random() * 2 - 1);
-      const bbox: BoundingBox = {
-        minX: cx - halfX,
-        minY: cy - halfY,
-        maxX: cx + halfX,
-        maxY: cy + halfY,
-      };
+      const bbox: BBox = [cx - halfX, cy - halfY, cx + halfX, cy + halfY];
 
       const actual = querySegmentIndicesInBBox(grid, bbox);
       const expected = bruteForceIndices(coords, bbox);
@@ -270,24 +266,15 @@ describe('querySegmentIndicesInBBox', () => {
     const coords = randomPolyline(1200, 5);
     const grid = buildSegmentGrid(coords);
 
-    expect(
-      querySegmentIndicesInBBox(grid, { minX: 1000, minY: 1000, maxX: 1001, maxY: 1001 }),
-    ).toEqual([]);
-    expect(
-      querySegmentIndicesInBBox(grid, { minX: -1001, minY: -1, maxX: -1000, maxY: 1 }),
-    ).toEqual([]);
+    expect(querySegmentIndicesInBBox(grid, [1000, 1000, 1001, 1001])).toEqual([]);
+    expect(querySegmentIndicesInBBox(grid, [-1001, -1, -1000, 1])).toEqual([]);
   });
 
   it('returns every segment for a query that covers the whole index', () => {
     const coords = randomPolyline(1500, 6);
     const grid = buildSegmentGrid(coords);
 
-    const all = querySegmentIndicesInBBox(grid, {
-      minX: grid.minX,
-      minY: grid.minY,
-      maxX: grid.maxX,
-      maxY: grid.maxY,
-    });
+    const all = querySegmentIndicesInBBox(grid, [grid.minX, grid.minY, grid.maxX, grid.maxY]);
 
     expect(all.length).toBe(grid.segmentCount);
     expect(all[0]).toBe(0);
@@ -297,12 +284,12 @@ describe('querySegmentIndicesInBBox', () => {
   it('returns the same result when queried repeatedly (cleanup of the visit stamps)', () => {
     const coords = randomPolyline(1500, 42);
     const grid = buildSegmentGrid(coords);
-    const bbox: BoundingBox = {
-      minX: coords[10][0] - 0.3,
-      minY: coords[10][1] - 0.3,
-      maxX: coords[10][0] + 0.3,
-      maxY: coords[10][1] + 0.3,
-    };
+    const bbox: BBox = [
+      coords[10][0] - 0.3,
+      coords[10][1] - 0.3,
+      coords[10][0] + 0.3,
+      coords[10][1] + 0.3,
+    ];
 
     const first = querySegmentIndicesInBBox(grid, bbox);
     expect(first.length).toBeGreaterThan(0);
@@ -313,7 +300,7 @@ describe('querySegmentIndicesInBBox', () => {
 
   it('returns nothing when there is not a single segment', () => {
     const single: Coordinate[] = [[1, 1]];
-    const bbox: BoundingBox = { minX: 0, minY: 0, maxX: 2, maxY: 2 };
+    const bbox: BBox = [0, 0, 2, 2];
 
     expect(querySegmentIndicesInBBox(buildSegmentGrid([]), bbox)).toEqual([]);
     expect(querySegmentIndicesInBBox(buildSegmentGrid(single), bbox)).toEqual([]);
@@ -325,12 +312,12 @@ describe('querySegmentIndicesInBBox', () => {
 
     for (const coords of [vertical, same]) {
       const grid = buildSegmentGrid(coords);
-      const bbox: BoundingBox = {
-        minX: coords[0][0] - 0.5,
-        minY: coords[0][1] - 0.5,
-        maxX: coords[0][0] + 0.5,
-        maxY: coords[0][1] + 0.5,
-      };
+      const bbox: BBox = [
+        coords[0][0] - 0.5,
+        coords[0][1] - 0.5,
+        coords[0][0] + 0.5,
+        coords[0][1] + 0.5,
+      ];
       const returned = new Set(querySegmentIndicesInBBox(grid, bbox));
       for (const index of bruteForceIndices(coords, bbox)) {
         expect(returned.has(index)).toBe(true);

@@ -13,6 +13,7 @@
 
 import { beforeEach, describe, expect, it } from 'vitest';
 import { initialBearingDegrees } from '../geometry/distance.js';
+import type { BBox } from '../geometry/types.js';
 import type { ObjectLayer } from '../shared/types/model.js';
 import { coordinatesOf, geometryFromCoordinates } from '../shared/utils/coordinates.js';
 import { RenderedShapes } from '../sketches/rendered-shapes.js';
@@ -109,7 +110,7 @@ function providerContext(overrides: Partial<SnapProviderContext> = {}): SnapProv
   };
 }
 
-const WIDE_BBOX = { minX: -1, minY: -1, maxX: 1, maxY: 1 };
+const WIDE_BBOX: BBox = [-1, -1, 1, 1];
 
 function vertexCandidates(ctx: SnapProviderContext = providerContext()): SnapCandidate[] {
   return createStoreVertexSnapProvider({
@@ -600,7 +601,7 @@ describe('the built-in edge provider', () => {
       shapes: shapesOf(store),
       spatialIndex,
     })
-      .candidates({ minX: -0.01, minY: -0.01, maxX: 0.01, maxY: 0.01 }, providerContext())
+      .candidates([-0.01, -0.01, 0.01, 0.01], providerContext())
       .filter(isSegmentCandidate);
 
     expect(candidates).toHaveLength(1);
@@ -746,7 +747,7 @@ describe('the built-in intersection provider', () => {
     addCrossingLines();
     // In a bbox away from the intersection, neither edge falls within it, so no
     // candidate comes out
-    const far = { minX: 0.05, minY: 0.05, maxX: 0.07, maxY: 0.07 };
+    const far: BBox = [0.05, 0.05, 0.07, 0.07];
 
     expect(intersectionCandidates(providerContext(), far)).toHaveLength(0);
   });

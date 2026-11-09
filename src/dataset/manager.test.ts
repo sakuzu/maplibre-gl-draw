@@ -10,9 +10,10 @@
 
 import type { ProjectionData } from 'maplibre-gl';
 import { describe, expect, it, vi } from 'vitest';
+import type { BBox } from '../geometry/types.js';
 import { DEFAULT_FEATURE_STYLE_CONFIG } from '../shared/config/feature-style.js';
 import { coordinatesOf } from '../shared/utils/coordinates.js';
-import type { BoundingBox, Coordinate, Feature } from '../store/types.js';
+import type { Coordinate, Feature } from '../store/types.js';
 import { toRow } from '../test-utils.js';
 import { GpuLedger } from '../view/gpu-ledger.js';
 import { FeatureDrawer } from '../view/renderers/drawer.js';
@@ -28,7 +29,7 @@ import { createDatasetManager, type DatasetManager } from './manager.js';
 import type { TriangulationScheduler } from './triangulation.js';
 import type { DatasetRow } from './types.js';
 
-const WORLD: BoundingBox = { minX: -180, minY: -85, maxX: 180, maxY: 85 };
+const WORLD: BBox = [-180, -85, 180, 85];
 
 function createManager(): DatasetManager {
   return createDatasetManager({

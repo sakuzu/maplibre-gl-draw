@@ -46,13 +46,9 @@ export type MultiPolygonCoordinates = PolygonCoordinates[];
  */
 export type AreaCoordinates = PolygonCoordinates | MultiPolygonCoordinates;
 
-/**
- * A bounding box as `[minLng, minLat, maxLng, maxLat]`, in degrees in this entry (the main entry
- * and `/geometry` give it so; `features.bbox` returns it).
- *
- * A box never crosses the ±180 degree meridian: `minLng <= maxLng` always holds.
- */
-export type BBox = [number, number, number, number];
+// A bounding box (`[minLng, minLat, maxLng, maxLat]` in degrees in this entry): the box of the
+// tables of rows, given again (see the module doc of the entries)
+export type { BBox } from './bbox-type.js';
 
 /** A GeoJSON Point geometry without `bbox`. */
 export interface PointGeometry {

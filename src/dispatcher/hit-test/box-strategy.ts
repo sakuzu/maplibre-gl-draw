@@ -9,7 +9,8 @@
  * Tests for custom types can be added through FeatureTypeHandler.
  */
 
-import type { BoundingBox, Feature, FeatureType } from '../../store/types.js';
+import type { BBox } from '../../geometry/types.js';
+import type { Feature, FeatureType } from '../../store/types.js';
 import { registerRestoring } from './strategies/base.js';
 
 /**
@@ -28,7 +29,7 @@ export interface BoxSelectionStrategy {
    * @param rect The selection box in degrees
    * @returns `true` if it intersects (the feature is then selected)
    */
-  intersects(feature: Feature, rect: BoundingBox): boolean;
+  intersects(feature: Feature, rect: BBox): boolean;
   /**
    * True when every feature whose extent is inside the box meets the test: the rows of a layer
    * held as rows inside a box are then selected without being made features (the tests of core

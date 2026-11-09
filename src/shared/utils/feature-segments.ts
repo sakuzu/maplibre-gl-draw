@@ -9,12 +9,13 @@
  * so the listing sits in shared/. It is pure: it reads only the coordinates of the feature.
  */
 
+import type { BBox } from '../../geometry/types.js';
 import {
   getSegmentGrid,
   querySegmentIndicesInBBox,
   SEGMENT_INDEX_THRESHOLD,
 } from '../math/segment-grid.js';
-import type { BoundingBox, Coordinate, Feature, VertexRef } from '../types/model.js';
+import type { Coordinate, Feature, VertexRef } from '../types/model.js';
 import { coordinatesOf } from './coordinates.js';
 import { isSameVertexRef } from './vertex-ref.js';
 
@@ -51,16 +52,12 @@ export function hasSnapEdges(type: string): boolean {
  * The real test against the tolerance is done by SnapService using the distance to
  * the nearest point, so all this guarantees is that nothing is missed.
  */
-export function segmentIntersectsBBox(
-  start: Coordinate,
-  end: Coordinate,
-  bbox: BoundingBox,
-): boolean {
+export function segmentIntersectsBBox(start: Coordinate, end: Coordinate, bbox: BBox): boolean {
   const minX = Math.min(start[0], end[0]);
   const maxX = Math.max(start[0], end[0]);
   const minY = Math.min(start[1], end[1]);
   const maxY = Math.max(start[1], end[1]);
-  return minX <= bbox.maxX && maxX >= bbox.minX && minY <= bbox.maxY && maxY >= bbox.minY;
+  return minX <= bbox[2] && maxX >= bbox[0] && minY <= bbox[3] && maxY >= bbox[1];
 }
 
 /**
@@ -68,12 +65,12 @@ export function segmentIntersectsBBox(
  *
  * @internal
  */
-export function isInBBox(position: Coordinate, bbox: BoundingBox): boolean {
+export function isInBBox(position: Coordinate, bbox: BBox): boolean {
   return (
-    position[0] >= bbox.minX &&
-    position[0] <= bbox.maxX &&
-    position[1] >= bbox.minY &&
-    position[1] <= bbox.maxY
+    position[0] >= bbox[0] &&
+    position[0] <= bbox[2] &&
+    position[1] >= bbox[1] &&
+    position[1] <= bbox[3]
   );
 }
 
@@ -201,7 +198,7 @@ function collectSegmentsInBBox(
   coords: Coordinate[],
   ring: number,
   part: number | undefined,
-  bbox: BoundingBox,
+  bbox: BBox,
   visit: SegmentVisitor,
 ): void {
   if (coords.length < 2) return;
@@ -265,7 +262,7 @@ export function edgesOfVertex(feature: Feature, vertex: VertexRef): VertexRef[] 
  */
 export function collectFeatureSegmentsInBBox(
   feature: Feature,
-  bbox: BoundingBox,
+  bbox: BBox,
   visit: SegmentVisitor,
 ): void {
   forEachPart(feature, (coords, ring, part) => {

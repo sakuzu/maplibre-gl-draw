@@ -50,7 +50,6 @@ import { circleRowRings } from '../shared/circle-rings.js';
 import { DrawError } from '../shared/draw-error.js';
 import { drawPropertyKey } from '../shared/properties.js';
 import type {
-  BoundingBox,
   Feature,
   FeatureStyle,
   FeatureType,
@@ -735,7 +734,7 @@ export interface FeatureTablesInternals {
    *
    * @returns The function that stops the calls
    */
-  onTouched(listener: (layerId: string, bounds: BoundingBox) => void): () => void;
+  onTouched(listener: (layerId: string, bounds: BBox) => void): () => void;
   /**
    * What the versions did: swapped so far, pending, the most held at once, the time of the last
    * merge (ms)
@@ -894,7 +893,7 @@ interface Creation {
  *
  * @internal
  */
-export type RowBoxCalculator = (feature: Feature, tileSize: number) => BoundingBox;
+export type RowBoxCalculator = (feature: Feature, tileSize: number) => BBox;
 
 /** The owner of the features drawn for the sketches (`showSketches`) */
 const SKETCH_OWNER = '\u0000sketches';
@@ -985,7 +984,7 @@ class FeatureTablesStore implements FeatureTablesInternals {
     (layerId: string, writes: readonly InPlaceRowWrite[]) => void
   >();
   private readonly deltaListeners = new Set<(layerId: string, change: DeltaRowsChange) => void>();
-  private readonly touchListeners = new Set<(layerId: string, bounds: BoundingBox) => void>();
+  private readonly touchListeners = new Set<(layerId: string, bounds: BBox) => void>();
   readonly groupsDue = new Set<RowGroupHandle>();
   private readonly versions: GroupVersions;
   private readonly worker: FeatureTablesWorker | undefined;
@@ -1087,11 +1086,11 @@ class FeatureTablesStore implements FeatureTablesInternals {
       const box = calculator
         ? calculator(feature, this.rowBoxTileSize)
         : getBoundingBox(feature, this.rowBoxTileSize);
-      if (![box.minX, box.minY, box.maxX, box.maxY].every(Number.isFinite)) return null;
-      out[0] = box.minX;
-      out[1] = box.minY;
-      out[2] = box.maxX;
-      out[3] = box.maxY;
+      if (!box.every(Number.isFinite)) return null;
+      out[0] = box[0];
+      out[1] = box[1];
+      out[2] = box[2];
+      out[3] = box[3];
       return layer.serial;
     }
     return layer.rowBox(group, row, out) ? layer.serial : null;
@@ -1257,7 +1256,7 @@ class FeatureTablesStore implements FeatureTablesInternals {
     this.versions.urge(groups);
   }
 
-  onTouched(listener: (layerId: string, bounds: BoundingBox) => void): () => void {
+  onTouched(listener: (layerId: string, bounds: BBox) => void): () => void {
     this.touchListeners.add(listener);
     return () => {
       this.touchListeners.delete(listener);
@@ -1365,7 +1364,7 @@ class FeatureTablesStore implements FeatureTablesInternals {
   }
 
   /** Tells the sides that draw in tiles the extent of rows whose drawing changed */
-  private touch(layerId: string, bounds: BoundingBox | null): void {
+  private touch(layerId: string, bounds: BBox | null): void {
     if (!bounds || this.touchListeners.size === 0) return;
     for (const listener of this.touchListeners) listener(layerId, bounds);
   }
@@ -4112,15 +4111,10 @@ function deltaRowsInOrder(
 }
 
 /** The union of two extents (null when both are) */
-function unionBounds(a: BoundingBox | null, b: BoundingBox | null): BoundingBox | null {
+function unionBounds(a: BBox | null, b: BBox | null): BBox | null {
   if (!a) return b;
   if (!b) return a;
-  return {
-    minX: Math.min(a.minX, b.minX),
-    minY: Math.min(a.minY, b.minY),
-    maxX: Math.max(a.maxX, b.maxX),
-    maxY: Math.max(a.maxY, b.maxY),
-  };
+  return [Math.min(a[0], b[0]), Math.min(a[1], b[1]), Math.max(a[2], b[2]), Math.max(a[3], b[3])];
 }
 
 /** The draft of the change of a layer */

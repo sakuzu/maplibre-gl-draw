@@ -8,6 +8,7 @@
  * They provide the intersection test logic for box selection of each feature type.
  */
 
+import type { BBox } from '../../geometry/types.js';
 import {
   createOBB,
   DEFAULT_TILE_SIZE,
@@ -22,7 +23,7 @@ import {
 } from '../../shared/math/index.js';
 import { coordinatesOf } from '../../shared/utils/coordinates.js';
 import { getCircleRadius, getImageProperties } from '../../shared/utils/property.js';
-import type { BoundingBox, Coordinate, Feature } from '../../store/types.js';
+import type { Coordinate, Feature } from '../../store/types.js';
 import type { BoxSelectionStrategy } from './box-strategy.js';
 
 /**
@@ -37,7 +38,7 @@ export class PointBoxSelectionStrategy implements BoxSelectionStrategy {
   /** A row whose extent is inside the box meets this test (it is not made a feature for it) */
   readonly insideMeetsTest = true;
 
-  intersects(feature: Feature, rect: BoundingBox): boolean {
+  intersects(feature: Feature, rect: BBox): boolean {
     if (feature.type !== 'Point') return false;
 
     const coord = coordinatesOf(feature) as Coordinate;
@@ -58,7 +59,7 @@ export class LineStringBoxSelectionStrategy implements BoxSelectionStrategy {
   /** A row whose extent is inside the box meets this test (it is not made a feature for it) */
   readonly insideMeetsTest = true;
 
-  intersects(feature: Feature, rect: BoundingBox): boolean {
+  intersects(feature: Feature, rect: BBox): boolean {
     if (feature.type !== 'LineString') return false;
 
     const coords = coordinatesOf(feature) as Coordinate[];
@@ -81,7 +82,7 @@ export class PolygonBoxSelectionStrategy implements BoxSelectionStrategy {
   /** A row whose extent is inside the box meets this test (it is not made a feature for it) */
   readonly insideMeetsTest = true;
 
-  intersects(feature: Feature, rect: BoundingBox): boolean {
+  intersects(feature: Feature, rect: BBox): boolean {
     if (feature.type !== 'Polygon') return false;
 
     const rings = coordinatesOf(feature) as Coordinate[][];
@@ -101,7 +102,7 @@ export class MultiPointBoxSelectionStrategy implements BoxSelectionStrategy {
   /** A row whose extent is inside the box meets this test (it is not made a feature for it) */
   readonly insideMeetsTest = true;
 
-  intersects(feature: Feature, rect: BoundingBox): boolean {
+  intersects(feature: Feature, rect: BBox): boolean {
     if (feature.type !== 'MultiPoint') return false;
 
     const parts = coordinatesOf(feature) as Coordinate[];
@@ -121,7 +122,7 @@ export class MultiLineStringBoxSelectionStrategy implements BoxSelectionStrategy
   /** A row whose extent is inside the box meets this test (it is not made a feature for it) */
   readonly insideMeetsTest = true;
 
-  intersects(feature: Feature, rect: BoundingBox): boolean {
+  intersects(feature: Feature, rect: BBox): boolean {
     if (feature.type !== 'MultiLineString') return false;
 
     const parts = coordinatesOf(feature) as Coordinate[][];
@@ -141,7 +142,7 @@ export class MultiPolygonBoxSelectionStrategy implements BoxSelectionStrategy {
   /** A row whose extent is inside the box meets this test (it is not made a feature for it) */
   readonly insideMeetsTest = true;
 
-  intersects(feature: Feature, rect: BoundingBox): boolean {
+  intersects(feature: Feature, rect: BBox): boolean {
     if (feature.type !== 'MultiPolygon') return false;
 
     const parts = coordinatesOf(feature) as Coordinate[][][];
@@ -166,7 +167,7 @@ export class ImageBoxSelectionStrategy implements BoxSelectionStrategy {
     this.tileSize = tileSize;
   }
 
-  intersects(feature: Feature, rect: BoundingBox): boolean {
+  intersects(feature: Feature, rect: BBox): boolean {
     if (feature.type !== 'Image') return false;
 
     const obb = this.createOBBForImage(feature);
@@ -224,7 +225,7 @@ export class CircleBoxSelectionStrategy implements BoxSelectionStrategy {
   /** A row whose extent is inside the box meets this test (it is not made a feature for it) */
   readonly insideMeetsTest = true;
 
-  intersects(feature: Feature, rect: BoundingBox): boolean {
+  intersects(feature: Feature, rect: BBox): boolean {
     if (feature.type !== 'Circle') return false;
 
     const center = coordinatesOf(feature) as Coordinate;
@@ -244,12 +245,7 @@ export class CircleBoxSelectionStrategy implements BoxSelectionStrategy {
     // radius rLng. The box is axis-aligned, so multiplying each y coordinate by k is an
     // equivalent transformation.
     const k = rLng / rLat;
-    const normRect: BoundingBox = {
-      minX: rect.minX,
-      maxX: rect.maxX,
-      minY: rect.minY * k,
-      maxY: rect.maxY * k,
-    };
+    const normRect: BBox = [rect[0], rect[1] * k, rect[2], rect[3] * k];
     const normCenter: Coordinate = [center[0], center[1] * k];
 
     return rectangleIntersectsCircle(normRect, normCenter, rLng);

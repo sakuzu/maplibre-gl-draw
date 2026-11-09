@@ -29,7 +29,7 @@ import {
   inverseEnuEdit,
   moveEnuPosition,
 } from '../../geometry/enu-transforms.js';
-import type { BoundingBox } from '../../store/types.js';
+import type { BBox } from '../../geometry/types.js';
 import { getRenderFrame } from '../shaders/frame.js';
 import type { RetainedDrawRun } from './draw-run.js';
 import {
@@ -538,8 +538,8 @@ export function rowStateBindingOf(
  * @param view - The view, longitude and latitude
  * @returns The regions, none when no set moves by more than a translation
  */
-export function rowStateMovedViews(binding: RowStateBinding, view: BoundingBox): BoundingBox[] {
-  const views: BoundingBox[] = [];
+export function rowStateMovedViews(binding: RowStateBinding, view: BBox): BBox[] {
+  const views: BBox[] = [];
   if (binding.transforms) movedViewsOf(binding.transforms, view, views);
   return views;
 }
@@ -553,8 +553,8 @@ export function rowStateMovedViews(binding: RowStateBinding, view: BoundingBox):
  */
 export function movedViewsOf(
   transforms: ReadonlyArray<EnuEdit | null>,
-  view: BoundingBox,
-  out: BoundingBox[],
+  view: BBox,
+  out: BBox[],
 ): void {
   for (const edit of transforms) {
     if (edit) movedBackViews(edit, view, out);
@@ -566,7 +566,7 @@ export function movedViewsOf(
  *
  * @internal
  */
-export function movedBackViews(edit: EnuEdit, view: BoundingBox, out: BoundingBox[]): void {
+export function movedBackViews(edit: EnuEdit, view: BBox, out: BBox[]): void {
   const back = inverseEnuEdit(edit);
   for (const uniform of edit.kind === 'scale' ? [false, true] : [false]) {
     let minX = Infinity;
@@ -575,8 +575,8 @@ export function movedBackViews(edit: EnuEdit, view: BoundingBox, out: BoundingBo
     let maxY = -Infinity;
     for (const fx of [0, 0.5, 1]) {
       for (const fy of [0, 0.5, 1]) {
-        const x = view.minX + (view.maxX - view.minX) * fx;
-        const y = Math.max(-90, Math.min(90, view.minY + (view.maxY - view.minY) * fy));
+        const x = view[0] + (view[2] - view[0]) * fx;
+        const y = Math.max(-90, Math.min(90, view[1] + (view[3] - view[1]) * fy));
         const p = moveEnuPosition(back, [x, y], uniform);
         minX = Math.min(minX, p[0] as number);
         minY = Math.min(minY, p[1] as number);
@@ -584,6 +584,6 @@ export function movedBackViews(edit: EnuEdit, view: BoundingBox, out: BoundingBo
         maxY = Math.max(maxY, p[1] as number);
       }
     }
-    if (minX <= maxX && minY <= maxY) out.push({ minX, minY, maxX, maxY });
+    if (minX <= maxX && minY <= maxY) out.push([minX, minY, maxX, maxY]);
   }
 }

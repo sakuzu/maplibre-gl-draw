@@ -14,8 +14,9 @@
 
 import type { ProjectionData } from 'maplibre-gl';
 import { describe, expect, it } from 'vitest';
+import type { BBox } from '../geometry/types.js';
 import { coordinatesOf } from '../shared/utils/coordinates.js';
-import type { BoundingBox, Coordinate, Feature } from '../store/types.js';
+import type { Coordinate, Feature } from '../store/types.js';
 import { toRow } from '../test-utils.js';
 import type { DisplayBatchTarget } from './dataset.js';
 import { createDatasetManager, type DatasetManager } from './manager.js';
@@ -37,7 +38,7 @@ import type { DatasetOptions, DatasetRow } from './types.js';
 import { normalizeDisplayFeature } from './types.js';
 
 /** Viewport covering the whole globe */
-const WORLD: BoundingBox = { minX: -180, minY: -85, maxX: 180, maxY: 85 };
+const WORLD: BBox = [-180, -85, 180, 85];
 
 /** The longitude that corresponds to one screen pixel in band b (the same for latitude at the
  * equator) */
@@ -89,7 +90,7 @@ function createManager(zoom = 10): {
   setZoom: (next: number) => void;
   /** Replaces the shallowest effective zoom on screen (the pitch correction) */
   setEffectiveZoom: (next: number | null) => void;
-  setBounds: (next: BoundingBox) => void;
+  setBounds: (next: BBox) => void;
   /** Raises the equivalent of moveend */
   moveEnd: () => void;
 } {
@@ -120,7 +121,7 @@ function createManager(zoom = 10): {
     setEffectiveZoom: (next: number | null) => {
       currentEffectiveZoom = next;
     },
-    setBounds: (next: BoundingBox) => {
+    setBounds: (next: BBox) => {
       currentBounds = next;
     },
     moveEnd: () => {
@@ -518,7 +519,7 @@ describe('the application to a dataset', () => {
 
     // Even panning to a window that shows only a part, the winners stay decided from every
     // feature
-    setBounds({ minX: 30 * pxDeg(10), minY: -1, maxX: 50 * pxDeg(10), maxY: 1 });
+    setBounds([30 * pxDeg(10), -1, 50 * pxDeg(10), 1]);
     manager.list();
     const after = [...(dataset.getVisibleFeatureIds() ?? [])].sort();
 

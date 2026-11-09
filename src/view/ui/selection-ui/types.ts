@@ -4,7 +4,7 @@
 /**
  * Type definitions related to the selection UI
  *
- * Gathers the types of BoundingBox, resize computation and the custom feature extension points.
+ * Gathers the types of BBox, resize computation and the custom feature extension points.
  */
 
 import type { BoundingBoxCoords } from '../../../shared/types/selection-box.js';

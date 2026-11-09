@@ -22,7 +22,9 @@
  * they use (GeoJSON features and the features of the drawing), and return GeoJSON geometries. Lengths, distances, radii and tolerances are in meters, areas in
  * square meters, and bearings and coordinates in degrees. An input whose shape a function
  * cannot take throws a {@link GeometryError}; a computation whose result is empty returns null.
- * Crossing the ±180 degree meridian and the vicinity of the poles are out of scope.
+ * Crossing the ±180 degree meridian and the vicinity of the poles are out of scope. A box
+ * ({@link BBox}) is `[minLng, minLat, maxLng, maxLat]` in degrees in this entry, and never
+ * crosses the ±180 degree meridian (`minLng <= maxLng`).
  *
  * Read next: the guide
  * [snapping and geometry](https://sakuzu.github.io/maplibre-gl-draw/guides/snapping-geometry),

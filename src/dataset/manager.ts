@@ -11,8 +11,9 @@
  */
 
 import type { ProjectionData } from 'maplibre-gl';
+import type { BBox } from '../geometry/types.js';
 import type { FeatureStyleConfig } from '../shared/config/feature-style.js';
-import type { BoundingBox, Coordinate, Feature } from '../shared/types/model.js';
+import type { Coordinate, Feature } from '../shared/types/model.js';
 import type { PixelRatioInput } from '../shared/utils/pixel-ratio.js';
 import type { DisplayBatchTarget, DisplayHitTestFn } from './dataset.js';
 import { DatasetImpl } from './dataset.js';
@@ -33,7 +34,7 @@ export const DEFAULT_PROVIDER_DEBOUNCE_MS = 200;
  */
 export interface DatasetManagerDeps {
   /** Returns the bbox of the displayed range (the same expanded viewport as the render loop) */
-  getViewportBounds(): BoundingBox;
+  getViewportBounds(): BBox;
   /** The current zoom */
   getZoom(): number;
   /**
@@ -370,11 +371,11 @@ export class DatasetManager {
     target: DisplayBatchTarget,
     projectionData: ProjectionData,
     zoom: number,
-    bounds?: BoundingBox,
+    bounds?: BBox,
   ): void {
     if (this.ordered.length === 0) return;
 
-    let resolved: BoundingBox | undefined = bounds;
+    let resolved: BBox | undefined = bounds;
     for (let i = this.sideStart(order); i < this.sideEnd(order); i++) {
       if (resolved === undefined) resolved = this.deps.getViewportBounds();
       this.ordered[i].draw(target, projectionData, zoom, resolved);
@@ -394,7 +395,7 @@ export class DatasetManager {
     target: DisplayBatchTarget,
     projectionData: ProjectionData,
     zoom: number,
-    bounds?: BoundingBox,
+    bounds?: BBox,
   ): boolean {
     const dataset = this.datasets.get(id);
     if (dataset?.order !== 'layer-order') return false;

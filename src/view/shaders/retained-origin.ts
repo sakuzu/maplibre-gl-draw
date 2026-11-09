@@ -25,8 +25,8 @@
  * the batch that stays where it is may be far from it then.
  */
 
+import type { BBox } from '../../geometry/types.js';
 import { worldSizeAtZoom } from '../../shared/math/ground-scale.js';
-import type { BoundingBox } from '../../store/types.js';
 
 /** The largest screen error of the baked offsets that is accepted (CSS px) */
 export const RETAINED_ORIGIN_TOLERANCE_PX = 0.1;
@@ -40,8 +40,8 @@ const MAX_MERCATOR_LATITUDE = 85.0511287798;
 /**
  * The center of a bounding box
  */
-export function boundsCenter(bounds: BoundingBox): [number, number] {
-  return [(bounds.minX + bounds.maxX) / 2, (bounds.minY + bounds.maxY) / 2];
+export function boundsCenter(bounds: BBox): [number, number] {
+  return [(bounds[0] + bounds[2]) / 2, (bounds[1] + bounds[3]) / 2];
 }
 
 /**
@@ -57,18 +57,10 @@ export function boundsCenter(bounds: BoundingBox): [number, number] {
  */
 export function retainedOriginErrorPx(
   origin: readonly [number, number],
-  region: BoundingBox,
+  region: BBox,
   zoom: number,
 ): number {
-  return originErrorPx(
-    origin[0],
-    origin[1],
-    region.minX,
-    region.minY,
-    region.maxX,
-    region.maxY,
-    zoom,
-  );
+  return originErrorPx(origin[0], origin[1], region[0], region[1], region[2], region[3], zoom);
 }
 
 /** {@link retainedOriginErrorPx} of an origin and a region given as numbers */
@@ -104,18 +96,18 @@ function originErrorPx(
  */
 export function rebasedRetainedOrigin(
   origin: readonly [number, number],
-  extent: BoundingBox | null,
-  view: BoundingBox | null,
+  extent: BBox | null,
+  view: BBox | null,
   zoom: number,
-  movedViews?: readonly BoundingBox[],
+  movedViews?: readonly BBox[],
 ): [number, number] | null {
   if (!extent) return null;
   return rebasedOriginOf(
     origin,
-    extent.minX,
-    extent.minY,
-    extent.maxX,
-    extent.maxY,
+    extent[0],
+    extent[1],
+    extent[2],
+    extent[3],
     view,
     zoom,
     movedViews,
@@ -138,9 +130,9 @@ export function rebasedOriginOf(
   extentMinY: number,
   extentMaxX: number,
   extentMaxY: number,
-  view: BoundingBox | null,
+  view: BBox | null,
   zoom: number,
-  movedViews?: readonly BoundingBox[],
+  movedViews?: readonly BBox[],
 ): [number, number] | null {
   // The region on screen: the parts of the extent the rows moved are seen from, or else the
   // extent clipped to the view (the whole extent without a view)
@@ -150,10 +142,10 @@ export function rebasedOriginOf(
   let maxY = -Infinity;
   if (movedViews) {
     for (const moved of movedViews) {
-      const x0 = Math.max(extentMinX, moved.minX);
-      const y0 = Math.max(extentMinY, moved.minY);
-      const x1 = Math.min(extentMaxX, moved.maxX);
-      const y1 = Math.min(extentMaxY, moved.maxY);
+      const x0 = Math.max(extentMinX, moved[0]);
+      const y0 = Math.max(extentMinY, moved[1]);
+      const x1 = Math.min(extentMaxX, moved[2]);
+      const y1 = Math.min(extentMaxY, moved[3]);
       if (!(x0 <= x1 && y0 <= y1)) continue;
       minX = Math.min(minX, x0);
       minY = Math.min(minY, y0);
@@ -162,10 +154,10 @@ export function rebasedOriginOf(
     }
   }
   if (!(minX <= maxX && minY <= maxY)) {
-    minX = view ? Math.max(extentMinX, view.minX) : extentMinX;
-    minY = view ? Math.max(extentMinY, view.minY) : extentMinY;
-    maxX = view ? Math.min(extentMaxX, view.maxX) : extentMaxX;
-    maxY = view ? Math.min(extentMaxY, view.maxY) : extentMaxY;
+    minX = view ? Math.max(extentMinX, view[0]) : extentMinX;
+    minY = view ? Math.max(extentMinY, view[1]) : extentMinY;
+    maxX = view ? Math.min(extentMaxX, view[2]) : extentMaxX;
+    maxY = view ? Math.min(extentMaxY, view[3]) : extentMaxY;
   }
   if (!(minX <= maxX && minY <= maxY)) return null;
 

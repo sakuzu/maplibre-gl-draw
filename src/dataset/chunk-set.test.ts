@@ -11,8 +11,9 @@
 
 import type { ProjectionData } from 'maplibre-gl';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { BBox } from '../geometry/types.js';
 import { DEFAULT_FEATURE_STYLE_CONFIG } from '../shared/config/feature-style.js';
-import type { BoundingBox, Feature } from '../shared/types/model.js';
+import type { Feature } from '../shared/types/model.js';
 import { displayFeature } from '../test-utils.js';
 import { GpuLedger } from '../view/gpu-ledger.js';
 import { FeatureDrawer } from '../view/renderers/drawer.js';
@@ -132,7 +133,7 @@ function createHost(overrides: Partial<DisplayChunkSetHost> = {}): DisplayChunkS
   };
 }
 
-function frameFor(renderers: RetainedRendererSet, bounds: BoundingBox): DisplayChunkFrame {
+function frameFor(renderers: RetainedRendererSet, bounds: BBox): DisplayChunkFrame {
   return {
     target: { beginFrame: vi.fn(), processFeature: vi.fn(() => false), endFrame: vi.fn() },
     renderers,
@@ -145,9 +146,9 @@ function frameFor(renderers: RetainedRendererSet, bounds: BoundingBox): DisplayC
 }
 
 /** The viewport over the first group only */
-const LEFT: BoundingBox = { minX: -1, minY: -1, maxX: 1, maxY: 1 };
+const LEFT: BBox = [-1, -1, 1, 1];
 /** The viewport over both groups */
-const BOTH: BoundingBox = { minX: -1, minY: -1, maxX: 101, maxY: 1 };
+const BOTH: BBox = [-1, -1, 101, 1];
 
 describe('DisplayChunkSet', () => {
   beforeEach(() => {
@@ -280,7 +281,7 @@ describe('DisplayChunkSet', () => {
       }),
     );
     const chunks = chunksOf(FEATURES);
-    const inView = chunks.filter((chunk) => chunk.bounds.maxX <= 1).length;
+    const inView = chunks.filter((chunk) => chunk.bounds[2] <= 1).length;
     expect(inView).toBeGreaterThan(1);
     set.replace(chunks);
 

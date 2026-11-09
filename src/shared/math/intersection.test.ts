@@ -2,7 +2,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import { describe, expect, it } from 'vitest';
-import type { BoundingBox, Coordinate } from '../../store/types.js';
+import type { BBox } from '../../geometry/types.js';
+import type { Coordinate } from '../../store/types.js';
 import {
   pointInRectangle,
   rectangleIntersectsCircle,
@@ -13,7 +14,7 @@ import {
   segmentIntersectsSegment,
 } from './intersection.js';
 
-const rect: BoundingBox = { minX: 0, minY: 0, maxX: 10, maxY: 10 };
+const rect: BBox = [0, 0, 10, 10];
 
 describe('pointInRectangle', () => {
   it('a point inside the rectangle returns true', () => {

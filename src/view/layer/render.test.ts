@@ -24,6 +24,7 @@ import type {
   FrameDrawContext,
   LayeredOverlayRenderer,
 } from '../../extension/index.js';
+import type { BBox } from '../../geometry/types.js';
 import { geometryFromCoordinates } from '../../shared/utils/coordinates.js';
 import type { Store } from '../../store/store.js';
 import type { Feature, Layer } from '../../store/types.js';
@@ -222,7 +223,7 @@ describe('renderLayers and datasets', () => {
   /** Manager of the datasets (the viewport is the whole globe) */
   function createDisplay(): DatasetManager {
     return createDatasetManager({
-      getViewportBounds: () => ({ minX: -180, minY: -85, maxX: 180, maxY: 85 }),
+      getViewportBounds: () => [-180, -85, 180, 85],
       getZoom: () => 14,
       onViewportChange: () => () => {},
       requestRepaint: () => {},
@@ -406,13 +407,13 @@ describe('renderLayers and datasets', () => {
 describe('viewport of renderLayers', () => {
   it('the bbox is computed once and passed to the datasets even in immediate mode', () => {
     let boundsCalls = 0;
-    const bounds = { minX: -1, minY: -1, maxX: 1, maxY: 1 };
+    const bounds: BBox = [-1, -1, 1, 1];
     let managerBoundsCalls = 0;
 
     const display = createDatasetManager({
       getViewportBounds: () => {
         managerBoundsCalls++;
-        return { minX: -180, minY: -85, maxX: 180, maxY: 85 };
+        return [-180, -85, 180, 85];
       },
       getZoom: () => 14,
       onViewportChange: () => () => {},
@@ -592,7 +593,7 @@ describe('renderLayers and the visible id set of immediate chunks', () => {
     let queries = 0;
 
     const viewportFilter = {
-      getBounds: () => ({ minX: -1, minY: -1, maxX: 1, maxY: 1 }),
+      getBounds: () => [-1, -1, 1, 1],
       getVisibleIds: (): Set<string> => {
         queries++;
         return new Set(['visible-1']);

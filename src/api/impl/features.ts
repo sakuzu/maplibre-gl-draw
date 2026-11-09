@@ -8,7 +8,7 @@
 import type { Value } from '@sakuzu/tabane';
 import { featureTablesInternals, readWithoutKeeping } from '../../feature-table/feature-tables.js';
 import { differenceAll, intersectionAll, unionAll } from '../../geometry/boolean.js';
-import type { AreaCoordinates, MultiPolygonCoordinates } from '../../geometry/types.js';
+import type { AreaCoordinates, BBox, MultiPolygonCoordinates } from '../../geometry/types.js';
 import { describeGeometryProblem } from '../../shared/geometry-validation.js';
 import { describeStyleProblem } from '../../shared/style-validation.js';
 import { getBoundingBox } from '../../shared/utils/feature-bbox.js';
@@ -479,15 +479,14 @@ function featureFilterOf(
   const bbox = entries.find(([key]) => key === 'bbox')?.[1];
   if (bbox === undefined) return { entries, inside: null, shown };
   const [minX, minY, maxX, maxY] = bbox as number[];
-  const bounds = { minX, minY, maxX, maxY };
   const inside = new Set(
     deps.spatialIndex
-      ? deps.spatialIndex.findInBounds(bounds)
+      ? deps.spatialIndex.findInBounds(bbox as BBox)
       : store
           .listFeatures()
           .filter((feature) => {
             const box = getBoundingBox(feature);
-            return box.minX <= maxX && box.maxX >= minX && box.minY <= maxY && box.maxY >= minY;
+            return box[0] <= maxX && box[2] >= minX && box[1] <= maxY && box[3] >= minY;
           })
           .map((feature) => feature.id),
   );

@@ -24,9 +24,10 @@ import type {
   FrameDrawContext,
   LayeredOverlayRenderer,
 } from '../../extension/index.js';
+import type { BBox } from '../../geometry/types.js';
 import { geometryFromCoordinates } from '../../shared/utils/coordinates.js';
 import type { Store } from '../../store/store.js';
-import type { BoundingBox, Feature, Layer } from '../../store/types.js';
+import type { Feature, Layer } from '../../store/types.js';
 import { toRow } from '../../test-utils.js';
 import { createFeatureCompanionRegistry } from '../feature-companion.js';
 import { renderLayers } from './render.js';
@@ -39,7 +40,7 @@ import type { Renderers } from './renderers.js';
 type BlendState = 'core' | 'foreign';
 
 /** Viewport covering the whole globe */
-const WORLD: BoundingBox = { minX: -180, minY: -85, maxX: 180, maxY: 85 };
+const WORLD: BBox = [-180, -85, 180, 85];
 
 function makeFeature(id: string, type: Feature['type'], layerId: string): Feature {
   return {

@@ -382,7 +382,7 @@ describe('the wiring with a dataset', () => {
     const { scheduler, runAll } = createRuntime({ vertexThreshold: 10 });
     const repaint = vi.fn();
     const manager = createDatasetManager({
-      getViewportBounds: () => ({ minX: -180, minY: -85, maxX: 180, maxY: 85 }),
+      getViewportBounds: () => [-180, -85, 180, 85],
       getZoom: () => 10,
       onViewportChange: () => () => {},
       requestRepaint: repaint,
@@ -411,7 +411,7 @@ describe('the wiring with a dataset', () => {
   it('removing the dataset throws away the triangulation jobs too', () => {
     const { scheduler } = createRuntime({ vertexThreshold: 10 });
     const manager = createDatasetManager({
-      getViewportBounds: () => ({ minX: -180, minY: -85, maxX: 180, maxY: 85 }),
+      getViewportBounds: () => [-180, -85, 180, 85],
       getZoom: () => 10,
       onViewportChange: () => () => {},
       requestRepaint: () => {},

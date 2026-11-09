@@ -138,28 +138,24 @@ describe.each(STORE_KINDS)('on %s', (_kind, createStore) => {
 
   describe('boxRects across the antimeridian', () => {
     it('keeps a box within [-180, 180] as one rectangle', () => {
-      expect(boxRects([10, 20], [-10, -20])).toEqual([
-        { minX: -10, minY: -20, maxX: 10, maxY: 20 },
-      ]);
+      expect(boxRects([10, 20], [-10, -20])).toEqual([[-10, -20, 10, 20]]);
     });
 
     it('splits a box drawn across the line into both sides, keeping the box as drawn', () => {
       expect(boxRects([170, 0], [190, 10])).toEqual([
-        { minX: 170, minY: 0, maxX: 180, maxY: 10 },
-        { minX: -180, minY: 0, maxX: -170, maxY: 10 },
-        { minX: 170, minY: 0, maxX: 190, maxY: 10 },
+        [170, 0, 180, 10],
+        [-180, 0, -170, 10],
+        [170, 0, 190, 10],
       ]);
       expect(boxRects([-190, 0], [-170, 10])).toEqual([
-        { minX: 170, minY: 0, maxX: 180, maxY: 10 },
-        { minX: -180, minY: 0, maxX: -170, maxY: 10 },
-        { minX: -190, minY: 0, maxX: -170, maxY: 10 },
+        [170, 0, 180, 10],
+        [-180, 0, -170, 10],
+        [-190, 0, -170, 10],
       ]);
     });
 
     it('covers every longitude for a box as wide as the world', () => {
-      expect(boxRects([-200, 0], [200, 10])).toEqual([
-        { minX: -180, minY: 0, maxX: 180, maxY: 10 },
-      ]);
+      expect(boxRects([-200, 0], [200, 10])).toEqual([[-180, 0, 180, 10]]);
     });
 
     it('selects the features on both sides of the line', () => {

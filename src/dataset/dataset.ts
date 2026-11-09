@@ -28,8 +28,9 @@
  */
 
 import type { ProjectionData } from 'maplibre-gl';
+import type { BBox } from '../geometry/types.js';
 import { DEFAULT_FEATURE_STYLE_CONFIG } from '../shared/config/feature-style.js';
-import type { BoundingBox, Coordinate, Feature, StyleRule } from '../shared/types/model.js';
+import type { Coordinate, Feature, StyleRule } from '../shared/types/model.js';
 import { idleNow, whenIdle } from '../shared/utils/idle.js';
 import type { PreparedTable, Table } from '../table/types.js';
 import { type RetainedDrawFactors, sanitizeDrawFactors } from '../view/renderers/draw-factors.js';
@@ -498,11 +499,11 @@ export class DatasetImpl implements Dataset {
    * Returns the features inside the viewport in draw order (with the rule colors and the base
    * style applied)
    */
-  collectVisible(bounds: BoundingBox): Feature[] {
+  collectVisible(bounds: BBox): Feature[] {
     return this.styler.prepareAll(this.featuresOf(this.source.index.search(bounds)));
   }
 
-  collectDrawnRows(bounds: BoundingBox): Int32Array {
+  collectDrawnRows(bounds: BBox): Int32Array {
     const source = this.source;
     const thinning = this.thinning;
     // The index holds only the rows with a geometry. `skip` is a hidden feature (a table has no
@@ -526,11 +527,11 @@ export class DatasetImpl implements Dataset {
     return this.hasRow(row) ? this.source.typeOf(row) : null;
   }
 
-  getRowBBox(row: number): BoundingBox | null {
+  getRowBBox(row: number): BBox | null {
     if (!this.hasRow(row) || !this.source.hasGeometry(row)) return null;
     const bounds = this.source.bounds;
     const at = row * 4;
-    return { minX: bounds[at], minY: bounds[at + 1], maxX: bounds[at + 2], maxY: bounds[at + 3] };
+    return [bounds[at], bounds[at + 1], bounds[at + 2], bounds[at + 3]];
   }
 
   getRowPoint(row: number): Coordinate | null {
@@ -594,7 +595,7 @@ export class DatasetImpl implements Dataset {
     target: DisplayBatchTarget,
     projectionData: ProjectionData,
     zoom: number,
-    bounds: BoundingBox,
+    bounds: BBox,
   ): void {
     if (!this.isVisible) return;
 
@@ -682,7 +683,7 @@ export class DatasetImpl implements Dataset {
    * once; otherwise the call is debounced. While a fetch is in flight, the previous result keeps
    * being shown.
    */
-  scheduleProviderUpdate(bounds: BoundingBox, zoom: number): void {
+  scheduleProviderUpdate(bounds: BBox, zoom: number): void {
     if (!this.loader || this.removed) return;
     this.loader.schedule(bounds, zoom);
   }
@@ -736,7 +737,7 @@ export class DatasetImpl implements Dataset {
     target: DisplayBatchTarget,
     projectionData: ProjectionData,
     zoom: number,
-    bounds: BoundingBox,
+    bounds: BBox,
     factors: RetainedDrawFactors,
   ): void {
     const rows = this.source.index.search(bounds).filter((row) => this.thinning.isDrawnRow(row));

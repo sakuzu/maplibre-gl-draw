@@ -319,7 +319,7 @@ describe('the features kept of rows', () => {
     internals.setRowBoxCalculator('Point', (feature) => {
       calculated.push(feature);
       const [x, y] = (feature.geometry as { coordinates: number[] }).coordinates;
-      return { minX: x - 1, minY: y - 1, maxX: x + 1, maxY: y + 1 };
+      return [x - 1, y - 1, x + 1, y + 1];
     });
     expect(internals.rowBoxIndexSize().rows).toBe(10);
     expect(calculated).toHaveLength(10);
@@ -349,7 +349,7 @@ describe('the features kept of rows', () => {
     internals.setRowBoxCalculator('Point', (feature) => {
       seen.push(feature.properties.n as number);
       const [x, y] = (feature.geometry as { coordinates: number[] }).coordinates;
-      return { minX: x - 1, minY: y - 1, maxX: x + 1, maxY: y + 1 };
+      return [x - 1, y - 1, x + 1, y + 1];
     });
     internals.rowBoxIndexSize();
     seen.length = 0;

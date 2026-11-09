@@ -10,9 +10,9 @@
 
 import type { LngLatBounds, Map as MapLibreMap } from 'maplibre-gl';
 import { LngLatBounds as LngLatBoundsClass } from 'maplibre-gl';
-
+import type { BBox } from '../geometry/types.js';
 import type { SpatialIndex } from '../store/spatial/spatial-index.js';
-import type { BoundingBox, Feature } from '../store/types.js';
+import type { Feature } from '../store/types.js';
 
 /**
  * The factor by which the render loop widens the viewport for rendering and culling: 2.
@@ -137,7 +137,7 @@ export interface ViewportCopy {
   /** How far the stored longitudes are moved to be drawn on this copy */
   readonly lngShift: number;
   /** The part of the view on this copy, in stored longitudes */
-  readonly bounds: BoundingBox;
+  readonly bounds: BBox;
 }
 
 /**
@@ -167,7 +167,7 @@ export function getViewportCopies(map: MapLibreMap, expansionFactor: number): Vi
   const maxY = expanded.getNorth();
   return splitLongitudeCopies(west, east).map((copy) => ({
     lngShift: copy.lngShift,
-    bounds: { minX: copy.minX, minY, maxX: copy.maxX, maxY },
+    bounds: [copy.minX, minY, copy.maxX, maxY],
   }));
 }
 
@@ -180,10 +180,7 @@ export function getViewportCopies(map: MapLibreMap, expansionFactor: number): Vi
  * @param map The MapLibre Map
  * @param expansionFactor The expansion factor
  */
-export function getExpandedViewportRanges(
-  map: MapLibreMap,
-  expansionFactor: number,
-): BoundingBox[] {
+export function getExpandedViewportRanges(map: MapLibreMap, expansionFactor: number): BBox[] {
   return getViewportCopies(map, expansionFactor).map((copy) => copy.bounds);
 }
 
@@ -204,20 +201,20 @@ export function getExpandedViewportRanges(
  *   viewport itself)
  * @returns The range in degrees (`minX` / `maxX` longitudes, `minY` / `maxY` latitudes)
  */
-export function getExpandedViewportBounds(map: MapLibreMap, expansionFactor: number): BoundingBox {
+export function getExpandedViewportBounds(map: MapLibreMap, expansionFactor: number): BBox {
   return hullOf(getExpandedViewportRanges(map, expansionFactor));
 }
 
 /** The bbox of one or two ranges (two ranges together cover every stored longitude) */
-function hullOf(ranges: BoundingBox[]): BoundingBox {
+function hullOf(ranges: BBox[]): BBox {
   if (ranges.length === 1) return ranges[0];
   let minX = Number.POSITIVE_INFINITY;
   let maxX = Number.NEGATIVE_INFINITY;
   for (const range of ranges) {
-    minX = Math.min(minX, range.minX);
-    maxX = Math.max(maxX, range.maxX);
+    minX = Math.min(minX, range[0]);
+    maxX = Math.max(maxX, range[2]);
   }
-  return { minX, minY: ranges[0].minY, maxX, maxY: ranges[0].maxY };
+  return [minX, ranges[0][1], maxX, ranges[0][3]];
 }
 
 /**
@@ -269,7 +266,7 @@ export class ViewportFilter {
   /**
    * Gets the Set of feature IDs inside a range of stored longitudes (one copy of the view)
    */
-  getVisibleIdsIn(bounds: BoundingBox): Set<string> {
+  getVisibleIdsIn(bounds: BBox): Set<string> {
     return new Set(this.spatialIndex.findInBounds(bounds));
   }
 
@@ -278,7 +275,7 @@ export class ViewportFilter {
    *
    * Across the antimeridian it covers every longitude (see getExpandedViewportBounds).
    */
-  getBounds(): BoundingBox {
+  getBounds(): BBox {
     return getExpandedViewportBounds(this.map, this.expansionFactor);
   }
 

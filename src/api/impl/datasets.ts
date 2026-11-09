@@ -37,7 +37,7 @@ import type { ScreenPoint } from '../events.js';
 import type { StyleRule } from '../model.js';
 import type { EventHub } from './events.js';
 import { observe } from './events.js';
-import { toBBox, toBoundingBox, toDatasetRow } from './rows.js';
+import { copyBBox, planeBBoxOf, toDatasetRow } from './rows.js';
 import {
   invalidInput,
   isRecord,
@@ -193,7 +193,7 @@ function toEngineOptions(options: DatasetOptions): EngineDatasetOptions {
   if ('provider' in options && options.provider !== undefined) {
     const provider = options.provider;
     result.provider = async (bounds, zoom) =>
-      (await provider(toBBox(bounds), zoom)) as EngineDatasetRow[];
+      (await provider(copyBBox(bounds), zoom)) as EngineDatasetRow[];
   }
   if (options.styleRule !== undefined) result.styleRule = options.styleRule;
   if (options.baseStyle !== undefined) result.baseStyle = options.baseStyle;
@@ -330,8 +330,8 @@ export function wrapDataset(dataset: EngineDataset): Dataset {
     getBaseStyle: () => dataset.getBaseStyle(),
     listRows: () => dataset.getFeatures().map(toDatasetRow),
     listVisibleRows: (bbox) =>
-      dataset.collectVisible(toBoundingBox(requireBBox(bbox))).map(toDatasetRow),
-    listDrawnRows: (bbox) => dataset.collectDrawnRows(toBoundingBox(requireBBox(bbox))),
+      dataset.collectVisible(planeBBoxOf(requireBBox(bbox))).map(toDatasetRow),
+    listDrawnRows: (bbox) => dataset.collectDrawnRows(planeBBoxOf(requireBBox(bbox))),
     getRow(index) {
       const feature = dataset.getRow(index);
       return feature ? toDatasetRow(feature) : undefined;
@@ -340,7 +340,7 @@ export function wrapDataset(dataset: EngineDataset): Dataset {
     getRowType: (index) => dataset.getRowType(index),
     getRowBBox(index) {
       const bounds = dataset.getRowBBox(index);
-      return bounds ? toBBox(bounds) : null;
+      return bounds ? copyBBox(bounds) : null;
     },
     getRowPoint(index) {
       const point = dataset.getRowPoint(index);

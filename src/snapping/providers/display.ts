@@ -25,12 +25,13 @@
 import type { DatasetManager } from '../../dataset/manager.js';
 import type { Dataset } from '../../dataset/types.js';
 import { segmentIntersection } from '../../geometry/split.js';
+import type { BBox } from '../../geometry/types.js';
 import { MESSAGES_EN, type Messages } from '../../messages.js';
 import type { RenderedShapes } from '../../sketches/rendered-shapes.js';
 import type { SpatialIndex } from '../../store/spatial/spatial-index.js';
 import { RBushSpatialIndex } from '../../store/spatial/spatial-index.js';
 import type { Store } from '../../store/store.js';
-import type { BoundingBox, Coordinate, Feature } from '../../store/types.js';
+import type { Coordinate, Feature } from '../../store/types.js';
 import { computeVertexHandles } from '../../view/ui/handles.js';
 import type { SnapTargetsRegistry } from '../custom-targets.js';
 import type {
@@ -90,9 +91,9 @@ export interface DisplaySnapProviders {
    * This is the entry point through which tracing gathers the material for the graph
    * of edges (it is wired to ModeContext.getDatasetTraceFeatures).
    */
-  queryFeatures(bbox: BoundingBox): Feature[];
+  queryFeatures(bbox: BBox): Feature[];
   /** The same features as `queryFeatures`, each with the ID of its dataset */
-  queryRows(bbox: BoundingBox): Array<{ datasetId: string; feature: Feature }>;
+  queryRows(bbox: BBox): Array<{ datasetId: string; feature: Feature }>;
 }
 
 /**
@@ -195,14 +196,14 @@ export function createDisplaySnapProviders(deps: DisplaySnapProviderDeps): Displ
    * feature being edited in the Store from snapping to itself, and they have nothing
    * to do with the features of datasets, which are never dragged.
    */
-  function nearbyFeatures(bbox: BoundingBox): Array<{ datasetId: string; feature: Feature }> {
+  function nearbyFeatures(bbox: BBox): Array<{ datasetId: string; feature: Feature }> {
     const datasets = deps.datasets.list();
     prune(new Set(datasets.map((dataset) => dataset.id)));
 
-    const lng = (bbox.minX + bbox.maxX) / 2;
-    const lat = (bbox.minY + bbox.maxY) / 2;
+    const lng = (bbox[0] + bbox[2]) / 2;
+    const lat = (bbox[1] + bbox[3]) / 2;
     // findNear queries a square extent, so the larger of the tolerances is used
-    const tolerance = Math.max(bbox.maxX - lng, bbox.maxY - lat);
+    const tolerance = Math.max(bbox[2] - lng, bbox[3] - lat);
 
     const result: Array<{ datasetId: string; feature: Feature }> = [];
     for (const dataset of datasets) {
@@ -233,7 +234,7 @@ export function createDisplaySnapProviders(deps: DisplaySnapProviderDeps): Displ
   /**
    * Gathers the edges of the datasets that fall within the bbox
    */
-  function collectDisplaySegments(bbox: BoundingBox): SegmentGroup[] {
+  function collectDisplaySegments(bbox: BBox): SegmentGroup[] {
     const groups: SegmentGroup[] = [];
 
     for (const { datasetId, feature } of nearbyFeatures(bbox)) {
@@ -255,7 +256,7 @@ export function createDisplaySnapProviders(deps: DisplaySnapProviderDeps): Displ
    * Gathers the edges of the Store that fall within the bbox (the counterpart of an
    * intersection)
    */
-  function collectStoreSegments(bbox: BoundingBox, ctx: SnapProviderContext): SegmentGroup[] {
+  function collectStoreSegments(bbox: BBox, ctx: SnapProviderContext): SegmentGroup[] {
     const groups: SegmentGroup[] = [];
 
     for (const feature of queryFeatures(
@@ -289,7 +290,7 @@ export function createDisplaySnapProviders(deps: DisplaySnapProviderDeps): Displ
   const vertexProvider: SnapProvider = {
     name: 'core:display-vertex',
 
-    candidates(bbox: BoundingBox): SnapCandidate[] {
+    candidates(bbox: BBox): SnapCandidate[] {
       if (!deps.isEnabled()) return [];
 
       const candidates: SnapCandidate[] = [];
@@ -314,7 +315,7 @@ export function createDisplaySnapProviders(deps: DisplaySnapProviderDeps): Displ
   const edgeProvider: SnapProvider = {
     name: 'core:display-edge',
 
-    candidates(bbox: BoundingBox): SnapCandidate[] {
+    candidates(bbox: BBox): SnapCandidate[] {
       if (!deps.isEnabled()) return [];
 
       const candidates: SnapCandidate[] = [];
@@ -343,7 +344,7 @@ export function createDisplaySnapProviders(deps: DisplaySnapProviderDeps): Displ
   const intersectionProvider: SnapProvider = {
     name: 'core:display-intersection',
 
-    candidates(bbox: BoundingBox, ctx: SnapProviderContext): SnapCandidate[] {
+    candidates(bbox: BBox, ctx: SnapProviderContext): SnapCandidate[] {
       if (!deps.isEnabled()) return [];
 
       const displayGroups = collectDisplaySegments(bbox);
@@ -396,7 +397,7 @@ export function createDisplaySnapProviders(deps: DisplaySnapProviderDeps): Displ
   return {
     providers: [vertexProvider, edgeProvider, intersectionProvider],
 
-    queryFeatures(bbox: BoundingBox): Feature[] {
+    queryFeatures(bbox: BBox): Feature[] {
       return nearbyFeatures(bbox).map((entry) => entry.feature);
     },
 

@@ -7,6 +7,7 @@
  * Responsible for handling box selection in select mode
  */
 
+import type { BBox } from '../../geometry/types.js';
 import { coordinatesOf } from '../../shared/utils/coordinates.js';
 import { isLocallyHidden } from '../../store/local-visibility.js';
 import type { BoxSelection, Coordinate, Feature } from '../../store/types.js';
@@ -37,7 +38,7 @@ export function queryFeaturesInBox(
     for (const id of spatialIndex.findInBounds(rect)) candidateIds.add(id);
     const tables = store.tables;
     const cursor = tables?.scan({
-      bbox: [rect.minX, rect.minY, rect.maxX, rect.maxY],
+      bbox: rect,
       order: 'any',
     });
     for (let batch = cursor?.next(); batch; batch = cursor?.next()) {
@@ -76,8 +77,6 @@ export function queryFeaturesInBox(
   return hitIds;
 }
 
-type Rect = { minX: number; minY: number; maxX: number; maxY: number };
-
 /**
  * The rectangles, in longitudes within [-180, 180], that a box drawn on the screen covers
  *
@@ -86,27 +85,27 @@ type Rect = { minX: number; minY: number; maxX: number; maxY: number };
  * and split at the line into two rectangles, and the box as drawn is kept as well; a box as
  * wide as the world covers every longitude.
  */
-export function boxRects(start: Coordinate, end: Coordinate): Rect[] {
+export function boxRects(start: Coordinate, end: Coordinate): BBox[] {
   const minY = Math.min(start[1], end[1]);
   const maxY = Math.max(start[1], end[1]);
   let minX = Math.min(start[0], end[0]);
   let maxX = Math.max(start[0], end[0]);
 
-  if (maxX - minX >= 360) return [{ minX: -180, minY, maxX: 180, maxY }];
+  if (maxX - minX >= 360) return [[-180, minY, 180, maxY]];
 
   // Features whose coordinates were stored beyond ±180 are still found by the box as drawn
-  const drawn: Rect = { minX, minY, maxX, maxY };
+  const drawn: BBox = [minX, minY, maxX, maxY];
 
   // Shift whole turns so that the west side is within [-180, 180)
   const turns = Math.floor((minX + 180) / 360);
   minX -= turns * 360;
   maxX -= turns * 360;
-  const parts: Rect[] =
+  const parts: BBox[] =
     maxX <= 180
-      ? [{ minX, minY, maxX, maxY }]
+      ? [[minX, minY, maxX, maxY]]
       : [
-          { minX, minY, maxX: 180, maxY },
-          { minX: -180, minY, maxX: maxX - 360, maxY },
+          [minX, minY, 180, maxY],
+          [-180, minY, maxX - 360, maxY],
         ];
   return turns === 0 && parts.length === 1 ? parts : [...parts, drawn];
 }
@@ -124,7 +123,7 @@ export function boxRects(start: Coordinate, end: Coordinate): Rect[] {
  */
 export function isFeatureInBox(
   feature: Feature,
-  rect: { minX: number; minY: number; maxX: number; maxY: number },
+  rect: BBox,
   boxSelectionRegistry: EngineModeContext['boxSelectionRegistry'],
 ): boolean {
   // Get the Strategy from the registry
@@ -142,17 +141,9 @@ export function isFeatureInBox(
  *
  * Performs a simple coordinate-based test for feature types that are not registered.
  */
-export function fallbackBoxSelection(
-  feature: Feature,
-  rect: { minX: number; minY: number; maxX: number; maxY: number },
-): boolean {
+export function fallbackBoxSelection(feature: Feature, rect: BBox): boolean {
   const isPointInBox = (coord: Coordinate): boolean => {
-    return (
-      coord[0] >= rect.minX &&
-      coord[0] <= rect.maxX &&
-      coord[1] >= rect.minY &&
-      coord[1] <= rect.maxY
-    );
+    return coord[0] >= rect[0] && coord[0] <= rect[2] && coord[1] >= rect[1] && coord[1] <= rect[3];
   };
 
   const coords = coordinatesOf(feature);

@@ -24,9 +24,10 @@
  */
 
 import type { ModifierKeys } from '../dispatcher/types.js';
+import type { BBox } from '../geometry/types.js';
 import type { ScreenPoint } from '../shared/math/index.js';
 import type { SnapLngLat, SnapResult, SnapTargetKind } from '../shared/types/events.js';
-import type { BoundingBox, Coordinate, Feature, VertexRef } from '../store/types.js';
+import type { Coordinate, Feature, VertexRef } from '../store/types.js';
 
 // The result types of snapping are defined in shared/ because draw.snap.change carries them
 export type {
@@ -233,7 +234,7 @@ export interface SnapProvider {
    * @param ctx The cursor position, the tolerance, the exclusions and the modifier keys
    * @returns The candidates. An empty array when there are none
    */
-  candidates(bbox: BoundingBox, ctx: SnapProviderContext): SnapCandidate[];
+  candidates(bbox: BBox, ctx: SnapProviderContext): SnapCandidate[];
 }
 
 /**

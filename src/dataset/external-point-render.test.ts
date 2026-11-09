@@ -12,7 +12,8 @@
 
 import type { ProjectionData } from 'maplibre-gl';
 import { describe, expect, it } from 'vitest';
-import type { BoundingBox, Feature } from '../store/types.js';
+import type { BBox } from '../geometry/types.js';
+import type { Feature } from '../store/types.js';
 import { toRow } from '../test-utils.js';
 import type {
   PointInstanceDataFull,
@@ -24,7 +25,7 @@ import { createDatasetManager, type DatasetManager } from './manager.js';
 import type { DatasetRow } from './types.js';
 
 /** Viewport covering the whole globe */
-const WORLD: BoundingBox = { minX: -180, minY: -85, maxX: 180, maxY: 85 };
+const WORLD: BBox = [-180, -85, 180, 85];
 
 function point(id: string, coord: [number, number], extra?: Partial<Feature>): DatasetRow {
   return toRow({ id, type: 'Point', coordinates: coord, ...extra });

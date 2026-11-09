@@ -23,7 +23,8 @@ import type { GpuRowsSource } from '../../extension/renderers.js';
 import type { RowGroup } from '../../feature-table/layer-table.js';
 import { geometryAt } from '../../feature-table/layer-table.js';
 import { rowHasGeometry, rowType } from '../../feature-table/row-read.js';
-import type { BoundingBox, Feature, Layer } from '../../shared/types/model.js';
+import type { BBox } from '../../geometry/types.js';
+import type { Feature, Layer } from '../../shared/types/model.js';
 import type { TransformFieldsRegistry } from '../../store/transform-roles.js';
 import { CHUNK_TARGET_VERTICES } from '../../table/partition.js';
 import type { FeatureCompanionRegistry } from '../feature-companion.js';
@@ -229,7 +230,7 @@ export interface OrderedChunkRange {
   /** The coordinates of its rows (the estimate of the work of a build) */
   readonly vertices: number;
   /** The union of the bboxes of its rows (null when no row has one) */
-  readonly bounds: BoundingBox | null;
+  readonly bounds: BBox | null;
   /** What makes what holds its rows on the GPU (a chunk of the kind `extension`) */
   readonly gpuRows?: GpuRowsSource;
 }
@@ -265,7 +266,8 @@ export function partitionRowGroup(
         from,
         to,
         vertices,
-        bounds: box ? { minX: box[0], minY: box[1], maxX: box[2], maxY: box[3] } : null,
+        // A box made for this run (the next run makes its own)
+        bounds: box,
         ...(kind === 'extension' && { gpuRows: source as GpuRowsSource }),
       });
     }

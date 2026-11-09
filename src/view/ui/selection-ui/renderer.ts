@@ -4,8 +4,8 @@
 /**
  * SelectionUIRenderer
  *
- * Draws the visual feedback of the selection state (the BoundingBox + the OBB while rotating).
- * The BoundingBox computation logic itself is separated into ./bounding-box.ts, and this
+ * Draws the visual feedback of the selection state (the BBox + the OBB while rotating).
+ * The BBox computation logic itself is separated into ./bounding-box.ts, and this
  * file concentrates on orchestrating the rendering and the application of the margin.
  */
 
@@ -69,12 +69,12 @@ export class SelectionUIRenderer {
     this.#terrain = terrain;
   }
 
-  /** Compute the BoundingBox of a feature (also usable from outside) */
+  /** Compute the BBox of a feature (also usable from outside) */
   computeFeatureBoundingBox(feature: Feature): BoundingBoxCoords | null {
     return computeBoundingBox(feature, this.#extensions);
   }
 
-  /** Compute the combined BoundingBox of several features (also usable from outside) */
+  /** Compute the combined BBox of several features (also usable from outside) */
   computeCombinedFeatureBoundingBox(features: Feature[]): BoundingBoxCoords | null {
     return computeCombinedBoundingBox(features, this.#extensions);
   }
@@ -110,7 +110,7 @@ export class SelectionUIRenderer {
   draw(features: Feature[], zoom: number, dragState?: DragState | null): void {
     if (features.length === 0) return;
 
-    // While rotating, the rotated BoundingBox is drawn
+    // While rotating, the rotated BBox is drawn
     if (dragState?.operation === 'rotate' && dragState.rotateInfo) {
       this.#drawRotatingBoundingBox(features, zoom, dragState);
       return;
@@ -141,7 +141,7 @@ export class SelectionUIRenderer {
   }
 
   /**
-   * Draw the BoundingBox while rotating
+   * Draw the BBox while rotating
    *
    * Rotates the AABB from when the rotation started by the current rotation angle and draws it.
    * In a multi-selection the individual feature bboxes are also rotated about the center
@@ -178,7 +178,7 @@ export class SelectionUIRenderer {
   }
 
   /**
-   * Draw the BoundingBox of an individual feature (for a multi-selection)
+   * Draw the BBox of an individual feature (for a multi-selection)
    */
   #drawIndividualBoundingBox(feature: Feature, zoom: number): void {
     const bbox = computeBoundingBox(feature, this.#extensions);
@@ -187,7 +187,7 @@ export class SelectionUIRenderer {
   }
 
   /**
-   * Draw the BoundingBox with a margin: the frame of a single selection, and the combined frame
+   * Draw the BBox with a margin: the frame of a single selection, and the combined frame
    * of a multi-selection
    *
    * The combined frame is the box the resize and rotate handles are placed on
@@ -202,7 +202,7 @@ export class SelectionUIRenderer {
   }
 
   /**
-   * Draw the BoundingBox of a single-coordinate feature (expanding the extent of the
+   * Draw the BBox of a single-coordinate feature (expanding the extent of the
    * point frame by the margin)
    *
    * The half width and half height of the frame can be registered per type

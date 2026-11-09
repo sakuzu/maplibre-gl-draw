@@ -10,6 +10,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
+import type { BBox } from '../geometry/types.js';
 import type { Feature } from '../store/types.js';
 import { displayFeature } from '../test-utils.js';
 import type { RenderableTerrainTile } from '../view/terrain/detect.js';
@@ -181,7 +182,7 @@ describe('the bbox of a chunk', () => {
 
     const [chunk] = partitionIntoChunks(features);
 
-    expect(chunk.bounds).toEqual({ minX: 0, minY: 0, maxX: 10, maxY: 5 });
+    expect(chunk.bounds).toEqual([0, 0, 10, 5]);
   });
 
   it('the splitting does not break even when everything is at the same coordinate', () => {
@@ -194,7 +195,7 @@ describe('the bbox of a chunk', () => {
 
     expect(chunks).toHaveLength(1);
     expect(chunks[0].rows).toHaveLength(600);
-    expect(chunks[0].bounds).toEqual({ minX: 1, minY: 2, maxX: 1, maxY: 2 });
+    expect(chunks[0].bounds).toEqual([1, 2, 1, 2]);
   });
 
   it('the bboxes of the chunks may overlap (the assignment is decided by the center)', () => {
@@ -204,8 +205,8 @@ describe('the bbox of a chunk', () => {
     let minX = Number.POSITIVE_INFINITY;
     let maxX = Number.NEGATIVE_INFINITY;
     for (const chunk of chunks) {
-      minX = Math.min(minX, chunk.bounds.minX);
-      maxX = Math.max(maxX, chunk.bounds.maxX);
+      minX = Math.min(minX, chunk.bounds[0]);
+      maxX = Math.max(maxX, chunk.bounds[2]);
     }
     expect(minX).toBe(0);
     expect(maxX).toBe(14);
@@ -213,26 +214,26 @@ describe('the bbox of a chunk', () => {
 });
 
 describe('the bbox intersection test', () => {
-  const base = { minX: 0, minY: 0, maxX: 10, maxY: 10 };
+  const base: BBox = [0, 0, 10, 10];
 
   it('true when they overlap', () => {
-    expect(boundsIntersect(base, { minX: 5, minY: 5, maxX: 20, maxY: 20 })).toBe(true);
+    expect(boundsIntersect(base, [5, 5, 20, 20])).toBe(true);
   });
 
   it('true when they touch at an edge', () => {
-    expect(boundsIntersect(base, { minX: 10, minY: 10, maxX: 20, maxY: 20 })).toBe(true);
+    expect(boundsIntersect(base, [10, 10, 20, 20])).toBe(true);
   });
 
   it('false when they are apart', () => {
-    expect(boundsIntersect(base, { minX: 10.1, minY: 0, maxX: 20, maxY: 10 })).toBe(false);
-    expect(boundsIntersect(base, { minX: 0, minY: -20, maxX: 10, maxY: -0.1 })).toBe(false);
+    expect(boundsIntersect(base, [10.1, 0, 20, 10])).toBe(false);
+    expect(boundsIntersect(base, [0, -20, 10, -0.1])).toBe(false);
   });
 });
 
 describe('the re-bake decision of the terrain subdivision', () => {
   const chunk = {
     rows: new Int32Array(0),
-    bounds: { minX: 139.5, minY: 35.6, maxX: 139.6, maxY: 35.7 },
+    bounds: [139.5, 35.6, 139.6, 35.7] as BBox,
     firstIndex: 0,
   };
   const meshSize = 128;
@@ -275,10 +276,10 @@ describe('the re-bake decision of the terrain subdivision', () => {
       step.region ?? null,
       step.coarsen && step.coarsen > 1 ? step.coarsen : 1,
       step.grid,
-      mercatorX(chunk.bounds.minX),
-      mercatorY(chunk.bounds.maxY),
-      mercatorX(chunk.bounds.maxX),
-      mercatorY(chunk.bounds.minY),
+      mercatorX(chunk.bounds[0]),
+      mercatorY(chunk.bounds[3]),
+      mercatorX(chunk.bounds[2]),
+      mercatorY(chunk.bounds[1]),
     ),
     chunk,
   });

@@ -19,6 +19,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { DragNormalizedEvent } from '../../dispatcher/types.js';
 import { destinationPoint, haversineDistanceMeters } from '../../geometry/distance.js';
+import type { BBox } from '../../geometry/types.js';
 import { DEFAULT_TOPOLOGY_CONFIG } from '../../shared/config/topology.js';
 import { setScreenScaleFrame } from '../../shared/math/index.js';
 import { coordinatesOf as featureCoordinates } from '../../shared/utils/coordinates.js';
@@ -278,10 +279,10 @@ describe.each(STORE_KINDS)('on %s', (_kind, createStore) => {
       expect(indexUpdates).toContain('f2');
       // f2 now reaches down to y = 2 only at x = 11; its old extent started at y = 0 (a Store of
       // rows finds its rows in its tables, the spatial index has the rows held only)
-      const indexed = (bounds: { minX: number; minY: number; maxX: number; maxY: number }) => {
+      const indexed = (bounds: BBox) => {
         const ids = new Set(spatialIndex.findInBounds(bounds));
         const cursor = store.tables?.scan({
-          bbox: [bounds.minX, bounds.minY, bounds.maxX, bounds.maxY],
+          bbox: bounds,
           order: 'any',
         });
         for (let batch = cursor?.next(); batch; batch = cursor?.next()) {
@@ -289,10 +290,8 @@ describe.each(STORE_KINDS)('on %s', (_kind, createStore) => {
         }
         return [...ids];
       };
-      expect(indexed({ minX: 19, minY: 0, maxX: 20, maxY: 1 })).toContain('f2');
-      expect(indexed({ minX: 10.2, minY: 1, maxX: 10.8, maxY: 1.5 })).toEqual(
-        expect.arrayContaining(['f1', 'f2']),
-      );
+      expect(indexed([19, 0, 20, 1])).toContain('f2');
+      expect(indexed([10.2, 1, 10.8, 1.5])).toEqual(expect.arrayContaining(['f1', 'f2']));
     });
 
     it('dragging a vertex that is not shared does not move the other features', () => {

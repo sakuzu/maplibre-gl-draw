@@ -6,10 +6,11 @@
  * arguments and the lookups of the document
  */
 
+import type { BBox } from '../../geometry/types.js';
 import type { AutoNameGenerator } from '../../shared/utils/name-generator.js';
 import { isFeatureLocked, isGroupLocked } from '../../store/lock.js';
 import type { Store } from '../../store/store.js';
-import type { BoundingBox, Feature, Group, Layer, SelectionType } from '../../store/types.js';
+import type { Feature, Group, Layer, SelectionType } from '../../store/types.js';
 import { DrawError } from '../errors.js';
 import type { FeatureStyleResolved } from '../model.js';
 
@@ -39,7 +40,7 @@ export interface ResourceDeps {
    * The spatial index of the features, for a filter by extent; the extent of each feature is
    * measured when it is left out
    */
-  spatialIndex?: { findInBounds(bounds: BoundingBox): string[] };
+  spatialIndex?: { findInBounds(bounds: BBox): string[] };
 }
 
 // ============================================================================

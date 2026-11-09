@@ -19,9 +19,10 @@
 
 import type { RowGroup } from '../../feature-table/layer-table.js';
 import { rowType } from '../../feature-table/row-read.js';
+import type { BBox } from '../../geometry/types.js';
 import { degreesPerMeterAt } from '../../shared/math/ground-scale.js';
 import { metersPerPixelInFrame, type ScreenScaleFrame } from '../../shared/math/screen-scale.js';
-import type { BoundingBox, Feature } from '../../shared/types/model.js';
+import type { Feature } from '../../shared/types/model.js';
 import type { SelectionExtensionRegistry } from '../ui/selection-ui/index.js';
 import { computeAnchoredExtent } from './store-retained-bbox.js';
 
@@ -207,12 +208,7 @@ export function reachDegrees(
  *
  * @internal
  */
-export function widened(box: BoundingBox, lng: number, lat: number): BoundingBox {
+export function widened(box: BBox, lng: number, lat: number): BBox {
   if (lng === 0 && lat === 0) return box;
-  return {
-    minX: box.minX - lng,
-    minY: Math.max(-90, box.minY - lat),
-    maxX: box.maxX + lng,
-    maxY: Math.min(90, box.maxY + lat),
-  };
+  return [box[0] - lng, Math.max(-90, box[1] - lat), box[2] + lng, Math.min(90, box[3] + lat)];
 }

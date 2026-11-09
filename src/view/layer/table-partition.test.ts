@@ -346,8 +346,8 @@ describe('partitionRowGroup', () => {
       ['line', 3, 4],
       ['point', 4, 6],
     ]);
-    expect(ranges[0].bounds).toEqual({ minX: 0, minY: 0, maxX: 1, maxY: 1 });
-    expect(ranges[3].bounds).toEqual({ minX: 6, minY: 6, maxX: 7, maxY: 7 });
+    expect(ranges[0].bounds).toEqual([0, 0, 1, 1]);
+    expect(ranges[3].bounds).toEqual([6, 6, 7, 7]);
   });
 
   it('ends a chunk where it would hold too many coordinates, a large row making a chunk of its own', () => {

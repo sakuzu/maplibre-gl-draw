@@ -10,9 +10,10 @@
 
 import type { ProjectionData } from 'maplibre-gl';
 import { describe, expect, it, vi } from 'vitest';
+import type { BBox } from '../geometry/types.js';
 import { DEFAULT_FEATURE_STYLE_CONFIG } from '../shared/config/feature-style.js';
 import { SELECTION_HIGHLIGHT_COLOR } from '../shared/config/selection-highlight.js';
-import type { BoundingBox, Feature } from '../shared/types/model.js';
+import type { Feature } from '../shared/types/model.js';
 import { toRow } from '../test-utils.js';
 import { GpuLedger } from '../view/gpu-ledger.js';
 import { FeatureDrawer } from '../view/renderers/drawer.js';
@@ -32,7 +33,7 @@ import {
 import type { DatasetRow, DisplayBatchTarget } from './types.js';
 import { normalizeDisplayFeature } from './types.js';
 
-const WORLD: BoundingBox = { minX: -180, minY: -85, maxX: 180, maxY: 85 };
+const WORLD: BBox = [-180, -85, 180, 85];
 
 function feature(input: DatasetRow): Feature {
   return normalizeDisplayFeature(input, 0);
@@ -162,7 +163,7 @@ describe('drawSelectionHighlight', () => {
     drawSelectionHighlight(
       highlightInput(target, {
         selected: [hidden, POLYGON],
-        bounds: { minX: 10, minY: 10, maxX: 11, maxY: 11 },
+        bounds: [10, 10, 11, 11],
       }),
     );
     expect(drawn).toHaveLength(0);
@@ -258,8 +259,8 @@ describe('hitTestDisplayFeatures', () => {
     });
     expect(tolerances[0]).toBeGreaterThan(base.toleranceLngLat);
     // The narrowing of the index reaches as far as the largest marker
-    const bounds = (search.mock.calls[0] as unknown as [BoundingBox])[0];
-    expect(bounds.maxX).toBeGreaterThan(tolerances[0]);
+    const bounds = (search.mock.calls[0] as unknown as [BBox])[0];
+    expect(bounds[2]).toBeGreaterThan(tolerances[0]);
   });
 });
 

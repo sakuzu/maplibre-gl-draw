@@ -29,6 +29,7 @@ import type { ProjectionData } from 'maplibre-gl';
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { RowField, RowValues } from '../../api/tables.js';
 import type { LayerTable } from '../../feature-table/layer-table.js';
+import type { BBox } from '../../geometry/types.js';
 import type { Feature, Layer } from '../../shared/types/model.js';
 import {
   createTestDrawer,
@@ -168,7 +169,7 @@ function setup(list: Feature[], targetRows = 16, versions = false) {
   });
   tables.internals.onRowsWritten((layerId, writes) => renderer.rowsWritten(layerId, writes));
   /** One frame: the pass before the main one, then the layer; returns the ranges drawn */
-  const frame = (bounds?: { minX: number; minY: number; maxX: number; maxY: number }) => {
+  const frame = (bounds?: BBox) => {
     renderer.prerender();
     beginRenderFrame();
     renderer.beginFrame();
@@ -454,9 +455,7 @@ describe('the drawing of the rows of the delta', () => {
         } else {
           live.renderer.setArtificialCuts(Math.floor(random() * 5));
         }
-        const { record } = live.frame(
-          random() < 0.3 ? { minX: 0, minY: 0, maxX: 5, maxY: 5 } : undefined,
-        );
+        const { record } = live.frame(random() < 0.3 ? [0, 0, 5, 5] : undefined);
         const drawn = drawnIds(record, live.table);
         // Every row once, in the order of the layer (out of the view, the chunks are skipped)
         const shown = shownIds(live.table, live.tables.getRowId);

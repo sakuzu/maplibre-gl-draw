@@ -12,9 +12,10 @@
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createDatasetManager, type DatasetManager } from '../../dataset/manager.js';
+import type { BBox } from '../../geometry/types.js';
 import { MemoryStore } from '../../store/memory.js';
 import { RBushSpatialIndex } from '../../store/spatial/spatial-index.js';
-import type { BoundingBox, Coordinate, Feature } from '../../store/types.js';
+import type { Coordinate, Feature } from '../../store/types.js';
 import { toRow } from '../../test-utils.js';
 import type { FeatureCompanionProvider } from '../../view/feature-companion.js';
 import {
@@ -29,7 +30,7 @@ function datasetFeature(top: TopHit | null): Feature | null | undefined {
   return top?.kind === 'dataset' ? top.feature : undefined;
 }
 
-const WORLD: BoundingBox = { minX: -180, minY: -85, maxX: 180, maxY: 85 };
+const WORLD: BBox = [-180, -85, 180, 85];
 
 /** An unproject that maps longitude/latitude naively and linearly (1 degree = 10px) */
 const unproject = (p: { x: number; y: number }): { lng: number; lat: number } => ({

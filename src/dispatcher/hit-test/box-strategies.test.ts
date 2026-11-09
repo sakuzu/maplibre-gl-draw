@@ -10,9 +10,10 @@
  */
 
 import { describe, expect, it } from 'vitest';
+import type { BBox } from '../../geometry/types.js';
 import type { FeatureCoordinates } from '../../shared/types/model.js';
 import { geometryFromCoordinates } from '../../shared/utils/coordinates.js';
-import type { BoundingBox, Feature } from '../../store/types.js';
+import type { Feature } from '../../store/types.js';
 import {
   CircleBoxSelectionStrategy,
   createCoreBoxSelectionStrategies,
@@ -35,12 +36,12 @@ function circle(center: [number, number], radiusMeters: number): Feature {
   };
 }
 
-const rect = (minX: number, minY: number, maxX: number, maxY: number): BoundingBox => ({
+const rect = (minX: number, minY: number, maxX: number, maxY: number): BBox => [
   minX,
   minY,
   maxX,
   maxY,
-});
+];
 
 describe('CircleBoxSelectionStrategy', () => {
   const s = new CircleBoxSelectionStrategy();

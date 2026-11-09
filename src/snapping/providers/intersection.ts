@@ -20,8 +20,9 @@
  */
 
 import { segmentIntersection } from '../../geometry/split.js';
+import type { BBox } from '../../geometry/types.js';
 import { MESSAGES_EN, type Messages } from '../../messages.js';
-import type { BoundingBox, Coordinate } from '../../store/types.js';
+import type { Coordinate } from '../../store/types.js';
 import type {
   SnapCandidate,
   SnapPointCandidate,
@@ -61,7 +62,7 @@ interface FeatureSegments {
  */
 function collectNearbySegments(
   deps: StoreSnapProviderDeps,
-  bbox: BoundingBox,
+  bbox: BBox,
   ctx: SnapProviderContext,
 ): FeatureSegments[] {
   const result: FeatureSegments[] = [];
@@ -101,7 +102,7 @@ export function createStoreIntersectionSnapProvider(
   return {
     name: 'core:store-intersection',
 
-    candidates(bbox: BoundingBox, ctx: SnapProviderContext): SnapCandidate[] {
+    candidates(bbox: BBox, ctx: SnapProviderContext): SnapCandidate[] {
       const nearby = collectNearbySegments(deps, bbox, ctx);
       if (nearby.length < 2) return [];
 

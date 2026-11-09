@@ -41,8 +41,9 @@
  */
 
 import type { ProjectionData } from 'maplibre-gl';
+import type { BBox } from '../../geometry/types.js';
 import type { Store } from '../../store/store.js';
-import type { BoundingBox, Feature, Layer, StoreChange } from '../../store/types.js';
+import type { Feature, Layer, StoreChange } from '../../store/types.js';
 import type { FeatureCompanionRegistry } from '../feature-companion.js';
 import { layerDrawFactors } from '../renderers/draw-factors.js';
 import type { RetainedRendererSet } from '../renderers/retained.js';
@@ -50,12 +51,7 @@ import { boundsCenter, rebasedOriginOf } from '../shaders/retained-origin.js';
 import { TerrainContext } from '../terrain/context.js';
 import type { SelectionExtensionRegistry } from '../ui/selection-ui/index.js';
 import { createShownStore, type DrawnShapes } from './shown-store.js';
-import {
-  bboxIntersects,
-  type ChunkBBox,
-  chunkBBoxToBounds,
-  computeFeaturesBBox,
-} from './store-retained-bbox.js';
+import { bboxIntersects, type ChunkBBox, computeFeaturesBBox } from './store-retained-bbox.js';
 import {
   buildChunkBatch,
   type ChunkBuildResult,
@@ -172,7 +168,7 @@ export class StoreRetainedCache {
     projectionData: ProjectionData,
     zoom: number,
     deps: StoreRetainedDrawDeps,
-    viewportBounds?: BoundingBox,
+    viewportBounds?: BBox,
   ): void {
     this.renderers = deps.renderers;
 
@@ -542,8 +538,7 @@ export class StoreRetainedCache {
     // The origin is the center of the extent (or the one chosen for the view), not the first
     // feature: the error of the baked offsets grows with the distance from it
     const origin =
-      chunk.viewOrigin ??
-      (chunk.bbox ? boundsCenter(chunkBBoxToBounds(chunk.bbox)) : featureOrigin(features[0]));
+      chunk.viewOrigin ?? (chunk.bbox ? boundsCenter(chunk.bbox) : featureOrigin(features[0]));
     chunk.origin = origin;
     const result = buildChunkBatch(chunk, features, layer, origin, deps.renderers);
     if (result !== 'retry') chunk.dirty = false;
@@ -563,7 +558,7 @@ export class StoreRetainedCache {
     layer: Layer | undefined,
     zoom: number,
     deps: StoreRetainedDrawDeps,
-    viewportBounds: BoundingBox | undefined,
+    viewportBounds: BBox | undefined,
   ): void {
     if (chunk.kind === 'immediate' || chunk.dirty || !chunk.origin || !chunk.bbox) return;
     if (chunk.rebasedFrame === this.frame) return;

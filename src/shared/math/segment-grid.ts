@@ -23,7 +23,8 @@
  * For that reason there is no invalidation logic.
  */
 
-import type { BoundingBox, Coordinate } from '../types/model.js';
+import type { BBox } from '../../geometry/types.js';
+import type { Coordinate } from '../types/model.js';
 
 /**
  * Vertex count threshold above which the index is built
@@ -151,23 +152,18 @@ export function getSegmentGrid(coords: Coordinate[]): SegmentGrid {
  * strict test is left to the caller. The return value is sorted in ascending order to make
  * the enumeration order deterministic.
  */
-export function querySegmentIndicesInBBox(grid: SegmentGrid, bbox: BoundingBox): number[] {
+export function querySegmentIndicesInBBox(grid: SegmentGrid, bbox: BBox): number[] {
   if (grid.segmentCount === 0) return [];
 
   // If the query box does not intersect the bbox of the index, there is no candidate
-  if (
-    bbox.maxX < grid.minX ||
-    bbox.minX > grid.maxX ||
-    bbox.maxY < grid.minY ||
-    bbox.minY > grid.maxY
-  ) {
+  if (bbox[2] < grid.minX || bbox[0] > grid.maxX || bbox[3] < grid.minY || bbox[1] > grid.maxY) {
     return [];
   }
 
-  const col0 = cellIndex(bbox.minX - grid.minX, grid.cellW, grid.cols);
-  const col1 = cellIndex(bbox.maxX - grid.minX, grid.cellW, grid.cols);
-  const row0 = cellIndex(bbox.minY - grid.minY, grid.cellH, grid.rows);
-  const row1 = cellIndex(bbox.maxY - grid.minY, grid.cellH, grid.rows);
+  const col0 = cellIndex(bbox[0] - grid.minX, grid.cellW, grid.cols);
+  const col1 = cellIndex(bbox[2] - grid.minX, grid.cellW, grid.cols);
+  const row0 = cellIndex(bbox[1] - grid.minY, grid.cellH, grid.rows);
+  const row1 = cellIndex(bbox[3] - grid.minY, grid.cellH, grid.rows);
 
   const stamp = nextGeneration(grid);
   const indices: number[] = [];

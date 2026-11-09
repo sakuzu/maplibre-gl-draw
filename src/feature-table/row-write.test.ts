@@ -285,7 +285,7 @@ describe('the geometry written in place', () => {
     expect(hitTestLayerTable(tables.internals, tables.table, input(30, 30))?.row).toBe(2);
     expect(tables.table.movedRowCount).toBe(1);
     // The bbox of the group only widens
-    expect(group.bounds?.maxX).toBeGreaterThanOrEqual(30);
+    expect(group.bounds?.[2]).toBeGreaterThanOrEqual(30);
   });
 
   it('counts the geometry written into the overrides with the attributes', () => {

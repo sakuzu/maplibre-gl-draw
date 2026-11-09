@@ -21,6 +21,7 @@ import {
 } from '../../feature-table/feature-tables.js';
 import type { LayerTable } from '../../feature-table/layer-table.js';
 import type { EnuEdit } from '../../geometry/enu-transforms.js';
+import type { BBox } from '../../geometry/types.js';
 import type { Feature, Layer } from '../../shared/types/model.js';
 import { createRowBlockDataBuilder } from '../../table/row-group-builder.js';
 import {
@@ -194,7 +195,7 @@ function setup(features: Feature[], targetRows?: number) {
     requestRepaint: () => {},
     buildBudgetMs: Number.POSITIVE_INFINITY,
   });
-  const frame = (bounds?: { minX: number; minY: number; maxX: number; maxY: number }) => {
+  const frame = (bounds?: BBox) => {
     const record: TableDrawRecord[] = [];
     renderer.recordDraws(record);
     renderer.beginFrame();
@@ -266,8 +267,8 @@ describe('the order of the drawing of a layer held as rows', () => {
 
   it('skips the chunks out of view and keeps the order of the others', () => {
     const { table, frame } = setup(interleaved(300, 4), 50);
-    frame({ minX: 0, minY: 0, maxX: 3, maxY: 3 });
-    const record = frame({ minX: 0, minY: 0, maxX: 3, maxY: 3 });
+    frame([0, 0, 3, 3]);
+    const record = frame([0, 0, 3, 3]);
     const retained = record.filter((entry) => entry.kind !== 'immediate');
     expect(retained.length).toBeGreaterThan(0);
     expect(coverage(table, retained).length).toBeLessThan(allRows(table).length);

@@ -624,7 +624,7 @@ describe('the writes in place and the building of the chunks', () => {
       {
         projectionData: PROJECTION,
         zoom: 10,
-        bounds: { minX: 4.9, minY: 4.9, maxX: 5.1, maxY: 5.1 },
+        bounds: [4.9, 4.9, 5.1, 5.1],
       },
       live.deps,
     );

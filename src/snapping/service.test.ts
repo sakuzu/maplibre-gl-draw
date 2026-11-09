@@ -13,11 +13,12 @@
 
 import { describe, expect, it, vi } from 'vitest';
 import type { ModifierKeys } from '../dispatcher/types.js';
+import type { BBox } from '../geometry/types.js';
 import { EventEmitterImpl } from '../shared/utils/event-emitter.js';
 import { RenderedShapes } from '../sketches/rendered-shapes.js';
 import { MemoryStore } from '../store/memory.js';
 import { RBushSpatialIndex } from '../store/spatial/spatial-index.js';
-import type { BoundingBox, Coordinate } from '../store/types.js';
+import type { Coordinate } from '../store/types.js';
 import { degreesPerPixel } from './geometry.js';
 import { createSnapService } from './service.js';
 import type {
@@ -534,7 +535,7 @@ describe('SnapService', () => {
   describe('exclusions and the context', () => {
     it('passes the tolerance and the specification of exclusions to the providers', () => {
       const service = createSnapService();
-      const seen: Array<{ bbox: BoundingBox; ctx: SnapProviderContext }> = [];
+      const seen: Array<{ bbox: BBox; ctx: SnapProviderContext }> = [];
       service.register({
         name: 'spy',
         candidates: (bbox, ctx) => {
@@ -566,8 +567,8 @@ describe('SnapService', () => {
       });
       expect(ctx.lngLat).toEqual(ORIGIN);
       expect(ctx.point).toEqual({ x: 100, y: 100 });
-      expect(bbox.maxX - bbox.minX).toBeCloseTo(perPixel.lng * 20, 12);
-      expect(bbox.maxY - bbox.minY).toBeCloseTo(perPixel.lat * 20, 12);
+      expect(bbox[2] - bbox[0]).toBeCloseTo(perPixel.lng * 20, 12);
+      expect(bbox[3] - bbox[1]).toBeCloseTo(perPixel.lat * 20, 12);
     });
 
     it('keeps the candidates of the other providers alive even when one provider throws', () => {

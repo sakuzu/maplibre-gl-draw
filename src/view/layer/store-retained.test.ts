@@ -21,7 +21,7 @@ import { coordinatesOf, geometryFromCoordinates } from '../../shared/utils/coord
 import type { SpatialIndex } from '../../store/spatial/spatial-index.js';
 import { RBushSpatialIndex } from '../../store/spatial/spatial-index.js';
 import type { Store } from '../../store/store.js';
-import type { BoundingBox, Coordinate, Feature, Layer } from '../../store/types.js';
+import type { Coordinate, Feature, Layer } from '../../store/types.js';
 import {
   createFeatureCompanionRegistry,
   type FeatureCompanionRegistry,
@@ -36,6 +36,7 @@ beforeEach(() => {
   companions = createFeatureCompanionRegistry();
 });
 
+import type { BBox } from '../../geometry/types.js';
 import type { RetainedDrawFactors } from '../renderers/draw-factors.js';
 import type { LineBatchItem, RetainedLineBatch } from '../renderers/line/line-types.js';
 import type { SDFLineRenderer, SDFStrokeStyle } from '../renderers/line/sdf-line.js';
@@ -454,7 +455,7 @@ function createHarness(
   const visible = { calls: 0 };
   const visibleIds = options.visibleIds;
   /** The expanded viewport passed to the most recent draw (the range of the index query) */
-  let lastBounds: BoundingBox | undefined;
+  let lastBounds: BBox | undefined;
   const spatialIndex = options.spatialIndex;
 
   let getVisibleIds: (() => ReadonlySet<string>) | undefined;
@@ -481,7 +482,7 @@ function createHarness(
 
   const cache = new StoreRetainedCache(stub.store, { extensions: harnessExtensions });
 
-  const draw = (viewportBounds?: BoundingBox, zoom = 14, layer: Layer = LAYER): void => {
+  const draw = (viewportBounds?: BBox, zoom = 14, layer: Layer = LAYER): void => {
     lastBounds = viewportBounds;
     cache.beginFrame(companions);
     cache.drawLayer('layer-1', layer, PROJECTION, zoom, deps, viewportBounds);
@@ -742,7 +743,7 @@ describe('the origin of a chunk seen at high zoom', () => {
     }),
   ];
   /** A view of about 1000 px around Osaka at zoom 22 */
-  const osakaView: BoundingBox = { minX: 135.5, minY: 34.69, maxX: 135.5002, maxY: 34.6902 };
+  const osakaView: BBox = [135.5, 34.69, 135.5002, 34.6902];
 
   it('builds the chunk again around the view when the error would exceed 0.1 px', () => {
     const h = createHarness(tokyoOsaka());
@@ -765,7 +766,7 @@ describe('the origin of a chunk seen at high zoom', () => {
     h.draw(osakaView, 22);
     h.probe.reset();
 
-    h.draw({ ...osakaView, minX: 135.5001, maxX: 135.5003 }, 22);
+    h.draw([135.5001, osakaView[1], 135.5003, osakaView[3]], 22);
     h.draw(osakaView, 22);
 
     expect(h.probe.built).toEqual([]);
@@ -1283,9 +1284,9 @@ describe('passing the layer around', () => {
 
 describe('viewport thinning', () => {
   /** Around the origin (contains LINE_COORDS / RING) */
-  const NEAR: BoundingBox = { minX: -1, minY: -1, maxX: 2, maxY: 2 };
+  const NEAR: BBox = [-1, -1, 2, 2];
   /** A range far away from the origin (contains FAR_RING) */
-  const FAR: BoundingBox = { minX: 100, minY: 40, maxX: 110, maxY: 50 };
+  const FAR: BBox = [100, 40, 110, 50];
 
   const FAR_RING: Coordinate[] = [
     [104, 44],
@@ -1390,12 +1391,12 @@ describe('viewport thinning', () => {
     ]);
 
     // A range that does not contain the center but touches the circle
-    h.draw({ minX: 1, minY: -0.1, maxX: 1.5, maxY: 0.1 });
+    h.draw([1, -0.1, 1.5, 0.1]);
     expect(h.probe.drawn).toHaveLength(1);
 
     // Outside the circle
     h.probe.reset();
-    h.draw({ minX: 5, minY: -0.1, maxX: 6, maxY: 0.1 });
+    h.draw([5, -0.1, 6, 0.1]);
     expect(h.probe.drawn).toHaveLength(0);
   });
 
@@ -1430,7 +1431,7 @@ describe('viewport thinning', () => {
 
     // A range that does not contain the anchor (the origin) but touches the rectangle (±2
     // degrees). It corresponds to putting the center of the map inside a huge box of that type.
-    h.draw({ minX: 1, minY: -0.5, maxX: 1.5, maxY: 0.5 });
+    h.draw([1, -0.5, 1.5, 0.5]);
     expect(h.paintLog).toEqual(['marker']);
   });
 
@@ -1443,7 +1444,7 @@ describe('viewport thinning', () => {
       },
     );
 
-    h.draw({ minX: 5, minY: -0.5, maxX: 6, maxY: 0.5 });
+    h.draw([5, -0.5, 6, 0.5]);
     expect(h.paintLog).toEqual([]);
   });
 
@@ -1468,12 +1469,7 @@ describe('viewport thinning', () => {
     const spatialIndex = new RBushSpatialIndex();
     spatialIndex.setCustomBoundingBoxCalculator(ANCHORED_TYPE, (feature) => {
       const [lng, lat] = coordinatesOf(feature) as Coordinate;
-      return {
-        minX: lng - halfDeg,
-        minY: lat - halfDeg,
-        maxX: lng + halfDeg,
-        maxY: lat + halfDeg,
-      };
+      return [lng - halfDeg, lat - halfDeg, lng + halfDeg, lat + halfDeg];
     });
 
     const marker = makeFeature('marker', ANCHORED_TYPE, {
@@ -1486,12 +1482,7 @@ describe('viewport thinning', () => {
     // The expanded viewport corresponding to the pose that reproduces the field case (z12, the
     // camera 0.35 degrees east of the anchor). It does not contain the anchor (139.74717) but
     // touches the eastern edge of the rectangle (140.0905).
-    const expanded: BoundingBox = {
-      minX: 139.8637,
-      minY: 35.5252,
-      maxX: 140.3306,
-      maxY: 35.7586,
-    };
+    const expanded: BBox = [139.8637, 35.5252, 140.3306, 35.7586];
 
     // The index returns the box for this range (= the index is not what decides it)
     expect(spatialIndex.findInBounds(expanded)).toEqual(['marker']);
@@ -1514,18 +1505,18 @@ describe('viewport thinning', () => {
       }),
     ]);
 
-    h.draw({ minX: 1, minY: -0.5, maxX: 1.5, maxY: 0.5 });
+    h.draw([1, -0.5, 1.5, 0.5]);
     expect(h.paintLog).toEqual(['img']);
 
     h.paintLog.length = 0;
-    h.draw({ minX: 5, minY: -0.5, maxX: 6, maxY: 0.5 });
+    h.draw([5, -0.5, 6, 0.5]);
     expect(h.paintLog).toEqual([]);
   });
 });
 
 describe('per-feature thinning of the immediate chunks', () => {
   /** A range that contains every feature */
-  const ALL: BoundingBox = { minX: -10, minY: -10, maxX: 10, maxY: 10 };
+  const ALL: BBox = [-10, -10, 10, 10];
 
   const NEAR_COORDS: Coordinate[] = [
     [0, 0],
@@ -1628,7 +1619,7 @@ describe('per-feature thinning of the immediate chunks', () => {
     );
 
     // A viewport where only the dashed chunk falls out of range
-    h.draw({ minX: -1, minY: -1, maxX: 1.5, maxY: 1.5 });
+    h.draw([-1, -1, 1.5, 1.5]);
     expect(h.visible.calls).toBe(0);
 
     // It is looked up once in a frame where the dashed chunk touches the view
@@ -1922,13 +1913,13 @@ describe('incremental update of a vertex drag', () => {
 
   it('the bbox of the chunk expands to the destination (it survives the thinning)', () => {
     const h = createHarness([makeFeature('l1', 'LineString')]);
-    h.draw({ minX: -1, minY: -1, maxX: 2, maxY: 2 });
+    h.draw([-1, -1, 2, 2]);
 
     h.probe.reset();
     moveVertices(h, 'l1', [[1, [50, 50]]]);
     // A viewport containing the destination (it does not touch the original bbox). At a zoom
     // where the origin 50 degrees away still leaves less than 0.1 px, so the batch is kept
-    h.draw({ minX: 49, minY: 49, maxX: 51, maxY: 51 }, 10);
+    h.draw([49, 49, 51, 51], 10);
 
     expect(h.probe.built).toHaveLength(0);
     expect(h.probe.drawn).toHaveLength(1);
@@ -1942,10 +1933,10 @@ describe('incremental update of a vertex drag', () => {
     h.probe.reset();
     moveVertices(h, 'l1', [[1, [1.5, 1.5]]]);
     // Neither drawing nor applying happens with a viewport the chunk does not touch
-    h.draw({ minX: 100, minY: 40, maxX: 110, maxY: 50 });
+    h.draw([100, 40, 110, 50]);
     expect(h.probe.patched).toHaveLength(0);
 
-    h.draw({ minX: -1, minY: -1, maxX: 2, maxY: 2 });
+    h.draw([-1, -1, 2, 2]);
     expect(h.probe.patched).toHaveLength(1);
     expect(h.probe.patched[0].updates).toEqual([{ coordIndex: 1, lngLat: [1.5, 1.5] }]);
   });

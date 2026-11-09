@@ -173,8 +173,8 @@ describe('the sizes given at a zoom on a flat Web Mercator view', () => {
     expect((topLeft[1] - bottomRight[1]) / latPerPx).toBeCloseTo(100, 6);
 
     const extent = getBoundingBox(image());
-    expect((extent.maxX - extent.minX) / lngPerPx).toBeCloseTo(200, 6);
-    expect((extent.maxY - extent.minY) / latPerPx).toBeCloseTo(100, 6);
+    expect((extent[2] - extent[0]) / lngPerPx).toBeCloseTo(200, 6);
+    expect((extent[3] - extent[1]) / latPerPx).toBeCloseTo(100, 6);
   });
 
   it('cuts the dashes of a line by their pixels at the zoom', () => {

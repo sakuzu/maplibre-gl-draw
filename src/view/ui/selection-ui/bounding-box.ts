@@ -2,10 +2,10 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * BoundingBox computation and rendering
+ * BBox computation and rendering
  *
  * Provides the functions that compute BoundingBoxCoords from a feature, and the function
- * that draws a BoundingBox with StrokeRenderer.
+ * that draws a BBox with StrokeRenderer.
  *
  * Image (an OBB that takes the rotation into account) is computed by computeOrientedBoundingBox,
  * and custom features use the calculator registered in the draw instance's
@@ -82,16 +82,16 @@ export function computeBoundingBox(
   // LineString / Polygon / the Multi kinds compute an AABB
   // (for the Multi kinds getBoundingBox flattens all the parts, so this is their union as is)
   const bounds = getBoundingBox(feature);
-  if (bounds.minX === 0 && bounds.minY === 0 && bounds.maxX === 0 && bounds.maxY === 0) {
+  if (bounds[0] === 0 && bounds[1] === 0 && bounds[2] === 0 && bounds[3] === 0) {
     return null;
   }
-  const centerLng = (bounds.minX + bounds.maxX) / 2;
-  const centerLat = (bounds.minY + bounds.maxY) / 2;
+  const centerLng = (bounds[0] + bounds[2]) / 2;
+  const centerLat = (bounds[1] + bounds[3]) / 2;
   return {
-    topLeft: [bounds.minX, bounds.maxY],
-    topRight: [bounds.maxX, bounds.maxY],
-    bottomRight: [bounds.maxX, bounds.minY],
-    bottomLeft: [bounds.minX, bounds.minY],
+    topLeft: [bounds[0], bounds[3]],
+    topRight: [bounds[2], bounds[3]],
+    bottomRight: [bounds[2], bounds[1]],
+    bottomLeft: [bounds[0], bounds[1]],
     center: [centerLng, centerLat],
   };
 }
@@ -203,7 +203,7 @@ function computeOrientedBoundingBox(feature: Feature): BoundingBoxCoords | null 
 }
 
 /**
- * Compute the combined BoundingBox of several features
+ * Compute the combined BBox of several features
  *
  * A single feature returns its OBB as is. Several features return an AABB that contains
  * all the vertices.
@@ -245,7 +245,7 @@ export function computeCombinedBoundingBox(
 }
 
 /**
- * Rotate a BoundingBox around its center
+ * Rotate a BBox around its center
  *
  * Rotates in the east, north and up frame of the center on the WGS 84 ellipsoid, as the rotate
  * drag writes the features it turns (`geometry/enu-transforms.ts`), so the frame drawn during a

@@ -10,37 +10,31 @@
  */
 
 import { circleBoundingBox } from '../../geometry/circle.js';
+import type { BBox } from '../../geometry/types.js';
 import { DEFAULT_TILE_SIZE } from '../../shared/math/index.js';
 import { coordinatesOf } from '../../shared/utils/coordinates.js';
 import { getCircleRadius } from '../../shared/utils/property.js';
 import { getBoundingBox } from '../../store/spatial/index.js';
-import type { BoundingBox, Coordinate, Feature } from '../../store/types.js';
+import type { Coordinate, Feature } from '../../store/types.js';
 import type { SelectionExtensionRegistry } from '../ui/selection-ui/index.js';
 
 /**
  * Longitude/latitude bounding box of a chunk `[minLng, minLat, maxLng, maxLat]`
  */
-export type ChunkBBox = [number, number, number, number];
+export type ChunkBBox = BBox;
 
 /**
  * Whether the chunk bbox intersects the expanded viewport
  *
  * Both are treated as longitude/latitude rectangles (touching edges count as intersecting).
  */
-export function bboxIntersects(bbox: ChunkBBox, viewport: BoundingBox): boolean {
+export function bboxIntersects(bbox: ChunkBBox, viewport: BBox): boolean {
   return (
-    bbox[0] <= viewport.maxX &&
-    bbox[2] >= viewport.minX &&
-    bbox[1] <= viewport.maxY &&
-    bbox[3] >= viewport.minY
+    bbox[0] <= viewport[2] &&
+    bbox[2] >= viewport[0] &&
+    bbox[1] <= viewport[3] &&
+    bbox[3] >= viewport[1]
   );
-}
-
-/**
- * The chunk bbox as a BoundingBox
- */
-export function chunkBBoxToBounds(bbox: ChunkBBox): BoundingBox {
-  return { minX: bbox[0], minY: bbox[1], maxX: bbox[2], maxY: bbox[3] };
 }
 
 /**
@@ -121,9 +115,7 @@ export function computeAnchoredExtent(
   // Image is a standard kind of core, but its size is determined by the style and createdZoom
   if (feature.type === 'Image') {
     const box = getBoundingBox(feature, tileSize);
-    return isFiniteBBox([box.minX, box.minY, box.maxX, box.maxY])
-      ? [box.minX, box.minY, box.maxX, box.maxY]
-      : null;
+    return isFiniteBBox(box) ? box : null;
   }
 
   return null;

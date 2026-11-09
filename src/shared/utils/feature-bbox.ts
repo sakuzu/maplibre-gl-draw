@@ -9,8 +9,9 @@
  */
 
 import { circleBoundingBox } from '../../geometry/circle.js';
+import type { BBox } from '../../geometry/types.js';
 import { degreesPerPixelAtZoom, rotateCoordinateOnSphere } from '../math/index.js';
-import type { BoundingBox, Coordinate, Feature, FeatureCoordinates } from '../types/model.js';
+import type { Coordinate, Feature, FeatureCoordinates } from '../types/model.js';
 import { coordinatesOf, forEachCoordinateDeep } from './coordinates.js';
 import { getCircleRadius, getCreatedZoom, getImageProperties } from './property.js';
 
@@ -19,7 +20,7 @@ import { getCircleRadius, getCreatedZoom, getImageProperties } from './property.
  *
  * For an Image, the size at createdZoom is converted into geographic coordinates
  */
-function computeBoundingBox(feature: Feature, tileSize: number): BoundingBox {
+function computeBoundingBox(feature: Feature, tileSize: number): BBox {
   const { type } = feature;
   const coordinates = coordinatesOf(feature);
 
@@ -56,25 +57,22 @@ function computeBoundingBox(feature: Feature, tileSize: number): BoundingBox {
     const radiusMeters = getCircleRadius(feature);
 
     if (!radiusMeters || radiusMeters <= 0) {
-      return { minX: lng, minY: lat, maxX: lng, maxY: lat };
+      return [lng, lat, lng, lat];
     }
 
     // The extent of the geodesic circle as it is drawn (a circle over a pole spans every
     // longitude up to the pole)
     const extent = circleBoundingBox(coord, radiusMeters);
     if (!extent) {
-      return { minX: lng, minY: lat, maxX: lng, maxY: lat };
+      return [lng, lat, lng, lat];
     }
     const [minX, minY, maxX, maxY] = extent;
-    return { minX, minY, maxX, maxY };
+    return [minX, minY, maxX, maxY];
   }
 
   // For Point, LineString, Polygon, Freehand and the Multi types
   return computeCoordinateBoundingBox(feature);
 }
-
-/** The bounding box for empty or unreadable coordinates (the origin) */
-const EMPTY_BOUNDING_BOX: BoundingBox = { minX: 0, minY: 0, maxX: 0, maxY: 0 };
 
 /**
  * A cache of AABBs determined by the coordinates alone (the key is the coordinate array
@@ -92,7 +90,7 @@ const EMPTY_BOUNDING_BOX: BoundingBox = { minX: 0, minY: 0, maxX: 0, maxY: 0 };
  * rotation, radius, tile size), so they are not cached. Point is a single vertex and has no
  * traversal cost, so it is not cached either.
  */
-const coordinateBoundingBoxCache = new WeakMap<object, BoundingBox>();
+const coordinateBoundingBoxCache = new WeakMap<object, BBox>();
 
 /**
  * Computes the bounding box determined by the coordinates alone (with caching)
@@ -100,30 +98,30 @@ const coordinateBoundingBoxCache = new WeakMap<object, BoundingBox>();
  * For a selected feature on the order of 100,000 vertices this is called every frame, so on a
  * cache hit it does not traverse and only returns a copy of the value.
  */
-function computeCoordinateBoundingBox(feature: Feature): BoundingBox {
+function computeCoordinateBoundingBox(feature: Feature): BBox {
   const { type } = feature;
   const coordinates = coordinatesOf(feature);
 
   if (type === 'Point') {
     const [lng, lat] = coordinates as Coordinate;
-    return { minX: lng, minY: lat, maxX: lng, maxY: lat };
+    return [lng, lat, lng, lat];
   }
 
   // Every other type (the built-in line and area types, and a custom type without its own
   // bounding box calculator) is measured by the extent of its coordinates
   if (!Array.isArray(coordinates)) {
-    return { ...EMPTY_BOUNDING_BOX };
+    return [0, 0, 0, 0];
   }
 
   const cached = coordinateBoundingBoxCache.get(coordinates);
   if (cached) {
-    // Return a new object every time so that the cache is not polluted if the caller mutates it
-    return { ...cached };
+    // Return a new box every time so that the cache is not polluted if the caller mutates it
+    return [cached[0], cached[1], cached[2], cached[3]];
   }
 
   const bbox = computeCoordinateBoundingBoxUncached(type, coordinates);
   coordinateBoundingBoxCache.set(coordinates, bbox);
-  return { ...bbox };
+  return [bbox[0], bbox[1], bbox[2], bbox[3]];
 }
 
 /**
@@ -132,10 +130,7 @@ function computeCoordinateBoundingBox(feature: Feature): BoundingBox {
  * It takes the min and max without building an intermediate array (a flattened coordinate
  * sequence).
  */
-function computeCoordinateBoundingBoxUncached(
-  type: string,
-  coordinates: FeatureCoordinates,
-): BoundingBox {
+function computeCoordinateBoundingBoxUncached(type: string, coordinates: FeatureCoordinates): BBox {
   let minX = Number.POSITIVE_INFINITY;
   let minY = Number.POSITIVE_INFINITY;
   let maxX = Number.NEGATIVE_INFINITY;
@@ -172,10 +167,10 @@ function computeCoordinateBoundingBoxUncached(
   }
 
   if (count === 0) {
-    return { ...EMPTY_BOUNDING_BOX };
+    return [0, 0, 0, 0];
   }
 
-  return { minX, minY, maxX, maxY };
+  return [minX, minY, maxX, maxY];
 }
 
 /**
@@ -197,15 +192,15 @@ function computeRotatedBoundingBox(
   halfWidthDeg: number,
   halfHeightDeg: number,
   rotationDeg: number,
-): BoundingBox {
+): BBox {
   // With no rotation, return a simple AABB
   if (rotationDeg === 0) {
-    return {
-      minX: centerLng - halfWidthDeg,
-      minY: centerLat - halfHeightDeg,
-      maxX: centerLng + halfWidthDeg,
-      maxY: centerLat + halfHeightDeg,
-    };
+    return [
+      centerLng - halfWidthDeg,
+      centerLat - halfHeightDeg,
+      centerLng + halfWidthDeg,
+      centerLat + halfHeightDeg,
+    ];
   }
 
   const center: Coordinate = [centerLng, centerLat];
@@ -227,12 +222,7 @@ function computeRotatedBoundingBox(
   const lngs = rotatedCorners.map((c) => c[0]);
   const lats = rotatedCorners.map((c) => c[1]);
 
-  return {
-    minX: Math.min(...lngs),
-    minY: Math.min(...lats),
-    maxX: Math.max(...lngs),
-    maxY: Math.max(...lats),
-  };
+  return [Math.min(...lngs), Math.min(...lats), Math.max(...lngs), Math.max(...lats)];
 }
 
 /**
@@ -241,6 +231,6 @@ function computeRotatedBoundingBox(
  * @param feature the feature
  * @param tileSize the tile size (512 by default)
  */
-export function getBoundingBox(feature: Feature, tileSize = 512): BoundingBox {
+export function getBoundingBox(feature: Feature, tileSize = 512): BBox {
   return computeBoundingBox(feature, tileSize);
 }

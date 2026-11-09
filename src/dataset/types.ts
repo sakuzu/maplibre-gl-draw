@@ -12,7 +12,8 @@
 import type { Value } from '@sakuzu/tabane';
 import type { Feature as GeoJSONFeature, Geometry as GeoJSONGeometry } from 'geojson';
 import type { ProjectionData } from 'maplibre-gl';
-import type { BoundingBox, Coordinate, Feature, Layer, StyleRule } from '../shared/types/model.js';
+import type { BBox } from '../geometry/types.js';
+import type { Coordinate, Feature, Layer, StyleRule } from '../shared/types/model.js';
 import type { PixelRatioInput } from '../shared/utils/pixel-ratio.js';
 import type { PreparedTable, Table } from '../table/types.js';
 import type { RetainedDrawFactors } from '../view/renderers/draw-factors.js';
@@ -103,7 +104,7 @@ export interface DatasetPlacement {
  * the result of the last request is applied, and a rejected promise is logged with
  * `console.error` and leaves the rows shown as they are.
  */
-export type DatasetFeatureProvider = (bbox: BoundingBox, zoom: number) => Promise<DatasetRow[]>;
+export type DatasetFeatureProvider = (bbox: BBox, zoom: number) => Promise<DatasetRow[]>;
 
 /**
  * Returns the size and opacity factors of a dataset for a zoom.
@@ -381,7 +382,7 @@ export interface Dataset {
    *   latitudes)
    * @returns New array of features. Empty when nothing intersects
    */
-  collectVisible(bounds: BoundingBox): Feature[];
+  collectVisible(bounds: BBox): Feature[];
 
   /**
    * Returns the rows that intersect the range and are drawn now, in draw order
@@ -410,7 +411,7 @@ export interface Dataset {
    *   latitudes)
    * @returns New array of rows, in ascending order. Empty when nothing is drawn in the range
    */
-  collectDrawnRows(bounds: BoundingBox): Int32Array;
+  collectDrawnRows(bounds: BBox): Int32Array;
   /**
    * Reads a row as a feature, with the rule colors and the base style applied (the same feature
    * `collectVisible` returns for that row)
@@ -439,7 +440,7 @@ export interface Dataset {
    *
    * @returns null for a row without a geometry, or out of range
    */
-  getRowBBox(row: number): BoundingBox | null;
+  getRowBBox(row: number): BBox | null;
   /**
    * The `[lng, lat]` of a row whose geometry is a `Point`, without building its feature
    *
@@ -688,7 +689,7 @@ export interface DatasetDeps {
    * It is used to fetch the same range again after the provider cache has been discarded. Only
    * the manager knows the displayed range.
    */
-  getViewportState(): { bounds: BoundingBox; zoom: number };
+  getViewportState(): { bounds: BBox; zoom: number };
   /**
    * How far "the shallowest effective zoom on screen" lies below the zoom of the camera (the
    * pitch correction; 0 at pitch 0)

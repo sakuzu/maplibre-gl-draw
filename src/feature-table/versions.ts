@@ -27,7 +27,8 @@
  */
 
 import type { CoordinateDimensions, CoordinateSystem } from '@sakuzu/tabane';
-import type { BoundingBox, RowsChange } from '../shared/types/model.js';
+import type { BBox } from '../geometry/bbox-type.js';
+import type { RowsChange } from '../shared/types/model.js';
 import type { GroupEntry, RowBlockBuilderOptions, RowInput } from '../table/row-group-builder.js';
 import { ROW_BLOCK_TARGET_ROWS, ROW_BLOCK_TARGET_VERTICES } from '../table/row-group-builder.js';
 import {
@@ -772,19 +773,19 @@ export class GroupVersions {
   }
 
   /** The bounds of the groups a version replaces and of its new ones */
-  static boundsOf(version: GroupVersion): BoundingBox | null {
-    let out: BoundingBox | null = null;
+  static boundsOf(version: GroupVersion): BBox | null {
+    let out: BBox | null = null;
     for (const group of [...version.replaces, ...(version.groups ?? [])]) {
       const b = group.bounds;
       if (!b) continue;
       out = out
-        ? {
-            minX: Math.min(out.minX, b.minX),
-            minY: Math.min(out.minY, b.minY),
-            maxX: Math.max(out.maxX, b.maxX),
-            maxY: Math.max(out.maxY, b.maxY),
-          }
-        : { ...b };
+        ? [
+            Math.min(out[0], b[0]),
+            Math.min(out[1], b[1]),
+            Math.max(out[2], b[2]),
+            Math.max(out[3], b[3]),
+          ]
+        : [b[0], b[1], b[2], b[3]];
     }
     return out;
   }

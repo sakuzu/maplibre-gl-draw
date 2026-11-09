@@ -25,7 +25,7 @@ import { createCoordinateTransform } from '../../shared/math/index.js';
 import type { SketchController } from '../../sketches/sketch-controller.js';
 import { DrawStore } from '../../store/draw-store.js';
 import { createTransformFieldsRegistry } from '../../store/transform-roles.js';
-import type { BoundingBox, Feature as StoredFeature } from '../../store/types.js';
+import type { Feature as StoredFeature } from '../../store/types.js';
 import type { FeatureCompanionRegistry } from '../../view/feature-companion.js';
 import type { CustomLayerInterface } from '../../view/layer/index.js';
 import type { Draw } from '../draw.js';
@@ -87,9 +87,7 @@ export interface ExtensionHostDeps {
   /** A frontmost hit tester with another tolerance, in pixels */
   hitTestTopmostWith(tolerancePx: number): HitTestTopmost;
   /** The rows of the datasets to trace along (empty when snapping to them is off) */
-  listTraceRows(
-    bbox: BoundingBox,
-  ): Array<{ datasetId: string; rowIndex: number; feature: StoredFeature }>;
+  listTraceRows(bbox: BBox): Array<{ datasetId: string; rowIndex: number; feature: StoredFeature }>;
 }
 
 /**
@@ -341,7 +339,7 @@ export function createExtensionHost(deps: ExtensionHostDeps): ExtensionHost {
       });
     },
     listTraceRows(bbox: BBox) {
-      return deps.listTraceRows({ minX: bbox[0], minY: bbox[1], maxX: bbox[2], maxY: bbox[3] });
+      return deps.listTraceRows(bbox);
     },
     getWritableLayerId: context.getWritableLayerId,
     sketches: deps.sketches,

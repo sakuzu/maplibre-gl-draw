@@ -289,7 +289,7 @@ function sceneOf(
     }
     // The box of the feature as the Store holds it
     const box = getBoundingBox(feature as never);
-    const [x0, x1, y0, y1] = [box.minX, box.maxX, box.minY, box.maxY];
+    const [x0, x1, y0, y1] = [box[0], box[2], box[1], box[3]];
     const widened = applyMarginToBoundingBox(
       { topLeft: [x0, y1], topRight: [x1, y1], bottomRight: [x1, y0], bottomLeft: [x0, y0] },
       margin,

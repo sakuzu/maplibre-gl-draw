@@ -349,7 +349,7 @@ describe('the features drawn at once among the retained chunks', () => {
         terrain,
         projectionData,
         zoom: 14,
-        bounds: { minX: -180, minY: -85, maxX: 180, maxY: 85 },
+        bounds: [-180, -85, 180, 85],
         factors: { scale: 1, opacity: 1 },
       });
       return from;

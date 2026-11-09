@@ -12,8 +12,9 @@
 
 import { describe, expect, it } from 'vitest';
 import { SEGMENT_INDEX_THRESHOLD } from '../../dispatcher/hit-test/segment-grid.js';
+import type { BBox } from '../../geometry/types.js';
 import { coordinatesOf, geometryFromCoordinates } from '../../shared/utils/coordinates.js';
-import type { BoundingBox, Coordinate, Feature, FeatureCoordinates } from '../../store/types.js';
+import type { Coordinate, Feature, FeatureCoordinates } from '../../store/types.js';
 import { computeVertexHandles } from '../../view/ui/handles.js';
 import {
   collectFeatureSegments,
@@ -90,10 +91,10 @@ function flattenCoords(coordinates: FeatureCoordinates): Coordinate[] {
  * Some of them are placed away from the feature so that the path that finds nothing is
  * exercised as well.
  */
-function randomBBoxes(feature: Feature, count: number, seed: number): BoundingBox[] {
+function randomBBoxes(feature: Feature, count: number, seed: number): BBox[] {
   const coords = flattenCoords(coordinatesOf(feature));
   const random = mulberry32(seed);
-  const boxes: BoundingBox[] = [];
+  const boxes: BBox[] = [];
 
   for (let i = 0; i < count; i++) {
     const base = coords[Math.floor(random() * coords.length)];
@@ -102,13 +103,13 @@ function randomBBoxes(feature: Feature, count: number, seed: number): BoundingBo
     const cy = base[1] + (random() * 2 - 1) + far;
     const halfX = 0.05 + random() * 0.5;
     const halfY = 0.05 + random() * 0.5;
-    boxes.push({ minX: cx - halfX, minY: cy - halfY, maxX: cx + halfX, maxY: cy + halfY });
+    boxes.push([cx - halfX, cy - halfY, cx + halfX, cy + halfY]);
   }
   return boxes;
 }
 
 /** Turns the result of listing edges into a string for comparison */
-function segmentKeys(feature: Feature, bbox: BoundingBox, useIndex: boolean): string[] {
+function segmentKeys(feature: Feature, bbox: BBox, useIndex: boolean): string[] {
   const keys: string[] = [];
   const visit = (start: Coordinate, end: Coordinate, startRef: unknown, endRef: unknown): void => {
     keys.push(
@@ -130,7 +131,7 @@ function segmentKeys(feature: Feature, bbox: BoundingBox, useIndex: boolean): st
 }
 
 /** Turns the result of listing vertices into a string for comparison */
-function vertexKeys(feature: Feature, bbox: BoundingBox, useIndex: boolean): string[] {
+function vertexKeys(feature: Feature, bbox: BBox, useIndex: boolean): string[] {
   if (useIndex) {
     return collectVertexCandidatesInBBox(feature, bbox).map(
       (c) => `${c.position[0]},${c.position[1]}|${JSON.stringify(c.vertexRef)}`,
@@ -141,7 +142,7 @@ function vertexKeys(feature: Feature, bbox: BoundingBox, useIndex: boolean): str
   const keys: string[] = [];
   for (const handle of computeVertexHandles(feature)) {
     const [x, y] = handle.position;
-    if (x < bbox.minX || x > bbox.maxX || y < bbox.minY || y > bbox.maxY) continue;
+    if (x < bbox[0] || x > bbox[2] || y < bbox[1] || y > bbox[3]) continue;
     keys.push(`${x},${y}|${JSON.stringify(handle.vertexRef)}`);
   }
   return keys;
@@ -218,7 +219,7 @@ describe('the parity of collectFeatureSegmentsInBBox', () => {
 
   it('lists nothing for a bbox far from the feature', () => {
     for (const { feature } of features) {
-      const bbox: BoundingBox = { minX: 1000, minY: 1000, maxX: 1001, maxY: 1001 };
+      const bbox: BBox = [1000, 1000, 1001, 1001];
       expect(segmentKeys(feature, bbox, true)).toEqual([]);
     }
   });
@@ -245,12 +246,7 @@ describe('the parity of collectVertexCandidatesInBBox', () => {
     const ring = closeRing(randomPolyline(LARGE, 21));
     const feature = makeFeature('Polygon', [ring]);
     const first = ring[0];
-    const bbox: BoundingBox = {
-      minX: first[0] - 0.2,
-      minY: first[1] - 0.2,
-      maxX: first[0] + 0.2,
-      maxY: first[1] + 0.2,
-    };
+    const bbox: BBox = [first[0] - 0.2, first[1] - 0.2, first[0] + 0.2, first[1] + 0.2];
 
     const candidates = collectVertexCandidatesInBBox(feature, bbox);
     const refs = candidates.map((c) => JSON.stringify(c.vertexRef));
@@ -265,12 +261,7 @@ describe('the parity of collectVertexCandidatesInBBox', () => {
     const coords = closeRing(randomPolyline(LARGE, 22));
     const feature = makeFeature('LineString', coords);
     const first = coords[0];
-    const bbox: BoundingBox = {
-      minX: first[0] - 0.2,
-      minY: first[1] - 0.2,
-      maxX: first[0] + 0.2,
-      maxY: first[1] + 0.2,
-    };
+    const bbox: BBox = [first[0] - 0.2, first[1] - 0.2, first[0] + 0.2, first[1] + 0.2];
 
     const refs = collectVertexCandidatesInBBox(feature, bbox).map((c) =>
       JSON.stringify(c.vertexRef),
@@ -282,8 +273,8 @@ describe('the parity of collectVertexCandidatesInBBox', () => {
 
   it('simply narrows the vertex handles down by bbox for Point / MultiPoint, as before', () => {
     const point = makeFeature('Point', [1, 1]);
-    const inside: BoundingBox = { minX: 0, minY: 0, maxX: 2, maxY: 2 };
-    const outside: BoundingBox = { minX: 5, minY: 5, maxX: 6, maxY: 6 };
+    const inside: BBox = [0, 0, 2, 2];
+    const outside: BBox = [5, 5, 6, 6];
 
     expect(collectVertexCandidatesInBBox(point, inside)).toEqual([
       { position: [1, 1], vertexRef: { ring: 0, index: 0 } },
@@ -300,7 +291,7 @@ describe('the parity of collectVertexCandidatesInBBox', () => {
   });
 
   it('does not break for a feature with no vertices at all or a degenerate one', () => {
-    const bbox: BoundingBox = { minX: -1, minY: -1, maxX: 1, maxY: 1 };
+    const bbox: BBox = [-1, -1, 1, 1];
 
     expect(collectVertexCandidatesInBBox(makeFeature('LineString', []), bbox)).toEqual([]);
     expect(collectVertexCandidatesInBBox(makeFeature('Polygon', [[]]), bbox)).toEqual([]);

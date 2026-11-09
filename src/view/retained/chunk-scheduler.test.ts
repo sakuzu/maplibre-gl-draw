@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import { describe, expect, it } from 'vitest';
+import type { BBox } from '../../geometry/types.js';
 import {
   advanceChunkBuild,
   advanceChunkBuilds,
@@ -21,7 +22,7 @@ function state(name: string, minX = 0): State {
   return {
     name,
     builds: 0,
-    bounds: { minX, minY: 0, maxX: minX + 1, maxY: 1 },
+    bounds: [minX, 0, minX + 1, 1],
     batches: null,
     job: null,
     origin: null,
@@ -60,7 +61,7 @@ function host(steps = 1) {
   return { h, drawn, disposed };
 }
 
-const VIEW = { minX: -10, minY: -10, maxX: 10, maxY: 10 };
+const VIEW: BBox = [-10, -10, 10, 10];
 const frame = (settled = true, ms = Number.POSITIVE_INFINITY) => ({
   bounds: VIEW,
   zoom: 10,
@@ -225,7 +226,7 @@ describe('advanceChunkBuild', () => {
     const away = state('away', 100);
     advanceChunkBuild(away, frame(), h);
     expect(away.batches).toBeNull();
-    const seenFrom = { minX: 90, minY: 0, maxX: 110, maxY: 1 };
+    const seenFrom: BBox = [90, 0, 110, 1];
     advanceChunkBuild(away, { ...frame(), movedViews: [seenFrom] }, h);
     expect(away.batches).toBe('away#1');
   });

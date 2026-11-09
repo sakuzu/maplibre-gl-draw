@@ -15,7 +15,8 @@
  */
 
 import type { ProjectionData } from 'maplibre-gl';
-import type { BoundingBox, Feature } from '../shared/types/model.js';
+import type { BBox } from '../geometry/types.js';
+import type { Feature } from '../shared/types/model.js';
 import type { PixelRatioInput } from '../shared/utils/pixel-ratio.js';
 import { resolvePixelRatio } from '../shared/utils/pixel-ratio.js';
 import { getSurfaceTessellationStep } from '../view/globe-subdivision.js';
@@ -92,11 +93,11 @@ function chunkTilingKey(chunk: DisplayChunk, step: TessellationStep): string {
     step.region ?? null,
     step.coarsen && step.coarsen > 1 ? step.coarsen : 1,
     step.grid,
-    mercatorX(bounds.minX),
+    mercatorX(bounds[0]),
     // The mercator y decreases as the latitude increases
-    mercatorY(bounds.maxY),
-    mercatorX(bounds.maxX),
-    mercatorY(bounds.minY),
+    mercatorY(bounds[3]),
+    mercatorX(bounds[2]),
+    mercatorY(bounds[1]),
   );
 }
 
@@ -225,7 +226,7 @@ export interface DisplayChunkFrame {
   terrain: TerrainContext;
   projectionData: ProjectionData;
   zoom: number;
-  bounds: BoundingBox;
+  bounds: BBox;
   /** The zoom-dependent drawing factors of this frame */
   factors: RetainedDrawFactors;
 }

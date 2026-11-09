@@ -9,8 +9,9 @@
  */
 
 import RBush from 'rbush';
+import type { BBox } from '../../geometry/types.js';
 import { getBoundingBox } from '../../shared/utils/feature-bbox.js';
-import type { BoundingBox, Coordinate, Feature } from '../types.js';
+import type { Coordinate, Feature } from '../types.js';
 
 // The bounding box of a feature is a pure function of the feature, so it is defined in
 // shared/ (dataset/ uses it too); re-exported here for the existing imports
@@ -27,10 +28,15 @@ interface IndexItem {
   featureId: string;
 }
 
+/** The item of rbush of a box (rbush reads its boxes as `{ minX, minY, maxX, maxY }`) */
+function indexItemOf(bbox: BBox, featureId: string): IndexItem {
+  return { minX: bbox[0], minY: bbox[1], maxX: bbox[2], maxY: bbox[3], featureId };
+}
+
 /**
  * The type of a custom bounding box calculation function
  */
-export type CustomBoundingBoxCalculator = (feature: Feature, tileSize: number) => BoundingBox;
+export type CustomBoundingBoxCalculator = (feature: Feature, tileSize: number) => BBox;
 
 /**
  * The queries of a spatial index (what the hit testing, the snapping, the rendering and the
@@ -48,7 +54,7 @@ export interface SpatialQuery {
   /**
    * Gets the IDs of the features inside the given bounding box
    */
-  findInBounds(bounds: BoundingBox): string[];
+  findInBounds(bounds: BBox): string[];
 }
 
 /**
@@ -126,10 +132,7 @@ export class RBushSpatialIndex implements SpatialIndex {
     const items: IndexItem[] = [];
     for (const feature of features) {
       this.remove(feature.id);
-      const item: IndexItem = {
-        ...this.computeBoundingBoxForFeature(feature),
-        featureId: feature.id,
-      };
+      const item = indexItemOf(this.computeBoundingBoxForFeature(feature), feature.id);
       this.items.set(feature.id, item);
       items.push(item);
     }
@@ -146,7 +149,7 @@ export class RBushSpatialIndex implements SpatialIndex {
    *
    * If a custom calculation function is registered, it is used.
    */
-  private computeBoundingBoxForFeature(feature: Feature): BoundingBox {
+  private computeBoundingBoxForFeature(feature: Feature): BBox {
     // Use the custom calculation function if there is one
     const customCalc = this.customCalculators.get(feature.type);
     if (customCalc) {
@@ -162,11 +165,7 @@ export class RBushSpatialIndex implements SpatialIndex {
     this.remove(id);
 
     // Compute the new bounding box and insert it
-    const bbox = this.computeBoundingBoxForFeature(feature);
-    const item: IndexItem = {
-      ...bbox,
-      featureId: feature.id,
-    };
+    const item = indexItemOf(this.computeBoundingBoxForFeature(feature), feature.id);
 
     this.items.set(feature.id, item);
     this.tree.insert(item);
@@ -189,22 +188,17 @@ export class RBushSpatialIndex implements SpatialIndex {
 
   findNear(coordinate: Coordinate, tolerance: number): string[] {
     const [lng, lat] = coordinate;
-    const bounds: BoundingBox = {
-      minX: lng - tolerance,
-      minY: lat - tolerance,
-      maxX: lng + tolerance,
-      maxY: lat + tolerance,
-    };
+    const bounds: BBox = [lng - tolerance, lat - tolerance, lng + tolerance, lat + tolerance];
 
     return this.findInBounds(bounds);
   }
 
-  findInBounds(bounds: BoundingBox): string[] {
+  findInBounds(bounds: BBox): string[] {
     const results = this.tree.search({
-      minX: bounds.minX,
-      minY: bounds.minY,
-      maxX: bounds.maxX,
-      maxY: bounds.maxY,
+      minX: bounds[0],
+      minY: bounds[1],
+      maxX: bounds[2],
+      maxY: bounds[3],
     });
 
     return results.map((item) => item.featureId);

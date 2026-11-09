@@ -4,7 +4,7 @@
 /**
  * Selection UI module
  *
- * Visual feedback for the selection state (BoundingBox / custom calculators / Renderer).
+ * Visual feedback for the selection state (BBox / custom calculators / Renderer).
  * The files are split per feature, and this index is a barrel that re-exports their public
  * symbols.
  */

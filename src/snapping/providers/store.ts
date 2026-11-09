@@ -21,8 +21,8 @@
  * registered (the vertex provider calls it).
  */
 
+import type { BBox } from '../../geometry/types.js';
 import { type Messages, resolveMessages } from '../../messages.js';
-import type { BoundingBox } from '../../store/types.js';
 import {
   DEFAULT_SNAP_OPTIONS,
   type SnapCandidate,
@@ -62,7 +62,7 @@ export function createStoreVertexSnapProvider(deps: StoreSnapProviderDeps): Snap
   return {
     name: 'core:store-vertex',
 
-    candidates(bbox: BoundingBox, ctx: SnapProviderContext): SnapCandidate[] {
+    candidates(bbox: BBox, ctx: SnapProviderContext): SnapCandidate[] {
       const candidates: SnapCandidate[] = [];
 
       for (const feature of queryFeatures(deps, bbox, ctx)) {
@@ -109,7 +109,7 @@ export function createStoreEdgeSnapProvider(deps: StoreSnapProviderDeps): SnapPr
   return {
     name: 'core:store-edge',
 
-    candidates(bbox: BoundingBox, ctx: SnapProviderContext): SnapCandidate[] {
+    candidates(bbox: BBox, ctx: SnapProviderContext): SnapCandidate[] {
       const candidates: SnapCandidate[] = [];
 
       for (const feature of queryFeatures(deps, bbox, ctx)) {

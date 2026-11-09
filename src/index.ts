@@ -45,6 +45,9 @@
  * - events with `draw.on`: {@link DrawEvents} (a commit of the document: {@link Change}); a value
  *   that changes over time: {@link Observable}; errors: {@link DrawError}
  *
+ * A box ({@link BBox}, what `features.bbox` returns) is `[minLng, minLat, maxLng, maxLat]` in
+ * degrees in this entry, and never crosses the ±180 degree meridian (`minLng <= maxLng`).
+ *
  * Read next: [getting started](https://sakuzu.github.io/maplibre-gl-draw/getting-started),
  * then the guides for [drawing](https://sakuzu.github.io/maplibre-gl-draw/guides/drawing) and
  * [saving and loading](https://sakuzu.github.io/maplibre-gl-draw/guides/save-load). The

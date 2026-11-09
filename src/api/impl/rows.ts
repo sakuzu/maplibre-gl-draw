@@ -7,7 +7,7 @@
  */
 
 import type { BBox } from '../../geometry/types.js';
-import type { BoundingBox, Feature as StoredFeature } from '../../store/types.js';
+import type { Feature as StoredFeature } from '../../store/types.js';
 import type { DatasetRow } from '../datasets.js';
 
 /**
@@ -35,23 +35,23 @@ function hasGeometry(feature: StoredFeature): boolean {
 }
 
 /**
- * The range of a `BBox` (`[west, south, east, north]`, or with the heights
- * `[west, south, low, east, north, high]`)
+ * The box of a `bbox` given to the API (`[west, south, east, north]`, or with the heights
+ * `[west, south, low, east, north, high]`), as a box of its own
  *
  * @internal
  */
-export function toBoundingBox(bbox: BBox | readonly number[]): BoundingBox {
+export function planeBBoxOf(bbox: BBox | readonly number[]): BBox {
   if (bbox.length === 6) {
-    return { minX: bbox[0], minY: bbox[1], maxX: bbox[3], maxY: bbox[4] };
+    return [bbox[0], bbox[1], bbox[3], bbox[4]];
   }
-  return { minX: bbox[0], minY: bbox[1], maxX: bbox[2], maxY: bbox[3] };
+  return [bbox[0], bbox[1], bbox[2], bbox[3]];
 }
 
 /**
- * A range as a `BBox`, `[west, south, east, north]`
+ * A copy of a box of the library, to hand out (what is handed out is not the box it keeps)
  *
  * @internal
  */
-export function toBBox(bounds: BoundingBox): BBox {
-  return [bounds.minX, bounds.minY, bounds.maxX, bounds.maxY];
+export function copyBBox(bounds: BBox): BBox {
+  return [bounds[0], bounds[1], bounds[2], bounds[3]];
 }
