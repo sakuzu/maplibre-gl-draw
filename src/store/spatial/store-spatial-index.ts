@@ -27,7 +27,7 @@
  * that with invalidateType(), which re-derives the features of that type from the Store.
  */
 
-import { featureTablesInternals } from '../../feature-table/feature-tables.js';
+import { featureRowBoxesOf } from '../../feature-table/feature-row-boxes.js';
 import type { BBox } from '../../geometry/types.js';
 import type { Store } from '../store.js';
 import type { Coordinate, Feature, StoreChange } from '../types.js';
@@ -66,7 +66,7 @@ export class StoreSpatialIndex implements SpatialIndex {
    */
   setTileSize(tileSize: number): void {
     this.#index.setTileSize(tileSize);
-    featureTablesInternals(this.#store.tables)?.setRowBoxTileSize(tileSize);
+    featureRowBoxesOf(this.#store.tables)?.setTileSize(tileSize);
     this.#rebuild();
   }
 
@@ -83,12 +83,12 @@ export class StoreSpatialIndex implements SpatialIndex {
   ): () => void {
     const cancel = this.#index.setCustomBoundingBoxCalculator(type, calculator);
     // The rows of the type are found by the same extent
-    const tables = featureTablesInternals(this.#store.tables);
-    tables?.setRowBoxCalculator(type, calculator);
+    const boxes = featureRowBoxesOf(this.#store.tables);
+    boxes?.setCalculator(type, calculator);
     this.invalidateType(type);
     return () => {
       cancel();
-      tables?.setRowBoxCalculator(type, undefined);
+      boxes?.setCalculator(type, undefined);
       this.invalidateType(type);
     };
   }

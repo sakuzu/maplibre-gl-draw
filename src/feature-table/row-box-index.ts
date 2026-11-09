@@ -4,10 +4,9 @@
 /**
  * The boxes of every row of a set of tables, in one spatial index (`RowBoxIndex`)
  *
- * A row is found where it is drawn by the box it covers: the box of its positions, or for a type
- * whose extent is worked out from the feature (an Image, the type of an extension that covers a
- * box around its point, a Circle), the box its calculation gives; for a row held as a feature,
- * the box of that feature as it is now. Every row of the tables is in the one index, whatever
+ * A row is found where it is drawn by the box it covers: the box of its positions, or for a row
+ * whose box comes from more than its points, the box the user of the tables gives for it
+ * (`rowBoxes`). Every row of the tables is in the one index, whatever
  * group, delta or set of new rows it is read from, so the rows a click or a box may meet are the
  * rows whose boxes meet it, and nothing else is looked at.
  *

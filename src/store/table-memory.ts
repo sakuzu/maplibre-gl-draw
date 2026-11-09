@@ -45,7 +45,7 @@ import type {
 } from '../api/tables.js';
 import { featureFields, featureWithFields } from '../feature-table/feature-fields.js';
 import {
-  createTables,
+  createFeatureRowTables,
   type FeatureTablesInternalOptions,
   type FeatureTablesInternals,
   featureTablesInternals,
@@ -250,7 +250,7 @@ export class TableContractStore implements StoreContract {
     takeTransformFields(this, (fields) => {
       this.#transformFields = fields;
     });
-    const { tables, writer: tablesWriter } = createTables({
+    const { tables, writer: tablesWriter } = createFeatureRowTables({
       ...options,
       // Nothing else needs the ids of the rows deleted that nothing keeps any more
       onRelease: (handles) => this.#writer.forget(handles),

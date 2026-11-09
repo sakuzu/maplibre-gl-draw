@@ -29,6 +29,7 @@ import { RBushSpatialIndex } from '../store/spatial/spatial-index.js';
 import { createTableStore } from '../store/table-memory.js';
 import type { Feature } from '../store/types.js';
 import { createMapStub } from '../test-utils.js';
+import { featureRowBoxesOf } from './feature-row-boxes.js';
 import { type FeatureTablesInternals, featureTablesInternals } from './feature-tables.js';
 
 function point(i: number): Feature {
@@ -316,7 +317,7 @@ describe('the features kept of rows', () => {
   it('keeps none of the features a build of every box makes, and the one of a row marked', () => {
     const { store, internals, cache } = storeWith(10);
     const calculated: Feature[] = [];
-    internals.setRowBoxCalculator('Point', (feature) => {
+    featureRowBoxesOf(store.tables)?.setCalculator('Point', (feature) => {
       calculated.push(feature);
       const [x, y] = (feature.geometry as { coordinates: number[] }).coordinates;
       return [x - 1, y - 1, x + 1, y + 1];
@@ -346,7 +347,7 @@ describe('the features kept of rows', () => {
     expect(marked()).toBeGreaterThan(0);
     // The box of a type is told of the attributes it may read
     const seen: number[] = [];
-    internals.setRowBoxCalculator('Point', (feature) => {
+    featureRowBoxesOf(store.tables)?.setCalculator('Point', (feature) => {
       seen.push(feature.properties.n as number);
       const [x, y] = (feature.geometry as { coordinates: number[] }).coordinates;
       return [x - 1, y - 1, x + 1, y + 1];

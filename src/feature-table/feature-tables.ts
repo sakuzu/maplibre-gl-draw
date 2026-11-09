@@ -48,7 +48,6 @@ import { circleRowRings } from '../shared/circle-rings.js';
 import { DrawError } from '../shared/draw-error.js';
 import { drawPropertyKey } from '../shared/properties.js';
 import type { Feature, FeatureStyle, FeatureType, RowValues } from '../shared/types/model.js';
-import { getBoundingBox } from '../shared/utils/feature-bbox.js';
 import type { IdleScheduler } from '../shared/utils/idle.js';
 import { drawErrorOf } from '../table/draw-error-of.js';
 import { KasaneError } from '../table/kasane-error.js';
@@ -69,6 +68,7 @@ import { type BulkOperation, planBulk } from './bulk-plan.js';
 import type { RowContainers } from './bulk-rows.js';
 import { FeatureCache } from './feature-cache.js';
 import { featureFields } from './feature-fields.js';
+import { FeatureRowBoxes, keepFeatureRowBoxes } from './feature-row-boxes.js';
 import { createFeatureTablesWriter } from './feature-tables-writer.js';
 import { groupRunCuts, rowGroupsHolding } from './group-runs.js';
 import { GroupTable } from './group-table.js';
@@ -219,6 +219,29 @@ export interface FeatureTablesInternalOptions extends FeatureTablesOptions {
 }
 
 /**
+ * The box of the rows of a value of the type of the rows, from a row read as a feature, or
+ * undefined for a type whose rows take the box of their points. The tables ask it once per type
+ * until they are told to read the boxes again (`refreshBoxes`); a box that is not finite is no box
+ *
+ * @internal
+ */
+export type RowBoxes = (type: string) => ((feature: Feature) => BBox) | undefined;
+
+/**
+ * The options of the tables (`createTables`): those of core, and what the user of the tables
+ * declares of its rows
+ *
+ * @internal
+ */
+export interface TablesInternalOptions extends FeatureTablesInternalOptions {
+  /**
+   * The boxes of the rows whose boxes come from more than their points (none: every row takes
+   * the box of its points)
+   */
+  readonly rowBoxes?: RowBoxes;
+}
+
+/**
  * Creates the tables of the features of a document, as its reading side and the writer of the
  * features over the writer of the tables (the implementation of `createFeatureTables`): the writer
  * only writes, and tells nothing
@@ -229,7 +252,7 @@ export function createFeatureTablesStore(options: FeatureTablesInternalOptions =
   tables: FeatureTables;
   writer: FeatureTablesWriter;
 } {
-  const { tables, writer } = createTables(options);
+  const { tables, writer } = createFeatureRowTables(options);
   return {
     tables,
     writer: createFeatureTablesWriter(
@@ -240,12 +263,31 @@ export function createFeatureTablesStore(options: FeatureTablesInternalOptions =
 }
 
 /**
+ * Creates the tables of the features of a document with what the library declares of its
+ * features (`createTables`): the boxes of the rows of an Image and of the types of the extensions
+ * (`featureRowBoxesOf`)
+ *
+ * @internal
+ */
+export function createFeatureRowTables(options: FeatureTablesInternalOptions = {}): {
+  tables: FeatureTables;
+  writer: TablesWriter;
+} {
+  const boxes = new FeatureRowBoxes();
+  const made = createTables({ ...options, rowBoxes: boxes.boxesOf });
+  const internals = featureTablesInternals(made.tables) as FeatureTablesInternals;
+  boxes.attach(() => internals.refreshBoxes());
+  keepFeatureRowBoxes(made.tables, boxes);
+  return made;
+}
+
+/**
  * Creates the tables of the features of a document, as their reading side and the writer of the
  * tables, which returns what it wrote and tells nobody (`TablesWriter`)
  *
  * @internal
  */
-export function createTables(options: FeatureTablesInternalOptions = {}): {
+export function createTables(options: TablesInternalOptions = {}): {
   tables: FeatureTables;
   writer: TablesWriter;
 } {
@@ -555,8 +597,8 @@ export interface FeatureTablesInternals {
   /**
    * The rows of a layer whose boxes meet a box, in the order of the layer: the rows a click there
    * may hit. Every row of the tables is in one spatial index by the box it covers as it is drawn
-   * (`row-box-index.ts`): the box of its positions, the box the calculation of its type gives
-   * (`setRowBoxCalculator`)
+   * (`row-box-index.ts`): the box of its positions, or the box the user of the tables gives for
+   * its type (`TablesInternalOptions.rowBoxes`)
    *
    * @param visit Receives each row, in order, with the group it is read from
    */
@@ -581,12 +623,11 @@ export interface FeatureTablesInternals {
     visit: (group: RowGroup, row: number) => void,
   ): void;
   /**
-   * Sets how the box of the rows of a type is worked out from their features (the type of an
-   * extension that covers more than its positions); undefined puts it back to its positions
+   * Reads every box the user of the tables gives (`TablesInternalOptions.rowBoxes`) again: what
+   * they are worked out from changed (the size of the tiles, the calculation of a type), and the
+   * types are asked again which give a box
    */
-  setRowBoxCalculator(type: string, calculator: RowBoxCalculator | undefined): void;
-  /** Sets the size of the tiles the boxes of the rows are worked out at (an Image, a calculation) */
-  setRowBoxTileSize(tileSize: number): void;
+  refreshBoxes(): void;
   /** The rows in the index of the boxes, and the bytes it holds about */
   rowBoxIndexSize(): { readonly rows: number; readonly bytes: number };
   /** The handles of the row groups of a set of rows, the rows by group */
@@ -833,13 +874,6 @@ interface Creation {
   inputs: Map<RowHandle, RowInput> | null;
 }
 
-/**
- * How the box of a row of a type is worked out from its feature
- *
- * @internal
- */
-export type RowBoxCalculator = (feature: Feature, tileSize: number) => BBox;
-
 /** The owner of the features drawn for the sketches (`showSketches`) */
 const SKETCH_OWNER = '\u0000sketches';
 
@@ -970,11 +1004,15 @@ class FeatureTablesStore implements FeatureTablesInternals, TablesWriter, Tables
   private readonly clearedDims = new Map<string, CoordinateDimensions>();
   /** The boxes of every row, in one spatial index (the rows a click may hit) */
   private readonly rowBoxes: RowBoxIndex;
-  /** How the boxes of the rows of some types are worked out from their features */
-  private readonly rowBoxCalculators = new Map<string, RowBoxCalculator>();
-  private rowBoxTileSize = 512;
+  /** The boxes of the rows whose boxes come from more than their points (`rowBoxes`) */
+  private readonly boxesGiven: RowBoxes | undefined;
+  /**
+   * The box each type of row is given by (`rowBoxes`), null for a type whose rows take the box of
+   * their points: asked once per type until the boxes are read again (`refreshBoxes`)
+   */
+  private readonly boxOfType = new Map<string, ((feature: Feature) => BBox) | null>();
 
-  constructor(options: FeatureTablesInternalOptions) {
+  constructor(options: TablesInternalOptions) {
     this.strings = new ValueStringCache(options.stringCacheSize);
     this.states = new RowStateSets((handles) => this.refreshStates(handles));
     this.declaredDims = options.dimensionsOf;
@@ -994,6 +1032,7 @@ class FeatureTablesStore implements FeatureTablesInternals, TablesWriter, Tables
     });
     this.worker = options.worker;
     this.onRelease = options.onRelease;
+    this.boxesGiven = options.rowBoxes;
     this.versions = new GroupVersions(this.versionHost());
     this.rowBoxes = new RowBoxIndex(
       {
@@ -1010,26 +1049,38 @@ class FeatureTablesStore implements FeatureTablesInternals, TablesWriter, Tables
   }
 
   /**
-   * The box of a row as it is drawn now, and the number of its layer (null for no row): the box the
-   * calculation of its type gives (an Image, the type of an extension), or the box of its
-   * positions. A feature made for a build of every box is not kept
+   * The box the rows of a type are given by (`rowBoxes`), or null for a type whose rows take the
+   * box of their points
+   */
+  private boxOfTypeOf(type: string): ((feature: Feature) => BBox) | null {
+    const given = this.boxesGiven;
+    if (!given) return null;
+    let boxOf = this.boxOfType.get(type);
+    if (boxOf === undefined) {
+      boxOf = given(type) ?? null;
+      this.boxOfType.set(type, boxOf);
+    }
+    return boxOf;
+  }
+
+  /**
+   * The box of a row as it is drawn now, and the number of its layer (null for no row): the box
+   * the user of the tables gives for its type (`rowBoxes`), or the box of its positions. A feature
+   * made for a build of every box is not kept
    */
   private rowBoxOf(handle: RowHandle, out: Float64Array, inBuild: boolean): number | null {
     const place = this.placeOf(handle);
     if (!place) return null;
     const { layer, group, row } = place;
     if ((group.data.flags[row] & ROW_FLAG_DELETED) !== 0) return null;
-    const type = rowType(group.data, row);
-    const calculator = this.rowBoxCalculators.get(type);
-    if (calculator || type === 'Image') {
+    const boxOf = this.boxOfTypeOf(rowType(group.data, row));
+    if (boxOf) {
       const feature = inBuild
         ? this.featureCache.withoutKeeping(() =>
             this.featureCache.featureOf(layer.layerId, group, row),
           )
         : this.featureCache.featureOf(layer.layerId, group, row);
-      const box = calculator
-        ? calculator(feature, this.rowBoxTileSize)
-        : getBoundingBox(feature, this.rowBoxTileSize);
+      const box = boxOf(feature);
       if (!box.every(Number.isFinite)) return null;
       out[0] = box[0];
       out[1] = box[1];
@@ -1101,15 +1152,8 @@ class FeatureTablesStore implements FeatureTablesInternals, TablesWriter, Tables
     return found;
   }
 
-  setRowBoxCalculator(type: string, calculator: RowBoxCalculator | undefined): void {
-    if (calculator) this.rowBoxCalculators.set(type, calculator);
-    else this.rowBoxCalculators.delete(type);
-    this.rowBoxes.markAll();
-  }
-
-  setRowBoxTileSize(tileSize: number): void {
-    if (tileSize === this.rowBoxTileSize) return;
-    this.rowBoxTileSize = tileSize;
+  refreshBoxes(): void {
+    this.boxOfType.clear();
     this.rowBoxes.markAll();
   }
 
@@ -2684,8 +2728,8 @@ class FeatureTablesStore implements FeatureTablesInternals, TablesWriter, Tables
   /**
    * Marks the rows a patch may give another box: every row of a patch that writes what a box is
    * made of (the geometry, the type, the layer, the group or whether it is deleted). A patch of the
-   * attributes and the style marks only the rows whose box is not their bbox: a box of its type
-   * reads the feature, and so does the box of an image
+   * attributes and the style marks only the rows whose box is not their bbox: the box given for
+   * their type (`rowBoxes`) reads the feature
    */
   private markBoxes(patch: RowValues): void {
     const { handles, fields, deleted } = patch;
@@ -2699,8 +2743,7 @@ class FeatureTablesStore implements FeatureTablesInternals, TablesWriter, Tables
         this.rowBoxes.markOne(handle);
         continue;
       }
-      const type = rowType(place.group.data, place.row);
-      if (type === 'Image' || this.rowBoxCalculators.has(type)) {
+      if (this.boxOfTypeOf(rowType(place.group.data, place.row))) {
         this.rowBoxes.markOne(handle);
       }
     }
