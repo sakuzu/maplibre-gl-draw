@@ -13,8 +13,10 @@
  * the rework (`__snapshots__/table-parity.jsonl`), so a rework that changes the internals and not
  * what the Store does keeps it as it is.
  *
- * Only `record` and the few lines that reach the internals (`settle`) read the tables by the
- * names of the code; a rework that renames them changes those lines, never the record.
+ * The rows are built and the blocks read through the entry of the library, as a host does. Only
+ * the imports, `record`, `notificationOf` and the few lines that reach the internals (`settle`)
+ * read the tables by the names of the code; a rework that renames them changes those lines,
+ * never the record.
  */
 
 import { readTabaneBlock, utf8ColumnFromStrings } from '@sakuzu/tabane';
@@ -22,9 +24,11 @@ import type { Geometry } from 'geojson';
 import { describe, expect, it } from 'vitest';
 import type { FeatureTables, FeatureTablesWriter, RowField } from '../api/tables.js';
 import { featureTablesInternals } from '../feature-table/feature-tables.js';
-import { createRowBlockBuilder } from '../table/row-group-builder.js';
-import { writeTabaneFeatureBlocks } from '../table/tabane/blocks.js';
-import { rowBlockOfTabane } from '../table/tabane/rows.js';
+import {
+  createRowBlockBuilder,
+  rowBlockOfTabane,
+  writeTabaneFeatureBlocks,
+} from '../kasane/index.js';
 import { rowPatch } from '../test-utils.js';
 import type { Store } from './store.js';
 import { createTableStore } from './table-memory.js';
