@@ -127,7 +127,7 @@ export { createRowBlockBuilder, mergeRowBlock } from './row-blocks.js';
 export type { RowBlockMerge } from '../table/row-group-merge.js';
 export type { RowBlock } from '../table/row-group-types.js';
 export { transferList } from '../table/transfer-list.js';
-export type { RowRings } from '../table/row-rings.js';
+export type { PointRowRings as RowRings } from '../table/row-rings.js';
 
 // Features as the rows of Tabane blocks (@sakuzu/tabane), and the blocks read as row blocks
 export type { TabaneFeatureRow } from '../table/tabane/columns.js';

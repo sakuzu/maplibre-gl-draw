@@ -41,6 +41,7 @@ export const KASANE_FILES = [
   'table/row-group-merge.ts',
   'table/row-group-types.ts',
   'table/row-keys.ts',
+  'table/row-read-type.ts',
   'table/row-rings.ts',
   'table/transfer-list.ts',
 ];

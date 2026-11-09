@@ -22,6 +22,7 @@ import earcut from 'earcut';
 import type { Geometry, Position } from 'geojson';
 import { DrawError } from '../shared/draw-error.js';
 import { polygonRingRuns } from './polygon-rings.js';
+import type { RowShape } from './row-read-type.js';
 import type { GeometryType, TableGeometry } from './types.js';
 
 /** The number of vertices of a fill below which its indices take 16 bits */
@@ -308,6 +309,39 @@ export function singleRowColumn(geometry: RowGeometry): TableGeometry {
       };
     }
   }
+}
+
+/**
+ * The shape of a row geometry as a row reads it: a column of the one row, its coordinates not
+ * copied
+ *
+ * @internal
+ */
+export function rowShapeOf(geometry: RowGeometry): RowShape {
+  const { coords, stride } = geometry;
+  let offsets: Int32Array[];
+  switch (geometry.type) {
+    case 'Point':
+      offsets = [];
+      break;
+    case 'LineString':
+    case 'MultiPoint':
+      offsets = [Int32Array.of(0, coords.length / stride)];
+      break;
+    case 'Polygon':
+    case 'MultiLineString':
+      offsets = [Int32Array.of(0, geometry.parts.length), ringOffsetsOf(geometry)];
+      break;
+    case 'MultiPolygon': {
+      const polygons = new Int32Array(geometry.polygons.length + 1);
+      for (let p = 0; p < geometry.polygons.length; p++) {
+        polygons[p + 1] = polygons[p] + geometry.polygons[p];
+      }
+      offsets = [Int32Array.of(0, geometry.polygons.length), polygons, ringOffsetsOf(geometry)];
+      break;
+    }
+  }
+  return { column: { type: geometry.type, coords, stride, offsets }, at: 0 };
 }
 
 /**

@@ -18,6 +18,7 @@ import { type CoordinateSystem, planarCoordinates, planarRowBox, type Value } fr
 import type { Geometry } from 'geojson';
 import { describe, expect, it } from 'vitest';
 import type { Feature } from '../shared/types/model.js';
+import { circleRowRings } from '../table/circle-rings.js';
 import { createRowBlockDataBuilder } from '../table/row-group-builder.js';
 import { feature, referenceKey, rowPatch, tablesOfFeatures } from '../test-utils.js';
 import { createFeatureTablesStore } from './feature-row-tables.js';
@@ -242,6 +243,7 @@ describe('the geometry written in place', () => {
         coordinates: [21, 20],
       },
       planarCoordinates,
+      circleRowRings,
     );
     expect(moved.sameShape).toBe(true);
     expect(moved.from).toBe(0);
@@ -253,6 +255,7 @@ describe('the geometry written in place', () => {
       2,
       { type: 'Point', coordinates: [9, 9] },
       planarCoordinates,
+      circleRowRings,
     );
     expect(still).toEqual({ sameShape: true, from: 0, to: 0 });
   });

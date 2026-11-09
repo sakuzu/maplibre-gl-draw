@@ -22,7 +22,7 @@ import { utf8String } from '@sakuzu/tabane';
 import { describe, expect, it, vi } from 'vitest';
 import type { RowField } from '../api/tables.js';
 import { featureTablesInternals } from '../feature-table/feature-tables.js';
-import { circleRowRings } from '../shared/circle-rings.js';
+import { circleRowRings } from '../table/circle-rings.js';
 import { createRowBlockDataBuilder } from '../table/row-group-builder.js';
 import { SELECTION_IDS_LIMIT } from './draw-store.js';
 import { insertGroup } from './item-lists.js';

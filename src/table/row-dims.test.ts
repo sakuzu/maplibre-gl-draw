@@ -18,12 +18,12 @@ import { createHash } from 'node:crypto';
 import type { CoordinateDimensions } from '@sakuzu/tabane';
 import type { Geometry, Position } from 'geojson';
 import { describe, expect, it } from 'vitest';
-import { circleRowRings } from '../shared/circle-rings.js';
+import { circleRowRings } from './circle-rings.js';
 import { toRowGeometry } from './row-geometry.js';
 import {
   blockTransferList,
   createRowBlockDataBuilder,
-  type RowBlockBuilderOptions,
+  type RowBlockBuildOptions,
   type RowInput,
 } from './row-group-builder.js';
 import { mergeRowBlockData } from './row-group-merge.js';
@@ -125,7 +125,7 @@ function randomRows(
   return rows;
 }
 
-function build(rows: readonly RowInput[], options: RowBlockBuilderOptions = {}): RowBlockData[] {
+function build(rows: readonly RowInput[], options: RowBlockBuildOptions = {}): RowBlockData[] {
   const builder = createRowBlockDataBuilder({ rings: circleRowRings, ...options });
   for (const row of rows) builder.addRow(row);
   return builder.finish();

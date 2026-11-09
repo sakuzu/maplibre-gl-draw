@@ -60,7 +60,7 @@ export interface TableWorkBudget {
   step<T>(work: (deadline: number) => T): T;
 }
 
-/** A write of the geometry of a row (its coordinates, and the ring of a Circle) */
+/** A write of the geometry of a row (its coordinates, and the ring it draws around its point) */
 export const ROW_WRITE_GEOMETRY = 1;
 /** A write of the style of a row */
 export const ROW_WRITE_STYLE = 2;

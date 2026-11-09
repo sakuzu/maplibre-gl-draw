@@ -8,6 +8,7 @@ import { describe, expect, it } from 'vitest';
 import { generateCirclePolygon } from '../geometry/circle.js';
 import { drawPropertyKey } from '../shared/properties.js';
 import { buildEarcutInput } from '../view/renderers/polygon/earcut-input.js';
+import { circleRowRings } from './circle-rings.js';
 import { pairTriangles } from './row-geometry.js';
 import {
   blockTransferList,
@@ -261,9 +262,9 @@ describe('createRowBlockDataBuilder', () => {
     ]);
   });
 
-  it('triangulates a Circle from its radius by default, with the rings of the Circles', () => {
+  it('triangulates a Circle from its radius with the rings of the Circles', () => {
     const properties = { [drawPropertyKey('radiusMeters')]: 1000 };
-    const builder = createRowBlockDataBuilder();
+    const builder = createRowBlockDataBuilder({ rings: circleRowRings });
     builder.addRow(row('c', 'a', point(139.7, 35.7), { type: 'Circle', properties }));
     const [group] = builder.finish();
     const ring = generateCirclePolygon([139.7, 35.7], 1000);
@@ -275,16 +276,19 @@ describe('createRowBlockDataBuilder', () => {
     expect(group.vertexCount).toBe(ring.length);
   });
 
-  it('draws a Circle as its point with rings that draw none', () => {
+  it('draws a Circle as its point with rings that draw none, and without rings', () => {
     const properties = { [drawPropertyKey('radiusMeters')]: 1000 };
-    const builder = createRowBlockDataBuilder({
-      rings: { draws: () => false, ringOf: () => null, ringVertices: 1 },
-    });
-    builder.addRow(row('c', 'a', point(139.7, 35.7), { type: 'Circle', properties }));
-    const [group] = builder.finish();
-    expect(trianglesOf(group, 0)).toEqual([]);
-    expect(Array.from(group.rowBounds)).toEqual([139.7, 35.7, 139.7, 35.7]);
-    expect(group.vertexCount).toBe(1);
+    for (const rings of [
+      { draws: () => false, ringOf: () => null, ringVertices: 1, keys: [] },
+      undefined,
+    ]) {
+      const builder = createRowBlockDataBuilder({ rings });
+      builder.addRow(row('c', 'a', point(139.7, 35.7), { type: 'Circle', properties }));
+      const [group] = builder.finish();
+      expect(trianglesOf(group, 0)).toEqual([]);
+      expect(Array.from(group.rowBounds)).toEqual([139.7, 35.7, 139.7, 35.7]);
+      expect(group.vertexCount).toBe(1);
+    }
   });
 
   it('keeps the indices of a large fill in 32 bits', { timeout: 60_000 }, () => {

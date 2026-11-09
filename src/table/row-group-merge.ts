@@ -74,8 +74,8 @@ export interface RowBlockMerge {
   readonly dimensions?: CoordinateDimensions;
   /**
    * The number of coordinates a row that draws a ring around its point (a row of a Point with a
-   * fill: a Circle) is counted as when the rows are cut into row blocks (`RowRings.ringVertices`; 1
-   * when omitted)
+   * fill) is counted as when the rows are cut into row blocks (`RowRings.ringVertices`; 1 when
+   * omitted)
    */
   readonly ringVertices?: number;
 }

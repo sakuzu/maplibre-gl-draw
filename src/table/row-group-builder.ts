@@ -30,13 +30,13 @@ import {
   ValueColumnBuilder,
 } from '@sakuzu/tabane';
 import type { Geometry } from 'geojson';
-import { circleRowRings } from '../shared/circle-rings.js';
 import { KasaneError, kasaneErrorOf } from './kasane-error.js';
 import {
   polygonRanges,
   type RowGeometry,
   ringOffsetsOf,
   rowGeometryOfColumn,
+  rowShapeOf,
   toRowGeometry,
   triangulateRow,
   WIDE_VERTICES,
@@ -50,7 +50,8 @@ import {
   type TriangleCache,
 } from './row-group-types.js';
 import { compareRowKeys, type GroupKeySource, type RowKeySource } from './row-keys.js';
-import type { RowRings } from './row-rings.js';
+import type { RowRead, RowShape } from './row-read-type.js';
+import type { PointRowRings, RowRings } from './row-rings.js';
 import type { GeometryType, TableGeometry, TableMixedGeometry } from './types.js';
 
 /**
@@ -107,8 +108,23 @@ export interface RowBlockBuilderOptions {
    */
   readonly coordinateSystem?: CoordinateSystem;
   /**
-   * The rings the rows of some types draw around their point (the rings of the Circles, each of
-   * its radius, when omitted). A function: it is given in the Worker that builds the rows
+   * The rings the rows of some types draw around their point, read from the type, the point and
+   * the attributes of a row (none when omitted: every row draws its shape). A function: it is
+   * given in the Worker that builds the rows
+   */
+  readonly rings?: PointRowRings;
+}
+
+/**
+ * The options of the builder of the tables (`createRowBlockDataBuilder`): those of
+ * {@link RowBlockBuilderOptions}, with the rings that read a row
+ *
+ * @internal
+ */
+export interface RowBlockBuildOptions extends Omit<RowBlockBuilderOptions, 'rings'> {
+  /**
+   * The rings the rows of some types draw around their point (none when omitted: every row draws
+   * its shape). A function: it is given in the Worker that builds the rows
    */
   readonly rings?: RowRings;
 }
@@ -180,8 +196,10 @@ export interface RowBlockDataBuilder extends RowBlockBuilder {
 
 /**
  * Creates the builder of the row blocks of one layer
+ *
+ * @internal
  */
-export function createRowBlockBuilder(options: RowBlockBuilderOptions = {}): RowBlockBuilder {
+export function createRowBlockBuilder(options: RowBlockBuildOptions = {}): RowBlockBuilder {
   return createRowBlockDataBuilder(options);
 }
 
@@ -190,15 +208,13 @@ export function createRowBlockBuilder(options: RowBlockBuilderOptions = {}): Row
  *
  * @internal
  */
-export function createRowBlockDataBuilder(
-  options: RowBlockBuilderOptions = {},
-): RowBlockDataBuilder {
+export function createRowBlockDataBuilder(options: RowBlockBuildOptions = {}): RowBlockDataBuilder {
   const targetRows = Math.max(1, options.targetRows ?? ROW_BLOCK_TARGET_ROWS);
   const targetVertices = Math.max(1, options.targetVertices ?? ROW_BLOCK_TARGET_VERTICES);
   const shape: GroupShape = {
     dims: options.dimensions ?? 'xy',
     coordinates: options.coordinateSystem ?? planarCoordinates,
-    rings: options.rings ?? circleRowRings,
+    rings: options.rings ?? null,
   };
 
   const ids = new Utf8ColumnBuilder(256);
@@ -665,6 +681,28 @@ function buildGroup(
   };
 }
 
+/** A row added, as the rings read it */
+class InputRowRead implements RowRead {
+  readonly handle = -1;
+  constructor(
+    private readonly row: RowInput,
+    private readonly geometry: RowGeometry | null,
+  ) {}
+
+  get type(): string {
+    return this.row.type;
+  }
+
+  value(key: string): unknown {
+    const properties = this.row.properties;
+    return properties ? properties[key] : undefined;
+  }
+
+  shape(): RowShape | null {
+    return this.geometry ? rowShapeOf(this.geometry) : null;
+  }
+}
+
 /** The ring a row draws around its point, or null for a row that draws its geometry */
 function ringOfRow(
   row: RowInput,
@@ -672,10 +710,7 @@ function ringOfRow(
   rings: RowRings | null,
 ): Float64Array | null {
   if (!rings || geometry.type !== 'Point' || !rings.draws(row.type)) return null;
-  const properties = row.properties;
-  return rings.ringOf(row.type, geometry.coords[0], geometry.coords[1], (key) =>
-    properties ? properties[key] : undefined,
-  );
+  return rings.ringOf(new InputRowRead(row, geometry));
 }
 
 /** The number of coordinates a row draws (the estimate of the work of a group) */

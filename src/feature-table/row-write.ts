@@ -17,8 +17,6 @@
 
 import { type CoordinateSystem, readValue } from '@sakuzu/tabane';
 import type { Geometry } from 'geojson';
-import { circleRingCoords } from '../shared/circle-rings.js';
-import { drawPropertyKey } from '../shared/properties.js';
 import {
   polygonRanges,
   type RowGeometry,
@@ -28,6 +26,7 @@ import {
   toRowGeometry,
   triangulateRow,
 } from '../table/row-geometry.js';
+import type { RowRings } from '../table/row-rings.js';
 import {
   columnGeometryAt,
   geometryAt,
@@ -36,7 +35,7 @@ import {
   type RowGroup,
   widenBounds,
 } from './layer-table.js';
-import { rowNumber, rowTriangles, rowType } from './row-read.js';
+import { groupRowRead, rowTriangles, rowType } from './row-read.js';
 import {
   encodeOverrideValue,
   GeometryOverrides,
@@ -44,9 +43,6 @@ import {
   sameOverrideValue,
   ValueOverrides,
 } from './value-overrides.js';
-
-/** The key of the radius of a Circle in the attributes of a row */
-const RADIUS_KEY = drawPropertyKey('radiusMeters');
 
 /**
  * What a write of the geometry of a row changed
@@ -61,7 +57,8 @@ export interface GeometryWrite {
   readonly sameShape: boolean;
   /**
    * The coordinates of the row whose `x` or `y` changed, `[from, to)` counted from its first
-   * coordinate (a Circle counts the coordinates of its ring): what is drawn of them. Empty when
+   * coordinate (a row that draws a ring counts the coordinates of its ring): what is drawn of
+   * them. Empty when
    * nothing moved, a write of a `z` or an `m` only included
    */
   readonly from: number;
@@ -101,6 +98,8 @@ export function writeRowValue(group: RowGroup, row: number, key: string, value: 
  *
  * @param table The layer of the row (its dimensions, its rows moved)
  * @param system The system of the coordinates the bbox of the row is made in (that of the tables)
+ * @param rings The rings the rows of some types draw around their point (those of the tables;
+ *   none when omitted)
  * @throws when the geometry is not of one of the six types a row holds, or when a position has
  *   more values than the dimensions of the layer
  * @internal
@@ -111,6 +110,7 @@ export function writeRowGeometry(
   row: number,
   geometry: Geometry,
   system: CoordinateSystem,
+  rings: RowRings | null = null,
 ): GeometryWrite {
   const next = toRowGeometry(geometry, table.dims);
   const stride = next.stride;
@@ -153,9 +153,9 @@ export function writeRowGeometry(
       group.geometries.setGeometry(row, singleRowColumn(next));
     }
   }
-  const shape = refreshRowShape(table, group, row, system);
+  const shape = refreshRowShape(table, group, row, system, rings);
   if (shape.ring) {
-    // A Circle draws its ring: every coordinate of it moves with its center
+    // A row that draws a ring: every coordinate of it moves with its point
     return {
       sameShape: sameStructure && shape.sameTriangles,
       from: 0,
@@ -166,14 +166,16 @@ export function writeRowGeometry(
 }
 
 /**
- * Works out again what follows from the geometry of a row (and the radius of a Circle): its
- * triangles and its bbox, and records it moved in its layer. Called after its geometry or the
- * radius of a Circle was written
+ * Works out again what follows from the geometry of a row (and from the attributes its ring is
+ * made from): its triangles and its bbox, and records it moved in its layer. Called after its
+ * geometry or an attribute its ring is made from was written
  *
  * @param system The system of the coordinates the bbox of the row is made in, as for every other
  *   row of the tables (that of the tables)
- * @returns Whether the triangles stayed the same, and the number of coordinates of the ring of a
- *   Circle (0 for any other row)
+ * @param rings The rings the rows of some types draw around their point (those of the tables;
+ *   none when omitted)
+ * @returns Whether the triangles stayed the same, and the number of coordinates of the ring the
+ *   row draws (0 for a row that draws none)
  * @internal
  */
 export function refreshRowShape(
@@ -181,10 +183,11 @@ export function refreshRowShape(
   group: RowGroup,
   row: number,
   system: CoordinateSystem,
+  rings: RowRings | null = null,
 ): { sameTriangles: boolean; ring: number } {
   const geometry = geometryAt(group, row);
   if (!geometry) return { sameTriangles: true, ring: 0 };
-  const shape = shapeOf(group, row, geometry);
+  const shape = shapeOf(group, row, geometry, rings);
   const sameTriangles = shape.fill ? writeTriangles(group, row, shape.fill) : true;
   const bounds = group.data.rowBounds;
   system.rowBox(shape.coords, shape.stride, shape.from, shape.to, bounds, row * 4);
@@ -203,12 +206,18 @@ export function refreshRowShape(
 }
 
 /**
- * Whether the radius of a row is the key written (the ring of a Circle follows it)
+ * Whether the ring of a row is made from the attribute of a key (its ring follows it)
  *
+ * @param rings The rings of the tables (null for none)
  * @internal
  */
-export function isRadiusKey(group: RowGroup, row: number, key: string): boolean {
-  return key === RADIUS_KEY && rowType(group.data, row) === 'Circle';
+export function isRingKey(
+  rings: RowRings | null,
+  group: RowGroup,
+  row: number,
+  key: string,
+): boolean {
+  return rings?.keys.includes(key) === true && rings.draws(rowType(group.data, row));
 }
 
 /**
@@ -259,15 +268,19 @@ interface RowShape {
   readonly to: number;
   /** The triangles of its fill (null for a row without one) */
   readonly fill: number[] | null;
-  /** The coordinates of the ring of a Circle (0 for any other row) */
+  /** The coordinates of the ring the row draws (0 for a row that draws none) */
   readonly ring: number;
 }
 
-function shapeOf(group: RowGroup, row: number, geometry: RowGeometryAt): RowShape {
+function shapeOf(
+  group: RowGroup,
+  row: number,
+  geometry: RowGeometryAt,
+  rings: RowRings | null,
+): RowShape {
   const { reader, at } = geometry;
-  if (rowType(group.data, row) === 'Circle' && reader.type === 'Point') {
-    const center = reader.position(at);
-    const ring = circleRingCoords([center[0], center[1]], rowNumber(group, row, RADIUS_KEY) ?? 0);
+  if (rings && reader.type === 'Point' && rings.draws(rowType(group.data, row))) {
+    const ring = rings.ringOf(groupRowRead(group, row));
     if (!ring) {
       return {
         coords: reader.coords,

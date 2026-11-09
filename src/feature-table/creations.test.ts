@@ -18,6 +18,7 @@
 
 import { describe, expect, it, vi } from 'vitest';
 import type { FeatureTablesWorker } from '../api/tables.js';
+import { circleRowRings } from '../table/circle-rings.js';
 import { createRowBlockDataBuilder, ROW_BLOCK_TARGET_ROWS } from '../table/row-group-builder.js';
 import {
   expectTablesMatch,
@@ -207,7 +208,7 @@ describe('many new rows written at once', () => {
       merge: () => Promise.reject(new Error('no merge')),
       build: (rows, options) => {
         built.push(rows.length);
-        const builder = createRowBlockDataBuilder(options);
+        const builder = createRowBlockDataBuilder({ ...options, rings: circleRowRings });
         for (const row of rows) builder.addRow(structuredClone(row));
         return Promise.resolve(builder.finish());
       },
@@ -254,7 +255,7 @@ describe('many new rows written at once', () => {
       build: (rows, options) =>
         new Promise((resolve) => {
           release = () => {
-            const builder = createRowBlockDataBuilder(options);
+            const builder = createRowBlockDataBuilder({ ...options, rings: circleRowRings });
             for (const row of rows) builder.addRow(structuredClone(row));
             resolve(builder.finish());
           };

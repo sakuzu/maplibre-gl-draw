@@ -46,8 +46,8 @@ import type { GroupHandle, RowGroupHandle, RowHandle, TableWorkBudget } from './
  *
  * What is handed over can be posted as it is: it holds no function. The Worker gives the
  * system of the coordinates to the builder when the tables are given one
- * (`FeatureTablesOptions.coordinateSystem`); the builder draws the rings of the Circles by
- * default.
+ * (`FeatureTablesOptions.coordinateSystem`); the builder of the entry draws the rings the
+ * tables draw.
  *
  * @example A Worker of the host
  * ```ts

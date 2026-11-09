@@ -43,7 +43,6 @@ import {
 import type { LayerTable } from './feature-table/layer-table.js';
 import { resolveMessages } from './messages.js';
 import type { ModeManager } from './modes/manager.js';
-import { circleRowRings } from './shared/circle-rings.js';
 import { DEFAULT_FEATURE_STYLE_CONFIG } from './shared/config/feature-style.js';
 import { DEFAULT_BOX_SELECTION_STYLE_CONFIG } from './shared/config/rendering.js';
 import { DEFAULT_SELECTION_CONFIG } from './shared/config/selection.js';
@@ -61,6 +60,7 @@ import type { SnapResult } from './snapping/types.js';
 import { MemoryStore } from './store/memory.js';
 import type { Store } from './store/store.js';
 import { createTableStore } from './store/table-memory.js';
+import { circleRowRings } from './table/circle-rings.js';
 import { createRowBlockDataBuilder, type RowInput } from './table/row-group-builder.js';
 import { GpuResources } from './view/gpu.js';
 import { GpuLedger } from './view/gpu-ledger.js';

@@ -35,8 +35,8 @@ import {
   type TabaneShapeColumn,
   tabaneFlagOf,
 } from '@sakuzu/tabane';
-import { circleRowRings } from '../../shared/circle-rings.js';
 import { DrawError } from '../../shared/draw-error.js';
+import { circleRowRings } from '../circle-rings.js';
 import {
   polygonRanges,
   ringOffsetsOf,
@@ -52,7 +52,8 @@ import {
   type RowBlockData,
   type TriangleCache,
 } from '../row-group-types.js';
-import type { RowRings } from '../row-rings.js';
+import type { RowRead, RowShape } from '../row-read-type.js';
+import { type PointRowRings, rowRingsOfPoint } from '../row-rings.js';
 import type { TableGeometry, TableMixedGeometry } from '../types.js';
 import { featureColumnsOf, geometryTypeOf, stylesOf, typesOf } from './columns.js';
 import { type CachedFills, FILL_TRIANGLES_CACHE, readFillTrianglesCache } from './triangles.js';
@@ -71,7 +72,7 @@ export interface RowBlockOfTabaneOptions {
   /** The system of the coordinates of the bbox (the plane when omitted) */
   readonly coordinateSystem?: CoordinateSystem;
   /** The rings the rows of some types draw around their point (the Circles when omitted) */
-  readonly rings?: RowRings;
+  readonly rings?: PointRowRings;
   /**
    * The caches that follow the row block in its file (those of its part, `TabaneBlockFile.caches`
    * whose `part` is the number of the row block plus one): the triangles of its polygons are
@@ -160,7 +161,7 @@ export function rowBlockDataOfTabane(
   const columns = featureColumnsOf(rowBlock);
   const dims = options.dimensions ?? columns.geometry?.dimensions ?? 'xy';
   const system = options.coordinateSystem ?? planarCoordinates;
-  const rings = options.rings ?? circleRowRings;
+  const rings = options.rings ? rowRingsOfPoint(options.rings) : circleRowRings;
   const geometry = geometryOf(columns.geometry, n, dims);
   const stride = strideOf(dims);
   const { typeNames, types } = typesOf(columns.type, n);
@@ -236,15 +237,15 @@ export function rowBlockDataOfTabane(
     const end = vertexStart(child, at + 1);
     const type = typeNames[types[r]];
     if (child.type === 'Point' && drawsRing[types[r]]) {
-      const ring = rings.ringOf(
+      const ring = rings.ringOf({
+        handle: -1,
         type,
-        child.coords[first * stride],
-        child.coords[first * stride + 1],
-        (key) => {
+        value: (key) => {
           const k = columnOf.get(key);
           return k === undefined ? undefined : readValue(properties.columns[k], r);
         },
-      );
+        shape: (): RowShape => ({ column: { ...child, stride, offsets: child.offsets ?? [] }, at }),
+      } satisfies RowRead);
       vertexCount += ring ? ring.length / 2 : 1;
       if (ring) {
         system.rowBox(ring, 2, 0, ring.length / 2, rowBounds, r * 4);

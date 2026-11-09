@@ -5,7 +5,9 @@
  * The builder and the merge of the row blocks of the features (`feature-row-blocks.ts`)
  *
  * - The builder gives the rows the rings of the Circles when no rings are given, and the rings
- *   given otherwise; the row blocks are those of the builder of the tables given the same
+ *   given otherwise, read from the type, the point and the attributes of a row; the row blocks
+ *   are those of the builder of the tables given the same. The builder of the tables has no rings
+ *   of its own
  * - The merge merges as the merge of the tables does
  * - What the tables throw is a DrawError
  */
@@ -13,13 +15,13 @@
 import { utf8String } from '@sakuzu/tabane';
 import { describe, expect, it } from 'vitest';
 import { DrawError } from '../api/errors.js';
-import { circleRowRings } from '../shared/circle-rings.js';
 import { drawPropertyKey } from '../shared/properties.js';
+import { circleRowRings } from './circle-rings.js';
 import { createFeatureRowBlockBuilder, mergeFeatureRowBlock } from './feature-row-blocks.js';
 import { createRowBlockBuilder, type RowInput } from './row-group-builder.js';
 import { mergeRowBlock } from './row-group-merge.js';
 import type { RowBlock, RowBlockData } from './row-group-types.js';
-import type { RowRings } from './row-rings.js';
+import { type PointRowRings, rowRingsOfPoint } from './row-rings.js';
 
 const ROWS: RowInput[] = [
   {
@@ -61,10 +63,30 @@ describe('the builder of the row blocks of the features', () => {
   });
 
   it('gives the rows the rings given', () => {
-    const none: RowRings = { draws: () => false, ringOf: () => null, ringVertices: 1 };
+    const none: PointRowRings = { draws: () => false, ringOf: () => null, ringVertices: 1 };
     const blocks = build(createFeatureRowBlockBuilder({ rings: none }));
-    expect(blocks).toEqual(build(createRowBlockBuilder({ rings: none })));
+    expect(blocks).toEqual(build(createRowBlockBuilder({ rings: rowRingsOfPoint(none) })));
     expect(blocks).not.toEqual(build(createFeatureRowBlockBuilder()));
+    // The builder of the tables draws no ring when given none
+    expect(build(createRowBlockBuilder())).toEqual(blocks);
+  });
+
+  it('reads the rings given from the type, the point and the attributes of a row', () => {
+    const asked: unknown[] = [];
+    const square: PointRowRings = {
+      draws: (type) => type === 'Circle',
+      ringOf: (type, x, y, value) => {
+        asked.push([type, x, y, value(drawPropertyKey('radiusMeters')), value('none')]);
+        return Float64Array.of(x, y, x + 1, y, x + 1, y + 1, x, y);
+      },
+      ringVertices: 4,
+    };
+    const [block] = build(createFeatureRowBlockBuilder({ rings: square })) as RowBlockData[];
+    expect(asked[0]).toEqual(['Circle', 10, 20, 5000, undefined]);
+    const circle = 1;
+    expect(Array.from(block.rowBounds.subarray(circle * 4, circle * 4 + 4))).toEqual([
+      10, 20, 11, 21,
+    ]);
   });
 
   it('throws an error of the tables as a DrawError', () => {

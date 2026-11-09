@@ -11,7 +11,7 @@
 
 import { describe, expect, it } from 'vitest';
 import type { FeatureTables } from '../api/tables.js';
-import { circleRowRings } from '../shared/circle-rings.js';
+import { circleRowRings } from '../table/circle-rings.js';
 import { createRowBlockDataBuilder, type RowInput } from '../table/row-group-builder.js';
 import type { RowBlockData } from '../table/row-group-types.js';
 import { orderKey, randomRowGeometry, seededRandom } from '../test-utils.js';

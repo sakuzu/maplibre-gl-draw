@@ -18,6 +18,7 @@ import { describe, expect, it } from 'vitest';
 import type { FeatureTablesWorker } from '../api/tables.js';
 import { featureTablesInternals } from '../feature-table/feature-tables.js';
 import type { TableWorkBudget } from '../feature-table/types.js';
+import { circleRowRings } from '../table/circle-rings.js';
 import {
   createRowBlockBuilder,
   createRowBlockDataBuilder,
@@ -179,7 +180,7 @@ describe('every row taken out of the tables', () => {
       build: (rows, options) =>
         new Promise((resolve) => {
           release = () => {
-            const builder = createRowBlockDataBuilder(options);
+            const builder = createRowBlockDataBuilder({ ...options, rings: circleRowRings });
             for (const row of rows) builder.addRow(structuredClone(row));
             resolve(builder.finish());
           };

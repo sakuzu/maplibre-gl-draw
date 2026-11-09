@@ -7,12 +7,16 @@
  *
  * What the library declares of its features for the builder and the merge of the tables
  * (`row-group-builder.ts`, `row-group-merge.ts`) is given here: the rings of the Circles as the
- * rings of the rows when none are given (`circleRowRings`), and what they throw for the rows as
- * a `DrawError`, as every error of the library. A Worker of the host imports these: a function
- * cannot be sent to it, so what the library declares is held here, where the Worker runs them.
+ * rings of the rows when none are given (`circleRowRings`; the tables have none of their own),
+ * and what they throw for the rows as a `DrawError`, as every error of the library. A Worker of
+ * the host imports these: a function cannot be sent to it, so what the library declares is held
+ * here, where the Worker runs them.
+ *
+ * The rings given to the builder here are read from the type, the point and the attributes of a
+ * row (`PointRowRings`), and given to the builder of the tables as rings that read a row.
  */
 
-import { circleRowRings } from '../shared/circle-rings.js';
+import { circleRowRings } from './circle-rings.js';
 import { drawErrorOf } from './draw-error-of.js';
 import { KasaneError } from './kasane-error.js';
 import {
@@ -23,6 +27,7 @@ import {
 } from './row-group-builder.js';
 import { mergeRowBlock, type RowBlockMerge } from './row-group-merge.js';
 import type { RowBlock } from './row-group-types.js';
+import { rowRingsOfPoint } from './row-rings.js';
 
 /**
  * One feature given to the builder of the row blocks of the features, as a row
@@ -59,7 +64,10 @@ function rowsError(error: unknown): unknown {
 export function createFeatureRowBlockBuilder(
   options: FeatureRowBlockBuilderOptions = {},
 ): RowBlockBuilder {
-  const builder = createRowBlockBuilder({ ...options, rings: options.rings ?? circleRowRings });
+  const builder = createRowBlockBuilder({
+    ...options,
+    rings: options.rings ? rowRingsOfPoint(options.rings) : circleRowRings,
+  });
   return {
     get length() {
       return builder.length;

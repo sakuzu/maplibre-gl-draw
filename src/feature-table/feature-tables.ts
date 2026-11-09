@@ -42,7 +42,6 @@ import type {
   TableScanOptions,
 } from '../api/tables.js';
 import type { BBox } from '../geometry/types.js';
-import { circleRowRings } from '../shared/circle-rings.js';
 import { DrawError } from '../shared/draw-error.js';
 import type { Feature, FeatureStyle, FeatureType, RowValues } from '../shared/types/model.js';
 import { drawErrorOf } from '../table/draw-error-of.js';
@@ -60,6 +59,7 @@ import {
   type RowBlockData,
 } from '../table/row-group-types.js';
 import { compareRowKeys, type GroupKeySource, type RowKeySource } from '../table/row-keys.js';
+import type { RowRings } from '../table/row-rings.js';
 import { FeatureCache } from './feature-cache.js';
 import { featureFields } from './feature-fields.js';
 import { groupRunCuts, rowGroupsHolding } from './group-runs.js';
@@ -92,7 +92,7 @@ import {
 } from './row-state.js';
 import {
   type GeometryWrite,
-  isRadiusKey,
+  isRingKey,
   refreshRowShape,
   writeRowGeometry,
   writeRowValue,
@@ -246,6 +246,11 @@ export interface TablesInternalOptions extends FeatureTablesInternalOptions {
    * which do not
    */
   readonly beforeRead?: () => void;
+  /**
+   * The rings the rows of some types draw around their point (none when omitted: every row draws
+   * its shape). The rows a Worker builds for the tables are to be built with the same
+   */
+  readonly rings?: RowRings;
 }
 
 /**
@@ -969,6 +974,8 @@ class FeatureTablesStore implements FeatureTablesInternals, TablesWriter, Tables
   private readonly boxOfType = new Map<string, ((feature: Feature) => BBox) | null>();
   /** The fields whose new value places a row again (`relocatingFields`) */
   private readonly relocating: ReadonlySet<string>;
+  /** The rings the rows of some types draw around their point (`rings`; null for none) */
+  private readonly rings: RowRings | null;
 
   constructor(options: TablesInternalOptions) {
     this.strings = new ValueStringCache(options.stringCacheSize);
@@ -991,6 +998,7 @@ class FeatureTablesStore implements FeatureTablesInternals, TablesWriter, Tables
     this.worker = options.worker;
     this.onRelease = options.onRelease;
     this.boxesGiven = options.rowBoxes;
+    this.rings = options.rings ?? null;
     for (const field of options.relocatingFields ?? []) {
       if (field !== TYPE_FIELD && !field.startsWith('property:')) {
         throw new KasaneError(
@@ -1144,7 +1152,7 @@ class FeatureTablesStore implements FeatureTablesInternals, TablesWriter, Tables
       rowInput: (group, row) => rowInputOf(this.readContext, group, row),
       buildRows: (inputs, dims) => this.buildRows(inputs, dims),
       coordinates: this.coordinates,
-      ringVertices: circleRowRings.ringVertices,
+      ringVertices: this.rings?.ringVertices ?? 1,
       groupKeys: this.groups,
       groupKeyList: () => this.groups.keyList(),
       orderVersionOf: (group) => this.groups.orderVersionOf(group),
@@ -1688,7 +1696,7 @@ class FeatureTablesStore implements FeatureTablesInternals, TablesWriter, Tables
       groups: this.groups.keyList(),
       dimensions: creation.layer.dims,
       coordinateSystem: this.coordinates,
-      rings: circleRowRings,
+      rings: this.rings ?? undefined,
     });
     for (const row of creation.rows) builder.addRow(row.input);
     return builder.finish();
@@ -3155,7 +3163,7 @@ class FeatureTablesStore implements FeatureTablesInternals, TablesWriter, Tables
       targetRows: UNBOUNDED,
       targetVertices: UNBOUNDED,
       dimensions: dims,
-      ringVertices: circleRowRings.ringVertices,
+      ringVertices: this.rings?.ringVertices ?? 1,
     });
     return data;
   }
@@ -3310,7 +3318,7 @@ class FeatureTablesStore implements FeatureTablesInternals, TablesWriter, Tables
     let keys: string[] | null = null;
     const geometry = columns.geometry?.[i];
     if (geometry !== undefined) {
-      shape = writeRowGeometry(layer, group, row, geometry as never, this.coordinates);
+      shape = writeRowGeometry(layer, group, row, geometry as never, this.coordinates, this.rings);
       what |= ROW_WRITE_GEOMETRY;
     }
     if (styleNumbers) {
@@ -3347,9 +3355,9 @@ class FeatureTablesStore implements FeatureTablesInternals, TablesWriter, Tables
       what |= ROW_WRITE_VALUES;
       keys ??= [];
       keys.push(key);
-      if (isRadiusKey(group, row, key)) {
-        // The ring of a Circle follows its radius
-        const ring = refreshRowShape(layer, group, row, this.coordinates);
+      if (isRingKey(this.rings, group, row, key)) {
+        // The ring of a row follows the attributes it is made from
+        const ring = refreshRowShape(layer, group, row, this.coordinates, this.rings);
         shape = { sameShape: ring.sameTriangles, from: 0, to: ring.ring };
         what |= ROW_WRITE_GEOMETRY;
       }
@@ -3608,7 +3616,7 @@ class FeatureTablesStore implements FeatureTablesInternals, TablesWriter, Tables
       targetRows: UNBOUNDED,
       targetVertices: UNBOUNDED,
       dimensions: layer.dims,
-      ringVertices: circleRowRings.ringVertices,
+      ringVertices: this.rings?.ringVertices ?? 1,
     });
     const marks = this.writeMarks;
     const group =
@@ -3676,7 +3684,7 @@ class FeatureTablesStore implements FeatureTablesInternals, TablesWriter, Tables
       targetVertices: UNBOUNDED,
       dimensions: dims,
       coordinateSystem: this.coordinates,
-      rings: circleRowRings,
+      rings: this.rings ?? undefined,
     });
     for (const input of inputs) builder.addRow(input);
     const [data] = builder.finish();

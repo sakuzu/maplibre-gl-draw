@@ -34,6 +34,7 @@ import {
 import { compareKeys, keyAfter } from '../../store/order-keys.js';
 import { createTableStore } from '../../store/table-memory.js';
 import { rowPatch, seededRandom } from '../../test-utils.js';
+import { circleRowRings } from '../circle-rings.js';
 import { createRowBlockDataBuilder } from '../row-group-builder.js';
 import type { RowBlockData } from '../row-group-types.js';
 import { writeTabaneFeatureBlocks } from './blocks.js';
@@ -289,7 +290,7 @@ describe('a row block as a row block of the tables', () => {
     }));
     for (const rows of [buildings(1000, 3), variety(), flagged, circles]) {
       const [written] = writeTabaneFeatureBlocks({ parent: 'p', head: 'V', rows });
-      const builder = createRowBlockDataBuilder({ targetRows: 1000 });
+      const builder = createRowBlockDataBuilder({ targetRows: 1000, rings: circleRowRings });
       rows.forEach((row, i) => {
         builder.addRow({
           id: row.id,

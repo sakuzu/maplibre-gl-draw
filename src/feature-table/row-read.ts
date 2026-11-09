@@ -30,6 +30,7 @@ import {
   ROW_FLAG_VISIBLE,
   type RowBlockData,
 } from '../table/row-group-types.js';
+import type { RowRead, RowShape } from '../table/row-read-type.js';
 import type { GroupTable } from './group-table.js';
 import { geometryAt, type RowGroup } from './layer-table.js';
 import type { StyleTable } from './style-table.js';
@@ -73,6 +74,24 @@ export function rowValue(
   const column = group.propertyIndex.get(key);
   if (column === undefined) return undefined;
   return readValue(group.data.properties.columns[column], row, strings);
+}
+
+/**
+ * A row of a group as what the user of the tables gives reads it (`RowRead`): its values as they
+ * are read now, what was written in place included
+ *
+ * @internal
+ */
+export function groupRowRead(group: RowGroup, row: number): RowRead {
+  return {
+    handle: group.data.handles[row],
+    type: rowType(group.data, row),
+    value: (key) => rowValue(group, row, key),
+    shape: (): RowShape | null => {
+      const geometry = geometryAt(group, row);
+      return geometry ? { column: geometry.reader, at: geometry.at } : null;
+    },
+  };
 }
 
 /**

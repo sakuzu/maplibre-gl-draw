@@ -18,7 +18,7 @@ import { type CoordinateDimensions, planarRowBox } from '@sakuzu/tabane';
 import type { Geometry, Position } from 'geojson';
 import { describe, expect, it } from 'vitest';
 import type { FeatureTablesWorker } from '../api/tables.js';
-import { circleRowRings } from '../shared/circle-rings.js';
+import { circleRowRings } from '../table/circle-rings.js';
 import { createRowBlockDataBuilder } from '../table/row-group-builder.js';
 import { mergeRowBlock } from '../table/row-group-merge.js';
 import {

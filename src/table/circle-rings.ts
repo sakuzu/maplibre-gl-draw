@@ -7,7 +7,9 @@
  */
 
 import { generateCirclePolygon } from '../geometry/circle.js';
-import { drawPropertyKey } from './properties.js';
+import { drawPropertyKey } from '../shared/properties.js';
+import type { RowRead } from './row-read-type.js';
+import type { RowRings } from './row-rings.js';
 
 /** The key of the radius of a Circle in the attributes of a row */
 const RADIUS_KEY = drawPropertyKey('radiusMeters');
@@ -37,21 +39,23 @@ export function circleRingCoords(center: [number, number], radius: number): Floa
  * The rings of the Circles held as rows: a row of the type `Circle` draws the circle of its
  * radius in meters (`maplibre-gl-draw:radiusMeters`) around its point in degrees.
  *
- * The builder of the row blocks of the features (`createFeatureRowBlockBuilder`, which a Worker
- * of the host imports) gives it as the rings when none are given, so that the Circles it builds
- * have the bbox and the triangles of their rings.
+ * The library gives it to the tables and to the builder of their row blocks
+ * (`createFeatureRowBlockBuilder`, which a Worker of the host imports) as the rings of the rows,
+ * so that the Circles have the bbox and the triangles of their rings.
  */
-export const circleRowRings = {
+export const circleRowRings: RowRings = {
   draws: (type: string): boolean => type === 'Circle',
-  ringOf: (
-    type: string,
-    x: number,
-    y: number,
-    value: (key: string) => unknown,
-  ): Float64Array | null => {
-    if (type !== 'Circle') return null;
-    const radius = value(RADIUS_KEY);
-    return circleRingCoords([x, y], typeof radius === 'number' ? radius : 0);
+  ringOf: (row: RowRead): Float64Array | null => {
+    if (row.type !== 'Circle') return null;
+    const shape = row.shape();
+    if (shape?.column.type !== 'Point') return null;
+    const { coords, stride } = shape.column;
+    const radius = row.value(RADIUS_KEY);
+    return circleRingCoords(
+      [coords[shape.at * stride], coords[shape.at * stride + 1]],
+      typeof radius === 'number' ? radius : 0,
+    );
   },
   ringVertices: CIRCLE_RING_VERTICES,
+  keys: [RADIUS_KEY],
 };

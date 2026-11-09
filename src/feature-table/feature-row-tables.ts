@@ -6,15 +6,16 @@
  * (`createFeatureRowTables`, `createFeatureTablesStore`)
  *
  * The tables (`createTables`) hold rows and know nothing of features. The library gives them what
- * they ask the user of the tables for: the boxes of the rows of an Image and of the types of the
- * extensions (`FeatureRowBoxes`), the fields whose new value places a row again, the ones the
- * drawing cuts the rows by (the type, and the zoom a feature was created at), and when the tables
- * run their work (while the page is idle).
+ * they ask the user of the tables for: the rings of the Circles (`circleRowRings`), the boxes of
+ * the rows of an Image and of the types of the extensions (`FeatureRowBoxes`), the fields whose
+ * new value places a row again, the ones the drawing cuts the rows by (the type, and the zoom a
+ * feature was created at), and when the tables run their work (while the page is idle).
  */
 
 import type { FeatureTables, FeatureTablesWriter, RowField } from '../api/tables.js';
 import { drawPropertyKey } from '../shared/properties.js';
 import { whenIdle } from '../shared/utils/idle.js';
+import { circleRowRings } from '../table/circle-rings.js';
 import { FeatureRowBoxes, keepFeatureRowBoxes } from './feature-row-boxes.js';
 import {
   createTables,
@@ -39,15 +40,15 @@ export const FEATURE_RELOCATING_FIELDS: readonly RowField[] = [
 
 /**
  * Creates the tables of the features of a document with what the library declares of its
- * features (`createTables`): the boxes of the rows of an Image and of the types of the extensions
- * (`featureRowBoxesOf`), the fields that place a row again, and the idle periods of the page for
- * their work (unless the options give others). What a read through the reading side calls first
- * (`beforeRead`) is the one of the options
+ * features (`createTables`): the rings of the Circles, the boxes of the rows of an Image and of
+ * the types of the extensions (`featureRowBoxesOf`), the fields that place a row again, and the
+ * idle periods of the page for their work (unless the options give others). What a read through
+ * the reading side calls first (`beforeRead`) is the one of the options
  *
  * @internal
  */
 export function createFeatureRowTables(
-  options: Omit<TablesInternalOptions, 'rowBoxes' | 'relocatingFields'> = {},
+  options: Omit<TablesInternalOptions, 'rowBoxes' | 'relocatingFields' | 'rings'> = {},
 ): {
   tables: FeatureTables;
   writer: TablesWriter;
@@ -55,6 +56,7 @@ export function createFeatureRowTables(
   const boxes = new FeatureRowBoxes();
   const made = createTables({
     ...options,
+    rings: circleRowRings,
     rowBoxes: boxes.boxesOf,
     relocatingFields: FEATURE_RELOCATING_FIELDS,
     whenIdle: options.whenIdle ?? whenIdle,
