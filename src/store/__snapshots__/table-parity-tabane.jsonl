@@ -1,0 +1,9 @@
+{"blocks":1}
+{"geometry":{"coordinates":[1,1],"type":"Point"},"groupId":"<undefined>","id":"1AAAAAAAAAAAA-1","layerId":"a","locked":false,"properties":{"n":0,"name":"F 0"},"style":{},"type":"Point","visible":true}
+{"geometry":{"coordinates":[[2,0],[3,1]],"type":"LineString"},"groupId":"<undefined>","id":"1AAAAAAAAAAAA-2","layerId":"a","locked":false,"properties":{"n":1,"name":"F 1"},"style":{"strokeColor":"#ff0000"},"type":"LineString","visible":true}
+{"geometry":{"coordinates":[[[4,0],[5,0],[5,1],[4,1],[4,0]]],"type":"Polygon"},"groupId":"<undefined>","id":"1AAAAAAAAAAAA-3","layerId":"a","locked":false,"properties":{"n":2,"name":"F 2"},"style":{"fillColor":"#00ff00"},"type":"Polygon","visible":true}
+{"geometry":{"coordinates":[[6,0],[6.5,0.5]],"type":"MultiPoint"},"groupId":"<undefined>","id":"1AAAAAAAAAAAA-4","layerId":"a","locked":false,"properties":{"n":3,"name":"F 3"},"style":{},"type":"MultiPoint","visible":true}
+{"geometry":{"coordinates":[[[7,0],[7.5,0.5]],[[7,1],[7.5,1.5]]],"type":"MultiLineString"},"groupId":"<undefined>","id":"1AAAAAAAAAAAA-5","layerId":"a","locked":false,"properties":{"n":4,"name":"F 4"},"style":{"strokeColor":"#ff0000"},"type":"MultiLineString","visible":true}
+{"geometry":{"coordinates":[[[[8,0],[9,0],[9,1],[8,0]]]],"type":"MultiPolygon"},"groupId":"<undefined>","id":"1AAAAAAAAAAAA-6","layerId":"a","locked":false,"properties":{"n":5,"name":"F 5"},"style":{"fillColor":"#00ff00"},"type":"MultiPolygon","visible":true}
+{"geometry":{"coordinates":[10,0.5],"type":"Point"},"groupId":"<undefined>","id":"1AAAAAAAAAAAA-7","layerId":"a","locked":false,"properties":{"n":6,"radius":5000},"style":{},"type":"Circle","visible":true}
+{"geometry":{"coordinates":[[11,0],[11.2,0.4],[11.5,0.2]],"type":"LineString"},"groupId":"<undefined>","id":"1AAAAAAAAAAAA-8","layerId":"a","locked":false,"properties":{"n":7,"name":"F 7"},"style":{"strokeColor":"#ff0000"},"type":"Freehand","visible":true}
