@@ -479,13 +479,9 @@ describe.each(KINDS)('the shape being drawn over a Store of %s', (kind) => {
       expect(created.type).toBe(d.created?.type);
       if ((d.created?.positions ?? 0) > 0) expect(created.positions).toBe(d.created?.positions);
       else expect(created.positions).toBeGreaterThan(2);
-      if (kind === 'rows') {
-        // A row created is told by the change of the document alone, selected or not
-        expect(featureEvents(recorded)).toEqual(['D']);
-      } else {
-        expect(featureEvents(recorded)).toEqual(['created', 'D']);
-        expect(recorded.find((e) => e.name === 'created')?.id).toBe(created.id);
-      }
+      // Both Stores tell the feature created by its ID in the one change
+      expect(featureEvents(recorded)).toEqual(['created', 'D']);
+      expect(recorded.find((e) => e.name === 'created')?.id).toBe(created.id);
       if (d.mode !== 'draw_point') expect(last(previews(recorded))).toBe('cleared');
       else expect(previews(recorded)).toEqual([]);
       expect(await modeOf(page)).toBe(d.modeAfter);

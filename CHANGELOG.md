@@ -88,7 +88,6 @@ writing it. Its changes are listed after those of 3.0.0.
   `ItemPosition`), and many rows put in another place at once. For a
   store of your own, `diffItemOrder(lists, isGroup)` makes them from the
   lists of items before and after (`ItemListChange`).
-- The event `group.moved`.
 - Optional members of `Store`: `moveItem` and `moveItems`;
   `createFeatures`, which creates many features at once, so that a store
   that holds its features as rows writes them in one write of its tables,
@@ -109,8 +108,8 @@ writing it. Its changes are listed after those of 3.0.0.
   `selection.value` (`SelectionValue`) tells the type, the number of the
   features, their layers and extent, and the IDs; past 2,000 features, in a
   store that holds its features as rows (a box, every feature), the IDs are
-  not listed (`ids` is `null`). `selection.changed` gives the value and the
-  one before it. `selection.target` (`SelectionTarget`) names the selection
+  not listed (`ids` is `null`). `draw.selection` is the observable of the
+  value. `selection.target` (`SelectionTarget`) names the selection
   as it is, without listing it, and `selection.set(target)` selects it
   again, features selected without their IDs included. The verbs of
   `draw.selection` act on them, the
@@ -237,7 +236,7 @@ writing it. Its changes are listed after those of 3.0.0.
   footprint with the margin) in the view drawn last, `getFootprint` its
   footprint without the margin (the four corners of an image as it is
   drawn, the footprint a custom type declares), and `getDraggedRows`,
-  experimental, the rows dragged in bulk. The event
+  experimental, the rows dragged in bulk. The observable
   `rendered.changed` tells the features whose shapes changed (a write of
   features or of rows, a sketch, or the rows dragged in bulk moving; a
   change of the shape being drawn is told with no IDs), once the draw
@@ -298,10 +297,19 @@ writing it. Its changes are listed after those of 3.0.0.
   the library answers, the color of the layer rule included. Reading it
   again gives the same object until the feature, the rule of its layer or
   the `style` option changes.
-- `PluginContext.emit(event, payload)`: a plugin sends events of its
-  own, which it declares in `DrawEvents` by declaration merging, to the
-  subscribers of `draw.on` and `ctx.on`, so that every event is in the
-  one list. The events of the library are refused with `invalid-input`.
+- `Observable` (`{ value, subscribe }`), the one shape of a value that
+  changes over time, which keeps the contract of a Svelte store:
+  `draw.selection`, `draw.vertexSelection`, `draw.mode` (new),
+  `draw.hidden.hiddenIds`, `draw.options`, `draw.sketches`,
+  `draw.datasets` and `draw.rendered.changed` are observables. A plugin
+  gives its own values on its API as observables.
+- The event `change` (`Change`, `ChangedIds`): once per commit of the
+  document, whatever it changed and however many features, the IDs of
+  the features, layers and groups created, updated, deleted and put in
+  another place (`placed`), whether the metadata or the files changed
+  (`document`), the source, and the feature before the commit
+  (`previous(id)`), in the same shape over a store of objects and a store
+  of rows.
 - `pixelsToMeters(pixels, zoom, latitude)` in `/geometry`: a size in
   pixels at a zoom of its own (the zoom a shape was made at) as a length
   on the ground, by the scale of Web Mercator on the sphere of
@@ -334,13 +342,12 @@ writing it. Its changes are listed after those of 3.0.0.
 - `selection.get()` is `selection.value` (`SelectionValue`): the type, the
   number of the features, their layers and extent, and the IDs, `null` past
   2,000 features in a store that holds its features as rows. Nothing selected
-  is the type `feature` and the number 0. `selection.changed` gives values.
+  is the type `feature` and the number 0. `draw.selection` tells values.
   `Selection` is what a store keeps (`Store.getSelection`), and
   `DocumentChange.selection` tells it as the store keeps it
 - A store that holds its features as rows tells every write of a row as the
   row written (`DocumentChange.rows`), selected or not: a feature selected or
-  being edited is not a feature of its own until it is let go of, and its
-  writes do not fire `feature.created` and `feature.updated`. A feature read
+  being edited is not a feature of its own until it is let go of. A feature read
   from it (`features.get`) is made of the row each time it changes
 - The vertices selected stay selected when another writer moves a vertex of
   the feature; by their places, they end when another writer adds or deletes
@@ -377,9 +384,9 @@ writing it. Its changes are listed after those of 3.0.0.
   left out places every vertex, and `below` left out puts the feature at the
   front of its layer or group, where `features.create` puts a new feature
 - The shape a drawing mode draws is a sketch of this client of an edit
-  `create` (`ModeContext.preview`): `sketch.added`, `sketch.updated` and
-  `sketch.removed` (`committed` once the feature is created, `cancelled` once
-  it is dropped) tell it, nothing is written while it is drawn, and
+  `create` (`ModeContext.preview`): `draw.sketches` tells it (it ends
+  `committed` once the feature is created, `cancelled` once it is dropped),
+  nothing is written while it is drawn, and
   `commitFeature` writes the feature with the ID of the sketch. An edit
   `create` with `placedVertexCount` is a shape being drawn: drawn with the look
   of `previewStyle` in its layer, not as a feature, with a geometry that may
@@ -471,18 +478,22 @@ writing it. Its changes are listed after those of 3.0.0.
   groups that list their items (`ObjectLayer[]` and `ObjectGroup[]`): a
   layer held as rows is written with the items its rows list, so
   `layer.items` and `group.featureIds` of a document are read as before.
-- `feature.moved` carries `from` and `to` as `ItemPosition`s (the layer,
-  the group and the items just below and above) instead of `MoveTarget`s,
-  and fires for a move in the same layer or group as well, once per
-  transaction. It fires after the events of the groups, with
-  `group.moved`.
-- A change of the order is told by `feature.moved`, `group.moved` and
+- The events of each feature, layer and group (`feature.created`,
+  `feature.updated`, `feature.deleted`, `feature.moved`, `layer.*`,
+  `group.*`), `metadata.updated` and `document.changed` are one event,
+  `change`, once per commit. The events of the values of this client
+  (`selection.changed`, `vertexSelection.changed`, `mode.changed`,
+  `hidden.changed`, `options.changed`, `sketch.*`, `dataset.added`,
+  `dataset.removed`, `dataset.reordered`, `rendered.changed`) are the
+  observables of their resources. `draw.on` refuses a name that is not
+  one of its events, and `PluginContext.emit` and the events a plugin
+  added to `DrawEvents` are gone.
+- A change of the order is told as `placed` of `change` and by
   `DocumentChange.order` only: an update of a layer that changed nothing
   but its `items`, or of a group nothing but its `featureIds` (a feature
-  created, deleted or moved), is no longer in `layer.updated`,
-  `group.updated` nor `DocumentChange.layers.updated` and
-  `groups.updated`. An update of another field carries the lists as they
-  are.
+  created, deleted or moved), is no longer in `updated` of `change` nor in
+  `DocumentChange.layers.updated` and `groups.updated`. An update of
+  another field carries the lists as they are.
 - A store that holds its features as rows refuses what would make or
   place every feature at once: `features.list` without a `limit`, and a
   place by `index`, throw a `DrawError` with the code `invalid-state`.
@@ -605,8 +616,8 @@ writing it. Its changes are listed after those of 3.0.0.
 ### Removed in 3.0.0
 
 - The event `preview.changed`: the shape being drawn is a sketch of this
-  client, told by `sketch.added`, `sketch.updated` and `sketch.removed`, and
-  `rendered.changed` tells with no IDs that a draw drew it changed.
+  client, told by `draw.sketches`, and `rendered.changed` tells with no IDs
+  that a draw drew it changed.
 
 - `DocumentChange.layerReorder` and `DocumentChange.groupReorder`: the
   order inside a layer or a group is told by `DocumentChange.order`.
@@ -702,7 +713,8 @@ writing it. Its changes are listed after those of 3.0.0.
 | --- | --- |
 | `DocumentChange.layerReorder` | `DocumentChange.order` |
 | `DocumentChange.groupReorder` | `DocumentChange.order` |
-| `feature.moved` `from`, `to` (`MoveTarget`) | `ItemPosition` |
+| `feature.*`, `layer.*`, `group.*`, `document.changed` | `change` |
+| `selection.changed` and the like | its observable (`draw.selection`) |
 | `TableGeometry.dimensions: 2` | `'xy'` |
 | `TableGeometry.dimensions: 3` | `'xyz'` |
 | `layer.items` of any layer | `layers.listItems(layer.id)` |
@@ -715,7 +727,6 @@ writing it. Its changes are listed after those of 3.0.0.
 | `PreparedTable.bounds` | `bbox` |
 | `selection.get()` | `selection.value` |
 | `selection.get().type` `null` | `selection.value.count` 0 |
-| `selection.changed` `{ type, ids }` | `SelectionValue` |
 | `Dataset.getRowBounds`, `LayerTableView.getRowBounds` | `getRowBBox` |
 | `selectionStyle.boundingBox` | `selectionStyle.box` |
 | `selectionStyle.boxSelection` | `selectionStyle.selectionRectangle` |
@@ -728,7 +739,7 @@ writing it. Its changes are listed after those of 3.0.0.
 | `features.get(id, { applySketches })` | `draw.rendered.get(id)` |
 | `draggedRowsOf(tables)` of `/kasane` | `draw.rendered.getDraggedRows()` |
 | `ExtensionContext.drawing` | `ctx.draw.drawing` |
-| `preview.changed` | `sketch.added`, `sketch.updated`, `sketch.removed` |
+| `preview.changed` | `draw.sketches` |
 | `getStyleRuleChannel(type)` | `featureTypes.getStyleRuleChannel(type)` |
 | `interaction.onDrawCommit` | `Plugin.onFeatureCommit` |
 | `interaction.onFeatureClick` | `selectMode.onSelectedFeatureClick` |

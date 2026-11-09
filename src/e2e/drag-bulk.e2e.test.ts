@@ -397,12 +397,9 @@ describe.each(KINDS)('many features selected over a Store of %s', (kind) => {
       expect((end.drawn[I_RESIZE] as Drawn).count).toBe((selected.drawn[I_RESIZE] as Drawn).count);
       expect((end.drawn[I_ROTATE] as Drawn).count).toBeGreaterThan(50);
       expectHitsAsDrawn(end.hits);
-      if (bulk) {
-        expect(sequenceOf(end.events)).toEqual(['D', `end ${started}`]);
-        expect(rowsWritten(end.events)).toEqual([IDS.length]);
-      } else {
-        expect(sequenceOf(end.events)).toEqual([...stepWrites('U'), `end ${started}`]);
-      }
+      // Both Stores tell the features written by their IDs in the one change
+      expect(sequenceOf(end.events)).toEqual([...stepWrites('U'), `end ${started}`]);
+      if (bulk) expect(rowsWritten(end.events)).toEqual([IDS.length]);
     });
 
     it('is drawn, hit and read in its middle as the Store shows it, and as before once cancelled', {
@@ -564,12 +561,9 @@ describe.each(KINDS)('many features selected over a Store of %s', (kind) => {
       expectHitsAsDrawn(end.hits);
       expect(await featureAt(page, edge)).toBe('b1');
       // Written once, a moment after the last press
-      if (bulk) {
-        expect(sequenceOf(end.events)).toEqual(['D']);
-        expect(rowsWritten(end.events)).toEqual([IDS.length]);
-      } else {
-        expect(sequenceOf(end.events)).toEqual(stepWrites('U'));
-      }
+      // Both Stores tell the features written by their IDs in the one change
+      expect(sequenceOf(end.events)).toEqual(stepWrites('U'));
+      if (bulk) expect(rowsWritten(end.events)).toEqual([IDS.length]);
     });
 
     it('moves the features at once, and Escape writes them and clears the selection', {
@@ -587,12 +581,9 @@ describe.each(KINDS)('many features selected over a Store of %s', (kind) => {
       expect(end.geometry).not.toEqual(selected.geometry);
       expectHitsAsDrawn(end.hits);
       // The moves waiting are written before the selection is cleared
-      if (bulk) {
-        expect(sequenceOf(end.events)).toEqual(['D']);
-        expect(rowsWritten(end.events)).toEqual([IDS.length]);
-      } else {
-        expect(sequenceOf(end.events)).toEqual(stepWrites('U'));
-      }
+      // Both Stores tell the features written by their IDs in the one change
+      expect(sequenceOf(end.events)).toEqual(stepWrites('U'));
+      if (bulk) expect(rowsWritten(end.events)).toEqual([IDS.length]);
     });
   });
 });

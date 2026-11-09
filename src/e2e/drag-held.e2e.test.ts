@@ -410,9 +410,9 @@ describe.each(KINDS)('many features dragged over a Store of %s', (kind) => {
       expectSame(end.drawn[I_FILL] as Drawn, mid.drawn[I_FILL] as Drawn);
       expectSame(end.drawn[I_LAST] as Drawn, mid.drawn[I_LAST] as Drawn);
       expect((end.drawn[I_RESIZE] as Drawn).count).toBeGreaterThan(100);
-      // A Store of rows tells the rows written by the change of the document alone
+      // Both Stores tell the features written by their IDs in the one change
       expect(sequenceOf(end.events)).toEqual([
-        ...(kind === 'rows' ? [] : ids.map((id) => `U ${id}`)),
+        ...ids.map((id) => `U ${id}`),
         'D',
         `end ${started}`,
       ]);
@@ -494,7 +494,7 @@ describe.each(KINDS)('many features dragged over a Store of %s', (kind) => {
       // Let go: written as the middle showed it last
       expect(end.first).toEqual(mid.firstSketched);
       expectSame(end.drawn[I_FIRST] as Drawn, mid.drawn[I_FIRST] as Drawn);
-      expect(sequenceOf(end.events)).toEqual([...(kind === 'rows' ? [] : [`U ${IDS[0]}`]), 'D']);
+      expect(sequenceOf(end.events)).toEqual([`U ${IDS[0]}`, 'D']);
     }
 
     it('is drawn, hit and read as it goes in its middle, and as written once let go', {
