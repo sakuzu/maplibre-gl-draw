@@ -60,7 +60,8 @@ GeoJSON の書き出しにもそのまま出ます。1.0 の名前はすべて�
   もプラグインも、同じ一覧 `DrawEvents` を購読します。
   `document.changed` は取引ごとに 1 回、文書の変化の全部を届けます。
   地物、レイヤー、グループ、メタデータのイベントは、書き込みの
-  出どころ `source` を運びます
+  出どころ `source` を運びます。3.0 ではこれらが替わります
+  ([2.x から 3.0 へ](#2x-から-30-へ))
 
 地物は `{ id, type, geometry, layerId, groupId, properties, style,
 visible, locked }` です。`geometry` は GeoJSON の geometry で、
@@ -650,7 +651,7 @@ Store を差し替えるときは、これまでどおり `options.store` に渡
 `isLocallyHidden`、`getLocallyHidden` は、`listFeatures`、
 `listFeaturesInOrder`、`listLayers`、`listGroups`、`listFiles`、
 `getVertexSelection`、`isHidden`、`listHidden` になります。
-`subscribe` は `document.changed` と同じ型の `DocumentChange` を
+`subscribe` は (2.0 では `document.changed` と同じ型の) `DocumentChange` を
 届け、文書の全部の置き換えも同じ形で知らせます。入力の状態 (描いて
 いる途中の形、範囲選択、ドラッグ) は契約に含めません。
 
@@ -663,7 +664,8 @@ Store を差し替えるときは、これまでどおり `options.store` に渡
 
 ## 2.0 から 2.1 へ
 
-変えるところはありません。2.1 ではイベント `options.changed` と
+変えるところはありません。2.1 ではイベント `options.changed` (3.0 では
+Observable の `draw.options` で読みます) と
 `Dataset.getStyleRule()` と標準の UI のパッケージ
 `@sakuzu/maplibre-gl-draw-ui` が加わり、差分の `map.setStyle` の後の
 レイヤーの順が直りました (描画は新しいスタイルの上に残ります。文書に
@@ -676,6 +678,29 @@ Store を差し替えるときは、これまでどおり `options.store` に渡
 ([変更履歴](../../CHANGELOG.md#unreleased))。標準のストアを使う
 アプリで変わるところは次のとおりです。拡張で変わるところは
 [3.0 の拡張](#30-の拡張)にあります。
+
+文書の確定は、地物、レイヤー、グループごとのイベントと
+`metadata.updated`、`document.changed` に替わって、1 つのイベント
+`change` で届きます。確定が作った、変えた、消した、置き場を変えた物の ID
+を並べ、`previous(id)` は地物の確定の前の姿を返します。時間で変わる値は、
+イベントに替わって資源の `Observable` で読みます。`draw.selection`、
+`draw.vertexSelection`、`draw.mode`、`draw.hidden.hiddenIds`、
+`draw.options`、`draw.sketches`、`draw.datasets`、
+`draw.rendered.changed` です。プラグインは自分のイベントを送らなくなり
+(`PluginContext.emit` は無くなりました)、自分の値を API の Observable
+で渡します ([イベント](../reference/events.md))。
+
+```ts
+// 2.x
+draw.on('feature.updated', ({ feature }) => redraw(feature.id));
+draw.on('selection.changed', ({ selection }) => show(selection));
+
+// 3.0
+draw.on('change', ({ features }) => {
+  for (const id of features.updated) redraw(id);
+});
+draw.selection.subscribe((selection) => show(selection));
+```
 
 `Layer` と `Group` は、`kind` で見分ける共用体になりました。行で持つ
 レイヤー (`kind: 'table'`) は `items` を持たず、そのグループは

@@ -553,7 +553,7 @@ export interface Dataset {
 
   /**
    * Removes the dataset and releases its GPU resources; the same as
-   * `draw.datasets.remove`, including the `dataset.removed` event.
+   * `draw.datasets.remove`, the observable `draw.datasets` telling it.
    * Calling it again does nothing
    */
   remove(): void;

@@ -11,7 +11,7 @@
 // A value is shown as a string (an object or an array as JSON). A value the user types is kept
 // as the string typed: "12" stays the string "12" and is not turned into a number, so that what
 // is typed is what is stored, whatever it looks like. An application that wants typed values
-// converts them itself (feature.updated tells it of each change).
+// converts them itself (`change` tells it of each change).
 
 import { type Feature, type FeaturePatch, isDrawProperty } from '@sakuzu/maplibre-gl-draw';
 

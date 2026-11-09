@@ -40,7 +40,7 @@ export type ScreenPoint = [number, number];
  * `useSyncExternalStore(observable.subscribe, () => observable.value)` reads it.
  */
 export interface Observable<T> {
-  /** The value now */
+  /** The value now: the same object while the value does not change */
   readonly value: T;
   /**
    * Calls `run` with the value now at once, and again each time the value changes. It does not
@@ -53,19 +53,21 @@ export interface Observable<T> {
 
 /**
  * The IDs of what one commit created, updated, deleted and put in another place, of one kind
- * (features, layers or groups). An ID is in one of `created` and `deleted` at most; a feature or a
- * group put into another layer or group is in `updated` and in `placed`.
+ * (features, layers or groups), for the commit as a whole: an ID is listed once in each list at
+ * most, in one of `created`, `updated` and `deleted` at most, and not at all when it was created
+ * and deleted in the commit, or written back to what it was.
  */
 export interface ChangedIds {
-  /** Created */
+  /** Created (written after in the commit included) */
   readonly created: readonly string[];
-  /** Changed (a feature or a group put into another layer or group included) */
+  /** Changed, otherwise than by its place (it is in `placed` too when it was also put elsewhere) */
   readonly updated: readonly string[];
-  /** Deleted */
+  /** Deleted (written before in the commit included) */
   readonly deleted: readonly string[];
   /**
-   * Put in another place of the stacking order: in its layer or group, or into another one. For
-   * the layers, those whose place in the stacking order of the layers changed
+   * Put in another place of the stacking order: in its layer or group, or into another one. A
+   * feature or a group that changed nothing but its place is here alone. For the layers, those
+   * whose place among the layers changed
    */
   readonly placed: readonly string[];
 }
@@ -89,11 +91,16 @@ export interface Change {
   readonly layers: ChangedIds;
   /** The groups */
   readonly groups: ChangedIds;
-  /** Whether the values of the document itself (its metadata or its files) changed */
+  /**
+   * Whether the document itself changed: its metadata or its files, the whole document replaced,
+   * or an entry of the stacking order of the layers that is not a layer (a dataset of the order
+   * of the layers, an entry of the application) put in or out of it, or in another place of it
+   */
   readonly document: boolean;
   /**
-   * The feature as it was before the commit: one updated or deleted. It is read in the listener,
-   * while the change is delivered; after, its answer is not kept.
+   * The feature as it was before the commit, before its first write in it: one updated, deleted
+   * or put in another layer or group. It is read in the listener, while the change is delivered;
+   * after, its answer is not kept.
    *
    * @returns The feature before, or `undefined` for one created, one the commit did not change,
    *   and a feature written by a commit from elsewhere to a layer held as rows of columns (which

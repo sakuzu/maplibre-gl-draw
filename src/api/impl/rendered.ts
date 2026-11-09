@@ -184,9 +184,10 @@ export function createRendered(deps: RenderedDeps): {
   };
 
   const stops = [
-    // The features a commit created, wrote and deleted (the rows of a Store of rows included)
+    // The features a commit created, wrote, put in another place and deleted (the rows of a Store
+    // of rows included)
     events.on('change', ({ features }) => {
-      for (const ids of [features.created, features.updated, features.deleted]) {
+      for (const ids of [features.created, features.updated, features.placed, features.deleted]) {
         for (const id of ids) changed.add(id);
       }
     }),

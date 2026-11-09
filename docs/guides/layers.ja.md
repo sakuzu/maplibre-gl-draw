@@ -139,8 +139,8 @@ draw.groups.move(groupId, { layerId: notes.id, index: 0 });
 - ロックされたものの移動や、ロックされたレイヤーやグループへの移動は
   `false` を返し、何も変えません
 - 移った地物とグループは、`change` の `features.placed` と
-  `groups.placed` に並びます。別のレイヤーやグループへ移ったものは
-  `updated` にも並びます
+  `groups.placed` に並びます。置き場のほかに何も変わっていなければ、
+  `placed` にだけ並びます
 
 重なりの順は文書の一部です。`document.toJSON()` は `layerOrder` に書き
 出し、文書の `document.load` はこれを置き換えます。

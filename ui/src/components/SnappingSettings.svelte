@@ -13,7 +13,7 @@
   // one for each kind of target under it, one for the rows of datasets, one for tracing and one
   // for moving shared vertices together, and below them the key that pauses snapping.
   //
-  // It keeps nothing: every switch shows draw.options.get(), read again on options.changed, so a
+  // It keeps nothing: every switch shows draw.options.get(), read again as the observable draw.options tells, so a
   // change made by code shows too, and writes through draw.options.update.
   //
   // kata's Drawbar draws its buttons itself and a Popover draws its own trigger, so the popover

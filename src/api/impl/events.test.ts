@@ -60,7 +60,6 @@ function record(target: Pick<Draw, 'on'>): Recorded[] {
   return events;
 }
 
-const names = (events: Recorded[]) => events.map(([name]) => name);
 const payloadsOf = <K extends keyof DrawEvents>(events: Recorded[], name: K): DrawEvents[K][] =>
   events.filter(([n]) => n === name).map(([, payload]) => payload as DrawEvents[K]);
 const changesOf = (events: Recorded[]): Change[] => payloadsOf(events, 'change');
@@ -127,19 +126,25 @@ describe('change', () => {
     }
   });
 
-  it('arrives once per transaction, last, with its source, whatever it changed', () => {
+  it('arrives once per transaction, before the values of this client it moved, with its source', () => {
+    const order: string[] = [];
+    draw.on('change', () => order.push('change'));
+    const stop = draw.selection.subscribe(() => order.push('selection'));
+    order.length = 0;
     draw.transact(
       () => {
-        draw.features.create(pointInput());
+        const a = draw.features.create(pointInput()) as Feature;
         draw.features.create(pointInput(1, 1));
         draw.layers.create({ name: 'Second' });
         draw.metadata.update({ title: 'Map' });
+        draw.selection.set('feature', [a.id]);
       },
       { source: 'script' },
     );
+    stop();
     const changes = changesOf(events);
     expect(changes).toHaveLength(1);
-    expect(names(events)[events.length - 1]).toBe('change');
+    expect(order).toEqual(['change', 'selection']);
     expect(changes[0].source).toBe('script');
     expect(changes[0].features.created).toHaveLength(2);
     expect(changes[0].layers.created).toHaveLength(1);
@@ -161,7 +166,7 @@ describe('change', () => {
     expect(before).toEqual([created, updated, undefined]);
   });
 
-  it('tells a feature put in another place of its layer as placed, and one put into another layer or group as updated too', () => {
+  it('tells a feature put in another place of its layer, or into another layer or group, as placed alone', () => {
     const first = draw.layers.getActive()?.id as string;
     const second = draw.layers.create({ name: 'Second' })?.id as string;
     const a = draw.features.create(pointInput()) as Feature;
@@ -176,8 +181,8 @@ describe('change', () => {
     const [inLayer, intoLayer, intoGroup] = changesOf(events);
     // A move within a layer changes no field of the feature
     expect(inLayer.features).toEqual({ ...NONE, placed: [c.id] });
-    expect(intoLayer.features).toEqual({ ...NONE, updated: [a.id], placed: [a.id] });
-    expect(intoGroup.features.updated).toEqual([b.id]);
+    expect(intoLayer.features).toEqual({ ...NONE, placed: [a.id] });
+    expect(intoGroup.features.updated).toEqual([]);
     expect(intoGroup.features.placed).toEqual([b.id]);
     expect(intoGroup.groups.created).toEqual([group.id]);
     // The group created is not also placed

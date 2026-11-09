@@ -102,7 +102,7 @@ export function createDrawOnEngine(
     gpu: () => engine.customLayer.getGpuMemory(),
   });
 
-  const optionsObservable = observe(events, ['options.changed'], drawOptions.get);
+  const optionsObservable = observe(events, ['options.changed'], drawOptions.get, { kept: true });
   const members: Draw = {
     features,
     layers: createLayers(

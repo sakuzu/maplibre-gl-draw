@@ -140,8 +140,7 @@ draw.groups.move(groupId, { layerId: notes.id, index: 0 });
 - A move of a locked item, or into a locked layer or group, returns
   `false` and changes nothing
 - `change` lists each feature and group that moved in `features.placed`
-  and `groups.placed`, and also in `updated` when it went into another
-  layer or group
+  and `groups.placed`, alone when nothing else of it changed
 
 The stacking order is part of the document: `document.toJSON()` writes it
 in `layerOrder`, and `document.load` of a document replaces it.

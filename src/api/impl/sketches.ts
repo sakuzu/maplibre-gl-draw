@@ -18,8 +18,11 @@ import { invalidInput, requireId } from './shared.js';
  * @internal
  */
 export function createSketches(sketches: SketchController, events: EventHub): SketchesCollection {
-  const observable = observe(events, ['sketch.added', 'sketch.updated', 'sketch.removed'], () =>
-    sketches.list(),
+  const observable = observe(
+    events,
+    ['sketch.added', 'sketch.updated', 'sketch.removed'],
+    () => sketches.list(),
+    { kept: true },
   );
   return {
     get value() {

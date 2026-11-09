@@ -432,6 +432,7 @@ export function createDatasets(
     events,
     ['dataset.added', 'dataset.removed', 'dataset.reordered'],
     () => manager.list().map(wrap),
+    { kept: true },
   );
   const collection: DatasetsCollection = {
     get value() {

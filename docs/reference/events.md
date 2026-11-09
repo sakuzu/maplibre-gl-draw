@@ -102,8 +102,9 @@ CSS pixels from the top left of the map.
 
 A value that changes over time is not an event. It is an
 [`Observable`](../api/maplibre-gl-draw/interfaces/Observable.md) on its
-resource: `value` reads it now, and `subscribe(run)` calls `run` with the
-value now at once, and again each time it changes. `subscribe` returns the
+resource: `value` reads it now (the same object while it does not change),
+and `subscribe(run)` calls `run` with the value now at once, and again each
+time it changes. `subscribe` returns the
 function that stops calling it.
 
 | Value | Observable | Its value |
@@ -165,25 +166,32 @@ lists the IDs of what changed and where the writes came from.
 | `features` | The IDs of the features, as `ChangedIds` |
 | `layers` | The IDs of the layers, as `ChangedIds` |
 | `groups` | The IDs of the groups, as `ChangedIds` |
-| `document` | Whether the metadata or the files of the document changed |
+| `document` | Whether the document itself changed (see below) |
 | `previous(id)` | The feature as it was before the commit |
 | `rows` | The rows written of the layers held as rows (experimental) |
 
 [`ChangedIds`](../api/maplibre-gl-draw/interfaces/ChangedIds.md) holds four
 lists of IDs.
 
-- `created`: the items created
-- `updated`: the items changed, a feature or a group put into another layer
-  or group included
-- `deleted`: the items deleted
+- `created`: the items created (written after in the commit included)
+- `updated`: the items changed otherwise than by their place
+- `deleted`: the items deleted (written before in the commit included)
 - `placed`: the items put in another place of the stacking order, in their
-  layer or group or into another one. For the layers, those whose place in
-  the stacking order of the layers changed
+  layer or group or into another one. For the layers, those whose place
+  among the layers changed
 
-An ID is in one of `created` and `deleted` at most. A feature or a group
-put into another layer or group is in `updated` and in `placed`; one put in
-another place of the same layer or group changes no field of it, and is in
-`placed` only.
+The lists tell the commit as a whole. An item is in each list once at most,
+in one of `created`, `updated` and `deleted` at most, and not at all when
+it was created and deleted in the commit, or written back to what it was.
+An item that changed nothing but its place, in its layer or group or into
+another one, is in `placed` alone; one that also changed otherwise is in
+`updated` and `placed`. `previous(id)` gives what the feature was before
+its first write in the commit, its layer and group included.
+
+`document` is true when the metadata or the files changed, when the whole
+document was replaced, and when an entry of the stacking order of the
+layers that is not a layer (a dataset of the order of the layers, an entry
+of the application) was put in or out of it, or in another place of it.
 
 The IDs are all `change` gives: what the items are now is read from the
 resources (`draw.features.get(id)`, `draw.layers.get(id)`,
@@ -254,14 +262,16 @@ as the Store keeps it, without the IDs of the features selected past 2,000:
 
 ### Order within one transaction
 
-When a transaction ends, its observables and events are told in this order.
+When a transaction ends, its observables and events are told in this order:
+the commit first, so that a subscriber of a value reads what the commit
+wrote as already told.
 
-1. `draw.selection`
-2. `draw.mode`
-3. `draw.vertexSelection`
-4. `draw.hidden.hiddenIds`
-5. `readOnly.changed`, then `interactionLock.changed`
-6. `change`
+1. `change`
+2. `draw.selection`
+3. `draw.mode`
+4. `draw.vertexSelection`
+5. `draw.hidden.hiddenIds`
+6. `readOnly.changed`, then `interactionLock.changed`
 
 ## Sources
 

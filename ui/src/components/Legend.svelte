@@ -12,8 +12,8 @@
   // Legend: for each layer and each dataset with a style rule, in the order of the stack from the
   // front, its name and the rows core derives from the rule (deriveLegend), each a Swatch and a
   // label. It only reads: the rules are changed with draw.layers.update and a dataset's
-  // setStyleRule. It is built again on document.changed (a rule of a layer, the stacking order),
-  // dataset.added, dataset.removed and dataset.reordered, and on the `changed` of a dataset with
+  // setStyleRule. It is built again on `change` (a rule of a layer, the stacking order), on the
+  // changes the observable draw.datasets tells, and on the `changed` of a dataset with
   // the reason `style` (its rule) or `rows` (the shape of its swatches follows its rows).
   let {
     draw,

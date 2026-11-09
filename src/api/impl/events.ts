@@ -5,10 +5,10 @@
  * The events of the draw instance: the emitter of `DrawEvents`, fed by the notifications of
  * the Store and by the signals of the engine, and the observables of its values
  *
- * One transaction of the Store is one notification. From it come first the signals of the
- * values of this client the observables follow (the selection, the vertex selection, the mode,
- * what is hidden here), then the events of read-only and of the interaction lock, and last one
- * `change` with the IDs of what the commit changed, when it changed the document. The engine
+ * One transaction of the Store is one notification. From it come first one `change` with the
+ * IDs of what the commit changed, when it changed the document, then the signals of the values of
+ * this client the observables follow (the selection, the mode, the vertex selection, what is
+ * hidden here), and last the events of read-only and of the interaction lock. The engine
  * announces the rest on its internal emitter (snapping, clicks, images, the stacking order,
  * failed loads, drags), and each is passed on under its name here. The signals of the options,
  * the sketches, the datasets and the shapes as they are drawn come from their resources, on the
@@ -16,7 +16,7 @@
  */
 
 import { TabaneError } from '@sakuzu/tabane';
-import { featureWithFields } from '../../feature-table/feature-fields.js';
+import { featureFields, featureWithFields } from '../../feature-table/feature-fields.js';
 import { featureTablesInternals } from '../../feature-table/feature-tables.js';
 import { rowFeature } from '../../feature-table/row-read.js';
 import type { EngineSignals, EventEmitter } from '../../shared/utils/event-emitter.js';
@@ -204,13 +204,29 @@ export function createEventHub(): EventHub {
  * isolated from the others, as a listener is
  *
  * @param read - Reads the value now
+ * @param options - `kept`: the value read is kept until one of the signals tells it changed, so
+ *   that the same value is the same object (for a value read as a new object each time)
  * @internal
  */
 export function observe<T>(
   hub: Pick<EventHub, 'on'>,
   signals: readonly (keyof HubEvents)[],
   read: () => T,
+  options: { readonly kept?: boolean } = {},
 ): Observable<T> {
+  if (options.kept) {
+    const fresh = read;
+    let kept: { value: T } | null = null;
+    for (const signal of signals) {
+      hub.on(signal, () => {
+        kept = null;
+      });
+    }
+    read = () => {
+      kept ??= { value: fresh() };
+      return kept.value;
+    };
+  }
   return {
     get value() {
       return read();
@@ -252,6 +268,11 @@ export function connectStoreEvents(hub: EventHub, store: Store): () => void {
   let readOnly = store.isReadOnly();
   let locked = store.isInteractionLocked();
   return store.subscribe((changes) => {
+    // The commit first, then the values of this client it moved: a listener of a value (the
+    // selection) reads what the commit wrote as already told
+    const change = toChange(changes, store);
+    if (change) hub.emit('change', change);
+
     const selection = selectionChangeOf(changes, store);
     if (selection) hub.emit('selection.changed', selection);
     if (changes.mode) {
@@ -282,9 +303,6 @@ export function connectStoreEvents(hub: EventHub, store: Store): () => void {
       locked = nextLocked;
       hub.emit('interactionLock.changed', { locked });
     }
-
-    const change = toChange(changes, store);
-    if (change) hub.emit('change', change);
   });
 }
 
@@ -386,32 +404,6 @@ const PLACE_FIELDS: ReadonlySet<RowField> = new Set<RowField>([
   'member',
 ]);
 
-/**
- * The IDs of the items a list of moves put in another place of the layer and the group they were
- * in: their features did not change
- */
-function keptPlaces(
-  order: readonly ItemOrderChange[] | undefined,
-  tables: Store['tables'],
-): ReadonlySet<string> {
-  const out = new Set<string>();
-  for (const [itemId, { from, to }] of movesOf(order)) {
-    if (from.layerId === to.layerId && from.groupId === to.groupId) out.add(itemId);
-  }
-  for (const move of order ?? []) {
-    if (move.kind !== 'rows' || !move.to || !tables) continue;
-    const layers = move.before.fields.get('layerId');
-    const groups = move.before.fields.get('groupId');
-    move.handles.forEach((handle, index) => {
-      const groupBefore = (groups?.[index] as string | null | undefined) || undefined;
-      if (layers?.[index] !== move.layerId || groupBefore !== move.to?.groupId) return;
-      const id = tables.getRowId(handle);
-      if (id !== undefined) out.add(id);
-    });
-  }
-  return out;
-}
-
 /** Whether the fields written to the rows of a layer are those of their places only */
 function onlyPlaced(fields: ReadonlySet<RowField>): boolean {
   if (fields.size === 0) return false;
@@ -477,9 +469,16 @@ export function toChange(changes: StoreChange, store: Store): Change | null {
   const created: string[] = [];
   const updated: string[] = [];
   const deleted: string[] = [];
-  for (const feature of changes.features?.created ?? []) created.push(feature.id);
-  for (const update of changes.features?.updated ?? []) updated.push(update.id);
-  for (const feature of changes.features?.deleted ?? []) deleted.push(feature.id);
+  const placedFeatures: string[] = [];
+  // The features of a Store of objects, each told once for the commit as a whole: what it was
+  // before the commit is the one before its first write
+  const before = foldFeatures(changes, store, {
+    created,
+    updated,
+    deleted,
+    placed: placedFeatures,
+  });
+
   const ofRows = (handles: Int32Array, out: string[]): void => {
     if (!tables) return;
     for (const handle of handles) {
@@ -487,50 +486,34 @@ export function toChange(changes: StoreChange, store: Store): Change | null {
       if (id !== undefined) out.push(id);
     }
   };
-  // A row whose only fields written are those of its place, put in another place of its layer or
-  // group, was not changed: it is told as placed, as a feature of a Store of objects is
-  const placedRows: string[] = [];
-  let kept: ReadonlySet<string> | null = null;
+  // A row whose only fields written are those of its place was put in another place, and nothing
+  // else of it changed: it is told as placed, as a feature of a Store of objects is
   for (const rows of changes.rows?.layers.values() ?? []) {
     ofRows(rows.created, created);
-    if (onlyPlaced(rows.fields)) {
-      kept ??= keptPlaces(changes.order, tables);
-      for (const handle of rows.updated) {
-        const id = tables?.getRowId(handle);
-        if (id !== undefined) (kept.has(id) ? placedRows : updated).push(id);
-      }
-    } else {
-      ofRows(rows.updated, updated);
-    }
+    ofRows(rows.updated, onlyPlaced(rows.fields) ? placedFeatures : updated);
     ofRows(rows.deleted, deleted);
   }
 
   // The features and the groups put in another place of the order, each once
-  const placedFeatures: string[] = [];
   const placedGroups: string[] = [];
   if (changes.order) {
-    const seen = new Set<string>();
+    const seen = new Set<string>(placedFeatures);
+    const add = (id: string, out: string[]): void => {
+      if (seen.has(id)) return;
+      seen.add(id);
+      out.push(id);
+    };
     for (const [itemId] of movesOf(changes.order)) {
-      seen.add(itemId);
-      if (store.getGroup(itemId)) placedGroups.push(itemId);
-      else placedFeatures.push(itemId);
+      if (store.getGroup(itemId)) add(itemId, placedGroups);
+      else add(itemId, placedFeatures);
     }
     for (const move of changes.order) {
       if (move.kind !== 'rows' || !tables) continue;
       for (const handle of move.handles) {
         const id = tables.getRowId(handle);
-        if (id === undefined || seen.has(id)) continue;
-        seen.add(id);
-        placedFeatures.push(id);
+        if (id !== undefined) add(id, placedFeatures);
       }
     }
-    for (const id of placedRows) {
-      if (seen.has(id)) continue;
-      seen.add(id);
-      placedFeatures.push(id);
-    }
-  } else {
-    placedFeatures.push(...placedRows);
   }
   const featureIds: ChangedIds = {
     created: idsOf(created),
@@ -544,15 +527,12 @@ export function toChange(changes: StoreChange, store: Store): Change | null {
   };
 
   const layers = changes.layers;
+  const order = layers?.orderChanged ? stackingOrderOf(layers.orderChanged, store, layers) : null;
   const layerIds: ChangedIds = {
     created: idsOf((layers?.created ?? []).map((layer) => layer.id)),
     updated: idsOf((layers?.updated ?? []).map((update) => update.id)),
     deleted: idsOf((layers?.deleted ?? []).map((layer) => layer.id)),
-    placed: idsOf(
-      layers?.orderChanged
-        ? reordered(layers.orderChanged.order, layers.orderChanged.previous)
-        : [],
-    ),
+    placed: idsOf(order?.placed ?? []),
   };
   const groups = changes.groups;
   const groupsCreated = (groups?.created ?? []).map((group) => group.id);
@@ -564,25 +544,22 @@ export function toChange(changes: StoreChange, store: Store): Change | null {
     placed: idsOf(without(placedGroups, new Set([...groupsCreated, ...groupsDeleted]))),
   };
 
-  let before: Map<string, Feature> | null = null;
   let rowsBefore: RowsBefore | null = null;
   return {
     source: changes.source ?? 'local',
     features: featureIds,
     layers: layerIds,
     groups: groupIds,
-    document: reset || changes.metadata !== undefined || changes.files !== undefined,
+    // A change of the metadata or of the files, the whole document replaced, or an entry that is
+    // not a layer (a dataset, an entry of the application) put in or out of the stacking order of
+    // the layers, or in another place of it
+    document:
+      reset ||
+      changes.metadata !== undefined ||
+      changes.files !== undefined ||
+      order?.otherEntries === true,
     previous(id) {
       if (typeof id !== 'string') return undefined;
-      if (!before) {
-        before = new Map();
-        for (const update of changes.features?.updated ?? []) {
-          before.set(update.id, update.previous as Feature);
-        }
-        for (const feature of changes.features?.deleted ?? []) {
-          before.set(feature.id, feature as Feature);
-        }
-      }
       const found = before.get(id);
       if (found || !changes.rows) return found;
       rowsBefore ??= rowsBeforeOf(changes, store);
@@ -590,6 +567,79 @@ export function toChange(changes: StoreChange, store: Store): Change | null {
     },
     ...(changes.rows && { rows: changes.rows }),
   };
+}
+
+/**
+ * The features of a Store of objects a notification tells, folded over the commit: a feature once,
+ * created (written after included), updated, deleted (written before included) or put in another
+ * place only, and none for a feature created and deleted in the commit, or written back to what it
+ * was. What each was before the commit is returned by its ID
+ */
+function foldFeatures(
+  changes: StoreChange,
+  store: Store,
+  out: { created: string[]; updated: string[]; deleted: string[]; placed: string[] },
+): Map<string, Feature> {
+  const features = changes.features;
+  const before = new Map<string, Feature>();
+  if (!features) return before;
+  const created = new Set<string>();
+  for (const feature of features.created ?? []) created.add(feature.id);
+  const deleted = new Map<string, StoredFeature>();
+  for (const feature of features.deleted ?? []) deleted.set(feature.id, feature);
+  // The first state before and the last state after of each feature written
+  const written = new Map<string, { previous: StoredFeature; feature: StoredFeature }>();
+  for (const update of features.updated ?? []) {
+    const known = written.get(update.id);
+    if (known) known.feature = update.feature;
+    else written.set(update.id, { previous: update.previous, feature: update.feature });
+  }
+  for (const id of created) {
+    if (!deleted.has(id)) {
+      out.created.push(id);
+      continue;
+    }
+    // Created and deleted: deleted then made again (it is there), or made and gone
+    const now = store.getFeature(id);
+    if (!now) continue;
+    const was = deleted.get(id) as StoredFeature;
+    before.set(id, was as Feature);
+    if (featureFields(was, now).size > 0) out.updated.push(id);
+    if (was.layerId !== now.layerId || was.groupId !== now.groupId) out.placed.push(id);
+  }
+  for (const [id, feature] of deleted) {
+    if (created.has(id)) continue;
+    out.deleted.push(id);
+    before.set(id, (written.get(id)?.previous ?? feature) as Feature);
+  }
+  for (const [id, { previous, feature }] of written) {
+    if (created.has(id) || deleted.has(id)) continue;
+    const changed = featureFields(previous, feature).size > 0;
+    const moved = previous.layerId !== feature.layerId || previous.groupId !== feature.groupId;
+    if (!changed && !moved) continue;
+    before.set(id, previous as Feature);
+    if (changed) out.updated.push(id);
+    if (moved) out.placed.push(id);
+  }
+  return before;
+}
+
+/**
+ * A change of the stacking order of the layers: the layers whose place among the layers changed,
+ * and whether an entry that is not a layer was put in or out of it, or in another place of it
+ */
+function stackingOrderOf(
+  change: { order: readonly string[]; previous: readonly string[] },
+  store: Store,
+  layers: NonNullable<StoreChange['layers']>,
+): { placed: string[]; otherEntries: boolean } {
+  const gone = new Set((layers.deleted ?? []).map((layer) => layer.id));
+  const isLayer = (id: string): boolean => gone.has(id) || store.getLayer(id) !== undefined;
+  const placed = reordered(change.order.filter(isLayer), change.previous.filter(isLayer));
+  // The other entries, each with its place among all the entries
+  const placesOf = (list: readonly string[]): string =>
+    list.flatMap((id, index) => (isLayer(id) ? [] : [`${index}:${id}`])).join('\n');
+  return { placed, otherEntries: placesOf(change.order) !== placesOf(change.previous) };
 }
 
 /** What the rows of a change were before it, read when one is asked for */
@@ -617,13 +667,40 @@ function rowsBeforeOf(changes: StoreChange, store: Store): RowsBefore {
     }
   }
   let indexOf: Map<number, number> | null = null;
+  // The place of each row moved before its first move (its layer and group), by its handle
+  let placeOf: Map<number, Map<RowField, unknown>> | null = null;
+  const placesBefore = (): Map<number, Map<RowField, unknown>> => {
+    const out = new Map<number, Map<RowField, unknown>>();
+    const take = (before: RowValues | undefined): void => {
+      if (!before) return;
+      before.handles.forEach((handle, index) => {
+        if (out.has(handle)) return;
+        const fields = new Map<RowField, unknown>();
+        for (const field of ['layerId', 'groupId'] as const) {
+          const list = before.fields.get(field);
+          if (list) fields.set(field, list[index] ?? null);
+        }
+        out.set(handle, fields);
+      });
+    };
+    for (const move of changes.order ?? []) take(move.before);
+    return out;
+  };
   return {
     previous(id) {
       const handle = handles.get(id);
-      if (handle === undefined || !internals || !values) return undefined;
-      indexOf ??= new Map(Array.from(values.handles, (row, index) => [row, index]));
-      const index = indexOf.get(handle);
-      if (index === undefined) return undefined;
+      if (handle === undefined || !internals) return undefined;
+      const fields = new Map<RowField, unknown>();
+      if (values) {
+        indexOf ??= new Map(Array.from(values.handles, (row, index) => [row, index]));
+        const index = indexOf.get(handle);
+        if (index !== undefined) {
+          for (const [field, list] of values.fields) fields.set(field, list[index]);
+        }
+      }
+      placeOf ??= placesBefore();
+      for (const [field, value] of placeOf.get(handle) ?? []) fields.set(field, value);
+      if (fields.size === 0) return undefined;
       const place = internals.placeOf(handle);
       if (!place) return undefined;
       let now: StoredFeature;
@@ -632,8 +709,6 @@ function rowsBeforeOf(changes: StoreChange, store: Store): RowsBefore {
       } catch {
         return undefined;
       }
-      const fields = new Map<RowField, unknown>();
-      for (const [field, list] of values.fields) fields.set(field, list[index]);
       return featureWithFields(now, fields) as Feature;
     },
   };

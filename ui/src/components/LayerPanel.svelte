@@ -43,10 +43,10 @@
   // LayerPanel: kata's LayerTree of the stack from the front: the layers, their groups and their
   // features, and the datasets in their place among the layers.
   //
-  // It keeps nothing of the drawing. The nodes are built from draw again on document.changed,
-  // hidden.changed, options.changed, dataset.added, dataset.removed, dataset.reordered and the
+  // It keeps nothing of the drawing. The nodes are built from draw again on `change`, on the
+  // changes the observables draw.hidden.hiddenIds, draw.options and draw.datasets tell, and on the
   // `changed` of a dataset (its visibility, its rows); the selected rows are draw.selection.value,
-  // read again on selection.changed. Every action calls the public API of draw: the eye
+  // read again as the observable draw.selection tells. Every action calls the public API of draw: the eye
   // `update({ visible })` (and shows again what this client hid) or a dataset's `setVisible`, the
   // lock `update({ locked })`, a drop `layers.reorder` (with `datasets.move` for a dataset that
   // joins the stacking order), `groups.move` or `features.move`, a press

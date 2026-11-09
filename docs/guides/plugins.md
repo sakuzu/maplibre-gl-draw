@@ -240,7 +240,9 @@ and hits it in the view drawn last, and `rendered.getFootprint(id)` its
 footprint without the margin, the box the library makes it from (the
 four corners of an image as it is drawn, say). `rendered.changed` tells
 the features whose shapes changed, once the draw of the map that draws
-them is done: its value is the IDs told last. It tells no change of the
+them is done: its value is the IDs told last, and `subscribe` calls the
+function with them at once, as every observable does (none at first). It
+tells no change of the
 look nor of the selection box with the view: read those at each draw.
 What writes reads the document, `ctx.draw.features`.
 

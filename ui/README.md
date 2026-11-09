@@ -243,8 +243,8 @@ and opens the snapping settings above the toolbar: snapping itself and,
 under it, the kinds of target (vertices, edges, intersections and
 guides), then snapping to datasets, tracing edges and moving shared
 vertices together, with the key that pauses snapping while it is held.
-Each switch writes `draw.options.update`, and the settings follow
-`options.changed`, so a change made by code shows too.
+Each switch writes `draw.options.update`, and the settings follow the
+observable `draw.options`, so a change made by code shows too.
 The side panels float over the map, gap-md from its edges and as tall
 as their content; `side: 'beside'` docks them beside the map on a wide
 one instead. The map's padding follows the interface: at the left, the

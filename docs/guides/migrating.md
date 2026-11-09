@@ -57,7 +57,7 @@ Four rules hold everywhere:
   the same list, `DrawEvents`. `document.changed` arrives once per
   transaction with every change to the document, and the events of
   features, layers, groups and metadata carry the `source` of the
-  write
+  write. 3.0 replaces them: see [From 2.x to 3.0](#from-2x-to-30)
 
 A feature is `{ id, type, geometry, layerId, groupId, properties,
 style, visible, locked }`. `geometry` is a GeoJSON geometry, and
@@ -639,7 +639,7 @@ A replacement Store is still passed as `options.store`, and implements
 `getAllFeatures`, `getOrderedFeatures`, `getAllLayers`,
 `getAllGroups`, `getAllFiles`, `getSelectedVertices`,
 `isLocallyHidden` and `getLocallyHidden`. `subscribe` delivers a
-`DocumentChange`, the same type as `document.changed`, and replacing
+`DocumentChange` (in 2.0 the same type as `document.changed`), and replacing
 the whole document is reported that way too. The state of the input
 (the shape being drawn, the box selection, the drag) is no longer part
 of the contract.
@@ -653,7 +653,8 @@ entry, `/geometry` and `/table`.
 
 ## From 2.0 to 2.1
 
-Nothing to change. 2.1 adds the event `options.changed`,
+Nothing to change. 2.1 adds the event `options.changed` (3.0 reads it as
+the observable `draw.options`),
 `Dataset.getStyleRule()` and the standard UI package
 `@sakuzu/maplibre-gl-draw-ui`, and fixes the order of the layers after a
 diffed `map.setStyle` (the drawing stays on top of the new style, as the
@@ -666,6 +667,29 @@ documentation always said). An app that called `setStyle` with
 [the change log](../../CHANGELOG.md#unreleased)). An app over the
 default store changes in the places below, and an extension in those of
 [an extension](#an-extension-in-30).
+
+A commit of the document is one event, `change`, in place of the events
+of each feature, layer and group, `metadata.updated` and
+`document.changed`. It lists the IDs of what the commit created, updated,
+deleted and put in another place, and `previous(id)` gives a feature as
+it was before. A value that changes over time is an `Observable` of its
+resource in place of its event: `draw.selection`, `draw.vertexSelection`,
+`draw.mode`, `draw.hidden.hiddenIds`, `draw.options`, `draw.sketches`,
+`draw.datasets` and `draw.rendered.changed`. A plugin no longer sends
+events of its own (`PluginContext.emit` is gone): it gives its values on
+its API as observables ([Events](../reference/events.md)).
+
+```ts
+// 2.x
+draw.on('feature.updated', ({ feature }) => redraw(feature.id));
+draw.on('selection.changed', ({ selection }) => show(selection));
+
+// 3.0
+draw.on('change', ({ features }) => {
+  for (const id of features.updated) redraw(id);
+});
+draw.selection.subscribe((selection) => show(selection));
+```
 
 `Layer` and `Group` are unions told apart by `kind`. A layer held as rows
 (`kind: 'table'`) has no `items`, and a group of it no `featureIds`.

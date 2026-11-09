@@ -18,10 +18,10 @@
   // Toolbar: kata's Drawbar with the tools, the delete button and the magnet of snapping.
   //
   // It keeps nothing of the drawing: the current tool is the one whose mode is draw.getMode(),
-  // read again on mode.changed; the delete button is off while draw.selection.value lists no ID,
-  // read again on selection.changed, and while draw is read-only, read again on
-  // readOnly.changed; the magnet is on while snapping is, read again on
-  // options.changed. Pressing a tool calls draw.setMode and delete calls draw.selection.delete.
+  // read again as the observable draw.mode tells; the delete button is off while
+  // draw.selection.value lists no ID, read again as draw.selection tells, and while draw is
+  // read-only, read again on readOnly.changed; the magnet is on while snapping is, read again as
+  // draw.options tells. Pressing a tool calls draw.setMode and delete calls draw.selection.delete.
   // The magnet is one of the Drawbar's switches, so that it looks like one, but pressing it opens
   // the snapping settings rather than switching snapping (SnappingSettings, which writes through
   // draw.options.update).
