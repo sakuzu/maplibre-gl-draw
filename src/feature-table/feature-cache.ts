@@ -14,8 +14,9 @@
  *
  * - A row written in the frame of writes under way may be written again under the same mark: what
  *   is made of it then is not kept, and nothing kept is given for it
- * - A row stamped outside a frame that raised the mark (`WriteMarks.onUnframedStamp`) has a mark
- *   that does not tell it from before: what is kept of it is forgotten
+ * - A row stamped outside a frame that raised the mark has a mark that does not tell it from
+ *   before: what is kept of it is forgotten. The keeper of the marks of the Store tells both
+ *   (`followFrames`)
  * - Tables whose marks no keeper gives keep nothing (every write of theirs has the same mark)
  * - The reads of many rows one after the other (a page of a list, every feature in order) give
  *   what is kept and keep nothing more (`withoutKeeping`), so that they do not push out what the
@@ -44,6 +45,20 @@ const FEATURE_CACHE_LIMIT = 1024;
 
 /** The problems the check keeps at most until they are read */
 const PROBLEM_LIMIT = 20;
+
+/**
+ * The frames of writes the write marks of the rows are given by (the keeper of the marks of the
+ * Store, `write-mark-keeper.ts`)
+ *
+ * @internal
+ */
+export interface WriteFrames {
+  /**
+   * Whether a row of a mark is not written again under it: the row was not written in the frame
+   * under way (whose rows may be written again under its mark)
+   */
+  settled(mark: number): boolean;
+}
 
 /**
  * What the cache reads of its tables
@@ -122,10 +137,24 @@ export class FeatureCache {
   /** Whether what is kept is checked (`watch`) */
   #watched = false;
   readonly #problems: string[] = [];
+  /** The frames the marks are given by (none: nothing is kept) */
+  #frames: WriteFrames | null = null;
 
-  constructor(private readonly host: FeatureCacheHost) {
-    // A row stamped outside a frame that raised the mark has the mark it had before
-    host.writeMarks.onUnframedStamp = (handle) => this.#forget(handle);
+  constructor(private readonly host: FeatureCacheHost) {}
+
+  /**
+   * Takes the frames the marks of the rows are given by, from when they are given by them: what
+   * forgets what is kept of a row stamped outside a frame that raised the mark (its mark is the
+   * one it had before)
+   */
+  followFrames(frames: WriteFrames): (handle: RowHandle) => void {
+    this.#frames = frames;
+    return (handle) => this.#forget(handle);
+  }
+
+  /** Whether a row of a mark is not written again under it (never, without frames) */
+  #settled(mark: number): boolean {
+    return this.#frames?.settled(mark) === true;
   }
 
   /** The number of features kept */
@@ -255,7 +284,7 @@ export class FeatureCache {
       group.marks[row] !== kept.mark ||
       (group.data.flags[row] & ROW_FLAG_DELETED) !== 0 ||
       this.#groupNumbers.get(group) !== kept.group ||
-      !this.host.writeMarks.settled(kept.mark) ||
+      !this.#settled(kept.mark) ||
       context.dimensionsOf(layerId) !== 'xy'
     ) {
       return undefined;
@@ -285,7 +314,7 @@ export class FeatureCache {
     if (context.dimensionsOf(layerId) !== 'xy') return rowFeature(context, layerId, group, row);
     const handle = group.data.handles[row];
     const mark = group.marks[row];
-    if (!this.host.writeMarks.settled(mark)) {
+    if (!this.#settled(mark)) {
       this.#forget(handle);
       return rowFeature(context, layerId, group, row);
     }

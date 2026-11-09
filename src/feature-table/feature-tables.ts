@@ -532,10 +532,11 @@ export interface FeatureTablesInternals {
    */
   readonly featureCache: FeatureCache;
   /**
-   * Sets the write mark the rows written from now on are stamped with: the Store gives it at the
-   * beginning of each frame that writes values (see `write-marks.ts`)
+   * Sets the write mark the rows written from now on are stamped with: the Store gives it before
+   * the first write of values of each frame of writes (see `write-mark-keeper.ts`), and the writing
+   * side stamps it (see `write-marks.ts`)
    *
-   * @throws DrawError (`invalid-state`) for a mark below the one before
+   * @throws KasaneError (`invalid-state`) for a mark below the one before
    */
   setWriteMark(mark: number): void;
   /** The rows of a layer (undefined for a layer that holds none) */

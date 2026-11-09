@@ -61,11 +61,11 @@ import { utf8String } from '@sakuzu/tabane';
 import { featureTablesInternals } from '../feature-table/feature-tables.js';
 import type { RowGroup } from '../feature-table/layer-table.js';
 import { STATE_BULK } from '../feature-table/row-state.js';
-import { writeMarkKeeperOf } from '../feature-table/write-marks.js';
 import { DrawError } from '../shared/draw-error.js';
 import type { SketchController } from '../sketches/sketch-controller.js';
 import type { Store } from '../store/store.js';
 import type { Feature } from '../store/types.js';
+import { writeMarkKeeperOf } from '../store/write-mark-keeper.js';
 import type { ConsistencyCheck, ConsistencyCheckOptions, ConsistencyFailure } from './types.js';
 
 export type { ConsistencyCheck, ConsistencyCheckOptions, ConsistencyFailure } from './types.js';

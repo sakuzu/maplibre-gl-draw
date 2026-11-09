@@ -10,6 +10,10 @@
  * out. They tell nobody: what is told of a write, and to whom, is the business of the one that
  * holds the writer and calls it, which reads before a write what it needs to tell of it.
  *
+ * Every row a write writes, and the row block it is in, is stamped with the write mark given last
+ * (`setWriteMark` of the drawing side, `write-marks.ts`): the one that holds the tables gives the
+ * marks, and the writer stamps them in its one place that writes the values of rows.
+ *
  * A token that keeps the rows and the groups a write deletes is a number the writer makes
  * (`createRestoreToken`). The tables keep what it keeps for as long as it is not let go of
  * (`Tables.release`), with no limit of number or bytes: when to let go is the caller's.

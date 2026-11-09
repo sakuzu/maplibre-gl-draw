@@ -27,9 +27,10 @@
  *   their source (`store.transact(() => writer.apply(patch), 'remote')`)
  * - `listFeatures` and `listFeaturesInOrder` throw: the rows are read from the tables
  * - A restore of many rows is written in steps, as one transaction told once (`row-steps.ts`)
- * - The write mark of the rows (`write-marks.ts`) goes up once in each frame that writes values:
- *   an outermost transaction, a step of a restore written in steps, a call of its writer outside
- *   a transaction
+ * - The write mark of the rows goes up once in each frame that writes values: an outermost
+ *   transaction, a step of a restore written in steps, a call of its writer outside a
+ *   transaction. The Store keeps it (`write-mark-keeper.ts`) and gives it to its tables, which
+ *   stamp it on the rows they write (`write-marks.ts`)
  */
 
 import { utf8ColumnFromStrings, utf8String } from '@sakuzu/tabane';
@@ -54,7 +55,6 @@ import {
   type FeatureTablesStoreWriter,
 } from '../feature-table/feature-tables-writer.js';
 import { ItemWalk } from '../feature-table/item-walk.js';
-import { createWriteMarkKeeper, type WriteMarkKeeper } from '../feature-table/write-marks.js';
 import { ROW_FLAG_DELETED } from '../table/row-group-types.js';
 import { DrawStore } from './draw-store.js';
 import {
@@ -110,6 +110,7 @@ import type {
   UpdateSource,
   VertexSelection,
 } from './types.js';
+import { createWriteMarkKeeper, type WriteMarkKeeper } from './write-mark-keeper.js';
 
 /**
  * The options of a Store of rows: those of its tables, but the notifications, which the Store

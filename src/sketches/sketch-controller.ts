@@ -8,7 +8,7 @@
  * A sketch holds edits (`SketchEdit`). What it shows is the features it edits as its edits leave
  * them over their values of now, worked out again whenever the Store writes one of them: at the
  * end of each frame of writes (each notification of the Store), from the write marks of the rows
- * of a Store of rows (`write-marks.ts`) and from the features a Store of objects tells written. A
+ * of a Store of rows (`write-mark-keeper.ts`) and from the features a Store of objects tells written. A
  * sketch is never carried over what was written: it is applied again over it.
  *
  * A sketch of this client (`owner` null) edits only what it can write. A feature of it deleted,
@@ -51,7 +51,6 @@ import {
   STATE_MOVE_SHIFT,
 } from '../feature-table/row-state.js';
 import { TableSelection } from '../feature-table/selection.js';
-import { writeMarkKeeperOf } from '../feature-table/write-marks.js';
 import { DrawError } from '../shared/draw-error.js';
 import { coordinatesOf } from '../shared/utils/coordinates.js';
 import { isVertexOf } from '../shared/utils/vertex-edits.js';
@@ -69,6 +68,7 @@ import type {
 import { transformFieldsOfStore } from '../store/transform-roles.js';
 import type { Feature, StoreChange, VertexRef } from '../store/types.js';
 import { isWritableLayer } from '../store/writable-layer.js';
+import { writeMarkKeeperOf } from '../store/write-mark-keeper.js';
 import {
   type CreateEdit,
   checkSketchEdits,
