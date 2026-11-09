@@ -729,7 +729,7 @@ describe('features of GeoJSON written as blocks', () => {
       visible: row.visible,
       locked: row.locked,
     }));
-    const { store, writer } = createTableStore();
+    const { store, writer } = createTableStore({ dimensionsOf: () => read.dimensions });
     store.createLayer({
       id: 'l',
       name: 'l',
@@ -740,7 +740,6 @@ describe('features of GeoJSON written as blocks', () => {
       metadata: undefined,
       styleRule: undefined,
     });
-    writer.raiseDimensions('l', read.dimensions);
     const [written] = writeTabaneFeatureBlocks({
       parent: 'l',
       head: 'V',

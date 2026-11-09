@@ -411,19 +411,6 @@ export interface FeatureTablesWriter {
    */
   addRowBlocks(layerId: string, rowBlocks: readonly RowBlock[]): RowsChange;
   /**
-   * Raises the dimensions of the coordinates of a layer, so that it holds a `z` or an `m` it did
-   * not (`xy` to `xyz`, `xyz` to `xyzm`; a layer of no rows yet included): no value is dropped.
-   *
-   * The rows written from then on are held with the new dimensions (a position of fewer values
-   * gets NaN for the others), and every row block of the layer is due for its next version, which
-   * copies its coordinates into them over the draws; the row blocks of before are read and drawn as
-   * they are until then. The row blocks given to `addRowBlocks` from then on have the new dimensions.
-   *
-   * @throws `DrawError` with the code `invalid-input` when the dimensions do not hold the ones of
-   *   the layer (they are never lowered)
-   */
-  raiseDimensions(layerId: string, dimensions: CoordinateDimensions): void;
-  /**
    * Writes values of rows, after the implementation of the Store recorded them.
    *
    * The geometry, the style, shown and locked, the attributes and the deletion of a row are
@@ -444,8 +431,7 @@ export interface FeatureTablesWriter {
    * The positions of a geometry are read as coordinates of the dimensions of the layer of the
    * row (`FeatureTablesOptions.dimensionsOf`): `[x, y, z]` in a layer of `xyz`, `[x, y, m]` in
    * one of `xym`; a position of fewer values gets NaN for the others. A position of more values
-   * than the dimensions is refused rather than cut: raise the dimensions of the layer first
-   * (`raiseDimensions`).
+   * than the dimensions is refused rather than cut.
    *
    * @returns The rows written, by layer
    * @throws `DrawError`: `not-found` when a handle names no row or a group of features is
@@ -530,12 +516,17 @@ export interface FeatureTablesOptions {
    */
   readonly onRelease?: (handles: Int32Array) => void;
   /**
-   * The dimensions of the coordinates of the rows of a layer, read once, when the layer first
-   * holds rows (`xy` for every layer when omitted): `xy`, `xyz`, `xym` or `xyzm`. The rows of a
-   * layer of `z` or `m` are drawn and hit by their `x` and `y`, and are read with every value
-   * (`readValues`); they are not made features (for the selection, or by `getRow`)
+   * The dimensions of the coordinates of the rows of a table, read once, when the table first
+   * holds rows (`xy` for every table when omitted): `xy`, `xyz`, `xym` or `xyzm`. The rows of a
+   * table of `z` or `m` are drawn and hit by their `x` and `y`, and are read with every value
+   * (`readValues`); they are not made features (for the selection, or by `getRow`).
+   *
+   * An interim form, held only while the tables are a draft: the dimensions are to be worked out
+   * from the rows themselves, and this declaration is taken out before the tables are 1.0.0.
+   *
+   * @param tableId - The table: the layer the rows are in
    */
-  readonly dimensionsOf?: (layerId: string) => CoordinateDimensions;
+  readonly dimensionsOf?: (tableId: string) => CoordinateDimensions;
   /**
    * The system of the coordinates the bbox of the rows and their spatial index are made in (the
    * plane of the longitudes and latitudes when omitted). A Worker passes its own

@@ -10,7 +10,6 @@
  *
  * - A write of a `z` or an `m` only is written in place and draws nothing again
  * - The values read are the values written back: `snapshot` and `apply` keep the `z` and the `m`
- * - The dimensions of a layer raised: no value is lost, before and after the next versions
  * - A row of a layer of `z` or `m` is not made a feature, and a row group or a row of other
  *   dimensions is refused
  */
@@ -35,9 +34,7 @@ import {
   seededRandom,
   tablesOfReference,
 } from '../test-utils.js';
-import type { FeatureTablesInternals } from './feature-tables.js';
 import type { InPlaceRowWrite } from './types.js';
-import type { GroupVersion, GroupVersionReceiver } from './versions.js';
 
 const ALL_DIMS: readonly CoordinateDimensions[] = ['xy', 'xyz', 'xym', 'xyzm'];
 
@@ -397,102 +394,11 @@ describe('a write of the coordinates of a layer of z or m', () => {
   });
 });
 
-describe('the dimensions of a layer raised', () => {
-  /** A side that draws the rows whose GPU side is up when the test says */
-  function gate(internals: FeatureTablesInternals) {
-    let open = false;
-    const receiver: GroupVersionReceiver = {
-      uploaded: () => open,
-      swapped: () => {},
-      dropped: () => {},
-    };
-    const detach = internals.attachReceiver(receiver);
-    return {
-      open: () => {
-        open = true;
-      },
-      detach,
-    };
-  }
-
-  /** The dimensions of every geometry column of the groups of a layer */
-  const dimsOfGroups = (internals: FeatureTablesInternals, layerId: string): string[] => {
-    const table = internals.layerTable(layerId);
-    const out = new Set<string>();
-    for (let g = 0; g < (table?.groupCount ?? 0); g++) {
-      for (const child of table?.groupAt(g).data.geometry.children ?? []) {
-        out.add(child.dimensions ?? 'xy');
-      }
-    }
-    return [...out];
-  };
-
-  it('loses no value: the rows read the same, then hold their z, before and after the next versions', () => {
-    const random = seededRandom(3);
-    const reference = randomReference(random, 60, ['a']);
-    const setup = tablesOfReference(reference, ['a'], 8);
-    const { tables, writer, internals, groupHandleOf } = setup;
-    let current: RandomGeometry = geometryOf('xy');
-    const writes = randomRowWrites(random, {
-      ...setup,
-      reference,
-      layerIds: ['a'],
-      geometryOf: (r, type) => current(r, type),
+describe('the rows of a layer of z or m', () => {
+  it('of a layer declared of z with no rows yet hold the rows it is given', () => {
+    const { writer, internals } = tablesOfReference(new ReferenceRows(), [], 8, {
+      dimensionsOf: (tableId) => (tableId === 'a' ? 'xyz' : 'xy'),
     });
-    // Values written in place, of another shape, and rows in the delta, before the raise
-    for (let step = 0; step < 40; step++) writes.step(step);
-    expect(internals.deltaRowCount()).toBeGreaterThan(0);
-    writer.raiseDimensions('a', 'xyz');
-    expectTablesMatch(tables, reference, ['a'], groupHandleOf);
-    // Rows with a z, written before the groups have their next versions
-    current = geometryOf('xyz');
-    for (let step = 0; step < 60; step++) writes.step(step + 100);
-    expectTablesMatch(tables, reference, ['a'], groupHandleOf);
-    internals.flushVersions();
-    expect(dimsOfGroups(internals, 'a')).toEqual(['xyz']);
-    expectTablesMatch(tables, reference, ['a'], groupHandleOf);
-    // Raised again, to an m as well
-    writer.raiseDimensions('a', 'xyzm');
-    current = geometryOf('xyzm');
-    for (let step = 0; step < 60; step++) writes.step(step + 200);
-    expectTablesMatch(tables, reference, ['a'], groupHandleOf);
-    internals.flushVersions();
-    expect(dimsOfGroups(internals, 'a')).toEqual(['xyzm']);
-    expectTablesMatch(tables, reference, ['a'], groupHandleOf);
-  });
-
-  it('makes again the next versions started before it', () => {
-    const random = seededRandom(5);
-    const reference = randomReference(random, 60, ['a']);
-    const setup = tablesOfReference(reference, ['a'], 8);
-    const { tables, writer, internals, groupHandleOf } = setup;
-    const sides = gate(internals);
-    let current: RandomGeometry = geometryOf('xy');
-    const writes = randomRowWrites(random, {
-      ...setup,
-      reference,
-      layerIds: ['a'],
-      geometryOf: (r, type) => current(r, type),
-    });
-    for (let step = 0; step < 30; step++) writes.step(step);
-    for (let i = 0; i < 4; i++) internals.advanceVersions(steps(20));
-    const built: GroupVersion[] = internals.builtVersions('a');
-    expect(built.length).toBeGreaterThan(0);
-    writer.raiseDimensions('a', 'xym');
-    current = geometryOf('xym');
-    for (let step = 0; step < 30; step++) writes.step(step + 100);
-    sides.open();
-    internals.swapVersions();
-    expectTablesMatch(tables, reference, ['a'], groupHandleOf);
-    internals.flushVersions();
-    expect(dimsOfGroups(internals, 'a')).toEqual(['xym']);
-    expectTablesMatch(tables, reference, ['a'], groupHandleOf);
-    sides.detach();
-  });
-
-  it('of a layer of no rows yet holds the rows it is given', () => {
-    const { writer, internals } = tablesOfReference(new ReferenceRows(), [], 8);
-    writer.raiseDimensions('a', 'xyz');
     const builder = createRowBlockDataBuilder({ dimensions: 'xyz' });
     builder.addRow({
       id: 'p',
@@ -502,20 +408,13 @@ describe('the dimensions of a layer raised', () => {
     });
     writer.addRowBlocks('a', builder.finish());
     internals.addQueuedRowBlocks();
-    expect(dimsOfGroups(internals, 'a')).toEqual(['xyz']);
+    const table = internals.layerTable('a');
+    expect(table?.dims).toBe('xyz');
+    expect(table?.groupAt(0).data.geometry.children.map((child) => child.dimensions)).toEqual([
+      'xyz',
+    ]);
   });
 
-  it('is refused to fewer dimensions', () => {
-    const { tables, writer } = smallTables('xyz', [['p', { type: 'Point', coordinates: [1, 2] }]]);
-    expect(() => writer.raiseDimensions('a', 'xym')).toThrow(/cannot be lowered/);
-    expect(() => writer.raiseDimensions('a', 'xy')).toThrow(/cannot be lowered/);
-    const xy = smallTables('xy', [['p', { type: 'Point', coordinates: [1, 2] }]]);
-    xy.writer.raiseDimensions('a', 'xyz');
-    expect(tables.get('a')).toBeDefined();
-  });
-});
-
-describe('the rows of a layer of z or m', () => {
   it('are not made features: read as one, hit as one', () => {
     const { tables } = smallTables('xyz', [['p', { type: 'Point', coordinates: [1, 2, 3] }]]);
     const handle = tables.findRow('p') as number;

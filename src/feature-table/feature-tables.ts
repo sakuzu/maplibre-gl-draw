@@ -18,7 +18,6 @@
 import {
   type CoordinateDimensions,
   type CoordinateSystem,
-  dimsWithin,
   isCoordinateDimensions,
   planarCoordinates,
   sortKeyOf,
@@ -336,13 +335,6 @@ export function createFeatureTablesStore(options: FeatureTablesInternalOptions =
     addRowBlocks: (layerId, blocks) => {
       try {
         return store.addRowBlocks(layerId, blocks as readonly RowBlockData[]);
-      } catch (error) {
-        throw tablesError(error);
-      }
-    },
-    raiseDimensions: (layerId, dimensions) => {
-      try {
-        store.raiseDimensions(layerId, dimensions);
       } catch (error) {
         throw tablesError(error);
       }
@@ -1018,11 +1010,14 @@ class FeatureTablesStore implements FeatureTablesInternals {
    */
   private readonly deletedGroups = new Set<GroupHandle>();
   /** `FeatureTablesOptions.dimensionsOf` */
-  private readonly declaredDims: ((layerId: string) => CoordinateDimensions) | undefined;
+  private readonly declaredDims: ((tableId: string) => CoordinateDimensions) | undefined;
   /** The system of the coordinates of the rows (`FeatureTablesOptions.coordinates`) */
   private readonly coordinates: CoordinateSystem;
-  /** The dimensions raised of the layers that hold no rows yet (`raiseDimensions`) */
-  private readonly raisedDims = new Map<string, CoordinateDimensions>();
+  /**
+   * The dimensions of the layers whose rows were all taken out (`clear`), kept for the rows that
+   * come next
+   */
+  private readonly clearedDims = new Map<string, CoordinateDimensions>();
   /** The boxes of every row, in one spatial index (the rows a click may hit) */
   private readonly rowBoxes: RowBoxIndex;
   /** How the boxes of the rows of some types are worked out from their features */
@@ -1317,7 +1312,7 @@ class FeatureTablesStore implements FeatureTablesInternals {
     };
     for (const layer of this.layers.values()) {
       // A layer keeps the dimensions of its coordinates for the rows that come next
-      this.raisedDims.set(layer.layerId, layer.dims);
+      this.clearedDims.set(layer.layerId, layer.dims);
       for (let g = 0; g < layer.groupCount; g++) release(layer.groupAt(g));
       if (layer.delta.group) release(layer.delta.group);
     }
@@ -1383,15 +1378,15 @@ class FeatureTablesStore implements FeatureTablesInternals {
 
   /**
    * The dimensions of the coordinates of the rows of a layer: its own once it holds rows, the
-   * ones the options declare for it before
+   * ones it had when its rows were taken out (`clear`), the ones the options declare for it before
    *
    * @throws when the options declare what is not dimensions
    */
   dimsOfLayer(layerId: string): CoordinateDimensions {
     const layer = this.layers.get(layerId);
     if (layer) return layer.dims;
-    const raised = this.raisedDims.get(layerId);
-    if (raised) return raised;
+    const cleared = this.clearedDims.get(layerId);
+    if (cleared) return cleared;
     const dims = this.declaredDims?.(layerId) ?? 'xy';
     if (!isCoordinateDimensions(dims)) {
       throw new DrawError(
@@ -1400,33 +1395,6 @@ class FeatureTablesStore implements FeatureTablesInternals {
       );
     }
     return dims;
-  }
-
-  /**
-   * Raises the dimensions of the coordinates of a layer (see `FeatureTablesWriter.raiseDimensions`):
-   * the rows built from then on have them, and every row group of the layer is due for its next
-   * version, which copies its coordinates into them (the groups of before are read as they are
-   * until then)
-   */
-  raiseDimensions(layerId: string, dims: CoordinateDimensions): void {
-    if (!isCoordinateDimensions(dims))
-      throw new DrawError('invalid-input', `FeatureTables: ${dims} are not dimensions`);
-    const current = this.dimsOfLayer(layerId);
-    if (!dimsWithin(current, dims)) {
-      throw new DrawError(
-        'invalid-input',
-        `FeatureTables: the coordinates of ${current} cannot be lowered to ${dims}`,
-      );
-    }
-    if (current === dims) return;
-    const layer = this.layers.get(layerId);
-    if (!layer) {
-      this.raisedDims.set(layerId, dims);
-      return;
-    }
-    layer.dims = dims;
-    for (let g = 0; g < layer.groupCount; g++) this.versions.markDue(layer.groupAt(g).handle);
-    this.notifyWork();
   }
 
   /** The rows of a layer, made when first written (with the dimensions declared for it) */

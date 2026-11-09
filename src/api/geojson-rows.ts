@@ -57,9 +57,9 @@ export interface GeoJSONRows {
   /** The features of the input that were not read, in the order of the input, and why */
   readonly skipped: SkippedFeature[];
   /**
-   * The dimensions that hold the positions of every row (`xy` for none): a layer of fewer is
-   * raised to hold them, `unionDims` of `@sakuzu/tabane` giving the dimensions of the layer that
-   * hold both (`FeatureTablesWriter.raiseDimensions`)
+   * The dimensions that hold the positions of every row (`xy` for none): the rows are written to a
+   * layer of these dimensions or more (`FeatureTablesOptions.dimensionsOf`; `unionDims` of
+   * `@sakuzu/tabane` gives the dimensions that hold both)
    */
   readonly dimensions: CoordinateDimensions;
 }

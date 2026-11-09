@@ -104,8 +104,6 @@ describe('the kasane subpath', () => {
     expect(codeOf(() => writer.addRowBlocks('l', [{ ...builder.finish()[0], length: 0 }]))).toBe(
       'invalid-input',
     );
-    expect(codeOf(() => writer.raiseDimensions('l', 'xy' as never))).toBeUndefined();
-    expect(codeOf(() => writer.raiseDimensions('l', 'x' as never))).toBe('invalid-input');
     expect(codeOf(() => writer.apply({ handles: Int32Array.of(99), fields: new Map() }))).toBe(
       'not-found',
     );

@@ -265,7 +265,6 @@ export class TableContractStore implements StoreContract {
       forget: (handles) => own.forget(handles),
       allocateHandles: (ids, hashes) => own.allocateHandles(ids, hashes),
       addRowBlocks: (layerId, blocks) => this.transact(() => own.addRowBlocks(layerId, blocks)),
-      raiseDimensions: (layerId, dimensions) => own.raiseDimensions(layerId, dimensions),
       apply: (patch, options) => this.transact(() => this.#applyRows(patch, options)),
       applyGroups: (patch, options) => this.#applyGroups(patch, options),
       getGroupOrder: (groupHandle) => own.getGroupOrder(groupHandle),
