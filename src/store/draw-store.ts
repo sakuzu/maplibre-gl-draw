@@ -29,7 +29,7 @@
 
 import type { VertexId } from '../api/state.js';
 import type { FeatureTables, RowWrite } from '../api/tables.js';
-import type { BulkOperation } from '../feature-table/bulk-plan.js';
+import { type BulkOperation, planBulk } from '../feature-table/bulk-plan.js';
 import {
   isRowLocked,
   isRowShown,
@@ -572,7 +572,7 @@ export class DrawStore implements Store {
     const internals = featureTablesInternals(contract.tables);
     if (!target || !internals || !contract.applyRows) return false;
     if (contract.isReadOnly() || contract.isInteractionLocked()) return false;
-    const write = internals.planBulk(op, target, this.#containers());
+    const write = planBulk(internals, op, target, this.#containers());
     if (!write) return false;
     return this.applyRows(write);
   }

@@ -12,11 +12,8 @@ import { describe, expect, expectTypeOf, it, vi } from 'vitest';
 import type { LayerTableView } from '../api/tables.js';
 import { createRowBlockDataBuilder, type RowInput } from '../table/row-group-builder.js';
 import type { RowBlockData } from '../table/row-group-types.js';
-import {
-  createFeatureTablesStore,
-  type FeatureTablesInternals,
-  featureTablesInternals,
-} from './feature-tables.js';
+import { createFeatureTablesStore } from './feature-row-tables.js';
+import { type FeatureTablesInternals, featureTablesInternals } from './feature-tables.js';
 import type { LayerTable } from './layer-table.js';
 import {
   GPU_STATE_BULK,

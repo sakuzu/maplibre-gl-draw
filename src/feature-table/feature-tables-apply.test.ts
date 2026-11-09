@@ -23,7 +23,12 @@ import { drawPropertyKey } from '../shared/properties.js';
 import type { Feature } from '../shared/types/model.js';
 import { createRowBlockDataBuilder } from '../table/row-group-builder.js';
 import { feature, orderKey, rowOfFeature, seededRandom, tablesOfFeatures } from '../test-utils.js';
-import { createFeatureTablesStore, featureTablesInternals } from './feature-tables.js';
+import { createFeatureTablesStore } from './feature-row-tables.js';
+import {
+  createTables,
+  type FeatureTablesInternals,
+  featureTablesInternals,
+} from './feature-tables.js';
 import {
   type InPlaceRowWrite,
   ROW_WRITE_GEOMETRY,
@@ -208,6 +213,66 @@ describe('writer.apply', () => {
     writer.apply(patchOf([handle], created, [12]));
     // The created zoom is read by the cutting of the rows: the row is placed again
     expect(internals.placeOf(handle)?.group.delta).toBe(true);
+  });
+
+  it('places a row again for a new type or created zoom, and writes the rest in place', () => {
+    const created = `property:${drawPropertyKey('createdZoom')}` as RowField;
+    const inDelta = (internals: ReturnType<typeof tablesOfFeatures>['internals'], id: string) =>
+      internals.placeOf(internals.ids.handleOf(id))?.group.delta;
+    const { writer, internals } = tablesOfFeatures(
+      'layer',
+      points(4).map((f) => ({
+        ...f,
+        properties: { ...f.properties, [drawPropertyKey('createdZoom')]: 10 },
+      })),
+    );
+    const [p0, p1, p2, p3] = ['p0', 'p1', 'p2', 'p3'].map((id) => internals.ids.handleOf(id));
+    // The same type, the same created zoom, another attribute: in place
+    writer.apply(patchOf([p0], 'type', ['Point']));
+    writer.apply(patchOf([p0], created, [10]));
+    writer.apply(patchOf([p0], 'property:name', ['x']));
+    writer.apply(patchOf([p0, p1], 'type', [undefined, 'Point']));
+    expect(['p0', 'p1', 'p2', 'p3'].map((id) => inDelta(internals, id))).toEqual([
+      false,
+      false,
+      false,
+      false,
+    ]);
+    // Another type, another created zoom, a created zoom taken off: placed again
+    writer.apply(patchOf([p1], 'type', ['Marker']));
+    writer.apply(patchOf([p2], created, [11]));
+    writer.apply(patchOf([p3], created, [undefined]));
+    expect(['p0', 'p1', 'p2', 'p3'].map((id) => inDelta(internals, id))).toEqual([
+      false,
+      true,
+      true,
+      true,
+    ]);
+    expect(internals.deltaRowCount()).toBe(3);
+  });
+
+  it('places a row again for a new type only, in tables told of no field that places it', () => {
+    const created = `property:${drawPropertyKey('createdZoom')}` as RowField;
+    const { tables, writer } = createTables();
+    const builder = createRowBlockDataBuilder();
+    points(2).forEach((f, i) => {
+      builder.addRow(
+        rowOfFeature(
+          { ...f, properties: { ...f.properties, [drawPropertyKey('createdZoom')]: 10 } },
+          orderKey(i),
+        ),
+      );
+    });
+    writer.addRowBlocks('layer', builder.finish());
+    const internals = featureTablesInternals(tables) as FeatureTablesInternals;
+    internals.addQueuedRowBlocks();
+    const [p0, p1] = ['p0', 'p1'].map((id) => internals.ids.handleOf(id));
+    writer.apply(patchOf([p0], created, [11]));
+    writer.apply(patchOf([p1], 'type', ['Marker']));
+    expect(internals.placeOf(p0)?.group.delta).toBe(false);
+    expect(tables.get('layer')?.getRowValue(p0, drawPropertyKey('createdZoom'))).toBe(11);
+    expect(internals.placeOf(p1)?.group.delta).toBe(true);
+    expect(tables.get('layer')?.getRowType(p1)).toBe('Marker');
   });
 
   it('marks a group due for its next version past the limit of its overrides', () => {

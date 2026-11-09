@@ -15,11 +15,8 @@ import { circleRowRings } from '../shared/circle-rings.js';
 import { createRowBlockDataBuilder, type RowInput } from '../table/row-group-builder.js';
 import type { RowBlockData } from '../table/row-group-types.js';
 import { orderKey, randomRowGeometry, seededRandom } from '../test-utils.js';
-import {
-  createFeatureTablesStore,
-  type FeatureTablesInternals,
-  featureTablesInternals,
-} from './feature-tables.js';
+import { createFeatureTablesStore } from './feature-row-tables.js';
+import { type FeatureTablesInternals, featureTablesInternals } from './feature-tables.js';
 
 const TYPES = ['Point', 'LineString', 'Polygon'];
 

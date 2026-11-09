@@ -1,0 +1,79 @@
+// SPDX-FileCopyrightText: 2026 SAKAIDA Atsushi
+// SPDX-License-Identifier: AGPL-3.0-only
+
+/**
+ * The tables of the features of a document, with what the library declares of its features
+ * (`createFeatureRowTables`, `createFeatureTablesStore`)
+ *
+ * The tables (`createTables`) hold rows and know nothing of features. The library gives them what
+ * they ask the user of the tables for: the boxes of the rows of an Image and of the types of the
+ * extensions (`FeatureRowBoxes`), and the fields whose new value places a row again, the ones the
+ * drawing cuts the rows by (the type, and the zoom a feature was created at).
+ */
+
+import type { FeatureTables, FeatureTablesWriter, RowField } from '../api/tables.js';
+import { drawPropertyKey } from '../shared/properties.js';
+import { FeatureRowBoxes, keepFeatureRowBoxes } from './feature-row-boxes.js';
+import {
+  createTables,
+  type FeatureTablesInternalOptions,
+  type FeatureTablesInternals,
+  featureTablesInternals,
+} from './feature-tables.js';
+import { createFeatureTablesWriter } from './feature-tables-writer.js';
+import type { TablesWriter } from './tables-writer.js';
+
+/**
+ * The fields of a feature whose new value places its row again: the drawing cuts the rows by
+ * their type and by the zoom they were created at
+ *
+ * @internal
+ */
+export const FEATURE_RELOCATING_FIELDS: readonly RowField[] = [
+  'type',
+  `property:${drawPropertyKey('createdZoom')}`,
+];
+
+/**
+ * Creates the tables of the features of a document with what the library declares of its
+ * features (`createTables`): the boxes of the rows of an Image and of the types of the extensions
+ * (`featureRowBoxesOf`), and the fields that place a row again
+ *
+ * @internal
+ */
+export function createFeatureRowTables(options: FeatureTablesInternalOptions = {}): {
+  tables: FeatureTables;
+  writer: TablesWriter;
+} {
+  const boxes = new FeatureRowBoxes();
+  const made = createTables({
+    ...options,
+    rowBoxes: boxes.boxesOf,
+    relocatingFields: FEATURE_RELOCATING_FIELDS,
+  });
+  const internals = featureTablesInternals(made.tables) as FeatureTablesInternals;
+  boxes.attach(() => internals.refreshBoxes());
+  keepFeatureRowBoxes(made.tables, boxes);
+  return made;
+}
+
+/**
+ * Creates the tables of the features of a document, as its reading side and the writer of the
+ * features over the writer of the tables (the implementation of `createFeatureTables`): the writer
+ * only writes, and tells nothing
+ *
+ * @internal
+ */
+export function createFeatureTablesStore(options: FeatureTablesInternalOptions = {}): {
+  tables: FeatureTables;
+  writer: FeatureTablesWriter;
+} {
+  const { tables, writer } = createFeatureRowTables(options);
+  return {
+    tables,
+    writer: createFeatureTablesWriter(
+      writer,
+      featureTablesInternals(tables) as FeatureTablesInternals,
+    ),
+  };
+}

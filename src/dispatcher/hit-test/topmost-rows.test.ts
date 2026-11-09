@@ -18,10 +18,8 @@
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { LayerTableView } from '../../api/tables.js';
-import {
-  createFeatureTablesStore,
-  featureTablesInternals,
-} from '../../feature-table/feature-tables.js';
+import { createFeatureTablesStore } from '../../feature-table/feature-row-tables.js';
+import { featureTablesInternals } from '../../feature-table/feature-tables.js';
 import { getAnchorProjector } from '../../shared/math/index.js';
 import { DrawStore } from '../../store/draw-store.js';
 import { MemoryContractStore } from '../../store/memory.js';

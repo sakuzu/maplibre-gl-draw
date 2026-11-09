@@ -17,7 +17,7 @@
 
 import type { CoordinateDimensions, CoordinateSystem, Utf8Column } from '@sakuzu/tabane';
 import type { Position } from 'geojson';
-import { createFeatureTablesStore } from '../feature-table/feature-tables.js';
+import { createFeatureTablesStore } from '../feature-table/feature-row-tables.js';
 import type { TableGroupField, TableGroupPatch } from '../feature-table/tables-writer.js';
 import type { FeatureTablesWorker } from '../feature-table/versions.js';
 import type { BBox } from '../geometry/types.js';

@@ -14,8 +14,8 @@
 import type { ProjectionData } from 'maplibre-gl';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { draggedRowsOf } from '../../feature-table/dragged-rows.js';
+import { createFeatureTablesStore } from '../../feature-table/feature-row-tables.js';
 import {
-  createFeatureTablesStore,
   type FeatureTablesInternals,
   featureTablesInternals,
 } from '../../feature-table/feature-tables.js';

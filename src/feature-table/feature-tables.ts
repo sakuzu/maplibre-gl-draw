@@ -32,7 +32,6 @@ import type {
   FeatureTables,
   FeatureTablesOptions,
   FeatureTablesWorker,
-  FeatureTablesWriter,
   ItemHandles,
   LayerRowsChange,
   LayerTableView,
@@ -40,13 +39,11 @@ import type {
   RowField,
   RowHandle,
   RowsChange,
-  RowWrite,
   TableScanOptions,
 } from '../api/tables.js';
 import type { BBox } from '../geometry/types.js';
 import { circleRowRings } from '../shared/circle-rings.js';
 import { DrawError } from '../shared/draw-error.js';
-import { drawPropertyKey } from '../shared/properties.js';
 import type { Feature, FeatureStyle, FeatureType, RowValues } from '../shared/types/model.js';
 import type { IdleScheduler } from '../shared/utils/idle.js';
 import { drawErrorOf } from '../table/draw-error-of.js';
@@ -64,12 +61,8 @@ import {
   type RowBlockData,
 } from '../table/row-group-types.js';
 import { compareRowKeys, type GroupKeySource, type RowKeySource } from '../table/row-keys.js';
-import { type BulkOperation, planBulk } from './bulk-plan.js';
-import type { RowContainers } from './bulk-rows.js';
 import { FeatureCache } from './feature-cache.js';
 import { featureFields } from './feature-fields.js';
-import { FeatureRowBoxes, keepFeatureRowBoxes } from './feature-row-boxes.js';
-import { createFeatureTablesWriter } from './feature-tables-writer.js';
 import { groupRunCuts, rowGroupsHolding } from './group-runs.js';
 import { GroupTable } from './group-table.js';
 import { IdIndex } from './id-index.js';
@@ -135,12 +128,6 @@ import {
 } from './versions.js';
 import { WriteMarks } from './write-marks.js';
 
-/** The key of the created zoom: the cutting of the rows into chunks reads it */
-const CREATED_ZOOM_KEY = drawPropertyKey('createdZoom');
-
-/** The attributes the cutting of the rows into chunks reads (a write of one moves the row) */
-const CLASSIFY_KEYS: ReadonlySet<string> = new Set([CREATED_ZOOM_KEY]);
-
 /**
  * The share of the rows of a group deleted and kept by nothing past which the group is due for
  * its next version (which leaves them out), and the number it always keeps before
@@ -148,14 +135,18 @@ const CLASSIFY_KEYS: ReadonlySet<string> = new Set([CREATED_ZOOM_KEY]);
 const DROPPED_ROWS_SHARE = 1 / 8;
 const DROPPED_ROWS_MIN = 64;
 
-/** The fields that place a row in the order of its layer or in another layer */
-const PLACE_FIELDS: ReadonlySet<string> = new Set([
-  'type',
-  'layerId',
-  'groupId',
-  'order',
-  'member',
-]);
+/**
+ * The fields that place a row in the order of its layer or in another layer (the fields the user
+ * of the tables declares, `relocatingFields`, place it again too)
+ */
+const PLACE_FIELDS: ReadonlySet<string> = new Set(['layerId', 'groupId', 'order', 'member']);
+
+/**
+ * The field of the type of a row, which the tables do not write in place: a row block holds the
+ * types of its rows once, so a new type puts the row in the delta, as a new place does, whether
+ * the user of the tables declares it among the fields that place a row again or not
+ */
+const TYPE_FIELD = 'type';
 
 /** The fields a new row is written with: a deleted row written all of them is created again */
 const CREATE_FIELDS: readonly RowField[] = ['type', 'layerId', 'geometry', 'order'];
@@ -239,46 +230,13 @@ export interface TablesInternalOptions extends FeatureTablesInternalOptions {
    * the box of its points)
    */
   readonly rowBoxes?: RowBoxes;
-}
-
-/**
- * Creates the tables of the features of a document, as its reading side and the writer of the
- * features over the writer of the tables (the implementation of `createFeatureTables`): the writer
- * only writes, and tells nothing
- *
- * @internal
- */
-export function createFeatureTablesStore(options: FeatureTablesInternalOptions = {}): {
-  tables: FeatureTables;
-  writer: FeatureTablesWriter;
-} {
-  const { tables, writer } = createFeatureRowTables(options);
-  return {
-    tables,
-    writer: createFeatureTablesWriter(
-      writer,
-      featureTablesInternals(tables) as FeatureTablesInternals,
-    ),
-  };
-}
-
-/**
- * Creates the tables of the features of a document with what the library declares of its
- * features (`createTables`): the boxes of the rows of an Image and of the types of the extensions
- * (`featureRowBoxesOf`)
- *
- * @internal
- */
-export function createFeatureRowTables(options: FeatureTablesInternalOptions = {}): {
-  tables: FeatureTables;
-  writer: TablesWriter;
-} {
-  const boxes = new FeatureRowBoxes();
-  const made = createTables({ ...options, rowBoxes: boxes.boxesOf });
-  const internals = featureTablesInternals(made.tables) as FeatureTablesInternals;
-  boxes.attach(() => internals.refreshBoxes());
-  keepFeatureRowBoxes(made.tables, boxes);
-  return made;
+  /**
+   * The fields whose new value places a row again, as a new place does (none when omitted): what
+   * the drawing cuts the rows by. A row written another value of one goes to the delta rather
+   * than being written in place. The type (`type`) and attributes (`property:<key>`) can be
+   * declared
+   */
+  readonly relocatingFields?: readonly RowField[];
 }
 
 /**
@@ -740,11 +698,6 @@ export interface FeatureTablesInternals {
   /** The values the rows of `rows` have now, for its fields (see `FeatureTables.readValues`) */
   readValues(rows: RowValues): RowValues;
   /**
-   * The write of an operation on the rows of a selection of many rows (null when it writes
-   * nothing or is refused): read only, nothing is written (`bulk-plan.ts`)
-   */
-  planBulk(op: BulkOperation, rows: TableSelection, containers: RowContainers): RowWrite | null;
-  /**
    * Calls `listener` with the rows of a selection of many features once it is decided (a box let
    * go of, every feature selected), and with null once there is none: what moves them on the
    * terrain (the moving parts of the drape) starts being built then, before they are pressed
@@ -1011,6 +964,8 @@ class FeatureTablesStore implements FeatureTablesInternals, TablesWriter, Tables
    * their points: asked once per type until the boxes are read again (`refreshBoxes`)
    */
   private readonly boxOfType = new Map<string, ((feature: Feature) => BBox) | null>();
+  /** The fields whose new value places a row again (`relocatingFields`) */
+  private readonly relocating: ReadonlySet<string>;
 
   constructor(options: TablesInternalOptions) {
     this.strings = new ValueStringCache(options.stringCacheSize);
@@ -1033,6 +988,15 @@ class FeatureTablesStore implements FeatureTablesInternals, TablesWriter, Tables
     this.worker = options.worker;
     this.onRelease = options.onRelease;
     this.boxesGiven = options.rowBoxes;
+    for (const field of options.relocatingFields ?? []) {
+      if (field !== TYPE_FIELD && !field.startsWith('property:')) {
+        throw new KasaneError(
+          'invalid-input',
+          `FeatureTables: the field ${field} cannot place a row again (the type and attributes can)`,
+        );
+      }
+    }
+    this.relocating = new Set(options.relocatingFields);
     this.versions = new GroupVersions(this.versionHost());
     this.rowBoxes = new RowBoxIndex(
       {
@@ -2344,10 +2308,6 @@ class FeatureTablesStore implements FeatureTablesInternals, TablesWriter, Tables
 
   // === The rows selected in bulk ===
 
-  planBulk(op: BulkOperation, rows: TableSelection, containers: RowContainers): RowWrite | null {
-    return planBulk(this, op, rows, containers);
-  }
-
   private readonly bulkListeners = new Set<(rows: TableSelection | null) => void>();
 
   setGroupHidden(groupId: string, hidden: boolean): void {
@@ -2406,6 +2366,15 @@ class FeatureTablesStore implements FeatureTablesInternals, TablesWriter, Tables
   }
 
   /**
+   * Whether a field of a feature of the sketches is written over its row of the delta: its
+   * geometry, and an attribute that places no row again (`relocatingFields`)
+   */
+  private writtenOverSketch(field: RowField): boolean {
+    if (field === 'geometry') return true;
+    return field.startsWith('property:') && !this.relocating.has(field);
+  }
+
+  /**
    * Draws features of the sketches that changed nothing but their geometry and their attributes by
    * writing those over the rows of the delta they are drawn as, as a write of a row does: the
    * same features, drawn over the same places, so that a frame of a drag of vertices draws again the
@@ -2426,7 +2395,7 @@ class FeatureTablesStore implements FeatureTablesInternals, TablesWriter, Tables
       if (previous === feature) continue;
       const fields = new Map<RowField, readonly unknown[]>();
       for (const [field, value] of featureFields(previous, feature)) {
-        if (!writtenOverSketch(field)) return false;
+        if (!this.writtenOverSketch(field)) return false;
         fields.set(field, [value]);
       }
       if (previous.layerId !== feature.layerId) return false;
@@ -2778,10 +2747,9 @@ class FeatureTablesStore implements FeatureTablesInternals, TablesWriter, Tables
       : checked.places;
     const columns = patchColumns(fields);
     // Whether a field written can move a row to another place (else no row is looked at for it)
+    const relocating = this.relocating;
     const mayPlace = [...fields.keys()].some(
-      (field) =>
-        PLACE_FIELDS.has(field) ||
-        (field.startsWith('property:') && CLASSIFY_KEYS.has(field.slice('property:'.length))),
+      (field) => PLACE_FIELDS.has(field) || field === TYPE_FIELD || relocating.has(field),
     );
     /** The writes in place of the layer of the row before */
     let lastWritesLayer: string | undefined;
@@ -3219,8 +3187,9 @@ class FeatureTablesStore implements FeatureTablesInternals, TablesWriter, Tables
   }
 
   /**
-   * Whether a patch places a row elsewhere (another key, group, layer or type, or an attribute
-   * the cutting of the rows reads): it then goes to the delta rather than being written in place
+   * Whether a patch places a row elsewhere (another key, group or layer, or another value of a
+   * field declared to place it again, `relocatingFields`): it then goes to the delta rather than
+   * being written in place
    */
   private placeChanged(
     place: RowPlace,
@@ -3235,9 +3204,6 @@ class FeatureTablesStore implements FeatureTablesInternals, TablesWriter, Tables
       if (PLACE_FIELDS.has(field)) {
         if (value === undefined && field !== 'member' && field !== 'groupId') continue;
         switch (field) {
-          case 'type':
-            if (value !== rowType(data, row)) return true;
-            break;
           case 'layerId':
             if (value !== place.layer.layerId) return true;
             break;
@@ -3253,7 +3219,11 @@ class FeatureTablesStore implements FeatureTablesInternals, TablesWriter, Tables
         }
         continue;
       }
-      if (field.startsWith('property:') && CLASSIFY_KEYS.has(field.slice('property:'.length))) {
+      if (field === TYPE_FIELD) {
+        if (value !== undefined && value !== rowType(data, row)) return true;
+        continue;
+      }
+      if (this.relocating.has(field)) {
         if (rowValue(place.group, row, field.slice('property:'.length)) !== value) return true;
       }
     }
@@ -4005,12 +3975,6 @@ function patchColumns(fields: ReadonlyMap<RowField, readonly unknown[]>): PatchC
     locked: fields.get('locked'),
     properties,
   };
-}
-
-/** Whether a field of a feature of the sketches is written over its row of the delta */
-function writtenOverSketch(field: RowField): boolean {
-  if (field === 'geometry') return true;
-  return field.startsWith('property:') && !CLASSIFY_KEYS.has(field.slice('property:'.length));
 }
 
 /** What makes a row not drawn, a sketch drawn over it aside */

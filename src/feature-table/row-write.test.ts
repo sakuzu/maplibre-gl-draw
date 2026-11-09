@@ -20,7 +20,8 @@ import { describe, expect, it } from 'vitest';
 import type { Feature } from '../shared/types/model.js';
 import { createRowBlockDataBuilder } from '../table/row-group-builder.js';
 import { feature, referenceKey, rowPatch, tablesOfFeatures } from '../test-utils.js';
-import { createFeatureTablesStore, featureTablesInternals } from './feature-tables.js';
+import { createFeatureTablesStore } from './feature-row-tables.js';
+import { featureTablesInternals } from './feature-tables.js';
 import { hitTestLayerTable } from './hit-test.js';
 import { overrideBytesOf } from './layer-table.js';
 import {

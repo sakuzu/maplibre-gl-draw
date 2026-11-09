@@ -44,8 +44,8 @@ import type {
   TableGroupPatch,
 } from '../api/tables.js';
 import { featureFields, featureWithFields } from '../feature-table/feature-fields.js';
+import { createFeatureRowTables } from '../feature-table/feature-row-tables.js';
 import {
-  createFeatureRowTables,
   type FeatureTablesInternalOptions,
   type FeatureTablesInternals,
   featureTablesInternals,

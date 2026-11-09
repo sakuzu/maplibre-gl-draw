@@ -10,9 +10,13 @@
  *   over is hit where it is)
  * - The sketches are replaced by the next call; none takes them all away
  * - No next version takes a sketch drawn over a row
+ * - A sketch that changes only its geometry or attributes is written over its row of the delta;
+ *   one that changes an attribute the cutting of the rows reads (the created zoom) makes the delta
+ *   again
  */
 
 import { describe, expect, it } from 'vitest';
+import { drawPropertyKey } from '../shared/properties.js';
 import type { Feature } from '../shared/types/model.js';
 import { feature, internalsOf, tablesOfFeatures } from '../test-utils.js';
 import { hitTestLayerTable } from './hit-test.js';
@@ -149,5 +153,34 @@ describe('the sketches drawn over rows for this client', () => {
       'p11',
     ]);
     expect(internals.hasPendingWork).toBe(false);
+  });
+
+  it('are written over their rows of the delta, unless the created zoom changes', () => {
+    const { tables, internals } = setup();
+    let written = 0;
+    let remade = 0;
+    internals.onRowsWritten(() => {
+      written++;
+    });
+    internals.onDeltaChanged(() => {
+      remade++;
+    });
+    const p3 = { ...feature('p3', 'Polygon', square(30)), layerId: 'layer' };
+    internalsOf(tables).showSketches(sketchesOf([p3]));
+    written = 0;
+    remade = 0;
+    const named = { ...p3, geometry: { type: 'Polygon' as const, coordinates: square(32) } };
+    const renamed = { ...named, properties: { name: 'x' } };
+    internalsOf(tables).showSketches(sketchesOf([named]));
+    internalsOf(tables).showSketches(sketchesOf([renamed]));
+    expect(written).toBe(2);
+    expect(remade).toBe(0);
+    const zoomed = {
+      ...renamed,
+      properties: { ...renamed.properties, [drawPropertyKey('createdZoom')]: 12 },
+    };
+    internalsOf(tables).showSketches(sketchesOf([zoomed]));
+    expect(written).toBe(2);
+    expect(remade).toBeGreaterThan(0);
   });
 });

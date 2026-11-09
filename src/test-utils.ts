@@ -35,8 +35,8 @@ import type { DatasetRow } from './dataset/types.js';
 import { normalizeDisplayFeature } from './dataset/types.js';
 import type { InputRouter } from './dispatcher/input-router.js';
 import type { KeyNormalizedEvent, ModifierKeys, MouseNormalizedEvent } from './dispatcher/types.js';
+import { createFeatureTablesStore } from './feature-table/feature-row-tables.js';
 import {
-  createFeatureTablesStore,
   type FeatureTablesInternals,
   featureTablesInternals,
 } from './feature-table/feature-tables.js';
