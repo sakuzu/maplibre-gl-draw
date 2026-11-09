@@ -5,11 +5,12 @@
  * `draw.document`: the whole document, to load and to write out
  */
 
-import { parseJSONKeepingIntegers, TabaneError } from '@sakuzu/tabane';
+import { parseJSONKeepingIntegers } from '@sakuzu/tabane';
 import type { FeatureCollection } from 'geojson';
 import { deleteFeaturesAndGroups } from '../../store/feature-stream.js';
 import { insertGroup } from '../../store/item-lists.js';
 import type { Coordinate } from '../../store/types.js';
+import { drawErrorOf } from '../../table/draw-error-of.js';
 import type { DocumentResource } from '../document.js';
 import { DrawError } from '../errors.js';
 import type { StoreView } from '../extension/store.js';
@@ -345,9 +346,8 @@ function parseJSON(text: string): unknown {
 
 /** Wraps an error of a reader into a DrawError with the code */
 function asDrawError(code: 'invalid-input' | 'unsupported-format', error: unknown): DrawError {
-  if (error instanceof DrawError) return error;
-  if (error instanceof TabaneError)
-    return new DrawError(error.code, error.message, { cause: error });
+  const wrapped = drawErrorOf(error);
+  if (wrapped instanceof DrawError) return wrapped;
   const message = error instanceof Error ? error.message : String(error);
   return new DrawError(code, message, { cause: error });
 }

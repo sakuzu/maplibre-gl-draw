@@ -16,8 +16,8 @@
  */
 
 import type { CoordinateDimensions } from '@sakuzu/tabane';
-import { DrawError } from '../shared/draw-error.js';
 import type { BoundingBox } from '../shared/types/model.js';
+import { KasaneError } from '../table/kasane-error.js';
 import { ROW_FLAG_DELETED, type RowBlockData } from '../table/row-group-types.js';
 import { compareRowKeys, type GroupKeySource, type RowKeySource } from '../table/row-keys.js';
 import { GeometryColumnReader } from '../table/table.js';
@@ -434,16 +434,16 @@ export class LayerTable {
    */
   insert(group: RowGroup): void {
     const data = group.data;
-    if (data.length === 0) throw new DrawError('invalid-input', 'LayerTable: an empty row group');
+    if (data.length === 0) throw new KasaneError('invalid-input', 'LayerTable: an empty row group');
     if (!this.inKeyOrder(data)) {
-      throw new DrawError(
+      throw new KasaneError(
         'invalid-state',
         'LayerTable: the rows of a group are not in the order of their keys',
       );
     }
     const lo = this.placeOfGroup(data);
     if (lo < 0) {
-      throw new DrawError(
+      throw new KasaneError(
         'invalid-state',
         'LayerTable: the rows of a group overlap the rows of another group',
       );
@@ -470,7 +470,7 @@ export class LayerTable {
     const replaced = new Set<RowGroup>();
     for (const group of before) {
       if (this.groups.get(group.handle) !== group) {
-        throw new DrawError('invalid-state', 'LayerTable: a group replaced is not in the layer');
+        throw new KasaneError('invalid-state', 'LayerTable: a group replaced is not in the layer');
       }
       replaced.add(group);
     }
@@ -509,7 +509,8 @@ export class LayerTable {
     groupKeys: GroupKeySource = this.groupKeys,
   ): void {
     const groups = this.groupsAfter(before, after, groupKeys);
-    if (!groups) throw new DrawError('invalid-state', 'LayerTable: the rows of two groups overlap');
+    if (!groups)
+      throw new KasaneError('invalid-state', 'LayerTable: the rows of two groups overlap');
     for (const group of before) {
       this.groups.delete(group.handle);
       this.rows -= group.data.length;
@@ -580,7 +581,10 @@ export class LayerTable {
     }
     flush(Number.MAX_SAFE_INTEGER, 0);
     if (at !== count)
-      throw new DrawError('invalid-state', 'LayerTable: the order read other rows than it counted');
+      throw new KasaneError(
+        'invalid-state',
+        'LayerTable: the order read other rows than it counted',
+      );
     this.ordered = { handles, groups, rows };
     return this.ordered;
   }
@@ -1042,7 +1046,8 @@ export class LayerTable {
   private extraOf(at: OrderRow): number {
     if (!at.group.delta && !at.group.pending) return -1;
     const k = this.readExtras().entries.get(at.group)?.[at.row] ?? -1;
-    if (k < 0) throw new DrawError('invalid-state', 'LayerTable: the row is not read in the layer');
+    if (k < 0)
+      throw new KasaneError('invalid-state', 'LayerTable: the row is not read in the layer');
     return k;
   }
 
@@ -1050,7 +1055,7 @@ export class LayerTable {
   private mainOf(at: OrderRow): [number, number] {
     const g = this.orderOf(at.group.handle);
     if (g < 0 || this.groupAt(g) !== at.group || (at.group.state[at.row] & STATE_ELSEWHERE) !== 0) {
-      throw new DrawError('invalid-state', 'LayerTable: the row is not read in the layer');
+      throw new KasaneError('invalid-state', 'LayerTable: the row is not read in the layer');
     }
     return [g, at.row];
   }
@@ -1155,7 +1160,7 @@ export class LayerTable {
     const ai = this.orderOf(a.group);
     const bi = this.orderOf(b.group);
     if (ai < 0 || bi < 0)
-      throw new DrawError('invalid-state', 'LayerTable: a place names a group not in the layer');
+      throw new KasaneError('invalid-state', 'LayerTable: a place names a group not in the layer');
     if (ai !== bi) return ai - bi;
     if (a.slot !== b.slot) return a.slot - b.slot;
     return a.k - b.k;

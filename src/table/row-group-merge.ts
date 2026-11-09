@@ -28,7 +28,7 @@ import {
   ValueColumnBuilder,
   valueEntryOf,
 } from '@sakuzu/tabane';
-import { DrawError } from '../shared/draw-error.js';
+import { KasaneError } from './kasane-error.js';
 import { WIDE_VERTICES } from './row-geometry.js';
 import {
   ChildBuilder,
@@ -95,7 +95,7 @@ export interface RowBlockDataMerge extends Omit<RowBlockMerge, 'sources' | 'grou
  * Merges rows of row blocks into new row blocks, in the order of the layer
  *
  * @returns The new row blocks (none for no row); their handles are those of the rows
- * @throws `DrawError` with the code `invalid-input` when a source holds styles not numbered yet,
+ * @throws `KasaneError` with the code `invalid-input` when a source holds styles not numbered yet,
  *   or `not-found` when a row names a group of features the keys do not give
  */
 export function mergeRowBlock(merge: RowBlockMerge): RowBlock[] {
@@ -111,7 +111,7 @@ export function mergeRowBlockData(merge: RowBlockDataMerge): RowBlockData[] {
   const { sources, rows } = merge;
   for (const source of sources) {
     if (source.styleDictionary) {
-      throw new DrawError(
+      throw new KasaneError(
         'invalid-input',
         'mergeRowBlock: the styles of a source are not numbered',
       );
@@ -194,7 +194,7 @@ function mergeDims(
       const own = child.dimensions ?? 'xy';
       if (dims === undefined) dims = own;
       else if (given === undefined ? own !== dims : !dimsWithin(own, dims)) {
-        throw new DrawError(
+        throw new KasaneError(
           'invalid-input',
           `mergeRowBlock: a source has coordinates of ${own}, the merge ${given === undefined ? 'has' : 'makes'} ${dims}`,
         );
@@ -298,7 +298,7 @@ function copyRows(
     let type = typeIndex.get(typeName);
     if (type === undefined) {
       if (typeNames.length >= 255)
-        throw new DrawError('invalid-input', 'mergeRowBlock: more than 255 types');
+        throw new KasaneError('invalid-input', 'mergeRowBlock: more than 255 types');
       type = typeNames.length;
       typeNames.push(typeName);
       typeIndex.set(typeName, type);

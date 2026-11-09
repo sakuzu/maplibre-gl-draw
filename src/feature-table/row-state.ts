@@ -16,7 +16,7 @@
  */
 
 import type { EnuEdit } from '../geometry/enu-transforms.js';
-import { DrawError } from '../shared/draw-error.js';
+import { KasaneError } from '../table/kasane-error.js';
 import type { RowHandle } from './types.js';
 
 // === The bits of the copy kept by a row group (16 bits per row) ===
@@ -203,7 +203,7 @@ export class RowStateSets {
    */
   setMoving(handles: Int32Array, set: number): void {
     if (!Number.isInteger(set) || set < 0 || set > MOVE_SETS) {
-      throw new DrawError('invalid-input', `RowStateSets: no moving set ${set}`);
+      throw new KasaneError('invalid-input', `RowStateSets: no moving set ${set}`);
     }
     this.update(handles, (bits) => (bits & ~SET_MOVE_MASK) | (set << SET_MOVE_SHIFT));
   }
@@ -233,7 +233,7 @@ export class RowStateSets {
   /** Sets the translation of a moving set (degrees of longitude and latitude) */
   setTranslation(set: number, dLng: number, dLat: number): void {
     if (!Number.isInteger(set) || set < 1 || set > MOVE_SETS) {
-      throw new DrawError('invalid-input', `RowStateSets: no moving set ${set}`);
+      throw new KasaneError('invalid-input', `RowStateSets: no moving set ${set}`);
     }
     this.translations[set * 2] = dLng;
     this.translations[set * 2 + 1] = dLat;
@@ -256,7 +256,7 @@ export class RowStateSets {
    */
   setTransform(set: number, transform: EnuEdit | null): void {
     if (!Number.isInteger(set) || set < 1 || set > MOVE_SETS) {
-      throw new DrawError('invalid-input', `RowStateSets: no moving set ${set}`);
+      throw new KasaneError('invalid-input', `RowStateSets: no moving set ${set}`);
     }
     this.transforms[set] = transform;
     this.translationRevision++;

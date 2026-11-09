@@ -4,9 +4,12 @@
 /**
  * The guard of a destroyed instance: once `destroy()` has run, every method of the draw instance
  * and of its collections throws `DrawError('invalid-state')` instead of reaching an engine that
- * has released everything
+ * has released everything. Before, an error of the tables of rows a method reaches is thrown as
+ * a `DrawError` of the same code (`drawErrorOf`)
  */
 
+import { drawErrorOf } from '../../table/draw-error-of.js';
+import { KasaneError } from '../../table/kasane-error.js';
 import { DrawError } from '../errors.js';
 
 /** The error of a call made after destroy */
@@ -30,7 +33,8 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
 /**
  * Copies an object with every method (at any depth of plain objects) guarded: a call after
  * `isDestroyed()` turned true throws `DrawError('invalid-state')`, or rejects with it for a
- * method that returns a promise. A getter is guarded the same way.
+ * method that returns a promise. A getter is guarded the same way. An error of the tables of rows
+ * a call throws is thrown as a `DrawError` (what a function given to the call throws, as it is)
  *
  * @param target - The object to guard
  * @param isDestroyed - Whether the instance is destroyed
@@ -57,7 +61,11 @@ export function guardAfterDestroy<T extends object>(
         enumerable: descriptor.enumerable,
         get() {
           if (isDestroyed()) throw destroyedError(path);
-          return get.call(target);
+          try {
+            return get.call(target);
+          } catch (error) {
+            throw error instanceof KasaneError ? drawErrorOf(error) : error;
+          }
         },
       });
       continue;
@@ -71,7 +79,11 @@ export function guardAfterDestroy<T extends object>(
           if (rejects) return Promise.reject(error);
           throw error;
         }
-        return (value as (...a: unknown[]) => unknown).apply(target, args);
+        try {
+          return (value as (...a: unknown[]) => unknown).apply(target, args);
+        } catch (error) {
+          throw error instanceof KasaneError ? drawErrorOf(error) : error;
+        }
       };
     } else if (isPlainObject(value)) {
       guarded[key] = guardAfterDestroy(value, isDestroyed, options, `${path}.`);

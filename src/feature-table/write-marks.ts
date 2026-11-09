@@ -22,7 +22,7 @@
  * row stamped outside a frame that raised the mark is told to what keeps it (`onUnframedStamp`).
  */
 
-import { DrawError } from '../shared/draw-error.js';
+import { KasaneError } from '../table/kasane-error.js';
 import type { RowGroup } from './layer-table.js';
 import type { RowHandle } from './types.js';
 
@@ -84,11 +84,11 @@ export class WriteMarks {
   /**
    * Sets the mark the rows written from now on are stamped with
    *
-   * @throws DrawError (`invalid-state`) for a mark below the one before, or past what a row holds
+   * @throws KasaneError (`invalid-state`) for a mark below the one before, or past what a row holds
    */
   set(mark: number): void {
     if (!Number.isInteger(mark) || mark < this.#mark || mark > MARK_LIMIT) {
-      throw new DrawError(
+      throw new KasaneError(
         'invalid-state',
         `FeatureTables: the write mark ${mark} is not after the mark ${this.#mark}`,
       );

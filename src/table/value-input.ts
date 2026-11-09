@@ -7,8 +7,8 @@
  * the API is
  */
 
-import { TabaneError, type Value, valueOfInput } from '@sakuzu/tabane';
-import { DrawError } from '../shared/draw-error.js';
+import { type Value, valueOfInput } from '@sakuzu/tabane';
+import { drawErrorOf } from './draw-error-of.js';
 
 /**
  * The value given, in the one form the library holds
@@ -20,8 +20,6 @@ export function drawValueOfInput(value: unknown, what: string): Value {
   try {
     return valueOfInput(value, what);
   } catch (error) {
-    if (error instanceof TabaneError)
-      throw new DrawError(error.code, error.message, { cause: error });
-    throw error;
+    throw drawErrorOf(error);
   }
 }

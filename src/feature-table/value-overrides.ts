@@ -36,7 +36,7 @@ import {
   valueTagOf,
   wellFormed,
 } from '@sakuzu/tabane';
-import { DrawError } from '../shared/draw-error.js';
+import { KasaneError, kasaneErrorOf } from '../table/kasane-error.js';
 import { GeometryColumnReader } from '../table/table.js';
 import type { TableGeometry } from '../table/types.js';
 import { drawValueOfInput } from '../table/value-input.js';
@@ -93,13 +93,17 @@ export function encodeOverrideValue(value: unknown): OverrideValue {
   if (typeof value === 'number') return { tag: VALUE_NUMBER, number: value, bytes: null };
   if (typeof value === 'string') {
     if (!wellFormed(value)) {
-      throw new DrawError('invalid-input', 'ValueOverrides: a string with a lone surrogate');
+      throw new KasaneError('invalid-input', 'ValueOverrides: a string with a lone surrogate');
     }
     return { tag: VALUE_STRING, number: 0, bytes: utf8Bytes(value) };
   }
   // A bigint as the number or the big integer it is
   if (typeof value === 'bigint') return encodeOverrideValue(drawValueOfInput(value, 'The value'));
-  return { tag: valueTagOf(value), number: 0, bytes: encodeCanonicalValue(value) };
+  try {
+    return { tag: valueTagOf(value), number: 0, bytes: encodeCanonicalValue(value) };
+  } catch (error) {
+    throw kasaneErrorOf(error);
+  }
 }
 
 /**
@@ -121,7 +125,11 @@ export function decodeOverrideValue(value: OverrideValue): unknown {
       return DECODER.decode(value.bytes as Uint8Array);
     case VALUE_NESTED:
     case VALUE_OTHER:
-      return decodeCanonicalValue(value.bytes as Uint8Array);
+      try {
+        return decodeCanonicalValue(value.bytes as Uint8Array);
+      } catch (error) {
+        throw kasaneErrorOf(error);
+      }
     default:
       return undefined;
   }

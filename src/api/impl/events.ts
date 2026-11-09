@@ -15,7 +15,6 @@
  * same hub.
  */
 
-import { TabaneError } from '@sakuzu/tabane';
 import { featureFields, featureWithFields } from '../../feature-table/feature-fields.js';
 import { featureTablesInternals } from '../../feature-table/feature-tables.js';
 import { rowFeature } from '../../feature-table/row-read.js';
@@ -32,6 +31,7 @@ import type {
   Feature as StoredFeature,
   VertexSelection as StoredVertexSelection,
 } from '../../store/types.js';
+import { drawErrorOf } from '../../table/draw-error-of.js';
 import type { Dataset } from '../datasets.js';
 import { DrawError } from '../errors.js';
 import type { Change, ChangedIds, DrawEvents, Observable } from '../events.js';
@@ -814,9 +814,8 @@ function toSnapResult(result: EngineSignals['snap.change']): SnapResult {
 
 /** A failure of a load as a DrawError, with what was thrown as its cause */
 function toDrawError(error: unknown): DrawError {
-  if (error instanceof DrawError) return error;
-  if (error instanceof TabaneError)
-    return new DrawError(error.code, error.message, { cause: error });
+  const wrapped = drawErrorOf(error);
+  if (wrapped instanceof DrawError) return wrapped;
   const message = error instanceof Error ? error.message : String(error);
   return new DrawError('unsupported-format', message, { cause: error });
 }

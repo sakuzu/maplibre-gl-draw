@@ -15,8 +15,10 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { TabaneError } from '@sakuzu/tabane';
 import { describe, expect, it } from 'vitest';
 import { DrawError } from '../api/errors.js';
+import { KasaneError } from '../table/kasane-error.js';
 import { createFeatureTables, createRowBlockBuilder, mergeRowBlock } from './index.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -119,5 +121,102 @@ describe('the kasane subpath', () => {
     ).toBe('invalid-input');
     expect(codeOf(() => mergeRowBlock({ sources: [], rows: Int32Array.of(0, 0) }))).toBeDefined();
     expect(tables.get('l')).toBeUndefined();
+  });
+
+  it('throws an error of the tables as a DrawError of its code and message, held as the cause', () => {
+    const thrown = (fn: () => unknown): unknown => {
+      try {
+        fn();
+      } catch (error) {
+        return error;
+      }
+      throw new Error('nothing was thrown');
+    };
+    /** The error a call threw, a DrawError, and the error of the tables it holds */
+    const wrapped = (fn: () => unknown): { error: DrawError; cause: KasaneError } => {
+      const error = thrown(fn);
+      expect(error).toBeInstanceOf(DrawError);
+      const cause = ((error as DrawError).details as { cause?: unknown } | undefined)?.cause;
+      expect(cause).toBeInstanceOf(KasaneError);
+      expect((error as DrawError).code).toBe((cause as KasaneError).code);
+      expect((error as DrawError).message).toBe((cause as KasaneError).message);
+      return { error: error as DrawError, cause: cause as KasaneError };
+    };
+    const row = { id: 'a', type: 'Point', geometry: null, order: 'a0' };
+
+    // The builder: a row added twice, a value it cannot hold, a group the options do not give
+    const builder = createRowBlockBuilder();
+    builder.addRow(row);
+    const twice = wrapped(() => builder.addRow(row));
+    expect(twice.error.code).toBe('invalid-input');
+    expect(twice.error.message).toBe('RowBlockBuilder: the id "a" is added twice');
+    const withFunction = createRowBlockBuilder();
+    withFunction.addRow({ ...row, properties: { f: () => 1 } });
+    const value = wrapped(() => withFunction.finish());
+    expect(value.error.code).toBe('invalid-input');
+    // An error of Tabane is held by the error of the tables
+    expect(value.cause.cause).toBeInstanceOf(TabaneError);
+    const grouped = createRowBlockBuilder();
+    grouped.addRow({ ...row, group: 7 });
+    grouped.addRow({ ...row, id: 'b', group: 7 });
+    expect(wrapped(() => grouped.finish()).error.code).toBe('not-found');
+
+    // The merge: a source whose styles are not numbered
+    const blocks = builder.finish();
+    expect(
+      wrapped(() => mergeRowBlock({ sources: blocks, rows: Int32Array.of(0, 0) })).error.code,
+    ).toBe('invalid-input');
+
+    // The writer: values of a row it cannot hold
+    const { tables, writer } = createFeatureTables();
+    const one = createRowBlockBuilder();
+    one.addRow({ ...row, geometry: { type: 'Point', coordinates: [1, 2] } });
+    writer.addRowBlocks('l', one.finish());
+    const handles = Int32Array.of(tables.findRow('a') as number);
+    const surrogate = wrapped(() =>
+      writer.apply({ handles, fields: new Map([['property:x', ['\ud800']]]) }),
+    );
+    expect(surrogate.error.code).toBe('invalid-input');
+    expect(surrogate.error.message).toBe('ValueOverrides: a string with a lone surrogate');
+    const notValue = wrapped(() =>
+      writer.apply({ handles, fields: new Map([['property:x', [() => 1]]]) }),
+    );
+    expect(notValue.error.code).toBe('invalid-input');
+    expect(notValue.cause.cause).toBeInstanceOf(TabaneError);
+  });
+
+  it('lets through as it is what a function given to the tables throws', () => {
+    const own = new TabaneError('invalid-input', 'an error of the caller');
+    const point = { type: 'Point' as const, coordinates: [1, 2] };
+    const builder = createRowBlockBuilder({
+      coordinateSystem: {
+        rowBox: () => {
+          throw own;
+        },
+      },
+    });
+    builder.addRow({ id: 'a', type: 'Point', geometry: point, order: 'a0' });
+    let error: unknown;
+    try {
+      builder.finish();
+    } catch (thrown) {
+      error = thrown;
+    }
+    expect(error).toBe(own);
+
+    const blocks = createRowBlockBuilder();
+    blocks.addRow({ id: 'a', type: 'Point', geometry: point, order: 'a0' });
+    const { writer } = createFeatureTables({
+      onChange: () => {
+        throw own;
+      },
+    });
+    error = undefined;
+    try {
+      writer.addRowBlocks('l', blocks.finish());
+    } catch (thrown) {
+      error = thrown;
+    }
+    expect(error).toBe(own);
   });
 });

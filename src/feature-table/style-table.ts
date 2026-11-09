@@ -23,8 +23,8 @@
  */
 
 import { decodeCanonicalValue, encodeCanonicalValue, hashByteRun } from '@sakuzu/tabane';
-import { DrawError } from '../shared/draw-error.js';
 import type { FeatureStyle } from '../shared/types/model.js';
+import { KasaneError, kasaneErrorOf } from '../table/kasane-error.js';
 
 /**
  * The distinct styles of a document, numbered
@@ -70,7 +70,13 @@ export class StyleTable {
    * @throws when a value of the style cannot be held (a number that is not finite, a function)
    */
   intern(style: Readonly<FeatureStyle>): number {
-    return this.internBytes(encodeCanonicalValue(style));
+    let bytes: Uint8Array;
+    try {
+      bytes = encodeCanonicalValue(style);
+    } catch (error) {
+      throw kasaneErrorOf(error);
+    }
+    return this.internBytes(bytes);
   }
 
   /**
@@ -123,7 +129,7 @@ export class StyleTable {
 
   /** Counts `count` more rows that use a number */
   retain(id: number, count = 1): void {
-    if (!this.entries[id]) throw new DrawError('not-found', `StyleTable: no style ${id}`);
+    if (!this.entries[id]) throw new KasaneError('not-found', `StyleTable: no style ${id}`);
     this.uses[id] += count;
   }
 
@@ -168,8 +174,14 @@ export class StyleTable {
     const cached = this.styles[id];
     if (cached) return cached;
     const bytes = this.entries[id];
-    if (!bytes) throw new DrawError('not-found', `StyleTable: no style ${id}`);
-    const style = Object.freeze(decodeCanonicalValue(bytes) as FeatureStyle);
+    if (!bytes) throw new KasaneError('not-found', `StyleTable: no style ${id}`);
+    let decoded: unknown;
+    try {
+      decoded = decodeCanonicalValue(bytes);
+    } catch (error) {
+      throw kasaneErrorOf(error);
+    }
+    const style = Object.freeze(decoded as FeatureStyle);
     this.styles[id] = style;
     return style;
   }

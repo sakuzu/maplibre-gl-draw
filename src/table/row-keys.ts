@@ -26,7 +26,7 @@
  */
 
 import { compareByteRuns, type Utf8Column } from '@sakuzu/tabane';
-import { DrawError } from '../shared/draw-error.js';
+import { KasaneError } from './kasane-error.js';
 
 /**
  * The columns of rows the order is read from
@@ -102,7 +102,7 @@ function groupEntry(group: number, groups: GroupKeySource | null): number {
   if (group < 0) return -1;
   const entry = groups ? groups.entryOf(group) : -1;
   if (entry < 0)
-    throw new DrawError(
+    throw new KasaneError(
       'not-found',
       `compareRowKeys: a row names the group ${group}, which is unknown`,
     );

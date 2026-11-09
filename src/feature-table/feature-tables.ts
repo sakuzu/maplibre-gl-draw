@@ -61,6 +61,8 @@ import type {
 } from '../shared/types/model.js';
 import { getBoundingBox } from '../shared/utils/feature-bbox.js';
 import type { IdleScheduler } from '../shared/utils/idle.js';
+import { drawErrorOf } from '../table/draw-error-of.js';
+import { KasaneError } from '../table/kasane-error.js';
 import {
   createRowBlockDataBuilder,
   ROW_BLOCK_TARGET_ROWS,
@@ -241,74 +243,179 @@ export function createFeatureTablesStore(options: FeatureTablesInternalOptions =
   const gated = new WeakMap<LayerTableView, LayerTableView>();
   const tables: FeatureTables = {
     get: (layerId) => {
-      gate();
-      const view = store.view(layerId);
-      if (!view) return undefined;
-      let out = gated.get(view);
-      if (!out) {
-        out = new GatedLayerView(view, gate);
-        gated.set(view, out);
+      try {
+        gate();
+        const view = store.view(layerId);
+        if (!view) return undefined;
+        let out = gated.get(view);
+        if (!out) {
+          out = new GatedLayerView(view, gate);
+          gated.set(view, out);
+        }
+        return out;
+      } catch (error) {
+        throw tablesError(error);
       }
-      return out;
     },
     findRow: (id) => {
-      gate();
-      return store.handleOf(id);
+      try {
+        gate();
+        return store.handleOf(id);
+      } catch (error) {
+        throw tablesError(error);
+      }
     },
     getRowId: (handle) => {
-      gate();
-      return store.ids.idOf(handle);
+      try {
+        gate();
+        return store.ids.idOf(handle);
+      } catch (error) {
+        throw tablesError(error);
+      }
     },
     getGroupId: (groupHandle) => {
-      gate();
-      return store.groups.idOf(groupHandle);
+      try {
+        gate();
+        return store.groups.idOf(groupHandle);
+      } catch (error) {
+        throw tablesError(error);
+      }
     },
     findGroup: (id) => {
-      gate();
-      const group = store.groups.handleOfId(id);
-      return group >= 0 ? group : undefined;
+      try {
+        gate();
+        const group = store.groups.handleOfId(id);
+        return group >= 0 ? group : undefined;
+      } catch (error) {
+        throw tablesError(error);
+      }
     },
     scan: (options) => {
-      gate();
-      const cursor = store.scan(options ?? {});
-      return {
-        next: () => {
-          gate();
-          return cursor.next();
-        },
-      };
+      try {
+        gate();
+        const cursor = store.scan(options ?? {});
+        return {
+          next: () => {
+            try {
+              gate();
+              return cursor.next();
+            } catch (error) {
+              throw tablesError(error);
+            }
+          },
+        };
+      } catch (error) {
+        throw tablesError(error);
+      }
     },
     readValues: (rows) => {
-      gate();
-      return store.readValues(rows);
+      try {
+        gate();
+        return store.readValues(rows);
+      } catch (error) {
+        throw tablesError(error);
+      }
     },
     release: (token) => {
-      gate();
-      store.release(token);
+      try {
+        gate();
+        store.release(token);
+      } catch (error) {
+        throw tablesError(error);
+      }
     },
   };
   const writer: FeatureTablesWriter = {
-    allocateHandles: (ids, hashes) => store.ids.allocate(ids, hashes),
+    allocateHandles: (ids, hashes) => {
+      try {
+        return store.ids.allocate(ids, hashes);
+      } catch (error) {
+        throw tablesError(error);
+      }
+    },
     // The blocks are made by the builder and the merge of the library
-    addRowBlocks: (layerId, blocks) =>
-      store.addRowBlocks(layerId, blocks as readonly RowBlockData[]),
-    raiseDimensions: (layerId, dimensions) => store.raiseDimensions(layerId, dimensions),
-    apply: (values, options) => store.apply(values, options),
-    applyGroups: (patch, options) => store.applyGroups(patch, options),
-    lookup: (id) => store.lookup(id),
-    createRestoreToken: () => store.createRestoreToken(),
-    forget: (handles) => store.forget(handles),
-    getGroupOrder: (groupHandle) => store.getGroupOrder(groupHandle),
-    clear: () => store.clear(),
+    addRowBlocks: (layerId, blocks) => {
+      try {
+        return store.addRowBlocks(layerId, blocks as readonly RowBlockData[]);
+      } catch (error) {
+        throw tablesError(error);
+      }
+    },
+    raiseDimensions: (layerId, dimensions) => {
+      try {
+        store.raiseDimensions(layerId, dimensions);
+      } catch (error) {
+        throw tablesError(error);
+      }
+    },
+    apply: (values, options) => {
+      try {
+        return store.apply(values, options);
+      } catch (error) {
+        throw tablesError(error);
+      }
+    },
+    applyGroups: (patch, options) => {
+      try {
+        store.applyGroups(patch, options);
+      } catch (error) {
+        throw tablesError(error);
+      }
+    },
+    lookup: (id) => {
+      try {
+        return store.lookup(id);
+      } catch (error) {
+        throw tablesError(error);
+      }
+    },
+    createRestoreToken: () => {
+      try {
+        return store.createRestoreToken();
+      } catch (error) {
+        throw tablesError(error);
+      }
+    },
+    forget: (handles) => {
+      try {
+        store.forget(handles);
+      } catch (error) {
+        throw tablesError(error);
+      }
+    },
+    getGroupOrder: (groupHandle) => {
+      try {
+        return store.getGroupOrder(groupHandle);
+      } catch (error) {
+        throw tablesError(error);
+      }
+    },
+    clear: () => {
+      try {
+        store.clear();
+      } catch (error) {
+        throw tablesError(error);
+      }
+    },
   };
   INTERNALS.set(tables, store);
   return { tables, writer };
 }
 
 /**
+ * What a read or a write of the reading and writing sides threw, as they throw it: an error of
+ * the tables (`KasaneError`) as a `DrawError` of the same code (`drawErrorOf`), anything else
+ * (a `DrawError`, what a function given to the tables threw) as it is. The internals are not
+ * wrapped: core reads and writes them inside its own entries, which wrap what they throw
+ */
+function tablesError(error: unknown): unknown {
+  return error instanceof KasaneError ? drawErrorOf(error) : error;
+}
+
+/**
  * A view of a layer handed out by the reading side of the tables: each read goes through the gate
  * of the reads first (see `FeatureTablesInternals.setReadGate`), a check of one flag when there is
- * nothing to finish
+ * nothing to finish, and throws an error of the tables as a `DrawError` (`tablesError`)
  */
 class GatedLayerView implements LayerTableView {
   constructor(
@@ -320,64 +427,124 @@ class GatedLayerView implements LayerTableView {
     return this.view.layerId;
   }
   get rowCount(): number {
-    this.gate();
-    return this.view.rowCount;
+    try {
+      this.gate();
+      return this.view.rowCount;
+    } catch (error) {
+      throw tablesError(error);
+    }
   }
   get rowCountWithDeleted(): number {
-    this.gate();
-    return this.view.rowCountWithDeleted;
+    try {
+      this.gate();
+      return this.view.rowCountWithDeleted;
+    } catch (error) {
+      throw tablesError(error);
+    }
   }
   get itemCount(): number {
-    this.gate();
-    return this.view.itemCount;
+    try {
+      this.gate();
+      return this.view.itemCount;
+    } catch (error) {
+      throw tablesError(error);
+    }
   }
   listDrawnRows(bbox: BBox): Int32Array {
-    this.gate();
-    return this.view.listDrawnRows(bbox);
+    try {
+      this.gate();
+      return this.view.listDrawnRows(bbox);
+    } catch (error) {
+      throw tablesError(error);
+    }
   }
   getRowBBox(handle: RowHandle): BBox | null {
-    this.gate();
-    return this.view.getRowBBox(handle);
+    try {
+      this.gate();
+      return this.view.getRowBBox(handle);
+    } catch (error) {
+      throw tablesError(error);
+    }
   }
   getRowType(handle: RowHandle): FeatureType | null {
-    this.gate();
-    return this.view.getRowType(handle);
+    try {
+      this.gate();
+      return this.view.getRowType(handle);
+    } catch (error) {
+      throw tablesError(error);
+    }
   }
   getRowPoint(handle: RowHandle): Position | null {
-    this.gate();
-    return this.view.getRowPoint(handle);
+    try {
+      this.gate();
+      return this.view.getRowPoint(handle);
+    } catch (error) {
+      throw tablesError(error);
+    }
   }
   getRowValue(handle: RowHandle, key: string): unknown {
-    this.gate();
-    return this.view.getRowValue(handle, key);
+    try {
+      this.gate();
+      return this.view.getRowValue(handle, key);
+    } catch (error) {
+      throw tablesError(error);
+    }
   }
   getRowStyle(handle: RowHandle): Readonly<FeatureStyle> | undefined {
-    this.gate();
-    return this.view.getRowStyle(handle);
+    try {
+      this.gate();
+      return this.view.getRowStyle(handle);
+    } catch (error) {
+      throw tablesError(error);
+    }
   }
   getRow(handle: RowHandle): Feature | undefined {
-    this.gate();
-    return this.view.getRow(handle);
+    try {
+      this.gate();
+      return this.view.getRow(handle);
+    } catch (error) {
+      throw tablesError(error);
+    }
   }
   getDrawnRowsRevision(): number {
-    this.gate();
-    return this.view.getDrawnRowsRevision();
+    try {
+      this.gate();
+      return this.view.getDrawnRowsRevision();
+    } catch (error) {
+      throw tablesError(error);
+    }
   }
   listRowHandles(start: number, count: number): Int32Array {
-    this.gate();
-    return this.view.listRowHandles(start, count);
+    try {
+      this.gate();
+      return this.view.listRowHandles(start, count);
+    } catch (error) {
+      throw tablesError(error);
+    }
   }
   listItems(start: number, count: number): ItemHandles {
-    this.gate();
-    return this.view.listItems(start, count);
+    try {
+      this.gate();
+      return this.view.listItems(start, count);
+    } catch (error) {
+      throw tablesError(error);
+    }
   }
   countGroupMembers(groupHandle: number): number {
-    this.gate();
-    return this.view.countGroupMembers(groupHandle);
+    try {
+      this.gate();
+      return this.view.countGroupMembers(groupHandle);
+    } catch (error) {
+      throw tablesError(error);
+    }
   }
   listGroupMembers(groupHandle: number, start: number, count: number): Int32Array {
-    this.gate();
-    return this.view.listGroupMembers(groupHandle, start, count);
+    try {
+      this.gate();
+      return this.view.listGroupMembers(groupHandle, start, count);
+    } catch (error) {
+      throw tablesError(error);
+    }
   }
 }
 

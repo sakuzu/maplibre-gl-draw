@@ -31,7 +31,7 @@ import {
 } from '@sakuzu/tabane';
 import type { Geometry } from 'geojson';
 import { circleRowRings } from '../shared/circle-rings.js';
-import { DrawError } from '../shared/draw-error.js';
+import { KasaneError, kasaneErrorOf } from './kasane-error.js';
 import {
   polygonRanges,
   type RowGeometry,
@@ -156,7 +156,7 @@ export interface RowBlockBuilder {
   /**
    * Adds a row
    *
-   * @throws `DrawError` with the code `invalid-input` when the id was already added, when the
+   * @throws an error with the code `invalid-input` when the id was already added, when the
    *   geometry is not a GeoJSON geometry of one of the six types, or when a value of the style or
    *   the attributes cannot be held (a number that is not finite, a function)
    */
@@ -164,7 +164,7 @@ export interface RowBlockBuilder {
   /**
    * Puts the rows in the order of the layer and cuts them into row blocks
    *
-   * @throws `DrawError` with the code `not-found` when a row names a group the options do not give
+   * @throws an error with the code `not-found` when a row names a group the options do not give
    */
   finish(): RowBlock[];
 }
@@ -217,7 +217,10 @@ export function createRowBlockDataBuilder(
     },
     addRow(row: RowInput): void {
       if (seen.has(row.id))
-        throw new DrawError('invalid-input', `RowBlockBuilder: the id "${row.id}" is added twice`);
+        throw new KasaneError(
+          'invalid-input',
+          `RowBlockBuilder: the id "${row.id}" is added twice`,
+        );
       const geometry = row.geometry ? toRowGeometry(row.geometry, shape.dims) : null;
       const style = styles.intern(row.style ?? {});
       seen.add(row.id);
@@ -548,7 +551,7 @@ function buildGroup(
     let type = typeIndex.get(row.type);
     if (type === undefined) {
       if (typeNames.length >= 255)
-        throw new DrawError('invalid-input', 'RowBlockBuilder: more than 255 types');
+        throw new KasaneError('invalid-input', 'RowBlockBuilder: more than 255 types');
       type = typeNames.length;
       typeNames.push(row.type);
       typeIndex.set(row.type, type);
@@ -571,13 +574,17 @@ function buildGroup(
 
     const properties = row.properties;
     if (properties) {
-      for (const key of Object.keys(properties)) {
-        let builder = propertyBuilders.get(key);
-        if (!builder) {
-          builder = new ValueColumnBuilder(length);
-          propertyBuilders.set(key, builder);
+      try {
+        for (const key of Object.keys(properties)) {
+          let builder = propertyBuilders.get(key);
+          if (!builder) {
+            builder = new ValueColumnBuilder(length);
+            propertyBuilders.set(key, builder);
+          }
+          builder.set(r, properties[key]);
         }
-        builder.set(r, properties[key]);
+      } catch (error) {
+        throw kasaneErrorOf(error);
       }
     }
 
@@ -754,7 +761,12 @@ class StyleInterner {
   intern(style: Readonly<Record<string, unknown>>): number {
     const known = this.byObject.get(style);
     if (known !== undefined) return known;
-    const bytes = encodeCanonicalValue(style);
+    let bytes: Uint8Array;
+    try {
+      bytes = encodeCanonicalValue(style);
+    } catch (error) {
+      throw kasaneErrorOf(error);
+    }
     const hash = hashByteRun(bytes, 0, bytes.length);
     let bucket = this.buckets.get(hash);
     if (bucket) {

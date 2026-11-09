@@ -21,11 +21,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { FeatureTables, RowField } from '../api/tables.js';
 import { BULK_SLICE_ROWS, writeKindsInSlices } from '../operations/bulk-sliced.js';
 import { type BulkKinds, transformKinds } from '../operations/bulk-transform.js';
-import { DrawError } from '../shared/draw-error.js';
 import type { DrawStore } from '../store/draw-store.js';
 import type { TransformEdit } from '../store/store.js';
 import { createTableStore } from '../store/table-memory.js';
 import type { Feature } from '../store/types.js';
+import { KasaneError } from '../table/kasane-error.js';
 import {
   expectTablesMatch,
   referenceKey as key,
@@ -220,10 +220,11 @@ describe('the write mark of the tables', () => {
     } catch (error) {
       thrown = error;
     }
-    expect(thrown).toBeInstanceOf(DrawError);
-    expect((thrown as DrawError).code).toBe('invalid-state');
+    // The internals are of the tables: their error is wrapped by the entries of core
+    expect(thrown).toBeInstanceOf(KasaneError);
+    expect((thrown as KasaneError).code).toBe('invalid-state');
     expect(internals.writeMarks.mark).toBe(keeper.mark);
-    expect(() => internals.setWriteMark(0.5 + keeper.mark)).toThrow(DrawError);
+    expect(() => internals.setWriteMark(0.5 + keeper.mark)).toThrow(KasaneError);
   });
 
   it('is stamped on a row placed elsewhere in the delta, on the delta, and on the group it left', () => {

@@ -19,11 +19,10 @@ import {
   readTabaneBlockHead,
   type TabaneBlock,
   type TabaneCache,
-  TabaneError,
   writeTabaneBlocks,
 } from '@sakuzu/tabane';
 import type { Position } from 'geojson';
-import { DrawError } from '../../shared/draw-error.js';
+import { drawErrorOf } from '../draw-error-of.js';
 import { type RowGeometry, toRowGeometry } from '../row-geometry.js';
 import { TABANE_FEATURE_COLUMNS, type TabaneFeatureRow, tabaneRowOf } from './columns.js';
 import { FILL_TRIANGLES_CACHE, fillTrianglesCacheOf } from './triangles.js';
@@ -96,9 +95,7 @@ function writeBlocks(input: Parameters<typeof writeTabaneBlocks>[0]): TabaneBloc
   try {
     return writeTabaneBlocks(input);
   } catch (error) {
-    if (error instanceof TabaneError)
-      throw new DrawError(error.code, error.message, { cause: error });
-    throw error;
+    throw drawErrorOf(error);
   }
 }
 

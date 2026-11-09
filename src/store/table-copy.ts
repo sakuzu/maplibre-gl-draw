@@ -17,6 +17,8 @@
 import { featureTablesInternals } from '../feature-table/feature-tables.js';
 import { rowInputOf } from '../feature-table/row-read.js';
 import { DrawError } from '../shared/draw-error.js';
+import { drawErrorOf } from '../table/draw-error-of.js';
+import { KasaneError } from '../table/kasane-error.js';
 import {
   createRowBlockBuilder,
   type GroupEntry,
@@ -155,34 +157,39 @@ export function copyTableStore(
     store,
     writer,
     copyNext(): boolean {
-      while (pending.length > 0) {
-        const layer = pending[0] as LayerRows;
-        if (layer.at >= layer.handles.length) {
-          pending.shift();
-          continue;
-        }
-        const builder = createRowBlockBuilder({
-          groups: groupEntries.get(layer.layerId) ?? [],
-          dimensions: internals.readContext.dimensionsOf(layer.layerId),
-        });
-        const end = Math.min(layer.handles.length, layer.at + Math.max(1, blockRows));
-        for (; layer.at < end; layer.at++) {
-          const place = internals.placeOf(layer.handles[layer.at] as number);
-          if (!place) continue;
-          const row = rowInputOf(internals.readContext, place.group, place.row);
-          if (row.deleted) continue;
-          const group = row.group ?? -1;
-          builder.addRow({
-            ...row,
-            group: group >= 0 ? (targetGroupOf.get(group) ?? -1) : -1,
-            ...(group >= 0 && !targetGroupOf.has(group) && { member: undefined }),
+      // An error of the tables, read or built, is thrown as a DrawError
+      try {
+        while (pending.length > 0) {
+          const layer = pending[0] as LayerRows;
+          if (layer.at >= layer.handles.length) {
+            pending.shift();
+            continue;
+          }
+          const builder = createRowBlockBuilder({
+            groups: groupEntries.get(layer.layerId) ?? [],
+            dimensions: internals.readContext.dimensionsOf(layer.layerId),
           });
+          const end = Math.min(layer.handles.length, layer.at + Math.max(1, blockRows));
+          for (; layer.at < end; layer.at++) {
+            const place = internals.placeOf(layer.handles[layer.at] as number);
+            if (!place) continue;
+            const row = rowInputOf(internals.readContext, place.group, place.row);
+            if (row.deleted) continue;
+            const group = row.group ?? -1;
+            builder.addRow({
+              ...row,
+              group: group >= 0 ? (targetGroupOf.get(group) ?? -1) : -1,
+              ...(group >= 0 && !targetGroupOf.has(group) && { member: undefined }),
+            });
+          }
+          if (builder.length > 0) writer.addRowBlocks(layer.layerId, builder.finish());
+          if (layer.at >= layer.handles.length) pending.shift();
+          return pending.length > 0;
         }
-        if (builder.length > 0) writer.addRowBlocks(layer.layerId, builder.finish());
-        if (layer.at >= layer.handles.length) pending.shift();
-        return pending.length > 0;
+        return false;
+      } catch (error) {
+        throw error instanceof KasaneError ? drawErrorOf(error) : error;
       }
-      return false;
     },
   };
 }

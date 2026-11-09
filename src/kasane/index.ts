@@ -122,13 +122,9 @@ export type {
   RowBlockBuilderOptions,
   RowInput,
 } from '../table/row-group-builder.js';
-export {
-  createRowBlockBuilder,
-  ROW_BLOCK_TARGET_ROWS,
-  ROW_BLOCK_TARGET_VERTICES,
-} from '../table/row-group-builder.js';
+export { ROW_BLOCK_TARGET_ROWS, ROW_BLOCK_TARGET_VERTICES } from '../table/row-group-builder.js';
+export { createRowBlockBuilder, mergeRowBlock } from './row-blocks.js';
 export type { RowBlockMerge } from '../table/row-group-merge.js';
-export { mergeRowBlock } from '../table/row-group-merge.js';
 export type { RowBlock } from '../table/row-group-types.js';
 export { transferList } from '../table/transfer-list.js';
 export type { RowRings } from '../table/row-rings.js';
