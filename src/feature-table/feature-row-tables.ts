@@ -21,6 +21,7 @@ import {
   type FeatureTablesInternalOptions,
   type FeatureTablesInternals,
   featureTablesInternals,
+  type TablesInternalOptions,
 } from './feature-tables.js';
 import { createFeatureTablesWriter } from './feature-tables-writer.js';
 import type { TablesWriter } from './tables-writer.js';
@@ -40,11 +41,14 @@ export const FEATURE_RELOCATING_FIELDS: readonly RowField[] = [
  * Creates the tables of the features of a document with what the library declares of its
  * features (`createTables`): the boxes of the rows of an Image and of the types of the extensions
  * (`featureRowBoxesOf`), the fields that place a row again, and the idle periods of the page for
- * their work (unless the options give others)
+ * their work (unless the options give others). What a read through the reading side calls first
+ * (`beforeRead`) is the one of the options
  *
  * @internal
  */
-export function createFeatureRowTables(options: FeatureTablesInternalOptions = {}): {
+export function createFeatureRowTables(
+  options: Omit<TablesInternalOptions, 'rowBoxes' | 'relocatingFields'> = {},
+): {
   tables: FeatureTables;
   writer: TablesWriter;
 } {

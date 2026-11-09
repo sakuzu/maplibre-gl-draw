@@ -238,6 +238,14 @@ export interface TablesInternalOptions extends FeatureTablesInternalOptions {
    * declared
    */
   readonly relocatingFields?: readonly RowField[];
+  /**
+   * What a read through the reading side of the tables (`FeatureTables`) calls first (none:
+   * nothing): a user that writes over several tasks finishes the write there, so that what is read
+   * is what the write leaves. Each read of a view of a layer and each batch of a scan handed out
+   * goes through it, a view kept from before included; core reads the rows through the internals,
+   * which do not
+   */
+  readonly beforeRead?: () => void;
 }
 
 /**
@@ -253,9 +261,9 @@ export function createTables(options: TablesInternalOptions = {}): {
   const store = new FeatureTablesStore(options);
   // What lets go of the tokens: the reading side of the tables, which `release` wraps
   const kept: Tables = store;
-  // A read through the reading side lets the gate of the reads finish what is written first
-  // (`setReadGate`); core reads the rows through its internals
-  const gate = (): void => store.readGate?.();
+  // A read through the reading side lets the user finish what it writes first (`beforeRead`);
+  // core reads the rows through the internals
+  const gate = options.beforeRead ?? noRead;
   // The views and the scans handed out read through the gate at each of their reads (a view kept
   // from before a write is read later); the drawing reads the views of the internals
   const gated = new WeakMap<LayerTableView, LayerTableView>();
@@ -357,10 +365,13 @@ function tablesError(error: unknown): unknown {
   return error instanceof KasaneError ? drawErrorOf(error) : error;
 }
 
+/** What is called before a read when the user gives nothing (`beforeRead`) */
+function noRead(): void {}
+
 /**
- * A view of a layer handed out by the reading side of the tables: each read goes through the gate
- * of the reads first (see `FeatureTablesInternals.setReadGate`), a check of one flag when there is
- * nothing to finish, and throws an error of the tables as a `DrawError` (`tablesError`)
+ * A view of a layer handed out by the reading side of the tables: each read calls what the user
+ * gives first (`TablesInternalOptions.beforeRead`), and throws an error of the tables as a
+ * `DrawError` (`tablesError`)
  */
 class GatedLayerView implements LayerTableView {
   constructor(
@@ -736,13 +747,6 @@ export interface FeatureTablesInternals {
   /** The geometry of the row of a feature, as it is read (undefined for an id of no row) */
   rowGeometryOf(id: string): Geometry | null | undefined;
   /**
-   * Sets what a read through the reading side of the tables (`FeatureTables`) calls first (none:
-   * nothing): the Store finishes there a write it makes over several tasks, so that what is read
-   * is what the write leaves. Each read of a view of a layer and each batch of a scan handed out
-   * goes through it, a view kept from before included
-   */
-  setReadGate(gate: (() => void) | null): void;
-  /**
    * The key of the order of a group of features last written: the one not in the order read yet
    * (its members are read in the order before until its reorder goes in), or the one of the table
    * of the groups (undefined for an unknown group)
@@ -884,8 +888,6 @@ interface LayerChangeDraft {
 
 /** The implementation of the tables */
 class FeatureTablesStore implements FeatureTablesInternals, TablesWriter, Tables {
-  /** What a read through the reading side calls first (see `setReadGate`) */
-  readGate: (() => void) | null = null;
   readonly ids = new IdIndex();
   readonly styles = new StyleTable();
   readonly groups = new GroupTable();
@@ -2351,10 +2353,6 @@ class FeatureTablesStore implements FeatureTablesInternals, TablesWriter, Tables
   }
 
   // === The features drawn over rows for this client ===
-
-  setReadGate(gate: (() => void) | null): void {
-    this.readGate = gate;
-  }
 
   setWriteMark(mark: number): void {
     this.writeMarks.set(mark);

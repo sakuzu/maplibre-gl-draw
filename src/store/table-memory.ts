@@ -254,6 +254,8 @@ export class TableContractStore implements StoreContract {
       ...options,
       // Nothing else needs the ids of the rows deleted that nothing keeps any more
       onRelease: (handles) => this.#writer.forget(handles),
+      // A read of the rows comes after the restore under way, finished first
+      beforeRead: () => this.#readGate(),
     });
     this.tables = tables;
     this.#internals = featureTablesInternals(tables) as FeatureTablesInternals;
@@ -284,8 +286,6 @@ export class TableContractStore implements StoreContract {
       clear: () => this.transact(() => own.clear(), 'remote'),
     };
     this.#bus.subscribe((changes) => this.#deliver(changes));
-    // A read of the rows comes after the restore under way, finished first
-    this.#internals.setReadGate(() => this.#readGate());
     rowStepsOf.set(this, {
       begin: (write, onEnd) => this.#beginSteps(write, onEnd),
       finish: () => this.#finishSteps(),
