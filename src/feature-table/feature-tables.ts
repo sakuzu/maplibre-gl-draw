@@ -47,13 +47,7 @@ import type { BBox } from '../geometry/types.js';
 import { circleRowRings } from '../shared/circle-rings.js';
 import { DrawError } from '../shared/draw-error.js';
 import { drawPropertyKey } from '../shared/properties.js';
-import type {
-  Feature,
-  FeatureStyle,
-  FeatureType,
-  RestoreToken,
-  RowValues,
-} from '../shared/types/model.js';
+import type { Feature, FeatureStyle, FeatureType, RowValues } from '../shared/types/model.js';
 import { getBoundingBox } from '../shared/utils/feature-bbox.js';
 import type { IdleScheduler } from '../shared/utils/idle.js';
 import { drawErrorOf } from '../table/draw-error-of.js';
@@ -115,6 +109,7 @@ import type { TableSelection } from './selection.js';
 import { StyleTable } from './style-table.js';
 import type {
   TableGroupPatch,
+  Tables,
   TablesWrite,
   TablesWriteOptions,
   TablesWriter,
@@ -255,6 +250,8 @@ export function createTables(options: FeatureTablesInternalOptions = {}): {
   writer: TablesWriter;
 } {
   const store = new FeatureTablesStore(options);
+  // What lets go of the tokens: the reading side of the tables, which `release` wraps
+  const kept: Tables = store;
   // A read through the reading side lets the gate of the reads finish what is written first
   // (`setReadGate`); core reads the rows through its internals
   const gate = (): void => store.readGate?.();
@@ -339,7 +336,7 @@ export function createTables(options: FeatureTablesInternalOptions = {}): {
     release: (token) => {
       try {
         gate();
-        store.release(token);
+        kept.release(token);
       } catch (error) {
         throw tablesError(error);
       }
@@ -897,7 +894,7 @@ interface LayerChangeDraft {
 }
 
 /** The implementation of the tables */
-class FeatureTablesStore implements FeatureTablesInternals, TablesWriter {
+class FeatureTablesStore implements FeatureTablesInternals, TablesWriter, Tables {
   /** What a read through the reading side calls first (see `setReadGate`) */
   readGate: (() => void) | null = null;
   readonly ids = new IdIndex();
@@ -2064,8 +2061,8 @@ class FeatureTablesStore implements FeatureTablesInternals, TablesWriter {
 
   // === The rows deleted kept, forgotten ===
 
-  createRestoreToken(): RestoreToken {
-    return this.nextToken++ as RestoreToken;
+  createRestoreToken(): number {
+    return this.nextToken++;
   }
 
   /**
@@ -2075,7 +2072,7 @@ class FeatureTablesStore implements FeatureTablesInternals, TablesWriter {
    *
    * @returns Whether the token keeps a row
    */
-  private keepDeleted(patch: RowValues, token: RestoreToken | undefined): boolean {
+  private keepDeleted(patch: RowValues, token: number | undefined): boolean {
     const deleted = patch.deleted;
     if (!deleted) return false;
     let kept = false;
@@ -2111,7 +2108,7 @@ class FeatureTablesStore implements FeatureTablesInternals, TablesWriter {
     this.retained.get(token)?.delete(handle);
   }
 
-  release(token: RestoreToken): void {
+  release(token: number): void {
     const set = this.retained.get(token);
     if (!set) return;
     this.retained.delete(token);

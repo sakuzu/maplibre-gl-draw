@@ -2,16 +2,21 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * The writing side of the tables (`TablesWriter`)
+ * The writing side of the tables (`TablesWriter`), and what lets go of what a write deleted
+ * (`Tables`)
  *
  * The tables write the rows and the groups given, and return what they wrote: the rows written by
  * table, whether the token of the write keeps what it deleted, and whether every row was taken
  * out. They tell nobody: what is told of a write, and to whom, is the business of the one that
  * holds the writer and calls it, which reads before a write what it needs to tell of it.
+ *
+ * A token that keeps the rows and the groups a write deletes is a number the writer makes
+ * (`createRestoreToken`). The tables keep what it keeps for as long as it is not let go of
+ * (`Tables.release`), with no limit of number or bytes: when to let go is the caller's.
  */
 
 import type { Utf8Column } from '@sakuzu/tabane';
-import type { RestoreToken, RowsChange, RowValues } from '../shared/types/model.js';
+import type { RowsChange, RowValues } from '../shared/types/model.js';
 import type { RowBlockData } from '../table/row-group-types.js';
 import type { RowHandle } from './types.js';
 
@@ -46,7 +51,7 @@ export interface TablesWriteOptions {
    * deleted puts them back where they were. Rows deleted without one go with the next versions of
    * their row blocks
    */
-  readonly restoreToken?: RestoreToken;
+  readonly restoreToken?: number;
 }
 
 /**
@@ -75,7 +80,7 @@ export interface TablesWriter {
    */
   lookup(id: string): { readonly handle: RowHandle; readonly deleted: boolean } | undefined;
   /** A new token to keep the rows and groups a write deletes (`TablesWriteOptions.restoreToken`) */
-  createRestoreToken(): RestoreToken;
+  createRestoreToken(): number;
   /**
    * Forgets the ids of deleted rows that nothing keeps any more: they leave the table of the ids
    * (an id seen again is a new row), and their handles are given again once their rows are gone.
@@ -96,4 +101,20 @@ export interface TablesWriter {
   applyGroups(patch: TableGroupPatch, options?: TablesWriteOptions): TablesWrite;
   /** Takes every row out of the tables (`emptied`) */
   clear(): TablesWrite;
+}
+
+/**
+ * The reading side of the tables, as far as it is declared on its own yet: what lets go of a
+ * token
+ *
+ * @internal
+ */
+export interface Tables {
+  /**
+   * Lets go of the rows and the groups a token keeps (`TablesWriteOptions.restoreToken`): they go
+   * with the next versions of their row blocks, and the deleted rows that nothing keeps any more
+   * are told (`onRelease`), so that their ids may be forgotten. A token let go of, or never used,
+   * keeps nothing
+   */
+  release(token: number): void;
 }

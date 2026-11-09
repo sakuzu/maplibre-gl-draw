@@ -19,7 +19,12 @@
 
 import { utf8String } from '@sakuzu/tabane';
 import type { FeatureTablesWriter, RowApplyOptions } from '../api/tables.js';
-import type { ItemOrderChange, RowValues, StoreChange } from '../shared/types/model.js';
+import type {
+  ItemOrderChange,
+  RestoreToken,
+  RowValues,
+  StoreChange,
+} from '../shared/types/model.js';
 import { drawErrorOf } from '../table/draw-error-of.js';
 import { KasaneError } from '../table/kasane-error.js';
 import { ROW_FLAG_DELETED, type RowBlockData } from '../table/row-group-types.js';
@@ -234,7 +239,8 @@ export function createFeatureTablesWriter(
     },
     createRestoreToken: () => {
       try {
-        return tables.createRestoreToken();
+        // The tables make a number; core names it a token
+        return tables.createRestoreToken() as RestoreToken;
       } catch (error) {
         throw writerError(error);
       }
