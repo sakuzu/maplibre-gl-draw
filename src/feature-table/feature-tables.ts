@@ -46,6 +46,7 @@ import { DrawError } from '../shared/draw-error.js';
 import type { Feature, FeatureStyle, FeatureType, RowValues } from '../shared/types/model.js';
 import { drawErrorOf } from '../table/draw-error-of.js';
 import { KasaneError } from '../table/kasane-error.js';
+import { buildCacheColumns, cacheColumnsIn, type RowCache } from '../table/row-caches.js';
 import {
   createRowBlockDataBuilder,
   ROW_BLOCK_TARGET_ROWS,
@@ -66,9 +67,16 @@ import { groupRunCuts, rowGroupsHolding } from './group-runs.js';
 import { GroupTable } from './group-table.js';
 import { IdIndex } from './id-index.js';
 import { ItemWalk } from './item-walk.js';
-import { createRowGroup, LayerTable, overrideBytesOf, type RowGroup } from './layer-table.js';
+import {
+  createRowGroup,
+  geometryAt,
+  LayerTable,
+  overrideBytesOf,
+  type RowGroup,
+} from './layer-table.js';
 import { RowBoxIndex } from './row-box-index.js';
 import {
+  groupRowRead,
   type RowReadContext,
   rowGeometry,
   rowInputOf,
@@ -251,6 +259,12 @@ export interface TablesInternalOptions extends FeatureTablesInternalOptions {
    * its shape). The rows a Worker builds for the tables are to be built with the same
    */
   readonly rings?: RowRings;
+  /**
+   * The caches of the rows (none when omitted): made of every row built and written, copied where
+   * a row does not change. The rows a Worker builds for the tables are to be built with the same;
+   * a row block taken in without one has it made then
+   */
+  readonly caches?: readonly RowCache[];
 }
 
 /**
@@ -976,6 +990,8 @@ class FeatureTablesStore implements FeatureTablesInternals, TablesWriter, Tables
   private readonly relocating: ReadonlySet<string>;
   /** The rings the rows of some types draw around their point (`rings`; null for none) */
   private readonly rings: RowRings | null;
+  /** The caches of the rows (`caches`) */
+  private readonly caches: readonly RowCache[];
 
   constructor(options: TablesInternalOptions) {
     this.strings = new ValueStringCache(options.stringCacheSize);
@@ -999,6 +1015,7 @@ class FeatureTablesStore implements FeatureTablesInternals, TablesWriter, Tables
     this.onRelease = options.onRelease;
     this.boxesGiven = options.rowBoxes;
     this.rings = options.rings ?? null;
+    this.caches = options.caches ?? [];
     for (const field of options.relocatingFields ?? []) {
       if (field !== TYPE_FIELD && !field.startsWith('property:')) {
         throw new KasaneError(
@@ -1511,6 +1528,7 @@ class FeatureTablesStore implements FeatureTablesInternals, TablesWriter, Tables
     for (const data of groups) {
       checkShape(data);
       checkDims(data, dims);
+      this.fitCaches(data);
       if (data.length === 0)
         throw new DrawError('invalid-input', 'FeatureTables: an empty row group');
       for (let r = 0; r < data.length; r++) {
@@ -1642,6 +1660,7 @@ class FeatureTablesStore implements FeatureTablesInternals, TablesWriter, Tables
             (groups) => {
               if (creation.status !== 'building') return;
               // The host builds with the builder of the library
+              for (const data of groups as RowBlockData[]) this.fitCaches(data);
               this.queueCreation(creation, groups as RowBlockData[]);
             },
             (error) => {
@@ -1697,6 +1716,7 @@ class FeatureTablesStore implements FeatureTablesInternals, TablesWriter, Tables
       dimensions: creation.layer.dims,
       coordinateSystem: this.coordinates,
       rings: this.rings ?? undefined,
+      caches: this.caches,
     });
     for (const row of creation.rows) builder.addRow(row.input);
     return builder.finish();
@@ -3144,7 +3164,7 @@ class FeatureTablesStore implements FeatureTablesInternals, TablesWriter, Tables
       if (
         group.values?.has(r) ||
         group.geometries?.geometry(r) !== undefined ||
-        group.geometries?.rowTriangles(r) !== undefined
+        group.geometries?.holdsCacheNumbers(r) === true
       ) {
         inputs.push(rowInputOf(this.readContext, group, r));
       } else {
@@ -3318,7 +3338,15 @@ class FeatureTablesStore implements FeatureTablesInternals, TablesWriter, Tables
     let keys: string[] | null = null;
     const geometry = columns.geometry?.[i];
     if (geometry !== undefined) {
-      shape = writeRowGeometry(layer, group, row, geometry as never, this.coordinates, this.rings);
+      shape = writeRowGeometry(
+        layer,
+        group,
+        row,
+        geometry as never,
+        this.coordinates,
+        this.rings,
+        this.caches,
+      );
       what |= ROW_WRITE_GEOMETRY;
     }
     if (styleNumbers) {
@@ -3357,7 +3385,7 @@ class FeatureTablesStore implements FeatureTablesInternals, TablesWriter, Tables
       keys.push(key);
       if (isRingKey(this.rings, group, row, key)) {
         // The ring of a row follows the attributes it is made from
-        const ring = refreshRowShape(layer, group, row, this.coordinates, this.rings);
+        const ring = refreshRowShape(layer, group, row, this.coordinates, this.rings, this.caches);
         shape = { sameShape: ring.sameTriangles, from: 0, to: ring.ring };
         what |= ROW_WRITE_GEOMETRY;
       }
@@ -3593,7 +3621,11 @@ class FeatureTablesStore implements FeatureTablesInternals, TablesWriter, Tables
       for (let r = 0; r < old.data.length; r++) {
         const handle = old.data.handles[r];
         if (leaving.has(handle) || comingHandles.has(handle)) continue;
-        if (old.values?.has(r) || old.geometries?.geometry(r) || old.geometries?.rowTriangles(r)) {
+        if (
+          old.values?.has(r) ||
+          old.geometries?.geometry(r) ||
+          old.geometries?.holdsCacheNumbers(r)
+        ) {
           marksOf.set(handle, old.marks[r]);
           inputs.push(rowInputOf(this.readContext, old, r));
         } else {
@@ -3685,6 +3717,7 @@ class FeatureTablesStore implements FeatureTablesInternals, TablesWriter, Tables
       dimensions: dims,
       coordinateSystem: this.coordinates,
       rings: this.rings ?? undefined,
+      caches: this.caches,
     });
     for (const input of inputs) builder.addRow(input);
     const [data] = builder.finish();
@@ -3692,6 +3725,28 @@ class FeatureTablesStore implements FeatureTablesInternals, TablesWriter, Tables
     this.numberStyles(data);
     data.handles.set(this.ids.allocate(data.ids, data.idHashes));
     return data;
+  }
+
+  /**
+   * Puts the caches of a row block taken in in the order of the caches of the tables, making the
+   * ones it does not hold
+   */
+  private fitCaches(data: RowBlockData): void {
+    const fitted = cacheColumnsIn(data.caches, this.caches, (cache) => {
+      const group = createRowGroup(-1, data, this.writeMarks.mark);
+      const rings = this.rings;
+      return buildCacheColumns([cache], data.length, (r) => {
+        const geometry = geometryAt(group, r);
+        if (!geometry) return null;
+        const read = groupRowRead(group, r);
+        const ring =
+          rings && geometry.reader.type === 'Point' && rings.draws(read.type)
+            ? rings.ringOf(read)
+            : null;
+        return { read, ring };
+      })[0];
+    });
+    if (fitted) data.caches = fitted;
   }
 
   /** Gives the styles of a group built in a Worker the numbers of the table of styles */
@@ -4020,7 +4075,10 @@ function checkShape(data: RowBlockData): void {
     ['flags', data.flags.length],
     ['styles', data.styles.length],
     ['rowBounds', data.rowBounds.length / 4],
-    ['triangles.offsets', data.triangles.offsets.length - 1],
+    ...data.caches.map((cache): [string, number] => [
+      `caches ${cache.name}`,
+      cache.offsets.length - 1,
+    ]),
   ];
   for (const [name, length] of perRow) {
     if (length !== n) {

@@ -796,6 +796,6 @@ function writtenInPlace(group: RowGroup, row: number): boolean {
   return (
     group.values?.has(row) === true ||
     group.geometries?.geometry(row) !== undefined ||
-    group.geometries?.rowTriangles(row) !== undefined
+    group.geometries?.holdsCacheNumbers(row) === true
   );
 }

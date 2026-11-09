@@ -37,22 +37,17 @@ import {
 } from '@sakuzu/tabane';
 import { DrawError } from '../../shared/draw-error.js';
 import { circleRowRings } from '../circle-rings.js';
-import {
-  polygonRanges,
-  ringOffsetsOf,
-  rowGeometryOfColumn,
-  triangulateRow,
-  WIDE_VERTICES,
-} from '../row-geometry.js';
+import { FEATURE_CACHES, FILL_TRIANGLES } from '../fill-triangles.js';
+import { RowCacheWriter } from '../row-caches.js';
+import { WIDE_VERTICES } from '../row-geometry.js';
 import {
   ROW_FLAG_DELETED,
   ROW_FLAG_LOCKED,
   ROW_FLAG_VISIBLE,
   type RowBlock,
   type RowBlockData,
-  type TriangleCache,
 } from '../row-group-types.js';
-import type { RowRead, RowShape } from '../row-read-type.js';
+import type { RowRead, RowShape, RowShapeColumn } from '../row-read-type.js';
 import { type PointRowRings, rowRingsOfPoint } from '../row-rings.js';
 import type { TableGeometry, TableMixedGeometry } from '../types.js';
 import { featureColumnsOf, geometryTypeOf, stylesOf, typesOf } from './columns.js';
@@ -180,103 +175,86 @@ export function rowBlockDataOfTabane(
       (tabaneFlagOf(rowBlock.deleted, r) ? ROW_FLAG_DELETED : 0);
   }
 
-  // The attributes a ring reads, by key
+  // What the rings and the caches read of a row: its type, its attributes and its shape
   const columnOf = new Map<string, number>();
   properties.keys.forEach((key, c) => {
     columnOf.set(key, c);
   });
   const drawsRing = typeNames.map((t) => rings.draws(t));
-
-  const cache = options.caches?.find((c) => c.name === FILL_TRIANGLES_CACHE);
-  const fills: CachedFills | null = cache
-    ? readFillTrianglesCache(cache.content, n, columns.geometry)
-    : null;
-
-  const rowBounds = new Float64Array(n * 4);
-  const triOffsets = new Int32Array(n + 1);
-  let indices = new Uint16Array(fills ? fills.indices.length : n * 8);
-  let narrow = 0;
-  const wideRows: number[] = [];
-  const wideOffsets: number[] = [0];
-  const wideIndices: number[] = [];
-  let vertexCount = 0;
-  const putIndices = (
-    row: number,
-    source: ArrayLike<number>,
-    from: number,
-    to: number,
-    vertices: number,
-  ) => {
-    if (vertices >= WIDE_VERTICES) {
-      wideRows.push(row);
-      for (let k = from; k < to; k++) wideIndices.push(source[k]);
-      wideOffsets.push(wideIndices.length);
-      return;
-    }
-    if (narrow + (to - from) > indices.length) {
-      // An empty array (a block whose fills hold no triangle) grows too
-      let size = Math.max(64, indices.length * 2);
-      while (size < narrow + (to - from)) size *= 2;
-      const next = new Uint16Array(size);
-      next.set(indices.subarray(0, narrow));
-      indices = next;
-    }
-    for (let k = from; k < to; k++) indices[narrow++] = source[k];
+  const shapeColumns: RowShapeColumn[] = geometry.children.map((child) => ({
+    type: child.type,
+    coords: child.coords,
+    stride,
+    offsets: child.offsets ?? [],
+  }));
+  let at = 0;
+  const read: RowRead = {
+    handle: -1,
+    get type() {
+      return typeNames[types[at]];
+    },
+    value: (key) => {
+      const k = columnOf.get(key);
+      return k === undefined ? undefined : readValue(properties.columns[k], at);
+    },
+    shape: (): RowShape | null => {
+      const c = geometry.types[at];
+      return c < 0 ? null : { column: shapeColumns[c], at: geometry.offsets[at] };
+    },
   };
 
-  for (let r = 0; r < n; r++) {
+  // The triangles of the polygons kept with the block, copied when they fit every row
+  const file = options.caches?.find((c) => c.name === FILL_TRIANGLES_CACHE);
+  let fills: CachedFills | null = file
+    ? readFillTrianglesCache(file.content, n, columns.geometry)
+    : null;
+  if (fills) {
+    for (at = 0; at < n; at++) {
+      if (fills.vertices[at] < 0) continue;
+      const kept = fills.indices.subarray(fills.offsets[at], fills.offsets[at + 1]);
+      if (!FILL_TRIANGLES.fits(read, null, kept)) {
+        fills = null;
+        break;
+      }
+    }
+  }
+
+  const rowBounds = new Float64Array(n * 4);
+  const caches = FEATURE_CACHES.map((cache) => new RowCacheWriter(cache.name, cache.width, n));
+  let vertexCount = 0;
+  for (at = 0; at < n; at++) {
+    const r = at;
     const c = geometry.types[r];
     if (c < 0) {
       rowBounds.fill(Number.NaN, r * 4, r * 4 + 4);
-      triOffsets[r + 1] = narrow;
+      for (const cache of caches) cache.skip(r);
       continue;
     }
     const child = geometry.children[c];
-    const at = geometry.offsets[r];
-    const first = vertexStart(child, at);
-    const end = vertexStart(child, at + 1);
-    const type = typeNames[types[r]];
+    const row = geometry.offsets[r];
+    const first = vertexStart(child, row);
+    const end = vertexStart(child, row + 1);
+    let ring: Float64Array | null = null;
     if (child.type === 'Point' && drawsRing[types[r]]) {
-      const ring = rings.ringOf({
-        handle: -1,
-        type,
-        value: (key) => {
-          const k = columnOf.get(key);
-          return k === undefined ? undefined : readValue(properties.columns[k], r);
-        },
-        shape: (): RowShape => ({ column: { ...child, stride, offsets: child.offsets ?? [] }, at }),
-      } satisfies RowRead);
+      ring = rings.ringOf(read);
       vertexCount += ring ? ring.length / 2 : 1;
-      if (ring) {
-        system.rowBox(ring, 2, 0, ring.length / 2, rowBounds, r * 4);
-        const made = triangulateRow(ring, new Int32Array([0, ring.length / 2]), [[0, 1]], 2);
-        putIndices(r, made.indices, 0, made.indices.length, made.vertices);
-      } else {
-        system.rowBox(child.coords, stride, first, end, rowBounds, r * 4);
-      }
-      triOffsets[r + 1] = narrow;
-      continue;
+      if (ring) system.rowBox(ring, 2, 0, ring.length / 2, rowBounds, r * 4);
+      else system.rowBox(child.coords, stride, first, end, rowBounds, r * 4);
+    } else {
+      vertexCount += end - first;
+      system.rowBox(child.coords, stride, first, end, rowBounds, r * 4);
     }
-    vertexCount += end - first;
-    system.rowBox(child.coords, stride, first, end, rowBounds, r * 4);
-    if (child.type === 'Polygon' || child.type === 'MultiPolygon') {
-      if (fills) {
-        putIndices(r, fills.indices, fills.offsets[r], fills.offsets[r + 1], fills.vertices[r]);
+    for (let k = 0; k < caches.length; k++) {
+      const cache = FEATURE_CACHES[k];
+      if (fills && cache === FILL_TRIANGLES && fills.vertices[r] >= 0) {
+        const from = fills.offsets[r];
+        const to = fills.offsets[r + 1];
+        caches[k].put(r, fills.indices, from, to, fills.vertices[r] >= WIDE_VERTICES);
       } else {
-        const g = rowGeometryOfColumn(child, at, dims);
-        const made = triangulateRow(g.coords, ringOffsetsOf(g), polygonRanges(g), g.stride);
-        putIndices(r, made.indices, 0, made.indices.length, made.vertices);
+        caches[k].put(r, cache.build(read, ring));
       }
     }
-    triOffsets[r + 1] = narrow;
   }
-  const triangles: TriangleCache = {
-    offsets: triOffsets,
-    indices: indices.slice(0, narrow),
-    wideRows: Int32Array.from(wideRows),
-    wideOffsets: Int32Array.from(wideOffsets),
-    wideIndices: Uint32Array.from(wideIndices),
-  };
 
   return {
     length: n,
@@ -294,7 +272,7 @@ export function rowBlockDataOfTabane(
     styleDictionary,
     properties,
     rowBounds,
-    triangles,
+    caches: caches.map((cache) => cache.finish()),
     vertexCount,
   };
 }

@@ -14,6 +14,8 @@ import { planarCoordinates } from '@sakuzu/tabane';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { rowTriangles } from '../../feature-table/row-read.js';
 import { writeRowGeometry } from '../../feature-table/row-write.js';
+import { circleRowRings } from '../../table/circle-rings.js';
+import { FEATURE_CACHES } from '../../table/fill-triangles.js';
 import { pairTriangles } from '../../table/row-geometry.js';
 import { createTestDrawer, feature, tablesOfFeatures } from '../../test-utils.js';
 import { buildEarcutInput } from '../renderers/polygon/earcut-input.js';
@@ -123,6 +125,8 @@ describe('the pairs of triangles of the rows', () => {
         ],
       },
       planarCoordinates,
+      circleRowRings,
+      FEATURE_CACHES,
     );
     expect(calls.earcut).toBe(2);
     calls.earcut = 0;

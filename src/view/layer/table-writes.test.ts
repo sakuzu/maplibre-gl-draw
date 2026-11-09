@@ -32,6 +32,7 @@ import {
 import { drawPropertyKey } from '../../shared/properties.js';
 import type { Feature, FeatureStyle, Layer } from '../../shared/types/model.js';
 import { circleRowRings } from '../../table/circle-rings.js';
+import { FEATURE_CACHES } from '../../table/fill-triangles.js';
 import {
   createTestDrawer,
   feature,
@@ -319,6 +320,7 @@ function editor(live: ReturnType<typeof drawn>, features: Feature[]) {
         geometry,
         planarCoordinates,
         circleRowRings,
+        FEATURE_CACHES,
       );
       features[row] = { ...features[row], geometry: geometry as Feature['geometry'] };
       tell(row, ROW_WRITE_GEOMETRY, write);
@@ -334,7 +336,14 @@ function editor(live: ReturnType<typeof drawn>, features: Feature[]) {
     },
     radius(row: number, radius: number): void {
       writeRowValue(group, row, RADIUS, radius);
-      const shape = refreshRowShape(live.table, group, row, planarCoordinates, circleRowRings);
+      const shape = refreshRowShape(
+        live.table,
+        group,
+        row,
+        planarCoordinates,
+        circleRowRings,
+        FEATURE_CACHES,
+      );
       features[row] = {
         ...features[row],
         properties: { ...features[row].properties, [RADIUS]: radius },

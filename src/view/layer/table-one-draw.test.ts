@@ -35,6 +35,8 @@ import {
   createTransformFieldsRegistry,
   type TransformFieldsRegistry,
 } from '../../store/transform-roles.js';
+import { circleRowRings } from '../../table/circle-rings.js';
+import { FEATURE_CACHES } from '../../table/fill-triangles.js';
 import { createTestDrawer, feature, seededRandom, tablesOfFeatures } from '../../test-utils.js';
 import { createFeatureCompanionRegistry } from '../feature-companion.js';
 import { GpuLedger } from '../gpu-ledger.js';
@@ -684,6 +686,8 @@ describe('the drawing of a layer held as rows in one draw per chunk', () => {
         ],
       },
       planarCoordinates,
+      circleRowRings,
+      FEATURE_CACHES,
     );
     renderer.rowsWritten('layer', [
       {
@@ -1016,6 +1020,8 @@ describe('the rows drawn at once out of view', () => {
         row,
         { type: 'Point', coordinates: position },
         planarCoordinates,
+        circleRowRings,
+        FEATURE_CACHES,
       );
       renderer.rowsWritten('layer', [
         {
@@ -1154,6 +1160,8 @@ describe('the rows drawn at once by the extent of their footprint', () => {
       1,
       { type: 'Point', coordinates: [1.2, 0.5] },
       planarCoordinates,
+      circleRowRings,
+      FEATURE_CACHES,
     );
     renderer.rowsWritten('layer', [
       {

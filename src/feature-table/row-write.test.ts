@@ -19,6 +19,7 @@ import type { Geometry } from 'geojson';
 import { describe, expect, it } from 'vitest';
 import type { Feature } from '../shared/types/model.js';
 import { circleRowRings } from '../table/circle-rings.js';
+import { FEATURE_CACHES } from '../table/fill-triangles.js';
 import { createRowBlockDataBuilder } from '../table/row-group-builder.js';
 import { feature, referenceKey, rowPatch, tablesOfFeatures } from '../test-utils.js';
 import { createFeatureTablesStore } from './feature-row-tables.js';
@@ -166,7 +167,17 @@ describe('the geometry written in place', () => {
         ],
       ],
     };
-    expect(writeRowGeometry(tables.table, group, 1, corner, planarCoordinates)).toEqual({
+    expect(
+      writeRowGeometry(
+        tables.table,
+        group,
+        1,
+        corner,
+        planarCoordinates,
+        circleRowRings,
+        FEATURE_CACHES,
+      ),
+    ).toEqual({
       sameShape: true,
       from: 1,
       to: 2,
@@ -181,9 +192,17 @@ describe('the geometry written in place', () => {
         [2, 0],
       ],
     };
-    expect(writeRowGeometry(tables.table, group, 0, longer, planarCoordinates).sameShape).toBe(
-      false,
-    );
+    expect(
+      writeRowGeometry(
+        tables.table,
+        group,
+        0,
+        longer,
+        planarCoordinates,
+        circleRowRings,
+        FEATURE_CACHES,
+      ).sameShape,
+    ).toBe(false);
     expect(group.geometries?.geometry(0)).toBeDefined();
     expect(group.geometries?.geometry(1)).toBeUndefined();
     // The arrays of the column are the ones of the group (written, not replaced)
@@ -211,9 +230,17 @@ describe('the geometry written in place', () => {
         ],
       ],
     };
-    expect(writeRowGeometry(tables.table, group, 1, notched, planarCoordinates).sameShape).toBe(
-      false,
-    );
+    expect(
+      writeRowGeometry(
+        tables.table,
+        group,
+        1,
+        notched,
+        planarCoordinates,
+        circleRowRings,
+        FEATURE_CACHES,
+      ).sameShape,
+    ).toBe(false);
     const next = features();
     next[1] = { ...next[1], geometry: notched as Feature['geometry'] };
     expect(readGeometry(tables)).toEqual(readGeometry(tablesOfFeatures('layer', next)));
@@ -227,6 +254,8 @@ describe('the geometry written in place', () => {
         coordinates: [square(5, 5, 2)],
       },
       planarCoordinates,
+      circleRowRings,
+      FEATURE_CACHES,
     );
     expect(group.geometries?.geometry(1)).toBeUndefined();
   });
@@ -244,6 +273,7 @@ describe('the geometry written in place', () => {
       },
       planarCoordinates,
       circleRowRings,
+      FEATURE_CACHES,
     );
     expect(moved.sameShape).toBe(true);
     expect(moved.from).toBe(0);
@@ -256,6 +286,7 @@ describe('the geometry written in place', () => {
       { type: 'Point', coordinates: [9, 9] },
       planarCoordinates,
       circleRowRings,
+      FEATURE_CACHES,
     );
     expect(still).toEqual({ sameShape: true, from: 0, to: 0 });
   });
@@ -284,6 +315,8 @@ describe('the geometry written in place', () => {
       2,
       { type: 'Point', coordinates: [30, 30] },
       planarCoordinates,
+      circleRowRings,
+      FEATURE_CACHES,
     );
     expect(hitTestLayerTable(tables.internals, tables.table, input(9, 9))).toBeNull();
     expect(hitTestLayerTable(tables.internals, tables.table, input(30, 30))?.row).toBe(2);
@@ -305,6 +338,8 @@ describe('the geometry written in place', () => {
       0,
       { type: 'LineString', coordinates },
       planarCoordinates,
+      circleRowRings,
+      FEATURE_CACHES,
     );
     // The 1,000 coordinates of 16 bytes each, and what the attribute took
     expect(overrideBytesOf(group)).toBeGreaterThan(values + 16_000);

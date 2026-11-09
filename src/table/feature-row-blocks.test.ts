@@ -5,9 +5,9 @@
  * The builder and the merge of the row blocks of the features (`feature-row-blocks.ts`)
  *
  * - The builder gives the rows the rings of the Circles when no rings are given, and the rings
- *   given otherwise, read from the type, the point and the attributes of a row; the row blocks
- *   are those of the builder of the tables given the same. The builder of the tables has no rings
- *   of its own
+ *   given otherwise, read from the type, the point and the attributes of a row, and the triangles
+ *   of the fills as a cache; the row blocks are those of the builder of the tables given the
+ *   same. The builder of the tables has no rings and no caches of its own
  * - The merge merges as the merge of the tables does
  * - What the tables throw is a DrawError
  */
@@ -18,6 +18,7 @@ import { DrawError } from '../api/errors.js';
 import { drawPropertyKey } from '../shared/properties.js';
 import { circleRowRings } from './circle-rings.js';
 import { createFeatureRowBlockBuilder, mergeFeatureRowBlock } from './feature-row-blocks.js';
+import { FEATURE_CACHES } from './fill-triangles.js';
 import { createRowBlockBuilder, type RowInput } from './row-group-builder.js';
 import { mergeRowBlock } from './row-group-merge.js';
 import type { RowBlock, RowBlockData } from './row-group-types.js';
@@ -54,7 +55,9 @@ function build(builder: { addRow(row: RowInput): void; finish(): RowBlock[] }): 
 describe('the builder of the row blocks of the features', () => {
   it('gives the rows the rings of the Circles when no rings are given', () => {
     const blocks = build(createFeatureRowBlockBuilder());
-    expect(blocks).toEqual(build(createRowBlockBuilder({ rings: circleRowRings })));
+    expect(blocks).toEqual(
+      build(createRowBlockBuilder({ rings: circleRowRings, caches: FEATURE_CACHES })),
+    );
     const [block] = blocks as RowBlockData[];
     // The Circle (the second row in the order) has the box of its ring, past its center
     const circle = 1;
@@ -65,10 +68,13 @@ describe('the builder of the row blocks of the features', () => {
   it('gives the rows the rings given', () => {
     const none: PointRowRings = { draws: () => false, ringOf: () => null, ringVertices: 1 };
     const blocks = build(createFeatureRowBlockBuilder({ rings: none }));
-    expect(blocks).toEqual(build(createRowBlockBuilder({ rings: rowRingsOfPoint(none) })));
+    expect(blocks).toEqual(
+      build(createRowBlockBuilder({ rings: rowRingsOfPoint(none), caches: FEATURE_CACHES })),
+    );
     expect(blocks).not.toEqual(build(createFeatureRowBlockBuilder()));
-    // The builder of the tables draws no ring when given none
-    expect(build(createRowBlockBuilder())).toEqual(blocks);
+    // The builder of the tables draws no ring when given none, and has no cache of its own
+    expect(build(createRowBlockBuilder({ caches: FEATURE_CACHES }))).toEqual(blocks);
+    expect((build(createRowBlockBuilder()) as RowBlockData[])[0].caches).toEqual([]);
   });
 
   it('reads the rings given from the type, the point and the attributes of a row', () => {

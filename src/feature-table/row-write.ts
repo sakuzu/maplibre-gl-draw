@@ -5,11 +5,12 @@
  * Writing the values of a row held as columns in place
  *
  * What fits the columns of the group is written into them: the coordinates of a geometry of the
- * same shape (the same type and the same numbers of parts, rings and coordinates), its triangles
- * when there are as many. What does not fit is written into the overrides of the group
- * (`value-overrides.ts`), which every reader looks at first: the attributes (a column of values
- * cannot change in place), the geometry of another shape, and triangles of another number. The
- * next version of the group folds the overrides into its columns.
+ * same shape (the same type and the same numbers of parts, rings and coordinates), the numbers of
+ * its caches (`RowCache`, made again of the row written) when there are as many. What does not
+ * fit is written into the overrides of the group (`value-overrides.ts`), which every reader looks
+ * at first: the attributes (a column of values cannot change in place), the geometry of another
+ * shape, and numbers of a cache of another count. The next version of the group folds the
+ * overrides into its columns.
  *
  * A geometry written marks its row moved in its group, with its new bbox, and tells the index of
  * the boxes of the rows of its layer to read the row again.
@@ -17,15 +18,9 @@
 
 import { type CoordinateSystem, readValue } from '@sakuzu/tabane';
 import type { Geometry } from 'geojson';
-import {
-  polygonRanges,
-  type RowGeometry,
-  ringOffsetsOf,
-  rowGeometryOfColumn,
-  singleRowColumn,
-  toRowGeometry,
-  triangulateRow,
-} from '../table/row-geometry.js';
+import type { RowCache } from '../table/row-caches.js';
+import { type RowGeometry, singleRowColumn, toRowGeometry } from '../table/row-geometry.js';
+import type { RowRead } from '../table/row-read-type.js';
 import type { RowRings } from '../table/row-rings.js';
 import {
   columnGeometryAt,
@@ -35,7 +30,7 @@ import {
   type RowGroup,
   widenBounds,
 } from './layer-table.js';
-import { groupRowRead, rowTriangles, rowType } from './row-read.js';
+import { groupRowRead, rowCacheNumbers, rowType } from './row-read.js';
 import {
   encodeOverrideValue,
   GeometryOverrides,
@@ -52,7 +47,7 @@ import {
 export interface GeometryWrite {
   /**
    * Whether the row keeps its shape: the same numbers of parts, rings and coordinates, and the
-   * same triangles, so only the positions of its coordinates changed
+   * same numbers of its caches, so only the positions of its coordinates changed
    */
   readonly sameShape: boolean;
   /**
@@ -100,6 +95,7 @@ export function writeRowValue(group: RowGroup, row: number, key: string, value: 
  * @param system The system of the coordinates the bbox of the row is made in (that of the tables)
  * @param rings The rings the rows of some types draw around their point (those of the tables;
  *   none when omitted)
+ * @param caches The caches of the rows (those of the tables; none when omitted)
  * @throws when the geometry is not of one of the six types a row holds, or when a position has
  *   more values than the dimensions of the layer
  * @internal
@@ -111,6 +107,7 @@ export function writeRowGeometry(
   geometry: Geometry,
   system: CoordinateSystem,
   rings: RowRings | null = null,
+  caches: readonly RowCache[] = [],
 ): GeometryWrite {
   const next = toRowGeometry(geometry, table.dims);
   const stride = next.stride;
@@ -153,7 +150,7 @@ export function writeRowGeometry(
       group.geometries.setGeometry(row, singleRowColumn(next));
     }
   }
-  const shape = refreshRowShape(table, group, row, system, rings);
+  const shape = refreshRowShape(table, group, row, system, rings, caches);
   if (shape.ring) {
     // A row that draws a ring: every coordinate of it moves with its point
     return {
@@ -167,15 +164,16 @@ export function writeRowGeometry(
 
 /**
  * Works out again what follows from the geometry of a row (and from the attributes its ring is
- * made from): its triangles and its bbox, and records it moved in its layer. Called after its
- * geometry or an attribute its ring is made from was written
+ * made from): the numbers of its caches and its bbox, and records it moved in its layer. Called
+ * after its geometry or an attribute its ring is made from was written
  *
  * @param system The system of the coordinates the bbox of the row is made in, as for every other
  *   row of the tables (that of the tables)
  * @param rings The rings the rows of some types draw around their point (those of the tables;
  *   none when omitted)
- * @returns Whether the triangles stayed the same, and the number of coordinates of the ring the
- *   row draws (0 for a row that draws none)
+ * @param caches The caches of the rows (those of the tables; none when omitted)
+ * @returns Whether the numbers of its caches stayed the same, and the number of coordinates of
+ *   the ring the row draws (0 for a row that draws none)
  * @internal
  */
 export function refreshRowShape(
@@ -184,11 +182,17 @@ export function refreshRowShape(
   row: number,
   system: CoordinateSystem,
   rings: RowRings | null = null,
+  caches: readonly RowCache[] = [],
 ): { sameTriangles: boolean; ring: number } {
   const geometry = geometryAt(group, row);
   if (!geometry) return { sameTriangles: true, ring: 0 };
-  const shape = shapeOf(group, row, geometry, rings);
-  const sameTriangles = shape.fill ? writeTriangles(group, row, shape.fill) : true;
+  const read = groupRowRead(group, row);
+  const shape = shapeOf(group, row, geometry, rings, read);
+  let sameTriangles = true;
+  for (let c = 0; c < caches.length; c++) {
+    const numbers = caches[c].build(read, shape.ring > 0 ? shape.coords : null);
+    if (!writeCacheNumbers(group, row, c, numbers)) sameTriangles = false;
+  }
   const bounds = group.data.rowBounds;
   system.rowBox(shape.coords, shape.stride, shape.from, shape.to, bounds, row * 4);
   table.moveRow(group, row, bounds);
@@ -259,16 +263,14 @@ function fits(current: RowGeometryAt, next: RowGeometry): boolean {
   }
 }
 
-/** What follows from the geometry of a row: the coordinates of its bbox and its fill */
+/** What follows from the geometry of a row: the coordinates of its bbox, and the ring it draws */
 interface RowShape {
   readonly coords: Float64Array;
   readonly stride: number;
   /** The coordinates `[from, to)` the bbox is made of */
   readonly from: number;
   readonly to: number;
-  /** The triangles of its fill (null for a row without one) */
-  readonly fill: number[] | null;
-  /** The coordinates of the ring the row draws (0 for a row that draws none) */
+  /** The coordinates of the ring the row draws, `coords` (0 for a row that draws none) */
   readonly ring: number;
 }
 
@@ -277,65 +279,53 @@ function shapeOf(
   row: number,
   geometry: RowGeometryAt,
   rings: RowRings | null,
+  read: RowRead,
 ): RowShape {
   const { reader, at } = geometry;
   if (rings && reader.type === 'Point' && rings.draws(rowType(group.data, row))) {
-    const ring = rings.ringOf(groupRowRead(group, row));
-    if (!ring) {
-      return {
-        coords: reader.coords,
-        stride: reader.stride,
-        from: at,
-        to: at + 1,
-        fill: [],
-        ring: 0,
-      };
-    }
-    const count = ring.length / 2;
-    const fill = triangulateRow(ring, Int32Array.of(0, count), [[0, 1]]).indices;
-    return { coords: ring, stride: 2, from: 0, to: count, fill, ring: count };
+    const ring = rings.ringOf(read);
+    if (ring)
+      return { coords: ring, stride: 2, from: 0, to: ring.length / 2, ring: ring.length / 2 };
   }
   const from = reader.vertexStart(at);
   const to = reader.vertexStart(at + 1);
-  if (reader.type !== 'Polygon' && reader.type !== 'MultiPolygon') {
-    return { coords: reader.coords, stride: reader.stride, from, to, fill: null, ring: 0 };
-  }
-  const local = rowGeometryOfColumn(reader, at);
-  const fill = triangulateRow(
-    local.coords,
-    ringOffsetsOf(local),
-    polygonRanges(local),
-    local.stride,
-  ).indices;
-  return { coords: reader.coords, stride: reader.stride, from, to, fill, ring: 0 };
+  return { coords: reader.coords, stride: reader.stride, from, to, ring: 0 };
 }
 
 /**
- * Writes the triangles of a row: into the cache of the group when there are as many as it holds
- * for the row, into the overrides otherwise
+ * Writes the numbers of a cache of a row: into the column of the cache of the group when there
+ * are as many as it holds for the row, into the overrides otherwise
  *
- * @returns Whether they are the triangles the row had
+ * @param cache The place of the cache in the caches of the tables
+ * @returns Whether they are the numbers the row had
  */
-function writeTriangles(group: RowGroup, row: number, next: number[]): boolean {
-  const current = rowTriangles(group, row);
+function writeCacheNumbers(
+  group: RowGroup,
+  row: number,
+  cache: number,
+  next: ArrayLike<number>,
+): boolean {
+  const current = rowCacheNumbers(group, row, cache);
   if (current.length === next.length) {
     let same = true;
     for (let i = 0; i < next.length && same; i++) same = current[i] === next[i];
     if (same) return true;
   }
-  const written = group.geometries?.rowTriangles(row) !== undefined;
+  const written = group.geometries?.cacheNumbers(cache, row) !== undefined;
   const narrow = current instanceof Uint16Array;
   let max = 0;
-  for (const index of next) if (index > max) max = index;
+  for (let i = 0; i < next.length; i++) if (next[i] > max) max = next[i];
   if (!written && current.length === next.length && (!narrow || max < 65_536)) {
-    // The slot of the row in the cache of the group takes them
+    // The slot of the row in the column of the cache of the group takes them
     current.set(next);
     return false;
   }
+  const width = group.data.caches[cache]?.numbers instanceof Uint32Array ? 32 : 16;
   group.geometries ??= new GeometryOverrides();
-  group.geometries.setTriangles(
+  group.geometries.setCacheNumbers(
+    cache,
     row,
-    max < 65_536 ? Uint16Array.from(next) : Uint32Array.from(next),
+    width === 16 && max < 65_536 ? Uint16Array.from(next) : Uint32Array.from(next),
   );
   return false;
 }

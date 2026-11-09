@@ -16,6 +16,8 @@ import { readValue, utf8ColumnLength, utf8String } from '@sakuzu/tabane';
 import type { Geometry } from 'geojson';
 import { describe, expect, it } from 'vitest';
 import { seededRandom } from '../test-utils.js';
+import { FEATURE_CACHES, FILL_TRIANGLES_AT } from './fill-triangles.js';
+import { cacheNumbersOf } from './row-caches.js';
 import { createRowBlockDataBuilder, type RowInput } from './row-group-builder.js';
 import { mergeRowBlockData } from './row-group-merge.js';
 import { ROW_FLAG_LOCKED, ROW_FLAG_VISIBLE, type RowBlockData } from './row-group-types.js';
@@ -43,7 +45,7 @@ function numbered(groups: RowBlockData[], numbers: Map<string, number>): RowBloc
 
 /** Builds rows into groups */
 function build(rows: RowInput[], numbers: Map<string, number>, targetRows?: number) {
-  const builder = createRowBlockDataBuilder({ targetRows });
+  const builder = createRowBlockDataBuilder({ targetRows, caches: FEATURE_CACHES });
   for (const row of rows) builder.addRow(row);
   return numbered(builder.finish(), numbers);
 }
@@ -130,12 +132,7 @@ function randomRow(random: () => number, i: number): RowInput {
 /** Everything a row holds, read back */
 function readRow(group: RowBlockData, r: number, styles: Map<number, string>) {
   const child = group.geometry.types[r];
-  const t = group.triangles;
-  const wide = Array.from(t.wideRows).indexOf(r);
-  const triangles =
-    wide >= 0
-      ? Array.from(t.wideIndices.subarray(t.wideOffsets[wide], t.wideOffsets[wide + 1]))
-      : Array.from(t.indices.subarray(t.offsets[r], t.offsets[r + 1]));
+  const triangles = Array.from(cacheNumbersOf(group.caches[FILL_TRIANGLES_AT], r));
   const properties: Record<string, unknown> = {};
   group.properties.keys.forEach((key, k) => {
     const value = readValue(group.properties.columns[k], r);
@@ -225,18 +222,18 @@ describe('mergeRowBlockData', () => {
     const rows = Array.from({ length: 40 }, (_, i) => randomRow(random, i));
     const [group] = build(rows, numbers);
     // A mark in the cache: a merge that ran earcut again would not keep it
-    const t = group.triangles;
+    const t = group.caches[FILL_TRIANGLES_AT];
     let marked = -1;
     for (let r = 0; r < group.length && marked < 0; r++) {
       if (t.offsets[r + 1] - t.offsets[r] >= 4) marked = r;
     }
-    t.indices[t.offsets[marked]] = 7777;
+    t.numbers[t.offsets[marked]] = 7777;
     const merged = mergeRowBlockData({
       sources: [group],
       rows: Int32Array.from(everyRow([group])),
     });
-    const at = merged[0].triangles.offsets[marked];
-    expect(merged[0].triangles.indices[at]).toBe(7777);
+    const at = merged[0].caches[FILL_TRIANGLES_AT].offsets[marked];
+    expect(merged[0].caches[FILL_TRIANGLES_AT].numbers[at]).toBe(7777);
   });
 
   it('keeps the handles, the flags and the hashes of the rows', () => {
@@ -262,7 +259,7 @@ describe('mergeRowBlockData', () => {
   it('puts the members of a group of features at the key of the group', () => {
     const numbers = new Map<string, number>();
     const groups = [{ handle: 3, id: 'g', order: 'k5' }];
-    const builder = createRowBlockDataBuilder({ groups });
+    const builder = createRowBlockDataBuilder({ groups, caches: FEATURE_CACHES });
     const point = { type: 'Point', coordinates: [0, 0] } as Geometry;
     for (const [id, order] of [
       ['a', 'k1'],
@@ -271,7 +268,7 @@ describe('mergeRowBlockData', () => {
       builder.addRow({ id, type: 'Point', geometry: point, order });
     }
     const outside = numbered(builder.finish(), numbers);
-    const members = createRowBlockDataBuilder({ groups });
+    const members = createRowBlockDataBuilder({ groups, caches: FEATURE_CACHES });
     members.addRow({ id: 'm2', type: 'Point', geometry: point, order: 'z', group: 3, member: 'b' });
     members.addRow({ id: 'm1', type: 'Point', geometry: point, order: 'z', group: 3, member: 'a' });
     const inside = numbered(members.finish(), numbers);
@@ -312,7 +309,7 @@ describe('mergeRowBlockData', () => {
   });
 
   it('refuses sources whose styles are not numbered', () => {
-    const builder = createRowBlockDataBuilder();
+    const builder = createRowBlockDataBuilder({ caches: FEATURE_CACHES });
     builder.addRow({ id: 'a', type: 'Point', geometry: null, order: 'k' });
     const [group] = builder.finish();
     expect(() => mergeRowBlockData({ sources: [group], rows: Int32Array.of(0, 0) })).toThrow(

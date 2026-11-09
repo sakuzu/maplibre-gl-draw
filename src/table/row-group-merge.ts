@@ -7,10 +7,9 @@
  * The next version of a row group is the rows of the group that stay, and the rows that come into
  * its range, in the order of the layer. Both are rows of groups already built: the rows of the
  * group itself, and rows built on their own (the rows changed since). The merge copies their
- * columns as they are, so nothing is computed again for a row that did not change: its
- * triangles are copied from the cache of its group (earcut runs only where a row was built), its
- * bbox is copied, its attributes are copied as their bytes (no value is decoded and written
- * again). A merge too large for one group is cut into groups of the target sizes at once.
+ * columns as they are, so nothing is computed again for a row that did not change: the numbers of
+ * its caches are copied from its group (they are made only where a row was built), its bbox is
+ * copied, its attributes are copied as their bytes (no value is decoded and written again). A merge too large for one group is cut into groups of the target sizes at once.
  *
  * The rows of the sources must hold the numbers of the table of styles of the document (a group
  * built in a Worker gets them when it is taken in), so a merge keeps the numbers as they are.
@@ -29,7 +28,7 @@ import {
   valueEntryOf,
 } from '@sakuzu/tabane';
 import { KasaneError } from './kasane-error.js';
-import { WIDE_VERTICES } from './row-geometry.js';
+import { cacheNumbersOf, holdsCacheNumbers, RowCacheWriter } from './row-caches.js';
 import {
   ChildBuilder,
   type GroupEntry,
@@ -37,7 +36,7 @@ import {
   ROW_BLOCK_TARGET_ROWS,
   ROW_BLOCK_TARGET_VERTICES,
 } from './row-group-builder.js';
-import type { RowBlock, RowBlockData, TriangleCache } from './row-group-types.js';
+import type { RowBlock, RowBlockData } from './row-group-types.js';
 import { compareRowKeys, type GroupKeySource } from './row-keys.js';
 import type { GeometryType, TableMixedGeometry } from './types.js';
 
@@ -219,8 +218,8 @@ function vertexCountOf(data: RowBlockData, row: number, ringVertices: number): n
   const column = data.geometry.children[child];
   const at = data.geometry.offsets[row];
   if (column.type === 'Point') {
-    const t = data.triangles;
-    return t.offsets[row + 1] > t.offsets[row] ? ringVertices : 1;
+    // A row of a point that keeps numbers in a cache draws a ring around it
+    return holdsCacheNumbers(data.caches, row) ? ringVertices : 1;
   }
   let first = at;
   let end = at + 1;
@@ -229,24 +228,6 @@ function vertexCountOf(data: RowBlockData, row: number, ringVertices: number): n
     end = level[end];
   }
   return end - first;
-}
-
-/** The triangles of a row in the cache of its group */
-function trianglesOf(cache: TriangleCache, row: number): Uint16Array | Uint32Array {
-  const start = cache.offsets[row];
-  const end = cache.offsets[row + 1];
-  if (end > start) return cache.indices.subarray(start, end);
-  let lo = 0;
-  let hi = cache.wideRows.length - 1;
-  while (lo <= hi) {
-    const mid = (lo + hi) >> 1;
-    if (cache.wideRows[mid] === row) {
-      return cache.wideIndices.subarray(cache.wideOffsets[mid], cache.wideOffsets[mid + 1]);
-    }
-    if (cache.wideRows[mid] < row) lo = mid + 1;
-    else hi = mid - 1;
-  }
-  return cache.indices.subarray(start, start);
 }
 
 /** Copies the rows `order` (indices into the pairs of `rows`) into one group */
@@ -274,11 +255,11 @@ function copyRows(
   const children: ChildBuilder[] = [];
   const childIndex = new Map<GeometryType, number>();
   const rowBounds = new Float64Array(length * 4);
-  const triangleOffsets = new Int32Array(length + 1);
-  const narrow: number[] = [];
-  const wideRows: number[] = [];
-  const wideOffsets: number[] = [0];
-  const wide: number[] = [];
+  const caches = cacheWritersOf(sources, length);
+  // The column of each cache in each source (null for a source that does not hold it)
+  const columnsOf = sources.map((source) =>
+    caches.map((cache) => source.caches.find((c) => c.name === cache.name) ?? null),
+  );
   const builders = new Map<string, ValueColumnBuilder>();
   let vertexCount = 0;
 
@@ -320,19 +301,18 @@ function copyRows(
     }
 
     for (let k = 0; k < 4; k++) rowBounds[r * 4 + k] = data.rowBounds[row * 4 + k];
-    const triangles = trianglesOf(data.triangles, row);
-    let max = -1;
-    for (const index of triangles) if (index > max) max = index;
-    if (max >= WIDE_VERTICES || triangles instanceof Uint32Array) {
-      if (triangles.length > 0) {
-        wideRows.push(r);
-        for (const index of triangles) wide.push(index);
-        wideOffsets.push(wide.length);
+    // The numbers of the caches, in the column of the same name (a row keeps them as wide as they
+    // were)
+    const cacheColumns = columnsOf[rows[pair * 2]];
+    for (let c = 0; c < caches.length; c++) {
+      const column = cacheColumns[c];
+      if (!column) {
+        caches[c].writer.skip(r);
+        continue;
       }
-    } else {
-      for (const index of triangles) narrow.push(index);
+      const numbers = cacheNumbersOf(column, row);
+      caches[c].writer.put(r, numbers, 0, numbers.length, numbers instanceof Uint32Array);
     }
-    triangleOffsets[r + 1] = narrow.length;
 
     const child = data.geometry.types[row];
     if (child < 0) {
@@ -377,13 +357,26 @@ function copyRows(
       columns: propertyKeys.map((key) => (builders.get(key) as ValueColumnBuilder).finish()),
     },
     rowBounds,
-    triangles: {
-      offsets: triangleOffsets,
-      indices: new Uint16Array(narrow),
-      wideRows: new Int32Array(wideRows),
-      wideOffsets: new Int32Array(wideOffsets),
-      wideIndices: new Uint32Array(wide),
-    },
+    caches: caches.map((cache) => cache.writer.finish()),
     vertexCount,
   };
+}
+
+/**
+ * The writers of the caches of the rows of a merge: one per name of a cache of the sources, of
+ * the width of the first that holds it, in the order of the first sources
+ */
+function cacheWritersOf(
+  sources: readonly RowBlockData[],
+  length: number,
+): Array<{ name: string; writer: RowCacheWriter }> {
+  const out: Array<{ name: string; writer: RowCacheWriter }> = [];
+  for (const source of sources) {
+    for (const column of source.caches) {
+      if (out.some((cache) => cache.name === column.name)) continue;
+      const width = column.numbers instanceof Uint32Array ? 32 : 16;
+      out.push({ name: column.name, writer: new RowCacheWriter(column.name, width, length) });
+    }
+  }
+  return out;
 }

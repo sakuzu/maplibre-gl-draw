@@ -35,6 +35,7 @@ import { compareKeys, keyAfter } from '../../store/order-keys.js';
 import { createTableStore } from '../../store/table-memory.js';
 import { rowPatch, seededRandom } from '../../test-utils.js';
 import { circleRowRings } from '../circle-rings.js';
+import { FEATURE_CACHES } from '../fill-triangles.js';
 import { createRowBlockDataBuilder } from '../row-group-builder.js';
 import type { RowBlockData } from '../row-group-types.js';
 import { writeTabaneFeatureBlocks } from './blocks.js';
@@ -259,7 +260,7 @@ describe('a row block as a row block of the tables', () => {
     expect(a.typeNames).toEqual(b.typeNames);
     expect(a.geometry).toEqual(b.geometry);
     expect(a.rowBounds).toEqual(b.rowBounds);
-    expect(a.triangles).toEqual(b.triangles);
+    expect(a.caches).toEqual(b.caches);
     expect(a.vertexCount).toBe(b.vertexCount);
     for (let r = 0; r < a.length; r++) {
       const sa = a.styleDictionary as NonNullable<RowBlockData['styleDictionary']>;
@@ -290,7 +291,11 @@ describe('a row block as a row block of the tables', () => {
     }));
     for (const rows of [buildings(1000, 3), variety(), flagged, circles]) {
       const [written] = writeTabaneFeatureBlocks({ parent: 'p', head: 'V', rows });
-      const builder = createRowBlockDataBuilder({ targetRows: 1000, rings: circleRowRings });
+      const builder = createRowBlockDataBuilder({
+        targetRows: 1000,
+        rings: circleRowRings,
+        caches: FEATURE_CACHES,
+      });
       rows.forEach((row, i) => {
         builder.addRow({
           id: row.id,
@@ -320,7 +325,7 @@ describe('a row block as a row block of the tables', () => {
     const keys = rows.map((_, i) => (i < 20 ? `A${tabaneRowSuffixOf(i * 7)}` : numberedKey(i * 2)));
     const rowBlock = rowBlockOf(rows.map((row, i) => ({ ...tabaneRowOf(row), key: keys[i] })));
     expect(rowBlock.keys).toEqual(keys);
-    const builder = createRowBlockDataBuilder({ targetRows: 1000 });
+    const builder = createRowBlockDataBuilder({ targetRows: 1000, caches: FEATURE_CACHES });
     rows.forEach((row, i) => {
       builder.addRow({ ...row, order: keys[i] });
     });
@@ -359,15 +364,15 @@ describe('a row block as a row block of the tables', () => {
     past.content[past.content.length - 1] = 0x7f;
     const renamed = { ...cache, name: 'other' };
     for (const c of [other, cut, past, renamed]) {
-      expect(rowBlockDataOfTabane(rowBlock, { caches: [c] }).triangles).toEqual(made.triangles);
+      expect(rowBlockDataOfTabane(rowBlock, { caches: [c] }).caches).toEqual(made.caches);
     }
     // A cache that fits is copied: an index changed within the vertices is read as it is
-    expect(rowBlockDataOfTabane(rowBlock, { caches: [cache] }).triangles).toEqual(made.triangles);
+    expect(rowBlockDataOfTabane(rowBlock, { caches: [cache] }).caches).toEqual(made.caches);
     const changed = { ...cache, content: cache.content.slice() };
     changed.content[changed.content.length - 1] = 0;
-    const copied = rowBlockDataOfTabane(rowBlock, { caches: [changed] }).triangles.indices;
+    const copied = rowBlockDataOfTabane(rowBlock, { caches: [changed] }).caches[0].numbers;
     expect(copied[copied.length - 1]).toBe(0);
-    expect(made.triangles.indices[copied.length - 1]).not.toBe(0);
+    expect(made.caches[0].numbers[copied.length - 1]).not.toBe(0);
   });
 
   it('is taken by the tables as it is, and read back as features', () => {

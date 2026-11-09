@@ -14,15 +14,15 @@
  * The content: the number of rows of the row block, the number of its polygon rows, then a run of
  * the number of vertices and of pairs of each polygon row in turn, and a run of the indices of
  * their pairs, 4 per pair (each a varint of `@sakuzu/tabane`). A reader checks it against the rows
- * it reads (the number of rows and of polygon rows, the vertices of each fill, every index within
- * them) and makes the triangles again when it does not fit.
+ * it reads (the number of rows and of polygon rows, every index within the vertices it gives; then
+ * the triangles of each row against the row, `FILL_TRIANGLES.fits`) and makes the triangles again
+ * when it does not fit.
  *
  * A pure module: it depends on nothing outside `/table` but `@sakuzu/tabane`, so it runs in a
  * Worker as well.
  */
 
-import { ByteSink, ByteSource, strideOf, type TabaneShapeColumn } from '@sakuzu/tabane';
-import { polygonRingRuns } from '../polygon-rings.js';
+import { ByteSink, ByteSource, type TabaneShapeColumn } from '@sakuzu/tabane';
 import { polygonRanges, type RowGeometry, ringOffsetsOf, triangulateRow } from '../row-geometry.js';
 
 /**
@@ -73,31 +73,11 @@ export interface CachedFills {
   readonly indices: Uint32Array;
 }
 
-/** The number of vertices of the fill of row `row` of a polygon form (the rings drawn) */
-function fillVertices(
-  points: Float64Array,
-  stride: number,
-  offsets: readonly Int32Array[],
-  row: number,
-  runs: number[],
-): number {
-  let count = 0;
-  if (offsets.length === 2) {
-    runs.length = 0;
-    count = polygonRingRuns(points, stride, offsets[1], offsets[0][row], offsets[0][row + 1], runs);
-  } else {
-    for (let p = offsets[0][row]; p < offsets[0][row + 1]; p++) {
-      runs.length = 0;
-      count += polygonRingRuns(points, stride, offsets[2], offsets[1][p], offsets[1][p + 1], runs);
-    }
-  }
-  return count;
-}
-
 /**
  * The fills of the polygon rows of a row block, read from the content of the cache of their
- * triangles when it fits the rows: as many rows and polygon rows, the vertices of each fill those
- * of the rings it draws, every index within them, nothing left after them
+ * triangles when it fits the rows: as many rows and polygon rows, every index within the vertices
+ * of its fill, nothing left after them (whether the triangles of each row fit the row is checked
+ * then, `FILL_TRIANGLES.fits`)
  *
  * @param content The content of the cache
  * @param rows The number of rows of the row block
@@ -122,8 +102,6 @@ export function readFillTrianglesCache(
     const offsets = new Int32Array(rows + 1);
     // At most one index per byte
     const indices = new Uint32Array(indexRun.length);
-    const stride = geometry ? strideOf(geometry.dimensions) : 2;
-    const runs: number[] = [];
     let at = 0;
     let seen = 0;
     for (let row = 0; row < rows; row++) {
@@ -133,8 +111,6 @@ export function readFillTrianglesCache(
         if (seen++ === polygons) return null;
         const v = heads.uint();
         const pairs = heads.uint();
-        const at2 = (geometry as TabaneShapeColumn).formRow[row];
-        if (v !== fillVertices(form.points, stride, form.offsets, at2, runs)) return null;
         if (at + pairs * 4 > indices.length) return null;
         vertices[row] = v;
         for (let k = 0; k < pairs * 4; k++) {

@@ -19,6 +19,7 @@ import type { CoordinateDimensions } from '@sakuzu/tabane';
 import type { Geometry, Position } from 'geojson';
 import { describe, expect, it } from 'vitest';
 import { circleRowRings } from './circle-rings.js';
+import { FEATURE_CACHES } from './fill-triangles.js';
 import { toRowGeometry } from './row-geometry.js';
 import {
   blockTransferList,
@@ -126,7 +127,11 @@ function randomRows(
 }
 
 function build(rows: readonly RowInput[], options: RowBlockBuildOptions = {}): RowBlockData[] {
-  const builder = createRowBlockDataBuilder({ rings: circleRowRings, ...options });
+  const builder = createRowBlockDataBuilder({
+    rings: circleRowRings,
+    caches: FEATURE_CACHES,
+    ...options,
+  });
   for (const row of rows) builder.addRow(row);
   return builder.finish();
 }
@@ -216,7 +221,7 @@ describe('the row groups of every dimensions', () => {
         const other = xy[g];
         expect(group.geometry.children.every((child) => child.dimensions === dims)).toBe(true);
         expect(group.rowBounds).toEqual(other.rowBounds);
-        expect(group.triangles).toEqual(other.triangles);
+        expect(group.caches).toEqual(other.caches);
         expect(group.vertexCount).toBe(other.vertexCount);
         expect(Array.from(group.geometry.types)).toEqual(Array.from(other.geometry.types));
         expect(Array.from(group.geometry.offsets)).toEqual(Array.from(other.geometry.offsets));

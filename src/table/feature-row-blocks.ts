@@ -8,7 +8,8 @@
  * What the library declares of its features for the builder and the merge of the tables
  * (`row-group-builder.ts`, `row-group-merge.ts`) is given here: the rings of the Circles as the
  * rings of the rows when none are given (`circleRowRings`; the tables have none of their own),
- * and what they throw for the rows as a `DrawError`, as every error of the library. A Worker of
+ * the triangles of the fills as a cache of the rows (`FEATURE_CACHES`), and what they throw for
+ * the rows as a `DrawError`, as every error of the library. A Worker of
  * the host imports these: a function cannot be sent to it, so what the library declares is held
  * here, where the Worker runs them.
  *
@@ -18,6 +19,7 @@
 
 import { circleRowRings } from './circle-rings.js';
 import { drawErrorOf } from './draw-error-of.js';
+import { FEATURE_CACHES } from './fill-triangles.js';
 import { KasaneError } from './kasane-error.js';
 import {
   createRowBlockBuilder,
@@ -67,6 +69,7 @@ export function createFeatureRowBlockBuilder(
   const builder = createRowBlockBuilder({
     ...options,
     rings: options.rings ? rowRingsOfPoint(options.rings) : circleRowRings,
+    caches: FEATURE_CACHES,
   });
   return {
     get length() {

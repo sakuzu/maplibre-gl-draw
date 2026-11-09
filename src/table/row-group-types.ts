@@ -14,6 +14,7 @@
  */
 
 import type { PropertyColumns, Utf8Column } from '@sakuzu/tabane';
+import type { RowCacheColumn } from './row-caches.js';
 import type { TableMixedGeometry } from './types.js';
 
 /** The bit of {@link RowBlockData.flags} of a row that is shown */
@@ -22,30 +23,6 @@ export const ROW_FLAG_VISIBLE = 1;
 export const ROW_FLAG_LOCKED = 2;
 /** The bit of {@link RowBlockData.flags} of a row that is deleted (kept for what refers to it) */
 export const ROW_FLAG_DELETED = 4;
-
-/**
- * The triangulation of the fills of the rows of a group, in pairs of triangles
- *
- * The triangles of a row are indices into the vertices of its fill: the rings of each of its
- * polygons in turn, without the closing coordinate of a ring, leaving out a ring of fewer than 3
- * coordinates (and a polygon whose outer ring has fewer than 3). They are held in pairs, as the
- * fill draws them in strips of 4 vertices: 4 indices `(a, b, c, d)` per pair, the triangles
- * `(a, b, c)` and `(c, b, d)` sharing the edge `b, c`, and a triangle without a partner as
- * `(a, b, c, c)`. The pairs of a polygon of the row come before the pairs of the next. A row of
- * fewer than 65,536 such vertices keeps its indices in `indices`; a larger one in `wideIndices`.
- */
-export interface TriangleCache {
-  /** Where the indices of each row start in `indices` (rows + 1 values) */
-  readonly offsets: Int32Array;
-  /** The indices of the rows of fewer than 65,536 vertices */
-  readonly indices: Uint16Array;
-  /** The rows of 65,536 vertices or more, ascending */
-  readonly wideRows: Int32Array;
-  /** Where the indices of each of `wideRows` start in `wideIndices` (`wideRows` + 1 values) */
-  readonly wideOffsets: Int32Array;
-  /** The indices of the rows of 65,536 vertices or more */
-  readonly wideIndices: Uint32Array;
-}
 
 /**
  * A row block of one layer, in the order of the layer: columns of typed arrays, built in a
@@ -114,8 +91,11 @@ export interface RowBlockData extends RowBlock {
   readonly properties: PropertyColumns;
   /** The bbox of each row, `[minX, minY, maxX, maxY]` (NaN for a row without a geometry) */
   readonly rowBounds: Float64Array;
-  /** The triangulation of the fills of the rows */
-  readonly triangles: TriangleCache;
+  /**
+   * The caches of the rows (`RowCache`), one column per cache: in the order the tables declare
+   * them once the tables have taken the row block in
+   */
+  caches: readonly RowCacheColumn[];
   /** The total number of coordinates of the rows */
   readonly vertexCount: number;
 }

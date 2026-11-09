@@ -755,7 +755,7 @@ export interface PolygonRowPlan {
   readonly slot: PolygonSlot;
   /**
    * The indices of the pairs of triangles of the row (into the vertices of its fill; 4 per pair,
-   * `TriangleCache`)
+   * `FILL_TRIANGLES`)
    */
   readonly triangles: Uint16Array | Uint32Array;
   readonly createdZoom: number | undefined;

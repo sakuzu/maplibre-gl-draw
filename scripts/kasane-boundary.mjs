@@ -37,6 +37,7 @@ export const KASANE_FILES = [
   'geometry/bbox-type.ts',
   'table/kasane-error.ts',
   'table/packed-rtree.ts',
+  'table/row-caches.ts',
   'table/row-group-builder.ts',
   'table/row-group-merge.ts',
   'table/row-group-types.ts',

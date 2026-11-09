@@ -7,8 +7,8 @@
  * The rows are added in any order. `finish` puts them in the order of the layer
  * (`compareRowKeys`), cuts them into groups of at most a target number of rows and of
  * coordinates, and computes for every group what the main thread would otherwise compute: the
- * hashes of the ids, the bbox of every row, the triangulation of the fills,
- * and the form of every attribute column (dense or sparse). The styles are written as their
+ * hashes of the ids, the bbox of every row, the caches of the rows the user of the tables
+ * declares (`RowCache`), and the form of every attribute column (dense or sparse). The styles are written as their
  * canonical bytes, shared within a group; the main thread numbers them in its table of styles.
  *
  * A pure module: it depends on neither maplibre, nor WebGL, nor the DOM, so a Worker builds the
@@ -31,15 +31,12 @@ import {
 } from '@sakuzu/tabane';
 import type { Geometry } from 'geojson';
 import { KasaneError, kasaneErrorOf } from './kasane-error.js';
+import { type RowCache, RowCacheWriter } from './row-caches.js';
 import {
-  polygonRanges,
   type RowGeometry,
-  ringOffsetsOf,
   rowGeometryOfColumn,
   rowShapeOf,
   toRowGeometry,
-  triangulateRow,
-  WIDE_VERTICES,
 } from './row-geometry.js';
 import {
   ROW_FLAG_DELETED,
@@ -47,7 +44,6 @@ import {
   ROW_FLAG_VISIBLE,
   type RowBlock,
   type RowBlockData,
-  type TriangleCache,
 } from './row-group-types.js';
 import { compareRowKeys, type GroupKeySource, type RowKeySource } from './row-keys.js';
 import type { RowRead, RowShape } from './row-read-type.js';
@@ -127,6 +123,11 @@ export interface RowBlockBuildOptions extends Omit<RowBlockBuilderOptions, 'ring
    * its shape). A function: it is given in the Worker that builds the rows
    */
   readonly rings?: RowRings;
+  /**
+   * The caches of the rows (none when omitted), made of every row built. Functions: they are given
+   * in the Worker that builds the rows
+   */
+  readonly caches?: readonly RowCache[];
 }
 
 /**
@@ -215,6 +216,7 @@ export function createRowBlockDataBuilder(options: RowBlockBuildOptions = {}): R
     dims: options.dimensions ?? 'xy',
     coordinates: options.coordinateSystem ?? planarCoordinates,
     rings: options.rings ?? null,
+    caches: options.caches ?? [],
   };
 
   const ids = new Utf8ColumnBuilder(256);
@@ -341,11 +343,13 @@ export function blockTransferList(groups: readonly RowBlockData[]): ArrayBuffer[
       addColumn(column.values);
     }
     add(group.rowBounds);
-    add(group.triangles.offsets);
-    add(group.triangles.indices);
-    add(group.triangles.wideRows);
-    add(group.triangles.wideOffsets);
-    add(group.triangles.wideIndices);
+    for (const cache of group.caches) {
+      add(cache.offsets);
+      add(cache.numbers);
+      add(cache.wideRows);
+      add(cache.wideOffsets);
+      add(cache.wideNumbers);
+    }
   }
   return [...buffers];
 }
@@ -521,6 +525,7 @@ interface GroupShape {
   readonly dims: CoordinateDimensions;
   readonly coordinates: CoordinateSystem;
   readonly rings: RowRings | null;
+  readonly caches: readonly RowCache[];
 }
 
 /** Builds one group from its rows in order (`order` holds the indices of the rows added) */
@@ -551,7 +556,7 @@ function buildGroup(
   const children: ChildBuilder[] = [];
   const childIndex = new Map<GeometryType, number>();
   const rowBounds = new Float64Array(length * 4);
-  const triangles = new TriangleWriter(length);
+  const caches = shape.caches.map((cache) => new RowCacheWriter(cache.name, cache.width, length));
   const propertyBuilders = new Map<string, ValueColumnBuilder>();
   let vertexCount = 0;
 
@@ -608,7 +613,7 @@ function buildGroup(
     if (!geometry) {
       childTypes[r] = -1;
       setNaNBounds(rowBounds, r);
-      triangles.skip(r);
+      for (const cache of caches) cache.skip(r);
       continue;
     }
     let child = childIndex.get(geometry.type);
@@ -624,7 +629,6 @@ function buildGroup(
     const ring = ringOfRow(row, geometry, shape.rings);
     if (ring) {
       shape.coordinates.rowBox(ring, 2, 0, ring.length / 2, rowBounds, r * 4);
-      triangles.polygonRow(r, ring, 2, new Int32Array([0, ring.length / 2]), [[0, 1]]);
     } else {
       const stride = geometry.stride;
       shape.coordinates.rowBox(
@@ -635,17 +639,10 @@ function buildGroup(
         rowBounds,
         r * 4,
       );
-      if (geometry.type === 'Polygon' || geometry.type === 'MultiPolygon') {
-        triangles.polygonRow(
-          r,
-          geometry.coords,
-          stride,
-          ringOffsetsOf(geometry),
-          polygonRanges(geometry),
-        );
-      } else {
-        triangles.skip(r);
-      }
+    }
+    if (caches.length > 0) {
+      const read = new InputRowRead(row, geometry);
+      for (let c = 0; c < caches.length; c++) caches[c].put(r, shape.caches[c].build(read, ring));
     }
   }
 
@@ -676,14 +673,15 @@ function buildGroup(
     styleDictionary: styleDictionary.finish(),
     properties: { keys: keysOfProperties, columns },
     rowBounds,
-    triangles: triangles.finish(),
+    caches: caches.map((cache) => cache.finish()),
     vertexCount,
   };
 }
 
-/** A row added, as the rings read it */
+/** A row added, as the rings and the caches read it */
 class InputRowRead implements RowRead {
   readonly handle = -1;
+  private made: RowShape | null = null;
   constructor(
     private readonly row: RowInput,
     private readonly geometry: RowGeometry | null,
@@ -699,7 +697,9 @@ class InputRowRead implements RowRead {
   }
 
   shape(): RowShape | null {
-    return this.geometry ? rowShapeOf(this.geometry) : null;
+    if (!this.geometry) return null;
+    this.made ??= rowShapeOf(this.geometry);
+    return this.made;
   }
 }
 
@@ -729,59 +729,6 @@ function vertexCountOf(
 
 function setNaNBounds(bounds: Float64Array, row: number): void {
   bounds.fill(Number.NaN, row * 4, row * 4 + 4);
-}
-
-/** Writes the triangles of the fills of the rows of a group */
-class TriangleWriter {
-  private readonly offsets: Int32Array;
-  private indices: number[] = [];
-  private readonly wideRows: number[] = [];
-  private readonly wideOffsets: number[] = [0];
-  private wideIndices: number[] = [];
-
-  constructor(length: number) {
-    this.offsets = new Int32Array(length + 1);
-  }
-
-  /** A row without a fill */
-  skip(row: number): void {
-    this.offsets[row + 1] = this.indices.length;
-  }
-
-  /**
-   * The triangles of the polygons of a row
-   *
-   * @param stride The number of values of a coordinate of `coords`
-   * @param ringOffsets The offsets from a ring to its first coordinate
-   * @param polygons The rings of each polygon, `[first, end)`
-   */
-  polygonRow(
-    row: number,
-    coords: Float64Array,
-    stride: number,
-    ringOffsets: Int32Array,
-    polygons: ReadonlyArray<readonly [number, number]>,
-  ): void {
-    const { indices: out, vertices: base } = triangulateRow(coords, ringOffsets, polygons, stride);
-    if (base >= WIDE_VERTICES) {
-      this.wideRows.push(row);
-      for (const index of out) this.wideIndices.push(index);
-      this.wideOffsets.push(this.wideIndices.length);
-    } else {
-      for (const index of out) this.indices.push(index);
-    }
-    this.offsets[row + 1] = this.indices.length;
-  }
-
-  finish(): TriangleCache {
-    return {
-      offsets: this.offsets,
-      indices: Uint16Array.from(this.indices),
-      wideRows: Int32Array.from(this.wideRows),
-      wideOffsets: Int32Array.from(this.wideOffsets),
-      wideIndices: Uint32Array.from(this.wideIndices),
-    };
-  }
 }
 
 // === Styles ===

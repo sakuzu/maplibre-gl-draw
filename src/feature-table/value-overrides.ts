@@ -12,8 +12,8 @@
  * - `ValueOverrides`: the attributes written, by row and key (a value, or absent for a key taken
  *   off the row)
  * - `GeometryOverrides`: the geometry of a row whose number of coordinates or rings changed, as a
- *   column of one row, and the triangles of a row whose triangulation does not fit the cache of
- *   the group any more
+ *   column of one row, and the numbers of a cache of a row that do not fit the column of the cache
+ *   of the group any more
  *
  * Every reader of the values of a row (`row-read.ts`) looks here first. The values are held as
  * their own bytes, so the dictionaries of the columns (which only grow) never take a value
@@ -37,6 +37,7 @@ import {
   wellFormed,
 } from '@sakuzu/tabane';
 import { KasaneError, kasaneErrorOf } from '../table/kasane-error.js';
+import type { RowCacheNumbers } from '../table/row-caches.js';
 import { GeometryColumnReader } from '../table/table.js';
 import type { TableGeometry } from '../table/types.js';
 import { drawValueOfInput } from '../table/value-input.js';
@@ -228,16 +229,19 @@ export class ValueOverrides {
 /**
  * The geometry written in place of the rows of one group that does not fit its columns
  * (`GeometryOverrides`): the geometry of a row whose number of coordinates, rings or parts
- * changed, as a column of one row, and the triangles of a row whose triangulation does not fit
- * the cache of the group, with the bytes they take
+ * changed, as a column of one row, and the numbers of a cache of a row (`RowCache`) that do not
+ * fit the column of the cache of the group, with the bytes they take
  *
  * @internal
  */
 export class GeometryOverrides {
   /** The geometry of the rows written with another shape */
   private readonly geometries = new Map<number, GeometryOverride>();
-  /** The triangles of the rows whose triangulation does not fit the cache of the group */
-  private readonly triangles = new Map<number, Uint16Array | Uint32Array>();
+  /**
+   * The numbers of the rows whose numbers do not fit the column of the cache of the group, by the
+   * place of the cache in the caches of the tables
+   */
+  private readonly caches: Array<Map<number, RowCacheNumbers>> = [];
   private size = 0;
 
   /** The bytes held */
@@ -247,7 +251,7 @@ export class GeometryOverrides {
 
   /** Whether nothing is held */
   get empty(): boolean {
-    return this.geometries.size === 0 && this.triangles.size === 0;
+    return this.geometries.size === 0 && this.caches.every((numbers) => numbers.size === 0);
   }
 
   /** The geometry column of one row a row is read from (undefined when not written) */
@@ -271,23 +275,35 @@ export class GeometryOverrides {
     this.size -= GEOMETRY_OVERHEAD_BYTES + columnBytes(old.column);
   }
 
-  /** The triangles written of a row (undefined when they are the ones of the cache) */
-  rowTriangles(row: number): Uint16Array | Uint32Array | undefined {
-    return this.triangles.get(row);
+  /**
+   * The numbers of a cache written of a row (undefined when they are the ones of the column of the
+   * cache)
+   *
+   * @param cache The place of the cache in the caches of the tables
+   */
+  cacheNumbers(cache: number, row: number): RowCacheNumbers | undefined {
+    return this.caches[cache]?.get(row);
   }
 
-  /** Writes the triangles of a row */
-  setTriangles(row: number, indices: Uint16Array | Uint32Array): void {
-    this.deleteTriangles(row);
-    this.triangles.set(row, indices);
-    this.size += ENTRY_OVERHEAD_BYTES + indices.byteLength;
+  /** Whether numbers of a cache are written of a row */
+  holdsCacheNumbers(row: number): boolean {
+    for (const numbers of this.caches) if (numbers?.has(row)) return true;
+    return false;
   }
 
-  /** Takes off the triangles written of a row */
-  deleteTriangles(row: number): void {
-    const old = this.triangles.get(row);
+  /** Writes the numbers of a cache of a row */
+  setCacheNumbers(cache: number, row: number, numbers: RowCacheNumbers): void {
+    this.deleteCacheNumbers(cache, row);
+    while (this.caches.length <= cache) this.caches.push(new Map());
+    this.caches[cache].set(row, numbers);
+    this.size += ENTRY_OVERHEAD_BYTES + numbers.byteLength;
+  }
+
+  /** Takes off the numbers of a cache written of a row */
+  deleteCacheNumbers(cache: number, row: number): void {
+    const old = this.caches[cache]?.get(row);
     if (!old) return;
-    this.triangles.delete(row);
+    this.caches[cache].delete(row);
     this.size -= ENTRY_OVERHEAD_BYTES + old.byteLength;
   }
 }

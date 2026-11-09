@@ -23,6 +23,8 @@ import type { Geometry } from 'geojson';
 import { DrawError } from '../shared/draw-error.js';
 import type { Coordinate, Feature, FeatureType } from '../shared/types/model.js';
 import { setOwnProperty } from '../shared/utils/own-property.js';
+import { FILL_TRIANGLES_AT } from '../table/fill-triangles.js';
+import { cacheNumbersOf, noCacheNumbers, type RowCacheNumbers } from '../table/row-caches.js';
 import type { RowInput } from '../table/row-group-builder.js';
 import {
   ROW_FLAG_DELETED,
@@ -142,37 +144,26 @@ export function rowHasGeometry(group: RowGroup, row: number): boolean {
 }
 
 /**
+ * The numbers of a cache of a row (the ones written in place when there are; none for a row of
+ * tables without the cache)
+ *
+ * @param cache The place of the cache in the caches of the tables
+ * @internal
+ */
+export function rowCacheNumbers(group: RowGroup, row: number, cache: number): RowCacheNumbers {
+  const written = group.geometries?.cacheNumbers(cache, row);
+  if (written) return written;
+  const column = group.data.caches[cache];
+  return column ? cacheNumbersOf(column, row) : noCacheNumbers();
+}
+
+/**
  * The indices of the triangles of the fill of a row (the ones written in place when there are)
  *
  * @internal
  */
 export function rowTriangles(group: RowGroup, row: number): Uint16Array | Uint32Array {
-  const written = group.geometries?.rowTriangles(row);
-  if (written) return written;
-  const t = group.data.triangles;
-  const start = t.offsets[row];
-  const end = t.offsets[row + 1];
-  if (end > start) return t.indices.subarray(start, end);
-  const wide = indexOfRow(t.wideRows, row);
-  if (wide < 0) return t.indices.subarray(start, start);
-  return t.wideIndices.subarray(t.wideOffsets[wide], t.wideOffsets[wide + 1]);
-}
-
-/**
- * The place of a row in an ascending list of rows (-1 when it is not there)
- *
- * @internal
- */
-export function indexOfRow(rows: Int32Array, row: number): number {
-  let lo = 0;
-  let hi = rows.length - 1;
-  while (lo <= hi) {
-    const mid = (lo + hi) >> 1;
-    if (rows[mid] === row) return mid;
-    if (rows[mid] < row) lo = mid + 1;
-    else hi = mid - 1;
-  }
-  return -1;
+  return rowCacheNumbers(group, row, FILL_TRIANGLES_AT);
 }
 
 /**

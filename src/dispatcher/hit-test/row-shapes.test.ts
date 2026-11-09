@@ -24,6 +24,8 @@ import { drawPropertyKey } from '../../shared/properties.js';
 import { MemoryStore } from '../../store/memory.js';
 import { RBushSpatialIndex } from '../../store/spatial/spatial-index.js';
 import type { Coordinate, Feature } from '../../store/types.js';
+import { circleRowRings } from '../../table/circle-rings.js';
+import { FEATURE_CACHES } from '../../table/fill-triangles.js';
 import { feature, seededRandom, tablesOfFeatures } from '../../test-utils.js';
 import type { DrawnShapeResolver } from './globe-shape.js';
 import { HitTestServiceImpl } from './service.js';
@@ -175,7 +177,15 @@ describe('the hits of the rows tested on their columns', () => {
     const { table, internals } = tablesOfFeatures('layer', [feature('p', 'Polygon', [square])]);
     const group = table.groupAt(0);
     const grown: Geometry = { type: 'Polygon', coordinates: [ring(0, 0, 5, 9)] };
-    writeRowGeometry(table, group, 0, grown as never, planarCoordinates);
+    writeRowGeometry(
+      table,
+      group,
+      0,
+      grown as never,
+      planarCoordinates,
+      circleRowRings,
+      FEATURE_CACHES,
+    );
     const service = new HitTestServiceImpl(new MemoryStore(), new RBushSpatialIndex());
     const shape = rowHitShape(group, 0);
     if (!shape) throw new Error('a shape');
