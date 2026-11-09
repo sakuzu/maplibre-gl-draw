@@ -172,7 +172,7 @@ async function drawWritten(
           createDraw: typeof import('../index.js').createDraw;
           tables: {
             createFeatureTables: typeof import('../kasane/index.js').createFeatureTables;
-            createRowBlockBuilder: typeof import('../table/row-group-builder.js').createRowBlockBuilder;
+            createRowBlockBuilder: typeof import('../table/feature-row-blocks.js').createFeatureRowBlockBuilder;
           };
           internals: {
             MemoryContractStore: new () => Contract;

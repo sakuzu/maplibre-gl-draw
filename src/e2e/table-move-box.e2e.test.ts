@@ -120,7 +120,7 @@ async function open(page: Page, features: SceneFeature[], form: 'rows' | 'store'
         e2e: {
           createDraw: typeof import('../index.js').createDraw;
           tables: {
-            createRowBlockBuilder: typeof import('../table/row-group-builder.js').createRowBlockBuilder;
+            createRowBlockBuilder: typeof import('../table/feature-row-blocks.js').createFeatureRowBlockBuilder;
             createTableStore: typeof import('../store/table-memory.js').createTableStore;
           };
           internals: { MemoryContractStore: new () => Contract };

@@ -217,7 +217,7 @@ async function put(
         writer: import('../kasane/index.js').FeatureTablesWriter;
         e2e: {
           tables: {
-            createRowBlockBuilder: typeof import('../table/row-group-builder.js').createRowBlockBuilder;
+            createRowBlockBuilder: typeof import('../table/feature-row-blocks.js').createFeatureRowBlockBuilder;
           };
         };
       };

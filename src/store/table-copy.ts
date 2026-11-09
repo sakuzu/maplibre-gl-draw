@@ -18,12 +18,9 @@ import { featureTablesInternals } from '../feature-table/feature-tables.js';
 import { rowInputOf } from '../feature-table/row-read.js';
 import { DrawError } from '../shared/draw-error.js';
 import { drawErrorOf } from '../table/draw-error-of.js';
+import { createFeatureRowBlockBuilder } from '../table/feature-row-blocks.js';
 import { KasaneError } from '../table/kasane-error.js';
-import {
-  createRowBlockBuilder,
-  type GroupEntry,
-  ROW_BLOCK_TARGET_ROWS,
-} from '../table/row-group-builder.js';
+import { type GroupEntry, ROW_BLOCK_TARGET_ROWS } from '../table/row-group-builder.js';
 import type { GeometryTransforms, Store, StoreContractView } from './store.js';
 import { createTableStore, type TableStoreOptions } from './table-memory.js';
 import type { Feature, Group, Layer } from './types.js';
@@ -165,7 +162,7 @@ export function copyTableStore(
             pending.shift();
             continue;
           }
-          const builder = createRowBlockBuilder({
+          const builder = createFeatureRowBlockBuilder({
             groups: groupEntries.get(layer.layerId) ?? [],
             dimensions: internals.readContext.dimensionsOf(layer.layerId),
           });

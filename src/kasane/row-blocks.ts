@@ -2,31 +2,15 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * The builder and the merge of row blocks as this entry hands them out: what they throw for the
- * rows is a `DrawError`, as every error of the library
+ * The builder and the merge of row blocks as this entry hands them out: those of the features
+ * (`createFeatureRowBlockBuilder`, `mergeFeatureRowBlock`), so that what they throw for the rows
+ * is a `DrawError`, as every error of the library, and a Circle built has the ring of its radius
  */
 
-import { drawErrorOf } from '../table/draw-error-of.js';
-import { KasaneError } from '../table/kasane-error.js';
-import {
-  createRowBlockBuilder as createKasaneRowBlockBuilder,
-  type RowBlockBuilder,
-  type RowBlockBuilderOptions,
-  type RowInput,
-} from '../table/row-group-builder.js';
-import {
-  mergeRowBlock as mergeKasaneRowBlock,
-  type RowBlockMerge,
-} from '../table/row-group-merge.js';
+import { createFeatureRowBlockBuilder, mergeFeatureRowBlock } from '../table/feature-row-blocks.js';
+import type { RowBlockBuilder, RowBlockBuilderOptions } from '../table/row-group-builder.js';
+import type { RowBlockMerge } from '../table/row-group-merge.js';
 import type { RowBlock } from '../table/row-group-types.js';
-
-/**
- * An error of the tables (`KasaneError`) as a `DrawError`; what a function given in the options
- * threw (the system of coordinates, the rings) as it is
- */
-function rowsError(error: unknown): unknown {
-  return error instanceof KasaneError ? drawErrorOf(error) : error;
-}
 
 /**
  * Creates the builder of the row blocks of one layer
@@ -36,26 +20,7 @@ function rowsError(error: unknown): unknown {
  * row names a group the options do not give.
  */
 export function createRowBlockBuilder(options: RowBlockBuilderOptions = {}): RowBlockBuilder {
-  const builder = createKasaneRowBlockBuilder(options);
-  return {
-    get length() {
-      return builder.length;
-    },
-    addRow(row: RowInput): void {
-      try {
-        builder.addRow(row);
-      } catch (error) {
-        throw rowsError(error);
-      }
-    },
-    finish(): RowBlock[] {
-      try {
-        return builder.finish();
-      } catch (error) {
-        throw rowsError(error);
-      }
-    },
-  };
+  return createFeatureRowBlockBuilder(options);
 }
 
 /**
@@ -66,9 +31,5 @@ export function createRowBlockBuilder(options: RowBlockBuilderOptions = {}): Row
  *   or `not-found` when a row names a group of features the keys do not give
  */
 export function mergeRowBlock(merge: RowBlockMerge): RowBlock[] {
-  try {
-    return mergeKasaneRowBlock(merge);
-  } catch (error) {
-    throw rowsError(error);
-  }
+  return mergeFeatureRowBlock(merge);
 }

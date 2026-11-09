@@ -23,8 +23,11 @@ import { createFeatureTables } from '../kasane/index.js';
 import { getAnchorProjector } from '../shared/math/index.js';
 import { MemoryContractStore } from '../store/memory.js';
 import { createTableStore } from '../store/table-memory.js';
+import {
+  createFeatureRowBlockBuilder,
+  type FeatureRowBlockBuilderOptions,
+} from '../table/feature-row-blocks.js';
 import { prepareTable } from '../table/index.js';
-import { createRowBlockBuilder, type RowBlockBuilderOptions } from '../table/row-group-builder.js';
 import { DemAtlas } from '../view/terrain/dem-atlas.js';
 import {
   getMapTerrain,
@@ -42,7 +45,8 @@ installTestDem(maplibregl);
   prepareTable,
   tables: {
     createFeatureTables,
-    createRowBlockBuilder: (options: RowBlockBuilderOptions = {}) => createRowBlockBuilder(options),
+    createRowBlockBuilder: (options: FeatureRowBlockBuilderOptions = {}) =>
+      createFeatureRowBlockBuilder(options),
     createTableStore,
   },
   terrain: { addTestTerrain, TEST_PEAK, testElevation },
