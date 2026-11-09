@@ -2454,11 +2454,14 @@ class FeatureTablesStore implements FeatureTablesInternals {
   /** What the changes of the order read of the tables */
   private get orderSource(): ItemOrderSource {
     return {
-      layer: (layerId) => this.layers.get(layerId),
+      walkItems: (layerId) => {
+        const layer = this.layers.get(layerId);
+        return layer ? new ItemWalk(layer, this) : null;
+      },
+      getGroupKey: (group) => this.getGroupOrder(group),
       groups: this.groups,
       idOf: (handle) => this.ids.idOf(handle),
       placeOf: (handle) => this.placeOf(handle),
-      writtenOrders: this.writtenOrders,
     };
   }
 

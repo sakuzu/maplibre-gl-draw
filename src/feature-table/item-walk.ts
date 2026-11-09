@@ -23,7 +23,7 @@
 
 import { utf8ColumnFromStrings, utf8String } from '@sakuzu/tabane';
 import { ROW_FLAG_DELETED } from '../table/row-group-types.js';
-import type { RowKeySource } from '../table/row-keys.js';
+import { compareRowKeys, type GroupKeySource, type RowKeySource } from '../table/row-keys.js';
 import type { GroupTable } from './group-table.js';
 import type { LayerTable, OrderRow, RowGroup } from './layer-table.js';
 import type { GroupHandle, RowHandle } from './types.js';
@@ -101,6 +101,8 @@ interface ItemSpan {
 export class ItemWalk {
   /** The groups of the layer whose keys written are not in the order read yet, with those keys */
   private readonly written = new Map<GroupHandle, string>();
+  /** The keys of the groups the rows are ordered by, the keys written among them (made once) */
+  private rowGroupKeys: GroupKeySource | null = null;
 
   constructor(
     private readonly layer: LayerTable,
@@ -237,6 +239,21 @@ export class ItemWalk {
   compare(a: number, b: number): number {
     if (!this.span(a, -1) || !this.span(b, -1)) return 0;
     return compareItemKeys(this.keyOf(a), this.keyOf(b));
+  }
+
+  /**
+   * The order of two rows, by their keys written: the members of a group at the key written of
+   * the group (the order the rows will have once the keys written are in)
+   *
+   * @returns A negative number when `a` comes first, 0 for the same row
+   */
+  compareRows(a: OrderRow, b: OrderRow): number {
+    if (!this.rowGroupKeys) {
+      const written = this.source.writtenOrders;
+      const groups = this.source.groups;
+      this.rowGroupKeys = written && written.size > 0 ? groups.withOrders(written) : groups;
+    }
+    return compareRowKeys(a.group.data, a.row, b.group.data, b.row, this.rowGroupKeys);
   }
 
   /**

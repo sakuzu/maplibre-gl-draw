@@ -25,6 +25,7 @@ import { compareRowKeys } from '../table/row-keys.js';
 import { seededRandom } from '../test-utils.js';
 import { type FeatureTablesInternals, featureTablesInternals } from './feature-tables.js';
 import { groupKeyMoves, type ItemOrderSource, ORDER_ITEM_LIMIT } from './item-order.js';
+import { ItemWalk } from './item-walk.js';
 import type { LayerItems, LayerTable, RowGroup } from './layer-table.js';
 import type { GroupHandle, RowHandle } from './types.js';
 
@@ -57,6 +58,12 @@ function memberCodesOf(members: Int32Array | undefined): Int32Array {
   return out;
 }
 
+/** What the reference reads: the source of the changes of the order, and the rows of the layers */
+interface ReferenceSource extends ItemOrderSource {
+  /** The rows of a layer (undefined for a layer that holds none) */
+  layer(layerId: string): LayerTable | undefined;
+}
+
 /** The place a row is read from (its group and its row there) */
 interface RowAt {
   readonly layer: LayerTable;
@@ -82,7 +89,7 @@ class FullListWatch {
   /** The layer, group and keys of each row moved before the write (absent for a new row) */
   private readonly before = new Map<RowHandle, readonly unknown[]>();
 
-  constructor(private readonly source: ItemOrderSource) {}
+  constructor(private readonly source: ReferenceSource) {}
 
   /** Whether the write puts a row in another place, creates or deletes one */
   get changes(): boolean {
@@ -348,7 +355,7 @@ function isDeleted(at: RowAt): boolean {
  * is not an item, and is not moved)
  */
 function fullGroupKeyMoves(
-  source: ItemOrderSource,
+  source: ReferenceSource,
   layerId: string,
   orders: ReadonlyMap<GroupHandle, string>,
 ): ItemMove[] {
@@ -412,11 +419,20 @@ function compareCodePoints(a: string, b: string): number {
 
 // === The tests ===
 
-/** The source of the changes of the order of the tables of a Store */
-function sourceOf(internals: FeatureTablesInternals): ItemOrderSource {
+/**
+ * The source of the changes of the order of the tables of a Store (the order read, the keys
+ * written of the groups left out), with the rows of the layers the reference reads every item of
+ */
+function sourceOf(internals: FeatureTablesInternals): ReferenceSource {
+  const groups = internals.groups;
   return {
     layer: (layerId) => internals.layerTable(layerId),
-    groups: internals.groups,
+    walkItems: (layerId) => {
+      const table = internals.layerTable(layerId);
+      return table ? new ItemWalk(table, { groups, placeOf: (h) => internals.placeOf(h) }) : null;
+    },
+    getGroupKey: (group) => groups.orderOf(group),
+    groups,
     idOf: (handle) => internals.ids.idOf(handle),
     placeOf: (handle) => internals.placeOf(handle),
   };

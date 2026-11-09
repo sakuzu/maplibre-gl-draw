@@ -45,9 +45,8 @@ import {
   trimmedContainer,
 } from '../shared/utils/item-moves.js';
 import { ROW_FLAG_DELETED } from '../table/row-group-types.js';
-import { compareRowKeys } from '../table/row-keys.js';
 import type { GroupTable } from './group-table.js';
-import { compareItemKeys, groupCode, type ItemKey, ItemWalk, rowCode } from './item-walk.js';
+import { compareItemKeys, groupCode, type ItemKey, type ItemWalk, rowCode } from './item-walk.js';
 import type { LayerTable, RowGroup } from './layer-table.js';
 import type { GroupHandle, RowHandle } from './types.js';
 
@@ -68,23 +67,26 @@ interface RowAt {
 }
 
 /**
- * What the changes of the order read of the tables
+ * What the changes of the order read of the tables: the order through the walks of the items
+ * (`walkItems`) and the keys of the groups written (`getGroupKey`), the places of the rows
  *
  * @internal
  */
 export interface ItemOrderSource {
-  /** The rows of a layer (undefined for a layer that holds none) */
-  layer(layerId: string): LayerTable | undefined;
+  /**
+   * The walk of the items of a layer, in the order written (null for a layer that holds no row)
+   */
+  walkItems(layerId: string): ItemWalk | null;
+  /**
+   * The key of the order of a group of features last written (undefined for an unknown group):
+   * the one not in the order read yet, or the one of the table of the groups
+   */
+  getGroupKey(group: GroupHandle): string | undefined;
   readonly groups: GroupTable;
   /** The id of a row */
   idOf(handle: RowHandle): string | undefined;
   /** Where a row is read (undefined for no row) */
   placeOf(handle: RowHandle): RowAt | undefined;
-  /**
-   * The keys of the order of groups of features written and not in the order read yet (see
-   * `ItemWalkSource.writtenOrders`)
-   */
-  readonly writtenOrders?: ReadonlyMap<GroupHandle, string>;
 }
 
 /** The fields of a row that place it, as a row holds them (what `RowsMove.before` keeps) */
@@ -336,15 +338,12 @@ export class ItemOrderWatch {
 
   /** The key a group of features is ordered by in its layer (the key written) */
   private groupKey(group: GroupHandle): ItemKey {
-    const groups = this.source.groups;
-    const order = this.source.writtenOrders?.get(group) ?? groups.orderOf(group);
-    return [order ?? '', groups.idOf(group) ?? ''];
+    return [this.source.getGroupKey(group) ?? '', this.source.groups.idOf(group) ?? ''];
   }
 
   /** The walk of the items of a layer (null for a layer that holds no row) */
   private walkOf(layerId: string): ItemWalk | null {
-    const layer = this.source.layer(layerId);
-    return layer ? new ItemWalk(layer, this.source) : null;
+    return this.source.walkItems(layerId);
   }
 
   /** The id of an item */
@@ -377,15 +376,11 @@ export class ItemOrderWatch {
     const out: RowsMove[] = [];
     const groupIds = new Map<GroupHandle, string>();
     for (const [layer, rows] of byLayer) {
+      const walk = this.walkOf(layer.layerId) as ItemWalk;
       // In the order written (the keys of the groups written and not read yet)
-      const written = this.source.writtenOrders;
-      const keys = written && written.size > 0 ? this.source.groups.withOrders(written) : null;
-      rows.sort((a, b) =>
-        compareRowKeys(a.group.data, a.row, b.group.data, b.row, keys ?? this.source.groups),
-      );
+      rows.sort((a, b) => walk.compareRows(a, b));
       const handles = Int32Array.from(rows, (at) => at.group.data.handles[at.row]);
       const before = this.placeBefore(handles);
-      const walk = new ItemWalk(layer, this.source);
       /** The item just below a row among the items of its layer, or the members of its group */
       const belowOf = (at: RowAt): { kind: number; handle: number } => {
         const handle = at.group.data.handles[at.row];
@@ -462,9 +457,8 @@ export function groupKeyMoves(
   layerId: string,
   orders: ReadonlyMap<GroupHandle, string>,
 ): ItemMove[] {
-  const layer = source.layer(layerId);
-  if (!layer) return [];
-  const walk = new ItemWalk(layer, source);
+  const walk = source.walkItems(layerId);
+  if (!walk) return [];
   const moved = new Set<number>();
   for (const group of orders.keys()) {
     if (walk.span(groupCode(group), -1)) moved.add(groupCode(group));
