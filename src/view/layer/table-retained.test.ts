@@ -23,9 +23,9 @@ import type { RowTable } from '../../feature-table/row-table.js';
 import type { EnuEdit } from '../../geometry/enu-transforms.js';
 import type { BBox } from '../../geometry/types.js';
 import type { Feature, Layer } from '../../shared/types/model.js';
-import { createRowBlockDataBuilder } from '../../table/row-group-builder.js';
 import { FEATURE_TABLE_COLUMNS } from '../../table/tabane/columns.js';
 import {
+  featureRowDataBuilder as createRowBlockDataBuilder,
   createTestDrawer,
   feature,
   orderKey,

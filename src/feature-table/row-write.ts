@@ -4,29 +4,33 @@
 /**
  * Writing the values of a row held as columns in place
  *
- * What fits the columns of the group is written into them: the coordinates of a geometry of the
- * same shape (the same type and the same numbers of parts, rings and coordinates), the numbers of
- * its caches (`RowCache`, made again of the row written) when there are as many. What does not
- * fit is written into the overrides of the group (`value-overrides.ts`), which every reader looks
- * at first: the attributes (a column of values cannot change in place), the geometry of another
- * shape, and numbers of a cache of another count. The next version of the group folds the
+ * What fits the columns of the group is written into them: the points of a shape of the same
+ * form (the same name and depth, and the same numbers of lists and points), the numbers of its
+ * caches (`RowCache`, made again of the row written) when there are as many. What does not fit
+ * is written into the overrides of the group (`value-overrides.ts`), which every reader looks at
+ * first: the keys of the `keyed` column (a column of values cannot change in place), the shape of
+ * another form, and numbers of a cache of another count. The next version of the group folds the
  * overrides into its columns.
  *
- * A geometry written marks its row moved in its group, with its new bbox, and tells the index of
- * the boxes of the rows of its layer to read the row again.
+ * A shape written marks its row moved in its group, with its new box, and tells the index of the
+ * boxes of the rows of its table to read the row again.
  */
 
-import { type CoordinateSystem, type PropertyColumns, readValue } from '@sakuzu/tabane';
-import type { Geometry } from 'geojson';
-import { PROPERTIES_COLUMN } from '../table/feature-row-columns.js';
+import {
+  type CoordinateSystem,
+  type PropertyColumns,
+  readValue,
+  type TabaneShape,
+} from '@sakuzu/tabane';
 import type { RowCache } from '../table/row-caches.js';
-import { type RowGeometry, singleRowColumn, toRowGeometry } from '../table/row-geometry.js';
 import type { RowRead } from '../table/row-read-type.js';
 import type { RowRings } from '../table/row-rings.js';
-import { groupRowRead, rowCacheNumbers, rowType } from './row-read.js';
+import { type RowGeometry, rowGeometryOfShape, singleRowForm } from '../table/row-shape.js';
+import { groupRowRead, rowCacheNumbers, rowWholeValue } from './row-group-read.js';
 import {
   columnGeometryAt,
   geometryAt,
+  KEYED_COLUMN,
   type RowGeometryAt,
   type RowGroup,
   type RowTable,
@@ -62,7 +66,32 @@ export interface GeometryWrite {
 }
 
 /**
- * Writes the value of an attribute of a row (`undefined` takes the key off the row)
+ * What a write in place reads of the tables besides the row: what the box of a row is made in,
+ * what the rows draw, and where their type is read
+ *
+ * @internal
+ */
+export interface RowWriteContext {
+  /** The system of the coordinates the box of a row is made in (that of the tables) */
+  readonly coordinates: CoordinateSystem;
+  /** The rings the rows of some types draw around their point (those of the tables; null for none) */
+  readonly rings: RowRings | null;
+  /** The caches of the rows (those of the tables) */
+  readonly caches: readonly RowCache[];
+  /** The name of the `shape` column (for the message of an error) */
+  readonly shapeName: string;
+  /** The place in `RowBlockData.wholes` of the column of the type of a row (-1 for none) */
+  readonly typeAt: number;
+}
+
+/** The type of a row (the empty string for tables without the column of the type) */
+function typeOfRow(context: RowWriteContext, group: RowGroup, row: number): string {
+  return context.typeAt < 0 ? '' : (rowWholeValue(group.data, row, context.typeAt) as string);
+}
+
+/**
+ * Writes the value of a key of the `keyed` column of a row (`undefined` takes the key off the
+ * row)
  *
  * The value is kept in the overrides of the group, unless it is the value of the column, in
  * which case what was written of it is taken off.
@@ -77,7 +106,7 @@ export function writeRowValue(group: RowGroup, row: number, key: string, value: 
   const held = encodeOverrideValue(
     column === undefined
       ? undefined
-      : readValue((group.data.keyed[PROPERTIES_COLUMN] as PropertyColumns).columns[column], row),
+      : readValue((group.data.keyed[KEYED_COLUMN] as PropertyColumns).columns[column], row),
   );
   const before: OverrideValue = group.values?.get(row, key) ?? held;
   if (sameOverrideValue(next, held)) {
@@ -90,29 +119,23 @@ export function writeRowValue(group: RowGroup, row: number, key: string, value: 
 }
 
 /**
- * Writes the geometry of a row in place, as coordinates of the dimensions of its layer: every
- * value of a coordinate is written (a `z` or an `m` a position does not have is NaN), and the
- * coordinates whose `x` or `y` changed are told apart (only they are drawn again)
+ * Writes the shape of a row in place, as points of the dimensions of its table: every value of a
+ * point is written (a `z` or an `m` a point does not have is NaN), and the points whose `x` or `y`
+ * changed are told apart (only they are drawn again)
  *
- * @param table The layer of the row (its dimensions, its rows moved)
- * @param system The system of the coordinates the bbox of the row is made in (that of the tables)
- * @param rings The rings the rows of some types draw around their point (those of the tables;
- *   none when omitted)
- * @param caches The caches of the rows (those of the tables; none when omitted)
- * @throws when the geometry is not of one of the six types a row holds, or when a position has
- *   more values than the dimensions of the layer
+ * @param table The table of the row (its dimensions, its rows moved)
+ * @throws `KasaneError` with the code `invalid-input` when the depth of the shape is not one of a
+ *   shape, or when a point has more values than the dimensions of the table
  * @internal
  */
 export function writeRowGeometry(
   table: RowTable,
   group: RowGroup,
   row: number,
-  geometry: Geometry,
-  system: CoordinateSystem,
-  rings: RowRings | null = null,
-  caches: readonly RowCache[] = [],
+  value: TabaneShape,
+  context: RowWriteContext,
 ): GeometryWrite {
-  const next = toRowGeometry(geometry, table.dims);
+  const next = rowGeometryOfShape(value, context.shapeName, table.dims);
   const stride = next.stride;
   const current = geometryAt(group, row);
   let sameStructure = false;
@@ -150,10 +173,10 @@ export function writeRowGeometry(
       group.geometries?.deleteGeometry(row);
     } else {
       group.geometries ??= new GeometryOverrides();
-      group.geometries.setGeometry(row, singleRowColumn(next));
+      group.geometries.setGeometry(row, singleRowForm(next));
     }
   }
-  const shape = refreshRowShape(table, group, row, system, rings, caches);
+  const shape = refreshRowShape(table, group, row, context);
   if (shape.ring) {
     // A row that draws a ring: every coordinate of it moves with its point
     return {
@@ -166,15 +189,10 @@ export function writeRowGeometry(
 }
 
 /**
- * Works out again what follows from the geometry of a row (and from the attributes its ring is
- * made from): the numbers of its caches and its bbox, and records it moved in its layer. Called
- * after its geometry or an attribute its ring is made from was written
+ * Works out again what follows from the shape of a row (and from the keys its ring is made from):
+ * the numbers of its caches and its box, and records it moved in its table. Called after its
+ * shape or a key its ring is made from was written
  *
- * @param system The system of the coordinates the bbox of the row is made in, as for every other
- *   row of the tables (that of the tables)
- * @param rings The rings the rows of some types draw around their point (those of the tables;
- *   none when omitted)
- * @param caches The caches of the rows (those of the tables; none when omitted)
  * @returns Whether the numbers of its caches stayed the same, and the number of coordinates of
  *   the ring the row draws (0 for a row that draws none)
  * @internal
@@ -183,21 +201,20 @@ export function refreshRowShape(
   table: RowTable,
   group: RowGroup,
   row: number,
-  system: CoordinateSystem,
-  rings: RowRings | null = null,
-  caches: readonly RowCache[] = [],
+  context: RowWriteContext,
 ): { sameTriangles: boolean; ring: number } {
   const geometry = geometryAt(group, row);
   if (!geometry) return { sameTriangles: true, ring: 0 };
-  const read = groupRowRead(group, row);
-  const shape = shapeOf(group, row, geometry, rings, read);
+  const { caches } = context;
+  const read = groupRowRead(group, row, context.typeAt);
+  const shape = shapeOf(context, group, row, geometry, read);
   let sameTriangles = true;
   for (let c = 0; c < caches.length; c++) {
     const numbers = caches[c].build(read, shape.ring > 0 ? shape.coords : null);
     if (!writeCacheNumbers(group, row, c, numbers)) sameTriangles = false;
   }
   const bounds = group.data.rowBounds;
-  system.rowBox(shape.coords, shape.stride, shape.from, shape.to, bounds, row * 4);
+  context.coordinates.rowBox(shape.coords, shape.stride, shape.from, shape.to, bounds, row * 4);
   table.moveRow(group, row, bounds);
   const at = row * 4;
   if (!Number.isNaN(bounds[at])) {
@@ -213,36 +230,34 @@ export function refreshRowShape(
 }
 
 /**
- * Whether the ring of a row is made from the attribute of a key (its ring follows it)
+ * Whether the ring of a row is made from a key of the `keyed` column (its ring follows it)
  *
- * @param rings The rings of the tables (null for none)
  * @internal
  */
 export function isRingKey(
-  rings: RowRings | null,
+  context: RowWriteContext,
   group: RowGroup,
   row: number,
   key: string,
 ): boolean {
-  return rings?.keys.includes(key) === true && rings.draws(rowType(group.data, row));
+  const rings = context.rings;
+  return rings?.keys.includes(key) === true && rings.draws(typeOfRow(context, group, row));
 }
 
 /**
- * Whether a geometry has the type, the dimensions and the numbers of parts, rings and coordinates
- * of a row
+ * Whether a shape has the form, the dimensions and the numbers of lists and points of a row
  */
 function fits(current: RowGeometryAt, next: RowGeometry): boolean {
   const { reader, at } = current;
   if (reader.type !== next.type || reader.stride !== next.stride) return false;
+  if (reader.depth !== next.depth) return false;
   const o = reader.offsets;
-  switch (reader.type) {
-    case 'Point':
+  switch (next.depth) {
+    case 0:
       return next.coords.length === next.stride;
-    case 'LineString':
-    case 'MultiPoint':
+    case 1:
       return o[0][at + 1] - o[0][at] === next.coords.length / next.stride;
-    case 'Polygon':
-    case 'MultiLineString': {
+    case 2: {
       if (o[0][at + 1] - o[0][at] !== next.parts.length) return false;
       for (let i = 0; i < next.parts.length; i++) {
         const ring = o[0][at] + i;
@@ -250,7 +265,7 @@ function fits(current: RowGeometryAt, next: RowGeometry): boolean {
       }
       return true;
     }
-    case 'MultiPolygon': {
+    case 3: {
       if (o[0][at + 1] - o[0][at] !== next.polygons.length) return false;
       let ring = 0;
       for (let p = 0; p < next.polygons.length; p++) {
@@ -278,14 +293,15 @@ interface RowShape {
 }
 
 function shapeOf(
+  context: RowWriteContext,
   group: RowGroup,
   row: number,
   geometry: RowGeometryAt,
-  rings: RowRings | null,
   read: RowRead,
 ): RowShape {
   const { reader, at } = geometry;
-  if (rings && reader.type === 'Point' && rings.draws(rowType(group.data, row))) {
+  const rings = context.rings;
+  if (rings && reader.depth === 0 && rings.draws(typeOfRow(context, group, row))) {
     const ring = rings.ringOf(read);
     if (ring)
       return { coords: ring, stride: 2, from: 0, to: ring.length / 2, ring: ring.length / 2 };

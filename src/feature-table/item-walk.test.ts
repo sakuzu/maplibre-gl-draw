@@ -16,10 +16,13 @@ import { createEngine } from '../api/impl/engine.js';
 import type { FeatureTables, RowField } from '../api/tables.js';
 import { groupsInStackingOrder, groupsInStackingOrderOf } from '../store/item-lists.js';
 import { createTableStore } from '../store/table-memory.js';
-import { createRowBlockDataBuilder } from '../table/row-group-builder.js';
 import { ROW_FLAG_DELETED } from '../table/row-group-types.js';
 import { FEATURE_TABLE_COLUMNS } from '../table/tabane/columns.js';
-import { createMapStub, seededRandom } from '../test-utils.js';
+import {
+  createMapStub,
+  featureRowDataBuilder as createRowBlockDataBuilder,
+  seededRandom,
+} from '../test-utils.js';
 import { type FeatureTablesInternals, featureTablesInternals } from './feature-tables.js';
 import { groupCode, ItemWalk, rowCode } from './item-walk.js';
 import { RowTable } from './row-table.js';

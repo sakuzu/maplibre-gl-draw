@@ -22,7 +22,7 @@ import { planarCoordinates } from '@sakuzu/tabane';
 import type { Geometry } from 'geojson';
 import type { ProjectionData } from 'maplibre-gl';
 import { beforeEach, describe, expect, it } from 'vitest';
-import { refreshRowShape, writeRowGeometry, writeRowValue } from '../../feature-table/row-write.js';
+import { writeRowValue } from '../../feature-table/row-write.js';
 import {
   type InPlaceRowWrite,
   ROW_WRITE_GEOMETRY,
@@ -38,8 +38,10 @@ import {
   createTestDrawer,
   feature,
   memoryGL,
+  refreshFeatureShape,
   rowPatch,
   tablesOfFeatures,
+  writeFeatureGeometry,
 } from '../../test-utils.js';
 import { createFeatureCompanionRegistry } from '../feature-companion.js';
 import { GpuLedger } from '../gpu-ledger.js';
@@ -314,7 +316,7 @@ function editor(live: ReturnType<typeof drawn>, features: Feature[]) {
   };
   return {
     geometry(row: number, geometry: Geometry): void {
-      const write = writeRowGeometry(
+      const write = writeFeatureGeometry(
         live.table,
         group,
         row,
@@ -337,7 +339,7 @@ function editor(live: ReturnType<typeof drawn>, features: Feature[]) {
     },
     radius(row: number, radius: number): void {
       writeRowValue(group, row, RADIUS, radius);
-      const shape = refreshRowShape(
+      const shape = refreshFeatureShape(
         live.table,
         group,
         row,

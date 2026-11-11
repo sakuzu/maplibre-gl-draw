@@ -8,8 +8,9 @@
  * (`compareRowKeys`), cuts them into groups of at most a target number of rows and of
  * coordinates, and computes for every group what the main thread would otherwise compute: the
  * hashes of the ids, the bbox of every row, the caches of the rows the user of the tables
- * declares (`RowCache`), and the form of every attribute column (dense or sparse). The styles are written as their
- * canonical bytes, shared within a group; the main thread numbers them in its table of styles.
+ * declares (`RowCache`), and the form of every column of the `keyed` column (dense or sparse).
+ * The values of a `whole` column the tables keep (`'tables'`) are written as their canonical
+ * bytes, shared within a group; the main thread numbers them in their table.
  *
  * A pure module: it depends on neither maplibre, nor WebGL, nor the DOM, so a Worker builds the
  * groups and sends them with `blockTransferList`.
@@ -24,31 +25,17 @@ import {
   type PropertyColumns,
   planarCoordinates,
   strideOf,
+  type TabaneShape,
   type Utf8Column,
   Utf8ColumnBuilder,
   utf8ColumnFromStrings,
   type ValueColumn,
   ValueColumnBuilder,
 } from '@sakuzu/tabane';
-import type { Geometry } from 'geojson';
 import type { TableColumns } from '../feature-table/row-values.js';
 import { KasaneError, kasaneErrorOf } from './kasane-error.js';
 import { type RowCache, RowCacheWriter } from './row-caches.js';
-import {
-  flagBitOf,
-  keyedColumnOf,
-  type RowColumnLayout,
-  rowColumnLayoutOf,
-  shapeColumnOf,
-  wholeColumnOf,
-} from './row-columns.js';
-import {
-  GEOMETRY_DEPTHS,
-  type RowGeometry,
-  rowGeometryOfColumn,
-  rowShapeOf,
-  toRowGeometry,
-} from './row-geometry.js';
+import { type RowColumnLayout, rowColumnLayoutOf } from './row-columns.js';
 import {
   ROW_FLAG_DELETED,
   type RowBlock,
@@ -58,8 +45,13 @@ import {
 import { compareRowKeys, type GroupKeySource, type RowKeySource } from './row-keys.js';
 import type { RowRead, RowShape } from './row-read-type.js';
 import type { PointRowRings, RowRings } from './row-rings.js';
+import {
+  type RowGeometry,
+  rowGeometryOfColumn,
+  rowGeometryOfShape,
+  rowShapeOf,
+} from './row-shape.js';
 import type { ShapeColumn, ShapeForm } from './shape-reader.js';
-import type { GeometryType } from './types.js';
 
 /**
  * The target number of rows of a row block
@@ -130,9 +122,9 @@ export interface RowBlockBuilderOptions {
  */
 export interface RowBlockBuildOptions extends Omit<RowBlockBuilderOptions, 'rings'> {
   /**
-   * The columns of the rows, by their names: a field of a row added is written to the column of
-   * its name (`type`, `geometry`, `style`, `properties`, `hidden`, `locked`), and a field no column
-   * is declared for is not held
+   * The columns of the rows, by their names: a value of a row added is written to the column of
+   * its name, and a value no column is declared for is not held. The type of a row (what the
+   * rings and the caches read) is its value of the `whole` column `type`
    */
   readonly columns: TableColumns;
   /**
@@ -151,15 +143,8 @@ export interface RowBlockBuildOptions extends Omit<RowBlockBuilderOptions, 'ring
  * One row given to the builder
  */
 export interface RowInput {
-  /** The id of the row (unique in the document) */
+  /** The id of the row (unique in the tables) */
   readonly id: string;
-  /** The type of the feature (`'Point'`, `'Circle'`, the type of an extension) */
-  readonly type: string;
-  /**
-   * The GeoJSON geometry (a Circle and an Image give the Point of their center, a Freehand a
-   * LineString), or null for a row without one
-   */
-  readonly geometry: Geometry | null;
   /**
    * The key of the order of the row: among the members of its group when it is in
    * one, among the items of its table otherwise
@@ -170,14 +155,13 @@ export interface RowInput {
    * omitted or negative)
    */
   readonly group?: number;
-  /** The style of the row */
-  readonly style?: Readonly<Record<string, unknown>>;
-  /** The attributes of the row */
-  readonly properties?: Readonly<Record<string, unknown>>;
-  /** Whether the row is hidden (false when omitted) */
-  readonly hidden?: boolean;
-  /** Whether the row is locked (false when omitted) */
-  readonly locked?: boolean;
+  /**
+   * The values of the row by the names of their columns: a shape of Tabane (`TabaneShape`) in a
+   * `shape` column (none for null), `true` in a `flag` column for a row that has the flag, a value
+   * in a `whole` column (the empty object when the tables keep the values of the column and the
+   * row gives none), an object of keys and values in a `keyed` column
+   */
+  readonly values: Readonly<Record<string, unknown>>;
   /** Whether the row is deleted (false when omitted) */
   readonly deleted?: boolean;
 }
@@ -192,8 +176,8 @@ export interface RowBlockBuilder {
    * Adds a row
    *
    * @throws an error with the code `invalid-input` when the id was already added, when the
-   *   geometry is not a GeoJSON geometry of one of the six types, or when a value of the style or
-   *   the attributes cannot be held (a number that is not finite, a function)
+   *   shape is not one of a depth of a shape, or when a value of a `whole` or a `keyed` column
+   *   cannot be held (a number that is not finite, a function)
    */
   addRow(row: RowInput): void;
   /**
@@ -245,15 +229,10 @@ export function createRowBlockDataBuilder(options: RowBlockBuildOptions): RowBlo
   const geometries: Array<RowGeometry | null> = [];
   let groupRefs: Int32Array = new Int32Array(256);
   const places = shape.places;
-  const wholes: WholeInput[] = [];
-  if (places.type >= 0) {
-    wholes.push(new WholeInput(places.type, 'type', places.typeInTables, (row) => row.type));
-  }
-  if (places.style >= 0) {
-    wholes.push(
-      new WholeInput(places.style, 'style', places.styleInTables, (row) => row.style ?? EMPTY),
-    );
-  }
+  const wholes = places.wholes.map(
+    (name, w) => new WholeInput(w, name, places.kept[w], (row) => row.values[name]),
+  );
+  const shapeName = places.shape;
 
   return {
     get length() {
@@ -265,7 +244,10 @@ export function createRowBlockDataBuilder(options: RowBlockBuildOptions): RowBlo
           'invalid-input',
           `RowBlockBuilder: the id "${row.id}" is added twice`,
         );
-      const geometry = row.geometry ? toRowGeometry(row.geometry, shape.dims) : null;
+      const value = shapeName === null ? null : row.values[shapeName];
+      const geometry = value
+        ? rowGeometryOfShape(value as TabaneShape, shapeName as string, shape.dims)
+        : null;
       const at = rows.length;
       for (const whole of wholes) whole.add(at, row);
       seen.add(row.id);
@@ -291,7 +273,7 @@ export function createRowBlockDataBuilder(options: RowBlockBuildOptions): RowBlo
       for (const whole of wholes) whole.finish();
       const vertexCounts = new Int32Array(n);
       for (let i = 0; i < n; i++) {
-        vertexCounts[i] = vertexCountOf(rows[i], geometries[i], shape.rings);
+        vertexCounts[i] = vertexCountOf(rows[i], geometries[i], shape.rings, places);
       }
 
       const out: RowBlockData[] = [];
@@ -538,41 +520,38 @@ interface GroupShape {
 }
 
 /**
- * Where the fields of a row added are written: the places of the columns of their names (-1, or
- * the bit 0, for a field no column is declared for)
+ * Where the values of a row added are written: the columns declared, by kind, in the order of
+ * their places in a row block
  */
 interface InputPlaces {
-  /** The number of columns of each kind */
+  /** The name of the `shape` column (null for none) */
+  readonly shape: string | null;
+  /** The number of `shape` columns */
   readonly shapes: number;
-  readonly wholes: number;
-  readonly keyed: number;
-  readonly geometry: number;
+  /** The names of the `whole` columns */
+  readonly wholes: readonly string[];
+  /** Whether the tables keep the values of each `whole` column (`'tables'`) */
+  readonly kept: readonly boolean[];
+  /** The place of the `whole` column of the type of a row (`type`; -1 for none) */
   readonly type: number;
-  /** Whether the values of the type are kept by the tables (else by each row block) */
-  readonly typeInTables: boolean;
-  readonly style: number;
-  /** Whether the values of the style are kept by the tables (else by each row block) */
-  readonly styleInTables: boolean;
-  readonly properties: number;
-  readonly hidden: number;
-  readonly locked: number;
+  /** The name of the `keyed` column (null for none) */
+  readonly keyed: string | null;
+  /** The number of `keyed` columns */
+  readonly keyedCount: number;
+  /** The `flag` columns: their names and their bits in `RowBlockData.flags` */
+  readonly flags: ReadonlyArray<{ readonly name: string; readonly bit: number }>;
 }
 
 function inputPlacesOf(layout: RowColumnLayout): InputPlaces {
-  const type = wholeColumnOf(layout, 'type');
-  const style = wholeColumnOf(layout, 'style');
   return {
+    shape: layout.shapes[0] ?? null,
     shapes: layout.shapes.length,
-    wholes: layout.wholes.length,
-    keyed: layout.keyed.length,
-    geometry: shapeColumnOf(layout, 'geometry'),
-    type,
-    typeInTables: type >= 0 && layout.dictionaries[type] === 'tables',
-    style,
-    styleInTables: style >= 0 && layout.dictionaries[style] === 'tables',
-    properties: keyedColumnOf(layout, 'properties'),
-    hidden: flagBitOf(layout, 'hidden'),
-    locked: flagBitOf(layout, 'locked'),
+    wholes: layout.wholes,
+    kept: layout.dictionaries.map((dictionary) => dictionary === 'tables'),
+    type: layout.wholes.indexOf('type'),
+    keyed: layout.keyed[0] ?? null,
+    keyedCount: layout.keyed.length,
+    flags: layout.flags.map((name, f) => ({ name, bit: ROW_FLAG_DELETED << (f + 1) })),
   };
 }
 
@@ -595,7 +574,7 @@ function buildGroup(
   const childTypes = new Int8Array(length);
   const childRows = new Int32Array(length);
   const children: ChildBuilder[] = [];
-  const childIndex = new Map<GeometryType, number>();
+  const childIndex = new Map<string, number>();
   const rowBounds = new Float64Array(length * 4);
   const caches = shape.caches.map((cache) => new RowCacheWriter(cache.name, cache.width, length));
   const propertyBuilders = new Map<string, ValueColumnBuilder>();
@@ -609,12 +588,14 @@ function buildGroup(
     rowKeys.addEntry(keys.keys, source);
     groups[r] = keys.groups[source];
 
-    flags[r] =
-      (row.hidden === true ? places.hidden : 0) |
-      (row.locked === true ? places.locked : 0) |
-      (row.deleted === true ? ROW_FLAG_DELETED : 0);
+    let bits = row.deleted === true ? ROW_FLAG_DELETED : 0;
+    for (const flag of places.flags) if (row.values[flag.name] === true) bits |= flag.bit;
+    flags[r] = bits;
 
-    const properties = places.properties >= 0 ? row.properties : undefined;
+    const properties =
+      places.keyed === null
+        ? undefined
+        : (row.values[places.keyed] as Readonly<Record<string, unknown>> | undefined);
     if (properties) {
       try {
         for (const key of Object.keys(properties)) {
@@ -630,7 +611,7 @@ function buildGroup(
       }
     }
 
-    const geometry = places.geometry >= 0 ? geometries[source] : null;
+    const geometry = geometries[source];
     if (!geometry) {
       childTypes[r] = -1;
       setNaNBounds(rowBounds, r);
@@ -640,14 +621,14 @@ function buildGroup(
     let child = childIndex.get(geometry.type);
     if (child === undefined) {
       child = children.length;
-      children.push(new ChildBuilder(geometry.type, GEOMETRY_DEPTHS[geometry.type], shape.dims));
+      children.push(new ChildBuilder(geometry.type, geometry.depth, shape.dims));
       childIndex.set(geometry.type, child);
     }
     childTypes[r] = child;
     childRows[r] = children[child].add(geometry);
-    vertexCount += vertexCountOf(row, geometry, shape.rings);
+    vertexCount += vertexCountOf(row, geometry, shape.rings, places);
 
-    const ring = ringOfRow(row, geometry, shape.rings);
+    const ring = ringOfRow(row, geometry, shape.rings, places);
     if (ring) {
       shape.coordinates.rowBox(ring, 2, 0, ring.length / 2, rowBounds, r * 4);
     } else {
@@ -662,7 +643,7 @@ function buildGroup(
       );
     }
     if (caches.length > 0) {
-      const read = new InputRowRead(row, geometry);
+      const read = new InputRowRead(row, geometry, places);
       for (let c = 0; c < caches.length; c++) caches[c].put(r, shape.caches[c].build(read, ring));
     }
   }
@@ -674,17 +655,15 @@ function buildGroup(
   // A column no row holds a value of has no arrays
   const shapes: Array<ShapeColumn | null> = new Array(places.shapes).fill(null);
   if (children.length > 0) {
-    shapes[places.geometry] = {
+    shapes[0] = {
       types: childTypes,
       offsets: childRows,
       children: children.map((child) => child.finish()),
     };
   }
-  const keyed: Array<PropertyColumns | null> = new Array(places.keyed).fill(null);
-  if (keysOfProperties.length > 0) {
-    keyed[places.properties] = { keys: keysOfProperties, columns };
-  }
-  const wholeColumns: Array<RowBlockWhole | null> = new Array(places.wholes).fill(null);
+  const keyed: Array<PropertyColumns | null> = new Array(places.keyedCount).fill(null);
+  if (keysOfProperties.length > 0) keyed[0] = { keys: keysOfProperties, columns };
+  const wholeColumns: Array<RowBlockWhole | null> = new Array(places.wholes.length).fill(null);
   for (const whole of wholes) wholeColumns[whole.place] = whole.build(order, rows);
 
   return {
@@ -711,15 +690,20 @@ class InputRowRead implements RowRead {
   constructor(
     private readonly row: RowInput,
     private readonly geometry: RowGeometry | null,
+    private readonly places: InputPlaces,
   ) {}
 
   get type(): string {
-    return this.row.type;
+    return typeOfInput(this.row, this.places);
   }
 
   value(key: string): unknown {
-    const properties = this.row.properties;
-    return properties ? properties[key] : undefined;
+    const keyed = this.places.keyed;
+    const values =
+      keyed === null
+        ? undefined
+        : (this.row.values[keyed] as Readonly<Record<string, unknown>> | undefined);
+    return values ? values[key] : undefined;
   }
 
   shape(): RowShape | null {
@@ -729,14 +713,20 @@ class InputRowRead implements RowRead {
   }
 }
 
-/** The ring a row draws around its point, or null for a row that draws its geometry */
+/** The type of a row added: its value of the column `type` (the empty string for none) */
+function typeOfInput(row: RowInput, places: InputPlaces): string {
+  return places.type < 0 ? '' : (row.values.type as string);
+}
+
+/** The ring a row draws around its point, or null for a row that draws its shape */
 function ringOfRow(
   row: RowInput,
   geometry: RowGeometry,
   rings: RowRings | null,
+  places: InputPlaces,
 ): Float64Array | null {
-  if (!rings || geometry.type !== 'Point' || !rings.draws(row.type)) return null;
-  return rings.ringOf(new InputRowRead(row, geometry));
+  if (!rings || geometry.depth !== 0 || !rings.draws(typeOfInput(row, places))) return null;
+  return rings.ringOf(new InputRowRead(row, geometry, places));
 }
 
 /** The number of coordinates a row draws (the estimate of the work of a group) */
@@ -744,10 +734,11 @@ function vertexCountOf(
   row: RowInput,
   geometry: RowGeometry | null,
   rings: RowRings | null,
+  places: InputPlaces,
 ): number {
   if (!geometry) return 0;
-  if (rings && geometry.type === 'Point' && rings.draws(row.type)) {
-    const ring = ringOfRow(row, geometry, rings);
+  if (rings && geometry.depth === 0 && rings.draws(typeOfInput(row, places))) {
+    const ring = ringOfRow(row, geometry, rings, places);
     return ring ? ring.length / 2 : 1;
   }
   return geometry.coords.length / geometry.stride;
@@ -759,7 +750,7 @@ function setNaNBounds(bounds: Float64Array, row: number): void {
 
 // === The whole columns ===
 
-/** The value of a `style` of a row added without one */
+/** The value of a column the tables keep of a row added without one */
 const EMPTY: Readonly<Record<string, unknown>> = Object.freeze({});
 
 /**
@@ -788,7 +779,7 @@ class WholeInput {
   /** Takes the value of a row added (checks that it can be held) */
   add(at: number, row: RowInput): void {
     if (!this.interner) return;
-    const entry = this.interner.intern(this.read(row));
+    const entry = this.interner.intern(this.read(row) ?? EMPTY);
     if (at >= this.refs.length) this.refs = growInt32(this.refs, at + 1);
     this.refs[at] = entry;
   }
@@ -799,7 +790,7 @@ class WholeInput {
   }
 
   /** The column of the rows of a row block (`order` holds the indices of the rows added) */
-  build(order: Int32Array, rows: readonly RowInput[]): RowBlockWhole {
+  build(order: Int32Array, rows: readonly RowInput[]): RowBlockWhole | null {
     const length = order.length;
     if (this.interner) {
       const all = this.dictionary as Utf8Column;
@@ -821,8 +812,11 @@ class WholeInput {
     const indexes = new Uint8Array(length);
     const values: unknown[] = [];
     const index = new Map<unknown, number>();
+    // A column no row of the row block holds a value of has no arrays
+    let held = false;
     for (let r = 0; r < length; r++) {
       const value = this.read(rows[order[r]]);
+      if (value !== undefined) held = true;
       let at = index.get(value);
       if (at === undefined) {
         if (values.length >= 255) {
@@ -837,7 +831,7 @@ class WholeInput {
       }
       indexes[r] = at;
     }
-    return { indexes, values };
+    return held ? { indexes, values } : null;
   }
 }
 

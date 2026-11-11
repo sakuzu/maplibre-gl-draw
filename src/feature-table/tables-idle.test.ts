@@ -13,8 +13,8 @@
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createTableStore } from '../store/table-memory.js';
-import { createRowBlockDataBuilder } from '../table/row-group-builder.js';
 import { FEATURE_TABLE_COLUMNS } from '../table/tabane/columns.js';
+import { featureRowDataBuilder as createRowBlockDataBuilder } from '../test-utils.js';
 import { createFeatureTablesStore } from './feature-row-tables.js';
 import type { FeatureTablesInternals } from './feature-tables.js';
 import { createTables, featureTablesInternals } from './feature-tables.js';

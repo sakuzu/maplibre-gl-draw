@@ -25,9 +25,13 @@ import { DrawStore } from '../../store/draw-store.js';
 import { MemoryContractStore } from '../../store/memory.js';
 import { RBushSpatialIndex } from '../../store/spatial/spatial-index.js';
 import type { Feature } from '../../store/types.js';
-import { createRowBlockDataBuilder } from '../../table/row-group-builder.js';
 import { FEATURE_TABLE_COLUMNS } from '../../table/tabane/columns.js';
-import { feature, orderKey, rowOfFeature } from '../../test-utils.js';
+import {
+  featureRowDataBuilder as createRowBlockDataBuilder,
+  feature,
+  orderKey,
+  rowOfFeature,
+} from '../../test-utils.js';
 import {
   createFeatureCompanionRegistry,
   type FeatureCompanionProvider,

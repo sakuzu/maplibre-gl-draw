@@ -27,7 +27,6 @@ import type { GpuRowBuffer } from '../../api/extension/webgl.js';
 import type { LayerTableView, RowField } from '../../api/tables.js';
 import type { GpuRowsSource, HeldGpuRows } from '../../extension/renderers.js';
 import type { RowTable } from '../../feature-table/row-table.js';
-import { writeRowGeometry } from '../../feature-table/row-write.js';
 import { ROW_WRITE_GEOMETRY, ROW_WRITE_STYLE } from '../../feature-table/types.js';
 import type { BBox } from '../../geometry/types.js';
 import type { Feature, Layer } from '../../shared/types/model.js';
@@ -38,7 +37,13 @@ import {
 import { circleRowRings } from '../../table/circle-rings.js';
 import { styleColumnOf } from '../../table/feature-row-columns.js';
 import { FEATURE_CACHES } from '../../table/fill-triangles.js';
-import { createTestDrawer, feature, seededRandom, tablesOfFeatures } from '../../test-utils.js';
+import {
+  createTestDrawer,
+  feature,
+  seededRandom,
+  tablesOfFeatures,
+  writeFeatureGeometry,
+} from '../../test-utils.js';
 import { createFeatureCompanionRegistry } from '../feature-companion.js';
 import { GpuLedger } from '../gpu-ledger.js';
 import { retainedDrawRun } from '../renderers/draw-run.js';
@@ -673,7 +678,7 @@ describe('the drawing of a layer held as rows in one draw per chunk', () => {
     const group = table.groupAt(0);
     // A line row made longer than its place
     const row = features.findIndex((f) => f.id.startsWith('l'));
-    const longer = writeRowGeometry(
+    const longer = writeFeatureGeometry(
       table,
       group,
       row,
@@ -1018,7 +1023,7 @@ describe('the rows drawn at once out of view', () => {
     const group = table.groupAt(0);
     const write = (id: string, position: number[]): void => {
       const row = features.findIndex((f) => f.id === id);
-      const written = writeRowGeometry(
+      const written = writeFeatureGeometry(
         table,
         group,
         row,
@@ -1158,7 +1163,7 @@ describe('the rows drawn at once by the extent of their footprint', () => {
     frame(VIEW);
     const group = table.groupAt(0);
     const before = reads();
-    const written = writeRowGeometry(
+    const written = writeFeatureGeometry(
       table,
       group,
       1,

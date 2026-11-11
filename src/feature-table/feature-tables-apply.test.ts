@@ -21,9 +21,15 @@ import { describe, expect, it } from 'vitest';
 import { ITEM_GROUP, ITEM_ROW, type RowField, type RowValues } from '../api/tables.js';
 import { drawPropertyKey } from '../shared/properties.js';
 import type { Feature } from '../shared/types/model.js';
-import { createRowBlockDataBuilder } from '../table/row-group-builder.js';
 import { FEATURE_TABLE_COLUMNS } from '../table/tabane/columns.js';
-import { feature, orderKey, rowOfFeature, seededRandom, tablesOfFeatures } from '../test-utils.js';
+import {
+  featureRowDataBuilder as createRowBlockDataBuilder,
+  feature,
+  orderKey,
+  rowOfFeature,
+  seededRandom,
+  tablesOfFeatures,
+} from '../test-utils.js';
 import { createFeatureTablesStore } from './feature-row-tables.js';
 import {
   createTables,

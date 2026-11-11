@@ -7,8 +7,10 @@ import type { Geometry } from 'geojson';
 import { describe, expect, it } from 'vitest';
 import { generateCirclePolygon } from '../geometry/circle.js';
 import { drawPropertyKey } from '../shared/properties.js';
+import { featureRowDataBuilder as createRowBlockDataBuilder } from '../test-utils.js';
 import { buildEarcutInput } from '../view/renderers/polygon/earcut-input.js';
 import { circleRowRings } from './circle-rings.js';
+import type { FeatureRowInput as RowInput } from './feature-row-blocks.js';
 import {
   geometryColumnOf,
   propertyColumnsOf,
@@ -20,13 +22,7 @@ import {
 import { FEATURE_CACHES, FILL_TRIANGLES_AT } from './fill-triangles.js';
 import { cacheNumbersOf } from './row-caches.js';
 import { pairTriangles } from './row-geometry.js';
-import {
-  blockTransferList,
-  createRowBlockDataBuilder,
-  type RowBlockBuildOptions,
-  type RowBlockDataBuilder,
-  type RowInput,
-} from './row-group-builder.js';
+import { blockTransferList, type RowBlockBuildOptions } from './row-group-builder.js';
 import { ROW_FLAG_DELETED, type RowBlockData, type RowBlockDictionary } from './row-group-types.js';
 import { ShapeFormReader } from './shape-reader.js';
 import { FEATURE_TABLE_COLUMNS } from './tabane/columns.js';
@@ -68,7 +64,9 @@ function trianglesOf(group: RowBlockData, r: number): number[] {
 }
 
 /** The builder of the tables, with the caches of the library unless told */
-function builderOf(options: Partial<RowBlockBuildOptions> = {}): RowBlockDataBuilder {
+function builderOf(
+  options: Partial<RowBlockBuildOptions> = {},
+): ReturnType<typeof createRowBlockDataBuilder> {
   return createRowBlockDataBuilder({
     columns: FEATURE_TABLE_COLUMNS,
     caches: FEATURE_CACHES,

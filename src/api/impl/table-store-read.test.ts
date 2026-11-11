@@ -15,9 +15,11 @@ import { MemoryStore } from '../../store/memory.js';
 import type { Store } from '../../store/store.js';
 import { createTableStore } from '../../store/table-memory.js';
 import type { Feature, Group, Layer } from '../../store/types.js';
-import { createRowBlockDataBuilder } from '../../table/row-group-builder.js';
 import { FEATURE_TABLE_COLUMNS } from '../../table/tabane/columns.js';
-import { createResourceDeps } from '../../test-utils.js';
+import {
+  createResourceDeps,
+  featureRowDataBuilder as createRowBlockDataBuilder,
+} from '../../test-utils.js';
 import { DrawError } from '../errors.js';
 import type { FeaturesCollection } from '../features.js';
 import type { FeatureFilter } from '../model.js';

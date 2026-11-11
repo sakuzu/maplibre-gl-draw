@@ -16,10 +16,14 @@ import { utf8String } from '@sakuzu/tabane';
 import { describe, expect, it } from 'vitest';
 import { DrawError } from '../api/errors.js';
 import { drawPropertyKey } from '../shared/properties.js';
+import { featureRowBuilder as createRowBlockBuilder } from '../test-utils.js';
 import { circleRowRings } from './circle-rings.js';
-import { createFeatureRowBlockBuilder, mergeFeatureRowBlock } from './feature-row-blocks.js';
+import {
+  createFeatureRowBlockBuilder,
+  mergeFeatureRowBlock,
+  type FeatureRowInput as RowInput,
+} from './feature-row-blocks.js';
 import { FEATURE_CACHES } from './fill-triangles.js';
-import { createRowBlockBuilder, type RowInput } from './row-group-builder.js';
 import { mergeRowBlock } from './row-group-merge.js';
 import type { RowBlock, RowBlockData } from './row-group-types.js';
 import { type PointRowRings, rowRingsOfPoint } from './row-rings.js';

@@ -10,49 +10,36 @@
  * (`value-overrides.ts`), then at the columns.
  */
 
-import {
-  type PropertyColumns,
-  readNumberValue,
-  readValue,
-  utf8String,
-  VALUE_NUMBER,
-  type Value,
-  type ValueStringCache,
-} from '@sakuzu/tabane';
+import { utf8String } from '@sakuzu/tabane';
 import type { Geometry } from 'geojson';
 import { DrawError } from '../shared/draw-error.js';
 import type { Coordinate, Feature, FeatureStyle, FeatureType } from '../shared/types/model.js';
-import { setOwnProperty } from '../shared/utils/own-property.js';
+import type { FeatureRowInput } from '../table/feature-row-blocks.js';
 import {
   GEOMETRY_COLUMN,
-  PROPERTIES_COLUMN,
   ROW_FLAG_HIDDEN,
   ROW_FLAG_LOCKED,
   STYLE_COLUMN,
   TYPE_COLUMN,
 } from '../table/feature-row-columns.js';
 import { FILL_TRIANGLES_AT } from '../table/fill-triangles.js';
-import { cacheNumbersOf, noCacheNumbers, type RowCacheNumbers } from '../table/row-caches.js';
-import type { RowInput } from '../table/row-group-builder.js';
 import {
   ROW_FLAG_DELETED,
   type RowBlockData,
   type RowBlockDictionary,
   type RowBlockValues,
 } from '../table/row-group-types.js';
-import type { RowRead, RowShape } from '../table/row-read-type.js';
+import type { RowRead } from '../table/row-read-type.js';
+import { rowCacheNumbers, rowProperties, groupRowRead as tablesRowRead } from './row-group-read.js';
 import { geometryAt, type RowGroup } from './row-table.js';
 import type { RowReadContext as TablesReadContext } from './tables-store.js';
-import { decodeOverrideValue } from './value-overrides.js';
+
+export { rowCacheNumbers, rowNumber, rowProperties, rowValue } from './row-group-read.js';
 
 /** The places of the columns of a feature, read once rather than through the import at every row */
 const STYLE = STYLE_COLUMN;
 const TYPE = TYPE_COLUMN;
 const GEOMETRY = GEOMETRY_COLUMN;
-const PROPERTIES = PROPERTIES_COLUMN;
-
-/** The attributes of a row block none of whose rows holds one */
-const NO_PROPERTIES: PropertyColumns = { keys: [], columns: [] };
 
 /**
  * What reading a row needs besides the row: that of the tables, whose values they keep are the
@@ -73,79 +60,13 @@ export function rowType(data: RowBlockData, row: number): FeatureType {
 }
 
 /**
- * The value of an attribute of a row (undefined when the row does not hold the key)
- *
- * @internal
- */
-export function rowValue(
-  group: RowGroup,
-  row: number,
-  key: string,
-  strings?: ValueStringCache,
-): unknown {
-  const written = group.values?.get(row, key);
-  if (written) return decodeOverrideValue(written);
-  const column = group.propertyIndex.get(key);
-  if (column === undefined) return undefined;
-  return readValue((group.data.keyed[PROPERTIES] as PropertyColumns).columns[column], row, strings);
-}
-
-/**
  * A row of a group as what the user of the tables gives reads it (`RowRead`): its values as they
  * are read now, what was written in place included
  *
  * @internal
  */
 export function groupRowRead(group: RowGroup, row: number): RowRead {
-  return {
-    handle: group.data.handles[row],
-    type: rowType(group.data, row),
-    value: (key) => rowValue(group, row, key),
-    shape: (): RowShape | null => {
-      const geometry = geometryAt(group, row);
-      return geometry ? { column: geometry.reader, at: geometry.at } : null;
-    },
-  };
-}
-
-/**
- * The value of an attribute of a row when it is a number
- *
- * @internal
- */
-export function rowNumber(group: RowGroup, row: number, key: string): number | undefined {
-  const written = group.values?.get(row, key);
-  if (written) return written.tag === VALUE_NUMBER ? written.number : undefined;
-  const column = group.propertyIndex.get(key);
-  if (column === undefined) return undefined;
-  return readNumberValue((group.data.keyed[PROPERTIES] as PropertyColumns).columns[column], row);
-}
-
-/**
- * Every attribute of a row
- *
- * @internal
- */
-export function rowProperties(
-  group: RowGroup,
-  row: number,
-  strings?: ValueStringCache,
-): Record<string, Value> {
-  const keyed = group.data.keyed[PROPERTIES];
-  if (!keyed && !group.values) return {};
-  const { keys, columns } = keyed ?? NO_PROPERTIES;
-  const out: Record<string, Value> = {};
-  for (let i = 0; i < keys.length; i++) {
-    // A column holds values only
-    const value = readValue(columns[i], row, strings) as Value | undefined;
-    if (value !== undefined) setOwnProperty(out, keys[i], value);
-  }
-  group.values?.forEach(row, (key, written) => {
-    const value = decodeOverrideValue(written);
-    if (value === undefined) delete out[key];
-    else setOwnProperty(out, key, value);
-  });
-  return out;
+  return tablesRowRead(group, row, TYPE);
 }
 
 /**
@@ -158,20 +79,6 @@ export function rowHasGeometry(group: RowGroup, row: number): boolean {
   return (
     (geometry !== null && geometry.types[row] >= 0) || group.geometries?.geometry(row) !== undefined
   );
-}
-
-/**
- * The numbers of a cache of a row (the ones written in place when there are; none for a row of
- * tables without the cache)
- *
- * @param cache The place of the cache in the caches of the tables
- * @internal
- */
-export function rowCacheNumbers(group: RowGroup, row: number, cache: number): RowCacheNumbers {
-  const written = group.geometries?.cacheNumbers(cache, row);
-  if (written) return written;
-  const column = group.data.caches[cache];
-  return column ? cacheNumbersOf(column, row) : noCacheNumbers();
 }
 
 /**
@@ -267,7 +174,11 @@ export function rowFeatureToRead(
  *
  * @internal
  */
-export function rowInputOf(context: TablesReadContext, group: RowGroup, row: number): RowInput {
+export function rowInputOf(
+  context: TablesReadContext,
+  group: RowGroup,
+  row: number,
+): FeatureRowInput {
   const data = group.data;
   const flags = data.flags[row];
   const groupHandle = data.groups[row];

@@ -11,8 +11,8 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { createRowBlockDataBuilder } from '../table/row-group-builder.js';
 import { FEATURE_TABLE_COLUMNS } from '../table/tabane/columns.js';
+import { featureRowDataBuilder as createRowBlockDataBuilder } from '../test-utils.js';
 import {
   createTables,
   type FeatureTablesInternals,

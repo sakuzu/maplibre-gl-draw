@@ -117,12 +117,11 @@ export type {
 } from '../view/renderers/rows/rows-format.js';
 
 // Build row blocks in a Worker
+export type { GroupEntry, RowBlockBuilderOptions } from '../table/row-group-builder.js';
 export type {
-  GroupEntry,
-  RowBlockBuilder,
-  RowBlockBuilderOptions,
-  RowInput,
-} from '../table/row-group-builder.js';
+  FeatureRowBlockBuilder as RowBlockBuilder,
+  FeatureRowInput as RowInput,
+} from '../table/feature-row-blocks.js';
 export { ROW_BLOCK_TARGET_ROWS, ROW_BLOCK_TARGET_VERTICES } from '../table/row-group-builder.js';
 export { createRowBlockBuilder, mergeRowBlock, transferList } from './row-blocks.js';
 export type { RowBlockMerge } from '../table/row-group-merge.js';

@@ -12,10 +12,15 @@
 import { describe, expect, it } from 'vitest';
 import type { FeatureTables } from '../api/tables.js';
 import { circleRowRings } from '../table/circle-rings.js';
-import { createRowBlockDataBuilder, type RowInput } from '../table/row-group-builder.js';
+import type { FeatureRowInput as RowInput } from '../table/feature-row-blocks.js';
 import type { RowBlockData } from '../table/row-group-types.js';
 import { FEATURE_TABLE_COLUMNS } from '../table/tabane/columns.js';
-import { orderKey, randomRowGeometry, seededRandom } from '../test-utils.js';
+import {
+  featureRowDataBuilder as createRowBlockDataBuilder,
+  orderKey,
+  randomRowGeometry,
+  seededRandom,
+} from '../test-utils.js';
 import { createFeatureTablesStore } from './feature-row-tables.js';
 import { type FeatureTablesInternals, featureTablesInternals } from './feature-tables.js';
 

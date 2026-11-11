@@ -14,9 +14,9 @@ import type { LayerTableView, RowField, RowValues, TableGroupField } from '../..
 import type { FeatureTablesInternals } from '../../feature-table/feature-tables.js';
 import { rowFeatureToRead, rowHasGeometry } from '../../feature-table/row-read.js';
 import type { RowTable } from '../../feature-table/row-table.js';
-import { createRowBlockDataBuilder } from '../../table/row-group-builder.js';
 import { FEATURE_TABLE_COLUMNS } from '../../table/tabane/columns.js';
 import {
+  featureRowDataBuilder as createRowBlockDataBuilder,
   feature,
   orderKey,
   randomReference,

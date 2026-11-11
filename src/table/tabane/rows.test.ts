@@ -33,7 +33,11 @@ import {
 } from '../../feature-table/feature-tables.js';
 import { compareKeys, keyAfter } from '../../store/order-keys.js';
 import { createTableStore } from '../../store/table-memory.js';
-import { rowPatch, seededRandom } from '../../test-utils.js';
+import {
+  featureRowDataBuilder as createRowBlockDataBuilder,
+  rowPatch,
+  seededRandom,
+} from '../../test-utils.js';
 import { circleRowRings } from '../circle-rings.js';
 import {
   geometryColumnOf,
@@ -42,7 +46,6 @@ import {
   typeColumnOf,
 } from '../feature-row-columns.js';
 import { FEATURE_CACHES } from '../fill-triangles.js';
-import { createRowBlockDataBuilder } from '../row-group-builder.js';
 import type { RowBlockData, RowBlockDictionary } from '../row-group-types.js';
 import { writeTabaneFeatureBlocks } from './blocks.js';
 import {

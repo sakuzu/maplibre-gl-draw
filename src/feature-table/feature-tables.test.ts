@@ -10,9 +10,10 @@ import { utf8ColumnFromStrings } from '@sakuzu/tabane';
 import type { Geometry, Position } from 'geojson';
 import { describe, expect, expectTypeOf, it, vi } from 'vitest';
 import type { LayerTableView } from '../api/tables.js';
-import { createRowBlockDataBuilder, type RowInput } from '../table/row-group-builder.js';
+import type { FeatureRowInput as RowInput } from '../table/feature-row-blocks.js';
 import type { RowBlockData } from '../table/row-group-types.js';
 import { FEATURE_TABLE_COLUMNS } from '../table/tabane/columns.js';
+import { featureRowDataBuilder as createRowBlockDataBuilder } from '../test-utils.js';
 import {
   GPU_STATE_BULK,
   GPU_STATE_HIDDEN,

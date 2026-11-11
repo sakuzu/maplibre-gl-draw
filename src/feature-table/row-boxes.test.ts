@@ -20,8 +20,8 @@ import { StoreSpatialIndex } from '../store/spatial/store-spatial-index.js';
 import type { Store } from '../store/store.js';
 import { createTableStore } from '../store/table-memory.js';
 import type { Feature } from '../store/types.js';
-import { createRowBlockDataBuilder } from '../table/row-group-builder.js';
 import { FEATURE_TABLE_COLUMNS } from '../table/tabane/columns.js';
+import { featureRowDataBuilder as createRowBlockDataBuilder } from '../test-utils.js';
 import {
   createTables,
   type FeatureTablesInternals,

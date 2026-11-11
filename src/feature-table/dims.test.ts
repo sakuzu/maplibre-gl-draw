@@ -20,10 +20,10 @@ import { describe, expect, it } from 'vitest';
 import type { FeatureTablesWorker } from '../api/tables.js';
 import { circleRowRings } from '../table/circle-rings.js';
 import { geometryColumnOf } from '../table/feature-row-columns.js';
-import { createRowBlockDataBuilder } from '../table/row-group-builder.js';
 import { mergeRowBlock } from '../table/row-group-merge.js';
 import { FEATURE_TABLE_COLUMNS } from '../table/tabane/columns.js';
 import {
+  featureRowDataBuilder as createRowBlockDataBuilder,
   expectTablesMatch,
   referenceKey as key,
   type RandomGeometry,

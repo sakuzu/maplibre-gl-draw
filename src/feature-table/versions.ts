@@ -41,34 +41,17 @@ import type { RowsChange } from './tables-writer.js';
 import type { GroupHandle, RowGroupHandle, RowHandle, TableWorkBudget } from './types.js';
 
 /**
- * The work the tables hand to a Worker of the host: the functions of the
- * `@sakuzu/maplibre-gl-draw/table` subpath, run there on copies of the columns.
+ * The work the tables hand to a Worker of their user: the builder and the merge of the row
+ * blocks, run there on copies of the columns. What is handed over can be posted as it is: it
+ * holds no function, so the Worker gives the builder what the user of the tables declares (the
+ * columns, the system of the coordinates, the rings, the caches)
  *
- * What is handed over can be posted as it is: it holds no function. The Worker gives the
- * system of the coordinates to the builder when the tables are given one
- * (`TablesStoreOptions.coordinateSystem`); the builder of the entry draws the rings the
- * tables draw.
- *
- * @example A Worker of the host
- * ```ts
- * // in the Worker
- * import {
- *   createRowBlockBuilder,
- *   mergeRowBlock,
- *   transferList,
- * } from '@sakuzu/maplibre-gl-draw/kasane';
- * self.onmessage = ({ data }) => {
- *   const blocks = data.merge
- *     ? mergeRowBlock(data.merge)
- *     : build(data.rows, data.options); // createRowBlockBuilder, addRow, finish
- *   self.postMessage({ id: data.id, blocks }, transferList(blocks));
- * };
- * ```
+ * @internal
  */
-export interface FeatureTablesWorker {
-  /** Merges rows of blocks (`mergeRowBlock`): the next version of blocks */
+export interface TablesWorker {
+  /** Merges rows of blocks: the next version of blocks */
   merge(merge: RowBlockMerge): Promise<RowBlock[]>;
-  /** Builds rows into blocks (`createRowBlockBuilder`): many new rows written at once */
+  /** Builds rows into blocks: many new rows written at once */
   build(rows: readonly RowInput[], options: RowBlockBuilderOptions): Promise<RowBlock[]>;
 }
 
@@ -225,7 +208,7 @@ export interface VersionHost {
   /** Counts the styles of the rows of groups as used (or not any more) */
   retainStyles(data: RowBlockData, count: 1 | -1): void;
   /** The Worker of the host (none: everything on the main thread) */
-  readonly worker: FeatureTablesWorker | undefined;
+  readonly worker: TablesWorker | undefined;
   /** Asks for a frame (work is left) */
   requestWork(): void;
   /** Reports a version that went wrong (there is no caller to throw to) */

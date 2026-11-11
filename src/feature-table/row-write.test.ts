@@ -21,9 +21,15 @@ import type { Feature } from '../shared/types/model.js';
 import { circleRowRings } from '../table/circle-rings.js';
 import { geometryColumnOf } from '../table/feature-row-columns.js';
 import { FEATURE_CACHES } from '../table/fill-triangles.js';
-import { createRowBlockDataBuilder } from '../table/row-group-builder.js';
 import { FEATURE_TABLE_COLUMNS } from '../table/tabane/columns.js';
-import { feature, referenceKey, rowPatch, tablesOfFeatures } from '../test-utils.js';
+import {
+  featureRowDataBuilder as createRowBlockDataBuilder,
+  feature,
+  referenceKey,
+  rowPatch,
+  tablesOfFeatures,
+  writeFeatureGeometry,
+} from '../test-utils.js';
 import { createFeatureTablesStore } from './feature-row-tables.js';
 import { featureTablesInternals } from './feature-tables.js';
 import { hitTestLayerTable } from './hit-test.js';
@@ -36,7 +42,7 @@ import {
   rowValue,
 } from './row-read.js';
 import { overrideBytesOf } from './row-table.js';
-import { writeRowGeometry, writeRowValue } from './row-write.js';
+import { writeRowValue } from './row-write.js';
 import { OVERRIDE_BYTES_LIMIT } from './value-overrides.js';
 
 /** Points whose attributes are the ones given */
@@ -170,7 +176,7 @@ describe('the geometry written in place', () => {
       ],
     };
     expect(
-      writeRowGeometry(
+      writeFeatureGeometry(
         tables.table,
         group,
         1,
@@ -195,7 +201,7 @@ describe('the geometry written in place', () => {
       ],
     };
     expect(
-      writeRowGeometry(
+      writeFeatureGeometry(
         tables.table,
         group,
         0,
@@ -233,7 +239,7 @@ describe('the geometry written in place', () => {
       ],
     };
     expect(
-      writeRowGeometry(
+      writeFeatureGeometry(
         tables.table,
         group,
         1,
@@ -247,7 +253,7 @@ describe('the geometry written in place', () => {
     next[1] = { ...next[1], geometry: notched as Feature['geometry'] };
     expect(readGeometry(tables)).toEqual(readGeometry(tablesOfFeatures('layer', next)));
     // Back to the shape of the column: written there, and the override is dropped
-    writeRowGeometry(
+    writeFeatureGeometry(
       tables.table,
       group,
       1,
@@ -265,7 +271,7 @@ describe('the geometry written in place', () => {
   it('moves the ring of a Circle with its center, and reports a move of nothing as empty', () => {
     const tables = tablesOfFeatures('layer', features());
     const group = tables.table.groupAt(0);
-    const moved = writeRowGeometry(
+    const moved = writeFeatureGeometry(
       tables.table,
       group,
       3,
@@ -281,7 +287,7 @@ describe('the geometry written in place', () => {
     expect(moved.from).toBe(0);
     expect(moved.to).toBeGreaterThan(60);
     expect(group.data.rowBounds[3 * 4]).toBeGreaterThan(20.9);
-    const still = writeRowGeometry(
+    const still = writeFeatureGeometry(
       tables.table,
       group,
       2,
@@ -311,7 +317,7 @@ describe('the geometry written in place', () => {
       },
     });
     expect(hitTestLayerTable(tables.internals, tables.table, input(9, 9))?.row).toBe(2);
-    writeRowGeometry(
+    writeFeatureGeometry(
       tables.table,
       group,
       2,
@@ -334,7 +340,7 @@ describe('the geometry written in place', () => {
     const values = overrideBytesOf(group);
     const coordinates: number[][] = [];
     for (let i = 0; i < 1000; i++) coordinates.push([i / 1000, 0]);
-    writeRowGeometry(
+    writeFeatureGeometry(
       tables.table,
       group,
       0,

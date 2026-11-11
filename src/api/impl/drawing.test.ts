@@ -11,10 +11,10 @@ import { createFeatureTablesStore } from '../../feature-table/feature-row-tables
 import { featureTablesInternals } from '../../feature-table/feature-tables.js';
 import { setViewProjector } from '../../shared/math/index.js';
 import { MemoryContractStore } from '../../store/memory.js';
-import { createRowBlockDataBuilder } from '../../table/row-group-builder.js';
 import { FEATURE_TABLE_COLUMNS } from '../../table/tabane/columns.js';
 import {
   createMapStub,
+  featureRowDataBuilder as createRowBlockDataBuilder,
   createSyntheticInput,
   feature,
   orderKey,

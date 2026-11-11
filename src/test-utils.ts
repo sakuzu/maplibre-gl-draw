@@ -5,6 +5,7 @@
  * Helpers shared by the tests. This file is not part of the build.
  */
 
+import type { CoordinateSystem, TabaneShape } from '@sakuzu/tabane';
 import { utf8ColumnFromStrings } from '@sakuzu/tabane';
 import type { Geometry } from 'geojson';
 import type { Map as MapLibreMap } from 'maplibre-gl';
@@ -40,7 +41,13 @@ import {
   type FeatureTablesInternals,
   featureTablesInternals,
 } from './feature-table/feature-tables.js';
-import type { RowTable } from './feature-table/row-table.js';
+import type { RowGroup, RowTable } from './feature-table/row-table.js';
+import {
+  type GeometryWrite,
+  type RowWriteContext,
+  refreshRowShape,
+  writeRowGeometry,
+} from './feature-table/row-write.js';
 import { resolveMessages } from './messages.js';
 import type { ModeManager } from './modes/manager.js';
 import { DEFAULT_FEATURE_STYLE_CONFIG } from './shared/config/feature-style.js';
@@ -61,8 +68,20 @@ import { MemoryStore } from './store/memory.js';
 import type { Store } from './store/store.js';
 import { createTableStore } from './store/table-memory.js';
 import { circleRowRings } from './table/circle-rings.js';
-import { GROUP_FLAG_HIDDEN } from './table/feature-row-columns.js';
-import { createRowBlockDataBuilder, type RowInput } from './table/row-group-builder.js';
+import {
+  type FeatureRowInput,
+  rowInputOfFeature,
+  shapeOfGeometry,
+} from './table/feature-row-blocks.js';
+import { GROUP_FLAG_HIDDEN, TYPE_COLUMN } from './table/feature-row-columns.js';
+import type { RowCache } from './table/row-caches.js';
+import {
+  createRowBlockBuilder,
+  createRowBlockDataBuilder,
+  type RowBlockBuildOptions,
+} from './table/row-group-builder.js';
+import type { RowBlock, RowBlockData } from './table/row-group-types.js';
+import type { RowRings } from './table/row-rings.js';
 import { FEATURE_TABLE_COLUMNS } from './table/tabane/columns.js';
 import { GpuResources } from './view/gpu.js';
 import { GpuLedger } from './view/gpu-ledger.js';
@@ -596,8 +615,89 @@ export function orderKey(i: number): string {
   return `k${String(i).padStart(6, '0')}`;
 }
 
+/**
+ * The builder of the row blocks of the tables, adding rows of features given as the library gives
+ * them (`rowInputOfFeature`)
+ */
+export function featureRowDataBuilder(options: RowBlockBuildOptions): {
+  readonly length: number;
+  addRow(row: FeatureRowInput): void;
+  finish(): RowBlockData[];
+} {
+  const builder = createRowBlockDataBuilder(options);
+  return {
+    get length() {
+      return builder.length;
+    },
+    addRow: (row) => builder.addRow(rowInputOfFeature(row)),
+    finish: () => builder.finish(),
+  };
+}
+
+/** The builder of the row blocks of the tables as `featureRowDataBuilder`, with its row blocks */
+export function featureRowBuilder(options: RowBlockBuildOptions): {
+  readonly length: number;
+  addRow(row: FeatureRowInput): void;
+  finish(): RowBlock[];
+} {
+  const builder = createRowBlockBuilder(options);
+  return {
+    get length() {
+      return builder.length;
+    },
+    addRow: (row) => builder.addRow(rowInputOfFeature(row)),
+    finish: () => builder.finish(),
+  };
+}
+
+/**
+ * Writes the GeoJSON geometry of a feature in place over a row of the tables of features (as the
+ * tables write a shape, `writeRowGeometry`)
+ */
+export function writeFeatureGeometry(
+  table: RowTable,
+  group: RowGroup,
+  row: number,
+  geometry: Geometry,
+  system: CoordinateSystem,
+  rings: RowRings | null = null,
+  caches: readonly RowCache[] = [],
+): GeometryWrite {
+  return writeRowGeometry(
+    table,
+    group,
+    row,
+    shapeOfGeometry(geometry) as TabaneShape,
+    featureWriteContext(system, rings, caches),
+  );
+}
+
+/**
+ * Works out again what follows from the shape of a row of the tables of features (as the tables
+ * do, `refreshRowShape`)
+ */
+export function refreshFeatureShape(
+  table: RowTable,
+  group: RowGroup,
+  row: number,
+  system: CoordinateSystem,
+  rings: RowRings | null = null,
+  caches: readonly RowCache[] = [],
+): { sameTriangles: boolean; ring: number } {
+  return refreshRowShape(table, group, row, featureWriteContext(system, rings, caches));
+}
+
+/** What a write in place reads of the tables of features */
+function featureWriteContext(
+  system: CoordinateSystem,
+  rings: RowRings | null,
+  caches: readonly RowCache[],
+): RowWriteContext {
+  return { coordinates: system, rings, caches, shapeName: 'geometry', typeAt: TYPE_COLUMN };
+}
+
 /** A feature as a row */
-export function rowOfFeature(feature: Feature, key: string): RowInput {
+export function rowOfFeature(feature: Feature, key: string): FeatureRowInput {
   return {
     id: feature.id,
     type: feature.type,
@@ -638,7 +738,7 @@ export function tablesOfFeatures(
   writer: FeatureTablesWriter;
 } {
   const { tables, writer } = createFeatureTablesStore(options);
-  const builder = createRowBlockDataBuilder({
+  const builder = featureRowDataBuilder({
     columns: FEATURE_TABLE_COLUMNS,
     targetRows,
     dimensions: options?.dimensionsOf?.(layerId),
@@ -1013,18 +1113,20 @@ export function tablesOfReference(
     });
     for (const row of reference.rows.values()) {
       if (row.layerId !== layerId) continue;
-      builder.addRow({
-        id: row.id,
-        type: row.type,
-        geometry: row.geometry,
-        key: row.groupId !== undefined ? row.member : row.order,
-        group: row.groupId !== undefined ? groupHandles.get(row.groupId) : undefined,
-        style: row.style,
-        properties: row.properties,
-        hidden: !row.visible,
-        locked: row.locked,
-        deleted: row.deleted,
-      });
+      builder.addRow(
+        rowInputOfFeature({
+          id: row.id,
+          type: row.type,
+          geometry: row.geometry,
+          key: row.groupId !== undefined ? row.member : row.order,
+          group: row.groupId !== undefined ? groupHandles.get(row.groupId) : undefined,
+          style: row.style,
+          properties: row.properties,
+          hidden: !row.visible,
+          locked: row.locked,
+          deleted: row.deleted,
+        }),
+      );
     }
     if (builder.length > 0) writer.addRowBlocks(layerId, builder.finish());
   }

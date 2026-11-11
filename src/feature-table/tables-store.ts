@@ -22,6 +22,7 @@ import {
   isCoordinateDimensions,
   planarCoordinates,
   sortKeyOf,
+  type TabaneShape,
   type Utf8Column,
   utf8ColumnFromStrings,
   utf8ColumnLength,
@@ -46,12 +47,19 @@ import {
 } from '../table/row-group-types.js';
 import { compareRowKeys, type GroupKeySource, type RowKeySource } from '../table/row-keys.js';
 import type { RowRings } from '../table/row-rings.js';
+import { isShapeValue } from '../table/row-shape.js';
 import { groupRunCuts, rowGroupsHolding } from './group-runs.js';
 import { GroupTable } from './group-table.js';
 import { IdIndex } from './id-index.js';
 import { ItemWalk } from './item-walk.js';
 import { RowBoxIndex } from './row-box-index.js';
-import { groupRowRead, rowInputOf, rowValue } from './row-read.js';
+import {
+  groupRowRead,
+  type RowInputColumns,
+  rowInputColumnsOf,
+  rowInputOfGroup,
+  rowValue,
+} from './row-group-read.js';
 import { noteRowState } from './row-skips.js';
 import {
   checkStateBits,
@@ -75,6 +83,7 @@ import { type RowField, RowFields, type RowValues, type TableColumns } from './r
 import {
   type GeometryWrite,
   isRingKey,
+  type RowWriteContext,
   refreshRowShape,
   writeRowGeometry,
   writeRowValue,
@@ -107,10 +116,10 @@ import {
 } from './types.js';
 import { OVERRIDE_BYTES_LIMIT } from './value-overrides.js';
 import {
-  type FeatureTablesWorker,
   type GroupVersion,
   type GroupVersionReceiver,
   GroupVersions,
+  type TablesWorker,
   type VersionHost,
   type WaitingCopies,
 } from './versions.js';
@@ -186,7 +195,7 @@ export interface TablesStoreOptions {
    * Where the large merges and builds of rows run (on the main thread, within the time of the
    * frames, when omitted)
    */
-  readonly worker?: FeatureTablesWorker;
+  readonly worker?: TablesWorker;
   /**
    * Told the deleted rows nothing keeps any more (a token let go of): the user of the tables
    * forgets them (`TablesWriter.forget`) once it no longer needs their ids
@@ -582,7 +591,7 @@ export class TablesStore<V = unknown> implements RowBlocks<V>, TablesWriter, Tab
   private readonly touchListeners = new Set<(tableId: string, bounds: BBox) => void>();
   readonly groupsDue = new Set<RowGroupHandle>();
   private readonly versions: GroupVersions;
-  private readonly worker: FeatureTablesWorker | undefined;
+  private readonly worker: TablesWorker | undefined;
   private readonly onRelease: ((handles: Int32Array) => void) | undefined;
   /** The rows of the deltas that are rows drawn over rows (drawn, not read) */
   protected readonly drawnOnlyRows = new Set<RowHandle>();
@@ -641,6 +650,17 @@ export class TablesStore<V = unknown> implements RowBlocks<V>, TablesWriter, Tab
   private readonly keptWhole: number;
   /** The start of the fields of the keys of the `keyed` column (`<column>:`; null for none) */
   private readonly keyedStart: string | null;
+  /** The name of the `whole` column whose values the tables keep (null for none) */
+  private readonly keptName: string | null;
+  /** The columns of the rows as a row is read back as the builder takes it */
+  private readonly inputColumns: RowInputColumns;
+  /** What a write in place reads of the tables besides the row */
+  private readonly writeContext: RowWriteContext;
+  /**
+   * The place in `RowBlockData.wholes` of the column of the type of a row (the `whole` column
+   * `type`; -1 for none)
+   */
+  private readonly typeAt: number;
   /** The fields of the values of groups: the fixed ones, and the group columns (`groupColumns`) */
   private readonly groupFields: ReadonlySet<string>;
   /** The `flag` columns of the groups, in the order of their bits */
@@ -676,6 +696,9 @@ export class TablesStore<V = unknown> implements RowBlocks<V>, TablesWriter, Tab
       );
     }
     this.keyedStart = this.layout.keyed.length > 0 ? `${this.layout.keyed[0]}:` : null;
+    this.keptName = this.keptWhole < 0 ? null : this.layout.wholes[this.keptWhole];
+    this.inputColumns = rowInputColumnsOf(this.layout);
+    this.typeAt = this.layout.wholes.indexOf('type');
     this.flagBits = new Map(
       this.layout.flags.map((name, f) => [name, ROW_FLAG_DELETED << (f + 1)]),
     );
@@ -710,6 +733,13 @@ export class TablesStore<V = unknown> implements RowBlocks<V>, TablesWriter, Tab
       }
     }
     this.relocating = new Set(options.relocatingFields);
+    this.writeContext = {
+      coordinates: this.coordinates,
+      rings: this.rings,
+      caches: this.caches,
+      shapeName: this.inputColumns.shape ?? '',
+      typeAt: this.typeAt,
+    };
     this.versions = new GroupVersions(this.versionHost());
     this.rowBoxes = new RowBoxIndex(
       {
@@ -723,6 +753,13 @@ export class TablesStore<V = unknown> implements RowBlocks<V>, TablesWriter, Tab
       },
       { whenIdle: options.whenIdle, sortKey: sortKeyOf(this.coordinates) },
     );
+  }
+
+  /**
+   * A row as the builder takes it, to build it again on its own (`rowInputOfGroup`)
+   */
+  private inputOf(group: RowGroup, row: number): RowInput {
+    return rowInputOfGroup(this.inputColumns, this.styles as StyleTable, group, row);
   }
 
   /**
@@ -853,7 +890,7 @@ export class TablesStore<V = unknown> implements RowBlocks<V>, TablesWriter, Tab
       inDelta: (handle) => this.ids.deltaTable(handle) >= 0,
       drawnOnly: (handle) => this.drawnOnlyRows.has(handle),
       mainGroup: (handle) => this.ids.mainGroup(handle),
-      rowInput: (group, row) => rowInputOf(this.readContext, group, row),
+      rowInput: (group, row) => this.inputOf(group, row),
       buildRows: (inputs, dims) => this.buildRows(inputs, dims),
       coordinates: this.coordinates,
       ringVertices: this.rings?.ringVertices ?? 1,
@@ -1519,7 +1556,7 @@ export class TablesStore<V = unknown> implements RowBlocks<V>, TablesWriter, Tab
       if (this.ids.mainGroup(handle) >= 0 || this.ids.deltaTable(handle) >= 0) continue;
       if (seen.has(handle)) continue;
       seen.add(handle);
-      rows.push({ handle, input: rowInputOf(this.readContext, group, r) });
+      rows.push({ handle, input: this.inputOf(group, r) });
     }
     this.rebuildDelta(table, new Set(), rows);
     this.revisionCount++;
@@ -1742,7 +1779,7 @@ export class TablesStore<V = unknown> implements RowBlocks<V>, TablesWriter, Tab
       if (this.ids.deltaTable(handle) >= 0) continue;
       const placed = this.rowGroups.get(this.ids.mainGroup(handle));
       if (!placed) continue;
-      const input = rowInputOf(this.readContext, placed.group, this.ids.mainRow(handle));
+      const input = this.inputOf(placed.group, this.ids.mainRow(handle));
       let list = inputs.get(placed.table);
       if (!list) {
         list = [];
@@ -2024,13 +2061,14 @@ export class TablesStore<V = unknown> implements RowBlocks<V>, TablesWriter, Tab
   } {
     const { handles, fields } = patch;
     this.checkPatch(patch);
-    const geometries = fields.get('geometry');
+    const shapeName = this.inputColumns.shape;
+    const geometries = shapeName === null ? undefined : fields.get(shapeName);
     geometries?.forEach((geometry, i) => {
       if (geometry === undefined) return;
-      if (!geometry || typeof geometry !== 'object' || !('type' in geometry)) {
+      if (!isShapeValue(geometry)) {
         throw new KasaneError(
           'invalid-input',
-          `Tables: the geometry of the row ${handles[i]} is not a geometry`,
+          `Tables: the ${shapeName} of the row ${handles[i]} is not a ${shapeName}`,
         );
       }
     });
@@ -2584,7 +2622,7 @@ export class TablesStore<V = unknown> implements RowBlocks<V>, TablesWriter, Tab
         group.geometries?.geometry(r) !== undefined ||
         group.geometries?.holdsCacheNumbers(r) === true
       ) {
-        inputs.push(rowInputOf(this.readContext, group, r));
+        inputs.push(this.inputOf(group, r));
       } else {
         pairs.push(0, r);
       }
@@ -2692,40 +2730,34 @@ export class TablesStore<V = unknown> implements RowBlocks<V>, TablesWriter, Tab
     // A row created again starts from nothing, as a new one does
     const base: RowInput =
       place && !revived
-        ? rowInputOf(this.readContext, place.group, place.row)
-        : { id: this.ids.idOf(handle) ?? '', type: 'Point', geometry: null, key: '' };
-    const out: {
-      -readonly [K in keyof RowInput]: RowInput[K];
-    } = { ...base, properties: { ...(base.properties ?? {}) } };
-    for (const [field, values] of fields) {
-      const value = values[i];
+        ? this.inputOf(place.group, place.row)
+        : { id: this.ids.idOf(handle) ?? '', key: '', values: {} };
+    const keyed = this.inputColumns.keyed;
+    const values: Record<string, unknown> = { ...base.values };
+    if (keyed !== null) {
+      values[keyed] = { ...((base.values[keyed] as Record<string, unknown> | undefined) ?? {}) };
+    }
+    const out: { -readonly [K in keyof RowInput]: RowInput[K] } = { ...base, values };
+    for (const [field, list] of fields) {
+      const value = list[i];
       switch (field) {
-        case 'type':
-          if (value !== undefined) out.type = value as string;
-          break;
-        case 'geometry':
-          if (value !== undefined) out.geometry = value as RowInput['geometry'];
-          break;
         case 'key':
           if (value !== undefined) out.key = value as string;
           break;
         case 'parent':
           out.group = (groupHandles as number[])[i];
           break;
-        case 'style':
-          out.style = (value ?? {}) as Readonly<Record<string, unknown>>;
-          break;
-        case 'hidden':
-          if (value !== undefined) out.hidden = value === true;
-          break;
-        case 'locked':
-          if (value !== undefined) out.locked = value === true;
-          break;
         default: {
-          const key = field.slice((this.keyedStart as string).length);
-          const properties = out.properties as Record<string, unknown>;
-          if (value === undefined) delete properties[key];
-          else properties[key] = value;
+          if (this.keyedStart !== null && field.startsWith(this.keyedStart)) {
+            const key = field.slice(this.keyedStart.length);
+            const keys = values[keyed as string] as Record<string, unknown>;
+            if (value === undefined) delete keys[key];
+            else keys[key] = value;
+          } else if (field === this.keptName) {
+            values[field] = value ?? {};
+          } else if (this.flagBits.has(field)) {
+            if (value !== undefined) values[field] = value === true;
+          } else if (value !== undefined) values[field] = value;
         }
       }
     }
@@ -2752,7 +2784,13 @@ export class TablesStore<V = unknown> implements RowBlocks<V>, TablesWriter, Tab
       const whole = this.blockWholes.get(field);
       if (whole !== undefined) wholes.push([whole, values]);
     }
-    return { geometry: fields.get('geometry'), flags, wholes, properties };
+    const shapeName = this.inputColumns.shape;
+    return {
+      geometry: shapeName === null ? undefined : fields.get(shapeName),
+      flags,
+      wholes,
+      properties,
+    };
   }
 
   /**
@@ -2789,15 +2827,7 @@ export class TablesStore<V = unknown> implements RowBlocks<V>, TablesWriter, Tab
     let keys: string[] | null = null;
     const geometry = columns.geometry?.[i];
     if (geometry !== undefined) {
-      shape = writeRowGeometry(
-        table,
-        group,
-        row,
-        geometry as never,
-        this.coordinates,
-        this.rings,
-        this.caches,
-      );
+      shape = writeRowGeometry(table, group, row, geometry as TabaneShape, this.writeContext);
       what |= ROW_WRITE_GEOMETRY;
     }
     const kept = styleNumbers ? this.keptNumbers(data) : null;
@@ -2842,9 +2872,9 @@ export class TablesStore<V = unknown> implements RowBlocks<V>, TablesWriter, Tab
       what |= ROW_WRITE_VALUES;
       keys ??= [];
       keys.push(key);
-      if (isRingKey(this.rings, group, row, key)) {
-        // The ring of a row follows the attributes it is made from
-        const ring = refreshRowShape(table, group, row, this.coordinates, this.rings, this.caches);
+      if (isRingKey(this.writeContext, group, row, key)) {
+        // The ring of a row follows the keys it is made from
+        const ring = refreshRowShape(table, group, row, this.writeContext);
         shape = { sameShape: ring.sameTriangles, from: 0, to: ring.ring };
         what |= ROW_WRITE_GEOMETRY;
       }
@@ -3108,7 +3138,7 @@ export class TablesStore<V = unknown> implements RowBlocks<V>, TablesWriter, Tab
           old.geometries?.holdsCacheNumbers(r)
         ) {
           marksOf.set(handle, old.marks[r]);
-          inputs.push(rowInputOf(this.readContext, old, r));
+          inputs.push(this.inputOf(old, r));
         } else {
           if (!keysKept) marksOf.set(handle, old.marks[r]);
           stay.push(r);
@@ -3222,7 +3252,7 @@ export class TablesStore<V = unknown> implements RowBlocks<V>, TablesWriter, Tab
       return buildCacheColumns([cache], data.length, (r) => {
         const geometry = geometryAt(group, r);
         if (!geometry) return null;
-        const read = groupRowRead(group, r);
+        const read = groupRowRead(group, r, this.typeAt);
         const ring =
           rings && geometry.reader.type === 'Point' && rings.draws(read.type)
             ? rings.ringOf(read)

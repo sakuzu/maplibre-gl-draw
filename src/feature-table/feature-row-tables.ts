@@ -18,6 +18,7 @@ import type { FeatureTables, FeatureTablesWriter, RowField } from '../api/tables
 import { drawPropertyKey } from '../shared/properties.js';
 import { whenIdle } from '../shared/utils/idle.js';
 import { circleRowRings } from '../table/circle-rings.js';
+import { type FeatureTablesWorker, tablesWorkerOf } from '../table/feature-row-blocks.js';
 import { FEATURE_CACHES } from '../table/fill-triangles.js';
 import { FEATURE_GROUP_COLUMNS, FEATURE_TABLE_COLUMNS } from '../table/tabane/columns.js';
 import { FeatureRowBoxes, keepFeatureRowBoxes } from './feature-row-boxes.js';
@@ -71,14 +72,17 @@ export function createFeatureRowTables(
     | 'hiddenStates'
     | 'stateByte'
     | 'valueStates'
-  > = {},
+    | 'worker'
+  > & { readonly worker?: FeatureTablesWorker } = {},
 ): {
   tables: FeatureTables;
   writer: TablesWriter;
 } {
   const boxes = new FeatureRowBoxes();
+  const { worker, ...rest } = options;
   const made = createTables({
-    ...options,
+    ...rest,
+    ...(worker && { worker: tablesWorkerOf(worker) }),
     columns: FEATURE_TABLE_COLUMNS,
     groupColumns: FEATURE_GROUP_COLUMNS,
     rings: circleRowRings,

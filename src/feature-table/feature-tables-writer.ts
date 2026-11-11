@@ -28,6 +28,7 @@ import type {
   StoreChange,
 } from '../shared/types/model.js';
 import { drawErrorOf } from '../table/draw-error-of.js';
+import { shapeOfGeometry } from '../table/feature-row-blocks.js';
 import { KasaneError } from '../table/kasane-error.js';
 import { ROW_FLAG_DELETED, type RowBlockData } from '../table/row-group-types.js';
 import type { FeatureTablesInternals } from './feature-tables.js';
@@ -63,6 +64,20 @@ export interface FeatureTablesStoreWriter extends FeatureTablesWriter {
  */
 function writerError(error: unknown): unknown {
   return error instanceof KasaneError ? drawErrorOf(error) : error;
+}
+
+/**
+ * Values of rows as the tables take them: the GeoJSON geometries as shapes of Tabane
+ * (`shapeOfGeometry`), every other field as it is
+ *
+ * @internal
+ */
+export function shapesOfGeometries(values: RowValues): RowValues {
+  const geometries = values.fields.get('geometry');
+  if (!geometries) return values;
+  const fields = new Map(values.fields);
+  fields.set('geometry', geometries.map(shapeOfGeometry));
+  return { ...values, fields };
 }
 
 /**
@@ -302,7 +317,7 @@ export function createFeatureTablesWriter(
       try {
         // A part of a write made in several parts: its changes of the order are told at its end
         const watch = partsWatch ? null : watchOrder(values);
-        const { rows, kept } = tables.apply(values, options);
+        const { rows, kept } = tables.apply(shapesOfGeometries(values), options);
         if (notify) {
           // The values before, the token that keeps the rows deleted and the changes of the order
           // go with the last of the additions to the notification

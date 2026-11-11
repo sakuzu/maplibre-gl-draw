@@ -19,9 +19,10 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { FeatureTablesWorker } from '../api/tables.js';
 import { circleRowRings } from '../table/circle-rings.js';
-import { createRowBlockDataBuilder, ROW_BLOCK_TARGET_ROWS } from '../table/row-group-builder.js';
+import { ROW_BLOCK_TARGET_ROWS } from '../table/row-group-builder.js';
 import { FEATURE_TABLE_COLUMNS } from '../table/tabane/columns.js';
 import {
+  featureRowDataBuilder as createRowBlockDataBuilder,
   expectTablesMatch,
   referenceKey as key,
   type ReferenceRow,

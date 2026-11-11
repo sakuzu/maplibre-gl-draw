@@ -16,9 +16,8 @@
 import { describe, expect, it } from 'vitest';
 import type { BBox } from '../geometry/types.js';
 import { KasaneError } from '../table/kasane-error.js';
-import { createRowBlockDataBuilder } from '../table/row-group-builder.js';
 import { FEATURE_GROUP_COLUMNS, FEATURE_TABLE_COLUMNS } from '../table/tabane/columns.js';
-import { orderKey } from '../test-utils.js';
+import { featureRowDataBuilder as createRowBlockDataBuilder, orderKey } from '../test-utils.js';
 import {
   createTables,
   type FeatureTablesInternals,

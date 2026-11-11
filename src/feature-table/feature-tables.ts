@@ -27,13 +27,17 @@ import type { BBox } from '../geometry/types.js';
 import type { Feature, FeatureStyle, FeatureType } from '../shared/types/model.js';
 import { drawErrorOf } from '../table/draw-error-of.js';
 import {
+  type FeatureRowInput,
+  rowInputOfFeature,
+  shapeOfGeometry,
+} from '../table/feature-row-blocks.js';
+import {
   PROPERTY_FIELD,
   ROW_FLAG_HIDDEN,
   ROW_FLAG_LOCKED,
   styleColumnOf,
 } from '../table/feature-row-columns.js';
 import { KasaneError } from '../table/kasane-error.js';
-import type { RowInput } from '../table/row-group-builder.js';
 import { ROW_FLAG_DELETED } from '../table/row-group-types.js';
 import { FeatureCache } from './feature-cache.js';
 import { featureFields } from './feature-fields.js';
@@ -85,7 +89,9 @@ export type RowBoxes = (type: string) => ((feature: Feature) => BBox) | undefine
  *
  * @internal
  */
-export interface TablesInternalOptions extends FeatureTablesInternalOptions, TablesStoreOptions {
+export interface TablesInternalOptions
+  extends Omit<FeatureTablesInternalOptions, 'worker'>,
+    TablesStoreOptions {
   /**
    * The boxes of the rows whose boxes come from more than their points (none: every row takes
    * the box of its points)
@@ -649,7 +655,7 @@ class FeatureTablesStore extends TablesStore<FeatureStyle> implements FeatureTab
       const fields = new Map<RowField, readonly unknown[]>();
       for (const [field, value] of featureFields(previous, feature)) {
         if (!this.writtenOverSketch(field)) return false;
-        fields.set(field, [value]);
+        fields.set(field, [field === 'geometry' ? shapeOfGeometry(value) : value]);
       }
       if (previous.layerId !== feature.layerId) return false;
       if ((previous.groupId ?? undefined) !== (feature.groupId ?? undefined)) return false;
@@ -703,7 +709,7 @@ class FeatureTablesStore extends TablesStore<FeatureStyle> implements FeatureTab
         const [handle] = this.ids.allocate(utf8ColumnFromStrings([id]));
         const place = over === undefined ? undefined : this.placeOf(over);
         const layer = this.tableOf(feature.layerId);
-        let base: RowInput;
+        let base: FeatureRowInput;
         if (place) base = rowInputOf(this.readContext, place.group, place.row);
         else if (given) {
           base = {
@@ -714,7 +720,7 @@ class FeatureTablesStore extends TablesStore<FeatureStyle> implements FeatureTab
             ...(given.group === undefined ? {} : { group: given.group }),
           };
         } else base = { id, type: feature.type, geometry: null, key: this.keyAfterLast(layer) };
-        const input: RowInput = {
+        const input: FeatureRowInput = {
           ...base,
           id,
           type: feature.type,
@@ -732,7 +738,7 @@ class FeatureTablesStore extends TablesStore<FeatureStyle> implements FeatureTab
           list = [];
           coming.set(layer, list);
         }
-        list.push({ handle, input });
+        list.push({ handle, input: rowInputOfFeature(input) });
         next.set(feature.id, {
           handle,
           layer,
@@ -969,7 +975,7 @@ class LayerTableViewImpl implements LayerTableView {
   getRowType(handle: RowHandle): FeatureType | null {
     // A new row not built yet is read from what was written (its creation is not built for it)
     const input = this.store.newRowInputOf(handle);
-    if (input) return input.type;
+    if (input) return input.values.type as FeatureType;
     if (!this.locate(handle)) return null;
     return rowType((this.store.foundGroup as RowGroup).data, this.store.foundRow);
   }
@@ -984,7 +990,8 @@ class LayerTableViewImpl implements LayerTableView {
     // row would give it back (an object is read from the row, a copy of its own)
     const input = this.store.newRowInputOf(handle);
     if (input) {
-      const value = input.properties?.[key];
+      const properties = input.values.properties as Readonly<Record<string, unknown>> | undefined;
+      const value = properties?.[key];
       if (value === null || typeof value !== 'object') return value;
     }
     if (!this.locate(handle)) return undefined;

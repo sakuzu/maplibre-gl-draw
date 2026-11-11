@@ -15,7 +15,8 @@
 import { readValue, utf8ColumnLength, utf8String } from '@sakuzu/tabane';
 import type { Geometry } from 'geojson';
 import { describe, expect, it } from 'vitest';
-import { seededRandom } from '../test-utils.js';
+import { featureRowDataBuilder as createRowBlockDataBuilder, seededRandom } from '../test-utils.js';
+import type { FeatureRowInput as RowInput } from './feature-row-blocks.js';
 import {
   geometryColumnOf,
   propertyColumnsOf,
@@ -26,7 +27,6 @@ import {
 } from './feature-row-columns.js';
 import { FEATURE_CACHES, FILL_TRIANGLES_AT } from './fill-triangles.js';
 import { cacheNumbersOf } from './row-caches.js';
-import { createRowBlockDataBuilder, type RowInput } from './row-group-builder.js';
 import { mergeRowBlockData } from './row-group-merge.js';
 import type { RowBlockData } from './row-group-types.js';
 import { ShapeFormReader } from './shape-reader.js';

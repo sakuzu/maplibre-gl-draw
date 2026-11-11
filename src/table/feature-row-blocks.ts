@@ -14,16 +14,21 @@
  * here, where the Worker runs them.
  *
  * The rings given to the builder here are read from the type, the point and the attributes of a
- * row (`PointRowRings`), and given to the builder of the tables as rings that read a row.
+ * row (`PointRowRings`), and given to the builder of the tables as rings that read a row. A
+ * feature added is given to the builder of the tables as the values of its columns, its GeoJSON
+ * geometry as a shape of Tabane (`rowInputOfFeature`).
  */
 
+import type { TabaneShape } from '@sakuzu/tabane';
+import type { Geometry } from 'geojson';
+import type { TablesWorker } from '../feature-table/versions.js';
 import { circleRowRings } from './circle-rings.js';
 import { drawErrorOf } from './draw-error-of.js';
 import { FEATURE_CACHES } from './fill-triangles.js';
 import { KasaneError } from './kasane-error.js';
+import { GEOMETRY_DEPTHS } from './row-geometry.js';
 import {
   createRowBlockBuilder,
-  type RowBlockBuilder,
   type RowBlockBuilderOptions,
   type RowInput,
 } from './row-group-builder.js';
@@ -33,11 +38,169 @@ import { rowRingsOfPoint } from './row-rings.js';
 import { FEATURE_TABLE_COLUMNS } from './tabane/columns.js';
 
 /**
- * One feature given to the builder of the row blocks of the features, as a row
+ * One row given to the builder
+ */
+export interface FeatureRowInput {
+  /** The id of the row (unique in the document) */
+  readonly id: string;
+  /** The type of the feature (`'Point'`, `'Circle'`, the type of an extension) */
+  readonly type: string;
+  /**
+   * The GeoJSON geometry (a Circle and an Image give the Point of their center, a Freehand a
+   * LineString), or null for a row without one
+   */
+  readonly geometry: Geometry | null;
+  /**
+   * The key of the order of the row: among the members of its group when it is in
+   * one, among the items of its table otherwise
+   */
+  readonly key: string;
+  /**
+   * The handle of the group of the row (`GroupEntry.handle`; outside a group when
+   * omitted or negative)
+   */
+  readonly group?: number;
+  /** The style of the row */
+  readonly style?: Readonly<Record<string, unknown>>;
+  /** The attributes of the row */
+  readonly properties?: Readonly<Record<string, unknown>>;
+  /** Whether the row is hidden (false when omitted) */
+  readonly hidden?: boolean;
+  /** Whether the row is locked (false when omitted) */
+  readonly locked?: boolean;
+  /** Whether the row is deleted (false when omitted) */
+  readonly deleted?: boolean;
+}
+
+/**
+ * Builds the row blocks of one layer
+ */
+export interface FeatureRowBlockBuilder {
+  /** The number of rows added */
+  readonly length: number;
+  /**
+   * Adds a row
+   *
+   * @throws an error with the code `invalid-input` when the id was already added, when the
+   *   geometry is not a GeoJSON geometry of one of the six types, or when a value of the style or
+   *   the attributes cannot be held (a number that is not finite, a function)
+   */
+  addRow(row: FeatureRowInput): void;
+  /**
+   * Puts the rows in the order of the table and cuts them into row blocks
+   *
+   * @throws an error with the code `not-found` when a row names a group the options do not give
+   */
+  finish(): RowBlock[];
+}
+
+/**
+ * The work the tables hand to a Worker of the host: the functions of the
+ * `@sakuzu/maplibre-gl-draw/table` subpath, run there on copies of the columns.
+ *
+ * What is handed over can be posted as it is: it holds no function. The Worker gives the
+ * system of the coordinates to the builder when the tables are given one
+ * (`TablesStoreOptions.coordinateSystem`); the builder of the entry draws the rings the
+ * tables draw.
+ *
+ * @example A Worker of the host
+ * ```ts
+ * // in the Worker
+ * import {
+ *   createRowBlockBuilder,
+ *   mergeRowBlock,
+ *   transferList,
+ * } from '@sakuzu/maplibre-gl-draw/kasane';
+ * self.onmessage = ({ data }) => {
+ *   const blocks = data.merge
+ *     ? mergeRowBlock(data.merge)
+ *     : build(data.rows, data.options); // createRowBlockBuilder, addRow, finish
+ *   self.postMessage({ id: data.id, blocks }, transferList(blocks));
+ * };
+ * ```
+ */
+export interface FeatureTablesWorker {
+  /** Merges rows of blocks (`mergeRowBlock`): the next version of blocks */
+  merge(merge: RowBlockMerge): Promise<RowBlock[]>;
+  /** Builds rows into blocks (`createRowBlockBuilder`): many new rows written at once */
+  build(rows: readonly FeatureRowInput[], options: RowBlockBuilderOptions): Promise<RowBlock[]>;
+}
+
+/**
+ * The Worker of the host as the tables hand it their work: the rows it builds are given to it as
+ * features (`featureRowInputOf`)
  *
  * @internal
  */
-export type FeatureRowInput = RowInput;
+export function tablesWorkerOf(worker: FeatureTablesWorker): TablesWorker {
+  return {
+    merge: (merge) => worker.merge(merge),
+    build: (rows, options) => worker.build(rows.map(featureRowInputOf), options),
+  };
+}
+
+/**
+ * A row the tables give the builder, as a feature given to it (`rowInputOfFeature` read back)
+ *
+ * @internal
+ */
+export function featureRowInputOf(row: RowInput): FeatureRowInput {
+  const { values } = row;
+  const shape = values.geometry as TabaneShape | null | undefined;
+  return {
+    id: row.id,
+    type: values.type as string,
+    geometry: shape ? ({ type: shape.name, coordinates: shape.points } as Geometry) : null,
+    key: row.key,
+    ...(row.group === undefined ? {} : { group: row.group }),
+    style: values.style as Readonly<Record<string, unknown>> | undefined,
+    properties: values.properties as Readonly<Record<string, unknown>> | undefined,
+    hidden: values.hidden === true,
+    locked: values.locked === true,
+    deleted: row.deleted === true,
+  };
+}
+
+/** The depth of the shape of each GeoJSON geometry type a row holds */
+const DEPTH_OF_TYPE: ReadonlyMap<string, number> = new Map(Object.entries(GEOMETRY_DEPTHS));
+
+/**
+ * A value of the geometry of a feature as the tables take it: a GeoJSON geometry as a shape of
+ * Tabane, the name of its form its type (a type that is not one of the six has no depth of a
+ * shape, so the tables refuse it); anything else as it is, for the tables to refuse
+ *
+ * @internal
+ */
+export function shapeOfGeometry(geometry: unknown): unknown {
+  if (typeof geometry !== 'object' || geometry === null || !('type' in geometry)) return geometry;
+  const { type, coordinates } = geometry as { type: unknown; coordinates?: unknown };
+  const name = String(type);
+  const depth = DEPTH_OF_TYPE.get(name) ?? -1;
+  return { name, depth, points: coordinates } as unknown as TabaneShape;
+}
+
+/**
+ * A feature given to the builder as the row the builder of the tables takes: its values by the
+ * names of the columns of the features
+ *
+ * @internal
+ */
+export function rowInputOfFeature(row: FeatureRowInput): RowInput {
+  return {
+    id: row.id,
+    key: row.key,
+    ...(row.group === undefined ? {} : { group: row.group }),
+    values: {
+      type: row.type,
+      geometry: row.geometry === null ? null : shapeOfGeometry(row.geometry),
+      style: row.style,
+      properties: row.properties,
+      hidden: row.hidden,
+      locked: row.locked,
+    },
+    ...(row.deleted === undefined ? {} : { deleted: row.deleted }),
+  };
+}
 
 /**
  * The options of {@link createFeatureRowBlockBuilder}: those of the builder of the tables, whose
@@ -66,7 +229,7 @@ function rowsError(error: unknown): unknown {
  */
 export function createFeatureRowBlockBuilder(
   options: FeatureRowBlockBuilderOptions = {},
-): RowBlockBuilder {
+): FeatureRowBlockBuilder {
   const builder = createRowBlockBuilder({
     ...options,
     columns: FEATURE_TABLE_COLUMNS,
@@ -79,7 +242,7 @@ export function createFeatureRowBlockBuilder(
     },
     addRow(row: FeatureRowInput): void {
       try {
-        builder.addRow(row);
+        builder.addRow(rowInputOfFeature(row));
       } catch (error) {
         throw rowsError(error);
       }

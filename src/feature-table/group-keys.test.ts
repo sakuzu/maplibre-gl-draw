@@ -28,9 +28,8 @@ import {
 } from '../api/tables.js';
 import type { StoreChange } from '../shared/types/model.js';
 import { createTableStore } from '../store/table-memory.js';
-import { createRowBlockDataBuilder } from '../table/row-group-builder.js';
 import { FEATURE_TABLE_COLUMNS } from '../table/tabane/columns.js';
-import { seededRandom } from '../test-utils.js';
+import { featureRowDataBuilder as createRowBlockDataBuilder, seededRandom } from '../test-utils.js';
 import { type FeatureTablesInternals, featureTablesInternals } from './feature-tables.js';
 import type { TableWorkBudget } from './types.js';
 

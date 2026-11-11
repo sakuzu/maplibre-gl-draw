@@ -18,16 +18,13 @@ import { createHash } from 'node:crypto';
 import type { CoordinateDimensions } from '@sakuzu/tabane';
 import type { Geometry, Position } from 'geojson';
 import { describe, expect, it } from 'vitest';
+import { featureRowDataBuilder as createRowBlockDataBuilder } from '../test-utils.js';
 import { circleRowRings } from './circle-rings.js';
+import type { FeatureRowInput as RowInput } from './feature-row-blocks.js';
 import { geometryColumnOf, styleColumnOf } from './feature-row-columns.js';
 import { FEATURE_CACHES } from './fill-triangles.js';
 import { toRowGeometry } from './row-geometry.js';
-import {
-  blockTransferList,
-  createRowBlockDataBuilder,
-  type RowBlockBuildOptions,
-  type RowInput,
-} from './row-group-builder.js';
+import { blockTransferList, type RowBlockBuildOptions } from './row-group-builder.js';
 import { mergeRowBlockData } from './row-group-merge.js';
 import type { RowBlockData } from './row-group-types.js';
 import { ShapeFormReader } from './shape-reader.js';

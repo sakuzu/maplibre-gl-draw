@@ -19,12 +19,12 @@ import type { FeatureTablesWorker } from '../api/tables.js';
 import { featureTablesInternals } from '../feature-table/feature-tables.js';
 import type { TableWorkBudget } from '../feature-table/types.js';
 import { circleRowRings } from '../table/circle-rings.js';
-import {
-  createRowBlockBuilder,
-  createRowBlockDataBuilder,
-  type GroupEntry,
-} from '../table/row-group-builder.js';
+import type { GroupEntry } from '../table/row-group-builder.js';
 import { FEATURE_TABLE_COLUMNS } from '../table/tabane/columns.js';
+import {
+  featureRowBuilder as createRowBlockBuilder,
+  featureRowDataBuilder as createRowBlockDataBuilder,
+} from '../test-utils.js';
 import { createTableStore } from './table-memory.js';
 import type { Feature, Layer, RestoreToken, StoreChange } from './types.js';
 

@@ -17,8 +17,11 @@
 
 import { describe, expect, it } from 'vitest';
 import { createTables, featureTablesInternals } from '../feature-table/feature-tables.js';
+import { shapesOfGeometries } from '../feature-table/feature-tables-writer.js';
 import type { RowBlockData } from '../table/row-group-types.js';
+import { featureRowDataBuilder as createRowBlockDataBuilder } from '../test-utils.js';
 import { circleRowRings } from './circle-rings.js';
+import type { FeatureRowInput as RowInput } from './feature-row-blocks.js';
 import { FILL_TRIANGLES } from './fill-triangles.js';
 import {
   cacheNumbersOf,
@@ -26,7 +29,6 @@ import {
   type RowCacheColumn,
   RowCacheWriter,
 } from './row-caches.js';
-import { createRowBlockDataBuilder, type RowInput } from './row-group-builder.js';
 import { mergeRowBlockData } from './row-group-merge.js';
 import type { RowRead } from './row-read-type.js';
 import { FEATURE_TABLE_COLUMNS } from './tabane/columns.js';
@@ -134,33 +136,37 @@ describe('the caches of the rows of the tables', () => {
       return place ? numbersOf(place.group.data.caches[0], place.row) : null;
     };
     // A point written in place: its numbers are made again, into the column of its row block
-    writer.apply({
-      handles: Int32Array.of(point),
-      fields: new Map([['geometry', [{ type: 'Point', coordinates: [7, 8] }]]]),
-      deleted: new Uint8Array(1),
-    });
+    writer.apply(
+      shapesOfGeometries({
+        handles: Int32Array.of(point),
+        fields: new Map([['geometry', [{ type: 'Point', coordinates: [7, 8] }]]]),
+        deleted: new Uint8Array(1),
+      }),
+    );
     expect(cache.made).toEqual(['r2']);
     expect(read(point)).toEqual([7, 8, 5]);
     // A line of another shape: its numbers are made again (as many: into the column)
-    writer.apply({
-      handles: Int32Array.of(line),
-      fields: new Map([
-        [
-          'geometry',
+    writer.apply(
+      shapesOfGeometries({
+        handles: Int32Array.of(line),
+        fields: new Map([
           [
-            {
-              type: 'LineString',
-              coordinates: [
-                [9, 9],
-                [1, 1],
-                [2, 2],
-              ],
-            },
+            'geometry',
+            [
+              {
+                type: 'LineString',
+                coordinates: [
+                  [9, 9],
+                  [1, 1],
+                  [2, 2],
+                ],
+              },
+            ],
           ],
-        ],
-      ]),
-      deleted: new Uint8Array(1),
-    });
+        ]),
+        deleted: new Uint8Array(1),
+      }),
+    );
     expect(cache.made).toEqual(['r2', 'r3']);
     expect(read(line)).toEqual([9, 9, 10]);
     expect(read(point)).toEqual([7, 8, 5]);
