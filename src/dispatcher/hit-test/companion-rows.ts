@@ -28,8 +28,8 @@
 
 import type { LayerTableView } from '../../api/tables.js';
 import type { FeatureTablesInternals } from '../../feature-table/feature-tables.js';
-import type { LayerOrder, LayerTable, RowGroup } from '../../feature-table/layer-table.js';
 import { rowFeatureToRead, rowHasGeometry } from '../../feature-table/row-read.js';
+import type { RowGroup, RowTable, TableOrder } from '../../feature-table/row-table.js';
 import type { RowHandle } from '../../feature-table/types.js';
 import type { Feature } from '../../store/types.js';
 import type { FeatureCompanionRegistry } from '../../view/feature-companion.js';
@@ -45,7 +45,7 @@ export interface CompanionRows {
   readonly groups: readonly RowGroup[];
   /** The row of each in its group */
   readonly rows: Int32Array;
-  /** The rows by the group they are read from (what `LayerTable.visitInOrder` takes) */
+  /** The rows by the group they are read from (what `RowTable.visitInOrder` takes) */
   readonly byGroup: ReadonlyMap<RowGroup, number[]>;
 }
 
@@ -78,7 +78,7 @@ interface Kept {
 }
 
 /** The rows with companions kept, by the providers and the layer */
-const KEPT = new WeakMap<FeatureCompanionRegistry, WeakMap<LayerTable, Kept>>();
+const KEPT = new WeakMap<FeatureCompanionRegistry, WeakMap<RowTable, Kept>>();
 
 /**
  * The handles of the rows told to have changed, by tables and layer: one watch per tables, which
@@ -111,7 +111,7 @@ function toldOf(tables: FeatureTablesInternals): Map<string, Told> {
     // read before it came into a delta (from another layer), or is read again once it left
     const moved = (handle: RowHandle): void => {
       tell(layerId, handle);
-      const copy = tables.rowGroup(tables.ids.mainGroup(handle))?.layer.layerId;
+      const copy = tables.rowGroup(tables.ids.mainGroup(handle))?.table.tableId;
       if (copy !== undefined && copy !== layerId) tell(copy, handle);
     };
     for (const handle of change.leaving) moved(handle);
@@ -129,10 +129,10 @@ function toldOf(tables: FeatureTablesInternals): Map<string, Told> {
  */
 export function companionRowsOf(
   tables: FeatureTablesInternals,
-  table: LayerTable,
+  table: RowTable,
   companions: FeatureCompanionRegistry,
 ): CompanionRows {
-  const told = toldOf(tables).get(table.layerId);
+  const told = toldOf(tables).get(table.tableId);
   const toldEnd = told ? told.start + told.handles.length : 0;
   const generation = companions.generation();
   const structure = table.structureRevision;
@@ -169,7 +169,7 @@ export function companionRowsOf(
   }
   let changed = false;
   if (told && kept.seen < toldEnd) {
-    const view = tables.view(table.layerId);
+    const view = tables.view(table.tableId);
     const asked = new Set<RowHandle>();
     for (let i = kept.seen - told.start; i < told.handles.length; i++) {
       const handle = told.handles[i];
@@ -194,18 +194,18 @@ export function companionRowsOf(
 /** Where a row is read in a layer (null for a row read in another layer, or in none) */
 function placeIn(
   tables: FeatureTablesInternals,
-  table: LayerTable,
+  table: RowTable,
   handle: RowHandle,
 ): { readonly group: RowGroup; readonly row: number } | null {
   const place = tables.placeOf(handle);
-  if (!place || place.layer !== table || !table.readsRow(place.group, place.row)) return null;
+  if (!place || place.table !== table || !table.readsRow(place.group, place.row)) return null;
   return place;
 }
 
 /** Whether the row of a handle is read in a layer and has companions there */
 function hasCompanion(
   tables: FeatureTablesInternals,
-  table: LayerTable,
+  table: RowTable,
   view: LayerTableView | undefined,
   companions: FeatureCompanionRegistry,
   handle: RowHandle,
@@ -216,7 +216,7 @@ function hasCompanion(
   if (!rowHasGeometry(group, row)) return false;
   let feature: Feature | undefined;
   const featureOf = (): Feature => {
-    feature ??= rowFeatureToRead(tables.readContext, table.layerId, group, row);
+    feature ??= rowFeatureToRead(tables.readContext, table.tableId, group, row);
     return feature;
   };
   return rowHasCompanion(companions, view, group, row, featureOf);
@@ -228,7 +228,7 @@ function hasCompanion(
  */
 function placeRows(
   tables: FeatureTablesInternals,
-  table: LayerTable,
+  table: RowTable,
   handles: ReadonlySet<RowHandle>,
 ): CompanionRows {
   const byGroup = new Map<RowGroup, number[]>();
@@ -251,22 +251,22 @@ function placeRows(
 /** Walks the rows of a layer for the ones with companions (a row without a geometry has none) */
 function findCompanionRows(
   tables: FeatureTablesInternals,
-  table: LayerTable,
-  order: LayerOrder,
+  table: RowTable,
+  order: TableOrder,
   companions: FeatureCompanionRegistry,
 ): { readonly handles: Set<RowHandle>; readonly rows: CompanionRows } {
   const handles = new Set<RowHandle>();
   const groups: RowGroup[] = [];
   const rows: number[] = [];
   const byGroup = new Map<RowGroup, number[]>();
-  const view = tables.view(table.layerId);
+  const view = tables.view(table.tableId);
   for (let i = 0; i < order.handles.length; i++) {
     const group = order.groups[i];
     const row = order.rows[i];
     if (!rowHasGeometry(group, row)) continue;
     let feature: Feature | undefined;
     const featureOf = (): Feature => {
-      feature ??= rowFeatureToRead(tables.readContext, table.layerId, group, row);
+      feature ??= rowFeatureToRead(tables.readContext, table.tableId, group, row);
       return feature;
     };
     if (!rowHasCompanion(companions, view, group, row, featureOf)) continue;
@@ -288,7 +288,7 @@ function findCompanionRows(
  * @internal
  */
 export function companionRowsInFront(
-  table: LayerTable,
+  table: RowTable,
   withCompanions: CompanionRows,
   group: RowGroup,
   row: number,

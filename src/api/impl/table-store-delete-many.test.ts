@@ -10,8 +10,8 @@
  */
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { LayerTable } from '../../feature-table/layer-table.js';
 import { RowSkips } from '../../feature-table/row-skips.js';
+import { RowTable } from '../../feature-table/row-table.js';
 import { createTableStore } from '../../store/table-memory.js';
 import type { ItemMove } from '../../store/types.js';
 import { createMapStub, onDocumentChange } from '../../test-utils.js';
@@ -71,8 +71,8 @@ describe('features deleted over a Store of rows', () => {
     for (const reversed of [false, true]) {
       const n = 2000;
       const { draw, ids } = instance(n);
-      const previous = vi.spyOn(LayerTable.prototype, 'previousRow');
-      const next = vi.spyOn(LayerTable.prototype, 'nextRow');
+      const previous = vi.spyOn(RowTable.prototype, 'previousRow');
+      const next = vi.spyOn(RowTable.prototype, 'nextRow');
       const down = vi.spyOn(RowSkips.prototype, 'lastAtOrBefore');
       const up = vi.spyOn(RowSkips.prototype, 'firstAtOrAfter');
       expect(draw.features.deleteMany(reversed ? [...ids].reverse() : ids)).toBe(true);

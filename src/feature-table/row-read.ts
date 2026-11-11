@@ -43,7 +43,7 @@ import {
 } from '../table/row-group-types.js';
 import type { RowRead, RowShape } from '../table/row-read-type.js';
 import type { GroupTable } from './group-table.js';
-import { geometryAt, type RowGroup } from './layer-table.js';
+import { geometryAt, type RowGroup } from './row-table.js';
 import type { StyleTable } from './style-table.js';
 import { decodeOverrideValue } from './value-overrides.js';
 

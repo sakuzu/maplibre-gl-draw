@@ -349,7 +349,7 @@ describe('the order of the in-memory Store of rows', () => {
     const internals = featureTablesInternals(store.tables);
     if (!internals) throw new Error('a Store of rows has tables');
     internals.addQueuedRowBlocks();
-    const layer = internals.layerTable('layer');
+    const layer = internals.rowTable('layer');
     const members = Array.from({ length: 50 }, (_, k) => `r${k * 100}`);
     const apply = vi.spyOn(writer, 'apply');
     const work: string[] = [];

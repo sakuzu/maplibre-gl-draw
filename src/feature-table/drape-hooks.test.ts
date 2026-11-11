@@ -29,7 +29,7 @@ import {
 } from '../test-utils.js';
 import { STATE_HIDDEN_MASK } from './feature-row-states.js';
 import type { FeatureTablesInternals } from './feature-tables.js';
-import type { RowGroup } from './layer-table.js';
+import type { RowGroup } from './row-table.js';
 import type { TableWorkBudget } from './types.js';
 import type { GroupVersion, GroupVersionReceiver } from './versions.js';
 
@@ -48,7 +48,7 @@ function fakeDrape(internals: FeatureTablesInternals, layerIds: readonly string[
   const elements = (): Map<string, number> => {
     const out = new Map<string, number>();
     for (const layerId of layerIds) {
-      const table = internals.layerTable(layerId);
+      const table = internals.rowTable(layerId);
       if (!table) continue;
       const add = (group: RowGroup, row: number, name: string): void => {
         if ((group.state[row] & STATE_HIDDEN_MASK) !== 0) return;
@@ -147,7 +147,7 @@ describe('what a draped drawing reads of the deltas and the versions', () => {
   it('gives every row of a delta a copy number kept while it is there, and again once freed', () => {
     const reference = randomReference(seededRandom(2), 40, ['a']);
     const { tables, writer, internals } = tablesOfReference(reference, ['a'], 8);
-    const delta = internals.layerTable('a')?.delta;
+    const delta = internals.rowTable('a')?.delta;
     const at = (id: string) => tables.findRow(id) as number;
     writer.apply(rowPatch([at('r1'), at('r2'), at('r3')], { key: [key(10), key(20), key(30)] }));
     const before = ['r1', 'r2', 'r3'].map((id) => delta?.copyOf(at(id)));

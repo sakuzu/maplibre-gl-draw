@@ -111,7 +111,7 @@ describe('the delta of a layer', () => {
     const handle = tables.findRow('r5') as number;
     internals.setWriteMark(1);
     writer.apply(patchOf([handle], { key: [key(1)] }));
-    const delta = internals.layerTable('a')?.delta;
+    const delta = internals.rowTable('a')?.delta;
     const slot = internals.ids.deltaSlot(handle);
     expect(delta?.group?.marks[slot]).toBe(1);
     const group = delta?.group;

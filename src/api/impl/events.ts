@@ -678,7 +678,7 @@ function rowsBeforeOf(changes: StoreChange, store: Store): RowsBefore {
       if (store.getLayer(parent) !== undefined) return { layerId: parent, groupId: undefined };
       const group = internals?.groups.handleOfId(parent) ?? -1;
       const layerId =
-        (group >= 0 ? internals?.groups.layerOf(group) : undefined) ??
+        (group >= 0 ? internals?.groups.tableOf(group) : undefined) ??
         store.getGroup(parent)?.layerId ??
         parent;
       return { layerId, groupId: parent };
@@ -718,7 +718,7 @@ function rowsBeforeOf(changes: StoreChange, store: Store): RowsBefore {
       if (!place) return undefined;
       let now: StoredFeature;
       try {
-        now = rowFeature(internals.readContext, place.layer.layerId, place.group, place.row);
+        now = rowFeature(internals.readContext, place.table.tableId, place.group, place.row);
       } catch {
         return undefined;
       }

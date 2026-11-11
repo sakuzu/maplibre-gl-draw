@@ -63,7 +63,7 @@ export function rowsByValues(
   const out: number[] = [];
   for (const handle of rows.handles) {
     const place = livePlaceOf(internals, handle);
-    const view = place ? store.tables?.get(place.layer.layerId) : undefined;
+    const view = place ? store.tables?.get(place.table.tableId) : undefined;
     const type = view?.getRowType(handle);
     if (!view || type === null || type === undefined) continue;
     const roles = transformRolesOf(

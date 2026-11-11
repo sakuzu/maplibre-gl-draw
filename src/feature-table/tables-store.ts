@@ -51,13 +51,6 @@ import type { RowRings } from '../table/row-rings.js';
 import { groupRunCuts, rowGroupsHolding } from './group-runs.js';
 import { GroupTable } from './group-table.js';
 import { IdIndex } from './id-index.js';
-import {
-  createRowGroup,
-  geometryAt,
-  LayerTable,
-  overrideBytesOf,
-  type RowGroup,
-} from './layer-table.js';
 import { RowBoxIndex } from './row-box-index.js';
 import { groupRowRead, type RowReadContext, rowInputOf, rowValue } from './row-read.js';
 import { noteRowState } from './row-skips.js';
@@ -71,6 +64,13 @@ import {
   USER_STATES,
   type ValueStates,
 } from './row-state.js';
+import {
+  createRowGroup,
+  geometryAt,
+  overrideBytesOf,
+  type RowGroup,
+  RowTable,
+} from './row-table.js';
 import { type RowField, RowFields, type RowValues, type TableColumns } from './row-values.js';
 import {
   type GeometryWrite,
@@ -265,13 +265,13 @@ export interface TablesStoreOptions {
 }
 
 /**
- * Where a row is read: its group (a group of a layer, or the group of the delta of a layer) and
+ * Where a row is read: its group (a group of a table, or the group of the delta of a table) and
  * its row there
  *
  * @internal
  */
 export interface RowPlace {
-  readonly layer: LayerTable;
+  readonly table: RowTable;
   readonly group: RowGroup;
   readonly row: number;
 }
@@ -296,7 +296,7 @@ export interface RowBlocks {
   readonly rowStates: RowStates;
   readonly strings: ValueStringCache;
   readonly readContext: RowReadContext;
-  /** Changes with every change of the rows drawn of any layer */
+  /** Changes with every change of the rows drawn of any table */
   readonly revision: number;
   /** The write mark the rows written are stamped with (`write-marks.ts`) */
   readonly writeMarks: WriteMarks;
@@ -308,19 +308,19 @@ export interface RowBlocks {
    * @throws KasaneError (`invalid-state`) for a mark below the one before
    */
   setWriteMark(mark: number): void;
-  /** The rows of a layer (undefined for a layer that holds none) */
-  layerTable(layerId: string): LayerTable | undefined;
+  /** The rows of a table (undefined for a table that holds none) */
+  rowTable(tableId: string): RowTable | undefined;
   /**
    * The state of a row as its copy in its row group is made: from the sets of the state, its
    * values, its group of features and where it is read (the checks compare the copy with it)
    */
   rowStateOf(group: RowGroup, row: number): number;
-  /** The layer and the row group of a handle of a row group */
-  rowGroup(handle: RowGroupHandle): { layer: LayerTable; group: RowGroup } | undefined;
+  /** The table and the row group of a handle of a row group */
+  rowGroup(handle: RowGroupHandle): { table: RowTable; group: RowGroup } | undefined;
   /** Where the row of a handle is read (undefined for a handle of no row) */
   placeOf(handle: RowHandle): RowPlace | undefined;
   /**
-   * The rows of a layer whose boxes meet a box, in the order of the layer: the rows a click there
+   * The rows of a table whose boxes meet a box, in the order of the table: the rows a click there
    * may hit. Every row of the tables is in one spatial index by the box it covers as it is drawn
    * (`row-box-index.ts`): the box of its positions, or the box the user of the tables gives for
    * its type (`TablesInternalOptions.rowBoxes`)
@@ -328,7 +328,7 @@ export interface RowBlocks {
    * @param visit Receives each row, in order, with the group it is read from
    */
   searchRowBoxes(
-    table: LayerTable,
+    table: RowTable,
     minX: number,
     minY: number,
     maxX: number,
@@ -336,14 +336,14 @@ export interface RowBlocks {
     visit: (group: RowGroup, row: number) => void,
   ): void;
   /**
-   * The rows of a layer whose boxes meet one of several boxes, each once, in the order of the
-   * layer (as {@link FeatureTablesInternals.searchRowBoxes} for one)
+   * The rows of a table whose boxes meet one of several boxes, each once, in the order of the
+   * table (as {@link FeatureTablesInternals.searchRowBoxes} for one)
    *
    * @param boxes The boxes, `[minX, minY, maxX, maxY]` one after another
    * @param visit Receives each row, in order, with the group it is read from
    */
   searchRowBoxesIn(
-    table: LayerTable,
+    table: RowTable,
     boxes: readonly number[],
     visit: (group: RowGroup, row: number) => void,
   ): void;
@@ -357,13 +357,13 @@ export interface RowBlocks {
   rowBoxIndexSize(): { readonly rows: number; readonly bytes: number };
   /** The handles of the row groups of a set of rows, the rows by group */
   groupsOfRows(handles: Int32Array): Map<RowGroupHandle, number[]>;
-  /** The rows read in a layer as members of a group of features (deleted ones included) */
-  membersIn(layerId: string, group: GroupHandle): RowHandle[];
+  /** The rows read in a table as members of a group of features (deleted ones included) */
+  membersIn(tableId: string, group: GroupHandle): RowHandle[];
   /** Whether row groups built of new rows written are still waiting to be taken in */
   readonly hasQueuedBlocks: boolean;
   /**
    * Takes in the row groups built of new rows written that wait, one group per step, within the
-   * budget of the frame (at least one group per call), but the ones of a layer whose reorder of
+   * budget of the frame (at least one group per call), but the ones of a table whose reorder of
    * groups of features waits (taken in once it is in). A group that cannot be taken in goes to the
    * delta
    *
@@ -372,7 +372,7 @@ export interface RowBlocks {
   advanceQueuedBlocks(budget: TableWorkBudget): boolean;
   /**
    * Builds the new rows written and takes in every row group waiting at once (a host without
-   * frames, the tests), but the ones of a layer whose reorder of groups of features waits (they are
+   * frames, the tests), but the ones of a table whose reorder of groups of features waits (they are
    * taken in once it is in)
    */
   addQueuedRowBlocks(): void;
@@ -383,25 +383,25 @@ export interface RowBlocks {
    */
   onPendingWork(listener: () => void): () => void;
   /**
-   * Calls `listener` with the rows of a layer written in place, so the drawing writes them
-   * into the chunks that draw them (the rows of the delta of a layer name the handle of the
+   * Calls `listener` with the rows of a table written in place, so the drawing writes them
+   * into the chunks that draw them (the rows of the delta of a table name the handle of the
    * delta, `DeltaRows.handle`)
    *
    * @returns The function that stops the calls
    */
   onRowsWritten(
-    listener: (layerId: string, writes: readonly InPlaceRowWrite[]) => void,
+    listener: (tableId: string, writes: readonly InPlaceRowWrite[]) => void,
   ): () => void;
   /**
-   * Calls `listener` when the rows of the delta of a layer came in, left or were made again, so
+   * Calls `listener` when the rows of the delta of a table came in, left or were made again, so
    * the drawing packs them again before its next frame: with the rows that left it and the rows
    * that came into it (told once the rows that left are read again where they are read)
    *
    * @returns The function that stops the calls
    */
-  onDeltaChanged(listener: (layerId: string, change: DeltaRowsChange) => void): () => void;
+  onDeltaChanged(listener: (tableId: string, change: DeltaRowsChange) => void): () => void;
   /**
-   * Puts rows of groups into the delta of their layer as they are: rows whose change the
+   * Puts rows of groups into the delta of their table as they are: rows whose change the
    * drawing could not write into their places (more coordinates than the place holds, another
    * kind of run). Their copy in their group is hidden from then on
    */
@@ -413,9 +413,9 @@ export interface RowBlocks {
   readonly groupsDue: ReadonlySet<RowGroupHandle>;
   /** The bytes the values written in place of every row group hold */
   overrideBytes(): number;
-  /** The rows moved since their row groups were built, over every layer */
+  /** The rows moved since their row groups were built, over every table */
   movedRowCount(): number;
-  /** The rows held by the deltas of every layer */
+  /** The rows held by the deltas of every table */
   deltaRowCount(): number;
   /** Whether work is left: row groups to take in, next versions of row groups to make */
   readonly hasPendingWork: boolean;
@@ -435,8 +435,8 @@ export interface RowBlocks {
    * rows let (a host without frames, the tests)
    */
   flushVersions(): void;
-  /** The next versions built and waiting for the GPU side, of a layer */
-  builtVersions(layerId: string): GroupVersion[];
+  /** The next versions built and waiting for the GPU side, of a table */
+  builtVersions(tableId: string): GroupVersion[];
   /** Adds a side that draws the rows: the versions wait for its GPU side */
   attachReceiver(receiver: GroupVersionReceiver): () => void;
   /** Makes the next versions of groups go first (the frames cut them too much) */
@@ -448,7 +448,7 @@ export interface RowBlocks {
    *
    * @returns The function that stops the calls
    */
-  onTouched(listener: (layerId: string, bounds: BBox) => void): () => void;
+  onTouched(listener: (tableId: string, bounds: BBox) => void): () => void;
   /**
    * What the versions did: swapped so far, pending, the most held at once, the time of the last
    * merge (ms)
@@ -460,14 +460,14 @@ export interface RowBlocks {
   clear(): void;
   /**
    * The rows the tables hold and the positions of their geometries: the rows of the blocks of
-   * every layer, of the rows changed since (the delta) and of the blocks waiting to be taken in
+   * every table, of the rows changed since (the delta) and of the blocks waiting to be taken in
    * (deleted rows kept included), what the memory of the tables is estimated from
    */
   size(): { readonly rows: number; readonly positions: number };
 }
 
 /**
- * A row of a patch that comes into the delta of a layer
+ * A row of a patch that comes into the delta of a table
  *
  * @internal
  */
@@ -477,12 +477,12 @@ export interface DeltaInput {
 }
 
 /**
- * New rows of a layer built into row groups of their own: a run of keys no
- * row of the layer is within, at a place between two groups (or before the first, after the
+ * New rows of a table built into row groups of their own: a run of keys no
+ * row of the table is within, at a place between two groups (or before the first, after the
  * last), gathered over the writes that continue it
  */
 interface Creation {
-  readonly layer: LayerTable;
+  readonly table: RowTable;
   /** Its rows not taken in yet */
   readonly rows: DeltaInput[];
   /** The keys of the first and the last row */
@@ -511,14 +511,14 @@ interface Creation {
 
 /** A row group given to `adopt`, or built of new rows, waiting to be taken in */
 interface Adoption {
-  readonly layer: LayerTable;
+  readonly table: RowTable;
   readonly data: RowBlockData;
   /** The new rows written the group is built of (put in the delta when it cannot be taken in) */
   readonly creation: Creation;
 }
 
-/** What a change wrote to the rows of one layer, as it is gathered */
-interface LayerChangeDraft {
+/** What a change wrote to the rows of one table, as it is gathered */
+interface TableChangeDraft {
   readonly created: number[];
   readonly updated: number[];
   readonly deleted: number[];
@@ -534,15 +534,15 @@ export class TablesStore implements RowBlocks, TablesWriter, Tables {
   readonly writtenOrders = new Map<GroupHandle, string>();
   readonly strings: ValueStringCache;
   readonly readContext: RowReadContext;
-  protected readonly layers = new Map<string, LayerTable>();
-  /** The layers by their serial number */
-  private readonly layerList: LayerTable[] = [];
+  protected readonly tables = new Map<string, RowTable>();
+  /** The tables by their serial number */
+  private readonly tableList: RowTable[] = [];
   readonly rowStates: RowStates;
   /** The bits that leave a row out of the rows drawn: those declared, and those of the tables */
   readonly drawnHidden: number;
   /** The byte per row the drawing side reads, made of the copy of the state of the row */
   private readonly stateByte: (state: number) => number;
-  private readonly rowGroups = new Map<RowGroupHandle, { layer: LayerTable; group: RowGroup }>();
+  private readonly rowGroups = new Map<RowGroupHandle, { table: RowTable; group: RowGroup }>();
   private nextGroup = 0;
   protected revisionCount = 0;
   readonly writeMarks = new WriteMarks();
@@ -554,10 +554,10 @@ export class TablesStore implements RowBlocks, TablesWriter, Tables {
   private readonly creationOf = new Map<RowHandle, Creation>();
   private readonly workListeners = new Set<() => void>();
   protected readonly writeListeners = new Set<
-    (layerId: string, writes: readonly InPlaceRowWrite[]) => void
+    (tableId: string, writes: readonly InPlaceRowWrite[]) => void
   >();
-  private readonly deltaListeners = new Set<(layerId: string, change: DeltaRowsChange) => void>();
-  private readonly touchListeners = new Set<(layerId: string, bounds: BBox) => void>();
+  private readonly deltaListeners = new Set<(tableId: string, change: DeltaRowsChange) => void>();
+  private readonly touchListeners = new Set<(tableId: string, bounds: BBox) => void>();
   readonly groupsDue = new Set<RowGroupHandle>();
   private readonly versions: GroupVersions;
   private readonly worker: FeatureTablesWorker | undefined;
@@ -588,7 +588,7 @@ export class TablesStore implements RowBlocks, TablesWriter, Tables {
   /** The system of the coordinates of the rows (`FeatureTablesOptions.coordinates`) */
   private readonly coordinates: CoordinateSystem;
   /**
-   * The dimensions of the layers whose rows were all taken out (`clear`), kept for the rows that
+   * The dimensions of the tables whose rows were all taken out (`clear`), kept for the rows that
    * come next
    */
   private readonly clearedDims = new Map<string, CoordinateDimensions>();
@@ -658,7 +658,7 @@ export class TablesStore implements RowBlocks, TablesWriter, Tables {
       styles: this.styles,
       groups: this.groups,
       strings: this.strings,
-      dimensionsOf: (layerId) => this.dimsOfLayer(layerId),
+      dimensionsOf: (tableId) => this.dimsOfTable(tableId),
     };
     this.worker = options.worker;
     this.onRelease = options.onRelease;
@@ -677,10 +677,10 @@ export class TablesStore implements RowBlocks, TablesWriter, Tables {
     this.rowBoxes = new RowBoxIndex(
       {
         boxOf: (handle, out, inBuild) => this.rowBoxOf(handle, out, inBuild),
-        rowLists: () => this.layerList.map((layer) => layer.rowOrder().handles),
+        rowLists: () => this.tableList.map((table) => table.rowOrder().handles),
         countRows: () => {
           let count = 0;
-          for (const layer of this.layerList) count += layer.groupRowCount + layer.delta.length;
+          for (const table of this.tableList) count += table.groupRowCount + table.delta.length;
           return count;
         },
       },
@@ -689,17 +689,17 @@ export class TablesStore implements RowBlocks, TablesWriter, Tables {
   }
 
   /**
-   * The box of a row as it is drawn now, and the number of its layer (null for no row): the box
+   * The box of a row as it is drawn now, and the number of its table (null for no row): the box
    * the user of the tables gives for it (`givenRowBox`), or the box of its positions
    */
   private rowBoxOf(handle: RowHandle, out: Float64Array, inBuild: boolean): number | null {
     const place = this.placeOf(handle);
     if (!place) return null;
-    const { layer, group, row } = place;
+    const { table, group, row } = place;
     if ((group.data.flags[row] & ROW_FLAG_DELETED) !== 0) return null;
     const given = this.givenRowBox(place, out, inBuild);
-    if (given !== null) return given ? layer.serial : null;
-    return layer.rowBox(group, row, out) ? layer.serial : null;
+    if (given !== null) return given ? table.serial : null;
+    return table.rowBox(group, row, out) ? table.serial : null;
   }
 
   /**
@@ -722,7 +722,7 @@ export class TablesStore implements RowBlocks, TablesWriter, Tables {
   }
 
   searchRowBoxes(
-    table: LayerTable,
+    table: RowTable,
     minX: number,
     minY: number,
     maxX: number,
@@ -733,7 +733,7 @@ export class TablesStore implements RowBlocks, TablesWriter, Tables {
   }
 
   searchRowBoxesIn(
-    table: LayerTable,
+    table: RowTable,
     boxes: readonly number[],
     visit: (group: RowGroup, row: number) => void,
   ): void {
@@ -741,10 +741,10 @@ export class TablesStore implements RowBlocks, TablesWriter, Tables {
   }
 
   /**
-   * The rows of a layer whose boxes meet one of the boxes (`[minX, minY, maxX, maxY]` one after
+   * The rows of a table whose boxes meet one of the boxes (`[minX, minY, maxX, maxY]` one after
    * another), each once, by the group they are read from
    */
-  private rowsInBoxes(table: LayerTable, boxes: readonly number[]): Map<RowGroup, number[]> {
+  private rowsInBoxes(table: RowTable, boxes: readonly number[]): Map<RowGroup, number[]> {
     const found = new Map<RowGroup, number[]>();
     // A row found in a box before is not taken again (one box needs no check)
     const seen = boxes.length > 4 ? new Set<RowHandle>() : null;
@@ -766,7 +766,7 @@ export class TablesStore implements RowBlocks, TablesWriter, Tables {
           seen.add(handle);
         }
         const place = this.placeOf(handle);
-        if (!place || place.layer !== table) continue;
+        if (!place || place.table !== table) continue;
         if (place.group !== lastGroup) {
           lastGroup = place.group;
           let rows = found.get(place.group);
@@ -795,12 +795,12 @@ export class TablesStore implements RowBlocks, TablesWriter, Tables {
   private versionHost(): VersionHost {
     const store = this;
     return {
-      layers: () => this.layers.values(),
+      tables: () => this.tables.values(),
       get writeMark() {
         return store.writeMarks.mark;
       },
       nextGroupHandle: () => this.nextGroup++,
-      inDelta: (handle) => this.ids.deltaLayer(handle) >= 0,
+      inDelta: (handle) => this.ids.deltaTable(handle) >= 0,
       drawnOnly: (handle) => this.drawnOnlyRows.has(handle),
       mainGroup: (handle) => this.ids.mainGroup(handle),
       rowInput: (group, row) => rowInputOf(this.readContext, group, row),
@@ -851,18 +851,18 @@ export class TablesStore implements RowBlocks, TablesWriter, Tables {
   }
 
   /**
-   * Whether a reorder of the groups of features of a layer waits to go in: the keys of its groups
+   * Whether a reorder of the groups of features of a table waits to go in: the keys of its groups
    * are going to change, so nothing new is put among its row groups until then (row groups taken
    * in, new rows built into groups of their own, next versions): what is placed by the keys
    * written would be put among the groups by the keys before
    */
-  private reorderWaits(layer: LayerTable): boolean {
-    return this.versions.reorders(layer).length > 0;
+  private reorderWaits(table: RowTable): boolean {
+    return this.versions.reorders(table).length > 0;
   }
 
-  builtVersions(layerId: string): GroupVersion[] {
-    const layer = this.layers.get(layerId);
-    return layer ? this.versions.built(layer) : [];
+  builtVersions(tableId: string): GroupVersion[] {
+    const table = this.tables.get(tableId);
+    return table ? this.versions.built(table) : [];
   }
 
   attachReceiver(receiver: GroupVersionReceiver): () => void {
@@ -873,7 +873,7 @@ export class TablesStore implements RowBlocks, TablesWriter, Tables {
     this.versions.urge(groups);
   }
 
-  onTouched(listener: (layerId: string, bounds: BBox) => void): () => void {
+  onTouched(listener: (tableId: string, bounds: BBox) => void): () => void {
     this.touchListeners.add(listener);
     return () => {
       this.touchListeners.delete(listener);
@@ -907,7 +907,7 @@ export class TablesStore implements RowBlocks, TablesWriter, Tables {
     // The keys of the order of the groups written go into the table of the groups at once
     for (const [group, key] of this.writtenOrders) this.groups.setOrder(group, key);
     this.writtenOrders.clear();
-    // The rows of every layer: their styles let go of, and their handles placed nowhere (an id
+    // The rows of every table: their styles let go of, and their handles placed nowhere (an id
     // keeps its handle until the Store forgets it)
     const release = (group: RowGroup): void => {
       const data = group.data;
@@ -919,14 +919,14 @@ export class TablesStore implements RowBlocks, TablesWriter, Tables {
         else if (this.ids.mainGroup(handle) === group.handle) this.ids.setMain(handle, -1, -1);
       }
     };
-    for (const layer of this.layers.values()) {
-      // A layer keeps the dimensions of its coordinates for the rows that come next
-      this.clearedDims.set(layer.layerId, layer.dims);
-      for (let g = 0; g < layer.groupCount; g++) release(layer.groupAt(g));
-      if (layer.delta.group) release(layer.delta.group);
+    for (const table of this.tables.values()) {
+      // A table keeps the dimensions of its coordinates for the rows that come next
+      this.clearedDims.set(table.tableId, table.dims);
+      for (let g = 0; g < table.groupCount; g++) release(table.groupAt(g));
+      if (table.delta.group) release(table.delta.group);
     }
-    this.layers.clear();
-    this.layerList.length = 0;
+    this.tables.clear();
+    this.tableList.length = 0;
     this.rowGroups.clear();
     this.groupsDue.clear();
     // The deletions kept: their rows are gone, and the groups deleted that they kept go too
@@ -947,13 +947,13 @@ export class TablesStore implements RowBlocks, TablesWriter, Tables {
   size(): { readonly rows: number; readonly positions: number } {
     let rows = 0;
     let positions = 0;
-    for (const layer of this.layers.values()) {
-      for (let g = 0; g < layer.groupCount; g++) {
-        const data = layer.groupAt(g).data;
+    for (const table of this.tables.values()) {
+      for (let g = 0; g < table.groupCount; g++) {
+        const data = table.groupAt(g).data;
         rows += data.length;
         positions += data.vertexCount;
       }
-      const delta = layer.delta.group?.data;
+      const delta = table.delta.group?.data;
       if (delta) {
         rows += delta.length;
         positions += delta.vertexCount;
@@ -967,76 +967,75 @@ export class TablesStore implements RowBlocks, TablesWriter, Tables {
   }
 
   /** Tells the sides that draw in tiles the extent of rows whose drawing changed */
-  protected touch(layerId: string, bounds: BBox | null): void {
+  protected touch(tableId: string, bounds: BBox | null): void {
     if (!bounds || this.touchListeners.size === 0) return;
-    for (const listener of this.touchListeners) listener(layerId, bounds);
+    for (const listener of this.touchListeners) listener(tableId, bounds);
   }
 
   get revision(): number {
     return this.revisionCount;
   }
 
-  layerTable(layerId: string): LayerTable | undefined {
-    return this.layers.get(layerId);
+  rowTable(tableId: string): RowTable | undefined {
+    return this.tables.get(tableId);
   }
 
-  rowGroup(handle: RowGroupHandle): { layer: LayerTable; group: RowGroup } | undefined {
+  rowGroup(handle: RowGroupHandle): { table: RowTable; group: RowGroup } | undefined {
     return this.rowGroups.get(handle);
   }
 
   /**
-   * The dimensions of the coordinates of the rows of a layer: its own once it holds rows, the
+   * The dimensions of the coordinates of the rows of a table: its own once it holds rows, the
    * ones it had when its rows were taken out (`clear`), the ones the options declare for it before
    *
    * @throws when the options declare what is not dimensions
    */
-  dimsOfLayer(layerId: string): CoordinateDimensions {
-    const layer = this.layers.get(layerId);
-    if (layer) return layer.dims;
-    const cleared = this.clearedDims.get(layerId);
+  dimsOfTable(tableId: string): CoordinateDimensions {
+    const table = this.tables.get(tableId);
+    if (table) return table.dims;
+    const cleared = this.clearedDims.get(tableId);
     if (cleared) return cleared;
-    const dims = this.declaredDims?.(layerId) ?? 'xy';
+    const dims = this.declaredDims?.(tableId) ?? 'xy';
     if (!isCoordinateDimensions(dims)) {
       throw new DrawError(
         'invalid-state',
-        `FeatureTables: the layer "${layerId}" has the dimensions ${dims}`,
+        `FeatureTables: the table "${tableId}" has the dimensions ${dims}`,
       );
     }
     return dims;
   }
 
-  /** The rows of a layer, made when first written (with the dimensions declared for it) */
-  protected layerOf(layerId: string): LayerTable {
-    let layer = this.layers.get(layerId);
-    if (!layer) {
-      layer = new LayerTable(
-        layerId,
+  /** The rows of a table, made when first written (with the dimensions declared for it) */
+  protected tableOf(tableId: string): RowTable {
+    let table = this.tables.get(tableId);
+    if (!table) {
+      table = new RowTable(
+        tableId,
         this.groups,
-        this.layerList.length,
+        this.tableList.length,
         this.nextGroup++,
-        this.dimsOfLayer(layerId),
+        this.dimsOfTable(tableId),
       );
-      const table = layer;
-      layer.setPendingSource(() => this.pendingGroups(table));
-      layer.onRowBox = (handle) => this.rowBoxes.markOne(handle);
-      layer.setDrawnOnly((handle) => this.drawnOnlyRows.has(handle));
-      this.layers.set(layerId, layer);
-      this.layerList.push(layer);
+      table.setPendingSource(() => this.pendingGroups(table as RowTable));
+      table.onRowBox = (handle) => this.rowBoxes.markOne(handle);
+      table.setDrawnOnly((handle) => this.drawnOnlyRows.has(handle));
+      this.tables.set(tableId, table);
+      this.tableList.push(table);
     }
-    return layer;
+    return table;
   }
 
   placeOf(handle: RowHandle): RowPlace | undefined {
     if (!this.findPlace(handle)) return undefined;
     return {
-      layer: this.foundLayer as LayerTable,
+      table: this.foundTable as RowTable,
       group: this.foundGroup as RowGroup,
       row: this.foundRow,
     };
   }
 
-  /** The layer of the row the last `findPlace` found (read at once: the next search changes it) */
-  foundLayer: LayerTable | null = null;
+  /** The table of the row the last `findPlace` found (read at once: the next search changes it) */
+  foundTable: RowTable | null = null;
   /** The group of the row the last `findPlace` found */
   foundGroup: RowGroup | null = null;
   /** The row in its group the last `findPlace` found */
@@ -1044,28 +1043,28 @@ export class TablesStore implements RowBlocks, TablesWriter, Tables {
 
   /**
    * Finds where a row is read, as `placeOf` does, without making an object: true when it is
-   * found, its layer, group and row then in `foundLayer`, `foundGroup` and `foundRow` (a read of a
+   * found, its table, group and row then in `foundTable`, `foundGroup` and `foundRow` (a read of a
    * value of each row of many makes nothing per row)
    */
   findPlace(handle: RowHandle): boolean {
-    const serial = this.ids.deltaLayer(handle);
+    const serial = this.ids.deltaTable(handle);
     if (serial >= 0) {
-      const layer = this.layerList[serial];
-      const group = layer.delta.group;
-      if (group) return this.found(layer, group, this.ids.deltaSlot(handle));
+      const table = this.tableList[serial];
+      const group = table.delta.group;
+      if (group) return this.found(table, group, this.ids.deltaSlot(handle));
     }
     const placed = this.rowGroups.get(this.ids.mainGroup(handle));
-    if (placed) return this.found(placed.layer, placed.group, this.ids.mainRow(handle));
+    if (placed) return this.found(placed.table, placed.group, this.ids.mainRow(handle));
     // A new row read from its creation until its group is taken in
     const creation = this.creationOf.get(handle);
     const reading = creation ? this.readingOf(creation) : null;
     const row = reading?.rows.get(handle);
     if (!creation || !reading || row === undefined) return false;
-    return this.found(creation.layer, reading.group, row);
+    return this.found(creation.table, reading.group, row);
   }
 
-  private found(layer: LayerTable, group: RowGroup, row: number): true {
-    this.foundLayer = layer;
+  private found(table: RowTable, group: RowGroup, row: number): true {
+    this.foundTable = table;
     this.foundGroup = group;
     this.foundRow = row;
     return true;
@@ -1077,7 +1076,7 @@ export class TablesStore implements RowBlocks, TablesWriter, Tables {
    * the row is read from it without building the creation
    */
   newRowInputOf(handle: RowHandle): RowInput | undefined {
-    if (this.ids.deltaLayer(handle) >= 0 || this.rowGroups.has(this.ids.mainGroup(handle))) {
+    if (this.ids.deltaTable(handle) >= 0 || this.rowGroups.has(this.ids.mainGroup(handle))) {
       return undefined;
     }
     const creation = this.creationOf.get(handle);
@@ -1098,9 +1097,9 @@ export class TablesStore implements RowBlocks, TablesWriter, Tables {
     return (place.group.data.flags[place.row] & ROW_FLAG_DELETED) !== 0 ? undefined : handle;
   }
 
-  membersIn(layerId: string, group: GroupHandle): RowHandle[] {
-    const layer = this.layers.get(layerId);
-    if (!layer) return [];
+  membersIn(tableId: string, group: GroupHandle): RowHandle[] {
+    const table = this.tables.get(tableId);
+    if (!table) return [];
     const out: RowHandle[] = [];
     const take = (rowGroup: RowGroup): void => {
       const data = rowGroup.data;
@@ -1111,10 +1110,10 @@ export class TablesStore implements RowBlocks, TablesWriter, Tables {
         if (place?.group === rowGroup && place.row === r) out.push(handle);
       }
     };
-    for (let g = 0; g < layer.groupCount; g++) take(layer.groupAt(g));
-    if (layer.delta.group) take(layer.delta.group);
+    for (let g = 0; g < table.groupCount; g++) take(table.groupAt(g));
+    if (table.delta.group) take(table.delta.group);
     for (const creation of this.creations) {
-      if (creation.layer !== layer) continue;
+      if (creation.table !== table) continue;
       for (const row of creation.rows) if (row.input.group === group) out.push(row.handle);
     }
     return out;
@@ -1136,14 +1135,14 @@ export class TablesStore implements RowBlocks, TablesWriter, Tables {
   }
 
   /**
-   * Takes row groups into a layer at once: every group is checked before any is taken in (its
+   * Takes row groups into a table at once: every group is checked before any is taken in (its
    * shape, its dimensions, its groups of features, and that none of its ids is a row already), then
-   * each is put at its place in the order of the layer (into the delta when its rows are not in the
-   * order of their keys, overlap another group, or a reorder of the groups of the layer waits),
+   * each is put at its place in the order of the table (into the delta when its rows are not in the
+   * order of their keys, overlap another group, or a reorder of the groups of the table waits),
    * and its rows are told as created
    */
-  addRowBlocks(layerId: string, groups: readonly RowBlockData[]): TablesWrite {
-    const dims = this.dimsOfLayer(layerId);
+  addRowBlocks(tableId: string, groups: readonly RowBlockData[]): TablesWrite {
+    const dims = this.dimsOfTable(tableId);
     for (const data of groups) {
       checkShape(data, this.layout);
       checkDims(data, dims);
@@ -1159,7 +1158,7 @@ export class TablesStore implements RowBlocks, TablesWriter, Tables {
           );
         }
         const handle = this.ids.handleOfEntry(data.ids, r, data.idHashes[r]);
-        if (handle >= 0 && (this.ids.mainGroup(handle) >= 0 || this.ids.deltaLayer(handle) >= 0)) {
+        if (handle >= 0 && (this.ids.mainGroup(handle) >= 0 || this.ids.deltaTable(handle) >= 0)) {
           throw new DrawError(
             'already-exists',
             `FeatureTables: "${this.ids.idOf(handle)}" is already a row`,
@@ -1167,12 +1166,12 @@ export class TablesStore implements RowBlocks, TablesWriter, Tables {
         }
       }
     }
-    const layer = this.layerOf(layerId);
-    const drafts = new Map<string, LayerChangeDraft>();
-    const draft = draftOf(drafts, layerId);
+    const table = this.tableOf(tableId);
+    const drafts = new Map<string, TableChangeDraft>();
+    const draft = draftOf(drafts, tableId);
     for (const data of groups) {
-      if (this.reorderWaits(layer)) this.rowsToDelta(layer, data);
-      else this.adoptGroup(layer, data);
+      if (this.reorderWaits(table)) this.rowsToDelta(table, data);
+      else this.adoptGroup(table, data);
       for (let r = 0; r < data.length; r++) draft.created.push(data.handles[r]);
       for (const field of ADDED_FIELDS) draft.fields.add(field);
       for (const key of propertyColumnsOf(data).keys) draft.fields.add(`${PROPERTY_FIELD}${key}`);
@@ -1190,8 +1189,8 @@ export class TablesStore implements RowBlocks, TablesWriter, Tables {
     let at = 0;
     while (at < this.adoptions.length && budget.canStep()) {
       const next = this.adoptions[at];
-      // The groups of a layer whose reorder waits wait with it, in their order
-      if (this.reorderWaits(next.layer)) {
+      // The groups of a table whose reorder waits wait with it, in their order
+      if (this.reorderWaits(next.table)) {
         at++;
         continue;
       }
@@ -1206,7 +1205,7 @@ export class TablesStore implements RowBlocks, TablesWriter, Tables {
     let at = 0;
     while (at < this.adoptions.length) {
       const next = this.adoptions[at];
-      if (this.reorderWaits(next.layer)) {
+      if (this.reorderWaits(next.table)) {
         at++;
         continue;
       }
@@ -1222,9 +1221,9 @@ export class TablesStore implements RowBlocks, TablesWriter, Tables {
   private takeIn(adoption: Adoption): void {
     const creation = adoption.creation;
     try {
-      this.adoptGroup(adoption.layer, adoption.data);
+      this.adoptGroup(adoption.table, adoption.data);
     } catch {
-      this.rowsToDelta(adoption.layer, adoption.data);
+      this.rowsToDelta(adoption.table, adoption.data);
     }
     this.settleCreated(creation, adoption.data);
   }
@@ -1260,21 +1259,21 @@ export class TablesStore implements RowBlocks, TablesWriter, Tables {
     for (const creation of [...this.creations]) {
       if (creation.status !== 'gathering') continue;
       creation.idle++;
-      // Its rows are read from it until the reorder of its layer is in, and built then
-      if (this.reorderWaits(creation.layer)) continue;
+      // Its rows are read from it until the reorder of its table is in, and built then
+      if (this.reorderWaits(creation.table)) continue;
       // Rows keep coming: the groups of the target size are built, the rest keeps gathering (so
       // a long import is not cut into a group per write)
       if (wait && creation.idle <= CREATE_WAIT_FRAMES) this.splitCreation(creation);
     }
     for (const creation of [...this.creations]) {
-      if (creation.status !== 'gathering' || this.reorderWaits(creation.layer)) continue;
+      if (creation.status !== 'gathering' || this.reorderWaits(creation.table)) continue;
       if (wait && creation.idle <= CREATE_WAIT_FRAMES) continue;
       const worker = this.worker;
       if (worker && wait) {
         creation.status = 'building';
         const inputs = creation.rows.map((row) => row.input);
         worker
-          .build(inputs, { groups: this.groups.keyList(), dimensions: creation.layer.dims })
+          .build(inputs, { groups: this.groups.keyList(), dimensions: creation.table.dims })
           .then(
             (groups) => {
               if (creation.status !== 'building') return;
@@ -1333,7 +1332,7 @@ export class TablesStore implements RowBlocks, TablesWriter, Tables {
     const builder = createRowBlockDataBuilder({
       columns: this.columns,
       groups: this.groups.keyList(),
-      dimensions: creation.layer.dims,
+      dimensions: creation.table.dims,
       coordinateSystem: this.coordinates,
       rings: this.rings ?? undefined,
       caches: this.caches,
@@ -1354,7 +1353,7 @@ export class TablesStore implements RowBlocks, TablesWriter, Tables {
     creation.status = 'queued';
     creation.queued = groups.length;
     const wasPending = this.adoptions.length > 0;
-    for (const data of groups) this.adoptions.push({ layer: creation.layer, data, creation });
+    for (const data of groups) this.adoptions.push({ table: creation.table, data, creation });
     if (!wasPending && this.adoptions.length > 0) this.notifyWork();
   }
 
@@ -1371,10 +1370,10 @@ export class TablesStore implements RowBlocks, TablesWriter, Tables {
 
   /**
    * Builds and takes in a creation now (a row of it is written before it is taken in); while a
-   * reorder of its layer waits, its rows not taken in go to the delta instead
+   * reorder of its table waits, its rows not taken in go to the delta instead
    */
   private finishCreationNow(creation: Creation): void {
-    if (this.reorderWaits(creation.layer)) {
+    if (this.reorderWaits(creation.table)) {
       for (const adoption of this.adoptions.filter((entry) => entry.creation === creation)) {
         this.adoptions.splice(this.adoptions.indexOf(adoption), 1);
       }
@@ -1392,17 +1391,17 @@ export class TablesStore implements RowBlocks, TablesWriter, Tables {
     creation.status = 'queued';
     creation.queued = groups.length;
     if (groups.length === 0) this.endCreation(creation);
-    for (const data of groups) this.takeIn({ layer: creation.layer, data, creation });
+    for (const data of groups) this.takeIn({ table: creation.table, data, creation });
   }
 
   /**
-   * The new rows of a layer not taken in yet, built to be read: one group per creation of the
-   * layer (made when first read after a change of its rows)
+   * The new rows of a table not taken in yet, built to be read: one group per creation of the
+   * table (made when first read after a change of its rows)
    */
-  private pendingGroups(layer: LayerTable): RowGroup[] {
+  private pendingGroups(table: RowTable): RowGroup[] {
     const out: RowGroup[] = [];
     for (const creation of this.creations) {
-      if (creation.layer !== layer || creation.rows.length === 0) continue;
+      if (creation.table !== table || creation.rows.length === 0) continue;
       const reading = this.readingOf(creation);
       if (reading) out.push(reading.group);
     }
@@ -1414,7 +1413,7 @@ export class TablesStore implements RowBlocks, TablesWriter, Tables {
     if (creation.reading || creation.rows.length === 0) return creation.reading;
     const data = this.buildRows(
       creation.rows.map((row) => row.input),
-      creation.layer.dims,
+      creation.table.dims,
     );
     if (!data) return null;
     const group = createRowGroup(-1, data, this.writeMarks.mark, false, true);
@@ -1438,21 +1437,21 @@ export class TablesStore implements RowBlocks, TablesWriter, Tables {
         this.styles.release(styleColumnOf(reading.group.data).indexes[r]);
       }
     }
-    creation.layer.touchPending();
+    creation.table.touchPending();
   }
 
   /** Puts the rows of a creation into the delta (it could not be built) */
   private creationToDelta(creation: Creation): void {
     this.endCreation(creation);
-    this.rebuildDelta(creation.layer, new Set(), creation.rows);
+    this.rebuildDelta(creation.table, new Set(), creation.rows);
     this.revisionCount++;
   }
 
   /**
-   * Puts the rows of a row group that cannot be taken in as a group into the delta of its layer
+   * Puts the rows of a row group that cannot be taken in as a group into the delta of its table
    * (given to `adopt`, or built of new rows)
    */
-  private rowsToDelta(layer: LayerTable, data: RowBlockData): void {
+  private rowsToDelta(table: RowTable, data: RowBlockData): void {
     this.numberStyles(data);
     data.handles.set(this.ids.allocate(data.ids, data.idHashes));
     this.rowBoxes.mark(data.handles);
@@ -1463,40 +1462,40 @@ export class TablesStore implements RowBlocks, TablesWriter, Tables {
       const handle = data.handles[r];
       // A row read from a row group or a delta is not put there again (one read from its
       // creation, which it is about to leave, is), nor an id the group holds twice (its first)
-      if (this.ids.mainGroup(handle) >= 0 || this.ids.deltaLayer(handle) >= 0) continue;
+      if (this.ids.mainGroup(handle) >= 0 || this.ids.deltaTable(handle) >= 0) continue;
       if (seen.has(handle)) continue;
       seen.add(handle);
       rows.push({ handle, input: rowInputOf(this.readContext, group, r) });
     }
-    this.rebuildDelta(layer, new Set(), rows);
+    this.rebuildDelta(table, new Set(), rows);
     this.revisionCount++;
   }
 
   /**
-   * Takes new rows of one write into a creation when their keys are a run no row of the layer is
+   * Takes new rows of one write into a creation when their keys are a run no row of the table is
    * within, at a place between two groups: a new one when they are many, or the creation at the
    * same place whose rows they follow. Past the size of a group of the delta, a run gathers wherever
    * it is, and goes into the delta when it is taken in
    *
    * @returns Whether they were taken (they go to the delta otherwise)
    */
-  private tryCreate(layer: LayerTable, rows: DeltaInput[]): boolean {
+  private tryCreate(table: RowTable, rows: DeltaInput[]): boolean {
     const keys = keySourceOf(rows.map((row) => row.input));
     const order = rows.map((_, i) => i);
     order.sort((a, b) => compareRowKeys(keys, a, keys, b, this.groups));
     const first = order[0];
     const last = order[order.length - 1];
     // A delta is made again whole for each write into it: past the size of a group, the rows of a
-    // run among the rows of the layer gather too, and go into it a group at a time when they are
+    // run among the rows of the table gather too, and go into it a group at a time when they are
     // taken in, so that many of them written a part at a time do not make it again for each part
-    const large = layer.delta.length >= ROW_BLOCK_TARGET_ROWS;
-    if (!large && !this.withinGap(layer, keys, first, keys, last)) return false;
+    const large = table.delta.length >= ROW_BLOCK_TARGET_ROWS;
+    if (!large && !this.withinGap(table, keys, first, keys, last)) return false;
     const cmp = (a: RowKeySource, i: number, b: RowKeySource, j: number): number =>
       compareRowKeys(a, i, b, j, this.groups);
-    // The creation whose rows these follow, with no row of the layer between them
+    // The creation whose rows these follow, with no row of the table between them
     let target: Creation | null = null;
     for (const creation of this.creations) {
-      if (creation.layer !== layer) continue;
+      if (creation.table !== table) continue;
       const before = cmp(creation.last, 0, keys, first) < 0;
       const after = cmp(keys, last, creation.first, 0) < 0;
       // Within the run of another creation: not a run of its own
@@ -1509,15 +1508,15 @@ export class TablesStore implements RowBlocks, TablesWriter, Tables {
         target = creation;
       }
     }
-    if (target && !large && !this.withinGap(layer, target.first, 0, keys, last)) target = null;
+    if (target && !large && !this.withinGap(table, target.first, 0, keys, last)) target = null;
     // Rows of the delta within the run (from the last row of the creation continued)
     const from = target ? target.last : keys;
-    if (!large && this.deltaWithin(layer, from, target ? 0 : first, keys, last)) return false;
+    if (!large && this.deltaWithin(table, from, target ? 0 : first, keys, last)) return false;
     if (target && target.rows.length >= ROW_BLOCK_TARGET_ROWS) target = null;
     if (!target) {
       if (rows.length < CREATE_GROUP_MIN_ROWS) return false;
       target = {
-        layer,
+        table,
         rows: [],
         first: oneKey(keys, first),
         last: oneKey(keys, last),
@@ -1542,33 +1541,33 @@ export class TablesStore implements RowBlocks, TablesWriter, Tables {
   }
 
   /**
-   * Whether a run of keys `[first, last]` falls between two groups of a layer (or before the
+   * Whether a run of keys `[first, last]` falls between two groups of a table (or before the
    * first, after the last): no row of a group is within it
    */
   private withinGap(
-    layer: LayerTable,
+    table: RowTable,
     firstKeys: RowKeySource,
     first: number,
     lastKeys: RowKeySource,
     last: number,
   ): boolean {
-    if (layer.groupCount === 0) return true;
-    const a = layer.positionOfKey(firstKeys, first);
-    const b = layer.positionOfKey(lastKeys, last);
+    if (table.groupCount === 0) return true;
+    const a = table.positionOfKey(firstKeys, first);
+    const b = table.positionOfKey(lastKeys, last);
     if (!a || !b || a.group !== b.group || a.slot !== b.slot || a.slot % 2 === 1) return false;
-    const g = layer.orderOf(a.group);
-    return a.slot === 2 * layer.groupAt(g).data.length || (g === 0 && a.slot === 0);
+    const g = table.orderOf(a.group);
+    return a.slot === 2 * table.groupAt(g).data.length || (g === 0 && a.slot === 0);
   }
 
-  /** Whether a row of the delta of a layer has a key within `[from, to]` of two sources */
+  /** Whether a row of the delta of a table has a key within `[from, to]` of two sources */
   private deltaWithin(
-    layer: LayerTable,
+    table: RowTable,
     fromKeys: RowKeySource,
     from: number,
     toKeys: RowKeySource,
     to: number,
   ): boolean {
-    const delta = layer.delta.group;
+    const delta = table.delta.group;
     if (!delta) return false;
     for (let k = 0; k < delta.data.length; k++) {
       if (
@@ -1600,18 +1599,18 @@ export class TablesStore implements RowBlocks, TablesWriter, Tables {
 
   movedRowCount(): number {
     let count = 0;
-    for (const layer of this.layers.values()) count += layer.movedRowCount;
+    for (const table of this.tables.values()) count += table.movedRowCount;
     return count;
   }
 
   deltaRowCount(): number {
     let count = 0;
-    for (const layer of this.layers.values()) count += layer.delta.length;
+    for (const table of this.tables.values()) count += table.delta.length;
     return count;
   }
 
   onRowsWritten(
-    listener: (layerId: string, writes: readonly InPlaceRowWrite[]) => void,
+    listener: (tableId: string, writes: readonly InPlaceRowWrite[]) => void,
   ): () => void {
     this.writeListeners.add(listener);
     return () => {
@@ -1619,31 +1618,31 @@ export class TablesStore implements RowBlocks, TablesWriter, Tables {
     };
   }
 
-  onDeltaChanged(listener: (layerId: string, change: DeltaRowsChange) => void): () => void {
+  onDeltaChanged(listener: (tableId: string, change: DeltaRowsChange) => void): () => void {
     this.deltaListeners.add(listener);
     return () => {
       this.deltaListeners.delete(listener);
     };
   }
 
-  /** Reads the handles of the rows of layers a batch at a time */
+  /** Reads the handles of the rows of tables a batch at a time */
   scan(options: TableScan): RowCursor {
-    const layers = (options.tableIds ?? [...this.layers.keys()])
-      .map((id) => this.layers.get(id))
-      .filter((layer): layer is LayerTable => layer !== undefined);
+    const tables = (options.tableIds ?? [...this.tables.keys()])
+      .map((id) => this.tables.get(id))
+      .filter((table): table is RowTable => table !== undefined);
     const batch = Math.max(1, Math.floor(options.batchSize ?? SCAN_BATCH));
     const bbox = options.bbox;
-    let layerAt = 0;
+    let tableAt = 0;
     let handles: number[] | null = null;
     let at = 0;
     return {
       next: (): Int32Array | null => {
         const out: number[] = [];
-        while (out.length < batch && layerAt < layers.length) {
+        while (out.length < batch && tableAt < tables.length) {
           if (!handles) {
             handles = [];
             const list = handles;
-            const layer = layers[layerAt];
+            const table = tables[tableAt];
             const take = (group: RowGroup, row: number): void => {
               if ((group.data.flags[row] & ROW_FLAG_DELETED) === 0) {
                 list.push(group.data.handles[row]);
@@ -1652,28 +1651,28 @@ export class TablesStore implements RowBlocks, TablesWriter, Tables {
             if (bbox && options.order === 'any') {
               // The rows found in the index of the boxes, as it gives them
               for (const handle of this.rowBoxes.search(
-                layer.serial,
+                table.serial,
                 bbox[0],
                 bbox[1],
                 bbox[2],
                 bbox[3],
               )) {
                 const place = this.placeOf(handle);
-                if (place?.layer === layer && layer.readsRow(place.group, place.row)) {
+                if (place?.table === table && table.readsRow(place.group, place.row)) {
                   take(place.group, place.row);
                 }
               }
             } else if (bbox) {
-              this.searchRowBoxes(layer, bbox[0], bbox[1], bbox[2], bbox[3], take);
+              this.searchRowBoxes(table, bbox[0], bbox[1], bbox[2], bbox[3], take);
             } else {
-              const order = layer.rowOrder();
+              const order = table.rowOrder();
               for (let i = 0; i < order.handles.length; i++) take(order.groups[i], order.rows[i]);
             }
             at = 0;
           }
           while (out.length < batch && at < handles.length) out.push(handles[at++]);
           if (at >= handles.length) {
-            layerAt++;
+            tableAt++;
             handles = null;
           }
         }
@@ -1682,25 +1681,25 @@ export class TablesStore implements RowBlocks, TablesWriter, Tables {
     };
   }
 
-  /** Puts rows of groups into the delta of their layer as they are */
+  /** Puts rows of groups into the delta of their table as they are */
   toDelta(handles: readonly RowHandle[]): void {
-    const inputs = new Map<LayerTable, DeltaInput[]>();
+    const inputs = new Map<RowTable, DeltaInput[]>();
     for (const handle of handles) {
-      if (this.ids.deltaLayer(handle) >= 0) continue;
+      if (this.ids.deltaTable(handle) >= 0) continue;
       const placed = this.rowGroups.get(this.ids.mainGroup(handle));
       if (!placed) continue;
       const input = rowInputOf(this.readContext, placed.group, this.ids.mainRow(handle));
-      let list = inputs.get(placed.layer);
+      let list = inputs.get(placed.table);
       if (!list) {
         list = [];
-        inputs.set(placed.layer, list);
+        inputs.set(placed.table, list);
       }
       list.push({ handle, input });
       // Its group is not where it is read any more
       this.writeMarks.stampGroup(placed.group);
     }
     if (inputs.size === 0) return;
-    for (const [layer, list] of inputs) this.rebuildDelta(layer, new Set(), list);
+    for (const [table, list] of inputs) this.rebuildDelta(table, new Set(), list);
     for (const list of inputs.values()) {
       for (const { handle } of list) this.refreshCopies(handle);
     }
@@ -1709,7 +1708,7 @@ export class TablesStore implements RowBlocks, TablesWriter, Tables {
 
   /** Writes values of rows (see `FeatureTablesWriter.apply`) */
   apply(patch: RowValues, options: TablesWriteOptions = {}): TablesWrite {
-    const drafts = new Map<string, LayerChangeDraft>();
+    const drafts = new Map<string, TableChangeDraft>();
     this.applyPatch(patch, drafts);
     const kept = this.keepDeleted(patch, options.restoreToken);
     return { rows: { layers: finishChanges(drafts) }, kept, emptied: false };
@@ -1880,7 +1879,7 @@ export class TablesStore implements RowBlocks, TablesWriter, Tables {
   /** Frees the handle of a row forgotten once it is in no row group and no delta */
   private freeIfGone(handle: RowHandle): void {
     if (!this.forgotten.has(handle)) return;
-    if (this.ids.mainGroup(handle) >= 0 || this.ids.deltaLayer(handle) >= 0) return;
+    if (this.ids.mainGroup(handle) >= 0 || this.ids.deltaTable(handle) >= 0) return;
     if (this.creationOf.has(handle)) return;
     this.forgotten.delete(handle);
     // The state of the handle goes with it; the user of the tables is told what it held
@@ -1941,10 +1940,10 @@ export class TablesStore implements RowBlocks, TablesWriter, Tables {
 
   /** Makes the copies of the state of the rows of groups of features again */
   private refreshGroupStates(shown: ReadonlySet<GroupHandle>): void {
-    for (const layer of this.layers.values()) {
+    for (const table of this.tables.values()) {
       // The row groups around the members of the groups (by their keys), and the delta
-      const groups = rowGroupsHolding(layer, shown, this.groups).map((g) => layer.groupAt(g));
-      if (layer.delta.group) groups.push(layer.delta.group);
+      const groups = rowGroupsHolding(table, shown, this.groups).map((g) => table.groupAt(g));
+      if (table.delta.group) groups.push(table.delta.group);
       for (const group of groups) {
         let changed = false;
         for (let r = 0; r < group.data.length; r++) {
@@ -1969,7 +1968,7 @@ export class TablesStore implements RowBlocks, TablesWriter, Tables {
    */
   private checkRows(patch: RowValues): {
     groupHandles: number[] | undefined;
-    layerIds: Array<string | undefined> | undefined;
+    tableIds: Array<string | undefined> | undefined;
     places: Array<RowPlace | undefined>;
   } {
     const { handles, fields } = patch;
@@ -1991,16 +1990,16 @@ export class TablesStore implements RowBlocks, TablesWriter, Tables {
     // The parent of a row is a group (of the table of the group) or a table; a row given none
     // stays in its own
     let groupHandles: number[] | undefined;
-    let layerIds: Array<string | undefined> | undefined;
+    let tableIds: Array<string | undefined> | undefined;
     if (parents) {
       groupHandles = [];
-      layerIds = [];
+      tableIds = [];
       for (let i = 0; i < handles.length; i++) {
         const parent = parents[i];
         const place = places[i];
         if (parent === undefined) {
           groupHandles.push(place ? place.group.data.groups[place.row] : -1);
-          layerIds.push(undefined);
+          tableIds.push(undefined);
           continue;
         }
         if (typeof parent !== 'string' || parent === '') {
@@ -2011,21 +2010,21 @@ export class TablesStore implements RowBlocks, TablesWriter, Tables {
         }
         const group = this.groups.handleOfId(parent);
         groupHandles.push(group);
-        layerIds.push(group >= 0 ? (this.groups.layerOf(group) as string) : parent);
+        tableIds.push(group >= 0 ? (this.groups.tableOf(group) as string) : parent);
       }
     }
-    // A row moved to a layer of other dimensions keeps its values only when the positions it
+    // A row moved to a table of other dimensions keeps its values only when the positions it
     // has are read the same there (xy into any, xyz into xyzm), or when it is given a geometry
-    layerIds?.forEach((layerId, i) => {
+    tableIds?.forEach((tableId, i) => {
       const place = places[i];
-      if (typeof layerId !== 'string' || !place || place.layer.layerId === layerId) return;
+      if (typeof tableId !== 'string' || !place || place.table.tableId === tableId) return;
       if (geometries?.[i] !== undefined) return;
-      const from = place.layer.dims;
-      const to = this.dimsOfLayer(layerId);
+      const from = place.table.dims;
+      const to = this.dimsOfTable(tableId);
       if (from !== to && !to.startsWith(from)) {
         throw new DrawError(
           'invalid-input',
-          `FeatureTables: the row ${handles[i]} has coordinates of ${from}, the layer "${layerId}" of ${to}`,
+          `FeatureTables: the row ${handles[i]} has coordinates of ${from}, the table "${tableId}" of ${to}`,
         );
       }
     });
@@ -2063,12 +2062,12 @@ export class TablesStore implements RowBlocks, TablesWriter, Tables {
         );
       }
     });
-    return { groupHandles, layerIds, places };
+    return { groupHandles, tableIds, places };
   }
 
   /**
    * Marks the rows a patch may give another box: every row of a patch that writes what a box is
-   * made of (the geometry, the type, the layer, the group or whether it is deleted). A patch of the
+   * made of (the geometry, the type, the table, the group or whether it is deleted). A patch of the
    * attributes and the style marks only the rows whose box is not their bbox: the box given for
    * their type (`rowBoxes`) reads the feature
    */
@@ -2093,15 +2092,15 @@ export class TablesStore implements RowBlocks, TablesWriter, Tables {
   /**
    * Writes values of rows: every value is checked before anything is written; then the rows are
    * written in place, and the rows placed elsewhere and the new ones are put in the delta of
-   * their layer, and the drawing is told
+   * their table, and the drawing is told
    */
-  private applyPatch(patch: RowValues, changes: Map<string, LayerChangeDraft>): void {
+  private applyPatch(patch: RowValues, changes: Map<string, TableChangeDraft>): void {
     const { handles, fields, deleted } = patch;
     this.markBoxes(patch);
     const n = handles.length;
     const checked = this.checkRows(patch);
     const groupHandles = checked.groupHandles;
-    const layerIds = checked.layerIds;
+    const tableIds = checked.tableIds;
     // A row of a creation written before it is taken in: the creation is taken in now (and the
     // places are read again)
     let creations = false;
@@ -2124,8 +2123,8 @@ export class TablesStore implements RowBlocks, TablesWriter, Tables {
     const mayPlace = [...fields.keys()].some(
       (field) => PLACE_FIELDS.has(field) || blockWholes.has(field) || relocating.has(field),
     );
-    /** The writes in place of the layer of the row before */
-    let lastWritesLayer: string | undefined;
+    /** The writes in place of the table of the row before */
+    let lastWritesTable: string | undefined;
     let lastWrites: InPlaceRowWrite[] | undefined;
     let lastTouched: RowGroup | null = null;
     /** The version of the group of the row before, and whether it is locked */
@@ -2149,26 +2148,26 @@ export class TablesStore implements RowBlocks, TablesWriter, Tables {
     });
     /** The keys a row changes in its style, by the number of its style before and after */
     const styleKeysOf = new Map<number, Map<number, readonly string[]>>();
-    const keysAddedTo = new Map<readonly string[], LayerChangeDraft>();
-    /** The change of the layer of the row before (a write of many rows is mostly of one layer) */
-    let lastLayer: string | undefined;
-    let lastChange: LayerChangeDraft | undefined;
+    const keysAddedTo = new Map<readonly string[], TableChangeDraft>();
+    /** The change of the table of the row before (a write of many rows is mostly of one table) */
+    let lastTable: string | undefined;
+    let lastChange: TableChangeDraft | undefined;
 
     const marks = this.writeMarks;
     // The rows of the deltas written under the mark a version started under stay for it
     const watched = this.versions.watches(marks.mark);
     const writes = new Map<string, InPlaceRowWrite[]>();
     const touched = new Set<RowGroup>();
-    const moving = new Map<LayerTable, DeltaInput[]>();
-    const leaving = new Map<LayerTable, Set<RowHandle>>();
-    const fresh = new Map<LayerTable, DeltaInput[]>();
+    const moving = new Map<RowTable, DeltaInput[]>();
+    const leaving = new Map<RowTable, Set<RowHandle>>();
+    const fresh = new Map<RowTable, DeltaInput[]>();
     let stateChanged = false;
     let created = false;
 
     for (let i = 0; i < n; i++) {
       const handle = handles[i];
       const place = places[i];
-      // A deleted row written whole (its type, layer, geometry and key) is created again: it
+      // A deleted row written whole (its type, table, geometry and key) is created again: it
       // goes to the delta as a new row would
       const revived =
         !!place &&
@@ -2176,14 +2175,14 @@ export class TablesStore implements RowBlocks, TablesWriter, Tables {
         (place.group.data.flags[place.row] & ROW_FLAG_DELETED) !== 0 &&
         CREATE_FIELDS.every((field) => fields.get(field)?.[i] !== undefined);
       const placed = place
-        ? revived || (mayPlace && this.placeChanged(place, i, fields, groupHandles, layerIds))
+        ? revived || (mayPlace && this.placeChanged(place, i, fields, groupHandles, tableIds))
         : true;
-      const targetLayer = (layerIds?.[i] as string | undefined) ?? place?.layer.layerId;
+      const targetTable = (tableIds?.[i] as string | undefined) ?? place?.table.tableId;
       let change = lastChange;
-      if (!change || targetLayer !== lastLayer) {
-        change = draftOf(changes, targetLayer as string);
+      if (!change || targetTable !== lastTable) {
+        change = draftOf(changes, targetTable as string);
         for (const field of fields.keys()) change.fields.add(field);
-        lastLayer = targetLayer;
+        lastTable = targetTable;
         lastChange = change;
       }
       if (styles && styleNumbers && place) {
@@ -2199,7 +2198,7 @@ export class TablesStore implements RowBlocks, TablesWriter, Tables {
           keys = changedKeys(this.styles.get(beforeNumber), (styles[i] ?? {}) as FeatureStyle);
           byAfter.set(afterNumber, keys);
         }
-        // The keys of a pair are added once per change of a layer
+        // The keys of a pair are added once per change of a table
         if (keysAddedTo.get(keys) !== change) {
           for (const key of keys) change.styleKeys.add(key);
           keysAddedTo.set(keys, change);
@@ -2230,48 +2229,48 @@ export class TablesStore implements RowBlocks, TablesWriter, Tables {
         if (!write) continue;
         marks.stamp(place.group, place.row);
         if (watched && place.group.delta) this.versions.rowChanged(handle, marks.mark);
-        if (write.what & ROW_WRITE_GEOMETRY) this.touch(place.layer.layerId, place.group.bounds);
+        if (write.what & ROW_WRITE_GEOMETRY) this.touch(place.table.tableId, place.group.bounds);
         if (write.what & (ROW_WRITE_GEOMETRY | ROW_WRITE_STATE)) stateChanged = true;
         if (place.group !== lastTouched) {
           touched.add(place.group);
           lastTouched = place.group;
         }
         let list =
-          lastWritesLayer === place.layer.layerId ? lastWrites : writes.get(place.layer.layerId);
+          lastWritesTable === place.table.tableId ? lastWrites : writes.get(place.table.tableId);
         if (!list) {
           list = [];
-          writes.set(place.layer.layerId, list);
+          writes.set(place.table.tableId, list);
         }
-        lastWritesLayer = place.layer.layerId;
+        lastWritesTable = place.table.tableId;
         lastWrites = list;
         list.push(write);
         continue;
       }
-      // Placed elsewhere, or new: a copy in the delta of its layer (many new rows next to each
+      // Placed elsewhere, or new: a copy in the delta of its table (many new rows next to each
       // other are built into groups of their own instead)
       const input = this.patchedInput(handle, place, i, fields, deleted, groupHandles, revived);
-      const layer = this.layerOf(targetLayer as string);
+      const table = this.tableOf(targetTable as string);
       if (!place) {
-        let list = fresh.get(layer);
+        let list = fresh.get(table);
         if (!list) {
           list = [];
-          fresh.set(layer, list);
+          fresh.set(table, list);
         }
         list.push({ handle, input });
         created = true;
         continue;
       }
-      let list = moving.get(layer);
+      let list = moving.get(table);
       if (!list) {
         list = [];
-        moving.set(layer, list);
+        moving.set(table, list);
       }
       list.push({ handle, input });
       if (place?.group.delta) {
-        let set = leaving.get(place.layer);
+        let set = leaving.get(place.table);
         if (!set) {
           set = new Set();
-          leaving.set(place.layer, set);
+          leaving.set(place.table, set);
         }
         set.add(handle);
       } else {
@@ -2292,26 +2291,26 @@ export class TablesStore implements RowBlocks, TablesWriter, Tables {
       this.versions.checkMoved(group);
     }
     // The new rows: a run of their own built into groups, or into the delta
-    for (const [layer, list] of fresh) {
-      if (this.tryCreate(layer, list)) continue;
-      let into = moving.get(layer);
+    for (const [table, list] of fresh) {
+      if (this.tryCreate(table, list)) continue;
+      let into = moving.get(table);
       if (!into) {
         into = [];
-        moving.set(layer, into);
+        moving.set(table, into);
       }
       into.push(...list);
     }
     // The deltas
-    const layers = new Set<LayerTable>([...moving.keys(), ...leaving.keys()]);
-    for (const layer of layers) {
-      this.rebuildDelta(layer, leaving.get(layer) ?? new Set(), moving.get(layer) ?? []);
+    const tables = new Set<RowTable>([...moving.keys(), ...leaving.keys()]);
+    for (const table of tables) {
+      this.rebuildDelta(table, leaving.get(table) ?? new Set(), moving.get(table) ?? []);
     }
     for (const list of moving.values()) {
       for (const { handle } of list) this.refreshCopies(handle);
     }
-    if (stateChanged || layers.size > 0 || created) this.revisionCount++;
-    for (const [layerId, list] of writes) {
-      for (const listener of this.writeListeners) listener(layerId, list);
+    if (stateChanged || tables.size > 0 || created) this.revisionCount++;
+    for (const [tableId, list] of writes) {
+      for (const listener of this.writeListeners) listener(tableId, list);
     }
   }
 
@@ -2385,7 +2384,7 @@ export class TablesStore implements RowBlocks, TablesWriter, Tables {
         continue;
       }
       const parent = value('parent', i) as string | undefined;
-      const before = this.groups.layerOf(group);
+      const before = this.groups.tableOf(group);
       if (parent !== undefined && before !== undefined && parent !== before) {
         const id = this.groups.idOf(group) as string;
         for (const member of this.membersIn(before, group)) {
@@ -2407,7 +2406,7 @@ export class TablesStore implements RowBlocks, TablesWriter, Tables {
         this.groups.set(group, {
           id: value('id', i) as string,
           order: value('key', i) as string,
-          layerId: value('parent', i) as string,
+          tableId: value('parent', i) as string,
           flags,
         });
         continue;
@@ -2417,32 +2416,32 @@ export class TablesStore implements RowBlocks, TablesWriter, Tables {
         id: this.groups.idOf(group) as string,
         // A new key goes in with the members in their new order
         order: this.groups.orderOf(group) as string,
-        layerId:
-          (value('parent', i) as string | undefined) ?? (this.groups.layerOf(group) as string),
+        tableId:
+          (value('parent', i) as string | undefined) ?? (this.groups.tableOf(group) as string),
         flags,
       };
       this.groups.set(group, next);
       if (this.groups.memberStatesOf(group) !== memberStates) shown.add(group);
       const order = value('key', i) as string | undefined;
       if (order !== undefined && order !== next.order) {
-        let list = orders.get(next.layerId);
+        let list = orders.get(next.tableId);
         if (!list) {
           list = new Map();
-          orders.set(next.layerId, list);
+          orders.set(next.tableId, list);
         }
         list.set(group, order);
       }
     }
     if (shown.size > 0) this.refreshGroupStates(shown);
     // The members go to the table of their group, before the group is put in its new place there
-    const drafts = new Map<string, LayerChangeDraft>();
+    const drafts = new Map<string, TableChangeDraft>();
     if (following.length > 0) {
       this.applyPatch(
         { handles: Int32Array.from(following), fields: new Map([['parent', followed]]) },
         drafts,
       );
     }
-    for (const [layerId, list] of orders) this.reorderGroups(layerId, list);
+    for (const [tableId, list] of orders) this.reorderGroups(tableId, list);
     // The new rows read from their creations are built again with the groups as they are now
     for (const creation of this.creations) this.dropReading(creation);
     // A group deleted with a token is kept until the token is let go of
@@ -2468,31 +2467,31 @@ export class TablesStore implements RowBlocks, TablesWriter, Tables {
 
   /**
    * Puts the members of groups of features in the order of new keys of the groups: the row
-   * groups of the layer are cut at the runs of the members and at the places they go to, and
+   * groups of the table are cut at the runs of the members and at the places they go to, and
    * the pieces are put in their new order by a version swapped in once its chunks are up (the
    * keys go in then; until then the order before is read and drawn). The rows are not written.
    * A reorder still waiting is made again with its keys and the new ones
    */
-  private reorderGroups(layerId: string, orders: Map<GroupHandle, string>): void {
-    const layer = this.layers.get(layerId);
+  private reorderGroups(tableId: string, orders: Map<GroupHandle, string>): void {
+    const table = this.tables.get(tableId);
     // The keys of a reorder still waiting that are still the ones written (a key written since,
-    // here or in another layer, is the one that goes in)
-    for (const version of this.versions.reorders(layer)) {
+    // here or in another table, is the one that goes in)
+    for (const version of this.versions.reorders(table)) {
       for (const [group, order] of version.orders ?? []) {
         if (!orders.has(group) && this.writtenOrders.get(group) === order) orders.set(group, order);
       }
     }
     // The cuts of each row group: the runs of the members, and where they go
-    const { cuts, members } = layer
-      ? groupRunCuts(layer, orders, this.groups)
+    const { cuts, members } = table
+      ? groupRunCuts(table, orders, this.groups)
       : { cuts: new Map<RowGroup, Set<number>>(), members: false };
-    if (!layer || !members) {
+    if (!table || !members) {
       // No member in the groups: the keys go in now (the deltas in their new order)
       for (const [group, order] of orders) {
         this.groups.setOrder(group, order);
         this.writtenOrders.delete(group);
       }
-      for (const other of this.layers.values()) {
+      for (const other of this.tables.values()) {
         if (other.delta.group) this.rebuildDelta(other, new Set(), []);
         other.touchItems();
       }
@@ -2500,7 +2499,7 @@ export class TablesStore implements RowBlocks, TablesWriter, Tables {
     }
     // The pieces
     const groups = [...cuts.keys()].sort(
-      (a, b) => layer.orderOf(a.handle) - layer.orderOf(b.handle),
+      (a, b) => table.orderOf(a.handle) - table.orderOf(b.handle),
     );
     const pieces: RowBlockData[] = [];
     for (const group of groups) {
@@ -2511,11 +2510,11 @@ export class TablesStore implements RowBlocks, TablesWriter, Tables {
       ];
       for (let k = 0; k + 1 < points.length; k++) {
         if (points[k + 1] > points[k])
-          pieces.push(this.sliceRows(group, points[k], points[k + 1], layer.dims));
+          pieces.push(this.sliceRows(group, points[k], points[k + 1], table.dims));
       }
     }
     for (const [group, order] of orders) this.writtenOrders.set(group, order);
-    this.versions.startReorder(layer, groups, pieces, orders);
+    this.versions.startReorder(table, groups, pieces, orders);
   }
 
   /**
@@ -2570,10 +2569,10 @@ export class TablesStore implements RowBlocks, TablesWriter, Tables {
     const read = (handles: Int32Array): void => {
       for (const group of handles) if (group >= 0 && wanted.has(group)) named.add(group);
     };
-    for (const layer of this.layers.values()) {
-      for (const g of rowGroupsHolding(layer, wanted, this.groups))
-        read(layer.groupAt(g).data.groups);
-      if (layer.delta.group) read(layer.delta.group.data.groups);
+    for (const table of this.tables.values()) {
+      for (const g of rowGroupsHolding(table, wanted, this.groups))
+        read(table.groupAt(g).data.groups);
+      if (table.delta.group) read(table.delta.group.data.groups);
     }
     for (const creation of this.creations) {
       for (const row of creation.rows) {
@@ -2585,7 +2584,7 @@ export class TablesStore implements RowBlocks, TablesWriter, Tables {
   }
 
   /**
-   * Whether a patch places a row elsewhere (another key, group or layer, or another value of a
+   * Whether a patch places a row elsewhere (another key, group or table, or another value of a
    * field declared to place it again, `relocatingFields`): it then goes to the delta rather than
    * being written in place
    */
@@ -2594,7 +2593,7 @@ export class TablesStore implements RowBlocks, TablesWriter, Tables {
     i: number,
     fields: ReadonlyMap<RowField, readonly unknown[]>,
     groupHandles: number[] | undefined,
-    layerIds: Array<string | undefined> | undefined,
+    tableIds: Array<string | undefined> | undefined,
   ): boolean {
     const data = place.group.data;
     const row = place.row;
@@ -2606,7 +2605,7 @@ export class TablesStore implements RowBlocks, TablesWriter, Tables {
           if (value !== utf8String(data.keys, row)) return true;
         } else if (
           (groupHandles as number[])[i] !== data.groups[row] ||
-          (layerIds as Array<string | undefined>)[i] !== place.layer.layerId
+          (tableIds as Array<string | undefined>)[i] !== place.table.tableId
         ) {
           return true;
         }
@@ -2734,7 +2733,7 @@ export class TablesStore implements RowBlocks, TablesWriter, Tables {
     styleNumbers: number[] | undefined,
     columns: PatchColumns = this.patchColumns(fields),
   ): InPlaceRowWrite | null {
-    const { layer, group, row } = place;
+    const { table, group, row } = place;
     const data = group.data;
     let what = 0;
     let shape: GeometryWrite = SAME_SHAPE;
@@ -2742,7 +2741,7 @@ export class TablesStore implements RowBlocks, TablesWriter, Tables {
     const geometry = columns.geometry?.[i];
     if (geometry !== undefined) {
       shape = writeRowGeometry(
-        layer,
+        table,
         group,
         row,
         geometry as never,
@@ -2782,7 +2781,7 @@ export class TablesStore implements RowBlocks, TablesWriter, Tables {
     // A row deleted written not deleted is created again at its place
     else if (deleted) flags &= ~ROW_FLAG_DELETED;
     if (flags !== data.flags[row]) {
-      if ((flags & ROW_FLAG_DELETED) !== (data.flags[row] & ROW_FLAG_DELETED)) layer.touchItems();
+      if ((flags & ROW_FLAG_DELETED) !== (data.flags[row] & ROW_FLAG_DELETED)) table.touchItems();
       data.flags[row] = flags;
       this.writeState(group, row);
       group.stateVersion++;
@@ -2795,7 +2794,7 @@ export class TablesStore implements RowBlocks, TablesWriter, Tables {
       keys.push(key);
       if (isRingKey(this.rings, group, row, key)) {
         // The ring of a row follows the attributes it is made from
-        const ring = refreshRowShape(layer, group, row, this.coordinates, this.rings, this.caches);
+        const ring = refreshRowShape(table, group, row, this.coordinates, this.rings, this.caches);
         shape = { sameShape: ring.sameTriangles, from: 0, to: ring.ring };
         what |= ROW_WRITE_GEOMETRY;
       }
@@ -2821,12 +2820,12 @@ export class TablesStore implements RowBlocks, TablesWriter, Tables {
    * written again into it, and the copies of the state of its rows are made again
    */
   private swapIn(version: GroupVersion, waiting: WaitingCopies): RowsChange | null {
-    const layer = version.layer;
+    const table = version.table;
     const groups = version.groups ?? [];
     const replaced = new Set(version.replaces.map((group) => group.handle));
     const replacedGroups = new Set<RowGroup>(version.replaces);
     if (version.orders) {
-      // The keys that are still the ones written go in (a key written since, in another layer,
+      // The keys that are still the ones written go in (a key written since, in another table,
       // went in or waits there)
       for (const [group, order] of version.orders) {
         if (this.writtenOrders.get(group) !== order) continue;
@@ -2846,17 +2845,17 @@ export class TablesStore implements RowBlocks, TablesWriter, Tables {
         }
       }
     }
-    layer.replaceGroups(version.replaces, groups);
+    table.replaceGroups(version.replaces, groups);
     for (const old of version.replaces) {
       this.rowGroups.delete(old.handle);
       this.groupsDue.delete(old.handle);
     }
-    for (const group of groups) this.rowGroups.set(group.handle, { layer, group });
-    const leaving = new Map<LayerTable, Set<RowHandle>>();
+    for (const group of groups) this.rowGroups.set(group.handle, { table, group });
+    const leaving = new Map<RowTable, Set<RowHandle>>();
     const leave = (handle: RowHandle): void => {
-      const serial = this.ids.deltaLayer(handle);
+      const serial = this.ids.deltaTable(handle);
       if (serial < 0) return;
-      const delta = this.layerList[serial];
+      const delta = this.tableList[serial];
       let set = leaving.get(delta);
       if (!set) {
         set = new Set();
@@ -2867,9 +2866,9 @@ export class TablesStore implements RowBlocks, TablesWriter, Tables {
     // Whether the copy of a row in a delta goes, for a version that took the rows of the deltas
     // up to a mark (-1: none): it is not kept, and was not written since
     const takes = (handle: RowHandle, mark: number): boolean => {
-      const serial = this.ids.deltaLayer(handle);
+      const serial = this.ids.deltaTable(handle);
       if (serial < 0) return false;
-      const delta = this.layerList[serial].delta;
+      const delta = this.tableList[serial].delta;
       const slot = this.ids.deltaSlot(handle);
       return !delta.isKept(slot) && (delta.group as RowGroup).marks[slot] <= mark;
     };
@@ -2943,13 +2942,13 @@ export class TablesStore implements RowBlocks, TablesWriter, Tables {
     for (const copy of handed) {
       this.writeState(copy.group, copy.row);
       copy.group.stateVersion++;
-      this.rowGroups.get(copy.group.handle)?.layer.touchItems();
+      this.rowGroups.get(copy.group.handle)?.table.touchItems();
     }
     for (const [delta, set] of leaving) this.rebuildDelta(delta, set, []);
     // The values written in place since the version started (a row whose values its new row block
     // does not hold goes to the delta)
     const writes = new Map<string, InPlaceRowWrite[]>();
-    const moved = new Map<LayerTable, DeltaInput[]>();
+    const moved = new Map<RowTable, DeltaInput[]>();
     for (const entry of version.log) {
       const place = this.placeOf(entry.handle);
       if (!place || place.group.delta || !groups.includes(place.group)) continue;
@@ -2960,10 +2959,10 @@ export class TablesStore implements RowBlocks, TablesWriter, Tables {
         const input = this.patchedInput(entry.handle, place, 0, fields, deleted, [
           place.group.data.groups[place.row],
         ]);
-        let list = moved.get(place.layer);
+        let list = moved.get(place.table);
         if (!list) {
           list = [];
-          moved.set(place.layer, list);
+          moved.set(place.table, list);
         }
         list.push({ handle: entry.handle, input });
         this.writeMarks.stampGroup(place.group);
@@ -2980,10 +2979,10 @@ export class TablesStore implements RowBlocks, TablesWriter, Tables {
       );
       if (numbers && this.styles.usesOf(numbers[0]) === 0) this.styles.release(numbers[0]);
       if (!write) continue;
-      let list = writes.get(place.layer.layerId);
+      let list = writes.get(place.table.tableId);
       if (!list) {
         list = [];
-        writes.set(place.layer.layerId, list);
+        writes.set(place.table.tableId, list);
       }
       list.push(write);
     }
@@ -2993,19 +2992,19 @@ export class TablesStore implements RowBlocks, TablesWriter, Tables {
     }
     if (version.orders) {
       // The rows of the deltas in the order of the new keys
-      for (const other of this.layers.values()) {
+      for (const other of this.tables.values()) {
         if (other.delta.group && !leaving.has(other)) {
           this.rebuildDelta(other, new Set(), []);
         }
       }
-      for (const other of this.layers.values()) other.touchItems();
+      for (const other of this.tables.values()) other.touchItems();
     }
-    layer.touchItems();
+    table.touchItems();
     this.revisionCount++;
-    for (const [layerId, list] of writes) {
-      for (const listener of this.writeListeners) listener(layerId, list);
+    for (const [tableId, list] of writes) {
+      for (const listener of this.writeListeners) listener(tableId, list);
     }
-    this.touch(layer.layerId, GroupVersions.boundsOf(version));
+    this.touch(table.tableId, GroupVersions.boundsOf(version));
     // The rows left out are gone: the handles of the ones forgotten are freed, and the groups of
     // features deleted no row names any more are taken out
     for (const handle of version.dropped) this.freeIfGone(handle);
@@ -3018,26 +3017,26 @@ export class TablesStore implements RowBlocks, TablesWriter, Tables {
         this.writtenOrders.delete(group);
       }
     }
-    // A version started before the dimensions of its layer were raised has the ones of before:
+    // A version started before the dimensions of its table were raised has the ones of before:
     // its groups are due again
     for (const group of groups) {
-      if (!hasDims(group.data, layer.dims)) this.versions.markDue(group.handle);
+      if (!hasDims(group.data, table.dims)) this.versions.markDue(group.handle);
     }
     return null;
   }
 
   /**
-   * Makes the rows of the delta of a layer again: its rows but the ones leaving it, and the rows
+   * Makes the rows of the delta of a table again: its rows but the ones leaving it, and the rows
    * coming into it (stamped with the write mark of now; the rows that stay keep theirs). A row of
    * the delta written in place is built again with its values, so the new rows hold no values
    * written in place
    */
   protected rebuildDelta(
-    layer: LayerTable,
+    table: RowTable,
     leaving: ReadonlySet<RowHandle>,
     coming: readonly DeltaInput[],
   ): void {
-    const delta = layer.delta;
+    const delta = table.delta;
     const old = delta.group;
     const sources: RowBlockData[] = [];
     /** The rows of the delta that stay as they are, in their order */
@@ -3046,7 +3045,7 @@ export class TablesStore implements RowBlocks, TablesWriter, Tables {
     const marksOf = new Map<RowHandle, number>();
     const inputs: RowInput[] = [];
     const comingHandles = new Set(coming.map((entry) => entry.handle));
-    const keysKept = old !== null && layer.deltaKeysRevision === this.groups.revision;
+    const keysKept = old !== null && table.deltaKeysRevision === this.groups.revision;
     if (old) {
       sources.push(old.data);
       for (let r = 0; r < old.data.length; r++) {
@@ -3066,7 +3065,7 @@ export class TablesStore implements RowBlocks, TablesWriter, Tables {
       }
     }
     for (const entry of coming) inputs.push(entry.input);
-    const built = inputs.length > 0 ? this.buildRows(inputs, layer.dims) : null;
+    const built = inputs.length > 0 ? this.buildRows(inputs, table.dims) : null;
     if (built) sources.push(built);
     const pairs = keysKept
       ? deltaRowsInOrder(old.data, stay, built, this.groups)
@@ -3078,7 +3077,7 @@ export class TablesStore implements RowBlocks, TablesWriter, Tables {
       sort: !keysKept,
       targetRows: UNBOUNDED,
       targetVertices: UNBOUNDED,
-      dimensions: layer.dims,
+      dimensions: table.dims,
       ringVertices: this.rings?.ringVertices ?? 1,
     });
     const marks = this.writeMarks;
@@ -3111,29 +3110,29 @@ export class TablesStore implements RowBlocks, TablesWriter, Tables {
       for (let r = 0; r < old.data.length; r++) {
         const handle = old.data.handles[r];
         this.styles.release(styleColumnOf(old.data).indexes[r]);
-        if (this.ids.deltaLayer(handle) === layer.serial) this.ids.setDelta(handle, -1, -1);
+        if (this.ids.deltaTable(handle) === table.serial) this.ids.setDelta(handle, -1, -1);
       }
-      layer.dropMoved(old);
+      table.dropMoved(old);
     }
     if (group) {
       for (let r = 0; r < group.data.length; r++) {
-        this.ids.setDelta(group.data.handles[r], layer.serial, r);
+        this.ids.setDelta(group.data.handles[r], table.serial, r);
       }
       for (let r = 0; r < group.data.length; r++) this.writeState(group, r);
     }
-    const places = keysKept ? layer.placesOfDelta() : null;
+    const places = keysKept ? table.placesOfDelta() : null;
     delta.rebuild(group, kept);
-    layer.deltaKeysRevision = this.groups.revision;
-    if (places) layer.carryDeltaPlaces(places, pairs);
-    layer.touchItems();
-    this.touch(layer.layerId, unionBounds(old?.bounds ?? null, group?.bounds ?? null));
+    table.deltaKeysRevision = this.groups.revision;
+    if (places) table.carryDeltaPlaces(places, pairs);
+    table.touchItems();
+    this.touch(table.tableId, unionBounds(old?.bounds ?? null, group?.bounds ?? null));
     // The copies the rows leaving the delta had in their groups are read again
     for (const handle of leaving) {
-      if (this.ids.deltaLayer(handle) < 0) this.refreshCopies(handle);
+      if (this.ids.deltaTable(handle) < 0) this.refreshCopies(handle);
     }
     if (this.deltaListeners.size === 0) return;
     const change: DeltaRowsChange = { leaving, coming };
-    for (const listener of this.deltaListeners) listener(layer.layerId, change);
+    for (const listener of this.deltaListeners) listener(table.tableId, change);
   }
 
   /**
@@ -3200,8 +3199,8 @@ export class TablesStore implements RowBlocks, TablesWriter, Tables {
   }
 
   /** Takes in one row group: the handles, the numbers of its styles, the state of its rows */
-  private adoptGroup(layer: LayerTable, data: RowBlockData): void {
-    checkDims(data, layer.dims);
+  private adoptGroup(table: RowTable, data: RowBlockData): void {
+    checkDims(data, table.dims);
     if (data.handles.some((handle) => handle < 0)) {
       data.handles.set(this.ids.allocate(data.ids, data.idHashes));
     }
@@ -3209,7 +3208,7 @@ export class TablesStore implements RowBlocks, TablesWriter, Tables {
       const handle = data.handles[r];
       if (!this.ids.has(handle))
         throw new DrawError('not-found', `FeatureTables: the handle ${handle} is unknown`);
-      if (this.ids.mainGroup(handle) >= 0 || this.ids.deltaLayer(handle) >= 0) {
+      if (this.ids.mainGroup(handle) >= 0 || this.ids.deltaTable(handle) >= 0) {
         throw new DrawError(
           'already-exists',
           `FeatureTables: "${this.ids.idOf(handle)}" is already a row`,
@@ -3231,16 +3230,16 @@ export class TablesStore implements RowBlocks, TablesWriter, Tables {
     // another group (one taken in, or built of rows written, since it was made), is not left
     // out: its rows go to the delta, read and drawn at their places at once, and into the row
     // groups with their next versions
-    if (data.length > 0 && (!layer.inKeyOrder(data) || layer.overlaps(data))) {
-      this.rowsToDelta(layer, data);
+    if (data.length > 0 && (!table.inKeyOrder(data) || table.overlaps(data))) {
+      this.rowsToDelta(table, data);
       return;
     }
     const group = createRowGroup(this.nextGroup++, data, this.writeMarks.mark);
-    layer.insert(group);
+    table.insert(group);
     this.rowBoxes.mark(data.handles);
     // The rows that use each style are counted (a style no row uses is given again)
     for (let r = 0; r < data.length; r++) this.styles.retain(styles[r]);
-    this.rowGroups.set(group.handle, { layer, group });
+    this.rowGroups.set(group.handle, { table, group });
     for (let r = 0; r < data.length; r++) {
       const handle = data.handles[r];
       this.ids.setMain(handle, group.handle, r);
@@ -3320,7 +3319,7 @@ export class TablesStore implements RowBlocks, TablesWriter, Tables {
     }
     if (!group.delta && !group.pending) {
       // The copy of a row read elsewhere: in the delta, or in another group until it is in this
-      if (this.ids.deltaLayer(handle) >= 0) state |= STATE_DELTA;
+      if (this.ids.deltaTable(handle) >= 0) state |= STATE_DELTA;
       if (this.ids.mainGroup(handle) !== group.handle) state |= STATE_WAIT;
     }
     return state;
@@ -3332,10 +3331,10 @@ export class TablesStore implements RowBlocks, TablesWriter, Tables {
     if (placed) {
       this.writeState(placed.group, this.ids.mainRow(handle));
       placed.group.stateVersion++;
-      placed.layer.touchItems();
+      placed.table.touchItems();
     }
-    const serial = this.ids.deltaLayer(handle);
-    const delta = serial >= 0 ? this.layerList[serial].delta.group : null;
+    const serial = this.ids.deltaTable(handle);
+    const delta = serial >= 0 ? this.tableList[serial].delta.group : null;
     if (delta) {
       this.writeState(delta, this.ids.deltaSlot(handle));
       delta.stateVersion++;
@@ -3360,8 +3359,8 @@ export class TablesStore implements RowBlocks, TablesWriter, Tables {
         this.writeState(placed.group, this.ids.mainRow(handle));
         placed.group.stateVersion++;
       }
-      const serial = this.ids.deltaLayer(handle);
-      const delta = serial >= 0 ? this.layerList[serial].delta.group : null;
+      const serial = this.ids.deltaTable(handle);
+      const delta = serial >= 0 ? this.tableList[serial].delta.group : null;
       if (delta) {
         this.writeState(delta, this.ids.deltaSlot(handle));
         delta.stateVersion++;
@@ -3416,7 +3415,7 @@ function deltaRowsOf(hasOld: boolean, stay: readonly number[], built: RowBlockDa
 }
 
 /**
- * The rows of a delta made again in the order of the layer, as {@link deltaRowsOf} gives them: the
+ * The rows of a delta made again in the order of the table, as {@link deltaRowsOf} gives them: the
  * rows that stay are in that order, so only the rows built are looked for among them
  */
 function deltaRowsInOrder(
@@ -3463,9 +3462,9 @@ function unionBounds(a: BBox | null, b: BBox | null): BBox | null {
   return [Math.min(a[0], b[0]), Math.min(a[1], b[1]), Math.max(a[2], b[2]), Math.max(a[3], b[3])];
 }
 
-/** The draft of the change of a layer */
-function draftOf(changes: Map<string, LayerChangeDraft>, layerId: string): LayerChangeDraft {
-  let draft = changes.get(layerId);
+/** The draft of the change of a table */
+function draftOf(changes: Map<string, TableChangeDraft>, tableId: string): TableChangeDraft {
+  let draft = changes.get(tableId);
   if (!draft) {
     draft = {
       created: [],
@@ -3474,16 +3473,16 @@ function draftOf(changes: Map<string, LayerChangeDraft>, layerId: string): Layer
       fields: new Set(),
       styleKeys: new Set(),
     };
-    changes.set(layerId, draft);
+    changes.set(tableId, draft);
   }
   return draft;
 }
 
-/** The changes of the layers, as the writer returns them */
-function finishChanges(changes: Map<string, LayerChangeDraft>): Map<string, LayerRowsChange> {
+/** The changes of the tables, as the writer returns them */
+function finishChanges(changes: Map<string, TableChangeDraft>): Map<string, LayerRowsChange> {
   const out = new Map<string, LayerRowsChange>();
-  for (const [layerId, draft] of changes) {
-    out.set(layerId, {
+  for (const [tableId, draft] of changes) {
+    out.set(tableId, {
       created: Int32Array.from(draft.created),
       updated: Int32Array.from(draft.updated),
       deleted: Int32Array.from(draft.deleted),
@@ -3601,7 +3600,7 @@ function hasDims(data: RowBlockData, dims: CoordinateDimensions): boolean {
 }
 
 /**
- * Checks that the coordinates of a row group have the dimensions of its layer
+ * Checks that the coordinates of a row group have the dimensions of its table
  *
  * @throws when a geometry column of the group has others
  */
@@ -3611,7 +3610,7 @@ function checkDims(data: RowBlockData, dims: CoordinateDimensions): void {
     if (own !== dims) {
       throw new DrawError(
         'invalid-input',
-        `FeatureTables: a row group has coordinates of ${own}, its layer ${dims}`,
+        `FeatureTables: a row group has coordinates of ${own}, its table ${dims}`,
       );
     }
   }

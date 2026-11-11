@@ -113,7 +113,7 @@ describe('the groups of features written', () => {
     const sides = gate(internals);
     const before = Array.from(tables.get('a')?.listRowHandles(0, 100) ?? []);
     const keysBefore = internals
-      .layerTable('a')
+      .rowTable('a')
       ?.rowOrder()
       .groups.map((group) => group.data.keys);
     writer.applyGroups(groupPatch([groupHandleOf('g')], { key: [key(55_500)] }));

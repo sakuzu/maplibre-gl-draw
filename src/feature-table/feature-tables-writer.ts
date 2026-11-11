@@ -82,7 +82,7 @@ export function createFeatureTablesWriter(
   let partsWatch: { readonly watch: ItemOrderWatch | null } | null = null;
   const orderSource: ItemOrderSource = {
     walkItems: (layerId) => {
-      const layer = internals.layerTable(layerId);
+      const layer = internals.rowTable(layerId);
       return layer ? new ItemWalk(layer, internals) : null;
     },
     getGroupKey: (group) => internals.getGroupOrder(group),
@@ -122,7 +122,7 @@ export function createFeatureTablesWriter(
     const layerOf = (value: unknown): string | undefined => {
       if (typeof value !== 'string' || value === '') return undefined;
       const group = groups.handleOfId(value);
-      return group >= 0 ? groups.layerOf(group) : value;
+      return group >= 0 ? groups.tableOf(group) : value;
     };
     for (let i = 0; i < handles.length; i++) {
       const handle = handles[i];
@@ -130,7 +130,7 @@ export function createFeatureTablesWriter(
       const deleting = !!deleted?.[i];
       if (!place || (place.group.data.flags[place.row] & ROW_FLAG_DELETED) !== 0) {
         // A new row, or a deleted one created again
-        const layerId = layerOf(parents?.[i]) ?? place?.layer.layerId;
+        const layerId = layerOf(parents?.[i]) ?? place?.table.tableId;
         if (deleting || layerId === undefined) continue;
         watch.watchLayer(layerId);
         watch.watchGroup(groupOf(parents?.[i]));
@@ -141,8 +141,8 @@ export function createFeatureTablesWriter(
       const row = place.row;
       const group = data.groups[row];
       if (deleting) {
-        watch.watchLayer(place.layer.layerId);
-        watch.watchGroup(group, place.layer.layerId);
+        watch.watchLayer(place.table.tableId);
+        watch.watchGroup(group, place.table.tableId);
         watch.row(handle, true);
         continue;
       }
@@ -153,14 +153,14 @@ export function createFeatureTablesWriter(
       const nextGroup = parent !== undefined ? groupOf(parent) : group;
       const key = keys?.[i];
       const moved =
-        (layerId !== undefined && layerId !== place.layer.layerId) ||
+        (layerId !== undefined && layerId !== place.table.tableId) ||
         nextGroup !== group ||
         (key !== undefined && key !== utf8String(data.keys, row));
       if (!moved) continue;
-      watch.watchLayer(place.layer.layerId);
+      watch.watchLayer(place.table.tableId);
       if (layerId !== undefined) watch.watchLayer(layerId);
       // The members of a group given another layer are read where they are until written there
-      watch.watchGroup(group, place.layer.layerId);
+      watch.watchGroup(group, place.table.tableId);
       watch.watchGroup(nextGroup);
       watch.row(handle, false);
     }
@@ -181,7 +181,7 @@ export function createFeatureTablesWriter(
     for (let i = 0; i < patch.handles.length; i++) {
       const parent = parents[i];
       const group = patch.handles[i];
-      const before = groups.layerOf(group);
+      const before = groups.tableOf(group);
       if (patch.deleted?.[i] || typeof parent !== 'string' || before === undefined) continue;
       if (parent === before) continue;
       const members = internals.membersIn(before, group);
@@ -225,7 +225,7 @@ export function createFeatureTablesWriter(
         created.add(group);
         continue;
       }
-      const layerId = layerValue ?? layersNow.get(group) ?? (groups.layerOf(group) as string);
+      const layerId = layerValue ?? layersNow.get(group) ?? (groups.tableOf(group) as string);
       if (layerValue !== undefined) layersNow.set(group, layerValue);
       if (order === undefined || order === groups.orderOf(group)) continue;
       let list = orders.get(layerId);
@@ -244,7 +244,7 @@ export function createFeatureTablesWriter(
             groups,
             placeOf: (handle) => internals.placeOf(handle),
             writtenOrders: internals.writtenOrders,
-            groupTableOf: (group) => layersNow.get(group) ?? groups.layerOf(group),
+            groupTableOf: (group) => layersNow.get(group) ?? groups.tableOf(group),
           };
     const source: ItemOrderSource =
       walkSource === internals
@@ -252,7 +252,7 @@ export function createFeatureTablesWriter(
         : {
             ...orderSource,
             walkItems: (layerId) => {
-              const layer = internals.layerTable(layerId);
+              const layer = internals.rowTable(layerId);
               return layer ? new ItemWalk(layer, walkSource) : null;
             },
           };

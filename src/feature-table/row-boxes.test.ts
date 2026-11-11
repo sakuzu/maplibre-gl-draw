@@ -81,7 +81,7 @@ function idsIn(
   internals: FeatureTablesInternals,
   box: readonly [number, number, number, number],
 ): string[] {
-  const table = internals.layerTable('a');
+  const table = internals.rowTable('a');
   if (!table) return [];
   const ids: string[] = [];
   internals.searchRowBoxes(table, box[0], box[1], box[2], box[3], (group, row) => {

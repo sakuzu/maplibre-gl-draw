@@ -2,24 +2,24 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * Where the row groups of a layer are cut when groups of features are given new keys of their
+ * Where the row groups of a table are cut when groups of features are given new keys of their
  * order (`groupRunCuts`): at the runs of the members of the groups, and at the places the new keys
  * put them
  *
- * The members of a group of features follow each other in the order of the layer, at the key of
+ * The members of a group of features follow each other in the order of the table, at the key of
  * the group, so the row groups that hold them are found by the keys of the group, and the place a
  * new key puts them is found by its key among the rows that stay: what a group given a new key
- * reads is the row groups around its members and its place, not every row of the layer.
+ * reads is the row groups around its members and its place, not every row of the table.
  */
 
 import { utf8ColumnFromStrings } from '@sakuzu/tabane';
 import { compareRowKeys, type GroupKeySource, type RowKeySource } from '../table/row-keys.js';
 import type { GroupTable } from './group-table.js';
-import type { LayerTable, RowGroup } from './layer-table.js';
+import type { RowGroup, RowTable } from './row-table.js';
 import type { GroupHandle } from './types.js';
 
 /**
- * Where the row groups of a layer are cut
+ * Where the row groups of a table are cut
  *
  * @internal
  */
@@ -34,7 +34,7 @@ export interface GroupRunCuts {
 }
 
 /**
- * The cuts of the row groups of a layer for groups of features given new keys: before and after
+ * The cuts of the row groups of a table for groups of features given new keys: before and after
  * each run of their members, and before the first row that is no member of them and comes after
  * them with the new keys
  *
@@ -43,7 +43,7 @@ export interface GroupRunCuts {
  * @internal
  */
 export function groupRunCuts(
-  layer: LayerTable,
+  table: RowTable,
   orders: ReadonlyMap<GroupHandle, string>,
   groups: GroupTable,
 ): GroupRunCuts {
@@ -57,11 +57,11 @@ export function groupRunCuts(
     }
     set.add(row);
   };
-  const count = layer.groupCount;
+  const count = table.groupCount;
   // The runs of the members
   const members: Array<{ group: RowGroup; row: number; of: GroupHandle }> = [];
-  for (const g of rowGroupsHolding(layer, orders.keys(), groups)) {
-    const group = layer.groupAt(g);
+  for (const g of rowGroupsHolding(table, orders.keys(), groups)) {
+    const group = table.groupAt(g);
     const data = group.data;
     let run = -1;
     for (let r = 0; r <= data.length; r++) {
@@ -88,7 +88,7 @@ export function groupRunCuts(
   const stays = (data: RowKeySource, row: number): boolean => !orders.has(data.groups[row]);
   /** The last row of a row group that stays (-1 for none) */
   const lastStaying = (g: number): number => {
-    const data = layer.groupAt(g).data;
+    const data = table.groupAt(g).data;
     let r = data.length - 1;
     while (r >= 0 && !stays(data, r)) r--;
     return r;
@@ -111,7 +111,7 @@ export function groupRunCuts(
       while (last < 0 && ++g < hi) last = lastStaying(g);
       if (last < 0) {
         hi = mid;
-      } else if (after(layer.groupAt(g).data, last)) {
+      } else if (after(table.groupAt(g).data, last)) {
         found = g;
         hi = mid;
       } else {
@@ -119,7 +119,7 @@ export function groupRunCuts(
       }
     }
     if (found === count) continue;
-    const group = layer.groupAt(found);
+    const group = table.groupAt(found);
     const data = group.data;
     for (let r = 0; r < data.length; r++) {
       if (!stays(data, r) || !after(data, r)) continue;
@@ -131,18 +131,18 @@ export function groupRunCuts(
 }
 
 /**
- * The places in the order of a layer of the row groups that can hold members of groups of
+ * The places in the order of a table of the row groups that can hold members of groups of
  * features: the ones whose rows meet the keys of a group (its members follow each other there),
  * found by a search of the keys, in their order
  *
  * @internal
  */
 export function rowGroupsHolding(
-  layer: LayerTable,
+  table: RowTable,
   groupsOf: Iterable<GroupHandle>,
   groups: GroupTable,
 ): number[] {
-  const count = layer.groupCount;
+  const count = table.groupCount;
   const holding = new Set<number>();
   for (const group of groupsOf) {
     if (!groups.has(group)) continue;
@@ -153,12 +153,12 @@ export function rowGroupsHolding(
     let hi = count;
     while (lo < hi) {
       const mid = (lo + hi) >> 1;
-      const data = layer.groupAt(mid).data;
+      const data = table.groupAt(mid).data;
       if (compareRowKeys(data, data.length - 1, start, 0, groups) < 0) lo = mid + 1;
       else hi = mid;
     }
     for (let g = lo; g < count; g++) {
-      const data = layer.groupAt(g).data;
+      const data = table.groupAt(g).data;
       if (compareRowKeys(data, 0, end, 0, groups) >= 0) break;
       holding.add(g);
     }

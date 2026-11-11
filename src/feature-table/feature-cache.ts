@@ -31,8 +31,8 @@
 
 import type { Feature } from '../shared/types/model.js';
 import { ROW_FLAG_DELETED } from '../table/row-group-types.js';
-import type { RowGroup } from './layer-table.js';
 import { type RowReadContext, rowFeature } from './row-read.js';
+import type { RowGroup } from './row-table.js';
 import type { RowPlace } from './tables-store.js';
 import type { RowHandle } from './types.js';
 import type { WriteMarks } from './write-marks.js';
@@ -232,7 +232,7 @@ export class FeatureCache {
       // deleted, or of a layer whose coordinates were raised, is not made a feature)
       const place = this.host.placeOf(handle);
       if (!place || (place.group.data.flags[place.row] & ROW_FLAG_DELETED) !== 0) continue;
-      const layerId = place.layer.layerId;
+      const layerId = place.table.tableId;
       if (this.host.readContext.dimensionsOf(layerId) !== 'xy') continue;
       this.featureOf(layerId, place.group, place.row);
       // What its id finds from now on, while no row is written or placed elsewhere
@@ -279,7 +279,7 @@ export class FeatureCache {
     const place = this.host.placeOf(found.handle);
     if (!place) return undefined;
     const { group, row } = place;
-    const layerId = place.layer.layerId;
+    const layerId = place.table.tableId;
     if (
       group.marks[row] !== kept.mark ||
       (group.data.flags[row] & ROW_FLAG_DELETED) !== 0 ||
@@ -405,8 +405,8 @@ export class FeatureCache {
       if (!place) continue;
       const { group, row } = place;
       if (group.marks[row] !== kept.mark || this.#groupNumbers.get(group) !== kept.group) continue;
-      if (this.host.readContext.dimensionsOf(place.layer.layerId) !== 'xy') continue;
-      const now = rowFeature(this.host.readContext, place.layer.layerId, group, row);
+      if (this.host.readContext.dimensionsOf(place.table.tableId) !== 'xy') continue;
+      const now = rowFeature(this.host.readContext, place.table.tableId, group, row);
       if (!sameValue(kept.feature, now)) {
         problems.push(
           `the feature kept for the row ${handle} of the write mark ${kept.mark} is not the one its row makes now`,

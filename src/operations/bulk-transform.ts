@@ -98,7 +98,7 @@ export function transformKinds(
   for (const handle of rows.handles) {
     const place = livePlaceOf(internals, handle);
     if (!place) continue;
-    const view = tables.get(place.layer.layerId);
+    const view = tables.get(place.table.tableId);
     const type = view?.getRowType(handle) ?? null;
     let field = '';
     if (view && type !== null && edit.kind !== 'translate') {
@@ -125,7 +125,7 @@ export function transformKinds(
         kind: 'rows',
         fields,
         write: (handle, read) => {
-          const type = tables.get(read.place.layer.layerId)?.getRowType(handle) ?? null;
+          const type = tables.get(read.place.table.tableId)?.getRowType(handle) ?? null;
           const moved = transformedRow(transforms, edit, read, type, declared);
           if (!moved) return null;
           if (field === '') return [moved.geometry];

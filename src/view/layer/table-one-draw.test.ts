@@ -26,7 +26,7 @@ import type { RenderContext } from '../../api/extension/render.js';
 import type { GpuRowBuffer } from '../../api/extension/webgl.js';
 import type { LayerTableView, RowField } from '../../api/tables.js';
 import type { GpuRowsSource, HeldGpuRows } from '../../extension/renderers.js';
-import type { LayerTable } from '../../feature-table/layer-table.js';
+import type { RowTable } from '../../feature-table/row-table.js';
 import { writeRowGeometry } from '../../feature-table/row-write.js';
 import { ROW_WRITE_GEOMETRY, ROW_WRITE_STYLE } from '../../feature-table/types.js';
 import type { BBox } from '../../geometry/types.js';
@@ -333,7 +333,7 @@ function coverage(record: TableDrawRecord[]): string[] {
   return out;
 }
 
-function allRows(table: LayerTable): string[] {
+function allRows(table: RowTable): string[] {
   const out: string[] = [];
   for (let g = 0; g < table.groupCount; g++) {
     for (let row = 0; row < table.groupAt(g).data.length; row++) out.push(`${g}:${row}`);
@@ -345,7 +345,7 @@ function allRows(table: LayerTable): string[] {
  * The handles of the rows drawn, in the order they are drawn: the rows of the ranges recorded
  * that the state of their group does not hide, the rows of the delta included
  */
-function drawnHandles(record: TableDrawRecord[], table: LayerTable): number[] {
+function drawnHandles(record: TableDrawRecord[], table: RowTable): number[] {
   const out: number[] = [];
   for (const entry of record) {
     const group = entry.delta ? table.delta.group : table.groupAt(entry.groupIndex);
@@ -358,7 +358,7 @@ function drawnHandles(record: TableDrawRecord[], table: LayerTable): number[] {
 }
 
 /** Every row of a layer that is not hidden, in its order */
-function visibleHandles(table: LayerTable): number[] {
+function visibleHandles(table: RowTable): number[] {
   const order = table.rowOrder();
   const out: number[] = [];
   for (let i = 0; i < order.handles.length; i++) {

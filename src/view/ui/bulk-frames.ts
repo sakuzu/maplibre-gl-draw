@@ -21,7 +21,7 @@
  */
 
 import type { ProjectionData } from 'maplibre-gl';
-import type { RowGroup } from '../../feature-table/layer-table.js';
+import type { RowGroup } from '../../feature-table/row-table.js';
 import type { SelectionUIConfig } from '../../shared/config/selection.js';
 import { RENDERING_DEFAULTS } from '../../shared/math/constants.js';
 import {

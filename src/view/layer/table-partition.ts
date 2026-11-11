@@ -20,9 +20,9 @@
 
 import type { LayerTableView } from '../../api/tables.js';
 import type { GpuRowsSource } from '../../extension/renderers.js';
-import type { RowGroup } from '../../feature-table/layer-table.js';
-import { geometryAt } from '../../feature-table/layer-table.js';
 import { rowHasGeometry, rowType } from '../../feature-table/row-read.js';
+import type { RowGroup } from '../../feature-table/row-table.js';
+import { geometryAt } from '../../feature-table/row-table.js';
 import type { BBox } from '../../geometry/types.js';
 import type { Feature, Layer } from '../../shared/types/model.js';
 import type { TransformFieldsRegistry } from '../../store/transform-roles.js';

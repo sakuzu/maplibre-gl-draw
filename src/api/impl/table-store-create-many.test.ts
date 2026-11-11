@@ -103,7 +103,7 @@ function places(store: Store, ids: readonly string[]): unknown[] {
     const at = handle === undefined ? null : internals?.placeOf(handle);
     if (!at) return null;
     const data = at.group.data;
-    return { layerId: at.layer.layerId, group: data.groups[at.row] };
+    return { layerId: at.table.tableId, group: data.groups[at.row] };
   });
 }
 

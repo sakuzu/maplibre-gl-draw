@@ -9,7 +9,7 @@ import type { BBox } from '../geometry/bbox-type.js';
 
 /**
  * The handle of a row: a number the document gives a row the first time it sees its id, and
- * never changes while the document is open, whatever group, layer or place the row moves to
+ * never changes while the document is open, whatever group, table or place the row moves to
  *
  * A host or an extension that keeps a value per row outside the row (a column of its own) keys
  * it by the handle, so the value stays with its row when the groups are built again or the rows
@@ -18,7 +18,7 @@ import type { BBox } from '../geometry/bbox-type.js';
 export type RowHandle = number;
 
 /**
- * The handle of a row group of a layer. Cutting a group in two or joining two groups gives a
+ * The handle of a row group of a table. Cutting a group in two or joining two groups gives a
  * handle to the new groups only; the other groups keep theirs
  */
 export type RowGroupHandle = number;
@@ -54,7 +54,7 @@ export interface RowCursor {
 }
 
 /**
- * The rows of the delta of a layer that changed when it was made again: the rows that left it
+ * The rows of the delta of a table that changed when it was made again: the rows that left it
  * and the rows that came into it (the rows that stay keep their values)
  *
  * @internal

@@ -12,8 +12,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { FeatureTablesWriter } from '../../api/tables.js';
 import { featureTablesInternals } from '../../feature-table/feature-tables.js';
-import { LayerTable } from '../../feature-table/layer-table.js';
 import { RowSkips } from '../../feature-table/row-skips.js';
+import { RowTable } from '../../feature-table/row-table.js';
 import type { Store } from '../../store/store.js';
 import { createTableStore } from '../../store/table-memory.js';
 import { createMapStub } from '../../test-utils.js';
@@ -130,8 +130,8 @@ describe('many groups at once over a Store of rows', () => {
     );
     expect(apply).toHaveBeenCalledTimes(1);
     apply.mockClear();
-    const previous = vi.spyOn(LayerTable.prototype, 'previousRow');
-    const next = vi.spyOn(LayerTable.prototype, 'nextRow');
+    const previous = vi.spyOn(RowTable.prototype, 'previousRow');
+    const next = vi.spyOn(RowTable.prototype, 'nextRow');
     const down = vi.spyOn(RowSkips.prototype, 'lastAtOrBefore');
     const up = vi.spyOn(RowSkips.prototype, 'firstAtOrAfter');
     expect(draw.groups.deleteMany(ids)).toBe(true);

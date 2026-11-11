@@ -159,7 +159,7 @@ describe('the rows of layers of every dimensions', () => {
         expect(internals.deltaRowCount()).toBe(0);
         expectTablesMatch(tables, reference, layerIds, groupHandleOf);
         for (const layerId of layerIds) {
-          const table = internals.layerTable(layerId);
+          const table = internals.rowTable(layerId);
           for (let g = 0; g < (table?.groupCount ?? 0); g++) {
             for (const child of geometryColumnOf(table!.groupAt(g).data)!.children ?? []) {
               expect(child.dimensions).toBe(dims);
@@ -265,7 +265,7 @@ describe('a next version merged in a Worker', () => {
       coordinateSystem: { rowBox: (...args) => planarRowBox(...args) },
     });
     const { tables, writer, internals, groupHandleOf } = setup;
-    expect(internals.layerTable('a')?.groupCount).toBe(1);
+    expect(internals.rowTable('a')?.groupCount).toBe(1);
     const moved = reference.rows.get('p5') as ReferenceRow;
     moved.order = key(50_005);
     moved.geometry = { type: 'Point', coordinates: [3, 4, Number.NaN, 5] };
@@ -416,7 +416,7 @@ describe('the rows of a layer of z or m', () => {
     });
     writer.addRowBlocks('a', builder.finish());
     internals.addQueuedRowBlocks();
-    const table = internals.layerTable('a');
+    const table = internals.rowTable('a');
     expect(table?.dims).toBe('xyz');
     expect(
       geometryColumnOf(table!.groupAt(0).data)!.children.map((child) => child.dimensions),
@@ -442,11 +442,11 @@ describe('the rows of a layer of z or m', () => {
       key: key(5),
     });
     expect(() => writer.addRowBlocks('a', builder.finish())).toThrow(
-      /coordinates of xy, its layer xyz/,
+      /coordinates of xy, its table xyz/,
     );
     // Into a layer of xy: its z would be lost
     expect(() => writer.apply(rowPatch([at('p')], { parent: ['b'], key: [key(1)] }))).toThrow(
-      /coordinates of xyz, the layer "b" of xy/,
+      /coordinates of xyz, the table "b" of xy/,
     );
   });
 

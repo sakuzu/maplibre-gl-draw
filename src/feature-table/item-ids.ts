@@ -133,7 +133,7 @@ export function tableLayerHasLockedRow(
   layerId: string,
 ): boolean {
   const internals = featureTablesInternals(tables);
-  const table = internals?.layerTable(layerId);
+  const table = internals?.rowTable(layerId);
   if (!table) return false;
   const order = table.rowOrder();
   for (let i = 0; i < order.handles.length; i++) {
@@ -146,7 +146,7 @@ export function tableLayerHasLockedRow(
 /** The walk of the items of a layer held as rows (null for a layer that holds no row) */
 function walkOf(tables: FeatureTables, layerId: string): ItemWalk | null {
   const internals = featureTablesInternals(tables);
-  const table = internals?.layerTable(layerId);
+  const table = internals?.rowTable(layerId);
   return internals && table ? new ItemWalk(table, internals) : null;
 }
 
@@ -252,7 +252,7 @@ export function tableGroupsInOrder(
  */
 export function tableLayerGroupIds(tables: FeatureTables | undefined, layerId: string): string[] {
   const internals = featureTablesInternals(tables);
-  const items = internals?.layerTable(layerId)?.itemsOf();
+  const items = internals?.rowTable(layerId)?.itemsOf();
   if (!internals || !items) return [];
   const out: string[] = [];
   for (let i = 0; i < items.kinds.length; i++) {
@@ -285,11 +285,11 @@ export function tableIdsInOrder(
   return entries
     .sort((a, b) => {
       if (!a.place || !b.place) return (a.place ? 0 : 1) - (b.place ? 0 : 1);
-      const la = layerRank.get(a.place.layer.layerId) ?? Number.MAX_SAFE_INTEGER;
-      const lb = layerRank.get(b.place.layer.layerId) ?? Number.MAX_SAFE_INTEGER;
+      const la = layerRank.get(a.place.table.tableId) ?? Number.MAX_SAFE_INTEGER;
+      const lb = layerRank.get(b.place.table.tableId) ?? Number.MAX_SAFE_INTEGER;
       if (la !== lb) return la - lb;
-      if (a.place.layer !== b.place.layer) {
-        return a.place.layer.layerId < b.place.layer.layerId ? -1 : 1;
+      if (a.place.table !== b.place.table) {
+        return a.place.table.tableId < b.place.table.tableId ? -1 : 1;
       }
       return compareRowKeys(
         a.place.group.data,

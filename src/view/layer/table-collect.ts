@@ -25,8 +25,6 @@
  */
 
 import type { ValueStringCache } from '@sakuzu/tabane';
-import type { RowGroup } from '../../feature-table/layer-table.js';
-import { geometryAt, type RowGeometryAt } from '../../feature-table/layer-table.js';
 import {
   rowHasGeometry,
   rowNumber,
@@ -34,6 +32,8 @@ import {
   rowType,
   rowValue,
 } from '../../feature-table/row-read.js';
+import type { RowGroup } from '../../feature-table/row-table.js';
+import { geometryAt, type RowGeometryAt } from '../../feature-table/row-table.js';
 import type { StyleTable } from '../../feature-table/style-table.js';
 import { generateCirclePolygon } from '../../geometry/circle.js';
 import { drawPropertyKey } from '../../shared/properties.js';

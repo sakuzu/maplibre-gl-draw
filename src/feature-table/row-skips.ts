@@ -4,7 +4,7 @@
 /**
  * The runs of the rows of a row group the walk of the order passes (`RowSkips`)
  *
- * The walk of the items of a layer reads the rows next to a row, and passes the rows that are not
+ * The walk of the items of a table reads the rows next to a row, and passes the rows that are not
  * items: the deleted rows, and the copies of rows read elsewhere. Rows deleted one write after
  * the other stay in their groups until their next versions, so a walk that passed them one at a
  * time would cost every row deleted before it, and many deletions the square of their number.
@@ -18,11 +18,11 @@
  */
 
 import { ROW_FLAG_DELETED } from '../table/row-group-types.js';
-import type { RowGroup } from './layer-table.js';
 import { STATE_ELSEWHERE } from './row-state.js';
+import type { RowGroup } from './row-table.js';
 
 /**
- * Whether a row of a group is read there in the order of its layer: not the copy of a row read
+ * Whether a row of a group is read there in the order of its table: not the copy of a row read
  * elsewhere (a row of the delta or of the new rows is read where it is)
  *
  * @internal

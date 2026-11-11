@@ -47,8 +47,8 @@ import type { FeatureTypeDefinition } from '../../api/extension/feature-type.js'
 import type { FeaturePatch, FeatureStyle } from '../../api/model.js';
 import type { FeatureTypeHandler, FrameDrawContext } from '../../extension/index.js';
 import { featureTablesInternals } from '../../feature-table/feature-tables.js';
-import type { RowGroup } from '../../feature-table/layer-table.js';
 import { rowFeatureToRead } from '../../feature-table/row-read.js';
+import type { RowGroup } from '../../feature-table/row-table.js';
 import { generateCirclePolygon } from '../../geometry/circle.js';
 import { createRowBlockBuilder, createRowValues } from '../../kasane/index.js';
 import { drawPropertyKey } from '../../shared/properties.js';

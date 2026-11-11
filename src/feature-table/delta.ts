@@ -2,12 +2,12 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * The rows of a layer changed since their row groups were built (`DeltaRows`)
+ * The rows of a table changed since their row groups were built (`DeltaRows`)
  *
  * A row whose change cannot be written into its group in place (it moves in the order or to
- * another layer, its shape no longer fits its place in the GPU chunk, it is new) is held here
+ * another table, its shape no longer fits its place in the GPU chunk, it is new) is held here
  * until the next version of the group its key falls in takes it. The delta has the columns of a
- * row group: its rows are one row group in the order of the layer, made again when rows come in
+ * row group: its rows are one row group in the order of the table, made again when rows come in
  * or leave (`rebuild`), and written in place as the rows of a group are otherwise. While a row is
  * in the delta, its copy in its group is hidden and not read: the delta copy is the row.
  *
@@ -20,16 +20,16 @@
  * again around it.
  */
 
-import type { RowGroup } from './layer-table.js';
+import type { RowGroup } from './row-table.js';
 import type { RowGroupHandle, RowHandle } from './types.js';
 
 /**
- * The rows of a layer changed since their groups were built
+ * The rows of a table changed since their groups were built
  *
  * @internal
  */
 export class DeltaRows {
-  /** The rows in the order of the layer, as one row group (null when there is none) */
+  /** The rows in the order of the table, as one row group (null when there is none) */
   private rowGroup: RowGroup | null = null;
   /** 1 for a row kept whatever version comes (a row held as a feature), by row of the group */
   private kept: Uint8Array = new Uint8Array(0);

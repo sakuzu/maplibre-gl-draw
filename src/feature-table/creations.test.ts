@@ -98,7 +98,7 @@ function create(
 
 /** The sizes of the groups of a layer */
 function sizes(internals: FeatureTablesInternals): number[] {
-  const table = internals.layerTable('a');
+  const table = internals.rowTable('a');
   return Array.from(
     { length: table?.groupCount ?? 0 },
     (_, g) => table?.groupAt(g).data.length ?? 0,
@@ -273,7 +273,7 @@ describe('many new rows written at once', () => {
     const reference = pointsReference(4);
     const setup = tablesOfReference(reference, ['a'], 10, { worker });
     const { tables, internals, groupHandleOf } = setup;
-    const table = internals.layerTable('a');
+    const table = internals.rowTable('a');
     const { handles, change } = create(
       setup,
       reference,

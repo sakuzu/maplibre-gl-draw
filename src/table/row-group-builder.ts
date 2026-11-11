@@ -2,9 +2,9 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * Builds the row groups of one layer (`createRowBlockBuilder`)
+ * Builds the row groups of one table (`createRowBlockBuilder`)
  *
- * The rows are added in any order. `finish` puts them in the order of the layer
+ * The rows are added in any order. `finish` puts them in the order of the table
  * (`compareRowKeys`), cuts them into groups of at most a target number of rows and of
  * coordinates, and computes for every group what the main thread would otherwise compute: the
  * hashes of the ids, the bbox of every row, the caches of the rows the user of the tables
@@ -105,7 +105,7 @@ export interface RowBlockBuilderOptions {
    */
   readonly targetVertices?: number;
   /**
-   * The dimensions of the coordinates of the rows: those of their layer (`xy` when omitted). A
+   * The dimensions of the coordinates of the rows: those of their table (`xy` when omitted). A
    * position of fewer values gets NaN for the others; one of more values is refused
    */
   readonly dimensions?: CoordinateDimensions;
@@ -183,7 +183,7 @@ export interface RowInput {
 }
 
 /**
- * Builds the row blocks of one layer
+ * Builds the row blocks of one table
  */
 export interface RowBlockBuilder {
   /** The number of rows added */
@@ -197,7 +197,7 @@ export interface RowBlockBuilder {
    */
   addRow(row: RowInput): void;
   /**
-   * Puts the rows in the order of the layer and cuts them into row blocks
+   * Puts the rows in the order of the table and cuts them into row blocks
    *
    * @throws an error with the code `not-found` when a row names a group the options do not give
    */
@@ -214,7 +214,7 @@ export interface RowBlockDataBuilder extends RowBlockBuilder {
 }
 
 /**
- * Creates the builder of the row blocks of one layer
+ * Creates the builder of the row blocks of one table
  *
  * @internal
  */
@@ -223,7 +223,7 @@ export function createRowBlockBuilder(options: RowBlockBuildOptions): RowBlockBu
 }
 
 /**
- * Creates the builder of the row blocks of one layer, as the tables use it
+ * Creates the builder of the row blocks of one table, as the tables use it
  *
  * @internal
  */

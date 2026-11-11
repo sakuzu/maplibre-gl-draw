@@ -60,7 +60,7 @@
 import { utf8String } from '@sakuzu/tabane';
 import { STATE_BULK } from '../feature-table/feature-row-states.js';
 import { featureTablesInternals } from '../feature-table/feature-tables.js';
-import type { RowGroup } from '../feature-table/layer-table.js';
+import type { RowGroup } from '../feature-table/row-table.js';
 import { DrawError } from '../shared/draw-error.js';
 import type { SketchController } from '../sketches/sketch-controller.js';
 import type { Store } from '../store/store.js';
@@ -309,7 +309,7 @@ export function checkWriteMarks(store: Store): string[] {
   };
   for (const layer of store.listLayers()) {
     if (full()) break;
-    const table = tables.layerTable(layer.id);
+    const table = tables.rowTable(layer.id);
     if (!table) continue;
     for (let g = 0; g < table.groupCount && !full(); g++) checkGroup(layer.id, table.groupAt(g));
     if (table.delta.group && !full()) checkGroup(layer.id, table.delta.group);

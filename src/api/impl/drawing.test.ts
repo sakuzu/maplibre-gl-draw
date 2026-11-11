@@ -94,7 +94,7 @@ describe('debug.gpu and the hooks of measurement of the rows', () => {
     debug.setRowsMoving([handle], 2);
     debug.setMoveTranslation(2, 0.5, -0.5);
     const internals = featureTablesInternals(tables);
-    const group = internals?.layerTable('rows')?.groupAt(0);
+    const group = internals?.rowTable('rows')?.groupAt(0);
     expect(group?.gpuState[1]).toBe(2 << 1);
     expect(internals?.states.translation(2)).toEqual([0.5, -0.5]);
     // Nothing is drawn yet: the recording starts empty

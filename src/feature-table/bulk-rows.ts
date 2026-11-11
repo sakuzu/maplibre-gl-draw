@@ -65,7 +65,7 @@ export function summarizeRows(
     const place = internals.placeOf(handle);
     if (!place || (place.group.data.flags[place.row] & ROW_FLAG_DELETED) !== 0) continue;
     count++;
-    layers.add(place.layer.layerId);
+    layers.add(place.table.tableId);
     const b = place.group.data.rowBounds;
     const at = place.row * 4;
     if (Number.isNaN(b[at])) continue;
@@ -113,7 +113,7 @@ export function isRowShown(
   if (!place) return false;
   // Hidden by its own flag, by its group, deleted, or by this client
   if ((place.group.state[place.row] & STATE_UNHIT_MASK) !== 0) return false;
-  const layerId = place.layer.layerId;
+  const layerId = place.table.tableId;
   if (!containers.layerVisible(layerId) || containers.hidden(layerId)) return false;
   const group = place.group.data.groups[place.row];
   if (group >= 0) {
@@ -139,7 +139,7 @@ export function isRowLocked(
   if ((place.group.data.flags[place.row] & ROW_FLAG_LOCKED) !== 0) return true;
   const group = place.group.data.groups[place.row];
   if (group >= 0 && isGroupLocked(internals.groups, group)) return true;
-  return containers.layerLocked(place.layer.layerId);
+  return containers.layerLocked(place.table.tableId);
 }
 
 /**
@@ -158,11 +158,11 @@ export function rowsByLayerInOrder(
   const layers = new Map<string, true>();
   for (const handle of rows.handles) {
     const place = livePlaceOf(internals, handle);
-    if (place) layers.set(place.layer.layerId, true);
+    if (place) layers.set(place.table.tableId, true);
   }
   const out = new Map<string, Int32Array>();
   for (const layerId of layers.keys()) {
-    const table = internals.layerTable(layerId);
+    const table = internals.rowTable(layerId);
     if (!table) continue;
     const order = table.rowOrder();
     const picked: number[] = [];
@@ -192,7 +192,7 @@ export function firstRowsInOrder(
 ): number[] {
   const out: number[] = [];
   for (const layerId of layerIds) {
-    const order = internals.layerTable(layerId)?.rowOrder();
+    const order = internals.rowTable(layerId)?.rowOrder();
     if (!order) continue;
     for (let i = 0; i < order.handles.length; i++) {
       if (out.length >= limit) return out;

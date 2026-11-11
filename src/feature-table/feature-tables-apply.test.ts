@@ -97,7 +97,7 @@ describe('the items of a layer', () => {
     internals?.groups.set(7, {
       id: 'g',
       order: 'k000003',
-      layerId: 'layer',
+      tableId: 'layer',
       flags: 0,
     });
     const builder = createRowBlockDataBuilder({

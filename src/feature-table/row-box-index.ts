@@ -34,14 +34,14 @@ import type { RowHandle, WhenIdle } from './types.js';
  */
 export interface RowBoxSource {
   /**
-   * The box of a row as it is drawn now and the number of its layer, or null for no row (deleted,
+   * The box of a row as it is drawn now and the number of its table, or null for no row (deleted,
    * gone): written into `out` (minX, minY, maxX, maxY)
    *
    * @param inBuild Whether it is read in a build of every row (rather than as a row marked)
    */
   boxOf(handle: RowHandle, out: Float64Array, inBuild: boolean): number | null;
   /**
-   * The handles of every row of the tables, an array per layer (to build the index again); the
+   * The handles of every row of the tables, an array per table (to build the index again); the
    * arrays are not changed afterwards
    */
   rowLists(): readonly Int32Array[];
@@ -126,7 +126,7 @@ const LOAD = 4;
 /** A build of the index from every row, done in slices */
 interface Build {
   phase: number;
-  /** The handles of every row, an array per layer, and where the reading is */
+  /** The handles of every row, an array per table, and where the reading is */
   readonly lists: readonly Int32Array[];
   list: number;
   at: number;
@@ -160,8 +160,8 @@ export class RowBoxIndex {
   readonly #sortKey: ((centerX: number, centerY: number) => number) | undefined;
   /** The box each handle is indexed with (minX, minY, maxX, maxY) */
   #boxes = new Float64Array(0);
-  /** The layer each handle is indexed in, -1 for a handle not indexed */
-  #layers = new Int32Array(0);
+  /** The table each handle is indexed in, -1 for a handle not indexed */
+  #tables = new Int32Array(0);
   /** The handles of the rows, each as `handle + 1` */
   readonly #tree: RBush<number>;
   /** The handles to look at again */
@@ -234,15 +234,15 @@ export class RowBoxIndex {
   }
 
   /**
-   * The rows of a layer whose boxes meet a box (in no particular order)
+   * The rows of a table whose boxes meet a box (in no particular order)
    *
-   * @param layer The number of the layer (`RowBoxSource.boxOf`)
+   * @param table The number of the table (`RowBoxSource.boxOf`)
    */
-  search(layer: number, minX: number, minY: number, maxX: number, maxY: number): RowHandle[] {
+  search(table: number, minX: number, minY: number, maxX: number, maxY: number): RowHandle[] {
     this.#flush();
     const out: RowHandle[] = [];
     for (const item of this.#tree.search({ minX, minY, maxX, maxY })) {
-      if (this.#layers[item - 1] === layer) out.push(item - 1);
+      if (this.#tables[item - 1] === table) out.push(item - 1);
     }
     return out;
   }
@@ -250,7 +250,7 @@ export class RowBoxIndex {
   /** The bytes the index holds about (the arrays by handle and the nodes of the tree) */
   get bytes(): number {
     // A node of the tree holds up to 9 children: about one node per 5 rows, of about 100 bytes
-    return this.#boxes.byteLength + this.#layers.byteLength + Math.ceil(this.#count / 5) * 100;
+    return this.#boxes.byteLength + this.#tables.byteLength + Math.ceil(this.#count / 5) * 100;
   }
 
   /**
@@ -306,16 +306,16 @@ export class RowBoxIndex {
     const box = this.#scratch;
     for (const handle of marked) {
       // A row is taken out with the box it was put in with
-      if (handle < this.#layers.length && this.#layers[handle] >= 0) {
+      if (handle < this.#tables.length && this.#tables[handle] >= 0) {
         this.#tree.remove(handle + 1);
-        this.#layers[handle] = -1;
+        this.#tables[handle] = -1;
         this.#count--;
       }
-      const layer = this.#source.boxOf(handle, box, false);
-      if (layer === null) continue;
+      const table = this.#source.boxOf(handle, box, false);
+      if (table === null) continue;
       this.#reserve(handle + 1);
       this.#boxes.set(box, handle * 4);
-      this.#layers[handle] = layer;
+      this.#tables[handle] = table;
       this.#tree.insert(handle + 1);
       this.#count++;
     }
@@ -326,7 +326,7 @@ export class RowBoxIndex {
     this.#all = false;
     this.#marked.clear();
     this.#tree.clear();
-    this.#layers.fill(-1);
+    this.#tables.fill(-1);
     this.#count = 0;
     const lists = this.#source.rowLists();
     let total = 0;
@@ -391,12 +391,12 @@ export class RowBoxIndex {
       const end = Math.min(list.length, build.at + left);
       for (let i = build.at; i < end; i++) {
         const handle = list[i];
-        const layer = this.#source.boxOf(handle, box, true);
-        if (layer === null) continue;
+        const table = this.#source.boxOf(handle, box, true);
+        if (table === null) continue;
         this.#reserve(handle + 1);
-        if (this.#layers[handle] >= 0) continue;
+        if (this.#tables[handle] >= 0) continue;
         this.#boxes.set(box, handle * 4);
-        this.#layers[handle] = layer;
+        this.#tables[handle] = table;
         build.items[build.count++] = handle + 1;
         const cx = (box[0] + box[2]) / 2;
         const cy = (box[1] + box[3]) / 2;
@@ -518,13 +518,13 @@ export class RowBoxIndex {
 
   /** Makes the arrays by handle hold `n` handles at least */
   #reserve(n: number): void {
-    if (this.#layers.length >= n) return;
-    const size = Math.max(n, this.#layers.length * 2, 64);
+    if (this.#tables.length >= n) return;
+    const size = Math.max(n, this.#tables.length * 2, 64);
     const boxes = new Float64Array(size * 4);
     boxes.set(this.#boxes);
-    const layers = new Int32Array(size).fill(-1);
-    layers.set(this.#layers);
+    const tables = new Int32Array(size).fill(-1);
+    tables.set(this.#tables);
     this.#boxes = boxes;
-    this.#layers = layers;
+    this.#tables = tables;
   }
 }

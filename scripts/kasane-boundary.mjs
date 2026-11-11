@@ -24,7 +24,7 @@ export const KASANE_FILES = [
   'feature-table/group-table.ts',
   'feature-table/id-index.ts',
   'feature-table/item-walk.ts',
-  'feature-table/layer-table.ts',
+  'feature-table/row-table.ts',
   'feature-table/row-box-index.ts',
   'feature-table/row-skips.ts',
   'feature-table/row-state.ts',

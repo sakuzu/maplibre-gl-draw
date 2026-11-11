@@ -42,8 +42,8 @@ export class IdIndex {
   private rowOf: Int32Array = new Int32Array(64).fill(-1);
   /** The place of each handle among the changed rows (-1 for none) */
   private deltaOf: Int32Array = new Int32Array(64).fill(-1);
-  /** The layer of the changed rows each handle is among (-1 for none) */
-  private deltaLayerOf: Int32Array = new Int32Array(64).fill(-1);
+  /** The table of the changed rows each handle is among (-1 for none) */
+  private deltaTableOf: Int32Array = new Int32Array(64).fill(-1);
   /** Whether each handle is found by its id (a handle forgotten is not, until it is freed) */
   private linkedOf: Uint8Array = new Uint8Array(64);
   /** The number of the handles whose id is read from each column of `sources` */
@@ -166,7 +166,7 @@ export class IdIndex {
     this.groupOf[handle] = -1;
     this.rowOf[handle] = -1;
     this.deltaOf[handle] = -1;
-    this.deltaLayerOf[handle] = -1;
+    this.deltaTableOf[handle] = -1;
   }
 
   /**
@@ -226,7 +226,7 @@ export class IdIndex {
     this.groupOf[handle] = -1;
     this.rowOf[handle] = -1;
     this.deltaOf[handle] = -1;
-    this.deltaLayerOf[handle] = -1;
+    this.deltaTableOf[handle] = -1;
     this.freeList.push(handle);
   }
 
@@ -254,9 +254,9 @@ export class IdIndex {
     return handle >= 0 && handle < this.count ? this.deltaOf[handle] : -1;
   }
 
-  /** The layer of the changed rows a handle is among (-1 for none) */
-  deltaLayer(handle: RowHandle): number {
-    return handle >= 0 && handle < this.count ? this.deltaLayerOf[handle] : -1;
+  /** The table of the changed rows a handle is among (-1 for none) */
+  deltaTable(handle: RowHandle): number {
+    return handle >= 0 && handle < this.count ? this.deltaTableOf[handle] : -1;
   }
 
   /** Records where the row of a handle is */
@@ -266,11 +266,11 @@ export class IdIndex {
   }
 
   /**
-   * Records the place of a handle among the changed rows of a layer (`layer` and `slot` -1 for
+   * Records the place of a handle among the changed rows of a table (`table` and `slot` -1 for
    * none)
    */
-  setDelta(handle: RowHandle, layer: number, slot: number): void {
-    this.deltaLayerOf[handle] = layer;
+  setDelta(handle: RowHandle, table: number, slot: number): void {
+    this.deltaTableOf[handle] = table;
     this.deltaOf[handle] = slot;
   }
 
@@ -306,7 +306,7 @@ export class IdIndex {
     this.groupOf[handle] = -1;
     this.rowOf[handle] = -1;
     this.deltaOf[handle] = -1;
-    this.deltaLayerOf[handle] = -1;
+    this.deltaTableOf[handle] = -1;
     this.linkedOf[handle] = 1;
     if ((this.used + 1) * 2 > this.slots.length) this.rehash(handle);
     const mask = this.slots.length - 1;
@@ -353,7 +353,7 @@ export class IdIndex {
     this.groupOf = grow(this.groupOf, size, -1);
     this.rowOf = grow(this.rowOf, size, -1);
     this.deltaOf = grow(this.deltaOf, size, -1);
-    this.deltaLayerOf = grow(this.deltaLayerOf, size, -1);
+    this.deltaTableOf = grow(this.deltaTableOf, size, -1);
     const linked = new Uint8Array(size);
     linked.set(this.linkedOf);
     this.linkedOf = linked;

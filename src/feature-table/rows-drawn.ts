@@ -21,5 +21,5 @@ import { featureTablesInternals } from './feature-tables.js';
 export function isLayerDrawnFromRows(tables: FeatureTables | undefined, layer: Layer): boolean {
   const internals = featureTablesInternals(tables);
   if (!internals) return false;
-  return layer.kind === 'table' || internals.layerTable(layer.id) !== undefined;
+  return layer.kind === 'table' || internals.rowTable(layer.id) !== undefined;
 }

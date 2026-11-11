@@ -27,7 +27,6 @@ import { feature, referenceKey, rowPatch, tablesOfFeatures } from '../test-utils
 import { createFeatureTablesStore } from './feature-row-tables.js';
 import { featureTablesInternals } from './feature-tables.js';
 import { hitTestLayerTable } from './hit-test.js';
-import { overrideBytesOf } from './layer-table.js';
 import {
   rowFeature,
   rowGeometry,
@@ -36,6 +35,7 @@ import {
   rowTriangles,
   rowValue,
 } from './row-read.js';
+import { overrideBytesOf } from './row-table.js';
 import { writeRowGeometry, writeRowValue } from './row-write.js';
 import { OVERRIDE_BYTES_LIMIT } from './value-overrides.js';
 

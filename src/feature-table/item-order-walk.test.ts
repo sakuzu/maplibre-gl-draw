@@ -26,7 +26,7 @@ import { seededRandom } from '../test-utils.js';
 import { type FeatureTablesInternals, featureTablesInternals } from './feature-tables.js';
 import { groupKeyMoves, type ItemOrderSource, ORDER_ITEM_LIMIT } from './item-order.js';
 import { ItemWalk } from './item-walk.js';
-import type { LayerItems, LayerTable, RowGroup } from './layer-table.js';
+import type { RowGroup, RowTable, TableItems } from './row-table.js';
 import type { GroupHandle, RowHandle } from './types.js';
 
 // === The reference: the changes made from the lists of every item ===
@@ -42,7 +42,7 @@ function groupCode(group: GroupHandle): number {
 }
 
 /** The items of a layer as numbers */
-function codesOf(items: LayerItems): Int32Array {
+function codesOf(items: TableItems): Int32Array {
   const out = new Int32Array(items.kinds.length);
   for (let i = 0; i < out.length; i++) {
     out[i] = items.kinds[i] === 0 ? rowCode(items.handles[i]) : groupCode(items.handles[i]);
@@ -61,12 +61,12 @@ function memberCodesOf(members: Int32Array | undefined): Int32Array {
 /** What the reference reads: the source of the changes of the order, and the rows of the layers */
 interface ReferenceSource extends ItemOrderSource {
   /** The rows of a layer (undefined for a layer that holds none) */
-  layer(layerId: string): LayerTable | undefined;
+  layer(layerId: string): RowTable | undefined;
 }
 
 /** The place a row is read from (its group and its row there) */
 interface RowAt {
-  readonly layer: LayerTable;
+  readonly table: RowTable;
   readonly group: RowGroup;
   readonly row: number;
 }
@@ -79,7 +79,7 @@ const PLACE_FIELDS: readonly RowField[] = ['parent', 'key'];
  * another place, to make the changes of the order once it is written
  */
 class FullListWatch {
-  private readonly layers = new Map<string, LayerItems | null>();
+  private readonly layers = new Map<string, TableItems | null>();
   private readonly groupsBefore = new Map<
     GroupHandle,
     { layerId: string; members: Int32Array | undefined }
@@ -104,7 +104,7 @@ class FullListWatch {
   /** A group of features whose members the write changes (its layer too) */
   watchGroup(group: GroupHandle): void {
     if (group < 0 || this.groupsBefore.has(group)) return;
-    const layerId = this.source.groups.layerOf(group);
+    const layerId = this.source.groups.tableOf(group);
     if (layerId === undefined) return;
     this.watchLayer(layerId);
     this.groupsBefore.set(group, { layerId, members: undefined });
@@ -140,7 +140,7 @@ class FullListWatch {
       const data = at.group.data;
       const group = data.groups[at.row];
       this.before.set(handle, [
-        group >= 0 ? this.source.groups.idOf(group) : at.layer.layerId,
+        group >= 0 ? this.source.groups.idOf(group) : at.table.tableId,
         utf8String(data.keys, at.row),
       ]);
     }
@@ -180,7 +180,7 @@ class FullListWatch {
     }
     for (const group of groups) {
       const before = this.groupsBefore.get(group);
-      const layerId = this.source.groups.layerOf(group) ?? before?.layerId;
+      const layerId = this.source.groups.tableOf(group) ?? before?.layerId;
       if (layerId === undefined) continue;
       const after = this.source.layer(layerId)?.itemsOf().members.get(group);
       containers.push(
@@ -234,14 +234,14 @@ class FullListWatch {
    * their new order, with the place they were put at together or the item just below each
    */
   private rowRanges(): RowsMove[] {
-    const byLayer = new Map<LayerTable, RowAt[]>();
+    const byLayer = new Map<RowTable, RowAt[]>();
     for (const handle of this.before.keys()) {
       const at = this.source.placeOf(handle);
       if (!at || isDeleted(at)) continue;
-      let list = byLayer.get(at.layer);
+      let list = byLayer.get(at.table);
       if (!list) {
         list = [];
-        byLayer.set(at.layer, list);
+        byLayer.set(at.table, list);
       }
       list.push(at);
     }
@@ -309,7 +309,7 @@ class FullListWatch {
           above = i < codes.length ? codes[i] : null;
         }
         const to: ItemPosition = {
-          layerId: layer.layerId,
+          layerId: layer.tableId,
           groupId: group >= 0 ? this.source.groups.idOf(group) : undefined,
           below:
             below.handle < 0
@@ -320,7 +320,7 @@ class FullListWatch {
                 ),
           above: above === null ? null : this.idOf(above, groupIds),
         };
-        out.push({ kind: 'rows', layerId: layer.layerId, handles, to, before });
+        out.push({ kind: 'rows', layerId: layer.tableId, handles, to, before });
         continue;
       }
       const kinds = new Uint8Array(rows.length);
@@ -332,7 +332,7 @@ class FullListWatch {
       });
       out.push({
         kind: 'rows',
-        layerId: layer.layerId,
+        layerId: layer.tableId,
         handles,
         belows: { kinds, handles: belows },
         before,
@@ -424,9 +424,9 @@ function compareCodePoints(a: string, b: string): number {
 function sourceOf(internals: FeatureTablesInternals): ReferenceSource {
   const groups = internals.groups;
   return {
-    layer: (layerId) => internals.layerTable(layerId),
+    layer: (layerId) => internals.rowTable(layerId),
     walkItems: (layerId) => {
-      const table = internals.layerTable(layerId);
+      const table = internals.rowTable(layerId);
       return table ? new ItemWalk(table, { groups, placeOf: (h) => internals.placeOf(h) }) : null;
     },
     getGroupKey: (group) => groups.orderOf(group),
@@ -450,14 +450,14 @@ function referenceWatch(
   const layerOf = (value: unknown): string | undefined => {
     if (typeof value !== 'string' || value === '') return undefined;
     const group = internals.groups.handleOfId(value);
-    return group >= 0 ? internals.groups.layerOf(group) : value;
+    return group >= 0 ? internals.groups.tableOf(group) : value;
   };
   for (let i = 0; i < handles.length; i++) {
     const handle = handles[i];
     const place = internals.placeOf(handle);
     const deleting = !!deleted?.[i];
     if (!place || (place.group.data.flags[place.row] & ROW_FLAG_DELETED) !== 0) {
-      const layerId = layerOf(parents?.[i]) ?? place?.layer.layerId;
+      const layerId = layerOf(parents?.[i]) ?? place?.table.tableId;
       if (deleting || layerId === undefined) continue;
       watch.watchLayer(layerId);
       watch.watchGroup(groupOf(parents?.[i]));
@@ -468,7 +468,7 @@ function referenceWatch(
     const row = place.row;
     const group = data.groups[row];
     if (deleting) {
-      watch.watchLayer(place.layer.layerId);
+      watch.watchLayer(place.table.tableId);
       watch.watchGroup(group);
       watch.row(handle, true);
       continue;
@@ -478,11 +478,11 @@ function referenceWatch(
     const nextGroup = parent !== undefined ? groupOf(parent) : group;
     const key = keys?.[i];
     const moved =
-      (layerId !== undefined && layerId !== place.layer.layerId) ||
+      (layerId !== undefined && layerId !== place.table.tableId) ||
       nextGroup !== group ||
       (key !== undefined && key !== utf8String(data.keys, row));
     if (!moved) continue;
-    watch.watchLayer(place.layer.layerId);
+    watch.watchLayer(place.table.tableId);
     if (layerId !== undefined) watch.watchLayer(layerId);
     watch.watchGroup(group);
     watch.watchGroup(nextGroup);
@@ -585,7 +585,7 @@ function randomPatch(
     picked.push(pool[picked.length]);
   }
   const handles = Int32Array.from(picked, (id) => tables.findRow(id) as number);
-  const layerOfRow = (handle: number) => internals.placeOf(handle)?.layer.layerId ?? 'a';
+  const layerOfRow = (handle: number) => internals.placeOf(handle)?.table.tableId ?? 'a';
   const kind = random();
   if (kind < 0.3 || many) {
     // New keys of their order (a member's among the members of its group)
@@ -704,7 +704,7 @@ describe('the changes of the order read from the items next to the ones a write 
           const orders = new Map(
             groups
               .map((group, k) => [group, keys[k]] as const)
-              .filter(([group]) => internals.groups.layerOf(group) === layerId),
+              .filter(([group]) => internals.groups.tableOf(group) === layerId),
           );
           const source = sourceOf(internals);
           expect(groupKeyMoves(source, layerId, orders), `seed ${seed}, step ${step}`).toEqual(

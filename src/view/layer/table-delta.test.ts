@@ -28,7 +28,7 @@ import type { Geometry } from 'geojson';
 import type { ProjectionData } from 'maplibre-gl';
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { RowField, RowValues } from '../../api/tables.js';
-import type { LayerTable } from '../../feature-table/layer-table.js';
+import type { RowTable } from '../../feature-table/row-table.js';
 import type { BBox } from '../../geometry/types.js';
 import type { Feature, Layer } from '../../shared/types/model.js';
 import {
@@ -178,7 +178,7 @@ function setup(list: Feature[], targetRows = 16, versions = false) {
     const record: TableDrawRecord[] = [];
     renderer.recordDraws(record);
     atOnce.length = 0;
-    const table = tables.internals.layerTable('layer') as LayerTable;
+    const table = tables.internals.rowTable('layer') as RowTable;
     renderer.drawLayer(
       tables.internals,
       table,
@@ -197,7 +197,7 @@ function setup(list: Feature[], targetRows = 16, versions = false) {
  * The ids of the rows drawn, in the order they are drawn: the rows of the ranges recorded that
  * the state of their group does not hide (the delta included)
  */
-function drawnIds(record: TableDrawRecord[], table: LayerTable): string[] {
+function drawnIds(record: TableDrawRecord[], table: RowTable): string[] {
   const out: string[] = [];
   for (const entry of record) {
     const group = entry.delta ? table.delta.group : table.groupAt(entry.groupIndex);
@@ -218,7 +218,7 @@ function drawnIds(record: TableDrawRecord[], table: LayerTable): string[] {
 }
 
 /** The ids of the rows of a layer that are shown, in its order */
-function shownIds(table: LayerTable, idOf: (handle: number) => string | undefined): string[] {
+function shownIds(table: RowTable, idOf: (handle: number) => string | undefined): string[] {
   const order = table.rowOrder();
   const out: string[] = [];
   for (let i = 0; i < order.handles.length; i++) {
@@ -277,7 +277,7 @@ describe('the drawing of the rows of the delta', () => {
         key: [orderKey(1)],
       }),
     );
-    const second = live.internals.layerTable('second') as LayerTable;
+    const second = live.internals.rowTable('second') as RowTable;
     expect(second.groupCount).toBe(0);
     live.renderer.prerender();
     const record2: TableDrawRecord[] = [];

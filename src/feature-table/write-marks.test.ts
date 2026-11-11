@@ -238,7 +238,7 @@ describe('the write mark of the tables', () => {
     const other = internals.placeOf(at('p20'))?.group;
     internals.setWriteMark(5);
     writer.apply(rowPatch([at('p3')], { key: [key(9500)] }));
-    const delta = internals.layerTable('a')?.delta;
+    const delta = internals.rowTable('a')?.delta;
     const place = internals.placeOf(at('p3'));
     expect(place?.group).toBe(delta?.group);
     expect(place?.group.marks[place.row]).toBe(5);

@@ -2,16 +2,16 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * The rows of one layer held as columns (`LayerTable`)
+ * The rows of one table held as columns (`RowTable`)
  *
- * A layer holds its rows as row groups in the order of the layer: the rows of a group are in the
+ * A table holds its rows as row groups in the order of the table: the rows of a group are in the
  * order of their keys, and every row of a group comes before every row of the next group. A
- * group is never changed in its shape once it is in the layer; its handle names it in the order,
+ * group is never changed in its shape once it is in the table; its handle names it in the order,
  * so the place of a row is its group and its row there.
  *
- * A place in the order of the layer (`TablePosition`) is a group and a slot: the slot of row `r`
+ * A place in the order of the table (`TablePosition`) is a group and a slot: the slot of row `r`
  * is `2r + 1`, the slot of what is drawn just before row `p` is `2p`, and `k` orders the things
- * at the same slot. The slots of a group never change while it is in the layer, so a place found
+ * at the same slot. The slots of a group never change while it is in the table, so a place found
  * once keeps its meaning until the group is replaced.
  */
 
@@ -43,7 +43,7 @@ export const SHAPE_COLUMN = 0;
 export const KEYED_COLUMN = 0;
 
 /**
- * A row group as a layer holds it
+ * A row group as a table holds it
  *
  * @internal
  */
@@ -89,7 +89,7 @@ export interface RowGroup {
   unindexed: Uint8Array | null;
   /** The number of rows marked in `unindexed` */
   unindexedCount: number;
-  /** Whether the group holds the rows of the delta of its layer (not a group of the order) */
+  /** Whether the group holds the rows of the delta of its table (not a group of the order) */
   readonly delta: boolean;
   /**
    * Whether the group holds new rows read before their own row groups are taken in (neither a
@@ -110,7 +110,7 @@ export interface RowGeometryAt {
 }
 
 /**
- * A place in the order of a layer
+ * A place in the order of a table
  */
 export interface TablePosition {
   /** The row group */
@@ -122,7 +122,7 @@ export interface TablePosition {
 }
 
 /**
- * Makes the row group of a layer for its columns, every row of it and itself with a write mark
+ * Makes the row group of a table for its columns, every row of it and itself with a write mark
  *
  * @internal
  */
@@ -217,11 +217,11 @@ const ITEM_KIND_ROW = 0;
 const ITEM_KIND_GROUP = 1;
 
 /**
- * The items of a layer in their order, and the members of its groups of features
+ * The items of a table in their order, and the members of its groups of features
  *
  * @internal
  */
-export interface LayerItems {
+export interface TableItems {
   /** The kind of each item (0: a row, 1: a group of features) */
   readonly kinds: Uint8Array;
   /** The handle of the row or of the group of each item */
@@ -233,22 +233,22 @@ export interface LayerItems {
 }
 
 /**
- * The rows of a layer in their order: the rows of its groups that are read there, and the rows
+ * The rows of a table in their order: the rows of its groups that are read there, and the rows
  * of its delta at their places
  *
  * @internal
  */
-export interface LayerOrder {
+export interface TableOrder {
   /** The handle of each row */
   readonly handles: Int32Array;
-  /** The group each row is read from (a group of the layer, or the group of its delta) */
+  /** The group each row is read from (a group of the table, or the group of its delta) */
   readonly groups: readonly RowGroup[];
   /** The row of each in its group */
   readonly rows: Int32Array;
 }
 
 /**
- * A row of the order of a layer: the group it is read from (a group of the layer, the group of
+ * A row of the order of a table: the group it is read from (a group of the table, the group of
  * its delta, or a group of its new rows read before their groups are taken in) and its row there
  *
  * @internal
@@ -259,20 +259,20 @@ export interface OrderRow {
 }
 
 /**
- * Where the rows of the delta of a layer are drawn and read: before row `cuts[k]` of the group
+ * Where the rows of the delta of a table are drawn and read: before row `cuts[k]` of the group
  * at `groups[k]` of the order (the rows of the delta are in their order, so the places are too)
  *
  * @internal
  */
 export interface DeltaPlaces {
-  /** The place of the group of each row of the delta in the order of the layer (-1: no group) */
+  /** The place of the group of each row of the delta in the order of the table (-1: no group) */
   readonly groups: Int32Array;
   /** The row of that group the row of the delta comes before (its length: after every row) */
   readonly cuts: Int32Array;
 }
 
 /**
- * The rows of a layer read outside its groups, in the order of their keys: the rows of its delta
+ * The rows of a table read outside its groups, in the order of their keys: the rows of its delta
  * and its new rows read before their groups are taken in
  */
 interface ReadExtras {
@@ -280,7 +280,7 @@ interface ReadExtras {
   readonly groups: readonly RowGroup[];
   /** The row of each in its group */
   readonly rows: Int32Array;
-  /** The place of each among the rows of the groups of the layer */
+  /** The place of each among the rows of the groups of the table */
   readonly places: DeltaPlaces;
   /** The entry of each row of each group (-1 for none) */
   readonly entries: ReadonlyMap<RowGroup, Int32Array>;
@@ -291,20 +291,20 @@ interface ReadExtras {
 }
 
 /**
- * The rows of one layer
+ * The rows of one table
  *
  * @internal
  */
-export class LayerTable {
+export class RowTable {
   private readonly order: RowGroupHandle[] = [];
   private readonly groups = new Map<RowGroupHandle, RowGroup>();
   private readonly indexOf = new Map<RowGroupHandle, number>();
   private rows = 0;
   private revision = 0;
-  /** The items of the layer in their order, made when first read after a change */
-  private items: LayerItems | null = null;
+  /** The items of the table in their order, made when first read after a change */
+  private items: TableItems | null = null;
   /** The rows in their order, made when first read after a change */
-  private ordered: LayerOrder | null = null;
+  private ordered: TableOrder | null = null;
   /** The places of the rows of the delta, and what they were found with */
   private places: DeltaPlaces | null = null;
   private placesKey = '';
@@ -312,7 +312,7 @@ export class LayerTable {
   deltaKeysRevision = -1;
   /** The group of each row moved since its group was built, by handle */
   private readonly moved = new Map<number, RowGroup>();
-  /** The rows of the layer changed since their groups were built */
+  /** The rows of the table changed since their groups were built */
   readonly delta: DeltaRows;
   /** The new rows read before their own groups are taken in (`setPendingSource`) */
   private pendingSource: (() => readonly RowGroup[]) | null = null;
@@ -330,20 +330,20 @@ export class LayerTable {
   onRowBox: ((handle: number) => void) | null = null;
 
   /**
-   * The dimensions of the coordinates of the rows of the layer. The groups built since it was
+   * The dimensions of the coordinates of the rows of the table. The groups built since it was
    * last raised have them; a group of before keeps its own (fewer) until its next version
    */
   dims: CoordinateDimensions;
 
   /**
-   * @param layerId The layer
+   * @param tableId The table
    * @param groupKeys The keys of the groups of features the rows name
-   * @param serial The number of the layer among the layers of its tables
+   * @param serial The number of the table among the tables of its tables
    * @param deltaHandle The handle of the group of its delta
    * @param dims The dimensions of the coordinates of its rows
    */
   constructor(
-    readonly layerId: string,
+    readonly tableId: string,
     private readonly groupKeys: GroupKeySource & { readonly revision?: number },
     readonly serial = 0,
     deltaHandle: RowGroupHandle = -1,
@@ -353,12 +353,12 @@ export class LayerTable {
     this.dims = dims;
   }
 
-  /** The number of rows read in the layer (deleted ones included until they are dropped) */
+  /** The number of rows read in the table (deleted ones included until they are dropped) */
   get rowCount(): number {
     return this.rowOrder().handles.length;
   }
 
-  /** The number of rows held by the groups of the layer, the copies not read included */
+  /** The number of rows held by the groups of the table, the copies not read included */
   get groupRowCount(): number {
     return this.rows;
   }
@@ -382,7 +382,7 @@ export class LayerTable {
     return this.pendingRevision;
   }
 
-  /** The handles of the row groups, in the order of the layer */
+  /** The handles of the row groups, in the order of the table */
   get groupHandles(): readonly RowGroupHandle[] {
     return this.order;
   }
@@ -397,7 +397,7 @@ export class LayerTable {
     return this.groups.get(handle);
   }
 
-  /** The place of a row group in the order (-1 when it is not in the layer) */
+  /** The place of a row group in the order (-1 when it is not in the table) */
   orderOf(handle: RowGroupHandle): number {
     return this.indexOf.get(handle) ?? -1;
   }
@@ -412,7 +412,7 @@ export class LayerTable {
 
   /**
    * Whether the keys of the rows of a row group overlap the keys of the rows of a group of the
-   * layer: it then cannot be put among them (its rows are not in the order of their keys
+   * table: it then cannot be put among them (its rows are not in the order of their keys
    * otherwise: see `insert`)
    */
   overlaps(data: RowBlockData): boolean {
@@ -449,18 +449,18 @@ export class LayerTable {
    */
   insert(group: RowGroup): void {
     const data = group.data;
-    if (data.length === 0) throw new KasaneError('invalid-input', 'LayerTable: an empty row group');
+    if (data.length === 0) throw new KasaneError('invalid-input', 'RowTable: an empty row group');
     if (!this.inKeyOrder(data)) {
       throw new KasaneError(
         'invalid-state',
-        'LayerTable: the rows of a group are not in the order of their keys',
+        'RowTable: the rows of a group are not in the order of their keys',
       );
     }
     const lo = this.placeOfGroup(data);
     if (lo < 0) {
       throw new KasaneError(
         'invalid-state',
-        'LayerTable: the rows of a group overlap the rows of another group',
+        'RowTable: the rows of a group overlap the rows of another group',
       );
     }
     this.order.splice(lo, 0, group.handle);
@@ -472,10 +472,10 @@ export class LayerTable {
   }
 
   /**
-   * The groups of the layer once some are replaced by others, in the order of their rows (null
+   * The groups of the table once some are replaced by others, in the order of their rows (null
    * when the rows of two of them would overlap)
    *
-   * @throws when a group replaced is not in the layer
+   * @throws when a group replaced is not in the table
    */
   private groupsAfter(
     before: readonly RowGroup[],
@@ -485,7 +485,7 @@ export class LayerTable {
     const replaced = new Set<RowGroup>();
     for (const group of before) {
       if (this.groups.get(group.handle) !== group) {
-        throw new KasaneError('invalid-state', 'LayerTable: a group replaced is not in the layer');
+        throw new KasaneError('invalid-state', 'RowTable: a group replaced is not in the table');
       }
       replaced.add(group);
     }
@@ -513,10 +513,10 @@ export class LayerTable {
   }
 
   /**
-   * Replaces row groups of the layer by others (the next versions of groups, groups cut or
+   * Replaces row groups of the table by others (the next versions of groups, groups cut or
    * joined, the order of their rows changed) and puts the groups in the order of their rows
    *
-   * @throws when the rows of two groups would overlap (the layer is left as it was)
+   * @throws when the rows of two groups would overlap (the table is left as it was)
    */
   replaceGroups(
     before: readonly RowGroup[],
@@ -524,8 +524,7 @@ export class LayerTable {
     groupKeys: GroupKeySource = this.groupKeys,
   ): void {
     const groups = this.groupsAfter(before, after, groupKeys);
-    if (!groups)
-      throw new KasaneError('invalid-state', 'LayerTable: the rows of two groups overlap');
+    if (!groups) throw new KasaneError('invalid-state', 'RowTable: the rows of two groups overlap');
     for (const group of before) {
       this.groups.delete(group.handle);
       this.rows -= group.data.length;
@@ -544,12 +543,12 @@ export class LayerTable {
   }
 
   /**
-   * The rows of the layer in their order: the rows of its groups read there (not the ones read
+   * The rows of the table in their order: the rows of its groups read there (not the ones read
    * from the delta, nor the ones waiting for another group), the rows of the delta and the new
    * rows read before their groups are taken in at their places, deleted rows included. Made again
    * when read after a change (`touchItems`)
    */
-  rowOrder(): LayerOrder {
+  rowOrder(): TableOrder {
     if (this.ordered) return this.ordered;
     const extras = this.readExtras();
     const places = extras.places;
@@ -596,16 +595,13 @@ export class LayerTable {
     }
     flush(Number.MAX_SAFE_INTEGER, 0);
     if (at !== count)
-      throw new KasaneError(
-        'invalid-state',
-        'LayerTable: the order read other rows than it counted',
-      );
+      throw new KasaneError('invalid-state', 'RowTable: the order read other rows than it counted');
     this.ordered = { handles, groups, rows };
     return this.ordered;
   }
 
   /**
-   * Sets where the new rows of the layer read before their own groups are taken in come from: row
+   * Sets where the new rows of the table read before their own groups are taken in come from: row
    * groups in no particular order whose runs of keys do not overlap (`touchPending` when they
    * change)
    */
@@ -630,7 +626,7 @@ export class LayerTable {
   }
 
   /**
-   * The rows read outside the groups of the layer, in the order of their keys: the rows of the
+   * The rows read outside the groups of the table, in the order of their keys: the rows of the
    * delta and the new rows read before their groups are taken in, with their places among the
    * rows of the groups (found again when the groups, the delta, the new rows or the keys of the
    * groups of features changed)
@@ -786,12 +782,12 @@ export class LayerTable {
   }
 
   /**
-   * The items of the layer in their order: its rows outside a group of features and its groups
+   * The items of the table in their order: its rows outside a group of features and its groups
    * of features (one item at the place of their members, which follow each other), deleted rows
    * left out; with the members of each group in their order. Made again when read after a change
    * of the rows (`touchItems`)
    */
-  itemsOf(): LayerItems {
+  itemsOf(): TableItems {
     if (this.items) return this.items;
     const order = this.rowOrder();
     const n = order.handles.length;
@@ -852,8 +848,8 @@ export class LayerTable {
     return this.items;
   }
 
-  /** The items of the layer when they are made, null when they would have to be made again */
-  get itemsMade(): LayerItems | null {
+  /** The items of the table when they are made, null when they would have to be made again */
+  get itemsMade(): TableItems | null {
     return this.items;
   }
 
@@ -871,14 +867,14 @@ export class LayerTable {
   // The rows of the order (`rowOrder`) are the rows of the groups read there and the rows read
   // outside them (the delta, the new rows) at their places. A row is found from its place and
   // the rows next to it are read from the groups and the places of the rows outside them, so a
-  // step costs the rows not read it passes, not the rows of the layer.
+  // step costs the rows not read it passes, not the rows of the table.
 
-  /** The first row of the order (null for a layer without rows) */
+  /** The first row of the order (null for a table without rows) */
   firstRow(): OrderRow | null {
     return this.earlier(this.mainFrom(0, 0), this.readExtras().rows.length > 0 ? 0 : -1);
   }
 
-  /** The last row of the order (null for a layer without rows) */
+  /** The last row of the order (null for a table without rows) */
   lastRow(): OrderRow | null {
     const extras = this.readExtras();
     const last = this.order.length - 1;
@@ -889,7 +885,7 @@ export class LayerTable {
   /**
    * The row just before a row of the order (null for the first one)
    *
-   * @throws when the row is not read in the layer
+   * @throws when the row is not read in the table
    */
   previousRow(at: OrderRow): OrderRow | null {
     const extras = this.readExtras();
@@ -906,7 +902,7 @@ export class LayerTable {
   /**
    * The row just after a row of the order (null for the last one)
    *
-   * @throws when the row is not read in the layer
+   * @throws when the row is not read in the table
    */
   nextRow(at: OrderRow): OrderRow | null {
     const extras = this.readExtras();
@@ -926,7 +922,7 @@ export class LayerTable {
    * of deleted rows of a group is passed in a few steps (`RowSkips`), so a walk costs the rows it
    * reads, not the rows deleted before them
    *
-   * @throws when the row is not read in the layer
+   * @throws when the row is not read in the table
    */
   liveRowAtOrBefore(at: OrderRow | null): OrderRow | null {
     if (!at || (at.group.data.flags[at.row] & ROW_FLAG_DELETED) === 0) return at;
@@ -948,7 +944,7 @@ export class LayerTable {
    * The row at or after a row of the order that is not deleted (null when there is none), as
    * `liveRowAtOrBefore` finds it up
    *
-   * @throws when the row is not read in the layer
+   * @throws when the row is not read in the table
    */
   liveRowAtOrAfter(at: OrderRow | null): OrderRow | null {
     if (!at || (at.group.data.flags[at.row] & ROW_FLAG_DELETED) === 0) return at;
@@ -1061,8 +1057,7 @@ export class LayerTable {
   private extraOf(at: OrderRow): number {
     if (!at.group.delta && !at.group.pending) return -1;
     const k = this.readExtras().entries.get(at.group)?.[at.row] ?? -1;
-    if (k < 0)
-      throw new KasaneError('invalid-state', 'LayerTable: the row is not read in the layer');
+    if (k < 0) throw new KasaneError('invalid-state', 'RowTable: the row is not read in the table');
     return k;
   }
 
@@ -1070,7 +1065,7 @@ export class LayerTable {
   private mainOf(at: OrderRow): [number, number] {
     const g = this.orderOf(at.group.handle);
     if (g < 0 || this.groupAt(g) !== at.group || (at.group.state[at.row] & STATE_ELSEWHERE) !== 0) {
-      throw new KasaneError('invalid-state', 'LayerTable: the row is not read in the layer');
+      throw new KasaneError('invalid-state', 'RowTable: the row is not read in the table');
     }
     return [g, at.row];
   }
@@ -1138,7 +1133,7 @@ export class LayerTable {
    * @param keys The columns the key is read from
    * @param row The entry of the key in them
    * @param k The order of the things at the same slot
-   * @returns The place, or null when the layer has no row
+   * @returns The place, or null when the table has no row
    */
   positionOfKey(keys: RowKeySource, row: number, k = 0): TablePosition | null {
     if (this.order.length === 0) return null;
@@ -1166,16 +1161,16 @@ export class LayerTable {
   }
 
   /**
-   * The order of two places of this layer
+   * The order of two places of this table
    *
    * @returns A negative number when `a` comes first
-   * @throws when a place names a group that is not in the layer
+   * @throws when a place names a group that is not in the table
    */
   comparePositions(a: TablePosition, b: TablePosition): number {
     const ai = this.orderOf(a.group);
     const bi = this.orderOf(b.group);
     if (ai < 0 || bi < 0)
-      throw new KasaneError('invalid-state', 'LayerTable: a place names a group not in the layer');
+      throw new KasaneError('invalid-state', 'RowTable: a place names a group not in the table');
     if (ai !== bi) return ai - bi;
     if (a.slot !== b.slot) return a.slot - b.slot;
     return a.k - b.k;
@@ -1201,10 +1196,10 @@ export class LayerTable {
   }
 
   /**
-   * Calls `visit` with rows found in the layer, in the order of the layer: the rows of its groups
+   * Calls `visit` with rows found in the table, in the order of the table: the rows of its groups
    * read there, and the rows of its delta and its new rows read before their groups are taken in at
-   * their places. A row not read in the layer (a row of a group of the order read elsewhere, a row
-   * of the delta drawn only, a group the layer does not read) is left out
+   * their places. A row not read in the table (a row of a group of the order read elsewhere, a row
+   * of the delta drawn only, a group the table does not read) is left out
    *
    * @param found The rows found, by the group they are read from (in no particular order; the
    *   arrays are sorted in place)
@@ -1254,7 +1249,7 @@ export class LayerTable {
   }
 
   /**
-   * Whether a row is read in the layer from a group: a row of a group of the order not read
+   * Whether a row is read in the table from a group: a row of a group of the order not read
    * elsewhere, or a row of its delta or its new rows that is read (not drawn only)
    */
   readsRow(group: RowGroup, row: number): boolean {
@@ -1281,7 +1276,7 @@ export class LayerTable {
     return true;
   }
 
-  /** Forgets the rows of a group moved since it was built (the group left the layer) */
+  /** Forgets the rows of a group moved since it was built (the group left the table) */
   dropMoved(group: RowGroup): void {
     if (group.unindexedCount === 0) return;
     for (const [handle, of] of this.moved) {

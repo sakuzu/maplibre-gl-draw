@@ -22,7 +22,7 @@ import { FEATURE_TABLE_COLUMNS } from '../table/tabane/columns.js';
 import { createMapStub, seededRandom } from '../test-utils.js';
 import { type FeatureTablesInternals, featureTablesInternals } from './feature-tables.js';
 import { groupCode, ItemWalk, rowCode } from './item-walk.js';
-import { LayerTable } from './layer-table.js';
+import { RowTable } from './row-table.js';
 
 const LAYER = {
   name: 'rows',
@@ -73,7 +73,7 @@ function idColumn(ids: readonly string[]): { offsets: Int32Array; bytes: Uint8Ar
  * The items of a layer from its order, a row at a time: its rows outside a group of features and
  * its groups (one item at each run of their members), deleted rows left out
  */
-function itemsOfOrder(table: LayerTable) {
+function itemsOfOrder(table: RowTable) {
   const order = table.rowOrder();
   const kinds: number[] = [];
   const handles: number[] = [];
@@ -106,7 +106,7 @@ function itemsOfOrder(table: LayerTable) {
 
 /** Checks every item the walk reads against the lists of every item of the layer */
 function expectWalkAsLists(internals: FeatureTablesInternals): void {
-  const table = internals.layerTable('rows') as LayerTable;
+  const table = internals.rowTable('rows') as RowTable;
   const walk = new ItemWalk(table, internals);
   const items = table.itemsOf();
   // The lists are the items of the order read a row at a time, made at their sizes
@@ -271,12 +271,12 @@ describe('an edit of a few items of a layer held as rows', () => {
     const members = Array.from({ length: 50 }, (_, k) => at(k, 50));
     const many = Array.from({ length: 300 }, (_, k) => at(k, 300));
     // The lists are made once before the edits (as a host reads them)
-    internals.layerTable('rows')?.itemsOf();
+    internals.rowTable('rows')?.itemsOf();
     const counted = ['previousRow', 'nextRow', 'rowNotBefore', 'firstRow', 'lastRow'] as const;
-    const spies = counted.map((name) => vi.spyOn(LayerTable.prototype, name));
+    const spies = counted.map((name) => vi.spyOn(RowTable.prototype, name));
     const listed = [
-      vi.spyOn(LayerTable.prototype, 'rowOrder'),
-      vi.spyOn(LayerTable.prototype, 'itemsOf'),
+      vi.spyOn(RowTable.prototype, 'rowOrder'),
+      vi.spyOn(RowTable.prototype, 'itemsOf'),
     ];
     const group = draw.groups.create({ featureIds: members });
     draw.features.moveMany(members.slice(0, 10), { layerId: 'rows', above: null });

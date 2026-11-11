@@ -45,7 +45,7 @@ import { drawValueOfInput } from '../table/value-input.js';
  * The bytes the values written in place may take per row group (attributes and geometry
  * together) before the group is due for its next version
  *
- * A first estimate (25 groups of a large layer at the limit hold about 6 MB), to be set from
+ * A first estimate (25 groups of a large table at the limit hold about 6 MB), to be set from
  * the measurement of the writes of attributes.
  *
  * @internal

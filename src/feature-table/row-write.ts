@@ -23,15 +23,15 @@ import type { RowCache } from '../table/row-caches.js';
 import { type RowGeometry, singleRowColumn, toRowGeometry } from '../table/row-geometry.js';
 import type { RowRead } from '../table/row-read-type.js';
 import type { RowRings } from '../table/row-rings.js';
+import { groupRowRead, rowCacheNumbers, rowType } from './row-read.js';
 import {
   columnGeometryAt,
   geometryAt,
-  type LayerTable,
   type RowGeometryAt,
   type RowGroup,
+  type RowTable,
   widenBounds,
-} from './layer-table.js';
-import { groupRowRead, rowCacheNumbers, rowType } from './row-read.js';
+} from './row-table.js';
 import {
   encodeOverrideValue,
   GeometryOverrides,
@@ -104,7 +104,7 @@ export function writeRowValue(group: RowGroup, row: number, key: string, value: 
  * @internal
  */
 export function writeRowGeometry(
-  table: LayerTable,
+  table: RowTable,
   group: RowGroup,
   row: number,
   geometry: Geometry,
@@ -180,7 +180,7 @@ export function writeRowGeometry(
  * @internal
  */
 export function refreshRowShape(
-  table: LayerTable,
+  table: RowTable,
   group: RowGroup,
   row: number,
   system: CoordinateSystem,

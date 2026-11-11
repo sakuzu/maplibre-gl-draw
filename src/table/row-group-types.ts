@@ -2,10 +2,10 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * The types of a row group: a run of the rows of a layer, held as columns
+ * The types of a row group: a run of the rows of a table, held as columns
  *
- * The features of a document can be held as rows rather than as objects: the rows of a layer
- * are cut, in the order of the layer, into groups of a few thousand rows, and every group is a
+ * The features of a document can be held as rows rather than as objects: the rows of a table
+ * are cut, in the order of the table, into groups of a few thousand rows, and every group is a
  * set of columns of typed arrays that is never changed in place in its shape. A Worker builds
  * the groups (`createRowBlockBuilder`) and sends them to the main thread without a copy
  * (`blockTransferList`); the main thread only gives the rows their handles and draws them.
@@ -25,7 +25,7 @@ import type { ShapeColumn } from './shape-reader.js';
 export const ROW_FLAG_DELETED = 1;
 
 /**
- * A row block of one layer, in the order of the layer: columns of typed arrays, built in a
+ * A row block of one table, in the order of the table: columns of typed arrays, built in a
  * Worker (`createRowBlockBuilder`) and sent to the main thread without a copy (`transferList`).
  *
  * Its other columns (the geometry, the keys of the order, the styles, the attributes, the spatial

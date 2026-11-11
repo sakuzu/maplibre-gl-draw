@@ -22,8 +22,8 @@ import { STYLE_COLUMN } from '../table/feature-row-columns.js';
 import type { RowBlockDictionary } from '../table/row-group-types.js';
 import { STATE_UNHIT_MASK } from './feature-row-states.js';
 import type { FeatureTablesInternals } from './feature-tables.js';
-import { geometryAt, type LayerTable, type RowGroup } from './layer-table.js';
 import { rowNumber, rowType } from './row-read.js';
+import { geometryAt, type RowGroup, type RowTable } from './row-table.js';
 
 /** The key of the radius of a Circle in the attributes of a row */
 const RADIUS_KEY = drawPropertyKey('radiusMeters');
@@ -115,7 +115,7 @@ export interface TableRowHit {
  */
 export function hitTestLayerTable(
   internals: FeatureTablesInternals,
-  table: LayerTable,
+  table: RowTable,
   input: TableHitInput,
 ): TableRowHit | null {
   const [x, y] = input.coordinate;
@@ -158,7 +158,7 @@ export function hitTestLayerTable(
     let hit = shape ? input.testShape(type, shape, input.coordinate, tolerance) : null;
     if (hit === null) {
       // A type tested on a feature: the one kept of the row, made for the test otherwise
-      const feature = internals.featureCache.featureOf(table.layerId, group, row);
+      const feature = internals.featureCache.featureOf(table.tableId, group, row);
       hit = input.test(feature, input.coordinate, tolerance);
       if (hit) return { group, row, type, tolerance, shape: null, feature };
       continue;

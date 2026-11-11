@@ -8,7 +8,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import type { RowGroup } from '../../feature-table/layer-table.js';
+import type { RowGroup } from '../../feature-table/row-table.js';
 import { DEFAULT_SELECTION_CONFIG } from '../../shared/config/selection.js';
 import { GpuLedger } from '../gpu-ledger.js';
 import type { RowStateBinding } from '../renderers/row-state.js';

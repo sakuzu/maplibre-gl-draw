@@ -421,7 +421,7 @@ export class TableContractStore implements StoreContract {
         // A row deleted and kept is created again at the place it had in its layer and its group
         const kept = this.#internals.placeOf(handle);
         const keptGroup = kept ? kept.group.data.groups[kept.row] : -1;
-        const sameLayer = kept?.layer.layerId === feature.layerId;
+        const sameLayer = kept?.table.tableId === feature.layerId;
         const fields = new Map<RowField, unknown>([
           ['type', feature.type],
           ['parent', group ? group.id : feature.layerId],
@@ -1124,7 +1124,7 @@ export class TableContractStore implements StoreContract {
         });
         // Its layer is the one of its first member, when it has one
         const firstLayer =
-          members.length > 0 ? this.#internals.placeOf(members[0])?.layer.layerId : undefined;
+          members.length > 0 ? this.#internals.placeOf(members[0])?.table.tableId : undefined;
         plans.push({
           created: tableGroupOf(firstLayer ? { ...group, layerId: firstLayer } : group),
           members,
@@ -1561,7 +1561,7 @@ export class TableContractStore implements StoreContract {
         const fields = {
           id,
           name: typeof name === 'string' ? name : (previous?.name ?? ''),
-          layerId: groups.layerOf(handle) as string,
+          layerId: groups.tableOf(handle) as string,
           visible: !isGroupHidden(groups, handle),
           locked: isGroupLocked(groups, handle),
         };
@@ -1630,7 +1630,7 @@ export class TableContractStore implements StoreContract {
 
   /** The walk of the items of a layer (null for a layer that holds no row) */
   #walk(layerId: string): ItemWalk | null {
-    const table = this.#internals.layerTable(layerId);
+    const table = this.#internals.rowTable(layerId);
     return table ? new ItemWalk(table, this.#internals) : null;
   }
 
@@ -1771,7 +1771,7 @@ export class TableContractStore implements StoreContract {
   #rowFeature(handle: RowHandle): Feature | undefined {
     const place = this.#internals.placeOf(handle);
     if (!place || (place.group.data.flags[place.row] & ROW_FLAG_DELETED) !== 0) return undefined;
-    return this.#internals.featureCache.featureOf(place.layer.layerId, place.group, place.row);
+    return this.#internals.featureCache.featureOf(place.table.tableId, place.group, place.row);
   }
 
   /** The key of the order of the last item of a layer (null for none) */

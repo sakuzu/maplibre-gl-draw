@@ -5,7 +5,7 @@
  * Merges rows of row groups into new row groups (`mergeRowBlock`)
  *
  * The next version of a row group is the rows of the group that stay, and the rows that come into
- * its range, in the order of the layer. Both are rows of groups already built: the rows of the
+ * its range, in the order of the table. Both are rows of groups already built: the rows of the
  * group itself, and rows built on their own (the rows changed since). The merge copies their
  * columns as they are, so nothing is computed again for a row that did not change: the numbers of
  * its caches are copied from its group (they are made only where a row was built), its bbox is
@@ -63,7 +63,7 @@ export interface RowBlockMerge {
   readonly rows: Int32Array;
   /** The groups of features the rows name (their keys order their members) */
   readonly groups?: readonly GroupEntry[] | null;
-  /** Whether the rows are put in the order of the layer (true when omitted) */
+  /** Whether the rows are put in the order of the table (true when omitted) */
   readonly sort?: boolean;
   /** The target number of rows of a row block ({@link ROW_BLOCK_TARGET_ROWS} when omitted) */
   readonly targetRows?: number;
@@ -76,8 +76,8 @@ export interface RowBlockMerge {
    */
   readonly cutPast?: number;
   /**
-   * The dimensions of the coordinates of the new row blocks: those of the layer. A source of fewer
-   * dimensions is copied with NaN for the others (a layer whose dimensions were raised). Every
+   * The dimensions of the coordinates of the new row blocks: those of the table. A source of fewer
+   * dimensions is copied with NaN for the others (a table whose dimensions were raised). Every
    * source has the same when omitted
    */
   readonly dimensions?: CoordinateDimensions;
@@ -101,7 +101,7 @@ export interface RowBlockDataMerge extends Omit<RowBlockMerge, 'sources' | 'grou
 }
 
 /**
- * Merges rows of row blocks into new row blocks, in the order of the layer
+ * Merges rows of row blocks into new row blocks, in the order of the table
  *
  * @returns The new row blocks (none for no row); their handles are those of the rows
  * @throws `KasaneError` with the code `invalid-input` when a source holds styles not numbered yet,
@@ -141,7 +141,7 @@ export function mergeRowBlockData(merge: RowBlockDataMerge): RowBlockData[] {
   const keys = isKeySource(merge.groups)
     ? merge.groups
     : groupKeySource((merge.groups as readonly GroupEntry[] | null | undefined) ?? []);
-  // The rows in the order of the layer
+  // The rows in the order of the table
   const order = new Int32Array(count);
   for (let i = 0; i < count; i++) order[i] = i;
   if (merge.sort !== false) {

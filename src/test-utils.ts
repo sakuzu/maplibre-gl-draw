@@ -40,7 +40,7 @@ import {
   type FeatureTablesInternals,
   featureTablesInternals,
 } from './feature-table/feature-tables.js';
-import type { LayerTable } from './feature-table/layer-table.js';
+import type { RowTable } from './feature-table/row-table.js';
 import { resolveMessages } from './messages.js';
 import type { ModeManager } from './modes/manager.js';
 import { DEFAULT_FEATURE_STYLE_CONFIG } from './shared/config/feature-style.js';
@@ -633,7 +633,7 @@ export function tablesOfFeatures(
   options?: FeatureTablesOptions,
 ): {
   internals: FeatureTablesInternals;
-  table: LayerTable;
+  table: RowTable;
   tables: FeatureTables;
   writer: FeatureTablesWriter;
 } {
@@ -650,7 +650,7 @@ export function tablesOfFeatures(
   writer.addRowBlocks(layerId, builder.finish());
   const internals = featureTablesInternals(tables) as FeatureTablesInternals;
   internals.addQueuedRowBlocks();
-  return { internals, table: internals.layerTable(layerId) as LayerTable, tables, writer };
+  return { internals, table: internals.rowTable(layerId) as RowTable, tables, writer };
 }
 
 /** A feature of the tests */
@@ -994,7 +994,7 @@ export function tablesOfReference(
     internals.groups.set(handle, {
       id,
       order: group.order,
-      layerId: group.layerId,
+      tableId: group.layerId,
       flags: group.visible ? 0 : GROUP_FLAG_HIDDEN,
     });
   }

@@ -75,13 +75,13 @@ import {
   toGpuState,
 } from '../../feature-table/feature-row-states.js';
 import type { FeatureTablesInternals } from '../../feature-table/feature-tables.js';
+import { rowFeatureToRead, rowHasGeometry, rowType } from '../../feature-table/row-read.js';
 import {
   geometryAt,
-  type LayerTable,
   type RowGroup,
+  type RowTable,
   widenBounds,
-} from '../../feature-table/layer-table.js';
-import { rowFeatureToRead, rowHasGeometry, rowType } from '../../feature-table/row-read.js';
+} from '../../feature-table/row-table.js';
 import {
   type InPlaceRowWrite,
   ROW_WRITE_GEOMETRY,
@@ -1004,7 +1004,7 @@ export class TableLayerRenderer {
     for (const [layerId, cache] of this.layers) {
       const fresh = this.freshDrawingOf(layerId, cache);
       const tables = cache.tables;
-      const table = tables?.layerTable(layerId);
+      const table = tables?.rowTable(layerId);
       if (!fresh || !tables || !table) continue;
       for (let g = 0; g < table.groupCount; g++) {
         const group = table.groupAt(g);
@@ -1039,7 +1039,7 @@ export class TableLayerRenderer {
     if (cache.drawnFrame !== this.frameCount || !tables || !layer || !deps || !renderers) {
       return null;
     }
-    if (!cache.rowsStyles || !tables.layerTable(layerId)) return null;
+    if (!cache.rowsStyles || !tables.rowTable(layerId)) return null;
     if ((this.written.get(layerId)?.size ?? 0) > 0) return null;
     const slots = new RowStyleSlots(renderers.styles, tables.styles, layer.styleRule);
     const pixelRatio = this.options.pixelRatio;
@@ -1081,7 +1081,7 @@ export class TableLayerRenderer {
   private checkedGroups(layerId: string, cache: LayerCache): GroupCache[] {
     const groups = [...cache.groups.values()];
     const delta = cache.delta;
-    const table = cache.tables?.layerTable(layerId);
+    const table = cache.tables?.rowTable(layerId);
     if (delta && !cache.deltaStale && delta.group === table?.delta.group) groups.push(delta);
     return groups;
   }
@@ -1324,7 +1324,7 @@ export class TableLayerRenderer {
   rowsWritten(layerId: string, writes: readonly InPlaceRowWrite[]): void {
     if (writes.length === 0) return;
     // The drape makes the partitions of the rows written again with them
-    const table = this.layers.get(layerId)?.tables?.layerTable(layerId);
+    const table = this.layers.get(layerId)?.tables?.rowTable(layerId);
     if (table) {
       for (const write of writes) {
         const group =
@@ -1455,7 +1455,7 @@ export class TableLayerRenderer {
     if (tables) {
       for (const layerId of layerOrder) {
         const cache = this.layers.get(layerId);
-        const table = tables.layerTable(layerId);
+        const table = tables.rowTable(layerId);
         const { slots, layer, deps } = cache ?? {};
         if (!cache || !table || !slots || !layer || !deps || cache.tables !== tables) continue;
         // A layer not drawn in the last frame is not on the drape
@@ -1620,7 +1620,7 @@ export class TableLayerRenderer {
    */
   drawLayer(
     tables: FeatureTablesInternals,
-    table: LayerTable,
+    table: RowTable,
     layer: Layer,
     frame: TableLayerFrame,
     deps: StoreRetainedDrawDeps,
@@ -1725,7 +1725,7 @@ export class TableLayerRenderer {
     pass.tables = tables;
     pass.settled = settled;
     this.writeStats.cuts = 0;
-    pass.layerId = table.layerId;
+    pass.layerId = table.tableId;
     pass.frame = frame;
     pass.factors = layerDrawFactors(layer);
     pass.renderers = renderers;
@@ -1773,7 +1773,7 @@ export class TableLayerRenderer {
           run?.begin();
         },
       },
-      table.layerId,
+      table.tableId,
       pass.factors.opacity,
       // The drape is painted once, with the first copy of the world drawn
       frame.firstCopy !== false,
@@ -1885,13 +1885,13 @@ export class TableLayerRenderer {
   private advanceVersions(
     cache: LayerCache,
     tables: FeatureTablesInternals,
-    table: LayerTable,
+    table: RowTable,
     layer: Layer,
     deps: StoreRetainedDrawDeps,
     drawing: Drawing,
     settled: boolean,
   ): void {
-    const versions = tables.builtVersions(table.layerId);
+    const versions = tables.builtVersions(table.tableId);
     if (versions.length === 0) return;
     const pass = this.pass;
     const schedule = this.schedule;
@@ -1928,7 +1928,7 @@ export class TableLayerRenderer {
    * meets the view is built (a layer not drawn last frame waits for nothing)
    */
   private versionUploaded(version: GroupVersion): boolean {
-    const cache = this.layers.get(version.layer.layerId);
+    const cache = this.layers.get(version.table.tableId);
     if (!cache || cache.drawnFrame < this.frameCount - 1) return true;
     const caches = this.pendingCaches.get(version);
     const groups = version.groups ?? [];
@@ -1946,7 +1946,7 @@ export class TableLayerRenderer {
     this.drape.versionSwapped(version);
     const caches = this.pendingCaches.get(version) ?? [];
     this.pendingCaches.delete(version);
-    const cache = this.layers.get(version.layer.layerId);
+    const cache = this.layers.get(version.table.tableId);
     if (!cache) {
       for (const groupCache of caches) this.disposeGroup(groupCache);
       return;
@@ -2101,7 +2101,7 @@ export class TableLayerRenderer {
     for (const [layerId, groups] of this.written) {
       const cache = this.layers.get(layerId);
       if (!cache) continue;
-      const delta = cache.tables?.layerTable(layerId)?.delta;
+      const delta = cache.tables?.rowTable(layerId)?.delta;
       const away: number[] = [];
       for (const [handle, rows] of groups) {
         const ofDelta = delta?.handle === handle;
@@ -2431,12 +2431,12 @@ export class TableLayerRenderer {
   /** The cache of a layer, classified again when what its classification read changed */
   private layerCache(
     tables: FeatureTablesInternals,
-    table: LayerTable,
+    table: RowTable,
     layer: Layer,
     renderers: RetainedRendererSet,
     deps: StoreRetainedDrawDeps,
   ): LayerCache {
-    let cache = this.layers.get(table.layerId);
+    let cache = this.layers.get(table.tableId);
     if (!cache) {
       cache = {
         groups: new Map(),
@@ -2458,7 +2458,7 @@ export class TableLayerRenderer {
         drawnFrame: -1,
         holdsGpuRows: false,
       };
-      this.layers.set(table.layerId, cache);
+      this.layers.set(table.tableId, cache);
     }
     cache.layer = layer;
     cache.deps = deps;
@@ -2539,7 +2539,7 @@ export class TableLayerRenderer {
     groupCache: GroupCache,
     drawing: Drawing,
     tables: FeatureTablesInternals,
-    table: LayerTable,
+    table: RowTable,
     layer: Layer,
     deps: StoreRetainedDrawDeps,
   ): TableChunk[] {
@@ -2566,7 +2566,7 @@ export class TableLayerRenderer {
     groupCache: GroupCache,
     drawing: Drawing,
     tables: FeatureTablesInternals,
-    table: LayerTable,
+    table: RowTable,
     layer: Layer,
     deps: StoreRetainedDrawDeps,
     held: GroupChunks<TableChunk> | null,
@@ -2575,7 +2575,7 @@ export class TableLayerRenderer {
     const oneDraw = drawing === 'one-draw';
     const sprites = new Map<number, RowSpriteSource>();
     const gpuRows = new Map<number, GpuRowsSource>();
-    const view = tables.view(table.layerId);
+    const view = tables.view(table.tableId);
     const transformFields = this.options.transformFields?.() ?? null;
     const ranges = partitionRowGroup(
       group,
@@ -2584,7 +2584,7 @@ export class TableLayerRenderer {
           slots: cache.slots as RowStyleSlots,
           customTypes: deps.customRenderers,
           companions: deps.companions as FeatureCompanionRegistry,
-          featureOf: (rows, r) => rowFeatureToRead(tables.readContext, table.layerId, rows, r),
+          featureOf: (rows, r) => rowFeatureToRead(tables.readContext, table.tableId, rows, r),
           view,
           layer,
           oneDraw,
@@ -4106,7 +4106,7 @@ export class TableLayerRenderer {
    * the order (-1 for the rows after every group), the rows of the delta to draw before each row
    * of the group, consecutive rows at the same place in one range
    */
-  private deltaInserts(table: LayerTable): Map<number, DeltaInsert[]> {
+  private deltaInserts(table: RowTable): Map<number, DeltaInsert[]> {
     const out = new Map<number, DeltaInsert[]>();
     const delta = table.delta.group;
     if (!delta) return out;
@@ -4236,7 +4236,7 @@ export class TableLayerRenderer {
   private packDeltas(): void {
     const rows = this.renderers?.rows ?? null;
     for (const [layerId, cache] of this.layers) {
-      const table = cache.tables?.layerTable(layerId);
+      const table = cache.tables?.rowTable(layerId);
       if (!table) {
         // A layer that left: what is held for it is released
         if (cache.tables) this.releaseLayer(layerId, cache);
@@ -4331,7 +4331,7 @@ export class TableLayerRenderer {
    * places between two rows of the retained chunks in view of the drawing chosen for each group,
    * as rows of each chunk (a cut is never at the start of a chunk, so every cut is one more draw)
    */
-  private placeCuts(table: LayerTable, cache: LayerCache, bounds: BBox): Map<TableChunk, number[]> {
+  private placeCuts(table: RowTable, cache: LayerCache, bounds: BBox): Map<TableChunk, number[]> {
     const visible: TableChunk[] = [];
     let interior = 0;
     for (let g = 0; g < table.groupCount; g++) {

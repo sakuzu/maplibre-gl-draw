@@ -152,7 +152,7 @@ export function rowMatcher(
   return (handle) => {
     const place = internals.placeOf(handle);
     if (!place) return false;
-    const layerId = place.layer.layerId;
+    const layerId = place.table.tableId;
     if (filter.layerId !== undefined && layerId !== filter.layerId) return false;
     const data = place.group.data;
     const row = place.row;
@@ -199,7 +199,7 @@ export function forEachMatchingRow(
   const matches = rowMatcher(store, filter);
   if (!tables || !internals || !matches) return;
   // The layer of the row the visit starts after: the layers before it are not read
-  const afterLayer = after === undefined ? undefined : internals.placeOf(after)?.layer.layerId;
+  const afterLayer = after === undefined ? undefined : internals.placeOf(after)?.table.tableId;
   let started = after === undefined;
   const layerIds =
     filter.layerId !== undefined

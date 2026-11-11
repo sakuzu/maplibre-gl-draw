@@ -12,8 +12,8 @@ import { utf8ColumnFromStrings } from '@sakuzu/tabane';
 import { describe, expect, it } from 'vitest';
 import type { LayerTableView, RowField, RowValues, TableGroupField } from '../../api/tables.js';
 import type { FeatureTablesInternals } from '../../feature-table/feature-tables.js';
-import type { LayerTable } from '../../feature-table/layer-table.js';
 import { rowFeatureToRead, rowHasGeometry } from '../../feature-table/row-read.js';
+import type { RowTable } from '../../feature-table/row-table.js';
 import { createRowBlockDataBuilder } from '../../table/row-group-builder.js';
 import { FEATURE_TABLE_COLUMNS } from '../../table/tabane/columns.js';
 import {
@@ -61,14 +61,14 @@ function registerBands(companions: FeatureCompanionRegistry, id = 'bands') {
  * The rows with companions as walking every row of the layer in its order finds them: the rows
  * read with a geometry and a number in their attribute `band`
  */
-function walked(internals: FeatureTablesInternals, table: LayerTable): string[] {
+function walked(internals: FeatureTablesInternals, table: RowTable): string[] {
   const order = table.rowOrder();
   const out: string[] = [];
   for (let i = 0; i < order.handles.length; i++) {
     const group = order.groups[i];
     const row = order.rows[i];
     if (!rowHasGeometry(group, row)) continue;
-    const read = rowFeatureToRead(internals.readContext, table.layerId, group, row);
+    const read = rowFeatureToRead(internals.readContext, table.tableId, group, row);
     if (typeof read.properties.band === 'number') out.push(read.id);
   }
   return out;
@@ -77,7 +77,7 @@ function walked(internals: FeatureTablesInternals, table: LayerTable): string[] 
 /** The ids of the rows with companions kept, in their order, checked against their groups */
 function kept(
   internals: FeatureTablesInternals,
-  table: LayerTable,
+  table: RowTable,
   companions: FeatureCompanionRegistry,
 ): string[] {
   const found = companionRowsOf(internals, table, companions);
@@ -87,7 +87,7 @@ function kept(
     const group = found.groups[i];
     const row = found.rows[i];
     expect(found.byGroup.get(group)).toContain(row);
-    ids.push(rowFeatureToRead(internals.readContext, table.layerId, group, row).id);
+    ids.push(rowFeatureToRead(internals.readContext, table.tableId, group, row).id);
   }
   for (const rows of found.byGroup.values()) count += rows.length;
   expect(count).toBe(found.rows.length);
@@ -213,7 +213,7 @@ describe('the rows with companions of a layer held as rows', () => {
       let blocks = 0;
       const check = (step: number): void => {
         for (const layerId of layerIds) {
-          const table = internals.layerTable(layerId);
+          const table = internals.rowTable(layerId);
           if (!table) continue;
           expect(kept(internals, table, companions), `seed ${seed}, step ${step}`).toEqual(
             walked(internals, table),
@@ -321,9 +321,9 @@ describe('the rows with companions of a layer held as rows', () => {
     internals.addQueuedRowBlocks();
     const companions = createFeatureCompanionRegistry();
     registerBands(companions);
-    const a = internals.layerTable('a') as LayerTable;
-    const b = internals.layerTable('b') as LayerTable;
-    const ids = (table: LayerTable) => kept(internals, table, companions);
+    const a = internals.rowTable('a') as RowTable;
+    const b = internals.rowTable('b') as RowTable;
+    const ids = (table: RowTable) => kept(internals, table, companions);
     expect(ids(a)).toEqual(['x']);
     expect(ids(b)).toEqual([]);
     const x = tables.findRow('x') as number;

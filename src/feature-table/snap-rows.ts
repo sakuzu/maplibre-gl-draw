@@ -60,7 +60,7 @@ export function forEachSnapRow(
       const id = tables.getRowId(handle) as string;
       if (skip(id)) continue;
       const group = place.group.data.groups[place.row];
-      if (!shown(place.layer.layerId, group >= 0 ? internals.groups.idOf(group) : undefined)) {
+      if (!shown(place.table.tableId, group >= 0 ? internals.groups.idOf(group) : undefined)) {
         continue;
       }
       const shape = rowHitShape(place.group, place.row);
@@ -70,7 +70,7 @@ export function forEachSnapRow(
         type: rowType(place.group.data, place.row),
         parts: shape.parts,
         feature: () =>
-          rowFeature(internals.readContext, place.layer.layerId, place.group, place.row),
+          rowFeature(internals.readContext, place.table.tableId, place.group, place.row),
       });
     }
   }

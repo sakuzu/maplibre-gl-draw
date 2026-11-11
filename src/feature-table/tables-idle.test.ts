@@ -43,7 +43,7 @@ function indexOf(internals: FeatureTablesInternals): RowBoxIndex {
 /** The number of rows of a layer whose boxes meet a box */
 function countIn(internals: FeatureTablesInternals, minX: number, maxX: number): number {
   let count = 0;
-  internals.searchRowBoxes(internals.layerTable('a') as never, minX, -1, maxX, 1, () => {
+  internals.searchRowBoxes(internals.rowTable('a') as never, minX, -1, maxX, 1, () => {
     count++;
   });
   return count;

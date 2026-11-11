@@ -187,7 +187,7 @@ export function renderLayers(
       // A layer held as rows: drawn from its rows only, unless the layer is hidden. One that
       // has no rows yet draws nothing: a cache of the features of objects of the same id, built
       // for another document the instance drew, is not its own
-      const table = tables?.layerTable(layerId);
+      const table = tables?.rowTable(layerId);
       if (
         table &&
         tables &&

@@ -432,7 +432,7 @@ describe('the row groups taken in while the drawing holds the reorder of a group
     // Where the members of the group stood: among them in the order drawn, free once it is in
     writer.addRowBlocks('a', around(`${key(1)}5`, `${key(2)}5`));
     const n0 = tables.findRow('n0') as number;
-    expect(internals.ids.deltaLayer(n0)).toBeGreaterThanOrEqual(0);
+    expect(internals.ids.deltaTable(n0)).toBeGreaterThanOrEqual(0);
     expect(internals.hasQueuedBlocks).toBe(false);
     // The drawing holds the reorder for three frames
     for (let f = 1; f <= 6; f++) frame(f >= 4);
@@ -447,7 +447,7 @@ describe('the row groups taken in while the drawing holds the reorder of a group
     // Taken in by its rows (it would overlap the members of the group), read and drawn at their
     // places
     const n0 = tables.findRow('n0') as number;
-    expect(internals.ids.deltaLayer(n0)).toBeGreaterThanOrEqual(0);
+    expect(internals.ids.deltaTable(n0)).toBeGreaterThanOrEqual(0);
     for (let f = 1; f <= 6; f++) frame(f >= 4);
     const after = ['r0', 'r1', 'r4', 'r5', 'r6', 'r7', 'r8', 'r9', 'n0', 'g', 'n1'];
     expect(items('a')).toEqual(after);
@@ -497,7 +497,7 @@ describe('the row groups taken in while the drawing holds the reorder of a group
     // built in the seventh and taken in at the start of the eighth, in a group of their own, not
     // in the delta (without the reorder: built in the third frame, taken in in the fourth)
     expect(built).toBe(8);
-    expect(internals.ids.deltaLayer(handles[0])).toBeLessThan(0);
+    expect(internals.ids.deltaTable(handles[0])).toBeLessThan(0);
     const order = items('a');
     expect(order.slice(0, 8)).toEqual(['r0', 'r1', 'r4', 'r5', 'r6', 'r7', 'r8', 'r9']);
     expect(order.slice(8, 8 + ids.length)).toEqual(ids);
@@ -514,7 +514,7 @@ describe('the row groups taken in while the drawing holds the reorder of a group
     for (let f = 1; f <= 10; f++) {
       frame(f >= 6);
       const placed =
-        internals.ids.mainGroup(handles[0]) >= 0 || internals.ids.deltaLayer(handles[0]) >= 0;
+        internals.ids.mainGroup(handles[0]) >= 0 || internals.ids.deltaTable(handles[0]) >= 0;
       if (left === 0 && placed) left = f;
       expect(tables.findRow(ids[0])).toBe(handles[0]);
     }
@@ -750,7 +750,7 @@ describe('taking in the row groups without a drawing', () => {
     // In row groups of the layer, not in its delta
     for (const handle of handles) {
       expect(internals.ids.mainGroup(handle)).toBeGreaterThanOrEqual(0);
-      expect(internals.ids.deltaLayer(handle)).toBeLessThan(0);
+      expect(internals.ids.deltaTable(handle)).toBeLessThan(0);
     }
     expect(internals.deltaRowCount()).toBe(0);
     const view = tables.get('a');

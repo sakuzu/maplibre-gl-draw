@@ -17,8 +17,8 @@
 
 import { BULK_MOVE_SET, STATE_UNHIT_MASK } from '../../feature-table/feature-row-states.js';
 import { featureTablesInternals } from '../../feature-table/feature-tables.js';
-import type { RowGroup } from '../../feature-table/layer-table.js';
 import { rowGeometry, rowProperties, rowType } from '../../feature-table/row-read.js';
+import type { RowGroup } from '../../feature-table/row-table.js';
 import { TableSelection } from '../../feature-table/selection.js';
 import { writeKindsInSlices } from '../../operations/bulk-sliced.js';
 import { type BulkKinds, transformKinds } from '../../operations/bulk-transform.js';
@@ -73,7 +73,7 @@ export function queryRowsInBox(box: BoxSelection, context: EngineModeContext): T
         const flags = data.flags[row];
         if ((flags & (ROW_FLAG_DELETED | ROW_FLAG_LOCKED)) !== 0) continue;
         if ((group.state[row] & STATE_UNHIT_MASK) !== 0) continue;
-        if (!layerOpen(place.layer.layerId)) continue;
+        if (!layerOpen(place.table.tableId)) continue;
         const featureGroup = data.groups[row];
         if (featureGroup >= 0) {
           if (
@@ -96,7 +96,7 @@ export function queryRowsInBox(box: BoxSelection, context: EngineModeContext): T
         }
         const feature = rowAsFeature(
           internals.ids.idOf(handle) as string,
-          place.layer.layerId,
+          place.table.tableId,
           group,
           row,
         );

@@ -408,7 +408,7 @@ describe('a drag of a vertex over a Store of rows', () => {
     router.dispatch(event<DragNormalizedEvent>('dragstart', 1, 0, from));
     router.dispatch(event<DragNormalizedEvent>('dragmove', 1.5, 0, from));
     const internals = featureTablesInternals(draw.getStore().tables);
-    const delta = internals?.layerTable('l')?.delta;
+    const delta = internals?.rowTable('l')?.delta;
     const group = delta?.group;
     router.dispatch(event<DragNormalizedEvent>('dragmove', 2, 0, from));
     expect(delta?.group).toBe(group);

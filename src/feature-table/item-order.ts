@@ -47,7 +47,7 @@ import {
 import { ROW_FLAG_DELETED } from '../table/row-group-types.js';
 import type { GroupTable } from './group-table.js';
 import { compareItemKeys, groupCode, type ItemKey, type ItemWalk, rowCode } from './item-walk.js';
-import type { LayerTable, RowGroup } from './layer-table.js';
+import type { RowGroup, RowTable } from './row-table.js';
 import type { GroupHandle, RowHandle } from './types.js';
 
 /**
@@ -61,7 +61,7 @@ export const ORDER_ITEM_LIMIT = 256;
 
 /** The place a row is read from (its group and its row there) */
 interface RowAt {
-  readonly layer: LayerTable;
+  readonly table: RowTable;
   readonly group: RowGroup;
   readonly row: number;
 }
@@ -146,7 +146,7 @@ export class ItemOrderWatch {
    * @param layerId The layer its members are read in before the write (the layer of the group when
    *   omitted): the members of a group given another layer are there until they are written
    */
-  watchGroup(group: GroupHandle, layerId = this.source.groups.layerOf(group)): void {
+  watchGroup(group: GroupHandle, layerId = this.source.groups.tableOf(group)): void {
     if (group < 0 || this.groupsBefore.has(group)) return;
     if (layerId === undefined) return;
     this.watchLayer(layerId);
@@ -183,7 +183,7 @@ export class ItemOrderWatch {
       const data = at.group.data;
       const group = data.groups[at.row];
       this.before.set(handle, [
-        group >= 0 ? this.source.groups.idOf(group) : at.layer.layerId,
+        group >= 0 ? this.source.groups.idOf(group) : at.table.tableId,
         utf8String(data.keys, at.row),
       ]);
       if (!many) {
@@ -221,7 +221,7 @@ export class ItemOrderWatch {
       const at = this.source.placeOf(code >> 1);
       if (!at || isDeleted(at)) continue;
       const group = at.group.data.groups[at.row];
-      const layer = layerOrder.indexOf(at.layer.layerId);
+      const layer = layerOrder.indexOf(at.table.tableId);
       if (group < 0 || layer < 0 || this.groupsBefore.has(group)) continue;
       if (joined.some((entry) => entry.group === group)) continue;
       joined.push({ group, layer, key: this.groupKey(group) });
@@ -230,7 +230,7 @@ export class ItemOrderWatch {
     for (const { group } of joined) groups.push(group);
     for (const group of groups) {
       const layerBefore = this.groupsBefore.get(group);
-      const layerId = this.source.groups.layerOf(group) ?? layerBefore;
+      const layerId = this.source.groups.tableOf(group) ?? layerBefore;
       if (layerId === undefined) continue;
       const before = this.groupItems.get(group) ?? new Map();
       const after = this.itemsNow({ layerId, group });
@@ -365,21 +365,21 @@ export class ItemOrderWatch {
    * from the rows next to each)
    */
   private rowRanges(): RowsMove[] {
-    const byLayer = new Map<LayerTable, RowAt[]>();
+    const byLayer = new Map<RowTable, RowAt[]>();
     for (const handle of this.before.keys()) {
       const at = this.source.placeOf(handle);
       if (!at || isDeleted(at)) continue;
-      let list = byLayer.get(at.layer);
+      let list = byLayer.get(at.table);
       if (!list) {
         list = [];
-        byLayer.set(at.layer, list);
+        byLayer.set(at.table, list);
       }
       list.push(at);
     }
     const out: RowsMove[] = [];
     const groupIds = new Map<GroupHandle, string>();
     for (const [layer, rows] of byLayer) {
-      const walk = this.walkOf(layer.layerId) as ItemWalk;
+      const walk = this.walkOf(layer.tableId) as ItemWalk;
       // In the order written (the keys of the groups written and not read yet)
       rows.sort((a, b) => walk.compareRows(a, b));
       const handles = Int32Array.from(rows, (at) => at.group.data.handles[at.row]);
@@ -402,7 +402,7 @@ export class ItemOrderWatch {
         const below = belowOf(first);
         const above = walk.above(rowCode(handles[handles.length - 1]), group);
         const to: ItemPosition = {
-          layerId: layer.layerId,
+          layerId: layer.tableId,
           groupId: group >= 0 ? this.source.groups.idOf(group) : undefined,
           below:
             below.handle < 0
@@ -413,7 +413,7 @@ export class ItemOrderWatch {
                 ),
           above: above === null ? null : this.idOf(above, groupIds),
         };
-        out.push({ kind: 'rows', layerId: layer.layerId, handles, to, before });
+        out.push({ kind: 'rows', layerId: layer.tableId, handles, to, before });
         continue;
       }
       const kinds = new Uint8Array(rows.length);
@@ -425,7 +425,7 @@ export class ItemOrderWatch {
       });
       out.push({
         kind: 'rows',
-        layerId: layer.layerId,
+        layerId: layer.tableId,
         handles,
         belows: { kinds, handles: belows },
         before,

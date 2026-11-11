@@ -9,9 +9,9 @@
 
 import { describe, expect, it } from 'vitest';
 import { ROW_FLAG_DELETED } from '../table/row-group-types.js';
-import type { RowGroup } from './layer-table.js';
 import { noteRowState, skipsOf, walkReads } from './row-skips.js';
 import { STATE_DELTA } from './row-state.js';
+import type { RowGroup } from './row-table.js';
 
 /** A row group of `n` rows of the order, with only what the walk reads of it */
 function group(n: number): RowGroup {

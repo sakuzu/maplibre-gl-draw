@@ -19,7 +19,7 @@
  */
 
 import type { WriteFrames } from '../feature-table/feature-cache.js';
-import type { RowGroup } from '../feature-table/layer-table.js';
+import type { RowGroup } from '../feature-table/row-table.js';
 import type { RowHandle } from '../feature-table/types.js';
 import type { WriteMarks } from '../feature-table/write-marks.js';
 

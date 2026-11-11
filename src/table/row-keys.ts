@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * The order of the rows of a layer
+ * The order of the rows of a table
  *
  * Every row has one key (`key`): the key of its order among the items of its table, or, for a row
  * in a group, among the members of the group. The items of a table are its rows outside a group
@@ -56,7 +56,7 @@ export interface GroupKeySource {
 }
 
 /**
- * Compares row `i` of `a` with row `j` of `b` in the order of the layer
+ * Compares row `i` of `a` with row `j` of `b` in the order of the table
  *
  * @param groups The groups the rows name (null when no row is in a group)
  * @returns A negative number when row `i` comes first, a positive one when row `j` does, 0 when

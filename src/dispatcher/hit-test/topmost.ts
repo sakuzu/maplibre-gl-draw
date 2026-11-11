@@ -54,8 +54,8 @@ import {
   type TableRowHit,
   type TableScreenHit,
 } from '../../feature-table/hit-test.js';
-import type { LayerTable, RowGroup } from '../../feature-table/layer-table.js';
 import { rowFeatureToRead } from '../../feature-table/row-read.js';
+import type { RowGroup, RowTable } from '../../feature-table/row-table.js';
 import type { LngLat, ScreenPoint } from '../../shared/math/index.js';
 import { wrapLongitude } from '../../shared/math/longitude.js';
 import { RenderedShapes } from '../../sketches/rendered-shapes.js';
@@ -286,7 +286,7 @@ export function createTopmostHitTester(deps: TopmostHitTestDeps): HitTestTopmost
    */
   const frontRowOf = (
     tables: FeatureTablesInternals,
-    table: LayerTable,
+    table: RowTable,
     copies: readonly Coordinate[],
     tolerance: number,
     skip: ((group: RowGroup, row: number) => boolean) | undefined,
@@ -359,7 +359,7 @@ export function createTopmostHitTester(deps: TopmostHitTestDeps): HitTestTopmost
    */
   const rowHitOf = (
     tables: FeatureTablesInternals,
-    table: LayerTable,
+    table: RowTable,
     layer: Layer,
     found: { hit: TableRowHit; coordinate: Coordinate },
     point: ScreenPoint,
@@ -370,7 +370,7 @@ export function createTopmostHitTester(deps: TopmostHitTestDeps): HitTestTopmost
     const handle = data.handles[hit.row];
     const id = tables.ids.idOf(handle) as string;
     if (asFeature) {
-      const feature = tables.featureCache.featureOf(table.layerId, hit.group, hit.row);
+      const feature = tables.featureCache.featureOf(table.tableId, hit.group, hit.row);
       return { kind: 'store', feature };
     }
     const groupHandle = data.groups[hit.row];
@@ -389,7 +389,7 @@ export function createTopmostHitTester(deps: TopmostHitTestDeps): HitTestTopmost
       );
       return onePixel > 0 ? distance / onePixel : 0;
     };
-    return { kind: 'row', layerId: table.layerId, id, handle, locked, distancePx };
+    return { kind: 'row', layerId: table.tableId, id, handle, locked, distancePx };
   };
 
   /**
@@ -406,7 +406,7 @@ export function createTopmostHitTester(deps: TopmostHitTestDeps): HitTestTopmost
    */
   const rowsOf = (
     tables: FeatureTablesInternals,
-    table: LayerTable,
+    table: RowTable,
     point: ScreenPoint,
     copies: readonly Coordinate[],
     tolerance: number,
@@ -415,8 +415,8 @@ export function createTopmostHitTester(deps: TopmostHitTestDeps): HitTestTopmost
     visible: VisibilityLookup,
     onScreen: TableScreenHit | undefined,
   ): TopHit | null => {
-    const layer = store.getLayer(table.layerId);
-    if (!layer || layer.visible === false || store.isHidden(table.layerId)) return null;
+    const layer = store.getLayer(table.tableId);
+    if (!layer || layer.visible === false || store.isHidden(table.tableId)) return null;
     const skip = rowsLeftOut(tables);
     const front = frontRowOf(tables, table, copies, tolerance, skip, onScreen);
     const rowHit = (): TopHit | null =>
@@ -434,7 +434,7 @@ export function createTopmostHitTester(deps: TopmostHitTestDeps): HitTestTopmost
       const row = inFront.rows[i];
       // A row that is not hit has no companion hit either
       if ((group.state[row] & STATE_UNHIT_MASK) !== 0 || skip?.(group, row)) continue;
-      const feature = rowFeatureToRead(tables.readContext, table.layerId, group, row);
+      const feature = rowFeatureToRead(tables.readContext, table.tableId, group, row);
       const companionHit = companionOf(feature, context, visible);
       if (companionHit) return companionHit;
     }
@@ -503,7 +503,7 @@ export function createTopmostHitTester(deps: TopmostHitTestDeps): HitTestTopmost
       const entryId = layerOrder[i];
 
       // A layer held as rows is tested on its rows: each row itself, then its companions
-      const table = tables?.layerTable(entryId);
+      const table = tables?.rowTable(entryId);
       if (tables && table) {
         if (onScreen === null) onScreen = screenHitOf(tables, point, lngLat);
         const hit = rowsOf(

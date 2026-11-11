@@ -228,7 +228,7 @@ function layerOfGroupIn(tables: FeatureTables): LayerOfGroup {
   return (groupId) => {
     const groups = featureTablesInternals(tables)?.groups;
     const handle = groups?.handleOfId(groupId) ?? -1;
-    return handle >= 0 ? groups?.layerOf(handle) : undefined;
+    return handle >= 0 ? groups?.tableOf(handle) : undefined;
   };
 }
 

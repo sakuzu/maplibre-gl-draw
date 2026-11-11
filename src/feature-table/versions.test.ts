@@ -117,7 +117,7 @@ describe('the next versions of the row groups', () => {
       expectTablesMatch(tables, reference, layerIds, groupHandleOf);
       // No row is read from a copy waiting for another group
       for (const layerId of layerIds) {
-        const table = internals.layerTable(layerId);
+        const table = internals.rowTable(layerId);
         for (let g = 0; g < (table?.groupCount ?? 0); g++) {
           const group = table?.groupAt(g);
           expect(group?.state.every((state) => (state & STATE_HIDDEN_WAIT) === 0)).toBe(true);
@@ -178,7 +178,7 @@ describe('the next versions of the row groups', () => {
       // The groups are not small: the versions are of one group each
       for (let i = 0; i < 4; i++) internals.advanceVersions(steps(10));
       const versions = internals.builtVersions('a');
-      const table = internals.layerTable('a');
+      const table = internals.rowTable('a');
       const of = (g: number) =>
         versions.find((v) => v.replaces.some((group) => group === table?.groupAt(g)));
       const fromVersion = of(0) as GroupVersion;
@@ -209,7 +209,7 @@ describe('the next versions of the row groups', () => {
   it('cut a version grown past twice the targets at once, and merge a small group', () => {
     const reference = pointsReference(10);
     const { tables, writer, internals, groupHandleOf } = tablesOfReference(reference, ['a'], 4);
-    const table = internals.layerTable('a');
+    const table = internals.rowTable('a');
     expect(table?.groupCount).toBe(3);
     // 9,000 new rows within the range of the middle group (between p5 and p6): into the delta,
     // and the next version of the group cut into groups of the target rows
@@ -302,7 +302,7 @@ describe('the next versions of the row groups', () => {
   it('make a group due when many of its rows moved far, or its values written hold too much', () => {
     const reference = pointsReference(600);
     const { tables, writer, internals, groupHandleOf } = tablesOfReference(reference, ['a'], 600);
-    const table = internals.layerTable('a');
+    const table = internals.rowTable('a');
     const handles = Array.from({ length: 200 }, (_, i) => tables.findRow(`p${i}`) as number);
     writer.apply(
       rowPatch(handles, {

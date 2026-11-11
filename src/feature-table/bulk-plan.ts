@@ -37,8 +37,8 @@ import {
 import type { RowContainers } from './bulk-rows.js';
 import { isRowLocked, livePlaceOf, rowsByLayerInOrder } from './bulk-rows.js';
 import type { FeatureTablesInternals } from './feature-tables.js';
-import type { RowGroup } from './layer-table.js';
 import { rowGeometry, rowNumber, rowType, rowValue } from './row-read.js';
+import type { RowGroup } from './row-table.js';
 import type { TableSelection } from './selection.js';
 import type { RowPlace } from './tables-store.js';
 import type { RowHandle } from './types.js';
@@ -347,7 +347,7 @@ function lockReader(
       }
       if (groupLocked) return true;
     }
-    const layerId = place.layer.layerId;
+    const layerId = place.table.tableId;
     let layerLocked = layers.get(layerId);
     if (layerLocked === undefined) {
       layerLocked = containers.layerLocked(layerId);

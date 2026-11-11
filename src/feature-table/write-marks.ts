@@ -18,7 +18,7 @@
  */
 
 import { KasaneError } from '../table/kasane-error.js';
-import type { RowGroup } from './layer-table.js';
+import type { RowGroup } from './row-table.js';
 import type { RowHandle } from './types.js';
 
 /** The highest mark a row holds (its marks are 32-bit) */

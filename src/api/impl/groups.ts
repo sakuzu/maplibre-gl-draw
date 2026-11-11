@@ -176,7 +176,7 @@ export function createGroups(deps: ResourceDeps): GroupsCollection {
       // deleted, by the token of the deletion, and the ones its deleted rows kept still name
       const internals = featureTablesInternals(store.tables);
       const handle = internals?.groups.handleOfId(id) ?? -1;
-      const layerId = handle >= 0 ? internals?.groups.layerOf(handle) : undefined;
+      const layerId = handle >= 0 ? internals?.groups.tableOf(handle) : undefined;
       if (layerId === undefined) throw notFound('group kept by a deletion', id);
       const layer = store.getLayer(layerId);
       if (!layer) throw notFound('layer', layerId);

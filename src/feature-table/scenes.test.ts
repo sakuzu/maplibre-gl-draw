@@ -53,7 +53,7 @@ describe('the deltas and the versions at their edges', () => {
     const reference = pointsReference(22_000 / 2);
     const setup = tablesOfReference(reference, ['a'], 550);
     const { tables, writer, internals, groupHandleOf } = setup;
-    const table = internals.layerTable('a');
+    const table = internals.rowTable('a');
     expect(table?.groupCount).toBe(20);
     let open = false;
     internals.attachReceiver({ uploaded: () => open, swapped: () => {}, dropped: () => {} });
@@ -83,7 +83,7 @@ describe('the deltas and the versions at their edges', () => {
     const reference = pointsReference(3000);
     const setup = tablesOfReference(reference, ['a'], 1100);
     const { tables, writer, internals, groupHandleOf } = setup;
-    expect(internals.layerTable('a')?.groupCount).toBe(3);
+    expect(internals.rowTable('a')?.groupCount).toBe(3);
     // The rows of the middle group to the ranges of the others
     const ids = Array.from({ length: 1100 }, (_, i) => `p${1100 + i}`);
     const orders = ids.map(
@@ -100,7 +100,7 @@ describe('the deltas and the versions at their edges', () => {
     });
     internals.flushVersions();
     expect(internals.deltaRowCount()).toBe(0);
-    const table = internals.layerTable('a');
+    const table = internals.rowTable('a');
     const sizes = Array.from(
       { length: table?.groupCount ?? 0 },
       (_, g) => table?.groupAt(g).data.length,
@@ -133,7 +133,7 @@ describe('the deltas and the versions at their edges', () => {
     writer.apply(rowPatch([tables.findRow('p3') as number], {}, [1]));
     (reference.rows.get('p3') as ReferenceRow).deleted = true;
     internals.flushVersions();
-    expect(internals.layerTable('b')?.groupCount).toBe(1);
+    expect(internals.rowTable('b')?.groupCount).toBe(1);
     expect(internals.deltaRowCount()).toBe(0);
     expectTablesMatch(tables, reference, ['a', 'b'], groupHandleOf);
   });

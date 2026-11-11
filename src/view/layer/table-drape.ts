@@ -42,8 +42,8 @@ import {
   STATE_HIDDEN_WAIT,
 } from '../../feature-table/feature-row-states.js';
 import type { FeatureTablesInternals } from '../../feature-table/feature-tables.js';
-import { geometryAt, type LayerTable, type RowGroup } from '../../feature-table/layer-table.js';
 import { rowNumber, rowType } from '../../feature-table/row-read.js';
+import { geometryAt, type RowGroup, type RowTable } from '../../feature-table/row-table.js';
 import type { RowHandle } from '../../feature-table/types.js';
 import type { GroupVersion } from '../../feature-table/versions.js';
 import { generateCirclePolygon } from '../../geometry/circle.js';
@@ -166,7 +166,7 @@ export interface TableDrapeInsert {
 /** A layer held as rows, as the drape reads it */
 export interface TableDrapeLayer {
   readonly layerId: string;
-  readonly table: LayerTable;
+  readonly table: RowTable;
   readonly slots: RowStyleSlots;
   readonly strings: Parameters<RowStyleSlots['ruleColorOf']>[2];
   /** Changes when the rows are to be sorted again or their styles resolved again */
@@ -518,7 +518,7 @@ export class TableDrape {
    * copies of the rows dropped are given back
    */
   versionSwapped(version: GroupVersion): void {
-    const layerId = version.layer.layerId;
+    const layerId = version.table.tableId;
     const groups = version.groups ?? [];
     const byGroup = this.partitions.get(layerId);
     if (byGroup && version.replaces.length === 1 && groups.length === 1) {

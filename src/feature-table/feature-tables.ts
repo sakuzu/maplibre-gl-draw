@@ -34,8 +34,8 @@ import { FeatureCache } from './feature-cache.js';
 import { featureFields } from './feature-fields.js';
 import { RowStateSets, STATE_HIDDEN_SKETCH } from './feature-row-states.js';
 import { ItemWalk } from './item-walk.js';
-import type { LayerTable, RowGroup } from './layer-table.js';
 import { rowGeometry, rowInputOf, rowPoint, rowType, rowValue } from './row-read.js';
+import type { RowGroup, RowTable } from './row-table.js';
 import type { RowValues } from './row-values.js';
 import type { TableSelection } from './selection.js';
 import {
@@ -491,7 +491,7 @@ interface OverlayEntry {
   /** Where the row it is drawn over was when it was drawn */
   overPlace: { readonly group: RowGroup; readonly row: number } | undefined;
   /** Its layer */
-  readonly layer: LayerTable;
+  readonly layer: RowTable;
   /** The row it is drawn over (undefined for a feature of no row) */
   readonly over: RowHandle | undefined;
 }
@@ -531,7 +531,7 @@ class FeatureTablesStore extends TablesStore implements FeatureTablesInternals {
   }
 
   view(layerId: string): LayerTableView | undefined {
-    const layer = this.layerTable(layerId);
+    const layer = this.rowTable(layerId);
     if (!layer) return undefined;
     let view = this.views.get(layerId);
     if (!view) {
@@ -579,7 +579,7 @@ class FeatureTablesStore extends TablesStore implements FeatureTablesInternals {
       case 'type':
         return rowType(data, row);
       case 'parent':
-        return featureGroup >= 0 ? this.groups.idOf(featureGroup) : place.layer.layerId;
+        return featureGroup >= 0 ? this.groups.idOf(featureGroup) : place.table.tableId;
       case 'key':
         return utf8String(data.keys, row);
       case 'geometry':
@@ -658,9 +658,9 @@ class FeatureTablesStore extends TablesStore implements FeatureTablesInternals {
     for (const { place, fields } of writes) {
       const write = this.writeInPlace(place, 0, fields, undefined, undefined);
       if (!write) continue;
-      const { layerId } = place.layer;
-      this.touch(layerId, place.group.bounds);
-      for (const listener of this.writeListeners) listener(layerId, [write]);
+      const { tableId } = place.table;
+      this.touch(tableId, place.group.bounds);
+      for (const listener of this.writeListeners) listener(tableId, [write]);
     }
     if (writes.length > 0) this.revisionCount++;
     return true;
@@ -680,9 +680,9 @@ class FeatureTablesStore extends TablesStore implements FeatureTablesInternals {
    * is not drawn (`STATE_HIDDEN_SKETCH`). The rows are not written
    */
   private syncSketches(): void {
-    const leaving = new Map<LayerTable, Set<RowHandle>>();
-    const coming = new Map<LayerTable, DeltaInput[]>();
-    const leave = (layer: LayerTable, handle: RowHandle): void => {
+    const leaving = new Map<RowTable, Set<RowHandle>>();
+    const coming = new Map<RowTable, DeltaInput[]>();
+    const leave = (layer: RowTable, handle: RowHandle): void => {
       let set = leaving.get(layer);
       if (!set) {
         set = new Set();
@@ -698,7 +698,7 @@ class FeatureTablesStore extends TablesStore implements FeatureTablesInternals {
         const id = `\u0000overlay\u0000${SKETCH_OWNER}\u0000${feature.id}`;
         const [handle] = this.ids.allocate(utf8ColumnFromStrings([id]));
         const place = over === undefined ? undefined : this.placeOf(over);
-        const layer = this.layerOf(feature.layerId);
+        const layer = this.tableOf(feature.layerId);
         let base: RowInput;
         if (place) base = rowInputOf(this.readContext, place.group, place.row);
         else if (given) {
@@ -747,7 +747,7 @@ class FeatureTablesStore extends TablesStore implements FeatureTablesInternals {
     }
     for (const [layer, set] of leaving) {
       for (const handle of set) {
-        if (this.ids.deltaLayer(handle) < 0) this.drawnOnlyRows.delete(handle);
+        if (this.ids.deltaTable(handle) < 0) this.drawnOnlyRows.delete(handle);
       }
       layer.touchPending();
     }
@@ -797,7 +797,7 @@ class FeatureTablesStore extends TablesStore implements FeatureTablesInternals {
         problems.push(`${over.get(handle)} features are drawn over the row of the feature "${id}"`);
       }
       const drawn = this.placeOf(entry.handle);
-      if (!drawn || drawn.layer !== place.layer) {
+      if (!drawn || drawn.table !== place.table) {
         problems.push(`the sketch of the feature "${id}" is not drawn in the layer of its row`);
         continue;
       }
@@ -829,7 +829,7 @@ class FeatureTablesStore extends TablesStore implements FeatureTablesInternals {
   }
 
   /** A key of the order after every item of a layer (a feature drawn at its end) */
-  private keyAfterLast(layer: LayerTable): string {
+  private keyAfterLast(layer: RowTable): string {
     // The last row of the order, read from the rows at its end
     const last = layer.lastRow();
     if (!last) return 'V';
@@ -860,15 +860,15 @@ class FeatureTablesStore extends TablesStore implements FeatureTablesInternals {
     out: Float64Array,
     inBuild: boolean,
   ): boolean | null {
-    const { layer, group, row } = place;
+    const { table, group, row } = place;
     const boxOf = this.boxOfTypeOf(rowType(group.data, row));
     if (!boxOf) return null;
     // A feature made for a build of every box is not kept
     const feature = inBuild
       ? this.featureCache.withoutKeeping(() =>
-          this.featureCache.featureOf(layer.layerId, group, row),
+          this.featureCache.featureOf(table.tableId, group, row),
         )
-      : this.featureCache.featureOf(layer.layerId, group, row);
+      : this.featureCache.featureOf(table.tableId, group, row);
     const box = boxOf(feature);
     if (!box.every(Number.isFinite)) return false;
     out[0] = box[0];
@@ -931,11 +931,11 @@ class FeatureTablesStore extends TablesStore implements FeatureTablesInternals {
 class LayerTableViewImpl implements LayerTableView {
   constructor(
     private readonly store: FeatureTablesStore,
-    private readonly table: LayerTable,
+    private readonly table: RowTable,
   ) {}
 
   get layerId(): string {
-    return this.table.layerId;
+    return this.table.tableId;
   }
 
   get rowCount(): number {
@@ -1003,7 +1003,7 @@ class LayerTableViewImpl implements LayerTableView {
     const group = this.store.foundGroup as RowGroup;
     const row = this.store.foundRow;
     if ((group.data.flags[row] & ROW_FLAG_DELETED) !== 0) return undefined;
-    return this.store.featureCache.featureOf(this.table.layerId, group, row);
+    return this.store.featureCache.featureOf(this.table.tableId, group, row);
   }
 
   getDrawnRowsRevision(): number {
@@ -1055,6 +1055,6 @@ class LayerTableViewImpl implements LayerTableView {
    * store found (`foundGroup`, `foundRow`), read at once
    */
   private locate(handle: RowHandle): boolean {
-    return this.store.findPlace(handle) && this.store.foundLayer === this.table;
+    return this.store.findPlace(handle) && this.store.foundTable === this.table;
   }
 }

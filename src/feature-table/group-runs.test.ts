@@ -21,12 +21,12 @@ import { STATE_HIDDEN_GROUP } from './feature-row-states.js';
 import { type FeatureTablesInternals, featureTablesInternals } from './feature-tables.js';
 import { groupRunCuts } from './group-runs.js';
 import type { GroupTable } from './group-table.js';
-import type { LayerTable, RowGroup } from './layer-table.js';
+import type { RowGroup, RowTable } from './row-table.js';
 import type { GroupHandle } from './types.js';
 
 /** The cuts made by reading every row of the layer (the reference) */
 function referenceCuts(
-  layer: LayerTable,
+  layer: RowTable,
   orders: ReadonlyMap<GroupHandle, string>,
   groups: GroupTable,
 ): { cuts: Map<RowGroup, Set<number>>; members: boolean } {
@@ -178,7 +178,7 @@ describe('groupRunCuts', () => {
         for (const id of GROUPS) {
           if (random() < 0.4) orders.set(internals.groups.handleOfId(id), key());
         }
-        const layer = internals.layerTable('rows') as LayerTable;
+        const layer = internals.rowTable('rows') as RowTable;
         expect(comparable(groupRunCuts(layer, orders, internals.groups)), `seed ${seed}`).toEqual(
           comparable(referenceCuts(layer, orders, internals.groups)),
         );
@@ -245,7 +245,7 @@ describe('groupRunCuts', () => {
         'remote',
       );
       internals.flushVersions();
-      const layer = internals.layerTable('rows') as LayerTable;
+      const layer = internals.rowTable('rows') as RowTable;
       const orders = new Map([[internals.groups.handleOfId('g1'), 'k00000']]);
       const spy = vi.spyOn(layer, 'groupAt');
       expect(groupRunCuts(layer, orders, internals.groups).members).toBe(true);

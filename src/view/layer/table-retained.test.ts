@@ -19,7 +19,7 @@ import {
   type FeatureTablesInternals,
   featureTablesInternals,
 } from '../../feature-table/feature-tables.js';
-import type { LayerTable } from '../../feature-table/layer-table.js';
+import type { RowTable } from '../../feature-table/row-table.js';
 import type { EnuEdit } from '../../geometry/enu-transforms.js';
 import type { BBox } from '../../geometry/types.js';
 import type { Feature, Layer } from '../../shared/types/model.js';
@@ -215,7 +215,7 @@ function setup(features: Feature[], targetRows?: number) {
 }
 
 /** The rows the ranges cover, in order, as `group:row` */
-function coverage(table: LayerTable, record: TableDrawRecord[]): string[] {
+function coverage(table: RowTable, record: TableDrawRecord[]): string[] {
   const out: string[] = [];
   for (const entry of record) {
     for (let row = entry.from; row < entry.to; row++) out.push(`${entry.groupIndex}:${row}`);
@@ -225,7 +225,7 @@ function coverage(table: LayerTable, record: TableDrawRecord[]): string[] {
 }
 
 /** Every row of the layer in its order, as `group:row` */
-function allRows(table: LayerTable): string[] {
+function allRows(table: RowTable): string[] {
   const out: string[] = [];
   for (let g = 0; g < table.groupCount; g++) {
     for (let row = 0; row < table.groupAt(g).data.length; row++) out.push(`${g}:${row}`);
@@ -372,7 +372,7 @@ describe('the order of the drawing of a layer held as rows', () => {
       renderer.recordDraws(record);
       renderer.beginFrame();
       renderer.advanceTables(internals);
-      const table = internals.layerTable('layer') as LayerTable;
+      const table = internals.rowTable('layer') as RowTable;
       taken.push(table.groupCount);
       renderer.drawLayer(
         internals,

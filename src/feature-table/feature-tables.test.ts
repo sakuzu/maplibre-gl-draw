@@ -25,7 +25,7 @@ import {
 } from './feature-row-states.js';
 import { createFeatureTablesStore } from './feature-row-tables.js';
 import { type FeatureTablesInternals, featureTablesInternals } from './feature-tables.js';
-import type { LayerTable } from './layer-table.js';
+import type { RowTable } from './row-table.js';
 
 const point = (x: number, y: number): Geometry => ({ type: 'Point', coordinates: [x, y] });
 
@@ -186,7 +186,7 @@ describe('createFeatureTables', () => {
     ).not.toThrow();
     const internals = featureTablesInternals(tables) as FeatureTablesInternals;
     const x3 = tables.findRow('x3') as number;
-    expect(internals.ids.deltaLayer(x3)).toBeGreaterThanOrEqual(0);
+    expect(internals.ids.deltaTable(x3)).toBeGreaterThanOrEqual(0);
     const view = tables.get('layer');
     const ids = () => Array.from(view?.listRowHandles(0, 10) ?? []).map((h) => tables.getRowId(h));
     const order = ['r0', 'r1', 'r2', 'r3', 'x3', 'r4', 'x4'];
@@ -199,7 +199,7 @@ describe('createFeatureTables', () => {
     expect(drawn).toEqual(order);
     // And into the row groups with their next versions
     internals.flushVersions();
-    expect(internals.ids.deltaLayer(x3)).toBeLessThan(0);
+    expect(internals.ids.deltaTable(x3)).toBeLessThan(0);
     expect(internals.ids.mainGroup(x3)).toBeGreaterThanOrEqual(0);
     expect(ids()).toEqual(order);
   });
@@ -213,7 +213,7 @@ describe('createFeatureTables', () => {
     expect(() => writer.addRowBlocks('layer', [swapped])).not.toThrow();
     const internals = featureTablesInternals(tables) as FeatureTablesInternals;
     const u100 = tables.findRow('u100') as number;
-    expect(internals.ids.deltaLayer(u100)).toBeGreaterThanOrEqual(0);
+    expect(internals.ids.deltaTable(u100)).toBeGreaterThanOrEqual(0);
     const view = tables.get('layer');
     const ids = () => Array.from(view?.listRowHandles(0, 10) ?? []).map((h) => tables.getRowId(h));
     const order = ['r0', 'r1', 'r2', 'u101', 'u100'];
@@ -263,7 +263,7 @@ describe('createFeatureTables', () => {
     builder.addRow({ id: 'circle', type: 'Circle', geometry: point(0, 0), key: 'd' });
     writer.addRowBlocks('layer', builder.finish());
     const internals = featureTablesInternals(tables);
-    const group = internals?.layerTable('layer')?.groupAt(0);
+    const group = internals?.rowTable('layer')?.groupAt(0);
     expect(Array.from(group?.state ?? []).slice(0, 3)).toEqual([
       0,
       STATE_HIDDEN_INVISIBLE,
@@ -289,7 +289,7 @@ describe('createFeatureTables', () => {
     const { tables, writer } = createFeatureTablesStore();
     writer.addRowBlocks('layer', groups(6, { targetRows: 3 }));
     const internals = featureTablesInternals(tables);
-    const layer = internals?.layerTable('layer') as LayerTable;
+    const layer = internals?.rowTable('layer') as RowTable;
     const versions = [layer.groupAt(0).stateVersion, layer.groupAt(1).stateVersion];
     const revision = tables.get('layer')?.getDrawnRowsRevision();
     const r4 = tables.findRow('r4') as number;
@@ -327,11 +327,11 @@ describe('createFeatureTables', () => {
   });
 });
 
-describe('LayerTable', () => {
+describe('RowTable', () => {
   it('finds the place of a key and orders places', () => {
     const { tables, writer } = createFeatureTablesStore();
     writer.addRowBlocks('layer', groups(6, { targetRows: 3 }));
-    const layer = featureTablesInternals(tables)?.layerTable('layer') as LayerTable;
+    const layer = featureTablesInternals(tables)?.rowTable('layer') as RowTable;
     const [first, second] = layer.groupHandles;
 
     const key = (order: string, id: string) => ({

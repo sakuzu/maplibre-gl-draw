@@ -8,7 +8,7 @@
  * values written in place past a limit, its rows moved far, are kept beside it (the delta, the
  * overrides, the marks of the moved rows) until the next version of the group takes them. The
  * next version is the rows of the group that stay and the rows of the delta whose keys fall in
- * its range, merged in the order of the layer (`mergeRowBlockData`, on the main thread or in the
+ * its range, merged in the order of the table (`mergeRowBlockData`, on the main thread or in the
  * Worker of the host), and cut into groups of the target sizes when it grew past twice them. A
  * small group is merged with its neighbor.
  *
@@ -37,7 +37,7 @@ import {
   type RowBlockMerge,
 } from '../table/row-group-merge.js';
 import type { RowBlock, RowBlockData } from '../table/row-group-types.js';
-import { createRowGroup, type LayerTable, type RowGroup } from './layer-table.js';
+import { createRowGroup, type RowGroup, type RowTable } from './row-table.js';
 import type { GroupHandle, RowGroupHandle, RowHandle, TableWorkBudget } from './types.js';
 
 /**
@@ -89,7 +89,7 @@ export const VERSION_WAIT_FRAMES = 2;
 export const FOLD_INLINE_ROWS = 8192;
 
 /**
- * The bytes the versions started and not swapped yet may hold together (a whole-layer change
+ * The bytes the versions started and not swapped yet may hold together (a whole-table change
  * goes a group at a time within it)
  *
  * @internal
@@ -114,14 +114,14 @@ const MOVED_ROWS_MIN = 64;
 export type GroupVersionStatus = 'building' | 'built' | 'uploaded' | 'swapped' | 'dropped';
 
 /**
- * A next version of row groups of a layer
+ * A next version of row groups of a table
  *
  * @internal
  */
 export interface GroupVersion {
   readonly id: number;
-  readonly layer: LayerTable;
-  /** The groups it replaces, in their order (none for the first group of a layer) */
+  readonly table: RowTable;
+  /** The groups it replaces, in their order (none for the first group of a table) */
   readonly replaces: readonly RowGroup[];
   /** The groups of the version once built */
   groups: RowGroup[] | null;
@@ -189,8 +189,8 @@ export interface GroupVersionReceiver {
  * @internal
  */
 export interface VersionHost {
-  /** The layers */
-  layers(): Iterable<LayerTable>;
+  /** The tables */
+  tables(): Iterable<RowTable>;
   /** The write mark the rows written now are stamped with (`write-marks.ts`) */
   readonly writeMark: number;
   /** The handle a new group gets */
@@ -274,16 +274,16 @@ export class GroupVersions {
   /** Whether a version is started and not swapped, a group is due, or a delta has rows */
   get hasWork(): boolean {
     if (this.pending.size > 0 || this.due.size > 0) return true;
-    for (const layer of this.host.layers()) if (layer.delta.hasFoldable()) return true;
+    for (const table of this.host.tables()) if (table.delta.hasFoldable()) return true;
     return false;
   }
 
-  /** The versions built and waiting for the GPU side, of a layer (of every layer when omitted) */
-  built(layer?: LayerTable): GroupVersion[] {
+  /** The versions built and waiting for the GPU side, of a table (of every table when omitted) */
+  built(table?: RowTable): GroupVersion[] {
     const out: GroupVersion[] = [];
     for (const version of this.pending.values()) {
       if (version.status !== 'built' && version.status !== 'uploaded') continue;
-      if (!layer || version.layer === layer) out.push(version);
+      if (!table || version.table === table) out.push(version);
     }
     return out;
   }
@@ -367,21 +367,21 @@ export class GroupVersions {
         this.due.delete(handle);
         continue;
       }
-      // While a reorder of the layer waits, the keys of its groups of features are going to
+      // While a reorder of the table waits, the keys of its groups of features are going to
       // change: the rows of the deltas written meanwhile are placed by the keys written, which a
       // version made now would read by the keys before. It is made once the reorder is in
-      if (this.reorders(found.layer).length > 0) continue;
+      if (this.reorders(found.table).length > 0) continue;
       if (this.pendingBytes() + found.group.data.length * ROW_BYTES > this.pendingBytesLimit) {
         // The ones started are swapped first
         if (this.pending.size > 0) break;
       }
-      budget.step(() => this.start(found.layer, found.group));
+      budget.step(() => this.start(found.table, found.group));
     }
-    // The first group of a layer that has only rows of its delta
-    for (const layer of this.host.layers()) {
-      if (layer.groupCount > 0 || !layer.delta.hasFoldable() || !budget.canStep()) continue;
-      if ([...this.pending.values()].some((v) => v.layer === layer)) continue;
-      budget.step(() => this.startGroups(layer, []));
+    // The first group of a table that has only rows of its delta
+    for (const table of this.host.tables()) {
+      if (table.groupCount > 0 || !table.delta.hasFoldable() || !budget.canStep()) continue;
+      if ([...this.pending.values()].some((v) => v.table === table)) continue;
+      budget.step(() => this.startGroups(table, []));
     }
     if (this.receivers.size === 0) this.swapReady();
     if (this.hasWork) this.host.requestWork();
@@ -436,18 +436,18 @@ export class GroupVersions {
 
   /**
    * The groups that need their next version, found from the rows of the deltas: the group a row
-   * of a delta comes into, and the group its copy left (in this layer or another)
+   * of a delta comes into, and the group its copy left (in this table or another)
    */
   private findDue(): void {
-    for (const layer of this.host.layers()) {
-      const delta = layer.delta.group;
+    for (const table of this.host.tables()) {
+      const delta = table.delta.group;
       if (!delta) continue;
-      const places = layer.deltaPlaces();
+      const places = table.deltaPlaces();
       for (let k = 0; k < delta.data.length; k++) {
         // A row held as a feature stays in the delta until it is no longer held
-        if (layer.delta.isKept(k)) continue;
+        if (table.delta.isKept(k)) continue;
         const g = places.groups[k];
-        if (g >= 0) this.markDue(layer.groupAt(g).handle);
+        if (g >= 0) this.markDue(table.groupAt(g).handle);
         const main = this.host.mainGroup(delta.data.handles[k]);
         if (main >= 0) this.markDue(main);
       }
@@ -460,10 +460,10 @@ export class GroupVersions {
     if (group.unindexedCount > moved) this.markDue(group.handle);
   }
 
-  private findGroup(handle: RowGroupHandle): { layer: LayerTable; group: RowGroup } | null {
-    for (const layer of this.host.layers()) {
-      const group = layer.group(handle);
-      if (group) return { layer, group };
+  private findGroup(handle: RowGroupHandle): { table: RowTable; group: RowGroup } | null {
+    for (const table of this.host.tables()) {
+      const group = table.group(handle);
+      if (group) return { table, group };
     }
     return null;
   }
@@ -477,38 +477,38 @@ export class GroupVersions {
   }
 
   /** Starts the next version of a group, with its neighbor when it is small */
-  private start(layer: LayerTable, group: RowGroup): void {
+  private start(table: RowTable, group: RowGroup): void {
     const groups = [group];
     const data = group.data;
     if (
       data.length < ROW_BLOCK_TARGET_ROWS / 4 &&
       data.vertexCount < ROW_BLOCK_TARGET_VERTICES / 4 &&
-      layer.groupCount > 1
+      table.groupCount > 1
     ) {
-      const at = layer.orderOf(group.handle);
-      const neighbor = at + 1 < layer.groupCount ? layer.groupAt(at + 1) : layer.groupAt(at - 1);
+      const at = table.orderOf(group.handle);
+      const neighbor = at + 1 < table.groupCount ? table.groupAt(at + 1) : table.groupAt(at - 1);
       if (!this.locked.has(neighbor.handle)) {
-        if (layer.orderOf(neighbor.handle) > at) groups.push(neighbor);
+        if (table.orderOf(neighbor.handle) > at) groups.push(neighbor);
         else groups.unshift(neighbor);
       }
     }
-    this.startGroups(layer, groups);
+    this.startGroups(table, groups);
   }
 
   /**
    * Starts the next version of groups next to each other in the order (none: the first group of
-   * a layer from its delta): takes their rows that stay and the rows of the delta in their range,
+   * a table from its delta): takes their rows that stay and the rows of the delta in their range,
    * and merges them on the main thread, or in the Worker of the host when they are many
    */
   private startGroups(
-    layer: LayerTable,
+    table: RowTable,
     groups: RowGroup[],
     orders: ReadonlyMap<GroupHandle, string> | null = null,
   ): void {
     const host = this.host;
     const version: GroupVersion = {
       id: this.nextId++,
-      layer,
+      table,
       replaces: groups,
       groups: null,
       deltaMark: host.writeMark,
@@ -526,7 +526,7 @@ export class GroupVersions {
       this.due.delete(group.handle);
       this.urged.delete(group.handle);
     }
-    const merge = this.mergeOf(layer, groups, version.dropped, version.stays);
+    const merge = this.mergeOf(table, groups, version.dropped, version.stays);
     (version as { keys: ReadonlyMap<GroupHandle, number> }).keys = this.keysOf(merge);
     this.pending.set(version.id, version);
     this.mostPending = Math.max(this.mostPending, this.pending.size);
@@ -566,7 +566,7 @@ export class GroupVersions {
    * go into `stays`)
    */
   private mergeOf(
-    layer: LayerTable,
+    table: RowTable,
     groups: readonly RowGroup[],
     dropped: RowHandle[],
     stays: Set<RowHandle>,
@@ -592,17 +592,17 @@ export class GroupVersions {
       }
     }
     // The rows of the delta whose places are in the range of the groups
-    const delta = layer.delta.group;
+    const delta = table.delta.group;
     if (delta) {
-      const places = layer.deltaPlaces();
-      const indices = new Set(groups.map((group) => layer.orderOf(group.handle)));
+      const places = table.deltaPlaces();
+      const indices = new Set(groups.map((group) => table.orderOf(group.handle)));
       if (groups.length === 0) indices.add(-1);
       const source = sources.length;
       sources.push(delta.data);
       for (let k = 0; k < delta.data.length; k++) {
         if (!indices.has(places.groups[k])) continue;
         if (host.drawnOnly(delta.data.handles[k])) continue;
-        if (layer.delta.isKept(k)) stays.add(delta.data.handles[k]);
+        if (table.delta.isKept(k)) stays.add(delta.data.handles[k]);
         // A row deleted read here is left out when its copy in a group goes with the version too
         const main = host.mainGroup(delta.data.handles[k]);
         if (
@@ -617,7 +617,7 @@ export class GroupVersions {
       }
     }
     if (inputs.length > 0) {
-      const built = host.buildRows(inputs, layer.dims);
+      const built = host.buildRows(inputs, table.dims);
       if (built) {
         sources.push(built);
         for (let r = 0; r < built.length; r++) pairs.push(sources.length - 1, r);
@@ -628,7 +628,7 @@ export class GroupVersions {
       rows: Int32Array.from(pairs),
       groups: host.groupKeys,
       cutPast: 2,
-      dimensions: layer.dims,
+      dimensions: table.dims,
       ringVertices: host.ringVertices,
     };
   }
@@ -669,7 +669,7 @@ export class GroupVersions {
   /** Puts a version in place of its groups (see the module) */
   private swap(version: GroupVersion): RowsChange | null {
     for (const group of version.replaces) {
-      if (version.layer.group(group.handle) !== group) {
+      if (version.table.group(group.handle) !== group) {
         this.drop(version);
         return null;
       }
@@ -680,12 +680,12 @@ export class GroupVersions {
       return null;
     }
     // A group taken in within its range since it started (the rows of a run built into groups
-    // of their own, while the first group of the delta of the layer was made): its groups would
+    // of their own, while the first group of the delta of the table was made): its groups would
     // overlap it. Dropped: its rows stay where they are read now (the delta), and the next
     // version of the group they fall in takes them
     if (
       version.orders === null &&
-      version.layer.overlapsAfter(version.replaces, version.groups ?? [])
+      version.table.overlapsAfter(version.replaces, version.groups ?? [])
     ) {
       this.drop(version);
       this.host.requestWork();
@@ -722,16 +722,16 @@ export class GroupVersions {
    * and the keys go in when it is swapped. A version of the groups being made is dropped
    */
   startReorder(
-    layer: LayerTable,
+    table: RowTable,
     groups: RowGroup[],
     built: RowBlockData[],
     orders: ReadonlyMap<GroupHandle, string>,
   ): GroupVersion {
     for (const group of groups) this.dropLock(group.handle);
-    for (const version of this.reorders(layer)) this.drop(version);
+    for (const version of this.reorders(table)) this.drop(version);
     const version: GroupVersion = {
       id: this.nextId++,
-      layer,
+      table,
       replaces: groups,
       groups: null,
       deltaMark: this.host.writeMark,
@@ -765,10 +765,10 @@ export class GroupVersions {
     return [...this.pending.values()].filter((version) => version.orders?.has(group));
   }
 
-  /** The reorders pending of a layer */
-  reorders(layer: LayerTable | undefined): GroupVersion[] {
+  /** The reorders pending of a table */
+  reorders(table: RowTable | undefined): GroupVersion[] {
     return [...this.pending.values()].filter(
-      (version) => version.orders !== null && version.layer === layer,
+      (version) => version.orders !== null && version.table === table,
     );
   }
 

@@ -17,7 +17,7 @@ import type { GroupHandle } from './types.js';
 interface GroupState {
   readonly id: string;
   order: string;
-  layerId: string;
+  tableId: string;
   /** The values of the `flag` columns of the group, a bit each (`flagBitOf`) */
   flags: number;
   /** Advances with every change of `order` */
@@ -131,9 +131,9 @@ export class GroupTable implements GroupKeySource {
     return this.entries.get(group)?.order;
   }
 
-  /** The layer of a group (undefined for an unknown handle) */
-  layerOf(group: GroupHandle): string | undefined {
-    return this.entries.get(group)?.layerId;
+  /** The table of a group (undefined for an unknown handle) */
+  tableOf(group: GroupHandle): string | undefined {
+    return this.entries.get(group)?.tableId;
   }
 
   /**
@@ -147,7 +147,7 @@ export class GroupTable implements GroupKeySource {
   /** Sets a group (its handle is given by the caller) */
   set(
     group: GroupHandle,
-    entry: { id: string; order: string; layerId: string; flags: number },
+    entry: { id: string; order: string; tableId: string; flags: number },
   ): void {
     const old = this.entries.get(group);
     if (old) this.byId.delete(old.id);
