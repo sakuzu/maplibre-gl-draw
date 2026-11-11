@@ -363,6 +363,48 @@ describe('drawing with the real pointer on a flat map', () => {
     expectNear(ring[3], await lngLatOf(page, at(40, -40)));
   });
 
+  it('keeps the vertices of a ring a drag turns: Delete takes the vertex dragged, a drag the next', async () => {
+    await clearAll(page);
+    await setMode(page, 'draw_polygon');
+    // Drawn clockwise on the map: held counter-clockwise from its first vertex
+    for (const p of [at(-40, -40), at(40, -40), at(40, 40), at(-40, 40), at(-40, -40)]) {
+      await click(page, p);
+    }
+    await click(page, at(0, 0));
+    // The corner (-40, 40), the second vertex of the ring, dragged across it to (100, -10): the
+    // ring turns, and its vertices keep their numbers
+    await drag(page, at(-40, 40), at(100, -10));
+    const [turned] = await features(page);
+    expect(outerRing(turned)).toHaveLength(5);
+    expectNear(outerRing(turned)[1], await lngLatOf(page, at(100, -10)));
+    // The vertex dragged, selected by a click on its handle, is the one Delete takes
+    await click(page, at(100, -10));
+    expect(
+      await page.evaluate(
+        () => (window as unknown as E2EWindow).draw.vertexSelection.get()?.vertices,
+      ),
+    ).toEqual([{ ring: 0, index: 1 }]);
+    await press(page, 'Delete');
+    const [deleted] = await features(page);
+    const ring = outerRing(deleted);
+    expect(ring).toHaveLength(4);
+    for (const p of [at(-40, -40), at(40, 40), at(40, -40)]) {
+      const where = await lngLatOf(page, p);
+      expect(
+        ring.some((v) => Math.abs(v[0] - where[0]) < 2e-5 && Math.abs(v[1] - where[1]) < 2e-5),
+      ).toBe(true);
+    }
+    // A drag of another vertex moves that one
+    await drag(page, at(40, -40), at(90, -70));
+    const [moved] = await features(page);
+    const after = outerRing(moved);
+    expect(after).toHaveLength(4);
+    const to = await lngLatOf(page, at(90, -70));
+    expect(after.some((v) => Math.abs(v[0] - to[0]) < 2e-5 && Math.abs(v[1] - to[1]) < 2e-5)).toBe(
+      true,
+    );
+  });
+
   it('moves a selected point with a drag anywhere in its frame: the marker and the margin', async () => {
     await clearAll(page);
     await setMode(page, 'draw_point');
