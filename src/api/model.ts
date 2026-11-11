@@ -542,12 +542,15 @@ export interface DrawDocument {
   created?: string;
   /** When it was last changed, as an ISO 8601 timestamp */
   modified?: string;
-  /** The title */
-  title?: string;
-  /** The description */
-  description?: string;
-  /** The values an application or an extension keeps on the document, under keys of its own prefix */
-  metadata?: { readonly [key: `${string}:${string}`]: unknown };
+  /**
+   * The title, the description, and the values an application or an extension keeps on the
+   * document under keys of its own prefix
+   */
+  metadata?: {
+    readonly title?: string;
+    readonly description?: string;
+    readonly [key: `${string}:${string}`]: unknown;
+  };
   /** The layers, each with the items it lists (a layer held as rows is not written here) */
   layers?: ObjectLayer[];
   /** The IDs of the layers in stacking order, from the back */

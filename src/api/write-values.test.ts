@@ -55,8 +55,7 @@ describe('the values of an application', () => {
     );
     expect(draw.document.metadata).toEqual({ 'app:n': 2 });
     const written = draw.document.toJSON();
-    expect(written.title).toBe('T');
-    expect(written.metadata).toEqual({ 'app:n': 2 });
+    expect(written.metadata).toEqual({ title: 'T', 'app:n': 2 });
     await draw.undo();
     expect(draw.document.metadata).toEqual({ 'app:basemap': 'positron', 'app:n': 1 });
   });
@@ -102,9 +101,42 @@ describe('the stacking order', () => {
 });
 
 describe('the format read', () => {
-  it('is the version written only: an earlier version is refused', async () => {
-    const earlier = { ...draw.document.toJSON(), version: '3.0.0' };
+  it('upgrades a document of version 3, its features in the fields of version 3', async () => {
+    const layerId = draw.layers.getActive()?.id as string;
+    const v3 = {
+      version: '3.0.0',
+      metadata: { title: 'Old' },
+      layers: [{ id: layerId, name: 'L', visible: true, locked: false, opacity: 1, items: ['p'] }],
+      layerOrder: [layerId],
+      features: [
+        {
+          id: 'p',
+          type: 'Point',
+          geometry: { type: 'Point', coordinates: [1, 2] },
+          layerId,
+          properties: { name: 'a' },
+          style: { pointColor: '#ff0000' },
+          visible: true,
+          locked: false,
+        },
+      ],
+    };
+    await draw.open(v3 as never);
+    expect(draw.document.title).toBe('Old');
+    expect(draw.features.get('p')?.properties).toMatchObject({
+      name: 'a',
+      'maplibre-gl-draw:style': { pointColor: '#ff0000' },
+    });
+  });
+
+  it('refuses a version that has no upgrade', async () => {
+    const earlier = { ...draw.document.toJSON(), version: '1.0.0' };
     expect(await codeOf(draw.open(earlier))).toBe('invalid-input');
+  });
+
+  it('writes the title and the description in the metadata', async () => {
+    await draw.write((tx) => tx.document.update({ title: 'T', description: 'D' }));
+    expect(draw.document.toJSON().metadata).toEqual({ title: 'T', description: 'D' });
   });
 });
 

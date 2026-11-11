@@ -5,7 +5,7 @@
  * A document of the library for the tests, written with its features in the fields of the Store
  * (layerId, groupId, type, style, visible, locked) and given in the format the library reads
  * (4.0.0): each feature a GeoJSON Feature, the fields under the keys of the library in
- * `properties`, the title and the description out of the metadata
+ * `properties`
  */
 
 type Json = Record<string, unknown>;
@@ -30,14 +30,8 @@ function featureOf(feature: Json): Json {
 
 /** The document in the format of the library */
 export function nativeDocument<T extends Json>(data: T): T {
-  const { metadata, features, ...rest } = data as Json;
+  const { features, ...rest } = data as Json;
   const out: Json = { ...rest, version: '4.0.0' };
-  if (typeof metadata === 'object' && metadata !== null) {
-    const { title, description, ...values } = metadata as Json;
-    if (title !== undefined) out.title = title;
-    if (description !== undefined) out.description = description;
-    if (Object.keys(values).length > 0) out.metadata = values;
-  }
   out.features = Array.isArray(features) ? features.map((f) => featureOf(f as Json)) : features;
   return out as T;
 }

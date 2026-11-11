@@ -31,6 +31,7 @@ export type ParsedStore = Omit<ParsedDocument, 'features'> & { features: StoredF
 import { invalidInput, isRecord, onlyKeys, optionalBoolean, requireId } from '../shared.js';
 import { isNativeFormat, toFeatureCollection } from './format-detection.js';
 import { convertGeoJSONFeatures, decodeEmbeddedImages } from './geojson-import.js';
+import { upgradeNativeData } from './native-upgrade.js';
 import { validateNativeData } from './native-validation.js';
 
 type Skipped = ParsedDocument['skipped'];
@@ -183,7 +184,9 @@ export function parseNativeInput(input: unknown, options?: unknown): Promise<Par
 
     // The validation of a load: a malformed document throws, and an image that cannot be
     // imported is returned as a problem of its file
-    const validated = await validateNativeData(input, new Set());
+    // Data of an earlier major version is brought to the current one first
+    const upgraded = upgradeNativeData(input) as typeof input;
+    const validated = await validateNativeData(upgraded, new Set());
     const skipped: Skipped = [];
 
     // The layers, from the back, with new IDs; none when every feature goes into one layer

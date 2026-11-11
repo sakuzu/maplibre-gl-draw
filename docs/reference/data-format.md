@@ -396,9 +396,11 @@ serialize it with `JSON.stringify` and store it as `application/json`.
   "version": "4.0.0",
   "created": "2026-01-05T12:00:00.000Z",
   "modified": "2026-01-05T12:00:00.000Z",
-  "title": "Survey",
-  "description": "Field notes",
-  "metadata": { "app:basemap": "streets" },
+  "metadata": {
+    "title": "Survey",
+    "description": "Field notes",
+    "app:basemap": "streets"
+  },
   "layerOrder": ["parcels", "layer-1"],
   "layers": [
     {
@@ -442,12 +444,12 @@ serialize it with `JSON.stringify` and store it as `application/json`.
 ```
 
 - `created` and `modified` are the time of the call that wrote it
-- `title` and `description` are fields of the document, left out when
-  there is none
-- `metadata` holds the values an application or an extension keeps on the
-  document, each under a key of its own prefix (`app:basemap`); they are
-  written and read back as they are. A key without a prefix is not kept.
-  `metadata` and `files` are left out when they are empty
+- `metadata` holds the `title` and the `description` of the document (each
+  left out when there is none), and the values an application or an
+  extension keeps on the document, each under a key of its own prefix
+  (`app:basemap`); they are written and read back as they are. Another key
+  without a prefix is not kept. `metadata` and `files` are left out when
+  they are empty
 - `features` are GeoJSON Features, in the shape `draw.features.get` reads
   them: the layer of each in `maplibre-gl-draw:layerId`, which every
   feature of a document names, and the other values of the library under
@@ -469,9 +471,12 @@ serialize it with `JSON.stringify` and store it as `application/json`.
 - A minor version only adds fields. Data of an older minor version is read
   as it is. Data of a newer minor version is read with a warning on the
   console, and the fields it adds are kept but not interpreted
-- Data of another major version (`3.0.0` and earlier included), or a
-  `version` that is not `major.minor.patch`, is rejected: no earlier
-  version is upgraded
+- Data of version 2.x or 3.x is upgraded to 4.0.0 as it is read: the
+  fields of version 2 are renamed as version 3 names them, and each
+  feature of version 3 becomes a GeoJSON Feature, its layer, group, type,
+  style, visibility and lock under the keys of the library in `properties`
+- Data of another major version, or a `version` that is not
+  `major.minor.patch`, is rejected
 
 ### Opening
 
