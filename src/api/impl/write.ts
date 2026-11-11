@@ -614,7 +614,9 @@ class TransactionImpl implements Transaction {
       const named = target as unknown as SelectionTarget;
       const selection = selectionOfTarget(this.#store, named);
       if (!selection) throw invalidInput('The target is not one this instance gave');
-      return { kind: 'selection', selection, count: named.count };
+      // The features it names, read now: written without touching the selection, the locked
+      // ones left as they are
+      return { kind: 'ids', ids: this.#idsOfSelection(selection), skipLocked: true };
     }
     if ('all' in target) {
       if (target.all !== true || Object.keys(target).length !== 1) {
@@ -626,9 +628,9 @@ class TransactionImpl implements Transaction {
   }
 
   /** The IDs of the features of a target as the document is now (at the commit) */
-  #idsAtCommit(resolved: ResolvedTargetOf): string[] {
+  #idsAtCommit(resolved: ResolvedTargetOf, named?: readonly string[]): string[] {
     if (resolved.kind === 'ids') {
-      return resolved.ids.filter((id) => this.#store.getFeature(id) !== undefined);
+      return (named ?? resolved.ids).filter((id) => this.#store.getFeature(id) !== undefined);
     }
     if (resolved.kind === 'filter') {
       return listEveryFeatureIds(this.#store).filter((id) => {
@@ -651,17 +653,58 @@ class TransactionImpl implements Transaction {
     return null;
   }
 
-  /** Runs a write of the internal resources with the selection a target names */
-  #withSelection<T>(selection: Selection, fn: () => T): T {
+  /**
+   * The IDs of the features a selection names: the features selected, or those of the groups or
+   * the layers selected
+   */
+  #idsOfSelection(selection: Selection): string[] {
     const store = this.#store;
-    const before = store.getSelection();
-    if (sameSelection(before, selection)) return fn();
-    store.restoreSelection(selection);
-    try {
-      return fn();
-    } finally {
-      store.restoreSelection(before);
+    if (selection.bulk) {
+      const rows = sameSelection(store.getSelection(), selection) ? store.getSelectedRows() : null;
+      const tables = store.tables;
+      if (!rows || !tables) {
+        throw new DrawError(
+          'invalid-state',
+          'The target names features selected in bulk that are no longer the selection',
+        );
+      }
+      const ids: string[] = [];
+      for (const handle of rows.handles) {
+        const id = tables.getRowId(handle);
+        if (typeof id === 'string') ids.push(id);
+      }
+      return ids;
     }
+    const there = selection.ids.filter((id) => {
+      if (selection.type === 'feature') return this.#overlay.view.getFeature(id) !== undefined;
+      if (selection.type === 'group') return this.#overlay.view.getGroup(id) !== undefined;
+      return this.#overlay.view.getLayer(id) !== undefined;
+    });
+    if (selection.type === 'feature') return there;
+    if (selection.type === 'group') {
+      const groups = new Set(there);
+      return listEveryFeatureIds(store).filter((id) => {
+        const groupId = this.#overlay.view.getFeature(id)?.groupId;
+        return groupId !== undefined && groups.has(groupId);
+      });
+    }
+    const layers = new Set(there);
+    return listEveryFeatureIds(store).filter((id) => {
+      const feature = this.#overlay.view.getFeature(id);
+      return feature !== undefined && layers.has(feature.layerId);
+    });
+  }
+
+  /** The IDs a target names now, without the locked ones when the target leaves them */
+  #writableIds(resolved: ResolvedTargetOf): string[] {
+    const ids = this.#idsNow(resolved) ?? [];
+    if (resolved.kind !== 'ids') return ids;
+    if (resolved.skipLocked) {
+      return ids.filter((id) => !featureLocked(this.#overlay.view, this.#feature(id)));
+    }
+    const locked = ids.filter((id) => featureLocked(this.#overlay.view, this.#feature(id)));
+    if (locked.length > 0) throw lockedError(locked);
+    return ids;
   }
 
   // ==========================================================================
@@ -785,14 +828,6 @@ class TransactionImpl implements Transaction {
     ): number => {
       self.#requireEditable();
       const make = sharedPatchMaker(patch);
-      if (resolved.kind === 'selection') {
-        keep(() =>
-          self.#withSelection(resolved.selection, () =>
-            self.#writers.selection.update((sample) => make(sample, undefined)),
-          ),
-        );
-        return resolved.count;
-      }
       const ids = self.#idsNow(resolved) ?? [];
       // Checked now, on the features it names now: a wrong patch fails it
       for (const id of ids) make(sampleOf(self.#feature(id)), self.#feature(id));
@@ -819,20 +854,10 @@ class TransactionImpl implements Transaction {
       self.#run((keep) => {
         const resolved = self.#resolve(target, 'The target');
         self.#requireEditable();
-        if (resolved.kind === 'selection') {
-          keep(() =>
-            self.#withSelection(resolved.selection, () => self.#writers.selection.delete()),
-          );
-          return resolved.count;
-        }
-        const ids = self.#idsNow(resolved) ?? [];
-        if (resolved.kind === 'ids') {
-          const locked = ids.filter((id) => featureLocked(overlay.view, self.#feature(id)));
-          if (locked.length > 0) throw lockedError(locked);
-        }
+        const ids = self.#writableIds(resolved);
         for (const id of ids) overlay.features.set(id, null);
         keep(() => {
-          const now = self.#idsAtCommit(resolved).filter((id) => {
+          const now = self.#idsAtCommit(resolved, ids).filter((id) => {
             const feature = self.#store.getFeature(id);
             return feature !== undefined && !featureLocked(self.#store, feature);
           });
@@ -849,22 +874,9 @@ class TransactionImpl implements Transaction {
           const resolved = self.#resolve(target, 'The target');
           self.#requireEditable();
           const values = transformValues(kind, input);
-          if (resolved.kind === 'selection') {
-            keep(() =>
-              self.#withSelection(resolved.selection, () => {
-                self.#store.applyEdits([{ ...values, target: { selection: true } }]);
-                return true;
-              }),
-            );
-            return resolved.count;
-          }
-          const ids = self.#idsNow(resolved) ?? [];
-          if (resolved.kind === 'ids') {
-            const locked = ids.filter((id) => featureLocked(overlay.view, self.#feature(id)));
-            if (locked.length > 0) throw lockedError(locked);
-          }
+          const ids = self.#writableIds(resolved);
           keep(() => {
-            const now = self.#idsAtCommit(resolved).filter((id) => {
+            const now = self.#idsAtCommit(resolved, ids).filter((id) => {
               const feature = self.#store.getFeature(id);
               return feature !== undefined && !featureLocked(self.#store, feature);
             });
@@ -882,15 +894,7 @@ class TransactionImpl implements Transaction {
         const resolvedTarget = resolveMoveTarget(overlay.view, moveTarget);
         self.#requireEditable();
         if (resolvedTarget.locked) throw lockedError([placeIdOf(to)]);
-        if (resolved.kind === 'selection') {
-          keep(() =>
-            self.#withSelection(resolved.selection, () => self.#writers.selection.move(moveTarget)),
-          );
-          return resolved.count;
-        }
-        const ids = self.#idsNow(resolved) ?? [];
-        const locked = ids.filter((id) => featureLocked(overlay.view, self.#feature(id)));
-        if (locked.length > 0) throw lockedError(locked);
+        const ids = self.#writableIds(resolved);
         for (const id of ids) {
           const feature = self.#feature(id);
           const layerId =
@@ -1405,9 +1409,8 @@ class TransactionImpl implements Transaction {
 
 /** The features a target names, as the transaction reads them */
 type ResolvedTargetOf =
-  | { kind: 'ids'; ids: string[] }
-  | { kind: 'filter'; matches: (feature: StoredFeature) => boolean }
-  | { kind: 'selection'; selection: Selection; count: number };
+  | { kind: 'ids'; ids: string[]; skipLocked?: boolean }
+  | { kind: 'filter'; matches: (feature: StoredFeature) => boolean };
 
 /** The IDs of every feature, in stacking order */
 function listEveryFeatureIds(store: Store): string[] {

@@ -28,8 +28,13 @@ export async function write(
 
 /** Deletes what is selected: features, groups or layers */
 export function deleteSelection(draw: WriteDraw): Promise<boolean> {
-  const { type, count } = draw.selection.value;
+  const { type, count, ids } = draw.selection.value;
   if (type === null || count === 0) return Promise.resolve(false);
+  // The layers and the groups selected go with what they hold
+  if (type === 'layer' && ids) return write(draw, (tx) => tx.layers.delete(ids));
+  if (type === 'group' && ids) {
+    return write(draw, (tx) => tx.groups.delete(ids, { members: 'delete' }));
+  }
   return write(draw, (tx) => tx.features.delete(draw.selection.target));
 }
 
