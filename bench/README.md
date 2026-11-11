@@ -21,8 +21,8 @@ frame times. The target is an average of 55 fps or more with a p90 of
 
 ## bench.html
 
-The features are loaded into the Store with `draw.document.load()`, on a map
-with a background layer only (no network), in a fixed 1280 x 800 map.
+The features are imported into the Store with `tx.import` in `draw.write`,
+on a map with a background layer only (no network), in a fixed 1280 x 800 map.
 The address sets the conditions:
 
 | Parameter | Meaning | Default |
@@ -212,7 +212,7 @@ nothing is left to build, with the longest key of the order of the rows
 moved), and `undoRedo` undoes and redoes an edit of the rows (moved and
 colored) with a history of the page: the Store has no history of its own,
 so the values before and after are written back through the Store
-(`applyRows` for rows, `updateMany` for features), and the bytes that
+(`applyRows` for rows, `tx.features.update` for features), and the bytes that
 history holds are shown. `boxHeld` draws a box with Shift from the
 center of the map, grown to its corner and shrunk, a move of the pointer
 per rep, each move timed (the rows in the box are marked while it is

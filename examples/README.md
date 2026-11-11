@@ -18,14 +18,14 @@ them in this order.
 | --- | --- | --- |
 | [get-started](get-started/) | Drawing, selecting and changing a feature in the panel on the right, the change events | [Getting started](../docs/getting-started.md) |
 | [style-features](style-features/) | The style of each feature side by side (colors, widths, dashes, point shapes and sizes), the defaults of a type, a style set from code and in the panel | [Styles](../docs/guides/styles.md) |
-| [feature-properties](feature-properties/) | Attributes loaded from GeoJSON, changed in the Attributes tab and with `features.update` | [Data format](../docs/reference/data-format.md) |
+| [feature-properties](feature-properties/) | Attributes loaded from GeoJSON, changed in the Attributes tab and with `tx.features.update` | [Data format](../docs/reference/data-format.md) |
 | [zoom-and-scale](zoom-and-scale/) | Widths at the reference zoom of each feature that grow and shrink with the map, widths fixed on the screen, `scaleWithZoom` switched from the card of actions | [Styles](../docs/guides/styles.md) |
 | [editing-shapes](editing-shapes/) | The selection box, the vertex and midpoint handles, an area with a hole, a `MultiPolygon`, shared vertices moved together and switched from the card of actions | [Drawing and editing](../docs/guides/drawing.md#selecting-and-editing) |
 | [layers-and-groups](layers-and-groups/) | Two layers and a group made from code, the order, the active layer, visibility, locks and opacity in the layer panel | [Layers and groups](../docs/guides/layers.md) |
 | [style-rules-and-legend](style-rules-and-legend/) | The four kinds of style rule on a layer and the Legend tab | [Styles](../docs/guides/styles.md) |
 | [snapping-and-tracing](snapping-and-tracing/) | The snapping options, the guide lines, tracing a boundary, the snapping switch of the toolbar | [Snapping and geometry](../docs/guides/snapping-geometry.md) |
 | [geometry-operations](geometry-operations/) | Union, intersection, difference, split and buffer from the panel, length and area | [Snapping and geometry](../docs/guides/snapping-geometry.md) |
-| [images](images/) | The Image tool, `image.requested`, an image placed from code and its opacity | [Drawing and editing](../docs/guides/drawing.md#images) |
+| [images](images/) | The Image tool, `requestImage`, an image placed from code and its opacity | [Drawing and editing](../docs/guides/drawing.md#images) |
 | [save-and-load](save-and-load/) | GeoJSON and the native format, buttons in the card of actions to save, load, download and open a file, files dropped on the map, skipped features | [Save and load](../docs/guides/save-load.md) |
 | [terrain](terrain/) | Drawing and editing on the 3D terrain of the map | [Terrain](../docs/guides/terrain.md) |
 | [globe](globe/) | The globe projection, routes along great circles, a box, a circle, an image and cities on the sphere, an area across the antimeridian | [Drawing](../docs/guides/drawing.md#near-the-antimeridian) |

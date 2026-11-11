@@ -5,7 +5,7 @@
  * The large-data scene: a city of editable features
  *
  * Every building, street and place of the scene is an editable feature of the Store, loaded
- * with `draw.document.load()`: each one can be selected, moved and reshaped. The tilted camera shows
+ * with `draw.open()`: each one can be selected, moved and reshaped. The tilted camera shows
  * them near at hand, where they can be told apart, and far into the distance, where they
  * become a texture. A park in the foreground is selected, with its selection box and vertex handles.
  *
@@ -34,7 +34,7 @@ const HALF_HEIGHT_KM = 4.2;
 /** The width of the land mask, in pixels */
 const MASK_WIDTH = 2048;
 
-/** The number of features, for the legend, and the time `draw.document.load` took, for the console */
+/** The number of features, for the legend, and the time `draw.open` took, for the console */
 const counts = { buildings: 0, streets: 0, places: 0, total: 0, loadMs: 0 };
 
 export const largeDataScene: ShowcaseScene = {
@@ -46,11 +46,11 @@ export const largeDataScene: ShowcaseScene = {
     await settled(map);
     const document = createCity(map);
     const started = performance.now();
-    await draw.document.load(document);
+    await draw.open(document);
     counts.loadMs = performance.now() - started;
     console.info(
       `large-data: ${counts.total} features (${counts.buildings} buildings, ` +
-        `${counts.streets} streets, ${counts.places} places), draw.document.load ${Math.round(counts.loadMs)} ms`,
+        `${counts.streets} streets, ${counts.places} places), draw.open ${Math.round(counts.loadMs)} ms`,
     );
   },
   async finish({ draw, map }) {
@@ -213,15 +213,14 @@ function createCity(map: maplibregl.Map): DrawDocument {
       } else if (frame.random() < 0.025) {
         buildings.push({
           id: `park-${buildings.length}`,
-          type: 'Polygon',
+          type: 'Feature',
           geometry: {
             type: 'Polygon',
             coordinates: [
               rectangle(frame, west + 0.006, south + 0.006, east - 0.006, north - 0.006, 3),
             ],
           },
-          properties: { use: 'Park' },
-          style: BUILDING_STYLE,
+          properties: { use: 'Park', 'maplibre-gl-draw:style': BUILDING_STYLE },
         });
       } else {
         fillBlock(frame, buildings, places, west, south, east, north);
@@ -292,10 +291,12 @@ function street(
   }
   return {
     id: `street-${index}`,
-    type: 'LineString',
+    type: 'Feature',
     geometry: { type: 'LineString', coordinates: coordinates },
-    properties: { class: avenue ? 'Avenue' : 'Street' },
-    style: { strokeWidth: avenue ? 5 : 2.5, strokeOpacity: 1 },
+    properties: {
+      class: avenue ? 'Avenue' : 'Street',
+      'maplibre-gl-draw:style': { strokeWidth: avenue ? 5 : 2.5, strokeOpacity: 1 },
+    },
   };
 }
 
@@ -330,27 +331,28 @@ function fillBlock(
       const use = apartment ? 'Apartment' : frame.random() < 0.05 ? 'Shop' : 'House';
       buildings.push({
         id: `building-${buildings.length}`,
-        type: 'Polygon',
+        type: 'Feature',
         geometry: {
           type: 'Polygon',
           coordinates: [
             rectangle(frame, x + 0.0012, houseSouth, x + width - 0.0012, houseSouth + depth),
           ],
         },
-        properties: { use },
-        style: BUILDING_STYLE,
+        properties: { use, 'maplibre-gl-draw:style': BUILDING_STYLE },
       });
       if (use === 'Shop' || frame.random() < 0.01) {
         const kind = PLACE_KINDS[Math.floor(frame.random() * PLACE_KINDS.length)];
         places.push({
           id: `place-${places.length}`,
-          type: 'Point',
+          type: 'Feature',
           geometry: {
             type: 'Point',
             coordinates: frame.toLngLat(x + width / 2, houseSouth + depth / 2),
           },
-          properties: { kind: kind.name },
-          style: { pointShape: kind.shape, pointRadius: 4.5 },
+          properties: {
+            kind: kind.name,
+            'maplibre-gl-draw:style': { pointShape: kind.shape, pointRadius: 4.5 },
+          },
         });
       }
       x += width;
@@ -395,10 +397,9 @@ function selectedPark(
   ring.push(ring[0]);
   return {
     id: SELECTED_FEATURE,
-    type: 'Polygon',
+    type: 'Feature',
     geometry: { type: 'Polygon', coordinates: [ring] },
-    properties: { use: 'Park', name: 'Park' },
-    style: BUILDING_STYLE,
+    properties: { use: 'Park', name: 'Park', 'maplibre-gl-draw:style': BUILDING_STYLE },
   };
 }
 

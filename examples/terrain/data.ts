@@ -7,7 +7,8 @@
 // relief, and the parts behind the ridge are hidden by it.
 import type { DrawDocument, Feature, FileData } from '@sakuzu/maplibre-gl-draw';
 
-type SceneFeature = Pick<Feature, 'id' | 'type' | 'geometry' | 'style' | 'properties'>;
+/** A feature of the drawing, before it is put in its layer */
+type SceneFeature = Feature;
 
 export interface SceneLayer {
   id: string;
@@ -26,7 +27,7 @@ export const TERRAIN_LAYERS: SceneLayer[] = [
     features: [
       {
         id: 'survey-map',
-        type: 'Image',
+        type: 'Feature',
         geometry: { type: 'Point', coordinates: [11.4265, 47.3005] },
         properties: {
           name: 'Survey map',
@@ -34,12 +35,13 @@ export const TERRAIN_LAYERS: SceneLayer[] = [
           'maplibre-gl-draw:imageFileId': SURVEY_FILE_ID,
           'maplibre-gl-draw:imageWidth': 480,
           'maplibre-gl-draw:imageHeight': 375,
+          'maplibre-gl-draw:featureType': 'Image',
+          'maplibre-gl-draw:style': { imageOpacity: 0.9 },
         },
-        style: { imageOpacity: 0.9 },
       },
       {
         id: 'forest-plot',
-        type: 'Polygon',
+        type: 'Feature',
         geometry: {
           type: 'Polygon',
           coordinates: [
@@ -54,13 +56,15 @@ export const TERRAIN_LAYERS: SceneLayer[] = [
             ],
           ],
         },
-        properties: { name: 'Forest plot' },
-        style: {
-          fillColor: '#FF006E',
-          fillOpacity: 0.45,
-          strokeColor: '#C9004F',
-          strokeWidth: 3,
-          strokeOpacity: 1,
+        properties: {
+          name: 'Forest plot',
+          'maplibre-gl-draw:style': {
+            fillColor: '#FF006E',
+            fillOpacity: 0.45,
+            strokeColor: '#C9004F',
+            strokeWidth: 3,
+            strokeOpacity: 1,
+          },
         },
       },
     ],
@@ -71,7 +75,7 @@ export const TERRAIN_LAYERS: SceneLayer[] = [
     features: [
       {
         id: 'meridian',
-        type: 'LineString',
+        type: 'Feature',
         geometry: {
           type: 'LineString',
           coordinates: [
@@ -79,12 +83,18 @@ export const TERRAIN_LAYERS: SceneLayer[] = [
             [11.358, 47.328],
           ],
         },
-        properties: { name: 'Straight line north' },
-        style: { strokeColor: '#1D4ED8', strokeWidth: 3.5, lineStyle: 'dashed' },
+        properties: {
+          name: 'Straight line north',
+          'maplibre-gl-draw:style': {
+            strokeColor: '#1D4ED8',
+            strokeWidth: 3.5,
+            lineStyle: 'dashed',
+          },
+        },
       },
       {
         id: 'trail',
-        type: 'LineString',
+        type: 'Feature',
         geometry: {
           type: 'LineString',
           coordinates: [
@@ -98,8 +108,10 @@ export const TERRAIN_LAYERS: SceneLayer[] = [
             [11.3905, 47.3262],
           ],
         },
-        properties: { name: 'Trail' },
-        style: { strokeColor: '#FF7B00', strokeWidth: 5, strokeOpacity: 1 },
+        properties: {
+          name: 'Trail',
+          'maplibre-gl-draw:style': { strokeColor: '#FF7B00', strokeWidth: 5, strokeOpacity: 1 },
+        },
       },
     ],
   },
@@ -123,10 +135,9 @@ function point(
 ): SceneFeature {
   return {
     id: name.toLowerCase(),
-    type: 'Point',
+    type: 'Feature',
     geometry: { type: 'Point', coordinates },
-    properties: { name },
-    style: { pointShape, pointColor, pointRadius },
+    properties: { name, 'maplibre-gl-draw:style': { pointShape, pointColor, pointRadius } },
   };
 }
 
@@ -137,8 +148,8 @@ export function buildDocument(
   files: FileData[],
 ): DrawDocument {
   return {
-    version: '3.0.0',
-    metadata: { title },
+    version: '4.0.0',
+    title,
     layerOrder: layers.map((layer) => layer.id),
     layers: layers.map((layer) => ({
       id: layer.id,
@@ -153,10 +164,7 @@ export function buildDocument(
     features: layers.flatMap((layer) =>
       layer.features.map((feature) => ({
         ...feature,
-        layerId: layer.id,
-        groupId: undefined,
-        visible: true,
-        locked: false,
+        properties: { ...feature.properties, 'maplibre-gl-draw:layerId': layer.id },
       })),
     ),
     files: Object.fromEntries(files.map((file) => [file.id, file])),

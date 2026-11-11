@@ -106,23 +106,25 @@ async function nearestBuildings(count: number): Promise<GeoJSON.Feature[]> {
     }));
 }
 
-// 3. The rule is a key of the layer: the load creates the layer with the first rule, the
-// graduated one, and puts the buildings in it, in one step
+// 3. The rule is a key of the layer: the import creates the layer with the first rule, the
+// graduated one, and puts the buildings in it, in one commit
 const loaded = nearestBuildings(400).then(async (features) => {
-  const result = await draw.document.load(
-    { type: 'FeatureCollection', features },
-    { layer: { name: 'Buildings', styleRule: RULES[0] } },
+  const result = await draw.write((tx) =>
+    tx.import(
+      { type: 'FeatureCollection', features },
+      { layer: { name: 'Buildings', styleRule: RULES[0] } },
+    ),
   );
-  if (!result?.layerId) throw new Error('The drawing is read-only');
   return result.layerId;
 });
 
-// 4. layers.update changes the rule; the map and the legend follow. A button in the card of
+// 4. tx.layers.update changes the rule; the map and the legend follow. A button in the card of
 // actions goes to the next kind (7)
 let current = 0;
 async function nextRule(): Promise<void> {
   current = (current + 1) % RULES.length;
-  draw.layers.update(await loaded, { styleRule: RULES[current] });
+  const layerId = await loaded;
+  await draw.write((tx) => tx.layers.update(layerId, { styleRule: RULES[current] }));
 }
 
 // 5. The Attributes tab keeps what is typed as text ("45"), and graduated and continuous rules
@@ -139,7 +141,7 @@ draw.on('change', ({ features }) => {
       }
     }
     if (Object.keys(numbers).length > 0) {
-      draw.features.update(feature.id, { properties: numbers });
+      void draw.write((tx) => tx.features.update(feature.id, { properties: numbers }));
     }
   }
 });

@@ -38,7 +38,7 @@ function row(south: number): FeatureInput[] {
   const west = 139.77;
   return [
     {
-      type: 'LineString',
+      type: 'Feature',
       geometry: {
         type: 'LineString',
         coordinates: [
@@ -46,11 +46,13 @@ function row(south: number): FeatureInput[] {
           [west + 0.0018, south + 0.0016],
         ],
       },
-      properties: { name: 'Wide line' },
-      style: { strokeColor: '#d1495b', strokeWidth: 8 },
+      properties: {
+        name: 'Wide line',
+        'maplibre-gl-draw:style': { strokeColor: '#d1495b', strokeWidth: 8 },
+      },
     },
     {
-      type: 'Polygon',
+      type: 'Feature',
       geometry: {
         type: 'Polygon',
         coordinates: [
@@ -63,14 +65,23 @@ function row(south: number): FeatureInput[] {
           ],
         ],
       },
-      properties: { name: 'Thick outline' },
-      style: { fillColor: '#edae49', fillOpacity: 0.4, strokeColor: '#00798c', strokeWidth: 6 },
+      properties: {
+        name: 'Thick outline',
+        'maplibre-gl-draw:style': {
+          fillColor: '#edae49',
+          fillOpacity: 0.4,
+          strokeColor: '#00798c',
+          strokeWidth: 6,
+        },
+      },
     },
     {
-      type: 'Point',
+      type: 'Feature',
       geometry: { type: 'Point', coordinates: [west + 0.0064, south + 0.0009] },
-      properties: { name: 'Big point' },
-      style: { pointColor: '#30638e', pointRadius: 14, pointStrokeWidth: 3 },
+      properties: {
+        name: 'Big point',
+        'maplibre-gl-draw:style': { pointColor: '#30638e', pointRadius: 14, pointStrokeWidth: 3 },
+      },
     },
   ];
 }
@@ -78,41 +89,49 @@ function row(south: number): FeatureInput[] {
 // 1. Two layers. The document starts with one, which showState names below; the second goes
 // behind it (`index` 0 is the back), as its row is under the first on the map
 const scaledLayer = draw.layers.getActive();
-const fixedLayer = draw.layers.create({ name: 'Fixed on screen', index: 0 });
-if (scaledLayer === null || fixedLayer === null) throw new Error('The drawing is read-only');
+if (scaledLayer === null) throw new Error('The document has no layer');
+const fixedLayer = await draw.write((tx) =>
+  tx.layers.create({ name: 'Fixed on screen', index: 0 }),
+);
 const layerIds = { scaled: scaledLayer.id, fixed: fixedLayer.id };
+
+/** A feature put in a layer, with its other properties */
+const inLayer = (feature: FeatureInput, layerId: string, properties: object = {}) => ({
+  ...feature,
+  properties: { ...feature.properties, ...properties, 'maplibre-gl-draw:layerId': layerId },
+});
 
 // 2. The same features in both. Those of the first layer have a reference zoom of 15, where
 // the page opens, so both rows look the same until the map zooms; those of the second have
-// none, so they keep their widths on the screen (createMany returns null only while read-only)
-const scaled = draw.features.createMany(
-  row(35.683).map((feature) => ({
-    ...feature,
-    layerId: scaledLayer.id,
-    properties: { ...feature.properties, [CREATED_ZOOM]: 15 },
-  })),
+// none, so they keep their widths on the screen
+await draw.write((tx) =>
+  tx.features.create([
+    ...row(35.683).map((feature) => inLayer(feature, scaledLayer.id, { [CREATED_ZOOM]: 15 })),
+    ...row(35.6806).map((feature) => inLayer(feature, fixedLayer.id)),
+  ]),
 );
-draw.features.createMany(row(35.6806).map((feature) => ({ ...feature, layerId: fixedLayer.id })));
-if (scaled === null) throw new Error('The drawing is read-only');
 
 // 3. The reference zoom is per feature: a line of 2 px beside the wide line, whose reference
 // zoom is set to 13 from code. Two zoom levels further in, at 15, it is 4 times as wide: 8 px,
 // as wide as the wide line beside it
-const thin = draw.features.create({
-  type: 'LineString',
-  layerId: scaledLayer.id,
-  geometry: {
-    type: 'LineString',
-    coordinates: [
-      [139.7707, 35.6832],
-      [139.7725, 35.6846],
-    ],
-  },
-  properties: { name: '2 px at zoom 13' },
-  style: { strokeColor: '#2e4057', strokeWidth: 2 },
-});
-if (thin === null) throw new Error('The drawing is read-only');
-draw.features.update(thin.id, { properties: { [CREATED_ZOOM]: 13 } });
+const thin = await draw.write((tx) =>
+  tx.features.create({
+    type: 'Feature',
+    geometry: {
+      type: 'LineString',
+      coordinates: [
+        [139.7707, 35.6832],
+        [139.7725, 35.6846],
+      ],
+    },
+    properties: {
+      name: '2 px at zoom 13',
+      'maplibre-gl-draw:layerId': scaledLayer.id,
+      'maplibre-gl-draw:style': { strokeColor: '#2e4057', strokeWidth: 2 },
+    },
+  }),
+);
+await draw.write((tx) => tx.features.update(thin.id, { properties: { [CREATED_ZOOM]: 13 } }));
 
 // 4. The standard UI. `?locale=ja` in the address shows it in Japanese
 const locale = new URLSearchParams(location.search).get('locale') === 'ja' ? 'ja' : 'en';
@@ -126,13 +145,14 @@ const ui = createDrawUI(draw, { locale });
 const scaleWithZoom = () => draw.options.get().scaleWithZoom ?? true;
 function showState(): void {
   const active = scaleWithZoom() ? layerIds.scaled : layerIds.fixed;
-  draw.transact(() => {
-    draw.layers.setActive(active);
+  // The active layer is of this client; the names are written in one commit
+  draw.layers.setActive(active);
+  void draw.write(async (tx) => {
     for (const [id, name] of [
       [layerIds.scaled, 'Scaled with zoom'],
       [layerIds.fixed, 'Fixed on screen'],
     ]) {
-      draw.layers.update(id, { name: id === active ? `→ ${name}` : name });
+      await tx.layers.update(id, { name: id === active ? `→ ${name}` : name });
     }
   });
   console.info(`scaleWithZoom: ${scaleWithZoom()}`);

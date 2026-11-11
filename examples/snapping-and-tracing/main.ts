@@ -26,7 +26,7 @@ const draw = createDraw(map);
 
 // 1. A parcel whose east side follows a stream (STREAM, the boundary to trace), and a road
 // (data.ts)
-draw.features.createMany(FEATURES);
+await draw.write((tx) => tx.features.create(FEATURES));
 
 // 2. Snapping and tracing are on by default; options.update changes only the keys given.
 // Here: a wider reach, guide lines every 15 degrees from the last vertex, no snapping to

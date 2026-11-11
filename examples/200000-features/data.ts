@@ -10,7 +10,8 @@ import type { DrawDocument, Feature, PointShape, StyleRule } from '@sakuzu/mapli
 
 type LngLat = [number, number];
 
-type CityFeature = Pick<Feature, 'id' | 'type' | 'geometry' | 'style' | 'properties'>;
+/** A feature of the city, before it is put in its layer */
+type CityFeature = Feature;
 
 /** The center of the city and of the map */
 export const CENTER: LngLat = [139.664, 35.652];
@@ -89,15 +90,14 @@ export function createCity(center: LngLat, halfSizeKm: number, parkAtKm: [number
       } else if (frame.random() < 0.025) {
         buildings.push({
           id: `park-${buildings.length}`,
-          type: 'Polygon',
+          type: 'Feature',
           geometry: {
             type: 'Polygon',
             coordinates: [
               rectangle(frame, west + 0.006, south + 0.006, east - 0.006, north - 0.006, 3),
             ],
           },
-          properties: { use: 'Park' },
-          style: BUILDING_STYLE,
+          properties: { use: 'Park', 'maplibre-gl-draw:style': BUILDING_STYLE },
         });
       } else {
         fillBlock(frame, buildings, places, west, south, east, north);
@@ -111,8 +111,8 @@ export function createCity(center: LngLat, halfSizeKm: number, parkAtKm: [number
     { id: 'layer-places', name: 'Places', features: places },
   ];
   const document: DrawDocument = {
-    version: '3.0.0',
-    metadata: { title: 'City' },
+    version: '4.0.0',
+    title: 'City',
     layerOrder: layers.map((layer) => layer.id),
     layers: layers.map((layer) => ({
       id: layer.id,
@@ -127,10 +127,7 @@ export function createCity(center: LngLat, halfSizeKm: number, parkAtKm: [number
     features: layers.flatMap((layer) =>
       layer.features.map((feature) => ({
         ...feature,
-        layerId: layer.id,
-        groupId: undefined,
-        visible: true,
-        locked: false,
+        properties: { ...feature.properties, 'maplibre-gl-draw:layerId': layer.id },
       })),
     ),
     files: {},
@@ -292,10 +289,12 @@ function street(
   }
   return {
     id: `street-${index}`,
-    type: 'LineString',
+    type: 'Feature',
     geometry: { type: 'LineString', coordinates },
-    properties: { class: avenue ? 'Avenue' : 'Street' },
-    style: { strokeWidth: avenue ? 5 : 2.5, strokeOpacity: 1 },
+    properties: {
+      class: avenue ? 'Avenue' : 'Street',
+      'maplibre-gl-draw:style': { strokeWidth: avenue ? 5 : 2.5, strokeOpacity: 1 },
+    },
   };
 }
 
@@ -330,27 +329,28 @@ function fillBlock(
       const use = apartment ? 'Apartment' : frame.random() < 0.05 ? 'Shop' : 'House';
       buildings.push({
         id: `building-${buildings.length}`,
-        type: 'Polygon',
+        type: 'Feature',
         geometry: {
           type: 'Polygon',
           coordinates: [
             rectangle(frame, x + 0.0012, houseSouth, x + width - 0.0012, houseSouth + depth),
           ],
         },
-        properties: { use },
-        style: BUILDING_STYLE,
+        properties: { use, 'maplibre-gl-draw:style': BUILDING_STYLE },
       });
       if (use === 'Shop' || frame.random() < 0.01) {
         const kind = PLACE_KINDS[Math.floor(frame.random() * PLACE_KINDS.length)];
         places.push({
           id: `place-${places.length}`,
-          type: 'Point',
+          type: 'Feature',
           geometry: {
             type: 'Point',
             coordinates: frame.toLngLat(x + width / 2, houseSouth + depth / 2),
           },
-          properties: { kind: kind.name },
-          style: { pointShape: kind.shape, pointRadius: 4.5 },
+          properties: {
+            kind: kind.name,
+            'maplibre-gl-draw:style': { pointShape: kind.shape, pointRadius: 4.5 },
+          },
         });
       }
       x += width;
@@ -389,9 +389,8 @@ function selectedPark(
   ring.push(ring[0]);
   return {
     id: PARK_ID,
-    type: 'Polygon',
+    type: 'Feature',
     geometry: { type: 'Polygon', coordinates: [ring] },
-    properties: { use: 'Park', name: 'Park' },
-    style: BUILDING_STYLE,
+    properties: { use: 'Park', name: 'Park', 'maplibre-gl-draw:style': BUILDING_STYLE },
   };
 }

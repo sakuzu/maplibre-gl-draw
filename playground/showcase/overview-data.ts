@@ -26,8 +26,8 @@ import type {
   DatasetBaseStyle,
   DatasetRow,
   DrawDocument,
-  DrawProperties,
   Position,
+  Properties,
   StyleRule,
 } from '@sakuzu/maplibre-gl-draw';
 import { buildDocument, type SceneFeature, type SceneLayer } from './scene';
@@ -48,7 +48,7 @@ const IMAGE_FILE = 'file-station';
 const DRAWN_AT_ZOOM = 15;
 
 /** The attributes of a feature: its name, the zoom it was drawn at, and any others */
-function drawn(name: string, others: DrawProperties = {}): DrawProperties {
+function drawn(name: string, others: Properties = {}): Properties {
   return { name, 'maplibre-gl-draw:createdZoom': DRAWN_AT_ZOOM, ...others };
 }
 
@@ -100,10 +100,12 @@ const PARCELS: SceneFeature[] = (
   ] as const
 ).map(([use, west, south, east, north], i) => ({
   id: `parcel-${i + 1}`,
-  type: 'Polygon',
+  type: 'Feature',
   geometry: { type: 'Polygon', coordinates: [box(west, south, east, north)] },
-  properties: drawn(`Parcel ${i + 1}`, { use }),
-  style: { fillOpacity: 0.75, strokeColor: '#ffffff', strokeWidth: 1.5 },
+  properties: {
+    ...drawn(`Parcel ${i + 1}`, { use }),
+    'maplibre-gl-draw:style': { fillOpacity: 0.75, strokeColor: '#ffffff', strokeWidth: 1.5 },
+  },
 }));
 
 // Draft
@@ -111,7 +113,7 @@ const PARCELS: SceneFeature[] = (
 /** A footprint in a dashed outline, in a layer drawn at half opacity */
 const DRAFT_FOOTPRINT: SceneFeature = {
   id: 'draft-footprint',
-  type: 'Polygon',
+  type: 'Feature',
   geometry: {
     type: 'Polygon',
     coordinates: [
@@ -121,13 +123,15 @@ const DRAFT_FOOTPRINT: SceneFeature = {
       ]),
     ],
   },
-  properties: drawn('Draft footprint'),
-  style: {
-    fillColor: '#FF9E00',
-    fillOpacity: 1,
-    strokeColor: '#1D4ED8',
-    strokeWidth: 3,
-    lineStyle: 'dashed',
+  properties: {
+    ...drawn('Draft footprint'),
+    'maplibre-gl-draw:style': {
+      fillColor: '#FF9E00',
+      fillOpacity: 1,
+      strokeColor: '#1D4ED8',
+      strokeWidth: 3,
+      lineStyle: 'dashed',
+    },
   },
 };
 
@@ -144,15 +148,17 @@ const FILL_OPACITY: SceneFeature[] = (
   ] as const
 ).map(([percent, west, east]) => ({
   id: `fill-${percent}`,
-  type: 'Polygon',
+  type: 'Feature',
   geometry: { type: 'Polygon', coordinates: [box(west, 35.683036, east, 35.683678)] },
-  properties: drawn(`Fill ${percent}%`),
-  style: {
-    fillColor: '#1D3557',
-    fillOpacity: percent / 100,
-    strokeColor: '#1D3557',
-    strokeWidth: 1.5,
-    strokeOpacity: 1,
+  properties: {
+    ...drawn(`Fill ${percent}%`),
+    'maplibre-gl-draw:style': {
+      fillColor: '#1D3557',
+      fillOpacity: percent / 100,
+      strokeColor: '#1D3557',
+      strokeWidth: 1.5,
+      strokeOpacity: 1,
+    },
   },
 }));
 
@@ -161,23 +167,25 @@ const FILL_OPACITY: SceneFeature[] = (
 const OUTLINES: SceneFeature[] = [
   {
     id: 'outline-solid',
-    type: 'Polygon',
+    type: 'Feature',
     geometry: {
       type: 'Polygon',
       coordinates: [box(139.776009, 35.6876, 139.779114, 35.6885)],
     },
-    properties: drawn('Solid outline, 1 px'),
-    style: {
-      fillColor: '#FFD166',
-      fillOpacity: 0.55,
-      strokeColor: '#2A9D8F',
-      strokeWidth: 1,
-      lineStyle: 'solid',
+    properties: {
+      ...drawn('Solid outline, 1 px'),
+      'maplibre-gl-draw:style': {
+        fillColor: '#FFD166',
+        fillOpacity: 0.55,
+        strokeColor: '#2A9D8F',
+        strokeWidth: 1,
+        lineStyle: 'solid',
+      },
     },
   },
   {
     id: 'outline-dashed',
-    type: 'Polygon',
+    type: 'Feature',
     geometry: {
       type: 'Polygon',
       coordinates: [
@@ -187,18 +195,20 @@ const OUTLINES: SceneFeature[] = [
         ]),
       ],
     },
-    properties: drawn('Dashed outline, 3 px'),
-    style: {
-      fillColor: '#8ECAE6',
-      fillOpacity: 0.5,
-      strokeColor: '#D00000',
-      strokeWidth: 3,
-      lineStyle: 'dashed',
+    properties: {
+      ...drawn('Dashed outline, 3 px'),
+      'maplibre-gl-draw:style': {
+        fillColor: '#8ECAE6',
+        fillOpacity: 0.5,
+        strokeColor: '#D00000',
+        strokeWidth: 3,
+        lineStyle: 'dashed',
+      },
     },
   },
   {
     id: 'outline-dotted',
-    type: 'Polygon',
+    type: 'Feature',
     geometry: {
       type: 'Polygon',
       coordinates: [
@@ -208,13 +218,15 @@ const OUTLINES: SceneFeature[] = [
         ]),
       ],
     },
-    properties: drawn('Dotted outline, 6 px'),
-    style: {
-      fillColor: '#C77DFF',
-      fillOpacity: 0.4,
-      strokeColor: '#1B7F3B',
-      strokeWidth: 6,
-      lineStyle: 'dotted',
+    properties: {
+      ...drawn('Dotted outline, 6 px'),
+      'maplibre-gl-draw:style': {
+        fillColor: '#C77DFF',
+        fillOpacity: 0.4,
+        strokeColor: '#1B7F3B',
+        strokeWidth: 6,
+        lineStyle: 'dotted',
+      },
     },
   },
 ];
@@ -228,25 +240,28 @@ const COVERAGE: SceneFeature[] = (
   ] as const
 ).map(([letter, lng, lat, color], i) => ({
   id: `circle-${i + 1}`,
-  type: 'Circle',
+  type: 'Feature',
   geometry: { type: 'Point', coordinates: [lng, lat] },
-  properties: drawn(`Coverage ${letter}`, {
-    'maplibre-gl-draw:radiusMeters': 170.7,
-    'maplibre-gl-draw:radiusHandleAngle': 45,
-  }),
-  style: {
-    fillColor: color,
-    fillOpacity: 0.32,
-    strokeColor: color,
-    strokeWidth: 2.5,
-    strokeOpacity: 0.95,
+  properties: {
+    ...drawn(`Coverage ${letter}`, {
+      'maplibre-gl-draw:radiusMeters': 170.7,
+      'maplibre-gl-draw:radiusHandleAngle': 45,
+    }),
+    'maplibre-gl-draw:featureType': 'Circle',
+    'maplibre-gl-draw:style': {
+      fillColor: color,
+      fillOpacity: 0.32,
+      strokeColor: color,
+      strokeWidth: 2.5,
+      strokeOpacity: 0.95,
+    },
   },
 }));
 
 /** One feature of three areas */
 const ISLANDS: SceneFeature = {
   id: 'islands',
-  type: 'MultiPolygon',
+  type: 'Feature',
   geometry: {
     type: 'MultiPolygon',
     coordinates: [
@@ -273,20 +288,22 @@ const ISLANDS: SceneFeature = {
       ],
     ],
   },
-  properties: drawn('Islands'),
-  style: {
-    fillColor: '#06D6A0',
-    fillOpacity: 0.55,
-    strokeColor: '#04836B',
-    strokeWidth: 2,
-    strokeOpacity: 0.9,
+  properties: {
+    ...drawn('Islands'),
+    'maplibre-gl-draw:style': {
+      fillColor: '#06D6A0',
+      fillOpacity: 0.55,
+      strokeColor: '#04836B',
+      strokeWidth: 2,
+      strokeOpacity: 0.9,
+    },
   },
 };
 
 /** An area with a hole */
 const COURTYARD: SceneFeature = {
   id: 'courtyard',
-  type: 'Polygon',
+  type: 'Feature',
   geometry: {
     type: 'Polygon',
     coordinates: [
@@ -301,13 +318,15 @@ const COURTYARD: SceneFeature = {
       ]),
     ],
   },
-  properties: drawn('Courtyard block'),
-  style: {
-    fillColor: '#8338EC',
-    fillOpacity: 0.45,
-    strokeColor: '#5A189A',
-    strokeWidth: 2.5,
-    strokeOpacity: 1,
+  properties: {
+    ...drawn('Courtyard block'),
+    'maplibre-gl-draw:style': {
+      fillColor: '#8338EC',
+      fillOpacity: 0.45,
+      strokeColor: '#5A189A',
+      strokeWidth: 2.5,
+      strokeOpacity: 1,
+    },
   },
 };
 
@@ -324,10 +343,12 @@ function line(
 ): SceneFeature {
   return {
     id,
-    type: 'LineString',
+    type: 'Feature',
     geometry: { type: 'LineString', coordinates },
-    properties: drawn(name),
-    style: { strokeColor, strokeWidth, strokeOpacity: 1, lineStyle },
+    properties: {
+      ...drawn(name),
+      'maplibre-gl-draw:style': { strokeColor, strokeWidth, strokeOpacity: 1, lineStyle },
+    },
   };
 }
 
@@ -470,21 +491,24 @@ const TRAILS: SceneFeature[] = [
 /** An image, 120 x 80 px at the zoom it was placed at, turned a little */
 const PHOTO: SceneFeature = {
   id: 'photo',
-  type: 'Image',
+  type: 'Feature',
   geometry: { type: 'Point', coordinates: [139.778369, 35.677764] },
-  properties: drawn('Station photo', {
-    'maplibre-gl-draw:rotation': -6,
-    'maplibre-gl-draw:imageFileId': IMAGE_FILE,
-    'maplibre-gl-draw:imageWidth': 120,
-    'maplibre-gl-draw:imageHeight': 80,
-  }),
-  style: { imageOpacity: 1 },
+  properties: {
+    ...drawn('Station photo', {
+      'maplibre-gl-draw:rotation': -6,
+      'maplibre-gl-draw:imageFileId': IMAGE_FILE,
+      'maplibre-gl-draw:imageWidth': 120,
+      'maplibre-gl-draw:imageHeight': 80,
+    }),
+    'maplibre-gl-draw:featureType': 'Image',
+    'maplibre-gl-draw:style': { imageOpacity: 1 },
+  },
 };
 
 /** A freehand loop around the image: many close positions */
 const SCRIBBLE: SceneFeature = {
   id: 'scribble',
-  type: 'Freehand',
+  type: 'Feature',
   geometry: {
     type: 'LineString',
     coordinates: pairs([
@@ -505,8 +529,16 @@ const SCRIBBLE: SceneFeature = {
       139.776339, 35.678293, 139.776486, 35.678405,
     ]),
   },
-  properties: drawn('Freehand note'),
-  style: { strokeColor: '#FF006E', strokeWidth: 3, strokeOpacity: 0.9, lineStyle: 'solid' },
+  properties: {
+    ...drawn('Freehand note'),
+    'maplibre-gl-draw:featureType': 'Freehand',
+    'maplibre-gl-draw:style': {
+      strokeColor: '#FF006E',
+      strokeWidth: 3,
+      strokeOpacity: 0.9,
+      lineStyle: 'solid',
+    },
+  },
 };
 
 /** Points of the four shapes, each with an outline */
@@ -519,15 +551,17 @@ const MARKERS: SceneFeature[] = (
   ] as const
 ).map(([pointShape, lng, lat, pointColor, pointRadius]) => ({
   id: `marker-${pointShape}`,
-  type: 'Point',
+  type: 'Feature',
   geometry: { type: 'Point', coordinates: [lng, lat] },
-  properties: drawn(pointShape[0].toUpperCase() + pointShape.slice(1)),
-  style: {
-    pointShape,
-    pointColor,
-    pointRadius,
-    pointStrokeColor: '#1F2937',
-    pointStrokeWidth: 2,
+  properties: {
+    ...drawn(pointShape[0].toUpperCase() + pointShape.slice(1)),
+    'maplibre-gl-draw:style': {
+      pointShape,
+      pointColor,
+      pointRadius,
+      pointStrokeColor: '#1F2937',
+      pointStrokeWidth: 2,
+    },
   },
 }));
 

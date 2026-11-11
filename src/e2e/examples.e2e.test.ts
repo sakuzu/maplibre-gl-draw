@@ -627,9 +627,11 @@ describe('the examples', () => {
       );
     expect(await images()).toEqual([{ name: 'Sketch map', opacity: 0.85 }]);
 
-    // The Image tool emits image.requested, and the page opens a file picker
-    const chooser = page.waitForEvent('filechooser');
+    // The Image tool, then a click on the map: the library asks the page for the image with
+    // requestImage, and the page opens a file picker and gives the file it chose
     await page.getByRole('button', { name: 'Image', exact: true }).click();
+    const chooser = page.waitForEvent('filechooser');
+    await click(page, at(-300, 200));
     await (await chooser).setFiles({
       name: 'red.png',
       mimeType: 'image/png',

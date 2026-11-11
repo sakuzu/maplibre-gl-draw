@@ -26,8 +26,8 @@ const map = new maplibregl.Map({
 });
 const draw = createDraw(map);
 
-// 1. A style of its own for each feature: the keys left out keep the defaults.
-// Colors are CSS colors, opacities run from 0 to 1, widths and radii are in pixels
+// 1. A style of its own for each feature, under `maplibre-gl-draw:style` in its properties: the
+// keys left out keep the defaults. Colors are CSS colors, opacities run from 0 to 1, widths and radii are in pixels
 const AREA_STYLES: FeatureStyle[] = [
   { fillColor: '#edae49', fillOpacity: 0.5, strokeColor: '#00798c', strokeWidth: 1 },
   { fillColor: '#66a182', fillOpacity: 0.5, strokeColor: '#d1495b', strokeWidth: 3 },
@@ -57,27 +57,30 @@ const POINT_STYLES: FeatureStyle[] = [
   marker('star', 15, '#30638e'),
 ];
 
+/** A sample feature with a style */
+const withStyle = (feature: FeatureInput, style: FeatureStyle): FeatureInput => ({
+  ...feature,
+  properties: { ...feature.properties, 'maplibre-gl-draw:style': style },
+});
 /** The sample features with the style of the same place in `styles` */
 const styled = (features: FeatureInput[], styles: FeatureStyle[]) =>
-  features.map((feature, i) => ({ ...feature, style: styles[i] }));
+  features.map((feature, i) => withStyle(feature, styles[i]));
 
-// createMany returns null only while the drawing is read-only, which this page never turns on
-const created = draw.features.createMany([
-  ...styled(AREAS, AREA_STYLES),
-  ...styled(LINES, LINE_STYLES),
-  ...styled(POINTS, POINT_STYLES),
-  {
-    ...RANGE,
-    style: {
+// Created in one commit, which gives their IDs
+const created = await draw.write((tx) =>
+  tx.features.create([
+    ...styled(AREAS, AREA_STYLES),
+    ...styled(LINES, LINE_STYLES),
+    ...styled(POINTS, POINT_STYLES),
+    withStyle(RANGE, {
       fillColor: '#30638e',
       fillOpacity: 0.15,
       strokeColor: '#30638e',
       strokeWidth: 2,
       lineStyle: 'dashed',
-    },
-  },
-]);
-if (created === null) throw new Error('The drawing is read-only');
+    }),
+  ]),
+);
 const middle = created[1];
 
 // 2. The defaults of a type: the areas drawn from now on, which have no style of their own,
@@ -92,11 +95,14 @@ const ui = createDrawUI(draw, { locale });
 
 // 4. Select the middle area from code on a wide screen: the panel on the right opens on its style
 // (on a narrow one the panel would open over the map)
-if (matchMedia('(min-width: 48rem)').matches) draw.selection.set('feature', [middle.id]);
+if (matchMedia('(min-width: 48rem)').matches) draw.selection.set('feature', [middle]);
 
-// 5. A field of the panel writes its value with features.update (updateMany for several
-// features); this is the same change as choosing the dashed outline there
-draw.features.update(middle.id, { style: { lineStyle: 'dashed' } });
+// 5. A field of the panel writes its value with tx.features.update (one patch for each of
+// several features); this is the same change as choosing the dashed outline there. The style is
+// merged key by key
+await draw.write((tx) =>
+  tx.features.update(middle, { properties: { 'maplibre-gl-draw:style': { lineStyle: 'dashed' } } }),
+);
 
 // For the browser console and the end-to-end tests
 Object.assign(window, { map, draw, ui });

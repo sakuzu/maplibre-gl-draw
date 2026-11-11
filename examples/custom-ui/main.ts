@@ -4,10 +4,17 @@
 // custom-ui: a toolbar and a panel of your own, without the standard UI.
 // Everything the standard UI does goes through the public API of the draw instance: a button
 // calls setMode and follows `draw.mode`; the panel follows `draw.selection` and `change`, and
-// writes with features.update. This page does the same with a few
+// writes with `tx.features.update` in `draw.write`. This page does the same with a few
 // buttons and fields in plain TypeScript, styled by its own style.css.
 
-import { createDraw, type Feature, type Mode } from '@sakuzu/maplibre-gl-draw';
+import {
+  createDraw,
+  DrawError,
+  type Feature,
+  type Mode,
+  readFeature,
+  type Transaction,
+} from '@sakuzu/maplibre-gl-draw';
 import * as maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import '../maplibre-setup.ts';
@@ -23,6 +30,17 @@ const map = new maplibregl.Map({
   zoom: 14,
 });
 const draw = createDraw(map);
+
+/**
+ * Writes the document in one transaction. A write core refuses (a locked feature, a read-only
+ * document) rejects with a `DrawError`, which the page tells in the console
+ */
+function write(fn: (tx: Transaction) => Promise<unknown>): void {
+  draw.write(fn).catch((error: unknown) => {
+    if (error instanceof DrawError) console.warn(`Not written: ${error.code}`);
+    else throw error;
+  });
+}
 
 /** Creates an element with a class and text */
 function el<K extends keyof HTMLElementTagNameMap>(tag: K, className = '', text = '') {
@@ -53,7 +71,7 @@ for (const [mode, en, jaLabel] of TOOLS) {
 }
 const remove = el('button', 'danger', ja ? '削除' : 'Delete');
 remove.type = 'button';
-remove.addEventListener('click', () => draw.selection.delete());
+remove.addEventListener('click', () => write((tx) => tx.features.delete(draw.selection.target)));
 toolbar.append(remove);
 document.body.append(toolbar);
 
@@ -82,8 +100,9 @@ document.body.append(panel);
 
 /** The style key of a type's main color */
 function colorKey(feature: Feature): 'pointColor' | 'fillColor' | 'strokeColor' {
-  if (feature.type === 'Point' || feature.type === 'MultiPoint') return 'pointColor';
-  if (/Polygon|Circle/.test(feature.type)) return 'fillColor';
+  const { featureType } = readFeature(feature);
+  if (featureType === 'Point' || featureType === 'MultiPoint') return 'pointColor';
+  if (/Polygon|Circle/.test(featureType)) return 'fillColor';
   return 'strokeColor';
 }
 
@@ -111,15 +130,20 @@ function showSelection(): void {
 draw.selection.subscribe(showSelection);
 draw.on('change', showSelection);
 
-// 5. A field writes its value into the feature with features.update, as the standard UI does
+// 5. A field writes its value into the feature with tx.features.update, as the standard UI does.
+// The style is merged key by key under `maplibre-gl-draw:style`
 nameInput.addEventListener('change', () => {
   const feature = selected();
-  if (feature) draw.features.update(feature.id, { properties: { name: nameInput.value } });
+  if (feature)
+    write((tx) => tx.features.update(feature.id, { properties: { name: nameInput.value } }));
 });
 colorInput.addEventListener('input', () => {
   const feature = selected();
-  if (feature)
-    draw.features.update(feature.id, { style: { [colorKey(feature)]: colorInput.value } });
+  if (!feature) return;
+  const style = { [colorKey(feature)]: colorInput.value };
+  write((tx) =>
+    tx.features.update(feature.id, { properties: { 'maplibre-gl-draw:style': style } }),
+  );
 });
 
 // For the browser console and the end-to-end tests

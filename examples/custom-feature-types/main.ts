@@ -12,7 +12,7 @@
 // a handle in the middle of its east edge changes its width, and the rule of its layer colors its
 // fill.
 
-import { createDraw } from '@sakuzu/maplibre-gl-draw';
+import { createDraw, readFeature } from '@sakuzu/maplibre-gl-draw';
 import { createDrawUI } from '@sakuzu/maplibre-gl-draw-ui';
 import '@sakuzu/maplibre-gl-draw-ui/style.css';
 import * as maplibregl from 'maplibre-gl';
@@ -36,46 +36,56 @@ const draw = createDraw(map);
 // unregisters it (6)
 draw.extensions.featureTypes.add(routeType);
 
-// 2. Two routes (their lines are in data.ts), one with style keys of its own
-draw.features.create({
-  type: 'Route',
-  geometry: { type: 'LineString', coordinates: HILL_ROUTE },
-  properties: { name: 'Hill route' },
-});
-const river = draw.features.create({
-  type: 'Route',
-  geometry: { type: 'LineString', coordinates: RIVER_ROUTE },
-  properties: { name: 'River route' },
-  style: { routeColor: '#1f6feb', routeWidth: 5, routeDashed: false },
+// 2. Two routes (their lines are in data.ts), one with style keys of its own. A feature is a
+// GeoJSON Feature: its type and its style are under the keys of the library in `properties`.
+// Every write of the document is a transaction of `draw.write`
+const river = await draw.write(async (tx) => {
+  await tx.features.create({
+    type: 'Feature',
+    geometry: { type: 'LineString', coordinates: HILL_ROUTE },
+    properties: { name: 'Hill route', 'maplibre-gl-draw:featureType': 'Route' },
+  });
+  return tx.features.create({
+    type: 'Feature',
+    geometry: { type: 'LineString', coordinates: RIVER_ROUTE },
+    properties: {
+      name: 'River route',
+      'maplibre-gl-draw:featureType': 'Route',
+      'maplibre-gl-draw:style': { routeColor: '#1f6feb', routeWidth: 5, routeDashed: false },
+    },
+  });
 });
 
 // 7. The boards, in a layer of their own whose rule colors their fill by their topic. The board
 // type declares that the rule colors its fill, though its geometry is a Point
 draw.extensions.featureTypes.add(boardType);
-const boards = draw.layers.create({
-  name: 'Boards',
-  styleRule: {
-    kind: 'categorical',
-    property: 'topic',
-    map: { hill: '#ffd6a5', river: '#b9e3ff' },
-    other: '#fff3a8',
-  },
-});
-for (const [topic, place] of [
-  ['hill', HILL_BOARD],
-  ['river', RIVER_BOARD],
-] as const) {
-  draw.features.create({
-    type: 'Board',
-    geometry: { type: 'Point', coordinates: place },
-    layerId: boards?.id,
-    properties: {
-      name: `Board of the ${topic} route`,
-      topic,
-      'maplibre-gl-draw:createdZoom': 14,
+await draw.write(async (tx) => {
+  const boards = await tx.layers.create({
+    name: 'Boards',
+    styleRule: {
+      kind: 'categorical',
+      property: 'topic',
+      map: { hill: '#ffd6a5', river: '#b9e3ff' },
+      other: '#fff3a8',
     },
   });
-}
+  for (const [topic, place] of [
+    ['hill', HILL_BOARD],
+    ['river', RIVER_BOARD],
+  ] as const) {
+    await tx.features.create({
+      type: 'Feature',
+      geometry: { type: 'Point', coordinates: place },
+      properties: {
+        name: `Board of the ${topic} route`,
+        topic,
+        'maplibre-gl-draw:featureType': 'Board',
+        'maplibre-gl-draw:layerId': boards.id,
+        'maplibre-gl-draw:createdZoom': 14,
+      },
+    });
+  }
+});
 
 // 3. The standard UI. `?locale=ja` in the address shows it in Japanese
 const locale = new URLSearchParams(location.search).get('locale') === 'ja' ? 'ja' : 'en';
@@ -87,7 +97,7 @@ const ja = locale === 'ja';
 ui.inspector?.sections.add({
   id: 'route-style',
   title: ja ? 'ルート' : 'Route',
-  appliesTo: (features) => features.every((f) => f.type === 'Route'),
+  appliesTo: (features) => features.every((f) => readFeature(f).featureType === 'Route'),
   fields: ([first]) => {
     const look = routeLook(first);
     return [
@@ -111,14 +121,20 @@ ui.inspector?.sections.add({
     ];
   },
   onchange: (key, value, features) => {
-    const patch = { style: { [key]: value } };
-    draw.features.updateMany(features.map((f) => ({ id: f.id, patch })));
+    // Merged key by key into the style of each route, in one commit
+    const patch = { properties: { 'maplibre-gl-draw:style': { [key]: value } } };
+    void draw.write((tx) =>
+      tx.features.update(
+        features.map((f) => f.id),
+        patch,
+      ),
+    );
   },
 });
 
 // 5. Select the second route on a wide screen, so the panel opens on its section (on a narrow one
 // the panel would open over the map)
-if (river !== null && matchMedia('(min-width: 48rem)').matches) {
+if (matchMedia('(min-width: 48rem)').matches) {
   draw.selection.set('feature', [river.id]);
 }
 

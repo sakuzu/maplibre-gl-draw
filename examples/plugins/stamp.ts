@@ -12,7 +12,7 @@ export type StampState = keyof typeof STAMP_COLORS;
 
 /** What the plugin offers the page (`draw.extensions.plugins.getApi('stamp')`) */
 export interface StampApi {
-  /** The stamps created since the plugin was added: by its mode, by a load or by code */
+  /** The stamps created since the plugin was added: by its mode, by an import or by code */
   count(): number;
 }
 
@@ -44,10 +44,9 @@ export function createStampPlugin(onStamp?: (count: number) => void): Plugin<Sta
     onClick(event) {
       // Created as the built-in modes create: in the writable layer, with an automatic name
       ctx.commitFeature({
-        type: 'Point',
+        type: 'Feature',
         geometry: { type: 'Point', coordinates: event.lngLat },
-        properties: { stamp: 'planned' },
-        style: stampStyle('planned'),
+        properties: { stamp: 'planned', 'maplibre-gl-draw:style': stampStyle('planned') },
       });
     },
     onKeyDown(event) {

@@ -14,7 +14,7 @@
  * groups of features put in another place, a vertex added to a building past its place, new rows
  * imported a transaction at a time, run until all are sent). Rows held as columns are written
  * through the writer of their tables, as the implementation of a Store writes them; features of
- * the Store through `draw.features` and `draw.groups`, as it is drawn today, to compare.
+ * the Store through the transactions of `draw.write`, as it is drawn today, to compare.
  *
  * The edits of a feature at a time are made as the select mode makes them: the pointer moved
  * over the map and a click are sent to the canvas as the events of the mouse (the time each takes
@@ -30,7 +30,8 @@
  * the order of the rows moved is noted); an edit of `members` rows undone and redone by a history
  * of the page (the Store of the page has none): the values before and after the edit written back
  * through the Store (`restoreRows`, which returns the values before; the features of the Store are
- * updated with their values for the Store of objects), with the bytes the history holds noted. A
+ * updated with their values for the Store of objects, in `draw.write`), with the bytes the history
+ * holds noted. A
  * box drawn with Shift (`boxHeld`) is grown and shrunk a step per frame, each move of the pointer
  * timed.
  *
@@ -40,7 +41,16 @@
  * holds it: it is not part of its API).
  */
 
-import type { Draw, Feature, Store } from '@sakuzu/maplibre-gl-draw';
+import {
+  type Draw,
+  type Feature,
+  type FeatureInput,
+  type FeaturePatch,
+  type FeatureStyle,
+  type Placement,
+  readFeature,
+  type Store,
+} from '@sakuzu/maplibre-gl-draw';
 import type {
   FeatureTables,
   FeatureTablesWriter,
@@ -118,23 +128,65 @@ interface RowChange {
   properties?: Record<string, unknown>;
 }
 
-/** The feature of a row as it is now */
-function featureOf(target: EditTarget, id: string): Feature | undefined {
-  if (!target.tables) return target.draw.features.get(id);
+/** What the edits read of a row: its geometry and its own style */
+interface RowView {
+  readonly geometry: Geometry;
+  readonly style: Record<string, unknown>;
+}
+
+/** A row as it is now */
+function featureOf(target: EditTarget, id: string): RowView | undefined {
+  if (!target.tables) {
+    const feature = target.draw.features.get(id);
+    return feature && { geometry: feature.geometry, style: { ...readFeature(feature).style } };
+  }
   const handle = target.tables.getRowRef(id);
-  return handle === undefined ? undefined : target.tables.get(target.layerId)?.getRow(handle);
+  const row = handle === undefined ? undefined : target.tables.get(target.layerId)?.getRow(handle);
+  return row && { geometry: row.geometry, style: row.style as Record<string, unknown> };
+}
+
+/** A change of a row as a patch of a feature: its style under the key of the library */
+function patchOf(change: RowChange): FeaturePatch {
+  const properties: Record<string, unknown> = { ...change.properties };
+  if (change.style) properties['maplibre-gl-draw:style'] = change.style;
+  return {
+    ...(change.geometry && { geometry: change.geometry }),
+    ...(Object.keys(properties).length > 0 && { properties }),
+  } as FeaturePatch;
+}
+
+/**
+ * The placement that puts an item at a position of its layer, from the back: just behind the
+ * item there now, or at the front past the last one
+ */
+function placementAt(draw: Draw, layerId: string, id: string, index: number): Placement {
+  const [there] = draw.layers
+    .listItems(layerId, { offset: index, limit: 2 })
+    .filter((x) => x !== id);
+  return there === undefined ? { layerId } : { above: there };
+}
+
+/** The placement at the back of a layer, behind every item but those placed */
+function backOf(draw: Draw, layerId: string, placed: readonly string[]): Placement {
+  const skip = new Set(placed);
+  const items = draw.layers.listItems(layerId, { limit: placed.length + 1 });
+  const back = items.find((x) => !skip.has(x));
+  return back === undefined ? { layerId } : { above: back };
 }
 
 /**
  * Writes changes of rows (of the same fields): through the writer of the tables, or to the
- * features of the Store
+ * features of the Store in one commit
  */
-function writeRows(target: EditTarget, changes: ReadonlyArray<[string, RowChange]>): void {
+async function writeRows(
+  target: EditTarget,
+  changes: ReadonlyArray<[string, RowChange]>,
+): Promise<void> {
   if (changes.length === 0) return;
   const { tables, writer } = target;
   if (!tables || !writer) {
-    target.draw.features.updateMany(
-      changes.map(([id, change]) => ({ id, patch: change as never })),
+    await target.draw.write((tx) =>
+      tx.features.update(changes.map(([id, change]) => ({ id, patch: patchOf(change) }))),
     );
     return;
   }
@@ -254,25 +306,33 @@ function buildingAt(x: number, y: number, size: number): Geometry {
  * Writes new rows of the layer, each with its key: through the writer (the new rows of a Store
  * implementation, given handles first), or created in the Store and put at their places
  */
-function createRows(
+async function createRows(
   target: EditTarget,
   rows: ReadonlyArray<{ id: string; geometry: Geometry; order: string; index: number }>,
   style: Record<string, unknown>,
-): void {
+): Promise<void> {
   if (rows.length === 0) return;
-  const { tables, writer } = target;
+  const { tables, writer, draw, layerId } = target;
   if (!tables || !writer) {
-    target.draw.features.createMany(
-      rows.map((row) => ({
-        id: row.id,
-        type: row.geometry.type,
-        geometry: row.geometry,
-        layerId: target.layerId,
-        style,
-      })) as never,
-    );
-    for (const row of rows)
-      target.draw.features.move(row.id, { layerId: target.layerId, index: row.index });
+    // Created and put at their places in one commit
+    await draw.write(async (tx) => {
+      await tx.features.create(
+        rows.map(
+          (row): FeatureInput => ({
+            type: 'Feature',
+            id: row.id,
+            geometry: row.geometry,
+            properties: {
+              'maplibre-gl-draw:layerId': layerId,
+              'maplibre-gl-draw:style': style as FeatureStyle,
+            },
+          }),
+        ),
+      );
+      for (const row of rows) {
+        await tx.features.place(row.id, placementAt(draw, layerId, row.id, row.index));
+      }
+    });
     return;
   }
   const handles = writer.allocateHandles(idColumn(rows.map((row) => row.id)));
@@ -301,7 +361,7 @@ function stepsOf(
       if (!building) return 'no polygon or point to color';
       // One color, then the frames go on
       return async (i) => {
-        writeRows(target, [[building, { style: colored(hue((i * 137) % 360)) }]]);
+        await writeRows(target, [[building, { style: colored(hue((i * 137) % 360)) }]]);
         await nextFrame();
         await nextFrame();
       };
@@ -312,15 +372,17 @@ function stepsOf(
       const { key, breaks } = params.rule;
       return async (i) => {
         const colors = Array.from({ length: breaks.length + 1 }, (_, k) => hue(i * 3.6 + k * 40));
-        target.draw.layers.update(target.layerId, {
-          styleRule: {
-            kind: 'graduated',
-            property: key,
-            breaks: [...breaks],
-            colors,
-            other: '#808080',
-          },
-        });
+        await target.draw.write((tx) =>
+          tx.layers.update(target.layerId, {
+            styleRule: {
+              kind: 'graduated',
+              property: key,
+              breaks: [...breaks],
+              colors,
+              other: '#808080',
+            },
+          }),
+        );
       };
     }
     case 'attr': {
@@ -331,7 +393,7 @@ function stepsOf(
         const id = ids[Math.floor(i / 2) % ids.length];
         const properties =
           i % 2 === 0 ? { name: `edited ${'x'.repeat(i % 23)}` } : { height: (i * 1.5) % 97 };
-        writeRows(target, [[id, { properties }]]);
+        await writeRows(target, [[id, { properties }]]);
       };
     }
     case 'point': {
@@ -340,7 +402,7 @@ function stepsOf(
       return async () => {
         const geometry = featureOf(target, point)?.geometry;
         if (geometry)
-          writeRows(target, [[point, { geometry: moved(geometry, () => 0, 2e-5, 1e-5) }]]);
+          await writeRows(target, [[point, { geometry: moved(geometry, () => 0, 2e-5, 1e-5) }]]);
       };
     }
     case 'longLine': {
@@ -350,7 +412,7 @@ function stepsOf(
         const geometry = featureOf(target, line)?.geometry;
         const d = (i % 2 === 0 ? 1 : -1) * 2e-5;
         if (geometry) {
-          writeRows(target, [
+          await writeRows(target, [
             [line, { geometry: moved(geometry, (n) => Math.floor(n / 2), d, d) }],
           ]);
         }
@@ -362,7 +424,8 @@ function stepsOf(
       return async (i) => {
         const geometry = featureOf(target, polygon)?.geometry;
         const d = (i % 2 === 0 ? 1 : -1) * 2e-5;
-        if (geometry) writeRows(target, [[polygon, { geometry: moved(geometry, () => 1, d, 0) }]]);
+        if (geometry)
+          await writeRows(target, [[polygon, { geometry: moved(geometry, () => 1, d, 0) }]]);
       };
     }
     case 'finish': {
@@ -371,7 +434,7 @@ function stepsOf(
       return async (i) => {
         const center = target.map.getCenter();
         const size = 1e-4;
-        createRows(
+        await createRows(
           target,
           [
             {
@@ -465,7 +528,12 @@ function bulkSteps(
     return async (i) => {
       if (i === 0) await selectAll();
       const t0 = performance.now();
-      draw.selection.update({ style: colored(hue((i * 137) % 360)) as never });
+      const style = colored(hue((i * 137) % 360)) as FeatureStyle;
+      await draw.write((tx) =>
+        tx.features.update(draw.selection.target, {
+          properties: { 'maplibre-gl-draw:style': style },
+        }),
+      );
       await settled(draw);
       inputs.push(performance.now() - t0);
     };
@@ -538,7 +606,7 @@ function bulkSteps(
 }
 
 /** The first position of a feature (null for none) */
-function firstPositionOf(feature: Feature | undefined): Position | null {
+function firstPositionOf(feature: { readonly geometry: Geometry } | undefined): Position | null {
   let found: Position | null = null;
   const walk = (value: unknown): void => {
     if (found || !Array.isArray(value)) return;
@@ -602,7 +670,7 @@ async function settled(draw: Draw, frames = 600): Promise<void> {
 const OTHER_LAYER = 'bench-other';
 
 /** Makes the other layer the rows are put in, the same kind as the layer of the page */
-function ensureOtherLayer(target: EditTarget): void {
+async function ensureOtherLayer(target: EditTarget): Promise<void> {
   if (target.store.getLayer(OTHER_LAYER)) return;
   if (target.tables) {
     target.store.createLayer({
@@ -616,7 +684,7 @@ function ensureOtherLayer(target: EditTarget): void {
       metadata: undefined,
     } as never);
   } else {
-    target.draw.layers.create({ id: OTHER_LAYER, name: OTHER_LAYER });
+    await target.draw.write((tx) => tx.layers.create({ id: OTHER_LAYER, name: OTHER_LAYER }));
   }
 }
 
@@ -669,9 +737,9 @@ function manySteps(
     notes.push(`selected ${store.getSelection().ids.length} of ${held.length}`);
   };
   /** Runs a change of the order and times it to the frame nothing is left to build */
-  const timed = async (change: () => void): Promise<void> => {
+  const timed = async (change: () => Promise<unknown>): Promise<void> => {
     const t0 = performance.now();
-    change();
+    await change();
     await settled(draw);
     inputs.push(performance.now() - t0);
   };
@@ -719,22 +787,26 @@ function manySteps(
       // Grouped at the place of the frontmost, then ungrouped at the place of the group
       let group: string | null = null;
       return async () => {
-        await timed(() => {
+        await timed(async () => {
           if (group) {
-            draw.groups.delete(group);
+            const id = group;
+            await draw.write((tx) => tx.groups.delete(id, { members: 'keep' }));
             group = null;
           } else {
-            group = draw.groups.create({ featureIds: members })?.id ?? null;
+            group = (await draw.write((tx) => tx.groups.create({ featureIds: members }))).id;
           }
         });
       };
     }
     case 'toLayer': {
-      ensureOtherLayer(target);
+      const ready = ensureOtherLayer(target);
       return async (i) => {
-        await timed(() => {
-          draw.features.moveMany(members, { layerId: i % 2 === 0 ? OTHER_LAYER : layerId });
-        });
+        await ready;
+        await timed(() =>
+          draw.write((tx) =>
+            tx.features.place(members, { layerId: i % 2 === 0 ? OTHER_LAYER : layerId }),
+          ),
+        );
         if (i % 2 === 1) notes.push(`longest key ${longestKey(target, members)}`);
       };
     }
@@ -742,12 +814,12 @@ function manySteps(
     case 'orderMany': {
       const moved = op === 'order1' ? ids.slice(0, 1) : members;
       return async (i) => {
-        await timed(() => {
-          draw.features.moveMany(
-            moved,
-            i % 2 === 0 ? { layerId, above: null } : { layerId, below: null },
-          );
-        });
+        // To the front, then to the back
+        await timed(() =>
+          draw.write((tx) =>
+            tx.features.place(moved, i % 2 === 0 ? { layerId } : backOf(draw, layerId, moved)),
+          ),
+        );
         if (i === params.reps - 1) notes.push(`longest key ${longestKey(target, moved)}`);
       };
     }
@@ -793,7 +865,8 @@ function boxSteps(target: EditTarget, params: TableBenchPageParams): (i: number)
 /**
  * The steps of an edit of rows undone and redone by a history of the page: the edit (the rows
  * moved and colored) is made once, then undone and redone in turn, each a write of the values
- * the history holds (through `restoreRows` for rows, `updateMany` for features of the Store)
+ * the history holds (through `restoreRows` for rows, `tx.features.update` for features of the
+ * Store)
  */
 function undoRedoSteps(target: EditTarget, ids: readonly string[]): (i: number) => Promise<void> {
   const { draw, tables, rowsStore } = target;
@@ -807,8 +880,8 @@ function undoRedoSteps(target: EditTarget, ids: readonly string[]): (i: number) 
       style: { ...feature.style, ...colored('#e15759') },
     });
   }
-  let undo: (() => void) | null = null;
-  let redo: (() => void) | null = null;
+  let undo: (() => unknown) | null = null;
+  let redo: (() => unknown) | null = null;
   if (tables && rowsStore) {
     const handles = [...after.keys()].map((id) => tables.getRowRef(id) as number);
     const patch: RowValues = {
@@ -834,23 +907,20 @@ function undoRedoSteps(target: EditTarget, ids: readonly string[]): (i: number) 
   } else {
     const previous = [...after.keys()].map((id) => {
       const feature = draw.features.get(id) as Feature;
-      return { id, patch: { geometry: feature.geometry, style: feature.style } };
+      const style = { ...readFeature(feature).style };
+      return { id, patch: patchOf({ geometry: feature.geometry, style }) };
     });
-    const next = [...after].map(([id, values]) => ({ id, patch: values }));
-    undo = () => {
-      draw.features.updateMany(previous as never);
-    };
-    redo = () => {
-      draw.features.updateMany(next as never);
-    };
-    redo();
+    const next = [...after].map(([id, values]) => ({ id, patch: patchOf(values) }));
+    undo = () => draw.write((tx) => tx.features.update(previous));
+    redo = () => draw.write((tx) => tx.features.update(next));
+    void redo();
     const bytes = JSON.stringify(previous).length + JSON.stringify(next).length;
     notes.push(`history ${(bytes / 1024).toFixed(1)} KB (the features before and after)`);
   }
   return async (i) => {
     const t0 = performance.now();
-    if (i % 2 === 0) undo?.();
-    else redo?.();
+    if (i % 2 === 0) await undo?.();
+    else await redo?.();
     inputs.push(performance.now() - t0);
   };
 }
@@ -884,7 +954,7 @@ function mouse(
 }
 
 /** A position inside a feature (the mean of the corners of a polygon, a point, a vertex of a line) */
-function insideOf(feature: Feature): Position | null {
+function insideOf(feature: { readonly geometry: Geometry }): Position | null {
   const geometry = feature.geometry;
   switch (geometry.type) {
     case 'Point':
@@ -1017,7 +1087,7 @@ let benchGroups: string[] | null = null;
  * Makes the groups of features the reorders of others move: `groups` groups of `members` rows
  * each, every one at the key of one of its members
  */
-function ensureGroups(target: EditTarget, params: TableBenchPageParams): string[] {
+async function ensureGroups(target: EditTarget, params: TableBenchPageParams): Promise<string[]> {
   if (benchGroups) return benchGroups;
   const ids = target.candidates.ids;
   const out: string[] = [];
@@ -1044,7 +1114,7 @@ function ensureGroups(target: EditTarget, params: TableBenchPageParams): string[
         ]),
       });
     } else {
-      target.draw.groups.create({ id, featureIds: members });
+      await target.draw.write((tx) => tx.groups.create({ id, featureIds: members }));
     }
     out.push(id);
   }
@@ -1194,7 +1264,7 @@ export async function runStream(
         const change = changeOf(id);
         if (change) changes.push([id, change]);
       }
-      writeRows(target, changes);
+      void writeRows(target, changes);
       sample();
     }
     return sent;
@@ -1211,7 +1281,7 @@ async function runReorders(
   params: TableBenchPageParams,
 ): Promise<EditResult> {
   const name = `stream ${kind} ${params.rate}/s ${params.seconds}s`;
-  const pool = kind === 'group' ? ensureGroups(target, params) : target.candidates.ids;
+  const pool = kind === 'group' ? await ensureGroups(target, params) : target.candidates.ids;
   if (pool.length === 0) return failed(target, name, `no row for ${kind}`);
   // The groups made settle before the run
   if (kind === 'group') await idleFrames(target.map, 120);
@@ -1240,8 +1310,10 @@ async function runReorders(
           fields: new Map([['key', orders]]),
         });
       } else {
+        // Each a commit of its own, as each was sent
         ids.forEach((id, k) => {
-          draw.groups.move(id, { layerId: target.layerId, index: indices[k] });
+          const to = placementAt(draw, target.layerId, id, indices[k]);
+          void draw.write((tx) => tx.groups.place(id, to));
         });
       }
       return;
@@ -1256,7 +1328,8 @@ async function runReorders(
       });
     } else {
       ids.forEach((id, k) => {
-        draw.features.move(id, { layerId: target.layerId, index: indices[k] });
+        const to = placementAt(draw, target.layerId, id, indices[k]);
+        void draw.write((tx) => tx.features.place(id, to));
       });
     }
   };
@@ -1305,7 +1378,7 @@ async function runImport(target: EditTarget, params: TableBenchPageParams): Prom
         index: rowCount(target) + k,
       };
     });
-    createRows(target, rows, { fillColor: '#e15759', fillOpacity: 0.5, strokeWidth: 1 });
+    void createRows(target, rows, { fillColor: '#e15759', fillOpacity: 0.5, strokeWidth: 1 });
     sent += n;
   };
   return measured(target, name, async (sample) => {

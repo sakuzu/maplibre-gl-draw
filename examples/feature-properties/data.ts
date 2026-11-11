@@ -6,11 +6,15 @@
 
 import type { FeatureCollection } from 'geojson';
 
+/** The ID of the market hall: the `id` of its GeoJSON feature, which the drawing keeps */
+export const MARKET_ID = 'market-hall';
+
 export const PLACES: FeatureCollection = {
   type: 'FeatureCollection',
   features: [
     {
       type: 'Feature',
+      id: MARKET_ID,
       geometry: {
         type: 'Polygon',
         coordinates: [

@@ -25,7 +25,7 @@ export const terrainScene: ShowcaseScene = {
   mapOnly: true,
   async load({ draw, map }) {
     addTerrain(map);
-    await draw.document.load(createDocument());
+    await draw.open(createDocument());
   },
 };
 
@@ -63,7 +63,7 @@ export const TERRAIN_LAYERS: SceneLayer[] = [
     features: [
       {
         id: 'survey-map',
-        type: 'Image',
+        type: 'Feature',
         geometry: { type: 'Point', coordinates: [11.4265, 47.3005] },
         properties: {
           name: 'Survey map',
@@ -71,12 +71,13 @@ export const TERRAIN_LAYERS: SceneLayer[] = [
           'maplibre-gl-draw:imageFileId': 'file-survey',
           'maplibre-gl-draw:imageWidth': 480,
           'maplibre-gl-draw:imageHeight': 375,
+          'maplibre-gl-draw:featureType': 'Image',
+          'maplibre-gl-draw:style': { imageOpacity: 0.9 },
         },
-        style: { imageOpacity: 0.9 },
       },
       {
         id: 'forest-plot',
-        type: 'Polygon',
+        type: 'Feature',
         geometry: {
           type: 'Polygon',
           coordinates: [
@@ -91,13 +92,15 @@ export const TERRAIN_LAYERS: SceneLayer[] = [
             ],
           ],
         },
-        properties: { name: 'Forest plot' },
-        style: {
-          fillColor: '#FF006E',
-          fillOpacity: 0.45,
-          strokeColor: '#C9004F',
-          strokeWidth: 3,
-          strokeOpacity: 1,
+        properties: {
+          name: 'Forest plot',
+          'maplibre-gl-draw:style': {
+            fillColor: '#FF006E',
+            fillOpacity: 0.45,
+            strokeColor: '#C9004F',
+            strokeWidth: 3,
+            strokeOpacity: 1,
+          },
         },
       },
     ],
@@ -108,7 +111,7 @@ export const TERRAIN_LAYERS: SceneLayer[] = [
     features: [
       {
         id: 'meridian',
-        type: 'LineString',
+        type: 'Feature',
         geometry: {
           type: 'LineString',
           coordinates: [
@@ -116,12 +119,18 @@ export const TERRAIN_LAYERS: SceneLayer[] = [
             [11.358, 47.328],
           ],
         },
-        properties: { name: 'Straight line north' },
-        style: { strokeColor: '#1D4ED8', strokeWidth: 3.5, lineStyle: 'dashed' },
+        properties: {
+          name: 'Straight line north',
+          'maplibre-gl-draw:style': {
+            strokeColor: '#1D4ED8',
+            strokeWidth: 3.5,
+            lineStyle: 'dashed',
+          },
+        },
       },
       {
         id: 'trail',
-        type: 'LineString',
+        type: 'Feature',
         geometry: {
           type: 'LineString',
           coordinates: [
@@ -135,8 +144,10 @@ export const TERRAIN_LAYERS: SceneLayer[] = [
             [11.3905, 47.3262],
           ],
         },
-        properties: { name: 'Trail' },
-        style: { strokeColor: '#FF7B00', strokeWidth: 5, strokeOpacity: 1 },
+        properties: {
+          name: 'Trail',
+          'maplibre-gl-draw:style': { strokeColor: '#FF7B00', strokeWidth: 5, strokeOpacity: 1 },
+        },
       },
     ],
   },
@@ -166,10 +177,9 @@ function point(
 ) {
   return {
     id,
-    type: 'Point' as const,
+    type: 'Feature' as const,
     geometry: { type: 'Point' as const, coordinates },
-    properties: { name: id },
-    style: { pointShape, pointColor, pointRadius },
+    properties: { name: id, 'maplibre-gl-draw:style': { pointShape, pointColor, pointRadius } },
   };
 }
 

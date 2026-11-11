@@ -16,7 +16,7 @@ function square(name: string, lng: number, lat: number, size: number): FeatureIn
     [lng, lat],
   ];
   return {
-    type: 'Polygon',
+    type: 'Feature',
     geometry: { type: 'Polygon', coordinates: [ring] },
     properties: { name },
   };
@@ -28,7 +28,7 @@ export const SHAPES: FeatureInput[] = [
   square('East', 139.7725, 35.679, 0.004),
   square('Overlap', 139.7755, 35.682, 0.003),
   {
-    type: 'LineString',
+    type: 'Feature',
     geometry: {
       type: 'LineString',
       coordinates: [

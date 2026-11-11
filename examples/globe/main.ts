@@ -12,7 +12,7 @@
 // antimeridian keeps its shape. The globe button at the bottom right switches between the
 // globe and the flat map.
 
-import { createDraw } from '@sakuzu/maplibre-gl-draw';
+import { createDraw, type FeatureInput } from '@sakuzu/maplibre-gl-draw';
 import { createDrawUI } from '@sakuzu/maplibre-gl-draw-ui';
 import '@sakuzu/maplibre-gl-draw-ui/style.css';
 import * as maplibregl from 'maplibre-gl';
@@ -43,16 +43,23 @@ map.on('style.load', () => {
 // data.ts). The routes are great circles, computed there as points along them. New drawings go
 // to the routes
 const draw = createDraw(map, { initDefaultLayer: false });
-const [areas, routes, places] = ['Areas', 'Routes', 'Cities'].map((name) => {
-  const layer = draw.layers.create({ name });
-  if (!layer) throw new Error('The drawing is read-only');
-  return layer;
+const [areas, routes] = await draw.write(async (tx) => {
+  const [areas, routes, places] = [
+    await tx.layers.create({ name: 'Areas' }),
+    await tx.layers.create({ name: 'Routes' }),
+    await tx.layers.create({ name: 'Cities' }),
+  ];
+  const into = (layerId: string) => (feature: FeatureInput) => ({
+    ...feature,
+    properties: { ...feature.properties, 'maplibre-gl-draw:layerId': layerId },
+  });
+  await tx.features.create([
+    ...AREAS.map(into(areas.id)),
+    ...ROUTES.map(into(routes.id)),
+    ...PLACES.map(into(places.id)),
+  ]);
+  return [areas, routes];
 });
-draw.features.createMany([
-  ...AREAS.map((feature) => ({ ...feature, layerId: areas.id })),
-  ...ROUTES.map((feature) => ({ ...feature, layerId: routes.id })),
-  ...PLACES.map((feature) => ({ ...feature, layerId: places.id })),
-]);
 draw.layers.setActive(routes.id);
 
 // 3. The standard UI; its map controls include maplibre-gl's globe button
@@ -60,24 +67,36 @@ const locale = new URLSearchParams(location.search).get('locale') === 'ja' ? 'ja
 const ui = createDrawUI(draw, { locale, basemaps: BASEMAPS, basemap: initialBasemapId() });
 
 // 4. The picture of a storm, made in a canvas and placed over the Pacific at its size in pixels
-// at zoom 3. It lies on the sphere like the rest, and is stored in the files of the document
-const loaded = (async () => {
-  const placed = await draw.document.load(await stormPicture(STORM.size), {
-    coordinate: STORM.center,
-    zoom: STORM.zoom,
-    layerId: areas.id,
-  });
-  if (placed === null) throw new Error('The drawing is read-only');
-  draw.features.update(placed.featureIds[0], {
-    properties: { name: 'Storm' },
-    style: { imageOpacity: 0.95 },
-  });
-  // A placed image is selected; the page opens with nothing selected
-  draw.selection.clear();
-})();
+// at zoom 3. It is imported as a GeoJSON feature of the type Image that carries the picture
+// under `maplibre-gl-draw:imageData`, as the GeoJSON written out carries it. It lies on the
+// sphere like the rest, and is stored in the files of the document
+const loaded = draw.write((tx) =>
+  tx.import(
+    {
+      type: 'FeatureCollection',
+      features: [
+        {
+          type: 'Feature',
+          geometry: { type: 'Point', coordinates: STORM.center },
+          properties: {
+            name: 'Storm',
+            'maplibre-gl-draw:featureType': 'Image',
+            'maplibre-gl-draw:imageData': stormPicture(STORM.size),
+            'maplibre-gl-draw:imageMimeType': 'image/png',
+            'maplibre-gl-draw:imageWidth': STORM.size,
+            'maplibre-gl-draw:imageHeight': STORM.size,
+            'maplibre-gl-draw:createdZoom': STORM.zoom,
+            'maplibre-gl-draw:style': { imageOpacity: 0.95 },
+          },
+        },
+      ],
+    },
+    { layer: areas.id },
+  ),
+);
 
-/** A made-up picture of a storm seen from above: a white spiral around an eye */
-function stormPicture(size: number): Promise<Blob> {
+/** A made-up picture of a storm seen from above: a white spiral around an eye, as a data URL */
+function stormPicture(size: number): string {
   const canvas = document.createElement('canvas');
   canvas.width = size;
   canvas.height = size;
@@ -107,9 +126,7 @@ function stormPicture(size: number): Promise<Blob> {
   context.beginPath();
   context.arc(128, 128, 9, 0, 2 * Math.PI);
   context.fill();
-  return new Promise((resolve, reject) => {
-    canvas.toBlob((blob) => (blob ? resolve(blob) : reject(new Error('No PNG'))), 'image/png');
-  });
+  return canvas.toDataURL('image/png');
 }
 
 // For the browser console and the end-to-end tests

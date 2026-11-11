@@ -54,52 +54,76 @@ const ui = createDrawUI(draw, { locale, basemaps: BASEMAPS, basemap: initialBase
 // 2. Two layers of the user's drawing, there from the first draw: a survey area, to lie behind
 // the buildings, and a planned route with its stops, in front of them. New drawings go to the
 // route (the active layer)
-const survey = draw.layers.create({ name: 'Survey area' });
-const route = draw.layers.create({ name: 'Planned route' });
-if (!survey || !route) throw new Error('The drawing is read-only');
-draw.features.create({
-  type: 'Polygon',
-  layerId: survey.id,
-  geometry: {
-    type: 'Polygon',
-    coordinates: [
-      [
-        [139.7735, 35.6745],
-        [139.7825, 35.6772],
-        [139.7852, 35.6712],
-        [139.7768, 35.6683],
-        [139.7735, 35.6745],
-      ],
-    ],
-  },
-  properties: { name: 'Survey area' },
-  style: { fillColor: '#fbbf24', fillOpacity: 0.35, strokeColor: '#b45309', strokeWidth: 2 },
-});
 const STOPS: Array<[string, [number, number]]> = [
   ['Nihonbashi', [139.774, 35.6823]],
   ['Kyobashi', [139.7701, 35.6769]],
   ['Tsukiji', [139.7726, 35.6668]],
 ];
 const ROUTE_STYLE = { strokeColor: '#2563eb', strokeWidth: 4, pointColor: '#2563eb' };
-draw.features.createMany([
-  {
-    type: 'LineString',
-    layerId: route.id,
-    geometry: {
-      type: 'LineString',
-      coordinates: [STOPS[0][1], STOPS[1][1], [139.7674, 35.6743], [139.7676, 35.67], STOPS[2][1]],
+const { survey, route } = await draw.write(async (tx) => {
+  const survey = await tx.layers.create({ name: 'Survey area' });
+  const route = await tx.layers.create({ name: 'Planned route' });
+  await tx.features.create([
+    {
+      type: 'Feature',
+      geometry: {
+        type: 'Polygon',
+        coordinates: [
+          [
+            [139.7735, 35.6745],
+            [139.7825, 35.6772],
+            [139.7852, 35.6712],
+            [139.7768, 35.6683],
+            [139.7735, 35.6745],
+          ],
+        ],
+      },
+      properties: {
+        name: 'Survey area',
+        'maplibre-gl-draw:layerId': survey.id,
+        'maplibre-gl-draw:style': {
+          fillColor: '#fbbf24',
+          fillOpacity: 0.35,
+          strokeColor: '#b45309',
+          strokeWidth: 2,
+        },
+      },
     },
-    properties: { name: 'Planned route' },
-    style: ROUTE_STYLE,
-  },
-  ...STOPS.map(([name, coordinates]) => ({
-    type: 'Point' as const,
-    layerId: route.id,
-    geometry: { type: 'Point' as const, coordinates },
-    properties: { name },
-    style: { ...ROUTE_STYLE, pointRadius: 7, pointStrokeColor: '#ffffff', pointStrokeWidth: 2 },
-  })),
-]);
+    {
+      type: 'Feature',
+      geometry: {
+        type: 'LineString',
+        coordinates: [
+          STOPS[0][1],
+          STOPS[1][1],
+          [139.7674, 35.6743],
+          [139.7676, 35.67],
+          STOPS[2][1],
+        ],
+      },
+      properties: {
+        name: 'Planned route',
+        'maplibre-gl-draw:layerId': route.id,
+        'maplibre-gl-draw:style': ROUTE_STYLE,
+      },
+    },
+    ...STOPS.map(([name, coordinates]) => ({
+      type: 'Feature' as const,
+      geometry: { type: 'Point' as const, coordinates },
+      properties: {
+        name,
+        'maplibre-gl-draw:layerId': route.id,
+        'maplibre-gl-draw:style': {
+          ...ROUTE_STYLE,
+          pointRadius: 7,
+          pointStrokeColor: '#ffffff',
+          pointStrokeWidth: 2,
+        },
+      },
+    })),
+  ]);
+  return { survey, route };
+});
 draw.layers.setActive(route.id);
 
 /** A time in whole milliseconds, for the console */
@@ -129,7 +153,9 @@ const cellsShown = new Promise<number>((resolve) => {
       baseStyle: { fill: { fillOpacity: 0.45, strokeWidth: 0 } },
       order: 'layer-order',
     });
-    draw.layers.reorder(['cells', ...draw.layers.getOrder().filter((id) => id !== 'cells')]);
+    // At the back of the stacking order: just below the entry at the back
+    const back = draw.layers.getOrder().find((id) => id !== 'cells');
+    if (back !== undefined) void draw.write((tx) => tx.layers.place('cells', { above: back }));
     const given = performance.now();
     map.once('render', () => {
       const frame = performance.now();
@@ -276,9 +302,7 @@ const buildingsAndPlaces = Promise.all([
     order: 'layer-order',
     interactive: true,
   });
-  const order = draw.layers.getOrder().filter((id) => id !== 'buildings');
-  order.splice(order.indexOf(survey.id) + 1, 0, 'buildings');
-  draw.layers.reorder(order);
+  void draw.write((tx) => tx.layers.place('buildings', { below: survey.id }));
 
   // 8. The places, fetched for the view, in front of every layer. Places that overlap on the
   // screen are thinned, and from zoom 18 every place is drawn

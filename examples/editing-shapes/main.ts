@@ -38,10 +38,10 @@ const draw = createDraw(map, {
 
 // 2. The features: the parcels list the same positions for the ends of their shared edge.
 // A hole is a second ring of a Polygon, and the parts of a MultiPolygon are polygons of their
-// own (createMany returns null only while read-only)
-const created = draw.features.createMany([WEST_PARCEL, EAST_PARCEL, COURTYARD, ISLANDS, PATH]);
-if (created === null) throw new Error('The drawing is read-only');
-const [west] = created;
+// own. Created in one commit, they give their IDs
+const [west] = await draw.write((tx) =>
+  tx.features.create([WEST_PARCEL, EAST_PARCEL, COURTYARD, ISLANDS, PATH]),
+);
 
 // 3. The standard UI. `?locale=ja` in the address shows it in Japanese
 const locale = new URLSearchParams(location.search).get('locale') === 'ja' ? 'ja' : 'en';
@@ -49,7 +49,7 @@ const ui = createDrawUI(draw, { locale });
 
 // 4. Open with the west parcel selected on a wide screen, so its selection box and its handles are drawn
 // (on a narrow one the panel would open over the map)
-if (matchMedia('(min-width: 48rem)').matches) draw.selection.set('feature', [west.id]);
+if (matchMedia('(min-width: 48rem)').matches) draw.selection.set('feature', [west]);
 
 // 5. A switch in the card of actions of the standard UI, with the key T (listed with ?, and left
 // alone while a field has the keyboard), switches the shared vertices: off, a vertex of the

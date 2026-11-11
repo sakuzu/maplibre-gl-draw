@@ -37,7 +37,7 @@ export const globeScene: ShowcaseScene = {
   mapOnly: true,
   async load({ draw, map }) {
     setUpGlobe(map);
-    await draw.document.load(createDocument());
+    await draw.open(createDocument());
   },
 };
 
@@ -61,33 +61,39 @@ export const GLOBE_LAYERS: SceneLayer[] = [
     features: [
       {
         id: 'monsoon-box',
-        type: 'Polygon',
+        type: 'Feature',
         geometry: { type: 'Polygon', coordinates: [lngLatBox(50, 5, 100, 38)] },
-        properties: { name: 'Box from 50°E to 100°E, 5°N to 38°N' },
-        style: {
-          fillColor: '#FF7B00',
-          fillOpacity: 0.55,
-          strokeColor: '#FF7B00',
-          strokeWidth: 3,
-          strokeOpacity: 1,
+        properties: {
+          name: 'Box from 50°E to 100°E, 5°N to 38°N',
+          'maplibre-gl-draw:style': {
+            fillColor: '#FF7B00',
+            fillOpacity: 0.55,
+            strokeColor: '#FF7B00',
+            strokeWidth: 3,
+            strokeOpacity: 1,
+          },
         },
       },
       {
         id: 'tokyo-range',
-        type: 'Circle',
+        type: 'Feature',
         geometry: { type: 'Point', coordinates: PLACES.tokyo },
-        properties: { name: '2,500 km from Tokyo', 'maplibre-gl-draw:radiusMeters': 2_500_000 },
-        style: {
-          fillColor: '#3A86FF',
-          fillOpacity: 0.35,
-          strokeColor: '#3A86FF',
-          strokeWidth: 2.5,
-          strokeOpacity: 1,
+        properties: {
+          name: '2,500 km from Tokyo',
+          'maplibre-gl-draw:radiusMeters': 2_500_000,
+          'maplibre-gl-draw:featureType': 'Circle',
+          'maplibre-gl-draw:style': {
+            fillColor: '#3A86FF',
+            fillOpacity: 0.35,
+            strokeColor: '#3A86FF',
+            strokeWidth: 2.5,
+            strokeOpacity: 1,
+          },
         },
       },
       {
         id: 'storm',
-        type: 'Image',
+        type: 'Feature',
         geometry: { type: 'Point', coordinates: [131, 16] },
         properties: {
           name: 'Storm',
@@ -95,8 +101,9 @@ export const GLOBE_LAYERS: SceneLayer[] = [
           'maplibre-gl-draw:imageFileId': 'file-storm',
           'maplibre-gl-draw:imageWidth': 150,
           'maplibre-gl-draw:imageHeight': 150,
+          'maplibre-gl-draw:featureType': 'Image',
+          'maplibre-gl-draw:style': { imageOpacity: 0.95 },
         },
-        style: { imageOpacity: 0.95 },
       },
     ],
   },
@@ -118,13 +125,15 @@ export const GLOBE_LAYERS: SceneLayer[] = [
     name: 'Places',
     features: Object.entries(PLACES).map(([name, coordinates]) => ({
       id: `place-${name}`,
-      type: 'Point' as const,
+      type: 'Feature' as const,
       geometry: { type: 'Point' as const, coordinates },
-      properties: { name },
-      style:
-        name === 'tokyo'
-          ? { pointShape: 'star' as const, pointColor: '#FFD000', pointRadius: 13 }
-          : { pointColor: '#FF006E', pointRadius: 7 },
+      properties: {
+        name,
+        'maplibre-gl-draw:style':
+          name === 'tokyo'
+            ? { pointShape: 'star' as const, pointColor: '#FFD000', pointRadius: 13 }
+            : { pointColor: '#FF006E', pointRadius: 7 },
+      },
     })),
   },
 ];
@@ -163,10 +172,12 @@ function route(
   }
   return {
     id,
-    type: 'LineString' as const,
+    type: 'Feature' as const,
     geometry: { type: 'LineString' as const, coordinates },
-    properties: { name: id },
-    style: { strokeColor, strokeWidth: 4, strokeOpacity: 1, lineStyle },
+    properties: {
+      name: id,
+      'maplibre-gl-draw:style': { strokeColor, strokeWidth: 4, strokeOpacity: 1, lineStyle },
+    },
   };
 }
 

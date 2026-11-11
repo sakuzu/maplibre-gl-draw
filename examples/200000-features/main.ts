@@ -56,11 +56,11 @@ const ui = createDrawUI(draw, { locale, basemaps: BASEMAPS, basemap: initialBase
 // their lots, parks, and places on some of the houses, in three layers with a style rule each
 const { document: city, counts } = createCity(CENTER, HALF_SIZE_KM, PARK_AT_KM);
 
-// 5. One load writes them all in one transaction: one change, one redraw. Creating them with
-// `draw.features.createMany` is one transaction too. Then the park in front is selected, with
-// its vertex handles
+// 5. Opening the document writes them all at once: one change, one redraw. Creating them with
+// one `tx.features.create` of an array in `draw.write` is one commit too. Then the park in front
+// is selected, with its vertex handles
 const started = performance.now();
-const loaded = draw.document.load(city).then(() => {
+const loaded = draw.open(city).then(() => {
   const ms = Math.round(performance.now() - started);
   const format = (n: number) => n.toLocaleString('en');
   console.info(

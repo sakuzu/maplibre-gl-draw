@@ -25,7 +25,7 @@ function area(name: string, column: number): FeatureInput {
     [west, TOP - 0.0009],
   ];
   return {
-    type: 'Polygon',
+    type: 'Feature',
     geometry: { type: 'Polygon', coordinates: [ring] },
     properties: { name },
   };
@@ -35,7 +35,7 @@ function area(name: string, column: number): FeatureInput {
 function line(name: string, column: number): FeatureInput {
   const west = WEST + column * STEP;
   return {
-    type: 'LineString',
+    type: 'Feature',
     geometry: {
       type: 'LineString',
       coordinates: [
@@ -51,7 +51,7 @@ function line(name: string, column: number): FeatureInput {
 /** A point of the third row, the first of four at `index` 0 */
 function point(name: string, index: number): FeatureInput {
   return {
-    type: 'Point',
+    type: 'Feature',
     geometry: { type: 'Point', coordinates: [WEST + 0.0002 + index * 0.00123, TOP - 0.0022] },
     properties: { name },
   };
@@ -73,7 +73,11 @@ export const POINTS = [
 
 /** A circle of 80 m on the ground, under the points */
 export const RANGE: FeatureInput = {
-  type: 'Circle',
+  type: 'Feature',
   geometry: { type: 'Point', coordinates: [WEST + 0.00205, TOP - 0.0032] },
-  properties: { name: 'Within 80 m', 'maplibre-gl-draw:radiusMeters': 80 },
+  properties: {
+    name: 'Within 80 m',
+    'maplibre-gl-draw:radiusMeters': 80,
+    'maplibre-gl-draw:featureType': 'Circle',
+  },
 };

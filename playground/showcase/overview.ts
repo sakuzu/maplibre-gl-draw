@@ -71,7 +71,7 @@ export const overviewScene: ShowcaseScene = {
  * The tilted scene loads the same drawing.
  */
 export async function loadDocument({ draw }: ShowcaseContext): Promise<void> {
-  await draw.document.load(createOverviewDocument(station));
+  await draw.open(createOverviewDocument(station));
   draw.layers.setActive(ACTIVE_LAYER);
   draw.datasets.add({
     id: DENSITY_DATASET,

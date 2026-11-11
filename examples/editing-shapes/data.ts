@@ -19,7 +19,7 @@ export const SHARED: { lower: Position; upper: Position } = {
 function area(name: string, outer: Position[], ...holes: Position[][]): FeatureInput {
   const close = (ring: Position[]) => [...ring, ring[0]];
   return {
-    type: 'Polygon',
+    type: 'Feature',
     geometry: { type: 'Polygon', coordinates: [close(outer), ...holes.map(close)] },
     properties: { name },
   };
@@ -58,7 +58,7 @@ export const COURTYARD = area(
 
 /** One feature of two separate parts */
 export const ISLANDS: FeatureInput = {
-  type: 'MultiPolygon',
+  type: 'Feature',
   geometry: {
     type: 'MultiPolygon',
     coordinates: [
@@ -85,7 +85,7 @@ export const ISLANDS: FeatureInput = {
 };
 
 export const PATH: FeatureInput = {
-  type: 'LineString',
+  type: 'Feature',
   geometry: {
     type: 'LineString',
     coordinates: [

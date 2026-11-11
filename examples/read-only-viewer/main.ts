@@ -9,7 +9,7 @@
 // gestures of the user; B the lock of the Blocks layer, which protects its features; and H hides
 // the blocks on this page only, writing nothing.
 
-import { createDraw } from '@sakuzu/maplibre-gl-draw';
+import { createDraw, DrawError } from '@sakuzu/maplibre-gl-draw';
 import { createDrawUI } from '@sakuzu/maplibre-gl-draw-ui';
 import '@sakuzu/maplibre-gl-draw-ui/style.css';
 import * as maplibregl from 'maplibre-gl';
@@ -43,20 +43,22 @@ const ui = createDrawUI(draw, {
 });
 
 const loaded = (async () => {
-  // 3. Load the drawing while it can still be written: each file into a layer of its own, the
-  // blocks colored by their use (the legend tab shows the colors)
-  await draw.document.load(BLOCKS, {
-    layer: {
-      name: 'Blocks',
-      styleRule: {
-        kind: 'categorical',
-        property: 'use',
-        map: { office: '#4e79a7', shop: '#f28e2b', hotel: '#59a14f' },
-        other: '#bab0ac',
+  // 3. Import the drawing while it can still be written: each file into a layer of its own, in
+  // one commit, the blocks colored by their use (the legend tab shows the colors)
+  await draw.write(async (tx) => {
+    await tx.import(BLOCKS, {
+      layer: {
+        name: 'Blocks',
+        styleRule: {
+          kind: 'categorical',
+          property: 'use',
+          map: { office: '#4e79a7', shop: '#f28e2b', hotel: '#59a14f' },
+          other: '#bab0ac',
+        },
       },
-    },
+    });
+    await tx.import(STOPS, { layer: { name: 'Stops' } });
   });
-  await draw.document.load(STOPS, { layer: { name: 'Stops' } });
 
   // 4. Then a viewer: read-only refuses every write, from the user and from code
   draw.setReadOnly(true);
@@ -67,8 +69,8 @@ function blocksId(): string | undefined {
   return draw.layers.list().find((layer) => layer.name === 'Blocks')?.id;
 }
 
-// 5. The four switches. Read-only refuses every write, by the user or by code: the methods that
-// change data return false or null, and the tools draw nothing. The interaction lock only stops
+// 5. The four switches. Read-only refuses every write, by the user or by code: a write of
+// `draw.write` rejects with a DrawError of the code `not-editable`, and the tools draw nothing. The interaction lock only stops
 // the user: no tool starts, no handles and no moving, while selecting still works and code can
 // still write. A locked layer is a property of the document: its features refuse to move or
 // change, and since locking it is a write, read-only refuses it too. Hiding is local: the
@@ -84,13 +86,17 @@ function toggleInteractionLock(): void {
   console.info(`Interaction lock: ${draw.isInteractionLocked()}`);
 }
 
-function toggleLayerLock(): void {
+async function toggleLayerLock(): Promise<void> {
   const id = blocksId();
   if (id === undefined) return;
   const locked = draw.layers.get(id)?.locked !== true;
-  const layer = draw.layers.update(id, { locked });
-  if (layer === null) console.info('The lock of the Blocks layer was refused: read-only');
-  else console.info(`Blocks layer locked: ${layer.locked === true}`);
+  try {
+    const layer = await draw.write((tx) => tx.layers.update(id, { locked }));
+    console.info(`Blocks layer locked: ${layer.locked}`);
+  } catch (error) {
+    if (!(error instanceof DrawError)) throw error;
+    console.info(`The lock of the Blocks layer was refused: ${error.code}`);
+  }
 }
 
 function toggleHidden(): void {

@@ -5,7 +5,7 @@
 // the bottom left of the map, each with a letter and Shift as its key (listed with ?). The modes
 // are tools of the toolbar instead, and the globe is the globe button of the map's controls.
 
-import type { DatasetRow, Draw } from '@sakuzu/maplibre-gl-draw';
+import { type DatasetRow, type Draw, DrawError } from '@sakuzu/maplibre-gl-draw';
 import type { ActionSpec, DrawUI } from '@sakuzu/maplibre-gl-draw-ui';
 import type { FeatureCollection } from 'geojson';
 import type * as maplibregl from 'maplibre-gl';
@@ -92,8 +92,13 @@ export function createSwitches(draw: Draw, map: maplibregl.Map, ja: boolean): Ac
           console.info('Nothing is saved yet (Save, Shift+S)');
           return;
         }
-        const result = await draw.document.load(JSON.parse(saved));
-        console.info(result ? `Opened ${result.featureIds.length} features` : 'Read-only');
+        try {
+          const result = await draw.open(saved);
+          console.info(`Opened ${result.features} features`);
+        } catch (error) {
+          if (!(error instanceof DrawError)) throw error;
+          console.info(`Not opened: ${error.code}`);
+        }
       },
     },
   ];
@@ -179,8 +184,13 @@ function toggleCells(draw: Draw, map: maplibregl.Map): void {
  */
 async function toggleBig(draw: Draw, map: maplibregl.Map): Promise<void> {
   if (draw.layers.get(BIG_LAYER)) {
-    if (!draw.layers.delete(BIG_LAYER)) return;
-    console.info('200,000 points: removed');
+    try {
+      await draw.write((tx) => tx.layers.delete(BIG_LAYER));
+      console.info('200,000 points: removed');
+    } catch (error) {
+      if (!(error instanceof DrawError)) throw error;
+      console.info(`200,000 points: not removed (${error.code})`);
+    }
     return;
   }
   const { lng, lat } = map.getCenter();
@@ -198,9 +208,14 @@ async function toggleBig(draw: Draw, map: maplibregl.Map): Promise<void> {
     }
   }
   const started = performance.now();
-  const result = await draw.document.load(points, {
-    layer: { id: BIG_LAYER, name: '200,000 points' },
-  });
-  const ms = Math.round(performance.now() - started);
-  console.info(result ? `200,000 points: loaded in ${ms} ms` : 'Read-only');
+  try {
+    await draw.write((tx) =>
+      tx.import(points, { layer: { id: BIG_LAYER, name: '200,000 points' } }),
+    );
+    const ms = Math.round(performance.now() - started);
+    console.info(`200,000 points: imported in ${ms} ms`);
+  } catch (error) {
+    if (!(error instanceof DrawError)) throw error;
+    console.info(`200,000 points: not imported (${error.code})`);
+  }
 }

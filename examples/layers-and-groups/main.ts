@@ -25,43 +25,50 @@ const map = new maplibregl.Map({
 const draw = createDraw(map);
 
 // 1. The document starts with one empty layer: name it. A second layer goes behind it
-// (`index` 0 is the back). Methods that write return null only while read-only
+// (`index` 0 is the back). Every write of the document is a transaction of `draw.write`; a
+// write refused (a read-only document) rejects with a DrawError
 const parcels = draw.layers.getActive();
-const paths = draw.layers.create({ name: 'Paths', index: 0 });
-if (parcels === null || paths === null) throw new Error('The drawing is read-only');
-draw.layers.update(parcels.id, { name: 'Parcels' });
+if (parcels === null) throw new Error('The document has no layer');
+const paths = await draw.write(async (tx) => {
+  await tx.layers.update(parcels.id, { name: 'Parcels' });
+  return tx.layers.create({ name: 'Paths', index: 0 });
+});
 
-// 2. Features go into the layer named by `layerId`, or else into the active layer (the
-// parcels and the path are in data.ts)
-const created = draw.features.createMany([
-  ...PARCELS.map((coordinates, i) => ({
-    type: 'Polygon' as const,
-    geometry: { type: 'Polygon' as const, coordinates },
-    properties: { name: i === 3 ? 'Draft' : `Parcel ${i + 1}` },
-  })),
-  {
-    type: 'LineString',
-    layerId: paths.id,
-    geometry: { type: 'LineString', coordinates: PATH },
-    properties: { name: 'Path' },
-  },
-]);
-if (created === null) throw new Error('The drawing is read-only');
-const [a, b, c, draft] = created;
+// 2. Features go into the layer named by `maplibre-gl-draw:layerId` in their properties, or
+// else into the active layer (the parcels and the path are in data.ts)
+const [a, b, c, draft] = await draw.write((tx) =>
+  tx.features.create([
+    ...PARCELS.map((coordinates, i) => ({
+      type: 'Feature' as const,
+      geometry: { type: 'Polygon' as const, coordinates },
+      properties: { name: i === 3 ? 'Draft' : `Parcel ${i + 1}` },
+    })),
+    {
+      type: 'Feature',
+      geometry: { type: 'LineString', coordinates: PATH },
+      properties: { name: 'Path', 'maplibre-gl-draw:layerId': paths.id },
+    },
+  ]),
+);
 
-// 3. A group of two parcels; features.move puts a third one into it.
+// 3. A group of two parcels; `place` puts a third one into it, in front.
 // The group is then locked: its features can be selected, not edited
-const group = draw.groups.create({ featureIds: [a.id, b.id], name: 'Block A' });
-if (group === null) throw new Error('The drawing is read-only');
-draw.features.move(c.id, { groupId: group.id });
-draw.groups.update(group.id, { locked: true });
+await draw.write(async (tx) => {
+  const group = await tx.groups.create({ featureIds: [a, b], name: 'Block A' });
+  await tx.features.place(c, { groupId: group.id });
+  await tx.groups.update(group.id, { locked: true });
+});
 
 // 4. Hide the draft for everyone who shares the document (`draw.hidden` hides on this page only)
-draw.features.update(draft.id, { visible: false });
+await draw.write((tx) =>
+  tx.features.update(draft, { properties: { 'maplibre-gl-draw:visible': false } }),
+);
 
 // 5. The stacking order, from the back: the paths go in front of the parcels, and fade
-draw.layers.reorder([parcels.id, paths.id]);
-draw.layers.update(paths.id, { opacity: 0.6 });
+await draw.write(async (tx) => {
+  await tx.layers.place(paths.id, { below: parcels.id });
+  await tx.layers.update(paths.id, { opacity: 0.6 });
+});
 
 // 6. What the tools draw goes into the active layer
 draw.layers.setActive(paths.id);

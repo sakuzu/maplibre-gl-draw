@@ -56,8 +56,8 @@ function addStamp(): void {
   });
 
   // 4. A section of the panel on the right, shown when every selected feature is a stamp. Its
-  // field is drawn by the UI; a change comes to onchange, which writes it with
-  // features.updateMany
+  // field is drawn by the UI; a change comes to onchange, which writes it into every stamp
+  // selected with one tx.features.update
   ui.inspector?.sections.add({
     id: 'stamp',
     title: locale === 'ja' ? 'スタンプ' : 'Stamp',
@@ -80,11 +80,11 @@ function addStamp(): void {
     },
     onchange: (_key, value, features) => {
       const state = value as StampState;
-      draw.features.updateMany(
-        features.map((f) => ({
-          id: f.id,
-          patch: { properties: { stamp: state }, style: stampStyle(state) },
-        })),
+      void draw.write((tx) =>
+        tx.features.update(
+          features.map((f) => f.id),
+          { properties: { stamp: state, 'maplibre-gl-draw:style': stampStyle(state) } },
+        ),
       );
     },
   });
@@ -103,13 +103,18 @@ addStamp();
 
 // 6. One stamp placed from code (where, in data.ts), selected on a wide screen so the panel opens
 // on its section (on a narrow one the panel would open over the map)
-const first = draw.features.create({
-  type: 'Point',
-  geometry: { type: 'Point', coordinates: MEETING_POINT },
-  properties: { name: 'Meeting point', stamp: 'done' },
-  style: stampStyle('done'),
-});
-if (first !== null && matchMedia('(min-width: 48rem)').matches) {
+const first = await draw.write((tx) =>
+  tx.features.create({
+    type: 'Feature',
+    geometry: { type: 'Point', coordinates: MEETING_POINT },
+    properties: {
+      name: 'Meeting point',
+      stamp: 'done',
+      'maplibre-gl-draw:style': stampStyle('done'),
+    },
+  }),
+);
+if (matchMedia('(min-width: 48rem)').matches) {
   draw.selection.set('feature', [first.id]);
 }
 

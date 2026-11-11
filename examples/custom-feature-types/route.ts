@@ -5,11 +5,12 @@
 // its own. One definition says how it is drawn (with the library's shared line renderer), hit,
 // box-selected, framed and reshaped, with a handle on each vertex whose mark it draws.
 
-import type {
-  Feature,
-  FeatureTypeDefinition,
-  Position,
-  ScreenPoint,
+import {
+  type Feature,
+  type FeatureTypeDefinition,
+  type Position,
+  readFeature,
+  type ScreenPoint,
 } from '@sakuzu/maplibre-gl-draw';
 import type { LineString } from 'geojson';
 
@@ -32,7 +33,7 @@ export const ROUTE_DEFAULTS = { routeColor: '#e64d1a', routeWidth: 3, routeDashe
 
 /** The look a route is drawn with: its own keys where they are valid, the defaults elsewhere */
 export function routeLook(feature: Feature): typeof ROUTE_DEFAULTS {
-  const { routeColor, routeWidth, routeDashed } = feature.style ?? {};
+  const { routeColor, routeWidth, routeDashed } = readFeature(feature).style;
   return {
     routeColor: typeof routeColor === 'string' ? routeColor : ROUTE_DEFAULTS.routeColor,
     routeWidth:

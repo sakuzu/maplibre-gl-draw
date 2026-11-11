@@ -212,8 +212,7 @@ window.drapeReady = (async (): Promise<void> => {
   });
   map.setTerrain({ source: 'dem', exaggeration: 1 });
 
-  const result = await draw.document.load({ type: 'FeatureCollection', features: buildLines() });
-  if (!result) throw new Error('The document is read-only');
+  await draw.write((tx) => tx.import({ type: 'FeatureCollection', features: buildLines() }));
 
   // Draw until every tile is in and the drape has settled on its index
   for (let i = 0; i < 300; i++) {

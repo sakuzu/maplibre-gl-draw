@@ -18,7 +18,7 @@ export const STREAM: Position[] = [
 /** The parcel and the road */
 export const FEATURES: FeatureInput[] = [
   {
-    type: 'Polygon',
+    type: 'Feature',
     geometry: {
       type: 'Polygon',
       coordinates: [[[139.7695, 35.678], ...STREAM, [139.7695, 35.684], [139.7695, 35.678]]],
@@ -26,7 +26,7 @@ export const FEATURES: FeatureInput[] = [
     properties: { name: 'West parcel' },
   },
   {
-    type: 'LineString',
+    type: 'Feature',
     geometry: {
       type: 'LineString',
       coordinates: [

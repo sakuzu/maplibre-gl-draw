@@ -4,7 +4,7 @@
 /**
  * Benchmark page for the Store rendering path
  *
- * It loads a large number of features into the Store with `draw.document.load()`, runs the same
+ * It imports a large number of features into the Store with `tx.import`, runs the same
  * pan / zoom path and collects statistics on the frame times. It is used for comparative
  * measurements against main / perf.
  *
@@ -324,15 +324,14 @@ window.benchReady = (async (): Promise<BenchInfo> => {
   });
 
   const t0 = performance.now();
-  const result = await draw.document.load({ type: 'FeatureCollection', features });
-  if (!result) throw new Error('The document is read-only');
+  const result = await draw.write((tx) => tx.import({ type: 'FeatureCollection', features }));
   const loadMs = performance.now() - t0;
   const firstIdleMs = await idlePromise;
 
   const info: BenchInfo = {
     loadMs,
     firstIdleMs,
-    featureCount: result.featureIds.length,
+    featureCount: result.count,
   };
   setStatus(
     `n=${featureTotal} order=${order} retained=${retained ? 1 : 0} ` +

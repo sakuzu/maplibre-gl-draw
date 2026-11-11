@@ -42,8 +42,8 @@ export interface ShowcaseScene {
   finish?(context: ShowcaseContext): Promise<void>;
 }
 
-/** A feature of a scene's document: the fields a scene sets */
-export type SceneFeature = Pick<Feature, 'id' | 'type' | 'geometry' | 'style' | 'properties'>;
+/** A feature of a scene's document, before it is put in its layer and its group */
+export type SceneFeature = Feature;
 
 /** A group of a scene's layer: its features, from the back */
 export interface SceneGroup {
@@ -86,8 +86,8 @@ export function buildDocument(
     ...new Set(layer.features.map((feature) => groupOf.get(feature.id) ?? feature.id)),
   ];
   return {
-    version: '3.0.0',
-    metadata: { title },
+    version: '4.0.0',
+    title,
     layerOrder: layers.map((layer) => layer.id),
     layers: layers.map((layer) => ({
       id: layer.id,
@@ -108,13 +108,17 @@ export function buildDocument(
       })),
     ),
     features: layers.flatMap((layer) =>
-      layer.features.map((feature) => ({
-        ...feature,
-        layerId: layer.id,
-        groupId: groupOf.get(feature.id),
-        visible: true,
-        locked: false,
-      })),
+      layer.features.map((feature) => {
+        const groupId = groupOf.get(feature.id);
+        return {
+          ...feature,
+          properties: {
+            ...feature.properties,
+            'maplibre-gl-draw:layerId': layer.id,
+            ...(groupId !== undefined && { 'maplibre-gl-draw:groupId': groupId }),
+          },
+        };
+      }),
     ),
     files: Object.fromEntries(files.map((file) => [file.id, file])),
   };

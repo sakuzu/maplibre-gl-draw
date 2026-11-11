@@ -13,7 +13,7 @@
 // feature and look. `?plain` opens it empty, and `?showcase=<scene>` opens another scene of
 // those the README images are taken from (showcase/).
 
-import { createDraw, type ModeFactory } from '@sakuzu/maplibre-gl-draw';
+import { createDraw, DrawError, type ModeFactory, readFeature } from '@sakuzu/maplibre-gl-draw';
 import { createDrawUI, type DrawUI } from '@sakuzu/maplibre-gl-draw-ui';
 import '@sakuzu/maplibre-gl-draw-ui/style.css';
 import * as maplibregl from 'maplibre-gl';
@@ -28,6 +28,7 @@ import {
   type StampState,
   stampStyle,
 } from '../examples/plugins/stamp.ts';
+import { imageFeature, isImageFile } from '../examples/save-and-load/image-feature.ts';
 import { getShowcaseScene, runShowcase } from './showcase/showcase.ts';
 import './showcase/showcase.css';
 import { addSwitches } from './switches.ts';
@@ -66,8 +67,9 @@ const routeMode: ModeFactory = (ctx) => ({
   onClick({ point: [x, y] }) {
     const at = (dx: number, dy: number) => ctx.screen.unproject([x + dx, y + dy]);
     ctx.commitFeature({
-      type: 'Route',
+      type: 'Feature',
       geometry: { type: 'LineString', coordinates: [at(-80, 30), at(0, -30), at(80, 30)] },
+      properties: { 'maplibre-gl-draw:featureType': 'Route' },
     });
   },
   onKeyDown(event) {
@@ -125,8 +127,15 @@ function mountUI(): DrawUI {
     ],
     onchange: (_key, value, features) => {
       const state = value as StampState;
-      const patch = { properties: { stamp: state }, style: stampStyle(state) };
-      draw.features.updateMany(features.map((f) => ({ id: f.id, patch })));
+      const patch = {
+        properties: { stamp: state, 'maplibre-gl-draw:style': stampStyle(state) },
+      };
+      void draw.write((tx) =>
+        tx.features.update(
+          features.map((f) => f.id),
+          patch,
+        ),
+      );
     },
   });
   // The ID of the feature selected, made by the generator of step 1. The scenes of the showcase
@@ -144,7 +153,7 @@ function mountUI(): DrawUI {
   ui.inspector?.sections.add({
     id: 'route',
     title: ja ? 'ルート' : 'Route',
-    appliesTo: (features) => features.every((f) => f.type === 'Route'),
+    appliesTo: (features) => features.every((f) => readFeature(f).featureType === 'Route'),
     fields: ([first]) => {
       const look = routeLook(first);
       return [
@@ -167,8 +176,13 @@ function mountUI(): DrawUI {
       ];
     },
     onchange: (key, value, features) => {
-      const patch = { style: { [key]: value } };
-      draw.features.updateMany(features.map((f) => ({ id: f.id, patch })));
+      const patch = { properties: { 'maplibre-gl-draw:style': { [key]: value } } };
+      void draw.write((tx) =>
+        tx.features.update(
+          features.map((f) => f.id),
+          patch,
+        ),
+      );
     },
   });
   return ui;
@@ -176,20 +190,26 @@ function mountUI(): DrawUI {
 // None over a scene that shows the map alone
 const ui = scene?.mapOnly ? null : mountUI();
 
-// 5. The image tool asks the page for a file; the page places it where the user clicked
-draw.on('image.requested', ({ lngLat, zoom, layerId }) => {
-  const input = document.createElement('input');
-  input.type = 'file';
-  input.accept = 'image/*';
-  input.addEventListener('change', () => {
-    const file = input.files?.[0];
-    if (file) void draw.document.load(file, { coordinate: lngLat, zoom, layerId });
-  });
-  input.click();
+// 5. The image tool asks the page for a file (the option requestImage, which can change while
+// the instance runs); the library places it where the user clicked. A picker left without a file
+// gives nothing: the request is stopped by its signal when the next one is made
+draw.options.update({
+  requestImage: (_at, { signal }) =>
+    new Promise<Blob>((resolve, reject) => {
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.accept = 'image/*';
+      input.addEventListener('change', () => {
+        const file = input.files?.[0];
+        if (file) resolve(file);
+      });
+      signal.addEventListener('abort', () => reject(signal.reason));
+      input.click();
+    }),
 });
 
-// 6. A file dropped on the map is loaded there: an image centered where it fell, a GeoJSON or
-// a document of the library at its own positions
+// 6. A file dropped on the map is imported there: an image centered where it fell (as a feature
+// of the type Image), a GeoJSON or a document of the library at its own positions
 const container = map.getContainer();
 container.addEventListener('dragover', (e) => e.preventDefault());
 container.addEventListener('drop', async (e) => {
@@ -197,12 +217,22 @@ container.addEventListener('drop', async (e) => {
   const rect = container.getBoundingClientRect();
   const { lng, lat } = map.unproject([e.clientX - rect.left, e.clientY - rect.top]);
   for (const file of e.dataTransfer?.files ?? []) {
-    const result = await draw.document.load(file, {
-      coordinate: [lng, lat],
-      zoom: map.getZoom(),
-      layerId: draw.layers.getActive()?.id,
-    });
-    console.info(result ? `${file.name}: ${result.featureIds.length} features` : 'Read-only');
+    try {
+      const source = isImageFile(file)
+        ? {
+            type: 'FeatureCollection' as const,
+            features: [await imageFeature(file, [lng, lat], map.getZoom())],
+          }
+        : file;
+      const layer = draw.layers.getActive()?.id;
+      const result = await draw.write((tx) =>
+        tx.import(source, layer === undefined ? {} : { layer }),
+      );
+      console.info(`${file.name}: ${result.count} features`);
+    } catch (error) {
+      if (!(error instanceof DrawError)) throw error;
+      console.info(`${file.name}: not imported (${error.code})`);
+    }
   }
 });
 

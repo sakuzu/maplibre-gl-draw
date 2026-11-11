@@ -36,7 +36,14 @@
  * a stream (on the map opened by the measurement). The draw instance is `window.benchDraw`.
  */
 
-import { createDraw, type Draw, type Store } from '@sakuzu/maplibre-gl-draw';
+import {
+  createDraw,
+  type Draw,
+  type Feature,
+  type FeatureGeometry,
+  type FeatureStyle,
+  type Store,
+} from '@sakuzu/maplibre-gl-draw';
 import {
   createTableStore as createPublicTableStore,
   type FeatureTablesWorker,
@@ -429,17 +436,18 @@ async function open(result: TableBenchResult): Promise<void> {
   } else {
     const g0 = performance.now();
     const made = await pageFeatures();
-    const features = made.map((f) => ({
-      id: f.id,
-      type: f.type,
-      geometry: f.geometry,
-      layerId: LAYER_ID,
-      groupId: undefined,
-      properties: f.properties,
-      style: f.style,
-      locked: false,
-      visible: true,
-    }));
+    const features = made.map(
+      (f): Feature => ({
+        type: 'Feature',
+        id: f.id,
+        geometry: f.geometry as FeatureGeometry,
+        properties: {
+          ...f.properties,
+          'maplibre-gl-draw:layerId': LAYER_ID,
+          'maplibre-gl-draw:style': f.style as FeatureStyle,
+        },
+      }),
+    );
     result.open.rows = features.length;
     result.open.generate = performance.now() - g0;
     opened = {
@@ -448,8 +456,8 @@ async function open(result: TableBenchResult): Promise<void> {
     };
     if (overLimit()) return;
     const l0 = performance.now();
-    await draw.document.load({
-      version: '3.0.0',
+    await draw.open({
+      version: '4.0.0',
       layers: [
         {
           id: LAYER_ID,
@@ -464,7 +472,7 @@ async function open(result: TableBenchResult): Promise<void> {
       ],
       layerOrder: [LAYER_ID],
       features,
-    } as never);
+    });
     result.open.load = performance.now() - l0;
   }
   const d0 = performance.now();
@@ -478,14 +486,14 @@ async function open(result: TableBenchResult): Promise<void> {
   result.open.total = performance.now() - t0;
   if (params.bigArea > 0 && opened) {
     const b0 = performance.now();
-    putBigArea(opened.extent);
+    await putBigArea(opened.extent);
     await settle();
     result.open.bigArea = performance.now() - b0;
   }
 }
 
 /** Puts a large area under every row (the first item of the layer) */
-function putBigArea(extent: [number, number, number, number]): void {
+async function putBigArea(extent: [number, number, number, number]): Promise<void> {
   const geometry = bigAreaOf(extent, params.bigArea);
   const style = { fillColor: '#bfd3c1', fillOpacity: 1, strokeColor: '#5b7f63', strokeWidth: 2 };
   if (tablesOfPage) {
@@ -508,14 +516,17 @@ function putBigArea(extent: [number, number, number, number]): void {
     });
     return;
   }
-  draw.features.create({
-    id: 'bigArea',
-    type: 'Polygon',
-    geometry,
-    layerId: LAYER_ID,
-    style,
-  } as never);
-  draw.features.move('bigArea', { layerId: LAYER_ID, index: 0 });
+  // Created and put behind the item at the back, in one commit
+  const [back] = draw.layers.listItems(LAYER_ID, { limit: 1 });
+  await draw.write(async (tx) => {
+    await tx.features.create({
+      type: 'Feature',
+      id: 'bigArea',
+      geometry,
+      properties: { 'maplibre-gl-draw:layerId': LAYER_ID, 'maplibre-gl-draw:style': style },
+    });
+    if (back !== undefined) await tx.features.place('bigArea', { above: back });
+  });
 }
 
 /** Eases the camera and waits for the end of the move */

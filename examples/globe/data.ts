@@ -57,10 +57,9 @@ function route(
     coordinates.push(...(i === 1 ? leg : leg.slice(1)));
   }
   return {
-    type: 'LineString',
+    type: 'Feature',
     geometry: { type: 'LineString', coordinates },
-    properties: { name },
-    style: { strokeColor, strokeWidth: 4, lineStyle },
+    properties: { name, 'maplibre-gl-draw:style': { strokeColor, strokeWidth: 4, lineStyle } },
   };
 }
 
@@ -69,7 +68,7 @@ export const AREAS: FeatureInput[] = [
   {
     // A box between two meridians and two parallels, given by its four corners: an edge
     // follows the path it takes on the flat map, so its edges run along them
-    type: 'Polygon',
+    type: 'Feature',
     geometry: {
       type: 'Polygon',
       coordinates: [
@@ -82,19 +81,35 @@ export const AREAS: FeatureInput[] = [
         ],
       ],
     },
-    properties: { name: 'Box from 50°E to 100°E, 5°N to 38°N' },
-    style: { fillColor: '#ff7b00', fillOpacity: 0.55, strokeColor: '#ff7b00', strokeWidth: 3 },
+    properties: {
+      name: 'Box from 50°E to 100°E, 5°N to 38°N',
+      'maplibre-gl-draw:style': {
+        fillColor: '#ff7b00',
+        fillOpacity: 0.55,
+        strokeColor: '#ff7b00',
+        strokeWidth: 3,
+      },
+    },
   },
   {
-    type: 'Circle',
+    type: 'Feature',
     geometry: { type: 'Point', coordinates: CITIES.Tokyo },
-    properties: { name: '2,500 km from Tokyo', 'maplibre-gl-draw:radiusMeters': 2_500_000 },
-    style: { fillColor: '#3a86ff', fillOpacity: 0.35, strokeColor: '#3a86ff', strokeWidth: 2.5 },
+    properties: {
+      name: '2,500 km from Tokyo',
+      'maplibre-gl-draw:radiusMeters': 2_500_000,
+      'maplibre-gl-draw:featureType': 'Circle',
+      'maplibre-gl-draw:style': {
+        fillColor: '#3a86ff',
+        fillOpacity: 0.35,
+        strokeColor: '#3a86ff',
+        strokeWidth: 2.5,
+      },
+    },
   },
   {
     // Its longitudes run on past 180 instead of jumping to -180, as a shape drawn across the
     // line is kept; the GeoJSON written out wraps them
-    type: 'Polygon',
+    type: 'Feature',
     geometry: {
       type: 'Polygon',
       coordinates: [
@@ -107,8 +122,15 @@ export const AREAS: FeatureInput[] = [
         ],
       ],
     },
-    properties: { name: 'Across the antimeridian' },
-    style: { fillColor: '#edae49', fillOpacity: 0.5, strokeColor: '#a86a00', strokeWidth: 2 },
+    properties: {
+      name: 'Across the antimeridian',
+      'maplibre-gl-draw:style': {
+        fillColor: '#edae49',
+        fillOpacity: 0.5,
+        strokeColor: '#a86a00',
+        strokeWidth: 2,
+      },
+    },
   },
 ];
 
@@ -125,20 +147,24 @@ export const ROUTES: FeatureInput[] = [
   route('Tokyo to Perth', ['Tokyo', 'Perth'], '#ff006e', 'dashed'),
   route('Dubai to Perth', ['Dubai', 'Perth'], '#8338ec', 'dotted'),
   {
-    type: 'LineString',
+    type: 'Feature',
     geometry: { type: 'LineString', coordinates: [CITIES.London, CITIES.Tokyo] },
-    properties: { name: 'Two vertices' },
-    style: { strokeColor: '#30638e', strokeWidth: 2, lineStyle: 'dashed' },
+    properties: {
+      name: 'Two vertices',
+      'maplibre-gl-draw:style': { strokeColor: '#30638e', strokeWidth: 2, lineStyle: 'dashed' },
+    },
   },
 ];
 
 /** The cities, Tokyo as a star */
 export const PLACES: FeatureInput[] = Object.entries(CITIES).map(([name, coordinates]) => ({
-  type: 'Point',
+  type: 'Feature',
   geometry: { type: 'Point', coordinates },
-  properties: { name },
-  style:
-    name === 'Tokyo'
-      ? { pointShape: 'star', pointColor: '#ffd000', pointRadius: 13 }
-      : { pointColor: '#ff006e', pointRadius: 7 },
+  properties: {
+    name,
+    'maplibre-gl-draw:style':
+      name === 'Tokyo'
+        ? { pointShape: 'star', pointColor: '#ffd000', pointRadius: 13 }
+        : { pointColor: '#ff006e', pointRadius: 7 },
+  },
 }));

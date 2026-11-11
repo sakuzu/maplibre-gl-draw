@@ -63,7 +63,7 @@ const draw = createDraw(map, { initDefaultLayer: false });
 // 3. The drawing (data.ts): an area and an image on the slope, a trail to the ridge with markers
 // on its stations, a straight dashed line across the valley. Each follows the ground, and the
 // parts behind the ridge are hidden by it
-await draw.document.load(
+await draw.open(
   buildDocument('Terrain', TERRAIN_LAYERS, [
     { id: SURVEY_FILE_ID, mimeType: 'image/png', dataURL: surveyMap() },
   ]),

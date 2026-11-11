@@ -5,7 +5,8 @@
 // The features come from GeoJSON, whose properties become their attributes. The page opens
 // with the market hall selected, and the panel on the right opens on its Attributes tab, which
 // lists its attributes, where a value is changed, added and removed. Code changes them with
-// features.update, and `change` tells the page of every change, wherever it was made.
+// tx.features.update in draw.write, and `change` tells the page of every change, wherever it was
+// made.
 
 import { createDraw, isDrawProperty } from '@sakuzu/maplibre-gl-draw';
 import { createDrawUI } from '@sakuzu/maplibre-gl-draw-ui';
@@ -15,7 +16,7 @@ import 'maplibre-gl/dist/maplibre-gl.css';
 import '../maplibre-setup.ts';
 import { BASEMAPS, basemapStyle, initialBasemapId } from '../basemap.ts';
 import '../example.css';
-import { PLACES } from './data.ts';
+import { MARKET_ID, PLACES } from './data.ts';
 
 const map = new maplibregl.Map({
   container: 'map',
@@ -43,16 +44,19 @@ draw.on('change', (change) => {
   }
 });
 
-// 2. Load the GeoJSON: each feature keeps its properties, of any JSON type
-const loaded = await draw.document.load(PLACES);
-if (loaded === null) throw new Error('The drawing is read-only');
-const [market] = loaded.featureIds;
+// 2. Import the GeoJSON into the document: each feature keeps its ID and its properties, of any
+// JSON type
+await draw.write((tx) => tx.import(PLACES));
+const market = MARKET_ID;
 
-// 3. Change attributes from code: `properties` is merged key by key, and a key given as
-// `undefined` is removed. This is what the Attributes tab does when a value is changed
-draw.features.update(market, {
-  properties: { floors: 4, renovated: 2024, stalls: undefined },
-});
+// 3. Change attributes from code: `properties` is merged key by key, and a key is removed by
+// naming it in `unset`. This is what the Attributes tab does when a value is changed
+await draw.write((tx) =>
+  tx.features.update(market, {
+    properties: { floors: 4, renovated: 2024 },
+    unset: { properties: ['stalls'] },
+  }),
+);
 
 // 4. The standard UI, its inspector opening on the Attributes tab: the first of `tabs` is the
 // one that opens. `?locale=ja` in the address shows it in Japanese

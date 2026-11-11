@@ -27,18 +27,16 @@ const map = new maplibregl.Map({
 const draw = createDraw(map);
 
 // 1. Two squares that share an edge, a third that overlaps them, and a line across the first
-// (data.ts; createMany returns null only while read-only)
-const created = draw.features.createMany(SHAPES);
-if (created === null) throw new Error('The drawing is read-only');
-const [west, east, , line] = created;
+// (data.ts), created in one commit, which gives their IDs
+const [west, east, , line] = await draw.write((tx) => tx.features.create(SHAPES));
 
-// 2. The panel's operations are these calls, with the IDs of the selection; each replaces or
-// adds features in one change and returns what it made (null or [] when nothing changed):
-//   draw.features.union(ids)                     every area merged into one
-//   draw.features.intersection(ids)              where they all overlap
-//   draw.features.difference(first, others)      the first minus the others
-//   draw.features.split(areaId, lineId)          the area cut along the line
-//   draw.features.buffer(ids, { distanceMeters }) the area around each, one per input
+// 2. The panel's operations are these writes of a transaction, with the IDs of the selection;
+// each replaces or adds features in the commit of `draw.write` and gives what it made:
+//   tx.features.union(ids)                  every area merged into one
+//   tx.features.intersection(ids)           where they all overlap
+//   tx.features.difference(first, others)   the first minus the others
+//   tx.features.split(areaId, lineId)       the area cut along the line
+//   tx.features.buffer(id, distanceMeters)  the area around one feature
 // `?locale=ja` in the address shows the interface in Japanese
 const locale = new URLSearchParams(location.search).get('locale') === 'ja' ? 'ja' : 'en';
 const ui = createDrawUI(draw, {
@@ -67,11 +65,11 @@ draw.selection.subscribe(() => {
 });
 
 // 4. One of the calls from code: the area within 40 m of the line, a new feature beside it
-draw.features.buffer([line.id], { distanceMeters: 40 });
+await draw.write((tx) => tx.features.buffer(line, 40));
 
 // 5. Open with the two squares selected on a wide screen: the panel lists the operations for two
 // areas (on a narrow one the panel would open over the map)
-if (matchMedia('(min-width: 48rem)').matches) draw.selection.set('feature', [west.id, east.id]);
+if (matchMedia('(min-width: 48rem)').matches) draw.selection.set('feature', [west, east]);
 
 // For the browser console and the end-to-end tests
 Object.assign(window, { map, draw, ui });
