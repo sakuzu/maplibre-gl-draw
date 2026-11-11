@@ -29,6 +29,7 @@ import {
 import type { StoreChange } from '../shared/types/model.js';
 import { createTableStore } from '../store/table-memory.js';
 import { createRowBlockDataBuilder } from '../table/row-group-builder.js';
+import { FEATURE_TABLE_COLUMNS } from '../table/tabane/columns.js';
 import { seededRandom } from '../test-utils.js';
 import { type FeatureTablesInternals, featureTablesInternals } from './feature-tables.js';
 import type { TableWorkBudget } from './types.js';
@@ -41,7 +42,7 @@ const key = (i: number) => `k${String(i).padStart(3, '0')}`;
 
 /** Row groups of points `r<from>`.. in the order of their keys */
 function points(from: number, count: number) {
-  const builder = createRowBlockDataBuilder({ targetRows: 4 });
+  const builder = createRowBlockDataBuilder({ columns: FEATURE_TABLE_COLUMNS, targetRows: 4 });
   for (let i = from; i < from + count; i++) {
     builder.addRow({
       id: `r${i}`,
@@ -411,7 +412,7 @@ describe('the row groups taken in while the drawing holds the reorder of a group
 
   /** Two points `n0` and `n1` of these keys */
   function around(low: string, high: string) {
-    const builder = createRowBlockDataBuilder({ targetRows: 4 });
+    const builder = createRowBlockDataBuilder({ columns: FEATURE_TABLE_COLUMNS, targetRows: 4 });
     ['n0', 'n1'].forEach((id, i) => {
       builder.addRow({
         id,

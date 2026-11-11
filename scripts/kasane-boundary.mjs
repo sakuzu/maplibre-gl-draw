@@ -39,6 +39,7 @@ export const KASANE_FILES = [
   'table/kasane-error.ts',
   'table/packed-rtree.ts',
   'table/row-caches.ts',
+  'table/row-columns.ts',
   'table/row-group-builder.ts',
   'table/row-group-merge.ts',
   'table/row-group-types.ts',

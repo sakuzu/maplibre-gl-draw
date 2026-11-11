@@ -18,6 +18,7 @@
 import { ColumnRun, type HitShape, type PositionRun } from '../shared/math/position-runs.js';
 import { drawPropertyKey } from '../shared/properties.js';
 import type { Coordinate, Feature, FeatureStyle, FeatureType } from '../shared/types/model.js';
+import { styleColumnOf } from '../table/feature-row-columns.js';
 import type { FeatureTablesInternals } from './feature-tables.js';
 import { geometryAt, type LayerTable, type RowGroup } from './layer-table.js';
 import { rowNumber, rowType } from './row-read.js';
@@ -139,7 +140,7 @@ export function hitTestLayerTable(
   for (let i = candidates.length - 1; i >= 0; i--) {
     const { group, row } = candidates[i];
     const type = rowType(group.data, row);
-    const style = internals.styles.get(group.data.styles[row]);
+    const style = internals.styles.get(styleColumnOf(group.data).indexes[row]);
     const tolerance = input.toleranceOf(type, style);
     if (onScreen && SCREEN_TYPES.has(type)) {
       // A point is hit where its anchor is drawn, never at the coordinate

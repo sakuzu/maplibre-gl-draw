@@ -9,6 +9,14 @@ import { generateCirclePolygon } from '../geometry/circle.js';
 import { drawPropertyKey } from '../shared/properties.js';
 import { buildEarcutInput } from '../view/renderers/polygon/earcut-input.js';
 import { circleRowRings } from './circle-rings.js';
+import {
+  geometryColumnOf,
+  propertyColumnsOf,
+  ROW_FLAG_HIDDEN,
+  ROW_FLAG_LOCKED,
+  styleColumnOf,
+  typeColumnOf,
+} from './feature-row-columns.js';
 import { FEATURE_CACHES, FILL_TRIANGLES_AT } from './fill-triangles.js';
 import { cacheNumbersOf } from './row-caches.js';
 import { pairTriangles } from './row-geometry.js';
@@ -19,12 +27,8 @@ import {
   type RowBlockDataBuilder,
   type RowInput,
 } from './row-group-builder.js';
-import {
-  ROW_FLAG_DELETED,
-  ROW_FLAG_LOCKED,
-  ROW_FLAG_VISIBLE,
-  type RowBlockData,
-} from './row-group-types.js';
+import { ROW_FLAG_DELETED, type RowBlockData, type RowBlockDictionary } from './row-group-types.js';
+import { FEATURE_TABLE_COLUMNS } from './tabane/columns.js';
 import { GeometryColumnReader } from './table.js';
 
 /** A row with the defaults of the tests */
@@ -43,10 +47,14 @@ function idsOf(groups: readonly RowBlockData[]): string[] {
 
 /** The coordinates of a row read back through the geometry columns */
 function coordinatesOf(group: RowBlockData, r: number): unknown {
-  const child = group.geometry.types[r];
+  const child = geometryColumnOf(group)!.types[r];
   if (child < 0) return null;
-  const column = new GeometryColumnReader(group.geometry.children[child], undefined, 'child');
-  return column.coordinatesOf(group.geometry.offsets[r]);
+  const column = new GeometryColumnReader(
+    geometryColumnOf(group)!.children[child],
+    undefined,
+    'child',
+  );
+  return column.coordinatesOf(geometryColumnOf(group)!.offsets[r]);
 }
 
 /** The triangles earcut makes, in the pairs the builder keeps them in */
@@ -64,8 +72,12 @@ function trianglesOf(group: RowBlockData, r: number): number[] {
 }
 
 /** The builder of the tables, with the caches of the library unless told */
-function builderOf(options: RowBlockBuildOptions = {}): RowBlockDataBuilder {
-  return createRowBlockDataBuilder({ caches: FEATURE_CACHES, ...options });
+function builderOf(options: Partial<RowBlockBuildOptions> = {}): RowBlockDataBuilder {
+  return createRowBlockDataBuilder({
+    columns: FEATURE_TABLE_COLUMNS,
+    caches: FEATURE_CACHES,
+    ...options,
+  });
 }
 
 describe('createRowBlockDataBuilder', () => {
@@ -83,7 +95,10 @@ describe('createRowBlockDataBuilder', () => {
   });
 
   it('puts the members of a group at the key of the group', () => {
-    const builder = builderOf({ groups: [{ handle: 4, id: 'g', order: 'a5' }] });
+    const builder = builderOf({
+      columns: FEATURE_TABLE_COLUMNS,
+      groups: [{ handle: 4, id: 'g', order: 'a5' }],
+    });
     builder.addRow(row('y', 'a9', point(0, 0)));
     builder.addRow(row('m2', 'zz', point(0, 0), { group: 4, member: 'b' }));
     builder.addRow(row('x', 'a1', point(0, 0)));
@@ -96,7 +111,7 @@ describe('createRowBlockDataBuilder', () => {
   });
 
   it('cuts the rows into groups by their number and by their coordinates', () => {
-    const byRows = builderOf({ targetRows: 3 });
+    const byRows = builderOf({ columns: FEATURE_TABLE_COLUMNS, targetRows: 3 });
     for (let i = 0; i < 8; i++) byRows.addRow(row(`r${i}`, `k${i}`, point(i, i)));
     const rowGroups = byRows.finish();
     expect(rowGroups.map((group) => group.length)).toEqual([3, 3, 2]);
@@ -106,7 +121,7 @@ describe('createRowBlockDataBuilder', () => {
       type: 'LineString',
       coordinates: Array.from({ length: n }, (_, i) => [i, 0]),
     });
-    const byVertices = builderOf({ targetVertices: 10 });
+    const byVertices = builderOf({ columns: FEATURE_TABLE_COLUMNS, targetVertices: 10 });
     byVertices.addRow(row('a', 'a', line(4)));
     byVertices.addRow(row('b', 'b', line(4)));
     byVertices.addRow(row('c', 'c', line(4)));
@@ -269,13 +284,13 @@ describe('createRowBlockDataBuilder', () => {
 
   it('triangulates a Circle from its radius with the rings of the Circles', () => {
     const properties = { [drawPropertyKey('radiusMeters')]: 1000 };
-    const builder = builderOf({ rings: circleRowRings });
+    const builder = builderOf({ columns: FEATURE_TABLE_COLUMNS, rings: circleRowRings });
     builder.addRow(row('c', 'a', point(139.7, 35.7), { type: 'Circle', properties }));
     const [group] = builder.finish();
     const ring = generateCirclePolygon([139.7, 35.7], 1000);
     const input = buildEarcutInput([ring]);
     expect(trianglesOf(group, 0)).toEqual(paired(earcut(input.flatCoords, input.holeIndices)));
-    expect(group.typeNames[group.types[0]]).toBe('Circle');
+    expect(typeColumnOf(group).values[typeColumnOf(group).indexes[0]]).toBe('Circle');
     // The bbox is the one of the circle, not of its center
     expect(group.rowBounds[2] - group.rowBounds[0]).toBeGreaterThan(0.01);
     expect(group.vertexCount).toBe(ring.length);
@@ -287,7 +302,7 @@ describe('createRowBlockDataBuilder', () => {
       { draws: () => false, ringOf: () => null, ringVertices: 1, keys: [] },
       undefined,
     ]) {
-      const builder = builderOf({ rings });
+      const builder = builderOf({ columns: FEATURE_TABLE_COLUMNS, rings });
       builder.addRow(row('c', 'a', point(139.7, 35.7), { type: 'Circle', properties }));
       const [group] = builder.finish();
       expect(trianglesOf(group, 0)).toEqual([]);
@@ -343,22 +358,24 @@ describe('createRowBlockDataBuilder', () => {
     builder.addRow(row('c', 'c', point(0, 0), { hidden: true, locked: true }));
     builder.addRow(row('d', 'd', point(0, 0), { deleted: true }));
     const [group] = builder.finish();
-    expect(group.styles[0]).toBe(group.styles[1]);
-    expect(group.styles[2]).not.toBe(group.styles[0]);
-    const dictionary = group.styleDictionary as NonNullable<RowBlockData['styleDictionary']>;
+    expect(styleColumnOf(group).indexes[0]).toBe(styleColumnOf(group).indexes[1]);
+    expect(styleColumnOf(group).indexes[2]).not.toBe(styleColumnOf(group).indexes[0]);
+    const dictionary = styleColumnOf(group).dictionary as NonNullable<
+      RowBlockDictionary['dictionary']
+    >;
     const style = (r: number) =>
       decodeCanonicalValue(
         dictionary.bytes,
-        dictionary.offsets[group.styles[r]],
-        dictionary.offsets[group.styles[r] + 1],
+        dictionary.offsets[styleColumnOf(group).indexes[r]],
+        dictionary.offsets[styleColumnOf(group).indexes[r] + 1],
       );
     expect(style(0)).toEqual({ pointColor: '#ff0000', pointRadius: 4 });
     expect(style(2)).toEqual({});
     expect(Array.from(group.flags)).toEqual([
-      ROW_FLAG_VISIBLE,
-      ROW_FLAG_VISIBLE,
-      ROW_FLAG_LOCKED,
-      ROW_FLAG_VISIBLE | ROW_FLAG_DELETED,
+      0,
+      0,
+      ROW_FLAG_HIDDEN | ROW_FLAG_LOCKED,
+      ROW_FLAG_DELETED,
     ]);
   });
 
@@ -371,7 +388,8 @@ describe('createRowBlockDataBuilder', () => {
       builder.addRow(row(`r${i}`, `k${i}`, point(i, 0), { properties }));
     }
     const [group] = builder.finish();
-    const column = (key: string) => group.properties.columns[group.properties.keys.indexOf(key)];
+    const column = (key: string) =>
+      propertyColumnsOf(group).columns[propertyColumnsOf(group).keys.indexOf(key)];
     expect(column('n').form).toBe('dense');
     expect(column('rare').form).toBe('sparse');
     expect(readValue(column('n'), 4)).toBe(4);
@@ -392,7 +410,7 @@ describe('createRowBlockDataBuilder', () => {
   });
 
   it('lists every buffer of the groups once for the transfer', () => {
-    const builder = builderOf({ targetRows: 2 });
+    const builder = builderOf({ columns: FEATURE_TABLE_COLUMNS, targetRows: 2 });
     for (let i = 0; i < 3; i++) {
       builder.addRow(row(`r${i}`, `k${i}`, point(i, 0), { properties: { name: `n${i}` } }));
     }
@@ -400,7 +418,7 @@ describe('createRowBlockDataBuilder', () => {
     const buffers = blockTransferList(groups);
     expect(new Set(buffers).size).toBe(buffers.length);
     expect(buffers).toContain(groups[0].ids.bytes.buffer);
-    expect(buffers).toContain(groups[1].properties.columns[0].tags.buffer);
+    expect(buffers).toContain(propertyColumnsOf(groups[1]).columns[0].tags.buffer);
     expect(buffers).toContain(groups[1].rowBounds.buffer);
   });
 });

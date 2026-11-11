@@ -14,6 +14,7 @@ import type { FeatureTables, RowField } from '../api/tables.js';
 import { createTableStore } from '../store/table-memory.js';
 import { createRowBlockDataBuilder } from '../table/row-group-builder.js';
 import { compareRowKeys } from '../table/row-keys.js';
+import { FEATURE_TABLE_COLUMNS } from '../table/tabane/columns.js';
 import { seededRandom } from '../test-utils.js';
 import { type FeatureTablesInternals, featureTablesInternals } from './feature-tables.js';
 import { groupRunCuts } from './group-runs.js';
@@ -103,7 +104,7 @@ function setup(n: number) {
     metadata: undefined,
     styleRule: undefined,
   });
-  const builder = createRowBlockDataBuilder({ targetRows: 64 });
+  const builder = createRowBlockDataBuilder({ columns: FEATURE_TABLE_COLUMNS, targetRows: 64 });
   for (let i = 0; i < n; i++) {
     builder.addRow({
       id: `r${i}`,

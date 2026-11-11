@@ -19,6 +19,7 @@ import type { CoordinateDimensions } from '@sakuzu/tabane';
 import type { Geometry, Position } from 'geojson';
 import { describe, expect, it } from 'vitest';
 import { circleRowRings } from './circle-rings.js';
+import { geometryColumnOf, styleColumnOf } from './feature-row-columns.js';
 import { FEATURE_CACHES } from './fill-triangles.js';
 import { toRowGeometry } from './row-geometry.js';
 import {
@@ -29,6 +30,7 @@ import {
 } from './row-group-builder.js';
 import { mergeRowBlockData } from './row-group-merge.js';
 import type { RowBlockData } from './row-group-types.js';
+import { FEATURE_TABLE_COLUMNS } from './tabane/columns.js';
 import { GeometryColumnReader } from './table.js';
 
 const ALL_DIMS: readonly CoordinateDimensions[] = ['xy', 'xyz', 'xym', 'xyzm'];
@@ -126,8 +128,12 @@ function randomRows(
   return rows;
 }
 
-function build(rows: readonly RowInput[], options: RowBlockBuildOptions = {}): RowBlockData[] {
+function build(
+  rows: readonly RowInput[],
+  options: Partial<RowBlockBuildOptions> = {},
+): RowBlockData[] {
   const builder = createRowBlockDataBuilder({
+    columns: FEATURE_TABLE_COLUMNS,
     rings: circleRowRings,
     caches: FEATURE_CACHES,
     ...options,
@@ -152,7 +158,7 @@ function bytesOf(groups: readonly RowBlockData[]): number {
 function coordinatesOf(groups: readonly RowBlockData[]): number {
   let count = 0;
   for (const group of groups) {
-    for (const child of group.geometry.children) {
+    for (const child of geometryColumnOf(group)!.children) {
       count += child.coords.length;
     }
   }
@@ -199,7 +205,7 @@ describe('the positions of a row', () => {
     expect(() => toRowGeometry({ type: 'LineString', coordinates: [[0, 0, 1, 2]] }, 'xyz')).toThrow(
       /4 values does not fit coordinates of xyz/,
     );
-    const builder = createRowBlockDataBuilder();
+    const builder = createRowBlockDataBuilder({ columns: FEATURE_TABLE_COLUMNS });
     expect(() =>
       builder.addRow({
         id: 'a',
@@ -213,18 +219,28 @@ describe('the positions of a row', () => {
 
 describe('the row groups of every dimensions', () => {
   it('draw and index the same: the bboxes, the triangles and the index of x and y', () => {
-    const xy = build(randomRows(600, 3), { targetRows: 100 });
+    const xy = build(randomRows(600, 3), { columns: FEATURE_TABLE_COLUMNS, targetRows: 100 });
     for (const dims of ALL_DIMS) {
-      const groups = build(randomRows(600, 3, EXTRA[dims]), { targetRows: 100, dimensions: dims });
+      const groups = build(randomRows(600, 3, EXTRA[dims]), {
+        columns: FEATURE_TABLE_COLUMNS,
+        targetRows: 100,
+        dimensions: dims,
+      });
       expect(groups.length).toBe(xy.length);
       groups.forEach((group, g) => {
         const other = xy[g];
-        expect(group.geometry.children.every((child) => child.dimensions === dims)).toBe(true);
+        expect(geometryColumnOf(group)!.children.every((child) => child.dimensions === dims)).toBe(
+          true,
+        );
         expect(group.rowBounds).toEqual(other.rowBounds);
         expect(group.caches).toEqual(other.caches);
         expect(group.vertexCount).toBe(other.vertexCount);
-        expect(Array.from(group.geometry.types)).toEqual(Array.from(other.geometry.types));
-        expect(Array.from(group.geometry.offsets)).toEqual(Array.from(other.geometry.offsets));
+        expect(Array.from(geometryColumnOf(group)!.types)).toEqual(
+          Array.from(geometryColumnOf(other)!.types),
+        );
+        expect(Array.from(geometryColumnOf(group)!.offsets)).toEqual(
+          Array.from(geometryColumnOf(other)!.offsets),
+        );
       });
     }
   });
@@ -235,7 +251,10 @@ describe('the row groups of every dimensions', () => {
     expect(coordinates).toBeGreaterThan(1000);
     const extra: Record<CoordinateDimensions, number> = { xy: 0, xyz: 8, xym: 8, xyzm: 16 };
     for (const dims of ALL_DIMS) {
-      const groups = build(randomRows(800, 5, EXTRA[dims]), { dimensions: dims });
+      const groups = build(randomRows(800, 5, EXTRA[dims]), {
+        columns: FEATURE_TABLE_COLUMNS,
+        dimensions: dims,
+      });
       expect(bytesOf(groups)).toBe(bytesOf(xy) + extra[dims] * coordinates);
     }
   });
@@ -244,11 +263,17 @@ describe('the row groups of every dimensions', () => {
     // The hashes of the groups built before the coordinates had dimensions (the same rows), of
     // every array the groups hold now
     expect(hashOf(build(randomRows(3000, 7)))).toBe(PINNED.mixed);
-    expect(hashOf(build(randomRows(3000, 8), { targetRows: 100, targetVertices: 900 }))).toBe(
-      PINNED.small,
-    );
-    const groups = build(randomRows(3000, 9), { targetRows: 300 });
-    for (const group of groups) group.styleDictionary = null;
+    expect(
+      hashOf(
+        build(randomRows(3000, 8), {
+          columns: FEATURE_TABLE_COLUMNS,
+          targetRows: 100,
+          targetVertices: 900,
+        }),
+      ),
+    ).toBe(PINNED.small);
+    const groups = build(randomRows(3000, 9), { columns: FEATURE_TABLE_COLUMNS, targetRows: 300 });
+    for (const group of groups) styleColumnOf(group).dictionary = null;
     const pairs: number[] = [];
     groups.forEach((group, source) => {
       for (let r = 0; r < group.length; r += 2) pairs.push(source, r);
@@ -279,9 +304,13 @@ describe('the row groups of every dimensions', () => {
           order: 'k',
         },
       ],
-      { dimensions: 'xyzm' },
+      { columns: FEATURE_TABLE_COLUMNS, dimensions: 'xyzm' },
     );
-    const reader = new GeometryColumnReader(group.geometry.children[0], undefined, 'child');
+    const reader = new GeometryColumnReader(
+      geometryColumnOf(group)!.children[0],
+      undefined,
+      'child',
+    );
     expect(reader.stride).toBe(4);
     expect(reader.fullCoordinatesOf(0)).toEqual([
       [0, 0],
@@ -301,14 +330,20 @@ describe('the row groups of every dimensions', () => {
 
 describe('a merge of row groups of dimensions', () => {
   const numbered = (groups: RowBlockData[]): RowBlockData[] => {
-    for (const group of groups) group.styleDictionary = null;
+    for (const group of groups) styleColumnOf(group).dictionary = null;
     return groups;
   };
 
   it('copies the coordinates into the dimensions of the merge, the ones missing NaN', () => {
-    const xy = numbered(build(randomRows(40, 11), { targetRows: 1000 }));
+    const xy = numbered(
+      build(randomRows(40, 11), { columns: FEATURE_TABLE_COLUMNS, targetRows: 1000 }),
+    );
     const xyz = numbered(
-      build(randomRows(40, 12, EXTRA.xyz, 'z'), { targetRows: 1000, dimensions: 'xyz' }),
+      build(randomRows(40, 12, EXTRA.xyz, 'z'), {
+        columns: FEATURE_TABLE_COLUMNS,
+        targetRows: 1000,
+        dimensions: 'xyz',
+      }),
     );
     const rows: number[] = [];
     for (let r = 0; r < 40; r++) rows.push(0, r, 1, r);
@@ -319,24 +354,29 @@ describe('a merge of row groups of dimensions', () => {
       targetRows: 1000,
       targetVertices: 1e9,
     });
-    expect(merged.geometry.children.every((child) => child.dimensions === 'xyz')).toBe(true);
-    const readers = merged.geometry.children.map(
+    expect(geometryColumnOf(merged)!.children.every((child) => child.dimensions === 'xyz')).toBe(
+      true,
+    );
+    const readers = geometryColumnOf(merged)!.children.map(
       (child) => new GeometryColumnReader(child, undefined, 'child'),
     );
     const sources = [xy[0], xyz[0]].map((data) => ({
       data,
-      readers: data.geometry.children.map(
+      readers: geometryColumnOf(data)!.children.map(
         (child) => new GeometryColumnReader(child, undefined, 'child'),
       ),
     }));
     const byId = (data: RowBlockData, readers: GeometryColumnReader[]) => {
       const out = new Map<string, unknown>();
       for (let r = 0; r < data.length; r++) {
-        const child = data.geometry.types[r];
+        const child = geometryColumnOf(data)!.types[r];
         const id = new TextDecoder().decode(
           data.ids.bytes.subarray(data.ids.offsets[r], data.ids.offsets[r + 1]),
         );
-        out.set(id, child < 0 ? null : readers[child].fullCoordinatesOf(data.geometry.offsets[r]));
+        out.set(
+          id,
+          child < 0 ? null : readers[child].fullCoordinatesOf(geometryColumnOf(data)!.offsets[r]),
+        );
       }
       return out;
     };
@@ -350,7 +390,12 @@ describe('a merge of row groups of dimensions', () => {
 
   it('is refused for sources of other dimensions, or of more dimensions than the merge', () => {
     const xy = numbered(build(randomRows(10, 13)));
-    const xyz = numbered(build(randomRows(10, 14, EXTRA.xyz, 'z'), { dimensions: 'xyz' }));
+    const xyz = numbered(
+      build(randomRows(10, 14, EXTRA.xyz, 'z'), {
+        columns: FEATURE_TABLE_COLUMNS,
+        dimensions: 'xyz',
+      }),
+    );
     const rows = Int32Array.of(0, 0, 1, 0);
     expect(() => mergeRowBlockData({ sources: [xy[0], xyz[0]], rows })).toThrow(/coordinates of/);
     expect(() =>
@@ -359,9 +404,13 @@ describe('a merge of row groups of dimensions', () => {
   });
 });
 
-/** The hashes of the groups of xy, taken from the version before the dimensions */
+/**
+ * The hashes of the groups of xy, taken from the version before the dimensions, the columns put
+ * in the order they are declared and the flags made the deleted mark and the flag columns (the
+ * same arrays, in that order, gave the hashes of before)
+ */
 const PINNED = {
-  mixed: '7ce5fbb4c506ae76116ba6042941b8bc732f298e4aa85dd1e5e7c4c2eba9d72b',
-  small: 'e752844839528e3698375cc584bd3c1667b0cd4f3d956ade96dabd512475c89e',
-  merged: 'e72e9a9b7b144ad92c9d305dcaf9e2e7e3fcc799972785dd51c92c4948d94e84',
+  mixed: '3dab2eaf4d731280c8d76f647edecd2d99cd0fae3d760fc98de10016b13a0ca6',
+  small: '848f13d4409015f1f486bfbcb400c106b46858af94faf9d3cecec50ea3890732',
+  merged: 'fdba476268cfb99034589fab54125fb04c1bd30a011a600a277dc13308be8a37',
 };

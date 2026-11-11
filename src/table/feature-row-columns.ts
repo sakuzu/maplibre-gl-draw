@@ -1,0 +1,111 @@
+// SPDX-FileCopyrightText: 2026 SAKAIDA Atsushi
+// SPDX-License-Identifier: AGPL-3.0-only
+
+/**
+ * The places of the columns of a feature in a row block, read once from the declaration of the
+ * library (`FEATURE_TABLE_COLUMNS`)
+ *
+ * A row block holds its columns by kind, in the order they are declared (`rowColumnLayoutOf`).
+ * What the library reads of a row (the drawing, the hit testing, the walks, the reads of a
+ * feature) reads its columns at these places, never by a name: the geometry is a `shape` column,
+ * the type and the style are `whole` columns (the types kept by each row block, the styles by the
+ * tables, as their numbers), the attributes a `keyed` column, and `hidden` and `locked` bits of the
+ * flags of a row.
+ *
+ * A pure module, so it runs in a Worker as well.
+ */
+
+import type { PropertyColumns } from '@sakuzu/tabane';
+import {
+  flagBitOf,
+  keyedColumnOf,
+  type RowColumnLayout,
+  rowColumnLayoutOf,
+  shapeColumnOf,
+  wholeColumnOf,
+} from './row-columns.js';
+import type { RowBlockData, RowBlockDictionary, RowBlockValues } from './row-group-types.js';
+import { FEATURE_TABLE_COLUMNS } from './tabane/columns.js';
+
+/**
+ * The places of the columns of a feature
+ *
+ * @internal
+ */
+export const FEATURE_COLUMN_LAYOUT: RowColumnLayout = rowColumnLayoutOf(FEATURE_TABLE_COLUMNS);
+
+/** The place of the geometry in `RowBlockData.shapes` @internal */
+export const GEOMETRY_COLUMN = shapeColumnOf(FEATURE_COLUMN_LAYOUT, 'geometry');
+/** The place of the type in `RowBlockData.wholes` @internal */
+export const TYPE_COLUMN = wholeColumnOf(FEATURE_COLUMN_LAYOUT, 'type');
+/** The place of the style in `RowBlockData.wholes` @internal */
+export const STYLE_COLUMN = wholeColumnOf(FEATURE_COLUMN_LAYOUT, 'style');
+/** The place of the attributes in `RowBlockData.keyed` @internal */
+export const PROPERTIES_COLUMN = keyedColumnOf(FEATURE_COLUMN_LAYOUT, 'properties');
+/** The bit of {@link RowBlockData.flags} of a row that is not shown @internal */
+export const ROW_FLAG_HIDDEN = flagBitOf(FEATURE_COLUMN_LAYOUT, 'hidden');
+/** The bit of {@link RowBlockData.flags} of a row that is locked @internal */
+export const ROW_FLAG_LOCKED = flagBitOf(FEATURE_COLUMN_LAYOUT, 'locked');
+
+/** The attributes of a row block none of whose rows holds one (shared, never changed) */
+const NO_PROPERTIES: PropertyColumns = Object.freeze({
+  keys: Object.freeze([]),
+  columns: Object.freeze([]),
+});
+
+/**
+ * The geometry of the rows of a row block (null when no row has one)
+ *
+ * @internal
+ */
+export function geometryColumnOf(data: RowBlockData): RowBlockData['shapes'][number] {
+  return data.shapes[GEOMETRY_COLUMN];
+}
+
+/**
+ * The types of the rows of a row block (every row of a feature has one)
+ *
+ * @internal
+ */
+export function typeColumnOf(data: RowBlockData): RowBlockValues {
+  return data.wholes[TYPE_COLUMN] as RowBlockValues;
+}
+
+/**
+ * The styles of the rows of a row block (every row of a feature has one, `{}` when it was given
+ * none)
+ *
+ * @internal
+ */
+export function styleColumnOf(data: RowBlockData): RowBlockDictionary {
+  return data.wholes[STYLE_COLUMN] as RowBlockDictionary;
+}
+
+/**
+ * The attributes of the rows of a row block, a column per key (none when no row holds one)
+ *
+ * @internal
+ */
+export function propertyColumnsOf(data: RowBlockData): PropertyColumns {
+  return data.keyed[PROPERTIES_COLUMN] ?? NO_PROPERTIES;
+}
+
+/**
+ * The type of a row of a row block
+ *
+ * @internal
+ */
+export function typeOfRow(data: RowBlockData, row: number): string {
+  const column = data.wholes[TYPE_COLUMN] as RowBlockValues;
+  return column.values[column.indexes[row]] as string;
+}
+
+/**
+ * The number of the style of a row of a row block (in the table of the styles of the tables once
+ * they have taken the row block in)
+ *
+ * @internal
+ */
+export function styleOfRow(data: RowBlockData, row: number): number {
+  return (data.wholes[STYLE_COLUMN] as RowBlockDictionary).indexes[row];
+}

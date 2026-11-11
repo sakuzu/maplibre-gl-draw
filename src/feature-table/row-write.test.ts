@@ -19,8 +19,10 @@ import type { Geometry } from 'geojson';
 import { describe, expect, it } from 'vitest';
 import type { Feature } from '../shared/types/model.js';
 import { circleRowRings } from '../table/circle-rings.js';
+import { geometryColumnOf } from '../table/feature-row-columns.js';
 import { FEATURE_CACHES } from '../table/fill-triangles.js';
 import { createRowBlockDataBuilder } from '../table/row-group-builder.js';
+import { FEATURE_TABLE_COLUMNS } from '../table/tabane/columns.js';
 import { feature, referenceKey, rowPatch, tablesOfFeatures } from '../test-utils.js';
 import { createFeatureTablesStore } from './feature-row-tables.js';
 import { featureTablesInternals } from './feature-tables.js';
@@ -153,7 +155,7 @@ describe('the geometry written in place', () => {
   it('writes a geometry of the same shape into the column, and of another into the overrides', () => {
     const tables = tablesOfFeatures('layer', features());
     const group = tables.table.groupAt(0);
-    const coords = group.data.geometry.children.map((c) => c.coords);
+    const coords = geometryColumnOf(group.data)!.children.map((c) => c.coords);
     // A corner of the building moved: the same shape, its triangles kept
     const corner: Geometry = {
       type: 'Polygon',
@@ -206,7 +208,7 @@ describe('the geometry written in place', () => {
     expect(group.geometries?.geometry(0)).toBeDefined();
     expect(group.geometries?.geometry(1)).toBeUndefined();
     // The arrays of the column are the ones of the group (written, not replaced)
-    expect(group.data.geometry.children.map((c) => c.coords)).toEqual(coords);
+    expect(geometryColumnOf(group.data)!.children.map((c) => c.coords)).toEqual(coords);
 
     const next = features();
     next[0] = { ...next[0], geometry: longer as Feature['geometry'] };
@@ -378,7 +380,10 @@ describe('the bbox of a row written', () => {
       },
     };
     const { tables, writer } = createFeatureTablesStore({ coordinateSystem: wider });
-    const builder = createRowBlockDataBuilder({ coordinateSystem: wider });
+    const builder = createRowBlockDataBuilder({
+      columns: FEATURE_TABLE_COLUMNS,
+      coordinateSystem: wider,
+    });
     const square = (x: number): Geometry => ({
       type: 'Polygon',
       coordinates: [

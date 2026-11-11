@@ -19,8 +19,10 @@ import type { Geometry, Position } from 'geojson';
 import { describe, expect, it } from 'vitest';
 import type { FeatureTablesWorker } from '../api/tables.js';
 import { circleRowRings } from '../table/circle-rings.js';
+import { geometryColumnOf } from '../table/feature-row-columns.js';
 import { createRowBlockDataBuilder } from '../table/row-group-builder.js';
 import { mergeRowBlock } from '../table/row-group-merge.js';
+import { FEATURE_TABLE_COLUMNS } from '../table/tabane/columns.js';
 import {
   expectTablesMatch,
   referenceKey as key,
@@ -92,6 +94,7 @@ function cloningWorker(): FeatureTablesWorker & { calls: number } {
     ) => {
       worker.calls++;
       const builder = createRowBlockDataBuilder({
+        columns: FEATURE_TABLE_COLUMNS,
         ...structuredClone(options),
         rings: circleRowRings,
       });
@@ -158,7 +161,7 @@ describe('the rows of layers of every dimensions', () => {
         for (const layerId of layerIds) {
           const table = internals.layerTable(layerId);
           for (let g = 0; g < (table?.groupCount ?? 0); g++) {
-            for (const child of table?.groupAt(g).data.geometry.children ?? []) {
+            for (const child of geometryColumnOf(table!.groupAt(g).data)!.children ?? []) {
               expect(child.dimensions).toBe(dims);
             }
           }
@@ -399,7 +402,10 @@ describe('the rows of a layer of z or m', () => {
     const { writer, internals } = tablesOfReference(new ReferenceRows(), [], 8, {
       dimensionsOf: (tableId) => (tableId === 'a' ? 'xyz' : 'xy'),
     });
-    const builder = createRowBlockDataBuilder({ dimensions: 'xyz' });
+    const builder = createRowBlockDataBuilder({
+      columns: FEATURE_TABLE_COLUMNS,
+      dimensions: 'xyz',
+    });
     builder.addRow({
       id: 'p',
       type: 'Point',
@@ -410,9 +416,9 @@ describe('the rows of a layer of z or m', () => {
     internals.addQueuedRowBlocks();
     const table = internals.layerTable('a');
     expect(table?.dims).toBe('xyz');
-    expect(table?.groupAt(0).data.geometry.children.map((child) => child.dimensions)).toEqual([
-      'xyz',
-    ]);
+    expect(
+      geometryColumnOf(table!.groupAt(0).data)!.children.map((child) => child.dimensions),
+    ).toEqual(['xyz']);
   });
 
   it('are not made features: read as one, hit as one', () => {
@@ -426,7 +432,7 @@ describe('the rows of a layer of z or m', () => {
 
   it('refuse a row group of other dimensions, and a row moved from a layer they do not read', () => {
     const { writer, at } = smallTables('xyz', [['p', { type: 'Point', coordinates: [1, 2, 3] }]]);
-    const builder = createRowBlockDataBuilder();
+    const builder = createRowBlockDataBuilder({ columns: FEATURE_TABLE_COLUMNS });
     builder.addRow({
       id: 'q',
       type: 'Point',

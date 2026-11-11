@@ -16,6 +16,7 @@ import type { Store } from '../../store/store.js';
 import { createTableStore } from '../../store/table-memory.js';
 import type { Feature, Group, Layer } from '../../store/types.js';
 import { createRowBlockDataBuilder } from '../../table/row-group-builder.js';
+import { FEATURE_TABLE_COLUMNS } from '../../table/tabane/columns.js';
 import { createResourceDeps } from '../../test-utils.js';
 import { DrawError } from '../errors.js';
 import type { FeaturesCollection } from '../features.js';
@@ -334,7 +335,7 @@ describe('the names generated over a Store of rows', () => {
     const names = new AutoNameGenerator(store);
     expect(names.generateName('Point')).toBe('Point 1');
     expect(names.generateName('Polygon')).toBe('Polygon 1');
-    const builder = createRowBlockDataBuilder({ targetRows: 64 });
+    const builder = createRowBlockDataBuilder({ columns: FEATURE_TABLE_COLUMNS, targetRows: 64 });
     for (let i = 0; i < 300; i++) {
       const point = i % 3 !== 0;
       builder.addRow({

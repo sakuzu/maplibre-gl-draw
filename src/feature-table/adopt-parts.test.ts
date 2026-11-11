@@ -14,6 +14,7 @@ import type { FeatureTables } from '../api/tables.js';
 import { circleRowRings } from '../table/circle-rings.js';
 import { createRowBlockDataBuilder, type RowInput } from '../table/row-group-builder.js';
 import type { RowBlockData } from '../table/row-group-types.js';
+import { FEATURE_TABLE_COLUMNS } from '../table/tabane/columns.js';
 import { orderKey, randomRowGeometry, seededRandom } from '../test-utils.js';
 import { createFeatureTablesStore } from './feature-row-tables.js';
 import { type FeatureTablesInternals, featureTablesInternals } from './feature-tables.js';
@@ -37,7 +38,11 @@ function rowsOf(random: () => number, n: number): RowInput[] {
 
 /** The row groups of rows, built by one builder */
 function build(rows: readonly RowInput[]): RowBlockData[] {
-  const builder = createRowBlockDataBuilder({ targetRows: 64, rings: circleRowRings });
+  const builder = createRowBlockDataBuilder({
+    columns: FEATURE_TABLE_COLUMNS,
+    targetRows: 64,
+    rings: circleRowRings,
+  });
   for (const row of rows) builder.addRow(row);
   return builder.finish();
 }

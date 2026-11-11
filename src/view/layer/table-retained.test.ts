@@ -24,6 +24,7 @@ import type { EnuEdit } from '../../geometry/enu-transforms.js';
 import type { BBox } from '../../geometry/types.js';
 import type { Feature, Layer } from '../../shared/types/model.js';
 import { createRowBlockDataBuilder } from '../../table/row-group-builder.js';
+import { FEATURE_TABLE_COLUMNS } from '../../table/tabane/columns.js';
 import {
   createTestDrawer,
   feature,
@@ -351,7 +352,7 @@ describe('the order of the drawing of a layer held as rows', () => {
   it('draws the row groups added, in order, from the first frame', () => {
     const { tables, writer } = createFeatureTablesStore();
     const internals = featureTablesInternals(tables) as FeatureTablesInternals;
-    const builder = createRowBlockDataBuilder({ targetRows: 20 });
+    const builder = createRowBlockDataBuilder({ columns: FEATURE_TABLE_COLUMNS, targetRows: 20 });
     interleaved(100, 9).forEach((f, i) => {
       builder.addRow(rowOfFeature(f, orderKey(i)));
     });

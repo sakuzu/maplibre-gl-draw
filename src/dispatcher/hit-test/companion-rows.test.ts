@@ -15,6 +15,7 @@ import type { FeatureTablesInternals } from '../../feature-table/feature-tables.
 import type { LayerTable } from '../../feature-table/layer-table.js';
 import { rowFeatureToRead, rowHasGeometry } from '../../feature-table/row-read.js';
 import { createRowBlockDataBuilder } from '../../table/row-group-builder.js';
+import { FEATURE_TABLE_COLUMNS } from '../../table/tabane/columns.js';
 import {
   feature,
   orderKey,
@@ -259,7 +260,10 @@ describe('the rows with companions of a layer held as rows', () => {
         } else if (pick < 0.92) {
           // A row group of new rows taken in
           const layerId = layerIds[Math.floor(random() * layerIds.length)];
-          const builder = createRowBlockDataBuilder({ targetRows: 8 });
+          const builder = createRowBlockDataBuilder({
+            columns: FEATURE_TABLE_COLUMNS,
+            targetRows: 8,
+          });
           const base = 2_000_000 + blocks * 100;
           for (let k = 0; k < 3; k++) {
             const row = randomReferenceRow(random, `blk${blocks}-${k}`, layerId);
@@ -313,7 +317,7 @@ describe('the rows with companions of a layer held as rows', () => {
       [feature('x', 'Point', [0, 0], { properties: { band: 1 } }), feature('y', 'Point', [1, 0])],
       8,
     );
-    const builder = createRowBlockDataBuilder({ targetRows: 8 });
+    const builder = createRowBlockDataBuilder({ columns: FEATURE_TABLE_COLUMNS, targetRows: 8 });
     builder.addRow(rowOfFeature(feature('z', 'Point', [2, 0]), orderKey(5)));
     writer.addRowBlocks('b', builder.finish());
     internals.addQueuedRowBlocks();

@@ -23,6 +23,7 @@ import { bulkRowMotionOf } from '../../sketches/rendered-shapes.js';
 import { isInteractionBlocked } from '../../store/lock.js';
 import type { Store } from '../../store/store.js';
 import type { Feature } from '../../store/types.js';
+import { styleColumnOf } from '../../table/feature-row-columns.js';
 import type { FeatureCompanionRegistry } from '../feature-companion.js';
 import type { TerrainContext } from '../terrain/context.js';
 import {
@@ -521,7 +522,7 @@ function pointFrameExtentOf(
   return (group, row) => {
     const data = group.data;
     const type = rowType(data, row);
-    const styleNumber = data.styles[row];
+    const styleNumber = styleColumnOf(data).indexes[row];
     const key = `${type}\u0000${styleNumber}`;
     let extent = known.get(key);
     if (extent === undefined) {

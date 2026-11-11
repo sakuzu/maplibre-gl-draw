@@ -35,11 +35,18 @@ import { compareKeys, keyAfter } from '../../store/order-keys.js';
 import { createTableStore } from '../../store/table-memory.js';
 import { rowPatch, seededRandom } from '../../test-utils.js';
 import { circleRowRings } from '../circle-rings.js';
+import {
+  geometryColumnOf,
+  propertyColumnsOf,
+  styleColumnOf,
+  typeColumnOf,
+} from '../feature-row-columns.js';
 import { FEATURE_CACHES } from '../fill-triangles.js';
 import { createRowBlockDataBuilder } from '../row-group-builder.js';
-import type { RowBlockData } from '../row-group-types.js';
+import type { RowBlockData, RowBlockDictionary } from '../row-group-types.js';
 import { writeTabaneFeatureBlocks } from './blocks.js';
 import {
+  FEATURE_TABLE_COLUMNS,
   featureRowOfTabane,
   TABANE_FEATURE_COLUMNS,
   type TabaneFeatureRow,
@@ -256,20 +263,22 @@ describe('a row block as a row block of the tables', () => {
     expect(a.memberKeys).toEqual(b.memberKeys);
     expect(a.groups).toEqual(b.groups);
     expect(a.flags).toEqual(b.flags);
-    expect(a.types).toEqual(b.types);
-    expect(a.typeNames).toEqual(b.typeNames);
-    expect(a.geometry).toEqual(b.geometry);
+    expect(typeColumnOf(a).indexes).toEqual(typeColumnOf(b).indexes);
+    expect(typeColumnOf(a).values).toEqual(typeColumnOf(b).values);
+    expect(geometryColumnOf(a)!).toEqual(geometryColumnOf(b)!);
     expect(a.rowBounds).toEqual(b.rowBounds);
     expect(a.caches).toEqual(b.caches);
     expect(a.vertexCount).toBe(b.vertexCount);
     for (let r = 0; r < a.length; r++) {
-      const sa = a.styleDictionary as NonNullable<RowBlockData['styleDictionary']>;
-      const sb = b.styleDictionary as NonNullable<RowBlockData['styleDictionary']>;
-      expect(utf8String(sa, a.styles[r])).toBe(utf8String(sb, b.styles[r]));
+      const sa = styleColumnOf(a).dictionary as NonNullable<RowBlockDictionary['dictionary']>;
+      const sb = styleColumnOf(b).dictionary as NonNullable<RowBlockDictionary['dictionary']>;
+      expect(utf8String(sa, styleColumnOf(a).indexes[r])).toBe(
+        utf8String(sb, styleColumnOf(b).indexes[r]),
+      );
       const read = (block: RowBlockData) =>
         Object.fromEntries(
-          block.properties.keys
-            .map((key, k) => [key, readValue(block.properties.columns[k], r)])
+          propertyColumnsOf(block)
+            .keys.map((key, k) => [key, readValue(propertyColumnsOf(block).columns[k], r)])
             .filter(([, v]) => v !== undefined),
         );
       expect(same(read(a), read(b))).toBe(true);
@@ -292,6 +301,7 @@ describe('a row block as a row block of the tables', () => {
     for (const rows of [buildings(1000, 3), variety(), flagged, circles]) {
       const [written] = writeTabaneFeatureBlocks({ parent: 'p', head: 'V', rows });
       const builder = createRowBlockDataBuilder({
+        columns: FEATURE_TABLE_COLUMNS,
         targetRows: 1000,
         rings: circleRowRings,
         caches: FEATURE_CACHES,
@@ -325,7 +335,11 @@ describe('a row block as a row block of the tables', () => {
     const keys = rows.map((_, i) => (i < 20 ? `A${tabaneRowSuffixOf(i * 7)}` : numberedKey(i * 2)));
     const rowBlock = rowBlockOf(rows.map((row, i) => ({ ...tabaneRowOf(row), key: keys[i] })));
     expect(rowBlock.keys).toEqual(keys);
-    const builder = createRowBlockDataBuilder({ targetRows: 1000, caches: FEATURE_CACHES });
+    const builder = createRowBlockDataBuilder({
+      columns: FEATURE_TABLE_COLUMNS,
+      targetRows: 1000,
+      caches: FEATURE_CACHES,
+    });
     rows.forEach((row, i) => {
       builder.addRow({ ...row, order: keys[i] });
     });

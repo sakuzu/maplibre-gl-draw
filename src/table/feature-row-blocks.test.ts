@@ -23,6 +23,7 @@ import { createRowBlockBuilder, type RowInput } from './row-group-builder.js';
 import { mergeRowBlock } from './row-group-merge.js';
 import type { RowBlock, RowBlockData } from './row-group-types.js';
 import { type PointRowRings, rowRingsOfPoint } from './row-rings.js';
+import { FEATURE_TABLE_COLUMNS } from './tabane/columns.js';
 
 const ROWS: RowInput[] = [
   {
@@ -56,7 +57,13 @@ describe('the builder of the row blocks of the features', () => {
   it('gives the rows the rings of the Circles when no rings are given', () => {
     const blocks = build(createFeatureRowBlockBuilder());
     expect(blocks).toEqual(
-      build(createRowBlockBuilder({ rings: circleRowRings, caches: FEATURE_CACHES })),
+      build(
+        createRowBlockBuilder({
+          columns: FEATURE_TABLE_COLUMNS,
+          rings: circleRowRings,
+          caches: FEATURE_CACHES,
+        }),
+      ),
     );
     const [block] = blocks as RowBlockData[];
     // The Circle (the second row in the order) has the box of its ring, past its center
@@ -69,12 +76,23 @@ describe('the builder of the row blocks of the features', () => {
     const none: PointRowRings = { draws: () => false, ringOf: () => null, ringVertices: 1 };
     const blocks = build(createFeatureRowBlockBuilder({ rings: none }));
     expect(blocks).toEqual(
-      build(createRowBlockBuilder({ rings: rowRingsOfPoint(none), caches: FEATURE_CACHES })),
+      build(
+        createRowBlockBuilder({
+          columns: FEATURE_TABLE_COLUMNS,
+          rings: rowRingsOfPoint(none),
+          caches: FEATURE_CACHES,
+        }),
+      ),
     );
     expect(blocks).not.toEqual(build(createFeatureRowBlockBuilder()));
     // The builder of the tables draws no ring when given none, and has no cache of its own
-    expect(build(createRowBlockBuilder({ caches: FEATURE_CACHES }))).toEqual(blocks);
-    expect((build(createRowBlockBuilder()) as RowBlockData[])[0].caches).toEqual([]);
+    expect(
+      build(createRowBlockBuilder({ columns: FEATURE_TABLE_COLUMNS, caches: FEATURE_CACHES })),
+    ).toEqual(blocks);
+    expect(
+      (build(createRowBlockBuilder({ columns: FEATURE_TABLE_COLUMNS })) as RowBlockData[])[0]
+        .caches,
+    ).toEqual([]);
   });
 
   it('reads the rings given from the type, the point and the attributes of a row', () => {
@@ -107,7 +125,7 @@ describe('the merge of the row blocks of the features', () => {
     // Sources whose styles are numbered, as the tables hold them
     const sources = (build(createFeatureRowBlockBuilder()) as RowBlockData[]).map((block) => ({
       ...block,
-      styleDictionary: null,
+      wholes: block.wholes.map((w) => (w && 'dictionary' in w ? { ...w, dictionary: null } : w)),
     }));
     const merge = {
       sources,

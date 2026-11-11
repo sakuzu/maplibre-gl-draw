@@ -11,7 +11,8 @@
 import type { FeatureTables } from '../api/tables.js';
 import type { HitShape } from '../shared/math/position-runs.js';
 import type { Coordinate } from '../shared/types/model.js';
-import { ROW_FLAG_DELETED, ROW_FLAG_LOCKED } from '../table/row-group-types.js';
+import { ROW_FLAG_LOCKED } from '../table/feature-row-columns.js';
+import { ROW_FLAG_DELETED } from '../table/row-group-types.js';
 import { compareRowKeys } from '../table/row-keys.js';
 import { featureTablesInternals } from './feature-tables.js';
 import { rowHitShape } from './hit-test.js';

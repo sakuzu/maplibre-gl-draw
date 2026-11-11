@@ -17,12 +17,12 @@ import type { PropertyColumns, Utf8Column } from '@sakuzu/tabane';
 import type { RowCacheColumn } from './row-caches.js';
 import type { TableMixedGeometry } from './types.js';
 
-/** The bit of {@link RowBlockData.flags} of a row that is shown */
-export const ROW_FLAG_VISIBLE = 1;
-/** The bit of {@link RowBlockData.flags} of a row that is locked */
-export const ROW_FLAG_LOCKED = 2;
-/** The bit of {@link RowBlockData.flags} of a row that is deleted (kept for what refers to it) */
-export const ROW_FLAG_DELETED = 4;
+/**
+ * The bit of {@link RowBlockData.flags} of a row that is deleted (kept for what refers to it). The
+ * `flag` columns declared take the bits after it, in the order they are declared
+ * (`rowColumnLayoutOf`)
+ */
+export const ROW_FLAG_DELETED = 1;
 
 /**
  * A row block of one layer, in the order of the layer: columns of typed arrays, built in a
@@ -54,6 +54,43 @@ export interface RowBlock {
 }
 
 /**
+ * A `whole` column whose values a row block keeps (declared `'rowBlock'`): each different value
+ * once, and the value of each row as an index into them
+ *
+ * @internal
+ */
+export interface RowBlockValues {
+  /** The value of each row, as an index into `values` */
+  readonly indexes: Uint8Array;
+  /** The values, each different one once (at most 255) */
+  readonly values: readonly unknown[];
+}
+
+/**
+ * A `whole` column whose values the tables keep (declared `'tables'`): the value of each row as
+ * an index into `dictionary` while the row block comes from a Worker, as the number of the value
+ * in the dictionary of the tables once the tables have taken it in
+ *
+ * @internal
+ */
+export interface RowBlockDictionary {
+  /** The value of each row: an index into `dictionary`, or the number of the tables */
+  readonly indexes: Uint32Array;
+  /**
+   * The values the rows of a row block from a Worker use, as their canonical bytes (null once the
+   * tables have numbered them)
+   */
+  dictionary: Utf8Column | null;
+}
+
+/**
+ * A `whole` column of a row block
+ *
+ * @internal
+ */
+export type RowBlockWhole = RowBlockValues | RowBlockDictionary;
+
+/**
  * A row block with every column, as the tables read it
  *
  * Every array has one entry per row (`length` of them) unless it says otherwise, and every
@@ -62,33 +99,31 @@ export interface RowBlock {
  * @internal
  */
 export interface RowBlockData extends RowBlock {
-  /** The type of each row, as an index into `typeNames` */
-  readonly types: Uint8Array;
-  /** The names of the types (`'Point'`, `'Circle'`, the type of an extension) */
-  readonly typeNames: readonly string[];
   /**
-   * The geometry of each row. A Circle and an Image hold a Point, a Freehand a LineString; the
-   * coordinates have the dimensions of the layer (`TableGeometry.dimensions` of every child)
+   * The `shape` columns, in the order they are declared (`RowColumnLayout.shapes`): null for a
+   * column no row of the row block holds a value of. The points have the dimensions of the
+   * table (`TableGeometry.dimensions` of every child)
    */
-  readonly geometry: TableMixedGeometry;
+  readonly shapes: readonly (TableMixedGeometry | null)[];
+  /**
+   * The `whole` columns, in the order they are declared (`RowColumnLayout.wholes`): null for a
+   * column no row of the row block holds a value of
+   */
+  readonly wholes: readonly (RowBlockWhole | null)[];
+  /**
+   * The `keyed` columns, one column per key, in the order they are declared
+   * (`RowColumnLayout.keyed`): null for a column no row of the row block holds a key of
+   */
+  readonly keyed: readonly (PropertyColumns | null)[];
   /** The key of the order of each row */
   readonly itemKeys: Utf8Column;
   /** The key of the order of each row within its group (empty outside a group) */
   readonly memberKeys: Utf8Column;
-  /** The flags of each row: {@link ROW_FLAG_VISIBLE}, {@link ROW_FLAG_LOCKED}, {@link ROW_FLAG_DELETED} */
+  /**
+   * The flags of each row, one byte: {@link ROW_FLAG_DELETED}, and a bit per `flag` column
+   * declared after it (`RowColumnLayout.flagBit`)
+   */
   readonly flags: Uint8Array;
-  /**
-   * The style of each row: an index into `styleDictionary` while the group comes from a
-   * Worker, the number of the table of styles of the document once the main thread has taken it
-   */
-  readonly styles: Uint32Array;
-  /**
-   * The styles the rows of a group from a Worker use, as their canonical bytes (null once the
-   * main thread has numbered them in its table of styles)
-   */
-  styleDictionary: Utf8Column | null;
-  /** The attributes of the rows, one column per key */
-  readonly properties: PropertyColumns;
   /** The bbox of each row, `[minX, minY, maxX, maxY]` (NaN for a row without a geometry) */
   readonly rowBounds: Float64Array;
   /**

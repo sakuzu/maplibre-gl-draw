@@ -12,6 +12,7 @@ import { featureTablesInternals } from '../../feature-table/feature-tables.js';
 import { setViewProjector } from '../../shared/math/index.js';
 import { MemoryContractStore } from '../../store/memory.js';
 import { createRowBlockDataBuilder } from '../../table/row-group-builder.js';
+import { FEATURE_TABLE_COLUMNS } from '../../table/tabane/columns.js';
 import {
   createMapStub,
   createSyntheticInput,
@@ -78,7 +79,7 @@ describe('debug.gpu and the hooks of measurement of the rows', () => {
 
   it('writes the state of the rows of the tables of the Store', () => {
     const { tables, writer } = createFeatureTablesStore();
-    const builder = createRowBlockDataBuilder();
+    const builder = createRowBlockDataBuilder({ columns: FEATURE_TABLE_COLUMNS });
     ['a', 'b'].forEach((id, i) => {
       builder.addRow(rowOfFeature(feature(id, 'Point', [i, i]), orderKey(i)));
     });

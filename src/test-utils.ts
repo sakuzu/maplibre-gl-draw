@@ -62,6 +62,7 @@ import type { Store } from './store/store.js';
 import { createTableStore } from './store/table-memory.js';
 import { circleRowRings } from './table/circle-rings.js';
 import { createRowBlockDataBuilder, type RowInput } from './table/row-group-builder.js';
+import { FEATURE_TABLE_COLUMNS } from './table/tabane/columns.js';
 import { GpuResources } from './view/gpu.js';
 import { GpuLedger } from './view/gpu-ledger.js';
 import { FeatureDrawer } from './view/renderers/drawer.js';
@@ -637,6 +638,7 @@ export function tablesOfFeatures(
 } {
   const { tables, writer } = createFeatureTablesStore(options);
   const builder = createRowBlockDataBuilder({
+    columns: FEATURE_TABLE_COLUMNS,
     targetRows,
     dimensions: options?.dimensionsOf?.(layerId),
     rings: circleRowRings,
@@ -1004,6 +1006,7 @@ export function tablesOfReference(
   }));
   for (const layerId of layerIds) {
     const builder = createRowBlockDataBuilder({
+      columns: FEATURE_TABLE_COLUMNS,
       groups: groupKeys,
       targetRows,
       dimensions: options.dimensionsOf?.(layerId),

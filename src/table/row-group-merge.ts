@@ -21,6 +21,7 @@
 import {
   type CoordinateDimensions,
   dimsWithin,
+  type PropertyColumns,
   Utf8ColumnBuilder,
   VALUE_ABSENT,
   type ValueColumn,
@@ -36,7 +37,13 @@ import {
   ROW_BLOCK_TARGET_ROWS,
   ROW_BLOCK_TARGET_VERTICES,
 } from './row-group-builder.js';
-import type { RowBlock, RowBlockData } from './row-group-types.js';
+import type {
+  RowBlock,
+  RowBlockData,
+  RowBlockDictionary,
+  RowBlockValues,
+  RowBlockWhole,
+} from './row-group-types.js';
 import { compareRowKeys, type GroupKeySource } from './row-keys.js';
 import type { GeometryType, TableMixedGeometry } from './types.js';
 
@@ -44,7 +51,10 @@ import type { GeometryType, TableMixedGeometry } from './types.js';
  * What {@link mergeRowBlock} merges
  */
 export interface RowBlockMerge {
-  /** The row blocks the rows are taken from (their styles numbered: no `styleDictionary`) */
+  /**
+   * The row blocks the rows are taken from (the values of their columns kept by the tables
+   * numbered: no `dictionary`)
+   */
   readonly sources: readonly RowBlock[];
   /**
    * The rows taken, two numbers each: the source and the row there (`[source, row, ...]`). A row
@@ -109,11 +119,13 @@ export function mergeRowBlock(merge: RowBlockMerge): RowBlock[] {
 export function mergeRowBlockData(merge: RowBlockDataMerge): RowBlockData[] {
   const { sources, rows } = merge;
   for (const source of sources) {
-    if (source.styleDictionary) {
-      throw new KasaneError(
-        'invalid-input',
-        'mergeRowBlock: the styles of a source are not numbered',
-      );
+    for (const whole of source.wholes) {
+      if (whole && 'dictionary' in whole && whole.dictionary) {
+        throw new KasaneError(
+          'invalid-input',
+          'mergeRowBlock: the values of a column of a source are not numbered',
+        );
+      }
     }
   }
   const count = rows.length / 2;
@@ -122,6 +134,9 @@ export function mergeRowBlockData(merge: RowBlockDataMerge): RowBlockData[] {
   const shape: MergeShape = {
     dims,
     ringVertices: merge.ringVertices ?? 1,
+    shapes: sources[0].shapes.length,
+    wholes: sources[0].wholes.length,
+    keyed: sources[0].keyed.length,
   };
   const keys = isKeySource(merge.groups)
     ? merge.groups
@@ -174,6 +189,10 @@ export function mergeRowBlockData(merge: RowBlockDataMerge): RowBlockData[] {
 interface MergeShape {
   readonly dims: CoordinateDimensions;
   readonly ringVertices: number;
+  /** The number of columns of each kind (the same in every source) */
+  readonly shapes: number;
+  readonly wholes: number;
+  readonly keyed: number;
 }
 
 /**
@@ -189,7 +208,7 @@ function mergeDims(
 ): CoordinateDimensions {
   let dims = given;
   for (const source of sources) {
-    for (const child of source.geometry.children) {
+    for (const child of source.shapes.flatMap((shape) => shape?.children ?? [])) {
       const own = child.dimensions ?? 'xy';
       if (dims === undefined) dims = own;
       else if (given === undefined ? own !== dims : !dimsWithin(own, dims)) {
@@ -209,25 +228,31 @@ function isKeySource(groups: RowBlockDataMerge['groups']): groups is GroupKeySou
 }
 
 /**
- * The number of coordinates a row draws (the estimate of the work of a group): a Point with a
- * fill draws a ring around it
+ * The number of points a row draws (the estimate of the work of a group), of its shapes: a
+ * single point with numbers in a cache draws a ring around it
  */
 function vertexCountOf(data: RowBlockData, row: number, ringVertices: number): number {
-  const child = data.geometry.types[row];
-  if (child < 0) return 0;
-  const column = data.geometry.children[child];
-  const at = data.geometry.offsets[row];
-  if (column.type === 'Point') {
-    // A row of a point that keeps numbers in a cache draws a ring around it
-    return holdsCacheNumbers(data.caches, row) ? ringVertices : 1;
+  let count = 0;
+  for (const shape of data.shapes) {
+    if (!shape) continue;
+    const child = shape.types[row];
+    if (child < 0) continue;
+    const column = shape.children[child];
+    const at = shape.offsets[row];
+    if (column.type === 'Point') {
+      // A row of a single point that keeps numbers in a cache draws a ring around it
+      count += holdsCacheNumbers(data.caches, row) ? ringVertices : 1;
+      continue;
+    }
+    let first = at;
+    let end = at + 1;
+    for (const level of column.offsets ?? []) {
+      first = level[first];
+      end = level[end];
+    }
+    count += end - first;
   }
-  let first = at;
-  let end = at + 1;
-  for (const level of column.offsets ?? []) {
-    first = level[first];
-    end = level[end];
-  }
-  return end - first;
+  return count;
 }
 
 /** Copies the rows `order` (indices into the pairs of `rows`) into one group */
@@ -244,23 +269,17 @@ function copyRows(
   const idHashes = new Uint32Array(length);
   const itemKeys = new Utf8ColumnBuilder(length);
   const memberKeys = new Utf8ColumnBuilder(length);
-  const types = new Uint8Array(length);
-  const typeNames: string[] = [];
-  const typeIndex = new Map<string, number>();
   const groups = new Int32Array(length);
   const flags = new Uint8Array(length);
-  const styles = new Uint32Array(length);
-  const childTypes = new Int8Array(length);
-  const childRows = new Int32Array(length);
-  const children: ChildBuilder[] = [];
-  const childIndex = new Map<GeometryType, number>();
+  const shapes = Array.from({ length: shape.shapes }, () => new ShapeCopy(length, shape.dims));
+  const wholes = Array.from({ length: shape.wholes }, (_, w) => wholeCopyOf(sources, w, length));
+  const keyed = Array.from({ length: shape.keyed }, () => new Map<string, ValueColumnBuilder>());
   const rowBounds = new Float64Array(length * 4);
   const caches = cacheWritersOf(sources, length);
   // The column of each cache in each source (null for a source that does not hold it)
   const columnsOf = sources.map((source) =>
     caches.map((cache) => source.caches.find((c) => c.name === cache.name) ?? null),
   );
-  const builders = new Map<string, ValueColumnBuilder>();
   let vertexCount = 0;
 
   for (let r = 0; r < length; r++) {
@@ -274,30 +293,25 @@ function copyRows(
     memberKeys.addEntry(data.memberKeys, row);
     groups[r] = data.groups[row];
     flags[r] = data.flags[row];
-    styles[r] = data.styles[row];
-    const typeName = data.typeNames[data.types[row]];
-    let type = typeIndex.get(typeName);
-    if (type === undefined) {
-      if (typeNames.length >= 255)
-        throw new KasaneError('invalid-input', 'mergeRowBlock: more than 255 types');
-      type = typeNames.length;
-      typeNames.push(typeName);
-      typeIndex.set(typeName, type);
-    }
-    types[r] = type;
+    for (let w = 0; w < wholes.length; w++) wholes[w]?.copy(r, data.wholes[w], row);
 
-    // The attributes, by key, copied as their bytes (no value is decoded)
-    const { keys, columns } = data.properties;
-    for (let k = 0; k < keys.length; k++) {
-      const column = columns[k] as ValueColumn;
-      const entry = valueEntryOf(column, row);
-      if (entry < 0 || column.tags[entry] === VALUE_ABSENT) continue;
-      let builder = builders.get(keys[k]);
-      if (!builder) {
-        builder = new ValueColumnBuilder(length);
-        builders.set(keys[k], builder);
+    // The values of the keyed columns, by key, copied as their bytes (no value is decoded)
+    for (let k = 0; k < keyed.length; k++) {
+      const from = data.keyed[k];
+      if (!from) continue;
+      const { keys, columns } = from;
+      const builders = keyed[k];
+      for (let c = 0; c < keys.length; c++) {
+        const column = columns[c] as ValueColumn;
+        const entry = valueEntryOf(column, row);
+        if (entry < 0 || column.tags[entry] === VALUE_ABSENT) continue;
+        let builder = builders.get(keys[c]);
+        if (!builder) {
+          builder = new ValueColumnBuilder(length);
+          builders.set(keys[c], builder);
+        }
+        builder.copy(r, column, entry);
       }
-      builder.copy(r, column, entry);
     }
 
     for (let k = 0; k < 4; k++) rowBounds[r * 4 + k] = data.rowBounds[row * 4 + k];
@@ -314,48 +328,29 @@ function copyRows(
       caches[c].writer.put(r, numbers, 0, numbers.length, numbers instanceof Uint32Array);
     }
 
-    const child = data.geometry.types[row];
-    if (child < 0) {
-      childTypes[r] = -1;
-      continue;
-    }
-    const column = data.geometry.children[child];
-    let target = childIndex.get(column.type);
-    if (target === undefined) {
-      target = children.length;
-      children.push(new ChildBuilder(column.type, shape.dims));
-      childIndex.set(column.type, target);
-    }
-    childTypes[r] = target;
-    childRows[r] = children[target].addOfColumn(column, data.geometry.offsets[row]);
+    for (let k = 0; k < shapes.length; k++) shapes[k].copy(r, data.shapes[k], row);
     vertexCount += vertices[pair];
   }
 
-  const propertyKeys = [...builders.keys()];
-  const geometry: TableMixedGeometry = {
-    type: 'Mixed',
-    types: childTypes,
-    offsets: childRows,
-    children: children.map((child) => child.finish()),
-  };
   return {
     length,
     handles,
     ids: ids.finish(),
     idHashes,
-    types,
-    typeNames,
-    geometry,
+    shapes: shapes.map((copy) => copy.finish()),
+    wholes: wholes.map((copy) => copy?.finish() ?? null),
+    keyed: keyed.map((builders): PropertyColumns | null => {
+      if (builders.size === 0) return null;
+      const keys = [...builders.keys()];
+      return {
+        keys,
+        columns: keys.map((key) => (builders.get(key) as ValueColumnBuilder).finish()),
+      };
+    }),
     itemKeys: itemKeys.finish(),
     memberKeys: memberKeys.finish(),
     groups,
     flags,
-    styles,
-    styleDictionary: null,
-    properties: {
-      keys: propertyKeys,
-      columns: propertyKeys.map((key) => (builders.get(key) as ValueColumnBuilder).finish()),
-    },
     rowBounds,
     caches: caches.map((cache) => cache.writer.finish()),
     vertexCount,
@@ -379,4 +374,116 @@ function cacheWritersOf(
     }
   }
   return out;
+}
+
+/** The rows of a `shape` column copied into a new row block (null when no row has a shape) */
+class ShapeCopy {
+  private readonly types: Int8Array;
+  private readonly rows: Int32Array;
+  private readonly children: ChildBuilder[] = [];
+  private readonly childIndex = new Map<GeometryType, number>();
+
+  constructor(
+    length: number,
+    private readonly dims: CoordinateDimensions,
+  ) {
+    this.types = new Int8Array(length).fill(-1);
+    this.rows = new Int32Array(length);
+  }
+
+  /** Copies the shape of a row of a source to row `r` */
+  copy(r: number, from: TableMixedGeometry | null, row: number): void {
+    if (!from) return;
+    const child = from.types[row];
+    if (child < 0) return;
+    const column = from.children[child];
+    let target = this.childIndex.get(column.type);
+    if (target === undefined) {
+      target = this.children.length;
+      this.children.push(new ChildBuilder(column.type, this.dims));
+      this.childIndex.set(column.type, target);
+    }
+    this.types[r] = target;
+    this.rows[r] = this.children[target].addOfColumn(column, from.offsets[row]);
+  }
+
+  finish(): TableMixedGeometry | null {
+    if (this.children.length === 0) return null;
+    return {
+      type: 'Mixed',
+      types: this.types,
+      offsets: this.rows,
+      children: this.children.map((child) => child.finish()),
+    };
+  }
+}
+
+/**
+ * The rows of a `whole` column copied into a new row block: the numbers of the tables as they
+ * are (a column the tables keep the values of), or the values each different one once (a column
+ * each row block keeps the values of). Null for a column no source holds
+ */
+function wholeCopyOf(
+  sources: readonly RowBlockData[],
+  w: number,
+  length: number,
+): NumberCopy | ValueCopy | null {
+  for (const source of sources) {
+    const whole = source.wholes[w];
+    if (whole) return 'values' in whole ? new ValueCopy(length) : new NumberCopy(length);
+  }
+  return null;
+}
+
+/** The numbers of the tables of the rows of a `whole` column, copied as they are */
+class NumberCopy {
+  private readonly indexes: Uint32Array;
+  private any = false;
+
+  constructor(length: number) {
+    this.indexes = new Uint32Array(length);
+  }
+
+  copy(r: number, from: RowBlockWhole | null, row: number): void {
+    if (!from) return;
+    this.indexes[r] = from.indexes[row];
+    this.any = true;
+  }
+
+  finish(): RowBlockDictionary | null {
+    return this.any ? { indexes: this.indexes, dictionary: null } : null;
+  }
+}
+
+/** The values of the rows of a `whole` column, each different value once */
+class ValueCopy {
+  private readonly indexes: Uint8Array;
+  private readonly values: unknown[] = [];
+  private readonly index = new Map<unknown, number>();
+
+  constructor(length: number) {
+    this.indexes = new Uint8Array(length);
+  }
+
+  copy(r: number, from: RowBlockWhole | null, row: number): void {
+    if (!from) return;
+    const value = (from as RowBlockValues).values[from.indexes[row]];
+    let at = this.index.get(value);
+    if (at === undefined) {
+      if (this.values.length >= 255) {
+        throw new KasaneError(
+          'invalid-input',
+          'mergeRowBlock: more than 255 values of a column in a row block',
+        );
+      }
+      at = this.values.length;
+      this.values.push(value);
+      this.index.set(value, at);
+    }
+    this.indexes[r] = at;
+  }
+
+  finish(): RowBlockValues | null {
+    return this.values.length > 0 ? { indexes: this.indexes, values: this.values } : null;
+  }
 }

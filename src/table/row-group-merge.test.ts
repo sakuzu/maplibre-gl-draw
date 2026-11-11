@@ -16,17 +16,26 @@ import { readValue, utf8ColumnLength, utf8String } from '@sakuzu/tabane';
 import type { Geometry } from 'geojson';
 import { describe, expect, it } from 'vitest';
 import { seededRandom } from '../test-utils.js';
+import {
+  geometryColumnOf,
+  propertyColumnsOf,
+  ROW_FLAG_HIDDEN,
+  ROW_FLAG_LOCKED,
+  styleColumnOf,
+  typeColumnOf,
+} from './feature-row-columns.js';
 import { FEATURE_CACHES, FILL_TRIANGLES_AT } from './fill-triangles.js';
 import { cacheNumbersOf } from './row-caches.js';
 import { createRowBlockDataBuilder, type RowInput } from './row-group-builder.js';
 import { mergeRowBlockData } from './row-group-merge.js';
-import { ROW_FLAG_LOCKED, ROW_FLAG_VISIBLE, type RowBlockData } from './row-group-types.js';
+import type { RowBlockData } from './row-group-types.js';
+import { FEATURE_TABLE_COLUMNS } from './tabane/columns.js';
 import { GeometryColumnReader } from './table.js';
 
 /** Numbers the styles of groups built by builders, as the table of styles of a document does */
 function numbered(groups: RowBlockData[], numbers: Map<string, number>): RowBlockData[] {
   for (const group of groups) {
-    const dictionary = group.styleDictionary;
+    const dictionary = styleColumnOf(group).dictionary;
     if (!dictionary) continue;
     const local = Array.from({ length: utf8ColumnLength(dictionary) }, (_, i) => {
       const bytes = utf8String(dictionary, i);
@@ -37,15 +46,20 @@ function numbered(groups: RowBlockData[], numbers: Map<string, number>): RowBloc
       }
       return n;
     });
-    for (let r = 0; r < group.length; r++) group.styles[r] = local[group.styles[r]];
-    group.styleDictionary = null;
+    for (let r = 0; r < group.length; r++)
+      styleColumnOf(group).indexes[r] = local[styleColumnOf(group).indexes[r]];
+    styleColumnOf(group).dictionary = null;
   }
   return groups;
 }
 
 /** Builds rows into groups */
 function build(rows: RowInput[], numbers: Map<string, number>, targetRows?: number) {
-  const builder = createRowBlockDataBuilder({ targetRows, caches: FEATURE_CACHES });
+  const builder = createRowBlockDataBuilder({
+    columns: FEATURE_TABLE_COLUMNS,
+    targetRows,
+    caches: FEATURE_CACHES,
+  });
   for (const row of rows) builder.addRow(row);
   return numbered(builder.finish(), numbers);
 }
@@ -131,31 +145,31 @@ function randomRow(random: () => number, i: number): RowInput {
 
 /** Everything a row holds, read back */
 function readRow(group: RowBlockData, r: number, styles: Map<number, string>) {
-  const child = group.geometry.types[r];
+  const child = geometryColumnOf(group)!.types[r];
   const triangles = Array.from(cacheNumbersOf(group.caches[FILL_TRIANGLES_AT], r));
   const properties: Record<string, unknown> = {};
-  group.properties.keys.forEach((key, k) => {
-    const value = readValue(group.properties.columns[k], r);
+  propertyColumnsOf(group).keys.forEach((key, k) => {
+    const value = readValue(propertyColumnsOf(group).columns[k], r);
     if (value !== undefined) properties[key] = value;
   });
   return {
     id: utf8String(group.ids, r),
     handle: group.handles[r],
     hash: group.idHashes[r],
-    type: group.typeNames[group.types[r]],
+    type: typeColumnOf(group).values[typeColumnOf(group).indexes[r]],
     order: utf8String(group.itemKeys, r),
     member: utf8String(group.memberKeys, r),
     group: group.groups[r],
     flags: group.flags[r],
-    style: styles.get(group.styles[r]),
+    style: styles.get(styleColumnOf(group).indexes[r]),
     geometry:
       child < 0
         ? null
         : new GeometryColumnReader(
-            group.geometry.children[child],
+            geometryColumnOf(group)!.children[child],
             undefined,
             'child',
-          ).coordinatesOf(group.geometry.offsets[r]),
+          ).coordinatesOf(geometryColumnOf(group)!.offsets[r]),
     bounds: Array.from(group.rowBounds.subarray(r * 4, r * 4 + 4)),
     triangles,
     properties,
@@ -252,14 +266,18 @@ describe('mergeRowBlockData', () => {
     expect(Array.from(merged.handles)).toEqual(Array.from(group.handles));
     expect(Array.from(merged.idHashes)).toEqual(Array.from(group.idHashes));
     expect(Array.from(merged.flags)).toEqual(Array.from(group.flags));
-    expect(merged.flags.some((f) => (f & ROW_FLAG_VISIBLE) === 0)).toBe(true);
+    expect(merged.flags.some((f) => (f & ROW_FLAG_HIDDEN) !== 0)).toBe(true);
     expect(merged.flags.some((f) => (f & ROW_FLAG_LOCKED) !== 0)).toBe(true);
   });
 
   it('puts the members of a group of features at the key of the group', () => {
     const numbers = new Map<string, number>();
     const groups = [{ handle: 3, id: 'g', order: 'k5' }];
-    const builder = createRowBlockDataBuilder({ groups, caches: FEATURE_CACHES });
+    const builder = createRowBlockDataBuilder({
+      columns: FEATURE_TABLE_COLUMNS,
+      groups,
+      caches: FEATURE_CACHES,
+    });
     const point = { type: 'Point', coordinates: [0, 0] } as Geometry;
     for (const [id, order] of [
       ['a', 'k1'],
@@ -268,7 +286,11 @@ describe('mergeRowBlockData', () => {
       builder.addRow({ id, type: 'Point', geometry: point, order });
     }
     const outside = numbered(builder.finish(), numbers);
-    const members = createRowBlockDataBuilder({ groups, caches: FEATURE_CACHES });
+    const members = createRowBlockDataBuilder({
+      columns: FEATURE_TABLE_COLUMNS,
+      groups,
+      caches: FEATURE_CACHES,
+    });
     members.addRow({ id: 'm2', type: 'Point', geometry: point, order: 'z', group: 3, member: 'b' });
     members.addRow({ id: 'm1', type: 'Point', geometry: point, order: 'z', group: 3, member: 'a' });
     const inside = numbered(members.finish(), numbers);
@@ -309,7 +331,10 @@ describe('mergeRowBlockData', () => {
   });
 
   it('refuses sources whose styles are not numbered', () => {
-    const builder = createRowBlockDataBuilder({ caches: FEATURE_CACHES });
+    const builder = createRowBlockDataBuilder({
+      columns: FEATURE_TABLE_COLUMNS,
+      caches: FEATURE_CACHES,
+    });
     builder.addRow({ id: 'a', type: 'Point', geometry: null, order: 'k' });
     const [group] = builder.finish();
     expect(() => mergeRowBlockData({ sources: [group], rows: Int32Array.of(0, 0) })).toThrow(

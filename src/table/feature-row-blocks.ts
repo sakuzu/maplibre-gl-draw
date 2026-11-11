@@ -30,6 +30,7 @@ import {
 import { mergeRowBlock, type RowBlockMerge } from './row-group-merge.js';
 import type { RowBlock } from './row-group-types.js';
 import { rowRingsOfPoint } from './row-rings.js';
+import { FEATURE_TABLE_COLUMNS } from './tabane/columns.js';
 
 /**
  * One feature given to the builder of the row blocks of the features, as a row
@@ -68,6 +69,7 @@ export function createFeatureRowBlockBuilder(
 ): RowBlockBuilder {
   const builder = createRowBlockBuilder({
     ...options,
+    columns: FEATURE_TABLE_COLUMNS,
     rings: options.rings ? rowRingsOfPoint(options.rings) : circleRowRings,
     caches: FEATURE_CACHES,
   });

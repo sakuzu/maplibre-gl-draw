@@ -12,6 +12,7 @@ import { describe, expect, expectTypeOf, it, vi } from 'vitest';
 import type { LayerTableView } from '../api/tables.js';
 import { createRowBlockDataBuilder, type RowInput } from '../table/row-group-builder.js';
 import type { RowBlockData } from '../table/row-group-types.js';
+import { FEATURE_TABLE_COLUMNS } from '../table/tabane/columns.js';
 import { createFeatureTablesStore } from './feature-row-tables.js';
 import { type FeatureTablesInternals, featureTablesInternals } from './feature-tables.js';
 import type { LayerTable } from './layer-table.js';
@@ -37,7 +38,10 @@ function groups(
     extra?: Partial<RowInput>;
   } = {},
 ): RowBlockData[] {
-  const builder = createRowBlockDataBuilder({ targetRows: options.targetRows });
+  const builder = createRowBlockDataBuilder({
+    columns: FEATURE_TABLE_COLUMNS,
+    targetRows: options.targetRows,
+  });
   for (let i = 0; i < count; i++) {
     const n = i + (options.keyOffset ?? 0);
     builder.addRow({
@@ -245,7 +249,7 @@ describe('createFeatureTables', () => {
 
   it('hides the rows that are not shown or are deleted, and not their handles', () => {
     const { tables, writer } = createFeatureTablesStore();
-    const builder = createRowBlockDataBuilder();
+    const builder = createRowBlockDataBuilder({ columns: FEATURE_TABLE_COLUMNS });
     builder.addRow({ id: 'shown', type: 'Point', geometry: point(0, 0), order: 'a' });
     builder.addRow({
       id: 'hidden',

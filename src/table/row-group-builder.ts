@@ -21,6 +21,7 @@ import {
   encodeCanonicalValue,
   hashByteRun,
   hashUtf8,
+  type PropertyColumns,
   planarCoordinates,
   strideOf,
   type Utf8Column,
@@ -30,8 +31,17 @@ import {
   ValueColumnBuilder,
 } from '@sakuzu/tabane';
 import type { Geometry } from 'geojson';
+import type { TableColumns } from '../feature-table/row-values.js';
 import { KasaneError, kasaneErrorOf } from './kasane-error.js';
 import { type RowCache, RowCacheWriter } from './row-caches.js';
+import {
+  flagBitOf,
+  keyedColumnOf,
+  type RowColumnLayout,
+  rowColumnLayoutOf,
+  shapeColumnOf,
+  wholeColumnOf,
+} from './row-columns.js';
 import {
   type RowGeometry,
   rowGeometryOfColumn,
@@ -40,10 +50,9 @@ import {
 } from './row-geometry.js';
 import {
   ROW_FLAG_DELETED,
-  ROW_FLAG_LOCKED,
-  ROW_FLAG_VISIBLE,
   type RowBlock,
   type RowBlockData,
+  type RowBlockWhole,
 } from './row-group-types.js';
 import { compareRowKeys, type GroupKeySource, type RowKeySource } from './row-keys.js';
 import type { RowRead, RowShape } from './row-read-type.js';
@@ -118,6 +127,12 @@ export interface RowBlockBuilderOptions {
  * @internal
  */
 export interface RowBlockBuildOptions extends Omit<RowBlockBuilderOptions, 'rings'> {
+  /**
+   * The columns of the rows, by their names: a field of a row added is written to the column of
+   * its name (`type`, `geometry`, `style`, `properties`, `hidden`, `locked`), and a field no column
+   * is declared for is not held
+   */
+  readonly columns: TableColumns;
   /**
    * The rings the rows of some types draw around their point (none when omitted: every row draws
    * its shape). A function: it is given in the Worker that builds the rows
@@ -200,7 +215,7 @@ export interface RowBlockDataBuilder extends RowBlockBuilder {
  *
  * @internal
  */
-export function createRowBlockBuilder(options: RowBlockBuildOptions = {}): RowBlockBuilder {
+export function createRowBlockBuilder(options: RowBlockBuildOptions): RowBlockBuilder {
   return createRowBlockDataBuilder(options);
 }
 
@@ -209,7 +224,7 @@ export function createRowBlockBuilder(options: RowBlockBuildOptions = {}): RowBl
  *
  * @internal
  */
-export function createRowBlockDataBuilder(options: RowBlockBuildOptions = {}): RowBlockDataBuilder {
+export function createRowBlockDataBuilder(options: RowBlockBuildOptions): RowBlockDataBuilder {
   const targetRows = Math.max(1, options.targetRows ?? ROW_BLOCK_TARGET_ROWS);
   const targetVertices = Math.max(1, options.targetVertices ?? ROW_BLOCK_TARGET_VERTICES);
   const shape: GroupShape = {
@@ -217,6 +232,7 @@ export function createRowBlockDataBuilder(options: RowBlockBuildOptions = {}): R
     coordinates: options.coordinateSystem ?? planarCoordinates,
     rings: options.rings ?? null,
     caches: options.caches ?? [],
+    places: inputPlacesOf(rowColumnLayoutOf(options.columns)),
   };
 
   const ids = new Utf8ColumnBuilder(256);
@@ -226,8 +242,16 @@ export function createRowBlockDataBuilder(options: RowBlockBuildOptions = {}): R
   const rows: RowInput[] = [];
   const geometries: Array<RowGeometry | null> = [];
   let groupRefs: Int32Array = new Int32Array(256);
-  let styleRefs: Int32Array = new Int32Array(256);
-  const styles = new StyleInterner();
+  const places = shape.places;
+  const wholes: WholeInput[] = [];
+  if (places.type >= 0) {
+    wholes.push(new WholeInput(places.type, 'type', places.typeInTables, (row) => row.type));
+  }
+  if (places.style >= 0) {
+    wholes.push(
+      new WholeInput(places.style, 'style', places.styleInTables, (row) => row.style ?? EMPTY),
+    );
+  }
 
   return {
     get length() {
@@ -240,15 +264,11 @@ export function createRowBlockDataBuilder(options: RowBlockBuildOptions = {}): R
           `RowBlockBuilder: the id "${row.id}" is added twice`,
         );
       const geometry = row.geometry ? toRowGeometry(row.geometry, shape.dims) : null;
-      const style = styles.intern(row.style ?? {});
-      seen.add(row.id);
       const at = rows.length;
-      if (at >= groupRefs.length) {
-        groupRefs = growInt32(groupRefs, at + 1);
-        styleRefs = growInt32(styleRefs, at + 1);
-      }
+      for (const whole of wholes) whole.add(at, row);
+      seen.add(row.id);
+      if (at >= groupRefs.length) groupRefs = growInt32(groupRefs, at + 1);
       groupRefs[at] = row.group !== undefined && row.group >= 0 ? row.group : -1;
-      styleRefs[at] = style;
       ids.add(row.id);
       itemKeys.add(row.order);
       memberKeys.add(groupRefs[at] >= 0 ? (row.member ?? '') : '');
@@ -268,7 +288,7 @@ export function createRowBlockDataBuilder(options: RowBlockBuildOptions = {}): R
       for (let i = 0; i < n; i++) order[i] = i;
       order.sort((a, b) => compareRowKeys(keys, a, keys, b, groupKeys));
 
-      const dictionary = styles.finish();
+      for (const whole of wholes) whole.finish();
       const vertexCounts = new Int32Array(n);
       for (let i = 0; i < n; i++) {
         vertexCounts[i] = vertexCountOf(rows[i], geometries[i], shape.rings);
@@ -285,17 +305,7 @@ export function createRowBlockDataBuilder(options: RowBlockBuildOptions = {}): R
           vertices += count;
           end++;
         }
-        out.push(
-          buildGroup(
-            order.subarray(start, end),
-            keys,
-            rows,
-            geometries,
-            styleRefs,
-            dictionary,
-            shape,
-          ),
-        );
+        out.push(buildGroup(order.subarray(start, end), keys, rows, geometries, wholes, shape));
         start = end;
       }
       return out;
@@ -322,25 +332,32 @@ export function blockTransferList(groups: readonly RowBlockData[]): ArrayBuffer[
     add(group.handles);
     addColumn(group.ids);
     add(group.idHashes);
-    add(group.types);
-    add(group.geometry.types);
-    add(group.geometry.offsets);
-    for (const child of group.geometry.children) {
-      add(child.coords);
-      for (const offsets of child.offsets ?? []) add(offsets);
+    for (const shape of group.shapes) {
+      if (!shape) continue;
+      add(shape.types);
+      add(shape.offsets);
+      for (const child of shape.children) {
+        add(child.coords);
+        for (const offsets of child.offsets ?? []) add(offsets);
+      }
+    }
+    for (const whole of group.wholes) {
+      if (!whole) continue;
+      add(whole.indexes);
+      if ('dictionary' in whole) addColumn(whole.dictionary);
     }
     addColumn(group.itemKeys);
     addColumn(group.memberKeys);
     add(group.groups);
     add(group.flags);
-    add(group.styles);
-    addColumn(group.styleDictionary);
-    for (const column of group.properties.columns) {
-      add(column.rows);
-      add(column.tags);
-      add(column.numbers);
-      add(column.refs);
-      addColumn(column.values);
+    for (const keyed of group.keyed) {
+      for (const column of keyed?.columns ?? []) {
+        add(column.rows);
+        add(column.tags);
+        add(column.numbers);
+        add(column.refs);
+        addColumn(column.values);
+      }
     }
     add(group.rowBounds);
     for (const cache of group.caches) {
@@ -526,6 +543,46 @@ interface GroupShape {
   readonly coordinates: CoordinateSystem;
   readonly rings: RowRings | null;
   readonly caches: readonly RowCache[];
+  readonly places: InputPlaces;
+}
+
+/**
+ * Where the fields of a row added are written: the places of the columns of their names (-1, or
+ * the bit 0, for a field no column is declared for)
+ */
+interface InputPlaces {
+  /** The number of columns of each kind */
+  readonly shapes: number;
+  readonly wholes: number;
+  readonly keyed: number;
+  readonly geometry: number;
+  readonly type: number;
+  /** Whether the values of the type are kept by the tables (else by each row block) */
+  readonly typeInTables: boolean;
+  readonly style: number;
+  /** Whether the values of the style are kept by the tables (else by each row block) */
+  readonly styleInTables: boolean;
+  readonly properties: number;
+  readonly hidden: number;
+  readonly locked: number;
+}
+
+function inputPlacesOf(layout: RowColumnLayout): InputPlaces {
+  const type = wholeColumnOf(layout, 'type');
+  const style = wholeColumnOf(layout, 'style');
+  return {
+    shapes: layout.shapes.length,
+    wholes: layout.wholes.length,
+    keyed: layout.keyed.length,
+    geometry: shapeColumnOf(layout, 'geometry'),
+    type,
+    typeInTables: type >= 0 && layout.dictionaries[type] === 'tables',
+    style,
+    styleInTables: style >= 0 && layout.dictionaries[style] === 'tables',
+    properties: keyedColumnOf(layout, 'properties'),
+    hidden: flagBitOf(layout, 'hidden'),
+    locked: flagBitOf(layout, 'locked'),
+  };
 }
 
 /** Builds one group from its rows in order (`order` holds the indices of the rows added) */
@@ -534,23 +591,17 @@ function buildGroup(
   keys: RowKeySource,
   rows: readonly RowInput[],
   geometries: ReadonlyArray<RowGeometry | null>,
-  styleRefs: Int32Array,
-  dictionary: Utf8Column,
+  wholes: readonly WholeInput[],
   shape: GroupShape,
 ): RowBlockData {
+  const places = shape.places;
   const length = order.length;
   const ids = new Utf8ColumnBuilder(length);
   const itemKeys = new Utf8ColumnBuilder(length);
   const memberKeys = new Utf8ColumnBuilder(length);
   const idHashes = new Uint32Array(length);
-  const types = new Uint8Array(length);
-  const typeNames: string[] = [];
-  const typeIndex = new Map<string, number>();
   const groups = new Int32Array(length);
   const flags = new Uint8Array(length);
-  const styles = new Uint32Array(length);
-  const localStyles = new Map<number, number>();
-  const styleDictionary = new Utf8ColumnBuilder(8);
   const childTypes = new Int8Array(length);
   const childRows = new Int32Array(length);
   const children: ChildBuilder[] = [];
@@ -569,31 +620,12 @@ function buildGroup(
     memberKeys.addEntry(keys.memberKeys, source);
     groups[r] = keys.groups[source];
 
-    let type = typeIndex.get(row.type);
-    if (type === undefined) {
-      if (typeNames.length >= 255)
-        throw new KasaneError('invalid-input', 'RowBlockBuilder: more than 255 types');
-      type = typeNames.length;
-      typeNames.push(row.type);
-      typeIndex.set(row.type, type);
-    }
-    types[r] = type;
-
     flags[r] =
-      (row.hidden === true ? 0 : ROW_FLAG_VISIBLE) |
-      (row.locked === true ? ROW_FLAG_LOCKED : 0) |
+      (row.hidden === true ? places.hidden : 0) |
+      (row.locked === true ? places.locked : 0) |
       (row.deleted === true ? ROW_FLAG_DELETED : 0);
 
-    const global = styleRefs[source];
-    let local = localStyles.get(global);
-    if (local === undefined) {
-      local = localStyles.size;
-      localStyles.set(global, local);
-      styleDictionary.addEntry(dictionary, global);
-    }
-    styles[r] = local;
-
-    const properties = row.properties;
+    const properties = places.properties >= 0 ? row.properties : undefined;
     if (properties) {
       try {
         for (const key of Object.keys(properties)) {
@@ -609,7 +641,7 @@ function buildGroup(
       }
     }
 
-    const geometry = geometries[source];
+    const geometry = places.geometry >= 0 ? geometries[source] : null;
     if (!geometry) {
       childTypes[r] = -1;
       setNaNBounds(rowBounds, r);
@@ -650,28 +682,35 @@ function buildGroup(
   const columns: ValueColumn[] = keysOfProperties.map((key) =>
     (propertyBuilders.get(key) as ValueColumnBuilder).finish(),
   );
-  const geometry: TableMixedGeometry = {
-    type: 'Mixed',
-    types: childTypes,
-    offsets: childRows,
-    children: children.map((child) => child.finish()),
-  };
+  // A column no row holds a value of has no arrays
+  const shapes: Array<TableMixedGeometry | null> = new Array(places.shapes).fill(null);
+  if (children.length > 0) {
+    shapes[places.geometry] = {
+      type: 'Mixed',
+      types: childTypes,
+      offsets: childRows,
+      children: children.map((child) => child.finish()),
+    };
+  }
+  const keyed: Array<PropertyColumns | null> = new Array(places.keyed).fill(null);
+  if (keysOfProperties.length > 0) {
+    keyed[places.properties] = { keys: keysOfProperties, columns };
+  }
+  const wholeColumns: Array<RowBlockWhole | null> = new Array(places.wholes).fill(null);
+  for (const whole of wholes) wholeColumns[whole.place] = whole.build(order, rows);
 
   return {
     length,
     handles: new Int32Array(length).fill(-1),
     ids: ids.finish(),
     idHashes,
-    types,
-    typeNames,
-    geometry,
+    shapes,
+    wholes: wholeColumns,
+    keyed,
     itemKeys: itemKeys.finish(),
     memberKeys: memberKeys.finish(),
     groups,
     flags,
-    styles,
-    styleDictionary: styleDictionary.finish(),
-    properties: { keys: keysOfProperties, columns },
     rowBounds,
     caches: caches.map((cache) => cache.finish()),
     vertexCount,
@@ -731,21 +770,104 @@ function setNaNBounds(bounds: Float64Array, row: number): void {
   bounds.fill(Number.NaN, row * 4, row * 4 + 4);
 }
 
-// === Styles ===
+// === The whole columns ===
 
-/** Shares the canonical bytes of the styles of the rows (one entry per distinct style) */
-class StyleInterner {
+/** The value of a `style` of a row added without one */
+const EMPTY: Readonly<Record<string, unknown>> = Object.freeze({});
+
+/**
+ * The values of a `whole` column of the rows added: as their canonical bytes, each different
+ * value once, for a column the tables keep the values of (`'tables'`: the tables number them when
+ * they take the row block in), or as they are, for a column each row block keeps the values of
+ */
+class WholeInput {
+  /** The entry of the canonical bytes of the value of each row added (for `'tables'`) */
+  private refs: Int32Array = new Int32Array(256);
+  private readonly interner: ValueInterner | null;
+  private dictionary: Utf8Column | null = null;
+
+  constructor(
+    /** The place of the column in `RowBlockData.wholes` */
+    readonly place: number,
+    /** The name of the column */
+    private readonly name: string,
+    inTables: boolean,
+    /** The value of the column of a row */
+    private readonly read: (row: RowInput) => unknown,
+  ) {
+    this.interner = inTables ? new ValueInterner() : null;
+  }
+
+  /** Takes the value of a row added (checks that it can be held) */
+  add(at: number, row: RowInput): void {
+    if (!this.interner) return;
+    const entry = this.interner.intern(this.read(row));
+    if (at >= this.refs.length) this.refs = growInt32(this.refs, at + 1);
+    this.refs[at] = entry;
+  }
+
+  /** Ends the adding of rows */
+  finish(): void {
+    if (this.interner) this.dictionary = this.interner.finish();
+  }
+
+  /** The column of the rows of a row block (`order` holds the indices of the rows added) */
+  build(order: Int32Array, rows: readonly RowInput[]): RowBlockWhole {
+    const length = order.length;
+    if (this.interner) {
+      const all = this.dictionary as Utf8Column;
+      const indexes = new Uint32Array(length);
+      const local = new Map<number, number>();
+      const dictionary = new Utf8ColumnBuilder(8);
+      for (let r = 0; r < length; r++) {
+        const global = this.refs[order[r]];
+        let at = local.get(global);
+        if (at === undefined) {
+          at = local.size;
+          local.set(global, at);
+          dictionary.addEntry(all, global);
+        }
+        indexes[r] = at;
+      }
+      return { indexes, dictionary: dictionary.finish() };
+    }
+    const indexes = new Uint8Array(length);
+    const values: unknown[] = [];
+    const index = new Map<unknown, number>();
+    for (let r = 0; r < length; r++) {
+      const value = this.read(rows[order[r]]);
+      let at = index.get(value);
+      if (at === undefined) {
+        if (values.length >= 255) {
+          throw new KasaneError(
+            'invalid-input',
+            `RowBlockBuilder: more than 255 values of ${this.name} in a row block`,
+          );
+        }
+        at = values.length;
+        values.push(value);
+        index.set(value, at);
+      }
+      indexes[r] = at;
+    }
+    return { indexes, values };
+  }
+}
+
+/** Shares the canonical bytes of the values of a column (one entry per distinct value) */
+class ValueInterner {
   private readonly column = new Utf8ColumnBuilder(16);
   private readonly entries: Uint8Array[] = [];
   private readonly buckets = new Map<number, number[]>();
   private readonly byObject = new WeakMap<object, number>();
 
-  intern(style: Readonly<Record<string, unknown>>): number {
-    const known = this.byObject.get(style);
+  intern(value: unknown): number {
+    const object = typeof value === 'object' && value !== null ? value : null;
+    const known = object ? this.byObject.get(object) : undefined;
     if (known !== undefined) return known;
     let bytes: Uint8Array;
     try {
-      bytes = encodeCanonicalValue(style);
+      bytes = encodeCanonicalValue(value);
     } catch (error) {
       throw kasaneErrorOf(error);
     }
@@ -754,7 +876,7 @@ class StyleInterner {
     if (bucket) {
       for (const entry of bucket) {
         if (sameBytes(this.entries[entry], bytes)) {
-          this.byObject.set(style, entry);
+          if (object) this.byObject.set(object, entry);
           return entry;
         }
       }
@@ -766,7 +888,7 @@ class StyleInterner {
     this.entries.push(bytes);
     this.column.addBytes(bytes);
     bucket.push(entry);
-    this.byObject.set(style, entry);
+    if (object) this.byObject.set(object, entry);
     return entry;
   }
 

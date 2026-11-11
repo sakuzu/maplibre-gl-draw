@@ -24,6 +24,7 @@ import type { RowField } from '../api/tables.js';
 import { featureTablesInternals } from '../feature-table/feature-tables.js';
 import { circleRowRings } from '../table/circle-rings.js';
 import { createRowBlockDataBuilder } from '../table/row-group-builder.js';
+import { FEATURE_TABLE_COLUMNS } from '../table/tabane/columns.js';
 import { SELECTION_IDS_LIMIT } from './draw-store.js';
 import { insertGroup } from './item-lists.js';
 import type { Store } from './store.js';
@@ -333,7 +334,7 @@ describe('the order of the in-memory Store of rows', () => {
       styleRule: undefined,
     });
     // 10,000 rows in groups of the target size; 50 members spread over the first half of them
-    const builder = createRowBlockDataBuilder();
+    const builder = createRowBlockDataBuilder({ columns: FEATURE_TABLE_COLUMNS });
     for (let i = 0; i < 10_000; i++) {
       builder.addRow({
         id: `r${i}`,
@@ -417,7 +418,11 @@ describe('the rows of a layer of z and m in the in-memory Store of rows', () => 
         [2, 2, 12],
       ],
     };
-    const builder = createRowBlockDataBuilder({ dimensions: 'xyzm', rings: circleRowRings });
+    const builder = createRowBlockDataBuilder({
+      columns: FEATURE_TABLE_COLUMNS,
+      dimensions: 'xyzm',
+      rings: circleRowRings,
+    });
     builder.addRow({ id: 'l', type: 'LineString', geometry: line, order: 'k1' });
     writer.addRowBlocks('layer', builder.finish());
     const tables = store.tables;

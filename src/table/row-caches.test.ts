@@ -71,7 +71,11 @@ function rowOf(i: number): RowInput {
 }
 
 function build(cache: RowCache | null, count: number, targetRows = 1000): RowBlockData[] {
-  const builder = createRowBlockDataBuilder({ caches: cache ? [cache] : [], targetRows });
+  const builder = createRowBlockDataBuilder({
+    columns: FEATURE_TABLE_COLUMNS,
+    caches: cache ? [cache] : [],
+    targetRows,
+  });
   for (let i = 0; i < count; i++) builder.addRow(rowOf(i));
   return builder.finish();
 }
@@ -98,7 +102,10 @@ describe('the caches of the rows of the builder', () => {
 describe('the caches of the rows of a merge', () => {
   it('are copied by their names, and made of no row', () => {
     const cache = countingCache();
-    const blocks = build(cache, 6, 3).map((b) => ({ ...b, styleDictionary: null }));
+    const blocks = build(cache, 6, 3).map((b) => ({
+      ...b,
+      wholes: b.wholes.map((w) => (w && 'dictionary' in w ? { ...w, dictionary: null } : w)),
+    }));
     cache.made.length = 0;
     const [merged] = mergeRowBlockData({ sources: blocks, rows: Int32Array.of(1, 2, 0, 1) });
     expect(cache.made).toEqual([]);
@@ -167,7 +174,7 @@ describe('the caches of the rows of the tables', () => {
       columns: FEATURE_TABLE_COLUMNS,
       caches: [first, second],
     });
-    const builder = createRowBlockDataBuilder({ caches: [second] });
+    const builder = createRowBlockDataBuilder({ columns: FEATURE_TABLE_COLUMNS, caches: [second] });
     for (let i = 0; i < 3; i++) builder.addRow(rowOf(i));
     const blocks = builder.finish();
     first.made.length = 0;

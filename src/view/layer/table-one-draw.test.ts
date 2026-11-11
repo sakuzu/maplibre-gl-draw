@@ -36,6 +36,7 @@ import {
   type TransformFieldsRegistry,
 } from '../../store/transform-roles.js';
 import { circleRowRings } from '../../table/circle-rings.js';
+import { styleColumnOf } from '../../table/feature-row-columns.js';
 import { FEATURE_CACHES } from '../../table/fill-triangles.js';
 import { createTestDrawer, feature, seededRandom, tablesOfFeatures } from '../../test-utils.js';
 import { createFeatureCompanionRegistry } from '../feature-companion.js';
@@ -538,7 +539,7 @@ describe('the drawing of a layer held as rows in one draw per chunk', () => {
     expect(data.rowStyle[0]).not.toBe(data.rowStyle[1]);
     // Row 0 takes the style of row 1, and the image is written: both are taken before the
     // next frame
-    group.data.styles[0] = group.data.styles[1];
+    styleColumnOf(group.data).indexes[0] = styleColumnOf(group.data).indexes[1];
     const write = { sameShape: true, from: 0, to: 0, keys: [] };
     renderer.rowsWritten('layer', [
       {
@@ -720,8 +721,8 @@ describe('the drawing of a layer held as rows in one draw per chunk', () => {
     const row = features.findIndex((f) => f.id.startsWith('l'));
     const dashed = internals.styles.intern({ lineStyle: 'dashed' });
     internals.styles.retain(dashed);
-    internals.styles.release(group.data.styles[row]);
-    group.data.styles[row] = dashed;
+    internals.styles.release(styleColumnOf(group.data).indexes[row]);
+    styleColumnOf(group.data).indexes[row] = dashed;
     renderer.rowsWritten('layer', [
       {
         group: group.handle,

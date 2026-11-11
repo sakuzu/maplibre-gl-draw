@@ -13,7 +13,7 @@
 
 import type { FeatureTables, RowHandle, RowValues } from '../api/tables.js';
 import { featureTablesInternals, readWithoutKeeping } from '../feature-table/feature-tables.js';
-import { ROW_FLAG_LOCKED, ROW_FLAG_VISIBLE } from '../table/row-group-types.js';
+import { ROW_FLAG_HIDDEN, ROW_FLAG_LOCKED } from '../table/feature-row-columns.js';
 import { listEveryFeatureInOrder } from './ordering.js';
 import type { Feature, FeatureType, Group, Layer, ObjectGroup, ObjectLayer } from './types.js';
 
@@ -159,7 +159,7 @@ export function rowMatcher(
     const group = data.groups[row];
     if (groupHandle >= 0 && group !== groupHandle) return false;
     const flags = data.flags[row];
-    const visible = (flags & ROW_FLAG_VISIBLE) !== 0;
+    const visible = (flags & ROW_FLAG_HIDDEN) === 0;
     if (filter.visible !== undefined && visible !== filter.visible) return false;
     if (filter.locked !== undefined && ((flags & ROW_FLAG_LOCKED) !== 0) !== filter.locked) {
       return false;

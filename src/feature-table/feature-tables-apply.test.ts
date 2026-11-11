@@ -102,6 +102,7 @@ describe('the items of a layer', () => {
       locked: false,
     });
     const builder = createRowBlockDataBuilder({
+      columns: FEATURE_TABLE_COLUMNS,
       groups: [{ handle: 7, id: 'g', order: 'k000003' }],
       targetRows: 2,
     });
@@ -255,7 +256,7 @@ describe('writer.apply', () => {
   it('places a row again for a new type only, in tables told of no field that places it', () => {
     const created = `properties:${drawPropertyKey('createdZoom')}` as RowField;
     const { tables, writer } = createTables({ columns: FEATURE_TABLE_COLUMNS });
-    const builder = createRowBlockDataBuilder();
+    const builder = createRowBlockDataBuilder({ columns: FEATURE_TABLE_COLUMNS });
     points(2).forEach((f, i) => {
       builder.addRow(
         rowOfFeature(

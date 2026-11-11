@@ -24,7 +24,8 @@ import { writeKindsInSlices } from '../../operations/bulk-sliced.js';
 import { type BulkKinds, transformKinds } from '../../operations/bulk-transform.js';
 import type { TransformEdit } from '../../store/store.js';
 import type { BoxSelection, Feature } from '../../store/types.js';
-import { ROW_FLAG_DELETED, ROW_FLAG_LOCKED } from '../../table/row-group-types.js';
+import { ROW_FLAG_LOCKED } from '../../table/feature-row-columns.js';
+import { ROW_FLAG_DELETED } from '../../table/row-group-types.js';
 import type { EngineModeContext } from '../handler.js';
 import { boxRects, isFeatureInBox } from './box-selection.js';
 

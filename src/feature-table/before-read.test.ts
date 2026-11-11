@@ -24,7 +24,7 @@ function tablesWith(beforeRead?: () => void) {
     columns: FEATURE_TABLE_COLUMNS,
     ...(beforeRead ? { beforeRead } : {}),
   });
-  const builder = createRowBlockDataBuilder();
+  const builder = createRowBlockDataBuilder({ columns: FEATURE_TABLE_COLUMNS });
   for (let i = 0; i < 5; i++) {
     builder.addRow({
       id: `p${i}`,

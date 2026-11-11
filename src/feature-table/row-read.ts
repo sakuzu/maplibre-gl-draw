@@ -23,15 +23,18 @@ import type { Geometry } from 'geojson';
 import { DrawError } from '../shared/draw-error.js';
 import type { Coordinate, Feature, FeatureType } from '../shared/types/model.js';
 import { setOwnProperty } from '../shared/utils/own-property.js';
+import {
+  geometryColumnOf,
+  propertyColumnsOf,
+  ROW_FLAG_HIDDEN,
+  ROW_FLAG_LOCKED,
+  styleOfRow,
+  typeOfRow,
+} from '../table/feature-row-columns.js';
 import { FILL_TRIANGLES_AT } from '../table/fill-triangles.js';
 import { cacheNumbersOf, noCacheNumbers, type RowCacheNumbers } from '../table/row-caches.js';
 import type { RowInput } from '../table/row-group-builder.js';
-import {
-  ROW_FLAG_DELETED,
-  ROW_FLAG_LOCKED,
-  ROW_FLAG_VISIBLE,
-  type RowBlockData,
-} from '../table/row-group-types.js';
+import { ROW_FLAG_DELETED, type RowBlockData } from '../table/row-group-types.js';
 import type { RowRead, RowShape } from '../table/row-read-type.js';
 import type { GroupTable } from './group-table.js';
 import { geometryAt, type RowGroup } from './layer-table.js';
@@ -57,7 +60,7 @@ export interface RowReadContext {
  * @internal
  */
 export function rowType(data: RowBlockData, row: number): FeatureType {
-  return data.typeNames[data.types[row]] as FeatureType;
+  return typeOfRow(data, row) as FeatureType;
 }
 
 /**
@@ -75,7 +78,7 @@ export function rowValue(
   if (written) return decodeOverrideValue(written);
   const column = group.propertyIndex.get(key);
   if (column === undefined) return undefined;
-  return readValue(group.data.properties.columns[column], row, strings);
+  return readValue(propertyColumnsOf(group.data).columns[column], row, strings);
 }
 
 /**
@@ -106,7 +109,7 @@ export function rowNumber(group: RowGroup, row: number, key: string): number | u
   if (written) return written.tag === VALUE_NUMBER ? written.number : undefined;
   const column = group.propertyIndex.get(key);
   if (column === undefined) return undefined;
-  return readNumberValue(group.data.properties.columns[column], row);
+  return readNumberValue(propertyColumnsOf(group.data).columns[column], row);
 }
 
 /**
@@ -119,7 +122,7 @@ export function rowProperties(
   row: number,
   strings?: ValueStringCache,
 ): Record<string, Value> {
-  const { keys, columns } = group.data.properties;
+  const { keys, columns } = propertyColumnsOf(group.data);
   const out: Record<string, Value> = {};
   for (let i = 0; i < keys.length; i++) {
     // A column holds values only
@@ -140,7 +143,10 @@ export function rowProperties(
  * @internal
  */
 export function rowHasGeometry(group: RowGroup, row: number): boolean {
-  return group.data.geometry.types[row] >= 0 || group.geometries?.geometry(row) !== undefined;
+  const geometry = geometryColumnOf(group.data);
+  return (
+    (geometry !== null && geometry.types[row] >= 0) || group.geometries?.geometry(row) !== undefined
+  );
 }
 
 /**
@@ -238,9 +244,9 @@ export function rowFeatureToRead(
     layerId,
     groupId: groupHandle >= 0 ? context.groups.idOf(groupHandle) : undefined,
     properties: rowProperties(group, row, context.strings),
-    style: context.styles.get(data.styles[row]),
+    style: context.styles.get(styleOfRow(data, row)),
     locked: (data.flags[row] & ROW_FLAG_LOCKED) !== 0,
-    visible: (data.flags[row] & ROW_FLAG_VISIBLE) !== 0,
+    visible: (data.flags[row] & ROW_FLAG_HIDDEN) === 0,
   };
 }
 
@@ -261,9 +267,9 @@ export function rowInputOf(context: RowReadContext, group: RowGroup, row: number
     order: utf8String(data.itemKeys, row),
     member: groupHandle >= 0 ? utf8String(data.memberKeys, row) : undefined,
     group: groupHandle,
-    style: context.styles.get(data.styles[row]) as Readonly<Record<string, unknown>>,
+    style: context.styles.get(styleOfRow(data, row)) as Readonly<Record<string, unknown>>,
     properties: rowProperties(group, row),
-    hidden: (flags & ROW_FLAG_VISIBLE) === 0,
+    hidden: (flags & ROW_FLAG_HIDDEN) !== 0,
     locked: (flags & ROW_FLAG_LOCKED) !== 0,
     deleted: (flags & ROW_FLAG_DELETED) !== 0,
   };

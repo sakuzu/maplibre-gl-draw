@@ -24,6 +24,7 @@ import {
   createRowBlockDataBuilder,
   type GroupEntry,
 } from '../table/row-group-builder.js';
+import { FEATURE_TABLE_COLUMNS } from '../table/tabane/columns.js';
 import { createTableStore } from './table-memory.js';
 import type { Feature, Layer, RestoreToken, StoreChange } from './types.js';
 
@@ -97,7 +98,7 @@ function rowsBack(
   const groups: GroupEntry[] = [
     { handle: group, id: 'g', order: writer.getGroupOrder(group) as string },
   ];
-  const builder = createRowBlockBuilder({ groups, targetRows: 4 });
+  const builder = createRowBlockBuilder({ columns: FEATURE_TABLE_COLUMNS, groups, targetRows: 4 });
   ids.forEach((id) => {
     const i = Number(id.slice(1));
     const inGroup = id === 'a3' || id === 'a4';
@@ -180,7 +181,11 @@ describe('every row taken out of the tables', () => {
       build: (rows, options) =>
         new Promise((resolve) => {
           release = () => {
-            const builder = createRowBlockDataBuilder({ ...options, rings: circleRowRings });
+            const builder = createRowBlockDataBuilder({
+              columns: FEATURE_TABLE_COLUMNS,
+              ...options,
+              rings: circleRowRings,
+            });
             for (const row of rows) builder.addRow(structuredClone(row));
             resolve(builder.finish());
           };
@@ -229,7 +234,7 @@ describe('every row taken out of the tables', () => {
     const { store, writer, tables, internals } = setup();
     writer.clear();
     expect(internals.readContext.dimensionsOf('z')).toBe('xyz');
-    const builder = createRowBlockBuilder({ dimensions: 'xyz' });
+    const builder = createRowBlockBuilder({ columns: FEATURE_TABLE_COLUMNS, dimensions: 'xyz' });
     builder.addRow({
       id: 'high',
       type: 'Point',

@@ -18,6 +18,7 @@ import { groupsInStackingOrder, groupsInStackingOrderOf } from '../store/item-li
 import { createTableStore } from '../store/table-memory.js';
 import { createRowBlockDataBuilder } from '../table/row-group-builder.js';
 import { ROW_FLAG_DELETED } from '../table/row-group-types.js';
+import { FEATURE_TABLE_COLUMNS } from '../table/tabane/columns.js';
 import { createMapStub, seededRandom } from '../test-utils.js';
 import { type FeatureTablesInternals, featureTablesInternals } from './feature-tables.js';
 import { groupCode, ItemWalk, rowCode } from './item-walk.js';
@@ -37,7 +38,7 @@ const LAYER = {
 function storeOf(n: number) {
   const { store, writer } = createTableStore();
   store.createLayer({ ...LAYER, id: 'rows' });
-  const builder = createRowBlockDataBuilder({ targetRows: 512 });
+  const builder = createRowBlockDataBuilder({ columns: FEATURE_TABLE_COLUMNS, targetRows: 512 });
   for (let i = 0; i < n; i++) {
     builder.addRow({
       id: `r${i}`,

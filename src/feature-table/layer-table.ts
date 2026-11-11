@@ -27,6 +27,17 @@ import { STATE_HIDDEN_DELTA, STATE_HIDDEN_WAIT } from './row-state.js';
 import type { RowGroupHandle } from './types.js';
 import type { GeometryOverrides, ValueOverrides } from './value-overrides.js';
 
+/**
+ * The `shape` column and the `keyed` column of the rows the tables read and write in place past
+ * the columns of their row block (`GeometryOverrides`, `ValueOverrides`), and index for the boxes
+ * of the rows: the first of each kind declared. The tables hold at most one of each for now
+ *
+ * @internal
+ */
+export const SHAPE_COLUMN = 0;
+/** @internal */
+export const KEYED_COLUMN = 0;
+
 /** The bits of the state of a row whose copy in its group is not the row (it is read elsewhere) */
 const STATE_ELSEWHERE = STATE_HIDDEN_DELTA | STATE_HIDDEN_WAIT;
 
@@ -127,7 +138,7 @@ export function createRowGroup(
     marks: new Uint32Array(data.length).fill(mark),
     mark,
     bounds: unionOfRows(data.rowBounds),
-    propertyIndex: new Map(data.properties.keys.map((key, i) => [key, i])),
+    propertyIndex: new Map((data.keyed[KEYED_COLUMN]?.keys ?? []).map((key, i) => [key, i])),
     readers: null,
     values: null,
     geometries: null,
@@ -167,12 +178,14 @@ export function geometryAt(group: RowGroup, row: number): RowGeometryAt | undefi
  * @internal
  */
 export function columnGeometryAt(group: RowGroup, row: number): RowGeometryAt | undefined {
-  const child = group.data.geometry.types[row];
+  const shape = group.data.shapes[SHAPE_COLUMN];
+  if (!shape) return undefined;
+  const child = shape.types[row];
   if (child < 0) return undefined;
-  group.readers ??= group.data.geometry.children.map(
+  group.readers ??= shape.children.map(
     (column, k) => new GeometryColumnReader(column, undefined, `geometry.children[${k}]`),
   );
-  return { reader: group.readers[child], at: group.data.geometry.offsets[row] };
+  return { reader: group.readers[child], at: shape.offsets[row] };
 }
 
 /**

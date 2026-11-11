@@ -18,6 +18,7 @@
 
 import { type CoordinateSystem, readValue } from '@sakuzu/tabane';
 import type { Geometry } from 'geojson';
+import { propertyColumnsOf } from '../table/feature-row-columns.js';
 import type { RowCache } from '../table/row-caches.js';
 import { type RowGeometry, singleRowColumn, toRowGeometry } from '../table/row-geometry.js';
 import type { RowRead } from '../table/row-read-type.js';
@@ -74,7 +75,9 @@ export function writeRowValue(group: RowGroup, row: number, key: string, value: 
   const next = encodeOverrideValue(value);
   const column = group.propertyIndex.get(key);
   const held = encodeOverrideValue(
-    column === undefined ? undefined : readValue(group.data.properties.columns[column], row),
+    column === undefined
+      ? undefined
+      : readValue(propertyColumnsOf(group.data).columns[column], row),
   );
   const before: OverrideValue = group.values?.get(row, key) ?? held;
   if (sameOverrideValue(next, held)) {

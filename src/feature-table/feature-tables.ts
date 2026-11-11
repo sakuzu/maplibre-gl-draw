@@ -45,8 +45,15 @@ import type { BBox } from '../geometry/types.js';
 import { DrawError } from '../shared/draw-error.js';
 import type { Feature, FeatureStyle, FeatureType } from '../shared/types/model.js';
 import { drawErrorOf } from '../table/draw-error-of.js';
+import {
+  propertyColumnsOf,
+  ROW_FLAG_HIDDEN,
+  ROW_FLAG_LOCKED,
+  styleColumnOf,
+} from '../table/feature-row-columns.js';
 import { KasaneError } from '../table/kasane-error.js';
 import { buildCacheColumns, cacheColumnsIn, type RowCache } from '../table/row-caches.js';
+import { type RowColumnLayout, rowColumnLayoutOf } from '../table/row-columns.js';
 import {
   createRowBlockDataBuilder,
   ROW_BLOCK_TARGET_ROWS,
@@ -55,9 +62,8 @@ import {
 import { mergeRowBlockData } from '../table/row-group-merge.js';
 import {
   ROW_FLAG_DELETED,
-  ROW_FLAG_LOCKED,
-  ROW_FLAG_VISIBLE,
   type RowBlockData,
+  type RowBlockValues,
 } from '../table/row-group-types.js';
 import { compareRowKeys, type GroupKeySource, type RowKeySource } from '../table/row-keys.js';
 import type { RowRings } from '../table/row-rings.js';
@@ -149,13 +155,6 @@ const DROPPED_ROWS_MIN = 64;
  * of the tables declares, `relocatingFields`, place it again too)
  */
 const PLACE_FIELDS: ReadonlySet<string> = new Set(['layerId', 'groupId', 'order', 'member']);
-
-/**
- * The field of the type of a row, which the tables do not write in place: a row block holds the
- * types of its rows once, so a new type puts the row in the delta, as a new place does, whether
- * the user of the tables declares it among the fields that place a row again or not
- */
-const TYPE_FIELD = 'type';
 
 /** The start of the fields of the attributes of a row (`properties:<key>`) */
 const PROPERTY_FIELD = 'properties:';
@@ -1003,9 +1002,35 @@ class FeatureTablesStore implements FeatureTablesInternals, TablesWriter, Tables
   private readonly caches: readonly RowCache[];
   /** The fields of the values of rows the columns declared allow (`columns`) */
   private readonly fields: RowFields;
+  /** The columns of the rows (`columns`), and their places in a row block */
+  private readonly columns: TableColumns;
+  private readonly layout: RowColumnLayout;
+  /**
+   * The `whole` columns whose values each row block keeps, by their names: their places in
+   * `RowBlockData.wholes`. A value a row block does not hold puts the row in the delta
+   */
+  private readonly blockWholes: ReadonlyMap<string, number>;
+  /** The bits of the `flag` columns in `RowBlockData.flags`, by their names */
+  private readonly flagBits: ReadonlyMap<string, number>;
 
   constructor(options: TablesInternalOptions) {
     this.fields = new RowFields(options.columns);
+    this.columns = options.columns;
+    this.layout = rowColumnLayoutOf(options.columns);
+    if (this.layout.shapes.length > 1 || this.layout.keyed.length > 1) {
+      throw new KasaneError(
+        'invalid-input',
+        'FeatureTables: the rows hold one shape column and one keyed column at most',
+      );
+    }
+    const blockWholes = new Map<string, number>();
+    this.layout.wholes.forEach((name, w) => {
+      if (this.layout.dictionaries[w] === 'rowBlock') blockWholes.set(name, w);
+    });
+    this.blockWholes = blockWholes;
+    this.flagBits = new Map(
+      this.layout.flags.map((name, f) => [name, ROW_FLAG_DELETED << (f + 1)]),
+    );
     this.strings = new ValueStringCache(options.stringCacheSize);
     this.states = new RowStateSets((handles) => this.refreshStates(handles));
     this.declaredDims = options.dimensionsOf;
@@ -1029,10 +1054,10 @@ class FeatureTablesStore implements FeatureTablesInternals, TablesWriter, Tables
     this.rings = options.rings ?? null;
     this.caches = options.caches ?? [];
     for (const field of options.relocatingFields ?? []) {
-      if (field !== TYPE_FIELD && !field.startsWith(PROPERTY_FIELD)) {
+      if (!this.blockWholes.has(field) && !(this.fields.has(field) && field.includes(':'))) {
         throw new KasaneError(
           'invalid-input',
-          `FeatureTables: the field ${field} cannot place a row again (the type and attributes can)`,
+          `FeatureTables: the field ${field} cannot place a row again (a whole column whose values a row block keeps and a key of a keyed column can)`,
         );
       }
     }
@@ -1188,8 +1213,8 @@ class FeatureTablesStore implements FeatureTablesInternals, TablesWriter, Tables
       swapIn: (version, waiting) => this.swapIn(version, waiting),
       retainStyles: (data, count) => {
         for (let r = 0; r < data.length; r++) {
-          if (count > 0) this.styles.retain(data.styles[r]);
-          else this.styles.release(data.styles[r]);
+          if (count > 0) this.styles.retain(styleColumnOf(data).indexes[r]);
+          else this.styles.release(styleColumnOf(data).indexes[r]);
         }
       },
       drops: (handle, group, row) => this.drops(handle, group, row),
@@ -1300,7 +1325,7 @@ class FeatureTablesStore implements FeatureTablesInternals, TablesWriter, Tables
     const release = (group: RowGroup): void => {
       const data = group.data;
       for (let r = 0; r < data.length; r++) {
-        this.styles.release(data.styles[r]);
+        this.styles.release(styleColumnOf(data).indexes[r]);
         const handle = data.handles[r];
         if (handle < 0) continue;
         if (group.delta) this.ids.setDelta(handle, -1, -1);
@@ -1538,7 +1563,7 @@ class FeatureTablesStore implements FeatureTablesInternals, TablesWriter, Tables
   addRowBlocks(layerId: string, groups: readonly RowBlockData[]): TablesWrite {
     const dims = this.dimsOfLayer(layerId);
     for (const data of groups) {
-      checkShape(data);
+      checkShape(data, this.layout);
       checkDims(data, dims);
       this.fitCaches(data);
       if (data.length === 0)
@@ -1568,7 +1593,7 @@ class FeatureTablesStore implements FeatureTablesInternals, TablesWriter, Tables
       else this.adoptGroup(layer, data);
       for (let r = 0; r < data.length; r++) draft.created.push(data.handles[r]);
       for (const field of ADDED_FIELDS) draft.fields.add(field);
-      for (const key of data.properties.keys) draft.fields.add(`${PROPERTY_FIELD}${key}`);
+      for (const key of propertyColumnsOf(data).keys) draft.fields.add(`${PROPERTY_FIELD}${key}`);
     }
     const rows: RowsChange = { layers: finishChanges(drafts) };
     this.notifyWork();
@@ -1724,6 +1749,7 @@ class FeatureTablesStore implements FeatureTablesInternals, TablesWriter, Tables
   /** Builds the rows of a creation into row groups on the main thread */
   private buildCreation(creation: Creation): RowBlockData[] {
     const builder = createRowBlockDataBuilder({
+      columns: this.columns,
       groups: this.groups.keyList(),
       dimensions: creation.layer.dims,
       coordinateSystem: this.coordinates,
@@ -1813,7 +1839,7 @@ class FeatureTablesStore implements FeatureTablesInternals, TablesWriter, Tables
     const rows = new Map<RowHandle, number>();
     for (let r = 0; r < data.length; r++) {
       rows.set(data.handles[r], r);
-      this.styles.retain(data.styles[r]);
+      this.styles.retain(styleColumnOf(data).indexes[r]);
     }
     creation.reading = { group, rows };
     for (let r = 0; r < data.length; r++) this.writeState(group, r);
@@ -1827,7 +1853,7 @@ class FeatureTablesStore implements FeatureTablesInternals, TablesWriter, Tables
     creation.inputs = null;
     if (reading) {
       for (let r = 0; r < reading.group.data.length; r++) {
-        this.styles.release(reading.group.data.styles[r]);
+        this.styles.release(styleColumnOf(reading.group.data).indexes[r]);
       }
     }
     creation.layer.touchPending();
@@ -2317,11 +2343,11 @@ class FeatureTablesStore implements FeatureTablesInternals, TablesWriter, Tables
       case 'geometry':
         return rowGeometry(group, row) ?? undefined;
       case 'hidden':
-        return (data.flags[row] & ROW_FLAG_VISIBLE) === 0;
+        return (data.flags[row] & ROW_FLAG_HIDDEN) !== 0;
       case 'locked':
         return (data.flags[row] & ROW_FLAG_LOCKED) !== 0;
       case 'style':
-        return this.styles.get(data.styles[row]);
+        return this.styles.get(styleColumnOf(data).indexes[row]);
       default:
         return rowValue(group, row, field.slice(PROPERTY_FIELD.length), this.strings);
     }
@@ -2785,11 +2811,12 @@ class FeatureTablesStore implements FeatureTablesInternals, TablesWriter, Tables
     const places = creations
       ? Array.from(handles, (handle) => this.placeOf(handle))
       : checked.places;
-    const columns = patchColumns(fields);
+    const columns = this.patchColumns(fields);
     // Whether a field written can move a row to another place (else no row is looked at for it)
     const relocating = this.relocating;
+    const blockWholes = this.blockWholes;
     const mayPlace = [...fields.keys()].some(
-      (field) => PLACE_FIELDS.has(field) || field === TYPE_FIELD || relocating.has(field),
+      (field) => PLACE_FIELDS.has(field) || blockWholes.has(field) || relocating.has(field),
     );
     /** The writes in place of the layer of the row before */
     let lastWritesLayer: string | undefined;
@@ -2854,7 +2881,7 @@ class FeatureTablesStore implements FeatureTablesInternals, TablesWriter, Tables
         lastChange = change;
       }
       if (styles && styleNumbers && place) {
-        const beforeNumber = place.group.data.styles[place.row];
+        const beforeNumber = styleColumnOf(place.group.data).indexes[place.row];
         const afterNumber = styleNumbers[i];
         let byAfter = styleKeysOf.get(beforeNumber);
         if (!byAfter) {
@@ -3259,8 +3286,16 @@ class FeatureTablesStore implements FeatureTablesInternals, TablesWriter, Tables
         }
         continue;
       }
-      if (field === TYPE_FIELD) {
-        if (value !== undefined && value !== rowType(data, row)) return true;
+      const whole = this.blockWholes.get(field);
+      if (whole !== undefined) {
+        // A value the row block does not hold, or another value of a field that places a row
+        // again
+        if (value === undefined) continue;
+        const column = data.wholes[whole] as RowBlockValues | null;
+        if (!column) return true;
+        if (this.relocating.has(field)) {
+          if (column.values[column.indexes[row]] !== value) return true;
+        } else if (!column.values.includes(value)) return true;
         continue;
       }
       if (this.relocating.has(field)) {
@@ -3331,6 +3366,41 @@ class FeatureTablesStore implements FeatureTablesInternals, TablesWriter, Tables
     return out;
   }
 
+  /** The columns of a patch, as a write in place writes them */
+  private patchColumns(fields: ReadonlyMap<RowField, readonly unknown[]>): PatchColumns {
+    const properties: Array<readonly [string, readonly unknown[]]> = [];
+    const flags: Array<readonly [number, readonly unknown[]]> = [];
+    const wholes: Array<readonly [number, readonly unknown[]]> = [];
+    for (const [field, values] of fields) {
+      if (field.startsWith(PROPERTY_FIELD)) {
+        properties.push([field.slice(PROPERTY_FIELD.length), values]);
+        continue;
+      }
+      const bit = this.flagBits.get(field);
+      if (bit !== undefined) {
+        flags.push([bit, values]);
+        continue;
+      }
+      const whole = this.blockWholes.get(field);
+      if (whole !== undefined) wholes.push([whole, values]);
+    }
+    return { geometry: fields.get('geometry'), flags, wholes, properties };
+  }
+
+  /**
+   * Whether the values of a row can be written in place: every value of a `whole` column a row
+   * block keeps is one its row block holds
+   */
+  private fitsInPlace(place: RowPlace, fields: ReadonlyMap<RowField, readonly unknown[]>): boolean {
+    for (const [field, values] of fields) {
+      const whole = this.blockWholes.get(field);
+      if (whole === undefined || values[0] === undefined) continue;
+      const column = place.group.data.wholes[whole] as RowBlockValues | null;
+      if (!column?.values.includes(values[0])) return false;
+    }
+    return true;
+  }
+
   /**
    * Writes the values of a row in place
    *
@@ -3342,7 +3412,7 @@ class FeatureTablesStore implements FeatureTablesInternals, TablesWriter, Tables
     fields: ReadonlyMap<RowField, readonly unknown[]>,
     deleted: Uint8Array | undefined,
     styleNumbers: number[] | undefined,
-    columns: PatchColumns = patchColumns(fields),
+    columns: PatchColumns = this.patchColumns(fields),
   ): InPlaceRowWrite | null {
     const { layer, group, row } = place;
     const data = group.data;
@@ -3364,22 +3434,29 @@ class FeatureTablesStore implements FeatureTablesInternals, TablesWriter, Tables
     }
     if (styleNumbers) {
       const next = styleNumbers[i];
-      const old = data.styles[row];
+      const old = styleColumnOf(data).indexes[row];
       if (next !== old) {
         this.styles.retain(next);
         this.styles.release(old);
-        data.styles[row] = next;
+        styleColumnOf(data).indexes[row] = next;
         what |= ROW_WRITE_STYLE;
       }
     }
-    let flags = data.flags[row];
-    const hidden = columns.hidden?.[i];
-    if (hidden !== undefined) {
-      flags = hidden === true ? flags & ~ROW_FLAG_VISIBLE : flags | ROW_FLAG_VISIBLE;
+    // A value of a whole column a row block keeps is written as its index (a value the row block
+    // does not hold puts the row in the delta: `placeChanged`, `fitsInPlace`)
+    for (const [whole, values] of columns.wholes) {
+      const value = values[i];
+      if (value === undefined) continue;
+      const column = data.wholes[whole] as RowBlockValues | null;
+      const at = column ? column.values.indexOf(value) : -1;
+      if (!column || at < 0 || column.indexes[row] === at) continue;
+      column.indexes[row] = at;
+      what |= ROW_WRITE_VALUES;
     }
-    const locked = columns.locked?.[i];
-    if (locked !== undefined) {
-      flags = locked === true ? flags | ROW_FLAG_LOCKED : flags & ~ROW_FLAG_LOCKED;
+    let flags = data.flags[row];
+    for (const [bit, values] of columns.flags) {
+      const value = values[i];
+      if (value !== undefined) flags = value === true ? flags | bit : flags & ~bit;
     }
     if (deleted && deleted[i] !== 0) flags |= ROW_FLAG_DELETED;
     // A row deleted written not deleted is created again at its place
@@ -3536,7 +3613,8 @@ class FeatureTablesStore implements FeatureTablesInternals, TablesWriter, Tables
       if (replacedGroups.has(copy.group) && !newGroups.has(copy.group)) waiting.delete(handle);
     }
     for (const old of version.replaces) {
-      for (let r = 0; r < old.data.length; r++) this.styles.release(old.data.styles[r]);
+      for (let r = 0; r < old.data.length; r++)
+        this.styles.release(styleColumnOf(old.data).indexes[r]);
     }
     for (const group of groups) {
       for (let r = 0; r < group.data.length; r++) this.writeState(group, r);
@@ -3548,13 +3626,29 @@ class FeatureTablesStore implements FeatureTablesInternals, TablesWriter, Tables
       this.rowGroups.get(copy.group.handle)?.layer.touchItems();
     }
     for (const [delta, set] of leaving) this.rebuildDelta(delta, set, []);
-    // The values written in place since the version started
+    // The values written in place since the version started (a row whose values its new row block
+    // does not hold goes to the delta)
     const writes = new Map<string, InPlaceRowWrite[]>();
+    const moved = new Map<LayerTable, DeltaInput[]>();
     for (const entry of version.log) {
       const place = this.placeOf(entry.handle);
       if (!place || place.group.delta || !groups.includes(place.group)) continue;
       const fields = new Map<RowField, unknown[]>();
       for (const [field, value] of entry.fields) fields.set(field as RowField, [value]);
+      if (!this.fitsInPlace(place, fields)) {
+        const deleted = entry.deleted ? Uint8Array.of(1) : undefined;
+        const input = this.patchedInput(entry.handle, place, 0, fields, deleted, [
+          place.group.data.groups[place.row],
+        ]);
+        let list = moved.get(place.layer);
+        if (!list) {
+          list = [];
+          moved.set(place.layer, list);
+        }
+        list.push({ handle: entry.handle, input });
+        this.writeMarks.stampGroup(place.group);
+        continue;
+      }
       const style = fields.get('style');
       const numbers = style ? [this.styles.intern((style[0] ?? {}) as FeatureStyle)] : undefined;
       const write = this.writeInPlace(
@@ -3572,6 +3666,10 @@ class FeatureTablesStore implements FeatureTablesInternals, TablesWriter, Tables
         writes.set(place.layer.layerId, list);
       }
       list.push(write);
+    }
+    for (const [delta, list] of moved) {
+      this.rebuildDelta(delta, new Set(), list);
+      for (const { handle } of list) this.refreshCopies(handle);
     }
     if (version.orders) {
       // The rows of the deltas in the order of the new keys
@@ -3686,13 +3784,13 @@ class FeatureTablesStore implements FeatureTablesInternals, TablesWriter, Tables
           marks.stamp(group, r);
           if (watched) this.versions.rowChanged(handle, marks.mark);
         }
-        this.styles.retain(group.data.styles[r]);
+        this.styles.retain(styleColumnOf(group.data).indexes[r]);
       }
     }
     if (old) {
       for (let r = 0; r < old.data.length; r++) {
         const handle = old.data.handles[r];
-        this.styles.release(old.data.styles[r]);
+        this.styles.release(styleColumnOf(old.data).indexes[r]);
         if (this.ids.deltaLayer(handle) === layer.serial) this.ids.setDelta(handle, -1, -1);
       }
       layer.dropMoved(old);
@@ -3724,6 +3822,7 @@ class FeatureTablesStore implements FeatureTablesInternals, TablesWriter, Tables
    */
   private buildRows(inputs: readonly RowInput[], dims: CoordinateDimensions): RowBlockData | null {
     const builder = createRowBlockDataBuilder({
+      columns: this.columns,
       groups: this.groups.keyList(),
       targetRows: UNBOUNDED,
       targetVertices: UNBOUNDED,
@@ -3764,7 +3863,7 @@ class FeatureTablesStore implements FeatureTablesInternals, TablesWriter, Tables
 
   /** Gives the styles of a group built in a Worker the numbers of the table of styles */
   private numberStyles(data: RowBlockData): void {
-    const dictionary = data.styleDictionary;
+    const dictionary = styleColumnOf(data).dictionary;
     if (!dictionary) return;
     const numbers = new Uint32Array(utf8ColumnLength(dictionary));
     for (let i = 0; i < numbers.length; i++) {
@@ -3774,8 +3873,10 @@ class FeatureTablesStore implements FeatureTablesInternals, TablesWriter, Tables
         dictionary.offsets[i + 1],
       );
     }
-    for (let r = 0; r < data.length; r++) data.styles[r] = numbers[data.styles[r]];
-    data.styleDictionary = null;
+    const column = styleColumnOf(data);
+    const indexes = column.indexes;
+    for (let r = 0; r < data.length; r++) indexes[r] = numbers[indexes[r]];
+    column.dictionary = null;
   }
 
   /** Takes in one row group: the handles, the numbers of its styles, the state of its rows */
@@ -3797,11 +3898,12 @@ class FeatureTablesStore implements FeatureTablesInternals, TablesWriter, Tables
     }
     // The styles of a group built in a Worker get the numbers of the table of styles
     this.numberStyles(data);
+    const styles = styleColumnOf(data).indexes;
     for (let r = 0; r < data.length; r++) {
-      if (!this.styles.has(data.styles[r])) {
+      if (!this.styles.has(styles[r])) {
         throw new DrawError(
           'not-found',
-          `FeatureTables: a row names the style ${data.styles[r]}, which is unknown`,
+          `FeatureTables: a row names the style ${styles[r]}, which is unknown`,
         );
       }
     }
@@ -3817,7 +3919,7 @@ class FeatureTablesStore implements FeatureTablesInternals, TablesWriter, Tables
     layer.insert(group);
     this.rowBoxes.mark(data.handles);
     // The rows that use each style are counted (a style no row uses is given again)
-    for (let r = 0; r < data.length; r++) this.styles.retain(data.styles[r]);
+    for (let r = 0; r < data.length; r++) this.styles.retain(styles[r]);
     this.rowGroups.set(group.handle, { layer, group });
     for (let r = 0; r < data.length; r++) {
       const handle = data.handles[r];
@@ -3841,7 +3943,7 @@ class FeatureTablesStore implements FeatureTablesInternals, TablesWriter, Tables
     const handle = data.handles[row];
     const flags = data.flags[row];
     let state = this.states.stateOf(handle);
-    if ((flags & ROW_FLAG_VISIBLE) === 0) state |= STATE_HIDDEN_INVISIBLE;
+    if ((flags & ROW_FLAG_HIDDEN) !== 0) state |= STATE_HIDDEN_INVISIBLE;
     if ((flags & ROW_FLAG_DELETED) !== 0) state |= STATE_HIDDEN_DELETED;
     const featureGroup = data.groups[row];
     if (featureGroup >= 0 && !this.groups.isVisible(featureGroup)) state |= STATE_HIDDEN_GROUP;
@@ -4033,25 +4135,12 @@ function finishChanges(changes: Map<string, LayerChangeDraft>): Map<string, Laye
 /** The columns of a patch a write in place reads, taken from it once */
 interface PatchColumns {
   readonly geometry: readonly unknown[] | undefined;
-  readonly hidden: readonly unknown[] | undefined;
-  readonly locked: readonly unknown[] | undefined;
+  /** The `flag` columns written: their bits and values */
+  readonly flags: ReadonlyArray<readonly [number, readonly unknown[]]>;
+  /** The `whole` columns whose values a row block keeps written: their places and values */
+  readonly wholes: ReadonlyArray<readonly [number, readonly unknown[]]>;
   /** The attributes written: their keys and values */
   readonly properties: ReadonlyArray<readonly [string, readonly unknown[]]>;
-}
-
-function patchColumns(fields: ReadonlyMap<RowField, readonly unknown[]>): PatchColumns {
-  const properties: Array<readonly [string, readonly unknown[]]> = [];
-  for (const [field, values] of fields) {
-    if (field.startsWith(PROPERTY_FIELD)) {
-      properties.push([field.slice(PROPERTY_FIELD.length), values]);
-    }
-  }
-  return {
-    geometry: fields.get('geometry'),
-    hidden: fields.get('hidden'),
-    locked: fields.get('locked'),
-    properties,
-  };
 }
 
 /** What makes a row not drawn, a sketch drawn over it aside */
@@ -4075,20 +4164,39 @@ function changedKeys(a: FeatureStyle, b: FeatureStyle): string[] {
 }
 
 /** Checks that the arrays of a group have one entry per row */
-function checkShape(data: RowBlockData): void {
+function checkShape(data: RowBlockData, layout: RowColumnLayout): void {
   const n = data.length;
+  if (
+    data.shapes.length !== layout.shapes.length ||
+    data.wholes.length !== layout.wholes.length ||
+    data.keyed.length !== layout.keyed.length
+  ) {
+    throw new DrawError(
+      'invalid-input',
+      'FeatureTables: a row group holds other columns than the ones declared',
+    );
+  }
   const perRow: Array<[string, number]> = [
     ['handles', data.handles.length],
     ['ids', utf8ColumnLength(data.ids)],
     ['idHashes', data.idHashes.length],
-    ['types', data.types.length],
-    ['geometry.types', data.geometry.types.length],
-    ['geometry.offsets', data.geometry.offsets.length],
+    ...data.shapes.flatMap(
+      (shape, k): Array<[string, number]> =>
+        shape
+          ? [
+              [`shapes[${k}].types`, shape.types.length],
+              [`shapes[${k}].offsets`, shape.offsets.length],
+            ]
+          : [],
+    ),
+    ...data.wholes.flatMap(
+      (whole, k): Array<[string, number]> =>
+        whole ? [[`wholes[${k}]`, whole.indexes.length]] : [],
+    ),
     ['itemKeys', utf8ColumnLength(data.itemKeys)],
     ['memberKeys', utf8ColumnLength(data.memberKeys)],
     ['groups', data.groups.length],
     ['flags', data.flags.length],
-    ['styles', data.styles.length],
     ['rowBounds', data.rowBounds.length / 4],
     ...data.caches.map((cache): [string, number] => [
       `caches ${cache.name}`,
@@ -4103,15 +4211,23 @@ function checkShape(data: RowBlockData): void {
       );
     }
   }
-  for (const column of data.properties.columns) {
-    if (column.length !== n)
-      throw new DrawError('invalid-input', 'FeatureTables: an attribute column has another length');
+  for (const keyed of data.keyed) {
+    for (const column of keyed?.columns ?? []) {
+      if (column.length !== n)
+        throw new DrawError(
+          'invalid-input',
+          'FeatureTables: an attribute column has another length',
+        );
+    }
   }
 }
 
 /** Whether every geometry column of a row group has coordinates of dimensions */
 function hasDims(data: RowBlockData, dims: CoordinateDimensions): boolean {
-  for (const child of data.geometry.children) if ((child.dimensions ?? 'xy') !== dims) return false;
+  for (const shape of data.shapes) {
+    for (const child of shape?.children ?? [])
+      if ((child.dimensions ?? 'xy') !== dims) return false;
+  }
   return true;
 }
 
@@ -4121,7 +4237,7 @@ function hasDims(data: RowBlockData, dims: CoordinateDimensions): boolean {
  * @throws when a geometry column of the group has others
  */
 function checkDims(data: RowBlockData, dims: CoordinateDimensions): void {
-  for (const child of data.geometry.children) {
+  for (const child of data.shapes.flatMap((shape) => shape?.children ?? [])) {
     const own = child.dimensions ?? 'xy';
     if (own !== dims) {
       throw new DrawError(
@@ -4201,7 +4317,7 @@ class LayerTableViewImpl implements LayerTableView {
   getRowStyle(handle: RowHandle): Readonly<FeatureStyle> | undefined {
     if (!this.locate(handle)) return undefined;
     const group = this.store.foundGroup as RowGroup;
-    return this.store.styles.get(group.data.styles[this.store.foundRow]);
+    return this.store.styles.get(styleColumnOf(group.data).indexes[this.store.foundRow]);
   }
 
   getRow(handle: RowHandle): Feature | undefined {

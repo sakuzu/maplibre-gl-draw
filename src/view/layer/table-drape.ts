@@ -51,6 +51,7 @@ import { type EnuEdit, inverseEnuEdit, moveEnuPosition } from '../../geometry/en
 import { drawPropertyKey } from '../../shared/properties.js';
 import { BULK_ROWS_SET, type RowMotion, rowMotionOf } from '../../sketches/rendered-shapes.js';
 import type { Coordinate } from '../../store/types.js';
+import { styleColumnOf } from '../../table/feature-row-columns.js';
 import type { GpuLedger } from '../gpu-ledger.js';
 import { dashCoefficientsOf } from '../renderers/line/dash.js';
 import { rowsVariantOf } from '../renderers/rows/rows-shader.js';
@@ -1382,7 +1383,7 @@ export class TableDrape {
     const geometry = geometryAt(group, row);
     if (!geometry) return null;
     const type = rowType(group.data, row);
-    const style = group.data.styles[row] as number;
+    const style = styleColumnOf(group.data).indexes[row] as number;
     const ruleColor = layer.slots.ruleColorOf(group, row, layer.strings);
     const createdZoom = rowCreatedZoom(group, row);
     const ratios = this.ratios;

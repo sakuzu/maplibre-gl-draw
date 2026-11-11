@@ -61,7 +61,7 @@ import { wrapLongitude } from '../../shared/math/longitude.js';
 import { RenderedShapes } from '../../sketches/rendered-shapes.js';
 import type { Store } from '../../store/store.js';
 import type { Coordinate, Feature, FeatureStyle, FeatureType, Layer } from '../../store/types.js';
-import { ROW_FLAG_LOCKED } from '../../table/row-group-types.js';
+import { ROW_FLAG_LOCKED } from '../../table/feature-row-columns.js';
 import type {
   CompanionHitContext,
   FeatureCompanionHitResult,

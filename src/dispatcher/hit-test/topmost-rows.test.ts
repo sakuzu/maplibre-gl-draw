@@ -26,6 +26,7 @@ import { MemoryContractStore } from '../../store/memory.js';
 import { RBushSpatialIndex } from '../../store/spatial/spatial-index.js';
 import type { Feature } from '../../store/types.js';
 import { createRowBlockDataBuilder } from '../../table/row-group-builder.js';
+import { FEATURE_TABLE_COLUMNS } from '../../table/tabane/columns.js';
 import { feature, orderKey, rowOfFeature } from '../../test-utils.js';
 import {
   createFeatureCompanionRegistry,
@@ -78,7 +79,7 @@ function layer(id: string): void {
 }
 
 function adopt(layerId: string, features: Feature[]): void {
-  const builder = createRowBlockDataBuilder({ targetRows: 2 });
+  const builder = createRowBlockDataBuilder({ columns: FEATURE_TABLE_COLUMNS, targetRows: 2 });
   features.forEach((f, i) => {
     builder.addRow(rowOfFeature(f, orderKey(i)));
   });
@@ -372,7 +373,7 @@ describe('the hit testing of the companions of the rows held as columns', () => 
 
   /** Points on a grid of 200 columns, one degree apart, in groups of 4096 rows */
   function adoptGrid(layerId: string, count: number, extra: (i: number) => Partial<Feature>): void {
-    const builder = createRowBlockDataBuilder({ targetRows: 4096 });
+    const builder = createRowBlockDataBuilder({ columns: FEATURE_TABLE_COLUMNS, targetRows: 4096 });
     for (let i = 0; i < count; i++) {
       const f = feature(`p${i}`, 'Point', [i % 200, Math.floor(i / 200)], extra(i));
       builder.addRow(rowOfFeature(f, orderKey(i)));
@@ -442,7 +443,7 @@ describe('the hit testing of the companions of the rows held as columns', () => 
     const first = hitTest(at(60, 50));
     expect(first?.kind === 'companion' && first.companion.featureId).toBe('a');
     // A row comes in front of it, with a band
-    const builder = createRowBlockDataBuilder({ targetRows: 2 });
+    const builder = createRowBlockDataBuilder({ columns: FEATURE_TABLE_COLUMNS, targetRows: 2 });
     builder.addRow(
       rowOfFeature(
         feature('b', 'Polygon', square(20, 0), { properties: { band: 50 } }),

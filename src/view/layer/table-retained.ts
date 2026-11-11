@@ -106,6 +106,7 @@ import {
   transformRolesOf,
   transformValuesOf,
 } from '../../store/transform-roles.js';
+import { styleColumnOf } from '../../table/feature-row-columns.js';
 import { buildPackedRTree, type PackedRTree, searchPackedRTree } from '../../table/packed-rtree.js';
 import type { FeatureCompanionRegistry } from '../feature-companion.js';
 import { GpuResources } from '../gpu.js';
@@ -3418,7 +3419,7 @@ export class TableLayerRenderer {
         let rowReach = TABLE_DRAPE_POINT_REACH_PX;
         if (context && !groupCache?.sprites.has(row)) {
           const slot = context.slots.point(
-            group.data.styles[row] as number,
+            styleColumnOf(group.data).indexes[row] as number,
             rowType(group.data, row),
             context.slots.ruleColorOf(group, row, context.strings),
           );

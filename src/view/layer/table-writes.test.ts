@@ -32,6 +32,7 @@ import {
 import { drawPropertyKey } from '../../shared/properties.js';
 import type { Feature, FeatureStyle, Layer } from '../../shared/types/model.js';
 import { circleRowRings } from '../../table/circle-rings.js';
+import { styleColumnOf } from '../../table/feature-row-columns.js';
 import { FEATURE_CACHES } from '../../table/fill-triangles.js';
 import {
   createTestDrawer,
@@ -329,8 +330,8 @@ function editor(live: ReturnType<typeof drawn>, features: Feature[]) {
       const styles = live.internals.styles;
       const next = styles.intern(style);
       styles.retain(next);
-      styles.release(group.data.styles[row]);
-      group.data.styles[row] = next;
+      styles.release(styleColumnOf(group.data).indexes[row]);
+      styleColumnOf(group.data).indexes[row] = next;
       features[row] = { ...features[row], style };
       tell(row, ROW_WRITE_STYLE);
     },

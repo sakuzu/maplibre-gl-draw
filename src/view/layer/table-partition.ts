@@ -26,6 +26,7 @@ import { rowHasGeometry, rowType } from '../../feature-table/row-read.js';
 import type { BBox } from '../../geometry/types.js';
 import type { Feature, Layer } from '../../shared/types/model.js';
 import type { TransformFieldsRegistry } from '../../store/transform-roles.js';
+import { styleColumnOf } from '../../table/feature-row-columns.js';
 import { CHUNK_TARGET_VERTICES } from '../../table/partition.js';
 import type { FeatureCompanionRegistry } from '../feature-companion.js';
 import type { RowSpriteSource } from '../renderers/rows/rows-format.js';
@@ -185,7 +186,7 @@ export function classifyRow(
     const source = renderer?.rowSprites as RowSpriteSource;
     const reader = geometryAt(group, row)?.reader;
     const points = reader?.type === 'Point' || reader?.type === 'MultiPoint';
-    if (!points || !slots.sprite(source, data.styles[row])) return 'immediate';
+    if (!points || !slots.sprite(source, styleColumnOf(data).indexes[row])) return 'immediate';
     context.onSprite?.(row, source);
     return 'rows';
   }
@@ -194,14 +195,15 @@ export function classifyRow(
   switch (type) {
     case 'Point':
     case 'MultiPoint':
-      if (!slots.point(data.styles[row], type, color()).shape) return 'immediate';
+      if (!slots.point(styleColumnOf(data).indexes[row], type, color()).shape) return 'immediate';
       return oneDraw ? 'rows' : 'point';
     case 'LineString':
     case 'Freehand':
     case 'MultiLineString':
       // The drawing in one draw cuts the dashes itself
       if (oneDraw) return 'rows';
-      return slots.line(data.styles[row], type, color()).stroke.lineStyle === 'solid'
+      return slots.line(styleColumnOf(data).indexes[row], type, color()).stroke.lineStyle ===
+        'solid'
         ? 'line'
         : 'immediate';
     case 'Polygon':
@@ -209,7 +211,9 @@ export function classifyRow(
     case 'Circle':
       if (oneDraw) return 'rows';
       // Only a dashed outline cannot be retained (fill only and a solid outline can be)
-      return slots.polygon(data.styles[row], type, color()).dashedStroke ? 'immediate' : 'polygon';
+      return slots.polygon(styleColumnOf(data).indexes[row], type, color()).dashedStroke
+        ? 'immediate'
+        : 'polygon';
     default:
       // Kinds that retained mode does not handle, such as Image
       return 'immediate';

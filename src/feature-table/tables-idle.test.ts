@@ -23,7 +23,7 @@ import { IDLE_BUILD_FROM, type RowBoxIndex } from './row-box-index.js';
 const COUNT = IDLE_BUILD_FROM + 100;
 
 function blocks() {
-  const builder = createRowBlockDataBuilder();
+  const builder = createRowBlockDataBuilder({ columns: FEATURE_TABLE_COLUMNS });
   for (let i = 0; i < COUNT; i++) {
     builder.addRow({
       id: `p${i}`,

@@ -37,15 +37,23 @@ import {
 } from '@sakuzu/tabane';
 import { DrawError } from '../../shared/draw-error.js';
 import { circleRowRings } from '../circle-rings.js';
+import {
+  FEATURE_COLUMN_LAYOUT,
+  GEOMETRY_COLUMN,
+  PROPERTIES_COLUMN,
+  ROW_FLAG_HIDDEN,
+  ROW_FLAG_LOCKED,
+  STYLE_COLUMN,
+  TYPE_COLUMN,
+} from '../feature-row-columns.js';
 import { FEATURE_CACHES, FILL_TRIANGLES } from '../fill-triangles.js';
 import { RowCacheWriter } from '../row-caches.js';
 import { WIDE_VERTICES } from '../row-geometry.js';
 import {
   ROW_FLAG_DELETED,
-  ROW_FLAG_LOCKED,
-  ROW_FLAG_VISIBLE,
   type RowBlock,
   type RowBlockData,
+  type RowBlockWhole,
 } from '../row-group-types.js';
 import type { RowRead, RowShape, RowShapeColumn } from '../row-read-type.js';
 import { type PointRowRings, rowRingsOfPoint } from '../row-rings.js';
@@ -87,21 +95,14 @@ function vertexStart(child: TableGeometry, row: number): number {
 
 /**
  * The geometry of the shapes of a row block, its points with the coordinates of `dims`: the
- * points of each form are the coordinates of a child, the form of each row its child
+ * points of each form are the coordinates of a child, the form of each row its child (null for a
+ * row block without the column)
  */
 function geometryOf(
   column: TabaneShapeColumn | null,
-  rows: number,
   dims: CoordinateDimensions,
-): TableMixedGeometry {
-  if (column === null) {
-    return {
-      type: 'Mixed',
-      types: new Int8Array(rows).fill(-1),
-      offsets: new Int32Array(rows),
-      children: [],
-    };
-  }
+): TableMixedGeometry | null {
+  if (column === null) return null;
   const from = column.dimensions;
   if (!dimsWithin(from, dims))
     throw new DrawError('invalid-input', `Tabane: coordinates of ${from} in a layer of ${dims}`);
@@ -157,7 +158,7 @@ export function rowBlockDataOfTabane(
   const dims = options.dimensions ?? columns.geometry?.dimensions ?? 'xy';
   const system = options.coordinateSystem ?? planarCoordinates;
   const rings = options.rings ? rowRingsOfPoint(options.rings) : circleRowRings;
-  const geometry = geometryOf(columns.geometry, n, dims);
+  const geometry = geometryOf(columns.geometry, dims);
   const stride = strideOf(dims);
   const { typeNames, types } = typesOf(columns.type, n);
   const { styleDictionary, styles } = stylesOf(columns.style, n);
@@ -167,10 +168,11 @@ export function rowBlockDataOfTabane(
   const idHashes = new Uint32Array(n);
   for (let r = 0; r < n; r++) idHashes[r] = hashUtf8(ids, r);
 
+  // The flag columns are taken as they are, a bit each
   const flags = new Uint8Array(n);
   for (let r = 0; r < n; r++) {
     flags[r] =
-      (tabaneFlagOf(columns.hidden, r) ? 0 : ROW_FLAG_VISIBLE) |
+      (tabaneFlagOf(columns.hidden, r) ? ROW_FLAG_HIDDEN : 0) |
       (tabaneFlagOf(columns.locked, r) ? ROW_FLAG_LOCKED : 0) |
       (tabaneFlagOf(rowBlock.deleted, r) ? ROW_FLAG_DELETED : 0);
   }
@@ -181,7 +183,7 @@ export function rowBlockDataOfTabane(
     columnOf.set(key, c);
   });
   const drawsRing = typeNames.map((t) => rings.draws(t));
-  const shapeColumns: RowShapeColumn[] = geometry.children.map((child) => ({
+  const shapeColumns: RowShapeColumn[] = (geometry?.children ?? []).map((child) => ({
     type: child.type,
     coords: child.coords,
     stride,
@@ -198,8 +200,8 @@ export function rowBlockDataOfTabane(
       return k === undefined ? undefined : readValue(properties.columns[k], at);
     },
     shape: (): RowShape | null => {
-      const c = geometry.types[at];
-      return c < 0 ? null : { column: shapeColumns[c], at: geometry.offsets[at] };
+      const c = geometry ? geometry.types[at] : -1;
+      return c < 0 || !geometry ? null : { column: shapeColumns[c], at: geometry.offsets[at] };
     },
   };
 
@@ -224,8 +226,8 @@ export function rowBlockDataOfTabane(
   let vertexCount = 0;
   for (at = 0; at < n; at++) {
     const r = at;
-    const c = geometry.types[r];
-    if (c < 0) {
+    const c = geometry ? geometry.types[r] : -1;
+    if (c < 0 || !geometry) {
       rowBounds.fill(Number.NaN, r * 4, r * 4 + 4);
       for (const cache of caches) cache.skip(r);
       continue;
@@ -256,21 +258,25 @@ export function rowBlockDataOfTabane(
     }
   }
 
+  const shapes: Array<TableMixedGeometry | null> = FEATURE_COLUMN_LAYOUT.shapes.map(() => null);
+  shapes[GEOMETRY_COLUMN] = geometry;
+  const wholes: Array<RowBlockWhole | null> = FEATURE_COLUMN_LAYOUT.wholes.map(() => null);
+  wholes[TYPE_COLUMN] = { indexes: types, values: typeNames };
+  wholes[STYLE_COLUMN] = { indexes: styles, dictionary: styleDictionary };
+  const keyed = FEATURE_COLUMN_LAYOUT.keyed.map(() => null as typeof properties | null);
+  keyed[PROPERTIES_COLUMN] = properties.keys.length > 0 ? properties : null;
   return {
     length: n,
     handles: new Int32Array(n).fill(-1),
     ids,
     idHashes,
-    types,
-    typeNames,
-    geometry,
+    shapes,
+    wholes,
+    keyed,
     itemKeys: keyColumn(rowBlock),
     memberKeys: { offsets: new Int32Array(n + 1), bytes: new Uint8Array(0) },
     groups: new Int32Array(n).fill(-1),
     flags,
-    styles,
-    styleDictionary,
-    properties,
     rowBounds,
     caches: caches.map((cache) => cache.finish()),
     vertexCount,

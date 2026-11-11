@@ -17,6 +17,7 @@ import type { GpuRowsSource } from '../../extension/renderers.js';
 import { rowFeature } from '../../feature-table/row-read.js';
 import { drawPropertyKey } from '../../shared/properties.js';
 import type { Feature, Layer } from '../../shared/types/model.js';
+import { geometryColumnOf } from '../../table/feature-row-columns.js';
 import { createTestDrawer, feature, tablesOfFeatures } from '../../test-utils.js';
 import {
   createFeatureCompanionRegistry,
@@ -302,7 +303,7 @@ describe('classifyRow', () => {
     const { internals, table } = tablesOfFeatures('layer', [feature('p', 'Point', [0, 0])]);
     const group = table.groupAt(0);
     // A geometry column of no child stands for a row without a geometry
-    group.data.geometry.types[0] = -1;
+    geometryColumnOf(group.data)!.types[0] = -1;
     const slots = new RowStyleSlots(createTestDrawer(), internals.styles, undefined);
     expect(
       classifyRow(group, 0, {

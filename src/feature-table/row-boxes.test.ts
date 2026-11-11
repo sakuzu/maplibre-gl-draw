@@ -155,7 +155,7 @@ describe('the boxes of the rows whose boxes come from more than their points', (
 
   it('finds every row by the box of its points in tables given no boxes', () => {
     const { tables, writer } = createTables({ columns: FEATURE_TABLE_COLUMNS });
-    const builder = createRowBlockDataBuilder();
+    const builder = createRowBlockDataBuilder({ columns: FEATURE_TABLE_COLUMNS });
     builder.addRow({
       id: 'image',
       type: 'Image',
