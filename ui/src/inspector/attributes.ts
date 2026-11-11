@@ -67,7 +67,9 @@ export function attributeRows(feature: Pick<Feature, 'properties'>): AttributeRo
 /** The patch that sets a text attribute, or removes it when the text is empty after trimming */
 function textPatch(key: string, text: string): FeaturePatch {
   const value = text.trim();
-  return { properties: { [key]: value === '' ? undefined : value } };
+  return value === ''
+    ? ({ unset: { properties: [key] } } as FeaturePatch)
+    : { properties: { [key]: value } };
 }
 
 /** The patch that names a feature; an empty name removes the attribute */
@@ -77,8 +79,9 @@ export function namePatch(name: string): FeaturePatch {
 
 /** The patch that describes a feature; an empty description removes the attribute */
 export function descriptionPatch(text: string): FeaturePatch {
-  const value = text.trim() === '' ? undefined : text;
-  return { properties: { [DESCRIPTION_KEY]: value } };
+  return text.trim() === ''
+    ? ({ unset: { properties: [DESCRIPTION_KEY] } } as FeaturePatch)
+    : { properties: { [DESCRIPTION_KEY]: text } };
 }
 
 /** Whether a name can be given to an attribute of the feature, other than the one at `except` */

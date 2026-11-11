@@ -15,7 +15,7 @@
 // The features an operation makes become the selection.
 
 import { type Feature, readFeature } from '@sakuzu/maplibre-gl-draw';
-import { write } from '../writes.js';
+import { writeOrThrow } from '../writes.js';
 import type { InspectorDraw, Units } from './types.js';
 
 /** An operation on the features selected */
@@ -119,7 +119,7 @@ export async function runOperation(
 ): Promise<string[] | null> {
   const ids = features.map((f) => f.id);
   let made: readonly Feature[] | null = null;
-  const done = await write(draw, async (tx) => {
+  const done = await writeOrThrow(draw, async (tx) => {
     switch (op) {
       case 'union':
         made = [await tx.features.union(ids)];
@@ -147,7 +147,7 @@ export async function runOperation(
  * Makes the buffers of features and selects them
  *
  * @param distanceMeters - The distance of the outline from the features, in meters
- * @param segments - The segments of a full circle; core's default when left out
+ * @param _segments - Not read: core makes the buffer with its own segments
  * @returns The IDs of the features made, or null when core refused the operation
  * @throws `DrawError` of core when a feature cannot be buffered or the distance is not finite
  */
@@ -158,7 +158,7 @@ export async function runBuffer(
   _segments?: number,
 ): Promise<string[] | null> {
   const made: Feature[] = [];
-  const done = await write(draw, async (tx) => {
+  const done = await writeOrThrow(draw, async (tx) => {
     for (const feature of features) made.push(await tx.features.buffer(feature.id, distanceMeters));
   });
   return done ? selectResults(draw, made) : null;

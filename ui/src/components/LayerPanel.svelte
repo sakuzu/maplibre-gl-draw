@@ -20,6 +20,7 @@
     type TreeNode,
     TreeRow,
   } from '@sakuzu/kata/svelte';
+  import { readFeature } from '@sakuzu/maplibre-gl-draw';
   import type { Snippet } from 'svelte';
   import type { BasemapControl } from '../basemaps.js';
   import { type MoveJoin, planMove } from '../layers/move.js';
@@ -216,8 +217,13 @@
       return;
     }
     if (visible && draw.hidden.has(id)) draw.hidden.remove(id);
-    const entity = index.get(id)?.node.data as { visible: boolean } | undefined;
-    if (entity?.visible === visible) return;
+    const data = index.get(id)?.node.data;
+    // A feature is a GeoJSON Feature: its own visibility is a value of the library
+    const own =
+      kind === 'feature' && data
+        ? readFeature(data as Parameters<typeof readFeature>[0]).visible
+        : (data as { visible?: boolean } | undefined)?.visible;
+    if (own === visible) return;
     if (kind === 'layer') void write(draw, (tx) => tx.layers.update(id, { visible }));
     else if (kind === 'group') void write(draw, (tx) => tx.groups.update(id, { visible }));
     else void write(draw, (tx) => tx.features.update(id, featurePatchOf({ visible })));

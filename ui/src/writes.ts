@@ -26,6 +26,25 @@ export async function write(
   }
 }
 
+/**
+ * Runs a write whose error the interface shows: true once committed, false when core refused it
+ * (read-only, a lock); any other error of core is thrown
+ */
+export async function writeOrThrow(
+  draw: Pick<Draw, 'write'>,
+  fn: Parameters<Draw['write']>[0],
+): Promise<boolean> {
+  try {
+    await draw.write(fn);
+    return true;
+  } catch (error) {
+    if (error instanceof DrawError && (error.code === 'not-editable' || error.code === 'locked')) {
+      return false;
+    }
+    throw error;
+  }
+}
+
 /** Deletes what is selected: features, groups or layers */
 export function deleteSelection(draw: WriteDraw): Promise<boolean> {
   const { type, count, ids } = draw.selection.value;

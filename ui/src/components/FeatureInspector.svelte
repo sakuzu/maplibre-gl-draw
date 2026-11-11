@@ -80,7 +80,11 @@
   // The tabs show when there are two
   const shownTabs = $derived(tabs.length > 1 ? tabs : []);
   const subtitle = $derived(
-    [typeLabel(feature.type, m), view.layer?.name, view.hidden ? m.hiddenState : '']
+    [
+      typeLabel(readFeature(feature).featureType, m),
+      view.layer?.name,
+      view.hidden ? m.hiddenState : '',
+    ]
       .filter(Boolean)
       .join(' · '),
   );
@@ -166,7 +170,7 @@
 {/snippet}
 
 <InspectorFrame
-  title={editable ? name : name || typeLabel(feature.type, m)}
+  title={editable ? name : name || typeLabel(readFeature(feature).featureType, m)}
   ontitle={editable ? (next) => update(namePatch(next)) : undefined}
   {subtitle}
   {onclose}

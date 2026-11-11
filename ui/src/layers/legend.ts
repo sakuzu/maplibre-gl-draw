@@ -20,6 +20,7 @@ import {
   type FeatureType,
   type Layer,
   type LegendEntry,
+  readFeature,
 } from '@sakuzu/maplibre-gl-draw';
 import type { Messages } from '../messages.js';
 
@@ -98,7 +99,7 @@ export function legendShape(
   channelOf: (type: FeatureType) => RuleChannel,
 ): LegendShape {
   return shapeOfTypes(
-    features.map((feature) => feature.type),
+    features.map((feature) => readFeature(feature).featureType),
     channelOf,
   );
 }
