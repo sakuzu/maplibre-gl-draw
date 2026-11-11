@@ -20,6 +20,7 @@ const ROOT = new URL('..', import.meta.url).pathname;
 /** The sections of src/index.ts, which are its categories (in this order) */
 const MAIN_CATEGORIES = [
   'Entry and options',
+  'Writing',
   'Document model',
   'Inputs, patches and filters',
   'The stacking order of the items',
@@ -68,7 +69,8 @@ const MEMBER_GROUPS = [
   'The map and the Store',
   'Mode',
   'Read-only and interaction lock',
-  'Transactions and events',
+  'Writing',
+  'Events',
   'Drawing',
   'Lifecycle',
 ];

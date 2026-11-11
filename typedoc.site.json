@@ -15,6 +15,7 @@
   "categorizeByGroup": false,
   "categoryOrder": [
     "Entry and options",
+    "Writing",
     "Document model",
     "Inputs, patches and filters",
     "The stacking order of the items",
@@ -61,7 +62,8 @@
     "The map and the Store",
     "Mode",
     "Read-only and interaction lock",
-    "Transactions and events",
+    "Writing",
+    "Events",
     "Drawing",
     "Lifecycle",
     "*"

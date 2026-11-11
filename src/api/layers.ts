@@ -57,10 +57,10 @@ export interface LayersCollection {
    */
   countItems(id: string): number;
   /**
-   * The stacking order as {@link LayersCollection.reorder} takes it: the IDs of every layer and
-   * of the other entries placed on it (the datasets whose order is `layer-order` and the
-   * entries the `isExternalEntry` option recognizes), from the back. An entry that is no longer
-   * one of those is left out, so the array can be changed and given to `reorder` as it is.
+   * The stacking order: the IDs of every layer and of the other entries placed on it (the
+   * datasets whose order is `layer-order` and the entries the `isExternalEntry` option
+   * recognizes), from the back. An entry that is no longer one of those is left out. Each of
+   * them is put elsewhere with `tx.layers.place`.
    *
    * @returns A frozen array of IDs
    */

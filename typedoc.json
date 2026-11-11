@@ -24,6 +24,9 @@
   "externalSymbolLinkMappings": {
     "@sakuzu/tabane": {
       "*": "https://github.com/sakuzu/tabane-ts"
+    },
+    "@sakuzu/kasane": {
+      "createPageBuilder": "/api/table/functions/createPageBuilder"
     }
   }
 }
