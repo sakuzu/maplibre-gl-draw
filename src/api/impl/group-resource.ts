@@ -6,6 +6,7 @@
  * `draw.write`: the internal part each write of a transaction is made with once it is committed
  */
 
+import type { ObjectGroup } from '../../shared/types/model.js';
 import type {
   Group,
   GroupFilter,
@@ -72,6 +73,13 @@ export interface GroupResource {
    *   `already-exists` when its ID is taken
    */
   create(input: GroupInput): Group | null;
+  /**
+   * Creates a group checked before against the document as it still is (`prepareGroup`), without
+   * checking it again: its members put in stacking order unless they are in it already
+   *
+   * @returns The group, or `null` when the document is read-only
+   */
+  createChecked(group: ObjectGroup, options: { readonly membersInOrder: boolean }): Group | null;
   /**
    * Brings back a group this client deleted that a Store that holds its features as rows keeps
    * (`DocumentChange.restoreToken`), at the place it had in its layer, without features: its

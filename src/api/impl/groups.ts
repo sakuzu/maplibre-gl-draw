@@ -92,6 +92,15 @@ export function createGroups(deps: ResourceDeps): GroupResource {
       return store.getGroup(prepared.id) ?? null;
     },
 
+    createChecked(group, options) {
+      if (store.isReadOnly()) return null;
+      const prepared = options.membersInOrder
+        ? group
+        : { ...group, featureIds: idsInStackingOrder(store, group.featureIds) };
+      store.transact(() => createOne(prepared));
+      return store.getGroup(prepared.id) ?? null;
+    },
+
     createMany(inputs) {
       if (!Array.isArray(inputs)) throw invalidInput('The inputs must be an array');
       const pending = new Set<string>();

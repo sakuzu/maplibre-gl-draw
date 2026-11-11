@@ -432,6 +432,13 @@ export type SlicedWrite = QueuedWrite;
 
 export interface Store extends StoreView, UiState {
   /**
+   * A number that changes whenever the Store may have changed: each of its transactions and each
+   * notification it tells. While it stays the same, what was read of the document still holds
+   * (it also changes for writes that change nothing of the document). Read by the writes of a
+   * transaction checked before their commit
+   */
+  readonly revision: number;
+  /**
    * The layer of a feature, read without making the feature (a row of a layer held as rows is
    * read where it stands); undefined when there is no such feature
    */

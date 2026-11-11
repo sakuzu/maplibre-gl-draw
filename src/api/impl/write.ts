@@ -478,6 +478,12 @@ class TransactionImpl implements Transaction {
   readonly #pending = new Set<Promise<unknown>>();
   #closed = false;
   #failure: { error: unknown } | undefined;
+  /** The revision of the Store the writes are checked against (`Store.revision`) */
+  readonly #revision: number;
+  /** Whether the Store changed while the writes were checked */
+  #changed = false;
+  /** Whether the Store is as the writes were checked against, as the commit is made */
+  #unchangedAtCommit = false;
 
   constructor(id: string, signal: AbortSignal, writerDeps: WriterDeps) {
     this.id = id;
@@ -486,6 +492,12 @@ class TransactionImpl implements Transaction {
     this.#store = writerDeps.deps.store;
     this.#writers = writerDeps.writers;
     this.#reads = writerDeps.reads;
+    this.#revision = this.#store.revision;
+  }
+
+  /** Notes whether the Store changed since the transaction began */
+  #noteRevision(): void {
+    if (this.#store.revision !== this.#revision) this.#changed = true;
   }
 
   get features(): TransactionFeatures {
@@ -547,6 +559,10 @@ class TransactionImpl implements Transaction {
     const store = this.#store;
     if (store.isReadOnly()) throw notEditable();
     let skipped = 0;
+    // Nothing changed the document since the writes were checked: a write may skip the checks
+    // it made then (the writes before it in the commit are the ones it was checked after)
+    this.#noteRevision();
+    this.#unchangedAtCommit = !this.#changed;
     runCommit(store, info, info.undo ? WRITE_SOURCE : WRITE_SOURCE_NO_UNDO, () => {
       for (const op of this.#ops) {
         if (op === null) continue;
@@ -572,6 +588,7 @@ class TransactionImpl implements Transaction {
   #run<T>(check: (keep: (op: Op) => void) => T): Promise<T> {
     const refused = this.#refusal();
     if (refused) return this.#fail(refused);
+    this.#noteRevision();
     try {
       return Promise.resolve(check((op) => this.#ops.push(op)));
     } catch (error) {
@@ -585,9 +602,11 @@ class TransactionImpl implements Transaction {
     if (refused) return this.#fail(refused);
     const at = this.#ops.length;
     this.#ops.push(null);
+    this.#noteRevision();
     const running = (async () => {
       try {
         return await check((op) => {
+          this.#noteRevision();
           this.#ops[at] = op;
         });
       } catch (error) {
@@ -1301,16 +1320,18 @@ class TransactionImpl implements Transaction {
             if (own) overlay.features.set(featureId, { ...own, groupId: prepared.id });
             else overlay.members.set(featureId, prepared.id);
           }
-          keep(
-            () =>
-              writers.create({
-                id: prepared.id,
-                name: prepared.name,
-                visible: prepared.visible,
-                locked: prepared.locked,
-                layerId: prepared.layerId,
-                members: prepared.featureIds,
-              }) !== null,
+          keep(() =>
+            // Checked against the document as it is: made as it was checked
+            this.#unchangedAtCommit
+              ? writers.createChecked(prepared, { membersInOrder: !asRows }) !== null
+              : writers.create({
+                  id: prepared.id,
+                  name: prepared.name,
+                  visible: prepared.visible,
+                  locked: prepared.locked,
+                  layerId: prepared.layerId,
+                  members: prepared.featureIds,
+                }) !== null,
           );
           return made as Group;
         }),

@@ -84,6 +84,33 @@ function nextTask(): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, 0));
 }
 
+/** A row of a feature read from the tables, its feature made when asked for */
+class TableFeatureRow implements FeatureRow {
+  #made: Feature | undefined;
+  constructor(
+    readonly id: string,
+    readonly featureType: FeatureType,
+    readonly layerId: string,
+    readonly groupId: string | null,
+    readonly visible: boolean,
+    readonly locked: boolean,
+    readonly bbox: [number, number, number, number] | null,
+    private readonly read: (id: string) => StoredFeature | undefined,
+  ) {}
+
+  property(key: PropertyKey): never {
+    return (this.toFeature().properties as Record<PropertyKey, unknown>)[key] as never;
+  }
+
+  toFeature(): Feature {
+    if (this.#made) return this.#made;
+    const feature = this.read(this.id);
+    if (!feature) throw notFound('feature', this.id);
+    this.#made = toFeature(feature);
+    return this.#made;
+  }
+}
+
 /** A row of a feature held as a feature */
 function rowOfFeature(feature: StoredFeature): FeatureRow {
   let made: Feature | undefined;
@@ -210,43 +237,48 @@ export function createSelection(
     return { ids: selectedFeatures().map((feature) => feature.id) };
   };
 
-  /** A row held in the tables, read as it is held now; null when it is gone */
-  const rowOfHandle = (handle: number): FeatureRow | null => {
+  /**
+   * What reads the rows held in the tables, as they are held when each is read: a row, or null
+   * for a row that is gone (null when the Store holds no rows)
+   */
+  const tableRows = (): ((handle: number) => FeatureRow | null) | null => {
     const tables = store.tables;
     const internals = featureTablesInternals(tables);
-    const place = internals?.placeOf(handle);
-    const id = internals?.ids.idOf(handle);
-    if (!tables || !internals || !place || typeof id !== 'string') return null;
-    const { data, row } = { data: place.group.data, row: place.row };
-    const layerId = place.table.tableId;
-    const flags = data.flags[row] as number;
-    const group = data.groups[row] as number;
-    const at = row * 4;
-    const b = data.rowBounds;
-    const bbox: [number, number, number, number] = [
-      b[at] as number,
-      b[at + 1] as number,
-      b[at + 2] as number,
-      b[at + 3] as number,
-    ];
-    let made: Feature | undefined;
-    const make = (): Feature => {
-      if (made) return made;
-      const feature = readWithoutKeeping(tables, () => store.getFeature(id));
-      if (!feature) throw notFound('feature', id);
-      made = toFeature(feature);
-      return made;
-    };
-    return {
-      id,
-      featureType: tables.get(layerId)?.getRowType(handle) as FeatureType,
-      layerId,
-      groupId: group >= 0 ? (internals.groups.idOf(group) ?? null) : null,
-      visible: (flags & ROW_FLAG_HIDDEN) === 0,
-      locked: (flags & ROW_FLAG_LOCKED) !== 0,
-      bbox: bbox.every(Number.isFinite) ? bbox : null,
-      property: (key) => (make().properties as Record<PropertyKey, unknown>)[key] as never,
-      toFeature: make,
+    if (!tables || !internals) return null;
+    const read = (id: string) => readWithoutKeeping(tables, () => store.getFeature(id));
+    const views = new Map<string, ReturnType<typeof tables.get>>();
+    return (handle) => {
+      const place = internals.placeOf(handle);
+      const id = internals.ids.idOf(handle);
+      if (!place || typeof id !== 'string') return null;
+      const data = place.group.data;
+      const row = place.row;
+      const layerId = place.table.tableId;
+      let view = views.get(layerId);
+      if (view === undefined) {
+        view = tables.get(layerId);
+        views.set(layerId, view);
+      }
+      const flags = data.flags[row] as number;
+      const group = data.groups[row] as number;
+      const at = row * 4;
+      const b = data.rowBounds;
+      const x0 = b[at] as number;
+      const y0 = b[at + 1] as number;
+      const x1 = b[at + 2] as number;
+      const y1 = b[at + 3] as number;
+      const finite =
+        Number.isFinite(x0) && Number.isFinite(y0) && Number.isFinite(x1) && Number.isFinite(y1);
+      return new TableFeatureRow(
+        id,
+        view?.getRowType(handle) as FeatureType,
+        layerId,
+        group >= 0 ? (internals.groups.idOf(group) ?? null) : null,
+        (flags & ROW_FLAG_HIDDEN) === 0,
+        (flags & ROW_FLAG_LOCKED) !== 0,
+        finite ? [x0, y0, x1, y1] : null,
+        read,
+      );
     };
   };
 
@@ -440,9 +472,10 @@ export function createSelection(
       if (signal?.aborted) throw stopped();
       const what = toScan();
       const total = 'rows' in what ? what.rows.length : what.ids.length;
+      const ofHandle = 'rows' in what ? tableRows() : null;
       const rowAt =
         'rows' in what
-          ? (i: number) => rowOfHandle(what.rows[i] as number)
+          ? (i: number) => ofHandle?.(what.rows[i] as number) ?? null
           : (i: number) => {
               const feature = store.getFeature(what.ids[i] as string);
               return feature ? rowOfFeature(feature) : null;

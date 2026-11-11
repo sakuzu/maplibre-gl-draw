@@ -151,6 +151,8 @@ interface BulkState {
  * @internal
  */
 export class DrawStore implements Store {
+  /** Counted up by each transaction and each notification (`revision`) */
+  #revision = 0;
   readonly #contract: StoreContract;
   readonly #bus = new ChangeBus();
   readonly #drawing = new MemoryDrawingState(this.#bus);
@@ -688,7 +690,12 @@ export class DrawStore implements Store {
     this.#bus.setAfterFlush(fn);
   }
 
+  get revision(): number {
+    return this.#revision;
+  }
+
   transact<T>(fn: () => T, source: UpdateSource = 'local'): T {
+    this.#revision++;
     // A write of this client comes after the writes over several tasks queued
     if (source !== 'remote') this.#queue.finish();
     if (source !== 'remote') {
@@ -1091,6 +1098,7 @@ export class DrawStore implements Store {
    * did not come from a transaction of this Store)
    */
   #receive(changes: StoreChange): void {
+    this.#revision++;
     this.#bulkUnlocked = null;
     // The values of the selection told keep the document as it was when they were told
     settleSelectionValues(this, changes, [this.#toldValue, this.#toldBefore]);
