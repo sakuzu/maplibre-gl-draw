@@ -696,8 +696,10 @@ export class DrawStore implements Store {
 
   transact<T>(fn: () => T, source: UpdateSource = 'local'): T {
     this.#revision++;
-    // A write of this client comes after the writes over several tasks queued
-    if (source !== 'remote') this.#queue.finish();
+    // A write of this client comes after the writes over several tasks queued. A write made
+    // inside a write from elsewhere (a Store applying what it received) finishes none of them:
+    // they stay writes of this client, told after it
+    if (source !== 'remote' && this.#remoteDepth === 0) this.#queue.finish();
     if (source !== 'remote') {
       return this.#bus.transact(() => this.#contract.transact(fn, source), source);
     }
