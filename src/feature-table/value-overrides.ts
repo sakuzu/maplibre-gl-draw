@@ -33,13 +33,13 @@ import {
   VALUE_OTHER,
   VALUE_STRING,
   VALUE_TRUE,
+  valueOfInput,
   valueTagOf,
   wellFormed,
 } from '@sakuzu/tabane';
 import { KasaneError, kasaneErrorOf } from '../table/kasane-error.js';
 import type { RowCacheNumbers } from '../table/row-caches.js';
 import { type ShapeForm, ShapeFormReader } from '../table/shape-reader.js';
-import { drawValueOfInput } from '../table/value-input.js';
 
 /**
  * The bytes the values written in place may take per row group (attributes and geometry
@@ -98,8 +98,8 @@ export function encodeOverrideValue(value: unknown): OverrideValue {
     return { tag: VALUE_STRING, number: 0, bytes: utf8Bytes(value) };
   }
   // A bigint as the number or the big integer it is
-  if (typeof value === 'bigint') return encodeOverrideValue(drawValueOfInput(value, 'The value'));
   try {
+    if (typeof value === 'bigint') return encodeOverrideValue(valueOfInput(value, 'The value'));
     return { tag: valueTagOf(value), number: 0, bytes: encodeCanonicalValue(value) };
   } catch (error) {
     throw kasaneErrorOf(error);

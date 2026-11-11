@@ -28,7 +28,6 @@
 
 import type { CoordinateDimensions, CoordinateSystem } from '@sakuzu/tabane';
 import type { BBox } from '../geometry/bbox-type.js';
-import type { RowsChange } from '../shared/types/model.js';
 import type { GroupEntry, RowBlockBuilderOptions, RowInput } from '../table/row-group-builder.js';
 import { ROW_BLOCK_TARGET_ROWS, ROW_BLOCK_TARGET_VERTICES } from '../table/row-group-builder.js';
 import {
@@ -38,6 +37,7 @@ import {
 } from '../table/row-group-merge.js';
 import type { RowBlock, RowBlockData } from '../table/row-group-types.js';
 import { createRowGroup, type RowGroup, type RowTable } from './row-table.js';
+import type { RowsChange } from './tables-writer.js';
 import type { GroupHandle, RowGroupHandle, RowHandle, TableWorkBudget } from './types.js';
 
 /**

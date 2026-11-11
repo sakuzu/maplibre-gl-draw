@@ -20,10 +20,36 @@
  */
 
 import type { Utf8Column } from '@sakuzu/tabane';
-import type { RowsChange } from '../shared/types/model.js';
 import type { RowBlockData } from '../table/row-group-types.js';
-import type { RowValues } from './row-values.js';
+import type { RowField, RowValues } from './row-values.js';
 import type { RowHandle } from './types.js';
+
+/**
+ * The rows of one table a write created, updated or deleted, by handle
+ */
+export interface TableRowsChange {
+  /** The rows created */
+  readonly created: Int32Array;
+  /** The rows updated (a row that came from another table included) */
+  readonly updated: Int32Array;
+  /** The rows deleted */
+  readonly deleted: Int32Array;
+  /** The fields written */
+  readonly fields: ReadonlySet<RowField>;
+  /**
+   * The keys that changed of the objects the `whole` column kept by the tables holds (declared
+   * `'tables'`)
+   */
+  readonly styleKeys: ReadonlySet<string>;
+}
+
+/**
+ * The rows a write wrote, by table
+ */
+export interface RowsChange {
+  /** The rows of each table */
+  readonly layers: ReadonlyMap<string, TableRowsChange>;
+}
 
 /**
  * A field of a group a {@link TableGroupPatch} writes: a fixed field of every group (its `id`,

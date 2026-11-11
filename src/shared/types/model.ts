@@ -11,8 +11,15 @@
 import type { Value } from '@sakuzu/tabane';
 import type { Geometry, Position } from 'geojson';
 import type { RowField, RowValues } from '../../feature-table/row-values.js';
+import type { RowsChange, TableRowsChange } from '../../feature-table/tables-writer.js';
 
-export type { RowField, RowValues };
+/**
+ * The rows of one layer a change created, updated or deleted, by handle (`LayerRowsChange`), and
+ * the rows a change wrote, by layer (`RowsChange`): what the writer of the rows
+ * (`FeatureTablesWriter.apply`) returns, for the implementation of the Store to put in its
+ * notification (`StoreChange.rows`). The tables declare them, a layer being a table
+ */
+export type { RowField, RowsChange, RowValues, TableRowsChange as LayerRowsChange };
 
 /**
  * A position as `[longitude, latitude]` in degrees (WGS 84), in the same order as GeoJSON
@@ -792,31 +799,6 @@ export interface StoreChange {
    * `DocumentChange.previousValues`): a {@link RowValues}
    */
   previousValues?: FeatureValues;
-}
-
-/**
- * The rows of one layer a change created, updated or deleted, by handle.
- */
-export interface LayerRowsChange {
-  /** The rows created */
-  readonly created: Int32Array;
-  /** The rows updated (a row that came from another layer included) */
-  readonly updated: Int32Array;
-  /** The rows deleted */
-  readonly deleted: Int32Array;
-  /** The fields written */
-  readonly fields: ReadonlySet<RowField>;
-  /** The keys of the styles that changed */
-  readonly styleKeys: ReadonlySet<string>;
-}
-
-/**
- * The rows a change wrote, by layer: what the writer of the rows (`FeatureTablesWriter.apply`) returns, for the
- * implementation of the Store to put in its notification (`StoreChange.rows`).
- */
-export interface RowsChange {
-  /** The rows of each layer */
-  readonly layers: ReadonlyMap<string, LayerRowsChange>;
 }
 
 declare const featureValuesBrand: unique symbol;

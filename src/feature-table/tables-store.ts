@@ -29,8 +29,7 @@ import {
   ValueStringCache,
 } from '@sakuzu/tabane';
 import type { BBox } from '../geometry/bbox-type.js';
-import { DrawError } from '../shared/draw-error.js';
-import type { FeatureStyle, LayerRowsChange, RowsChange } from '../shared/types/model.js';
+import type { FeatureStyle } from '../shared/types/model.js';
 import { propertyColumnsOf, styleColumnOf } from '../table/feature-row-columns.js';
 import { KasaneError } from '../table/kasane-error.js';
 import { buildCacheColumns, cacheColumnsIn, type RowCache } from '../table/row-caches.js';
@@ -82,8 +81,10 @@ import {
 } from './row-write.js';
 import { StyleTable } from './style-table.js';
 import type {
+  RowsChange,
   TableGroupField,
   TableGroupPatch,
+  TableRowsChange,
   Tables,
   TablesWrite,
   TablesWriteOptions,
@@ -1008,7 +1009,7 @@ export class TablesStore implements RowBlocks, TablesWriter, Tables {
     if (cleared) return cleared;
     const dims = this.declaredDims?.(tableId) ?? 'xy';
     if (!isCoordinateDimensions(dims)) {
-      throw new DrawError(
+      throw new KasaneError(
         'invalid-state',
         `Tables: the table "${tableId}" has the dimensions ${dims}`,
       );
@@ -1158,18 +1159,18 @@ export class TablesStore implements RowBlocks, TablesWriter, Tables {
       checkShape(data, this.layout);
       checkDims(data, dims);
       this.fitCaches(data);
-      if (data.length === 0) throw new DrawError('invalid-input', 'Tables: an empty row group');
+      if (data.length === 0) throw new KasaneError('invalid-input', 'Tables: an empty row group');
       for (let r = 0; r < data.length; r++) {
         const group = data.groups[r];
         if (group >= 0 && !this.groups.has(group)) {
-          throw new DrawError(
+          throw new KasaneError(
             'not-found',
             `Tables: a row names the group ${group}, which is unknown`,
           );
         }
         const handle = this.ids.handleOfEntry(data.ids, r, data.idHashes[r]);
         if (handle >= 0 && (this.ids.mainGroup(handle) >= 0 || this.ids.deltaTable(handle) >= 0)) {
-          throw new DrawError(
+          throw new KasaneError(
             'already-exists',
             `Tables: "${this.ids.idOf(handle)}" is already a row`,
           );
@@ -1912,14 +1913,14 @@ export class TablesStore implements RowBlocks, TablesWriter, Tables {
     const n = patch.handles.length;
     for (const [field, values] of patch.fields) {
       if (values.length !== n) {
-        throw new DrawError(
+        throw new KasaneError(
           'invalid-input',
           `Tables: "${field}" has ${values.length} values for ${n} rows`,
         );
       }
     }
     if (patch.deleted && patch.deleted.length !== n) {
-      throw new DrawError('invalid-input', 'Tables: deleted has another length than the rows');
+      throw new KasaneError('invalid-input', 'Tables: deleted has another length than the rows');
     }
   }
 
@@ -1984,7 +1985,7 @@ export class TablesStore implements RowBlocks, TablesWriter, Tables {
     geometries?.forEach((geometry, i) => {
       if (geometry === undefined) return;
       if (!geometry || typeof geometry !== 'object' || !('type' in geometry)) {
-        throw new DrawError(
+        throw new KasaneError(
           'invalid-input',
           `Tables: the geometry of the row ${handles[i]} is not a geometry`,
         );
@@ -2010,7 +2011,7 @@ export class TablesStore implements RowBlocks, TablesWriter, Tables {
           continue;
         }
         if (typeof parent !== 'string' || parent === '') {
-          throw new DrawError(
+          throw new KasaneError(
             'invalid-input',
             `Tables: the parent of the row ${handles[i]} is not an id`,
           );
@@ -2029,7 +2030,7 @@ export class TablesStore implements RowBlocks, TablesWriter, Tables {
       const from = place.table.dims;
       const to = this.dimsOfTable(tableId);
       if (from !== to && !to.startsWith(from)) {
-        throw new DrawError(
+        throw new KasaneError(
           'invalid-input',
           `Tables: the row ${handles[i]} has coordinates of ${from}, the table "${tableId}" of ${to}`,
         );
@@ -2042,7 +2043,7 @@ export class TablesStore implements RowBlocks, TablesWriter, Tables {
     for (const [name, values] of strings) {
       values?.forEach((value, i) => {
         if (typeof value === 'string' || (value === undefined && !!places[i])) return;
-        throw new DrawError(
+        throw new KasaneError(
           'invalid-input',
           `Tables: the ${name} of the row ${handles[i]} is not a string`,
         );
@@ -2051,7 +2052,7 @@ export class TablesStore implements RowBlocks, TablesWriter, Tables {
     places.forEach((place, i) => {
       if (place) return;
       if (!this.ids.has(handles[i])) {
-        throw new DrawError('not-found', `Tables: no row has the handle ${handles[i]}`);
+        throw new KasaneError('not-found', `Tables: no row has the handle ${handles[i]}`);
       }
       // A new row: what a new row cannot be without
       const missing = [
@@ -2061,7 +2062,7 @@ export class TablesStore implements RowBlocks, TablesWriter, Tables {
         ['key', keys?.[i]],
       ].filter(([, value]) => value === undefined);
       if (missing.length > 0) {
-        throw new DrawError(
+        throw new KasaneError(
           'invalid-input',
           `Tables: no row has the handle ${handles[i]}, and a new row needs ${missing
             .map(([name]) => name)
@@ -2338,14 +2339,14 @@ export class TablesStore implements RowBlocks, TablesWriter, Tables {
         );
       }
       if (values.length !== n) {
-        throw new DrawError(
+        throw new KasaneError(
           'invalid-input',
           `Tables: "${field}" has ${values.length} values for ${n} groups`,
         );
       }
     }
     if (deleted && deleted.length !== n) {
-      throw new DrawError('invalid-input', 'Tables: deleted has another length than the groups');
+      throw new KasaneError('invalid-input', 'Tables: deleted has another length than the groups');
     }
     const value = (field: TableGroupField, i: number) => fields.get(field)?.[i];
     for (let i = 0; i < n; i++) {
@@ -2353,13 +2354,13 @@ export class TablesStore implements RowBlocks, TablesWriter, Tables {
       for (const field of ['id', 'key', 'parent'] as const) {
         const v = value(field, i);
         if (v !== undefined && typeof v !== 'string') {
-          throw new DrawError(
+          throw new KasaneError(
             'invalid-input',
             `Tables: the ${field} of the group ${handles[i]} is not a string`,
           );
         }
         if (v === undefined && !this.groups.has(handles[i])) {
-          throw new DrawError(
+          throw new KasaneError(
             'invalid-input',
             `Tables: the new group ${handles[i]} needs its ${field}`,
           );
@@ -2368,7 +2369,7 @@ export class TablesStore implements RowBlocks, TablesWriter, Tables {
       for (const field of this.groupFlags) {
         const v = value(field as TableGroupField, i);
         if (v !== undefined && typeof v !== 'boolean') {
-          throw new DrawError(
+          throw new KasaneError(
             'invalid-input',
             `Tables: the ${field} of the group ${handles[i]} is not a boolean`,
           );
@@ -3211,9 +3212,9 @@ export class TablesStore implements RowBlocks, TablesWriter, Tables {
     for (let r = 0; r < data.length; r++) {
       const handle = data.handles[r];
       if (!this.ids.has(handle))
-        throw new DrawError('not-found', `Tables: the handle ${handle} is unknown`);
+        throw new KasaneError('not-found', `Tables: the handle ${handle} is unknown`);
       if (this.ids.mainGroup(handle) >= 0 || this.ids.deltaTable(handle) >= 0) {
-        throw new DrawError(
+        throw new KasaneError(
           'already-exists',
           `Tables: "${this.ids.idOf(handle)}" is already a row`,
         );
@@ -3224,7 +3225,7 @@ export class TablesStore implements RowBlocks, TablesWriter, Tables {
     const styles = styleColumnOf(data).indexes;
     for (let r = 0; r < data.length; r++) {
       if (!this.styles.has(styles[r])) {
-        throw new DrawError(
+        throw new KasaneError(
           'not-found',
           `Tables: a row names the style ${styles[r]}, which is unknown`,
         );
@@ -3483,8 +3484,8 @@ function draftOf(changes: Map<string, TableChangeDraft>, tableId: string): Table
 }
 
 /** The changes of the tables, as the writer returns them */
-function finishChanges(changes: Map<string, TableChangeDraft>): Map<string, LayerRowsChange> {
-  const out = new Map<string, LayerRowsChange>();
+function finishChanges(changes: Map<string, TableChangeDraft>): Map<string, TableRowsChange> {
+  const out = new Map<string, TableRowsChange>();
   for (const [tableId, draft] of changes) {
     out.set(tableId, {
       created: Int32Array.from(draft.created),
@@ -3544,7 +3545,7 @@ function checkShape(data: RowBlockData, layout: RowColumnLayout): void {
     data.wholes.length !== layout.wholes.length ||
     data.keyed.length !== layout.keyed.length
   ) {
-    throw new DrawError(
+    throw new KasaneError(
       'invalid-input',
       'Tables: a row group holds other columns than the ones declared',
     );
@@ -3577,13 +3578,13 @@ function checkShape(data: RowBlockData, layout: RowColumnLayout): void {
   ];
   for (const [name, length] of perRow) {
     if (length !== n) {
-      throw new DrawError('invalid-input', `Tables: ${name} has ${length} entries for ${n} rows`);
+      throw new KasaneError('invalid-input', `Tables: ${name} has ${length} entries for ${n} rows`);
     }
   }
   for (const keyed of data.keyed) {
     for (const column of keyed?.columns ?? []) {
       if (column.length !== n)
-        throw new DrawError('invalid-input', 'Tables: an attribute column has another length');
+        throw new KasaneError('invalid-input', 'Tables: an attribute column has another length');
     }
   }
 }
@@ -3606,7 +3607,7 @@ function checkDims(data: RowBlockData, dims: CoordinateDimensions): void {
   for (const child of data.shapes.flatMap((shape) => shape?.children ?? [])) {
     const own = child.dimensions ?? 'xy';
     if (own !== dims) {
-      throw new DrawError(
+      throw new KasaneError(
         'invalid-input',
         `Tables: a row group has coordinates of ${own}, its table ${dims}`,
       );
