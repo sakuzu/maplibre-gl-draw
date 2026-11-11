@@ -431,6 +431,11 @@ export interface StoreView {
 export type SlicedWrite = QueuedWrite;
 
 export interface Store extends StoreView, UiState {
+  /**
+   * The layer of a feature, read without making the feature (a row of a layer held as rows is
+   * read where it stands); undefined when there is no such feature
+   */
+  getFeatureLayerId(id: string): string | undefined;
   /** Creates a feature (see {@link DocumentStore.createFeature}) */
   createFeature(feature: Feature): boolean;
   /** Creates features, one after the other in the order given (see the public `Store.createFeatures`) */

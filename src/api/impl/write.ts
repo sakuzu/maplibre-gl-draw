@@ -22,6 +22,7 @@
 
 import { differenceAll, intersectionAll, unionAll } from '../../geometry/boolean.js';
 import type { AreaCoordinates, MultiPolygonCoordinates } from '../../geometry/types.js';
+import type { ObjectGroup } from '../../shared/types/model.js';
 import { createId } from '../../shared/utils/id.js';
 import { forEachMatchingRow, type RowFilter } from '../../store/feature-stream.js';
 import { featuresInStackingOrder } from '../../store/item-lists.js';
@@ -96,7 +97,7 @@ import {
   toResultGeometry,
 } from './geometry/targets.js';
 import type { GroupResource } from './group-resource.js';
-import { prepareGroup, prepareGroupPatch } from './groups.js';
+import { idsInStackingOrder, prepareGroup, prepareGroupPatch } from './groups.js';
 import type { LayerResource } from './layer-resource.js';
 import { prepareLayer, prepareLayerPatch } from './layers.js';
 import { resolveMoveTarget } from './placement.js';
@@ -398,6 +399,11 @@ class Overlay {
   readonly features = new Map<string, StoredFeature | null>();
   readonly layers = new Map<string, StoredLayer | null>();
   readonly groups = new Map<string, StoredGroup | null>();
+  /**
+   * The group of each feature a group the transaction made took, that the transaction has not
+   * written otherwise (a feature it writes after is read as it wrote it)
+   */
+  readonly members = new Map<string, string>();
   /** The Store as the checks read it, with what the transaction wrote over it */
   readonly view: Store;
 
@@ -411,7 +417,19 @@ class Overlay {
       return own === null ? undefined : (own ?? committed());
     };
     const overrides: Record<string, unknown> = {
-      getFeature: (id: string) => read(this.features, id, () => store.getFeature(id)),
+      getFeature: (id: string) => {
+        const feature = read(this.features, id, () => store.getFeature(id));
+        // A member of a group the transaction made, written into the group as it is read
+        const groupId = this.members.get(id);
+        return feature && groupId !== undefined && !this.features.has(id)
+          ? { ...feature, groupId }
+          : feature;
+      },
+      getFeatureLayerId: (id: string) => {
+        const own = this.features.get(id);
+        if (own !== undefined) return own === null ? undefined : own.layerId;
+        return store.getFeatureLayerId(id);
+      },
       getLayer: (id: string) => read(this.layers, id, () => store.getLayer(id)),
       getGroup: (id: string) => read(this.groups, id, () => store.getGroup(id)),
       getLayerOrder: () => {
@@ -1260,17 +1278,28 @@ class TransactionImpl implements Transaction {
       listMembers: (id, options) => read(() => reads.listMembers(id, options)),
       create: (input: GroupInput) =>
         this.#run((keep) => {
-          const prepared = prepareGroup(
+          const checked = prepareGroup(
             { ...this.#deps, store: overlay.view },
             input,
             new Set(),
             new Set(),
+            { inOrder: false },
           );
           this.#requireEditable();
-          overlay.groups.set(prepared.id, prepared);
+          // A group of a layer held as rows lists no members (they are read from the rows); a
+          // group of a layer of objects lists them in stacking order
+          const asRows = overlay.view.getLayer(checked.layerId)?.kind === 'table';
+          const prepared: ObjectGroup = asRows
+            ? checked
+            : { ...checked, featureIds: idsInStackingOrder(overlay.view, checked.featureIds) };
+          const { featureIds: _members, ...fields } = prepared;
+          const made: StoredGroup = asRows ? { ...fields, kind: 'table' } : prepared;
+          overlay.groups.set(prepared.id, made);
           for (const featureId of prepared.featureIds) {
-            const feature = this.#feature(featureId);
-            overlay.features.set(featureId, { ...feature, groupId: prepared.id });
+            // The features it wrote are written again in the group; the others are read in it
+            const own = overlay.features.get(featureId);
+            if (own) overlay.features.set(featureId, { ...own, groupId: prepared.id });
+            else overlay.members.set(featureId, prepared.id);
           }
           keep(
             () =>
@@ -1283,7 +1312,7 @@ class TransactionImpl implements Transaction {
                 members: prepared.featureIds,
               }) !== null,
           );
-          return prepared as Group;
+          return made as Group;
         }),
       update: (id: string, patch: GroupPatch) =>
         this.#run((keep) => {

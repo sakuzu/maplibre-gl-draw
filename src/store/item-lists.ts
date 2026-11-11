@@ -234,16 +234,27 @@ function memberRows(store: GroupInsertStore, members: ReadonlySet<string>): Int3
  * caller. A group of a layer held as rows deleted whose rows are kept is created again at the
  * place it had, which the Store gives it
  *
+ * @param options - `membersInOrder`: its members are listed in stacking order and stand in the
+ *   layer, so the last is the frontmost
  * @internal
  */
-export function insertGroup(store: GroupInsertStore, group: Group): void {
+export function insertGroup(
+  store: GroupInsertStore,
+  group: Group,
+  options?: { readonly membersInOrder?: boolean },
+): void {
   const members = new Set(group.kind === 'table' ? [] : group.featureIds);
   const layerId = group.layerId;
   const kept =
     heldAsRows(store, layerId) &&
     store.getGroup(group.id) === undefined &&
     store.tables?.findGroup(group.id) !== undefined;
-  const frontmost = frontmostItem(store, layerId, members);
+  // The last of members listed in stacking order is the frontmost
+  const listed = group.kind === 'table' ? [] : group.featureIds;
+  const frontmost =
+    options?.membersInOrder === true && listed.length > 0
+      ? listed[listed.length - 1]
+      : frontmostItem(store, layerId, members);
   const around = frontmost ? itemNeighbors(store, layerId, undefined, frontmost, members) : null;
   // A new group of rows: made empty at the place of its frontmost member, its members put into
   // it as rows in one write (by the keys of their order, without naming each of them)

@@ -67,7 +67,9 @@ export function createGroups(deps: ResourceDeps): GroupResource {
     return inOrder().filter((group) => matches(group, entries));
   };
 
-  const createOne = (prepared: ObjectGroup): void => insertGroup(store, prepared);
+  // Its members are in stacking order (`prepareGroup`)
+  const createOne = (prepared: ObjectGroup): void =>
+    insertGroup(store, prepared, { membersInOrder: true });
 
   return {
     get: (id) => store.getGroup(id),
@@ -245,29 +247,36 @@ export function prepareGroupShell(
   };
 }
 
-/** Checks an input and builds the group to store; throws DrawError on a wrong input */
-/** @internal */
+/**
+ * Checks an input and builds the group to store; throws DrawError on a wrong input
+ *
+ * @param options - `inOrder: false` leaves its members in the order given (they are put in
+ *   stacking order otherwise)
+ * @internal
+ */
 export function prepareGroup(
   deps: ResourceDeps,
   input: GroupInput,
   pending: ReadonlySet<string>,
   claimed: ReadonlySet<string>,
+  options?: { readonly inOrder?: boolean },
 ): ObjectGroup {
   const { store } = deps;
   requireRecord(input, 'The input');
   const ids = requireIds(input.members, 'members');
   optionalString(input as unknown as Record<string, unknown>, 'layerId');
   if (ids.length === 0) throw invalidInput('A group needs at least one feature');
-  const members = ids.map((featureId) => {
-    const feature = store.getFeature(featureId);
-    if (!feature) throw notFound('feature', featureId);
+  // Their layers, read without making the features (a group can take many)
+  const layers = ids.map((featureId) => {
+    const layer = store.getFeatureLayerId(featureId);
+    if (layer === undefined) throw notFound('feature', featureId);
     if (claimed.has(featureId)) {
       throw invalidInput(`The feature ${featureId} is in two of the new groups`);
     }
-    return feature;
+    return layer;
   });
-  const layerId = members[0].layerId;
-  if (members.some((feature) => feature.layerId !== layerId)) {
+  const layerId = layers[0] as string;
+  if (layers.some((layer) => layer !== layerId)) {
     throw invalidInput('The features of a group must be in the same layer');
   }
   if (input.layerId !== undefined && input.layerId !== layerId) {
@@ -277,13 +286,20 @@ export function prepareGroup(
   return {
     ...shell,
     layerId,
-    featureIds: inStackingOrder(store, members).map((feature) => feature.id),
+    featureIds: options?.inOrder === false ? ids : idsInStackingOrder(store, ids),
   };
 }
 
-/** The features in stacking order, from the back */
-function inStackingOrder(store: Store, features: StoredFeature[]): StoredFeature[] {
-  return featuresInStackingOrder(store, features);
+/**
+ * The IDs of features in stacking order, from the back (read by their IDs alone)
+ *
+ * @internal
+ */
+export function idsInStackingOrder(store: Store, ids: readonly string[]): string[] {
+  return featuresInStackingOrder(
+    store,
+    ids.map((id) => ({ id }) as StoredFeature),
+  ).map((feature) => feature.id);
 }
 
 /** Checks a patch and builds the updates of the Store; throws DrawError on a wrong patch */

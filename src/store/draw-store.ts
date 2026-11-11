@@ -33,6 +33,7 @@ import { type BulkOperation, planBulk } from '../feature-table/bulk-plan.js';
 import {
   isRowLocked,
   isRowShown,
+  livePlaceOf,
   type RowContainers,
   rowsByLayerInOrder,
 } from '../feature-table/bulk-rows.js';
@@ -207,6 +208,16 @@ export class DrawStore implements Store {
   getFeature(id: string): Feature | undefined {
     const feature = this.#contract.getFeature(id);
     return feature && this.#feature(feature);
+  }
+  getFeatureLayerId(id: string): string | undefined {
+    const tables = this.#contract.tables;
+    const internals = featureTablesInternals(tables);
+    const handle = tables?.getRowRef(id);
+    if (internals && handle !== undefined) {
+      const place = livePlaceOf(internals, handle);
+      if (place) return place.table.tableId;
+    }
+    return this.#contract.getFeature(id)?.layerId;
   }
   listFeatures(): Feature[] {
     return this.#features(this.#contract.listFeatures());
