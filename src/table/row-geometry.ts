@@ -2,12 +2,13 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * The geometry of one row as the rows are built and written
+ * The geometry of one row of a feature, read from its GeoJSON geometry (`toRowGeometry`), and the
+ * triangles of the fills of polygons
  *
- * The builder of the row groups and the writes of the rows in place read a GeoJSON geometry the
- * same way: its coordinates in one array, the sizes of its rings and parts, and the triangles of
- * its fills. Keeping both on these functions keeps the triangles of a row written in place the
- * ones the builder would have made.
+ * The tables build and write their rows from shapes (`row-shape.ts`); the library reads a GeoJSON
+ * geometry here where it makes what the tables hold itself (the triangles of a Tabane block
+ * written). The triangles of a row are made by the same functions everywhere, so the triangles of
+ * a row written in place are the ones the builder would have made.
  *
  * The coordinates of a row have the dimensions of its layer (`CoordinateDimensions`): a position
  * shorter than them gets NaN for the values it does not have, and a longer one is refused rather
@@ -17,13 +18,12 @@
  * runs in a Worker as well.
  */
 
-import { type CoordinateDimensions, copyCoordinates, strideOf } from '@sakuzu/tabane';
+import { type CoordinateDimensions, strideOf } from '@sakuzu/tabane';
 import earcut from 'earcut';
 import type { Geometry, Position } from 'geojson';
 import { DrawError } from '../shared/draw-error.js';
 import { polygonRingRuns } from './polygon-rings.js';
-import type { RowShape } from './row-read-type.js';
-import type { GeometryType, TableGeometry } from './types.js';
+import type { GeometryType } from './types.js';
 
 /**
  * The depth of the shapes of each geometry type: the number of its offset arrays
@@ -278,126 +278,4 @@ export function pairTriangles(
     }
     if (!paired) emit(v[0], v[1], v[2], v[2]);
   }
-}
-
-/**
- * A geometry column of one row holding a row geometry
- *
- * @internal
- */
-export function singleRowColumn(geometry: RowGeometry): TableGeometry {
-  const coords = geometry.coords.slice();
-  const dims = geometry.dims;
-  const vertices = coords.length / geometry.stride;
-  switch (geometry.type) {
-    case 'Point':
-      return { type: 'Point', coords, dimensions: dims };
-    case 'LineString':
-    case 'MultiPoint':
-      return {
-        type: geometry.type,
-        coords,
-        dimensions: dims,
-        offsets: [Int32Array.of(0, vertices)],
-      };
-    case 'Polygon':
-    case 'MultiLineString': {
-      const rings = ringOffsetsOf(geometry);
-      return {
-        type: geometry.type,
-        coords,
-        dimensions: dims,
-        offsets: [Int32Array.of(0, geometry.parts.length), rings],
-      };
-    }
-    case 'MultiPolygon': {
-      const polygons = new Int32Array(geometry.polygons.length + 1);
-      for (let p = 0; p < geometry.polygons.length; p++) {
-        polygons[p + 1] = polygons[p] + geometry.polygons[p];
-      }
-      return {
-        type: 'MultiPolygon',
-        coords,
-        dimensions: dims,
-        offsets: [Int32Array.of(0, geometry.polygons.length), polygons, ringOffsetsOf(geometry)],
-      };
-    }
-  }
-}
-
-/**
- * The shape of a row geometry as a row reads it: a column of the one row, its coordinates not
- * copied
- *
- * @internal
- */
-export function rowShapeOf(geometry: RowGeometry): RowShape {
-  const { coords, stride } = geometry;
-  let offsets: Int32Array[];
-  switch (geometry.type) {
-    case 'Point':
-      offsets = [];
-      break;
-    case 'LineString':
-    case 'MultiPoint':
-      offsets = [Int32Array.of(0, coords.length / stride)];
-      break;
-    case 'Polygon':
-    case 'MultiLineString':
-      offsets = [Int32Array.of(0, geometry.parts.length), ringOffsetsOf(geometry)];
-      break;
-    case 'MultiPolygon': {
-      const polygons = new Int32Array(geometry.polygons.length + 1);
-      for (let p = 0; p < geometry.polygons.length; p++) {
-        polygons[p + 1] = polygons[p] + geometry.polygons[p];
-      }
-      offsets = [Int32Array.of(0, geometry.polygons.length), polygons, ringOffsetsOf(geometry)];
-      break;
-    }
-  }
-  return { column: { type: geometry.type, coords, stride, offsets }, at: 0 };
-}
-
-/**
- * The geometry of one row of a geometry column, as a row geometry (its coordinates copied)
- *
- * @param column The column
- * @param at The row in the column
- * @param dims The dimensions of the coordinates of the row geometry (those of the column when
- *   omitted): a dimension the column does not have is NaN
- * @throws when the column has a dimension that `dims` does not
- * @internal
- */
-export function rowGeometryOfColumn(
-  column: {
-    readonly type: string;
-    readonly coords: Float64Array;
-    readonly dimensions?: CoordinateDimensions;
-    readonly offsets?: readonly Int32Array[];
-  },
-  at: number,
-  dims: CoordinateDimensions = column.dimensions ?? 'xy',
-): RowGeometry {
-  const o = column.offsets ?? [];
-  let first = at;
-  let end = at + 1;
-  for (const level of o) {
-    first = level[first];
-    end = level[end];
-  }
-  const stride = strideOf(dims);
-  const coords = new Float64Array((end - first) * stride);
-  copyCoordinates(column.coords, column.dimensions ?? 'xy', first, end - first, coords, dims, 0);
-  const parts: number[] = [];
-  const polygons: number[] = [];
-  if (o.length === 2) {
-    for (let r = o[0][at]; r < o[0][at + 1]; r++) parts.push(o[1][r + 1] - o[1][r]);
-  } else if (o.length === 3) {
-    for (let p = o[0][at]; p < o[0][at + 1]; p++) {
-      polygons.push(o[1][p + 1] - o[1][p]);
-      for (let r = o[1][p]; r < o[1][p + 1]; r++) parts.push(o[2][r + 1] - o[2][r]);
-    }
-  }
-  // The name of the form of a row of the tables is its geometry type
-  return { type: column.type as GeometryType, dims, stride, coords, parts, polygons };
 }
