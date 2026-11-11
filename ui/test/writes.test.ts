@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest';
 import { groupSelection, ungroupSelection, type WriteDraw } from '../src/writes.js';
 
 /** A draw whose selection lists no IDs (selected in bulk), with the writes it is given */
-function bulkDraw(rows: Array<{ id: string; groupId: string | null }>) {
+function bulkDraw(rows: Array<{ id: string; groupId: string | null; layerId?: string }>) {
   const calls: unknown[] = [];
   const value: SelectionValue = {
     type: 'feature',
@@ -16,7 +16,9 @@ function bulkDraw(rows: Array<{ id: string; groupId: string | null }>) {
   const tx = {
     groups: {
       create: async (input: unknown) => calls.push(['create', input]),
-      delete: async (ids: unknown, options: unknown) => calls.push(['delete', ids, options]),
+    },
+    features: {
+      place: async (ids: unknown, to: unknown) => calls.push(['place', ids, to]),
     },
   };
   const draw = {
@@ -25,7 +27,7 @@ function bulkDraw(rows: Array<{ id: string; groupId: string | null }>) {
       value,
       target: { type: 'selection', count: rows.length },
       scan: async (visit: (row: FeatureRow) => void) => {
-        for (const row of rows) visit(row as unknown as FeatureRow);
+        for (const row of rows) visit({ layerId: 'l', ...row } as unknown as FeatureRow);
       },
     },
   } as unknown as WriteDraw;
@@ -42,7 +44,7 @@ describe('the group writes over features selected in bulk', () => {
     expect(calls).toEqual([['create', { members: ['a', 'b'] }]]);
   });
 
-  it('dissolve the groups of the features the selection scans, keeping the features', async () => {
+  it('take the features the selection scans out of their groups, in front of each, in order', async () => {
     const { draw, calls } = bulkDraw([
       { id: 'a', groupId: 'g1' },
       { id: 'b', groupId: 'g1' },
@@ -50,6 +52,9 @@ describe('the group writes over features selected in bulk', () => {
       { id: 'd', groupId: 'g2' },
     ]);
     expect(await ungroupSelection(draw)).toBe(true);
-    expect(calls).toEqual([['delete', ['g1', 'g2'], { members: 'keep' }]]);
+    expect(calls).toEqual([
+      ['place', ['a', 'b'], { layerId: 'l', below: 'g1' }],
+      ['place', ['d'], { layerId: 'l', below: 'g2' }],
+    ]);
   });
 });
