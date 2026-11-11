@@ -24,24 +24,30 @@ const SRC = resolve(here, '..');
 /** The names the entry exports, values and types */
 const EXPORTS = [
   'Column',
+  'createPageBuilder',
   'createTableBuilder',
   'DictionaryColumn',
   'GeometryType',
-  'prepareTable',
+  'Page',
+  'PageBuilder',
   'PreparedTable',
+  'prepareTable',
   'Table',
   'TableBuilder',
   'tableFromFeatures',
   'TableGeometry',
   'TableMixedGeometry',
+  'toPage',
+  'ToPageOptions',
   'transferList',
 ];
 
 /**
- * The packages the entry loads at runtime: Tabane, and of Kasane the packed R-tree and the readers
- * of the shape columns, which a Worker runs too
+ * The packages the entry loads at runtime: Tabane, of Kasane the builder of its pages, the packed
+ * R-tree and the readers of the shape columns, and earcut for the triangles of the pages, which a
+ * Worker runs too
  */
-const PACKAGES: string[] = ['@sakuzu/kasane/engine', '@sakuzu/tabane'];
+const PACKAGES: string[] = ['@sakuzu/kasane', '@sakuzu/kasane/render', '@sakuzu/tabane', 'earcut'];
 
 /** The runtime imports of a file (type-only imports are erased) */
 function runtimeImports(file: string): string[] {
@@ -90,11 +96,13 @@ describe('the table subpath', () => {
     expect(exportedNames().sort(byName)).toEqual([...EXPORTS].sort(byName));
   });
 
-  it('exports at runtime the building, the preparation and the transfer list', () => {
+  it('exports at runtime the building, the preparation, the pages and the transfer list', () => {
     expect(Object.keys(table).sort()).toEqual([
+      'createPageBuilder',
       'createTableBuilder',
       'prepareTable',
       'tableFromFeatures',
+      'toPage',
       'transferList',
     ]);
   });
@@ -118,11 +126,28 @@ describe('the table subpath', () => {
     expect([...new Set(packages)].sort()).toEqual(PACKAGES);
     const files = [...seen].map((file) => relative(SRC, file)).sort();
     expect(files).toEqual([
+      'geometry/circle.ts',
+      'geometry/coords.ts',
+      'geometry/distance.ts',
+      'geometry/units.ts',
+      'shared/draw-error.ts',
+      'shared/properties.ts',
       'shared/utils/own-property.ts',
       'table/builder.ts',
+      'table/circle-rings.ts',
+      'table/draw-error-of.ts',
+      'table/feature-row-blocks.ts',
+      'table/feature-row-columns.ts',
+      'table/fill-triangles.ts',
       'table/index.ts',
+      'table/pages.ts',
       'table/partition.ts',
+      'table/polygon-rings.ts',
       'table/prepare.ts',
+      'table/row-geometry.ts',
+      'table/tabane/columns.ts',
+      'table/tabane/rows.ts',
+      'table/tabane/triangles.ts',
       'table/table.ts',
     ]);
   });

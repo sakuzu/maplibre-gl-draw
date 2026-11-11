@@ -1,22 +1,22 @@
 // SPDX-FileCopyrightText: 2026 SAKAIDA Atsushi
 // SPDX-License-Identifier: AGPL-3.0-only
 
-import type { RowBlockBuildOptions } from '@sakuzu/kasane';
+import type { PageBuildOptions } from '@sakuzu/kasane';
 import { transferList } from '@sakuzu/kasane';
 import {
   cacheNumbersOf,
+  type PageData,
+  type PageDictionary,
   ROW_FLAG_DELETED,
-  type RowBlockData,
-  type RowBlockDictionary,
   ShapeFormReader,
-} from '@sakuzu/kasane/engine';
+} from '@sakuzu/kasane/render';
 import { decodeCanonicalValue, hashUtf8, readValue, utf8String } from '@sakuzu/tabane';
 import earcut from 'earcut';
 import type { Geometry } from 'geojson';
 import { describe, expect, it } from 'vitest';
 import { generateCirclePolygon } from '../geometry/circle.js';
 import { drawPropertyKey } from '../shared/properties.js';
-import { featureRowDataBuilder as createRowBlockDataBuilder } from '../test-utils.js';
+import { featureRowDataBuilder as createPageDataBuilder } from '../test-utils.js';
 import { buildEarcutInput } from '../view/renderers/polygon/earcut-input.js';
 import { circleRowRings } from './circle-rings.js';
 import type { FeatureRowInput as RowInput } from './feature-row-blocks.js';
@@ -40,14 +40,14 @@ function row(id: string, key: string, geometry: Geometry | null, extra: Partial<
 const point = (x: number, y: number): Geometry => ({ type: 'Point', coordinates: [x, y] });
 
 /** The ids of every group, group after group */
-function idsOf(groups: readonly RowBlockData[]): string[] {
+function idsOf(groups: readonly PageData[]): string[] {
   return groups.flatMap((group) =>
     Array.from({ length: group.length }, (_, r) => utf8String(group.ids, r)),
   );
 }
 
 /** The coordinates of a row read back through the geometry columns */
-function coordinatesOf(group: RowBlockData, r: number): unknown {
+function coordinatesOf(group: PageData, r: number): unknown {
   const child = geometryColumnOf(group)!.types[r];
   if (child < 0) return null;
   const column = new ShapeFormReader(geometryColumnOf(group)!.children[child]);
@@ -64,22 +64,22 @@ function paired(triangles: readonly number[], base = 0): number[] {
 }
 
 /** The indices of the pairs of triangles of a row */
-function trianglesOf(group: RowBlockData, r: number): number[] {
+function trianglesOf(group: PageData, r: number): number[] {
   return Array.from(cacheNumbersOf(group.caches[FILL_TRIANGLES_AT], r));
 }
 
 /** The builder of the tables, with the caches of the library unless told */
 function builderOf(
-  options: Partial<RowBlockBuildOptions> = {},
-): ReturnType<typeof createRowBlockDataBuilder> {
-  return createRowBlockDataBuilder({
+  options: Partial<PageBuildOptions> = {},
+): ReturnType<typeof createPageDataBuilder> {
+  return createPageDataBuilder({
     columns: FEATURE_TABLE_COLUMNS,
     caches: FEATURE_CACHES,
     ...options,
   });
 }
 
-describe('createRowBlockDataBuilder', () => {
+describe('createPageDataBuilder', () => {
   it('puts the rows in the order of their keys', () => {
     const builder = builderOf();
     builder.addRow(row('c', 'a2', point(0, 0)));
@@ -359,9 +359,7 @@ describe('createRowBlockDataBuilder', () => {
     const [group] = builder.finish();
     expect(styleColumnOf(group).indexes[0]).toBe(styleColumnOf(group).indexes[1]);
     expect(styleColumnOf(group).indexes[2]).not.toBe(styleColumnOf(group).indexes[0]);
-    const dictionary = styleColumnOf(group).dictionary as NonNullable<
-      RowBlockDictionary['dictionary']
-    >;
+    const dictionary = styleColumnOf(group).dictionary as NonNullable<PageDictionary['dictionary']>;
     const style = (r: number) =>
       decodeCanonicalValue(
         dictionary.bytes,

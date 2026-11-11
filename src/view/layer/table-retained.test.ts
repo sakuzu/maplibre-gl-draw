@@ -11,7 +11,7 @@
  * record what they are asked to build and draw.
  */
 
-import type { RowTable } from '@sakuzu/kasane/engine';
+import type { RowTable } from '@sakuzu/kasane/render';
 import type { ProjectionData } from 'maplibre-gl';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { draggedRowsOf } from '../../feature-table/dragged-rows.js';
@@ -25,7 +25,7 @@ import type { BBox } from '../../geometry/types.js';
 import type { Feature, Layer } from '../../shared/types/model.js';
 import { FEATURE_TABLE_COLUMNS } from '../../table/tabane/columns.js';
 import {
-  featureRowDataBuilder as createRowBlockDataBuilder,
+  featureRowDataBuilder as createPageDataBuilder,
   createTestDrawer,
   feature,
   orderKey,
@@ -352,11 +352,11 @@ describe('the order of the drawing of a layer held as rows', () => {
   it('draws the row groups added, in order, from the first frame', () => {
     const { tables, writer } = createFeatureTablesStore();
     const internals = featureTablesInternals(tables) as FeatureTablesInternals;
-    const builder = createRowBlockDataBuilder({ columns: FEATURE_TABLE_COLUMNS, targetRows: 20 });
+    const builder = createPageDataBuilder({ columns: FEATURE_TABLE_COLUMNS, targetRows: 20 });
     interleaved(100, 9).forEach((f, i) => {
       builder.addRow(rowOfFeature(f, orderKey(i)));
     });
-    writer.addRowBlocks('layer', builder.finish());
+    writer.addPages('layer', builder.finish());
     const mocks = createRenderers();
     const renderer = new TableLayerRenderer({
       ledger: new GpuLedger(),

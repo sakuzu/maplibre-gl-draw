@@ -19,8 +19,8 @@
  * - The draws of a mixed layer are a few, and what they hold is in the ledger
  */
 
-import type { RowTable } from '@sakuzu/kasane/engine';
-import { ROW_WRITE_GEOMETRY, ROW_WRITE_STYLE } from '@sakuzu/kasane/engine';
+import type { RowTable } from '@sakuzu/kasane/render';
+import { ROW_WRITE_GEOMETRY, ROW_WRITE_STYLE } from '@sakuzu/kasane/render';
 import { planarCoordinates } from '@sakuzu/tabane';
 import type { ProjectionData } from 'maplibre-gl';
 import { beforeEach, describe, expect, it } from 'vitest';
@@ -787,8 +787,8 @@ describe('the check of the classification of a row written in place', () => {
     frame();
     frame();
     const line = features.find((f) => f.id.startsWith('l')) as Feature;
-    const handle = tables.findRow(line.id) as number;
-    writer.apply({
+    const handle = tables.getRowRef(line.id) as number;
+    writer.writeRows({
       handles: Int32Array.of(handle),
       fields: new Map([['properties:ring', [true]]]),
     });
@@ -825,10 +825,13 @@ describe('the check of the classification of a row written in place', () => {
     frame();
     frame();
     const line = features.find((f) => f.id.startsWith('l')) as Feature;
-    const handle = tables.findRow(line.id) as number;
+    const handle = tables.getRowRef(line.id) as number;
     asked.length = 0;
     // A key it does not read: the row keeps its classification, the provider is not asked
-    writer.apply({ handles: Int32Array.of(handle), fields: new Map([['properties:name', ['n']]]) });
+    writer.writeRows({
+      handles: Int32Array.of(handle),
+      fields: new Map([['properties:name', ['n']]]),
+    });
     for (let i = 0; i < 2; i++) {
       const { record } = frame();
       expect(drawnHandles(record, table)).toEqual(visibleHandles(table));
@@ -837,7 +840,7 @@ describe('the check of the classification of a row written in place', () => {
     expect(renderer.writeStats.reclassified).toBe(0);
     expect(internals.deltaRowCount()).toBe(0);
     // The key it reads: classified again, drawn at once from the delta with its companion
-    writer.apply({
+    writer.writeRows({
       handles: Int32Array.of(handle),
       fields: new Map([['properties:ring', [true]]]),
     });
@@ -871,9 +874,12 @@ describe('the check of the classification of a row written in place', () => {
     frame();
     frame();
     const line = features.find((f) => f.id.startsWith('l')) as Feature;
-    const handle = tables.findRow(line.id) as number;
+    const handle = tables.getRowRef(line.id) as number;
     asked.length = 0;
-    writer.apply({ handles: Int32Array.of(handle), fields: new Map([['properties:name', ['n']]]) });
+    writer.writeRows({
+      handles: Int32Array.of(handle),
+      fields: new Map([['properties:name', ['n']]]),
+    });
     frame();
     expect(asked).toContain(handle);
     expect(renderer.writeStats.reclassified).toBe(0);
@@ -885,8 +891,8 @@ describe('the check of the classification of a row written in place', () => {
     frame();
     frame();
     const polygon = features.find((f) => f.id.startsWith('g')) as Feature;
-    const handle = tables.findRow(polygon.id) as number;
-    writer.apply({
+    const handle = tables.getRowRef(polygon.id) as number;
+    writer.writeRows({
       handles: Int32Array.of(handle),
       fields: new Map<RowField, unknown[]>([
         ['properties:name', ['a name']],
@@ -926,8 +932,8 @@ describe('the check of the classification of a row written in place', () => {
     const { tables, writer, renderer, frame, table } = setUp;
     frame();
     frame();
-    writer.apply({
-      handles: Int32Array.of(tables.findRow('c1') as number),
+    writer.writeRows({
+      handles: Int32Array.of(tables.getRowRef('c1') as number),
       fields: new Map([['properties:custom', [true]]]),
     });
     for (let i = 0; i < 3; i++) {
@@ -1355,8 +1361,8 @@ describe('the rows an extension holds on the GPU', () => {
     expect(drawnHandles(record, table)).toEqual(visibleHandles(table));
     // Rows of two types that give the same source are one range, whatever their order
     expect(made.map((held) => held.rows)).toEqual([
-      ['a', 'b', 'c'].map((id) => tables.findRow(id)),
-      [tables.findRow('e')],
+      ['a', 'b', 'c'].map((id) => tables.getRowRef(id)),
+      [tables.getRowRef('e')],
     ]);
     expect(log).toEqual(['held 0 0-3', 'held 1 0-1']);
     // Every row was given once, with its state
@@ -1473,13 +1479,16 @@ describe('the rows an extension holds on the GPU', () => {
     const features = ribbonRows(3);
     const { frame, made, tables, writer, log } = layer(features);
     frame();
-    const handle = tables.findRow('r1') as number;
-    writer.apply({ handles: Int32Array.of(handle), fields: new Map([['properties:name', ['n']]]) });
+    const handle = tables.getRowRef('r1') as number;
+    writer.writeRows({
+      handles: Int32Array.of(handle),
+      fields: new Map([['properties:name', ['n']]]),
+    });
     log.length = 0;
     frame([50, 50, 51, 51]);
     expect(log).toEqual([]);
     expect(made[0].writes).toEqual([[1, handle]]);
-    writer.apply({
+    writer.writeRows({
       handles: Int32Array.of(handle),
       fields: new Map([['style', [{ strokeColor: '#00ff00' }]]]),
     });
@@ -1493,8 +1502,8 @@ describe('the rows an extension holds on the GPU', () => {
       fits: () => false,
     });
     frame();
-    writer.apply({
-      handles: Int32Array.of(tables.findRow('r1') as number),
+    writer.writeRows({
+      handles: Int32Array.of(tables.getRowRef('r1') as number),
       fields: new Map([['properties:name', ['n']]]),
     });
     log.length = 0;
@@ -1503,7 +1512,7 @@ describe('the rows an extension holds on the GPU', () => {
     expect(drawnHandles(record, table)).toEqual(visibleHandles(table));
     // The row hidden in its range, and the row of the delta held by a range of its own
     expect(made[0].states).toEqual([0, 1, 0, 0].map((hidden, i) => made[0].states[i] | hidden));
-    expect(made[1].rows).toEqual([tables.findRow('r1')]);
+    expect(made[1].rows).toEqual([tables.getRowRef('r1')]);
     expect(log).toEqual(['held 0 0-2', 'held 1 0-1', 'held 0 2-4']);
   });
 
@@ -1520,8 +1529,8 @@ describe('the rows an extension holds on the GPU', () => {
       onCompanionClick: () => undefined,
     });
     frame();
-    writer.apply({
-      handles: Int32Array.of(tables.findRow('r1') as number),
+    writer.writeRows({
+      handles: Int32Array.of(tables.getRowRef('r1') as number),
       fields: new Map([['properties:ring', [true]]]),
     });
     log.length = 0;
@@ -1537,7 +1546,7 @@ describe('the rows an extension holds on the GPU', () => {
     const { frame, made, internals, tables } = layer(ribbonRows(3));
     frame();
     expect(made[0].stateCalls).toBe(1);
-    internals.states.setHidden(Int32Array.of(tables.findRow('r2') as number), true);
+    internals.states.setHidden(Int32Array.of(tables.getRowRef('r2') as number), true);
     frame();
     expect(made[0].states[2] & 1).toBe(1);
     expect(made[0].states[0] & 1).toBe(0);
@@ -1545,7 +1554,7 @@ describe('the rows an extension holds on the GPU', () => {
     frame();
     frame();
     expect(made[0].stateCalls).toBe(2);
-    internals.states.setMoving(Int32Array.of(tables.findRow('r0') as number), 2);
+    internals.states.setMoving(Int32Array.of(tables.getRowRef('r0') as number), 2);
     frame();
     expect(made[0].states[0]).not.toBe(0);
     expect(made[0].stateCalls).toBe(3);
@@ -1558,7 +1567,7 @@ describe('the rows an extension holds on the GPU', () => {
     log.length = 0;
     frame(VIEW);
     expect(log).toEqual([]);
-    internals.states.setMoving(Int32Array.of(tables.findRow('a') as number), 2);
+    internals.states.setMoving(Int32Array.of(tables.getRowRef('a') as number), 2);
     internals.states.setTranslation(2, -10, -10);
     frame(VIEW);
     expect(log).toEqual(['held 0 0-1']);
@@ -1664,13 +1673,13 @@ describe('the rows an extension holds on the GPU', () => {
       expect(made.map((held) => held.rows.length)).toEqual([2, 0]);
       // The rows of the first chunk hidden: released, and the room goes to the other
       internals.states.setHidden(
-        Int32Array.from(['r0', 'r1'].map((id) => tables.findRow(id) as number)),
+        Int32Array.from(['r0', 'r1'].map((id) => tables.getRowRef(id) as number)),
         true,
       );
       frame();
       frame();
       expect(made[0].released).toBe(true);
-      expect(made[1].rows).toEqual([tables.findRow('z')]);
+      expect(made[1].rows).toEqual([tables.getRowRef('z')]);
     });
 
     it('releases what was not in view for the longest for the rows in view, and only then', () => {
@@ -1691,7 +1700,7 @@ describe('the rows an extension holds on the GPU', () => {
       const released = made.filter((held) => held.released);
       expect(released).toHaveLength(1);
       expect(heldBytes()).toBe(2 * ROW_BYTES);
-      expect(made[made.length - 1].rows).toEqual([tables.findRow('near')]);
+      expect(made[made.length - 1].rows).toEqual([tables.getRowRef('near')]);
     });
 
     it('survives a failed allocation told after it took rows: the rows are drawn from their features', () => {
@@ -1735,7 +1744,7 @@ describe('the rows an extension holds on the GPU', () => {
       const { frame, made, heldBytes, internals, tables, log } = layer(ribbonRows(2));
       frame();
       expect(heldBytes()).toBe(2 * ROW_BYTES);
-      const handles = Int32Array.from(['r0', 'r1'].map((id) => tables.findRow(id) as number));
+      const handles = Int32Array.from(['r0', 'r1'].map((id) => tables.getRowRef(id) as number));
       internals.states.setHidden(handles, true);
       log.length = 0;
       frame();
@@ -1788,9 +1797,9 @@ describe('the rows an extension holds on the GPU', () => {
         fits: () => false,
       });
       frame();
-      const handle = tables.findRow('r1') as number;
+      const handle = tables.getRowRef('r1') as number;
       const write = (value: string) =>
-        writer.apply({
+        writer.writeRows({
           handles: Int32Array.of(handle),
           fields: new Map([['properties:name', [value]]]),
         });

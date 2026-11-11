@@ -64,12 +64,12 @@ function storeWith(count: number, selectionIdsLimit?: number) {
   store.createFeatures(Array.from({ length: count }, (_, i) => point(i)));
   const tables = store.tables as FeatureTables;
   const internals = featureTablesInternals(tables) as FeatureTablesInternals;
-  internals.addQueuedRowBlocks();
+  internals.addQueuedPages();
   internals.flushVersions();
   const cache = internals.featureCache;
   cache.clear();
   const rowOf = (id: string): Feature | undefined =>
-    tables.get('a')?.getRow(tables.findRow(id) as number);
+    tables.get('a')?.getRow(tables.getRowRef(id) as number);
   return { store: store as DrawStore, writer, tables, internals, cache, rowOf };
 }
 
@@ -216,7 +216,7 @@ describe('the features kept of rows', () => {
     // Deleted: none
     store.deleteFeature('p3');
     expect(store.getFeature('p3')).toBeUndefined();
-    expect(store.tables?.findRow('p3')).toBeUndefined();
+    expect(store.tables?.getRowRef('p3')).toBeUndefined();
     // Created again under the same id: the row made now
     store.createFeature({ ...point(3), properties: { n: 30 } });
     expect(store.getFeature('p3')?.properties).toEqual({ n: 30 });

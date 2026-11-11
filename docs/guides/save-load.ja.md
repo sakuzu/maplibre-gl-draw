@@ -564,7 +564,7 @@ if (last) {
 そうしたストアの表の writer (`@sakuzu/maplibre-gl-draw/kasane` の
 `createTableStore` の writer) には、ほかの端末と内容を揃えるストアのための
 部品がもう 1 つあります。`writer.clear()` は、文書がよそから置き換わるとき
-(最初から読み直すとき)、行を `addRowBlocks` で戻す前に、表から行を全部
+(最初から読み直すとき)、行を `addPages` で戻す前に、表から行を全部
 出します。まとめて選んだ地物を手放し、途中の仕事を捨て、ID は行の handle を
 持ち続けます。
 
@@ -591,15 +591,15 @@ version.store.createLayer({
   kind: 'table',
 });
 // Worker で作った版の行を足す:
-// version.writer.addRowBlocks('buildings', blocks)
+// version.writer.addPages('buildings', pages)
 draw.document.setShown(version.store);
 // ...
 draw.document.setShown(null);
 ```
 
-`writer.addRowBlocks(layerId, rowBlocks)` は、行の組をその場で取り込み、
+`writer.addPages(layerId, pages)` は、行の頁をその場で取り込み、
 ストアのほかの書き込みと同じく、その行を作った行として知らせます
-(`change.rows`)。行の組を取り込む手間は、作る手間に比べて小さいです。
+(`change.rows`)。行の頁を取り込む手間は、作る手間に比べて小さいです。
 たくさん足すときは、少しずつ足すと描画を止めません。`copyTableStore`
 は塊ずつ写します。
 

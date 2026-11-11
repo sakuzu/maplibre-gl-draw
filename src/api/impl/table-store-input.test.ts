@@ -125,7 +125,7 @@ describe('the input of the user over a Store of rows', () => {
     createSyntheticInput(engine).click([0.25, 0.25]);
     let updates = 0;
     store.subscribe((change) => {
-      const handle = tables.findRow('a');
+      const handle = tables.getRowRef('a');
       for (const rows of change.rows?.layers.values() ?? []) {
         if (handle !== undefined && rows.updated.includes(handle)) updates++;
       }
@@ -137,7 +137,7 @@ describe('the input of the user over a Store of rows', () => {
     // The corner dragged, as the row reads it
     const corner = () =>
       (
-        tables.get('rows')?.getRow(tables.findRow('a') ?? -1)?.geometry as
+        tables.get('rows')?.getRow(tables.getRowRef('a') ?? -1)?.geometry as
           | { coordinates: number[][][] }
           | undefined
       )?.coordinates[0][1];
@@ -159,7 +159,7 @@ describe('the input of the user over a Store of rows', () => {
     expect(store.getSelection().ids).toEqual(['b']);
     createSyntheticInput(engine).key('Delete');
     expect(store.getFeature('b')).toBeUndefined();
-    expect(tables.findRow('b')).toBeUndefined();
+    expect(tables.getRowRef('b')).toBeUndefined();
     expect(store.getSelection().ids).toEqual([]);
   });
 });

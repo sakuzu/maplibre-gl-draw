@@ -15,7 +15,7 @@ import type { Geometry, Position } from 'geojson';
 /**
  * The rows of one layer a change created, updated or deleted, by handle (`LayerRowsChange`), and
  * the rows a change wrote, by layer (`RowsChange`): what the writer of the rows
- * (`FeatureTablesWriter.apply`) returns, for the implementation of the Store to put in its
+ * (`FeatureTablesWriter.writeRows`) returns, for the implementation of the Store to put in its
  * notification (`StoreChange.rows`). The tables declare them, a layer being a table
  */
 export type { RowField, RowsChange, RowValues, TableRowsChange as LayerRowsChange };

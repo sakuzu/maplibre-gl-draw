@@ -12,17 +12,24 @@
  * `featureTablesInternals`.
  */
 
-import type { RowValues, Tables, TablesWrite, TablesWriter, WhenIdle } from '@sakuzu/kasane';
-import { KasaneError, type TablesStoreOptions } from '@sakuzu/kasane';
-import type { GroupHandle, RowGroup, RowTable, TableScan } from '@sakuzu/kasane/engine';
+import type {
+  GroupHandle,
+  RowValues,
+  ScheduleIdleWork,
+  TableScanOptions as TablesScanOptions,
+  TablesWrite,
+  TablesWriter,
+} from '@sakuzu/kasane';
+import { KasaneError, type TablesOptions } from '@sakuzu/kasane';
+import type { RowGroup } from '@sakuzu/kasane/render';
 import {
   type DeltaInput,
-  ItemWalk,
+  type Pages,
   ROW_FLAG_DELETED,
-  type RowBlocks,
   type RowPlace,
+  RowTableView,
   TablesStore,
-} from '@sakuzu/kasane/engine';
+} from '@sakuzu/kasane/render';
 import { utf8ColumnFromStrings, utf8String } from '@sakuzu/tabane';
 import type { Geometry, Position } from 'geojson';
 import type {
@@ -31,7 +38,7 @@ import type {
   ItemHandles,
   LayerTableView,
   RowField,
-  RowHandle,
+  RowRef,
   TableScanOptions,
 } from '../api/tables.js';
 import type { BBox } from '../geometry/types.js';
@@ -68,7 +75,7 @@ export interface FeatureTablesInternalOptions extends FeatureTablesOptions {
    * rows (none: it is left to the first search). The tables of the library run it while the page
    * is idle when omitted (`requestIdleCallback`, or a timer); a test runs the slices itself
    */
-  readonly whenIdle?: WhenIdle;
+  readonly scheduleIdleWork?: ScheduleIdleWork;
 }
 
 /**
@@ -88,20 +95,12 @@ export type RowBoxes = (type: string) => ((feature: Feature) => BBox) | undefine
  */
 export interface TablesInternalOptions
   extends Omit<FeatureTablesInternalOptions, 'worker'>,
-    TablesStoreOptions {
+    TablesOptions {
   /**
    * The boxes of the rows whose boxes come from more than their points (none: every row takes
    * the box of its points)
    */
   readonly rowBoxes?: RowBoxes;
-  /**
-   * What a read through the reading side of the tables (`FeatureTables`) calls first (none:
-   * nothing): a user that writes over several tasks finishes the write there, so that what is read
-   * is what the write leaves. Each read of a view of a layer and each batch of a scan handed out
-   * goes through it, a view kept from before included; core reads the rows through the internals,
-   * which do not
-   */
-  readonly beforeRead?: () => void;
 }
 
 /**
@@ -115,8 +114,6 @@ export function createTables(options: TablesInternalOptions): {
   writer: TablesWriter;
 } {
   const store = new FeatureTablesStore(options);
-  // What lets go of the tokens: the reading side of the tables, which `release` wraps
-  const kept: Tables = store;
   // A read through the reading side lets the user finish what it writes first (`beforeRead`);
   // core reads the rows through the internals
   const gate = options.beforeRead ?? noRead;
@@ -139,7 +136,7 @@ export function createTables(options: TablesInternalOptions): {
         throw tablesError(error);
       }
     },
-    findRow: (id) => {
+    getRowRef: (id) => {
       try {
         gate();
         return store.handleOf(id);
@@ -168,6 +165,14 @@ export function createTables(options: TablesInternalOptions): {
         gate();
         const group = store.groups.handleOfId(id);
         return group >= 0 ? group : undefined;
+      } catch (error) {
+        throw tablesError(error);
+      }
+    },
+    getGroupKey: (groupHandle) => {
+      try {
+        gate();
+        return store.getGroupKey(groupHandle);
       } catch (error) {
         throw tablesError(error);
       }
@@ -201,7 +206,7 @@ export function createTables(options: TablesInternalOptions): {
     release: (token) => {
       try {
         gate();
-        kept.release(token);
+        store.release(token);
       } catch (error) {
         throw tablesError(error);
       }
@@ -222,7 +227,7 @@ function tablesError(error: unknown): unknown {
 }
 
 /** A scan of the reading side as a scan of the tables: the layers are the tables */
-function tableScanOf(options: TableScanOptions): TableScan {
+function tableScanOf(options: TableScanOptions): TablesScanOptions {
   return {
     tableIds: options.layerIds,
     bbox: options.bbox,
@@ -280,7 +285,7 @@ class GatedLayerView implements LayerTableView {
       throw tablesError(error);
     }
   }
-  getRowBBox(handle: RowHandle): BBox | null {
+  getRowBBox(handle: RowRef): BBox | null {
     try {
       this.gate();
       return this.view.getRowBBox(handle);
@@ -288,7 +293,7 @@ class GatedLayerView implements LayerTableView {
       throw tablesError(error);
     }
   }
-  getRowType(handle: RowHandle): FeatureType | null {
+  getRowType(handle: RowRef): FeatureType | null {
     try {
       this.gate();
       return this.view.getRowType(handle);
@@ -296,7 +301,7 @@ class GatedLayerView implements LayerTableView {
       throw tablesError(error);
     }
   }
-  getRowPoint(handle: RowHandle): Position | null {
+  getRowPoint(handle: RowRef): Position | null {
     try {
       this.gate();
       return this.view.getRowPoint(handle);
@@ -304,7 +309,7 @@ class GatedLayerView implements LayerTableView {
       throw tablesError(error);
     }
   }
-  getRowValue(handle: RowHandle, key: string): unknown {
+  getRowValue(handle: RowRef, key: string): unknown {
     try {
       this.gate();
       return this.view.getRowValue(handle, key);
@@ -312,7 +317,7 @@ class GatedLayerView implements LayerTableView {
       throw tablesError(error);
     }
   }
-  getRowStyle(handle: RowHandle): Readonly<FeatureStyle> | undefined {
+  getRowStyle(handle: RowRef): Readonly<FeatureStyle> | undefined {
     try {
       this.gate();
       return this.view.getRowStyle(handle);
@@ -320,7 +325,7 @@ class GatedLayerView implements LayerTableView {
       throw tablesError(error);
     }
   }
-  getRow(handle: RowHandle): Feature | undefined {
+  getRow(handle: RowRef): Feature | undefined {
     try {
       this.gate();
       return this.view.getRow(handle);
@@ -376,7 +381,7 @@ class GatedLayerView implements LayerTableView {
  *
  * @internal
  */
-export interface FeatureTablesInternals extends RowBlocks<FeatureStyle> {
+export interface FeatureTablesInternals extends Pages<FeatureStyle> {
   /** The state of the rows of the library, written to the tables (`feature-row-states.ts`) */
   readonly states: RowStateSets;
   /**
@@ -424,7 +429,7 @@ export interface FeatureTablesInternals extends RowBlocks<FeatureStyle> {
    * (its members are read in the order before until its reorder goes in), or the one of the table
    * of the groups (undefined for an unknown group)
    */
-  getGroupOrder(group: GroupHandle): string | undefined;
+  getGroupKey(group: GroupHandle): string | undefined;
 }
 
 const INTERNALS = new WeakMap<FeatureTables, FeatureTablesStore>();
@@ -460,7 +465,7 @@ export function readWithoutKeeping<T>(tables: FeatureTables | undefined, read: (
  */
 export function keepSelectedRows(
   tables: FeatureTables | undefined,
-  handles: readonly RowHandle[],
+  handles: readonly RowRef[],
   ids: readonly string[],
 ): void {
   featureTablesInternals(tables)?.featureCache.keepSelected(handles, ids);
@@ -494,13 +499,13 @@ export interface SketchOverlay {
 
 interface OverlayEntry {
   /** The row of the delta it is drawn as */
-  readonly handle: RowHandle;
+  readonly handle: RowRef;
   /** Where the row it is drawn over was when it was drawn */
   overPlace: { readonly group: RowGroup; readonly row: number } | undefined;
   /** Its layer */
   readonly layer: string;
   /** The row it is drawn over (undefined for a feature of no row) */
-  readonly over: RowHandle | undefined;
+  readonly over: RowRef | undefined;
 }
 
 /** The implementation of the tables of the library: the tables, and what the library reads of them */
@@ -513,7 +518,7 @@ class FeatureTablesStore extends TablesStore<FeatureStyle> implements FeatureTab
   /** The features of the sketches drawn over rows, as they were given last */
   private sketchInputs: readonly SketchOverlay[] = [];
   /** The rows a sketch is drawn over */
-  private sketchedRows = new Set<RowHandle>();
+  private sketchedRows = new Set<RowRef>();
   /** The boxes of the rows whose boxes come from more than their points (`rowBoxes`) */
   private readonly boxesGiven: RowBoxes | undefined;
   /**
@@ -548,17 +553,7 @@ class FeatureTablesStore extends TablesStore<FeatureStyle> implements FeatureTab
     return view;
   }
 
-  /**
-   * The key of the order of a group of features last written: the one not in the order read yet
-   * (its members are read in the order before until its reorder goes in), or the one of the table
-   * of the groups
-   */
-  getGroupOrder(group: GroupHandle): string | undefined {
-    if (!this.groups.has(group)) return undefined;
-    return this.writtenOrders.get(group) ?? this.groups.orderOf(group);
-  }
-
-  readValues(patch: RowValues): RowValues {
+  override readValues(patch: RowValues): RowValues {
     const n = patch.handles.length;
     const fields = new Map<RowField, unknown[]>();
     for (const field of patch.fields.keys()) fields.set(field, new Array(n).fill(undefined));
@@ -623,11 +618,11 @@ class FeatureTablesStore extends TablesStore<FeatureStyle> implements FeatureTab
 
   /**
    * Whether a field of a feature of the sketches is written over its row of the delta: its
-   * geometry, and an attribute that places no row again (`relocatingFields`)
+   * geometry, and an attribute that places no row again (`orderFields`)
    */
   private writtenOverSketch(field: RowField): boolean {
     if (field === 'geometry') return true;
-    return field.startsWith(PROPERTY_FIELD) && !this.relocatingFields.has(field);
+    return field.startsWith(PROPERTY_FIELD) && !this.orderFields.has(field);
   }
 
   /**
@@ -680,9 +675,9 @@ class FeatureTablesStore extends TablesStore<FeatureStyle> implements FeatureTab
    * is not drawn (`STATE_HIDDEN_SKETCH`). The rows are not written
    */
   private syncSketches(): void {
-    const leaving = new Map<string, Set<RowHandle>>();
+    const leaving = new Map<string, Set<RowRef>>();
     const coming = new Map<string, DeltaInput[]>();
-    const leave = (layer: string, handle: RowHandle): void => {
+    const leave = (layer: string, handle: RowRef): void => {
       let set = leaving.get(layer);
       if (!set) {
         set = new Set();
@@ -745,7 +740,7 @@ class FeatureTablesStore extends TablesStore<FeatureStyle> implements FeatureTab
     }
     this.drawRows(leaving, coming);
     // The rows drawn over are not drawn
-    const sketchedNow = new Set<RowHandle>();
+    const sketchedNow = new Set<RowRef>();
     for (const entry of this.sketchEntries.values()) {
       const place = entry.over === undefined ? undefined : this.placeOf(entry.over);
       entry.overPlace = place && { group: place.group, row: place.row };
@@ -762,7 +757,7 @@ class FeatureTablesStore extends TablesStore<FeatureStyle> implements FeatureTab
     const problems: string[] = [];
     const entries = this.sketchEntries;
     /** The features drawn over each row */
-    const over = new Map<RowHandle, number>();
+    const over = new Map<RowRef, number>();
     for (const entry of entries.values()) {
       if (entry.over !== undefined) over.set(entry.over, (over.get(entry.over) ?? 0) + 1);
     }
@@ -833,12 +828,12 @@ class FeatureTablesStore extends TablesStore<FeatureStyle> implements FeatureTab
     return `${key}~`;
   }
 
-  /** The fields whose new value places a row again (`relocatingFields`) */
-  private readonly relocatingFields: ReadonlySet<string>;
+  /** The fields whose new value places a row again (`orderFields`) */
+  private readonly orderFields: ReadonlySet<string>;
 
   constructor(options: TablesInternalOptions) {
     super(options);
-    this.relocatingFields = new Set(options.relocatingFields);
+    this.orderFields = new Set(options.orderFields);
     this.states = new RowStateSets(this);
     this.featureCache = new FeatureCache({
       writeMarks: this.writeMarks,
@@ -903,7 +898,7 @@ class FeatureTablesStore extends TablesStore<FeatureStyle> implements FeatureTab
     return super.clear();
   }
 
-  override handleOf(id: string): RowHandle | undefined {
+  override handleOf(id: string): RowRef | undefined {
     // A row selected by the handle its id was found to have, while no id got or lost a handle
     const cache = this.featureCache;
     let handle = cache.selectedHandleOf(id);
@@ -918,47 +913,23 @@ class FeatureTablesStore extends TablesStore<FeatureStyle> implements FeatureTab
   }
 
   /** What the library keeps of the state of a handle freed is let go of */
-  protected override statesForgotten(handle: RowHandle, bits: number): void {
+  protected override statesForgotten(handle: RowRef, bits: number): void {
     this.states.forgotten(handle, bits);
   }
 }
 
-/** The rows of one layer, read without making features */
-class LayerTableViewImpl implements LayerTableView {
-  constructor(
-    private readonly store: FeatureTablesStore,
-    private readonly table: RowTable,
-  ) {}
+/**
+ * The rows of one layer, read without making features: the view of a table of the tables, and
+ * the rows read as a feature reads them
+ */
+class LayerTableViewImpl extends RowTableView implements LayerTableView {
+  protected declare readonly store: FeatureTablesStore;
 
   get layerId(): string {
     return this.table.tableId;
   }
 
-  get rowCount(): number {
-    return this.table.itemsOf().rowCount;
-  }
-
-  get rowCountWithDeleted(): number {
-    return this.table.rowCount;
-  }
-
-  listDrawnRows(bbox: BBox): Int32Array {
-    const out: number[] = [];
-    this.store.searchRowBoxes(this.table, bbox[0], bbox[1], bbox[2], bbox[3], (group, row) => {
-      if ((group.state[row] & this.store.drawnHidden) === 0) out.push(group.data.handles[row]);
-    });
-    return Int32Array.from(out);
-  }
-
-  getRowBBox(handle: RowHandle): BBox | null {
-    if (!this.locate(handle)) return null;
-    const b = (this.store.foundGroup as RowGroup).data.rowBounds;
-    const i = this.store.foundRow * 4;
-    if (Number.isNaN(b[i])) return null;
-    return [b[i], b[i + 1], b[i + 2], b[i + 3]];
-  }
-
-  getRowType(handle: RowHandle): FeatureType | null {
+  getRowType(handle: RowRef): FeatureType | null {
     // A new row not built yet is read from what was written (its creation is not built for it)
     const input = this.store.newRowInputOf(handle);
     if (input) return input.values.type as FeatureType;
@@ -966,12 +937,12 @@ class LayerTableViewImpl implements LayerTableView {
     return rowType((this.store.foundGroup as RowGroup).data, this.store.foundRow);
   }
 
-  getRowPoint(handle: RowHandle): Position | null {
+  getRowPoint(handle: RowRef): Position | null {
     if (!this.locate(handle)) return null;
     return rowPoint(this.store.foundGroup as RowGroup, this.store.foundRow);
   }
 
-  getRowValue(handle: RowHandle, key: string): unknown {
+  getRowValue(handle: RowRef, key: string): unknown {
     // A new row not built yet: a value that is not an object is read from what was written, as the
     // row would give it back (an object is read from the row, a copy of its own)
     const input = this.store.newRowInputOf(handle);
@@ -989,69 +960,17 @@ class LayerTableViewImpl implements LayerTableView {
     );
   }
 
-  getRowStyle(handle: RowHandle): Readonly<FeatureStyle> | undefined {
+  getRowStyle(handle: RowRef): Readonly<FeatureStyle> | undefined {
     if (!this.locate(handle)) return undefined;
     const group = this.store.foundGroup as RowGroup;
     return this.store.styles.get(styleColumnOf(group.data).indexes[this.store.foundRow]);
   }
 
-  getRow(handle: RowHandle): Feature | undefined {
+  getRow(handle: RowRef): Feature | undefined {
     if (!this.locate(handle)) return undefined;
     const group = this.store.foundGroup as RowGroup;
     const row = this.store.foundRow;
     if ((group.data.flags[row] & ROW_FLAG_DELETED) !== 0) return undefined;
     return this.store.featureCache.featureOf(this.table.tableId, group, row);
-  }
-
-  getDrawnRowsRevision(): number {
-    return this.store.revision;
-  }
-
-  listRowHandles(start: number, count: number): Int32Array {
-    const handles = this.table.rowOrder().handles;
-    const from = Math.max(0, Math.min(start, handles.length));
-    return handles.slice(from, Math.max(from, Math.min(handles.length, from + Math.max(0, count))));
-  }
-
-  get itemCount(): number {
-    return this.table.itemsOf().kinds.length;
-  }
-
-  listItems(start: number, count: number): ItemHandles {
-    const items = this.table.itemsOf();
-    const from = Math.max(0, Math.min(start, items.kinds.length));
-    const to = Math.max(from, Math.min(items.kinds.length, from + Math.max(0, count)));
-    return { kinds: items.kinds.slice(from, to), handles: items.handles.slice(from, to) };
-  }
-
-  // The members of a group are read from the list of the items when it is made, and from the
-  // rows of the group otherwise (the list is made from every row of the layer)
-
-  countGroupMembers(group: number): number {
-    const items = this.table.itemsMade;
-    if (items) return items.members.get(group)?.length ?? 0;
-    return new ItemWalk(this.table, this.store).memberCount(group);
-  }
-
-  listGroupMembers(group: number, start: number, count: number): Int32Array {
-    const items = this.table.itemsMade;
-    if (!items) {
-      const from = Math.max(0, start);
-      return Int32Array.from(
-        new ItemWalk(this.table, this.store).members(group, from, Math.max(0, count)),
-      );
-    }
-    const members = items.members.get(group);
-    if (!members) return new Int32Array(0);
-    const from = Math.max(0, Math.min(start, members.length));
-    return members.slice(from, Math.max(from, Math.min(members.length, from + Math.max(0, count))));
-  }
-
-  /**
-   * Whether a handle is read from a row of this layer: its group and row are then the ones the
-   * store found (`foundGroup`, `foundRow`), read at once
-   */
-  private locate(handle: RowHandle): boolean {
-    return this.store.findPlace(handle) && this.store.foundTable === this.table;
   }
 }

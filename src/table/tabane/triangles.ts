@@ -2,16 +2,16 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * The triangles of the fills of the polygons of a row block, kept as a cache of its file
+ * The triangles of the fills of the polygons of a page, kept as a cache of its file
  *
- * A file of a block of the Tabane format can keep, after the part of each row block, caches the
+ * A file of a block of the Tabane format can keep, after the part of each page, caches the
  * format does not read and that its name does not depend on. The triangles of the fills of the
  * polygon rows (`triangulateRow`) are kept in one, so that a reader copies them rather than making
  * them again with earcut. The name of the cache says what it holds and how they were made: a
  * change to how the triangles are made (earcut, how they are paired, which rings are drawn) is a
  * new version of the name, and a cache of another name is not read.
  *
- * The content: the number of rows of the row block, the number of its polygon rows, then a run of
+ * The content: the number of rows of the page, the number of its polygon rows, then a run of
  * the number of vertices and of pairs of each polygon row in turn, and a run of the indices of
  * their pairs, 4 per pair (each a varint of `@sakuzu/tabane`). A reader checks it against the rows
  * it reads (the number of rows and of polygon rows, every index within the vertices it gives; then
@@ -26,13 +26,13 @@ import { ByteSink, ByteSource, type TabaneShapeColumn } from '@sakuzu/tabane';
 import { polygonRanges, type RowGeometry, ringOffsetsOf, triangulateRow } from '../row-geometry.js';
 
 /**
- * The name of the cache of the triangles of the fills of the polygon rows of a row block: what it
+ * The name of the cache of the triangles of the fills of the polygon rows of a page: what it
  * holds and the version of how they are made
  */
 export const FILL_TRIANGLES_CACHE = 'maplibre-gl-draw:fill-triangles:1';
 
 /**
- * The content of the cache of the triangles of the rows of a row block (null when no row is a
+ * The content of the cache of the triangles of the rows of a page (null when no row is a
  * polygon: a reader then has none to make)
  *
  * @param geometries The geometry of each row (null for a row without one)
@@ -61,7 +61,7 @@ export function fillTrianglesCacheOf(
 }
 
 /**
- * The fills of the polygon rows of a row block read from a cache: the triangles of row `r` are
+ * The fills of the polygon rows of a page read from a cache: the triangles of row `r` are
  * `indices[offsets[r]..offsets[r + 1]]`, into its `vertices[r]` vertices (-1 for a row that is
  * not a polygon)
  *
@@ -74,14 +74,14 @@ export interface CachedFills {
 }
 
 /**
- * The fills of the polygon rows of a row block, read from the content of the cache of their
+ * The fills of the polygon rows of a page, read from the content of the cache of their
  * triangles when it fits the rows: as many rows and polygon rows, every index within the vertices
  * of its fill, nothing left after them (whether the triangles of each row fit the row is checked
  * then, `FILL_TRIANGLES.fits`)
  *
  * @param content The content of the cache
- * @param rows The number of rows of the row block
- * @param geometry The geometry column of the row block (null when no row has a geometry)
+ * @param rows The number of rows of the page
+ * @param geometry The geometry column of the page (null when no row has a geometry)
  * @returns The fills, or null when the cache does not fit the rows
  * @internal
  */

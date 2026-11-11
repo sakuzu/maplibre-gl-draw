@@ -5,7 +5,7 @@
  * What a Store of rows reads of the groups of features and of the row groups it gives, without
  * a drawing
  *
- * - The key of the order of a group (`FeatureTablesWriter.getGroupOrder`) is the key last written, read
+ * - The key of the order of a group (`FeatureTables.getGroupKey`) is the key last written, read
  *   in the notification of the change that wrote it: a group created, moved in its layer, moved
  *   to another layer. While a drawing holds the reorder of its members, the rows are read in the
  *   order before, and the key is still the new one
@@ -14,11 +14,11 @@
  *   key puts it, and a key written in another layer is not overwritten by the reorder of before
  * - The groups written through the writer of the Store (from elsewhere) are the groups of the
  *   document: created, moved to another layer, renamed, shown, locked and deleted, and notified
- * - the tables take in, all at once, the blocks given to `addRowBlocks` and the new rows
+ * - the tables take in, all at once, the blocks given to `addPages` and the new rows
  *   waiting to be built, at once; without it, they wait for the frames of the drawing as before
  */
 
-import type { TableWorkBudget } from '@sakuzu/kasane/engine';
+import type { TableWorkBudget } from '@sakuzu/kasane/render';
 import { utf8ColumnFromStrings } from '@sakuzu/tabane';
 import { describe, expect, it } from 'vitest';
 import {
@@ -30,7 +30,7 @@ import {
 import type { StoreChange } from '../shared/types/model.js';
 import { createTableStore } from '../store/table-memory.js';
 import { FEATURE_TABLE_COLUMNS } from '../table/tabane/columns.js';
-import { featureRowDataBuilder as createRowBlockDataBuilder, seededRandom } from '../test-utils.js';
+import { featureRowDataBuilder as createPageDataBuilder, seededRandom } from '../test-utils.js';
 import { type FeatureTablesInternals, featureTablesInternals } from './feature-tables.js';
 
 /** A budget of one step at a time */
@@ -41,7 +41,7 @@ const key = (i: number) => `k${String(i).padStart(3, '0')}`;
 
 /** Row groups of points `r<from>`.. in the order of their keys */
 function points(from: number, count: number) {
-  const builder = createRowBlockDataBuilder({ columns: FEATURE_TABLE_COLUMNS, targetRows: 4 });
+  const builder = createPageDataBuilder({ columns: FEATURE_TABLE_COLUMNS, targetRows: 4 });
   for (let i = from; i < from + count; i++) {
     builder.addRow({
       id: `r${i}`,
@@ -68,10 +68,10 @@ function setup() {
       styleRule: undefined,
     });
   }
-  writer.addRowBlocks('a', points(0, 10));
+  writer.addPages('a', points(0, 10));
   const tables = store.tables as FeatureTables;
   const internals = featureTablesInternals(tables) as FeatureTablesInternals;
-  internals.addQueuedRowBlocks();
+  internals.addQueuedPages();
   // The side that draws: the versions go in when it lets them
   let open = true;
   internals.attachReceiver({ uploaded: () => open, swapped: () => {}, dropped: () => {} });
@@ -87,9 +87,9 @@ function setup() {
    */
   const frame = (up: boolean) => {
     internals.advanceQueuedBlocks(ONE_STEP);
-    internals.advanceVersions(ONE_STEP);
+    internals.rebuild(ONE_STEP);
     open = up;
-    internals.swapVersions();
+    internals.swap();
     open = false;
   };
   /** The ids of the items of a layer in their order */
@@ -106,11 +106,11 @@ function setup() {
 
 describe('the key of the order of a group of features', () => {
   it('is read in the notification of the creation of the group', () => {
-    const { store, tables, writer } = setup();
+    const { store, tables } = setup();
     const read: Array<string | undefined> = [];
     store.subscribe((change) => {
       for (const group of change.groups?.created ?? []) {
-        read.push(writer.getGroupOrder(tables.findGroup(group.id) ?? -1));
+        read.push(tables.getGroupKey(tables.findGroup(group.id) ?? -1));
       }
     });
     store.createGroup({
@@ -123,11 +123,11 @@ describe('the key of the order of a group of features', () => {
     });
     // The group takes the place of its first member
     expect(read).toEqual([key(2)]);
-    expect(writer.getGroupOrder(tables.findGroup('g') ?? -1)).toBe(key(2));
+    expect(tables.getGroupKey(tables.findGroup('g') ?? -1)).toBe(key(2));
   });
 
   it('is the new key in the notification of a move, while the rows are read in the order before', () => {
-    const { store, tables, internals, draw, items, writer } = setup();
+    const { store, tables, internals, draw, items } = setup();
     store.createGroup({
       id: 'g',
       layerId: 'a',
@@ -138,7 +138,7 @@ describe('the key of the order of a group of features', () => {
     });
     draw();
     const handle = tables.findGroup('g') as number;
-    const before = writer.getGroupOrder(handle) as string;
+    const before = tables.getGroupKey(handle) as string;
     expect(items('a')).toEqual(['r0', 'r1', 'g', 'r4', 'r5', 'r6', 'r7', 'r8', 'r9']);
     const read: Array<{ key: string | undefined; drawn: string | undefined; items: unknown[] }> =
       [];
@@ -147,7 +147,7 @@ describe('the key of the order of a group of features', () => {
       if (!change.order) return;
       moves.push(change.order);
       read.push({
-        key: writer.getGroupOrder(handle),
+        key: tables.getGroupKey(handle),
         drawn: internals.groups.orderOf(handle),
         items: items('a'),
       });
@@ -163,15 +163,15 @@ describe('the key of the order of a group of features', () => {
     // The drawing holds the reorder: the rows are in the order before until it lets it in
     expect(read[0]?.drawn).toBe(before);
     expect(read[0]?.items).toEqual(['r0', 'r1', 'g', 'r4', 'r5', 'r6', 'r7', 'r8', 'r9']);
-    expect(writer.getGroupOrder(handle)).toBe(moved);
+    expect(tables.getGroupKey(handle)).toBe(moved);
     draw();
     expect(items('a')).toEqual(['r0', 'r1', 'r4', 'r5', 'r6', 'r7', 'r8', 'r9', 'g']);
-    expect(writer.getGroupOrder(handle)).toBe(moved);
+    expect(tables.getGroupKey(handle)).toBe(moved);
     expect(internals.groups.orderOf(handle)).toBe(moved);
   });
 
   it('is the last key written when moves follow each other before the drawing lets them in', () => {
-    const { store, tables, draw, items, writer } = setup();
+    const { store, tables, draw, items } = setup();
     store.createGroup({
       id: 'g',
       layerId: 'a',
@@ -184,7 +184,7 @@ describe('the key of the order of a group of features', () => {
     const handle = tables.findGroup('g') as number;
     const read: Array<string | undefined> = [];
     store.subscribe((change) => {
-      if (change.order) read.push(writer.getGroupOrder(handle));
+      if (change.order) read.push(tables.getGroupKey(handle));
     });
     store.moveItem('g', { layerId: 'a', above: null });
     store.moveItem('g', { layerId: 'a', below: null });
@@ -192,14 +192,14 @@ describe('the key of the order of a group of features', () => {
     expect(read[0]).not.toBe(read[1]);
     // Behind the first row
     expect(compareKeys(read[1] as string, key(0))).toBeLessThan(0);
-    expect(writer.getGroupOrder(handle)).toBe(read[1]);
+    expect(tables.getGroupKey(handle)).toBe(read[1]);
     draw();
     expect(items('a')).toEqual(['g', 'r0', 'r1', 'r4', 'r5', 'r6', 'r7', 'r8', 'r9']);
-    expect(writer.getGroupOrder(handle)).toBe(read[1]);
+    expect(tables.getGroupKey(handle)).toBe(read[1]);
   });
 
   it('is read with the layer of the group in the notification of a move to another layer', () => {
-    const { store, tables, draw, items, writer } = setup();
+    const { store, tables, draw, items } = setup();
     store.createGroup({
       id: 'g',
       layerId: 'a',
@@ -210,13 +210,13 @@ describe('the key of the order of a group of features', () => {
     });
     draw();
     const handle = tables.findGroup('g') as number;
-    const before = writer.getGroupOrder(handle);
+    const before = tables.getGroupKey(handle);
     const read: Array<{ key: string | undefined; layerId: string | undefined }> = [];
     let updated: string | undefined;
     store.subscribe((change) => {
       updated = change.groups?.updated?.find((entry) => entry.id === 'g')?.group.layerId;
       if (change.order) {
-        read.push({ key: writer.getGroupOrder(handle), layerId: store.getGroup('g')?.layerId });
+        read.push({ key: tables.getGroupKey(handle), layerId: store.getGroup('g')?.layerId });
       }
     });
     store.moveItem('g', { layerId: 'b' });
@@ -228,12 +228,12 @@ describe('the key of the order of a group of features', () => {
     draw();
     expect(items('b')).toEqual(['g']);
     expect(items('a')).toEqual(['r0', 'r1', 'r4', 'r5', 'r6', 'r7', 'r8', 'r9']);
-    expect(writer.getGroupOrder(handle)).toBe(read[0]?.key);
+    expect(tables.getGroupKey(handle)).toBe(read[0]?.key);
   });
 
   it('is undefined for a handle of no group', () => {
-    const { writer } = setup();
-    expect(writer.getGroupOrder(42)).toBeUndefined();
+    const { tables } = setup();
+    expect(tables.getGroupKey(42)).toBeUndefined();
   });
 });
 
@@ -334,7 +334,7 @@ describe('the order written, while the drawing holds the reorder of a group', ()
         if (pick < 0.15) {
           // Sometimes the drawing lets the versions in, sometimes it only starts them
           if (random() < 0.5) draw();
-          else internals.advanceVersions(ONE_STEP);
+          else internals.rebuild(ONE_STEP);
           continue;
         }
         const id = reference[Math.floor(random() * reference.length)];
@@ -363,12 +363,12 @@ describe('the order written, while the drawing holds the reorder of a group', ()
   });
 
   it('keeps the key a group was given in another layer when the reorder of before goes in', () => {
-    const { store, internals, draw, items, handle, writer } = grouped();
+    const { store, internals, draw, items, handle } = grouped();
     store.moveItem('g', { layerId: 'a', above: null });
     store.moveItem('g', { layerId: 'b' });
-    const key = writer.getGroupOrder(handle);
+    const key = internals.getGroupKey(handle);
     draw();
-    expect(writer.getGroupOrder(handle)).toBe(key);
+    expect(internals.getGroupKey(handle)).toBe(key);
     expect(internals.groups.orderOf(handle)).toBe(key);
     expect(internals.writtenOrders.size).toBe(0);
     expect(items('b')).toEqual(['g']);
@@ -398,7 +398,7 @@ describe('the row groups taken in while the drawing holds the reorder of a group
     setupOf.draw();
     setupOf.store.moveItem('g', { layerId: 'a', above: null });
     const handle = setupOf.tables.findGroup('g') as number;
-    const written = setupOf.writer.getGroupOrder(handle) as string;
+    const written = setupOf.tables.getGroupKey(handle) as string;
     expect(setupOf.internals.writtenOrders.get(handle)).toBe(written);
     // After the last row in the order drawn, and around the new key of the group
     const low = `${written.slice(0, -1)}0`;
@@ -411,7 +411,7 @@ describe('the row groups taken in while the drawing holds the reorder of a group
 
   /** Two points `n0` and `n1` of these keys */
   function around(low: string, high: string) {
-    const builder = createRowBlockDataBuilder({ columns: FEATURE_TABLE_COLUMNS, targetRows: 4 });
+    const builder = createPageDataBuilder({ columns: FEATURE_TABLE_COLUMNS, targetRows: 4 });
     ['n0', 'n1'].forEach((id, i) => {
       builder.addRow({
         id,
@@ -429,8 +429,8 @@ describe('the row groups taken in while the drawing holds the reorder of a group
   it('are taken in at once into the delta, and stand where their keys say once it is in', () => {
     const { writer, tables, internals, frame, draw, items } = heldReorder();
     // Where the members of the group stood: among them in the order drawn, free once it is in
-    writer.addRowBlocks('a', around(`${key(1)}5`, `${key(2)}5`));
-    const n0 = tables.findRow('n0') as number;
+    writer.addPages('a', around(`${key(1)}5`, `${key(2)}5`));
+    const n0 = tables.getRowRef('n0') as number;
     expect(internals.ids.deltaTable(n0)).toBeGreaterThanOrEqual(0);
     expect(internals.hasQueuedBlocks).toBe(false);
     // The drawing holds the reorder for three frames
@@ -442,10 +442,10 @@ describe('the row groups taken in while the drawing holds the reorder of a group
 
   it('put a group whose keys hold the new key of the group in the delta', () => {
     const { writer, tables, internals, frame, draw, items, low, high } = heldReorder();
-    writer.addRowBlocks('a', around(low, high));
+    writer.addPages('a', around(low, high));
     // Taken in by its rows (it would overlap the members of the group), read and drawn at their
     // places
-    const n0 = tables.findRow('n0') as number;
+    const n0 = tables.getRowRef('n0') as number;
     expect(internals.ids.deltaTable(n0)).toBeGreaterThanOrEqual(0);
     for (let f = 1; f <= 6; f++) frame(f >= 4);
     const after = ['r0', 'r1', 'r4', 'r5', 'r6', 'r7', 'r8', 'r9', 'n0', 'g', 'n1'];
@@ -468,7 +468,7 @@ describe('the row groups taken in while the drawing holds the reorder of a group
   ) {
     const ids = Array.from({ length: n }, (_, i) => `c${String(i).padStart(2, '0')}`);
     const handles = writer.allocateHandles(utf8ColumnFromStrings(ids));
-    writer.apply({
+    writer.writeRows({
       handles,
       fields: new Map<RowField, unknown[]>([
         ['type', ids.map(() => 'Point')],
@@ -490,7 +490,7 @@ describe('the row groups taken in while the drawing holds the reorder of a group
       frame(f >= 6);
       if (built === 0 && internals.ids.mainGroup(handles[0]) >= 0) built = f;
       // Read from their creation meanwhile
-      expect(tables.findRow(ids[0])).toBe(handles[0]);
+      expect(tables.getRowRef(ids[0])).toBe(handles[0]);
     }
     // Gathered for two frames, then waiting for the reorder (in at the end of the sixth frame):
     // built in the seventh and taken in at the start of the eighth, in a group of their own, not
@@ -515,7 +515,7 @@ describe('the row groups taken in while the drawing holds the reorder of a group
       const placed =
         internals.ids.mainGroup(handles[0]) >= 0 || internals.ids.deltaTable(handles[0]) >= 0;
       if (left === 0 && placed) left = f;
-      expect(tables.findRow(ids[0])).toBe(handles[0]);
+      expect(tables.getRowRef(ids[0])).toBe(handles[0]);
     }
     // Not built before the reorder is in (they would be built by the keys before); built in the
     // seventh frame, their group overlaps the members of the group when it is taken in, in the
@@ -534,7 +534,7 @@ describe('the row groups taken in while the drawing holds the reorder of a group
       i < n / 2 ? `${low}${String(i).padStart(2, '0')}` : `${high}${String(i).padStart(2, '0')}`,
     );
     const handles = writer.allocateHandles(utf8ColumnFromStrings(ids));
-    writer.apply({
+    writer.writeRows({
       handles,
       fields: new Map<RowField, unknown[]>([
         ['type', ids.map(() => 'Point')],
@@ -544,7 +544,7 @@ describe('the row groups taken in while the drawing holds the reorder of a group
       ]),
     });
     // A row of them written before they are built
-    writer.apply({
+    writer.writeRows({
       handles: handles.subarray(0, 1),
       fields: new Map<RowField, unknown[]>([
         ['geometry', [{ type: 'Point', coordinates: [9, 9] }]],
@@ -572,20 +572,20 @@ describe('the groups written through the writer of the Store of rows', () => {
     });
     draw();
     const handle = tables.findGroup('g') as number;
-    const members = ['r2', 'r3'].map((id) => tables.findRow(id) as number);
+    const members = ['r2', 'r3'].map((id) => tables.getRowRef(id) as number);
     const notified: StoreChange[] = [];
     store.subscribe((change) => notified.push(change));
     store.transact(() => {
       // The group goes to the other layer, and its members follow it there (their parent is the
       // group, in that layer now)
-      writer.applyGroups({
+      writer.writeGroups({
         handles: Int32Array.of(handle),
         fields: new Map<TableGroupField, unknown[]>([
           ['parent', ['b']],
           ['key', ['m']],
         ]),
       });
-      writer.apply({
+      writer.writeRows({
         handles: Int32Array.from(members),
         fields: new Map<RowField, unknown[]>([['parent', ['g', 'g']]]),
       });
@@ -600,7 +600,7 @@ describe('the groups written through the writer of the Store of rows', () => {
       }),
     ]);
     expect(store.getGroup('g')?.layerId).toBe('b');
-    expect(writer.getGroupOrder(handle)).toBe('m');
+    expect(tables.getGroupKey(handle)).toBe('m');
     draw();
     expect(items('b')).toEqual(['g']);
     expect(store.getFeature('r2')?.layerId).toBe('b');
@@ -624,7 +624,7 @@ describe('the groups written through the writer of the Store of rows', () => {
     const notified: StoreChange[] = [];
     store.subscribe((change) => notified.push(change));
     store.transact(() => {
-      writer.applyGroups({
+      writer.writeGroups({
         handles: Int32Array.of(handle),
         fields: new Map<TableGroupField, unknown[]>([
           ['name', ['renamed']],
@@ -639,7 +639,7 @@ describe('the groups written through the writer of the Store of rows', () => {
     // The same values again change nothing
     notified.length = 0;
     store.transact(() => {
-      writer.applyGroups({
+      writer.writeGroups({
         handles: Int32Array.of(handle),
         fields: new Map<TableGroupField, unknown[]>([['hidden', [true]]]),
       });
@@ -657,7 +657,7 @@ describe('the groups written through the writer of the Store of rows', () => {
     const notified: StoreChange[] = [];
     store.subscribe((change) => notified.push(change));
     store.transact(() => {
-      writer.applyGroups({
+      writer.writeGroups({
         handles: Int32Array.of(40),
         fields: new Map<TableGroupField, unknown[]>([
           ['id', ['far']],
@@ -688,7 +688,7 @@ describe('the groups written through the writer of the Store of rows', () => {
     expect(tables.findGroup('far')).toBe(40);
     notified.length = 0;
     store.transact(() => {
-      writer.applyGroups({
+      writer.writeGroups({
         handles: Int32Array.of(40),
         fields: new Map(),
         deleted: Uint8Array.of(1),
@@ -717,7 +717,7 @@ describe('the groups written through the writer of the Store of rows', () => {
 describe('taking in the row groups without a drawing', () => {
   it('takes the row groups given in at once', () => {
     const { tables, writer } = createFeatureTables();
-    writer.addRowBlocks('a', points(0, 10));
+    writer.addPages('a', points(0, 10));
     const internals = featureTablesInternals(tables) as FeatureTablesInternals;
     expect(internals.hasQueuedBlocks).toBe(false);
     const view = tables.get('a');
@@ -727,14 +727,14 @@ describe('taking in the row groups without a drawing', () => {
 
   it('builds the new rows waiting into row groups of their own and takes them in', () => {
     const { tables, writer } = createFeatureTables();
-    writer.addRowBlocks('a', points(0, 4));
+    writer.addPages('a', points(0, 4));
     const internals = featureTablesInternals(tables) as FeatureTablesInternals;
-    internals.addQueuedRowBlocks();
+    internals.addQueuedPages();
     // A run of new rows after the last row: built into row groups of their own over the frames
     const n = 100;
     const ids = Array.from({ length: n }, (_, i) => `r${i + 4}`);
     const handles = writer.allocateHandles(utf8ColumnFromStrings(ids));
-    writer.apply({
+    writer.writeRows({
       handles,
       fields: new Map<RowField, unknown[]>([
         ['type', ids.map(() => 'Point')],
@@ -745,7 +745,7 @@ describe('taking in the row groups without a drawing', () => {
     });
     expect(internals.hasPendingWork).toBe(true);
     expect(internals.ids.mainGroup(handles[0])).toBeLessThan(0);
-    internals.addQueuedRowBlocks();
+    internals.addQueuedPages();
     // In row groups of the layer, not in its delta
     for (const handle of handles) {
       expect(internals.ids.mainGroup(handle)).toBeGreaterThanOrEqual(0);
@@ -760,14 +760,14 @@ describe('taking in the row groups without a drawing', () => {
 
   it('throws for a row group that cannot be taken in, and takes none of the others', () => {
     const { tables, writer } = createFeatureTables();
-    writer.addRowBlocks('a', points(0, 4));
+    writer.addPages('a', points(0, 4));
     // Its ids are rows already, then a group that can be taken in
-    expect(() => writer.addRowBlocks('a', [...points(0, 1), ...points(10, 1)])).toThrow(
+    expect(() => writer.addPages('a', [...points(0, 1), ...points(10, 1)])).toThrow(
       /already a row/,
     );
-    expect(tables.findRow('r10')).toBeUndefined();
-    writer.addRowBlocks('a', points(10, 1));
-    expect(tables.findRow('r10')).toBeDefined();
+    expect(tables.getRowRef('r10')).toBeUndefined();
+    writer.addPages('a', points(10, 1));
+    expect(tables.getRowRef('r10')).toBeDefined();
   });
 });
 

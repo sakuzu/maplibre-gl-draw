@@ -24,8 +24,8 @@ import { getAnchorProjector } from '../shared/math/index.js';
 import { MemoryContractStore } from '../store/memory.js';
 import { createTableStore } from '../store/table-memory.js';
 import {
-  createFeatureRowBlockBuilder,
-  type FeatureRowBlockBuilderOptions,
+  createFeaturePageBuilder,
+  type FeaturePageBuilderOptions,
 } from '../table/feature-row-blocks.js';
 import { prepareTable } from '../table/index.js';
 import { DemAtlas } from '../view/terrain/dem-atlas.js';
@@ -45,8 +45,8 @@ installTestDem(maplibregl);
   prepareTable,
   tables: {
     createFeatureTables,
-    createRowBlockBuilder: (options: FeatureRowBlockBuilderOptions = {}) =>
-      createFeatureRowBlockBuilder(options),
+    createPageBuilder: (options: FeaturePageBuilderOptions = {}) =>
+      createFeaturePageBuilder(options),
     createTableStore,
   },
   terrain: { addTestTerrain, TEST_PEAK, testElevation },

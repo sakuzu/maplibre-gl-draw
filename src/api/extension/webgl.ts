@@ -14,7 +14,7 @@
 import type { DraggedRows } from '../../feature-table/dragged-rows.js';
 import type { MemoryUsage } from '../memory.js';
 import type { Feature } from '../model.js';
-import type { LayerTableView, RowHandle } from '../tables.js';
+import type { LayerTableView, RowRef } from '../tables.js';
 import type { RenderContext } from './render.js';
 
 /**
@@ -229,9 +229,6 @@ export interface ProgramCompile {
    */
   readonly program: WebGLProgram;
 }
-
-/** A row of a layer */
-export type RowRef = RowHandle;
 
 /**
  * The WebGL context of an extension: WebGL2, without the calls that make and delete resources

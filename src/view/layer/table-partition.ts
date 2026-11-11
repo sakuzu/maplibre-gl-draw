@@ -18,8 +18,8 @@
  * A row without a geometry draws nothing and joins the run it is in.
  */
 
-import type { RowBlockDictionary, RowGroup } from '@sakuzu/kasane/engine';
-import { geometryAt } from '@sakuzu/kasane/engine';
+import type { PageDictionary, RowGroup } from '@sakuzu/kasane/render';
+import { geometryAt } from '@sakuzu/kasane/render';
 import type { LayerTableView } from '../../api/tables.js';
 import type { GpuRowsSource } from '../../extension/renderers.js';
 import { rowHasGeometry, rowType } from '../../feature-table/row-read.js';
@@ -189,7 +189,7 @@ export function classifyRow(
     const source = renderer?.rowSprites as RowSpriteSource;
     const reader = geometryAt(group, row)?.reader;
     const points = reader?.type === 'Point' || reader?.type === 'MultiPoint';
-    if (!points || !slots.sprite(source, (data.wholes[STYLE] as RowBlockDictionary).indexes[row]))
+    if (!points || !slots.sprite(source, (data.wholes[STYLE] as PageDictionary).indexes[row]))
       return 'immediate';
     context.onSprite?.(row, source);
     return 'rows';
@@ -199,9 +199,7 @@ export function classifyRow(
   switch (type) {
     case 'Point':
     case 'MultiPoint':
-      if (
-        !slots.point((data.wholes[STYLE] as RowBlockDictionary).indexes[row], type, color()).shape
-      )
+      if (!slots.point((data.wholes[STYLE] as PageDictionary).indexes[row], type, color()).shape)
         return 'immediate';
       return oneDraw ? 'rows' : 'point';
     case 'LineString':
@@ -209,8 +207,8 @@ export function classifyRow(
     case 'MultiLineString':
       // The drawing in one draw cuts the dashes itself
       if (oneDraw) return 'rows';
-      return slots.line((data.wholes[STYLE] as RowBlockDictionary).indexes[row], type, color())
-        .stroke.lineStyle === 'solid'
+      return slots.line((data.wholes[STYLE] as PageDictionary).indexes[row], type, color()).stroke
+        .lineStyle === 'solid'
         ? 'line'
         : 'immediate';
     case 'Polygon':
@@ -218,7 +216,7 @@ export function classifyRow(
     case 'Circle':
       if (oneDraw) return 'rows';
       // Only a dashed outline cannot be retained (fill only and a solid outline can be)
-      return slots.polygon((data.wholes[STYLE] as RowBlockDictionary).indexes[row], type, color())
+      return slots.polygon((data.wholes[STYLE] as PageDictionary).indexes[row], type, color())
         .dashedStroke
         ? 'immediate'
         : 'polygon';

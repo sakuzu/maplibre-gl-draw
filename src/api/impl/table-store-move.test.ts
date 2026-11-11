@@ -113,7 +113,7 @@ function event<T extends MouseNormalizedEvent | DragNormalizedEvent>(
 
 /** The first corner of the square of a row, as the row holds it */
 function rowCorner(tables: FeatureTables, id: string): number[] | undefined {
-  const geometry = tables.get('rows')?.getRow(tables.findRow(id) ?? -1)?.geometry as
+  const geometry = tables.get('rows')?.getRow(tables.getRowRef(id) ?? -1)?.geometry as
     | { coordinates: number[][][] }
     | undefined;
   return geometry?.coordinates[0][0];
@@ -133,7 +133,7 @@ function drawnCorner(id: string): number[] | undefined {
 
 /** Whether a row is in a moving set */
 function moving(tables: FeatureTables, id: string): boolean {
-  const state = featureTablesInternals(tables)?.states.stateOf(tables.findRow(id) ?? -1) ?? 0;
+  const state = featureTablesInternals(tables)?.states.stateOf(tables.getRowRef(id) ?? -1) ?? 0;
   return (state & STATE_MOVE_MASK) !== 0;
 }
 

@@ -12,22 +12,21 @@
  *   (Node's), with and without the caches of the triangles of the polygons
  * - Every row read back and compared with the feature it was written from, the coordinates to
  *   their bits
- * - The time to read the row blocks as the Worker of a page does: decompress a part (fzstd, as in
- *   a browser), read the row block, make it a row block of the tables (the triangles copied from
+ * - The time to read the pages as the Worker of a page does: decompress a part (fzstd, as in
+ *   a browser), read the page, make it a page of the tables (the triangles copied from
  *   the cache of the file, or made without one). Then, for the same rows, the
- *   way before: rows made objects again and given to the builder of the row blocks
+ *   way before: rows made objects again and given to the builder of the pages
  */
 
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { zstdCompressSync } from 'node:zlib';
 import {
-  createRowBlockBuilder,
   featureRowOfTabane,
-  rowBlockOfTabane,
   type TabaneFeatureRow,
   writeTabaneFeatureBlocks,
 } from '@sakuzu/maplibre-gl-draw/kasane';
+import { createPageBuilder, toPage } from '@sakuzu/maplibre-gl-draw/table';
 import {
   formatTabaneId,
   listTabaneFileParts,
@@ -136,7 +135,7 @@ describe.skipIf(!MEASURE)('Tabane measured', () => {
         }
         (result[label] as Record<string, unknown>).readBack = { rows: at, differ };
 
-        // The time to read the row blocks into row blocks of the tables, a part at a time (warmed up)
+        // The time to read the pages into pages of the tables, a part at a time (warmed up)
         const parts = files.flatMap((f) => listTabaneFileParts(f).slice(1));
         const pass = () => {
           const t = { unzip: 0, read: 0, block: 0, rowBlocks: 0 };
@@ -152,7 +151,7 @@ describe.skipIf(!MEASURE)('Tabane measured', () => {
             const b = performance.now();
             const rowBlock = readTabaneRowBlock(bytes);
             const c = performance.now();
-            rowBlockOfTabane(rowBlock, { caches });
+            toPage(rowBlock, { caches });
             const d = performance.now();
             t.unzip += b - a;
             t.read += c - b;
@@ -179,19 +178,19 @@ describe.skipIf(!MEASURE)('Tabane measured', () => {
         };
       }
 
-      // The way before, for the same rows: rows given to the builder of the row blocks
+      // The way before, for the same rows: rows given to the builder of the pages
       const builderPass = () => {
         let ms = 0;
         for (let s = 0; s < rows.length; s += 1000) {
           const chunk = rows.slice(s, s + 1000);
           const a = performance.now();
-          const builder = createRowBlockBuilder();
+          const builder = createPageBuilder();
           chunk.forEach((row, i) => {
             builder.addRow({
               id: row.id,
               type: row.type,
               geometry: row.geometry,
-              order: `V${tabaneRowSuffixOf(s + i)}`,
+              key: `V${tabaneRowSuffixOf(s + i)}`,
               properties: row.properties,
             });
           });

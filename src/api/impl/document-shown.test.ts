@@ -139,8 +139,8 @@ describe('another document shown in place of the document', () => {
     // A layer and a row written by a transaction from elsewhere
     store.transact(() => {
       store.createLayer(layer('more', true));
-      writer.apply({
-        handles: Int32Array.of(store.tables?.findRow('p1') ?? -1),
+      writer.writeRows({
+        handles: Int32Array.of(store.tables?.getRowRef('p1') ?? -1),
         fields: new Map([['properties:n', [7]]]),
       });
     }, 'remote');

@@ -22,7 +22,7 @@ import type {
   GroupVersionReceiver,
   RowGroup,
   TableWorkBudget,
-} from '@sakuzu/kasane/engine';
+} from '@sakuzu/kasane/render';
 import { describe, expect, it } from 'vitest';
 import type { BBox } from '../geometry/types.js';
 import {
@@ -105,19 +105,19 @@ describe('what a draped drawing reads of the deltas and the versions', () => {
     const reference = randomReference(seededRandom(1), 40, ['a']);
     const { tables, writer, internals } = tablesOfReference(reference, ['a'], 8);
     const drape = fakeDrape(internals, ['a']);
-    writer.apply(rowPatch([tables.findRow('r3') as number], { key: [key(999_000)] }));
+    writer.writeRows(rowPatch([tables.getRowRef('r3') as number], { key: [key(999_000)] }));
     drape.answer(false);
     internals.flushVersions();
     expect(drape.statuses.every((status) => status === 'built')).toBe(true);
     expect(internals.builtVersions('a').length).toBeGreaterThan(0);
     drape.answer('partial');
-    internals.swapVersions();
+    internals.swap();
     expect(drape.statuses.filter((status) => status.startsWith('swapped'))).toEqual(
       drape.statuses.filter((status) => status === 'swapped partial'),
     );
     expect(drape.statuses).toContain('swapped partial');
     drape.answer(true);
-    writer.apply(rowPatch([tables.findRow('r4') as number], { key: [key(998_000)] }));
+    writer.writeRows(rowPatch([tables.getRowRef('r4') as number], { key: [key(998_000)] }));
     internals.flushVersions();
     expect(drape.statuses[drape.statuses.length - 1]).toBe('swapped');
     expect(drape.problems).toEqual([]);
@@ -135,10 +135,10 @@ describe('what a draped drawing reads of the deltas and the versions', () => {
       for (let step = 0; step < 150; step++) {
         const pick = random();
         if (pick < 0.6) writes.step(step);
-        else if (pick < 0.8) internals.advanceVersions(ONE_STEP);
+        else if (pick < 0.8) internals.rebuild(ONE_STEP);
         else {
           drape.answer(random() < 0.3 ? false : random() < 0.5 ? 'partial' : true);
-          internals.swapVersions();
+          internals.swap();
         }
         drape.check(`step ${step}`);
       }
@@ -151,18 +151,20 @@ describe('what a draped drawing reads of the deltas and the versions', () => {
     const reference = randomReference(seededRandom(2), 40, ['a']);
     const { tables, writer, internals } = tablesOfReference(reference, ['a'], 8);
     const delta = internals.rowTable('a')?.delta;
-    const at = (id: string) => tables.findRow(id) as number;
-    writer.apply(rowPatch([at('r1'), at('r2'), at('r3')], { key: [key(10), key(20), key(30)] }));
+    const at = (id: string) => tables.getRowRef(id) as number;
+    writer.writeRows(
+      rowPatch([at('r1'), at('r2'), at('r3')], { key: [key(10), key(20), key(30)] }),
+    );
     const before = ['r1', 'r2', 'r3'].map((id) => delta?.copyOf(at(id)));
     expect(new Set(before).size).toBe(3);
     // Made again around them: the numbers stay
-    writer.apply(rowPatch([at('r4')], { key: [key(15)] }));
+    writer.writeRows(rowPatch([at('r4')], { key: [key(15)] }));
     expect(['r1', 'r2', 'r3'].map((id) => delta?.copyOf(at(id)))).toEqual(before);
     internals.flushVersions();
     expect(internals.deltaRowCount()).toBe(0);
     // Freed: given again, the range does not grow
     const range = delta?.copyRange;
-    writer.apply(rowPatch([at('r5'), at('r6')], { key: [key(40), key(50)] }));
+    writer.writeRows(rowPatch([at('r5'), at('r6')], { key: [key(40), key(50)] }));
     expect(delta?.copyRange).toBe(range);
   });
 
@@ -171,10 +173,10 @@ describe('what a draped drawing reads of the deltas and the versions', () => {
     const { tables, writer, internals } = tablesOfReference(reference, ['a'], 8);
     const told: Array<[string, BBox]> = [];
     internals.onTouched((layerId, bounds) => told.push([layerId, bounds]));
-    const at = (id: string) => tables.findRow(id) as number;
+    const at = (id: string) => tables.getRowRef(id) as number;
     const contains = (b: BBox, x: number, y: number) =>
       b[0] <= x && x <= b[2] && b[1] <= y && y <= b[3];
-    writer.apply(
+    writer.writeRows(
       rowPatch([at('r1')], {
         geometry: [{ type: 'Point', coordinates: [50, 50] }],
         key: [key(5)],
@@ -182,7 +184,9 @@ describe('what a draped drawing reads of the deltas and the versions', () => {
     );
     expect(told.some(([layer, b]) => layer === 'a' && contains(b, 50, 50))).toBe(true);
     told.length = 0;
-    writer.apply(rowPatch([at('r1')], { geometry: [{ type: 'Point', coordinates: [60, 60] }] }));
+    writer.writeRows(
+      rowPatch([at('r1')], { geometry: [{ type: 'Point', coordinates: [60, 60] }] }),
+    );
     expect(told.some(([, b]) => contains(b, 60, 60))).toBe(true);
     told.length = 0;
     internals.flushVersions();
@@ -192,9 +196,9 @@ describe('what a draped drawing reads of the deltas and the versions', () => {
   it('finds a row of a delta moved far where it is now', () => {
     const reference = randomReference(seededRandom(4), 40, ['a']);
     const { tables, writer } = tablesOfReference(reference, ['a'], 8);
-    const handle = tables.findRow('r7') as number;
-    writer.apply(rowPatch([handle], { key: [key(5)] }));
-    writer.apply(rowPatch([handle], { geometry: [{ type: 'Point', coordinates: [80, 80] }] }));
+    const handle = tables.getRowRef('r7') as number;
+    writer.writeRows(rowPatch([handle], { key: [key(5)] }));
+    writer.writeRows(rowPatch([handle], { geometry: [{ type: 'Point', coordinates: [80, 80] }] }));
     expect(Array.from(tables.get('a')?.listDrawnRows([79, 79, 81, 81]) ?? [])).toEqual([handle]);
     expect(Array.from(tables.get('a')?.listDrawnRows([-1, -1, 11, 11]) ?? [])).not.toContain(
       handle,

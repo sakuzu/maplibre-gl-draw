@@ -40,7 +40,7 @@ const REACH = 32;
 
 /**
  * How the features are put in the Store: made by `features.createMany`, or, in a Store of rows,
- * put in a row block of its tables (the rows a document opened holds, written in place)
+ * put in a page of its tables (the rows a document opened holds, written in place)
  */
 export type Holding = 'made' | 'block';
 
@@ -211,7 +211,7 @@ async function putFeatures(page: Page, type: TypeCase, holding: Holding): Promis
         writer: import('../kasane/index.js').FeatureTablesWriter;
         e2e: {
           tables: {
-            createRowBlockBuilder: typeof import('../table/feature-row-blocks.js').createFeatureRowBlockBuilder;
+            createPageBuilder: typeof import('../table/feature-row-blocks.js').createFeaturePageBuilder;
           };
         };
       };
@@ -320,7 +320,7 @@ async function putFeatures(page: Page, type: TypeCase, holding: Holding): Promis
         ];
       });
       if (holding === 'block') {
-        const builder = w.e2e.tables.createRowBlockBuilder({});
+        const builder = w.e2e.tables.createPageBuilder({});
         inputs.forEach((f, i) => {
           builder.addRow({
             id: f.id,
@@ -333,7 +333,7 @@ async function putFeatures(page: Page, type: TypeCase, holding: Holding): Promis
             locked: false,
           } as never);
         });
-        w.writer.addRowBlocks('L', builder.finish());
+        w.writer.addPages('L', builder.finish());
       } else if (!draw.features.createMany(inputs as never)) {
         throw new Error('the features were not created');
       }

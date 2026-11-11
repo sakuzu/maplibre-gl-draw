@@ -6,7 +6,7 @@
 /**
  * The subpath `@sakuzu/maplibre-gl-draw/kasane`
  *
- * A Worker imports it to build the row blocks, so what it loads at runtime must depend on
+ * A Worker imports it to build the pages, so what it loads at runtime must depend on
  * neither maplibre nor the drawing: every runtime import reachable from its entry is walked, and
  * none may be maplibre, a module that draws, a mode, the dispatch of the input or the
  * implementation of the instance. Its export list is pinned in src/index.test.ts.
@@ -19,7 +19,8 @@ import { KasaneError } from '@sakuzu/kasane';
 import { TabaneError } from '@sakuzu/tabane';
 import { describe, expect, it } from 'vitest';
 import { DrawError } from '../api/errors.js';
-import { createFeatureTables, createRowBlockBuilder, mergeRowBlock } from './index.js';
+import { createPageBuilder } from '../table/index.js';
+import { createFeatureTables, mergePages } from './index.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const SRC = resolve(here, '..');
@@ -95,15 +96,15 @@ describe('the kasane subpath', () => {
       }
       return undefined;
     };
-    const builder = createRowBlockBuilder();
+    const builder = createPageBuilder();
     const row = { id: 'a', type: 'Point', geometry: null, key: 'a0' };
     builder.addRow(row);
     expect(codeOf(() => builder.addRow(row))).toBe('invalid-input');
     const { tables, writer } = createFeatureTables();
-    expect(codeOf(() => writer.addRowBlocks('l', [{ ...builder.finish()[0], length: 0 }]))).toBe(
+    expect(codeOf(() => writer.addPages('l', [{ ...builder.finish()[0], length: 0 }]))).toBe(
       'invalid-input',
     );
-    expect(codeOf(() => writer.apply({ handles: Int32Array.of(99), fields: new Map() }))).toBe(
+    expect(codeOf(() => writer.writeRows({ handles: Int32Array.of(99), fields: new Map() }))).toBe(
       'not-found',
     );
     // A handle given to a new id, written without what a new row needs
@@ -113,10 +114,13 @@ describe('the kasane subpath', () => {
     });
     expect(
       codeOf(() =>
-        writer.apply({ handles: Int32Array.of(handle), fields: new Map([['hidden', [false]]]) }),
+        writer.writeRows({
+          handles: Int32Array.of(handle),
+          fields: new Map([['hidden', [false]]]),
+        }),
       ),
     ).toBe('invalid-input');
-    expect(codeOf(() => mergeRowBlock({ sources: [], rows: Int32Array.of(0, 0) }))).toBeDefined();
+    expect(codeOf(() => mergePages({ sources: [], rows: Int32Array.of(0, 0) }))).toBeDefined();
     expect(tables.get('l')).toBeUndefined();
   });
 
@@ -142,18 +146,18 @@ describe('the kasane subpath', () => {
     const row = { id: 'a', type: 'Point', geometry: null, key: 'a0' };
 
     // The builder: a row added twice, a value it cannot hold, a group the options do not give
-    const builder = createRowBlockBuilder();
+    const builder = createPageBuilder();
     builder.addRow(row);
     const twice = wrapped(() => builder.addRow(row));
     expect(twice.error.code).toBe('invalid-input');
-    expect(twice.error.message).toBe('RowBlockBuilder: the id "a" is added twice');
-    const withFunction = createRowBlockBuilder();
+    expect(twice.error.message).toBe('PageBuilder: the id "a" is added twice');
+    const withFunction = createPageBuilder();
     withFunction.addRow({ ...row, properties: { f: () => 1 } });
     const value = wrapped(() => withFunction.finish());
     expect(value.error.code).toBe('invalid-input');
     // An error of Tabane is held by the error of the tables
     expect(value.cause.cause).toBeInstanceOf(TabaneError);
-    const grouped = createRowBlockBuilder();
+    const grouped = createPageBuilder();
     grouped.addRow({ ...row, group: 7 });
     grouped.addRow({ ...row, id: 'b', group: 7 });
     expect(wrapped(() => grouped.finish()).error.code).toBe('not-found');
@@ -161,22 +165,22 @@ describe('the kasane subpath', () => {
     // The merge: a source whose styles are not numbered
     const blocks = builder.finish();
     expect(
-      wrapped(() => mergeRowBlock({ sources: blocks, rows: Int32Array.of(0, 0) })).error.code,
+      wrapped(() => mergePages({ sources: blocks, rows: Int32Array.of(0, 0) })).error.code,
     ).toBe('invalid-input');
 
     // The writer: values of a row it cannot hold
     const { tables, writer } = createFeatureTables();
-    const one = createRowBlockBuilder();
+    const one = createPageBuilder();
     one.addRow({ ...row, geometry: { type: 'Point', coordinates: [1, 2] } });
-    writer.addRowBlocks('l', one.finish());
-    const handles = Int32Array.of(tables.findRow('a') as number);
+    writer.addPages('l', one.finish());
+    const handles = Int32Array.of(tables.getRowRef('a') as number);
     const surrogate = wrapped(() =>
-      writer.apply({ handles, fields: new Map([['properties:x', ['\ud800']]]) }),
+      writer.writeRows({ handles, fields: new Map([['properties:x', ['\ud800']]]) }),
     );
     expect(surrogate.error.code).toBe('invalid-input');
     expect(surrogate.error.message).toBe('ValueOverrides: a string with a lone surrogate');
     const notValue = wrapped(() =>
-      writer.apply({ handles, fields: new Map([['properties:x', [() => 1]]]) }),
+      writer.writeRows({ handles, fields: new Map([['properties:x', [() => 1]]]) }),
     );
     expect(notValue.error.code).toBe('invalid-input');
     expect(notValue.cause.cause).toBeInstanceOf(TabaneError);
@@ -185,7 +189,7 @@ describe('the kasane subpath', () => {
   it('lets through as it is what a function given to the tables throws', () => {
     const own = new TabaneError('invalid-input', 'an error of the caller');
     const point = { type: 'Point' as const, coordinates: [1, 2] };
-    const builder = createRowBlockBuilder({
+    const builder = createPageBuilder({
       coordinateSystem: {
         rowBox: () => {
           throw own;
@@ -201,18 +205,18 @@ describe('the kasane subpath', () => {
     }
     expect(error).toBe(own);
 
-    const blocks = createRowBlockBuilder();
+    const blocks = createPageBuilder();
     blocks.addRow({ id: 'a', type: 'Point', geometry: point, key: 'a0' });
     const { tables, writer } = createFeatureTables({
       onRelease: () => {
         throw own;
       },
     });
-    writer.addRowBlocks('l', blocks.finish());
+    writer.addPages('l', blocks.finish());
     const token = writer.createRestoreToken();
-    writer.apply(
+    writer.writeRows(
       {
-        handles: Int32Array.of(tables.findRow('a') as number),
+        handles: Int32Array.of(tables.getRowRef('a') as number),
         fields: new Map(),
         deleted: Uint8Array.of(1),
       },

@@ -225,7 +225,7 @@ function handleFeatureClick(
   // Shift over features selected in bulk: the feature joins or leaves their rows (listed by
   // their IDs once few enough)
   const rows = store.getSelectedRows();
-  const handle = store.tables?.findRow(feature.id);
+  const handle = store.tables?.getRowRef(feature.id);
   if (event.modifiers.shift && rows && selection.type === 'feature' && handle !== undefined) {
     if (rows.has(handle)) {
       store.selectRows(rows.without([handle]));

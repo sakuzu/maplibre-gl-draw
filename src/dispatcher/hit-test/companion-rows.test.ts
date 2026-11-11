@@ -8,7 +8,7 @@
  * what is kept stays what walking every row of the layer finds, over writes of every kind.
  */
 
-import type { RowTable } from '@sakuzu/kasane/engine';
+import type { RowTable } from '@sakuzu/kasane/render';
 import { utf8ColumnFromStrings } from '@sakuzu/tabane';
 import { describe, expect, it } from 'vitest';
 import type { LayerTableView, RowField, RowValues, TableGroupField } from '../../api/tables.js';
@@ -16,7 +16,7 @@ import type { FeatureTablesInternals } from '../../feature-table/feature-tables.
 import { rowFeatureToRead, rowHasGeometry } from '../../feature-table/row-read.js';
 import { FEATURE_TABLE_COLUMNS } from '../../table/tabane/columns.js';
 import {
-  featureRowDataBuilder as createRowBlockDataBuilder,
+  featureRowDataBuilder as createPageDataBuilder,
   feature,
   orderKey,
   randomReference,
@@ -109,7 +109,7 @@ describe('the rows with companions of a layer held as rows', () => {
     const { internals, table, tables, writer } = tablesOfFeatures('l', features, 4096);
     const companions = createFeatureCompanionRegistry();
     const { asked } = registerBands(companions);
-    const handleOf = (id: string): number => tables.findRow(id) as number;
+    const handleOf = (id: string): number => tables.getRowRef(id) as number;
     const ids = (): string[] => kept(internals, table, companions);
     const expectWalked = (): void => {
       expect(ids()).toEqual(walked(internals, table));
@@ -125,7 +125,7 @@ describe('the rows with companions of a layer held as rows', () => {
     expect(asked.rows).toBe(0);
 
     // A row moved in place
-    writer.apply(
+    writer.writeRows(
       rowPatch([handleOf('p500')], { geometry: [{ type: 'Point', coordinates: [1, 1] }] }),
     );
     asked.rows = 0;
@@ -133,18 +133,18 @@ describe('the rows with companions of a layer held as rows', () => {
     expect(asked.rows).toBe(1);
 
     // A row given a band, and one whose band is taken off
-    writer.apply(rowPatch([handleOf('p30000')], { 'properties:band': [2] }));
+    writer.writeRows(rowPatch([handleOf('p30000')], { 'properties:band': [2] }));
     asked.rows = 0;
     expect(ids()).toEqual(['p10', 'p20000', 'p30000', 'p40000', 'p60000', 'p99000']);
     expect(asked.rows).toBe(1);
-    writer.apply(rowPatch([handleOf('p40000')], { 'properties:band': [undefined] }));
+    writer.writeRows(rowPatch([handleOf('p40000')], { 'properties:band': [undefined] }));
     asked.rows = 0;
     expect(ids()).toEqual(['p10', 'p20000', 'p30000', 'p60000', 'p99000']);
     expect(asked.rows).toBe(1);
 
     // Rows written by many writes before the next hit: each asked once
     for (let i = 0; i < 20; i++) {
-      writer.apply(
+      writer.writeRows(
         rowPatch([handleOf(`p${70_000 + (i % 4)}`)], {
           geometry: [{ type: 'Point', coordinates: [i, 2] }],
         }),
@@ -155,18 +155,18 @@ describe('the rows with companions of a layer held as rows', () => {
     expect(asked.rows).toBe(4);
 
     // A row deleted
-    writer.apply(rowPatch([handleOf('p60000')], {}, [1]));
+    writer.writeRows(rowPatch([handleOf('p60000')], {}, [1]));
     asked.rows = 0;
     expectWalked();
     expect(asked.rows).toBe(1);
 
     // A row put at another place of the order (it comes into the delta), and a row of the delta
     // written in place
-    writer.apply(rowPatch([handleOf('p20000')], { key: [`${orderKey(50_000)}a`] }));
+    writer.writeRows(rowPatch([handleOf('p20000')], { key: [`${orderKey(50_000)}a`] }));
     asked.rows = 0;
     expect(ids()).toEqual(['p10', 'p30000', 'p20000', 'p60000', 'p99000']);
     expect(asked.rows).toBe(1);
-    writer.apply(rowPatch([handleOf('p20000')], { 'properties:band': [undefined] }));
+    writer.writeRows(rowPatch([handleOf('p20000')], { 'properties:band': [undefined] }));
     asked.rows = 0;
     expect(ids()).toEqual(['p10', 'p30000', 'p60000', 'p99000']);
     expect(asked.rows).toBe(1);
@@ -175,10 +175,10 @@ describe('the rows with companions of a layer held as rows', () => {
     const p10 = handleOf('p10');
     const write = rowPatch([p10], { 'properties:band': [undefined] }, [1]);
     const undo = internals.readValues(write);
-    writer.apply(write);
+    writer.writeRows(write);
     asked.rows = 0;
     expect(ids()).toEqual(['p30000', 'p60000', 'p99000']);
-    writer.apply(undo);
+    writer.writeRows(undo);
     expect(ids()).toEqual(['p10', 'p30000', 'p60000', 'p99000']);
     expect(asked.rows).toBe(2);
   });
@@ -204,11 +204,11 @@ describe('the rows with companions of a layer held as rows', () => {
       const undos: RowValues[] = [];
       const write = (patch: RowValues): void => {
         undos.push(internals.readValues(patch));
-        writer.apply(patch);
+        writer.writeRows(patch);
       };
       const someRow = (): number | undefined => {
         const ids = [...reference.rows.keys()];
-        return tables.findRow(ids[Math.floor(random() * ids.length)]);
+        return tables.getRowRef(ids[Math.floor(random() * ids.length)]);
       };
       let blocks = 0;
       const check = (step: number): void => {
@@ -243,14 +243,14 @@ describe('the rows with companions of a layer held as rows', () => {
         } else if (pick < 0.78) {
           // The last writes undone
           const undo = undos.pop();
-          if (undo) writer.apply(undo);
+          if (undo) writer.writeRows(undo);
         } else if (pick < 0.84) {
           // The next versions of the groups (the rows of the deltas taken into them)
           internals.flushVersions();
         } else if (pick < 0.88) {
           // A group of features put at another place of the order
           const group = groupHandleOf(random() < 0.5 ? 'ga' : 'gb');
-          writer.applyGroups({
+          writer.writeGroups({
             handles: Int32Array.of(group),
             fields: new Map<TableGroupField, unknown[]>([['key', [referenceKey(random() * 1e6)]]]),
           });
@@ -258,7 +258,7 @@ describe('the rows with companions of a layer held as rows', () => {
         } else if (pick < 0.92) {
           // A row group of new rows taken in
           const layerId = layerIds[Math.floor(random() * layerIds.length)];
-          const builder = createRowBlockDataBuilder({
+          const builder = createPageDataBuilder({
             columns: FEATURE_TABLE_COLUMNS,
             targetRows: 8,
           });
@@ -275,8 +275,8 @@ describe('the rows with companions of a layer held as rows', () => {
             });
           }
           blocks++;
-          writer.addRowBlocks(layerId, builder.finish());
-          internals.addQueuedRowBlocks();
+          writer.addPages(layerId, builder.finish());
+          internals.addQueuedPages();
         } else if (pick < 0.95) {
           // Many new rows in one write (their own row groups)
           const layerId = layerIds[Math.floor(random() * layerIds.length)];
@@ -294,7 +294,7 @@ describe('the rows with companions of a layer held as rows', () => {
               'properties:band': handles.map((_, k) => (k % 9 === 0 ? 1 : undefined)),
             }),
           );
-          if (random() < 0.5) internals.addQueuedRowBlocks();
+          if (random() < 0.5) internals.addQueuedPages();
         } else {
           // Another provider comes or goes
           if (second) {
@@ -315,10 +315,10 @@ describe('the rows with companions of a layer held as rows', () => {
       [feature('x', 'Point', [0, 0], { properties: { band: 1 } }), feature('y', 'Point', [1, 0])],
       8,
     );
-    const builder = createRowBlockDataBuilder({ columns: FEATURE_TABLE_COLUMNS, targetRows: 8 });
+    const builder = createPageDataBuilder({ columns: FEATURE_TABLE_COLUMNS, targetRows: 8 });
     builder.addRow(rowOfFeature(feature('z', 'Point', [2, 0]), orderKey(5)));
-    writer.addRowBlocks('b', builder.finish());
-    internals.addQueuedRowBlocks();
+    writer.addPages('b', builder.finish());
+    internals.addQueuedPages();
     const companions = createFeatureCompanionRegistry();
     registerBands(companions);
     const a = internals.rowTable('a') as RowTable;
@@ -326,11 +326,11 @@ describe('the rows with companions of a layer held as rows', () => {
     const ids = (table: RowTable) => kept(internals, table, companions);
     expect(ids(a)).toEqual(['x']);
     expect(ids(b)).toEqual([]);
-    const x = tables.findRow('x') as number;
+    const x = tables.getRowRef('x') as number;
     const moves: RowValues[] = [];
     const move = (patch: RowValues): void => {
       moves.push(internals.readValues(patch));
-      writer.apply(patch);
+      writer.writeRows(patch);
     };
     move(
       rowPatch([x], {
@@ -343,14 +343,14 @@ describe('the rows with companions of a layer held as rows', () => {
     move(rowPatch([x], { 'properties:band': [undefined] }));
     expect(ids(b)).toEqual([]);
     // Back to its layer, and its band again
-    writer.apply(moves.pop() as RowValues);
-    writer.apply(moves.pop() as RowValues);
+    writer.writeRows(moves.pop() as RowValues);
+    writer.writeRows(moves.pop() as RowValues);
     for (const table of [a, b]) expect(ids(table)).toEqual(walked(internals, table));
     expect(ids(a)).toEqual(['x']);
     internals.flushVersions();
     for (const table of [a, b]) expect(ids(table)).toEqual(walked(internals, table));
     const fields = new Map<RowField, unknown[]>([['properties:band', [1]]]);
-    writer.apply({ handles: Int32Array.of(tables.findRow('z') as number), fields });
+    writer.writeRows({ handles: Int32Array.of(tables.getRowRef('z') as number), fields });
     expect(ids(b)).toEqual(['z']);
   });
 });

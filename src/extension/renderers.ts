@@ -15,7 +15,7 @@
 import type { Map as MapLibreMap, ProjectionData } from 'maplibre-gl';
 import type { RenderContext } from '../api/extension/render.js';
 import type { GpuRowBuffer } from '../api/extension/webgl.js';
-import type { LayerTableView, RowHandle } from '../api/tables.js';
+import type { LayerTableView, RowRef } from '../api/tables.js';
 import type { Feature } from '../shared/types/model.js';
 import type { SDFLineRenderer } from '../view/renderers/line/sdf-line.js';
 import type { PointShapeRenderer } from '../view/renderers/point/point-shape.js';
@@ -153,7 +153,7 @@ export interface FeatureTypeRenderer {
    * answer of `appliesTo` for the feature of the row, read with it only. Without it, the
    * classification of the rows makes the feature of each row of the type to ask `appliesTo`
    */
-  appliesToRow?(view: LayerTableView, handle: RowHandle): boolean;
+  appliesToRow?(view: LayerTableView, handle: RowRef): boolean;
 
   /**
    * What holds its rows on the GPU, for the layers held as rows (`FeatureRenderer.rows`).

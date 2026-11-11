@@ -127,7 +127,7 @@ async function open(page: Page, features: SceneFeature[], form: 'rows' | 'store'
         e2e: {
           createDraw: typeof import('../index.js').createDraw;
           tables: {
-            createRowBlockBuilder: typeof import('../table/feature-row-blocks.js').createFeatureRowBlockBuilder;
+            createPageBuilder: typeof import('../table/feature-row-blocks.js').createFeaturePageBuilder;
             createTableStore: typeof import('../store/table-memory.js').createTableStore;
           };
           internals: { MemoryContractStore: new () => Contract };
@@ -149,7 +149,7 @@ async function open(page: Page, features: SceneFeature[], form: 'rows' | 'store'
         const made = w.e2e.tables.createTableStore({ selectionIdsLimit: 3 });
         store = made.store as unknown as Contract;
         store.createLayer({ ...layer, kind: 'table' } as never);
-        const builder = w.e2e.tables.createRowBlockBuilder({});
+        const builder = w.e2e.tables.createPageBuilder({});
         features.forEach((f, i) => {
           builder.addRow({
             id: f.id,
@@ -162,7 +162,7 @@ async function open(page: Page, features: SceneFeature[], form: 'rows' | 'store'
             locked: false,
           } as never);
         });
-        made.writer.addRowBlocks('rows', builder.finish());
+        made.writer.addPages('rows', builder.finish());
       } else {
         store = new w.e2e.internals.MemoryContractStore();
         const contract = store;

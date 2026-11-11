@@ -24,7 +24,7 @@ import type { RowField } from '../api/tables.js';
 import { featureTablesInternals } from '../feature-table/feature-tables.js';
 import { circleRowRings } from '../table/circle-rings.js';
 import { FEATURE_TABLE_COLUMNS } from '../table/tabane/columns.js';
-import { featureRowDataBuilder as createRowBlockDataBuilder } from '../test-utils.js';
+import { featureRowDataBuilder as createPageDataBuilder } from '../test-utils.js';
 import { SELECTION_IDS_LIMIT } from './draw-store.js';
 import { insertGroup } from './item-lists.js';
 import type { Store } from './store.js';
@@ -91,7 +91,7 @@ describe('the in-memory Store of rows', () => {
     store.updateFeature('p1', { properties: { n: 10 } });
     store.deleteFeature('p2');
     expect(notified).toHaveLength(2);
-    const handle = (id: string) => tables.findRow(id) ?? -1;
+    const handle = (id: string) => tables.getRowRef(id) ?? -1;
     expect(notified[0].features).toBeUndefined();
     expect(Array.from(notified[0].rows?.layers.get('layer')?.updated ?? [])).toEqual([
       handle('p1'),
@@ -112,7 +112,7 @@ describe('the in-memory Store of rows', () => {
     expect(notified).toHaveLength(1);
     expect(notified[0].features).toBeUndefined();
     expect(Array.from(notified[0].rows?.layers.get('layer')?.updated ?? [])).toEqual([
-      tables.findRow('p1'),
+      tables.getRowRef('p1'),
     ]);
     expect((notified[0].previousValues as RowValues | undefined)?.fields.get('geometry')).toEqual([
       p1?.geometry,
@@ -133,7 +133,7 @@ describe('the in-memory Store of rows', () => {
     expect(notified).toHaveLength(1);
     expect(notified[0].features).toBeUndefined();
     expect(Array.from(notified[0].rows?.layers.get('layer')?.created ?? [])).toEqual([
-      tables.findRow('n'),
+      tables.getRowRef('n'),
     ]);
     expect(notified[0].selection?.ids).toEqual(['n']);
   });
@@ -142,9 +142,9 @@ describe('the in-memory Store of rows', () => {
     const { store, writer, tables, notified } = setup();
     store.setSelection('feature', ['p2']);
     notified.length = 0;
-    const handle = tables.findRow('p2') ?? -1;
+    const handle = tables.getRowRef('p2') ?? -1;
     store.transact(() => {
-      writer.apply({
+      writer.writeRows({
         handles: Int32Array.of(handle),
         fields: new Map(),
         deleted: Uint8Array.of(1),
@@ -221,7 +221,7 @@ describe('the order of the in-memory Store of rows', () => {
     expect(order.slice(0, 2002)).toEqual(['p0', ...ids, 'p1']);
     const internals = featureTablesInternals(tables);
     for (const id of ids) {
-      const place = internals?.placeOf(tables.findRow(id) as number);
+      const place = internals?.placeOf(tables.getRowRef(id) as number);
       const key = place ? utf8String(place.group.data.keys, place.row) : '';
       expect(key.length).toBeLessThanOrEqual(64);
     }
@@ -291,7 +291,7 @@ describe('the order of the in-memory Store of rows', () => {
     const { store, writer, tables, notified } = setup(8);
     store.setSelection('feature', ['p5']);
     notified.length = 0;
-    const apply = vi.spyOn(writer, 'apply');
+    const apply = vi.spyOn(writer, 'writeRows');
     store.transact(() =>
       insertGroup(store, {
         id: 'g',
@@ -334,7 +334,7 @@ describe('the order of the in-memory Store of rows', () => {
       styleRule: undefined,
     });
     // 10,000 rows in groups of the target size; 50 members spread over the first half of them
-    const builder = createRowBlockDataBuilder({ columns: FEATURE_TABLE_COLUMNS });
+    const builder = createPageDataBuilder({ columns: FEATURE_TABLE_COLUMNS });
     for (let i = 0; i < 10_000; i++) {
       builder.addRow({
         id: `r${i}`,
@@ -345,13 +345,13 @@ describe('the order of the in-memory Store of rows', () => {
         properties: { n: i },
       });
     }
-    writer.addRowBlocks('layer', builder.finish());
+    writer.addPages('layer', builder.finish());
     const internals = featureTablesInternals(store.tables);
     if (!internals) throw new Error('a Store of rows has tables');
-    internals.addQueuedRowBlocks();
+    internals.addQueuedPages();
     const layer = internals.rowTable('layer');
     const members = Array.from({ length: 50 }, (_, k) => `r${k * 100}`);
-    const apply = vi.spyOn(writer, 'apply');
+    const apply = vi.spyOn(writer, 'writeRows');
     const work: string[] = [];
     for (let rep = 0; rep < 40; rep++) {
       apply.mockClear();
@@ -380,7 +380,7 @@ describe('the order of the in-memory Store of rows', () => {
       // of the members
       let longest = 0;
       for (const id of members) {
-        const place = internals.placeOf(store.tables?.findRow(id) as number);
+        const place = internals.placeOf(store.tables?.getRowRef(id) as number);
         const data = place?.group.data;
         if (!data || !place) continue;
         const keys = [utf8String(data.keys, place.row)];
@@ -418,17 +418,17 @@ describe('the rows of a layer of z and m in the in-memory Store of rows', () => 
         [2, 2, 12],
       ],
     };
-    const builder = createRowBlockDataBuilder({
+    const builder = createPageDataBuilder({
       columns: FEATURE_TABLE_COLUMNS,
       dimensions: 'xyzm',
       rings: circleRowRings,
     });
     builder.addRow({ id: 'l', type: 'LineString', geometry: line, key: 'k1' });
-    writer.addRowBlocks('layer', builder.finish());
+    writer.addPages('layer', builder.finish());
     const tables = store.tables;
     if (!tables) throw new Error('a Store of rows has tables');
-    featureTablesInternals(tables)?.addQueuedRowBlocks();
-    const handle = tables.findRow('l') as number;
+    featureTablesInternals(tables)?.addQueuedPages();
+    const handle = tables.getRowRef('l') as number;
     const geometryOf = () =>
       tables
         .readValues({ handles: Int32Array.of(handle), fields: new Map([['geometry', [0]]]) })

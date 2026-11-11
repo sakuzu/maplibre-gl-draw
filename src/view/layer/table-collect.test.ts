@@ -7,7 +7,7 @@
  * vertex, in the same order), and the number of the row after them
  */
 
-import type { RowTable } from '@sakuzu/kasane/engine';
+import type { RowTable } from '@sakuzu/kasane/render';
 import { ValueStringCache } from '@sakuzu/tabane';
 import { describe, expect, it } from 'vitest';
 import type { FeatureTablesInternals } from '../../feature-table/feature-tables.js';

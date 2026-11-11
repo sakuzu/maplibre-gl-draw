@@ -5,16 +5,16 @@
  * Helpers shared by the tests. This file is not part of the build.
  */
 
-import type { RowBlock, RowCache, RowRings } from '@sakuzu/kasane';
-import { createRowBlockBuilder, type RowBlockBuildOptions } from '@sakuzu/kasane';
-import type { RowBlockData, RowGroup, RowTable } from '@sakuzu/kasane/engine';
+import type { Page, RowCache, RowRings } from '@sakuzu/kasane';
+import { createPageBuilder, type PageBuildOptions } from '@sakuzu/kasane';
+import type { PageData, RowGroup, RowTable } from '@sakuzu/kasane/render';
 import {
-  createRowBlockDataBuilder,
+  createPageDataBuilder,
   type GeometryWrite,
   type RowWriteContext,
   refreshRowShape,
   writeRowGeometry,
-} from '@sakuzu/kasane/engine';
+} from '@sakuzu/kasane/render';
 import type { CoordinateSystem, TabaneShape } from '@sakuzu/tabane';
 import { utf8ColumnFromStrings } from '@sakuzu/tabane';
 import type { Geometry } from 'geojson';
@@ -611,15 +611,15 @@ export function orderKey(i: number): string {
 }
 
 /**
- * The builder of the row blocks of the tables, adding rows of features given as the library gives
+ * The builder of the pages of the tables, adding rows of features given as the library gives
  * them (`rowInputOfFeature`)
  */
-export function featureRowDataBuilder(options: RowBlockBuildOptions): {
+export function featureRowDataBuilder(options: PageBuildOptions): {
   readonly length: number;
   addRow(row: FeatureRowInput): void;
-  finish(): RowBlockData[];
+  finish(): PageData[];
 } {
-  const builder = createRowBlockDataBuilder(options);
+  const builder = createPageDataBuilder(options);
   return {
     get length() {
       return builder.length;
@@ -629,13 +629,13 @@ export function featureRowDataBuilder(options: RowBlockBuildOptions): {
   };
 }
 
-/** The builder of the row blocks of the tables as `featureRowDataBuilder`, with its row blocks */
-export function featureRowBuilder(options: RowBlockBuildOptions): {
+/** The builder of the pages of the tables as `featureRowDataBuilder`, with its pages */
+export function featureRowBuilder(options: PageBuildOptions): {
   readonly length: number;
   addRow(row: FeatureRowInput): void;
-  finish(): RowBlock[];
+  finish(): Page[];
 } {
-  const builder = createRowBlockBuilder(options);
+  const builder = createPageBuilder(options);
   return {
     get length() {
       return builder.length;
@@ -742,9 +742,9 @@ export function tablesOfFeatures(
   features.forEach((feature, i) => {
     builder.addRow(rowOfFeature(feature, orderKey(i)));
   });
-  writer.addRowBlocks(layerId, builder.finish());
+  writer.addPages(layerId, builder.finish());
   const internals = featureTablesInternals(tables) as FeatureTablesInternals;
-  internals.addQueuedRowBlocks();
+  internals.addQueuedPages();
   return { internals, table: internals.rowTable(layerId) as RowTable, tables, writer };
 }
 
@@ -1021,7 +1021,7 @@ export function expectTablesMatch(
     // is not a feature)
     const dims = internals?.readContext.dimensionsOf(layerId) ?? 'xy';
     for (const row of live) {
-      const handle = tables.findRow(row.id);
+      const handle = tables.getRowRef(row.id);
       expect(handle).toBeDefined();
       if (dims !== 'xy') {
         expect(() => view.getRow(handle as number)).toThrow(/is not a feature/);
@@ -1099,7 +1099,7 @@ export function tablesOfReference(
     key: group.order,
   }));
   for (const layerId of layerIds) {
-    const builder = createRowBlockDataBuilder({
+    const builder = createPageDataBuilder({
       columns: FEATURE_TABLE_COLUMNS,
       groups: groupKeys,
       targetRows,
@@ -1123,9 +1123,9 @@ export function tablesOfReference(
         }),
       );
     }
-    if (builder.length > 0) writer.addRowBlocks(layerId, builder.finish());
+    if (builder.length > 0) writer.addPages(layerId, builder.finish());
   }
-  internals.addQueuedRowBlocks();
+  internals.addQueuedPages();
   const groupHandleOf = (id: string): number => groupHandles.get(id) as number;
   return { tables, writer, internals, groupHandleOf };
 }
@@ -1226,11 +1226,11 @@ export function randomRowWrites(
     if (ids.length === 0) return;
     const id = ids[Math.floor(random() * ids.length)];
     const row = reference.rows.get(id) as ReferenceRow;
-    const handle = tables.findRow(id) as number;
+    const handle = tables.getRowRef(id) as number;
     const pick = random();
     if (pick < 0.15) {
       const geometry = geometryOf(random, row.type);
-      writer.apply(rowPatch([handle], { geometry: [geometry] }));
+      writer.writeRows(rowPatch([handle], { geometry: [geometry] }));
       row.geometry = geometry;
     } else if (pick < 0.25) {
       const style = {
@@ -1238,23 +1238,23 @@ export function randomRowWrites(
           .toString(16)
           .padStart(6, '0')}`,
       };
-      writer.apply(rowPatch([handle], { style: [style] }));
+      writer.writeRows(rowPatch([handle], { style: [style] }));
       row.style = style;
     } else if (pick < 0.35) {
       const value = random() < 0.3 ? undefined : `v${n}`;
-      writer.apply(rowPatch([handle], { 'properties:name': [value] }));
+      writer.writeRows(rowPatch([handle], { 'properties:name': [value] }));
       if (value === undefined) delete row.properties.name;
       else row.properties = { ...row.properties, name: value };
     } else if (pick < 0.5) {
       // The key of a member orders it among the members of its group
       const key = referenceKey(random() * 1e6);
-      writer.apply(rowPatch([handle], { key: [key] }));
+      writer.writeRows(rowPatch([handle], { key: [key] }));
       if (row.groupId !== undefined) row.member = key;
       else row.order = key;
     } else if (pick < 0.6) {
       const layerId = layerIds[Math.floor(random() * layerIds.length)];
       const order = referenceKey(random() * 1e6);
-      writer.apply(
+      writer.writeRows(
         rowPatch([handle], {
           parent: [layerId],
           key: [order],
@@ -1264,7 +1264,7 @@ export function randomRowWrites(
     } else if (pick < 0.68 && row.layerId === layerIds[0]) {
       const groupId = random() < 0.5 ? 'ga' : 'gb';
       const member = referenceKey(random() * 1e6);
-      writer.apply(rowPatch([handle], { parent: [groupId], key: [member] }));
+      writer.writeRows(rowPatch([handle], { parent: [groupId], key: [member] }));
       Object.assign(row, { groupId, member });
     } else if (pick < 0.78) {
       const fresh = `n${created++}`;
@@ -1275,7 +1275,7 @@ export function randomRowWrites(
         layerIds[Math.floor(random() * layerIds.length)],
         geometryOf,
       );
-      writer.apply(
+      writer.writeRows(
         rowPatch([freshHandle], {
           type: [next.type],
           parent: [next.layerId],
@@ -1287,12 +1287,12 @@ export function randomRowWrites(
       );
       reference.rows.set(fresh, next);
     } else if (pick < 0.85) {
-      writer.apply(rowPatch([handle], {}, [1]));
+      writer.writeRows(rowPatch([handle], {}, [1]));
       row.deleted = true;
     } else if (pick < 0.92) {
       internals.toDelta([handle]);
     } else {
-      writer.apply(rowPatch([handle], { hidden: [row.visible] }));
+      writer.writeRows(rowPatch([handle], { hidden: [row.visible] }));
       row.visible = !row.visible;
     }
   };

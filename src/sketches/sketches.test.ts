@@ -739,7 +739,7 @@ describe('a sketch of one edit that moves rows', () => {
   /** The bits of the state of the row of a feature */
   function stateOf(draw: Draw, id: string): number {
     const tables = draw.getStore().tables;
-    return featureTablesInternals(tables)?.states.stateOf(tables?.findRow(id) ?? -1) ?? 0;
+    return featureTablesInternals(tables)?.states.stateOf(tables?.getRowRef(id) ?? -1) ?? 0;
   }
 
   const setOf = (draw: Draw, id: string): number =>
@@ -836,7 +836,10 @@ describe('a sketch of one edit that moves rows', () => {
     draw.sketches.add({ edits: [translate([a.id], 1)] });
     expect(failures).toEqual([]);
     const tables = draw.getStore().tables;
-    featureTablesInternals(tables)?.states.setMoving(Int32Array.of(tables?.findRow(a.id) ?? -1), 0);
+    featureTablesInternals(tables)?.states.setMoving(
+      Int32Array.of(tables?.getRowRef(a.id) ?? -1),
+      0,
+    );
     line(draw, 30);
     expect(failures.map((f) => f.check)).toContain('sketches');
   });

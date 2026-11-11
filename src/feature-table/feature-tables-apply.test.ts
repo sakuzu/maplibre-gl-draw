@@ -2,13 +2,13 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * Reading every row and every item of the tables, and writing rows in place (`writer.apply`)
+ * Reading every row and every item of the tables, and writing rows in place (`writer.writeRows`)
  *
  * - `scan` reads the rows of the layers in their order a batch at a time, the deleted ones left
  *   out, and the rows whose bbox meets a box (a moved row where it is now)
  * - The items of a layer are its rows outside a group and its groups, each at its place, with
  *   the members of a group in their order
- * - `writer.apply` writes the geometry, the style, shown, locked, the attributes and the deletion
+ * - `writer.writeRows` writes the geometry, the style, shown, locked, the attributes and the deletion
  *   of rows in place, and tells the drawing; it refuses whole a patch with a row it does not
  *   hold (a new row without what it needs), or a group of features it does not know
  * - Writes at random, applied to the tables and to a list of features: every read of the tables
@@ -20,7 +20,7 @@ import {
   ROW_WRITE_GEOMETRY,
   ROW_WRITE_STATE,
   ROW_WRITE_STYLE,
-} from '@sakuzu/kasane/engine';
+} from '@sakuzu/kasane/render';
 import { utf8ColumnFromStrings, type Value } from '@sakuzu/tabane';
 import type { Geometry } from 'geojson';
 import { describe, expect, it } from 'vitest';
@@ -29,7 +29,7 @@ import { drawPropertyKey } from '../shared/properties.js';
 import type { Feature } from '../shared/types/model.js';
 import { FEATURE_TABLE_COLUMNS } from '../table/tabane/columns.js';
 import {
-  featureRowDataBuilder as createRowBlockDataBuilder,
+  featureRowDataBuilder as createPageDataBuilder,
   feature,
   orderKey,
   rowOfFeature,
@@ -72,7 +72,11 @@ describe('scan', () => {
     expect(batches.slice(0, -1).every((n) => n === 7)).toBe(true);
     expect(ids(readAll(tables.scan()))).toEqual(points(50).map((f) => f.id));
     const handle = internals.ids.handleOf('p3');
-    writer.apply({ handles: Int32Array.of(handle), fields: new Map(), deleted: Uint8Array.of(1) });
+    writer.writeRows({
+      handles: Int32Array.of(handle),
+      fields: new Map(),
+      deleted: Uint8Array.of(1),
+    });
     expect(ids(readAll(tables.scan()))).not.toContain('p3');
     expect(readAll(tables.scan())).toHaveLength(49);
   });
@@ -82,7 +86,7 @@ describe('scan', () => {
     const ids = (box: [number, number, number, number], order?: 'any') =>
       readAll(tables.scan({ bbox: box, order })).map((h) => tables.getRowId(h));
     expect(ids([4.5, -1, 9.5, 1])).toEqual(['p5', 'p6', 'p7', 'p8', 'p9']);
-    writer.apply(
+    writer.writeRows(
       patchOf([internals.ids.handleOf('p20')], 'geometry', [
         { type: 'Point', coordinates: [7, 0] },
       ]),
@@ -105,7 +109,7 @@ describe('the items of a layer', () => {
       tableId: 'layer',
       flags: 0,
     });
-    const builder = createRowBlockDataBuilder({
+    const builder = createPageDataBuilder({
       columns: FEATURE_TABLE_COLUMNS,
       groups: [{ handle: 7, id: 'g', key: 'k000003' }],
       targetRows: 2,
@@ -116,20 +120,20 @@ describe('the items of a layer', () => {
       const member = i === 1 || i === 2 || i === 4;
       builder.addRow(member ? { ...row, group: 7 } : row);
     }
-    writer.addRowBlocks('layer', builder.finish());
-    internals?.addQueuedRowBlocks();
+    writer.addPages('layer', builder.finish());
+    internals?.addQueuedPages();
     const view = tables.get('layer');
     if (!view) throw new Error('no layer');
     expect(view.itemCount).toBe(4);
     const items = view.listItems(0, 10);
-    const handle = (id: string) => tables.findRow(id) as number;
+    const handle = (id: string) => tables.getRowRef(id) as number;
     expect(Array.from(items.kinds)).toEqual([ITEM_ROW, ITEM_ROW, ITEM_GROUP, ITEM_ROW]);
     expect(Array.from(items.handles)).toEqual([handle('f0'), handle('f3'), 7, handle('f5')]);
     expect(view.countGroupMembers(7)).toBe(3);
     expect(Array.from(view.listGroupMembers(7, 1, 5))).toEqual([handle('f2'), handle('f4')]);
     expect(Array.from(view.listItems(1, 2).handles)).toEqual([handle('f3'), 7]);
     // A deleted member leaves the group, and a deleted row its item
-    writer.apply({
+    writer.writeRows({
       handles: Int32Array.of(handle('f2'), handle('f3')),
       fields: new Map(),
       deleted: Uint8Array.of(1, 1),
@@ -139,7 +143,7 @@ describe('the items of a layer', () => {
   });
 });
 
-describe('writer.apply', () => {
+describe('writer.writeRows', () => {
   it('writes the values of rows in place and tells the drawing what it wrote', () => {
     const features = [
       feature('a', 'Point', [0, 0], { style: { pointColor: '#ff0000' } }),
@@ -153,7 +157,7 @@ describe('writer.apply', () => {
     internals.onRowsWritten((layerId, writes) => told.push([layerId, writes]));
     const a = internals.ids.handleOf('a');
     const b = internals.ids.handleOf('b');
-    writer.apply({
+    writer.writeRows({
       handles: Int32Array.of(a, b),
       fields: new Map<RowField, unknown[]>([
         [
@@ -205,18 +209,18 @@ describe('writer.apply', () => {
       handles: Int32Array.of(handle, 999),
       fields: new Map([['properties:name', ['x', 'y']]]),
     };
-    expect(() => writer.apply(patch)).toThrow(/no row/);
+    expect(() => writer.writeRows(patch)).toThrow(/no row/);
     expect(tables.get('layer')?.getRowValue(handle, 'name')).toBeUndefined();
     // A new row without what it needs
     const [fresh] = writer.allocateHandles(utf8ColumnFromStrings(['new']));
-    expect(() => writer.apply(patchOf([fresh], 'properties:name', ['x']))).toThrow(
+    expect(() => writer.writeRows(patchOf([fresh], 'properties:name', ['x']))).toThrow(
       /a new row needs type, parent, geometry, key/,
     );
-    expect(() => writer.apply(patchOf([handle], 'parent', ['']))).toThrow(/is not an id/);
+    expect(() => writer.writeRows(patchOf([handle], 'parent', ['']))).toThrow(/is not an id/);
     expect(internals.deltaRowCount()).toBe(0);
     const created = `properties:${drawPropertyKey('createdZoom')}` as RowField;
     expect(internals.placeOf(handle)?.group.delta).toBe(false);
-    writer.apply(patchOf([handle], created, [12]));
+    writer.writeRows(patchOf([handle], created, [12]));
     // The created zoom is read by the cutting of the rows: the row is placed again
     expect(internals.placeOf(handle)?.group.delta).toBe(true);
   });
@@ -234,10 +238,10 @@ describe('writer.apply', () => {
     );
     const [p0, p1, p2, p3] = ['p0', 'p1', 'p2', 'p3'].map((id) => internals.ids.handleOf(id));
     // The same type, the same created zoom, another attribute: in place
-    writer.apply(patchOf([p0], 'type', ['Point']));
-    writer.apply(patchOf([p0], created, [10]));
-    writer.apply(patchOf([p0], 'properties:name', ['x']));
-    writer.apply(patchOf([p0, p1], 'type', [undefined, 'Point']));
+    writer.writeRows(patchOf([p0], 'type', ['Point']));
+    writer.writeRows(patchOf([p0], created, [10]));
+    writer.writeRows(patchOf([p0], 'properties:name', ['x']));
+    writer.writeRows(patchOf([p0, p1], 'type', [undefined, 'Point']));
     expect(['p0', 'p1', 'p2', 'p3'].map((id) => inDelta(internals, id))).toEqual([
       false,
       false,
@@ -245,9 +249,9 @@ describe('writer.apply', () => {
       false,
     ]);
     // Another type, another created zoom, a created zoom taken off: placed again
-    writer.apply(patchOf([p1], 'type', ['Marker']));
-    writer.apply(patchOf([p2], created, [11]));
-    writer.apply(patchOf([p3], created, [undefined]));
+    writer.writeRows(patchOf([p1], 'type', ['Marker']));
+    writer.writeRows(patchOf([p2], created, [11]));
+    writer.writeRows(patchOf([p3], created, [undefined]));
     expect(['p0', 'p1', 'p2', 'p3'].map((id) => inDelta(internals, id))).toEqual([
       false,
       true,
@@ -260,7 +264,7 @@ describe('writer.apply', () => {
   it('places a row again for a new type only, in tables told of no field that places it', () => {
     const created = `properties:${drawPropertyKey('createdZoom')}` as RowField;
     const { tables, writer } = createTables({ columns: FEATURE_TABLE_COLUMNS });
-    const builder = createRowBlockDataBuilder({ columns: FEATURE_TABLE_COLUMNS });
+    const builder = createPageDataBuilder({ columns: FEATURE_TABLE_COLUMNS });
     points(2).forEach((f, i) => {
       builder.addRow(
         rowOfFeature(
@@ -269,12 +273,12 @@ describe('writer.apply', () => {
         ),
       );
     });
-    writer.addRowBlocks('layer', builder.finish());
+    writer.addPages('layer', builder.finish());
     const internals = featureTablesInternals(tables) as FeatureTablesInternals;
-    internals.addQueuedRowBlocks();
+    internals.addQueuedPages();
     const [p0, p1] = ['p0', 'p1'].map((id) => internals.ids.handleOf(id));
-    writer.apply(patchOf([p0], created, [11]));
-    writer.apply(patchOf([p1], 'type', ['Marker']));
+    writer.writeRows(patchOf([p0], created, [11]));
+    writer.writeRows(patchOf([p1], 'type', ['Marker']));
     expect(internals.placeOf(p0)?.group.delta).toBe(false);
     expect(tables.get('layer')?.getRowValue(p0, drawPropertyKey('createdZoom'))).toBe(11);
     expect(internals.placeOf(p1)?.group.delta).toBe(true);
@@ -286,7 +290,7 @@ describe('writer.apply', () => {
     const handle = internals.ids.handleOf('p0');
     const long = 'x'.repeat(1024);
     for (let i = 0; internals.groupsDue.size === 0 && i < 1000; i++) {
-      writer.apply(patchOf([handle], `properties:k${i}`, [long]));
+      writer.writeRows(patchOf([handle], `properties:k${i}`, [long]));
     }
     expect(internals.groupsDue.has(table.groupAt(0).handle)).toBe(true);
   });
@@ -296,7 +300,7 @@ describe('writer.apply', () => {
     const handle = internals.ids.handleOf('p4');
     for (let i = 0; i < 200; i++) {
       const color = `#${(i * 997).toString(16).padStart(6, '0').slice(-6)}`;
-      writer.apply(patchOf([handle], 'style', [{ pointColor: color }]));
+      writer.writeRows(patchOf([handle], 'style', [{ pointColor: color }]));
     }
     // The style of the other rows and the one of p4
     expect(internals.styles.size).toBe(2);
@@ -308,8 +312,8 @@ describe('writer.apply', () => {
     const [a, b, c] = ['p0', 'p1', 'p2'].map((id) => internals.ids.handleOf(id));
     const red = { pointColor: '#ff0000' };
     const green = { pointColor: '#00ff00' };
-    writer.apply(patchOf([a], 'style', [red]));
-    writer.apply(patchOf([a, b], 'style', [green, { ...red }]));
+    writer.writeRows(patchOf([a], 'style', [red]));
+    writer.writeRows(patchOf([a, b], 'style', [green, { ...red }]));
     const view = tables.get('layer');
     expect(view?.getRow(a)?.style).toEqual(green);
     expect(view?.getRow(b)?.style).toEqual(red);
@@ -325,8 +329,8 @@ describe('writer.apply', () => {
     const [a, b] = ['p0', 'p1'].map((id) => internals.ids.handleOf(id));
     const red = { pointColor: '#ff0000' };
     const green = { pointColor: '#00ff00' };
-    writer.apply(patchOf([a, b], 'style', [red, green]));
-    writer.apply(patchOf([a, b], 'style', [green, red]));
+    writer.writeRows(patchOf([a, b], 'style', [red, green]));
+    writer.writeRows(patchOf([a, b], 'style', [green, red]));
     expect(tables.get('layer')?.getRow(a)?.style).toEqual(green);
     expect(tables.get('layer')?.getRow(b)?.style).toEqual(red);
     expect(internals.styles.size).toBe(2);
@@ -336,7 +340,7 @@ describe('writer.apply', () => {
     const { tables, writer, internals } = tablesOfFeatures('layer', points(2));
     const a = internals.ids.handleOf('p0');
     const red = { pointColor: '#ff0000' };
-    writer.apply({
+    writer.writeRows({
       handles: Int32Array.of(a),
       fields: new Map<RowField, unknown[]>([
         ['style', [red]],
@@ -401,7 +405,7 @@ describe('writes at random against a list of features', () => {
         const i = Math.floor(random() * features.length);
         const current = alive[i];
         if (!current) continue;
-        const handle = tables.findRow(current.id) as number;
+        const handle = tables.getRowRef(current.id) as number;
         const pick = random();
         let field: RowField;
         let value: unknown;
@@ -430,7 +434,7 @@ describe('writes at random against a list of features', () => {
           else properties[key] = value as Value;
           alive[i] = { ...current, properties };
         } else {
-          writer.apply({
+          writer.writeRows({
             handles: Int32Array.of(handle),
             fields: new Map(),
             deleted: Uint8Array.of(1),
@@ -438,7 +442,7 @@ describe('writes at random against a list of features', () => {
           alive[i] = null;
           continue;
         }
-        writer.apply(patchOf([handle], field, [value]));
+        writer.writeRows(patchOf([handle], field, [value]));
       }
       const view = tables.get('layer');
       if (!view) throw new Error('no layer');
@@ -447,7 +451,7 @@ describe('writes at random against a list of features', () => {
       expect(scanned.map((h) => tables.getRowId(h))).toEqual(expected.map((f) => f.id));
       expect(Array.from(view.listItems(0, 1000).handles)).toEqual(scanned);
       for (const f of expected) {
-        const handle = tables.findRow(f.id) as number;
+        const handle = tables.getRowRef(f.id) as number;
         const row = view.getRow(handle);
         expect(row?.geometry).toEqual(f.geometry);
         expect(row?.properties).toEqual(f.properties);

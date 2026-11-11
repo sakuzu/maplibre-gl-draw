@@ -181,7 +181,7 @@ export function createSelection(
       // Many features of rows are selected in bulk: read on their columns, no feature is made
       const tables = store.tables;
       if (type === 'feature' && tables && list.length > store.selectionIdsLimit) {
-        const handles = list.map((id) => tables.findRow(id) ?? -1);
+        const handles = list.map((id) => tables.getRowRef(id) ?? -1);
         if (handles.every((handle) => handle >= 0)) {
           if (!list.some((id) => isShown(store, type, id))) return false;
           store.selectRows(TableSelection.of(handles));
@@ -196,7 +196,7 @@ export function createSelection(
         const shown: string[] = [];
         const handles: number[] = [];
         for (const id of list) {
-          const handle = tables.findRow(id);
+          const handle = tables.getRowRef(id);
           if (handle === undefined) throw notFound(type, id);
           if (!isRowShown(internals, containers, handle)) continue;
           shown.push(id);
@@ -253,7 +253,7 @@ export function createSelection(
         const tables = store.tables;
         const handles = requireItems(type, list)
           .filter((id) => isShown(store, type, id))
-          .map((id) => tables.findRow(id) ?? -1)
+          .map((id) => tables.getRowRef(id) ?? -1)
           .filter((handle) => handle >= 0 && !found.rows.has(handle));
         if (handles.length === 0) return false;
         store.selectRows(found.rows.with(handles));
@@ -274,7 +274,7 @@ export function createSelection(
       if (found && store.tables) {
         const tables = store.tables;
         const handles = list
-          .map((id) => tables.findRow(id) ?? -1)
+          .map((id) => tables.getRowRef(id) ?? -1)
           .filter((handle) => found.rows.has(handle));
         if (handles.length === 0) return false;
         store.selectRows(found.rows.without(handles));
@@ -303,7 +303,7 @@ export function createSelection(
           page.after === undefined ? firstRows(filter, page.limit) : matchingRows(filter);
         let from = 0;
         if (page.after !== undefined) {
-          const after = store.tables?.findRow(page.after);
+          const after = store.tables?.getRowRef(page.after);
           const found = bulkRows();
           if (after === undefined || !found?.rows.has(after)) throw notFound('feature', page.after);
           const at = rows.indexOf(after);

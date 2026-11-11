@@ -135,7 +135,8 @@ not cover.
 ### The public surface
 
 `src/index.ts`, `src/geometry/index.ts`, `src/table/index.ts`,
-`src/kasane/index.ts` and `src/webgl/index.ts`, the five entries, name
+`src/extend/index.ts`, `src/kasane/index.ts` and `src/webgl/index.ts`,
+the six entries, name
 every public symbol one by one; they have no `export *`. The names fall
 into two layers: layer 1 is the main entry (with `/geometry` and
 `/table`, which follow the same rules), and layer 2 is the entries
@@ -151,13 +152,13 @@ into two layers: layer 1 is the main entry (with `/geometry` and
   providers), the style rule functions and the reader of CSS colors. The
   contracts are declared in `src/api/` and `src/api/extension/`. It
   follows semver. It is written in the words of features, layers, groups
-  and items: the words of the rows (a row, its handle, a row block) are
+  and items: the words of the rows (a row, its handle, a page) are
   left to `/kasane`.
 - Layer 2, the parts that hold features as rows of columns
   (`src/kasane/index.ts`, experimental): the Store that holds them
   (`createTableStore`, `createFeatureTables`), the reading and writing
   sides of its tables, the values and the handles of rows, and the
-  builder and the merge of the row blocks for a Worker. It loads
+  merge of the pages for a Worker. It loads
   neither maplibre nor the drawing. The fields of layer 1 that a Store of
   rows fills (`StoreView.tables`, `Store.applyRows`, `DocumentChange.rows`,
   `DocumentChange.opened`, and the rows moved at once of

@@ -38,8 +38,8 @@ export function circleRingCoords(center: [number, number], radius: number): Floa
  * The rings of the Circles held as rows: a row of the type `Circle` draws the circle of its
  * radius in meters (`maplibre-gl-draw:radiusMeters`) around its point in degrees.
  *
- * The library gives it to the tables and to the builder of their row blocks
- * (`createFeatureRowBlockBuilder`, which a Worker of the host imports) as the rings of the rows,
+ * The library gives it to the tables and to the builder of their pages
+ * (`createFeaturePageBuilder`, which a Worker of the host imports) as the rings of the rows,
  * so that the Circles have the bbox and the triangles of their rings.
  */
 export const circleRowRings: RowRings = {

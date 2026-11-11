@@ -32,9 +32,9 @@
  * meet it, so nothing changes).
  */
 
-import type { RowHandle } from '@sakuzu/kasane';
-import type { GroupVersion, RowBlockDictionary } from '@sakuzu/kasane/engine';
-import { geometryAt, type RowGroup, type RowTable } from '@sakuzu/kasane/engine';
+import type { RowRef } from '@sakuzu/kasane';
+import type { GroupVersion, PageDictionary } from '@sakuzu/kasane/render';
+import { geometryAt, type RowGroup, type RowTable } from '@sakuzu/kasane/render';
 import type { CustomRenderMethodInput, ProjectionData } from 'maplibre-gl';
 import {
   GPU_STATE_MOVE_SHIFT,
@@ -341,13 +341,13 @@ interface WidthRatios {
  * it (`release`)
  */
 export class DrapeCopyIndex {
-  private readonly copies = new Map<RowHandle, number>();
+  private readonly copies = new Map<RowRef, number>();
   private readonly free: number[] = [];
   private readonly waiting: number[] = [];
   private next = 0;
 
   /** The copy of a handle (given now when it has none) */
-  copyOf(handle: RowHandle): number {
+  copyOf(handle: RowRef): number {
     let copy = this.copies.get(handle);
     if (copy === undefined) {
       copy = this.free.pop() ?? this.next++;
@@ -357,12 +357,12 @@ export class DrapeCopyIndex {
   }
 
   /** The copy of a handle, -1 for none */
-  peek(handle: RowHandle): number {
+  peek(handle: RowRef): number {
     return this.copies.get(handle) ?? -1;
   }
 
   /** Gives the copy of a handle back: it waits until no tile still names it */
-  drop(handle: RowHandle): number {
+  drop(handle: RowRef): number {
     const copy = this.copies.get(handle);
     if (copy === undefined) return -1;
     this.copies.delete(handle);
@@ -1383,7 +1383,7 @@ export class TableDrape {
     const geometry = geometryAt(group, row);
     if (!geometry) return null;
     const type = rowType(group.data, row);
-    const style = (group.data.wholes[STYLE_COLUMN] as RowBlockDictionary).indexes[row] as number;
+    const style = (group.data.wholes[STYLE_COLUMN] as PageDictionary).indexes[row] as number;
     const ruleColor = layer.slots.ruleColorOf(group, row, layer.strings);
     const createdZoom = rowCreatedZoom(group, row);
     const ratios = this.ratios;

@@ -15,7 +15,7 @@
  *   limit of a group, in the tests of Kasane)
  */
 
-import { writeRowValue } from '@sakuzu/kasane/engine';
+import { writeRowValue } from '@sakuzu/kasane/render';
 import { type CoordinateSystem, planarCoordinates, planarRowBox, type Value } from '@sakuzu/tabane';
 import type { Geometry } from 'geojson';
 import { describe, expect, it } from 'vitest';
@@ -25,7 +25,7 @@ import { geometryColumnOf } from '../table/feature-row-columns.js';
 import { FEATURE_CACHES } from '../table/fill-triangles.js';
 import { FEATURE_TABLE_COLUMNS } from '../table/tabane/columns.js';
 import {
-  featureRowDataBuilder as createRowBlockDataBuilder,
+  featureRowDataBuilder as createPageDataBuilder,
   feature,
   referenceKey,
   rowPatch,
@@ -371,7 +371,7 @@ describe('the bbox of a row written', () => {
       },
     };
     const { tables, writer } = createFeatureTablesStore({ coordinateSystem: wider });
-    const builder = createRowBlockDataBuilder({
+    const builder = createPageDataBuilder({
       columns: FEATURE_TABLE_COLUMNS,
       coordinateSystem: wider,
     });
@@ -388,11 +388,11 @@ describe('the bbox of a row written', () => {
     });
     builder.addRow({ id: 'a', type: 'Polygon', geometry: square(0), key: referenceKey(1) });
     builder.addRow({ id: 'b', type: 'Polygon', geometry: square(10), key: referenceKey(2) });
-    writer.addRowBlocks('l', builder.finish());
-    featureTablesInternals(tables)?.addQueuedRowBlocks();
+    writer.addPages('l', builder.finish());
+    featureTablesInternals(tables)?.addQueuedPages();
     const view = tables.get('l');
-    const a = tables.findRow('a') as number;
-    const b = tables.findRow('b') as number;
+    const a = tables.getRowRef('a') as number;
+    const b = tables.getRowRef('b') as number;
     expect(view?.getRowBBox(a)).toEqual([-1, 0, 2, 1]);
     // The same shape, written in place; another shape, into the overrides
     const line: Geometry = {
@@ -402,7 +402,7 @@ describe('the bbox of a row written', () => {
         [22, 6],
       ],
     };
-    writer.apply(
+    writer.writeRows(
       rowPatch([a, b], { geometry: [square(5), line], type: ['Polygon', 'LineString'] }),
     );
     expect(view?.getRowBBox(a)).toEqual([4, 0, 7, 1]);

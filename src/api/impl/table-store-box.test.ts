@@ -145,7 +145,7 @@ function drawBox(
 /** Whether a row is marked, in the sets of handles and in the byte the GPU reads */
 function marked(tables: FeatureTables, id: string): [boolean, boolean] {
   const internals = featureTablesInternals(tables);
-  const handle = tables.findRow(id) ?? -1;
+  const handle = tables.getRowRef(id) ?? -1;
   const place = internals?.placeOf(handle);
   const copy = place ? place.group.state[place.row] : 0;
   return [

@@ -8,8 +8,8 @@
  * ids of its features reads them here, in the order of the layer (deleted rows left out).
  */
 
-import type { ItemWalk } from '@sakuzu/kasane/engine';
-import { compareRowKeys, ROW_FLAG_DELETED } from '@sakuzu/kasane/engine';
+import type { ItemWalk } from '@sakuzu/kasane/render';
+import { compareRowKeys, ROW_FLAG_DELETED } from '@sakuzu/kasane/render';
 import type { FeatureTables } from '../api/tables.js';
 import type { HitShape } from '../shared/math/position-runs.js';
 import type { Coordinate } from '../shared/types/model.js';
@@ -155,7 +155,7 @@ function idOfCode(tables: FeatureTables, code: number): string | undefined {
 
 /** The number of an item by its id (-1 for none) */
 function codeOfId(tables: FeatureTables, id: string): number {
-  const handle = tables.findRow(id);
+  const handle = tables.getRowRef(id);
   if (handle !== undefined) return handle * 2;
   const group = featureTablesInternals(tables)?.groups.handleOfId(id) ?? -1;
   return group >= 0 ? group * 2 + 1 : -1;
@@ -275,7 +275,7 @@ export function tableIdsInOrder(
   if (!internals || !tables) return [...ids];
   const layerRank = new Map(layerOrder.map((id, i) => [id, i]));
   const entries = ids.map((id) => {
-    const handle = tables.findRow(id);
+    const handle = tables.getRowRef(id);
     const place = handle === undefined ? undefined : internals.placeOf(handle);
     return { id, place };
   });

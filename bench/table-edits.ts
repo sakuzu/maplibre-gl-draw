@@ -121,7 +121,7 @@ interface RowChange {
 /** The feature of a row as it is now */
 function featureOf(target: EditTarget, id: string): Feature | undefined {
   if (!target.tables) return target.draw.features.get(id);
-  const handle = target.tables.findRow(id);
+  const handle = target.tables.getRowRef(id);
   return handle === undefined ? undefined : target.tables.get(target.layerId)?.getRow(handle);
 }
 
@@ -149,7 +149,7 @@ function writeRows(target: EditTarget, changes: ReadonlyArray<[string, RowChange
     return values;
   };
   for (const [id, change] of changes) {
-    const handle = tables.findRow(id);
+    const handle = tables.getRowRef(id);
     if (handle === undefined) continue;
     handles.push(handle);
     if (change.geometry) field('geometry').push(change.geometry);
@@ -162,7 +162,7 @@ function writeRows(target: EditTarget, changes: ReadonlyArray<[string, RowChange
       field(`properties:${key}`).push(value);
     }
   }
-  if (handles.length > 0) writer.apply({ handles: Int32Array.from(handles), fields });
+  if (handles.length > 0) writer.writeRows({ handles: Int32Array.from(handles), fields });
 }
 
 /** A color of a hue (0 to 360) */
@@ -276,7 +276,7 @@ function createRows(
     return;
   }
   const handles = writer.allocateHandles(idColumn(rows.map((row) => row.id)));
-  writer.apply({
+  writer.writeRows({
     handles,
     fields: new Map<RowField, unknown[]>([
       ['type', rows.map((row) => row.geometry.type)],
@@ -624,7 +624,7 @@ function ensureOtherLayer(target: EditTarget): void {
 function longestKey(target: EditTarget, ids: readonly string[]): number {
   const { tables } = target;
   if (!tables) return 0;
-  const handles = ids.map((id) => tables.findRow(id)).filter((h) => h !== undefined) as number[];
+  const handles = ids.map((id) => tables.getRowRef(id)).filter((h) => h !== undefined) as number[];
   if (handles.length === 0) return 0;
   const read = tables.readValues({
     handles: Int32Array.from(handles),
@@ -696,13 +696,7 @@ function manySteps(
         const t0 = performance.now();
         if (frame < DRAG_FRAMES - 1) {
           for (const [id, geometry] of starts) {
-            store.updateFeature(
-              id,
-              { geometry: translated(geometry, d, d / 2) },
-              {
-                isIntermediate: true,
-              },
-            );
+            store.updateFeature(id, { geometry: translated(geometry, d, d / 2) });
           }
         } else {
           store.transact(() => {
@@ -816,7 +810,7 @@ function undoRedoSteps(target: EditTarget, ids: readonly string[]): (i: number) 
   let undo: (() => void) | null = null;
   let redo: (() => void) | null = null;
   if (tables && rowsStore) {
-    const handles = [...after.keys()].map((id) => tables.findRow(id) as number);
+    const handles = [...after.keys()].map((id) => tables.getRowRef(id) as number);
     const patch: RowValues = {
       handles: Int32Array.from(handles),
       fields: new Map<RowField, unknown[]>([
@@ -982,13 +976,7 @@ function featureSteps(
         store.updateFeature(id, { geometry: start });
         const d = (i % 2 === 0 ? 1 : -1) * 1e-6;
         for (let f = 1; f <= 6; f++) {
-          store.updateFeature(
-            id,
-            { geometry: withVertex(feature.geometry, f * d) },
-            {
-              isIntermediate: true,
-            },
-          );
+          store.updateFeature(id, { geometry: withVertex(feature.geometry, f * d) });
           await nextFrame();
         }
         store.updateFeature(id, { geometry: withVertex(feature.geometry, 6 * d) });
@@ -1039,7 +1027,7 @@ function ensureGroups(target: EditTarget, params: TableBenchPageParams): string[
     const id = `benchGroup${g}`;
     const members = ids.slice(g * params.members, (g + 1) * params.members);
     if (tables && writer) {
-      writer.applyGroups({
+      writer.writeGroups({
         handles: Int32Array.of(1000 + g),
         fields: new Map<'id' | 'key' | 'parent', unknown[]>([
           ['id', [id]],
@@ -1047,8 +1035,8 @@ function ensureGroups(target: EditTarget, params: TableBenchPageParams): string[
           ['parent', [target.layerId]],
         ]),
       });
-      const handles = members.map((m) => tables.findRow(m)).filter((h) => h !== undefined);
-      writer.apply({
+      const handles = members.map((m) => tables.getRowRef(m)).filter((h) => h !== undefined);
+      writer.writeRows({
         handles: Int32Array.from(handles as number[]),
         fields: new Map<RowField, unknown[]>([
           ['parent', handles.map(() => id)],
@@ -1247,7 +1235,7 @@ async function runReorders(
     }
     if (kind === 'group') {
       if (tables && writer) {
-        writer.applyGroups({
+        writer.writeGroups({
           handles: Int32Array.from(ids.map((id) => 1000 + pool.indexOf(id))),
           fields: new Map([['key', orders]]),
         });
@@ -1259,8 +1247,8 @@ async function runReorders(
       return;
     }
     if (tables && writer) {
-      const handles = ids.map((id) => tables.findRow(id));
-      writer.apply({
+      const handles = ids.map((id) => tables.getRowRef(id));
+      writer.writeRows({
         handles: Int32Array.from(handles.filter((h) => h !== undefined) as number[]),
         fields: new Map<RowField, unknown[]>([
           ['key', orders.filter((_, k) => handles[k] !== undefined)],

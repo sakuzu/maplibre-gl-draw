@@ -571,7 +571,7 @@ The writer of the tables of such a store (the writer of `createTableStore`,
 in `@sakuzu/maplibre-gl-draw/kasane`) has one more part for a store kept in
 step with others: `writer.clear()` takes every row out of the tables, when
 the document is replaced from elsewhere (read again from the start), before
-its rows come back with `addRowBlocks`. The features selected in bulk are let
+its rows come back with `addPages`. The features selected in bulk are let
 go of, the work under way is dropped, and the ids keep their handles.
 
 ## Another document on the same map
@@ -598,15 +598,15 @@ version.store.createLayer({
   kind: 'table',
 });
 // The rows of the version, built in a Worker:
-// version.writer.addRowBlocks('buildings', blocks)
+// version.writer.addPages('buildings', pages)
 draw.document.setShown(version.store);
 // ...
 draw.document.setShown(null);
 ```
 
-`writer.addRowBlocks(layerId, rowBlocks)` takes the row blocks in at once
+`writer.addPages(layerId, pages)` takes the pages in at once
 and tells their rows created, as any write of the store does
-(`change.rows`). Taking a row block in costs little next to building it; a
+(`change.rows`). Taking a page in costs little next to building it; a
 caller that adds many keeps the draws going by adding a few at a time, as
 `copyTableStore` copies a block at a time.
 

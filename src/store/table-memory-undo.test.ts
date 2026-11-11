@@ -68,7 +68,7 @@ function liveOf(tables: FeatureTables, layerId = 'layer'): string[] {
 describe('the deletions of this client kept', () => {
   it('keep the rows deleted through the next versions until the token is let go of', () => {
     const { store, writer, tables, notified, internals } = setup();
-    const handle = tables.findRow('p2') as number;
+    const handle = tables.getRowRef('p2') as number;
     store.deleteFeature('p2');
     const retain = notified[0].restoreToken as RestoreToken;
     expect(retain).toBeDefined();
@@ -77,7 +77,7 @@ describe('the deletions of this client kept', () => {
     expect(rowsOf(tables)).toContain('p2');
     // Written not deleted, it is back where it was
     store.transact(() =>
-      writer.apply({
+      writer.writeRows({
         handles: Int32Array.of(handle),
         fields: new Map(),
         deleted: Uint8Array.of(0),
@@ -140,7 +140,7 @@ describe('the deletions of this client kept', () => {
       locked: false,
     });
     const layer = store.getLayer('layer');
-    const handles = Array.from(['p0', 'p1', 'p2', 'p3'], (id) => tables.findRow(id) as number);
+    const handles = Array.from(['p0', 'p1', 'p2', 'p3'], (id) => tables.getRowRef(id) as number);
     notified.length = 0;
     store.deleteLayer('layer');
     expect(store.getLayer('layer')).toBeUndefined();
@@ -165,7 +165,7 @@ describe('the deletions of this client kept', () => {
       });
     });
     expect(liveOf(tables)).toEqual(['p0', 'p1', 'p2', 'p3', 'p4', 'p5']);
-    expect(Array.from(['p0', 'p1', 'p2', 'p3'], (id) => tables.findRow(id))).toEqual(handles);
+    expect(Array.from(['p0', 'p1', 'p2', 'p3'], (id) => tables.getRowRef(id))).toEqual(handles);
     expect(store.getFeature('p1')?.groupId).toBe('g');
     expect(writer.lookup('p1')?.deleted).toBe(false);
   });
@@ -174,7 +174,7 @@ describe('the deletions of this client kept', () => {
 describe('the rows written for this client through the Store', () => {
   it('read the values before, notify them, and put the rows back when written back', () => {
     const { store, tables, notified } = setup();
-    const handles = Int32Array.from(['p1', 'p3'], (id) => tables.findRow(id) as number);
+    const handles = Int32Array.from(['p1', 'p3'], (id) => tables.getRowRef(id) as number);
     const patch = {
       handles,
       fields: new Map<RowField, unknown[]>([
@@ -202,7 +202,7 @@ describe('the rows written for this client through the Store', () => {
   it('are refused while read-only', () => {
     const { store, tables } = setup();
     store.setReadOnly(true);
-    const handle = tables.findRow('p1') as number;
+    const handle = tables.getRowRef('p1') as number;
     expect(
       store.restoreRows({
         handles: Int32Array.of(handle),
@@ -214,7 +214,7 @@ describe('the rows written for this client through the Store', () => {
 
   it('put rows in a place with keys made at once, and new rows after them', () => {
     const { store, tables } = setup();
-    const handles = Int32Array.from(['p4', 'p5'], (id) => tables.findRow(id) as number);
+    const handles = Int32Array.from(['p4', 'p5'], (id) => tables.getRowRef(id) as number);
     store.applyRows({
       patch: { handles: new Int32Array(0), fields: new Map() },
       created: {
@@ -279,7 +279,7 @@ describe('the rows deleted from elsewhere', () => {
       });
       const handles = writer.allocateHandles({ offsets, bytes });
       write((w) =>
-        w.apply({
+        w.writeRows({
           handles,
           fields: new Map<RowField, unknown[]>([
             ['type', ids.map(() => 'Point')],
@@ -291,7 +291,11 @@ describe('the rows deleted from elsewhere', () => {
       );
       internals?.flushVersions();
       write((w) =>
-        w.apply({ handles, fields: new Map(), deleted: new Uint8Array(handles.length).fill(1) }),
+        w.writeRows({
+          handles,
+          fields: new Map(),
+          deleted: new Uint8Array(handles.length).fill(1),
+        }),
       );
       internals?.flushVersions();
       live = internals?.ids.live ?? 0;

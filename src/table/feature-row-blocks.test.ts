@@ -2,29 +2,29 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * The builder and the merge of the row blocks of the features (`feature-row-blocks.ts`)
+ * The builder and the merge of the pages of the features (`feature-row-blocks.ts`)
  *
  * - The builder gives the rows the rings of the Circles when no rings are given, and the rings
  *   given otherwise, read from the type, the point and the attributes of a row, and the triangles
- *   of the fills as a cache; the row blocks are those of the builder of the tables given the
+ *   of the fills as a cache; the pages are those of the builder of the tables given the
  *   same. The builder of the tables has no rings and no caches of its own
  * - The merge merges as the merge of the tables does
  * - What the tables throw is a DrawError
  */
 
-import type { RowBlock } from '@sakuzu/kasane';
-import { mergeRowBlock, type PointRowRings } from '@sakuzu/kasane';
-import type { RowBlockData } from '@sakuzu/kasane/engine';
-import { rowRingsOfPoint } from '@sakuzu/kasane/engine';
+import type { Page } from '@sakuzu/kasane';
+import { mergePages, type PointRowRings } from '@sakuzu/kasane';
+import type { PageData } from '@sakuzu/kasane/render';
+import { rowRingsOfPoint } from '@sakuzu/kasane/render';
 import { utf8String } from '@sakuzu/tabane';
 import { describe, expect, it } from 'vitest';
 import { DrawError } from '../api/errors.js';
 import { drawPropertyKey } from '../shared/properties.js';
-import { featureRowBuilder as createRowBlockBuilder } from '../test-utils.js';
+import { featureRowBuilder as createPageBuilder } from '../test-utils.js';
 import { circleRowRings } from './circle-rings.js';
 import {
-  createFeatureRowBlockBuilder,
-  mergeFeatureRowBlock,
+  createFeaturePageBuilder,
+  mergeFeaturePages,
   type FeatureRowInput as RowInput,
 } from './feature-row-blocks.js';
 import { FEATURE_CACHES } from './fill-triangles.js';
@@ -53,24 +53,24 @@ const ROWS: RowInput[] = [
   },
 ];
 
-function build(builder: { addRow(row: RowInput): void; finish(): RowBlock[] }): RowBlock[] {
+function build(builder: { addRow(row: RowInput): void; finish(): Page[] }): Page[] {
   for (const row of ROWS) builder.addRow(row);
   return builder.finish();
 }
 
-describe('the builder of the row blocks of the features', () => {
+describe('the builder of the pages of the features', () => {
   it('gives the rows the rings of the Circles when no rings are given', () => {
-    const blocks = build(createFeatureRowBlockBuilder());
+    const blocks = build(createFeaturePageBuilder());
     expect(blocks).toEqual(
       build(
-        createRowBlockBuilder({
+        createPageBuilder({
           columns: FEATURE_TABLE_COLUMNS,
           rings: circleRowRings,
           caches: FEATURE_CACHES,
         }),
       ),
     );
-    const [block] = blocks as RowBlockData[];
+    const [block] = blocks as PageData[];
     // The Circle (the second row in the order) has the box of its ring, past its center
     const circle = 1;
     expect(utf8String(block.ids, circle)).toBe('c');
@@ -79,24 +79,23 @@ describe('the builder of the row blocks of the features', () => {
 
   it('gives the rows the rings given', () => {
     const none: PointRowRings = { draws: () => false, ringOf: () => null, ringVertices: 1 };
-    const blocks = build(createFeatureRowBlockBuilder({ rings: none }));
+    const blocks = build(createFeaturePageBuilder({ rings: none }));
     expect(blocks).toEqual(
       build(
-        createRowBlockBuilder({
+        createPageBuilder({
           columns: FEATURE_TABLE_COLUMNS,
           rings: rowRingsOfPoint(none),
           caches: FEATURE_CACHES,
         }),
       ),
     );
-    expect(blocks).not.toEqual(build(createFeatureRowBlockBuilder()));
+    expect(blocks).not.toEqual(build(createFeaturePageBuilder()));
     // The builder of the tables draws no ring when given none, and has no cache of its own
     expect(
-      build(createRowBlockBuilder({ columns: FEATURE_TABLE_COLUMNS, caches: FEATURE_CACHES })),
+      build(createPageBuilder({ columns: FEATURE_TABLE_COLUMNS, caches: FEATURE_CACHES })),
     ).toEqual(blocks);
     expect(
-      (build(createRowBlockBuilder({ columns: FEATURE_TABLE_COLUMNS })) as RowBlockData[])[0]
-        .caches,
+      (build(createPageBuilder({ columns: FEATURE_TABLE_COLUMNS })) as PageData[])[0].caches,
     ).toEqual([]);
   });
 
@@ -110,7 +109,7 @@ describe('the builder of the row blocks of the features', () => {
       },
       ringVertices: 4,
     };
-    const [block] = build(createFeatureRowBlockBuilder({ rings: square })) as RowBlockData[];
+    const [block] = build(createFeaturePageBuilder({ rings: square })) as PageData[];
     expect(asked[0]).toEqual(['Circle', 10, 20, 5000, undefined]);
     const circle = 1;
     expect(Array.from(block.rowBounds.subarray(circle * 4, circle * 4 + 4))).toEqual([
@@ -119,16 +118,16 @@ describe('the builder of the row blocks of the features', () => {
   });
 
   it('throws an error of the tables as a DrawError', () => {
-    const builder = createFeatureRowBlockBuilder();
+    const builder = createFeaturePageBuilder();
     builder.addRow(ROWS[0]);
     expect(() => builder.addRow(ROWS[0])).toThrow(DrawError);
   });
 });
 
-describe('the merge of the row blocks of the features', () => {
+describe('the merge of the pages of the features', () => {
   it('merges as the merge of the tables', () => {
     // Sources whose styles are numbered, as the tables hold them
-    const sources = (build(createFeatureRowBlockBuilder()) as RowBlockData[]).map((block) => ({
+    const sources = (build(createFeaturePageBuilder()) as PageData[]).map((block) => ({
       ...block,
       wholes: block.wholes.map((w) => (w && 'dictionary' in w ? { ...w, dictionary: null } : w)),
     }));
@@ -137,11 +136,11 @@ describe('the merge of the row blocks of the features', () => {
       rows: Int32Array.of(0, 2, 0, 0),
       ringVertices: circleRowRings.ringVertices,
     };
-    expect(mergeFeatureRowBlock(merge)).toEqual(mergeRowBlock(merge));
+    expect(mergeFeaturePages(merge)).toEqual(mergePages(merge));
   });
 
   it('throws an error of the tables as a DrawError', () => {
-    const sources = build(createFeatureRowBlockBuilder());
-    expect(() => mergeFeatureRowBlock({ sources, rows: Int32Array.of(0, 0) })).toThrow(DrawError);
+    const sources = build(createFeaturePageBuilder());
+    expect(() => mergeFeaturePages({ sources, rows: Int32Array.of(0, 0) })).toThrow(DrawError);
   });
 });

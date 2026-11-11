@@ -11,7 +11,7 @@
  * that never answers stops the opening with why, and the opening never waits silently.
  */
 
-import type { RowBlock } from '@sakuzu/maplibre-gl-draw/kasane';
+import type { Page } from '@sakuzu/maplibre-gl-draw/table';
 import { describe, expect, it } from 'vitest';
 import {
   candidatesOf,
@@ -155,7 +155,7 @@ function responseOf(text: string, chunk: number, sized = true): Response {
 }
 
 /** The ids of the rows of row groups, in the order the groups were taken in */
-function idsOf(groups: readonly RowBlock[]): string[] {
+function idsOf(groups: readonly Page[]): string[] {
   const decoder = new TextDecoder();
   const out: string[] = [];
   for (const group of groups) {
@@ -181,12 +181,12 @@ async function open(run: Run) {
   const params: TableBenchPageParams = parseParams(
     `?mode=table&data=test.ndjson&workers=${run.workers}`,
   );
-  const taken: RowBlock[] = [];
+  const taken: Page[] = [];
   const opened = await openRows({
     params,
     dataUrl: 'http://localhost/data/test.ndjson',
     layerId: 'rows',
-    writer: { addRowBlocks: (_layerId, blocks) => taken.push(...blocks) },
+    writer: { addPages: (_layerId, blocks) => taken.push(...blocks) },
     createWorker: (() => {
       let w = 0;
       return () => fakeWorker(run.fake?.(w++));

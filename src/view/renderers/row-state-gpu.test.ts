@@ -117,7 +117,7 @@ function setup() {
     for (const p of POINTS) store.createFeature(feature(p.id, p.at, p.type));
   });
   const tables = store.tables as FeatureTables;
-  return { tables, handleOf: (id: string) => tables.findRow(id) as number };
+  return { tables, handleOf: (id: string) => tables.getRowRef(id) as number };
 }
 
 /** A GL that keeps the uniforms and the texture uploads it is given */

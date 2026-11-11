@@ -47,7 +47,7 @@ describe('the style of a row', () => {
     });
     const tables = store.tables as FeatureTables;
     const view = tables.get('l');
-    const handle = (id: string) => tables.findRow(id) as number;
+    const handle = (id: string) => tables.getRowRef(id) as number;
     const a = view?.getRowStyle(handle('a'));
     expect(a).toEqual({ pointColor: '#ff0000' });
     expect(Object.isFrozen(a)).toBe(true);

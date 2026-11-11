@@ -11,7 +11,7 @@
  * set and restored through gl-state.ts.
  */
 
-import type { RowBlockDictionary } from '@sakuzu/kasane/engine';
+import type { PageDictionary } from '@sakuzu/kasane/render';
 import type { Map as MapLibreMap } from 'maplibre-gl';
 import type { FeatureTypeHandler } from '../../extension/index.js';
 import {
@@ -523,7 +523,7 @@ function pointFrameExtentOf(
   return (group, row) => {
     const data = group.data;
     const type = rowType(data, row);
-    const styleNumber = (data.wholes[STYLE_COLUMN] as RowBlockDictionary).indexes[row];
+    const styleNumber = (data.wholes[STYLE_COLUMN] as PageDictionary).indexes[row];
     const key = `${type}\u0000${styleNumber}`;
     let extent = known.get(key);
     if (extent === undefined) {

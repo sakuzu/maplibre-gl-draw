@@ -24,13 +24,8 @@
  * coordinates stay those of the line).
  */
 
-import type {
-  RowBlockDictionary,
-  RowGroup,
-  ShapeFormReader,
-  StyleTable,
-} from '@sakuzu/kasane/engine';
-import { geometryAt, type RowGeometryAt } from '@sakuzu/kasane/engine';
+import type { PageDictionary, RowGroup, ShapeFormReader, StyleTable } from '@sakuzu/kasane/render';
+import { geometryAt, type RowGeometryAt } from '@sakuzu/kasane/render';
 import type { ValueStringCache } from '@sakuzu/tabane';
 import {
   rowHasGeometry,
@@ -536,7 +531,7 @@ export function writePointRow(
   const { reader, at } = geometry;
   const data = group.data;
   const slot = context.slots.point(
-    (data.wholes[STYLE] as RowBlockDictionary).indexes[row],
+    (data.wholes[STYLE] as PageDictionary).indexes[row],
     rowType(data, row),
     context.slots.ruleColorOf(group, row, context.strings),
   );
@@ -653,7 +648,7 @@ export function writeLineRow(
   if (!reader || parts.length === 0) return 0;
   const data = group.data;
   const slot = context.slots.line(
-    (data.wholes[STYLE] as RowBlockDictionary).indexes[row],
+    (data.wholes[STYLE] as PageDictionary).indexes[row],
     rowType(data, row),
     context.slots.ruleColorOf(group, row, context.strings),
   );
@@ -837,7 +832,7 @@ export function planPolygonRow(
   }
 
   const slot = context.slots.polygon(
-    (data.wholes[STYLE] as RowBlockDictionary).indexes[row],
+    (data.wholes[STYLE] as PageDictionary).indexes[row],
     type,
     context.slots.ruleColorOf(group, row, context.strings),
   );
@@ -1618,7 +1613,7 @@ function pointStyleOf(
   if (source) {
     const sprite = context.slots.sprite(
       source,
-      (data.wholes[STYLE] as RowBlockDictionary).indexes[row],
+      (data.wholes[STYLE] as PageDictionary).indexes[row],
     );
     if (!sprite) return null;
     return {
@@ -1626,12 +1621,12 @@ function pointStyleOf(
       style: context.rowsStyles.sprite(
         source,
         sprite,
-        (data.wholes[STYLE] as RowBlockDictionary).indexes[row],
+        (data.wholes[STYLE] as PageDictionary).indexes[row],
       ),
     };
   }
   const style = context.rowsStyles.point(
-    (data.wholes[STYLE] as RowBlockDictionary).indexes[row],
+    (data.wholes[STYLE] as PageDictionary).indexes[row],
     rowType(data, row),
     context.slots.ruleColorOf(group, row, context.strings),
   );
@@ -1655,7 +1650,7 @@ export function resolveRowStyle(group: RowGroup, row: number, context: RowsPackC
     case 'Freehand':
     case 'MultiLineString':
       return context.rowsStyles.line(
-        (data.wholes[STYLE] as RowBlockDictionary).indexes[row],
+        (data.wholes[STYLE] as PageDictionary).indexes[row],
         type,
         ruleColor(),
       );
@@ -1664,13 +1659,13 @@ export function resolveRowStyle(group: RowGroup, row: number, context: RowsPackC
     case 'Circle': {
       const color = ruleColor();
       const slot = context.slots.polygon(
-        (data.wholes[STYLE] as RowBlockDictionary).indexes[row],
+        (data.wholes[STYLE] as PageDictionary).indexes[row],
         type,
         color,
       );
       if (!slot.hasStroke && slot.fillColor[3] <= 0) return -1;
       return context.rowsStyles.polygon(
-        (data.wholes[STYLE] as RowBlockDictionary).indexes[row],
+        (data.wholes[STYLE] as PageDictionary).indexes[row],
         type,
         color,
       );
@@ -1700,14 +1695,14 @@ function collectLineRow(
   const ruleColor = context.slots.ruleColorOf(group, row, context.strings);
   const type = rowType(data, row);
   const style = context.rowsStyles.line(
-    (data.wholes[STYLE] as RowBlockDictionary).indexes[row],
+    (data.wholes[STYLE] as PageDictionary).indexes[row],
     type,
     ruleColor,
   );
   writeRowStyle(draft, styleAt, style, rowCreatedZoom(group, row));
   const dashed =
-    context.slots.line((data.wholes[STYLE] as RowBlockDictionary).indexes[row], type, ruleColor)
-      .stroke.lineStyle !== 'solid';
+    context.slots.line((data.wholes[STYLE] as PageDictionary).indexes[row], type, ruleColor).stroke
+      .lineStyle !== 'solid';
   const piece = context.surface?.linePiece ?? 0;
   const coords = reader.coords;
   const stride = reader.stride;
@@ -1759,7 +1754,7 @@ function collectPolygonRow(
   const { slot, triangles } = plan;
   const data = group.data;
   const style = context.rowsStyles.polygon(
-    (data.wholes[STYLE] as RowBlockDictionary).indexes[row],
+    (data.wholes[STYLE] as PageDictionary).indexes[row],
     rowType(data, row),
     context.slots.ruleColorOf(group, row, context.strings),
   );

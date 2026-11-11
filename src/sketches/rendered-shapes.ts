@@ -413,7 +413,7 @@ export class RenderedShapes {
     const tables = this.#store.tables;
     if (movingRows && tables) {
       return new RowsExclusion(moving ?? [], (id) => {
-        const handle = tables.findRow(id);
+        const handle = tables.getRowRef(id);
         return handle !== undefined && movingRows.has(handle);
       });
     }

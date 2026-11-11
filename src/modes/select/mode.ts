@@ -622,7 +622,7 @@ export class SelectMode implements EngineModeHandler {
       top?.kind === 'row'
         ? top.handle
         : top?.kind === 'store'
-          ? store.tables?.findRow(top.feature.id)
+          ? store.tables?.getRowRef(top.feature.id)
           : undefined;
     if (handle === undefined || !rows.has(handle)) return null;
     return {

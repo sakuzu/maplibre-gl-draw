@@ -59,7 +59,7 @@
  * (`checkRebuild`).
  */
 
-import type { GroupVersion, GroupVersionReceiver, RowBlockDictionary } from '@sakuzu/kasane/engine';
+import type { GroupVersion, GroupVersionReceiver, PageDictionary } from '@sakuzu/kasane/render';
 import {
   buildPackedRTree,
   geometryAt,
@@ -74,7 +74,7 @@ import {
   type RowTable,
   searchPackedRTree,
   widenBounds,
-} from '@sakuzu/kasane/engine';
+} from '@sakuzu/kasane/render';
 import type { ProjectionData } from 'maplibre-gl';
 import type { GpuRowBuffer } from '../../api/extension/webgl.js';
 import type { FeatureTypeRenderer, GpuRowsSource, HeldGpuRows } from '../../extension/renderers.js';
@@ -1288,7 +1288,7 @@ export class TableLayerRenderer {
     this.uploadStates();
     this.renderers?.rows?.flushUploads();
     if (this.attached.size === 0) return;
-    for (const tables of this.attached.keys()) tables.swapVersions();
+    for (const tables of this.attached.keys()) tables.swap();
     this.applyWrites();
     this.packDeltas();
     this.uploadStates();
@@ -1412,7 +1412,7 @@ export class TableLayerRenderer {
     const budget = this.budget ?? createChunkBuildBudget(TABLE_BUILD_BUDGET_MS);
     this.budget = budget;
     if (tables.hasQueuedBlocks && tables.advanceQueuedBlocks(budget)) this.pending = true;
-    tables.advanceVersions(budget);
+    tables.rebuild(budget);
     if (tables.hasPendingWork) this.pending = true;
   }
 
@@ -1840,7 +1840,7 @@ export class TableLayerRenderer {
       this.drapeFramePointDraws += this.painter.pointDraws;
       // The chunks of the next versions of the groups, built without being drawn
       pass.inserts = null;
-      this.advanceVersions(cache, tables, table, layer, deps, drawing, settled);
+      this.rebuild(cache, tables, table, layer, deps, drawing, settled);
     } finally {
       run?.end();
       if (pass.groundRead) renderers.rows?.setGround(null);
@@ -1881,7 +1881,7 @@ export class TableLayerRenderer {
    * their GPU side, without drawing them (within the budget, once the camera is still unless the
    * drawing is given a budget for them while it moves)
    */
-  private advanceVersions(
+  private rebuild(
     cache: LayerCache,
     tables: FeatureTablesInternals,
     table: RowTable,
@@ -3419,7 +3419,7 @@ export class TableLayerRenderer {
         let rowReach = TABLE_DRAPE_POINT_REACH_PX;
         if (context && !groupCache?.sprites.has(row)) {
           const slot = context.slots.point(
-            (group.data.wholes[STYLE_COLUMN] as RowBlockDictionary).indexes[row] as number,
+            (group.data.wholes[STYLE_COLUMN] as PageDictionary).indexes[row] as number,
             rowType(group.data, row),
             context.slots.ruleColorOf(group, row, context.strings),
           );

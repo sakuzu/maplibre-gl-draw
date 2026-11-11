@@ -7,13 +7,14 @@
  * going in. (The cuts of the row groups for groups given new keys are in the tests of Kasane.)
  */
 
-import type { GroupHandle, RowGroup, RowTable } from '@sakuzu/kasane/engine';
+import type { GroupHandle } from '@sakuzu/kasane';
+import type { RowGroup, RowTable } from '@sakuzu/kasane/render';
 import { describe, expect, it } from 'vitest';
 import type { FeatureTables, RowField } from '../api/tables.js';
 import { createTableStore } from '../store/table-memory.js';
 import { isGroupHidden } from '../table/feature-row-columns.js';
 import { FEATURE_TABLE_COLUMNS } from '../table/tabane/columns.js';
-import { featureRowDataBuilder as createRowBlockDataBuilder, seededRandom } from '../test-utils.js';
+import { featureRowDataBuilder as createPageDataBuilder, seededRandom } from '../test-utils.js';
 import { STATE_HIDDEN_GROUP } from './feature-row-states.js';
 import { type FeatureTablesInternals, featureTablesInternals } from './feature-tables.js';
 
@@ -31,7 +32,7 @@ function setup(n: number) {
     metadata: undefined,
     styleRule: undefined,
   });
-  const builder = createRowBlockDataBuilder({ columns: FEATURE_TABLE_COLUMNS, targetRows: 64 });
+  const builder = createPageDataBuilder({ columns: FEATURE_TABLE_COLUMNS, targetRows: 64 });
   for (let i = 0; i < n; i++) {
     builder.addRow({
       id: `r${i}`,
@@ -40,10 +41,10 @@ function setup(n: number) {
       key: `k${String(i).padStart(5, '0')}`,
     });
   }
-  writer.addRowBlocks('rows', builder.finish());
+  writer.addPages('rows', builder.finish());
   const tables = store.tables as FeatureTables;
   const internals = featureTablesInternals(tables) as FeatureTablesInternals;
-  internals.addQueuedRowBlocks();
+  internals.addQueuedPages();
   store.transact(() => {
     GROUPS.forEach((id, k) => {
       store.createGroup({
@@ -55,7 +56,7 @@ function setup(n: number) {
         locked: false,
       });
       // A key among the keys of the rows
-      writer.applyGroups({
+      writer.writeGroups({
         handles: Int32Array.of(internals.groups.handleOfId(id)),
         fields: new Map([['key', [`k${String(k * 100 + 50).padStart(5, '0')}`]]]),
       });
@@ -94,9 +95,9 @@ describe('a group shown or hidden', () => {
         } else {
           fields = new Map<RowField, unknown[]>([['key', Array.from(handles, () => key())]]);
         }
-        store.transact(() => writer.apply({ handles, fields, deleted }), 'remote');
+        store.transact(() => writer.writeRows({ handles, fields, deleted }), 'remote');
         if (step % 3 === 0) {
-          internals.addQueuedRowBlocks();
+          internals.addQueuedPages();
           internals.flushVersions();
         }
         // New keys for some groups, which go in later
@@ -111,7 +112,7 @@ describe('a group shown or hidden', () => {
           const group = internals.groups.handleOfId(id);
           store.transact(
             () =>
-              writer.applyGroups({
+              writer.writeGroups({
                 handles: Int32Array.of(group),
                 fields: new Map([['hidden', [!isGroupHidden(internals.groups, group)]]]),
               }),
@@ -132,7 +133,7 @@ describe('a group shown or hidden', () => {
         if (orders.size > 0 && random() < 0.4) {
           store.transact(
             () =>
-              writer.applyGroups({
+              writer.writeGroups({
                 handles: Int32Array.from(orders.keys()),
                 fields: new Map([['key', [...orders.values()]]]),
               }),

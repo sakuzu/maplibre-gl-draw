@@ -11,18 +11,18 @@
  */
 
 import type { RowRead } from '@sakuzu/kasane';
-import type { RowReadContext as TablesReadContext } from '@sakuzu/kasane/engine';
+import type { RowReadContext as TablesReadContext } from '@sakuzu/kasane/render';
 import {
   geometryAt,
+  type PageData,
+  type PageDictionary,
+  type PageValues,
   ROW_FLAG_DELETED,
-  type RowBlockData,
-  type RowBlockDictionary,
-  type RowBlockValues,
   type RowGroup,
   rowCacheNumbers,
   rowProperties,
   groupRowRead as tablesRowRead,
-} from '@sakuzu/kasane/engine';
+} from '@sakuzu/kasane/render';
 import { utf8String } from '@sakuzu/tabane';
 import type { Geometry } from 'geojson';
 import { DrawError } from '../shared/draw-error.js';
@@ -37,7 +37,7 @@ import {
 } from '../table/feature-row-columns.js';
 import { FILL_TRIANGLES_AT } from '../table/fill-triangles.js';
 
-export { rowCacheNumbers, rowNumber, rowProperties, rowValue } from '@sakuzu/kasane/engine';
+export { rowCacheNumbers, rowNumber, rowProperties, rowValue } from '@sakuzu/kasane/render';
 
 /** The places of the columns of a feature, read once rather than through the import at every row */
 const STYLE = STYLE_COLUMN;
@@ -57,8 +57,8 @@ export type RowReadContext = TablesReadContext<FeatureStyle>;
  *
  * @internal
  */
-export function rowType(data: RowBlockData, row: number): FeatureType {
-  const column = data.wholes[TYPE] as RowBlockValues;
+export function rowType(data: PageData, row: number): FeatureType {
+  const column = data.wholes[TYPE] as PageValues;
   return column.values[column.indexes[row]] as FeatureType;
 }
 
@@ -165,7 +165,7 @@ export function rowFeatureToRead(
     layerId,
     groupId: groupHandle >= 0 ? context.groups.idOf(groupHandle) : undefined,
     properties: rowProperties(group, row, context.strings),
-    style: context.styles.get((data.wholes[STYLE] as RowBlockDictionary).indexes[row]),
+    style: context.styles.get((data.wholes[STYLE] as PageDictionary).indexes[row]),
     locked: (data.flags[row] & ROW_FLAG_LOCKED) !== 0,
     visible: (data.flags[row] & ROW_FLAG_HIDDEN) === 0,
   };
@@ -191,7 +191,7 @@ export function rowInputOf(
     geometry: rowGeometry(group, row),
     key: utf8String(data.keys, row),
     group: groupHandle,
-    style: context.styles.get((data.wholes[STYLE] as RowBlockDictionary).indexes[row]) as Readonly<
+    style: context.styles.get((data.wholes[STYLE] as PageDictionary).indexes[row]) as Readonly<
       Record<string, unknown>
     >,
     properties: rowProperties(group, row),

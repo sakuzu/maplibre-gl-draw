@@ -15,15 +15,15 @@
  */
 
 import type { GroupEntry } from '@sakuzu/kasane';
-import type { TableWorkBudget } from '@sakuzu/kasane/engine';
+import type { TableWorkBudget } from '@sakuzu/kasane/render';
 import { describe, expect, it } from 'vitest';
 import type { FeatureTablesWorker } from '../api/tables.js';
 import { featureTablesInternals } from '../feature-table/feature-tables.js';
 import { circleRowRings } from '../table/circle-rings.js';
 import { FEATURE_TABLE_COLUMNS } from '../table/tabane/columns.js';
 import {
-  featureRowBuilder as createRowBlockBuilder,
-  featureRowDataBuilder as createRowBlockDataBuilder,
+  featureRowBuilder as createPageBuilder,
+  featureRowDataBuilder as createPageDataBuilder,
 } from '../test-utils.js';
 import { createTableStore } from './table-memory.js';
 import type { Feature, Layer, RestoreToken, StoreChange } from './types.js';
@@ -92,13 +92,13 @@ function setup(worker?: FeatureTablesWorker) {
 function rowsBack(
   setupOf: ReturnType<typeof setup>,
   ids: readonly string[],
-): ReturnType<ReturnType<typeof createRowBlockBuilder>['finish']> {
-  const { tables, writer } = setupOf;
+): ReturnType<ReturnType<typeof createPageBuilder>['finish']> {
+  const { tables } = setupOf;
   const group = tables.findGroup('g') as number;
   const groups: GroupEntry[] = [
-    { handle: group, id: 'g', key: writer.getGroupOrder(group) as string },
+    { handle: group, id: 'g', key: tables.getGroupKey(group) as string },
   ];
-  const builder = createRowBlockBuilder({ columns: FEATURE_TABLE_COLUMNS, groups, targetRows: 4 });
+  const builder = createPageBuilder({ columns: FEATURE_TABLE_COLUMNS, groups, targetRows: 4 });
   ids.forEach((id) => {
     const i = Number(id.slice(1));
     const inGroup = id === 'a3' || id === 'a4';
@@ -106,7 +106,7 @@ function rowsBack(
       id,
       type: 'Point',
       geometry: { type: 'Point', coordinates: [i, 0] },
-      key: inGroup ? (writer.getGroupOrder(group) as string) : key(i * 10),
+      key: inGroup ? (tables.getGroupKey(group) as string) : key(i * 10),
       ...(inGroup && { group, member: key(i) }),
       properties: { n: i * 100 },
     });
@@ -118,11 +118,11 @@ describe('every row taken out of the tables', () => {
   it('lets go of the rows, told as a replacement of the document', () => {
     const s = setup();
     const { store, writer, tables, notified } = s;
-    const a1 = tables.findRow('a1') as number;
+    const a1 = tables.getRowRef('a1') as number;
     store.setSelection('feature', ['a1']);
     notified.length = 0;
     writer.clear();
-    expect(tables.findRow('a1')).toBeUndefined();
+    expect(tables.getRowRef('a1')).toBeUndefined();
     expect(tables.get('a')).toBeUndefined();
     expect(store.getFeature('a1')).toBeUndefined();
     const change = notified[notified.length - 1];
@@ -139,15 +139,15 @@ describe('every row taken out of the tables', () => {
     const s = setup();
     const { store, writer, tables, internals } = s;
     const handles = new Map(
-      Array.from({ length: 10 }, (_, i) => [`a${i}`, tables.findRow(`a${i}`) as number]),
+      Array.from({ length: 10 }, (_, i) => [`a${i}`, tables.getRowRef(`a${i}`) as number]),
     );
     store.setSelection('feature', ['a1']);
     writer.clear();
     // Every row but a5 comes back, with new values
     const ids = Array.from({ length: 10 }, (_, i) => `a${i}`).filter((id) => id !== 'a5');
-    store.transact(() => writer.addRowBlocks('a', rowsBack(s, ids)), 'remote');
+    store.transact(() => writer.addPages('a', rowsBack(s, ids)), 'remote');
     internals.flushVersions();
-    for (const id of ids) expect(tables.findRow(id)).toBe(handles.get(id));
+    for (const id of ids) expect(tables.getRowRef(id)).toBe(handles.get(id));
     expect(store.getFeature('a2')?.properties).toEqual({ n: 200 });
     expect(store.getFeature('a3')?.groupId).toBe('g');
     // The feature selected is read from its row again
@@ -181,7 +181,7 @@ describe('every row taken out of the tables', () => {
       build: (rows, options) =>
         new Promise((resolve) => {
           release = () => {
-            const builder = createRowBlockDataBuilder({
+            const builder = createPageDataBuilder({
               columns: FEATURE_TABLE_COLUMNS,
               ...options,
               rings: circleRowRings,
@@ -206,7 +206,7 @@ describe('every row taken out of the tables', () => {
       bytes.set(part, offsets[i]);
     });
     store.transact(() => {
-      writer.apply({
+      writer.writeRows({
         handles: writer.allocateHandles({ offsets, bytes }),
         fields: new Map<never, unknown[]>([
           ['type' as never, ids.map(() => 'Point')],
@@ -217,7 +217,7 @@ describe('every row taken out of the tables', () => {
       });
     }, 'remote');
     expect(internals.deltaRowCount()).toBe(0);
-    for (let i = 0; i < 6; i++) internals.advanceVersions(UNBOUNDED);
+    for (let i = 0; i < 6; i++) internals.rebuild(UNBOUNDED);
     expect(release).not.toBeNull();
     writer.clear();
     (release as unknown as () => void)();
@@ -225,7 +225,7 @@ describe('every row taken out of the tables', () => {
     await Promise.resolve();
     internals.advanceQueuedBlocks(UNBOUNDED);
     internals.flushVersions();
-    expect(tables.findRow('r10')).toBeUndefined();
+    expect(tables.getRowRef('r10')).toBeUndefined();
     expect(tables.get('a')).toBeUndefined();
     expect(internals.hasPendingWork).toBe(false);
   });
@@ -234,19 +234,19 @@ describe('every row taken out of the tables', () => {
     const { store, writer, tables, internals } = setup();
     writer.clear();
     expect(internals.readContext.dimensionsOf('z')).toBe('xyz');
-    const builder = createRowBlockBuilder({ columns: FEATURE_TABLE_COLUMNS, dimensions: 'xyz' });
+    const builder = createPageBuilder({ columns: FEATURE_TABLE_COLUMNS, dimensions: 'xyz' });
     builder.addRow({
       id: 'high',
       type: 'Point',
       geometry: { type: 'Point', coordinates: [1, 2, 30] },
       key: key(1),
     });
-    store.transact(() => writer.addRowBlocks('z', builder.finish()), 'remote');
+    store.transact(() => writer.addPages('z', builder.finish()), 'remote');
     internals.flushVersions();
     expect(
       tables
         .readValues({
-          handles: Int32Array.of(tables.findRow('high') as number),
+          handles: Int32Array.of(tables.getRowRef('high') as number),
           fields: new Map([['geometry', []]]),
         })
         .fields.get('geometry'),

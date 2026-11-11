@@ -15,8 +15,8 @@
  * candidate; a row a sketch is drawn over for this client is hit where it is.
  */
 
-import type { RowBlockDictionary } from '@sakuzu/kasane/engine';
-import { geometryAt, type RowGroup, type RowTable } from '@sakuzu/kasane/engine';
+import type { PageDictionary } from '@sakuzu/kasane/render';
+import { geometryAt, type RowGroup, type RowTable } from '@sakuzu/kasane/render';
 import { ColumnRun, type HitShape, type PositionRun } from '../shared/math/position-runs.js';
 import { drawPropertyKey } from '../shared/properties.js';
 import type { Coordinate, Feature, FeatureStyle, FeatureType } from '../shared/types/model.js';
@@ -142,7 +142,7 @@ export function hitTestLayerTable(
     const { group, row } = candidates[i];
     const type = rowType(group.data, row);
     const style = internals.styles.get(
-      (group.data.wholes[STYLE_COLUMN] as RowBlockDictionary).indexes[row],
+      (group.data.wholes[STYLE_COLUMN] as PageDictionary).indexes[row],
     );
     const tolerance = input.toleranceOf(type, style);
     if (onScreen && SCREEN_TYPES.has(type)) {

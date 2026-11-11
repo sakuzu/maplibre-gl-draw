@@ -55,7 +55,7 @@ function setup() {
     for (let i = 0; i < COUNT; i++) store.createFeature(point(i));
   });
   const tables = store.tables as FeatureTables;
-  const handles = Array.from({ length: COUNT }, (_, i) => tables.findRow(`f${i}`) as number);
+  const handles = Array.from({ length: COUNT }, (_, i) => tables.getRowRef(`f${i}`) as number);
   store.selectRows(TableSelection.of(handles));
   const rows = store.getSelectedRows() as TableSelection;
   const changes: StoreChange[] = [];

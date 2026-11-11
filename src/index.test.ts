@@ -4,9 +4,11 @@
 /**
  * The public surface of the package
  *
- * - The names that the five entries export are pinned in five lists (see "The public
- *   surface" in CONTRIBUTING.md): src/index.ts, src/geometry/index.ts and src/table/index.ts
- *   (layer 1) and src/kasane/index.ts and src/webgl/index.ts (layer 2). Adding or removing a
+ * - The names that the six entries export are pinned in six lists (see "The public
+ *   surface" in CONTRIBUTING.md): src/index.ts, src/geometry/index.ts, src/table/index.ts and
+ *   src/extend/index.ts (layer 1) and src/kasane/index.ts and src/webgl/index.ts (layer 2). The
+ *   entry /kasane is kept only until what it holds has its place in the others (the package is
+ *   published with five entries, `check:entries`). Adding or removing a
  *   name means editing these lists as well, so every change to the surface is deliberate.
  * - The emitted declarations (with `stripInternal`) are self-contained: nothing that a
  *   public declaration needs was stripped as `@internal`, and every named type that a
@@ -247,9 +249,12 @@ const GEOMETRY = [
 /** The table entry (layer 1) */
 const TABLE = [
   'Column',
+  'createPageBuilder',
   'createTableBuilder',
   'DictionaryColumn',
   'GeometryType',
+  'Page',
+  'PageBuilder',
   'PreparedTable',
   'prepareTable',
   'Table',
@@ -257,6 +262,8 @@ const TABLE = [
   'tableFromFeatures',
   'TableGeometry',
   'TableMixedGeometry',
+  'toPage',
+  'ToPageOptions',
   'transferList',
 ];
 
@@ -269,17 +276,15 @@ const KASANE = [
   'copyTableStore',
   'CreatedRows',
   'createFeatureTables',
-  'createRowBlockBuilder',
   'createRowValues',
-  'FeatureTypeRows',
-  'featureValuesOf',
   'createTableStore',
-  'DraggedRows',
   'featureRowOfTabane',
   'FeatureTables',
   'FeatureTablesOptions',
   'FeatureTablesWorker',
   'FeatureTablesWriter',
+  'FeatureTypeRows',
+  'featureValuesOf',
   'GeoJSONRow',
   'GeoJSONRows',
   'GroupEntry',
@@ -287,31 +292,22 @@ const KASANE = [
   'ITEM_ROW',
   'ItemHandles',
   'LayerRowsChange',
-  'LayerTableView',
   'listSelectedRows',
-  'mergeRowBlock',
-  'ROW_BLOCK_TARGET_ROWS',
-  'ROW_BLOCK_TARGET_VERTICES',
+  'mergePages',
+  'PAGE_TARGET_ROWS',
+  'PAGE_TARGET_VERTICES',
+  'PageBuilderOptions',
+  'PageMerge',
   'RowApplyOptions',
-  'RowBlock',
-  'RowBlockBuilder',
-  'RowBlockBuilderOptions',
-  'RowBlockMerge',
-  'rowBlockOfTabane',
-  'RowBlockOfTabaneOptions',
   'RowCursor',
   'RowField',
   'RowFieldValues',
-  'RowHandle',
   'RowInput',
   'RowPlacement',
   'RowRings',
   'RowsChange',
   'RowsMove',
   'rowsOfGeoJSON',
-  'RowSprite',
-  'RowSpriteScaleStop',
-  'RowSpriteSource',
   'RowValues',
   'rowValuesOf',
   'RowWrite',
@@ -324,9 +320,11 @@ const KASANE = [
   'TableGroupPatch',
   'TableScanOptions',
   'TableStoreCopy',
-  'transferList',
   'writeTabaneFeatureBlocks',
 ];
+
+/** The entry of who plugs a storage or an extension into the library (follows semver) */
+const EXTEND = ['RowSprite', 'RowSpriteScaleStop', 'RowSpriteSource'];
 
 /** Layer 2: the building blocks for custom shaders of src/webgl/index.ts */
 const WEBGL = [
@@ -341,6 +339,7 @@ const WEBGL = [
   'DashSegment',
   'DEFAULT_TILE_SIZE',
   'densifyPath',
+  'DraggedRows',
   'DrapeQuadCorners',
   'drawBillboardsWithoutDepth',
   'drawQuadOnTerrain',
@@ -350,6 +349,7 @@ const WEBGL = [
   'GpuDefinition',
   'GpuRowBuffer',
   'GpuRowBufferFactory',
+  'LayerTableView',
   'MercatorRect',
   'OFFSET_MODE_GLSL',
   'OffsetUniforms',
@@ -452,16 +452,14 @@ function describeEntry(file: string, list: readonly string[], load: () => Promis
 describeEntry('src/index.ts', MAIN, () => import('./index.js'));
 describeEntry('src/geometry/index.ts', GEOMETRY, () => import('./geometry/index.js'));
 describeEntry('src/table/index.ts', TABLE, () => import('./table/index.js'));
+describeEntry('src/extend/index.ts', EXTEND, () => import('./extend/index.js'));
 describeEntry('src/kasane/index.ts', KASANE, () => import('./kasane/index.js'));
 describeEntry('src/webgl/index.ts', WEBGL, () => import('./webgl/index.js'));
 
-describe('the five entries', () => {
-  it('share no name, but the box of /geometry, which the main entry gives too, and the transfer list of /table, which /kasane widens to row blocks', () => {
-    const all = [...MAIN, ...GEOMETRY, ...TABLE, ...KASANE, ...WEBGL];
-    expect(all.filter((name, index) => all.indexOf(name) !== index).sort()).toEqual([
-      'BBox',
-      'transferList',
-    ]);
+describe('the six entries', () => {
+  it('share no name, but the box of /geometry, which the main entry gives too', () => {
+    const all = [...MAIN, ...GEOMETRY, ...TABLE, ...EXTEND, ...KASANE, ...WEBGL];
+    expect(all.filter((name, index) => all.indexOf(name) !== index).sort()).toEqual(['BBox']);
   });
 });
 
@@ -619,9 +617,10 @@ describe('the emitted declarations', () => {
   const main = resolve(outDir, 'index.d.ts');
   const geometry = resolve(outDir, 'geometry/index.d.ts');
   const table = resolve(outDir, 'table/index.d.ts');
+  const extend = resolve(outDir, 'extend/index.d.ts');
   const kasane = resolve(outDir, 'kasane/index.d.ts');
   const webgl = resolve(outDir, 'webgl/index.d.ts');
-  const entries = [main, geometry, table, kasane, webgl];
+  const entries = [main, geometry, table, extend, kasane, webgl];
   let files: Map<string, string>;
   let program: ts.Program;
 
@@ -652,8 +651,8 @@ describe('the emitted declarations', () => {
       findForgottenExports(
         program,
         files,
-        [main, geometry, table, kasane, webgl],
-        [main, geometry, table],
+        [main, geometry, table, extend, kasane, webgl],
+        [main, geometry, table, extend],
       ),
     ).toEqual([]);
   }, 60_000);

@@ -9,7 +9,7 @@
  * the order and in the delta of the layer, after a deletion is undone too
  */
 
-import { RowSkips, RowTable } from '@sakuzu/kasane/engine';
+import { RowSkips, RowTable } from '@sakuzu/kasane/render';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createTableStore } from '../../store/table-memory.js';
 import type { ItemMove } from '../../store/types.js';

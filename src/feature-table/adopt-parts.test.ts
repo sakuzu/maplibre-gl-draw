@@ -9,14 +9,14 @@
  * their order still read in the order of their keys.
  */
 
-import type { RowBlockData } from '@sakuzu/kasane/engine';
+import type { PageData } from '@sakuzu/kasane/render';
 import { describe, expect, it } from 'vitest';
 import type { FeatureTables } from '../api/tables.js';
 import { circleRowRings } from '../table/circle-rings.js';
 import type { FeatureRowInput as RowInput } from '../table/feature-row-blocks.js';
 import { FEATURE_TABLE_COLUMNS } from '../table/tabane/columns.js';
 import {
-  featureRowDataBuilder as createRowBlockDataBuilder,
+  featureRowDataBuilder as createPageDataBuilder,
   orderKey,
   randomRowGeometry,
   seededRandom,
@@ -42,8 +42,8 @@ function rowsOf(random: () => number, n: number): RowInput[] {
 }
 
 /** The row groups of rows, built by one builder */
-function build(rows: readonly RowInput[]): RowBlockData[] {
-  const builder = createRowBlockDataBuilder({
+function build(rows: readonly RowInput[]): PageData[] {
+  const builder = createPageDataBuilder({
     columns: FEATURE_TABLE_COLUMNS,
     targetRows: 64,
     rings: circleRowRings,
@@ -53,10 +53,10 @@ function build(rows: readonly RowInput[]): RowBlockData[] {
 }
 
 /** The tables of a layer `rows` that took in the row groups of each part, in the order given */
-function tablesOf(parts: readonly RowBlockData[][]): FeatureTables {
+function tablesOf(parts: readonly PageData[][]): FeatureTables {
   const { tables, writer } = createFeatureTablesStore();
-  for (const groups of parts) writer.addRowBlocks('rows', groups);
-  (featureTablesInternals(tables) as FeatureTablesInternals).addQueuedRowBlocks();
+  for (const groups of parts) writer.addPages('rows', groups);
+  (featureTablesInternals(tables) as FeatureTablesInternals).addQueuedPages();
   return tables;
 }
 
@@ -76,13 +76,13 @@ describe('the rows of a layer built in parts', () => {
       // Cut at places at random: the runs of keys follow each other
       const cuts = [0, ...Array.from({ length: 5 }, () => Math.floor(random() * 1_000)), 1_000];
       cuts.sort((a, b) => a - b);
-      const parts: RowBlockData[][] = [];
+      const parts: PageData[][] = [];
       for (let k = 0; k + 1 < cuts.length; k++) {
         if (cuts[k + 1] > cuts[k]) parts.push(build(rows.slice(cuts[k], cuts[k + 1])));
       }
       expect(readOf(tablesOf(parts)), `seed ${seed}`).toEqual(whole);
       // Taken in as they come (the last part first)
-      const again: RowBlockData[][] = [];
+      const again: PageData[][] = [];
       for (let k = 0; k + 1 < cuts.length; k++) {
         if (cuts[k + 1] > cuts[k]) again.push(build(rows.slice(cuts[k], cuts[k + 1])));
       }

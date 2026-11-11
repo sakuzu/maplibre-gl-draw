@@ -4,7 +4,7 @@
 /**
  * End-to-end tests of the rows written in place, drawn in one draw per chunk
  *
- * Rows are drawn, then written through the writer of their tables (`writer.apply`), on the real
+ * Rows are drawn, then written through the writer of their tables (`writer.writeRows`), on the real
  * maplibre and WebGL of the browser, and the picture once everything is written is compared with
  * the picture of the rows as written, drawn from the start. Two kinds of writes:
  *
@@ -229,7 +229,7 @@ async function drawWritten(
           createDraw: typeof import('../index.js').createDraw;
           tables: {
             createFeatureTables: typeof import('../kasane/index.js').createFeatureTables;
-            createRowBlockBuilder: typeof import('../table/feature-row-blocks.js').createFeatureRowBlockBuilder;
+            createPageBuilder: typeof import('../table/feature-row-blocks.js').createFeaturePageBuilder;
           };
           internals: {
             MemoryContractStore: new () => Contract;
@@ -252,7 +252,7 @@ async function drawWritten(
         });
       }, 'remote');
       const { tables, writer } = w.e2e.tables.createFeatureTables();
-      const builder = w.e2e.tables.createRowBlockBuilder({});
+      const builder = w.e2e.tables.createPageBuilder({});
       features.forEach((f, i) => {
         builder.addRow({
           id: f.id,
@@ -265,7 +265,7 @@ async function drawWritten(
           locked: false,
         } as never);
       });
-      writer.addRowBlocks('rows', builder.finish());
+      writer.addPages('rows', builder.finish());
       Object.defineProperty(store, 'tables', { value: tables });
       w.draw.destroy();
       w.draw = w.e2e.createDraw(map, { store, initDefaultLayer: false });
@@ -301,9 +301,9 @@ async function drawWritten(
       };
       await settle();
       for (const write of writes) {
-        const handle = tables.findRow(write.id);
+        const handle = tables.getRowRef(write.id);
         if (handle === undefined) throw new Error(`no row ${write.id}`);
-        writer.apply({
+        writer.writeRows({
           handles: Int32Array.of(handle),
           fields: new Map([[write.field as never, [write.value]]]),
         });

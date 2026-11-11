@@ -64,21 +64,21 @@ describe('the sketches drawn over rows for this client', () => {
   it('are drawn in the places of the rows, which are not drawn, and read as before', () => {
     const { tables, internals, table, ids } = setup();
     const before = ids();
-    const p3 = tables.get('layer')?.getRow(tables.findRow('p3') ?? -1);
+    const p3 = tables.get('layer')?.getRow(tables.getRowRef('p3') ?? -1);
     internalsOf(tables).showSketches(
       sketchesOf([{ ...feature('p3', 'Polygon', square(30)), layerId: 'layer' }]),
     );
     // Drawn as a row of the delta, at the place of p3
     expect(deltaIds(table)).toEqual(['\u0000overlay\u0000\u0000sketches\u0000p3']);
     const place = table.deltaPlaces();
-    const p3Place = internals.placeOf(tables.findRow('p3') ?? -1);
+    const p3Place = internals.placeOf(tables.getRowRef('p3') ?? -1);
     expect(place.groups[0]).toBe(table.orderOf(p3Place?.group.handle ?? -1));
     expect(place.cuts[0]).toBe(p3Place?.row);
     // The row drawn over is not drawn
     expect((p3Place?.group.state[p3Place.row] ?? 0) & STATE_HIDDEN_SKETCH).not.toBe(0);
     // Read as before
     expect(ids()).toEqual(before);
-    expect(tables.get('layer')?.getRow(tables.findRow('p3') ?? -1)).toEqual(p3);
+    expect(tables.get('layer')?.getRow(tables.getRowRef('p3') ?? -1)).toEqual(p3);
     const scanned: number[] = [];
     const cursor = tables.scan({ layerIds: ['layer'] });
     for (let batch = cursor.next(); batch; batch = cursor.next()) scanned.push(...batch);
@@ -118,11 +118,11 @@ describe('the sketches drawn over rows for this client', () => {
       sketchesOf([{ ...feature('p5', 'Polygon', square(50)), layerId: 'layer' }]),
     );
     expect(deltaIds(table)).toEqual(['\u0000overlay\u0000\u0000sketches\u0000p5']);
-    const p3 = internals.placeOf(tables.findRow('p3') ?? -1);
+    const p3 = internals.placeOf(tables.getRowRef('p3') ?? -1);
     expect((p3?.group.state[p3.row] ?? 0) & STATE_HIDDEN_SKETCH).toBe(0);
     internalsOf(tables).showSketches([]);
     expect(table.delta.group).toBeNull();
-    const p5 = internals.placeOf(tables.findRow('p5') ?? -1);
+    const p5 = internals.placeOf(tables.getRowRef('p5') ?? -1);
     expect((p5?.group.state[p5.row] ?? 0) & STATE_HIDDEN_SKETCH).toBe(0);
   });
 
@@ -132,8 +132,8 @@ describe('the sketches drawn over rows for this client', () => {
       sketchesOf([{ ...feature('p3', 'Polygon', square(30)), layerId: 'layer' }]),
     );
     // A row moved in the same layer goes to the delta and to the next version
-    writer.apply({
-      handles: Int32Array.of(tables.findRow('p1') ?? -1),
+    writer.writeRows({
+      handles: Int32Array.of(tables.getRowRef('p1') ?? -1),
       fields: new Map([['key', ['k000009m']]]),
     });
     internals.flushVersions();

@@ -11,7 +11,7 @@ import type { BBox } from '../../geometry/types.js';
 import type { RowSpriteSource } from '../../view/renderers/rows/rows-format.js';
 import type { ScreenPoint } from '../events.js';
 import type { Feature, FeaturePatch, FeatureStyle } from '../model.js';
-import type { LayerTableView, RowHandle } from '../tables.js';
+import type { LayerTableView, RowRef } from '../tables.js';
 import type { FootprintContext, HandleContext, PointContext } from './context.js';
 import type { DrawPointerEvent } from './mode.js';
 import type { Hit, SnapCandidate } from './provider.js';
@@ -94,7 +94,7 @@ export interface FeatureTypeRows {
    * the type to ask `appliesTo` whenever the rows are classified for the drawing, so a type of many
    * rows should have it.
    */
-  appliesTo(view: LayerTableView, handle: RowHandle): boolean;
+  appliesTo(view: LayerTableView, handle: RowRef): boolean;
 }
 
 /**

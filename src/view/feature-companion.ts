@@ -34,7 +34,7 @@
  */
 
 import type { ProjectionData } from 'maplibre-gl';
-import type { LayerTableView, RowHandle } from '../api/tables.js';
+import type { LayerTableView, RowRef } from '../api/tables.js';
 import type { MouseNormalizedEvent } from '../dispatcher/types.js';
 import type { FrameDrawContext } from '../extension/index.js';
 import type { LngLat, ScreenPoint } from '../shared/math/index.js';
@@ -97,7 +97,7 @@ export interface FeatureCompanionProvider {
    * (the answer of `has` for the feature of the row). Optional: without it, the classification
    * of the rows makes the feature of each row to ask `has`
    */
-  hasRow?(view: LayerTableView, handle: RowHandle): boolean;
+  hasRow?(view: LayerTableView, handle: RowRef): boolean;
   /**
    * The keys of `properties` the answers of `has` and `hasRow` read. Optional: with them, a write
    * in place of other attributes of a row held as rows keeps the classification of the row (the
@@ -208,7 +208,7 @@ export interface FeatureCompanionRegistry {
    *
    * @param featureOf Makes the feature of the row
    */
-  hasRow(view: LayerTableView, handle: RowHandle, featureOf: () => Feature): boolean;
+  hasRow(view: LayerTableView, handle: RowRef, featureOf: () => Feature): boolean;
   /**
    * Whether a write of attributes of a row may change whether it has companions: a provider reads
    * one of the keys written (`classifyKeys`), or does not tell the keys it reads (false when no
@@ -261,7 +261,7 @@ export function createFeatureCompanionRegistry(): FeatureCompanionRegistry {
       return false;
     },
 
-    hasRow(view: LayerTableView, handle: RowHandle, featureOf: () => Feature): boolean {
+    hasRow(view: LayerTableView, handle: RowRef, featureOf: () => Feature): boolean {
       if (providers.size === 0) return false;
       let feature: Feature | undefined;
       for (const provider of providers.values()) {

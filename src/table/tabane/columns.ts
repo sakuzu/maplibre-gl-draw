@@ -17,7 +17,7 @@
  * - `style` (`whole`): the style, an object (`{}` for a row without one)
  * - `properties` (`keyed`): the attributes, a column per key
  *
- * The rows are read as columns (`rowBlockOfTabane`), without an object per row; the functions here
+ * The rows are read as columns (`toPage`), without an object per row; the functions here
  * that read and write a row as an object are for the rows written and for a row read alone.
  *
  * A pure module: it depends on nothing outside `/table` but its error and `@sakuzu/tabane`, so it
@@ -58,14 +58,14 @@ export const TABANE_FEATURE_COLUMNS: Readonly<Record<string, TabaneColumnKind>> 
 /**
  * The columns of the rows of features as the tables hold them (`TableColumns`): those of
  * {@link TABANE_FEATURE_COLUMNS}, with where the values of each `whole` column are kept. The
- * types are few and differ from a row block to another, so each row block keeps its own; the
+ * types are few and differ from a page to another, so each page keeps its own; the
  * styles are shared by rows of every table, so the tables keep one dictionary of them
  *
  * @internal
  */
 export const FEATURE_TABLE_COLUMNS: TableColumns = Object.freeze({
   ...TABANE_FEATURE_COLUMNS,
-  type: Object.freeze({ kind: 'whole', dictionary: 'rowBlock' }),
+  type: Object.freeze({ kind: 'whole', dictionary: 'page' }),
   style: Object.freeze({ kind: 'whole', dictionary: 'tables' }),
 });
 
@@ -129,7 +129,7 @@ export interface TabaneFeatureRow {
   readonly locked?: boolean;
   /** Whether the row is deleted (kept for what refers to it) */
   readonly deleted?: boolean;
-  /** What created the row (every row of a row block has one, or none has) */
+  /** What created the row (every row of a page has one, or none has) */
   readonly created?: TabaneRevision;
   /** The revision of each cell changed after the row was created, by the name of the cell */
   readonly revisions?: Readonly<Record<string, TabaneRevision>>;
@@ -176,7 +176,7 @@ export function tabaneRowOf(row: TabaneFeatureRow): TabaneRow {
 
 /**
  * A row of Tabane read back as a feature (`tabaneRowsOf` of `@sakuzu/tabane` reads the rows of a
- * row block as objects)
+ * page as objects)
  *
  * @throws `DrawError` with the code `invalid-input` when the row is not one of a feature: a column
  *   that is not one of {@link TABANE_FEATURE_COLUMNS}, no type, a geometry of another name or
@@ -235,7 +235,7 @@ export function geometryTypeOf(name: string, depth: number): GeometryType {
 }
 
 /**
- * The columns of a feature of a row block read, by their names: null for a column the row block
+ * The columns of a feature of a page read, by their names: null for a column the page
  * does not hold (no row holds a value of it)
  *
  * @internal
@@ -252,9 +252,9 @@ export interface FeatureColumns {
 }
 
 /**
- * The columns of a feature of a row block, each checked to be of its kind
+ * The columns of a feature of a page, each checked to be of its kind
  *
- * @throws `DrawError` with the code `invalid-input` when the row block holds a column that is not
+ * @throws `DrawError` with the code `invalid-input` when the page holds a column that is not
  *   one of {@link TABANE_FEATURE_COLUMNS}, or one of another kind
  * @internal
  */

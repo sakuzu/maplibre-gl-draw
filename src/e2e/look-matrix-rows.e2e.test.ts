@@ -3,7 +3,7 @@
 
 /**
  * End-to-end tests of many features of different looks drawn together, over a Store of rows: rows
- * made by `features.createMany`, and rows of a row block (see `look-matrix.ts`)
+ * made by `features.createMany`, and rows of a page (see `look-matrix.ts`)
  */
 
 import { describe } from 'vitest';
@@ -13,6 +13,6 @@ describe('the looks of many features over a Store of rows, of rows made', () => 
   describeLookMatrix('rows', 'made');
 });
 
-describe('the looks of many features over a Store of rows, of rows of a row block', () => {
+describe('the looks of many features over a Store of rows, of rows of a page', () => {
   describeLookMatrix('rows', 'block');
 });

@@ -4,6 +4,7 @@
     "src/index.ts",
     "src/geometry/index.ts",
     "src/table/index.ts",
+    "src/extend/index.ts",
     "src/kasane/index.ts",
     "src/webgl/index.ts"
   ],

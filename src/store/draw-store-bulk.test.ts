@@ -67,14 +67,14 @@ function setup(count: number, selectionIdsLimit = 3) {
   const changes: StoreChange[] = [];
   store.subscribe((change) => changes.push(change));
   const ids = Array.from({ length: count }, (_, i) => `f${i}`);
-  const handleOf = (id: string) => tables.findRow(id) as number;
+  const handleOf = (id: string) => tables.getRowRef(id) as number;
   return { contract, store, tables, changes, ids, handleOf };
 }
 
 /** Whether the row of an id is marked as selected in bulk */
 function marked(tables: FeatureTables, id: string): boolean {
   const internals = internalsOf(tables);
-  const place = internals.placeOf(tables.findRow(id) as number);
+  const place = internals.placeOf(tables.getRowRef(id) as number);
   return place !== undefined && (place.group.state[place.row] & STATE_BULK) !== 0;
 }
 
@@ -247,7 +247,7 @@ describe('features selected in bulk', () => {
     const handles = Int32Array.from(ids.slice(0, 20).map(handleOf));
     store.transact(
       () =>
-        contract.writer.apply({
+        contract.writer.writeRows({
           handles,
           fields: new Map(),
           deleted: new Uint8Array(handles.length).fill(1),

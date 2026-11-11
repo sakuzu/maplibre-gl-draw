@@ -193,7 +193,7 @@ function rowHit(id: string): TopHit {
     kind: 'row',
     layerId: 'l',
     id,
-    handle: store.tables?.findRow(id) as number,
+    handle: store.tables?.getRowRef(id) as number,
     locked: false,
     distancePx: () => 0,
   };
@@ -202,7 +202,7 @@ function rowHit(id: string): TopHit {
 /** The first position of each feature */
 function corners(): number[][] {
   return ids.map((id) => {
-    const feature = store.tables?.get('l')?.getRow(store.tables.findRow(id) as number);
+    const feature = store.tables?.get('l')?.getRow(store.tables.getRowRef(id) as number);
     return ((feature as Feature).geometry as { coordinates: number[][][] }).coordinates[0][0];
   });
 }
@@ -227,7 +227,7 @@ function expectNear(
 /** The moving set of the row of a feature */
 function movingSetOf(id: string): number {
   const internals = featureTablesInternals(store.tables);
-  const place = internals?.placeOf(store.tables?.findRow(id) as number);
+  const place = internals?.placeOf(store.tables?.getRowRef(id) as number);
   return place ? (place.group.state[place.row] & STATE_MOVE_MASK) >> STATE_MOVE_SHIFT : -1;
 }
 
@@ -335,7 +335,7 @@ describe('the select mode over features selected in bulk', () => {
     expect(emitted.filter(([name]) => name === 'drag.ended')).toHaveLength(1);
     const last = store.tables
       ?.get('l')
-      ?.getRow(store.tables.findRow(more[more.length - 1]) as number);
+      ?.getRow(store.tables.getRowRef(more[more.length - 1]) as number);
     expectNear(
       [((last as Feature).geometry as { coordinates: number[][][] }).coordinates[0][0] as number[]],
       [referenceTranslate([(more.length - 1) * 2, 10], DRAG_FROM, DRAG_TO)],
@@ -405,7 +405,7 @@ describe('the select mode over features selected in bulk', () => {
       );
     });
     const tables = store.tables as NonNullable<typeof store.tables>;
-    const handleOf = (id: string) => tables.findRow(id) as number;
+    const handleOf = (id: string) => tables.getRowRef(id) as number;
     const read = (id: string) => tables.get('l')?.getRow(handleOf(id)) as Feature;
     const at = (feature: Feature) => (feature.geometry as { coordinates: number[] }).coordinates;
     store.setSelection('feature', [...ids, 'img', 'board']);

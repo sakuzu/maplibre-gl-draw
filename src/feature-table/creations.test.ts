@@ -16,14 +16,14 @@
  *   gathered, built in the Worker, and queued to be taken in, as once they are taken in
  */
 
-import { ROW_BLOCK_TARGET_ROWS } from '@sakuzu/kasane';
-import type { TableWorkBudget } from '@sakuzu/kasane/engine';
+import { PAGE_TARGET_ROWS } from '@sakuzu/kasane';
+import type { TableWorkBudget } from '@sakuzu/kasane/render';
 import { describe, expect, it, vi } from 'vitest';
 import type { FeatureTablesWorker } from '../api/tables.js';
 import { circleRowRings } from '../table/circle-rings.js';
 import { FEATURE_TABLE_COLUMNS } from '../table/tabane/columns.js';
 import {
-  featureRowDataBuilder as createRowBlockDataBuilder,
+  featureRowDataBuilder as createPageDataBuilder,
   expectTablesMatch,
   referenceKey as key,
   type ReferenceRow,
@@ -79,7 +79,7 @@ function create(
     bytes.set(part, offsets[i]);
   });
   const handles = setup.writer.allocateHandles({ offsets, bytes });
-  const change = setup.writer.apply(
+  const change = setup.writer.writeRows(
     rowPatch(Array.from(handles), {
       type: rows.map(() => 'Point'),
       parent: rows.map(() => 'a'),
@@ -120,7 +120,7 @@ describe('many new rows written at once', () => {
       expect(internals.deltaRowCount()).toBe(0);
       // A frame between the writes
       internals.advanceQueuedBlocks(UNBOUNDED);
-      internals.advanceVersions(UNBOUNDED);
+      internals.rebuild(UNBOUNDED);
       internals.advanceQueuedBlocks(UNBOUNDED);
     }
     internals.flushVersions();
@@ -193,11 +193,11 @@ describe('many new rows written at once', () => {
         order: `${key(3000)}${String(from + i).padStart(6, '0')}`,
       }));
     // Into the delta until it holds a group of rows
-    create(setup, reference, within(0, ROW_BLOCK_TARGET_ROWS));
-    expect(internals.deltaRowCount()).toBe(ROW_BLOCK_TARGET_ROWS);
+    create(setup, reference, within(0, PAGE_TARGET_ROWS));
+    expect(internals.deltaRowCount()).toBe(PAGE_TARGET_ROWS);
     // Past it, the rows that follow are read from where they gather
-    create(setup, reference, within(ROW_BLOCK_TARGET_ROWS, 100));
-    expect(internals.deltaRowCount()).toBe(ROW_BLOCK_TARGET_ROWS);
+    create(setup, reference, within(PAGE_TARGET_ROWS, 100));
+    expect(internals.deltaRowCount()).toBe(PAGE_TARGET_ROWS);
     expectTablesMatch(tables, reference, ['a'], groupHandleOf);
     internals.flushVersions();
     expect(internals.deltaRowCount()).toBe(0);
@@ -210,7 +210,7 @@ describe('many new rows written at once', () => {
       merge: () => Promise.reject(new Error('no merge')),
       build: (rows, options) => {
         built.push(rows.length);
-        const builder = createRowBlockDataBuilder({
+        const builder = createPageDataBuilder({
           columns: FEATURE_TABLE_COLUMNS,
           ...options,
           rings: circleRowRings,
@@ -227,7 +227,7 @@ describe('many new rows written at once', () => {
       reference,
       Array.from({ length: 500 }, (_, i) => ({ id: `w${i}`, order: `${key(9000)}${i}` })),
     );
-    for (let i = 0; i < 4; i++) internals.advanceVersions(UNBOUNDED);
+    for (let i = 0; i < 4; i++) internals.rebuild(UNBOUNDED);
     await Promise.resolve();
     internals.advanceQueuedBlocks(UNBOUNDED);
     expect(built).toEqual([500]);
@@ -246,10 +246,10 @@ describe('many new rows written at once', () => {
       Array.from({ length: 200 }, (_, i) => ({ id: `c${i}`, order: `${key(9000)}${i}` })),
     );
     // Read before it is built
-    expect(tables.findRow('c5')).toBe(handles[5]);
-    writer.apply(rowPatch([handles[5]], { 'properties:n': [-1] }));
+    expect(tables.getRowRef('c5')).toBe(handles[5]);
+    writer.writeRows(rowPatch([handles[5]], { 'properties:n': [-1] }));
     (reference.rows.get('c5') as ReferenceRow).properties = { n: -1 };
-    expect(tables.findRow('c5')).toBe(handles[5]);
+    expect(tables.getRowRef('c5')).toBe(handles[5]);
     expect(internals.deltaRowCount()).toBe(0);
     expectTablesMatch(tables, reference, ['a'], groupHandleOf);
   });
@@ -261,7 +261,7 @@ describe('many new rows written at once', () => {
       build: (rows, options) =>
         new Promise((resolve) => {
           release = () => {
-            const builder = createRowBlockDataBuilder({
+            const builder = createPageDataBuilder({
               columns: FEATURE_TABLE_COLUMNS,
               ...options,
               rings: circleRowRings,
@@ -306,7 +306,7 @@ describe('many new rows written at once', () => {
     // Gathered
     reads();
     // Being built in the Worker
-    for (let i = 0; i < 4; i++) internals.advanceVersions(UNBOUNDED);
+    for (let i = 0; i < 4; i++) internals.rebuild(UNBOUNDED);
     expect(release).not.toBeNull();
     reads();
     // Built and queued to be taken in
@@ -351,15 +351,15 @@ describe('many new rows written at once', () => {
     expect(internals.deltaRowCount()).toBe(200);
     for (let frame = 0; frame < 6; frame++) {
       internals.advanceQueuedBlocks(UNBOUNDED);
-      internals.advanceVersions(UNBOUNDED);
-      internals.swapVersions();
+      internals.rebuild(UNBOUNDED);
+      internals.swap();
     }
     expect(internals.builtVersions('a').length).toBeGreaterThan(0);
     expect(sizes(internals)).toEqual([200]);
     // The GPU side of the first group of the delta is up: it overlaps the run taken in, so it is
     // not swapped in, and the rows of the delta go to the next version of the run's group
     uploaded = true;
-    expect(() => internals.swapVersions()).not.toThrow();
+    expect(() => internals.swap()).not.toThrow();
     expectTablesMatch(tables, reference, ['a'], groupHandleOf);
     expect(() => internals.flushVersions()).not.toThrow();
     expect(internals.deltaRowCount()).toBe(0);

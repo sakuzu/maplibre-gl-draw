@@ -704,7 +704,7 @@ where input is dispatched: the InputRouter intercepts the click and the
   feature later in the array is in front
 - Candidates come from the spatial index of each dataset (a static
   R-tree over the bboxes of its rows, packed into typed arrays:
-  `@sakuzu/kasane/engine`), and the precise test borrows
+  `@sakuzu/kasane/render`), and the precise test borrows
   `HitTestService.hitTestFeature()`. The test is the same as for Store
   features, including the Multi types and holes. A dataset given as a
   table builds the features of the candidate rows only, and the

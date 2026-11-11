@@ -5,9 +5,9 @@
  * Features written as blocks of the Tabane format, each with the caches of its file
  *
  * The rows are written as `writeTabaneBlocks` of `@sakuzu/tabane` writes them, in the columns of
- * a feature (`columns.ts`). The triangles of the fills of the polygon rows of every row block are
- * made here, once, and kept as a cache that follows the row block in the file of its block
- * (`triangles.ts`), so that a reader copies them (`rowBlockOfTabane`). The name of a block does
+ * a feature (`columns.ts`). The triangles of the fills of the polygon rows of every page are
+ * made here, once, and kept as a cache that follows the page in the file of its block
+ * (`triangles.ts`), so that a reader copies them (`toPage`). The name of a block does
  * not depend on its caches.
  *
  * A pure module: it depends on nothing outside `/table` but its error and `@sakuzu/tabane`, so it
@@ -48,11 +48,11 @@ export interface TabaneFeatureBlocksInput {
   readonly dimensions?: CoordinateDimensions;
   /** The features, in their order */
   readonly rows: readonly TabaneFeatureRow[];
-  /** The most rows of a row block (`TABANE_TARGET_ROWS` of `@sakuzu/tabane` when omitted) */
+  /** The most rows of a page (`TABANE_TARGET_ROWS` of `@sakuzu/tabane` when omitted) */
   readonly targetRows?: number;
-  /** The most points of a row block (`TABANE_TARGET_VERTICES` when omitted) */
+  /** The most points of a page (`TABANE_TARGET_VERTICES` when omitted) */
   readonly targetVertices?: number;
-  /** The most bytes of the row blocks of a block (`TABANE_TARGET_BYTES` when omitted) */
+  /** The most bytes of the pages of a block (`TABANE_TARGET_BYTES` when omitted) */
   readonly targetBytes?: number;
 }
 
@@ -65,7 +65,7 @@ export interface TabaneFeatureBlock {
   /** The block (its name is the SHA-256 of its content, `tabaneNameOf`) */
   readonly block: TabaneBlock;
   /**
-   * The caches of its file, each after the part of its row block (none for a row block without a
+   * The caches of its file, each after the part of its page (none for a page without a
    * polygon): give them to `packTabaneBlock` with the block
    */
   readonly caches: TabaneCache[];
@@ -101,7 +101,7 @@ function writeBlocks(input: Parameters<typeof writeTabaneBlocks>[0]): TabaneBloc
 
 /**
  * Writes features as the blocks of a long run of rows (as `writeTabaneBlocks` of
- * `@sakuzu/tabane`), with the triangles of the fills of the polygons of every row block as a cache
+ * `@sakuzu/tabane`), with the triangles of the fills of the polygons of every page as a cache
  * of the file of its block
  *
  * @example

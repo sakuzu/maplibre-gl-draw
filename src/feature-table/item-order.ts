@@ -31,8 +31,8 @@
  * layers.
  */
 
-import type { RowHandle } from '@sakuzu/kasane';
-import type { GroupHandle, GroupTable, RowGroup, RowTable } from '@sakuzu/kasane/engine';
+import type { GroupHandle, RowRef } from '@sakuzu/kasane';
+import type { GroupTable, RowGroup, RowTable } from '@sakuzu/kasane/render';
 import {
   compareItemKeys,
   groupCode,
@@ -40,7 +40,8 @@ import {
   type ItemWalk,
   ROW_FLAG_DELETED,
   rowCode,
-} from '@sakuzu/kasane/engine';
+} from '@sakuzu/kasane/render';
+
 import { utf8String } from '@sakuzu/tabane';
 import type {
   ItemMove,
@@ -89,9 +90,9 @@ export interface ItemOrderSource {
   getGroupKey(group: GroupHandle): string | undefined;
   readonly groups: GroupTable;
   /** The id of a row */
-  idOf(handle: RowHandle): string | undefined;
+  idOf(handle: RowRef): string | undefined;
   /** Where a row is read (undefined for no row) */
-  placeOf(handle: RowHandle): RowAt | undefined;
+  placeOf(handle: RowRef): RowAt | undefined;
 }
 
 /** The fields of a row that place it, as a row holds them (what `RowsMove.before` keeps) */
@@ -124,9 +125,9 @@ export class ItemOrderWatch {
   private readonly moved = new Set<number>();
   private readonly deleted: number[] = [];
   /** The layer, group and keys of each row moved before the write (absent for a new row) */
-  private readonly before = new Map<RowHandle, readonly unknown[]>();
+  private readonly before = new Map<RowRef, readonly unknown[]>();
   /** The id of each row of `before`, when the moves are told one at a time */
-  private readonly beforeIds = new Map<string, RowHandle>();
+  private readonly beforeIds = new Map<string, RowRef>();
   /** The items of each container before the write (the layers by id, the groups by handle) */
   private readonly layerItems = new Map<string, ItemsKept>();
   private readonly groupItems = new Map<GroupHandle, ItemsKept>();
@@ -164,7 +165,7 @@ export class ItemOrderWatch {
    *
    * @param deleting Whether the write deletes it
    */
-  row(handle: RowHandle, deleting: boolean): void {
+  row(handle: RowRef, deleting: boolean): void {
     const code = rowCode(handle);
     if (this.moved.has(code)) return;
     this.moved.add(code);

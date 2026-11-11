@@ -50,6 +50,7 @@ const RANK = {
   // The layer 2 entries: entries like src/index.ts, and imported by nothing (rule 10)
   webgl: 9,
   kasane: 9,
+  extend: 9,
 };
 
 /** Files at the root of src/ belong to the area given here */

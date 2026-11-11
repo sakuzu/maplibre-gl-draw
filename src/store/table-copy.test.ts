@@ -4,7 +4,7 @@
 /**
  * The copy of a document held as rows into a new Store of rows (`copyTableStore`; 13.7 of the
  * design of the tables: a print and a thumbnail read the document into a Store of rows with
- * `addRowBlocks`, without making its features)
+ * `addPages`, without making its features)
  *
  * - The layers, the groups at their places, the stacking order with its entries from outside the
  *   document, the metadata and the files are copied at once
@@ -67,7 +67,7 @@ function rowsOf(store: Store, layerId: string): Feature[] {
   const view = tables?.get(layerId);
   if (!tables || !view) return [];
   return Array.from(view.listRowHandles(0, view.rowCountWithDeleted))
-    .filter((handle) => tables.findRow(tables.getRowId(handle) as string) !== undefined)
+    .filter((handle) => tables.getRowRef(tables.getRowId(handle) as string) !== undefined)
     .map((handle) => view.getRow(handle) as Feature);
 }
 
@@ -151,7 +151,7 @@ describe('the copy of a document held as rows', () => {
     const read = (s: Store) =>
       s.tables
         ?.readValues({
-          handles: Int32Array.of(s.tables?.findRow('high') ?? -1),
+          handles: Int32Array.of(s.tables?.getRowRef('high') ?? -1),
           fields: new Map([['geometry', []]]),
         })
         .fields.get('geometry');

@@ -56,7 +56,7 @@ function drawn(tables: FeatureTables): string[] {
 /** Whether the copy of the state of the row of an id is hidden (as the drawing reads it) */
 function hiddenInState(tables: FeatureTables, id: string): boolean {
   const internals = featureTablesInternals(tables);
-  const place = internals?.placeOf(tables.findRow(id) as number);
+  const place = internals?.placeOf(tables.getRowRef(id) as number);
   if (!place) throw new Error(`no row ${id}`);
   return (place.group.state[place.row] & STATE_HIDDEN_MASK) !== 0;
 }

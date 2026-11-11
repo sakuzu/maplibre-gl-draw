@@ -13,7 +13,7 @@
  * attributes, from its feature.
  */
 
-import { ROW_FLAG_DELETED } from '@sakuzu/kasane/engine';
+import { ROW_FLAG_DELETED } from '@sakuzu/kasane/render';
 import { featureTablesInternals } from '../../feature-table/feature-tables.js';
 import { rowPoint, rowType, rowValue } from '../../feature-table/row-read.js';
 import { coordinatesBBox } from '../../geometry/bbox.js';

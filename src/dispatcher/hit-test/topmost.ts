@@ -44,7 +44,7 @@
  * of the layer. When no provider at all is registered, this detour never happens.
  */
 
-import type { RowGroup, RowTable } from '@sakuzu/kasane/engine';
+import type { RowGroup, RowTable } from '@sakuzu/kasane/render';
 import type { DisplayHitTestFn } from '../../dataset/dataset.js';
 import type { DatasetManager } from '../../dataset/manager.js';
 import type { Dataset } from '../../dataset/types.js';

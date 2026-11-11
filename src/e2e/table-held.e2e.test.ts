@@ -168,7 +168,7 @@ async function drawWritten(
         e2e: {
           createDraw: typeof import('../index.js').createDraw;
           tables: {
-            createRowBlockBuilder: typeof import('../table/feature-row-blocks.js').createFeatureRowBlockBuilder;
+            createPageBuilder: typeof import('../table/feature-row-blocks.js').createFeaturePageBuilder;
             createTableStore: typeof import('../store/table-memory.js').createTableStore;
           };
           internals: {
@@ -189,7 +189,7 @@ async function drawWritten(
         styleRule: undefined,
         metadata: undefined,
       });
-      const builder = w.e2e.tables.createRowBlockBuilder({});
+      const builder = w.e2e.tables.createPageBuilder({});
       features.forEach((f, i) => {
         builder.addRow({
           id: f.id,
@@ -202,7 +202,7 @@ async function drawWritten(
           locked: false,
         } as never);
       });
-      writer.addRowBlocks('rows', builder.finish());
+      writer.addPages('rows', builder.finish());
       w.draw.destroy();
       w.draw = w.e2e.createDraw(map, { store, initDefaultLayer: false });
 

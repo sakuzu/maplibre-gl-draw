@@ -8,17 +8,17 @@
  * - The bits of each handle are the lowest of the copy, written with `setRowStates`; the bits of a
  *   group with `setGroupStates`, taken by its members; the bits from values come from a flag of a
  *   row, a flag of its group and values of a `whole` column
- * - `hiddenStates` leaves rows out of the rows drawn; the deleted rows are left out anyway
- * - Neither write raises the write mark; both raise the state version of the row blocks
+ * - `hiddenMask` leaves rows out of the rows drawn; the deleted rows are left out anyway
+ * - Neither write raises the write mark; both raise the state version of the pages
  * - The declarations and the writes are checked
  */
 
 import { KasaneError } from '@sakuzu/kasane';
-import { STATE_DELETED } from '@sakuzu/kasane/engine';
+import { STATE_DELETED } from '@sakuzu/kasane/render';
 import { describe, expect, it } from 'vitest';
 import type { BBox } from '../geometry/types.js';
 import { FEATURE_GROUP_COLUMNS, FEATURE_TABLE_COLUMNS } from '../table/tabane/columns.js';
-import { featureRowDataBuilder as createRowBlockDataBuilder, orderKey } from '../test-utils.js';
+import { featureRowDataBuilder as createPageDataBuilder, orderKey } from '../test-utils.js';
 import {
   createTables,
   type FeatureTablesInternals,
@@ -40,7 +40,7 @@ function statesTables(options: Partial<TablesInternalOptions> = {}) {
     columns: FEATURE_TABLE_COLUMNS,
     groupColumns: FEATURE_GROUP_COLUMNS,
     rowStateBits: 2,
-    hiddenStates: MARKED | SHUT | SHUT_GROUP | GROUP_MARK,
+    hiddenMask: MARKED | SHUT | SHUT_GROUP | GROUP_MARK,
     stateByte: (state) => state & 0xff,
     valueStates: {
       rowFlags: [{ column: 'hidden', states: SHUT }],
@@ -49,7 +49,7 @@ function statesTables(options: Partial<TablesInternalOptions> = {}) {
     },
     ...options,
   });
-  writer.applyGroups({
+  writer.writeGroups({
     handles: Int32Array.of(50),
     fields: new Map<'id' | 'parent' | 'key', unknown[]>([
       ['id', ['g']],
@@ -57,7 +57,7 @@ function statesTables(options: Partial<TablesInternalOptions> = {}) {
       ['key', [orderKey(9)]],
     ]),
   });
-  const builder = createRowBlockDataBuilder({
+  const builder = createPageDataBuilder({
     columns: FEATURE_TABLE_COLUMNS,
     groups: [{ handle: 50, id: 'g', key: orderKey(9) }],
   });
@@ -66,9 +66,9 @@ function statesTables(options: Partial<TablesInternalOptions> = {}) {
   builder.addRow({ id: 'b', type: 'Circle', geometry: point, key: orderKey(1), hidden: true });
   builder.addRow({ id: 'c', type: 'Point', geometry: point, key: orderKey(2), group: 50 });
   builder.addRow({ id: 'd', type: 'Marker', geometry: point, key: orderKey(3), deleted: true });
-  writer.addRowBlocks('layer', builder.finish());
+  writer.addPages('layer', builder.finish());
   const internals = featureTablesInternals(tables) as FeatureTablesInternals;
-  internals.addQueuedRowBlocks();
+  internals.addQueuedPages();
   const handle = (id: string) => internals.ids.handleOf(id);
   const stateOf = (id: string): number => {
     const place = internals.placeOf(handle(id));
@@ -114,11 +114,11 @@ describe('the copy of the state of the rows', () => {
 
   it('gives the members the bits of the flag of their group as it is written', () => {
     const { writer, stateOf } = statesTables();
-    writer.applyGroups({ handles: Int32Array.of(50), fields: new Map([['hidden', [true]]]) });
+    writer.writeGroups({ handles: Int32Array.of(50), fields: new Map([['hidden', [true]]]) });
     expect(stateOf('c')).toBe(SHUT_GROUP);
-    writer.applyGroups({ handles: Int32Array.of(50), fields: new Map([['locked', [true]]]) });
+    writer.writeGroups({ handles: Int32Array.of(50), fields: new Map([['locked', [true]]]) });
     expect(stateOf('c')).toBe(SHUT_GROUP);
-    writer.applyGroups({ handles: Int32Array.of(50), fields: new Map([['hidden', [false]]]) });
+    writer.writeGroups({ handles: Int32Array.of(50), fields: new Map([['hidden', [false]]]) });
     expect(stateOf('c')).toBe(0);
   });
 
@@ -130,7 +130,7 @@ describe('the copy of the state of the rows', () => {
     expect(() => writer.setGroupStates(Int32Array.of(50), MARKED, MARKED)).toThrow(KasaneError);
     expect(() => writer.setGroupStates(Int32Array.of(50), STATE_DELETED, 0)).toThrow(KasaneError);
     expect(() => writer.setGroupStates(Int32Array.of(51), GROUP_MARK, 0)).toThrow(KasaneError);
-    expect(() => statesTables({ hiddenStates: STATE_DELETED })).toThrow(KasaneError);
+    expect(() => statesTables({ hiddenMask: STATE_DELETED })).toThrow(KasaneError);
     expect(() =>
       statesTables({ valueStates: { rowFlags: [{ column: 'type', states: SHUT }] } }),
     ).toThrow(KasaneError);

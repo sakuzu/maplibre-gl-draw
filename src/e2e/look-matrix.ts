@@ -201,7 +201,7 @@ const copyId = (i: number, round: number): string => `m${i}-copy${round}`;
 
 /**
  * Puts features in the Store: in the left half (`copy` false) or their copies in the right half,
- * made by `features.createMany` or put in a row block
+ * made by `features.createMany` or put in a page
  */
 async function put(
   page: Page,
@@ -217,7 +217,7 @@ async function put(
         writer: import('../kasane/index.js').FeatureTablesWriter;
         e2e: {
           tables: {
-            createRowBlockBuilder: typeof import('../table/feature-row-blocks.js').createFeatureRowBlockBuilder;
+            createPageBuilder: typeof import('../table/feature-row-blocks.js').createFeaturePageBuilder;
           };
         };
       };
@@ -332,7 +332,7 @@ async function put(
         };
       });
       if (holding === 'block' && !copy) {
-        const builder = w.e2e.tables.createRowBlockBuilder({});
+        const builder = w.e2e.tables.createPageBuilder({});
         inputs.forEach((f, k) => {
           builder.addRow({
             id: f.id,
@@ -345,7 +345,7 @@ async function put(
             locked: false,
           } as never);
         });
-        w.writer.addRowBlocks('L', builder.finish());
+        w.writer.addPages('L', builder.finish());
       } else if (!draw.features.createMany(inputs as never)) {
         throw new Error('the features were not created');
       }

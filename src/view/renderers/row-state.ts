@@ -19,7 +19,7 @@
  * byte of the row of each of its instances (`rowStateOf`), so what it draws moves as the rows do.
  */
 
-import type { RowHandle } from '@sakuzu/kasane';
+import type { RowRef } from '@sakuzu/kasane';
 import type { Gpu, GpuContext } from '../../api/extension/webgl.js';
 import { type DraggedRows, draggedRowMotionsOf } from '../../feature-table/dragged-rows.js';
 import { MOVE_SETS } from '../../feature-table/feature-row-states.js';
@@ -498,7 +498,7 @@ export function uploadRowState(
  * @returns The byte; 0 for a row not dragged, or when no row is (`dragged` is null). Its lowest
  *   bit is 0: set it (`| 1`) to hide the row (`rowStateHidden`)
  */
-export function rowStateOf(dragged: DraggedRows | null, handle: RowHandle): number {
+export function rowStateOf(dragged: DraggedRows | null, handle: RowRef): number {
   if (!dragged) return 0;
   return draggedRowMotionsOf(dragged)?.gpuStateOf(handle) ?? 0;
 }

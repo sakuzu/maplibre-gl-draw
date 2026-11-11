@@ -22,7 +22,7 @@
  * are drawn in the order of the table whatever the order within the children.
  */
 
-import type { ShapeFormReader } from '@sakuzu/kasane/engine';
+import type { ShapeFormReader } from '@sakuzu/kasane/render';
 import { drawPropertyKey } from '../shared/properties.js';
 import type { Feature, FeatureCoordinates } from '../shared/types/model.js';
 import type { Color } from '../shared/types/style.js';

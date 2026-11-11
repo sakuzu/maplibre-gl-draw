@@ -9,7 +9,7 @@
  * put back into the draw order (the order of the rows) before they are returned.
  */
 
-import { buildPackedRTree, type PackedRTree, searchPackedRTree } from '@sakuzu/kasane/engine';
+import { buildPackedRTree, type PackedRTree, searchPackedRTree } from '@sakuzu/kasane/render';
 import type { BBox } from '../geometry/types.js';
 
 /**

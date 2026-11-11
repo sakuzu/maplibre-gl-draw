@@ -21,7 +21,7 @@ import type { Store } from '../store/store.js';
 import { createTableStore } from '../store/table-memory.js';
 import type { Feature } from '../store/types.js';
 import { FEATURE_TABLE_COLUMNS } from '../table/tabane/columns.js';
-import { featureRowDataBuilder as createRowBlockDataBuilder } from '../test-utils.js';
+import { featureRowDataBuilder as createPageDataBuilder } from '../test-utils.js';
 import {
   createTables,
   type FeatureTablesInternals,
@@ -70,7 +70,7 @@ function storeWith(features: readonly Feature[]): {
   });
   store.createFeatures([...features]);
   const internals = featureTablesInternals(store.tables) as FeatureTablesInternals;
-  internals.addQueuedRowBlocks();
+  internals.addQueuedPages();
   internals.flushVersions();
   return { store, internals };
 }
@@ -155,7 +155,7 @@ describe('the boxes of the rows whose boxes come from more than their points', (
 
   it('finds every row by the box of its points in tables given no boxes', () => {
     const { tables, writer } = createTables({ columns: FEATURE_TABLE_COLUMNS });
-    const builder = createRowBlockDataBuilder({ columns: FEATURE_TABLE_COLUMNS });
+    const builder = createPageDataBuilder({ columns: FEATURE_TABLE_COLUMNS });
     builder.addRow({
       id: 'image',
       type: 'Image',
@@ -163,9 +163,9 @@ describe('the boxes of the rows whose boxes come from more than their points', (
       key: 'a0',
       properties: IMAGE.properties,
     });
-    writer.addRowBlocks('a', builder.finish());
+    writer.addPages('a', builder.finish());
     const internals = featureTablesInternals(tables) as FeatureTablesInternals;
-    internals.addQueuedRowBlocks();
+    internals.addQueuedPages();
     const store = { tables } as unknown as Store;
     expect(idsIn(store, internals, cornerOf(getBoundingBox(IMAGE, 512)))).toEqual([]);
     expect(idsIn(store, internals, [10, 20, 10, 20])).toEqual(['image']);

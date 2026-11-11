@@ -86,7 +86,7 @@ function rowsOf(instance: Draw, tables: FeatureTables): Feature[] {
     view?.listRowHandles(0, 100) ?? [],
     (handle) => tables.getRowId(handle) as string,
   )
-    .filter((id) => tables.findRow(id) !== undefined)
+    .filter((id) => tables.getRowRef(id) !== undefined)
     .map((id) => instance.getStore().getFeature(id) as Feature);
 }
 
@@ -94,7 +94,7 @@ describe('draw.features.restore', () => {
   it('writes the rows, notifies the values before as previousValues and returns them', () => {
     const { draw, tables, notified } = setup();
     const start = rowsOf(draw, tables);
-    const handles = Int32Array.from(['p1', 'p2'], (id) => tables.findRow(id) as number);
+    const handles = Int32Array.from(['p1', 'p2'], (id) => tables.getRowRef(id) as number);
     const before = draw.features.restore(
       createRowValues({
         handles,
@@ -126,7 +126,7 @@ describe('draw.features.restore', () => {
   it('is refused while read-only', () => {
     const { draw, tables } = setup();
     draw.setReadOnly(true);
-    const handle = tables.findRow('p1') as number;
+    const handle = tables.getRowRef('p1') as number;
     expect(
       draw.features.restore(
         createRowValues({
@@ -142,7 +142,7 @@ describe('draw.features.restore', () => {
     const { draw, tables } = setup();
     const values = (id: string) =>
       createRowValues({
-        handles: Int32Array.of(tables.findRow(id) as number),
+        handles: Int32Array.of(tables.getRowRef(id) as number),
         fields: new Map([['properties:n', [99]]]),
       });
     draw.features.update('p1', { locked: true });
@@ -169,7 +169,7 @@ describe('draw.features.restore', () => {
 
   it('throws on values of the wrong shape or a handle of no row, writing nothing', () => {
     const { draw, tables, notified } = setup();
-    const handle = tables.findRow('p1') as number;
+    const handle = tables.getRowRef('p1') as number;
     const count = notified.length;
     const call = (values: unknown) => () => draw.features.restore(values as FeatureValues);
     expect(call(null)).toThrow(expect.objectContaining({ code: 'invalid-input' }));
@@ -223,7 +223,7 @@ describe('draw.features.releaseRestore', () => {
     expect(token).toBeDefined();
     // Kept through the next versions of the blocks
     featureTablesInternals(tables)?.flushVersions();
-    expect(tables.getRowId(tables.findRow('p0') as number)).toBe('p0');
+    expect(tables.getRowId(tables.getRowRef('p0') as number)).toBe('p0');
     draw.features.releaseRestore(token);
     featureTablesInternals(tables)?.flushVersions();
     expect(() => draw.features.restore(change.previousValues as FeatureValues)).toThrow(
@@ -257,7 +257,7 @@ describe('the writes of draw.features of rows that are not selected', () => {
     const change = notified[notified.length - 1];
     expect(change.features?.updated ?? []).toEqual([]);
     expect(Array.from(change.rows?.layers.get('rows')?.updated ?? [])).toEqual([
-      tables.findRow('p2'),
+      tables.getRowRef('p2'),
     ]);
     draw.features.update('p3', { visible: false });
     expect(steps).toHaveLength(2);

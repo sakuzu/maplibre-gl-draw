@@ -17,7 +17,7 @@
  * the rows of a layer.
  */
 
-import type { RowGroup } from '@sakuzu/kasane/engine';
+import type { RowGroup } from '@sakuzu/kasane/render';
 import { rowType } from '../../feature-table/row-read.js';
 import type { BBox } from '../../geometry/types.js';
 import { degreesPerMeterAt } from '../../shared/math/ground-scale.js';

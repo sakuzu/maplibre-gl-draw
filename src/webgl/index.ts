@@ -71,9 +71,11 @@ export type {
   GpuRowBufferFactory,
   OverlayContext,
   ProgramCompile,
-  RowRef,
   Webgl,
 } from '../api/extension/webgl.js';
+
+// The rows of a layer read without making features
+export type { LayerTableView, RowRef } from '../api/tables.js';
 
 // Shaders and projection
 export { DEFAULT_TILE_SIZE } from '../shared/math/constants.js';
@@ -119,6 +121,7 @@ export { terrainTessellationStep } from '../view/terrain/polygon.js';
 export { densifyPath } from '../view/terrain/tessellation.js';
 
 // Rows being dragged
+export type { DraggedRows } from '../feature-table/dragged-rows.js';
 export type { RowStateBinding, RowStateTexture } from '../view/renderers/row-state.js';
 export {
   createRowStateTexture,

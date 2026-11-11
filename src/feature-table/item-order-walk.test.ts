@@ -9,9 +9,10 @@
  * from the whole lists is kept here as the reference.
  */
 
-import type { RowHandle } from '@sakuzu/kasane';
-import type { GroupHandle, RowGroup, RowTable, TableItems } from '@sakuzu/kasane/engine';
-import { compareRowKeys, ItemWalk, ROW_FLAG_DELETED } from '@sakuzu/kasane/engine';
+import type { GroupHandle, RowRef } from '@sakuzu/kasane';
+import type { RowGroup, RowTable, TableItems } from '@sakuzu/kasane/render';
+import { compareRowKeys, ItemWalk, ROW_FLAG_DELETED } from '@sakuzu/kasane/render';
+
 import { utf8String } from '@sakuzu/tabane';
 import { describe, expect, it } from 'vitest';
 import type { FeatureTables, FeatureTablesWriter, RowField } from '../api/tables.js';
@@ -30,7 +31,7 @@ import { groupKeyMoves, type ItemOrderSource, ORDER_ITEM_LIMIT } from './item-or
 // === The reference: the changes made from the lists of every item ===
 
 /** The number of a row as an item */
-function rowCode(handle: RowHandle): number {
+function rowCode(handle: RowRef): number {
   return handle * 2;
 }
 
@@ -85,7 +86,7 @@ class FullListWatch {
   private readonly moved = new Set<number>();
   private readonly deleted: number[] = [];
   /** The layer, group and keys of each row moved before the write (absent for a new row) */
-  private readonly before = new Map<RowHandle, readonly unknown[]>();
+  private readonly before = new Map<RowRef, readonly unknown[]>();
 
   constructor(private readonly source: ReferenceSource) {}
 
@@ -114,7 +115,7 @@ class FullListWatch {
    *
    * @param deleting Whether the write deletes it
    */
-  row(handle: RowHandle, deleting: boolean): void {
+  row(handle: RowRef, deleting: boolean): void {
     const code = rowCode(handle);
     if (this.moved.has(code)) return;
     this.moved.add(code);
@@ -201,7 +202,7 @@ class FullListWatch {
       idOf: (code) => this.idOf(code, groupIds),
     }) as ItemMove[];
     // A row that was somewhere tells its place before
-    const handleOf = new Map<string, RowHandle>();
+    const handleOf = new Map<string, RowRef>();
     for (const handle of this.before.keys()) {
       const id = this.source.idOf(handle);
       if (id !== undefined) handleOf.set(id, handle);
@@ -265,7 +266,7 @@ class FullListWatch {
       codes.forEach((code, i) => {
         itemIndex.set(code, i);
       });
-      const memberIndex = new Map<GroupHandle, Map<RowHandle, number>>();
+      const memberIndex = new Map<GroupHandle, Map<RowRef, number>>();
       const belowOf = (at: RowAt): { kind: number; handle: number } => {
         const handle = at.group.data.handles[at.row];
         const group = at.group.data.groups[at.row];
@@ -582,7 +583,7 @@ function randomPatch(
     [pool[picked.length], pool[k]] = [pool[k], pool[picked.length]];
     picked.push(pool[picked.length]);
   }
-  const handles = Int32Array.from(picked, (id) => tables.findRow(id) as number);
+  const handles = Int32Array.from(picked, (id) => tables.getRowRef(id) as number);
   const layerOfRow = (handle: number) => internals.placeOf(handle)?.table.tableId ?? 'a';
   const kind = random();
   if (kind < 0.3 || many) {
@@ -664,7 +665,7 @@ describe('the changes of the order read from the items next to the ones a write 
         if (!patch) continue;
         const reference = referenceWatch(internals, patch);
         notified.length = 0;
-        store.transact(() => writer.apply(patch), 'remote');
+        store.transact(() => writer.writeRows(patch), 'remote');
         const expected: ItemOrderChange[] = reference?.finish() ?? [];
         const actual = notified.flatMap((change) => change.order ?? []);
         expect(actual, `seed ${seed}, step ${step}`).toEqual(expected);
@@ -672,7 +673,7 @@ describe('the changes of the order read from the items next to the ones a write 
         ranges += actual.filter((change) => change.kind === 'rows').length;
         // The next versions of the row groups now and then: the rows written go back to them
         if (step % 30 === 29) {
-          internals.addQueuedRowBlocks();
+          internals.addQueuedPages();
           internals.flushVersions();
         }
       }
@@ -690,7 +691,7 @@ describe('the changes of the order read from the items next to the ones a write 
       // Members in the groups
       for (let step = 0; step < 30; step++) {
         const patch = randomPatch(random, tables, writer, internals, next, false);
-        if (patch) store.transact(() => writer.apply(patch), 'remote');
+        if (patch) store.transact(() => writer.writeRows(patch), 'remote');
       }
       for (let step = 0; step < 40; step++) {
         const groups = GROUPS.filter(() => random() < 0.5).map((id) =>
@@ -711,7 +712,7 @@ describe('the changes of the order read from the items next to the ones a write 
         }
         store.transact(
           () =>
-            writer.applyGroups({
+            writer.writeGroups({
               handles: Int32Array.from(groups),
               fields: new Map([['key', keys]]),
             }),

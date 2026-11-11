@@ -24,11 +24,7 @@
  * the tests as it is.
  */
 
-import {
-  createRowBlockBuilder,
-  type RowBlock,
-  transferList,
-} from '@sakuzu/maplibre-gl-draw/kasane';
+import { createPageBuilder, type Page, transferList } from '@sakuzu/maplibre-gl-draw/table';
 import {
   type BenchFeature,
   benchFeature,
@@ -71,7 +67,7 @@ export type TableWorkerMessage =
   /** Every part has come: the lines of them (the blank ones left out) */
   | { readonly kind: 'counted'; readonly lines: number }
   /** Row groups built, the ones of the run before them sent already */
-  | { readonly kind: 'groups'; readonly groups: RowBlock[] }
+  | { readonly kind: 'groups'; readonly groups: Page[] }
   /** Every row group is sent */
   | {
       readonly kind: 'built';
@@ -121,7 +117,7 @@ export function createOpenWork(
   let styles: Record<string, unknown>[] = [];
   let failed = false;
   /** What is being built */
-  let builder = createRowBlockBuilder();
+  let builder = createPageBuilder();
   const extent = emptyExtent();
   let built = 0;
   let readMs = 0;
@@ -138,7 +134,7 @@ export function createOpenWork(
     const b0 = performance.now();
     const groups = builder.finish();
     buildMs += performance.now() - b0;
-    builder = createRowBlockBuilder();
+    builder = createPageBuilder();
     post({ kind: 'groups', groups }, transferList(groups));
   };
 

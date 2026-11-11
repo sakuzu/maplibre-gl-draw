@@ -11,7 +11,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createTableStore } from '../store/table-memory.js';
 import { FEATURE_TABLE_COLUMNS } from '../table/tabane/columns.js';
-import { featureRowDataBuilder as createRowBlockDataBuilder } from '../test-utils.js';
+import { featureRowDataBuilder as createPageDataBuilder } from '../test-utils.js';
 import type { FeatureTablesInternals } from './feature-tables.js';
 import { featureTablesInternals } from './feature-tables.js';
 
@@ -19,7 +19,7 @@ import { featureTablesInternals } from './feature-tables.js';
 const COUNT = 20_000;
 
 function blocks() {
-  const builder = createRowBlockDataBuilder({ columns: FEATURE_TABLE_COLUMNS });
+  const builder = createPageDataBuilder({ columns: FEATURE_TABLE_COLUMNS });
   for (let i = 0; i < COUNT; i++) {
     builder.addRow({
       id: `p${i}`,
@@ -58,9 +58,9 @@ describe('the work of the tables of a Store of core while the page is idle', () 
       styleRule: undefined,
       metadata: undefined,
     });
-    writer.addRowBlocks('a', blocks());
+    writer.addPages('a', blocks());
     const internals = featureTablesInternals(store.tables) as FeatureTablesInternals;
-    internals.addQueuedRowBlocks();
+    internals.addQueuedPages();
     // The build waits for an idle period of the page
     expect(vi.getTimerCount()).toBeGreaterThan(0);
     for (let i = 0; i < 10_000 && vi.getTimerCount() > 0; i++) vi.advanceTimersByTime(100);

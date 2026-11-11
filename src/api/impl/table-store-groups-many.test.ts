@@ -9,7 +9,7 @@
  * them in
  */
 
-import { RowSkips, RowTable } from '@sakuzu/kasane/engine';
+import { RowSkips, RowTable } from '@sakuzu/kasane/render';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { FeatureTablesWriter } from '../../api/tables.js';
 import { featureTablesInternals } from '../../feature-table/feature-tables.js';
@@ -122,7 +122,7 @@ describe('many groups at once over a Store of rows', () => {
   it('writes the members of many groups in one write, and reads a few rows per group', () => {
     const n = 2000;
     const { draw, writer } = instance(n);
-    const apply = vi.spyOn(writer, 'apply');
+    const apply = vi.spyOn(writer, 'writeRows');
     const ids = Array.from({ length: n / 2 }, (_, i) => `g${i}`);
     draw.groups.createMany(
       ids.map((id, i) => ({ id, featureIds: [`f${2 * i}`, `f${2 * i + 1}`] })),

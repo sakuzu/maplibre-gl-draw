@@ -118,7 +118,7 @@ export interface TableSnapshot {
 /**
  * Something compared with the model: a Store behind the operations
  *
- * `apply` makes the calls of one operation (a throw is a difference of the run); `read` reads
+ * `writeRows` makes the calls of one operation (a throw is a difference of the run); `read` reads
  * what is compared. Keep the implementations thin: the model knows nothing of them.
  */
 export interface TableSubject {

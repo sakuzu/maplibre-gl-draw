@@ -12,7 +12,7 @@
 
 import { describe, expect, it } from 'vitest';
 import { FEATURE_TABLE_COLUMNS } from '../table/tabane/columns.js';
-import { featureRowDataBuilder as createRowBlockDataBuilder } from '../test-utils.js';
+import { featureRowDataBuilder as createPageDataBuilder } from '../test-utils.js';
 import {
   createTables,
   type FeatureTablesInternals,
@@ -24,7 +24,7 @@ function tablesWith(beforeRead?: () => void) {
     columns: FEATURE_TABLE_COLUMNS,
     ...(beforeRead ? { beforeRead } : {}),
   });
-  const builder = createRowBlockDataBuilder({ columns: FEATURE_TABLE_COLUMNS });
+  const builder = createPageDataBuilder({ columns: FEATURE_TABLE_COLUMNS });
   for (let i = 0; i < 5; i++) {
     builder.addRow({
       id: `p${i}`,
@@ -33,9 +33,9 @@ function tablesWith(beforeRead?: () => void) {
       key: `a${i}`,
     });
   }
-  writer.addRowBlocks('a', builder.finish());
+  writer.addPages('a', builder.finish());
   const internals = featureTablesInternals(tables) as FeatureTablesInternals;
-  internals.addQueuedRowBlocks();
+  internals.addQueuedPages();
   return { tables, internals };
 }
 
@@ -45,7 +45,7 @@ describe('what the tables call before a read', () => {
     const { tables, internals } = tablesWith(() => {
       calls++;
     });
-    const handle = tables.findRow('p2') as number;
+    const handle = tables.getRowRef('p2') as number;
     expect(calls).toBe(1);
     expect(tables.getRowId(handle)).toBe('p2');
     expect(calls).toBe(2);
@@ -71,6 +71,6 @@ describe('what the tables call before a read', () => {
     const { tables } = tablesWith();
     const view = tables.get('a');
     expect(view?.rowCount).toBe(5);
-    expect(tables.findRow('p4')).toBeDefined();
+    expect(tables.getRowRef('p4')).toBeDefined();
   });
 });

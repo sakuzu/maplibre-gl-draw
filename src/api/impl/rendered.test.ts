@@ -391,7 +391,10 @@ describe('rendered.changed', () => {
     afterNow(draw.rendered.changed, (ids) => told.push(ids));
     const tables = store.tables as FeatureTables;
     const states = internalsOf(tables).states;
-    const handles = Int32Array.of(tables.findRow('r0') as number, tables.findRow('r1') as number);
+    const handles = Int32Array.of(
+      tables.getRowRef('r0') as number,
+      tables.getRowRef('r1') as number,
+    );
     states.setMoving(handles, BULK_MOVE_SET);
     states.setTranslation(BULK_MOVE_SET, 1, 0);
     drawFrame();

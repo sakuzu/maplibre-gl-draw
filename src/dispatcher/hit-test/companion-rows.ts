@@ -26,8 +26,8 @@
  * read here: the hit reads it as it is.
  */
 
-import type { RowHandle } from '@sakuzu/kasane';
-import type { RowGroup, RowTable, TableOrder } from '@sakuzu/kasane/engine';
+import type { RowRef } from '@sakuzu/kasane';
+import type { RowGroup, RowTable, TableOrder } from '@sakuzu/kasane/render';
 import type { LayerTableView } from '../../api/tables.js';
 import type { FeatureTablesInternals } from '../../feature-table/feature-tables.js';
 import { rowFeatureToRead, rowHasGeometry } from '../../feature-table/row-read.js';
@@ -53,7 +53,7 @@ export interface CompanionRows {
 interface Told {
   /** The number of handles told before the first one held */
   start: number;
-  readonly handles: RowHandle[];
+  readonly handles: RowRef[];
 }
 
 /**
@@ -73,7 +73,7 @@ interface Kept {
   /** The revision of the delta the places of the rows were found at */
   delta: number;
   /** The handles of the rows with companions */
-  readonly handles: Set<RowHandle>;
+  readonly handles: Set<RowRef>;
   rows: CompanionRows;
 }
 
@@ -91,7 +91,7 @@ function toldOf(tables: FeatureTablesInternals): Map<string, Told> {
   const known = TOLD.get(tables);
   if (known) return known;
   const told = new Map<string, Told>();
-  const tell = (layerId: string, handle: RowHandle): void => {
+  const tell = (layerId: string, handle: RowRef): void => {
     let list = told.get(layerId);
     if (!list) {
       list = { start: 0, handles: [] };
@@ -109,7 +109,7 @@ function toldOf(tables: FeatureTablesInternals): Map<string, Told> {
   tables.onDeltaChanged((layerId, change) => {
     // The layer of the delta, and the layer of the copy of the row in a row group: where it was
     // read before it came into a delta (from another layer), or is read again once it left
-    const moved = (handle: RowHandle): void => {
+    const moved = (handle: RowRef): void => {
       tell(layerId, handle);
       const copy = tables.rowGroup(tables.ids.mainGroup(handle))?.table.tableId;
       if (copy !== undefined && copy !== layerId) tell(copy, handle);
@@ -170,7 +170,7 @@ export function companionRowsOf(
   let changed = false;
   if (told && kept.seen < toldEnd) {
     const view = tables.view(table.tableId);
-    const asked = new Set<RowHandle>();
+    const asked = new Set<RowRef>();
     for (let i = kept.seen - told.start; i < told.handles.length; i++) {
       const handle = told.handles[i];
       if (asked.has(handle)) continue;
@@ -195,7 +195,7 @@ export function companionRowsOf(
 function placeIn(
   tables: FeatureTablesInternals,
   table: RowTable,
-  handle: RowHandle,
+  handle: RowRef,
 ): { readonly group: RowGroup; readonly row: number } | null {
   const place = tables.placeOf(handle);
   if (!place || place.table !== table || !table.readsRow(place.group, place.row)) return null;
@@ -208,7 +208,7 @@ function hasCompanion(
   table: RowTable,
   view: LayerTableView | undefined,
   companions: FeatureCompanionRegistry,
-  handle: RowHandle,
+  handle: RowRef,
 ): boolean {
   const place = placeIn(tables, table, handle);
   if (!place) return false;
@@ -229,7 +229,7 @@ function hasCompanion(
 function placeRows(
   tables: FeatureTablesInternals,
   table: RowTable,
-  handles: ReadonlySet<RowHandle>,
+  handles: ReadonlySet<RowRef>,
 ): CompanionRows {
   const byGroup = new Map<RowGroup, number[]>();
   for (const handle of handles) {
@@ -254,8 +254,8 @@ function findCompanionRows(
   table: RowTable,
   order: TableOrder,
   companions: FeatureCompanionRegistry,
-): { readonly handles: Set<RowHandle>; readonly rows: CompanionRows } {
-  const handles = new Set<RowHandle>();
+): { readonly handles: Set<RowRef>; readonly rows: CompanionRows } {
+  const handles = new Set<RowRef>();
   const groups: RowGroup[] = [];
   const rows: number[] = [];
   const byGroup = new Map<RowGroup, number[]>();

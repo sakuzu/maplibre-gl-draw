@@ -284,7 +284,7 @@ async function drawScene(
           createDraw: typeof import('../index.js').createDraw;
           tables: {
             createFeatureTables: typeof import('../kasane/index.js').createFeatureTables;
-            createRowBlockBuilder: typeof import('../table/feature-row-blocks.js').createFeatureRowBlockBuilder;
+            createPageBuilder: typeof import('../table/feature-row-blocks.js').createFeaturePageBuilder;
           };
           internals: {
             MemoryContractStore: new () => Contract;
@@ -337,7 +337,7 @@ async function drawScene(
         const { tables, writer } = w.e2e.tables.createFeatureTables(
           dims ? { dimensionsOf: () => dims } : undefined,
         );
-        const builder = w.e2e.tables.createRowBlockBuilder(dims ? { dimensions: dims } : {});
+        const builder = w.e2e.tables.createPageBuilder(dims ? { dimensions: dims } : {});
         features.forEach((f, i) => {
           builder.addRow({
             id: f.id,
@@ -352,7 +352,7 @@ async function drawScene(
             locked: false,
           } as never);
         });
-        writer.addRowBlocks('rows', builder.finish());
+        writer.addPages('rows', builder.finish());
         Object.defineProperty(store, 'tables', { value: tables });
       }
       w.draw.destroy();

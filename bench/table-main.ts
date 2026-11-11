@@ -253,7 +253,7 @@ function rowsWorker(): FeatureTablesWorker {
 }
 
 // The rows are held by an in-memory Store of rows: its tables are drawn, its writer adds the
-// row blocks and writes the changes of others
+// pages and writes the changes of others
 const ofRows =
   params.mode === 'table'
     ? createPublicTableStore({
@@ -496,7 +496,7 @@ function putBigArea(extent: [number, number, number, number]): void {
       offsets: Int32Array.of(0, bytes.length),
       bytes,
     });
-    tablesOfPage.writer.apply({
+    tablesOfPage.writer.writeRows({
       handles: Int32Array.of(handle),
       fields: new Map<RowField, unknown[]>([
         ['type', ['Polygon']],

@@ -17,8 +17,8 @@ import { createTableStore } from '../../store/table-memory.js';
 import type { Feature, Group, Layer } from '../../store/types.js';
 import { FEATURE_TABLE_COLUMNS } from '../../table/tabane/columns.js';
 import {
+  featureRowDataBuilder as createPageDataBuilder,
   createResourceDeps,
-  featureRowDataBuilder as createRowBlockDataBuilder,
 } from '../../test-utils.js';
 import { DrawError } from '../errors.js';
 import type { FeaturesCollection } from '../features.js';
@@ -331,13 +331,13 @@ describe('the names generated over a Store of rows', () => {
     names.dispose();
   });
 
-  it('takes in the names of the rows of row blocks taken in, of the types of the rows', () => {
+  it('takes in the names of the rows of pages taken in, of the types of the rows', () => {
     const { store, writer } = createTableStore();
     store.createLayer(layerOf('blocks', true));
     const names = new AutoNameGenerator(store);
     expect(names.generateName('Point')).toBe('Point 1');
     expect(names.generateName('Polygon')).toBe('Polygon 1');
-    const builder = createRowBlockDataBuilder({ columns: FEATURE_TABLE_COLUMNS, targetRows: 64 });
+    const builder = createPageDataBuilder({ columns: FEATURE_TABLE_COLUMNS, targetRows: 64 });
     for (let i = 0; i < 300; i++) {
       const point = i % 3 !== 0;
       builder.addRow({
@@ -370,7 +370,7 @@ describe('the names generated over a Store of rows', () => {
                   : {},
       });
     }
-    writer.addRowBlocks('blocks', builder.finish());
+    writer.addPages('blocks', builder.finish());
     expect(names.generateName('Point')).toBe('Point 901');
     // Row 120 is a Polygon (120 % 3 === 0): its name 'Point 77' is not of its type
     expect(names.generateName('Polygon')).toBe('Polygon 41');

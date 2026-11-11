@@ -14,7 +14,7 @@ import { MemoryContractStore } from '../../store/memory.js';
 import { FEATURE_TABLE_COLUMNS } from '../../table/tabane/columns.js';
 import {
   createMapStub,
-  featureRowDataBuilder as createRowBlockDataBuilder,
+  featureRowDataBuilder as createPageDataBuilder,
   createSyntheticInput,
   feature,
   orderKey,
@@ -79,18 +79,18 @@ describe('debug.gpu and the hooks of measurement of the rows', () => {
 
   it('writes the state of the rows of the tables of the Store', () => {
     const { tables, writer } = createFeatureTablesStore();
-    const builder = createRowBlockDataBuilder({ columns: FEATURE_TABLE_COLUMNS });
+    const builder = createPageDataBuilder({ columns: FEATURE_TABLE_COLUMNS });
     ['a', 'b'].forEach((id, i) => {
       builder.addRow(rowOfFeature(feature(id, 'Point', [i, i]), orderKey(i)));
     });
-    writer.addRowBlocks('rows', builder.finish());
-    featureTablesInternals(tables)?.addQueuedRowBlocks();
+    writer.addPages('rows', builder.finish());
+    featureTablesInternals(tables)?.addQueuedPages();
     const contract = new MemoryContractStore();
     Object.defineProperty(contract, 'tables', { value: tables });
     draw = createDraw(createMapStub().map, { store: contract, initDefaultLayer: false });
 
     const debug = tableDiagnosticsOf(draw);
-    const handle = tables.findRow('b') as number;
+    const handle = tables.getRowRef('b') as number;
     debug.setRowsMoving([handle], 2);
     debug.setMoveTranslation(2, 0.5, -0.5);
     const internals = featureTablesInternals(tables);

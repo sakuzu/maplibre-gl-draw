@@ -9,13 +9,13 @@
  *   reference, every value of the positions included, in layers of `xy`, `xyz`, `xym` and `xyzm`
  *
  * - A write of a `z` or an `m` only is written in place and draws nothing again
- * - The values read are the values written back: `snapshot` and `apply` keep the `z` and the `m`
+ * - The values read are the values written back: `snapshot` and `writeRows` keep the `z` and the `m`
  * - A row of a layer of `z` or `m` is not made a feature, and a row group or a row of other
  *   dimensions is refused
  */
 
-import { mergeRowBlock } from '@sakuzu/kasane';
-import type { InPlaceRowWrite } from '@sakuzu/kasane/engine';
+import { mergePages } from '@sakuzu/kasane';
+import type { InPlaceRowWrite } from '@sakuzu/kasane/render';
 import { type CoordinateDimensions, planarRowBox } from '@sakuzu/tabane';
 import type { Geometry, Position } from 'geojson';
 import { describe, expect, it } from 'vitest';
@@ -24,7 +24,7 @@ import { circleRowRings } from '../table/circle-rings.js';
 import { geometryColumnOf } from '../table/feature-row-columns.js';
 import { FEATURE_TABLE_COLUMNS } from '../table/tabane/columns.js';
 import {
-  featureRowDataBuilder as createRowBlockDataBuilder,
+  featureRowDataBuilder as createPageDataBuilder,
   expectTablesMatch,
   referenceKey as key,
   type RandomGeometry,
@@ -86,14 +86,14 @@ function cloningWorker(): FeatureTablesWorker & { calls: number } {
     calls: 0,
     merge: async (merge: Parameters<FeatureTablesWorker['merge']>[0]) => {
       worker.calls++;
-      return mergeRowBlock(structuredClone(merge));
+      return mergePages(structuredClone(merge));
     },
     build: async (
       rows: Parameters<FeatureTablesWorker['build']>[0],
       options: Parameters<FeatureTablesWorker['build']>[1],
     ) => {
       worker.calls++;
-      const builder = createRowBlockDataBuilder({
+      const builder = createPageDataBuilder({
         columns: FEATURE_TABLE_COLUMNS,
         ...structuredClone(options),
         rings: circleRowRings,
@@ -140,13 +140,13 @@ describe('the rows of layers of every dimensions', () => {
           writes.step(step);
           if (step % 50 === 49) {
             expectTablesMatch(tables, reference, layerIds, groupHandleOf);
-            internals.advanceVersions(steps(3));
+            internals.rebuild(steps(3));
           }
           if (step % 50 === 24) {
             // A group of features put in another place: its members are cut out of their row
             // groups, as they are
             const order = key(random() * 1e6);
-            setup.writer.applyGroups({
+            setup.writer.writeGroups({
               handles: Int32Array.of(groupHandleOf('ga')),
               fields: new Map([['key', [order]]]),
             });
@@ -196,7 +196,7 @@ describe('the rows of layers of every dimensions', () => {
         locked: false,
         deleted: false,
       }));
-      writer.apply(
+      writer.writeRows(
         rowPatch(Array.from(handles), {
           type: rows.map((row) => row.type),
           parent: rows.map(() => 'a'),
@@ -206,18 +206,18 @@ describe('the rows of layers of every dimensions', () => {
       );
       for (const row of rows) reference.rows.set(row.id, row);
       for (let i = 0; i < 6; i++) {
-        internals.advanceVersions(steps(10));
+        internals.rebuild(steps(10));
         internals.advanceQueuedBlocks(steps(10));
         await settle();
       }
-      internals.addQueuedRowBlocks();
+      internals.addQueuedPages();
       expectTablesMatch(tables, reference, layerIds, groupHandleOf);
       // A merge past the rows of the main thread: in the Worker
       const all = [...reference.rows.values()];
       const moved = all.slice(0, 30);
-      writer.apply(
+      writer.writeRows(
         rowPatch(
-          moved.map((row) => tables.findRow(row.id) as number),
+          moved.map((row) => tables.getRowRef(row.id) as number),
           { key: moved.map((_, i) => key(1_000_000 + i)) },
         ),
       );
@@ -227,7 +227,7 @@ describe('the rows of layers of every dimensions', () => {
         else row.order = key(1_000_000 + i);
       });
       for (let i = 0; i < 8; i++) {
-        internals.advanceVersions(steps(10));
+        internals.rebuild(steps(10));
         await settle();
       }
       internals.flushVersions();
@@ -269,14 +269,14 @@ describe('a next version merged in a Worker', () => {
     const moved = reference.rows.get('p5') as ReferenceRow;
     moved.order = key(50_005);
     moved.geometry = { type: 'Point', coordinates: [3, 4, Number.NaN, 5] };
-    writer.apply(
-      rowPatch([tables.findRow('p5') as number], {
+    writer.writeRows(
+      rowPatch([tables.getRowRef('p5') as number], {
         key: [moved.order],
         geometry: [moved.geometry],
       }),
     );
     for (let i = 0; i < 6; i++) {
-      internals.advanceVersions(steps(10));
+      internals.rebuild(steps(10));
       await settle();
     }
     expect(worker.calls).toBe(1);
@@ -308,7 +308,7 @@ function smallTables(dims: CoordinateDimensions, rows: Array<[string, Geometry]>
   const setup = tablesOfReference(reference, ['a'], 8, {
     dimensionsOf: (layerId) => (layerId === 'a' ? dims : 'xy'),
   });
-  const at = (id: string) => setup.tables.findRow(id) as number;
+  const at = (id: string) => setup.tables.getRowRef(id) as number;
   const geometryOf = (id: string) =>
     setup.tables.readValues(rowPatch([at(id)], { geometry: [0] })).fields.get('geometry')?.[0];
   return { ...setup, reference, at, geometryOf };
@@ -326,14 +326,14 @@ describe('a write of the coordinates of a layer of z or m', () => {
     const { writer, internals, at, geometryOf } = smallTables('xyz', [['l', line(1)]]);
     const written: InPlaceRowWrite[] = [];
     internals.onRowsWritten((_, writes) => written.push(...writes));
-    writer.apply(rowPatch([at('l')], { geometry: [line(2)] }));
+    writer.writeRows(rowPatch([at('l')], { geometry: [line(2)] }));
     expect(written).toHaveLength(1);
     expect(written[0].sameShape).toBe(true);
     expect(written[0].to - written[0].from).toBe(0);
     expect(geometryOf('l')).toEqual(line(2));
     expect(internals.overrideBytes()).toBe(0);
     // A move of x and y is drawn again, the coordinates it moved only
-    writer.apply(
+    writer.writeRows(
       rowPatch([at('l')], {
         geometry: [
           {
@@ -360,9 +360,9 @@ describe('a write of the coordinates of a layer of z or m', () => {
     expect(geometryOf('q')).toEqual(point(1, 2));
     expect(geometryOf('r')).toEqual(point(1, 2, Number.NaN, 9));
     const before = tables.readValues(rowPatch([at('p'), at('r')], { geometry: [0, 0] }));
-    writer.apply(rowPatch([at('p'), at('r')], { geometry: [point(7, 7), point(8, 8, 1)] }));
+    writer.writeRows(rowPatch([at('p'), at('r')], { geometry: [point(7, 7), point(8, 8, 1)] }));
     expect(geometryOf('p')).toEqual(point(7, 7));
-    writer.apply({ handles: before.handles, fields: before.fields });
+    writer.writeRows({ handles: before.handles, fields: before.fields });
     expect(geometryOf('p')).toEqual(point(1, 2, 3, 4));
     expect(geometryOf('r')).toEqual(point(1, 2, Number.NaN, 9));
     // Of another shape: kept aside, with its values, until the next version
@@ -373,7 +373,7 @@ describe('a write of the coordinates of a layer of z or m', () => {
         [1, 1, 3],
       ],
     };
-    writer.apply(rowPatch([at('q')], { type: ['LineString'], geometry: [line] }));
+    writer.writeRows(rowPatch([at('q')], { type: ['LineString'], geometry: [line] }));
     expect(geometryOf('q')).toEqual(line);
     internals.flushVersions();
     expect(geometryOf('q')).toEqual(line);
@@ -385,14 +385,14 @@ describe('a write of the coordinates of a layer of z or m', () => {
       ['p', { type: 'Point', coordinates: [1, 2, 3] }],
     ]);
     expect(() =>
-      writer.apply(
+      writer.writeRows(
         rowPatch([at('p')], { geometry: [{ type: 'Point', coordinates: [1, 2, 3, 4] }] }),
       ),
     ).toThrow(/does not fit coordinates of xyz/);
     expect(geometryOf('p')).toEqual({ type: 'Point', coordinates: [1, 2, 3] });
     const xy = smallTables('xy', [['p', { type: 'Point', coordinates: [1, 2] }]]);
     expect(() =>
-      xy.writer.apply(
+      xy.writer.writeRows(
         rowPatch([xy.at('p')], { geometry: [{ type: 'Point', coordinates: [1, 2, 3] }] }),
       ),
     ).toThrow(/does not fit coordinates of xy/);
@@ -404,7 +404,7 @@ describe('the rows of a layer of z or m', () => {
     const { writer, internals } = tablesOfReference(new ReferenceRows(), [], 8, {
       dimensionsOf: (tableId) => (tableId === 'a' ? 'xyz' : 'xy'),
     });
-    const builder = createRowBlockDataBuilder({
+    const builder = createPageDataBuilder({
       columns: FEATURE_TABLE_COLUMNS,
       dimensions: 'xyz',
     });
@@ -414,8 +414,8 @@ describe('the rows of a layer of z or m', () => {
       geometry: { type: 'Point', coordinates: [1, 2, 3] },
       key: key(1),
     });
-    writer.addRowBlocks('a', builder.finish());
-    internals.addQueuedRowBlocks();
+    writer.addPages('a', builder.finish());
+    internals.addQueuedPages();
     const table = internals.rowTable('a');
     expect(table?.dims).toBe('xyz');
     expect(
@@ -425,7 +425,7 @@ describe('the rows of a layer of z or m', () => {
 
   it('are not made features: read as one, hit as one', () => {
     const { tables } = smallTables('xyz', [['p', { type: 'Point', coordinates: [1, 2, 3] }]]);
-    const handle = tables.findRow('p') as number;
+    const handle = tables.getRowRef('p') as number;
     expect(() => tables.get('a')?.getRow(handle)).toThrow(/is not a feature/);
     // What is read without a feature: x and y
     expect(tables.get('a')?.getRowPoint(handle)).toEqual([1, 2]);
@@ -434,18 +434,18 @@ describe('the rows of a layer of z or m', () => {
 
   it('refuse a row group of other dimensions, and a row moved from a layer they do not read', () => {
     const { writer, at } = smallTables('xyz', [['p', { type: 'Point', coordinates: [1, 2, 3] }]]);
-    const builder = createRowBlockDataBuilder({ columns: FEATURE_TABLE_COLUMNS });
+    const builder = createPageDataBuilder({ columns: FEATURE_TABLE_COLUMNS });
     builder.addRow({
       id: 'q',
       type: 'Point',
       geometry: { type: 'Point', coordinates: [1, 2] },
       key: key(5),
     });
-    expect(() => writer.addRowBlocks('a', builder.finish())).toThrow(
+    expect(() => writer.addPages('a', builder.finish())).toThrow(
       /coordinates of xy, its table xyz/,
     );
     // Into a layer of xy: its z would be lost
-    expect(() => writer.apply(rowPatch([at('p')], { parent: ['b'], key: [key(1)] }))).toThrow(
+    expect(() => writer.writeRows(rowPatch([at('p')], { parent: ['b'], key: [key(1)] }))).toThrow(
       /coordinates of xyz, the table "b" of xy/,
     );
   });
@@ -476,11 +476,11 @@ describe('the rows of a layer of z or m', () => {
       dimensionsOf: (layerId) => (layerId === 'b' ? 'xyz' : 'xy'),
     });
     const { tables, writer, internals, groupHandleOf } = setup;
-    const at = (id: string) => tables.findRow(id) as number;
-    writer.apply(rowPatch([at('p')], { parent: ['b'], key: [key(1)] }));
+    const at = (id: string) => tables.getRowRef(id) as number;
+    writer.writeRows(rowPatch([at('p')], { parent: ['b'], key: [key(1)] }));
     Object.assign(reference.rows.get('p') as ReferenceRow, { layerId: 'b', order: key(1) });
     const geometry: Geometry = { type: 'Point', coordinates: [4, 5, 6] };
-    writer.apply(rowPatch([at('q')], { parent: ['b'], key: [key(2)], geometry: [geometry] }));
+    writer.writeRows(rowPatch([at('q')], { parent: ['b'], key: [key(2)], geometry: [geometry] }));
     Object.assign(reference.rows.get('q') as ReferenceRow, {
       layerId: 'b',
       order: key(2),

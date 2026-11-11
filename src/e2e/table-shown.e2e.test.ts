@@ -101,11 +101,11 @@ const PAGE_HELPERS = `
     const { store, writer } = window.e2e.tables.createTableStore();
     store.createLayer({ id: 'rows', name: 'rows', visible: true, locked: false, opacity: 1,
       kind: 'table', styleRule: undefined, metadata: undefined });
-    const builder = window.e2e.tables.createRowBlockBuilder({ targetRows: 8 });
+    const builder = window.e2e.tables.createPageBuilder({ targetRows: 8 });
     for (const f of features) {
       builder.addRow({ id: f.id, type: f.type, geometry: f.geometry, order: f.order, style: f.style ?? {} });
     }
-    writer.addRowBlocks('rows', builder.finish());
+    writer.addPages('rows', builder.finish());
     return store;
   };
   window.readFrame = () => new Promise((resolve) => {

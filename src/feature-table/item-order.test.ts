@@ -113,8 +113,8 @@ function writeKeys(
 ): void {
   store.transact(
     () =>
-      writer.apply({
-        handles: Int32Array.from(keys, ([id]) => tables.findRow(id) as number),
+      writer.writeRows({
+        handles: Int32Array.from(keys, ([id]) => tables.getRowRef(id) as number),
         fields: new Map<RowField, unknown[]>([['key', keys.map(([, key]) => key)]]),
       }),
     'remote',
@@ -226,7 +226,7 @@ describe('the changes of the order of a Store of rows', () => {
     expect(move.to).toEqual({ layerId: 'a', groupId: undefined, below: null, above: ids[0] });
     expect(move.belows).toBeUndefined();
     // The values before written back put the rows back
-    store.transact(() => writer.apply(move.before), 'remote');
+    store.transact(() => writer.writeRows(move.before), 'remote');
     expect(listsOf(tables, ['a'])).toEqual(before);
   });
 
@@ -241,7 +241,7 @@ describe('the changes of the order of a Store of rows', () => {
     notified.length = 0;
     // Every other row goes up by one: its key between the next row and the one after
     const keyOfRow = (id: string) => {
-      const handle = tables.findRow(id) as number;
+      const handle = tables.getRowRef(id) as number;
       const place = featureTablesInternals(tables)?.placeOf(handle);
       return place ? new TextDecoder().decode(rowKey(place.group.data.keys, place.row)) : '';
     };
@@ -255,7 +255,7 @@ describe('the changes of the order of a Store of rows', () => {
     // The item just below each row moved is the one it went past
     const below = Array.from(move.belows?.handles ?? [], (h) => tables.getRowId(h));
     expect(below).toEqual(keys.map(([id]) => ids[ids.indexOf(id) + 1]));
-    store.transact(() => writer.apply(move.before), 'remote');
+    store.transact(() => writer.writeRows(move.before), 'remote');
     expect(listsOf(tables, ['a'])).toEqual(before);
   });
 
@@ -270,10 +270,13 @@ describe('the changes of the order of a Store of rows', () => {
     const moves = notified.flatMap((change) => change.order ?? []) as ItemMove[];
     expect(moves).toHaveLength(1);
     const move = moves[0] as ItemMove;
-    expect(move.before?.handles).toEqual(Int32Array.of(tables.findRow('f3') as number));
+    expect(move.before?.handles).toEqual(Int32Array.of(tables.getRowRef('f3') as number));
     expect(move.before?.fields.get('parent')).toEqual(['a']);
     // Its keys before, written back, put the row back
-    store.transact(() => writer.apply(move.before as NonNullable<ItemMove['before']>), 'remote');
+    store.transact(
+      () => writer.writeRows(move.before as NonNullable<ItemMove['before']>),
+      'remote',
+    );
     expect(listsOf(tables, ['a', 'b'])).toEqual(before);
     // A row created tells none; a row deleted tells its place before
     notified.length = 0;
@@ -306,7 +309,7 @@ describe('the changes of the order of a Store of rows', () => {
     const groups = featureTablesInternals(tables)?.groups;
     store.transact(
       () =>
-        writer.applyGroups({
+        writer.writeGroups({
           handles: Int32Array.of(groups?.handleOfId('g') as number),
           fields: new Map([['key', ['0']]]),
         }),

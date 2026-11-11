@@ -4,22 +4,23 @@
 /**
  * Hold the features of a document as rows of columns, and read and write them as rows.
  *
- * Experimental: this entry may change in a minor release. Use it to write a Store that holds its
- * features as rows, or to read and write the rows of such a Store: when a layer holds more
- * features than can be made objects at once. A Worker builds the rows into row blocks of typed arrays
- * (`createRowBlockBuilder`), the Store adds them to its tables without a copy
- * (`writer.addRowBlocks`), and the instance draws and hit tests the layer from its rows, making a
- * feature of a row only when one is read. An application that only draws, edits and
- * reads features needs none of it: the main entry reads the features of every layer.
+ * Experimental: this entry may change in a minor release, and goes once what it holds has its
+ * place in the other entries. Use it to write a Store that holds its features as rows, or to read
+ * and write the rows of such a Store: when a layer holds more features than can be made objects
+ * at once. A Worker builds the rows into pages of typed arrays (`createPageBuilder` of `/table`),
+ * the Store adds them to its tables without a copy (`writer.addPages`), and the instance draws
+ * and hit tests the layer from its rows, making a feature of a row only when one is read. An
+ * application that only draws, edits and reads features needs none of it: the main entry reads
+ * the features of every layer.
  *
  * ```ts
  * // worker.ts
- * import { createRowBlockBuilder, transferList } from '@sakuzu/maplibre-gl-draw/kasane';
+ * import { createPageBuilder, transferList } from '@sakuzu/maplibre-gl-draw/table';
  *
- * const builder = createRowBlockBuilder();
+ * const builder = createPageBuilder();
  * rows.forEach((row) => builder.addRow(row)); // id, type, geometry, key of the order
- * const rowBlocks = builder.finish();
- * self.postMessage(rowBlocks, { transfer: transferList(rowBlocks) });
+ * const pages = builder.finish();
+ * self.postMessage(pages, { transfer: transferList(pages) });
  *
  * // main.ts
  * import { createTableStore } from '@sakuzu/maplibre-gl-draw/kasane';
@@ -27,22 +28,22 @@
  * const { store, writer } = createTableStore();
  * const draw = createDraw(map, { store });
  * draw.layers.create({ id: 'buildings', name: 'Buildings' });
- * worker.onmessage = (e) => writer.addRowBlocks('buildings', e.data);
+ * worker.onmessage = (e) => writer.addPages('buildings', e.data);
  * ```
  *
- * The functions used most are {@link createTableStore}, {@link createRowBlockBuilder} and
- * {@link FeatureTables}.
+ * The functions used most are {@link createTableStore} and {@link FeatureTables}.
  *
  * Rows can also be kept and handed out as Tabane blocks (`@sakuzu/tabane`): files named by the
- * SHA-256 of their content, each a run of rows of one parent cut into row blocks, listed by a
+ * SHA-256 of their content, each a run of rows of one parent cut into pages, listed by a
  * manifest. Use them to save the rows of a document, or to send them elsewhere, without
  * making features of them. A feature is a row of the columns {@link TABANE_FEATURE_COLUMNS}
  * ({@link tabaneRowOf}); {@link writeTabaneFeatureBlocks} writes features as blocks, with the
- * triangles of their polygons as caches of the files, and a block read is row blocks the tables
- * take as they are ({@link rowBlockOfTabane}), the triangles copied from the caches.
+ * triangles of their polygons as caches of the files, and a block read is pages the tables
+ * take as they are (`toPage` of `/table`), the triangles copied from the caches.
  *
  * ```ts
  * import { packTabaneBlock, readTabaneBlockFile, tabaneNameOf } from '@sakuzu/tabane';
+ * import { toPage } from '@sakuzu/maplibre-gl-draw/table';
  *
  * const [{ block, caches }] = writeTabaneFeatureBlocks({ parent: 'buildings', head: 'V', rows });
  * const name = await tabaneNameOf(block.content); // the name to keep the file under
@@ -50,8 +51,8 @@
  *
  * // where it is read
  * const read = readTabaneBlockFile(file, compressor);
- * const rowBlocks = read.rowBlocks.map((b, k) =>
- *   rowBlockOfTabane(b, { caches: read.caches.filter((c) => c.part === k + 1) }),
+ * const pages = read.rowBlocks.map((b, k) =>
+ *   toPage(b, { caches: read.caches.filter((c) => c.part === k + 1) }),
  * );
  * ```
  *
@@ -69,12 +70,10 @@ export type {
   FeatureTablesWorker,
   FeatureTablesWriter,
   LayerRowsChange,
-  LayerTableView,
   RowApplyOptions,
   RowCursor,
   RowField,
   RowFieldValues,
-  RowHandle,
   RowPlacement,
   RowsChange,
   RowValues,
@@ -101,32 +100,23 @@ export { rowsOfGeoJSON } from '../api/geojson-rows.js';
 export type { ItemHandles, RowsMove } from '../api/model.js';
 export { ITEM_GROUP, ITEM_ROW } from '../api/tables.js';
 
-// Features selected in bulk and dragged
+// Features selected in bulk
 export { listSelectedRows } from '../store/bulk-selection.js';
-export type { DraggedRows } from '../feature-table/dragged-rows.js';
 
 // What the extensions answer from the rows
 export type { FeatureTypeRows } from '../api/extension/feature-type.js';
 export type { CompanionProviderRows } from '../api/extension/provider.js';
 
-// Pictures of points drawn with the rows
-export type {
-  RowSprite,
-  RowSpriteScaleStop,
-  RowSpriteSource,
-} from '../view/renderers/rows/rows-format.js';
+// Build and merge pages in a Worker
+// (the builder itself is `createPageBuilder` of `/table`)
+export type { GroupEntry, PageBuilderOptions } from '@sakuzu/kasane';
+export type { FeatureRowInput as RowInput } from '../table/feature-row-blocks.js';
+export { PAGE_TARGET_ROWS, PAGE_TARGET_VERTICES } from '@sakuzu/kasane';
+export { mergePages } from '../table/pages.js';
+export type { PointRowRings as RowRings, PageMerge } from '@sakuzu/kasane';
 
-// Build row blocks in a Worker
-export type { GroupEntry, RowBlockBuilderOptions } from '@sakuzu/kasane';
-export type {
-  FeatureRowBlockBuilder as RowBlockBuilder,
-  FeatureRowInput as RowInput,
-} from '../table/feature-row-blocks.js';
-export { ROW_BLOCK_TARGET_ROWS, ROW_BLOCK_TARGET_VERTICES } from '@sakuzu/kasane';
-export { createRowBlockBuilder, mergeRowBlock, transferList } from './row-blocks.js';
-export type { PointRowRings as RowRings, RowBlock, RowBlockMerge } from '@sakuzu/kasane';
-
-// Features as the rows of Tabane blocks (@sakuzu/tabane), and the blocks read as row blocks
+// Features as the rows of Tabane blocks (@sakuzu/tabane)
+// (a block is read as pages by `toPage` of `/table`)
 export type { TabaneFeatureRow } from '../table/tabane/columns.js';
 export {
   featureRowOfTabane,
@@ -135,5 +125,3 @@ export {
 } from '../table/tabane/columns.js';
 export type { TabaneFeatureBlock, TabaneFeatureBlocksInput } from '../table/tabane/blocks.js';
 export { writeTabaneFeatureBlocks } from '../table/tabane/blocks.js';
-export type { RowBlockOfTabaneOptions } from '../table/tabane/rows.js';
-export { rowBlockOfTabane } from '../table/tabane/rows.js';

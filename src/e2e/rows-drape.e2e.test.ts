@@ -572,9 +572,9 @@ async function openScene(
 function handlesOf(page: Page, ids: string[]): Promise<number[]> {
   return page.evaluate((list) => {
     const w = window as unknown as {
-      store: { tables: { findRow(id: string): number | undefined } };
+      store: { tables: { getRowRef(id: string): number | undefined } };
     };
-    return list.map((id) => w.store.tables.findRow(id) as number);
+    return list.map((id) => w.store.tables.getRowRef(id) as number);
   }, ids);
 }
 

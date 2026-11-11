@@ -7,7 +7,7 @@
  * - The builder makes the numbers of every row of every cache declared, once per row, and none
  *   without a cache declared
  * - A merge copies the numbers as they are, by the name of the cache, and makes none
- * - The tables make the numbers of a row written again, and of no other row; a row block taken in
+ * - The tables make the numbers of a row written again, and of no other row; a page taken in
  *   without a cache declared has it made, and its caches are put in the order of the declaration
  * - Numbers wider than the width of a cache are kept apart; a cache of 32 bits keeps every row in
  *   its numbers
@@ -16,17 +16,17 @@
  */
 
 import type { RowCache, RowRead } from '@sakuzu/kasane';
-import type { RowBlockData } from '@sakuzu/kasane/engine';
+import type { PageData } from '@sakuzu/kasane/render';
 import {
   cacheNumbersOf,
-  mergeRowBlockData,
+  mergePageData,
   type RowCacheColumn,
   RowCacheWriter,
-} from '@sakuzu/kasane/engine';
+} from '@sakuzu/kasane/render';
 import { describe, expect, it } from 'vitest';
 import { createTables, featureTablesInternals } from '../feature-table/feature-tables.js';
 import { shapesOfGeometries } from '../feature-table/feature-tables-writer.js';
-import { featureRowDataBuilder as createRowBlockDataBuilder } from '../test-utils.js';
+import { featureRowDataBuilder as createPageDataBuilder } from '../test-utils.js';
 import { circleRowRings } from './circle-rings.js';
 import type { FeatureRowInput as RowInput } from './feature-row-blocks.js';
 import { FILL_TRIANGLES } from './fill-triangles.js';
@@ -71,8 +71,8 @@ function rowOf(i: number): RowInput {
   };
 }
 
-function build(cache: RowCache | null, count: number, targetRows = 1000): RowBlockData[] {
-  const builder = createRowBlockDataBuilder({
+function build(cache: RowCache | null, count: number, targetRows = 1000): PageData[] {
+  const builder = createPageDataBuilder({
     columns: FEATURE_TABLE_COLUMNS,
     caches: cache ? [cache] : [],
     targetRows,
@@ -108,7 +108,7 @@ describe('the caches of the rows of a merge', () => {
       wholes: b.wholes.map((w) => (w && 'dictionary' in w ? { ...w, dictionary: null } : w)),
     }));
     cache.made.length = 0;
-    const [merged] = mergeRowBlockData({ sources: blocks, rows: Int32Array.of(1, 2, 0, 1) });
+    const [merged] = mergePageData({ sources: blocks, rows: Int32Array.of(1, 2, 0, 1) });
     expect(cache.made).toEqual([]);
     expect(merged.caches.map((c) => c.name)).toEqual([cache.name]);
     expect(numbersOf(merged.caches[0], 0)).toEqual(numbersOf(blocks[0].caches[0], 1));
@@ -124,18 +124,18 @@ describe('the caches of the rows of the tables', () => {
       caches: [cache],
       rings: circleRowRings,
     });
-    writer.addRowBlocks('a', build(cache, 6));
+    writer.addPages('a', build(cache, 6));
     const internals = featureTablesInternals(tables);
-    internals?.addQueuedRowBlocks();
+    internals?.addQueuedPages();
     cache.made.length = 0;
-    const point = tables.findRow('r2') as number;
-    const line = tables.findRow('r3') as number;
+    const point = tables.getRowRef('r2') as number;
+    const line = tables.getRowRef('r3') as number;
     const read = (handle: number) => {
       const place = internals?.placeOf(handle);
       return place ? numbersOf(place.group.data.caches[0], place.row) : null;
     };
-    // A point written in place: its numbers are made again, into the column of its row block
-    writer.apply(
+    // A point written in place: its numbers are made again, into the column of its page
+    writer.writeRows(
       shapesOfGeometries({
         handles: Int32Array.of(point),
         fields: new Map([['geometry', [{ type: 'Point', coordinates: [7, 8] }]]]),
@@ -145,7 +145,7 @@ describe('the caches of the rows of the tables', () => {
     expect(cache.made).toEqual(['r2']);
     expect(read(point)).toEqual([7, 8, 5]);
     // A line of another shape: its numbers are made again (as many: into the column)
-    writer.apply(
+    writer.writeRows(
       shapesOfGeometries({
         handles: Int32Array.of(line),
         fields: new Map([
@@ -169,23 +169,23 @@ describe('the caches of the rows of the tables', () => {
     expect(cache.made).toEqual(['r2', 'r3']);
     expect(read(line)).toEqual([9, 9, 10]);
     expect(read(point)).toEqual([7, 8, 5]);
-    expect(read(tables.findRow('r4') as number)).toEqual([4, 1, 5]);
+    expect(read(tables.getRowRef('r4') as number)).toEqual([4, 1, 5]);
   });
 
-  it('are made for a row block taken in without one, and put in the order declared', () => {
+  it('are made for a page taken in without one, and put in the order declared', () => {
     const first = countingCache('test:a:1');
     const second = countingCache('test:b:1');
     const { tables, writer } = createTables({
       columns: FEATURE_TABLE_COLUMNS,
       caches: [first, second],
     });
-    const builder = createRowBlockDataBuilder({ columns: FEATURE_TABLE_COLUMNS, caches: [second] });
+    const builder = createPageDataBuilder({ columns: FEATURE_TABLE_COLUMNS, caches: [second] });
     for (let i = 0; i < 3; i++) builder.addRow(rowOf(i));
     const blocks = builder.finish();
     first.made.length = 0;
     second.made.length = 0;
-    writer.addRowBlocks('a', blocks);
-    featureTablesInternals(tables)?.addQueuedRowBlocks();
+    writer.addPages('a', blocks);
+    featureTablesInternals(tables)?.addQueuedPages();
     expect(blocks[0].caches.map((c) => c.name)).toEqual(['test:a:1', 'test:b:1']);
     expect(first.made).toHaveLength(3);
     expect(second.made).toEqual([]);

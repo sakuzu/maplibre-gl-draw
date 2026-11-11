@@ -21,7 +21,7 @@
  * - The drawing keeps what it writes to the GPU only while those checks run
  */
 
-import { ROW_WRITE_STYLE } from '@sakuzu/kasane/engine';
+import { ROW_WRITE_STYLE } from '@sakuzu/kasane/render';
 import type { CustomRenderMethodInput } from 'maplibre-gl';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createDraw } from '../api/draw.js';

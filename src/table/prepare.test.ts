@@ -5,7 +5,7 @@
  * Tests for the preparation of a table (the part that runs in a Worker)
  */
 
-import { searchPackedRTree } from '@sakuzu/kasane/engine';
+import { searchPackedRTree } from '@sakuzu/kasane/render';
 import { describe, expect, it } from 'vitest';
 import { chunkTargetSizeFor, partitionIntoChunks } from '../dataset/chunk.js';
 import { displayFeature } from '../test-utils.js';

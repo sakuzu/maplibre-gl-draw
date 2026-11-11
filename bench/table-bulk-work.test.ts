@@ -16,7 +16,8 @@
 import { writeFileSync } from 'node:fs';
 import { Session } from 'node:inspector';
 import { join } from 'node:path';
-import { createRowBlockBuilder, createTableStore } from '@sakuzu/maplibre-gl-draw/kasane';
+import { createTableStore } from '@sakuzu/maplibre-gl-draw/kasane';
+import { createPageBuilder } from '@sakuzu/maplibre-gl-draw/table';
 import { describe, expect, it } from 'vitest';
 import * as featureTablesModule from '../src/feature-table/feature-tables';
 import * as selectionModule from '../src/feature-table/selection';
@@ -32,13 +33,13 @@ interface Rows {
 }
 /** The Store of rows as the select mode uses it */
 interface BulkStore {
-  readonly tables?: { findRow(id: string): number | undefined };
+  readonly tables?: { getRowRef(id: string): number | undefined };
   selectRows(rows: Rows): void;
   getSelectedRows(): Rows | null;
   applyBulk(op: unknown, rows?: Rows): boolean;
 }
 const { featureTablesInternals } = featureTablesModule as unknown as {
-  featureTablesInternals(tables: unknown): { addQueuedRowBlocks(): void } | undefined;
+  featureTablesInternals(tables: unknown): { addQueuedPages(): void } | undefined;
 };
 const { TableSelection } = selectionModule as unknown as {
   TableSelection: { of(handles: readonly number[]): Rows };
@@ -173,7 +174,7 @@ function storeOf(params: TableBenchParams): BulkStore {
     metadata: undefined,
   } as never);
   const styles = stylesOf(params);
-  let builder = createRowBlockBuilder();
+  let builder = createPageBuilder();
   for (let i = 0; i < params.n; i++) {
     const feature = benchFeature(params, styles, i);
     builder.addRow({
@@ -185,12 +186,12 @@ function storeOf(params: TableBenchParams): BulkStore {
       properties: feature.properties,
     } as never);
     if (builder.length >= 16_384) {
-      writer.addRowBlocks('rows', builder.finish());
-      builder = createRowBlockBuilder();
+      writer.addPages('rows', builder.finish());
+      builder = createPageBuilder();
     }
   }
-  if (builder.length > 0) writer.addRowBlocks('rows', builder.finish());
-  featureTablesInternals(store.tables)?.addQueuedRowBlocks();
+  if (builder.length > 0) writer.addPages('rows', builder.finish());
+  featureTablesInternals(store.tables)?.addQueuedPages();
   return store as unknown as BulkStore;
 }
 
@@ -208,7 +209,7 @@ describe.skipIf(COUNT === 0)('the work of one edit of every feature selected in 
     const tables = store.tables;
     expect(tables).toBeDefined();
     const handles: number[] = [];
-    for (let i = 0; i < params.n; i++) handles.push(tables?.findRow(`f${i}`) as number);
+    for (let i = 0; i < params.n; i++) handles.push(tables?.getRowRef(`f${i}`) as number);
     await timed('select all', () => store.selectRows(TableSelection.of(handles)));
     const rows = store.getSelectedRows() as Rows;
     expect(rows.count).toBe(params.n);

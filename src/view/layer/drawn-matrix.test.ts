@@ -28,7 +28,7 @@
  *
  * The features are drawn among others (every kind with the styles the rows give, so the numbers
  * of the styles are shared), in a view around them. A row is run four ways: the feature made
- * after the others or with them (the rows of a Store of rows then given as row blocks built
+ * after the others or with them (the rows of a Store of rows then given as pages built
  * elsewhere, as a copy of a document gives them), not selected (its row as it is) or selected
  * from its creation on (its row opened). A cell that differs is written with the first step that
  * differs and the primitives of both, and whether a drawing made afresh draws the same. The cells
@@ -38,7 +38,7 @@
  */
 
 import { writeFileSync } from 'node:fs';
-import type { RowGroup } from '@sakuzu/kasane/engine';
+import type { RowGroup } from '@sakuzu/kasane/render';
 import type { Geometry, Point } from 'geojson';
 import type { ProjectionData } from 'maplibre-gl';
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -50,13 +50,14 @@ import type { FeatureTypeHandler, FrameDrawContext } from '../../extension/index
 import { featureTablesInternals } from '../../feature-table/feature-tables.js';
 import { rowFeatureToRead } from '../../feature-table/row-read.js';
 import { generateCirclePolygon } from '../../geometry/circle.js';
-import { createRowBlockBuilder, createRowValues } from '../../kasane/index.js';
+import { createRowValues } from '../../kasane/index.js';
 import { drawPropertyKey } from '../../shared/properties.js';
 import { getCircleRadius, getCreatedZoom } from '../../shared/utils/property.js';
 import { getDisplayFeatures } from '../../store/local-visibility.js';
 import type { Store } from '../../store/store.js';
 import { createTableStore } from '../../store/table-memory.js';
 import type { Coordinate, Feature, Layer } from '../../store/types.js';
+import { createPageBuilder } from '../../table/index.js';
 import { createMapStub, createTestDrawer, memoryGL, onDocumentChange } from '../../test-utils.js';
 import { createFeatureCompanionRegistry } from '../feature-companion.js';
 import { GpuLedger } from '../gpu-ledger.js';
@@ -939,9 +940,9 @@ function makeScene(run: Run, style: FeatureStyle | null): void {
   const inputs = sceneInputs();
   if (style) inputs.push(inputOf(run.shape, style));
   if (writer && run.loaded) {
-    // The rows given as row blocks built elsewhere, as a copy of a document gives them
+    // The rows given as pages built elsewhere, as a copy of a document gives them
     const layerId = draw.layers.list()[0].id;
-    const builder = createRowBlockBuilder();
+    const builder = createPageBuilder();
     inputs.forEach((input, i) => {
       const id = `b${String(i).padStart(6, '0')}`;
       builder.addRow({
@@ -957,7 +958,7 @@ function makeScene(run: Run, style: FeatureStyle | null): void {
       run.names.set(id, i < inputs.length - (style ? 1 : 0) ? `S${i}` : 'F');
       if (style && i === inputs.length - 1) run.id = id;
     });
-    writer.addRowBlocks(layerId, builder.finish());
+    writer.addPages(layerId, builder.finish());
     return;
   }
   const made = draw.features.createMany(inputs);
@@ -1187,7 +1188,7 @@ function patchOf(from: Feature, to: Feature): FeaturePatch {
 
 /**
  * A write from elsewhere: the style made dashed, written to the rows as the values of another
- * writer are (`FeatureTablesWriter.apply`); the Store of objects is written through the instance
+ * writer are (`FeatureTablesWriter.writeRows`); the Store of objects is written through the instance
  */
 const dashedFromElsewhere: Step = {
   name: 'dashed, written from elsewhere',
@@ -1200,7 +1201,7 @@ const dashedFromElsewhere: Step = {
     }
     const found = writer.lookup(run.id);
     if (!found) throw new Error('no row');
-    writer.apply(
+    writer.writeRows(
       createRowValues({
         handles: Int32Array.of(found.handle),
         fields: new Map([['style', [style]]]),

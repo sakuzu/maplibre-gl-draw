@@ -7,7 +7,7 @@
  * drawn in one instanced draw of four sides per row group, made again only when the rows change.
  */
 
-import type { RowGroup } from '@sakuzu/kasane/engine';
+import type { RowGroup } from '@sakuzu/kasane/render';
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_SELECTION_CONFIG } from '../../shared/config/selection.js';
 import { GpuLedger } from '../gpu-ledger.js';

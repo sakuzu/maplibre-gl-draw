@@ -15,8 +15,8 @@
  * - A locked feature stays where it is: its row is not in the moving set, and the others move
  */
 
-import type { RowGroup } from '@sakuzu/kasane/engine';
-import { ROW_FLAG_DELETED } from '@sakuzu/kasane/engine';
+import type { RowGroup } from '@sakuzu/kasane/render';
+import { ROW_FLAG_DELETED } from '@sakuzu/kasane/render';
 import { BULK_MOVE_SET, STATE_UNHIT_MASK } from '../../feature-table/feature-row-states.js';
 import { featureTablesInternals } from '../../feature-table/feature-tables.js';
 import { rowGeometry, rowProperties, rowType } from '../../feature-table/row-read.js';

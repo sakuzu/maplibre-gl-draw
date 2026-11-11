@@ -2,8 +2,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * The builder and the merge of the row blocks of the features (`createFeatureRowBlockBuilder`,
- * `mergeFeatureRowBlock`): those of the tables, with what the library declares of its features
+ * The builder and the merge of the pages of the features (`createFeaturePageBuilder`,
+ * `mergeFeaturePages`): those of the tables, with what the library declares of its features
  *
  * What the library declares of its features for the builder and the merge of the tables
  * (`row-group-builder.ts`, `row-group-merge.ts`) is given here: the rings of the Circles as the
@@ -19,16 +19,16 @@
  * geometry as a shape of Tabane (`rowInputOfFeature`).
  */
 
-import type { RowBlock, TablesWorker } from '@sakuzu/kasane';
+import type { Page, TablesWorker } from '@sakuzu/kasane';
 import {
-  createRowBlockBuilder,
+  createPageBuilder,
   KasaneError,
-  mergeRowBlock,
-  type RowBlockBuilderOptions,
-  type RowBlockMerge,
+  mergePages,
+  type PageBuilderOptions,
+  type PageMerge,
   type RowInput,
 } from '@sakuzu/kasane';
-import { rowRingsOfPoint } from '@sakuzu/kasane/engine';
+import { rowRingsOfPoint } from '@sakuzu/kasane/render';
 import type { TabaneShape } from '@sakuzu/tabane';
 import type { Geometry } from 'geojson';
 import { circleRowRings } from './circle-rings.js';
@@ -73,9 +73,9 @@ export interface FeatureRowInput {
 }
 
 /**
- * Builds the row blocks of one layer
+ * Builds the pages of one layer
  */
-export interface FeatureRowBlockBuilder {
+export interface FeaturePageBuilder {
   /** The number of rows added */
   readonly length: number;
   /**
@@ -87,11 +87,11 @@ export interface FeatureRowBlockBuilder {
    */
   addRow(row: FeatureRowInput): void;
   /**
-   * Puts the rows in the order of the table and cuts them into row blocks
+   * Puts the rows in the order of the table and cuts them into pages
    *
    * @throws an error with the code `not-found` when a row names a group the options do not give
    */
-  finish(): RowBlock[];
+  finish(): Page[];
 }
 
 /**
@@ -100,30 +100,30 @@ export interface FeatureRowBlockBuilder {
  *
  * What is handed over can be posted as it is: it holds no function. The Worker gives the
  * system of the coordinates to the builder when the tables are given one
- * (`TablesStoreOptions.coordinateSystem`); the builder of the entry draws the rings the
+ * (`TablesOptions.coordinateSystem`); the builder of the entry draws the rings the
  * tables draw.
  *
  * @example A Worker of the host
  * ```ts
  * // in the Worker
  * import {
- *   createRowBlockBuilder,
- *   mergeRowBlock,
+ *   createPageBuilder,
+ *   mergePages,
  *   transferList,
  * } from '@sakuzu/maplibre-gl-draw/kasane';
  * self.onmessage = ({ data }) => {
  *   const blocks = data.merge
- *     ? mergeRowBlock(data.merge)
- *     : build(data.rows, data.options); // createRowBlockBuilder, addRow, finish
+ *     ? mergePages(data.merge)
+ *     : build(data.rows, data.options); // createPageBuilder, addRow, finish
  *   self.postMessage({ id: data.id, blocks }, transferList(blocks));
  * };
  * ```
  */
 export interface FeatureTablesWorker {
-  /** Merges rows of blocks (`mergeRowBlock`): the next version of blocks */
-  merge(merge: RowBlockMerge): Promise<RowBlock[]>;
-  /** Builds rows into blocks (`createRowBlockBuilder`): many new rows written at once */
-  build(rows: readonly FeatureRowInput[], options: RowBlockBuilderOptions): Promise<RowBlock[]>;
+  /** Merges rows of blocks (`mergePages`): the next version of blocks */
+  merge(merge: PageMerge): Promise<Page[]>;
+  /** Builds rows into blocks (`createPageBuilder`): many new rows written at once */
+  build(rows: readonly FeatureRowInput[], options: PageBuilderOptions): Promise<Page[]>;
 }
 
 /**
@@ -203,12 +203,12 @@ export function rowInputOfFeature(row: FeatureRowInput): RowInput {
 }
 
 /**
- * The options of {@link createFeatureRowBlockBuilder}: those of the builder of the tables, whose
+ * The options of {@link createFeaturePageBuilder}: those of the builder of the tables, whose
  * rings are the rings of the Circles when omitted
  *
  * @internal
  */
-export type FeatureRowBlockBuilderOptions = RowBlockBuilderOptions;
+export type FeaturePageBuilderOptions = PageBuilderOptions;
 
 /**
  * An error of the tables (`KasaneError`) as a `DrawError`; what a function given in the options
@@ -219,7 +219,7 @@ function rowsError(error: unknown): unknown {
 }
 
 /**
- * Creates the builder of the row blocks of the features of one layer
+ * Creates the builder of the pages of the features of one layer
  *
  * Its methods throw `DrawError`: with the code `invalid-input` when a row is refused (an id added
  * twice, a geometry or a value that cannot be held, more than 255 types), or `not-found` when a
@@ -227,10 +227,10 @@ function rowsError(error: unknown): unknown {
  *
  * @internal
  */
-export function createFeatureRowBlockBuilder(
-  options: FeatureRowBlockBuilderOptions = {},
-): FeatureRowBlockBuilder {
-  const builder = createRowBlockBuilder({
+export function createFeaturePageBuilder(
+  options: FeaturePageBuilderOptions = {},
+): FeaturePageBuilder {
+  const builder = createPageBuilder({
     ...options,
     columns: FEATURE_TABLE_COLUMNS,
     rings: options.rings ? rowRingsOfPoint(options.rings) : circleRowRings,
@@ -247,7 +247,7 @@ export function createFeatureRowBlockBuilder(
         throw rowsError(error);
       }
     },
-    finish(): RowBlock[] {
+    finish(): Page[] {
       try {
         return builder.finish();
       } catch (error) {
@@ -258,16 +258,16 @@ export function createFeatureRowBlockBuilder(
 }
 
 /**
- * Merges rows of row blocks of the features into new row blocks, in the order of the layer
+ * Merges rows of pages of the features into new pages, in the order of the layer
  *
- * @returns The new row blocks (none for no row); their handles are those of the rows
+ * @returns The new pages (none for no row); their handles are those of the rows
  * @throws `DrawError` with the code `invalid-input` when a source holds styles not numbered yet,
  *   or `not-found` when a row names a group of features the keys do not give
  * @internal
  */
-export function mergeFeatureRowBlock(merge: RowBlockMerge): RowBlock[] {
+export function mergeFeaturePages(merge: PageMerge): Page[] {
   try {
-    return mergeRowBlock(merge);
+    return mergePages(merge);
   } catch (error) {
     throw rowsError(error);
   }

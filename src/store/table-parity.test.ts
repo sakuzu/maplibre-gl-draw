@@ -25,11 +25,8 @@ import type { Geometry } from 'geojson';
 import { describe, expect, it } from 'vitest';
 import type { FeatureTables, FeatureTablesWriter, RowField } from '../api/tables.js';
 import { featureTablesInternals } from '../feature-table/feature-tables.js';
-import {
-  createRowBlockBuilder,
-  rowBlockOfTabane,
-  writeTabaneFeatureBlocks,
-} from '../kasane/index.js';
+import { writeTabaneFeatureBlocks } from '../kasane/index.js';
+import { createPageBuilder, toPage } from '../table/index.js';
 import { rowPatch } from '../test-utils.js';
 import type { Store } from './store.js';
 import { createTableStore } from './table-memory.js';
@@ -193,7 +190,7 @@ function setup(): {
 /** Builds and swaps in every next version of the row blocks, and takes in the ones queued */
 function settle(tables: FeatureTables): void {
   const internals = featureTablesInternals(tables);
-  internals?.addQueuedRowBlocks();
+  internals?.addQueuedPages();
   internals?.flushVersions();
 }
 
@@ -526,7 +523,9 @@ function record(store: Store, tables: FeatureTables): unknown {
       .map((g) => plain(g))
       .sort((a, b) => String((a as { id: string }).id).localeCompare((b as { id: string }).id)),
     features: Object.fromEntries([...all].sort().map((id) => [id, plain(store.getFeature(id))])),
-    found: Object.fromEntries([...all].sort().map((id) => [id, tables.findRow(id) !== undefined])),
+    found: Object.fromEntries(
+      [...all].sort().map((id) => [id, tables.getRowRef(id) !== undefined]),
+    ),
     scanned: scanned.sort(),
     values: valuesOf(tables, read),
   };
@@ -655,10 +654,10 @@ const CASES: readonly Case[] = [
   {
     name: 'writes from elsewhere',
     run: ({ store, writer, tables }, step) => {
-      const h = (id: string) => tables.findRow(id) ?? -1;
+      const h = (id: string) => tables.getRowRef(id) ?? -1;
       store.transact(
         () =>
-          writer.apply(
+          writer.writeRows(
             rowPatch([h('f0'), h('f7')], {
               'properties:n': [7, 8],
               style: [{ pointColor: '#123456' }, {}],
@@ -667,13 +666,13 @@ const CASES: readonly Case[] = [
         'remote',
       );
       step('values');
-      store.transact(() => writer.apply(rowPatch([h('f1')], {}, [1])), 'remote');
+      store.transact(() => writer.writeRows(rowPatch([h('f1')], {}, [1])), 'remote');
       step('deleted');
       let refused = 'none';
       try {
         store.transact(
           () =>
-            writer.apply(
+            writer.writeRows(
               rowPatch([h('b1')], { geometry: [{ type: 'Point', coordinates: [21, 6, 3] }] }),
             ),
           'remote',
@@ -687,17 +686,21 @@ const CASES: readonly Case[] = [
   {
     name: 'deletion kept and let go of',
     run: ({ store, writer, tables }, step) => {
-      const h = (id: string) => tables.findRow(id) ?? -1;
+      const h = (id: string) => tables.getRowRef(id) ?? -1;
       const handles = [h('f2'), h('f5')];
       const token: RestoreToken = writer.createRestoreToken();
-      store.transact(() => writer.apply(rowPatch(handles, {}, [1, 1]), { restoreToken: token }));
+      store.transact(() =>
+        writer.writeRows(rowPatch(handles, {}, [1, 1]), { restoreToken: token }),
+      );
       step('deleted with a token');
       settle(tables);
       step('the versions after it');
-      store.transact(() => writer.apply(rowPatch(handles, {}, [0, 0])));
+      store.transact(() => writer.writeRows(rowPatch(handles, {}, [0, 0])));
       step('put back');
       const again = writer.createRestoreToken();
-      store.transact(() => writer.apply(rowPatch([handles[0]], {}, [1]), { restoreToken: again }));
+      store.transact(() =>
+        writer.writeRows(rowPatch([handles[0]], {}, [1]), { restoreToken: again }),
+      );
       tables.release(again);
       step('deleted again and let go of');
       settle(tables);
@@ -710,7 +713,7 @@ const CASES: readonly Case[] = [
   {
     name: 'row blocks added and cleared',
     run: ({ store, writer, tables }, step) => {
-      const builder = createRowBlockBuilder();
+      const builder = createPageBuilder();
       builder.addRow({
         id: 'n0',
         type: 'Point',
@@ -741,12 +744,12 @@ const CASES: readonly Case[] = [
         hidden: true,
         locked: false,
       });
-      store.transact(() => writer.addRowBlocks('b', builder.finish()), 'load');
+      store.transact(() => writer.addPages('b', builder.finish()), 'load');
       settle(tables);
       step('added');
       const ids = ['f0', 'n0', 'zz'];
       const given = Array.from(writer.allocateHandles(utf8ColumnFromStrings(ids)));
-      step(`handles ${JSON.stringify(given.map((x, i) => x === tables.findRow(ids[i])))}`);
+      step(`handles ${JSON.stringify(given.map((x, i) => x === tables.getRowRef(ids[i])))}`);
       store.transact(() => writer.clear(), 'remote');
       step('cleared');
     },
@@ -804,8 +807,8 @@ describe('the Store of rows, as it was before its tables were reworked', () => {
     const { store, writer } = createTableStore();
     store.createLayer(layer('a'));
     for (const w of written) {
-      const rowBlocks = readTabaneBlock(w.block.content).map((b) => rowBlockOfTabane(b));
-      store.transact(() => writer.addRowBlocks('a', rowBlocks), 'load');
+      const rowBlocks = readTabaneBlock(w.block.content).map((b) => toPage(b));
+      store.transact(() => writer.addPages('a', rowBlocks), 'load');
     }
     const tables = store.tables as FeatureTables;
     settle(tables);

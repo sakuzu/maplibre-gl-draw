@@ -3,34 +3,33 @@
 
 /**
  * The Worker the tables of the measurement page hand their large work to: the next versions of
- * the row groups merged (`mergeRowBlock`) and the new rows of an import built
- * (`createRowBlockBuilder`), sent back without a copy
+ * the row groups merged (`mergePages`) and the new rows of an import built
+ * (`createPageBuilder`), sent back without a copy
  */
 
 import {
-  createRowBlockBuilder,
-  mergeRowBlock,
-  type RowBlockBuilderOptions,
-  type RowBlockMerge,
+  mergePages,
+  type PageBuilderOptions,
+  type PageMerge,
   type RowInput,
-  transferList,
 } from '@sakuzu/maplibre-gl-draw/kasane';
+import { createPageBuilder, transferList } from '@sakuzu/maplibre-gl-draw/table';
 
 /** What the page asks for */
 export interface RowsWorkerRequest {
   readonly id: number;
-  readonly merge?: RowBlockMerge;
+  readonly merge?: PageMerge;
   readonly rows?: readonly RowInput[];
-  readonly options?: RowBlockBuilderOptions;
+  readonly options?: PageBuilderOptions;
 }
 
 self.onmessage = (event: MessageEvent<RowsWorkerRequest>) => {
   const { id, merge, rows, options } = event.data;
-  let groups: ReturnType<typeof mergeRowBlock>;
+  let groups: ReturnType<typeof mergePages>;
   if (merge) {
-    groups = mergeRowBlock(merge);
+    groups = mergePages(merge);
   } else {
-    const builder = createRowBlockBuilder(options);
+    const builder = createPageBuilder(options);
     for (const row of rows ?? []) builder.addRow(row);
     groups = builder.finish();
   }

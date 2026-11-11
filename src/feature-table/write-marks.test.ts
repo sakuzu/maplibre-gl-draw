@@ -18,7 +18,7 @@
  */
 
 import { KasaneError } from '@sakuzu/kasane';
-import type { GroupVersion, GroupVersionReceiver, TableWorkBudget } from '@sakuzu/kasane/engine';
+import type { GroupVersion, GroupVersionReceiver, TableWorkBudget } from '@sakuzu/kasane/render';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { FeatureTables, RowField } from '../api/tables.js';
 import { BULK_SLICE_ROWS, writeKindsInSlices } from '../operations/bulk-sliced.js';
@@ -76,7 +76,7 @@ function storeWith(count: number, selectionIdsLimit?: number) {
   store.createFeatures(Array.from({ length: count }, (_, i) => point(i)));
   const tables = store.tables as FeatureTables;
   const internals = featureTablesInternals(tables) as FeatureTablesInternals;
-  internals.addQueuedRowBlocks();
+  internals.addQueuedPages();
   internals.flushVersions();
   const keeper = writeMarkKeeperOf(tables);
   if (!keeper) throw new Error('no keeper of the write marks');
@@ -142,7 +142,10 @@ describe('the write mark of a Store of rows', () => {
     const count = BULK_SLICE_ROWS * 3;
     const { store, tables, keeper, given, marksOf } = storeWith(count);
     const before = keeper.mark;
-    const handles = Int32Array.from({ length: count }, (_, i) => tables.findRow(`p${i}`) as number);
+    const handles = Int32Array.from(
+      { length: count },
+      (_, i) => tables.getRowRef(`p${i}`) as number,
+    );
     const values = Array.from({ length: count }, (_, i) => i + 1000);
     store.restoreRows({
       handles,
@@ -162,7 +165,7 @@ describe('the write mark of a Store of rows', () => {
   it('goes up once in each step of a write of rows selected in bulk in steps', () => {
     const count = BULK_SLICE_ROWS * 2 + 10;
     const { store, tables, keeper, given, marksOf } = storeWith(count, 3);
-    const handles = Array.from({ length: count }, (_, i) => tables.findRow(`p${i}`) as number);
+    const handles = Array.from({ length: count }, (_, i) => tables.getRowRef(`p${i}`) as number);
     store.selectRows(TableSelection.of(handles));
     const rows = store.getSelectedRows() as TableSelection;
     const steps: Array<() => void> = [];
@@ -183,16 +186,16 @@ describe('the write mark of a Store of rows', () => {
   it('makes a frame of each call of its writer outside a transaction', () => {
     const { store, writer, tables, keeper, given } = storeWith(8);
     const before = keeper.mark;
-    const handle = tables.findRow('p1') as number;
-    writer.apply(rowPatch([handle], { 'properties:n': [10] }));
-    writer.apply(rowPatch([handle], { 'properties:n': [11] }));
-    const other = tables.findRow('p2') as number;
-    writer.apply(rowPatch([other], { 'properties:n': [20] }));
+    const handle = tables.getRowRef('p1') as number;
+    writer.writeRows(rowPatch([handle], { 'properties:n': [10] }));
+    writer.writeRows(rowPatch([handle], { 'properties:n': [11] }));
+    const other = tables.getRowRef('p2') as number;
+    writer.writeRows(rowPatch([other], { 'properties:n': [20] }));
     expect(given).toEqual([before + 1, before + 2, before + 3]);
     // Inside a transaction, the calls are part of its frame
     store.transact(() => {
-      writer.apply(rowPatch([handle], { 'properties:n': [12] }));
-      writer.apply(rowPatch([other], { 'properties:n': [21] }));
+      writer.writeRows(rowPatch([handle], { 'properties:n': [12] }));
+      writer.writeRows(rowPatch([other], { 'properties:n': [21] }));
     });
     expect(given).toEqual([before + 1, before + 2, before + 3, before + 4]);
   });
@@ -232,11 +235,11 @@ describe('the write mark of the tables', () => {
   it('is stamped on a row placed elsewhere in the delta, on the delta, and on the group it left', () => {
     const reference = pointsReference(32);
     const { tables, writer, internals } = tablesOfReference(reference, ['a'], 8);
-    const at = (id: string) => tables.findRow(id) as number;
+    const at = (id: string) => tables.getRowRef(id) as number;
     const left = internals.placeOf(at('p3'))?.group;
     const other = internals.placeOf(at('p20'))?.group;
     internals.setWriteMark(5);
-    writer.apply(rowPatch([at('p3')], { key: [key(9500)] }));
+    writer.writeRows(rowPatch([at('p3')], { key: [key(9500)] }));
     const delta = internals.rowTable('a')?.delta;
     const place = internals.placeOf(at('p3'));
     expect(place?.group).toBe(delta?.group);
@@ -246,13 +249,13 @@ describe('the write mark of the tables', () => {
     expect(other?.mark).toBe(0);
     // Written in place: the row and its group
     internals.setWriteMark(6);
-    writer.apply(rowPatch([at('p21')], { hidden: [true] }));
+    writer.writeRows(rowPatch([at('p21')], { hidden: [true] }));
     const hidden = internals.placeOf(at('p21'));
     expect(hidden?.group.marks[hidden.row]).toBe(6);
     expect(hidden?.group.mark).toBe(6);
     // The row of the delta that stays keeps its mark when the delta is made again
     internals.setWriteMark(7);
-    writer.apply(rowPatch([at('p12')], { key: [key(10_500)] }));
+    writer.writeRows(rowPatch([at('p12')], { key: [key(10_500)] }));
     const kept = internals.placeOf(at('p3'));
     expect(kept?.group.marks[kept.row]).toBe(5);
     expect(kept?.group.mark).toBe(7);
@@ -318,16 +321,16 @@ function waitingVersion(mark: number, before?: (internals: FeatureTablesInternal
   const setup = tablesOfReference(reference, ['a'], 8);
   const { tables, writer, internals } = setup;
   const sides = gate(internals);
-  const at = (id: string) => tables.findRow(id) as number;
+  const at = (id: string) => tables.getRowRef(id) as number;
   const write = (id: string, order: number): void => {
-    writer.apply(rowPatch([at(id)], { key: [key(order)] }));
+    writer.writeRows(rowPatch([at(id)], { key: [key(order)] }));
     (reference.rows.get(id) as ReferenceRow).order = key(order);
   };
   internals.setWriteMark(mark);
   write('p3', 9500);
   write('p11', 9700);
   before?.(internals);
-  for (let i = 0; i < 4; i++) internals.advanceVersions(steps(10));
+  for (let i = 0; i < 4; i++) internals.rebuild(steps(10));
   const versions: GroupVersion[] = internals.builtVersions('a');
   expect(versions.length).toBeGreaterThan(0);
   return { ...setup, reference, sides, at, write };
@@ -345,10 +348,10 @@ describe('the next versions with the write marks', () => {
       if (later) internals.setWriteMark(4);
       write('p3', 9600);
       sides.allowAll();
-      internals.swapVersions();
+      internals.swap();
       // p11, not written since, left the delta; p3 stays
       expect(internals.deltaRowCount()).toBe(1);
-      expect(internals.placeOf(tables.findRow('p3') as number)?.group.delta).toBe(true);
+      expect(internals.placeOf(tables.getRowRef('p3') as number)?.group.delta).toBe(true);
       expectTablesMatch(tables, reference, ['a'], groupHandleOf);
       internals.flushVersions();
       expect(internals.deltaRowCount()).toBe(0);
@@ -359,11 +362,11 @@ describe('the next versions with the write marks', () => {
   it('give the rows of a version the marks they had', () => {
     const reference = pointsReference(32);
     const { tables, writer, internals } = tablesOfReference(reference, ['a'], 8);
-    const at = (id: string) => tables.findRow(id) as number;
+    const at = (id: string) => tables.getRowRef(id) as number;
     internals.setWriteMark(1);
-    writer.apply(rowPatch([at('p9')], { 'properties:name': ['kept'] }));
+    writer.writeRows(rowPatch([at('p9')], { 'properties:name': ['kept'] }));
     internals.setWriteMark(2);
-    writer.apply(rowPatch([at('p3')], { key: [key(9500)] }));
+    writer.writeRows(rowPatch([at('p3')], { key: [key(9500)] }));
     internals.flushVersions();
     expect(internals.deltaRowCount()).toBe(0);
     const marksOf = (id: string): number | undefined => {
@@ -382,9 +385,9 @@ describe('the next versions with the write marks', () => {
     const handle = (version.groups ?? [])[0].data.handles[0];
     // A row of the version written in place under a later mark while it waits
     internals.setWriteMark(4);
-    writer.apply(rowPatch([handle], { 'properties:name': ['later'] }));
+    writer.writeRows(rowPatch([handle], { 'properties:name': ['later'] }));
     sides.allowAll();
-    internals.swapVersions();
+    internals.swap();
     const place = internals.placeOf(handle);
     expect(place?.group).toBe((version.groups ?? [])[0]);
     expect(place?.group.marks[place.row]).toBe(4);

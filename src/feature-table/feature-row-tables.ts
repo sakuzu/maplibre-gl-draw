@@ -65,11 +65,11 @@ export function createFeatureRowTables(
     | 'columns'
     | 'groupColumns'
     | 'rowBoxes'
-    | 'relocatingFields'
+    | 'orderFields'
     | 'rings'
     | 'caches'
     | 'rowStateBits'
-    | 'hiddenStates'
+    | 'hiddenMask'
     | 'stateByte'
     | 'valueStates'
     | 'worker'
@@ -88,12 +88,12 @@ export function createFeatureRowTables(
     rings: circleRowRings,
     caches: FEATURE_CACHES,
     rowBoxes: boxes.boxesOf,
-    relocatingFields: FEATURE_RELOCATING_FIELDS,
+    orderFields: FEATURE_RELOCATING_FIELDS,
     rowStateBits: FEATURE_ROW_STATE_BITS,
-    hiddenStates: FEATURE_HIDDEN_STATES,
+    hiddenMask: FEATURE_HIDDEN_STATES,
     stateByte: toGpuState,
     valueStates: FEATURE_VALUE_STATES,
-    whenIdle: options.whenIdle ?? whenIdle,
+    scheduleIdleWork: options.scheduleIdleWork ?? whenIdle,
   });
   const internals = featureTablesInternals(made.tables) as FeatureTablesInternals;
   boxes.attach(() => internals.refreshBoxes());

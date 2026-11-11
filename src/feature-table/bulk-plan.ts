@@ -13,13 +13,9 @@
  * not once per row: a map has few styles, so a hundred thousand rows ask for a few patches.
  */
 
-import type { RowHandle } from '@sakuzu/kasane';
-import type { RowGroup, RowPlace } from '@sakuzu/kasane/engine';
-import {
-  ROW_FLAG_DELETED,
-  type RowBlockDictionary,
-  type RowBlockValues,
-} from '@sakuzu/kasane/engine';
+import type { RowRef } from '@sakuzu/kasane';
+import type { RowGroup, RowPlace } from '@sakuzu/kasane/render';
+import { type PageDictionary, type PageValues, ROW_FLAG_DELETED } from '@sakuzu/kasane/render';
 import type { RowWrite } from '../api/tables.js';
 import { drawPropertyKey } from '../shared/properties.js';
 import type {
@@ -101,7 +97,7 @@ export type BulkOperation =
       readonly kind: 'rows';
       readonly fields: readonly RowField[];
       /** The values of the fields of a row, in the order of `fields` (null: the row is not written) */
-      readonly write: (handle: RowHandle, read: BulkRowReader) => readonly unknown[] | null;
+      readonly write: (handle: RowRef, read: BulkRowReader) => readonly unknown[] | null;
     }
   | { readonly kind: 'place'; readonly to: ItemPlacement };
 
@@ -187,9 +183,9 @@ function planUpdate(
         return id;
       });
     }
-    const typeId = typeIdOf[(data.wholes[TYPE_COLUMN] as RowBlockValues).indexes[row]];
+    const typeId = typeIdOf[(data.wholes[TYPE_COLUMN] as PageValues).indexes[row]];
     const createdZoom = rowNumber(group, row, CREATED_ZOOM_KEY);
-    const styleNumber = (data.wholes[STYLE_COLUMN] as RowBlockDictionary).indexes[row];
+    const styleNumber = (data.wholes[STYLE_COLUMN] as PageDictionary).indexes[row];
     let ofType = kindsByType[typeId];
     if (!ofType) {
       ofType = [];

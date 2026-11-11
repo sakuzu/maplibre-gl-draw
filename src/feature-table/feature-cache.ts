@@ -29,14 +29,14 @@
  * compared with the feature its row makes when it is given again.
  */
 
-import type { RowHandle } from '@sakuzu/kasane';
-import type { RowGroup, RowPlace, WriteMarks } from '@sakuzu/kasane/engine';
-import { ROW_FLAG_DELETED } from '@sakuzu/kasane/engine';
+import type { RowRef } from '@sakuzu/kasane';
+import type { RowGroup, RowPlace, WriteMarks } from '@sakuzu/kasane/render';
+import { ROW_FLAG_DELETED } from '@sakuzu/kasane/render';
 import type { Feature } from '../shared/types/model.js';
 import { type RowReadContext, rowFeature } from './row-read.js';
 
 /** No row selected */
-const NO_ROWS: ReadonlySet<RowHandle> = new Set();
+const NO_ROWS: ReadonlySet<RowRef> = new Set();
 
 /** The most features kept */
 const FEATURE_CACHE_LIMIT = 1024;
@@ -67,7 +67,7 @@ export interface FeatureCacheHost {
   readonly writeMarks: WriteMarks;
   readonly readContext: RowReadContext;
   /** Where the row of a handle is read (undefined for a handle of no row) */
-  placeOf(handle: RowHandle): RowPlace | undefined;
+  placeOf(handle: RowRef): RowPlace | undefined;
   /** A number that changes whenever an id gets a handle or loses it (`IdIndex.version`) */
   idsVersion(): number;
   /** A number that changes with every change of the rows drawn (`FeatureTablesInternals.revision`) */
@@ -76,7 +76,7 @@ export interface FeatureCacheHost {
 
 /** A feature kept, the version of the row it was made of, and its place in the order of use */
 interface Kept {
-  readonly handle: RowHandle;
+  readonly handle: RowRef;
   readonly feature: Feature;
   /** The write mark of the row */
   readonly mark: number;
@@ -96,7 +96,7 @@ interface Kept {
  * elsewhere since)
  */
 interface FoundId {
-  readonly handle: RowHandle;
+  readonly handle: RowRef;
   readonly version: number;
   kept: Kept | null;
   layerId: string;
@@ -111,7 +111,7 @@ interface FoundId {
  */
 export class FeatureCache {
   /** The features kept by the handles of their rows */
-  readonly #kept = new Map<RowHandle, Kept>();
+  readonly #kept = new Map<RowRef, Kept>();
   /**
    * The one used longest ago and the one used last: the order of use is a list of its own, since
    * a Map taking out and putting back a key on every read costs more than making the feature
@@ -124,7 +124,7 @@ export class FeatureCache {
   /** The depth of the reads that keep nothing (`withoutKeeping`) */
   #passing = 0;
   /** The rows selected (`keepSelected`) */
-  #selected: ReadonlySet<RowHandle> = NO_ROWS;
+  #selected: ReadonlySet<RowRef> = NO_ROWS;
   /** The number of features kept of rows selected */
   #selectedKept = 0;
   /** The handles the ids of rows selected were found to have (`noteSelectedId`) */
@@ -145,7 +145,7 @@ export class FeatureCache {
    * forgets what is kept of a row stamped outside a frame that raised the mark (its mark is the
    * one it had before)
    */
-  followFrames(frames: WriteFrames): (handle: RowHandle) => void {
+  followFrames(frames: WriteFrames): (handle: RowRef) => void {
     this.#frames = frames;
     return (handle) => this.#forget(handle);
   }
@@ -168,7 +168,7 @@ export class FeatureCache {
    * @param handles The rows selected (none for no row)
    * @param ids The id of each of them, when it is known (each is found by it from now on)
    */
-  keepSelected(handles: readonly RowHandle[] | null, ids?: readonly string[]): void {
+  keepSelected(handles: readonly RowRef[] | null, ids?: readonly string[]): void {
     const before = this.#selected;
     const foundBefore = this.#selectedIds;
     // The same rows, found by the same ids: what their ids find is read again when rows were
@@ -194,7 +194,7 @@ export class FeatureCache {
     this.#selectedIds = new Map();
     const version = this.host.idsVersion();
     // An id found before for a row still selected is kept, with the feature found for it
-    const byHandle = new Map<RowHandle, FoundId>();
+    const byHandle = new Map<RowRef, FoundId>();
     if (handles && ids) {
       handles.forEach((handle, i) => {
         const old = foundBefore.get(ids[i]);
@@ -251,7 +251,7 @@ export class FeatureCache {
    * The handle an id of a row selected was found to have, while no id has got or lost a handle
    * since (undefined otherwise: the id is looked up in the table of the ids then)
    */
-  selectedHandleOf(id: string): RowHandle | undefined {
+  selectedHandleOf(id: string): RowRef | undefined {
     if (this.#selectedIds.size === 0) return undefined;
     const found = this.#selectedIds.get(id);
     return found && found.version === this.host.idsVersion() ? found.handle : undefined;
@@ -295,7 +295,7 @@ export class FeatureCache {
   }
 
   /** Notes the handle an id was found to have in the table of the ids, when its row is selected */
-  noteSelectedId(id: string, handle: RowHandle): void {
+  noteSelectedId(id: string, handle: RowRef): void {
     if (this.#selected.size === 0 || !this.#selected.has(handle)) return;
     this.#selectedIds.set(id, foundId(handle, this.host.idsVersion()));
   }
@@ -434,7 +434,7 @@ export class FeatureCache {
   }
 
   /** Forgets the feature kept of a row */
-  #forget(handle: RowHandle): void {
+  #forget(handle: RowRef): void {
     const kept = this.#kept.get(handle);
     if (!kept) return;
     this.#kept.delete(handle);
@@ -476,7 +476,7 @@ export class FeatureCache {
 }
 
 /** An id found to have a handle, with no feature found for it yet */
-function foundId(handle: RowHandle, version: number): FoundId {
+function foundId(handle: RowRef, version: number): FoundId {
   return { handle, version, kept: null, layerId: '', revision: -1, stamped: -1 };
 }
 

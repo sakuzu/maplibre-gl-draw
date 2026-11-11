@@ -12,7 +12,7 @@
  */
 
 import type { Position } from 'geojson';
-import type { FeatureTables, RowHandle } from '../api/tables.js';
+import type { FeatureTables, RowRef } from '../api/tables.js';
 import { type EnuEdit, moveEnuPosition, withinTurn } from '../geometry/enu-transforms.js';
 import { DRAW_PROPERTY_KEYS } from '../shared/properties.js';
 import type { Feature } from '../shared/types/model.js';
@@ -34,25 +34,25 @@ import { rowType } from './row-read.js';
  */
 export interface DraggedRows {
   /** Whether the row of a handle is being dragged */
-  has(handle: RowHandle): boolean;
+  has(handle: RowRef): boolean;
   /**
    * A position of a row, where the row is drawn now: moved as it is while it is dragged (the
    * values after `x` and `y` kept), as it is otherwise
    */
-  position(handle: RowHandle, position: Position): Position;
+  position(handle: RowRef, position: Position): Position;
   /**
    * The angle a row dragged that turns by its rotation (an image, a row of a custom type that
    * declares `angleDegreesKey`, a row of another type that has a rotation) is
    * turned by, in degrees counterclockwise (0 otherwise): its rotation once written is the one it
    * has plus this angle, within [0, 360)
    */
-  rotation(handle: RowHandle): number;
+  rotation(handle: RowRef): number;
   /**
    * The factor of the scale of a row dragged that keeps its shape (an image, a row of a custom
    * type that declares `uniformScale`, a row of another type that has a scale), and of the radius
    * of a Circle (1 otherwise)
    */
-  scale(handle: RowHandle): number;
+  scale(handle: RowRef): number;
 }
 
 /**
@@ -66,7 +66,7 @@ export interface DraggedRowMotions {
    * The bits of the byte the GPU reads for the row of a handle that tell how it moves: its moving
    * set, and whether it keeps its shape (0 for a row not dragged)
    */
-  gpuStateOf(handle: RowHandle): number;
+  gpuStateOf(handle: RowRef): number;
   /** The translation of a moving set (1 to 3), `[dLng, dLat]` in degrees */
   translation(set: number): [number, number];
   /** The edit that moves, rotates or scales a moving set before its translation (null for none) */
@@ -103,10 +103,10 @@ export function draggedRowsOf(tables: FeatureTables | undefined): DraggedRows | 
     if (dx !== 0 || dy !== 0 || states.transform(set)) moving = true;
   }
   if (!moving) return null;
-  const setOf = (handle: RowHandle): number =>
+  const setOf = (handle: RowRef): number =>
     (states.stateOf(handle) & STATE_MOVE_MASK) >> STATE_MOVE_SHIFT;
-  const byValues = (handle: RowHandle): boolean => (states.stateOf(handle) & STATE_BY_VALUES) !== 0;
-  const keepsShape = (handle: RowHandle): boolean => {
+  const byValues = (handle: RowRef): boolean => (states.stateOf(handle) & STATE_BY_VALUES) !== 0;
+  const keepsShape = (handle: RowRef): boolean => {
     if (byValues(handle)) return true;
     const place = internals.placeOf(handle);
     return place ? rowType(place.group.data, place.row) === 'Circle' : false;
@@ -187,7 +187,7 @@ export function draggedFeatureOf(
   tables: FeatureTables,
   dragged: DraggedRows,
 ): Feature {
-  const handle = tables.findRow(feature.id);
+  const handle = tables.getRowRef(feature.id);
   if (handle === undefined || !dragged.has(handle)) return feature;
   const move = (value: unknown): unknown => {
     if (!Array.isArray(value)) return value;

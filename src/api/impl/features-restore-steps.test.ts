@@ -7,7 +7,7 @@
  * rest first: what is read is what the restore leaves, and the writes keep their order.
  */
 
-import { ROW_FLAG_DELETED } from '@sakuzu/kasane/engine';
+import { ROW_FLAG_DELETED } from '@sakuzu/kasane/render';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { featureTablesInternals } from '../../feature-table/feature-tables.js';
 import { createRowValues as createRows, featureValuesOf, rowValuesOf } from '../../kasane/index.js';
@@ -97,7 +97,7 @@ function setup(options: { selectionIdsLimit?: number; prepare?: (draw: Draw) => 
     for (let i = 0; i < COUNT; i++) store.createFeature(point(`p${i}`, i));
   });
   const tables = store.tables as FeatureTables;
-  const handles = Int32Array.from({ length: COUNT }, (_, i) => tables.findRow(`p${i}`) as number);
+  const handles = Int32Array.from({ length: COUNT }, (_, i) => tables.getRowRef(`p${i}`) as number);
   const instance = drawOn(store);
   options.prepare?.(instance);
   const notified: StoreChange[] = [];

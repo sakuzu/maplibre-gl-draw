@@ -181,7 +181,7 @@ export function createFeatures(deps: ResourceDeps): FeaturesCollection {
         'The features of a Store that holds them as rows are listed up to a limit: pass { limit }',
       );
     }
-    const after = page.after === undefined ? undefined : tables.findRow(page.after);
+    const after = page.after === undefined ? undefined : tables.getRowRef(page.after);
     if (page.after !== undefined && after === undefined) throw notFound('feature', page.after);
     const features: Feature[] = [];
     if (page.limit === 0) return features;

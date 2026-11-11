@@ -8,24 +8,24 @@
  * its own, held as rows as the document is: no feature is made. The layers, the groups, the
  * stacking order, the metadata and the embedded files are copied at once; the rows a block at a
  * time (`copyNext`), each block built from the rows as they are read then (what was written in
- * place included) and added to the new Store (`addRowBlocks`), so that a large document does not hold
+ * place included) and added to the new Store (`addPages`), so that a large document does not hold
  * a frame. The rows are listed once, at the start, in the order of their layers: a row written
  * meanwhile is copied with the values it has when its block is read. The new Store computes the
  * edits that move, rotate and scale features as the one copied does (its `transforms`).
  */
 
-import { type GroupEntry, KasaneError, ROW_BLOCK_TARGET_ROWS } from '@sakuzu/kasane';
+import { type GroupEntry, KasaneError, PAGE_TARGET_ROWS } from '@sakuzu/kasane';
 import { featureTablesInternals } from '../feature-table/feature-tables.js';
 import { rowInputOf } from '../feature-table/row-read.js';
 import { DrawError } from '../shared/draw-error.js';
 import { drawErrorOf } from '../table/draw-error-of.js';
-import { createFeatureRowBlockBuilder } from '../table/feature-row-blocks.js';
+import { createFeaturePageBuilder } from '../table/feature-row-blocks.js';
 import type { GeometryTransforms, Store, StoreContractView } from './store.js';
 import { createTableStore, type TableStoreOptions } from './table-memory.js';
 import type { Feature, Group, Layer } from './types.js';
 
 /**
- * A copy of a document held as rows, made a row block at a time
+ * A copy of a document held as rows, made a page at a time
  *
  * @internal
  */
@@ -57,7 +57,7 @@ export function copyTableStore(
   if (!internals || !source.tables) {
     throw new DrawError('invalid-input', 'The Store to copy does not hold its features as rows');
   }
-  const { blockRows = ROW_BLOCK_TARGET_ROWS, ...tableOptions } = options;
+  const { blockRows = PAGE_TARGET_ROWS, ...tableOptions } = options;
   // The computation of the edits of the Store copied (a Store has it, a view of one may not)
   const transforms =
     tableOptions.transforms ??
@@ -99,7 +99,7 @@ export function copyTableStore(
       const targetHandle = store.tables?.findGroup(group.id);
       const key = sourceHandle === undefined ? undefined : groupOrderOf(sourceHandle);
       if (key !== undefined && targetHandle !== undefined) {
-        writer.applyGroups({
+        writer.writeGroups({
           handles: Int32Array.of(targetHandle),
           fields: new Map([['key', [key]]]),
         });
@@ -161,7 +161,7 @@ export function copyTableStore(
             pending.shift();
             continue;
           }
-          const builder = createFeatureRowBlockBuilder({
+          const builder = createFeaturePageBuilder({
             groups: groupEntries.get(layer.layerId) ?? [],
             dimensions: internals.readContext.dimensionsOf(layer.layerId),
           });
@@ -180,7 +180,7 @@ export function copyTableStore(
                 !targetGroupOf.has(group) && { key: groupOrderOf(group) ?? row.key }),
             });
           }
-          if (builder.length > 0) writer.addRowBlocks(layer.layerId, builder.finish());
+          if (builder.length > 0) writer.addPages(layer.layerId, builder.finish());
           if (layer.at >= layer.handles.length) pending.shift();
           return pending.length > 0;
         }

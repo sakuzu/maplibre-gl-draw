@@ -23,7 +23,7 @@ import {
   ROW_WRITE_STYLE,
   ROW_WRITE_VALUES,
   writeRowValue,
-} from '@sakuzu/kasane/engine';
+} from '@sakuzu/kasane/render';
 import type { CoordinateDimensions } from '@sakuzu/tabane';
 import { planarCoordinates } from '@sakuzu/tabane';
 import type { Geometry } from 'geojson';
@@ -565,7 +565,7 @@ describe('the styles of rows written again and again', () => {
     let style: FeatureStyle = {};
     for (let i = 0; i < 100; i++) {
       style = { pointColor: `#${(i * 2_654_435).toString(16).padStart(6, '0').slice(-6)}` };
-      live.writer.apply(styled(handle, style));
+      live.writer.writeRows(styled(handle, style));
       live.frame();
     }
     expect(palette.size).toBeLessThanOrEqual(held + 1);
@@ -593,7 +593,7 @@ describe('the styles of rows written again and again', () => {
         .map((n) => [n, Array.from(palette.values.subarray(n * 16, n * 16 + 16))]);
     for (let i = 0; i < 30; i++) {
       const before = named();
-      live.writer.apply(
+      live.writer.writeRows(
         styled(handle, { pointColor: `#00${(i * 7).toString(16).padStart(2, '0')}ff` }),
       );
       live.frame();
@@ -722,8 +722,8 @@ describe('the rows of a layer of z or m', () => {
       type: 'Polygon',
       coordinates: [building.coordinates[0].map(([x, y, z, m]) => [x, y, z + 5, m + 5])],
     };
-    live.writer.apply(
-      rowPatch([live.tables.findRow('building') as number], { geometry: [geometry] }),
+    live.writer.writeRows(
+      rowPatch([live.tables.getRowRef('building') as number], { geometry: [geometry] }),
     );
     live.settle();
     expect(calls).toEqual({ coords: 0, rows: 0 });
@@ -734,7 +734,9 @@ describe('the rows of a layer of z or m', () => {
       type: 'Polygon',
       coordinates: [building.coordinates[0].map(([x, y, z, m]) => [x + 0.001, y, z, m])],
     };
-    live.writer.apply(rowPatch([live.tables.findRow('building') as number], { geometry: [moved] }));
+    live.writer.writeRows(
+      rowPatch([live.tables.getRowRef('building') as number], { geometry: [moved] }),
+    );
     live.settle();
     expect(calls.coords).toBeGreaterThan(0);
   });

@@ -15,14 +15,14 @@
  */
 
 import { createHash } from 'node:crypto';
-import type { RowBlockBuildOptions } from '@sakuzu/kasane';
+import type { PageBuildOptions } from '@sakuzu/kasane';
 import { transferList } from '@sakuzu/kasane';
-import type { RowBlockData } from '@sakuzu/kasane/engine';
-import { mergeRowBlockData, ShapeFormReader } from '@sakuzu/kasane/engine';
+import type { PageData } from '@sakuzu/kasane/render';
+import { mergePageData, ShapeFormReader } from '@sakuzu/kasane/render';
 import type { CoordinateDimensions } from '@sakuzu/tabane';
 import type { Geometry, Position } from 'geojson';
 import { describe, expect, it } from 'vitest';
-import { featureRowDataBuilder as createRowBlockDataBuilder } from '../test-utils.js';
+import { featureRowDataBuilder as createPageDataBuilder } from '../test-utils.js';
 import { circleRowRings } from './circle-rings.js';
 import type { FeatureRowInput as RowInput } from './feature-row-blocks.js';
 import { geometryColumnOf, styleColumnOf } from './feature-row-columns.js';
@@ -125,11 +125,8 @@ function randomRows(
   return rows;
 }
 
-function build(
-  rows: readonly RowInput[],
-  options: Partial<RowBlockBuildOptions> = {},
-): RowBlockData[] {
-  const builder = createRowBlockDataBuilder({
+function build(rows: readonly RowInput[], options: Partial<PageBuildOptions> = {}): PageData[] {
+  const builder = createPageDataBuilder({
     columns: FEATURE_TABLE_COLUMNS,
     rings: circleRowRings,
     caches: FEATURE_CACHES,
@@ -140,19 +137,19 @@ function build(
 }
 
 /** The hash of every array of groups (the bytes a Worker sends) */
-function hashOf(groups: readonly RowBlockData[]): string {
+function hashOf(groups: readonly PageData[]): string {
   const hash = createHash('sha256');
   for (const buffer of transferList(groups)) hash.update(new Uint8Array(buffer));
   return hash.digest('hex');
 }
 
 /** The bytes of every array of groups */
-function bytesOf(groups: readonly RowBlockData[]): number {
+function bytesOf(groups: readonly PageData[]): number {
   return transferList(groups).reduce((sum, buffer) => sum + buffer.byteLength, 0);
 }
 
 /** The number of values of the coordinates the geometry columns of groups hold */
-function coordinatesOf(groups: readonly RowBlockData[]): number {
+function coordinatesOf(groups: readonly PageData[]): number {
   let count = 0;
   for (const group of groups) {
     for (const child of geometryColumnOf(group)!.children) {
@@ -202,7 +199,7 @@ describe('the positions of a row', () => {
     expect(() => toRowGeometry({ type: 'LineString', coordinates: [[0, 0, 1, 2]] }, 'xyz')).toThrow(
       /4 values does not fit coordinates of xyz/,
     );
-    const builder = createRowBlockDataBuilder({ columns: FEATURE_TABLE_COLUMNS });
+    const builder = createPageDataBuilder({ columns: FEATURE_TABLE_COLUMNS });
     expect(() =>
       builder.addRow({
         id: 'a',
@@ -275,7 +272,7 @@ describe('the row groups of every dimensions', () => {
     groups.forEach((group, source) => {
       for (let r = 0; r < group.length; r += 2) pairs.push(source, r);
     });
-    const merged = mergeRowBlockData({
+    const merged = mergePageData({
       sources: groups,
       rows: Int32Array.from(pairs),
       ringVertices: circleRowRings.ringVertices,
@@ -322,7 +319,7 @@ describe('the row groups of every dimensions', () => {
 });
 
 describe('a merge of row groups of dimensions', () => {
-  const numbered = (groups: RowBlockData[]): RowBlockData[] => {
+  const numbered = (groups: PageData[]): PageData[] => {
     for (const group of groups) styleColumnOf(group).dictionary = null;
     return groups;
   };
@@ -340,7 +337,7 @@ describe('a merge of row groups of dimensions', () => {
     );
     const rows: number[] = [];
     for (let r = 0; r < 40; r++) rows.push(0, r, 1, r);
-    const [merged] = mergeRowBlockData({
+    const [merged] = mergePageData({
       sources: [xy[0], xyz[0]],
       rows: Int32Array.from(rows),
       dimensions: 'xyz',
@@ -355,7 +352,7 @@ describe('a merge of row groups of dimensions', () => {
       data,
       readers: geometryColumnOf(data)!.children.map((child) => new ShapeFormReader(child)),
     }));
-    const byId = (data: RowBlockData, readers: ShapeFormReader[]) => {
+    const byId = (data: PageData, readers: ShapeFormReader[]) => {
       const out = new Map<string, unknown>();
       for (let r = 0; r < data.length; r++) {
         const child = geometryColumnOf(data)!.types[r];
@@ -386,9 +383,9 @@ describe('a merge of row groups of dimensions', () => {
       }),
     );
     const rows = Int32Array.of(0, 0, 1, 0);
-    expect(() => mergeRowBlockData({ sources: [xy[0], xyz[0]], rows })).toThrow(/coordinates of/);
+    expect(() => mergePageData({ sources: [xy[0], xyz[0]], rows })).toThrow(/coordinates of/);
     expect(() =>
-      mergeRowBlockData({ sources: [xyz[0]], rows: Int32Array.of(0, 0), dimensions: 'xym' }),
+      mergePageData({ sources: [xyz[0]], rows: Int32Array.of(0, 0), dimensions: 'xym' }),
     ).toThrow(/coordinates of xyz/);
   });
 });

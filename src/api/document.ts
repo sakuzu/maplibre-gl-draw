@@ -66,7 +66,7 @@ export interface DocumentResource {
    * given: a past version of the document to look at, say, on the same map.
    *
    * The other document is a Store that holds its features as rows (`createTableStore` of
-   * `@sakuzu/maplibre-gl-draw/kasane`, its rows added with `addRowBlocks`, which makes no feature
+   * `@sakuzu/maplibre-gl-draw/kasane`, its rows added with `addPages`, which makes no feature
    * of them): its layers and groups are drawn from its rows in its stacking order, the datasets
    * of that order among them, read only. The rows added to it or written while it is shown are
    * drawn as they come.

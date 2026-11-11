@@ -21,9 +21,10 @@
  * the row.
  */
 
-import type { RowHandle, ValueStates } from '@sakuzu/kasane';
-import type { GroupHandle, GroupTable } from '@sakuzu/kasane/engine';
-import { type RowStates, STATE_DELETED, STATE_DELTA, STATE_WAIT } from '@sakuzu/kasane/engine';
+import type { GroupHandle, RowRef, ValueStates } from '@sakuzu/kasane';
+import type { GroupTable } from '@sakuzu/kasane/render';
+import { type RowStates, STATE_DELETED, STATE_DELTA, STATE_WAIT } from '@sakuzu/kasane/render';
+
 import type { EnuEdit } from '../geometry/enu-transforms.js';
 import { DrawError } from '../shared/draw-error.js';
 
@@ -102,7 +103,7 @@ export const STATE_HIDDEN_MASK =
 /** The bits of the reasons a row is not hit (a row drawn over is hit where it is) */
 export const STATE_UNHIT_MASK = STATE_HIDDEN_MASK & ~STATE_HIDDEN_SKETCH;
 /**
- * The bits of the library that leave a row out of the rows drawn (`hiddenStates`; the tables
+ * The bits of the library that leave a row out of the rows drawn (`hiddenMask`; the tables
  * leave out the rows deleted and read elsewhere themselves): a row a sketch is drawn over is
  * drawn, by its sketch
  */
@@ -180,7 +181,7 @@ export interface RowStateTables {
  */
 export class RowStateSets {
   /** The handles marked as selected in bulk */
-  private readonly bulk = new Set<RowHandle>();
+  private readonly bulk = new Set<RowRef>();
   /** The translation of each moving set, `[dLng, dLat]` (set 0 is unused) */
   private readonly translations = new Float64Array((MOVE_SETS + 1) * 2);
   /** The edit that moves, rotates or scales each moving set (null for none; set 0 is unused) */
@@ -212,13 +213,13 @@ export class RowStateSets {
   }
 
   /** The rows in a moving set, walked once for each change of them */
-  movingHandles(): RowHandle[] {
+  movingHandles(): RowRef[] {
     if (this.members.every((count) => count === 0)) return [];
     return this.tables.rowStates.find(STATE_MOVE_MASK);
   }
 
   /** The bits of the state of a handle, as the copy of a group holds them */
-  stateOf(handle: RowHandle): number {
+  stateOf(handle: RowRef): number {
     return this.tables.rowStates.of(handle);
   }
 
@@ -243,7 +244,7 @@ export class RowStateSets {
   }
 
   /** The handles marked as selected in bulk */
-  bulkHandles(): ReadonlySet<RowHandle> {
+  bulkHandles(): ReadonlySet<RowRef> {
     return this.bulk;
   }
 
@@ -325,7 +326,7 @@ export class RowStateSets {
    * Forgets what is kept of a handle the tables give again to another row, with the bits it had
    * (the tables have forgotten them)
    */
-  forgotten(handle: RowHandle, bits: number): void {
+  forgotten(handle: RowRef, bits: number): void {
     this.bulk.delete(handle);
     const from = (bits & STATE_MOVE_MASK) >> STATE_MOVE_SHIFT;
     this.letGoIfEmpty(this.leave(from, 0));

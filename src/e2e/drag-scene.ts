@@ -206,7 +206,7 @@ export async function load(
       if (s.kind === 'rows') {
         const made = w.e2e.tables.createTableStore((s.rowsOptions ?? {}) as never);
         store = made.store as unknown as Store;
-        // The writer of its tables, which puts row blocks in them
+        // The writer of its tables, which puts pages in them
         w.writer = made.writer;
         made.store.createLayer({
           ...layer,

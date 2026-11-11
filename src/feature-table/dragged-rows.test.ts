@@ -62,7 +62,7 @@ function setup() {
     store.createFeature(point('d', 139.3));
   });
   const tables = store.tables as FeatureTables;
-  return { store, tables, handleOf: (id: string) => tables.findRow(id) as number };
+  return { store, tables, handleOf: (id: string) => tables.getRowRef(id) as number };
 }
 
 describe('the rows dragged', () => {

@@ -19,7 +19,7 @@
  * It depends on neither the map nor the page, so it runs where Workers run (and in the tests).
  */
 
-import type { RowBlock } from '@sakuzu/maplibre-gl-draw/kasane';
+import type { Page } from '@sakuzu/maplibre-gl-draw/table';
 import {
   type BenchCandidates,
   type CandidatePick,
@@ -51,7 +51,7 @@ export interface OpenRowsOptions {
   readonly dataUrl: string | null;
   readonly layerId: string;
   /** What takes the row groups in */
-  readonly writer: { addRowBlocks(layerId: string, blocks: readonly RowBlock[]): void };
+  readonly writer: { addPages(layerId: string, blocks: readonly Page[]): void };
   readonly createWorker: () => OpenWorker;
   /** The logical cores of the device */
   readonly cores: number;
@@ -120,7 +120,7 @@ export async function openRows(options: OpenRowsOptions): Promise<OpenedRows> {
   }));
   const builds: Array<Extract<TableWorkerMessage, { kind: 'built' }>> = [];
   /** The groups of each Worker not taken in yet */
-  const waiting: RowBlock[][][] = states.map(() => []);
+  const waiting: Page[][][] = states.map(() => []);
   let taking = 0;
   let adopted = 0;
   let adoptMs = 0;
@@ -158,7 +158,7 @@ export async function openRows(options: OpenRowsOptions): Promise<OpenedRows> {
     while (taking < count) {
       for (const groups of waiting[taking].splice(0)) {
         const a0 = performance.now();
-        writer.addRowBlocks(layerId, groups);
+        writer.addPages(layerId, groups);
         adoptMs += performance.now() - a0;
         adopted += groups.length;
         firstGroupAt ||= performance.now();

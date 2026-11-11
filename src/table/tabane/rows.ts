@@ -2,34 +2,34 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * A row block of the Tabane format as a row block of the tables
+ * A page of the Tabane format as a page of the tables
  *
- * The columns of a row block read are the columns of a feature (`columns.ts`), and they are taken
+ * The columns of a page read are the columns of a feature (`columns.ts`), and they are taken
  * as columns: the points of the geometry are the coordinates of its children, the types, the
  * styles and the attributes are taken as they are. What is made here is what the columns of a
- * row block leave to the reader: the ids as text (from their runs), the keys as text (the key of
- * each row of a row block that writes them, or else its head and the numbers of its rows), the
+ * page leave to the reader: the ids as text (from their runs), the keys as text (the key of
+ * each row of a page that writes them, or else its head and the numbers of its rows), the
  * hashes of the ids, the flags, the bbox of every row (it depends on the system of
  * the coordinates of the reader), and the fills of the rows that draw a ring around their
  * point (they depend on the types of the reader). The fills of the polygons are copied from the
- * cache of their triangles that follows the row block in its file (`triangles.ts`) when it fits the
+ * cache of their triangles that follows the page in its file (`triangles.ts`) when it fits the
  * rows, and made otherwise.
  *
  * A pure module: it depends on nothing outside `/table` but its error and `@sakuzu/tabane`, so it
  * runs in a Worker as well.
  */
 
-import type { PointRowRings, RowBlock, RowRead, RowShape, RowShapeColumn } from '@sakuzu/kasane';
+import type { Page, PointRowRings, RowRead, RowShape, RowShapeColumn } from '@sakuzu/kasane';
 import {
   INT8_FORMS,
+  type PageData,
+  type PageWhole,
   ROW_FLAG_DELETED,
-  type RowBlockData,
-  type RowBlockWhole,
   RowCacheWriter,
   rowRingsOfPoint,
   type ShapeColumn,
   type ShapeForm,
-} from '@sakuzu/kasane/engine';
+} from '@sakuzu/kasane/render';
 import {
   type CoordinateDimensions,
   type CoordinateSystem,
@@ -64,13 +64,13 @@ import { featureColumnsOf, geometryTypeOf, stylesOf, typesOf } from './columns.j
 import { type CachedFills, FILL_TRIANGLES_CACHE, readFillTrianglesCache } from './triangles.js';
 
 /**
- * The options of {@link rowBlockOfTabane}
+ * The options of {@link toPage}
  *
  * @experimental
  */
-export interface RowBlockOfTabaneOptions {
+export interface ToPageOptions {
   /**
-   * The dimensions of the coordinates of the layer (those of the row block when omitted); a row block of
+   * The dimensions of the coordinates of the layer (those of the page when omitted); a page of
    * fewer dimensions gets NaN for the others, one of more is refused
    */
   readonly dimensions?: CoordinateDimensions;
@@ -79,8 +79,8 @@ export interface RowBlockOfTabaneOptions {
   /** The rings the rows of some types draw around their point (the Circles when omitted) */
   readonly rings?: PointRowRings;
   /**
-   * The caches that follow the row block in its file (those of its part, `TabaneBlockFile.caches`
-   * whose `part` is the number of the row block plus one): the triangles of its polygons are
+   * The caches that follow the page in its file (those of its part, `TabaneBlockFile.caches`
+   * whose `part` is the number of the page plus one): the triangles of its polygons are
    * copied from the one of the triangles when it fits the rows, and made when there is none or it
    * does not fit. A cache of another name is not read
    */
@@ -96,9 +96,9 @@ function vertexStart(child: ShapeForm, row: number): number {
 }
 
 /**
- * The geometry of the shapes of a row block, its points with the coordinates of `dims`: the
+ * The geometry of the shapes of a page, its points with the coordinates of `dims`: the
  * points of each form are the coordinates of a child, the form of each row its child (null for a
- * row block without the column)
+ * page without the column)
  */
 function geometryOf(
   column: TabaneShapeColumn | null,
@@ -130,31 +130,25 @@ function geometryOf(
 }
 
 /**
- * A row block as a row block of the tables (for `FeatureTablesWriter.addRowBlocks`), its columns
+ * A page as a page of the tables (for `FeatureTablesWriter.addPages`), its columns
  * taken as they are
  *
- * @throws `DrawError` with the code `invalid-input` when the row block has a dimension the layer
+ * @throws `DrawError` with the code `invalid-input` when the page has a dimension the layer
  *   does not, or is not one of features: a column that is not one of `TABANE_FEATURE_COLUMNS` or
  *   of another kind, a row without a type, a geometry of another name or depth, a style that is
  *   not an object
  * @experimental
  */
-export function rowBlockOfTabane(
-  rowBlock: TabaneRowBlock,
-  options: RowBlockOfTabaneOptions = {},
-): RowBlock {
-  return rowBlockDataOfTabane(rowBlock, options);
+export function toPage(rowBlock: TabaneRowBlock, options: ToPageOptions = {}): Page {
+  return pageDataOfTabane(rowBlock, options);
 }
 
 /**
- * A row block as a row block with every column, as the tables read it
+ * A page as a page with every column, as the tables read it
  *
  * @internal
  */
-export function rowBlockDataOfTabane(
-  rowBlock: TabaneRowBlock,
-  options: RowBlockOfTabaneOptions = {},
-): RowBlockData {
+export function pageDataOfTabane(rowBlock: TabaneRowBlock, options: ToPageOptions = {}): PageData {
   const n = rowBlock.length;
   const columns = featureColumnsOf(rowBlock);
   const dims = options.dimensions ?? columns.geometry?.dimensions ?? 'xy';
@@ -262,7 +256,7 @@ export function rowBlockDataOfTabane(
 
   const shapes: Array<ShapeColumn | null> = FEATURE_COLUMN_LAYOUT.shapes.map(() => null);
   shapes[GEOMETRY_COLUMN] = geometry;
-  const wholes: Array<RowBlockWhole | null> = FEATURE_COLUMN_LAYOUT.wholes.map(() => null);
+  const wholes: Array<PageWhole | null> = FEATURE_COLUMN_LAYOUT.wholes.map(() => null);
   wholes[TYPE_COLUMN] = { indexes: types, values: typeNames };
   wholes[STYLE_COLUMN] = { indexes: styles, dictionary: styleDictionary };
   const keyed = FEATURE_COLUMN_LAYOUT.keyed.map(() => null as typeof properties | null);

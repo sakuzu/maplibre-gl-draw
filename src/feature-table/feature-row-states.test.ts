@@ -7,7 +7,7 @@
  * moves its rows while one is in it, and is let go of once the last leaves it
  */
 
-import { GroupTable, RowStates } from '@sakuzu/kasane/engine';
+import { GroupTable, RowStates } from '@sakuzu/kasane/render';
 import { describe, expect, it } from 'vitest';
 import {
   FEATURE_ROW_STATE_BITS,

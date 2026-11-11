@@ -6,9 +6,9 @@
  * number, layers and extent, their order, whether each can be seen and edited
  */
 
-import type { RowHandle } from '@sakuzu/kasane';
-import type { RowPlace } from '@sakuzu/kasane/engine';
-import { ROW_FLAG_DELETED } from '@sakuzu/kasane/engine';
+import type { RowRef } from '@sakuzu/kasane';
+import type { RowPlace } from '@sakuzu/kasane/render';
+import { ROW_FLAG_DELETED } from '@sakuzu/kasane/render';
 import type { BBox } from '../geometry/types.js';
 import { isGroupHidden, isGroupLocked, ROW_FLAG_LOCKED } from '../table/feature-row-columns.js';
 import { STATE_UNHIT_MASK } from './feature-row-states.js';
@@ -90,7 +90,7 @@ export function summarizeRows(
  */
 export function livePlaceOf(
   internals: FeatureTablesInternals,
-  handle: RowHandle,
+  handle: RowRef,
 ): RowPlace | undefined {
   const place = internals.placeOf(handle);
   if (!place || (place.group.data.flags[place.row] & ROW_FLAG_DELETED) !== 0) return undefined;
@@ -107,7 +107,7 @@ export function livePlaceOf(
 export function isRowShown(
   internals: FeatureTablesInternals,
   containers: RowContainers,
-  handle: RowHandle,
+  handle: RowRef,
 ): boolean {
   const place = livePlaceOf(internals, handle);
   if (!place) return false;
@@ -132,7 +132,7 @@ export function isRowShown(
 export function isRowLocked(
   internals: FeatureTablesInternals,
   containers: RowContainers,
-  handle: RowHandle,
+  handle: RowRef,
 ): boolean {
   const place = livePlaceOf(internals, handle);
   if (!place) return false;
@@ -188,7 +188,7 @@ export function firstRowsInOrder(
   rows: TableSelection,
   layerIds: readonly string[],
   limit: number,
-  matches: (handle: RowHandle) => boolean,
+  matches: (handle: RowRef) => boolean,
 ): number[] {
   const out: number[] = [];
   for (const layerId of layerIds) {

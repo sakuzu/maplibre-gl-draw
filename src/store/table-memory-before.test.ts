@@ -62,7 +62,7 @@ function stateOf(store: Store, tables: FeatureTables) {
     const view = tables.get(layerId);
     const handles = view?.listRowHandles(0, 1_000) ?? new Int32Array(0);
     out[layerId] = Array.from(handles, (handle) => tables.getRowId(handle) as string)
-      .filter((id) => tables.findRow(id) !== undefined)
+      .filter((id) => tables.getRowRef(id) !== undefined)
       .map((id) => store.getFeature(id) as Feature);
   }
   return out;
@@ -86,7 +86,7 @@ describe('the writes of the features of rows not held', () => {
     });
     const before = lastBefore(notified);
     expect(before).toBeDefined();
-    expect(Array.from(before?.handles ?? [])).toEqual([tables.findRow('p1')]);
+    expect(Array.from(before?.handles ?? [])).toEqual([tables.getRowRef('p1')]);
     expect(before?.fields.get('geometry')).toEqual([{ type: 'Point', coordinates: [1, 0] }]);
     expect(before?.fields.get('properties:m')).toEqual([undefined]);
     expect(store.restoreRows(before as NonNullable<typeof before>)).not.toBeNull();
@@ -161,7 +161,7 @@ describe('the writes of the features of rows not held', () => {
     const before = lastBefore(notified);
     expect(notified).toHaveLength(1);
     const handles = Array.from(before?.handles ?? []);
-    const at = handles.indexOf(tables.findRow('p1') as number);
+    const at = handles.indexOf(tables.getRowRef('p1') as number);
     expect(before?.fields.get('properties:n')?.[at]).toBe(1);
     expect(before?.fields.get('style')?.[at]).toEqual({});
     store.restoreRows(before as NonNullable<typeof before>);
@@ -187,7 +187,7 @@ describe('the writes of the features of rows not held', () => {
 describe('the writes of rows through the writer of the Store', () => {
   function patchOf(tables: FeatureTables) {
     return {
-      handles: Int32Array.from(['p0', 'p4'], (id) => tables.findRow(id) as number),
+      handles: Int32Array.from(['p0', 'p4'], (id) => tables.getRowRef(id) as number),
       fields: new Map<RowField, unknown[]>([
         ['properties:n', [100, 400]],
         ['hidden', [true, true]],
@@ -198,32 +198,32 @@ describe('the writes of rows through the writer of the Store', () => {
   it('notify the values before of a write of this client', () => {
     const { store, writer, tables, notified } = setup();
     const start = stateOf(store, tables);
-    store.transact(() => writer.apply(patchOf(tables)));
+    store.transact(() => writer.writeRows(patchOf(tables)));
     const before = lastBefore(notified);
     expect(before?.fields.get('properties:n')).toEqual([0, 4]);
     store.restoreRows(before as NonNullable<typeof before>);
     expect(stateOf(store, tables)).toEqual(start);
     // Outside a transaction too
-    writer.apply(patchOf(tables));
+    writer.writeRows(patchOf(tables));
     expect(lastBefore(notified)?.fields.get('hidden')).toEqual([false, false]);
   });
 
   it('notify no values before of a write from elsewhere', () => {
     const { store, writer, tables, notified } = setup();
-    store.transact(() => writer.apply(patchOf(tables)), 'remote');
+    store.transact(() => writer.writeRows(patchOf(tables)), 'remote');
     expect(notified[notified.length - 1].previousValues as RowValues | undefined).toBeUndefined();
   });
 
   it('fold the writes of a transaction that write other fields of other rows', () => {
     const { store, writer, tables, notified } = setup();
     const start = stateOf(store, tables);
-    const h = (id: string) => tables.findRow(id) as number;
+    const h = (id: string) => tables.getRowRef(id) as number;
     store.transact(() => {
       store.restoreRows({
         handles: Int32Array.of(h('p0'), h('p1')),
         fields: new Map([['properties:n', [10, 11]]]),
       });
-      writer.apply({
+      writer.writeRows({
         handles: Int32Array.of(h('p1'), h('p2')),
         fields: new Map<RowField, unknown[]>([
           ['geometry', [null, null].map((_, i) => ({ type: 'Point', coordinates: [i, 5] }))],
@@ -295,7 +295,7 @@ describe('the rows of a layer of z', () => {
     });
     store.transact(
       () =>
-        writer.apply({
+        writer.writeRows({
           handles,
           fields: new Map<RowField, unknown[]>([
             ['type', ['Point', 'Point']],
@@ -331,7 +331,7 @@ describe('the rows of a layer of z', () => {
 
 function writeGeometry(writer: FeatureTablesWriter, store: Store, handles: Int32Array): void {
   store.transact(() =>
-    writer.apply({
+    writer.writeRows({
       handles,
       fields: new Map<RowField, unknown[]>([
         [

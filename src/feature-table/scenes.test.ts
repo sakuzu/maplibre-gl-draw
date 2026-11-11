@@ -11,7 +11,7 @@
  * - A row deleted keeps its key through the versions (it is not dropped yet)
  */
 
-import type { TableWorkBudget } from '@sakuzu/kasane/engine';
+import type { TableWorkBudget } from '@sakuzu/kasane/render';
 import { utf8ColumnFromStrings } from '@sakuzu/tabane';
 import { describe, expect, it } from 'vitest';
 import {
@@ -61,18 +61,18 @@ describe('the deltas and the versions at their edges', () => {
     for (let g = 0; g < 20; g++) {
       const id = `p${g * 550 + 5}`;
       const order = `${key((g * 550 + 549) * 1000)}x`;
-      writer.apply(rowPatch([tables.findRow(id) as number], { key: [order] }));
+      writer.writeRows(rowPatch([tables.getRowRef(id) as number], { key: [order] }));
       (reference.rows.get(id) as ReferenceRow).order = order;
     }
     // The bytes of three versions at once: the others wait for the ones held
     internals.setPendingVersionBytes(3 * 550 * 2 * 342);
-    for (let i = 0; i < 10; i++) internals.advanceVersions(ONE_STEP);
+    for (let i = 0; i < 10; i++) internals.rebuild(ONE_STEP);
     expect(internals.versionStats().mostPending).toBeLessThanOrEqual(3);
     expectTablesMatch(tables, reference, ['a'], groupHandleOf);
     open = true;
     for (let i = 0; i < 60 && internals.hasPendingWork; i++) {
-      internals.advanceVersions(ONE_STEP);
-      internals.swapVersions();
+      internals.rebuild(ONE_STEP);
+      internals.swap();
     }
     expect(internals.versionStats().mostPending).toBeLessThanOrEqual(3);
     expect(internals.deltaRowCount()).toBe(0);
@@ -89,9 +89,9 @@ describe('the deltas and the versions at their edges', () => {
     const orders = ids.map(
       (_, i) => `${key(i % 2 === 0 ? 5000 : 2_500_000)}${String(i).padStart(5, '0')}`,
     );
-    writer.apply(
+    writer.writeRows(
       rowPatch(
-        ids.map((id) => tables.findRow(id) as number),
+        ids.map((id) => tables.getRowRef(id) as number),
         { key: orders },
       ),
     );
@@ -115,7 +115,7 @@ describe('the deltas and the versions at their edges', () => {
     const setup = tablesOfReference(reference, ['a'], 4);
     const { tables, writer, internals, groupHandleOf } = setup;
     const [fresh] = writer.allocateHandles(utf8ColumnFromStrings(['alone']));
-    writer.apply(
+    writer.writeRows(
       rowPatch([fresh], {
         type: ['Point'],
         parent: ['b'],
@@ -130,7 +130,7 @@ describe('the deltas and the versions at their edges', () => {
       geometry: { type: 'Point', coordinates: [1, 1] },
       order: key(1),
     });
-    writer.apply(rowPatch([tables.findRow('p3') as number], {}, [1]));
+    writer.writeRows(rowPatch([tables.getRowRef('p3') as number], {}, [1]));
     (reference.rows.get('p3') as ReferenceRow).deleted = true;
     internals.flushVersions();
     expect(internals.rowTable('b')?.groupCount).toBe(1);

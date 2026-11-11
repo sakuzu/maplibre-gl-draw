@@ -4,8 +4,8 @@
 // A TypeDoc plugin that sorts the API reference by task instead of by kind.
 //
 // The sources already group the public symbols: the section comments of each entry point
-// (src/index.ts, src/geometry/index.ts, src/table/index.ts, src/kasane/index.ts,
-// src/webgl/index.ts) and of the
+// (src/index.ts, src/geometry/index.ts, src/table/index.ts, src/extend/index.ts,
+// src/kasane/index.ts, src/webgl/index.ts) and of the
 // Draw interface (src/api/draw.ts). This plugin reads those comments and gives every symbol a
 // category, and every member of Draw a group, so that the grouping lives in one place, next to
 // the code. A symbol outside any section, or a section this file does not
@@ -41,16 +41,16 @@ const KASANE_CATEGORIES = [
   'Stores that hold features as rows',
   'Features of GeoJSON read as rows',
   'The order of the rows',
-  'Features selected in bulk and dragged',
+  'Features selected in bulk',
   'What the extensions answer from the rows',
-  'Pictures of points drawn with the rows',
-  'Build row blocks in a Worker',
-  'Features as the rows of Tabane blocks (@sakuzu/tabane), and the blocks read as row blocks',
+  'Build and merge pages in a Worker',
+  'Features as the rows of Tabane blocks (@sakuzu/tabane)',
 ];
 
 /** The sections of src/webgl/index.ts, which are its categories (in this order) */
 const WEBGL_CATEGORIES = [
   'What a plugin draws with, and what it holds on the GPU',
+  'The rows of a layer read without making features',
   'Shaders and projection',
   'The origin of what is kept on the GPU',
   'Blending and billboards',
@@ -147,6 +147,7 @@ export function load(app) {
       },
       { module: 'geometry', file: 'src/geometry/index.ts', rename: (s) => s },
       { module: 'table', file: 'src/table/index.ts', rename: (s) => s },
+      { module: 'extend', file: 'src/extend/index.ts', rename: (s) => s },
       {
         module: 'kasane',
         file: 'src/kasane/index.ts',

@@ -20,7 +20,7 @@
  * turns the box of no extent of a point).
  */
 
-import type { RowGroup } from '@sakuzu/kasane/engine';
+import type { RowGroup } from '@sakuzu/kasane/render';
 import type { ProjectionData } from 'maplibre-gl';
 import type { SelectionUIConfig } from '../../shared/config/selection.js';
 import { RENDERING_DEFAULTS } from '../../shared/math/constants.js';

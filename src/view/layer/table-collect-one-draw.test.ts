@@ -13,7 +13,7 @@
  * of the points are also in the buffer of the points, in the same order.
  */
 
-import type { RowGroup } from '@sakuzu/kasane/engine';
+import type { RowGroup } from '@sakuzu/kasane/render';
 import { ValueStringCache } from '@sakuzu/tabane';
 import { describe, expect, it } from 'vitest';
 import { drawPropertyKey } from '../../shared/properties.js';

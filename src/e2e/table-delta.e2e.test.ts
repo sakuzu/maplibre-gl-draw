@@ -172,7 +172,7 @@ async function drawWritten(
           createDraw: typeof import('../index.js').createDraw;
           tables: {
             createFeatureTables: typeof import('../kasane/index.js').createFeatureTables;
-            createRowBlockBuilder: typeof import('../table/feature-row-blocks.js').createFeatureRowBlockBuilder;
+            createPageBuilder: typeof import('../table/feature-row-blocks.js').createFeaturePageBuilder;
           };
           internals: {
             MemoryContractStore: new () => Contract;
@@ -195,7 +195,7 @@ async function drawWritten(
         });
       }, 'remote');
       const { tables, writer } = w.e2e.tables.createFeatureTables();
-      const builder = w.e2e.tables.createRowBlockBuilder({ targetRows: 8 });
+      const builder = w.e2e.tables.createPageBuilder({ targetRows: 8 });
       for (const f of features) {
         builder.addRow({
           id: f.id,
@@ -205,7 +205,7 @@ async function drawWritten(
           style: f.style ?? {},
         } as never);
       }
-      writer.addRowBlocks('rows', builder.finish());
+      writer.addPages('rows', builder.finish());
       Object.defineProperty(store, 'tables', { value: tables });
       w.draw.destroy();
       w.draw = w.e2e.createDraw(map, { store, initDefaultLayer: false });
@@ -245,8 +245,8 @@ async function drawWritten(
       let deltaRows = 0;
       if (change) {
         const ids = change.moves.map((m) => m.id);
-        writer.apply({
-          handles: Int32Array.from(ids.map((id) => tables.findRow(id) as number)),
+        writer.writeRows({
+          handles: Int32Array.from(ids.map((id) => tables.getRowRef(id) as number)),
           fields: new Map([['key', change.moves.map((m) => m.order)]]),
         });
         const encoder = new TextEncoder();
@@ -258,7 +258,7 @@ async function drawWritten(
           bytes.set(part, offsets[i]);
         });
         const handles = writer.allocateHandles({ offsets, bytes });
-        writer.apply({
+        writer.writeRows({
           handles,
           fields: new Map<never, unknown[]>([
             ['type' as never, change.created.map((f) => f.type)],

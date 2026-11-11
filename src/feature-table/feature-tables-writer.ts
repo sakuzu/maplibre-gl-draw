@@ -17,15 +17,15 @@
  * copied row by row.
  */
 
-import type { TableGroupPatch, TablesWriter } from '@sakuzu/kasane';
+import type { GroupHandle, TableGroupPatch, TablesWriter } from '@sakuzu/kasane';
 import { KasaneError } from '@sakuzu/kasane';
-import type { GroupHandle } from '@sakuzu/kasane/engine';
 import {
   ItemWalk,
   type ItemWalkSource,
+  type PageData,
   ROW_FLAG_DELETED,
-  type RowBlockData,
-} from '@sakuzu/kasane/engine';
+} from '@sakuzu/kasane/render';
+
 import { utf8String } from '@sakuzu/tabane';
 import type { FeatureTablesWriter, RowApplyOptions } from '../api/tables.js';
 import { DrawError } from '../shared/draw-error.js';
@@ -101,7 +101,7 @@ export function createFeatureTablesWriter(
   let partsWatch: { readonly watch: ItemOrderWatch | null } | null = null;
   const orderSource: ItemOrderSource = {
     walkItems: (layerId) => internals.walkItems(layerId),
-    getGroupKey: (group) => internals.getGroupOrder(group),
+    getGroupKey: (group) => internals.getGroupKey(group),
     groups: internals.groups,
     idOf: (handle) => internals.ids.idOf(handle),
     placeOf: (handle) => internals.placeOf(handle),
@@ -308,20 +308,20 @@ export function createFeatureTablesWriter(
       }
     },
     // The blocks are made by the builder and the merge of the library
-    addRowBlocks: (layerId, blocks) => {
+    addPages: (layerId, blocks) => {
       try {
-        const { rows } = tables.addRowBlocks(layerId, blocks as readonly RowBlockData[]);
+        const { rows } = tables.addPages(layerId, blocks as readonly PageData[]);
         notify?.({ rows });
         return rows;
       } catch (error) {
         throw writerError(error);
       }
     },
-    apply: (values, options: RowApplyOptions = {}) => {
+    writeRows: (values, options: RowApplyOptions = {}) => {
       try {
         // A part of a write made in several parts: its changes of the order are told at its end
         const watch = partsWatch ? null : watchOrder(values);
-        const { rows, kept } = tables.apply(shapesOfGeometries(values), options);
+        const { rows, kept } = tables.writeRows(shapesOfGeometries(values), options);
         if (notify) {
           // The values before, the token that keeps the rows deleted and the changes of the order
           // go with the last of the additions to the notification
@@ -346,24 +346,17 @@ export function createFeatureTablesWriter(
         throw writerError(error);
       }
     },
-    applyGroups: (patch, options: RowApplyOptions = {}) => {
+    writeGroups: (patch, options: RowApplyOptions = {}) => {
       try {
         const followers = notify ? watchFollowers(patch) : null;
         const moves = notify ? groupMovesOf(patch) : [];
-        const { rows, kept } = tables.applyGroups(withoutNames(patch), options);
+        const { rows, kept } = tables.writeGroups(withoutNames(patch), options);
         // A group created again whose id is hidden on this client is hidden again
         internals.states.groupsWritten(patch.handles);
         const order = [...(followers?.finish() ?? []), ...moves];
         if (rows.layers.size > 0) notify?.({ rows, ...(order.length > 0 && { order }) });
         else if (order.length > 0) notify?.({ order });
         if (kept) notify?.({ restoreToken: options.restoreToken });
-      } catch (error) {
-        throw writerError(error);
-      }
-    },
-    getGroupOrder: (groupHandle) => {
-      try {
-        return internals.getGroupOrder(groupHandle);
       } catch (error) {
         throw writerError(error);
       }

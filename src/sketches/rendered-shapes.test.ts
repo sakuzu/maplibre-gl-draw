@@ -50,7 +50,7 @@ function rowsSetup() {
     store.createFeature(point('c', 139.2));
   });
   const tables = store.tables as FeatureTables;
-  const handleOf = (id: string) => tables.findRow(id) as number;
+  const handleOf = (id: string) => tables.getRowRef(id) as number;
   return { store, tables, handleOf, states: internalsOf(tables).states };
 }
 

@@ -11,7 +11,7 @@
  * Store of rows for a host without a document of its own elsewhere, and what the tests of core
  * run a Store of rows with.
  *
- * - The writes of the features go to the rows (`apply`). A new feature is put at the end of its
+ * - The writes of the features go to the rows (`writeRows`). A new feature is put at the end of its
  *   layer (or of its group), with a key after the last one
  * - One notification per outermost transaction. A row is in it once, as a change of its row
  * - Every write of rows of this client (not `remote`), through the Store or its writer, reads the
@@ -24,7 +24,7 @@
  *   feature, or dissolved) are kept by the token of the transaction (`features.restore`,
  *   `groups.restore`); what is deleted from elsewhere is not
  * - The writes of rows from elsewhere go through the writer it returns, in a transaction with
- *   their source (`store.transact(() => writer.apply(patch), 'remote')`)
+ *   their source (`store.transact(() => writer.writeRows(patch), 'remote')`)
  * - `listFeatures` and `listFeaturesInOrder` throw: the rows are read from the tables
  * - A restore of many rows is written in steps, as one transaction told once (`row-steps.ts`)
  * - The write mark of the rows goes up once in each frame that writes values: an outermost
@@ -33,15 +33,15 @@
  *   stamp it on the rows they write (`write-marks.ts`)
  */
 
-import type { ItemWalk } from '@sakuzu/kasane/engine';
-import { ROW_FLAG_DELETED } from '@sakuzu/kasane/engine';
+import type { ItemWalk } from '@sakuzu/kasane/render';
+import { ROW_FLAG_DELETED } from '@sakuzu/kasane/render';
 import { utf8ColumnFromStrings, utf8String } from '@sakuzu/tabane';
 import type {
   FeatureTables,
   FeatureTablesWriter,
   RowApplyOptions,
   RowField,
-  RowHandle,
+  RowRef,
   RowWrite,
   TableGroupField,
   TableGroupPatch,
@@ -136,7 +136,7 @@ export type TableStoreOptions = Omit<FeatureTablesInternalOptions, 'onRelease'> 
  * type, its geometry, the keys of `properties` read and the fields written
  */
 interface TransformedRow {
-  readonly handle: RowHandle;
+  readonly handle: RowRef;
   readonly type: string;
   geometry: Feature['geometry'];
   readonly properties: Map<string, unknown>;
@@ -226,13 +226,13 @@ export class TableContractStore implements StoreContract {
   /** The values the writes of this transaction read before they wrote, in their order */
   #before: RowValues[] = [];
   /** The rows this transaction wrote, and whether each was there when it began */
-  #written = new Map<RowHandle, boolean>();
+  #written = new Map<RowRef, boolean>();
   /** The depth of the writes of the document being made */
   #depth = 0;
   /** What keeps the rows deleted in this transaction (made at the first deletion) */
   #retain: RestoreToken | null = null;
   /** The rows deleted from elsewhere, the oldest first, whose ids are kept a while */
-  #remoteDeleted: RowHandle[] = [];
+  #remoteDeleted: RowRef[] = [];
   /** The groups features left in the write being made (deleted at its end when empty) */
   readonly #leftGroups = new Set<string>();
   /** The restore of rows written in steps under way (`row-steps.ts`) */
@@ -271,9 +271,9 @@ export class TableContractStore implements StoreContract {
     // Every write of values of the tables raises the mark of its frame (once a frame)
     this.#writer = {
       ...writer,
-      addRowBlocks: (layerId, blocks) => marks.write(() => writer.addRowBlocks(layerId, blocks)),
-      apply: (patch, options) => marks.write(() => writer.apply(patch, options)),
-      applyGroups: (patch, options) => marks.write(() => writer.applyGroups(patch, options)),
+      addPages: (layerId, blocks) => marks.write(() => writer.addPages(layerId, blocks)),
+      writeRows: (patch, options) => marks.write(() => writer.writeRows(patch, options)),
+      writeGroups: (patch, options) => marks.write(() => writer.writeGroups(patch, options)),
       clear: () => marks.write(() => writer.clear()),
     };
     const own = this.#writer;
@@ -282,10 +282,9 @@ export class TableContractStore implements StoreContract {
       createRestoreToken: () => own.createRestoreToken(),
       forget: (handles) => own.forget(handles),
       allocateHandles: (ids, hashes) => own.allocateHandles(ids, hashes),
-      addRowBlocks: (layerId, blocks) => this.transact(() => own.addRowBlocks(layerId, blocks)),
-      apply: (patch, options) => this.transact(() => this.#applyRows(patch, options)),
-      applyGroups: (patch, options) => this.#applyGroups(patch, options),
-      getGroupOrder: (groupHandle) => own.getGroupOrder(groupHandle),
+      addPages: (layerId, blocks) => this.transact(() => own.addPages(layerId, blocks)),
+      writeRows: (patch, options) => this.transact(() => this.#applyRows(patch, options)),
+      writeGroups: (patch, options) => this.#applyGroups(patch, options),
       clear: () => this.transact(() => own.clear(), 'remote'),
     };
     this.#bus.subscribe((changes) => this.#deliver(changes));
@@ -319,7 +318,7 @@ export class TableContractStore implements StoreContract {
     this.#readGate();
     const selected = this.#internals.featureCache.selectedFeatureOf(id);
     if (selected) return selected;
-    const handle = this.tables.findRow(id);
+    const handle = this.tables.getRowRef(id);
     return handle === undefined ? undefined : this.#rowFeature(handle);
   }
   listFeatures(): Feature[] {
@@ -373,7 +372,7 @@ export class TableContractStore implements StoreContract {
       const ids = new Set<string>();
       const groups: Array<TableGroup | undefined> = [];
       for (const feature of features) {
-        if (ids.has(feature.id) || this.tables.findRow(feature.id) !== undefined) {
+        if (ids.has(feature.id) || this.tables.getRowRef(feature.id) !== undefined) {
           throw new Error(`Feature with id "${feature.id}" already exists`);
         }
         ids.add(feature.id);
@@ -411,10 +410,7 @@ export class TableContractStore implements StoreContract {
         return end;
       };
       // The rows of each layer, in the order given
-      const writes = new Map<
-        string,
-        Array<{ handle: RowHandle; fields: Map<RowField, unknown> }>
-      >();
+      const writes = new Map<string, Array<{ handle: RowRef; fields: Map<RowField, unknown> }>>();
       features.forEach((feature, i) => {
         const handle = handles[i];
         const group = groups[i];
@@ -448,7 +444,7 @@ export class TableContractStore implements StoreContract {
             // A row that was a member stands where its group stands
             const key =
               keptGroup >= 0
-                ? (this.#writer.getGroupOrder(keptGroup) ?? keyAfter(end.first))
+                ? (this.#internals.getGroupKey(keptGroup) ?? keyAfter(end.first))
                 : utf8String(kept.group.data.keys, kept.row);
             fields.set('key', key);
             end.keep(key);
@@ -485,7 +481,7 @@ export class TableContractStore implements StoreContract {
    */
   #updateFeatures(updates: ReadonlyArray<{ id: string; updates: Partial<Feature> }>): void {
     this.#apply(() => {
-      let run: Array<{ handle: RowHandle; fields: ReadonlyMap<RowField, unknown> }> = [];
+      let run: Array<{ handle: RowRef; fields: ReadonlyMap<RowField, unknown> }> = [];
       let runFields = '';
       const inRun = new Set<string>();
       const flush = (): void => {
@@ -497,7 +493,7 @@ export class TableContractStore implements StoreContract {
       for (const { id, updates: changes } of updates) {
         // A feature updated again is read as the write before leaves it
         if (inRun.has(id)) flush();
-        let updated: { handle: RowHandle; fields: Map<RowField, unknown>; moved: boolean };
+        let updated: { handle: RowRef; fields: Map<RowField, unknown>; moved: boolean };
         try {
           updated = this.#updatedFields(id, changes);
         } catch (error) {
@@ -531,8 +527,8 @@ export class TableContractStore implements StoreContract {
   #updatedFields(
     id: string,
     updates: Partial<Feature>,
-  ): { handle: RowHandle; fields: Map<RowField, unknown>; moved: boolean } {
-    const handle = this.tables.findRow(id);
+  ): { handle: RowRef; fields: Map<RowField, unknown>; moved: boolean } {
+    const handle = this.tables.getRowRef(id);
     const current = handle === undefined ? undefined : this.#rowFeature(handle);
     if (handle === undefined || !current) throw new Error(`Feature with id "${id}" not found`);
     // The place: another layer or group goes at its end, with the key of the order
@@ -659,7 +655,7 @@ export class TableContractStore implements StoreContract {
     const named: string[] = [];
     for (const id of ids) {
       if (edited.has(id) || rows.has(id)) continue;
-      const handle = this.tables.findRow(id);
+      const handle = this.tables.getRowRef(id);
       if (handle === undefined) continue;
       handles.push(handle);
       named.push(id);
@@ -722,11 +718,11 @@ export class TableContractStore implements StoreContract {
 
   deleteFeature(id: string): boolean {
     return this.#apply(() => {
-      const handle = this.tables.findRow(id);
+      const handle = this.tables.getRowRef(id);
       if (handle === undefined) throw new Error(`Feature with id "${id}" not found`);
       const group = this.#groupIdOfRow(handle);
       if (group !== undefined) this.#leftGroups.add(group);
-      this.writer.apply(
+      this.writer.writeRows(
         { handles: Int32Array.of(handle), fields: new Map(), deleted: Uint8Array.of(1) },
         this.#keeping(),
       );
@@ -787,7 +783,7 @@ export class TableContractStore implements StoreContract {
           handles.set(batch, at);
           at += batch.length;
         }
-        this.writer.apply(
+        this.writer.writeRows(
           { handles, fields: new Map(), deleted: new Uint8Array(count).fill(1) },
           this.#keeping(),
         );
@@ -840,7 +836,7 @@ export class TableContractStore implements StoreContract {
         // Values of rows there (a change of many rows selected): written as given
         this.#leaveGroups(patch);
         const deletes = patch.deleted?.some((value) => value !== 0) ?? false;
-        this.writer.apply(patch, { before: write.before, ...(deletes && this.#keeping()) });
+        this.writer.writeRows(patch, { before: write.before, ...(deletes && this.#keeping()) });
         return;
       }
       const handles: number[] = Array.from(patch.handles);
@@ -899,7 +895,7 @@ export class TableContractStore implements StoreContract {
       }
       for (const values of fields.values()) values.length = handles.length;
       const deletes = deleted?.some((value) => value !== 0) ?? false;
-      this.writer.apply(
+      this.writer.writeRows(
         {
           handles: Int32Array.from(handles),
           fields,
@@ -961,7 +957,7 @@ export class TableContractStore implements StoreContract {
         groupWrites.push({ handle: code >> 1, key: keys[k], group: moved });
       });
       if (groupWrites.length > 0) {
-        this.#writer.applyGroups({
+        this.#writer.writeGroups({
           handles: Int32Array.from(groupWrites, (write) => write.handle),
           fields: new Map<TableGroupField, unknown[]>([
             ['key', groupWrites.map((write) => write.key)],
@@ -993,7 +989,7 @@ export class TableContractStore implements StoreContract {
         ['parent', rows.map(() => group?.id ?? to.layerId)],
         ['key', rowKeys],
       ]);
-      this.writer.apply({ handles: Int32Array.from(rows), fields });
+      this.writer.writeRows({ handles: Int32Array.from(rows), fields });
     });
   }
 
@@ -1005,15 +1001,15 @@ export class TableContractStore implements StoreContract {
       }
       // The features listed join the group, which takes the place of the first of them
       const members = group.kind === 'table' ? [] : group.featureIds;
-      const first = members.length > 0 ? this.tables.findRow(members[0]) : undefined;
+      const first = members.length > 0 ? this.tables.getRowRef(members[0]) : undefined;
       // Its layer is the one of its first member, when it has one
       const firstLayer = first === undefined ? undefined : this.getFeature(members[0])?.layerId;
       const created = tableGroupOf(firstLayer ? { ...group, layerId: firstLayer } : group);
       // A group deleted whose rows are kept is created again with its handle and the key it had
       const kept = this.#internals.groups.handleOfId(created.id);
       const handle = kept >= 0 ? kept : this.#nextGroup++;
-      const keptOrder = kept >= 0 ? this.#writer.getGroupOrder(kept) : undefined;
-      this.#writer.applyGroups({
+      const keptOrder = kept >= 0 ? this.#internals.getGroupKey(kept) : undefined;
+      this.#writer.writeGroups({
         handles: Int32Array.of(handle),
         fields: new Map<TableGroupField, unknown[]>([
           ['id', [created.id]],
@@ -1054,7 +1050,7 @@ export class TableContractStore implements StoreContract {
       const group = frozenCopy({ ...previous, ...fields, id, kind: 'table' as const });
       const handle = this.#internals.groups.handleOfId(id);
       if (handle >= 0 && (group.visible !== previous.visible || group.locked !== previous.locked)) {
-        this.#writer.applyGroups({
+        this.#writer.writeGroups({
           handles: Int32Array.of(handle),
           fields: new Map<TableGroupField, unknown[]>([
             ['hidden', [!group.visible]],
@@ -1082,7 +1078,7 @@ export class TableContractStore implements StoreContract {
       if (members.length > 0) {
         const place = this.#neighborsOf(group.layerId, handle * 2 + 1);
         const keys = keysBetween(place.below, place.above, members.length);
-        this.writer.apply({
+        this.writer.writeRows({
           handles: Int32Array.from(members),
           fields: new Map<RowField, unknown[]>([
             ['parent', Array.from(members, () => group.layerId)],
@@ -1105,8 +1101,8 @@ export class TableContractStore implements StoreContract {
   createGroups(groups: readonly Group[]): boolean {
     return this.#apply(() => {
       const ids = new Set<string>();
-      const joining = new Set<RowHandle>();
-      const plans: Array<{ created: TableGroup; members: RowHandle[] }> = [];
+      const joining = new Set<RowRef>();
+      const plans: Array<{ created: TableGroup; members: RowRef[] }> = [];
       for (const group of groups) {
         if (ids.has(group.id) || this.#groups.has(group.id)) {
           throw new Error(`Group with id "${group.id}" already exists`);
@@ -1116,7 +1112,7 @@ export class TableContractStore implements StoreContract {
           throw new Error(`Layer with id "${group.layerId}" not found`);
         }
         const members = (group.kind === 'table' ? [] : group.featureIds).map((id) => {
-          const handle = this.tables.findRow(id);
+          const handle = this.tables.getRowRef(id);
           if (handle === undefined) throw new Error(`Item with id "${id}" not found`);
           if (joining.has(handle)) throw new Error(`The feature "${id}" joins two groups`);
           joining.add(handle);
@@ -1148,7 +1144,7 @@ export class TableContractStore implements StoreContract {
         const kept = this.#internals.groups.handleOfId(created.id);
         handles.push(kept >= 0 ? kept : this.#nextGroup++);
         orders.push('');
-        const keptOrder = kept >= 0 ? this.#writer.getGroupOrder(kept) : undefined;
+        const keptOrder = kept >= 0 ? this.#internals.getGroupKey(kept) : undefined;
         if (keptOrder !== undefined) {
           orders[i] = keptOrder;
           continue;
@@ -1164,7 +1160,7 @@ export class TableContractStore implements StoreContract {
         else endOf(created.layerId).add((key) => (orders[i] = key));
       }
       for (const end of ends.values()) end.finish();
-      this.#writer.applyGroups({
+      this.#writer.writeGroups({
         handles: Int32Array.from(handles),
         fields: new Map<TableGroupField, unknown[]>([
           ['id', plans.map(({ created }) => created.id)],
@@ -1196,7 +1192,7 @@ export class TableContractStore implements StoreContract {
         });
       }
       for (const write of writes.values()) {
-        this.writer.apply({
+        this.writer.writeRows({
           handles: Int32Array.from(write.rows),
           fields: new Map<RowField, unknown[]>([
             ['parent', write.groups],
@@ -1264,7 +1260,7 @@ export class TableContractStore implements StoreContract {
           run.push(entry);
         }
         finishRun();
-        this.writer.apply({
+        this.writer.writeRows({
           handles: Int32Array.from(rows),
           fields: new Map<RowField, unknown[]>([
             ['parent', rows.map(() => layerId)],
@@ -1356,7 +1352,7 @@ export class TableContractStore implements StoreContract {
   setLocallyHidden(id: string, hidden: boolean): void {
     this.#client.setLocallyHidden(id, hidden);
     // A row hidden on this client is hidden in its state, and the rows of a group by the group
-    const handle = this.tables.findRow(id);
+    const handle = this.tables.getRowRef(id);
     if (handle !== undefined) this.#internals.states.setHidden(Int32Array.of(handle), hidden);
     else if (this.tables.findGroup(id) !== undefined || !hidden) {
       this.#internals.states.setGroupHidden(id, hidden);
@@ -1538,7 +1534,7 @@ export class TableContractStore implements StoreContract {
     this.transact(() => {
       const groups = this.#internals.groups;
       const idsBefore = Array.from(patch.handles, (handle) => groups.idOf(handle));
-      this.#writer.applyGroups(patch, options);
+      this.#writer.writeGroups(patch, options);
       const names = patch.fields.get('name');
       const created: TableGroup[] = [];
       const updated: Array<{ id: string; group: TableGroup; previous: TableGroup }> = [];
@@ -1613,7 +1609,7 @@ export class TableContractStore implements StoreContract {
   }
 
   /** The id of the group of features a row is in (undefined outside a group) */
-  #groupIdOfRow(handle: RowHandle): string | undefined {
+  #groupIdOfRow(handle: RowRef): string | undefined {
     const place = this.#internals.placeOf(handle);
     const group = place ? place.group.data.groups[place.row] : -1;
     return group >= 0 ? this.#internals.groups.idOf(group) : undefined;
@@ -1621,7 +1617,7 @@ export class TableContractStore implements StoreContract {
 
   /** The number of an item: twice the handle of a row, twice the handle of a group plus one */
   #codeOfId(id: string): number {
-    const handle = this.tables.findRow(id);
+    const handle = this.tables.getRowRef(id);
     if (handle !== undefined) return handle * 2;
     if (!this.#groups.has(id)) return -1;
     const group = this.#internals.groups.handleOfId(id);
@@ -1637,7 +1633,7 @@ export class TableContractStore implements StoreContract {
   #keyOfCode(code: number): string {
     const handle = code >> 1;
     // The key written of a group (its members may be read where the key before puts them)
-    if ((code & 1) === 1) return this.#writer.getGroupOrder(handle) ?? '';
+    if ((code & 1) === 1) return this.#internals.getGroupKey(handle) ?? '';
     const place = this.#internals.placeOf(handle);
     if (!place) return '';
     // A row is ordered by its key among the members of its group, or among the items of its layer
@@ -1690,7 +1686,7 @@ export class TableContractStore implements StoreContract {
   }
 
   /** Writes fields of one row */
-  #write(handle: RowHandle, fields: ReadonlyMap<RowField, unknown>): void {
+  #write(handle: RowRef, fields: ReadonlyMap<RowField, unknown>): void {
     this.#writeRows([{ handle, fields }]);
   }
 
@@ -1699,7 +1695,7 @@ export class TableContractStore implements StoreContract {
    * first give it, with nothing (undefined) for a row that does not give it
    */
   #writeRows(
-    rows: ReadonlyArray<{ handle: RowHandle; fields: ReadonlyMap<RowField, unknown> }>,
+    rows: ReadonlyArray<{ handle: RowRef; fields: ReadonlyMap<RowField, unknown> }>,
   ): void {
     const columns = new Map<RowField, unknown[]>();
     rows.forEach(({ fields }, i) => {
@@ -1712,7 +1708,7 @@ export class TableContractStore implements StoreContract {
         values[i] = value;
       }
     });
-    this.writer.apply({
+    this.writer.writeRows({
       handles: Int32Array.from(rows, (row) => row.handle),
       fields: columns,
     });
@@ -1730,7 +1726,7 @@ export class TableContractStore implements StoreContract {
     for (const handle of patch.handles) {
       if (!this.#written.has(handle) && !this.#isThere(handle)) this.#written.set(handle, false);
     }
-    const change = this.#writer.apply(patch, rest);
+    const change = this.#writer.writeRows(patch, rest);
     if (before && before.handles.length > 0) this.#before.push(before);
     return change;
   }
@@ -1756,7 +1752,7 @@ export class TableContractStore implements StoreContract {
   }
 
   /** Whether a row is there (a row, not deleted) */
-  #isThere(handle: RowHandle): boolean {
+  #isThere(handle: RowRef): boolean {
     const place = this.#internals.placeOf(handle);
     return !!place && (place.group.data.flags[place.row] & ROW_FLAG_DELETED) === 0;
   }
@@ -1767,7 +1763,7 @@ export class TableContractStore implements StoreContract {
   }
 
   /** The feature of a row, kept or made (undefined for a deleted row) */
-  #rowFeature(handle: RowHandle): Feature | undefined {
+  #rowFeature(handle: RowRef): Feature | undefined {
     const place = this.#internals.placeOf(handle);
     if (!place || (place.group.data.flags[place.row] & ROW_FLAG_DELETED) !== 0) return undefined;
     return this.#internals.featureCache.featureOf(place.table.tableId, place.group, place.row);
@@ -1782,18 +1778,18 @@ export class TableContractStore implements StoreContract {
     // A group without members is not an item of the rows; its key may come after
     for (const group of this.#groups.values()) {
       if (group.layerId !== layerId) continue;
-      const key = this.#writer.getGroupOrder(this.#internals.groups.handleOfId(group.id));
+      const key = this.#internals.getGroupKey(this.#internals.groups.handleOfId(group.id));
       if (key !== undefined && (last === null || key > last)) last = key;
     }
     return last;
   }
 
   /** The key a row is ordered by among the items of its layer: its own, or the one of its group */
-  #itemKeyOf(handle: RowHandle): string {
+  #itemKeyOf(handle: RowRef): string {
     const place = this.#internals.placeOf(handle);
     if (!place) return keyAfter(null);
     const group = place.group.data.groups[place.row];
-    if (group >= 0) return this.#writer.getGroupOrder(group) ?? keyAfter(null);
+    if (group >= 0) return this.#internals.getGroupKey(group) ?? keyAfter(null);
     return utf8String(place.group.data.keys, place.row);
   }
 
@@ -1823,7 +1819,7 @@ export class TableContractStore implements StoreContract {
       .map((group) => this.#internals.groups.handleOfId(group.id))
       .filter((handle) => handle >= 0);
     if (handles.length > 0) {
-      this.#writer.applyGroups(
+      this.#writer.writeGroups(
         {
           handles: Int32Array.from(handles),
           fields: new Map(),

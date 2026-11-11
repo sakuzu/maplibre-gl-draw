@@ -406,7 +406,7 @@ export class SketchController {
       ids: listed,
       hasFeature(id) {
         if (ids.has(id)) return true;
-        const handle = rows ? tables?.findRow(id) : undefined;
+        const handle = rows ? tables?.getRowRef(id) : undefined;
         return handle !== undefined && rows?.has(handle) === true;
       },
       hasRow(handle) {
@@ -1277,7 +1277,7 @@ export class SketchController {
     if (selected) {
       const shared: number[] = [];
       for (const id of others) {
-        const handle = tables.findRow(id);
+        const handle = tables.getRowRef(id);
         if (handle === undefined || !selected.has(handle)) continue;
         shared.push(handle);
         slow.push(id);
@@ -1286,7 +1286,7 @@ export class SketchController {
     } else {
       const handles: number[] = [];
       for (const id of this.#touchedBy(entry)) {
-        const handle = tables.findRow(id);
+        const handle = tables.getRowRef(id);
         if (handle === undefined || others.has(id)) slow.push(id);
         else {
           handles.push(handle);
@@ -1579,7 +1579,7 @@ export class SketchController {
   #rowMark(id: string): number | undefined {
     const tables = this.#store.tables;
     const internals = featureTablesInternals(tables);
-    const handle = tables?.findRow(id);
+    const handle = tables?.getRowRef(id);
     if (!internals || handle === undefined) return undefined;
     const place = internals.placeOf(handle);
     return place ? place.group.marks[place.row] : undefined;

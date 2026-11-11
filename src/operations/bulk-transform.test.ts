@@ -99,7 +99,7 @@ function storeOf(features: Feature[], selectionIdsLimit: number, dims?: Coordina
 /** The values of every row of the layer (geometry, attributes) */
 function rowsOf(_store: DrawStore, tables: FeatureTables, ids: readonly string[]): unknown[] {
   return ids.map((id) => {
-    const handle = tables.findRow(id) as number;
+    const handle = tables.getRowRef(id) as number;
     const values = tables.readValues({
       handles: Int32Array.of(handle),
       fields: new Map([

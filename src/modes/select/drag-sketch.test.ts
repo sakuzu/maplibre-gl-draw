@@ -156,7 +156,7 @@ function near(actual: number[] | undefined, expected: readonly number[]): void {
 function setOf(id: string): number {
   const tables = draw.getStore().tables;
   const internals = featureTablesInternals(tables);
-  const state = internals?.states.stateOf(tables?.findRow(id) ?? -1) ?? 0;
+  const state = internals?.states.stateOf(tables?.getRowRef(id) ?? -1) ?? 0;
   return (state & STATE_MOVE_MASK) >> STATE_MOVE_SHIFT;
 }
 
@@ -255,7 +255,7 @@ describe.each(KINDS)('a drag of vertices over a Store of %s', (kind) => {
 
   it('does not hit the feature whose vertex is dragged', () => {
     const { shapes } = engine.context;
-    const handle = store.tables?.findRow('a');
+    const handle = store.tables?.getRowRef('a');
     const hit = (): boolean =>
       handle === undefined
         ? shapes.hitFeatures().some((feature) => feature.id === 'a')
@@ -383,7 +383,7 @@ describe.each(KINDS)('a drag of a handle shown by a sketch of its extension over
     });
     draw.selection.set('feature', ['a']);
     const { shapes } = engine.context;
-    const handle = store.tables?.findRow('a');
+    const handle = store.tables?.getRowRef('a');
     const hit = (): boolean =>
       handle === undefined
         ? shapes.hitFeatures().some((feature) => feature.id === 'a')
@@ -503,7 +503,7 @@ describe.each(KINDS)('a drag over a Store of %s', (kind) => {
     const { shapes } = engine.context;
     const tables = draw.getStore().tables;
     const hits = (id: string): boolean => {
-      const handle = tables?.findRow(id);
+      const handle = tables?.getRowRef(id);
       return handle === undefined
         ? shapes.hitFeatures().some((feature) => feature.id === id)
         : shapes.hitRowsLeftOut()?.(handle) !== true;

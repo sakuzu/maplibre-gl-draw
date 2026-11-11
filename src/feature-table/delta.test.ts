@@ -39,9 +39,9 @@ describe('the delta of a layer', () => {
     const reference = referenceOf(random, 60, ['a']);
     const { tables, writer, internals, groupHandleOf } = tablesOf(reference, ['a']);
     const row = reference.rows.get('r10') as ReferenceRow;
-    const handle = tables.findRow('r10') as number;
+    const handle = tables.getRowRef('r10') as number;
     const before = internals.placeOf(handle);
-    writer.apply(patchOf([handle], { key: [key(999_999)] }));
+    writer.writeRows(patchOf([handle], { key: [key(999_999)] }));
     row.order = key(999_999);
     expectTablesMatch(tables, reference, ['a'], groupHandleOf);
     expect(internals.deltaRowCount()).toBe(1);
@@ -59,9 +59,9 @@ describe('the delta of a layer', () => {
     const { tables, writer, internals, groupHandleOf } = tablesOf(reference, ['a']);
     for (let part = 0; part < 12; part++) {
       const ids = Array.from({ length: 5 }, (_, i) => `r${part * 5 + i}`);
-      const handles = ids.map((id) => tables.findRow(id) as number);
+      const handles = ids.map((id) => tables.getRowRef(id) as number);
       const orders = ids.map(() => key(Math.floor(random() * 1_000_000)));
-      writer.apply(patchOf(handles, { key: orders }));
+      writer.writeRows(patchOf(handles, { key: orders }));
       ids.forEach((id, i) => {
         // The key of a member orders it among the members of its group
         const row = reference.rows.get(id) as ReferenceRow;
@@ -78,12 +78,12 @@ describe('the delta of a layer', () => {
     const random = seededRandom(2);
     const reference = referenceOf(random, 40, ['a', 'b']);
     const { tables, writer, internals, groupHandleOf } = tablesOf(reference, ['a', 'b']);
-    const moved = tables.findRow('r3') as number;
-    writer.apply(patchOf([moved], { parent: ['b'], key: [key(10)] }));
+    const moved = tables.getRowRef('r3') as number;
+    writer.writeRows(patchOf([moved], { parent: ['b'], key: [key(10)] }));
     Object.assign(reference.rows.get('r3') as ReferenceRow, { layerId: 'b', order: key(10) });
     const [fresh] = writer.allocateHandles(utf8ColumnFromStrings(['new']));
     const geometry: Geometry = { type: 'Point', coordinates: [1, 2] };
-    const change = writer.apply(
+    const change = writer.writeRows(
       patchOf([fresh], {
         type: ['Point'],
         parent: ['a'],
@@ -108,9 +108,9 @@ describe('the delta of a layer', () => {
     const random = seededRandom(3);
     const reference = referenceOf(random, 30, ['a']);
     const { tables, writer, internals } = tablesOf(reference, ['a']);
-    const handle = tables.findRow('r5') as number;
+    const handle = tables.getRowRef('r5') as number;
     internals.setWriteMark(1);
-    writer.apply(patchOf([handle], { key: [key(1)] }));
+    writer.writeRows(patchOf([handle], { key: [key(1)] }));
     const delta = internals.rowTable('a')?.delta;
     const slot = internals.ids.deltaSlot(handle);
     expect(delta?.group?.marks[slot]).toBe(1);
@@ -119,7 +119,7 @@ describe('the delta of a layer', () => {
     const writes: unknown[] = [];
     internals.onRowsWritten((_layer, list) => writes.push(...list));
     internals.setWriteMark(2);
-    writer.apply(
+    writer.writeRows(
       patchOf([handle], { 'properties:name': ['written'], style: [{ pointColor: '#00ff00' }] }),
     );
     // In place: the rows of the delta are not made again
@@ -136,7 +136,7 @@ describe('the delta of a layer', () => {
     const random = seededRandom(4);
     const reference = referenceOf(random, 30, ['a']);
     const { tables, internals, groupHandleOf } = tablesOf(reference, ['a']);
-    const handles = ['r1', 'r2', 'r20'].map((id) => tables.findRow(id) as number);
+    const handles = ['r1', 'r2', 'r20'].map((id) => tables.getRowRef(id) as number);
     internals.toDelta(handles);
     expect(internals.deltaRowCount()).toBe(3);
     expectTablesMatch(tables, reference, ['a'], groupHandleOf);
@@ -146,9 +146,9 @@ describe('the delta of a layer', () => {
     const random = seededRandom(5);
     const reference = referenceOf(random, 20, ['a', 'b']);
     const { tables, writer } = tablesOf(reference, ['a', 'b']);
-    const a = tables.findRow('r0') as number;
-    const b = tables.findRow('r1') as number;
-    const change = writer.apply(
+    const a = tables.getRowRef('r0') as number;
+    const b = tables.getRowRef('r1') as number;
+    const change = writer.writeRows(
       patchOf(
         [a, b],
         { style: [{ strokeColor: '#00ff00' }, { strokeColor: '#ff0000', fillColor: '#000000' }] },

@@ -940,7 +940,7 @@ export class DrawStore implements Store {
     const handles: number[] = [];
     if (type === 'feature') {
       for (const id of ids) {
-        const handle = tables.findRow(id);
+        const handle = tables.getRowRef(id);
         if (handle !== undefined) handles.push(handle);
       }
     } else if (type === 'group') {
@@ -1299,7 +1299,7 @@ export class DrawStore implements Store {
       if (ids.length > limit) return null;
       const found: string[] = [];
       for (const id of ids) {
-        const handle = tables.findRow(id);
+        const handle = tables.getRowRef(id);
         if (handle === undefined) continue;
         handles.push(handle);
         found.push(id);
@@ -1425,7 +1425,7 @@ export class DrawStore implements Store {
   #featureChanged(changes: StoreChange, id: string): boolean {
     if (changes.reset) return true;
     if (changes.features?.updated?.some((entry) => entry.id === id)) return true;
-    const handle = changes.rows ? this.#contract.tables?.findRow(id) : undefined;
+    const handle = changes.rows ? this.#contract.tables?.getRowRef(id) : undefined;
     if (handle === undefined) return false;
     for (const rows of changes.rows?.layers.values() ?? []) {
       if (rows.updated.includes(handle) || rows.created.includes(handle)) return true;

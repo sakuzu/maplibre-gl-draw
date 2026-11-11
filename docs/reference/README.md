@@ -20,7 +20,7 @@ they link here for the details.
 
 ## Entry points
 
-The package has five entry points.
+The package has six entry points.
 
 - `@sakuzu/maplibre-gl-draw` — the drawing and editing library:
   `createDraw` and the instance it returns (`Draw`, with its
@@ -38,21 +38,27 @@ The package has five entry points.
 - `@sakuzu/maplibre-gl-draw/table` — the building of a table for a
   dataset from GeoJSON (`tableFromFeatures`, `createTableBuilder`), whose
   rows have one geometry type or several, its preparation
-  (`prepareTable`) and the list of its buffers for `postMessage`
+  (`prepareTable`), the pages of rows a store of rows takes, built from
+  features (`createPageBuilder`) or read from Tabane blocks (`toPage`),
+  and the list of the buffers of either for `postMessage`
   (`transferList`). It depends on neither maplibre-gl nor WebGL nor the
   DOM, so a Worker that reads a file can use it
+- `@sakuzu/maplibre-gl-draw/extend` — the parts for the one who writes an
+  extension or the storage of the documents: for now the pictures an
+  extension draws points with, among the rows of their layer
 - `@sakuzu/maplibre-gl-draw/kasane` — the parts that hold the features of
   a layer as rows of columns: a store of rows (`createTableStore`,
   `createFeatureTables`), the reading and writing of its rows, and the
-  building of row blocks in a Worker (`createRowBlockBuilder`). It
-  depends on neither maplibre-gl nor WebGL nor the DOM. It is
-  experimental and may change in a minor release
+  merge of pages in a Worker (`mergePages`). It depends on neither
+  maplibre-gl nor WebGL nor the DOM. It is experimental, may change in a
+  minor release, and goes once what it holds has its place in the other
+  entries
 - `@sakuzu/maplibre-gl-draw/webgl` — building blocks for custom shaders
   (the GLSL snippet and the projection uniforms, the quad shader, the
   blend and billboard helpers, the dash and terrain subdivision rules).
   It may change in a minor release
 
-Import only from these five. Paths inside the package (`dist/...`) are
+Import only from these six. Paths inside the package (`dist/...`) are
 not public and may change in any release.
 
 ## The two layers of the public API
@@ -81,8 +87,9 @@ it, because the render context already passes the shared renderers.
 Prefer an extension point of layer 1 when one does the job.
 
 The lists are fixed in the entry files (`src/index.ts`,
-`src/geometry/index.ts`, `src/table/index.ts`, `src/kasane/index.ts` and
-`src/webgl/index.ts`); whatever they do not export is internal.
+`src/geometry/index.ts`, `src/table/index.ts`, `src/extend/index.ts`,
+`src/kasane/index.ts` and `src/webgl/index.ts`); whatever they do not
+export is internal.
 
 ## Versioning
 
@@ -117,11 +124,11 @@ npm run build && npm run ui:build
 npm run site:dev   # then open http://localhost:5173/maplibre-gl-draw/
 ```
 
-`npm run docs:api` runs typedoc on the five entry points and writes
+`npm run docs:api` runs typedoc on the six entry points and writes
 Markdown to `docs/api/`, sorted by task: the categories come from the
 section comments of the entry files (`src/index.ts`,
-`src/geometry/index.ts`, `src/table/index.ts`, `src/kasane/index.ts` and
-`src/webgl/index.ts`),
+`src/geometry/index.ts`, `src/table/index.ts`, `src/extend/index.ts`,
+`src/kasane/index.ts` and `src/webgl/index.ts`),
 and the groups of the members of `Draw` from the section comments of
 its declaration in `src/api/draw.ts` (`scripts/typedoc-categories.mjs`).
 A symbol outside any section fails the build. The page of each entry

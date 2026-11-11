@@ -410,7 +410,7 @@ describe('the handles of a footprint laid on the map, of features selected in bu
       transformBulkSelection(store, { kind: 'rotate', center: [0, 0], angleDegrees: 30 }),
     ).toBe(true);
     const angles = ids.map((id) => {
-      const handle = store.tables?.findRow(id) as number;
+      const handle = store.tables?.getRowRef(id) as number;
       const read = store.tables?.readValues({
         handles: Int32Array.of(handle),
         fields: new Map([[`properties:${ANGLE}`, []]]),

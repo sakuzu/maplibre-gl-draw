@@ -12,7 +12,7 @@
  * A pure module: it depends on neither maplibre nor WebGL nor the DOM.
  */
 
-import { buildPackedRTree } from '@sakuzu/kasane/engine';
+import { buildPackedRTree } from '@sakuzu/kasane/render';
 import type { BBox } from '../geometry/types.js';
 import { partitionRows } from './partition.js';
 import { isDictionaryColumn, TableReader } from './table.js';

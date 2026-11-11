@@ -12,7 +12,7 @@
  * later (the selection before an operation, to put it back after an undo) stays as it was.
  */
 
-import type { RowHandle } from '@sakuzu/kasane';
+import type { RowRef } from '@sakuzu/kasane';
 
 /**
  * A set of the handles of rows, kept sorted
@@ -54,7 +54,7 @@ export class TableSelection {
   }
 
   /** Whether the row of a handle is in the set */
-  has(handle: RowHandle): boolean {
+  has(handle: RowRef): boolean {
     if (handle < 0 || this.handles.length === 0) return false;
     const last = this.handles[this.handles.length - 1];
     if (handle > last) return false;
@@ -89,7 +89,7 @@ export class TableSelection {
   }
 
   /** The rows of the set a test keeps (this set when it keeps them all) */
-  filter(keep: (handle: RowHandle) => boolean): TableSelection {
+  filter(keep: (handle: RowRef) => boolean): TableSelection {
     const kept = new Int32Array(this.handles.length);
     let n = 0;
     for (const handle of this.handles) if (keep(handle)) kept[n++] = handle;

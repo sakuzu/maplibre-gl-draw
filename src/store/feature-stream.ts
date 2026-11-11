@@ -11,7 +11,7 @@
  * one write.
  */
 
-import type { FeatureTables, RowHandle, RowValues } from '../api/tables.js';
+import type { FeatureTables, RowRef, RowValues } from '../api/tables.js';
 import { featureTablesInternals, readWithoutKeeping } from '../feature-table/feature-tables.js';
 import { isGroupHidden, ROW_FLAG_HIDDEN, ROW_FLAG_LOCKED } from '../table/feature-row-columns.js';
 import { listEveryFeatureInOrder } from './ordering.js';
@@ -142,7 +142,7 @@ export interface RowFilter {
 export function rowMatcher(
   store: FeatureSource,
   filter: RowFilter,
-): ((handle: RowHandle) => boolean) | null {
+): ((handle: RowRef) => boolean) | null {
   const tables = store.tables;
   const internals = featureTablesInternals(tables);
   if (!tables || !internals) return null;
@@ -191,8 +191,8 @@ export function rowMatcher(
 export function forEachMatchingRow(
   store: FeatureSource,
   filter: RowFilter,
-  visit: (handle: RowHandle) => boolean,
-  after?: RowHandle,
+  visit: (handle: RowRef) => boolean,
+  after?: RowRef,
 ): void {
   const tables = store.tables;
   const internals = featureTablesInternals(tables);

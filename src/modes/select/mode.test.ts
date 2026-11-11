@@ -775,7 +775,7 @@ describe.each(STORE_KINDS)('on %s', (_kind, createStore) => {
     });
     const marked = (id: string): boolean => {
       const tables = store.tables;
-      const handle = tables?.findRow(id) ?? -1;
+      const handle = tables?.getRowRef(id) ?? -1;
       const place = featureTablesInternals(tables)?.placeOf(handle);
       return place ? (place.group.state[place.row] & STATE_BULK) !== 0 : false;
     };

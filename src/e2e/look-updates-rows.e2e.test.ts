@@ -3,7 +3,7 @@
 
 /**
  * End-to-end tests of the looks changed after the features are made, over a Store of rows: rows
- * made by `features.createMany`, and rows of a row block, which a change writes in place (see
+ * made by `features.createMany`, and rows of a page, which a change writes in place (see
  * `look-updates.ts`)
  */
 
@@ -14,6 +14,6 @@ describe('the looks changed over a Store of rows, of rows made', () => {
   describeLookUpdates('rows', 'made');
 });
 
-describe('the looks changed over a Store of rows, of rows of a row block', () => {
+describe('the looks changed over a Store of rows, of rows of a page', () => {
   describeLookUpdates('rows', 'block');
 });

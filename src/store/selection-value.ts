@@ -152,7 +152,7 @@ export function valueOfSelection(store: Store, selection: Selection): SelectionV
   if (internals && store.tables) {
     const rows =
       type === 'feature'
-        ? TableSelection.of(ids.flatMap((id) => store.tables?.findRow(id) ?? []))
+        ? TableSelection.of(ids.flatMap((id) => store.tables?.getRowRef(id) ?? []))
         : (store.rowsOfSelection(selection) ?? TableSelection.empty);
     const summary = summarizeRows(internals, rows);
     const value: SelectionValue = Object.freeze({

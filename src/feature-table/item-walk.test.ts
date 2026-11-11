@@ -9,7 +9,7 @@
  * them, not the rows of the layer, as many steps for a layer ten times as large.
  */
 
-import { groupCode, ItemWalk, ROW_FLAG_DELETED, RowTable, rowCode } from '@sakuzu/kasane/engine';
+import { groupCode, ItemWalk, ROW_FLAG_DELETED, RowTable, rowCode } from '@sakuzu/kasane/render';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Draw } from '../api/draw.js';
 import { createDrawOnEngine } from '../api/impl/create-draw.js';
@@ -20,7 +20,7 @@ import { createTableStore } from '../store/table-memory.js';
 import { FEATURE_TABLE_COLUMNS } from '../table/tabane/columns.js';
 import {
   createMapStub,
-  featureRowDataBuilder as createRowBlockDataBuilder,
+  featureRowDataBuilder as createPageDataBuilder,
   seededRandom,
 } from '../test-utils.js';
 import { type FeatureTablesInternals, featureTablesInternals } from './feature-tables.js';
@@ -39,7 +39,7 @@ const LAYER = {
 function storeOf(n: number) {
   const { store, writer } = createTableStore();
   store.createLayer({ ...LAYER, id: 'rows' });
-  const builder = createRowBlockDataBuilder({ columns: FEATURE_TABLE_COLUMNS, targetRows: 512 });
+  const builder = createPageDataBuilder({ columns: FEATURE_TABLE_COLUMNS, targetRows: 512 });
   for (let i = 0; i < n; i++) {
     builder.addRow({
       id: `r${i}`,
@@ -48,10 +48,10 @@ function storeOf(n: number) {
       key: `k${String(i).padStart(6, '0')}`,
     });
   }
-  writer.addRowBlocks('rows', builder.finish());
+  writer.addPages('rows', builder.finish());
   const tables = store.tables as FeatureTables;
   const internals = featureTablesInternals(tables) as FeatureTablesInternals;
-  internals.addQueuedRowBlocks();
+  internals.addQueuedPages();
   return { store, writer, tables, internals };
 }
 
@@ -219,7 +219,7 @@ describe('ItemWalk', () => {
           const fresh = Array.from({ length: 70 }, () => `n${next++}`);
           const created = writer.allocateHandles(idColumn(fresh));
           store.transact(() =>
-            writer.apply(
+            writer.writeRows(
               {
                 handles: created,
                 fields: new Map<RowField, unknown[]>([
@@ -235,7 +235,7 @@ describe('ItemWalk', () => {
           expectWalkAsLists(internals);
           continue;
         }
-        store.transact(() => writer.apply({ handles, fields, deleted }), 'remote');
+        store.transact(() => writer.writeRows({ handles, fields, deleted }), 'remote');
         expectWalkAsLists(internals);
         // The groups in stacking order, read where each stands
         const groups = store.listGroups();
@@ -243,7 +243,7 @@ describe('ItemWalk', () => {
           groupsInStackingOrder(store).filter((group) => group.id !== groups[0].id),
         );
         if (step % 10 === 9) {
-          internals.addQueuedRowBlocks();
+          internals.addQueuedPages();
           internals.flushVersions();
           expectWalkAsLists(internals);
         }
@@ -289,7 +289,7 @@ describe('an edit of a few items of a layer held as rows', () => {
     const handle = internals.groups.handleOfId(again?.id ?? '');
     store.transact(
       () =>
-        writer.applyGroups({
+        writer.writeGroups({
           handles: Int32Array.of(handle),
           fields: new Map([['key', ['0']]]),
         }),

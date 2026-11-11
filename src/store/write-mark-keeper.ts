@@ -18,8 +18,8 @@
  * the mark (their marks do not tell them from what they were before).
  */
 
-import type { RowHandle } from '@sakuzu/kasane';
-import type { RowGroup, WriteMarks } from '@sakuzu/kasane/engine';
+import type { RowRef } from '@sakuzu/kasane';
+import type { RowGroup, WriteMarks } from '@sakuzu/kasane/render';
 import type { WriteFrames } from '../feature-table/feature-cache.js';
 
 /** The problems the check of the marks keeps at most until they are read */
@@ -35,11 +35,11 @@ export interface WriteMarkTarget {
   /** Gives the tables the mark the rows written from now on are stamped with */
   setWriteMark(mark: number): void;
   /** Where the row of a handle is read (undefined for a handle of no row) */
-  placeOf(handle: RowHandle): { readonly group: RowGroup; readonly row: number } | undefined;
+  placeOf(handle: RowRef): { readonly group: RowGroup; readonly row: number } | undefined;
   /** What keeps the features of the rows, told the frames of the marks */
   readonly featureCache: {
     /** Takes the frames: what forgets what is kept of a row stamped outside a frame that raised */
-    followFrames(frames: WriteFrames): (handle: RowHandle) => void;
+    followFrames(frames: WriteFrames): (handle: RowRef) => void;
   };
 }
 
@@ -57,7 +57,7 @@ export class WriteMarkKeeper implements WriteFrames {
   /** Whether the frame that raised the mark of now is under way */
   #open = false;
   /** What is told of a row stamped outside a frame that raised the mark */
-  readonly #unframed: (handle: RowHandle) => void;
+  readonly #unframed: (handle: RowRef) => void;
   /** Whether the frames are checked (`watch`) */
   #watched = false;
   /** The mark and the rows stamped when the frame under way began (while checked) */

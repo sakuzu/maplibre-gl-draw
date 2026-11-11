@@ -374,7 +374,7 @@ export interface Store extends StoreView {
   /**
    * Writes rows held as columns for this client (the operations of the instance on many rows at
    * once, and what undoes them): makes the keys of the order of the rows put in a place and the
-   * handles of the new rows, writes the rows (`FeatureTablesWriter.apply`), and notifies them with
+   * handles of the new rows, writes the rows (`FeatureTablesWriter.writeRows`), and notifies them with
    * the values they had before. A Store that holds its features as rows has it. Its type is in
    * `@sakuzu/maplibre-gl-draw/kasane`
    *

@@ -99,7 +99,7 @@ function members(store: Store, groupId: string): string[] {
 function places(store: Store, ids: readonly string[]): unknown[] {
   const internals = featureTablesInternals(store.tables);
   return ids.map((id) => {
-    const handle = store.tables?.findRow(id);
+    const handle = store.tables?.getRowRef(id);
     const at = handle === undefined ? null : internals?.placeOf(handle);
     if (!at) return null;
     const data = at.group.data;
@@ -124,7 +124,7 @@ function keysOf(store: Store, layerId: string): string[] {
 describe('many features created at once over a Store of rows', () => {
   it('writes the new rows of each layer in one write of the tables', () => {
     const { draw, writer } = instance();
-    const apply = vi.spyOn(writer, 'apply');
+    const apply = vi.spyOn(writer, 'writeRows');
     const created = draw.features.createMany(inputs(2000));
     expect(created).toHaveLength(2000);
     // One write per layer, whatever the number of features
@@ -203,12 +203,12 @@ describe('many features created at once over a Store of rows', () => {
     expect(() => store.createFeatures([feature('x', 'a'), feature('y', 'missing')])).toThrow();
     expect(() => store.createFeatures([feature('x', 'a'), feature('x', 'b')])).toThrow();
     expect(store.getFeature('x')).toBeUndefined();
-    expect(store.tables?.findRow('x')).toBeUndefined();
+    expect(store.tables?.getRowRef('x')).toBeUndefined();
   });
 
   it('writes no field a feature does not give for it', () => {
     const { draw, writer } = instance();
-    const apply = vi.spyOn(writer, 'apply');
+    const apply = vi.spyOn(writer, 'writeRows');
     draw.features.createMany([point('p', 'a', 1), point('q', 'a', 2)]);
     const [patch] = apply.mock.calls[0];
     const odd = patch.fields.get('properties:odd' as RowField);
