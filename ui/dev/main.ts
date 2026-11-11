@@ -25,31 +25,27 @@ const map = new maplibregl.Map({
 
 const draw = createDraw(map);
 
-// A feature of each type, around Tokyo Station (data.ts)
-draw.features.createMany(FEATURES);
-
-/** A second layer of places colored by their kind, two of them in a group */
-const places = draw.layers.create({
-  name: 'Places',
-  styleRule: {
-    kind: 'categorical',
-    property: 'kind',
-    map: { park: '#3fa34d', station: '#e4572e' },
-    other: '#888888',
-  },
-});
-if (places) {
-  const point = (name: string, kind: string, coordinates: [number, number]): FeatureInput => ({
-    type: 'Point',
-    geometry: { type: 'Point', coordinates },
-    layerId: places.id,
-    properties: { name, kind },
+// A feature of each type, around Tokyo Station (data.ts), and a second layer of places colored by
+// their kind, two of them in a group
+await draw.write(async (tx) => {
+  await tx.features.create(FEATURES);
+  const places = await tx.layers.create({
+    name: 'Places',
+    styleRule: {
+      kind: 'categorical',
+      property: 'kind',
+      map: { park: '#3fa34d', station: '#e4572e' },
+      other: '#888888',
+    },
   });
-  const created = draw.features.createMany(PLACES.map((place) => point(...place)));
-  if (created) {
-    draw.groups.create({ name: 'Parks', featureIds: [created[0].id, created[1].id] });
-  }
-}
+  const point = (name: string, kind: string, coordinates: [number, number]): FeatureInput => ({
+    type: 'Feature',
+    geometry: { type: 'Point', coordinates },
+    properties: { name, kind, 'maplibre-gl-draw:layerId': places.id },
+  });
+  const created = await tx.features.create(PLACES.map((place) => point(...place)));
+  await tx.groups.create({ name: 'Parks', featureIds: [created[0], created[1]] });
+});
 
 const ui = createDrawUI(draw, { locale: params.get('locale') === 'ja' ? 'ja' : 'en' });
 

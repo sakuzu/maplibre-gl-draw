@@ -152,7 +152,10 @@ describe('the inspector', () => {
     await code.press('Enter');
     const fill = () =>
       page.evaluate(
-        (id) => (window as unknown as E2EWindow).draw.features.get(id)?.style?.fillColor,
+        (id) =>
+          (window as unknown as E2EWindow).draw.features.get(id)?.properties[
+            'maplibre-gl-draw:style'
+          ]?.fillColor,
         polygon,
       );
     await until(fill, '#1A2B3C');
@@ -402,7 +405,10 @@ describe('the layer panel', () => {
     await until(
       () =>
         page.evaluate(
-          (id) => (window as unknown as E2EWindow).draw.features.get(id)?.visible,
+          (id) =>
+            (window as unknown as E2EWindow).draw.features.get(id)?.properties[
+              'maplibre-gl-draw:visible'
+            ] ?? true,
           line,
         ),
       false,
@@ -494,24 +500,27 @@ describe('operations', () => {
   it('unites two selected polygons from the selection panel', async () => {
     page = await openPage(browser, site);
     const { polygon } = await ids();
-    const other = await page.evaluate(() => {
+    const other = await page.evaluate(async () => {
       const draw = (window as unknown as E2EWindow).draw;
-      return draw.features.create({
-        type: 'Polygon',
-        geometry: {
-          type: 'Polygon',
-          coordinates: [
-            [
-              [139.778, 35.676],
-              [139.788, 35.676],
-              [139.788, 35.684],
-              [139.778, 35.684],
-              [139.778, 35.676],
+      const made = await draw.write((tx) =>
+        tx.features.create({
+          type: 'Feature',
+          geometry: {
+            type: 'Polygon',
+            coordinates: [
+              [
+                [139.778, 35.676],
+                [139.788, 35.676],
+                [139.788, 35.684],
+                [139.778, 35.684],
+                [139.778, 35.676],
+              ],
             ],
-          ],
-        },
-        properties: { name: 'Annex' },
-      })?.id;
+          },
+          properties: { name: 'Annex' },
+        }),
+      );
+      return made.id;
     });
     if (!other) throw new Error('the second polygon was not created');
     await page.evaluate(

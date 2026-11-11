@@ -220,47 +220,48 @@ export async function openPage(
       });
     });
     const draw = createDraw(map);
-    const created = draw.features.createMany([
-      {
-        type: 'Point',
-        geometry: { type: 'Point', coordinates: [139.765, 35.684] },
-        properties: { name: 'Station', kind: 'station', platforms: 30 },
-      },
-      {
-        type: 'LineString',
-        geometry: {
-          type: 'LineString',
-          coordinates: [
-            [139.755, 35.676],
-            [139.762, 35.684],
-            [139.768, 35.69],
-          ],
+    const created = await draw.write((tx) =>
+      tx.features.create([
+        {
+          type: 'Feature',
+          geometry: { type: 'Point', coordinates: [139.765, 35.684] },
+          properties: { name: 'Station', kind: 'station', platforms: 30 },
         },
-        properties: { name: 'Walk', surface: 'paved', lanes: 2 },
-      },
-      {
-        type: 'Polygon',
-        geometry: {
-          type: 'Polygon',
-          coordinates: [
-            [
-              [139.772, 35.672],
-              [139.782, 35.672],
-              [139.782, 35.68],
-              [139.772, 35.68],
-              [139.772, 35.672],
+        {
+          type: 'Feature',
+          geometry: {
+            type: 'LineString',
+            coordinates: [
+              [139.755, 35.676],
+              [139.762, 35.684],
+              [139.768, 35.69],
             ],
-          ],
+          },
+          properties: { name: 'Walk', surface: 'paved', lanes: 2 },
         },
-        properties: { name: 'Block', kind: 'block', owner: 'city' },
-      },
-    ]);
-    if (!created) throw new Error('the features were not created');
+        {
+          type: 'Feature',
+          geometry: {
+            type: 'Polygon',
+            coordinates: [
+              [
+                [139.772, 35.672],
+                [139.782, 35.672],
+                [139.782, 35.68],
+                [139.772, 35.68],
+                [139.772, 35.672],
+              ],
+            ],
+          },
+          properties: { name: 'Block', kind: 'block', owner: 'city' },
+        },
+      ]),
+    );
     const [point, line, polygon] = created;
     w.map = map;
     w.draw = draw;
-    w.ids = { point: point.id, line: line.id, polygon: polygon.id };
-    w.layerId = polygon.layerId;
+    w.ids = { point, line, polygon };
+    w.layerId = draw.features.get(polygon)?.properties['maplibre-gl-draw:layerId'] as string;
     w.ui = createDrawUI(draw, { theme: 'dark' });
   }, browserTimeout(15_000));
   await settle(page);

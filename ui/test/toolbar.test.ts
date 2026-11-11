@@ -4,7 +4,7 @@
 import { flushSync } from 'svelte';
 import { afterEach, describe, expect, it } from 'vitest';
 import { createToolbar, type ToolbarHandle } from '../src/index.js';
-import { fakeDocument, fakeDraw } from './fake-draw.js';
+import { fakeDocument, fakeDraw, feature, layer } from './fake-draw.js';
 
 let bar: ToolbarHandle | undefined;
 afterEach(() => {
@@ -90,16 +90,25 @@ describe('createToolbar', () => {
     for (const name of ['Select', 'Polygon']) expect(pressed(name)).toBe('false');
   });
 
-  it('deletes the selection, and is off while nothing is selected', () => {
-    const fake = fakeDraw();
+  it('deletes the selection, and is off while nothing is selected', async () => {
+    const fake = fakeDraw({
+      doc: {
+        layers: [layer('l1', ['a', 'b'])],
+        features: [feature('a', 'l1'), feature('b', 'l1')],
+      },
+    });
     bar = createToolbar(fake.asDraw, { target: fake.container });
     expect(button('Delete').disabled).toBe(true);
     fake.select(['a', 'b']);
     flushSync();
     expect(button('Delete').disabled).toBe(false);
     button('Delete').click();
-    flushSync();
-    expect(fake.draw.selection.delete).toHaveBeenCalledOnce();
+    expect(fake.tx.features.delete).toHaveBeenCalledExactlyOnceWith({
+      type: 'selection',
+      count: 2,
+    });
+    await fake.settle();
+    expect(fake.draw.features.count()).toBe(0);
     expect(fake.draw.setMode).not.toHaveBeenCalled();
     expect(button('Delete').disabled).toBe(true);
   });

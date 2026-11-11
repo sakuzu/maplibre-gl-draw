@@ -1,10 +1,11 @@
 // SPDX-FileCopyrightText: 2026 SAKAIDA Atsushi
 // SPDX-License-Identifier: AGPL-3.0-only
 
+import { type Feature, readFeature } from '@sakuzu/maplibre-gl-draw';
 import { flushSync } from 'svelte';
 import { afterEach, describe, expect, it } from 'vitest';
 import { createDrawUI, createInspector, type DrawUI, type InspectorHandle } from '../src/index.js';
-import { fakeDocument, makeFeature } from './fake-draw.js';
+import { type FakeFeatureSpec, fakeDocument, makeFeature } from './fake-draw.js';
 
 let handle: InspectorHandle | DrawUI | undefined;
 afterEach(() => {
@@ -13,7 +14,7 @@ afterEach(() => {
   document.body.innerHTML = '';
 });
 
-const park = makeFeature({
+const PARK: FakeFeatureSpec = {
   id: 'a',
   type: 'Polygon',
   geometry: {
@@ -28,7 +29,8 @@ const park = makeFeature({
     ],
   },
   properties: { name: 'Park', kind: 'green' },
-});
+};
+const park = makeFeature(PARK);
 const road = makeFeature({
   id: 'b',
   type: 'LineString',
@@ -108,20 +110,21 @@ describe('createInspector', () => {
     expect(inspector.element.textContent).toContain('Nothing is selected');
   });
 
-  it('writes a color picked into the style of the feature', () => {
+  it('writes a color picked into the style of the feature', async () => {
     const fake = fakeDocument({ features: [park], selection: { type: 'feature', ids: ['a'] } });
     const inspector = mountAlone(fake);
     click(button(inspector.element, 'Fill color'));
     click(button(document.body, 'Red'));
-    expect(fake.mocks.features.updateMany).toHaveBeenCalledWith([
-      { id: 'a', patch: { style: { fillColor: '#E5484D' } } },
+    expect(fake.tx.features.update).toHaveBeenCalledWith([
+      { id: 'a', patch: { properties: { 'maplibre-gl-draw:style': { fillColor: '#E5484D' } } } },
     ]);
-    expect(fake.mocks.transact).toHaveBeenCalled();
-    expect(fake.asDraw.features.get('a')?.style.fillColor).toBe('#E5484D');
+    expect(fake.draw.write).toHaveBeenCalledOnce();
+    await fake.settle();
+    expect(readFeature(fake.asDraw.features.get('a') as Feature).style.fillColor).toBe('#E5484D');
   });
 
   it('writes a color into every feature selected', () => {
-    const red = makeFeature({ ...park, style: { strokeColor: '#ff0000' } });
+    const red = makeFeature({ ...PARK, style: { strokeColor: '#ff0000' } });
     const fake = fakeDocument({
       features: [red, road],
       selection: { type: 'feature', ids: ['a', 'b'] },
@@ -131,13 +134,14 @@ describe('createInspector', () => {
     expect(button(inspector.element, 'Line color').textContent).toContain('Mixed');
     click(button(inspector.element, 'Line color'));
     click(button(document.body, 'Blue'));
-    expect(fake.mocks.features.updateMany).toHaveBeenCalledWith([
-      { id: 'a', patch: { style: { strokeColor: '#2D7FF9' } } },
-      { id: 'b', patch: { style: { strokeColor: '#2D7FF9' } } },
+    const patch = { properties: { 'maplibre-gl-draw:style': { strokeColor: '#2D7FF9' } } };
+    expect(fake.tx.features.update).toHaveBeenCalledWith([
+      { id: 'a', patch },
+      { id: 'b', patch },
     ]);
   });
 
-  it('renames the feature through properties.name', () => {
+  it('renames the feature through properties.name', async () => {
     const fake = fakeDocument({ features: [park], selection: { type: 'feature', ids: ['a'] } });
     const inspector = mountAlone(fake);
     click(button(inspector.element, 'Name'));
@@ -146,14 +150,15 @@ describe('createInspector', () => {
     typeInto(input, 'Lake');
     input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
     flushSync();
-    expect(fake.mocks.features.update).toHaveBeenCalledWith('a', { properties: { name: 'Lake' } });
+    expect(fake.tx.features.update).toHaveBeenCalledWith('a', { properties: { name: 'Lake' } });
+    await fake.settle();
     expect(inspector.element.textContent).toContain('Lake');
   });
 
   it('shows a change made elsewhere', () => {
     const fake = fakeDocument({ features: [park], selection: { type: 'feature', ids: ['a'] } });
     const inspector = mountAlone(fake);
-    fake.change('a', { properties: { name: 'Garden' } });
+    fake.changeFeature('a', { properties: { name: 'Garden' } });
     flushSync();
     expect(inspector.element.textContent).toContain('Garden');
   });
@@ -166,12 +171,10 @@ describe('createInspector', () => {
     expect(text).toContain('green');
     expect(text).toContain('Description');
     click(button(inspector.element, 'Remove kind'));
-    expect(fake.mocks.features.update).toHaveBeenCalledWith('a', {
-      properties: { kind: undefined },
-    });
+    expect(fake.tx.features.update).toHaveBeenCalledWith('a', { unset: { properties: ['kind'] } });
   });
 
-  it('writes the description where it stands', () => {
+  it('writes the description where it stands', async () => {
     const fake = fakeDocument({ features: [park], selection: { type: 'feature', ids: ['a'] } });
     const inspector = mountAlone(fake);
     expect(inspector.element.querySelector('textarea')).toBeNull();
@@ -181,17 +184,18 @@ describe('createInspector', () => {
     typeInto(area, 'Open all day');
     area.dispatchEvent(new FocusEvent('blur'));
     flushSync();
-    expect(fake.mocks.features.update).toHaveBeenCalledWith('a', {
+    expect(fake.tx.features.update).toHaveBeenCalledWith('a', {
       properties: { description: 'Open all day' },
     });
+    await fake.settle();
     expect(inspector.element.textContent).toContain('Open all day');
     expect(hasButton(inspector.element, 'Description')).toBe(true);
   });
 
   it('shows the measurements under the head, then the tabs, and the description on top of the content', () => {
     const described = makeFeature({
-      ...park,
-      properties: { ...park.properties, description: 'Gate' },
+      ...PARK,
+      properties: { ...PARK.properties, description: 'Gate' },
     });
     const fake = fakeDocument({
       features: [described],
@@ -237,7 +241,7 @@ describe('createInspector', () => {
   });
 
   it('puts the fields of the Style tab under the description, with no title', () => {
-    const red = makeFeature({ ...park, style: { fillColor: '#ff0000' } });
+    const red = makeFeature({ ...PARK, style: { fillColor: '#ff0000' } });
     const fake = fakeDocument({ features: [red], selection: { type: 'feature', ids: ['a'] } });
     const inspector = mountAlone(fake);
     inspector.sections.add({
@@ -260,8 +264,8 @@ describe('createInspector', () => {
     // The reset of the style is a text action after the fields
     expect(first?.contains(button(el, 'Reset the style'))).toBe(true);
     click(button(el, 'Reset the style'));
-    expect(fake.mocks.features.updateMany).toHaveBeenCalledWith([
-      { id: 'a', patch: { style: { fillColor: undefined } } },
+    expect(fake.tx.features.update).toHaveBeenCalledWith([
+      { id: 'a', patch: { unset: { style: ['fillColor'] } } },
     ]);
     // The Attributes tab has no title either
     click(button(el, 'Attributes'));
@@ -269,7 +273,7 @@ describe('createInspector', () => {
   });
 
   it('gives the shared fields of a selection, a group and a layer no title', () => {
-    const other = makeFeature({ ...park, id: 'd', properties: {} });
+    const other = makeFeature({ ...PARK, id: 'd', properties: {} });
     const fake = fakeDocument({
       features: [park, other],
       groups: [
@@ -302,7 +306,7 @@ describe('createInspector', () => {
     byDefault.destroy();
     document.body.innerHTML = '';
     // Attributes first: it opens on Attributes, and Style is still a tab
-    const other = makeFeature({ ...park, id: 'd', properties: { name: 'Pond', depth: '3' } });
+    const other = makeFeature({ ...PARK, id: 'd', properties: { name: 'Pond', depth: '3' } });
     const fake = fakeDocument({
       features: [park, other],
       selection: { type: 'feature', ids: ['a'] },
@@ -335,28 +339,39 @@ describe('createInspector', () => {
     expect(hasButton(inspector.element, 'Buffer')).toBe(false);
   });
 
-  it('locks, hides and deletes from the foot', () => {
+  it('locks, hides and deletes from the foot', async () => {
     const fake = fakeDocument({ features: [park], selection: { type: 'feature', ids: ['a'] } });
     const inspector = mountAlone(fake);
     click(button(inspector.element, 'Hide'));
-    expect(fake.mocks.hidden.add).toHaveBeenCalledWith('a');
+    expect(fake.draw.hidden.add).toHaveBeenCalledWith('a');
     expect(inspector.element.textContent).toContain('Hidden');
     click(button(inspector.element, 'Show'));
-    expect(fake.mocks.hidden.remove).toHaveBeenCalledWith('a');
+    expect(fake.draw.hidden.remove).toHaveBeenCalledWith('a');
     click(button(inspector.element, 'Lock'));
-    expect(fake.mocks.features.update).toHaveBeenCalledWith('a', { locked: true });
+    expect(fake.tx.features.update).toHaveBeenCalledWith('a', {
+      properties: { 'maplibre-gl-draw:locked': true },
+    });
+    await fake.settle();
     // Locked: no change of the style, the name or the attributes; unlocking is still possible
     expect(button(inspector.element, 'Fill color').disabled).toBe(true);
     expect(button(inspector.element, 'Delete').disabled).toBe(true);
     expect(hasButton(inspector.element, 'Name')).toBe(false);
     click(button(inspector.element, 'Unlock'));
+    expect(fake.tx.features.update).toHaveBeenLastCalledWith('a', {
+      properties: { 'maplibre-gl-draw:locked': false },
+    });
+    await fake.settle();
     click(button(inspector.element, 'Delete'));
-    expect(fake.mocks.selection.delete).toHaveBeenCalledOnce();
+    expect(fake.tx.features.delete).toHaveBeenCalledExactlyOnceWith({
+      type: 'selection',
+      count: 1,
+    });
+    await fake.settle();
     expect(inspector.element.textContent).toContain('Nothing is selected');
   });
 
   it('turns every Delete off while draw is read-only', () => {
-    const other = makeFeature({ ...park, id: 'd', properties: {} });
+    const other = makeFeature({ ...PARK, id: 'd', properties: {} });
     const selections = [
       { type: 'feature', ids: ['a'] },
       { type: 'feature', ids: ['a', 'd'] },
@@ -396,8 +411,8 @@ describe('createInspector', () => {
     }
   });
 
-  it('offers the operations that apply to the selection', () => {
-    const other = makeFeature({ ...park, id: 'd', properties: {} });
+  it('offers the operations that apply to the selection', async () => {
+    const other = makeFeature({ ...PARK, id: 'd', properties: {} });
     const fake = fakeDocument({
       features: [park, other],
       selection: { type: 'feature', ids: ['a', 'd'] },
@@ -413,11 +428,12 @@ describe('createInspector', () => {
     expect(foot.querySelector('.lead')?.contains(button(inspector.element, 'Delete'))).toBe(true);
     expect(foot.contains(button(inspector.element, 'Union'))).toBe(false);
     click(button(inspector.element, 'Union'));
-    expect(fake.mocks.features.union).toHaveBeenCalledWith(['a', 'd']);
-    expect(fake.mocks.selection.set).toHaveBeenLastCalledWith('feature', ['union']);
+    expect(fake.tx.features.union).toHaveBeenCalledWith(['a', 'd']);
+    await fake.settle();
+    expect(fake.draw.selection.set).toHaveBeenLastCalledWith('feature', ['union']);
   });
 
-  it('deletes several layers from the lead of the foot', () => {
+  it('deletes several layers from the lead of the foot', async () => {
     const fake = fakeDocument({
       features: [park],
       layers: [
@@ -432,7 +448,9 @@ describe('createInspector', () => {
     const remove = button(inspector.element, 'Delete');
     expect(foot.querySelector('.lead')?.contains(remove)).toBe(true);
     click(remove);
-    expect(fake.mocks.selection.delete).toHaveBeenCalledOnce();
+    expect(fake.tx.layers.delete).toHaveBeenCalledExactlyOnceWith(['l1', 'l2']);
+    await fake.settle();
+    expect(fake.asDraw.layers.count()).toBe(0);
   });
 
   it('changes a layer', () => {
@@ -448,7 +466,7 @@ describe('createInspector', () => {
     const toggle = inspector.element.querySelector<HTMLElement>('[aria-label="Visible"]');
     if (!toggle) throw new Error('no toggle');
     click(toggle);
-    expect(fake.mocks.layers.update).toHaveBeenCalledWith('l1', { visible: false });
+    expect(fake.tx.layers.update).toHaveBeenCalledWith('l1', { visible: false });
     expect(button(inspector.element, 'Delete layer').disabled).toBe(false);
   });
 
@@ -458,7 +476,7 @@ describe('createInspector', () => {
     expect(button(inspector.element, 'Delete layer').disabled).toBe(true);
   });
 
-  it('ungroups a group', () => {
+  it('ungroups a group', async () => {
     const fake = fakeDocument({
       features: [park],
       groups: [
@@ -469,7 +487,10 @@ describe('createInspector', () => {
     const inspector = mountAlone(fake);
     expect(inspector.element.textContent).toContain('Block');
     click(button(inspector.element, 'Ungroup'));
-    expect(fake.mocks.selection.ungroup).toHaveBeenCalledOnce();
+    expect(fake.tx.groups.delete).toHaveBeenCalledExactlyOnceWith(['g'], { members: 'keep' });
+    await fake.settle();
+    expect(fake.asDraw.groups.get('g')).toBeUndefined();
+    expect(fake.asDraw.layers.listItems('l1')).toEqual(['a']);
   });
 
   it('shows the sections an application adds', () => {
@@ -479,7 +500,7 @@ describe('createInspector', () => {
     const remove = inspector.sections.add({
       id: 'extra',
       title: 'Extra',
-      appliesTo: (fs) => fs.every((f) => f.type === 'Polygon'),
+      appliesTo: (fs) => fs.every((f) => readFeature(f).featureType === 'Polygon'),
       fields: () => [{ key: 'size', kind: 'toggle', label: 'Big', value: false }],
       onchange: (key, value, fs) =>
         seen.push(
@@ -549,7 +570,7 @@ describe('the inspector of createDrawUI', () => {
     const inspector = ui.inspector?.element;
     if (!inspector) throw new Error('no inspector');
     click(button(inspector, 'Close'));
-    expect(fake.mocks.selection.clear).toHaveBeenCalled();
+    expect(fake.draw.selection.clear).toHaveBeenCalled();
     expect(region(ui)).toBeNull();
   });
 

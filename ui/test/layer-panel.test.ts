@@ -108,18 +108,22 @@ describe('createLayerPanel', () => {
     expect(row(fake.container, 'l1').textContent?.trim()).toBe('Sketch');
   });
 
-  it('shows and hides through update({ visible })', () => {
+  it('shows and hides through update({ visible })', async () => {
     const fake = sample();
     handle = createLayerPanel(fake.asDraw, { target: fake.container });
     rowButton(fake.container, 'l2', 'Hide').click();
-    expect(fake.draw.layers.update).toHaveBeenCalledWith('l2', { visible: false });
+    expect(fake.tx.layers.update).toHaveBeenCalledWith('l2', { visible: false });
     rowButton(fake.container, 'g1', 'Hide').click();
-    expect(fake.draw.groups.update).toHaveBeenCalledWith('g1', { visible: false });
+    expect(fake.tx.groups.update).toHaveBeenCalledWith('g1', { visible: false });
     rowButton(fake.container, 'b', 'Hide').click();
-    expect(fake.draw.features.update).toHaveBeenCalledWith('b', { visible: false });
-    flushSync();
+    expect(fake.tx.features.update).toHaveBeenCalledWith('b', {
+      properties: { 'maplibre-gl-draw:visible': false },
+    });
+    await fake.settle();
     rowButton(fake.container, 'b', 'Show').click();
-    expect(fake.draw.features.update).toHaveBeenLastCalledWith('b', { visible: true });
+    expect(fake.tx.features.update).toHaveBeenLastCalledWith('b', {
+      properties: { 'maplibre-gl-draw:visible': true },
+    });
   });
 
   it('shows again what this client hid', () => {
@@ -129,14 +133,16 @@ describe('createLayerPanel', () => {
     flushSync();
     rowButton(fake.container, 'a', 'Show').click();
     expect(fake.draw.hidden.remove).toHaveBeenCalledWith('a');
-    expect(fake.draw.features.update).not.toHaveBeenCalled();
+    expect(fake.draw.write).not.toHaveBeenCalled();
   });
 
   it('locks through update({ locked })', () => {
     const fake = sample();
     handle = createLayerPanel(fake.asDraw, { target: fake.container });
     rowButton(fake.container, 'c', 'Lock').click();
-    expect(fake.draw.features.update).toHaveBeenCalledWith('c', { locked: true });
+    expect(fake.tx.features.update).toHaveBeenCalledWith('c', {
+      properties: { 'maplibre-gl-draw:locked': true },
+    });
   });
 
   it('changes no name in the tree: neither a double click nor F2 opens a field', () => {
@@ -263,9 +269,9 @@ describe('the limit of the features of the layer panel', () => {
     const fake = crowded();
     handle = createLayerPanel(fake.asDraw, { target: fake.container });
     rowButton(fake.container, 'l1', 'Hide').click();
-    expect(fake.draw.layers.update).toHaveBeenCalledWith('l1', { visible: false });
+    expect(fake.tx.layers.update).toHaveBeenCalledWith('l1', { visible: false });
     rowButton(fake.container, 'l1', 'Lock').click();
-    expect(fake.draw.layers.update).toHaveBeenCalledWith('l1', { locked: true });
+    expect(fake.tx.layers.update).toHaveBeenCalledWith('l1', { locked: true });
     row(fake.container, 'l1').click();
     expect(fake.draw.selection.set).toHaveBeenLastCalledWith('layer', ['l1']);
     expect(fake.draw.layers.setActive).toHaveBeenLastCalledWith('l1');
@@ -344,7 +350,7 @@ describe('the datasets of the layer panel', () => {
     // The dataset told of the change: the row shows it hidden
     rowButton(fake.container, 'buildings', 'Show').click();
     expect(buildings.setVisible).toHaveBeenLastCalledWith(true);
-    expect(fake.draw.layers.update).not.toHaveBeenCalled();
+    expect(fake.draw.write).not.toHaveBeenCalled();
     // A layer keeps both, after its chevron
     expect(
       [...row(fake.container, 'l1').querySelectorAll('button')].map((b) =>

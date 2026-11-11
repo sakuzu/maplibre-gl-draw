@@ -12,12 +12,12 @@ export const CENTER: [number, number] = [139.773, 35.68];
 /** A feature of each type */
 export const FEATURES: FeatureInput[] = [
   {
-    type: 'Point',
+    type: 'Feature',
     geometry: { type: 'Point', coordinates: [139.7671, 35.6812] },
     properties: { name: 'Tokyo Station', kind: 'station', platforms: 30 },
   },
   {
-    type: 'LineString',
+    type: 'Feature',
     geometry: {
       type: 'LineString',
       coordinates: [
@@ -29,7 +29,7 @@ export const FEATURES: FeatureInput[] = [
     properties: { name: 'Walk', surface: 'paved' },
   },
   {
-    type: 'Polygon',
+    type: 'Feature',
     geometry: {
       type: 'Polygon',
       coordinates: [
@@ -45,9 +45,14 @@ export const FEATURES: FeatureInput[] = [
     properties: { kind: 'block', owner: 'city', description: 'A block east of the station.' },
   },
   {
-    type: 'Circle',
+    type: 'Feature',
     geometry: { type: 'Point', coordinates: [139.7765, 35.6905] },
-    properties: { 'maplibre-gl-draw:radiusMeters': 400, name: 'Within 400 m', zone: 'A' },
+    properties: {
+      'maplibre-gl-draw:featureType': 'Circle',
+      'maplibre-gl-draw:radiusMeters': 400,
+      name: 'Within 400 m',
+      zone: 'A',
+    },
   },
 ];
 

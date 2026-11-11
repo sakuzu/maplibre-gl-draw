@@ -128,9 +128,9 @@ describe('createDrawUI', () => {
     const fake = fakeDraw({ ids: ['a'] });
     ui = createDrawUI(fake.asDraw);
     key(fake.canvas, 'Delete');
-    expect(fake.draw.selection.delete).not.toHaveBeenCalled();
+    expect(fake.tx.features.delete).not.toHaveBeenCalled();
     key(document.body, 'Backspace');
-    expect(fake.draw.selection.delete).toHaveBeenCalledOnce();
+    expect(fake.tx.features.delete).toHaveBeenCalledOnce();
   });
 
   it('clears the selection with Escape away from the map', () => {
@@ -149,7 +149,7 @@ describe('createDrawUI', () => {
     key(document.body, 'a');
     key(document.body, 'Delete');
     expect(fake.draw.setMode).not.toHaveBeenCalled();
-    expect(fake.draw.selection.delete).not.toHaveBeenCalled();
+    expect(fake.tx.features.delete).not.toHaveBeenCalled();
   });
 
   it('stops following draw and leaves the page when destroyed', async () => {

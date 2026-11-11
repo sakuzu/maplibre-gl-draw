@@ -19,6 +19,7 @@ import {
   selectionOf,
 } from '../src/layers/tree.js';
 import { resolveMessages } from '../src/messages.js';
+import { placementOf } from '../src/writes.js';
 import {
   builtInRuleChannel,
   fakeDraw,
@@ -362,22 +363,25 @@ describe('dropping in the tree', () => {
     ['a group to the front', { id: 'g1', parentId: 'l1', index: 0 }, ['g1', 'b', 'a']],
   ];
   for (const [what, move, children] of drops) {
-    it(`moves ${what}`, () => {
+    it(`moves ${what}`, async () => {
       const fake = sample();
       const plan = planMove(move, buildNodes(fake.draw, en));
-      if (plan?.kind === 'feature') fake.draw.features.move(plan.id, plan.to);
-      else if (plan?.kind === 'group') fake.draw.groups.move(plan.id, plan.to);
-      else throw new Error('no plan');
+      if (plan?.kind === 'feature') {
+        await fake.asDraw.write((tx) => tx.features.place(plan.id, placementOf(plan.to)));
+      } else if (plan?.kind === 'group') {
+        await fake.asDraw.write((tx) => tx.groups.place(plan.id, placementOf(plan.to)));
+      } else throw new Error('no plan');
       const l1 = buildNodes(fake.draw, en)[1];
       expect(l1.children?.map((n) => n.id)).toEqual(children);
     });
   }
 
-  it('moves a feature into a group, at the place it was dropped', () => {
+  it('moves a feature into a group, at the place it was dropped', async () => {
     const fake = sample();
     const plan = planMove({ id: 'a', parentId: 'g1', index: 1 }, buildNodes(fake.draw, en));
-    expect(plan).toEqual({ kind: 'feature', id: 'a', to: { groupId: 'g1', index: 1 } });
-    fake.draw.features.move('a', { groupId: 'g1', index: 1 });
+    const to = { layerId: 'l1', groupId: 'g1', below: 'c' };
+    expect(plan).toEqual({ kind: 'feature', id: 'a', to });
+    await fake.asDraw.write((tx) => tx.features.place('a', placementOf(to)));
     const g1 = buildNodes(fake.draw, en)[1].children?.find((n) => n.id === 'g1');
     expect(g1?.children?.map((n) => n.id)).toEqual(['d', 'a', 'c']);
   });
@@ -385,13 +389,13 @@ describe('dropping in the tree', () => {
   it('moves a feature out of its group into another layer', () => {
     const fake = sample();
     const plan = planMove({ id: 'c', parentId: 'l2', index: 0 }, buildNodes(fake.draw, en));
-    expect(plan).toEqual({ kind: 'feature', id: 'c', to: { layerId: 'l2', index: 1 } });
+    expect(plan).toEqual({ kind: 'feature', id: 'c', to: { layerId: 'l2', below: 'e' } });
   });
 
   it('moves a group into another layer', () => {
     const fake = sample();
     const plan = planMove({ id: 'g1', parentId: 'l2', index: 1 }, buildNodes(fake.draw, en));
-    expect(plan).toEqual({ kind: 'group', id: 'g1', to: { layerId: 'l2', index: 0 } });
+    expect(plan).toEqual({ kind: 'group', id: 'g1', to: { layerId: 'l2', above: 'e' } });
   });
 
   it('refuses a drop the tree does not allow', () => {
@@ -414,7 +418,7 @@ describe('dropping in the tree', () => {
     const nodes = buildNodes(fake.draw, en, { features: false });
     expect(shape(nodes)).toEqual([['l1', ['g2', 'g1']]]);
     const plan = planMove({ id: 'g1', parentId: 'l1', index: 0 }, nodes);
-    expect(plan).toEqual({ kind: 'group', id: 'g1', to: { layerId: 'l1', index: 3 } });
+    expect(plan).toEqual({ kind: 'group', id: 'g1', to: { layerId: 'l1', below: 'g2' } });
   });
 });
 

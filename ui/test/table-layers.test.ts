@@ -35,11 +35,12 @@ function tableSource(): TreeSource {
     kind: 'table',
   };
   const ids = ['a', 'b', 'c', 'd'];
-  const features = new Map(ids.map((id) => [id, { ...feature(id, 'rows'), layerId: 'rows' }]));
-  for (const id of ['c', 'd']) {
-    const f = features.get(id);
-    if (f) features.set(id, { ...f, groupId: 'g' });
-  }
+  const features = new Map(
+    ids.map((id) => [
+      id,
+      feature(id, 'rows', 'Point', id === 'c' || id === 'd' ? { groupId: 'g' } : {}),
+    ]),
+  );
   return {
     extensions: { featureTypes: { getStyleRuleChannel: builtInRuleChannel } },
     layers: {
@@ -84,7 +85,7 @@ describe('a layer held as rows in the tree', () => {
     expect(planMove({ id: 'b', parentId: 'rows', index: 2 }, nodes)).toEqual({
       kind: 'feature',
       id: 'b',
-      to: { layerId: 'rows', below: null },
+      to: { layerId: 'rows', above: 'a' },
     });
     // a into the group, in front of d
     expect(planMove({ id: 'a', parentId: 'g', index: 0 }, nodes)).toEqual({

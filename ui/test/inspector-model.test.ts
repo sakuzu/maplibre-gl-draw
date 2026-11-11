@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import { getMessages } from '@sakuzu/kata/svelte';
-import type { Feature, FeatureStyleResolved } from '@sakuzu/maplibre-gl-draw';
+import { type Feature, type FeatureStyleResolved, readFeature } from '@sakuzu/maplibre-gl-draw';
 import { describe, expect, it } from 'vitest';
 import {
   attributeAdd,
@@ -38,16 +38,16 @@ import {
   inspectorKataMessages,
   resolveMessages,
 } from '../src/messages.js';
-import { DEFAULT_STYLE, fakeDocument, makeFeature } from './fake-draw.js';
+import { DEFAULT_STYLE, type FakeFeatureSpec, fakeDocument, makeFeature } from './fake-draw.js';
 
-const pt = (id: string, extra: Partial<Feature> = {}) =>
+const pt = (id: string, extra: Partial<FakeFeatureSpec> = {}) =>
   makeFeature({
     id,
     type: 'Point',
     geometry: { type: 'Point', coordinates: [139.7671, 35.6812] },
     ...extra,
   });
-const square = (id: string, type = 'Polygon', extra: Partial<Feature> = {}) =>
+const square = (id: string, type = 'Polygon', extra: Partial<FakeFeatureSpec> = {}) =>
   makeFeature({
     id,
     type,
@@ -85,7 +85,10 @@ const circle = (id: string, radius = 100) =>
     properties: { 'maplibre-gl-draw:radiusMeters': radius },
   });
 
-const resolved = (f: Feature): FeatureStyleResolved => ({ ...DEFAULT_STYLE, ...f.style });
+const resolved = (f: Feature): FeatureStyleResolved => ({
+  ...DEFAULT_STYLE,
+  ...readFeature(f).style,
+});
 const fields = (features: Feature[]) =>
   styleFields(
     features,
@@ -309,10 +312,12 @@ describe('the attributes', () => {
 
   it('rename an attribute, keeping the type of its value', () => {
     expect(attributePatch(f, 1, { key: 'levels', value: '3' })).toEqual({
-      properties: { floors: undefined, levels: 3 },
+      properties: { levels: 3 },
+      unset: { properties: ['floors'] },
     });
     expect(attributePatch(f, 0, { key: 'type', value: 'tram' })).toEqual({
-      properties: { kind: undefined, type: 'tram' },
+      properties: { type: 'tram' },
+      unset: { properties: ['kind'] },
     });
   });
 
@@ -330,7 +335,7 @@ describe('the attributes', () => {
     expect(attributeAdd(f, { key: ' owner ', value: 'city' })).toEqual({
       properties: { owner: 'city' },
     });
-    expect(attributeRemove(f, 2)).toEqual({ properties: { tags: undefined } });
+    expect(attributeRemove(f, 2)).toEqual({ unset: { properties: ['tags'] } });
     expect(attributeRemove(f, 5)).toBeNull();
   });
 
@@ -363,7 +368,7 @@ describe('the operations', () => {
     expect(splitPair([line('l'), square('a')])?.area.id).toBe('a');
   });
 
-  it('run in core and select what they made', () => {
+  it('run in core, one write each, and select what they made', async () => {
     const a = square('a');
     const b = square('b');
     const fake = fakeDocument({
@@ -371,19 +376,19 @@ describe('the operations', () => {
       selection: { type: 'feature', ids: ['a', 'b'] },
     });
     const draw = fake.asDraw as unknown as InspectorDraw;
-    expect(runOperation(draw, 'difference', [a, b])).toEqual(['difference']);
-    expect(fake.mocks.features.difference).toHaveBeenCalledWith('a', ['b']);
-    expect(fake.mocks.selection.set).toHaveBeenLastCalledWith('feature', ['difference']);
-    expect(runOperation(draw, 'split', [line('l'), a])).toEqual(['part1', 'part2']);
-    expect(fake.mocks.features.split).toHaveBeenCalledWith('a', 'l');
-    expect(runBuffer(draw, [a], 250)).toEqual(['buffer']);
-    expect(fake.mocks.features.buffer).toHaveBeenCalledWith(['a'], { distanceMeters: 250 });
-    runBuffer(draw, [a], 250, 16);
-    expect(fake.mocks.features.buffer).toHaveBeenLastCalledWith(['a'], {
-      distanceMeters: 250,
-      segments: 16,
-    });
-    expect(fake.mocks.transact).toHaveBeenCalled();
+    expect(await runOperation(draw, 'difference', [a, b])).toEqual(['difference']);
+    expect(fake.tx.features.difference).toHaveBeenCalledWith('a', ['b']);
+    expect(fake.draw.selection.set).toHaveBeenLastCalledWith('feature', ['difference']);
+    expect(await runOperation(draw, 'split', [line('l'), a])).toEqual(['part1', 'part2']);
+    expect(fake.tx.features.split).toHaveBeenCalledWith('a', 'l');
+    expect(await runBuffer(draw, [a], 250)).toEqual(['buffer']);
+    expect(fake.tx.features.buffer).toHaveBeenCalledWith('a', 250);
+    expect(fake.draw.write).toHaveBeenCalledTimes(3);
+    // Refused by core (read-only): null, and nothing selected
+    fake.setReadOnly(true);
+    fake.draw.selection.set.mockClear();
+    expect(await runOperation(draw, 'union', [a, b])).toBeNull();
+    expect(fake.draw.selection.set).not.toHaveBeenCalled();
   });
 
   it('convert a distance to meters', () => {
