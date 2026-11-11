@@ -200,10 +200,10 @@ async function drawWritten(
         builder.addRow({
           id: f.id,
           type: f.type,
-          geometry: f.geometry,
-          order: f.order,
+          geometry: f.geometry as never,
+          key: f.order,
           style: f.style ?? {},
-        } as never);
+        });
       }
       writer.addPages('rows', builder.finish());
       Object.defineProperty(store, 'tables', { value: tables });

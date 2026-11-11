@@ -154,13 +154,13 @@ async function open(page: Page, features: SceneFeature[], form: 'rows' | 'store'
           builder.addRow({
             id: f.id,
             type: f.type,
-            geometry: f.geometry,
-            order: `k${String(i).padStart(6, '0')}`,
+            geometry: f.geometry as never,
+            key: `k${String(i).padStart(6, '0')}`,
             style: f.style ?? {},
             properties: {},
-            visible: true,
+            hidden: false,
             locked: false,
-          } as never);
+          });
         });
         made.writer.addPages('rows', builder.finish());
       } else {

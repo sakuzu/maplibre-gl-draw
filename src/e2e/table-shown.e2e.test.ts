@@ -103,7 +103,7 @@ const PAGE_HELPERS = `
       kind: 'table', styleRule: undefined, metadata: undefined });
     const builder = window.e2e.tables.createPageBuilder({ targetRows: 8 });
     for (const f of features) {
-      builder.addRow({ id: f.id, type: f.type, geometry: f.geometry, order: f.order, style: f.style ?? {} });
+      builder.addRow({ id: f.id, type: f.type, geometry: f.geometry, key: f.order, style: f.style ?? {} });
     }
     writer.addPages('rows', builder.finish());
     return store;

@@ -29,6 +29,7 @@ import {
 } from '../table/feature-row-blocks.js';
 import { prepareTable } from '../table/index.js';
 import { writesOf } from '../test-support/writes.js';
+import { GpuLedger } from '../view/gpu-ledger.js';
 import { DemAtlas } from '../view/terrain/dem-atlas.js';
 import {
   getMapTerrain,
@@ -57,6 +58,7 @@ installTestDem(maplibregl);
   terrain: { addTestTerrain, TEST_PEAK, testElevation },
   internals: {
     DemAtlas,
+    GpuLedger,
     MemoryContractStore,
     getAnchorProjector,
     getMapTerrain,

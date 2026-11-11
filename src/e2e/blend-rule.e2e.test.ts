@@ -96,45 +96,41 @@ async function addCustomType(page: Page): Promise<void> {
       w.draw.extensions.featureTypes.add({
         type: 'E2EShared',
         geometry: 'Point',
-        renderer: {
-          onAdd() {},
-          draw(feature: import('../index.js').Feature, ctx: import('../index.js').RenderContext) {
-            // The opacity of the style, and of the layer as a renderer of a custom type applies it
-            const opacity = (feature.properties as { opacity: number }).opacity * ctx.opacity;
-            const [x, y] = places.customLine;
-            ctx.line.draw([p([x - 0.002, y]), p([x + 0.002, y])], {
-              width: 12,
-              color: blue,
-              opacity,
-              lineStyle: 'solid',
-            });
-            const [fx, fy] = places.customFill;
-            const r = 0.001;
-            ctx.fill.draw(
+        render(feature, ctx) {
+          // The opacity of the style, and of the layer as a renderer of a custom type applies it
+          const opacity = (feature.properties as { opacity: number }).opacity * ctx.opacity;
+          const [x, y] = places.customLine;
+          ctx.line.draw([p([x - 0.002, y]), p([x + 0.002, y])], {
+            width: 12,
+            color: blue,
+            opacity,
+            lineStyle: 'solid',
+          });
+          const [fx, fy] = places.customFill;
+          const r = 0.001;
+          ctx.fill.draw(
+            [
               [
-                [
-                  p([fx - r, fy - r]),
-                  p([fx + r, fy - r]),
-                  p([fx + r, fy + r]),
-                  p([fx - r, fy + r]),
-                  p([fx - r, fy - r]),
-                ],
+                p([fx - r, fy - r]),
+                p([fx + r, fy - r]),
+                p([fx + r, fy + r]),
+                p([fx - r, fy + r]),
+                p([fx - r, fy - r]),
               ],
-              { color: blue, opacity },
-            );
-            ctx.point.draw(p(places.customPoint), {
-              shape: 'circle',
-              size: 20,
-              fillColor: blue,
-              fillOpacity: opacity,
-              strokeColor: blue,
-              strokeWidth: 0,
-              strokeOpacity: opacity,
-            });
-          },
-          onRemove() {},
+            ],
+            { color: blue, opacity },
+          );
+          ctx.point.draw(p(places.customPoint), {
+            shape: 'circle',
+            size: 20,
+            fillColor: blue,
+            fillOpacity: opacity,
+            strokeColor: blue,
+            strokeWidth: 0,
+            strokeOpacity: opacity,
+          });
         },
-      } as never);
+      });
     },
     { places: PLACES, blue: BLUE },
   );

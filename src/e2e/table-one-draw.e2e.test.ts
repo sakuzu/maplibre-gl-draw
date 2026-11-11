@@ -342,15 +342,15 @@ async function drawScene(
           builder.addRow({
             id: f.id,
             type: f.type,
-            geometry: dims
+            geometry: (dims
               ? { ...f.geometry, coordinates: lift(f.geometry.coordinates) }
-              : f.geometry,
-            order: `k${String(i).padStart(6, '0')}`,
+              : f.geometry) as never,
+            key: `k${String(i).padStart(6, '0')}`,
             style: f.style ?? {},
             properties: f.properties ?? {},
-            visible: true,
+            hidden: false,
             locked: false,
-          } as never);
+          });
         });
         writer.addPages('rows', builder.finish());
         Object.defineProperty(store, 'tables', { value: tables });

@@ -325,13 +325,13 @@ async function putFeatures(page: Page, type: TypeCase, holding: Holding): Promis
           builder.addRow({
             id: f.id,
             type: f.type,
-            geometry: f.geometry,
-            order: `k${String(i).padStart(6, '0')}`,
+            geometry: f.geometry as never,
+            key: `k${String(i).padStart(6, '0')}`,
             style: f.style,
             properties: f.properties,
-            visible: true,
+            hidden: false,
             locked: false,
-          } as never);
+          });
         });
         w.writer.addPages('L', builder.finish());
       } else if (

@@ -337,13 +337,13 @@ async function put(
           builder.addRow({
             id: f.id,
             type: f.type,
-            geometry: f.geometry,
-            order: `a${String(k).padStart(4, '0')}`,
+            geometry: f.geometry as never,
+            key: `a${String(k).padStart(4, '0')}`,
             style: f.style,
             properties: f.properties,
-            visible: true,
+            hidden: false,
             locked: false,
-          } as never);
+          });
         });
         w.writer.addPages('L', builder.finish());
       } else if (

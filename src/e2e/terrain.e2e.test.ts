@@ -22,7 +22,6 @@ import type { Browser, Page } from 'playwright-core';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { PluginContext } from '../index.js';
 import { browserTimeout } from '../test-utils.js';
-import { GpuLedger } from '../view/gpu-ledger.js';
 import {
   type Bundle,
   bundlePage,
@@ -57,6 +56,7 @@ interface TerrainWindow extends E2EWindow {
     };
     internals: {
       DemAtlas: typeof import('../view/terrain/dem-atlas.js').DemAtlas;
+      GpuLedger: typeof import('../view/gpu-ledger.js').GpuLedger;
       getMapTerrain: typeof import('../view/terrain/detect.js').getMapTerrain;
       getRenderableTerrainTiles: typeof import('../view/terrain/detect.js').getRenderableTerrainTiles;
       getTerrainTileData: typeof import('../view/terrain/detect.js').getTerrainTileData;
@@ -316,7 +316,8 @@ void main() {
     const points = await groundPoints();
     const pairs = await page.evaluate((list) => {
       const w = window as unknown as TerrainWindow;
-      const { DemAtlas, getMapTerrain } = w.e2e.internals;
+      // The page bundles the library: its classes come from the page, not from this module
+      const { DemAtlas, GpuLedger, getMapTerrain } = w.e2e.internals;
       const map = w.map;
       const painter = (
         map as unknown as {

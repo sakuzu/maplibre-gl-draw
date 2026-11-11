@@ -257,13 +257,13 @@ async function drawWritten(
         builder.addRow({
           id: f.id,
           type: f.type,
-          geometry: f.geometry,
-          order: `k${String(i).padStart(6, '0')}`,
+          geometry: f.geometry as never,
+          key: `k${String(i).padStart(6, '0')}`,
           style: f.style ?? {},
           properties: f.properties ?? {},
-          visible: (f as { visible?: boolean }).visible !== false,
+          hidden: (f as { visible?: boolean }).visible === false,
           locked: false,
-        } as never);
+        });
       });
       writer.addPages('rows', builder.finish());
       Object.defineProperty(store, 'tables', { value: tables });
