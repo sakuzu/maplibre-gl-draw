@@ -37,7 +37,7 @@ import { geometryAt, type RowGeometryAt } from '../../feature-table/row-table.js
 import type { StyleTable } from '../../feature-table/style-table.js';
 import { generateCirclePolygon } from '../../geometry/circle.js';
 import { drawPropertyKey } from '../../shared/properties.js';
-import type { Feature, FeatureType, StyleRule } from '../../shared/types/model.js';
+import type { Feature, FeatureStyle, FeatureType, StyleRule } from '../../shared/types/model.js';
 import type { Color } from '../../shared/types/style.js';
 import type { PixelRatioInput } from '../../shared/utils/pixel-ratio.js';
 import { resolveContentPixelRatio, resolvePixelRatio } from '../../shared/utils/pixel-ratio.js';
@@ -169,7 +169,7 @@ export class RowStyleSlots {
    */
   constructor(
     readonly resolver: RetainedStyleResolver,
-    private readonly styles: StyleTable,
+    private readonly styles: StyleTable<FeatureStyle>,
     readonly rule: StyleRule | undefined,
   ) {}
 
@@ -1085,7 +1085,7 @@ export class RowsStyles {
     public slots: RowStyleSlots,
     readonly palette: RowsPalette,
     pixelRatio: PixelRatioInput | undefined,
-    private readonly styles?: StyleTable,
+    private readonly styles?: StyleTable<FeatureStyle>,
   ) {
     this.screenRatio = resolvePixelRatio(pixelRatio);
     this.contentRatio = resolveContentPixelRatio(pixelRatio);

@@ -2,43 +2,42 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * The table of the styles of the rows (`StyleTable`)
+ * The table of the values of the `whole` column the tables keep (`StyleTable`; declared
+ * `'tables'`)
  *
- * The rows do not hold their styles: a row holds the number of its style in this table, and
- * every row whose style has the same contents has the same number. A map holds few distinct
- * styles (the rows a file brings share one; the ones drawn by hand use a handful of colors), so
- * a row costs 4 bytes for its style, and the values drawn from a style are worked out once per
+ * The rows do not hold these values: a row holds the number of its value in this table, and every
+ * row whose value has the same contents has the same number. The tables hold few distinct values
+ * of such a column (the rows a file brings share one; the ones written by hand use a handful), so
+ * a row costs 4 bytes for its value, and what is worked out from a value is worked out once per
  * number rather than once per row.
  *
- * Two styles are the same when their canonical bytes are (`canonical-value.ts`): the order of
- * their keys does not count, and a key an extension adds is part of the contents like any
- * other.
+ * Two values are the same when their canonical bytes are (`canonical-value.ts`): the order of
+ * their keys does not count, and every key is part of the contents.
  *
- * The table counts the rows that use each number (`retain`, `release`): a color changed again
- * and again would otherwise leave a number behind for every color on the way. A number no row
- * uses any more is taken back and given to the next new style, with a new epoch, so what is kept
- * by number elsewhere (the resolution of the styles by the drawing) can tell a number given
- * again from the one it kept (`epochOf`). A reader that keeps a style past its rows keeps the
- * style itself (`get`), not its number.
+ * The table counts the rows that use each number (`retain`, `release`): a value changed again
+ * and again would otherwise leave a number behind for every value on the way. A number no row
+ * uses any more is taken back and given to the next new value, with a new epoch, so what is kept
+ * by number elsewhere can tell a number given again from the one it kept (`epochOf`). A reader
+ * that keeps a value past its rows keeps the value itself (`get`), not its number.
  */
 
 import { decodeCanonicalValue, encodeCanonicalValue, hashByteRun } from '@sakuzu/tabane';
-import type { FeatureStyle } from '../shared/types/model.js';
 import { KasaneError, kasaneErrorOf } from '../table/kasane-error.js';
 
 /**
- * The distinct styles of a document, numbered
+ * The distinct values of the column the tables keep, numbered
  *
+ * @typeParam V - The values of the column, as the user of the tables declares them
  * @internal
  */
-export class StyleTable {
-  /** The canonical bytes of each style (null for a number taken back) */
+export class StyleTable<V = unknown> {
+  /** The canonical bytes of each value (null for a number taken back) */
   private readonly entries: Array<Uint8Array | null> = [];
-  /** The hash of the bytes of each style */
+  /** The hash of the bytes of each value */
   private readonly hashes: number[] = [];
-  /** The style of each number, made once and frozen */
-  private readonly styles: Array<FeatureStyle | undefined> = [];
-  /** The numbers of the styles of each hash */
+  /** The value of each number, made once and frozen */
+  private readonly values: Array<V | undefined> = [];
+  /** The numbers of the values of each hash */
   private readonly buckets = new Map<number, number[]>();
   /** The rows that use each number */
   private uses = new Int32Array(16);
@@ -46,15 +45,15 @@ export class StyleTable {
   private epochs = new Uint32Array(16);
   /** The numbers taken back, to be given again */
   private readonly free: number[] = [];
-  /** The number of times a number was given to a style (new or given again) */
+  /** The number of times a number was given to a value (new or given again) */
   private given = 0;
 
-  /** Changes every time a number is given to a style: what is kept by the styles held is read again */
+  /** Changes every time a number is given to a value: what is kept by the values held is read again */
   get revision(): number {
     return this.given;
   }
 
-  /** The number of distinct styles held */
+  /** The number of distinct values held */
   get size(): number {
     return this.entries.length - this.free.length;
   }
@@ -65,14 +64,14 @@ export class StyleTable {
   }
 
   /**
-   * The number of a style (the same number for the same contents)
+   * The number of a value (the same number for the same contents)
    *
-   * @throws when a value of the style cannot be held (a number that is not finite, a function)
+   * @throws when the value cannot be held (a number that is not finite, a function)
    */
-  intern(style: Readonly<FeatureStyle>): number {
+  intern(value: Readonly<V>): number {
     let bytes: Uint8Array;
     try {
-      bytes = encodeCanonicalValue(style);
+      bytes = encodeCanonicalValue(value);
     } catch (error) {
       throw kasaneErrorOf(error);
     }
@@ -80,7 +79,7 @@ export class StyleTable {
   }
 
   /**
-   * The number of a style given as its canonical bytes `[start, end)` of an array
+   * The number of a value given as its canonical bytes `[start, end)` of an array
    */
   internBytes(bytes: Uint8Array, start = 0, end = bytes.length): number {
     const hash = hashByteRun(bytes, start, end);
@@ -98,7 +97,7 @@ export class StyleTable {
     if (reused === undefined) {
       this.entries.push(null);
       this.hashes.push(0);
-      this.styles.push(undefined);
+      this.values.push(undefined);
       this.reserve(id + 1);
     } else {
       this.epochs[id]++;
@@ -106,18 +105,18 @@ export class StyleTable {
     this.given++;
     this.entries[id] = bytes.slice(start, end);
     this.hashes[id] = hash;
-    this.styles[id] = undefined;
+    this.values[id] = undefined;
     this.uses[id] = 0;
     bucket.push(id);
     return id;
   }
 
-  /** Whether a number holds a style */
+  /** Whether a number holds a value */
   has(id: number): boolean {
     return this.entries[id] != null;
   }
 
-  /** The times a number was given again (a number kept with its epoch is the same style) */
+  /** The times a number was given again (a number kept with its epoch is the same value) */
   epochOf(id: number): number {
     return this.epochs[id] ?? 0;
   }
@@ -135,7 +134,7 @@ export class StyleTable {
 
   /**
    * Counts `count` rows less that use a number; a number no row uses any more is taken back
-   * (given again to the next new style)
+   * (given again to the next new value)
    */
   release(id: number, count = 1): void {
     if (!this.entries[id]) return;
@@ -149,7 +148,7 @@ export class StyleTable {
       if (bucket.length === 0) this.buckets.delete(this.hashes[id]);
     }
     this.entries[id] = null;
-    this.styles[id] = undefined;
+    this.values[id] = undefined;
     this.free.push(id);
   }
 
@@ -166,13 +165,13 @@ export class StyleTable {
   }
 
   /**
-   * The style of a number: the same frozen object every time
+   * The value of a number: the same frozen object every time
    *
    * @throws when the number was never given
    */
-  get(id: number): FeatureStyle {
-    const cached = this.styles[id];
-    if (cached) return cached;
+  get(id: number): V {
+    const cached = this.values[id];
+    if (cached !== undefined) return cached;
     const bytes = this.entries[id];
     if (!bytes) throw new KasaneError('not-found', `StyleTable: no style ${id}`);
     let decoded: unknown;
@@ -181,9 +180,9 @@ export class StyleTable {
     } catch (error) {
       throw kasaneErrorOf(error);
     }
-    const style = Object.freeze(decoded as FeatureStyle);
-    this.styles[id] = style;
-    return style;
+    const value = Object.freeze(decoded) as V;
+    this.values[id] = value;
+    return value;
   }
 }
 

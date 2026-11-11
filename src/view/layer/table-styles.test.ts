@@ -15,6 +15,7 @@
 
 import { describe, expect, it } from 'vitest';
 import { StyleTable } from '../../feature-table/style-table.js';
+import type { FeatureStyle } from '../../shared/types/model.js';
 import { createTestDrawer, feature, tablesOfFeatures } from '../../test-utils.js';
 import { ROWS_STYLE_FLOATS, RowsPalette } from '../renderers/rows/rows-format.js';
 import { TerrainContext } from '../terrain/context.js';
@@ -53,7 +54,7 @@ describe('RowsPalette', () => {
 });
 
 /** The styles of a layer of the tests, with the table of styles of the rows */
-function stylesOf(styles = new StyleTable(), pixelRatio = 1) {
+function stylesOf(styles = new StyleTable<FeatureStyle>(), pixelRatio = 1) {
   const slots = new RowStyleSlots(createTestDrawer(), styles, undefined);
   const palette = new RowsPalette();
   return { styles, slots, palette, rows: new RowsStyles(slots, palette, pixelRatio, styles) };
@@ -91,7 +92,7 @@ describe('RowsStyles', () => {
   });
 
   it('writes the values again for a new pixel ratio, under the same numbers', () => {
-    const { styles, palette, rows } = stylesOf(new StyleTable(), 1);
+    const { styles, palette, rows } = stylesOf(new StyleTable<FeatureStyle>(), 1);
     const style = styles.intern({ strokeWidth: 3 });
     const n = rows.line(style, 'LineString', null);
     // The width fixed on screen, in device pixels

@@ -26,7 +26,12 @@ import type {
 import type { BBox } from '../geometry/types.js';
 import type { Feature, FeatureStyle, FeatureType } from '../shared/types/model.js';
 import { drawErrorOf } from '../table/draw-error-of.js';
-import { ROW_FLAG_HIDDEN, ROW_FLAG_LOCKED, styleColumnOf } from '../table/feature-row-columns.js';
+import {
+  PROPERTY_FIELD,
+  ROW_FLAG_HIDDEN,
+  ROW_FLAG_LOCKED,
+  styleColumnOf,
+} from '../table/feature-row-columns.js';
 import { KasaneError } from '../table/kasane-error.js';
 import type { RowInput } from '../table/row-group-builder.js';
 import { ROW_FLAG_DELETED } from '../table/row-group-types.js';
@@ -40,7 +45,6 @@ import type { RowValues } from './row-values.js';
 import type { TableSelection } from './selection.js';
 import {
   type DeltaInput,
-  PROPERTY_FIELD,
   type RowBlocks,
   type RowPlace,
   TablesStore,
@@ -369,7 +373,7 @@ class GatedLayerView implements LayerTableView {
  *
  * @internal
  */
-export interface FeatureTablesInternals extends RowBlocks {
+export interface FeatureTablesInternals extends RowBlocks<FeatureStyle> {
   /** The state of the rows of the library, written to the tables (`feature-row-states.ts`) */
   readonly states: RowStateSets;
   /**
@@ -497,7 +501,7 @@ interface OverlayEntry {
 }
 
 /** The implementation of the tables of the library: the tables, and what the library reads of them */
-class FeatureTablesStore extends TablesStore implements FeatureTablesInternals {
+class FeatureTablesStore extends TablesStore<FeatureStyle> implements FeatureTablesInternals {
   readonly states: RowStateSets;
   private readonly views = new Map<string, LayerTableView>();
   readonly featureCache: FeatureCache;

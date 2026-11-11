@@ -42,6 +42,12 @@ export const GEOMETRY_COLUMN = shapeColumnOf(FEATURE_COLUMN_LAYOUT, 'geometry');
 export const TYPE_COLUMN = wholeColumnOf(FEATURE_COLUMN_LAYOUT, 'type');
 /** The place of the style in `RowBlockData.wholes` @internal */
 export const STYLE_COLUMN = wholeColumnOf(FEATURE_COLUMN_LAYOUT, 'style');
+/**
+ * The start of the fields of the attributes of a row (`properties:<key>`)
+ *
+ * @internal
+ */
+export const PROPERTY_FIELD = 'properties:';
 /** The place of the attributes in `RowBlockData.keyed` @internal */
 export const PROPERTIES_COLUMN = keyedColumnOf(FEATURE_COLUMN_LAYOUT, 'properties');
 /** The bit of {@link RowBlockData.flags} of a row that is not shown @internal */

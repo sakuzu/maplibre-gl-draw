@@ -29,8 +29,6 @@ import {
   ValueStringCache,
 } from '@sakuzu/tabane';
 import type { BBox } from '../geometry/bbox-type.js';
-import type { FeatureStyle } from '../shared/types/model.js';
-import { propertyColumnsOf, styleColumnOf } from '../table/feature-row-columns.js';
 import { KasaneError } from '../table/kasane-error.js';
 import { buildCacheColumns, cacheColumnsIn, type RowCache } from '../table/row-caches.js';
 import { type RowColumnLayout, rowColumnLayoutOf } from '../table/row-columns.js';
@@ -43,6 +41,7 @@ import { mergeRowBlockData } from '../table/row-group-merge.js';
 import {
   ROW_FLAG_DELETED,
   type RowBlockData,
+  type RowBlockDictionary,
   type RowBlockValues,
 } from '../table/row-group-types.js';
 import { compareRowKeys, type GroupKeySource, type RowKeySource } from '../table/row-keys.js';
@@ -52,7 +51,7 @@ import { GroupTable } from './group-table.js';
 import { IdIndex } from './id-index.js';
 import { ItemWalk } from './item-walk.js';
 import { RowBoxIndex } from './row-box-index.js';
-import { groupRowRead, type RowReadContext, rowInputOf, rowValue } from './row-read.js';
+import { groupRowRead, rowInputOf, rowValue } from './row-read.js';
 import { noteRowState } from './row-skips.js';
 import {
   checkStateBits,
@@ -67,6 +66,7 @@ import {
 import {
   createRowGroup,
   geometryAt,
+  KEYED_COLUMN,
   overrideBytesOf,
   type RowGroup,
   RowTable,
@@ -129,13 +129,6 @@ const DROPPED_ROWS_MIN = 64;
  */
 const PLACE_FIELDS: ReadonlySet<string> = new Set(['parent', 'key']);
 
-/**
- * The start of the fields of the attributes of a row (`properties:<key>`)
- *
- * @internal
- */
-export const PROPERTY_FIELD = 'properties:';
-
 /** The fields a new row is written with: a deleted row written all of them is created again */
 const CREATE_FIELDS: readonly RowField[] = ['type', 'parent', 'geometry', 'key'];
 
@@ -155,6 +148,9 @@ const ADDED_FIELDS: readonly RowField[] = [
 
 /** The rows of a write that writes none */
 const NO_ROWS: RowsChange = { layers: new Map() };
+
+/** The numbers of the values of rows when the tables keep none (shared) */
+const NO_NUMBERS = new Uint32Array(0);
 
 /** The number of handles a scan reads at a time when not told */
 const SCAN_BATCH = 1024;
@@ -267,6 +263,20 @@ export interface TablesStoreOptions {
 }
 
 /**
+ * What reading a row needs besides the row: the values the tables keep, the groups, the strings
+ * read, and the dimensions of the coordinates of a table
+ *
+ * @internal
+ */
+export interface RowReadContext<V = unknown> {
+  readonly styles: StyleTable<V>;
+  readonly groups: GroupTable;
+  readonly strings: ValueStringCache;
+  /** The dimensions of the coordinates of a table */
+  dimensionsOf(tableId: string): CoordinateDimensions;
+}
+
+/**
  * Where a row is read: its group (a group of a table, or the group of the delta of a table) and
  * its row there
  *
@@ -284,9 +294,10 @@ export interface RowPlace {
  *
  * @internal
  */
-export interface RowBlocks {
+export interface RowBlocks<V = unknown> {
   readonly ids: IdIndex;
-  readonly styles: StyleTable;
+  /** The values of the `whole` column the tables keep (`'tables'`), numbered */
+  readonly styles: StyleTable<V>;
   readonly groups: GroupTable;
   /**
    * The keys of the order of groups written and not in the order read yet: their
@@ -297,7 +308,7 @@ export interface RowBlocks {
   /** The bits of the state of each handle (`setRowStates`) */
   readonly rowStates: RowStates;
   readonly strings: ValueStringCache;
-  readonly readContext: RowReadContext;
+  readonly readContext: RowReadContext<V>;
   /** Changes with every change of the rows drawn of any table */
   readonly revision: number;
   /** The write mark the rows written are stamped with (`write-marks.ts`) */
@@ -533,14 +544,18 @@ interface TableChangeDraft {
   readonly styleKeys: Set<string>;
 }
 
-/** The implementation of the tables */
-export class TablesStore implements RowBlocks, TablesWriter, Tables {
+/**
+ * The implementation of the tables
+ *
+ * @typeParam V - The values of the `whole` column the tables keep (`'tables'`)
+ */
+export class TablesStore<V = unknown> implements RowBlocks<V>, TablesWriter, Tables {
   readonly ids = new IdIndex();
-  readonly styles = new StyleTable();
+  readonly styles = new StyleTable<V>();
   readonly groups: GroupTable;
   readonly writtenOrders = new Map<GroupHandle, string>();
   readonly strings: ValueStringCache;
-  readonly readContext: RowReadContext;
+  readonly readContext: RowReadContext<V>;
   protected readonly tables = new Map<string, RowTable>();
   /** The tables by their serial number */
   private readonly tableList: RowTable[] = [];
@@ -619,6 +634,13 @@ export class TablesStore implements RowBlocks, TablesWriter, Tables {
   private readonly blockWholes: ReadonlyMap<string, number>;
   /** The bits of the `flag` columns in `RowBlockData.flags`, by their names */
   private readonly flagBits: ReadonlyMap<string, number>;
+  /**
+   * The place in `RowBlockData.wholes` of the `whole` column whose values the tables keep
+   * (`'tables'`, numbered in `styles`; -1 for none)
+   */
+  private readonly keptWhole: number;
+  /** The start of the fields of the keys of the `keyed` column (`<column>:`; null for none) */
+  private readonly keyedStart: string | null;
   /** The fields of the values of groups: the fixed ones, and the group columns (`groupColumns`) */
   private readonly groupFields: ReadonlySet<string>;
   /** The `flag` columns of the groups, in the order of their bits */
@@ -646,6 +668,14 @@ export class TablesStore implements RowBlocks, TablesWriter, Tables {
       if (this.layout.dictionaries[w] === 'rowBlock') blockWholes.set(name, w);
     });
     this.blockWholes = blockWholes;
+    this.keptWhole = this.layout.dictionaries.indexOf('tables');
+    if (this.layout.dictionaries.lastIndexOf('tables') !== this.keptWhole) {
+      throw new KasaneError(
+        'invalid-input',
+        'Tables: the tables keep the values of one whole column at most',
+      );
+    }
+    this.keyedStart = this.layout.keyed.length > 0 ? `${this.layout.keyed[0]}:` : null;
     this.flagBits = new Map(
       this.layout.flags.map((name, f) => [name, ROW_FLAG_DELETED << (f + 1)]),
     );
@@ -693,6 +723,14 @@ export class TablesStore implements RowBlocks, TablesWriter, Tables {
       },
       { whenIdle: options.whenIdle, sortKey: sortKeyOf(this.coordinates) },
     );
+  }
+
+  /**
+   * The numbers of the values of the column the tables keep of the rows of a row block (null when
+   * the tables keep none)
+   */
+  private keptNumbers(data: RowBlockData): Uint32Array | null {
+    return this.keptWhole < 0 ? null : (data.wholes[this.keptWhole] as RowBlockDictionary).indexes;
   }
 
   /**
@@ -824,9 +862,11 @@ export class TablesStore implements RowBlocks, TablesWriter, Tables {
       orderVersionOf: (group) => this.groups.orderVersionOf(group),
       swapIn: (version, waiting) => this.swapIn(version, waiting),
       retainStyles: (data, count) => {
+        const kept = this.keptNumbers(data);
+        if (!kept) return;
         for (let r = 0; r < data.length; r++) {
-          if (count > 0) this.styles.retain(styleColumnOf(data).indexes[r]);
-          else this.styles.release(styleColumnOf(data).indexes[r]);
+          if (count > 0) this.styles.retain(kept[r]);
+          else this.styles.release(kept[r]);
         }
       },
       drops: (handle, group, row) => this.drops(handle, group, row),
@@ -923,8 +963,9 @@ export class TablesStore implements RowBlocks, TablesWriter, Tables {
     // keeps its handle until the Store forgets it)
     const release = (group: RowGroup): void => {
       const data = group.data;
+      const kept = this.keptNumbers(data);
       for (let r = 0; r < data.length; r++) {
-        this.styles.release(styleColumnOf(data).indexes[r]);
+        if (kept) this.styles.release(kept[r]);
         const handle = data.handles[r];
         if (handle < 0) continue;
         if (group.delta) this.ids.setDelta(handle, -1, -1);
@@ -1185,7 +1226,9 @@ export class TablesStore implements RowBlocks, TablesWriter, Tables {
       else this.adoptGroup(table, data);
       for (let r = 0; r < data.length; r++) draft.created.push(data.handles[r]);
       for (const field of ADDED_FIELDS) draft.fields.add(field);
-      for (const key of propertyColumnsOf(data).keys) draft.fields.add(`${PROPERTY_FIELD}${key}`);
+      for (const key of data.keyed[KEYED_COLUMN]?.keys ?? []) {
+        draft.fields.add(`${this.keyedStart}${key}`);
+      }
     }
     const rows: RowsChange = { layers: finishChanges(drafts) };
     this.notifyWork();
@@ -1429,9 +1472,10 @@ export class TablesStore implements RowBlocks, TablesWriter, Tables {
     if (!data) return null;
     const group = createRowGroup(-1, data, this.writeMarks.mark, false, true);
     const rows = new Map<RowHandle, number>();
+    const kept = this.keptNumbers(data);
     for (let r = 0; r < data.length; r++) {
       rows.set(data.handles[r], r);
-      this.styles.retain(styleColumnOf(data).indexes[r]);
+      if (kept) this.styles.retain(kept[r]);
     }
     creation.reading = { group, rows };
     for (let r = 0; r < data.length; r++) this.writeState(group, r);
@@ -1443,10 +1487,9 @@ export class TablesStore implements RowBlocks, TablesWriter, Tables {
     const reading = creation.reading;
     creation.reading = null;
     creation.inputs = null;
-    if (reading) {
-      for (let r = 0; r < reading.group.data.length; r++) {
-        this.styles.release(styleColumnOf(reading.group.data).indexes[r]);
-      }
+    const kept = reading ? this.keptNumbers(reading.group.data) : null;
+    if (kept) {
+      for (let r = 0; r < kept.length; r++) this.styles.release(kept[r]);
     }
     creation.table.touchPending();
   }
@@ -2148,7 +2191,7 @@ export class TablesStore implements RowBlocks, TablesWriter, Tables {
     const styleNumbers = styles?.map((style) => {
       let number = internedStyles.get(style);
       if (number === undefined) {
-        number = this.styles.intern((style ?? {}) as FeatureStyle);
+        number = this.styles.intern((style ?? {}) as V);
         this.styles.retain(number);
         internedStyles.set(style, number);
       }
@@ -2194,7 +2237,7 @@ export class TablesStore implements RowBlocks, TablesWriter, Tables {
         lastChange = change;
       }
       if (styles && styleNumbers && place) {
-        const beforeNumber = styleColumnOf(place.group.data).indexes[place.row];
+        const beforeNumber = (this.keptNumbers(place.group.data) as Uint32Array)[place.row];
         const afterNumber = styleNumbers[i];
         let byAfter = styleKeysOf.get(beforeNumber);
         if (!byAfter) {
@@ -2203,7 +2246,7 @@ export class TablesStore implements RowBlocks, TablesWriter, Tables {
         }
         let keys = byAfter.get(afterNumber);
         if (!keys) {
-          keys = changedKeys(this.styles.get(beforeNumber), (styles[i] ?? {}) as FeatureStyle);
+          keys = changedKeys(this.styles.get(beforeNumber), styles[i] ?? {});
           byAfter.set(afterNumber, keys);
         }
         // The keys of a pair are added once per change of a table
@@ -2629,7 +2672,8 @@ export class TablesStore implements RowBlocks, TablesWriter, Tables {
         continue;
       }
       if (this.relocating.has(field)) {
-        if (rowValue(place.group, row, field.slice(PROPERTY_FIELD.length)) !== value) return true;
+        const key = field.slice((this.keyedStart as string).length);
+        if (rowValue(place.group, row, key) !== value) return true;
       }
     }
     return false;
@@ -2678,7 +2722,7 @@ export class TablesStore implements RowBlocks, TablesWriter, Tables {
           if (value !== undefined) out.locked = value === true;
           break;
         default: {
-          const key = field.slice(PROPERTY_FIELD.length);
+          const key = field.slice((this.keyedStart as string).length);
           const properties = out.properties as Record<string, unknown>;
           if (value === undefined) delete properties[key];
           else properties[key] = value;
@@ -2696,8 +2740,8 @@ export class TablesStore implements RowBlocks, TablesWriter, Tables {
     const flags: Array<readonly [number, readonly unknown[]]> = [];
     const wholes: Array<readonly [number, readonly unknown[]]> = [];
     for (const [field, values] of fields) {
-      if (field.startsWith(PROPERTY_FIELD)) {
-        properties.push([field.slice(PROPERTY_FIELD.length), values]);
+      if (this.keyedStart !== null && field.startsWith(this.keyedStart)) {
+        properties.push([field.slice(this.keyedStart.length), values]);
         continue;
       }
       const bit = this.flagBits.get(field);
@@ -2756,13 +2800,14 @@ export class TablesStore implements RowBlocks, TablesWriter, Tables {
       );
       what |= ROW_WRITE_GEOMETRY;
     }
-    if (styleNumbers) {
+    const kept = styleNumbers ? this.keptNumbers(data) : null;
+    if (styleNumbers && kept) {
       const next = styleNumbers[i];
-      const old = styleColumnOf(data).indexes[row];
+      const old = kept[row];
       if (next !== old) {
         this.styles.retain(next);
         this.styles.release(old);
-        styleColumnOf(data).indexes[row] = next;
+        kept[row] = next;
         what |= ROW_WRITE_STYLE;
       }
     }
@@ -2937,8 +2982,9 @@ export class TablesStore implements RowBlocks, TablesWriter, Tables {
       if (replacedGroups.has(copy.group) && !newGroups.has(copy.group)) waiting.delete(handle);
     }
     for (const old of version.replaces) {
-      for (let r = 0; r < old.data.length; r++)
-        this.styles.release(styleColumnOf(old.data).indexes[r]);
+      const kept = this.keptNumbers(old.data);
+      if (!kept) continue;
+      for (let r = 0; r < old.data.length; r++) this.styles.release(kept[r]);
     }
     for (const group of groups) {
       for (let r = 0; r < group.data.length; r++) this.writeState(group, r);
@@ -2974,7 +3020,7 @@ export class TablesStore implements RowBlocks, TablesWriter, Tables {
         continue;
       }
       const style = fields.get('style');
-      const numbers = style ? [this.styles.intern((style[0] ?? {}) as FeatureStyle)] : undefined;
+      const numbers = style ? [this.styles.intern((style[0] ?? {}) as V)] : undefined;
       const write = this.writeInPlace(
         place,
         0,
@@ -3092,6 +3138,7 @@ export class TablesStore implements RowBlocks, TablesWriter, Tables {
     if (group) {
       // The rows coming in under the mark a version started under stay for it
       const watched = coming.length > 0 && this.versions.watches(marks.mark);
+      const numbers = this.keptNumbers(group.data);
       for (let r = 0; r < group.data.length; r++) {
         const handle = group.data.handles[r];
         // A row drawn over a row stays in the delta as long as it is drawn
@@ -3108,13 +3155,14 @@ export class TablesStore implements RowBlocks, TablesWriter, Tables {
           marks.stamp(group, r);
           if (watched) this.versions.rowChanged(handle, marks.mark);
         }
-        this.styles.retain(styleColumnOf(group.data).indexes[r]);
+        if (numbers) this.styles.retain(numbers[r]);
       }
     }
     if (old) {
+      const numbers = this.keptNumbers(old.data);
       for (let r = 0; r < old.data.length; r++) {
         const handle = old.data.handles[r];
-        this.styles.release(styleColumnOf(old.data).indexes[r]);
+        if (numbers) this.styles.release(numbers[r]);
         if (this.ids.deltaTable(handle) === table.serial) this.ids.setDelta(handle, -1, -1);
       }
       table.dropMoved(old);
@@ -3185,9 +3233,14 @@ export class TablesStore implements RowBlocks, TablesWriter, Tables {
     if (fitted) data.caches = fitted;
   }
 
-  /** Gives the styles of a group built in a Worker the numbers of the table of styles */
+  /**
+   * Gives the values of the column the tables keep of a group built in a Worker the numbers of
+   * their table (`styles`)
+   */
   private numberStyles(data: RowBlockData): void {
-    const dictionary = styleColumnOf(data).dictionary;
+    if (this.keptWhole < 0) return;
+    const column = data.wholes[this.keptWhole] as RowBlockDictionary;
+    const dictionary = column.dictionary;
     if (!dictionary) return;
     const numbers = new Uint32Array(utf8ColumnLength(dictionary));
     for (let i = 0; i < numbers.length; i++) {
@@ -3197,7 +3250,6 @@ export class TablesStore implements RowBlocks, TablesWriter, Tables {
         dictionary.offsets[i + 1],
       );
     }
-    const column = styleColumnOf(data);
     const indexes = column.indexes;
     for (let r = 0; r < data.length; r++) indexes[r] = numbers[indexes[r]];
     column.dictionary = null;
@@ -3222,8 +3274,8 @@ export class TablesStore implements RowBlocks, TablesWriter, Tables {
     }
     // The styles of a group built in a Worker get the numbers of the table of styles
     this.numberStyles(data);
-    const styles = styleColumnOf(data).indexes;
-    for (let r = 0; r < data.length; r++) {
+    const styles = this.keptNumbers(data) ?? NO_NUMBERS;
+    for (let r = 0; r < styles.length; r++) {
       if (!this.styles.has(styles[r])) {
         throw new KasaneError(
           'not-found',
@@ -3526,8 +3578,11 @@ const SAME_SHAPE: GeometryWrite = Object.freeze({ sameShape: true, from: 0, to: 
 /** The keys of a write in place that writes no attribute (shared) */
 const NO_KEYS: readonly string[] = Object.freeze([]);
 
-/** The keys whose values differ between two styles */
-function changedKeys(a: FeatureStyle, b: FeatureStyle): string[] {
+/**
+ * The keys whose values differ between two values of the column the tables keep (an object each;
+ * any other value has no key)
+ */
+function changedKeys(a: unknown, b: unknown): string[] {
   const out: string[] = [];
   const left = a as Record<string, unknown>;
   const right = b as Record<string, unknown>;

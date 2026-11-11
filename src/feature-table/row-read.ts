@@ -11,7 +11,6 @@
  */
 
 import {
-  type CoordinateDimensions,
   type PropertyColumns,
   readNumberValue,
   readValue,
@@ -22,7 +21,7 @@ import {
 } from '@sakuzu/tabane';
 import type { Geometry } from 'geojson';
 import { DrawError } from '../shared/draw-error.js';
-import type { Coordinate, Feature, FeatureType } from '../shared/types/model.js';
+import type { Coordinate, Feature, FeatureStyle, FeatureType } from '../shared/types/model.js';
 import { setOwnProperty } from '../shared/utils/own-property.js';
 import {
   GEOMETRY_COLUMN,
@@ -42,9 +41,8 @@ import {
   type RowBlockValues,
 } from '../table/row-group-types.js';
 import type { RowRead, RowShape } from '../table/row-read-type.js';
-import type { GroupTable } from './group-table.js';
 import { geometryAt, type RowGroup } from './row-table.js';
-import type { StyleTable } from './style-table.js';
+import type { RowReadContext as TablesReadContext } from './tables-store.js';
 import { decodeOverrideValue } from './value-overrides.js';
 
 /** The places of the columns of a feature, read once rather than through the import at every row */
@@ -57,17 +55,12 @@ const PROPERTIES = PROPERTIES_COLUMN;
 const NO_PROPERTIES: PropertyColumns = { keys: [], columns: [] };
 
 /**
- * What reading a row needs besides the row
+ * What reading a row needs besides the row: that of the tables, whose values they keep are the
+ * styles
  *
  * @internal
  */
-export interface RowReadContext {
-  readonly styles: StyleTable;
-  readonly groups: GroupTable;
-  readonly strings: ValueStringCache;
-  /** The dimensions of the coordinates of a layer */
-  dimensionsOf(layerId: string): CoordinateDimensions;
-}
+export type RowReadContext = TablesReadContext<FeatureStyle>;
 
 /**
  * The type of a row
@@ -274,7 +267,7 @@ export function rowFeatureToRead(
  *
  * @internal
  */
-export function rowInputOf(context: RowReadContext, group: RowGroup, row: number): RowInput {
+export function rowInputOf(context: TablesReadContext, group: RowGroup, row: number): RowInput {
   const data = group.data;
   const flags = data.flags[row];
   const groupHandle = data.groups[row];
