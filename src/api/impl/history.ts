@@ -94,6 +94,9 @@ export function createHistory(store: Store, options: HistoryOptions | undefined)
   let applying: { direction: 'undo' | 'redo'; parts: Inverse[] } | null = null;
   // A step whose commit is still being written over several tasks
   let open: Step | null = null;
+  // The step the last undo or redo made, which a notification of it told after its commit (a
+  // write of many rows the Store tells later) joins
+  let taken: { direction: 'undo' | 'redo'; step: Step } | null = null;
 
   const release = (step: Step): void => {
     const tables = store.tables;
@@ -113,8 +116,14 @@ export function createHistory(store: Store, options: HistoryOptions | undefined)
     }
     const source = change.source ?? 'local';
     if (source === 'remote' || source === 'silent') return;
+    if (source === 'undo' || source === 'redo') {
+      const inverse = taken?.direction === source ? inverseOf(change) : null;
+      if (taken && inverse) taken.step.parts.push(inverse);
+      return;
+    }
     if (source === 'open' || change.reset === true) {
       open = null;
+      taken = null;
       dropAll(undoSteps);
       dropAll(redoSteps);
       return;
@@ -123,6 +132,7 @@ export function createHistory(store: Store, options: HistoryOptions | undefined)
     if (commit && !commit.undo) return;
     const inverse = inverseOf(change);
     if (!inverse) return;
+    taken = null;
     if (open) {
       open.parts.push(inverse);
     } else {
@@ -166,8 +176,10 @@ export function createHistory(store: Store, options: HistoryOptions | undefined)
           applying = null;
         }
         release(step);
-        const reversed: Step = { label: step.label, parts: parts.reverse() };
+        // Its parts in the order they were told: taken back from the last one, as a step is
+        const reversed: Step = { label: step.label, parts };
         (direction === 'undo' ? redoSteps : undoSteps).push(reversed);
+        taken = { direction, step: reversed };
         return { value: undefined, skipped: 0 };
       });
     })();
@@ -180,6 +192,7 @@ export function createHistory(store: Store, options: HistoryOptions | undefined)
     redo: (taskOptions) => take('redo', taskOptions),
     clear() {
       open = null;
+      taken = null;
       dropAll(undoSteps);
       dropAll(redoSteps);
     },
@@ -312,9 +325,14 @@ function applyInverse(store: Store, inverse: Inverse): void {
     store.updateLayer(id, fields);
   }
 
-  // 4. The items put in another place go back, from the last one
+  // 4. The items put in another place go back, from the last one. A group deleted is created
+  // again with the key it had in a Store that keeps the keys of the order (1.): it is not moved
+  const groupsBack = new Set(inverse.groupsDeleted.map((group) => group.id));
   for (let i = inverse.moves.length - 1; i >= 0; i--) {
     const move = inverse.moves[i];
+    if (tables && move.kind === 'item' && move.to === null && groupsBack.has(move.itemId)) {
+      continue;
+    }
     if (move.kind === 'rows') {
       if (tables) store.restoreRows(move.before);
       continue;
