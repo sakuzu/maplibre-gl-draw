@@ -176,3 +176,28 @@ export function normalizeMultiPolygonOrientation(
 ): MultiPolygonCoordinates {
   return multiPolygon.map(normalizePolygonOrientation);
 }
+
+/**
+ * A GeoJSON geometry with the rings of its polygons in the right-hand rule (RFC 7946): the same
+ * object when they already are, so that a geometry written as it was is not a new one. The
+ * positions are not changed, the numbers after the first two included.
+ *
+ * @internal
+ */
+export function orientRings<G extends { readonly type: string }>(geometry: G): G {
+  const record = geometry as unknown as { type: string; coordinates?: unknown };
+  if (record.type === 'Polygon' && Array.isArray(record.coordinates)) {
+    const rings = record.coordinates as PolygonCoordinates;
+    const oriented = normalizePolygonOrientation(rings);
+    return oriented.every((ring, i) => ring === rings[i])
+      ? geometry
+      : ({ ...geometry, coordinates: oriented } as G);
+  }
+  if (record.type === 'MultiPolygon' && Array.isArray(record.coordinates)) {
+    const parts = record.coordinates as MultiPolygonCoordinates;
+    const oriented = normalizeMultiPolygonOrientation(parts);
+    const same = oriented.every((part, i) => part.every((ring, j) => ring === parts[i][j]));
+    return same ? geometry : ({ ...geometry, coordinates: oriented } as G);
+  }
+  return geometry;
+}

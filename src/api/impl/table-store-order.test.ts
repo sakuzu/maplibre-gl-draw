@@ -12,6 +12,7 @@ import { featureTablesInternals } from '../../feature-table/feature-tables.js';
 import type { Store } from '../../store/store.js';
 import { createTableStore } from '../../store/table-memory.js';
 import type { Feature } from '../../store/types.js';
+import { writesOf } from '../../test-support/writes.js';
 import { createMapStub } from '../../test-utils.js';
 import type { Draw } from '../draw.js';
 import { DrawError } from '../errors.js';
@@ -104,30 +105,34 @@ afterEach(() => {
 
 describe('the moves of features held as rows', () => {
   it('put features just above an item, just below one, at the front, and in another layer', () => {
-    expect(draw.features.move('s0', { layerId: 'rows', below: 's2' })).toBe(true);
+    expect(writesOf(draw).features.move('s0', { layerId: 'rows', below: 's2' })).toBe(true);
     expect(items()).toEqual(['s1', 's2', 's0', 's3', 's4']);
-    expect(draw.features.moveMany(['s3', 's4'], { layerId: 'rows', above: 's1' })).toBe(true);
+    expect(writesOf(draw).features.moveMany(['s3', 's4'], { layerId: 'rows', above: 's1' })).toBe(
+      true,
+    );
     expect(items()).toEqual(['s3', 's4', 's1', 's2', 's0']);
-    expect(draw.features.move('s3', { layerId: 'rows' })).toBe(true);
+    expect(writesOf(draw).features.move('s3', { layerId: 'rows' })).toBe(true);
     expect(items()).toEqual(['s4', 's1', 's2', 's0', 's3']);
-    expect(draw.features.move('s1', { layerId: 'other' })).toBe(true);
+    expect(writesOf(draw).features.move('s1', { layerId: 'other' })).toBe(true);
     expect(items('other')).toEqual(['s1']);
     expect(store.getFeature('s1')?.layerId).toBe('other');
   });
 
   it('refuses a position by index in a layer held as rows, as a refusal of its state', () => {
-    expect(() => draw.features.move('s0', { layerId: 'rows', index: 2 })).toThrow(DrawError);
-    expect(() => draw.features.move('s0', { layerId: 'rows', index: 2 })).toThrow(
+    expect(() => writesOf(draw).features.move('s0', { layerId: 'rows', index: 2 })).toThrow(
+      DrawError,
+    );
+    expect(() => writesOf(draw).features.move('s0', { layerId: 'rows', index: 2 })).toThrow(
       expect.objectContaining({ code: 'invalid-state' }),
     );
     expect(items()).toEqual(['s0', 's1', 's2', 's3', 's4']);
   });
 
   it('makes a group at the place of its frontmost member, and moves it with its members', () => {
-    const group = draw.groups.create({ featureIds: ['s3', 's1'] });
+    const group = writesOf(draw).groups.create({ featureIds: ['s3', 's1'] });
     expect(items()).toEqual(['s0', 's2', group?.id, 's4']);
     expect(members(group?.id as string)).toEqual(['s1', 's3']);
-    expect(draw.groups.move(group?.id as string, { layerId: 'other' })).toBe(true);
+    expect(writesOf(draw).groups.move(group?.id as string, { layerId: 'other' })).toBe(true);
     expect(items('other')).toEqual([group?.id]);
     expect(store.getFeature('s1')?.layerId).toBe('other');
     expect(members(group?.id as string)).toEqual(['s1', 's3']);
@@ -135,33 +140,33 @@ describe('the moves of features held as rows', () => {
 
   it('groups the selection at its frontmost feature, and ungroups it at the place of the group', () => {
     draw.selection.set('feature', ['s1', 's3']);
-    const group = draw.selection.group();
+    const group = writesOf(draw).selection.group();
     expect(items()).toEqual(['s0', 's2', group?.id, 's4']);
     draw.selection.set('group', [group?.id as string]);
-    expect(draw.selection.ungroup()).toBe(true);
+    expect(writesOf(draw).selection.ungroup()).toBe(true);
     expect(store.getGroup(group?.id as string)).toBeUndefined();
     expect(items()).toEqual(['s0', 's2', 's1', 's3', 's4']);
   });
 
   it('takes a member out of its group just in front of it, and deletes the group it leaves empty', () => {
-    const group = draw.groups.create({ featureIds: ['s1', 's2'] })?.id as string;
+    const group = writesOf(draw).groups.create({ featureIds: ['s1', 's2'] })?.id as string;
     expect(items()).toEqual(['s0', group, 's3', 's4']);
-    draw.features.move('s1', { groupId: null });
+    writesOf(draw).features.move('s1', { groupId: null });
     expect(items()).toEqual(['s0', group, 's1', 's3', 's4']);
-    draw.features.move('s2', { groupId: null });
+    writesOf(draw).features.move('s2', { groupId: null });
     expect(store.getGroup(group)).toBeUndefined();
     expect(items()).toEqual(['s0', 's2', 's1', 's3', 's4']);
   });
 
   it('puts features into a group just above a member', () => {
-    const group = draw.groups.create({ featureIds: ['s1', 's2'] })?.id as string;
-    draw.features.move('s4', { layerId: 'rows', groupId: group, below: 's1' });
+    const group = writesOf(draw).groups.create({ featureIds: ['s1', 's2'] })?.id as string;
+    writesOf(draw).features.move('s4', { layerId: 'rows', groupId: group, below: 's1' });
     expect(members(group)).toEqual(['s1', 's4', 's2']);
     expect(store.getFeature('s4')?.groupId).toBe(group);
   });
 
   it('puts the result of a union where its frontmost input was', () => {
-    const result = draw.features.union(['s1', 's3']);
+    const result = writesOf(draw).features.union(['s1', 's3']);
     expect(result).not.toBeNull();
     expect(items()).toEqual(['s0', 's2', result?.id, 's4']);
   });

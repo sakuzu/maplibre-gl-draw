@@ -14,6 +14,7 @@ import type {
   Feature as GeoJSONFeature,
   FeatureCollection as GeoJSONFeatureCollection,
   Geometry,
+  GeometryCollection,
   Position,
 } from 'geojson';
 import type { BBox } from '../geometry/types.js';
@@ -28,11 +29,12 @@ import {
   evaluateStyleRule as evaluateRule,
 } from '../view/style-rule.js';
 import type { DrawErrorCode } from './errors.js';
+import { readFeatureFields, toFeature } from './impl/feature-shape.js';
 import {
-  convertFeaturesToGeoJSON,
-  convertFeatureToGeoJSON,
-} from './impl/import-export/geojson-export.js';
-import { parseGeoJSONInput, parseNativeInput } from './impl/import-export/parse.js';
+  type ParsedStore,
+  parseGeoJSONInput,
+  parseNativeInput,
+} from './impl/import-export/parse.js';
 import type { VertexTarget } from './state.js';
 
 // ============================================================================
@@ -136,38 +138,65 @@ export type FeatureStyleResolved = FeatureStyle &
 export { DRAW_PROPERTY_PREFIX } from '../shared/properties.js';
 
 /**
- * The `properties` of a feature: the GeoJSON properties themselves, with the keys of the
- * library typed.
- *
- * A key that starts with {@link DRAW_PROPERTY_PREFIX} holds a value of the library; any other
- * key is an attribute of the user. Export and load keep the keys as they are.
- *
- * Every value is a {@link Value}: null, a boolean, a number, a string, an array or an object of
- * values, or one of the classes of the kinds JSON has not (a date is a {@link CalendarDate}, a
- * date-time a {@link DateTime}, the id of another feature a {@link Reference}, ...). What is
- * given is held in one form: a bigint becomes a number or a {@link BigInteger}, a `Uint8Array`
- * {@link Bytes}, and a key whose value is `undefined` is left out. Anything else (a `Date`, a
- * `Map`, an instance of another class, a function, a string with a lone surrogate) is refused
- * with `invalid-input`.
+ * The attributes of the user of a feature: any object. The values are checked when they are
+ * written: each is a {@link Value} (null, a boolean, a number, a string, an array or an object of
+ * values, or one of the classes of the kinds JSON has not: a date is a {@link CalendarDate}, a
+ * date-time a {@link DateTime}, the id of another feature a {@link Reference}, ...). What is given
+ * is held in one form: a bigint becomes a number or a {@link BigInteger}, a `Uint8Array`
+ * {@link Bytes}. Anything else (a `Date`, a `Map`, an instance of another class, a function, a
+ * string with a lone surrogate) is refused with `invalid-input`. An `interface` of the
+ * application can be given as it is.
  */
-export type DrawProperties = { [key: string]: Value } & {
+// biome-ignore lint/suspicious/noExplicitAny: the one shape that takes an interface of the application
+export type Properties = { readonly [key: string]: any };
+
+/**
+ * The keys of `properties` that hold the values of the library. A key's prefix is the name of
+ * the one who decides what its value means:
+ *
+ * - a key without a prefix is an attribute of the user; `name`, `description` and `content` are
+ *   read as the name, the description and the text of the feature
+ * - a value of the library is under a key that starts with {@link DRAW_PROPERTY_PREFIX}
+ * - an extension or an application keeps its values under keys of its own prefix, which the
+ *   library keeps as they are and does not read
+ *
+ * A key of a default value is not held: a feature visible, not locked, in no group, of the type
+ * of its geometry or with no style of its own has no such key. Read them with
+ * {@link readFeature}.
+ */
+export interface DrawProperties {
+  /** The layer it is in */
+  readonly 'maplibre-gl-draw:layerId'?: string;
+  /** The group it is in */
+  readonly 'maplibre-gl-draw:groupId'?: string;
+  /** The type it is drawn as; the type of its geometry when there is none */
+  readonly 'maplibre-gl-draw:featureType'?: FeatureType;
+  /** Its own look: the keys it gives win over the layer rule and the defaults */
+  readonly 'maplibre-gl-draw:style'?: FeatureStyle;
+  /** Hidden in the document */
+  readonly 'maplibre-gl-draw:visible'?: false;
+  /** Locked */
+  readonly 'maplibre-gl-draw:locked'?: true;
   /** The reference zoom: the zoom the feature was drawn or created at */
-  'maplibre-gl-draw:createdZoom'?: number;
+  readonly 'maplibre-gl-draw:createdZoom'?: number;
   /** The rotation, in degrees */
-  'maplibre-gl-draw:rotation'?: number;
+  readonly 'maplibre-gl-draw:rotation'?: number;
   /** The scale factor */
-  'maplibre-gl-draw:scale'?: number;
-  /** The radius of a circle, in meters */
-  'maplibre-gl-draw:radiusMeters'?: number;
+  readonly 'maplibre-gl-draw:scale'?: number;
+  /** The radius of a circle, in meters; a Circle cannot be without it */
+  readonly 'maplibre-gl-draw:radiusMeters'?: number;
   /** The direction of the radius handle of a circle, in degrees */
-  'maplibre-gl-draw:radiusHandleAngle'?: number;
-  /** The ID of the file of an image feature */
-  'maplibre-gl-draw:imageFileId'?: string;
+  readonly 'maplibre-gl-draw:radiusHandleAngle'?: number;
+  /** The ID of the file of an image; an Image cannot be without it */
+  readonly 'maplibre-gl-draw:imageFileId'?: string;
   /** The width of the image of an image feature, in pixels */
-  'maplibre-gl-draw:imageWidth'?: number;
+  readonly 'maplibre-gl-draw:imageWidth'?: number;
   /** The height of the image of an image feature, in pixels */
-  'maplibre-gl-draw:imageHeight'?: number;
-};
+  readonly 'maplibre-gl-draw:imageHeight'?: number;
+  /** A key of another prefix: the value of an extension or an application */
+  // biome-ignore lint/suspicious/noExplicitAny: the owner of the prefix decides the type of its values
+  readonly [key: `${string}:${string}`]: any;
+}
 
 /**
  * Whether a key of `properties` holds a value of the library, so that an attribute panel can
@@ -180,10 +209,121 @@ export function isDrawProperty(key: string): boolean {
   return isLibraryKey(key);
 }
 
+/** The geometry of a feature: any GeoJSON geometry but a GeometryCollection */
+export type FeatureGeometry = Exclude<Geometry, GeometryCollection>;
+
 /**
- * A shape that can be drawn and edited, with its layer, group, attributes and look.
+ * A feature, in the one shape there is: a GeoJSON Feature as it is. It is what is given to be
+ * created, what is read and what is written out, and `JSON.stringify` of it is GeoJSON. The
+ * values of the library are in `properties`, under the keys of {@link DrawProperties}.
+ *
+ * The features are held as rows of a table: this object is made each time one is read, a new copy
+ * each time. Read many with `features.list` a page at a time.
+ *
+ * The rings of a polygon follow the right-hand rule (RFC 7946): they are put so when written.
+ * The longitudes are as they were written, so a shape drawn across the ±180 degree meridian keeps
+ * its edges; the GeoJSON written out brings them back into [-180, 180].
  */
-export interface Feature {
+export interface Feature<
+  P extends object = Properties,
+  G extends FeatureGeometry = FeatureGeometry,
+> {
+  readonly type: 'Feature';
+  /** The ID, unique within the document */
+  readonly id: string;
+  readonly geometry: G;
+  /** The attributes of the user and the values of the library */
+  readonly properties: P & DrawProperties;
+}
+
+/**
+ * The values of the library of a feature under short names (the key without its prefix), as
+ * {@link readFeature} reads them: the names of {@link Layer} (`visible`, `locked`, `style`), with
+ * the defaults filled in.
+ */
+export interface FeatureFields {
+  /** The type it is drawn as */
+  readonly featureType: FeatureType;
+  /** Its layer, or `null` for a GeoJSON feature that names none */
+  readonly layerId: string | null;
+  /** Its group, or `null` */
+  readonly groupId: string | null;
+  /** Its own look (`{}` when it has none) */
+  readonly style: FeatureStyle;
+  readonly visible: boolean;
+  readonly locked: boolean;
+  readonly createdZoom?: number;
+  readonly rotation?: number;
+  readonly scale?: number;
+  readonly radiusMeters?: number;
+  readonly radiusHandleAngle?: number;
+  readonly imageFileId?: string;
+  readonly imageWidth?: number;
+  readonly imageHeight?: number;
+}
+
+/**
+ * Reads the values of the library of a feature under short names, the defaults filled in. It
+ * reads a feature the instance gives as well as a GeoJSON feature read from a file.
+ *
+ * ```ts
+ * const { layerId, visible, style } = readFeature(draw.features.get(id));
+ * ```
+ *
+ * @throws `DrawError` with the code `invalid-input` for something that is not a feature
+ */
+export function readFeature(feature: {
+  readonly geometry: Geometry;
+  readonly properties: object | null;
+}): FeatureFields {
+  return readFeatureFields(feature);
+}
+
+/**
+ * What `tx.features.create` takes: the same GeoJSON Feature that is read, so a GeoJSON feature
+ * is given as it is.
+ *
+ * - an `id` that is a number becomes its string; one is made when there is none. An `id` taken
+ *   fails with `already-exists`
+ * - `properties` of `null` are empty attributes; the keys are kept as they are
+ * - a `null` geometry and a GeometryCollection fail with `invalid-input`
+ * - the rings of a polygon are put in the right-hand rule
+ * - without `maplibre-gl-draw:layerId` it goes into the active layer
+ */
+export type FeatureInput<P extends object = Properties> = GeoJSONFeature<
+  Geometry,
+  (P & DrawProperties) | null
+>;
+
+/**
+ * A change of a feature: only the keys given change. `properties` is merged key by key, and so is
+ * the style under `maplibre-gl-draw:style`. A key is removed by naming it in `unset`; a key given
+ * `undefined`, an empty `properties` and an empty patch fail with `invalid-input`, so that nothing
+ * is removed without being named. A value a type needs (the radius of a Circle) cannot be
+ * removed (`invalid-input`). The place of a feature (`maplibre-gl-draw:layerId`, `groupId`,
+ * `featureType`) is not changed here (`invalid-input`): `place` puts a feature elsewhere.
+ */
+export type FeaturePatch<P extends object = Properties> = {
+  [K in keyof FeaturePatchFields<P>]-?: Required<Pick<FeaturePatchFields<P>, K>> &
+    Partial<Omit<FeaturePatchFields<P>, K>>;
+}[keyof FeaturePatchFields<P>];
+
+/** The keys of a {@link FeaturePatch}, of which a patch gives at least one */
+export interface FeaturePatchFields<P extends object = Properties> {
+  readonly geometry: Geometry;
+  readonly properties: { readonly [K in keyof (P & DrawProperties)]?: (P & DrawProperties)[K] };
+  readonly unset: {
+    readonly properties?: readonly Extract<keyof (P & DrawProperties), string>[];
+    readonly style?: readonly Extract<keyof FeatureStyle, string>[];
+  };
+}
+
+/**
+ * A feature as the Store holds it, with the values of the library in fields of their own: what
+ * the Store gives and takes (`StoreView.getFeature`, `DocumentChange`), and what a sketch edits.
+ * It goes with the Store; an application reads and writes {@link Feature}.
+ */
+export interface StoredFeature {
   /** The ID */
   id: string;
   /** The type */
@@ -195,7 +335,7 @@ export interface Feature {
   /** The ID of the group it is in */
   groupId: string | undefined;
   /** The GeoJSON properties: the attributes of the user and the values of the library */
-  properties: DrawProperties;
+  properties: { [key: string]: Value };
   /** The look of the feature */
   style: FeatureStyle;
   /** Whether it is visible */
@@ -368,7 +508,7 @@ export interface FileData {
 
 /**
  * The whole document in the format of the library, as `document.toJSON` writes it and
- * `document.load` reads it.
+ * `draw.open` reads it.
  */
 export interface DrawDocument {
   /** The version of the format */
@@ -396,10 +536,10 @@ export interface DrawDocument {
 // ============================================================================
 
 /**
- * What `features.create` takes. The radius of a circle and the other values of the library
- * go into `properties` under their prefixed keys.
+ * A feature to create as the Store and a sketch take it ({@link StoredFeature}). The radius of a
+ * circle and the other values of the library go into `properties` under their prefixed keys.
  */
-export interface FeatureInput {
+export interface StoredFeatureInput {
   /** The type */
   type: FeatureType;
   /** The GeoJSON geometry */
@@ -411,7 +551,7 @@ export interface FeatureInput {
   /** The group to put it in */
   groupId?: string;
   /** The GeoJSON properties */
-  properties?: DrawProperties;
+  properties?: { [key: string]: unknown };
   /** The look */
   style?: FeatureStyle;
   /** Whether it is visible */
@@ -421,7 +561,8 @@ export interface FeatureInput {
 }
 
 /**
- * What `features.update` takes: only the keys given change.
+ * A change of a feature as the Store and a sketch take it ({@link StoredFeature}): only the keys
+ * given change.
  *
  * `properties` and `style` are merged key by key, and a key given as `undefined` is removed.
  * The ID and the layer cannot change here; `features.move` moves a feature.
@@ -429,11 +570,11 @@ export interface FeatureInput {
  * A patch has no `type`: the type of a feature cannot change. To turn a feature into another
  * type, or to undo such a change, delete it and create it again.
  */
-export interface FeaturePatch {
+export interface StoredFeaturePatch {
   /** The new GeoJSON geometry */
   geometry?: Geometry;
   /** The keys of `properties` to set, or to remove with `undefined` */
-  properties?: Partial<DrawProperties>;
+  properties?: { [key: string]: unknown };
   /** The keys of `style` to set, or to remove with `undefined` */
   style?: FeatureStyle;
   /** Whether it is visible */
@@ -481,7 +622,7 @@ export type FeatureEdit =
       /** The feature */
       featureId: string;
       /** The fields to change */
-      patch: FeaturePatch;
+      patch: StoredFeaturePatch;
     }
   | {
       kind: 'vertex-move';
@@ -993,57 +1134,6 @@ export function parseCssColor(
 }
 
 // ============================================================================
-// GeoJSON functions
-// ============================================================================
-
-/** Options of {@link featuresToGeoJSON} and {@link featureToGeoJSON}. */
-export interface ToGeoJSONOptions {
-  /**
-   * Reads an embedded file by its ID, for the pixels of an Image: `(id) => store.getFile(id)`,
-   * for example. An Image whose file it does not find, or every Image when it is left out, is
-   * written without `maplibre-gl-draw:imageData` and `maplibre-gl-draw:imageMimeType`.
-   */
-  getFile?: (id: string) => FileData | undefined;
-}
-
-/**
- * Writes features as a GeoJSON FeatureCollection, as `document.toGeoJSON` writes the
- * document, without a drawing: the features need not be in one.
- *
- * The features come out in the order given (`document.toGeoJSON` gives the draw order, with
- * the hidden features at the end). The rules of the output are those of `document.toGeoJSON`:
- * positions rounded to 7 decimal places, rings by the right-hand rule, longitudes brought into
- * -180 to 180, the values of the feature added to `properties` under the prefixed keys, and a
- * `bbox` unless nothing was written. A feature whose geometry is a GeometryCollection is left
- * out. The features given are not changed.
- *
- * @param features - The features, in the order to write them
- * @param options - Where the files of the images are read from
- * @returns The FeatureCollection
- */
-export function featuresToGeoJSON(
-  features: readonly Feature[],
-  options?: ToGeoJSONOptions,
-): GeoJSONFeatureCollection {
-  return convertFeaturesToGeoJSON(features, options?.getFile);
-}
-
-/**
- * Writes one feature as a GeoJSON Feature, as {@link featuresToGeoJSON} writes each of its
- * features.
- *
- * @param feature - The feature
- * @param options - Where the file of an image is read from
- * @returns The Feature, or `null` when its geometry is a GeometryCollection
- */
-export function featureToGeoJSON(
-  feature: Feature,
-  options?: ToGeoJSONOptions,
-): GeoJSONFeature | null {
-  return convertFeatureToGeoJSON(feature, options?.getFile);
-}
-
-// ============================================================================
 // Parsing
 // ============================================================================
 
@@ -1057,8 +1147,8 @@ export interface ParseOptions {
   generateId?: () => string;
   /**
    * The layer every feature goes into. Leave it out when the caller creates the layer and sets
-   * it: the features of GeoJSON then have an empty `layerId`, and those of a document of the
-   * library the ID of their layer in `layers`.
+   * it: the features of GeoJSON then name no layer (no `maplibre-gl-draw:layerId`), and those
+   * of a document of the library the ID of their layer in `layers`.
    */
   layerId?: string;
   /** Whether the Multi geometries of GeoJSON are split into one feature per part */
@@ -1119,10 +1209,10 @@ export interface ParsedDocument {
 }
 
 /**
- * Reads GeoJSON into features, groups and files without a drawing, the counterpart of
- * {@link featuresToGeoJSON}: nothing is written, and no document is needed.
+ * Reads GeoJSON into features, groups and files without a drawing: nothing is written, and no
+ * document is needed.
  *
- * The features are read as `document.load` reads them: the values of the library come back from
+ * The features are read as `tx.import` reads them: the values of the library come back from
  * the prefixed keys, a Multi geometry stays one feature unless `flattenMulti` is given, and a
  * GeometryCollection is folded by type. Unlike a load, the IDs of the input are never kept:
  * every feature and file gets one from `generateId`, and the features that name the same group
@@ -1143,14 +1233,14 @@ export function parseGeoJSON(
   input: GeoJSONFeatureCollection | GeoJSONFeature | Geometry,
   options?: ParseOptions,
 ): Promise<ParsedDocument> {
-  return parseGeoJSONInput(input, options);
+  return parseGeoJSONInput(input, options).then(publicParsed);
 }
 
 /**
  * Reads a document of the library into features, groups, files and layers without a drawing,
  * with new IDs: nothing is written, and no document is needed.
  *
- * The document is checked as `document.load` checks it. Every layer, group, feature and file
+ * The document is checked as `draw.open` checks it. Every layer, group, feature and file
  * gets a new ID from `generateId`, and the references between them are rewritten; the
  * metadata of the document is not read. A {@link Reference} in `properties` names the new ID;
  * `idMap` gives the new ID of each ID of the input, for an ID kept as a string, which is left as
@@ -1167,5 +1257,19 @@ export function parseGeoJSON(
  *   option has the wrong type
  */
 export function parseNative(input: DrawDocument, options?: ParseOptions): Promise<ParsedDocument> {
-  return parseNativeInput(input, options);
+  return parseNativeInput(input, options).then(publicParsed);
+}
+
+/** What was parsed, the features in the public shape (a feature of no layer names none) */
+function publicParsed(parsed: ParsedStore): ParsedDocument {
+  return {
+    ...parsed,
+    features: parsed.features.map((stored) => {
+      const feature = toFeature(stored);
+      if (stored.layerId === '') {
+        delete (feature.properties as Record<string, unknown>)['maplibre-gl-draw:layerId'];
+      }
+      return feature;
+    }),
+  };
 }

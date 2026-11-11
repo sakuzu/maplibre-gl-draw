@@ -47,10 +47,10 @@
       (segments === null || segments > 0),
   );
 
-  function run() {
+  async function run() {
     if (!ready || distance === null) return;
     try {
-      const made = runBuffer(
+      const made = await runBuffer(
         draw,
         features,
         toMeters(distance, currentUnit),

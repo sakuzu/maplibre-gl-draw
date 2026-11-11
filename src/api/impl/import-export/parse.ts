@@ -19,7 +19,15 @@ import { setOwnProperty } from '../../../shared/utils/own-property.js';
 import type { Feature, FileData, Group } from '../../../store/types.js';
 import { drawErrorOf } from '../../../table/draw-error-of.js';
 import { DrawError } from '../../errors.js';
-import type { GroupInput, LayerInput, ParsedDocument } from '../../model.js';
+import type { GroupInput, LayerInput, ParsedDocument, StoredFeature } from '../../model.js';
+
+/**
+ * What was parsed, the features as the Store holds them
+ *
+ * @internal
+ */
+export type ParsedStore = Omit<ParsedDocument, 'features'> & { features: StoredFeature[] };
+
 import { invalidInput, isRecord, onlyKeys, optionalBoolean, requireId } from '../shared.js';
 import { isNativeFormat, toFeatureCollection } from './format-detection.js';
 import { convertGeoJSONFeatures, decodeEmbeddedImages } from './geojson-import.js';
@@ -68,7 +76,7 @@ function resolveOptions(options: unknown): ResolvedParseOptions {
 }
 
 /** Runs a parse so that every failure is a DrawError */
-async function asParse(read: () => Promise<ParsedDocument>): Promise<ParsedDocument> {
+async function asParse(read: () => Promise<ParsedStore>): Promise<ParsedStore> {
   try {
     return await read();
   } catch (error) {
@@ -89,7 +97,7 @@ function byIndex(skipped: Skipped): Skipped {
  *
  * @internal
  */
-export function parseGeoJSONInput(input: unknown, options?: unknown): Promise<ParsedDocument> {
+export function parseGeoJSONInput(input: unknown, options?: unknown): Promise<ParsedStore> {
   return asParse(async () => {
     const { generateId, layerId, flattenMulti } = resolveOptions(options);
     const collection = toFeatureCollection(input);
@@ -167,7 +175,7 @@ export function parseGeoJSONInput(input: unknown, options?: unknown): Promise<Pa
  *
  * @internal
  */
-export function parseNativeInput(input: unknown, options?: unknown): Promise<ParsedDocument> {
+export function parseNativeInput(input: unknown, options?: unknown): Promise<ParsedStore> {
   return asParse(async () => {
     const { generateId, layerId } = resolveOptions(options);
     if (!isNativeFormat(input)) {

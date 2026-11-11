@@ -949,7 +949,7 @@ export interface Metadata {
  * first problem. The format is described in the data format reference.
  */
 export interface Data {
-  /** The version of the native format (`'3.0.0'` for this release) */
+  /** The version of the native format (`'4.0.0'` for this release) */
   version: string;
   /** When the data was written (an ISO 8601 timestamp) */
   created?: string;

@@ -458,7 +458,7 @@ export class ConsistencyChecks {
     throw new DrawError(
       'invalid-state',
       `The state does not agree with itself (${check}): ${problems[0]}`,
-      failure,
+      { cause: failure },
     );
   }
 }

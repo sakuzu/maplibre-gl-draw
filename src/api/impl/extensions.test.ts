@@ -16,6 +16,7 @@ import {
 } from '../../shared/math/index.js';
 import { MemoryContractStore } from '../../store/memory.js';
 import type { StoreChange } from '../../store/types.js';
+import { writesOf } from '../../test-support/writes.js';
 import { createMapStub, createSyntheticInput } from '../../test-utils.js';
 import { customRendererOf } from '../../view/layer/store-retained-classify.js';
 import { computeBoundingBox } from '../../view/ui/selection-ui/index.js';
@@ -31,7 +32,7 @@ import type { CompanionProvider, HandleProvider, SnapProvider } from '../extensi
 import type { OverlayRenderer } from '../extension/render.js';
 import type { Store } from '../extension/store.js';
 import type { ExtensionsCollections } from '../extensions.js';
-import type { Feature } from '../model.js';
+import type { StoredFeature as Feature } from '../model.js';
 import { createDrawOnEngine } from './create-draw.js';
 import type { Engine } from './engine.js';
 import { createEngine } from './engine.js';
@@ -241,7 +242,7 @@ describe('extensions.featureTypes.override', () => {
         unregister();
       };
     });
-    const feature = instance.features.create(square);
+    const feature = writesOf(instance).features.create(square);
     if (!feature) throw new Error('not created');
     const selected = () => engine.context.store.getSelection().ids;
     return { engine, instance, registered, removed, selected, input: createSyntheticInput(engine) };
@@ -333,11 +334,11 @@ describe('extensions.featureTypes.override', () => {
         halfHeightPx: 5,
       }),
     });
-    const point = instance.features.create({
+    const point = writesOf(instance).features.create({
       type: 'Point',
       geometry: { type: 'Point', coordinates: [1, 1] },
     }) as Feature;
-    const image = instance.features.create({
+    const image = writesOf(instance).features.create({
       type: 'Image',
       geometry: { type: 'Point', coordinates: [2, 2] },
     }) as Feature;
@@ -388,7 +389,7 @@ describe('extensions.featureTypes.override', () => {
       snapCandidates,
     });
     const plain = engine.context.store.listFeatures()[0];
-    const special = instance.features.create({
+    const special = writesOf(instance).features.create({
       ...square,
       geometry: {
         type: 'Polygon',
@@ -436,9 +437,11 @@ describe('extensions.featureTypes.override', () => {
     expect(computeBoundingBox(stored, extensions)?.topLeft).not.toEqual([2, 3]);
 
     // The extent on the map, the snapping candidates and the handles
-    expect(instance.features.list({ bbox: [40, 40, 41, 41] }).map((f) => f.id)).toEqual([
-      special.id,
-    ]);
+    expect(
+      writesOf(instance)
+        .features.list({ bbox: [40, 40, 41, 41] })
+        .map((f) => f.id),
+    ).toEqual([special.id]);
     expect(engine.context.snapTargets.forFeature(plain)).toBeUndefined();
     expect(engine.context.snapTargets.forFeature(stored)).toBeDefined();
     const provider = engine.context.selectionScope.auxiliaryHandles.list()[0];
@@ -459,7 +462,10 @@ describe('extensions.featureTypes.override', () => {
       appliesTo: () => false,
       hitTest,
     });
-    instance.features.create({ type: 'pin', geometry: { type: 'Point', coordinates: [5, 5] } });
+    writesOf(instance).features.create({
+      type: 'pin',
+      geometry: { type: 'Point', coordinates: [5, 5] },
+    });
     input.click([5, 5]);
     expect(hitTest).toHaveBeenCalled();
     instance.destroy();
@@ -792,21 +798,28 @@ describe('ModeContext.commitFeature', () => {
 
   it('gives a new feature the writable layer, an ID, the automatic name and the zoom', () => {
     const feature = ctx.commitFeature({
-      type: 'Point',
+      type: 'Feature',
       geometry: { type: 'Point', coordinates: [1, 1] },
+      properties: {},
     });
-    expect(feature?.layerId).toBe(engine.context.getWritableLayerId());
+    expect(feature?.properties['maplibre-gl-draw:layerId']).toBe(
+      engine.context.getWritableLayerId(),
+    );
     expect(feature?.id).toEqual(expect.any(String));
     expect(feature?.properties.name).toEqual(expect.any(String));
     expect(feature?.properties['maplibre-gl-draw:createdZoom']).toBe(10);
   });
 
   it('keeps the name and the ID given, and the ID of the preview', () => {
-    ctx.preview.set({ type: 'Point', geometry: { type: 'Point', coordinates: [1, 1] } });
+    ctx.preview.set({
+      type: 'Feature',
+      geometry: { type: 'Point', coordinates: [1, 1] },
+      properties: {},
+    });
     const pending = engine.context.shapes.drawing()?.pendingFeatureId;
     expect(pending).toEqual(expect.any(String));
     const feature = ctx.commitFeature({
-      type: 'Point',
+      type: 'Feature',
       geometry: { type: 'Point', coordinates: [1, 1] },
       properties: { name: 'mine' },
     });
@@ -832,18 +845,27 @@ describe('ModeContext.commitFeature', () => {
     });
     store.updateLayer(active, { locked: true });
     const feature = ctx.commitFeature({
-      type: 'Point',
+      type: 'Feature',
       geometry: { type: 'Point', coordinates: [0, 0] },
+      properties: {},
     });
-    expect(feature?.layerId).toBe('other');
+    expect(feature?.properties['maplibre-gl-draw:layerId']).toBe('other');
   });
 
   it('refuses when no layer can be written, drops the drawing and returns to select', () => {
     const { store } = engine.context;
     store.updateLayer(store.listLayers()[0].id, { locked: true });
-    ctx.preview.set({ type: 'Point', geometry: { type: 'Point', coordinates: [1, 1] } });
+    ctx.preview.set({
+      type: 'Feature',
+      geometry: { type: 'Point', coordinates: [1, 1] },
+      properties: {},
+    });
     expect(
-      ctx.commitFeature({ type: 'Point', geometry: { type: 'Point', coordinates: [1, 1] } }),
+      ctx.commitFeature({
+        type: 'Feature',
+        geometry: { type: 'Point', coordinates: [1, 1] },
+        properties: {},
+      }),
     ).toBeNull();
     expect(engine.context.shapes.drawing()).toBeNull();
     expect(engine.modeManager.getMode()).toBe('select');
@@ -861,7 +883,11 @@ describe('ModeContext.commitFeature', () => {
   it('refuses while the document is read-only', () => {
     engine.context.store.setReadOnly(true);
     expect(
-      ctx.commitFeature({ type: 'Point', geometry: { type: 'Point', coordinates: [1, 1] } }),
+      ctx.commitFeature({
+        type: 'Feature',
+        geometry: { type: 'Point', coordinates: [1, 1] },
+        properties: {},
+      }),
     ).toBeNull();
     expect(engine.context.store.listFeatures()).toHaveLength(0);
   });
@@ -872,12 +898,17 @@ describe('ModeContext.commitFeature', () => {
       plugin('commits', { onFeatureCommit: (feature) => committed.push(feature.id) }),
     );
     const feature = ctx.commitFeature({
-      type: 'Point',
+      type: 'Feature',
       geometry: { type: 'Point', coordinates: [1, 1] },
+      properties: {},
     });
     expect(committed).toEqual([feature?.id]);
     engine.context.store.setReadOnly(true);
-    ctx.commitFeature({ type: 'Point', geometry: { type: 'Point', coordinates: [2, 2] } });
+    ctx.commitFeature({
+      type: 'Feature',
+      geometry: { type: 'Point', coordinates: [2, 2] },
+      properties: {},
+    });
     expect(committed).toHaveLength(1);
   });
 });
@@ -1016,7 +1047,7 @@ describe('a Store that replaces its whole document', () => {
     store.announce({ source: 'remote', reset: true });
     expect(changes).toHaveLength(2);
     expect(changes.every((change) => change.document && change.source === 'remote')).toBe(true);
-    other.layers.update(layer.id, { name: 'renamed' });
+    writesOf(other).layers.update(layer.id, { name: 'renamed' });
     expect(changes[2].document).toBe(false);
     other.destroy();
   });
@@ -1051,12 +1082,10 @@ describe('the built-in modes written to the contract', () => {
     const [point] = engine.context.store.listFeatures();
     expect(committed).toEqual([point.id]);
 
-    // An image loaded without a request is not a commit of the image mode
+    // An image loaded without a request is not a commit of the image mode: the instance tells
+    // the extensions of each load it wrote
     const loaded = (featureIds: string[]) =>
-      engine.events.emit('document.loaded', {
-        result: { format: 'image', featureIds, replaced: false },
-        source: 'local',
-      });
+      engine.extensions.loaded({ format: 'image', featureIds, replaced: false });
     loaded([point.id]);
     expect(committed).toHaveLength(1);
     engine.modeManager.setMode('draw_image');
@@ -1100,7 +1129,7 @@ describe('what a drawing mode reads and shows', () => {
   it('shows the placed vertices and a highlighted one in the preview', () => {
     ctx.preview.set(
       {
-        type: 'LineString',
+        type: 'Feature',
         geometry: {
           type: 'LineString',
           coordinates: [
@@ -1109,6 +1138,7 @@ describe('what a drawing mode reads and shows', () => {
             [2, 2],
           ],
         },
+        properties: {},
       },
       { confirmedVertices: 2, highlightVertex: 0 },
     );
@@ -1129,7 +1159,7 @@ describe('what a drawing mode reads and shows', () => {
   it('gives the writable layer, or null when none can be written', () => {
     const layer = draw.layers.list()[0];
     expect(ctx.writableLayer()?.id).toBe(layer.id);
-    draw.layers.update(layer.id, { locked: true });
+    writesOf(draw).layers.update(layer.id, { locked: true });
     expect(ctx.writableLayer()).toBeNull();
   });
 
@@ -1173,7 +1203,7 @@ describe('what a drawing mode reads and shows', () => {
 
 describe('features.list and count by extent', () => {
   it('keep the features whose extent meets the extent', () => {
-    draw.features.createMany([
+    writesOf(draw).features.createMany([
       { type: 'Point', geometry: { type: 'Point', coordinates: [1, 1] }, id: 'in' },
       { type: 'Point', geometry: { type: 'Point', coordinates: [9, 9] }, id: 'out' },
       {
@@ -1188,9 +1218,15 @@ describe('features.list and count by extent', () => {
         id: 'across',
       },
     ]);
-    expect(draw.features.list({ bbox: [0, -1, 2, 2] }).map((f) => f.id)).toEqual(['in', 'across']);
+    expect(
+      writesOf(draw)
+        .features.list({ bbox: [0, -1, 2, 2] })
+        .map((f) => f.id),
+    ).toEqual(['in', 'across']);
     expect(draw.features.count({ bbox: [0, -1, 2, 2], type: 'Point' })).toBe(1);
-    expect(errorOf(() => draw.features.list({ bbox: [0, 0] as never })).code).toBe('invalid-input');
+    expect(errorOf(() => writesOf(draw).features.list({ bbox: [0, 0] as never })).code).toBe(
+      'invalid-input',
+    );
   });
 });
 
@@ -1300,8 +1336,9 @@ describe('drawing.cancel', () => {
     draw.extensions.modes.add('custom', (modeCtx) => ({
       onClick(event) {
         modeCtx.preview.set({
-          type: 'Point',
+          type: 'Feature',
           geometry: { type: 'Point', coordinates: event.lngLat },
+          properties: {},
         });
         return true;
       },

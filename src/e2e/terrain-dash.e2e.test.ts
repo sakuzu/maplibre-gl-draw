@@ -22,6 +22,7 @@ import {
   type Bundle,
   bundlePage,
   type Camera,
+  type E2EWrites,
   launchBrowser,
   openMapPage,
   settle,
@@ -165,9 +166,11 @@ async function groundAt(page: Page, points: CanvasPoint[]): Promise<LngLat[]> {
 async function replaceFeatures(page: Page, features: TestFeature[]): Promise<void> {
   await page.evaluate((features) => {
     const { map, draw } = window as unknown as TestWindow;
-    draw.features.deleteMany(draw.features.list().map((feature) => feature.id));
+    (window as unknown as E2EWrites).e2e
+      .writesOf(draw)
+      .features.deleteMany(draw.features.list().map((feature) => feature.id));
     for (const feature of features) {
-      draw.features.create({
+      (window as unknown as E2EWrites).e2e.writesOf(draw).features.create({
         type: feature.type,
         geometry:
           feature.type === 'Polygon'

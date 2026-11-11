@@ -15,6 +15,7 @@ import type { FeatureTablesWriter } from '../../api/tables.js';
 import { featureTablesInternals } from '../../feature-table/feature-tables.js';
 import type { Store } from '../../store/store.js';
 import { createTableStore } from '../../store/table-memory.js';
+import { writesOf } from '../../test-support/writes.js';
 import { createMapStub } from '../../test-utils.js';
 import type { Draw } from '../draw.js';
 import type { GroupInput } from '../model.js';
@@ -33,8 +34,8 @@ function instance(n: number): { draw: Draw; store: Store; writer: FeatureTablesW
   );
   const draw = createDrawOnEngine(engine, { store, initDefaultLayer: false });
   instances.push(draw);
-  draw.layers.create({ id: 'a', name: 'a' });
-  draw.features.createMany(
+  writesOf(draw).layers.create({ id: 'a', name: 'a' });
+  writesOf(draw).features.createMany(
     Array.from({ length: n }, (_, i) => ({
       id: `f${i}`,
       type: 'Point' as const,
@@ -99,10 +100,10 @@ describe('many groups at once over a Store of rows', () => {
     const one = instance(16);
     // A group whose features then join other groups (it is emptied and deleted)
     for (const { draw } of [many, one])
-      draw.groups.create({ id: 'old', featureIds: ['f10', 'f11'] });
+      writesOf(draw).groups.create({ id: 'old', featureIds: ['f10', 'f11'] });
     const list = [...inputs(), { id: 'g5', featureIds: ['f10', 'f11'] }];
-    many.draw.groups.createMany(list);
-    for (const input of list) one.draw.groups.create(input);
+    writesOf(many.draw).groups.createMany(list);
+    for (const input of list) writesOf(one.draw).groups.create(input);
     expect(items(many.store)).toEqual(items(one.store));
     expect(members(many.store)).toEqual(members(one.store));
     expect(many.store.getGroup('old')).toBeUndefined();
@@ -111,10 +112,10 @@ describe('many groups at once over a Store of rows', () => {
   it('puts the members where deleting the groups one at a time puts them', () => {
     const many = instance(16);
     const one = instance(16);
-    for (const { draw } of [many, one]) draw.groups.createMany(inputs());
+    for (const { draw } of [many, one]) writesOf(draw).groups.createMany(inputs());
     const ids = ['g3', 'g0', 'g1', 'g4'];
-    many.draw.groups.deleteMany(ids);
-    for (const id of ids) one.draw.groups.delete(id);
+    writesOf(many.draw).groups.deleteMany(ids);
+    for (const id of ids) writesOf(one.draw).groups.delete(id);
     expect(items(many.store)).toEqual(items(one.store));
     expect(members(many.store)).toEqual(members(one.store));
   });
@@ -124,7 +125,7 @@ describe('many groups at once over a Store of rows', () => {
     const { draw, writer } = instance(n);
     const apply = vi.spyOn(writer, 'writeRows');
     const ids = Array.from({ length: n / 2 }, (_, i) => `g${i}`);
-    draw.groups.createMany(
+    writesOf(draw).groups.createMany(
       ids.map((id, i) => ({ id, featureIds: [`f${2 * i}`, `f${2 * i + 1}`] })),
     );
     expect(apply).toHaveBeenCalledTimes(1);
@@ -133,7 +134,7 @@ describe('many groups at once over a Store of rows', () => {
     const next = vi.spyOn(RowTable.prototype, 'nextRow');
     const down = vi.spyOn(RowSkips.prototype, 'lastAtOrBefore');
     const up = vi.spyOn(RowSkips.prototype, 'firstAtOrAfter');
-    expect(draw.groups.deleteMany(ids)).toBe(true);
+    expect(writesOf(draw).groups.deleteMany(ids)).toBe(true);
     expect(apply).toHaveBeenCalledTimes(1);
     expect(draw.groups.count()).toBe(0);
     // A row at a time would be about n * n / 2 rows: the members moved, read elsewhere, passed

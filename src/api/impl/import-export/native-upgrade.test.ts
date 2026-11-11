@@ -8,14 +8,17 @@
 import { describe, expect, it } from 'vitest';
 import type { ObjectLayer } from '../../../shared/types/model.js';
 import { MemoryStore } from '../../../store/memory.js';
-import type { Data } from '../../../store/types.js';
 import { createResourceDeps } from '../../../test-utils.js';
+import type { DrawDocument } from '../../model.js';
 import { createDocument } from '../document.js';
 import { NATIVE_VERSION } from './constants.js';
 import { upgradeNativeData } from './native-upgrade.js';
 
 /** Upgrades the data and reads it as data of the current version */
-const upgrade = (data: unknown): Data => upgradeNativeData(data) as Data;
+const upgrade = (data: unknown): DrawDocument => upgradeNativeData(data) as DrawDocument;
+
+/** The key of `properties` of a value of the library */
+const KEY = (name: string) => `maplibre-gl-draw:${name}`;
 
 /** A layer of version 2 */
 function layer2(id: string, order: string[]) {
@@ -118,10 +121,67 @@ describe('upgradeNativeData', () => {
   it('brings data of version 2 to the version this library writes', () => {
     const data = upgrade(document2());
 
-    expect(data.version).toBe('3.0.0');
-    expect(NATIVE_VERSION).toBe('3.0.0');
+    expect(data.version).toBe('4.0.0');
+    expect(NATIVE_VERSION).toBe('4.0.0');
     expect(data.metadata).toEqual({ title: 'Old' });
     expect(data.layerOrder).toEqual(['l1', 'l2']);
+  });
+
+  it('turns each feature of version 3 into a GeoJSON Feature, its fields in its properties', () => {
+    const point = { type: 'Point', coordinates: [1, 2] };
+    const data = {
+      version: '3.0.0',
+      layerOrder: ['l1'],
+      features: [
+        {
+          id: 'plain',
+          type: 'Point',
+          geometry: point,
+          layerId: 'l1',
+          groupId: undefined,
+          properties: { name: 'A' },
+          style: {},
+          visible: true,
+          locked: false,
+        },
+        {
+          id: 'every',
+          type: 'Circle',
+          geometry: point,
+          layerId: 'l1',
+          groupId: 'g1',
+          properties: { 'maplibre-gl-draw:radiusMeters': 10 },
+          style: { pointColor: '#ff0000' },
+          visible: false,
+          locked: true,
+        },
+      ],
+    };
+
+    const { version, features } = upgrade(data);
+
+    expect(version).toBe('4.0.0');
+    // A field of a default value has no key
+    expect(features[0]).toEqual({
+      type: 'Feature',
+      id: 'plain',
+      geometry: point,
+      properties: { name: 'A', [KEY('layerId')]: 'l1' },
+    });
+    expect(features[1]).toEqual({
+      type: 'Feature',
+      id: 'every',
+      geometry: point,
+      properties: {
+        'maplibre-gl-draw:radiusMeters': 10,
+        [KEY('layerId')]: 'l1',
+        [KEY('groupId')]: 'g1',
+        [KEY('featureType')]: 'Circle',
+        [KEY('style')]: { pointColor: '#ff0000' },
+        [KEY('visible')]: false,
+        [KEY('locked')]: true,
+      },
+    });
   });
 
   it('turns the coordinates of each type into the geometry of its kind', () => {
@@ -153,12 +213,17 @@ describe('upgradeNativeData', () => {
     expect(propertiesOf('p')).toEqual({
       'maplibre-gl-draw:createdZoom': 12,
       name: 'A point',
+      [KEY('layerId')]: 'l1',
     });
     expect(propertiesOf('c')).toEqual({
       'maplibre-gl-draw:radiusMeters': 100,
       'maplibre-gl-draw:radiusHandleAngle': 45,
+      [KEY('layerId')]: 'l1',
+      [KEY('featureType')]: 'Circle',
     });
     expect(propertiesOf('i')).toEqual({
+      [KEY('layerId')]: 'l1',
+      [KEY('featureType')]: 'Image',
       'maplibre-gl-draw:imageFileId': 'file-1',
       'maplibre-gl-draw:imageWidth': 1,
       'maplibre-gl-draw:imageHeight': 1,
@@ -181,13 +246,15 @@ describe('upgradeNativeData', () => {
     const { features } = upgrade(data);
 
     expect(features[2].properties).toEqual({
+      [KEY('layerId')]: 'l1',
+      [KEY('featureType')]: 'Image',
       'maplibre-gl-draw:imageFileId': 'file-1',
       'maplibre-gl-draw:imageWidth': 400,
       'maplibre-gl-draw:imageHeight': 160,
       'maplibre-gl-draw:createdZoom': 10,
       'maplibre-gl-draw:rotation': 45,
+      [KEY('style')]: { imageOpacity: 0.5, fillColor: '#ff0000' },
     });
-    expect(features[2].style).toEqual({ imageOpacity: 0.5, fillColor: '#ff0000' });
   });
 
   it('keeps imageOpacity over the opacity of an Image, and leaves other types alone', () => {
@@ -203,9 +270,9 @@ describe('upgradeNativeData', () => {
 
     const { features } = upgrade(data);
 
-    expect(features[2].style).toEqual({ imageOpacity: 0.8 });
+    expect(features[2].properties[KEY('style')]).toEqual({ imageOpacity: 0.8 });
     // A key of an extension on another type is not the size of an image
-    expect(features[0].style).toEqual({ width: 3 });
+    expect(features[0].properties[KEY('style')]).toEqual({ width: 3 });
   });
 
   it('keeps a prefixed value that is already there over the plain one', () => {
@@ -220,6 +287,7 @@ describe('upgradeNativeData', () => {
     expect(features[0].properties).toEqual({
       createdZoom: 3,
       'maplibre-gl-draw:createdZoom': 12,
+      [KEY('layerId')]: 'l1',
     });
   });
 
@@ -267,7 +335,7 @@ describe('upgradeNativeData', () => {
 
   it('leaves data of a version without an upgrade as it is', () => {
     const one = { ...document2(), version: '1.2.0' };
-    const later = { ...document2(), version: '4.0.0' };
+    const later = { ...document2(), version: '5.0.0' };
 
     expect(upgradeNativeData(one)).toBe(one);
     expect(upgradeNativeData(later)).toBe(later);
@@ -316,7 +384,11 @@ describe('loading native data of version 2', () => {
     expect(exported.version).toBe(NATIVE_VERSION);
     const point = exported.features.find((f: { id: string }) => f.id === 'p');
     expect(point.geometry).toEqual({ type: 'Point', coordinates: [1, 2] });
-    expect(point.properties).toEqual({ 'maplibre-gl-draw:createdZoom': 12, name: 'A point' });
+    expect(point.properties).toEqual({
+      'maplibre-gl-draw:createdZoom': 12,
+      name: 'A point',
+      [KEY('layerId')]: 'l1',
+    });
     expect(exported.layers[0]).not.toHaveProperty('order');
     expect(exported.groups[0].layerId).toBe('l1');
     // The exported data loads again as it is

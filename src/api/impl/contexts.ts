@@ -50,11 +50,13 @@ import type {
 } from '../extension/context.js';
 import type { Hit } from '../extension/provider.js';
 import type { ExtensionsCollections } from '../extensions.js';
-import type { Feature, FeatureInput, Layer } from '../model.js';
+import type { Feature, Layer, StoredFeatureInput } from '../model.js';
 import type { SelectionStyleOptions } from '../options.js';
 import type { SketchEdit } from '../sketches.js';
 import type { SnapResult } from '../state.js';
 import { requireEventName } from './events.js';
+import { storedInputOf, toFeature } from './feature-shape.js';
+import { prepareFeatureInput } from './features.js';
 import { mergeOptions } from './options.js';
 import { toDatasetRow } from './rows.js';
 
@@ -491,16 +493,17 @@ export function createModeContext(
     },
     commitFeature(input) {
       if (store.isReadOnly() || store.isInteractionLocked()) return null;
-      const layerId = input.layerId ?? services.getWritableLayerId();
+      const given = storedInputOf(input);
+      const layerId = given.layerId ?? services.getWritableLayerId();
       if (layerId === '' || !isWritableLayer(store.getLayer(layerId), store)) {
         // The layer went away, or was locked or hidden, while drawing: the drawing is dropped
         clearPreview();
         services.modeManager.setMode('select');
         return null;
       }
-      const properties: Record<string, unknown> = { ...(input.properties ?? {}) };
+      const properties: Record<string, unknown> = { ...(given.properties ?? {}) };
       if (properties.name === undefined) {
-        const name = services.autoNameGenerator.generateName(input.type);
+        const name = services.autoNameGenerator.generateName(given.type);
         if (name !== undefined) properties.name = name;
       }
       if (
@@ -509,15 +512,12 @@ export function createModeContext(
       ) {
         properties[DRAW_PROPERTY_KEYS.createdZoom] = map.getZoom();
       }
-      const id = input.id ?? pendingId ?? undefined;
-      let feature: Feature | null = null;
+      const id = given.id ?? pendingId ?? services.generateId();
+      let created: StoredFeature | undefined;
       const write = (): void => {
-        feature = services.getDraw().features.create({
-          ...input,
-          ...(id !== undefined && { id }),
-          layerId,
-          properties: properties as FeatureInput['properties'],
-        });
+        const feature = prepareFeatureInput(store, { ...given, layerId, properties }, id, layerId);
+        store.createFeature(feature);
+        created = store.getFeature(feature.id);
       };
       // The sketch of the shape being drawn ends committed with the write that creates it
       const sketch = drawingSketch();
@@ -525,12 +525,13 @@ export function createModeContext(
       drawing = null;
       if (sketch !== null) sketches.commitWith(sketch, () => store.transact(write));
       else store.transact(write);
-      const created = feature as Feature | null;
-      if (created) services.notifyDrawCommit(created);
-      return created;
+      const made = created === undefined ? null : toFeature(created);
+      if (made) services.notifyDrawCommit(made);
+      return made;
     },
     preview: {
-      set(feature, options) {
+      set(input, options) {
+        const feature = storedInputOf(input);
         if (feature.id !== undefined) pendingId = feature.id;
         pendingId ??= services.generateId();
         const layerId = feature.layerId ?? services.getWritableLayerId();
@@ -609,7 +610,7 @@ export function createModeContext(
  * The number of vertices of the shape of a feature input: every position of a line, the positions
  * of the outer ring of an area without the one that closes it, one for a point
  */
-function vertexCountOf(input: FeatureInput): number {
+function vertexCountOf(input: StoredFeatureInput): number {
   const coordinates = coordinatesOf(input) as unknown;
   if (!Array.isArray(coordinates) || typeof coordinates[0] === 'number') return 1;
   const first = coordinates[0] as unknown;

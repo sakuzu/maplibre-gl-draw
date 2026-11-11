@@ -10,9 +10,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { DrawStore } from '../../store/draw-store.js';
 import { createTableStore, TableContractStore } from '../../store/table-memory.js';
+import { writesOf } from '../../test-support/writes.js';
 import { createMapStub } from '../../test-utils.js';
 import type { Draw } from '../draw.js';
-import type { FeatureFilter, FeatureInput } from '../model.js';
+import type { FeatureFilter, StoredFeatureInput as FeatureInput } from '../model.js';
 import { createDrawOnEngine } from './create-draw.js';
 import { createEngine } from './engine.js';
 
@@ -33,8 +34,8 @@ function instance(rows: boolean): Draw {
   );
   const draw = createDrawOnEngine(engine, { ...(store && { store }), initDefaultLayer: false });
   instances.push(draw);
-  draw.layers.create({ id: 'a', name: 'a' });
-  draw.layers.create({ id: 'b', name: 'b' });
+  writesOf(draw).layers.create({ id: 'a', name: 'a' });
+  writesOf(draw).layers.create({ id: 'b', name: 'b' });
   return draw;
 }
 
@@ -114,8 +115,8 @@ describe('the extent of features', () => {
     const objects = instance(false);
     const rows = instance(true);
     for (const draw of [objects, rows]) {
-      draw.features.createMany(FEATURES);
-      draw.groups.create({ id: 'grp', featureIds: ['p', 'm'] });
+      writesOf(draw).features.createMany(FEATURES);
+      writesOf(draw).groups.create({ id: 'grp', featureIds: ['p', 'm'] });
     }
     const read = (draw: Draw) => FILTERS.map((filter) => draw.features.bbox(filter));
     expect(read(rows)).toEqual(read(objects));
@@ -123,8 +124,8 @@ describe('the extent of features', () => {
     expect(objects.features.bbox({ layerId: 'missing' })).toBeNull();
     // A feature at an edge deleted, and a geometry written smaller
     for (const draw of [objects, rows]) {
-      draw.features.delete('m');
-      draw.features.update('l', {
+      writesOf(draw).features.delete('m');
+      writesOf(draw).features.update('l', {
         geometry: {
           type: 'LineString',
           coordinates: [
@@ -136,7 +137,7 @@ describe('the extent of features', () => {
     }
     expect(read(rows)).toEqual(read(objects));
     expect(objects.features.bbox({ layerId: 'a' })).toEqual([0, 0, 1, 2]);
-    for (const draw of [objects, rows]) draw.features.deleteMany(['p', 'l']);
+    for (const draw of [objects, rows]) writesOf(draw).features.deleteMany(['p', 'l']);
     expect(rows.features.bbox({ layerId: 'a' })).toBeNull();
     expect(objects.features.bbox({ layerId: 'a' })).toBeNull();
   });
@@ -144,7 +145,7 @@ describe('the extent of features', () => {
   it('reads a layer of 100,000 rows without making a feature', () => {
     const draw = instance(true);
     const n = 100_000;
-    draw.features.createMany(
+    writesOf(draw).features.createMany(
       Array.from({ length: n }, (_, i) => ({
         id: `r${i}`,
         type: 'Point' as const,

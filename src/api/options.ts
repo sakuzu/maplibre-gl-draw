@@ -484,6 +484,11 @@ export interface DrawOptions extends RuntimeOptions {
    */
   generateId?: () => string;
   /**
+   * The local undo (`draw.undo`, `draw.redo`): `maxSteps` is how many steps are kept, the oldest
+   * let go of first (100 when left out)
+   */
+  history?: { maxSteps?: number };
+  /**
    * Diagnostics for the development of an application or an extension; only at creation
    *
    * @experimental

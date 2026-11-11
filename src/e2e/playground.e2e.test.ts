@@ -110,7 +110,17 @@ describe('the playground', () => {
           .list()
           .map((layer) => [layer.name, layer.opacity, layer.styleRule?.kind]),
         groups: draw.groups.list().map((group) => group.name),
-        types: [...new Set(draw.features.list().map((feature) => feature.type))].sort(),
+        types: [
+          ...new Set(
+            draw.features
+              .list()
+              .map(
+                (feature) =>
+                  (feature.properties['maplibre-gl-draw:featureType'] as string | undefined) ??
+                  feature.geometry.type,
+              ),
+          ),
+        ].sort(),
         active: draw.layers.getActive()?.name,
         selected: selected.map((feature) => [
           feature?.properties.name,

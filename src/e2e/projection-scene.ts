@@ -39,7 +39,7 @@ import {
   type StoreKind,
   select,
 } from './drag-scene.js';
-import { settle } from './harness.js';
+import { type E2EWrites, settle } from './harness.js';
 
 /** The projection of a view */
 export type ViewProjection = 'mercator' | 'globe' | 'transition';
@@ -346,8 +346,13 @@ async function putFeatures(
       }
       const present = new Set(draw.features.list(undefined, { limit: 100 }).map((f) => f.id));
       const gone = ids.filter((id) => present.has(id));
-      if (gone.length > 0) draw.features.deleteMany(gone);
-      if (!draw.features.createMany(features.map((f) => ({ ...f, layerId: 'L' })) as never)) {
+      if (gone.length > 0)
+        (window as unknown as E2EWrites).e2e.writesOf(draw).features.deleteMany(gone);
+      if (
+        !(window as unknown as E2EWrites).e2e
+          .writesOf(draw)
+          .features.createMany(features.map((f) => ({ ...f, layerId: 'L' })) as never)
+      ) {
         throw new Error('the features were not created');
       }
       const frame = (): Promise<void> =>

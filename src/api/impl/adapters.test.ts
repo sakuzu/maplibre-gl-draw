@@ -16,6 +16,7 @@ import type {
   FrameDrawContext,
   LayeredOverlayRenderer,
 } from '../../extension/index.js';
+import { writesOf } from '../../test-support/writes.js';
 import { createMapStub, createSyntheticInput } from '../../test-utils.js';
 import { createFeatureCompanionRegistry } from '../../view/feature-companion.js';
 import { calculateOffsetUniforms } from '../../view/shaders/helpers.js';
@@ -27,7 +28,7 @@ import type { FootprintContext, PointContext, ScreenContext } from '../extension
 import type { FeatureTypeDefinition, Footprint, Handle } from '../extension/feature-type.js';
 import type { Hit } from '../extension/provider.js';
 import type { RenderContext } from '../extension/render.js';
-import type { Feature } from '../model.js';
+import type { Feature, StoredFeature } from '../model.js';
 import type { LayerTableView } from '../tables.js';
 import type { AdapterDeps } from './adapters.js';
 import { adaptCompanionProvider } from './adapters.js';
@@ -569,39 +570,43 @@ describe('the extent of a custom feature type', () => {
         return [x - reach, y - reach, x + reach, y + reach];
       },
     });
-    const feature = draw.features.create({
+    const feature = writesOf(draw).features.create({
       type: 'wide',
       geometry: { type: 'Point', coordinates: [10, 10] },
     });
     if (!feature) throw new Error('not created');
     const near = [11, 11, 11.5, 11.5] as [number, number, number, number];
-    expect(draw.features.list({ bbox: near }).map((f) => f.id)).toEqual([feature.id]);
+    expect(
+      writesOf(draw)
+        .features.list({ bbox: near })
+        .map((f) => f.id),
+    ).toEqual([feature.id]);
     expect(engine.context.spatialIndex.findNear([11.5, 10], 0)).toEqual([feature.id]);
 
     // A change outside the document is measured again with invalidate
     reach = 1;
-    expect(draw.features.list({ bbox: [11.5, 11.5, 12, 12] })).toHaveLength(1);
+    expect(writesOf(draw).features.list({ bbox: [11.5, 11.5, 12, 12] })).toHaveLength(1);
     engine.context.spatialIndex.invalidateType('wide');
-    expect(draw.features.list({ bbox: [11.5, 11.5, 12, 12] })).toHaveLength(0);
-    expect(draw.features.list({ bbox: near })).toHaveLength(1);
+    expect(writesOf(draw).features.list({ bbox: [11.5, 11.5, 12, 12] })).toHaveLength(0);
+    expect(writesOf(draw).features.list({ bbox: near })).toHaveLength(1);
 
     // An extent that is not four finite numbers gives the one of the geometry, told once
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     reach = Number.NaN;
     engine.context.spatialIndex.invalidateType('wide');
-    expect(draw.features.list({ bbox: near })).toHaveLength(0);
-    expect(draw.features.list({ bbox: [9, 9, 10, 10] })).toHaveLength(1);
+    expect(writesOf(draw).features.list({ bbox: near })).toHaveLength(0);
+    expect(writesOf(draw).features.list({ bbox: [9, 9, 10, 10] })).toHaveLength(1);
     engine.context.spatialIndex.invalidateType('wide');
-    expect(draw.features.list({ bbox: [9, 9, 10, 10] })).toHaveLength(1);
+    expect(writesOf(draw).features.list({ bbox: [9, 9, 10, 10] })).toHaveLength(1);
     expect(warn).toHaveBeenCalledTimes(1);
     expect(String(warn.mock.calls[0]?.[0])).toMatch(/"wide" gave a bbox that is not one/);
     warn.mockRestore();
 
     reach = 2;
     engine.context.spatialIndex.invalidateType('wide');
-    expect(draw.features.list({ bbox: near })).toHaveLength(1);
+    expect(writesOf(draw).features.list({ bbox: near })).toHaveLength(1);
     remove();
-    expect(draw.features.list({ bbox: near })).toHaveLength(0);
+    expect(writesOf(draw).features.list({ bbox: near })).toHaveLength(0);
     draw.destroy();
   });
 
@@ -830,7 +835,17 @@ describe('a companion provider', () => {
     const own = { id: 'ring', distancePx: 3 };
     const filled: Hit = { kind: 'companion', id: 'ring', featureId: 'f', distancePx: 3 };
     const onClick = vi.fn(() => true);
-    const feature = { id: 'f', type: 'Point', geometry: { type: 'Point', coordinates: [1, 1] } };
+    const feature: StoredFeature = {
+      id: 'f',
+      type: 'Point',
+      geometry: { type: 'Point', coordinates: [1, 1] },
+      layerId: 'l',
+      groupId: undefined,
+      properties: { name: 'F' },
+      style: {},
+      visible: true,
+      locked: false,
+    };
     const deps = {
       store: { getFeature: () => feature },
       shapes: { draggedIds: () => [] },
@@ -864,8 +879,14 @@ describe('a companion provider', () => {
       modifiers: { shift: false, ctrl: false, alt: false, meta: false },
     } as MouseNormalizedEvent;
     provider.onCompanionClick('f', hit as never, click);
+    // The provider is given the feature in the public shape
     expect(onClick).toHaveBeenCalledWith(
-      feature,
+      {
+        type: 'Feature',
+        id: 'f',
+        geometry: { type: 'Point', coordinates: [1, 1] },
+        properties: { name: 'F', 'maplibre-gl-draw:layerId': 'l' },
+      },
       filled,
       expect.objectContaining({ lngLat: [1, 1] }),
     );
@@ -900,7 +921,17 @@ describe('a companion provider', () => {
       zoom: 10,
       tolerancePx: 4,
     };
-    const feature = { id: 'f', type: 'Point', geometry: { type: 'Point', coordinates: [1, 1] } };
+    const feature: StoredFeature = {
+      id: 'f',
+      type: 'Point',
+      geometry: { type: 'Point', coordinates: [1, 1] },
+      layerId: 'l',
+      groupId: undefined,
+      properties: {},
+      style: {},
+      visible: true,
+      locked: false,
+    };
     provider.hitTest(feature as never, { x: 5, y: 5 }, at);
     dragged = ['f', 'g'];
     provider.hitTest(feature as never, { x: 5, y: 5 }, at);

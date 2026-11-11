@@ -21,7 +21,7 @@ describe('drawErrorOf', () => {
       expect(wrapped).toBeInstanceOf(DrawError);
       expect(wrapped.code).toBe(error.code);
       expect(wrapped.message).toBe(error.message);
-      expect(wrapped.details).toEqual({ cause: error });
+      expect((wrapped as { cause?: unknown }).cause).toBe(error);
     }
   });
 
@@ -39,7 +39,7 @@ describe('drawErrorOf', () => {
     const wrapped = drawErrorOf(thrown) as DrawError;
     expect(wrapped).toBeInstanceOf(DrawError);
     expect(wrapped.code).toBe('invalid-input');
-    expect(wrapped.details).toEqual({ cause: thrown });
+    expect((wrapped as { cause?: unknown }).cause).toBe(thrown);
   });
 
   it('leaves a DrawError and any other error as they are', () => {

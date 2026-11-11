@@ -15,6 +15,7 @@
   import { inspectorSources, readView } from '../inspector/view.js';
   import { fillWord, type Messages } from '../messages.js';
   import { type Box, follow } from '../store.js';
+  import { deleteSelection } from '../writes.js';
   import FeatureInspector from './FeatureInspector.svelte';
   import GroupInspector from './GroupInspector.svelte';
   import LayerInspector from './LayerInspector.svelte';
@@ -102,7 +103,7 @@
       {#snippet foot()}
         <Footer>
           {#snippet lead()}
-            <Button variant="danger" disabled={v.readOnly} onclick={() => draw.selection.delete()}>
+            <Button variant="danger" disabled={v.readOnly} onclick={() => void deleteSelection(draw)}>
               {m.delete}
             </Button>
           {/snippet}

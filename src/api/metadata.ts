@@ -11,13 +11,6 @@ import type { Metadata } from './model.js';
  * The title and the description of the document.
  */
 export interface MetadataResource {
-  /** The title and the description. */
+  /** The title and the description; they are written with `tx.document.update`. */
   get(): Metadata;
-  /**
-   * Changes the fields given and returns the metadata after the change.
-   *
-   * @returns The changed metadata, or `null` when the document is read-only
-   * @throws `DrawError` with the code `invalid-input` when a field has the wrong type
-   */
-  update(patch: Partial<Metadata>): Metadata | null;
 }

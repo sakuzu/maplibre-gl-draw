@@ -15,6 +15,7 @@ import { createDrawOnEngine } from '../../api/impl/create-draw.js';
 import type { Engine } from '../../api/impl/engine.js';
 import { createEngine } from '../../api/impl/engine.js';
 import type { HubEvents } from '../../api/impl/events.js';
+import type { FeaturePatch } from '../../api/model.js';
 import type { DragNormalizedEvent, MouseNormalizedEvent } from '../../dispatcher/types.js';
 import {
   BULK_MOVE_SET,
@@ -24,9 +25,10 @@ import {
 } from '../../feature-table/feature-row-states.js';
 import { featureTablesInternals } from '../../feature-table/feature-tables.js';
 import { MemoryStore } from '../../store/memory.js';
-import type { FeaturePatch, Store } from '../../store/store.js';
+import type { Store } from '../../store/store.js';
 import { createTableStore } from '../../store/table-memory.js';
 import type { Feature } from '../../store/types.js';
+import { writesOf } from '../../test-support/writes.js';
 import { createMapStub } from '../../test-utils.js';
 
 type Kind = 'objects' | 'rows';
@@ -196,12 +198,12 @@ describe.each(KINDS)('a drag of vertices over a Store of %s', (kind) => {
     pressAt(CORNER, [1.5, -0.5], [2, -1]);
     expect(writes).toEqual([]);
     expect(update).not.toHaveBeenCalled();
-    near(second(draw.features.get('a')), [1, 0]);
+    near(second(writesOf(draw).features.get('a')), [1, 0]);
     near(second(draw.rendered.get('a')), [2, -1]);
     letGoAt(2, -1, CORNER);
     expect(writes).toEqual(['change']);
     expect(update.mock.calls.map(([id]) => id)).toEqual(['a']);
-    near(second(draw.features.get('a')), [2, -1]);
+    near(second(writesOf(draw).features.get('a')), [2, -1]);
     expect(events[events.length - 2]?.[1]).toMatchObject({ reason: 'committed' });
     expect(events[events.length - 1]).toEqual([
       'drag.ended',
@@ -225,8 +227,8 @@ describe.each(KINDS)('a drag of vertices over a Store of %s', (kind) => {
     near(third(draw.rendered.get('a')), [5, 5]);
     near(second(draw.rendered.get('a')), [2, -1]);
     letGoAt(2, -1, CORNER);
-    near(second(draw.features.get('a')), [2, -1]);
-    near(third(draw.features.get('a')), [5, 5]);
+    near(second(writesOf(draw).features.get('a')), [2, -1]);
+    near(third(writesOf(draw).features.get('a')), [5, 5]);
   });
 
   it('adds nothing while a midpoint is dragged, and adds the vertex once let go', () => {
@@ -235,13 +237,13 @@ describe.each(KINDS)('a drag of vertices over a Store of %s', (kind) => {
     expect(writes).toEqual([]);
     const positions = (feature: unknown) =>
       ((feature as Feature).geometry as { coordinates: number[][][] }).coordinates[0].length;
-    expect(positions(draw.features.get('a'))).toBe(5);
+    expect(positions(writesOf(draw).features.get('a'))).toBe(5);
     expect(positions(draw.rendered.get('a'))).toBe(6);
     near(second(draw.rendered.get('a')), [0.5, -1]);
     letGoAt(0.5, -1, from);
     expect(writes).toEqual(['change']);
-    expect(positions(draw.features.get('a'))).toBe(6);
-    near(second(draw.features.get('a')), [0.5, -1]);
+    expect(positions(writesOf(draw).features.get('a'))).toBe(6);
+    near(second(writesOf(draw).features.get('a')), [0.5, -1]);
   });
 
   it('adds no vertex once a drag of a midpoint is cancelled', () => {
@@ -249,7 +251,7 @@ describe.each(KINDS)('a drag of vertices over a Store of %s', (kind) => {
     pressAt(from, [0.5, -1]);
     engine.modeManager.getHandler()?.onDragCancel?.(event('dragcancel', 0.5, -1, from));
     expect(writes).toEqual([]);
-    const polygon = draw.features.get('a')?.geometry as { coordinates: number[][][] };
+    const polygon = writesOf(draw).features.get('a')?.geometry as { coordinates: number[][][] };
     expect(polygon.coordinates[0]).toHaveLength(5);
   });
 
@@ -308,11 +310,11 @@ describe.each(KINDS)('a drag of a handle of a provider over a Store of %s', (kin
   it('shows its patches, writes nothing while it goes on, and writes once let go', () => {
     pressHandle(1, 2);
     expect(writes).toEqual([]);
-    expect(draw.features.get('a')?.properties.at).toBeUndefined();
+    expect(writesOf(draw).features.get('a')?.properties.at).toBeUndefined();
     expect(draw.rendered.get('a')?.properties.at).toBe(2);
     letGoHandle(3);
     expect(writes).toEqual(['change']);
-    expect(draw.features.get('a')?.properties.at).toBe(3);
+    expect(writesOf(draw).features.get('a')?.properties.at).toBe(3);
     expect(ended).toEqual([3]);
     expect(draw.sketches.count()).toBe(0);
   });
@@ -322,7 +324,11 @@ describe.each(KINDS)('a drag of a handle of a provider over a Store of %s', (kin
     patchAt = () => ({ properties: { [`key${++move}`]: move } });
     pressHandle(1, 2);
     letGoHandle(3);
-    expect(draw.features.get('a')?.properties).toMatchObject({ key1: 1, key2: 2, key3: 3 });
+    expect(writesOf(draw).features.get('a')?.properties).toMatchObject({
+      key1: 1,
+      key2: 2,
+      key3: 3,
+    });
   });
 
   it('writes nothing once cancelled, and tells the end to the provider', () => {
@@ -344,7 +350,7 @@ describe.each(KINDS)('a drag of a handle of a provider over a Store of %s', (kin
   });
 
   it('writes nothing when its patches give the feature what it has', () => {
-    draw.features.update('a', { properties: { at: 5 } });
+    writesOf(draw).features.update('a', { properties: { at: 5 } });
     writes.length = 0;
     pressHandle(1);
     letGoHandle(5);
@@ -354,11 +360,11 @@ describe.each(KINDS)('a drag of a handle of a provider over a Store of %s', (kin
 
   it('writes nothing once its feature is locked', () => {
     pressHandle(1);
-    draw.features.update('a', { locked: true });
+    writesOf(draw).features.update('a', { locked: true });
     writes.length = 0;
     letGoHandle(2);
     expect(writes).toEqual([]);
-    expect(draw.features.get('a')?.properties.at).toBeUndefined();
+    expect(writesOf(draw).features.get('a')?.properties.at).toBeUndefined();
   });
 });
 
@@ -431,13 +437,13 @@ describe.each(KINDS)('a drag over a Store of %s', (kind) => {
     press([1.5, 0.5], [2.5, 0.5]);
     expect(writes).toEqual([]);
     expect(update).not.toHaveBeenCalled();
-    near(corner(draw.features.get('a') as unknown as Feature), [0, 0]);
+    near(corner(writesOf(draw).features.get('a') as unknown as Feature), [0, 0]);
     near(corner(draw.rendered.get('a') as unknown as Feature), [2, 0]);
     near(corner(draw.rendered.get('b') as unknown as Feature), [5, 0]);
     letGo(2.5, 0.5);
     expect(writes).toEqual(['change']);
     expect(update.mock.calls.map(([id]) => id)).toEqual(['a', 'b']);
-    near(corner(draw.features.get('a') as unknown as Feature), [2, 0]);
+    near(corner(writesOf(draw).features.get('a') as unknown as Feature), [2, 0]);
     near(corner(draw.rendered.get('a') as unknown as Feature), [2, 0]);
     expect(events.map(([name]) => name)).toEqual([
       'drag.started',
@@ -473,7 +479,7 @@ describe.each(KINDS)('a drag over a Store of %s', (kind) => {
     store.updateFeature('b', { geometry: square('b', 10, 10).geometry });
     near(corner(draw.rendered.get('b') as unknown as Feature), [12, 10]);
     letGo(2.5, 0.5);
-    near(corner(draw.features.get('b') as unknown as Feature), [12, 10]);
+    near(corner(writesOf(draw).features.get('b') as unknown as Feature), [12, 10]);
   });
 
   it('leaves out a feature deleted or locked meanwhile, and writes the others', () => {
@@ -481,8 +487,8 @@ describe.each(KINDS)('a drag over a Store of %s', (kind) => {
     store.updateFeature('b', { locked: true });
     near(corner(draw.rendered.get('b') as unknown as Feature), [3, 0]);
     letGo(2.5, 0.5);
-    near(corner(draw.features.get('a') as unknown as Feature), [2, 0]);
-    near(corner(draw.features.get('b') as unknown as Feature), [3, 0]);
+    near(corner(writesOf(draw).features.get('a') as unknown as Feature), [2, 0]);
+    near(corner(writesOf(draw).features.get('b') as unknown as Feature), [3, 0]);
   });
 
   it('stops once every feature is deleted: nothing is written, and its end is cancelled', () => {
@@ -552,7 +558,7 @@ describe('the rows of a drag', () => {
     letGo(2.5, 0.5);
     expect(writes).toEqual(['change']);
     expect(setOf('a')).toBe(0);
-    near(corner(draw.features.get('b') as unknown as Feature), [5, 0]);
+    near(corner(writesOf(draw).features.get('b') as unknown as Feature), [5, 0]);
   });
 
   it('of the features selected in bulk leave out a row locked meanwhile', () => {
@@ -560,12 +566,12 @@ describe('the rows of a drag', () => {
     draw.selection.set('feature', ['a', 'b']);
     expect(draw.selection.value.ids).toBeNull();
     press([2.5, 0.5]);
-    draw.features.update('b', { locked: true });
+    writesOf(draw).features.update('b', { locked: true });
     expect(setOf('b')).toBe(0);
     expect(setOf('a')).toBe(BULK_MOVE_SET);
     letGo(2.5, 0.5);
-    near(corner(draw.features.get('a') as unknown as Feature), [2, 0]);
-    near(corner(draw.features.get('b') as unknown as Feature), [3, 0]);
+    near(corner(writesOf(draw).features.get('a') as unknown as Feature), [2, 0]);
+    near(corner(writesOf(draw).features.get('b') as unknown as Feature), [3, 0]);
   });
 
   it('of the features selected in bulk are written with a row another sketch edits too', () => {
@@ -577,8 +583,8 @@ describe('the rows of a drag', () => {
     expect(setOf('b')).toBe(0);
     near(corner(draw.rendered.get('b') as unknown as Feature), [5, 0]);
     letGo(2.5, 0.5);
-    near(corner(draw.features.get('a') as unknown as Feature), [2, 0]);
-    near(corner(draw.features.get('b') as unknown as Feature), [5, 0]);
+    near(corner(writesOf(draw).features.get('a') as unknown as Feature), [2, 0]);
+    near(corner(writesOf(draw).features.get('b') as unknown as Feature), [5, 0]);
   });
 
   it('of a selection no longer in bulk are written as the features selected', () => {
@@ -588,7 +594,7 @@ describe('the rows of a drag', () => {
     draw.selection.set('feature', ['a']);
     expect(draw.selection.value.ids).not.toBeNull();
     letGo(2.5, 0.5);
-    near(corner(draw.features.get('a') as unknown as Feature), [2, 0]);
-    near(corner(draw.features.get('b') as unknown as Feature), [3, 0]);
+    near(corner(writesOf(draw).features.get('a') as unknown as Feature), [2, 0]);
+    near(corner(writesOf(draw).features.get('b') as unknown as Feature), [3, 0]);
   });
 });

@@ -64,9 +64,9 @@ function makeMultiPolygon(): Feature {
       ],
       [
         [5, 5],
-        [15, 5],
-        [15, 15],
         [5, 15],
+        [15, 15],
+        [15, 5],
         [5, 5],
       ],
     ],
@@ -310,9 +310,9 @@ describe('vertex operations on a MultiPolygon', () => {
 
     expect(result[0][1]).toEqual([
       [5, 5],
-      [16, 7],
+      [6, 17],
       [15, 15],
-      [5, 15],
+      [15, 5],
       [5, 5],
     ]);
     // The outer ring of the same part is unchanged
@@ -397,10 +397,10 @@ describe('vertex operations on a MultiPolygon', () => {
     const result = deleteVertex(feature, { part: 0, ring: 1, index: 0 }) as Coordinate[][][];
 
     expect(result[0][1]).toEqual([
-      [15, 5],
-      [15, 15],
       [5, 15],
+      [15, 15],
       [15, 5],
+      [5, 15],
     ]);
     expect(result[0][1][0]).toEqual(result[0][1][result[0][1].length - 1]);
     // The outer ring and the other part are unchanged
@@ -649,7 +649,7 @@ describe('consecutive deletion of several vertices', () => {
     expect(parts[0][1]).toEqual([
       [5, 5],
       [15, 15],
-      [5, 15],
+      [15, 5],
       [5, 5],
     ]);
     expect(parts[1][0]).toEqual([

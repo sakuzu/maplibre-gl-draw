@@ -8,8 +8,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { processImageDataUrl, UnsupportedImageTypeError } from '../../../shared/utils/image.js';
 import { DrawError } from '../../errors.js';
-import type { DrawDocument } from '../../model.js';
-import { featuresToGeoJSON, parseGeoJSON, parseNative } from '../../model.js';
+import type { DrawDocument, Feature, FeatureFields } from '../../model.js';
+import { parseGeoJSON, parseNative, readFeature } from '../../model.js';
+
+/** The values of the library of a feature parsed, under their short names */
+const fieldsOf = (feature: Feature): FeatureFields => readFeature(feature);
 
 vi.mock('../../../shared/utils/image', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../../shared/utils/image.js')>()),
@@ -122,16 +125,16 @@ describe('parseGeoJSON', () => {
     expect(ids).not.toContain('a');
     expect(ids).not.toContain('b');
     expect(ids).not.toContain('3');
-    expect(parsed.features.every((feature) => feature.layerId === 'target')).toBe(true);
+    expect(parsed.features.every((feature) => fieldsOf(feature).layerId === 'target')).toBe(true);
 
     // The two features that name group g form one new group
     expect(parsed.groups).toHaveLength(1);
     const [group] = parsed.groups;
     expect(minted).toContain(group.id);
     expect(group.featureIds).toEqual([ids[0], ids[1]]);
-    expect(parsed.features[0].groupId).toBe(group.id);
-    expect(parsed.features[1].groupId).toBe(group.id);
-    expect(parsed.features[2].groupId).toBeUndefined();
+    expect(fieldsOf(parsed.features[0]).groupId).toBe(group.id);
+    expect(fieldsOf(parsed.features[1]).groupId).toBe(group.id);
+    expect(fieldsOf(parsed.features[2]).groupId).toBeNull();
 
     // The image names its new file
     expect(parsed.files).toHaveLength(1);
@@ -227,9 +230,9 @@ describe('parseGeoJSON', () => {
     expect(Object.getPrototypeOf(features)).toBe(Object.prototype);
   });
 
-  it('keeps the order of the input, names nothing, and leaves the layer empty without layerId', async () => {
+  it('keeps the order of the input, names nothing, and names no layer without layerId', async () => {
     const parsed = await parseGeoJSON(input);
-    expect(parsed.features.map((feature) => feature.type)).toEqual([
+    expect(parsed.features.map((feature) => fieldsOf(feature).featureType)).toEqual([
       'Point',
       'LineString',
       'Polygon',
@@ -241,7 +244,11 @@ describe('parseGeoJSON', () => {
       undefined,
       undefined,
     ]);
-    expect(parsed.features.every((feature) => feature.layerId === '')).toBe(true);
+    // A feature names no layer: it has no key of a layer
+    expect(parsed.features.every((feature) => fieldsOf(feature).layerId === null)).toBe(true);
+    for (const feature of parsed.features) {
+      expect(feature.properties).not.toHaveProperty(['maplibre-gl-draw:layerId']);
+    }
   });
 
   it('reads a single feature and a geometry, and splits Multi geometries when asked', async () => {
@@ -256,28 +263,34 @@ describe('parseGeoJSON', () => {
     } as GeoJSON.MultiPoint;
     expect((await parseGeoJSON(multi)).features).toHaveLength(1);
     const split = await parseGeoJSON(multi, { flattenMulti: true });
-    expect(split.features.map((feature) => feature.type)).toEqual(['Point', 'Point']);
+    expect(split.features.map((feature) => fieldsOf(feature).featureType)).toEqual([
+      'Point',
+      'Point',
+    ]);
     expect(split.features[0].id).not.toBe(split.features[1].id);
   });
 
-  it('round-trips the geometry and the properties through featuresToGeoJSON', async () => {
+  it('keeps the geometry and the properties of the input, as GeoJSON Features', async () => {
     const parsed = await parseGeoJSON(input, { layerId: 'target' });
-    const files = new Map(parsed.files.map((file) => [file.id, file]));
-    const output = featuresToGeoJSON(parsed.features, { getFile: (id) => files.get(id) });
+    const output = parsed.features;
 
-    // The IDs and the references are new; everything else comes back as it was
+    // The IDs and the references are new, and the image data goes into its file; everything else
+    // comes back as it was
     const renamed = [
       'maplibre-gl-draw:id',
       'maplibre-gl-draw:layerId',
       'maplibre-gl-draw:groupId',
       'maplibre-gl-draw:imageFileId',
+      'maplibre-gl-draw:imageData',
+      'maplibre-gl-draw:imageMimeType',
     ];
     const strip = (properties: GeoJSON.GeoJsonProperties) =>
       Object.fromEntries(
         Object.entries(properties ?? {}).filter(([key]) => !renamed.includes(key)),
       );
-    expect(output.features).toHaveLength(input.features.length);
-    output.features.forEach((feature, index) => {
+    expect(output).toHaveLength(input.features.length);
+    output.forEach((feature, index) => {
+      expect(feature.type).toBe('Feature');
       expect(feature.geometry).toEqual(input.features[index].geometry);
       expect(strip(feature.properties)).toEqual(strip(input.features[index].properties));
     });
@@ -311,7 +324,7 @@ describe('parseGeoJSON', () => {
       type: 'FeatureCollection',
       features: [image(LARGE), input.features[0]],
     });
-    expect(parsed.features.map((feature) => feature.type)).toEqual(['Point']);
+    expect(parsed.features.map((feature) => fieldsOf(feature).featureType)).toEqual(['Point']);
     expect(parsed.files).toEqual([]);
     expect(parsed.skipped).toEqual([
       {
@@ -431,13 +444,19 @@ describe('parseNative', () => {
     });
     const [back, front] = parsed.layers.map((l) => l.id as string);
     const [p, q, r, img] = parsed.features;
-    expect(p.layerId).toBe(front);
-    expect([q.layerId, r.layerId, img.layerId]).toEqual([back, back, back]);
+    expect(fieldsOf(p).layerId).toBe(front);
+    expect([q, r, img].map((f) => fieldsOf(f).layerId)).toEqual([back, back, back]);
 
     expect(parsed.groups).toEqual([
-      { id: q.groupId, name: 'G', visible: false, locked: true, featureIds: [q.id, r.id] },
+      {
+        id: fieldsOf(q).groupId,
+        name: 'G',
+        visible: false,
+        locked: true,
+        featureIds: [q.id, r.id],
+      },
     ]);
-    expect(r.groupId).toBe(q.groupId);
+    expect(fieldsOf(r).groupId).toBe(fieldsOf(q).groupId);
 
     expect(parsed.files).toEqual([
       { id: expect.any(String), mimeType: 'image/png', dataURL: SMALL },
@@ -456,7 +475,7 @@ describe('parseNative', () => {
     expect(parsed.skipped).toEqual([]);
     expect(parsed.idMap).toEqual({
       features: { p: p.id, q: q.id, r: r.id, img: img.id },
-      groups: { g: q.groupId },
+      groups: { g: fieldsOf(q).groupId },
       files: { f: parsed.files[0].id },
       layers: { back, front },
     });
@@ -467,7 +486,7 @@ describe('parseNative', () => {
   it('puts every feature into the layer given, without layers', async () => {
     const parsed = await parseNative(doc, { layerId: 'target' });
     expect(parsed.layers).toEqual([]);
-    expect(parsed.features.every((f) => f.layerId === 'target')).toBe(true);
+    expect(parsed.features.every((f) => fieldsOf(f).layerId === 'target')).toBe(true);
     expect(parsed.groups).toHaveLength(1);
     expect(parsed.idMap.layers).toEqual({});
   });

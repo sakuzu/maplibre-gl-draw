@@ -14,9 +14,9 @@ import type { StoreChange } from '../../store/types.js';
 import { createResourceDeps } from '../../test-utils.js';
 import { getStyleRuleChannel } from '../../view/style-rule.js';
 import { DrawError } from '../errors.js';
-import type { FeaturesCollection } from '../features.js';
-import type { FeatureInput } from '../model.js';
+import type { StoredFeatureInput as FeatureInput } from '../model.js';
 import { createAppliedStyles } from './applied-style.js';
+import type { FeatureResource as FeaturesCollection } from './feature-resource.js';
 import { createFeatures } from './features.js';
 
 let store: MemoryStore;

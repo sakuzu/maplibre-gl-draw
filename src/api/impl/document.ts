@@ -11,10 +11,30 @@ import { deleteFeaturesAndGroups } from '../../store/feature-stream.js';
 import { insertGroup } from '../../store/item-lists.js';
 import type { Coordinate } from '../../store/types.js';
 import { drawErrorOf } from '../../table/draw-error-of.js';
-import type { DocumentResource } from '../document.js';
+import type { DocumentLoads } from './document-resource.js';
+
+/**
+ * The loads of the document, read and written apart: a transaction reads a source when it is
+ * imported, and writes it at its commit
+ *
+ * @internal
+ */
+export interface DocumentLoader extends DocumentLoads {
+  /** Reads a source; null when the document is read-only. Every failure is a DrawError */
+  prepare(
+    source: LoadSource,
+    options: LoadOptions | undefined,
+    pending: Set<string>,
+    createdLayers: Set<string>,
+  ): Promise<PreparedItem | null>;
+  /** Writes what was read in one transaction; null when the document became read-only */
+  writeAll(prepared: readonly PreparedItem[]): LoadResult[] | null;
+}
+
 import { DrawError } from '../errors.js';
 import type { StoreView } from '../extension/store.js';
 import type { DrawDocument, LoadOptions, LoadResult, LoadSource } from '../model.js';
+import { toFeature } from './feature-shape.js';
 import type { GroupShell } from './groups.js';
 import { prepareGroupShell } from './groups.js';
 import { isNativeFormat, toFeatureCollection } from './import-export/format-detection.js';
@@ -38,7 +58,12 @@ const LOAD_SOURCE = 'load';
 const GROUP_KEYS = ['id', 'name', 'visible', 'locked'] as const;
 
 /** A load read and checked, with the layer and the group it creates when it is written */
-interface PreparedItem {
+/**
+ * A source read, ready to be written
+ *
+ * @internal
+ */
+export interface PreparedItem {
   load: PreparedLoad;
   layer: PreparedLayer | undefined;
   group: GroupShell | undefined;
@@ -74,7 +99,7 @@ export function createDocument(
   deps: Pick<ResourceDeps, 'store' | 'autoNameGenerator' | 'generateId' | 'getActiveLayerId'>,
   onLoaded?: (result: LoadResult, source: string) => void,
   shown: ShownDocument = NO_SHOWN_DOCUMENT,
-): DocumentResource {
+): DocumentLoader {
   const { store } = deps;
 
   /**
@@ -110,7 +135,7 @@ export function createDocument(
       for (const id of [layer?.layer.id, group?.id]) {
         if (id !== undefined && isTaken(store, id)) {
           throw new DrawError('already-exists', `The ID ${JSON.stringify(id)} is already taken`, {
-            id,
+            ids: [id],
           });
         }
       }
@@ -138,6 +163,8 @@ export function createDocument(
   };
 
   return {
+    prepare,
+    writeAll,
     async load(source, options) {
       const prepared = await prepare(source, options, new Set(), new Set());
       return prepared ? (writeAll([prepared])?.[0] ?? null) : null;
@@ -183,7 +210,10 @@ export function createDocument(
 
     getShown: () => shown.get(),
 
-    toJSON: (): DrawDocument => exportNative(store),
+    toJSON: (): DrawDocument => {
+      const data = exportNative(store);
+      return { ...data, features: data.features.map(toFeature) } as DrawDocument;
+    },
 
     toGeoJSON: (): FeatureCollection => exportGeoJSON(store),
   };

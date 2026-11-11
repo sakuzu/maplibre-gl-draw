@@ -40,7 +40,12 @@ import { drawErrorOf } from '../table/draw-error-of.js';
 import type { FeatureTablesWorker } from '../table/feature-row-blocks.js';
 import { FEATURE_TABLE_COLUMNS } from '../table/tabane/columns.js';
 import type { GeometryTransforms, Store, StoreView, UpdateSource } from './extension/store.js';
-import type { Feature, FeatureStyle, FeatureType, FeatureValues } from './model.js';
+import type {
+  StoredFeature as Feature,
+  FeatureStyle,
+  FeatureType,
+  FeatureValues,
+} from './model.js';
 
 export type {
   FeatureTablesWorker,

@@ -17,9 +17,10 @@ import { featureTablesInternals } from '../../feature-table/feature-tables.js';
 import type { Store } from '../../store/store.js';
 import { createTableStore } from '../../store/table-memory.js';
 import type { Feature } from '../../store/types.js';
+import { writesOf } from '../../test-support/writes.js';
 import { createMapStub } from '../../test-utils.js';
 import type { Draw } from '../draw.js';
-import type { FeatureInput } from '../model.js';
+import type { StoredFeatureInput as FeatureInput } from '../model.js';
 import { createDrawOnEngine } from './create-draw.js';
 import { createEngine } from './engine.js';
 
@@ -41,11 +42,15 @@ function instance(): Instance {
   );
   const draw = createDrawOnEngine(engine, { store, initDefaultLayer: false });
   instances.push(draw);
-  draw.layers.create({ id: 'a', name: 'a' });
-  draw.layers.create({ id: 'b', name: 'b' });
-  draw.features.createMany([point('a0', 'a', 0), point('a1', 'a', 1), point('b0', 'b', 2)]);
-  draw.groups.create({ id: 'g', featureIds: ['a1'] });
-  draw.features.create(point('a2', 'a', 3));
+  writesOf(draw).layers.create({ id: 'a', name: 'a' });
+  writesOf(draw).layers.create({ id: 'b', name: 'b' });
+  writesOf(draw).features.createMany([
+    point('a0', 'a', 0),
+    point('a1', 'a', 1),
+    point('b0', 'b', 2),
+  ]);
+  writesOf(draw).groups.create({ id: 'g', featureIds: ['a1'] });
+  writesOf(draw).features.create(point('a2', 'a', 3));
   return { draw, store, writer };
 }
 
@@ -125,7 +130,7 @@ describe('many features created at once over a Store of rows', () => {
   it('writes the new rows of each layer in one write of the tables', () => {
     const { draw, writer } = instance();
     const apply = vi.spyOn(writer, 'writeRows');
-    const created = draw.features.createMany(inputs(2000));
+    const created = writesOf(draw).features.createMany(inputs(2000));
     expect(created).toHaveLength(2000);
     // One write per layer, whatever the number of features
     expect(apply).toHaveBeenCalledTimes(2);
@@ -138,11 +143,11 @@ describe('many features created at once over a Store of rows', () => {
     const one = instance();
     for (const { draw } of [many, one]) {
       // Deleted here and kept: created again where it was
-      draw.features.delete('a0');
+      writesOf(draw).features.delete('a0');
     }
     const list = [...inputs(40), point('a0', 'a', 99)];
-    many.draw.features.createMany(list);
-    for (const input of list) one.draw.features.create(input);
+    writesOf(many.draw).features.createMany(list);
+    for (const input of list) writesOf(one.draw).features.create(input);
     for (const layerId of ['a', 'b']) {
       expect(items(many.store, layerId)).toEqual(items(one.store, layerId));
     }
@@ -158,7 +163,7 @@ describe('many features created at once over a Store of rows', () => {
   it('makes the keys of the order of many features at once, short', () => {
     const { draw, store } = instance();
     const n = 20000;
-    draw.features.createMany(Array.from({ length: n }, (_, i) => point(`k${i}`, 'b', i)));
+    writesOf(draw).features.createMany(Array.from({ length: n }, (_, i) => point(`k${i}`, 'b', i)));
     const keys = keysOf(store, 'b');
     expect(keys).toHaveLength(n + 1);
     // Made one after the other, the last of them would be 646 characters long
@@ -173,7 +178,7 @@ describe('many features created at once over a Store of rows', () => {
     const changes: unknown[] = [];
     draw.on('change', (change) => changes.push(change));
     const list = inputs(30);
-    draw.features.createMany(list);
+    writesOf(draw).features.createMany(list);
     expect(changes).toHaveLength(1);
     const layers = (changes[0] as { rows: { layers: Map<string, { created: Int32Array }> } }).rows
       .layers;
@@ -209,7 +214,7 @@ describe('many features created at once over a Store of rows', () => {
   it('writes no field a feature does not give for it', () => {
     const { draw, writer } = instance();
     const apply = vi.spyOn(writer, 'writeRows');
-    draw.features.createMany([point('p', 'a', 1), point('q', 'a', 2)]);
+    writesOf(draw).features.createMany([point('p', 'a', 1), point('q', 'a', 2)]);
     const [patch] = apply.mock.calls[0];
     const odd = patch.fields.get('properties:odd' as RowField);
     expect(odd).toEqual([true, undefined]);

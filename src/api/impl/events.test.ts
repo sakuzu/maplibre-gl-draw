@@ -16,6 +16,7 @@ import { SelectModeDragHandler } from '../../modes/select/drag-handler.js';
 import { MemoryStore } from '../../store/memory.js';
 import type { Store } from '../../store/store.js';
 import { createTableStore } from '../../store/table-memory.js';
+import { writesOf } from '../../test-support/writes.js';
 import { createMapStub, createSyntheticInput } from '../../test-utils.js';
 import type { HandleHitResult } from '../../view/ui/handle-test.js';
 import { computeSelectionBoundingBox, getSelectedFeatureIds } from '../../view/ui/helper.js';
@@ -23,7 +24,7 @@ import type { Draw } from '../draw.js';
 import { createDraw } from '../draw.js';
 import { DrawError } from '../errors.js';
 import type { Change, DrawEvents, Observable } from '../events.js';
-import type { Feature, Group } from '../model.js';
+import type { Feature, FeatureInput, StoredFeature } from '../model.js';
 import type { Sketch } from '../sketches.js';
 import { createDrawOnEngine } from './create-draw.js';
 import type { Engine } from './engine.js';
@@ -38,7 +39,6 @@ type Recorded = { [K in keyof DrawEvents]: [K, DrawEvents[K]] }[keyof DrawEvents
 
 const ALL_EVENTS: ReadonlyArray<keyof DrawEvents> = [
   'change',
-  'document.loaded',
   'drag.started',
   'drag.ended',
   'readOnly.changed',
@@ -78,6 +78,13 @@ const pointInput = (lng = 0, lat = 0) => ({
   geometry: { type: 'Point' as const, coordinates: [lng, lat] },
 });
 
+/** A point as a GeoJSON Feature, what `tx.features.create` takes */
+const point = (lng = 0, lat = 0, layerId?: string): FeatureInput => ({
+  type: 'Feature',
+  geometry: { type: 'Point', coordinates: [lng, lat] },
+  properties: layerId ? { 'maplibre-gl-draw:layerId': layerId } : {},
+});
+
 const lineInput = () => ({
   type: 'LineString' as const,
   geometry: {
@@ -106,10 +113,10 @@ afterEach(() => {
 });
 
 describe('change', () => {
-  it('tells the IDs of the features a commit created, updated and deleted, once per commit, with its source', () => {
-    const created = draw.features.create(pointInput()) as Feature;
-    draw.features.update(created.id, { properties: { name: 'A' } });
-    draw.features.delete(created.id);
+  it('tells the IDs of the features a commit created, updated and deleted, once per commit, with its source', async () => {
+    const created = await draw.write((tx) => tx.features.create(point()));
+    await draw.write((tx) => tx.features.update(created.id, { properties: { name: 'A' } }));
+    await draw.write((tx) => tx.features.delete(created.id));
 
     const changes = changesOf(events);
     expect(changes).toHaveLength(3);
@@ -126,33 +133,40 @@ describe('change', () => {
     }
   });
 
-  it('arrives once per transaction, before the values of this client it moved, with its source', () => {
+  it('arrives once per commit, before the values of this client it moved, with its label', async () => {
+    const a = await draw.write((tx) => tx.features.create(point()));
+    draw.selection.set('feature', [a.id]);
+    events.length = 0;
     const order: string[] = [];
     draw.on('change', () => order.push('change'));
     const stop = draw.selection.subscribe(() => order.push('selection'));
     order.length = 0;
-    draw.transact(
-      () => {
-        const a = draw.features.create(pointInput()) as Feature;
-        draw.features.create(pointInput(1, 1));
-        draw.layers.create({ name: 'Second' });
-        draw.metadata.update({ title: 'Map' });
-        draw.selection.set('feature', [a.id]);
+    // The feature selected is deleted: the selection lets go of it after the change
+    const write = draw.write(
+      async (tx) => {
+        await tx.features.delete(a.id);
+        await tx.features.create([point(1, 1), point(2, 2)]);
+        await tx.layers.create({ name: 'Second' });
+        await tx.document.update({ title: 'Map' });
       },
-      { source: 'script' },
+      { label: 'script' },
     );
+    await write;
     stop();
     const changes = changesOf(events);
     expect(changes).toHaveLength(1);
     expect(order).toEqual(['change', 'selection']);
-    expect(changes[0].source).toBe('script');
+    expect(changes[0].source).toBe('local');
+    expect(changes[0].label).toBe('script');
+    expect(changes[0].commit).toBe(write.id);
+    expect(changes[0].features.deleted).toEqual([a.id]);
     expect(changes[0].features.created).toHaveLength(2);
     expect(changes[0].layers.created).toHaveLength(1);
     expect(changes[0].document).toBe(true);
   });
 
-  it('gives the feature before the commit for one updated or deleted, and none for one created', () => {
-    const created = draw.features.create(pointInput()) as Feature;
+  it('gives the feature before the commit for one updated or deleted, and none for one created', async () => {
+    const created = await draw.write((tx) => tx.features.create(point()));
     const before: Array<Feature | undefined> = [];
     draw.on('change', (change) => {
       for (const id of [...change.features.created, ...change.features.updated]) {
@@ -160,44 +174,47 @@ describe('change', () => {
       }
       for (const id of change.features.deleted) before.push(change.previous(id));
     });
-    const updated = draw.features.update(created.id, { properties: { name: 'A' } }) as Feature;
-    draw.features.delete(created.id);
-    draw.features.create(pointInput(1, 1));
+    const updated = await draw.write((tx) =>
+      tx.features.update(created.id, { properties: { name: 'A' } }),
+    );
+    await draw.write((tx) => tx.features.delete(created.id));
+    await draw.write((tx) => tx.features.create(point(1, 1)));
+    // In the public shape, as `draw.features.get` reads it
     expect(before).toEqual([created, updated, undefined]);
   });
 
-  it('tells a feature put in another place of its layer, or into another layer or group, as placed alone', () => {
-    const first = draw.layers.getActive()?.id as string;
-    const second = draw.layers.create({ name: 'Second' })?.id as string;
-    const a = draw.features.create(pointInput()) as Feature;
-    const b = draw.features.create(pointInput(1, 1)) as Feature;
-    const c = draw.features.create(pointInput(2, 2)) as Feature;
+  it('tells a feature put in another place of its layer, or into another layer or group, as placed alone', async () => {
+    const second = (await draw.write((tx) => tx.layers.create({ name: 'Second' }))).id;
+    const [a, b, c] = await draw.write((tx) =>
+      tx.features.create([point(), point(1, 1), point(2, 2)]),
+    );
     events.length = 0;
 
-    draw.features.move(c.id, { layerId: first, index: 0 });
-    draw.features.move(a.id, { layerId: second });
-    const group = draw.groups.create({ featureIds: [b.id] }) as Group;
+    // To the back of its layer, just below the first
+    await draw.write((tx) => tx.features.place(c, { above: a }));
+    await draw.write((tx) => tx.features.place(a, { layerId: second }));
+    const group = await draw.write((tx) => tx.groups.create({ featureIds: [b] }));
 
     const [inLayer, intoLayer, intoGroup] = changesOf(events);
     // A move within a layer changes no field of the feature
-    expect(inLayer.features).toEqual({ ...NONE, placed: [c.id] });
-    expect(intoLayer.features).toEqual({ ...NONE, placed: [a.id] });
+    expect(inLayer.features).toEqual({ ...NONE, placed: [c] });
+    expect(intoLayer.features).toEqual({ ...NONE, placed: [a] });
     expect(intoGroup.features.updated).toEqual([]);
-    expect(intoGroup.features.placed).toEqual([b.id]);
+    expect(intoGroup.features.placed).toEqual([b]);
     expect(intoGroup.groups.created).toEqual([group.id]);
     // The group created is not also placed
     expect(intoGroup.groups.placed).toEqual([]);
   });
 
-  it('tells the layers created, updated, deleted, and those whose place in the order changed', () => {
+  it('tells the layers created, updated, deleted, and those whose place in the order changed', async () => {
     const first = draw.layers.getActive()?.id as string;
-    const second = draw.layers.create({ name: 'Roads' })?.id as string;
-    const third = draw.layers.create({ name: 'Rivers' })?.id as string;
-    draw.layers.update(second, { name: 'Streets' });
+    const second = (await draw.write((tx) => tx.layers.create({ name: 'Roads' }))).id;
+    const third = (await draw.write((tx) => tx.layers.create({ name: 'Rivers' }))).id;
+    await draw.write((tx) => tx.layers.update(second, { name: 'Streets' }));
     events.length = 0;
     // The third layer goes to the back: the two others keep their order
-    draw.layers.reorder([third, first, second]);
-    draw.layers.delete(second);
+    await draw.write((tx) => tx.layers.place(third, { above: first }));
+    await draw.write((tx) => tx.layers.delete(second));
 
     const [reorder, deletion] = changesOf(events);
     expect(reorder.layers).toEqual({ ...NONE, placed: [third] });
@@ -206,16 +223,17 @@ describe('change', () => {
     expect(deletion.layers.placed).toEqual([]);
   });
 
-  it('tells the layers and the groups updated for a field of their own, not for their items alone', () => {
+  it('tells the layers and the groups updated for a field of their own, not for their items alone', async () => {
     const first = draw.layers.getActive()?.id as string;
-    const second = draw.layers.create({ name: 'Second' })?.id as string;
-    draw.features.create(pointInput());
-    const b = draw.features.create(pointInput(1, 1)) as Feature;
-    const c = draw.features.create(pointInput(2, 2)) as Feature;
-    const group = draw.groups.create({ featureIds: [c.id], name: 'G' }) as Group;
+    const second = (await draw.write((tx) => tx.layers.create({ name: 'Second' }))).id;
+    const [a, b, c] = await draw.write((tx) =>
+      tx.features.create([point(), point(1, 1), point(2, 2)]),
+    );
+    const group = await draw.write((tx) => tx.groups.create({ featureIds: [c], name: 'G' }));
     events.length = 0;
-    draw.features.move(b.id, { groupId: group.id });
-    draw.groups.move(group.id, { layerId: first, index: 0 });
+    await draw.write((tx) => tx.features.place(b, { groupId: group.id }));
+    // To the back of the first layer, just below the first feature
+    await draw.write((tx) => tx.groups.place(group.id, { layerId: first, above: a }));
     expect(changesOf(events)).toHaveLength(2);
     for (const change of changesOf(events)) {
       expect(change.layers.updated).toEqual([]);
@@ -224,27 +242,27 @@ describe('change', () => {
     expect(changesOf(events)[1].groups.placed).toEqual([group.id]);
 
     events.length = 0;
-    draw.layers.update(second, { name: 'Renamed' });
-    draw.groups.move(group.id, { layerId: second });
+    await draw.write((tx) => tx.layers.update(second, { name: 'Renamed' }));
+    await draw.write((tx) => tx.groups.place(group.id, { layerId: second }));
     const [renamed, moved] = changesOf(events);
     expect(renamed.layers.updated).toEqual([second]);
     expect(moved.groups.updated).toEqual([group.id]);
     expect(moved.groups.placed).toEqual([group.id]);
   });
 
-  it('tells the groups created, updated and deleted', () => {
-    const a = draw.features.create(pointInput()) as Feature;
-    const group = draw.groups.create({ featureIds: [a.id], name: 'G' }) as Group;
-    draw.groups.update(group.id, { name: 'H' });
-    draw.groups.delete(group.id);
+  it('tells the groups created, updated and deleted', async () => {
+    const a = await draw.write((tx) => tx.features.create(point()));
+    const group = await draw.write((tx) => tx.groups.create({ featureIds: [a.id], name: 'G' }));
+    await draw.write((tx) => tx.groups.update(group.id, { name: 'H' }));
+    await draw.write((tx) => tx.groups.delete(group.id, { members: 'keep' }));
     const [created, updated, deleted] = changesOf(events).slice(-3);
     expect(created.groups.created).toEqual([group.id]);
     expect(updated.groups.updated).toEqual([group.id]);
     expect(deleted.groups.deleted).toEqual([group.id]);
   });
 
-  it('tells a change of the metadata or of the files as a change of the document itself', () => {
-    draw.metadata.update({ title: 'Map' });
+  it('tells a change of the metadata or of the files as a change of the document itself', async () => {
+    await draw.write((tx) => tx.document.update({ title: 'Map' }));
     store.createFile({ id: 'f1', mimeType: 'image/png', dataURL: 'data:image/png;base64,' });
     store.deleteFile('f1');
     const changes = changesOf(events);
@@ -255,8 +273,8 @@ describe('change', () => {
     }
   });
 
-  it('does not fire for a change of the selection, the mode or the drawing state alone', () => {
-    const a = draw.features.create(pointInput()) as Feature;
+  it('does not fire for a change of the selection, the mode or the drawing state alone', async () => {
+    const a = await draw.write((tx) => tx.features.create(point()));
     const received: Change[] = [];
     draw.on('change', (change) => received.push(change));
     draw.selection.set('feature', [a.id]);
@@ -274,20 +292,24 @@ describe('change', () => {
     expect(received).toEqual([]);
   });
 
-  it('document.loaded carries the result, and the features of the load arrive in one change', async () => {
-    const result = await draw.document.load({
-      type: 'FeatureCollection',
-      features: [
-        { type: 'Feature', properties: {}, geometry: { type: 'Point', coordinates: [1, 2] } },
-      ],
-    });
-    expect(payloadsOf(events, 'document.loaded')).toEqual([{ result, source: 'load' }]);
+  it('tells the features of an import in one change, with the source local', async () => {
+    const result = await draw.write((tx) =>
+      tx.import({
+        type: 'FeatureCollection',
+        features: [
+          { type: 'Feature', properties: {}, geometry: { type: 'Point', coordinates: [1, 2] } },
+          { type: 'Feature', properties: {}, geometry: { type: 'Point', coordinates: [3, 4] } },
+        ],
+      }),
+    );
+    expect(result.count).toBe(2);
     const changes = changesOf(events);
-    expect(changes[changes.length - 1]?.source).toBe('load');
-    expect(changes[changes.length - 1]?.features.created).toEqual(result?.featureIds);
+    expect(changes).toHaveLength(1);
+    expect(changes[0].source).toBe('local');
+    expect(changes[0].features.created).toEqual(draw.features.list().map((feature) => feature.id));
   });
 
-  it('has the same shape over a Store of rows: the rows written by the IDs of their features', () => {
+  it('has the same shape over a Store of rows: the rows written by the IDs of their features', async () => {
     const rows = createTableStore().store;
     rows.createLayer({
       id: 'rows',
@@ -307,11 +329,14 @@ describe('change', () => {
         before.push(change.previous(id));
       }
     });
-    const a = other.features.create({ ...pointInput(), layerId: 'rows' }) as Feature;
-    const b = other.features.create({ ...pointInput(1, 1), layerId: 'rows' }) as Feature;
-    const named = other.features.update(a.id, { properties: { name: 'A' } }) as Feature;
-    other.features.move(b.id, { layerId: 'rows', below: null, above: a.id });
-    other.features.delete(a.id);
+    const a = await other.write((tx) => tx.features.create(point(0, 0, 'rows')));
+    const b = await other.write((tx) => tx.features.create(point(1, 1, 'rows')));
+    const named = await other.write((tx) =>
+      tx.features.update(a.id, { properties: { name: 'A' } }),
+    );
+    // To the back of the layer, just below the first
+    await other.write((tx) => tx.features.place(b.id, { above: a.id }));
+    await other.write((tx) => tx.features.delete(a.id));
 
     const changes = changesOf(seen);
     expect(changes.map((change) => change.features)).toEqual([
@@ -323,7 +348,7 @@ describe('change', () => {
     ]);
     expect(changes[2].rows?.layers.get('rows')?.updated).toHaveLength(1);
     // The feature before a write of this client, and the one deleted as it was
-    expect(before[0]).toMatchObject({ id: a.id, properties: {} });
+    expect(before[0]).toMatchObject({ id: a.id });
     expect(before[0]?.properties).not.toHaveProperty('name');
     expect(before[1]).toMatchObject({ id: named.id, properties: { name: 'A' } });
     other.destroy();
@@ -339,7 +364,7 @@ describe('change', () => {
 
 describe('the observables of the state of this client', () => {
   it('the selection holds its value and tells each change of it', () => {
-    const a = draw.features.create(pointInput()) as Feature;
+    const a = writesOf(draw).features.create(pointInput()) as StoredFeature;
     const values = told(draw.selection);
     draw.selection.set('feature', [a.id]);
     draw.selection.clear();
@@ -356,7 +381,7 @@ describe('the observables of the state of this client', () => {
   });
 
   it('the vertex selection tells the vertices selected', () => {
-    const line = draw.features.create(lineInput()) as Feature;
+    const line = writesOf(draw).features.create(lineInput()) as StoredFeature;
     draw.selection.set('feature', [line.id]);
     const values = told(draw.vertexSelection);
     draw.vertexSelection.set(line.id, [{ ring: 0, index: 1 }]);
@@ -369,13 +394,13 @@ describe('the observables of the state of this client', () => {
   });
 
   it('the IDs hidden here are told as the whole set after each change', () => {
-    const a = draw.features.create(pointInput()) as Feature;
-    const b = draw.features.create(pointInput(1, 1)) as Feature;
+    const a = writesOf(draw).features.create(pointInput()) as StoredFeature;
+    const b = writesOf(draw).features.create(pointInput(1, 1)) as StoredFeature;
     const values = told(draw.hidden.hiddenIds);
     draw.hidden.add(a.id);
     draw.hidden.add(b.id);
     draw.hidden.add(b.id);
-    draw.features.delete(a.id);
+    writesOf(draw).features.delete(a.id);
     draw.hidden.clear();
     expect(values.map((ids) => [...ids])).toEqual([[], [a.id], [a.id, b.id], [b.id], []]);
     expect(draw.hidden.hiddenIds.value.size).toBe(0);
@@ -541,13 +566,13 @@ describe('the signals of the engine', () => {
     expect(failure.featureId).toBe('img');
     expect(failure.error).toBeInstanceOf(DrawError);
     expect(failure.error.code).toBe('unsupported-format');
-    expect(failure.error.details).toEqual({ cause });
+    expect((failure.error as { cause?: unknown }).cause).toBe(cause);
   });
 
   it('map.clicked fires for every click of the select mode, with what it hit or null', () => {
     const draw = createDrawOnEngine(engine);
     engine.enterDefaultMode();
-    const point = draw.features.create(pointInput(1, 1)) as Feature;
+    const point = writesOf(draw).features.create(pointInput(1, 1)) as StoredFeature;
     const input = createSyntheticInput(engine);
     input.click([1, 1]);
     input.click([-0.5, -0.5]);
@@ -731,8 +756,9 @@ describe('the shape being drawn, shown by a sketch of this client', () => {
       onClick(event) {
         ctx.preview.set(
           {
-            type: 'LineString',
+            type: 'Feature',
             geometry: { type: 'LineString', coordinates: [[0, 0], event.lngLat] },
+            properties: {},
           },
           { confirmedVertices: 1, highlightVertex: 0 },
         );
@@ -740,8 +766,9 @@ describe('the shape being drawn, shown by a sketch of this client', () => {
       },
       onPointerMove(event) {
         ctx.preview.set({
-          type: 'LineString',
+          type: 'Feature',
           geometry: { type: 'LineString', coordinates: [[0, 0], event.lngLat] },
+          properties: {},
         });
         return true;
       },

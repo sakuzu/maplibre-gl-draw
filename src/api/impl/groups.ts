@@ -19,8 +19,8 @@ import type {
   Group as StoredGroup,
 } from '../../store/types.js';
 import { DrawError } from '../errors.js';
-import type { GroupsCollection } from '../groups.js';
 import type { Group, GroupFilter, GroupInput, GroupPatch, MoveTarget } from '../model.js';
+import type { GroupResource } from './group-resource.js';
 import { groupMemberIds, rangeOf } from './item-reads.js';
 import { moveGroups, resolveMoveTarget } from './placement.js';
 import type { ResourceDeps } from './shared.js';
@@ -50,7 +50,7 @@ const FILTER_KEYS = ['layerId', 'visible', 'locked'] as const;
  *
  * @internal
  */
-export function createGroups(deps: ResourceDeps): GroupsCollection {
+export function createGroups(deps: ResourceDeps): GroupResource {
   const { store } = deps;
 
   const require = (id: unknown): StoredGroup => {
@@ -167,9 +167,7 @@ export function createGroups(deps: ResourceDeps): GroupsCollection {
         throw new DrawError(
           'already-exists',
           `There is a group with the ID ${JSON.stringify(id)}`,
-          {
-            id,
-          },
+          { ids: [id] },
         );
       }
       // A Store of objects keeps no group it deleted; a Store of rows keeps the ones this client
@@ -182,7 +180,7 @@ export function createGroups(deps: ResourceDeps): GroupsCollection {
       if (!layer) throw notFound('layer', layerId);
       if (isTaken(store, id)) {
         throw new DrawError('already-exists', `The ID ${JSON.stringify(id)} is already taken`, {
-          id,
+          ids: [id],
         });
       }
       if (store.isReadOnly() || layerLocked(store, layer)) return null;
@@ -248,7 +246,8 @@ export function prepareGroupShell(
 }
 
 /** Checks an input and builds the group to store; throws DrawError on a wrong input */
-function prepareGroup(
+/** @internal */
+export function prepareGroup(
   deps: ResourceDeps,
   input: GroupInput,
   pending: ReadonlySet<string>,
@@ -288,7 +287,8 @@ function inStackingOrder(store: Store, features: StoredFeature[]): StoredFeature
 }
 
 /** Checks a patch and builds the updates of the Store; throws DrawError on a wrong patch */
-function prepareGroupPatch(patch: GroupPatch): Partial<StoredGroup> {
+/** @internal */
+export function prepareGroupPatch(patch: GroupPatch): Partial<StoredGroup> {
   requireRecord(patch, 'The patch');
   const record = patch as unknown as Record<string, unknown>;
   onlyKeys(record, PATCH_KEYS, 'The patch');

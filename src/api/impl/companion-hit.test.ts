@@ -19,12 +19,13 @@
 import type { LineString, Point } from 'geojson';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { DragNormalizedEvent, MouseNormalizedEvent } from '../../dispatcher/types.js';
+import { writesOf } from '../../test-support/writes.js';
 import { createMapStub, createSyntheticInput } from '../../test-utils.js';
 import type { Draw } from '../draw.js';
 import type { DrawEvents } from '../events.js';
 import type { ModeContext } from '../extension/context.js';
 import type { Hit } from '../extension/provider.js';
-import type { Feature } from '../model.js';
+import type { StoredFeature as Feature } from '../model.js';
 import { createDrawOnEngine } from './create-draw.js';
 import type { Engine } from './engine.js';
 import { createEngine } from './engine.js';
@@ -110,7 +111,7 @@ function pointerDrag(from: [number, number], to: [number, number]): void {
 
 /** A point feature of the document */
 function point(lngLat: [number, number], style: Feature['style'] = {}): Feature {
-  const feature = draw.features.create({
+  const feature = writesOf(draw).features.create({
     type: 'Point',
     geometry: { type: 'Point', coordinates: lngLat },
     style,
@@ -213,7 +214,7 @@ describe('a Point type that takes only some points', () => {
       },
     });
     const plain = point([0, 0]);
-    const pictured = draw.features.create({
+    const pictured = writesOf(draw).features.create({
       type: 'Point',
       geometry: { type: 'Point', coordinates: [3, 0] },
       properties: { picture: true },
@@ -257,7 +258,7 @@ describe('the stacking order between features', () => {
 
 describe('the handles of the selection', () => {
   it('select and drag a vertex under the companion of a feature in front', () => {
-    const line = draw.features.create({
+    const line = writesOf(draw).features.create({
       type: 'LineString',
       geometry: {
         type: 'LineString',
@@ -278,7 +279,7 @@ describe('the handles of the selection', () => {
     expect(draw.selection.value.ids).toEqual([line.id]);
 
     pointerDrag([0.3, 0.3], [0.5, 0.6]);
-    const moved = draw.features.get(line.id)?.geometry as LineString | undefined;
+    const moved = writesOf(draw).features.get(line.id)?.geometry as LineString | undefined;
     expect(moved?.coordinates[1]).toEqual([0.5, 0.6]);
     expect(clicked).toEqual([]);
   });
@@ -366,7 +367,7 @@ describe('the hits the library gives out', () => {
         return distancePx <= 20 ? { distancePx } : null;
       },
     });
-    const pin = draw.features.create({
+    const pin = writesOf(draw).features.create({
       type: 'pin',
       geometry: { type: 'Point', coordinates: [1, 1] },
     });

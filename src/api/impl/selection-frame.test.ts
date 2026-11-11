@@ -12,6 +12,7 @@ import { DEFAULT_SELECTION_CONFIG } from '../../shared/config/selection.js';
 import { createCoordinateTransform } from '../../shared/math/index.js';
 import { drawProperties } from '../../shared/properties.js';
 import type { Coordinate, Feature } from '../../store/types.js';
+import { writesOf } from '../../test-support/writes.js';
 import { createMapStub } from '../../test-utils.js';
 import type {
   AnchoredOutlineRenderer,
@@ -210,7 +211,7 @@ describe('the selection frame of a built-in point of a draw instance', () => {
     const engine = createEngine(engineMap, {}, { deferDefaultMode: true });
     try {
       const draw = createDrawOnEngine(engine);
-      const created = draw.features.create({
+      const created = writesOf(draw).features.create({
         type: 'Point',
         geometry: { type: 'Point', coordinates: [0.1, 0.1] },
         style,

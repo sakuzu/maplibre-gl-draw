@@ -364,7 +364,7 @@ describe('the examples', () => {
     await fill.waitFor();
     expect((await fill.innerText()).trim().toLowerCase()).toBe('#66a182');
     // The dash the page set from code after the style it was created with
-    expect((await middle())?.style).toMatchObject({
+    expect((await middle())?.properties['maplibre-gl-draw:style']).toMatchObject({
       fillColor: '#66a182',
       strokeColor: '#d1495b',
       strokeWidth: 3,
@@ -377,7 +377,9 @@ describe('the examples', () => {
     await code.fill('#1a2b3c');
     await code.press('Enter');
     await expect
-      .poll(async () => (await middle())?.style?.fillColor, { timeout: browserTimeout(5_000) })
+      .poll(async () => (await middle())?.properties['maplibre-gl-draw:style']?.fillColor, {
+        timeout: browserTimeout(5_000),
+      })
       .toBe('#1A2B3C');
     await close();
   });
@@ -596,7 +598,11 @@ describe('the examples', () => {
     const made = await page.evaluate(() => {
       const { draw } = window as unknown as E2EWindow;
       const [feature] = draw.selection.features();
-      return feature?.type;
+      return (
+        feature &&
+        ((feature.properties['maplibre-gl-draw:featureType'] as string | undefined) ??
+          feature.geometry.type)
+      );
     });
     expect(made).toBe('Polygon');
     // The result is selected, and its area logged: two squares of about 400 m by 445 m
@@ -614,9 +620,10 @@ describe('the examples', () => {
     const { page, close } = await openExample('images');
     const images = () =>
       page.evaluate(() =>
-        (window as unknown as E2EWindow).draw.features
-          .list({ type: 'Image' })
-          .map((f) => ({ name: f.properties.name, opacity: f.style.imageOpacity })),
+        (window as unknown as E2EWindow).draw.features.list({ type: 'Image' }).map((f) => ({
+          name: f.properties.name,
+          opacity: f.properties['maplibre-gl-draw:style']?.imageOpacity,
+        })),
       );
     expect(await images()).toEqual([{ name: 'Sketch map', opacity: 0.85 }]);
 
@@ -655,9 +662,9 @@ describe('the examples', () => {
     expect(await featureCount(page)).toBe(5);
 
     // O loads it back in place of the drawing
-    await page.evaluate(() => {
+    await page.evaluate(async () => {
       const { draw } = window as unknown as E2EWindow;
-      draw.features.deleteMany(draw.features.list().map((f) => f.id));
+      await draw.write((tx) => tx.features.delete({ all: true }));
     });
     expect(await featureCount(page)).toBe(0);
     await pressAction(page, 'Load');
@@ -725,7 +732,11 @@ describe('the examples', () => {
         name: draw.layers.get(id)?.name,
         types: draw.features
           .list({ layerId: id })
-          .map((feature) => feature.type)
+          .map(
+            (feature) =>
+              (feature.properties['maplibre-gl-draw:featureType'] as string | undefined) ??
+              feature.geometry.type,
+          )
           .sort(),
       }));
     });
@@ -739,7 +750,11 @@ describe('the examples', () => {
       Object.fromEntries(
         (window as unknown as E2EWindow).draw.features
           .list()
-          .filter((feature) => feature.type === 'LineString')
+          .filter(
+            (feature) =>
+              ((feature.properties['maplibre-gl-draw:featureType'] as string | undefined) ??
+                feature.geometry.type) === 'LineString',
+          )
           .map((feature) => [
             feature.properties.name,
             (feature.geometry as GeoJSON.LineString).coordinates.length,
@@ -778,7 +793,10 @@ describe('the examples', () => {
     const byType = await page.evaluate(() => {
       const types: Record<string, number> = {};
       for (const feature of (window as unknown as E2EWindow).draw.features.list()) {
-        types[feature.type] = (types[feature.type] ?? 0) + 1;
+        const type =
+          (feature.properties['maplibre-gl-draw:featureType'] as string | undefined) ??
+          feature.geometry.type;
+        types[type] = (types[type] ?? 0) + 1;
       }
       return types;
     });
@@ -818,7 +836,11 @@ describe('the examples', () => {
       const middle = { x: map.getCanvas().clientWidth / 2, y: map.getCanvas().clientHeight / 2 };
       const places = draw.features
         .list()
-        .filter((feature) => feature.type === 'Point')
+        .filter(
+          (feature) =>
+            ((feature.properties['maplibre-gl-draw:featureType'] as string | undefined) ??
+              feature.geometry.type) === 'Point',
+        )
         .map((feature) =>
           map.project((feature.geometry as GeoJSON.Point).coordinates as [number, number]),
         );
@@ -877,7 +899,11 @@ describe('the examples', () => {
           layer.name,
           draw.features
             .list({ layerId: layer.id })
-            .map((feature) => feature.type)
+            .map(
+              (feature) =>
+                (feature.properties['maplibre-gl-draw:featureType'] as string | undefined) ??
+                feature.geometry.type,
+            )
             .sort(),
         ]),
       );
@@ -1186,17 +1212,23 @@ describe('the examples', () => {
   }, async () => {
     const { page, close } = await openExample('read-only-viewer');
     await page.evaluate(() => (window as unknown as { loaded: Promise<void> }).loaded);
-    const after = await page.evaluate(() => {
+    const after = await page.evaluate(async () => {
       const { draw } = window as unknown as E2EWindow;
       const [first] = draw.features.list();
-      const updated = draw.features.update(first.id, { properties: { name: 'Changed' } });
+      // The write is refused with the code of the read-only document
+      const refused = await draw
+        .write((tx) => tx.features.update(first.id, { properties: { name: 'Changed' } }))
+        .then(
+          () => null,
+          (error: { code?: string }) => error.code ?? String(error),
+        );
       return {
         count: draw.features.count(),
-        updated,
+        refused,
         name: draw.features.get(first.id)?.properties.name,
       };
     });
-    expect(after).toEqual({ count: 8, updated: null, name: 'North tower' });
+    expect(after).toEqual({ count: 8, refused: 'not-editable', name: 'North tower' });
     await close();
   });
 
@@ -1232,12 +1264,19 @@ describe('the examples', () => {
         (featureId) => (window as unknown as E2EWindow).draw.features.get(featureId)?.geometry,
         id,
       );
+    // Whether the write is made: false when it is refused (read-only, a lock)
     const rename = () =>
       page.evaluate(
         (id) =>
-          (window as unknown as E2EWindow).draw.features.update(id, {
-            properties: { note: 'changed' },
-          }) !== null,
+          (window as unknown as E2EWindow).draw
+            .write((tx) => tx.features.update(id, { properties: { note: 'changed' } }))
+            .then(
+              () => true,
+              (error: { code?: string }) => {
+                if (error.code === 'not-editable' || error.code === 'locked') return false;
+                throw error;
+              },
+            ),
         tower.id,
       );
     // The viewer opens read-only, with the three other states off

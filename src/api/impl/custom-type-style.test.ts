@@ -27,6 +27,7 @@ import { afterEach, describe, expect, expectTypeOf, it, vi } from 'vitest';
 import type { FeatureTypeRenderer, FrameDrawContext } from '../../extension/renderers.js';
 import type { Store } from '../../store/store.js';
 import type { Feature as StoredFeature } from '../../store/types.js';
+import { writesOf } from '../../test-support/writes.js';
 import { createMapStub, STORE_KINDS } from '../../test-utils.js';
 import type { TerrainContext } from '../../view/terrain/context.js';
 import type { Draw } from '../draw.js';
@@ -233,7 +234,7 @@ describe.each(STORE_KINDS)('the look of a custom type over %s', (_, makeStore) =
 
   it('takes the color of the layer rule as its fill, and keeps its outline', () => {
     const view = open(makeStore(), [featureOf('c', 'board')]);
-    view.draw.layers.update('l', { styleRule: { kind: 'single', color: '#00ff00' } });
+    writesOf(view.draw).layers.update('l', { styleRule: { kind: 'single', color: '#00ff00' } });
     expect(view.draw.features.getAppliedStyle('c')).toMatchObject({
       ...BOARD_LOOK,
       fillColor: '#00ff00',
@@ -242,7 +243,7 @@ describe.each(STORE_KINDS)('the look of a custom type over %s', (_, makeStore) =
 
   it('takes the style of the feature over the layer rule', () => {
     const view = open(makeStore(), [featureOf('c', 'board', { fillColor: '#123456' })]);
-    view.draw.layers.update('l', { styleRule: { kind: 'single', color: '#00ff00' } });
+    writesOf(view.draw).layers.update('l', { styleRule: { kind: 'single', color: '#00ff00' } });
     expect(view.draw.features.getAppliedStyle('c')).toMatchObject({
       ...BOARD_LOOK,
       fillColor: '#123456',
@@ -260,7 +261,7 @@ describe.each(STORE_KINDS)('the look of a custom type over %s', (_, makeStore) =
     };
     expect(view.draw.features.getAppliedStyle('p')).toMatchObject(defaults);
     expect(view.draw.features.getAppliedStyle('q')).toMatchObject(defaults);
-    view.draw.layers.update('l', { styleRule: { kind: 'single', color: '#00ff00' } });
+    writesOf(view.draw).layers.update('l', { styleRule: { kind: 'single', color: '#00ff00' } });
     // A type of points that declares no channel: the point, as a built-in point
     expect(view.draw.features.getAppliedStyle('p')).toMatchObject({
       ...defaults,
@@ -274,7 +275,7 @@ describe.each(STORE_KINDS)('the look of a custom type over %s', (_, makeStore) =
 
   it('takes the stroke of a type of lines and the fill of a type of areas that declare none', () => {
     const view = open(makeStore(), [featureOf('t', 'trail'), featureOf('a', 'plot')]);
-    view.draw.layers.update('l', { styleRule: { kind: 'single', color: '#00ff00' } });
+    writesOf(view.draw).layers.update('l', { styleRule: { kind: 'single', color: '#00ff00' } });
     expect(view.draw.features.getAppliedStyle('t')).toMatchObject({
       strokeColor: '#00ff00',
       fillColor: '#ff0077',
@@ -287,7 +288,7 @@ describe.each(STORE_KINDS)('the look of a custom type over %s', (_, makeStore) =
 
   it('takes the channel a type declares over the one of its geometry', () => {
     const view = open(makeStore(), [featureOf('s', 'swath')]);
-    view.draw.layers.update('l', { styleRule: { kind: 'single', color: '#00ff00' } });
+    writesOf(view.draw).layers.update('l', { styleRule: { kind: 'single', color: '#00ff00' } });
     expect(view.draw.features.getAppliedStyle('s')).toMatchObject({
       fillColor: '#00ff00',
     });
@@ -300,7 +301,7 @@ describe.each(STORE_KINDS)('the look of a custom type over %s', (_, makeStore) =
       featureOf('d', 'board', { strokeWidth: 3 }),
       featureOf('p', 'pin'),
     ]);
-    view.draw.layers.update('l', { styleRule: { kind: 'single', color: '#00ff00' } });
+    writesOf(view.draw).layers.update('l', { styleRule: { kind: 'single', color: '#00ff00' } });
     for (const id of ['c', 'd', 'p']) {
       expect(drawnLook(view, id)).toEqual(view.draw.features.getAppliedStyle(id));
     }
@@ -316,9 +317,9 @@ describe.each(STORE_KINDS)('the look of a custom type over %s', (_, makeStore) =
     // The next frame reads the same look while nothing changed
     expect(drawnLook(view, 'c')).toBe(first);
     // A change of the rule, then of the style, is read in the next frame
-    view.draw.layers.update('l', { styleRule: { kind: 'single', color: '#00ff00' } });
+    writesOf(view.draw).layers.update('l', { styleRule: { kind: 'single', color: '#00ff00' } });
     expect(drawnLook(view, 'c').fillColor).toBe('#00ff00');
-    view.draw.features.update('c', { style: { fillColor: '#0000ff' } });
+    writesOf(view.draw).features.update('c', { style: { fillColor: '#0000ff' } });
     expect(drawnLook(view, 'c').fillColor).toBe('#0000ff');
     expect(drawnLook(view, 'c')).toEqual(view.draw.features.getAppliedStyle('c'));
   });

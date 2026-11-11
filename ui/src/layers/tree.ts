@@ -28,16 +28,17 @@ import Group from '@lucide/svelte/icons/group';
 import Layers from '@lucide/svelte/icons/layers';
 import Shapes from '@lucide/svelte/icons/shapes';
 import type { IconComponent, IconSource, TreeNode } from '@sakuzu/kata/svelte';
-import type {
-  Dataset,
-  Group as DrawGroup,
-  Feature,
-  FeatureFilter,
-  FeatureStyleResolved,
-  FeatureType,
-  Layer,
-  SelectionType,
-  SelectionValue,
+import {
+  type Dataset,
+  type Group as DrawGroup,
+  type Feature,
+  type FeatureFilter,
+  type FeatureStyleResolved,
+  type FeatureType,
+  type Layer,
+  readFeature,
+  type SelectionType,
+  type SelectionValue,
 } from '@sakuzu/maplibre-gl-draw';
 import { fillWord, type Messages } from '../messages.js';
 
@@ -181,7 +182,7 @@ export function featureName(feature: Feature, m: Messages): string {
   const name = feature.properties?.name;
   if (typeof name === 'string' && name.trim() !== '') return name;
   if (typeof name === 'number') return String(name);
-  return typeLabel(feature.type, m);
+  return typeLabel(readFeature(feature).featureType, m);
 }
 
 /**
@@ -193,25 +194,26 @@ export function featureColor(
   style: FeatureStyleResolved | undefined,
   channel: 'point' | 'stroke' | 'fill',
 ): string | undefined {
-  if (!style || feature.type === 'Image') return undefined;
+  if (!style || readFeature(feature).featureType === 'Image') return undefined;
   if (channel === 'point') return style.pointColor;
   if (channel === 'stroke') return style.strokeColor;
   return style.fillColor;
 }
 
 function featureNode(source: TreeSource, feature: Feature, m: Messages): LayerTreeNode {
+  const fields = readFeature(feature);
   return {
     id: feature.id,
     kind: 'feature',
     name: featureName(feature, m),
-    icon: typeIcon(feature.type),
+    icon: typeIcon(fields.featureType),
     iconColor: featureColor(
       feature,
       source.features.getAppliedStyle(feature.id),
-      source.extensions.featureTypes.getStyleRuleChannel(feature.type),
+      source.extensions.featureTypes.getStyleRuleChannel(fields.featureType),
     ),
-    visible: shown(source, feature),
-    locked: feature.locked,
+    visible: shown(source, { id: feature.id, visible: fields.visible }),
+    locked: fields.locked,
     data: feature,
   };
 }
@@ -336,7 +338,8 @@ export function buildNodes(
       if (!options.features) continue;
       const feature = source.features.get(itemId);
       // A feature in a group shows under the group
-      if (!feature || (feature.groupId !== undefined && source.groups.get(feature.groupId))) {
+      const groupId = feature ? readFeature(feature).groupId : null;
+      if (!feature || (groupId !== null && source.groups.get(groupId))) {
         continue;
       }
       seen.add(feature.id);
@@ -421,8 +424,9 @@ export function canGroup(
   for (const id of ids) {
     const feature = getFeature(id);
     if (!feature) return false;
-    if (layerId === undefined) layerId = feature.layerId;
-    else if (feature.layerId !== layerId) return false;
+    const own = readFeature(feature).layerId ?? '';
+    if (layerId === undefined) layerId = own;
+    else if (own !== layerId) return false;
   }
   return true;
 }

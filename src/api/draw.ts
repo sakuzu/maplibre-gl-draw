@@ -10,7 +10,7 @@ import type { DatasetsCollection } from './datasets.js';
 import type { DocumentResource } from './document.js';
 import type { DrawingResource } from './drawing.js';
 import type { DrawEvents, Observable } from './events.js';
-import type { StoreView, UpdateSource } from './extension/store.js';
+import type { StoreView } from './extension/store.js';
 import type { ExtensionsCollections } from './extensions.js';
 import type { FeaturesCollection } from './features.js';
 import type { GroupsCollection } from './groups.js';
@@ -24,17 +24,14 @@ import type { RenderedResource } from './rendered.js';
 import type { SelectionResource, VertexSelectionResource } from './selection.js';
 import type { SketchesCollection } from './sketches.js';
 import type { GpuMemoryDiagnostics, LayerStackEntry, Mode, TerrainDiagnostics } from './state.js';
-
-/** The options of {@link Draw.transact} */
-export interface TransactOptions {
-  /** Where the writes come from; `'local'` when left out */
-  source?: UpdateSource;
-  /**
-   * Whether the writes ignore the locks of the features, groups and layers; read-only still
-   * refuses them. False when left out.
-   */
-  ignoreLocks?: boolean;
-}
+import type {
+  OpenResult,
+  OpenSource,
+  TaskOptions,
+  Transaction,
+  Write,
+  WriteOptions,
+} from './write.js';
 
 /** The options of {@link Draw.captureImage} */
 export interface CaptureImageOptions {
@@ -123,22 +120,63 @@ export interface Draw {
   /** Turns the interaction lock on or off. */
   setInteractionLocked(value: boolean): void;
 
-  // Transactions and events
+  // Writing
 
   /**
-   * Runs `fn` as one transaction: its writes arrive as one `change`.
+   * Makes one transaction: the writes of `fn` are kept in its transaction `tx` and committed at
+   * once when `fn` ends. A commit is one step of undo, one `change`, and one commit of the
+   * document.
    *
-   * In nested calls the source of the outermost call wins. With `ignoreLocks`, the writes of
-   * `fn` through the resources of this instance ignore the locks of the features, groups and
-   * layers, as a change applied again from a record needs; read-only still refuses them, and
-   * what the user does with the pointer and the keys still respects the locks. A nested call
-   * inside such a call ignores them as well.
+   * There is no lock: the commits are made in the order their functions end, and the later one
+   * stays. `fn` is not run again. A write of `fn` that fails fails the whole transaction (even when
+   * `fn` catches its error), and nothing is committed; a write whose target is gone when it is
+   * committed (a feature deleted from elsewhere) is left out, counted in `result.skipped`.
    *
-   * @param options - `source` names where the writes come from; `ignoreLocks` lets them
-   *   change locked features, groups and layers
-   * @returns What `fn` returns
+   * The commit is always made after `write` returns, for one feature as for many: a read made
+   * before the promise settles reads the document before it. Stopped by `signal` before it is
+   * committed, nothing is written. Keep `fn` short: make the long calls (a `fetch`) before it.
+   *
+   * Calling `write` in the synchronous part of `fn` throws `nested-write`: give `tx` to a function
+   * instead.
+   *
+   * ```ts
+   * const point = await draw.write((tx) =>
+   *   tx.features.create({ type: 'Feature', geometry: { type: 'Point', coordinates: [139.7, 35.7] }, properties: {} }),
+   * );
+   * ```
+   *
+   * @returns A promise of what `fn` returned, settled once the commit is made here
+   * @throws `DrawError` with the code `nested-write` when called in the synchronous part of the
+   *   function of another write
    */
-  transact<T>(fn: () => T, options?: TransactOptions): T;
+  write<T>(fn: (tx: Transaction) => T | Promise<T>, options?: WriteOptions): Write<T>;
+  /**
+   * Takes back the last commit of this client: a commit of its own, told with the source `undo`.
+   *
+   * @throws `DrawError` (the promise rejects) with the code `invalid-state` when there is nothing
+   *   to undo
+   */
+  undo(options?: TaskOptions): Write<void>;
+  /**
+   * Makes again the last commit undone, told with the source `redo`.
+   *
+   * @throws `DrawError` (the promise rejects) with the code `invalid-state` when there is nothing
+   *   to redo
+   */
+  redo(options?: TaskOptions): Write<void>;
+  /**
+   * Replaces the whole document with what a source holds: a document of the library replaces
+   * everything, GeoJSON replaces the features and the groups and keeps the layers. It is one
+   * `change` with the source `open`, and the steps of undo are dropped. A source is added to the
+   * document with `tx.import`.
+   *
+   * @throws `DrawError` (the promise rejects) with the code `unsupported-format` when the source
+   *   cannot be read, `invalid-input` when it is not valid, `not-editable` when the document is
+   *   read-only, or `invalid-state` when no source is given (there is no storage to open from)
+   */
+  open(source?: OpenSource, options?: TaskOptions): Promise<OpenResult>;
+
+  // Events
   /**
    * Subscribes to an event.
    *
@@ -196,7 +234,7 @@ export interface Draw {
   /**
    * Removes the instance from the map and releases everything it holds. A second call does
    * nothing; every other method of the instance and of its collections then throws `DrawError`
-   * with the code `invalid-state` (`document.load` rejects with it).
+   * with the code `invalid-state` (`write`, `open`, `undo` and `redo` reject with it).
    */
   destroy(): void;
 }

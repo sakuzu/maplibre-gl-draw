@@ -19,10 +19,11 @@ import { afterEach, describe, expect, it } from 'vitest';
 import type { MouseNormalizedEvent } from '../../dispatcher/types.js';
 import { DRAW_PROPERTY_KEYS } from '../../shared/properties.js';
 import { MemoryContractStore } from '../../store/memory.js';
+import { writesOf } from '../../test-support/writes.js';
 import { createMapStub } from '../../test-utils.js';
 import type { Draw } from '../draw.js';
 import type { Store } from '../extension/store.js';
-import type { Feature, Layer } from '../model.js';
+import type { StoredFeature as Feature, Layer } from '../model.js';
 import { createDrawOnEngine } from './create-draw.js';
 import type { Engine } from './engine.js';
 import { createEngine } from './engine.js';
@@ -129,8 +130,8 @@ function inputs(createdZoom: number, path: [number, number][] = LINE_PATH) {
 function throughTheInstance(createdZoom: number, path?: [number, number][]) {
   const created = create();
   const { line, polygon } = inputs(createdZoom, path);
-  const l = created.draw.features.create(line);
-  const g = created.draw.features.create(polygon);
+  const l = writesOf(created.draw).features.create(line);
+  const g = writesOf(created.draw).features.create(polygon);
   if (!l || !g) throw new Error('not created');
   return { ...created, lineId: l.id, polygonId: g.id };
 }

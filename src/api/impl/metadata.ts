@@ -6,6 +6,7 @@
  */
 
 import type { MetadataResource } from '../metadata.js';
+import type { Metadata } from '../model.js';
 import type { ResourceDeps } from './shared.js';
 import { optionalString, requireRecord } from './shared.js';
 
@@ -14,7 +15,9 @@ import { optionalString, requireRecord } from './shared.js';
  *
  * @internal
  */
-export function createMetadata(deps: Pick<ResourceDeps, 'store'>): MetadataResource {
+export function createMetadata(
+  deps: Pick<ResourceDeps, 'store'>,
+): MetadataResource & { update(patch: Partial<Metadata>): Metadata | null } {
   const { store } = deps;
   return {
     get: () => store.getMetadata(),

@@ -17,12 +17,13 @@
 
 import type { Browser, Page } from 'playwright-core';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import type { DatasetRow, FeatureInput } from '../index.js';
+import type { DatasetRow, StoredFeatureInput as FeatureInput } from '../index.js';
 import { browserTimeout } from '../test-utils.js';
 import {
   type Bundle,
   bundlePage,
   type Camera,
+  type E2EWrites,
   launchBrowser,
   openMapPage,
   settle,
@@ -95,11 +96,13 @@ afterAll(async () => {
 async function clear(): Promise<void> {
   await page.evaluate(() => {
     const { draw } = window as unknown as TestWindow;
-    draw.features.deleteMany(draw.features.list().map((feature) => feature.id));
+    (window as unknown as E2EWrites).e2e
+      .writesOf(draw)
+      .features.deleteMany(draw.features.list().map((feature) => feature.id));
     draw.datasets.removeMany(draw.datasets.list().map((dataset) => dataset.id));
     // A solid line on the plain keeps the drape in use whatever else is on the map, so every
     // test runs on a frame the drape paints
-    draw.features.create({
+    (window as unknown as E2EWrites).e2e.writesOf(draw).features.create({
       type: 'LineString',
       geometry: {
         type: 'LineString',
@@ -310,7 +313,10 @@ type Stroke = 'solid' | 'dashed';
 async function createFeature(feature: FeatureInput): Promise<string> {
   // Given as unknown: the type of the values of the properties is too deep for the arguments
   const id = await page.evaluate(
-    (f) => (window as unknown as TestWindow).draw.features.create(f as FeatureInput)?.id ?? null,
+    (f) =>
+      (window as unknown as E2EWrites).e2e
+        .writesOf((window as unknown as TestWindow).draw)
+        .features.create(f as FeatureInput)?.id ?? null,
     feature as unknown,
   );
   if (id === null) throw new Error('the feature was not added');

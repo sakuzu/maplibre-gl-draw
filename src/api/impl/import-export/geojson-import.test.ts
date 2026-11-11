@@ -327,9 +327,9 @@ describe('loadGeoJSON', () => {
       expect(coordinatesOf(store.getFeature(result.featureIds[0]))).toEqual([1, 2]);
     });
 
-    it('keeps the ring orientation as given', async () => {
-      // RFC 7946 asks parsers not to reject rings against the right-hand rule, and nothing
-      // in the library depends on the orientation, so a round trip stays exact
+    it('puts the rings in the right-hand rule, the outer ring counterclockwise and the holes clockwise', async () => {
+      // RFC 7946 asks parsers not to reject rings against the right-hand rule: they are read,
+      // and put in it as they are written
       const clockwiseOuter = [
         [0, 0],
         [0, 10],
@@ -352,8 +352,11 @@ describe('loadGeoJSON', () => {
       );
 
       const polygon = coordinatesOf(store.getFeature(result.featureIds[0])) as number[][][];
-      expect(signedArea(polygon[0])).toBeLessThan(0);
-      expect(signedArea(polygon[1])).toBeGreaterThan(0);
+      expect(signedArea(polygon[0])).toBeGreaterThan(0);
+      expect(signedArea(polygon[1])).toBeLessThan(0);
+      // The same positions, the other way round
+      expect(polygon[0]).toEqual([...clockwiseOuter].reverse());
+      expect(polygon[1]).toEqual([...counterclockwiseHole].reverse());
     });
 
     it('does not rewrite the input object', async () => {

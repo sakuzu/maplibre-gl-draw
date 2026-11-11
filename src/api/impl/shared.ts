@@ -12,6 +12,10 @@ import { isFeatureLocked, isGroupLocked } from '../../store/lock.js';
 import type { Store } from '../../store/store.js';
 import type { Feature, Group, Layer, SelectionType } from '../../store/types.js';
 import { DrawError } from '../errors.js';
+
+/** The options of a DrawError: what failed underneath, and the IDs it is about */
+type DrawErrorOptions = ConstructorParameters<typeof DrawError>[2];
+
 import type { FeatureStyleResolved } from '../model.js';
 
 /**
@@ -50,18 +54,18 @@ export interface ResourceDeps {
 /** The error for an ID that names nothing of its kind */
 export function notFound(kind: string, id: unknown): DrawError {
   return new DrawError('not-found', `There is no ${kind} with the ID ${JSON.stringify(id)}`, {
-    id,
+    ids: typeof id === 'string' ? [id] : [],
   });
 }
 
 /** The error for an input of the wrong shape or value */
-export function invalidInput(message: string, details?: unknown): DrawError {
-  return new DrawError('invalid-input', message, details);
+export function invalidInput(message: string, options?: DrawErrorOptions): DrawError {
+  return new DrawError('invalid-input', message, options);
 }
 
 /** The error for a call the state of the instance or of its Store does not allow */
-export function invalidState(message: string, details?: unknown): DrawError {
-  return new DrawError('invalid-state', message, details);
+export function invalidState(message: string, options?: DrawErrorOptions): DrawError {
+  return new DrawError('invalid-state', message, options);
 }
 
 // ============================================================================
@@ -184,13 +188,15 @@ export function requireNewId(
 ): string {
   const id = requireId(value);
   if (isTaken(store, id) || pending.has(id) || alsoTaken?.(id) === true) {
-    throw new DrawError('already-exists', `The ID ${JSON.stringify(id)} is already taken`, { id });
+    throw new DrawError('already-exists', `The ID ${JSON.stringify(id)} is already taken`, {
+      ids: [id],
+    });
   }
   if (store.acceptsId?.(id) === false) {
     throw new DrawError(
       'invalid-input',
       `The Store does not take the ID ${JSON.stringify(id)} (leave the ID out, and one is made)`,
-      { id },
+      { ids: [id] },
     );
   }
   return id;

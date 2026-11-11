@@ -10,10 +10,11 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { transformBulkSelection } from '../../operations/bulk-transform.js';
 import type { Store } from '../../store/store.js';
 import { createTableStore } from '../../store/table-memory.js';
+import { writesOf } from '../../test-support/writes.js';
 import { createMapStub } from '../../test-utils.js';
 import type { Draw } from '../draw.js';
 import type { Change } from '../events.js';
-import type { FeatureInput } from '../model.js';
+import type { StoredFeatureInput as FeatureInput } from '../model.js';
 import { createDrawOnEngine } from './create-draw.js';
 import { createEngine } from './engine.js';
 
@@ -56,7 +57,7 @@ beforeAll(() => {
       properties: { n: i },
     });
   }
-  draw.features.createMany(inputs);
+  writesOf(draw).features.createMany(inputs);
   draw.on('change', (change) => changes.push(change));
 });
 
@@ -84,17 +85,20 @@ describe('one change per commit, over a layer of 57,144 rows', () => {
 
   it('tells every row colored in bulk in one change', () => {
     draw.selection.setAll();
-    const colored = told(() => draw.selection.update({ style: { pointColor: '#ff0000' } }));
+    const colored = told(() =>
+      writesOf(draw).selection.update({ style: { pointColor: '#ff0000' } }),
+    );
     expect(colored).toHaveLength(1);
     expect(colored[0].features.updated).toHaveLength(COUNT);
   });
 
   it('tells one feature edited in one change, with the feature before it', () => {
     draw.selection.clear();
+    // `previous` gives the feature in the public shape, as `draw.features.get` reads it
     const before = draw.features.get('f1');
     const previous: unknown[] = [];
     const stop = draw.on('change', (change) => previous.push(change.previous('f1')));
-    const edited = told(() => draw.features.update('f1', { properties: { n: -1 } }));
+    const edited = told(() => writesOf(draw).features.update('f1', { properties: { n: -1 } }));
     stop();
     expect(edited).toHaveLength(1);
     expect(edited[0].features).toEqual({ created: [], updated: ['f1'], deleted: [], placed: [] });

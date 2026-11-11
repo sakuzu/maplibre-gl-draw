@@ -18,6 +18,7 @@ import type { FeatureTables, RowField } from '../api/tables.js';
 import { groupsInStackingOrder, groupsInStackingOrderOf } from '../store/item-lists.js';
 import { createTableStore } from '../store/table-memory.js';
 import { FEATURE_TABLE_COLUMNS } from '../table/tabane/columns.js';
+import { writesOf } from '../test-support/writes.js';
 import {
   createMapStub,
   featureRowDataBuilder as createPageDataBuilder,
@@ -279,13 +280,13 @@ describe('an edit of a few items of a layer held as rows', () => {
       vi.spyOn(RowTable.prototype, 'rowOrder'),
       vi.spyOn(RowTable.prototype, 'itemsOf'),
     ];
-    const group = draw.groups.create({ featureIds: members });
-    draw.features.moveMany(members.slice(0, 10), { layerId: 'rows', above: null });
-    if (group) draw.groups.delete(group.id);
-    draw.features.moveMany(members, { layerId: 'rows', below: null });
-    draw.features.moveMany(many, { layerId: 'rows', above: null });
-    const again = draw.groups.create({ featureIds: members.slice(0, 5) });
-    if (again) draw.groups.move(again.id, { layerId: 'rows', below: null });
+    const group = writesOf(draw).groups.create({ featureIds: members });
+    writesOf(draw).features.moveMany(members.slice(0, 10), { layerId: 'rows', above: null });
+    if (group) writesOf(draw).groups.delete(group.id);
+    writesOf(draw).features.moveMany(members, { layerId: 'rows', below: null });
+    writesOf(draw).features.moveMany(many, { layerId: 'rows', above: null });
+    const again = writesOf(draw).groups.create({ featureIds: members.slice(0, 5) });
+    if (again) writesOf(draw).groups.move(again.id, { layerId: 'rows', below: null });
     const handle = internals.groups.handleOfId(again?.id ?? '');
     store.transact(
       () =>

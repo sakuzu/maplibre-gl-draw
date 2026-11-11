@@ -17,6 +17,7 @@
   import type { Layer, StyleRule } from '@sakuzu/maplibre-gl-draw';
   import type { InspectorDraw } from '../inspector/types.js';
   import type { Messages } from '../messages.js';
+  import { deleteSelection, write } from '../writes.js';
 
   // LayerInspector: a layer in kata's InspectorFrame: its name, changed where it stands, its
   // opacity, whether it is visible and whether it is locked. Its style rule is shown and not
@@ -78,14 +79,16 @@
 
   function onchange(key: string, value: unknown) {
     if (key === 'opacity' && typeof value === 'number') {
-      draw.layers.update(layer.id, { opacity: Math.min(1, Math.max(0, value / 100)) });
+      void write(draw, (tx) =>
+        tx.layers.update(layer.id, { opacity: Math.min(1, Math.max(0, value / 100)) }),
+      );
     } else if (key === 'visible' || key === 'locked') {
-      draw.layers.update(layer.id, { [key]: value === true });
+      void write(draw, (tx) => tx.layers.update(layer.id, { [key]: value === true }));
     }
   }
 
   function rename(name: string) {
-    if (name !== '') draw.layers.update(layer.id, { name });
+    if (name !== '') void write(draw, (tx) => tx.layers.update(layer.id, { name }));
   }
 </script>
 
@@ -95,7 +98,7 @@
       <Button
         variant="danger"
         disabled={readOnly || onlyLayer || layer.locked}
-        onclick={() => draw.selection.delete()}
+        onclick={() => void deleteSelection(draw)}
       >
         {m.deleteLayer}
       </Button>

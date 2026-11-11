@@ -34,6 +34,7 @@ import { DrawStore } from '../../store/draw-store.js';
 import type { Store } from '../../store/store.js';
 import { TableContractStore } from '../../store/table-memory.js';
 import type { Feature } from '../../store/types.js';
+import { writesOf } from '../../test-support/writes.js';
 import {
   createMapStub,
   createSyntheticInput,
@@ -591,7 +592,7 @@ describe.each(STORE_KINDS)('the drags of the select mode over %s', (_, makeStore
 
     it('a feature of a hidden layer', () => {
       const view = open(makeStore(), [A(), B()]);
-      view.draw.layers.update('l', { visible: false });
+      writesOf(view.draw).layers.update('l', { visible: false });
       select(view, IN_A);
       expect(view.draw.selection.value.ids).toEqual([]);
       const before = view.store.getFeature('a')?.geometry;

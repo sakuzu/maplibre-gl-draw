@@ -8,9 +8,9 @@
 import { holdsLockedItem } from '../../operations/selection-operations.js';
 import type { Store } from '../../store/store.js';
 import type { Layer as StoredLayer, StyleRule } from '../../store/types.js';
-import type { LayersCollection } from '../layers.js';
 import type { Layer, LayerFilter, LayerInput, LayerPatch } from '../model.js';
 import { layerItemCount, layerItemIds, rangeOf } from './item-reads.js';
+import type { LayerResource } from './layer-resource.js';
 import type { ResourceDeps } from './shared.js';
 import {
   filterEntries,
@@ -53,7 +53,7 @@ const FILTER_KEYS = ['visible', 'locked'] as const;
 export function createLayers(
   deps: ResourceDeps,
   isStackEntry: (id: string) => boolean = () => false,
-): LayersCollection {
+): LayerResource {
   const { store } = deps;
 
   const require = (id: unknown): StoredLayer => {
@@ -286,8 +286,12 @@ export function prepareLayer(
   };
 }
 
-/** Checks a patch and builds the updates of the Store; throws DrawError on a wrong patch */
-function prepareLayerPatch(patch: LayerPatch): Partial<StoredLayer> {
+/**
+ * Checks a patch and builds the updates of the Store; throws DrawError on a wrong patch
+ *
+ * @internal
+ */
+export function prepareLayerPatch(patch: LayerPatch): Partial<StoredLayer> {
   requireRecord(patch, 'The patch');
   const record = patch as unknown as Record<string, unknown>;
   onlyKeys(record, PATCH_KEYS, 'The patch');

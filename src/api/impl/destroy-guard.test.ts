@@ -38,7 +38,7 @@ describe('guardAfterDestroy', () => {
       expect(thrown).toBeInstanceOf(DrawError);
       expect((thrown as DrawError).code).toBe('invalid-state');
       expect((thrown as DrawError).message).toBe('the row is not read');
-      expect((thrown as DrawError).details).toEqual({ cause: tables });
+      expect((thrown as { cause?: unknown }).cause).toBe(tables);
     }
   });
 

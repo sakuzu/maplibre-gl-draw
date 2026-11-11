@@ -34,13 +34,13 @@ import {
   selectionValueOf,
 } from '../../store/selection-value.js';
 import type { Feature as StoredFeature, VertexRef } from '../../store/types.js';
-import type { FeaturesCollection } from '../features.js';
-import type { GroupsCollection } from '../groups.js';
-import type { Feature, FeaturePatch, FeatureStyleSample } from '../model.js';
-import type { SelectionResource, VertexSelectionResource } from '../selection.js';
+import type { Feature, StoredFeaturePatch as FeaturePatch, FeatureStyleSample } from '../model.js';
+import type { VertexSelectionResource } from '../selection.js';
 import type { SelectionTarget, SelectionType, SelectionValue } from '../state.js';
 import type { EventHub } from './events.js';
 import { observe } from './events.js';
+import type { FeatureResource } from './feature-resource.js';
+import { toFeature } from './feature-shape.js';
 import {
   checkSharedPatch,
   featureMatcher,
@@ -48,7 +48,9 @@ import {
   featureRowMatcher,
   pageOf,
 } from './features.js';
+import type { GroupResource } from './group-resource.js';
 import { moveBulkSelection } from './placement.js';
+import type { SelectionWrites } from './selection-resource.js';
 import type { ResourceDeps } from './shared.js';
 import {
   featureLocked,
@@ -75,9 +77,9 @@ const SELECTION_TYPES: readonly SelectionType[] = ['feature', 'group', 'layer'];
  */
 export function createSelection(
   deps: ResourceDeps,
-  collections: { features: FeaturesCollection; groups: GroupsCollection },
+  collections: { features: FeatureResource; groups: GroupResource },
   events: EventHub,
-): SelectionResource {
+): SelectionWrites {
   const { store } = deps;
   const observable = observe(
     events,
@@ -132,7 +134,7 @@ export function createSelection(
   };
 
   /** The rows selected in bulk that match a filter, in stacking order */
-  const matchingRows = (filter: Parameters<SelectionResource['count']>[0]): number[] => {
+  const matchingRows = (filter: Parameters<SelectionWrites['count']>[0]): number[] => {
     const found = bulkRows();
     if (!found) return [];
     const matches = featureRowMatcher(store, filter);
@@ -145,10 +147,7 @@ export function createSelection(
   };
 
   /** The first rows selected in bulk that match a filter, in stacking order */
-  const firstRows = (
-    filter: Parameters<SelectionResource['count']>[0],
-    limit: number,
-  ): number[] => {
+  const firstRows = (filter: Parameters<SelectionWrites['count']>[0], limit: number): number[] => {
     const found = bulkRows();
     const layerIds = store.getSelection().bulk?.layerIds;
     const matches = found && layerIds ? featureRowMatcher(store, filter) : null;
@@ -315,7 +314,7 @@ export function createSelection(
         readWithoutKeeping(store.tables, () => {
           for (let i = from; i < rows.length && out.length < page.limit; i++) {
             const feature = store.getFeature(store.tables?.getRowId(rows[i]) as string);
-            if (feature) out.push(feature as Feature);
+            if (feature) out.push(toFeature(feature));
           }
         });
         return out;
@@ -328,7 +327,7 @@ export function createSelection(
         features = features.slice(at + 1);
       }
       features = features.filter(matches);
-      return (page === undefined ? features : features.slice(0, page.limit)) as Feature[];
+      return (page === undefined ? features : features.slice(0, page.limit)).map(toFeature);
     },
 
     count(filter) {

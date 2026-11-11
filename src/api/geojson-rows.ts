@@ -8,7 +8,7 @@
 import { type CoordinateDimensions, unionDims, type Value } from '@sakuzu/tabane';
 import type { Feature as GeoJSONFeature, Geometry } from 'geojson';
 import { readGeoJSONFeature } from '../feature-table/geojson-read.js';
-import type { FeatureStyle, SkippedFeature } from './model.js';
+import type { FeatureStyle } from './model.js';
 
 /**
  * A row read from a feature of GeoJSON: the values of a row of a layer, without its id
@@ -55,7 +55,7 @@ export interface GeoJSONRows {
   /** The rows, in the order of the input */
   readonly rows: GeoJSONRow[];
   /** The features of the input that were not read, in the order of the input, and why */
-  readonly skipped: SkippedFeature[];
+  readonly skipped: { readonly index: number; readonly reason: string }[];
   /**
    * The dimensions that hold the positions of every row (`xy` for none): the rows are written to a
    * layer of these dimensions or more (`FeatureTablesOptions.dimensionsOf`; `unionDims` of
@@ -65,7 +65,7 @@ export interface GeoJSONRows {
 }
 
 /**
- * Reads features of GeoJSON as the values of rows of a layer, as `document.load` reads them
+ * Reads features of GeoJSON as the values of rows of a layer, as `tx.import` reads them
  *
  * The type comes back from `maplibre-gl-draw:featureType`, the style from
  * `maplibre-gl-draw:style` (else from the keys of simplestyle-spec), `visible` and `locked` from
@@ -91,7 +91,7 @@ export interface GeoJSONRows {
  */
 export function rowsOfGeoJSON(features: readonly GeoJSONFeature[]): GeoJSONRows {
   const rows: GeoJSONRow[] = [];
-  const skipped: SkippedFeature[] = [];
+  const skipped: { index: number; reason: string }[] = [];
   let dimensions: CoordinateDimensions = 'xy';
   features.forEach((feature: unknown, index) => {
     const read = readGeoJSONFeature(feature, false, 'all');

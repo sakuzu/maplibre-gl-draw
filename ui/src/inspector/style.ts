@@ -11,15 +11,18 @@
 //
 // The opacities are fractions from 0 to 1 in core and percentages from 0 to 100 on screen.
 
-import type {
-  Feature,
-  FeatureStyle,
-  FeatureStyleResolved,
-  FeatureType,
-  LineStyle,
-  PointShape,
+import {
+  type Feature,
+  type FeaturePatch,
+  type FeatureStyle,
+  type FeatureStyleResolved,
+  type FeatureType,
+  type LineStyle,
+  type PointShape,
+  readFeature,
 } from '@sakuzu/maplibre-gl-draw';
 import type { Messages } from '../messages.js';
+import { write } from '../writes.js';
 import type { InspectorDraw, InspectorField } from './types.js';
 
 /** A key of the style that the inspector edits */
@@ -165,10 +168,12 @@ export function displayValue(key: StyleKey, value: unknown): unknown {
  * The keys the features share, in the order of the first one's: the keys of every type of the
  * selection. Empty when one of them is of a custom type, or when there is no feature
  */
-export function sharedStyleKeys(features: readonly Pick<Feature, 'type'>[]): StyleKey[] {
+export function sharedStyleKeys(features: readonly Feature[]): StyleKey[] {
   if (features.length === 0) return [];
   const [first, ...rest] = features;
-  return styleKeys(first.type).filter((key) => rest.every((f) => styleKeys(f.type).includes(key)));
+  return styleKeys(readFeature(first).featureType).filter((key) =>
+    rest.every((f) => styleKeys(readFeature(f).featureType).includes(key)),
+  );
 }
 
 /**
@@ -189,7 +194,9 @@ export function styleFields(
 ): InspectorField[] {
   const keys = sharedStyleKeys(features);
   if (keys.length === 0) return [];
-  const looks = features.map((f) => applied(f.id) ?? (f.style as Partial<FeatureStyleResolved>));
+  const looks = features.map(
+    (f) => applied(f.id) ?? (readFeature(f).style as Partial<FeatureStyleResolved>),
+  );
   const shape = shapes(messages);
   const label = labels(messages);
   return keys.map((key) => {
@@ -224,11 +231,11 @@ export function stylePatch(key: string, value: unknown): FeatureStyle {
  * rule and the defaults. Keys the features share no field for (keys of an extension) are left
  * out, so a reset does not touch them
  */
-export function ownStyleKeys(features: readonly Pick<Feature, 'type' | 'style'>[]): StyleKey[] {
+export function ownStyleKeys(features: readonly Feature[]): StyleKey[] {
   const fields = new Set(sharedStyleKeys(features));
   const out = new Set<StyleKey>();
   for (const f of features) {
-    for (const [key, value] of Object.entries(f.style ?? {})) {
+    for (const [key, value] of Object.entries(readFeature(f).style)) {
       if (value !== undefined && fields.has(key as StyleKey)) out.add(key as StyleKey);
     }
   }
@@ -243,14 +250,26 @@ export function resetPatch(keys: readonly string[]): FeatureStyle {
 }
 
 /**
- * Writes a style into features, in one transaction
+ * Writes a style into features, in one transaction: the keys given set, the keys given `undefined`
+ * removed
  *
- * @returns The features after the change, or null when core refused it (read-only, a lock)
+ * @returns Whether it was written (false when core refused it: read-only, a lock)
  */
 export function applyStyle(
-  draw: Pick<InspectorDraw, 'transact' | 'features'>,
+  draw: Pick<InspectorDraw, 'write'>,
   ids: readonly string[],
   style: FeatureStyle,
-): Feature[] | null {
-  return draw.transact(() => draw.features.updateMany(ids.map((id) => ({ id, patch: { style } }))));
+): Promise<boolean> {
+  const set: Record<string, unknown> = {};
+  const unset: string[] = [];
+  for (const [key, value] of Object.entries(style)) {
+    if (value === undefined) unset.push(key);
+    else set[key] = value;
+  }
+  const patch = {
+    ...(Object.keys(set).length > 0 && { properties: { 'maplibre-gl-draw:style': set } }),
+    ...(unset.length > 0 && { unset: { style: unset } }),
+  } as FeaturePatch;
+  if (Object.keys(patch).length === 0 || ids.length === 0) return Promise.resolve(false);
+  return write(draw, (tx) => tx.features.update(ids.map((id) => ({ id, patch }))));
 }

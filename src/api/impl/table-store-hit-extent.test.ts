@@ -15,6 +15,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Store } from '../../store/store.js';
 import { createTableStore } from '../../store/table-memory.js';
 import type { Feature } from '../../store/types.js';
+import { writesOf } from '../../test-support/writes.js';
 import { createMapStub, createSyntheticInput } from '../../test-utils.js';
 import type { Draw } from '../draw.js';
 import type { FeatureTypeDefinition } from '../extension/feature-type.js';
@@ -113,7 +114,7 @@ describe('the extent a click finds a row by', () => {
     store.createFeature(point('b', 'box', [1, 1]));
     expect(clickAfresh([1.4, 0.6])).toEqual(['b']);
     // Moved, and let go of: found at the box of its new place
-    draw.features.update('b', { geometry: { type: 'Point', coordinates: [2, 1] } });
+    writesOf(draw).features.update('b', { geometry: { type: 'Point', coordinates: [2, 1] } });
     expect(clickAfresh([2.4, 1.4])).toEqual(['b']);
     expect(clickAfresh([1.4, 0.6])).toEqual([]);
   });
@@ -166,13 +167,13 @@ describe('the rows a box finds', () => {
     expect(scan(bbox, 'any').sort()).toEqual(['b', 'p']);
     expect(drawn(bbox)).toEqual(['b', 'p']);
     // In the order of the layer, whatever it is
-    draw.features.move('b', { layerId: 'rows', below: 'p', above: null });
+    writesOf(draw).features.move('b', { layerId: 'rows', below: 'p', above: null });
     expect(scan(bbox, 'layer')).toEqual(['p', 'b']);
     expect(drawn(bbox)).toEqual(['p', 'b']);
     // A row hidden is not drawn; a row deleted is not read
-    draw.features.update('p', { visible: false });
+    writesOf(draw).features.update('p', { visible: false });
     expect(drawn(bbox)).toEqual(['b']);
-    draw.features.delete('b');
+    writesOf(draw).features.delete('b');
     expect(scan(bbox, 'layer')).toEqual(['p']);
     expect(scan(bbox, 'any')).toEqual(['p']);
   });
@@ -181,7 +182,7 @@ describe('the rows a box finds', () => {
     store.createFeature(point('b', 'box', [1, 1]));
     // Selected, then moved
     clickAfresh([1, 1]);
-    draw.features.update('b', { geometry: { type: 'Point', coordinates: [2, 1] } });
+    writesOf(draw).features.update('b', { geometry: { type: 'Point', coordinates: [2, 1] } });
     expect(scan([2.3, 1.3, 2.45, 1.45], 'any')).toEqual(['b']);
     expect(scan([1.3, 1.3, 1.45, 1.45], 'layer')).toEqual([]);
   });

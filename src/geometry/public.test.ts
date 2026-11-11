@@ -11,7 +11,7 @@
 
 import type { Feature, LineString, MultiPolygon, Polygon, Position } from 'geojson';
 import { describe, expect, it } from 'vitest';
-import type { Feature as DrawnFeature } from '../api/model.js';
+import type { StoredFeature as DrawnFeature } from '../api/model.js';
 import {
   along,
   area,
@@ -815,8 +815,9 @@ describe('bbox, metersToDegrees and pixelsToMeters', () => {
 
 describe('inputs that carry a geometry', () => {
   /**
-   * A feature as the drawing returns it: a `geometry` field, and a `type` that names the type
-   * of the feature (the type of its geometry by default), not a GeoJSON `Feature`
+   * A feature as the Store of the drawing holds it (`StoredFeature`): a `geometry` field, and a
+   * `type` that names the type of the feature (the type of its geometry by default), not a
+   * GeoJSON `Feature`
    */
   function drawn(
     id: string,

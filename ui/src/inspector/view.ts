@@ -10,12 +10,13 @@
 // description), then the tabs. The Style tab holds the fields of the style, the sections of the
 // application and the operations; the Attributes tab the list of the attributes.
 
-import type {
-  Feature,
-  FeatureStyleResolved,
-  FeatureType,
-  Group,
-  Layer,
+import {
+  type Feature,
+  type FeatureStyleResolved,
+  type FeatureType,
+  type Group,
+  type Layer,
+  readFeature,
 } from '@sakuzu/maplibre-gl-draw';
 import type { Messages } from '../messages.js';
 import type { FollowSource } from '../store.js';
@@ -77,7 +78,7 @@ export function readView(draw: InspectorDraw): InspectorView {
         kind: 'feature',
         feature,
         applied: draw.features.getAppliedStyle(feature.id),
-        layer: draw.layers.get(feature.layerId),
+        layer: draw.layers.get(readFeature(feature).layerId ?? ''),
         editable,
         readOnly,
         hidden: draw.hidden.has(feature.id),
@@ -176,10 +177,13 @@ export function typeLabel(type: FeatureType, m: Messages): string {
 
 /** The number of features of each type, in the order the types first appear */
 export function kindCounts(
-  features: readonly Pick<Feature, 'type'>[],
+  features: readonly Feature[],
   m: Messages,
 ): { label: string; count: number }[] {
   const counts = new Map<string, number>();
-  for (const f of features) counts.set(f.type, (counts.get(f.type) ?? 0) + 1);
+  for (const f of features) {
+    const type = readFeature(f).featureType;
+    counts.set(type, (counts.get(type) ?? 0) + 1);
+  }
   return [...counts].map(([type, count]) => ({ label: typeLabel(type, m), count }));
 }

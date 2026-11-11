@@ -13,7 +13,8 @@ import { deleteFeaturesAndGroups, featuresInOrder } from '../../../store/feature
 import { MemoryStore } from '../../../store/memory.js';
 import type { Store } from '../../../store/store.js';
 import { createTableStore } from '../../../store/table-memory.js';
-import type { Feature, Group, Layer } from '../../../store/types.js';
+import type { Data, Feature, Group, Layer } from '../../../store/types.js';
+import { toFeature } from '../feature-shape.js';
 import { exportGeoJSON } from './geojson-export.js';
 import { exportNative, prepareNative } from './native-format.js';
 
@@ -65,6 +66,15 @@ beforeEach(() => {
   store.createFeature(point('f', 5));
 });
 
+/**
+ * The native export of a Store as `document.toJSON` writes it: its features GeoJSON Features, as
+ * a document of the version written is read
+ */
+function documentOf(from: Store): Data {
+  const data = exportNative(from);
+  return { ...data, features: data.features.map(toFeature) } as unknown as Data;
+}
+
 /** The ids of the features of a GeoJSON export, in its order */
 const idsOf = (collection: { features: Array<{ id?: unknown }> }): unknown[] =>
   collection.features.map((feature) => feature.id);
@@ -111,7 +121,7 @@ describe('the GeoJSON export of a Store of rows', () => {
 
   it('writes what the export of the same document held as objects writes', async () => {
     const objects = new MemoryStore();
-    const { write } = await prepareNative(exportNative(store), { store: objects });
+    const { write } = await prepareNative(documentOf(store), { store: objects });
     objects.transact(() => write());
     expect(exportGeoJSON(store)).toEqual(exportGeoJSON(objects));
     expect(exportGeoJSON(store, { layerIds: ['l1'] })).toEqual(
@@ -136,7 +146,7 @@ describe('the native export of a Store of rows', () => {
 
   it('loads into a Store of objects as the same document', async () => {
     const objects = new MemoryStore();
-    const { write } = await prepareNative(exportNative(store), { store: objects });
+    const { write } = await prepareNative(documentOf(store), { store: objects });
     objects.transact(() => write());
     expect(objects.listFeaturesInOrder().map((feature) => feature.id)).toEqual([
       'a',

@@ -34,6 +34,7 @@ import { DrawStore } from '../../store/draw-store.js';
 import type { Store } from '../../store/store.js';
 import { TableContractStore } from '../../store/table-memory.js';
 import type { Feature as StoredFeature } from '../../store/types.js';
+import { writesOf } from '../../test-support/writes.js';
 import { createMapStub, planeMetersPerPixel, STORE_KINDS } from '../../test-utils.js';
 import type { TerrainContext } from '../../view/terrain/context.js';
 import type { AuxiliaryHandleContext } from '../../view/ui/auxiliary-handles.js';
@@ -420,7 +421,7 @@ describe('the handles of a footprint laid on the map, of features selected in bu
     expect(angles[0]).toBeCloseTo(30, 9);
     expect(angles[1]).toBeCloseTo(45, 9);
     expect(angles[3]).toBeCloseTo(30, 9);
-    expect(view.draw.features.get('a')).toBeDefined();
+    expect(writesOf(view.draw).features.get('a')).toBeDefined();
   });
 });
 
@@ -508,7 +509,7 @@ describe('the handles a custom type adds', () => {
     expect(view.store.getDragState()?.operation).toBe('move');
     // The selection UI asks for the handles of the feature drawn, which the drag moved
     const provider = view.engine.context.selectionScope.auxiliaryHandles.list()[0];
-    const moved = view.draw.rendered.get('c') as StoredFeature;
+    const moved = view.engine.context.shapes.get('c') as StoredFeature;
     const [x, y] = (moved.geometry as { coordinates: number[] }).coordinates;
     expect(x).toBeCloseTo(0.2, 9);
     expect(y).toBeCloseTo(0.1, 9);

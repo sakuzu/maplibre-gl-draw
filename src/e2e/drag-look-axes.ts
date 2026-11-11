@@ -47,7 +47,7 @@ import {
   shiftOf,
   square,
 } from './drag-scene.js';
-import { type Bundle, bundlePage, launchBrowser } from './harness.js';
+import { type Bundle, bundlePage, type E2EWrites, launchBrowser } from './harness.js';
 
 const ZOOM = 14;
 const STEPS = 8;
@@ -219,8 +219,11 @@ async function show(page: Page, group: Group, before: Group | null): Promise<voi
         map: import('maplibre-gl').Map;
       };
       w.draw.selection.clear();
-      if (remove.length > 0) w.draw.features.deleteMany(remove);
-      const created = w.draw.features.createMany(add.map((f) => ({ ...f, layerId: 'L' })) as never);
+      if (remove.length > 0)
+        (window as unknown as E2EWrites).e2e.writesOf(w.draw).features.deleteMany(remove);
+      const created = (window as unknown as E2EWrites).e2e
+        .writesOf(w.draw)
+        .features.createMany(add.map((f) => ({ ...f, layerId: 'L' })) as never);
       if (!created) throw new Error('the features were not created');
       w.map.jumpTo({ center, zoom });
     },

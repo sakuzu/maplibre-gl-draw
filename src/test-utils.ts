@@ -28,6 +28,7 @@ import { createAppliedStyles } from './api/impl/applied-style.js';
 import type { ModeServices } from './api/impl/contexts.js';
 import { createModeContext, createScreenContext } from './api/impl/contexts.js';
 import { createEventHub } from './api/impl/events.js';
+import { toFeature, toFeatureOrUndefined } from './api/impl/feature-shape.js';
 import { createFeatures, prepareFeatureInput } from './api/impl/features.js';
 import { createGroups } from './api/impl/groups.js';
 import { bridgeMode, createInputRoute } from './api/impl/input.js';
@@ -382,7 +383,13 @@ export function createModeHarness(options: {
   const groups = createGroups(deps);
   // The members of the draw instance the modes use; the rest is not needed without an engine
   const draw = {
-    features,
+    // Read in the public shape, as the instance reads them
+    features: {
+      ...features,
+      get: (id: string) => toFeatureOrUndefined(features.get(id)),
+      getMany: (ids: readonly string[]) => features.getMany(ids).map(toFeatureOrUndefined),
+      list: (...args: Parameters<typeof features.list>) => features.list(...args).map(toFeature),
+    },
     groups,
     layers: createLayers(deps),
     selection: createSelection(deps, { features, groups }, createEventHub()),

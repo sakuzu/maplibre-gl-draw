@@ -13,7 +13,7 @@
 
 import type { Browser, Page } from 'playwright-core';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import type { Feature } from '../index.js';
+import type { StoredFeature as Feature } from '../index.js';
 import type { ObjectLayer } from '../shared/types/model.js';
 import { coordinatesOf } from '../shared/utils/coordinates.js';
 import { browserTimeout } from '../test-utils.js';
@@ -24,6 +24,7 @@ import {
   click,
   drag,
   type E2EWindow,
+  type E2EWrites,
   features,
   launchBrowser,
   lngLatOf,
@@ -86,7 +87,9 @@ async function clearAll(page: Page): Promise<void> {
     const { draw } = window as unknown as E2EWindow;
     draw.setReadOnly(false);
     draw.setMode('select');
-    draw.features.deleteMany(draw.features.list().map((feature) => feature.id));
+    (window as unknown as E2EWrites).e2e
+      .writesOf(draw)
+      .features.deleteMany(draw.features.list().map((feature) => feature.id));
   });
   await settle(page);
 }
@@ -481,7 +484,7 @@ describe('a point with a companion under the real pointer', () => {
       const { draw } = window as unknown as E2EWindow;
       const w = window as unknown as { e2eRingClicks: string[] };
       w.e2eRingClicks = [];
-      const feature = draw.features.create({
+      const feature = (window as unknown as E2EWrites).e2e.writesOf(draw).features.create({
         type: 'Point',
         geometry: { type: 'Point', coordinates },
       });
@@ -573,7 +576,9 @@ describe('the snap indicator belongs to the input of the mode', () => {
     const target = await lngLatOf(page, at(0, 0));
     await page.evaluate((coordinates) => {
       const { draw } = window as unknown as E2EWindow;
-      draw.features.create({ type: 'Point', geometry: { type: 'Point', coordinates } });
+      (window as unknown as E2EWrites).e2e
+        .writesOf(draw)
+        .features.create({ type: 'Point', geometry: { type: 'Point', coordinates } });
       const w = window as unknown as { e2eSnaps: Array<string | null> };
       w.e2eSnaps = [];
       draw.on('snap.changed', ({ result }) => w.e2eSnaps.push(result?.target?.kind ?? null));
@@ -630,15 +635,17 @@ describe('the stacking order on a real map', () => {
       draw.options.update({ isExternalEntry: (id) => id.startsWith('base:') });
       const [first] = draw.layers.list();
       const itemsBefore = [...(first as ObjectLayer).items];
-      draw.layers.create({ id: 'e2e-second' });
+      (window as unknown as E2EWrites).e2e.writesOf(draw).layers.create({ id: 'e2e-second' });
       draw.datasets.add({ id: 'e2e-parcels', rows: [], order: 'layer-order' });
-      draw.layers.reorder([first.id, 'base:roads', 'e2e-parcels', 'e2e-second']);
+      (window as unknown as E2EWrites).e2e
+        .writesOf(draw)
+        .layers.reorder([first.id, 'base:roads', 'e2e-parcels', 'e2e-second']);
       const placed = {
         order: [...draw.getStore().getLayerOrder()],
         runs: draw.getLayerStack().map(({ from, to }) => [from, to]),
         items: draw.layers.list().map((layer) => [...(layer as ObjectLayer).items]),
       };
-      draw.layers.delete('e2e-second');
+      (window as unknown as E2EWrites).e2e.writesOf(draw).layers.delete('e2e-second');
       draw.datasets.remove('e2e-parcels');
       draw.options.update({ isExternalEntry: () => false });
       return { ...placed, firstId: first.id, itemsBefore };
@@ -813,7 +820,7 @@ describe('the combined frame of a multiple selection on a turned and pitched map
       });
       const ids = list.map(
         (ring) =>
-          draw.features.create({
+          (window as unknown as E2EWrites).e2e.writesOf(draw).features.create({
             type: 'Polygon',
             geometry: { type: 'Polygon', coordinates: [ring] },
             style: { strokeColor: '#808080', fillColor: '#808080' },
@@ -913,10 +920,10 @@ describe('a replaced Store that held its features before the instance, with null
         }, 'remote');
         w.draw.destroy();
         w.draw = w.e2e.createDraw(w.map, { store, initDefaultLayer: false });
-        // The instance reads the null of the Store as undefined
+        // The instance reads the null of the Store as no group: the feature has no key of a group
         return w.draw.features
           .list()
-          .filter((feature) => feature.groupId === undefined)
+          .filter((feature) => !('maplibre-gl-draw:groupId' in feature.properties))
           .map((feature) => feature.id);
       },
       {
@@ -971,7 +978,7 @@ describe('a diffed setStyle on a real map', () => {
     ];
     const result = await page.evaluate(async (coordinates) => {
       const { map, draw } = window as unknown as E2EWindow;
-      draw.features.create({
+      (window as unknown as E2EWrites).e2e.writesOf(draw).features.create({
         type: 'Polygon',
         geometry: { type: 'Polygon', coordinates: [coordinates] },
         style: { fillColor: '#ff0000', fillOpacity: 1 },
@@ -1044,7 +1051,7 @@ describe('a custom feature type that draws with the shared fill alone', () => {
           },
         });
       }
-      draw.features.create({
+      (window as unknown as E2EWrites).e2e.writesOf(draw).features.create({
         type: 'E2EFillOnly',
         geometry: { type: 'Polygon', coordinates: [coordinates] },
       });

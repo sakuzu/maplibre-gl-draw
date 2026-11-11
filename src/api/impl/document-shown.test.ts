@@ -13,6 +13,7 @@ import { MemoryStore } from '../../store/memory.js';
 import type { Store } from '../../store/store.js';
 import { createTableStore } from '../../store/table-memory.js';
 import type { Feature, Layer } from '../../store/types.js';
+import { writesOf } from '../../test-support/writes.js';
 import { createMapStub, createSyntheticInput } from '../../test-utils.js';
 import type { Draw } from '../draw.js';
 import { DrawError } from '../errors.js';
@@ -101,15 +102,21 @@ describe('another document shown in place of the document', () => {
     draw.document.setShown(version().store);
     expect(draw.isReadOnly()).toBe(true);
     expect(
-      draw.features.create({ type: 'Point', geometry: { type: 'Point', coordinates: [9, 9] } }),
+      writesOf(draw).features.create({
+        type: 'Point',
+        geometry: { type: 'Point', coordinates: [9, 9] },
+      }),
     ).toBeNull();
-    expect(draw.features.update('p1', { properties: { n: 1 } })).toBeNull();
+    expect(writesOf(draw).features.update('p1', { properties: { n: 1 } })).toBeNull();
     expect(draw.features.has('p1')).toBe(true);
     draw.document.setShown(null);
     expect(draw.isReadOnly()).toBe(false);
     expect(told).toEqual([true, false]);
     expect(
-      draw.features.create({ type: 'Point', geometry: { type: 'Point', coordinates: [9, 9] } }),
+      writesOf(draw).features.create({
+        type: 'Point',
+        geometry: { type: 'Point', coordinates: [9, 9] },
+      }),
     ).not.toBeNull();
   });
 
@@ -124,7 +131,7 @@ describe('another document shown in place of the document', () => {
   it('refuses a load of a document while it is shown', async () => {
     const { draw } = live();
     draw.document.setShown(version().store);
-    const result = await draw.document.load({
+    const result = await writesOf(draw).document.load({
       type: 'FeatureCollection',
       features: [
         { type: 'Feature', properties: {}, geometry: { type: 'Point', coordinates: [1, 1] } },
@@ -145,7 +152,7 @@ describe('another document shown in place of the document', () => {
       });
     }, 'remote');
     expect(draw.layers.has('more')).toBe(true);
-    expect(draw.features.get('p1')?.properties).toEqual({ n: 7 });
+    expect(writesOf(draw).features.get('p1')?.properties).toEqual({ n: 7 });
   });
 
   it('leaves a drawing mode for the select mode and gives the input to the map only', () => {

@@ -135,21 +135,18 @@ export function defineMessages(defaults: Partial<Messages>): void {
       throw new DrawError(
         'invalid-input',
         `The message ${JSON.stringify(key)} is one of the library, which an extension does not define`,
-        { key },
       );
     }
     if (typeof value !== 'string' && typeof value !== 'function') {
       throw new DrawError(
         'invalid-input',
         `The default of the message ${JSON.stringify(key)} must be a string or a function`,
-        { key },
       );
     }
     if (hasOwn(definedMessages, key) && definedMessages[key] !== value) {
       throw new DrawError(
         'already-exists',
         `The message ${JSON.stringify(key)} is defined with another default`,
-        { key },
       );
     }
   }

@@ -7,6 +7,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createId } from '../../shared/utils/id.js';
+import { writesOf } from '../../test-support/writes.js';
 import { createMapStub } from '../../test-utils.js';
 import type { Draw } from '../draw.js';
 import { createDraw } from '../draw.js';
@@ -70,6 +71,9 @@ function documentIds(): string[] {
 
 describe('generateId', () => {
   it('makes every ID the library creates', async () => {
+    // The IDs of the commits are not IDs of the document: the built-in generator makes them
+    const commits: string[] = [];
+    draw.on('change', (change) => commits.push(change.commit));
     // Draw a point, and a line through the pending ID of the drawing mode
     draw.setMode('draw_point');
     draw.drawing.addVertex([0.5, 0.5]);
@@ -77,11 +81,11 @@ describe('generateId', () => {
     draw.drawing.addVertex([-1, 0.5]);
     draw.drawing.addVertex([2, 0.5]);
     expect(draw.drawing.finish()).toBe(true);
-    const [point] = draw.features.list({ type: 'Point' });
-    const [line] = draw.features.list({ type: 'LineString' });
+    const [point] = writesOf(draw).features.list({ type: 'Point' });
+    const [line] = writesOf(draw).features.list({ type: 'LineString' });
 
     // Split an area along the line: the results are new features
-    const area = draw.features.create({
+    const area = writesOf(draw).features.create({
       type: 'Polygon',
       geometry: {
         type: 'Polygon',
@@ -96,18 +100,18 @@ describe('generateId', () => {
         ],
       },
     });
-    const pieces = draw.features.split(area?.id ?? '', line.id);
+    const pieces = writesOf(draw).features.split(area?.id ?? '', line.id);
     expect(pieces).toHaveLength(2);
 
     // Group a selection, and create a layer
     draw.selection.set('feature', [point.id, line.id]);
-    const group = draw.selection.group();
-    const layer = draw.layers.create({ name: 'more' });
+    const group = writesOf(draw).selection.group();
+    const layer = writesOf(draw).layers.create({ name: 'more' });
 
     // Paste an image, and load GeoJSON with an embedded image
     const image = new File([new Uint8Array([1])], 'photo.png', { type: 'image/png' });
-    await draw.document.load(image, { coordinate: [0, 0] });
-    await draw.document.load({
+    await writesOf(draw).document.load(image, { coordinate: [0, 0] });
+    await writesOf(draw).document.load({
       type: 'FeatureCollection',
       features: [
         {
@@ -127,10 +131,12 @@ describe('generateId', () => {
     expect(layer && minted.includes(layer.id)).toBe(true);
     // Two Images and their two files
     expect(draw.getStore().listFiles()).toHaveLength(2);
-    expect(draw.features.list({ type: 'Image' })).toHaveLength(2);
+    expect(writesOf(draw).features.list({ type: 'Image' })).toHaveLength(2);
     for (const id of ids) expect(minted).toContain(id);
     expect(new Set(minted).size).toBe(minted.length);
-    expect(createId).not.toHaveBeenCalled();
+    expect(commits.length).toBeGreaterThan(0);
+    expect(commits.every((commit) => commit === 'built-in')).toBe(true);
+    expect(createId).toHaveBeenCalledTimes(commits.length);
   });
 
   it('can only be given when the instance is created, as a function', () => {
@@ -144,7 +150,7 @@ describe('without generateId', () => {
     const other = createDraw(createMapStub().map);
     other.setMode('draw_point');
     other.drawing.addVertex([0, 0]);
-    expect(other.features.list()[0].id).toBe('built-in');
+    expect(writesOf(other).features.list()[0].id).toBe('built-in');
     other.destroy();
   });
 });

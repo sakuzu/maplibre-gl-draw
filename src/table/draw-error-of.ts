@@ -6,7 +6,7 @@
  *
  * The library throws only `DrawError` from its entries. An error of the tables of rows
  * (`KasaneError`) or of `@sakuzu/tabane` (`TabaneError`) is wrapped where the library called
- * them, in a `DrawError` of the same code and message, the error wrapped held as `details.cause`.
+ * them, in a `DrawError` of the same code and message, the error wrapped held as `cause`.
  * What a function given by the caller throws (a listener, a system of coordinates, the rings of a
  * row) is the caller's, and is not wrapped: an entry that runs such a function wraps only the
  * errors of the tables (`KasaneError`), which no function of the caller throws.
@@ -18,7 +18,7 @@ import { DrawError } from '../shared/draw-error.js';
 
 /**
  * A `KasaneError` or a `TabaneError` as a `DrawError` of the same code and message, with it as
- * the cause (`details.cause`); any other error, a `DrawError` among them, as it is
+ * the cause (`cause`); any other error, a `DrawError` among them, as it is
  *
  * @internal
  */

@@ -28,19 +28,25 @@ export const drawPolygonMode: ModeFactory = (ctx) =>
       if (coordinates.length < 2) {
         // One vertex shows as a marker
         return {
-          feature: { type: 'Point', geometry: { type: 'Point', coordinates: coordinates[0] } },
+          feature: {
+            type: 'Feature',
+            properties: {},
+            geometry: { type: 'Point', coordinates: coordinates[0] },
+          },
         };
       }
       return {
         feature: {
-          type: 'Polygon',
+          type: 'Feature',
+          properties: {},
           geometry: { type: 'Polygon', coordinates: [[...coordinates, coordinates[0]]] },
         },
         options: { confirmedVertices: vertices.length, ...(closable && { highlightVertex: 0 }) },
       };
     },
     feature: (vertices) => ({
-      type: 'Polygon',
+      type: 'Feature',
+      properties: {},
       geometry: { type: 'Polygon', coordinates: [[...vertices, vertices[0]]] },
     }),
   });

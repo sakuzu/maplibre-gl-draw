@@ -36,6 +36,7 @@ import type {
 } from '../extension/render.js';
 import type { FeatureRenderer, OverlayContext } from '../extension/webgl.js';
 import type { Feature, FeatureStyleResolved } from '../model.js';
+import { featureForExtension, storedFeatureOf, storedOfExtensionFeature } from './feature-shape.js';
 import type { GpuPart } from './gpu-parts.js';
 
 // ============================================================================
@@ -200,8 +201,9 @@ export function createRenderContext(
     line,
     fill,
     point,
-    // The features a renderer is given are those of the Store, as the contract shows them
-    appliedStyle: (feature) => appliedStyle(feature as unknown as StoredFeature),
+    // A renderer is given the features in the public shape, made from those of the Store
+    appliedStyle: (feature) =>
+      appliedStyle(storedOfExtensionFeature(feature) ?? storedFeatureOf(feature)),
   };
   // The building blocks of the second entry find the terrain state and the values of the GPU of
   // the frame behind the context
@@ -270,7 +272,10 @@ export function adaptFeatureRender(
     name: type,
     onAdd() {},
     draw(feature, projectionData, zoom, context) {
-      render?.(feature as unknown as Feature, contextFor(context, projectionData, zoom));
+      render?.(
+        featureForExtension(feature as StoredFeature),
+        contextFor(context, projectionData, zoom),
+      );
     },
     onRemove() {},
   };
@@ -298,7 +303,10 @@ export function adaptGpuFeatureRenderer(
     },
     draw(feature, projectionData, zoom, context) {
       part.draw((renderer) =>
-        renderer.render(feature as unknown as Feature, contextFor(context, projectionData, zoom)),
+        renderer.render(
+          featureForExtension(feature as StoredFeature),
+          contextFor(context, projectionData, zoom),
+        ),
       );
     },
     onRemove() {
@@ -348,7 +356,7 @@ export function createCompanionDrawer(
     context: FrameDrawContext,
   ): void => {
     if (!getGl()) return;
-    draw(feature as Feature, contextFor(context, projectionData, zoom));
+    draw(featureForExtension(feature), contextFor(context, projectionData, zoom));
   };
 }
 

@@ -16,6 +16,7 @@ import type {
 import { createMapStub } from '../../test-utils.js';
 import type { PluginContext } from '../extension/context.js';
 import type { FeatureRenderer, Gpu, GpuDefinition } from '../extension/webgl.js';
+import type { StoredFeature } from '../model.js';
 import { createDrawOnEngine } from './create-draw.js';
 import type { Engine } from './engine.js';
 import { createEngine } from './engine.js';
@@ -176,8 +177,18 @@ describe('ctx.webgl.addFeatureRenderer', () => {
       ctx.webgl.addFeatureRenderer('Marker', value);
     });
     attachAll(renderers, gl);
-    const draw = (): void =>
-      renderers.get('Marker')?.draw({ id: 'a' } as never, PROJECTION, 10, FRAME);
+    const feature: StoredFeature = {
+      id: 'a',
+      type: 'Marker',
+      geometry: { type: 'Point', coordinates: [0, 0] },
+      layerId: 'l',
+      groupId: undefined,
+      properties: {},
+      style: {},
+      visible: true,
+      locked: false,
+    };
+    const draw = (): void => renderers.get('Marker')?.draw(feature, PROJECTION, 10, FRAME);
     draw();
     draw();
     expect(render).toHaveBeenCalledOnce();

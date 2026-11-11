@@ -26,7 +26,7 @@ export const drawLineMode: ModeFactory = (ctx) =>
     preview(vertices, pointer, closable) {
       const coordinates: Coordinate[] = pointer ? [...vertices, ...pointer] : [...vertices];
       return {
-        feature: { type: 'LineString', geometry: { type: 'LineString', coordinates } },
+        feature: { type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates } },
         options: {
           confirmedVertices: vertices.length,
           ...(closable && { highlightVertex: vertices.length - 1 }),
@@ -34,7 +34,8 @@ export const drawLineMode: ModeFactory = (ctx) =>
       };
     },
     feature: (vertices) => ({
-      type: 'LineString',
+      type: 'Feature',
+      properties: {},
       geometry: { type: 'LineString', coordinates: [...vertices] },
     }),
   });

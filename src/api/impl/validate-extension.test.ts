@@ -104,9 +104,11 @@ describe('validateExtension', () => {
     }
     expect(thrown).toBeInstanceOf(DrawError);
     expect((thrown as DrawError).code).toBe('invalid-input');
-    expect((thrown as DrawError).details).toEqual(
-      member === undefined ? { kind } : { kind, member },
-    );
+    // The kind and the member are named in the message
+    const { message } = thrown as DrawError;
+    expect(message.startsWith(`The ${kind} `)).toBe(true);
+    if (member === undefined) expect(message.endsWith(')')).toBe(false);
+    else expect(message.endsWith(` (${member})`)).toBe(true);
   });
 });
 

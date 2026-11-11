@@ -12,21 +12,23 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { MemoryStore } from '../../store/memory.js';
 import type { Store } from '../../store/store.js';
 import { createTableStore } from '../../store/table-memory.js';
+import { writesOf } from '../../test-support/writes.js';
 import { createMapStub } from '../../test-utils.js';
 import type { Draw } from '../draw.js';
 import { createDraw } from '../draw.js';
 import type { Change } from '../events.js';
-import type { Feature, Group } from '../model.js';
+import type { Feature, FeatureInput } from '../model.js';
+import { readFeature } from '../model.js';
 
 const opened: Draw[] = [];
 afterEach(() => {
   for (const draw of opened.splice(0)) draw.destroy();
 });
 
-const point = (x: number, layerId?: string) => ({
-  type: 'Point' as const,
-  geometry: { type: 'Point' as const, coordinates: [x, x] },
-  ...(layerId && { layerId }),
+const point = (x: number, layerId?: string): FeatureInput => ({
+  type: 'Feature',
+  geometry: { type: 'Point', coordinates: [x, x] },
+  properties: layerId ? { 'maplibre-gl-draw:layerId': layerId } : {},
 });
 
 /** An instance over a Store of objects or of rows, with two layers, and the changes it tells */
@@ -80,46 +82,45 @@ function open(kind: 'objects' | 'rows') {
 const NONE = { created: [], updated: [], deleted: [], placed: [] };
 
 describe.each(['objects', 'rows'] as const)('one commit over a Store of %s', (kind) => {
-  it('tells a feature written twice once, with what it was before the commit', () => {
+  it('tells a feature written twice once, with what it was before the commit', async () => {
     const { draw, changes, before } = open(kind);
-    const f = draw.features.create(point(1, 'a')) as Feature;
+    const f = await draw.write((tx) => tx.features.create(point(1, 'a')));
     const was = draw.features.get(f.id);
     changes.length = 0;
     before.length = 0;
-    draw.transact(() => {
-      draw.features.update(f.id, { properties: { n: 1 } });
-      draw.features.update(f.id, { properties: { n: 2 } });
+    await draw.write(async (tx) => {
+      await tx.features.update(f.id, { properties: { n: 1 } });
+      await tx.features.update(f.id, { properties: { n: 2 } });
     });
     expect(changes).toHaveLength(1);
     expect(changes[0].features).toEqual({ ...NONE, updated: [f.id] });
     expect(before[0][f.id]).toEqual(was);
   });
 
-  it('tells a feature written then deleted as deleted, with what it was before the commit', () => {
+  it('tells a feature written then deleted as deleted, with what it was before the commit', async () => {
     const { draw, changes, before } = open(kind);
-    const f = draw.features.create(point(1, 'a')) as Feature;
+    const f = await draw.write((tx) => tx.features.create(point(1, 'a')));
     const was = draw.features.get(f.id);
     changes.length = 0;
     before.length = 0;
-    draw.transact(() => {
-      draw.features.update(f.id, { properties: { n: 1 } });
-      draw.features.delete(f.id);
+    await draw.write(async (tx) => {
+      await tx.features.update(f.id, { properties: { n: 1 } });
+      await tx.features.delete(f.id);
     });
     expect(changes[0].features).toEqual({ ...NONE, deleted: [f.id] });
     expect(before[0][f.id]).toEqual(was);
   });
 
-  it('tells a feature created then written as created, and one created then deleted not at all', () => {
+  it('tells a feature created then written as created, and one created then deleted not at all', async () => {
     const { draw, changes } = open(kind);
-    draw.features.create(point(0, 'a'));
+    await draw.write((tx) => tx.features.create(point(0, 'a')));
     changes.length = 0;
-    let created = '';
-    let gone = '';
-    draw.transact(() => {
-      created = (draw.features.create(point(1, 'a')) as Feature).id;
-      draw.features.update(created, { properties: { n: 1 } });
-      gone = (draw.features.create(point(2, 'a')) as Feature).id;
-      draw.features.delete(gone);
+    const { created, gone } = await draw.write(async (tx) => {
+      const created = (await tx.features.create(point(1, 'a'))).id;
+      await tx.features.update(created, { properties: { n: 1 } });
+      const gone = (await tx.features.create(point(2, 'a'))).id;
+      await tx.features.delete(gone);
+      return { created, gone };
     });
     expect(changes).toHaveLength(1);
     expect(changes[0].features.created).toEqual([created]);
@@ -127,28 +128,36 @@ describe.each(['objects', 'rows'] as const)('one commit over a Store of %s', (ki
     expect(changes[0].features.updated).toEqual([]);
   });
 
-  it('tells a feature put into another layer or group alone as placed, with its place before', () => {
+  it('tells a feature put into another layer or group alone as placed, with its place before', async () => {
     const { draw, changes, before } = open(kind);
-    const f = draw.features.create(point(1, 'a')) as Feature;
-    const g = draw.features.create(point(2, 'b')) as Feature;
-    const group = draw.groups.create({ featureIds: [g.id] }) as Group;
+    const { f, g, group } = await draw.write(async (tx) => {
+      const f = await tx.features.create(point(1, 'a'));
+      const g = await tx.features.create(point(2, 'b'));
+      const group = await tx.groups.create({ featureIds: [g.id] });
+      return { f, g, group };
+    });
     changes.length = 0;
     before.length = 0;
-    draw.features.move(f.id, { layerId: 'b', below: null, above: group.id });
+    // Just below the group, at the back of the layer
+    await draw.write((tx) => tx.features.place(f.id, { layerId: 'b', above: group.id }));
     expect(changes[0].features).toEqual({ ...NONE, placed: [f.id] });
-    expect(before[0][f.id]?.layerId).toBe('a');
-    draw.features.move(f.id, { layerId: 'b', groupId: group.id, below: null, above: g.id });
+    expect(readFeature(before[0][f.id] as Feature).layerId).toBe('a');
+    await draw.write((tx) =>
+      tx.features.place(f.id, { layerId: 'b', groupId: group.id, above: g.id }),
+    );
     expect(changes[1].features).toEqual({ ...NONE, placed: [f.id] });
-    expect(before[1][f.id]?.groupId).toBeUndefined();
-    expect(before[1][f.id]?.layerId).toBe('b');
+    expect(readFeature(before[1][f.id] as Feature).groupId).toBeNull();
+    expect(readFeature(before[1][f.id] as Feature).layerId).toBe('b');
   });
 
-  it('tells features put in another place of their layer as placed alone', () => {
+  it('tells features put in another place of their layer as placed alone', async () => {
     const { draw, changes } = open(kind);
-    const ids = [1, 2, 3, 4].map((x) => (draw.features.create(point(x, 'a')) as Feature).id);
+    const ids = await draw.write((tx) =>
+      tx.features.create([1, 2, 3, 4].map((x) => point(x, 'a'))),
+    );
     changes.length = 0;
     // The first and the third to the front, apart from each other
-    draw.features.moveMany([ids[0], ids[2]], { layerId: 'a', below: ids[3], above: null });
+    await draw.write((tx) => tx.features.place([ids[0], ids[2]], { layerId: 'a', below: ids[3] }));
     expect(changes).toHaveLength(1);
     expect(changes[0].features.updated).toEqual([]);
     // The moves the Store tells (the fewest that make the new order) name features of the layer
@@ -162,11 +171,11 @@ describe('the stacking order of the layers', () => {
     const { draw, changes } = open('objects');
     draw.datasets.add({ id: 'd', rows: [], order: 'layer-order' } as never);
     changes.length = 0;
-    draw.layers.reorder(['a', 'b', 'd']);
+    writesOf(draw).layers.reorder(['a', 'b', 'd']);
     expect(changes).toHaveLength(1);
     expect(changes[0].layers.placed).toEqual([]);
     expect(changes[0].document).toBe(true);
-    draw.layers.reorder(['b', 'a', 'd']);
+    writesOf(draw).layers.reorder(['b', 'a', 'd']);
     expect(changes[1].layers.placed).toHaveLength(1);
     expect(changes[1].layers.placed).not.toContain('d');
   });
@@ -175,9 +184,9 @@ describe('the stacking order of the layers', () => {
 describe.each(['objects', 'rows'] as const)(
   'the value of an observable over a Store of %s',
   (kind) => {
-    it('is the same object while the value does not change, and a new one once it does', () => {
+    it('is the same object while the value does not change, and a new one once it does', async () => {
       const { draw } = open(kind);
-      const f = draw.features.create(point(1, 'a')) as Feature;
+      const f = await draw.write((tx) => tx.features.create(point(1, 'a')));
       draw.selection.set('feature', [f.id]);
       draw.datasets.add({ id: 'd', rows: [] } as never);
       for (const observable of [

@@ -137,7 +137,7 @@ describe('the kasane subpath', () => {
     const wrapped = (fn: () => unknown): { error: DrawError; cause: KasaneError } => {
       const error = thrown(fn);
       expect(error).toBeInstanceOf(DrawError);
-      const cause = ((error as DrawError).details as { cause?: unknown } | undefined)?.cause;
+      const cause = (error as { cause?: unknown }).cause;
       expect(cause).toBeInstanceOf(KasaneError);
       expect((error as DrawError).code).toBe((cause as KasaneError).code);
       expect((error as DrawError).message).toBe((cause as KasaneError).message);

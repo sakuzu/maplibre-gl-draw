@@ -5,6 +5,7 @@
 <script lang="ts">
   import { Button, Footer, Row, SelectionSummary } from '@sakuzu/kata/svelte';
   import type { Feature, FeatureStyleResolved } from '@sakuzu/maplibre-gl-draw';
+  import { readFeature } from '@sakuzu/maplibre-gl-draw';
   import { applicableOperations, type OperationId, runOperation } from '../inspector/operations.js';
   import type {
     InspectorDraw,
@@ -13,6 +14,7 @@
   } from '../inspector/types.js';
   import { kindCounts } from '../inspector/view.js';
   import { fillWord, type Messages } from '../messages.js';
+  import { deleteSelection, groupSelection } from '../writes.js';
   import BufferDialog from './BufferDialog.svelte';
   import StyleFields from './StyleFields.svelte';
 
@@ -43,7 +45,11 @@
   } = $props();
 
   const operations = $derived(settings.operations ? applicableOperations(features) : []);
-  const oneLayer = $derived(features.every((f) => f.layerId === features[0]?.layerId));
+  const oneLayer = $derived(
+    features.every(
+      (f) => readFeature(f).layerId === (features[0] && readFeature(features[0]).layerId),
+    ),
+  );
   let bufferOpen = $state(false);
 
   const LABELS: Record<OperationId, keyof Messages> = {
@@ -59,11 +65,7 @@
       bufferOpen = true;
       return;
     }
-    try {
-      runOperation(draw, op, features);
-    } catch (error) {
-      console.error(error);
-    }
+    runOperation(draw, op, features).catch((error: unknown) => console.error(error));
   }
 </script>
 
@@ -76,7 +78,7 @@
     {#each operations as op (op)}
       <Button disabled={!editable} onclick={() => run(op)}>{m[LABELS[op]]}</Button>
     {/each}
-    <Button disabled={readOnly || !oneLayer} onclick={() => draw.selection.group()}>
+    <Button disabled={readOnly || !oneLayer} onclick={() => void groupSelection(draw)}>
       {m.groupAction}
     </Button>
   </Row>
@@ -85,7 +87,7 @@
 {#snippet foot()}
   <Footer>
     {#snippet lead()}
-      <Button variant="danger" disabled={readOnly} onclick={() => draw.selection.delete()}>
+      <Button variant="danger" disabled={readOnly} onclick={() => void deleteSelection(draw)}>
         {m.delete}
       </Button>
     {/snippet}

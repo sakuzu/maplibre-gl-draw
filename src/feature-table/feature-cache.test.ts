@@ -28,6 +28,7 @@ import { featuresInOrder } from '../store/feature-stream.js';
 import { RBushSpatialIndex } from '../store/spatial/spatial-index.js';
 import { createTableStore } from '../store/table-memory.js';
 import type { Feature } from '../store/types.js';
+import { writesOf } from '../test-support/writes.js';
 import { createMapStub } from '../test-utils.js';
 import { featureRowBoxesOf } from './feature-row-boxes.js';
 import { type FeatureTablesInternals, featureTablesInternals } from './feature-tables.js';
@@ -285,8 +286,8 @@ describe('the features kept of rows', () => {
       store: store as unknown as PublicStore,
       initDefaultLayer: false,
     });
-    const kept = draw.features.get('p5');
-    expect(draw.features.getMany(['p6', 'p7'])).toEqual([
+    const kept = writesOf(draw).features.get('p5');
+    expect(writesOf(draw).features.getMany(['p6', 'p7'])).toEqual([
       store.getFeature('p6'),
       store.getFeature('p7'),
     ]);
@@ -294,7 +295,7 @@ describe('the features kept of rows', () => {
     let after: string | undefined;
     let listed = 0;
     for (;;) {
-      const page = draw.features.list(undefined, { limit: 500, after });
+      const page = writesOf(draw).features.list(undefined, { limit: 500, after });
       listed += page.length;
       if (page.some((feature) => feature.id === 'p5')) {
         expect(page.find((feature) => feature.id === 'p5')).toBe(kept);

@@ -23,6 +23,7 @@ import {
   type Bundle,
   bundlePage,
   type Camera,
+  type E2EWrites,
   launchBrowser,
   openMapPage,
   type PagePoint,
@@ -202,7 +203,11 @@ async function open(scene: Scene): Promise<Page> {
     } as never);
     w.draw = draw;
     for (const feature of s.features) {
-      if (!draw.features.create({ ...feature, layerId: 'L' } as never)) {
+      if (
+        !(window as unknown as E2EWrites).e2e
+          .writesOf(draw)
+          .features.create({ ...feature, layerId: 'L' } as never)
+      ) {
         throw new Error(`${feature.id} was not created`);
       }
     }
@@ -314,7 +319,7 @@ async function open(scene: Scene): Promise<Page> {
         else draw.selection.set('feature', ids);
       },
       update(id: string, patch: Record<string, unknown>) {
-        draw.features.update(id, patch as never);
+        (window as unknown as E2EWrites).e2e.writesOf(draw).features.update(id, patch as never);
       },
       setMode(mode: string) {
         draw.setMode(mode as never);

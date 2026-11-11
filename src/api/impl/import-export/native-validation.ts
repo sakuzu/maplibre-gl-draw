@@ -15,6 +15,7 @@ import { describeGeometryProblem } from '../../../shared/geometry-validation.js'
 import { sanitizeFeatureStyle } from '../../../shared/style-validation.js';
 import type { Data, Feature, FileData, Group, Layer } from '../../../store/types.js';
 import { DrawError } from '../../errors.js';
+import { orientedGeometry } from '../feature-shape.js';
 import { NATIVE_VERSION } from './constants.js';
 import type { EmbeddedFileProblem } from './embedded-file.js';
 import { isEmbeddedFileProblem, normalizeEmbeddedFile } from './embedded-file.js';
@@ -98,17 +99,69 @@ function validateVersion(version: unknown): void {
 }
 
 /**
+ * A GeoJSON Feature of the format with the values of the library read into the fields of a
+ * feature of the Store, the rings of its polygons in the right-hand rule
+ */
+function fieldsOf(feature: Record<string, unknown>, where: string): Record<string, unknown> {
+  const { id, geometry } = feature;
+  const properties: Record<string, unknown> = {};
+  const fields: Record<string, unknown> = { visible: true, locked: false };
+  for (const [key, value] of Object.entries(feature.properties as Record<string, unknown>)) {
+    switch (key) {
+      case 'maplibre-gl-draw:layerId':
+        fields.layerId = value;
+        break;
+      case 'maplibre-gl-draw:groupId':
+        fields.groupId = value;
+        break;
+      case 'maplibre-gl-draw:featureType':
+        fields.type = value;
+        break;
+      case 'maplibre-gl-draw:style':
+        fields.style = value;
+        break;
+      case 'maplibre-gl-draw:visible':
+        if (typeof value !== 'boolean') fail(`${where} has a visible that is not a boolean`);
+        fields.visible = value;
+        break;
+      case 'maplibre-gl-draw:locked':
+        if (typeof value !== 'boolean') fail(`${where} has a locked that is not a boolean`);
+        fields.locked = value;
+        break;
+      default:
+        Object.defineProperty(properties, key, {
+          value,
+          enumerable: true,
+          writable: true,
+          configurable: true,
+        });
+    }
+  }
+  const geometryType = isRecord(geometry) ? geometry.type : undefined;
+  if (fields.type === undefined) fields.type = geometryType;
+  return {
+    id,
+    ...fields,
+    geometry: isRecord(geometry) ? orientedGeometry(geometry as never) : geometry,
+    properties,
+  };
+}
+
+/**
  * Validates a feature and returns it with its style reduced to the usable keys
  */
 function validateFeature(
-  feature: unknown,
+  given: unknown,
   index: number,
   layerIds: ReadonlySet<string>,
   groupIds: ReadonlySet<string>,
 ): Feature {
-  if (!isRecord(feature)) fail(`features[${index}] is not an object`);
-  if (!isNonEmptyString(feature.id)) fail('feature without a valid string id');
-  const where = `feature "${feature.id}"`;
+  if (!isRecord(given)) fail(`features[${index}] is not an object`);
+  if (!isNonEmptyString(given.id)) fail('feature without a valid string id');
+  const where = `feature "${given.id}"`;
+  if (given.type !== 'Feature') fail(`${where} is not a GeoJSON Feature`);
+  if (!isRecord(given.properties)) fail(`${where} has no properties object`);
+  const feature = fieldsOf(given, where);
   if (!isNonEmptyString(feature.type)) fail(`${where} has no string type`);
 
   const geometryProblem = describeGeometryProblem(feature.type, feature.geometry);

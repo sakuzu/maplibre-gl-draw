@@ -60,7 +60,8 @@ function planCircleBuffer(input: Feature, distanceMeters: number): BufferPlan | 
  * Plans the buffer of one input. null when the result is empty or the operation is not
  * defined.
  */
-function planBuffer(input: Feature, options: BufferOptions): BufferPlan | null {
+/** @internal */
+export function planBuffer(input: Feature, options: BufferOptions): BufferPlan | null {
   const { distanceMeters, segments } = options;
   if (input.type === 'Circle') return planCircleBuffer(input, distanceMeters);
 

@@ -10,6 +10,7 @@
 
 import type { CoordinateDimensions, Value } from '@sakuzu/tabane';
 import type { Geometry, GeometryCollection } from 'geojson';
+import { orientRings } from '../geometry/simplify.js';
 import { COORDINATE_DEPTH, describeCoordinateProblem } from '../shared/geometry-validation.js';
 import { foldLegacyImageStyle } from '../shared/legacy-image-style.js';
 import type { DrawPropertyName } from '../shared/properties.js';
@@ -523,7 +524,11 @@ export function readGeoJSONFeature(
     };
   }
 
-  const parts = partsOf(geometry, featureType, flattenMulti);
+  // The rings of the polygons are put in the right-hand rule as they are written
+  const parts = partsOf(geometry, featureType, flattenMulti).map((part) => ({
+    ...part,
+    geometry: orientRings(part.geometry),
+  }));
   // Only a GeometryCollection without any member, or an empty Multi geometry, produces nothing
   if (parts.length === 0) return 'the geometry has no parts';
   const whole =

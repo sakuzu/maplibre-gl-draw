@@ -38,6 +38,7 @@
   import type { Messages } from '../messages.js';
   import { type Box, follow } from '../store.js';
   import type { LayerPanelDraw } from '../types.js';
+  import { featurePatchOf, groupSelection, placementOf, write } from '../writes.js';
   import BasemapPanel from './BasemapPanel.svelte';
 
   // LayerPanel: kata's LayerTree of the stack from the front: the layers, their groups and their
@@ -217,46 +218,52 @@
     if (visible && draw.hidden.has(id)) draw.hidden.remove(id);
     const entity = index.get(id)?.node.data as { visible: boolean } | undefined;
     if (entity?.visible === visible) return;
-    if (kind === 'layer') draw.layers.update(id, { visible });
-    else if (kind === 'group') draw.groups.update(id, { visible });
-    else draw.features.update(id, { visible });
+    if (kind === 'layer') void write(draw, (tx) => tx.layers.update(id, { visible }));
+    else if (kind === 'group') void write(draw, (tx) => tx.groups.update(id, { visible }));
+    else void write(draw, (tx) => tx.features.update(id, featurePatchOf({ visible })));
   }
 
   function onlock(id: string, locked: boolean) {
     const kind = kindOf(id);
-    if (kind === 'layer') draw.layers.update(id, { locked });
-    else if (kind === 'group') draw.groups.update(id, { locked });
-    else if (kind === 'feature') draw.features.update(id, { locked });
+    if (kind === 'layer') void write(draw, (tx) => tx.layers.update(id, { locked }));
+    else if (kind === 'group') void write(draw, (tx) => tx.groups.update(id, { locked }));
+    else if (kind === 'feature') {
+      void write(draw, (tx) => tx.features.update(id, featurePatchOf({ locked })));
+    }
   }
 
   // A dataset in front of or behind every layer joins the stacking order (layer-order) before the
   // reorder, and goes back to its own order when the reorder is refused
-  function reorderLayers(order: string[], join?: MoveJoin) {
+  async function reorderLayers(order: string[], join?: MoveJoin) {
     if (join) draw.datasets.move(join.id, { order: 'layer-order' });
-    let done = false;
-    try {
-      done = draw.layers.reorder(order);
-    } finally {
-      if (join && !done) draw.datasets.move(join.id, { order: join.order });
-    }
+    // Each layer just above the one before it, from the back, in one commit
+    const layers = order.filter((id) => draw.layers.get(id) !== undefined);
+    const done = await write(draw, async (tx) => {
+      for (let i = 1; i < layers.length; i++) {
+        await tx.layers.place(layers[i], { below: layers[i - 1] });
+      }
+    });
+    if (join && !done) draw.datasets.move(join.id, { order: join.order });
   }
 
   function onmove(move: TreeMove) {
     const plan = planMove(move, nodes);
     if (!plan) return;
-    if (plan.kind === 'layers') reorderLayers(plan.order, plan.join);
-    else if (plan.kind === 'group') draw.groups.move(plan.id, plan.to);
-    else draw.features.move(plan.id, plan.to);
+    if (plan.kind === 'layers') void reorderLayers(plan.order, plan.join);
+    else if (plan.kind === 'group') {
+      void write(draw, (tx) => tx.groups.place(plan.id, placementOf(plan.to)));
+    } else void write(draw, (tx) => tx.features.place(plan.id, placementOf(plan.to)));
   }
 
-  function onadd(id: string) {
+  async function onadd(id: string) {
     if (id === 'layer') {
-      const layer = draw.layers.create({});
-      if (layer) {
-        draw.layers.setActive(layer.id);
-      }
+      let made: string | undefined;
+      await write(draw, async (tx) => {
+        made = (await tx.layers.create({})).id;
+      });
+      if (made !== undefined) draw.layers.setActive(made);
     } else if (id === 'group') {
-      draw.selection.group();
+      await groupSelection(draw);
     }
   }
 

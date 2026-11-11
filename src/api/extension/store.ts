@@ -12,7 +12,6 @@ import type { Geometry } from 'geojson';
 import type { DocumentChange } from '../events.js';
 import type {
   EditResult,
-  Feature,
   FeatureEdit,
   FeatureType,
   FileData,
@@ -20,6 +19,7 @@ import type {
   ItemPlacement,
   Layer,
   Metadata,
+  StoredFeature,
 } from '../model.js';
 import type {
   Mode,
@@ -189,11 +189,11 @@ export interface GeometryTransforms {
  */
 export interface StoreView {
   /** A feature by ID, or `undefined` */
-  getFeature(id: string): Feature | undefined;
+  getFeature(id: string): StoredFeature | undefined;
   /** Every feature, in no particular order */
-  listFeatures(): Feature[];
+  listFeatures(): StoredFeature[];
   /** Every feature in stacking order, from the back */
-  listFeaturesInOrder(): Feature[];
+  listFeaturesInOrder(): StoredFeature[];
   /** A layer by ID, or `undefined` */
   getLayer(id: string): Layer | undefined;
   /** Every layer, in no particular order */
@@ -285,7 +285,7 @@ export interface StoreView {
  */
 export interface Store extends StoreView {
   /** Creates a feature. */
-  createFeature(feature: Feature): boolean;
+  createFeature(feature: StoredFeature): boolean;
   /**
    * Creates features, one after the other in the order given, as `createFeature` creates each
    * (all of them or none: it throws before creating any when one cannot be created). A Store
@@ -293,9 +293,9 @@ export interface Store extends StoreView {
    * once, so that many features cost their own rows, not the rows of their layer once per feature.
    * A Store without it is given the features one at a time.
    */
-  createFeatures?(features: readonly Feature[]): boolean;
+  createFeatures?(features: readonly StoredFeature[]): boolean;
   /** Changes the fields given of a feature. */
-  updateFeature(id: string, updates: Partial<Feature>): boolean;
+  updateFeature(id: string, updates: Partial<StoredFeature>): boolean;
   /**
    * Applies edits of features, one after the other in the order given, as one transaction:
    * every edit applies over the feature as the edits before it leave it, and the edits apply all

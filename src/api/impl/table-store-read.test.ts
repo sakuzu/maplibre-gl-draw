@@ -21,8 +21,8 @@ import {
   createResourceDeps,
 } from '../../test-utils.js';
 import { DrawError } from '../errors.js';
-import type { FeaturesCollection } from '../features.js';
 import type { FeatureFilter } from '../model.js';
+import type { FeatureResource as FeaturesCollection } from './feature-resource.js';
 import { createFeatures } from './features.js';
 import { createLayers } from './layers.js';
 

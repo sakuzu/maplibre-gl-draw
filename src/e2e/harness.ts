@@ -21,7 +21,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { type Browser, chromium, type Page } from 'playwright-core';
 import { build } from 'vite';
-import type { Draw, Feature, Mode } from '../index.js';
+import type { Draw, Mode, StoredFeature } from '../index.js';
 import { browserTimeout } from '../test-utils.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -35,6 +35,17 @@ const ORIGIN = 'http://draw.e2e.test';
 export interface E2EWindow {
   map: import('maplibre-gl').Map;
   draw: Draw;
+}
+
+/**
+ * The internal writes of the test page (`writesOf` of the test support): the scenes that only
+ * make a document write with them, synchronously and in the shape of the Store
+ */
+export interface E2EWrites {
+  e2e: {
+    writesOf: typeof import('../test-support/writes.js').writesOf;
+    readFeature: typeof import('../index.js').readFeature;
+  };
 }
 
 /** The size of the map on the page (CSS pixels) */
@@ -228,9 +239,12 @@ export async function lngLatOf(page: Page, point: PagePoint): Promise<[number, n
   }, point);
 }
 
-/** Every feature of the draw instance */
-export async function features(page: Page): Promise<Feature[]> {
-  return page.evaluate(() => (window as unknown as E2EWindow).draw.features.list());
+/** Every feature of the draw instance, as the Store holds it (its type in `type`) */
+export async function features(page: Page): Promise<StoredFeature[]> {
+  return page.evaluate(() => {
+    const { draw, e2e } = window as unknown as E2EWindow & E2EWrites;
+    return e2e.writesOf(draw).features.list();
+  });
 }
 
 /** The current mode of the draw instance */

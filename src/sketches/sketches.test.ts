@@ -27,6 +27,7 @@ import { createDrawOnEngine } from '../api/impl/create-draw.js';
 import type { Engine } from '../api/impl/engine.js';
 import { createEngine } from '../api/impl/engine.js';
 import type { InstanceSignals } from '../api/impl/events.js';
+import { toFeature } from '../api/impl/feature-shape.js';
 import type { ConsistencyFailure } from '../api/options.js';
 import type { Sketch, SketchEdit } from '../api/sketches.js';
 import { draggedRowMotionsOf } from '../feature-table/dragged-rows.js';
@@ -41,6 +42,7 @@ import { MemoryStore } from '../store/memory.js';
 import type { FeatureEdit, Store } from '../store/store.js';
 import { createTableStore } from '../store/table-memory.js';
 import type { Feature, StoreChange, VertexRef } from '../store/types.js';
+import { writesOf } from '../test-support/writes.js';
 import { createMapStub } from '../test-utils.js';
 
 type Kind = 'objects' | 'rows' | 'ids';
@@ -142,7 +144,7 @@ function open(kind: Kind, allowed: Array<'sketches' | 'sketch-commits'> = []): O
 
 /** A line of three vertices along the equator, from x */
 function line(draw: Draw, x = 0, layerId?: string): Feature {
-  return draw.features.create({
+  return writesOf(draw).features.create({
     type: 'LineString',
     geometry: {
       type: 'LineString',
@@ -156,9 +158,10 @@ function line(draw: Draw, x = 0, layerId?: string): Feature {
   }) as Feature;
 }
 
-/** The coordinates of a line */
-function coordinatesOf(feature: Feature | undefined): number[][] {
-  return ((feature as Feature).geometry as { coordinates: number[][] }).coordinates;
+/** The coordinates of a line, of a feature of the Store or of the public shape */
+function coordinatesOf(feature: { readonly geometry: unknown } | undefined): number[][] {
+  return ((feature as { readonly geometry: unknown }).geometry as { coordinates: number[][] })
+    .coordinates;
 }
 
 /** The names of the events, in order */
@@ -190,7 +193,7 @@ for (const kind of KINDS) {
       expect(draw.sketches.count()).toBe(1);
       expect(draw.sketches.has(sketch.id)).toBe(true);
       expect(names(events)).toEqual(['sketch.added']);
-      expect(coordinatesOf(draw.features.get(a.id))[1]).toEqual([1, 0]);
+      expect(coordinatesOf(writesOf(draw).features.get(a.id))[1]).toEqual([1, 0]);
       expect(coordinatesOf(draw.rendered.get(a.id))[1]).toEqual([1, 1]);
       expect(draw.rendered.getMany([a.id, 'none']).map((f) => f && coordinatesOf(f)[1])).toEqual([
         [1, 1],
@@ -216,20 +219,20 @@ for (const kind of KINDS) {
       expect(() =>
         draw.sketches.add({ edits: [move(a.id, [0, 0], { ring: 0, index: 9 })] }),
       ).toThrow(expect.objectContaining({ code: 'invalid-input' }));
-      draw.features.update(a.id, { locked: true });
+      writesOf(draw).features.update(a.id, { locked: true });
       expect(draw.sketches.add({ edits: [move(a.id, [1, 1])] })).toBeNull();
       // A sketch with an owner passes no gate
       expect(draw.sketches.add({ edits: [move(a.id, [1, 1])], owner: 'other' })).not.toBeNull();
-      draw.features.update(a.id, { locked: false });
-      draw.layers.update('default-layer', { visible: false });
+      writesOf(draw).features.update(a.id, { locked: false });
+      writesOf(draw).layers.update('default-layer', { visible: false });
       expect(draw.sketches.add({ edits: [move(b.id, [11, 1])] })).toBeNull();
-      draw.layers.update('default-layer', { visible: true });
+      writesOf(draw).layers.update('default-layer', { visible: true });
       draw.setReadOnly(true);
       expect(draw.sketches.add({ edits: [move(b.id, [11, 1])] })).toBeNull();
       draw.setReadOnly(false);
-      draw.layers.update('default-layer', { locked: true });
+      writesOf(draw).layers.update('default-layer', { locked: true });
       expect(draw.sketches.add({ edits: [move(b.id, [11, 1])] })).toBeNull();
-      draw.layers.update('default-layer', { locked: false });
+      writesOf(draw).layers.update('default-layer', { locked: false });
       expect(draw.sketches.add({ id: 'd', edits: [move(b.id, [11, 1])] })).not.toBeNull();
       expect(() => draw.sketches.add({ id: 'd', edits: [] })).toThrow(
         expect.objectContaining({ code: 'already-exists' }),
@@ -252,7 +255,7 @@ for (const kind of KINDS) {
       expect(events).toEqual([
         ['sketch.removed', { sketch: removed, reason: 'cancelled', dropped: 0 }],
       ]);
-      expect(coordinatesOf(draw.features.get(b.id))[1]).toEqual([11, 0]);
+      expect(coordinatesOf(writesOf(draw).features.get(b.id))[1]).toEqual([11, 0]);
 
       const sketch = draw.sketches.add({
         edits: [
@@ -267,9 +270,9 @@ for (const kind of KINDS) {
       expect(names(events)).toEqual(['change', 'sketch.removed']);
       expect(events[1][1]).toEqual({ sketch, reason: 'committed', dropped: 0 });
       expect(draw.sketches.count()).toBe(0);
-      expect(coordinatesOf(draw.features.get(a.id))[1]).toEqual([1, 1]);
-      expect(draw.features.get(b.id)?.geometry).toEqual(shown?.geometry);
-      expect(coordinatesOf(draw.features.get(b.id))[0][1]).toBeGreaterThan(0.9);
+      expect(coordinatesOf(writesOf(draw).features.get(a.id))[1]).toEqual([1, 1]);
+      expect(writesOf(draw).features.get(b.id)?.geometry).toEqual(shown?.geometry);
+      expect(coordinatesOf(writesOf(draw).features.get(b.id))[0][1]).toBeGreaterThan(0.9);
       expect(() => draw.sketches.commit(sketch.id)).toThrow(
         expect.objectContaining({ code: 'not-found' }),
       );
@@ -286,7 +289,7 @@ for (const kind of KINDS) {
       }) as Sketch;
       expect(names(events)).toEqual(['change', 'sketch.removed', 'sketch.added']);
       expect(events[1][1]).toEqual({ sketch: first, reason: 'committed', dropped: 0 });
-      expect(coordinatesOf(draw.features.get(a.id))[1]).toEqual([1, 1]);
+      expect(coordinatesOf(writesOf(draw).features.get(a.id))[1]).toEqual([1, 1]);
       expect(draw.sketches.list()).toEqual([second]);
       expect(failures).toEqual([]);
     });
@@ -312,7 +315,11 @@ for (const kind of KINDS) {
       expect(draw.sketches.commitMany([mine.id, theirs.id])).toBe(false);
       expect(draw.sketches.count()).toBe(2);
       draw.sketches.remove(theirs.id);
-      expect(draw.rendered.get(a.id)?.properties).toEqual({ by: 'me' });
+      // In the public shape: the attributes, and the layer under the key of the library
+      expect(draw.rendered.get(a.id)?.properties).toEqual({
+        by: 'me',
+        'maplibre-gl-draw:layerId': a.layerId,
+      });
       expect(failures).toEqual([]);
     });
 
@@ -332,20 +339,20 @@ for (const kind of KINDS) {
         ],
       }) as Sketch;
       events.length = 0;
-      draw.transact(() => draw.features.delete(a.id), { source: 'remote' });
+      writesOf(draw).transact(() => writesOf(draw).features.delete(a.id), { source: 'remote' });
       expect(names(events)).toEqual(['change', 'sketch.updated']);
       const updated = events[1][1] as InstanceSignals['sketch.updated'];
       expect(updated.dropped).toBe(1);
       expect(updated.sketch.edits[0]).toMatchObject({ target: { featureIds: [b.id, c.id] } });
       expect(draw.sketches.get(sketch.id)).toBe(updated.sketch);
       events.length = 0;
-      draw.features.update(b.id, { locked: true });
+      writesOf(draw).features.update(b.id, { locked: true });
       expect(names(events)).toEqual(['change', 'sketch.updated']);
       expect(draw.sketches.get(sketch.id)?.edits[0]).toMatchObject({
         target: { featureIds: [c.id] },
       });
       events.length = 0;
-      draw.features.update(c.id, { locked: true });
+      writesOf(draw).features.update(c.id, { locked: true });
       expect(names(events)).toEqual(['change', 'sketch.removed']);
       expect(events[1][1]).toMatchObject({ reason: 'locked', dropped: 3 });
       expect(draw.sketches.count()).toBe(0);
@@ -359,7 +366,7 @@ for (const kind of KINDS) {
       draw.sketches.add({ edits: [move(a.id, [1, 1])] });
       draw.sketches.add({ edits: [move(b.id, [11, 1])] });
       events.length = 0;
-      draw.features.delete(a.id);
+      writesOf(draw).features.delete(a.id);
       draw.hidden.add(b.id);
       expect(
         events
@@ -375,9 +382,9 @@ for (const kind of KINDS) {
       const sketch = draw.sketches.add({ edits: [move(a.id, [1, 1])] }) as Sketch;
       events.length = 0;
       // Another vertex moved: the sketch goes on, over the new position
-      draw.transact(
+      writesOf(draw).transact(
         () =>
-          draw.features.update(a.id, {
+          writesOf(draw).features.update(a.id, {
             geometry: {
               type: 'LineString',
               coordinates: [
@@ -396,9 +403,9 @@ for (const kind of KINDS) {
         [2, 0],
       ]);
       // A vertex added before it
-      draw.transact(
+      writesOf(draw).transact(
         () =>
-          draw.features.update(a.id, {
+          writesOf(draw).features.update(a.id, {
             geometry: {
               type: 'LineString',
               coordinates: [
@@ -422,9 +429,9 @@ for (const kind of KINDS) {
         ]);
         // The vertex itself moved by another: its ID is gone
         events.length = 0;
-        draw.transact(
+        writesOf(draw).transact(
           () =>
-            draw.features.update(a.id, {
+            writesOf(draw).features.update(a.id, {
               geometry: {
                 type: 'LineString',
                 coordinates: [
@@ -474,7 +481,7 @@ for (const kind of KINDS) {
       expect(items()).toEqual(['new-null', a.id, `new-${a.id}`, b.id]);
 
       const third = draw.sketches.add({ edits: [create(b.id)] }) as Sketch;
-      draw.layers.update('default-layer', { locked: true });
+      writesOf(draw).layers.update('default-layer', { locked: true });
       events.length = 0;
       expect(draw.sketches.commit(third.id)).toBe(false);
       expect(events).toEqual([
@@ -510,7 +517,10 @@ for (const kind of KINDS) {
       }
       expect(draw.sketches.commit(sketch.id)).toBe(true);
       expect(items()).toEqual([a.id, b.id, 'n']);
-      expect(draw.features.get('n')?.geometry).toEqual({ type: 'Point', coordinates: [5, 5] });
+      expect(writesOf(draw).features.get('n')?.geometry).toEqual({
+        type: 'Point',
+        coordinates: [5, 5],
+      });
       expect(failures).toEqual([]);
     });
 
@@ -554,7 +564,7 @@ for (const kind of KINDS) {
         ],
       });
       expect(draw.sketches.commit(sketch.id)).toBe(true);
-      expect(draw.features.get('s')?.geometry).toEqual({
+      expect(writesOf(draw).features.get('s')?.geometry).toEqual({
         type: 'LineString',
         coordinates: [
           [5, 5],
@@ -587,7 +597,7 @@ for (const kind of KINDS) {
       const a = line(draw);
       const b = line(draw, 10);
       const c = line(draw, 20);
-      draw.features.update(c.id, { locked: true });
+      writesOf(draw).features.update(c.id, { locked: true });
       expect(
         draw.sketches.addMany([{ edits: [move(a.id, [1, 1])] }, { edits: [move(c.id, [21, 1])] }]),
       ).toBeNull();
@@ -622,7 +632,7 @@ for (const kind of KINDS) {
       expect(draw.sketches.commitMany([u1.id, d2.id])).toBe(true);
       expect(names(events)).toEqual(['change', 'sketch.removed', 'sketch.removed']);
       expect(applyEdits).toHaveBeenCalledTimes(2);
-      expect(coordinatesOf(draw.features.get(b.id))[1]).toEqual([11, 1]);
+      expect(coordinatesOf(writesOf(draw).features.get(b.id))[1]).toEqual([11, 1]);
       expect(failures).toEqual([]);
     });
 
@@ -631,7 +641,7 @@ for (const kind of KINDS) {
       const a = line(draw);
       const b = line(draw, 10);
       draw.selection.set('feature', [a.id, b.id]);
-      draw.features.update(b.id, { locked: true });
+      writesOf(draw).features.update(b.id, { locked: true });
       const sketch = draw.sketches.add({
         edits: [{ kind: 'translate', target: { selection: true }, from: [0, 0], to: [0, 0.5] }],
       }) as Sketch;
@@ -653,17 +663,17 @@ for (const kind of KINDS) {
       const { draw, events, failures } = open(kind);
       const a = line(draw);
       events.length = 0;
-      draw.transact(() => {
+      writesOf(draw).transact(() => {
         const sketch = draw.sketches.add({ edits: [move(a.id, [1, 1])] }) as Sketch;
-        draw.features.update(a.id, { properties: { n: 1 } });
+        writesOf(draw).features.update(a.id, { properties: { n: 1 } });
         draw.sketches.commit(sketch.id);
       });
       expect(names(events)).toEqual(['sketch.added', 'sketch.removed', 'change']);
-      expect(coordinatesOf(draw.features.get(a.id))[1]).toEqual([1, 1]);
-      expect(draw.features.get(a.id)?.properties).toEqual({ n: 1 });
+      expect(coordinatesOf(writesOf(draw).features.get(a.id))[1]).toEqual([1, 1]);
+      expect(writesOf(draw).features.get(a.id)?.properties).toEqual({ n: 1 });
       // A transaction that writes nothing but draws a sketch
-      draw.transact(() => draw.sketches.add({ edits: [move(a.id, [1, 2])] }));
-      draw.features.update(a.id, { properties: { n: 2 } });
+      writesOf(draw).transact(() => draw.sketches.add({ edits: [move(a.id, [1, 2])] }));
+      writesOf(draw).features.update(a.id, { properties: { n: 2 } });
       expect(failures).toEqual([]);
     });
 
@@ -751,13 +761,13 @@ describe('a sketch of one edit that moves rows', () => {
     const sketch = draw.sketches.add({ edits: [translate([a.id], 1)] }) as Sketch;
     expect(setOf(draw, a.id)).toBe(SKETCH_MOVE_SET);
     expect(stateOf(draw, a.id) & STATE_HIDDEN_SKETCH).toBe(0);
-    expect(coordinatesOf(draw.features.get(a.id))[0]).toEqual([0, 0]);
+    expect(coordinatesOf(writesOf(draw).features.get(a.id))[0]).toEqual([0, 0]);
     expect(coordinatesOf(draw.rendered.get(a.id))[0]?.[0]).toBeCloseTo(1, 9);
     draw.sketches.update(sketch.id, { edits: [translate([a.id], 2)] });
     expect(coordinatesOf(draw.rendered.get(a.id))[0]?.[0]).toBeCloseTo(2, 9);
     expect(draw.sketches.commit(sketch.id)).toBe(true);
     expect(setOf(draw, a.id)).toBe(0);
-    expect(coordinatesOf(draw.features.get(a.id))[0]?.[0]).toBeCloseTo(2, 9);
+    expect(coordinatesOf(writesOf(draw).features.get(a.id))[0]?.[0]).toBeCloseTo(2, 9);
     expect(failures).toEqual([]);
   });
 
@@ -960,7 +970,10 @@ for (const kind of KINDS) {
           ],
         });
       } else {
-        expect(engine.sketches.view.drawnFeature(a.id)).toBe(draw.rendered.get(a.id));
+        // What is drawn is what `draw.rendered` reads, in the public shape
+        expect(draw.rendered.get(a.id)).toEqual(
+          toFeature(engine.sketches.view.drawnFeature(a.id) as Feature),
+        );
       }
       line(draw, 30);
       expect(failures).toEqual([]);

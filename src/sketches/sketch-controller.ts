@@ -34,7 +34,7 @@
  */
 
 import type { InstanceSignals } from '../api/impl/events.js';
-import type { FeatureInput } from '../api/model.js';
+import type { StoredFeatureInput as FeatureInput } from '../api/model.js';
 import type {
   Sketch,
   SketchEdit,
@@ -602,7 +602,7 @@ export class SketchController {
         id = requireId(input.id);
         if (this.#entries.has(id) || taken.has(id)) {
           throw new DrawError('already-exists', `The ID ${JSON.stringify(id)} is already taken`, {
-            id,
+            ids: [id],
           });
         }
       }
@@ -736,10 +736,7 @@ export class SketchController {
         const feature = store.getFeature(featureId) as Feature;
         for (const place of places) {
           if (!isVertexOf(feature.geometry.type, coordinatesOf(feature), place)) {
-            throw invalidInput(`The feature ${featureId} has no vertex ${JSON.stringify(place)}`, {
-              id: featureId,
-              vertex: place,
-            });
+            throw invalidInput(`The feature ${featureId} has no vertex ${JSON.stringify(place)}`);
           }
         }
         const ids = places.length > 0 ? getVertexIds(featureId, places) : [];
@@ -752,10 +749,7 @@ export class SketchController {
         const found = findVertices(featureId, named);
         named.forEach((vertex, i) => {
           if (found[i] == null) {
-            throw invalidInput(`The feature ${featureId} has no vertex ${JSON.stringify(vertex)}`, {
-              id: featureId,
-              vertex,
-            });
+            throw invalidInput(`The feature ${featureId} has no vertex ${JSON.stringify(vertex)}`);
           }
         });
       }
@@ -1694,14 +1688,14 @@ function sameBits(a: unknown, b: unknown): boolean {
 }
 
 /** The error for an input of the wrong shape or value */
-function invalidInput(message: string, details?: unknown): DrawError {
-  return new DrawError('invalid-input', message, details);
+function invalidInput(message: string): DrawError {
+  return new DrawError('invalid-input', message);
 }
 
 /** The error for an ID of no sketch, or of no feature */
 function notFound(id: unknown, kind = 'sketch'): DrawError {
   return new DrawError('not-found', `There is no ${kind} with the ID ${JSON.stringify(id)}`, {
-    id,
+    ids: typeof id === 'string' ? [id] : [],
   });
 }
 

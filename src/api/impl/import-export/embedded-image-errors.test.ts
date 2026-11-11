@@ -10,7 +10,6 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { processImageDataUrl, UnsupportedImageTypeError } from '../../../shared/utils/image.js';
 import type { AutoNameGenerator } from '../../../shared/utils/name-generator.js';
 import { MemoryStore } from '../../../store/memory.js';
-import type { Data } from '../../../store/types.js';
 import { createResourceDeps } from '../../../test-utils.js';
 import { DrawError } from '../../errors.js';
 import { createDocument } from '../document.js';
@@ -50,6 +49,7 @@ const geojson: GeoJSON.FeatureCollection = {
   ],
 };
 
+/** A document of an earlier version, upgraded as it is loaded */
 const native = {
   version: '2.0.0',
   layers: [
@@ -79,7 +79,7 @@ const native = {
     },
   ],
   files: { f: { id: 'f', mimeType: 'image/png', dataURL: LARGE } },
-} as unknown as Data;
+} as never;
 
 let store: MemoryStore;
 

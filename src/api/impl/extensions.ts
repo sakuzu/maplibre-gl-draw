@@ -122,7 +122,6 @@ export function createRegistry<T>(installer: Installer<T>): Registry<T> {
           throw new DrawError(
             'already-exists',
             `There is already a ${installer.kind} named ${JSON.stringify(name)}`,
-            { name },
           );
         }
         seen.add(name);
@@ -388,20 +387,11 @@ function namedCollectionByType(
       const type = typeOf(definition);
       const geometry = OVERRIDABLE_TYPES.get(type);
       if (geometry === undefined) {
-        throw invalidInput(
-          `${JSON.stringify(type)} is not a built-in type that can be overridden`,
-          {
-            type,
-          },
-        );
+        throw invalidInput(`${JSON.stringify(type)} is not a built-in type that can be overridden`);
       }
       if (definition.geometry !== geometry) {
         throw invalidInput(
           `A definition that overrides ${type} must have the geometry ${geometry}`,
-          {
-            type,
-            geometry: definition.geometry,
-          },
         );
       }
       validateOverride(definition);

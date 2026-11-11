@@ -12,6 +12,7 @@ import type { Shortcut } from '@sakuzu/kata/svelte';
 import type { Messages } from './messages.js';
 import { shortcutKey } from './tools.js';
 import type { DrawUIDraw, ToolSpec } from './types.js';
+import { deleteSelection } from './writes.js';
 
 /** Whether a key event comes from the map's canvas, where core has handled it already */
 export function fromMapCanvas(draw: Pick<DrawUIDraw, 'getMap'>, e: KeyboardEvent): boolean {
@@ -43,7 +44,11 @@ export function toolbarShortcuts(
         label: messages.deleteSelection,
         group: messages.editGroup,
         when: () => (draw.selection.value.ids?.length ?? 0) > 0,
-        run: (e) => !fromMapCanvas(draw, e) && draw.selection.delete(),
+        run: (e) => {
+          if (fromMapCanvas(draw, e)) return false;
+          void deleteSelection(draw);
+          return true;
+        },
       });
     }
   }

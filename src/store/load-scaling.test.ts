@@ -148,7 +148,8 @@ async function measureLoadOnce(data: Data): Promise<number> {
   events.on('change', emitLike);
 
   const start = performance.now();
-  await document.load(data);
+  // A document of version 3, upgraded as it is loaded
+  await document.load(data as never);
   const elapsed = performance.now() - start;
   stop();
   return elapsed;

@@ -19,6 +19,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { createDraw } from './api/draw.js';
 import type { Plugin } from './api/extension/plugin.js';
+import { writesOf } from './test-support/writes.js';
 import { createMapStub } from './test-utils.js';
 
 describe('draw.destroy()', () => {
@@ -48,7 +49,10 @@ describe('draw.destroy()', () => {
   it('leaves no timer running', () => {
     const stub = createMapStub();
     const draw = createDraw(stub.map);
-    draw.features.create({ type: 'Point', geometry: { type: 'Point', coordinates: [0, 0] } });
+    writesOf(draw).features.create({
+      type: 'Point',
+      geometry: { type: 'Point', coordinates: [0, 0] },
+    });
     draw.destroy();
 
     expect(vi.getTimerCount()).toBe(0);
@@ -104,7 +108,7 @@ describe('draw.destroy()', () => {
     expect(stub.isBoxZoomEnabled()).toBe(true);
   });
 
-  it('throws invalid-state for the calls made after destroy, and adds nothing to the map', () => {
+  it('throws invalid-state for the calls made after destroy, and adds nothing to the map', async () => {
     const stub = createMapStub();
     const draw = createDraw(stub.map);
     const lateInstall = vi.fn();
@@ -112,8 +116,6 @@ describe('draw.destroy()', () => {
 
     const calls: Array<() => unknown> = [
       () => draw.setMode('select'),
-      () =>
-        draw.features.create({ type: 'Point', geometry: { type: 'Point', coordinates: [1, 1] } }),
       () => draw.features.list(),
       () => draw.setReadOnly(true),
       () => draw.setInteractionLocked(true),
@@ -123,9 +125,20 @@ describe('draw.destroy()', () => {
       () => draw.extensions.plugins.add({ name: 'late', onAdd: lateInstall }),
       () => draw.extensions.snapProviders.add({ name: 'late', candidates: () => [] }),
     ];
+    const failed = expect.objectContaining({ name: 'DrawError', code: 'invalid-state' });
     for (const call of calls) {
-      expect(call).toThrow(expect.objectContaining({ name: 'DrawError', code: 'invalid-state' }));
+      expect(call).toThrow(failed);
     }
+    // A write returns a promise, which rejects with the error
+    await expect(
+      draw.write((tx) =>
+        tx.features.create({
+          type: 'Feature',
+          geometry: { type: 'Point', coordinates: [1, 1] },
+          properties: {},
+        }),
+      ),
+    ).rejects.toThrow(failed);
 
     expect(lateInstall).not.toHaveBeenCalled();
 

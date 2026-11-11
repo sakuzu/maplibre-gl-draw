@@ -2,8 +2,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * `draw.features.restore` of many rows: written in steps, a task each, and told once with the
- * last of them. Another write, a read of the rows and another restore made meanwhile write the
+ * `features.restore` of the internal writes, of many rows: written in steps, a task each, and
+ * told once with the last of them. Another write, a read of the rows and another restore made meanwhile write the
  * rest first: what is read is what the restore leaves, and the writes keep their order.
  */
 
@@ -15,6 +15,7 @@ import { BULK_SLICE_ROWS } from '../../operations/bulk-sliced.js';
 import type { Store } from '../../store/store.js';
 import { createTableStore } from '../../store/table-memory.js';
 import type { Feature, SelectionTarget, StoreChange } from '../../store/types.js';
+import { writesOf } from '../../test-support/writes.js';
 import { createMapStub } from '../../test-utils.js';
 import type { Draw } from '../draw.js';
 import type { FeatureValues } from '../model.js';
@@ -22,7 +23,7 @@ import type { FeatureTables, LayerTableView, RowField, RowWrite } from '../table
 import { createDrawOnEngine } from './create-draw.js';
 import { createEngine } from './engine.js';
 
-/** Values of rows made as values of features, which `draw.features.restore` writes back */
+/** Values of rows made as values of features, which `features.restore` writes back */
 function createRowValues(values: Parameters<typeof createRows>[0]): FeatureValues {
   return featureValuesOf(createRows(values));
 }
@@ -145,13 +146,13 @@ function runSteps(): number {
   return tasks;
 }
 
-describe('draw.features.restore of many rows', () => {
+describe('features.restore of many rows', () => {
   it('writes them over several tasks and tells it once, with the source of its transaction', () => {
     const { draw, store, tables, handles, notified, before } = setup();
     let returned: FeatureValues | null = null;
-    draw.transact(
+    writesOf(draw).transact(
       () => {
-        returned = draw.features.restore(before);
+        returned = writesOf(draw).features.restore(before);
       },
       { source: 'history' },
     );
@@ -183,7 +184,7 @@ describe('draw.features.restore of many rows', () => {
       fields: new Map(),
       deleted: (few.deleted as Uint8Array).slice(0, BULK_SLICE_ROWS),
     });
-    draw.features.restore(values);
+    writesOf(draw).features.restore(values);
     expect(rowsBack(tables, handles)).toBe(BULK_SLICE_ROWS);
     expect(notified).toHaveLength(1);
     expect(store.slicedWritePending).toBe(false);
@@ -191,10 +192,10 @@ describe('draw.features.restore of many rows', () => {
 
   it('reads the rows as the restore leaves them while it is under way', () => {
     const { draw, tables, handles, notified, before } = setup();
-    draw.features.restore(before);
+    writesOf(draw).features.restore(before);
     expect(rowsBack(tables, handles)).toBeLessThan(COUNT);
     // The last row, read through the instance: the rest is written first, and told
-    expect(draw.features.get(`p${COUNT - 1}`)?.properties).toEqual({ n: COUNT - 1 });
+    expect(writesOf(draw).features.get(`p${COUNT - 1}`)?.properties).toEqual({ n: COUNT - 1 });
     expect(rowsBack(tables, handles)).toBe(COUNT);
     expect(notified).toHaveLength(1);
     expect(runSteps()).toBe(0);
@@ -202,7 +203,7 @@ describe('draw.features.restore of many rows', () => {
 
   it('reads the rows through the tables as the restore leaves them', () => {
     const { draw, tables, handles, notified, before } = setup();
-    draw.features.restore(before);
+    writesOf(draw).features.restore(before);
     const read = tables.readValues({
       handles,
       fields: new Map<RowField, unknown[]>(),
@@ -214,7 +215,7 @@ describe('draw.features.restore of many rows', () => {
 
   it('writes the rest first when another write comes, which is told after it', () => {
     const { draw, store, tables, handles, notified, before } = setup();
-    draw.features.restore(before);
+    writesOf(draw).features.restore(before);
     expect(rowsBack(tables, handles)).toBeLessThan(COUNT);
     store.setMetadata({ title: 'after' });
     expect(rowsBack(tables, handles)).toBe(COUNT);
@@ -226,7 +227,7 @@ describe('draw.features.restore of many rows', () => {
 
   it('writes the rest first when a write comes from elsewhere', () => {
     const { draw, store, tables, handles, notified, before } = setup();
-    draw.features.restore(before);
+    writesOf(draw).features.restore(before);
     store.transact(() => store.setMetadata({ title: 'remote' }), 'remote');
     expect(rowsBack(tables, handles)).toBe(COUNT);
     expect(notified.map((change) => change.source)).toEqual(['local', 'remote']);
@@ -234,7 +235,7 @@ describe('draw.features.restore of many rows', () => {
 
   it('writes the rest of a restore first when another restore comes', () => {
     const { draw, tables, handles, notified, before } = setup();
-    draw.features.restore(before);
+    writesOf(draw).features.restore(before);
     const first = rowValuesOf(before);
     // The first rows deleted again
     const again = createRowValues({
@@ -242,7 +243,7 @@ describe('draw.features.restore of many rows', () => {
       fields: new Map(),
       deleted: new Uint8Array(10).fill(1),
     });
-    draw.features.restore(again);
+    writesOf(draw).features.restore(again);
     expect(notified).toHaveLength(2);
     expect(notified[0]?.rows?.layers.get('rows')?.created.length).toBe(COUNT);
     expect(rowsBack(tables, handles)).toBe(COUNT - 10);
@@ -251,7 +252,7 @@ describe('draw.features.restore of many rows', () => {
 
   it('tells the selection written meanwhile after the restore', () => {
     const { draw, tables, handles, notified, before } = setup();
-    draw.features.restore(before);
+    writesOf(draw).features.restore(before);
     draw.selection.set('feature', ['p0']);
     expect(rowsBack(tables, handles)).toBe(COUNT);
     expect(notified[0]?.rows?.layers.get('rows')?.created.length).toBe(COUNT);
@@ -260,11 +261,11 @@ describe('draw.features.restore of many rows', () => {
 
   it('deletes many rows in steps, kept by one token, and brings them back', () => {
     const { draw, store, tables, handles, notified, before } = setup();
-    draw.features.restore(before);
+    writesOf(draw).features.restore(before);
     runSteps();
     notified.length = 0;
     // Deleted again, in steps
-    draw.features.restore(
+    writesOf(draw).features.restore(
       createRowValues({ handles, fields: new Map(), deleted: new Uint8Array(COUNT).fill(1) }),
     );
     expect(store.slicedWritePending).toBe(true);
@@ -273,14 +274,14 @@ describe('draw.features.restore of many rows', () => {
     expect(notified).toHaveLength(1);
     const change = notified[0] as StoreChange;
     expect(change.restoreToken).toBeDefined();
-    draw.features.restore(change.previousValues as FeatureValues);
+    writesOf(draw).features.restore(change.previousValues as FeatureValues);
     runSteps();
     expect(rowsBack(tables, handles)).toBe(COUNT);
   });
 
   it('deletes a group its rows left once the last of them is written', () => {
     const { draw, store, tables, handles, notified, before } = setup();
-    draw.features.restore(before);
+    writesOf(draw).features.restore(before);
     runSteps();
     store.createGroup({
       id: 'g',
@@ -291,7 +292,7 @@ describe('draw.features.restore of many rows', () => {
       locked: false,
     } as never);
     notified.length = 0;
-    draw.features.restore(
+    writesOf(draw).features.restore(
       createRowValues({ handles, fields: new Map(), deleted: new Uint8Array(COUNT).fill(1) }),
     );
     // Between two steps, the group is there
@@ -316,8 +317,8 @@ describe('draw.features.restore of many rows', () => {
     });
     expect((selected as SelectionTarget | null)?.count).toBe(COUNT);
     // The features selected in bulk put back after the rows, as an undo does
-    draw.transact(() => {
-      draw.features.restore(before);
+    writesOf(draw).transact(() => {
+      writesOf(draw).features.restore(before);
       draw.selection.set(selected as SelectionTarget);
     });
     expect(rowsBack(tables, handles)).toBe(COUNT);
@@ -327,7 +328,7 @@ describe('draw.features.restore of many rows', () => {
 
   it('tells the changes of the order a write of every row at once tells', () => {
     const steps = setup();
-    steps.draw.features.restore(steps.before);
+    writesOf(steps.draw).features.restore(steps.before);
     runSteps();
     draw?.destroy();
     draw = undefined;
@@ -356,7 +357,7 @@ describe('draw.features.restore of many rows', () => {
       draw = undefined;
       const { draw: instance, tables, notified, before } = setup();
       const view = tables.get('rows') as LayerTableView;
-      instance.features.restore(before);
+      writesOf(instance).features.restore(before);
       expect(notified).toHaveLength(0);
       expect(read(view)).toEqual(expected[k]);
       expect(notified).toHaveLength(1);
@@ -366,7 +367,7 @@ describe('draw.features.restore of many rows', () => {
   it('reads the rows as the restore leaves them through a scan started before', () => {
     const { draw, tables, notified, before } = setup();
     const cursor = tables.scan({ layerIds: ['rows'] });
-    draw.features.restore(before);
+    writesOf(draw).features.restore(before);
     let count = 0;
     for (let batch = cursor.next(); batch; batch = cursor.next()) count += batch.length;
     expect(count).toBe(COUNT);

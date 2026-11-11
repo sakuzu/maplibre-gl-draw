@@ -98,8 +98,7 @@ const SHAPES: Readonly<
 function wrongShape(kind: ExtensionKind, message: string, member?: string): DrawError {
   return new DrawError(
     'invalid-input',
-    `The ${kind} ${message}`,
-    member === undefined ? { kind } : { kind, member },
+    member === undefined ? `The ${kind} ${message}` : `The ${kind} ${message} (${member})`,
   );
 }
 

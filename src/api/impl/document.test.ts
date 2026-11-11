@@ -9,14 +9,14 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import type { ObjectLayer } from '../../shared/types/model.js';
 import { MemoryStore } from '../../store/memory.js';
 import { createResourceDeps } from '../../test-utils.js';
-import type { DocumentResource } from '../document.js';
 import { DrawError } from '../errors.js';
-import type { MetadataResource } from '../metadata.js';
 import { createDocument } from './document.js';
+import type { DocumentLoads as DocumentResource } from './document-resource.js';
 import { createMetadata } from './metadata.js';
 
 let store: MemoryStore;
-let metadata: MetadataResource;
+/** The metadata of the internal writes, which writes as well as reads */
+let metadata: ReturnType<typeof createMetadata>;
 let doc: DocumentResource;
 
 beforeEach(() => {
@@ -664,6 +664,10 @@ describe('document.loadMany store contents', () => {
        "features": [
         {
          "id": "m",
+         "visible": true,
+         "locked": false,
+         "layerId": "n1",
+         "groupId": "g1",
          "type": "Point",
          "geometry": {
           "type": "Point",
@@ -672,17 +676,16 @@ describe('document.loadMany store contents', () => {
            1
           ]
          },
-         "layerId": "n1",
-         "groupId": "g1",
          "properties": {
           "name": "M"
          },
-         "style": {},
-         "visible": true,
-         "locked": false
+         "style": {}
         },
         {
          "id": "img",
+         "visible": true,
+         "locked": false,
+         "layerId": "n1",
          "type": "Image",
          "geometry": {
           "type": "Point",
@@ -691,13 +694,10 @@ describe('document.loadMany store contents', () => {
            2
           ]
          },
-         "layerId": "n1",
          "properties": {
           "maplibre-gl-draw:imageFileId": "f1"
          },
-         "style": {},
-         "visible": true,
-         "locked": false
+         "style": {}
         },
         {
          "id": "#1",

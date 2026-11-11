@@ -1,0 +1,1661 @@
+// SPDX-FileCopyrightText: 2026 SAKAIDA Atsushi
+// SPDX-License-Identifier: AGPL-3.0-only
+
+/**
+ * `draw.write`: the transaction, its writes kept until its function ends, and the commit that
+ * makes them at once
+ *
+ * A write of a transaction is checked when it is called, against the document as committed with
+ * what the transaction wrote before it over it (the features, layers and groups it wrote by their
+ * IDs): a wrong input, a refusal of the state and a lock fail it there, and fail the whole
+ * transaction. What it gives back (the feature created or changed) is what it will write. It is
+ * kept as a write of the internal resources, made when the transaction is committed: the commit
+ * goes into the queue of the writes of this client (`WriteQueue`), after the ones made before it,
+ * and is made in a later microtask, in one transaction of the Store, so it is one notification
+ * and one `change`. A write whose target is gone by then (a feature deleted from elsewhere) is
+ * left out and counted as skipped.
+ *
+ * Nothing of a transaction is read before its commit: `draw.features` reads the document as
+ * committed, however many features are written, so a read made without awaiting the write reads
+ * the document before it.
+ */
+
+import { differenceAll, intersectionAll, unionAll } from '../../geometry/boolean.js';
+import type { AreaCoordinates, MultiPolygonCoordinates } from '../../geometry/types.js';
+import { createId } from '../../shared/utils/id.js';
+import { forEachMatchingRow, type RowFilter } from '../../store/feature-stream.js';
+import { featuresInStackingOrder } from '../../store/item-lists.js';
+import { listEveryFeatureInOrder } from '../../store/ordering.js';
+import { selectionOfTarget } from '../../store/selection-value.js';
+import type { SlicedWrite, Store } from '../../store/store.js';
+import type {
+  FeatureCoordinates,
+  FeatureType,
+  Selection,
+  Feature as StoredFeature,
+  Group as StoredGroup,
+  Layer as StoredLayer,
+} from '../../store/types.js';
+import { DrawError } from '../errors.js';
+import type { FeaturesCollection } from '../features.js';
+import type { GroupsCollection } from '../groups.js';
+import type { LayersCollection } from '../layers.js';
+import type {
+  Feature,
+  FeatureInput,
+  FeaturePatch,
+  FeatureStyleSample,
+  Group,
+  GroupInput,
+  GroupPatch,
+  Layer,
+  LayerInput,
+  LayerPatch,
+  LoadOptions,
+  Metadata,
+  MoveTarget,
+  StoredFeaturePatch,
+} from '../model.js';
+import type { SelectionTarget } from '../state.js';
+import type {
+  ImportOptions,
+  ImportResult,
+  ImportSource,
+  Many,
+  Neighbor,
+  OpenResult,
+  OpenSource,
+  Placement,
+  Rotate,
+  Scale,
+  Target,
+  Transaction,
+  TransactionDocument,
+  TransactionFeatures,
+  TransactionGroups,
+  TransactionLayers,
+  Translate,
+  Where,
+  Write,
+  WriteOptions,
+  WriteResult,
+} from '../write.js';
+import type { DocumentLoader, PreparedItem } from './document.js';
+import type { FeatureResource } from './feature-resource.js';
+import { storedInputOf, storedPatchOf, toFeature } from './feature-shape.js';
+import { prepareFeature, preparePatch } from './features.js';
+import { resultFeature } from './geometry/apply.js';
+import { planBuffer } from './geometry/buffer.js';
+import { planSplit } from './geometry/split.js';
+import {
+  isAreaFeature,
+  isBufferableFeature,
+  isSplitLineFeature,
+  toAreaCoordinates,
+  toResultGeometry,
+} from './geometry/targets.js';
+import type { GroupResource } from './group-resource.js';
+import { prepareGroup, prepareGroupPatch } from './groups.js';
+import type { LayerResource } from './layer-resource.js';
+import { prepareLayer, prepareLayerPatch } from './layers.js';
+import { resolveMoveTarget } from './placement.js';
+import type { SelectionWrites } from './selection-resource.js';
+import type { ResourceDeps } from './shared.js';
+import {
+  featureLocked,
+  groupLocked,
+  invalidInput,
+  isRecord,
+  layerLocked,
+  notFound,
+  onlyLockOrVisibility,
+  requireId,
+} from './shared.js';
+
+// ============================================================================
+// What the commit tells
+// ============================================================================
+
+/** The commit of `draw.write` being made in a Store, read by the `change` it makes */
+interface CommitInfo {
+  readonly id: string;
+  readonly label: string | undefined;
+  /** Whether it is a step of undo */
+  readonly undo: boolean;
+}
+
+const COMMITS = new WeakMap<Store, CommitInfo>();
+
+/**
+ * The commit being made in the Store, while its transaction runs and its notification goes out
+ * (undefined for a write made otherwise: the input of the user, a write from elsewhere)
+ *
+ * @internal
+ */
+export function commitOf(store: Store): CommitInfo | undefined {
+  return COMMITS.get(store);
+}
+
+/**
+ * Makes a commit in the Store, with what tells it, in one transaction of the Store
+ *
+ * @internal
+ */
+export function runCommit<T>(store: Store, info: CommitInfo, source: string, fn: () => T): T {
+  const outer = COMMITS.get(store);
+  COMMITS.set(store, info);
+  try {
+    return store.transact(fn, source);
+  } finally {
+    if (outer) COMMITS.set(store, outer);
+    else COMMITS.delete(store);
+  }
+}
+
+/**
+ * Puts a commit in the queue of the writes of this client, after the ones before it, and makes it
+ * in a later microtask (or sooner, when another write of this client comes first)
+ *
+ * @internal
+ */
+export function queueCommit<T>(store: Store, make: () => T): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    let made = false;
+    const queued: SlicedWrite = {
+      finish() {
+        if (made) return;
+        made = true;
+        store.endSlicedWrite(queued);
+        try {
+          resolve(make());
+        } catch (error) {
+          reject(error);
+        }
+      },
+    };
+    store.beginSlicedWrite(queued);
+    queueMicrotask(() => queued.finish());
+  });
+}
+
+// ============================================================================
+// The writer
+// ============================================================================
+
+/**
+ * The internal resources the writes of a transaction are made with
+ *
+ * @internal
+ */
+export interface Writers {
+  readonly features: FeatureResource;
+  readonly layers: LayerResource;
+  readonly groups: GroupResource;
+  readonly metadata: { get(): Metadata; update(patch: Partial<Metadata>): Metadata | null };
+  readonly selection: SelectionWrites;
+  readonly document: DocumentLoader;
+}
+
+/**
+ * What the writer is made of
+ *
+ * @internal
+ */
+export interface WriterDeps {
+  readonly deps: ResourceDeps;
+  readonly writers: Writers;
+  readonly reads: {
+    readonly features: FeaturesCollection;
+    readonly layers: LayersCollection;
+    readonly groups: GroupsCollection;
+  };
+}
+
+/**
+ * `draw.write` and `draw.open`
+ *
+ * @internal
+ */
+export interface Writer {
+  write<T>(fn: (tx: Transaction) => T | Promise<T>, options?: WriteOptions): Write<T>;
+  open(source?: OpenSource, options?: { readonly signal?: AbortSignal }): Promise<OpenResult>;
+}
+
+/** The source the Store is told for a commit of `draw.write` */
+const WRITE_SOURCE = 'local';
+
+/**
+ * Creates `draw.write` and `draw.open`
+ *
+ * @internal
+ */
+export function createWriter(writerDeps: WriterDeps): Writer {
+  const { store } = writerDeps.deps;
+  // The depth of the synchronous parts of the functions of `write` running
+  let running = 0;
+
+  const write = <T>(fn: (tx: Transaction) => T | Promise<T>, options?: WriteOptions): Write<T> => {
+    if (running > 0) {
+      throw new DrawError(
+        'nested-write',
+        'draw.write is called in the function of another: give its transaction to a function instead',
+      );
+    }
+    if (typeof fn !== 'function') throw invalidInput('draw.write takes a function');
+    const checked = checkWriteOptions(options);
+    const id = createId();
+    const tx = new TransactionImpl(id, checked.signal, writerDeps);
+    let returned: T | Promise<T>;
+    running++;
+    try {
+      returned = fn(tx);
+    } catch (error) {
+      returned = Promise.reject(error);
+    } finally {
+      running--;
+    }
+    // Once the function ends (and its writes not awaited are done), the commit is queued
+    const commit = (value: T): WriteResult<T> | Promise<WriteResult<T>> => {
+      tx.throwFailure();
+      if (checked.signal.aborted) throw abortedError(checked.signal);
+      if (tx.empty) return { value, skipped: 0 };
+      return queueCommit(store, () =>
+        tx.commit({ id, label: checked.label, undo: checked.undo }),
+      ).then((skipped) => ({ value, skipped }));
+    };
+    const result: Promise<WriteResult<T>> = Promise.resolve(returned).then(
+      (value) => {
+        tx.close();
+        return tx.pending ? tx.settled().then(() => commit(value)) : commit(value);
+      },
+      (error: unknown) => {
+        tx.close();
+        throw error;
+      },
+    );
+    const done = result.then(({ value }) => value);
+    return Object.assign(done, { id, result }) as Write<T>;
+  };
+
+  return {
+    write,
+    async open(source, options) {
+      if (source === undefined) {
+        throw new DrawError('invalid-state', 'There is no storage to open the document from');
+      }
+      const signal = options?.signal;
+      const loader = writerDeps.writers.document;
+      const prepared = await loader.prepare(
+        source as never,
+        { mode: 'replace' },
+        new Set(),
+        new Set(),
+      );
+      if (signal?.aborted) throw abortedError(signal);
+      if (!prepared) throw notEditable();
+      return queueCommit(store, () => {
+        if (store.isReadOnly()) throw notEditable();
+        const id = createId();
+        const [result] =
+          runCommit(store, { id, label: undefined, undo: false }, 'open', () =>
+            loader.writeAll([prepared]),
+          ) ?? [];
+        return {
+          features: result?.featureIds.length ?? 0,
+          skipped: (result?.skipped ?? []).map(({ index, reason }) => ({
+            index,
+            error: new DrawError('invalid-input', reason),
+          })),
+        };
+      });
+    },
+  };
+}
+
+/** The signal of a write given none */
+const NEVER_ABORTED = new AbortController().signal;
+
+/** The options of `draw.write`, checked */
+function checkWriteOptions(options: WriteOptions | undefined): {
+  signal: AbortSignal;
+  label: string | undefined;
+  undo: boolean;
+} {
+  if (options !== undefined && !isRecord(options))
+    throw invalidInput('The options must be an object');
+  const { signal, label, undo } = options ?? {};
+  if (label !== undefined && typeof label !== 'string')
+    throw invalidInput('label must be a string');
+  if (undo !== undefined && typeof undo !== 'boolean') throw invalidInput('undo must be a boolean');
+  if (signal !== undefined && !(signal instanceof AbortSignal)) {
+    throw invalidInput('signal must be an AbortSignal');
+  }
+  return { signal: signal ?? NEVER_ABORTED, label, undo: undo ?? true };
+}
+
+function abortedError(signal: AbortSignal): DrawError {
+  return new DrawError('aborted', 'The write was stopped by its signal', { cause: signal.reason });
+}
+
+function notEditable(): DrawError {
+  return new DrawError('not-editable', 'The document is read-only');
+}
+
+function lockedError(ids: readonly string[]): DrawError {
+  return new DrawError('locked', `${ids.join(', ')} is locked`, { ids });
+}
+
+/** Whether a write made at the commit failed because what it named is gone, or locked meanwhile */
+function isSkip(error: unknown): boolean {
+  return error instanceof DrawError && (error.code === 'not-found' || error.code === 'locked');
+}
+
+// ============================================================================
+// The transaction
+// ============================================================================
+
+/** A write of a transaction, made at its commit: false when it was refused (left out) */
+type Op = () => boolean | undefined;
+
+/**
+ * The features, layers and groups a transaction wrote by their IDs, over the document as
+ * committed: what its later writes are checked against
+ */
+class Overlay {
+  readonly features = new Map<string, StoredFeature | null>();
+  readonly layers = new Map<string, StoredLayer | null>();
+  readonly groups = new Map<string, StoredGroup | null>();
+  /** The Store as the checks read it, with what the transaction wrote over it */
+  readonly view: Store;
+
+  constructor(store: Store) {
+    const read = <T>(
+      written: Map<string, T | null>,
+      id: string,
+      committed: () => T | undefined,
+    ) => {
+      const own = written.get(id);
+      return own === null ? undefined : (own ?? committed());
+    };
+    const overrides: Record<string, unknown> = {
+      getFeature: (id: string) => read(this.features, id, () => store.getFeature(id)),
+      getLayer: (id: string) => read(this.layers, id, () => store.getLayer(id)),
+      getGroup: (id: string) => read(this.groups, id, () => store.getGroup(id)),
+      getLayerOrder: () => {
+        const order = store.getLayerOrder().filter((id) => this.layers.get(id) !== null);
+        for (const [id, layer] of this.layers) {
+          if (layer !== null && !order.includes(id)) order.push(id);
+        }
+        return order;
+      },
+      listLayers: () => {
+        const out = store.listLayers().filter((layer) => this.layers.get(layer.id) !== null);
+        for (const [id, layer] of this.layers) {
+          if (layer !== null && !out.some((other) => other.id === id)) out.push(layer);
+        }
+        return out;
+      },
+    };
+    this.view = new Proxy(store, {
+      get(target, key, receiver) {
+        if (typeof key === 'string' && key in overrides) return overrides[key];
+        const value = Reflect.get(target, key, receiver === this ? target : target);
+        return typeof value === 'function' ? value.bind(target) : value;
+      },
+    });
+  }
+}
+
+/** A transaction: its writes checked when called, kept, and made at its commit */
+class TransactionImpl implements Transaction {
+  readonly id: string;
+  readonly signal: AbortSignal;
+  // Made when first read: a transaction that writes features only makes nothing else
+  #features: TransactionFeatures | undefined;
+  #layers: TransactionLayers | undefined;
+  #groups: TransactionGroups | undefined;
+  #document: TransactionDocument | undefined;
+
+  readonly #store: Store;
+  readonly #deps: ResourceDeps;
+  readonly #writers: Writers;
+  readonly #reads: WriterDeps['reads'];
+  #overlayMade: Overlay | undefined;
+  /** The writes in the order they were called; an asynchronous one fills its place once read */
+  readonly #ops: (Op | null)[] = [];
+  /** The writes called that have not settled yet */
+  readonly #pending = new Set<Promise<unknown>>();
+  #closed = false;
+  #failure: { error: unknown } | undefined;
+
+  constructor(id: string, signal: AbortSignal, writerDeps: WriterDeps) {
+    this.id = id;
+    this.signal = signal;
+    this.#deps = writerDeps.deps;
+    this.#store = writerDeps.deps.store;
+    this.#writers = writerDeps.writers;
+    this.#reads = writerDeps.reads;
+  }
+
+  get features(): TransactionFeatures {
+    this.#features ??= this.#featureWrites();
+    return this.#features;
+  }
+
+  get layers(): TransactionLayers {
+    this.#layers ??= this.#layerWrites();
+    return this.#layers;
+  }
+
+  get groups(): TransactionGroups {
+    this.#groups ??= this.#groupWrites();
+    return this.#groups;
+  }
+
+  get document(): TransactionDocument {
+    this.#document ??= this.#documentWrites();
+    return this.#document;
+  }
+
+  /** What the transaction wrote over the document, made with its first write */
+  get #overlay(): Overlay {
+    this.#overlayMade ??= new Overlay(this.#store);
+    return this.#overlayMade;
+  }
+
+  /** Whether it wrote nothing */
+  get empty(): boolean {
+    return this.#ops.every((op) => op === null);
+  }
+
+  close(): void {
+    this.#closed = true;
+  }
+
+  /** Whether a write called has not settled yet */
+  get pending(): boolean {
+    return this.#pending.size > 0;
+  }
+
+  /** Settles once every write called has */
+  async settled(): Promise<void> {
+    while (this.#pending.size > 0) await Promise.allSettled([...this.#pending]);
+  }
+
+  /** Throws what failed first, when a write failed */
+  throwFailure(): void {
+    if (this.#failure) throw this.#failure.error;
+  }
+
+  /**
+   * Makes the writes, in one transaction of the Store
+   *
+   * @returns How many were left out
+   */
+  commit(info: CommitInfo): number {
+    const store = this.#store;
+    if (store.isReadOnly()) throw notEditable();
+    let skipped = 0;
+    runCommit(store, info, WRITE_SOURCE, () => {
+      for (const op of this.#ops) {
+        if (op === null) continue;
+        try {
+          if (op() === false) skipped++;
+        } catch (error) {
+          if (!isSkip(error)) throw error;
+          skipped++;
+        }
+      }
+    });
+    return skipped;
+  }
+
+  // ==========================================================================
+  // Running a write
+  // ==========================================================================
+
+  /**
+   * Runs a write now: its checks and what it gives back, the write it keeps for the commit
+   * pushed by `keep`. What it throws fails it and the whole transaction.
+   */
+  #run<T>(check: (keep: (op: Op) => void) => T): Promise<T> {
+    const refused = this.#refusal();
+    if (refused) return this.#fail(refused);
+    try {
+      return Promise.resolve(check((op) => this.#ops.push(op)));
+    } catch (error) {
+      return this.#fail(error);
+    }
+  }
+
+  /** Runs a write that reads first: its place among the writes is kept from when it is called */
+  #runAsync<T>(check: (keep: (op: Op) => void) => Promise<T>): Promise<T> {
+    const refused = this.#refusal();
+    if (refused) return this.#fail(refused);
+    const at = this.#ops.length;
+    this.#ops.push(null);
+    const running = (async () => {
+      try {
+        return await check((op) => {
+          this.#ops[at] = op;
+        });
+      } catch (error) {
+        this.#failure ??= { error };
+        throw error;
+      }
+    })();
+    this.#pending.add(running);
+    void running.then(
+      () => this.#pending.delete(running),
+      () => this.#pending.delete(running),
+    );
+    return running;
+  }
+
+  #refusal(): DrawError | null {
+    if (this.#closed) {
+      return new DrawError(
+        'transaction-closed',
+        'The function of draw.write has ended: its transaction takes no more writes',
+      );
+    }
+    if (this.signal.aborted) return abortedError(this.signal);
+    return null;
+  }
+
+  #fail<T>(error: unknown): Promise<T> {
+    this.#failure ??= { error };
+    return Promise.reject(error);
+  }
+
+  /** Throws unless the document can be written now */
+  #requireEditable(): void {
+    if (this.#store.isReadOnly()) throw notEditable();
+  }
+
+  /** Throws while a write of the transaction is under way: what it reads is not yet known */
+  #requireSettled(): void {
+    if (this.#closed) {
+      throw new DrawError('transaction-closed', 'The function of draw.write has ended');
+    }
+    if (this.#pending.size > 0) {
+      throw new DrawError(
+        'write-not-finished',
+        'A write of the transaction is under way: await it before reading',
+      );
+    }
+  }
+
+  /** The feature as the transaction reads it */
+  #feature(id: unknown): StoredFeature {
+    const feature = typeof id === 'string' ? this.#overlay.view.getFeature(id) : undefined;
+    if (!feature) throw notFound('feature', id);
+    return feature;
+  }
+
+  // ==========================================================================
+  // The targets
+  // ==========================================================================
+
+  /**
+   * The features many names, read now: the IDs of the features (checked), or the selection of a
+   * target, kept to be written as it was named
+   */
+  #resolve(target: Target, what: string): ResolvedTargetOf {
+    if (typeof target === 'string') return { kind: 'ids', ids: [this.#feature(target).id] };
+    if (Array.isArray(target)) {
+      if (target.length === 0) throw invalidInput(`${what} names no feature`);
+      const ids = [...new Set(target.map((id) => requireId(id)))];
+      for (const id of ids) this.#feature(id);
+      return { kind: 'ids', ids };
+    }
+    if (!isRecord(target)) throw invalidInput(`${what} must be an ID, IDs, a filter or a target`);
+    if ((target as { type?: unknown }).type === 'selection') {
+      const named = target as unknown as SelectionTarget;
+      const selection = selectionOfTarget(this.#store, named);
+      if (!selection) throw invalidInput('The target is not one this instance gave');
+      return { kind: 'selection', selection, count: named.count };
+    }
+    if ('all' in target) {
+      if (target.all !== true || Object.keys(target).length !== 1) {
+        throw invalidInput('{ all: true } names every feature, and is given alone');
+      }
+      return { kind: 'filter', matches: () => true };
+    }
+    return { kind: 'filter', matches: whereMatcher(this.#store, target as Where) };
+  }
+
+  /** The IDs of the features of a target as the document is now (at the commit) */
+  #idsAtCommit(resolved: ResolvedTargetOf): string[] {
+    if (resolved.kind === 'ids') {
+      return resolved.ids.filter((id) => this.#store.getFeature(id) !== undefined);
+    }
+    if (resolved.kind === 'filter') {
+      return listEveryFeatureIds(this.#store).filter((id) => {
+        const feature = this.#store.getFeature(id);
+        return feature !== undefined && resolved.matches(feature);
+      });
+    }
+    return [];
+  }
+
+  /** The IDs of the features of a target as the transaction reads it (to count them now) */
+  #idsNow(resolved: ResolvedTargetOf): string[] | null {
+    if (resolved.kind === 'ids') return resolved.ids;
+    if (resolved.kind === 'filter') {
+      return listEveryFeatureIds(this.#store).filter((id) => {
+        const feature = this.#overlay.view.getFeature(id);
+        return feature !== undefined && resolved.matches(feature);
+      });
+    }
+    return null;
+  }
+
+  /** Runs a write of the internal resources with the selection a target names */
+  #withSelection<T>(selection: Selection, fn: () => T): T {
+    const store = this.#store;
+    const before = store.getSelection();
+    if (sameSelection(before, selection)) return fn();
+    store.restoreSelection(selection);
+    try {
+      return fn();
+    } finally {
+      store.restoreSelection(before);
+    }
+  }
+
+  // ==========================================================================
+  // The features
+  // ==========================================================================
+
+  #featureWrites(): TransactionFeatures {
+    const reads = this.#reads.features;
+    const writers = this.#writers.features;
+    const overlay = this.#overlay;
+    const deps = (): ResourceDeps => ({ ...this.#deps, store: overlay.view });
+    const read = <T>(fn: () => T): T => {
+      this.#requireSettled();
+      return fn();
+    };
+    const self = this;
+
+    function create(input: FeatureInput): Promise<Feature>;
+    function create(inputs: readonly FeatureInput[]): Promise<readonly string[]>;
+    function create(
+      given: FeatureInput | readonly FeatureInput[],
+    ): Promise<Feature | readonly string[]> {
+      return self.#run((keep) => {
+        const many = Array.isArray(given);
+        const inputs = (many ? given : [given]) as readonly FeatureInput[];
+        const pending = new Set<string>();
+        const prepared = inputs.map((input) => {
+          const feature = prepareFeature(deps(), storedInputOf(input), pending);
+          pending.add(feature.id);
+          return feature;
+        });
+        self.#requireEditable();
+        for (const feature of prepared) overlay.features.set(feature.id, feature);
+        keep(() => writers.createMany(prepared) !== null);
+        return many ? prepared.map((feature) => feature.id) : toFeature(prepared[0]);
+      });
+    }
+
+    const updateOne = (
+      id: string,
+      patch: FeaturePatch,
+    ): { feature: StoredFeature; next: StoredFeature; op: StoredFeaturePatch } => {
+      const feature = self.#feature(id);
+      const storedPatch = storedPatchOf(patch, feature);
+      const updates = preparePatch(feature, storedPatch);
+      return { feature, next: { ...feature, ...updates }, op: storedPatch };
+    };
+
+    function update(id: string, patch: FeaturePatch): Promise<Feature>;
+    function update(
+      target: Many,
+      patch: FeaturePatch | ((sample: FeatureStyleSample) => FeaturePatch | null),
+    ): Promise<number>;
+    function update(
+      entries: readonly { readonly id: string; readonly patch: FeaturePatch }[],
+    ): Promise<number>;
+    function update(
+      target: string | Many | readonly { readonly id: string; readonly patch: FeaturePatch }[],
+      patch?: FeaturePatch | ((sample: FeatureStyleSample) => FeaturePatch | null),
+    ): Promise<Feature | number> {
+      return self.#run((keep) => {
+        if (typeof target === 'string') {
+          const { feature, next, op } = updateOne(target, patch as FeaturePatch);
+          self.#requireEditable();
+          if (featureLocked(overlay.view, feature) && !onlyLockOrVisibility(op)) {
+            throw lockedError([target]);
+          }
+          overlay.features.set(target, next);
+          // Checked when called: the commit writes it, or leaves it out when the feature is gone
+          keep(() => {
+            const result = self.#store.applyEdits([{ kind: 'set', featureId: target, patch: op }]);
+            return result !== null && result.dropped === 0;
+          });
+          return toFeature(next);
+        }
+        if (patch === undefined) {
+          if (!Array.isArray(target)) throw invalidInput('update takes a target and a patch');
+          return updateEntries(target as readonly { id: string; patch: FeaturePatch }[], keep);
+        }
+        const resolved = self.#resolve(target as Many, 'The target');
+        return updateMany(resolved, patch, keep);
+      });
+    }
+
+    const updateEntries = (
+      entries: readonly { id: string; patch: FeaturePatch }[],
+      keep: (op: Op) => void,
+    ): number => {
+      if (entries.length === 0) throw invalidInput('The entries name no feature');
+      const seen = new Set<string>();
+      const prepared = entries.map((entry) => {
+        if (!isRecord(entry)) throw invalidInput('Each entry must be { id, patch }');
+        const id = requireId(entry.id);
+        if (seen.has(id)) throw invalidInput(`The ID ${id} is given twice`);
+        seen.add(id);
+        return { id, ...updateOne(id, entry.patch) };
+      });
+      self.#requireEditable();
+      const locked = prepared
+        .filter(
+          ({ id, op }) =>
+            featureLocked(overlay.view, self.#feature(id)) && !onlyLockOrVisibility(op),
+        )
+        .map(({ id }) => id);
+      if (locked.length > 0) throw lockedError(locked);
+      for (const { id, next } of prepared) overlay.features.set(id, next);
+      keep(() => {
+        const result = self.#store.applyEdits(
+          prepared.map(({ id, op }) => ({ kind: 'set', featureId: id, patch: op })),
+        );
+        return result !== null && result.dropped === 0;
+      });
+      return prepared.length;
+    };
+
+    /** A patch given to many features: once per kind of feature when it is a function */
+    const updateMany = (
+      resolved: ResolvedTargetOf,
+      patch: FeaturePatch | ((sample: FeatureStyleSample) => FeaturePatch | null),
+      keep: (op: Op) => void,
+    ): number => {
+      self.#requireEditable();
+      const make = sharedPatchMaker(patch);
+      if (resolved.kind === 'selection') {
+        keep(() =>
+          self.#withSelection(resolved.selection, () =>
+            self.#writers.selection.update((sample) => make(sample, undefined)),
+          ),
+        );
+        return resolved.count;
+      }
+      const ids = self.#idsNow(resolved) ?? [];
+      // Checked now, on the features it names now: a wrong patch fails it
+      for (const id of ids) make(sampleOf(self.#feature(id)), self.#feature(id));
+      keep(() => {
+        const entries: { id: string; patch: StoredFeaturePatch }[] = [];
+        for (const id of self.#idsAtCommit(resolved)) {
+          const feature = self.#store.getFeature(id);
+          if (!feature) continue;
+          const made = make(sampleOf(feature), feature);
+          if (made === null) continue;
+          if (featureLocked(self.#store, feature) && !onlyLockOrVisibility(made)) continue;
+          entries.push({ id, patch: made });
+        }
+        if (entries.length === 0) return true;
+        self.#store.applyEdits(
+          entries.map(({ id, patch: made }) => ({ kind: 'set', featureId: id, patch: made })),
+        );
+        return true;
+      });
+      return ids.length;
+    };
+
+    const remove = (target: Target): Promise<number> =>
+      self.#run((keep) => {
+        const resolved = self.#resolve(target, 'The target');
+        self.#requireEditable();
+        if (resolved.kind === 'selection') {
+          keep(() =>
+            self.#withSelection(resolved.selection, () => self.#writers.selection.delete()),
+          );
+          return resolved.count;
+        }
+        const ids = self.#idsNow(resolved) ?? [];
+        if (resolved.kind === 'ids') {
+          const locked = ids.filter((id) => featureLocked(overlay.view, self.#feature(id)));
+          if (locked.length > 0) throw lockedError(locked);
+        }
+        for (const id of ids) overlay.features.set(id, null);
+        keep(() => {
+          const now = self.#idsAtCommit(resolved).filter((id) => {
+            const feature = self.#store.getFeature(id);
+            return feature !== undefined && !featureLocked(self.#store, feature);
+          });
+          return now.length === 0 || writers.deleteMany(now);
+        });
+        return ids.length;
+      });
+
+    const transform =
+      (kind: 'translate' | 'rotate' | 'scale') =>
+      (target: Target, input: Translate | Rotate | Scale): Promise<number> =>
+        self.#run((keep) => {
+          if (!isRecord(input)) throw invalidInput(`The ${kind} must be an object`);
+          const resolved = self.#resolve(target, 'The target');
+          self.#requireEditable();
+          const values = transformValues(kind, input);
+          if (resolved.kind === 'selection') {
+            keep(() =>
+              self.#withSelection(resolved.selection, () => {
+                self.#store.applyEdits([{ ...values, target: { selection: true } }]);
+                return true;
+              }),
+            );
+            return resolved.count;
+          }
+          const ids = self.#idsNow(resolved) ?? [];
+          if (resolved.kind === 'ids') {
+            const locked = ids.filter((id) => featureLocked(overlay.view, self.#feature(id)));
+            if (locked.length > 0) throw lockedError(locked);
+          }
+          keep(() => {
+            const now = self.#idsAtCommit(resolved).filter((id) => {
+              const feature = self.#store.getFeature(id);
+              return feature !== undefined && !featureLocked(self.#store, feature);
+            });
+            if (now.length === 0) return true;
+            self.#store.applyEdits([{ ...values, target: { featureIds: now } }]);
+            return true;
+          });
+          return ids.length;
+        });
+
+    const place = (target: Target, to: Placement): Promise<number> =>
+      self.#run((keep) => {
+        const resolved = self.#resolve(target, 'The target');
+        const moveTarget = moveTargetOf(overlay.view, to);
+        const resolvedTarget = resolveMoveTarget(overlay.view, moveTarget);
+        self.#requireEditable();
+        if (resolvedTarget.locked) throw lockedError([placeIdOf(to)]);
+        if (resolved.kind === 'selection') {
+          keep(() =>
+            self.#withSelection(resolved.selection, () => self.#writers.selection.move(moveTarget)),
+          );
+          return resolved.count;
+        }
+        const ids = self.#idsNow(resolved) ?? [];
+        const locked = ids.filter((id) => featureLocked(overlay.view, self.#feature(id)));
+        if (locked.length > 0) throw lockedError(locked);
+        for (const id of ids) {
+          const feature = self.#feature(id);
+          const layerId =
+            resolvedTarget.kind === 'layer'
+              ? resolvedTarget.layer.id
+              : resolvedTarget.kind === 'group'
+                ? resolvedTarget.group.layerId
+                : feature.layerId;
+          const groupId = resolvedTarget.kind === 'group' ? resolvedTarget.group.id : undefined;
+          overlay.features.set(id, { ...feature, layerId, groupId });
+        }
+        keep(() => {
+          const now = self.#idsAtCommit(resolved);
+          return now.length === 0 || writers.moveMany(now, moveTarget);
+        });
+        return ids.length;
+      });
+
+    /** An operation on areas: its result computed now, written in place of the anchor */
+    const areaOperation = (
+      inputs: StoredFeature[],
+      anchor: StoredFeature,
+      removed: StoredFeature[],
+      compute: (areas: AreaCoordinates[]) => MultiPolygonCoordinates,
+      keep: (op: Op) => void,
+    ): Feature => {
+      for (const input of inputs) {
+        if (!isAreaFeature(input)) throw invalidInput(`The feature ${input.id} is not an area`);
+      }
+      self.#requireEditable();
+      const locked = inputs.filter((input) => featureLocked(overlay.view, input)).map((f) => f.id);
+      if (locked.length > 0) throw lockedError(locked);
+      const geometry = toResultGeometry(
+        compute(inputs.map((feature) => toAreaCoordinates(feature) as AreaCoordinates)),
+      );
+      if (geometry === null) throw invalidInput('The result has no area');
+      return writeResults(
+        [{ anchor, removedIds: removed.map((feature) => feature.id), geometry }],
+        keep,
+      )[0];
+    };
+
+    /** Results of an operation on features, each with a new ID, written at the commit */
+    /**
+     * Results of an operation on features, each with a new ID, written at the commit in the place
+     * of its anchor; `chained` puts each result after the first just above the one before it
+     */
+    const writeResults = (
+      results: readonly {
+        anchor: StoredFeature;
+        removedIds: string[];
+        geometry: { type: FeatureType; coordinates: FeatureCoordinates };
+        properties?: StoredFeature['properties'];
+      }[],
+      keep: (op: Op) => void,
+      chained = false,
+    ): Feature[] => {
+      const ids = results.map(() => self.#deps.generateId());
+      const made: StoredFeature[] = [];
+      const written = results.map((result, i) => {
+        const anchor = chained && i > 0 ? made[i - 1] : result.anchor;
+        const entry = { ...result, anchor };
+        made.push(resultFeature(overlay.view, entry, ids[i]));
+        for (const id of result.removedIds) overlay.features.set(id, null);
+        overlay.features.set(ids[i], made[i]);
+        return { ...entry, id: ids[i] };
+      });
+      keep(() => self.#writers.features.writeResults(written));
+      return made.map(toFeature);
+    };
+
+    const inStackingOrder = (features: StoredFeature[]) =>
+      featuresInStackingOrder(overlay.view, features);
+    const areas = (ids: unknown, min: number): StoredFeature[] => {
+      if (!Array.isArray(ids)) throw invalidInput('The IDs must be an array');
+      const features = inStackingOrder(
+        [...new Set(ids as string[])].map((id) => self.#feature(id)),
+      );
+      if (features.length < min) throw invalidInput(`At least ${min} areas are needed`);
+      return features;
+    };
+
+    return {
+      get: (id) =>
+        read(() => {
+          const feature = typeof id === 'string' ? overlay.view.getFeature(id) : undefined;
+          return feature === undefined ? undefined : toFeature(feature);
+        }),
+      getMany: (ids) =>
+        read(() => {
+          if (!Array.isArray(ids)) throw invalidInput('The IDs must be an array');
+          return ids.map((id) => {
+            const feature = overlay.view.getFeature(id);
+            return feature === undefined ? undefined : toFeature(feature);
+          });
+        }),
+      has: (id) => read(() => typeof id === 'string' && overlay.view.getFeature(id) !== undefined),
+      list: (filter, options) => read(() => reads.list(filter, options)),
+      count: (filter) => read(() => reads.count(filter)),
+      bbox: (filter) => read(() => reads.bbox(filter)),
+      isEditable: (id) => read(() => reads.isEditable(id)),
+      getAppliedStyle: (id) => read(() => reads.getAppliedStyle(id)),
+      create,
+      update,
+      delete: remove,
+      translate: transform('translate'),
+      rotate: transform('rotate'),
+      scale: transform('scale'),
+      place,
+      union: (ids) =>
+        self.#run((keep) => {
+          const inputs = areas(ids, 2);
+          return areaOperation(inputs, inputs[inputs.length - 1], inputs, unionAll, keep);
+        }),
+      difference: (id, subtract) =>
+        self.#run((keep) => {
+          const subject = self.#feature(id);
+          const others = areas(subtract, 1);
+          if (others.some((other) => other.id === subject.id)) {
+            throw invalidInput('An area cannot be subtracted from itself');
+          }
+          const inputs = inStackingOrder([subject, ...others]);
+          return areaOperation(
+            inputs,
+            subject,
+            [subject],
+            (all) =>
+              differenceAll(
+                all[inputs.indexOf(subject)],
+                all.filter((_, index) => inputs[index] !== subject),
+              ),
+            keep,
+          );
+        }),
+      intersection: (ids) =>
+        self.#run((keep) => {
+          const inputs = areas(ids, 2);
+          return areaOperation(inputs, inputs[inputs.length - 1], inputs, intersectionAll, keep);
+        }),
+      split: (id, lineId) =>
+        self.#run((keep) => {
+          const area = self.#feature(id);
+          const line = self.#feature(lineId);
+          if (!isAreaFeature(area)) throw invalidInput(`The feature ${area.id} is not an area`);
+          if (!isSplitLineFeature(line)) throw invalidInput(`The feature ${line.id} is not a line`);
+          self.#requireEditable();
+          if (featureLocked(overlay.view, area)) throw lockedError([area.id]);
+          const geometries = planSplit(area, line);
+          if (geometries.length < 2) return [];
+          return writeResults(
+            geometries.map((geometry, i) => ({
+              anchor: area,
+              removedIds: i === 0 ? [area.id] : [],
+              geometry,
+            })),
+            keep,
+            true,
+          );
+        }),
+      buffer: (id, distanceMeters) =>
+        self.#run((keep) => {
+          const input = self.#feature(id);
+          if (typeof distanceMeters !== 'number' || !Number.isFinite(distanceMeters)) {
+            throw invalidInput('distanceMeters must be a finite number');
+          }
+          if (!isBufferableFeature(input)) {
+            throw invalidInput(`The feature ${input.id} cannot be buffered`);
+          }
+          self.#requireEditable();
+          if (featureLocked(overlay.view, input)) throw lockedError([input.id]);
+          const plan = distanceMeters === 0 ? null : planBuffer(input, { distanceMeters });
+          if (plan === null) throw invalidInput('The buffer has no area');
+          return writeResults(
+            [
+              {
+                anchor: input,
+                removedIds: [],
+                geometry: plan.geometry,
+                properties: plan.properties,
+              },
+            ],
+            keep,
+          )[0];
+        }),
+    };
+  }
+
+  // ==========================================================================
+  // The layers, the groups and the document
+  // ==========================================================================
+
+  #layerWrites(): TransactionLayers {
+    const reads = this.#reads.layers;
+    const writers = this.#writers.layers;
+    const overlay = this.#overlay;
+    const read = <T>(fn: () => T): T => {
+      this.#requireSettled();
+      return fn();
+    };
+    const requireLayer = (id: unknown): StoredLayer => {
+      const layer = typeof id === 'string' ? overlay.view.getLayer(id) : undefined;
+      if (!layer) throw notFound('layer', id);
+      return layer;
+    };
+    return {
+      get: (id) => read(() => (typeof id === 'string' ? overlay.view.getLayer(id) : undefined)),
+      getMany: (ids) =>
+        read(() => reads.getMany(ids).map((layer, i) => overlay.view.getLayer(ids[i]) ?? layer)),
+      has: (id) => read(() => typeof id === 'string' && overlay.view.getLayer(id) !== undefined),
+      list: (filter) => read(() => reads.list(filter)),
+      count: (filter) => read(() => reads.count(filter)),
+      listItems: (id, options) => read(() => reads.listItems(id, options)),
+      countItems: (id) => read(() => reads.countItems(id)),
+      getOrder: () => read(() => reads.getOrder()),
+      getActive: () => read(() => reads.getActive()),
+      setActive: (id) => read(() => reads.setActive(id)),
+      create: (input?: LayerInput) =>
+        this.#run((keep) => {
+          const prepared = prepareLayer(
+            { ...this.#deps, store: overlay.view },
+            input ?? {},
+            new Set(),
+          );
+          this.#requireEditable();
+          overlay.layers.set(prepared.layer.id, prepared.layer);
+          const { layer, index } = prepared;
+          keep(
+            () =>
+              writers.create({
+                id: layer.id,
+                name: layer.name,
+                visible: layer.visible,
+                locked: layer.locked,
+                opacity: (layer as { opacity?: number }).opacity,
+                ...(layer.styleRule !== undefined && { styleRule: layer.styleRule }),
+                ...(layer.metadata !== undefined && { metadata: layer.metadata }),
+                ...(index !== undefined && { index }),
+              } as LayerInput) !== null,
+          );
+          return layer as Layer;
+        }),
+      update: (id: string, patch: LayerPatch) =>
+        this.#run((keep) => {
+          const layer = requireLayer(id);
+          const updates = prepareLayerPatch(patch);
+          this.#requireEditable();
+          if (layerLocked(overlay.view, layer) && !onlyLockOrVisibility(patch)) {
+            throw lockedError([layer.id]);
+          }
+          const next = { ...layer, ...updates } as StoredLayer;
+          overlay.layers.set(layer.id, next);
+          keep(() => writers.update(layer.id, patch) !== null);
+          return next as Layer;
+        }),
+      delete: (target) =>
+        this.#run((keep) => {
+          const ids =
+            typeof target === 'string'
+              ? [requireLayer(target).id]
+              : Array.isArray(target)
+                ? [...new Set(target.map((id) => requireLayer(id).id))]
+                : isRecord(target) && (target as { all?: unknown }).all === true
+                  ? overlay.view.listLayers().map((layer) => layer.id)
+                  : (() => {
+                      throw invalidInput('The target must be an ID, IDs or { all: true }');
+                    })();
+          this.#requireEditable();
+          const locked = ids.filter((id) => layerLocked(overlay.view, requireLayer(id)));
+          if (locked.length > 0) throw lockedError(locked);
+          for (const id of ids) overlay.layers.set(id, null);
+          keep(() => {
+            const now = ids.filter((id) => this.#store.getLayer(id) !== undefined);
+            return now.length === 0 || writers.deleteMany(now);
+          });
+          return ids.length;
+        }),
+      place: (id: string, to: Neighbor) =>
+        this.#run((keep) => {
+          const layer = requireLayer(id);
+          const { neighbor, after } = neighborOf(to);
+          requireLayer(neighbor);
+          if (neighbor === layer.id) throw invalidInput('A layer is not placed next to itself');
+          this.#requireEditable();
+          keep(() => {
+            const order = writers.getOrder().filter((other) => other !== layer.id);
+            const at = order.indexOf(neighbor);
+            if (at < 0 || !this.#store.getLayer(layer.id)) return false;
+            order.splice(after ? at + 1 : at, 0, layer.id);
+            return writers.reorder(order);
+          });
+          return undefined;
+        }),
+    };
+  }
+
+  #groupWrites(): TransactionGroups {
+    const reads = this.#reads.groups;
+    const writers = this.#writers.groups;
+    const overlay = this.#overlay;
+    const read = <T>(fn: () => T): T => {
+      this.#requireSettled();
+      return fn();
+    };
+    const requireGroup = (id: unknown): StoredGroup => {
+      const group = typeof id === 'string' ? overlay.view.getGroup(id) : undefined;
+      if (!group) throw notFound('group', id);
+      return group;
+    };
+    return {
+      get: (id) => read(() => (typeof id === 'string' ? overlay.view.getGroup(id) : undefined)),
+      getMany: (ids) =>
+        read(() => reads.getMany(ids).map((group, i) => overlay.view.getGroup(ids[i]) ?? group)),
+      has: (id) => read(() => typeof id === 'string' && overlay.view.getGroup(id) !== undefined),
+      list: (filter) => read(() => reads.list(filter)),
+      count: (filter) => read(() => reads.count(filter)),
+      listMembers: (id, options) => read(() => reads.listMembers(id, options)),
+      create: (input: GroupInput) =>
+        this.#run((keep) => {
+          const prepared = prepareGroup(
+            { ...this.#deps, store: overlay.view },
+            input,
+            new Set(),
+            new Set(),
+          );
+          this.#requireEditable();
+          overlay.groups.set(prepared.id, prepared);
+          for (const featureId of prepared.featureIds) {
+            const feature = this.#feature(featureId);
+            overlay.features.set(featureId, { ...feature, groupId: prepared.id });
+          }
+          keep(
+            () =>
+              writers.create({
+                id: prepared.id,
+                name: prepared.name,
+                visible: prepared.visible,
+                locked: prepared.locked,
+                layerId: prepared.layerId,
+                featureIds: prepared.featureIds,
+              }) !== null,
+          );
+          return prepared as Group;
+        }),
+      update: (id: string, patch: GroupPatch) =>
+        this.#run((keep) => {
+          const group = requireGroup(id);
+          const updates = prepareGroupPatch(patch);
+          this.#requireEditable();
+          if (groupLocked(overlay.view, group) && !onlyLockOrVisibility(patch)) {
+            throw lockedError([group.id]);
+          }
+          const next = { ...group, ...updates } as StoredGroup;
+          overlay.groups.set(group.id, next);
+          keep(() => writers.update(group.id, patch) !== null);
+          return next as Group;
+        }),
+      delete: (target, options) =>
+        this.#run((keep) => {
+          const ids =
+            typeof target === 'string'
+              ? [requireGroup(target).id]
+              : Array.isArray(target)
+                ? [...new Set(target.map((id) => requireGroup(id).id))]
+                : (() => {
+                    throw invalidInput('The target must be an ID or IDs');
+                  })();
+          if (!isRecord(options) || (options.members !== 'keep' && options.members !== 'delete')) {
+            throw invalidInput("Say whether the members stay: { members: 'keep' } or 'delete'");
+          }
+          this.#requireEditable();
+          const locked = ids.filter((id) => groupLocked(overlay.view, requireGroup(id)));
+          if (locked.length > 0) throw lockedError(locked);
+          const withMembers = options.members === 'delete';
+          const members = withMembers
+            ? ids.flatMap((id) => reads.listMembers(id).filter((m) => overlay.view.getFeature(m)))
+            : [];
+          for (const id of ids) overlay.groups.set(id, null);
+          for (const id of members) overlay.features.set(id, null);
+          keep(() => {
+            const now = ids.filter((id) => this.#store.getGroup(id) !== undefined);
+            if (withMembers) {
+              const there = members.filter((id) => this.#store.getFeature(id) !== undefined);
+              if (there.length > 0) this.#writers.features.deleteMany(there);
+            }
+            return now.length === 0 || writers.deleteMany(now);
+          });
+          return ids.length;
+        }),
+      place: (id: string, to: Placement) =>
+        this.#run((keep) => {
+          const group = requireGroup(id);
+          const moveTarget = moveTargetOf(overlay.view, to);
+          const resolvedTarget = resolveMoveTarget(overlay.view, moveTarget);
+          if (resolvedTarget.kind !== 'layer')
+            throw invalidInput('A group can only be put in a layer');
+          this.#requireEditable();
+          if (resolvedTarget.locked || groupLocked(overlay.view, group))
+            throw lockedError([group.id]);
+          overlay.groups.set(group.id, {
+            ...group,
+            layerId: resolvedTarget.layer.id,
+          } as StoredGroup);
+          keep(
+            () =>
+              this.#store.getGroup(group.id) === undefined ||
+              writers.moveMany([group.id], moveTarget),
+          );
+          return undefined;
+        }),
+    };
+  }
+
+  #documentWrites(): TransactionDocument {
+    const self = this;
+    const metadata = this.#writers.metadata;
+    let written: Partial<Metadata> = {};
+    const now = (): Metadata => ({ ...metadata.get(), ...written });
+    return {
+      get title() {
+        self.#requireSettled();
+        return now().title ?? '';
+      },
+      get description() {
+        self.#requireSettled();
+        return now().description ?? '';
+      },
+      update: (patch) =>
+        self.#run((keep) => {
+          if (!isRecord(patch)) throw invalidInput('The patch must be an object');
+          for (const key of ['title', 'description'] as const) {
+            const value = (patch as Record<string, unknown>)[key];
+            if (value !== undefined && typeof value !== 'string') {
+              throw invalidInput(`${key} must be a string`);
+            }
+          }
+          self.#requireEditable();
+          written = { ...written, ...patch };
+          keep(() => metadata.update(patch) !== null);
+          return undefined;
+        }),
+    };
+  }
+
+  // ==========================================================================
+  // Importing
+  // ==========================================================================
+
+  /** The IDs of the layers and groups the imports of this transaction create */
+  readonly #importIds = new Set<string>();
+  readonly #importLayers = new Set<string>();
+
+  import(source: ImportSource, options?: ImportOptions): Promise<ImportResult> {
+    return this.#runAsync(async (keep) => {
+      if (options !== undefined && !isRecord(options)) {
+        throw invalidInput('The options must be an object');
+      }
+      const { layer, group, duplicateIds } = options ?? {};
+      if (duplicateIds !== undefined && duplicateIds !== 'renew') {
+        throw invalidInput("duplicateIds takes 'renew': an ID taken is given a new one");
+      }
+      const loader = this.#writers.document;
+      const loadOptions: LoadOptions = {
+        mode: 'merge',
+        ...(typeof layer === 'string' ? { layerId: layer } : {}),
+        ...(layer !== undefined && typeof layer !== 'string' ? { layer: layer as LayerInput } : {}),
+        ...(group !== undefined ? { group: group as Omit<GroupInput, 'featureIds'> } : {}),
+      };
+      const prepared: PreparedItem | null = await loader.prepare(
+        source as never,
+        loadOptions,
+        this.#importIds,
+        this.#importLayers,
+      );
+      if (this.signal.aborted) throw abortedError(this.signal);
+      if (!prepared) throw notEditable();
+      // What it read is known once it is written, at the commit: the result fills in then
+      const result = {
+        count: 0,
+        layerId: prepared.layer?.layer.id ?? loadOptions.layerId ?? '',
+        renewed: 0,
+        skipped: [] as ImportResult['skipped'],
+      };
+      keep(() => {
+        const [written] = this.#writers.document.writeAll([prepared]) ?? [];
+        if (!written) return false;
+        result.count = written.featureIds.length;
+        result.layerId =
+          written.layerId ??
+          this.#store.getFeature(written.featureIds[0] ?? '')?.layerId ??
+          result.layerId;
+        result.skipped = (written.skipped ?? []).map(({ index, reason }) => ({
+          index,
+          error: new DrawError('invalid-input', reason),
+        }));
+        return true;
+      });
+      return result as ImportResult;
+    });
+  }
+}
+
+// ============================================================================
+// Helpers
+// ============================================================================
+
+/** The features a target names, as the transaction reads them */
+type ResolvedTargetOf =
+  | { kind: 'ids'; ids: string[] }
+  | { kind: 'filter'; matches: (feature: StoredFeature) => boolean }
+  | { kind: 'selection'; selection: Selection; count: number };
+
+/** The IDs of every feature, in stacking order */
+function listEveryFeatureIds(store: Store): string[] {
+  const tables = store.tables;
+  if (!tables) return listEveryFeatureInOrder(store).map((feature) => feature.id);
+  const out: string[] = [];
+  forEachMatchingRow(store, {} as RowFilter, (handle) => {
+    const id = tables.getRowId(handle);
+    if (typeof id === 'string') out.push(id);
+    return true;
+  });
+  return out;
+}
+
+/** The test of a filter of features by the values of the document */
+function whereMatcher(store: Store, where: Where): (feature: StoredFeature) => boolean {
+  const entries = Object.entries(where);
+  if (entries.length === 0)
+    throw invalidInput('A filter names at least one key: { all: true } names every feature');
+  const tests: ((feature: StoredFeature) => boolean)[] = [];
+  const oneOf = (value: unknown, key: string): ReadonlySet<string> => {
+    const list = Array.isArray(value) ? value : [value];
+    if (list.length === 0 || list.some((id) => typeof id !== 'string')) {
+      throw invalidInput(`${key} must be an ID or IDs`);
+    }
+    return new Set(list as string[]);
+  };
+  for (const [key, value] of entries) {
+    if (value === undefined) throw invalidInput(`The filter key ${key} is undefined`);
+    switch (key) {
+      case 'layerId': {
+        const ids = oneOf(value, key);
+        tests.push((feature) => ids.has(feature.layerId));
+        break;
+      }
+      case 'groupId': {
+        const ids = oneOf(value, key);
+        tests.push((feature) => feature.groupId !== undefined && ids.has(feature.groupId));
+        break;
+      }
+      case 'featureType':
+        if (typeof value !== 'string') throw invalidInput('featureType must be a string');
+        tests.push((feature) => feature.type === value);
+        break;
+      case 'visible':
+      case 'locked':
+        if (typeof value !== 'boolean') throw invalidInput(`${key} must be a boolean`);
+        tests.push((feature) => feature[key] === value);
+        break;
+      case 'bbox': {
+        if (
+          !Array.isArray(value) ||
+          value.length !== 4 ||
+          value.some((n) => typeof n !== 'number')
+        ) {
+          throw invalidInput('bbox must be [west, south, east, north]');
+        }
+        const [w, s, e, n] = value as number[];
+        tests.push((feature) => {
+          const box = boxOf(feature);
+          return box !== null && box[0] <= e && box[2] >= w && box[1] <= n && box[3] >= s;
+        });
+        break;
+      }
+      case 'properties': {
+        if (!isRecord(value)) throw invalidInput('properties must be an object');
+        const wanted = Object.entries(value);
+        tests.push((feature) =>
+          wanted.every(
+            ([name, v]) => JSON.stringify(feature.properties[name]) === JSON.stringify(v),
+          ),
+        );
+        break;
+      }
+      default:
+        throw invalidInput(`A filter cannot have the key ${key}`);
+    }
+  }
+  void store;
+  return (feature) => tests.every((test) => test(feature));
+}
+
+/** The extent of the positions of a feature */
+function boxOf(feature: StoredFeature): [number, number, number, number] | null {
+  let w = Infinity;
+  let s = Infinity;
+  let e = -Infinity;
+  let n = -Infinity;
+  const visit = (value: unknown): void => {
+    if (!Array.isArray(value)) return;
+    if (typeof value[0] === 'number') {
+      w = Math.min(w, value[0]);
+      e = Math.max(e, value[0]);
+      s = Math.min(s, value[1] as number);
+      n = Math.max(n, value[1] as number);
+      return;
+    }
+    for (const part of value) visit(part);
+  };
+  visit((feature.geometry as { coordinates?: unknown }).coordinates);
+  return w === Infinity ? null : [w, s, e, n];
+}
+
+/** The sample of a feature a patch made per kind is asked with */
+function sampleOf(feature: StoredFeature): FeatureStyleSample {
+  const createdZoom = feature.properties['maplibre-gl-draw:createdZoom'];
+  return {
+    type: feature.type,
+    style: feature.style,
+    createdZoom: typeof createdZoom === 'number' ? createdZoom : undefined,
+  };
+}
+
+/**
+ * The maker of the patch of the Store of a feature from a patch given to many features: the
+ * patch, or the function asked once per kind of feature (`null` leaves the kind as it is)
+ */
+function sharedPatchMaker(
+  patch: FeaturePatch | ((sample: FeatureStyleSample) => FeaturePatch | null),
+): (sample: FeatureStyleSample, feature: StoredFeature | undefined) => StoredFeaturePatch | null {
+  const kinds = new Map<string, FeaturePatch | null>();
+  return (sample, feature) => {
+    let made: FeaturePatch | null;
+    if (typeof patch === 'function') {
+      const key = JSON.stringify([sample.type, sample.style, sample.createdZoom ?? null]);
+      if (!kinds.has(key)) kinds.set(key, patch(sample));
+      made = kinds.get(key) ?? null;
+    } else {
+      made = patch;
+    }
+    if (made === null) return null;
+    if (isRecord(made) && (made as { geometry?: unknown }).geometry !== undefined) {
+      throw invalidInput('A patch given to many features does not change their geometry');
+    }
+    return storedPatchOf(made, feature ?? ({ style: sample.style } as StoredFeature));
+  };
+}
+
+/** The values of a move, a turn or a stretch, checked */
+function transformValues(
+  kind: 'translate' | 'rotate' | 'scale',
+  input: Translate | Rotate | Scale,
+):
+  | { kind: 'translate'; from: [number, number]; to: [number, number] }
+  | { kind: 'rotate'; center: [number, number]; angleDegrees: number }
+  | {
+      kind: 'scale';
+      center: [number, number];
+      eastFactor: number;
+      northFactor: number;
+      sizeFactor: number;
+    } {
+  const position = (value: unknown, name: string): [number, number] => {
+    if (
+      !Array.isArray(value) ||
+      value.length < 2 ||
+      !Number.isFinite(value[0]) ||
+      !Number.isFinite(value[1])
+    ) {
+      throw invalidInput(`${name} must be [longitude, latitude]`);
+    }
+    return [value[0] as number, value[1] as number];
+  };
+  const finite = (value: unknown, name: string): number => {
+    if (typeof value !== 'number' || !Number.isFinite(value)) {
+      throw invalidInput(`${name} must be a finite number`);
+    }
+    return value;
+  };
+  if (kind === 'translate') {
+    const { from, to } = input as Translate;
+    return { kind, from: position(from, 'from'), to: position(to, 'to') };
+  }
+  if (kind === 'rotate') {
+    const { center, angleDegrees } = input as Rotate;
+    return {
+      kind,
+      center: position(center, 'center'),
+      angleDegrees: finite(angleDegrees, 'angleDegrees'),
+    };
+  }
+  const { center, eastFactor, northFactor, sizeFactor } = input as Scale;
+  return {
+    kind,
+    center: position(center, 'center'),
+    eastFactor: finite(eastFactor, 'eastFactor'),
+    northFactor: finite(northFactor, 'northFactor'),
+    sizeFactor: finite(sizeFactor, 'sizeFactor'),
+  };
+}
+
+/** The item a neighbor names, and whether the item goes just after it (above it) */
+function neighborOf(to: Neighbor): { neighbor: string; after: boolean } {
+  if (!isRecord(to)) throw invalidInput('The place must be { below } or { above }');
+  const below = (to as { below?: unknown }).below;
+  const above = (to as { above?: unknown }).above;
+  if ((below === undefined) === (above === undefined)) {
+    throw invalidInput('The place names one neighbor: { below } or { above }');
+  }
+  return below !== undefined
+    ? { neighbor: requireId(below, 'below'), after: true }
+    : { neighbor: requireId(above, 'above'), after: false };
+}
+
+/** The ID a placement names, for the error of a lock */
+function placeIdOf(to: Placement): string {
+  const record = to as Record<string, unknown>;
+  return String(record.groupId ?? record.layerId ?? record.below ?? record.above ?? '');
+}
+
+/**
+ * A placement as the internal resources take it: a neighbor alone is in the layer and the group
+ * of the neighbor; `below` is the item just below
+ */
+function moveTargetOf(store: Store, to: Placement): MoveTarget {
+  if (!isRecord(to)) throw invalidInput('The place must be an object');
+  const record = to as Record<string, unknown>;
+  for (const key of Object.keys(record)) {
+    if (!['layerId', 'groupId', 'below', 'above'].includes(key)) {
+      throw invalidInput(`A place cannot have the key ${key}`);
+    }
+  }
+  const below = record.below as string | undefined;
+  const above = record.above as string | undefined;
+  if (below !== undefined && above !== undefined) {
+    throw invalidInput('A place names one neighbor at most');
+  }
+  let layerId = record.layerId as string | undefined;
+  let groupId = record.groupId as string | undefined;
+  if (layerId === undefined && groupId === undefined) {
+    const neighbor = requireId(below ?? above, 'The neighbor');
+    const item = store.getFeature(neighbor) ?? store.getGroup(neighbor);
+    if (!item) throw notFound('feature or group', neighbor);
+    layerId = item.layerId;
+    groupId = 'type' in item ? (item as StoredFeature).groupId : undefined;
+  }
+  if (layerId === undefined && groupId !== undefined) {
+    const group = store.getGroup(groupId);
+    if (!group) throw notFound('group', groupId);
+    layerId = group.layerId;
+  }
+  return {
+    layerId: layerId as string,
+    ...(groupId !== undefined && { groupId }),
+    ...(below !== undefined && { below }),
+    ...(above !== undefined && { above }),
+  } as MoveTarget;
+}
+
+/** Whether two selections name the same items */
+function sameSelection(a: Selection, b: Selection): boolean {
+  return (
+    a.type === b.type &&
+    a.bulk === b.bulk &&
+    a.ids.length === b.ids.length &&
+    a.ids.every((id, i) => id === b.ids[i])
+  );
+}

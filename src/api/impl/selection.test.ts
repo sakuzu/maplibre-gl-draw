@@ -10,11 +10,12 @@ import type { ObjectGroup, ObjectLayer } from '../../shared/types/model.js';
 import { MemoryStore } from '../../store/memory.js';
 import { createResourceDeps } from '../../test-utils.js';
 import { DrawError } from '../errors.js';
-import type { SelectionResource, VertexSelectionResource } from '../selection.js';
+import type { VertexSelectionResource } from '../selection.js';
 import { createEventHub } from './events.js';
 import { createFeatures } from './features.js';
 import { createGroups } from './groups.js';
 import { createSelection, createVertexSelection } from './selection.js';
+import type { SelectionWrites as SelectionResource } from './selection-resource.js';
 
 let store: MemoryStore;
 let selection: SelectionResource;

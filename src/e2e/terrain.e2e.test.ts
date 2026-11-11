@@ -28,6 +28,7 @@ import {
   bundlePage,
   type Camera,
   type E2EWindow,
+  type E2EWrites,
   launchBrowser,
   MAP_SIZE,
   openMapPage,
@@ -409,7 +410,7 @@ async function frameExtent(
       await frameReady();
       await frameReady();
       const ground = map.unproject([where.x, where.y]);
-      const point = draw.features.create({
+      const point = (window as unknown as E2EWrites).e2e.writesOf(draw).features.create({
         type: 'Point',
         geometry: { type: 'Point', coordinates: [ground.lng, ground.lat] },
         style: { pointColor: '#00ff00', ...look },
@@ -446,7 +447,7 @@ async function frameExtent(
         });
         map.triggerRepaint();
       });
-      draw.features.delete(point.id);
+      (window as unknown as E2EWrites).e2e.writesOf(draw).features.delete(point.id);
       return { box, center: center ? [center[0], center[1]] : [] };
     },
     { camera: view, where: at, look: style },

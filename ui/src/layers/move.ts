@@ -24,7 +24,7 @@
 //   instead (`{ layerId, groupId?, below }`, null at the back)
 
 import type { TreeMove } from '@sakuzu/kata/svelte';
-import type { DatasetOrder, Group, Layer, MoveTarget } from '@sakuzu/maplibre-gl-draw';
+import type { DatasetOrder, Group, Layer } from '@sakuzu/maplibre-gl-draw';
 import {
   canDropInto,
   indexNodes,
@@ -42,8 +42,16 @@ export interface MoveJoin {
 /** The call of core a drop makes */
 export type MovePlan =
   | { kind: 'layers'; order: string[]; join?: MoveJoin }
-  | { kind: 'group'; id: string; to: MoveTarget }
-  | { kind: 'feature'; id: string; to: MoveTarget };
+  | { kind: 'group'; id: string; to: ItemPlace }
+  | { kind: 'feature'; id: string; to: ItemPlace };
+
+/** Where an item goes: into a layer or a group, next to the item named */
+export interface ItemPlace {
+  readonly layerId: string;
+  readonly groupId?: string;
+  readonly below?: string;
+  readonly above?: string;
+}
 
 /** A list with an ID taken out and put back at an index */
 function placed(ids: readonly string[], id: string, index: number): string[] {
@@ -104,14 +112,16 @@ export function planMove(move: TreeMove, nodes: readonly LayerTreeNode[]): MoveP
     move.id,
     move.index,
   );
-  const behind = shown[shown.indexOf(move.id) + 1];
+  // The place is named by the item behind it (the one below in core), or else by the one in
+  // front of it (the one above), at the back
+  const at_ = shown.indexOf(move.id);
+  const behind = shown[at_ + 1];
+  const ahead = shown[at_ - 1];
+  const neighbor =
+    behind !== undefined ? { below: behind } : ahead !== undefined ? { above: ahead } : {};
   if (parent.kind === 'layer') {
     const layer = parent.data as Layer;
-    // A layer held as rows takes the place by the item that is behind (the one below in core)
-    const to: MoveTarget =
-      layer.kind === 'table'
-        ? { layerId: layer.id, below: behind ?? null }
-        : { layerId: layer.id, index: coreIndex(layer.items, move.id, behind) };
+    const to: ItemPlace = { layerId: layer.id, ...neighbor };
     return at.node.kind === 'group'
       ? { kind: 'group', id: move.id, to }
       : { kind: 'feature', id: move.id, to };
@@ -120,9 +130,6 @@ export function planMove(move: TreeMove, nodes: readonly LayerTreeNode[]): MoveP
   return {
     kind: 'feature',
     id: move.id,
-    to:
-      group.kind === 'table'
-        ? { layerId: group.layerId, groupId: group.id, below: behind ?? null }
-        : { groupId: group.id, index: coreIndex(group.featureIds, move.id, behind) },
+    to: { layerId: group.layerId, groupId: group.id, ...neighbor },
   };
 }

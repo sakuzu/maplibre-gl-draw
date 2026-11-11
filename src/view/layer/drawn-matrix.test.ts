@@ -45,7 +45,11 @@ import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vites
 import { createDraw, type Draw } from '../../api/draw.js';
 import type { DocumentChange } from '../../api/events.js';
 import type { FeatureTypeDefinition } from '../../api/extension/feature-type.js';
-import type { FeaturePatch, FeatureStyle } from '../../api/model.js';
+import type {
+  StoredFeaturePatch as FeaturePatch,
+  FeatureStyle,
+  StoredFeatureInput,
+} from '../../api/model.js';
 import type { FeatureTypeHandler, FrameDrawContext } from '../../extension/index.js';
 import { featureTablesInternals } from '../../feature-table/feature-tables.js';
 import { rowFeatureToRead } from '../../feature-table/row-read.js';
@@ -58,6 +62,7 @@ import type { Store } from '../../store/store.js';
 import { createTableStore } from '../../store/table-memory.js';
 import type { Coordinate, Feature, Layer } from '../../store/types.js';
 import { createPageBuilder } from '../../table/index.js';
+import { writesOf } from '../../test-support/writes.js';
 import { createMapStub, createTestDrawer, memoryGL, onDocumentChange } from '../../test-utils.js';
 import { createFeatureCompanionRegistry } from '../feature-companion.js';
 import { GpuLedger } from '../gpu-ledger.js';
@@ -717,7 +722,7 @@ function client(kind: StoreKind): Client {
     initDefaultLayer: false,
   });
   for (const type of CUSTOM_TYPES) draw.extensions.featureTypes.add(customType(type));
-  draw.layers.create({ name: 'Layer 1' });
+  writesOf(draw).layers.create({ name: 'Layer 1' });
   // The Store of the instance (the drawing reads it as the instance does)
   const store = draw.getStore() as unknown as Store;
   const drawer = createTestDrawer();
@@ -884,19 +889,19 @@ interface Step {
 }
 
 function styleOf(run: Run): FeatureStyle {
-  return { ...(run.client.draw.features.get(run.id)?.style ?? {}) };
+  return { ...(writesOf(run.client.draw).features.get(run.id)?.style ?? {}) };
 }
 
 function setStyle(name: string, patch: FeatureStyle): Step {
   return {
     name,
     run: (run) => {
-      run.client.draw.features.update(run.id, { style: { ...styleOf(run), ...patch } });
+      writesOf(run.client.draw).features.update(run.id, { style: { ...styleOf(run), ...patch } });
     },
   };
 }
 
-type FeatureInputOf = Parameters<Draw['features']['create']>[0];
+type FeatureInputOf = StoredFeatureInput;
 
 /** The input of a feature of a kind, moved by an offset (degrees) */
 function inputOf(
@@ -961,7 +966,7 @@ function makeScene(run: Run, style: FeatureStyle | null): void {
     writer.addPages(layerId, builder.finish());
     return;
   }
-  const made = draw.features.createMany(inputs);
+  const made = writesOf(draw).features.createMany(inputs);
   if (!made) throw new Error('the features around were not made');
   made.forEach((feature, i) => {
     run.names.set(feature.id, i < inputs.length - (style ? 1 : 0) ? `S${i}` : 'F');
@@ -976,7 +981,9 @@ function createStep(name: string, style: FeatureStyle = {}, createdZoom: number 
     run: (run) => {
       const { draw } = run.client;
       if (!run.loaded) {
-        const created = draw.features.create(inputOf(run.shape, style, 0, 0, createdZoom));
+        const created = writesOf(draw).features.create(
+          inputOf(run.shape, style, 0, 0, createdZoom),
+        );
         if (!created) throw new Error(`${run.shape} not created`);
         run.id = created.id;
         run.names.set(created.id, 'F');
@@ -1039,14 +1046,16 @@ const fillColor = setStyle('fill color', { fillColor: '#00aa00', pointColor: '#0
 const move: Step = {
   name: 'move',
   run: (run) => {
-    run.client.draw.features.update(run.id, { geometry: geometryOf(run.shape, 0.003, 0.002) });
+    writesOf(run.client.draw).features.update(run.id, {
+      geometry: geometryOf(run.shape, 0.003, 0.002),
+    });
   },
 };
 
 const remove: Step = {
   name: 'delete',
   run: (run) => {
-    run.client.draw.features.delete(run.id);
+    writesOf(run.client.draw).features.delete(run.id);
   },
 };
 
@@ -1055,7 +1064,7 @@ const deleteSelected: Step = {
   name: 'select and delete the selection',
   run: (run) => {
     run.client.draw.selection.set('feature', [run.id]);
-    run.client.draw.selection.delete();
+    writesOf(run.client.draw).selection.delete();
   },
 };
 
@@ -1064,21 +1073,21 @@ const dashedThroughSelection: Step = {
   name: 'dashed through the selection',
   run: (run) => {
     run.client.draw.selection.set('feature', [run.id]);
-    run.client.draw.selection.update({ style: { lineStyle: 'dashed' } });
+    writesOf(run.client.draw).selection.update({ style: { lineStyle: 'dashed' } });
   },
 };
 
 const hide: Step = {
   name: 'hide',
   run: (run) => {
-    run.client.draw.features.update(run.id, { visible: false });
+    writesOf(run.client.draw).features.update(run.id, { visible: false });
   },
 };
 
 const show: Step = {
   name: 'show',
   run: (run) => {
-    run.client.draw.features.update(run.id, { visible: true });
+    writesOf(run.client.draw).features.update(run.id, { visible: true });
   },
 };
 
@@ -1086,7 +1095,7 @@ const hideLayer: Step = {
   name: 'hide the layer',
   run: (run) => {
     const layer = run.client.draw.layers.list()[0];
-    run.client.draw.layers.update(layer.id, { visible: false });
+    writesOf(run.client.draw).layers.update(layer.id, { visible: false });
   },
 };
 
@@ -1094,7 +1103,7 @@ const showLayer: Step = {
   name: 'show the layer',
   run: (run) => {
     const layer = run.client.draw.layers.list()[0];
-    run.client.draw.layers.update(layer.id, { visible: true });
+    writesOf(run.client.draw).layers.update(layer.id, { visible: true });
   },
 };
 
@@ -1127,25 +1136,25 @@ const undo: Step = {
       const before = run.client.kind === 'table' ? change.previousValues : undefined;
       if (before) {
         back.push(() => {
-          const after = draw.features.restore(before);
-          if (after) again.push(() => draw.features.restore(after));
+          const after = writesOf(draw).features.restore(before);
+          if (after) again.push(() => writesOf(draw).features.restore(after));
         });
         continue;
       }
       for (const f of change.features?.created ?? []) {
-        back.push(() => draw.features.delete(f.id));
-        again.push(() => draw.features.create(f));
+        back.push(() => writesOf(draw).features.delete(f.id));
+        again.push(() => writesOf(draw).features.create(f));
       }
       for (const u of change.features?.updated ?? []) {
-        back.push(() => draw.features.update(u.id, patchOf(u.feature, u.previous)));
-        again.push(() => draw.features.update(u.id, patchOf(u.previous, u.feature)));
+        back.push(() => writesOf(draw).features.update(u.id, patchOf(u.feature, u.previous)));
+        again.push(() => writesOf(draw).features.update(u.id, patchOf(u.previous, u.feature)));
       }
       for (const f of change.features?.deleted ?? []) {
-        back.push(() => draw.features.create(f));
-        again.push(() => draw.features.delete(f.id));
+        back.push(() => writesOf(draw).features.create(f));
+        again.push(() => writesOf(draw).features.delete(f.id));
       }
     }
-    draw.transact(
+    writesOf(draw).transact(
       () => {
         for (const fn of back.reverse()) fn();
       },
@@ -1161,7 +1170,7 @@ const redo: Step = {
   run: (run) => {
     const { draw } = run.client;
     const again = run.redone.splice(0);
-    draw.transact(
+    writesOf(draw).transact(
       () => {
         for (const fn of again.reverse()) fn();
       },
@@ -1196,7 +1205,7 @@ const dashedFromElsewhere: Step = {
     const { draw, writer } = run.client;
     const style = { ...styleOf(run), lineStyle: 'dashed' as const };
     if (!writer) {
-      draw.features.update(run.id, { style });
+      writesOf(draw).features.update(run.id, { style });
       return;
     }
     const found = writer.lookup(run.id);

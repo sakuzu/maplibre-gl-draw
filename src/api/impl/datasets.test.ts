@@ -9,6 +9,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { BBox } from '../../geometry/index.js';
 import { tableFromFeatures } from '../../table/index.js';
+import { writesOf } from '../../test-support/writes.js';
 import { createMapStub } from '../../test-utils.js';
 import type { Dataset, DatasetEvents, DatasetRow, DatasetsCollection } from '../datasets.js';
 import type { Draw } from '../draw.js';
@@ -102,7 +103,7 @@ describe('the collection', () => {
     const parcels = datasets.add({ id: 'parcels', order: 'layer-order' });
     expect(parcels.listRows()).toEqual([]);
     const [layer] = draw.layers.list();
-    expect(draw.layers.reorder(['parcels', layer.id])).toBe(true);
+    expect(writesOf(draw).layers.reorder(['parcels', layer.id])).toBe(true);
     expect(draw.layers.getOrder()).toEqual(['parcels', layer.id]);
     parcels.setRows(ROWS);
     expect(parcels.listRows()).toHaveLength(ROWS.length);

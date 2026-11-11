@@ -12,7 +12,7 @@ import { MemoryStore } from '../../store/memory.js';
 import type { StoreChange } from '../../store/types.js';
 import { createResourceDeps } from '../../test-utils.js';
 import { DrawError } from '../errors.js';
-import type { GroupsCollection } from '../groups.js';
+import type { GroupResource as GroupsCollection } from './group-resource.js';
 import { createGroups } from './groups.js';
 
 let store: MemoryStore;

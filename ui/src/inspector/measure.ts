@@ -13,7 +13,7 @@
 // 1 acre (43 560 ft²), in acres below 1 square mile (640 ac), and in square miles from there.
 // The small unit is written with at most one decimal, the large ones with two.
 
-import type { Feature } from '@sakuzu/maplibre-gl-draw';
+import { type Feature, readFeature } from '@sakuzu/maplibre-gl-draw';
 import { area, length, perimeter } from '@sakuzu/maplibre-gl-draw/geometry';
 import type { Units } from './types.js';
 
@@ -111,7 +111,7 @@ export function measure(feature: Feature, units: Units, locale = 'en'): MeasureR
   const { geometry } = feature;
   const len = (meters: number | undefined): MeasureRow[] =>
     meters === undefined ? [] : [{ key: 'length', value: formatLength(meters, units, locale) }];
-  switch (feature.type) {
+  switch (readFeature(feature).featureType) {
     case 'Point': {
       if (geometry.type !== 'Point') return [];
       const [lng, lat] = geometry.coordinates;

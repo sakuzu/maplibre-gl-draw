@@ -36,6 +36,7 @@ import { createTableStore } from '../store/table-memory.js';
 import type { Feature, Layer } from '../store/types.js';
 import { writeMarkKeeperOf } from '../store/write-mark-keeper.js';
 import { randomSteps, runSteps, storeSubject } from '../test-support/store-model/index.js';
+import { writesOf } from '../test-support/writes.js';
 import { createMapStub, memoryGL } from '../test-utils.js';
 import type { CustomLayerInterface } from '../view/layer/custom-layer.js';
 import { TableLayerRenderer } from '../view/layer/table-retained.js';
@@ -143,8 +144,8 @@ describe('the option debug.checks', () => {
         initDefaultLayer: false,
         debug: { checks: { onFailure: (failure) => failures.push(failure) } },
       });
-      const created = draw.layers.create({ name: 'a' })!;
-      const a = draw.features.create({
+      const created = writesOf(draw).layers.create({ name: 'a' })!;
+      const a = writesOf(draw).features.create({
         type: 'Point',
         geometry: { type: 'Point', coordinates: [0, 0] },
         layerId: created.id,
@@ -157,7 +158,7 @@ describe('the option debug.checks', () => {
       const write = internals
         ? () => {
             internals.states.setBulk(Int32Array.of(internals.ids.handleOf(a.id)), true);
-            draw.features.update(a.id, { properties: { n: 1 } });
+            writesOf(draw).features.update(a.id, { properties: { n: 1 } });
           }
         : () => (draw.getStore() as unknown as Store).setSelection('feature', ['nothing']);
       let thrown: unknown;
@@ -171,7 +172,7 @@ describe('the option debug.checks', () => {
       expect((thrown as DrawError).message).toContain('(selection)');
       expect(failures.map((f) => f.check)).toEqual(['selection']);
       // The write was made
-      if (internals) expect(draw.features.get(a.id)?.properties).toEqual({ n: 1 });
+      if (internals) expect(writesOf(draw).features.get(a.id)?.properties).toEqual({ n: 1 });
       draw.destroy();
     });
   }
@@ -346,10 +347,10 @@ describe('the check of what is drawn', () => {
         initDefaultLayer: false,
         debug: { checks: { onFailure: (failure) => failures.push(failure) } },
       });
-      const created = draw.layers.create({ name: 'a' })!;
+      const created = writesOf(draw).layers.create({ name: 'a' })!;
       const ids: string[] = [];
       for (let i = 0; i < 5; i++) {
-        const feature = draw.features.create({
+        const feature = writesOf(draw).features.create({
           type: i % 2 === 0 ? 'Point' : 'LineString',
           geometry:
             i % 2 === 0
@@ -470,25 +471,31 @@ const DRAWN_EDITS: Readonly<
   Record<string, (draw: ReturnType<typeof createDraw>, layerId: string) => Array<() => void>>
 > = {
   'a style written while the polygon is selected': (draw, layerId) => {
-    const p = draw.features.create({ type: 'Polygon', geometry: SQUARE, layerId })!;
+    const p = writesOf(draw).features.create({ type: 'Polygon', geometry: SQUARE, layerId })!;
     return [
       () => draw.selection.set('feature', [p.id]),
-      () => draw.features.update(p.id, { style: { fillColor: '#00aa44' } }),
-      () => draw.features.update(p.id, { style: { strokeColor: '#3366ff', lineStyle: 'dotted' } }),
+      () => writesOf(draw).features.update(p.id, { style: { fillColor: '#00aa44' } }),
+      () =>
+        writesOf(draw).features.update(p.id, {
+          style: { strokeColor: '#3366ff', lineStyle: 'dotted' },
+        }),
       () => draw.selection.clear(),
     ];
   },
   'a dashed polygon selected and deleted': (draw, layerId) => {
-    const p = draw.features.create({
+    const p = writesOf(draw).features.create({
       type: 'Polygon',
       geometry: SQUARE,
       layerId,
       style: { lineStyle: 'dashed' },
     })!;
-    return [() => draw.selection.set('feature', [p.id]), () => draw.features.delete(p.id)];
+    return [
+      () => draw.selection.set('feature', [p.id]),
+      () => writesOf(draw).features.delete(p.id),
+    ];
   },
   'a line moved and hidden while selected': (draw, layerId) => {
-    const l = draw.features.create({
+    const l = writesOf(draw).features.create({
       type: 'LineString',
       geometry: {
         type: 'LineString',
@@ -502,7 +509,7 @@ const DRAWN_EDITS: Readonly<
     return [
       () => draw.selection.set('feature', [l.id]),
       () =>
-        draw.features.update(l.id, {
+        writesOf(draw).features.update(l.id, {
           geometry: {
             type: 'LineString',
             coordinates: [
@@ -511,21 +518,27 @@ const DRAWN_EDITS: Readonly<
             ],
           },
         }),
-      () => draw.features.update(l.id, { visible: false }),
-      () => draw.features.update(l.id, { visible: true }),
+      () => writesOf(draw).features.update(l.id, { visible: false }),
+      () => writesOf(draw).features.update(l.id, { visible: true }),
     ];
   },
   'a point moved in place and its color written': (draw, layerId) => {
-    const p = draw.features.create({
+    const p = writesOf(draw).features.create({
       type: 'Point',
       geometry: { type: 'Point', coordinates: [0.2, 0.2] },
       layerId,
     })!;
-    draw.features.create({ type: 'Polygon', geometry: SQUARE, layerId });
+    writesOf(draw).features.create({ type: 'Polygon', geometry: SQUARE, layerId });
     return [
-      () => draw.features.update(p.id, { geometry: { type: 'Point', coordinates: [0.3, 0.25] } }),
-      () => draw.features.update(p.id, { style: { pointColor: '#00aa44' } }),
-      () => draw.features.update(p.id, { geometry: { type: 'Point', coordinates: [0.4, 0.3] } }),
+      () =>
+        writesOf(draw).features.update(p.id, {
+          geometry: { type: 'Point', coordinates: [0.3, 0.25] },
+        }),
+      () => writesOf(draw).features.update(p.id, { style: { pointColor: '#00aa44' } }),
+      () =>
+        writesOf(draw).features.update(p.id, {
+          geometry: { type: 'Point', coordinates: [0.4, 0.3] },
+        }),
     ];
   },
   'a line made dashed, moved, and solid again': (draw, layerId) => {
@@ -537,19 +550,19 @@ const DRAWN_EDITS: Readonly<
         [dx + 1, 0],
       ],
     });
-    const l = draw.features.create({ type: 'LineString', geometry: line(0), layerId })!;
-    draw.features.create({ type: 'Polygon', geometry: SQUARE, layerId });
+    const l = writesOf(draw).features.create({ type: 'LineString', geometry: line(0), layerId })!;
+    writesOf(draw).features.create({ type: 'Polygon', geometry: SQUARE, layerId });
     return [
-      () => draw.features.update(l.id, { style: { lineStyle: 'dashed' } }),
-      () => draw.features.update(l.id, { geometry: line(0.25) }),
-      () => draw.features.update(l.id, { style: { lineStyle: 'solid', strokeWidth: 6 } }),
-      () => draw.features.update(l.id, { geometry: line(0.5) }),
+      () => writesOf(draw).features.update(l.id, { style: { lineStyle: 'dashed' } }),
+      () => writesOf(draw).features.update(l.id, { geometry: line(0.25) }),
+      () => writesOf(draw).features.update(l.id, { style: { lineStyle: 'solid', strokeWidth: 6 } }),
+      () => writesOf(draw).features.update(l.id, { geometry: line(0.5) }),
     ];
   },
   'polygons given a style rule by their layer, and a value it reads written': (draw, layerId) => {
     const ids = [0, 1, 2].map(
       (i) =>
-        draw.features.create({
+        writesOf(draw).features.create({
           type: 'Polygon',
           geometry: SQUARE,
           layerId,
@@ -558,7 +571,7 @@ const DRAWN_EDITS: Readonly<
     );
     return [
       () =>
-        draw.layers.update(layerId, {
+        writesOf(draw).layers.update(layerId, {
           styleRule: {
             kind: 'categorical',
             property: 'kind',
@@ -566,12 +579,12 @@ const DRAWN_EDITS: Readonly<
             other: '#888888',
           },
         }),
-      () => draw.features.update(ids[1], { properties: { kind: 'a' } }),
-      () => draw.layers.update(layerId, { styleRule: undefined }),
+      () => writesOf(draw).features.update(ids[1], { properties: { kind: 'a' } }),
+      () => writesOf(draw).layers.update(layerId, { styleRule: undefined }),
     ];
   },
   'a sketch of a vertex of a line moved, changed, and committed': (draw, layerId) => {
-    const l = draw.features.create({
+    const l = writesOf(draw).features.create({
       type: 'LineString',
       geometry: {
         type: 'LineString',
@@ -583,7 +596,7 @@ const DRAWN_EDITS: Readonly<
       },
       layerId,
     })!;
-    draw.features.create({ type: 'Polygon', geometry: SQUARE, layerId });
+    writesOf(draw).features.create({ type: 'Polygon', geometry: SQUARE, layerId });
     const edit = (y: number) => ({
       kind: 'vertex-move' as const,
       featureId: l.id,
@@ -602,7 +615,7 @@ const DRAWN_EDITS: Readonly<
   'a sketch of polygons turned, one of them deleted, and removed': (draw, layerId) => {
     const ids = [0, 1].map(
       (i) =>
-        draw.features.create({
+        writesOf(draw).features.create({
           type: 'Polygon',
           geometry: {
             type: 'Polygon',
@@ -620,13 +633,13 @@ const DRAWN_EDITS: Readonly<
           ],
         })!.id;
       },
-      () => draw.features.delete(ids[0]),
+      () => writesOf(draw).features.delete(ids[0]),
       () => draw.sketches.remove(id),
     ];
   },
   'a sketch creating a line above a polygon, drawn on and committed': (draw, layerId) => {
-    const p = draw.features.create({ type: 'Polygon', geometry: SQUARE, layerId })!;
-    draw.features.create({ type: 'Polygon', geometry: SQUARE, layerId });
+    const p = writesOf(draw).features.create({ type: 'Polygon', geometry: SQUARE, layerId })!;
+    writesOf(draw).features.create({ type: 'Polygon', geometry: SQUARE, layerId });
     const create = (x: number) => ({
       kind: 'create' as const,
       feature: {
@@ -653,8 +666,8 @@ const DRAWN_EDITS: Readonly<
     ];
   },
   'features hidden here, shown again and deleted': (draw, layerId) => {
-    const a = draw.features.create({ type: 'Polygon', geometry: SQUARE, layerId })!;
-    const b = draw.features.create({
+    const a = writesOf(draw).features.create({ type: 'Polygon', geometry: SQUARE, layerId })!;
+    const b = writesOf(draw).features.create({
       type: 'Point',
       geometry: { type: 'Point', coordinates: [0.5, 0.5] },
       layerId,
@@ -662,7 +675,7 @@ const DRAWN_EDITS: Readonly<
     return [
       () => draw.hidden.add(a.id),
       () => draw.hidden.remove(a.id),
-      () => draw.features.delete(b.id),
+      () => writesOf(draw).features.delete(b.id),
     ];
   },
 };
@@ -697,7 +710,7 @@ describe('edits written by hand, a frame drawn after each, with every check on',
         // The rows drawn by the renderers of their kinds, as on the terrain and the globe
         if (kind === 'rows by kind') tableRenderer?.setDrawingByKind(true);
         const compared = countComparedRows();
-        const layerId = draw.layers.create({ name: 'a' })!.id;
+        const layerId = writesOf(draw).layers.create({ name: 'a' })!.id;
         const steps = edits(draw, layerId);
         frame();
         for (const step of steps) {
@@ -832,7 +845,7 @@ describe('the checks of the drawing of the rows find a rule of the drawing broke
     const { draw, failures, frame } = drawnInstance('rows', {
       allowed: ['id-index', 'selection', 'drawing', 'drawing-writes', 'drawing-rebuild'],
     });
-    const layerId = draw.layers.create({ name: 'a' })!.id;
+    const layerId = writesOf(draw).layers.create({ name: 'a' })!.id;
     const edit = make(draw, layerId);
     frame();
     expect(failures).toEqual([]);
@@ -866,8 +879,8 @@ describe('the checks of the drawing of the rows find a rule of the drawing broke
       rowsWritten.call(this, layerId, told);
     });
     const failed = failedAfter((draw, layerId) => {
-      const l = draw.features.create({ type: 'LineString', geometry: line, layerId })!;
-      return () => draw.features.update(l.id, { style: { strokeColor: '#00aa44' } });
+      const l = writesOf(draw).features.create({ type: 'LineString', geometry: line, layerId })!;
+      return () => writesOf(draw).features.update(l.id, { style: { strokeColor: '#00aa44' } });
     });
     expect(failed).toEqual(['drawing-rebuild']);
   });
@@ -886,14 +899,14 @@ describe('the checks of the drawing of the rows find a rule of the drawing broke
       group.styleGeneration = cache.styleGeneration;
     });
     const failed = failedAfter((draw, layerId) => {
-      draw.features.create({
+      writesOf(draw).features.create({
         type: 'Polygon',
         geometry: SQUARE,
         layerId,
         properties: { kind: 'a' },
       });
       return () =>
-        draw.layers.update(layerId, {
+        writesOf(draw).layers.update(layerId, {
           styleRule: {
             kind: 'categorical',
             property: 'kind',
@@ -919,13 +932,15 @@ describe('the checks of the drawing of the rows find a rule of the drawing broke
       patchCoords.call(this, chunk, coordFrom, wrong, count);
     });
     const failed = failedAfter((draw, layerId) => {
-      const p = draw.features.create({
+      const p = writesOf(draw).features.create({
         type: 'Point',
         geometry: { type: 'Point', coordinates: [0.2, 0.2] },
         layerId,
       })!;
       return () =>
-        draw.features.update(p.id, { geometry: { type: 'Point', coordinates: [0.3, 0.3] } });
+        writesOf(draw).features.update(p.id, {
+          geometry: { type: 'Point', coordinates: [0.3, 0.3] },
+        });
     });
     expect(failed).toEqual(['drawing-rebuild', 'drawing-writes']);
   });
@@ -935,8 +950,8 @@ describe('what the drawing keeps of what it writes to the GPU', () => {
   /** What the drawing of the rows keeps, after a few frames of a layer with rows */
   function kept(checks: false | { run: ConsistencyCheck[] } | undefined) {
     const drawn = drawnInstance('rows', { checks });
-    const layerId = drawn.draw.layers.create({ name: 'a' })!.id;
-    drawn.draw.features.create({ type: 'Polygon', geometry: SQUARE, layerId });
+    const layerId = writesOf(drawn.draw).layers.create({ name: 'a' })!.id;
+    writesOf(drawn.draw).features.create({ type: 'Polygon', geometry: SQUARE, layerId });
     drawn.frame();
     const renderer = drawn.tableRenderer as unknown as {
       renderers: { rows: { copies: unknown } } | null;

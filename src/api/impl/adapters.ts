@@ -84,6 +84,11 @@ import type { SelectionStyleOptions } from '../options.js';
 import type { LayerTableView } from '../tables.js';
 import type { AppliedStyles } from './applied-style.js';
 import { toPosition, toScreenPoint } from './contexts.js';
+import {
+  featureForExtension,
+  featureForExtensionOrNull,
+  readFeatureFields,
+} from './feature-shape.js';
 import { toPointerEvent } from './input.js';
 import type { RenderAdapterDeps } from './render-context.js';
 import {
@@ -220,7 +225,7 @@ function hitTestStrategyOf(definition: FeatureTypeDefinition, deps: AdapterDeps)
     toleranceLngLat: number,
   ): number | null => {
     const { ctx, degPerPx } = hitContextAt(deps, coordinate, toleranceLngLat);
-    const hit = own(feature as Feature, ctx);
+    const hit = own(featureForExtension(feature), ctx);
     return hit ? Math.max(0, hit.distancePx) * degPerPx : null;
   };
   return {
@@ -302,7 +307,7 @@ function boxSelectionOf(
       ];
       const center: Coordinate = [(rect[0] + rect[2]) / 2, (rect[1] + rect[3]) / 2];
       const { ctx } = hitContextAt(deps, center, 0);
-      return own(feature as Feature, { min, max }, { ...ctx, tolerancePx: 0 });
+      return own(featureForExtension(feature), { min, max }, { ...ctx, tolerancePx: 0 });
     },
   };
 }
@@ -449,7 +454,8 @@ export function installFeatureType(
 
   // An override can take only some features of the type; the others keep the built-in type
   const appliesTo = overriding ? definition.appliesTo?.bind(definition) : undefined;
-  const applies = (feature: StoredFeature): boolean => appliesTo?.(feature as Feature) !== false;
+  const applies = (feature: StoredFeature): boolean =>
+    appliesTo?.(featureForExtension(feature)) !== false;
   // The same answer, from a row of a layer held as rows (read with appliesTo only)
   const rows = definition.rows;
   const appliesToRow = appliesTo && rows ? rows.appliesTo.bind(rows) : undefined;
@@ -509,7 +515,7 @@ export function installFeatureType(
       /** The footprint the type gives a feature it takes, when it is one */
       const footprintOf = (feature: StoredFeature): Footprint | null | undefined => {
         if (!applies(feature)) return undefined;
-        const valid = validFootprint(footprint(feature as Feature, footprintContext));
+        const valid = validFootprint(footprint(featureForExtension(feature), footprintContext));
         if (valid === undefined && !warnedFootprint) {
           warnedFootprint = true;
           console.warn(
@@ -575,7 +581,7 @@ export function installFeatureType(
             {
               name: `\u0000type:${type}`,
               handles: (feature, ctx) =>
-                feature.type === type && applies(feature as unknown as StoredFeature)
+                readFeatureFields(feature).featureType === type && appliesTo?.(feature) !== false
                   ? handles(feature, ctx)
                   : [],
               onHandleDrag: (feature, handle, event) =>
@@ -607,8 +613,8 @@ export function installFeatureType(
         deps.snapTargets.register(
           type,
           (feature, ctx) =>
-            snapCandidates(feature as Feature, toSnapContext(ctx, deps.screen)).map((candidate) =>
-              toEngineCandidate(candidate, feature.id),
+            snapCandidates(featureForExtension(feature), toSnapContext(ctx, deps.screen)).map(
+              (candidate) => toEngineCandidate(candidate, feature.id),
             ),
           appliesTo && applies,
         ),
@@ -622,7 +628,7 @@ export function installFeatureType(
       add(
         deps.spatialIndex.setCustomBoundingBoxCalculator(type, (feature, tileSize) => {
           if (!applies(feature)) return getBoundingBox(feature, tileSize);
-          const extent = bbox(feature as Feature);
+          const extent = bbox(featureForExtension(feature));
           if (
             Array.isArray(extent) &&
             extent.length === 4 &&
@@ -755,7 +761,7 @@ export function adaptHandleProvider(
     if (!active) return null;
     const feature = active.featureId ? deps.shapes.get(active.featureId) : undefined;
     const patch = provider.onHandleDrag(
-      (feature as Feature | undefined) ?? null,
+      featureForExtensionOrNull(feature),
       active.handle,
       toPointerEvent(event),
     );
@@ -765,7 +771,7 @@ export function adaptHandleProvider(
   const draw = provider.drawHandles?.bind(provider);
   return {
     id: provider.name,
-    getHandles: (feature) => handlesOf(feature as Feature).map(toEngineHandle),
+    getHandles: (feature) => handlesOf(featureForExtension(feature)).map(toEngineHandle),
     ...(provider.globalHandles && {
       getGlobalHandles: () => handlesOf(null).map(toEngineHandle),
     }),
@@ -774,19 +780,19 @@ export function adaptHandleProvider(
         const shown = handles.flatMap((handle) => toCustomHandle(handle) ?? []);
         const ctx = contextOf(frame, projectionData, zoom);
         if (shown.length === 0 || !ctx) return;
-        draw((feature as Feature | null) ?? null, shown, ctx);
+        draw(featureForExtensionOrNull(feature), shown, ctx);
       },
     }),
     onHandleDragStart(hit, event) {
       const feature = hit.global ? null : deps.store.getFeature(hit.featureId);
       if (feature === undefined) return false;
-      const handle = handlesOf((feature as Feature | null) ?? null).find(
+      const handle = handlesOf(featureForExtensionOrNull(feature)).find(
         (h) => h.id === hit.handleId,
       );
       if (!handle) return false;
       if (provider.onHandleDragStart) {
         const accepted = provider.onHandleDragStart(
-          (feature as Feature | null) ?? null,
+          featureForExtensionOrNull(feature),
           handle,
           toPointerEvent(event),
         );
@@ -803,7 +809,7 @@ export function adaptHandleProvider(
       if (ended && provider.onHandleDragEnd) {
         const feature = ended.featureId ? deps.store.getFeature(ended.featureId) : undefined;
         provider.onHandleDragEnd(
-          (feature as Feature | undefined) ?? null,
+          featureForExtensionOrNull(feature),
           ended.handle,
           toPointerEvent(event),
         );
@@ -828,7 +834,7 @@ export function adaptCompanionProvider(
   const draw = provider.draw.bind(provider);
   return {
     id: provider.name,
-    has: (feature) => provider.has(feature as Feature),
+    has: (feature) => provider.has(featureForExtension(feature)),
     // The same answer, from a row of a layer held as rows
     ...(provider.rows && {
       hasRow: (view: LayerTableView, handle: number) => provider.rows?.has(view, handle) === true,
@@ -839,7 +845,7 @@ export function adaptCompanionProvider(
       drawCompanion(draw, feature, projectionData, zoom, context);
     },
     hitTest(feature, point, context) {
-      const hit = provider.hitTest(feature as Feature, {
+      const hit = provider.hitTest(featureForExtension(feature), {
         point: toScreenPoint(point),
         lngLat: toPosition(context.unproject(point)),
         tolerancePx: context.tolerancePx,
@@ -861,7 +867,7 @@ export function adaptCompanionProvider(
       const own = (hit as { contractHit?: Hit }).contractHit;
       if (!feature || !own || !provider.onClick || !event) return false;
       const handled = provider.onClick(
-        feature as Feature,
+        featureForExtension(feature),
         own,
         toPointerEvent(event as DragNormalizedEvent),
       );

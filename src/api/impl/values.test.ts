@@ -18,12 +18,12 @@ import {
 import { beforeEach, describe, expect, it } from 'vitest';
 import { MemoryStore } from '../../store/memory.js';
 import { createResourceDeps } from '../../test-utils.js';
-import type { DocumentResource } from '../document.js';
 import { DrawError } from '../errors.js';
-import type { FeaturesCollection } from '../features.js';
 import type { DrawDocument } from '../model.js';
 import { parseGeoJSON, parseNative } from '../model.js';
 import { createDocument } from './document.js';
+import type { DocumentLoads as DocumentResource } from './document-resource.js';
+import type { FeatureResource as FeaturesCollection } from './feature-resource.js';
 import { createFeatures } from './features.js';
 
 let store: MemoryStore;

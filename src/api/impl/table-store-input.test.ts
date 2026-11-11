@@ -15,6 +15,7 @@ import type { DragNormalizedEvent, MouseNormalizedEvent } from '../../dispatcher
 import type { Store } from '../../store/store.js';
 import { createTableStore } from '../../store/table-memory.js';
 import type { Feature } from '../../store/types.js';
+import { writesOf } from '../../test-support/writes.js';
 import { createMapStub, createSyntheticInput } from '../../test-utils.js';
 import type { Draw } from '../draw.js';
 import { createDrawOnEngine } from './create-draw.js';
@@ -114,7 +115,7 @@ describe('the input of the user over a Store of rows', () => {
     if (!tables) throw new Error('rows');
     createSyntheticInput(engine).click([0.25, 0.25]);
     expect(store.getSelection()).toEqual({ type: 'feature', ids: ['a'] });
-    expect(draw.features.get('a')).toMatchObject({ id: 'a', type: 'Polygon' });
+    expect(writesOf(draw).features.get('a')).toMatchObject({ id: 'a', type: 'Polygon' });
     createSyntheticInput(engine).click([5, 5]);
     expect(store.getSelection().ids).toEqual([]);
   });

@@ -8,6 +8,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryStore } from '../../store/memory.js';
+import { writesOf } from '../../test-support/writes.js';
 import { createMapStub } from '../../test-utils.js';
 import type { Draw } from '../draw.js';
 import { createDraw } from '../draw.js';
@@ -86,7 +87,10 @@ describe('read-only and the interaction lock', () => {
     draw.setReadOnly(true);
     expect(draw.isReadOnly()).toBe(true);
     expect(
-      draw.features.create({ type: 'Point', geometry: { type: 'Point', coordinates: [0, 0] } }),
+      writesOf(draw).features.create({
+        type: 'Point',
+        geometry: { type: 'Point', coordinates: [0, 0] },
+      }),
     ).toBeNull();
     draw.setReadOnly(false);
     expect(draw.isReadOnly()).toBe(false);
@@ -102,17 +106,20 @@ describe('read-only and the interaction lock', () => {
   });
 });
 
-describe('transact', () => {
+describe('a transaction of the Store, as the internal writes make it', () => {
   it('delivers one Store notification for nested writes, with the outer source', () => {
     const notifications: DocumentChange[] = [];
     draw.getStore().subscribe((changes) => notifications.push(changes));
-    const result = draw.transact(
+    const result = writesOf(draw).transact(
       () => {
-        draw.features.create({ type: 'Point', geometry: { type: 'Point', coordinates: [0, 0] } });
-        draw.transact(
+        writesOf(draw).features.create({
+          type: 'Point',
+          geometry: { type: 'Point', coordinates: [0, 0] },
+        });
+        writesOf(draw).transact(
           () => {
-            draw.layers.create({ name: 'Second' });
-            draw.metadata.update({ title: 'Map' });
+            writesOf(draw).layers.create({ name: 'Second' });
+            writesOf(draw).metadata.update({ title: 'Map' });
           },
           { source: 'inner' },
         );
@@ -130,38 +137,38 @@ describe('transact', () => {
 
   it('lets the writes change locked features, groups and layers with ignoreLocks', () => {
     const layer = draw.layers.getActive() as NonNullable<ReturnType<typeof draw.layers.getActive>>;
-    const other = draw.layers.create({ name: 'Other' });
+    const other = writesOf(draw).layers.create({ name: 'Other' });
     const point = (x: number) => ({
       type: 'Point' as const,
       geometry: { type: 'Point' as const, coordinates: [x, 0] },
     });
-    const locked = draw.features.create({ ...point(0), locked: true });
-    const inGroup = draw.features.create(point(1));
-    const inLayer = draw.features.create(point(2));
-    const gone = draw.features.create({ ...point(3), locked: true });
+    const locked = writesOf(draw).features.create({ ...point(0), locked: true });
+    const inGroup = writesOf(draw).features.create(point(1));
+    const inLayer = writesOf(draw).features.create(point(2));
+    const gone = writesOf(draw).features.create({ ...point(3), locked: true });
     if (!locked || !inGroup || !inLayer || !gone || !other) throw new Error('not created');
-    const group = draw.groups.create({ featureIds: [inGroup.id], locked: true });
+    const group = writesOf(draw).groups.create({ featureIds: [inGroup.id], locked: true });
     if (!group) throw new Error('not created');
-    draw.layers.update(other.id, { locked: true });
-    draw.features.move(inLayer.id, { layerId: other.id });
+    writesOf(draw).layers.update(other.id, { locked: true });
+    writesOf(draw).features.move(inLayer.id, { layerId: other.id });
 
     // Without the option the locks refuse the writes
-    expect(draw.features.update(locked.id, { properties: { a: 1 } })).toBeNull();
-    expect(draw.transact(() => draw.features.delete(gone.id))).toBe(false);
+    expect(writesOf(draw).features.update(locked.id, { properties: { a: 1 } })).toBeNull();
+    expect(writesOf(draw).transact(() => writesOf(draw).features.delete(gone.id))).toBe(false);
 
     const notifications: DocumentChange[] = [];
     draw.getStore().subscribe((changes) => notifications.push(changes));
-    draw.transact(
+    writesOf(draw).transact(
       () => {
-        expect(draw.features.update(locked.id, { properties: { a: 1 } })).not.toBeNull();
-        expect(draw.groups.update(group.id, { name: 'Renamed' })).not.toBeNull();
-        expect(draw.features.update(inGroup.id, { properties: { b: 2 } })).not.toBeNull();
-        expect(draw.layers.update(other.id, { name: 'Renamed' })).not.toBeNull();
-        expect(draw.features.update(inLayer.id, { properties: { c: 3 } })).not.toBeNull();
-        expect(draw.features.delete(gone.id)).toBe(true);
+        expect(writesOf(draw).features.update(locked.id, { properties: { a: 1 } })).not.toBeNull();
+        expect(writesOf(draw).groups.update(group.id, { name: 'Renamed' })).not.toBeNull();
+        expect(writesOf(draw).features.update(inGroup.id, { properties: { b: 2 } })).not.toBeNull();
+        expect(writesOf(draw).layers.update(other.id, { name: 'Renamed' })).not.toBeNull();
+        expect(writesOf(draw).features.update(inLayer.id, { properties: { c: 3 } })).not.toBeNull();
+        expect(writesOf(draw).features.delete(gone.id)).toBe(true);
         // A nested call keeps ignoring them
-        draw.transact(() => {
-          expect(draw.features.move(locked.id, { layerId: other.id })).toBe(true);
+        writesOf(draw).transact(() => {
+          expect(writesOf(draw).features.move(locked.id, { layerId: other.id })).toBe(true);
         });
         // Reads still tell the lock
         expect(draw.features.isEditable(locked.id)).toBe(false);
@@ -170,59 +177,61 @@ describe('transact', () => {
     );
     expect(notifications).toHaveLength(1);
     expect(notifications[0].source).toBe('history');
-    expect(draw.features.get(locked.id)?.layerId).toBe(other.id);
-    expect(draw.features.get(locked.id)?.locked).toBe(true);
+    expect(writesOf(draw).features.get(locked.id)?.layerId).toBe(other.id);
+    expect(writesOf(draw).features.get(locked.id)?.locked).toBe(true);
 
     // After the call the locks refuse the writes again
-    expect(draw.features.update(locked.id, { properties: { a: 2 } })).toBeNull();
-    expect(draw.layers.delete(other.id)).toBe(false);
-    expect(draw.transact(() => draw.layers.delete(other.id), { ignoreLocks: true })).toBe(true);
+    expect(writesOf(draw).features.update(locked.id, { properties: { a: 2 } })).toBeNull();
+    expect(writesOf(draw).layers.delete(other.id)).toBe(false);
+    expect(
+      writesOf(draw).transact(() => writesOf(draw).layers.delete(other.id), { ignoreLocks: true }),
+    ).toBe(true);
     expect(draw.layers.get(layer.id)).toBeDefined();
   });
 
   it('keeps refusing the writes under read-only with ignoreLocks', () => {
-    const feature = draw.features.create({
+    const feature = writesOf(draw).features.create({
       type: 'Point',
       geometry: { type: 'Point', coordinates: [0, 0] },
       locked: true,
     });
     if (!feature) throw new Error('not created');
     draw.setReadOnly(true);
-    draw.transact(
+    writesOf(draw).transact(
       () => {
-        expect(draw.features.update(feature.id, { properties: { a: 1 } })).toBeNull();
-        expect(draw.features.delete(feature.id)).toBe(false);
+        expect(writesOf(draw).features.update(feature.id, { properties: { a: 1 } })).toBeNull();
+        expect(writesOf(draw).features.delete(feature.id)).toBe(false);
       },
       { ignoreLocks: true },
     );
-    expect(draw.features.get(feature.id)).toBeDefined();
+    expect(writesOf(draw).features.get(feature.id)).toBeDefined();
   });
 
   it('ends ignoring the locks when fn throws', () => {
-    const feature = draw.features.create({
+    const feature = writesOf(draw).features.create({
       type: 'Point',
       geometry: { type: 'Point', coordinates: [0, 0] },
       locked: true,
     });
     if (!feature) throw new Error('not created');
     expect(() =>
-      draw.transact(
+      writesOf(draw).transact(
         () => {
           throw new Error('stop');
         },
         { ignoreLocks: true },
       ),
     ).toThrow('stop');
-    expect(draw.features.delete(feature.id)).toBe(false);
+    expect(writesOf(draw).features.delete(feature.id)).toBe(false);
   });
+});
 
-  it('throws invalid-input for options that are not an object', () => {
-    try {
-      draw.transact(() => 1, 'remote' as never);
-      expect.unreachable();
-    } catch (error) {
-      expect((error as DrawError).code).toBe('invalid-input');
-    }
+describe('draw.write', () => {
+  it('fails with invalid-input for options that are not an object, and runs nothing', async () => {
+    const fn = vi.fn(() => 1);
+    const run = async () => draw.write(fn, 'remote' as never);
+    await expect(run()).rejects.toMatchObject({ name: 'DrawError', code: 'invalid-input' });
+    expect(fn).not.toHaveBeenCalled();
   });
 });
 
@@ -240,25 +249,23 @@ describe('destroy', () => {
 });
 
 describe('document.loadMany', () => {
-  it('arrives as one change with the source load, and one document.loaded per item', async () => {
+  it('arrives as one change with the source local', async () => {
     const saved = draw.document.toJSON();
     const changes: Change[] = [];
-    const loaded: string[] = [];
     draw.on('change', (change) => changes.push(change));
-    draw.on('document.loaded', ({ result, source }) => loaded.push(`${result.format}:${source}`));
     const point = (coordinates: number[]) => ({
       type: 'Feature' as const,
       properties: {},
       geometry: { type: 'Point' as const, coordinates },
     });
-    await draw.document.loadMany([
+    await writesOf(draw).document.loadMany([
       { source: saved },
       { source: point([1, 2]) },
       { source: JSON.stringify(point([3, 4])) },
     ]);
     expect(changes).toHaveLength(1);
-    expect(changes[0].source).toBe('load');
+    // A load is a write of this client
+    expect(changes[0].source).toBe('local');
     expect(draw.features.count()).toBe(2);
-    expect(loaded).toEqual(['native:load', 'geojson:load', 'geojson:load']);
   });
 });

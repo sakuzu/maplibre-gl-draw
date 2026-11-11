@@ -20,6 +20,7 @@ import {
   type Bundle,
   bundlePage,
   type Camera,
+  type E2EWrites,
   launchBrowser,
   openMapPage,
   settle,
@@ -111,7 +112,9 @@ async function drawLine(page: Page): Promise<TestLine> {
   return page.evaluate(
     ({ start, end, width, color }) => {
       const { map, draw } = window as unknown as TestWindow;
-      draw.features.deleteMany(draw.features.list().map((feature) => feature.id));
+      (window as unknown as E2EWrites).e2e
+        .writesOf(draw)
+        .features.deleteMany(draw.features.list().map((feature) => feature.id));
       const at = (px: { x: number; y: number }): LngLat => {
         const ll = map.unproject([px.x, px.y]);
         return [ll.lng, ll.lat];
@@ -120,7 +123,7 @@ async function drawLine(page: Page): Promise<TestLine> {
       const a = at(start);
       const c = at(end);
       const b = mid(a, c);
-      draw.features.create({
+      (window as unknown as E2EWrites).e2e.writesOf(draw).features.create({
         type: 'LineString',
         geometry: { type: 'LineString', coordinates: [a, b, c] },
         properties: { 'maplibre-gl-draw:createdZoom': map.getZoom() },

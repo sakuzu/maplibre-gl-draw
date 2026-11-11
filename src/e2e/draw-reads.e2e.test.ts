@@ -45,7 +45,7 @@ import {
   sequenceOf,
   square,
 } from './drag-scene.js';
-import { type Bundle, bundlePage, launchBrowser, settle } from './harness.js';
+import { type Bundle, bundlePage, type E2EWrites, launchBrowser, settle } from './harness.js';
 
 const ZOOM = 14;
 
@@ -171,9 +171,10 @@ const listed = (page: Page): Promise<Array<{ id: string; type: string; positions
         : Array.isArray(v)
           ? v.reduce((n: number, x) => n + count(x), 0)
           : 0;
+    const { readFeature } = (window as unknown as E2EWrites).e2e;
     return draw.features.list(undefined, { limit: 100 }).map((f) => ({
       id: f.id,
-      type: f.type,
+      type: readFeature(f).featureType,
       positions: count((f.geometry as { coordinates?: unknown }).coordinates),
     }));
   });
@@ -197,7 +198,8 @@ const reset = async (page: Page): Promise<void> => {
         .list(undefined, { limit: 100 })
         .map((f) => f.id)
         .filter((id) => id !== 'n');
-      if (ids.length > 0) w.draw.features.deleteMany(ids);
+      if (ids.length > 0)
+        (window as unknown as E2EWrites).e2e.writesOf(w.draw).features.deleteMany(ids);
       w.map.jumpTo({ center, zoom });
     },
     { center: at(0, 0), zoom: ZOOM },

@@ -11,7 +11,7 @@ import { MemoryStore } from '../../store/memory.js';
 import type { StoreChange } from '../../store/types.js';
 import { createResourceDeps } from '../../test-utils.js';
 import { DrawError } from '../errors.js';
-import type { LayersCollection } from '../layers.js';
+import type { LayerResource as LayersCollection } from './layer-resource.js';
 import { createLayers } from './layers.js';
 
 let store: MemoryStore;

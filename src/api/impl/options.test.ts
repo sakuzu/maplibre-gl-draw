@@ -8,6 +8,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { toColor } from '../../shared/color.js';
+import { writesOf } from '../../test-support/writes.js';
 import { createMapStub } from '../../test-utils.js';
 import type { Draw } from '../draw.js';
 import { createDraw } from '../draw.js';
@@ -433,11 +434,11 @@ describe('draw.options of createDraw', () => {
   it('gives the colors of the style option in getAppliedStyle as they were given', () => {
     const translucent = 'rgba(255, 255, 255, 0.5)';
     draw = createDraw(createMapStub().map);
-    const point = draw.features.create({
+    const point = writesOf(draw).features.create({
       type: 'Point',
       geometry: { type: 'Point', coordinates: [0, 0] },
     });
-    const area = draw.features.create({
+    const area = writesOf(draw).features.create({
       type: 'Polygon',
       geometry: {
         type: 'Polygon',
@@ -481,7 +482,7 @@ describe('draw.options of createDraw', () => {
   it('gives the colors of the style of a feature in getAppliedStyle as they were given', () => {
     const translucent = 'rgba(255, 255, 255, 0.5)';
     draw = createDraw(createMapStub().map);
-    const point = draw.features.create({
+    const point = writesOf(draw).features.create({
       type: 'Point',
       geometry: { type: 'Point', coordinates: [0, 0] },
       style: { pointStrokeColor: translucent, pointColor: 'rgba(0, 128, 0, 0.25)' },

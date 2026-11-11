@@ -8,7 +8,7 @@
  * Distances are measured in the local frame of hit testing (local-frame.ts).
  */
 
-import type { Feature, FeatureType } from '../../../api/model.js';
+import type { StoredFeature as Feature, FeatureType } from '../../../api/model.js';
 import type { Feature as StoredFeature } from '../../../store/types.js';
 import { pointsShapeTest, shapeOfFeature } from './shape-tests.js';
 

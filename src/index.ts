@@ -26,19 +26,29 @@
  * draw.on('change', ({ features }) => {
  *   for (const id of features.created) console.log(id, draw.features.get(id)?.geometry);
  * });
+ * await draw.write((tx) =>
+ *   tx.features.create({
+ *     type: 'Feature',
+ *     geometry: { type: 'Point', coordinates: [139.7, 35.7] },
+ *     properties: { name: 'Tokyo' },
+ *   }),
+ * );
  * ```
  *
  * Where to find things: every resource of {@link Draw} is a field with its own methods.
  *
- * - `draw.features` (create, update, delete, move, union, split, restore): {@link FeaturesCollection}
- * - `draw.layers` (create, update, reorder, setActive): {@link LayersCollection}
- * - `draw.groups` (create, update, move): {@link GroupsCollection}
+ * - `draw.write(fn)`: the one way to change the document, with the transaction `tx` it gives `fn`
+ *   ({@link Transaction}); `draw.undo`, `draw.redo` and `draw.open`
+ * - `draw.features` (get, list, count, bbox): {@link FeaturesCollection}
+ * - `draw.layers` (get, list, the order, the active layer): {@link LayersCollection}
+ * - `draw.groups` (get, list, members): {@link GroupsCollection}
  * - `draw.datasets` (add, remove, move): {@link DatasetsCollection}
  * - `draw.sketches` (add, update, commit, remove): {@link SketchesCollection}
- * - `draw.selection` (set, add, clear, delete, group): {@link SelectionResource}
+ * - `draw.selection` (set, add, clear, target): {@link SelectionResource}
  * - `draw.vertexSelection` (set, clear, delete): {@link VertexSelectionResource}
- * - `draw.metadata` and `draw.options` (get, update): {@link MetadataResource}, {@link OptionsResource}
- * - `draw.document` (load, toJSON, toGeoJSON): {@link DocumentResource}
+ * - `draw.metadata` (get) and `draw.options` (get, update): {@link MetadataResource},
+ *   {@link OptionsResource}
+ * - `draw.document` (toJSON, toGeoJSON): {@link DocumentResource}
  * - `draw.drawing` (addVertex, finish, cancel): {@link DrawingResource}
  * - `draw.rendered` (get, getSelectionBox): {@link RenderedResource}
  * - `draw.extensions` (plugins, modes, feature types): {@link ExtensionsCollections}
@@ -60,7 +70,7 @@
 // biome-ignore-all assist/source/organizeImports: the exports are grouped by topic
 
 // Entry and options
-export type { CaptureImageOptions, Draw, TransactOptions } from './api/draw.js';
+export type { CaptureImageOptions, Draw } from './api/draw.js';
 export { createDraw } from './api/draw.js';
 export type {
   AutoNameOptions,
@@ -97,11 +107,48 @@ export type { MetadataResource } from './api/metadata.js';
 export type { DrawingResource } from './api/drawing.js';
 export type { DocumentResource } from './api/document.js';
 
+// Writing
+export type {
+  All,
+  Filter,
+  ImportOptions,
+  ImportResult,
+  ImportSource,
+  Many,
+  Neighbor,
+  OpenResult,
+  OpenSource,
+  Placement,
+  Progress,
+  Rotate,
+  Scale,
+  SkippedFeature,
+  Target,
+  TaskOptions,
+  Transaction,
+  TransactionDocument,
+  TransactionFeatures,
+  TransactionGroups,
+  TransactionLayers,
+  Translate,
+  Where,
+  Write,
+  WriteOptions,
+  WriteResult,
+} from './api/write.js';
+
 // Document model
 export type {
   DrawDocument,
   DrawProperties,
   Feature,
+  FeatureFields,
+  FeatureGeometry,
+  FeaturePatchFields,
+  Properties,
+  StoredFeature,
+  StoredFeatureInput,
+  StoredFeaturePatch,
   FeatureStyle,
   FeatureStyleResolved,
   FeatureType,
@@ -118,7 +165,7 @@ export type {
   TableGroup,
   TableLayer,
 } from './api/model.js';
-export { DRAW_PROPERTY_PREFIX, isDrawProperty } from './api/model.js';
+export { DRAW_PROPERTY_PREFIX, isDrawProperty, readFeature } from './api/model.js';
 
 // Inputs, patches and filters
 export type { BBox } from './geometry/types.js';
@@ -138,11 +185,7 @@ export type {
   LayerFilter,
   LayerInput,
   LayerPatch,
-  LoadOptions,
-  LoadResult,
-  LoadSource,
   MoveTarget,
-  SkippedFeature,
 } from './api/model.js';
 
 // The stacking order of the items
@@ -280,10 +323,6 @@ export { deriveLegend, evaluateStyleRule } from './api/model.js';
 
 // Color functions
 export { parseCssColor } from './api/model.js';
-
-// GeoJSON functions
-export type { ToGeoJSONOptions } from './api/model.js';
-export { featuresToGeoJSON, featureToGeoJSON } from './api/model.js';
 
 // Parse functions
 export type { ParsedDocument, ParseOptions } from './api/model.js';

@@ -30,16 +30,16 @@ import type {
 } from '../../store/types.js';
 import { drawValueOfInput } from '../../table/value-input.js';
 import { DrawError } from '../errors.js';
-import type { FeaturesCollection } from '../features.js';
 import type {
-  Feature,
+  StoredFeature as Feature,
   FeatureFilter,
-  FeatureInput,
+  StoredFeatureInput as FeatureInput,
   FeatureListOptions,
-  FeaturePatch,
+  StoredFeaturePatch as FeaturePatch,
   MoveTarget,
 } from '../model.js';
 import { featuresExtent, rowsExtent } from './feature-extent.js';
+import type { FeatureResource } from './feature-resource.js';
 import { applyResult } from './geometry/apply.js';
 import { runBuffer } from './geometry/buffer.js';
 import { runSplit } from './geometry/split.js';
@@ -90,7 +90,7 @@ const FILTER_KEYS = ['layerId', 'groupId', 'type', 'visible', 'shown', 'locked',
  *
  * @internal
  */
-export function createFeatures(deps: ResourceDeps): FeaturesCollection {
+export function createFeatures(deps: ResourceDeps): FeatureResource {
   const { store } = deps;
   const geometryDeps: GeometryDeps = {
     store,
@@ -361,6 +361,32 @@ export function createFeatures(deps: ResourceDeps): FeaturesCollection {
       );
     },
 
+    writeResults(results) {
+      if (store.isReadOnly()) return false;
+      let written = 0;
+      store.transact(() => {
+        for (const result of results) {
+          const anchor =
+            store.getFeature(result.anchor.id) ??
+            (result.removedIds.length === 0 ? undefined : undefined);
+          if (!anchor && !result.removedIds.every((id) => !store.getFeature(id))) continue;
+          const source = anchor ?? result.anchor;
+          if (!anchor && !store.getLayer(source.layerId)) continue;
+          applyResult(
+            { store, generateFeatureId: () => result.id },
+            {
+              anchor: source,
+              removedIds: result.removedIds,
+              geometry: result.geometry as never,
+              ...(result.properties !== undefined && { properties: result.properties }),
+            },
+          );
+          written++;
+        }
+      });
+      return written > 0;
+    },
+
     buffer(ids, options) {
       const inputs = inStackingOrder(requireAll(ids));
       requireRecord(options, 'The options');
@@ -601,8 +627,12 @@ export function prepareFeatureInput(
   );
 }
 
-/** Checks an input and builds the feature to store; throws DrawError on a wrong input */
-function prepareFeature(
+/**
+ * Checks an input and builds the feature to store; throws DrawError on a wrong input
+ *
+ * @internal
+ */
+export function prepareFeature(
   deps: Pick<ResourceDeps, 'store' | 'generateId' | 'getActiveLayerId'>,
   input: FeatureInput,
   pending: ReadonlySet<string>,

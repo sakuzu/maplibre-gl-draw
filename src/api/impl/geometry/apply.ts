@@ -90,6 +90,28 @@ export interface CommitParams {
  * It does not open a transaction. Because the caller wraps it in store.transact, even a case
  * with several results, such as the buffer, is gathered into one StoreChange.
  */
+/**
+ * The feature a result is written as, with its ID: what `applyResult` writes, in the place of
+ * the anchor
+ *
+ * @internal
+ */
+export function resultFeature(store: Store, params: CommitParams, id: string): Feature {
+  const { anchor, removedIds, geometry } = params;
+  const placement = planPlacement(store, anchor, new Set(removedIds));
+  return {
+    id,
+    type: geometry.type,
+    geometry: geometryFromCoordinates(geometry.type, geometry.coordinates),
+    layerId: placement.layerId,
+    groupId: placement.groupId,
+    properties: params.properties ?? inheritProperties(anchor),
+    style: { ...anchor.style },
+    locked: false,
+    visible: true,
+  };
+}
+
 export function applyResult(deps: GeometryDeps, params: CommitParams): string {
   const { store, generateFeatureId } = deps;
   const { anchor, removedIds, geometry } = params;

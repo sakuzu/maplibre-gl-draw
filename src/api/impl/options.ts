@@ -37,7 +37,14 @@ import type { InstanceSignals } from './events.js';
 import { invalidInput, isRecord, onlyKeys } from './shared.js';
 
 /** The options that can only be given when the instance is created */
-const CREATION_KEYS = ['defaultMode', 'store', 'initDefaultLayer', 'generateId', 'debug'] as const;
+const CREATION_KEYS = [
+  'defaultMode',
+  'store',
+  'initDefaultLayer',
+  'generateId',
+  'history',
+  'debug',
+] as const;
 
 /** The options that change while the instance runs */
 const RUNTIME_KEYS = [
@@ -296,6 +303,16 @@ export function checkDrawOptions(options: unknown): asserts options is DrawOptio
     defaultMode: string,
     initDefaultLayer: bool,
     generateId: func,
+    history(value, what) {
+      if (!isRecord(value)) throw invalidInput(`${what} must be an object`);
+      checkFields(value, what, {
+        maxSteps(steps, where) {
+          if (typeof steps !== 'number' || !Number.isInteger(steps) || steps < 0) {
+            throw invalidInput(`${where} must be an integer from 0`);
+          }
+        },
+      });
+    },
     debug(value, what) {
       if (!isRecord(value)) throw invalidInput(`${what} must be an object`);
       checkFields(value, what, { checks: checkChecks });
@@ -307,7 +324,7 @@ export function checkDrawOptions(options: unknown): asserts options is DrawOptio
       const store = value as Record_;
       for (const method of STORE_METHODS) {
         if (typeof store[method] !== 'function') {
-          throw invalidInput(`${what} must be a Store: ${method} is missing`, { member: method });
+          throw invalidInput(`${what} must be a Store: ${method} is missing`);
         }
       }
     },

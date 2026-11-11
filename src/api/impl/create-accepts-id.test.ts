@@ -15,11 +15,12 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryContractStore } from '../../store/memory.js';
+import { writesOf } from '../../test-support/writes.js';
 import { createMapStub } from '../../test-utils.js';
 import type { Draw } from '../draw.js';
 import { createDraw } from '../draw.js';
 import { DrawError } from '../errors.js';
-import type { FeatureInput } from '../model.js';
+import type { StoredFeatureInput as FeatureInput } from '../model.js';
 
 let store: MemoryContractStore;
 let draw: Draw;
@@ -70,34 +71,38 @@ function errorOf(call: () => unknown): DrawError {
 describe('creating with an id the Store does not take', () => {
   it('refuses a feature with invalid-input, and writes nothing', () => {
     const write = vi.spyOn(store, 'createFeature');
-    const error = errorOf(() => draw.features.create(point('road-1')));
+    const error = errorOf(() => writesOf(draw).features.create(point('road-1')));
     expect(error.code).toBe('invalid-input');
-    expect(error.details).toEqual({ id: 'road-1' });
+    expect(error.ids).toEqual(['road-1']);
     expect(write).not.toHaveBeenCalled();
-    expect(draw.features.list()).toEqual([]);
+    expect(writesOf(draw).features.list()).toEqual([]);
   });
 
   it('refuses every feature of createMany for one of them', () => {
-    const error = errorOf(() => draw.features.createMany([point('w-a'), point('road-1')]));
+    const error = errorOf(() =>
+      writesOf(draw).features.createMany([point('w-a'), point('road-1')]),
+    );
     expect(error.code).toBe('invalid-input');
-    expect(draw.features.list()).toEqual([]);
+    expect(writesOf(draw).features.list()).toEqual([]);
   });
 
   it('refuses a group and a layer with invalid-input, and writes nothing', () => {
-    const feature = draw.features.create(point());
+    const feature = writesOf(draw).features.create(point());
     const group = errorOf(() =>
-      draw.groups.create({ id: 'group-1', featureIds: [feature?.id as string] }),
+      writesOf(draw).groups.create({ id: 'group-1', featureIds: [feature?.id as string] }),
     );
     expect(group.code).toBe('invalid-input');
     const groups = errorOf(() =>
-      draw.groups.createMany([{ id: 'group-1', featureIds: [feature?.id as string] }]),
+      writesOf(draw).groups.createMany([{ id: 'group-1', featureIds: [feature?.id as string] }]),
     );
     expect(groups.code).toBe('invalid-input');
     expect(draw.groups.list()).toEqual([]);
 
-    const layer = errorOf(() => draw.layers.create({ id: 'layer-2' }));
+    const layer = errorOf(() => writesOf(draw).layers.create({ id: 'layer-2' }));
     expect(layer.code).toBe('invalid-input');
-    const layers = errorOf(() => draw.layers.createMany([{ id: 'w-l' }, { id: 'layer-2' }]));
+    const layers = errorOf(() =>
+      writesOf(draw).layers.createMany([{ id: 'w-l' }, { id: 'layer-2' }]),
+    );
     expect(layers.code).toBe('invalid-input');
     expect(draw.layers.list().map((each) => each.id)).toEqual(['w-layer']);
   });
@@ -123,30 +128,36 @@ describe('creating with an id the Store does not take', () => {
         },
       ],
     };
-    await expect(draw.document.load(geojson, { layer: { id: 'layer-2' } })).rejects.toMatchObject({
+    await expect(
+      writesOf(draw).document.load(geojson, { layer: { id: 'layer-2' } }),
+    ).rejects.toMatchObject({
       code: 'invalid-input',
     });
-    await expect(draw.document.load(geojson, { group: { id: 'group-1' } })).rejects.toMatchObject({
+    await expect(
+      writesOf(draw).document.load(geojson, { group: { id: 'group-1' } }),
+    ).rejects.toMatchObject({
       code: 'invalid-input',
     });
-    expect(draw.features.list()).toEqual([]);
+    expect(writesOf(draw).features.list()).toEqual([]);
     expect(draw.layers.list().map((each) => each.id)).toEqual(['w-layer']);
   });
 });
 
 describe('creating with an id the Store takes, or with none', () => {
   it('creates them as before', () => {
-    const own = draw.features.create(point('w-own'));
-    const made = draw.features.create(point());
+    const own = writesOf(draw).features.create(point('w-own'));
+    const made = writesOf(draw).features.create(point());
     expect(own?.id).toBe('w-own');
     expect(made?.id.startsWith('w-')).toBe(true);
-    const group = draw.groups.create({ featureIds: [own?.id as string] });
+    const group = writesOf(draw).groups.create({ featureIds: [own?.id as string] });
     expect(group?.id.startsWith('w-')).toBe(true);
-    expect(draw.layers.create({ id: 'w-second' })?.id).toBe('w-second');
+    expect(writesOf(draw).layers.create({ id: 'w-second' })?.id).toBe('w-second');
   });
 
   it('takes an id that is taken as taken, before it asks the Store', () => {
-    draw.features.create(point('w-own'));
-    expect(errorOf(() => draw.features.create(point('w-own'))).code).toBe('already-exists');
+    writesOf(draw).features.create(point('w-own'));
+    expect(errorOf(() => writesOf(draw).features.create(point('w-own'))).code).toBe(
+      'already-exists',
+    );
   });
 });

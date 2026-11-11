@@ -14,11 +14,13 @@ import { BULK_MOVE_SET } from '../../feature-table/feature-row-states.js';
 import { createCoordinateTransform } from '../../shared/math/index.js';
 import { createTableStore } from '../../store/table-memory.js';
 import type { Feature as StoredFeature } from '../../store/types.js';
+import { writesOf } from '../../test-support/writes.js';
 import { createMapStub, internalsOf } from '../../test-utils.js';
 import { selectionBoxOf } from '../../view/ui/bounds.js';
 import type { Draw } from '../draw.js';
 import type { Observable } from '../events.js';
-import type { Feature } from '../model.js';
+import type { StoredFeature as Feature, Feature as PublicFeature } from '../model.js';
+import { readFeature } from '../model.js';
 import type { Sketch } from '../sketches.js';
 import type { FeatureTables } from '../tables.js';
 import { createDrawOnEngine } from './create-draw.js';
@@ -58,7 +60,7 @@ function afterNow<T>(observable: Observable<T>, run: (value: T) => void): () => 
 }
 
 const line = (): Feature =>
-  draw.features.create({
+  writesOf(draw).features.create({
     type: 'LineString',
     geometry: {
       type: 'LineString',
@@ -82,9 +84,9 @@ describe('draw.rendered', () => {
         },
       ],
     });
-    const second = (feature: Feature | undefined) =>
+    const second = (feature: { readonly geometry: GeoJSON.Geometry } | undefined) =>
       (feature?.geometry as GeoJSON.LineString | undefined)?.coordinates[1];
-    expect(second(draw.features.get(a.id))).toEqual([1, 1]);
+    expect(second(writesOf(draw).features.get(a.id))).toEqual([1, 1]);
     expect(second(draw.rendered.get(a.id))).toEqual([2, 2]);
     expect(draw.rendered.getMany([a.id, 'none', a.id]).map((f) => f?.id)).toEqual([
       a.id,
@@ -109,12 +111,12 @@ describe('draw.rendered', () => {
     });
     const key = engine.sketches.view.creates()[0]?.key as string;
     expect(draw.rendered.get(key)?.geometry).toEqual({ type: 'Point', coordinates: [3, 4] });
-    expect(draw.features.get(key)).toBeUndefined();
+    expect(writesOf(draw).features.get(key)).toBeUndefined();
   });
 
   it('gives the selection box the selection UI draws: the footprint with the margin', () => {
     const a = line();
-    const point = draw.features.create({
+    const point = writesOf(draw).features.create({
       type: 'Point',
       geometry: { type: 'Point', coordinates: [1, 1] },
     }) as Feature;
@@ -153,12 +155,12 @@ describe('draw.rendered', () => {
 
   it('gives the footprint as it is drawn: the box the selection box adds the margin to', () => {
     const a = line();
-    const point = draw.features.create({
+    const point = writesOf(draw).features.create({
       type: 'Point',
       geometry: { type: 'Point', coordinates: [1, 1] },
     }) as Feature;
     // An image of 100 by 50 pixels at zoom 1, turned by 30 degrees: its four corners as drawn
-    const image = draw.features.create({
+    const image = writesOf(draw).features.create({
       type: 'Image',
       geometry: { type: 'Point', coordinates: [2, 2] },
       properties: {
@@ -221,7 +223,7 @@ describe('rendered.changed', () => {
     afterNow(draw.rendered.changed, (ids) => told.push(ids));
     const a = line();
     const b = line();
-    draw.features.update(a.id, { style: { strokeWidth: 4 } });
+    writesOf(draw).features.update(a.id, { style: { strokeWidth: 4 } });
     expect(told).toEqual([]);
     drawFrame();
     expect(told).toEqual([[a.id, b.id]]);
@@ -246,7 +248,7 @@ describe('rendered.changed', () => {
     });
     drawFrame();
     draw.sketches.remove(sketch?.id as string);
-    draw.features.delete(a.id);
+    writesOf(draw).features.delete(a.id);
     drawFrame();
     expect(told).toEqual([[a.id], [a.id, b.id].sort(), [a.id, b.id].sort()]);
   });
@@ -263,9 +265,11 @@ describe('rendered.changed', () => {
     afterNow(draw.rendered.changed, (ids) => told.push(ids));
     // The frame of the image reads them as written, and they are seen again once it is drawn
     engine.context.shapes.setWritten(true);
-    expect(draw.rendered.get(a.id)?.style?.strokeWidth).toBeUndefined();
+    const strokeWidth = () =>
+      readFeature(draw.rendered.get(a.id) as PublicFeature).style.strokeWidth;
+    expect(strokeWidth()).toBeUndefined();
     engine.context.shapes.setWritten(false);
-    expect(draw.rendered.get(a.id)?.style?.strokeWidth).toBe(3);
+    expect(strokeWidth()).toBe(3);
     drawFrame();
     expect(told).toEqual([[a.id]]);
     // A frame of an image with no sketch tells nothing
@@ -331,13 +335,13 @@ describe('rendered.changed', () => {
       }
     });
     // Written as rows: the change names the features of the rows
-    draw.features.update('r1', { geometry: { type: 'Point', coordinates: [1, 1] } });
-    draw.features.delete('r2');
+    writesOf(draw).features.update('r1', { geometry: { type: 'Point', coordinates: [1, 1] } });
+    writesOf(draw).features.delete('r2');
     expect(notified).toEqual([['r1'], ['r2']]);
     drawFrame();
     expect(told).toEqual([['r1', 'r2']]);
     // A change of the look is read by each draw, not told
-    draw.layers.update('rows', { styleRule: { kind: 'single', color: '#00ff00' } });
+    writesOf(draw).layers.update('rows', { styleRule: { kind: 'single', color: '#00ff00' } });
     draw.options.update({ style: { point: { pointRadius: 9 } } });
     drawFrame();
     expect(told).toHaveLength(1);

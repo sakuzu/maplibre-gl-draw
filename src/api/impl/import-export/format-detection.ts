@@ -26,8 +26,12 @@ export function isNativeFormat(data: unknown): data is Data {
         'type' in f &&
         // `coordinates` in data of version 2, which is upgraded on load
         ('geometry' in f || 'coordinates' in f) &&
-        'layerId' in f,
-    )
+        // A GeoJSON Feature with its properties since version 4, the fields of the library apart
+        // before
+        ('layerId' in f || (f as { type?: unknown }).type === 'Feature'),
+    ) &&
+    // GeoJSON has no `layerOrder`; a document of the library always has it
+    Array.isArray(obj.layerOrder)
   );
 }
 

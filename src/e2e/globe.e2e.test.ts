@@ -22,13 +22,14 @@
 
 import type { Browser, Page } from 'playwright-core';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import type { FeatureInput } from '../index.js';
+import type { StoredFeatureInput as FeatureInput } from '../index.js';
 import { browserTimeout } from '../test-utils.js';
 import {
   type Bundle,
   bundlePage,
   click,
   type E2EWindow,
+  type E2EWrites,
   launchBrowser,
   openMapPage,
   pageOf,
@@ -167,8 +168,12 @@ async function show(page: Page, features: FeatureInput[]): Promise<void> {
   await page.evaluate((json: string) => {
     const { draw } = window as unknown as E2EWindow;
     draw.setMode('select');
-    draw.features.deleteMany(draw.features.list().map((feature) => feature.id));
-    draw.features.createMany(JSON.parse(json) as FeatureInput[]);
+    (window as unknown as E2EWrites).e2e
+      .writesOf(draw)
+      .features.deleteMany(draw.features.list().map((feature) => feature.id));
+    (window as unknown as E2EWrites).e2e
+      .writesOf(draw)
+      .features.createMany(JSON.parse(json) as FeatureInput[]);
   }, JSON.stringify(features));
   await settle(page);
 }
@@ -290,7 +295,7 @@ describe('the edges on the globe follow the paths maplibre draws', () => {
         if (!context) throw new Error('No 2D canvas');
         context.fillStyle = '#FF00FF';
         context.fillRect(0, 0, 64, 64);
-        await draw.document.load({
+        await (window as unknown as E2EWrites).e2e.writesOf(draw).document.load({
           version: '3.0.0',
           metadata: { title: 'image' },
           layerOrder: ['images'],
@@ -485,7 +490,7 @@ describe('the points near the edge of the sphere', () => {
     await page.evaluate((coord) => {
       const { map, draw } = window as unknown as E2EWindow;
       map.removeLayer('reference');
-      draw.features.create({
+      (window as unknown as E2EWrites).e2e.writesOf(draw).features.create({
         type: 'Point',
         geometry: { type: 'Point', coordinates: coord },
         style: { pointColor: '#00FF00', pointRadius: 6 },
@@ -581,15 +586,18 @@ describe('the selection box of a point on the globe', () => {
     await page.evaluate(() => {
       const { draw } = window as unknown as E2EWindow;
       draw.setMode('select');
-      draw.features.deleteMany(draw.features.list().map((feature) => feature.id));
+      (window as unknown as E2EWrites).e2e
+        .writesOf(draw)
+        .features.deleteMany(draw.features.list().map((feature) => feature.id));
       // Two points behind the sphere: the combined frame is a box on the map between them
       const ids = [
         [150, -30],
         [165, -15],
       ].map(
         (coordinates) =>
-          draw.features.create({ type: 'Point', geometry: { type: 'Point', coordinates } })?.id ??
-          '',
+          (window as unknown as E2EWrites).e2e
+            .writesOf(draw)
+            .features.create({ type: 'Point', geometry: { type: 'Point', coordinates } })?.id ?? '',
       );
       draw.selection.set('feature', ids);
     });

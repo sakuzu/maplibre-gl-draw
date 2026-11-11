@@ -52,7 +52,7 @@ function makePolygon(...rings: Coordinate[][]): Feature {
   };
 }
 
-/** A polygon with one 10x10 hole inside a 20x20 outer ring */
+/** A polygon with one 10x10 hole inside a 20x20 outer ring, in the right-hand rule (the hole clockwise) */
 function makePolygonWithHole(): Feature {
   return makePolygon(
     [
@@ -64,9 +64,9 @@ function makePolygonWithHole(): Feature {
     ],
     [
       [5, 5],
-      [15, 5],
-      [15, 15],
       [5, 15],
+      [15, 15],
+      [15, 5],
       [5, 5],
     ],
   );
@@ -229,7 +229,7 @@ describe('computeVertexMove', () => {
       };
 
       const result = computeVertexMove(state, { lng: 1, lat: 2 }, feature) as Coordinate[][];
-      expect(result[1][1]).toEqual([16, 7]);
+      expect(result[1][1]).toEqual([6, 17]);
       // The other vertices of the inner ring and the outer ring do not change
       expect(result[1][0]).toEqual([5, 5]);
       expect(result[0]).toEqual([
@@ -353,9 +353,9 @@ describe('the copy-on-write of computeVertexMove', () => {
         ],
         [
           [5, 5],
-          [15, 5],
-          [15, 15],
           [5, 15],
+          [15, 15],
+          [15, 5],
           [5, 5],
         ],
       ],
@@ -473,7 +473,7 @@ describe('the copy-on-write of computeVertexMove', () => {
     expect(result[0]).not.toBe(initial[0]);
     expect(result[0][0]).toBe(initial[0][0]);
     expect(result[0][1]).not.toBe(initial[0][1]);
-    expect(result[0][1][1]).toEqual([16, 7]);
+    expect(result[0][1][1]).toEqual([6, 17]);
     expect(result[0][1][0]).toBe(initial[0][1][0]);
     expect(initial).toEqual(snapshot);
   });
@@ -644,13 +644,13 @@ describe('addVertex', () => {
 
     it('inserts into an inner ring (the outer ring does not change)', () => {
       const feature = makePolygonWithHole();
-      const result = addVertex(feature, { ring: 1, index: 1 }, [15, 10]) as Coordinate[][];
+      const result = addVertex(feature, { ring: 1, index: 1 }, [10, 15]) as Coordinate[][];
       expect(result[1]).toEqual([
         [5, 5],
-        [15, 5],
-        [15, 10],
-        [15, 15],
         [5, 15],
+        [10, 15],
+        [15, 15],
+        [15, 5],
         [5, 5],
       ]);
       // The inner ring stays closed
@@ -832,8 +832,8 @@ describe('deleteVertex', () => {
       const result = deleteVertex(feature, { ring: 1, index: 2 }) as Coordinate[][];
       expect(result[1]).toEqual([
         [5, 5],
-        [15, 5],
         [5, 15],
+        [15, 5],
         [5, 5],
       ]);
       expect(result[1][0]).toEqual(result[1][result[1].length - 1]);
@@ -850,10 +850,10 @@ describe('deleteVertex', () => {
       const feature = makePolygonWithHole();
       const result = deleteVertex(feature, { ring: 1, index: 0 }) as Coordinate[][];
       expect(result[1]).toEqual([
-        [15, 5],
-        [15, 15],
         [5, 15],
+        [15, 15],
         [15, 5],
+        [5, 15],
       ]);
       expect(result[1][0]).toEqual(result[1][result[1].length - 1]);
     });

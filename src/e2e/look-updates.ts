@@ -22,7 +22,7 @@ import type { Browser, Page } from 'playwright-core';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { browserTimeout } from '../test-utils.js';
 import { idle, load, openScenePage, type StoreKind, select } from './drag-scene.js';
-import { type Bundle, bundlePage, launchBrowser, MAP_SIZE } from './harness.js';
+import { type Bundle, bundlePage, type E2EWrites, launchBrowser, MAP_SIZE } from './harness.js';
 
 const ZOOM = 14;
 
@@ -334,7 +334,9 @@ async function putFeatures(page: Page, type: TypeCase, holding: Holding): Promis
           } as never);
         });
         w.writer.addPages('L', builder.finish());
-      } else if (!draw.features.createMany(inputs as never)) {
+      } else if (
+        !(window as unknown as E2EWrites).e2e.writesOf(draw).features.createMany(inputs as never)
+      ) {
         throw new Error('the features were not created');
       }
       return inputs.map((input) => input.id);
@@ -361,7 +363,11 @@ async function changeLooks(page: Page, type: TypeCase): Promise<void> {
   await page.evaluate((patches) => {
     const w = window as unknown as { draw: import('../index.js').Draw };
     for (const { id, style } of patches) {
-      if (!w.draw.features.update(id, { style } as never)) {
+      if (
+        !(window as unknown as E2EWrites).e2e
+          .writesOf(w.draw)
+          .features.update(id, { style } as never)
+      ) {
         throw new Error(`the feature ${id} was not updated`);
       }
     }
@@ -482,7 +488,7 @@ export function describeLookUpdates(kind: StoreKind, holding: Holding): void {
       if (shown.length > 0) {
         await page.evaluate((ids) => {
           const w = window as unknown as { draw: import('../index.js').Draw };
-          w.draw.features.deleteMany(ids);
+          (window as unknown as E2EWrites).e2e.writesOf(w.draw).features.deleteMany(ids);
         }, shown);
       }
       shown = await putFeatures(page, type, holding);

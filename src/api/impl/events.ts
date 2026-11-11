@@ -19,6 +19,7 @@ import { featureFields, featureWithFields } from '../../feature-table/feature-fi
 import { featureTablesInternals } from '../../feature-table/feature-tables.js';
 import { rowFeature } from '../../feature-table/row-read.js';
 import type { EngineSignals, EventEmitter } from '../../shared/utils/event-emitter.js';
+import { createId } from '../../shared/utils/id.js';
 import { bulkSelectionValue, valueOfSelection } from '../../store/selection-value.js';
 import type { Store } from '../../store/store.js';
 import type {
@@ -40,7 +41,9 @@ import type { Feature } from '../model.js';
 import type { RuntimeOptions } from '../options.js';
 import type { Sketch, SketchEndReason } from '../sketches.js';
 import type { Mode, SnapResult, VertexSelection } from '../state.js';
+import { toFeatureOrUndefined } from './feature-shape.js';
 import { toDatasetRow } from './rows.js';
+import { commitOf } from './write.js';
 
 /**
  * What the parts of the instance tell one another on the hub, besides the events: the changes of
@@ -114,7 +117,6 @@ interface Entry {
 /** Every event of `draw.on` */
 const EVENT_KEYS = {
   change: true,
-  'document.loaded': true,
   'drag.started': true,
   'drag.ended': true,
   'readOnly.changed': true,
@@ -138,7 +140,7 @@ const EVENTS: ReadonlySet<string> = new Set(Object.keys(EVENT_KEYS));
  */
 export function requireEventName(event: unknown): asserts event is keyof DrawEvents {
   if (typeof event !== 'string' || !EVENTS.has(event)) {
-    throw new DrawError('invalid-input', `There is no event ${String(event)}`, { event });
+    throw new DrawError('invalid-input', `There is no event ${String(event)}`);
   }
 }
 
@@ -447,6 +449,19 @@ function reordered(order: readonly string[], previous: readonly string[]): strin
   return kept.filter((_id, i) => !stays.has(i));
 }
 
+/** Where a commit came from, in the words of `change`: what this client wrote is `local` */
+function changeSourceOf(source: string | undefined): Change['source'] {
+  switch (source) {
+    case 'remote':
+    case 'undo':
+    case 'redo':
+    case 'open':
+      return source;
+    default:
+      return 'local';
+  }
+}
+
 /**
  * The change a notification carries for `change`: the IDs of what it changed, and what a feature
  * was before; null when the notification changed nothing of the document
@@ -540,8 +555,11 @@ export function toChange(changes: StoreChange, store: Store): Change | null {
   };
 
   let rowsBefore: RowsBefore | null = null;
+  const commit = commitOf(store);
   return {
-    source: changes.source ?? 'local',
+    commit: commit?.id ?? createId(),
+    source: changeSourceOf(changes.source),
+    label: commit?.label,
     features: featureIds,
     layers: layerIds,
     groups: groupIds,
@@ -556,9 +574,9 @@ export function toChange(changes: StoreChange, store: Store): Change | null {
     previous(id) {
       if (typeof id !== 'string') return undefined;
       const found = before.get(id);
-      if (found || !changes.rows) return found;
+      if (found || !changes.rows) return toFeatureOrUndefined(found as StoredFeature | undefined);
       rowsBefore ??= rowsBeforeOf(changes, store);
-      return rowsBefore.previous(id);
+      return toFeatureOrUndefined(rowsBefore.previous(id) as StoredFeature | undefined);
     },
     ...(changes.rows && { rows: changes.rows }),
   };

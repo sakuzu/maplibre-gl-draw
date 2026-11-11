@@ -23,6 +23,7 @@
 import type { Value } from '@sakuzu/tabane';
 import type { Geometry } from 'geojson';
 import { acceptsEnuEdit, applyEnuEdit } from '../geometry/enu-transforms.js';
+import { orientRings } from '../geometry/simplify.js';
 import { DrawError } from '../shared/draw-error.js';
 import { describeGeometryProblem } from '../shared/geometry-validation.js';
 import { describeStyleProblem } from '../shared/style-validation.js';
@@ -137,9 +138,7 @@ export function checkEdits(
     if (!isTransformEdit(edit)) return undefined;
     const computed = transformEditOf(edit);
     if (!transforms.accepts(computed)) {
-      throw invalidInput(`The edit ${edit.kind} has values the Store does not take`, {
-        edit: computed,
-      });
+      throw invalidInput(`The edit ${edit.kind} has values the Store does not take`);
     }
     return computed;
   });
@@ -172,7 +171,7 @@ export function transformedFields(
   if (moved !== undefined) {
     const problem = describeGeometryProblem(type, moved);
     if (problem) {
-      throw invalidInput(`The edit ${edit.kind} gives the feature ${id} ${problem}`, { id });
+      throw invalidInput(`The edit ${edit.kind} gives the feature ${id} ${problem}`);
     }
   }
   const properties = roleFieldsOf(roles, before, after);
@@ -259,9 +258,9 @@ export function updatesOfEdits(
  * @internal
  */
 export function featureUpdatesOfEdit(feature: Feature, edit: OneFeatureEdit): Partial<Feature> {
-  return edit.kind === 'set'
-    ? featureUpdatesOfPatch(feature, edit.patch)
-    : { geometry: editedGeometry(feature, edit) };
+  // The rings of the polygons are put in the right-hand rule as they are written
+  if (edit.kind === 'set') return featureUpdatesOfPatch(feature, edit.patch);
+  return { geometry: orientRings(editedGeometry(feature, edit)) };
 }
 
 /**
@@ -316,7 +315,7 @@ export function featureUpdatesOfPatch(feature: Feature, patch: FeaturePatch): Pa
   if (patch.geometry !== undefined) {
     const problem = describeGeometryProblem(feature.type, patch.geometry);
     if (problem) throw invalidInput(`The patch has ${problem}`);
-    updates.geometry = patch.geometry;
+    updates.geometry = orientRings(patch.geometry);
   }
   if (patch.properties !== undefined) {
     if (!isRecord(patch.properties)) throw invalidInput('properties must be an object');
@@ -490,7 +489,6 @@ function checkVertex(vertex: VertexTarget): asserts vertex is VertexRef {
   if (typeof vertex === 'string') {
     throw invalidInput(
       'The Store takes a vertex by its place ({ part, ring, index }), not by an ID',
-      { vertex },
     );
   }
   if (
@@ -535,10 +533,7 @@ function editedGeometry(feature: Feature, edit: VertexEdit): Geometry {
   const vertexOf = (vertex: VertexTarget): VertexRef => {
     const ref = vertex as VertexRef;
     if (!isVertexOf(kind, coordinates, ref)) {
-      throw invalidInput(`The feature ${feature.id} has no vertex ${JSON.stringify(ref)}`, {
-        id: feature.id,
-        vertex: ref,
-      });
+      throw invalidInput(`The feature ${feature.id} has no vertex ${JSON.stringify(ref)}`);
     }
     return ref;
   };
@@ -573,7 +568,6 @@ function editedGeometry(feature: Feature, edit: VertexEdit): Geometry {
         throw invalidInput(
           `The vertices cannot be deleted from the feature ${feature.id}: a line or a ring ` +
             'would be left with too few positions, or a point with none',
-          { id: feature.id },
         );
       }
       edited = result;
@@ -693,8 +687,8 @@ function deletedVertices(
 // ============================================================================
 
 /** The error for an input of the wrong shape or value */
-function invalidInput(message: string, details?: unknown): DrawError {
-  return new DrawError('invalid-input', message, details);
+function invalidInput(message: string): DrawError {
+  return new DrawError('invalid-input', message);
 }
 
 /** Whether the value is a plain object (not null, not an array) */

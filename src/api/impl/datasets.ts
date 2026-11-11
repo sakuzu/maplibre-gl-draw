@@ -421,7 +421,7 @@ export function createDatasets(
     checkOptions(options);
     if (manager.get(options.id) || taken.has(options.id)) {
       throw new DrawError('already-exists', `A dataset with the ID ${options.id} exists`, {
-        id: options.id,
+        ids: [options.id],
       });
     }
     taken.add(options.id);

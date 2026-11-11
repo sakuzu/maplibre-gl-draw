@@ -58,7 +58,11 @@ export const drawFreehandMode: ModeFactory = (ctx) => {
 
   const showPreview = (): void => {
     if (!stroke) return;
-    ctx.preview.set({ type: 'Freehand', geometry: { type: 'LineString', coordinates: stroke } });
+    ctx.preview.set({
+      type: 'Feature',
+      geometry: { type: 'LineString', coordinates: stroke },
+      properties: { 'maplibre-gl-draw:featureType': 'Freehand' },
+    });
   };
 
   return {
@@ -67,7 +71,7 @@ export const drawFreehandMode: ModeFactory = (ctx) => {
 
     onEnter() {
       ctx.cursor.set('crosshair');
-      ctx.draw.transact(() => ctx.draw.selection.clear(), { source: 'silent' });
+      ctx.draw.selection.clear();
       stroke = null;
     },
 
@@ -118,10 +122,13 @@ export const drawFreehandMode: ModeFactory = (ctx) => {
       if (stroke.length >= 2) {
         // The line is not selected, so that drawing can go on
         ctx.commitFeature({
-          type: 'Freehand',
+          type: 'Feature',
           geometry: { type: 'LineString', coordinates: stroke },
           // The same default color as a line
-          style: { strokeWidth: 3 },
+          properties: {
+            'maplibre-gl-draw:featureType': 'Freehand',
+            'maplibre-gl-draw:style': { strokeWidth: 3 },
+          },
         });
       }
       dropStroke();

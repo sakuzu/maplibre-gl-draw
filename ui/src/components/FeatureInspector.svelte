@@ -15,7 +15,7 @@
     Pair,
     Row,
   } from '@sakuzu/kata/svelte';
-  import type { FeaturePatch } from '@sakuzu/maplibre-gl-draw';
+  import { type FeaturePatch, readFeature } from '@sakuzu/maplibre-gl-draw';
   import {
     attributeAdd,
     attributePatch,
@@ -34,6 +34,7 @@
   } from '../inspector/types.js';
   import { type FeatureView, featureLayout, typeLabel } from '../inspector/view.js';
   import type { Messages } from '../messages.js';
+  import { deleteSelection, featurePatchOf, write } from '../writes.js';
   import BufferDialog from './BufferDialog.svelte';
   import StyleFields from './StyleFields.svelte';
 
@@ -101,7 +102,7 @@
   );
 
   function update(patch: FeaturePatch | null) {
-    if (patch) draw.features.update(feature.id, patch);
+    if (patch) void write(draw, (tx) => tx.features.update(feature.id, patch));
   }
 
   function toggleHidden() {
@@ -145,16 +146,19 @@
 {#snippet foot()}
   <Footer>
     {#snippet lead()}
-      <Button variant="danger" disabled={!editable} onclick={() => draw.selection.delete()}>
+      <Button variant="danger" disabled={!editable} onclick={() => void deleteSelection(draw)}>
         {m.delete}
       </Button>
     {/snippet}
     {#snippet secondary()}
       <Button
         disabled={view.readOnly}
-        onclick={() => draw.features.update(feature.id, { locked: !feature.locked })}
+        onclick={() =>
+          void write(draw, (tx) =>
+            tx.features.update(feature.id, featurePatchOf({ locked: !readFeature(feature).locked })),
+          )}
       >
-        {feature.locked ? m.unlock : m.lock}
+        {readFeature(feature).locked ? m.unlock : m.lock}
       </Button>
       <Button onclick={toggleHidden}>{view.hidden ? m.show : m.hide}</Button>
     {/snippet}

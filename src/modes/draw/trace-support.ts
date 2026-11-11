@@ -108,11 +108,11 @@ function graphFeature(id: string, geometry: Geometry, type: string = geometry.ty
  */
 export function traceSourceOf(ctx: ModeContext): TraceSource {
   const { draw, store } = ctx;
-  const shown = (feature: PublicFeature): boolean => {
+  const shown = (feature: Feature): boolean => {
     if (!feature.visible) return false;
     if (!store.getLayer(feature.layerId)?.visible) return false;
     if (feature.groupId && store.getGroup(feature.groupId)?.visible === false) return false;
-    return !isLocallyHidden(feature as Feature, store);
+    return !isLocallyHidden(feature, store);
   };
   return {
     isEnabled: () => draw.options.get().tracing?.enabled !== false,
@@ -130,8 +130,8 @@ export function traceSourceOf(ctx: ModeContext): TraceSource {
     features(bbox) {
       // A Store of rows: its rows are listed as edges
       const features = (store.tables ? [] : draw.features.list({ bbox }))
-        .filter(shown)
-        .map((feature) => feature as Feature);
+        .map(storedOfFeature)
+        .filter((feature): feature is Feature => feature !== undefined && shown(feature));
       for (const { row } of ctx.listTraceRows(bbox)) {
         if (row.geometry) features.push(graphFeature(String(row.id), row.geometry));
       }
@@ -257,3 +257,38 @@ export function computeTracePath(
   );
   return findTracePath(graph, fromEndpoint, toEndpoint);
 }
+
+/** A feature read from the instance, in the fields a trace reads (its values of the library) */
+function storedOfFeature(feature: PublicFeature): Feature {
+  const { properties } = feature;
+  const read = (name: string): unknown => properties[`maplibre-gl-draw:${name}`];
+  const own: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(properties)) {
+    if (!key.startsWith('maplibre-gl-draw:') || !TRACE_FIELDS.has(key.slice(17))) own[key] = value;
+  }
+  const featureType = read('featureType');
+  const layerId = read('layerId');
+  const groupId = read('groupId');
+  const style = read('style');
+  return {
+    id: feature.id,
+    type: typeof featureType === 'string' ? featureType : feature.geometry.type,
+    geometry: feature.geometry,
+    layerId: typeof layerId === 'string' ? layerId : '',
+    groupId: typeof groupId === 'string' ? groupId : undefined,
+    properties: own as Feature['properties'],
+    style: (typeof style === 'object' && style !== null ? style : {}) as Feature['style'],
+    visible: read('visible') !== false,
+    locked: read('locked') === true,
+  };
+}
+
+/** The values of the library that are fields of a feature of the Store */
+const TRACE_FIELDS: ReadonlySet<string> = new Set([
+  'layerId',
+  'groupId',
+  'featureType',
+  'style',
+  'visible',
+  'locked',
+]);

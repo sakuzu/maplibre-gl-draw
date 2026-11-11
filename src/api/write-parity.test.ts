@@ -10,13 +10,16 @@
  * or the code of the error), the commits it told (`change`: where they came from, the IDs of what
  * changed and whether the document changed) and, at the end, the document as the Store holds it.
  * The writes are made through one small set of verbs (`Writes`), the only part that knows the shape
- * of the public writes: once the shape changes, the verbs are written again and the record is
- * compared as it is (`__snapshots__/write-parity.jsonl`).
+ * of the public writes. The record was written with the writes of the resources before they moved
+ * to `draw.write`, on ceb8cda2; the verbs are written for `draw.write` since, and the record is
+ * compared as it is (`__snapshots__/write-parity.jsonl`). What `draw.write` does otherwise is
+ * written down with the record, by the scene that shows it.
  */
 
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import type { FeatureCollection, Geometry, Polygon } from 'geojson';
 import { afterEach, describe, expect, it } from 'vitest';
+import { orientRings } from '../geometry/simplify.js';
 import { featuresInOrder, listedGroups, listedLayers } from '../store/feature-stream.js';
 import { MemoryStore } from '../store/memory.js';
 import type { Store } from '../store/store.js';
@@ -26,6 +29,8 @@ import type { Draw } from './draw.js';
 import { createDraw } from './draw.js';
 import { DrawError } from './errors.js';
 import type { Change } from './events.js';
+import type { FeatureInput, FeaturePatch } from './model.js';
+import type { Placement, Transaction } from './write.js';
 
 const SNAPSHOT = new URL('./__snapshots__/write-parity.jsonl', import.meta.url);
 
@@ -101,104 +106,105 @@ interface Writes {
   setReadOnly(value: boolean): void;
 }
 
-/** The outcome of a write that returns null or false when it is refused */
-function outcomeOf(result: unknown): Outcome {
-  return result === null || result === false ? 'refused' : 'done';
-}
-
-async function caught(run: () => unknown): Promise<Outcome> {
+/**
+ * The outcome of a write: a refusal of the state (`not-editable`, `locked`) is what the writes
+ * returned `null` or `false` for before they moved to `draw.write`
+ */
+async function caught(run: () => Promise<unknown>): Promise<Outcome> {
   try {
-    return outcomeOf(await run());
+    await run();
+    return 'done';
   } catch (error) {
-    if (error instanceof DrawError) return `error:${error.code}`;
+    if (error instanceof DrawError) {
+      return error.code === 'not-editable' || error.code === 'locked'
+        ? 'refused'
+        : `error:${error.code}`;
+    }
     throw error;
   }
 }
 
-/** The patch of the scenes in the shape of `features.update` */
-function patchOf(patch: Patch): Record<string, unknown> {
-  const { removeKeys, ...rest } = patch;
-  if (!removeKeys) return rest;
+const KEY = (name: string) => `maplibre-gl-draw:${name}`;
+
+/** A feature of the scenes as a GeoJSON Feature */
+function featureOf(input: Input): FeatureInput {
+  const properties: Record<string, unknown> = { ...input.properties };
+  if (input.layerId !== undefined) properties[KEY('layerId')] = input.layerId;
+  if (input.groupId !== undefined) properties[KEY('groupId')] = input.groupId;
+  if (input.geometry !== null && input.type !== input.geometry?.type) {
+    properties[KEY('featureType')] = input.type;
+  }
+  if (input.style !== undefined) properties[KEY('style')] = input.style;
+  if (input.visible !== undefined) properties[KEY('visible')] = input.visible;
+  if (input.locked !== undefined) properties[KEY('locked')] = input.locked;
+  return { type: 'Feature', id: input.id, geometry: input.geometry, properties } as FeatureInput;
+}
+
+/** A change of the scenes as a patch of `tx.features.update` */
+function patchOf(patch: Patch): FeaturePatch {
+  const properties: Record<string, unknown> = { ...patch.properties };
+  if (patch.style !== undefined) properties[KEY('style')] = patch.style;
+  if (patch.visible !== undefined) properties[KEY('visible')] = patch.visible;
+  if (patch.locked !== undefined) properties[KEY('locked')] = patch.locked;
   return {
-    ...rest,
-    properties: {
-      ...rest.properties,
-      ...Object.fromEntries(removeKeys.map((key) => [key, undefined])),
-    },
-  };
+    ...(patch.geometry !== undefined && { geometry: patch.geometry }),
+    ...(Object.keys(properties).length > 0 && { properties }),
+    ...(patch.removeKeys !== undefined && { unset: { properties: patch.removeKeys } }),
+  } as FeaturePatch;
 }
 
-/** A place in the terms of `ItemPlacement`: the container of a neighbor is read from it */
-function placementOf(draw: Draw, to: Place): Record<string, unknown> {
-  if ('layerId' in to || 'groupId' in to) return to;
-  const neighbor = 'below' in to ? to.below : to.above;
-  const item = draw.features.get(neighbor) ?? draw.groups.get(neighbor);
-  const groupId = item && 'groupId' in item ? item.groupId : undefined;
-  return { layerId: item?.layerId, ...(groupId ? { groupId } : {}), ...to };
-}
+/** Runs a write in a transaction */
+type Run = (fn: (tx: Transaction) => Promise<unknown>) => Promise<unknown>;
 
-/** The verbs on the public writes of the instance (`draw.features.create` and the rest) */
-function writesOf(draw: Draw): Writes {
+/** The verbs on `draw.write`: each verb is one write, or a write of the transaction given */
+function writesOf(draw: Draw, run: Run = (fn) => draw.write(fn)): Writes {
+  const write = (fn: (tx: Transaction) => Promise<unknown>) => caught(() => run(fn));
   const w: Writes = {
-    create: (input) => caught(() => draw.features.create(input as never)),
-    createMany: (inputs) => caught(() => draw.features.createMany(inputs as never)),
-    update: (id, patch) => caught(() => draw.features.update(id, patchOf(patch) as never)),
+    create: (input) => write((tx) => tx.features.create(featureOf(input))),
+    createMany: (inputs) => write((tx) => tx.features.create(inputs.map(featureOf))),
+    update: (id, patch) => write((tx) => tx.features.update(id, patchOf(patch))),
     updateMany: (entries) =>
-      caught(() =>
-        draw.features.updateMany(
-          entries.map(({ id, patch }) => ({ id, patch: patchOf(patch) as never })),
-        ),
+      write((tx) =>
+        tx.features.update(entries.map(({ id, patch }) => ({ id, patch: patchOf(patch) }))),
       ),
-    delete: (id) => caught(() => draw.features.delete(id)),
-    deleteMany: (ids) => caught(() => draw.features.deleteMany(ids)),
-    place: (ids, to) => caught(() => draw.features.moveMany(ids, placementOf(draw, to) as never)),
-    createLayer: (input) => caught(() => draw.layers.create(input)),
-    updateLayer: (id, patch) => caught(() => draw.layers.update(id, patch)),
-    deleteLayer: (id) => caught(() => draw.layers.delete(id)),
-    placeLayer: (id, above) =>
-      caught(() => {
-        const order = draw.layers.getOrder().filter((other) => other !== id);
-        order.splice(order.indexOf(above) + 1, 0, id);
-        return draw.layers.reorder(order);
-      }),
+    delete: (id) => write((tx) => tx.features.delete(id)),
+    deleteMany: (ids) => write((tx) => tx.features.delete(ids)),
+    place: (ids, to) => write((tx) => tx.features.place(ids, to as Placement)),
+    createLayer: (input) => write((tx) => tx.layers.create(input)),
+    updateLayer: (id, patch) => write((tx) => tx.layers.update(id, patch)),
+    deleteLayer: (id) => write((tx) => tx.layers.delete(id)),
+    placeLayer: (id, above) => write((tx) => tx.layers.place(id, { below: above })),
     createGroup: (input) =>
-      caught(() =>
-        draw.groups.create({ id: input.id, name: input.name, featureIds: input.members }),
+      write((tx) =>
+        tx.groups.create({ id: input.id, name: input.name, featureIds: input.members }),
       ),
-    updateGroup: (id, patch) => caught(() => draw.groups.update(id, patch)),
-    deleteGroup: (id) => caught(() => draw.groups.delete(id)),
-    placeGroup: (id, to) => caught(() => draw.groups.move(id, placementOf(draw, to) as never)),
-    updateDocument: (patch) => caught(() => draw.metadata.update(patch)),
+    updateGroup: (id, patch) => write((tx) => tx.groups.update(id, patch)),
+    deleteGroup: (id) => write((tx) => tx.groups.delete(id, { members: 'keep' })),
+    placeGroup: (id, to) => write((tx) => tx.groups.place(id, to as Placement)),
+    updateDocument: (patch) => write((tx) => tx.document.update(patch)),
     importGeoJSON: (collection, layerId) =>
-      caught(() =>
-        draw.document.load(collection, { mode: 'merge', ...(layerId ? { layerId } : {}) }),
-      ),
-    union: (ids) => caught(() => draw.features.union(ids)),
-    difference: (id, others) => caught(() => draw.features.difference(id, others)),
-    intersection: (ids) => caught(() => draw.features.intersection(ids)),
-    split: (id, lineId) => caught(() => draw.features.split(id, lineId)),
-    buffer: (id, distanceMeters) => caught(() => draw.features.buffer([id], { distanceMeters })),
+      write((tx) => tx.import(collection, layerId ? { layer: layerId } : undefined)),
+    union: (ids) => write((tx) => tx.features.union(ids)),
+    difference: (id, others) => write((tx) => tx.features.difference(id, others)),
+    intersection: (ids) => write((tx) => tx.features.intersection(ids)),
+    split: (id, lineId) => write((tx) => tx.features.split(id, lineId)),
+    buffer: (id, distanceMeters) => write((tx) => tx.features.buffer(id, distanceMeters)),
     together: (steps) =>
-      caught(async () => {
-        const outcomes: Outcome[] = [];
-        draw.transact(() => {
-          for (const step of steps) {
-            // The verbs of the old writes run in the task they are made in
-            void step(w).then((outcome) => outcomes.push(outcome));
-          }
-        });
-        await Promise.resolve();
-        return outcomes.every((outcome) => outcome === 'done') ? true : null;
+      write(async (tx) => {
+        const inner = writesOf(draw, (fn) => fn(tx));
+        const outcomes = await Promise.all(steps.map((step) => step(inner)));
+        const failed = outcomes.find((outcome) => outcome !== 'done');
+        if (failed) throw new Error(failed);
       }),
     deleteSelected: (ids) =>
-      caught(() => {
+      write((tx) => {
         draw.selection.set('feature', ids);
-        return draw.selection.delete();
+        return tx.features.delete(draw.selection.target);
       }),
     placeSelected: (ids, layerId) =>
-      caught(() => {
+      write((tx) => {
         draw.selection.set('feature', ids);
-        return draw.selection.move({ layerId });
+        return tx.features.place(draw.selection.target, { layerId });
       }),
     setReadOnly: (value) => draw.setReadOnly(value),
   };
@@ -610,6 +616,37 @@ const SCENES: readonly Scene[] = [
 // Running and comparing
 // ============================================================================
 
+/**
+ * A line of the record as `draw.write` writes it: what changed on purpose since the record was
+ * written, and nothing else.
+ *
+ * - The rings of a polygon are put in the right-hand rule as they are written (12-m14-114), where
+ *   the writes kept them as they were given (a ring drawn clockwise, a GeoJSON polygon read)
+ * - A GeoJSON source added is part of the commit of its transaction (`tx.import`): its source is
+ *   that of the transaction, `local`, where a load was told with the source `load`
+ */
+function asWrittenNow(line: Record<string, unknown>): Record<string, unknown> {
+  if (Array.isArray(line.told)) {
+    return {
+      ...line,
+      told: line.told.map((told: { source: string }) =>
+        told.source === 'load' ? { ...told, source: 'local' } : told,
+      ),
+    };
+  }
+  const document = line.document as { features: { geometry: Geometry }[] } | undefined;
+  if (!document) return line;
+  return {
+    document: {
+      ...document,
+      features: document.features.map((feature) => ({
+        ...feature,
+        geometry: orientRings(feature.geometry),
+      })),
+    },
+  };
+}
+
 let draw: Draw | undefined;
 
 afterEach(() => {
@@ -661,12 +698,60 @@ describe('the public writes', () => {
       mkdirSync(new URL('.', SNAPSHOT), { recursive: true });
       writeFileSync(SNAPSHOT, `${lines.join('\n')}\n`);
     }
+    if (process.env.WRITE_PARITY_OUT) {
+      writeFileSync(process.env.WRITE_PARITY_OUT, `${lines.join('\n')}\n`);
+    }
     const expected = readFileSync(SNAPSHOT, 'utf8')
       .split('\n')
       .filter((line) => line !== '');
     expect(lines.length).toBe(expected.length);
     lines.forEach((line, i) => {
-      expect(JSON.parse(line)).toEqual(JSON.parse(expected[i]));
+      expect(JSON.parse(line)).toEqual(asWrittenNow(JSON.parse(expected[i])));
     });
+  });
+
+  it('are taken back one step at a time, and made again', async () => {
+    const failures: string[] = [];
+    for (const scene of SCENES) {
+      for (const [kind, makeStore] of KINDS) {
+        if (kind === 'rows' && scene.rows !== true) continue;
+        const store = makeStore();
+        let next = 0;
+        draw = createDraw(createMapStub().map, {
+          store,
+          initDefaultLayer: false,
+          generateId: () => `n${++next}`,
+        });
+        const w = writesOf(draw);
+        const empty = JSON.stringify(documentOf(store));
+        await w.createLayer({ id: 'a', name: 'A' });
+        await w.createLayer({ id: 'b', name: 'B' });
+        await scene.run(w, async (_name, outcome) => {
+          await outcome;
+        });
+        w.setReadOnly(false);
+        const written = JSON.stringify(documentOf(store));
+        let undone = 0;
+        for (;;) {
+          try {
+            await draw.undo();
+            undone++;
+          } catch (error) {
+            if ((error as DrawError).code !== 'invalid-state') throw error;
+            break;
+          }
+        }
+        if (JSON.stringify(documentOf(store)) !== empty) {
+          failures.push(`${scene.name} / ${kind}: undo (${undone} steps)`);
+        }
+        for (let i = 0; i < undone; i++) await draw.redo();
+        if (JSON.stringify(documentOf(store)) !== written) {
+          failures.push(`${scene.name} / ${kind}: redo`);
+        }
+        draw.destroy();
+        draw = undefined;
+      }
+    }
+    expect(failures).toEqual([]);
   });
 });

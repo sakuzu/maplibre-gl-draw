@@ -20,7 +20,7 @@ export const drawPointMode: ModeFactory = (ctx) => ({
   onEnter() {
     ctx.cursor.set('crosshair');
     // Entering a drawing mode clears the selection, as a change nobody records
-    ctx.draw.transact(() => ctx.draw.selection.clear(), { source: 'silent' });
+    ctx.draw.selection.clear();
   },
 
   onExit() {
@@ -31,13 +31,12 @@ export const drawPointMode: ModeFactory = (ctx) => ({
   onDoubleClick: () => true,
 
   onClick(event) {
-    ctx.draw.transact(() => {
-      const feature = ctx.commitFeature({
-        type: 'Point',
-        geometry: { type: 'Point', coordinates: event.snapped.lngLat },
-      });
-      if (feature) ctx.draw.selection.set('feature', [feature.id]);
+    const feature = ctx.commitFeature({
+      type: 'Feature',
+      geometry: { type: 'Point', coordinates: event.snapped.lngLat },
+      properties: {},
     });
+    if (feature) ctx.draw.selection.set('feature', [feature.id]);
     ctx.setMode('select');
     return true;
   },

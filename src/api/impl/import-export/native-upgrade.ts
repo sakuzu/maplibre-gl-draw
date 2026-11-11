@@ -126,8 +126,38 @@ function upgradeFeature(feature: Json): Json {
   return result;
 }
 
+/**
+ * Data of version 3 in the shape of version 4: each feature a GeoJSON Feature, the fields of the
+ * library (layer, group, type, style, visibility, lock) moved into `properties` under the keys of
+ * the library, a key of a default value left out
+ */
+function upgradeFrom3(data: Json): Json {
+  const features = Array.isArray(data.features)
+    ? data.features.map((feature) => (isRecord(feature) ? featureOf3(feature) : feature))
+    : data.features;
+  return { ...data, version: '4.0.0', features };
+}
+
+/** A feature of version 3 as a GeoJSON Feature */
+function featureOf3(feature: Json): Json {
+  const { id, type, geometry, layerId, groupId, properties, style, visible, locked } = feature;
+  const moved: Json = isRecord(properties) ? { ...properties } : {};
+  const key = (name: string) => `maplibre-gl-draw:${name}`;
+  if (layerId !== undefined) moved[key('layerId')] = layerId;
+  if (groupId !== undefined && groupId !== null) moved[key('groupId')] = groupId;
+  const geometryType = isRecord(geometry) ? geometry.type : undefined;
+  if (typeof type === 'string' && type !== geometryType) moved[key('featureType')] = type;
+  if (isRecord(style) && Object.keys(style).length > 0) moved[key('style')] = style;
+  if (visible === false) moved[key('visible')] = false;
+  if (locked === true) moved[key('locked')] = true;
+  return { type: 'Feature', id, geometry, properties: moved };
+}
+
 /** The step that takes data of each major version to the next */
-const UPGRADES: ReadonlyMap<number, (data: Json) => Json> = new Map([[2, upgradeFrom2]]);
+const UPGRADES: ReadonlyMap<number, (data: Json) => Json> = new Map([
+  [2, upgradeFrom2],
+  [3, upgradeFrom3],
+]);
 
 /**
  * Upgrades native data of an earlier major version to the version this library writes

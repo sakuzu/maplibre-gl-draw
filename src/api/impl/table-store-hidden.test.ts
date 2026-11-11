@@ -11,6 +11,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { STATE_HIDDEN_MASK } from '../../feature-table/feature-row-states.js';
 import { featureTablesInternals } from '../../feature-table/feature-tables.js';
 import { createTableStore } from '../../store/table-memory.js';
+import { writesOf } from '../../test-support/writes.js';
 import { createMapStub } from '../../test-utils.js';
 import type { Draw } from '../draw.js';
 import type { FeatureTables } from '../tables.js';
@@ -33,16 +34,16 @@ function open(): { draw: Draw; tables: FeatureTables } {
   );
   draw = createDrawOnEngine(engine, { store, initDefaultLayer: false });
   engine.enterDefaultMode();
-  draw.layers.create({ id: 'l', name: 'l' });
+  writesOf(draw).layers.create({ id: 'l', name: 'l' });
   for (const [i, id] of ['a', 'b', 'c', 'd'].entries()) {
-    draw.features.create({
+    writesOf(draw).features.create({
       id,
       type: 'Point',
       geometry: { type: 'Point', coordinates: [i, 0] },
       layerId: 'l',
     });
   }
-  draw.groups.create({ id: 'g', name: 'g', featureIds: ['b', 'c'] });
+  writesOf(draw).groups.create({ id: 'g', name: 'g', featureIds: ['b', 'c'] });
   return { draw, tables: draw.getStore().tables as FeatureTables };
 }
 
@@ -77,10 +78,12 @@ describe('a group hidden on this client in a layer held as rows', () => {
   it('hides a row that joins it while it is hidden, and shows a row that leaves it', () => {
     const { draw, tables } = open();
     draw.hidden.add('g');
-    expect(draw.features.move('d', { layerId: 'l', groupId: 'g', above: null })).toBe(true);
-    expect(draw.features.move('c', { layerId: 'l', above: null })).toBe(true);
-    expect(draw.features.get('d')?.groupId).toBe('g');
-    expect(draw.features.get('c')?.groupId).toBeUndefined();
+    expect(writesOf(draw).features.move('d', { layerId: 'l', groupId: 'g', above: null })).toBe(
+      true,
+    );
+    expect(writesOf(draw).features.move('c', { layerId: 'l', above: null })).toBe(true);
+    expect(writesOf(draw).features.get('d')?.groupId).toBe('g');
+    expect(writesOf(draw).features.get('c')?.groupId).toBeUndefined();
     expect(drawn(tables).sort()).toEqual(['a', 'c']);
     draw.hidden.remove('g');
     expect(drawn(tables).sort()).toEqual(['a', 'b', 'c', 'd']);
@@ -89,15 +92,15 @@ describe('a group hidden on this client in a layer held as rows', () => {
   it('leaves the hidden ids with the group deleted: restored or created again, it is shown', () => {
     const { draw, tables } = open();
     draw.hidden.add('g');
-    draw.groups.delete('g');
+    writesOf(draw).groups.delete('g');
     expect(draw.hidden.has('g')).toBe(false);
     expect(drawn(tables)).toEqual(['a', 'b', 'c', 'd']);
-    draw.groups.restore('g');
+    writesOf(draw).groups.restore('g');
     expect(draw.groups.has('g')).toBe(true);
     expect(draw.hidden.has('g')).toBe(false);
     expect(drawn(tables)).toEqual(['a', 'b', 'c', 'd']);
-    draw.groups.delete('g');
-    draw.groups.create({ id: 'g', name: 'g', featureIds: ['a', 'd'] });
+    writesOf(draw).groups.delete('g');
+    writesOf(draw).groups.create({ id: 'g', name: 'g', featureIds: ['a', 'd'] });
     expect(hiddenInState(tables, 'a')).toBe(false);
     draw.hidden.add('g');
     expect(drawn(tables).sort()).toEqual(['b', 'c']);

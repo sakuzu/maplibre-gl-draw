@@ -43,23 +43,21 @@ export const drawCircleMode: ModeFactory = (ctx) => {
   const showPreview = (): void => {
     if (!center) return;
     ctx.preview.set({
-      type: 'Circle',
+      type: 'Feature',
       geometry: { type: 'Point', coordinates: center },
-      properties: circleProperties(),
+      properties: { ...circleProperties(), 'maplibre-gl-draw:featureType': 'Circle' },
     });
   };
 
   const finish = (): void => {
     if (!center || radiusMeters < MIN_RADIUS_METERS) return;
     const at = center;
-    ctx.draw.transact(() => {
-      const feature = ctx.commitFeature({
-        type: 'Circle',
-        geometry: { type: 'Point', coordinates: at },
-        properties: circleProperties(),
-      });
-      if (feature) ctx.draw.selection.set('feature', [feature.id]);
+    const feature = ctx.commitFeature({
+      type: 'Feature',
+      geometry: { type: 'Point', coordinates: at },
+      properties: { ...circleProperties(), 'maplibre-gl-draw:featureType': 'Circle' },
     });
+    if (feature) ctx.draw.selection.set('feature', [feature.id]);
     reset();
     ctx.setMode('select');
   };
@@ -69,7 +67,7 @@ export const drawCircleMode: ModeFactory = (ctx) => {
 
     onEnter() {
       ctx.cursor.set('crosshair');
-      ctx.draw.transact(() => ctx.draw.selection.clear(), { source: 'silent' });
+      ctx.draw.selection.clear();
       reset();
     },
 

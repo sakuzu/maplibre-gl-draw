@@ -8,11 +8,12 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryContractStore } from '../../store/memory.js';
+import { writesOf } from '../../test-support/writes.js';
 import { createMapStub, createSyntheticInput } from '../../test-utils.js';
 import type { Draw } from '../draw.js';
 import type { DocumentChange } from '../events.js';
 import type { Store } from '../extension/store.js';
-import type { Feature } from '../model.js';
+import type { StoredFeature as Feature } from '../model.js';
 import { createDrawOnEngine } from './create-draw.js';
 import type { Engine } from './engine.js';
 import { createEngine } from './engine.js';
@@ -120,7 +121,7 @@ afterEach(() => {
 
 describe('a Store of the application', () => {
   it('is reached through the members of the public Store only', async () => {
-    const line = draw.features.create({
+    const line = writesOf(draw).features.create({
       type: 'LineString',
       geometry: {
         type: 'LineString',
@@ -130,14 +131,14 @@ describe('a Store of the application', () => {
         ],
       },
     }) as Feature;
-    const point = draw.features.create({
+    const point = writesOf(draw).features.create({
       type: 'Point',
       geometry: { type: 'Point', coordinates: [0.5, 0.5] },
     }) as Feature;
     draw.selection.set('feature', [line.id]);
     draw.vertexSelection.set(line.id, [{ ring: 0, index: 1 }]);
     draw.hidden.add(point.id);
-    draw.groups.create({ featureIds: [line.id] });
+    writesOf(draw).groups.create({ featureIds: [line.id] });
     draw.setMode('draw_line');
     const input = createSyntheticInput(engine);
     input.click([0.2, 0.2]);
@@ -148,20 +149,20 @@ describe('a Store of the application', () => {
     draw.setInteractionLocked(false);
     draw.setReadOnly(true);
     draw.setReadOnly(false);
-    await draw.document.load({
+    await writesOf(draw).document.load({
       type: 'FeatureCollection',
       features: [
         { type: 'Feature', properties: {}, geometry: { type: 'Point', coordinates: [1, 2] } },
       ],
     });
-    draw.features.delete(point.id);
+    writesOf(draw).features.delete(point.id);
     draw.document.toJSON();
 
     expect(host.strays).toEqual([]);
   });
 
   it('receives the writes of the state of this client through the contract', () => {
-    const feature = draw.features.create({
+    const feature = writesOf(draw).features.create({
       type: 'Point',
       geometry: { type: 'Point', coordinates: [0, 0] },
     }) as Feature;
@@ -246,7 +247,7 @@ describe('a load into a Store of the application', () => {
     const before = draw.document.toJSON();
     const changes: DocumentChange[] = [];
     const unsubscribe = host.store.subscribe((change) => changes.push(change));
-    const results = await draw.document.loadMany([
+    const results = await writesOf(draw).document.loadMany([
       { source: collection('a'), options: { layer: { name: 'roads.geojson' } } },
       {
         source: collection('b', 'c'),
@@ -255,13 +256,13 @@ describe('a load into a Store of the application', () => {
     ]);
     expect(changes).toHaveLength(1);
     const [roads, shops] = results ?? [];
-    expect(draw.features.get('a')?.layerId).toBe(roads?.layerId);
+    expect(writesOf(draw).features.get('a')?.layerId).toBe(roads?.layerId);
     expect(draw.groups.get(shops?.groupId ?? '')).toMatchObject({
       name: 'town',
       layerId: shops?.layerId,
       featureIds: ['b', 'c'],
     });
-    expect(draw.features.get('b')).toMatchObject({
+    expect(writesOf(draw).features.get('b')).toMatchObject({
       layerId: shops?.layerId,
       groupId: shops?.groupId,
     });

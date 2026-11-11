@@ -13,6 +13,7 @@
   import { type Box, follow } from '../store.js';
   import { BUILTIN_ICONS, DELETE_ID, drawbarTools, SNAPPING_ID, toSpec } from '../tools.js';
   import type { ToolbarDraw, ToolEntry } from '../types.js';
+  import { deleteSelection } from '../writes.js';
   import SnappingSettings from './SnappingSettings.svelte';
 
   // Toolbar: kata's Drawbar with the tools, the delete button and the magnet of snapping.
@@ -93,7 +94,7 @@
 
   function onselect(id: string) {
     if (deletable && id === DELETE_ID) {
-      draw.selection.delete();
+      void deleteSelection(draw);
       return;
     }
     const spec = specs.find((s) => s.id === id);

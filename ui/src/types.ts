@@ -329,16 +329,16 @@ export interface ToolbarSettings {
 /** The members of a draw instance that the toolbar uses */
 export type ToolbarDraw = Pick<
   Draw,
-  'mode' | 'getMode' | 'setMode' | 'isReadOnly' | 'on' | 'off'
+  'mode' | 'getMode' | 'setMode' | 'isReadOnly' | 'on' | 'off' | 'write'
 > & {
-  readonly selection: Pick<Draw['selection'], 'value' | 'subscribe' | 'delete'>;
+  readonly selection: Pick<Draw['selection'], 'value' | 'subscribe' | 'target'>;
   readonly options: Pick<Draw['options'], 'value' | 'subscribe' | 'get' | 'update'>;
 };
 
 /** The members of a draw instance that the whole interface uses */
 export type DrawUIDraw = ToolbarDraw &
   Pick<Draw, 'getMap'> & {
-    readonly selection: Pick<Draw['selection'], 'value' | 'subscribe' | 'delete' | 'clear'>;
+    readonly selection: Pick<Draw['selection'], 'value' | 'subscribe' | 'target' | 'clear'>;
   };
 
 /**
@@ -393,17 +393,11 @@ export interface LeftSettings {
 }
 
 /** The members of a draw instance that the layer panel uses */
-export type LayerPanelDraw = Pick<Draw, 'on' | 'off'> & {
-  readonly layers: Pick<
-    Draw['layers'],
-    'get' | 'getOrder' | 'listItems' | 'reorder' | 'create' | 'update' | 'setActive'
-  >;
-  readonly groups: Pick<Draw['groups'], 'get' | 'listMembers' | 'update' | 'move'>;
-  readonly features: Pick<
-    Draw['features'],
-    'get' | 'count' | 'update' | 'move' | 'getAppliedStyle'
-  >;
-  readonly selection: Pick<Draw['selection'], 'value' | 'subscribe' | 'set' | 'clear' | 'group'>;
+export type LayerPanelDraw = Pick<Draw, 'on' | 'off' | 'write'> & {
+  readonly layers: Pick<Draw['layers'], 'get' | 'getOrder' | 'listItems' | 'setActive'>;
+  readonly groups: Pick<Draw['groups'], 'get' | 'listMembers'>;
+  readonly features: Pick<Draw['features'], 'get' | 'count' | 'getAppliedStyle'>;
+  readonly selection: Pick<Draw['selection'], 'value' | 'subscribe' | 'set' | 'clear' | 'target'>;
   readonly hidden: Pick<Draw['hidden'], 'hiddenIds' | 'has' | 'remove'>;
   readonly datasets: Pick<Draw['datasets'], 'value' | 'subscribe' | 'get' | 'list' | 'move'>;
   readonly options: Pick<Draw['options'], 'value' | 'subscribe'>;

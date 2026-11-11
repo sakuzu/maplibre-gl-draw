@@ -14,7 +14,8 @@
 //
 // The features an operation makes become the selection.
 
-import type { Feature } from '@sakuzu/maplibre-gl-draw';
+import { type Feature, readFeature } from '@sakuzu/maplibre-gl-draw';
+import { write } from '../writes.js';
 import type { InspectorDraw, Units } from './types.js';
 
 /** An operation on the features selected */
@@ -37,29 +38,27 @@ function hasRadius(feature: Pick<Feature, 'properties'>): boolean {
 }
 
 /** Whether a feature is an area that union, intersection, difference and split take */
-export function isArea(feature: Pick<Feature, 'type' | 'properties'>): boolean {
-  if (feature.type === 'Circle') return hasRadius(feature);
-  return feature.type === 'Polygon' || feature.type === 'MultiPolygon';
+export function isArea(feature: Pick<Feature, 'geometry' | 'properties'>): boolean {
+  const type = readFeature(feature).featureType;
+  if (type === 'Circle') return hasRadius(feature);
+  return type === 'Polygon' || type === 'MultiPolygon';
 }
 
 /** Whether a feature is a line that a split cuts along */
-export function isCuttingLine(feature: Pick<Feature, 'type'>): boolean {
-  return (
-    feature.type === 'LineString' ||
-    feature.type === 'MultiLineString' ||
-    feature.type === 'Freehand'
-  );
+export function isCuttingLine(feature: Pick<Feature, 'geometry' | 'properties'>): boolean {
+  const type = readFeature(feature).featureType;
+  return type === 'LineString' || type === 'MultiLineString' || type === 'Freehand';
 }
 
 const BUFFERABLE = new Set(['Point', 'MultiPoint', 'LineString', 'MultiLineString']);
 
 /** Whether a feature is one that buffer takes */
-export function isBufferable(feature: Pick<Feature, 'type' | 'properties'>): boolean {
-  return isArea(feature) || BUFFERABLE.has(feature.type);
+export function isBufferable(feature: Pick<Feature, 'geometry' | 'properties'>): boolean {
+  return isArea(feature) || BUFFERABLE.has(readFeature(feature).featureType);
 }
 
 /** The area and the line of a split, or null when the features are not one of each */
-export function splitPair<T extends Pick<Feature, 'type' | 'properties'>>(
+export function splitPair<T extends Pick<Feature, 'geometry' | 'properties'>>(
   features: readonly T[],
 ): { area: T; line: T } | null {
   if (features.length !== 2) return null;
@@ -71,7 +70,7 @@ export function splitPair<T extends Pick<Feature, 'type' | 'properties'>>(
 
 /** The operations that apply to features, in order */
 export function applicableOperations(
-  features: readonly Pick<Feature, 'type' | 'properties'>[],
+  features: readonly Pick<Feature, 'geometry' | 'properties'>[],
 ): OperationId[] {
   const out: OperationId[] = [];
   const areas = features.length >= 2 && features.every(isArea);
@@ -113,34 +112,35 @@ function selectResults(draw: InspectorDraw, features: readonly Feature[] | null)
  *   core refused the operation (read-only, a lock) or its result is empty
  * @throws `DrawError` of core when the features do not suit the operation
  */
-export function runOperation(
+export async function runOperation(
   draw: InspectorDraw,
   op: Exclude<OperationId, 'buffer'>,
   features: readonly Feature[],
-): string[] | null {
+): Promise<string[] | null> {
   const ids = features.map((f) => f.id);
-  return draw.transact(() => {
+  let made: readonly Feature[] | null = null;
+  const done = await write(draw, async (tx) => {
     switch (op) {
-      case 'union': {
-        const made = draw.features.union(ids);
-        return selectResults(draw, made ? [made] : null);
-      }
-      case 'intersection': {
-        const made = draw.features.intersection(ids);
-        return selectResults(draw, made ? [made] : null);
-      }
+      case 'union':
+        made = [await tx.features.union(ids)];
+        return;
+      case 'intersection':
+        made = [await tx.features.intersection(ids)];
+        return;
       case 'difference': {
         const [first, ...rest] = ids;
-        const made = draw.features.difference(first, rest);
-        return selectResults(draw, made ? [made] : null);
+        made = [await tx.features.difference(first, rest)];
+        return;
       }
       case 'split': {
         const pair = splitPair(features);
-        if (!pair) return null;
-        return selectResults(draw, draw.features.split(pair.area.id, pair.line.id));
+        if (!pair) return;
+        made = await tx.features.split(pair.area.id, pair.line.id);
+        return;
       }
     }
   });
+  return done ? selectResults(draw, made) : null;
 }
 
 /**
@@ -151,13 +151,15 @@ export function runOperation(
  * @returns The IDs of the features made, or null when core refused the operation
  * @throws `DrawError` of core when a feature cannot be buffered or the distance is not finite
  */
-export function runBuffer(
+export async function runBuffer(
   draw: InspectorDraw,
   features: readonly Feature[],
   distanceMeters: number,
-  segments?: number,
-): string[] | null {
-  const ids = features.map((f) => f.id);
-  const options = segments === undefined ? { distanceMeters } : { distanceMeters, segments };
-  return draw.transact(() => selectResults(draw, draw.features.buffer(ids, options)));
+  _segments?: number,
+): Promise<string[] | null> {
+  const made: Feature[] = [];
+  const done = await write(draw, async (tx) => {
+    for (const feature of features) made.push(await tx.features.buffer(feature.id, distanceMeters));
+  });
+  return done ? selectResults(draw, made) : null;
 }

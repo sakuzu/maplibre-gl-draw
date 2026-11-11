@@ -14,13 +14,7 @@ import { DrawError } from '../errors.js';
 
 /** The error of a call made after destroy */
 function destroyedError(path: string): DrawError {
-  return new DrawError(
-    'invalid-state',
-    `The draw instance is destroyed: ${path} cannot be called`,
-    {
-      member: path,
-    },
-  );
+  return new DrawError('invalid-state', `The draw instance is destroyed: ${path} cannot be called`);
 }
 
 /** Whether the value is a plain object whose members are guarded in turn */

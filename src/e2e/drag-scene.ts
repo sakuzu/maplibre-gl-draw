@@ -21,7 +21,7 @@
 
 import type { Browser, Page } from 'playwright-core';
 import { browserTimeout } from '../test-utils.js';
-import { type Bundle, openMapPage, type PagePoint, settle } from './harness.js';
+import { type Bundle, type E2EWrites, openMapPage, type PagePoint, settle } from './harness.js';
 
 /** The Store a scene holds its features in */
 export type StoreKind = 'objects' | 'rows';
@@ -245,9 +245,9 @@ export async function load(
       w.draw = draw;
       w.store = store;
       if (s.features.length > 0) {
-        const created = draw.features.createMany(
-          s.features.map((f) => ({ ...f, layerId: 'L' })) as never,
-        );
+        const created = (window as unknown as E2EWrites).e2e
+          .writesOf(draw)
+          .features.createMany(s.features.map((f) => ({ ...f, layerId: 'L' })) as never);
         if (!created) throw new Error('the features were not created');
       }
 

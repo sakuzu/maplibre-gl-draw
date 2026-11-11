@@ -12,6 +12,7 @@
  */
 
 import { afterEach, describe, expect, it } from 'vitest';
+import { writesOf } from '../test-support/writes.js';
 import { createMapStub } from '../test-utils.js';
 import type { Draw } from './draw.js';
 import { createDraw } from './draw.js';
@@ -62,7 +63,7 @@ describe('parseCssColor and the check of a style', () => {
   afterEach(() => draw.destroy());
 
   const createWithColor = (fillColor: string) =>
-    draw.features.create({
+    writesOf(draw).features.create({
       type: 'Polygon',
       geometry: {
         type: 'Polygon',

@@ -24,9 +24,9 @@ import type {
   Group,
   ItemOrderChange,
   Layer,
-  LoadResult,
   Metadata,
   RestoreToken,
+  StoredFeature,
 } from './model.js';
 import type { LayerStackEntry, Mode, SelectionType, SelectionValue, SnapResult } from './state.js';
 import type { RowsChange } from './tables.js';
@@ -83,8 +83,15 @@ export interface ChangedIds {
  * is read from the {@link Observable} of its resource.
  */
 export interface Change {
-  /** Where the writes came from: `local` for a write of this client */
-  readonly source: UpdateSource;
+  /** The ID of the commit: the `id` of the `draw.write` that made it */
+  readonly commit: string;
+  /**
+   * Where the commit came from: `local` for a write of this client, `undo` and `redo` for a step
+   * of its undo taken back and made again, `open` for a document opened, `remote` from elsewhere
+   */
+  readonly source: 'local' | 'remote' | 'undo' | 'redo' | 'open';
+  /** The `label` of the `draw.write` that made it */
+  readonly label: string | undefined;
   /** The features */
   readonly features: ChangedIds;
   /** The layers */
@@ -135,13 +142,13 @@ export interface DocumentChange {
   reset?: boolean;
   /** The features created, updated and deleted */
   features?: {
-    created?: Feature[];
+    created?: StoredFeature[];
     updated?: Array<{
       id: string;
-      feature: Feature;
-      previous: Feature;
+      feature: StoredFeature;
+      previous: StoredFeature;
     }>;
-    deleted?: Feature[];
+    deleted?: StoredFeature[];
   };
   /**
    * The layers created, updated and deleted, and the change of their stacking order. An update
@@ -221,8 +228,6 @@ export interface DrawEvents {
    * elsewhere
    */
   change: Change;
-  /** A document was loaded */
-  'document.loaded': { result: LoadResult; source: string };
   /**
    * A drag started; `bulk` for features selected in bulk, whose IDs are not listed: the value of
    * their selection (`SelectionValue.ids` is `null`; `listSelectedRows` of
@@ -261,8 +266,9 @@ export interface DrawEvents {
     point: ScreenPoint;
   };
   /**
-   * The image mode asks for an image to place at a position: the application picks a file
-   * and loads it with `document.load(file, { coordinate: lngLat, zoom, layerId })`. `lngLat` is
+   * The image mode asks for an image to place at a position: the application picks a file.
+   * (A transaction does not yet place an image at a position: what places it is to come with the
+   * option that asks the application for the image.) `lngLat` is
    * the clicked position when a click led to the mode (a listener of `map.clicked` entered it),
    * and the center of the map when the mode was entered otherwise
    */

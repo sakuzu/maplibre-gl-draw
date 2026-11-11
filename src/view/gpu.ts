@@ -13,7 +13,7 @@
 
 import type { Gpu, GpuContext, ProgramCompile } from '../api/extension/webgl.js';
 import type { MemoryUsage } from '../api/memory.js';
-import { DrawError } from '../shared/draw-error.js';
+import { DrawError, limitError } from '../shared/draw-error.js';
 import { deleteObject, type GpuLedger, type GpuObjectKind } from './gpu-ledger.js';
 import { createProgram, ProgramLink } from './shaders/helpers.js';
 
@@ -342,12 +342,7 @@ export class GpuResources implements Gpu {
   }
 
   #refusal(bytes: number, retryable: boolean): DrawError {
-    return new DrawError(
-      'too-large',
-      `${bytes} bytes of ${this.#owner} do not fit on the GPU`,
-      undefined,
-      retryable,
-    );
+    return limitError(`${bytes} bytes of ${this.#owner} do not fit on the GPU`, retryable);
   }
 
   /** A context that is lost makes nothing */

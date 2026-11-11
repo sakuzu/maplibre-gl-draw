@@ -10,8 +10,8 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { MemoryStore } from '../../store/memory.js';
 import { createResourceDeps } from '../../test-utils.js';
-import type { DocumentResource } from '../document.js';
 import { createDocument } from './document.js';
+import type { DocumentLoads as DocumentResource } from './document-resource.js';
 
 let store: MemoryStore;
 let doc: DocumentResource;
@@ -62,6 +62,7 @@ describe('a load into a Store that takes ids of its own form', () => {
   });
 
   it('gives the layers, groups and features of a document new ids, and its references with them', async () => {
+    // A document of an earlier version, upgraded as it is loaded
     const result = await doc.load({
       version: '2.0.0',
       created: '2026-01-01T00:00:00.000Z',
@@ -95,7 +96,7 @@ describe('a load into a Store that takes ids of its own form', () => {
           locked: false,
         },
       ],
-    });
+    } as never);
     const [featureId] = result?.featureIds ?? [];
     expect(featureId?.startsWith('id-')).toBe(true);
     const feature = store.getFeature(featureId as string);

@@ -12,6 +12,7 @@
  */
 
 import type { GpuRowsSource } from '../../extension/renderers.js';
+import { limitError } from '../../shared/draw-error.js';
 import { GpuResources } from '../../view/gpu.js';
 import type { GpuLedger } from '../../view/gpu-ledger.js';
 import { DrawError } from '../errors.js';
@@ -187,10 +188,8 @@ export function createGpuParts(deps: GpuPartsDeps): GpuParts {
         throw new DrawError('invalid-input', 'gpuShare must be above 0 and at most 1');
       }
       if (shares + share > EXTENSIONS_SHARE + SHARE_EPSILON) {
-        throw new DrawError(
-          'too-large',
+        throw limitError(
           `The extensions may take ${EXTENSIONS_SHARE} of the GPU limit, ${shares} is taken`,
-          undefined,
           false,
         );
       }

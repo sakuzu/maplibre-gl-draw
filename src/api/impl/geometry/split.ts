@@ -26,6 +26,33 @@ import type { GeometryDeps } from './types.js';
  * @param line The cutting line (it is not deleted and remains)
  * @param select Whether the results become the selection
  */
+/**
+ * The geometries an area split along a line gives (fewer than two: it is not split)
+ *
+ * @internal
+ */
+export function planSplit(
+  area: Feature,
+  line: Feature,
+): { type: FeatureType; coordinates: FeatureCoordinates }[] {
+  const source = toAreaCoordinates(area);
+  const paths = toSplitPaths(line);
+  const parts: MultiPolygonCoordinates[] = [];
+  if (source !== null && paths.length > 0) {
+    let current = splitArea(source, paths[0]);
+    for (let i = 1; i < paths.length; i++) {
+      current = current.flatMap((part) => splitArea(part, paths[i]));
+    }
+    parts.push(...current);
+  }
+  const geometries: { type: FeatureType; coordinates: FeatureCoordinates }[] = [];
+  for (const part of parts) {
+    const geometry = toResultGeometry(part);
+    if (geometry !== null) geometries.push(geometry);
+  }
+  return geometries;
+}
+
 export function runSplit(
   deps: GeometryDeps,
   area: Feature,

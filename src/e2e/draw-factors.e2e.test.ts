@@ -20,12 +20,13 @@
 
 import type { Browser, Page } from 'playwright-core';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import type { DatasetBaseStyle, DatasetRow, FeatureInput } from '../index.js';
+import type { DatasetBaseStyle, DatasetRow, StoredFeatureInput as FeatureInput } from '../index.js';
 import { browserTimeout } from '../test-utils.js';
 import {
   type Bundle,
   bundlePage,
   type Camera,
+  type E2EWrites,
   launchBrowser,
   openMapPage,
   settle,
@@ -183,8 +184,12 @@ async function drawFeatures(page: Page, inputs: FeatureInput[]): Promise<Picture
   // Passed as JSON: the type of the values of the properties is too deep for the arguments of a page
   await page.evaluate((json: string) => {
     const { draw } = window as unknown as TestWindow;
-    draw.features.deleteMany(draw.features.list().map((feature) => feature.id));
-    draw.features.createMany(JSON.parse(json) as FeatureInput[]);
+    (window as unknown as E2EWrites).e2e
+      .writesOf(draw)
+      .features.deleteMany(draw.features.list().map((feature) => feature.id));
+    (window as unknown as E2EWrites).e2e
+      .writesOf(draw)
+      .features.createMany(JSON.parse(json) as FeatureInput[]);
   }, JSON.stringify(inputs));
   return measure(page);
 }

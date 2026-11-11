@@ -35,7 +35,7 @@ import type { Plugin } from '../extension/plugin.js';
 import type { Hit } from '../extension/provider.js';
 import type { StoreView } from '../extension/store.js';
 import type { ExtensionsCollections } from '../extensions.js';
-import type { Feature, FeatureStyleResolved } from '../model.js';
+import type { Feature, FeatureStyleResolved, LoadResult } from '../model.js';
 import type { RuntimeOptions } from '../options.js';
 import type { AdapterDeps } from './adapters.js';
 import {
@@ -64,6 +64,7 @@ import {
   OVERRIDABLE_TYPES,
   styleRuleChannelOfType,
 } from './extensions.js';
+import { featureForExtension } from './feature-shape.js';
 import { createGpuParts } from './gpu-parts.js';
 import { bridgeMode, createInputRoute, deliverPointerLeave, toPointerEvent } from './input.js';
 import { adaptGpuFeatureRenderer, createOverlayStack, terrainSurfaceOf } from './render-context.js';
@@ -96,6 +97,8 @@ export interface ExtensionHostDeps {
  * @internal
  */
 export interface ExtensionHost {
+  /** Tells the host what a load wrote (`tx.import`, `draw.open`) */
+  loaded(result: LoadResult): void;
   /** The collections of `draw.extensions` */
   readonly collections: ExtensionsCollections;
   /** The route of the input to the plugins and the modes of the contract */
@@ -442,8 +445,10 @@ export function createExtensionHost(deps: ExtensionHostDeps): ExtensionHost {
       return false;
     });
   }
-  const featureOf = (id: string): Feature | undefined =>
-    store.getFeature(id) as Feature | undefined;
+  const featureOf = (id: string): Feature | undefined => {
+    const stored = store.getFeature(id);
+    return stored === undefined ? undefined : featureForExtension(stored);
+  };
   const click =
     (hook: 'onSelectedFeatureClick' | 'onFeatureDoubleClick') =>
     (featureId: string, event?: MouseNormalizedEvent): boolean => {
@@ -497,27 +502,29 @@ export function createExtensionHost(deps: ExtensionHostDeps): ExtensionHost {
    * places the image by loading the file. The image that load places is the commit of the
    * image mode, which the plugins hear of as the commits of the other drawing modes
    */
+  let imageRequested = false;
   function watchImageCommits(draw: Draw): void {
-    let requested = false;
     watches.push(
       draw.on('image.requested', () => {
-        requested = true;
-      }),
-      draw.on('document.loaded', ({ result }) => {
-        if (!requested || result.format !== 'image') return;
-        requested = false;
-        for (const id of result.featureIds) {
-          const feature = featureOf(id);
-          if (feature) announceDrawCommit(feature);
-        }
+        imageRequested = true;
       }),
     );
+  }
+  /** What a load wrote: an image the image mode asked for is told as its commit */
+  function loaded(result: LoadResult): void {
+    if (!imageRequested || result.format !== 'image') return;
+    imageRequested = false;
+    for (const id of result.featureIds) {
+      const feature = featureOf(id);
+      if (feature) announceDrawCommit(feature);
+    }
   }
 
   return {
     collections,
     input,
     interactions,
+    loaded,
     hitAt: (point) =>
       toHit(modeServices.hitTestTopmost(point), (feature) =>
         modeServices.distanceToFeaturePx(feature, point),

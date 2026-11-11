@@ -115,10 +115,8 @@ export function createVertexDrawing(ctx: ModeContext, shape: VertexShape): ModeH
   const finish = (): boolean => {
     if (vertices.length < shape.minVertices) return false;
     const input = shape.feature(vertices);
-    ctx.draw.transact(() => {
-      const feature = ctx.commitFeature(input);
-      if (feature) ctx.draw.selection.set('feature', [feature.id]);
-    });
+    const feature = ctx.commitFeature(input);
+    if (feature) ctx.draw.selection.set('feature', [feature.id]);
     reset();
     ctx.setMode('select');
     return true;
@@ -153,7 +151,7 @@ export function createVertexDrawing(ctx: ModeContext, shape: VertexShape): ModeH
 
     onEnter() {
       ctx.cursor.set('crosshair');
-      ctx.draw.transact(() => ctx.draw.selection.clear(), { source: 'silent' });
+      ctx.draw.selection.clear();
       reset();
     },
 

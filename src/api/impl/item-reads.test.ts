@@ -11,6 +11,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 import type { Store } from '../../store/store.js';
 import { createTableStore } from '../../store/table-memory.js';
+import { writesOf } from '../../test-support/writes.js';
 import { createMapStub } from '../../test-utils.js';
 import type { Draw } from '../draw.js';
 import { createDrawOnEngine } from './create-draw.js';
@@ -40,17 +41,17 @@ function drawOn(store?: Store): Draw {
  */
 function setup(kind: 'objects' | 'rows'): Draw {
   const instance = drawOn(kind === 'rows' ? createTableStore().store : undefined);
-  instance.layers.create({ id: 'l', name: 'l' });
-  instance.layers.create({ id: 'empty', name: 'empty' });
+  writesOf(instance).layers.create({ id: 'l', name: 'l' });
+  writesOf(instance).layers.create({ id: 'empty', name: 'empty' });
   for (let i = 0; i < 6; i++) {
-    instance.features.create({
+    writesOf(instance).features.create({
       id: `p${i}`,
       type: 'Point',
       geometry: { type: 'Point', coordinates: [i, 0] },
       layerId: 'l',
     });
   }
-  instance.groups.create({ id: 'g', featureIds: ['p2', 'p3'] });
+  writesOf(instance).groups.create({ id: 'g', featureIds: ['p2', 'p3'] });
   return instance;
 }
 
@@ -71,7 +72,7 @@ describe.each(['objects', 'rows'] as const)('the items read by position, a Store
     const draw = setup(kind);
     expect(draw.layers.countItems('l')).toBe(5);
     expect(draw.layers.countItems('empty')).toBe(0);
-    draw.features.delete('p0');
+    writesOf(draw).features.delete('p0');
     expect(draw.layers.countItems('l')).toBe(4);
     expect(draw.layers.listItems('l')).toEqual(['p1', 'g', 'p4', 'p5']);
   });

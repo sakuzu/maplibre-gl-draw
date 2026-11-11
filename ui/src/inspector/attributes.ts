@@ -109,7 +109,7 @@ export function attributePatch(
   const raw = feature.properties[row.key];
   const value = next.value === row.value ? raw : next.value;
   if (key === row.key) return { properties: { [key]: value } };
-  return { properties: { [row.key]: undefined, [key]: value } };
+  return { properties: { [key]: value }, unset: { properties: [row.key] } } as FeaturePatch;
 }
 
 /**
@@ -136,5 +136,5 @@ export function attributeRemove(
   index: number,
 ): FeaturePatch | null {
   const row = attributeRows(feature)[index];
-  return row ? { properties: { [row.key]: undefined } } : null;
+  return row ? ({ unset: { properties: [row.key] } } as FeaturePatch) : null;
 }

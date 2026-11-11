@@ -16,7 +16,7 @@
  * `maplibre-gl-draw:` prefix, the items of a layer in `items` and the layer of a group in
  * `layerId`.
  */
-export const NATIVE_VERSION = '3.0.0';
+export const NATIVE_VERSION = '4.0.0';
 
 /**
  * The number of decimal places the GeoJSON export keeps in a coordinate

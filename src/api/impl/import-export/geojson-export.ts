@@ -156,8 +156,7 @@ export function convertFeatureToGeoJSON(
     setOwnProperty(properties, key, value);
   }
 
-  // Add the metadata
-  properties[`${DRAW_PROPERTY_PREFIX}id`] = feature.id;
+  // Add the metadata; the ID is the `id` of the Feature
   properties[`${DRAW_PROPERTY_PREFIX}layerId`] = feature.layerId;
   // A feature given from outside a drawing may carry `null` for no group, which is read as
   // undefined at the boundary

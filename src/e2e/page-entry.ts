@@ -12,13 +12,13 @@
  * (`dem-fixture.ts`), the few internals the terrain tests read the GPU side of the engine
  * through, the in-memory Store the tests of a replaced Store fill before the instance, and the
  * builder of row groups the tests of the layers held as rows fill their tables with (and the
- * in-memory Store of rows).
+ * in-memory Store of rows), and the internal writes the scenes make their documents with.
  */
 
 import * as maplibregl from 'maplibre-gl';
 import { tableDiagnosticsOf } from '../api/impl/table-diagnostics.js';
 import { featureTablesInternals } from '../feature-table/feature-tables.js';
-import { createDraw } from '../index.js';
+import { createDraw, readFeature } from '../index.js';
 import { createFeatureTables } from '../kasane/index.js';
 import { getAnchorProjector } from '../shared/math/index.js';
 import { MemoryContractStore } from '../store/memory.js';
@@ -28,6 +28,7 @@ import {
   type FeaturePageBuilderOptions,
 } from '../table/feature-row-blocks.js';
 import { prepareTable } from '../table/index.js';
+import { writesOf } from '../test-support/writes.js';
 import { DemAtlas } from '../view/terrain/dem-atlas.js';
 import {
   getMapTerrain,
@@ -42,6 +43,10 @@ installTestDem(maplibregl);
 (window as unknown as { e2e: unknown }).e2e = {
   maplibregl,
   createDraw,
+  readFeature,
+  // The internal writes, for the scenes that only make a document (synchronous, in the shape of
+  // the Store), where an application writes with `draw.write`
+  writesOf,
   prepareTable,
   tables: {
     createFeatureTables,

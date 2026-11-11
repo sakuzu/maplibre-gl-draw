@@ -28,7 +28,7 @@ import type { Browser, Page } from 'playwright-core';
 import { afterAll, beforeAll, expect, it } from 'vitest';
 import { browserTimeout } from '../test-utils.js';
 import { idle, load, openScenePage, type StoreKind } from './drag-scene.js';
-import { type Bundle, bundlePage, launchBrowser, MAP_SIZE } from './harness.js';
+import { type Bundle, bundlePage, type E2EWrites, launchBrowser, MAP_SIZE } from './harness.js';
 import type { Holding } from './look-updates.js';
 
 /** The zoom of the map, past the created zoom of the features that have one */
@@ -346,7 +346,9 @@ async function put(
           } as never);
         });
         w.writer.addPages('L', builder.finish());
-      } else if (!draw.features.createMany(inputs as never)) {
+      } else if (
+        !(window as unknown as E2EWrites).e2e.writesOf(draw).features.createMany(inputs as never)
+      ) {
         throw new Error('the features were not created');
       }
     },
@@ -539,9 +541,14 @@ export function describeLookMatrix(kind: StoreKind, holding: Holding): void {
       ({ patches, copies }) => {
         const w = window as unknown as { draw: import('../index.js').Draw };
         for (const { id, style } of patches) {
-          if (!w.draw.features.update(id, { style } as never)) throw new Error(`${id} not updated`);
+          if (
+            !(window as unknown as E2EWrites).e2e
+              .writesOf(w.draw)
+              .features.update(id, { style } as never)
+          )
+            throw new Error(`${id} not updated`);
         }
-        w.draw.features.deleteMany(copies);
+        (window as unknown as E2EWrites).e2e.writesOf(w.draw).features.deleteMany(copies);
       },
       {
         patches: [...changed].map(([i, look]) => ({ id: featureId(i), style: look.style })),

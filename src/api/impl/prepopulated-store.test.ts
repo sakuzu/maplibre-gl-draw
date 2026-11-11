@@ -13,11 +13,12 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { DragNormalizedEvent } from '../../dispatcher/types.js';
 import { MemoryContractStore } from '../../store/memory.js';
+import { writesOf } from '../../test-support/writes.js';
 import { createMapStub, createSyntheticInput } from '../../test-utils.js';
 import type { Draw } from '../draw.js';
 import type { DocumentChange } from '../events.js';
 import type { Store } from '../extension/store.js';
-import type { Feature, Layer } from '../model.js';
+import type { StoredFeature as Feature, Layer } from '../model.js';
 import { createDrawOnEngine } from './create-draw.js';
 import type { Engine } from './engine.js';
 import { createEngine } from './engine.js';
@@ -207,10 +208,14 @@ describe('a Store of the application with features the instance did not write', 
     const contract = new MemoryContractStore();
     populate(contract);
     const target = create(contract);
-    const read = target.draw.features.get(POINT.id);
+    const read = writesOf(target.draw).features.get(POINT.id);
     expect(read).toBeDefined();
     expect(read?.groupId).toBeUndefined();
-    expect(target.draw.features.list().every((f) => f.groupId === undefined)).toBe(true);
+    expect(
+      writesOf(target.draw)
+        .features.list()
+        .every((f) => f.groupId === undefined),
+    ).toBe(true);
     const layer = target.draw.layers.get(LAYER.id);
     expect(layer?.metadata).toBeUndefined();
     expect(layer?.styleRule).toBeUndefined();
@@ -221,7 +226,8 @@ describe('a Store of the application with features the instance did not write', 
 
     const created: unknown[] = [];
     target.draw.on('change', ({ features }) => {
-      for (const id of features.created) created.push(target.draw.features.get(id)?.groupId);
+      for (const id of features.created)
+        created.push(writesOf(target.draw).features.get(id)?.groupId);
     });
     contract.transact(() => contract.createFeature(feature('p2', POINT.geometry)), 'remote');
     expect(created).toEqual([undefined]);
@@ -231,7 +237,7 @@ describe('a Store of the application with features the instance did not write', 
     const contract = new MemoryContractStore();
     populate(contract);
     const target = create(contract);
-    expect(target.draw.features.list()).toHaveLength(3);
+    expect(writesOf(target.draw).features.list()).toHaveLength(3);
     expectEveryFeatureSelectable(target);
   });
 
@@ -241,7 +247,7 @@ describe('a Store of the application with features the instance did not write', 
     const next = new MemoryContractStore();
     populate(next);
     replaceable.replace(next);
-    expect(target.draw.features.list()).toHaveLength(3);
+    expect(writesOf(target.draw).features.list()).toHaveLength(3);
     expectEveryFeatureSelectable(target);
   });
 
@@ -262,7 +268,7 @@ describe('a Store of the application with features the instance did not write', 
     populate(contract);
     const target = create(contract);
     target.draw.datasets.add({ id: 'behind', rows: [], order: 'layer-order' });
-    expect(target.draw.layers.reorder(['behind', LAYER.id])).toBe(true);
+    expect(writesOf(target.draw).layers.reorder(['behind', LAYER.id])).toBe(true);
     expectEveryFeatureSelectable(target);
   });
 
@@ -270,7 +276,7 @@ describe('a Store of the application with features the instance did not write', 
     const contract = new MemoryContractStore();
     const target = create(contract);
     populate(contract);
-    expect(target.draw.features.list()).toHaveLength(3);
+    expect(writesOf(target.draw).features.list()).toHaveLength(3);
     expectEveryFeatureSelectable(target);
   });
 });

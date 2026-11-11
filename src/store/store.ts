@@ -30,7 +30,12 @@ import type {
   TransformFields,
   TransformValues,
 } from '../api/extension/store.js';
-import type { EditResult, EditTarget, FeatureEdit, FeaturePatch } from '../api/model.js';
+import type {
+  EditResult,
+  EditTarget,
+  FeatureEdit,
+  StoredFeaturePatch as FeaturePatch,
+} from '../api/model.js';
 import type { VertexId, VertexTarget } from '../api/state.js';
 import type { FeatureTables, RowWrite } from '../api/tables.js';
 import type { BulkOperation } from '../feature-table/bulk-plan.js';

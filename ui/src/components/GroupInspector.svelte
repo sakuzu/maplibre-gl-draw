@@ -14,6 +14,7 @@
   import type { Group, Layer } from '@sakuzu/maplibre-gl-draw';
   import type { InspectorDraw } from '../inspector/types.js';
   import type { Messages } from '../messages.js';
+  import { deleteSelection, ungroupSelection, write } from '../writes.js';
 
   // GroupInspector: a group in kata's InspectorFrame: its name, changed where it stands, whether
   // it is visible and whether it is locked. The foot takes its features out of it (the group
@@ -56,12 +57,12 @@
 
   function onchange(key: string, value: unknown) {
     if (key === 'visible' || key === 'locked') {
-      draw.groups.update(group.id, { [key]: value === true });
+      void write(draw, (tx) => tx.groups.update(group.id, { [key]: value === true }));
     }
   }
 
   function rename(name: string) {
-    if (name !== '') draw.groups.update(group.id, { name });
+    if (name !== '') void write(draw, (tx) => tx.groups.update(group.id, { name }));
   }
 </script>
 
@@ -71,13 +72,13 @@
       <Button
         variant="danger"
         disabled={readOnly || lockedHere}
-        onclick={() => draw.selection.delete()}
+        onclick={() => void deleteSelection(draw)}
       >
         {m.delete}
       </Button>
     {/snippet}
     {#snippet secondary()}
-      <Button disabled={readOnly} onclick={() => draw.selection.ungroup()}>
+      <Button disabled={readOnly} onclick={() => void ungroupSelection(draw)}>
         {m.ungroupAction}
       </Button>
     {/snippet}

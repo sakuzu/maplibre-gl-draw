@@ -9,10 +9,11 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ObjectGroup, ObjectLayer } from '../../shared/types/model.js';
+import { writesOf } from '../../test-support/writes.js';
 import { createMapStub, createSyntheticInput } from '../../test-utils.js';
 import type { Draw } from '../draw.js';
 import type { DrawEvents } from '../events.js';
-import type { Feature, Group } from '../model.js';
+import type { StoredFeature as Feature, Group } from '../model.js';
 import { createDrawOnEngine } from './create-draw.js';
 import type { Engine } from './engine.js';
 import { createEngine } from './engine.js';
@@ -33,7 +34,7 @@ afterEach(() => {
 });
 
 const point = (lng: number, lat: number, id?: string) =>
-  draw.features.create({
+  writesOf(draw).features.create({
     type: 'Point',
     geometry: { type: 'Point', coordinates: [lng, lat] },
     ...(id !== undefined && { id }),
@@ -66,22 +67,27 @@ describe('selection.ungroup', () => {
   const snapshot = () => ({
     items: draw.layers.list().map((layer) => [...(layer as ObjectLayer).items]),
     groups: draw.groups.list().map((group) => [group.id, [...(group as ObjectGroup).featureIds]]),
-    grouped: draw.features.list().map((feature) => [feature.id, feature.groupId]),
+    grouped: writesOf(draw)
+      .features.list()
+      .map((feature) => [feature.id, feature.groupId]),
   });
 
   /** Two groups of two features each, the second one with a third feature */
   const build = (): { groups: Group[]; features: Feature[] } => {
     const features = [0, 1, 2, 3, 4].map((i) => point(i / 10, 0, `f${i}`));
     const ids = features.map((feature) => (feature as Feature).id);
-    const first = draw.groups.create({ featureIds: [ids[0], ids[1]], id: 'g1' }) as Group;
-    const second = draw.groups.create({ featureIds: [ids[2], ids[3], ids[4]], id: 'g2' }) as Group;
+    const first = writesOf(draw).groups.create({ featureIds: [ids[0], ids[1]], id: 'g1' }) as Group;
+    const second = writesOf(draw).groups.create({
+      featureIds: [ids[2], ids[3], ids[4]],
+      id: 'g2',
+    }) as Group;
     return { groups: [first, second], features: features as Feature[] };
   };
 
   it('dissolves the selected groups as the shortcut does', () => {
     build();
     draw.selection.set('group', ['g1', 'g2']);
-    expect(draw.selection.ungroup()).toBe(true);
+    expect(writesOf(draw).selection.ungroup()).toBe(true);
     const byApi = snapshot();
 
     draw.destroy();
@@ -98,7 +104,7 @@ describe('selection.ungroup', () => {
   it('takes the selected features out of their group as the shortcut does', () => {
     const { features } = build();
     draw.selection.set('feature', [features[2].id, features[0].id]);
-    expect(draw.selection.ungroup()).toBe(true);
+    expect(writesOf(draw).selection.ungroup()).toBe(true);
     const byApi = snapshot();
 
     draw.destroy();
@@ -120,11 +126,11 @@ describe('selection.ungroup', () => {
     const { features } = build();
     const loose = point(1, 1) as Feature;
     draw.selection.set('feature', [loose.id]);
-    expect(draw.selection.ungroup()).toBe(false);
+    expect(writesOf(draw).selection.ungroup()).toBe(false);
     draw.selection.set('feature', [features[0].id]);
     draw.setReadOnly(true);
-    expect(draw.selection.ungroup()).toBe(false);
-    expect(draw.features.get(features[0].id)?.groupId).toBe('g1');
+    expect(writesOf(draw).selection.ungroup()).toBe(false);
+    expect(writesOf(draw).features.get(features[0].id)?.groupId).toBe('g1');
   });
 });
 

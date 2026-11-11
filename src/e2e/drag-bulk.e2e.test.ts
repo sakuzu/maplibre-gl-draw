@@ -64,7 +64,7 @@ import {
   shiftOf,
   square,
 } from './drag-scene.js';
-import { type Bundle, bundlePage, launchBrowser } from './harness.js';
+import { type Bundle, bundlePage, type E2EWrites, launchBrowser } from './harness.js';
 
 let browser: Browser;
 let bundle: Bundle;
@@ -147,9 +147,9 @@ async function restore(page: Page): Promise<void> {
         map: import('maplibre-gl').Map;
       };
       w.draw.selection.clear();
-      w.draw.transact(() => {
+      (window as unknown as E2EWrites).e2e.writesOf(w.draw).transact(() => {
         ids.forEach((id, i) => {
-          w.draw.features.update(id, {
+          (window as unknown as E2EWrites).e2e.writesOf(w.draw).features.update(id, {
             geometry: { type: 'Polygon', coordinates: [squares[i]] },
           } as never);
         });

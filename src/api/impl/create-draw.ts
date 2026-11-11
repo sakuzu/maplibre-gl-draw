@@ -8,37 +8,109 @@
 import type { Map as MaplibreMap } from 'maplibre-gl';
 import { ConsistencyChecks } from '../../debug/consistency.js';
 import { DrawStore } from '../../store/draw-store.js';
+import type { Store } from '../../store/store.js';
 import type { Draw } from '../draw.js';
 import type { StoreView } from '../extension/store.js';
+import type { FeaturesCollection } from '../features.js';
 import type { DrawOptions } from '../options.js';
 import { captureImage } from './capture.js';
 import { createDatasets } from './datasets.js';
 import { guardAfterDestroy } from './destroy-guard.js';
+import type { DocumentLoader } from './document.js';
 import { createDocument } from './document.js';
 import { createDrawing, createDrawingResource } from './drawing.js';
 import type { Engine } from './engine.js';
 import { createEngine } from './engine.js';
 import { observe, requireEventName } from './events.js';
+import type { FeatureResource } from './feature-resource.js';
+import { toFeature, toFeatureOrUndefined } from './feature-shape.js';
 import { createFeatures } from './features.js';
+import type { GroupResource } from './group-resource.js';
 import { createGroups } from './groups.js';
 import { createHidden } from './hidden.js';
+import { createHistory } from './history.js';
+import type { LayerResource } from './layer-resource.js';
 import { createLayers } from './layers.js';
 import { createMemory } from './memory.js';
 import { createMetadata } from './metadata.js';
 import { checkDrawOptions, createOptions, toEngineOptions } from './options.js';
 import { createRendered } from './rendered.js';
 import { createSelection, createVertexSelection } from './selection.js';
+import type { SelectionWrites } from './selection-resource.js';
 import type { ResourceDeps } from './shared.js';
-import { invalidInput, notFound, requireRecord, withLocksIgnored } from './shared.js';
+import { invalidInput, notFound } from './shared.js';
 import { createSketches } from './sketches.js';
 import { attachTableDiagnostics } from './table-diagnostics.js';
+import { createWriter, type Writers } from './write.js';
 
 /** The methods of the instance that return a promise: after destroy they reject */
 const ASYNC_MEMBERS: ReadonlySet<string> = new Set([
-  'document.load',
-  'document.loadMany',
+  'write',
+  'undo',
+  'redo',
+  'open',
   'captureImage',
 ]);
+
+/**
+ * The internal resources of an instance: what its transactions are made with
+ *
+ * @internal
+ */
+export interface DrawResources {
+  readonly store: Store;
+  readonly features: FeatureResource;
+  readonly layers: LayerResource;
+  readonly groups: GroupResource;
+  readonly metadata: Writers['metadata'];
+  readonly document: DocumentLoader;
+  readonly selection: SelectionWrites;
+}
+
+const RESOURCES = new WeakMap<Draw, DrawResources>();
+
+/**
+ * The internal resources of an instance, which the tests of the parts of the instance write the
+ * document with directly
+ *
+ * @internal
+ */
+export function resourcesOf(draw: Draw): DrawResources {
+  const resources = RESOURCES.get(draw);
+  if (!resources) throw new Error('Not an instance of createDraw');
+  return resources;
+}
+
+/**
+ * An object with only the members named: the reads of an internal resource, say. A method is
+ * bound once; a value is read from the resource each time (a getter stays one)
+ */
+function pick<T extends object, K extends keyof T>(from: T, keys: readonly K[]): Pick<T, K> {
+  const out = {} as Pick<T, K>;
+  for (const key of keys) {
+    const value = from[key];
+    if (typeof value === 'function') {
+      Object.defineProperty(out, key, { value: value.bind(from), enumerable: true });
+    } else {
+      Object.defineProperty(out, key, { get: () => from[key], enumerable: true });
+    }
+  }
+  return out;
+}
+
+/** The reads of the features in the public shape */
+function publicFeatures(features: FeatureResource): FeaturesCollection {
+  return {
+    get: (id) => toFeatureOrUndefined(features.get(id)),
+    getMany: (ids) => features.getMany(ids).map(toFeatureOrUndefined),
+    list: (filter, options) => features.list(filter, options).map(toFeature),
+    count: (filter) => features.count(filter),
+    bbox: (filter) => features.bbox(filter),
+    has: (id) => features.has(id),
+    isEditable: (id) => features.isEditable(id),
+    getAppliedStyle: (id) => features.getAppliedStyle(id),
+  };
+}
 
 /**
  * Builds the draw instance on an engine and hands it to the extensions of the engine
@@ -70,8 +142,56 @@ export function createDrawOnEngine(
     appliedStyle: engine.extensions.appliedStyle,
     spatialIndex: context.spatialIndex,
   };
-  const features = createFeatures(deps);
-  const groups = createGroups(deps);
+  const featureResource = createFeatures(deps);
+  const features = publicFeatures(featureResource);
+  const groupResource = createGroups(deps);
+  const groups = pick(groupResource, ['get', 'getMany', 'list', 'count', 'has', 'listMembers']);
+  const layerResource = createLayers(
+    deps,
+    (id) =>
+      engine.datasets.get(id)?.order === 'layer-order' || context.isExternalEntry?.(id) === true,
+  );
+  const layers = pick(layerResource, [
+    'get',
+    'getMany',
+    'list',
+    'count',
+    'has',
+    'listItems',
+    'countItems',
+    'getOrder',
+    'getActive',
+    'setActive',
+  ]);
+  const metadataResource = createMetadata(deps);
+  const documentResource = createDocument(deps, (result) => engine.extensions.loaded(result), {
+    get: () => engine.customLayer.getShown(),
+    set(other) {
+      if (other === engine.customLayer.getShown()) return;
+      // No mode receives the input while another document is shown: a drawing mode is left
+      if (other !== null && modeManager.getMode() !== 'select') modeManager.setMode('select');
+      store.setDocumentWritable(other === null);
+      engine.customLayer.setShown(other);
+    },
+  });
+  const selectionResource = createSelection(
+    deps,
+    { features: featureResource, groups: groupResource },
+    events,
+  );
+  const writer = createWriter({
+    deps,
+    writers: {
+      features: featureResource,
+      layers: layerResource,
+      groups: groupResource,
+      metadata: metadataResource,
+      selection: selectionResource,
+      document: documentResource,
+    },
+    reads: { features, layers, groups },
+  });
+  const history = createHistory(store, options.history);
   // The features as this client draws them, and what changed of them once a frame is drawn
   const rendered = createRendered({
     map,
@@ -105,20 +225,27 @@ export function createDrawOnEngine(
   const optionsObservable = observe(events, ['options.changed'], drawOptions.get, { kept: true });
   const members: Draw = {
     features,
-    layers: createLayers(
-      deps,
-      (id) =>
-        engine.datasets.get(id)?.order === 'layer-order' || context.isExternalEntry?.(id) === true,
-    ),
+    layers,
     groups,
     datasets: createDatasets(engine.datasets, events, context.eventEmitter),
     hidden: createHidden(deps, events),
     sketches: createSketches(engine.sketches, events),
     rendered: rendered.rendered,
-    selection: createSelection(deps, { features, groups }, events),
+    selection: pick(selectionResource, [
+      'value',
+      'subscribe',
+      'target',
+      'set',
+      'setAll',
+      'add',
+      'remove',
+      'clear',
+      'features',
+      'count',
+    ]),
     vertexSelection: createVertexSelection(deps, events),
     drawing: createDrawingResource(engine),
-    metadata: createMetadata(deps),
+    metadata: pick(metadataResource, ['get']),
     options: {
       get value() {
         return optionsObservable.value;
@@ -127,20 +254,7 @@ export function createDrawOnEngine(
       get: drawOptions.get,
       update: drawOptions.update,
     },
-    document: createDocument(
-      deps,
-      (result, source) => events.emit('document.loaded', { result, source }),
-      {
-        get: () => engine.customLayer.getShown(),
-        set(other) {
-          if (other === engine.customLayer.getShown()) return;
-          // No mode receives the input while another document is shown: a drawing mode is left
-          if (other !== null && modeManager.getMode() !== 'select') modeManager.setMode('select');
-          store.setDocumentWritable(other === null);
-          engine.customLayer.setShown(other);
-        },
-      },
-    ),
+    document: pick(documentResource, ['setShown', 'getShown', 'toJSON', 'toGeoJSON']),
     extensions: engine.extensions.collections,
     memory: memory.memory,
 
@@ -166,11 +280,14 @@ export function createDrawOnEngine(
       if (value === true && modeManager.getMode() !== 'select') modeManager.setMode('select');
     },
 
-    transact(fn, transactOptions) {
-      if (transactOptions !== undefined) requireRecord(transactOptions, 'The options');
-      const run = () => store.transact(fn, transactOptions?.source);
-      return transactOptions?.ignoreLocks === true ? withLocksIgnored(store, run) : run();
-    },
+    write: (fn, writeOptions) => writer.write(fn, writeOptions),
+    undo: (taskOptions) => history.undo(taskOptions),
+    redo: (taskOptions) => history.redo(taskOptions),
+    open: (source, taskOptions) =>
+      writer.open(source, taskOptions).then((result) => {
+        history.clear();
+        return result;
+      }),
     on(event, listener) {
       requireEventName(event);
       return events.on(event, listener);
@@ -192,6 +309,7 @@ export function createDrawOnEngine(
       if (destroyed) return;
       try {
         stopChecks();
+        history.stop();
         rendered.stop();
         engine.destroy();
       } finally {
@@ -208,6 +326,15 @@ export function createDrawOnEngine(
     skip: new Set(['destroy']),
   });
   attachTableDiagnostics(draw, engine);
+  RESOURCES.set(draw, {
+    store,
+    features: featureResource,
+    layers: layerResource,
+    groups: groupResource,
+    metadata: metadataResource,
+    document: documentResource,
+    selection: selectionResource,
+  });
   engine.extensions.attach(draw, drawOptions.getStyle, options.store);
   return draw;
 }

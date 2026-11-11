@@ -34,11 +34,11 @@ import type { Store } from '../../store/store.js';
 import { selectionBoxOf } from '../../view/ui/bounds.js';
 import type { SelectionExtensionRegistry } from '../../view/ui/selection-ui/extension-registry.js';
 import type { Footprint } from '../extension/feature-type.js';
-import type { Feature } from '../model.js';
 import type { RenderedResource } from '../rendered.js';
 import type { Sketch } from '../sketches.js';
 import type { EventHub } from './events.js';
 import { observe } from './events.js';
+import { toFeatureOrUndefined } from './feature-shape.js';
 import { invalidInput } from './shared.js';
 
 const NO_IDS: readonly string[] = Object.freeze([]);
@@ -79,10 +79,10 @@ export function createRendered(deps: RenderedDeps): {
   // The IDs told last: what `rendered.changed` holds
   let told: readonly string[] = NO_IDS;
   const rendered: RenderedResource = {
-    get: (id) => shapes.get(id) as Feature | undefined,
+    get: (id) => toFeatureOrUndefined(shapes.get(id)),
     getMany(ids) {
       if (!Array.isArray(ids)) throw invalidInput('The IDs must be an array');
-      return shapes.getMany(ids) as (Feature | undefined)[];
+      return shapes.getMany(ids).map(toFeatureOrUndefined);
     },
     getSelectionBox: (id) => boxOf(id, deps.selectionStyle.box.margin),
     getFootprint: (id) => boxOf(id, 0),

@@ -6,7 +6,7 @@
  */
 
 import type { Observable } from './events.js';
-import type { FeatureEdit, FeatureInput } from './model.js';
+import type { FeatureEdit, StoredFeatureInput } from './model.js';
 
 /**
  * An edit a sketch holds: an edit of features ({@link FeatureEdit}), or the shape of a feature
@@ -28,7 +28,7 @@ export type SketchEdit =
   | {
       kind: 'create';
       /** The feature as it will be created */
-      feature: FeatureInput;
+      feature: StoredFeatureInput;
       /**
        * The number of vertices placed so far, for a shape being drawn (left out: a feature drawn as
        * it will be created, every vertex placed)

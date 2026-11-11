@@ -13,10 +13,10 @@ import { RowSkips, RowTable } from '@sakuzu/kasane/render';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createTableStore } from '../../store/table-memory.js';
 import type { ItemMove } from '../../store/types.js';
+import { writesOf } from '../../test-support/writes.js';
 import { createMapStub, onDocumentChange } from '../../test-utils.js';
 import type { Draw } from '../draw.js';
 import type { DocumentChange } from '../events.js';
-import type { FeatureValues } from '../model.js';
 import { createDrawOnEngine } from './create-draw.js';
 import { createEngine } from './engine.js';
 
@@ -30,11 +30,16 @@ function instance(n: number): { draw: Draw; ids: string[] } {
     { store, initDefaultLayer: false },
     { deferDefaultMode: true },
   );
-  const draw = createDrawOnEngine(engine, { store, initDefaultLayer: false });
+  // The local undo keeps a step for each deletion of the scenes
+  const draw = createDrawOnEngine(engine, {
+    store,
+    initDefaultLayer: false,
+    history: { maxSteps: 1000 },
+  });
   instances.push(draw);
-  draw.layers.create({ id: 'a', name: 'a' });
+  writesOf(draw).layers.create({ id: 'a', name: 'a' });
   const ids = Array.from({ length: n }, (_, i) => `f${i}`);
-  draw.features.createMany(
+  writesOf(draw).features.createMany(
     ids.map((id, i) => ({
       id,
       type: 'Point',
@@ -60,7 +65,7 @@ function deleteEach(draw: Draw, ids: readonly string[]): Array<[string | null, s
       }
     }
   });
-  for (const id of ids) draw.features.delete(id);
+  for (const id of ids) writesOf(draw).features.delete(id);
   off();
   return around;
 }
@@ -74,7 +79,7 @@ describe('features deleted over a Store of rows', () => {
       const next = vi.spyOn(RowTable.prototype, 'nextRow');
       const down = vi.spyOn(RowSkips.prototype, 'lastAtOrBefore');
       const up = vi.spyOn(RowSkips.prototype, 'firstAtOrAfter');
-      expect(draw.features.deleteMany(reversed ? [...ids].reverse() : ids)).toBe(true);
+      expect(writesOf(draw).features.deleteMany(reversed ? [...ids].reverse() : ids)).toBe(true);
       expect(draw.features.count({ layerId: 'a' })).toBe(0);
       // Each deleted row passed one at a time would be about n * n / 2 rows
       expect(previous.mock.calls.length + next.mock.calls.length).toBeLessThanOrEqual(4 * n);
@@ -104,21 +109,12 @@ describe('features deleted over a Store of rows', () => {
     }
   });
 
-  it('reads again the rows of a deletion undone', () => {
+  it('reads again the rows of a deletion undone', async () => {
     for (const n of [200, 20]) {
       const { draw, ids } = instance(n);
-      const steps: FeatureValues[] = [];
-      const off = onDocumentChange(draw, (change: DocumentChange) => {
-        if (change.previousValues) steps.push(change.previousValues as FeatureValues);
-      });
       // One at a time, so that the walks pass the rows deleted before; then undone, the last first
       deleteEach(draw, ids.slice(1, n - 1));
-      off();
-      while (steps.length > 0) {
-        draw.transact(() => draw.features.restore(steps.pop() as FeatureValues), {
-          ignoreLocks: true,
-        });
-      }
+      for (let i = 1; i < n - 1; i++) await draw.undo();
       expect(draw.features.count({ layerId: 'a' })).toBe(n);
       // The rows back are read: the one deleted next stands between the ones next to it
       const around = deleteEach(draw, [`f${n >> 1}`]);
@@ -127,7 +123,7 @@ describe('features deleted over a Store of rows', () => {
       onDocumentChange(draw, (change: DocumentChange) => {
         for (const move of change.order ?? []) if (move.kind === 'item') moves.push(move);
       });
-      draw.features.delete(`f${(n >> 1) + 1}`);
+      writesOf(draw).features.delete(`f${(n >> 1) + 1}`);
       expect(moves[0]?.from).toMatchObject({
         below: `f${(n >> 1) - 1}`,
         above: `f${(n >> 1) + 2}`,

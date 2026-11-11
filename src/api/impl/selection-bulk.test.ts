@@ -14,9 +14,10 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { DrawStore } from '../../store/draw-store.js';
 import { TableContractStore } from '../../store/table-memory.js';
 import type { StoreChange, Feature as StoredFeature } from '../../store/types.js';
+import { writesOf } from '../../test-support/writes.js';
 import { createMapStub } from '../../test-utils.js';
 import type { Draw } from '../draw.js';
-import type { Feature, FeatureStyleSample, FeatureValues } from '../model.js';
+import type { StoredFeature as Feature, FeatureStyleSample, FeatureValues } from '../model.js';
 import { createDrawOnEngine } from './create-draw.js';
 import { createEngine } from './engine.js';
 
@@ -155,7 +156,7 @@ function snapshot(draw: Draw) {
     out[layerId] = items;
   }
   const features: Record<string, unknown> = {};
-  for (const feature of draw.features.list({}, { limit: 10_000 })) {
+  for (const feature of writesOf(draw).features.list({}, { limit: 10_000 })) {
     features[feature.id] = { ...feature, groupId: nameOf(feature.groupId) };
   }
   out.features = features;
@@ -164,7 +165,9 @@ function snapshot(draw: Draw) {
 
 /** A random selection of the features of the document, in stacking order */
 function pick(draw: Draw, next: () => number, share: number): string[] {
-  const all = draw.features.list({}, { limit: 10_000 }).map((feature) => feature.id);
+  const all = writesOf(draw)
+    .features.list({}, { limit: 10_000 })
+    .map((feature) => feature.id);
   return all.filter(() => next() < share);
 }
 
@@ -185,15 +188,15 @@ describe('the verbs of the selection over features selected in bulk', () => {
       bulk.draw.selection.set('feature', ids);
       single.draw.selection.set('feature', ids);
       expect(bulk.draw.selection.value.count).toBe(ids.length);
-      expect(bulk.draw.selection.delete()).toBe(true);
-      expect(single.draw.selection.delete()).toBe(true);
+      expect(writesOf(bulk.draw).selection.delete()).toBe(true);
+      expect(writesOf(single.draw).selection.delete()).toBe(true);
       expect(snapshot(bulk.draw)).toEqual(snapshot(single.draw));
       // The values before, written back, put the document back
       const previous = bulk.changes[bulk.changes.length - 1].previousValues as FeatureValues;
       const groupsDeleted = bulk.changes[bulk.changes.length - 1].groups?.deleted ?? [];
       bulk.draw.getStore().transact(() => {
-        for (const group of groupsDeleted) bulk.draw.groups.restore(group.id);
-        bulk.draw.features.restore(previous);
+        for (const group of groupsDeleted) writesOf(bulk.draw).groups.restore(group.id);
+        writesOf(bulk.draw).features.restore(previous);
       });
       expect(snapshot(bulk.draw)).toEqual(before);
     }
@@ -215,7 +218,7 @@ describe('the verbs of the selection over features selected in bulk', () => {
       bulk.draw.selection.set('feature', ids);
       const kinds: FeatureStyleSample[] = [];
       expect(
-        bulk.draw.selection.update((sample) => {
+        writesOf(bulk.draw).selection.update((sample) => {
           kinds.push(sample);
           return make(sample);
         }),
@@ -223,7 +226,7 @@ describe('the verbs of the selection over features selected in bulk', () => {
       // One call per kind of feature, not per feature
       expect(kinds.length).toBeLessThan(ids.length);
       const patches = ids
-        .map((id) => single.draw.features.get(id) as Feature)
+        .map((id) => writesOf(single.draw).features.get(id) as Feature)
         .map((feature) => ({
           id: feature.id,
           patch: make({
@@ -234,10 +237,10 @@ describe('the verbs of the selection over features selected in bulk', () => {
         }))
         .filter((entry) => entry.patch !== null)
         .map((entry) => ({ id: entry.id, patch: entry.patch as NonNullable<typeof entry.patch> }));
-      single.draw.features.updateMany(patches);
+      writesOf(single.draw).features.updateMany(patches);
       expect(snapshot(bulk.draw)).toEqual(snapshot(single.draw));
       const previous = bulk.changes[bulk.changes.length - 1].previousValues as FeatureValues;
-      bulk.draw.features.restore(previous);
+      writesOf(bulk.draw).features.restore(previous);
       expect(snapshot(bulk.draw)).toEqual(before);
     }
   });
@@ -249,25 +252,27 @@ describe('the verbs of the selection over features selected in bulk', () => {
       if (ids.length <= 6) continue;
       const locked = ids.filter((_, i) => i % 5 === 0);
       for (const { draw } of [bulk, single]) {
-        for (const id of locked) draw.features.update(id, { locked: true });
+        for (const id of locked) writesOf(draw).features.update(id, { locked: true });
         draw.selection.set('feature', ids);
       }
-      const seen = locked.map((id) => JSON.stringify(bulk.draw.features.get(id)));
+      const seen = locked.map((id) => JSON.stringify(writesOf(bulk.draw).features.get(id)));
       expect(bulk.draw.selection.value.ids).toBeNull();
       expect(single.draw.selection.value.ids).not.toBeNull();
       for (const { draw } of [bulk, single]) {
         const patch = { style: { strokeColor: '#123456' }, properties: { changed: true } };
-        expect(draw.selection.update(patch)).toBe(true);
+        expect(writesOf(draw).selection.update(patch)).toBe(true);
       }
       expect(snapshot(bulk.draw)).toEqual(snapshot(single.draw));
-      expect(locked.map((id) => JSON.stringify(bulk.draw.features.get(id)))).toEqual(seen);
-      expect(bulk.draw.features.get(ids[1])?.style.strokeColor).toBe('#123456');
+      expect(locked.map((id) => JSON.stringify(writesOf(bulk.draw).features.get(id)))).toEqual(
+        seen,
+      );
+      expect(writesOf(bulk.draw).features.get(ids[1])?.style.strokeColor).toBe('#123456');
       // Their lock and their visibility change
       for (const { draw } of [bulk, single]) {
-        expect(draw.selection.update({ locked: false })).toBe(true);
+        expect(writesOf(draw).selection.update({ locked: false })).toBe(true);
       }
       expect(snapshot(bulk.draw)).toEqual(snapshot(single.draw));
-      expect(bulk.draw.features.get(locked[0])?.locked).toBe(false);
+      expect(writesOf(bulk.draw).features.get(locked[0])?.locked).toBe(false);
     }
   });
 
@@ -275,16 +280,16 @@ describe('the verbs of the selection over features selected in bulk', () => {
     const { bulk, single } = pair(67);
     const ids = pick(bulk.draw, bulk.next, 0.6);
     for (const { draw } of [bulk, single]) {
-      for (const id of ids) draw.features.update(id, { locked: true });
+      for (const id of ids) writesOf(draw).features.update(id, { locked: true });
       draw.selection.set('feature', ids);
       const before = snapshot(draw);
-      expect(draw.selection.update({ style: { strokeColor: '#123456' } })).toBe(false);
+      expect(writesOf(draw).selection.update({ style: { strokeColor: '#123456' } })).toBe(false);
       // A change with its lock is of more than its lock: it is left as it is too
-      expect(draw.selection.update({ style: { strokeColor: '#123456' }, locked: false })).toBe(
-        false,
-      );
+      expect(
+        writesOf(draw).selection.update({ style: { strokeColor: '#123456' }, locked: false }),
+      ).toBe(false);
       expect(snapshot(draw)).toEqual(before);
-      expect(draw.selection.update({ locked: false })).toBe(true);
+      expect(writesOf(draw).selection.update({ locked: false })).toBe(true);
     }
   });
 
@@ -293,13 +298,13 @@ describe('the verbs of the selection over features selected in bulk', () => {
       const { bulk, single } = pair(seed);
       // Features in no group
       const ids = pick(bulk.draw, bulk.next, 0.5).filter(
-        (id) => bulk.draw.features.get(id)?.groupId === undefined,
+        (id) => writesOf(bulk.draw).features.get(id)?.groupId === undefined,
       );
       if (ids.length <= 3) continue;
       bulk.draw.selection.set('feature', ids);
       single.draw.selection.set('feature', ids);
-      expect(bulk.draw.selection.group()).not.toBeNull();
-      expect(single.draw.selection.group()).not.toBeNull();
+      expect(writesOf(bulk.draw).selection.group()).not.toBeNull();
+      expect(writesOf(single.draw).selection.group()).not.toBeNull();
       expect(snapshot(bulk.draw)).toEqual(snapshot(single.draw));
     }
     for (let seed = 30; seed <= 36; seed++) {
@@ -309,8 +314,8 @@ describe('the verbs of the selection over features selected in bulk', () => {
       bulk.draw.selection.set('feature', ids);
       single.draw.selection.set('feature', ids);
       // Out of their groups: the features of a group go just in front of it, in their order
-      const moved = bulk.draw.selection.move({ groupId: null });
-      expect(moved).toBe(single.draw.selection.move({ groupId: null }));
+      const moved = writesOf(bulk.draw).selection.move({ groupId: null });
+      expect(moved).toBe(writesOf(single.draw).selection.move({ groupId: null }));
       expect(snapshot(bulk.draw)).toEqual(snapshot(single.draw));
     }
   });
@@ -322,8 +327,8 @@ describe('the verbs of the selection over features selected in bulk', () => {
       if (ids.length <= 3) continue;
       bulk.draw.selection.set('feature', ids);
       single.draw.selection.set('feature', ids);
-      expect(bulk.draw.selection.move({ layerId: 'm' })).toBe(true);
-      expect(single.draw.selection.move({ layerId: 'm' })).toBe(true);
+      expect(writesOf(bulk.draw).selection.move({ layerId: 'm' })).toBe(true);
+      expect(writesOf(single.draw).selection.move({ layerId: 'm' })).toBe(true);
       expect(snapshot(bulk.draw)).toEqual(snapshot(single.draw));
       expect(bulk.draw.selection.value.layerIds).toEqual(['m']);
     }
@@ -333,22 +338,22 @@ describe('the verbs of the selection over features selected in bulk', () => {
     const { bulk } = pair(50);
     const ids = pick(bulk.draw, bulk.next, 0.6);
     bulk.draw.selection.set('feature', ids);
-    bulk.draw.selection.update({ style: { strokeColor: '#123456' } });
+    writesOf(bulk.draw).selection.update({ style: { strokeColor: '#123456' } });
     const previous = bulk.changes[bulk.changes.length - 1].previousValues as FeatureValues;
     const store = bulk.draw.getStore() as unknown as DrawStore;
     store.setReadOnly(true);
     const before = snapshot(bulk.draw);
-    expect(bulk.draw.selection.delete()).toBe(false);
-    expect(bulk.draw.selection.update({ style: { strokeColor: '#000000' } })).toBe(false);
-    expect(bulk.draw.selection.move({ layerId: 'm' })).toBe(false);
-    expect(bulk.draw.selection.group()).toBeNull();
-    expect(bulk.draw.features.restore(previous)).toBeNull();
+    expect(writesOf(bulk.draw).selection.delete()).toBe(false);
+    expect(writesOf(bulk.draw).selection.update({ style: { strokeColor: '#000000' } })).toBe(false);
+    expect(writesOf(bulk.draw).selection.move({ layerId: 'm' })).toBe(false);
+    expect(writesOf(bulk.draw).selection.group()).toBeNull();
+    expect(writesOf(bulk.draw).features.restore(previous)).toBeNull();
     expect(snapshot(bulk.draw)).toEqual(before);
     store.setReadOnly(false);
     store.setInteractionLock(true);
-    expect(bulk.draw.selection.delete()).toBe(false);
-    expect(bulk.draw.selection.update({ style: { strokeColor: '#000000' } })).toBe(false);
-    expect(bulk.draw.selection.move({ layerId: 'm' })).toBe(false);
+    expect(writesOf(bulk.draw).selection.delete()).toBe(false);
+    expect(writesOf(bulk.draw).selection.update({ style: { strokeColor: '#000000' } })).toBe(false);
+    expect(writesOf(bulk.draw).selection.move({ layerId: 'm' })).toBe(false);
     expect(snapshot(bulk.draw)).toEqual(before);
   });
 
@@ -356,7 +361,7 @@ describe('the verbs of the selection over features selected in bulk', () => {
     const { bulk } = pair(51);
     bulk.draw.selection.set('feature', pick(bulk.draw, bulk.next, 0.6));
     expect(() =>
-      bulk.draw.selection.update({ geometry: { type: 'Point', coordinates: [0, 0] } }),
+      writesOf(bulk.draw).selection.update({ geometry: { type: 'Point', coordinates: [0, 0] } }),
     ).toThrow(/geometry/);
   });
 
@@ -379,7 +384,9 @@ describe('the verbs of the selection over features selected in bulk', () => {
       after = page[page.length - 1].id;
     }
     expect(pages).toEqual(
-      bulk.draw.features.list({ type: 'Point' }, { limit: 10_000 }).map((feature) => feature.id),
+      writesOf(bulk.draw)
+        .features.list({ type: 'Point' }, { limit: 10_000 })
+        .map((feature) => feature.id),
     );
     // One by one: the same features
     expect(single.draw.selection.setAll({ type: 'Point' })).toBe(true);
@@ -390,9 +397,11 @@ describe('the verbs of the selection over features selected in bulk', () => {
   it('read the first features selected in their order, and select many ids on their rows', () => {
     const { bulk } = pair(54);
     const draw = bulk.draw;
-    const all = draw.features.list({}, { limit: 10_000 }).map((feature) => feature.id);
+    const all = writesOf(draw)
+      .features.list({}, { limit: 10_000 })
+      .map((feature) => feature.id);
     const hidden = all[1] as string;
-    draw.features.update(hidden, { visible: false });
+    writesOf(draw).features.update(hidden, { visible: false });
     expect(draw.selection.set('feature', all)).toBe(true);
     const selected = draw.selection.value;
     expect(selected.ids).toBeNull();
@@ -409,7 +418,7 @@ describe('the verbs of the selection over features selected in bulk', () => {
         .slice(0, 5),
     );
     // Nothing that can be seen: nothing is selected, and the selection stays
-    for (const id of shown.slice(0, 40)) draw.features.update(id, { visible: false });
+    for (const id of shown.slice(0, 40)) writesOf(draw).features.update(id, { visible: false });
     const kept = draw.selection.value;
     expect(draw.selection.set('feature', [hidden, ...shown.slice(0, 40)])).toBe(false);
     expect(draw.selection.value).toBe(kept);

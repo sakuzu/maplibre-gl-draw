@@ -17,7 +17,7 @@ import type { Browser, Page } from 'playwright-core';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { browserTimeout } from '../test-utils.js';
 import { at, idle, KINDS, load, mapPointOf, openScenePage } from './drag-scene.js';
-import { type Bundle, bundlePage, launchBrowser } from './harness.js';
+import { type Bundle, bundlePage, type E2EWrites, launchBrowser } from './harness.js';
 
 const ZOOM = 14;
 const BLUE = '#0040ff';
@@ -225,7 +225,9 @@ describe.each(KINDS)('the colors composited over a Store of %s', (kind) => {
     await addCustomType(page);
     await page.evaluate((fs) => {
       const w = window as unknown as { draw: import('../index.js').Draw };
-      w.draw.features.createMany(fs.map((f) => ({ ...f, layerId: 'L' })) as never);
+      (window as unknown as E2EWrites).e2e
+        .writesOf(w.draw)
+        .features.createMany(fs.map((f) => ({ ...f, layerId: 'L' })) as never);
     }, features(0.5));
     expectHalfBlue(await colors(page), 'by the style');
   });
@@ -238,8 +240,10 @@ describe.each(KINDS)('the colors composited over a Store of %s', (kind) => {
     await addCustomType(page);
     await page.evaluate((fs) => {
       const w = window as unknown as { draw: import('../index.js').Draw };
-      w.draw.layers.update('L', { opacity: 0.5 });
-      w.draw.features.createMany(fs.map((f) => ({ ...f, layerId: 'L' })) as never);
+      (window as unknown as E2EWrites).e2e.writesOf(w.draw).layers.update('L', { opacity: 0.5 });
+      (window as unknown as E2EWrites).e2e
+        .writesOf(w.draw)
+        .features.createMany(fs.map((f) => ({ ...f, layerId: 'L' })) as never);
     }, features(1));
     expectHalfBlue(await colors(page), 'by the layer');
   });
