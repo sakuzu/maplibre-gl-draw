@@ -341,11 +341,11 @@ describe('the attributes', () => {
 
   it('name and describe a feature, an empty text removing the attribute', () => {
     expect(namePatch('  Park ')).toEqual({ properties: { name: 'Park' } });
-    expect(namePatch('   ')).toEqual({ properties: { name: undefined } });
+    expect(namePatch('   ')).toEqual({ unset: { properties: ['name'] } });
     expect(descriptionPatch('Line 1\nLine 2')).toEqual({
       properties: { description: 'Line 1\nLine 2' },
     });
-    expect(descriptionPatch('')).toEqual({ properties: { description: undefined } });
+    expect(descriptionPatch('')).toEqual({ unset: { properties: ['description'] } });
   });
 });
 

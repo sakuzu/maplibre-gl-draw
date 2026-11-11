@@ -4,11 +4,11 @@
 // The legend of a layer held as rows: the shape of its swatches read from the types of its first
 // features (a Store of rows lists its features up to a limit only)
 
-import type { Feature, FeatureListOptions, FeatureType, Layer } from '@sakuzu/maplibre-gl-draw';
+import type { FeatureListOptions, FeatureType, Layer } from '@sakuzu/maplibre-gl-draw';
 import { describe, expect, it, vi } from 'vitest';
 import { type LegendSource, legendBlocks } from '../src/layers/legend.js';
 import { resolveMessages } from '../src/messages.js';
-import { builtInRuleChannel } from './fake-draw.js';
+import { builtInRuleChannel, makeFeature } from './fake-draw.js';
 
 const en = resolveMessages('en');
 
@@ -24,9 +24,7 @@ function tableSource(types: FeatureType[]): LegendSource & { list: ReturnType<ty
     styleRule: { kind: 'single', color: '#123456' },
     metadata: undefined,
   };
-  const features = types.map(
-    (type, i) => ({ id: `f${i}`, type, layerId: 'rows' }) as unknown as Feature,
-  );
+  const features = types.map((type, i) => makeFeature({ id: `f${i}`, type, layerId: 'rows' }));
   const list = vi.fn((filter: { layerId: string }, options: FeatureListOptions) => {
     if (options?.limit === undefined) throw new Error('A Store of rows lists up to a limit');
     return filter.layerId === 'rows' ? features.slice(0, options.limit) : [];
