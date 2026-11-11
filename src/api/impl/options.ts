@@ -61,6 +61,7 @@ const RUNTIME_KEYS = [
   'dragThreshold',
   'rendering',
   'isExternalEntry',
+  'requestImage',
 ] as const satisfies ReadonlyArray<keyof RuntimeOptions>;
 
 // ============================================================================
@@ -236,6 +237,7 @@ const RUNTIME_CHECKS: Readonly<Record<string, (value: unknown, what: string) => 
     gpuLimitBytes: positive,
   }),
   isExternalEntry: func,
+  requestImage: func,
 };
 
 /**

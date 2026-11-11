@@ -1082,14 +1082,12 @@ describe('the built-in modes written to the contract', () => {
     const [point] = engine.context.store.listFeatures();
     expect(committed).toEqual([point.id]);
 
-    // An image loaded without a request is not a commit of the image mode: the instance tells
-    // the extensions of each load it wrote
-    const loaded = (featureIds: string[]) =>
-      engine.extensions.loaded({ format: 'image', featureIds, replaced: false });
-    loaded([point.id]);
+    // An image loaded otherwise is not a commit of the image mode; the one the image mode
+    // placed (after `requestImage`) is
+    const result = { format: 'image' as const, featureIds: [point.id], replaced: false };
+    engine.extensions.loaded(result);
     expect(committed).toHaveLength(1);
-    engine.modeManager.setMode('draw_image');
-    loaded([point.id]);
+    engine.extensions.loaded(result, true);
     expect(committed).toEqual([point.id, point.id]);
   });
 

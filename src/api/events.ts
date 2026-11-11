@@ -265,14 +265,6 @@ export interface DrawEvents {
     lngLat: Position;
     point: ScreenPoint;
   };
-  /**
-   * The image mode asks for an image to place at a position: the application picks a file.
-   * (A transaction does not yet place an image at a position: what places it is to come with the
-   * option that asks the application for the image.) `lngLat` is
-   * the clicked position when a click led to the mode (a listener of `map.clicked` entered it),
-   * and the center of the map when the mode was entered otherwise
-   */
-  'image.requested': { lngLat: Position; zoom: number; layerId: string };
   /** The divisions of the stacking order changed */
   'layerStack.changed': { entries: readonly LayerStackEntry[] };
   /** Loading or reading an image failed */

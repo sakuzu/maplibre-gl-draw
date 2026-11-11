@@ -52,6 +52,7 @@ import type {
   LayerInput,
   LayerPatch,
   LoadOptions,
+  LoadResult,
   Metadata,
   MoveTarget,
   StoredFeaturePatch,
@@ -219,6 +220,12 @@ export interface WriterDeps {
 export interface Writer {
   write<T>(fn: (tx: Transaction) => T | Promise<T>, options?: WriteOptions): Write<T>;
   open(source?: OpenSource, options?: { readonly signal?: AbortSignal }): Promise<OpenResult>;
+  /** Places an image at a position as one commit of this client (the image mode) */
+  placeImage(
+    image: Blob,
+    at: { readonly coordinate: [number, number]; readonly zoom: number; readonly layerId: string },
+    signal: AbortSignal,
+  ): Promise<LoadResult | null>;
 }
 
 /** The source the Store is told for a commit of `draw.write` */
@@ -279,6 +286,25 @@ export function createWriter(writerDeps: WriterDeps): Writer {
 
   return {
     write,
+    async placeImage(image, at, signal) {
+      const loader = writerDeps.writers.document;
+      const prepared = await loader.prepare(
+        image as never,
+        { mode: 'merge', coordinate: at.coordinate, zoom: at.zoom, layerId: at.layerId },
+        new Set(),
+        new Set(),
+      );
+      if (signal.aborted) throw abortedError(signal);
+      if (!prepared) throw notEditable();
+      return queueCommit(store, () => {
+        if (store.isReadOnly()) throw notEditable();
+        const [result] =
+          runCommit(store, { id: createId(), label: undefined, undo: true }, WRITE_SOURCE, () =>
+            loader.writeAll([prepared]),
+          ) ?? [];
+        return result ?? null;
+      });
+    },
     async open(source, options) {
       if (source === undefined) {
         throw new DrawError('invalid-state', 'There is no storage to open the document from');

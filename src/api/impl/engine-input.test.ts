@@ -12,7 +12,6 @@ import type { ObjectGroup, ObjectLayer } from '../../shared/types/model.js';
 import { writesOf } from '../../test-support/writes.js';
 import { createMapStub, createSyntheticInput } from '../../test-utils.js';
 import type { Draw } from '../draw.js';
-import type { DrawEvents } from '../events.js';
 import type { StoredFeature as Feature, Group } from '../model.js';
 import { createDrawOnEngine } from './create-draw.js';
 import type { Engine } from './engine.js';
@@ -40,25 +39,34 @@ const point = (lng: number, lat: number, id?: string) =>
     ...(id !== undefined && { id }),
   });
 
-describe('image.requested', () => {
-  it('carries the clicked position when a click led to the image mode', () => {
-    const requests: DrawEvents['image.requested'][] = [];
-    draw.on('image.requested', (request) => requests.push(request));
+describe('requestImage', () => {
+  it('is asked with the clicked position when a click led to the image mode', () => {
+    const requests: unknown[] = [];
+    draw.options.update({
+      requestImage: (at) => {
+        requests.push(at);
+        return new Promise<Blob>(() => {});
+      },
+    });
     const stop = draw.on('map.clicked', () => {
       draw.setMode('draw_image');
     });
     createSyntheticInput(engine).click([0.5, -0.25]);
     stop();
-    expect(requests).toHaveLength(1);
-    expect(requests[0].lngLat).toEqual([0.5, -0.25]);
+    expect(requests).toEqual([[0.5, -0.25]]);
     expect(draw.getMode()).toBe('select');
   });
 
-  it('carries the center of the map when the API entered the mode', () => {
-    const requests: DrawEvents['image.requested'][] = [];
-    draw.on('image.requested', (request) => requests.push(request));
+  it('is asked with the center of the map when the API entered the mode', () => {
+    const requests: unknown[] = [];
+    draw.options.update({
+      requestImage: (at) => {
+        requests.push(at);
+        return new Promise<Blob>(() => {});
+      },
+    });
     draw.setMode('draw_image');
-    expect(requests.map((request) => request.lngLat)).toEqual([[0, 0]]);
+    expect(requests).toEqual([[0, 0]]);
   });
 });
 

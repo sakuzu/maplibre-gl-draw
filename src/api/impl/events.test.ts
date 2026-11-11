@@ -46,7 +46,6 @@ const ALL_EVENTS: ReadonlyArray<keyof DrawEvents> = [
   'snap.changed',
   'map.clicked',
   'dataset.clicked',
-  'image.requested',
   'layerStack.changed',
   'error',
 ];
@@ -554,9 +553,6 @@ describe('the signals of the engine', () => {
     ]);
     expect(payloadsOf(signals, 'map.clicked')).toEqual([
       { lngLat: [3, 4], point: [5, 6], hit: null },
-    ]);
-    expect(payloadsOf(signals, 'image.requested')).toEqual([
-      { lngLat: [7, 8], zoom: 9, layerId: 'l' },
     ]);
     expect(payloadsOf(signals, 'layerStack.changed')).toEqual([
       { entries: [{ layerId: 'slot', from: 0, to: 2 }] },

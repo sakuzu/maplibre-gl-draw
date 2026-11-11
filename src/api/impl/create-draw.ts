@@ -10,6 +10,7 @@ import { ConsistencyChecks } from '../../debug/consistency.js';
 import { DrawStore } from '../../store/draw-store.js';
 import type { Store } from '../../store/store.js';
 import type { Draw } from '../draw.js';
+import { DrawError } from '../errors.js';
 import type { StoreView } from '../extension/store.js';
 import type { FeaturesCollection } from '../features.js';
 import type { DrawOptions } from '../options.js';
@@ -192,6 +193,39 @@ export function createDrawOnEngine(
     reads: { features, layers, groups },
   });
   const history = createHistory(store, options.history);
+  // The image mode asks the application for an image (`requestImage`), placed as one commit
+  let imageRequest: AbortController | null = null;
+  const onImageRequest = (asked: {
+    coordinate: [number, number];
+    zoom: number;
+    layerId: string;
+  }): void => {
+    const request = drawOptions.get().requestImage;
+    if (!request) return;
+    imageRequest?.abort();
+    const controller = new AbortController();
+    imageRequest = controller;
+    void (async () => {
+      try {
+        const image = await request([asked.coordinate[0], asked.coordinate[1]], {
+          signal: controller.signal,
+        });
+        if (controller.signal.aborted || destroyed) return;
+        const result = await writer.placeImage(image, asked, controller.signal);
+        if (result) engine.extensions.loaded(result, true);
+      } catch (error) {
+        if (controller.signal.aborted || destroyed) return;
+        const failure =
+          error instanceof DrawError
+            ? error
+            : new DrawError('unsupported-format', String(error), { cause: error });
+        events.emit('error', { error: failure, source: 'image' });
+      } finally {
+        if (imageRequest === controller) imageRequest = null;
+      }
+    })();
+  };
+  context.eventEmitter.on('image.request', onImageRequest);
   // The features as this client draws them, and what changed of them once a frame is drawn
   const rendered = createRendered({
     map,
@@ -320,6 +354,8 @@ export function createDrawOnEngine(
       try {
         stopChecks();
         history.stop();
+        imageRequest?.abort();
+        context.eventEmitter.off('image.request', onImageRequest);
         rendered.stop();
         engine.destroy();
       } finally {

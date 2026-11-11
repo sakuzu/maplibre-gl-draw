@@ -124,7 +124,6 @@ const EVENT_KEYS = {
   'snap.changed': true,
   'map.clicked': true,
   'dataset.clicked': true,
-  'image.requested': true,
   'layerStack.changed': true,
   error: true,
 } satisfies Record<keyof DrawEvents, true>;
@@ -794,9 +793,6 @@ export function connectEngineEvents(
       lngLat: [payload.lngLat[0], payload.lngLat[1]],
       point: payload.point ? [payload.point.x, payload.point.y] : [Number.NaN, Number.NaN],
     });
-  });
-  listen('image.request', ({ coordinate, zoom, layerId }) => {
-    hub.emit('image.requested', { lngLat: [coordinate[0], coordinate[1]], zoom, layerId });
   });
   listen('layerStack.change', ({ slots }) => {
     hub.emit('layerStack.changed', {

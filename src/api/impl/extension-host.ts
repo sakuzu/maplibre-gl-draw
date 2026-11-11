@@ -97,8 +97,8 @@ export interface ExtensionHostDeps {
  * @internal
  */
 export interface ExtensionHost {
-  /** Tells the host what a load wrote (`tx.import`, `draw.open`) */
-  loaded(result: LoadResult): void;
+  /** Tells the host what a load wrote; an image the image mode placed is a commit of the mode */
+  loaded(result: LoadResult, fromImageMode?: boolean): void;
   /** The collections of `draw.extensions` */
   readonly collections: ExtensionsCollections;
   /** The route of the input to the plugins and the modes of the contract */
@@ -498,22 +498,12 @@ export function createExtensionHost(deps: ExtensionHostDeps): ExtensionHost {
   const watches: Array<() => void> = [];
 
   /**
-   * The image mode asks the application for a file (`image.requested`), and the application
-   * places the image by loading the file. The image that load places is the commit of the
-   * image mode, which the plugins hear of as the commits of the other drawing modes
+   * What a load wrote: the image the image mode asked the application for (`requestImage`) and
+   * placed is the commit of the image mode, which the plugins hear of as the commits of the other
+   * drawing modes
    */
-  let imageRequested = false;
-  function watchImageCommits(draw: Draw): void {
-    watches.push(
-      draw.on('image.requested', () => {
-        imageRequested = true;
-      }),
-    );
-  }
-  /** What a load wrote: an image the image mode asked for is told as its commit */
-  function loaded(result: LoadResult): void {
-    if (!imageRequested || result.format !== 'image') return;
-    imageRequested = false;
+  function loaded(result: LoadResult, fromImageMode = false): void {
+    if (!fromImageMode || result.format !== 'image') return;
     for (const id of result.featureIds) {
       const feature = featureOf(id);
       if (feature) announceDrawCommit(feature);
@@ -533,7 +523,6 @@ export function createExtensionHost(deps: ExtensionHostDeps): ExtensionHost {
     attach(draw, options, documentStore) {
       attached = draw;
       styleOptions = options;
-      watchImageCommits(draw);
       // A Store that replaces its whole document says so with `reset`: the mode drops what it
       // was drawing, as it does for an Escape
       if (documentStore) {

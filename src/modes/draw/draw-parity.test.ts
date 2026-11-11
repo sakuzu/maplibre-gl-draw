@@ -244,11 +244,15 @@ describe.each(STORE_KINDS)('the shapes the drawing modes finish over %s', (_, ma
   it('asks the application for an image and writes nothing (DR-5)', () => {
     const view = open(makeStore());
     const requested: unknown[] = [];
-    view.draw.on('image.requested', (payload) => requested.push(payload));
+    view.draw.options.update({
+      requestImage: (at) => {
+        requested.push(at);
+        return new Promise<Blob>(() => {});
+      },
+    });
     view.draw.setMode('draw_image');
     vi.runAllTimers();
     expect(requested).toHaveLength(1);
-    expect(requested[0]).toMatchObject({ layerId: 'l' });
     expect(view.changes).toHaveLength(0);
     expect(view.draw.getMode()).toBe('select');
   });

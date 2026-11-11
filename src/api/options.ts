@@ -6,6 +6,7 @@
  * `draw.options` changes while it runs
  */
 
+import type { Position } from 'geojson';
 import type { ConsistencyCheckOptions } from '../debug/types.js';
 import type { Messages } from '../messages.js';
 import type { Observable } from './events.js';
@@ -461,6 +462,13 @@ export interface RuntimeOptions {
    * of the base map; the stacking order is divided at those entries
    */
   isExternalEntry?: (id: string) => boolean;
+  /**
+   * Called when the image mode asks for an image to place at a position: the application gives
+   * the file (it lets the user pick one, say), and the instance places it there in the active
+   * layer, at the zoom of the map, as one commit. Stopped by `signal` when the instance is
+   * removed or the next image is asked for. Without it the image mode places nothing.
+   */
+  requestImage?: (at: Position, context: { readonly signal: AbortSignal }) => Promise<Blob>;
 }
 
 /**

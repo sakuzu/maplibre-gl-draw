@@ -322,6 +322,9 @@ export interface FeaturePatchFields<P extends object = Properties> {
  * A feature as the Store holds it, with the values of the library in fields of their own: what
  * the Store gives and takes (`StoreView.getFeature`, `DocumentChange`), and what a sketch edits.
  * It goes with the Store; an application reads and writes {@link Feature}.
+ *
+ * @deprecated It names the shape the Store holds, and goes with the Store and the shape of the
+ *   sketches, when the storage takes the place of the Store (the next major part of this work)
  */
 export interface StoredFeature {
   /** The ID */
@@ -546,6 +549,9 @@ export interface DrawDocument {
  * A feature to create as the Store and a sketch take it ({@link StoredFeature}). The radius of a
  * circle and the other values of the library go into `properties` under their prefixed keys.
  */
+/**
+ * @deprecated It goes with the Store and the shape of the sketches, as {@link StoredFeature}
+ */
 export interface StoredFeatureInput {
   /** The type */
   type: FeatureType;
@@ -576,6 +582,9 @@ export interface StoredFeatureInput {
  *
  * A patch has no `type`: the type of a feature cannot change. To turn a feature into another
  * type, or to undo such a change, delete it and create it again.
+ */
+/**
+ * @deprecated It goes with the Store and the shape of the sketches, as {@link StoredFeature}
  */
 export interface StoredFeaturePatch {
   /** The new GeoJSON geometry */
