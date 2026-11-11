@@ -139,7 +139,6 @@ const MAIN = [
   'LineStyle',
   'Messages',
   'Metadata',
-  'MetadataResource',
   'Mode',
   'ModeContext',
   'ModeFactory',

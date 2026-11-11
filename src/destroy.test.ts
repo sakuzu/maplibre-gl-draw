@@ -188,7 +188,6 @@ describe('the instance after destroy', () => {
       'hidden',
       'selection',
       'vertexSelection',
-      'metadata',
       'options',
       'document',
       'debug',
