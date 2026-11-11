@@ -770,6 +770,20 @@ const CASES: readonly Case[] = [
       step(`refused: ${refused}`);
     },
   },
+  {
+    // Recorded after the rework, with what the Store of rows does now. Before it, the move of the
+    // group to another layer was told as two moves of the order (into the layer at the place of
+    // its key before, then to the place given); it is told as one now, from where it was to the
+    // place given. What is read after the move (the items, the features, the values and the rows
+    // told) is the same
+    name: 'a group moved to another layer',
+    run: ({ store }, step) => {
+      store.moveItems?.(['g'], { layerId: 'b', below: null });
+      step('the group moved to b');
+      store.moveItems?.(['g'], { layerId: 'a', above: null });
+      step('the group moved back');
+    },
+  },
 ];
 
 describe('the Store of rows, as it was before its tables were reworked', () => {
