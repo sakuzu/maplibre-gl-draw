@@ -63,8 +63,7 @@ interface NativeFeature {
 
 interface NativeDocument {
   version: '4.0.0';
-  title?: string;
-  description?: string;
+  metadata?: { title?: string; description?: string };
   layers?: DrawLayer[];
   layerOrder?: string[];
   groups?: never[];
@@ -265,8 +264,10 @@ function generateTestData(count: number): { data: NativeDocument; features: Draw
 
   const data: NativeDocument = {
     version: '4.0.0',
-    title: `Test data (${count} features)`,
-    description: `${count} features for performance measurements`,
+    metadata: {
+      title: `Test data (${count} features)`,
+      description: `${count} features for performance measurements`,
+    },
     layers: [
       {
         id: layerId,

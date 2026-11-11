@@ -224,11 +224,16 @@ is there only while it is locked: to unlock it, name the key in `unset`
   no handles, and box selection skips it
 - Selected with others, it stays where it is while they are dragged or
   moved with the arrow keys; a press on it moves nothing
-- A write that names a locked item by its ID rejects with `locked`: an
-  `update` whose patch changes anything other than the lock and the
+- A write that names features by their IDs (one ID, an array of IDs or
+  the entries of an `update`) is written whole or not at all: when one of
+  them is locked, it rejects with `locked` and changes nothing. This holds
+  for an `update` whose patch changes anything other than the lock and the
   visibility, a `delete` and a `place`
-- A write given `draw.selection.target` or a filter leaves the locked
-  features as they are and changes the others
+- A write given a filter, `{ all: true }` or `draw.selection.target`
+  leaves the locked features as they are, changes the others, and counts
+  only the features it wrote
+- `draw.selection.target` names the selection as it was when it was read:
+  the features selected then are written, whatever is selected since
 - The Delete key keeps locked features: a selected group loses only its
   unlocked features, and a layer that holds a locked item is not deleted
 - The geometry operations refuse locked features

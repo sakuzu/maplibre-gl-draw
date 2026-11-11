@@ -76,10 +76,13 @@ interface ListedValue {
 /** The value of the features listed by their IDs read last, for each tables */
 const LISTED_VALUES = new WeakMap<FeatureTablesInternals, ListedValue>();
 
-/** The selection each target names, with the Store it was read from */
+/**
+ * The selection each target names, with the Store it was read from and, for features selected in
+ * bulk, their rows as they were selected when it was read
+ */
 const TARGETS = new WeakMap<
   SelectionTarget,
-  { readonly store: Store; readonly selection: Selection }
+  { readonly store: Store; readonly selection: Selection; readonly rows: TableSelection | null }
 >();
 
 /**
@@ -360,7 +363,11 @@ export function selectionTargetOf(store: Store): SelectionTarget {
     ...(selection.bulk && { bulk: selection.bulk }),
   };
   const target: SelectionTarget = Object.freeze({ type: 'selection', count });
-  TARGETS.set(target, { store, selection: kept });
+  TARGETS.set(target, {
+    store,
+    selection: kept,
+    rows: selection.bulk ? store.getSelectedRows() : null,
+  });
   LAST_TARGET.set(store, target);
   return target;
 }
@@ -373,6 +380,17 @@ export function selectionTargetOf(store: Store): SelectionTarget {
 export function selectionOfTarget(store: Store, target: SelectionTarget): Selection | undefined {
   const named = TARGETS.get(target);
   return named?.store === store ? named.selection : undefined;
+}
+
+/**
+ * The rows of the features selected in bulk a target names, as they were selected when it was
+ * read (null for a target of another selection, or of another Store)
+ *
+ * @internal
+ */
+export function selectedRowsOfTarget(store: Store, target: SelectionTarget): TableSelection | null {
+  const named = TARGETS.get(target);
+  return named?.store === store ? named.rows : null;
 }
 
 /**

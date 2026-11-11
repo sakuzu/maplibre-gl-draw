@@ -179,7 +179,15 @@ export interface Transaction<P extends object = Properties> {
   import(source: ImportSource, options?: ImportOptions): Promise<ImportResult>;
 }
 
-/** The writes of the features */
+/**
+ * The writes of the features.
+ *
+ * The locks: a write that names features by their IDs (one ID, an array of IDs, the entries of
+ * `update`) is written whole or not at all, and fails with `locked` when one of them is locked
+ * (a patch of the lock or of the visibility alone excepted). A write given a filter, `{ all: true }`
+ * or `draw.selection.target` leaves the locked features as they are and counts only the features
+ * it writes. A target of the selection names the selection as it was when it was read.
+ */
 export interface TransactionFeatures<P extends object = Properties>
   extends Omit<FeaturesCollection, 'get' | 'getMany'> {
   /** What this transaction wrote of the feature, or what is committed */

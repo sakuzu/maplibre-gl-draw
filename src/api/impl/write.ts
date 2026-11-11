@@ -20,6 +20,7 @@
  * the document before it.
  */
 
+import type { TableSelection } from '../../feature-table/selection.js';
 import { differenceAll, intersectionAll, unionAll } from '../../geometry/boolean.js';
 import type { AreaCoordinates, MultiPolygonCoordinates } from '../../geometry/types.js';
 import type { ObjectGroup } from '../../shared/types/model.js';
@@ -27,7 +28,7 @@ import { createId } from '../../shared/utils/id.js';
 import { forEachMatchingRow, type RowFilter } from '../../store/feature-stream.js';
 import { featuresInStackingOrder } from '../../store/item-lists.js';
 import { listEveryFeatureInOrder } from '../../store/ordering.js';
-import { selectionOfTarget } from '../../store/selection-value.js';
+import { selectedRowsOfTarget, selectionOfTarget } from '../../store/selection-value.js';
 import type { SlicedWrite, Store } from '../../store/store.js';
 import type {
   FeatureCoordinates,
@@ -684,9 +685,11 @@ class TransactionImpl implements Transaction {
       const named = target as unknown as SelectionTarget;
       const selection = selectionOfTarget(this.#store, named);
       if (!selection) throw invalidInput('The target is not one this instance gave');
-      // The features it names, read now: written without touching the selection, the locked
+      // The features it names, read now: those of the selection as it was when the target was
+      // read (whatever is selected since), written without touching the selection, the locked
       // ones left as they are
-      return { kind: 'ids', ids: this.#idsOfSelection(selection), skipLocked: true };
+      const rows = selectedRowsOfTarget(this.#store, named);
+      return { kind: 'ids', ids: this.#idsOfSelection(selection, rows), skipLocked: true };
     }
     if ('all' in target) {
       if (target.all !== true || Object.keys(target).length !== 1) {
@@ -727,21 +730,16 @@ class TransactionImpl implements Transaction {
    * The IDs of the features a selection names: the features selected, or those of the groups or
    * the layers selected
    */
-  #idsOfSelection(selection: Selection): string[] {
+  #idsOfSelection(selection: Selection, rows: TableSelection | null): string[] {
     const store = this.#store;
     if (selection.bulk) {
-      const rows = sameSelection(store.getSelection(), selection) ? store.getSelectedRows() : null;
       const tables = store.tables;
-      if (!rows || !tables) {
-        throw new DrawError(
-          'invalid-state',
-          'The target names features selected in bulk that are no longer the selection',
-        );
-      }
+      if (!rows || !tables) return [];
+      // The rows still there as the features they were (a row deleted since is left out)
       const ids: string[] = [];
       for (const handle of rows.handles) {
         const id = tables.getRowId(handle);
-        if (typeof id === 'string') ids.push(id);
+        if (typeof id === 'string' && tables.getRowRef(id) === handle) ids.push(id);
       }
       return ids;
     }
@@ -765,16 +763,20 @@ class TransactionImpl implements Transaction {
     });
   }
 
-  /** The IDs a target names now, without the locked ones when the target leaves them */
+  /**
+   * The IDs a target names now that are written. The features it names by their IDs are written
+   * all or none: a locked one fails the write with `locked`. A filter, every feature and the
+   * selection leave the locked ones out, and do not count them
+   */
   #writableIds(resolved: ResolvedTargetOf): string[] {
     const ids = this.#idsNow(resolved) ?? [];
-    if (resolved.kind !== 'ids') return ids;
-    if (resolved.skipLocked) {
-      return ids.filter((id) => !featureLocked(this.#overlay.view, this.#feature(id)));
+    const locked = (id: string) => featureLocked(this.#overlay.view, this.#feature(id));
+    if (namesIds(resolved)) {
+      const named = ids.filter(locked);
+      if (named.length > 0) throw lockedError(named);
+      return ids;
     }
-    const locked = ids.filter((id) => featureLocked(this.#overlay.view, this.#feature(id)));
-    if (locked.length > 0) throw lockedError(locked);
-    return ids;
+    return ids.filter((id) => !locked(id));
   }
 
   // ==========================================================================
@@ -890,7 +892,11 @@ class TransactionImpl implements Transaction {
       return prepared.length;
     };
 
-    /** A patch given to many features: once per kind of feature when it is a function */
+    /**
+     * A patch given to many features: once per kind of feature when it is a function. A locked
+     * feature takes only a patch of its lock or its visibility: one named by its ID fails the
+     * write with `locked`, one a filter or the selection names is left out and not counted
+     */
     const updateMany = (
       resolved: ResolvedTargetOf,
       patch: FeaturePatch | ((sample: FeatureStyleSample) => FeaturePatch | null),
@@ -900,7 +906,20 @@ class TransactionImpl implements Transaction {
       const make = sharedPatchMaker(patch);
       const ids = self.#idsNow(resolved) ?? [];
       // Checked now, on the features it names now: a wrong patch fails it
-      for (const id of ids) make(sampleOf(self.#feature(id)), self.#feature(id));
+      const named = namesIds(resolved);
+      const lockedNamed: string[] = [];
+      let written = 0;
+      for (const id of ids) {
+        const feature = self.#feature(id);
+        const made = make(sampleOf(feature), feature);
+        if (made === null) continue;
+        if (featureLocked(overlay.view, feature) && !onlyLockOrVisibility(made)) {
+          if (named) lockedNamed.push(id);
+          continue;
+        }
+        written++;
+      }
+      if (lockedNamed.length > 0) throw lockedError(lockedNamed);
       keep(() => {
         const entries: { id: string; patch: StoredFeaturePatch }[] = [];
         for (const id of self.#idsAtCommit(resolved)) {
@@ -917,7 +936,7 @@ class TransactionImpl implements Transaction {
         );
         return true;
       });
-      return ids.length;
+      return written;
     };
 
     const remove = (target: Target): Promise<number> =>
@@ -977,7 +996,10 @@ class TransactionImpl implements Transaction {
           overlay.features.set(id, { ...feature, layerId, groupId });
         }
         keep(() => {
-          const now = self.#idsAtCommit(resolved);
+          const now = self.#idsAtCommit(resolved, ids).filter((id) => {
+            const feature = self.#store.getFeature(id);
+            return feature !== undefined && !featureLocked(self.#store, feature);
+          });
           return now.length === 0 || writers.moveMany(now, moveTarget);
         });
         return ids.length;
@@ -1499,6 +1521,11 @@ class TransactionImpl implements Transaction {
 // ============================================================================
 
 /** The features a target names, as the transaction reads them */
+/** Whether a target names its features by their IDs (not a filter, every feature or the selection) */
+function namesIds(resolved: ResolvedTargetOf): boolean {
+  return resolved.kind === 'ids' && resolved.skipLocked !== true;
+}
+
 type ResolvedTargetOf =
   | { kind: 'ids'; ids: string[]; skipLocked?: boolean }
   | { kind: 'filter'; matches: (feature: StoredFeature) => boolean };
@@ -1749,16 +1776,6 @@ function moveTargetOf(store: Store, to: Placement): MoveTarget {
     ...(below !== undefined && { below }),
     ...(above !== undefined && { above }),
   } as MoveTarget;
-}
-
-/** Whether two selections name the same items */
-function sameSelection(a: Selection, b: Selection): boolean {
-  return (
-    a.type === b.type &&
-    a.bulk === b.bulk &&
-    a.ids.length === b.ids.length &&
-    a.ids.every((id, i) => id === b.ids[i])
-  );
 }
 
 // ============================================================================
