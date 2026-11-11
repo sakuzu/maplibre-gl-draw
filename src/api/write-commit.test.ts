@@ -39,9 +39,11 @@ for (const [kind, store] of [
   ['rows', () => createTableStore().store],
 ] as const) {
   describe(`draw.write over a Store of ${kind}`, () => {
+    let given: ReturnType<typeof store>;
+
     beforeEach(() => {
       let next = 0;
-      const given = store();
+      given = store();
       draw = createDraw(createMapStub().map, {
         ...(given && { store: given }),
         generateId: () => `n${++next}`,
@@ -244,6 +246,18 @@ for (const [kind, store] of [
     it('makes no step of a commit written with undo: false', async () => {
       await draw.write((tx) => tx.features.create(point(1)), { undo: false });
       expect(await codeOf(draw.undo())).toBe('invalid-state');
+    });
+
+    it('tells the Store a commit written with undo: false as one a recorder of steps leaves out', async () => {
+      // The Store of objects is made by the instance: the Store of rows is the one given
+      if (given === undefined) return;
+      const told: Array<string | undefined> = [];
+      given.subscribe((change) => told.push(change.source));
+      await draw.write((tx) => tx.features.create(point(1)));
+      await draw.write((tx) => tx.features.create(point(2)), { undo: false });
+      expect(told).toEqual(['local', 'silent']);
+      // The change of the instance says local for both
+      expect(changes.map((change) => change.source)).toEqual(['local', 'local']);
     });
 
     it('adds GeoJSON with tx.import, in one commit with the rest', async () => {

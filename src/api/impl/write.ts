@@ -232,6 +232,13 @@ export interface Writer {
 const WRITE_SOURCE = 'local';
 
 /**
+ * The source the Store is told for a commit of `draw.write` that is no step of undo
+ * (`undo: false`): the source a subscriber recording the changes as steps leaves out, as the
+ * undo of a Store that keeps steps of its own does. The change of the instance still says `local`.
+ */
+const WRITE_SOURCE_NO_UNDO = 'silent';
+
+/**
  * Creates `draw.write` and `draw.open`
  *
  * @internal
@@ -522,7 +529,7 @@ class TransactionImpl implements Transaction {
     const store = this.#store;
     if (store.isReadOnly()) throw notEditable();
     let skipped = 0;
-    runCommit(store, info, WRITE_SOURCE, () => {
+    runCommit(store, info, info.undo ? WRITE_SOURCE : WRITE_SOURCE_NO_UNDO, () => {
       for (const op of this.#ops) {
         if (op === null) continue;
         try {
