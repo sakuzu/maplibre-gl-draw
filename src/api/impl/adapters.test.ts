@@ -285,6 +285,39 @@ describe('a custom feature type', () => {
     expect(patch).toEqual({ properties: { size: 2 } });
   });
 
+  it('gives the Store the patch of a drag as its fields: the style under its key becomes the style', () => {
+    const engine = engineWithDraw();
+    engine.extensions.collections.featureTypes.add({
+      type: 'wide',
+      geometry: 'Point',
+      render: vi.fn(),
+      handles: () => [handle],
+      onHandleDrag: (_feature, _handle, event) => ({
+        properties: { 'maplibre-gl-draw:style': { strokeWidth: event.lngLat[0] }, note: 'x' },
+      }),
+    });
+    const { store, selectionScope } = engine.context;
+    store.createFeature({
+      id: 'w',
+      type: 'wide',
+      geometry: { type: 'Point', coordinates: [1, 1] },
+      layerId: store.listLayers()[0].id,
+      groupId: undefined,
+      properties: {},
+      style: {},
+      locked: false,
+      visible: true,
+    });
+    const [provider] = selectionScope.auxiliaryHandles
+      .list()
+      .filter((p) => p.id.endsWith('type:wide'));
+    const grabbed = { providerId: provider.id, handleId: handle.id, featureId: 'w' };
+    expect(provider.onHandleDragStart(grabbed, drag('dragstart', 1, 1))).toBe(true);
+    const patch = provider.onHandleDragMove(drag('dragmove', 3, 1));
+    expect(patch).toEqual({ style: { strokeWidth: 3 }, properties: { note: 'x' } });
+    engine.destroy();
+  });
+
   it('offers its snapping candidates, keeping a kind of its own', () => {
     const result = engine.context.snapService.resolve(
       { lng: 1, lat: 1 },

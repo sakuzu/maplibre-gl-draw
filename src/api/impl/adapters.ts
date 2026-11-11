@@ -41,7 +41,7 @@ import type {
   SnapTargetKind,
 } from '../../snapping/types.js';
 import { getBoundingBox } from '../../store/spatial/index.js';
-import type { Store } from '../../store/store.js';
+import type { Store, FeaturePatch as StorePatch } from '../../store/store.js';
 import type { TransformFieldsRegistry } from '../../store/transform-roles.js';
 import type { Coordinate, Feature as StoredFeature } from '../../store/types.js';
 import type {
@@ -79,7 +79,7 @@ import type {
   SnapCandidate,
   SnapProvider,
 } from '../extension/provider.js';
-import type { Feature, FeaturePatch } from '../model.js';
+import type { Feature } from '../model.js';
 import type { SelectionStyleOptions } from '../options.js';
 import type { LayerTableView } from '../tables.js';
 import type { AppliedStyles } from './applied-style.js';
@@ -88,6 +88,7 @@ import {
   featureForExtension,
   featureForExtensionOrNull,
   readFeatureFields,
+  storedPatchOf,
 } from './feature-shape.js';
 import { toPointerEvent } from './input.js';
 import type { RenderAdapterDeps } from './render-context.js';
@@ -756,8 +757,12 @@ export function adaptHandleProvider(
     const given = feature ? provider.handles(feature, ctx) : (provider.globalHandles?.(ctx) ?? []);
     return takenHandles(given, label, warned);
   };
-  /** The patch of a position of the pointer, asked with the feature the patches before it leave */
-  const drag = (event: DragNormalizedEvent): FeaturePatch | null => {
+  /**
+   * The patch of a position of the pointer, asked with the feature the patches before it leave,
+   * as the Store takes it: the keys of the library in `properties` become its fields. A patch the
+   * library cannot take is left out, and told in the console once.
+   */
+  const drag = (event: DragNormalizedEvent): StorePatch | null => {
     if (!active) return null;
     const feature = active.featureId ? deps.shapes.get(active.featureId) : undefined;
     const patch = provider.onHandleDrag(
@@ -765,7 +770,17 @@ export function adaptHandleProvider(
       active.handle,
       toPointerEvent(event),
     );
-    return feature && !deps.store.isReadOnly() ? patch : null;
+    if (!feature || deps.store.isReadOnly() || patch === null) return null;
+    try {
+      return storedPatchOf(patch, feature);
+    } catch (error) {
+      const reason = `a patch the library cannot take (${(error as Error).message})`;
+      if (!warned.has(reason)) {
+        warned.add(reason);
+        console.warn(`The ${label} gave ${reason}, which is left out`);
+      }
+      return null;
+    }
   };
   const contextOf = createFrameContexts(deps, () => deps.customLayer.getGL());
   const draw = provider.drawHandles?.bind(provider);
