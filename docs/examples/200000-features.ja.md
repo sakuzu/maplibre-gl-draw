@@ -30,11 +30,11 @@ Delete キーで消したりできます。拡大すると手前の建物に寄�
 並べます (3)。町のどのレイヤーにもそれより多くの地物があるので、
 パネルは地物ごとの行の代わりに、レイヤーの下の行に地物の数を出します。
 建物は地図の上で選びます。町は、種を決めた乱数でコード (`data.ts`)
-から作るので、いつ開いても同じです (4)。`draw.document.load` は
-208,073 の地物を 1 つのトランザクションで書き込みます (5)。変更も
-イベントも描き直しも 1 回です。`draw.features.createMany` も 1 つの
-トランザクションです。公園は、読み込みが終わってからコードで選びます。
-選ぶのは広い画面 (48rem 以上) のときだけです。
+から作るので、いつ開いても同じです (4)。`draw.open` は 208,073 の
+地物を一度に書き込みます (5)。変更もイベントも描き直しも 1 回です。
+`draw.write` の中で配列を渡す `tx.features.create` も 1 つの確定です。
+公園は、文書を開き終わってからコードで選びます。選ぶのは広い画面
+(48rem 以上) のときだけです。
 
 ::: code-group
 <<< @/../examples/200000-features/main.ts
@@ -48,8 +48,8 @@ Delete キーで消したりできます。拡大すると手前の建物に寄�
   208,073 の地物で測った例、データの置き場所を説明します
 - [大量のデータを表示する](../guides/large-data.ja.md)。編集せずに
   見せるだけのデータに使います
-- [`draw.document.load`](../api/maplibre-gl-draw/interfaces/DocumentResource.md)
+- [`draw.open`](../api/maplibre-gl-draw/interfaces/Draw.md#open)
   と
-  [`features.createMany`](../api/maplibre-gl-draw/interfaces/FeaturesCollection.md#createmany)
+  [`tx.features.create`](../api/maplibre-gl-draw/interfaces/TransactionFeatures.md#create)
 - 標準の UI の[レイヤーのパネル](../../ui/README.md#use)と、その
   `features` のオプション (英語)

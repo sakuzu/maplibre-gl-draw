@@ -100,14 +100,14 @@ features, and a click reads its properties
 ### Save and load
 
 Write the document in the native format to keep layers, groups, styles
-and images, and load it to get the same state back. Write it as GeoJSON
-to exchange features with other tools: a feature holds a GeoJSON
-geometry and GeoJSON properties, so the file has the shape of the
-features you read in code. Features kept outside a drawing are written
-with the same rules by `featuresToGeoJSON`, and `parseGeoJSON` and
-`parseNative` read a file into new features without writing them.
-Every change arrives as one event per transaction, with where it came
-from, and the store that holds the document can be replaced
+and images, and open it to get the same state back. Write it as GeoJSON
+to exchange features with other tools: a feature is a GeoJSON Feature,
+so the file has the shape of the features you read in code, and a file
+from another tool is imported as it is. `parseGeoJSON` and
+`parseNative` read a file into new features without writing them. Every
+write is one transaction of `draw.write`, which arrives as one event
+with where it came from and is one step of undo, and the store that
+holds the document can be replaced
 ([save and load](docs/guides/save-load.md)).
 
 ### Read-only
@@ -203,7 +203,7 @@ document.querySelector('#polygon')?.addEventListener('click', () => {
 draw.on('change', ({ features }) => {
   for (const id of features.created) {
     const feature = draw.features.get(id);
-    console.log(id, feature?.type, feature?.geometry);
+    console.log(id, feature?.geometry);
   }
 });
 

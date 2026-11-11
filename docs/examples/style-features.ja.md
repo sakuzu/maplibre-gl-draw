@@ -23,12 +23,12 @@ style-features
 
 ## コード
 
-どの地物も、作るときに自分の `style` を持たせます (1)。スタイルを
-持たない地物が使う型ごとの既定値は、`draw.options.update` で変えます
-(2)。道具で面を描くと、その既定値で描かれます。パネルは変更を
-`draw.features.update` で書き込みます (複数の地物なら `updateMany`)。
-ページの最後で同じ呼び出しを 1 度だけ実行し、真ん中の面の輪郭を
-破線にしています (5)。
+どの地物も、作るときに properties の `maplibre-gl-draw:style` に自分の
+スタイルを持たせます (1)。スタイルを持たない地物が使う型ごとの既定値は、
+`draw.options.update` で変えます (2)。道具で面を描くと、その既定値で
+描かれます。パネルは変更を `draw.write` の中の `tx.features.update` で
+書き込みます (複数の地物なら地物ごとの差分を渡します)。ページの最後で
+同じ呼び出しを 1 度だけ実行し、真ん中の面の輪郭を破線にしています (5)。
 
 ::: code-group
 <<< @/../examples/style-features/main.ts
@@ -42,7 +42,7 @@ style-features
   スタイル規則、どの色が使われるかを説明します
 - [`FeatureStyle`](../api/maplibre-gl-draw/interfaces/FeatureStyle.md)。
   キーとその値です
-- [`features.update`](../api/maplibre-gl-draw/interfaces/FeaturesCollection.md#update)。
+- [`tx.features.update`](../api/maplibre-gl-draw/interfaces/TransactionFeatures.md#update)。
   スタイルをキーごとに併合します
 - [`options.update`](../api/maplibre-gl-draw/interfaces/OptionsResource.md#update)
   と [`RuntimeOptions`](../api/maplibre-gl-draw/interfaces/RuntimeOptions.md)

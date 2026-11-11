@@ -51,16 +51,15 @@ The drawing is loaded first, into two layers (3), while it can still be
 written. Then `setReadOnly(true)` refuses every write, from the user and
 from code (4). The standard UI is set for a viewer through its options
 (2): a layer panel that adds and reorders nothing, and an inspector with
-the Attributes tab alone and without the operations; while the drawing
-is read-only, the inspector disables every field it shows. The four
-switches (5) are `setReadOnly`, `setInteractionLocked`,
-`layers.update` with `locked`, which returns `null` when it is refused,
-and `draw.hidden`, which takes the ID of a layer, a group or a feature.
-They are actions of the standard UI (6), added with `ui.actions.add`:
-each names its key and a `checked` that the card reads again after each
-press, and on `ui.actions.refresh()`, which the page calls on the events
-of core and when what this client hides (`draw.hidden.hiddenIds`)
-changes.
+the Attributes tab alone and without the operations; while the drawing is
+read-only, the inspector disables every field it shows. The four switches
+(5) are `setReadOnly`, `setInteractionLocked`, `tx.layers.update` with
+`locked`, whose write rejects with a `DrawError` when it is refused, and
+`draw.hidden`, which takes the ID of a layer, a group or a feature. They
+are actions of the standard UI (6), added with `ui.actions.add`: each
+names its key and a `checked` that the card reads again after each press,
+and on `ui.actions.refresh()`, which the page calls on the events of core
+and when what this client hides (`draw.hidden.hiddenIds`) changes.
 
 ::: code-group
 <<< @/../examples/read-only-viewer/main.ts
@@ -75,7 +74,7 @@ changes.
 - [`setReadOnly`](../api/maplibre-gl-draw/interfaces/Draw.md#setreadonly)
   and
   [`setInteractionLocked`](../api/maplibre-gl-draw/interfaces/Draw.md#setinteractionlocked)
-- [Save and load](../guides/save-load.md): `document.load` and its
-  `layer` option
+- [Save and load](../guides/save-load.md): `tx.import` and its `layer`
+  option
 - [The options of the standard UI](../../ui/README.md#use), the toolbar,
   the layer panel and the inspector among them

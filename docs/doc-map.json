@@ -143,7 +143,7 @@
     "docs/reference/data-format.md": [
       "src/api/impl/import-export/native-format.ts",
       "src/api/impl/import-export/native-validation.ts",
-      "src/api/impl/import-export/native-upgrade.ts",
+      "src/api/impl/import-export/constants.ts",
       "src/api/impl/import-export/geojson-export.ts",
       "src/api/impl/import-export/geojson-import.ts",
       "src/api/model.ts",

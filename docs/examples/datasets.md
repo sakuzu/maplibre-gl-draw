@@ -74,7 +74,7 @@ features of two layers, there from the first draw (2). The cells are
 made in data.ts and given to `draw.datasets.add` as rows once the map
 has loaded, with a graduated rule on `value` and a base style without
 outlines. With the order `layer-order`, the dataset has a place in the
-stacking order of the layers, and `draw.layers.reorder` puts it at the
+stacking order of the layers, and `tx.layers.place` puts it at the
 back (3). They take no clicks, so the lines drawn snap to the buildings
 rather than to the cells. The points are made in typed arrays, with no
 object per point, and sorted into a grid by the stand-in for the server.
@@ -109,7 +109,7 @@ reports (10), and makes them candidates for the snapping.
 - [`draw.datasets`](../api/maplibre-gl-draw/interfaces/DatasetsCollection.md),
   [`DatasetOptions`](../api/maplibre-gl-draw/type-aliases/DatasetOptions.md)
   and [`DatasetProvider`](../api/maplibre-gl-draw/type-aliases/DatasetProvider.md)
-- [`layers.reorder`](../api/maplibre-gl-draw/interfaces/LayersCollection.md#reorder)
+- [`tx.layers.place`](../api/maplibre-gl-draw/interfaces/TransactionLayers.md#place)
   and [`SnappingOptions`](../api/maplibre-gl-draw/interfaces/SnappingOptions.md)
 - [The events](../reference/events.md), `dataset.clicked` among them
 - [`Dataset`](../api/maplibre-gl-draw/interfaces/Dataset.md), with

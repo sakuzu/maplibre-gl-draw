@@ -25,11 +25,12 @@ layers-and-groups
 ## コード
 
 文書は空のレイヤーを 1 つ持って始まるので、ページはそれに名前を
-付け、その後ろに 2 つ目のレイヤーを作ります (1)。地物は `layerId` の
-レイヤーに入ります (2)。グループは 1 つのレイヤーの地物をまとめます。
-`features.move` でもう 1 つの地物を入れ、グループをロックします (3)。
-`visible: false` は、文書を共有する全員に対して下書きを隠します (4)。
-`layers.reorder` はすべてのレイヤーの ID を奥から受け取り、
+付け、その後ろに 2 つ目のレイヤーを作ります (1)。書き込みはどれも
+`draw.write` の取引です。地物は `maplibre-gl-draw:layerId` のレイヤーに
+入ります (2)。グループは 1 つのレイヤーの地物をまとめます。
+`tx.features.place` でもう 1 つの地物を入れ、グループをロックします (3)。
+`maplibre-gl-draw:visible: false` は、文書を共有する全員に対して下書きを
+隠します (4)。`tx.layers.place` はレイヤーを別のレイヤーの隣に置き、
 `opacity` はレイヤー全体を薄くします (5)。`layers.setActive` は、
 道具で描いたものが入るレイヤーを決めます (6)。
 
@@ -43,9 +44,9 @@ layers-and-groups
 
 - [レイヤーとグループ](../guides/layers.ja.md)。アクティブなレイヤー、
   重なりの順、グループ、ロック、表示、不透明度を説明します
-- [`LayersCollection`](../api/maplibre-gl-draw/interfaces/LayersCollection.md)
-  と [`GroupsCollection`](../api/maplibre-gl-draw/interfaces/GroupsCollection.md)
-- [`features.move`](../api/maplibre-gl-draw/interfaces/FeaturesCollection.md#move)
+- [`TransactionLayers`](../api/maplibre-gl-draw/interfaces/TransactionLayers.md)
+  と [`TransactionGroups`](../api/maplibre-gl-draw/interfaces/TransactionGroups.md)
+- [`tx.features.place`](../api/maplibre-gl-draw/interfaces/TransactionFeatures.md#place)
 - [読み取り専用](../guides/read-only.ja.md)。このページだけで隠す方法と、
   すべての編集を一度に止める方法です
 - 標準の UI の[レイヤーのパネル](../../ui/README.md#use) (英語)

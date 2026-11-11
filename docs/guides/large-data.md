@@ -23,19 +23,22 @@ Use a dataset for data that is shown but not edited. For example:
 
 What the user draws and edits belongs in the document. A dataset is
 drawn but is not part of the document. When the user needs to edit one
-row, copy it into the document with `draw.features.create`. The library
+row, copy it into the document with `tx.features.create`. The library
 does not keep the two copies related.
 
 <!-- docs-check: with datasets -->
 
 ```ts
 const row = places.getRow(0);
-if (row?.geometry) {
-  draw.features.create({
-    type: row.geometry.type,
-    geometry: row.geometry,
-    properties: { ...row.properties },
-  });
+const geometry = row?.geometry;
+if (geometry) {
+  await draw.write((tx) =>
+    tx.features.create({
+      type: 'Feature',
+      geometry,
+      properties: { ...row.properties },
+    }),
+  );
 }
 ```
 
@@ -428,9 +431,9 @@ parcels.setZoomScale((zoom) => ({
 An `above-store` dataset is drawn behind the selection handles. The layer
 panel of the standard UI lets every dataset be dragged among the layers:
 it moves a `below-store` or `above-store` dataset dropped there to
-`layer-order` with `draw.datasets.move`, then places it with
-`draw.layers.reorder`; when the reorder is refused (read-only), the
-dataset goes back to its own order.
+`layer-order` with `draw.datasets.move`, then places the layers with
+`tx.layers.place`; when the write is refused (read-only), the dataset
+goes back to its own order.
 
 Datasets on the same side are drawn in the order they were added, the
 later one in front. Inside a dataset, the end of the array (or the last
@@ -448,21 +451,16 @@ draw.datasets.move('parcels', { index: 0 }); // backmost of its side
 
 A `layer-order` dataset is drawn only while its ID is in the stacking
 order of the document (`draw.getStore().getLayerOrder()`), and it is
-placed by that order alone. Put the ID there with `draw.layers.reorder`,
-which takes the IDs of `layer-order` datasets besides the IDs of the
-layers; an entry it is not given keeps its position. The entry also comes
-with a loaded document, whose stacking order keeps the ID at its
-position, or from a Store of your own passed as the `store` option.
-
-<!-- docs-check:
-declare const notes: import('@sakuzu/maplibre-gl-draw').Layer;
-declare const roads: import('@sakuzu/maplibre-gl-draw').Layer;
--->
+placed by that order alone. The entry comes with a document opened,
+whose stacking order (`layerOrder`) keeps the ID at its position, or from
+a Store of your own passed as the `store` option. Once there,
+`tx.layers.place` moves it as it moves a layer, and takes its ID as the
+neighbor of a layer.
 
 ```ts
-// Empty until its rows are given with setRows or setTable
+// Empty until its rows are given with setRows or setTable; drawn at the
+// position of 'parcels' in the stacking order of the document
 draw.datasets.add({ id: 'parcels', order: 'layer-order' });
-draw.layers.reorder([roads.id, 'parcels', notes.id]); // between the two layers
 ```
 
 Removing the dataset does not edit the stacking order. An ID left there
@@ -470,7 +468,7 @@ without a dataset is skipped.
 
 The stacking order is part of the document, but a dataset is not: the
 native format saves the ID at its position and not the rows. After a
-load, add the dataset again with the same ID, and it is drawn at the
+`draw.open`, add the dataset again with the same ID, and it is drawn at the
 saved position ([layers](layers.md)).
 
 ## Thinning points that overlap
@@ -736,10 +734,10 @@ it.
 ## Limits
 
 - A dataset cannot be edited. Copy a row into the document with
-  `draw.features.create` to edit it
+  `tx.features.create` to edit it
 - Its rows are replaced as a whole; there is no partial update
 - It is not saved with the document. Keep the data, or the address it
-  came from, yourself, and add the dataset again after a load
+  came from, yourself, and add the dataset again after `draw.open`
 - A row of a table has no style of its own
 - The thinning applies to `Point` only
 - A table is read in place: do not change its arrays while the

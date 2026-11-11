@@ -31,10 +31,10 @@ The layer panel of the standard UI lists up to 1,000 features in a layer
 its features in a row under the layer instead of a row for each, and a
 building is selected on the map. The city is made in code (`data.ts`)
 with a seeded random number generator, so it is the same on every visit
-(4). `draw.document.load` writes the 208,073 features in one transaction
-(5): one change, one event and one redraw. `draw.features.createMany` is
-one transaction too. The park is selected from the code once the load is
-done, on a wide screen (from 48rem) only.
+(4). `draw.open` writes the 208,073 features at once (5): one change, one
+event and one redraw. `tx.features.create` of an array in `draw.write` is
+one commit too. The park is selected from the code once the document is
+open, on a wide screen (from 48rem) only.
 
 ::: code-group
 <<< @/../examples/200000-features/main.ts
@@ -48,8 +48,8 @@ done, on a wide screen (from 48rem) only.
   measured example of 208,073 features, and where to put the data
 - [Showing large data](../guides/large-data.md), for data that is only
   shown, not edited
-- [`draw.document.load`](../api/maplibre-gl-draw/interfaces/DocumentResource.md)
+- [`draw.open`](../api/maplibre-gl-draw/interfaces/Draw.md#open)
   and
-  [`features.createMany`](../api/maplibre-gl-draw/interfaces/FeaturesCollection.md#createmany)
+  [`tx.features.create`](../api/maplibre-gl-draw/interfaces/TransactionFeatures.md#create)
 - [The layer panel](../../ui/README.md#use) of the standard UI and its
   `features` option

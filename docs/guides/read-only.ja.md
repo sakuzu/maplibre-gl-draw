@@ -40,20 +40,27 @@ draw.hidden.add(layerId);
 断ります。地物、レイヤー、グループ、ファイル、メタデータが対象です。
 
 ```ts
+import { DrawError } from '@sakuzu/maplibre-gl-draw';
+
 draw.setReadOnly(true);
 draw.isReadOnly(); // true
-draw.features.update(featureId, { visible: false }); // null。何も変わらない
-draw.features.create({
-  type: 'Point',
-  geometry: { type: 'Point', coordinates: [139.767, 35.681] },
-}); // null
+try {
+  await draw.write((tx) =>
+    tx.features.update(featureId, {
+      properties: { 'maplibre-gl-draw:visible': false },
+    }),
+  );
+} catch (error) {
+  // not-editable。何も変わらない
+  if (error instanceof DrawError) console.log(error.code);
+}
 ```
 
-- 断った書き込みは例外を投げません。書いたものを返すメソッド
-  (`create`、`update`、`union` など) は `null` を、真偽値を返す
-  メソッド (`delete`、`move`、`reorder`) は `false` を返し、
-  `document.load` は `null` で解決します
-- 引数の誤りは、読み取り専用かどうかにかかわらず `DrawError` を投げます
+- 断った書き込みは、コード `not-editable` の `DrawError` で reject し、
+  その取引は何も確定しません。`tx` のすべての書き込み、`draw.open`、
+  `draw.undo`、`draw.redo` が対象です
+- 引数の誤りは、読み取り専用かどうかにかかわらず、その `DrawError` で
+  reject します
 - すべての経路に効きます。API、描画モード、キーボード、形状
   演算、読み込み、プラグインです。描画モードには入れますが、描いた
   ものは残りません
@@ -86,8 +93,8 @@ draw.features.create({
   します
 - 始められない移動や拡縮を、カーソルの形で示すことはあり
   ません
-- Delete キーが何もしないのと同じく、`selection.delete()` と
-  `vertexSelection.delete()` は `false` を返します
+- Delete キーが何もしないのと同じく、`vertexSelection.delete()` は
+  `false` を返します
 
 これは、地物のロック ([レイヤーとグループ](layers.ja.md)) と同じ
 「選択はできるが編集はできない」状態を、すべての地物に一度に

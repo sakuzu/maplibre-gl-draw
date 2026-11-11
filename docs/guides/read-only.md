@@ -38,20 +38,27 @@ While `setReadOnly(true)` is on, every write to the document is refused:
 features, layers, groups, files and metadata.
 
 ```ts
+import { DrawError } from '@sakuzu/maplibre-gl-draw';
+
 draw.setReadOnly(true);
 draw.isReadOnly(); // true
-draw.features.update(featureId, { visible: false }); // null, nothing changed
-draw.features.create({
-  type: 'Point',
-  geometry: { type: 'Point', coordinates: [139.767, 35.681] },
-}); // null
+try {
+  await draw.write((tx) =>
+    tx.features.update(featureId, {
+      properties: { 'maplibre-gl-draw:visible': false },
+    }),
+  );
+} catch (error) {
+  // not-editable: nothing changed
+  if (error instanceof DrawError) console.log(error.code);
+}
 ```
 
-- A refused write does not throw: the methods that return what they wrote
-  (`create`, `update`, `union` and the rest) return `null`, those that
-  return a boolean (`delete`, `move`, `reorder`) return `false`, and
-  `document.load` resolves to `null`
-- A wrong argument still throws a `DrawError`, read-only or not
+- A refused write rejects with a `DrawError` with the code
+  `not-editable`, and nothing of its transaction is committed: every
+  write of `tx`, `draw.open`, `draw.undo` and `draw.redo`
+- A wrong argument still rejects with its own `DrawError`, read-only or
+  not
 - It covers every path: the API, the drawing modes, the keyboard,
   geometry operations, loading and plugins. A drawing mode can still be
   entered, but what is drawn is not kept
@@ -80,8 +87,8 @@ start an edit. Writes from code are not stopped.
 - `setMode` returns `false` for any mode other than `select` while it is on
 - A drag that starts on a feature pans the map instead
 - The cursor does not offer moves or resizes that would not start
-- `selection.delete()` and `vertexSelection.delete()` return `false`, as
-  the Delete key would do nothing
+- `vertexSelection.delete()` returns `false`, as the Delete key would do
+  nothing
 
 It is the same "select but do not edit" as a lock on a feature
 ([Layers and groups](layers.md)), applied to every feature at once. To

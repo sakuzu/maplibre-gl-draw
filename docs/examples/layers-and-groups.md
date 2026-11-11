@@ -24,13 +24,14 @@ the active layer.
 ## Code
 
 The document starts with one empty layer, which the page names; a
-second layer is created behind it (1). Features go into the layer their
-`layerId` names (2). A group gathers features of one layer,
-`features.move` puts another into it, and the group is then locked (3).
-`visible: false` hides the draft for everyone who shares the document
-(4). `layers.reorder` takes the IDs of every layer from the back, and
-`opacity` fades a whole layer (5). `layers.setActive` chooses where the
-tools draw (6).
+second layer is created behind it (1). Every write is a transaction of
+`draw.write`. Features go into the layer their
+`maplibre-gl-draw:layerId` names (2). A group gathers features of one
+layer, `tx.features.place` puts another into it, and the group is then
+locked (3). `maplibre-gl-draw:visible: false` hides the draft for
+everyone who shares the document (4). `tx.layers.place` puts a layer
+next to another, and `opacity` fades a whole layer (5).
+`layers.setActive` chooses where the tools draw (6).
 
 ::: code-group
 <<< @/../examples/layers-and-groups/main.ts
@@ -42,9 +43,9 @@ tools draw (6).
 
 - [Layers and groups](../guides/layers.md): the active layer, the
   stacking order, groups, locking, visibility and opacity
-- [`LayersCollection`](../api/maplibre-gl-draw/interfaces/LayersCollection.md)
-  and [`GroupsCollection`](../api/maplibre-gl-draw/interfaces/GroupsCollection.md)
-- [`features.move`](../api/maplibre-gl-draw/interfaces/FeaturesCollection.md#move)
+- [`TransactionLayers`](../api/maplibre-gl-draw/interfaces/TransactionLayers.md)
+  and [`TransactionGroups`](../api/maplibre-gl-draw/interfaces/TransactionGroups.md)
+- [`tx.features.place`](../api/maplibre-gl-draw/interfaces/TransactionFeatures.md#place)
 - [Read-only](../guides/read-only.md): hiding on this page only, and
   stopping every edit at once
 - [The layer panel](../../ui/README.md#use) of the standard UI

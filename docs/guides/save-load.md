@@ -2,9 +2,9 @@
 
 A drawing is a document: its features, layers, groups, embedded files and
 metadata. This guide covers writing the document out as GeoJSON or in the
-library's own format, loading it back, what a load leaves out, images,
-saving after each change, keeping the document in a store of your own,
-and what a change carries.
+library's own format, opening it again and importing files into it, what
+a read leaves out, images, saving after each change, keeping the
+document in a store of your own, and what a change carries.
 
 ## Minimal code
 
@@ -14,15 +14,15 @@ localStorage.setItem('drawing', JSON.stringify(draw.document.toJSON()));
 
 // Restore: a document of the library replaces what is on the map
 const saved = localStorage.getItem('drawing');
-if (saved) await draw.document.load(saved);
+if (saved) await draw.open(saved);
 ```
 
 ## Two formats
 
-| Format | Written by | `load` by default |
-| --- | --- | --- |
-| native | `document.toJSON()` | replaces the document |
-| GeoJSON | `document.toGeoJSON()` | adds the features |
+| Format | Written by | `draw.open` | `tx.import` |
+| --- | --- | --- | --- |
+| native | `toJSON()` | replaces the document | refuses it |
+| GeoJSON | `toGeoJSON()` | replaces the features and groups | adds them |
 
 The native format holds the whole document: the layers and their order,
 the groups, the features, the files and the metadata. GeoJSON holds one
@@ -33,12 +33,14 @@ layers, groups, order, styles and images. Use GeoJSON to exchange features
 with other tools. Both formats are specified in
 [the data format reference](../reference/data-format.md).
 
-A feature holds GeoJSON: `geometry` is a GeoJSON geometry and
+A feature is a GeoJSON Feature: `geometry` is a GeoJSON geometry and
 `properties` are the GeoJSON properties. The values the library keeps on
-a feature (its reference zoom, the radius of a circle, the size of an
-image) are keys of `properties` that start with `maplibre-gl-draw:`;
-every other key is an attribute of yours. Both formats write the
-`properties` as they are.
+a feature (its layer, group, type, style, visibility and lock, its
+reference zoom, the radius of a circle, the size of an image) are keys of
+`properties` that start with `maplibre-gl-draw:`; every other key is an
+attribute of yours. A key whose value is the default is not written.
+Both formats write the features in the shape `draw.features.get` reads
+them.
 
 ## Writing the document out
 
@@ -48,7 +50,7 @@ every other key is an attribute of yours. Both formats write the
 
 ```ts
 const geojson = draw.document.toGeoJSON();
-const title = draw.metadata.get().title || 'drawing';
+const title = draw.document.title || 'drawing';
 const blob = new Blob([JSON.stringify(geojson)], {
   type: 'application/geo+json',
 });
@@ -60,17 +62,21 @@ link.click();
 URL.revokeObjectURL(link.href);
 ```
 
-- The native document carries the version of its format, `3.0.0`
-- The GeoJSON follows RFC 7946: rings follow the right-hand rule,
-  positions are rounded to 7 decimal places, and the `FeatureCollection`
+- The native document carries the version of its format, `4.0.0`
+- The GeoJSON follows RFC 7946: rings follow the right-hand rule (as they
+  do in the document), positions are rounded to 7 decimal places,
+  longitudes are brought into -180 to 180, and the `FeatureCollection`
   carries a `bbox`
-- Hidden features are written too, with their `visible: false` kept in
-  their properties, so a round trip keeps them hidden
-- The fields of a feature that GeoJSON has no place for (its layer, group,
-  style, lock, and a type such as `Circle`) are written as properties with
-  the `maplibre-gl-draw:` prefix, so loading the file back restores them
+- Hidden features are written too, with their
+  `maplibre-gl-draw:visible: false` kept in their properties, so a round
+  trip keeps them hidden
+- The values of a feature that GeoJSON has no place for (its layer,
+  group, style, lock, and a type such as `Circle`) are its properties with
+  the `maplibre-gl-draw:` prefix, so reading the file back restores them
 - An image is embedded as a data URL, so the file stands on its own
-- Set the title and the description with `draw.metadata.update({ title })`
+- Set the title and the description with
+  `draw.write((tx) => tx.document.update({ title }))`, and read them as
+  `draw.document.title` and `draw.document.description`
 
 A reader that wants only your attributes leaves out the keys of the
 library:
@@ -85,19 +91,18 @@ const rows = draw.document.toGeoJSON().features.map((f) =>
 );
 ```
 
-To write features that are not in the drawing, or only some of its
-features, pass them to `featuresToGeoJSON(features, { getFile })`. It
-writes them in the order given, with the same rules as `toGeoJSON()`;
-`featureToGeoJSON` writes one feature. `getFile` reads the file of an
-image by its ID, for example `(id) => store.getFile(id)`; without it, an
-image is written without its pixels.
+To write only some of the features, write them as they are read: a
+feature of `draw.features.get` is a GeoJSON Feature, so
+`{ type: 'FeatureCollection', features }` of them is GeoJSON. Unlike
+`toGeoJSON()`, it keeps the longitudes as they are, and an image is
+written without its pixels.
 
-## Loading
+## Opening and importing
 
-`draw.document.load(source, options?)` takes a `File` or a `Blob`, a JSON
-string, a document of the library, or GeoJSON (a `FeatureCollection`, a
-`Feature` or a geometry). It returns a promise of a `LoadResult`, or of
-`null` when the document is read-only.
+`draw.open(source)` replaces the document with what a source holds, and
+`tx.import(source, options?)`, in a `draw.write`, adds it to the
+document. Both take a `File` or a `Blob`, a JSON string, a document of the
+library or a GeoJSON `FeatureCollection`.
 
 ```ts
 const input = document.querySelector<HTMLInputElement>('#file');
@@ -105,147 +110,147 @@ input?.addEventListener('change', async () => {
   const file = input.files?.[0];
   if (!file) return;
   try {
-    const result = await draw.document.load(file);
-    if (!result) return; // read-only
-    console.log(result.format, result.featureIds.length, result.replaced);
-    for (const { index, reason } of result.skipped ?? []) {
-      console.warn(`feature ${index} left out: ${reason}`);
+    const result = await draw.write((tx) => tx.import(file));
+    console.log(result.count, result.layerId, result.renewed);
+    for (const { index, error } of result.skipped) {
+      console.warn(`feature ${index} left out: ${error.message}`);
     }
   } catch (error) {
-    console.error('not loaded', error); // the document is unchanged
+    console.error('not imported', error); // the document is unchanged
   }
 });
 ```
 
-- The format is read from the content: a document of the library, GeoJSON
-  or an image file (below). Anything else rejects with a `DrawError` with
-  the code `unsupported-format`
-- `mode` chooses between replacing the document (`replace`, the default
-  for a document of the library) and adding to it (`merge`, the default
-  for GeoJSON). A document of the library can only replace; GeoJSON with
-  `replace` takes the place of the features and groups and keeps the
-  layers
-- The data is checked before the document changes, so a load that rejects
+- The format is read from the content: a document of the library or
+  GeoJSON. Anything else rejects with a `DrawError` with the code
+  `unsupported-format`
+- `draw.open` of a document of the library replaces everything; of
+  GeoJSON, it takes the place of the features and groups and keeps the
+  layers. It is one `change` with the source `'open'`, and the steps of
+  undo are dropped. It returns how many features it read (`features`) and
+  the ones it left out (`skipped`)
+- `tx.import` adds GeoJSON to the document: it is one commit and one
+  step of undo with the other writes of its transaction. A document of
+  the library is only opened, so `tx.import` refuses it with
+  `invalid-input`. It returns how many
+  features it added (`count`), their layer (`layerId`), how many were
+  given a new ID (`renewed`) and the ones it left out (`skipped`)
+- While the document is read-only, both reject with `not-editable`
+- The data is checked before the document changes, so a read that rejects
   leaves the drawing as it was
-- Once the source is read (and an image decoded), every write of the load
-  is one transaction with the source `load`, whatever the format: one
-  `change`, one step for a listener that records changes
 - A document of the library is rejected as a whole, with the code
   `invalid-input`, when something in it is malformed, refers to something
-  missing, or has a major version the library cannot read. A document of
-  an earlier major version is upgraded as it loads
+  missing, or has another version than the one the library writes
+  (`4.0.0`)
 - A GeoJSON feature whose geometry cannot be used (missing, unsupported,
   a number that is not finite, a line with one position, a ring that is
   not closed and so on) is left out and listed in `skipped` with its index
-  and reason; the rest are loaded
+  and a `DrawError`; the rest are read
 - A style value of the wrong type or form (a color that is not a CSS
   color, an opacity outside 0 to 1) is dropped, and the feature is kept
 - An embedded image that is not a PNG, JPEG, WebP or GIF data URL of its
-  declared type, or whose pixels cannot be decoded, rejects the load with
+  declared type, or whose pixels cannot be decoded, rejects the read with
   `invalid-input`. An image that has to be scaled down and that the
   browser cannot encode in one of those types rejects it with
-  `unsupported-format`, as an image file does
-- A GeoJSON feature whose ID is already taken gets a new ID, so a file
-  written by `toGeoJSON()` can be loaded back into the same drawing
-- GeoJSON features go into the layer of `options.layerId` when it is
-  given, otherwise into the layer named by their `maplibre-gl-draw:layerId`
-  when it exists, otherwise into the active layer
-- `options.layer` (a `LayerInput`) creates a layer in the same
-  transaction and puts every feature into it; `LoadResult.layerId` is its
-  ID. It cannot be given together with `layerId` (`invalid-input`)
+  `unsupported-format`
+- A feature imported with an ID the document already holds gets a new ID
+  (`duplicateIds: 'renew'`, when left out), so a file written by
+  `toGeoJSON()` can be imported back into the same drawing. Nothing is
+  written over
+- Features go into the layer of `options.layer` when it is given (an ID,
+  or a `LayerInput` that creates a layer in the same commit), otherwise
+  into the layer named by their `maplibre-gl-draw:layerId` when it exists,
+  otherwise into the active layer
 - `options.group` (a `GroupInput` without `featureIds`) puts every
-  feature read into one new group, created in the same transaction where
-  the features land. The features then all go into one layer (that of
-  `layer` or `layerId`, else the active one) and leave any group a
-  GeoJSON feature names. `LoadResult.groupId` is its ID; nothing read, no
-  group. A document of the library, which brings its own layers and
-  groups, takes neither `layer` nor `group`
-- Multi geometries are kept as Multi features; `flattenMulti: true` splits
-  them into single features. A `GeometryCollection` is folded into at most
-  one Multi feature per geometry type
+  feature read into one new group, created in the same commit. The
+  features then all go into one layer and leave any group a GeoJSON
+  feature names
+- Multi geometries are kept as Multi features. A `GeometryCollection` is
+  folded into at most one Multi feature per geometry type
 
-Each load that reads something emits `document.loaded` with the same
-result, and one `change` that lists every feature it adds in
-`features.created`. To react once per load, listen to `change` or
-`document.loaded` ([Events](../reference/events.md)).
+What is read arrives in one `change` that lists every feature it adds in
+`features.created` ([Events](../reference/events.md)).
 
 ### Several sources at once
 
-`draw.document.loadMany(items)` reads every source first and then writes
-all of them in one transaction, so that an import of several files is one
-`change`: one step to undo and one change to send. The items
-are written in order, each as `load` would write it.
+`tx.import` can be called several times in one `draw.write`: an import
+of several files is one commit, one `change` and one step to undo. When
+one source cannot be read, the write rejects with its `DrawError` and
+nothing is written.
 
 ```ts
 declare const files: File[];
 
-const results = await draw.document.loadMany(
-  files.map((file) => ({ source: file, options: { mode: 'merge' as const } })),
-);
-console.log(results?.length); // null while read-only
+const results = await draw.write(async (tx) => {
+  const out = [];
+  for (const file of files) out.push(await tx.import(file));
+  return out;
+});
+console.log(results.length);
 ```
 
-When one source cannot be read, the promise rejects with its `DrawError`
-and nothing is written. `document.loaded` arrives once per item.
-
-With `layer` and `group` in the options of the items, an import of a
-folder, one layer per file and one group for the folder, is still one
-transaction: the new layers, the features and the groups arrive in one
-`change` and one notification of the Store.
+With `layer` and `group` in the options, an import of a folder, one layer
+per file and one group for the folder, is still one commit: the new
+layers, the features and the groups arrive in one `change`.
 
 ```ts
 declare const folder: { name: string; files: File[] };
 
-const results = await draw.document.loadMany(
-  folder.files.map((file) => ({
-    source: file,
-    options: { layer: { name: file.name }, group: { name: folder.name } },
-  })),
-);
-for (const result of results ?? []) console.log(result.layerId, result.groupId);
+const results = await draw.write(async (tx) => {
+  const out = [];
+  for (const file of folder.files) {
+    out.push(
+      await tx.import(file, {
+        layer: { name: file.name },
+        group: { name: folder.name },
+      }),
+    );
+  }
+  return out;
+});
+for (const result of results) console.log(result.layerId);
 ```
 
-An item may name with `layerId` the layer an earlier item creates with
-`layer`, so the files of one import can share a new layer, and a file
-can put its features in a group of that layer, in the same transaction:
+An import may name by its ID the layer an earlier import of the same
+transaction creates, so the files of one import can share a new layer,
+and a file can put its features in a group of that layer:
 
 ```ts
-declare const files: File[];
+declare const files: [File, File];
 
-await draw.document.loadMany([
-  { source: files[0], options: { layer: { id: 'survey', name: 'Survey' } } },
-  {
-    source: files[1],
-    options: { layerId: 'survey', group: { name: 'second file' } },
-  },
-]);
+await draw.write(async (tx) => {
+  await tx.import(files[0], { layer: { id: 'survey', name: 'Survey' } });
+  await tx.import(files[1], { layer: 'survey', group: { name: 'second file' } });
+});
 ```
 
 ### Reading without writing
 
 `parseGeoJSON(input, options?)` and `parseNative(input, options?)` read a
-source as a load reads it and write nothing. They need no drawing, and
-give back a `ParsedDocument` (features, groups, files, layers and the
+source as `tx.import` reads it and write nothing. They need no drawing,
+and give back a `ParsedDocument` (features, groups, files, layers and the
 features left out) for the application to write where it chooses: in
-parts, into another store, or after it has placed them. They are the
-counterpart of `featuresToGeoJSON`.
+parts, into another store, or after it has placed them.
 
 ```ts
-import { parseGeoJSON, type Store } from '@sakuzu/maplibre-gl-draw';
+import { parseGeoJSON } from '@sakuzu/maplibre-gl-draw';
 
 declare const geojson: GeoJSON.FeatureCollection;
-declare const store: Store; // the Store given to createDraw, which keeps the files
 
 const target = draw.layers.getActive()?.id;
 const parsed = await parseGeoJSON(geojson, { layerId: target });
 for (const { index, reason, detail } of parsed.skipped) {
   console.warn(`feature ${index} left out (${reason}): ${detail}`);
 }
-draw.transact(() => {
-  for (const file of parsed.files) store.createFile(file);
-  // The features first, then the groups that take them in
-  draw.features.createMany(parsed.features.map(({ groupId: _, ...rest }) => rest));
-  draw.groups.createMany(parsed.groups);
+await draw.write(async (tx) => {
+  // The features first, out of their groups, then the groups that take them in
+  await tx.features.create(
+    parsed.features.map(({ properties, ...rest }) => {
+      const { 'maplibre-gl-draw:groupId': _, ...kept } = properties;
+      return { ...rest, properties: kept };
+    }),
+  );
+  for (const group of parsed.groups) await tx.groups.create(group);
 });
 ```
 
@@ -258,20 +263,23 @@ draw.transact(() => {
   map per kind (`features`, `groups`, `files` and `layers`), to rewrite
   it; an ID that was not read is not in it
 - `layerId` puts every feature into one layer. Without it, the features
-  of GeoJSON have an empty `layerId`, and those of a document of the
-  library the ID of their layer in `layers`, which lists the layers of
-  the document from the back, for the application to create
+  of GeoJSON name no layer (no `maplibre-gl-draw:layerId`), and those of
+  a document of the library the ID of their layer in `layers`, which
+  lists the layers of the document from the back, for the application to
+  create
 - The GeoJSON features that name the same `maplibre-gl-draw:groupId` form
-  one new group. `flattenMulti` splits Multi geometries as it does for a
-  load
+  one new group. `flattenMulti: true` splits Multi geometries into one
+  feature per part
+- An `Image` feature names its file in `files`, which the document does
+  not hold: a source with images is written with `tx.import`
 - No feature is given a name, and the features keep the order of the
   input
-- A feature that a load would leave out, and one whose embedded image
-  cannot be imported, is left out and listed in `skipped` with its index,
-  the code (`invalid-input`, or `unsupported-format` for an image the
-  browser cannot encode) and the reason. Only an input that is not of the
-  format (`unsupported-format`) and a document of the library that a load
-  would refuse (`invalid-input`) reject the promise
+- A feature that `tx.import` would leave out, and one whose embedded
+  image cannot be imported, is left out and listed in `skipped` with its
+  index, the code (`invalid-input`, or `unsupported-format` for an image
+  the browser cannot encode) and the reason. Only an input that is not of
+  the format (`unsupported-format`) and a document of the library that
+  `draw.open` would refuse (`invalid-input`) reject the promise
 
 With `idMap`, an application rewrites its own references before it
 writes the features. Here a feature keeps the ID of another one in
@@ -282,12 +290,12 @@ import type { ParsedDocument } from '@sakuzu/maplibre-gl-draw';
 
 declare const parsed: ParsedDocument;
 
-for (const feature of parsed.features) {
+const features = parsed.features.map((feature) => {
   const target = feature.properties.target;
-  if (typeof target === 'string') {
-    feature.properties.target = parsed.idMap.features[target];
-  }
-}
+  if (typeof target !== 'string') return feature;
+  const renamed = parsed.idMap.features[target];
+  return { ...feature, properties: { ...feature.properties, target: renamed } };
+});
 ```
 
 ### The IDs of the application
@@ -295,8 +303,8 @@ for (const feature of parsed.features) {
 By default the library makes a ULID for everything it creates. The
 option `generateId` of `createDraw` replaces it: features drawn or
 created without an ID, groups, layers, the files of images and the
-results of the geometry operations take their IDs from it, and so does a
-load for a GeoJSON feature that has no ID or one that is taken. It is
+results of the geometry operations take their IDs from it, and so does
+`tx.import` for a feature that has no ID or one that is taken. It is
 given only when the instance is created.
 
 ```ts
@@ -312,17 +320,16 @@ console.log(app.features.count(), parsed.features.length);
 
 The generator must return a non-empty string that is unique for the
 lifetime of the document and never reused, also after the thing it named
-was deleted. An ID the code gives, such as `id` of `features.create`, is
-used as it is. Give the same generator to `parseGeoJSON` and
+was deleted. An ID the code gives, such as `id` of `tx.features.create`,
+is used as it is. Give the same generator to `parseGeoJSON` and
 `parseNative`, so that every ID of the document comes from one place.
 
 ## Files dropped on the map
 
 The library does not take files dropped on the map: which files are
 accepted, where they go and whether a native file may replace the drawing
-are decisions of the application. To load dropped files, listen to the
-drop on the map's container, turn the position into a coordinate with
-`map.unproject` and pass each file to `draw.document.load`:
+are decisions of the application. To read dropped files, listen to the
+drop on the map's container and import each file in one `draw.write`:
 
 ```ts
 const container = map.getContainer();
@@ -332,47 +339,36 @@ container.addEventListener('dragover', (event) => event.preventDefault());
 
 container.addEventListener('drop', async (event) => {
   event.preventDefault();
-  const rect = container.getBoundingClientRect();
-  const { lng, lat } = map.unproject([
-    event.clientX - rect.left,
-    event.clientY - rect.top,
-  ]);
-  for (const file of event.dataTransfer?.files ?? []) {
-    try {
-      // The place is used by an image; a data file carries its own positions
-      await draw.document.load(file, {
-        coordinate: [lng, lat],
-        zoom: map.getZoom(),
-        layerId: draw.layers.getActive()?.id,
-      });
-    } catch (error) {
-      console.error(`${file.name} was not loaded`, error);
-    }
+  // An image is placed by the image mode (below); a data file carries its own positions
+  const files = [...(event.dataTransfer?.files ?? [])].filter(
+    (file) => !file.type.startsWith('image/'),
+  );
+  try {
+    await draw.write(async (tx) => {
+      for (const file of files) await tx.import(file);
+    });
+  } catch (error) {
+    console.error('the files were not imported', error);
   }
 });
 ```
 
 The application decides the rest in the listener. It can refuse drops
-while `draw.isReadOnly()` or `draw.isInteractionLocked()` is true, ask
-before a native file replaces the drawing, or read a file itself and hand
-the features to a dataset instead
+while `draw.isReadOnly()` or `draw.isInteractionLocked()` is true, open a
+native file with `draw.open` after asking before it replaces the drawing,
+or read a file itself and hand the features to a dataset instead
 ([Showing large data](large-data.md)).
 
 ## Images
 
-An image file needs a place:
-
-<!-- docs-check:
-declare const imageFile: File;
--->
-
-```ts
-await draw.document.load(imageFile, {
-  coordinate: [139.767, 35.681],
-  zoom: map.getZoom(),
-  layerId: draw.layers.getActive()?.id,
-});
-```
+An image is placed by the image mode, `draw_image`, which asks the
+application for the file through the option `requestImage` and places it
+where the mode was entered ([Drawing and editing](drawing.md#images)).
+Code places an image as the GeoJSON written out carries it: a feature of
+the type `Image` with the picture as a data URL in
+`maplibre-gl-draw:imageData` and its type in
+`maplibre-gl-draw:imageMimeType`, given to `tx.import`
+([data format](../reference/data-format.md)).
 
 The image is converted to WebP. When the browser cannot encode WebP, the
 image is converted to JPEG if none of its pixels is transparent, and is
@@ -380,14 +376,13 @@ otherwise stored in the format the browser returns (such as PNG). It is
 scaled down when a side exceeds 4096 px, stored once among the files of the
 document and referenced by the new `Image` feature through its property
 `maplibre-gl-draw:imageFileId`.
-Embedded images in a loaded file are accepted only as
+Embedded images in a file read are accepted only as
 `data:image/(png|jpeg|webp|gif);base64,` data URLs that match their
-declared type. See [Drawing and editing](drawing.md) for the `draw_image`
-mode, which asks the application for a file with `image.requested`.
+declared type.
 
 ## Saving as you go
 
-`change` arrives once per transaction that changed the document, with the
+`change` arrives once per commit that changed the document, with the
 IDs of everything that changed in it, so it is the place to save after
 each edit. A change of the selection or of the mode alone does not fire
 it:
@@ -406,17 +401,18 @@ draw.on('change', () => {
 A drag writes once, when it is let go: what it shows in its middle is a
 sketch, and it is no change.
 
-To make several writes of your own one change, wrap them in
-`draw.transact`. They then arrive as one `change`, with the source you
-name:
+Several writes in one `draw.write` arrive as one `change`, with the
+`label` you name, and are one step of undo:
 
 ```ts
-draw.transact(
-  () => {
-    draw.features.update(featureId, { visible: false });
-    draw.layers.update(layerId, { opacity: 0.5 });
+await draw.write(
+  async (tx) => {
+    await tx.features.update(featureId, {
+      properties: { 'maplibre-gl-draw:visible': false },
+    });
+    await tx.layers.update(layerId, { opacity: 0.5 });
   },
-  { source: 'toolbar' },
+  { label: 'toolbar' },
 );
 ```
 
@@ -484,32 +480,33 @@ A store whose IDs are of a form of its own (the IDs of a writer of a
 shared document) implements the optional `acceptsId(id)`, which is given
 the ID alone (not whether it names a feature, a group or a layer), and is
 given
-with a `generateId` that makes IDs of that form. A load gives a feature,
-a group or a layer whose ID the store does not take a new ID, and a
-feature, a group or a layer created with such an ID (`features.create`
-with `id`, say) is refused with `invalid-input` before anything is
-written.
+with a `generateId` that makes IDs of that form. `tx.import` gives a
+feature, a group or a layer whose ID the store does not take a new ID,
+and a feature, a group or a layer created with such an ID
+(`tx.features.create` with `id`, say) is refused with `invalid-input`
+before anything is written.
 
 The document it holds is the one `document.toJSON()` writes; its shape is
 in [the data format reference](../reference/data-format.md).
 
 ## What a change carries
 
-Core keeps no history of changes. What a listener needs to follow the
-document, or to put an earlier state of it back, is in every
+`draw.undo()` and `draw.redo()` take back and make again the commits of
+this client, one step per `draw.write` (a write with `undo: false` is no
+step). What a listener needs to follow the document is in every
 `DocumentChange` the Store delivers (`draw.getStore().subscribe`):
 
 - every update carries the `previous` object, and deletions carry the
   deleted object
-- one transaction is one change, so a geometry operation, a group or a
-  drag of several features comes as one step
-- `source` tells where it came from: `'local'` for edits and calls of the
-  API, `'load'` for a load of any format, `'remote'` for a store of your
-  own, and any value you pass to `transact`
+- one commit is one change, so a geometry operation, a group or a drag of
+  several features comes as one step
+- `source` tells where it came from: `'local'` for edits and the writes of
+  `draw.write`, `'undo'` and `'redo'` for a step taken back and made
+  again, `'open'` for a document opened, and `'remote'` for a store of
+  your own
 
 Layers, groups, and the group of a deleted feature come in the same change
-as the features. A change you apply from a listener can carry a source of
-your own, so that the listener can leave it out by that source.
+as the features.
 
 ### A store that holds its features as rows
 
@@ -517,50 +514,13 @@ A store that holds its features as rows of columns
 (`createTableStore`, or a store of your own over
 `createFeatureTables`) notifies the rows that are not features (not
 selected or edited) as rows, by their handles, rather than as features.
-What puts them back is in the change as well:
-
-- `change.previousValues` holds the values the rows had before a write of
-  this client, for the fields written: an update or a deletion through
-  `draw.features`, a deletion of a layer, a write of rows. Written back
-  with `draw.features.restore`, they put the rows back, and it returns the
-  values they had before it, which put them forward again. A row created
-  has none: written deleted, it is taken back
-- the place of an item (its layer, its group and its place among the
-  others) is in `change.order`, whether it is a feature or a row: a move
-  with where the item stood (`ItemMove.from`; a row of a Store of rows also
-  with its keys before, `ItemMove.before`), or many rows with their keys
-  before (`RowsMove.before`). The keys before are written back with
-  `draw.features.restore` after `featureValuesOf` of
-  `@sakuzu/maplibre-gl-draw/kasane`
-- a deletion of this client keeps the rows and the groups it deleted
-  (`change.restoreToken`) until they are let go of
-  (`draw.features.releaseRestore`). Written not deleted, a row comes back
-  where it was, and `draw.groups.restore` brings a group back at its place
-
-```ts
-import type { FeatureValues } from '@sakuzu/maplibre-gl-draw';
-
-const steps: FeatureValues[] = [];
-draw.getStore().subscribe((change) => {
-  if (change.source === 'local' && change.previousValues) {
-    steps.push(change.previousValues);
-  }
-});
-
-// Later: the rows of the last write as they were
-const last = steps.pop();
-if (last) {
-  draw.transact(() => draw.features.restore(last), {
-    source: 'history',
-    ignoreLocks: true,
-  });
-}
-```
-
-`draw.features.restore` goes through the gate of the instance: it returns
-`null` while read-only, as the other writes do, and when a lock refuses
-it, unless the transaction ignores the locks (`ignoreLocks`), as an undo
-does.
+The place of an item (its layer, its group and its place among the
+others) is in `change.order`, whether it is a feature or a row: a move
+with where the item stood (`ItemMove.from`; a row of a Store of rows also
+with its keys before, `ItemMove.before`), or many rows with their keys
+before (`RowsMove.before`). `draw.undo()` takes back a write of these rows
+as it does for features: a row deleted comes back where it was, and a
+group deleted at its place.
 
 A store of your own that keeps the items of its layers and groups as
 lists, and changes them otherwise than by putting items in a place, makes
@@ -636,22 +596,23 @@ Both count in `draw.memory`, against the limit of the device
 
 ## Examples
 
-- [Save and load](../examples/save-and-load.md) loads a GeoJSON file
+- [Save and load](../examples/save-and-load.md) imports a GeoJSON file
   and reports `skipped`, saves the native format in `localStorage` and
-  loads it back, downloads both formats as files, opens a file from the
-  disk, and loads files dropped on the map
+  opens it again, downloads both formats as files, opens a file from the
+  disk, and reads files dropped on the map
 
 ## Reference
 
 - [`DocumentResource`](../api/maplibre-gl-draw/interfaces/DocumentResource.md)
   (`setShown`) and
   [`DrawDocument`](../api/maplibre-gl-draw/interfaces/DrawDocument.md)
-- [`LoadOptions`](../api/maplibre-gl-draw/interfaces/LoadOptions.md),
-  [`LoadResult`](../api/maplibre-gl-draw/interfaces/LoadResult.md) and
+- [`OpenResult`](../api/maplibre-gl-draw/interfaces/OpenResult.md),
+  [`ImportOptions`](../api/maplibre-gl-draw/interfaces/ImportOptions.md),
+  [`ImportResult`](../api/maplibre-gl-draw/interfaces/ImportResult.md) and
   [`SkippedFeature`](../api/maplibre-gl-draw/interfaces/SkippedFeature.md)
 - [`isDrawProperty`](../api/maplibre-gl-draw/functions/isDrawProperty.md)
   and
-  [`DrawProperties`](../api/maplibre-gl-draw/type-aliases/DrawProperties.md)
+  [`DrawProperties`](../api/maplibre-gl-draw/interfaces/DrawProperties.md)
 - [`Store`](../api/maplibre-gl-draw/interfaces/Store.md),
   [`StoreView`](../api/maplibre-gl-draw/interfaces/StoreView.md) and
   [`DocumentChange`](../api/maplibre-gl-draw/interfaces/DocumentChange.md)

@@ -22,10 +22,11 @@ A button asks for its mode with `draw.setMode` (1), and the toolbar
 subscribes to `draw.mode` (2), so it shows the mode whoever changed it: a
 button, a key, or the end of a drawing. The panel subscribes to
 `draw.selection` and listens to `change` (4), and shows the color the
-feature is drawn with, from `features.getAppliedStyle`. A field writes
-its value with `features.update` (5), the same call the inspector of the
-standard UI makes, and `features.isEditable` disables the fields while
-the feature cannot be changed. The page has its own `style.css`.
+feature is drawn with, from `features.getAppliedStyle`. A field writes its
+value with `tx.features.update` in `draw.write` (5), the same call the
+inspector of the standard UI makes, and `features.isEditable` disables the
+fields while the feature cannot be changed. The page has its own
+`style.css`.
 
 ::: code-group
 <<< @/../examples/custom-ui/main.ts

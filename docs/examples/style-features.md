@@ -25,12 +25,13 @@ line its width and its dash, and an area its fill and its outline.
 
 ## Code
 
-Each feature gets a `style` of its own when it is created (1). The
-defaults of a type, which the features without a style take, change with
-`draw.options.update` (2): draw an area with the tools to see them. The
-panel writes a change with `draw.features.update` (`updateMany` for
-several features), the call that the page makes once at the end (5) to
-dash the outline of the middle area.
+Each feature gets a style of its own under `maplibre-gl-draw:style` in
+its properties when it is created (1). The defaults of a type, which the
+features without a style take, change with `draw.options.update` (2):
+draw an area with the tools to see them. The panel writes a change with
+`tx.features.update` in `draw.write` (one patch for each of several
+features), the call that the page makes once at the end (5) to dash the
+outline of the middle area.
 
 ::: code-group
 <<< @/../examples/style-features/main.ts
@@ -44,7 +45,7 @@ dash the outline of the middle area.
   style rules of a layer and which color wins
 - [`FeatureStyle`](../api/maplibre-gl-draw/interfaces/FeatureStyle.md):
   the keys and their values
-- [`features.update`](../api/maplibre-gl-draw/interfaces/FeaturesCollection.md#update),
+- [`tx.features.update`](../api/maplibre-gl-draw/interfaces/TransactionFeatures.md#update),
   which merges a style key by key
 - [`options.update`](../api/maplibre-gl-draw/interfaces/OptionsResource.md#update)
   and the `style` of

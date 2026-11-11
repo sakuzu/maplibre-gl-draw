@@ -9,27 +9,33 @@
 ## 最小のコード
 
 ```ts
-// レイヤーの地物を属性で塗り分ける
-draw.layers.update(layerId, {
-  styleRule: {
-    kind: 'categorical',
-    property: 'landuse',
-    map: { park: '#4caf50', water: '#2196f3' },
-    other: '#9e9e9e',
-  },
-});
+await draw.write(async (tx) => {
+  // レイヤーの地物を属性で塗り分ける
+  await tx.layers.update(layerId, {
+    styleRule: {
+      kind: 'categorical',
+      property: 'landuse',
+      map: { park: '#4caf50', water: '#2196f3' },
+      other: '#9e9e9e',
+    },
+  });
 
-// 1 つの地物は規則によらず自分の色を保つ
-draw.features.update(featureId, { style: { fillColor: '#ff9800' } });
+  // 1 つの地物は規則によらず自分の色を保つ
+  await tx.features.update(featureId, {
+    properties: { 'maplibre-gl-draw:style': { fillColor: '#ff9800' } },
+  });
+});
 ```
 
 規則はレイヤーを描くときに評価されるので、`landuse` が変わった
-地物は、`style` に触れなくてもすぐに新しい色になります。
+地物は、スタイルに触れなくてもすぐに新しい色になります。
 
 ## 地物自身のスタイル
 
-`Feature.style` は `FeatureStyle` です。どのキーも省略でき、省略した
-キーには規則の色か既定値が使われます。
+地物は自分のスタイルを `properties['maplibre-gl-draw:style']` に
+`FeatureStyle` として持ち、`readFeature(feature).style` で読めます
+(無ければ `{}` です)。どのキーも省略でき、省略したキーには規則の色か
+既定値が使われます。
 
 | 型 | キー |
 | --- | --- |
@@ -45,33 +51,45 @@ draw.features.update(featureId, { style: { fillColor: '#ff9800' } });
 `strokeColor` と `strokeWidth` は線と面の縁だけに使われます。
 
 ```ts
-draw.features.create({
-  type: 'LineString',
-  geometry: {
-    type: 'LineString',
-    coordinates: [
-      [139.7, 35.68],
-      [139.71, 35.69],
-    ],
-  },
-  style: { strokeColor: '#1e88e5', strokeWidth: 4, lineStyle: 'dashed' },
-});
+await draw.write((tx) =>
+  tx.features.create({
+    type: 'Feature',
+    geometry: {
+      type: 'LineString',
+      coordinates: [
+        [139.7, 35.68],
+        [139.71, 35.69],
+      ],
+    },
+    properties: {
+      'maplibre-gl-draw:style': {
+        strokeColor: '#1e88e5',
+        strokeWidth: 4,
+        lineStyle: 'dashed',
+      },
+    },
+  }),
+);
 ```
 
-`features.update` は、スタイルをキーごとに併合します。渡したキーだけが
-変わり、ほかのキーはそのまま残ります。`undefined` を渡したキーは消え、
-その地物には規則の色か既定値がまた使われます。
+`tx.features.update` は、スタイルをキーごとに併合します。渡したキーだけが
+変わり、ほかのキーはそのまま残ります。`unset.style` に書いたキーは消え、
+その地物には規則の色か既定値がまた使われます。`undefined` を渡したキーは
+受け付けません (`invalid-input`)。
 
 ```ts
 // 太くし、色は規則の色に戻す
-draw.features.update(featureId, {
-  style: { strokeWidth: 6, strokeColor: undefined },
-});
+await draw.write((tx) =>
+  tx.features.update(featureId, {
+    properties: { 'maplibre-gl-draw:style': { strokeWidth: 6 } },
+    unset: { style: ['strokeColor'] },
+  }),
+);
 ```
 
 - 色は CSS の色 (`#1e88e5`、`rgb(30 136 229)`、`hsl(...)`、`tomato`)
-  で、不透明度は 0 から 1 です。型や形の合わない値は、コード
-  `invalid-input` の `DrawError` を投げます
+  で、不透明度は 0 から 1 です。型や形の合わない値は、書き込みをコード
+  `invalid-input` の `DrawError` で reject します
 - `parseCssColor(value)` は、ライブラリーと同じ読み方で色を読み、
   0 から 1 の `[red, green, blue, alpha]` を返します。ライブラリーが色と
   して受けない値には `null` を返します。拡張は、自分のスタイルの鍵の色を
@@ -86,15 +104,15 @@ draw.features.update(featureId, {
   消えていきます
 - 描画モードは、オプション `scaleWithZoom` が `false` のとき以外は
   基準のズームを書きます。基準のズームを持たない地物
-  (`features.create` で作った地物や、このオプションを切って描いた地物)
+  (`tx.features.create` で作った地物や、このオプションを切って描いた地物)
   は、どのズームでも画面上のピクセルでの幅を保ちます
 - 点は、どのズームでも画面上の大きさを保ちます
 - `pointShape` は `circle`、`square`、`triangle`、`star` のどれかで、
   既定値の形より優先されます。そのため、1 つのインスタンスの中で
   点の形を混ぜられます。当たり判定は、形によらず、その形を囲む円で
   行います
-- ロックされた地物はスタイルを変えられません
-  ([レイヤーとグループ](layers.ja.md))
+- ロックされた地物はスタイルを変えられず、書き込みは `locked` で
+  reject します ([レイヤーとグループ](layers.ja.md))
 - `FeatureStyle` が定めていないキーも、検査せずにそのまま保ち、保存し、
   読み込みます。そのため、拡張は自分のキーを入れておけます。そのキーを
   読むコードが値を確かめます
@@ -180,29 +198,31 @@ declare const otherLayerId: string;
 -->
 
 ```ts
-draw.layers.update(layerId, {
-  styleRule: {
-    kind: 'graduated',
-    property: 'population',
-    breaks: [1000, 5000, 10000],
-    colors: ['#eff3ff', '#bdd7e7', '#6baed6', '#2171b5'],
-    other: '#cccccc',
-  },
-});
+await draw.write(async (tx) => {
+  await tx.layers.update(layerId, {
+    styleRule: {
+      kind: 'graduated',
+      property: 'population',
+      breaks: [1000, 5000, 10000],
+      colors: ['#eff3ff', '#bdd7e7', '#6baed6', '#2171b5'],
+      other: '#cccccc',
+    },
+  });
 
-draw.layers.update(otherLayerId, {
-  styleRule: {
-    kind: 'continuous',
-    property: 'height',
-    min: 0,
-    max: 300,
-    ramp: ['#fff5eb', '#7f2704'],
-    other: '#cccccc',
-  },
+  await tx.layers.update(otherLayerId, {
+    styleRule: {
+      kind: 'continuous',
+      property: 'height',
+      min: 0,
+      max: 300,
+      ramp: ['#fff5eb', '#7f2704'],
+      other: '#cccccc',
+    },
+  });
 });
 
 // 規則を外す
-draw.layers.update(layerId, { styleRule: undefined });
+await draw.write((tx) => tx.layers.update(layerId, { styleRule: undefined }));
 ```
 
 - 規則の色は CSS の色で書きます。`evaluateStyleRule` と `deriveLegend` は

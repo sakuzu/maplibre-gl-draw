@@ -18,7 +18,7 @@ const logger: Plugin = {
   onAdd(ctx) {
     ctx.on('change', ({ features, source }) => {
       for (const id of features.created) {
-        console.log('created', id, ctx.draw.features.get(id)?.type, source);
+        console.log('created', id, ctx.draw.features.get(id)?.geometry.type, source);
       }
       for (const id of features.updated) console.log('changed', id);
       for (const id of features.deleted) console.log('deleted', id);
@@ -140,63 +140,44 @@ drawing mode is drawing (`isActive`, `isDrawing`)
 
 ### Writing to the document
 
-A plugin writes with the same methods as an application. Wrap several
-writes in `transact` to make them one change, and give it a `source`
-so that listeners can tell where the change came from:
+A plugin writes with the same `draw.write` as an application. The writes
+of one `draw.write` are one commit and one `change`; give it a `label`
+so that listeners can tell what made the change:
 
 <!-- docs-check:
 declare const ctx: import('@sakuzu/maplibre-gl-draw').PluginContext;
 -->
 
 ```ts
-ctx.draw.transact(
-  () => {
-    const layer = ctx.draw.layers.create({ name: ctx.names.next('Layer') });
-    if (layer) {
-      ctx.draw.features.create({
-        type: 'Point',
-        geometry: { type: 'Point', coordinates: [139.767, 35.681] },
-        layerId: layer.id,
-      });
-    }
+await ctx.draw.write(
+  async (tx) => {
+    const layer = await tx.layers.create({ name: ctx.names.next('Layer') });
+    await tx.features.create({
+      type: 'Feature',
+      geometry: { type: 'Point', coordinates: [139.767, 35.681] },
+      properties: { 'maplibre-gl-draw:layerId': layer.id },
+    });
   },
-  { source: 'my-plugin' },
+  { label: 'my-plugin' },
 );
 ```
 
 The rules are those of the instance. A wrong argument, such as an ID
-that no longer exists, throws a `DrawError`. A write refused because
-the drawing is read-only or locked returns `null` or `false`. Either
-way nothing changes. A plugin that reacts to a change after it
-happened checks with `has` first, because the target may be gone.
-
-A plugin that applies changes again from a record of its own, such as
-an undo, has to write to features that were locked after the change.
-Give `ignoreLocks: true` to `transact`: its writes then ignore the locks
-of the features, groups and layers. Read-only still refuses them, and
-the user still cannot move a locked feature.
-
-<!-- docs-check:
-declare const ctx: import('@sakuzu/maplibre-gl-draw').PluginContext;
-declare const id: string;
--->
-
-```ts
-ctx.draw.transact(
-  () => ctx.draw.features.update(id, { properties: { name: 'Before' } }),
-  { source: 'my-plugin', ignoreLocks: true },
-);
-```
+that no longer exists, rejects with a `DrawError`. A write refused
+because the drawing is read-only or locked rejects with `not-editable`
+or `locked`. Either way nothing of the transaction is committed. A
+plugin that reacts to a change after it happened checks with `has` first,
+because the target may be gone.
 
 ### Events
 
 A plugin reacts to changes through the events, with the same names as
 `draw.on` ([events](../reference/events.md)). They arrive after the
 change, for every write whatever made it: the API, a drawing mode, a
-drag, the Delete key, a load, another plugin, or a Store you supplied.
+drag, the Delete key, an import, another plugin, or a Store you supplied.
 
-- `change` arrives once per transaction that changed the document, with
-  the IDs of everything it changed and its `source`
+- `change` arrives once per commit that changed the document, with the
+  IDs of everything it changed, its `source` and its `label`
 - A value of this client that changes over time (the selection, the mode,
   the sketches, the datasets and the others) is an observable of its
   resource, followed with `subscribe`
@@ -409,7 +390,7 @@ draw.extensions.plugins.add(createShortcuts());
 
 `onFeatureCommit(feature)` is called when a drawing mode created a
 feature: each commit of `ctx.commitFeature` (the built-in drawing modes
-use it too), and the image the load after an `image.requested` places.
+use it too), and the image the image mode places after `requestImage`.
 
 ### An exclusive interaction
 
@@ -447,11 +428,12 @@ import type { FeatureInput, ModeFactory, Position } from '@sakuzu/maplibre-gl-dr
 
 function rectangle(a: Position, b: Position): FeatureInput {
   return {
-    type: 'Polygon',
+    type: 'Feature',
     geometry: {
       type: 'Polygon',
       coordinates: [[a, [b[0], a[1]], b, [a[0], b[1]], a]],
     },
+    properties: {},
   };
 }
 

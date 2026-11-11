@@ -4,7 +4,7 @@ aside: false
 
 # Editing shapes
 
-選んだ地物のハンドルです。大きさを変えて回す枠、頂点と辺の中点、
+選んだ地物のハンドルです。大きさを変えて回す選択の枠、頂点と辺の中点、
 穴のある面、2 つの部分からなる面、共有する頂点がいっしょに動く
 2 つの区画を扱います。
 
@@ -12,8 +12,8 @@ aside: false
 editing-shapes
 ```
 
-広い画面では、このページは西の区画を選んだ状態で開きます。枠の角の四角を
-ドラッグすると、反対の角を基準に大きさが変わります。枠の上の点を
+広い画面では、このページは西の区画を選んだ状態で開きます。選択の枠の
+角の四角をドラッグすると、反対の角を基準に大きさが変わります。枠の上の点を
 ドラッグすると、中心のまわりに回ります。頂点には丸いハンドルがあり、
 辺の中ほどには小さなハンドルがあります。頂点をドラッグすると頂点が
 動き、中点をドラッグするとそこに頂点が増えます。頂点をクリックすると
@@ -52,7 +52,7 @@ editing-shapes
   [Multi の形状と穴](../guides/drawing.ja.md#multi-の形状と穴)
 - 吸着と幾何演算のガイドの[共有頂点の同時移動](../guides/snapping-geometry.ja.md#共有頂点の同時移動)
 - [`TopologyOptions`](../api/maplibre-gl-draw/interfaces/TopologyOptions.md)
-  の `sharedVertexDrag` と、枠とハンドルの見た目を決める
+  の `sharedVertexDrag` と、選択の枠とハンドルの見た目を決める
   [`SelectionStyleOptions`](../api/maplibre-gl-draw/interfaces/SelectionStyleOptions.md)
 - [`VertexSelectionResource`](../api/maplibre-gl-draw/interfaces/VertexSelectionResource.md)。
   選んだ頂点をコードで扱います

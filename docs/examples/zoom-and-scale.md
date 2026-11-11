@@ -30,7 +30,7 @@ the browser console logs the state.
 The two layers get the same features, those of the first with the
 property `maplibre-gl-draw:createdZoom` and those of the second without
 it (2). The reference zoom belongs to each feature, so
-`draw.features.update` changes it for one (3). The option
+`tx.features.update` changes it for one (3). The option
 `scaleWithZoom` decides whether the drawing tools write the zoom they
 draw at into what they draw, and it changes with
 `draw.options.update`, from a switch the page adds to the standard UI
@@ -49,7 +49,7 @@ with `ui.actions.add` (5).
 - [Scaling the drawing](../guides/performance.md#scaling-the-drawing)
   in the guide to performance, for a map shown larger or smaller than it
   is drawn
-- [`DrawProperties`](../api/maplibre-gl-draw/type-aliases/DrawProperties.md)
+- [`DrawProperties`](../api/maplibre-gl-draw/interfaces/DrawProperties.md)
   for `maplibre-gl-draw:createdZoom`
 - [`RuntimeOptions`](../api/maplibre-gl-draw/interfaces/RuntimeOptions.md)
   for `scaleWithZoom`, and

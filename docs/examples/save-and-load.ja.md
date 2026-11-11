@@ -36,14 +36,16 @@ save-and-load
 
 ## コード
 
-`draw.document.load` は中身から形式を判断して読み込み (2)、形式、
-読んだ地物、外した地物を `LoadResult` で返します (1)。
+`draw.open` は前の訪問で保存した文書で描いたものを置き換え、
+`tx.import` は GeoJSON のファイルの地物を描いたものに足します。どちらも
+中身から形式を判断して読み (2)、読んだ地物と外した地物を伝えます (1)。
 `draw.document.toJSON` はレイヤー、グループ、その順序を含む文書の
 全体を書き出し、`draw.document.toGeoJSON` は地物だけを書き出します
-(3)。ライブラリーの形式の文書は、読み込むと描いたものを置き換えます
+(3)。`draw.open` は描いたものを置き換えるときに undo の段を捨てます
 (4)。ダウンロードは、文字列から作った `Blob` と、ファイルの名前を付けた
 リンクで行います (5)。ディスクのファイルは、「ファイルを開く」を押した
-ときに作る入力の欄から受け取ります (6)。ボタンは標準の UI の操作で、
+ときに作る入力の欄から受け取ります (6)。画像は、画像を持つ型 `Image` の
+GeoJSON の地物にして取り込みます (`image-feature.ts`)。ボタンは標準の UI の操作で、
 キーと一緒に `ui.actions.add` で足します (7)。ファイルの落とし込み (8)
 はページが受け持ちます。ライブラリーはこれをアプリケーションに任せて
 います。
@@ -51,6 +53,7 @@ save-and-load
 ::: code-group
 <<< @/../examples/save-and-load/main.ts
 <<< @/../examples/save-and-load/data.ts
+<<< @/../examples/save-and-load/image-feature.ts
 <<< @/../examples/save-and-load/index.html
 :::
 
@@ -59,6 +62,6 @@ save-and-load
 - [保存と読み込み](../guides/save-load.ja.md)。2 つの形式、読み込みで
   外される地物、地図に落としたファイル、変更のたびの保存を説明します
 - [`draw.document`](../api/maplibre-gl-draw/interfaces/DocumentResource.md)、
-  [`LoadOptions`](../api/maplibre-gl-draw/interfaces/LoadOptions.md)、
-  [`LoadResult`](../api/maplibre-gl-draw/interfaces/LoadResult.md)
+  [`draw.open`](../api/maplibre-gl-draw/interfaces/Draw.md#open)、
+  [`tx.import`](../api/maplibre-gl-draw/interfaces/Transaction.md#import)
 - 2 つの形式の[データ形式](../reference/data-format.md) (英語)

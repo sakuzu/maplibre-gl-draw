@@ -17,6 +17,11 @@
 GeoJSON の書き出しにもそのまま出ます。1.0 の名前はすべて変わり、
 別名は 1 つも残さないので、アプリケーションは一度に移行します。
 
+この先の `2.0` と書いたコードは 2.x の API です。3.0 は文書を
+`draw.write` で書き、地物を 1 つの GeoJSON の Feature にし、読み込みの
+代わりにファイルを開いて取り込みます。1.0 から 3.0 へ移るアプリケーション
+は [2.x から 3.0 へ](#2x-から-30-へ) も読んでください。
+
 ## 2.0 の形
 
 `createDraw(map, options)` が `Draw` を返します。メソッドは資源の
@@ -80,8 +85,9 @@ visible, locked }` です。`geometry` は GeoJSON の geometry で、
 npm install @sakuzu/maplibre-gl-draw@^2.0.0
 ```
 
-1.0 で保存したファイル (独自の形式の 2.x) は、そのまま読み込め
-ます。読み込むときに 3.0.0 の形式に上げます。
+2.x は、1.0 で保存したファイル (独自の形式の 2.x) を、読み込むときに
+3.0.0 の形式に上げて読みます。3.0 が読むのは 4.0.0 の形式だけです
+([2.x から 3.0 へ](#2x-から-30-へ))。
 
 ### インスタンスを作る
 
@@ -125,6 +131,8 @@ if (id) {
 }
 ```
 
+<!-- docs-check: skip -->
+
 ```ts
 // 2.0
 const point = draw.features.create({
@@ -158,12 +166,16 @@ const inLayer = draw.features.count({ layerId });
 `deleteAllFeatures()` は、すべての ID を渡す `deleteMany` になり
 ます。
 
+<!-- docs-check: skip -->
+
 ```ts
 draw.features.deleteMany(draw.features.list().map((f) => f.id));
 ```
 
 無い ID は例外を投げます。1.0 では素の `Error` を投げるか、何も
 しないかでした。
+
+<!-- docs-check: skip -->
 
 ```ts
 import { DrawError } from '@sakuzu/maplibre-gl-draw';
@@ -194,6 +206,8 @@ if (roadsId) {
 const groupId = draw.addGroup([featureId], layerId, 'Block');
 draw.removeFeatureFromGroup(featureId);
 ```
+
+<!-- docs-check: skip -->
 
 ```ts
 // 2.0
@@ -251,9 +265,7 @@ const native = draw.export('native').data; // a string
 const geojson = JSON.parse(draw.export('geojson').data);
 ```
 
-<!-- docs-check:
-declare const file: File;
--->
+<!-- docs-check: skip -->
 
 ```ts
 // 2.0
@@ -300,6 +312,8 @@ const stop = draw.on('change', () => save());
 `on` は購読を解く関数を返し、`once` は 1 回だけ購読します。
 `change` はレイヤー、グループ、メタデータの変化も運びます。いくつかの
 書き込みを 1 つの変化にするには、`transact` で包みます。
+
+<!-- docs-check: skip -->
 
 ```ts
 draw.transact(
@@ -563,6 +577,8 @@ draw.registerMode('draw_marker', () => ({
 }));
 ```
 
+<!-- docs-check: skip -->
+
 ```ts
 // 2.0
 import type { ModeFactory } from '@sakuzu/maplibre-gl-draw';
@@ -690,11 +706,20 @@ Observable の `draw.options` で読みます) と
 (`PluginContext.emit` は無くなりました)、自分の値を API の Observable
 で渡します ([イベント](../reference/events.md))。
 
+<!-- docs-check: skip -->
+
 ```ts
 // 2.x
 draw.on('feature.updated', ({ feature }) => redraw(feature.id));
 draw.on('selection.changed', ({ selection }) => show(selection));
+```
 
+<!-- docs-check:
+declare function redraw(id: string): void;
+declare function show(selection: unknown): void;
+-->
+
+```ts
 // 3.0
 draw.on('change', ({ features }) => {
   for (const id of features.updated) redraw(id);
@@ -746,12 +771,14 @@ id は、それぞれの種類の値 (`CalendarDate`、`DateTime`、`TimeOfDay`�
 ```ts
 import { CalendarDate, DateTime } from '@sakuzu/tabane';
 
-draw.features.update(featureId, {
-  properties: {
-    updated: DateTime.fromDate(new Date()), // 瞬間 (UTC)
-    opened: CalendarDate.of(1998, 4, 1), // 日付
-  },
-});
+await draw.write((tx) =>
+  tx.features.update(featureId, {
+    properties: {
+      updated: DateTime.fromDate(new Date()), // 瞬間 (UTC)
+      opened: CalendarDate.of(1998, 4, 1), // 日付
+    },
+  }),
+);
 ```
 
 度の範囲は、`features.bbox` と同じく、どこでも `bbox` と呼びます。
@@ -807,6 +834,143 @@ draw.selection.set(kept);
 自前のストアは変えなくて構いません。レイヤーの項目をリストで持つ
 ストアは、変更の前と後のリストから `diffItemOrder` で
 `DocumentChange.order` を作ります。
+
+### 3.0 での文書の書き込み
+
+文書を書く入口は `draw.write(fn)` の 1 つです。関数は書き込みを持つ取引
+`tx` を受け取り、関数が終わると書き込みをまとめて確定します。確定は
+1 回の `change` と undo の 1 段になり、Promise は確定してから解けます。
+`draw` には読みだけが残ります。
+
+<!-- docs-check: skip -->
+
+```ts
+// 2.x
+draw.transact(
+  () => {
+    const point = draw.features.create({
+      type: 'Point',
+      geometry: { type: 'Point', coordinates: [139.767, 35.681] },
+      layerId,
+      style: { pointColor: '#e74c3c' },
+    });
+    if (point) draw.features.move(point.id, { layerId, index: 0 });
+  },
+  { source: 'toolbar' },
+);
+```
+
+```ts
+// 3.0
+await draw.write(
+  async (tx) => {
+    const point = await tx.features.create({
+      type: 'Feature',
+      geometry: { type: 'Point', coordinates: [139.767, 35.681] },
+      properties: {
+        'maplibre-gl-draw:layerId': layerId,
+        'maplibre-gl-draw:style': { pointColor: '#e74c3c' },
+      },
+    });
+    const [back] = draw.layers.listItems(layerId, { limit: 1 });
+    if (back !== undefined) await tx.features.place(point.id, { above: back });
+  },
+  { label: 'toolbar' },
+);
+```
+
+- 資源の書き込みは `tx` へ移ります。`features.create`、`update`、
+  `delete`、`union`、`difference`、`intersection`、`split`、`buffer`、
+  `layers.create`、`update`、`delete`、`groups.create`、`update`、
+  `delete` です。1 つのメソッドが 1 件もたくさんも受けます。`create` は
+  地物の配列を受け取り (`Many` のメソッドは無くなりました)、`update`、
+  `delete`、`translate`、`rotate`、`scale`、`place` は ID、複数の ID、
+  絞り込み、`draw.selection.target`、`{ all: true }` を受け取ります
+- `features.move` と `groups.move` は `tx.features.place` と
+  `tx.groups.place` になり、`Placement` を受け取ります。すぐ下
+  (`{ below }`) かすぐ上 (`{ above }`) の項目と、入る先のレイヤーか
+  グループです。`index` はありません。`layers.reorder` は
+  `tx.layers.place(id, { below })` か `{ above }` です
+- `groups.delete(id)` は、メンバーをどうするかを言います。
+  `tx.groups.delete(id, { members: 'keep' })` がグループを解きます
+- 選択の書き込みは無くなりました。`draw.selection.target` を `tx` に
+  渡し (`selection.delete()` は
+  `tx.features.delete(draw.selection.target)`)、グループは
+  `tx.groups.create({ featureIds })` で作り、`tx.groups.delete` で解きます
+- `buffer(ids, { distanceMeters, segments })` は、1 件ずつの
+  `tx.features.buffer(id, distanceMeters)` です
+- `transact(fn, { source })` は `draw.write(fn, { label })` です。
+  `ignoreLocks` は無くなりました。`draw.undo()` と `draw.redo()` が
+  この端末の確定を取り消し、やり直します。`features.restore`、
+  `features.releaseRestore`、`groups.restore` は無くなりました
+- 状態のために拒まれた書き込みは、`null` や `false` の代わりに
+  `DrawError` で reject します。読み取り専用のときは `not-editable`、
+  ロックされたものには `locked` です。引数の誤りも reject します。その
+  とき取引は何も確定しません
+- `draw.metadata` は `draw.document.title`、`description`、`metadata`
+  になり、`tx.document.update({ title, description, metadata })` で
+  書きます。文書とレイヤーに置くアプリケーションの値は自分の前置きの
+  鍵 (`app:key`) に置き、`unset` に書いて消します
+- `image.requested` は無くなりました。画像のモードはオプション
+  `requestImage` でファイルを求めて置きます
+  ([描画と編集](drawing.ja.md#画像))
+
+地物は 1 つの GeoJSON の Feature `{ type: 'Feature', id, geometry,
+properties }` で、渡す形、読む形、書き出す形が同じです。レイヤー、
+グループ、型、スタイル、表示、ロックは `properties` の鍵
+(`maplibre-gl-draw:layerId`、`groupId`、`featureType`、`style`、
+`visible`、`locked`) で、既定の値のときは置きません。
+`readFeature(feature)` は、それらを既定の値を埋めた短い名前で読みます。
+差分は `{ geometry?, properties?, unset? }` です。鍵は `unset` に書いて
+消し (スタイルの鍵は `unset.style`)、`undefined` を渡した鍵は
+`invalid-input` で断ります。地物がもともと GeoJSON なので、
+`featuresToGeoJSON` と `featureToGeoJSON` は無くなりました。
+
+<!-- docs-check: skip -->
+
+```ts
+// 2.x
+const f = draw.features.get(featureId);
+if (f && !f.locked) console.log(f.type, f.layerId, f.style.fillColor);
+draw.features.update(featureId, { style: { fillColor: undefined } });
+```
+
+```ts
+// 3.0
+import { readFeature } from '@sakuzu/maplibre-gl-draw';
+
+const f = draw.features.get(featureId);
+if (f) {
+  const { featureType, layerId, locked, style } = readFeature(f);
+  if (!locked) console.log(featureType, layerId, style.fillColor);
+}
+await draw.write((tx) =>
+  tx.features.update(featureId, { unset: { style: ['fillColor'] } }),
+);
+```
+
+`document.load` は `draw.open` と `tx.import` になります。
+`draw.open(source)` は文書を置き換え (`replace` のモードに当たります)、
+`tx.import(source, { layer, group })` は GeoJSON を文書に足します
+(`merge` に当たります)。1 つの `draw.write` の中の複数の取り込みは
+1 つの確定になり、`loadMany` の代わりになります。`document.loaded` は
+無くなり、読んだものは `change` で届きます。
+
+<!-- docs-check:
+declare const file: File;
+-->
+
+```ts
+// 3.0
+const opened = await draw.open(file); // 文書を置き換える
+const imported = await draw.write((tx) => tx.import(file)); // 文書に足す
+console.log(opened.features, imported.count, imported.skipped);
+```
+
+独自の形式は `4.0.0` です。地物は GeoJSON の Feature で、題と説明は
+文書の欄になり、`metadata` はアプリケーションの値をそれぞれの前置きで
+持ちます。3.0 が読むのはこの版だけで、`3.0.0` 以前の形式の文書は
+`invalid-input` で断ります。
 
 ### 3.0 の拡張
 
@@ -942,6 +1106,12 @@ draw.selection.set(kept);
 - 描く CSS の色を自前の読み方で読んでいた拡張は、主の入口の
   `parseCssColor` で読みます。ライブラリーが色を確かめて描くのと同じ
   読み方なので、同じ色を受けて同じ色で描けます
+- 拡張は、地物を 1 つの形の GeoJSON の Feature (凍結したもの) で受け
+  取り、ライブラリーの値を `readFeature` で読みます。モードの
+  `commitFeature(input)` と `preview.set` は GeoJSON の Feature
+  (`type: 'Feature'`。描く型が形状の型と違うときは
+  `maplibre-gl-draw:featureType` に書きます) を受け取り、`onHandleDrag` は
+  3.0 の差分 (`{ geometry?, properties?, unset? }`) を返します
 
 頂点ごとのハンドルの 2.x と 3.0 の書き方です。ライブラリーが描いていた
 白い丸は、型が描きます。
@@ -1000,7 +1170,8 @@ const vertexHandles: Pick<FeatureTypeDefinition, 'handles' | 'drawHandles'> = {
 モード、地物の store、イベント、独自のモードといった考え方は、
 そのまま引き継げます。組み込みのツールバーは無いので、自分の UI
 から `setMode` を呼びます。イベントは draw のインスタンスで購読し、
-API で行った書き込みでも発火します。
+API で行った書き込みでも発火します。文書の書き込みは `draw.write` の中で
+行い、その関数が受け取る取引 `tx` が下の表の `tx` です。
 
 | mapbox-gl-draw | このライブラリー |
 | --- | --- |
@@ -1008,13 +1179,13 @@ API で行った書き込みでも発火します。
 | `changeMode('simple_select')` | `setMode('select')` |
 | `changeMode('direct_select', ...)` | `setMode('select')` |
 | `changeMode('draw_line_string')` | `setMode('draw_line')` |
-| `add(featureCollection)` | `document.load(featureCollection)` |
+| `add(featureCollection)` | `tx.import(featureCollection)` |
 | `get(id)` | `features.get(id)` |
 | `getAll()` | `document.toGeoJSON()` |
 | `getSelectedIds()` | `selection.value.ids` |
-| `delete(ids)` | `features.deleteMany(ids)` |
-| `trash()` | `selection.delete()` |
-| `setFeatureProperty(id, key, value)` | `features.update(id, patch)` |
+| `delete(ids)` | `tx.features.delete(ids)` |
+| `trash()` | `tx.features.delete(draw.selection.target)` |
+| `setFeatureProperty(id, key, value)` | `tx.features.update(id, patch)` |
 | `draw.create`, `draw.update` | `change` (`features.created`、`updated`) |
 | `draw.delete` | `change` (`features.deleted`) |
 | `draw.selectionchange` | `selection.subscribe(run)` |
@@ -1025,14 +1196,13 @@ API で行った書き込みでも発火します。
 | `new TerraDraw({ adapter, modes })` | `createDraw(map)` |
 | `setMode('linestring')` | `setMode('draw_line')` |
 | `getSnapshot()` | `document.toGeoJSON()` |
-| `addFeatures(features)` | `document.load(featureCollection)` |
-| `removeFeatures(ids)` | `features.deleteMany(ids)` |
-| `clear()` | すべての ID で `features.deleteMany(ids)` |
+| `addFeatures(features)` | `tx.import(featureCollection)` |
+| `removeFeatures(ids)` | `tx.features.delete(ids)` |
+| `clear()` | `tx.features.delete({ all: true })` |
 | `selectFeature(id)` | `selection.set('feature', [id])` |
 | `on('change', ...)` | `on('change', ...)` |
 
 選択モードは `simple_select` と `direct_select` の両方の役目を
 果たします。選んだ地物の頂点は、選択モードのままドラッグできます。
-地物に `mode` のプロパティーは要らず、地物の型が決めます。組み込みの
-取り消しはありません。Store の通知がすべての変化の前の状態を運びます
-([保存と読み込み](save-load.ja.md) を参照)。
+地物に `mode` のプロパティーは要らず、地物の型が決めます。
+`draw.undo()` と `draw.redo()` が、この端末の確定を取り消し、やり直します。

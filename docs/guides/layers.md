@@ -8,43 +8,46 @@ layers of the map between the layers of the drawing.
 ## Minimal code
 
 ```ts
-import { createDraw } from '@sakuzu/maplibre-gl-draw';
+import { createDraw, readFeature } from '@sakuzu/maplibre-gl-draw';
 
 const draw = createDraw(map);
 
 // The document starts with one empty layer; add a second one and draw
-// into it (create returns null while the instance is read-only)
-const notes = draw.layers.create({ name: 'Notes' });
-if (notes) {
-  draw.layers.setActive(notes.id);
-  draw.setMode('draw_point');
+// into it (the write rejects while the instance is read-only)
+const notes = await draw.write((tx) => tx.layers.create({ name: 'Notes' }));
+draw.layers.setActive(notes.id);
+draw.setMode('draw_point');
 
-  // Later: lock it, so that its features can be selected but not edited
-  draw.layers.update(notes.id, { locked: true });
-}
+// Later: lock it, so that its features can be selected but not edited
+await draw.write((tx) => tx.layers.update(notes.id, { locked: true }));
 ```
 
 ## Layers
 
 A `Layer` has a `name`, `visible`, `locked`, an `opacity`, the `items` it
 holds (the IDs of its features and groups, from the back), an optional
-`styleRule` ([Styles](styles.md)) and optional `metadata` of your own.
+`styleRule` ([Styles](styles.md)) and optional `metadata` of your own,
+under keys of your own prefix (`app:key`).
 
 | Method | Does |
 | --- | --- |
-| `layers.create(input)` | adds a layer, at the front unless `index` is given |
-| `layers.update(id, patch)` | changes the keys given |
-| `layers.delete(id)` | deletes a layer with its features and groups |
-| `layers.get(id)`, `list()`, `count()`, `has(id)` | read |
+| `tx.layers.create(input)` | adds a layer, in front unless `index` |
+| `tx.layers.update(id, patch)` | changes the keys given |
+| `tx.layers.delete(target)` | deletes layers with their items |
+| `tx.layers.place(id, { below })` | puts a layer next to another |
+| `draw.layers.get(id)`, `list()`, `count()` | read |
 
-`create` and `update` return the layer as it was stored. While the
-instance is read-only they change nothing and return `null`, and `delete`
-returns `false` ([Read-only](read-only.md)). An ID that does not exist
-throws a `DrawError` with the code `not-found`. The methods whose name ends
-in `Many` do the same for several layers in one transaction.
+The writes are made in a `draw.write` ([Getting started](../getting-started.md)):
+`create` and `update` give the layer as it was written, and `delete` the
+number of layers deleted, given one ID, several or `{ all: true }`. While
+the instance is read-only the write rejects with a `DrawError` with the
+code `not-editable` ([Read-only](read-only.md)), and an ID that does not
+exist with `not-found`; nothing of the transaction is committed then.
 
 ```ts
-const roads = draw.layers.create({ name: 'Roads', opacity: 0.8, index: 0 });
+const roads = await draw.write((tx) =>
+  tx.layers.create({ name: 'Roads', opacity: 0.8, index: 0 }),
+);
 const hidden = draw.layers.list({ visible: false });
 ```
 
@@ -57,10 +60,9 @@ With `initDefaultLayer: false` no layer is created, and the application
 creates the layers itself, for example when it restores them from its own
 data.
 
-`layers.delete` deletes whatever the layer holds, and returns `false` for a
-layer that is locked or holds a locked feature or group. Deleting the
-selection (`selection.delete()` and the Delete key) with layers selected
-keeps at least one layer.
+`tx.layers.delete` deletes whatever the layer holds, and rejects with
+`locked` for a layer that is locked. Deleting the selection with the
+Delete key with layers selected keeps at least one layer.
 
 A change of the layers is told by `change`, in `layers.created`,
 `layers.updated` and `layers.deleted`, and a change of their stacking
@@ -78,8 +80,8 @@ visible (neither hidden for everyone nor hidden on this client). When the
 active layer is not writable, a drawing goes into the first writable layer,
 and the active layer comes back once it is writable again. While no layer
 is writable, `setMode` refuses the drawing modes. This rule is for user
-drawing only: `features.create` and `document.load` accept any existing
-layer.
+drawing only: `tx.features.create`, `tx.import` and `draw.open` accept any
+existing layer.
 
 ## Stacking order
 
@@ -96,54 +98,49 @@ and the features of a group by position, from the back, and
 `layers.countItems(id)` counts the items. They read every kind of layer:
 a layer held as rows (a store that holds its features as rows,
 `kind: 'table'`) has no `items`, and a group of it no `featureIds`.
-`layers.reorder` takes the IDs of every layer from the back (and may
-place other entries of the stacking order, below), and
-`features.move` and `groups.move` place features and groups. Without an
-`index` a move goes to the front of its destination; `index: 0` is the
-back. `layers.getOrder()` returns the stacking order as `reorder` takes
-it, the other entries placed on it included, so it can be changed and
-given back:
-
-```ts
-const order = [...draw.layers.getOrder()];
-const front = order.pop() as string;
-draw.layers.reorder([front, ...order]); // the front goes to the back
-```
+`tx.layers.place(id, { below })` puts a layer just in front of another
+(`below` is the layer just below it), and `{ above }` just behind another.
+`tx.features.place` and `tx.groups.place` put features and groups
+elsewhere: next to another item, or into a layer or a group. Without a
+neighbor they go to the front of where they go.
 
 <!-- docs-check:
 declare const notes: import('@sakuzu/maplibre-gl-draw').Layer;
 -->
 
 ```ts
-// Put the notes layer behind every other layer
-const others = draw.layers.list().filter((layer) => layer.id !== notes.id);
-draw.layers.reorder([notes.id, ...others.map((layer) => layer.id)]);
+await draw.write(async (tx) => {
+  // Put the notes layer behind every other layer
+  const [back] = draw.layers.list();
+  if (back !== undefined && back.id !== notes.id) {
+    await tx.layers.place(notes.id, { above: back.id });
+  }
 
-// Bring one feature to the front of its layer
-const target = draw.features.get(featureId);
-if (target) draw.features.move(target.id, { layerId: target.layerId });
+  // Bring one feature to the front of its layer
+  const target = draw.features.get(featureId);
+  const layer = target ? readFeature(target).layerId : null;
+  if (layer !== null) await tx.features.place(featureId, { layerId: layer });
 
-// Move a feature or a group to another layer
-draw.features.move(featureId, { layerId: notes.id });
-draw.groups.move(groupId, { layerId: notes.id, index: 0 });
+  // Move a group to the front of another layer
+  await tx.groups.place(groupId, { layerId: notes.id });
+});
 ```
 
-- A feature moved to a layer leaves its group; `{ groupId }` moves it into
-  a group of any layer, and `{ groupId: null }` takes it out of its group
-  and puts it just in front of the group
-- `moveMany` moves several features or groups and keeps their order among
-  them
-- A place can be named by the item just below it instead of an index
-  (`{ layerId, groupId?, below }`, `null` for the back), or by the item
-  just above it (`above`). A layer held as rows takes only these, and
-  refuses an `index`
-- A move of a locked item, or into a locked layer or group, returns
-  `false` and changes nothing
+- A feature put into a layer leaves its group; `{ groupId }` puts it into
+  a group of any layer, and `{ layerId, below: groupId }` takes it out of
+  its group and puts it just in front of the group
+- Given several features (their IDs, a filter or the selection),
+  `tx.features.place` keeps their order among them
+- A place is named by the item just below it (`{ below }`), or by the item
+  just above it (`{ above }`), with the layer or the group it is in when
+  the item goes into another (`{ layerId, groupId?, below }`)
+- A place of a locked item, or into a locked layer or group, rejects with
+  `locked` and changes nothing
 - `change` lists each feature and group that moved in `features.placed`
   and `groups.placed`, alone when nothing else of it changed
 
 The stacking order is part of the document: `document.toJSON()` writes it
-in `layerOrder`, and `document.load` of a document replaces it.
+in `layerOrder`, and `draw.open` of a document replaces it.
 
 ## Groups
 
@@ -156,43 +153,42 @@ declare const idB: string;
 -->
 
 ```ts
-// null while read-only
-const site = draw.groups.create({ featureIds: [idA, idB], name: 'Site' });
+const site = await draw.write((tx) =>
+  tx.groups.create({ featureIds: [idA, idB], name: 'Site' }),
+);
 
-// Or from the current selection, like Cmd/Ctrl+G
-draw.selection.set('feature', [idA, idB]);
-const created = draw.selection.group(); // null when it cannot group
+// Or from the current selection, as Cmd/Ctrl+G does
+const { type, ids } = draw.selection.value;
+if (type === 'feature' && ids !== null && ids.length > 1) {
+  await draw.write((tx) => tx.groups.create({ featureIds: ids }));
+}
 ```
 
-`groups.create` throws a `DrawError` when the features are not all in the
-same layer. `selection.group()` groups when two or more features are
-selected, all in the same layer, and none of them already in a group. The
-group takes the place of the frontmost of its features in the layer.
+`tx.groups.create` rejects with a `DrawError` when the features are not
+all in the same layer. The group takes the place of the frontmost of its
+features in the layer.
 
-| Method | Does |
-| --- | --- |
-| `features.move(id, { groupId })` | moves a feature into a group |
-| `features.move(id, { groupId: null })` | takes it out, in front of the group |
-| `features.move(id, { groupId, index })` | reorders inside the group |
-| `groups.delete(id)` | dissolves a group, keeps the features |
-| `selection.ungroup()` | as Shift+Cmd/Ctrl+G, below |
+- `tx.features.place(id, { groupId })` puts a feature into a group
+- `tx.features.place(id, { layerId, below: groupId })` takes it out of
+  its group, just in front of the group
+- `tx.features.place(id, { below })` reorders it next to another member
+- `tx.groups.delete(id, { members: 'keep' })` dissolves a group and
+  keeps the features
+- `tx.groups.delete(id, { members: 'delete' })` deletes a group with its
+  features
 
 - Dissolving a group puts its features where the group was, in their order
-- Shift+Cmd/Ctrl+G and `selection.ungroup()` dissolve the selected
-  groups, or take the selected features out of their group
+- Shift+Cmd/Ctrl+G dissolves the selected groups, or takes the selected
+  features out of their group
 - A group left empty (its last feature moved out or deleted) is deleted
   as well
 - A feature is always listed in exactly one place: in the `featureIds` of
   its group when it has a `groupId`, otherwise in the `items` of its layer
 
 In a layer held as rows (a store that holds its features as rows), a
-group needs features as well. The store keeps a group this client deletes
-(deleted with its features, left by its last feature, or dissolved) until
-the token of the deletion is let go of (`DocumentChange.restoreToken`):
-`groups.restore(id)` brings it back without features at the place it had,
-and `features.restore` or `features.move` puts its features back in it.
-A group created with the ID of such a group takes the place it had, as a
-feature created with the ID of a row deleted and kept does.
+group needs features as well. A group this client deleted (with its
+features, left by its last feature, or dissolved) comes back at the place
+it had, with its features, when `draw.undo()` takes the deletion back.
 
 A change of the groups is told by `change`, in `groups.created`,
 `groups.updated` and `groups.deleted`.
@@ -203,10 +199,18 @@ A change of the groups is told by `change`, in `groups.created`,
 and refuses every other edit.
 
 ```ts
-draw.features.update(featureId, { locked: true });
-draw.groups.update(groupId, { locked: true });
-draw.layers.update(layerId, { locked: true });
+await draw.write(async (tx) => {
+  await tx.features.update(featureId, {
+    properties: { 'maplibre-gl-draw:locked': true },
+  });
+  await tx.groups.update(groupId, { locked: true });
+  await tx.layers.update(layerId, { locked: true });
+});
 ```
+
+A feature keeps its lock in `properties['maplibre-gl-draw:locked']`, which
+is there only while it is locked: to unlock it, name the key in `unset`
+(`{ unset: { properties: ['maplibre-gl-draw:locked'] } }`).
 
 - The lock is inherited: a feature is locked when it, its group or its
   layer is locked
@@ -215,10 +219,11 @@ draw.layers.update(layerId, { locked: true });
   no handles, and box selection skips it
 - Selected with others, it stays where it is while they are dragged or
   moved with the arrow keys; a press on it moves nothing
-- `update` returns `null` for a locked item when the patch changes anything
-  other than `locked` and `visible`, and `delete` and `move` return `false`
-- `selection.update` and `selection.delete` leave the locked features as
-  they are and change the others
+- A write that names a locked item by its ID rejects with `locked`: an
+  `update` whose patch changes anything other than the lock and the
+  visibility, a `delete` and a `place`
+- A write given `draw.selection.target` or a filter leaves the locked
+  features as they are and changes the others
 - The Delete key keeps locked features: a selected group loses only its
   unlocked features, and a layer that holds a locked item is not deleted
 - The geometry operations refuse locked features
@@ -229,9 +234,10 @@ The inherited lock is read from the three items:
 function isLocked(id: string): boolean {
   const f = draw.features.get(id);
   if (!f) return false;
-  const group = f.groupId ? draw.groups.get(f.groupId) : undefined;
-  const layer = draw.layers.get(f.layerId);
-  return f.locked || group?.locked === true || layer?.locked === true;
+  const { groupId, layerId, locked } = readFeature(f);
+  const group = groupId !== null ? draw.groups.get(groupId) : undefined;
+  const layer = layerId !== null ? draw.layers.get(layerId) : undefined;
+  return locked || group?.locked === true || layer?.locked === true;
 }
 ```
 
@@ -240,13 +246,14 @@ interaction lock ([Read-only](read-only.md)).
 
 ## Visibility
 
-`visible: false` on a feature, a group or a layer hides it for everyone
-who shares the document; it is saved and written out. To hide something on
-this client only, use `draw.hidden.add(id)` ([Read-only](read-only.md)).
+`visible: false` on a group or a layer, and
+`properties['maplibre-gl-draw:visible']: false` on a feature, hide it for
+everyone who shares the document; it is saved and written out. To hide
+something on this client only, use `draw.hidden.add(id)` ([Read-only](read-only.md)).
 Hidden features are not drawn, hit-tested, snapped to or used by the
 geometry operations, and they cannot be selected.
 
-A feature's `visible` is its own flag: a feature can be visible itself and
+A feature's visibility is its own flag: a feature can be visible itself and
 still not be drawn because its group or its layer is hidden. The filter
 `shown` answers for the three together (local hiding is not consulted):
 
@@ -262,7 +269,7 @@ of everything drawn for the layer: fills, lines, points, images, and what
 custom feature types draw.
 
 ```ts
-draw.layers.update(layerId, { opacity: 0.4 });
+await draw.write((tx) => tx.layers.update(layerId, { opacity: 0.4 }));
 ```
 
 - It is applied as the map is drawn, so changing it (with a slider, say)
@@ -283,21 +290,12 @@ entries, one map layer per run of layers between them, and the application
 moves its map layer between the runs. A single feature cannot be placed
 between layers of the map; a whole run of the drawing moves as one.
 
-<!-- docs-check:
-declare const parcels: string;
--->
-
 ```ts
 const SEPARATOR = 'sep:';
 
 const draw = createDraw(map, {
   isExternalEntry: (id) => id.startsWith(SEPARATOR),
 });
-
-// The roads of the map go just in front of the parcels layer
-const ids = draw.layers.list().map((layer) => layer.id);
-ids.splice(ids.indexOf(parcels) + 1, 0, `${SEPARATOR}roads`);
-draw.layers.reorder(ids);
 
 function placeMapLayers(): void {
   const order = draw.getStore().getLayerOrder();
@@ -314,15 +312,15 @@ placeMapLayers();
 draw.on('layerStack.changed', placeMapLayers);
 ```
 
-- The entries of your own go into the stacking order with
-  `layers.reorder`, which takes the IDs `isExternalEntry` recognizes
-  besides the IDs of the layers, or through the document: the
-  `layerOrder` of a document you load, or the Store you give the
-  instance. An entry that `layers.reorder` is not given keeps its
-  position
+- The entries of your own go into the stacking order through the
+  document: the `layerOrder` of a document you open, which holds the IDs
+  `isExternalEntry` recognizes besides the IDs of the layers, or the Store
+  you give the instance. `tx.layers.place` moves an entry that is in the
+  order as it moves a layer, and takes it as the neighbor of a layer
 - `draw.getStore().getLayerOrder()` returns the whole stacking order, the
   entries of your own included, and `draw.layers.getOrder()` the same
-  without the entries `layers.reorder` would refuse
+  without an entry that is no longer a layer, a dataset of the order or
+  an entry `isExternalEntry` recognizes
 - `draw.getLayerStack()` returns the runs from the back, each with its
   range `[from, to)` on the stacking order and the ID of the map layer
   that draws it
@@ -343,11 +341,13 @@ draw.on('layerStack.changed', placeMapLayers);
 ## Reference
 
 - [`LayersCollection`](../api/maplibre-gl-draw/interfaces/LayersCollection.md)
-  and [`GroupsCollection`](../api/maplibre-gl-draw/interfaces/GroupsCollection.md)
+  and [`GroupsCollection`](../api/maplibre-gl-draw/interfaces/GroupsCollection.md),
+  [`TransactionLayers`](../api/maplibre-gl-draw/interfaces/TransactionLayers.md)
+  and [`TransactionGroups`](../api/maplibre-gl-draw/interfaces/TransactionGroups.md)
 - [`Layer`](../api/maplibre-gl-draw/type-aliases/Layer.md),
   [`LayerInput`](../api/maplibre-gl-draw/interfaces/LayerInput.md) and
   [`Group`](../api/maplibre-gl-draw/type-aliases/Group.md)
-- [`MoveTarget`](../api/maplibre-gl-draw/type-aliases/MoveTarget.md)
+- [`Placement`](../api/maplibre-gl-draw/type-aliases/Placement.md)
 - [`Draw`](../api/maplibre-gl-draw/interfaces/Draw.md) (`getLayerStack`)
   and [`LayerStackEntry`](../api/maplibre-gl-draw/interfaces/LayerStackEntry.md)
 - [Events](../reference/events.md)

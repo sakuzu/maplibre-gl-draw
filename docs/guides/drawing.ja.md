@@ -21,7 +21,7 @@ draw.setMode('draw_polygon');
 draw.on('change', ({ features }) => {
   for (const id of features.created) {
     const feature = draw.features.get(id);
-    console.log(feature?.type, feature?.properties.name);
+    console.log(feature?.geometry.type, feature?.properties.name);
   }
 });
 
@@ -147,38 +147,50 @@ draw.sketches.subscribe((sketches) => {
 ### 画像
 
 ライブラリーはファイルのダイアログを開きません。`draw_image` に入ると、
-位置、ズーム、画像を置くレイヤーを載せた `image.requested` を出し、
-すぐに `select` に戻ります。位置は、クリックからこのモードに入った
+オプション `requestImage` で、置く位置を添えてアプリケーションに画像を
+求め、すぐに `select` に戻ります。位置は、クリックからこのモードに入った
 とき (`map.clicked` のリスナーが入ったとき) はクリックした位置、
 それ以外は地図の中心です。アプリケーションは自前のファイル選択を
-表示し、選ばれたファイルを `draw.document.load` に渡します。
+表示してファイルを返し、インスタンスはそれをその位置に、アクティブな
+レイヤーへ、地図のズームで、1 つの確定として置きます。
 
 ```ts
-draw.on('image.requested', ({ lngLat, zoom, layerId }) => {
-  const input = document.createElement('input');
-  input.type = 'file';
-  input.accept = 'image/*';
-  input.addEventListener('change', async () => {
-    const file = input.files?.[0];
-    if (!file) return;
-    await draw.document.load(file, { coordinate: lngLat, zoom, layerId });
-  });
-  input.click();
+import { createDraw } from '@sakuzu/maplibre-gl-draw';
+
+const draw = createDraw(map, {
+  requestImage: (_at, { signal }) =>
+    new Promise<Blob>((resolve, reject) => {
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.accept = 'image/*';
+      input.addEventListener('change', () => {
+        const file = input.files?.[0];
+        if (file) resolve(file);
+        else reject(new Error('no file'));
+      });
+      signal.addEventListener('abort', () => reject(signal.reason));
+      input.click();
+    }),
 });
 
 draw.setMode('draw_image');
 ```
 
-画像は `coordinate` を中心に置かれ、WebP に変換されます。ブラウザーが
-WebP を作れないときは、透明な画素が無ければ JPEG に変換され、あれば
-ブラウザーが返した形式 (PNG など) になります (一辺が 4096 px を超えると縮小します)。変換した画像は文書のファイルとして 1 度だけ保存
-され、地物はそれを参照します。新しい地物は選ばれた状態に
-なります。複数の Image 地物が、保存した 1 つのファイルを共有
-できます。
+- `requestImage` が無ければ、画像のモードは何も置きません。動いている
+  あいだも `draw.options.update` で替えられます
+- `signal` は、インスタンスを外したときと、次の画像を求めたときに要求を
+  止めます
+- 置けなかった画像 (画像でないファイルなど) は、出どころ `image` の
+  `error` イベントで知らせます
+
+画像は WebP に変換されます。ブラウザーが WebP を作れないときは、透明な
+画素が無ければ JPEG に変換され、あればブラウザーが返した形式 (PNG など)
+になります (一辺が 4096 px を超えると縮小します)。変換した画像は文書の
+ファイルとして 1 度だけ保存され、地物はそれを参照します。複数の Image
+地物が、保存した 1 つのファイルを共有できます。
 
 ライブラリーは、地図にドロップされたファイルを受け取りません。ドロップ
-された画像をその位置に置くには、アプリケーションがドロップを受け、その
-位置を付けて `draw.document.load` を呼びます
+されたファイルを読むには、アプリケーションがドロップを受けて取り込みます
 ([保存と読み込み](save-load.ja.md) を参照)。
 
 ## 選択と編集
@@ -297,7 +309,8 @@ const selected = draw.selection.features();
 (`draw.selection.set('group', [groupId])`)。`selection.features()` は、
 選んだ地物か、選んだグループやレイヤーの中の地物を返します。
 `selection.value` は選んでいるものを伝えます。種類、地物の数、地物の
-レイヤーと範囲 (`bbox`)、ID です。`selection.delete()` は選んでいるものを
+レイヤーと範囲 (`bbox`)、ID です。`draw.selection.target` は書き込みに
+渡す選んでいるものの指定で、`tx.features.delete` に渡すと選んでいるものを
 削除します。選択が変わるたびに `draw.selection` が知らせます
 (`draw.selection.subscribe`)。
 
@@ -310,16 +323,22 @@ draw.selection.set(kept); // もう一度選びます
 ```
 
 `selection.setAll(filter)` は絞り込みに合う地物をすべて選びます (Cmd+A は
-すべてを選びます)。`selection.count(filter)` は選んだ地物を数え、
-`selection.update(patch, filter)` は選んだ地物を 1 回の変更で書き換えます。
-差分は関数で作れます。関数は地物ごとではなく、地物の種類 (型、書式、作った
-ときのズーム) ごとに 1 回呼ばれます。
+すべてを選びます)。`selection.count(filter)` は選んだ地物を数えます。
+`tx.features.update(draw.selection.target, patch)` は選んだ地物を 1 回の
+確定で書き換えます。差分は関数で作れます。関数は地物ごとではなく、地物の
+種類 (型、書式、作ったときのズーム) ごとに 1 回呼ばれます。
 
 ```ts
 draw.selection.setAll({ shown: true });
-draw.selection.update((sample) => ({
-  style: { strokeWidth: sample.type === 'LineString' ? 4 : 2 },
-}));
+await draw.write((tx) =>
+  tx.features.update(draw.selection.target, (sample) => ({
+    properties: {
+      'maplibre-gl-draw:style': {
+        strokeWidth: sample.type === 'LineString' ? 4 : 2,
+      },
+    },
+  })),
+);
 ```
 
 ### たくさんの地物を一度に
@@ -334,9 +353,9 @@ draw.selection.update((sample) => ({
 1 歩になります)。1 件ずつ選んだときと同じく、ロックされた地物はその場に残り、
 ドラッグの途中でロックされた地物も残ります。
 
-`draw.selection` の操作 (`delete`、`group`、`ungroup`、`move`、`update`) は、
-それらの地物にも効きます。`selection.features(filter, { limit, after })`
-はそれを 1 ページずつ読み、上限の無い読み出しは断ります。
+`draw.selection.target` を渡した書き込み (`tx.features.delete`、`update`、
+`place`、`translate`、`rotate`、`scale`) は、それらの地物にも効きます。
+`selection.features(filter, { limit, after })` はそれを 1 ページずつ読み、上限の無い読み出しは断ります。
 `selection.set(selection.target)` は、前に読んだ選択 (それらの地物を含みます)
 をもう一度選びます。選んだ地物の数で断る操作はありません。地物を読む物
 (コピーや複製) は 1 ページずつ読みます。
@@ -406,11 +425,12 @@ document.addEventListener('keydown', (event) => {
 `MultiPoint`、`MultiLineString`、`MultiPolygon` と穴のある多角形は、
 次の方法で作られます。
 
-- GeoJSON の `draw.document.load` (Multi の形状は保たれます。
-  `flattenMulti: true` で単一の地物に分けられます)
+- GeoJSON の `draw.open` と `tx.import` (Multi の形状は保たれます。
+  `parseGeoJSON` に `flattenMulti: true` を渡すと単一の地物に分けられ
+  ます)
 - 幾何演算 (離れた多角形を結合すると `MultiPolygon` になり、内側を
   型抜きすると穴になります。[吸着と幾何演算](snapping-geometry.ja.md))
-- 形状を渡した `draw.features.create`
+- 形状を渡した `tx.features.create`
 
 これらも単一の形状と同じように描画、当たり判定、編集ができます。どの
 パートをクリックしても地物全体が選ばれ、枠はすべてのパートを
@@ -428,42 +448,54 @@ document.addEventListener('keydown', (event) => {
 
 ## コードから地物を作る
 
-`draw.features.create` は型と GeoJSON の形状を受け取り、保存したとおりの
-地物を返します。フォームに入力された座標、距離と方位から求めた位置、
-自動化、テストに使えます。
+`draw.write` の中の `tx.features.create` は GeoJSON の Feature を受け取り、
+書いたとおりの地物を返します。フォームに入力された座標、距離と方位から
+求めた位置、自動化、テストに使えます。
 
 ```ts
 import { destination } from '@sakuzu/maplibre-gl-draw/geometry';
 
 const start = [139.7, 35.68];
-const line = draw.features.create({
-  type: 'LineString',
-  geometry: {
-    type: 'LineString',
-    coordinates: [start, destination(start, 500, 90)], // 東へ 500 m
-  },
-  properties: { name: 'Survey line' },
-});
-if (line) draw.selection.set('feature', [line.id]);
+const line = await draw.write((tx) =>
+  tx.features.create({
+    type: 'Feature',
+    geometry: {
+      type: 'LineString',
+      coordinates: [start, destination(start, 500, 90)], // 東へ 500 m
+    },
+    properties: { name: 'Survey line' },
+  }),
+);
+draw.selection.set('feature', [line.id]);
 ```
 
-- `layerId` か `groupId` で指定しない限り、地物はアクティブなレイヤーに
-  入ります。コードから作る地物は、利用者が描き込めないロック中や非表示の
-  レイヤーにも入れられます
-- 読み取り専用のあいだ、`create` は `null` を返します。入力が誤って
-  いれば `DrawError` を投げ、何も作りません
-- 円は中心を表す `Point` の形状で、半径は
+- `properties['maplibre-gl-draw:layerId']` か
+  `properties['maplibre-gl-draw:groupId']` で指定しない限り、地物は
+  アクティブなレイヤーに入ります。コードから作る地物は、利用者が描き込め
+  ないロック中や非表示のレイヤーにも入れられます
+- 描く型は形状の型です。`properties['maplibre-gl-draw:featureType']` で
+  別の型を指定できます
+- 読み取り専用のあいだ、書き込みは `DrawError` (`not-editable`) で
+  reject します。入力が誤っているときも `DrawError` で reject し、何も
+  作りません
+- 円は中心を表す `Point` の形状で型が `Circle` の地物で、半径は
   `properties['maplibre-gl-draw:radiusMeters']` に入れます
 - コードから作った地物には自動の名前も基準のズームも付かず、モードも
   選択も変わりません
-- `createMany` は複数の地物を 1 つの取引で作ります
+- 地物の配列を渡すと、`create` はそれを同じ取引ですべて作り、ID を
+  返します
 
 ```ts
-draw.features.create({
-  type: 'Circle',
-  geometry: { type: 'Point', coordinates: [139.7, 35.68] },
-  properties: { 'maplibre-gl-draw:radiusMeters': 250 },
-});
+await draw.write((tx) =>
+  tx.features.create({
+    type: 'Feature',
+    geometry: { type: 'Point', coordinates: [139.7, 35.68] },
+    properties: {
+      'maplibre-gl-draw:featureType': 'Circle',
+      'maplibre-gl-draw:radiusMeters': 250,
+    },
+  }),
+);
 ```
 
 組み込みのモードと同じ規則 (書き込めるレイヤー、自動の名前、基準の
@@ -573,7 +605,7 @@ const draw = createDraw(map, {
 
 描画と編集は地図のキャンバスへのポインター入力で操作し、ライブラリーは
 ARIA のロールもラベルも付けません。キーボードでは、削除、矢印キーでの
-移動、グループ化、取り消しができます。`draw.features.create` を使うと、
+移動、グループ化、取り消しができます。`tx.features.create` を使うと、
 アプリケーションでフォームなどの座標を入力する別の手段を用意できます。
 
 ## 関連する例
@@ -592,8 +624,9 @@ ARIA のロールもラベルも付けません。キーボードでは、削除
   `getMode`)
 - [`Mode`](../api/maplibre-gl-draw/type-aliases/Mode.md) と
   [`MODES`](../api/maplibre-gl-draw/variables/MODES.md)
-- [`FeaturesCollection`](../api/maplibre-gl-draw/interfaces/FeaturesCollection.md)
-  と [`FeatureInput`](../api/maplibre-gl-draw/interfaces/FeatureInput.md)
+- [`FeaturesCollection`](../api/maplibre-gl-draw/interfaces/FeaturesCollection.md)、
+  [`TransactionFeatures`](../api/maplibre-gl-draw/interfaces/TransactionFeatures.md)
+  と [`FeatureInput`](../api/maplibre-gl-draw/type-aliases/FeatureInput.md)
 - [`SelectionResource`](../api/maplibre-gl-draw/interfaces/SelectionResource.md)
   と
   [`VertexSelectionResource`](../api/maplibre-gl-draw/interfaces/VertexSelectionResource.md)

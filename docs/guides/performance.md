@@ -34,7 +34,7 @@ thousands of features in the document, measure it with the bench page
 
 When the user edits only a few features of large data, keep the data
 in a dataset and copy the row being edited into the document with
-`draw.features.create`. See [showing large data](large-data.md).
+`tx.features.create`. See [showing large data](large-data.md).
 
 ## Minimal settings
 
@@ -54,10 +54,12 @@ cases below, at creation or later with `draw.options.update`.
 
 ## Writing many features
 
-Each write of the document is one change, with its events. To create,
-change or delete many features, use the methods that take several at
-once: `createMany`, `updateMany` and `deleteMany` run in one transaction,
-so the drawing and `change` follow once for all of them.
+Each `draw.write` is one commit, with its events, however many features
+it writes. To create, change or delete many features, give them to one
+write of `tx`: `create` takes an array of features, and `update`,
+`delete`, `translate`, `rotate`, `scale` and `place` take their IDs, a
+filter, the selection or `{ all: true }`. The drawing and `change` then
+follow once for all of them.
 
 <!-- docs-check:
 declare const inputs: import('@sakuzu/maplibre-gl-draw').FeatureInput[];
@@ -65,17 +67,16 @@ declare const hiddenIds: string[];
 -->
 
 ```ts
-draw.features.createMany(inputs);
-
-// Writes of several kinds become one change with transact
-draw.transact(() => {
-  draw.features.deleteMany(hiddenIds);
-  draw.layers.update(layerId, { opacity: 0.5 });
+// Writes of several kinds in one transaction are one commit
+await draw.write(async (tx) => {
+  await tx.features.create(inputs);
+  await tx.features.delete(hiddenIds);
+  await tx.layers.update(layerId, { opacity: 0.5 });
 });
 ```
 
-A GeoJSON file is read in one step with `draw.document.load`, which also
-writes all its features in one change ([save and load](save-load.md)).
+A GeoJSON file is read in one step with `draw.open` or `tx.import`, which
+also writes all its features in one commit ([save and load](save-load.md)).
 
 ## Keeping the geometry
 
@@ -239,8 +240,8 @@ draw.extensions.overlays.add({
 
 ## A measured example
 
-A made-up city of 208,073 editable features was loaded into the document
-with `draw.document.load`: 174,435 polygons (buildings and parks), 24,328 lines
+A made-up city of 208,073 editable features was read into the document
+in one step: 174,435 polygons (buildings and parks), 24,328 lines
 (streets) and 9,310 points (places), colored by the style rules of their
 layers. It is the last picture of the README.
 
@@ -249,7 +250,7 @@ drawing on the GPU through ANGLE's Metal backend, with a map of 1280 ×
 760 CSS pixels at a pixel ratio of 2. Loading and panning were measured
 in four runs.
 
-- `draw.document.load` of the 208,073 features took 0.64 to 0.66 s
+- Reading the 208,073 features into the document took 0.64 to 0.66 s
 - Panning, zooming and turning the map for 10 s took draws of 8.4 ms
   at the median and 13 ms at the 90th percentile, 19 ms at the slowest
 
@@ -261,8 +262,8 @@ draw after the change, in three runs.
 - Moving the selected feature with an arrow key was drawn about 13 ms
   after the key press (6 to 14 ms)
 
-With twice as many features (410,772, one run), `draw.document.load`
-took 1.3 s.
+With twice as many features (410,772, one run), reading them took
+1.3 s.
 Other devices differ; measure yours as below.
 
 ## Package size
@@ -296,8 +297,8 @@ browser.
 - [OptionsResource](../api/maplibre-gl-draw/interfaces/OptionsResource.md)
   for `draw.options.update`
 - [Draw](../api/maplibre-gl-draw/interfaces/Draw.md) for `hasPendingWork`,
-  `captureImage` and `transact`
+  `captureImage` and `write`
 - [MemoryResource](../api/maplibre-gl-draw/interfaces/MemoryResource.md)
   for `draw.memory`
-- [FeaturesCollection](../api/maplibre-gl-draw/interfaces/FeaturesCollection.md)
-  for `createMany`, `updateMany` and `deleteMany`
+- [TransactionFeatures](../api/maplibre-gl-draw/interfaces/TransactionFeatures.md)
+  for the writes of many features

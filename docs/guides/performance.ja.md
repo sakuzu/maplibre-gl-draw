@@ -34,7 +34,7 @@ graduated のスタイル規則を付けた 5 万件の多角形のデータセ�
 測ってください。
 
 大きなデータのうち一部の地物だけを編集するなら、データは
-データセットに置き、編集する行だけを `draw.features.create` で
+データセットに置き、編集する行だけを `tx.features.create` で
 文書へ写します。[大量のデータを表示する](large-data.ja.md) を
 参照してください。
 
@@ -57,11 +57,12 @@ const draw = createDraw(map, {
 
 ## 多くの地物を書き込む
 
-文書への書き込みは 1 回ごとに 1 つの変更になり、イベントも
-届きます。多くの地物を作る、変える、消すときは、まとめて受け取る
-メソッドを使います。`createMany`、`updateMany`、`deleteMany` は
-1 つの取引で行うので、描画と `change` は全体に対して
-1 回で済みます。
+`draw.write` は、書く地物の数によらず 1 回ごとに 1 つの確定になり、
+イベントも届きます。多くの地物を作る、変える、消すときは、`tx` の 1 つの
+書き込みに渡します。`create` は地物の配列を受け取り、`update`、`delete`、
+`translate`、`rotate`、`scale`、`place` は ID、絞り込み、選択、
+`{ all: true }` を受け取ります。描画と `change` は全体に対して 1 回で
+済みます。
 
 <!-- docs-check:
 declare const inputs: import('@sakuzu/maplibre-gl-draw').FeatureInput[];
@@ -69,17 +70,16 @@ declare const hiddenIds: string[];
 -->
 
 ```ts
-draw.features.createMany(inputs);
-
-// 種類の違う書き込みも transact で 1 つの変更にする
-draw.transact(() => {
-  draw.features.deleteMany(hiddenIds);
-  draw.layers.update(layerId, { opacity: 0.5 });
+// 1 つの取引の種類の違う書き込みは 1 つの確定になる
+await draw.write(async (tx) => {
+  await tx.features.create(inputs);
+  await tx.features.delete(hiddenIds);
+  await tx.layers.update(layerId, { opacity: 0.5 });
 });
 ```
 
-GeoJSON のファイルは `draw.document.load` で 1 度に読めます。
-これもすべての地物を 1 つの変更で書き込みます
+GeoJSON のファイルは `draw.open` か `tx.import` で 1 度に読めます。
+これもすべての地物を 1 つの確定で書き込みます
 ([保存と読み込み](save-load.ja.md))。
 
 ## 形を持ち続ける
@@ -241,16 +241,16 @@ draw.extensions.overlays.add({
 
 ## 測った例
 
-架空の街の 208,073 件の編集できる地物を、`draw.document.load` で文書に
-読み込みました。多角形 174,435 件 (建物と公園)、線 24,328 件 (道)、点 9,310 件
-(場所) で、レイヤーのスタイル規則で塗り分けています。README の最後の
-画像がこの場面です。
+架空の街の 208,073 件の編集できる地物を、1 度に文書に読み込みました。
+多角形 174,435 件 (建物と公園)、線 24,328 件 (道)、点 9,310 件 (場所) で、
+レイヤーのスタイル規則で塗り分けています。README の最後の画像がこの場面
+です。
 
 測ったのは Apple M3 Max の上の headless Chromium 151 で、ANGLE の Metal の
 バックエンドにより GPU で描いています。地図は 1280 × 760 CSS ピクセル、
 画素の比は 2 です。読み込みとパンは 4 回測りました。
 
-- 208,073 件の `draw.document.load` は 0.64〜0.66 秒でした
+- 208,073 件を文書に読むのに 0.64〜0.66 秒かかりました
 - 地図を 10 秒間パン、ズーム、回転したときの描く 1 回は、中央値が
   8.4 ms、90 パーセンタイルが 13 ms、いちばん遅いもので 19 ms でした
 
@@ -262,8 +262,7 @@ draw.extensions.overlays.add({
 - 選んだ地物を矢印キーで動かすと、キーを押してから約 13 ms で描かれ
   ました (6〜14 ms)
 
-地物を 2 倍 (410,772 件、1 回) にすると、`draw.document.load` は
-1.3 秒かかりました。端末が違えば結果も変わるので、次の節の方法で測って
+地物を 2 倍 (410,772 件、1 回) にすると、読むのに 1.3 秒かかりました。端末が違えば結果も変わるので、次の節の方法で測って
 ください。
 
 ## パッケージの大きさ
@@ -297,9 +296,9 @@ draw.extensions.overlays.add({
   [RenderingOptions](../api/maplibre-gl-draw/interfaces/RenderingOptions.md)
 - `draw.options.update` については
   [OptionsResource](../api/maplibre-gl-draw/interfaces/OptionsResource.md)
-- `hasPendingWork`、`captureImage`、`transact` については
+- `hasPendingWork`、`captureImage`、`write` については
   [Draw](../api/maplibre-gl-draw/interfaces/Draw.md)
 - `draw.memory` については
   [MemoryResource](../api/maplibre-gl-draw/interfaces/MemoryResource.md)
-- `createMany`、`updateMany`、`deleteMany` については
-  [FeaturesCollection](../api/maplibre-gl-draw/interfaces/FeaturesCollection.md)
+- 多くの地物の書き込みについては
+  [TransactionFeatures](../api/maplibre-gl-draw/interfaces/TransactionFeatures.md)

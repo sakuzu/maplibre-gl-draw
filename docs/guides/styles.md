@@ -8,27 +8,33 @@ strings the library returns, which a host can replace for its language.
 ## Minimal code
 
 ```ts
-// Color the features of a layer by an attribute
-draw.layers.update(layerId, {
-  styleRule: {
-    kind: 'categorical',
-    property: 'landuse',
-    map: { park: '#4caf50', water: '#2196f3' },
-    other: '#9e9e9e',
-  },
-});
+await draw.write(async (tx) => {
+  // Color the features of a layer by an attribute
+  await tx.layers.update(layerId, {
+    styleRule: {
+      kind: 'categorical',
+      property: 'landuse',
+      map: { park: '#4caf50', water: '#2196f3' },
+      other: '#9e9e9e',
+    },
+  });
 
-// One feature keeps its own color whatever the rule says
-draw.features.update(featureId, { style: { fillColor: '#ff9800' } });
+  // One feature keeps its own color whatever the rule says
+  await tx.features.update(featureId, {
+    properties: { 'maplibre-gl-draw:style': { fillColor: '#ff9800' } },
+  });
+});
 ```
 
 The rule is evaluated when the layer is drawn, so a feature whose
-`landuse` changes takes its new color at once, without touching `style`.
+`landuse` changes takes its new color at once, without touching its style.
 
 ## A feature's own style
 
-`Feature.style` is a `FeatureStyle`. Every key is optional; a key left out
-takes the rule color or the default.
+A feature keeps its own style in `properties['maplibre-gl-draw:style']`, a
+`FeatureStyle`, and `readFeature(feature).style` reads it (`{}` when it
+has none). Every key is optional; a key left out takes the rule color or
+the default.
 
 | Types | Keys |
 | --- | --- |
@@ -45,33 +51,45 @@ default) and `pointStrokeWidth` (2 by default); `strokeColor` and
 `strokeWidth` are the lines and the outlines of areas only.
 
 ```ts
-draw.features.create({
-  type: 'LineString',
-  geometry: {
-    type: 'LineString',
-    coordinates: [
-      [139.7, 35.68],
-      [139.71, 35.69],
-    ],
-  },
-  style: { strokeColor: '#1e88e5', strokeWidth: 4, lineStyle: 'dashed' },
-});
+await draw.write((tx) =>
+  tx.features.create({
+    type: 'Feature',
+    geometry: {
+      type: 'LineString',
+      coordinates: [
+        [139.7, 35.68],
+        [139.71, 35.69],
+      ],
+    },
+    properties: {
+      'maplibre-gl-draw:style': {
+        strokeColor: '#1e88e5',
+        strokeWidth: 4,
+        lineStyle: 'dashed',
+      },
+    },
+  }),
+);
 ```
 
-`features.update` merges the style key by key: the keys you give change,
-the others stay, and a key given as `undefined` is removed, so the
-feature takes the rule color or the default again.
+`tx.features.update` merges the style key by key: the keys you give
+change, and the others stay. A key named in `unset.style` is removed, so
+the feature takes the rule color or the default again; a key given as
+`undefined` is refused (`invalid-input`).
 
 ```ts
 // Thicker, and back to the color of the rule
-draw.features.update(featureId, {
-  style: { strokeWidth: 6, strokeColor: undefined },
-});
+await draw.write((tx) =>
+  tx.features.update(featureId, {
+    properties: { 'maplibre-gl-draw:style': { strokeWidth: 6 } },
+    unset: { style: ['strokeColor'] },
+  }),
+);
 ```
 
 - Colors are CSS colors (`#1e88e5`, `rgb(30 136 229)`, `hsl(...)`,
   `tomato`); opacities run from 0 to 1. A value of the wrong type or
-  form throws a `DrawError` with the code `invalid-input`
+  form rejects the write with a `DrawError` with the code `invalid-input`
 - `parseCssColor(value)` reads a color as the library reads it, and
   gives `[red, green, blue, alpha]` from 0 to 1, or `null` for a value
   the library does not take as a color. An extension checks a color of
@@ -86,14 +104,14 @@ draw.features.update(featureId, {
   zoomed out
 - The drawing modes write the reference zoom unless the option
   `scaleWithZoom` is `false`. A feature without it (one created with
-  `features.create`, or drawn with that option off) keeps its width in
+  `tx.features.create`, or drawn with that option off) keeps its width in
   pixels on the screen at every zoom
 - A point keeps its size on screen at every zoom
 - `pointShape` is `circle`, `square`, `triangle` or `star`, and wins over
   the shape of the defaults, so the points of one instance can mix
   shapes. Whatever the shape, a point is hit like the circle that encloses
   it
-- A locked feature refuses a style change ([Layers and groups](layers.md))
+- A locked feature refuses a style change with `locked` ([Layers and groups](layers.md))
 - A key that `FeatureStyle` does not define is kept, saved and loaded
   unchanged without a check, so an extension can store its own keys; the
   code that reads such a key checks its value
@@ -184,29 +202,31 @@ declare const otherLayerId: string;
 -->
 
 ```ts
-draw.layers.update(layerId, {
-  styleRule: {
-    kind: 'graduated',
-    property: 'population',
-    breaks: [1000, 5000, 10000],
-    colors: ['#eff3ff', '#bdd7e7', '#6baed6', '#2171b5'],
-    other: '#cccccc',
-  },
-});
+await draw.write(async (tx) => {
+  await tx.layers.update(layerId, {
+    styleRule: {
+      kind: 'graduated',
+      property: 'population',
+      breaks: [1000, 5000, 10000],
+      colors: ['#eff3ff', '#bdd7e7', '#6baed6', '#2171b5'],
+      other: '#cccccc',
+    },
+  });
 
-draw.layers.update(otherLayerId, {
-  styleRule: {
-    kind: 'continuous',
-    property: 'height',
-    min: 0,
-    max: 300,
-    ramp: ['#fff5eb', '#7f2704'],
-    other: '#cccccc',
-  },
+  await tx.layers.update(otherLayerId, {
+    styleRule: {
+      kind: 'continuous',
+      property: 'height',
+      min: 0,
+      max: 300,
+      ramp: ['#fff5eb', '#7f2704'],
+      other: '#cccccc',
+    },
+  });
 });
 
 // Remove the rule
-draw.layers.update(layerId, { styleRule: undefined });
+await draw.write((tx) => tx.layers.update(layerId, { styleRule: undefined }));
 ```
 
 - The colors of a rule are CSS colors; `evaluateStyleRule` and

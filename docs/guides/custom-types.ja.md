@@ -39,17 +39,20 @@ const route: FeatureTypeDefinition = {
 
 const removeRoute = draw.extensions.featureTypes.add(route);
 
-draw.features.create({
-  type: 'Route',
-  geometry: {
-    type: 'LineString',
-    coordinates: [
-      [139.7, 35.68],
-      [139.72, 35.69],
-      [139.74, 35.68],
-    ],
-  },
-});
+await draw.write((tx) =>
+  tx.features.create({
+    type: 'Feature',
+    geometry: {
+      type: 'LineString',
+      coordinates: [
+        [139.7, 35.68],
+        [139.72, 35.69],
+        [139.74, 35.68],
+      ],
+    },
+    properties: { 'maplibre-gl-draw:featureType': 'Route' },
+  }),
+);
 ```
 
 経路は有効なレイヤーに入り、重なりの順のその位置に、オレンジの破線で
@@ -59,14 +62,14 @@ draw.features.create({
 
 ## 独自の型の保存のされ方
 
-独自の型の地物は、`type` が型の名前で、`geometry` が定義の決めた種類の
-GeoJSON の図形であるふつうの地物です。ほかの地物と同じように作り、
-変え、保存し、読み込めます。
+独自の型の地物は、プロパティー `maplibre-gl-draw:featureType` が型の
+名前で、`geometry` が定義の決めた種類の GeoJSON の図形であるふつうの
+地物です (`readFeature(feature).featureType` で型を読めます)。ほかの
+地物と同じように作り、変え、保存し、読めます。
 
-- ライブラリーの形式は型をそのまま保ちます
-- GeoJSON にはこの型に当たる種類が無いので、書き出しは図形をそのまま
-  書き、型の名前をプロパティー `maplibre-gl-draw:featureType` に書き
-  ます。そのファイルを読み込むと、図形の種類にかかわらず型が戻ります
+- GeoJSON にはこの型に当たる種類が無いので、どちらの形式も図形を
+  そのまま書き、型の名前をプロパティー `maplibre-gl-draw:featureType` に
+  書きます。そのファイルを読むと、図形の種類にかかわらず型が戻ります
   ([データ形式](../reference/data-format.md))
 - 組み込みの型の名前は使われているので、
   `draw.extensions.featureTypes.add` はそれらに `already-exists` を
@@ -80,7 +83,7 @@ GeoJSON の図形であるふつうの地物です。ほかの地物と同じよ
 ([自動の名前](drawing.ja.md#ほかの言語の名前))。
 
 型は、地物ごとに自分の値を要することがよくあります。印の大きさ
-などです。そうした値は、ライブラリーが決めていない鍵で `style` か
+などです。そうした値は、ライブラリーが決めていない鍵でスタイルか
 `properties` に置きます。値はそのまま保存、書き出し、読み込みされ、
 ライブラリーは検査しません。`render` は、値を使う前に確かめてください。
 `style` の鍵は、宣言のマージで TypeScript に伝えます。
@@ -92,7 +95,9 @@ declare module '@sakuzu/maplibre-gl-draw' {
   }
 }
 
-const ends = feature.style.routeEnds === 'dot' ? 'dot' : 'none';
+import { readFeature } from '@sakuzu/maplibre-gl-draw';
+
+const ends = readFeature(feature).style.routeEnds === 'dot' ? 'dot' : 'none';
 ```
 
 ## 描き方
@@ -208,7 +213,7 @@ ctx.point.draw(
 ### 型の見た目
 
 型は、その地物の見た目を `defaultStyle` (`FeatureStyle`) で宣言し、
-`render` は `feature.style` と自分の既定ではなく
+`render` は地物のスタイルと自分の既定ではなく
 `ctx.appliedStyle(feature)` で描きます。見た目はライブラリーが組み立て、
 `render` にも `draw.features.getAppliedStyle(id)` にも同じ組み立て方で
 答えます。そのため、インスペクターのパネルは描かれているものを見せます。
@@ -752,7 +757,8 @@ import type { Point } from 'geojson';
 const halo: CompanionProvider = {
   name: 'halo',
   has: (feature) =>
-    feature.type === 'Point' && feature.properties.highlight === true,
+    readFeature(feature).featureType === 'Point' &&
+    feature.properties.highlight === true,
   draw(feature, ctx) {
     ctx.point.draw((feature.geometry as Point).coordinates, {
       shape: 'circle',

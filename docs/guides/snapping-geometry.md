@@ -27,9 +27,8 @@ draw.on('snap.changed', ({ result }) => {
   statusBar.textContent = result?.target?.kind ?? '';
 });
 
-// Merge two areas into one feature
-// The new feature, or null when the change is refused
-const merged = draw.features.union([parcelA, parcelB]);
+// Merge two areas into one feature (the write rejects when it is refused)
+const merged = await draw.write((tx) => tx.features.union([parcelA, parcelB]));
 ```
 
 ## Snapping
@@ -238,9 +237,10 @@ draw.options.update({ topology: { sharedVertexDrag: true } });
 
 ## Combining and splitting features
 
-The collection `draw.features` has the operations that change the
-document: each takes the IDs of the features, computes the result and
-writes it in one change.
+The writes of the features, `tx.features` in a `draw.write`, have the
+operations that change the shapes of the document: each takes the IDs of
+the features, computes the result and writes it with the other writes of
+its transaction, in one commit.
 
 - `union(ids)` merges 2 or more areas into one feature, which replaces
   them
@@ -250,8 +250,8 @@ writes it in one change.
   feature that replaces them
 - `split(id, lineId)` cuts an area along a line into pieces, which
   replace the area; the line stays
-- `buffer(ids, { distanceMeters, segments })` makes the area around each
-  point, line and area, one per input; the inputs stay
+- `buffer(id, distanceMeters)` makes the area around a point, a line or
+  an area; the input stays
 
 <!-- docs-check:
 declare const back: string;
@@ -262,15 +262,27 @@ declare function toast(message: string): void;
 -->
 
 ```ts
-// Cut the front area out of the back one; the front one stays
-const cut = draw.features.difference(back, [front]);
-if (cut === null) toast('nothing left');
+import { DrawError } from '@sakuzu/maplibre-gl-draw';
 
-const pieces = draw.features.split(parcelId, cutLineId);
+try {
+  // Cut the front area out of the back one; the front one stays
+  await draw.write((tx) => tx.features.difference(back, [front]));
+} catch (error) {
+  if (error instanceof DrawError && error.code === 'invalid-input') {
+    toast('nothing left');
+  }
+}
 
+const pieces = await draw.write((tx) => tx.features.split(parcelId, cutLineId));
+
+// One buffer per selected feature, in one commit
 const ids = draw.selection.value.ids ?? [];
-const zones = draw.features.buffer(ids, { distanceMeters: 100 });
-draw.features.buffer([parcelId], { distanceMeters: -5, segments: 32 });
+const zones = await draw.write(async (tx) => {
+  const made = [];
+  for (const id of ids) made.push(await tx.features.buffer(id, 100));
+  return made;
+});
+await draw.write((tx) => tx.features.buffer(parcelId, -5));
 ```
 
 To work on the selection, pass `draw.selection.value.ids`. The results
@@ -281,18 +293,19 @@ when the user should keep working on them.
 
 - Areas are `Polygon`, `MultiPolygon` and `Circle`. The line of `split` is
   a `LineString`, a `MultiLineString` or a `Freehand`
-- A wrong argument throws a `DrawError` and changes nothing: `not-found`
-  for an unknown ID, `invalid-input` for a feature of the wrong type (a
-  line given to `union`, an `Image` given to `buffer`) or a distance that
-  is not a finite number
-- A refusal returns `null` and changes nothing: while the document is
-  read-only, or when one of the features is locked
-- Removing the inputs and creating the results is one change, which
+- A wrong argument rejects with a `DrawError` and changes nothing:
+  `not-found` for an unknown ID, `invalid-input` for a feature of the
+  wrong type (a line given to `union`, an `Image` given to `buffer`) or a
+  distance that is not a finite number
+- A refusal rejects and changes nothing: `not-editable` while the
+  document is read-only, and `locked` when one of the features is locked
+- Removing the inputs and creating the results is one commit, which
   arrives as one `change`
-- An empty result changes nothing. `intersection` of areas that do not
-  overlap and `difference` that cuts everything away return `null`; a
-  line that does not divide the area makes `split` return `[]`, and so
-  does `buffer` with a distance of 0
+- An empty result changes nothing. `union`, `intersection` of areas that
+  do not overlap, `difference` that cuts everything away and `buffer`
+  with a distance of 0 or one that leaves no area reject with
+  `invalid-input`; a line that does not divide the area makes `split`
+  return `[]`
 
 ### The shape of the result
 

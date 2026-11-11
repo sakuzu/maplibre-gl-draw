@@ -128,16 +128,19 @@ of what a change created, and `draw.features.get` reads each feature.
 draw.on('change', ({ features }) => {
   for (const id of features.created) {
     const feature = draw.features.get(id);
-    console.log('created', id, feature?.type);
+    console.log('created', id, feature?.geometry.type);
   }
 });
 ```
 
-`feature.geometry` is a GeoJSON geometry. For a polygon its
-`coordinates` are the rings, `[[[lng, lat], ...]]`, with the first point
-repeated at the end. `feature.properties` are GeoJSON properties too:
-your attributes, and the few values the library keeps under keys that
-start with `maplibre-gl-draw:`.
+A feature is a GeoJSON Feature, `{ type: 'Feature', id, geometry,
+properties }`. For a polygon the `coordinates` of its geometry are the
+rings, `[[[lng, lat], ...]]`, with the first point repeated at the end.
+`feature.properties` holds your attributes, and the few values the
+library keeps (its layer, group, style, and whether it is visible and
+locked) under keys that start with `maplibre-gl-draw:`. A key whose value
+is the default is left out; `readFeature(feature)` reads those values
+under short names with the defaults filled in.
 
 To keep a toolbar in step with the mode (including the automatic return
 to `select`), subscribe to `draw.mode`. A value that changes over time,
@@ -159,7 +162,7 @@ the same way; `draw_image` also asks your application for the image. The
 ## 4. Subscribe to changes
 
 `change` covers every change (creating, moving, editing vertices,
-deleting, loading). It arrives once per transaction, however many
+deleting, opening a document). It arrives once per commit, however many
 features it changed, and lists the IDs of everything that changed
 together.
 
@@ -176,21 +179,44 @@ draw.on('change', ({ features, source }) => {
 `draw.features.get(id)` reads a feature as it is now, and
 `change.previous(id)`, in the listener, a feature updated or deleted as it
 was before. `source` says where the change came from, for example
-`'local'` for the user's edits and calls of the API, and `'load'` for a
-GeoJSON load. The same event covers layers and groups (`layers` and
-`groups`), and the title of the document (`document`).
+`'local'` for the user's edits and the writes of your code, `'undo'` and
+`'redo'` for `draw.undo()` and `draw.redo()`, and `'open'` for a document
+opened. The same event covers layers and groups (`layers` and `groups`),
+and the title of the document (`document`).
 
 A few rules make the API easy to reason about.
 
-- Methods are synchronous. After `draw.setMode(...)` or
-  `draw.features.delete(id)` returns, reading the instance gives the new
-  state. Only `draw.document.load` returns a Promise
-- `create` and `update` return what they wrote. A wrong argument, such as
-  an ID that does not exist, throws a `DrawError`; a write refused
-  because the drawing is read-only returns `null` or `false`
-- Events fire after the change is complete, so a listener sees the new
-  state
+- Reads are synchronous: `draw.features.get(id)` and the other reads of
+  `draw` return at once. So do the changes of this client alone, such as
+  `draw.setMode(...)` and the selection
+- The document is written in one place, `draw.write`. Its function is
+  given a transaction, `tx`, which holds the writes; when the function
+  ends they are committed at once, as one `change` and one step of undo.
+  The promise settles once the commit is made, so a read after `await`
+  gives the new state, and a read before it the state before
+- A write that fails rejects with a `DrawError`: a wrong argument, such as
+  an ID that does not exist (`not-found`), or a write the state refuses,
+  such as one while the drawing is read-only (`not-editable`) or of a
+  locked feature (`locked`). Nothing of the transaction is committed then
+- Events fire after the commit is made, so a listener sees the new state
 - `draw.on` returns a function that unsubscribes
+
+<!-- docs-check: continue -->
+
+```ts
+// One transaction: both writes are one change and one step of undo
+const [first, second] = draw.selection.value.ids ?? [];
+if (first !== undefined && second !== undefined) {
+  await draw.write(async (tx) => {
+    await tx.features.update(first, {
+      properties: { 'maplibre-gl-draw:style': { fillColor: '#e74c3c' } },
+    });
+    await tx.features.delete(second);
+  });
+}
+// Takes it back
+await draw.undo();
+```
 
 Update your UI from the events, not from the methods you called: the
 user changes the drawing too, and the events cover both.
@@ -211,34 +237,38 @@ document.querySelector('#save')?.addEventListener('click', () => {
 });
 ```
 
-`draw.document.load` reads it back. It detects the format of what you
-give it: GeoJSON, the native format, a JSON string or a `File`.
+`draw.open` reads it back in place of the document. It detects the
+format of what you give it: GeoJSON, the native format, a JSON string or
+a `File`.
 
 <!-- docs-check: continue -->
 
 ```ts
 const saved = localStorage.getItem(STORAGE_KEY);
 if (saved !== null) {
-  const result = await draw.document.load(JSON.parse(saved));
-  console.log(`loaded ${result?.featureIds.length ?? 0} features`);
-  for (const { index, reason } of result?.skipped ?? []) {
-    console.warn(`feature ${index} was skipped: ${reason}`);
+  const result = await draw.open(saved);
+  console.log(`opened ${result.features} features`);
+  for (const { index, error } of result.skipped) {
+    console.warn(`feature ${index} was skipped: ${error.message}`);
   }
 }
 ```
 
-`load` returns `null` when the drawing is read-only. Loading GeoJSON adds
-the features to the ones already there. They go into the active layer,
-unless they name a layer that exists (a GeoJSON written by this library
-does). A feature that cannot be read (an unknown geometry type, invalid
-coordinates) is left out and listed in `skipped`, and the rest are
-loaded. All the loaded features arrive in one `change`.
+`open` rejects with a `DrawError` (`not-editable`) when the drawing is
+read-only. Opening GeoJSON replaces the features and the groups and keeps
+the layers. A feature goes into the layer it names in
+`maplibre-gl-draw:layerId` when that layer exists (a GeoJSON written by
+this library names it), and into the active layer otherwise. A feature
+that cannot be read (an unknown geometry type, invalid coordinates) is
+left out and listed in `skipped`, and the rest are read. The document
+opened arrives in one `change` with the source `'open'`, and the steps of
+undo are dropped. To add a file to the features already there, give it
+to `tx.import` in a `draw.write`.
 
 GeoJSON keeps each feature with its properties and style, but not the
 layers and groups themselves or their order. To keep those as well, use
 the native format: `draw.document.toJSON()` returns the whole document,
-and `draw.document.load` reads it back in the same way. Loading the
-native format replaces the current document instead of adding to it.
+and `draw.open` reads it back in the same way, replacing everything.
 Both formats are specified in the
 [data format reference](reference/data-format.md).
 

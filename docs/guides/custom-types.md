@@ -40,17 +40,20 @@ const route: FeatureTypeDefinition = {
 
 const removeRoute = draw.extensions.featureTypes.add(route);
 
-draw.features.create({
-  type: 'Route',
-  geometry: {
-    type: 'LineString',
-    coordinates: [
-      [139.7, 35.68],
-      [139.72, 35.69],
-      [139.74, 35.68],
-    ],
-  },
-});
+await draw.write((tx) =>
+  tx.features.create({
+    type: 'Feature',
+    geometry: {
+      type: 'LineString',
+      coordinates: [
+        [139.7, 35.68],
+        [139.72, 35.69],
+        [139.74, 35.68],
+      ],
+    },
+    properties: { 'maplibre-gl-draw:featureType': 'Route' },
+  }),
+);
 ```
 
 The route appears as an orange dashed line in the active layer, in its
@@ -62,15 +65,15 @@ again.
 
 ## How a custom type is stored
 
-A feature of a custom type is an ordinary feature whose `type` is the
-name of the type and whose `geometry` is a GeoJSON geometry of the kind
-the definition names. It is created, changed, saved and loaded like any
-other feature.
+A feature of a custom type is an ordinary feature whose property
+`maplibre-gl-draw:featureType` is the name of the type and whose
+`geometry` is a GeoJSON geometry of the kind the definition names
+(`readFeature(feature).featureType` reads the type). It is created,
+changed, saved and read like any other feature.
 
-- The native format keeps the type as it is
-- GeoJSON has no type of its own for it, so the export writes the
+- GeoJSON has no type of its own for it, so both formats write the
   geometry with the name of the type in the property
-  `maplibre-gl-draw:featureType`. Loading the file restores the type,
+  `maplibre-gl-draw:featureType`. Reading the file restores the type,
   whatever the kind of the geometry
   ([data format](../reference/data-format.md))
 - The names of the built-in types are taken:
@@ -85,8 +88,8 @@ shown to users should say its name in its documentation, for the host
 to translate ([automatic names](drawing.md#names-in-another-language)).
 
 A type often needs values of its own for each feature, such as the
-size of a marker. Keep them in `style` or in `properties` under keys
-that the library does not define. They are stored, exported and loaded
+size of a marker. Keep them in the style or in `properties` under keys
+that the library does not define. They are stored, exported and read
 back as they are, and the library does not check them, so `render`
 checks a value before it uses it. Declare the style keys for TypeScript
 by declaration merging:
@@ -98,7 +101,9 @@ declare module '@sakuzu/maplibre-gl-draw' {
   }
 }
 
-const ends = feature.style.routeEnds === 'dot' ? 'dot' : 'none';
+import { readFeature } from '@sakuzu/maplibre-gl-draw';
+
+const ends = readFeature(feature).style.routeEnds === 'dot' ? 'dot' : 'none';
 ```
 
 ## Drawing
@@ -219,7 +224,7 @@ and it lands on the right copy.
 
 A type declares the look of its features in `defaultStyle`, a
 `FeatureStyle`, and its `render` draws with `ctx.appliedStyle(feature)`
-rather than with `feature.style` and defaults of its own. The library
+rather than with the style of the feature and defaults of its own. The library
 puts the look together, the same way for `render` and for
 `draw.features.getAppliedStyle(id)`, so an inspector panel shows what is
 drawn. `getAppliedStyle` answers for the values of the document, without
@@ -801,7 +806,8 @@ import type { Point } from 'geojson';
 const halo: CompanionProvider = {
   name: 'halo',
   has: (feature) =>
-    feature.type === 'Point' && feature.properties.highlight === true,
+    readFeature(feature).featureType === 'Point' &&
+    feature.properties.highlight === true,
   draw(feature, ctx) {
     ctx.point.draw((feature.geometry as Point).coordinates, {
       shape: 'circle',

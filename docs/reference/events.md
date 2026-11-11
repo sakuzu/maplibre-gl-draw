@@ -24,7 +24,7 @@ const stop = draw.on('change', ({ features, source }) => {
 stop();
 
 // Only the next occurrence
-draw.once('document.loaded', ({ result }) => console.log(result.featureIds));
+draw.once('change', ({ commit, label }) => console.log(commit, label));
 ```
 
 `on` and `once` return the function that unsubscribes. `off(event,
@@ -43,8 +43,10 @@ API it returns
 
 ## Delivery
 
-Listeners run synchronously, inside the call that caused the change. When
-`draw.features.create()` returns, its `change` listeners have already run.
+Listeners run synchronously, when the change is made. A write of the
+document is committed after `draw.write` returns, and its `change`
+listeners have run when its promise settles. The other events run inside
+the call that caused them.
 
 A listener that throws is logged with `console.error`. It stops neither
 the other listeners of the same event nor the operation that emitted it.
@@ -53,8 +55,8 @@ A listener added or removed while an event is being delivered takes effect
 from the next event.
 
 When a listener reads the instance (for example `draw.features.get()`), it
-sees the state after the whole transaction, not the state between two
-writes of it.
+sees the state after the whole commit, not the state between two writes
+of it.
 
 No event can refuse or rewrite a change: every event arrives after the
 change is made.
@@ -68,7 +70,6 @@ change is made.
 | Event | Payload |
 | --- | --- |
 | `change` | [`Change`](../api/maplibre-gl-draw/interfaces/Change.md) |
-| `document.loaded` | `{ result: LoadResult; source }` |
 
 ### The state of this client
 
@@ -86,7 +87,6 @@ change is made.
 | `snap.changed` | `{ result: SnapResult \| null }` |
 | `map.clicked` | `{ lngLat; point; hit: Hit \| null }` |
 | `dataset.clicked` | `{ datasetId; rowIndex; row; lngLat; point }` |
-| `image.requested` | `{ lngLat; zoom; layerId }` |
 
 ### Drawing
 
@@ -140,19 +140,20 @@ that is not a function throws a `DrawError` with the code `invalid-input`.
 
 ## Transactions
 
-Every write belongs to a transaction. A method of the API is one
-transaction, and so is a method whose name ends in `Many`, a load, a drag
-step and `draw.transact(fn)`. A nested `transact` joins the outermost one.
+Every write of the document belongs to a commit. A `draw.write` is one
+commit, whatever its function writes, and so is `draw.open`, a step of
+`draw.undo` and `draw.redo`, an image the image mode places and what a
+drag writes when it is let go.
 
-What a transaction changed is told when the outermost transaction ends, all
-together, in the order below.
+What a commit changed is told when it is made, all together, in the order
+below.
 
 ### One change per commit
 
-`change` fires once per transaction that changed the document (its
-features, layers, groups, metadata or files), whatever it changed and
-however many features, from this client or from elsewhere. Loading 1,000
-features fires one `change`, with the 1,000 IDs in `features.created`. A
+`change` fires once per commit that changed the document (its features,
+layers, groups, metadata or files), whatever it changed and however many
+features, from this client or from elsewhere. Importing 1,000 features
+fires one `change`, with the 1,000 IDs in `features.created`. A
 listener that rebuilds a view on any change (a feature list, a legend) and a
 listener that keeps another copy in step (a server, a search index) both
 listen to it.
@@ -162,7 +163,9 @@ lists the IDs of what changed and where the writes came from.
 
 | Field | What it holds |
 | --- | --- |
+| `commit` | The ID of the commit: the `id` of the `draw.write` that made it |
 | `source` | Where the writes came from: `local` for a write of this client |
+| `label` | The `label` of the `draw.write` that made it |
 | `features` | The IDs of the features, as `ChangedIds` |
 | `layers` | The IDs of the layers, as `ChangedIds` |
 | `groups` | The IDs of the groups, as `ChangedIds` |
@@ -229,10 +232,10 @@ the document either: they fire `readOnly.changed` and
 ### The notifications of the Store
 
 `draw.getStore().subscribe(listener)` delivers every change of one
-transaction in full, once per transaction, as a
+commit in full, once per commit, as a
 [`DocumentChange`](../api/maplibre-gl-draw/interfaces/DocumentChange.md).
 It tells the same commit as `change`, by category, with the items
-themselves. A category is present only when the transaction changed it.
+themselves. A category is present only when the commit changed it.
 
 | Field | What it holds |
 | --- | --- |
@@ -254,15 +257,14 @@ themselves. A category is present only when the transaction changed it.
 The last three come from a Store that holds its features as rows. Such a
 Store tells the rows written by `rows`, by their handles, rather than in
 `features`, and many rows put in another place at once by one entry of
-`order`. `previousValues` and `restoreToken` are what an undo writes back
-with `draw.features.restore` and `draw.groups.restore` (see
-[Saving and loading](../guides/save-load.md)). `selection` is the selection
+`order`. `previousValues` and `restoreToken` are what `draw.undo` writes
+back. `selection` is the selection
 as the Store keeps it, without the IDs of the features selected past 2,000:
 `draw.selection.value` gives it with their number, layers and extent.
 
-### Order within one transaction
+### Order within one commit
 
-When a transaction ends, its observables and events are told in this order:
+When a commit is made, its observables and events are told in this order:
 the commit first, so that a subscriber of a value reads what the commit
 wrote as already told.
 
@@ -276,34 +278,26 @@ wrote as already told.
 ## Sources
 
 `change` carries `source`, and so does `DocumentChange`. It says where the
-writes of the transaction came from.
+writes of the commit came from.
 
 | Source | Writes |
 | --- | --- |
-| `local` | The user's operations and the calls of the API: the default |
-| `load` | A load of any format, with the replacement of `mode: 'replace'` |
-| `batch` | A bulk change meant to be one step |
-| `silent` | A change a recorder of changes leaves out |
+| `local` | The user's operations and the writes of `draw.write` |
+| `undo` | A step of undo of this client taken back by `draw.undo` |
+| `redo` | A step made again by `draw.redo` |
+| `open` | A document opened with `draw.open`, which replaces the document |
 | `remote` | A change a replaced Store applies from outside the instance |
-| `import` | Data an application or an extension loads by its own means |
-| any other | Given to `transact`, by an extension or by a replaced Store |
 
-The library itself writes `local`, `load` and `silent` (the selection a
-drawing mode clears as it is entered). A load of any format is one
-transaction with `load`: with `mode: 'replace'`, deleting what was there
-before is part of it, so it fires one `change`. `document.loadMany` writes
-all its sources in one such transaction.
-
-The library keeps no history of changes. `source` and the transaction
-boundary are what a listener that records changes goes by (see
-[Saving and loading](../guides/save-load.md)).
+A write of `draw.write` is told with `local` and its `label`, and is one
+step of undo unless it is given `undo: false`. `draw.open` drops the steps
+of undo. A commit with `remote` is no step of undo of this client.
 
 ## Drags
 
 A drag (of features, of a vertex, a midpoint, the radius of a Circle or a
 handle) is shown by a sketch of this client, which `draw.sketches` lists:
 the document does not change while it goes on, `draw.rendered` reads the
-features where they are drawn, and one transaction writes them when the
+features where they are drawn, and one commit writes them when the
 pointer is released. A drag cancelled writes nothing. A drag whose sketch
 ends by itself, its features deleted, locked, hidden or no longer
 selected, writes nothing either, and `drag.ended` says it was cancelled.
@@ -327,22 +321,12 @@ rows.
 
 ### change
 
-Fires once per transaction that changed the document, after the
-observables of the state of this client the transaction changed. See
+Fires once per commit that changed the document, after the observables of
+the state of this client the commit changed. See
 [one change per commit](#one-change-per-commit). The layer and the group
-that `LoadOptions.layer` and `LoadOptions.group` create come in the same
-`change` as the features of the load, in `layers.created` and
+that the `layer` and `group` options of `tx.import` create come in the
+same `change` as the features imported, in `layers.created` and
 `groups.created`.
-
-### document.loaded
-
-Fires after `draw.document.load()` read something, after the `change` of
-the load, and once per item after `draw.document.loadMany()`. `result` is
-the `LoadResult` the promise resolves to (the one of the item), and
-`source` is the source of its writes, `load`. A load refused because the
-document is read-only, and a load that fails, fire nothing.
-`result.layerId` and `result.groupId` name the layer and the group the load
-created.
 
 ### readOnly.changed and interactionLock.changed
 
@@ -373,17 +357,6 @@ the dataset itself fires `clicked` with the same payload. A click on a
 feature of the document, or on nothing, does not fire it: listen to
 `map.clicked` for those.
 
-### image.requested
-
-Fires when the mode `draw_image` starts. The library does not open a file
-dialog: your application picks the file and loads it with
-`draw.document.load(file, { coordinate: lngLat, zoom, layerId })`.
-`lngLat` is the clicked position when a click led to the mode (a listener
-of `map.clicked` entered it), and the center of the map when the mode was
-entered otherwise, such as by `draw.setMode('draw_image')` from a button.
-`layerId` is the layer the image goes into. The mode returns to `select`
-right after, and the mode cannot start while no layer can be written.
-
 ### layerStack.changed
 
 Fires when the divisions of the stacking order change: one is added or
@@ -394,12 +367,15 @@ own MapLibre layers between the divisions places them again here (see
 
 ### error
 
-The image of an Image feature could not be decoded. `source` is `image`,
-`featureId` names the feature, and `error` is a `DrawError` with the code
-`unsupported-format` whose `details` holds what was thrown. It fires once
-per image, and the feature is drawn without it.
+The image of an Image feature could not be decoded, or the image the image
+mode asked for with `requestImage` could not be placed. `source` is
+`image`, `featureId` names the feature of an image that could not be
+decoded, and `error` is a `DrawError` (with the code `unsupported-format`
+when what failed was not one) whose `cause` holds what was thrown. It fires
+once per image, and a feature is drawn without it.
 
-A failure of `draw.document.load()` rejects its promise instead.
+A failure of a write, of `draw.open` and of the other calls rejects their
+promise instead.
 
 ## Details per value
 
@@ -409,7 +385,7 @@ Its value is `draw.selection.value` (`SelectionValue`): the type (`feature`,
 `group` or `layer`; `feature` with the number 0 when nothing is selected),
 the number of the features, their layers and extent, and the IDs (`null`
 past 2,000 features of a Store that holds its features as rows). It is told
-again each time the selection changes, once a transaction, after it. The
+again each time the selection changes, once a commit, after it. The
 selection holds only what can be seen, so hiding or deleting a selected item
 changes it too.
 
@@ -427,7 +403,7 @@ changes, whoever changed it: `draw.setMode`, a key, or the end of a drawing.
 
 Its value is the set of the IDs of the features, groups and layers this
 client hides, what `draw.hidden.list()` lists. It is told again when they
-change, once a transaction, after it: by `draw.hidden`, or by the deletion
+change, once a commit, after it: by `draw.hidden`, or by the deletion
 of a hidden item. The value is the whole set after the change, not the
 difference.
 
@@ -438,7 +414,7 @@ Its value is what `draw.options.get()` returns. It is told again inside
 leaves every value as it was, such as `update({})`, tells nothing, and
 neither does an update that throws. The options belong to this client and
 are not part of the document, so a change of them is not part of a
-transaction and fires no `change`.
+commit and fires no `change`.
 
 ```ts
 draw.options.subscribe((options) => {
@@ -462,7 +438,7 @@ again once the operation is done: the features read with
   `draw.sketches.commit`, removed by `draw.sketches.remove`, or once nothing
   of it is left
 
-A commit writes in one transaction: `change` comes first, then the sketch is
+A commit of a sketch is one commit: `change` comes first, then the sketch is
 no longer listed. A second sketch of this client of a feature commits the
 first one before it is added.
 

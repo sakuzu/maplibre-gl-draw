@@ -35,9 +35,9 @@ with a white outline lets the colors of the rule read well: a rule sets
 the color of the fill, and the style keeps the opacity and the outline.
 The four kinds of rule are plain objects (1). The page fetches the
 buildings of the sample data and keeps the nearest 400 with a height and
-the attributes the rules read (2). `draw.document.load` creates the layer
-with its rule and puts the buildings in it, in one step (3), and
-`draw.layers.update` changes the rule (4), from a button the page adds
+the attributes the rules read (2). `tx.import` creates the layer with its
+rule and puts the buildings in it, in one commit (3), and
+`tx.layers.update` changes the rule (4), from a button the page adds
 to the standard UI with `ui.actions.add` (7); the map and the legend
 follow at once. The Attributes tab keeps what is typed as text, and a graduated
 or continuous rule reads numbers only, so the page turns a number typed
@@ -58,7 +58,7 @@ call to draw a legend itself.
   and the style of a feature
 - [`StyleRule`](../api/maplibre-gl-draw/type-aliases/StyleRule.md) and
   [`deriveLegend`](../api/maplibre-gl-draw/functions/deriveLegend.md)
-- [`layers.update`](../api/maplibre-gl-draw/interfaces/LayersCollection.md#update)
+- [`tx.layers.update`](../api/maplibre-gl-draw/interfaces/TransactionLayers.md#update)
 - [The legend](../../ui/README.md#use) of the standard UI
 
 Data: [Overture Maps Foundation](https://overturemaps.org), ODbL / CDLA

@@ -51,8 +51,8 @@ read-only-viewer
 インスペクターは属性のタブだけにして演算を出しません。描画が読み取り
 専用の間は、インスペクターが出す欄はすべて変えられなくなります。4 つの
 切り替え (5) は、`setReadOnly`、`setInteractionLocked`、`locked` を渡す
-`layers.update`、`draw.hidden` です。`layers.update` は断られると `null`
-を返します。`draw.hidden` はレイヤー、グループ、地物の ID を受け取ります。
+`tx.layers.update`、`draw.hidden` です。`tx.layers.update` の書き込みは、
+断られると `DrawError` で reject します。`draw.hidden` はレイヤー、グループ、地物の ID を受け取ります。
 これらは標準の UI の操作で (6)、`ui.actions.add` で足します。それぞれが
 キーと `checked` を持ちます。カードは `checked` を、押すたびと
 `ui.actions.refresh()` のたびに読み直します。ページはコアのイベントと、
@@ -72,7 +72,7 @@ read-only-viewer
 - [`setReadOnly`](../api/maplibre-gl-draw/interfaces/Draw.md#setreadonly)
   と
   [`setInteractionLocked`](../api/maplibre-gl-draw/interfaces/Draw.md#setinteractionlocked)
-- [保存と読み込み](../guides/save-load.ja.md)。`document.load` とその
+- [保存と読み込み](../guides/save-load.ja.md)。`tx.import` とその
   `layer` オプションです
 - [標準の UI のオプション](../../ui/README.md#use) (英語)。道具のバー、
   レイヤーのパネル、インスペクターのオプションもあります

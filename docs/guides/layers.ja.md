@@ -8,44 +8,46 @@
 ## 最小のコード
 
 ```ts
-import { createDraw } from '@sakuzu/maplibre-gl-draw';
+import { createDraw, readFeature } from '@sakuzu/maplibre-gl-draw';
 
 const draw = createDraw(map);
 
 // 文書は空のレイヤーを 1 つ持って始まる。2 つ目を足してそこに描く
-// (読み取り専用のあいだ create は null を返す)
-const notes = draw.layers.create({ name: 'Notes' });
-if (notes) {
-  draw.layers.setActive(notes.id);
-  draw.setMode('draw_point');
+// (読み取り専用のあいだ書き込みは reject する)
+const notes = await draw.write((tx) => tx.layers.create({ name: 'Notes' }));
+draw.layers.setActive(notes.id);
+draw.setMode('draw_point');
 
-  // 後で: ロックして、地物を選べるが編集できないようにする
-  draw.layers.update(notes.id, { locked: true });
-}
+// 後で: ロックして、地物を選べるが編集できないようにする
+await draw.write((tx) => tx.layers.update(notes.id, { locked: true }));
 ```
 
 ## レイヤー
 
 `Layer` は、`name`、`visible`、`locked`、`opacity`、中に持つ
 `items` (地物とグループの ID を奥から並べたもの)、省略できる
-`styleRule` ([スタイル](styles.ja.md))、省略できる独自の `metadata` を
-持ちます。
+`styleRule` ([スタイル](styles.ja.md))、省略できる独自の `metadata`
+(自分の前置きの付いた鍵 `app:key` の値) を持ちます。
 
 | メソッド | すること |
 | --- | --- |
-| `layers.create(input)` | レイヤーを足します。`index` が無ければ手前です |
-| `layers.update(id, patch)` | 渡したキーだけを変えます |
-| `layers.delete(id)` | 地物とグループごとレイヤーを削除します |
-| `layers.get(id)`、`list()`、`count()`、`has(id)` | 読みます |
+| `tx.layers.create(input)` | レイヤーを足します。`index` が無ければ手前です |
+| `tx.layers.update(id, patch)` | 渡したキーだけを変えます |
+| `tx.layers.delete(target)` | 地物とグループごとレイヤーを削除します |
+| `tx.layers.place(id, { below } か { above })` | レイヤーを別のレイヤーの隣に置きます |
+| `draw.layers.get(id)`、`list()`、`count()`、`has(id)` | 読みます |
 
-`create` と `update` は、保存したとおりのレイヤーを返します。読み取り
-専用のあいだは何も変えず、`create` と `update` は `null` を、`delete` は
-`false` を返します ([読み取り専用](read-only.ja.md))。無い ID を渡すと、
-コード `not-found` の `DrawError` を投げます。名前が `Many` で終わる
-メソッドは、同じことを複数のレイヤーについて 1 つの取引で行います。
+書き込みは `draw.write` の中で行います ([はじめに](../getting-started.ja.md))。
+`create` と `update` は書いたとおりのレイヤーを、`delete` は 1 つの ID、
+複数の ID、`{ all: true }` のどれかを受け取り、削除した数を返します。
+読み取り専用のあいだ、書き込みはコード `not-editable` の `DrawError` で
+reject します ([読み取り専用](read-only.ja.md))。無い ID を渡すと
+`not-found` で reject します。そのとき取引は何も確定しません。
 
 ```ts
-const roads = draw.layers.create({ name: 'Roads', opacity: 0.8, index: 0 });
+const roads = await draw.write((tx) =>
+  tx.layers.create({ name: 'Roads', opacity: 0.8, index: 0 }),
+);
 const hidden = draw.layers.list({ visible: false });
 ```
 
@@ -58,10 +60,9 @@ const hidden = draw.layers.list({ visible: false });
 自分でレイヤーを作ります。自前のデータから構成を復元するときなどに
 使います。
 
-`layers.delete` はレイヤーの中身もすべて削除します。ロックされた
-レイヤーや、ロックされた地物かグループを持つレイヤーには `false` を
-返します。レイヤーを選んでいるときの選択の削除 (`selection.delete()` と
-Delete キー) は、少なくとも 1 つのレイヤーを残します。
+`tx.layers.delete` はレイヤーの中身もすべて削除します。ロックされた
+レイヤーには `locked` で reject します。レイヤーを選んでいるときの
+Delete キーでの選択の削除は、少なくとも 1 つのレイヤーを残します。
 
 レイヤーの変更は `change` の `layers.created`、`layers.updated`、
 `layers.deleted` で、重なり順の変更は `layers.placed` で届きます。
@@ -78,8 +79,9 @@ Delete キー) は、少なくとも 1 つのレイヤーを残します。
 ます。アクティブなレイヤーに書き込めないときは、書き込める最初の
 レイヤーに描き、書き込めるようになるとアクティブなレイヤーに戻ります。
 書き込めるレイヤーが 1 つも無いあいだ、`setMode` は描画モードを
-受け付けません。この規則は利用者の描画だけのもので、`features.create`
-と `document.load` は存在するどのレイヤーにも書き込めます。
+受け付けません。この規則は利用者の描画だけのもので、
+`tx.features.create`、`tx.import`、`draw.open` は存在するどのレイヤーにも
+書き込めます。
 
 ## 重なりの順
 
@@ -96,54 +98,50 @@ Delete キー) は、少なくとも 1 つのレイヤーを残します。
 項目を数えます。どの種類のレイヤーでも読めます。行で持つレイヤー
 (地物を行で持つストアのレイヤー、`kind: 'table'`) は `items` を
 持たず、そのグループは `featureIds` を持ちません。
-`layers.reorder` はすべてのレイヤーの ID を奥から並べて受け取り
-(重なりの順のほかの項目も置けます。後で述べます)、
-`features.move` と `groups.move` が地物とグループを置きます。`index` を
-渡さない移動は移動先の手前に置き、`index: 0` は一番奥です。
-`layers.getOrder()` は、ほかの項目も含めて、重なりの順を `reorder` が
-受け取る形で返します。そのため、並べ替えてそのまま戻せます。
-
-```ts
-const order = [...draw.layers.getOrder()];
-const front = order.pop() as string;
-draw.layers.reorder([front, ...order]); // 一番手前を一番奥へ
-```
+`tx.layers.place(id, { below })` はレイヤーを別のレイヤーのすぐ手前に
+置き (`below` はすぐ下になるレイヤーです)、`{ above }` はすぐ奥に置きます。
+`tx.features.place` と `tx.groups.place` は、地物とグループを別の項目の
+隣か、レイヤーかグループの中に置きます。隣の項目を渡さなければ、置き先の
+一番手前に置きます。
 
 <!-- docs-check:
 declare const notes: import('@sakuzu/maplibre-gl-draw').Layer;
 -->
 
 ```ts
-// notes のレイヤーをほかのすべてのレイヤーの奥に置く
-const others = draw.layers.list().filter((layer) => layer.id !== notes.id);
-draw.layers.reorder([notes.id, ...others.map((layer) => layer.id)]);
+await draw.write(async (tx) => {
+  // notes のレイヤーをほかのすべてのレイヤーの奥に置く
+  const [back] = draw.layers.list();
+  if (back !== undefined && back.id !== notes.id) {
+    await tx.layers.place(notes.id, { above: back.id });
+  }
 
-// 1 つの地物をそのレイヤーの一番手前に出す
-const target = draw.features.get(featureId);
-if (target) draw.features.move(target.id, { layerId: target.layerId });
+  // 1 つの地物をそのレイヤーの一番手前に出す
+  const target = draw.features.get(featureId);
+  const layer = target ? readFeature(target).layerId : null;
+  if (layer !== null) await tx.features.place(featureId, { layerId: layer });
 
-// 地物やグループを別のレイヤーに移す
-draw.features.move(featureId, { layerId: notes.id });
-draw.groups.move(groupId, { layerId: notes.id, index: 0 });
+  // グループを別のレイヤーの一番手前に移す
+  await tx.groups.place(groupId, { layerId: notes.id });
+});
 ```
 
-- レイヤーへ移した地物はグループから出ます。`{ groupId }` はどの
-  レイヤーのグループにも地物を移し、`{ groupId: null }` は地物を
+- レイヤーへ置いた地物はグループから出ます。`{ groupId }` はどの
+  レイヤーのグループにも地物を入れ、`{ layerId, below: groupId }` は地物を
   グループから出してグループのすぐ手前に置きます
-- `moveMany` は複数の地物やグループを、それらのあいだの順を保って
-  移します
-- 置く場所は、`index` の代わりに、すぐ下の項目
-  (`{ layerId, groupId?, below }`。一番奥は `null`) か、すぐ上の項目
-  (`above`) でも指せます。行で持つレイヤーはこの形だけを受け取り、
-  `index` を断ります
-- ロックされたものの移動や、ロックされたレイヤーやグループへの移動は
-  `false` を返し、何も変えません
+- 複数の地物 (ID、絞り込み、選択) を渡すと、`tx.features.place` は
+  それらのあいだの順を保ちます
+- 置く場所は、すぐ下の項目 (`{ below }`) か、すぐ上の項目 (`{ above }`)
+  で指します。別のレイヤーやグループへ置くときは、その入れ物も添えます
+  (`{ layerId, groupId?, below }`)
+- ロックされたものを置くことや、ロックされたレイヤーやグループへ置く
+  ことは `locked` で reject し、何も変えません
 - 移った地物とグループは、`change` の `features.placed` と
   `groups.placed` に並びます。置き場のほかに何も変わっていなければ、
   `placed` にだけ並びます
 
 重なりの順は文書の一部です。`document.toJSON()` は `layerOrder` に書き
-出し、文書の `document.load` はこれを置き換えます。
+出し、文書の `draw.open` はこれを置き換えます。
 
 ## グループ
 
@@ -156,30 +154,32 @@ declare const idB: string;
 -->
 
 ```ts
-// 読み取り専用のあいだは null
-const site = draw.groups.create({ featureIds: [idA, idB], name: 'Site' });
+const site = await draw.write((tx) =>
+  tx.groups.create({ featureIds: [idA, idB], name: 'Site' }),
+);
 
 // Cmd/Ctrl+G と同じく、今の選択から作ることもできる
-draw.selection.set('feature', [idA, idB]);
-const created = draw.selection.group(); // まとめられないときは null
+const { type, ids } = draw.selection.value;
+if (type === 'feature' && ids !== null && ids.length > 1) {
+  await draw.write((tx) => tx.groups.create({ featureIds: ids }));
+}
 ```
 
-地物が同じレイヤーにそろっていなければ、`groups.create` は `DrawError`
-を投げます。`selection.group()` がグループを作るのは、同じレイヤーの
-地物を 2 つ以上選んでいて、どれもまだグループに入っていないときです。
-グループは、レイヤーの中で最も手前にあった地物の位置に入ります。
+地物が同じレイヤーにそろっていなければ、`tx.groups.create` は
+`DrawError` で reject します。グループは、レイヤーの中で最も手前に
+あった地物の位置に入ります。
 
-| メソッド | すること |
+| 書き込み | すること |
 | --- | --- |
-| `features.move(id, { groupId })` | 地物をグループに入れます |
-| `features.move(id, { groupId: null })` | グループのすぐ手前に出します |
-| `features.move(id, { groupId, index })` | グループの中で並べ替えます |
-| `groups.delete(id)` | グループを解き、地物は残します |
-| `selection.ungroup()` | 下の Shift+Cmd/Ctrl+G と同じ |
+| `tx.features.place(id, { groupId })` | 地物をグループに入れます |
+| `tx.features.place(id, { layerId, below: groupId })` | グループのすぐ手前に出します |
+| `tx.features.place(id, { below })` | 別のメンバーの隣へ並べ替えます |
+| `tx.groups.delete(id, { members: 'keep' })` | グループを解き、地物は残します |
+| `tx.groups.delete(id, { members: 'delete' })` | 地物ごとグループを削除します |
 
 - グループを解くと、その地物が順を保ってグループのあった位置に入ります
-- Shift+Cmd/Ctrl+G と `selection.ungroup()` は、選んだグループを
-  解くか、選んだ地物をそのグループから出します
+- Shift+Cmd/Ctrl+G は、選んだグループを解くか、選んだ地物をその
+  グループから出します
 - 空になったグループ (最後の地物が出たか削除された) は、合わせて削除
   されます
 - 地物は必ずどこか 1 か所に並んでいます。`groupId` を持つならその
@@ -187,12 +187,8 @@ const created = draw.selection.group(); // まとめられないときは null
 
 行で持つレイヤー (地物を行で持つストアのレイヤー) でも、グループには
 地物が要ります。このクライアントが削除したグループ (地物と一緒に削除
-したもの、最後の地物が出たもの、解除したもの) は、削除の札
-(`DocumentChange.restoreToken`) が離されるまでストアに残ります。
-`groups.restore(id)` は、そのグループを地物のないまま元の場所に
-戻します。地物は `features.restore` か `features.move` で戻します。
-残っているグループの ID でグループを作ると、そのグループがいた場所に
-作られます。残っている行の ID で地物を作ったときと同じです。
+したもの、最後の地物が出たもの、解除したもの) は、`draw.undo()` で削除を
+取り消すと、地物と一緒に元の場所に戻ります。
 
 グループの変更は `change` の `groups.created`、`groups.updated`、
 `groups.deleted` で届きます。
@@ -203,10 +199,18 @@ const created = draw.selection.group(); // まとめられないときは null
 許し、ほかの編集をすべて拒みます。
 
 ```ts
-draw.features.update(featureId, { locked: true });
-draw.groups.update(groupId, { locked: true });
-draw.layers.update(layerId, { locked: true });
+await draw.write(async (tx) => {
+  await tx.features.update(featureId, {
+    properties: { 'maplibre-gl-draw:locked': true },
+  });
+  await tx.groups.update(groupId, { locked: true });
+  await tx.layers.update(layerId, { locked: true });
+});
 ```
+
+地物のロックは `properties['maplibre-gl-draw:locked']` にあり、ロック
+されているあいだだけ置かれます。ロックを外すには、その鍵を `unset` に
+書きます (`{ unset: { properties: ['maplibre-gl-draw:locked'] } }`)。
 
 - ロックは引き継がれます。地物自身、そのグループ、そのレイヤーの
   どれかがロックされていれば、その地物はロックされています
@@ -215,11 +219,10 @@ draw.layers.update(layerId, { locked: true });
   でも選ばれません
 - ほかの地物と一緒に選ぶと、ほかをドラッグや矢印キーで動かしてもその場に
   残ります。ロックされた地物を押しても何も動きません
-- ロックされたものについて、`locked` と `visible` 以外を変える差分を
-  渡すと `update` は `null` を返し、`delete` と `move` は `false` を
-  返します
-- `selection.update` と `selection.delete` はロックされた地物をそのまま
-  残し、ほかを変えます
+- ロックされたものを ID で指す書き込みは `locked` で reject します。
+  ロックと表示のほかを変える差分の `update`、`delete`、`place` です
+- `draw.selection.target` か絞り込みを渡した書き込みは、ロックされた
+  地物をそのまま残し、ほかを変えます
 - Delete キーはロックされた地物を残します。グループを選んでいれば
   ロックされていない地物だけが削除され、ロックされたものを持つ
   レイヤーは削除されません
@@ -231,9 +234,10 @@ draw.layers.update(layerId, { locked: true });
 function isLocked(id: string): boolean {
   const f = draw.features.get(id);
   if (!f) return false;
-  const group = f.groupId ? draw.groups.get(f.groupId) : undefined;
-  const layer = draw.layers.get(f.layerId);
-  return f.locked || group?.locked === true || layer?.locked === true;
+  const { groupId, layerId, locked } = readFeature(f);
+  const group = groupId !== null ? draw.groups.get(groupId) : undefined;
+  const layer = layerId !== null ? draw.layers.get(layerId) : undefined;
+  return locked || group?.locked === true || layer?.locked === true;
 }
 ```
 
@@ -242,13 +246,14 @@ function isLocked(id: string): boolean {
 
 ## 表示
 
-地物、グループ、レイヤーの `visible: false` は、文書を共有する全員に
+グループとレイヤーの `visible: false` と、地物の
+`properties['maplibre-gl-draw:visible']: false` は、文書を共有する全員に
 対して隠します。保存され、書き出しにも入ります。この端末だけで隠すには
 `draw.hidden.add(id)` を使います ([読み取り専用](read-only.ja.md))。
 隠れた地物は、描画、当たり判定、吸着、幾何演算の対象にならず、選ぶことも
 できません。
 
-地物の `visible` は、その地物自身の印です。地物自身は表示でも、その
+地物の表示は、その地物自身の印です。地物自身は表示でも、その
 グループかレイヤーが隠れていれば描かれません。絞り込みの `shown` は、
 この 3 つをまとめて答えます (この端末だけの非表示は見ません)。
 
@@ -264,7 +269,7 @@ const shown = draw.features.list({ shown: true }); // グループとレイヤ�
 掛け合わされます。
 
 ```ts
-draw.layers.update(layerId, { opacity: 0.4 });
+await draw.write((tx) => tx.layers.update(layerId, { opacity: 0.4 }));
 ```
 
 - 地図を描くときに掛けるので、スライダーなどで値を変えても負担は
@@ -285,21 +290,12 @@ draw.layers.update(layerId, { opacity: 0.4 });
 地図のレイヤーをその並びのあいだへ動かします。1 つの地物だけを地図の
 レイヤーのあいだに置くことはできず、描画の並びがまとめて動きます。
 
-<!-- docs-check:
-declare const parcels: string;
--->
-
 ```ts
 const SEPARATOR = 'sep:';
 
 const draw = createDraw(map, {
   isExternalEntry: (id) => id.startsWith(SEPARATOR),
 });
-
-// 地図の道路を parcels のレイヤーのすぐ手前に入れる
-const ids = draw.layers.list().map((layer) => layer.id);
-ids.splice(ids.indexOf(parcels) + 1, 0, `${SEPARATOR}roads`);
-draw.layers.reorder(ids);
 
 function placeMapLayers(): void {
   const order = draw.getStore().getLayerOrder();
@@ -316,14 +312,15 @@ placeMapLayers();
 draw.on('layerStack.changed', placeMapLayers);
 ```
 
-- 自前の項目は、`layers.reorder` で重なりの順に入ります。このメソッドは
-  レイヤーの ID のほかに `isExternalEntry` が認める ID を受け取ります。
-  文書を通して入れることもでき、読み込む文書の `layerOrder` か、
-  インスタンスに渡す Store に持たせます。`layers.reorder` に渡さなかった
-  項目は、その位置に残ります
+- 自前の項目は、文書を通して重なりの順に入ります。開く文書の
+  `layerOrder` に、レイヤーの ID のほかに `isExternalEntry` が認める ID を
+  持たせるか、インスタンスに渡す Store に持たせます。順の中にある項目は、
+  `tx.layers.place` でレイヤーと同じように動かせ、レイヤーの隣の項目にも
+  指定できます
 - `draw.getStore().getLayerOrder()` は、自前の項目も含めた重なりの順の
-  全体を返します。`draw.layers.getOrder()` は、そこから `layers.reorder`
-  が受け付けない項目を除いたものを返します
+  全体を返します。`draw.layers.getOrder()` は、そこからレイヤーでも
+  順の中のデータセットでも `isExternalEntry` が認める項目でもなくなった
+  ものを除いたものを返します
 - `draw.getLayerStack()` は並びを奥から返します。それぞれが、重なりの順の
   範囲 `[from, to)` と、それを描く地図のレイヤーの ID を持ちます
 - 自前の項目が無ければ並びは 1 つで、`maplibre-gl-draw-layer` です
@@ -342,12 +339,14 @@ draw.on('layerStack.changed', placeMapLayers);
 
 ## リファレンス
 
-- [`LayersCollection`](../api/maplibre-gl-draw/interfaces/LayersCollection.md)
-  と [`GroupsCollection`](../api/maplibre-gl-draw/interfaces/GroupsCollection.md)
+- [`LayersCollection`](../api/maplibre-gl-draw/interfaces/LayersCollection.md)、
+  [`GroupsCollection`](../api/maplibre-gl-draw/interfaces/GroupsCollection.md)、
+  [`TransactionLayers`](../api/maplibre-gl-draw/interfaces/TransactionLayers.md)、
+  [`TransactionGroups`](../api/maplibre-gl-draw/interfaces/TransactionGroups.md)
 - [`Layer`](../api/maplibre-gl-draw/type-aliases/Layer.md)、
   [`LayerInput`](../api/maplibre-gl-draw/interfaces/LayerInput.md)、
   [`Group`](../api/maplibre-gl-draw/type-aliases/Group.md)
-- [`MoveTarget`](../api/maplibre-gl-draw/type-aliases/MoveTarget.md)
+- [`Placement`](../api/maplibre-gl-draw/type-aliases/Placement.md)
 - [`Draw`](../api/maplibre-gl-draw/interfaces/Draw.md) (`getLayerStack`)
   と [`LayerStackEntry`](../api/maplibre-gl-draw/interfaces/LayerStackEntry.md)
 - [イベント](../reference/events.md)

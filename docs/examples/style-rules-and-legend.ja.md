@@ -34,8 +34,8 @@ style-rules-and-legend
 不透明度と輪郭はスタイルのままです。4 種類の規則は、ただの
 オブジェクトです (1)。ページはサンプルデータの建物を取り寄せ、
 高さを持つ建物のうち近い 400 件を、規則が読む属性とともに取り出します
-(2)。`draw.document.load` は、規則を持つレイヤーを作って建物を
-入れるまでを 1 度で行い (3)、`draw.layers.update` で規則を変えます
+(2)。`tx.import` は、規則を持つレイヤーを作って建物を入れるまでを
+1 つの確定で行い (3)、`tx.layers.update` で規則を変えます
 (4)。変えるのは、ページが `ui.actions.add` で標準の UI に足したボタンです
 (7)。地図と凡例はすぐに追従します。属性のタブは入力をそのまま文字として
 保ち、階級と連続の規則は数しか読まないので、ページは `height` と
@@ -56,7 +56,7 @@ style-rules-and-legend
   説明します
 - [`StyleRule`](../api/maplibre-gl-draw/type-aliases/StyleRule.md) と
   [`deriveLegend`](../api/maplibre-gl-draw/functions/deriveLegend.md)
-- [`layers.update`](../api/maplibre-gl-draw/interfaces/LayersCollection.md#update)
+- [`tx.layers.update`](../api/maplibre-gl-draw/interfaces/TransactionLayers.md#update)
 - 標準の UI の[凡例](../../ui/README.md#use) (英語)
 
 データは [Overture Maps Foundation](https://overturemaps.org) のもので、

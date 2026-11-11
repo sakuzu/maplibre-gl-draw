@@ -127,15 +127,19 @@ document.querySelector('#draw-polygon')?.addEventListener('click', () => {
 draw.on('change', ({ features }) => {
   for (const id of features.created) {
     const feature = draw.features.get(id);
-    console.log('created', id, feature?.type);
+    console.log('created', id, feature?.geometry.type);
   }
 });
 ```
 
-`feature.geometry` は GeoJSON の図形です。多角形の `coordinates` は
-リングの配列 `[[[lng, lat], ...]]` で、最初の点が末尾にもう一度入り
-ます。`feature.properties` も GeoJSON の properties で、利用者の属性と、
-ライブラリーが `maplibre-gl-draw:` で始まる鍵に置く少しの値が入ります。
+地物は GeoJSON の Feature の `{ type: 'Feature', id, geometry,
+properties }` です。多角形の図形の `coordinates` はリングの配列
+`[[[lng, lat], ...]]` で、最初の点が末尾にもう一度入ります。
+`feature.properties` には利用者の属性と、ライブラリーが
+`maplibre-gl-draw:` で始まる鍵に置く少しの値 (レイヤー、グループ、
+スタイル、見えるかどうか、ロックされているかどうか) が入ります。値が
+既定の値である鍵は置きません。`readFeature(feature)` は、それらの値を
+既定の値を埋めた短い名前で読みます。
 
 ツールバーの表示をモードに合わせる (`select` に自動で戻る場合も含めて)
 には、`draw.mode` を `subscribe` で追います。モードや選択のように時間で
@@ -156,8 +160,8 @@ draw.mode.subscribe((mode) => {
 
 ## 4. 変更を受け取る
 
-`change` はすべての変更 (作成、移動、頂点の編集、削除、読み込み) を
-知らせます。このイベントは、変えた地物の数によらず取引ごとに 1 回届き、
+`change` はすべての変更 (作成、移動、頂点の編集、削除、文書を開くこと)
+を知らせます。このイベントは、変えた地物の数によらず確定ごとに 1 回届き、
 一緒に変わったものすべての ID を並べます。
 
 ```ts
@@ -172,22 +176,45 @@ draw.on('change', ({ features, source }) => {
 
 `draw.features.get(id)` は今の地物を読み、受け取る関数の中の
 `change.previous(id)` は、変わったか消された地物の変わる前の姿を読みます。
-`source` は変更の出どころを表し、たとえば利用者の編集と API の呼び出し
-なら `'local'`、GeoJSON の読み込みなら `'load'` です。同じイベントで、
-レイヤーとグループ (`layers` と `groups`)、文書の題 (`document`) の変更も
-届きます。
+`source` は変更の出どころを表し、利用者の編集とコードの書き込みなら
+`'local'`、`draw.undo()` と `draw.redo()` なら `'undo'` と `'redo'`、
+文書を開いたなら `'open'` です。同じイベントで、レイヤーとグループ
+(`layers` と `groups`)、文書の題 (`document`) の変更も届きます。
 
 API は、次の規則を押さえておくと分かりやすくなります。
 
-- メソッドは同期的です。`draw.setMode(...)` や
-  `draw.features.delete(id)` から戻った時点で、インスタンスを読めば新しい
-  状態が得られます。Promise を返すのは `draw.document.load` だけです
-- `create` と `update` は、書いたものを返します。無い ID のような誤った
-  引数には `DrawError` を投げます。読み取り専用のために書き込みを拒む
-  ときは `null` か `false` を返します
-- イベントは変更が終わってから発火するので、受け取る関数からは新しい
-  状態が見えます
+- 読みは同期的です。`draw.features.get(id)` ほかの `draw` の読みは
+  すぐに戻ります。`draw.setMode(...)` や選択のように、この端末だけを
+  変えるものも同期的です
+- 文書を書く入口は `draw.write` の 1 つです。渡した関数は取引の `tx` を
+  受け取り、書き込みは `tx` に貯まります。関数が終わると全部をまとめて
+  確定し、1 回の `change` と undo の 1 段になります。Promise は確定して
+  から解けるので、`await` の後に読めば新しい状態が、前に読めば前の状態が
+  得られます
+- 失敗した書き込みは `DrawError` で reject します。無い ID のような誤った
+  引数 (`not-found`) も、読み取り専用のとき (`not-editable`) や
+  ロックされた地物 (`locked`) のように状態が拒む書き込みも同じです。
+  そのとき取引は何も確定しません
+- イベントは確定してから発火するので、受け取る関数からは新しい状態が
+  見えます
 - `draw.on` は、購読をやめる関数を返します
+
+<!-- docs-check: continue -->
+
+```ts
+// 1 つの取引: 2 つの書き込みが 1 回の change と undo の 1 段になる
+const [first, second] = draw.selection.value.ids ?? [];
+if (first !== undefined && second !== undefined) {
+  await draw.write(async (tx) => {
+    await tx.features.update(first, {
+      properties: { 'maplibre-gl-draw:style': { fillColor: '#e74c3c' } },
+    });
+    await tx.features.delete(second);
+  });
+}
+// 取り消す
+await draw.undo();
+```
 
 UI は、呼んだメソッドからではなくイベントから更新してください。利用者も
 描いたものを変えるので、イベントを使えば両方を拾えます。
@@ -208,34 +235,36 @@ document.querySelector('#save')?.addEventListener('click', () => {
 });
 ```
 
-`draw.document.load` で読み戻します。渡したものが GeoJSON か、独自の
-形式か、JSON の文字列か、`File` かを自動で判別します。
+`draw.open` で、今の文書に代えて読み戻します。渡したものが GeoJSON か、
+独自の形式か、JSON の文字列か、`File` かを自動で判別します。
 
 <!-- docs-check: continue -->
 
 ```ts
 const saved = localStorage.getItem(STORAGE_KEY);
 if (saved !== null) {
-  const result = await draw.document.load(JSON.parse(saved));
-  console.log(`loaded ${result?.featureIds.length ?? 0} features`);
-  for (const { index, reason } of result?.skipped ?? []) {
-    console.warn(`feature ${index} was skipped: ${reason}`);
+  const result = await draw.open(saved);
+  console.log(`opened ${result.features} features`);
+  for (const { index, error } of result.skipped) {
+    console.warn(`feature ${index} was skipped: ${error.message}`);
   }
 }
 ```
 
-読み取り専用のとき、`load` は `null` を返します。GeoJSON を読み込むと、
-地物は今ある地物に追加されます。地物が存在するレイヤーを指していれば
+読み取り専用のとき、`open` は `DrawError` (`not-editable`) で reject
+します。GeoJSON を開くと、地物とグループを置き換え、レイヤーは残します。
+地物は `maplibre-gl-draw:layerId` が存在するレイヤーを指していれば
 そのレイヤーに (このライブラリーが書き出した GeoJSON は指しています)、
 そうでなければアクティブなレイヤーに入ります。読めない地物 (知らない
-geometry の型や不正な座標) は除かれて `skipped` に並び、残りは読み込まれ
-ます。読み込んだ地物は、すべて 1 回の `change` で届きます。
+geometry の型や不正な座標) は除かれて `skipped` に並び、残りは読まれ
+ます。開いた文書は `'open'` を出どころとする 1 回の `change` で届き、
+undo の段は捨てられます。今ある地物にファイルを足すには、`draw.write` の
+中で `tx.import` に渡します。
 
 GeoJSON は地物ごとの属性とスタイルを保ちますが、レイヤーとグループ
 そのものや、その順序は保ちません。それも保つには独自の形式を使います。
-`draw.document.toJSON()` が文書の全体を返し、`draw.document.load` で
-同じように読み戻せます。独自の形式を読み込むと、今の文書に追加するの
-ではなく置き換えます。両方の形式の仕様は
+`draw.document.toJSON()` が文書の全体を返し、`draw.open` で同じように
+読み戻すと、全体を置き換えます。両方の形式の仕様は
 [データ形式のリファレンス](reference/data-format.md) (英語) にあります。
 
 ## 6. 次に読むもの

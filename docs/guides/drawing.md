@@ -21,7 +21,7 @@ draw.setMode('draw_polygon');
 draw.on('change', ({ features }) => {
   for (const id of features.created) {
     const feature = draw.features.get(id);
-    console.log(feature?.type, feature?.properties.name);
+    console.log(feature?.geometry.type, feature?.properties.name);
   }
 });
 
@@ -148,40 +148,52 @@ first writable layer when the active one is locked or hidden.
 
 ### Images
 
-The library does not open a file dialog. Entering `draw_image` emits
-`image.requested` with a position, the zoom and the layer to place the
-image in, and returns to `select` at once. The position is the clicked one
-when a click led to the mode (a listener of `map.clicked` entered it), and
-the center of the map otherwise. The application shows
-its own file picker and passes the file to `draw.document.load`:
+The library does not open a file dialog. Entering `draw_image` asks the
+application for an image through the option `requestImage`, with the
+position to place it at, and returns to `select` at once. The position is
+the clicked one when a click led to the mode (a listener of `map.clicked`
+entered it), and the center of the map otherwise. The application shows
+its own file picker and gives back the file; the instance places it there
+in the active layer, at the zoom of the map, as one commit:
 
 ```ts
-draw.on('image.requested', ({ lngLat, zoom, layerId }) => {
-  const input = document.createElement('input');
-  input.type = 'file';
-  input.accept = 'image/*';
-  input.addEventListener('change', async () => {
-    const file = input.files?.[0];
-    if (!file) return;
-    await draw.document.load(file, { coordinate: lngLat, zoom, layerId });
-  });
-  input.click();
+import { createDraw } from '@sakuzu/maplibre-gl-draw';
+
+const draw = createDraw(map, {
+  requestImage: (_at, { signal }) =>
+    new Promise<Blob>((resolve, reject) => {
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.accept = 'image/*';
+      input.addEventListener('change', () => {
+        const file = input.files?.[0];
+        if (file) resolve(file);
+        else reject(new Error('no file'));
+      });
+      signal.addEventListener('abort', () => reject(signal.reason));
+      input.click();
+    }),
 });
 
 draw.setMode('draw_image');
 ```
 
-The image is centered on `coordinate` and converted to WebP. When the
-browser cannot encode WebP, the image is converted to JPEG if none of its
-pixels is transparent, and is otherwise kept in the format the browser
-returns (such as PNG). It is scaled down when a side exceeds 4096 px, stored
-once in the files of the document and referenced by the feature, and the
-new feature is selected. Several Image
-features can share one stored file.
+- Without `requestImage` the image mode places nothing. The option can
+  change while the instance runs, with `draw.options.update`
+- `signal` stops the request when the instance is removed or the next
+  image is asked for
+- An image that cannot be placed (a file that is not an image, say) is
+  told by the `error` event with the source `image`
 
-The library does not take files dropped on the map. To place a dropped
-image where it was dropped, the application listens to the drop and calls
-`draw.document.load` with that position; see
+The image is converted to WebP. When the browser cannot encode WebP, the
+image is converted to JPEG if none of its pixels is transparent, and is
+otherwise kept in the format the browser returns (such as PNG). It is
+scaled down when a side exceeds 4096 px, stored once in the files of the
+document and referenced by the feature. Several Image features can share
+one stored file.
+
+The library does not take files dropped on the map. To read a dropped
+file, the application listens to the drop and imports it; see
 [Save and load](save-load.md).
 
 ## Selecting and editing
@@ -303,7 +315,8 @@ too (`draw.selection.set('group', [groupId])`). `selection.features()`
 returns the selected features, or the features inside the selected groups
 or layers. `selection.value` tells what is selected: the type, the number
 of the features, their layers and extent (`bbox`), and the IDs.
-`selection.delete()` deletes whatever is selected, and `draw.selection`
+`draw.selection.target` names what is selected, for a write: given to
+`tx.features.delete`, it deletes whatever is selected. `draw.selection`
 tells every change (`draw.selection.subscribe`).
 
 ```ts
@@ -315,17 +328,23 @@ draw.selection.set(kept); // selected again
 ```
 
 `selection.setAll(filter)` selects every feature that matches a filter
-(Cmd+A selects them all), `selection.count(filter)` counts the selected
-features, and `selection.update(patch, filter)` changes them in one change.
-The patch can be made by a function, called once per kind of feature (its
-type, its style and the zoom it was created at) rather than once per
-feature:
+(Cmd+A selects them all), and `selection.count(filter)` counts the
+selected features. `tx.features.update(draw.selection.target, patch)`
+changes them in one commit. The patch can be made by a function, called
+once per kind of feature (its type, its style and the zoom it was created
+at) rather than once per feature:
 
 ```ts
 draw.selection.setAll({ shown: true });
-draw.selection.update((sample) => ({
-  style: { strokeWidth: sample.type === 'LineString' ? 4 : 2 },
-}));
+await draw.write((tx) =>
+  tx.features.update(draw.selection.target, (sample) => ({
+    properties: {
+      'maplibre-gl-draw:style': {
+        strokeWidth: sample.type === 'LineString' ? 4 : 2,
+      },
+    },
+  })),
+);
 ```
 
 ### Many features at once
@@ -342,8 +361,9 @@ step of an undo). A locked feature among them stays where it is, as it does
 among features selected one by one, and one locked while they are dragged
 stays too.
 
-The verbs of `draw.selection` act on them (`delete`, `group`, `ungroup`,
-`move`, `update`). `selection.features(filter, { limit, after })` reads
+The writes given `draw.selection.target` act on them (`tx.features.delete`,
+`update`, `place`, `translate`, `rotate` and `scale`).
+`selection.features(filter, { limit, after })` reads
 them a page at a time, and refuses to read them all without a limit.
 `selection.set(selection.target)` selects again what a target read before
 named, those features included. The number of features selected refuses
@@ -415,12 +435,13 @@ The drawing modes create single geometries, and a polygon is drawn with its
 outer ring only. `MultiPoint`, `MultiLineString`, `MultiPolygon` and
 polygons with holes come from:
 
-- `draw.document.load` of GeoJSON (Multi geometries are kept;
-  `flattenMulti: true` splits them into single features)
+- `draw.open` and `tx.import` of GeoJSON (Multi geometries are kept;
+  `parseGeoJSON` with `flattenMulti: true` splits them into single
+  features)
 - the geometry operations: a union of separate polygons gives a
   `MultiPolygon`, a subtraction from the inside gives a hole
   ([Snapping and geometry](snapping-geometry.md))
-- `draw.features.create` with the geometry
+- `tx.features.create` with the geometry
 
 They are drawn, hit-tested and edited like single geometries. A click on
 any part selects the whole feature, the selection box encloses every
@@ -438,42 +459,56 @@ part, and every part and ring gets its own vertex and midpoint handles.
 
 ## Creating features from code
 
-`draw.features.create` takes a type and a GeoJSON geometry, and returns the
-feature as it was stored. Use it for coordinates typed into a form, a
-position computed from a distance and a bearing, automation and tests.
+`tx.features.create`, in a `draw.write`, takes a GeoJSON Feature and
+returns the feature as it was written. Use it for coordinates typed into a
+form, a position computed from a distance and a bearing, automation and
+tests.
 
 ```ts
 import { destination } from '@sakuzu/maplibre-gl-draw/geometry';
 
 const start = [139.7, 35.68];
-const line = draw.features.create({
-  type: 'LineString',
-  geometry: {
-    type: 'LineString',
-    coordinates: [start, destination(start, 500, 90)], // 500 m to the east
-  },
-  properties: { name: 'Survey line' },
-});
-if (line) draw.selection.set('feature', [line.id]);
+const line = await draw.write((tx) =>
+  tx.features.create({
+    type: 'Feature',
+    geometry: {
+      type: 'LineString',
+      coordinates: [start, destination(start, 500, 90)], // 500 m to the east
+    },
+    properties: { name: 'Survey line' },
+  }),
+);
+draw.selection.set('feature', [line.id]);
 ```
 
-- The feature goes into the active layer unless `layerId` or `groupId`
-  says otherwise. A feature created from code may go into a locked or
-  hidden layer, which a user cannot draw into
-- `create` returns `null` while the instance is read-only. A wrong input
-  throws a `DrawError` and creates nothing
-- A circle is a `Point` geometry, the center, with its radius in
-  `properties['maplibre-gl-draw:radiusMeters']`
+- The feature goes into the active layer unless
+  `properties['maplibre-gl-draw:layerId']` or
+  `properties['maplibre-gl-draw:groupId']` says otherwise. A feature
+  created from code may go into a locked or hidden layer, which a user
+  cannot draw into
+- The type it is drawn as is the type of its geometry, unless
+  `properties['maplibre-gl-draw:featureType']` names another
+- While the instance is read-only the write rejects with a `DrawError`
+  (`not-editable`). A wrong input rejects with a `DrawError` too, and
+  nothing is created
+- A circle is a `Point` geometry, the center, of the type `Circle`, with
+  its radius in `properties['maplibre-gl-draw:radiusMeters']`
 - A feature created from code gets no automatic name and no reference zoom,
   and the mode and the selection do not change
-- `createMany` creates several features in one transaction
+- Given an array of features, `create` creates them all in the same
+  transaction and returns their IDs
 
 ```ts
-draw.features.create({
-  type: 'Circle',
-  geometry: { type: 'Point', coordinates: [139.7, 35.68] },
-  properties: { 'maplibre-gl-draw:radiusMeters': 250 },
-});
+await draw.write((tx) =>
+  tx.features.create({
+    type: 'Feature',
+    geometry: { type: 'Point', coordinates: [139.7, 35.68] },
+    properties: {
+      'maplibre-gl-draw:featureType': 'Circle',
+      'maplibre-gl-draw:radiusMeters': 250,
+    },
+  }),
+);
 ```
 
 A tool that should draw the way the built-in modes do (the writable layer,
@@ -584,7 +619,7 @@ copy of the world, and box selection does not reach across the line.
 
 Drawing and editing are driven by pointer input on the map canvas, and the
 library adds no ARIA roles or labels. The keyboard covers deleting, moving
-by arrow keys, grouping and cancelling. `draw.features.create` lets an
+by arrow keys, grouping and cancelling. `tx.features.create` lets an
 application offer another way to enter coordinates, such as a form.
 
 ## Examples
@@ -603,8 +638,9 @@ application offer another way to enter coordinates, such as a form.
   `getMode`)
 - [`Mode`](../api/maplibre-gl-draw/type-aliases/Mode.md) and
   [`MODES`](../api/maplibre-gl-draw/variables/MODES.md)
-- [`FeaturesCollection`](../api/maplibre-gl-draw/interfaces/FeaturesCollection.md)
-  and [`FeatureInput`](../api/maplibre-gl-draw/interfaces/FeatureInput.md)
+- [`FeaturesCollection`](../api/maplibre-gl-draw/interfaces/FeaturesCollection.md),
+  [`TransactionFeatures`](../api/maplibre-gl-draw/interfaces/TransactionFeatures.md)
+  and [`FeatureInput`](../api/maplibre-gl-draw/type-aliases/FeatureInput.md)
 - [`SelectionResource`](../api/maplibre-gl-draw/interfaces/SelectionResource.md)
   and
   [`VertexSelectionResource`](../api/maplibre-gl-draw/interfaces/VertexSelectionResource.md)

@@ -24,19 +24,22 @@
 
 利用者が描いて編集するものは文書に入れます。データセットは描かれ
 ますが、文書には入りません。1 つの行を編集したいときは、
-`draw.features.create` で文書へ写します。2 つの写しの対応関係は、
+`tx.features.create` で文書へ写します。2 つの写しの対応関係は、
 ライブラリーでは持ちません。
 
 <!-- docs-check: with datasets -->
 
 ```ts
 const row = places.getRow(0);
-if (row?.geometry) {
-  draw.features.create({
-    type: row.geometry.type,
-    geometry: row.geometry,
-    properties: { ...row.properties },
-  });
+const geometry = row?.geometry;
+if (geometry) {
+  await draw.write((tx) =>
+    tx.features.create({
+      type: 'Feature',
+      geometry,
+      properties: { ...row.properties },
+    }),
+  );
 }
 ```
 
@@ -426,8 +429,8 @@ parcels.setZoomScale((zoom) => ({
 UI のレイヤーパネルでは、どのデータセットもレイヤーの間へドラッグでき
 ます。パネルは、レイヤーの間に落とされた `below-store` か
 `above-store` のデータセットを `draw.datasets.move` で `layer-order` に
-移してから、`draw.layers.reorder` で置きます。並べ替えが断られたとき
-(読み取り専用) は、データセットを元の order に戻します。
+移してから、レイヤーを `tx.layers.place` で置きます。書き込みが
+断られたとき (読み取り専用) は、データセットを元の order に戻します。
 
 同じ側のデータセットは追加した順に描かれ、後から追加したものが前に
 なります。データセットの中では、配列の末尾 (表なら最後の行) が前です。
@@ -444,29 +447,23 @@ draw.datasets.move('parcels', { index: 0 }); // その側でいちばん後ろ
 
 `layer-order` のデータセットは、その ID が文書の重なりの順
 (`draw.getStore().getLayerOrder()`) にある間だけ描かれ、位置もその
-順だけで決まります。ID は `draw.layers.reorder` で入れます。このメソッドは
-レイヤーの ID のほかに `layer-order` のデータセットの ID を受け取り、
-渡されなかった項目はその場に残します。この項目は、読み込んだ文書
-(その重なりの順は ID を位置ごと保ちます) か、`store` オプションで
-渡した自分の Store からも入ります。
-
-<!-- docs-check:
-declare const notes: import('@sakuzu/maplibre-gl-draw').Layer;
-declare const roads: import('@sakuzu/maplibre-gl-draw').Layer;
--->
+順だけで決まります。この項目は、開いた文書 (その重なりの順
+`layerOrder` は ID を位置ごと保ちます) か、`store` オプションで渡した
+自分の Store から入ります。順に入った後は、`tx.layers.place` でレイヤーと
+同じように動かせ、その ID をレイヤーの隣の項目にも指定できます。
 
 ```ts
-// 行は後から setRows か setTable で渡すまで空
+// 行は後から setRows か setTable で渡すまで空。文書の重なりの順の
+// 'parcels' の位置に描かれる
 draw.datasets.add({ id: 'parcels', order: 'layer-order' });
-draw.layers.reorder([roads.id, 'parcels', notes.id]); // 2 つのレイヤーの間
 ```
 
 データセットを取り除いても、重なりの順は書き換えません。データセットの
 無い ID が残っていても、飛ばして描きます。
 
 重なりの順は文書の一部ですが、データセットは文書に入りません。
-ネイティブ形式は、位置にある ID を保存し、行は保存しません。読み込んだ
-後で同じ ID のデータセットを追加し直すと、保存した位置に描かれます
+ネイティブ形式は、位置にある ID を保存し、行は保存しません。`draw.open`
+の後で同じ ID のデータセットを追加し直すと、保存した位置に描かれます
 ([レイヤー](layers.ja.md))。
 
 ## 重なった点を間引く
@@ -728,10 +725,10 @@ async function whenPictureComplete(): Promise<void> {
 ## 制限
 
 - データセットは編集できません。編集するには、行を
-  `draw.features.create` で文書へ写してください
+  `tx.features.create` で文書へ写してください
 - 行は丸ごと置き換えます。一部だけを更新する方法はありません
 - 文書と一緒には保存されません。データかその取り寄せ先は自分で持ち、
-  読み込んだ後でデータセットを追加し直してください
+  `draw.open` の後でデータセットを追加し直してください
 - 表の行は、行ごとのスタイルを持ちません
 - 間引くのは `Point` だけです
 - 表はその場で読むので、データセットに持たせている間は配列を書き

@@ -69,7 +69,7 @@ datasets
 セルは data.ts で作り、地図の読み込みが終わったら行として
 `draw.datasets.add` に渡します。`value` の階級の規則と、輪郭のない基本の
 スタイルをつけます。順序を `layer-order` にすると、データセットは
-レイヤーの重なりの順に場所を持ちます。`draw.layers.reorder` で、それを
+レイヤーの重なりの順に場所を持ちます。`tx.layers.place` で、それを
 いちばん奥に置きます (3)。セルはクリックを受けないので、描く線はセルでなく
 建物に吸着します。点は型付き配列で作り、点ごとのオブジェクトは作りません。
 サーバーの代わりのものが点を格子に振り分けます。`provider` は、地図が
@@ -103,7 +103,7 @@ datasets
 - [`draw.datasets`](../api/maplibre-gl-draw/interfaces/DatasetsCollection.md)、
   [`DatasetOptions`](../api/maplibre-gl-draw/type-aliases/DatasetOptions.md)、
   [`DatasetProvider`](../api/maplibre-gl-draw/type-aliases/DatasetProvider.md)
-- [`layers.reorder`](../api/maplibre-gl-draw/interfaces/LayersCollection.md#reorder)
+- [`tx.layers.place`](../api/maplibre-gl-draw/interfaces/TransactionLayers.md#place)
   と [`SnappingOptions`](../api/maplibre-gl-draw/interfaces/SnappingOptions.md)
 - [イベント](../reference/events.md) (英語)。`dataset.clicked` も
   その 1 つです

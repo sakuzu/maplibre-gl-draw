@@ -286,8 +286,8 @@ The state is split along one line. The contracts are in
 - The drawing state (box selection, drag state and the vertices that
   follow a shared vertex drag) is read by the drawing only. The shape a
   drawing mode draws is a sketch of this client (`draw.sketches`), not a
-  state of the Store. Core owns it around whatever holds the rest, and it is never part
-  of the document.
+  state of the Store. Core owns it around whatever holds the rest, and it
+  is never part of the document.
 - `Store` is what core works with: both, behind one gate. Its document
   writes return what the contract returned, and `false` when read-only
   refused them. It delivers every kind of change in one notification.

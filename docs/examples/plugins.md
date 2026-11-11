@@ -41,19 +41,19 @@ listens to `change` to count the stars it created, and offers the count as
 its `api` (2). Everything the plugin adds through its context goes away
 with it when `plugins.remove` takes it out (5).
 
-The standard UI has two openings for an extension (3, 4).
-`ui.tools.add` puts a button for a registered mode on the toolbar, with
-its label, its icon (SVG markup drawn with `currentColor`) and its key.
+The standard UI has two openings for an extension (3, 4). `ui.tools.add`
+puts a button for a registered mode on the toolbar, with its label, its
+icon (SVG markup drawn with `currentColor`) and its key.
 `ui.inspector.sections.add` adds a section to the inspector for the
 features that `appliesTo` accepts: the UI draws the fields that `fields`
-lists, and gives each change to `onchange`, which writes it with
-`features.updateMany`. The UI does not know which plugin a tool or a
-section belongs to, so the page removes them itself with
-`ui.tools.remove` and `ui.inspector.sections.remove` as it removes the
-plugin (5). The page asks the plugin for its count by name with
-`plugins.getApi` (7). The switch (8) is a third opening,
-`ui.actions.add`: a row of the card of actions with its key, whose state
-is `checked`, read again after each press.
+lists, and gives each change to `onchange`, which writes it to every
+feature of the section with one `tx.features.update` in `draw.write`. The
+UI does not know which plugin a tool or a section belongs to, so the page
+removes them itself with `ui.tools.remove` and
+`ui.inspector.sections.remove` as it removes the plugin (5). The page asks
+the plugin for its count by name with `plugins.getApi` (7). The switch (8)
+is a third opening, `ui.actions.add`: a row of the card of actions with
+its key, whose state is `checked`, read again after each press.
 
 ::: code-group
 <<< @/../examples/plugins/main.ts

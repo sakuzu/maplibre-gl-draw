@@ -19,12 +19,14 @@ images
 ## コード
 
 ライブラリーはファイルのダイアログを開きません。`draw_image` に
-入ると、画像を置く位置、ズーム、レイヤーを載せた `image.requested` を
-出します。ページはファイルの選択を開き、選ばれたファイルをそれらと
-一緒に `draw.document.load` に渡します (1)。コードから画像を置くときも
-同じです。画像の `Blob` か `File` を渡すと、`coordinate` を中心に、
-`zoom` のときのピクセルの大きさで描かれます (3)。画像の見た目は
-`imageOpacity` で、パネルのスライダーも同じキーを書き込みます (4)。
+入ると、画像を置く位置を添えてオプション `requestImage` を呼びます。
+ページはファイルの選択を開いてファイルを返し、ライブラリーはそれをその
+位置に、アクティブなレイヤーへ、地図のズームで、1 つの確定として置きます
+(1)。コードから画像を置くときは、画像をデータ URL で
+`maplibre-gl-draw:imageData` に持つ型 `Image` の GeoJSON の地物を
+`tx.import` で取り込みます。点を中心に、基準のズームのときのピクセルの
+大きさで描かれます (3)。画像の見た目は `imageOpacity` で、パネルの
+スライダーも同じキーを書き込みます (4)。
 
 ::: code-group
 <<< @/../examples/images/main.ts
@@ -37,8 +39,6 @@ images
 - 描画と編集のガイドの[画像](../guides/drawing.ja.md#画像)
 - データ形式の [Image](../reference/data-format.md#image) (英語)。
   保存するファイル、大きさ、回転を説明します
-- [`LoadOptions`](../api/maplibre-gl-draw/interfaces/LoadOptions.md)。
-  `coordinate` と `zoom` を持ちます
-- [入力のイベント](../reference/events.md#input) (英語)。
-  `image.requested` もその 1 つです
+- [`RuntimeOptions`](../api/maplibre-gl-draw/interfaces/RuntimeOptions.md)。
+  `requestImage` を持ちます
 - 標準の UI の[道具のバー](../../ui/README.md#use) (英語)

@@ -27,9 +27,8 @@ draw.on('snap.changed', ({ result }) => {
   statusBar.textContent = result?.target?.kind ?? '';
 });
 
-// 2 つの面を 1 つの地物に結合する
-// 新しい地物か、変更を拒んだときは null
-const merged = draw.features.union([parcelA, parcelB]);
+// 2 つの面を 1 つの地物に結合する (拒まれたときは書き込みが reject する)
+const merged = await draw.write((tx) => tx.features.union([parcelA, parcelB]));
 ```
 
 ## 吸着
@@ -239,9 +238,9 @@ draw.options.update({ topology: { sharedVertexDrag: true } });
 
 ## 地物を組み合わせる、分ける
 
-コレクション `draw.features` には、文書を変える演算があります。
-どれも地物の ID を受け取って結果を計算し、1 つの変更として
-書き込みます。
+`draw.write` の中の地物の書き込み `tx.features` には、文書の形を変える
+演算があります。どれも地物の ID を受け取って結果を計算し、取引の
+ほかの書き込みと一緒に 1 つの確定として書き込みます。
 
 - `union(ids)` は 2 つ以上の面を 1 つの地物に結合し、それらと
   置き換えます
@@ -252,8 +251,8 @@ draw.options.update({ topology: { sharedVertexDrag: true } });
   し、それらと置き換えます
 - `split(id, lineId)` は面を線で断片に分け、面と置き換えます。
   線は残ります
-- `buffer(ids, { distanceMeters, segments })` は点、線、面の
-  周りの範囲を入力ごとに 1 つ作ります。入力は残ります
+- `buffer(id, distanceMeters)` は点、線、面の周りの範囲を作ります。
+  入力は残ります
 
 <!-- docs-check:
 declare const back: string;
@@ -264,15 +263,27 @@ declare function toast(message: string): void;
 -->
 
 ```ts
-// 前面の面を背面の面から切り抜く。前面の面は残る
-const cut = draw.features.difference(back, [front]);
-if (cut === null) toast('nothing left');
+import { DrawError } from '@sakuzu/maplibre-gl-draw';
 
-const pieces = draw.features.split(parcelId, cutLineId);
+try {
+  // 前面の面を背面の面から切り抜く。前面の面は残る
+  await draw.write((tx) => tx.features.difference(back, [front]));
+} catch (error) {
+  if (error instanceof DrawError && error.code === 'invalid-input') {
+    toast('nothing left');
+  }
+}
 
+const pieces = await draw.write((tx) => tx.features.split(parcelId, cutLineId));
+
+// 選んだ地物ごとに 1 つずつ、1 つの確定で作る
 const ids = draw.selection.value.ids ?? [];
-const zones = draw.features.buffer(ids, { distanceMeters: 100 });
-draw.features.buffer([parcelId], { distanceMeters: -5, segments: 32 });
+const zones = await draw.write(async (tx) => {
+  const made = [];
+  for (const id of ids) made.push(await tx.features.buffer(id, 100));
+  return made;
+});
+await draw.write((tx) => tx.features.buffer(parcelId, -5));
 ```
 
 選択しているものに対して行うときは、`draw.selection.value.ids`
@@ -283,17 +294,17 @@ draw.features.buffer([parcelId], { distanceMeters: -5, segments: 32 });
 
 - 面は `Polygon`、`MultiPolygon`、`Circle` です。`split` の線は
   `LineString`、`MultiLineString`、`Freehand` です
-- 引数の誤りには `DrawError` を投げ、何も変えません。無い ID には
+- 引数の誤りは `DrawError` で reject し、何も変えません。無い ID には
   `not-found`、型の合わない地物 (`union` に渡した線や `buffer` に
   渡した `Image`) や有限の数でない距離には `invalid-input` です
-- 文書が読み取り専用のときと、地物のどれかがロックされている
-  ときは拒み、`null` を返して何も変えません
-- 入力の削除と結果の作成は 1 つの変更で、`change` が
+- 拒んだときは reject し、何も変えません。文書が読み取り専用のときは
+  `not-editable`、地物のどれかがロックされているときは `locked` です
+- 入力の削除と結果の作成は 1 つの確定で、`change` が
   1 回届きます
-- 結果が空のときは何も変えません。重ならない面の `intersection`
-  と、すべてを切り抜いてしまう `difference` は `null` を返します。
-  面を分けない線を渡した `split` と、距離 0 の `buffer` は `[]` を
-  返します
+- 結果が空のときは何も変えません。`union`、重ならない面の
+  `intersection`、すべてを切り抜いてしまう `difference`、距離 0 か
+  面の残らない `buffer` は `invalid-input` で reject します。面を
+  分けない線を渡した `split` は `[]` を返します
 
 ### 結果の形
 

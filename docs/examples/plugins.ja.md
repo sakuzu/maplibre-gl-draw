@@ -43,8 +43,8 @@ plugins
 (`currentColor` で描く SVG のマークアップ)、キーを渡します。
 `ui.inspector.sections.add` は、`appliesTo` が受け入れた地物のために、
 インスペクターに節を足します。UI は `fields` が並べた欄を描き、変更を
-`onchange` に渡します。`onchange` はそれを `features.updateMany` で書き
-込みます。UI は、道具や節がどのプラグインのものかを知りません。そこで
+`onchange` に渡します。`onchange` はそれを、`draw.write` の中の 1 つの
+`tx.features.update` で節の地物すべてに書き込みます。UI は、道具や節がどのプラグインのものかを知りません。そこで
 ページは、プラグインを取り除くときに `ui.tools.remove` と
 `ui.inspector.sections.remove` で道具と節も取り除きます (5)。ページは
 `plugins.getApi` で、名前を指定してプラグインに数を尋ねます (7)。

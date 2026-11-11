@@ -40,7 +40,8 @@ points along the great circles, one every 2 degrees of arc at most. The
 area across the antimeridian keeps its longitudes past 180 rather than
 jumping to -180, as a shape drawn across the line is kept. The globe
 button is one of the map controls of the standard UI (3). The storm is
-a picture made in a canvas, placed with `document.load` at its size in
+a picture made in a canvas, imported with `tx.import` as a GeoJSON
+feature of the type `Image` that carries the picture, at its size in
 pixels at zoom 3 (4).
 
 ::: code-group

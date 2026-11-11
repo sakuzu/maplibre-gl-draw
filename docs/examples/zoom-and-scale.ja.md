@@ -29,7 +29,7 @@ zoom-and-scale
 2 つのレイヤーに同じ地物を入れます。1 つめのレイヤーの地物には
 `maplibre-gl-draw:createdZoom` のプロパティーを持たせ、2 つめのレイヤーの
 地物には持たせません (2)。基準のズームは地物ごとの値なので、
-`draw.features.update` で 1 つの地物だけ変えられます (3)。オプションの
+`tx.features.update` で 1 つの地物だけ変えられます (3)。オプションの
 `scaleWithZoom` は、描画の道具が描いたときのズームを地物に書き込むか
 どうかを決めます。`draw.options.update` で変えられます。ページは、
 `ui.actions.add` で標準の UI に足したスイッチから変えます (5)。
@@ -46,7 +46,7 @@ zoom-and-scale
   説明します
 - 性能のガイドの[描画の大きさを変える](../guides/performance.ja.md#描画の大きさを変える)。
   地図を描いた大きさより大きく、または小さく見せるときの設定です
-- [`DrawProperties`](../api/maplibre-gl-draw/type-aliases/DrawProperties.md)
+- [`DrawProperties`](../api/maplibre-gl-draw/interfaces/DrawProperties.md)
   の `maplibre-gl-draw:createdZoom`
 - [`RuntimeOptions`](../api/maplibre-gl-draw/interfaces/RuntimeOptions.md)
   の `scaleWithZoom` と

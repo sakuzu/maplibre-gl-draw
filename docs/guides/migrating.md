@@ -16,6 +16,11 @@ throws a `DrawError`, and a refusal for the state returns `null` or
 back and what the GeoJSON export writes. Every 1.0 name changes and
 none is kept as an alias, so an app is migrated in one step.
 
+The code marked `2.0` below is the API of 2.x. 3.0 writes the document
+through `draw.write`, makes a feature one GeoJSON Feature and opens and
+imports files in place of the loads: an app moving from 1.0 to 3.0 reads
+[From 2.x to 3.0](#from-2x-to-30) as well.
+
 ## The shape of 2.0
 
 `createDraw(map, options)` returns a `Draw`. Its methods live on
@@ -77,8 +82,9 @@ change:
 npm install @sakuzu/maplibre-gl-draw@^2.0.0
 ```
 
-A file saved by 1.0 (native format 2.x) loads as it is: it is upgraded
-to the format 3.0.0 on load.
+2.x reads a file saved by 1.0 (native format 2.x), upgraded to the
+format 3.0.0 as it loads. 3.0 reads the format 4.0.0 only
+([From 2.x to 3.0](#from-2x-to-30)).
 
 ### Create the instance
 
@@ -122,6 +128,8 @@ if (id) {
 }
 ```
 
+<!-- docs-check: skip -->
+
 ```ts
 // 2.0
 const point = draw.features.create({
@@ -153,11 +161,15 @@ feature's own flag only.
 
 `deleteAllFeatures()` becomes `deleteMany` with every ID:
 
+<!-- docs-check: skip -->
+
 ```ts
 draw.features.deleteMany(draw.features.list().map((f) => f.id));
 ```
 
 An unknown ID throws, where 1.0 threw a plain `Error` or did nothing:
+
+<!-- docs-check: skip -->
 
 ```ts
 import { DrawError } from '@sakuzu/maplibre-gl-draw';
@@ -188,6 +200,8 @@ if (roadsId) {
 const groupId = draw.addGroup([featureId], layerId, 'Block');
 draw.removeFeatureFromGroup(featureId);
 ```
+
+<!-- docs-check: skip -->
 
 ```ts
 // 2.0
@@ -244,9 +258,7 @@ const native = draw.export('native').data; // a string
 const geojson = JSON.parse(draw.export('geojson').data);
 ```
 
-<!-- docs-check:
-declare const file: File;
--->
+<!-- docs-check: skip -->
 
 ```ts
 // 2.0
@@ -293,6 +305,8 @@ const stop = draw.on('change', () => save());
 `on` returns the function that unsubscribes, and `once` subscribes to
 one occurrence. `change` covers layers, groups and metadata too. To make
 several writes one change, wrap them in `transact`:
+
+<!-- docs-check: skip -->
 
 ```ts
 draw.transact(
@@ -549,6 +563,8 @@ draw.registerMode('draw_marker', () => ({
 }));
 ```
 
+<!-- docs-check: skip -->
+
 ```ts
 // 2.0
 import type { ModeFactory } from '@sakuzu/maplibre-gl-draw';
@@ -679,11 +695,20 @@ resource in place of its event: `draw.selection`, `draw.vertexSelection`,
 events of its own (`PluginContext.emit` is gone): it gives its values on
 its API as observables ([Events](../reference/events.md)).
 
+<!-- docs-check: skip -->
+
 ```ts
 // 2.x
 draw.on('feature.updated', ({ feature }) => redraw(feature.id));
 draw.on('selection.changed', ({ selection }) => show(selection));
+```
 
+<!-- docs-check:
+declare function redraw(id: string): void;
+declare function show(selection: unknown): void;
+-->
+
+```ts
 // 3.0
 draw.on('change', ({ features }) => {
   for (const id of features.updated) redraw(id);
@@ -737,12 +762,14 @@ depends on.
 ```ts
 import { CalendarDate, DateTime } from '@sakuzu/tabane';
 
-draw.features.update(featureId, {
-  properties: {
-    updated: DateTime.fromDate(new Date()), // an instant, UTC
-    opened: CalendarDate.of(1998, 4, 1), // a day
-  },
-});
+await draw.write((tx) =>
+  tx.features.update(featureId, {
+    properties: {
+      updated: DateTime.fromDate(new Date()), // an instant, UTC
+      opened: CalendarDate.of(1998, 4, 1), // a day
+    },
+  }),
+);
 ```
 
 An extent in degrees is named `bbox` wherever it is, as in
@@ -799,6 +826,145 @@ draw.selection.set(kept);
 A store of your own needs no change. A store that keeps the items of its
 layers as lists makes `DocumentChange.order` from the lists before and
 after with `diffItemOrder`.
+
+### Writing the document in 3.0
+
+The document is written in one place, `draw.write(fn)`. Its function is
+given a transaction, `tx`, which has the writes; when the function ends
+they are committed at once, as one `change` and one step of undo, and
+the promise settles once the commit is made. `draw` keeps the reads only.
+
+<!-- docs-check: skip -->
+
+```ts
+// 2.x
+draw.transact(
+  () => {
+    const point = draw.features.create({
+      type: 'Point',
+      geometry: { type: 'Point', coordinates: [139.767, 35.681] },
+      layerId,
+      style: { pointColor: '#e74c3c' },
+    });
+    if (point) draw.features.move(point.id, { layerId, index: 0 });
+  },
+  { source: 'toolbar' },
+);
+```
+
+```ts
+// 3.0
+await draw.write(
+  async (tx) => {
+    const point = await tx.features.create({
+      type: 'Feature',
+      geometry: { type: 'Point', coordinates: [139.767, 35.681] },
+      properties: {
+        'maplibre-gl-draw:layerId': layerId,
+        'maplibre-gl-draw:style': { pointColor: '#e74c3c' },
+      },
+    });
+    const [back] = draw.layers.listItems(layerId, { limit: 1 });
+    if (back !== undefined) await tx.features.place(point.id, { above: back });
+  },
+  { label: 'toolbar' },
+);
+```
+
+- The writes of the resources move to `tx`: `features.create`,
+  `update`, `delete`, `union`, `difference`, `intersection`, `split` and
+  `buffer`, `layers.create`, `update` and `delete`, `groups.create`,
+  `update` and `delete`. One method takes one item or many: `create`
+  takes an array of features (the `Many` methods are gone), and `update`,
+  `delete`, `translate`, `rotate`, `scale` and `place` take an ID, IDs, a
+  filter, `draw.selection.target` or `{ all: true }`
+- `features.move` and `groups.move` are `tx.features.place` and
+  `tx.groups.place`, which take a `Placement`: the item just below
+  (`{ below }`) or above (`{ above }`), with the layer or the group it
+  goes into. There is no `index`. `layers.reorder` is
+  `tx.layers.place(id, { below })` or `{ above }`
+- `groups.delete(id)` says what becomes of the members:
+  `tx.groups.delete(id, { members: 'keep' })` dissolves the group
+- The writes of the selection go: give `draw.selection.target` to `tx`
+  (`tx.features.delete(draw.selection.target)` for `selection.delete()`),
+  make a group with `tx.groups.create({ featureIds })` and dissolve it
+  with `tx.groups.delete`
+- `buffer(ids, { distanceMeters, segments })` is
+  `tx.features.buffer(id, distanceMeters)`, one feature at a time
+- `transact(fn, { source })` is `draw.write(fn, { label })`;
+  `ignoreLocks` is gone. `draw.undo()` and `draw.redo()` take back and
+  make again the commits of this client, and `features.restore`,
+  `features.releaseRestore` and `groups.restore` are gone
+- A write refused because of the state rejects with a `DrawError`, in
+  place of `null` and `false`: `not-editable` while read-only, `locked`
+  for a locked item. A wrong argument rejects as well. Nothing of the
+  transaction is committed then
+- `draw.metadata` is `draw.document.title`, `description` and
+  `metadata`, written with `tx.document.update({ title, description,
+  metadata })`; the values of an application on the document and on a
+  layer are under keys of its own prefix (`app:key`), and removed by
+  naming them in `unset`
+- `image.requested` is gone: the image mode asks for the file through the
+  option `requestImage` and places it
+  ([Drawing and editing](drawing.md#images))
+
+A feature is one GeoJSON Feature, `{ type: 'Feature', id, geometry,
+properties }`, what is given, read and written out alike. Its layer,
+group, type, style, visibility and lock are keys of `properties`
+(`maplibre-gl-draw:layerId`, `groupId`, `featureType`, `style`,
+`visible`, `locked`), left out when they are the default.
+`readFeature(feature)` reads them under short names with the defaults
+filled in. A patch is `{ geometry?, properties?, unset? }`: a key is
+removed by naming it in `unset` (`unset.style` for the keys of the
+style), and a key given `undefined` is refused with `invalid-input`.
+`featuresToGeoJSON` and `featureToGeoJSON` are gone, as a feature is
+GeoJSON already.
+
+<!-- docs-check: skip -->
+
+```ts
+// 2.x
+const f = draw.features.get(featureId);
+if (f && !f.locked) console.log(f.type, f.layerId, f.style.fillColor);
+draw.features.update(featureId, { style: { fillColor: undefined } });
+```
+
+```ts
+// 3.0
+import { readFeature } from '@sakuzu/maplibre-gl-draw';
+
+const f = draw.features.get(featureId);
+if (f) {
+  const { featureType, layerId, locked, style } = readFeature(f);
+  if (!locked) console.log(featureType, layerId, style.fillColor);
+}
+await draw.write((tx) =>
+  tx.features.update(featureId, { unset: { style: ['fillColor'] } }),
+);
+```
+
+`document.load` is `draw.open` and `tx.import`. `draw.open(source)`
+replaces the document (as the `replace` mode did), and
+`tx.import(source, { layer, group })` adds GeoJSON to it (as `merge`
+did); several imports in one `draw.write` are one commit, in place of
+`loadMany`. `document.loaded` is gone: what is read arrives in `change`.
+
+<!-- docs-check:
+declare const file: File;
+-->
+
+```ts
+// 3.0
+const opened = await draw.open(file); // replaces the document
+const imported = await draw.write((tx) => tx.import(file)); // adds to it
+console.log(opened.features, imported.count, imported.skipped);
+```
+
+The native format is `4.0.0`: its features are GeoJSON Features, the
+title and the description are fields of the document, and `metadata`
+holds the values of the applications under their own prefix. 3.0 reads
+this version only: a document of the format `3.0.0` or earlier is
+refused with `invalid-input`.
 
 ### An extension in 3.0
 
@@ -946,6 +1112,13 @@ drawn. Each change below names what replaces what is gone.
   own reads them with `parseCssColor` of the main entry, the parser the
   library checks and draws them with, so that it takes and draws the
   same colors
+- An extension is given the features in their one shape, the GeoJSON
+  Feature, frozen: it reads the values of the library with
+  `readFeature`. `commitFeature(input)` and `preview.set` of a mode take
+  a GeoJSON Feature (`type: 'Feature'`, the type it is drawn as in
+  `maplibre-gl-draw:featureType` when it is not the type of its
+  geometry), and `onHandleDrag` returns a patch of 3.0
+  (`{ geometry?, properties?, unset? }`)
 
 A handle on each vertex, as 2.x gave it and as 3.0 gives it, with the
 white circle the library drew, now drawn by the type:
@@ -1004,7 +1177,9 @@ const vertexHandles: Pick<FeatureTypeDefinition, 'handles' | 'drawHandles'> = {
 The concepts carry over: modes, a store of features, events and custom
 modes. There is no built-in toolbar; your UI calls `setMode`. Events
 are subscribed on the draw instance, and they fire for writes made
-through the API as well.
+through the API as well. A write of the document is made in
+`draw.write`, which gives its function the transaction `tx` of the
+table below.
 
 | mapbox-gl-draw | This library |
 | --- | --- |
@@ -1012,13 +1187,13 @@ through the API as well.
 | `changeMode('simple_select')` | `setMode('select')` |
 | `changeMode('direct_select', ...)` | `setMode('select')` |
 | `changeMode('draw_line_string')` | `setMode('draw_line')` |
-| `add(featureCollection)` | `document.load(featureCollection)` |
+| `add(featureCollection)` | `tx.import(featureCollection)` |
 | `get(id)` | `features.get(id)` |
 | `getAll()` | `document.toGeoJSON()` |
 | `getSelectedIds()` | `selection.value.ids` |
-| `delete(ids)` | `features.deleteMany(ids)` |
-| `trash()` | `selection.delete()` |
-| `setFeatureProperty(id, key, value)` | `features.update(id, patch)` |
+| `delete(ids)` | `tx.features.delete(ids)` |
+| `trash()` | `tx.features.delete(draw.selection.target)` |
+| `setFeatureProperty(id, key, value)` | `tx.features.update(id, patch)` |
 | `draw.create`, `draw.update` | `change` (`features.created`, `updated`) |
 | `draw.delete` | `change` (`features.deleted`) |
 | `draw.selectionchange` | `selection.subscribe(run)` |
@@ -1029,14 +1204,13 @@ through the API as well.
 | `new TerraDraw({ adapter, modes })` | `createDraw(map)` |
 | `setMode('linestring')` | `setMode('draw_line')` |
 | `getSnapshot()` | `document.toGeoJSON()` |
-| `addFeatures(features)` | `document.load(featureCollection)` |
-| `removeFeatures(ids)` | `features.deleteMany(ids)` |
-| `clear()` | `features.deleteMany(ids)` with every ID |
+| `addFeatures(features)` | `tx.import(featureCollection)` |
+| `removeFeatures(ids)` | `tx.features.delete(ids)` |
+| `clear()` | `tx.features.delete({ all: true })` |
 | `selectFeature(id)` | `selection.set('feature', [id])` |
 | `on('change', ...)` | `on('change', ...)` |
 
 The select mode does the jobs of `simple_select` and `direct_select`:
 the vertices of a selected feature can be dragged there. A feature
-needs no `mode` property; its type decides. There is no built-in undo:
-the notifications of the Store carry the previous state of every change
-(see [save and load](save-load.md)).
+needs no `mode` property; its type decides. `draw.undo()` and
+`draw.redo()` take back and make again the commits of this client.

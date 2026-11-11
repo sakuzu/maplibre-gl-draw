@@ -9,10 +9,13 @@ generated from the sources. To learn how to use the library, start with
 - To put a drawing on a map, start from
   {@link maplibre-gl-draw!createDraw | createDraw}
   and its {@link maplibre-gl-draw!DrawOptions | DrawOptions}.
-- To add, change and remove features, layers and groups, use the
-  collections of the instance, {@link maplibre-gl-draw!Draw | Draw}. Its
-  page is grouped by task.
-- A {@link maplibre-gl-draw!Feature | Feature},
+- To read features, layers and groups, use the collections of the
+  instance, {@link maplibre-gl-draw!Draw | Draw}; its page is grouped by
+  task. To add, change and remove them, use the transaction
+  {@link maplibre-gl-draw!Transaction | Transaction} that
+  `draw.write` gives its function.
+- A {@link maplibre-gl-draw!Feature | Feature} (a GeoJSON Feature, read
+  with {@link maplibre-gl-draw!readFeature | readFeature}),
   a {@link maplibre-gl-draw!Layer | Layer} and
   a {@link maplibre-gl-draw!Group | Group} are the data model.
 - To react to changes and clicks, see the events of
@@ -24,9 +27,9 @@ generated from the sources. To learn how to use the library, start with
 - To show large data that is not edited, see
   {@link maplibre-gl-draw!Dataset | Dataset} and
   {@link maplibre-gl-draw!DatasetOptions | DatasetOptions}.
-- To save and load, see
+- To save and open, see
   {@link maplibre-gl-draw!DrawDocument | DrawDocument} and
-  {@link maplibre-gl-draw!LoadOptions | LoadOptions}. To read a source
+  {@link maplibre-gl-draw!ImportOptions | ImportOptions}. To read a source
   without writing it, see
   {@link maplibre-gl-draw!parseGeoJSON | parseGeoJSON} and
   {@link maplibre-gl-draw!parseNative | parseNative}.

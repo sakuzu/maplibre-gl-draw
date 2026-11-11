@@ -22,8 +22,8 @@ custom-ui
 `draw.mode` を `subscribe` で追うので (2)、ボタン、キー、描画の終わりの
 どれでモードが変わっても、今のモードを示します。パネルは `draw.selection`
 を `subscribe` で追い、`change` を聞いて (4)、`features.getAppliedStyle`
-で、地物が実際に描かれている色を出します。欄は値を `features.update` で
-書き込みます (5)。標準の UI のインスペクターと同じ呼び出しです。地物を変えられない間は、
+で、地物が実際に描かれている色を出します。欄は値を `draw.write` の中の
+`tx.features.update` で書き込みます (5)。標準の UI のインスペクターと同じ呼び出しです。地物を変えられない間は、
 `features.isEditable` を見て欄を無効にします。ページは自分の
 `style.css` を持ちます。
 

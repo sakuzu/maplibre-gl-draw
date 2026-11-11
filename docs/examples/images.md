@@ -19,13 +19,15 @@ selected.
 
 ## Code
 
-The library opens no file dialog. Entering `draw_image` emits
-`image.requested` with where to place the image, the zoom and the layer;
-the page opens a file picker and passes the file to
-`draw.document.load` with them (1). Code places an image the same way,
-from any image `Blob` or `File`: it is centered on `coordinate` and drawn
-at its size in pixels at `zoom` (3). The look of an image is
-`imageOpacity`, which the slider of the panel writes too (4).
+The library opens no file dialog. Entering `draw_image` calls the
+option `requestImage` with where to place the image; the page opens a
+file picker and gives the file, and the library places it there, in the
+active layer at the zoom of the map, as one commit (1). Code places an
+image with `tx.import`, as a GeoJSON feature of the type `Image` that
+carries the picture as a data URL under `maplibre-gl-draw:imageData`: it
+is centered on its point and drawn at its size in pixels at its
+reference zoom (3). The look of an image is `imageOpacity`, which the
+slider of the panel writes too (4).
 
 ::: code-group
 <<< @/../examples/images/main.ts
@@ -39,8 +41,6 @@ at its size in pixels at `zoom` (3). The look of an image is
   editing
 - [Image](../reference/data-format.md#image) in the data format: the
   stored file, the size and the rotation
-- [`LoadOptions`](../api/maplibre-gl-draw/interfaces/LoadOptions.md),
-  with `coordinate` and `zoom`
-- [The input events](../reference/events.md#input),
-  `image.requested` among them
+- [`RuntimeOptions`](../api/maplibre-gl-draw/interfaces/RuntimeOptions.md),
+  with `requestImage`
 - [The toolbar](../../ui/README.md#use) of the standard UI

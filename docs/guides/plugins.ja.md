@@ -18,7 +18,7 @@ const logger: Plugin = {
   onAdd(ctx) {
     ctx.on('change', ({ features, source }) => {
       for (const id of features.created) {
-        console.log('created', id, ctx.draw.features.get(id)?.type, source);
+        console.log('created', id, ctx.draw.features.get(id)?.geometry.type, source);
       }
       for (const id of features.updated) console.log('changed', id);
       for (const id of features.deleted) console.log('deleted', id);
@@ -140,63 +140,43 @@ console.log(counter?.count());
 
 ### 文書に書く
 
-プラグインは、アプリケーションと同じメソッドで書き込みます。いくつかの
-書き込みを 1 つの変化にするには `transact` で包みます。`source` を
-渡すと、受け手は変化の出どころを見分けられます。
+プラグインは、アプリケーションと同じ `draw.write` で書き込みます。1 つの
+`draw.write` の書き込みは 1 つの確定と 1 回の `change` になります。
+`label` を渡すと、受け手は何が変化を起こしたかを見分けられます。
 
 <!-- docs-check:
 declare const ctx: import('@sakuzu/maplibre-gl-draw').PluginContext;
 -->
 
 ```ts
-ctx.draw.transact(
-  () => {
-    const layer = ctx.draw.layers.create({ name: ctx.names.next('Layer') });
-    if (layer) {
-      ctx.draw.features.create({
-        type: 'Point',
-        geometry: { type: 'Point', coordinates: [139.767, 35.681] },
-        layerId: layer.id,
-      });
-    }
+await ctx.draw.write(
+  async (tx) => {
+    const layer = await tx.layers.create({ name: ctx.names.next('Layer') });
+    await tx.features.create({
+      type: 'Feature',
+      geometry: { type: 'Point', coordinates: [139.767, 35.681] },
+      properties: { 'maplibre-gl-draw:layerId': layer.id },
+    });
   },
-  { source: 'my-plugin' },
+  { label: 'my-plugin' },
 );
 ```
 
 決まりはインスタンスと同じです。もう無い ID のような誤った引数は
-`DrawError` を投げます。読み取り専用やロックのために拒まれた書き込みは
-`null` か `false` を返します。どちらの場合も何も変わりません。変化の
-後に反応するプラグインは、対象がもう無いかもしれないので、先に `has`
-で確かめます。
-
-取り消しのように、自分の記録から変化を当て直すプラグインは、変化の後に
-ロックされた地物にも書き込む必要があります。そのときは `transact` に
-`ignoreLocks: true` を渡します。その中の書き込みは、地物、グループ、
-レイヤーのロックを無視します。読み取り専用は無視しません。また、
-利用者がロックされた地物を動かせないことは変わりません。
-
-<!-- docs-check:
-declare const ctx: import('@sakuzu/maplibre-gl-draw').PluginContext;
-declare const id: string;
--->
-
-```ts
-ctx.draw.transact(
-  () => ctx.draw.features.update(id, { properties: { name: 'Before' } }),
-  { source: 'my-plugin', ignoreLocks: true },
-);
-```
+`DrawError` で reject します。読み取り専用やロックのために拒まれた
+書き込みは `not-editable` か `locked` で reject します。どちらの場合も
+取引は何も確定しません。変化の後に反応するプラグインは、対象がもう無い
+かもしれないので、先に `has` で確かめます。
 
 ### イベント
 
 プラグインは、`draw.on` と同じ名前のイベントで変化に反応します
 ([イベント](../reference/events.md))。イベントは変化の後に届き、何が
 書き込んだかを問いません。API、描画モード、ドラッグ、Delete キー、
-読み込み、ほかのプラグイン、差し替えた Store のどれでも届きます。
+取り込み、ほかのプラグイン、差し替えた Store のどれでも届きます。
 
-- `change` は、文書を変えた取引ごとに 1 回、その取引で変わったもの
-  すべての ID と `source` を持って届きます
+- `change` は、文書を変えた確定ごとに 1 回、その確定で変わったもの
+  すべての ID と `source`、`label` を持って届きます
 - この端末の時間で変わる値 (選択、モード、下書き、データセットなど) は
   その資源の `Observable` で、`subscribe` で追います
   ([時間で変わる値](../reference/events.md#values-that-change-over-time)
@@ -406,7 +386,7 @@ draw.extensions.plugins.add(createShortcuts());
 
 `onFeatureCommit(feature)` は、描画モードが地物を作ったときに呼ばれます。
 `ctx.commitFeature` の確定 (組み込みの描画モードもこれを使います) と、
-`image.requested` の後の読み込みが置いた画像です。
+`requestImage` の後に画像のモードが置いた画像です。
 
 ### 排他的な操作
 
@@ -444,11 +424,12 @@ import type { FeatureInput, ModeFactory, Position } from '@sakuzu/maplibre-gl-dr
 
 function rectangle(a: Position, b: Position): FeatureInput {
   return {
-    type: 'Polygon',
+    type: 'Feature',
     geometry: {
       type: 'Polygon',
       coordinates: [[a, [b[0], a[1]], b, [a[0], b[1]], a]],
     },
+    properties: {},
   };
 }
 
