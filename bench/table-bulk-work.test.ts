@@ -180,7 +180,7 @@ function storeOf(params: TableBenchParams): BulkStore {
       id: feature.id,
       type: feature.type,
       geometry: feature.geometry,
-      order: feature.order,
+      key: feature.order,
       style: feature.style,
       properties: feature.properties,
     } as never);

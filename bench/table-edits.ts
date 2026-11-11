@@ -280,9 +280,9 @@ function createRows(
     handles,
     fields: new Map<RowField, unknown[]>([
       ['type', rows.map((row) => row.geometry.type)],
-      ['layerId', rows.map(() => target.layerId)],
+      ['parent', rows.map(() => target.layerId)],
       ['geometry', rows.map((row) => row.geometry)],
-      ['order', rows.map((row) => row.order)],
+      ['key', rows.map((row) => row.order)],
       ['style', rows.map(() => style)],
     ]),
   });
@@ -628,10 +628,10 @@ function longestKey(target: EditTarget, ids: readonly string[]): number {
   if (handles.length === 0) return 0;
   const read = tables.readValues({
     handles: Int32Array.from(handles),
-    fields: new Map<RowField, unknown[]>([['order', handles.map(() => undefined)]]),
+    fields: new Map<RowField, unknown[]>([['key', handles.map(() => undefined)]]),
   });
   let longest = 0;
-  for (const key of read.fields.get('order') ?? []) {
+  for (const key of read.fields.get('key') ?? []) {
     if (typeof key === 'string') longest = Math.max(longest, key.length);
   }
   return longest;
@@ -1041,18 +1041,18 @@ function ensureGroups(target: EditTarget, params: TableBenchPageParams): string[
     if (tables && writer) {
       writer.applyGroups({
         handles: Int32Array.of(1000 + g),
-        fields: new Map<'id' | 'order' | 'layerId', unknown[]>([
+        fields: new Map<'id' | 'key' | 'parent', unknown[]>([
           ['id', [id]],
-          ['order', [keyAfter(params, (g * rowCount(target)) / count, 'g')]],
-          ['layerId', [target.layerId]],
+          ['key', [keyAfter(params, (g * rowCount(target)) / count, 'g')]],
+          ['parent', [target.layerId]],
         ]),
       });
       const handles = members.map((m) => tables.findRow(m)).filter((h) => h !== undefined);
       writer.apply({
         handles: Int32Array.from(handles as number[]),
         fields: new Map<RowField, unknown[]>([
-          ['groupId', handles.map(() => id)],
-          ['member', handles.map((_, k) => `m${String(k).padStart(4, '0')}`)],
+          ['parent', handles.map(() => id)],
+          ['key', handles.map((_, k) => `m${String(k).padStart(4, '0')}`)],
         ]),
       });
     } else {
@@ -1249,7 +1249,7 @@ async function runReorders(
       if (tables && writer) {
         writer.applyGroups({
           handles: Int32Array.from(ids.map((id) => 1000 + pool.indexOf(id))),
-          fields: new Map([['order', orders]]),
+          fields: new Map([['key', orders]]),
         });
       } else {
         ids.forEach((id, k) => {
@@ -1263,7 +1263,7 @@ async function runReorders(
       writer.apply({
         handles: Int32Array.from(handles.filter((h) => h !== undefined) as number[]),
         fields: new Map<RowField, unknown[]>([
-          ['order', orders.filter((_, k) => handles[k] !== undefined)],
+          ['key', orders.filter((_, k) => handles[k] !== undefined)],
         ]),
       });
     } else {

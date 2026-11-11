@@ -65,7 +65,7 @@ function rowOf(i: number): RowInput {
               [i + 1, 3],
             ],
           },
-    order: `a${String(i).padStart(3, '0')}`,
+    key: `a${String(i).padStart(3, '0')}`,
     properties: { id: `r${i}` },
   };
 }

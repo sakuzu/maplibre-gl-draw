@@ -130,7 +130,7 @@ function randomRow(random: () => number, i: number): RowInput {
     id: `r${i}`,
     type: type || geometry.type,
     geometry,
-    order: `k${String(Math.floor(random() * 1e6)).padStart(7, '0')}`,
+    key: `k${String(Math.floor(random() * 1e6)).padStart(7, '0')}`,
     style: { strokeColor: ['#ff0000', '#00ff00', '#0000ff'][i % 3] },
     properties: {
       n: i,
@@ -157,8 +157,7 @@ function readRow(group: RowBlockData, r: number, styles: Map<number, string>) {
     handle: group.handles[r],
     hash: group.idHashes[r],
     type: typeColumnOf(group).values[typeColumnOf(group).indexes[r]],
-    order: utf8String(group.itemKeys, r),
-    member: utf8String(group.memberKeys, r),
+    key: utf8String(group.keys, r),
     group: group.groups[r],
     flags: group.flags[r],
     style: styles.get(styleColumnOf(group).indexes[r]),
@@ -272,7 +271,7 @@ describe('mergeRowBlockData', () => {
 
   it('puts the members of a group of features at the key of the group', () => {
     const numbers = new Map<string, number>();
-    const groups = [{ handle: 3, id: 'g', order: 'k5' }];
+    const groups = [{ handle: 3, id: 'g', key: 'k5' }];
     const builder = createRowBlockDataBuilder({
       columns: FEATURE_TABLE_COLUMNS,
       groups,
@@ -283,7 +282,7 @@ describe('mergeRowBlockData', () => {
       ['a', 'k1'],
       ['b', 'k9'],
     ]) {
-      builder.addRow({ id, type: 'Point', geometry: point, order });
+      builder.addRow({ id, type: 'Point', geometry: point, key: order });
     }
     const outside = numbered(builder.finish(), numbers);
     const members = createRowBlockDataBuilder({
@@ -291,8 +290,8 @@ describe('mergeRowBlockData', () => {
       groups,
       caches: FEATURE_CACHES,
     });
-    members.addRow({ id: 'm2', type: 'Point', geometry: point, order: 'z', group: 3, member: 'b' });
-    members.addRow({ id: 'm1', type: 'Point', geometry: point, order: 'z', group: 3, member: 'a' });
+    members.addRow({ id: 'm2', type: 'Point', geometry: point, key: 'b', group: 3 });
+    members.addRow({ id: 'm1', type: 'Point', geometry: point, key: 'a', group: 3 });
     const inside = numbered(members.finish(), numbers);
     const merged = mergeRowBlockData({
       sources: [...outside, ...inside],
@@ -335,7 +334,7 @@ describe('mergeRowBlockData', () => {
       columns: FEATURE_TABLE_COLUMNS,
       caches: FEATURE_CACHES,
     });
-    builder.addRow({ id: 'a', type: 'Point', geometry: null, order: 'k' });
+    builder.addRow({ id: 'a', type: 'Point', geometry: null, key: 'k' });
     const [group] = builder.finish();
     expect(() => mergeRowBlockData({ sources: [group], rows: Int32Array.of(0, 0) })).toThrow(
       /not numbered/,

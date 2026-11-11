@@ -41,7 +41,7 @@ describe('the delta of a layer', () => {
     const row = reference.rows.get('r10') as ReferenceRow;
     const handle = tables.findRow('r10') as number;
     const before = internals.placeOf(handle);
-    writer.apply(patchOf([handle], { order: [key(999_999)] }));
+    writer.apply(patchOf([handle], { key: [key(999_999)] }));
     row.order = key(999_999);
     expectTablesMatch(tables, reference, ['a'], groupHandleOf);
     expect(internals.deltaRowCount()).toBe(1);
@@ -61,9 +61,12 @@ describe('the delta of a layer', () => {
       const ids = Array.from({ length: 5 }, (_, i) => `r${part * 5 + i}`);
       const handles = ids.map((id) => tables.findRow(id) as number);
       const orders = ids.map(() => key(Math.floor(random() * 1_000_000)));
-      writer.apply(patchOf(handles, { order: orders }));
+      writer.apply(patchOf(handles, { key: orders }));
       ids.forEach((id, i) => {
-        (reference.rows.get(id) as ReferenceRow).order = orders[i];
+        // The key of a member orders it among the members of its group
+        const row = reference.rows.get(id) as ReferenceRow;
+        if (row.groupId !== undefined) row.member = orders[i];
+        else row.order = orders[i];
       });
       // Read between the writes, so that the places are known when the delta is made again
       expectTablesMatch(tables, reference, ['a'], groupHandleOf);
@@ -76,16 +79,16 @@ describe('the delta of a layer', () => {
     const reference = referenceOf(random, 40, ['a', 'b']);
     const { tables, writer, internals, groupHandleOf } = tablesOf(reference, ['a', 'b']);
     const moved = tables.findRow('r3') as number;
-    writer.apply(patchOf([moved], { layerId: ['b'], order: [key(10)] }));
+    writer.apply(patchOf([moved], { parent: ['b'], key: [key(10)] }));
     Object.assign(reference.rows.get('r3') as ReferenceRow, { layerId: 'b', order: key(10) });
     const [fresh] = writer.allocateHandles(utf8ColumnFromStrings(['new']));
     const geometry: Geometry = { type: 'Point', coordinates: [1, 2] };
     const change = writer.apply(
       patchOf([fresh], {
         type: ['Point'],
-        layerId: ['a'],
+        parent: ['a'],
         geometry: [geometry],
-        order: [key(500_000)],
+        key: [key(500_000)],
       }),
     );
     reference.rows.set('new', {
@@ -107,7 +110,7 @@ describe('the delta of a layer', () => {
     const { tables, writer, internals } = tablesOf(reference, ['a']);
     const handle = tables.findRow('r5') as number;
     internals.setWriteMark(1);
-    writer.apply(patchOf([handle], { order: [key(1)] }));
+    writer.apply(patchOf([handle], { key: [key(1)] }));
     const delta = internals.layerTable('a')?.delta;
     const slot = internals.ids.deltaSlot(handle);
     expect(delta?.group?.marks[slot]).toBe(1);

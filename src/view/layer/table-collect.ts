@@ -41,9 +41,10 @@ import type { Feature, FeatureType, StyleRule } from '../../shared/types/model.j
 import type { Color } from '../../shared/types/style.js';
 import type { PixelRatioInput } from '../../shared/utils/pixel-ratio.js';
 import { resolveContentPixelRatio, resolvePixelRatio } from '../../shared/utils/pixel-ratio.js';
-import { styleColumnOf } from '../../table/feature-row-columns.js';
+import { STYLE_COLUMN } from '../../table/feature-row-columns.js';
 import { polygonRingRuns } from '../../table/polygon-rings.js';
 import { pairTriangles } from '../../table/row-geometry.js';
+import type { RowBlockDictionary } from '../../table/row-group-types.js';
 import type { GeometryColumnReader } from '../../table/table.js';
 import { tessellateSurfaceFill } from '../globe-subdivision.js';
 import { toPackedPointStyle } from '../renderers/batch-manager.js';
@@ -98,6 +99,9 @@ import {
   type TessellationStep,
 } from '../terrain/tessellation.js';
 import { tilingSignature } from '../terrain/tiling.js';
+
+/** The places of the columns of a feature, read once rather than through the import at every row */
+const STYLE = STYLE_COLUMN;
 
 /** The key of the created zoom in the attributes of a row */
 const CREATED_ZOOM_KEY = drawPropertyKey('createdZoom');
@@ -530,7 +534,7 @@ export function writePointRow(
   const { reader, at } = geometry;
   const data = group.data;
   const slot = context.slots.point(
-    styleColumnOf(data).indexes[row],
+    (data.wholes[STYLE] as RowBlockDictionary).indexes[row],
     rowType(data, row),
     context.slots.ruleColorOf(group, row, context.strings),
   );
@@ -647,7 +651,7 @@ export function writeLineRow(
   if (!reader || parts.length === 0) return 0;
   const data = group.data;
   const slot = context.slots.line(
-    styleColumnOf(data).indexes[row],
+    (data.wholes[STYLE] as RowBlockDictionary).indexes[row],
     rowType(data, row),
     context.slots.ruleColorOf(group, row, context.strings),
   );
@@ -831,7 +835,7 @@ export function planPolygonRow(
   }
 
   const slot = context.slots.polygon(
-    styleColumnOf(data).indexes[row],
+    (data.wholes[STYLE] as RowBlockDictionary).indexes[row],
     type,
     context.slots.ruleColorOf(group, row, context.strings),
   );
@@ -1610,15 +1614,22 @@ function pointStyleOf(
   const data = group.data;
   const source = context.spriteSourceOf(row);
   if (source) {
-    const sprite = context.slots.sprite(source, styleColumnOf(data).indexes[row]);
+    const sprite = context.slots.sprite(
+      source,
+      (data.wholes[STYLE] as RowBlockDictionary).indexes[row],
+    );
     if (!sprite) return null;
     return {
       kind: ROWS_KIND.sprite,
-      style: context.rowsStyles.sprite(source, sprite, styleColumnOf(data).indexes[row]),
+      style: context.rowsStyles.sprite(
+        source,
+        sprite,
+        (data.wholes[STYLE] as RowBlockDictionary).indexes[row],
+      ),
     };
   }
   const style = context.rowsStyles.point(
-    styleColumnOf(data).indexes[row],
+    (data.wholes[STYLE] as RowBlockDictionary).indexes[row],
     rowType(data, row),
     context.slots.ruleColorOf(group, row, context.strings),
   );
@@ -1641,14 +1652,26 @@ export function resolveRowStyle(group: RowGroup, row: number, context: RowsPackC
     case 'LineString':
     case 'Freehand':
     case 'MultiLineString':
-      return context.rowsStyles.line(styleColumnOf(data).indexes[row], type, ruleColor());
+      return context.rowsStyles.line(
+        (data.wholes[STYLE] as RowBlockDictionary).indexes[row],
+        type,
+        ruleColor(),
+      );
     case 'Polygon':
     case 'MultiPolygon':
     case 'Circle': {
       const color = ruleColor();
-      const slot = context.slots.polygon(styleColumnOf(data).indexes[row], type, color);
+      const slot = context.slots.polygon(
+        (data.wholes[STYLE] as RowBlockDictionary).indexes[row],
+        type,
+        color,
+      );
       if (!slot.hasStroke && slot.fillColor[3] <= 0) return -1;
-      return context.rowsStyles.polygon(styleColumnOf(data).indexes[row], type, color);
+      return context.rowsStyles.polygon(
+        (data.wholes[STYLE] as RowBlockDictionary).indexes[row],
+        type,
+        color,
+      );
     }
     default: {
       const reader = geometryAt(group, row)?.reader;
@@ -1674,11 +1697,15 @@ function collectLineRow(
   const data = group.data;
   const ruleColor = context.slots.ruleColorOf(group, row, context.strings);
   const type = rowType(data, row);
-  const style = context.rowsStyles.line(styleColumnOf(data).indexes[row], type, ruleColor);
+  const style = context.rowsStyles.line(
+    (data.wholes[STYLE] as RowBlockDictionary).indexes[row],
+    type,
+    ruleColor,
+  );
   writeRowStyle(draft, styleAt, style, rowCreatedZoom(group, row));
   const dashed =
-    context.slots.line(styleColumnOf(data).indexes[row], type, ruleColor).stroke.lineStyle !==
-    'solid';
+    context.slots.line((data.wholes[STYLE] as RowBlockDictionary).indexes[row], type, ruleColor)
+      .stroke.lineStyle !== 'solid';
   const piece = context.surface?.linePiece ?? 0;
   const coords = reader.coords;
   const stride = reader.stride;
@@ -1730,7 +1757,7 @@ function collectPolygonRow(
   const { slot, triangles } = plan;
   const data = group.data;
   const style = context.rowsStyles.polygon(
-    styleColumnOf(data).indexes[row],
+    (data.wholes[STYLE] as RowBlockDictionary).indexes[row],
     rowType(data, row),
     context.slots.ruleColorOf(group, row, context.strings),
   );

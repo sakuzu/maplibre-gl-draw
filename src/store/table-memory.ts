@@ -41,6 +41,7 @@ import type {
   RowField,
   RowHandle,
   RowWrite,
+  TableGroupField,
   TableGroupPatch,
 } from '../api/tables.js';
 import { featureFields, featureWithFields } from '../feature-table/feature-fields.js';
@@ -191,7 +192,7 @@ interface RestoreSteps {
  * The fields of the place of a row: a write of them is told by the changes of the order, not by
  * the values before
  */
-const PLACE_FIELDS: ReadonlySet<RowField> = new Set(['layerId', 'groupId', 'order', 'member']);
+const PLACE_FIELDS: ReadonlySet<RowField> = new Set(['parent', 'key']);
 
 /**
  * The in-memory {@link StoreContract} of rows
@@ -298,18 +299,14 @@ export class TableContractStore implements StoreContract {
    * The keys of the order a new feature put in a place gets, among the items there now (see
    * `row-places.ts`): null when the layer or the group is not there
    */
-  #placeKeys(to: ItemPlacement): { order: string; member?: string; group?: number } | null {
+  #placeKeys(to: ItemPlacement): { key: string; group?: number } | null {
     if (!this.#layers.has(to.layerId)) return null;
     const group = to.groupId === undefined ? undefined : this.#groups.get(to.groupId);
     if (to.groupId !== undefined && (!group || group.layerId !== to.layerId)) return null;
     const [key] = this.#keysAt(to, group, new Set(), 1);
-    if (!group) return { order: key };
-    // The key of a member is not read in the order of its layer
-    return {
-      order: keyAfter(this.#lastItemKey(to.layerId)),
-      member: key,
-      group: this.#internals.groups.handleOfId(group.id),
-    };
+    if (!group) return { key };
+    // The key of a member is its key among the members of its group
+    return { key, group: this.#internals.groups.handleOfId(group.id) };
   }
 
   // ==========================================================================
@@ -426,36 +423,36 @@ export class TableContractStore implements StoreContract {
         const sameLayer = kept?.layer.layerId === feature.layerId;
         const fields = new Map<RowField, unknown>([
           ['type', feature.type],
-          ['layerId', feature.layerId],
+          ['parent', group ? group.id : feature.layerId],
           ['geometry', feature.geometry],
-          ['order', undefined],
+          ['key', undefined],
           ['style', feature.style ?? {}],
           ['hidden', feature.visible === false],
           ['locked', feature.locked === true],
         ]);
-        const end = layerEnd(feature.layerId);
-        if (kept && sameLayer) {
-          const order = utf8String(kept.group.data.itemKeys, kept.row);
-          fields.set('order', order);
-          // A row in a group is not an item of its layer: its group is
-          if (!group) end.keep(order);
-        } else if (group) {
-          // The key of a member is not read in the order of its layer
-          fields.set('order', keyAfter(end.first));
-        } else {
-          end.add((key) => fields.set('order', key));
-        }
         if (group) {
+          // A member is ordered among the members of its group
           const handleOfGroup = this.#internals.groups.handleOfId(group.id);
-          fields.set('groupId', group.id);
-          fields.set('member', undefined);
           const members = groupEnd(group);
           if (kept && sameLayer && keptGroup >= 0 && keptGroup === handleOfGroup) {
-            const member = utf8String(kept.group.data.memberKeys, kept.row);
-            fields.set('member', member);
-            members.keep(member);
+            const key = utf8String(kept.group.data.keys, kept.row);
+            fields.set('key', key);
+            members.keep(key);
           } else {
-            members.add((key) => fields.set('member', key));
+            members.add((key) => fields.set('key', key));
+          }
+        } else {
+          const end = layerEnd(feature.layerId);
+          if (kept && sameLayer) {
+            // A row that was a member stands where its group stands
+            const key =
+              keptGroup >= 0
+                ? (this.#writer.getGroupOrder(keptGroup) ?? keyAfter(end.first))
+                : utf8String(kept.group.data.keys, kept.row);
+            fields.set('key', key);
+            end.keep(key);
+          } else {
+            end.add((key) => fields.set('key', key));
           }
         }
         for (const [key, value] of Object.entries(feature.properties ?? {})) {
@@ -546,10 +543,8 @@ export class TableContractStore implements StoreContract {
       const group = groupId ? this.#groups.get(groupId) : undefined;
       if (groupId && !group) throw new Error(`Group with id "${groupId}" not found`);
       if (current.groupId && current.groupId !== groupId) this.#leftGroups.add(current.groupId);
-      place.set('layerId', layerId);
-      place.set('order', keyAfter(this.#lastItemKey(layerId)));
-      place.set('groupId', group?.id ?? '');
-      place.set('member', group ? keyAfter(this.#lastMemberKey(group)) : undefined);
+      place.set('parent', group?.id ?? layerId);
+      place.set('key', keyAfter(group ? this.#lastMemberKey(group) : this.#lastItemKey(layerId)));
     }
     const next = { ...current, ...updates, id, layerId, groupId } as Feature;
     const fields = featureFields(current, next);
@@ -897,14 +892,8 @@ export class TableContractStore implements StoreContract {
           const at = row(handle);
           const left = this.#groupIdOfRow(handle);
           if (left !== undefined && left !== group?.id) this.#leftGroups.add(left);
-          set('layerId', at, to.layerId);
-          set('groupId', at, group?.id ?? '');
-          if (group) {
-            set('member', at, keys[k]);
-          } else {
-            set('order', at, keys[k]);
-            set('member', at, undefined);
-          }
+          set('parent', at, group?.id ?? to.layerId);
+          set('key', at, keys[k]);
         });
       }
       for (const values of fields.values()) values.length = handles.length;
@@ -926,11 +915,13 @@ export class TableContractStore implements StoreContract {
       const left = flag !== 0 ? this.#groupIdOfRow(patch.handles[i]) : undefined;
       if (left !== undefined) this.#leftGroups.add(left);
     });
-    const groupIds = patch.fields.get('groupId');
-    if (groupIds) {
+    const parents = patch.fields.get('parent');
+    if (parents) {
       patch.handles.forEach((handle, i) => {
+        const parent = parents[i];
+        if (parent === undefined) return;
         const left = this.#groupIdOfRow(handle);
-        if (left !== undefined && (groupIds[i] || undefined) !== left) this.#leftGroups.add(left);
+        if (left !== undefined && parent !== left) this.#leftGroups.add(left);
       });
     }
   }
@@ -961,31 +952,19 @@ export class TableContractStore implements StoreContract {
       });
       if (codes.length === 0) return;
       const keys = this.#keysAt(to, group, new Set(codes), codes.length);
-      // The members of the groups that go to another layer go with them
+      // The groups (the members of a group that goes to another layer go there with it)
       const groupWrites: Array<{ handle: number; key: string; group: TableGroup }> = [];
-      const members: number[] = [];
       codes.forEach((code, k) => {
         if ((code & 1) === 0) return;
-        const id = ids[k];
-        const moved = this.#groups.get(id) as TableGroup;
+        const moved = this.#groups.get(ids[k]) as TableGroup;
         groupWrites.push({ handle: code >> 1, key: keys[k], group: moved });
-        if (moved.layerId === to.layerId) return;
-        const view = this.tables.get(moved.layerId);
-        const handle = code >> 1;
-        if (view) members.push(...view.listGroupMembers(handle, 0, view.countGroupMembers(handle)));
       });
-      if (members.length > 0) {
-        this.writer.apply({
-          handles: Int32Array.from(members),
-          fields: new Map([['layerId', members.map(() => to.layerId)]]),
-        });
-      }
       if (groupWrites.length > 0) {
         this.#writer.applyGroups({
           handles: Int32Array.from(groupWrites, (write) => write.handle),
-          fields: new Map<'order' | 'layerId', unknown[]>([
-            ['order', groupWrites.map((write) => write.key)],
-            ['layerId', groupWrites.map(() => to.layerId)],
+          fields: new Map<TableGroupField, unknown[]>([
+            ['key', groupWrites.map((write) => write.key)],
+            ['parent', groupWrites.map(() => to.layerId)],
           ]),
         });
         for (const { group: moved } of groupWrites) {
@@ -1010,18 +989,9 @@ export class TableContractStore implements StoreContract {
       });
       if (rows.length === 0) return;
       const fields = new Map<RowField, unknown[]>([
-        ['layerId', rows.map(() => to.layerId)],
-        ['groupId', rows.map(() => group?.id ?? '')],
+        ['parent', rows.map(() => group?.id ?? to.layerId)],
+        ['key', rowKeys],
       ]);
-      if (group) {
-        fields.set('member', rowKeys);
-      } else {
-        fields.set('order', rowKeys);
-        fields.set(
-          'member',
-          rows.map(() => undefined),
-        );
-      }
       this.writer.apply({ handles: Int32Array.from(rows), fields });
     });
   }
@@ -1044,10 +1014,10 @@ export class TableContractStore implements StoreContract {
       const keptOrder = kept >= 0 ? this.#writer.getGroupOrder(kept) : undefined;
       this.#writer.applyGroups({
         handles: Int32Array.of(handle),
-        fields: new Map<'id' | 'order' | 'layerId' | 'visible' | 'locked', unknown[]>([
+        fields: new Map<TableGroupField, unknown[]>([
           ['id', [created.id]],
           [
-            'order',
+            'key',
             [
               keptOrder ??
                 (first === undefined
@@ -1055,8 +1025,8 @@ export class TableContractStore implements StoreContract {
                   : this.#itemKeyOf(first)),
             ],
           ],
-          ['layerId', [created.layerId]],
-          ['visible', [created.visible]],
+          ['parent', [created.layerId]],
+          ['hidden', [!created.visible]],
           ['locked', [created.locked]],
         ]),
       });
@@ -1085,8 +1055,8 @@ export class TableContractStore implements StoreContract {
       if (handle >= 0 && (group.visible !== previous.visible || group.locked !== previous.locked)) {
         this.#writer.applyGroups({
           handles: Int32Array.of(handle),
-          fields: new Map<'visible' | 'locked', unknown[]>([
-            ['visible', [group.visible]],
+          fields: new Map<TableGroupField, unknown[]>([
+            ['hidden', [!group.visible]],
             ['locked', [group.locked]],
           ]),
         });
@@ -1114,9 +1084,8 @@ export class TableContractStore implements StoreContract {
         this.writer.apply({
           handles: Int32Array.from(members),
           fields: new Map<RowField, unknown[]>([
-            ['groupId', Array.from(members, () => '')],
-            ['member', Array.from(members, () => undefined)],
-            ['order', keys],
+            ['parent', Array.from(members, () => group.layerId)],
+            ['key', keys],
           ]),
         });
       }
@@ -1190,17 +1159,17 @@ export class TableContractStore implements StoreContract {
           if (!walk?.span(code, -1)) continue;
           if (front < 0 || walk.compare(code, front) > 0) front = code;
         }
-        if (front >= 0) orders[i] = this.#keyOfCode(front, false);
+        if (front >= 0) orders[i] = this.#keyOfCode(front);
         else endOf(created.layerId).add((key) => (orders[i] = key));
       }
       for (const end of ends.values()) end.finish();
       this.#writer.applyGroups({
         handles: Int32Array.from(handles),
-        fields: new Map<'id' | 'order' | 'layerId' | 'visible' | 'locked', unknown[]>([
+        fields: new Map<TableGroupField, unknown[]>([
           ['id', plans.map(({ created }) => created.id)],
-          ['order', orders],
-          ['layerId', plans.map(({ created }) => created.layerId)],
-          ['visible', plans.map(({ created }) => created.visible)],
+          ['key', orders],
+          ['parent', plans.map(({ created }) => created.layerId)],
+          ['hidden', plans.map(({ created }) => !created.visible)],
           ['locked', plans.map(({ created }) => created.locked)],
         ]),
       });
@@ -1225,13 +1194,12 @@ export class TableContractStore implements StoreContract {
           write.keys.push(keys[k]);
         });
       }
-      for (const [layerId, write] of writes) {
+      for (const write of writes.values()) {
         this.writer.apply({
           handles: Int32Array.from(write.rows),
           fields: new Map<RowField, unknown[]>([
-            ['layerId', write.rows.map(() => layerId)],
-            ['groupId', write.groups],
-            ['member', write.keys],
+            ['parent', write.groups],
+            ['key', write.keys],
           ]),
         });
       }
@@ -1280,8 +1248,8 @@ export class TableContractStore implements StoreContract {
           const above = walk.above(codeOf(run[run.length - 1]), -1);
           const members = run.flatMap((entry) => Array.from(entry.members));
           const made = keysBetween(
-            below === null ? null : this.#keyOfCode(below, false),
-            above === null ? null : this.#keyOfCode(above, false),
+            below === null ? null : this.#keyOfCode(below),
+            above === null ? null : this.#keyOfCode(above),
             members.length,
           );
           rows.push(...members);
@@ -1298,9 +1266,8 @@ export class TableContractStore implements StoreContract {
         this.writer.apply({
           handles: Int32Array.from(rows),
           fields: new Map<RowField, unknown[]>([
-            ['groupId', rows.map(() => '')],
-            ['member', rows.map(() => undefined)],
-            ['order', keys],
+            ['parent', rows.map(() => layerId)],
+            ['key', keys],
           ]),
         });
       }
@@ -1666,14 +1633,15 @@ export class TableContractStore implements StoreContract {
     return table ? new ItemWalk(table, this.#internals) : null;
   }
 
-  /** The key of an item in a layer (its own key, the key of a group), or in a group */
-  #keyOfCode(code: number, inGroup: boolean): string {
+  /** The key of an item in a layer (its own key, the key of a group), or in a group (its key) */
+  #keyOfCode(code: number): string {
     const handle = code >> 1;
     // The key written of a group (its members may be read where the key before puts them)
     if ((code & 1) === 1) return this.#writer.getGroupOrder(handle) ?? '';
     const place = this.#internals.placeOf(handle);
     if (!place) return '';
-    return utf8String(inGroup ? place.group.data.memberKeys : place.group.data.itemKeys, place.row);
+    // A row is ordered by its key among the members of its group, or among the items of its layer
+    return utf8String(place.group.data.keys, place.row);
   }
 
   /** The keys of the items just below and above an item of a layer */
@@ -1682,8 +1650,8 @@ export class TableContractStore implements StoreContract {
     const below = walk?.below(code, -1) ?? null;
     const above = walk?.above(code, -1) ?? null;
     return {
-      below: below === null ? null : this.#keyOfCode(below, false),
-      above: above === null ? null : this.#keyOfCode(above, false),
+      below: below === null ? null : this.#keyOfCode(below),
+      above: above === null ? null : this.#keyOfCode(above),
     };
   }
 
@@ -1700,9 +1668,8 @@ export class TableContractStore implements StoreContract {
   ): string[] {
     const container = group ? this.#internals.groups.handleOfId(group.id) : -1;
     const walk = this.#walk(to.layerId);
-    const inGroup = group !== undefined;
     const keyOf = (code: number | null | undefined): string | null =>
-      code === null || code === undefined ? null : this.#keyOfCode(code, inGroup);
+      code === null || code === undefined ? null : this.#keyOfCode(code);
     /** The item of an id that stays in the container (-1 for none) */
     const itemOf = (id: string | null | undefined): number => {
       if (id === null || id === undefined || !walk) return -1;
@@ -1811,7 +1778,7 @@ export class TableContractStore implements StoreContract {
     // The keys of the items are in their order; the last one may be a group
     const top = this.#walk(layerId)?.top(-1) ?? null;
     if (top === null) return null;
-    let last: string | null = this.#keyOfCode(top, false);
+    let last: string | null = this.#keyOfCode(top);
     // A group without members is not an item of the rows; its key may come after
     for (const group of this.#groups.values()) {
       if (group.layerId !== layerId) continue;
@@ -1821,10 +1788,13 @@ export class TableContractStore implements StoreContract {
     return last;
   }
 
-  /** The key of the order of a row */
+  /** The key a row is ordered by among the items of its layer: its own, or the one of its group */
   #itemKeyOf(handle: RowHandle): string {
     const place = this.#internals.placeOf(handle);
-    return place ? utf8String(place.group.data.itemKeys, place.row) : keyAfter(null);
+    if (!place) return keyAfter(null);
+    const group = place.group.data.groups[place.row];
+    if (group >= 0) return this.#writer.getGroupOrder(group) ?? keyAfter(null);
+    return utf8String(place.group.data.keys, place.row);
   }
 
   /** The key of the last member of a group (null for none) */
@@ -1832,7 +1802,7 @@ export class TableContractStore implements StoreContract {
     const handle = this.#internals.groups.handleOfId(group.id);
     if (handle < 0) return null;
     const last = this.#walk(group.layerId)?.top(handle) ?? null;
-    return last === null ? null : this.#keyOfCode(last, true);
+    return last === null ? null : this.#keyOfCode(last);
   }
 
   /**

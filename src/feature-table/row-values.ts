@@ -64,16 +64,12 @@ export type ColumnDeclaration =
 export type TableColumns = Readonly<Record<string, ColumnDeclaration>>;
 
 /**
- * The fixed fields of a row: its place (not a column, so not declared)
+ * The fixed fields of a row: its place, the id of its parent (a table or a group) and the key of
+ * its order there (not columns, so not declared)
  *
  * @internal
  */
-export const PLACE_FIELDS: readonly RowField[] = Object.freeze([
-  'layerId',
-  'groupId',
-  'order',
-  'member',
-]);
+export const PLACE_FIELDS: readonly RowField[] = Object.freeze(['parent', 'key']);
 
 /**
  * The columns declared, read once: the names of the fields of the values of rows they allow

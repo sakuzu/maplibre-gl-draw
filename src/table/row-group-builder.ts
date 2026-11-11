@@ -85,8 +85,8 @@ export interface GroupEntry {
   readonly handle: number;
   /** The id of the group */
   readonly id: string;
-  /** The key of the order of the group in its layer */
-  readonly order: string;
+  /** The key of the order of the group among the items of its table */
+  readonly key: string;
 }
 
 /**
@@ -158,10 +158,11 @@ export interface RowInput {
    * LineString), or null for a row without one
    */
   readonly geometry: Geometry | null;
-  /** The key of the order of the row in its layer */
-  readonly order: string;
-  /** The key of the order of the row within its group of features (when it is in one) */
-  readonly member?: string;
+  /**
+   * The key of the order of the row: among the members of its group of features when it is in
+   * one, among the items of its table otherwise
+   */
+  readonly key: string;
   /**
    * The handle of the group of features of the row (`GroupEntry.handle`; outside a group when
    * omitted or negative)
@@ -236,8 +237,7 @@ export function createRowBlockDataBuilder(options: RowBlockBuildOptions): RowBlo
   };
 
   const ids = new Utf8ColumnBuilder(256);
-  const itemKeys = new Utf8ColumnBuilder(256);
-  const memberKeys = new Utf8ColumnBuilder(256);
+  const rowKeys = new Utf8ColumnBuilder(256);
   const seen = new Set<string>();
   const rows: RowInput[] = [];
   const geometries: Array<RowGeometry | null> = [];
@@ -270,8 +270,7 @@ export function createRowBlockDataBuilder(options: RowBlockBuildOptions): RowBlo
       if (at >= groupRefs.length) groupRefs = growInt32(groupRefs, at + 1);
       groupRefs[at] = row.group !== undefined && row.group >= 0 ? row.group : -1;
       ids.add(row.id);
-      itemKeys.add(row.order);
-      memberKeys.add(groupRefs[at] >= 0 ? (row.member ?? '') : '');
+      rowKeys.add(row.key);
       rows.push(row);
       geometries.push(geometry);
     },
@@ -279,8 +278,7 @@ export function createRowBlockDataBuilder(options: RowBlockBuildOptions): RowBlo
       const n = rows.length;
       const keys: RowKeySource = {
         ids: ids.finish(),
-        itemKeys: itemKeys.finish(),
-        memberKeys: memberKeys.finish(),
+        keys: rowKeys.finish(),
         groups: groupRefs.slice(0, n),
       };
       const groupKeys = groupKeySource(options.groups ?? []);
@@ -346,8 +344,7 @@ export function blockTransferList(groups: readonly RowBlockData[]): ArrayBuffer[
       add(whole.indexes);
       if ('dictionary' in whole) addColumn(whole.dictionary);
     }
-    addColumn(group.itemKeys);
-    addColumn(group.memberKeys);
+    addColumn(group.keys);
     add(group.groups);
     add(group.flags);
     for (const keyed of group.keyed) {
@@ -597,8 +594,7 @@ function buildGroup(
   const places = shape.places;
   const length = order.length;
   const ids = new Utf8ColumnBuilder(length);
-  const itemKeys = new Utf8ColumnBuilder(length);
-  const memberKeys = new Utf8ColumnBuilder(length);
+  const rowKeys = new Utf8ColumnBuilder(length);
   const idHashes = new Uint32Array(length);
   const groups = new Int32Array(length);
   const flags = new Uint8Array(length);
@@ -616,8 +612,7 @@ function buildGroup(
     const row = rows[source];
     ids.addEntry(keys.ids, source);
     idHashes[r] = hashUtf8(keys.ids, source);
-    itemKeys.addEntry(keys.itemKeys, source);
-    memberKeys.addEntry(keys.memberKeys, source);
+    rowKeys.addEntry(keys.keys, source);
     groups[r] = keys.groups[source];
 
     flags[r] =
@@ -707,8 +702,7 @@ function buildGroup(
     shapes,
     wholes: wholeColumns,
     keyed,
-    itemKeys: itemKeys.finish(),
-    memberKeys: memberKeys.finish(),
+    keys: rowKeys.finish(),
     groups,
     flags,
     rowBounds,
@@ -918,7 +912,7 @@ export function groupKeySource(groups: readonly GroupEntry[]): GroupKeySource | 
   });
   return {
     ids: utf8ColumnFromStrings(groups.map((group) => group.id)),
-    keys: utf8ColumnFromStrings(groups.map((group) => group.order)),
+    keys: utf8ColumnFromStrings(groups.map((group) => group.key)),
     entryOf: (handle) => entries.get(handle) ?? -1,
   };
 }

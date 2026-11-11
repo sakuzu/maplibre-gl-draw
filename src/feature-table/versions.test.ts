@@ -132,7 +132,7 @@ describe('the next versions of the row groups', () => {
     const sides = gate(internals);
     const at = (id: string) => tables.findRow(id) as number;
     // p3 to the range of the second group
-    writer.apply(rowPatch([at('p3')], { order: [key(9500)] }));
+    writer.apply(rowPatch([at('p3')], { key: [key(9500)] }));
     (reference.rows.get('p3') as ReferenceRow).order = key(9500);
     for (let i = 0; i < 4; i++) internals.advanceVersions(steps(10));
     const [version] = internals.builtVersions('a');
@@ -141,9 +141,9 @@ describe('the next versions of the row groups', () => {
     // took written again, and a new row of the delta in its range
     writer.apply(rowPatch([at('p9')], { 'properties:name': ['kept'] }));
     (reference.rows.get('p9') as ReferenceRow).properties = { name: 'kept' };
-    writer.apply(rowPatch([at('p3')], { order: [key(9600)] }));
+    writer.apply(rowPatch([at('p3')], { key: [key(9600)] }));
     (reference.rows.get('p3') as ReferenceRow).order = key(9600);
-    writer.apply(rowPatch([at('p12')], { order: [key(10_500)] }));
+    writer.apply(rowPatch([at('p12')], { key: [key(10_500)] }));
     (reference.rows.get('p12') as ReferenceRow).order = key(10_500);
     expectTablesMatch(tables, reference, ['a'], groupHandleOf);
     for (const v of internals.builtVersions('a')) sides.allow(v);
@@ -172,7 +172,7 @@ describe('the next versions of the row groups', () => {
       const sides = gate(internals);
       const at = (id: string) => tables.findRow(id) as number;
       // p2 (group 0) to the range of group 1, p1200 (group 1) to the range of group 0
-      writer.apply(rowPatch([at('p2'), at('p1200')], { order: [key(1_500_500), key(4500)] }));
+      writer.apply(rowPatch([at('p2'), at('p1200')], { key: [key(1_500_500), key(4500)] }));
       (reference.rows.get('p2') as ReferenceRow).order = key(1_500_500);
       (reference.rows.get('p1200') as ReferenceRow).order = key(4500);
       // The groups are not small: the versions are of one group each
@@ -218,9 +218,9 @@ describe('the next versions of the row groups', () => {
     writer.apply(
       rowPatch(Array.from(handles), {
         type: ids.map(() => 'Point'),
-        layerId: ids.map(() => 'a'),
+        parent: ids.map(() => 'a'),
         geometry: ids.map((_, i) => ({ type: 'Point', coordinates: [i, 1] })),
-        order: ids.map((_, i) => `${key(5000)}${String(i).padStart(5, '0')}`),
+        key: ids.map((_, i) => `${key(5000)}${String(i).padStart(5, '0')}`),
       }),
     );
     expect(internals.deltaRowCount()).toBe(9000);
@@ -271,7 +271,7 @@ describe('the next versions of the row groups', () => {
     const setup = tablesOfReference(reference, ['a'], 20_000, { worker });
     const { tables, writer, internals, groupHandleOf } = setup;
     const at = (id: string) => tables.findRow(id) as number;
-    writer.apply(rowPatch([at('p100')], { order: [key(100_500)] }));
+    writer.apply(rowPatch([at('p100')], { key: [key(100_500)] }));
     (reference.rows.get('p100') as ReferenceRow).order = key(100_500);
     internals.flushVersions();
     expect(pending).toHaveLength(1);

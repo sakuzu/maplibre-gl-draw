@@ -948,7 +948,7 @@ function makeScene(run: Run, style: FeatureStyle | null): void {
         id,
         type: input.type,
         geometry: input.geometry,
-        order: `a${String(i).padStart(6, '0')}`,
+        key: `a${String(i).padStart(6, '0')}`,
         style: input.style as Record<string, unknown>,
         properties: input.properties as Record<string, unknown>,
         hidden: false,

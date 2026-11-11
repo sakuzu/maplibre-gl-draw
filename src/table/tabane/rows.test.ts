@@ -259,8 +259,7 @@ describe('a row block as a row block of the tables', () => {
     expect(a.length).toBe(b.length);
     expect(a.ids).toEqual(b.ids);
     expect(a.idHashes).toEqual(b.idHashes);
-    expect(a.itemKeys).toEqual(b.itemKeys);
-    expect(a.memberKeys).toEqual(b.memberKeys);
+    expect(a.keys).toEqual(b.keys);
     expect(a.groups).toEqual(b.groups);
     expect(a.flags).toEqual(b.flags);
     expect(typeColumnOf(a).indexes).toEqual(typeColumnOf(b).indexes);
@@ -312,7 +311,7 @@ describe('a row block as a row block of the tables', () => {
           type: row.type,
           geometry: row.geometry,
           // Block 0 follows the key `V` and the suffix of 0
-          order: `V${tabaneRowSuffixOf(0)}${tabaneRowSuffixOf(i)}`,
+          key: `V${tabaneRowSuffixOf(0)}${tabaneRowSuffixOf(i)}`,
           style: row.style,
           properties: row.properties,
           deleted: row.deleted,
@@ -341,7 +340,7 @@ describe('a row block as a row block of the tables', () => {
       caches: FEATURE_CACHES,
     });
     rows.forEach((row, i) => {
-      builder.addRow({ ...row, order: keys[i] });
+      builder.addRow({ ...row, key: keys[i] });
     });
     expectSameBlock(rowBlockDataOfTabane(rowBlock), builder.finish()[0]);
   });
@@ -456,10 +455,10 @@ describe('a row block that writes the key of each row', () => {
       tables
         .readValues(
           rowPatch(numbers.map(handleOf), {
-            order: numbers.map(() => 0),
+            key: numbers.map(() => 0),
           }),
         )
-        .fields.get('order');
+        .fields.get('key');
     return {
       store,
       writer,
@@ -489,8 +488,7 @@ describe('a row block that writes the key of each row', () => {
     const keys = ['A5', numberedKey(1), numberedKey(3), numberedKey(9), 'a-b', 'あ'];
     expect(rowBlock.keys).toEqual(keys);
     const data = rowBlockDataOfTabane(rowBlock);
-    expect(textsOf(data.itemKeys, 6)).toEqual(keys);
-    expect(textsOf(data.memberKeys, 6)).toEqual(['', '', '', '', '', '']);
+    expect(textsOf(data.keys, 6)).toEqual(keys);
     expect(Array.from(data.groups)).toEqual([-1, -1, -1, -1, -1, -1]);
   });
 
@@ -499,8 +497,8 @@ describe('a row block that writes the key of each row', () => {
     expect(rowBlock.keys).toBe(null);
     expect(rowBlock.place.firstIndex).toBe(5);
     const data = rowBlockDataOfTabane(rowBlock);
-    expect(textsOf(data.itemKeys, 3)).toEqual([numberedKey(5), numberedKey(6), numberedKey(7)]);
-    expect(textsOf(data.itemKeys, 3)).toEqual(tabaneKeysOf(rowBlock));
+    expect(textsOf(data.keys, 3)).toEqual([numberedKey(5), numberedKey(6), numberedKey(7)]);
+    expect(textsOf(data.keys, 3)).toEqual(tabaneKeysOf(rowBlock));
   });
 
   it('is taken as it is when its rows are in the order of their keys', () => {
@@ -565,25 +563,26 @@ describe('a row block that writes the key of each row', () => {
     expect(items()).toEqual(order);
     internals.flushVersions();
     expect(items()).toEqual(order);
-    // The group moved past the last row: its members move, their keys do not
+    // The group moved past the last row: its members move, their keys (among the members) do not
+    const members = keysOf(2, 3);
     store.moveItem('g', { layerId: 'l', above: null });
     internals.flushVersions();
     expect(items()).toEqual([id(1), id(5), id(6), id(7), id(4), 'g']);
     expect(writer.getGroupOrder(group)).toBe(keyAfter('q7'));
-    expect(keysOf(2, 3)).toEqual(['G1', 'G2']);
+    expect(keysOf(2, 3)).toEqual(members);
   });
 
   it('keeps the keys of its rows when they are read and written back', () => {
     const { add, tables, writer, internals, handleOf, items, keysOf } = setup();
     const [data] = add(rowBlockOf(pointsOf(['A5', 'G1', numberedKey(9), 'q7'])));
     const handles = [1, 2, 3, 4].map(handleOf);
-    const read = tables.readValues(rowPatch(handles, { order: [0, 0, 0, 0] }));
+    const read = tables.readValues(rowPatch(handles, { key: [0, 0, 0, 0] }));
     // The same keys move no row
     writer.apply(read);
     expect(internals.placeOf(handleOf(2))?.group.data).toBe(data);
     expect(items()).toEqual([1, 2, 3, 4].map(id));
     // Moved, and put back by the keys read before
-    writer.apply(rowPatch([handleOf(4)], { order: ['A1'] }));
+    writer.apply(rowPatch([handleOf(4)], { key: ['A1'] }));
     expect(items()).toEqual([4, 1, 2, 3].map(id));
     writer.apply(read);
     expect(items()).toEqual([1, 2, 3, 4].map(id));
@@ -600,7 +599,7 @@ describe('a row block that writes the key of each row', () => {
     expect(items()).toEqual([1, 2, 3, 4].map(id));
     expect(keysOf(1, 2, 3, 4)).toEqual(['A5', 'G1', numberedKey(9), 'q7']);
     const place = internals.placeOf(handleOf(2));
-    expect(place && utf8String(place.group.data.itemKeys, place.row)).toBe('G1');
+    expect(place && utf8String(place.group.data.keys, place.row)).toBe('G1');
   });
 
   it('makes a key between two keys of rows', () => {
@@ -622,9 +621,9 @@ describe('a row block that writes the key of each row', () => {
     featureTablesInternals(tables)?.addQueuedRowBlocks();
     expect(itemsOf(tables)).toEqual(items());
     const handles = [1, 2, 3, 4].map((n) => tables.findRow(id(n)) as number);
-    expect(
-      tables.readValues(rowPatch(handles, { order: [0, 0, 0, 0] })).fields.get('order'),
-    ).toEqual(keysOf(1, 2, 3, 4));
+    expect(tables.readValues(rowPatch(handles, { key: [0, 0, 0, 0] })).fields.get('key')).toEqual(
+      keysOf(1, 2, 3, 4),
+    );
   });
 
   it('keeps the keys of its rows written again as rows of another head', () => {
@@ -636,7 +635,7 @@ describe('a row block that writes the key of each row', () => {
       rows: tabaneRowsOf(rowBlockOf(pointsOf(keys))),
     });
     const data = rowBlockDataOfTabane(readTabaneBlock(block.content)[0]);
-    expect(textsOf(data.itemKeys, 4)).toEqual(keys);
+    expect(textsOf(data.keys, 4)).toEqual(keys);
   });
 });
 

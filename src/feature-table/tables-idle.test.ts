@@ -29,7 +29,7 @@ function blocks() {
       id: `p${i}`,
       type: 'Point',
       geometry: { type: 'Point', coordinates: [i * 0.001, 0] },
-      order: `a${String(i).padStart(6, '0')}`,
+      key: `a${String(i).padStart(6, '0')}`,
     });
   }
   return builder.finish();

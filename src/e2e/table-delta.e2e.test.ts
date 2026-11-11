@@ -247,7 +247,7 @@ async function drawWritten(
         const ids = change.moves.map((m) => m.id);
         writer.apply({
           handles: Int32Array.from(ids.map((id) => tables.findRow(id) as number)),
-          fields: new Map([['order', change.moves.map((m) => m.order)]]),
+          fields: new Map([['key', change.moves.map((m) => m.order)]]),
         });
         const encoder = new TextEncoder();
         const parts = change.created.map((f) => encoder.encode(f.id));
@@ -262,9 +262,9 @@ async function drawWritten(
           handles,
           fields: new Map<never, unknown[]>([
             ['type' as never, change.created.map((f) => f.type)],
-            ['layerId' as never, change.created.map(() => 'rows')],
+            ['parent' as never, change.created.map(() => 'rows')],
             ['geometry' as never, change.created.map((f) => f.geometry)],
-            ['order' as never, change.created.map((f) => f.order)],
+            ['key' as never, change.created.map((f) => f.order)],
             ['style' as never, change.created.map((f) => f.style ?? {})],
           ]),
         });

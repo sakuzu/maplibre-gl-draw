@@ -395,8 +395,8 @@ describe('the bbox of a row written', () => {
         ],
       ],
     });
-    builder.addRow({ id: 'a', type: 'Polygon', geometry: square(0), order: referenceKey(1) });
-    builder.addRow({ id: 'b', type: 'Polygon', geometry: square(10), order: referenceKey(2) });
+    builder.addRow({ id: 'a', type: 'Polygon', geometry: square(0), key: referenceKey(1) });
+    builder.addRow({ id: 'b', type: 'Polygon', geometry: square(10), key: referenceKey(2) });
     writer.addRowBlocks('l', builder.finish());
     featureTablesInternals(tables)?.addQueuedRowBlocks();
     const view = tables.get('l');

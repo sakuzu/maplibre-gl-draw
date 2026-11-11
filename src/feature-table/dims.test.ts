@@ -148,7 +148,7 @@ describe('the rows of layers of every dimensions', () => {
             const order = key(random() * 1e6);
             setup.writer.applyGroups({
               handles: Int32Array.of(groupHandleOf('ga')),
-              fields: new Map([['order', [order]]]),
+              fields: new Map([['key', [order]]]),
             });
             const group = reference.groups.get('ga');
             if (group) group.order = order;
@@ -199,9 +199,9 @@ describe('the rows of layers of every dimensions', () => {
       writer.apply(
         rowPatch(Array.from(handles), {
           type: rows.map((row) => row.type),
-          layerId: rows.map(() => 'a'),
+          parent: rows.map(() => 'a'),
           geometry: rows.map((row) => row.geometry),
-          order: rows.map((row) => row.order),
+          key: rows.map((row) => row.order),
         }),
       );
       for (const row of rows) reference.rows.set(row.id, row);
@@ -218,11 +218,13 @@ describe('the rows of layers of every dimensions', () => {
       writer.apply(
         rowPatch(
           moved.map((row) => tables.findRow(row.id) as number),
-          { order: moved.map((_, i) => key(1_000_000 + i)) },
+          { key: moved.map((_, i) => key(1_000_000 + i)) },
         ),
       );
       moved.forEach((row, i) => {
-        row.order = key(1_000_000 + i);
+        // The key of a member orders it among the members of its group
+        if (row.groupId !== undefined) row.member = key(1_000_000 + i);
+        else row.order = key(1_000_000 + i);
       });
       for (let i = 0; i < 8; i++) {
         internals.advanceVersions(steps(10));
@@ -269,7 +271,7 @@ describe('a next version merged in a Worker', () => {
     moved.geometry = { type: 'Point', coordinates: [3, 4, Number.NaN, 5] };
     writer.apply(
       rowPatch([tables.findRow('p5') as number], {
-        order: [moved.order],
+        key: [moved.order],
         geometry: [moved.geometry],
       }),
     );
@@ -410,7 +412,7 @@ describe('the rows of a layer of z or m', () => {
       id: 'p',
       type: 'Point',
       geometry: { type: 'Point', coordinates: [1, 2, 3] },
-      order: key(1),
+      key: key(1),
     });
     writer.addRowBlocks('a', builder.finish());
     internals.addQueuedRowBlocks();
@@ -437,13 +439,13 @@ describe('the rows of a layer of z or m', () => {
       id: 'q',
       type: 'Point',
       geometry: { type: 'Point', coordinates: [1, 2] },
-      order: key(5),
+      key: key(5),
     });
     expect(() => writer.addRowBlocks('a', builder.finish())).toThrow(
       /coordinates of xy, its layer xyz/,
     );
     // Into a layer of xy: its z would be lost
-    expect(() => writer.apply(rowPatch([at('p')], { layerId: ['b'], order: [key(1)] }))).toThrow(
+    expect(() => writer.apply(rowPatch([at('p')], { parent: ['b'], key: [key(1)] }))).toThrow(
       /coordinates of xyz, the layer "b" of xy/,
     );
   });
@@ -475,10 +477,10 @@ describe('the rows of a layer of z or m', () => {
     });
     const { tables, writer, internals, groupHandleOf } = setup;
     const at = (id: string) => tables.findRow(id) as number;
-    writer.apply(rowPatch([at('p')], { layerId: ['b'], order: [key(1)] }));
+    writer.apply(rowPatch([at('p')], { parent: ['b'], key: [key(1)] }));
     Object.assign(reference.rows.get('p') as ReferenceRow, { layerId: 'b', order: key(1) });
     const geometry: Geometry = { type: 'Point', coordinates: [4, 5, 6] };
-    writer.apply(rowPatch([at('q')], { layerId: ['b'], order: [key(2)], geometry: [geometry] }));
+    writer.apply(rowPatch([at('q')], { parent: ['b'], key: [key(2)], geometry: [geometry] }));
     Object.assign(reference.rows.get('q') as ReferenceRow, {
       layerId: 'b',
       order: key(2),

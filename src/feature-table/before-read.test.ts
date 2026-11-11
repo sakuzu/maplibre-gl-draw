@@ -30,7 +30,7 @@ function tablesWith(beforeRead?: () => void) {
       id: `p${i}`,
       type: 'Point',
       geometry: { type: 'Point', coordinates: [i, 0] },
-      order: `a${i}`,
+      key: `a${i}`,
     });
   }
   writer.addRowBlocks('a', builder.finish());

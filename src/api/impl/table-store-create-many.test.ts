@@ -117,7 +117,7 @@ function keysOf(store: Store, layerId: string): string[] {
     const at = internals.placeOf(handle);
     if (!at) return '';
     const data = at.group.data;
-    return utf8String(data.groups[at.row] >= 0 ? data.memberKeys : data.itemKeys, at.row);
+    return utf8String(data.keys, at.row);
   });
 }
 

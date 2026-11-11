@@ -152,7 +152,7 @@ export function createOpenWork(
       id: feature.id,
       type: feature.type,
       geometry: feature.geometry,
-      order: feature.order,
+      key: feature.order,
       style: feature.style,
       properties: feature.properties,
     });

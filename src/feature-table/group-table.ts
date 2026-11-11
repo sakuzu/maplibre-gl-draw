@@ -151,7 +151,7 @@ export class GroupTable implements GroupKeySource {
     return [...this.entries].map(([handle, entry]) => ({
       handle,
       id: entry.id,
-      order: entry.order,
+      key: entry.order,
     }));
   }
 

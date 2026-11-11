@@ -31,19 +31,20 @@ function rowsLocked(store: ResourceDeps['store'], tables: FeatureTables, rows: R
     handles: rows.handles,
     fields: new Map([
       ['locked', []],
-      ['groupId', []],
-      ['layerId', []],
+      ['parent', []],
     ]),
   });
   const locked = now.fields.get('locked') ?? [];
-  const groups = now.fields.get('groupId') ?? [];
-  const layers = now.fields.get('layerId') ?? [];
+  const parents = now.fields.get('parent') ?? [];
   for (let i = 0; i < rows.handles.length; i++) {
     if (locked[i] === true) return true;
-    const groupId = groups[i];
-    if (typeof groupId === 'string' && store.getGroup(groupId)?.locked === true) return true;
-    const layerId = layers[i];
-    if (typeof layerId === 'string' && store.getLayer(layerId)?.locked === true) return true;
+    // The parent of a row is its group, in its layer, or its layer
+    const parent = parents[i];
+    if (typeof parent !== 'string') continue;
+    const group = store.getGroup(parent);
+    if (group?.locked === true) return true;
+    const layerId = group ? group.layerId : parent;
+    if (store.getLayer(layerId)?.locked === true) return true;
   }
   return false;
 }

@@ -115,7 +115,7 @@ function writeKeys(
     () =>
       writer.apply({
         handles: Int32Array.from(keys, ([id]) => tables.findRow(id) as number),
-        fields: new Map<RowField, unknown[]>([['order', keys.map(([, key]) => key)]]),
+        fields: new Map<RowField, unknown[]>([['key', keys.map(([, key]) => key)]]),
       }),
     'remote',
   );
@@ -243,7 +243,7 @@ describe('the changes of the order of a Store of rows', () => {
     const keyOfRow = (id: string) => {
       const handle = tables.findRow(id) as number;
       const place = featureTablesInternals(tables)?.placeOf(handle);
-      return place ? new TextDecoder().decode(rowKey(place.group.data.itemKeys, place.row)) : '';
+      return place ? new TextDecoder().decode(rowKey(place.group.data.keys, place.row)) : '';
     };
     const keys: Array<[string, string]> = [];
     for (let i = 0; i + 1 < ids.length; i += 2) keys.push([ids[i], `${keyOfRow(ids[i + 1])}V`]);
@@ -271,8 +271,7 @@ describe('the changes of the order of a Store of rows', () => {
     expect(moves).toHaveLength(1);
     const move = moves[0] as ItemMove;
     expect(move.before?.handles).toEqual(Int32Array.of(tables.findRow('f3') as number));
-    expect(move.before?.fields.get('layerId')).toEqual(['a']);
-    expect(move.before?.fields.get('groupId')).toEqual([undefined]);
+    expect(move.before?.fields.get('parent')).toEqual(['a']);
     // Its keys before, written back, put the row back
     store.transact(() => writer.apply(move.before as NonNullable<ItemMove['before']>), 'remote');
     expect(listsOf(tables, ['a', 'b'])).toEqual(before);
@@ -281,7 +280,7 @@ describe('the changes of the order of a Store of rows', () => {
     store.createFeature(point('f9', 'a'));
     store.deleteFeature('f1');
     const made = notified.flatMap((change) => change.order ?? []) as ItemMove[];
-    expect(made.map((m) => [m.itemId, m.before?.fields.get('layerId')])).toEqual([
+    expect(made.map((m) => [m.itemId, m.before?.fields.get('parent')])).toEqual([
       ['f9', undefined],
       ['f1', ['a']],
     ]);
@@ -309,7 +308,7 @@ describe('the changes of the order of a Store of rows', () => {
       () =>
         writer.applyGroups({
           handles: Int32Array.of(groups?.handleOfId('g') as number),
-          fields: new Map([['order', ['0']]]),
+          fields: new Map([['key', ['0']]]),
         }),
       'remote',
     );

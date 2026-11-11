@@ -102,7 +102,7 @@ export function copyTableStore(
       if (key !== undefined && targetHandle !== undefined) {
         writer.applyGroups({
           handles: Int32Array.of(targetHandle),
-          fields: new Map([['order', [key]]]),
+          fields: new Map([['key', [key]]]),
         });
       }
     }
@@ -147,7 +147,7 @@ export function copyTableStore(
       entries = [];
       groupEntries.set(group.layerId, entries);
     }
-    entries.push({ handle: targetHandle, id: group.id, order: key });
+    entries.push({ handle: targetHandle, id: group.id, key });
   }
 
   return {
@@ -176,7 +176,9 @@ export function copyTableStore(
             builder.addRow({
               ...row,
               group: group >= 0 ? (targetGroupOf.get(group) ?? -1) : -1,
-              ...(group >= 0 && !targetGroupOf.has(group) && { member: undefined }),
+              // A row of a group not copied stands where its group stood
+              ...(group >= 0 &&
+                !targetGroupOf.has(group) && { key: groupOrderOf(group) ?? row.key }),
             });
           }
           if (builder.length > 0) writer.addRowBlocks(layer.layerId, builder.finish());

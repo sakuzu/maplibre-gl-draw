@@ -61,7 +61,7 @@ describe('the deltas and the versions at their edges', () => {
     for (let g = 0; g < 20; g++) {
       const id = `p${g * 550 + 5}`;
       const order = `${key((g * 550 + 549) * 1000)}x`;
-      writer.apply(rowPatch([tables.findRow(id) as number], { order: [order] }));
+      writer.apply(rowPatch([tables.findRow(id) as number], { key: [order] }));
       (reference.rows.get(id) as ReferenceRow).order = order;
     }
     // The bytes of three versions at once: the others wait for the ones held
@@ -92,7 +92,7 @@ describe('the deltas and the versions at their edges', () => {
     writer.apply(
       rowPatch(
         ids.map((id) => tables.findRow(id) as number),
-        { order: orders },
+        { key: orders },
       ),
     );
     ids.forEach((id, i) => {
@@ -118,9 +118,9 @@ describe('the deltas and the versions at their edges', () => {
     writer.apply(
       rowPatch([fresh], {
         type: ['Point'],
-        layerId: ['b'],
+        parent: ['b'],
         geometry: [{ type: 'Point', coordinates: [1, 1] }],
-        order: [key(1)],
+        key: [key(1)],
       }),
     );
     reference.rows.set('alone', {

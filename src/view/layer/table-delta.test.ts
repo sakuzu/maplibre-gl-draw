@@ -242,7 +242,7 @@ describe('the drawing of the rows of the delta', () => {
     for (let i = 0; i < ids.length; i++) {
       const handle = live.tables.findRow(ids[i]) as number;
       if (handle === undefined) continue;
-      live.writer.apply(patchOf([handle], { order: [keys[i]] }));
+      live.writer.apply(patchOf([handle], { key: [keys[i]] }));
       const { record } = live.frame();
       expect(drawnIds(record, table)).toEqual(shownIds(table, live.tables.getRowId));
       // The row of the delta is drawn from its chunk, on the GPU in this frame
@@ -260,9 +260,9 @@ describe('the drawing of the rows of the delta', () => {
     live.writer.apply(
       patchOf([fresh], {
         type: ['Point'],
-        layerId: ['layer'],
+        parent: ['layer'],
         geometry: [geometry],
-        order: [`${orderKey(20)}a`],
+        key: [`${orderKey(20)}a`],
       }),
     );
     const { record } = live.frame();
@@ -272,9 +272,9 @@ describe('the drawing of the rows of the delta', () => {
     live.writer.apply(
       patchOf([other], {
         type: ['Point'],
-        layerId: ['second'],
+        parent: ['second'],
         geometry: [geometry],
-        order: [orderKey(1)],
+        key: [orderKey(1)],
       }),
     );
     const second = live.internals.layerTable('second') as LayerTable;
@@ -315,7 +315,7 @@ describe('the drawing of the rows of the delta', () => {
     live.frame();
     const handles = [3, 9, 9].map((i, k) => live.tables.findRow(list[i + k * 20].id) as number);
     live.writer.apply(
-      patchOf(handles, { order: [`${orderKey(10)}a`, `${orderKey(30)}a`, `${orderKey(30)}b`] }),
+      patchOf(handles, { key: [`${orderKey(10)}a`, `${orderKey(30)}a`, `${orderKey(30)}b`] }),
     );
     const { record } = live.frame();
     expect(drawnIds(record, live.table)).toEqual(shownIds(live.table, live.tables.getRowId));
@@ -343,7 +343,7 @@ describe('the drawing of the rows of the delta', () => {
     const live = setup(list);
     live.frame();
     const handle = live.tables.findRow(list[5].id) as number;
-    live.writer.apply(patchOf([handle], { order: [`${orderKey(30)}a`] }));
+    live.writer.apply(patchOf([handle], { key: [`${orderKey(30)}a`] }));
     live.frame();
     const chunk = live.renderer.deltaChunks('layer')[0];
     const made = live.made.length;
@@ -396,7 +396,7 @@ describe('the drawing of the rows of the delta', () => {
     live.frame();
     live.frame();
     const handle = live.tables.findRow(list[7].id) as number;
-    live.writer.apply(patchOf([handle], { order: [`${orderKey(40)}a`] }));
+    live.writer.apply(patchOf([handle], { key: [`${orderKey(40)}a`] }));
     const { record, atOnce } = live.frame();
     expect(drawnIds(record, live.table)).toEqual(shownIds(live.table, live.tables.getRowId));
     expect(record.filter((entry) => entry.delta).every((entry) => entry.kind === 'immediate')).toBe(
@@ -419,7 +419,7 @@ describe('the drawing of the rows of the delta', () => {
         const pick = random();
         if (pick < 0.35) {
           live.writer.apply(
-            patchOf([handle], { order: [`${orderKey(Math.floor(random() * 150))}m`] }),
+            patchOf([handle], { key: [`${orderKey(Math.floor(random() * 150))}m`] }),
           );
         } else if (pick < 0.5) {
           const id = `n${created++}`;
@@ -427,7 +427,7 @@ describe('the drawing of the rows of the delta', () => {
           live.writer.apply(
             patchOf([fresh], {
               type: ['Polygon'],
-              layerId: ['layer'],
+              parent: ['layer'],
               geometry: [
                 {
                   type: 'Polygon',
@@ -441,7 +441,7 @@ describe('the drawing of the rows of the delta', () => {
                   ],
                 },
               ],
-              order: [`${orderKey(Math.floor(random() * 150))}n`],
+              key: [`${orderKey(Math.floor(random() * 150))}n`],
             }),
           );
         } else if (pick < 0.65) {
@@ -508,7 +508,7 @@ describe('the drawing of the rows of the delta', () => {
           const pick = random();
           if (pick < 0.6) {
             live.writer.apply(
-              patchOf([handle], { order: [`${orderKey(Math.floor(random() * 300))}m`] }),
+              patchOf([handle], { key: [`${orderKey(Math.floor(random() * 300))}m`] }),
             );
           } else if (pick < 0.8) {
             live.writer.apply(patchOf([handle], { style: [{ strokeColor: '#00ff00' }] }));
@@ -540,15 +540,15 @@ describe('the drawing of the rows of the delta', () => {
       handles: Int32Array.of(5),
       fields: new Map([
         ['id', ['g']],
-        ['order', [`${orderKey(20)}g`]],
-        ['layerId', ['layer']],
+        ['key', [`${orderKey(20)}g`]],
+        ['parent', ['layer']],
       ]),
     });
     const members = [30, 31, 32, 150, 151].map((i) => live.tables.findRow(list[i].id) as number);
     live.writer.apply(
       patchOf(members, {
-        groupId: members.map(() => 'g'),
-        member: members.map((_, i) => `m${i}`),
+        parent: members.map(() => 'g'),
+        key: members.map((_, i) => `m${i}`),
       }),
     );
     for (let i = 0; i < 30 && live.internals.hasPendingWork; i++) {
@@ -559,7 +559,7 @@ describe('the drawing of the rows of the delta', () => {
     const before = shownIds(live.table, live.tables.getRowId);
     live.writer.applyGroups({
       handles: Int32Array.of(5),
-      fields: new Map([['order', [`${orderKey(120)}g`]]]),
+      fields: new Map([['key', [`${orderKey(120)}g`]]]),
     });
     let changed = false;
     for (let i = 0; i < 30; i++) {
@@ -588,9 +588,9 @@ describe('the drawing of the rows of the delta', () => {
       live.writer.apply(
         patchOf(Array.from(handles), {
           type: ids.map(() => 'Point'),
-          layerId: ids.map(() => 'layer'),
+          parent: ids.map(() => 'layer'),
           geometry: ids.map((_, i) => ({ type: 'Point', coordinates: [i / 100, write] })),
-          order: ids.map(
+          key: ids.map(
             (_, i) => `${orderKey(999_000)}${String(write * 1000 + i).padStart(6, '0')}`,
           ),
         }),
@@ -630,7 +630,7 @@ describe('the drawing of the rows of the delta', () => {
       live.renderer.setVersionBudgetWhileMoving(budget);
       setTerrainCameraMoving(terrain, true);
       const handle = live.tables.findRow(list[10].id) as number;
-      live.writer.apply(patchOf([handle], { order: [`${orderKey(150)}x`] }));
+      live.writer.apply(patchOf([handle], { key: [`${orderKey(150)}x`] }));
       for (let i = 0; i < 12; i++) {
         const { record } = live.frame();
         expect(drawnIds(record, live.table)).toEqual(shownIds(live.table, live.tables.getRowId));
@@ -659,7 +659,7 @@ describe('the drawing of the rows of the delta', () => {
       );
       live.writer.apply(
         patchOf(handles, {
-          order: handles.map((_, i) => `${orderKey(Math.floor((i * 397) % 400))}c${i}`),
+          key: handles.map((_, i) => `${orderKey(Math.floor((i * 397) % 400))}c${i}`),
         }),
       );
       live.frame();

@@ -115,6 +115,7 @@ import {
 import type { TableSelection } from './selection.js';
 import { StyleTable } from './style-table.js';
 import type {
+  TableGroupField,
   TableGroupPatch,
   Tables,
   TablesWrite,
@@ -151,27 +152,25 @@ const DROPPED_ROWS_SHARE = 1 / 8;
 const DROPPED_ROWS_MIN = 64;
 
 /**
- * The fields that place a row in the order of its layer or in another layer (the fields the user
- * of the tables declares, `relocatingFields`, place it again too)
+ * The fields that place a row: its parent (a table or a group) and the key of its order there (the
+ * fields the user of the tables declares, `relocatingFields`, place it again too)
  */
-const PLACE_FIELDS: ReadonlySet<string> = new Set(['layerId', 'groupId', 'order', 'member']);
+const PLACE_FIELDS: ReadonlySet<string> = new Set(['parent', 'key']);
 
 /** The start of the fields of the attributes of a row (`properties:<key>`) */
 const PROPERTY_FIELD = 'properties:';
 
 /** The fields a new row is written with: a deleted row written all of them is created again */
-const CREATE_FIELDS: readonly RowField[] = ['type', 'layerId', 'geometry', 'order'];
+const CREATE_FIELDS: readonly RowField[] = ['type', 'parent', 'geometry', 'key'];
 
 /** The fields a box of a row is made of, apart from what a box of its type reads */
-const BOX_FIELDS: readonly RowField[] = ['type', 'layerId', 'groupId', 'geometry'];
+const BOX_FIELDS: readonly RowField[] = ['type', 'parent', 'geometry'];
 
 /** The fields of the rows of a row group taken in, told as written (with their attributes) */
 const ADDED_FIELDS: readonly RowField[] = [
   'type',
-  'layerId',
-  'groupId',
-  'order',
-  'member',
+  'parent',
+  'key',
   'geometry',
   'hidden',
   'locked',
@@ -242,6 +241,12 @@ export interface TablesInternalOptions extends FeatureTablesInternalOptions {
    * values of rows written and read are checked against
    */
   readonly columns: TableColumns;
+  /**
+   * The columns of the groups, by their names, besides their fixed fields (`id`, `parent`, `key`;
+   * none when omitted): what the names of the fields of the values of groups written are checked
+   * against
+   */
+  readonly groupColumns?: TableColumns;
   /**
    * The boxes of the rows whose boxes come from more than their points (none: every row takes
    * the box of its points)
@@ -629,6 +634,8 @@ export interface FeatureTablesInternals {
   rowBoxIndexSize(): { readonly rows: number; readonly bytes: number };
   /** The handles of the row groups of a set of rows, the rows by group */
   groupsOfRows(handles: Int32Array): Map<RowGroupHandle, number[]>;
+  /** The rows read in a layer as members of a group of features (deleted ones included) */
+  membersIn(layerId: string, group: GroupHandle): RowHandle[];
   /** Whether row groups built of new rows written are still waiting to be taken in */
   readonly hasQueuedBlocks: boolean;
   /**
@@ -869,8 +876,8 @@ const SKETCH_OWNER = '\u0000sketches';
  * @internal
  */
 export interface OverlayPlace {
-  readonly order: string;
-  readonly member?: string;
+  /** The key of its order: among the members of its group when it has one, else in its layer */
+  readonly key: string;
   readonly group?: number;
 }
 
@@ -1012,6 +1019,8 @@ class FeatureTablesStore implements FeatureTablesInternals, TablesWriter, Tables
   private readonly blockWholes: ReadonlyMap<string, number>;
   /** The bits of the `flag` columns in `RowBlockData.flags`, by their names */
   private readonly flagBits: ReadonlyMap<string, number>;
+  /** The fields of the values of groups: the fixed ones, and the group columns (`groupColumns`) */
+  private readonly groupFields: ReadonlySet<string>;
 
   constructor(options: TablesInternalOptions) {
     this.fields = new RowFields(options.columns);
@@ -1031,6 +1040,7 @@ class FeatureTablesStore implements FeatureTablesInternals, TablesWriter, Tables
     this.flagBits = new Map(
       this.layout.flags.map((name, f) => [name, ROW_FLAG_DELETED << (f + 1)]),
     );
+    this.groupFields = new Set(['id', 'parent', 'key', ...Object.keys(options.groupColumns ?? {})]);
     this.strings = new ValueStringCache(options.stringCacheSize);
     this.states = new RowStateSets((handles) => this.refreshStates(handles));
     this.declaredDims = options.dimensionsOf;
@@ -1536,6 +1546,28 @@ class FeatureTablesStore implements FeatureTablesInternals, TablesWriter, Tables
   getGroupOrder(group: GroupHandle): string | undefined {
     if (!this.groups.has(group)) return undefined;
     return this.writtenOrders.get(group) ?? this.groups.orderOf(group);
+  }
+
+  membersIn(layerId: string, group: GroupHandle): RowHandle[] {
+    const layer = this.layers.get(layerId);
+    if (!layer) return [];
+    const out: RowHandle[] = [];
+    const take = (rowGroup: RowGroup): void => {
+      const data = rowGroup.data;
+      for (let r = 0; r < data.length; r++) {
+        if (data.groups[r] !== group) continue;
+        const handle = data.handles[r];
+        const place = this.placeOf(handle);
+        if (place?.group === rowGroup && place.row === r) out.push(handle);
+      }
+    };
+    for (let g = 0; g < layer.groupCount; g++) take(layer.groupAt(g));
+    if (layer.delta.group) take(layer.delta.group);
+    for (const creation of this.creations) {
+      if (creation.layer !== layer) continue;
+      for (const row of creation.rows) if (row.input.group === group) out.push(row.handle);
+    }
+    return out;
   }
 
   groupsOfRows(handles: Int32Array): Map<RowGroupHandle, number[]> {
@@ -2332,14 +2364,10 @@ class FeatureTablesStore implements FeatureTablesInternals, TablesWriter, Tables
     switch (field) {
       case 'type':
         return rowType(data, row);
-      case 'layerId':
-        return place.layer.layerId;
-      case 'groupId':
-        return featureGroup >= 0 ? this.groups.idOf(featureGroup) : undefined;
-      case 'order':
-        return utf8String(data.itemKeys, row);
-      case 'member':
-        return featureGroup >= 0 ? utf8String(data.memberKeys, row) : undefined;
+      case 'parent':
+        return featureGroup >= 0 ? this.groups.idOf(featureGroup) : place.layer.layerId;
+      case 'key':
+        return utf8String(data.keys, row);
       case 'geometry':
         return rowGeometry(group, row) ?? undefined;
       case 'hidden':
@@ -2523,11 +2551,10 @@ class FeatureTablesStore implements FeatureTablesInternals, TablesWriter, Tables
             id,
             type: feature.type,
             geometry: null,
-            order: given.order,
-            ...(given.member === undefined ? {} : { member: given.member }),
+            key: given.key,
             ...(given.group === undefined ? {} : { group: given.group }),
           };
-        } else base = { id, type: feature.type, geometry: null, order: this.keyAfterLast(layer) };
+        } else base = { id, type: feature.type, geometry: null, key: this.keyAfterLast(layer) };
         const input: RowInput = {
           ...base,
           id,
@@ -2594,11 +2621,7 @@ class FeatureTablesStore implements FeatureTablesInternals, TablesWriter, Tables
     }
     const keysOf = (place: RowPlace): string => {
       const data = place.group.data;
-      return JSON.stringify([
-        utf8String(data.itemKeys, place.row),
-        utf8String(data.memberKeys, place.row),
-        data.groups[place.row],
-      ]);
+      return JSON.stringify([utf8String(data.keys, place.row), data.groups[place.row]]);
     };
     for (const id of expected) {
       const handle = this.handleOf(id);
@@ -2658,7 +2681,7 @@ class FeatureTablesStore implements FeatureTablesInternals, TablesWriter, Tables
     const data = last.group.data;
     const row = last.row;
     const group = data.groups[row];
-    const key = group >= 0 ? (this.groups.orderOf(group) ?? '') : utf8String(data.itemKeys, row);
+    const key = group >= 0 ? (this.groups.orderOf(group) ?? '') : utf8String(data.keys, row);
     // Any key the last one is a beginning of comes after it
     return `${key}~`;
   }
@@ -2671,6 +2694,7 @@ class FeatureTablesStore implements FeatureTablesInternals, TablesWriter, Tables
    */
   private checkRows(patch: RowValues): {
     groupHandles: number[] | undefined;
+    layerIds: Array<string | undefined> | undefined;
     places: Array<RowPlace | undefined>;
   } {
     const { handles, fields } = patch;
@@ -2686,24 +2710,35 @@ class FeatureTablesStore implements FeatureTablesInternals, TablesWriter, Tables
       }
     });
     const types = fields.get('type');
-    const layerIds = fields.get('layerId');
-    const orders = fields.get('order');
-    const members = fields.get('member');
-    const groupIds = fields.get('groupId');
-    const groupHandles = groupIds?.map((id, i) => {
-      if (id === undefined || id === null || id === '') return -1;
-      if (typeof id !== 'string') {
-        throw new DrawError(
-          'invalid-input',
-          `FeatureTables: the group of the row ${handles[i]} is not an id`,
-        );
-      }
-      const group = this.groups.handleOfId(id);
-      if (group < 0)
-        throw new DrawError('not-found', `FeatureTables: the group "${id}" is unknown`);
-      return group;
-    });
+    const parents = fields.get('parent');
+    const keys = fields.get('key');
     const places = Array.from(handles, (handle) => this.placeOf(handle));
+    // The parent of a row is a group (of the table of the group) or a table; a row given none
+    // stays in its own
+    let groupHandles: number[] | undefined;
+    let layerIds: Array<string | undefined> | undefined;
+    if (parents) {
+      groupHandles = [];
+      layerIds = [];
+      for (let i = 0; i < handles.length; i++) {
+        const parent = parents[i];
+        const place = places[i];
+        if (parent === undefined) {
+          groupHandles.push(place ? place.group.data.groups[place.row] : -1);
+          layerIds.push(undefined);
+          continue;
+        }
+        if (typeof parent !== 'string' || parent === '') {
+          throw new DrawError(
+            'invalid-input',
+            `FeatureTables: the parent of the row ${handles[i]} is not an id`,
+          );
+        }
+        const group = this.groups.handleOfId(parent);
+        groupHandles.push(group);
+        layerIds.push(group >= 0 ? (this.groups.layerOf(group) as string) : parent);
+      }
+    }
     // A row moved to a layer of other dimensions keeps its values only when the positions it
     // has are read the same there (xy into any, xyz into xyzm), or when it is given a geometry
     layerIds?.forEach((layerId, i) => {
@@ -2719,17 +2754,13 @@ class FeatureTablesStore implements FeatureTablesInternals, TablesWriter, Tables
         );
       }
     });
-    const strings: Array<[string, readonly unknown[] | undefined, boolean]> = [
-      ['type', types, false],
-      ['layerId', layerIds, false],
-      ['order', orders, false],
-      ['member', members, true],
+    const strings: Array<[string, readonly unknown[] | undefined]> = [
+      ['type', types],
+      ['key', keys],
     ];
-    for (const [name, values, optional] of strings) {
+    for (const [name, values] of strings) {
       values?.forEach((value, i) => {
-        if (typeof value === 'string' || (value === undefined && (optional || !!places[i]))) {
-          return;
-        }
+        if (typeof value === 'string' || (value === undefined && !!places[i])) return;
         throw new DrawError(
           'invalid-input',
           `FeatureTables: the ${name} of the row ${handles[i]} is not a string`,
@@ -2744,9 +2775,9 @@ class FeatureTablesStore implements FeatureTablesInternals, TablesWriter, Tables
       // A new row: what a feature cannot be without
       const missing = [
         ['type', types?.[i]],
-        ['layerId', layerIds?.[i]],
+        ['parent', parents?.[i]],
         ['geometry', geometries?.[i]],
-        ['order', orders?.[i]],
+        ['key', keys?.[i]],
       ].filter(([, value]) => value === undefined);
       if (missing.length > 0) {
         throw new DrawError(
@@ -2757,7 +2788,7 @@ class FeatureTablesStore implements FeatureTablesInternals, TablesWriter, Tables
         );
       }
     });
-    return { groupHandles, places };
+    return { groupHandles, layerIds, places };
   }
 
   /**
@@ -2795,7 +2826,7 @@ class FeatureTablesStore implements FeatureTablesInternals, TablesWriter, Tables
     const n = handles.length;
     const checked = this.checkRows(patch);
     const groupHandles = checked.groupHandles;
-    const layerIds = fields.get('layerId');
+    const layerIds = checked.layerIds;
     // A row of a creation written before it is taken in: the creation is taken in now (and the
     // places are read again)
     let creations = false;
@@ -2870,7 +2901,7 @@ class FeatureTablesStore implements FeatureTablesInternals, TablesWriter, Tables
         (place.group.data.flags[place.row] & ROW_FLAG_DELETED) !== 0 &&
         CREATE_FIELDS.every((field) => fields.get(field)?.[i] !== undefined);
       const placed = place
-        ? revived || (mayPlace && this.placeChanged(place, i, fields, groupHandles))
+        ? revived || (mayPlace && this.placeChanged(place, i, fields, groupHandles, layerIds))
         : true;
       const targetLayer = (layerIds?.[i] as string | undefined) ?? place?.layer.layerId;
       let change = lastChange;
@@ -3011,13 +3042,20 @@ class FeatureTablesStore implements FeatureTablesInternals, TablesWriter, Tables
 
   /**
    * Writes values of groups of features (see `FeatureTablesWriter.applyGroups`): a new key of
-   * the order of a group puts its members in another order (`reorderGroups`), a group shown or
-   * hidden makes the copies of the state of its members again
+   * the order of a group puts its members in another order (`reorderGroups`), a new parent takes
+   * its members to that table with it (they are told as written), a group shown or hidden makes
+   * the copies of the state of its members again
    */
   applyGroups(patch: TableGroupPatch, options: TablesWriteOptions = {}): TablesWrite {
     const { handles, fields, deleted } = patch;
     const n = handles.length;
     for (const [field, values] of fields) {
+      if (!this.groupFields.has(field)) {
+        throw new KasaneError(
+          'invalid-input',
+          `FeatureTables: ${JSON.stringify(field)} is not a field of a group`,
+        );
+      }
       if (values.length !== n) {
         throw new DrawError(
           'invalid-input',
@@ -3031,19 +3069,10 @@ class FeatureTablesStore implements FeatureTablesInternals, TablesWriter, Tables
         'FeatureTables: deleted has another length than the groups',
       );
     }
-    const value = (field: 'id' | 'name' | 'order' | 'layerId' | 'visible' | 'locked', i: number) =>
-      fields.get(field)?.[i];
+    const value = (field: TableGroupField, i: number) => fields.get(field)?.[i];
     for (let i = 0; i < n; i++) {
       if (deleted?.[i]) continue;
-      // The name is the Store's (the tables do not hold it)
-      const name = value('name', i);
-      if (name !== undefined && typeof name !== 'string') {
-        throw new DrawError(
-          'invalid-input',
-          `FeatureTables: the name of the group ${handles[i]} is not a string`,
-        );
-      }
-      for (const field of ['id', 'order', 'layerId'] as const) {
+      for (const field of ['id', 'key', 'parent'] as const) {
         const v = value(field, i);
         if (v !== undefined && typeof v !== 'string') {
           throw new DrawError(
@@ -3058,7 +3087,7 @@ class FeatureTablesStore implements FeatureTablesInternals, TablesWriter, Tables
           );
         }
       }
-      for (const field of ['visible', 'locked'] as const) {
+      for (const field of ['hidden', 'locked'] as const) {
         const v = value(field, i);
         if (v !== undefined && typeof v !== 'boolean') {
           throw new DrawError(
@@ -3071,37 +3100,50 @@ class FeatureTablesStore implements FeatureTablesInternals, TablesWriter, Tables
     const orders = new Map<string, Map<GroupHandle, string>>();
     const shown = new Set<GroupHandle>();
     const removed: GroupHandle[] = [];
+    // The members of the groups given another parent, which go there with them
+    const following: RowHandle[] = [];
+    const followed: string[] = [];
     for (let i = 0; i < n; i++) {
       const group = handles[i];
       if (deleted?.[i]) {
         removed.push(group);
         continue;
       }
+      const parent = value('parent', i) as string | undefined;
+      const before = this.groups.layerOf(group);
+      if (parent !== undefined && before !== undefined && parent !== before) {
+        const id = this.groups.idOf(group) as string;
+        for (const member of this.membersIn(before, group)) {
+          following.push(member);
+          followed.push(id);
+        }
+      }
       this.deletedGroups.delete(group);
       this.unkeepGroup(group);
       if (!this.groups.has(group)) {
         this.groups.set(group, {
           id: value('id', i) as string,
-          order: value('order', i) as string,
-          layerId: value('layerId', i) as string,
-          visible: value('visible', i) !== false,
+          order: value('key', i) as string,
+          layerId: value('parent', i) as string,
+          visible: value('hidden', i) !== true,
           locked: value('locked', i) === true,
         });
         continue;
       }
       const visible = this.groups.isVisible(group);
+      const hidden = value('hidden', i) as boolean | undefined;
       const next = {
         id: this.groups.idOf(group) as string,
         // A new key goes in with the members in their new order
         order: this.groups.orderOf(group) as string,
         layerId:
-          (value('layerId', i) as string | undefined) ?? (this.groups.layerOf(group) as string),
-        visible: (value('visible', i) as boolean | undefined) ?? visible,
+          (value('parent', i) as string | undefined) ?? (this.groups.layerOf(group) as string),
+        visible: hidden === undefined ? visible : !hidden,
         locked: (value('locked', i) as boolean | undefined) ?? this.groups.isLocked(group),
       };
       this.groups.set(group, next);
       if (next.visible !== visible) shown.add(group);
-      const order = value('order', i) as string | undefined;
+      const order = value('key', i) as string | undefined;
       if (order !== undefined && order !== next.order) {
         let list = orders.get(next.layerId);
         if (!list) {
@@ -3112,6 +3154,14 @@ class FeatureTablesStore implements FeatureTablesInternals, TablesWriter, Tables
       }
     }
     if (shown.size > 0) this.refreshGroupStates(shown);
+    // The members go to the table of their group, before the group is put in its new place there
+    const drafts = new Map<string, LayerChangeDraft>();
+    if (following.length > 0) {
+      this.applyPatch(
+        { handles: Int32Array.from(following), fields: new Map([['parent', followed]]) },
+        drafts,
+      );
+    }
     for (const [layerId, list] of orders) this.reorderGroups(layerId, list);
     // The new rows read from their creations are built again with the groups as they are now
     for (const creation of this.creations) this.dropReading(creation);
@@ -3132,7 +3182,8 @@ class FeatureTablesStore implements FeatureTablesInternals, TablesWriter, Tables
     }
     this.revisionCount++;
     this.notifyWork();
-    return { rows: NO_ROWS, kept, emptied: false };
+    const rows = drafts.size > 0 ? { layers: finishChanges(drafts) } : NO_ROWS;
+    return { rows, kept, emptied: false };
   }
 
   /**
@@ -3263,26 +3314,21 @@ class FeatureTablesStore implements FeatureTablesInternals, TablesWriter, Tables
     i: number,
     fields: ReadonlyMap<RowField, readonly unknown[]>,
     groupHandles: number[] | undefined,
+    layerIds: Array<string | undefined> | undefined,
   ): boolean {
     const data = place.group.data;
     const row = place.row;
     for (const [field, values] of fields) {
       const value = values[i];
       if (PLACE_FIELDS.has(field)) {
-        if (value === undefined && field !== 'member' && field !== 'groupId') continue;
-        switch (field) {
-          case 'layerId':
-            if (value !== place.layer.layerId) return true;
-            break;
-          case 'order':
-            if (value !== utf8String(data.itemKeys, row)) return true;
-            break;
-          case 'member':
-            if ((value ?? '') !== utf8String(data.memberKeys, row)) return true;
-            break;
-          case 'groupId':
-            if ((groupHandles as number[])[i] !== data.groups[row]) return true;
-            break;
+        if (value === undefined) continue;
+        if (field === 'key') {
+          if (value !== utf8String(data.keys, row)) return true;
+        } else if (
+          (groupHandles as number[])[i] !== data.groups[row] ||
+          (layerIds as Array<string | undefined>)[i] !== place.layer.layerId
+        ) {
+          return true;
         }
         continue;
       }
@@ -3319,7 +3365,7 @@ class FeatureTablesStore implements FeatureTablesInternals, TablesWriter, Tables
     const base: RowInput =
       place && !revived
         ? rowInputOf(this.readContext, place.group, place.row)
-        : { id: this.ids.idOf(handle) ?? '', type: 'Point', geometry: null, order: '' };
+        : { id: this.ids.idOf(handle) ?? '', type: 'Point', geometry: null, key: '' };
     const out: {
       -readonly [K in keyof RowInput]: RowInput[K];
     } = { ...base, properties: { ...(base.properties ?? {}) } };
@@ -3332,13 +3378,10 @@ class FeatureTablesStore implements FeatureTablesInternals, TablesWriter, Tables
         case 'geometry':
           if (value !== undefined) out.geometry = value as RowInput['geometry'];
           break;
-        case 'order':
-          if (value !== undefined) out.order = value as string;
+        case 'key':
+          if (value !== undefined) out.key = value as string;
           break;
-        case 'member':
-          out.member = value as string | undefined;
-          break;
-        case 'groupId':
+        case 'parent':
           out.group = (groupHandles as number[])[i];
           break;
         case 'style':
@@ -3350,8 +3393,6 @@ class FeatureTablesStore implements FeatureTablesInternals, TablesWriter, Tables
         case 'locked':
           if (value !== undefined) out.locked = value === true;
           break;
-        case 'layerId':
-          break;
         default: {
           const key = field.slice(PROPERTY_FIELD.length);
           const properties = out.properties as Record<string, unknown>;
@@ -3362,7 +3403,6 @@ class FeatureTablesStore implements FeatureTablesInternals, TablesWriter, Tables
     }
     if (deleted?.[i]) out.deleted = true;
     else if (revived) out.deleted = false;
-    if (out.group === undefined || out.group < 0) out.member = undefined;
     return out;
   }
 
@@ -4016,10 +4056,7 @@ const UNBOUNDED_BUDGET: TableWorkBudget = {
 function keySourceOf(inputs: readonly RowInput[]): RowKeySource {
   return {
     ids: utf8ColumnFromStrings(inputs.map((input) => input.id)),
-    itemKeys: utf8ColumnFromStrings(inputs.map((input) => input.order)),
-    memberKeys: utf8ColumnFromStrings(
-      inputs.map((input) => ((input.group ?? -1) >= 0 ? (input.member ?? '') : '')),
-    ),
+    keys: utf8ColumnFromStrings(inputs.map((input) => input.key)),
     groups: Int32Array.from(inputs, (input) => input.group ?? -1),
   };
 }
@@ -4028,8 +4065,7 @@ function keySourceOf(inputs: readonly RowInput[]): RowKeySource {
 function oneKey(keys: RowKeySource, row: number): RowKeySource {
   return {
     ids: utf8ColumnFromStrings([utf8String(keys.ids, row)]),
-    itemKeys: utf8ColumnFromStrings([utf8String(keys.itemKeys, row)]),
-    memberKeys: utf8ColumnFromStrings([utf8String(keys.memberKeys, row)]),
+    keys: utf8ColumnFromStrings([utf8String(keys.keys, row)]),
     groups: Int32Array.of(keys.groups[row]),
   };
 }
@@ -4193,8 +4229,7 @@ function checkShape(data: RowBlockData, layout: RowColumnLayout): void {
       (whole, k): Array<[string, number]> =>
         whole ? [[`wholes[${k}]`, whole.indexes.length]] : [],
     ),
-    ['itemKeys', utf8ColumnLength(data.itemKeys)],
-    ['memberKeys', utf8ColumnLength(data.memberKeys)],
+    ['keys', utf8ColumnLength(data.keys)],
     ['groups', data.groups.length],
     ['flags', data.flags.length],
     ['rowBounds', data.rowBounds.length / 4],

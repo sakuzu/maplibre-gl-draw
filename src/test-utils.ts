@@ -596,12 +596,12 @@ export function orderKey(i: number): string {
 }
 
 /** A feature as a row */
-export function rowOfFeature(feature: Feature, order: string): RowInput {
+export function rowOfFeature(feature: Feature, key: string): RowInput {
   return {
     id: feature.id,
     type: feature.type,
     geometry: feature.geometry,
-    order,
+    key,
     style: feature.style as Record<string, unknown>,
     properties: feature.properties,
     hidden: feature.visible === false,
@@ -929,7 +929,7 @@ export function expectTablesMatch(
       expect(handle).toBeDefined();
       if (dims !== 'xy') {
         expect(() => view.getRow(handle as number)).toThrow(/is not a feature/);
-        const fields = ['type', 'geometry', 'style', 'hidden', 'locked', 'groupId', 'layerId'];
+        const fields = ['type', 'geometry', 'style', 'hidden', 'locked', 'parent'];
         const snapshot = tables.readValues(
           rowPatch([handle as number], Object.fromEntries(fields.map((field) => [field, [0]]))),
         );
@@ -939,8 +939,7 @@ export function expectTablesMatch(
         expect(value('style')).toEqual(row.style);
         expect(value('hidden')).toBe(!row.visible);
         expect(value('locked')).toBe(row.locked);
-        expect(value('groupId')).toBe(row.groupId);
-        expect(value('layerId')).toBe(layerId);
+        expect(value('parent')).toBe(row.groupId ?? layerId);
         for (const [key, expected] of Object.entries(row.properties)) {
           expect(view.getRowValue(handle as number, key)).toEqual(expected);
         }
@@ -1002,7 +1001,7 @@ export function tablesOfReference(
   const groupKeys = [...reference.groups].map(([id, group]) => ({
     handle: groupHandles.get(id) as number,
     id,
-    order: group.order,
+    key: group.order,
   }));
   for (const layerId of layerIds) {
     const builder = createRowBlockDataBuilder({
@@ -1018,8 +1017,7 @@ export function tablesOfReference(
         id: row.id,
         type: row.type,
         geometry: row.geometry,
-        order: row.order,
-        member: row.groupId !== undefined ? row.member : undefined,
+        key: row.groupId !== undefined ? row.member : row.order,
         group: row.groupId !== undefined ? groupHandles.get(row.groupId) : undefined,
         style: row.style,
         properties: row.properties,
@@ -1151,25 +1149,25 @@ export function randomRowWrites(
       if (value === undefined) delete row.properties.name;
       else row.properties = { ...row.properties, name: value };
     } else if (pick < 0.5) {
-      const order = referenceKey(random() * 1e6);
-      writer.apply(rowPatch([handle], { order: [order] }));
-      row.order = order;
+      // The key of a member orders it among the members of its group
+      const key = referenceKey(random() * 1e6);
+      writer.apply(rowPatch([handle], { key: [key] }));
+      if (row.groupId !== undefined) row.member = key;
+      else row.order = key;
     } else if (pick < 0.6) {
       const layerId = layerIds[Math.floor(random() * layerIds.length)];
       const order = referenceKey(random() * 1e6);
       writer.apply(
         rowPatch([handle], {
-          layerId: [layerId],
-          order: [order],
-          groupId: [undefined],
-          member: [undefined],
+          parent: [layerId],
+          key: [order],
         }),
       );
       Object.assign(row, { layerId, order, groupId: undefined, member: '' });
     } else if (pick < 0.68 && row.layerId === layerIds[0]) {
       const groupId = random() < 0.5 ? 'ga' : 'gb';
       const member = referenceKey(random() * 1e6);
-      writer.apply(rowPatch([handle], { groupId: [groupId], member: [member] }));
+      writer.apply(rowPatch([handle], { parent: [groupId], key: [member] }));
       Object.assign(row, { groupId, member });
     } else if (pick < 0.78) {
       const fresh = `n${created++}`;
@@ -1183,9 +1181,9 @@ export function randomRowWrites(
       writer.apply(
         rowPatch([freshHandle], {
           type: [next.type],
-          layerId: [next.layerId],
+          parent: [next.layerId],
           geometry: [next.geometry],
-          order: [next.order],
+          key: [next.order],
           style: [next.style],
           'properties:n': [next.properties.n],
         }),

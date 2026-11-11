@@ -115,10 +115,11 @@ export interface RowBlockData extends RowBlock {
    * (`RowColumnLayout.keyed`): null for a column no row of the row block holds a key of
    */
   readonly keyed: readonly (PropertyColumns | null)[];
-  /** The key of the order of each row */
-  readonly itemKeys: Utf8Column;
-  /** The key of the order of each row within its group (empty outside a group) */
-  readonly memberKeys: Utf8Column;
+  /**
+   * The key of the order of each row (`key`): among the members of its group for a row in a group,
+   * among the items of its table otherwise
+   */
+  readonly keys: Utf8Column;
   /**
    * The flags of each row, one byte: {@link ROW_FLAG_DELETED}, and a bit per `flag` column
    * declared after it (`RowColumnLayout.flagBit`)

@@ -281,7 +281,7 @@ export class ItemWalk {
     const place = this.source.placeOf(code >> 1);
     if (!place) return ['', ''];
     return [
-      utf8String(place.group.data.itemKeys, place.row),
+      utf8String(place.group.data.keys, place.row),
       utf8String(place.group.data.ids, place.row),
     ];
   }
@@ -414,8 +414,7 @@ export class ItemWalk {
   private groupStart(group: GroupHandle): RowKeySource {
     return {
       ids: EMPTY,
-      itemKeys: EMPTY,
-      memberKeys: EMPTY,
+      keys: EMPTY,
       groups: Int32Array.of(group),
     };
   }
@@ -426,8 +425,7 @@ export class ItemWalk {
     // The id of the group followed by the smallest character: no item id comes between them
     return {
       ids: utf8ColumnFromStrings([`${groups.idOf(group) ?? ''}\u0000`]),
-      itemKeys: utf8ColumnFromStrings([groups.orderOf(group) ?? '']),
-      memberKeys: EMPTY,
+      keys: utf8ColumnFromStrings([groups.orderOf(group) ?? '']),
       groups: NO_GROUP,
     };
   }
@@ -447,8 +445,7 @@ function probe(key: ItemKey, after: boolean): RowKeySource {
   // The id followed by the smallest character: no item id comes between them
   return {
     ids: utf8ColumnFromStrings([after ? `${key[1]}\u0000` : key[1]]),
-    itemKeys: utf8ColumnFromStrings([key[0]]),
-    memberKeys: EMPTY,
+    keys: utf8ColumnFromStrings([key[0]]),
     groups: NO_GROUP,
   };
 }

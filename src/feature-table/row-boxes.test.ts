@@ -160,7 +160,7 @@ describe('the boxes of the rows whose boxes come from more than their points', (
       id: 'image',
       type: 'Image',
       geometry: IMAGE.geometry,
-      order: 'a0',
+      key: 'a0',
       properties: IMAGE.properties,
     });
     writer.addRowBlocks('a', builder.finish());

@@ -110,7 +110,7 @@ function setup(n: number) {
       id: `r${i}`,
       type: 'Point',
       geometry: { type: 'Point', coordinates: [i, 0] },
-      order: `k${String(i).padStart(5, '0')}`,
+      key: `k${String(i).padStart(5, '0')}`,
     });
   }
   writer.addRowBlocks('rows', builder.finish());
@@ -130,7 +130,7 @@ function setup(n: number) {
       // A key among the keys of the rows
       writer.applyGroups({
         handles: Int32Array.of(internals.groups.handleOfId(id)),
-        fields: new Map([['order', [`k${String(k * 100 + 50).padStart(5, '0')}`]]]),
+        fields: new Map([['key', [`k${String(k * 100 + 50).padStart(5, '0')}`]]]),
       });
     });
   });
@@ -157,18 +157,15 @@ describe('groupRunCuts', () => {
         let deleted: Uint8Array | undefined;
         if (r < 0.5) {
           fields = new Map<RowField, unknown[]>([
-            ['groupId', Array.from(handles, () => GROUPS[Math.floor(random() * GROUPS.length)])],
-            ['member', Array.from(handles, () => key())],
+            ['parent', Array.from(handles, () => GROUPS[Math.floor(random() * GROUPS.length)])],
+            ['key', Array.from(handles, () => key())],
           ]);
         } else if (r < 0.65) {
-          fields = new Map<RowField, unknown[]>([
-            ['groupId', Array.from(handles, () => '')],
-            ['member', Array.from(handles, () => undefined)],
-          ]);
+          fields = new Map<RowField, unknown[]>([['parent', Array.from(handles, () => 'rows')]]);
         } else if (r < 0.75) {
           deleted = new Uint8Array(handles.length).fill(1);
         } else {
-          fields = new Map<RowField, unknown[]>([['order', Array.from(handles, () => key())]]);
+          fields = new Map<RowField, unknown[]>([['key', Array.from(handles, () => key())]]);
         }
         store.transact(() => writer.apply({ handles, fields, deleted }), 'remote');
         if (step % 3 === 0) {
@@ -192,7 +189,7 @@ describe('groupRunCuts', () => {
             () =>
               writer.applyGroups({
                 handles: Int32Array.of(group),
-                fields: new Map([['visible', [!internals.groups.isVisible(group)]]]),
+                fields: new Map([['hidden', [internals.groups.isVisible(group)]]]),
               }),
             'remote',
           );
@@ -213,7 +210,7 @@ describe('groupRunCuts', () => {
             () =>
               writer.applyGroups({
                 handles: Int32Array.from(orders.keys()),
-                fields: new Map([['order', [...orders.values()]]]),
+                fields: new Map([['key', [...orders.values()]]]),
               }),
             'remote',
           );
@@ -238,8 +235,8 @@ describe('groupRunCuts', () => {
             {
               handles,
               fields: new Map<RowField, unknown[]>([
-                ['groupId', Array.from(handles, () => 'g1')],
-                ['member', Array.from(handles, (_, k) => `m${k}`)],
+                ['parent', Array.from(handles, () => 'g1')],
+                ['key', Array.from(handles, (_, k) => `m${k}`)],
               ]),
             },
             {},

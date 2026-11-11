@@ -19,6 +19,7 @@
  * never the record.
  */
 
+import { readFileSync } from 'node:fs';
 import { readTabaneBlock, utf8ColumnFromStrings } from '@sakuzu/tabane';
 import type { Geometry } from 'geojson';
 import { describe, expect, it } from 'vitest';
@@ -199,7 +200,10 @@ function settle(tables: FeatureTables): void {
 /**
  * The names of the fields of the values of rows as the record holds them, by their names now
  * (the record was written before the fields were renamed): a key of the attributes was
- * `property:<key>`, and a row hidden was told by `visible`, of the opposite value
+ * `property:<key>`, and a row hidden was told by `visible`, of the opposite value. The place of a
+ * row (`parent` and `key`) was written as four fields, `layerId`, `groupId`, `order` and
+ * `member`: the fields told of a write are compared as `parent` and `key` (`comparable`), and
+ * the values are read back as the four (`recordedFields`)
  */
 function recordedField(field: RowField): string {
   if (field === 'hidden') return 'visible';
@@ -211,7 +215,98 @@ function recordedField(field: RowField): string {
 function fieldNow(recorded: string): RowField {
   if (recorded === 'visible') return 'hidden';
   if (recorded.startsWith('property:')) return `properties:${recorded.slice('property:'.length)}`;
+  if (recorded === 'layerId' || recorded === 'groupId') return 'parent';
+  if (recorded === 'order' || recorded === 'member') return 'key';
   return recorded;
+}
+
+/** The layer of a group of rows (undefined for an id that is no group the tables hold) */
+type LayerOfGroup = (groupId: string) => string | undefined;
+
+/** The layer of a group the tables hold */
+function layerOfGroupIn(tables: FeatureTables): LayerOfGroup {
+  return (groupId) => {
+    const groups = featureTablesInternals(tables)?.groups;
+    const handle = groups?.handleOfId(groupId) ?? -1;
+    return handle >= 0 ? groups?.layerOf(handle) : undefined;
+  };
+}
+
+/**
+ * The place of rows as the record holds it, from their parent and key: a row of a group was in
+ * the layer of its group (`layerOf`) with its key as its `member`; a row of a layer was there with
+ * its key as its `order`. The key a member had of its own order is no more (10-fix-017): it is
+ * read as `<member>`, and left out of the comparison (`comparable`)
+ */
+function recordedPlace(
+  parents: readonly unknown[],
+  keys: readonly unknown[] | undefined,
+  layerOf: LayerOfGroup,
+): Array<[string, unknown[]]> {
+  const layerIds: unknown[] = [];
+  const groupIds: unknown[] = [];
+  const orders: unknown[] = [];
+  const members: unknown[] = [];
+  parents.forEach((parent, i) => {
+    const key = keys?.[i];
+    const layer = typeof parent === 'string' ? layerOf(parent) : undefined;
+    if (layer === undefined) {
+      layerIds.push(parent);
+      groupIds.push(undefined);
+      orders.push(key);
+      members.push(undefined);
+    } else {
+      layerIds.push(layer);
+      groupIds.push(parent);
+      orders.push(MEMBER_ORDER);
+      members.push(key);
+    }
+  });
+  return [
+    ['layerId', layerIds],
+    ['groupId', groupIds],
+    ['order', orders],
+    ['member', members],
+  ];
+}
+
+/** The key a member of a group had of its own order, which is no more */
+const MEMBER_ORDER = '<member>';
+
+/**
+ * A line of the record as it is compared: the place of a row was written with four fields and is
+ * its parent and its key now (10-fix-017), so the fields told of a write name the place as
+ * `parent` and `key`, and the key a member of a group had of its own order (the `order` of a row
+ * whose `member` is a key) is left out, on both sides. Everything else is compared as it is
+ */
+function comparable(line: string): unknown {
+  const placeOf = (field: string): string =>
+    field === 'layerId' || field === 'groupId'
+      ? 'parent'
+      : field === 'order' || field === 'member'
+        ? 'key'
+        : field;
+  const leaveOutMemberOrders = (values: unknown): void => {
+    const fields = (values as { fields?: Record<string, unknown[]> } | undefined)?.fields;
+    if (!fields?.member || !fields.order) return;
+    fields.order = fields.order.map((order, i) =>
+      fields.member[i] === '<undefined>' ? order : MEMBER_ORDER,
+    );
+  };
+  const read = JSON.parse(line) as Record<string, unknown>;
+  for (const notified of (read.notified as Array<Record<string, unknown>> | undefined) ?? []) {
+    for (const rows of Object.values(
+      (notified.rows ?? {}) as Record<string, { fields: string[] }>,
+    )) {
+      rows.fields = [...new Set(rows.fields.map(placeOf))].sort();
+    }
+    leaveOutMemberOrders(notified.previousValues);
+    for (const move of (notified.order as Array<{ before?: unknown }> | undefined) ?? []) {
+      leaveOutMemberOrders(move.before);
+    }
+  }
+  leaveOutMemberOrders(read.values);
+  return read;
 }
 
 /** A value of a field as the record holds it (`visible` the opposite of `hidden`) */
@@ -222,13 +317,23 @@ function recordedValue(field: RowField, value: unknown): unknown {
 /** The fields of values of rows as the record holds them, in their order */
 function recordedFields(
   fields: ReadonlyMap<RowField, readonly unknown[]>,
+  layerOf: LayerOfGroup,
 ): Map<string, readonly unknown[]> {
-  return new Map(
-    [...fields].map(([field, values]) => [
+  const out = new Map<string, readonly unknown[]>();
+  for (const [field, values] of fields) {
+    if (field === 'key') continue;
+    if (field === 'parent') {
+      for (const [name, list] of recordedPlace(values, fields.get('key'), layerOf)) {
+        out.set(name, list);
+      }
+      continue;
+    }
+    out.set(
       recordedField(field),
       values.map((value) => recordedValue(field, value)),
-    ]),
-  );
+    );
+  }
+  return out;
 }
 
 /** The fields every row is read with, as the record names them */
@@ -272,12 +377,27 @@ function idsOf(tables: FeatureTables, handles: ArrayLike<number> | undefined): s
   return Array.from(handles ?? [], (h) => tables.getRowId(h) ?? `<${h}>`);
 }
 
-/** Values of rows, the rows by their ids */
-function valuesOf(tables: FeatureTables, values: RowValues | undefined): unknown {
+/**
+ * Values of rows, the rows by their ids (the layer of a group the tables no longer hold given, for
+ * the place of a row before a move: the layer it was moved from)
+ */
+function valuesOf(
+  tables: FeatureTables,
+  values: RowValues | undefined,
+  layerOfGone?: string,
+): unknown {
   if (!values) return undefined;
+  const layerOf = layerOfGroupIn(tables);
+  // A parent that is neither a group nor a layer of rows is a group gone
+  const isLayer = (parent: string): boolean => tables.get(parent) !== undefined;
   return {
     rows: idsOf(tables, values.handles),
-    fields: plain(recordedFields(values.fields)),
+    fields: plain(
+      recordedFields(
+        values.fields,
+        (parent) => layerOf(parent) ?? (isLayer(parent) ? undefined : layerOfGone),
+      ),
+    ),
     ...(values.deleted && { deleted: Array.from(values.deleted) }),
   };
 }
@@ -325,14 +445,14 @@ function notificationOf(tables: FeatureTables, change: StoreChange): unknown {
             item: move.itemId,
             from: plain(move.from),
             to: plain(move.to),
-            before: valuesOf(tables, move.before),
+            before: valuesOf(tables, move.before, move.from?.layerId),
           }
         : {
             rows: idsOf(tables, move.handles),
             layerId: move.layerId,
             to: plain(move.to),
             belows: move.belows && plain(move.belows),
-            before: valuesOf(tables, move.before),
+            before: valuesOf(tables, move.before, move.layerId),
           },
     );
   }
@@ -393,7 +513,9 @@ function record(store: Store, tables: FeatureTables): unknown {
   const sorted = Int32Array.from(handles).sort();
   const read = tables.readValues({
     handles: sorted,
-    fields: new Map(READ_FIELDS.map((f) => [fieldNow(f), Array.from(sorted, () => undefined)])),
+    fields: new Map(
+      [...new Set(READ_FIELDS.map(fieldNow))].map((f) => [f, Array.from(sorted, () => undefined)]),
+    ),
     deleted: new Uint8Array(sorted.length),
   });
   return {
@@ -593,7 +715,7 @@ const CASES: readonly Case[] = [
         id: 'n0',
         type: 'Point',
         geometry: { type: 'Point', coordinates: [30, 5] },
-        order: 'z0',
+        key: 'z0',
         style: {},
         properties: { n: 2000 },
         hidden: false,
@@ -613,7 +735,7 @@ const CASES: readonly Case[] = [
             ],
           ],
         },
-        order: 'z1',
+        key: 'z1',
         style: { fillColor: '#abcdef' },
         properties: { n: 2001 },
         hidden: true,
@@ -648,7 +770,17 @@ describe('the Store of rows, as it was before its tables were reworked', () => {
       settle(s.tables);
       step('the next versions swapped in');
     }
-    await expect(`${lines.join('\n')}\n`).toMatchFileSnapshot('./__snapshots__/table-parity.jsonl');
+    // The record, read as it is compared (`comparable`): it is not written again
+    const recorded = readFileSync(
+      new URL('./__snapshots__/table-parity.jsonl', import.meta.url),
+      'utf8',
+    )
+      .split('\n')
+      .filter((line) => line !== '');
+    expect(lines.length).toBe(recorded.length);
+    lines.forEach((line, i) => {
+      expect(comparable(line)).toEqual(comparable(recorded[i]));
+    });
   });
 
   it('reads the rows written into Tabane blocks as they were', async () => {

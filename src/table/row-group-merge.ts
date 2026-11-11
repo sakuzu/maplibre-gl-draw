@@ -267,8 +267,7 @@ function copyRows(
   const handles = new Int32Array(length);
   const ids = new Utf8ColumnBuilder(length);
   const idHashes = new Uint32Array(length);
-  const itemKeys = new Utf8ColumnBuilder(length);
-  const memberKeys = new Utf8ColumnBuilder(length);
+  const keys = new Utf8ColumnBuilder(length);
   const groups = new Int32Array(length);
   const flags = new Uint8Array(length);
   const shapes = Array.from({ length: shape.shapes }, () => new ShapeCopy(length, shape.dims));
@@ -289,8 +288,7 @@ function copyRows(
     handles[r] = data.handles[row];
     ids.addEntry(data.ids, row);
     idHashes[r] = data.idHashes[row];
-    itemKeys.addEntry(data.itemKeys, row);
-    memberKeys.addEntry(data.memberKeys, row);
+    keys.addEntry(data.keys, row);
     groups[r] = data.groups[row];
     flags[r] = data.flags[row];
     for (let w = 0; w < wholes.length; w++) wholes[w]?.copy(r, data.wholes[w], row);
@@ -347,8 +345,7 @@ function copyRows(
         columns: keys.map((key) => (builders.get(key) as ValueColumnBuilder).finish()),
       };
     }),
-    itemKeys: itemKeys.finish(),
-    memberKeys: memberKeys.finish(),
+    keys: keys.finish(),
     groups,
     flags,
     rowBounds,

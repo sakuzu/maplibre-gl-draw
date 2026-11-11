@@ -299,9 +299,9 @@ describe('the rows of a layer of z', () => {
           handles,
           fields: new Map<RowField, unknown[]>([
             ['type', ['Point', 'Point']],
-            ['layerId', ['layer', 'layer']],
+            ['parent', ['layer', 'layer']],
             ['geometry', ids.map((_, i) => ({ type: 'Point', coordinates: [i, 0, 10 + i] }))],
-            ['order', ['a', 'b']],
+            ['key', ['a', 'b']],
           ]),
         }),
       'remote',

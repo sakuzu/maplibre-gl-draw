@@ -354,7 +354,7 @@ describe('the names generated over a Store of rows', () => {
                 ],
               ],
             },
-        order: `k${String(i).padStart(4, '0')}`,
+        key: `k${String(i).padStart(4, '0')}`,
         // A name of the other type, a name that is not a number, and no name at all are passed over
         properties:
           i === 120

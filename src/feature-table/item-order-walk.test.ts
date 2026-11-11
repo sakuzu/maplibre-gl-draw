@@ -72,7 +72,7 @@ interface RowAt {
 }
 
 /** The fields of a row that place it, as a row holds them (what `RowsMove.before` keeps) */
-const PLACE_FIELDS: readonly RowField[] = ['layerId', 'groupId', 'order', 'member'];
+const PLACE_FIELDS: readonly RowField[] = ['parent', 'key'];
 
 /**
  * The items of the layers and the groups a write touches as they were, and the rows it puts in
@@ -140,10 +140,8 @@ class FullListWatch {
       const data = at.group.data;
       const group = data.groups[at.row];
       this.before.set(handle, [
-        at.layer.layerId,
-        group >= 0 ? this.source.groups.idOf(group) : undefined,
-        utf8String(data.itemKeys, at.row),
-        group >= 0 ? utf8String(data.memberKeys, at.row) : undefined,
+        group >= 0 ? this.source.groups.idOf(group) : at.layer.layerId,
+        utf8String(data.keys, at.row),
       ]);
     }
     if (many) return;
@@ -373,7 +371,7 @@ function fullGroupKeyMoves(
       ];
     }
     const at = source.placeOf(handle);
-    return [at ? utf8String(at.group.data.itemKeys, at.row) : '', source.idOf(handle) ?? ''];
+    return [at ? utf8String(at.group.data.keys, at.row) : '', source.idOf(handle) ?? ''];
   };
   const compare = (a: [string, string], b: [string, string]): number =>
     compareCodePoints(a[0], b[0]) || compareCodePoints(a[1], b[1]);
@@ -445,21 +443,24 @@ function referenceWatch(
 ): FullListWatch | null {
   const watch = new FullListWatch(sourceOf(internals));
   const { handles, fields, deleted } = patch;
-  const layerIds = fields.get('layerId');
-  const groupIds = fields.get('groupId');
-  const orders = fields.get('order');
-  const members = fields.get('member');
+  const parents = fields.get('parent');
+  const keys = fields.get('key');
   const groupOf = (value: unknown): GroupHandle =>
     typeof value === 'string' && value !== '' ? internals.groups.handleOfId(value) : -1;
+  const layerOf = (value: unknown): string | undefined => {
+    if (typeof value !== 'string' || value === '') return undefined;
+    const group = internals.groups.handleOfId(value);
+    return group >= 0 ? internals.groups.layerOf(group) : value;
+  };
   for (let i = 0; i < handles.length; i++) {
     const handle = handles[i];
     const place = internals.placeOf(handle);
     const deleting = !!deleted?.[i];
     if (!place || (place.group.data.flags[place.row] & ROW_FLAG_DELETED) !== 0) {
-      const layerId = (layerIds?.[i] as string | undefined) ?? place?.layer.layerId;
+      const layerId = layerOf(parents?.[i]) ?? place?.layer.layerId;
       if (deleting || layerId === undefined) continue;
       watch.watchLayer(layerId);
-      watch.watchGroup(groupOf(groupIds?.[i]));
+      watch.watchGroup(groupOf(parents?.[i]));
       watch.row(handle, false);
       continue;
     }
@@ -472,16 +473,14 @@ function referenceWatch(
       watch.row(handle, true);
       continue;
     }
-    const layerId = layerIds?.[i] as string | undefined;
-    const nextGroup = groupIds ? groupOf(groupIds[i]) : group;
-    const order = orders?.[i];
+    const parent = parents?.[i];
+    const layerId = layerOf(parent);
+    const nextGroup = parent !== undefined ? groupOf(parent) : group;
+    const key = keys?.[i];
     const moved =
       (layerId !== undefined && layerId !== place.layer.layerId) ||
       nextGroup !== group ||
-      (order !== undefined && order !== utf8String(data.itemKeys, row)) ||
-      (members !== undefined &&
-        nextGroup >= 0 &&
-        (members[i] ?? '') !== utf8String(data.memberKeys, row));
+      (key !== undefined && key !== utf8String(data.keys, row));
     if (!moved) continue;
     watch.watchLayer(place.layer.layerId);
     if (layerId !== undefined) watch.watchLayer(layerId);
@@ -589,10 +588,10 @@ function randomPatch(
   const layerOfRow = (handle: number) => internals.placeOf(handle)?.layer.layerId ?? 'a';
   const kind = random();
   if (kind < 0.3 || many) {
-    // New keys of their order (a member keeps its place in its group)
+    // New keys of their order (a member's among the members of its group)
     return {
       handles,
-      fields: new Map<RowField, unknown[]>([['order', picked.map(() => randomKey(random))]]),
+      fields: new Map<RowField, unknown[]>([['key', picked.map(() => randomKey(random))]]),
     };
   }
   if (kind < 0.45) {
@@ -600,10 +599,8 @@ function randomPatch(
     return {
       handles,
       fields: new Map<RowField, unknown[]>([
-        ['layerId', picked.map(() => LAYERS[Math.floor(random() * 2)])],
-        ['groupId', picked.map(() => '')],
-        ['member', picked.map(() => undefined)],
-        ['order', picked.map(() => randomKey(random))],
+        ['parent', picked.map(() => LAYERS[Math.floor(random() * 2)])],
+        ['key', picked.map(() => randomKey(random))],
       ]),
     };
   }
@@ -613,25 +610,22 @@ function randomPatch(
       handles,
       fields: new Map<RowField, unknown[]>([
         [
-          'groupId',
+          'parent',
           Array.from(handles, (handle) => {
             const layerId = layerOfRow(handle);
             const own = GROUPS.filter((_, k) => LAYERS[k % 2] === layerId);
             return own[Math.floor(random() * own.length)];
           }),
         ],
-        ['member', picked.map(() => randomKey(random))],
+        ['key', picked.map(() => randomKey(random))],
       ]),
     };
   }
   if (kind < 0.75) {
-    // Out of their group, at the key they have
+    // Out of their group, into their layer at the key they have
     return {
       handles,
-      fields: new Map<RowField, unknown[]>([
-        ['groupId', picked.map(() => '')],
-        ['member', picked.map(() => undefined)],
-      ]),
+      fields: new Map<RowField, unknown[]>([['parent', Array.from(handles, layerOfRow)]]),
     };
   }
   if (kind < 0.87) {
@@ -651,9 +645,9 @@ function randomPatch(
     handles: created,
     fields: new Map<RowField, unknown[]>([
       ['type', fresh.map(() => 'Point')],
-      ['layerId', fresh.map(() => LAYERS[Math.floor(random() * 2)])],
+      ['parent', fresh.map(() => LAYERS[Math.floor(random() * 2)])],
       ['geometry', fresh.map(() => ({ type: 'Point', coordinates: [random(), random()] }))],
-      ['order', fresh.map(() => randomKey(random))],
+      ['key', fresh.map(() => randomKey(random))],
     ]),
   };
 }
@@ -721,7 +715,7 @@ describe('the changes of the order read from the items next to the ones a write 
           () =>
             writer.applyGroups({
               handles: Int32Array.from(groups),
-              fields: new Map([['order', keys]]),
+              fields: new Map([['key', keys]]),
             }),
           'remote',
         );

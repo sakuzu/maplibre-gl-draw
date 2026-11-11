@@ -48,7 +48,7 @@ function points(from: number, count: number) {
       id: `r${i}`,
       type: 'Point',
       geometry: { type: 'Point', coordinates: [i, 0] },
-      order: key(i),
+      key: key(i),
     });
   }
   return builder.finish();
@@ -418,7 +418,7 @@ describe('the row groups taken in while the drawing holds the reorder of a group
         id,
         type: 'Point',
         geometry: { type: 'Point', coordinates: [20 + i, 0] },
-        order: i === 0 ? low : high,
+        key: i === 0 ? low : high,
       });
     });
     return builder.finish();
@@ -473,9 +473,9 @@ describe('the row groups taken in while the drawing holds the reorder of a group
       handles,
       fields: new Map<RowField, unknown[]>([
         ['type', ids.map(() => 'Point')],
-        ['layerId', ids.map(() => 'a')],
+        ['parent', ids.map(() => 'a')],
         ['geometry', ids.map((_, i) => ({ type: 'Point', coordinates: [i, 1] }))],
-        ['order', ids.map((_, i) => keyOf(i))],
+        ['key', ids.map((_, i) => keyOf(i))],
       ]),
     });
     return { ids, handles };
@@ -539,9 +539,9 @@ describe('the row groups taken in while the drawing holds the reorder of a group
       handles,
       fields: new Map<RowField, unknown[]>([
         ['type', ids.map(() => 'Point')],
-        ['layerId', ids.map(() => 'a')],
+        ['parent', ids.map(() => 'a')],
         ['geometry', ids.map((_, i) => ({ type: 'Point', coordinates: [i, 1] }))],
-        ['order', keys],
+        ['key', keys],
       ]),
     });
     // A row of them written before they are built
@@ -577,16 +577,18 @@ describe('the groups written through the writer of the Store of rows', () => {
     const notified: StoreChange[] = [];
     store.subscribe((change) => notified.push(change));
     store.transact(() => {
-      writer.apply({
-        handles: Int32Array.from(members),
-        fields: new Map<RowField, unknown[]>([['layerId', ['b', 'b']]]),
-      });
+      // The group goes to the other layer, and its members follow it there (their parent is the
+      // group, in that layer now)
       writer.applyGroups({
         handles: Int32Array.of(handle),
         fields: new Map<TableGroupField, unknown[]>([
-          ['layerId', ['b']],
-          ['order', ['m']],
+          ['parent', ['b']],
+          ['key', ['m']],
         ]),
+      });
+      writer.apply({
+        handles: Int32Array.from(members),
+        fields: new Map<RowField, unknown[]>([['parent', ['g', 'g']]]),
       });
     }, 'remote');
     expect(notified).toHaveLength(1);
@@ -627,7 +629,7 @@ describe('the groups written through the writer of the Store of rows', () => {
         handles: Int32Array.of(handle),
         fields: new Map<TableGroupField, unknown[]>([
           ['name', ['renamed']],
-          ['visible', [false]],
+          ['hidden', [true]],
           ['locked', [true]],
         ]),
       });
@@ -640,7 +642,7 @@ describe('the groups written through the writer of the Store of rows', () => {
     store.transact(() => {
       writer.applyGroups({
         handles: Int32Array.of(handle),
-        fields: new Map<TableGroupField, unknown[]>([['visible', [false]]]),
+        fields: new Map<TableGroupField, unknown[]>([['hidden', [true]]]),
       });
     }, 'remote');
     expect(notified[0]?.groups).toBeUndefined();
@@ -661,8 +663,8 @@ describe('the groups written through the writer of the Store of rows', () => {
         fields: new Map<TableGroupField, unknown[]>([
           ['id', ['far']],
           ['name', ['Far']],
-          ['order', ['m']],
-          ['layerId', ['a']],
+          ['key', ['m']],
+          ['parent', ['a']],
         ]),
       });
     }, 'remote');
@@ -737,9 +739,9 @@ describe('taking in the row groups without a drawing', () => {
       handles,
       fields: new Map<RowField, unknown[]>([
         ['type', ids.map(() => 'Point')],
-        ['layerId', ids.map(() => 'a')],
+        ['parent', ids.map(() => 'a')],
         ['geometry', ids.map((_, i) => ({ type: 'Point', coordinates: [i + 4, 0] }))],
-        ['order', ids.map((_, i) => key(i + 4))],
+        ['key', ids.map((_, i) => key(i + 4))],
       ]),
     });
     expect(internals.hasPendingWork).toBe(true);

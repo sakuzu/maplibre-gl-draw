@@ -26,12 +26,16 @@ import { rowHasGeometry, rowType } from '../../feature-table/row-read.js';
 import type { BBox } from '../../geometry/types.js';
 import type { Feature, Layer } from '../../shared/types/model.js';
 import type { TransformFieldsRegistry } from '../../store/transform-roles.js';
-import { styleColumnOf } from '../../table/feature-row-columns.js';
+import { STYLE_COLUMN } from '../../table/feature-row-columns.js';
 import { CHUNK_TARGET_VERTICES } from '../../table/partition.js';
+import type { RowBlockDictionary } from '../../table/row-group-types.js';
 import type { FeatureCompanionRegistry } from '../feature-companion.js';
 import type { RowSpriteSource } from '../renderers/rows/rows-format.js';
 import type { RunKind } from './store-retained-classify.js';
 import type { RowStyleSlots } from './table-collect.js';
+
+/** The places of the columns of a feature, read once rather than through the import at every row */
+const STYLE = STYLE_COLUMN;
 
 /** The number of vertices of the ring of a Circle (the estimate of its work) */
 const CIRCLE_VERTICES = 65;
@@ -186,7 +190,8 @@ export function classifyRow(
     const source = renderer?.rowSprites as RowSpriteSource;
     const reader = geometryAt(group, row)?.reader;
     const points = reader?.type === 'Point' || reader?.type === 'MultiPoint';
-    if (!points || !slots.sprite(source, styleColumnOf(data).indexes[row])) return 'immediate';
+    if (!points || !slots.sprite(source, (data.wholes[STYLE] as RowBlockDictionary).indexes[row]))
+      return 'immediate';
     context.onSprite?.(row, source);
     return 'rows';
   }
@@ -195,15 +200,18 @@ export function classifyRow(
   switch (type) {
     case 'Point':
     case 'MultiPoint':
-      if (!slots.point(styleColumnOf(data).indexes[row], type, color()).shape) return 'immediate';
+      if (
+        !slots.point((data.wholes[STYLE] as RowBlockDictionary).indexes[row], type, color()).shape
+      )
+        return 'immediate';
       return oneDraw ? 'rows' : 'point';
     case 'LineString':
     case 'Freehand':
     case 'MultiLineString':
       // The drawing in one draw cuts the dashes itself
       if (oneDraw) return 'rows';
-      return slots.line(styleColumnOf(data).indexes[row], type, color()).stroke.lineStyle ===
-        'solid'
+      return slots.line((data.wholes[STYLE] as RowBlockDictionary).indexes[row], type, color())
+        .stroke.lineStyle === 'solid'
         ? 'line'
         : 'immediate';
     case 'Polygon':
@@ -211,7 +219,8 @@ export function classifyRow(
     case 'Circle':
       if (oneDraw) return 'rows';
       // Only a dashed outline cannot be retained (fill only and a solid outline can be)
-      return slots.polygon(styleColumnOf(data).indexes[row], type, color()).dashedStroke
+      return slots.polygon((data.wholes[STYLE] as RowBlockDictionary).indexes[row], type, color())
+        .dashedStroke
         ? 'immediate'
         : 'polygon';
     default:

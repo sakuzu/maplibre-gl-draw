@@ -30,10 +30,10 @@ const ROWS: RowInput[] = [
     id: 'c',
     type: 'Circle',
     geometry: { type: 'Point', coordinates: [10, 20] },
-    order: 'a1',
+    key: 'a1',
     properties: { [drawPropertyKey('radiusMeters')]: 5000 },
   },
-  { id: 'p', type: 'Point', geometry: { type: 'Point', coordinates: [1, 2] }, order: 'a0' },
+  { id: 'p', type: 'Point', geometry: { type: 'Point', coordinates: [1, 2] }, key: 'a0' },
   {
     id: 'l',
     type: 'LineString',
@@ -44,7 +44,7 @@ const ROWS: RowInput[] = [
         [1, 1],
       ],
     },
-    order: 'a2',
+    key: 'a2',
   },
 ];
 

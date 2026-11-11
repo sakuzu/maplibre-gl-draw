@@ -117,7 +117,7 @@ function randomRows(
       id: `${prefix}${i}`,
       type,
       geometry,
-      order: `k${String(Math.floor(random() * 1e9)).padStart(10, '0')}`,
+      key: `k${String(Math.floor(random() * 1e9)).padStart(10, '0')}`,
       style: { strokeColor: i % 2 ? '#ff0000' : '#00ff00' },
       properties:
         type === 'Circle'
@@ -211,7 +211,7 @@ describe('the positions of a row', () => {
         id: 'a',
         type: 'Point',
         geometry: { type: 'Point', coordinates: [1, 2, 3] },
-        order: 'k',
+        key: 'k',
       }),
     ).toThrow(/does not fit/);
   });
@@ -301,7 +301,7 @@ describe('the row groups of every dimensions', () => {
               [3, 3, 6, 10],
             ],
           },
-          order: 'k',
+          key: 'k',
         },
       ],
       { columns: FEATURE_TABLE_COLUMNS, dimensions: 'xyzm' },
@@ -406,11 +406,12 @@ describe('a merge of row groups of dimensions', () => {
 
 /**
  * The hashes of the groups of xy, taken from the version before the dimensions, the columns put
- * in the order they are declared and the flags made the deleted mark and the flag columns (the
- * same arrays, in that order, gave the hashes of before)
+ * in the order they are declared, the flags made the deleted mark and the flag columns, and the
+ * two columns of keys made one (the same arrays, in that order, with the keys within a group, all
+ * empty for these rows, after the keys, gave the hashes of before)
  */
 const PINNED = {
-  mixed: '3dab2eaf4d731280c8d76f647edecd2d99cd0fae3d760fc98de10016b13a0ca6',
-  small: '848f13d4409015f1f486bfbcb400c106b46858af94faf9d3cecec50ea3890732',
-  merged: 'fdba476268cfb99034589fab54125fb04c1bd30a011a600a277dc13308be8a37',
+  mixed: 'f41423f0357959b7a40d22044cb680bfed068db59f495a7176ea372db4a0b6de',
+  small: '92721cefc5677287ab0d6cc67b1208396b4c1a15aca6dfcb6afbda737527e7e2',
+  merged: '804be1c6a4474de818618d1b9dfa11b90863f9d1bf1427e9acd7114060580211',
 };

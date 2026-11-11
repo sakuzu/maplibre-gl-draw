@@ -69,6 +69,18 @@ export const FEATURE_TABLE_COLUMNS: TableColumns = Object.freeze({
   style: Object.freeze({ kind: 'whole', dictionary: 'tables' }),
 });
 
+/**
+ * The columns of the groups of features as the tables hold them, besides the fixed fields of a
+ * group (its id, its parent and its key): whether a group is not shown, and whether it is locked.
+ * The name of a group is kept by the Store, not by the tables
+ *
+ * @internal
+ */
+export const FEATURE_GROUP_COLUMNS: TableColumns = Object.freeze({
+  hidden: 'flag',
+  locked: 'flag',
+});
+
 /** The kinds of the columns of a feature, by their names */
 const KIND_OF: ReadonlyMap<string, TabaneColumnKind> = new Map(
   Object.entries(TABANE_FEATURE_COLUMNS),

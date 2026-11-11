@@ -18,7 +18,7 @@ import { drawPropertyKey } from '../shared/properties.js';
 import { whenIdle } from '../shared/utils/idle.js';
 import { circleRowRings } from '../table/circle-rings.js';
 import { FEATURE_CACHES } from '../table/fill-triangles.js';
-import { FEATURE_TABLE_COLUMNS } from '../table/tabane/columns.js';
+import { FEATURE_GROUP_COLUMNS, FEATURE_TABLE_COLUMNS } from '../table/tabane/columns.js';
 import { FeatureRowBoxes, keepFeatureRowBoxes } from './feature-row-boxes.js';
 import {
   createTables,
@@ -54,7 +54,7 @@ export const FEATURE_RELOCATING_FIELDS: readonly RowField[] = [
 export function createFeatureRowTables(
   options: Omit<
     TablesInternalOptions,
-    'columns' | 'rowBoxes' | 'relocatingFields' | 'rings' | 'caches'
+    'columns' | 'groupColumns' | 'rowBoxes' | 'relocatingFields' | 'rings' | 'caches'
   > = {},
 ): {
   tables: FeatureTables;
@@ -64,6 +64,7 @@ export function createFeatureRowTables(
   const made = createTables({
     ...options,
     columns: FEATURE_TABLE_COLUMNS,
+    groupColumns: FEATURE_GROUP_COLUMNS,
     rings: circleRowRings,
     caches: FEATURE_CACHES,
     rowBoxes: boxes.boxesOf,

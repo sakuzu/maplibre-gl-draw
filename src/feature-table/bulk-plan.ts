@@ -22,8 +22,17 @@ import type {
   RowField,
   RowValues,
 } from '../shared/types/model.js';
-import { ROW_FLAG_LOCKED, styleColumnOf, typeColumnOf } from '../table/feature-row-columns.js';
-import { ROW_FLAG_DELETED } from '../table/row-group-types.js';
+import {
+  ROW_FLAG_LOCKED,
+  STYLE_COLUMN,
+  TYPE_COLUMN,
+  typeColumnOf,
+} from '../table/feature-row-columns.js';
+import {
+  ROW_FLAG_DELETED,
+  type RowBlockDictionary,
+  type RowBlockValues,
+} from '../table/row-group-types.js';
 import type { RowContainers } from './bulk-rows.js';
 import { isRowLocked, livePlaceOf, rowsByLayerInOrder } from './bulk-rows.js';
 import type { FeatureTablesInternals, RowPlace } from './feature-tables.js';
@@ -177,9 +186,9 @@ function planUpdate(
         return id;
       });
     }
-    const typeId = typeIdOf[typeColumnOf(data).indexes[row]];
+    const typeId = typeIdOf[(data.wholes[TYPE_COLUMN] as RowBlockValues).indexes[row]];
     const createdZoom = rowNumber(group, row, CREATED_ZOOM_KEY);
-    const styleNumber = styleColumnOf(data).indexes[row];
+    const styleNumber = (data.wholes[STYLE_COLUMN] as RowBlockDictionary).indexes[row];
     let ofType = kindsByType[typeId];
     if (!ofType) {
       ofType = [];

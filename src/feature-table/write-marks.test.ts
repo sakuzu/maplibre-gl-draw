@@ -237,7 +237,7 @@ describe('the write mark of the tables', () => {
     const left = internals.placeOf(at('p3'))?.group;
     const other = internals.placeOf(at('p20'))?.group;
     internals.setWriteMark(5);
-    writer.apply(rowPatch([at('p3')], { order: [key(9500)] }));
+    writer.apply(rowPatch([at('p3')], { key: [key(9500)] }));
     const delta = internals.layerTable('a')?.delta;
     const place = internals.placeOf(at('p3'));
     expect(place?.group).toBe(delta?.group);
@@ -253,7 +253,7 @@ describe('the write mark of the tables', () => {
     expect(hidden?.group.mark).toBe(6);
     // The row of the delta that stays keeps its mark when the delta is made again
     internals.setWriteMark(7);
-    writer.apply(rowPatch([at('p12')], { order: [key(10_500)] }));
+    writer.apply(rowPatch([at('p12')], { key: [key(10_500)] }));
     const kept = internals.placeOf(at('p3'));
     expect(kept?.group.marks[kept.row]).toBe(5);
     expect(kept?.group.mark).toBe(7);
@@ -321,7 +321,7 @@ function waitingVersion(mark: number, before?: (internals: FeatureTablesInternal
   const sides = gate(internals);
   const at = (id: string) => tables.findRow(id) as number;
   const write = (id: string, order: number): void => {
-    writer.apply(rowPatch([at(id)], { order: [key(order)] }));
+    writer.apply(rowPatch([at(id)], { key: [key(order)] }));
     (reference.rows.get(id) as ReferenceRow).order = key(order);
   };
   internals.setWriteMark(mark);
@@ -364,7 +364,7 @@ describe('the next versions with the write marks', () => {
     internals.setWriteMark(1);
     writer.apply(rowPatch([at('p9')], { 'properties:name': ['kept'] }));
     internals.setWriteMark(2);
-    writer.apply(rowPatch([at('p3')], { order: [key(9500)] }));
+    writer.apply(rowPatch([at('p3')], { key: [key(9500)] }));
     internals.flushVersions();
     expect(internals.deltaRowCount()).toBe(0);
     const marksOf = (id: string): number | undefined => {

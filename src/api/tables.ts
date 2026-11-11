@@ -387,11 +387,15 @@ export interface FeatureTablesWriter {
    * with the row block and read before its columns (every reader of the rows reads the values
    * written). The drawing writes the rows into the chunks that draw them before its next draw.
    *
-   * A row whose change moves it in the order of its layer or to another layer (`type`,
-   * `layerId`, `groupId`, `order`, `member`, or an attribute the cutting of the rows into chunks
-   * reads, the created zoom) goes to the rows of its layer changed since their row blocks were built
-   * (the delta), and so does a new row: a handle that names no row, with at least its `type`,
-   * `layerId`, `geometry` and `order` (the other fields take the defaults of a feature). The
+   * The place of a row is its `parent`, the id of its group (in the layer of the group) or of its
+   * layer, and its `key`, the key of its order among the members of its group, or among the items
+   * of its layer.
+   *
+   * A row whose change moves it in the order of its layer or to another layer (`type`, `parent`,
+   * `key`, or an attribute the cutting of the rows into chunks reads, the created zoom) goes to the
+   * rows of its layer changed since their row blocks were built (the delta), and so does a new row:
+   * a handle that names no row, with at least its `type`, `parent`, `geometry` and `key` (the other
+   * fields take the defaults of a feature). The
    * readers read the row there at once, and the drawing draws it at its place in the order; the
    * next version of the row block its key falls in takes it, over the draws. New rows whose keys
    * are one run that no row of the layer is within are built into row blocks of their own instead,
@@ -403,8 +407,8 @@ export interface FeatureTablesWriter {
    * than the dimensions is refused rather than cut.
    *
    * @returns The rows written, by layer
-   * @throws `DrawError`: `not-found` when a handle names no row or a group of features is
-   *   unknown; `invalid-input` when a field a new row needs is missing, when a row is moved without
+   * @throws `DrawError`: `not-found` when a handle names no row; `invalid-input` when a field a
+   *   new row needs is missing, when a parent is not an id, when a row is moved without
    *   a geometry to a layer of dimensions that would read its positions otherwise (only `xy` into
    *   any, and `xyz` into `xyzm`, keep them), or when a value cannot be held (nothing is written
    *   then), and when a position has more values than the dimensions of its layer (the rows before
@@ -414,14 +418,14 @@ export interface FeatureTablesWriter {
   /**
    * Writes values of groups of features, after the implementation of the Store recorded them.
    *
-   * A new group (a handle no group has) needs its `id`, `order` and `layerId`; its `name` is held
-   * by the Store, not by the tables (the Store of rows of `createTableStore` creates, changes and
+   * A new group (a handle no group has) needs its `id`, `key` and `parent` (its layer); its `name`
+   * is held by the Store, not by the tables (the Store of rows of `createTableStore` creates, changes and
    * deletes its groups as the values say, and notifies them). A new key of the order of a group
    * moves its members, which follow each other at the place of the group: the row blocks are cut at
    * the runs of the members and at the place they go to, and put in their new order over the
    * draws, read and drawn in the order before until then; the rows are not written. A group
-   * given another `layerId` is in that layer from then on; its members go there by the writes of
-   * their rows (`apply`). A group shown or hidden shows or hides its members. A group deleted is
+   * given another `parent` is in that layer from then on, and its members go there with it (told
+   * as rows written). A group `hidden` or shown hides or shows its members. A group deleted is
    * taken out once no row names it and no token keeps it: deleted with a token
    * (`RowApplyOptions.restoreToken`, added to the notification), it keeps its handle, its key and
    * its layer until the token is let go of, so that writing it again with its handle puts it back

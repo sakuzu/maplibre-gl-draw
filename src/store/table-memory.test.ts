@@ -222,7 +222,7 @@ describe('the order of the in-memory Store of rows', () => {
     const internals = featureTablesInternals(tables);
     for (const id of ids) {
       const place = internals?.placeOf(tables.findRow(id) as number);
-      const key = place ? utf8String(place.group.data.itemKeys, place.row) : '';
+      const key = place ? utf8String(place.group.data.keys, place.row) : '';
       expect(key.length).toBeLessThanOrEqual(64);
     }
   });
@@ -340,7 +340,7 @@ describe('the order of the in-memory Store of rows', () => {
         id: `r${i}`,
         type: 'Point',
         geometry: { type: 'Point', coordinates: [i * 1e-4, 0] },
-        order: `k${String(i).padStart(6, '0')}`,
+        key: `k${String(i).padStart(6, '0')}`,
         style: {},
         properties: { n: i },
       });
@@ -383,7 +383,7 @@ describe('the order of the in-memory Store of rows', () => {
         const place = internals.placeOf(store.tables?.findRow(id) as number);
         const data = place?.group.data;
         if (!data || !place) continue;
-        const keys = [utf8String(data.itemKeys, place.row), utf8String(data.memberKeys, place.row)];
+        const keys = [utf8String(data.keys, place.row)];
         for (const key of keys) longest = Math.max(longest, key.length);
       }
       work.push(
@@ -423,7 +423,7 @@ describe('the rows of a layer of z and m in the in-memory Store of rows', () => 
       dimensions: 'xyzm',
       rings: circleRowRings,
     });
-    builder.addRow({ id: 'l', type: 'LineString', geometry: line, order: 'k1' });
+    builder.addRow({ id: 'l', type: 'LineString', geometry: line, key: 'k1' });
     writer.addRowBlocks('layer', builder.finish());
     const tables = store.tables;
     if (!tables) throw new Error('a Store of rows has tables');

@@ -25,9 +25,13 @@ import type { RowBlockData } from '../table/row-group-types.js';
 import type { RowHandle } from './types.js';
 
 /**
- * A field of a group a {@link TableGroupPatch} writes.
+ * A field of a group a {@link TableGroupPatch} writes: a fixed field of every group (its `id`,
+ * its `parent`, the table it is in, and the `key` of its order among the items there), or a group
+ * column declared (`groupColumns`; `hidden` and `locked` for the groups of the library). The
+ * `name` of a group is kept by the user of the tables, not by them: the writer of the library
+ * takes it out of the values it writes to the tables.
  */
-export type TableGroupField = 'id' | 'name' | 'order' | 'layerId' | 'visible' | 'locked';
+export type TableGroupField = 'id' | 'name' | 'parent' | 'key' | 'hidden' | 'locked';
 
 /**
  * Values written to groups of rows of the tables: the groups by their handles (the handles rows

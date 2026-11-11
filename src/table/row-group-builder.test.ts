@@ -32,8 +32,8 @@ import { FEATURE_TABLE_COLUMNS } from './tabane/columns.js';
 import { GeometryColumnReader } from './table.js';
 
 /** A row with the defaults of the tests */
-function row(id: string, order: string, geometry: Geometry | null, extra: Partial<RowInput> = {}) {
-  return { id, type: geometry?.type ?? 'Point', geometry, order, ...extra } as RowInput;
+function row(id: string, key: string, geometry: Geometry | null, extra: Partial<RowInput> = {}) {
+  return { id, type: geometry?.type ?? 'Point', geometry, key, ...extra } as RowInput;
 }
 
 const point = (x: number, y: number): Geometry => ({ type: 'Point', coordinates: [x, y] });
@@ -97,17 +97,17 @@ describe('createRowBlockDataBuilder', () => {
   it('puts the members of a group at the key of the group', () => {
     const builder = builderOf({
       columns: FEATURE_TABLE_COLUMNS,
-      groups: [{ handle: 4, id: 'g', order: 'a5' }],
+      groups: [{ handle: 4, id: 'g', key: 'a5' }],
     });
     builder.addRow(row('y', 'a9', point(0, 0)));
-    builder.addRow(row('m2', 'zz', point(0, 0), { group: 4, member: 'b' }));
+    builder.addRow(row('m2', 'b', point(0, 0), { group: 4 }));
     builder.addRow(row('x', 'a1', point(0, 0)));
-    builder.addRow(row('m1', 'a0', point(0, 0), { group: 4, member: 'a' }));
+    builder.addRow(row('m1', 'a', point(0, 0), { group: 4 }));
     const [group] = builder.finish();
     expect(idsOf([group])).toEqual(['x', 'm1', 'm2', 'y']);
     expect(Array.from(group.groups)).toEqual([-1, 4, 4, -1]);
-    expect(utf8String(group.memberKeys, 2)).toBe('b');
-    expect(utf8String(group.memberKeys, 0)).toBe('');
+    expect(utf8String(group.keys, 2)).toBe('b');
+    expect(utf8String(group.keys, 0)).toBe('a1');
   });
 
   it('cuts the rows into groups by their number and by their coordinates', () => {

@@ -96,7 +96,7 @@ function rowsBack(
   const { tables, writer } = setupOf;
   const group = tables.findGroup('g') as number;
   const groups: GroupEntry[] = [
-    { handle: group, id: 'g', order: writer.getGroupOrder(group) as string },
+    { handle: group, id: 'g', key: writer.getGroupOrder(group) as string },
   ];
   const builder = createRowBlockBuilder({ columns: FEATURE_TABLE_COLUMNS, groups, targetRows: 4 });
   ids.forEach((id) => {
@@ -106,7 +106,7 @@ function rowsBack(
       id,
       type: 'Point',
       geometry: { type: 'Point', coordinates: [i, 0] },
-      order: inGroup ? (writer.getGroupOrder(group) as string) : key(i * 10),
+      key: inGroup ? (writer.getGroupOrder(group) as string) : key(i * 10),
       ...(inGroup && { group, member: key(i) }),
       properties: { n: i * 100 },
     });
@@ -210,9 +210,9 @@ describe('every row taken out of the tables', () => {
         handles: writer.allocateHandles({ offsets, bytes }),
         fields: new Map<never, unknown[]>([
           ['type' as never, ids.map(() => 'Point')],
-          ['layerId' as never, ids.map(() => 'a')],
+          ['parent' as never, ids.map(() => 'a')],
           ['geometry' as never, ids.map((_, i) => ({ type: 'Point', coordinates: [100 + i, 0] }))],
-          ['order' as never, ids.map((_, i) => `zz${String(i).padStart(4, '0')}`)],
+          ['key' as never, ids.map((_, i) => `zz${String(i).padStart(4, '0')}`)],
         ]),
       });
     }, 'remote');
@@ -239,7 +239,7 @@ describe('every row taken out of the tables', () => {
       id: 'high',
       type: 'Point',
       geometry: { type: 'Point', coordinates: [1, 2, 30] },
-      order: key(1),
+      key: key(1),
     });
     store.transact(() => writer.addRowBlocks('z', builder.finish()), 'remote');
     internals.flushVersions();

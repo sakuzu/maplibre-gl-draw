@@ -54,12 +54,6 @@ export function featureWithFields(
       case 'type':
         out.type = value as FeatureType;
         break;
-      case 'layerId':
-        out.layerId = value as string;
-        break;
-      case 'groupId':
-        out.groupId = (value as string | null) || undefined;
-        break;
       case 'geometry':
         out.geometry = value as Feature['geometry'];
         break;
@@ -72,8 +66,10 @@ export function featureWithFields(
       case 'locked':
         out.locked = value === true;
         break;
-      case 'order':
-      case 'member':
+      // The place of a row is not a value of its feature: its layer and group are read where the
+      // row is
+      case 'parent':
+      case 'key':
         break;
       default: {
         properties ??= { ...(feature.properties ?? {}) };

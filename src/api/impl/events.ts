@@ -397,12 +397,7 @@ const DOCUMENT_KEYS = [
 const NO_IDS: readonly string[] = Object.freeze([]);
 
 /** The fields of a row that hold its place in the stacking order */
-const PLACE_FIELDS: ReadonlySet<RowField> = new Set<RowField>([
-  'layerId',
-  'groupId',
-  'order',
-  'member',
-]);
+const PLACE_FIELDS: ReadonlySet<RowField> = new Set<RowField>(['parent', 'key']);
 
 /** Whether the fields written to the rows of a layer are those of their places only */
 function onlyPlaced(fields: ReadonlySet<RowField>): boolean {
@@ -642,6 +637,12 @@ function stackingOrderOf(
   return { placed, otherEntries: placesOf(change.order) !== placesOf(change.previous) };
 }
 
+/** The layer and the group of a row */
+interface ItemPlace {
+  readonly layerId: string;
+  readonly groupId: string | undefined;
+}
+
 /** What the rows of a change were before it, read when one is asked for */
 interface RowsBefore {
   previous(id: string): Feature | undefined;
@@ -667,23 +668,35 @@ function rowsBeforeOf(changes: StoreChange, store: Store): RowsBefore {
     }
   }
   let indexOf: Map<number, number> | null = null;
-  // The place of each row moved before its first move (its layer and group), by its handle
-  let placeOf: Map<number, Map<RowField, unknown>> | null = null;
-  const placesBefore = (): Map<number, Map<RowField, unknown>> => {
-    const out = new Map<number, Map<RowField, unknown>>();
-    const take = (before: RowValues | undefined): void => {
-      if (!before) return;
+  // The place of each row moved before its first move (its layer and group), by its handle: where
+  // a move of one row says it was, or else its parent before (its group, in the layer of the
+  // group, or its layer)
+  let placeOf: Map<number, ItemPlace> | null = null;
+  const placesBefore = (): Map<number, ItemPlace> => {
+    const out = new Map<number, ItemPlace>();
+    const placeOfParent = (parent: string): ItemPlace => {
+      if (store.getLayer(parent) !== undefined) return { layerId: parent, groupId: undefined };
+      const group = internals?.groups.handleOfId(parent) ?? -1;
+      const layerId =
+        (group >= 0 ? internals?.groups.layerOf(group) : undefined) ??
+        store.getGroup(parent)?.layerId ??
+        parent;
+      return { layerId, groupId: parent };
+    };
+    for (const move of changes.order ?? []) {
+      const before = move.before;
+      const parents = before?.fields.get('parent');
+      if (!before || !parents) continue;
       before.handles.forEach((handle, index) => {
         if (out.has(handle)) return;
-        const fields = new Map<RowField, unknown>();
-        for (const field of ['layerId', 'groupId'] as const) {
-          const list = before.fields.get(field);
-          if (list) fields.set(field, list[index] ?? null);
+        if (move.kind === 'item' && move.from) {
+          out.set(handle, { layerId: move.from.layerId, groupId: move.from.groupId });
+          return;
         }
-        out.set(handle, fields);
+        const parent = parents[index];
+        if (typeof parent === 'string') out.set(handle, placeOfParent(parent));
       });
-    };
-    for (const move of changes.order ?? []) take(move.before);
+    }
     return out;
   };
   return {
@@ -699,8 +712,8 @@ function rowsBeforeOf(changes: StoreChange, store: Store): RowsBefore {
         }
       }
       placeOf ??= placesBefore();
-      for (const [field, value] of placeOf.get(handle) ?? []) fields.set(field, value);
-      if (fields.size === 0) return undefined;
+      const placeBefore = placeOf.get(handle);
+      if (fields.size === 0 && !placeBefore) return undefined;
       const place = internals.placeOf(handle);
       if (!place) return undefined;
       let now: StoredFeature;
@@ -709,7 +722,10 @@ function rowsBeforeOf(changes: StoreChange, store: Store): RowsBefore {
       } catch {
         return undefined;
       }
-      return featureWithFields(now, fields) as Feature;
+      const feature = featureWithFields(now, fields) as Feature;
+      return placeBefore
+        ? ({ ...feature, layerId: placeBefore.layerId, groupId: placeBefore.groupId } as Feature)
+        : feature;
     },
   };
 }

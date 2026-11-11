@@ -4,10 +4,10 @@
 /**
  * The order of the rows of a layer
  *
- * Every row has a key of its own order, and a row in a group has a key of its order within the
- * group. The items of a layer are its rows outside a group and its groups; a group is ordered by
- * its own key, and its members follow each other at the place of the group, in the order of
- * their keys within it. The keys are fractional indexes: strings compared by their UTF-8 bytes,
+ * Every row has one key (`key`): the key of its order among the items of its table, or, for a row
+ * in a group, among the members of the group. The items of a table are its rows outside a group
+ * and its groups; a group is ordered by its own key, and its members follow each other at the
+ * place of the group, in the order of their keys. The keys are fractional indexes: strings compared by their UTF-8 bytes,
  * so that a key between any two keys can always be made.
  *
  * The order of two rows is decided by, in turn:
@@ -16,7 +16,7 @@
  *    otherwise
  * 2. the id of their item: the id of the group for a member, the id of the row otherwise (two
  *    items with the same key are ordered by their ids)
- * 3. the key within the group (empty for a row outside a group)
+ * 3. the key of the row within the group (for the members of a group)
  * 4. the id of the row
  *
  * A member does not hold the key of its group: it names the group, and the key is looked up in
@@ -34,10 +34,11 @@ import { KasaneError } from './kasane-error.js';
 export interface RowKeySource {
   /** The id of each row */
   readonly ids: Utf8Column;
-  /** The key of the order of each row */
-  readonly itemKeys: Utf8Column;
-  /** The key of the order of each row within its group (empty outside a group) */
-  readonly memberKeys: Utf8Column;
+  /**
+   * The key of the order of each row: among the members of its group for a row in a group, among
+   * the items otherwise
+   */
+  readonly keys: Utf8Column;
   /** The group of each row, as the groups below name it (-1 outside a group) */
   readonly groups: Int32Array;
 }
@@ -73,9 +74,9 @@ export function compareRowKeys(
   const bGroup = groupEntry(b.groups[j], groups);
 
   // 1. The key of the item
-  const aKeys = aGroup < 0 ? a.itemKeys : (groups as GroupKeySource).keys;
+  const aKeys = aGroup < 0 ? a.keys : (groups as GroupKeySource).keys;
   const aKeyAt = aGroup < 0 ? i : aGroup;
-  const bKeys = bGroup < 0 ? b.itemKeys : (groups as GroupKeySource).keys;
+  const bKeys = bGroup < 0 ? b.keys : (groups as GroupKeySource).keys;
   const bKeyAt = bGroup < 0 ? j : bGroup;
   let order = compareEntries(aKeys, aKeyAt, bKeys, bKeyAt);
   if (order !== 0) return order;
@@ -86,10 +87,10 @@ export function compareRowKeys(
   order = compareEntries(aIds, aGroup < 0 ? i : aGroup, bIds, bGroup < 0 ? j : bGroup);
   if (order !== 0) return order;
 
-  // 3. The key within the group (the same item: both rows are in the same group, or are the
-  //    same row)
+  // 3. The key of the row within the group (the same item: both rows are in the same group, or
+  //    are the same row)
   if (aGroup >= 0 || bGroup >= 0) {
-    order = compareEntries(a.memberKeys, i, b.memberKeys, j);
+    order = compareEntries(a.keys, i, b.keys, j);
     if (order !== 0) return order;
   }
 

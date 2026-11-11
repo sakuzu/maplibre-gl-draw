@@ -500,9 +500,9 @@ function putBigArea(extent: [number, number, number, number]): void {
       handles: Int32Array.of(handle),
       fields: new Map<RowField, unknown[]>([
         ['type', ['Polygon']],
-        ['layerId', [LAYER_ID]],
+        ['parent', [LAYER_ID]],
         ['geometry', [geometry]],
-        ['order', ['a']],
+        ['key', ['a']],
         ['style', [style]],
       ]),
     });

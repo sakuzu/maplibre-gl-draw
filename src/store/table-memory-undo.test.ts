@@ -283,9 +283,9 @@ describe('the rows deleted from elsewhere', () => {
           handles,
           fields: new Map<RowField, unknown[]>([
             ['type', ids.map(() => 'Point')],
-            ['layerId', ids.map(() => 'layer')],
+            ['parent', ids.map(() => 'layer')],
             ['geometry', ids.map((_, i) => ({ type: 'Point', coordinates: [i / 1000, round] }))],
-            ['order', ids.map((_, i) => `V${round}${String(i).padStart(5, '0')}`)],
+            ['key', ids.map((_, i) => `V${round}${String(i).padStart(5, '0')}`)],
           ]),
         }),
       );

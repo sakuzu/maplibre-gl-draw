@@ -134,7 +134,7 @@ describe('the sketches drawn over rows for this client', () => {
     // A row moved in the same layer goes to the delta and to the next version
     writer.apply({
       handles: Int32Array.of(tables.findRow('p1') ?? -1),
-      fields: new Map([['order', ['k000009m']]]),
+      fields: new Map([['key', ['k000009m']]]),
     });
     internals.flushVersions();
     expect(deltaIds(table)).toEqual(['\u0000overlay\u0000\u0000sketches\u0000p3']);

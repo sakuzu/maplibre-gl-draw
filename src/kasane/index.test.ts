@@ -97,7 +97,7 @@ describe('the kasane subpath', () => {
       return undefined;
     };
     const builder = createRowBlockBuilder();
-    const row = { id: 'a', type: 'Point', geometry: null, order: 'a0' };
+    const row = { id: 'a', type: 'Point', geometry: null, key: 'a0' };
     builder.addRow(row);
     expect(codeOf(() => builder.addRow(row))).toBe('invalid-input');
     const { tables, writer } = createFeatureTables();
@@ -140,7 +140,7 @@ describe('the kasane subpath', () => {
       expect((error as DrawError).message).toBe((cause as KasaneError).message);
       return { error: error as DrawError, cause: cause as KasaneError };
     };
-    const row = { id: 'a', type: 'Point', geometry: null, order: 'a0' };
+    const row = { id: 'a', type: 'Point', geometry: null, key: 'a0' };
 
     // The builder: a row added twice, a value it cannot hold, a group the options do not give
     const builder = createRowBlockBuilder();
@@ -193,7 +193,7 @@ describe('the kasane subpath', () => {
         },
       },
     });
-    builder.addRow({ id: 'a', type: 'Point', geometry: point, order: 'a0' });
+    builder.addRow({ id: 'a', type: 'Point', geometry: point, key: 'a0' });
     let error: unknown;
     try {
       builder.finish();
@@ -203,7 +203,7 @@ describe('the kasane subpath', () => {
     expect(error).toBe(own);
 
     const blocks = createRowBlockBuilder();
-    blocks.addRow({ id: 'a', type: 'Point', geometry: point, order: 'a0' });
+    blocks.addRow({ id: 'a', type: 'Point', geometry: point, key: 'a0' });
     const { tables, writer } = createFeatureTables({
       onRelease: () => {
         throw own;

@@ -162,7 +162,7 @@ describe('the rows with companions of a layer held as rows', () => {
 
     // A row put at another place of the order (it comes into the delta), and a row of the delta
     // written in place
-    writer.apply(rowPatch([handleOf('p20000')], { order: [`${orderKey(50_000)}a`] }));
+    writer.apply(rowPatch([handleOf('p20000')], { key: [`${orderKey(50_000)}a`] }));
     asked.rows = 0;
     expect(ids()).toEqual(['p10', 'p30000', 'p20000', 'p60000', 'p99000']);
     expect(asked.rows).toBe(1);
@@ -238,7 +238,7 @@ describe('the rows with companions of a layer held as rows', () => {
           const handle = someRow();
           if (handle !== undefined) {
             if (random() < 0.5) write(rowPatch([handle], {}, [1]));
-            else write(rowPatch([handle], { order: [referenceKey(random() * 1e6)] }));
+            else write(rowPatch([handle], { key: [referenceKey(random() * 1e6)] }));
           }
         } else if (pick < 0.78) {
           // The last writes undone
@@ -252,9 +252,7 @@ describe('the rows with companions of a layer held as rows', () => {
           const group = groupHandleOf(random() < 0.5 ? 'ga' : 'gb');
           writer.applyGroups({
             handles: Int32Array.of(group),
-            fields: new Map<TableGroupField, unknown[]>([
-              ['order', [referenceKey(random() * 1e6)]],
-            ]),
+            fields: new Map<TableGroupField, unknown[]>([['key', [referenceKey(random() * 1e6)]]]),
           });
           if (random() < 0.5) internals.flushVersions();
         } else if (pick < 0.92) {
@@ -271,7 +269,7 @@ describe('the rows with companions of a layer held as rows', () => {
               id: row.id,
               type: row.type,
               geometry: row.geometry,
-              order: referenceKey(base + k),
+              key: referenceKey(base + k),
               style: row.style,
               properties: random() < 0.5 ? { band: 1 } : {},
             });
@@ -289,9 +287,9 @@ describe('the rows with companions of a layer held as rows', () => {
           write(
             rowPatch(handles, {
               type: handles.map(() => 'Point'),
-              layerId: handles.map(() => layerId),
+              parent: handles.map(() => layerId),
               geometry: handles.map((_, k) => ({ type: 'Point', coordinates: [k, k] })),
-              order: handles.map((_, k) => referenceKey(base + k)),
+              key: handles.map((_, k) => referenceKey(base + k)),
               style: handles.map(() => ({})),
               'properties:band': handles.map((_, k) => (k % 9 === 0 ? 1 : undefined)),
             }),
@@ -336,10 +334,8 @@ describe('the rows with companions of a layer held as rows', () => {
     };
     move(
       rowPatch([x], {
-        layerId: ['b'],
-        order: [orderKey(9)],
-        groupId: [undefined],
-        member: [undefined],
+        parent: ['b'],
+        key: [orderKey(9)],
       }),
     );
     expect(ids(a)).toEqual([]);

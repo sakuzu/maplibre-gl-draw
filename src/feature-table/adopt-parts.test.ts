@@ -29,7 +29,7 @@ function rowsOf(random: () => number, n: number): RowInput[] {
       id: `r${i}`,
       type,
       geometry: randomRowGeometry(random, type),
-      order: orderKey(i),
+      key: orderKey(i),
       style: { fillColor: random() < 0.5 ? '#ff0000' : '#00ff00' },
       properties: { name: `row ${i}`, value: Math.floor(random() * 100) },
     };

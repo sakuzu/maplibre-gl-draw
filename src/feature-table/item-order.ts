@@ -90,7 +90,7 @@ export interface ItemOrderSource {
 }
 
 /** The fields of a row that place it, as a row holds them (what `RowsMove.before` keeps) */
-const PLACE_FIELDS: readonly RowField[] = ['layerId', 'groupId', 'order', 'member'];
+const PLACE_FIELDS: readonly RowField[] = ['parent', 'key'];
 
 /**
  * The items of a container the moves are made from, at one time (before or after the write): the
@@ -140,10 +140,14 @@ export class ItemOrderWatch {
     this.layers.add(layerId);
   }
 
-  /** A group of features whose members the write changes (its layer too) */
-  watchGroup(group: GroupHandle): void {
+  /**
+   * A group of features whose members the write changes (its layer too)
+   *
+   * @param layerId The layer its members are read in before the write (the layer of the group when
+   *   omitted): the members of a group given another layer are there until they are written
+   */
+  watchGroup(group: GroupHandle, layerId = this.source.groups.layerOf(group)): void {
     if (group < 0 || this.groupsBefore.has(group)) return;
-    const layerId = this.source.groups.layerOf(group);
     if (layerId === undefined) return;
     this.watchLayer(layerId);
     this.groupsBefore.set(group, layerId);
@@ -179,10 +183,8 @@ export class ItemOrderWatch {
       const data = at.group.data;
       const group = data.groups[at.row];
       this.before.set(handle, [
-        at.layer.layerId,
-        group >= 0 ? this.source.groups.idOf(group) : undefined,
-        utf8String(data.itemKeys, at.row),
-        group >= 0 ? utf8String(data.memberKeys, at.row) : undefined,
+        group >= 0 ? this.source.groups.idOf(group) : at.layer.layerId,
+        utf8String(data.keys, at.row),
       ]);
       if (!many) {
         const id = this.source.idOf(handle);
@@ -261,7 +263,7 @@ export class ItemOrderWatch {
     });
   }
 
-  /** The layers, groups and keys of rows before the write, as `RowsMove.before` holds them */
+  /** The parents and keys of rows before the write, as `RowsMove.before` holds them */
   private placeBefore(handles: Int32Array): RowsMove['before'] {
     const fields = new Map<RowField, unknown[]>(PLACE_FIELDS.map((field) => [field, []]));
     for (const handle of handles) {
@@ -284,7 +286,7 @@ export class ItemOrderWatch {
     if (!walk) return out;
     const disturbed = this.disturbed();
     const add = (code: number | null): void => {
-      if (code !== null && !out.has(code)) out.set(code, this.keyOf(code, container.group >= 0));
+      if (code !== null && !out.has(code)) out.set(code, this.keyOf(code));
     };
     const visit = (code: number): void => {
       if (!walk.span(code, container.group)) return;
@@ -326,14 +328,15 @@ export class ItemOrderWatch {
   }
 
   /** The key an item is ordered by now, in a layer or in a group */
-  private keyOf(code: number, member: boolean): ItemKey {
+  private keyOf(code: number): ItemKey {
     if ((code & 1) === 1) return this.groupKey(code >> 1);
     const handle = code >> 1;
     const at = this.source.placeOf(handle);
     const id = this.source.idOf(handle) ?? '';
     if (!at) return ['', id];
     const data = at.group.data;
-    return [utf8String(member ? data.memberKeys : data.itemKeys, at.row), id];
+    // A row is ordered by its key among the members of its group, or among the items of its layer
+    return [utf8String(data.keys, at.row), id];
   }
 
   /** The key a group of features is ordered by in its layer (the key written) */

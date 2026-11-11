@@ -44,7 +44,7 @@ function storeOf(n: number) {
       id: `r${i}`,
       type: 'Point',
       geometry: { type: 'Point', coordinates: [i % 100, Math.floor(i / 100)] },
-      order: `k${String(i).padStart(6, '0')}`,
+      key: `k${String(i).padStart(6, '0')}`,
     });
   }
   writer.addRowBlocks('rows', builder.finish());
@@ -201,18 +201,15 @@ describe('ItemWalk', () => {
         let deleted: Uint8Array | undefined;
         if (r < 0.35) {
           fields = new Map<RowField, unknown[]>([
-            ['order', Array.from(handles, () => `k${String(Math.floor(random() * 300))}`)],
+            ['key', Array.from(handles, () => `k${String(Math.floor(random() * 300))}`)],
           ]);
         } else if (r < 0.65) {
           fields = new Map<RowField, unknown[]>([
-            ['groupId', Array.from(handles, () => `g${Math.floor(random() * 3)}`)],
-            ['member', Array.from(handles, () => String.fromCharCode(65 + random() * 50))],
+            ['parent', Array.from(handles, () => `g${Math.floor(random() * 3)}`)],
+            ['key', Array.from(handles, () => String.fromCharCode(65 + random() * 50))],
           ]);
         } else if (r < 0.75) {
-          fields = new Map<RowField, unknown[]>([
-            ['groupId', Array.from(handles, () => '')],
-            ['member', Array.from(handles, () => undefined)],
-          ]);
+          fields = new Map<RowField, unknown[]>([['parent', Array.from(handles, () => 'rows')]]);
         } else if (r < 0.85) {
           fields = new Map();
           deleted = new Uint8Array(handles.length).fill(1);
@@ -226,9 +223,9 @@ describe('ItemWalk', () => {
                 handles: created,
                 fields: new Map<RowField, unknown[]>([
                   ['type', fresh.map(() => 'Point')],
-                  ['layerId', fresh.map(() => 'rows')],
+                  ['parent', fresh.map(() => 'rows')],
                   ['geometry', fresh.map(() => ({ type: 'Point', coordinates: [0, 0] }))],
-                  ['order', fresh.map(() => `k${String(Math.floor(random() * 300))}z`)],
+                  ['key', fresh.map(() => `k${String(Math.floor(random() * 300))}z`)],
                 ]),
               },
               {},
@@ -293,7 +290,7 @@ describe('an edit of a few items of a layer held as rows', () => {
       () =>
         writer.applyGroups({
           handles: Int32Array.of(handle),
-          fields: new Map([['order', ['0']]]),
+          fields: new Map([['key', ['0']]]),
         }),
       'remote',
     );

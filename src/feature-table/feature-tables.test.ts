@@ -48,7 +48,7 @@ function groups(
       id: `${options.prefix ?? 'r'}${n}`,
       type: 'Point',
       geometry: point(n, n),
-      order: `k${String(n).padStart(3, '0')}`,
+      key: `k${String(n).padStart(3, '0')}`,
       properties: { n, name: `name ${n}` },
       style: { pointColor: n % 2 === 0 ? '#ff0000' : '#0000ff' },
       ...options.extra,
@@ -208,7 +208,7 @@ describe('createFeatureTables', () => {
     writer.addRowBlocks('layer', groups(3));
     // u100 and u101 with their keys swapped: u101 comes first
     const [built] = groups(2, { keyOffset: 100, prefix: 'u' });
-    const swapped = { ...built, itemKeys: utf8ColumnFromStrings(['k101', 'k100']) };
+    const swapped = { ...built, keys: utf8ColumnFromStrings(['k101', 'k100']) };
     expect(() => writer.addRowBlocks('layer', [swapped])).not.toThrow();
     const internals = featureTablesInternals(tables) as FeatureTablesInternals;
     const u100 = tables.findRow('u100') as number;
@@ -250,16 +250,16 @@ describe('createFeatureTables', () => {
   it('hides the rows that are not shown or are deleted, and not their handles', () => {
     const { tables, writer } = createFeatureTablesStore();
     const builder = createRowBlockDataBuilder({ columns: FEATURE_TABLE_COLUMNS });
-    builder.addRow({ id: 'shown', type: 'Point', geometry: point(0, 0), order: 'a' });
+    builder.addRow({ id: 'shown', type: 'Point', geometry: point(0, 0), key: 'a' });
     builder.addRow({
       id: 'hidden',
       type: 'Point',
       geometry: point(0, 0),
-      order: 'b',
+      key: 'b',
       hidden: true,
     });
-    builder.addRow({ id: 'gone', type: 'Point', geometry: point(0, 0), order: 'c', deleted: true });
-    builder.addRow({ id: 'circle', type: 'Circle', geometry: point(0, 0), order: 'd' });
+    builder.addRow({ id: 'gone', type: 'Point', geometry: point(0, 0), key: 'c', deleted: true });
+    builder.addRow({ id: 'circle', type: 'Circle', geometry: point(0, 0), key: 'd' });
     writer.addRowBlocks('layer', builder.finish());
     const internals = featureTablesInternals(tables);
     const group = internals?.layerTable('layer')?.groupAt(0);
@@ -335,8 +335,7 @@ describe('LayerTable', () => {
 
     const key = (order: string, id: string) => ({
       ids: utf8ColumnFromStrings([id]),
-      itemKeys: utf8ColumnFromStrings([order]),
-      memberKeys: utf8ColumnFromStrings(['']),
+      keys: utf8ColumnFromStrings([order]),
       groups: Int32Array.of(-1),
     });
     // The key of an existing row is that row

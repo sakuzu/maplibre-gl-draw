@@ -20,8 +20,10 @@ interface Row {
 function source(rows: readonly Row[]): RowKeySource {
   return {
     ids: utf8ColumnFromStrings(rows.map((row) => row.id)),
-    itemKeys: utf8ColumnFromStrings(rows.map((row) => row.key)),
-    memberKeys: utf8ColumnFromStrings(rows.map((row) => row.member ?? '')),
+    // A member is ordered by its key among the members of its group
+    keys: utf8ColumnFromStrings(
+      rows.map((row) => ((row.group ?? -1) >= 0 ? (row.member ?? '') : row.key)),
+    ),
     groups: Int32Array.from(rows.map((row) => row.group ?? -1)),
   };
 }

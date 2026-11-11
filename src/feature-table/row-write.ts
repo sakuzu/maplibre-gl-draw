@@ -16,9 +16,9 @@
  * the boxes of the rows of its layer to read the row again.
  */
 
-import { type CoordinateSystem, readValue } from '@sakuzu/tabane';
+import { type CoordinateSystem, type PropertyColumns, readValue } from '@sakuzu/tabane';
 import type { Geometry } from 'geojson';
-import { propertyColumnsOf } from '../table/feature-row-columns.js';
+import { PROPERTIES_COLUMN } from '../table/feature-row-columns.js';
 import type { RowCache } from '../table/row-caches.js';
 import { type RowGeometry, singleRowColumn, toRowGeometry } from '../table/row-geometry.js';
 import type { RowRead } from '../table/row-read-type.js';
@@ -77,7 +77,7 @@ export function writeRowValue(group: RowGroup, row: number, key: string, value: 
   const held = encodeOverrideValue(
     column === undefined
       ? undefined
-      : readValue(propertyColumnsOf(group.data).columns[column], row),
+      : readValue((group.data.keyed[PROPERTIES_COLUMN] as PropertyColumns).columns[column], row),
   );
   const before: OverrideValue = group.values?.get(row, key) ?? held;
   if (sameOverrideValue(next, held)) {

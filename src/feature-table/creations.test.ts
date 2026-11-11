@@ -81,9 +81,9 @@ function create(
   const change = setup.writer.apply(
     rowPatch(Array.from(handles), {
       type: rows.map(() => 'Point'),
-      layerId: rows.map(() => 'a'),
+      parent: rows.map(() => 'a'),
       geometry: rows.map((_, i) => ({ type: 'Point', coordinates: [i, 1] })),
-      order: rows.map((row) => row.order),
+      key: rows.map((row) => row.order),
       'properties:n': rows.map((_, i) => i),
     }),
   );

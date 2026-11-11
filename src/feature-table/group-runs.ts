@@ -168,7 +168,7 @@ export function rowGroupsHolding(
 
 /** A key before every member of a group of features and after every item before the group */
 function groupStart(group: GroupHandle): RowKeySource {
-  return { ids: EMPTY, itemKeys: EMPTY, memberKeys: EMPTY, groups: Int32Array.of(group) };
+  return { ids: EMPTY, keys: EMPTY, groups: Int32Array.of(group) };
 }
 
 /** A key after every member of a group of features and before every item after the group */
@@ -176,8 +176,7 @@ function groupEnd(group: GroupHandle, groups: GroupKeySource & GroupTable): RowK
   // The id of the group followed by the smallest character: no item id comes between them
   return {
     ids: utf8ColumnFromStrings([`${groups.idOf(group) ?? ''}\u0000`]),
-    itemKeys: utf8ColumnFromStrings([groups.orderOf(group) ?? '']),
-    memberKeys: EMPTY,
+    keys: utf8ColumnFromStrings([groups.orderOf(group) ?? '']),
     groups: Int32Array.of(-1),
   };
 }

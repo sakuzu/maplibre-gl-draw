@@ -103,14 +103,14 @@ describe('the items of a layer', () => {
     });
     const builder = createRowBlockDataBuilder({
       columns: FEATURE_TABLE_COLUMNS,
-      groups: [{ handle: 7, id: 'g', order: 'k000003' }],
+      groups: [{ handle: 7, id: 'g', key: 'k000003' }],
       targetRows: 2,
     });
     for (let i = 0; i < 6; i++) {
       const row = rowOfFeature(feature(`f${i}`, 'Point', [i, i]), orderKey(i));
       // f1, f2 and f4 are the members of the group (at the place of its key, k000003)
       const member = i === 1 || i === 2 || i === 4;
-      builder.addRow(member ? { ...row, group: 7, member: orderKey(i) } : row);
+      builder.addRow(member ? { ...row, group: 7 } : row);
     }
     writer.addRowBlocks('layer', builder.finish());
     internals?.addQueuedRowBlocks();
@@ -206,9 +206,9 @@ describe('writer.apply', () => {
     // A new row without what it needs
     const [fresh] = writer.allocateHandles(utf8ColumnFromStrings(['new']));
     expect(() => writer.apply(patchOf([fresh], 'properties:name', ['x']))).toThrow(
-      /a new row needs type, layerId, geometry, order/,
+      /a new row needs type, parent, geometry, key/,
     );
-    expect(() => writer.apply(patchOf([handle], 'groupId', ['nobody']))).toThrow(/unknown/);
+    expect(() => writer.apply(patchOf([handle], 'parent', ['']))).toThrow(/is not an id/);
     expect(internals.deltaRowCount()).toBe(0);
     const created = `properties:${drawPropertyKey('createdZoom')}` as RowField;
     expect(internals.placeOf(handle)?.group.delta).toBe(false);
@@ -337,7 +337,7 @@ describe('writer.apply', () => {
       handles: Int32Array.of(a),
       fields: new Map<RowField, unknown[]>([
         ['style', [red]],
-        ['order', [orderKey(5)]],
+        ['key', [orderKey(5)]],
       ]),
     });
     expect(internals.placeOf(a)?.group.delta).toBe(true);

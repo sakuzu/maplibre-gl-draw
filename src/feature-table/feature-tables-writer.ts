@@ -19,6 +19,7 @@
 
 import { utf8String } from '@sakuzu/tabane';
 import type { FeatureTablesWriter, RowApplyOptions } from '../api/tables.js';
+import { DrawError } from '../shared/draw-error.js';
 import { asFeatureValues } from '../shared/feature-values.js';
 import type {
   ItemOrderChange,
@@ -98,11 +99,9 @@ export function createFeatureTablesWriter(
   const watchOrder = (patch: RowValues): ItemOrderWatch | null => {
     if (!notify) return null;
     const { handles, fields, deleted } = patch;
-    const layerIds = fields.get('layerId');
-    const groupIds = fields.get('groupId');
-    const orders = fields.get('order');
-    const members = fields.get('member');
-    const placeFields = !!(layerIds || groupIds || orders || members);
+    const parents = fields.get('parent');
+    const keys = fields.get('key');
+    const placeFields = !!(parents || keys);
     // Rows only deleted and created again, more than are told one at a time: they are told by
     // the change of the rows alone (`ItemOrderWatch`), so nothing is kept for them (the deletion
     // of a layer of 100,000 rows, and its undo)
@@ -119,16 +118,22 @@ export function createFeatureTablesWriter(
     const groups = internals.groups;
     const groupOf = (value: unknown): GroupHandle =>
       typeof value === 'string' && value !== '' ? groups.handleOfId(value) : -1;
+    // The layer of a parent: the layer of a group, or the parent itself (a layer)
+    const layerOf = (value: unknown): string | undefined => {
+      if (typeof value !== 'string' || value === '') return undefined;
+      const group = groups.handleOfId(value);
+      return group >= 0 ? groups.layerOf(group) : value;
+    };
     for (let i = 0; i < handles.length; i++) {
       const handle = handles[i];
       const place = internals.placeOf(handle);
       const deleting = !!deleted?.[i];
       if (!place || (place.group.data.flags[place.row] & ROW_FLAG_DELETED) !== 0) {
         // A new row, or a deleted one created again
-        const layerId = (layerIds?.[i] as string | undefined) ?? place?.layer.layerId;
+        const layerId = layerOf(parents?.[i]) ?? place?.layer.layerId;
         if (deleting || layerId === undefined) continue;
         watch.watchLayer(layerId);
-        watch.watchGroup(groupOf(groupIds?.[i]));
+        watch.watchGroup(groupOf(parents?.[i]));
         watch.row(handle, false);
         continue;
       }
@@ -137,28 +142,54 @@ export function createFeatureTablesWriter(
       const group = data.groups[row];
       if (deleting) {
         watch.watchLayer(place.layer.layerId);
-        watch.watchGroup(group);
+        watch.watchGroup(group, place.layer.layerId);
         watch.row(handle, true);
         continue;
       }
       // A row there that no field of its place is written for keeps its place
       if (!placeFields) continue;
-      const layerId = layerIds?.[i] as string | undefined;
-      const nextGroup = groupIds ? groupOf(groupIds[i]) : group;
-      const order = orders?.[i];
+      const parent = parents?.[i];
+      const layerId = layerOf(parent);
+      const nextGroup = parent !== undefined ? groupOf(parent) : group;
+      const key = keys?.[i];
       const moved =
         (layerId !== undefined && layerId !== place.layer.layerId) ||
         nextGroup !== group ||
-        (order !== undefined && order !== utf8String(data.itemKeys, row)) ||
-        (members !== undefined &&
-          nextGroup >= 0 &&
-          (members[i] ?? '') !== utf8String(data.memberKeys, row));
+        (key !== undefined && key !== utf8String(data.keys, row));
       if (!moved) continue;
       watch.watchLayer(place.layer.layerId);
       if (layerId !== undefined) watch.watchLayer(layerId);
-      watch.watchGroup(group);
+      // The members of a group given another layer are read where they are until written there
+      watch.watchGroup(group, place.layer.layerId);
       watch.watchGroup(nextGroup);
       watch.row(handle, false);
+    }
+    if (!watch.changes) return null;
+    watch.keep();
+    return watch;
+  };
+
+  /**
+   * The items of the layers a write of groups takes groups with members to another layer from and
+   * to, kept before it: the groups move there with their members (null when it moves none)
+   */
+  const watchFollowers = (patch: TableGroupPatch): ItemOrderWatch | null => {
+    const parents = patch.fields.get('parent');
+    if (!parents) return null;
+    const groups = internals.groups;
+    const watch = new ItemOrderWatch(orderSource);
+    for (let i = 0; i < patch.handles.length; i++) {
+      const parent = parents[i];
+      const group = patch.handles[i];
+      const before = groups.layerOf(group);
+      if (patch.deleted?.[i] || typeof parent !== 'string' || before === undefined) continue;
+      if (parent === before) continue;
+      const members = internals.membersIn(before, group);
+      if (members.length === 0) continue;
+      watch.watchLayer(before);
+      watch.watchLayer(parent);
+      watch.watchGroup(group, before);
+      for (const member of members) watch.row(member, false);
     }
     if (!watch.changes) return null;
     watch.keep();
@@ -174,9 +205,9 @@ export function createFeatureTablesWriter(
    */
   const groupMovesOf = (patch: TableGroupPatch): ItemOrderChange[] => {
     const { handles, fields, deleted } = patch;
-    const orderValues = fields.get('order');
+    const orderValues = fields.get('key');
     if (!orderValues) return [];
-    const layerValues = fields.get('layerId');
+    const layerValues = fields.get('parent');
     const groups = internals.groups;
     // The groups the write creates, and the layers of the groups it gives another, as it goes
     const created = new Set<GroupHandle>();
@@ -301,9 +332,12 @@ export function createFeatureTablesWriter(
     },
     applyGroups: (patch, options: RowApplyOptions = {}) => {
       try {
+        const followers = notify ? watchFollowers(patch) : null;
         const moves = notify ? groupMovesOf(patch) : [];
-        const { kept } = tables.applyGroups(patch, options);
-        if (moves.length > 0) notify?.({ order: moves });
+        const { rows, kept } = tables.applyGroups(withoutNames(patch), options);
+        const order = [...(followers?.finish() ?? []), ...moves];
+        if (rows.layers.size > 0) notify?.({ rows, ...(order.length > 0 && { order }) });
+        else if (order.length > 0) notify?.({ order });
         if (kept) notify?.({ restoreToken: options.restoreToken });
       } catch (error) {
         throw writerError(error);
@@ -335,4 +369,26 @@ export function createFeatureTablesWriter(
       };
     },
   };
+}
+
+/**
+ * The values of groups as the tables take them: the names of the groups are kept by the Store
+ * (`TableGroupField`), so they are checked and taken out
+ *
+ * @throws `DrawError` with the code `invalid-input` when a name is not a string
+ */
+function withoutNames(patch: TableGroupPatch): TableGroupPatch {
+  const names = patch.fields.get('name');
+  if (!names) return patch;
+  names.forEach((name, i) => {
+    if (name !== undefined && typeof name !== 'string' && !patch.deleted?.[i]) {
+      throw new DrawError(
+        'invalid-input',
+        `FeatureTables: the name of the group ${patch.handles[i]} is not a string`,
+      );
+    }
+  });
+  const fields = new Map(patch.fields);
+  fields.delete('name');
+  return { ...patch, fields };
 }
