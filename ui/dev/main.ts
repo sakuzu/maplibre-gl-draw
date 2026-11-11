@@ -44,7 +44,7 @@ await draw.write(async (tx) => {
     properties: { name, kind, 'maplibre-gl-draw:layerId': places.id },
   });
   const created = await tx.features.create(PLACES.map((place) => point(...place)));
-  await tx.groups.create({ name: 'Parks', featureIds: [created[0], created[1]] });
+  await tx.groups.create({ name: 'Parks', members: [created[0], created[1]] });
 });
 
 const ui = createDrawUI(draw, { locale: params.get('locale') === 'ja' ? 'ja' : 'en' });

@@ -73,7 +73,7 @@ beforeEach(() => {
 
 describe('create and reading', () => {
   it('makes a group in the place of its frontmost member, members in stacking order', () => {
-    const group = groups.create({ id: 'g', featureIds: ['c', 'a'], name: 'G' });
+    const group = groups.create({ id: 'g', members: ['c', 'a'], name: 'G' });
     expect(group).toEqual({
       id: 'g',
       layerId: 'l1',
@@ -89,8 +89,8 @@ describe('create and reading', () => {
 
   it('gets, lists, filters and counts', () => {
     groups.createMany([
-      { id: 'g1', featureIds: ['a'] },
-      { id: 'g2', featureIds: ['e'], locked: true },
+      { id: 'g1', members: ['a'] },
+      { id: 'g2', members: ['e'], locked: true },
     ]);
     expect(groups.get('g2')?.layerId).toBe('l2');
     expect(groups.getMany(['g2', 'x']).map((g) => g?.id)).toEqual(['g2', undefined]);
@@ -101,17 +101,17 @@ describe('create and reading', () => {
   });
 
   it('throws the codes of the contract, creating nothing', () => {
-    groups.create({ id: 'g', featureIds: ['a'] });
-    expect(codeOf(() => groups.create({ featureIds: ['x'] }))).toBe('not-found');
-    expect(codeOf(() => groups.create({ featureIds: ['b', 'e'] }))).toBe('invalid-input');
-    expect(codeOf(() => groups.create({ featureIds: [] }))).toBe('invalid-input');
-    expect(codeOf(() => groups.create({ id: 'g', featureIds: ['b'] }))).toBe('already-exists');
-    expect(codeOf(() => groups.create({ id: 'a', featureIds: ['b'] }))).toBe('already-exists');
+    groups.create({ id: 'g', members: ['a'] });
+    expect(codeOf(() => groups.create({ members: ['x'] }))).toBe('not-found');
+    expect(codeOf(() => groups.create({ members: ['b', 'e'] }))).toBe('invalid-input');
+    expect(codeOf(() => groups.create({ members: [] }))).toBe('invalid-input');
+    expect(codeOf(() => groups.create({ id: 'g', members: ['b'] }))).toBe('already-exists');
+    expect(codeOf(() => groups.create({ id: 'a', members: ['b'] }))).toBe('already-exists');
     expect(
       codeOf(() =>
         groups.createMany([
-          { id: 'h', featureIds: ['b'] },
-          { id: 'i', featureIds: ['b'] },
+          { id: 'h', members: ['b'] },
+          { id: 'i', members: ['b'] },
         ]),
       ),
     ).toBe('invalid-input');
@@ -120,13 +120,13 @@ describe('create and reading', () => {
 
   it('creates several in one notification, and none while read-only', () => {
     groups.createMany([
-      { id: 'g1', featureIds: ['a'] },
-      { id: 'g2', featureIds: ['b'] },
+      { id: 'g1', members: ['a'] },
+      { id: 'g2', members: ['b'] },
     ]);
     expect(notifications).toHaveLength(1);
     store.setReadOnly(true);
-    expect(groups.create({ featureIds: ['c'] })).toBeNull();
-    expect(groups.createMany([{ featureIds: ['c'] }])).toBeNull();
+    expect(groups.create({ members: ['c'] })).toBeNull();
+    expect(groups.createMany([{ members: ['c'] }])).toBeNull();
     expect(groups.count()).toBe(2);
   });
 });
@@ -134,8 +134,8 @@ describe('create and reading', () => {
 describe('update', () => {
   beforeEach(() => {
     groups.createMany([
-      { id: 'g', featureIds: ['a'] },
-      { id: 'h', featureIds: ['b'], locked: true },
+      { id: 'g', members: ['a'] },
+      { id: 'h', members: ['b'], locked: true },
     ]);
     notifications.length = 0;
   });
@@ -180,9 +180,9 @@ describe('update', () => {
 describe('delete and deleteMany', () => {
   beforeEach(() => {
     groups.createMany([
-      { id: 'g', featureIds: ['a', 'b'] },
-      { id: 'h', featureIds: ['c'] },
-      { id: 'k', featureIds: ['d'], locked: true },
+      { id: 'g', members: ['a', 'b'] },
+      { id: 'h', members: ['c'] },
+      { id: 'k', members: ['d'], locked: true },
     ]);
     notifications.length = 0;
   });
@@ -213,8 +213,8 @@ describe('delete and deleteMany', () => {
 describe('move and moveMany', () => {
   beforeEach(() => {
     groups.createMany([
-      { id: 'g', featureIds: ['a'] },
-      { id: 'h', featureIds: ['c'] },
+      { id: 'g', members: ['a'] },
+      { id: 'h', members: ['c'] },
     ]);
     notifications.length = 0;
   });

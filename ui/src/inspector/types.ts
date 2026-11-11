@@ -136,7 +136,10 @@ export interface InspectorSettings {
 /** The members of a draw instance that the inspector uses */
 export type InspectorDraw = Pick<Draw, 'on' | 'off' | 'write' | 'isReadOnly'> & {
   readonly features: Pick<Draw['features'], 'get' | 'getMany' | 'getAppliedStyle' | 'isEditable'>;
-  readonly selection: Pick<Draw['selection'], 'value' | 'subscribe' | 'set' | 'clear' | 'target'>;
+  readonly selection: Pick<
+    Draw['selection'],
+    'value' | 'subscribe' | 'set' | 'clear' | 'target' | 'scan'
+  >;
   readonly hidden: Pick<Draw['hidden'], 'hiddenIds' | 'has' | 'add' | 'remove'>;
   readonly layers: Pick<Draw['layers'], 'get' | 'count'>;
   readonly groups: Pick<Draw['groups'], 'get'>;

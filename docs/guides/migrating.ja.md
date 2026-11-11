@@ -896,7 +896,7 @@ await draw.write(
 - 選択の書き込みは無くなりました。`draw.selection.target` を `tx` に
   渡し (`selection.delete()` は
   `tx.features.delete(draw.selection.target)`)、グループは
-  `tx.groups.create({ featureIds })` で作り、`tx.groups.delete` で解きます
+  `tx.groups.create({ members })` で作り、`tx.groups.delete` で解きます
 - `buffer(ids, { distanceMeters, segments })` は、1 件ずつの
   `tx.features.buffer(id, distanceMeters)` です
 - `transact(fn, { source })` は `draw.write(fn, { label })` です。

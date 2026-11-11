@@ -154,13 +154,18 @@ declare const idB: string;
 
 ```ts
 const site = await draw.write((tx) =>
-  tx.groups.create({ featureIds: [idA, idB], name: 'Site' }),
+  tx.groups.create({ members: [idA, idB], name: 'Site' }),
 );
 
-// Or from the current selection, as Cmd/Ctrl+G does
-const { type, ids } = draw.selection.value;
-if (type === 'feature' && ids !== null && ids.length > 1) {
-  await draw.write((tx) => tx.groups.create({ featureIds: ids }));
+// Or from the current selection, as Cmd/Ctrl+G does. `scan` reads it
+// without stopping the page, past 2,000 features selected in a Store of
+// rows too (where `value.ids` is null)
+if (draw.selection.value.type === 'feature') {
+  const members: string[] = [];
+  await draw.selection.scan((row) => members.push(row.id));
+  if (members.length > 1) {
+    await draw.write((tx) => tx.groups.create({ members }));
+  }
 }
 ```
 

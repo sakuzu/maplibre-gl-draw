@@ -276,6 +276,7 @@ export function createDrawOnEngine(
       'clear',
       'features',
       'count',
+      'scan',
     ]),
     vertexSelection: createVertexSelection(deps, events),
     drawing: createDrawingResource(engine),

@@ -296,7 +296,7 @@ export interface ImportOptions {
   /** The layer to put the features in: its ID, or a new layer made in the same commit */
   readonly layer?: string | LayerInput;
   /** A new group, made in the same commit, to put the features in */
-  readonly group?: Omit<GroupInput, 'featureIds'>;
+  readonly group?: Omit<GroupInput, 'members'>;
   /** What an ID the document already holds becomes: a new ID. Nothing is written over */
   readonly duplicateIds?: 'renew';
 }

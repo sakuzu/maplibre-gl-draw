@@ -84,9 +84,9 @@ describe('selection.ungroup', () => {
   const build = (): { groups: Group[]; features: Feature[] } => {
     const features = [0, 1, 2, 3, 4].map((i) => point(i / 10, 0, `f${i}`));
     const ids = features.map((feature) => (feature as Feature).id);
-    const first = writesOf(draw).groups.create({ featureIds: [ids[0], ids[1]], id: 'g1' }) as Group;
+    const first = writesOf(draw).groups.create({ members: [ids[0], ids[1]], id: 'g1' }) as Group;
     const second = writesOf(draw).groups.create({
-      featureIds: [ids[2], ids[3], ids[4]],
+      members: [ids[2], ids[3], ids[4]],
       id: 'g2',
     }) as Group;
     return { groups: [first, second], features: features as Feature[] };

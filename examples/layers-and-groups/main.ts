@@ -54,7 +54,7 @@ const [a, b, c, draft] = await draw.write((tx) =>
 // 3. A group of two parcels; `place` puts a third one into it, in front.
 // The group is then locked: its features can be selected, not edited
 await draw.write(async (tx) => {
-  const group = await tx.groups.create({ featureIds: [a, b], name: 'Block A' });
+  const group = await tx.groups.create({ members: [a, b], name: 'Block A' });
   await tx.features.place(c, { groupId: group.id });
   await tx.groups.update(group.id, { locked: true });
 });

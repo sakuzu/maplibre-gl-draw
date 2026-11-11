@@ -147,7 +147,7 @@ describe('a transaction of the Store, as the internal writes make it', () => {
     const inLayer = writesOf(draw).features.create(point(2));
     const gone = writesOf(draw).features.create({ ...point(3), locked: true });
     if (!locked || !inGroup || !inLayer || !gone || !other) throw new Error('not created');
-    const group = writesOf(draw).groups.create({ featureIds: [inGroup.id], locked: true });
+    const group = writesOf(draw).groups.create({ members: [inGroup.id], locked: true });
     if (!group) throw new Error('not created');
     writesOf(draw).layers.update(other.id, { locked: true });
     writesOf(draw).features.move(inLayer.id, { layerId: other.id });

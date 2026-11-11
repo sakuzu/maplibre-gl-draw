@@ -49,7 +49,7 @@ function instance(): Instance {
     point('a1', 'a', 1),
     point('b0', 'b', 2),
   ]);
-  writesOf(draw).groups.create({ id: 'g', featureIds: ['a1'] });
+  writesOf(draw).groups.create({ id: 'g', members: ['a1'] });
   writesOf(draw).features.create(point('a2', 'a', 3));
   return { draw, store, writer };
 }

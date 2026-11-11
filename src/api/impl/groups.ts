@@ -41,7 +41,7 @@ import {
   requireRecord,
 } from './shared.js';
 
-const INPUT_KEYS = ['featureIds', 'layerId', 'id', 'name', 'visible', 'locked'] as const;
+const INPUT_KEYS = ['members', 'layerId', 'id', 'name', 'visible', 'locked'] as const;
 const PATCH_KEYS = ['name', 'visible', 'locked'] as const;
 const FILTER_KEYS = ['layerId', 'visible', 'locked'] as const;
 
@@ -225,7 +225,7 @@ export type GroupShell = Omit<ObjectGroup, 'layerId' | 'featureIds'>;
  */
 export function prepareGroupShell(
   deps: Pick<ResourceDeps, 'store' | 'generateId' | 'autoNameGenerator'>,
-  input: Omit<GroupInput, 'featureIds'>,
+  input: Omit<GroupInput, 'members'>,
   keys: readonly string[],
   pending: ReadonlySet<string>,
 ): GroupShell {
@@ -255,7 +255,7 @@ export function prepareGroup(
 ): ObjectGroup {
   const { store } = deps;
   requireRecord(input, 'The input');
-  const ids = requireIds(input.featureIds, 'featureIds');
+  const ids = requireIds(input.members, 'members');
   optionalString(input as unknown as Record<string, unknown>, 'layerId');
   if (ids.length === 0) throw invalidInput('A group needs at least one feature');
   const members = ids.map((featureId) => {

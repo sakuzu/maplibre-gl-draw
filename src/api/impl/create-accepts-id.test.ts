@@ -89,11 +89,11 @@ describe('creating with an id the Store does not take', () => {
   it('refuses a group and a layer with invalid-input, and writes nothing', () => {
     const feature = writesOf(draw).features.create(point());
     const group = errorOf(() =>
-      writesOf(draw).groups.create({ id: 'group-1', featureIds: [feature?.id as string] }),
+      writesOf(draw).groups.create({ id: 'group-1', members: [feature?.id as string] }),
     );
     expect(group.code).toBe('invalid-input');
     const groups = errorOf(() =>
-      writesOf(draw).groups.createMany([{ id: 'group-1', featureIds: [feature?.id as string] }]),
+      writesOf(draw).groups.createMany([{ id: 'group-1', members: [feature?.id as string] }]),
     );
     expect(groups.code).toBe('invalid-input');
     expect(draw.groups.list()).toEqual([]);
@@ -149,7 +149,7 @@ describe('creating with an id the Store takes, or with none', () => {
     const made = writesOf(draw).features.create(point());
     expect(own?.id).toBe('w-own');
     expect(made?.id.startsWith('w-')).toBe(true);
-    const group = writesOf(draw).groups.create({ featureIds: [own?.id as string] });
+    const group = writesOf(draw).groups.create({ members: [own?.id as string] });
     expect(group?.id.startsWith('w-')).toBe(true);
     expect(writesOf(draw).layers.create({ id: 'w-second' })?.id).toBe('w-second');
   });

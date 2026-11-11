@@ -51,7 +51,7 @@ function setup(kind: 'objects' | 'rows'): Draw {
       layerId: 'l',
     });
   }
-  writesOf(instance).groups.create({ id: 'g', featureIds: ['p2', 'p3'] });
+  writesOf(instance).groups.create({ id: 'g', members: ['p2', 'p3'] });
   return instance;
 }
 

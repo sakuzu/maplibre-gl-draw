@@ -90,22 +90,22 @@ function itemsOf(tables: FeatureTables): string[] {
 describe('groups.create in a layer held as rows', () => {
   it('keeps the place of a group created again with features, which join it', () => {
     const { draw, tables, notified } = setup();
-    writesOf(draw).groups.create({ id: 'g', featureIds: ['p1'] });
+    writesOf(draw).groups.create({ id: 'g', members: ['p1'] });
     writesOf(draw).features.delete('p1');
     expect(notified[notified.length - 1].groups?.deleted?.map((group) => group.id)).toEqual(['g']);
-    writesOf(draw).groups.create({ id: 'g', featureIds: ['p4'] });
+    writesOf(draw).groups.create({ id: 'g', members: ['p4'] });
     expect(itemsOf(tables)).toEqual(['p0', 'g[p4]', 'p2', 'p3']);
   });
 
   it('refuses a group without features, as in a layer of objects, and a layer other than its features', () => {
     const { draw } = setup();
-    expect(() => writesOf(draw).groups.create({ featureIds: [] })).toThrow(
+    expect(() => writesOf(draw).groups.create({ members: [] })).toThrow(
       expect.objectContaining({ code: 'invalid-input' }),
     );
-    expect(() => writesOf(draw).groups.create({ featureIds: [], layerId: 'rows' })).toThrow(
+    expect(() => writesOf(draw).groups.create({ members: [], layerId: 'rows' })).toThrow(
       expect.objectContaining({ code: 'invalid-input' }),
     );
-    expect(() => writesOf(draw).groups.create({ featureIds: ['p1'], layerId: 'other' })).toThrow(
+    expect(() => writesOf(draw).groups.create({ members: ['p1'], layerId: 'other' })).toThrow(
       expect.objectContaining({ code: 'invalid-input' }),
     );
     expect(draw.groups.list()).toEqual([]);
@@ -114,7 +114,7 @@ describe('groups.create in a layer held as rows', () => {
   it('refuses a group without features in a layer of objects', () => {
     const objects = drawOn();
     const layer = writesOf(objects).layers.create({ name: 'objects' });
-    expect(() => writesOf(objects).groups.create({ featureIds: [], layerId: layer?.id })).toThrow(
+    expect(() => writesOf(objects).groups.create({ members: [], layerId: layer?.id })).toThrow(
       expect.objectContaining({ code: 'invalid-input' }),
     );
   });
@@ -123,7 +123,7 @@ describe('groups.create in a layer held as rows', () => {
 describe('groups.restore of the internal writes', () => {
   it('brings back a group deleted whose rows are kept, at the place it had', () => {
     const { draw, tables, notified } = setup();
-    writesOf(draw).groups.create({ id: 'g', featureIds: ['p1', 'p2'], name: 'G' });
+    writesOf(draw).groups.create({ id: 'g', members: ['p1', 'p2'], name: 'G' });
     const start = itemsOf(tables);
     expect(start).toEqual(['p0', 'g[p1,p2]', 'p3', 'p4']);
     // Its features deleted: the group goes with them, its rows kept by the deletion
@@ -147,7 +147,7 @@ describe('groups.restore of the internal writes', () => {
 
   it('brings back a group whose features left it (an ungrouping), kept by the token of its deletion', () => {
     const { draw, tables, notified } = setup();
-    writesOf(draw).groups.create({ id: 'g', featureIds: ['p1', 'p2'], name: 'G' });
+    writesOf(draw).groups.create({ id: 'g', members: ['p1', 'p2'], name: 'G' });
     writesOf(draw).groups.delete('g');
     const deletion = notified[notified.length - 1];
     expect(deletion.groups?.deleted?.map((group) => group.id)).toEqual(['g']);
@@ -163,7 +163,7 @@ describe('groups.restore of the internal writes', () => {
 
   it('brings back a group its last feature left for another place', () => {
     const { draw, tables, notified } = setup();
-    writesOf(draw).groups.create({ id: 'g', featureIds: ['p2'] });
+    writesOf(draw).groups.create({ id: 'g', members: ['p2'] });
     writesOf(draw).features.move('p2', { layerId: 'rows', above: null });
     expect(notified[notified.length - 1].groups?.deleted?.map((group) => group.id)).toEqual(['g']);
     expect(notified[notified.length - 1].restoreToken).toBeDefined();
@@ -176,7 +176,7 @@ describe('groups.restore of the internal writes', () => {
 
   it('lets go of a group kept once the token of its deletion is let go of', () => {
     const { draw, notified } = setup();
-    writesOf(draw).groups.create({ id: 'g', featureIds: ['p1'] });
+    writesOf(draw).groups.create({ id: 'g', members: ['p1'] });
     writesOf(draw).groups.delete('g');
     const token = notified[notified.length - 1].restoreToken;
     expect(token).toBeDefined();
@@ -191,7 +191,7 @@ describe('groups.restore of the internal writes', () => {
     const { draw } = setup({}, 1000);
     // More deletions than the tokens a limit would have kept (100 before there was none)
     for (let i = 0; i < 120; i++) {
-      writesOf(draw).groups.create({ id: `g${i}`, featureIds: ['p1'] });
+      writesOf(draw).groups.create({ id: `g${i}`, members: ['p1'] });
       writesOf(draw).groups.delete(`g${i}`);
     }
     expect(writesOf(draw).groups.restore('g0')).toMatchObject({ id: 'g0' });
@@ -200,7 +200,7 @@ describe('groups.restore of the internal writes', () => {
 
   it('keeps no group deleted from elsewhere', () => {
     const { draw, notified } = setup();
-    writesOf(draw).groups.create({ id: 'g', featureIds: ['p1'] });
+    writesOf(draw).groups.create({ id: 'g', members: ['p1'] });
     const store = draw.getStore();
     store.transact(() => {
       writesOf(draw).features.move('p1', { layerId: 'rows', above: null });
@@ -217,7 +217,7 @@ describe('groups.restore of the internal writes', () => {
     expect(() => writesOf(draw).groups.restore('never')).toThrow(
       expect.objectContaining({ code: 'not-found' }),
     );
-    writesOf(draw).groups.create({ id: 'g', featureIds: ['p1'] });
+    writesOf(draw).groups.create({ id: 'g', members: ['p1'] });
     expect(() => writesOf(draw).groups.restore('g')).toThrow(
       expect.objectContaining({ code: 'already-exists' }),
     );
@@ -228,7 +228,7 @@ describe('groups.restore of the internal writes', () => {
 
   it('is refused while read-only', () => {
     const { draw } = setup();
-    writesOf(draw).groups.create({ id: 'g', featureIds: ['p1'] });
+    writesOf(draw).groups.create({ id: 'g', members: ['p1'] });
     writesOf(draw).features.delete('p1');
     draw.setReadOnly(true);
     expect(writesOf(draw).groups.restore('g')).toBeNull();
@@ -243,7 +243,7 @@ describe('groups.restore of the internal writes', () => {
       geometry: { type: 'Point', coordinates: [0, 0] },
       layerId: layer?.id,
     });
-    writesOf(objects).groups.create({ id: 'g', featureIds: [feature?.id as string] });
+    writesOf(objects).groups.create({ id: 'g', members: [feature?.id as string] });
     writesOf(objects).groups.delete('g');
     expect(() => writesOf(objects).groups.restore('g')).toThrow(
       expect.objectContaining({ code: 'not-found' }),
@@ -254,7 +254,7 @@ describe('groups.restore of the internal writes', () => {
 describe('a group or a layer selected over a Store of rows', () => {
   it('is read by the rows of its features: listed, counted, changed and given as a value', () => {
     const { draw } = setup();
-    writesOf(draw).groups.create({ id: 'g', featureIds: ['p1', 'p3'] });
+    writesOf(draw).groups.create({ id: 'g', members: ['p1', 'p3'] });
     draw.selection.set('group', ['g']);
     expect(draw.selection.features().map((feature) => feature.id)).toEqual(['p1', 'p3']);
     expect(draw.selection.count()).toBe(2);

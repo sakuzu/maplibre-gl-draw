@@ -175,9 +175,7 @@ function writesOf(draw: Draw, run: Run = (fn) => draw.write(fn)): Writes {
     deleteLayer: (id) => write((tx) => tx.layers.delete(id)),
     placeLayer: (id, above) => write((tx) => tx.layers.place(id, { below: above })),
     createGroup: (input) =>
-      write((tx) =>
-        tx.groups.create({ id: input.id, name: input.name, featureIds: input.members }),
-      ),
+      write((tx) => tx.groups.create({ id: input.id, name: input.name, members: input.members })),
     updateGroup: (id, patch) => write((tx) => tx.groups.update(id, patch)),
     deleteGroup: (id) => write((tx) => tx.groups.delete(id, { members: 'keep' })),
     placeGroup: (id, to) => write((tx) => tx.groups.place(id, to as Placement)),

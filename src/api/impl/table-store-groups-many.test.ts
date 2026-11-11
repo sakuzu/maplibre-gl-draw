@@ -86,11 +86,11 @@ function members(store: Store, layerId = 'a'): Record<string, string[]> {
  */
 function inputs(): GroupInput[] {
   return [
-    { id: 'g0', featureIds: ['f3', 'f1', 'f2'] },
-    { id: 'g1', featureIds: ['f4', 'f5'] },
-    { id: 'g2', featureIds: ['f9', 'f12'] },
-    { id: 'g3', featureIds: ['f7'] },
-    { id: 'g4', featureIds: ['f15', 'f0'] },
+    { id: 'g0', members: ['f3', 'f1', 'f2'] },
+    { id: 'g1', members: ['f4', 'f5'] },
+    { id: 'g2', members: ['f9', 'f12'] },
+    { id: 'g3', members: ['f7'] },
+    { id: 'g4', members: ['f15', 'f0'] },
   ];
 }
 
@@ -100,8 +100,8 @@ describe('many groups at once over a Store of rows', () => {
     const one = instance(16);
     // A group whose features then join other groups (it is emptied and deleted)
     for (const { draw } of [many, one])
-      writesOf(draw).groups.create({ id: 'old', featureIds: ['f10', 'f11'] });
-    const list = [...inputs(), { id: 'g5', featureIds: ['f10', 'f11'] }];
+      writesOf(draw).groups.create({ id: 'old', members: ['f10', 'f11'] });
+    const list = [...inputs(), { id: 'g5', members: ['f10', 'f11'] }];
     writesOf(many.draw).groups.createMany(list);
     for (const input of list) writesOf(one.draw).groups.create(input);
     expect(items(many.store)).toEqual(items(one.store));
@@ -126,7 +126,7 @@ describe('many groups at once over a Store of rows', () => {
     const apply = vi.spyOn(writer, 'writeRows');
     const ids = Array.from({ length: n / 2 }, (_, i) => `g${i}`);
     writesOf(draw).groups.createMany(
-      ids.map((id, i) => ({ id, featureIds: [`f${2 * i}`, `f${2 * i + 1}`] })),
+      ids.map((id, i) => ({ id, members: [`f${2 * i}`, `f${2 * i + 1}`] })),
     );
     expect(apply).toHaveBeenCalledTimes(1);
     apply.mockClear();

@@ -149,7 +149,7 @@ describe('features.restore', () => {
     writesOf(draw).features.update('p1', { locked: true });
     expect(writesOf(draw).features.restore(values('p1'))).toBeNull();
     expect(draw.getStore().getFeature('p1')?.properties).toEqual({ n: 1 });
-    const group = writesOf(draw).groups.create({ featureIds: ['p2'] });
+    const group = writesOf(draw).groups.create({ members: ['p2'] });
     writesOf(draw).groups.update(group?.id as string, { locked: true });
     expect(writesOf(draw).features.restore(values('p2'))).toBeNull();
     writesOf(draw).layers.update('rows', { locked: true });

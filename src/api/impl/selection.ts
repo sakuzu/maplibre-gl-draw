@@ -25,6 +25,7 @@ import {
 } from '../../operations/selection-operations.js';
 import { getDrawProperty } from '../../shared/properties.js';
 import { coordinatesOf, supportsVertexEditing } from '../../shared/utils/coordinates.js';
+import { getBoundingBox } from '../../shared/utils/feature-bbox.js';
 import { forEachMatchingRow } from '../../store/feature-stream.js';
 import { isFeatureLocked } from '../../store/lock.js';
 import { listEveryFeatureInOrder } from '../../store/ordering.js';
@@ -34,7 +35,15 @@ import {
   selectionValueOf,
 } from '../../store/selection-value.js';
 import type { Feature as StoredFeature, VertexRef } from '../../store/types.js';
-import type { Feature, StoredFeaturePatch as FeaturePatch, FeatureStyleSample } from '../model.js';
+import { ROW_FLAG_HIDDEN, ROW_FLAG_LOCKED } from '../../table/feature-row-columns.js';
+import { DrawError } from '../errors.js';
+import type {
+  Feature,
+  StoredFeaturePatch as FeaturePatch,
+  FeatureRow,
+  FeatureStyleSample,
+  FeatureType,
+} from '../model.js';
 import type { VertexSelectionResource } from '../selection.js';
 import type { SelectionTarget, SelectionType, SelectionValue } from '../state.js';
 import type { EventHub } from './events.js';
@@ -66,6 +75,34 @@ import {
 } from './shared.js';
 
 const SELECTION_TYPES: readonly SelectionType[] = ['feature', 'group', 'layer'];
+
+/** How long one slice of `selection.scan` reads for before the next one, in a task of its own (ms) */
+const SCAN_SLICE_MS = 8;
+
+/** A task after the ones queued now */
+function nextTask(): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, 0));
+}
+
+/** A row of a feature held as a feature */
+function rowOfFeature(feature: StoredFeature): FeatureRow {
+  let made: Feature | undefined;
+  const make = (): Feature => {
+    made ??= toFeature(feature);
+    return made;
+  };
+  return {
+    id: feature.id,
+    featureType: feature.type as FeatureType,
+    layerId: feature.layerId,
+    groupId: feature.groupId ?? null,
+    visible: feature.visible !== false,
+    locked: feature.locked === true,
+    bbox: getBoundingBox(feature),
+    property: (key) => (make().properties as Record<PropertyKey, unknown>)[key] as never,
+    toFeature: make,
+  };
+}
 
 /**
  * Creates `draw.selection`
@@ -153,6 +190,64 @@ export function createSelection(
     const matches = found && layerIds ? featureRowMatcher(store, filter) : null;
     if (!found || !layerIds || !matches) return [];
     return firstRowsInOrder(found.internals, found.rows, layerIds, limit, matches);
+  };
+
+  /**
+   * What `scan` reads, fixed as the selection is now: the rows in stacking order in a Store of
+   * rows (the rows selected in bulk, or those of the groups or the layers selected), or else the
+   * IDs of the features
+   */
+  const toScan = (): { rows: readonly number[] } | { ids: readonly string[] } => {
+    if (store.getSelectedRows()) return { rows: matchingRows(undefined) };
+    const { type } = store.getSelection();
+    const internals = featureTablesInternals(store.tables);
+    const rows = type !== 'feature' && type !== null && internals ? store.rowsOfSelection() : null;
+    if (internals && rows) {
+      const out: number[] = [];
+      for (const handles of rowsByLayerInOrder(internals, rows).values()) out.push(...handles);
+      return { rows: out };
+    }
+    return { ids: selectedFeatures().map((feature) => feature.id) };
+  };
+
+  /** A row held in the tables, read as it is held now; null when it is gone */
+  const rowOfHandle = (handle: number): FeatureRow | null => {
+    const tables = store.tables;
+    const internals = featureTablesInternals(tables);
+    const place = internals?.placeOf(handle);
+    const id = internals?.ids.idOf(handle);
+    if (!tables || !internals || !place || typeof id !== 'string') return null;
+    const { data, row } = { data: place.group.data, row: place.row };
+    const layerId = place.table.tableId;
+    const flags = data.flags[row] as number;
+    const group = data.groups[row] as number;
+    const at = row * 4;
+    const b = data.rowBounds;
+    const bbox: [number, number, number, number] = [
+      b[at] as number,
+      b[at + 1] as number,
+      b[at + 2] as number,
+      b[at + 3] as number,
+    ];
+    let made: Feature | undefined;
+    const make = (): Feature => {
+      if (made) return made;
+      const feature = readWithoutKeeping(tables, () => store.getFeature(id));
+      if (!feature) throw notFound('feature', id);
+      made = toFeature(feature);
+      return made;
+    };
+    return {
+      id,
+      featureType: tables.get(layerId)?.getRowType(handle) as FeatureType,
+      layerId,
+      groupId: group >= 0 ? (internals.groups.idOf(group) ?? null) : null,
+      visible: (flags & ROW_FLAG_HIDDEN) === 0,
+      locked: (flags & ROW_FLAG_LOCKED) !== 0,
+      bbox: bbox.every(Number.isFinite) ? bbox : null,
+      property: (key) => (make().properties as Record<PropertyKey, unknown>)[key] as never,
+      toFeature: make,
+    };
   };
 
   return {
@@ -334,6 +429,37 @@ export function createSelection(
       if (store.getSelectedRows()) return matchingRows(filter).length;
       const matches = featureMatcher(deps, filter);
       return selectedFeatures().filter(matches).length;
+    },
+
+    async scan(visit, options) {
+      if (typeof visit !== 'function') throw invalidInput('visit must be a function');
+      const signal = options?.signal;
+      const onProgress = options?.onProgress;
+      const stopped = () =>
+        new DrawError('aborted', 'The scan was stopped by its signal', { cause: signal?.reason });
+      if (signal?.aborted) throw stopped();
+      const what = toScan();
+      const total = 'rows' in what ? what.rows.length : what.ids.length;
+      const rowAt =
+        'rows' in what
+          ? (i: number) => rowOfHandle(what.rows[i] as number)
+          : (i: number) => {
+              const feature = store.getFeature(what.ids[i] as string);
+              return feature ? rowOfFeature(feature) : null;
+            };
+      let done = 0;
+      while (done < total) {
+        const start = performance.now();
+        do {
+          const row = rowAt(done++);
+          if (row) visit(row);
+        } while (done < total && performance.now() - start < SCAN_SLICE_MS);
+        onProgress?.({ phase: 'read', done, total });
+        if (done < total) {
+          await nextTask();
+          if (signal?.aborted) throw stopped();
+        }
+      }
     },
 
     update(patch, filter) {

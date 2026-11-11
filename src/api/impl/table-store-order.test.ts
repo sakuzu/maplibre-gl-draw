@@ -129,7 +129,7 @@ describe('the moves of features held as rows', () => {
   });
 
   it('makes a group at the place of its frontmost member, and moves it with its members', () => {
-    const group = writesOf(draw).groups.create({ featureIds: ['s3', 's1'] });
+    const group = writesOf(draw).groups.create({ members: ['s3', 's1'] });
     expect(items()).toEqual(['s0', 's2', group?.id, 's4']);
     expect(members(group?.id as string)).toEqual(['s1', 's3']);
     expect(writesOf(draw).groups.move(group?.id as string, { layerId: 'other' })).toBe(true);
@@ -149,7 +149,7 @@ describe('the moves of features held as rows', () => {
   });
 
   it('takes a member out of its group just in front of it, and deletes the group it leaves empty', () => {
-    const group = writesOf(draw).groups.create({ featureIds: ['s1', 's2'] })?.id as string;
+    const group = writesOf(draw).groups.create({ members: ['s1', 's2'] })?.id as string;
     expect(items()).toEqual(['s0', group, 's3', 's4']);
     writesOf(draw).features.move('s1', { groupId: null });
     expect(items()).toEqual(['s0', group, 's1', 's3', 's4']);
@@ -159,7 +159,7 @@ describe('the moves of features held as rows', () => {
   });
 
   it('puts features into a group just above a member', () => {
-    const group = writesOf(draw).groups.create({ featureIds: ['s1', 's2'] })?.id as string;
+    const group = writesOf(draw).groups.create({ members: ['s1', 's2'] })?.id as string;
     writesOf(draw).features.move('s4', { layerId: 'rows', groupId: group, below: 's1' });
     expect(members(group)).toEqual(['s1', 's4', 's2']);
     expect(store.getFeature('s4')?.groupId).toBe(group);

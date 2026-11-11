@@ -131,7 +131,7 @@ export function parseGeoJSONInput(input: unknown, options?: unknown): Promise<Pa
     const kept = results.filter((result) => !failed.has(result));
 
     // The features that name the same group of the input form one new group
-    const groups = new Map<string, GroupInput & { featureIds: string[] }>();
+    const groups = new Map<string, GroupInput & { members: string[] }>();
     const features: Feature[] = [];
     const files: FileData[] = [];
     const idMap = createIdMap();
@@ -142,11 +142,11 @@ export function parseGeoJSONInput(input: unknown, options?: unknown): Promise<Pa
         let group = groups.get(feature.groupId);
         if (!group) {
           const id = generateId();
-          group = { id, featureIds: [] };
+          group = { id, members: [] };
           groups.set(feature.groupId, group);
           recordId(idMap.groups, feature.groupId, id);
         }
-        group.featureIds.push(feature.id);
+        group.members.push(feature.id);
         feature.groupId = group.id;
       }
       if (sourceId !== undefined) recordId(idMap.features, sourceId, feature.id);
@@ -299,7 +299,7 @@ function parseGroups(
       name: group.name,
       visible: group.visible,
       locked: group.locked,
-      featureIds: [...members].map((id) => featureIds.get(id) as string),
+      members: [...members].map((id) => featureIds.get(id) as string),
     });
   }
   return result;

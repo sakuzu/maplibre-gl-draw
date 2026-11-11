@@ -143,6 +143,7 @@ export type {
   FeatureFields,
   FeatureGeometry,
   FeaturePatchFields,
+  FeatureRow,
   Properties,
   StoredFeature,
   StoredFeatureInput,

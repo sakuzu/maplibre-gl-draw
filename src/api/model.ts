@@ -263,6 +263,25 @@ export interface FeatureFields {
 }
 
 /**
+ * One feature read without making it: its values of the library, read as it is held, and the
+ * feature itself made only when asked for ({@link SelectionResource.scan}).
+ */
+export interface FeatureRow<P extends object = Properties> {
+  readonly id: string;
+  readonly featureType: FeatureType;
+  readonly layerId: string;
+  readonly groupId: string | null;
+  readonly visible: boolean;
+  readonly locked: boolean;
+  /** Its extent, or `null` when it has none */
+  readonly bbox: BBox | null;
+  /** The value of one key of `properties`, under the key as it is there */
+  property<K extends keyof (P & DrawProperties)>(key: K): (P & DrawProperties)[K] | undefined;
+  /** Makes the `Feature` of this row: its geometry is read only then */
+  toFeature(): Feature<P>;
+}
+
+/**
  * Reads the values of the library of a feature under short names, the defaults filled in. It
  * reads a feature the instance gives as well as a GeoJSON feature read from a file.
  *
@@ -851,7 +870,7 @@ export interface LayerFilter {
 /** What `groups.create` takes. The features must be in the same layer. */
 export interface GroupInput {
   /** The IDs of the features to put in the group: at least one */
-  featureIds: readonly string[];
+  members: readonly string[];
   /** The layer of the group: it must be the layer of its features (theirs when it is left out) */
   layerId?: string;
   /**
@@ -1060,7 +1079,7 @@ export interface LoadOptions {
    * GeoJSON feature names is not kept. `LoadResult.groupId` gives its ID; no group is created
    * when nothing is read. It cannot be given with a document of the library.
    */
-  group?: Omit<GroupInput, 'featureIds'>;
+  group?: Omit<GroupInput, 'members'>;
   /** Where to place an image */
   coordinate?: Position;
   /** The zoom an image is placed at */

@@ -116,7 +116,7 @@ describe('the extent of features', () => {
     const rows = instance(true);
     for (const draw of [objects, rows]) {
       writesOf(draw).features.createMany(FEATURES);
-      writesOf(draw).groups.create({ id: 'grp', featureIds: ['p', 'm'] });
+      writesOf(draw).groups.create({ id: 'grp', members: ['p', 'm'] });
     }
     const read = (draw: Draw) => FILTERS.map((filter) => draw.features.bbox(filter));
     expect(read(rows)).toEqual(read(objects));

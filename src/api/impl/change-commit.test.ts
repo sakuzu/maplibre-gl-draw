@@ -133,7 +133,7 @@ describe.each(['objects', 'rows'] as const)('one commit over a Store of %s', (ki
     const { f, g, group } = await draw.write(async (tx) => {
       const f = await tx.features.create(point(1, 'a'));
       const g = await tx.features.create(point(2, 'b'));
-      const group = await tx.groups.create({ featureIds: [g.id] });
+      const group = await tx.groups.create({ members: [g.id] });
       return { f, g, group };
     });
     changes.length = 0;

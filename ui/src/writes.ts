@@ -9,7 +9,7 @@ import { DrawError } from '@sakuzu/maplibre-gl-draw';
 
 /** The members of a draw instance the writes use */
 export type WriteDraw = Pick<Draw, 'write'> & {
-  readonly selection: Pick<Draw['selection'], 'value' | 'target'>;
+  readonly selection: Pick<Draw['selection'], 'value' | 'target' | 'scan'>;
 };
 
 /** Runs a write: true once committed, false when core refused it or it failed */
@@ -57,18 +57,40 @@ export function deleteSelection(draw: WriteDraw): Promise<boolean> {
   return write(draw, (tx) => tx.features.delete(draw.selection.target));
 }
 
-/** Makes a group of the selected features */
-export function groupSelection(draw: WriteDraw): Promise<boolean> {
-  const { type, ids } = draw.selection.value;
-  if (type !== 'feature' || !ids || ids.length === 0) return Promise.resolve(false);
-  return write(draw, (tx) => tx.groups.create({ featureIds: ids }));
+/** Makes a group of the selected features, those selected in bulk too (read with `scan`) */
+export async function groupSelection(draw: WriteDraw): Promise<boolean> {
+  const { type, count, ids } = draw.selection.value;
+  if (type !== 'feature' || count === 0) return false;
+  let members = ids;
+  if (!members) {
+    const read: string[] = [];
+    await draw.selection.scan((row) => read.push(row.id));
+    members = read;
+  }
+  if (members.length === 0) return false;
+  const chosen = members;
+  return write(draw, (tx) => tx.groups.create({ members: chosen }));
 }
 
-/** Dissolves the selected groups: their features stay in their place in the layer */
-export function ungroupSelection(draw: WriteDraw): Promise<boolean> {
-  const { type, ids } = draw.selection.value;
-  if (type !== 'group' || !ids || ids.length === 0) return Promise.resolve(false);
-  return write(draw, (tx) => tx.groups.delete(ids, { members: 'keep' }));
+/**
+ * Dissolves the selected groups, or the groups of the selected features (those selected in bulk
+ * too, read with `scan`): their features stay in their place in the layer
+ */
+export async function ungroupSelection(draw: WriteDraw): Promise<boolean> {
+  const { type, count, ids } = draw.selection.value;
+  if (count === 0 || (type !== 'group' && type !== 'feature')) return false;
+  let groupIds: readonly string[];
+  if (type === 'group' && ids) {
+    groupIds = ids;
+  } else {
+    const found = new Set<string>();
+    await draw.selection.scan((row) => {
+      if (row.groupId !== null) found.add(row.groupId);
+    });
+    groupIds = [...found];
+  }
+  if (groupIds.length === 0) return false;
+  return write(draw, (tx) => tx.groups.delete(groupIds, { members: 'keep' }));
 }
 
 /** The fields of a feature the interface changes, as the keys of its properties */

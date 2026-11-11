@@ -132,7 +132,7 @@ describe('parseGeoJSON', () => {
     expect(parsed.groups).toHaveLength(1);
     const [group] = parsed.groups;
     expect(minted).toContain(group.id);
-    expect(group.featureIds).toEqual([ids[0], ids[1]]);
+    expect(group.members).toEqual([ids[0], ids[1]]);
     expect(fieldsOf(parsed.features[0]).groupId).toBe(group.id);
     expect(fieldsOf(parsed.features[1]).groupId).toBe(group.id);
     expect(fieldsOf(parsed.features[2]).groupId).toBeNull();
@@ -454,7 +454,7 @@ describe('parseNative', () => {
         name: 'G',
         visible: false,
         locked: true,
-        featureIds: [q.id, r.id],
+        members: [q.id, r.id],
       },
     ]);
     expect(fieldsOf(r).groupId).toBe(fieldsOf(q).groupId);

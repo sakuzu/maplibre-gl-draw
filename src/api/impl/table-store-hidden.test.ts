@@ -43,7 +43,7 @@ function open(): { draw: Draw; tables: FeatureTables } {
       layerId: 'l',
     });
   }
-  writesOf(draw).groups.create({ id: 'g', name: 'g', featureIds: ['b', 'c'] });
+  writesOf(draw).groups.create({ id: 'g', name: 'g', members: ['b', 'c'] });
   return { draw, tables: draw.getStore().tables as FeatureTables };
 }
 
@@ -100,7 +100,7 @@ describe('a group hidden on this client in a layer held as rows', () => {
     expect(draw.hidden.has('g')).toBe(false);
     expect(drawn(tables)).toEqual(['a', 'b', 'c', 'd']);
     writesOf(draw).groups.delete('g');
-    writesOf(draw).groups.create({ id: 'g', name: 'g', featureIds: ['a', 'd'] });
+    writesOf(draw).groups.create({ id: 'g', name: 'g', members: ['a', 'd'] });
     expect(hiddenInState(tables, 'a')).toBe(false);
     draw.hidden.add('g');
     expect(drawn(tables).sort()).toEqual(['b', 'c']);

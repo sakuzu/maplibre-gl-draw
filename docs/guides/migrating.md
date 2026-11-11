@@ -887,7 +887,7 @@ await draw.write(
   `tx.groups.delete(id, { members: 'keep' })` dissolves the group
 - The writes of the selection go: give `draw.selection.target` to `tx`
   (`tx.features.delete(draw.selection.target)` for `selection.delete()`),
-  make a group with `tx.groups.create({ featureIds })` and dissolve it
+  make a group with `tx.groups.create({ members })` and dissolve it
   with `tx.groups.delete`
 - `buffer(ids, { distanceMeters, segments })` is
   `tx.features.buffer(id, distanceMeters)`, one feature at a time

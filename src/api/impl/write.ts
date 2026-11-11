@@ -1280,7 +1280,7 @@ class TransactionImpl implements Transaction {
                 visible: prepared.visible,
                 locked: prepared.locked,
                 layerId: prepared.layerId,
-                featureIds: prepared.featureIds,
+                members: prepared.featureIds,
               }) !== null,
           );
           return prepared as Group;
@@ -1409,7 +1409,7 @@ class TransactionImpl implements Transaction {
         mode: 'merge',
         ...(typeof layer === 'string' ? { layerId: layer } : {}),
         ...(layer !== undefined && typeof layer !== 'string' ? { layer: layer as LayerInput } : {}),
-        ...(group !== undefined ? { group: group as Omit<GroupInput, 'featureIds'> } : {}),
+        ...(group !== undefined ? { group: group as Omit<GroupInput, 'members'> } : {}),
       };
       const prepared: PreparedItem | null = await loader.prepare(
         source as never,

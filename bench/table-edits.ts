@@ -793,7 +793,7 @@ function manySteps(
             await draw.write((tx) => tx.groups.delete(id, { members: 'keep' }));
             group = null;
           } else {
-            group = (await draw.write((tx) => tx.groups.create({ featureIds: members }))).id;
+            group = (await draw.write((tx) => tx.groups.create({ members }))).id;
           }
         });
       };
@@ -1114,7 +1114,7 @@ async function ensureGroups(target: EditTarget, params: TableBenchPageParams): P
         ]),
       });
     } else {
-      await target.draw.write((tx) => tx.groups.create({ id, featureIds: members }));
+      await target.draw.write((tx) => tx.groups.create({ id, members }));
     }
     out.push(id);
   }

@@ -192,7 +192,7 @@ describe('change', () => {
     // To the back of its layer, just below the first
     await draw.write((tx) => tx.features.place(c, { above: a }));
     await draw.write((tx) => tx.features.place(a, { layerId: second }));
-    const group = await draw.write((tx) => tx.groups.create({ featureIds: [b] }));
+    const group = await draw.write((tx) => tx.groups.create({ members: [b] }));
 
     const [inLayer, intoLayer, intoGroup] = changesOf(events);
     // A move within a layer changes no field of the feature
@@ -228,7 +228,7 @@ describe('change', () => {
     const [a, b, c] = await draw.write((tx) =>
       tx.features.create([point(), point(1, 1), point(2, 2)]),
     );
-    const group = await draw.write((tx) => tx.groups.create({ featureIds: [c], name: 'G' }));
+    const group = await draw.write((tx) => tx.groups.create({ members: [c], name: 'G' }));
     events.length = 0;
     await draw.write((tx) => tx.features.place(b, { groupId: group.id }));
     // To the back of the first layer, just below the first feature
@@ -251,7 +251,7 @@ describe('change', () => {
 
   it('tells the groups created, updated and deleted', async () => {
     const a = await draw.write((tx) => tx.features.create(point()));
-    const group = await draw.write((tx) => tx.groups.create({ featureIds: [a.id], name: 'G' }));
+    const group = await draw.write((tx) => tx.groups.create({ members: [a.id], name: 'G' }));
     await draw.write((tx) => tx.groups.update(group.id, { name: 'H' }));
     await draw.write((tx) => tx.groups.delete(group.id, { members: 'keep' }));
     const [created, updated, deleted] = changesOf(events).slice(-3);

@@ -6,7 +6,7 @@
  */
 
 import type { Observable } from './events.js';
-import type { Feature, FeatureFilter, FeatureListOptions } from './model.js';
+import type { Feature, FeatureFilter, FeatureListOptions, FeatureRow } from './model.js';
 import type {
   SelectionTarget,
   SelectionType,
@@ -14,6 +14,7 @@ import type {
   VertexRef,
   VertexSelection,
 } from './state.js';
+import type { TaskOptions } from './write.js';
 
 /**
  * The selection of this client: features, groups or layers, one type at a time. What is selected
@@ -94,6 +95,23 @@ export interface SelectionResource extends Observable<SelectionValue> {
    * @throws `DrawError` with the code `invalid-input` when the filter has another shape
    */
   count(filter?: FeatureFilter): number;
+  /**
+   * Visits every selected feature (for a group or a layer, the features in it), in the order
+   * `features` reads them, without stopping the page for a large selection: the rows are read a
+   * slice at a time, each slice in a task of its own, as they are held then. A feature deleted
+   * before its slice is read is not visited.
+   *
+   * ```ts
+   * const ids: string[] = [];
+   * await draw.selection.scan((row) => ids.push(row.id));
+   * await draw.write((tx) => tx.groups.create({ members: ids }));
+   * ```
+   *
+   * @param visit - Called with each feature, as a row whose feature is made by `toFeature`
+   * @param options - `signal` stops the reading: the promise fails with `aborted`; `onProgress` is
+   *   told the features visited (`phase: 'read'`)
+   */
+  scan(visit: (row: FeatureRow) => void, options?: TaskOptions): Promise<void>;
 }
 
 /**

@@ -96,6 +96,7 @@ const MAIN = [
   'ItemListOptions',
   'FeaturePatch',
   'FeatureStyleSample',
+  'FeatureRow',
   'FeaturesCollection',
   'FeatureStyle',
   'FeatureStyleResolved',

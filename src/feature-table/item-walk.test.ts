@@ -280,12 +280,12 @@ describe('an edit of a few items of a layer held as rows', () => {
       vi.spyOn(RowTable.prototype, 'rowOrder'),
       vi.spyOn(RowTable.prototype, 'itemsOf'),
     ];
-    const group = writesOf(draw).groups.create({ featureIds: members });
+    const group = writesOf(draw).groups.create({ members: members });
     writesOf(draw).features.moveMany(members.slice(0, 10), { layerId: 'rows', above: null });
     if (group) writesOf(draw).groups.delete(group.id);
     writesOf(draw).features.moveMany(members, { layerId: 'rows', below: null });
     writesOf(draw).features.moveMany(many, { layerId: 'rows', above: null });
-    const again = writesOf(draw).groups.create({ featureIds: members.slice(0, 5) });
+    const again = writesOf(draw).groups.create({ members: members.slice(0, 5) });
     if (again) writesOf(draw).groups.move(again.id, { layerId: 'rows', below: null });
     const handle = internals.groups.handleOfId(again?.id ?? '');
     store.transact(

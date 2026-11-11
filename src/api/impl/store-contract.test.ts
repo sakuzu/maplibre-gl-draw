@@ -138,7 +138,7 @@ describe('a Store of the application', () => {
     draw.selection.set('feature', [line.id]);
     draw.vertexSelection.set(line.id, [{ ring: 0, index: 1 }]);
     draw.hidden.add(point.id);
-    writesOf(draw).groups.create({ featureIds: [line.id] });
+    writesOf(draw).groups.create({ members: [line.id] });
     draw.setMode('draw_line');
     const input = createSyntheticInput(engine);
     input.click([0.2, 0.2]);

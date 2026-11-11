@@ -73,7 +73,7 @@ beforeEach(() => {
       visible: false,
     },
   ]);
-  groups.create({ id: 'g', featureIds: ['b'] });
+  groups.create({ id: 'g', members: ['b'] });
   selection = createSelection(deps, { features, groups }, createEventHub());
   vertices = createVertexSelection(deps, createEventHub());
 });
