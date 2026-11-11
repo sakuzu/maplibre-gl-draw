@@ -239,7 +239,7 @@ function vertexCountOf(data: RowBlockData, row: number, ringVertices: number): n
     if (child < 0) continue;
     const column = shape.children[child];
     const at = shape.offsets[row];
-    if (column.type === 'Point') {
+    if ((column.offsets?.length ?? 0) === 0) {
       // A row of a single point that keeps numbers in a cache draws a ring around it
       count += holdsCacheNumbers(data.caches, row) ? ringVertices : 1;
       continue;

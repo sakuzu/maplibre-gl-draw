@@ -138,22 +138,11 @@ const DROPPED_ROWS_MIN = 64;
  */
 const PLACE_FIELDS: ReadonlySet<string> = new Set(['parent', 'key']);
 
-/** The fields a new row is written with: a deleted row written all of them is created again */
-const CREATE_FIELDS: readonly RowField[] = ['type', 'parent', 'geometry', 'key'];
-
-/** The fields a box of a row is made of, apart from what a box of its type reads */
-const BOX_FIELDS: readonly RowField[] = ['type', 'parent', 'geometry'];
-
-/** The fields of the rows of a row group taken in, told as written (with their attributes) */
-const ADDED_FIELDS: readonly RowField[] = [
-  'type',
-  'parent',
-  'key',
-  'geometry',
-  'hidden',
-  'locked',
-  'style',
-];
+/**
+ * The name of the `whole` column the type of a row is read from: what the rings and the boxes the
+ * user of the tables gives read of a row (`RowRead.type`), and what a new row is written with
+ */
+const TYPE_FIELD = 'type';
 
 /** The rows of a write that writes none */
 const NO_ROWS: RowsChange = { layers: new Map() };
@@ -695,6 +684,18 @@ export class TablesStore<V = unknown> implements RowBlocks<V>, DrawnRows, Tables
   /** What a write in place reads of the tables besides the row */
   private readonly writeContext: RowWriteContext;
   /**
+   * The fields a new row is written with (the type, the parent, the shape and the key): a deleted
+   * row written all of them is created again
+   */
+  private readonly createFields: readonly RowField[];
+  /** The fields a box of a row is made of, apart from what a box of its type reads */
+  private readonly boxFields: readonly RowField[];
+  /**
+   * The fields of the rows of a row group taken in, told as written (with the keys of the `keyed`
+   * column)
+   */
+  private readonly addedFields: readonly RowField[];
+  /**
    * The place in `RowBlockData.wholes` of the column of the type of a row (the `whole` column
    * `type`; -1 for none)
    */
@@ -736,7 +737,20 @@ export class TablesStore<V = unknown> implements RowBlocks<V>, DrawnRows, Tables
     this.keyedStart = this.layout.keyed.length > 0 ? `${this.layout.keyed[0]}:` : null;
     this.keptName = this.keptWhole < 0 ? null : this.layout.wholes[this.keptWhole];
     this.inputColumns = rowInputColumnsOf(this.layout);
-    this.typeAt = this.layout.wholes.indexOf('type');
+    this.typeAt = this.layout.wholes.indexOf(TYPE_FIELD);
+    const shapeName = this.inputColumns.shape;
+    const typeFields = this.typeAt < 0 ? [] : [TYPE_FIELD];
+    const shapeFields = shapeName === null ? [] : [shapeName];
+    this.createFields = [...typeFields, 'parent', ...shapeFields, 'key'];
+    this.boxFields = [...typeFields, 'parent', ...shapeFields];
+    this.addedFields = [
+      ...this.layout.wholes.filter((_, w) => this.layout.dictionaries[w] === 'rowBlock'),
+      'parent',
+      'key',
+      ...this.layout.shapes,
+      ...this.layout.flags,
+      ...this.layout.wholes.filter((_, w) => this.layout.dictionaries[w] === 'tables'),
+    ];
     this.flagBits = new Map(
       this.layout.flags.map((name, f) => [name, ROW_FLAG_DELETED << (f + 1)]),
     );
@@ -1339,7 +1353,7 @@ export class TablesStore<V = unknown> implements RowBlocks<V>, DrawnRows, Tables
       if (this.reorderWaits(table)) this.rowsToDelta(table, data);
       else this.adoptGroup(table, data);
       for (let r = 0; r < data.length; r++) draft.created.push(data.handles[r]);
-      for (const field of ADDED_FIELDS) draft.fields.add(field);
+      for (const field of this.addedFields) draft.fields.add(field);
       for (const key of data.keyed[KEYED_COLUMN]?.keys ?? []) {
         draft.fields.add(`${this.keyedStart}${key}`);
       }
@@ -2149,7 +2163,7 @@ export class TablesStore<V = unknown> implements RowBlocks<V>, DrawnRows, Tables
         );
       }
     });
-    const types = fields.get('type');
+    const types = this.typeAt < 0 ? undefined : fields.get(TYPE_FIELD);
     const parents = fields.get('parent');
     const keys = fields.get('key');
     const places = Array.from(handles, (handle) => this.placeOf(handle));
@@ -2195,7 +2209,7 @@ export class TablesStore<V = unknown> implements RowBlocks<V>, DrawnRows, Tables
       }
     });
     const strings: Array<[string, readonly unknown[] | undefined]> = [
-      ['type', types],
+      [TYPE_FIELD, types],
       ['key', keys],
     ];
     for (const [name, values] of strings) {
@@ -2213,12 +2227,9 @@ export class TablesStore<V = unknown> implements RowBlocks<V>, DrawnRows, Tables
         throw new KasaneError('not-found', `Tables: no row has the handle ${handles[i]}`);
       }
       // A new row: what a new row cannot be without
-      const missing = [
-        ['type', types?.[i]],
-        ['parent', parents?.[i]],
-        ['geometry', geometries?.[i]],
-        ['key', keys?.[i]],
-      ].filter(([, value]) => value === undefined);
+      const missing = this.createFields
+        .map((field) => [field, fields.get(field)?.[i]] as const)
+        .filter(([, value]) => value === undefined);
       if (missing.length > 0) {
         throw new KasaneError(
           'invalid-input',
@@ -2239,7 +2250,7 @@ export class TablesStore<V = unknown> implements RowBlocks<V>, DrawnRows, Tables
    */
   private markBoxes(patch: RowValues): void {
     const { handles, fields, deleted } = patch;
-    if (deleted || BOX_FIELDS.some((field) => fields.has(field))) {
+    if (deleted || this.boxFields.some((field) => fields.has(field))) {
       this.rowBoxes.mark(handles);
       return;
     }
@@ -2297,7 +2308,7 @@ export class TablesStore<V = unknown> implements RowBlocks<V>, DrawnRows, Tables
     let lastGroup: RowGroup | null = null;
     let lastLocked = false;
     // The values are made what the columns hold before anything is written
-    const styles = fields.get('style');
+    const styles = this.keptName === null ? undefined : fields.get(this.keptName);
     // A style given to many rows (a change of the style of many rows gives each kind of row the
     // same object) is made canonical once. The patch counts as a user of each until its rows are
     // written: a row that leaves a style as its last user would otherwise take back the number a
@@ -2339,7 +2350,7 @@ export class TablesStore<V = unknown> implements RowBlocks<V>, DrawnRows, Tables
         !!place &&
         !deleted?.[i] &&
         (place.group.data.flags[place.row] & ROW_FLAG_DELETED) !== 0 &&
-        CREATE_FIELDS.every((field) => fields.get(field)?.[i] !== undefined);
+        this.createFields.every((field) => fields.get(field)?.[i] !== undefined);
       const placed = place
         ? revived || (mayPlace && this.placeChanged(place, i, fields, groupHandles, tableIds))
         : true;
@@ -3126,7 +3137,7 @@ export class TablesStore<V = unknown> implements RowBlocks<V>, DrawnRows, Tables
         this.writeMarks.stampGroup(place.group);
         continue;
       }
-      const style = fields.get('style');
+      const style = this.keptName === null ? undefined : fields.get(this.keptName);
       const numbers = style ? [this.styles.intern((style[0] ?? {}) as V)] : undefined;
       const write = this.writeInPlace(
         place,
@@ -3331,7 +3342,7 @@ export class TablesStore<V = unknown> implements RowBlocks<V>, DrawnRows, Tables
         if (!geometry) return null;
         const read = groupRowRead(group, r, this.typeAt);
         const ring =
-          rings && geometry.reader.type === 'Point' && rings.draws(read.type)
+          rings && geometry.reader.depth === 0 && rings.draws(read.type)
             ? rings.ringOf(read)
             : null;
         return { read, ring };
