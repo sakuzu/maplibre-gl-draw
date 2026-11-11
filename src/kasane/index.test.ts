@@ -15,10 +15,10 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { KasaneError } from '@sakuzu/kasane';
 import { TabaneError } from '@sakuzu/tabane';
 import { describe, expect, it } from 'vitest';
 import { DrawError } from '../api/errors.js';
-import { KasaneError } from '../table/kasane-error.js';
 import { createFeatureTables, createRowBlockBuilder, mergeRowBlock } from './index.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -70,15 +70,14 @@ describe('the kasane subpath', () => {
 
   it('throws only DrawError from the modules behind it, with the code of the cause', () => {
     // Every throw of the tables and of the builders and the merge of their blocks is a DrawError
+    // (those of Kasane throw only its error, which the tests of Kasane check)
     const files = [
       ...readdirSync(join(SRC, 'feature-table'))
         .filter((name) => name.endsWith('.ts') && !name.endsWith('.test.ts'))
         .map((name) => join(SRC, 'feature-table', name)),
       ...[
-        'row-group-builder.ts',
-        'row-group-merge.ts',
+        'feature-row-blocks.ts',
         'row-geometry.ts',
-        'row-keys.ts',
         'tabane/blocks.ts',
         'tabane/columns.ts',
         'tabane/rows.ts',

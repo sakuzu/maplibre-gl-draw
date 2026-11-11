@@ -12,9 +12,9 @@
  * errors of the tables (`KasaneError`), which no function of the caller throws.
  */
 
+import { KasaneError } from '@sakuzu/kasane';
 import { TabaneError } from '@sakuzu/tabane';
 import { DrawError } from '../shared/draw-error.js';
-import { KasaneError } from './kasane-error.js';
 
 /**
  * A `KasaneError` or a `TabaneError` as a `DrawError` of the same code and message, with it as

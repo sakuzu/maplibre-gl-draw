@@ -8,8 +8,8 @@
  * a `DrawError` of the same code (`drawErrorOf`)
  */
 
+import { KasaneError } from '@sakuzu/kasane';
 import { drawErrorOf } from '../../table/draw-error-of.js';
-import { KasaneError } from '../../table/kasane-error.js';
 import { DrawError } from '../errors.js';
 
 /** The error of a call made after destroy */

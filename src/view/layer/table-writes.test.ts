@@ -17,18 +17,18 @@
  *   as a chunk built from it alone
  */
 
-import type { CoordinateDimensions } from '@sakuzu/tabane';
-import { planarCoordinates } from '@sakuzu/tabane';
-import type { Geometry } from 'geojson';
-import type { ProjectionData } from 'maplibre-gl';
-import { beforeEach, describe, expect, it } from 'vitest';
-import { writeRowValue } from '../../feature-table/row-write.js';
 import {
   type InPlaceRowWrite,
   ROW_WRITE_GEOMETRY,
   ROW_WRITE_STYLE,
   ROW_WRITE_VALUES,
-} from '../../feature-table/types.js';
+  writeRowValue,
+} from '@sakuzu/kasane/engine';
+import type { CoordinateDimensions } from '@sakuzu/tabane';
+import { planarCoordinates } from '@sakuzu/tabane';
+import type { Geometry } from 'geojson';
+import type { ProjectionData } from 'maplibre-gl';
+import { beforeEach, describe, expect, it } from 'vitest';
 import { drawPropertyKey } from '../../shared/properties.js';
 import type { Feature, FeatureStyle, Layer } from '../../shared/types/model.js';
 import { circleRowRings } from '../../table/circle-rings.js';

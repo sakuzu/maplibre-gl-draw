@@ -6,10 +6,9 @@
  * degrees, which the rows draw as its fill and its outline (a `RowRings` of the rows)
  */
 
+import type { RowRead, RowRings } from '@sakuzu/kasane';
 import { generateCirclePolygon } from '../geometry/circle.js';
 import { drawPropertyKey } from '../shared/properties.js';
-import type { RowRead } from './row-read-type.js';
-import type { RowRings } from './row-rings.js';
 
 /** The key of the radius of a Circle in the attributes of a row */
 const RADIUS_KEY = drawPropertyKey('radiusMeters');

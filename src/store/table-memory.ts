@@ -33,6 +33,8 @@
  *   stamp it on the rows they write (`write-marks.ts`)
  */
 
+import type { ItemWalk } from '@sakuzu/kasane/engine';
+import { ROW_FLAG_DELETED } from '@sakuzu/kasane/engine';
 import { utf8ColumnFromStrings, utf8String } from '@sakuzu/tabane';
 import type {
   FeatureTables,
@@ -55,10 +57,8 @@ import {
   createFeatureTablesWriter,
   type FeatureTablesStoreWriter,
 } from '../feature-table/feature-tables-writer.js';
-import type { ItemWalk } from '../feature-table/item-walk.js';
 import { asFeatureValues } from '../shared/feature-values.js';
 import { isGroupHidden, isGroupLocked } from '../table/feature-row-columns.js';
-import { ROW_FLAG_DELETED } from '../table/row-group-types.js';
 import { DrawStore } from './draw-store.js';
 import {
   checkEdits,

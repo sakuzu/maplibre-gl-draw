@@ -13,9 +13,10 @@
  * - The declarations and the writes are checked
  */
 
+import { KasaneError } from '@sakuzu/kasane';
+import { STATE_DELETED } from '@sakuzu/kasane/engine';
 import { describe, expect, it } from 'vitest';
 import type { BBox } from '../geometry/types.js';
-import { KasaneError } from '../table/kasane-error.js';
 import { FEATURE_GROUP_COLUMNS, FEATURE_TABLE_COLUMNS } from '../table/tabane/columns.js';
 import { featureRowDataBuilder as createRowBlockDataBuilder, orderKey } from '../test-utils.js';
 import {
@@ -24,7 +25,6 @@ import {
   featureTablesInternals,
   type TablesInternalOptions,
 } from './feature-tables.js';
-import { STATE_DELETED } from './row-state.js';
 
 const MARKED = 0b01;
 const PICKED = 0b10;

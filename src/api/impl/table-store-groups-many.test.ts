@@ -9,11 +9,10 @@
  * them in
  */
 
+import { RowSkips, RowTable } from '@sakuzu/kasane/engine';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { FeatureTablesWriter } from '../../api/tables.js';
 import { featureTablesInternals } from '../../feature-table/feature-tables.js';
-import { RowSkips } from '../../feature-table/row-skips.js';
-import { RowTable } from '../../feature-table/row-table.js';
 import type { Store } from '../../store/store.js';
 import { createTableStore } from '../../store/table-memory.js';
 import { createMapStub } from '../../test-utils.js';

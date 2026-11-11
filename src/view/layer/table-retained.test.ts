@@ -11,6 +11,7 @@
  * record what they are asked to build and draw.
  */
 
+import type { RowTable } from '@sakuzu/kasane/engine';
 import type { ProjectionData } from 'maplibre-gl';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { draggedRowsOf } from '../../feature-table/dragged-rows.js';
@@ -19,7 +20,6 @@ import {
   type FeatureTablesInternals,
   featureTablesInternals,
 } from '../../feature-table/feature-tables.js';
-import type { RowTable } from '../../feature-table/row-table.js';
 import type { EnuEdit } from '../../geometry/enu-transforms.js';
 import type { BBox } from '../../geometry/types.js';
 import type { Feature, Layer } from '../../shared/types/model.js';

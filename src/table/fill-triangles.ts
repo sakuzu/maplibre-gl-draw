@@ -21,10 +21,9 @@
  * A pure module: it runs in a Worker as well.
  */
 
+import type { RowCache, RowRead, RowShape } from '@sakuzu/kasane';
 import { polygonRingRuns } from './polygon-rings.js';
-import type { RowCache } from './row-caches.js';
 import { triangulateRow, WIDE_VERTICES } from './row-geometry.js';
-import type { RowRead, RowShape } from './row-read-type.js';
 import { FILL_TRIANGLES_CACHE } from './tabane/triangles.js';
 
 /** The triangles of a row without a fill */

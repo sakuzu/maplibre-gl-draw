@@ -7,10 +7,10 @@
  * vertex, in the same order), and the number of the row after them
  */
 
+import type { RowTable } from '@sakuzu/kasane/engine';
 import { ValueStringCache } from '@sakuzu/tabane';
 import { describe, expect, it } from 'vitest';
 import type { FeatureTablesInternals } from '../../feature-table/feature-tables.js';
-import type { RowTable } from '../../feature-table/row-table.js';
 import { drawPropertyKey } from '../../shared/properties.js';
 import type { Feature, Layer } from '../../shared/types/model.js';
 import { createTestDrawer, feature, tablesOfFeatures } from '../../test-utils.js';

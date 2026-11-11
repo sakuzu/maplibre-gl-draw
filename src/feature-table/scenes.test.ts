@@ -11,6 +11,7 @@
  * - A row deleted keeps its key through the versions (it is not dropped yet)
  */
 
+import type { TableWorkBudget } from '@sakuzu/kasane/engine';
 import { utf8ColumnFromStrings } from '@sakuzu/tabane';
 import { describe, expect, it } from 'vitest';
 import {
@@ -21,7 +22,6 @@ import {
   rowPatch,
   tablesOfReference,
 } from '../test-utils.js';
-import type { TableWorkBudget } from './types.js';
 
 const ONE_STEP: TableWorkBudget = { canStep: () => true, step: (work) => work(Infinity) };
 

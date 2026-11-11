@@ -17,6 +17,8 @@
  *   the version started; the rows of a version keep the marks they had
  */
 
+import { KasaneError } from '@sakuzu/kasane';
+import type { GroupVersion, GroupVersionReceiver, TableWorkBudget } from '@sakuzu/kasane/engine';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { FeatureTables, RowField } from '../api/tables.js';
 import { BULK_SLICE_ROWS, writeKindsInSlices } from '../operations/bulk-sliced.js';
@@ -26,7 +28,6 @@ import type { TransformEdit } from '../store/store.js';
 import { createTableStore } from '../store/table-memory.js';
 import type { Feature } from '../store/types.js';
 import { writeMarkKeeperOf } from '../store/write-mark-keeper.js';
-import { KasaneError } from '../table/kasane-error.js';
 import {
   expectTablesMatch,
   referenceKey as key,
@@ -37,8 +38,6 @@ import {
 } from '../test-utils.js';
 import { type FeatureTablesInternals, featureTablesInternals } from './feature-tables.js';
 import { TableSelection } from './selection.js';
-import type { TableWorkBudget } from './types.js';
-import type { GroupVersion, GroupVersionReceiver } from './versions.js';
 
 /** A move of one degree to the east along the equator: one degree of longitude at any latitude */
 const EAST_ONE_DEGREE: TransformEdit = { kind: 'translate', from: [0, 0], to: [1, 0] };

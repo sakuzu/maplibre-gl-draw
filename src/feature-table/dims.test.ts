@@ -14,13 +14,14 @@
  *   dimensions is refused
  */
 
+import { mergeRowBlock } from '@sakuzu/kasane';
+import type { InPlaceRowWrite } from '@sakuzu/kasane/engine';
 import { type CoordinateDimensions, planarRowBox } from '@sakuzu/tabane';
 import type { Geometry, Position } from 'geojson';
 import { describe, expect, it } from 'vitest';
 import type { FeatureTablesWorker } from '../api/tables.js';
 import { circleRowRings } from '../table/circle-rings.js';
 import { geometryColumnOf } from '../table/feature-row-columns.js';
-import { mergeRowBlock } from '../table/row-group-merge.js';
 import { FEATURE_TABLE_COLUMNS } from '../table/tabane/columns.js';
 import {
   featureRowDataBuilder as createRowBlockDataBuilder,
@@ -36,7 +37,6 @@ import {
   seededRandom,
   tablesOfReference,
 } from '../test-utils.js';
-import type { InPlaceRowWrite } from './types.js';
 
 const ALL_DIMS: readonly CoordinateDimensions[] = ['xy', 'xyz', 'xym', 'xyzm'];
 

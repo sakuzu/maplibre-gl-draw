@@ -8,6 +8,7 @@
  * builder of the blocks of rows makes from the same rows, and the tables take it as it is
  */
 
+import type { RowBlockData, RowBlockDictionary } from '@sakuzu/kasane/engine';
 import {
   formatTabaneId,
   packTabaneBlock,
@@ -46,7 +47,6 @@ import {
   typeColumnOf,
 } from '../feature-row-columns.js';
 import { FEATURE_CACHES } from '../fill-triangles.js';
-import type { RowBlockData, RowBlockDictionary } from '../row-group-types.js';
 import { writeTabaneFeatureBlocks } from './blocks.js';
 import {
   FEATURE_TABLE_COLUMNS,

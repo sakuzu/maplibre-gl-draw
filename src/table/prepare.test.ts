@@ -5,10 +5,10 @@
  * Tests for the preparation of a table (the part that runs in a Worker)
  */
 
+import { searchPackedRTree } from '@sakuzu/kasane/engine';
 import { describe, expect, it } from 'vitest';
 import { chunkTargetSizeFor, partitionIntoChunks } from '../dataset/chunk.js';
 import { displayFeature } from '../test-utils.js';
-import { searchPackedRTree } from './packed-rtree.js';
 import { prepareTable, transferList } from './prepare.js';
 import type { Table, TableGeometry } from './types.js';
 

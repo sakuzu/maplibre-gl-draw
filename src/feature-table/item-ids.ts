@@ -8,16 +8,15 @@
  * ids of its features reads them here, in the order of the layer (deleted rows left out).
  */
 
+import type { ItemWalk } from '@sakuzu/kasane/engine';
+import { compareRowKeys, ROW_FLAG_DELETED } from '@sakuzu/kasane/engine';
 import type { FeatureTables } from '../api/tables.js';
 import type { HitShape } from '../shared/math/position-runs.js';
 import type { Coordinate } from '../shared/types/model.js';
 import { ROW_FLAG_LOCKED } from '../table/feature-row-columns.js';
-import { ROW_FLAG_DELETED } from '../table/row-group-types.js';
-import { compareRowKeys } from '../table/row-keys.js';
 import { STATE_HIDDEN_MASK } from './feature-row-states.js';
 import { featureTablesInternals } from './feature-tables.js';
 import { rowHitShape } from './hit-test.js';
-import type { ItemWalk } from './item-walk.js';
 
 /**
  * The ids of the members of a group of features of a layer held as rows, in their order (none

@@ -15,17 +15,17 @@
  * - A locked feature stays where it is: its row is not in the moving set, and the others move
  */
 
+import type { RowGroup } from '@sakuzu/kasane/engine';
+import { ROW_FLAG_DELETED } from '@sakuzu/kasane/engine';
 import { BULK_MOVE_SET, STATE_UNHIT_MASK } from '../../feature-table/feature-row-states.js';
 import { featureTablesInternals } from '../../feature-table/feature-tables.js';
 import { rowGeometry, rowProperties, rowType } from '../../feature-table/row-read.js';
-import type { RowGroup } from '../../feature-table/row-table.js';
 import { TableSelection } from '../../feature-table/selection.js';
 import { writeKindsInSlices } from '../../operations/bulk-sliced.js';
 import { type BulkKinds, transformKinds } from '../../operations/bulk-transform.js';
 import type { TransformEdit } from '../../store/store.js';
 import type { BoxSelection, Feature } from '../../store/types.js';
 import { isGroupHidden, isGroupLocked, ROW_FLAG_LOCKED } from '../../table/feature-row-columns.js';
-import { ROW_FLAG_DELETED } from '../../table/row-group-types.js';
 import type { EngineModeContext } from '../handler.js';
 import { boxRects, isFeatureInBox } from './box-selection.js';
 

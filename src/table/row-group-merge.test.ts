@@ -12,6 +12,8 @@
  *   of the target sizes at once
  */
 
+import type { RowBlockData } from '@sakuzu/kasane/engine';
+import { cacheNumbersOf, mergeRowBlockData, ShapeFormReader } from '@sakuzu/kasane/engine';
 import { readValue, utf8ColumnLength, utf8String } from '@sakuzu/tabane';
 import type { Geometry } from 'geojson';
 import { describe, expect, it } from 'vitest';
@@ -26,10 +28,6 @@ import {
   typeColumnOf,
 } from './feature-row-columns.js';
 import { FEATURE_CACHES, FILL_TRIANGLES_AT } from './fill-triangles.js';
-import { cacheNumbersOf } from './row-caches.js';
-import { mergeRowBlockData } from './row-group-merge.js';
-import type { RowBlockData } from './row-group-types.js';
-import { ShapeFormReader } from './shape-reader.js';
 import { FEATURE_TABLE_COLUMNS } from './tabane/columns.js';
 
 /** Numbers the styles of groups built by builders, as the table of styles of a document does */

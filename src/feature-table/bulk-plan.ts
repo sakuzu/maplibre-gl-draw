@@ -13,6 +13,13 @@
  * not once per row: a map has few styles, so a hundred thousand rows ask for a few patches.
  */
 
+import type { RowHandle } from '@sakuzu/kasane';
+import type { RowGroup, RowPlace } from '@sakuzu/kasane/engine';
+import {
+  ROW_FLAG_DELETED,
+  type RowBlockDictionary,
+  type RowBlockValues,
+} from '@sakuzu/kasane/engine';
 import type { RowWrite } from '../api/tables.js';
 import { drawPropertyKey } from '../shared/properties.js';
 import type {
@@ -29,19 +36,11 @@ import {
   TYPE_COLUMN,
   typeColumnOf,
 } from '../table/feature-row-columns.js';
-import {
-  ROW_FLAG_DELETED,
-  type RowBlockDictionary,
-  type RowBlockValues,
-} from '../table/row-group-types.js';
 import type { RowContainers } from './bulk-rows.js';
 import { isRowLocked, livePlaceOf, rowsByLayerInOrder } from './bulk-rows.js';
 import type { FeatureTablesInternals } from './feature-tables.js';
 import { rowGeometry, rowNumber, rowType, rowValue } from './row-read.js';
-import type { RowGroup } from './row-table.js';
 import type { TableSelection } from './selection.js';
-import type { RowPlace } from './tables-store.js';
-import type { RowHandle } from './types.js';
 
 /** The key of the created zoom in the attributes of a row */
 const CREATED_ZOOM_KEY = drawPropertyKey('createdZoom');

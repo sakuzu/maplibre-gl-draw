@@ -13,8 +13,8 @@
  * - The rows packed count their resolved styles, a draft dropped stops counting them
  */
 
+import { StyleTable } from '@sakuzu/kasane/engine';
 import { describe, expect, it } from 'vitest';
-import { StyleTable } from '../../feature-table/style-table.js';
 import type { FeatureStyle } from '../../shared/types/model.js';
 import { createTestDrawer, feature, tablesOfFeatures } from '../../test-utils.js';
 import { ROWS_STYLE_FLOATS, RowsPalette } from '../renderers/rows/rows-format.js';

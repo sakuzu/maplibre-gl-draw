@@ -12,6 +12,17 @@
  * `featureTablesInternals`.
  */
 
+import type { RowValues, Tables, TablesWrite, TablesWriter, WhenIdle } from '@sakuzu/kasane';
+import { KasaneError, type TablesStoreOptions } from '@sakuzu/kasane';
+import type { GroupHandle, RowGroup, RowTable, TableScan } from '@sakuzu/kasane/engine';
+import {
+  type DeltaInput,
+  ItemWalk,
+  ROW_FLAG_DELETED,
+  type RowBlocks,
+  type RowPlace,
+  TablesStore,
+} from '@sakuzu/kasane/engine';
 import { utf8ColumnFromStrings, utf8String } from '@sakuzu/tabane';
 import type { Geometry, Position } from 'geojson';
 import type {
@@ -37,25 +48,11 @@ import {
   ROW_FLAG_LOCKED,
   styleColumnOf,
 } from '../table/feature-row-columns.js';
-import { KasaneError } from '../table/kasane-error.js';
-import { ROW_FLAG_DELETED } from '../table/row-group-types.js';
 import { FeatureCache } from './feature-cache.js';
 import { featureFields } from './feature-fields.js';
 import { RowStateSets, STATE_HIDDEN_SKETCH } from './feature-row-states.js';
-import { ItemWalk } from './item-walk.js';
 import { rowGeometry, rowInputOf, rowPoint, rowType, rowValue } from './row-read.js';
-import type { RowGroup, RowTable } from './row-table.js';
-import type { RowValues } from './row-values.js';
 import type { TableSelection } from './selection.js';
-import {
-  type DeltaInput,
-  type RowBlocks,
-  type RowPlace,
-  TablesStore,
-  type TablesStoreOptions,
-} from './tables-store.js';
-import type { Tables, TablesWrite, TablesWriter } from './tables-writer.js';
-import type { GroupHandle, TableScan, WhenIdle } from './types.js';
 
 /**
  * The options of the tables, with the ones core keeps to itself (the tests and the measurements

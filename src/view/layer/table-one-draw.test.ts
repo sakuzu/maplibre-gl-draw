@@ -19,6 +19,8 @@
  * - The draws of a mixed layer are a few, and what they hold is in the ledger
  */
 
+import type { RowTable } from '@sakuzu/kasane/engine';
+import { ROW_WRITE_GEOMETRY, ROW_WRITE_STYLE } from '@sakuzu/kasane/engine';
 import { planarCoordinates } from '@sakuzu/tabane';
 import type { ProjectionData } from 'maplibre-gl';
 import { beforeEach, describe, expect, it } from 'vitest';
@@ -26,8 +28,6 @@ import type { RenderContext } from '../../api/extension/render.js';
 import type { GpuRowBuffer } from '../../api/extension/webgl.js';
 import type { LayerTableView, RowField } from '../../api/tables.js';
 import type { GpuRowsSource, HeldGpuRows } from '../../extension/renderers.js';
-import type { RowTable } from '../../feature-table/row-table.js';
-import { ROW_WRITE_GEOMETRY, ROW_WRITE_STYLE } from '../../feature-table/types.js';
 import type { BBox } from '../../geometry/types.js';
 import type { Feature, Layer } from '../../shared/types/model.js';
 import {

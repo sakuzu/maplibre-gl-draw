@@ -9,7 +9,8 @@
  * Confirms mechanically, from the import statements in the sources, that
  * src/geometry/ does not depend on maplibre, the DOM, wasm, the Store or events.
  * Only polygon-clipping and relative imports within geometry are allowed at runtime, plus
- * the GeoJSON type definitions, which are erased at compile time.
+ * the GeoJSON type definitions and the type of a box of `@sakuzu/kasane` (`BBox`), which are
+ * erased at compile time.
  */
 
 import { readdirSync, readFileSync } from 'node:fs';
@@ -22,11 +23,14 @@ const GEOMETRY_DIR = dirname(fileURLToPath(import.meta.url));
 /** Packages allowed as runtime dependencies */
 const ALLOWED_PACKAGES = ['polygon-clipping'];
 
-/** Packages allowed in `import type` statements only */
-const ALLOWED_TYPE_PACKAGES = ['geojson'];
+/** Packages allowed in `import type` and `export type` statements only */
+const ALLOWED_TYPE_PACKAGES = ['geojson', '@sakuzu/kasane'];
 
-/** Regular expression that removes an `import type` statement from a package allowed for types */
-const TYPE_IMPORT_PATTERN = /\bimport\s+type\s+\{[^}]*\}\s+from\s+'([^']+)';?/g;
+/**
+ * Regular expression that removes an `import type` or `export type` statement from a package
+ * allowed for types
+ */
+const TYPE_IMPORT_PATTERN = /\b(?:import|export)\s+type\s+\{[^}]*\}\s+from\s+'([^']+)';?/g;
 
 /** Regular expression that picks up the from clause of an import / export statement */
 const MODULE_SPECIFIER_PATTERN = /\bfrom\s+'([^']+)'/g;

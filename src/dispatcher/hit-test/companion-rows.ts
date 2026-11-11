@@ -26,11 +26,11 @@
  * read here: the hit reads it as it is.
  */
 
+import type { RowHandle } from '@sakuzu/kasane';
+import type { RowGroup, RowTable, TableOrder } from '@sakuzu/kasane/engine';
 import type { LayerTableView } from '../../api/tables.js';
 import type { FeatureTablesInternals } from '../../feature-table/feature-tables.js';
 import { rowFeatureToRead, rowHasGeometry } from '../../feature-table/row-read.js';
-import type { RowGroup, RowTable, TableOrder } from '../../feature-table/row-table.js';
-import type { RowHandle } from '../../feature-table/types.js';
 import type { Feature } from '../../store/types.js';
 import type { FeatureCompanionRegistry } from '../../view/feature-companion.js';
 import { rowHasCompanion } from '../../view/layer/table-partition.js';

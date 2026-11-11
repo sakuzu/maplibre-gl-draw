@@ -18,10 +18,9 @@
  * the mark (their marks do not tell them from what they were before).
  */
 
+import type { RowHandle } from '@sakuzu/kasane';
+import type { RowGroup, WriteMarks } from '@sakuzu/kasane/engine';
 import type { WriteFrames } from '../feature-table/feature-cache.js';
-import type { RowGroup } from '../feature-table/row-table.js';
-import type { RowHandle } from '../feature-table/types.js';
-import type { WriteMarks } from '../feature-table/write-marks.js';
 
 /** The problems the check of the marks keeps at most until they are read */
 const PROBLEM_LIMIT = 20;

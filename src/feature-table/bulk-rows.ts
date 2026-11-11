@@ -6,14 +6,14 @@
  * number, layers and extent, their order, whether each can be seen and edited
  */
 
+import type { RowHandle } from '@sakuzu/kasane';
+import type { RowPlace } from '@sakuzu/kasane/engine';
+import { ROW_FLAG_DELETED } from '@sakuzu/kasane/engine';
 import type { BBox } from '../geometry/types.js';
 import { isGroupHidden, isGroupLocked, ROW_FLAG_LOCKED } from '../table/feature-row-columns.js';
-import { ROW_FLAG_DELETED } from '../table/row-group-types.js';
 import { STATE_UNHIT_MASK } from './feature-row-states.js';
 import type { FeatureTablesInternals } from './feature-tables.js';
 import type { TableSelection } from './selection.js';
-import type { RowPlace } from './tables-store.js';
-import type { RowHandle } from './types.js';
 
 /**
  * What the document says of the layers and the groups a row is in: whether each is shown and

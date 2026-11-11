@@ -13,9 +13,9 @@
  * of the points are also in the buffer of the points, in the same order.
  */
 
+import type { RowGroup } from '@sakuzu/kasane/engine';
 import { ValueStringCache } from '@sakuzu/tabane';
 import { describe, expect, it } from 'vitest';
-import type { RowGroup } from '../../feature-table/row-table.js';
 import { drawPropertyKey } from '../../shared/properties.js';
 import type { Feature, Layer } from '../../shared/types/model.js';
 import { pairTriangles } from '../../table/row-geometry.js';

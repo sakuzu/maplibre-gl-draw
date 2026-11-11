@@ -29,13 +29,11 @@
  * compared with the feature its row makes when it is given again.
  */
 
+import type { RowHandle } from '@sakuzu/kasane';
+import type { RowGroup, RowPlace, WriteMarks } from '@sakuzu/kasane/engine';
+import { ROW_FLAG_DELETED } from '@sakuzu/kasane/engine';
 import type { Feature } from '../shared/types/model.js';
-import { ROW_FLAG_DELETED } from '../table/row-group-types.js';
 import { type RowReadContext, rowFeature } from './row-read.js';
-import type { RowGroup } from './row-table.js';
-import type { RowPlace } from './tables-store.js';
-import type { RowHandle } from './types.js';
-import type { WriteMarks } from './write-marks.js';
 
 /** No row selected */
 const NO_ROWS: ReadonlySet<RowHandle> = new Set();

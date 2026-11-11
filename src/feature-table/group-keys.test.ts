@@ -18,6 +18,7 @@
  *   waiting to be built, at once; without it, they wait for the frames of the drawing as before
  */
 
+import type { TableWorkBudget } from '@sakuzu/kasane/engine';
 import { utf8ColumnFromStrings } from '@sakuzu/tabane';
 import { describe, expect, it } from 'vitest';
 import {
@@ -31,7 +32,6 @@ import { createTableStore } from '../store/table-memory.js';
 import { FEATURE_TABLE_COLUMNS } from '../table/tabane/columns.js';
 import { featureRowDataBuilder as createRowBlockDataBuilder, seededRandom } from '../test-utils.js';
 import { type FeatureTablesInternals, featureTablesInternals } from './feature-tables.js';
-import type { TableWorkBudget } from './types.js';
 
 /** A budget of one step at a time */
 const ONE_STEP: TableWorkBudget = { canStep: () => true, step: (work) => work(Infinity) };

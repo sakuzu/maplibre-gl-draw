@@ -48,7 +48,7 @@ export type AreaCoordinates = PolygonCoordinates | MultiPolygonCoordinates;
 
 // A bounding box (`[minLng, minLat, maxLng, maxLat]` in degrees in this entry): the box of the
 // tables of rows, given again (see the module doc of the entries)
-export type { BBox } from './bbox-type.js';
+export type { BBox } from '@sakuzu/kasane';
 
 /** A GeoJSON Point geometry without `bbox`. */
 export interface PointGeometry {

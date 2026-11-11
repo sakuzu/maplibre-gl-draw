@@ -9,6 +9,7 @@
  * them, not the rows of the layer, as many steps for a layer ten times as large.
  */
 
+import { groupCode, ItemWalk, ROW_FLAG_DELETED, RowTable, rowCode } from '@sakuzu/kasane/engine';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Draw } from '../api/draw.js';
 import { createDrawOnEngine } from '../api/impl/create-draw.js';
@@ -16,7 +17,6 @@ import { createEngine } from '../api/impl/engine.js';
 import type { FeatureTables, RowField } from '../api/tables.js';
 import { groupsInStackingOrder, groupsInStackingOrderOf } from '../store/item-lists.js';
 import { createTableStore } from '../store/table-memory.js';
-import { ROW_FLAG_DELETED } from '../table/row-group-types.js';
 import { FEATURE_TABLE_COLUMNS } from '../table/tabane/columns.js';
 import {
   createMapStub,
@@ -24,8 +24,6 @@ import {
   seededRandom,
 } from '../test-utils.js';
 import { type FeatureTablesInternals, featureTablesInternals } from './feature-tables.js';
-import { groupCode, ItemWalk, rowCode } from './item-walk.js';
-import { RowTable } from './row-table.js';
 
 const LAYER = {
   name: 'rows',

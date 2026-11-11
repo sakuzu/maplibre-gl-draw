@@ -7,6 +7,7 @@
  * rest first: what is read is what the restore leaves, and the writes keep their order.
  */
 
+import { ROW_FLAG_DELETED } from '@sakuzu/kasane/engine';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { featureTablesInternals } from '../../feature-table/feature-tables.js';
 import { createRowValues as createRows, featureValuesOf, rowValuesOf } from '../../kasane/index.js';
@@ -14,7 +15,6 @@ import { BULK_SLICE_ROWS } from '../../operations/bulk-sliced.js';
 import type { Store } from '../../store/store.js';
 import { createTableStore } from '../../store/table-memory.js';
 import type { Feature, SelectionTarget, StoreChange } from '../../store/types.js';
-import { ROW_FLAG_DELETED } from '../../table/row-group-types.js';
 import { createMapStub } from '../../test-utils.js';
 import type { Draw } from '../draw.js';
 import type { FeatureValues } from '../model.js';

@@ -17,6 +17,12 @@
  * - A row of a delta moved far is found where it is now
  */
 
+import type {
+  GroupVersion,
+  GroupVersionReceiver,
+  RowGroup,
+  TableWorkBudget,
+} from '@sakuzu/kasane/engine';
 import { describe, expect, it } from 'vitest';
 import type { BBox } from '../geometry/types.js';
 import {
@@ -29,9 +35,6 @@ import {
 } from '../test-utils.js';
 import { STATE_HIDDEN_MASK } from './feature-row-states.js';
 import type { FeatureTablesInternals } from './feature-tables.js';
-import type { RowGroup } from './row-table.js';
-import type { TableWorkBudget } from './types.js';
-import type { GroupVersion, GroupVersionReceiver } from './versions.js';
 
 const ONE_STEP: TableWorkBudget = { canStep: () => true, step: (work) => work(Infinity) };
 

@@ -18,17 +18,16 @@
  * A row without a geometry draws nothing and joins the run it is in.
  */
 
+import type { RowBlockDictionary, RowGroup } from '@sakuzu/kasane/engine';
+import { geometryAt } from '@sakuzu/kasane/engine';
 import type { LayerTableView } from '../../api/tables.js';
 import type { GpuRowsSource } from '../../extension/renderers.js';
 import { rowHasGeometry, rowType } from '../../feature-table/row-read.js';
-import type { RowGroup } from '../../feature-table/row-table.js';
-import { geometryAt } from '../../feature-table/row-table.js';
 import type { BBox } from '../../geometry/types.js';
 import type { Feature, Layer } from '../../shared/types/model.js';
 import type { TransformFieldsRegistry } from '../../store/transform-roles.js';
 import { STYLE_COLUMN } from '../../table/feature-row-columns.js';
 import { CHUNK_TARGET_VERTICES } from '../../table/partition.js';
-import type { RowBlockDictionary } from '../../table/row-group-types.js';
 import type { FeatureCompanionRegistry } from '../feature-companion.js';
 import type { RowSpriteSource } from '../renderers/rows/rows-format.js';
 import type { RunKind } from './store-retained-classify.js';

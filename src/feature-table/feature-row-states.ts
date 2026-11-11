@@ -21,17 +21,11 @@
  * the row.
  */
 
+import type { RowHandle, ValueStates } from '@sakuzu/kasane';
+import type { GroupHandle, GroupTable } from '@sakuzu/kasane/engine';
+import { type RowStates, STATE_DELETED, STATE_DELTA, STATE_WAIT } from '@sakuzu/kasane/engine';
 import type { EnuEdit } from '../geometry/enu-transforms.js';
 import { DrawError } from '../shared/draw-error.js';
-import type { GroupTable } from './group-table.js';
-import {
-  type RowStates,
-  STATE_DELETED,
-  STATE_DELTA,
-  STATE_WAIT,
-  type ValueStates,
-} from './row-state.js';
-import type { GroupHandle, RowHandle } from './types.js';
 
 // === The bits of each handle (the lowest of the copy) ===
 

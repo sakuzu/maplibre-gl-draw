@@ -12,7 +12,7 @@
  * later (the selection before an operation, to put it back after an undo) stays as it was.
  */
 
-import type { RowHandle } from './types.js';
+import type { RowHandle } from '@sakuzu/kasane';
 
 /**
  * A set of the handles of rows, kept sorted

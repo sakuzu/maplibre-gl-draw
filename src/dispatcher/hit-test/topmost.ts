@@ -44,6 +44,7 @@
  * of the layer. When no provider at all is registered, this detour never happens.
  */
 
+import type { RowGroup, RowTable } from '@sakuzu/kasane/engine';
 import type { DisplayHitTestFn } from '../../dataset/dataset.js';
 import type { DatasetManager } from '../../dataset/manager.js';
 import type { Dataset } from '../../dataset/types.js';
@@ -55,7 +56,6 @@ import {
   type TableScreenHit,
 } from '../../feature-table/hit-test.js';
 import { rowFeatureToRead } from '../../feature-table/row-read.js';
-import type { RowGroup, RowTable } from '../../feature-table/row-table.js';
 import type { LngLat, ScreenPoint } from '../../shared/math/index.js';
 import { wrapLongitude } from '../../shared/math/longitude.js';
 import { RenderedShapes } from '../../sketches/rendered-shapes.js';

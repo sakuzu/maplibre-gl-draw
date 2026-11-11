@@ -15,6 +15,10 @@
  */
 
 import { createHash } from 'node:crypto';
+import type { RowBlockBuildOptions } from '@sakuzu/kasane';
+import { transferList } from '@sakuzu/kasane';
+import type { RowBlockData } from '@sakuzu/kasane/engine';
+import { mergeRowBlockData, ShapeFormReader } from '@sakuzu/kasane/engine';
 import type { CoordinateDimensions } from '@sakuzu/tabane';
 import type { Geometry, Position } from 'geojson';
 import { describe, expect, it } from 'vitest';
@@ -24,10 +28,6 @@ import type { FeatureRowInput as RowInput } from './feature-row-blocks.js';
 import { geometryColumnOf, styleColumnOf } from './feature-row-columns.js';
 import { FEATURE_CACHES } from './fill-triangles.js';
 import { toRowGeometry } from './row-geometry.js';
-import { blockTransferList, type RowBlockBuildOptions } from './row-group-builder.js';
-import { mergeRowBlockData } from './row-group-merge.js';
-import type { RowBlockData } from './row-group-types.js';
-import { ShapeFormReader } from './shape-reader.js';
 import { FEATURE_TABLE_COLUMNS } from './tabane/columns.js';
 
 const ALL_DIMS: readonly CoordinateDimensions[] = ['xy', 'xyz', 'xym', 'xyzm'];
@@ -142,13 +142,13 @@ function build(
 /** The hash of every array of groups (the bytes a Worker sends) */
 function hashOf(groups: readonly RowBlockData[]): string {
   const hash = createHash('sha256');
-  for (const buffer of blockTransferList(groups)) hash.update(new Uint8Array(buffer));
+  for (const buffer of transferList(groups)) hash.update(new Uint8Array(buffer));
   return hash.digest('hex');
 }
 
 /** The bytes of every array of groups */
 function bytesOf(groups: readonly RowBlockData[]): number {
-  return blockTransferList(groups).reduce((sum, buffer) => sum + buffer.byteLength, 0);
+  return transferList(groups).reduce((sum, buffer) => sum + buffer.byteLength, 0);
 }
 
 /** The number of values of the coordinates the geometry columns of groups hold */

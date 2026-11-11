@@ -16,10 +16,11 @@
  *   gathered, built in the Worker, and queued to be taken in, as once they are taken in
  */
 
+import { ROW_BLOCK_TARGET_ROWS } from '@sakuzu/kasane';
+import type { TableWorkBudget } from '@sakuzu/kasane/engine';
 import { describe, expect, it, vi } from 'vitest';
 import type { FeatureTablesWorker } from '../api/tables.js';
 import { circleRowRings } from '../table/circle-rings.js';
-import { ROW_BLOCK_TARGET_ROWS } from '../table/row-group-builder.js';
 import { FEATURE_TABLE_COLUMNS } from '../table/tabane/columns.js';
 import {
   featureRowDataBuilder as createRowBlockDataBuilder,
@@ -33,7 +34,6 @@ import {
 import { STATE_HIDDEN_MASK } from './feature-row-states.js';
 import type { FeatureTablesInternals } from './feature-tables.js';
 import { hitTestLayerTable } from './hit-test.js';
-import type { TableWorkBudget } from './types.js';
 
 /** Points in a row, one per key every 1,000 */
 function pointsReference(count: number): ReferenceRows {

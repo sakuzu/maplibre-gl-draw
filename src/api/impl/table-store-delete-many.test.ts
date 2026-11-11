@@ -9,9 +9,8 @@
  * the order and in the delta of the layer, after a deletion is undone too
  */
 
+import { RowSkips, RowTable } from '@sakuzu/kasane/engine';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { RowSkips } from '../../feature-table/row-skips.js';
-import { RowTable } from '../../feature-table/row-table.js';
 import { createTableStore } from '../../store/table-memory.js';
 import type { ItemMove } from '../../store/types.js';
 import { createMapStub, onDocumentChange } from '../../test-utils.js';

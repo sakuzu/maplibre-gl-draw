@@ -57,10 +57,10 @@
  * checks allowed to fail; every failure is given to `onFailure` first.
  */
 
+import type { RowGroup } from '@sakuzu/kasane/engine';
 import { utf8String } from '@sakuzu/tabane';
 import { STATE_BULK } from '../feature-table/feature-row-states.js';
 import { featureTablesInternals } from '../feature-table/feature-tables.js';
-import type { RowGroup } from '../feature-table/row-table.js';
 import { DrawError } from '../shared/draw-error.js';
 import type { SketchController } from '../sketches/sketch-controller.js';
 import type { Store } from '../store/store.js';

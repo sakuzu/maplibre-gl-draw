@@ -24,6 +24,7 @@
  * runs in a Worker as well.
  */
 
+import type { TableColumns } from '@sakuzu/kasane';
 import {
   CANONICAL_OBJECT,
   decodeCanonicalValue,
@@ -37,7 +38,6 @@ import {
   type TabaneWholeColumn,
 } from '@sakuzu/tabane';
 import type { Geometry } from 'geojson';
-import type { TableColumns } from '../../feature-table/row-values.js';
 import { DrawError } from '../../shared/draw-error.js';
 import type { GeometryType } from '../types.js';
 

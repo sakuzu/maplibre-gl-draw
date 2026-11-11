@@ -6,9 +6,9 @@
  * is thrown as a DrawError, anything else as it is
  */
 
+import { KasaneError } from '@sakuzu/kasane';
 import { TabaneError } from '@sakuzu/tabane';
 import { describe, expect, it } from 'vitest';
-import { KasaneError } from '../../table/kasane-error.js';
 import { DrawError } from '../errors.js';
 import { guardAfterDestroy } from './destroy-guard.js';
 

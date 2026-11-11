@@ -13,18 +13,16 @@
  *   import whose specifiers are all `type X`, and `import('...')` in a type position) is
  *   listed but does not fail the check. Those are the known deviations of the document
  *
- * Test files (*.test.ts), src/e2e/, src/test-support/ and src/test-utils.ts are not checked.
- * Only Node's standard modules are used.
+ * Test files (*.test.ts), src/e2e/, src/test-support/ and src/test-utils.ts are not checked by
+ * the rules. Only Node's standard modules are used.
  *
- * With `--kasane`, it checks instead the files that are to be Kasane (scripts/kasane-boundary.mjs):
- * rule 12 (they import only each other, and of the packages only those listed), rule 13 (nothing
- * of view/, modes/, store/, dispatcher/, operations/, snapping/, api/ or dataset/, not even a
- * type), and the words they must not hold. Every hit is an error (exit code 1).
+ * - A relative import that leaves src/ is an error, in every file of src/ (the tests included): a
+ *   package, `@sakuzu/kasane` and `@sakuzu/tabane` among them, is imported by its name and its
+ *   entries, never by a path into its files
  */
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { dirname, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { FORBIDDEN_AREAS, KASANE_FILES, PACKAGES, WORDS } from './kasane-boundary.mjs';
 
 const SRC = resolve(dirname(fileURLToPath(import.meta.url)), '..', 'src');
 
@@ -106,6 +104,16 @@ function brokenRule(from, to, typeOnly) {
   if (b === 'api' || b === 'entry') return `rule 1 (${a} -> ${b})`;
   if (a === 'store') return `rule 8 (store -> ${b})`;
   return `rule 1 (${a} -> ${b})`;
+}
+
+/** @returns {string[]} Every TypeScript file of src/, the tests included, relative to src/ */
+function listAllFiles(dir = SRC, out = []) {
+  for (const name of readdirSync(dir)) {
+    const path = join(dir, name);
+    if (statSync(path).isDirectory()) listAllFiles(path, out);
+    else if (name.endsWith('.ts')) out.push(relative(SRC, path));
+  }
+  return out;
 }
 
 /** @returns {string[]} The checked files, relative to src/ */
@@ -208,89 +216,6 @@ function findCycles(graph) {
   return cycles;
 }
 
-/** Whether a token ends before the character at i of a run of ASCII letters and digits */
-function cutsBefore(run, i) {
-  const isLower = (c) => c >= 'a' && c <= 'z';
-  const isUpper = (c) => c >= 'A' && c <= 'Z';
-  const isDigit = (c) => c >= '0' && c <= '9';
-  const isLetter = (c) => isLower(c) || isUpper(c);
-  const a = run[i - 1];
-  const b = run[i];
-  const c = i + 1 < run.length ? run[i + 1] : '';
-  return (
-    (isLower(a) && isUpper(b)) ||
-    (isUpper(a) && isUpper(b) && isLower(c)) ||
-    (isLetter(a) && isDigit(b)) ||
-    (isDigit(a) && isLetter(b))
-  );
-}
-
-/** The tokens of a line, lower-cased */
-function tokensOf(line) {
-  const out = [];
-  for (const run of line.split(/[^A-Za-z0-9]+/)) {
-    if (run === '') continue;
-    let start = 0;
-    for (let i = 1; i < run.length; i++) {
-      if (cutsBefore(run, i)) {
-        out.push(run.slice(start, i).toLowerCase());
-        start = i;
-      }
-    }
-    out.push(run.slice(start).toLowerCase());
-  }
-  return out;
-}
-
-/** The packages a file imports */
-function packagesOf(file) {
-  const text = readFileSync(join(SRC, file), 'utf8')
-    .replace(/\/\*[\s\S]*?\*\//g, '')
-    .replace(/^[ \t]*\/\/.*$/gm, '');
-  const out = new Set();
-  for (const m of text.matchAll(/(?:from|import)[ \t]*\(?\s*['"]([^'"./][^'"]*)['"]/g)) {
-    const parts = m[1].split('/');
-    out.add(m[1].startsWith('@') ? parts.slice(0, 2).join('/') : parts[0]);
-  }
-  return out;
-}
-
-/** Rules 12 and 13 and the words, for the files that are to be Kasane */
-function checkKasane() {
-  const listed = new Set(KASANE_FILES.map((f) => f.split('/').join(sep)));
-  const words = new Set(WORDS);
-  const hits = [];
-  for (const file of [...listed].sort()) {
-    for (const imp of importsOf(file)) {
-      const area = imp.to.split(sep)[0];
-      if (FORBIDDEN_AREAS.includes(area)) {
-        hits.push(`rule 13: src/${file} -> src/${imp.to}${imp.names ? `  ${imp.names}` : ''}`);
-      } else if (!listed.has(imp.to)) {
-        hits.push(`rule 12: src/${file} -> src/${imp.to}${imp.names ? `  ${imp.names}` : ''}`);
-      }
-    }
-    for (const name of packagesOf(file)) {
-      if (!PACKAGES.includes(name)) hits.push(`rule 12: src/${file} -> ${name}`);
-    }
-    readFileSync(join(SRC, file), 'utf8')
-      .split('\n')
-      .forEach((line, k) => {
-        for (const t of tokensOf(line)) {
-          if (words.has(t)) hits.push(`words: src/${file}:${k + 1}: ${t}`);
-        }
-      });
-  }
-  const count = (prefix) => hits.filter((h) => h.startsWith(prefix)).length;
-  for (const line of hits) console.log(`  ${line}`);
-  console.log(
-    `check-layers --kasane: ${listed.size} files, rule 12 ${count('rule 12')}, ` +
-      `rule 13 ${count('rule 13')}, words ${count('words')}`,
-  );
-  process.exit(hits.length > 0 ? 1 : 0);
-}
-
-if (process.argv.includes('--kasane')) checkKasane();
-
 const files = listFiles().sort();
 const fileSet = new Set(files);
 const violations = [];
@@ -317,6 +242,15 @@ for (const file of files) {
 
 const cycles = findCycles(graph);
 
+const outside = [];
+for (const file of listAllFiles().sort()) {
+  for (const imp of importsOf(file)) {
+    if (imp.to === '..' || imp.to.startsWith(`..${sep}`)) {
+      outside.push(`src/${file} -> ${imp.to}${imp.names ? `  ${imp.names}` : ''}`);
+    }
+  }
+}
+
 if (typeDeviations.length > 0) {
   console.log(`Type-only imports against the layer rules (allowed, ${typeDeviations.length}):`);
   for (const line of typeDeviations.sort()) console.log(`  ${line}`);
@@ -329,8 +263,13 @@ if (cycles.length > 0) {
   console.log(`Runtime import cycles (${cycles.length}):`);
   for (const cycle of cycles) console.log(`  ${cycle.map((f) => `src/${f}`).join(' <-> ')}`);
 }
+if (outside.length > 0) {
+  console.log(`Relative imports out of src/ (${outside.length}):`);
+  for (const line of outside) console.log(`  ${line}`);
+}
 console.log(
   `check-layers: ${files.length} files, ${violations.length} runtime violations, ` +
-    `${cycles.length} runtime cycles, ${typeDeviations.length} type-only deviations`,
+    `${cycles.length} runtime cycles, ${typeDeviations.length} type-only deviations, ` +
+    `${outside.length} imports out of src/`,
 );
-process.exit(violations.length > 0 || cycles.length > 0 ? 1 : 0);
+process.exit(violations.length > 0 || cycles.length > 0 || outside.length > 0 ? 1 : 0);

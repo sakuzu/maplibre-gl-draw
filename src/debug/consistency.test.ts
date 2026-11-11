@@ -21,13 +21,13 @@
  * - The drawing keeps what it writes to the GPU only while those checks run
  */
 
+import { ROW_WRITE_STYLE } from '@sakuzu/kasane/engine';
 import type { CustomRenderMethodInput } from 'maplibre-gl';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createDraw } from '../api/draw.js';
 import type { Store as PublicStore } from '../api/extension/store.js';
 import type { ConsistencyFailure } from '../api/options.js';
 import { featureTablesInternals } from '../feature-table/feature-tables.js';
-import { ROW_WRITE_STYLE } from '../feature-table/types.js';
 import { DrawError } from '../shared/draw-error.js';
 import type { DrawStore } from '../store/draw-store.js';
 import { MemoryStore } from '../store/memory.js';

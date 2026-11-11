@@ -31,6 +31,16 @@
  * layers.
  */
 
+import type { RowHandle } from '@sakuzu/kasane';
+import type { GroupHandle, GroupTable, RowGroup, RowTable } from '@sakuzu/kasane/engine';
+import {
+  compareItemKeys,
+  groupCode,
+  type ItemKey,
+  type ItemWalk,
+  ROW_FLAG_DELETED,
+  rowCode,
+} from '@sakuzu/kasane/engine';
 import { utf8String } from '@sakuzu/tabane';
 import type {
   ItemMove,
@@ -44,11 +54,6 @@ import {
   type OrderContainer,
   trimmedContainer,
 } from '../shared/utils/item-moves.js';
-import { ROW_FLAG_DELETED } from '../table/row-group-types.js';
-import type { GroupTable } from './group-table.js';
-import { compareItemKeys, groupCode, type ItemKey, type ItemWalk, rowCode } from './item-walk.js';
-import type { RowGroup, RowTable } from './row-table.js';
-import type { GroupHandle, RowHandle } from './types.js';
 
 /**
  * The most rows a write puts in another place, creates or deletes and that are told one at a

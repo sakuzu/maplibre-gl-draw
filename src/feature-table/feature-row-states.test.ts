@@ -7,6 +7,7 @@
  * moves its rows while one is in it, and is let go of once the last leaves it
  */
 
+import { GroupTable, RowStates } from '@sakuzu/kasane/engine';
 import { describe, expect, it } from 'vitest';
 import {
   FEATURE_ROW_STATE_BITS,
@@ -14,8 +15,6 @@ import {
   STATE_BULK,
   STATE_MOVE_MASK,
 } from './feature-row-states.js';
-import { GroupTable } from './group-table.js';
-import { RowStates } from './row-state.js';
 
 const TURN = { kind: 'rotate' as const, center: [139, 35], angleDegrees: 15 };
 

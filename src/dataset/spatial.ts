@@ -9,8 +9,8 @@
  * put back into the draw order (the order of the rows) before they are returned.
  */
 
+import { buildPackedRTree, type PackedRTree, searchPackedRTree } from '@sakuzu/kasane/engine';
 import type { BBox } from '../geometry/types.js';
-import { buildPackedRTree, type PackedRTree, searchPackedRTree } from '../table/packed-rtree.js';
 
 /**
  * Spatial index of a dataset

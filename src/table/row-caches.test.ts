@@ -15,22 +15,21 @@
  *   of its fill
  */
 
+import type { RowCache, RowRead } from '@sakuzu/kasane';
+import type { RowBlockData } from '@sakuzu/kasane/engine';
+import {
+  cacheNumbersOf,
+  mergeRowBlockData,
+  type RowCacheColumn,
+  RowCacheWriter,
+} from '@sakuzu/kasane/engine';
 import { describe, expect, it } from 'vitest';
 import { createTables, featureTablesInternals } from '../feature-table/feature-tables.js';
 import { shapesOfGeometries } from '../feature-table/feature-tables-writer.js';
-import type { RowBlockData } from '../table/row-group-types.js';
 import { featureRowDataBuilder as createRowBlockDataBuilder } from '../test-utils.js';
 import { circleRowRings } from './circle-rings.js';
 import type { FeatureRowInput as RowInput } from './feature-row-blocks.js';
 import { FILL_TRIANGLES } from './fill-triangles.js';
-import {
-  cacheNumbersOf,
-  type RowCache,
-  type RowCacheColumn,
-  RowCacheWriter,
-} from './row-caches.js';
-import { mergeRowBlockData } from './row-group-merge.js';
-import type { RowRead } from './row-read-type.js';
 import { FEATURE_TABLE_COLUMNS } from './tabane/columns.js';
 
 /** A cache of the first point and the type of each row, which counts the rows it is made of */

@@ -12,6 +12,10 @@
  * - What the tables throw is a DrawError
  */
 
+import type { RowBlock } from '@sakuzu/kasane';
+import { mergeRowBlock, type PointRowRings } from '@sakuzu/kasane';
+import type { RowBlockData } from '@sakuzu/kasane/engine';
+import { rowRingsOfPoint } from '@sakuzu/kasane/engine';
 import { utf8String } from '@sakuzu/tabane';
 import { describe, expect, it } from 'vitest';
 import { DrawError } from '../api/errors.js';
@@ -24,9 +28,6 @@ import {
   type FeatureRowInput as RowInput,
 } from './feature-row-blocks.js';
 import { FEATURE_CACHES } from './fill-triangles.js';
-import { mergeRowBlock } from './row-group-merge.js';
-import type { RowBlock, RowBlockData } from './row-group-types.js';
-import { type PointRowRings, rowRingsOfPoint } from './row-rings.js';
 import { FEATURE_TABLE_COLUMNS } from './tabane/columns.js';
 
 const ROWS: RowInput[] = [

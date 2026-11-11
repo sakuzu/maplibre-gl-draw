@@ -15,18 +15,17 @@
  * implementation of the Store keeps and calls, after it has recorded what it writes.
  */
 
+import type { RowBlock, TableGroupField, TableGroupPatch } from '@sakuzu/kasane';
+import {
+  createRowValues as createRowValuesOf,
+  type RowField,
+  type RowFieldValues,
+  type RowValues,
+} from '@sakuzu/kasane';
+import { checkRowValues as checkShapeOfRowValues, RowFields } from '@sakuzu/kasane/engine';
 import type { CoordinateDimensions, CoordinateSystem, Utf8Column } from '@sakuzu/tabane';
 import type { Position } from 'geojson';
 import { createFeatureTablesStore } from '../feature-table/feature-row-tables.js';
-import {
-  checkRowValues as checkShapeOfRowValues,
-  createRowValues as createRowValuesOf,
-  type RowField,
-  RowFields,
-  type RowFieldValues,
-  type RowValues,
-} from '../feature-table/row-values.js';
-import type { TableGroupField, TableGroupPatch } from '../feature-table/tables-writer.js';
 import type { BBox } from '../geometry/types.js';
 import type {
   ItemHandles,
@@ -39,7 +38,6 @@ import { copyTableStore as copyTableStoreOf } from '../store/table-copy.js';
 import { createTableStore as createTableStoreOf } from '../store/table-memory.js';
 import { drawErrorOf } from '../table/draw-error-of.js';
 import type { FeatureTablesWorker } from '../table/feature-row-blocks.js';
-import type { RowBlock } from '../table/row-group-types.js';
 import { FEATURE_TABLE_COLUMNS } from '../table/tabane/columns.js';
 import type { GeometryTransforms, Store, StoreView, UpdateSource } from './extension/store.js';
 import type { Feature, FeatureStyle, FeatureType, FeatureValues } from './model.js';

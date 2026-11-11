@@ -14,6 +14,7 @@
  * when the tables run their work (while the page is idle).
  */
 
+import type { TablesWriter } from '@sakuzu/kasane';
 import type { FeatureTables, FeatureTablesWriter, RowField } from '../api/tables.js';
 import { drawPropertyKey } from '../shared/properties.js';
 import { whenIdle } from '../shared/utils/idle.js';
@@ -36,7 +37,6 @@ import {
   type TablesInternalOptions,
 } from './feature-tables.js';
 import { createFeatureTablesWriter } from './feature-tables-writer.js';
-import type { TablesWriter } from './tables-writer.js';
 
 /**
  * The fields of a feature whose new value places its row again: the drawing cuts the rows by

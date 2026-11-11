@@ -13,6 +13,7 @@
  * attributes, from its feature.
  */
 
+import { ROW_FLAG_DELETED } from '@sakuzu/kasane/engine';
 import { featureTablesInternals } from '../../feature-table/feature-tables.js';
 import { rowPoint, rowType, rowValue } from '../../feature-table/row-read.js';
 import { coordinatesBBox } from '../../geometry/bbox.js';
@@ -24,7 +25,6 @@ import { getBoundingBox } from '../../shared/utils/feature-bbox.js';
 import { forEachMatchingRow, type RowFilter } from '../../store/feature-stream.js';
 import type { Store } from '../../store/store.js';
 import type { Feature } from '../../store/types.js';
-import { ROW_FLAG_DELETED } from '../../table/row-group-types.js';
 
 /** The key of the radius of a Circle in the attributes of a row */
 const RADIUS_KEY = drawPropertyKey('radiusMeters');

@@ -15,6 +15,12 @@
  *   gives the features
  */
 
+import {
+  type InPlaceRowWrite,
+  ROW_WRITE_GEOMETRY,
+  ROW_WRITE_STATE,
+  ROW_WRITE_STYLE,
+} from '@sakuzu/kasane/engine';
 import { utf8ColumnFromStrings, type Value } from '@sakuzu/tabane';
 import type { Geometry } from 'geojson';
 import { describe, expect, it } from 'vitest';
@@ -36,13 +42,6 @@ import {
   type FeatureTablesInternals,
   featureTablesInternals,
 } from './feature-tables.js';
-import {
-  type InPlaceRowWrite,
-  ROW_WRITE_GEOMETRY,
-  ROW_WRITE_STATE,
-  ROW_WRITE_STYLE,
-} from './types.js';
-import { OVERRIDE_BYTES_LIMIT } from './value-overrides.js';
 
 /** Points in a row, `count` of them */
 function points(count: number): Feature[] {
@@ -290,7 +289,6 @@ describe('writer.apply', () => {
       writer.apply(patchOf([handle], `properties:k${i}`, [long]));
     }
     expect(internals.groupsDue.has(table.groupAt(0).handle)).toBe(true);
-    expect(OVERRIDE_BYTES_LIMIT).toBeGreaterThan(0);
   });
 
   it('keeps the styles of the table to the ones the rows use, however often a color changes', () => {

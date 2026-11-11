@@ -1,6 +1,15 @@
 // SPDX-FileCopyrightText: 2026 SAKAIDA Atsushi
 // SPDX-License-Identifier: AGPL-3.0-only
 
+import type { RowBlockBuildOptions } from '@sakuzu/kasane';
+import { transferList } from '@sakuzu/kasane';
+import {
+  cacheNumbersOf,
+  ROW_FLAG_DELETED,
+  type RowBlockData,
+  type RowBlockDictionary,
+  ShapeFormReader,
+} from '@sakuzu/kasane/engine';
 import { decodeCanonicalValue, hashUtf8, readValue, utf8String } from '@sakuzu/tabane';
 import earcut from 'earcut';
 import type { Geometry } from 'geojson';
@@ -20,11 +29,7 @@ import {
   typeColumnOf,
 } from './feature-row-columns.js';
 import { FEATURE_CACHES, FILL_TRIANGLES_AT } from './fill-triangles.js';
-import { cacheNumbersOf } from './row-caches.js';
 import { pairTriangles } from './row-geometry.js';
-import { blockTransferList, type RowBlockBuildOptions } from './row-group-builder.js';
-import { ROW_FLAG_DELETED, type RowBlockData, type RowBlockDictionary } from './row-group-types.js';
-import { ShapeFormReader } from './shape-reader.js';
 import { FEATURE_TABLE_COLUMNS } from './tabane/columns.js';
 
 /** A row with the defaults of the tests */
@@ -409,7 +414,7 @@ describe('createRowBlockDataBuilder', () => {
       builder.addRow(row(`r${i}`, `k${i}`, point(i, 0), { properties: { name: `n${i}` } }));
     }
     const groups = builder.finish();
-    const buffers = blockTransferList(groups);
+    const buffers = transferList(groups);
     expect(new Set(buffers).size).toBe(buffers.length);
     expect(buffers).toContain(groups[0].ids.bytes.buffer);
     expect(buffers).toContain(propertyColumnsOf(groups[1]).columns[0].tags.buffer);

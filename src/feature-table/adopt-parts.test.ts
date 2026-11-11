@@ -9,11 +9,11 @@
  * their order still read in the order of their keys.
  */
 
+import type { RowBlockData } from '@sakuzu/kasane/engine';
 import { describe, expect, it } from 'vitest';
 import type { FeatureTables } from '../api/tables.js';
 import { circleRowRings } from '../table/circle-rings.js';
 import type { FeatureRowInput as RowInput } from '../table/feature-row-blocks.js';
-import type { RowBlockData } from '../table/row-group-types.js';
 import { FEATURE_TABLE_COLUMNS } from '../table/tabane/columns.js';
 import {
   featureRowDataBuilder as createRowBlockDataBuilder,

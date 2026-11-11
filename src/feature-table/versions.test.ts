@@ -19,14 +19,16 @@
  *   between them: every read of the tables gives the reference
  */
 
+import type { RowBlockMerge } from '@sakuzu/kasane';
+import type {
+  GroupVersion,
+  GroupVersionReceiver,
+  RowBlockData,
+  TableWorkBudget,
+} from '@sakuzu/kasane/engine';
+import { mergeRowBlockData, type RowBlockDataMerge } from '@sakuzu/kasane/engine';
 import { describe, expect, it } from 'vitest';
 import type { FeatureTablesWorker } from '../api/tables.js';
-import {
-  mergeRowBlockData,
-  type RowBlockDataMerge,
-  type RowBlockMerge,
-} from '../table/row-group-merge.js';
-import type { RowBlockData } from '../table/row-group-types.js';
 import {
   expectTablesMatch,
   referenceKey as key,
@@ -40,8 +42,6 @@ import {
 } from '../test-utils.js';
 import { STATE_HIDDEN_WAIT } from './feature-row-states.js';
 import type { FeatureTablesInternals } from './feature-tables.js';
-import type { TableWorkBudget } from './types.js';
-import type { GroupVersion, GroupVersionReceiver } from './versions.js';
 
 /** A budget of `steps` steps */
 function steps(n: number): TableWorkBudget {

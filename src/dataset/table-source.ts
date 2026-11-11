@@ -22,12 +22,12 @@
  * are drawn in the order of the table whatever the order within the children.
  */
 
+import type { ShapeFormReader } from '@sakuzu/kasane/engine';
 import { drawPropertyKey } from '../shared/properties.js';
 import type { Feature, FeatureCoordinates } from '../shared/types/model.js';
 import type { Color } from '../shared/types/style.js';
 import { geometryFromCoordinates } from '../shared/utils/coordinates.js';
 import { isPreparedTable, prepareTable } from '../table/prepare.js';
-import type { ShapeFormReader } from '../table/shape-reader.js';
 import { columnValue, isDictionaryColumn, TableReader } from '../table/table.js';
 import type { GeometryType, PreparedTable, Table } from '../table/types.js';
 import { toPackedPointStyle } from '../view/renderers/batch-manager.js';

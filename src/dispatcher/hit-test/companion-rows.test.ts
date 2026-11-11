@@ -8,12 +8,12 @@
  * what is kept stays what walking every row of the layer finds, over writes of every kind.
  */
 
+import type { RowTable } from '@sakuzu/kasane/engine';
 import { utf8ColumnFromStrings } from '@sakuzu/tabane';
 import { describe, expect, it } from 'vitest';
 import type { LayerTableView, RowField, RowValues, TableGroupField } from '../../api/tables.js';
 import type { FeatureTablesInternals } from '../../feature-table/feature-tables.js';
 import { rowFeatureToRead, rowHasGeometry } from '../../feature-table/row-read.js';
-import type { RowTable } from '../../feature-table/row-table.js';
 import { FEATURE_TABLE_COLUMNS } from '../../table/tabane/columns.js';
 import {
   featureRowDataBuilder as createRowBlockDataBuilder,

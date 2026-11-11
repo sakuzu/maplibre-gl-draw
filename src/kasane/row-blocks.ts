@@ -8,16 +8,14 @@
  * The list of the buffers to transfer takes a table of `/table` as well as row blocks
  */
 
+import type { RowBlock, RowBlockBuilderOptions, RowBlockMerge } from '@sakuzu/kasane';
+import { transferList as rowBlockTransferList } from '@sakuzu/kasane';
 import {
   createFeatureRowBlockBuilder,
   mergeFeatureRowBlock,
   type FeatureRowBlockBuilder as RowBlockBuilder,
 } from '../table/feature-row-blocks.js';
 import { transferList as tableTransferList } from '../table/prepare.js';
-import type { RowBlockBuilderOptions } from '../table/row-group-builder.js';
-import type { RowBlockMerge } from '../table/row-group-merge.js';
-import type { RowBlock } from '../table/row-group-types.js';
-import { transferList as rowBlockTransferList } from '../table/transfer-list.js';
 import type { PreparedTable, Table } from '../table/types.js';
 
 /**

@@ -8,10 +8,9 @@
  * re-exports them).
  */
 
+import type { RowField, RowsChange, RowValues, TableRowsChange } from '@sakuzu/kasane';
 import type { Value } from '@sakuzu/tabane';
 import type { Geometry, Position } from 'geojson';
-import type { RowField, RowValues } from '../../feature-table/row-values.js';
-import type { RowsChange, TableRowsChange } from '../../feature-table/tables-writer.js';
 
 /**
  * The rows of one layer a change created, updated or deleted, by handle (`LayerRowsChange`), and

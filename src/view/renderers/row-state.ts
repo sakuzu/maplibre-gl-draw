@@ -19,10 +19,10 @@
  * byte of the row of each of its instances (`rowStateOf`), so what it draws moves as the rows do.
  */
 
+import type { RowHandle } from '@sakuzu/kasane';
 import type { Gpu, GpuContext } from '../../api/extension/webgl.js';
 import { type DraggedRows, draggedRowMotionsOf } from '../../feature-table/dragged-rows.js';
 import { MOVE_SETS } from '../../feature-table/feature-row-states.js';
-import type { RowHandle } from '../../feature-table/types.js';
 import {
   type EnuEdit,
   enuEditTurn,

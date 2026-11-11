@@ -23,12 +23,12 @@
  *   rows of the layer in their order, once each
  */
 
+import type { RowTable } from '@sakuzu/kasane/engine';
 import { utf8ColumnFromStrings } from '@sakuzu/tabane';
 import type { Geometry } from 'geojson';
 import type { ProjectionData } from 'maplibre-gl';
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { RowField, RowValues } from '../../api/tables.js';
-import type { RowTable } from '../../feature-table/row-table.js';
 import type { BBox } from '../../geometry/types.js';
 import type { Feature, Layer } from '../../shared/types/model.js';
 import {

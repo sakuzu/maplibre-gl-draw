@@ -9,6 +9,9 @@
  * from the whole lists is kept here as the reference.
  */
 
+import type { RowHandle } from '@sakuzu/kasane';
+import type { GroupHandle, RowGroup, RowTable, TableItems } from '@sakuzu/kasane/engine';
+import { compareRowKeys, ItemWalk, ROW_FLAG_DELETED } from '@sakuzu/kasane/engine';
 import { utf8String } from '@sakuzu/tabane';
 import { describe, expect, it } from 'vitest';
 import type { FeatureTables, FeatureTablesWriter, RowField } from '../api/tables.js';
@@ -20,14 +23,9 @@ import {
 } from '../shared/utils/item-moves.js';
 import { createTableStore } from '../store/table-memory.js';
 import type { Feature, StoreChange } from '../store/types.js';
-import { ROW_FLAG_DELETED } from '../table/row-group-types.js';
-import { compareRowKeys } from '../table/row-keys.js';
 import { seededRandom } from '../test-utils.js';
 import { type FeatureTablesInternals, featureTablesInternals } from './feature-tables.js';
 import { groupKeyMoves, type ItemOrderSource, ORDER_ITEM_LIMIT } from './item-order.js';
-import { ItemWalk } from './item-walk.js';
-import type { RowGroup, RowTable, TableItems } from './row-table.js';
-import type { GroupHandle, RowHandle } from './types.js';
 
 // === The reference: the changes made from the lists of every item ===
 

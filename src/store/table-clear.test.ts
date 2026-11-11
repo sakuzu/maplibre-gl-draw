@@ -14,12 +14,12 @@
  * - The groups of features and the dimensions of the layers stay
  */
 
+import type { GroupEntry } from '@sakuzu/kasane';
+import type { TableWorkBudget } from '@sakuzu/kasane/engine';
 import { describe, expect, it } from 'vitest';
 import type { FeatureTablesWorker } from '../api/tables.js';
 import { featureTablesInternals } from '../feature-table/feature-tables.js';
-import type { TableWorkBudget } from '../feature-table/types.js';
 import { circleRowRings } from '../table/circle-rings.js';
-import type { GroupEntry } from '../table/row-group-builder.js';
 import { FEATURE_TABLE_COLUMNS } from '../table/tabane/columns.js';
 import {
   featureRowBuilder as createRowBlockBuilder,

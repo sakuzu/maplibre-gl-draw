@@ -10,6 +10,19 @@
  * (`value-overrides.ts`), then at the columns.
  */
 
+import type { RowRead } from '@sakuzu/kasane';
+import type { RowReadContext as TablesReadContext } from '@sakuzu/kasane/engine';
+import {
+  geometryAt,
+  ROW_FLAG_DELETED,
+  type RowBlockData,
+  type RowBlockDictionary,
+  type RowBlockValues,
+  type RowGroup,
+  rowCacheNumbers,
+  rowProperties,
+  groupRowRead as tablesRowRead,
+} from '@sakuzu/kasane/engine';
 import { utf8String } from '@sakuzu/tabane';
 import type { Geometry } from 'geojson';
 import { DrawError } from '../shared/draw-error.js';
@@ -23,18 +36,8 @@ import {
   TYPE_COLUMN,
 } from '../table/feature-row-columns.js';
 import { FILL_TRIANGLES_AT } from '../table/fill-triangles.js';
-import {
-  ROW_FLAG_DELETED,
-  type RowBlockData,
-  type RowBlockDictionary,
-  type RowBlockValues,
-} from '../table/row-group-types.js';
-import type { RowRead } from '../table/row-read-type.js';
-import { rowCacheNumbers, rowProperties, groupRowRead as tablesRowRead } from './row-group-read.js';
-import { geometryAt, type RowGroup } from './row-table.js';
-import type { RowReadContext as TablesReadContext } from './tables-store.js';
 
-export { rowCacheNumbers, rowNumber, rowProperties, rowValue } from './row-group-read.js';
+export { rowCacheNumbers, rowNumber, rowProperties, rowValue } from '@sakuzu/kasane/engine';
 
 /** The places of the columns of a feature, read once rather than through the import at every row */
 const STYLE = STYLE_COLUMN;

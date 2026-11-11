@@ -81,7 +81,6 @@
     "check:spdx": "node scripts/spdx.mjs",
     "lint": "biome check src examples playground bench ui scripts docs/.vitepress/config.mts docs/.vitepress/theme && npm run check:layers && npm run check:reads && npm run check:terms && npm run check:commit-terms && npm run check:spdx && npm run check:row-fields && node ui/scripts/check-imports.mjs",
     "check:layers": "node scripts/check-layers.mjs",
-    "check:kasane": "node scripts/check-layers.mjs --kasane",
     "check:row-fields": "node scripts/check-row-fields.mjs",
     "check:reads": "node scripts/check-reads.mjs",
     "check:terms": "node scripts/check-terms.mjs",
@@ -117,6 +116,7 @@
     "site:preview": "vitepress preview docs"
   },
   "dependencies": {
+    "@sakuzu/kasane": "file:../kasane-ts",
     "@sakuzu/tabane": "file:../tabane-ts",
     "@types/geojson": "^7946.0.16",
     "earcut": "^3.0.2",

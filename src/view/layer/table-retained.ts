@@ -59,6 +59,22 @@
  * (`checkRebuild`).
  */
 
+import type { GroupVersion, GroupVersionReceiver, RowBlockDictionary } from '@sakuzu/kasane/engine';
+import {
+  buildPackedRTree,
+  geometryAt,
+  type InPlaceRowWrite,
+  type PackedRTree,
+  ROW_WRITE_GEOMETRY,
+  ROW_WRITE_STATE,
+  ROW_WRITE_STYLE,
+  ROW_WRITE_VALUES,
+  type RowGroup,
+  type RowGroupHandle,
+  type RowTable,
+  searchPackedRTree,
+  widenBounds,
+} from '@sakuzu/kasane/engine';
 import type { ProjectionData } from 'maplibre-gl';
 import type { GpuRowBuffer } from '../../api/extension/webgl.js';
 import type { FeatureTypeRenderer, GpuRowsSource, HeldGpuRows } from '../../extension/renderers.js';
@@ -76,21 +92,6 @@ import {
 } from '../../feature-table/feature-row-states.js';
 import type { FeatureTablesInternals } from '../../feature-table/feature-tables.js';
 import { rowFeatureToRead, rowHasGeometry, rowType } from '../../feature-table/row-read.js';
-import {
-  geometryAt,
-  type RowGroup,
-  type RowTable,
-  widenBounds,
-} from '../../feature-table/row-table.js';
-import {
-  type InPlaceRowWrite,
-  ROW_WRITE_GEOMETRY,
-  ROW_WRITE_STATE,
-  ROW_WRITE_STYLE,
-  ROW_WRITE_VALUES,
-  type RowGroupHandle,
-} from '../../feature-table/types.js';
-import type { GroupVersion, GroupVersionReceiver } from '../../feature-table/versions.js';
 import { applyEnuEdit, type EnuEdit } from '../../geometry/enu-transforms.js';
 import type { BBox } from '../../geometry/types.js';
 import type { SelectionUIConfig } from '../../shared/config/selection.js';
@@ -107,8 +108,6 @@ import {
   transformValuesOf,
 } from '../../store/transform-roles.js';
 import { STYLE_COLUMN } from '../../table/feature-row-columns.js';
-import { buildPackedRTree, type PackedRTree, searchPackedRTree } from '../../table/packed-rtree.js';
-import type { RowBlockDictionary } from '../../table/row-group-types.js';
 import type { FeatureCompanionRegistry } from '../feature-companion.js';
 import { GpuResources } from '../gpu.js';
 import type { GpuLedger } from '../gpu-ledger.js';

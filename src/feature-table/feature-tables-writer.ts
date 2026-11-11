@@ -17,6 +17,15 @@
  * copied row by row.
  */
 
+import type { TableGroupPatch, TablesWriter } from '@sakuzu/kasane';
+import { KasaneError } from '@sakuzu/kasane';
+import type { GroupHandle } from '@sakuzu/kasane/engine';
+import {
+  ItemWalk,
+  type ItemWalkSource,
+  ROW_FLAG_DELETED,
+  type RowBlockData,
+} from '@sakuzu/kasane/engine';
 import { utf8String } from '@sakuzu/tabane';
 import type { FeatureTablesWriter, RowApplyOptions } from '../api/tables.js';
 import { DrawError } from '../shared/draw-error.js';
@@ -29,8 +38,6 @@ import type {
 } from '../shared/types/model.js';
 import { drawErrorOf } from '../table/draw-error-of.js';
 import { shapeOfGeometry } from '../table/feature-row-blocks.js';
-import { KasaneError } from '../table/kasane-error.js';
-import { ROW_FLAG_DELETED, type RowBlockData } from '../table/row-group-types.js';
 import type { FeatureTablesInternals } from './feature-tables.js';
 import {
   groupKeyMoves,
@@ -38,9 +45,6 @@ import {
   ItemOrderWatch,
   ORDER_ITEM_LIMIT,
 } from './item-order.js';
-import { ItemWalk, type ItemWalkSource } from './item-walk.js';
-import type { TableGroupPatch, TablesWriter } from './tables-writer.js';
-import type { GroupHandle } from './types.js';
 
 /**
  * The writer of the features held as rows, with what the Store of rows calls besides

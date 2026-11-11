@@ -38,6 +38,7 @@
  */
 
 import { writeFileSync } from 'node:fs';
+import type { RowGroup } from '@sakuzu/kasane/engine';
 import type { Geometry, Point } from 'geojson';
 import type { ProjectionData } from 'maplibre-gl';
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -48,7 +49,6 @@ import type { FeaturePatch, FeatureStyle } from '../../api/model.js';
 import type { FeatureTypeHandler, FrameDrawContext } from '../../extension/index.js';
 import { featureTablesInternals } from '../../feature-table/feature-tables.js';
 import { rowFeatureToRead } from '../../feature-table/row-read.js';
-import type { RowGroup } from '../../feature-table/row-table.js';
 import { generateCirclePolygon } from '../../geometry/circle.js';
 import { createRowBlockBuilder, createRowValues } from '../../kasane/index.js';
 import { drawPropertyKey } from '../../shared/properties.js';

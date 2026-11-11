@@ -1203,7 +1203,7 @@ numbers of its rows, not the features.
   of the spatial index
 - Culling at draw time is an AABB test between the chunk bbox and the view.
   Hit testing uses the spatial index of the rows instead, a static R-tree
-  packed into typed arrays (`table/packed-rtree.ts`), built in one pass
+  packed into typed arrays (`@sakuzu/kasane/engine`), built in one pass
   when the contents are replaced
 
 ### Chunk batches

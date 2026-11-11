@@ -19,22 +19,22 @@
  * geometry as a shape of Tabane (`rowInputOfFeature`).
  */
 
+import type { RowBlock, TablesWorker } from '@sakuzu/kasane';
+import {
+  createRowBlockBuilder,
+  KasaneError,
+  mergeRowBlock,
+  type RowBlockBuilderOptions,
+  type RowBlockMerge,
+  type RowInput,
+} from '@sakuzu/kasane';
+import { rowRingsOfPoint } from '@sakuzu/kasane/engine';
 import type { TabaneShape } from '@sakuzu/tabane';
 import type { Geometry } from 'geojson';
-import type { TablesWorker } from '../feature-table/versions.js';
 import { circleRowRings } from './circle-rings.js';
 import { drawErrorOf } from './draw-error-of.js';
 import { FEATURE_CACHES } from './fill-triangles.js';
-import { KasaneError } from './kasane-error.js';
 import { GEOMETRY_DEPTHS } from './row-geometry.js';
-import {
-  createRowBlockBuilder,
-  type RowBlockBuilderOptions,
-  type RowInput,
-} from './row-group-builder.js';
-import { mergeRowBlock, type RowBlockMerge } from './row-group-merge.js';
-import type { RowBlock } from './row-group-types.js';
-import { rowRingsOfPoint } from './row-rings.js';
 import { FEATURE_TABLE_COLUMNS } from './tabane/columns.js';
 
 /**

@@ -15,15 +15,15 @@
  * candidate; a row a sketch is drawn over for this client is hit where it is.
  */
 
+import type { RowBlockDictionary } from '@sakuzu/kasane/engine';
+import { geometryAt, type RowGroup, type RowTable } from '@sakuzu/kasane/engine';
 import { ColumnRun, type HitShape, type PositionRun } from '../shared/math/position-runs.js';
 import { drawPropertyKey } from '../shared/properties.js';
 import type { Coordinate, Feature, FeatureStyle, FeatureType } from '../shared/types/model.js';
 import { STYLE_COLUMN } from '../table/feature-row-columns.js';
-import type { RowBlockDictionary } from '../table/row-group-types.js';
 import { STATE_UNHIT_MASK } from './feature-row-states.js';
 import type { FeatureTablesInternals } from './feature-tables.js';
 import { rowNumber, rowType } from './row-read.js';
-import { geometryAt, type RowGroup, type RowTable } from './row-table.js';
 
 /** The key of the radius of a Circle in the attributes of a row */
 const RADIUS_KEY = drawPropertyKey('radiusMeters');

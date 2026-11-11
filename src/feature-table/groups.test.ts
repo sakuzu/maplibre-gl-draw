@@ -16,6 +16,7 @@
  * - Writes, reorders and versions at random: every read gives the reference
  */
 
+import type { GroupVersion, TableWorkBudget } from '@sakuzu/kasane/engine';
 import { describe, expect, it } from 'vitest';
 import type { TableGroupField, TableGroupPatch } from '../api/tables.js';
 import {
@@ -31,8 +32,6 @@ import {
 } from '../test-utils.js';
 import { STATE_HIDDEN_GROUP } from './feature-row-states.js';
 import type { FeatureTablesInternals } from './feature-tables.js';
-import type { TableWorkBudget } from './types.js';
-import type { GroupVersion } from './versions.js';
 
 /** A patch of groups */
 function groupPatch(

@@ -15,8 +15,12 @@
  * A pure module, so it runs in a Worker as well.
  */
 
-import type { PropertyColumns } from '@sakuzu/tabane';
-import type { GroupTable } from '../feature-table/group-table.js';
+import type {
+  GroupTable,
+  RowBlockData,
+  RowBlockDictionary,
+  RowBlockValues,
+} from '@sakuzu/kasane/engine';
 import {
   flagBitOf,
   groupFlagBitOf,
@@ -25,8 +29,8 @@ import {
   rowColumnLayoutOf,
   shapeColumnOf,
   wholeColumnOf,
-} from './row-columns.js';
-import type { RowBlockData, RowBlockDictionary, RowBlockValues } from './row-group-types.js';
+} from '@sakuzu/kasane/engine';
+import type { PropertyColumns } from '@sakuzu/tabane';
 import { FEATURE_GROUP_COLUMNS, FEATURE_TABLE_COLUMNS } from './tabane/columns.js';
 
 /**

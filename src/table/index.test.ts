@@ -37,8 +37,11 @@ const EXPORTS = [
   'transferList',
 ];
 
-/** The packages the entry loads at runtime: none */
-const PACKAGES: string[] = ['@sakuzu/tabane'];
+/**
+ * The packages the entry loads at runtime: Tabane, and of Kasane the packed R-tree and the readers
+ * of the shape columns, which a Worker runs too
+ */
+const PACKAGES: string[] = ['@sakuzu/kasane/engine', '@sakuzu/tabane'];
 
 /** The runtime imports of a file (type-only imports are erased) */
 function runtimeImports(file: string): string[] {
@@ -118,11 +121,8 @@ describe('the table subpath', () => {
       'shared/utils/own-property.ts',
       'table/builder.ts',
       'table/index.ts',
-      'table/packed-rtree.ts',
       'table/partition.ts',
       'table/prepare.ts',
-      // The reader of the shapes of the rows of the tables reads the geometry columns too
-      'table/shape-reader.ts',
       'table/table.ts',
     ]);
   });

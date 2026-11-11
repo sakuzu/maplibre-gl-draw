@@ -19,6 +19,17 @@
  * runs in a Worker as well.
  */
 
+import type { PointRowRings, RowBlock, RowRead, RowShape, RowShapeColumn } from '@sakuzu/kasane';
+import {
+  INT8_FORMS,
+  ROW_FLAG_DELETED,
+  type RowBlockData,
+  type RowBlockWhole,
+  RowCacheWriter,
+  rowRingsOfPoint,
+  type ShapeColumn,
+  type ShapeForm,
+} from '@sakuzu/kasane/engine';
 import {
   type CoordinateDimensions,
   type CoordinateSystem,
@@ -47,17 +58,7 @@ import {
   TYPE_COLUMN,
 } from '../feature-row-columns.js';
 import { FEATURE_CACHES, FILL_TRIANGLES } from '../fill-triangles.js';
-import { RowCacheWriter } from '../row-caches.js';
 import { WIDE_VERTICES } from '../row-geometry.js';
-import {
-  ROW_FLAG_DELETED,
-  type RowBlock,
-  type RowBlockData,
-  type RowBlockWhole,
-} from '../row-group-types.js';
-import type { RowRead, RowShape, RowShapeColumn } from '../row-read-type.js';
-import { type PointRowRings, rowRingsOfPoint } from '../row-rings.js';
-import { INT8_FORMS, type ShapeColumn, type ShapeForm } from '../shape-reader.js';
 import type { TableGeometry } from '../types.js';
 import { featureColumnsOf, geometryTypeOf, stylesOf, typesOf } from './columns.js';
 import { type CachedFills, FILL_TRIANGLES_CACHE, readFillTrianglesCache } from './triangles.js';

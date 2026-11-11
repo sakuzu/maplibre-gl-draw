@@ -11,6 +11,7 @@
  * set and restored through gl-state.ts.
  */
 
+import type { RowBlockDictionary } from '@sakuzu/kasane/engine';
 import type { Map as MapLibreMap } from 'maplibre-gl';
 import type { FeatureTypeHandler } from '../../extension/index.js';
 import {
@@ -24,7 +25,6 @@ import { isInteractionBlocked } from '../../store/lock.js';
 import type { Store } from '../../store/store.js';
 import type { Feature } from '../../store/types.js';
 import { STYLE_COLUMN } from '../../table/feature-row-columns.js';
-import type { RowBlockDictionary } from '../../table/row-group-types.js';
 import type { FeatureCompanionRegistry } from '../feature-companion.js';
 import type { TerrainContext } from '../terrain/context.js';
 import {

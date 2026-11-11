@@ -32,6 +32,9 @@
  * meet it, so nothing changes).
  */
 
+import type { RowHandle } from '@sakuzu/kasane';
+import type { GroupVersion, RowBlockDictionary } from '@sakuzu/kasane/engine';
+import { geometryAt, type RowGroup, type RowTable } from '@sakuzu/kasane/engine';
 import type { CustomRenderMethodInput, ProjectionData } from 'maplibre-gl';
 import {
   GPU_STATE_MOVE_SHIFT,
@@ -43,16 +46,12 @@ import {
 } from '../../feature-table/feature-row-states.js';
 import type { FeatureTablesInternals } from '../../feature-table/feature-tables.js';
 import { rowNumber, rowType } from '../../feature-table/row-read.js';
-import { geometryAt, type RowGroup, type RowTable } from '../../feature-table/row-table.js';
-import type { RowHandle } from '../../feature-table/types.js';
-import type { GroupVersion } from '../../feature-table/versions.js';
 import { generateCirclePolygon } from '../../geometry/circle.js';
 import { type EnuEdit, inverseEnuEdit, moveEnuPosition } from '../../geometry/enu-transforms.js';
 import { drawPropertyKey } from '../../shared/properties.js';
 import { BULK_ROWS_SET, type RowMotion, rowMotionOf } from '../../sketches/rendered-shapes.js';
 import type { Coordinate } from '../../store/types.js';
 import { STYLE_COLUMN } from '../../table/feature-row-columns.js';
-import type { RowBlockDictionary } from '../../table/row-group-types.js';
 import type { GpuLedger } from '../gpu-ledger.js';
 import { dashCoefficientsOf } from '../renderers/line/dash.js';
 import { rowsVariantOf } from '../renderers/rows/rows-shader.js';

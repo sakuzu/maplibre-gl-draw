@@ -5,6 +5,16 @@
  * Helpers shared by the tests. This file is not part of the build.
  */
 
+import type { RowBlock, RowCache, RowRings } from '@sakuzu/kasane';
+import { createRowBlockBuilder, type RowBlockBuildOptions } from '@sakuzu/kasane';
+import type { RowBlockData, RowGroup, RowTable } from '@sakuzu/kasane/engine';
+import {
+  createRowBlockDataBuilder,
+  type GeometryWrite,
+  type RowWriteContext,
+  refreshRowShape,
+  writeRowGeometry,
+} from '@sakuzu/kasane/engine';
 import type { CoordinateSystem, TabaneShape } from '@sakuzu/tabane';
 import { utf8ColumnFromStrings } from '@sakuzu/tabane';
 import type { Geometry } from 'geojson';
@@ -41,13 +51,6 @@ import {
   type FeatureTablesInternals,
   featureTablesInternals,
 } from './feature-table/feature-tables.js';
-import type { RowGroup, RowTable } from './feature-table/row-table.js';
-import {
-  type GeometryWrite,
-  type RowWriteContext,
-  refreshRowShape,
-  writeRowGeometry,
-} from './feature-table/row-write.js';
 import { resolveMessages } from './messages.js';
 import type { ModeManager } from './modes/manager.js';
 import { DEFAULT_FEATURE_STYLE_CONFIG } from './shared/config/feature-style.js';
@@ -74,14 +77,6 @@ import {
   shapeOfGeometry,
 } from './table/feature-row-blocks.js';
 import { GROUP_FLAG_HIDDEN, TYPE_COLUMN } from './table/feature-row-columns.js';
-import type { RowCache } from './table/row-caches.js';
-import {
-  createRowBlockBuilder,
-  createRowBlockDataBuilder,
-  type RowBlockBuildOptions,
-} from './table/row-group-builder.js';
-import type { RowBlock, RowBlockData } from './table/row-group-types.js';
-import type { RowRings } from './table/row-rings.js';
 import { FEATURE_TABLE_COLUMNS } from './table/tabane/columns.js';
 import { GpuResources } from './view/gpu.js';
 import { GpuLedger } from './view/gpu-ledger.js';

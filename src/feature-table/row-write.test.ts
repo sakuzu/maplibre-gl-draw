@@ -11,9 +11,11 @@
  * - A geometry of the same shape is written into the column; of another shape, into the
  *   overrides; both read back as the geometry, with the triangles the builder makes of it, and
  *   the row is found at its new place and not at the old one
- * - The bytes held are counted for the attributes and the geometry together
+ * - The bytes held are counted for the attributes and the geometry together (those past the
+ *   limit of a group, in the tests of Kasane)
  */
 
+import { writeRowValue } from '@sakuzu/kasane/engine';
 import { type CoordinateSystem, planarCoordinates, planarRowBox, type Value } from '@sakuzu/tabane';
 import type { Geometry } from 'geojson';
 import { describe, expect, it } from 'vitest';
@@ -41,9 +43,6 @@ import {
   rowTriangles,
   rowValue,
 } from './row-read.js';
-import { overrideBytesOf } from './row-table.js';
-import { writeRowValue } from './row-write.js';
-import { OVERRIDE_BYTES_LIMIT } from './value-overrides.js';
 
 /** Points whose attributes are the ones given */
 function points(properties: Array<Record<string, Value>>): Feature[] {
@@ -100,28 +99,14 @@ describe('the attributes written in place', () => {
   it('takes off what was written when the value of the column is written back', () => {
     const tables = tablesOfFeatures('layer', points([{ name: 'a' }, { name: 'b' }]));
     const group = tables.table.groupAt(0);
-    expect(overrideBytesOf(group)).toBe(0);
+    expect(tables.internals.overrideBytes()).toBe(0);
     writeRowValue(group, 0, 'name', 'something else');
-    expect(overrideBytesOf(group)).toBeGreaterThan(0);
+    expect(tables.internals.overrideBytes()).toBeGreaterThan(0);
     // The same value again changes nothing
     expect(writeRowValue(group, 0, 'name', 'something else')).toBe(false);
     expect(writeRowValue(group, 0, 'name', 'a')).toBe(true);
-    expect(overrideBytesOf(group)).toBe(0);
+    expect(tables.internals.overrideBytes()).toBe(0);
     expect(group.values?.empty).toBe(true);
-  });
-
-  it('counts the bytes written, past the limit of a group', () => {
-    const tables = tablesOfFeatures('layer', points([{ name: 'a' }]));
-    const group = tables.table.groupAt(0);
-    const long = 'x'.repeat(4096);
-    let written = 0;
-    for (let i = 0; overrideBytesOf(group) <= OVERRIDE_BYTES_LIMIT; i++) {
-      writeRowValue(group, 0, `key${i}`, long);
-      written++;
-    }
-    // About the bytes of the strings, each with what its entry costs
-    expect(written).toBeGreaterThan(OVERRIDE_BYTES_LIMIT / (4096 + 256));
-    expect(written).toBeLessThan(OVERRIDE_BYTES_LIMIT / 4096 + 2);
   });
 });
 
@@ -337,7 +322,7 @@ describe('the geometry written in place', () => {
     const tables = tablesOfFeatures('layer', features());
     const group = tables.table.groupAt(0);
     writeRowValue(group, 2, 'name', 'x');
-    const values = overrideBytesOf(group);
+    const values = tables.internals.overrideBytes();
     const coordinates: number[][] = [];
     for (let i = 0; i < 1000; i++) coordinates.push([i / 1000, 0]);
     writeFeatureGeometry(
@@ -350,7 +335,7 @@ describe('the geometry written in place', () => {
       FEATURE_CACHES,
     );
     // The 1,000 coordinates of 16 bytes each, and what the attribute took
-    expect(overrideBytesOf(group)).toBeGreaterThan(values + 16_000);
+    expect(tables.internals.overrideBytes()).toBeGreaterThan(values + 16_000);
   });
 });
 

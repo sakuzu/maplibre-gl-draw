@@ -15,11 +15,11 @@
  * A pure module (it depends on nothing outside `/table`), so it runs in a Worker as well.
  */
 
+import { ShapeColumnReader, ShapeFormReader } from '@sakuzu/kasane/engine';
 import { isCoordinateDimensions, strideOf, type Value } from '@sakuzu/tabane';
 import type { Geometry } from 'geojson';
 import type { Feature, FeatureCoordinates } from '../shared/types/model.js';
 import { setOwnProperty } from '../shared/utils/own-property.js';
-import { ShapeColumnReader, ShapeFormReader } from './shape-reader.js';
 import type {
   Column,
   DictionaryColumn,

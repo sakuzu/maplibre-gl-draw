@@ -24,6 +24,13 @@
  * coordinates stay those of the line).
  */
 
+import type {
+  RowBlockDictionary,
+  RowGroup,
+  ShapeFormReader,
+  StyleTable,
+} from '@sakuzu/kasane/engine';
+import { geometryAt, type RowGeometryAt } from '@sakuzu/kasane/engine';
 import type { ValueStringCache } from '@sakuzu/tabane';
 import {
   rowHasGeometry,
@@ -32,9 +39,6 @@ import {
   rowType,
   rowValue,
 } from '../../feature-table/row-read.js';
-import type { RowGroup } from '../../feature-table/row-table.js';
-import { geometryAt, type RowGeometryAt } from '../../feature-table/row-table.js';
-import type { StyleTable } from '../../feature-table/style-table.js';
 import { generateCirclePolygon } from '../../geometry/circle.js';
 import { drawPropertyKey } from '../../shared/properties.js';
 import type { Feature, FeatureStyle, FeatureType, StyleRule } from '../../shared/types/model.js';
@@ -44,8 +48,6 @@ import { resolveContentPixelRatio, resolvePixelRatio } from '../../shared/utils/
 import { STYLE_COLUMN } from '../../table/feature-row-columns.js';
 import { polygonRingRuns } from '../../table/polygon-rings.js';
 import { pairTriangles } from '../../table/row-geometry.js';
-import type { RowBlockDictionary } from '../../table/row-group-types.js';
-import type { ShapeFormReader } from '../../table/shape-reader.js';
 import { tessellateSurfaceFill } from '../globe-subdivision.js';
 import { toPackedPointStyle } from '../renderers/batch-manager.js';
 import { dashSegmentLength } from '../renderers/line/dash.js';
