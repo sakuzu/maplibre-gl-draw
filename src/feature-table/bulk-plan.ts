@@ -36,10 +36,11 @@ import {
 } from '../table/row-group-types.js';
 import type { RowContainers } from './bulk-rows.js';
 import { isRowLocked, livePlaceOf, rowsByLayerInOrder } from './bulk-rows.js';
-import type { FeatureTablesInternals, RowPlace } from './feature-tables.js';
+import type { FeatureTablesInternals } from './feature-tables.js';
 import type { RowGroup } from './layer-table.js';
 import { rowGeometry, rowNumber, rowType, rowValue } from './row-read.js';
 import type { TableSelection } from './selection.js';
+import type { RowPlace } from './tables-store.js';
 import type { RowHandle } from './types.js';
 
 /** The key of the created zoom in the attributes of a row */

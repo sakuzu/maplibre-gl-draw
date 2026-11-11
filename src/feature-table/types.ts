@@ -5,6 +5,8 @@
  * The handles of the rows held as columns
  */
 
+import type { BBox } from '../geometry/bbox-type.js';
+
 /**
  * The handle of a row: a number the document gives a row the first time it sees its id, and
  * never changes while the document is open, whatever group, layer or place the row moves to
@@ -23,6 +25,33 @@ export type RowGroupHandle = number;
 
 /** The handle of a group of features held as columns */
 export type GroupHandle = number;
+
+/**
+ * What a scan of the rows of the tables reads (`TablesStore.scan`)
+ *
+ * @internal
+ */
+export interface TableScan {
+  /** The tables read, in this order (every table that holds rows when omitted) */
+  readonly tableIds?: readonly string[];
+  /** Only the rows whose box meets this box, `[minX, minY, maxX, maxY]` */
+  readonly bbox?: BBox;
+  /**
+   * `table` (the default): the rows of each table in its order; `any`: in no order, which costs
+   * less when a box is given
+   */
+  readonly order?: 'table' | 'any';
+  /** The number of handles read at a time (1,024 when omitted) */
+  readonly batchSize?: number;
+}
+
+/**
+ * Reads the handles of rows a batch at a time.
+ */
+export interface RowCursor {
+  /** The handles of the next rows (null once every row is read) */
+  next(): Int32Array | null;
+}
 
 /**
  * The rows of the delta of a layer that changed when it was made again: the rows that left it

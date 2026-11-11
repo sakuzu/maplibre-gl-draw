@@ -10,8 +10,9 @@ import type { BBox } from '../geometry/types.js';
 import { isGroupHidden, isGroupLocked, ROW_FLAG_LOCKED } from '../table/feature-row-columns.js';
 import { ROW_FLAG_DELETED } from '../table/row-group-types.js';
 import { STATE_UNHIT_MASK } from './feature-row-states.js';
-import type { FeatureTablesInternals, RowPlace } from './feature-tables.js';
+import type { FeatureTablesInternals } from './feature-tables.js';
 import type { TableSelection } from './selection.js';
+import type { RowPlace } from './tables-store.js';
 import type { RowHandle } from './types.js';
 
 /**

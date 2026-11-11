@@ -31,9 +31,9 @@
 
 import type { Feature } from '../shared/types/model.js';
 import { ROW_FLAG_DELETED } from '../table/row-group-types.js';
-import type { RowPlace } from './feature-tables.js';
 import type { RowGroup } from './layer-table.js';
 import { type RowReadContext, rowFeature } from './row-read.js';
+import type { RowPlace } from './tables-store.js';
 import type { RowHandle } from './types.js';
 import type { WriteMarks } from './write-marks.js';
 

@@ -30,6 +30,7 @@ export const KASANE_FILES = [
   'feature-table/row-state.ts',
   'feature-table/row-values.ts',
   'feature-table/style-table.ts',
+  'feature-table/tables-store.ts',
   'feature-table/tables-writer.ts',
   'feature-table/types.ts',
   'feature-table/value-overrides.ts',
