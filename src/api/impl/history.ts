@@ -383,6 +383,9 @@ function applyInverse(store: Store, inverse: Inverse): void {
       } as RowValues);
     }
   }
+  // A restore of many rows under way is written first: the groups it leaves empty are deleted
+  // with it, and are no longer there to delete
+  if (inverse.groupsCreated.length > 0) store.finishRowSteps();
   for (const id of inverse.featuresCreated) if (store.getFeature(id)) store.deleteFeature(id);
   for (const id of inverse.groupsCreated) if (store.getGroup(id)) store.deleteGroup(id);
   for (const id of inverse.layersCreated) if (store.getLayer(id)) store.deleteLayer(id);

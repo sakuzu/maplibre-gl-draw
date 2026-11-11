@@ -10,6 +10,7 @@
  */
 
 import type { FeatureTables } from '../api/tables.js';
+import type { BulkOperation } from '../feature-table/bulk-plan.js';
 import {
   tableFrontmostItem,
   tableGroupsInOrder,
@@ -17,6 +18,7 @@ import {
   tableItemNeighbors,
   tableLayerGroupIds,
 } from '../feature-table/item-ids.js';
+import { TableSelection } from '../feature-table/selection.js';
 import { listEveryFeatureInOrder } from './ordering.js';
 import type { Feature, Group, ItemPlacement, Layer } from './types.js';
 
@@ -198,6 +200,32 @@ export function groupsInStackingOrderOf(store: ItemListStore, groups: readonly G
 export interface GroupInsertStore extends ItemListStore {
   createGroup(group: Group): unknown;
   moveItems(itemIds: readonly string[], to: ItemPlacement): unknown;
+  /** Writes an operation on rows (a Store that holds its features as rows) */
+  applyBulk?(op: BulkOperation, rows?: TableSelection): unknown;
+}
+
+/**
+ * The number of members past which a new group of rows takes them as rows selected in bulk are
+ * grouped: in one write that reads the order of the layer, cheaper for many members than placing
+ * each of them by the items around it (which reads only the rows next to them, for a few)
+ */
+const BULK_MEMBERS = 2_000;
+
+/**
+ * The rows of the members of a new group of a layer held as rows, when there are many of them and
+ * all of them are rows of the tables (null otherwise)
+ */
+function memberRows(store: GroupInsertStore, members: ReadonlySet<string>): Int32Array | null {
+  const tables = store.tables;
+  if (!tables || !store.applyBulk || members.size <= BULK_MEMBERS) return null;
+  const handles = new Int32Array(members.size);
+  let at = 0;
+  for (const id of members) {
+    const handle = tables.getRowRef(id);
+    if (handle === undefined) return null;
+    handles[at++] = handle;
+  }
+  return handles;
 }
 
 /**
@@ -217,6 +245,22 @@ export function insertGroup(store: GroupInsertStore, group: Group): void {
     store.tables?.findGroup(group.id) !== undefined;
   const frontmost = frontmostItem(store, layerId, members);
   const around = frontmost ? itemNeighbors(store, layerId, undefined, frontmost, members) : null;
+  // A new group of rows: made empty at the place of its frontmost member, its members put into
+  // it as rows in one write (by the keys of their order, without naming each of them)
+  const rows = !kept && heldAsRows(store, layerId) ? memberRows(store, members) : null;
+  if (rows) {
+    const { featureIds: _members, ...fields } = group as Group & { featureIds?: unknown };
+    store.createGroup({ ...fields, kind: 'table' } as Group);
+    store.moveItems(
+      [group.id],
+      around ? { layerId, below: around.below, above: around.above } : { layerId, above: null },
+    );
+    store.applyBulk?.(
+      { kind: 'place', to: { layerId, groupId: group.id } },
+      TableSelection.of(rows),
+    );
+    return;
+  }
   store.createGroup(group);
   if (!kept && store.getLayer(layerId)) {
     store.moveItems(

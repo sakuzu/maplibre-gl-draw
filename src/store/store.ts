@@ -561,6 +561,11 @@ export interface Store extends StoreView, UiState {
   endSlicedWrite(write: SlicedWrite): void;
   /** Writes the rest of the writes over several tasks queued now, in their order */
   finishSlicedWrite(): void;
+  /**
+   * Writes the rest of a restore of many rows under way (`restoreRows` writes one in steps), so
+   * that what is read next reads it: a write finishes it first, a read does not
+   */
+  finishRowSteps(): void;
   /** Runs a step of a write over several tasks (its writes do not finish the queue) */
   runSlicedStep<T>(fn: () => T): T;
   /** Whether a write over several tasks is queued */

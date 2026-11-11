@@ -84,7 +84,9 @@ describe('draw.selection.scan', () => {
   it('visits the features selected in bulk in a Store of rows, and groups and ungroups them', async () => {
     const draw = rowsDraw();
     await draw.write(async (tx) => {
-      for (let i = 0; i < 12; i++) await tx.features.create({ ...point(i), properties: { n: i } });
+      // More members than a group of rows takes one by one
+      for (let i = 0; i < 2_010; i++)
+        await tx.features.create({ ...point(i), properties: { n: i } });
     });
     draw.selection.setAll();
     expect(draw.selection.value.ids).toBeNull();
@@ -100,12 +102,20 @@ describe('draw.selection.scan', () => {
       },
       { onProgress: (p) => progress.push(p.done) },
     );
-    expect(ids).toEqual(draw.features.list(undefined, { limit: 100 }).map((feature) => feature.id));
-    expect(progress[progress.length - 1]).toBe(12);
+    const order = draw.layers.listItems('l', { limit: 10_000 });
+    expect(ids).toEqual(order);
+    expect(progress[progress.length - 1]).toBe(2_010);
 
     // Grouped from the IDs it gave, in one commit
     const group = await draw.write((tx) => tx.groups.create({ members: ids }));
     expect(draw.groups.count()).toBe(1);
+    expect(draw.layers.listItems('l', { limit: 10 })).toEqual([group.id]);
+    expect(draw.groups.listMembers(group.id, { limit: 10_000 })).toEqual(order);
+    // Taken back and made again as one step
+    await draw.undo();
+    expect(draw.layers.listItems('l', { limit: 10_000 })).toEqual(order);
+    await draw.redo();
+    expect(draw.groups.listMembers(group.id, { limit: 10_000 })).toEqual(order);
 
     // Ungrouped from the groups of the rows it gives, the features kept
     draw.selection.setAll();
@@ -116,7 +126,8 @@ describe('draw.selection.scan', () => {
     expect([...groupIds]).toEqual([group.id]);
     await draw.write((tx) => tx.groups.delete([...groupIds], { members: 'keep' }));
     expect(draw.groups.count()).toBe(0);
-    expect(draw.features.count()).toBe(12);
+    expect(draw.features.count()).toBe(2_010);
+    expect(draw.layers.listItems('l', { limit: 10_000 })).toEqual(order);
   });
 
   it('fails with aborted once its signal stops it', async () => {

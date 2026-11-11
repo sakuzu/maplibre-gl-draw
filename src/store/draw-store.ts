@@ -544,6 +544,9 @@ export class DrawStore implements Store {
     // are drawn by it moved as they are, until the last of them is written)
     if (this.#bulk) this.#refreshSummary(null);
   }
+  finishRowSteps(): void {
+    rowStepsOf.get(this.#contract)?.finish();
+  }
   finishSlicedWrite(): void {
     this.#queue.finish();
   }
