@@ -564,17 +564,25 @@ class TransactionImpl implements Transaction {
     // it made then (the writes before it in the commit are the ones it was checked after)
     this.#noteRevision();
     this.#unchangedAtCommit = !this.#changed;
-    runCommit(store, info, info.undo ? WRITE_SOURCE : WRITE_SOURCE_NO_UNDO, () => {
-      for (const op of this.#ops) {
-        if (op === null) continue;
-        try {
-          if (op() === false) skipped++;
-        } catch (error) {
-          if (!isSkip(error)) throw error;
-          skipped++;
+    try {
+      runCommit(store, info, info.undo ? WRITE_SOURCE : WRITE_SOURCE_NO_UNDO, () => {
+        for (const op of this.#ops) {
+          if (op === null) continue;
+          try {
+            if (op() === false) skipped++;
+          } catch (error) {
+            if (!isSkip(error)) throw error;
+            skipped++;
+          }
         }
-      }
-    });
+      });
+    } catch (error) {
+      // What the Store refuses at the commit fails the write as an error of the library
+      if (error instanceof DrawError) throw error;
+      throw new DrawError('invalid-state', `The commit was refused: ${String(error)}`, {
+        cause: error,
+      });
+    }
     return skipped;
   }
 
@@ -1333,6 +1341,9 @@ class TransactionImpl implements Transaction {
           const prepared: ObjectGroup = asRows
             ? checked
             : { ...checked, featureIds: idsInStackingOrder(overlay.view, checked.featureIds) };
+          // The order read now holds at the commit when no write of the transaction comes
+          // before it (a write before it may place its members elsewhere)
+          const inOrderAtCommit = !asRows && this.#ops.length === 0;
           const { featureIds: _members, ...fields } = prepared;
           const made: StoredGroup = asRows ? { ...fields, kind: 'table' } : prepared;
           overlay.groups.set(prepared.id, made);
@@ -1345,7 +1356,7 @@ class TransactionImpl implements Transaction {
           keep(() =>
             // Checked against the document as it is: made as it was checked
             this.#unchangedAtCommit
-              ? writers.createChecked(prepared, { membersInOrder: !asRows }) !== null
+              ? writers.createChecked(prepared, { membersInOrder: inOrderAtCommit }) !== null
               : writers.create({
                   id: prepared.id,
                   name: prepared.name,
@@ -1491,6 +1502,17 @@ class TransactionImpl implements Transaction {
       );
       if (this.signal.aborted) throw abortedError(this.signal);
       if (!prepared) throw notEditable();
+      // The layer and the group it creates are taken from now on in the transaction: a write
+      // after it that gives one of their IDs fails as it would once they are written
+      const overlay = this.#overlay;
+      if (prepared.layer) overlay.layers.set(prepared.layer.layer.id, prepared.layer.layer);
+      if (prepared.group) {
+        overlay.groups.set(prepared.group.id, {
+          ...prepared.group,
+          layerId: prepared.layer?.layer.id ?? loadOptions.layerId ?? '',
+          featureIds: [],
+        } as StoredGroup);
+      }
       // What it read is known once it is written, at the commit: the result fills in then
       const result = {
         count: 0,
@@ -1498,6 +1520,10 @@ class TransactionImpl implements Transaction {
         skipped: [] as ImportResult['skipped'],
       };
       keep(() => {
+        // The features it writes take no ID the other writes of the transaction create
+        for (const map of [overlay.features, overlay.groups, overlay.layers]) {
+          for (const [id, item] of map) if (item !== null) this.#importIds.add(id);
+        }
         const [written] = this.#writers.document.writeAll([prepared]) ?? [];
         if (!written) return false;
         result.count = written.featureIds.length;
@@ -1520,7 +1546,6 @@ class TransactionImpl implements Transaction {
 // Helpers
 // ============================================================================
 
-/** The features a target names, as the transaction reads them */
 /** Whether a target names its features by their IDs (not a filter, every feature or the selection) */
 function namesIds(resolved: ResolvedTargetOf): boolean {
   return resolved.kind === 'ids' && resolved.skipLocked !== true;
