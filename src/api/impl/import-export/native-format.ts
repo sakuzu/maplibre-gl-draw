@@ -26,8 +26,9 @@ import type {
 } from '../../../store/types.js';
 import { DrawError } from '../../errors.js';
 import type { DrawDocument } from '../../model.js';
-import { toFeature } from '../feature-shape.js';
+import { orientedGeometry, toFeature } from '../feature-shape.js';
 import { NATIVE_VERSION } from './constants.js';
+import { upgradeNativeData } from './native-upgrade.js';
 import { validateNativeData } from './native-validation.js';
 import type { PreparedLoad } from './types.js';
 
@@ -36,7 +37,8 @@ const DEFAULT_LAYER_ID = 'default-layer';
 
 /**
  * Exports the current data in the native format, as `document.toJSON` gives it: the features as
- * GeoJSON Features, the title and the description apart from the values of the application
+ * GeoJSON Features with the rings of their polygons in the right-hand rule, the title, the
+ * description and the values of the application in the metadata
  */
 export function exportNative(store: Store, options?: ExportOptions): DrawDocument {
   // A Store of rows: its features made from its rows one at a time, in the order they are drawn.
@@ -74,6 +76,8 @@ export function exportNative(store: Store, options?: ExportOptions): DrawDocumen
 
   const { title, description, ...rest } = store.getMetadata() as Record<string, unknown>;
   const metadata: Record<string, unknown> = {};
+  if (typeof title === 'string') metadata.title = title;
+  if (typeof description === 'string') metadata.description = description;
   for (const [key, value] of Object.entries(rest)) if (key.indexOf(':') > 0) metadata[key] = value;
   const now = new Date().toISOString();
 
@@ -81,8 +85,6 @@ export function exportNative(store: Store, options?: ExportOptions): DrawDocumen
     version: NATIVE_VERSION,
     created: now,
     modified: now,
-    ...(typeof title === 'string' && { title }),
-    ...(typeof description === 'string' && { description }),
     ...(Object.keys(metadata).length > 0 && {
       metadata: metadata as DrawDocument['metadata'],
     }),
@@ -90,7 +92,10 @@ export function exportNative(store: Store, options?: ExportOptions): DrawDocumen
     // The whole stacking order, entries of the application that are not layers included
     layerOrder: [...store.getLayerOrder()],
     groups: groups as DrawDocument['groups'],
-    features: features.map(toFeature),
+    // A ring edited vertex by vertex is held as it was drawn: it is written in the right-hand rule
+    features: features.map((feature) =>
+      toFeature({ ...feature, geometry: orientedGeometry(feature.geometry) }),
+    ),
     files: Object.keys(filesRecord).length > 0 ? filesRecord : undefined,
   };
 }
@@ -113,8 +118,8 @@ export async function prepareNative(
   // still intact.
   const retainedLayerIds = new Set<string>();
   if (store.getLayer(DEFAULT_LAYER_ID)) retainedLayerIds.add(DEFAULT_LAYER_ID);
-  // Only the version this library writes is read (another major version is refused)
-  const upgraded = data as Data & { title?: unknown; description?: unknown };
+  // Data of an earlier major version is brought to the current one first (2.x and 3.x)
+  const upgraded = upgradeNativeData(data) as Data;
   const { layers, layerOrder, groups, features, files, fileProblems } = await validateNativeData(
     upgraded,
     retainedLayerIds,
@@ -185,9 +190,10 @@ export async function prepareNative(
     // 7. Replace the title, the description and the values of the application
     const metadata: Record<string, unknown> = {};
     for (const key of Object.keys(store.getMetadata())) metadata[key] = undefined;
-    if (typeof upgraded.title === 'string') metadata.title = upgraded.title;
-    if (typeof upgraded.description === 'string') metadata.description = upgraded.description;
-    for (const [key, value] of Object.entries(upgraded.metadata ?? {})) {
+    const given = (upgraded.metadata ?? {}) as Record<string, unknown>;
+    if (typeof given.title === 'string') metadata.title = given.title;
+    if (typeof given.description === 'string') metadata.description = given.description;
+    for (const [key, value] of Object.entries(given)) {
       if (key.indexOf(':') > 0) metadata[key] = value;
     }
     store.setMetadata(metadata as Partial<Data['metadata'] & object>);

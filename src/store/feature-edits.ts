@@ -258,9 +258,11 @@ export function updatesOfEdits(
  * @internal
  */
 export function featureUpdatesOfEdit(feature: Feature, edit: OneFeatureEdit): Partial<Feature> {
-  // The rings of the polygons are put in the right-hand rule as they are written
+  // A geometry written whole has its rings put in the right-hand rule (featureUpdatesOfPatch);
+  // an edit of vertices keeps the ring as it is, so that the vertices keep their numbers (the
+  // vertices selected and the edits written from elsewhere name them so)
   if (edit.kind === 'set') return featureUpdatesOfPatch(feature, edit.patch);
-  return { geometry: orientRings(editedGeometry(feature, edit)) };
+  return { geometry: editedGeometry(feature, edit) };
 }
 
 /**
