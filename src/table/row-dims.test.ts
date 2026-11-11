@@ -30,8 +30,8 @@ import {
 } from './row-group-builder.js';
 import { mergeRowBlockData } from './row-group-merge.js';
 import type { RowBlockData } from './row-group-types.js';
+import { ShapeFormReader } from './shape-reader.js';
 import { FEATURE_TABLE_COLUMNS } from './tabane/columns.js';
-import { GeometryColumnReader } from './table.js';
 
 const ALL_DIMS: readonly CoordinateDimensions[] = ['xy', 'xyz', 'xym', 'xyzm'];
 
@@ -306,11 +306,7 @@ describe('the row groups of every dimensions', () => {
       ],
       { columns: FEATURE_TABLE_COLUMNS, dimensions: 'xyzm' },
     );
-    const reader = new GeometryColumnReader(
-      geometryColumnOf(group)!.children[0],
-      undefined,
-      'child',
-    );
+    const reader = new ShapeFormReader(geometryColumnOf(group)!.children[0]);
     expect(reader.stride).toBe(4);
     expect(reader.fullCoordinatesOf(0)).toEqual([
       [0, 0],
@@ -357,16 +353,12 @@ describe('a merge of row groups of dimensions', () => {
     expect(geometryColumnOf(merged)!.children.every((child) => child.dimensions === 'xyz')).toBe(
       true,
     );
-    const readers = geometryColumnOf(merged)!.children.map(
-      (child) => new GeometryColumnReader(child, undefined, 'child'),
-    );
+    const readers = geometryColumnOf(merged)!.children.map((child) => new ShapeFormReader(child));
     const sources = [xy[0], xyz[0]].map((data) => ({
       data,
-      readers: geometryColumnOf(data)!.children.map(
-        (child) => new GeometryColumnReader(child, undefined, 'child'),
-      ),
+      readers: geometryColumnOf(data)!.children.map((child) => new ShapeFormReader(child)),
     }));
-    const byId = (data: RowBlockData, readers: GeometryColumnReader[]) => {
+    const byId = (data: RowBlockData, readers: ShapeFormReader[]) => {
       const out = new Map<string, unknown>();
       for (let r = 0; r < data.length; r++) {
         const child = geometryColumnOf(data)!.types[r];

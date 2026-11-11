@@ -45,7 +45,7 @@ import type {
   RowBlockWhole,
 } from './row-group-types.js';
 import { compareRowKeys, type GroupKeySource } from './row-keys.js';
-import type { GeometryType, TableMixedGeometry } from './types.js';
+import { INT8_FORMS, type ShapeColumn } from './shape-reader.js';
 
 /**
  * What {@link mergeRowBlock} merges
@@ -375,10 +375,12 @@ function cacheWritersOf(
 
 /** The rows of a `shape` column copied into a new row block (null when no row has a shape) */
 class ShapeCopy {
-  private readonly types: Int8Array;
+  /** The form of each row: an `Int8Array`, made an `Int16Array` past `INT8_FORMS` forms */
+  private types: Int8Array | Int16Array;
   private readonly rows: Int32Array;
   private readonly children: ChildBuilder[] = [];
-  private readonly childIndex = new Map<GeometryType, number>();
+  /** The place of each form in `children`, by its depth and its name */
+  private readonly childIndex = new Map<string, number>();
 
   constructor(
     length: number,
@@ -389,25 +391,31 @@ class ShapeCopy {
   }
 
   /** Copies the shape of a row of a source to row `r` */
-  copy(r: number, from: TableMixedGeometry | null, row: number): void {
+  copy(r: number, from: ShapeColumn | null, row: number): void {
     if (!from) return;
     const child = from.types[row];
     if (child < 0) return;
     const column = from.children[child];
-    let target = this.childIndex.get(column.type);
+    const depth = column.offsets?.length ?? 0;
+    const key = `${depth}:${column.type}`;
+    let target = this.childIndex.get(key);
     if (target === undefined) {
       target = this.children.length;
-      this.children.push(new ChildBuilder(column.type, this.dims));
-      this.childIndex.set(column.type, target);
+      if (target === INT8_FORMS && this.types instanceof Int8Array) {
+        const wide = new Int16Array(this.types.length);
+        wide.set(this.types);
+        this.types = wide;
+      }
+      this.children.push(new ChildBuilder(column.type, depth, this.dims));
+      this.childIndex.set(key, target);
     }
     this.types[r] = target;
     this.rows[r] = this.children[target].addOfColumn(column, from.offsets[row]);
   }
 
-  finish(): TableMixedGeometry | null {
+  finish(): ShapeColumn | null {
     if (this.children.length === 0) return null;
     return {
-      type: 'Mixed',
       types: this.types,
       offsets: this.rows,
       children: this.children.map((child) => child.finish()),

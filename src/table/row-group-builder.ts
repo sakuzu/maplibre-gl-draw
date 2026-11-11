@@ -43,6 +43,7 @@ import {
   wholeColumnOf,
 } from './row-columns.js';
 import {
+  GEOMETRY_DEPTHS,
   type RowGeometry,
   rowGeometryOfColumn,
   rowShapeOf,
@@ -57,7 +58,8 @@ import {
 import { compareRowKeys, type GroupKeySource, type RowKeySource } from './row-keys.js';
 import type { RowRead, RowShape } from './row-read-type.js';
 import type { PointRowRings, RowRings } from './row-rings.js';
-import type { GeometryType, TableGeometry, TableMixedGeometry } from './types.js';
+import type { ShapeColumn, ShapeForm } from './shape-reader.js';
+import type { GeometryType } from './types.js';
 
 /**
  * The target number of rows of a row block
@@ -386,11 +388,13 @@ export class ChildBuilder {
   private readonly stride: number;
 
   /**
-   * @param type The geometry type of the column
+   * @param type The name of the form of the column
+   * @param depth The depth of its shapes: the number of its offset arrays (0 to 3)
    * @param dims The dimensions of its coordinates (those of every row added)
    */
   constructor(
-    readonly type: GeometryType,
+    readonly type: string,
+    readonly depth: number,
     readonly dims: CoordinateDimensions = 'xy',
   ) {
     this.stride = strideOf(dims);
@@ -400,15 +404,13 @@ export class ChildBuilder {
   add(geometry: RowGeometry): number {
     this.addCoords(geometry.coords);
     const vertices = this.size / this.stride;
-    switch (this.type) {
-      case 'Point':
+    switch (this.depth) {
+      case 0:
         break;
-      case 'LineString':
-      case 'MultiPoint':
+      case 1:
         this.level0.push(vertices);
         break;
-      case 'Polygon':
-      case 'MultiLineString': {
+      case 2: {
         let at = this.level1[this.level1.length - 1];
         for (const size of geometry.parts) {
           at += size;
@@ -417,7 +419,7 @@ export class ChildBuilder {
         this.level0.push(this.level1.length - 1);
         break;
       }
-      case 'MultiPolygon': {
+      default: {
         let ring = 0;
         let at = this.level2[this.level2.length - 1];
         for (const ringCount of geometry.polygons) {
@@ -438,7 +440,7 @@ export class ChildBuilder {
    * Adds the geometry of row `at` of a column as it is held there; returns its row in the column.
    * A column of other dimensions is read as `add` reads a row
    */
-  addOfColumn(column: TableGeometry, at: number): number {
+  addOfColumn(column: ShapeForm, at: number): number {
     if ((column.dimensions ?? 'xy') !== this.dims) {
       return this.add(rowGeometryOfColumn(column, at, this.dims));
     }
@@ -452,15 +454,13 @@ export class ChildBuilder {
     this.addCoords(column.coords.subarray(first * this.stride, end * this.stride));
     const vertices = this.size / this.stride;
     const [l0, l1, l2] = levels;
-    switch (this.type) {
-      case 'Point':
+    switch (this.depth) {
+      case 0:
         break;
-      case 'LineString':
-      case 'MultiPoint':
+      case 1:
         this.level0.push(vertices);
         break;
-      case 'Polygon':
-      case 'MultiLineString': {
+      case 2: {
         let last = this.level1[this.level1.length - 1];
         for (let r = l0[at]; r < l0[at + 1]; r++) {
           last += l1[r + 1] - l1[r];
@@ -469,7 +469,7 @@ export class ChildBuilder {
         this.level0.push(this.level1.length - 1);
         break;
       }
-      case 'MultiPolygon': {
+      default: {
         let last = this.level2[this.level2.length - 1];
         for (let p = l0[at]; p < l0[at + 1]; p++) {
           for (let r = l1[p]; r < l1[p + 1]; r++) {
@@ -497,31 +497,25 @@ export class ChildBuilder {
     this.size = end;
   }
 
-  finish(): TableGeometry {
+  finish(): ShapeForm {
     const coords = this.coords.slice(0, this.size);
     const dims = this.dims;
-    switch (this.type) {
-      case 'Point':
-        return { type: 'Point', coords, dimensions: dims };
-      case 'LineString':
-      case 'MultiPoint':
+    const type = this.type;
+    switch (this.depth) {
+      case 0:
+        return { type, coords, dimensions: dims };
+      case 1:
+        return { type, coords, dimensions: dims, offsets: [new Int32Array(this.level0)] };
+      case 2:
         return {
-          type: this.type,
-          coords,
-          dimensions: dims,
-          offsets: [new Int32Array(this.level0)],
-        };
-      case 'Polygon':
-      case 'MultiLineString':
-        return {
-          type: this.type,
+          type,
           coords,
           dimensions: dims,
           offsets: [new Int32Array(this.level0), new Int32Array(this.level1)],
         };
-      case 'MultiPolygon':
+      default:
         return {
-          type: 'MultiPolygon',
+          type,
           coords,
           dimensions: dims,
           offsets: [
@@ -646,7 +640,7 @@ function buildGroup(
     let child = childIndex.get(geometry.type);
     if (child === undefined) {
       child = children.length;
-      children.push(new ChildBuilder(geometry.type, shape.dims));
+      children.push(new ChildBuilder(geometry.type, GEOMETRY_DEPTHS[geometry.type], shape.dims));
       childIndex.set(geometry.type, child);
     }
     childTypes[r] = child;
@@ -678,10 +672,9 @@ function buildGroup(
     (propertyBuilders.get(key) as ValueColumnBuilder).finish(),
   );
   // A column no row holds a value of has no arrays
-  const shapes: Array<TableMixedGeometry | null> = new Array(places.shapes).fill(null);
+  const shapes: Array<ShapeColumn | null> = new Array(places.shapes).fill(null);
   if (children.length > 0) {
     shapes[places.geometry] = {
-      type: 'Mixed',
       types: childTypes,
       offsets: childRows,
       children: children.map((child) => child.finish()),

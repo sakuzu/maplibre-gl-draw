@@ -20,7 +20,11 @@ import type { BBox } from '../geometry/bbox-type.js';
 import { KasaneError } from '../table/kasane-error.js';
 import { ROW_FLAG_DELETED, type RowBlockData } from '../table/row-group-types.js';
 import { compareRowKeys, type GroupKeySource, type RowKeySource } from '../table/row-keys.js';
-import { GeometryColumnReader } from '../table/table.js';
+import {
+  type ShapeColumnReader,
+  type ShapeFormReader,
+  shapeColumnReaderOf,
+} from '../table/shape-reader.js';
 import { DeltaRows } from './delta.js';
 import { elsewhereSkipsOf, skipsOf } from './row-skips.js';
 import { STATE_ELSEWHERE } from './row-state.js';
@@ -71,8 +75,8 @@ export interface RowGroup {
   bounds: BBox | null;
   /** The column of each attribute key */
   readonly propertyIndex: ReadonlyMap<string, number>;
-  /** The reader of each geometry column of the group (made on the first read) */
-  readers: GeometryColumnReader[] | null;
+  /** The reader of the `shape` column of the group (made on the first read) */
+  readers: ShapeColumnReader | null;
   /** The attributes written in place since the group was built (null before the first) */
   values: ValueOverrides | null;
   /** The geometry written in place that does not fit the columns (null before the first) */
@@ -100,8 +104,8 @@ export interface RowGroup {
  * @internal
  */
 export interface RowGeometryAt {
-  readonly reader: GeometryColumnReader;
-  /** The row in the column */
+  readonly reader: ShapeFormReader;
+  /** The row in the form */
   readonly at: number;
 }
 
@@ -180,12 +184,10 @@ export function geometryAt(group: RowGroup, row: number): RowGeometryAt | undefi
 export function columnGeometryAt(group: RowGroup, row: number): RowGeometryAt | undefined {
   const shape = group.data.shapes[SHAPE_COLUMN];
   if (!shape) return undefined;
-  const child = shape.types[row];
-  if (child < 0) return undefined;
-  group.readers ??= shape.children.map(
-    (column, k) => new GeometryColumnReader(column, undefined, `geometry.children[${k}]`),
-  );
-  return { reader: group.readers[child], at: shape.offsets[row] };
+  const form = shape.types[row];
+  if (form < 0) return undefined;
+  group.readers ??= shapeColumnReaderOf(shape);
+  return { reader: group.readers.readers[form], at: shape.offsets[row] };
 }
 
 /**

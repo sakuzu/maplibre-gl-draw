@@ -15,15 +15,11 @@
  * A pure module (it depends on nothing outside `/table`), so it runs in a Worker as well.
  */
 
-import {
-  type CoordinateDimensions,
-  isCoordinateDimensions,
-  strideOf,
-  type Value,
-} from '@sakuzu/tabane';
-import type { Geometry, Position } from 'geojson';
-import type { Coordinate, Feature, FeatureCoordinates } from '../shared/types/model.js';
+import { isCoordinateDimensions, strideOf, type Value } from '@sakuzu/tabane';
+import type { Geometry } from 'geojson';
+import type { Feature, FeatureCoordinates } from '../shared/types/model.js';
 import { setOwnProperty } from '../shared/utils/own-property.js';
+import { ShapeColumnReader, ShapeFormReader } from './shape-reader.js';
 import type {
   Column,
   DictionaryColumn,
@@ -85,197 +81,73 @@ export function columnValue(column: Column, row: number): unknown {
 }
 
 /**
- * A validated geometry column of a single type: the geometry of a table of one type, or one child
- * of a mixed geometry column
+ * The reader of a geometry column of a single type after checking its shape: the geometry of a
+ * table of one type, or one child of a mixed geometry column. The geometry type is the name of
+ * the form read (`ShapeFormReader.type`)
  *
+ * @param rows The number of rows (the length of the table), or undefined for a child of a mixed
+ *   column, whose number of rows is read from its arrays
+ * @param path Where the column is in the input (`geometry` or `geometry.children[k]`), for the
+ *   error messages
+ * @throws when the shape of the column does not add up
  * @internal
  */
-export class GeometryColumnReader {
-  readonly type: GeometryType;
-  readonly coords: Float64Array;
-  /** The dimensions of the coordinates */
-  readonly dimensions: CoordinateDimensions;
-  /** The number of values per coordinate (2 to 4) */
-  readonly stride: number;
-  readonly offsets: readonly Int32Array[];
-  /** The number of rows the column holds */
-  readonly length: number;
+export function readGeometryColumn(
+  geometry: TableGeometry,
+  rows: number | undefined,
+  path: string,
+): ShapeFormReader<GeometryType> {
+  // The messages about the geometry of a table of one type keep their short form
+  const at = rows === undefined ? `${path}: ` : '';
+  if (!geometry || !(geometry.type in OFFSET_LEVELS)) {
+    throw new Error(`Table: ${at}unknown geometry type "${geometry?.type}"`);
+  }
+  if (!(geometry.coords instanceof Float64Array)) {
+    throw new Error(`Table: ${path}.coords must be a Float64Array`);
+  }
+  const dims = geometry.dimensions ?? 'xy';
+  if (!isCoordinateDimensions(dims)) {
+    throw new Error(`Table: ${at}dimensions must be 'xy', 'xyz', 'xym' or 'xyzm' (got ${dims})`);
+  }
+  const stride = strideOf(dims);
+  const offsets = geometry.offsets ?? [];
+  const levels = OFFSET_LEVELS[geometry.type];
+  if (offsets.length !== levels) {
+    throw new Error(
+      `Table: ${at}a ${geometry.type} ${rows === undefined ? 'column' : 'table'} has ${levels} offset arrays (got ${offsets.length})`,
+    );
+  }
+  const vertexCount = Math.floor(geometry.coords.length / stride);
+  let length = rows;
+  if (length === undefined) {
+    const first = offsets[0];
+    length = levels === 0 ? vertexCount : first instanceof Int32Array ? first.length - 1 : 0;
+    length = Math.max(0, length);
+  }
 
-  /**
-   * @param rows The number of rows (the length of the table), or undefined for a child of a mixed
-   *   column, whose number of rows is read from its arrays
-   * @param path Where the column is in the input (`geometry` or `geometry.children[k]`), for the
-   *   error messages
-   * @throws when the shape of the column does not add up
-   */
-  constructor(geometry: TableGeometry, rows: number | undefined, path: string) {
-    // The messages about the geometry of a table of one type keep their short form
-    const at = rows === undefined ? `${path}: ` : '';
-    if (!geometry || !(geometry.type in OFFSET_LEVELS)) {
-      throw new Error(`Table: ${at}unknown geometry type "${geometry?.type}"`);
+  // Each level splits the elements of the level above it
+  let elements = length;
+  for (let level = 0; level < levels; level++) {
+    const array = offsets[level];
+    if (!(array instanceof Int32Array)) {
+      throw new Error(`Table: ${at}offsets[${level}] must be an Int32Array`);
     }
-    if (!(geometry.coords instanceof Float64Array)) {
-      throw new Error(`Table: ${path}.coords must be a Float64Array`);
-    }
-    const dims = geometry.dimensions ?? 'xy';
-    if (!isCoordinateDimensions(dims)) {
-      throw new Error(`Table: ${at}dimensions must be 'xy', 'xyz', 'xym' or 'xyzm' (got ${dims})`);
-    }
-    const stride = strideOf(dims);
-    const offsets = geometry.offsets ?? [];
-    const levels = OFFSET_LEVELS[geometry.type];
-    if (offsets.length !== levels) {
+    if (array.length < elements + 1) {
       throw new Error(
-        `Table: ${at}a ${geometry.type} ${rows === undefined ? 'column' : 'table'} has ${levels} offset arrays (got ${offsets.length})`,
+        `Table: ${at}offsets[${level}] has ${array.length} entries for ${elements} elements`,
       );
     }
-    const vertexCount = Math.floor(geometry.coords.length / stride);
-    let length = rows;
-    if (length === undefined) {
-      const first = offsets[0];
-      length = levels === 0 ? vertexCount : first instanceof Int32Array ? first.length - 1 : 0;
-      length = Math.max(0, length);
-    }
-
-    // Each level splits the elements of the level above it
-    let elements = length;
-    for (let level = 0; level < levels; level++) {
-      const array = offsets[level];
-      if (!(array instanceof Int32Array)) {
-        throw new Error(`Table: ${at}offsets[${level}] must be an Int32Array`);
-      }
-      if (array.length < elements + 1) {
-        throw new Error(
-          `Table: ${at}offsets[${level}] has ${array.length} entries for ${elements} elements`,
-        );
-      }
-      elements = array[elements];
-    }
-    if (elements > vertexCount) {
-      throw new Error(
-        `Table: ${at}the offsets reach coordinate ${elements} of ${vertexCount} coordinates`,
-      );
-    }
-
-    this.type = geometry.type;
-    this.coords = geometry.coords;
-    this.dimensions = dims;
-    this.stride = stride;
-    this.offsets = offsets;
-    this.length = length;
+    elements = array[elements];
   }
-
-  /** The first coordinate of the run of a row */
-  vertexStart(row: number): number {
-    let at = row;
-    for (let level = 0; level < this.offsets.length; level++) at = this.offsets[level][at];
-    return at;
+  if (elements > vertexCount) {
+    throw new Error(
+      `Table: ${at}the offsets reach coordinate ${elements} of ${vertexCount} coordinates`,
+    );
   }
-
-  /** Coordinate `v` as `[x, y]` (what is drawn and hit; a `z` and an `m` are not read) */
-  position(v: number): Coordinate {
-    const at = v * this.stride;
-    return [this.coords[at], this.coords[at + 1]];
-  }
-
-  /**
-   * Coordinate `v` with every value of its dimensions, in their order, without the values at
-   * the end that are NaN (a `z` or an `m` it does not have): `[x, y]`, `[x, y, z]`, `[x, y, z, m]`
-   * in a column of `xyzm`, `[x, y, m]` in a column of `xym`
-   */
-  fullPosition(v: number): Position {
-    const stride = this.stride;
-    const at = v * stride;
-    const coords = this.coords;
-    if (stride === 2) return [coords[at], coords[at + 1]];
-    let end = stride;
-    while (end > 2 && Number.isNaN(coords[at + end - 1])) end--;
-    const out: number[] = new Array(end);
-    for (let k = 0; k < end; k++) out[k] = coords[at + k];
-    return out;
-  }
-
-  /** The coordinates `[from, to)` as an array of positions */
-  positions(from: number, to: number): Coordinate[] {
-    const out: Coordinate[] = new Array(to - from);
-    for (let v = from; v < to; v++) out[v - from] = this.position(v);
-    return out;
-  }
-
-  /** The coordinates of a row, shaped as for its geometry type (`x` and `y` only) */
-  coordinatesOf(row: number): FeatureCoordinates {
-    const o = this.offsets;
-    switch (this.type) {
-      case 'Point':
-        return this.position(row);
-      case 'LineString':
-      case 'MultiPoint':
-        return this.positions(o[0][row], o[0][row + 1]);
-      case 'Polygon':
-      case 'MultiLineString': {
-        const rings: Coordinate[][] = [];
-        for (let r = o[0][row]; r < o[0][row + 1]; r++) {
-          rings.push(this.positions(o[1][r], o[1][r + 1]));
-        }
-        return rings;
-      }
-      case 'MultiPolygon': {
-        const polygons: Coordinate[][][] = [];
-        for (let p = o[0][row]; p < o[0][row + 1]; p++) {
-          const rings: Coordinate[][] = [];
-          for (let r = o[1][p]; r < o[1][p + 1]; r++) {
-            rings.push(this.positions(o[2][r], o[2][r + 1]));
-          }
-          polygons.push(rings);
-        }
-        return polygons;
-      }
-    }
-  }
-
-  /**
-   * The coordinates of a row with every value of their dimensions (`fullPosition`), shaped as
-   * for its geometry type
-   */
-  fullCoordinatesOf(row: number): Position | Position[] | Position[][] | Position[][][] {
-    if (this.stride === 2) return this.coordinatesOf(row);
-    return this.shaped(row, (v) => this.fullPosition(v));
-  }
-
-  /** The positions of a row, shaped as for its geometry type */
-  private shaped(
-    row: number,
-    position: (v: number) => Position,
-  ): Position | Position[] | Position[][] | Position[][][] {
-    const o = this.offsets;
-    const run = (from: number, to: number): Position[] => {
-      const out: Position[] = new Array(to - from);
-      for (let v = from; v < to; v++) out[v - from] = position(v);
-      return out;
-    };
-    switch (this.type) {
-      case 'Point':
-        return position(row);
-      case 'LineString':
-      case 'MultiPoint':
-        return run(o[0][row], o[0][row + 1]);
-      case 'Polygon':
-      case 'MultiLineString': {
-        const rings: Position[][] = [];
-        for (let r = o[0][row]; r < o[0][row + 1]; r++) rings.push(run(o[1][r], o[1][r + 1]));
-        return rings;
-      }
-      case 'MultiPolygon': {
-        const polygons: Position[][][] = [];
-        for (let p = o[0][row]; p < o[0][row + 1]; p++) {
-          const rings: Position[][] = [];
-          for (let r = o[1][p]; r < o[1][p + 1]; r++) rings.push(run(o[2][r], o[2][r + 1]));
-          polygons.push(rings);
-        }
-        return polygons;
-      }
-    }
-  }
+  return new ShapeFormReader(
+    { type: geometry.type, coords: geometry.coords, dimensions: dims, offsets },
+    length,
+  );
 }
 
 /** Whether a geometry column is the mixed form */
@@ -294,11 +166,12 @@ export class TableReader {
    * The geometry columns of a single type: the one column of a table of one type, or the children
    * of a mixed geometry column
    */
-  readonly children: readonly GeometryColumnReader[];
-  /** The child of every row (null for a table of one type: every row is in child 0) */
-  readonly childTypes: Int8Array | null;
-  /** The row within its child of every row (null for a table of one type: the same row) */
-  readonly childRows: Int32Array | null;
+  readonly children: readonly ShapeFormReader<GeometryType>[];
+  /**
+   * The child and the row there of every row (a table of one type: every row is the same row of
+   * child 0)
+   */
+  readonly shapes: ShapeColumnReader<GeometryType>;
   /** Whether every geometry of the table is a Point or a MultiPoint */
   readonly onlyPoints: boolean;
   readonly validity: Uint8Array | undefined;
@@ -319,12 +192,10 @@ export class TableReader {
     }
     if (isMixedGeometry(geometry)) {
       this.children = readMixedChildren(geometry, length);
-      this.childTypes = geometry.types;
-      this.childRows = geometry.offsets;
+      this.shapes = new ShapeColumnReader(geometry.types, geometry.offsets, this.children);
     } else {
-      this.children = [new GeometryColumnReader(geometry, length, 'geometry')];
-      this.childTypes = null;
-      this.childRows = null;
+      this.children = [readGeometryColumn(geometry, length, 'geometry')];
+      this.shapes = new ShapeColumnReader(null, null, this.children);
     }
     this.onlyPoints = this.children.every(
       (child) => child.type === 'Point' || child.type === 'MultiPoint',
@@ -358,21 +229,17 @@ export class TableReader {
 
   /** The index of the child that holds the geometry of a row (-1 for a row without one) */
   childOf(row: number): number {
-    const types = this.childTypes;
-    if (types === null) return 0;
-    const child = types[row];
-    return child < 0 ? -1 : child;
+    return this.shapes.formOf(row);
   }
 
   /** The row within its child of a row */
   childRowOf(row: number): number {
-    return this.childRows === null ? row : this.childRows[row];
+    return this.shapes.rowOf(row);
   }
 
   /** The geometry column of a row (undefined for a row without a geometry) */
-  columnOf(row: number): GeometryColumnReader | undefined {
-    const child = this.childOf(row);
-    return child < 0 ? undefined : this.children[child];
+  columnOf(row: number): ShapeFormReader<GeometryType> | undefined {
+    return this.shapes.readerOf(row);
   }
 
   /** The value of a column at a row (undefined when the table has no such column) */
@@ -448,7 +315,7 @@ export class TableReader {
     const column = this.columnOf(row);
     return column === undefined
       ? [Number.NaN, Number.NaN]
-      : column.coordinatesOf(this.childRowOf(row));
+      : (column.coordinatesOf(this.childRowOf(row)) as FeatureCoordinates);
   }
 
   /** The value of every column at a row */
@@ -491,7 +358,10 @@ export class TableReader {
  * @throws when an array has the wrong type or is shorter than the table, or when a row names a
  *   child that does not exist or a row past the end of its child
  */
-function readMixedChildren(geometry: TableMixedGeometry, length: number): GeometryColumnReader[] {
+function readMixedChildren(
+  geometry: TableMixedGeometry,
+  length: number,
+): ShapeFormReader<GeometryType>[] {
   const { types, offsets, children } = geometry;
   if (!(types instanceof Int8Array)) {
     throw new Error('Table: geometry.types must be an Int8Array');
@@ -508,8 +378,8 @@ function readMixedChildren(geometry: TableMixedGeometry, length: number): Geomet
   if (offsets.length < length) {
     throw new Error('Table: geometry.offsets is shorter than the table');
   }
-  const columns = children.map(
-    (child, k) => new GeometryColumnReader(child, undefined, `geometry.children[${k}]`),
+  const columns = children.map((child, k) =>
+    readGeometryColumn(child, undefined, `geometry.children[${k}]`),
   );
   for (let row = 0; row < length; row++) {
     const child = types[row];

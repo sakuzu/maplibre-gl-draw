@@ -45,7 +45,7 @@ import { STYLE_COLUMN } from '../../table/feature-row-columns.js';
 import { polygonRingRuns } from '../../table/polygon-rings.js';
 import { pairTriangles } from '../../table/row-geometry.js';
 import type { RowBlockDictionary } from '../../table/row-group-types.js';
-import type { GeometryColumnReader } from '../../table/table.js';
+import type { ShapeFormReader } from '../../table/shape-reader.js';
 import { tessellateSurfaceFill } from '../globe-subdivision.js';
 import { toPackedPointStyle } from '../renderers/batch-manager.js';
 import { dashSegmentLength } from '../renderers/line/dash.js';
@@ -583,7 +583,7 @@ export function linePartsOf(
   group: RowGroup,
   row: number,
   out: number[],
-): GeometryColumnReader | undefined {
+): ShapeFormReader | undefined {
   const geometry = geometryAt(group, row);
   if (!geometry) return undefined;
   const { reader, at } = geometry;

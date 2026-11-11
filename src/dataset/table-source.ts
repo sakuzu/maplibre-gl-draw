@@ -27,12 +27,8 @@ import type { Feature, FeatureCoordinates } from '../shared/types/model.js';
 import type { Color } from '../shared/types/style.js';
 import { geometryFromCoordinates } from '../shared/utils/coordinates.js';
 import { isPreparedTable, prepareTable } from '../table/prepare.js';
-import {
-  columnValue,
-  type GeometryColumnReader,
-  isDictionaryColumn,
-  TableReader,
-} from '../table/table.js';
+import type { ShapeFormReader } from '../table/shape-reader.js';
+import { columnValue, isDictionaryColumn, TableReader } from '../table/table.js';
 import type { GeometryType, PreparedTable, Table } from '../table/types.js';
 import { toPackedPointStyle } from '../view/renderers/batch-manager.js';
 import { toLineInstanceColor } from '../view/renderers/line/line-geometry.js';
@@ -305,7 +301,7 @@ export class TableSource implements DisplaySource {
   }
 
   pointOf(row: number): readonly [number, number] {
-    const column = this.table.columnOf(row) as GeometryColumnReader;
+    const column = this.table.columnOf(row) as ShapeFormReader<GeometryType>;
     return column.position(this.table.childRowOf(row));
   }
 
@@ -472,7 +468,7 @@ class RowCollector {
    * A point at coordinate `v` of the geometry column of the row (a shape without instancing
    * support goes to immediate mode)
    */
-  point(row: number, column: GeometryColumnReader, v: number): void {
+  point(row: number, column: ShapeFormReader<GeometryType>, v: number): void {
     const slot = this.slots.point(column.type, this.slots.ruleColorOf(row));
     if (!slot.shape) {
       this.fallback(row);
@@ -493,7 +489,7 @@ class RowCollector {
    */
   line(
     row: number,
-    column: GeometryColumnReader,
+    column: ShapeFormReader<GeometryType>,
     start: number,
     end: number,
     createdZoom: number | undefined,
@@ -538,7 +534,7 @@ class RowCollector {
    */
   polygon(
     row: number,
-    column: GeometryColumnReader,
+    column: ShapeFormReader<GeometryType>,
     ringStart: number,
     ringEnd: number,
     ringOffsets: Int32Array,

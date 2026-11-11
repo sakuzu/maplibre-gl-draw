@@ -25,6 +25,20 @@ import { polygonRingRuns } from './polygon-rings.js';
 import type { RowShape } from './row-read-type.js';
 import type { GeometryType, TableGeometry } from './types.js';
 
+/**
+ * The depth of the shapes of each geometry type: the number of its offset arrays
+ *
+ * @internal
+ */
+export const GEOMETRY_DEPTHS: Readonly<Record<GeometryType, number>> = {
+  Point: 0,
+  LineString: 1,
+  MultiPoint: 1,
+  Polygon: 2,
+  MultiLineString: 2,
+  MultiPolygon: 3,
+};
+
 /** The number of vertices of a fill below which its indices take 16 bits */
 export const WIDE_VERTICES = 65_536;
 
@@ -356,7 +370,7 @@ export function rowShapeOf(geometry: RowGeometry): RowShape {
  */
 export function rowGeometryOfColumn(
   column: {
-    readonly type: GeometryType;
+    readonly type: string;
     readonly coords: Float64Array;
     readonly dimensions?: CoordinateDimensions;
     readonly offsets?: readonly Int32Array[];
@@ -376,13 +390,14 @@ export function rowGeometryOfColumn(
   copyCoordinates(column.coords, column.dimensions ?? 'xy', first, end - first, coords, dims, 0);
   const parts: number[] = [];
   const polygons: number[] = [];
-  if (column.type === 'Polygon' || column.type === 'MultiLineString') {
+  if (o.length === 2) {
     for (let r = o[0][at]; r < o[0][at + 1]; r++) parts.push(o[1][r + 1] - o[1][r]);
-  } else if (column.type === 'MultiPolygon') {
+  } else if (o.length === 3) {
     for (let p = o[0][at]; p < o[0][at + 1]; p++) {
       polygons.push(o[1][p + 1] - o[1][p]);
       for (let r = o[1][p]; r < o[1][p + 1]; r++) parts.push(o[2][r + 1] - o[2][r]);
     }
   }
-  return { type: column.type, dims, stride, coords, parts, polygons };
+  // The name of the form of a row of the tables is its geometry type
+  return { type: column.type as GeometryType, dims, stride, coords, parts, polygons };
 }

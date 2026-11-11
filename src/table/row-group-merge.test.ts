@@ -29,8 +29,8 @@ import { cacheNumbersOf } from './row-caches.js';
 import { createRowBlockDataBuilder, type RowInput } from './row-group-builder.js';
 import { mergeRowBlockData } from './row-group-merge.js';
 import type { RowBlockData } from './row-group-types.js';
+import { ShapeFormReader } from './shape-reader.js';
 import { FEATURE_TABLE_COLUMNS } from './tabane/columns.js';
-import { GeometryColumnReader } from './table.js';
 
 /** Numbers the styles of groups built by builders, as the table of styles of a document does */
 function numbered(groups: RowBlockData[], numbers: Map<string, number>): RowBlockData[] {
@@ -164,11 +164,9 @@ function readRow(group: RowBlockData, r: number, styles: Map<number, string>) {
     geometry:
       child < 0
         ? null
-        : new GeometryColumnReader(
-            geometryColumnOf(group)!.children[child],
-            undefined,
-            'child',
-          ).coordinatesOf(geometryColumnOf(group)!.offsets[r]),
+        : new ShapeFormReader(geometryColumnOf(group)!.children[child]).coordinatesOf(
+            geometryColumnOf(group)!.offsets[r],
+          ),
     bounds: Array.from(group.rowBounds.subarray(r * 4, r * 4 + 4)),
     triangles,
     properties,

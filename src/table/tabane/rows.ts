@@ -57,7 +57,8 @@ import {
 } from '../row-group-types.js';
 import type { RowRead, RowShape, RowShapeColumn } from '../row-read-type.js';
 import { type PointRowRings, rowRingsOfPoint } from '../row-rings.js';
-import type { TableGeometry, TableMixedGeometry } from '../types.js';
+import { INT8_FORMS, type ShapeColumn, type ShapeForm } from '../shape-reader.js';
+import type { TableGeometry } from '../types.js';
 import { featureColumnsOf, geometryTypeOf, stylesOf, typesOf } from './columns.js';
 import { type CachedFills, FILL_TRIANGLES_CACHE, readFillTrianglesCache } from './triangles.js';
 
@@ -86,7 +87,7 @@ export interface RowBlockOfTabaneOptions {
 }
 
 /** The first coordinate of a row of a child of a geometry (its end is the first of the next row) */
-function vertexStart(child: TableGeometry, row: number): number {
+function vertexStart(child: ShapeForm, row: number): number {
   let first = row;
   const levels = child.offsets;
   if (levels) for (let k = 0; k < levels.length; k++) first = levels[k][first];
@@ -101,7 +102,7 @@ function vertexStart(child: TableGeometry, row: number): number {
 function geometryOf(
   column: TabaneShapeColumn | null,
   dims: CoordinateDimensions,
-): TableMixedGeometry | null {
+): ShapeColumn | null {
   if (column === null) return null;
   const from = column.dimensions;
   if (!dimsWithin(from, dims))
@@ -120,8 +121,8 @@ function geometryOf(
       : { type, coords, dimensions: dims };
   });
   return {
-    type: 'Mixed',
-    types: Int8Array.from(column.formIndex),
+    // The form of each row in one byte, but past 127 forms
+    types: column.forms.length > INT8_FORMS ? column.formIndex : Int8Array.from(column.formIndex),
     offsets: column.formRow,
     children,
   };
@@ -258,7 +259,7 @@ export function rowBlockDataOfTabane(
     }
   }
 
-  const shapes: Array<TableMixedGeometry | null> = FEATURE_COLUMN_LAYOUT.shapes.map(() => null);
+  const shapes: Array<ShapeColumn | null> = FEATURE_COLUMN_LAYOUT.shapes.map(() => null);
   shapes[GEOMETRY_COLUMN] = geometry;
   const wholes: Array<RowBlockWhole | null> = FEATURE_COLUMN_LAYOUT.wholes.map(() => null);
   wholes[TYPE_COLUMN] = { indexes: types, values: typeNames };

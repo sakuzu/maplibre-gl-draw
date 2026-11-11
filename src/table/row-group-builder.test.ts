@@ -28,8 +28,8 @@ import {
   type RowInput,
 } from './row-group-builder.js';
 import { ROW_FLAG_DELETED, type RowBlockData, type RowBlockDictionary } from './row-group-types.js';
+import { ShapeFormReader } from './shape-reader.js';
 import { FEATURE_TABLE_COLUMNS } from './tabane/columns.js';
-import { GeometryColumnReader } from './table.js';
 
 /** A row with the defaults of the tests */
 function row(id: string, key: string, geometry: Geometry | null, extra: Partial<RowInput> = {}) {
@@ -49,11 +49,7 @@ function idsOf(groups: readonly RowBlockData[]): string[] {
 function coordinatesOf(group: RowBlockData, r: number): unknown {
   const child = geometryColumnOf(group)!.types[r];
   if (child < 0) return null;
-  const column = new GeometryColumnReader(
-    geometryColumnOf(group)!.children[child],
-    undefined,
-    'child',
-  );
+  const column = new ShapeFormReader(geometryColumnOf(group)!.children[child]);
   return column.coordinatesOf(geometryColumnOf(group)!.offsets[r]);
 }
 

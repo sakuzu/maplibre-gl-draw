@@ -121,6 +121,8 @@ describe('the table subpath', () => {
       'table/packed-rtree.ts',
       'table/partition.ts',
       'table/prepare.ts',
+      // The reader of the shapes of the rows of the tables reads the geometry columns too
+      'table/shape-reader.ts',
       'table/table.ts',
     ]);
   });

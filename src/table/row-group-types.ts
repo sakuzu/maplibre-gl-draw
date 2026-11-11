@@ -15,7 +15,7 @@
 
 import type { PropertyColumns, Utf8Column } from '@sakuzu/tabane';
 import type { RowCacheColumn } from './row-caches.js';
-import type { TableMixedGeometry } from './types.js';
+import type { ShapeColumn } from './shape-reader.js';
 
 /**
  * The bit of {@link RowBlockData.flags} of a row that is deleted (kept for what refers to it). The
@@ -102,9 +102,9 @@ export interface RowBlockData extends RowBlock {
   /**
    * The `shape` columns, in the order they are declared (`RowColumnLayout.shapes`): null for a
    * column no row of the row block holds a value of. The points have the dimensions of the
-   * table (`TableGeometry.dimensions` of every child)
+   * table (`ShapeForm.dimensions` of every form)
    */
-  readonly shapes: readonly (TableMixedGeometry | null)[];
+  readonly shapes: readonly (ShapeColumn | null)[];
   /**
    * The `whole` columns, in the order they are declared (`RowColumnLayout.wholes`): null for a
    * column no row of the row block holds a value of

@@ -46,6 +46,7 @@ export const KASANE_FILES = [
   'table/row-keys.ts',
   'table/row-read-type.ts',
   'table/row-rings.ts',
+  'table/shape-reader.ts',
   'table/transfer-list.ts',
 ];
 

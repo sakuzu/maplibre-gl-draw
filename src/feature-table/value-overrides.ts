@@ -38,8 +38,7 @@ import {
 } from '@sakuzu/tabane';
 import { KasaneError, kasaneErrorOf } from '../table/kasane-error.js';
 import type { RowCacheNumbers } from '../table/row-caches.js';
-import { GeometryColumnReader } from '../table/table.js';
-import type { TableGeometry } from '../table/types.js';
+import { type ShapeForm, ShapeFormReader } from '../table/shape-reader.js';
 import { drawValueOfInput } from '../table/value-input.js';
 
 /**
@@ -74,8 +73,8 @@ export interface OverrideValue {
 
 /** The geometry of a row written with another shape */
 interface GeometryOverride {
-  readonly column: TableGeometry;
-  readonly reader: GeometryColumnReader;
+  readonly column: ShapeForm;
+  readonly reader: ShapeFormReader;
 }
 
 const DECODER = new TextDecoder();
@@ -156,7 +155,7 @@ function valueBytes(value: OverrideValue): number {
 }
 
 /** The bytes the arrays of a geometry column take */
-function columnBytes(column: TableGeometry): number {
+function columnBytes(column: ShapeForm): number {
   let bytes = column.coords.byteLength;
   for (const offsets of column.offsets ?? []) bytes += offsets.byteLength;
   return bytes;
@@ -255,14 +254,14 @@ export class GeometryOverrides {
   }
 
   /** The geometry column of one row a row is read from (undefined when not written) */
-  geometry(row: number): GeometryColumnReader | undefined {
+  geometry(row: number): ShapeFormReader | undefined {
     return this.geometries.get(row)?.reader;
   }
 
   /** Writes the geometry of a row as a column of one row */
-  setGeometry(row: number, column: TableGeometry): void {
+  setGeometry(row: number, column: ShapeForm): void {
     this.deleteGeometry(row);
-    const reader = new GeometryColumnReader(column, undefined, 'geometry');
+    const reader = new ShapeFormReader(column);
     this.geometries.set(row, { column, reader });
     this.size += GEOMETRY_OVERHEAD_BYTES + columnBytes(column);
   }
