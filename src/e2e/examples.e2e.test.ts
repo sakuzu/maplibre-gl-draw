@@ -627,11 +627,10 @@ describe('the examples', () => {
       );
     expect(await images()).toEqual([{ name: 'Sketch map', opacity: 0.85 }]);
 
-    // The Image tool, then a click on the map: the library asks the page for the image with
-    // requestImage, and the page opens a file picker and gives the file it chose
-    await page.getByRole('button', { name: 'Image', exact: true }).click();
+    // The Image tool: the library asks the page for the image with requestImage, and the page
+    // opens a file picker and gives the file it chose
     const chooser = page.waitForEvent('filechooser');
-    await click(page, at(-300, 200));
+    await page.getByRole('button', { name: 'Image', exact: true }).click();
     await (await chooser).setFiles({
       name: 'red.png',
       mimeType: 'image/png',
@@ -696,7 +695,7 @@ describe('the examples', () => {
         features: unknown[];
       };
       expect(json.features).toHaveLength(4);
-      if (label === 'Download') expect(json.version).toBe('3.0.0');
+      if (label === 'Download') expect(json.version).toBe('4.0.0');
       else expect(json.type).toBe('FeatureCollection');
     }
 
@@ -1458,7 +1457,7 @@ describe('the examples', () => {
       draw.selection.clear();
       return draw.features.list({ type: 'Route' });
     });
-    expect(river.type).toBe('Route');
+    expect(river.properties['maplibre-gl-draw:featureType']).toBe('Route');
     // The river route is drawn solid in its own blue (#1f6feb)
     const [r0, r1] = (river.geometry as GeoJSON.LineString).coordinates;
     const middle = [(r0[0] + r1[0]) / 2, (r0[1] + r1[1]) / 2];

@@ -210,7 +210,9 @@ describe('drawing with the real pointer on a flat map', () => {
     const [triangle] = await features(page);
     expect(triangle.type).toBe('Polygon');
     expect(outerRing(triangle)).toHaveLength(4);
-    expectNear(outerRing(triangle)[2], await lngLatOf(page, at(80, 60)));
+    // Drawn clockwise on the map, the ring is held counter-clockwise from its first vertex
+    // (the right-hand rule): the last vertex drawn is the second of the ring
+    expectNear(outerRing(triangle)[1], await lngLatOf(page, at(80, 60)));
 
     await clearAll(page);
     await setMode(page, 'draw_polygon');
@@ -222,7 +224,7 @@ describe('drawing with the real pointer on a flat map', () => {
     expect(await mode(page)).toBe('select');
     const [square] = await features(page);
     expect(outerRing(square)).toHaveLength(5);
-    expectNear(outerRing(square)[3], await lngLatOf(page, at(-80, 60)));
+    expectNear(outerRing(square)[1], await lngLatOf(page, at(-80, 60)));
     // The double clicks did not zoom the map
     expect(await page.evaluate(() => (window as unknown as E2EWindow).map.getZoom())).toBe(zoom);
   });
@@ -354,9 +356,11 @@ describe('drawing with the real pointer on a flat map', () => {
 
     await drag(page, at(40, 40), at(90, 70));
     const [after] = await features(page);
+    // Drawn clockwise, the ring is held counter-clockwise from its first vertex: (40, 40) stays
+    // the third vertex, and (40, -40) is the fourth
     const ring = outerRing(after);
     expectNear(ring[2], await lngLatOf(page, at(90, 70)));
-    expectNear(ring[1], await lngLatOf(page, at(40, -40)));
+    expectNear(ring[3], await lngLatOf(page, at(40, -40)));
   });
 
   it('moves a selected point with a drag anywhere in its frame: the marker and the margin', async () => {
@@ -688,8 +692,10 @@ describe('drawing on a pitched and rotated map', () => {
     const [polygon] = await features(page);
     const ring = outerRing(polygon);
     for (let i = 0; i < corners.length; i++) {
-      // The projection is not linear: the vertex is where maplibre unprojects the pointer
-      expectNear(ring[i], await lngLatOf(page, corners[i]));
+      // The projection is not linear: the vertex is where maplibre unprojects the pointer.
+      // Drawn clockwise, the ring is held counter-clockwise from its first vertex
+      const corner = corners[(corners.length - i) % corners.length] as PagePoint;
+      expectNear(ring[i], await lngLatOf(page, corner));
     }
 
     await click(page, at(0, 10));
@@ -704,10 +710,11 @@ describe('drawing on a pitched and rotated map', () => {
       expectNear(outerRing(moved)[i], [ring[i][0] + to[0] - from[0], ring[i][1] + to[1] - from[1]]);
     }
 
-    // A vertex handle is hit where it is drawn and follows the pointer
-    await drag(page, await pageOf(page, outerRing(moved)[1]), at(120, -90));
+    // A vertex handle is hit where it is drawn and follows the pointer: the corner drawn second
+    // (the fourth vertex of the ring), pulled outwards so that the ring keeps its orientation
+    await drag(page, await pageOf(page, outerRing(moved)[3]), at(120, -90));
     const [edited] = await features(page);
-    expectNear(outerRing(edited)[1], await lngLatOf(page, at(120, -90)));
+    expectNear(outerRing(edited)[3], await lngLatOf(page, at(120, -90)));
   });
 });
 

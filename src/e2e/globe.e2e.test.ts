@@ -296,28 +296,27 @@ describe('the edges on the globe follow the paths maplibre draws', () => {
         context.fillStyle = '#FF00FF';
         context.fillRect(0, 0, 64, 64);
         await (window as unknown as E2EWrites).e2e.writesOf(draw).document.load({
-          version: '3.0.0',
-          metadata: { title: 'image' },
+          version: '4.0.0',
+          title: 'image',
           layerOrder: ['images'],
           layers: [
             { id: 'images', name: 'Images', visible: true, locked: false, opacity: 1, items: [id] },
           ],
           features: [
             {
+              type: 'Feature',
               id,
-              type: 'Image',
               geometry: { type: 'Point', coordinates: [0, 30] },
-              layerId: 'images',
-              visible: true,
-              locked: false,
               properties: {
+                'maplibre-gl-draw:featureType': 'Image',
+                'maplibre-gl-draw:layerId': 'images',
                 'maplibre-gl-draw:createdZoom': 1,
                 'maplibre-gl-draw:imageFileId': 'file-magenta',
                 // Drawn at 400 x 160 px at the created zoom, whatever the size of the file
                 'maplibre-gl-draw:imageWidth': 400,
                 'maplibre-gl-draw:imageHeight': 160,
+                'maplibre-gl-draw:style': { imageOpacity: 1 },
               },
-              style: { imageOpacity: 1 },
             },
           ],
           files: {

@@ -21,7 +21,14 @@ import type { Browser, Page } from 'playwright-core';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { browserTimeout } from '../test-utils.js';
 import { type FeatureInput, hex, load, type Rgb } from './drag-scene.js';
-import { type Bundle, bundlePage, launchBrowser, openMapPage, settle } from './harness.js';
+import {
+  type Bundle,
+  bundlePage,
+  type E2EWrites,
+  launchBrowser,
+  openMapPage,
+  settle,
+} from './harness.js';
 
 let browser: Browser;
 let bundle: Bundle;
@@ -1136,12 +1143,10 @@ describe('the drape of the rows on the relief of the terrain', () => {
     expect(before.used, before.reason).toBe(true);
     const to: [number, number] = [SLOPE[0] + 0.0028, SLOPE[1] + 0.0015];
     await page.evaluate((target) => {
-      const w = window as unknown as {
-        draw: { features: { update(id: string, patch: unknown): unknown } };
-      };
+      const w = window as unknown as E2EWrites & { draw: import('../index.js').Draw };
       const [x, y] = target;
       const h = 0.0008;
-      w.draw.features.update('moved', {
+      w.e2e.writesOf(w.draw).features.update('moved', {
         geometry: {
           type: 'Polygon',
           coordinates: [
@@ -1321,10 +1326,8 @@ describe('the drape of the rows on the relief of the terrain', () => {
     await page.evaluate(
       ({ h, target }) => {
         const w = window as unknown as {
-          draw: {
-            features: { update(id: string, patch: unknown): unknown };
-          };
-          e2e: {
+          draw: import('../index.js').Draw;
+          e2e: E2EWrites['e2e'] & {
             internals: {
               tableDiagnosticsOf(draw: unknown): {
                 setRowsMoving(handles: number[], set: number): void;
@@ -1335,7 +1338,8 @@ describe('the drape of the rows on the relief of the terrain', () => {
         };
         const [x, y] = target;
         const s = 0.0008;
-        w.draw.features.update('moved', {
+        // The internal write, synchronous: the rows leave the set in the task they are written
+        w.e2e.writesOf(w.draw).features.update('moved', {
           geometry: {
             type: 'Polygon',
             coordinates: [

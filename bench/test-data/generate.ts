@@ -18,7 +18,8 @@ import { fileURLToPath } from 'node:url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Type definitions (the shapes of the native format, see DrawDocument in src/api/model.ts)
+// Type definitions: the features are made with their fields apart, then written in the native
+// format (4.0.0, see DrawDocument in src/api/model.ts) as GeoJSON Features
 interface Coordinate {
   0: number;
   1: number;
@@ -53,19 +54,35 @@ interface DrawLayer {
   metadata?: Record<string, unknown>;
 }
 
+interface NativeFeature {
+  type: 'Feature';
+  id: string;
+  geometry: DrawGeometry;
+  properties: Record<string, unknown>;
+}
+
 interface NativeDocument {
-  version: string;
-  created?: string;
-  modified?: string;
-  metadata?: {
-    title?: string;
-    description?: string;
-    basemap?: string;
-  };
+  version: '4.0.0';
+  title?: string;
+  description?: string;
   layers?: DrawLayer[];
+  layerOrder?: string[];
   groups?: never[];
-  features: DrawFeature[];
+  features: NativeFeature[];
   files?: Record<string, never>;
+}
+
+/** A feature as a GeoJSON Feature of the native format, its fields under the keys of the library */
+function nativeFeatureOf(feature: DrawFeature): NativeFeature {
+  const key = (name: string) => `maplibre-gl-draw:${name}`;
+  const properties: Record<string, unknown> = { ...feature.properties };
+  properties[key('layerId')] = feature.layerId;
+  if (feature.groupId !== undefined) properties[key('groupId')] = feature.groupId;
+  if (feature.type !== feature.geometry.type) properties[key('featureType')] = feature.type;
+  if (feature.style) properties[key('style')] = feature.style;
+  if (!feature.visible) properties[key('visible')] = false;
+  if (feature.locked) properties[key('locked')] = true;
+  return { type: 'Feature', id: feature.id, geometry: feature.geometry, properties };
 }
 
 // Random number generation
@@ -218,7 +235,7 @@ function generateSticker(id: string, layerId: string): DrawFeature {
 }
 
 // Test data generation
-function generateTestData(count: number): NativeDocument {
+function generateTestData(count: number): { data: NativeDocument; features: DrawFeature[] } {
   const layerId = 'layer-1';
   const features: DrawFeature[] = [];
   const order: string[] = [];
@@ -246,14 +263,10 @@ function generateTestData(count: number): NativeDocument {
     order.push(id);
   }
 
-  return {
-    version: '3.0.0',
-    created: new Date().toISOString(),
-    modified: new Date().toISOString(),
-    metadata: {
-      title: `Test data (${count} features)`,
-      description: `${count} features for performance measurements`,
-    },
+  const data: NativeDocument = {
+    version: '4.0.0',
+    title: `Test data (${count} features)`,
+    description: `${count} features for performance measurements`,
     layers: [
       {
         id: layerId,
@@ -266,22 +279,23 @@ function generateTestData(count: number): NativeDocument {
     ],
     layerOrder: [layerId],
     groups: [],
-    features,
+    features: features.map(nativeFeatureOf),
     files: {},
   };
+  return { data, features };
 }
 
 // File output
 function writeTestData(count: number): void {
-  const data = generateTestData(count);
+  const { data, features } = generateTestData(count);
   const filename = `test-data-${count}.json`;
   const filepath = path.join(__dirname, filename);
 
   fs.writeFileSync(filepath, JSON.stringify(data, null, 2));
   console.log(`Generated: ${filepath}`);
-  console.log(`  - Features: ${data.features.length}`);
+  console.log(`  - Features: ${features.length}`);
   console.log(
-    `  - Types: Point=${data.features.filter((f) => f.type === 'Point').length}, LineString=${data.features.filter((f) => f.type === 'LineString').length}, Polygon=${data.features.filter((f) => f.type === 'Polygon').length}, Sticker=${data.features.filter((f) => f.type === 'Sticker').length}`,
+    `  - Types: Point=${features.filter((f) => f.type === 'Point').length}, LineString=${features.filter((f) => f.type === 'LineString').length}, Polygon=${features.filter((f) => f.type === 'Polygon').length}, Sticker=${features.filter((f) => f.type === 'Sticker').length}`,
   );
 }
 

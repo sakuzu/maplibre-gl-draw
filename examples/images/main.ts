@@ -4,7 +4,7 @@
 // images: pictures placed on the map.
 // The Image tool of the toolbar (the mode `draw_image`) asks the page for a file with the option
 // requestImage; the page opens a file picker and gives the file, which the library places where
-// the map was clicked. Code places an image by importing a GeoJSON feature of the type Image that
+// the image was asked for. Code places an image by importing a GeoJSON feature of the type Image that
 // carries the picture. The page opens with that image selected, so the panel on the right shows
 // its opacity; drag its corners to scale it.
 
@@ -25,8 +25,8 @@ const map = new maplibregl.Map({
   zoom: 15.5,
 });
 // 1. The library opens no file dialog. Entering `draw_image` (the Image tool, or the I key)
-// and clicking the map calls requestImage with where the image goes; the page lets the user
-// pick a file and gives it, and the library places it there, in the active layer at the zoom of
+// calls requestImage with where the image goes (where the click that entered the mode was, or
+// else the center of the map); the page lets the user pick a file and gives it, and the library places it there, in the active layer at the zoom of
 // the map, as one commit. A picker left without a file gives nothing: the request is stopped by
 // its signal when the next one is made
 const draw = createDraw(map, {
