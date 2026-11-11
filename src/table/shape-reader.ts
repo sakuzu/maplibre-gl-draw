@@ -60,16 +60,6 @@ export interface ShapeColumn {
  */
 export const INT8_FORMS = 127;
 
-/**
- * An array for the form of each of `length` rows that holds `forms` forms: an `Int8Array` for
- * up to {@link INT8_FORMS}, an `Int16Array` past
- *
- * @internal
- */
-export function formArrayOf(length: number, forms: number): Int8Array | Int16Array {
-  return forms > INT8_FORMS ? new Int16Array(length) : new Int8Array(length);
-}
-
 /** A point read as its first two values */
 export type ShapePoint = [number, number];
 
