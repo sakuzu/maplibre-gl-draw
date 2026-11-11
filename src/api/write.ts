@@ -230,7 +230,11 @@ export interface TransactionLayers extends LayersCollection {
   update(id: string, patch: LayerPatch): Promise<import('./model.js').Layer>;
   /** Deletes the layers with their features and groups. @returns How many */
   delete(target: string | readonly string[] | All): Promise<number>;
-  /** Puts a layer just below or above another */
+  /**
+   * Puts a layer just below or above another. An entry of the stacking order that is not a layer
+   * (a dataset whose order is `layer-order`, an entry of the application) is placed the same way,
+   * and can be the neighbor
+   */
   place(id: string, to: Neighbor): Promise<void>;
 }
 

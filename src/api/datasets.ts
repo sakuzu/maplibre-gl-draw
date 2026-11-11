@@ -106,7 +106,7 @@ export interface DatasetEvents {
 /**
  * What `datasets.add` takes. The rows are given in one of three ways, told apart by the name
  * of the field: `rows`, `table` or `provider`. With none of them the dataset starts empty: it
- * can be placed at once (`layers.reorder` takes its ID when its order is `layer-order`), and
+ * can be placed at once (`tx.layers.place` takes its ID when its order is `layer-order`), and
  * its rows are given later with `setRows` or `setTable`.
  */
 export type DatasetOptions = {

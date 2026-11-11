@@ -1204,16 +1204,23 @@ class TransactionImpl implements Transaction {
         }),
       place: (id: string, to: Neighbor) =>
         this.#run((keep) => {
-          const layer = requireLayer(id);
+          // A layer, or an entry of the stacking order that is not one (a dataset placed among
+          // the layers, an entry of the application)
+          const inOrder = (entry: unknown): string => {
+            if (typeof entry === 'string' && overlay.view.getLayer(entry)) return entry;
+            if (typeof entry === 'string' && writers.getOrder().includes(entry)) return entry;
+            throw notFound('layer or entry of the stacking order', entry);
+          };
+          const placed = inOrder(id);
           const { neighbor, after } = neighborOf(to);
-          requireLayer(neighbor);
-          if (neighbor === layer.id) throw invalidInput('A layer is not placed next to itself');
+          inOrder(neighbor);
+          if (neighbor === placed) throw invalidInput('An entry is not placed next to itself');
           this.#requireEditable();
           keep(() => {
-            const order = writers.getOrder().filter((other) => other !== layer.id);
+            const order = writers.getOrder().filter((other) => other !== placed);
             const at = order.indexOf(neighbor);
-            if (at < 0 || !this.#store.getLayer(layer.id)) return false;
-            order.splice(after ? at + 1 : at, 0, layer.id);
+            if (at < 0 || !writers.getOrder().includes(placed)) return false;
+            order.splice(after ? at + 1 : at, 0, placed);
             return writers.reorder(order);
           });
           return undefined;
