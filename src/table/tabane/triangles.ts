@@ -76,8 +76,8 @@ export interface CachedFills {
 /**
  * The fills of the polygon rows of a page, read from the content of the cache of their
  * triangles when it fits the rows: as many rows and polygon rows, every index within the vertices
- * of its fill, nothing left after them (whether the triangles of each row fit the row is checked
- * then, `FILL_TRIANGLES.fits`)
+ * of its fill, nothing left after them (whether the triangles of each row fit the row, its number
+ * of vertices included, is checked then, `fillTrianglesFit`)
  *
  * @param content The content of the cache
  * @param rows The number of rows of the page

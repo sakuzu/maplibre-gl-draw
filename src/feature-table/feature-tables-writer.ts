@@ -45,6 +45,7 @@ import {
   ItemOrderWatch,
   ORDER_ITEM_LIMIT,
 } from './item-order.js';
+import { rowsChangeOf } from './rows-change.js';
 
 /**
  * The writer of the features held as rows, with what the Store of rows calls besides
@@ -90,12 +91,15 @@ export function shapesOfGeometries(values: RowValues): RowValues {
  * @param tables - The writer of the tables
  * @param internals - What the changes of the order read of the tables
  * @param notify - Where the changes of the document go (none: the writer only writes)
+ * @param isLayer - Whether an id is a layer of the Store (none: any id that is not a group is a
+ *   layer, the tables of a layer made when a row is put there)
  * @internal
  */
 export function createFeatureTablesWriter(
   tables: TablesWriter,
   internals: FeatureTablesInternals,
   notify?: (change: StoreChange) => void,
+  isLayer?: (id: string) => boolean,
 ): FeatureTablesStoreWriter {
   /** The changes of the order of a write made in several parts, under way (`watchOrderOf`) */
   let partsWatch: { readonly watch: ItemOrderWatch | null } | null = null;
@@ -277,6 +281,25 @@ export function createFeatureTablesWriter(
     return moves;
   };
 
+  /**
+   * Refuses a write whose parent of a row is neither a layer of the Store nor a group, before
+   * anything is written: the tables would hold the row in a table of that id
+   *
+   * @throws `DrawError` with the code `not-found`
+   */
+  const checkParents = (values: RowValues): void => {
+    const parents = values.fields.get('parent');
+    if (!isLayer || !parents) return;
+    parents.forEach((parent, i) => {
+      if (typeof parent !== 'string' || parent === '' || values.deleted?.[i]) return;
+      if (isLayer(parent) || internals.groups.handleOfId(parent) >= 0) return;
+      throw new DrawError(
+        'not-found',
+        `FeatureTables: the parent "${parent}" is unknown (neither a layer nor a group)`,
+      );
+    });
+  };
+
   return {
     lookup: (id) => {
       try {
@@ -310,7 +333,7 @@ export function createFeatureTablesWriter(
     // The blocks are made by the builder and the merge of the library
     addPages: (layerId, blocks) => {
       try {
-        const { rows } = tables.addPages(layerId, blocks as readonly PageData[]);
+        const rows = rowsChangeOf(tables.addPages(layerId, blocks as readonly PageData[]).rows);
         notify?.({ rows });
         return rows;
       } catch (error) {
@@ -319,9 +342,12 @@ export function createFeatureTablesWriter(
     },
     writeRows: (values, options: RowApplyOptions = {}) => {
       try {
+        checkParents(values);
         // A part of a write made in several parts: its changes of the order are told at its end
         const watch = partsWatch ? null : watchOrder(values);
-        const { rows, kept } = tables.writeRows(shapesOfGeometries(values), options);
+        const written = tables.writeRows(shapesOfGeometries(values), options);
+        const rows = rowsChangeOf(written.rows);
+        const kept = written.kept;
         if (notify) {
           // The values before, the token that keeps the rows deleted and the changes of the order
           // go with the last of the additions to the notification
@@ -350,7 +376,9 @@ export function createFeatureTablesWriter(
       try {
         const followers = notify ? watchFollowers(patch) : null;
         const moves = notify ? groupMovesOf(patch) : [];
-        const { rows, kept } = tables.writeGroups(withoutNames(patch), options);
+        const written = tables.writeGroups(withoutNames(patch), options);
+        const rows = rowsChangeOf(written.rows);
+        const kept = written.kept;
         // A group created again whose id is hidden on this client is hidden again
         internals.states.groupsWritten(patch.handles);
         const order = [...(followers?.finish() ?? []), ...moves];

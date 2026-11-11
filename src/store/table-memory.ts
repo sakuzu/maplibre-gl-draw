@@ -262,8 +262,11 @@ export class TableContractStore implements StoreContract {
     });
     this.tables = tables;
     this.#internals = featureTablesInternals(tables) as FeatureTablesInternals;
-    const writer = createFeatureTablesWriter(tablesWriter, this.#internals, (change) =>
-      this.#bus.merge(change),
+    const writer = createFeatureTablesWriter(
+      tablesWriter,
+      this.#internals,
+      (change) => this.#bus.merge(change),
+      (id) => this.#layers.has(id),
     );
     this.#tablesWriter = writer;
     const marks = createWriteMarkKeeper(tables, this.#internals);
@@ -732,6 +735,10 @@ export class TableContractStore implements StoreContract {
   createLayer(layer: Layer): boolean {
     return this.#apply(() => {
       if (this.#layers.has(layer.id)) throw new Error(`Layer with id "${layer.id}" already exists`);
+      // A layer and a group are named in one space: the parent of a row names one or the other
+      if (this.#groups.has(layer.id)) {
+        throw new Error(`Layer with id "${layer.id}" already exists as the id of a group`);
+      }
       const created = tableLayerOf(layer);
       this.#layers.set(layer.id, created);
       const previous = [...this.#order];
@@ -996,6 +1003,10 @@ export class TableContractStore implements StoreContract {
   createGroup(group: Group): boolean {
     return this.#apply(() => {
       if (this.#groups.has(group.id)) throw new Error(`Group with id "${group.id}" already exists`);
+      // A layer and a group are named in one space: the parent of a row names one or the other
+      if (this.#layers.has(group.id)) {
+        throw new Error(`Group with id "${group.id}" already exists as the id of a layer`);
+      }
       if (!this.#layers.has(group.layerId)) {
         throw new Error(`Layer with id "${group.layerId}" not found`);
       }
@@ -1106,6 +1117,9 @@ export class TableContractStore implements StoreContract {
       for (const group of groups) {
         if (ids.has(group.id) || this.#groups.has(group.id)) {
           throw new Error(`Group with id "${group.id}" already exists`);
+        }
+        if (this.#layers.has(group.id)) {
+          throw new Error(`Group with id "${group.id}" already exists as the id of a layer`);
         }
         ids.add(group.id);
         if (!this.#layers.has(group.layerId)) {

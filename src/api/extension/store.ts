@@ -346,7 +346,10 @@ export interface Store extends StoreView {
   findVertices?(featureId: string, ids: readonly VertexId[]): (VertexRef | null)[];
   /** Deletes a feature. */
   deleteFeature(id: string): boolean;
-  /** Creates a layer. */
+  /**
+   * Creates a layer. A layer and a group are named in one space: the Stores of the library
+   * refuse a layer whose ID is the ID of a group, as they refuse an ID taken by a layer.
+   */
   createLayer(layer: Layer): boolean;
   /** Changes the fields given of a layer. */
   updateLayer(id: string, updates: Partial<Layer>): boolean;
@@ -381,7 +384,10 @@ export interface Store extends StoreView {
    * @experimental
    */
   applyRows?(write: RowWrite): boolean;
-  /** Creates a group. */
+  /**
+   * Creates a group. A layer and a group are named in one space: the Stores of the library
+   * refuse a group whose ID is the ID of a layer, as they refuse an ID taken by a group.
+   */
   createGroup(group: Group): boolean;
   /**
    * Creates groups, one after the other in the order given, as `groups.create` puts each: at

@@ -8,17 +8,25 @@
  * re-exports them).
  */
 
-import type { RowField, RowsChange, RowValues, TableRowsChange } from '@sakuzu/kasane';
+import type { RowField, RowValues, TableRowsChange } from '@sakuzu/kasane';
 import type { Value } from '@sakuzu/tabane';
 import type { Geometry, Position } from 'geojson';
 
 /**
- * The rows of one layer a change created, updated or deleted, by handle (`LayerRowsChange`), and
- * the rows a change wrote, by layer (`RowsChange`): what the writer of the rows
- * (`FeatureTablesWriter.writeRows`) returns, for the implementation of the Store to put in its
- * notification (`StoreChange.rows`). The tables declare them, a layer being a table
+ * The rows of one layer a change created, updated or deleted, by handle (`LayerRowsChange`): the
+ * tables declare it, a layer being a table
  */
-export type { RowField, RowsChange, RowValues, TableRowsChange as LayerRowsChange };
+export type { RowField, RowValues, TableRowsChange as LayerRowsChange };
+
+/**
+ * The rows a change wrote, by layer: what the writer of the rows
+ * (`FeatureTablesWriter.writeRows`) returns, for the implementation of the Store to put in its
+ * notification (`StoreChange.rows`). It is what the tables tell, by table, a layer being a table
+ */
+export interface RowsChange {
+  /** The rows of each layer */
+  readonly layers: ReadonlyMap<string, TableRowsChange>;
+}
 
 /**
  * A position as `[longitude, latitude]` in degrees (WGS 84), in the same order as GeoJSON

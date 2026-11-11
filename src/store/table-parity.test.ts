@@ -754,6 +754,22 @@ const CASES: readonly Case[] = [
       step('cleared');
     },
   },
+  {
+    name: 'a parent that is neither a layer nor a group',
+    run: ({ store, writer, tables }, step) => {
+      const h = (id: string) => tables.getRowRef(id) ?? -1;
+      let refused = 'none';
+      try {
+        store.transact(
+          () => writer.writeRows(rowPatch([h('f0')], { parent: ['nogroup'] })),
+          'remote',
+        );
+      } catch (e) {
+        refused = (e as { code?: string }).code ?? String(e);
+      }
+      step(`refused: ${refused}`);
+    },
+  },
 ];
 
 describe('the Store of rows, as it was before its tables were reworked', () => {

@@ -57,7 +57,7 @@ import {
   STYLE_COLUMN,
   TYPE_COLUMN,
 } from '../feature-row-columns.js';
-import { FEATURE_CACHES, FILL_TRIANGLES } from '../fill-triangles.js';
+import { FEATURE_CACHES, FILL_TRIANGLES, fillTrianglesFit } from '../fill-triangles.js';
 import { WIDE_VERTICES } from '../row-geometry.js';
 import type { TableGeometry } from '../types.js';
 import { featureColumnsOf, geometryTypeOf, stylesOf, typesOf } from './columns.js';
@@ -201,7 +201,8 @@ export function pageDataOfTabane(rowBlock: TabaneRowBlock, options: ToPageOption
     },
   };
 
-  // The triangles of the polygons kept with the block, copied when they fit every row
+  // The triangles of the polygons kept with the block, copied when they fit every row: the
+  // number of vertices kept with them is the one of the fill of the row too
   const file = options.caches?.find((c) => c.name === FILL_TRIANGLES_CACHE);
   let fills: CachedFills | null = file
     ? readFillTrianglesCache(file.content, n, columns.geometry)
@@ -210,7 +211,7 @@ export function pageDataOfTabane(rowBlock: TabaneRowBlock, options: ToPageOption
     for (at = 0; at < n; at++) {
       if (fills.vertices[at] < 0) continue;
       const kept = fills.indices.subarray(fills.offsets[at], fills.offsets[at + 1]);
-      if (!FILL_TRIANGLES.fits(read, null, kept)) {
+      if (!fillTrianglesFit(read, null, kept, fills.vertices[at])) {
         fills = null;
         break;
       }

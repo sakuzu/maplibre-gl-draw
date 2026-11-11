@@ -10,6 +10,8 @@
 
 import type { PageData, PageDictionary } from '@sakuzu/kasane/render';
 import {
+  ByteSink,
+  ByteSource,
   formatTabaneId,
   packTabaneBlock,
   readTabaneBlock,
@@ -389,6 +391,10 @@ describe('a page as a page of the tables', () => {
     const copied = pageDataOfTabane(rowBlock, { caches: [changed] }).caches[0].numbers;
     expect(copied[copied.length - 1]).toBe(0);
     expect(made.caches[0].numbers[copied.length - 1]).not.toBe(0);
+    // The same with the number of vertices kept for the first polygon one more than its fill
+    // has: every index is within the fill, but the triangles were made of other vertices
+    const more = { ...changed, content: withVerticesOfFirst(changed.content, 1) };
+    expect(pageDataOfTabane(rowBlock, { caches: [more] }).caches).toEqual(made.caches);
   });
 
   it('is taken by the tables as it is, and read back as features', () => {
@@ -796,3 +802,26 @@ describe('features of GeoJSON written as blocks', () => {
     ]);
   });
 });
+
+/**
+ * The content of a cache of the triangles of the fills with the number of vertices of its first
+ * polygon changed by `delta`, the rest as it is
+ */
+function withVerticesOfFirst(content: Uint8Array, delta: number): Uint8Array {
+  const r = new ByteSource(content);
+  const rows = r.uint();
+  const polygons = r.uint();
+  const heads = new ByteSource(r.run());
+  const indices = r.run();
+  const out = new ByteSink();
+  const changed = new ByteSink();
+  for (let k = 0; k < polygons; k++) {
+    changed.uint(heads.uint() + (k === 0 ? delta : 0));
+    changed.uint(heads.uint());
+  }
+  out.uint(rows);
+  out.uint(polygons);
+  out.run(changed.finish());
+  out.run(indices);
+  return out.finish();
+}

@@ -462,6 +462,10 @@ export class MemoryDocumentStore implements DocumentStore {
     if (this.#layers.has(layer.id)) {
       throw new Error(`Layer with id "${layer.id}" already exists`);
     }
+    // A layer and a group are named in one space
+    if (this.#groups.has(layer.id)) {
+      throw new Error(`Layer with id "${layer.id}" already exists as the id of a group`);
+    }
     // The order stays open for the members created in the same notification
     const stored: ObjectLayer = { ...frozenFields(layer), items: [...layer.items] };
     this.#recordItems(`layer:${layer.id}`, layer.id, undefined, []);
@@ -627,6 +631,10 @@ export class MemoryDocumentStore implements DocumentStore {
   createGroup(group: ObjectGroup): void {
     if (this.#groups.has(group.id)) {
       throw new Error(`Group with id "${group.id}" already exists`);
+    }
+    // A layer and a group are named in one space
+    if (this.#layers.has(group.id)) {
+      throw new Error(`Group with id "${group.id}" already exists as the id of a layer`);
     }
     this.#withinOperation(() => this.#createGroup(group));
   }

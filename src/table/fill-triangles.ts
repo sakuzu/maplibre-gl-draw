@@ -111,13 +111,29 @@ export const FILL_TRIANGLES: RowCache = {
   name: FILL_TRIANGLES_CACHE,
   width: 16,
   build: fillTrianglesOf,
-  fits: (row, ring, numbers) => {
-    if (numbers.length % 4 !== 0) return false;
-    const vertices = fillVerticesOf(row, ring);
-    for (let k = 0; k < numbers.length; k++) if (numbers[k] >= vertices) return false;
-    return true;
-  },
+  fits: (row, ring, numbers) => fillTrianglesFit(row, ring, numbers),
 };
+
+/**
+ * Whether triangles kept of a row elsewhere fit the row (`FILL_TRIANGLES.fits`): in pairs, every
+ * index within the vertices of its fill, and, when the number of vertices they were made of is
+ * kept with them (the cache of the file of a block), that number is the one of the fill
+ *
+ * @param vertices - The number of vertices kept with the triangles (none: not compared)
+ * @internal
+ */
+export function fillTrianglesFit(
+  row: RowRead,
+  ring: Float64Array | null,
+  numbers: ArrayLike<number>,
+  vertices?: number,
+): boolean {
+  if (numbers.length % 4 !== 0) return false;
+  const count = fillVerticesOf(row, ring);
+  if (vertices !== undefined && vertices !== count) return false;
+  for (let k = 0; k < numbers.length; k++) if (numbers[k] >= count) return false;
+  return true;
+}
 
 /**
  * The caches of the rows the library declares for its tables and the builders of their row
