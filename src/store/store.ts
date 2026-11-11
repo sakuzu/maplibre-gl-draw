@@ -54,6 +54,7 @@ import type {
   VertexRef,
   VertexSelection,
 } from './types.js';
+import type { QueuedWrite } from './write-queue.js';
 
 /** The edits of features the Store applies, in the shape of the public types */
 export type {
@@ -417,14 +418,12 @@ export interface StoreView {
  * {@link StoreView}. The write methods behave as those of {@link StoreContract}.
  */
 /**
- * A write of many rows made over several tasks, which can be made whole at once
+ * A write of many rows made over several tasks, which can be made whole at once (a write of the
+ * queue of the writes of this client, `write-queue.ts`)
  *
  * @internal
  */
-export interface SlicedWrite {
-  /** Writes the rest now (in this task) */
-  finish(): void;
-}
+export type SlicedWrite = QueuedWrite;
 
 export interface Store extends StoreView, UiState {
   /** Creates a feature (see {@link DocumentStore.createFeature}) */
@@ -547,18 +546,19 @@ export interface Store extends StoreView, UiState {
    */
   applyBulk(op: BulkOperation, rows?: TableSelection): boolean;
   /**
-   * Begins a write of many rows made over several tasks (`operations/bulk-sliced.ts`), finishing
-   * the one under way first: another write of this client (not one of its steps, nor a write from
-   * elsewhere) finishes it before it is made, so the writes of this client keep their order
+   * Puts a write of many rows made over several tasks (`operations/bulk-sliced.ts`) in the queue of
+   * the writes of this client (`write-queue.ts`), the ones queued before finished first: another
+   * write of this client (not one of its steps, nor a write from elsewhere) finishes the queue
+   * before it is made, so the writes of this client keep their order
    */
   beginSlicedWrite(write: SlicedWrite): void;
-  /** Takes off a write over several tasks once it wrote its last rows */
+  /** Takes a write over several tasks out of the queue once it wrote its last rows */
   endSlicedWrite(write: SlicedWrite): void;
-  /** Writes the rest of the write over several tasks under way now, if there is one */
+  /** Writes the rest of the writes over several tasks queued now, in their order */
   finishSlicedWrite(): void;
-  /** Runs a step of the write over several tasks (its writes do not finish it) */
+  /** Runs a step of a write over several tasks (its writes do not finish the queue) */
   runSlicedStep<T>(fn: () => T): T;
-  /** Whether a write over several tasks is under way */
+  /** Whether a write over several tasks is queued */
   readonly slicedWritePending: boolean;
 
   /** Creates a group (see {@link DocumentStore.createGroup}) */

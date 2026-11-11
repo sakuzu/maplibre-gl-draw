@@ -89,6 +89,7 @@ import type {
   VertexRef,
   VertexSelection,
 } from './types.js';
+import { type QueuedWrite, WriteQueue } from './write-queue.js';
 
 /**
  * The most features of rows the selection lists the IDs of: a selection of more is selected in
@@ -162,11 +163,12 @@ export class DrawStore implements Store {
   #vertexTargets: VertexTargets | null = null;
   /** The features selected in bulk (null while the selection lists its features) */
   #bulk: BulkState | null = null;
-  /** The write of many rows made over several tasks under way, and whether a step of it runs */
-  #sliced: SlicedWrite | null = null;
-  #slicedSteps = 0;
-  /** The restore of rows written in steps whose notification this Store holds (`row-steps.ts`) */
-  #restoring: SlicedWrite | null = null;
+  /**
+   * The writes of this client made over several tasks, in their order (`write-queue.ts`): a
+   * restore of rows written in steps (`row-steps.ts`), whose notification this Store holds, or the
+   * write of a drag let go (`operations/bulk-sliced.ts`)
+   */
+  readonly #queue = new WriteQueue();
   /** Whether the selection is being written here (its notification does not prune it) */
   #selecting = false;
   /** Whether a feature selected in bulk is locked, as read last (null: to be read again) */
@@ -350,7 +352,7 @@ export class DrawStore implements Store {
       throw new Error('The Store does not hold its features as rows: it writes no rows');
     }
     if (this.#contract.isReadOnly() || !this.#takesWrites()) return null;
-    this.finishSlicedWrite();
+    this.#queue.finish();
     const before = tables.readValues(patch);
     // Many rows are written in steps by a Store of core that has them, as one transaction
     const steps = rowStepsOf.get(this.#contract);
@@ -366,18 +368,14 @@ export class DrawStore implements Store {
    * the contract wrote the last rows and told them
    */
   #restoreInSteps(steps: RowSteps, write: RowWrite): boolean {
-    const restore: SlicedWrite = { finish: () => steps.finish() };
+    const restore: QueuedWrite = { finish: () => steps.finish(), holdsNotification: true };
     let ended = false;
     const going = steps.begin(write, () => {
       ended = true;
-      if (this.#sliced === restore) this.#sliced = null;
-      if (this.#restoring !== restore) return;
-      this.#restoring = null;
-      this.#bus.release();
+      if (this.#queue.remove(restore)) this.#bus.release();
     });
     if (!going || ended) return true;
-    this.#sliced = restore;
-    this.#restoring = restore;
+    this.#queue.add(restore);
     // Anything else that comes to this Store finishes it first
     this.#bus.hold(() => restore.finish());
     return true;
@@ -451,7 +449,7 @@ export class DrawStore implements Store {
   }
   setSelection(type: SelectionType | null, ids: string[]): void {
     // Read from the rows a restore under way leaves (see `#local`)
-    this.#restoring?.finish();
+    this.#queue.finishHeld();
     // A selection of more features of rows than it lists the IDs of is selected in bulk
     const internals = featureTablesInternals(this.#contract.tables);
     if (internals && type !== null && this.#featureCount(type, ids) > this.selectionIdsLimit) {
@@ -481,7 +479,7 @@ export class DrawStore implements Store {
   }
 
   getUnlockedSelectedRows(): TableSelection | null {
-    this.#restoring?.finish();
+    this.#queue.finishHeld();
     const bulk = this.#bulk;
     const internals = featureTablesInternals(this.#contract.tables);
     if (!bulk || !internals) return null;
@@ -495,7 +493,7 @@ export class DrawStore implements Store {
   }
 
   selectRows(rows: TableSelection): void {
-    this.#restoring?.finish();
+    this.#queue.finishHeld();
     const internals = featureTablesInternals(this.#contract.tables);
     if (!internals) return;
     const containers = this.#containers();
@@ -512,7 +510,7 @@ export class DrawStore implements Store {
   }
 
   restoreSelection(selection: Selection): void {
-    this.#restoring?.finish();
+    this.#queue.finishHeld();
     const rows = rowsOfSummary(selection.bulk);
     if (rows && selection.type === 'feature') {
       this.selectRows(rows);
@@ -538,35 +536,27 @@ export class DrawStore implements Store {
   }
 
   beginSlicedWrite(write: SlicedWrite): void {
-    this.finishSlicedWrite();
-    this.#sliced = write;
+    this.#queue.add(write);
   }
   endSlicedWrite(write: SlicedWrite): void {
-    if (this.#sliced !== write) return;
-    this.#sliced = null;
+    if (!this.#queue.remove(write)) return;
     // The extent of the features selected in bulk, kept while they were written in steps (they
     // are drawn by it moved as they are, until the last of them is written)
     if (this.#bulk) this.#refreshSummary(null);
   }
   finishSlicedWrite(): void {
-    const write = this.#sliced;
-    if (write && this.#slicedSteps === 0) write.finish();
+    this.#queue.finish();
   }
   runSlicedStep<T>(fn: () => T): T {
-    this.#slicedSteps++;
-    try {
-      return fn();
-    } finally {
-      this.#slicedSteps--;
-    }
+    return this.#queue.runStep(fn);
   }
   get slicedWritePending(): boolean {
-    return this.#sliced !== null;
+    return this.#queue.pending;
   }
 
   applyBulk(op: BulkOperation, rows?: TableSelection): boolean {
-    // Planned from the values the rows have once the write under way is made
-    this.finishSlicedWrite();
+    // Planned from the values the rows have once the writes queued are made
+    this.#queue.finish();
     const contract = this.#contract;
     const target = rows ?? this.#bulk?.rows;
     const internals = featureTablesInternals(contract.tables);
@@ -685,8 +675,8 @@ export class DrawStore implements Store {
   }
 
   transact<T>(fn: () => T, source: UpdateSource = 'local'): T {
-    // A write of this client comes after the write over several tasks under way
-    if (source !== 'remote') this.finishSlicedWrite();
+    // A write of this client comes after the writes over several tasks queued
+    if (source !== 'remote') this.#queue.finish();
     if (source !== 'remote') {
       return this.#bus.transact(() => this.#contract.transact(fn, source), source);
     }
@@ -730,7 +720,7 @@ export class DrawStore implements Store {
   #local(fn: () => void, redraw = false): void {
     // A write of the state of this client comes after the rows of a restore under way (the
     // selection reads them), in the same transaction too
-    this.#restoring?.finish();
+    this.#queue.finishHeld();
     this.#bus.transact(() => {
       fn();
       if (redraw) this.#bus.merge({ uiStateChanged: true });
@@ -1032,7 +1022,7 @@ export class DrawStore implements Store {
   #refreshSummary(changes: StoreChange | null): void {
     const bulk = this.#bulk;
     const internals = featureTablesInternals(this.#contract.tables);
-    if (!bulk || !internals || (changes !== null && this.#sliced)) return;
+    if (!bulk || !internals || (changes !== null && this.#queue.pending)) return;
     let touched = changes === null;
     for (const change of changes?.rows?.layers.values() ?? []) {
       if (touched) break;
@@ -1092,7 +1082,7 @@ export class DrawStore implements Store {
     settleSelectionValues(this, changes, [this.#toldValue, this.#toldBefore]);
     // The notification of a restore written in steps goes into the one this Store holds
     const run = <T>(fn: () => T, source: UpdateSource): T =>
-      this.#restoring ? this.#bus.continueHeld(fn) : this.#bus.transact(fn, source);
+      this.#queue.holding ? this.#bus.continueHeld(fn) : this.#bus.transact(fn, source);
     run(() => {
       const normalized = this.#normalizeChanges(withoutSource(changes));
       if (normalized.selection) {

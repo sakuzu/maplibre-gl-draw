@@ -15,8 +15,9 @@
  *   changed from elsewhere meanwhile is written from its values with that change (the move is
  *   made to what it is then); a row deleted meanwhile is left out; a row locked meanwhile is left
  *   as it is, and leaves the moving set with the others of its step
- * - Another write of this client finishes the rest at once before it is made (the Store, see
- *   `Store.beginSlicedWrite`), so the writes keep their order; a write from elsewhere does not
+ * - Another write of this client finishes the rest at once before it is made (the queue of the
+ *   writes of this client, `store/write-queue.ts`), so the writes keep their order; a write from
+ *   elsewhere does not
  * - The end is told once, when the last rows are written (`onDone`): the end of the drag is
  *   announced then, so what keeps a drag as one step of the history keeps all the steps
  */
