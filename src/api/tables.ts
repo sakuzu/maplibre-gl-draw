@@ -18,6 +18,14 @@
 import type { CoordinateDimensions, CoordinateSystem, Utf8Column } from '@sakuzu/tabane';
 import type { Position } from 'geojson';
 import { createFeatureTablesStore } from '../feature-table/feature-row-tables.js';
+import {
+  checkRowValues as checkShapeOfRowValues,
+  createRowValues as createRowValuesOf,
+  type RowField,
+  RowFields,
+  type RowFieldValues,
+  type RowValues,
+} from '../feature-table/row-values.js';
 import type { TableGroupField, TableGroupPatch } from '../feature-table/tables-writer.js';
 import type { FeatureTablesWorker } from '../feature-table/versions.js';
 import type { BBox } from '../geometry/types.js';
@@ -26,14 +34,13 @@ import type {
   ItemPlacement,
   LayerRowsChange,
   RestoreToken,
-  RowField,
   RowsChange,
-  RowValues,
 } from '../shared/types/model.js';
 import { copyTableStore as copyTableStoreOf } from '../store/table-copy.js';
 import { createTableStore as createTableStoreOf } from '../store/table-memory.js';
+import { drawErrorOf } from '../table/draw-error-of.js';
 import type { RowBlock } from '../table/row-group-types.js';
-import { DrawError } from './errors.js';
+import { FEATURE_TABLE_COLUMNS } from '../table/tabane/columns.js';
 import type { GeometryTransforms, Store, StoreView, UpdateSource } from './extension/store.js';
 import type { Feature, FeatureStyle, FeatureType, FeatureValues } from './model.js';
 
@@ -43,6 +50,7 @@ export type {
   LayerRowsChange,
   RestoreToken,
   RowField,
+  RowFieldValues,
   RowsChange,
   RowValues,
   TableGroupField,
@@ -160,13 +168,6 @@ export interface RowCursor {
 }
 
 /**
- * The values of a field, one per row of {@link RowValues}: as the feature of the row holds them
- * (a GeoJSON geometry, a style, a boolean; for an attribute its value, `undefined` taking the key
- * off the row).
- */
-export type RowFieldValues = readonly unknown[];
-
-/**
  * New rows of a write of this client ({@link RowWrite}): their ids, and the values of their
  * fields (a `type` and a `geometry` at least; the layer and the key of their order come from the
  * place they are put at).
@@ -228,73 +229,57 @@ export interface RowApplyOptions {
   readonly before?: RowValues;
 }
 
-/** The fields of a row other than its attributes (`property:<key>`) */
-const ROW_FIELDS: ReadonlySet<string> = new Set([
-  'type',
-  'layerId',
-  'groupId',
-  'order',
-  'member',
-  'geometry',
-  'visible',
-  'locked',
-  'style',
-]);
+/** The fields of the values of rows of features: their place and the columns of a feature */
+const FEATURE_FIELDS = new RowFields(FEATURE_TABLE_COLUMNS);
 
 /**
- * The values checked: rows by their handles, values of fields of a row, one per row
+ * The values checked: rows by their handles, values of fields of a row of a feature, one per row
  *
- * @throws `DrawError` with the code `invalid-input` when they have another shape
+ * @throws `DrawError` with the code `invalid-input` when they have another shape, or a field
+ *   that is not one of a row of a feature
  * @internal
  */
 export function checkRowValues(values: unknown): RowValues {
-  if (typeof values !== 'object' || values === null || Array.isArray(values)) {
-    throw new DrawError('invalid-input', 'The values must be an object');
+  try {
+    const checked = checkShapeOfRowValues(values);
+    FEATURE_FIELDS.check(checked);
+    return checked;
+  } catch (error) {
+    throw drawErrorOf(error);
   }
-  const { handles, fields, deleted } = values as Partial<RowValues>;
-  if (!(handles instanceof Int32Array)) {
-    throw new DrawError('invalid-input', 'The handles must be an Int32Array');
-  }
-  if (!(fields instanceof Map)) throw new DrawError('invalid-input', 'The fields must be a Map');
-  const n = handles.length;
-  for (const [field, list] of fields) {
-    if (typeof field !== 'string' || !(ROW_FIELDS.has(field) || field.startsWith('property:'))) {
-      throw new DrawError('invalid-input', `${JSON.stringify(field)} is not a field of a row`);
-    }
-    if (!Array.isArray(list) || list.length !== n) {
-      throw new DrawError(
-        'invalid-input',
-        `The values of ${field} must be an array of one value per row`,
-      );
-    }
-  }
-  if (deleted !== undefined && (!(deleted instanceof Uint8Array) || deleted.length !== n)) {
-    throw new DrawError('invalid-input', 'The deletions must be a Uint8Array of one value per row');
-  }
-  return values as RowValues;
 }
 
 /**
- * Makes values of rows, which `draw.features.restore` writes back (a {@link FeatureValues} of the
- * main entry)
+ * Makes values of rows, checking their shape only: the writer checks the names of their fields
+ * (`featureValuesOf` makes of them what `draw.features.restore` writes back)
  *
  * @param values - The rows by their handles, the values of each field, one per row, and the
  *   deletion of each row (non-zero for a row deleted)
  * @returns The values
  * @throws `DrawError` with the code `invalid-input` when they have another shape: a field that is
- *   not one of a row, or not one value per row
+ *   not a name, or not one value per row
  */
 export function createRowValues(values: {
   readonly handles: Int32Array;
   readonly fields: ReadonlyMap<RowField, RowFieldValues>;
   readonly deleted?: Uint8Array;
 }): RowValues {
-  const checked = checkRowValues(values);
-  return {
-    handles: checked.handles,
-    fields: checked.fields,
-    ...(checked.deleted && { deleted: checked.deleted }),
-  };
+  try {
+    return createRowValuesOf(values);
+  } catch (error) {
+    throw drawErrorOf(error);
+  }
+}
+
+/**
+ * Reads values of rows as values of features, which `draw.features.restore` writes back
+ *
+ * @returns The same values
+ * @throws `DrawError` with the code `invalid-input` when they are not values of rows of
+ *   features: of another shape, or with a field that is not one of a row of a feature
+ */
+export function featureValuesOf(rows: RowValues): FeatureValues {
+  return checkRowValues(rows) as FeatureValues;
 }
 
 /**

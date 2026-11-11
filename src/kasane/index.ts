@@ -89,6 +89,7 @@ export {
   createFeatureTables,
   createRowValues,
   createTableStore,
+  featureValuesOf,
   rowValuesOf,
 } from '../api/tables.js';
 

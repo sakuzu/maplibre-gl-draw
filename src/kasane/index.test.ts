@@ -114,7 +114,7 @@ describe('the kasane subpath', () => {
     });
     expect(
       codeOf(() =>
-        writer.apply({ handles: Int32Array.of(handle), fields: new Map([['visible', [true]]]) }),
+        writer.apply({ handles: Int32Array.of(handle), fields: new Map([['hidden', [false]]]) }),
       ),
     ).toBe('invalid-input');
     expect(codeOf(() => mergeRowBlock({ sources: [], rows: Int32Array.of(0, 0) }))).toBeDefined();
@@ -172,12 +172,12 @@ describe('the kasane subpath', () => {
     writer.addRowBlocks('l', one.finish());
     const handles = Int32Array.of(tables.findRow('a') as number);
     const surrogate = wrapped(() =>
-      writer.apply({ handles, fields: new Map([['property:x', ['\ud800']]]) }),
+      writer.apply({ handles, fields: new Map([['properties:x', ['\ud800']]]) }),
     );
     expect(surrogate.error.code).toBe('invalid-input');
     expect(surrogate.error.message).toBe('ValueOverrides: a string with a lone surrogate');
     const notValue = wrapped(() =>
-      writer.apply({ handles, fields: new Map([['property:x', [() => 1]]]) }),
+      writer.apply({ handles, fields: new Map([['properties:x', [() => 1]]]) }),
     );
     expect(notValue.error.code).toBe('invalid-input');
     expect(notValue.cause.cause).toBeInstanceOf(TabaneError);

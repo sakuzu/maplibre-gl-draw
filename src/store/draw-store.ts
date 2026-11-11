@@ -1494,7 +1494,7 @@ function mayHide(changes: StoreChange): boolean {
   }
   for (const rows of changes.rows?.layers.values() ?? []) {
     if (rows.updated.length === 0) continue;
-    if (rows.fields.has('visible') || rows.fields.has('layerId') || rows.fields.has('groupId')) {
+    if (rows.fields.has('hidden') || rows.fields.has('layerId') || rows.fields.has('groupId')) {
       return true;
     }
   }
@@ -1618,7 +1618,7 @@ function membersMayChange(changes: StoreChange): boolean {
   if (changes.groups || changes.layers) return true;
   for (const rows of changes.rows?.layers.values() ?? []) {
     if (rows.created.length > 0 || rows.deleted.length > 0) return true;
-    if (rows.fields.has('groupId') || rows.fields.has('layerId') || rows.fields.has('visible')) {
+    if (rows.fields.has('groupId') || rows.fields.has('layerId') || rows.fields.has('hidden')) {
       return true;
     }
   }
@@ -1636,7 +1636,7 @@ function rowsToCheck(internals: FeatureTablesInternals, changes: StoreChange): I
   const out: number[] = [];
   for (const rows of changes.rows?.layers.values() ?? []) {
     out.push(...rows.deleted);
-    if (rows.fields.has('visible') || rows.fields.has('groupId') || rows.fields.has('layerId')) {
+    if (rows.fields.has('hidden') || rows.fields.has('groupId') || rows.fields.has('layerId')) {
       out.push(...rows.updated);
     }
   }

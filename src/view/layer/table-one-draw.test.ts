@@ -784,7 +784,7 @@ describe('the check of the classification of a row written in place', () => {
     const handle = tables.findRow(line.id) as number;
     writer.apply({
       handles: Int32Array.of(handle),
-      fields: new Map([['property:ring', [true]]]),
+      fields: new Map([['properties:ring', [true]]]),
     });
     let atOnce = false;
     for (let i = 0; i < 4; i++) {
@@ -822,7 +822,7 @@ describe('the check of the classification of a row written in place', () => {
     const handle = tables.findRow(line.id) as number;
     asked.length = 0;
     // A key it does not read: the row keeps its classification, the provider is not asked
-    writer.apply({ handles: Int32Array.of(handle), fields: new Map([['property:name', ['n']]]) });
+    writer.apply({ handles: Int32Array.of(handle), fields: new Map([['properties:name', ['n']]]) });
     for (let i = 0; i < 2; i++) {
       const { record } = frame();
       expect(drawnHandles(record, table)).toEqual(visibleHandles(table));
@@ -831,7 +831,10 @@ describe('the check of the classification of a row written in place', () => {
     expect(renderer.writeStats.reclassified).toBe(0);
     expect(internals.deltaRowCount()).toBe(0);
     // The key it reads: classified again, drawn at once from the delta with its companion
-    writer.apply({ handles: Int32Array.of(handle), fields: new Map([['property:ring', [true]]]) });
+    writer.apply({
+      handles: Int32Array.of(handle),
+      fields: new Map([['properties:ring', [true]]]),
+    });
     let atOnce = false;
     for (let i = 0; i < 4; i++) {
       const { record, immediate } = frame();
@@ -864,7 +867,7 @@ describe('the check of the classification of a row written in place', () => {
     const line = features.find((f) => f.id.startsWith('l')) as Feature;
     const handle = tables.findRow(line.id) as number;
     asked.length = 0;
-    writer.apply({ handles: Int32Array.of(handle), fields: new Map([['property:name', ['n']]]) });
+    writer.apply({ handles: Int32Array.of(handle), fields: new Map([['properties:name', ['n']]]) });
     frame();
     expect(asked).toContain(handle);
     expect(renderer.writeStats.reclassified).toBe(0);
@@ -880,8 +883,8 @@ describe('the check of the classification of a row written in place', () => {
     writer.apply({
       handles: Int32Array.of(handle),
       fields: new Map<RowField, unknown[]>([
-        ['property:name', ['a name']],
-        ['visible', [false]],
+        ['properties:name', ['a name']],
+        ['hidden', [true]],
       ]),
     });
     for (let i = 0; i < 2; i++) {
@@ -919,7 +922,7 @@ describe('the check of the classification of a row written in place', () => {
     frame();
     writer.apply({
       handles: Int32Array.of(tables.findRow('c1') as number),
-      fields: new Map([['property:custom', [true]]]),
+      fields: new Map([['properties:custom', [true]]]),
     });
     for (let i = 0; i < 3; i++) {
       const { record } = frame();
@@ -1465,7 +1468,7 @@ describe('the rows an extension holds on the GPU', () => {
     const { frame, made, tables, writer, log } = layer(features);
     frame();
     const handle = tables.findRow('r1') as number;
-    writer.apply({ handles: Int32Array.of(handle), fields: new Map([['property:name', ['n']]]) });
+    writer.apply({ handles: Int32Array.of(handle), fields: new Map([['properties:name', ['n']]]) });
     log.length = 0;
     frame([50, 50, 51, 51]);
     expect(log).toEqual([]);
@@ -1486,7 +1489,7 @@ describe('the rows an extension holds on the GPU', () => {
     frame();
     writer.apply({
       handles: Int32Array.of(tables.findRow('r1') as number),
-      fields: new Map([['property:name', ['n']]]),
+      fields: new Map([['properties:name', ['n']]]),
     });
     log.length = 0;
     const { record } = frame();
@@ -1513,7 +1516,7 @@ describe('the rows an extension holds on the GPU', () => {
     frame();
     writer.apply({
       handles: Int32Array.of(tables.findRow('r1') as number),
-      fields: new Map([['property:ring', [true]]]),
+      fields: new Map([['properties:ring', [true]]]),
     });
     log.length = 0;
     const { record } = frame();
@@ -1783,7 +1786,7 @@ describe('the rows an extension holds on the GPU', () => {
       const write = (value: string) =>
         writer.apply({
           handles: Int32Array.of(handle),
-          fields: new Map([['property:name', [value]]]),
+          fields: new Map([['properties:name', [value]]]),
         });
       write('a');
       frame();

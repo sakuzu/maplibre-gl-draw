@@ -31,6 +31,7 @@
  * the order of the writes.
  */
 
+import { asFeatureValues } from '../../shared/feature-values.js';
 import type {
   Group,
   Layer,
@@ -421,7 +422,12 @@ function appendChanges(target: StoreChange, changes: StoreChange, index: UpdateI
   if (changes.previousValues) {
     // A Store of rows gives values of rows
     target.previousValues = target.previousValues
-      ? mergeSnapshots(target.previousValues as RowValues, changes.previousValues as RowValues)
+      ? asFeatureValues(
+          mergeSnapshots(
+            target.previousValues as unknown as RowValues,
+            changes.previousValues as unknown as RowValues,
+          ),
+        )
       : changes.previousValues;
   }
 

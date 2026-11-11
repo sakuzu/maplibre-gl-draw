@@ -424,7 +424,7 @@ describe('the hit testing of the companions of the rows held as columns', () => 
     expect(hitTest(at(60, 50))).toBeNull();
     tables.writer.apply({
       handles: Int32Array.of(tables.tables.findRow('a') as number),
-      fields: new Map([['property:band', [50]]]),
+      fields: new Map([['properties:band', [50]]]),
     });
     asked.rows = 0;
     const hit = hitTest(at(60, 50));

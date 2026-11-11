@@ -156,8 +156,8 @@ export interface RowInput {
   readonly style?: Readonly<Record<string, unknown>>;
   /** The attributes of the row */
   readonly properties?: Readonly<Record<string, unknown>>;
-  /** Whether the row is shown (true when omitted) */
-  readonly visible?: boolean;
+  /** Whether the row is hidden (false when omitted) */
+  readonly hidden?: boolean;
   /** Whether the row is locked (false when omitted) */
   readonly locked?: boolean;
   /** Whether the row is deleted (false when omitted) */
@@ -580,7 +580,7 @@ function buildGroup(
     types[r] = type;
 
     flags[r] =
-      (row.visible === false ? 0 : ROW_FLAG_VISIBLE) |
+      (row.hidden === true ? 0 : ROW_FLAG_VISIBLE) |
       (row.locked === true ? ROW_FLAG_LOCKED : 0) |
       (row.deleted === true ? ROW_FLAG_DELETED : 0);
 

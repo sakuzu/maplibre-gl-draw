@@ -413,9 +413,9 @@ describe('the handles of a footprint laid on the map, of features selected in bu
       const handle = store.tables?.findRow(id) as number;
       const read = store.tables?.readValues({
         handles: Int32Array.of(handle),
-        fields: new Map([[`property:${ANGLE}`, []]]),
+        fields: new Map([[`properties:${ANGLE}`, []]]),
       });
-      return read?.fields.get(`property:${ANGLE}`)?.[0];
+      return read?.fields.get(`properties:${ANGLE}`)?.[0];
     });
     expect(angles[0]).toBeCloseTo(30, 9);
     expect(angles[1]).toBeCloseTo(45, 9);

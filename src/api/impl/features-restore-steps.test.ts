@@ -9,7 +9,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { featureTablesInternals } from '../../feature-table/feature-tables.js';
-import { createRowValues, rowValuesOf } from '../../kasane/index.js';
+import { createRowValues as createRows, featureValuesOf, rowValuesOf } from '../../kasane/index.js';
 import { BULK_SLICE_ROWS } from '../../operations/bulk-sliced.js';
 import type { Store } from '../../store/store.js';
 import { createTableStore } from '../../store/table-memory.js';
@@ -21,6 +21,11 @@ import type { FeatureValues } from '../model.js';
 import type { FeatureTables, LayerTableView, RowField, RowWrite } from '../tables.js';
 import { createDrawOnEngine } from './create-draw.js';
 import { createEngine } from './engine.js';
+
+/** Values of rows made as values of features, which `draw.features.restore` writes back */
+function createRowValues(values: Parameters<typeof createRows>[0]): FeatureValues {
+  return featureValuesOf(createRows(values));
+}
 
 /** The rows of the layer: more than are written at a time in a step */
 const COUNT = BULK_SLICE_ROWS * 4;

@@ -83,7 +83,7 @@ function create(
       layerId: rows.map(() => 'a'),
       geometry: rows.map((_, i) => ({ type: 'Point', coordinates: [i, 1] })),
       order: rows.map((row) => row.order),
-      'property:n': rows.map((_, i) => i),
+      'properties:n': rows.map((_, i) => i),
     }),
   );
   rows.forEach((row, i) => {
@@ -241,7 +241,7 @@ describe('many new rows written at once', () => {
     );
     // Read before it is built
     expect(tables.findRow('c5')).toBe(handles[5]);
-    writer.apply(rowPatch([handles[5]], { 'property:n': [-1] }));
+    writer.apply(rowPatch([handles[5]], { 'properties:n': [-1] }));
     (reference.rows.get('c5') as ReferenceRow).properties = { n: -1 };
     expect(tables.findRow('c5')).toBe(handles[5]);
     expect(internals.deltaRowCount()).toBe(0);

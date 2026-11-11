@@ -141,7 +141,7 @@ describe('another document shown in place of the document', () => {
       store.createLayer(layer('more', true));
       writer.apply({
         handles: Int32Array.of(store.tables?.findRow('p1') ?? -1),
-        fields: new Map([['property:n', [7]]]),
+        fields: new Map([['properties:n', [7]]]),
       });
     }, 'remote');
     expect(draw.layers.has('more')).toBe(true);

@@ -145,7 +145,10 @@ describe('the write mark of a Store of rows', () => {
     const before = keeper.mark;
     const handles = Int32Array.from({ length: count }, (_, i) => tables.findRow(`p${i}`) as number);
     const values = Array.from({ length: count }, (_, i) => i + 1000);
-    store.restoreRows({ handles, fields: new Map<RowField, unknown[]>([['property:n', values]]) });
+    store.restoreRows({
+      handles,
+      fields: new Map<RowField, unknown[]>([['properties:n', values]]),
+    });
     expect(given).toEqual([before + 1]);
     vi.runAllTimers();
     // A step per run of rows, the last one writing nothing (the end)
@@ -182,15 +185,15 @@ describe('the write mark of a Store of rows', () => {
     const { store, writer, tables, keeper, given } = storeWith(8);
     const before = keeper.mark;
     const handle = tables.findRow('p1') as number;
-    writer.apply(rowPatch([handle], { 'property:n': [10] }));
-    writer.apply(rowPatch([handle], { 'property:n': [11] }));
+    writer.apply(rowPatch([handle], { 'properties:n': [10] }));
+    writer.apply(rowPatch([handle], { 'properties:n': [11] }));
     const other = tables.findRow('p2') as number;
-    writer.apply(rowPatch([other], { 'property:n': [20] }));
+    writer.apply(rowPatch([other], { 'properties:n': [20] }));
     expect(given).toEqual([before + 1, before + 2, before + 3]);
     // Inside a transaction, the calls are part of its frame
     store.transact(() => {
-      writer.apply(rowPatch([handle], { 'property:n': [12] }));
-      writer.apply(rowPatch([other], { 'property:n': [21] }));
+      writer.apply(rowPatch([handle], { 'properties:n': [12] }));
+      writer.apply(rowPatch([other], { 'properties:n': [21] }));
     });
     expect(given).toEqual([before + 1, before + 2, before + 3, before + 4]);
   });
@@ -244,7 +247,7 @@ describe('the write mark of the tables', () => {
     expect(other?.mark).toBe(0);
     // Written in place: the row and its group
     internals.setWriteMark(6);
-    writer.apply(rowPatch([at('p21')], { visible: [false] }));
+    writer.apply(rowPatch([at('p21')], { hidden: [true] }));
     const hidden = internals.placeOf(at('p21'));
     expect(hidden?.group.marks[hidden.row]).toBe(6);
     expect(hidden?.group.mark).toBe(6);
@@ -359,7 +362,7 @@ describe('the next versions with the write marks', () => {
     const { tables, writer, internals } = tablesOfReference(reference, ['a'], 8);
     const at = (id: string) => tables.findRow(id) as number;
     internals.setWriteMark(1);
-    writer.apply(rowPatch([at('p9')], { 'property:name': ['kept'] }));
+    writer.apply(rowPatch([at('p9')], { 'properties:name': ['kept'] }));
     internals.setWriteMark(2);
     writer.apply(rowPatch([at('p3')], { order: [key(9500)] }));
     internals.flushVersions();
@@ -380,7 +383,7 @@ describe('the next versions with the write marks', () => {
     const handle = (version.groups ?? [])[0].data.handles[0];
     // A row of the version written in place under a later mark while it waits
     internals.setWriteMark(4);
-    writer.apply(rowPatch([handle], { 'property:name': ['later'] }));
+    writer.apply(rowPatch([handle], { 'properties:name': ['later'] }));
     sides.allowAll();
     internals.swapVersions();
     const place = internals.placeOf(handle);

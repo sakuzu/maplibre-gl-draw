@@ -11,7 +11,7 @@
 
 import { afterEach, describe, expect, it } from 'vitest';
 import { featureTablesInternals } from '../../feature-table/feature-tables.js';
-import { createRowValues, rowValuesOf } from '../../kasane/index.js';
+import { createRowValues as createRows, featureValuesOf, rowValuesOf } from '../../kasane/index.js';
 import type { Store } from '../../store/store.js';
 import { createTableStore } from '../../store/table-memory.js';
 import type { Feature, RestoreToken, StoreChange } from '../../store/types.js';
@@ -21,6 +21,11 @@ import type { FeatureValues } from '../model.js';
 import type { FeatureTables, RowField } from '../tables.js';
 import { createDrawOnEngine } from './create-draw.js';
 import { createEngine } from './engine.js';
+
+/** Values of rows made as values of features, which `draw.features.restore` writes back */
+function createRowValues(values: Parameters<typeof createRows>[0]): FeatureValues {
+  return featureValuesOf(createRows(values));
+}
 
 let draw: Draw | undefined;
 
@@ -95,11 +100,11 @@ describe('draw.features.restore', () => {
         handles,
         fields: new Map<RowField, unknown[]>([
           ['style', [{ pointColor: '#ff0000' }, { pointColor: '#00ff00' }]],
-          ['property:n', [10, 20]],
+          ['properties:n', [10, 20]],
         ]),
       }),
     );
-    expect(before && rowValuesOf(before).fields.get('property:n')).toEqual([1, 2]);
+    expect(before && rowValuesOf(before).fields.get('properties:n')).toEqual([1, 2]);
     expect(notified[notified.length - 1].previousValues).toBe(before);
     expect(notified[notified.length - 1].rows?.layers.get('rows')).toBeDefined();
     expect(draw.getStore().getFeature('p2')?.properties).toEqual({ n: 20 });
@@ -126,7 +131,7 @@ describe('draw.features.restore', () => {
       draw.features.restore(
         createRowValues({
           handles: Int32Array.of(handle),
-          fields: new Map([['visible', [false]]]),
+          fields: new Map([['hidden', [true]]]),
         }),
       ),
     ).toBeNull();
@@ -138,7 +143,7 @@ describe('draw.features.restore', () => {
     const values = (id: string) =>
       createRowValues({
         handles: Int32Array.of(tables.findRow(id) as number),
-        fields: new Map([['property:n', [99]]]),
+        fields: new Map([['properties:n', [99]]]),
       });
     draw.features.update('p1', { locked: true });
     expect(draw.features.restore(values('p1'))).toBeNull();
@@ -171,7 +176,7 @@ describe('draw.features.restore', () => {
     expect(call({ handles: [handle], fields: new Map() })).toThrow(
       expect.objectContaining({ code: 'invalid-input' }),
     );
-    expect(call({ handles: Int32Array.of(handle), fields: new Map([['visible', []]]) })).toThrow(
+    expect(call({ handles: Int32Array.of(handle), fields: new Map([['hidden', []]]) })).toThrow(
       expect.objectContaining({ code: 'invalid-input' }),
     );
     expect(call({ handles: Int32Array.of(handle), fields: new Map([['size', [1]]]) })).toThrow(

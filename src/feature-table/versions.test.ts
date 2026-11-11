@@ -139,7 +139,7 @@ describe('the next versions of the row groups', () => {
     expect(version).toBeDefined();
     // Written while it waits: a value in place of a row of its group, the row of the delta it
     // took written again, and a new row of the delta in its range
-    writer.apply(rowPatch([at('p9')], { 'property:name': ['kept'] }));
+    writer.apply(rowPatch([at('p9')], { 'properties:name': ['kept'] }));
     (reference.rows.get('p9') as ReferenceRow).properties = { name: 'kept' };
     writer.apply(rowPatch([at('p3')], { order: [key(9600)] }));
     (reference.rows.get('p3') as ReferenceRow).order = key(9600);

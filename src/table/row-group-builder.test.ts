@@ -340,7 +340,7 @@ describe('createRowBlockDataBuilder', () => {
     builder.addRow(
       row('b', 'b', point(0, 0), { style: { pointRadius: 4, pointColor: '#ff0000' } }),
     );
-    builder.addRow(row('c', 'c', point(0, 0), { visible: false, locked: true }));
+    builder.addRow(row('c', 'c', point(0, 0), { hidden: true, locked: true }));
     builder.addRow(row('d', 'd', point(0, 0), { deleted: true }));
     const [group] = builder.finish();
     expect(group.styles[0]).toBe(group.styles[1]);

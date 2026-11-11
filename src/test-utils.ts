@@ -603,7 +603,7 @@ export function rowOfFeature(feature: Feature, order: string): RowInput {
     order,
     style: feature.style as Record<string, unknown>,
     properties: feature.properties,
-    visible: feature.visible,
+    hidden: feature.visible === false,
     locked: feature.locked,
   };
 }
@@ -927,7 +927,7 @@ export function expectTablesMatch(
       expect(handle).toBeDefined();
       if (dims !== 'xy') {
         expect(() => view.getRow(handle as number)).toThrow(/is not a feature/);
-        const fields = ['type', 'geometry', 'style', 'visible', 'locked', 'groupId', 'layerId'];
+        const fields = ['type', 'geometry', 'style', 'hidden', 'locked', 'groupId', 'layerId'];
         const snapshot = tables.readValues(
           rowPatch([handle as number], Object.fromEntries(fields.map((field) => [field, [0]]))),
         );
@@ -935,7 +935,7 @@ export function expectTablesMatch(
         expect(value('type')).toBe(row.type);
         expect(value('geometry')).toEqual(row.geometry);
         expect(value('style')).toEqual(row.style);
-        expect(value('visible')).toBe(row.visible);
+        expect(value('hidden')).toBe(!row.visible);
         expect(value('locked')).toBe(row.locked);
         expect(value('groupId')).toBe(row.groupId);
         expect(value('layerId')).toBe(layerId);
@@ -1020,7 +1020,7 @@ export function tablesOfReference(
         group: row.groupId !== undefined ? groupHandles.get(row.groupId) : undefined,
         style: row.style,
         properties: row.properties,
-        visible: row.visible,
+        hidden: !row.visible,
         locked: row.locked,
         deleted: row.deleted,
       });
@@ -1144,7 +1144,7 @@ export function randomRowWrites(
       row.style = style;
     } else if (pick < 0.35) {
       const value = random() < 0.3 ? undefined : `v${n}`;
-      writer.apply(rowPatch([handle], { 'property:name': [value] }));
+      writer.apply(rowPatch([handle], { 'properties:name': [value] }));
       if (value === undefined) delete row.properties.name;
       else row.properties = { ...row.properties, name: value };
     } else if (pick < 0.5) {
@@ -1184,7 +1184,7 @@ export function randomRowWrites(
           geometry: [next.geometry],
           order: [next.order],
           style: [next.style],
-          'property:n': [next.properties.n],
+          'properties:n': [next.properties.n],
         }),
       );
       reference.rows.set(fresh, next);
@@ -1194,7 +1194,7 @@ export function randomRowWrites(
     } else if (pick < 0.92) {
       internals.toDelta([handle]);
     } else {
-      writer.apply(rowPatch([handle], { visible: [!row.visible] }));
+      writer.apply(rowPatch([handle], { hidden: [row.visible] }));
       row.visible = !row.visible;
     }
   };

@@ -37,6 +37,7 @@ import {
   type TabaneWholeColumn,
 } from '@sakuzu/tabane';
 import type { Geometry } from 'geojson';
+import type { TableColumns } from '../../feature-table/row-values.js';
 import { DrawError } from '../../shared/draw-error.js';
 import type { GeometryType } from '../types.js';
 
@@ -52,6 +53,20 @@ export const TABANE_FEATURE_COLUMNS: Readonly<Record<string, TabaneColumnKind>> 
   locked: 'flag',
   style: 'whole',
   properties: 'keyed',
+});
+
+/**
+ * The columns of the rows of features as the tables hold them (`TableColumns`): those of
+ * {@link TABANE_FEATURE_COLUMNS}, with where the values of each `whole` column are kept. The
+ * types are few and differ from a row block to another, so each row block keeps its own; the
+ * styles are shared by rows of every table, so the tables keep one dictionary of them
+ *
+ * @internal
+ */
+export const FEATURE_TABLE_COLUMNS: TableColumns = Object.freeze({
+  ...TABANE_FEATURE_COLUMNS,
+  type: Object.freeze({ kind: 'whole', dictionary: 'rowBlock' }),
+  style: Object.freeze({ kind: 'whole', dictionary: 'tables' }),
 });
 
 /** The kinds of the columns of a feature, by their names */

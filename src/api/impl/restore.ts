@@ -7,6 +7,7 @@
  */
 
 import { featureTablesInternals } from '../../feature-table/feature-tables.js';
+import { asFeatureValues } from '../../shared/feature-values.js';
 import type { FeatureValues, RestoreToken } from '../model.js';
 import type { FeatureTables, RowValues } from '../tables.js';
 import { checkRowValues } from '../tables.js';
@@ -71,7 +72,8 @@ export function createRestore(deps: Pick<ResourceDeps, 'store'>): {
       }
       if (store.isReadOnly()) return null;
       if (!locksIgnored(store) && rowsLocked(store, tables, rows)) return null;
-      return store.restoreRows(rows);
+      const restored = store.restoreRows(rows);
+      return restored && asFeatureValues(restored);
     },
     releaseRestore(token) {
       const tables = requireTables(store);

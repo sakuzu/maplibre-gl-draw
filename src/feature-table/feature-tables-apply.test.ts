@@ -22,6 +22,7 @@ import { ITEM_GROUP, ITEM_ROW, type RowField, type RowValues } from '../api/tabl
 import { drawPropertyKey } from '../shared/properties.js';
 import type { Feature } from '../shared/types/model.js';
 import { createRowBlockDataBuilder } from '../table/row-group-builder.js';
+import { FEATURE_TABLE_COLUMNS } from '../table/tabane/columns.js';
 import { feature, orderKey, rowOfFeature, seededRandom, tablesOfFeatures } from '../test-utils.js';
 import { createFeatureTablesStore } from './feature-row-tables.js';
 import {
@@ -165,9 +166,9 @@ describe('writer.apply', () => {
           ],
         ],
         ['style', [{ pointColor: '#00ff00' }, {}]],
-        ['visible', [true, false]],
+        ['hidden', [false, true]],
         ['locked', [true, false]],
-        ['property:name', ['A', undefined]],
+        ['properties:name', ['A', undefined]],
       ]),
     });
     const view = tables.get('layer');
@@ -197,18 +198,18 @@ describe('writer.apply', () => {
     // A known row and an unknown one: nothing is written
     const patch: RowValues = {
       handles: Int32Array.of(handle, 999),
-      fields: new Map([['property:name', ['x', 'y']]]),
+      fields: new Map([['properties:name', ['x', 'y']]]),
     };
     expect(() => writer.apply(patch)).toThrow(/no row/);
     expect(tables.get('layer')?.getRowValue(handle, 'name')).toBeUndefined();
     // A new row without what it needs
     const [fresh] = writer.allocateHandles(utf8ColumnFromStrings(['new']));
-    expect(() => writer.apply(patchOf([fresh], 'property:name', ['x']))).toThrow(
+    expect(() => writer.apply(patchOf([fresh], 'properties:name', ['x']))).toThrow(
       /a new row needs type, layerId, geometry, order/,
     );
     expect(() => writer.apply(patchOf([handle], 'groupId', ['nobody']))).toThrow(/unknown/);
     expect(internals.deltaRowCount()).toBe(0);
-    const created = `property:${drawPropertyKey('createdZoom')}` as RowField;
+    const created = `properties:${drawPropertyKey('createdZoom')}` as RowField;
     expect(internals.placeOf(handle)?.group.delta).toBe(false);
     writer.apply(patchOf([handle], created, [12]));
     // The created zoom is read by the cutting of the rows: the row is placed again
@@ -216,7 +217,7 @@ describe('writer.apply', () => {
   });
 
   it('places a row again for a new type or created zoom, and writes the rest in place', () => {
-    const created = `property:${drawPropertyKey('createdZoom')}` as RowField;
+    const created = `properties:${drawPropertyKey('createdZoom')}` as RowField;
     const inDelta = (internals: ReturnType<typeof tablesOfFeatures>['internals'], id: string) =>
       internals.placeOf(internals.ids.handleOf(id))?.group.delta;
     const { writer, internals } = tablesOfFeatures(
@@ -230,7 +231,7 @@ describe('writer.apply', () => {
     // The same type, the same created zoom, another attribute: in place
     writer.apply(patchOf([p0], 'type', ['Point']));
     writer.apply(patchOf([p0], created, [10]));
-    writer.apply(patchOf([p0], 'property:name', ['x']));
+    writer.apply(patchOf([p0], 'properties:name', ['x']));
     writer.apply(patchOf([p0, p1], 'type', [undefined, 'Point']));
     expect(['p0', 'p1', 'p2', 'p3'].map((id) => inDelta(internals, id))).toEqual([
       false,
@@ -252,8 +253,8 @@ describe('writer.apply', () => {
   });
 
   it('places a row again for a new type only, in tables told of no field that places it', () => {
-    const created = `property:${drawPropertyKey('createdZoom')}` as RowField;
-    const { tables, writer } = createTables();
+    const created = `properties:${drawPropertyKey('createdZoom')}` as RowField;
+    const { tables, writer } = createTables({ columns: FEATURE_TABLE_COLUMNS });
     const builder = createRowBlockDataBuilder();
     points(2).forEach((f, i) => {
       builder.addRow(
@@ -280,7 +281,7 @@ describe('writer.apply', () => {
     const handle = internals.ids.handleOf('p0');
     const long = 'x'.repeat(1024);
     for (let i = 0; internals.groupsDue.size === 0 && i < 1000; i++) {
-      writer.apply(patchOf([handle], `property:k${i}`, [long]));
+      writer.apply(patchOf([handle], `properties:k${i}`, [long]));
     }
     expect(internals.groupsDue.has(table.groupAt(0).handle)).toBe(true);
     expect(OVERRIDE_BYTES_LIMIT).toBeGreaterThan(0);
@@ -413,12 +414,12 @@ describe('writes at random against a list of features', () => {
           };
           alive[i] = { ...current, style: value as Feature['style'] };
         } else if (pick < 0.6) {
-          field = 'visible';
+          field = 'hidden';
           value = random() < 0.5;
-          alive[i] = { ...current, visible: value as boolean };
+          alive[i] = { ...current, visible: !(value as boolean) };
         } else if (pick < 0.9) {
           const key = ['n', 'name', 'extra'][Math.floor(random() * 3)];
-          field = `property:${key}`;
+          field = `properties:${key}`;
           value = random() < 0.2 ? undefined : random() < 0.5 ? random() * 100 : `v${step}`;
           const properties = { ...current.properties };
           if (value === undefined) delete properties[key];

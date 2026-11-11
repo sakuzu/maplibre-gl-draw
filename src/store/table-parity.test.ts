@@ -196,8 +196,43 @@ function settle(tables: FeatureTables): void {
   internals?.flushVersions();
 }
 
-/** The fields every row is read with */
-const READ_FIELDS: readonly RowField[] = [
+/**
+ * The names of the fields of the values of rows as the record holds them, by their names now
+ * (the record was written before the fields were renamed): a key of the attributes was
+ * `property:<key>`, and a row hidden was told by `visible`, of the opposite value
+ */
+function recordedField(field: RowField): string {
+  if (field === 'hidden') return 'visible';
+  if (field.startsWith('properties:')) return `property:${field.slice('properties:'.length)}`;
+  return field;
+}
+
+/** The name now of a field as the record holds it */
+function fieldNow(recorded: string): RowField {
+  if (recorded === 'visible') return 'hidden';
+  if (recorded.startsWith('property:')) return `properties:${recorded.slice('property:'.length)}`;
+  return recorded;
+}
+
+/** A value of a field as the record holds it (`visible` the opposite of `hidden`) */
+function recordedValue(field: RowField, value: unknown): unknown {
+  return field === 'hidden' && typeof value === 'boolean' ? !value : value;
+}
+
+/** The fields of values of rows as the record holds them, in their order */
+function recordedFields(
+  fields: ReadonlyMap<RowField, readonly unknown[]>,
+): Map<string, readonly unknown[]> {
+  return new Map(
+    [...fields].map(([field, values]) => [
+      recordedField(field),
+      values.map((value) => recordedValue(field, value)),
+    ]),
+  );
+}
+
+/** The fields every row is read with, as the record names them */
+const READ_FIELDS: readonly string[] = [
   'type',
   'layerId',
   'groupId',
@@ -242,7 +277,7 @@ function valuesOf(tables: FeatureTables, values: RowValues | undefined): unknown
   if (!values) return undefined;
   return {
     rows: idsOf(tables, values.handles),
-    fields: plain(values.fields),
+    fields: plain(recordedFields(values.fields)),
     ...(values.deleted && { deleted: Array.from(values.deleted) }),
   };
 }
@@ -261,7 +296,7 @@ function notificationOf(tables: FeatureTables, change: StoreChange): unknown {
           created: idsOf(tables, rows.created),
           updated: idsOf(tables, rows.updated),
           deleted: idsOf(tables, rows.deleted),
-          fields: [...rows.fields].sort(),
+          fields: [...rows.fields].map(recordedField).sort(),
           styleKeys: [...rows.styleKeys].sort(),
         },
       ]),
@@ -358,7 +393,7 @@ function record(store: Store, tables: FeatureTables): unknown {
   const sorted = Int32Array.from(handles).sort();
   const read = tables.readValues({
     handles: sorted,
-    fields: new Map(READ_FIELDS.map((f) => [f, Array.from(sorted, () => undefined)])),
+    fields: new Map(READ_FIELDS.map((f) => [fieldNow(f), Array.from(sorted, () => undefined)])),
     deleted: new Uint8Array(sorted.length),
   });
   return {
@@ -503,7 +538,7 @@ const CASES: readonly Case[] = [
         () =>
           writer.apply(
             rowPatch([h('f0'), h('f7')], {
-              'property:n': [7, 8],
+              'properties:n': [7, 8],
               style: [{ pointColor: '#123456' }, {}],
             }),
           ),
@@ -561,7 +596,7 @@ const CASES: readonly Case[] = [
         order: 'z0',
         style: {},
         properties: { n: 2000 },
-        visible: true,
+        hidden: false,
         locked: false,
       });
       builder.addRow({
@@ -581,7 +616,7 @@ const CASES: readonly Case[] = [
         order: 'z1',
         style: { fillColor: '#abcdef' },
         properties: { n: 2001 },
-        visible: false,
+        hidden: true,
         locked: false,
       });
       store.transact(() => writer.addRowBlocks('b', builder.finish()), 'load');

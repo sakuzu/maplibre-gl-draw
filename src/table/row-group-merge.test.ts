@@ -124,7 +124,7 @@ function randomRow(random: () => number, i: number): RowInput {
       tags: i % 5 === 0 ? ['a', i] : undefined,
       ...(type === 'Circle' ? { '@draw:radiusMeters': 1000 + i } : {}),
     },
-    visible: i % 7 !== 0,
+    hidden: i % 7 === 0,
     locked: i % 11 === 0,
   };
 }

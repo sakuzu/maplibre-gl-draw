@@ -22,7 +22,7 @@ export function featureFields(before: Feature, after: Feature): Map<RowField, un
   if (after.geometry !== before.geometry) out.set('geometry', after.geometry);
   if (after.style !== before.style) out.set('style', after.style ?? {});
   if ((after.visible !== false) !== (before.visible !== false)) {
-    out.set('visible', after.visible !== false);
+    out.set('hidden', after.visible === false);
   }
   if ((after.locked === true) !== (before.locked === true))
     out.set('locked', after.locked === true);
@@ -30,7 +30,7 @@ export function featureFields(before: Feature, after: Feature): Map<RowField, un
   const b = (after.properties ?? {}) as Record<string, unknown>;
   if (a !== b) {
     for (const key of new Set([...Object.keys(a), ...Object.keys(b)])) {
-      if (a[key] !== b[key]) out.set(`property:${key}`, b[key]);
+      if (a[key] !== b[key]) out.set(`properties:${key}`, b[key]);
     }
   }
   return out;
@@ -49,7 +49,7 @@ export function featureWithFields(
   const out = { ...feature } as { -readonly [K in keyof Feature]: Feature[K] };
   let properties: Record<string, Value> | null = null;
   for (const [field, value] of fields) {
-    if (value === undefined && !field.startsWith('property:')) continue;
+    if (value === undefined && !field.startsWith('properties:')) continue;
     switch (field) {
       case 'type':
         out.type = value as FeatureType;
@@ -66,8 +66,8 @@ export function featureWithFields(
       case 'style':
         out.style = (value ?? {}) as FeatureStyle;
         break;
-      case 'visible':
-        out.visible = value !== false;
+      case 'hidden':
+        out.visible = value !== true;
         break;
       case 'locked':
         out.locked = value === true;
@@ -77,7 +77,7 @@ export function featureWithFields(
         break;
       default: {
         properties ??= { ...(feature.properties ?? {}) };
-        const key = field.slice('property:'.length);
+        const key = field.slice('properties:'.length);
         if (value === undefined) delete properties[key];
         // The fields of a row hold values only
         else setOwnProperty(properties, key, value as Value);

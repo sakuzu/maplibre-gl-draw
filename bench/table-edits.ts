@@ -159,7 +159,7 @@ function writeRows(target: EditTarget, changes: ReadonlyArray<[string, RowChange
       field('style').push({ ...style, ...change.style });
     }
     for (const [key, value] of Object.entries(change.properties ?? {})) {
-      field(`property:${key}`).push(value);
+      field(`properties:${key}`).push(value);
     }
   }
   if (handles.length > 0) writer.apply({ handles: Int32Array.from(handles), fields });

@@ -19,6 +19,7 @@
 
 import { utf8String } from '@sakuzu/tabane';
 import type { FeatureTablesWriter, RowApplyOptions } from '../api/tables.js';
+import { asFeatureValues } from '../shared/feature-values.js';
 import type {
   ItemOrderChange,
   RestoreToken,
@@ -287,7 +288,7 @@ export function createFeatureTablesWriter(
           if (hasRows) {
             notify({
               rows,
-              ...(options.before && { previousValues: options.before }),
+              ...(options.before && { previousValues: asFeatureValues(options.before) }),
               ...extra,
             });
           }

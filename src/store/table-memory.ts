@@ -55,6 +55,7 @@ import {
   type FeatureTablesStoreWriter,
 } from '../feature-table/feature-tables-writer.js';
 import { ItemWalk } from '../feature-table/item-walk.js';
+import { asFeatureValues } from '../shared/feature-values.js';
 import { ROW_FLAG_DELETED } from '../table/row-group-types.js';
 import { DrawStore } from './draw-store.js';
 import {
@@ -429,7 +430,7 @@ export class TableContractStore implements StoreContract {
           ['geometry', feature.geometry],
           ['order', undefined],
           ['style', feature.style ?? {}],
-          ['visible', feature.visible !== false],
+          ['hidden', feature.visible === false],
           ['locked', feature.locked === true],
         ]);
         const end = layerEnd(feature.layerId);
@@ -458,7 +459,7 @@ export class TableContractStore implements StoreContract {
           }
         }
         for (const [key, value] of Object.entries(feature.properties ?? {})) {
-          if (value !== undefined) fields.set(`property:${key}`, value);
+          if (value !== undefined) fields.set(`properties:${key}`, value);
         }
         let rows = writes.get(feature.layerId);
         if (!rows) {
@@ -674,12 +675,12 @@ export class TableContractStore implements StoreContract {
       fields: new Map<RowField, unknown[]>([
         ['type', []],
         ['geometry', []],
-        ...keys.map((key): [RowField, unknown[]] => [`property:${key}`, []]),
+        ...keys.map((key): [RowField, unknown[]] => [`properties:${key}`, []]),
       ]),
     });
     const types = read.fields.get('type') as readonly unknown[];
     const geometries = read.fields.get('geometry') as readonly unknown[];
-    const values = keys.map((key) => read.fields.get(`property:${key}`) as readonly unknown[]);
+    const values = keys.map((key) => read.fields.get(`properties:${key}`) as readonly unknown[]);
     named.forEach((id, i) => {
       const properties = new Map<string, unknown>();
       keys.forEach((key, k) => {
@@ -719,7 +720,7 @@ export class TableContractStore implements StoreContract {
     }
     for (const [key, value] of fields.properties) {
       row.properties.set(key, value);
-      row.fields.set(`property:${key}`, value);
+      row.fields.set(`properties:${key}`, value);
     }
   }
 
@@ -1920,7 +1921,7 @@ function reconcile(
   }
   if (layers.size > 0) out.rows = { layers } as RowsChange;
   else delete out.rows;
-  if (before) out.previousValues = before;
+  if (before) out.previousValues = asFeatureValues(before);
   else delete out.previousValues;
   return out;
 }

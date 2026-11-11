@@ -222,8 +222,8 @@ function planUpdate(
     const update = updates[k];
     if (!update || counts[k] === 0) continue;
     if (update.style !== undefined) fieldNames.add('style');
-    for (const key of Object.keys(update.properties ?? {})) fieldNames.add(`property:${key}`);
-    if (update.visible !== undefined) fieldNames.add('visible');
+    for (const key of Object.keys(update.properties ?? {})) fieldNames.add(`properties:${key}`);
+    if (update.visible !== undefined) fieldNames.add('hidden');
     if (update.locked !== undefined) fieldNames.add('locked');
   }
   // The rows written, kind after kind (in the order the kinds were met), each kind in the order
@@ -281,9 +281,9 @@ function updatedValue(field: RowField, update: RowUpdate, before: unknown): unkn
   if (field === 'style') {
     return update.style === undefined ? before : merged(before as object, update.style);
   }
-  if (field === 'visible') return update.visible ?? before;
+  if (field === 'hidden') return update.visible === undefined ? before : update.visible === false;
   if (field === 'locked') return update.locked ?? before;
-  const key = field.slice('property:'.length);
+  const key = field.slice('properties:'.length);
   const properties = update.properties;
   return properties && Object.keys(properties).includes(key) ? properties[key] : before;
 }

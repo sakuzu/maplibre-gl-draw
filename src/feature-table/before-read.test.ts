@@ -12,6 +12,7 @@
 
 import { describe, expect, it } from 'vitest';
 import { createRowBlockDataBuilder } from '../table/row-group-builder.js';
+import { FEATURE_TABLE_COLUMNS } from '../table/tabane/columns.js';
 import {
   createTables,
   type FeatureTablesInternals,
@@ -19,7 +20,10 @@ import {
 } from './feature-tables.js';
 
 function tablesWith(beforeRead?: () => void) {
-  const { tables, writer } = createTables(beforeRead ? { beforeRead } : {});
+  const { tables, writer } = createTables({
+    columns: FEATURE_TABLE_COLUMNS,
+    ...(beforeRead ? { beforeRead } : {}),
+  });
   const builder = createRowBlockDataBuilder();
   for (let i = 0; i < 5; i++) {
     builder.addRow({

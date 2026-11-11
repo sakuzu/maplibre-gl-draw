@@ -14,6 +14,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createTableStore } from '../store/table-memory.js';
 import { createRowBlockDataBuilder } from '../table/row-group-builder.js';
+import { FEATURE_TABLE_COLUMNS } from '../table/tabane/columns.js';
 import { createFeatureTablesStore } from './feature-row-tables.js';
 import type { FeatureTablesInternals } from './feature-tables.js';
 import { createTables, featureTablesInternals } from './feature-tables.js';
@@ -120,7 +121,7 @@ describe('the work of the tables while the page is idle', () => {
 
   it('leaves the build to the first search in tables given no idle periods', () => {
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
-    const { tables, writer } = createTables();
+    const { tables, writer } = createTables({ columns: FEATURE_TABLE_COLUMNS });
     writer.addRowBlocks('a', blocks());
     const internals = featureTablesInternals(tables) as FeatureTablesInternals;
     internals.addQueuedRowBlocks();

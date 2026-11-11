@@ -211,7 +211,7 @@ describe('many features created at once over a Store of rows', () => {
     const apply = vi.spyOn(writer, 'apply');
     draw.features.createMany([point('p', 'a', 1), point('q', 'a', 2)]);
     const [patch] = apply.mock.calls[0];
-    const odd = patch.fields.get('property:odd' as RowField);
+    const odd = patch.fields.get('properties:odd' as RowField);
     expect(odd).toEqual([true, undefined]);
   });
 });

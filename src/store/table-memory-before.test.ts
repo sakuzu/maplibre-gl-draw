@@ -88,7 +88,7 @@ describe('the writes of the features of rows not held', () => {
     expect(before).toBeDefined();
     expect(Array.from(before?.handles ?? [])).toEqual([tables.findRow('p1')]);
     expect(before?.fields.get('geometry')).toEqual([{ type: 'Point', coordinates: [1, 0] }]);
-    expect(before?.fields.get('property:m')).toEqual([undefined]);
+    expect(before?.fields.get('properties:m')).toEqual([undefined]);
     expect(store.restoreRows(before as NonNullable<typeof before>)).not.toBeNull();
     expect(stateOf(store, tables)).toEqual(start);
   });
@@ -99,7 +99,7 @@ describe('the writes of the features of rows not held', () => {
     store.updateFeature('p1', { layerId: 'other', properties: { n: 5 } });
     const change = notified[notified.length - 1];
     expect([...((change.previousValues as RowValues | undefined)?.fields.keys() ?? [])]).toEqual([
-      'property:n',
+      'properties:n',
     ]);
     const moves = (change.order ?? []) as ItemMove[];
     expect(moves.map((move) => move.itemId)).toEqual(['p1']);
@@ -162,7 +162,7 @@ describe('the writes of the features of rows not held', () => {
     expect(notified).toHaveLength(1);
     const handles = Array.from(before?.handles ?? []);
     const at = handles.indexOf(tables.findRow('p1') as number);
-    expect(before?.fields.get('property:n')?.[at]).toBe(1);
+    expect(before?.fields.get('properties:n')?.[at]).toBe(1);
     expect(before?.fields.get('style')?.[at]).toEqual({});
     store.restoreRows(before as NonNullable<typeof before>);
     expect(stateOf(store, tables)).toEqual(start);
@@ -178,7 +178,7 @@ describe('the writes of the features of rows not held', () => {
     const change = notified[notified.length - 1];
     expect(change.features?.updated ?? []).toEqual([]);
     const before = change.previousValues as RowValues | undefined;
-    expect(before?.fields.get('property:n')).toEqual([1]);
+    expect(before?.fields.get('properties:n')).toEqual([1]);
     store.restoreRows(before as NonNullable<typeof before>);
     expect(stateOf(store, tables)).toEqual(start);
   });
@@ -189,8 +189,8 @@ describe('the writes of rows through the writer of the Store', () => {
     return {
       handles: Int32Array.from(['p0', 'p4'], (id) => tables.findRow(id) as number),
       fields: new Map<RowField, unknown[]>([
-        ['property:n', [100, 400]],
-        ['visible', [false, false]],
+        ['properties:n', [100, 400]],
+        ['hidden', [true, true]],
       ]),
     };
   }
@@ -200,12 +200,12 @@ describe('the writes of rows through the writer of the Store', () => {
     const start = stateOf(store, tables);
     store.transact(() => writer.apply(patchOf(tables)));
     const before = lastBefore(notified);
-    expect(before?.fields.get('property:n')).toEqual([0, 4]);
+    expect(before?.fields.get('properties:n')).toEqual([0, 4]);
     store.restoreRows(before as NonNullable<typeof before>);
     expect(stateOf(store, tables)).toEqual(start);
     // Outside a transaction too
     writer.apply(patchOf(tables));
-    expect(lastBefore(notified)?.fields.get('visible')).toEqual([true, true]);
+    expect(lastBefore(notified)?.fields.get('hidden')).toEqual([false, false]);
   });
 
   it('notify no values before of a write from elsewhere', () => {
@@ -221,13 +221,13 @@ describe('the writes of rows through the writer of the Store', () => {
     store.transact(() => {
       store.restoreRows({
         handles: Int32Array.of(h('p0'), h('p1')),
-        fields: new Map([['property:n', [10, 11]]]),
+        fields: new Map([['properties:n', [10, 11]]]),
       });
       writer.apply({
         handles: Int32Array.of(h('p1'), h('p2')),
         fields: new Map<RowField, unknown[]>([
           ['geometry', [null, null].map((_, i) => ({ type: 'Point', coordinates: [i, 5] }))],
-          ['property:n', [21, 22]],
+          ['properties:n', [21, 22]],
         ]),
       });
       store.deleteFeature('p3');
@@ -240,7 +240,7 @@ describe('the writes of rows through the writer of the Store', () => {
       'p3',
     ]);
     // The first value read of each row, and the value of the fields not written of a row
-    expect(before?.fields.get('property:n')).toEqual([0, 1, 2, 3]);
+    expect(before?.fields.get('properties:n')).toEqual([0, 1, 2, 3]);
     expect(before?.fields.get('geometry')).toEqual([0, 1, 2, 3].map((x) => point('', x).geometry));
     expect(Array.from(before?.deleted ?? [])).toEqual([0, 0, 0, 0]);
     store.restoreRows(before as NonNullable<typeof before>);

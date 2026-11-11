@@ -29,6 +29,7 @@ import {
 import { createRowBlockDataBuilder, type RowInput } from './row-group-builder.js';
 import { mergeRowBlockData } from './row-group-merge.js';
 import type { RowRead } from './row-read-type.js';
+import { FEATURE_TABLE_COLUMNS } from './tabane/columns.js';
 
 /** A cache of the first point and the type of each row, which counts the rows it is made of */
 function countingCache(name = 'test:first-point:1'): RowCache & { readonly made: string[] } {
@@ -110,7 +111,11 @@ describe('the caches of the rows of a merge', () => {
 describe('the caches of the rows of the tables', () => {
   it('are made again for a row written only', () => {
     const cache = countingCache();
-    const { tables, writer } = createTables({ caches: [cache], rings: circleRowRings });
+    const { tables, writer } = createTables({
+      columns: FEATURE_TABLE_COLUMNS,
+      caches: [cache],
+      rings: circleRowRings,
+    });
     writer.addRowBlocks('a', build(cache, 6));
     const internals = featureTablesInternals(tables);
     internals?.addQueuedRowBlocks();
@@ -158,7 +163,10 @@ describe('the caches of the rows of the tables', () => {
   it('are made for a row block taken in without one, and put in the order declared', () => {
     const first = countingCache('test:a:1');
     const second = countingCache('test:b:1');
-    const { tables, writer } = createTables({ caches: [first, second] });
+    const { tables, writer } = createTables({
+      columns: FEATURE_TABLE_COLUMNS,
+      caches: [first, second],
+    });
     const builder = createRowBlockDataBuilder({ caches: [second] });
     for (let i = 0; i < 3; i++) builder.addRow(rowOf(i));
     const blocks = builder.finish();

@@ -18,6 +18,7 @@ import { drawPropertyKey } from '../shared/properties.js';
 import { whenIdle } from '../shared/utils/idle.js';
 import { circleRowRings } from '../table/circle-rings.js';
 import { FEATURE_CACHES } from '../table/fill-triangles.js';
+import { FEATURE_TABLE_COLUMNS } from '../table/tabane/columns.js';
 import { FeatureRowBoxes, keepFeatureRowBoxes } from './feature-row-boxes.js';
 import {
   createTables,
@@ -37,7 +38,7 @@ import type { TablesWriter } from './tables-writer.js';
  */
 export const FEATURE_RELOCATING_FIELDS: readonly RowField[] = [
   'type',
-  `property:${drawPropertyKey('createdZoom')}`,
+  `properties:${drawPropertyKey('createdZoom')}`,
 ];
 
 /**
@@ -51,7 +52,10 @@ export const FEATURE_RELOCATING_FIELDS: readonly RowField[] = [
  * @internal
  */
 export function createFeatureRowTables(
-  options: Omit<TablesInternalOptions, 'rowBoxes' | 'relocatingFields' | 'rings' | 'caches'> = {},
+  options: Omit<
+    TablesInternalOptions,
+    'columns' | 'rowBoxes' | 'relocatingFields' | 'rings' | 'caches'
+  > = {},
 ): {
   tables: FeatureTables;
   writer: TablesWriter;
@@ -59,6 +63,7 @@ export function createFeatureRowTables(
   const boxes = new FeatureRowBoxes();
   const made = createTables({
     ...options,
+    columns: FEATURE_TABLE_COLUMNS,
     rings: circleRowRings,
     caches: FEATURE_CACHES,
     rowBoxes: boxes.boxesOf,

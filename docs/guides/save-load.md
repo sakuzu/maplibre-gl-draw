@@ -530,7 +530,7 @@ What puts them back is in the change as well:
   with where the item stood (`ItemMove.from`; a row of a Store of rows also
   with its keys before, `ItemMove.before`), or many rows with their keys
   before (`RowsMove.before`). The keys before are written back with
-  `draw.features.restore` after `createRowValues` of
+  `draw.features.restore` after `featureValuesOf` of
   `@sakuzu/maplibre-gl-draw/kasane`
 - a deletion of this client keeps the rows and the groups it deleted
   (`change.restoreToken`) until they are let go of

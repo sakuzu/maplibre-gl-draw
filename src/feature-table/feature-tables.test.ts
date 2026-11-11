@@ -252,7 +252,7 @@ describe('createFeatureTables', () => {
       type: 'Point',
       geometry: point(0, 0),
       order: 'b',
-      visible: false,
+      hidden: true,
     });
     builder.addRow({ id: 'gone', type: 'Point', geometry: point(0, 0), order: 'c', deleted: true });
     builder.addRow({ id: 'circle', type: 'Circle', geometry: point(0, 0), order: 'd' });
@@ -362,7 +362,7 @@ describe('adding row blocks', () => {
     expect(internals.revision).toBeGreaterThan(before);
     expect(tables.get('layer')?.rowCount).toBe(9);
     expect(added.layers.get('layer')?.created.length).toBe(9);
-    expect(added.layers.get('layer')?.fields.has('property:name')).toBe(true);
+    expect(added.layers.get('layer')?.fields.has('properties:name')).toBe(true);
     writer.addRowBlocks('layer', groups(3, { keyOffset: 20, prefix: 'z', targetRows: 3 }));
     const view = tables.get('layer');
     expect(Array.from(view?.listRowHandles(0, 12) ?? []).map((h) => tables.getRowId(h))).toEqual([

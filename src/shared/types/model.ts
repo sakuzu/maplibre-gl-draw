@@ -10,6 +10,9 @@
 
 import type { Value } from '@sakuzu/tabane';
 import type { Geometry, Position } from 'geojson';
+import type { RowField, RowValues } from '../../feature-table/row-values.js';
+
+export type { RowField, RowValues };
 
 /**
  * A position as `[longitude, latitude]` in degrees (WGS 84), in the same order as GeoJSON
@@ -792,22 +795,6 @@ export interface StoreChange {
 }
 
 /**
- * A field of a row a patch of rows writes: a value of the feature of the row, or an attribute
- * (`property:<key>`).
- */
-export type RowField =
-  | 'type'
-  | 'layerId'
-  | 'groupId'
-  | 'order'
-  | 'member'
-  | 'geometry'
-  | 'visible'
-  | 'locked'
-  | 'style'
-  | `property:${string}`;
-
-/**
  * The rows of one layer a change created, updated or deleted, by handle.
  */
 export interface LayerRowsChange {
@@ -837,31 +824,13 @@ declare const featureValuesBrand: unique symbol;
 /**
  * Values of features as they were, which written back with `features.restore` put them back: what
  * a Store that holds its features as rows notifies of a write of this client
- * (`DocumentChange.previousValues`) and what `features.restore` returns. Its content is read and
- * made with `@sakuzu/maplibre-gl-draw/kasane` (`RowValues`).
+ * (`DocumentChange.previousValues`) and what `features.restore` returns. Its content is values of
+ * rows, read with `rowValuesOf` and made of values of rows with `featureValuesOf`
+ * (`@sakuzu/maplibre-gl-draw/kasane`).
  */
 export interface FeatureValues {
   /** Tells it from other objects: its content is a `RowValues` */
   readonly [featureValuesBrand]?: true;
-}
-
-/**
- * Values of rows: the rows by their handles, and the values of fields, one per row (as the
- * feature of the row holds them: a GeoJSON geometry, a style, a boolean; for an attribute its
- * value, `undefined` taking the key off the row). Read from the rows, they are the values the rows
- * have (`FeatureTables.readValues`); written to them, they put the values there.
- */
-export interface RowValues extends FeatureValues {
-  /** The rows */
-  readonly handles: Int32Array;
-  /** The values of each field, one per row */
-  readonly fields: ReadonlyMap<RowField, readonly unknown[]>;
-  /**
-   * Non-zero for a row deleted, zero for a row not deleted (a row deleted and kept,
-   * `RestoreToken`, written not deleted comes back at its place, as it was); absent when the
-   * deletion is not read or written
-   */
-  readonly deleted?: Uint8Array;
 }
 
 /**

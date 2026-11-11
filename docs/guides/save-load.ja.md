@@ -525,7 +525,7 @@ core は変更の履歴を持ちません。リスナーが文書を追いかけ
   (`ItemMove.from`。行を持つ Store の行なら移動の前の並びの鍵
   `ItemMove.before` も) を、たくさんの行なら移動の前の並びの鍵
   (`RowsMove.before`) を持ちます。前の並びの鍵は
-  `@sakuzu/maplibre-gl-draw/kasane` の `createRowValues` で包み、
+  `@sakuzu/maplibre-gl-draw/kasane` の `featureValuesOf` で包み、
   `draw.features.restore` で書き戻します
 - この端末の削除は、消した行とグループを手放すまで
   (`draw.features.releaseRestore`) 残します (`change.restoreToken`)。

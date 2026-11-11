@@ -132,11 +132,11 @@ describe('the rows with companions of a layer held as rows', () => {
     expect(asked.rows).toBe(1);
 
     // A row given a band, and one whose band is taken off
-    writer.apply(rowPatch([handleOf('p30000')], { 'property:band': [2] }));
+    writer.apply(rowPatch([handleOf('p30000')], { 'properties:band': [2] }));
     asked.rows = 0;
     expect(ids()).toEqual(['p10', 'p20000', 'p30000', 'p40000', 'p60000', 'p99000']);
     expect(asked.rows).toBe(1);
-    writer.apply(rowPatch([handleOf('p40000')], { 'property:band': [undefined] }));
+    writer.apply(rowPatch([handleOf('p40000')], { 'properties:band': [undefined] }));
     asked.rows = 0;
     expect(ids()).toEqual(['p10', 'p20000', 'p30000', 'p60000', 'p99000']);
     expect(asked.rows).toBe(1);
@@ -165,14 +165,14 @@ describe('the rows with companions of a layer held as rows', () => {
     asked.rows = 0;
     expect(ids()).toEqual(['p10', 'p30000', 'p20000', 'p60000', 'p99000']);
     expect(asked.rows).toBe(1);
-    writer.apply(rowPatch([handleOf('p20000')], { 'property:band': [undefined] }));
+    writer.apply(rowPatch([handleOf('p20000')], { 'properties:band': [undefined] }));
     asked.rows = 0;
     expect(ids()).toEqual(['p10', 'p30000', 'p60000', 'p99000']);
     expect(asked.rows).toBe(1);
 
     // The undo of the writes of a row
     const p10 = handleOf('p10');
-    const write = rowPatch([p10], { 'property:band': [undefined] }, [1]);
+    const write = rowPatch([p10], { 'properties:band': [undefined] }, [1]);
     const undo = internals.readValues(write);
     writer.apply(write);
     asked.rows = 0;
@@ -230,7 +230,7 @@ describe('the rows with companions of a layer held as rows', () => {
           // A band given or taken off
           const handle = someRow();
           if (handle !== undefined) {
-            write(rowPatch([handle], { 'property:band': [random() < 0.5 ? 1 : undefined] }));
+            write(rowPatch([handle], { 'properties:band': [random() < 0.5 ? 1 : undefined] }));
           }
         } else if (pick < 0.68) {
           // A row deleted or written again with its key moved
@@ -289,7 +289,7 @@ describe('the rows with companions of a layer held as rows', () => {
               geometry: handles.map((_, k) => ({ type: 'Point', coordinates: [k, k] })),
               order: handles.map((_, k) => referenceKey(base + k)),
               style: handles.map(() => ({})),
-              'property:band': handles.map((_, k) => (k % 9 === 0 ? 1 : undefined)),
+              'properties:band': handles.map((_, k) => (k % 9 === 0 ? 1 : undefined)),
             }),
           );
           if (random() < 0.5) internals.addQueuedRowBlocks();
@@ -340,7 +340,7 @@ describe('the rows with companions of a layer held as rows', () => {
     );
     expect(ids(a)).toEqual([]);
     expect(ids(b)).toEqual(['x']);
-    move(rowPatch([x], { 'property:band': [undefined] }));
+    move(rowPatch([x], { 'properties:band': [undefined] }));
     expect(ids(b)).toEqual([]);
     // Back to its layer, and its band again
     writer.apply(moves.pop() as RowValues);
@@ -349,7 +349,7 @@ describe('the rows with companions of a layer held as rows', () => {
     expect(ids(a)).toEqual(['x']);
     internals.flushVersions();
     for (const table of [a, b]) expect(ids(table)).toEqual(walked(internals, table));
-    const fields = new Map<RowField, unknown[]>([['property:band', [1]]]);
+    const fields = new Map<RowField, unknown[]>([['properties:band', [1]]]);
     writer.apply({ handles: Int32Array.of(tables.findRow('z') as number), fields });
     expect(ids(b)).toEqual(['z']);
   });

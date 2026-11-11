@@ -21,6 +21,7 @@ import type { Store } from '../store/store.js';
 import { createTableStore } from '../store/table-memory.js';
 import type { Feature } from '../store/types.js';
 import { createRowBlockDataBuilder } from '../table/row-group-builder.js';
+import { FEATURE_TABLE_COLUMNS } from '../table/tabane/columns.js';
 import {
   createTables,
   type FeatureTablesInternals,
@@ -153,7 +154,7 @@ describe('the boxes of the rows whose boxes come from more than their points', (
   });
 
   it('finds every row by the box of its points in tables given no boxes', () => {
-    const { tables, writer } = createTables();
+    const { tables, writer } = createTables({ columns: FEATURE_TABLE_COLUMNS });
     const builder = createRowBlockDataBuilder();
     builder.addRow({
       id: 'image',

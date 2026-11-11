@@ -43,7 +43,7 @@ import type {
 } from '../api/tables.js';
 import type { BBox } from '../geometry/types.js';
 import { DrawError } from '../shared/draw-error.js';
-import type { Feature, FeatureStyle, FeatureType, RowValues } from '../shared/types/model.js';
+import type { Feature, FeatureStyle, FeatureType } from '../shared/types/model.js';
 import { drawErrorOf } from '../table/draw-error-of.js';
 import { KasaneError } from '../table/kasane-error.js';
 import { buildCacheColumns, cacheColumnsIn, type RowCache } from '../table/row-caches.js';
@@ -98,6 +98,7 @@ import {
   STATE_UNIFORM,
   toGpuState,
 } from './row-state.js';
+import { RowFields, type RowValues, type TableColumns } from './row-values.js';
 import {
   type GeometryWrite,
   isRingKey,
@@ -156,6 +157,9 @@ const PLACE_FIELDS: ReadonlySet<string> = new Set(['layerId', 'groupId', 'order'
  */
 const TYPE_FIELD = 'type';
 
+/** The start of the fields of the attributes of a row (`properties:<key>`) */
+const PROPERTY_FIELD = 'properties:';
+
 /** The fields a new row is written with: a deleted row written all of them is created again */
 const CREATE_FIELDS: readonly RowField[] = ['type', 'layerId', 'geometry', 'order'];
 
@@ -170,7 +174,7 @@ const ADDED_FIELDS: readonly RowField[] = [
   'order',
   'member',
   'geometry',
-  'visible',
+  'hidden',
   'locked',
   'style',
 ];
@@ -235,6 +239,11 @@ export type RowBoxes = (type: string) => ((feature: Feature) => BBox) | undefine
  */
 export interface TablesInternalOptions extends FeatureTablesInternalOptions {
   /**
+   * The columns of the rows of all the tables, by their names: what the names of the fields of the
+   * values of rows written and read are checked against
+   */
+  readonly columns: TableColumns;
+  /**
    * The boxes of the rows whose boxes come from more than their points (none: every row takes
    * the box of its points)
    */
@@ -242,7 +251,7 @@ export interface TablesInternalOptions extends FeatureTablesInternalOptions {
   /**
    * The fields whose new value places a row again, as a new place does (none when omitted): what
    * the drawing cuts the rows by. A row written another value of one goes to the delta rather
-   * than being written in place. The type (`type`) and attributes (`property:<key>`) can be
+   * than being written in place. The type (`type`) and attributes (`properties:<key>`) can be
    * declared
    */
   readonly relocatingFields?: readonly RowField[];
@@ -273,7 +282,7 @@ export interface TablesInternalOptions extends FeatureTablesInternalOptions {
  *
  * @internal
  */
-export function createTables(options: TablesInternalOptions = {}): {
+export function createTables(options: TablesInternalOptions): {
   tables: FeatureTables;
   writer: TablesWriter;
 } {
@@ -992,8 +1001,11 @@ class FeatureTablesStore implements FeatureTablesInternals, TablesWriter, Tables
   private readonly rings: RowRings | null;
   /** The caches of the rows (`caches`) */
   private readonly caches: readonly RowCache[];
+  /** The fields of the values of rows the columns declared allow (`columns`) */
+  private readonly fields: RowFields;
 
   constructor(options: TablesInternalOptions) {
+    this.fields = new RowFields(options.columns);
     this.strings = new ValueStringCache(options.stringCacheSize);
     this.states = new RowStateSets((handles) => this.refreshStates(handles));
     this.declaredDims = options.dimensionsOf;
@@ -1017,7 +1029,7 @@ class FeatureTablesStore implements FeatureTablesInternals, TablesWriter, Tables
     this.rings = options.rings ?? null;
     this.caches = options.caches ?? [];
     for (const field of options.relocatingFields ?? []) {
-      if (field !== TYPE_FIELD && !field.startsWith('property:')) {
+      if (field !== TYPE_FIELD && !field.startsWith(PROPERTY_FIELD)) {
         throw new KasaneError(
           'invalid-input',
           `FeatureTables: the field ${field} cannot place a row again (the type and attributes can)`,
@@ -1556,7 +1568,7 @@ class FeatureTablesStore implements FeatureTablesInternals, TablesWriter, Tables
       else this.adoptGroup(layer, data);
       for (let r = 0; r < data.length; r++) draft.created.push(data.handles[r]);
       for (const field of ADDED_FIELDS) draft.fields.add(field);
-      for (const key of data.properties.keys) draft.fields.add(`property:${key}`);
+      for (const key of data.properties.keys) draft.fields.add(`${PROPERTY_FIELD}${key}`);
     }
     const rows: RowsChange = { layers: finishChanges(drafts) };
     this.notifyWork();
@@ -2304,14 +2316,14 @@ class FeatureTablesStore implements FeatureTablesInternals, TablesWriter, Tables
         return featureGroup >= 0 ? utf8String(data.memberKeys, row) : undefined;
       case 'geometry':
         return rowGeometry(group, row) ?? undefined;
-      case 'visible':
-        return (data.flags[row] & ROW_FLAG_VISIBLE) !== 0;
+      case 'hidden':
+        return (data.flags[row] & ROW_FLAG_VISIBLE) === 0;
       case 'locked':
         return (data.flags[row] & ROW_FLAG_LOCKED) !== 0;
       case 'style':
         return this.styles.get(data.styles[row]);
       default:
-        return rowValue(group, row, field.slice('property:'.length), this.strings);
+        return rowValue(group, row, field.slice(PROPERTY_FIELD.length), this.strings);
     }
   }
 
@@ -2320,6 +2332,7 @@ class FeatureTablesStore implements FeatureTablesInternals, TablesWriter, Tables
    * they are written)
    */
   private checkPatch(patch: RowValues): void {
+    this.fields.check(patch);
     const n = patch.handles.length;
     for (const [field, values] of patch.fields) {
       if (values.length !== n) {
@@ -2398,7 +2411,7 @@ class FeatureTablesStore implements FeatureTablesInternals, TablesWriter, Tables
    */
   private writtenOverSketch(field: RowField): boolean {
     if (field === 'geometry') return true;
-    return field.startsWith('property:') && !this.relocating.has(field);
+    return field.startsWith(PROPERTY_FIELD) && !this.relocating.has(field);
   }
 
   /**
@@ -2496,7 +2509,7 @@ class FeatureTablesStore implements FeatureTablesInternals, TablesWriter, Tables
           geometry: feature.geometry,
           style: (feature.style ?? {}) as Readonly<Record<string, unknown>>,
           properties: feature.properties ?? {},
-          visible: feature.visible !== false,
+          hidden: feature.visible === false,
           locked: feature.locked === true,
           deleted: false,
         };
@@ -3251,7 +3264,7 @@ class FeatureTablesStore implements FeatureTablesInternals, TablesWriter, Tables
         continue;
       }
       if (this.relocating.has(field)) {
-        if (rowValue(place.group, row, field.slice('property:'.length)) !== value) return true;
+        if (rowValue(place.group, row, field.slice(PROPERTY_FIELD.length)) !== value) return true;
       }
     }
     return false;
@@ -3296,8 +3309,8 @@ class FeatureTablesStore implements FeatureTablesInternals, TablesWriter, Tables
         case 'style':
           out.style = (value ?? {}) as Readonly<Record<string, unknown>>;
           break;
-        case 'visible':
-          if (value !== undefined) out.visible = value !== false;
+        case 'hidden':
+          if (value !== undefined) out.hidden = value === true;
           break;
         case 'locked':
           if (value !== undefined) out.locked = value === true;
@@ -3305,7 +3318,7 @@ class FeatureTablesStore implements FeatureTablesInternals, TablesWriter, Tables
         case 'layerId':
           break;
         default: {
-          const key = field.slice('property:'.length);
+          const key = field.slice(PROPERTY_FIELD.length);
           const properties = out.properties as Record<string, unknown>;
           if (value === undefined) delete properties[key];
           else properties[key] = value;
@@ -3360,9 +3373,9 @@ class FeatureTablesStore implements FeatureTablesInternals, TablesWriter, Tables
       }
     }
     let flags = data.flags[row];
-    const visible = columns.visible?.[i];
-    if (visible !== undefined) {
-      flags = visible === false ? flags & ~ROW_FLAG_VISIBLE : flags | ROW_FLAG_VISIBLE;
+    const hidden = columns.hidden?.[i];
+    if (hidden !== undefined) {
+      flags = hidden === true ? flags & ~ROW_FLAG_VISIBLE : flags | ROW_FLAG_VISIBLE;
     }
     const locked = columns.locked?.[i];
     if (locked !== undefined) {
@@ -4020,7 +4033,7 @@ function finishChanges(changes: Map<string, LayerChangeDraft>): Map<string, Laye
 /** The columns of a patch a write in place reads, taken from it once */
 interface PatchColumns {
   readonly geometry: readonly unknown[] | undefined;
-  readonly visible: readonly unknown[] | undefined;
+  readonly hidden: readonly unknown[] | undefined;
   readonly locked: readonly unknown[] | undefined;
   /** The attributes written: their keys and values */
   readonly properties: ReadonlyArray<readonly [string, readonly unknown[]]>;
@@ -4029,11 +4042,13 @@ interface PatchColumns {
 function patchColumns(fields: ReadonlyMap<RowField, readonly unknown[]>): PatchColumns {
   const properties: Array<readonly [string, readonly unknown[]]> = [];
   for (const [field, values] of fields) {
-    if (field.startsWith('property:')) properties.push([field.slice('property:'.length), values]);
+    if (field.startsWith(PROPERTY_FIELD)) {
+      properties.push([field.slice(PROPERTY_FIELD.length), values]);
+    }
   }
   return {
     geometry: fields.get('geometry'),
-    visible: fields.get('visible'),
+    hidden: fields.get('hidden'),
     locked: fields.get('locked'),
     properties,
   };

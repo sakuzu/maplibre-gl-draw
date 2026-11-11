@@ -117,7 +117,7 @@ describe('the delta of a layer', () => {
     internals.onRowsWritten((_layer, list) => writes.push(...list));
     internals.setWriteMark(2);
     writer.apply(
-      patchOf([handle], { 'property:name': ['written'], style: [{ pointColor: '#00ff00' }] }),
+      patchOf([handle], { 'properties:name': ['written'], style: [{ pointColor: '#00ff00' }] }),
     );
     // In place: the rows of the delta are not made again
     expect(delta?.group).toBe(group);

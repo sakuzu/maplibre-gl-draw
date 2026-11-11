@@ -306,7 +306,7 @@ describe('a row block as a row block of the tables', () => {
           style: row.style,
           properties: row.properties,
           deleted: row.deleted,
-          visible: row.visible,
+          hidden: row.visible === false,
           locked: row.locked,
         });
       });
@@ -581,7 +581,7 @@ describe('a row block that writes the key of each row', () => {
   it('keeps the key of a row written, in the next versions of the rows', () => {
     const { add, writer, internals, handleOf, items, keysOf } = setup();
     add(rowBlockOf(pointsOf(['A5', 'G1', numberedKey(9), 'q7'])));
-    writer.apply(rowPatch([handleOf(2)], { 'property:name': ['x'] }));
+    writer.apply(rowPatch([handleOf(2)], { 'properties:name': ['x'] }));
     internals.flushVersions();
     expect(items()).toEqual([1, 2, 3, 4].map(id));
     expect(keysOf(1, 2, 3, 4)).toEqual(['A5', 'G1', numberedKey(9), 'q7']);

@@ -179,13 +179,13 @@ describe('the rows written for this client through the Store', () => {
       handles,
       fields: new Map<RowField, unknown[]>([
         ['style', [{ pointColor: '#ff0000' }, { pointColor: '#00ff00' }]],
-        ['property:n', [10, 30]],
+        ['properties:n', [10, 30]],
         ['geometry', [{ type: 'Point', coordinates: [9, 9] }, undefined]],
       ]),
     };
     notified.length = 0;
     const before = store.restoreRows(patch);
-    expect(before?.fields.get('property:n')).toEqual([1, 3]);
+    expect(before?.fields.get('properties:n')).toEqual([1, 3]);
     expect(before?.fields.get('style')).toEqual([{}, {}]);
     expect(notified).toHaveLength(1);
     expect(notified[0].previousValues).toBe(before);
@@ -206,7 +206,7 @@ describe('the rows written for this client through the Store', () => {
     expect(
       store.restoreRows({
         handles: Int32Array.of(handle),
-        fields: new Map([['property:n', [5]]]),
+        fields: new Map([['properties:n', [5]]]),
       }),
     ).toBeNull();
     expect(store.getFeature('p1')?.properties).toEqual({ n: 1 });

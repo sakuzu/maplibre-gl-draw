@@ -28,6 +28,7 @@ export const KASANE_FILES = [
   'feature-table/row-box-index.ts',
   'feature-table/row-skips.ts',
   'feature-table/row-state.ts',
+  'feature-table/row-values.ts',
   'feature-table/style-table.ts',
   'feature-table/tables-writer.ts',
   'feature-table/types.ts',

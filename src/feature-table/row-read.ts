@@ -263,7 +263,7 @@ export function rowInputOf(context: RowReadContext, group: RowGroup, row: number
     group: groupHandle,
     style: context.styles.get(data.styles[row]) as Readonly<Record<string, unknown>>,
     properties: rowProperties(group, row),
-    visible: (flags & ROW_FLAG_VISIBLE) !== 0,
+    hidden: (flags & ROW_FLAG_VISIBLE) === 0,
     locked: (flags & ROW_FLAG_LOCKED) !== 0,
     deleted: (flags & ROW_FLAG_DELETED) !== 0,
   };

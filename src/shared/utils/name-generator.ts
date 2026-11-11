@@ -345,7 +345,7 @@ export class AutoNameGenerator {
       // By index: the rows of a large write are read without an iterator
       const created = rows.created;
       for (let i = 0; i < created.length; i++) this.observeRowName(view, created[i]);
-      if (rows.fields.has('property:name') || rows.fields.has('type')) {
+      if (rows.fields.has('properties:name') || rows.fields.has('type')) {
         const updated = rows.updated;
         for (let i = 0; i < updated.length; i++) this.observeRowName(view, updated[i]);
       }

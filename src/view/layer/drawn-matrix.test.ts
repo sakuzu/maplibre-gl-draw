@@ -951,7 +951,7 @@ function makeScene(run: Run, style: FeatureStyle | null): void {
         order: `a${String(i).padStart(6, '0')}`,
         style: input.style as Record<string, unknown>,
         properties: input.properties as Record<string, unknown>,
-        visible: true,
+        hidden: false,
         locked: false,
       });
       run.names.set(id, i < inputs.length - (style ? 1 : 0) ? `S${i}` : 'F');

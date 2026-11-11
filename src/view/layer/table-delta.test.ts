@@ -451,7 +451,7 @@ describe('the drawing of the rows of the delta', () => {
         } else if (pick < 0.75) {
           live.writer.apply(patchOf([handle], {}, [1]));
         } else if (pick < 0.85) {
-          live.writer.apply(patchOf([handle], { visible: [false] }));
+          live.writer.apply(patchOf([handle], { hidden: [true] }));
         } else {
           live.renderer.setArtificialCuts(Math.floor(random() * 5));
         }
@@ -513,7 +513,7 @@ describe('the drawing of the rows of the delta', () => {
           } else if (pick < 0.8) {
             live.writer.apply(patchOf([handle], { style: [{ strokeColor: '#00ff00' }] }));
           } else {
-            live.writer.apply(patchOf([handle], { 'property:n': [step] }));
+            live.writer.apply(patchOf([handle], { 'properties:n': [step] }));
           }
         }
         const { record } = live.frame();

@@ -118,7 +118,7 @@ export function transformKinds(
   }
   const kinds: Array<{ rows: number[]; op: BulkOperation }> = [];
   for (const [field, list] of byField) {
-    const fields: RowField[] = field === '' ? ['geometry'] : ['geometry', `property:${field}`];
+    const fields: RowField[] = field === '' ? ['geometry'] : ['geometry', `properties:${field}`];
     kinds.push({
       rows: list,
       op: {

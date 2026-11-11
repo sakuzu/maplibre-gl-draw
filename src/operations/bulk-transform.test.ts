@@ -105,10 +105,10 @@ function rowsOf(_store: DrawStore, tables: FeatureTables, ids: readonly string[]
       fields: new Map([
         ['geometry', []],
         ['type', []],
-        ['property:n', []],
-        ['property:maplibre-gl-draw:rotation', []],
-        ['property:maplibre-gl-draw:scale', []],
-        ['property:maplibre-gl-draw:radiusMeters', []],
+        ['properties:n', []],
+        ['properties:maplibre-gl-draw:rotation', []],
+        ['properties:maplibre-gl-draw:scale', []],
+        ['properties:maplibre-gl-draw:radiusMeters', []],
       ]),
     });
     return Object.fromEntries([...values.fields].map(([field, list]) => [field, list[0]]));

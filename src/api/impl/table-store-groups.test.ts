@@ -11,7 +11,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 import type { Store } from '../../store/store.js';
 import { createTableStore } from '../../store/table-memory.js';
-import type { Feature, RowValues, StoreChange } from '../../store/types.js';
+import type { Feature, FeatureValues, StoreChange } from '../../store/types.js';
 import { createMapStub } from '../../test-utils.js';
 import type { Draw } from '../draw.js';
 import { type FeatureTables, ITEM_GROUP } from '../tables.js';
@@ -133,7 +133,7 @@ describe('draw.groups.restore', () => {
     draw.transact(() => {
       expect(draw?.groups.restore('g')).toMatchObject({ id: 'g', layerId: 'rows' });
       draw?.groups.update('g', { name: 'G' });
-      draw?.features.restore(deletion.previousValues as RowValues);
+      draw?.features.restore(deletion.previousValues as FeatureValues);
     });
     expect(itemsOf(tables)).toEqual(['g[p1,p2]', 'p3', 'p4', 'p0']);
     expect(draw.groups.get('g')?.name).toBe('G');

@@ -166,8 +166,8 @@ function fitting(): SceneWrite[] {
       field: 'style',
       value: { fillColor: '#ff00ff', fillOpacity: 0.6, strokeWidth: 3 },
     },
-    { id: 'circle', field: `property:${RADIUS}`, value: 200 },
-    { id: 'point0', field: 'visible', value: false },
+    { id: 'circle', field: `properties:${RADIUS}`, value: 200 },
+    { id: 'point0', field: 'hidden', value: true },
   ];
 }
 
@@ -200,8 +200,8 @@ function written(features: SceneFeature[], writes: SceneWrite[]): SceneFeature[]
         out = { ...out, geometry: write.value as SceneFeature['geometry'] };
       else if (write.field === 'style')
         out = { ...out, style: write.value as Record<string, unknown> };
-      else if (write.field === 'visible') out = { ...out, visible: write.value } as never;
-      else out.properties[write.field.slice('property:'.length)] = write.value;
+      else if (write.field === 'hidden') out = { ...out, visible: !write.value } as never;
+      else out.properties[write.field.slice('properties:'.length)] = write.value;
     }
     return out;
   });

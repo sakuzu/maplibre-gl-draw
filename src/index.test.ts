@@ -272,6 +272,7 @@ const KASANE = [
   'createRowBlockBuilder',
   'createRowValues',
   'FeatureTypeRows',
+  'featureValuesOf',
   'createTableStore',
   'DraggedRows',
   'featureRowOfTabane',
