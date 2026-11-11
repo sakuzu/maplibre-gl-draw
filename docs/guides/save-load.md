@@ -111,7 +111,7 @@ input?.addEventListener('change', async () => {
   if (!file) return;
   try {
     const result = await draw.write((tx) => tx.import(file));
-    console.log(result.count, result.layerId, result.renewed);
+    console.log(result.count, result.layerId);
     for (const { index, error } of result.skipped) {
       console.warn(`feature ${index} left out: ${error.message}`);
     }
@@ -133,8 +133,8 @@ input?.addEventListener('change', async () => {
   step of undo with the other writes of its transaction. A document of
   the library is only opened, so `tx.import` refuses it with
   `invalid-input`. It returns how many
-  features it added (`count`), their layer (`layerId`), how many were
-  given a new ID (`renewed`) and the ones it left out (`skipped`)
+  features it added (`count`), their layer (`layerId`) and the ones it
+  left out (`skipped`)
 - While the document is read-only, both reject with `not-editable`
 - The data is checked before the document changes, so a read that rejects
   leaves the drawing as it was

@@ -91,6 +91,16 @@ describe('the values of an application', () => {
   });
 });
 
+describe('the stacking order', () => {
+  it('takes a dataset placed among the layers, before it is on the order', async () => {
+    const layerId = draw.layers.getActive()?.id as string;
+    draw.datasets.add({ id: 'cells', rows: [], order: 'layer-order' });
+    await draw.write((tx) => tx.layers.place('cells', { below: layerId }));
+    const order = draw.layers.getOrder();
+    expect(order.indexOf('cells')).toBe(order.indexOf(layerId) + 1);
+  });
+});
+
 describe('the format read', () => {
   it('is the version written only: an earlier version is refused', async () => {
     const earlier = { ...draw.document.toJSON(), version: '3.0.0' };

@@ -297,18 +297,13 @@ export interface ImportOptions {
   readonly layer?: string | LayerInput;
   /** A new group, made in the same commit, to put the features in */
   readonly group?: Omit<GroupInput, 'featureIds'>;
-  /**
-   * What an ID the document already holds becomes: a new ID (`renew`, when left out), or the
-   * failure of the whole import with `already-exists` (`refuse`). Nothing is written over.
-   */
-  readonly duplicateIds?: 'renew' | 'refuse';
+  /** What an ID the document already holds becomes: a new ID. Nothing is written over */
+  readonly duplicateIds?: 'renew';
 }
 
 /** What `tx.import` read */
 export interface ImportResult {
   readonly count: number;
   readonly layerId: string;
-  /** How many features were given a new ID */
-  readonly renewed: number;
   readonly skipped: readonly SkippedFeature[];
 }

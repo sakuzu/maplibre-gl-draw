@@ -193,6 +193,8 @@ export function createLayers(
       return store.setLayerOrder(merged);
     },
 
+    isStackEntry: (id) => typeof id === 'string' && isStackEntry(id),
+
     getOrder() {
       return Object.freeze(
         store.getLayerOrder().filter((id) => store.getLayer(id) !== undefined || isStackEntry(id)),

@@ -1208,7 +1208,7 @@ class TransactionImpl implements Transaction {
           // the layers, an entry of the application)
           const inOrder = (entry: unknown): string => {
             if (typeof entry === 'string' && overlay.view.getLayer(entry)) return entry;
-            if (typeof entry === 'string' && writers.getOrder().includes(entry)) return entry;
+            if (typeof entry === 'string' && writers.isStackEntry(entry)) return entry;
             throw notFound('layer or entry of the stacking order', entry);
           };
           const placed = inOrder(id);
@@ -1219,7 +1219,9 @@ class TransactionImpl implements Transaction {
           keep(() => {
             const order = writers.getOrder().filter((other) => other !== placed);
             const at = order.indexOf(neighbor);
-            if (at < 0 || !writers.getOrder().includes(placed)) return false;
+            const there =
+              this.#store.getLayer(placed) !== undefined || writers.isStackEntry(placed);
+            if (at < 0 || !there) return false;
             order.splice(after ? at + 1 : at, 0, placed);
             return writers.reorder(order);
           });
@@ -1414,7 +1416,6 @@ class TransactionImpl implements Transaction {
       const result = {
         count: 0,
         layerId: prepared.layer?.layer.id ?? loadOptions.layerId ?? '',
-        renewed: 0,
         skipped: [] as ImportResult['skipped'],
       };
       keep(() => {

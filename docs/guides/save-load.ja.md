@@ -106,7 +106,7 @@ input?.addEventListener('change', async () => {
   if (!file) return;
   try {
     const result = await draw.write((tx) => tx.import(file));
-    console.log(result.count, result.layerId, result.renewed);
+    console.log(result.count, result.layerId);
     for (const { index, error } of result.skipped) {
       console.warn(`feature ${index} left out: ${error.message}`);
     }
@@ -124,8 +124,7 @@ input?.addEventListener('change', async () => {
   数 (`features`) と除いた地物 (`skipped`) を返します
 - `tx.import` は GeoJSON を文書に足します。同じ取引のほかの書き込みと
   一緒に 1 つの確定と undo の 1 段になります。足した地物の数 (`count`)、
-  そのレイヤー (`layerId`)、新しい ID を振った数 (`renewed`)、除いた
-  地物 (`skipped`) を返します。ライブラリーの文書は開くだけなので、
+  そのレイヤー (`layerId`)、除いた地物 (`skipped`) を返します。ライブラリーの文書は開くだけなので、
   `tx.import` は `invalid-input` で受け付けません
 - 読み取り専用のあいだは、どちらも `not-editable` で失敗します
 - データは文書を変える前に検証するので、失敗した読み込みでは、描いた

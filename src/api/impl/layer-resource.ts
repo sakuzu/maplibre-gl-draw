@@ -142,4 +142,6 @@ export interface LayerResource {
    * @throws `DrawError` with the code `not-found` when there is no layer with this ID
    */
   setActive(id: string): boolean;
+  /** Whether an ID that is not a layer may stand in the stacking order (a dataset, an entry) */
+  isStackEntry(id: string): boolean;
 }

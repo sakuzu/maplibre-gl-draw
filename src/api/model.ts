@@ -856,7 +856,7 @@ export interface GroupInput {
   layerId?: string;
   /**
    * The ID; one is generated when it is left out. A group deleted whose features are kept
-   * (`DocumentChange.restoreToken`) is brought back with `groups.restore`
+   * (`DocumentChange.restoreToken`) comes back with the undo of the deletion
    */
   id?: string;
   /** The name; one is generated when it is left out */

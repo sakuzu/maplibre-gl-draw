@@ -487,7 +487,7 @@ export interface DrawOptions extends RuntimeOptions {
    * a selection, the results of a geometry operation, an image and every feature of a GeoJSON
    * load. It must return a non-empty string that is unique for the lifetime of the document
    * and never reused, also after the thing it named was deleted. An ID given by the caller,
-   * such as `id` of `features.create`, is used as it is. When it is left out, the IDs are
+   * such as the `id` of a feature given to `tx.features.create`, is used as it is. When it is left out, the IDs are
    * ULIDs.
    */
   generateId?: () => string;
