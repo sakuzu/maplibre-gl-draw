@@ -81,10 +81,7 @@ export function createFeatureTablesWriter(
   /** The changes of the order of a write made in several parts, under way (`watchOrderOf`) */
   let partsWatch: { readonly watch: ItemOrderWatch | null } | null = null;
   const orderSource: ItemOrderSource = {
-    walkItems: (layerId) => {
-      const layer = internals.rowTable(layerId);
-      return layer ? new ItemWalk(layer, internals) : null;
-    },
+    walkItems: (layerId) => internals.walkItems(layerId),
     getGroupKey: (group) => internals.getGroupOrder(group),
     groups: internals.groups,
     idOf: (handle) => internals.ids.idOf(handle),

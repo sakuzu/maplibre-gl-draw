@@ -17,7 +17,7 @@ import { compareRowKeys } from '../table/row-keys.js';
 import { STATE_HIDDEN_MASK } from './feature-row-states.js';
 import { featureTablesInternals } from './feature-tables.js';
 import { rowHitShape } from './hit-test.js';
-import { ItemWalk } from './item-walk.js';
+import type { ItemWalk } from './item-walk.js';
 
 /**
  * The ids of the members of a group of features of a layer held as rows, in their order (none
@@ -145,9 +145,7 @@ export function tableLayerHasLockedRow(
 
 /** The walk of the items of a layer held as rows (null for a layer that holds no row) */
 function walkOf(tables: FeatureTables, layerId: string): ItemWalk | null {
-  const internals = featureTablesInternals(tables);
-  const table = internals?.rowTable(layerId);
-  return internals && table ? new ItemWalk(table, internals) : null;
+  return featureTablesInternals(tables)?.walkItems(layerId) ?? null;
 }
 
 /** The id of an item numbered as the walk numbers it */

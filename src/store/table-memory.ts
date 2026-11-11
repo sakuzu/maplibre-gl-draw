@@ -55,7 +55,7 @@ import {
   createFeatureTablesWriter,
   type FeatureTablesStoreWriter,
 } from '../feature-table/feature-tables-writer.js';
-import { ItemWalk } from '../feature-table/item-walk.js';
+import type { ItemWalk } from '../feature-table/item-walk.js';
 import { asFeatureValues } from '../shared/feature-values.js';
 import { isGroupHidden, isGroupLocked } from '../table/feature-row-columns.js';
 import { ROW_FLAG_DELETED } from '../table/row-group-types.js';
@@ -1630,8 +1630,7 @@ export class TableContractStore implements StoreContract {
 
   /** The walk of the items of a layer (null for a layer that holds no row) */
   #walk(layerId: string): ItemWalk | null {
-    const table = this.#internals.rowTable(layerId);
-    return table ? new ItemWalk(table, this.#internals) : null;
+    return this.#internals.walkItems(layerId);
   }
 
   /** The key of an item in a layer (its own key, the key of a group), or in a group (its key) */

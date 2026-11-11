@@ -51,6 +51,7 @@ import type { RowRings } from '../table/row-rings.js';
 import { groupRunCuts, rowGroupsHolding } from './group-runs.js';
 import { GroupTable } from './group-table.js';
 import { IdIndex } from './id-index.js';
+import { ItemWalk } from './item-walk.js';
 import { RowBoxIndex } from './row-box-index.js';
 import { groupRowRead, type RowReadContext, rowInputOf, rowValue } from './row-read.js';
 import { noteRowState } from './row-skips.js';
@@ -355,6 +356,11 @@ export interface RowBlocks {
   refreshBoxes(): void;
   /** The rows in the index of the boxes, and the bytes it holds about */
   rowBoxIndexSize(): { readonly rows: number; readonly bytes: number };
+  /**
+   * The walk of the items of a table in the order written (`ItemWalk`; null for a table that holds
+   * no row)
+   */
+  walkItems(tableId: string): ItemWalk | null;
   /** The handles of the row groups of a set of rows, the rows by group */
   groupsOfRows(handles: Int32Array): Map<RowGroupHandle, number[]>;
   /** The rows read in a table as members of a group (deleted ones included) */
@@ -789,6 +795,11 @@ export class TablesStore implements RowBlocks, TablesWriter, Tables {
   rowBoxIndexSize(): { readonly rows: number; readonly bytes: number } {
     this.rowBoxes.search(-1, 0, 0, 0, 0);
     return { rows: this.rowBoxes.size, bytes: this.rowBoxes.bytes };
+  }
+
+  walkItems(tableId: string): ItemWalk | null {
+    const table = this.tables.get(tableId);
+    return table ? new ItemWalk(table, this) : null;
   }
 
   /** What the versions read and write of the tables */
