@@ -563,6 +563,13 @@ export interface Store extends StoreView, UiState {
    */
   applyBulk(op: BulkOperation, rows?: TableSelection): boolean;
   /**
+   * Of rows, the ones still there that are not locked (themselves, by their group or by their
+   * layer): those a write of many rows writes
+   */
+  unlockedRows(rows: TableSelection): TableSelection;
+  /** Of rows, the ones still there */
+  liveRows(rows: TableSelection): TableSelection;
+  /**
    * Puts a write of many rows made over several tasks (`operations/bulk-sliced.ts`) in the queue of
    * the writes of this client (`write-queue.ts`), the ones queued before finished first: another
    * write of this client (not one of its steps, nor a write from elsewhere) finishes the queue

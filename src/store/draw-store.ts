@@ -570,6 +570,22 @@ export class DrawStore implements Store {
     return this.#queue.pending;
   }
 
+  liveRows(rows: TableSelection): TableSelection {
+    const internals = featureTablesInternals(this.#contract.tables);
+    if (!internals) return TableSelection.empty;
+    return rows.filter((handle) => livePlaceOf(internals, handle) !== undefined);
+  }
+
+  unlockedRows(rows: TableSelection): TableSelection {
+    const internals = featureTablesInternals(this.#contract.tables);
+    if (!internals) return TableSelection.empty;
+    const containers = this.#containers();
+    return rows.filter(
+      (handle) =>
+        livePlaceOf(internals, handle) !== undefined && !isRowLocked(internals, containers, handle),
+    );
+  }
+
   applyBulk(op: BulkOperation, rows?: TableSelection): boolean {
     // Planned from the values the rows have once the writes queued are made
     this.#queue.finish();

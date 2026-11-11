@@ -116,8 +116,10 @@ export function resolveMoveTarget(store: Store, to: MoveTarget): ResolvedTarget 
  * The place of a target in a layer or a group, by the items around it
  *
  * @throws DrawError `invalid-state` for a position by index in a layer held as rows
+ *
+ * @internal
  */
-function placementOf(
+export function placementOf(
   store: Store,
   layerId: string,
   groupId: string | undefined,

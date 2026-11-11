@@ -20,6 +20,7 @@
  * the document before it.
  */
 
+import type { RowUpdate } from '../../feature-table/bulk-plan.js';
 import type { TableSelection } from '../../feature-table/selection.js';
 import { differenceAll, intersectionAll, unionAll } from '../../geometry/boolean.js';
 import type { AreaCoordinates, MultiPolygonCoordinates } from '../../geometry/types.js';
@@ -101,7 +102,7 @@ import type { GroupResource } from './group-resource.js';
 import { idsInStackingOrder, prepareGroup, prepareGroupPatch } from './groups.js';
 import type { LayerResource } from './layer-resource.js';
 import { prepareLayer, prepareLayerPatch } from './layers.js';
-import { resolveMoveTarget } from './placement.js';
+import { placementOf, resolveMoveTarget } from './placement.js';
 import type { SelectionWrites } from './selection-resource.js';
 import type { ResourceDeps } from './shared.js';
 import {
@@ -405,6 +406,15 @@ class Overlay {
    * written otherwise (a feature it writes after is read as it wrote it)
    */
   readonly members = new Map<string, string>();
+  /**
+   * The writes of many rows the transaction made (a target of features selected in bulk), read
+   * over the features of their rows as they are read: in their order, each giving the feature
+   * after it, or null for one it deleted
+   */
+  readonly bulk: Array<{
+    readonly rows: TableSelection;
+    readonly apply: (feature: StoredFeature) => StoredFeature | null;
+  }> = [];
   /** The Store as the checks read it, with what the transaction wrote over it */
   readonly view: Store;
 
@@ -419,7 +429,15 @@ class Overlay {
     };
     const overrides: Record<string, unknown> = {
       getFeature: (id: string) => {
-        const feature = read(this.features, id, () => store.getFeature(id));
+        let feature = read(this.features, id, () => store.getFeature(id));
+        // The writes of many rows, over a feature the transaction did not write otherwise
+        if (feature && this.bulk.length > 0 && !this.features.has(id)) {
+          const handle = store.tables?.getRowRef(id);
+          for (const { rows, apply } of this.bulk) {
+            if (!feature || handle === undefined || !rows.has(handle)) continue;
+            feature = apply(feature) ?? undefined;
+          }
+        }
         // A member of a group the transaction made, written into the group as it is read
         const groupId = this.members.get(id);
         return feature && groupId !== undefined && !this.features.has(id)
@@ -429,6 +447,7 @@ class Overlay {
       getFeatureLayerId: (id: string) => {
         const own = this.features.get(id);
         if (own !== undefined) return own === null ? undefined : own.layerId;
+        if (this.bulk.length > 0) return this.view.getFeature(id)?.layerId;
         return store.getFeatureLayerId(id);
       },
       getLayer: (id: string) => read(this.layers, id, () => store.getLayer(id)),
@@ -697,6 +716,22 @@ class TransactionImpl implements Transaction {
       // read (whatever is selected since), written without touching the selection, the locked
       // ones left as they are
       const rows = selectedRowsOfTarget(this.#store, named);
+      if (selection.bulk && rows && this.#overlay.features.size === 0) {
+        // Written as rows: the IDs are read only by a write that writes them one by one
+        let ids: string[] | undefined;
+        const read = () => {
+          ids ??= this.#idsOfSelection(selection, rows);
+          return ids;
+        };
+        return {
+          kind: 'ids',
+          get ids() {
+            return read();
+          },
+          skipLocked: true,
+          rows,
+        };
+      }
       return { kind: 'ids', ids: this.#idsOfSelection(selection, rows), skipLocked: true };
     }
     if ('all' in target) {
@@ -769,6 +804,18 @@ class TransactionImpl implements Transaction {
       const feature = this.#overlay.view.getFeature(id);
       return feature !== undefined && layers.has(feature.layerId);
     });
+  }
+
+  /**
+   * The rows of the features selected in bulk a target names that are written now (not locked),
+   * when they are written as rows: in a Store of rows that takes a write of many rows now
+   * (null otherwise, the features written one by one)
+   */
+  #bulkRows(resolved: ResolvedTargetOf): TableSelection | null {
+    if (resolved.kind !== 'ids' || !resolved.rows) return null;
+    const store = this.#store;
+    if (!store.tables || store.isInteractionLocked()) return null;
+    return store.unlockedRows(resolved.rows);
   }
 
   /**
@@ -912,6 +959,8 @@ class TransactionImpl implements Transaction {
     ): number => {
       self.#requireEditable();
       const make = sharedPatchMaker(patch);
+      const bulk = self.#bulkRows(resolved);
+      if (bulk) return updateRows(resolved, bulk, patch, make, keep);
       const ids = self.#idsNow(resolved) ?? [];
       // Checked now, on the features it names now: a wrong patch fails it
       const named = namesIds(resolved);
@@ -947,10 +996,86 @@ class TransactionImpl implements Transaction {
       return written;
     };
 
+    /**
+     * A patch given to features selected in bulk: written to their rows in one write, once per
+     * kind of row; a locked row is left as it is, unless the patch is of its lock or its
+     * visibility only
+     */
+    const updateRows = (
+      resolved: ResolvedTargetOf,
+      bulk: TableSelection,
+      patch: FeaturePatch | ((sample: FeatureStyleSample) => FeaturePatch | null),
+      make: ReturnType<typeof sharedPatchMaker>,
+      keep: (op: Op) => void,
+    ): number => {
+      // A patch given whole is checked now; one made per kind is checked as it is made
+      const whole =
+        typeof patch === 'function'
+          ? null
+          : make({ type: 'Point', style: {}, createdZoom: undefined }, undefined);
+      const all = (resolved as { rows: TableSelection }).rows;
+      // A patch of the lock or of the visibility alone is written to the locked rows too
+      const lockOnly = whole !== null && onlyLockOrVisibility(whole);
+      const rows = lockOnly ? self.#store.liveRows(all) : bulk;
+      // The rows read now hold at the commit when nothing changed the document since and no
+      // write of the transaction comes before it
+      const first = self.#ops.length === 0;
+      overlay.bulk.push({
+        rows,
+        apply: (feature) => {
+          const made = make(sampleOf(feature), feature);
+          return made === null ? feature : { ...feature, ...preparePatch(feature, made) };
+        },
+      });
+      keep(() => {
+        const reuse = first && self.#unchangedAtCommit;
+        const now = reuse
+          ? rows
+          : lockOnly
+            ? self.#store.liveRows(all)
+            : self.#store.unlockedRows(bulk);
+        if (now.count === 0) return true;
+        return self.#store.applyBulk(
+          {
+            kind: 'update',
+            make: (sample) => {
+              const made = make(sample, undefined);
+              return made === null ? null : rowUpdateOf(made);
+            },
+          },
+          now,
+        );
+      });
+      return rows.count;
+    };
+
     const remove = (target: Target): Promise<number> =>
       self.#run((keep) => {
         const resolved = self.#resolve(target, 'The target');
         self.#requireEditable();
+        const bulk = self.#bulkRows(resolved);
+        if (bulk) {
+          // Features selected in bulk: their rows not locked deleted in one write of the rows
+          overlay.bulk.push({ rows: bulk, apply: () => null });
+          const first = self.#ops.length === 0;
+          keep(() => {
+            const now = first && self.#unchangedAtCommit ? bulk : self.#store.unlockedRows(bulk);
+            if (now.count === 0) return true;
+            const store = self.#store;
+            if (!store.applyBulk({ kind: 'delete' }, now)) return false;
+            // A selection in bulk the deletion left without a feature is cleared with it (the
+            // selection the target was read from, every row of it deleted, is known to be)
+            const selected = store.getSelectedRows();
+            const named = (resolved as { rows?: TableSelection }).rows;
+            const emptied =
+              selected !== null &&
+              ((selected === named && now.count === named.count) ||
+                store.liveRows(selected).count === 0);
+            if (emptied) store.setSelection(null, []);
+            return true;
+          });
+          return bulk.count;
+        }
         const ids = self.#writableIds(resolved);
         for (const id of ids) overlay.features.set(id, null);
         keep(() => {
@@ -991,6 +1116,29 @@ class TransactionImpl implements Transaction {
         const resolvedTarget = resolveMoveTarget(overlay.view, moveTarget);
         self.#requireEditable();
         if (resolvedTarget.locked) throw lockedError([placeIdOf(to)]);
+        const bulk = resolvedTarget.kind !== 'ungroup' ? self.#bulkRows(resolved) : null;
+        if (bulk && resolvedTarget.kind !== 'ungroup') {
+          // Features selected in bulk put in a layer or a group: their rows in one write
+          const layerId =
+            resolvedTarget.kind === 'layer'
+              ? resolvedTarget.layer.id
+              : resolvedTarget.group.layerId;
+          const groupId = resolvedTarget.kind === 'group' ? resolvedTarget.group.id : undefined;
+          const placement = placementOf(
+            overlay.view,
+            layerId,
+            groupId,
+            resolvedTarget.place,
+            new Set(),
+          );
+          overlay.bulk.push({ rows: bulk, apply: (feature) => ({ ...feature, layerId, groupId }) });
+          const first = self.#ops.length === 0;
+          keep(() => {
+            const now = first && self.#unchangedAtCommit ? bulk : self.#store.unlockedRows(bulk);
+            return now.count === 0 || self.#store.applyBulk({ kind: 'place', to: placement }, now);
+          });
+          return bulk.count;
+        }
         const ids = self.#writableIds(resolved);
         for (const id of ids) {
           const feature = self.#feature(id);
@@ -1546,13 +1694,34 @@ class TransactionImpl implements Transaction {
 // Helpers
 // ============================================================================
 
+/** A patch of the Store as the change of a kind of row */
+function rowUpdateOf(patch: StoredFeaturePatch): RowUpdate {
+  return {
+    ...(patch.style !== undefined && { style: patch.style as Record<string, unknown> }),
+    ...(patch.properties !== undefined && {
+      properties: patch.properties as Record<string, unknown>,
+    }),
+    ...(patch.visible !== undefined && { visible: patch.visible }),
+    ...(patch.locked !== undefined && { locked: patch.locked }),
+  };
+}
+
 /** Whether a target names its features by their IDs (not a filter, every feature or the selection) */
 function namesIds(resolved: ResolvedTargetOf): boolean {
   return resolved.kind === 'ids' && resolved.skipLocked !== true;
 }
 
 type ResolvedTargetOf =
-  | { kind: 'ids'; ids: string[]; skipLocked?: boolean }
+  | {
+      kind: 'ids';
+      ids: string[];
+      skipLocked?: boolean;
+      /**
+       * The rows of the features selected in bulk the target names (written as rows, as many
+       * at once, when the transaction wrote none of them before)
+       */
+      rows?: TableSelection;
+    }
   | { kind: 'filter'; matches: (feature: StoredFeature) => boolean };
 
 /** The IDs of every feature, in stacking order */

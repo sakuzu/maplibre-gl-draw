@@ -150,3 +150,70 @@ describe('a target of the selection', () => {
     ]);
   });
 });
+
+describe('the writes of a target of features selected in bulk', () => {
+  function bulkDraw(): Draw {
+    const store = new DrawStore(new TableContractStore(), { selectionIdsLimit: 2 });
+    for (const id of ['l', 'm']) {
+      store.createLayer({
+        id,
+        name: id,
+        visible: true,
+        locked: false,
+        opacity: 1,
+        kind: 'table',
+        styleRule: undefined,
+        metadata: undefined,
+      });
+    }
+    const draw = createDraw(createMapStub().map, {
+      store: store as never,
+      initDefaultLayer: false,
+    });
+    draws.push(draw);
+    writesOf(draw).features.createMany(
+      Array.from({ length: 6 }, (_, i) => ({
+        id: `r${i}`,
+        type: 'Point',
+        geometry: { type: 'Point', coordinates: [i, 1] },
+        layerId: 'l',
+        properties: {},
+        locked: i === 3,
+      })) as never,
+    );
+    draw.selection.setAll();
+    return draw;
+  }
+
+  it('change the look of the rows not locked, read so in the transaction', async () => {
+    const draw = bulkDraw();
+    const style = { 'maplibre-gl-draw:style': { pointColor: '#ff0000' } };
+    const read = await draw.write(async (tx) => {
+      const count = await tx.features.update(draw.selection.target, { properties: style });
+      return { count, r0: tx.features.get('r0')?.properties['maplibre-gl-draw:style'] };
+    });
+    expect(read).toEqual({ count: 5, r0: { pointColor: '#ff0000' } });
+    expect(draw.features.get('r5')?.properties['maplibre-gl-draw:style']).toEqual({
+      pointColor: '#ff0000',
+    });
+    expect(draw.features.get('r3')?.properties['maplibre-gl-draw:style']).toBeUndefined();
+  });
+
+  it('move the rows not locked to another layer, and delete them, read so in the transaction', async () => {
+    const draw = bulkDraw();
+    const moved = await draw.write((tx) =>
+      tx.features.place(draw.selection.target, { layerId: 'm' }),
+    );
+    expect(moved).toBe(5);
+    expect(draw.features.count({ layerId: 'm' })).toBe(5);
+    draw.selection.setAll();
+    const read = await draw.write(async (tx) => {
+      const count = await tx.features.delete(draw.selection.target);
+      return { count, has: tx.features.has('r0'), locked: tx.features.has('r3') };
+    });
+    expect(read).toEqual({ count: 5, has: false, locked: true });
+    expect(draw.features.count()).toBe(1);
+    // The locked one stays, selected
+    expect(draw.selection.value.count).toBe(1);
+  });
+});
