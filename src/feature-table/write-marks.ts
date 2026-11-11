@@ -57,7 +57,7 @@ export class WriteMarks {
     if (!Number.isInteger(mark) || mark < this.#mark || mark > MARK_LIMIT) {
       throw new KasaneError(
         'invalid-state',
-        `FeatureTables: the write mark ${mark} is not after the mark ${this.#mark}`,
+        `Tables: the write mark ${mark} is not after the mark ${this.#mark}`,
       );
     }
     if (mark === this.#mark) return;

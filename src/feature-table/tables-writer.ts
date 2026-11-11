@@ -20,8 +20,9 @@
  */
 
 import type { Utf8Column } from '@sakuzu/tabane';
-import type { RowsChange, RowValues } from '../shared/types/model.js';
+import type { RowsChange } from '../shared/types/model.js';
 import type { RowBlockData } from '../table/row-group-types.js';
+import type { RowValues } from './row-values.js';
 import type { RowHandle } from './types.js';
 
 /**

@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * The table of the groups of features held as columns
+ * The table of the groups held as columns
  *
  * A row in a group names the group by its handle; the id and the key of the order of the group
  * are here, so moving a group writes one entry and none of its members (`compareRowKeys`).

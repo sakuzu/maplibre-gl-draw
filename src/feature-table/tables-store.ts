@@ -287,7 +287,7 @@ export interface RowBlocks {
   readonly styles: StyleTable;
   readonly groups: GroupTable;
   /**
-   * The keys of the order of groups of features written and not in the order read yet: their
+   * The keys of the order of groups written and not in the order read yet: their
    * members are read and drawn where the keys before put them until their reorder goes in. The
    * writes read the order written (`ItemWalk`)
    */
@@ -312,7 +312,7 @@ export interface RowBlocks {
   rowTable(tableId: string): RowTable | undefined;
   /**
    * The state of a row as its copy in its row group is made: from the sets of the state, its
-   * values, its group of features and where it is read (the checks compare the copy with it)
+   * values, its group and where it is read (the checks compare the copy with it)
    */
   rowStateOf(group: RowGroup, row: number): number;
   /** The table and the row group of a handle of a row group */
@@ -337,7 +337,7 @@ export interface RowBlocks {
   ): void;
   /**
    * The rows of a table whose boxes meet one of several boxes, each once, in the order of the
-   * table (as {@link FeatureTablesInternals.searchRowBoxes} for one)
+   * table (as {@link RowBlocks.searchRowBoxes} for one)
    *
    * @param boxes The boxes, `[minX, minY, maxX, maxY]` one after another
    * @param visit Receives each row, in order, with the group it is read from
@@ -357,14 +357,14 @@ export interface RowBlocks {
   rowBoxIndexSize(): { readonly rows: number; readonly bytes: number };
   /** The handles of the row groups of a set of rows, the rows by group */
   groupsOfRows(handles: Int32Array): Map<RowGroupHandle, number[]>;
-  /** The rows read in a table as members of a group of features (deleted ones included) */
+  /** The rows read in a table as members of a group (deleted ones included) */
   membersIn(tableId: string, group: GroupHandle): RowHandle[];
   /** Whether row groups built of new rows written are still waiting to be taken in */
   readonly hasQueuedBlocks: boolean;
   /**
    * Takes in the row groups built of new rows written that wait, one group per step, within the
    * budget of the frame (at least one group per call), but the ones of a table whose reorder of
-   * groups of features waits (taken in once it is in). A group that cannot be taken in goes to the
+   * groups waits (taken in once it is in). A group that cannot be taken in goes to the
    * delta
    *
    * @returns Whether groups are still waiting
@@ -372,7 +372,7 @@ export interface RowBlocks {
   advanceQueuedBlocks(budget: TableWorkBudget): boolean;
   /**
    * Builds the new rows written and takes in every row group waiting at once (a host without
-   * frames, the tests), but the ones of a table whose reorder of groups of features waits (they are
+   * frames, the tests), but the ones of a table whose reorder of groups waits (they are
    * taken in once it is in)
    */
   addQueuedRowBlocks(): void;
@@ -456,7 +456,7 @@ export interface RowBlocks {
   versionStats(): { swapped: number; pending: number; mostPending: number; lastMergeMs: number };
   /** Sets the bytes the versions held at once may take (the tests, the measurements) */
   setPendingVersionBytes(bytes: number): void;
-  /** Takes every row out of the tables (see `FeatureTablesWriter.clear`) */
+  /** Takes every row out of the tables (see `TablesWriter.clear`) */
   clear(): void;
   /**
    * The rows the tables hold and the positions of their geometries: the rows of the blocks of
@@ -562,7 +562,7 @@ export class TablesStore implements RowBlocks, TablesWriter, Tables {
   private readonly versions: GroupVersions;
   private readonly worker: FeatureTablesWorker | undefined;
   private readonly onRelease: ((handles: Int32Array) => void) | undefined;
-  /** The rows of the deltas that are features drawn over rows (drawn, not read) */
+  /** The rows of the deltas that are rows drawn over rows (drawn, not read) */
   protected readonly drawnOnlyRows = new Set<RowHandle>();
   /**
    * The rows each deletion of this client keeps, by token, in the order the tokens were made (a
@@ -571,7 +571,7 @@ export class TablesStore implements RowBlocks, TablesWriter, Tables {
   private readonly retained = new Map<number, Set<RowHandle>>();
   /** The token that keeps each deleted row kept */
   private readonly retainOf = new Map<RowHandle, number>();
-  /** The groups of features each deletion of this client keeps, by token */
+  /** The groups each deletion of this client keeps, by token */
   private readonly retainedGroups = new Map<number, Set<GroupHandle>>();
   /** The token that keeps each deleted group kept */
   private readonly groupRetainOf = new Map<GroupHandle, number>();
@@ -579,13 +579,13 @@ export class TablesStore implements RowBlocks, TablesWriter, Tables {
   /** The deleted rows whose ids are forgotten, freed once their rows are gone */
   private readonly forgotten = new Set<RowHandle>();
   /**
-   * The groups of features deleted that rows still name or a token keeps (taken out once none
+   * The groups deleted that rows still name or a token keeps (taken out once none
    * does)
    */
   private readonly deletedGroups = new Set<GroupHandle>();
-  /** `FeatureTablesOptions.dimensionsOf` */
+  /** `TablesStoreOptions.dimensionsOf` */
   private readonly declaredDims: ((tableId: string) => CoordinateDimensions) | undefined;
-  /** The system of the coordinates of the rows (`FeatureTablesOptions.coordinates`) */
+  /** The system of the coordinates of the rows (`TablesStoreOptions.coordinateSystem`) */
   private readonly coordinates: CoordinateSystem;
   /**
    * The dimensions of the tables whose rows were all taken out (`clear`), kept for the rows that
@@ -631,7 +631,7 @@ export class TablesStore implements RowBlocks, TablesWriter, Tables {
     if (this.layout.shapes.length > 1 || this.layout.keyed.length > 1) {
       throw new KasaneError(
         'invalid-input',
-        'FeatureTables: the rows hold one shape column and one keyed column at most',
+        'Tables: the rows hold one shape column and one keyed column at most',
       );
     }
     const blockWholes = new Map<string, number>();
@@ -668,7 +668,7 @@ export class TablesStore implements RowBlocks, TablesWriter, Tables {
       if (!this.blockWholes.has(field) && !(this.fields.has(field) && field.includes(':'))) {
         throw new KasaneError(
           'invalid-input',
-          `FeatureTables: the field ${field} cannot place a row again (a whole column whose values a row block keeps and a key of a keyed column can)`,
+          `Tables: the field ${field} cannot place a row again (a whole column whose values a row block keeps and a key of a keyed column can)`,
         );
       }
     }
@@ -851,7 +851,7 @@ export class TablesStore implements RowBlocks, TablesWriter, Tables {
   }
 
   /**
-   * Whether a reorder of the groups of features of a table waits to go in: the keys of its groups
+   * Whether a reorder of the groups of a table waits to go in: the keys of its groups
    * are going to change, so nothing new is put among its row groups until then (row groups taken
    * in, new rows built into groups of their own, next versions): what is placed by the keys
    * written would be put among the groups by the keys before
@@ -999,7 +999,7 @@ export class TablesStore implements RowBlocks, TablesWriter, Tables {
     if (!isCoordinateDimensions(dims)) {
       throw new DrawError(
         'invalid-state',
-        `FeatureTables: the table "${tableId}" has the dimensions ${dims}`,
+        `Tables: the table "${tableId}" has the dimensions ${dims}`,
       );
     }
     return dims;
@@ -1136,7 +1136,7 @@ export class TablesStore implements RowBlocks, TablesWriter, Tables {
 
   /**
    * Takes row groups into a table at once: every group is checked before any is taken in (its
-   * shape, its dimensions, its groups of features, and that none of its ids is a row already), then
+   * shape, its dimensions, its groups, and that none of its ids is a row already), then
    * each is put at its place in the order of the table (into the delta when its rows are not in the
    * order of their keys, overlap another group, or a reorder of the groups of the table waits),
    * and its rows are told as created
@@ -1147,21 +1147,20 @@ export class TablesStore implements RowBlocks, TablesWriter, Tables {
       checkShape(data, this.layout);
       checkDims(data, dims);
       this.fitCaches(data);
-      if (data.length === 0)
-        throw new DrawError('invalid-input', 'FeatureTables: an empty row group');
+      if (data.length === 0) throw new DrawError('invalid-input', 'Tables: an empty row group');
       for (let r = 0; r < data.length; r++) {
         const group = data.groups[r];
         if (group >= 0 && !this.groups.has(group)) {
           throw new DrawError(
             'not-found',
-            `FeatureTables: a row names the group ${group}, which is unknown`,
+            `Tables: a row names the group ${group}, which is unknown`,
           );
         }
         const handle = this.ids.handleOfEntry(data.ids, r, data.idHashes[r]);
         if (handle >= 0 && (this.ids.mainGroup(handle) >= 0 || this.ids.deltaTable(handle) >= 0)) {
           throw new DrawError(
             'already-exists',
-            `FeatureTables: "${this.ids.idOf(handle)}" is already a row`,
+            `Tables: "${this.ids.idOf(handle)}" is already a row`,
           );
         }
       }
@@ -1706,7 +1705,7 @@ export class TablesStore implements RowBlocks, TablesWriter, Tables {
     this.revisionCount++;
   }
 
-  /** Writes values of rows (see `FeatureTablesWriter.apply`) */
+  /** Writes values of rows (see `TablesWriter.apply`) */
   apply(patch: RowValues, options: TablesWriteOptions = {}): TablesWrite {
     const drafts = new Map<string, TableChangeDraft>();
     this.applyPatch(patch, drafts);
@@ -1904,15 +1903,12 @@ export class TablesStore implements RowBlocks, TablesWriter, Tables {
       if (values.length !== n) {
         throw new DrawError(
           'invalid-input',
-          `FeatureTables: "${field}" has ${values.length} values for ${n} rows`,
+          `Tables: "${field}" has ${values.length} values for ${n} rows`,
         );
       }
     }
     if (patch.deleted && patch.deleted.length !== n) {
-      throw new DrawError(
-        'invalid-input',
-        'FeatureTables: deleted has another length than the rows',
-      );
+      throw new DrawError('invalid-input', 'Tables: deleted has another length than the rows');
     }
   }
 
@@ -1925,7 +1921,7 @@ export class TablesStore implements RowBlocks, TablesWriter, Tables {
     checkStateBits('the bits of groups', mask, USER_STATES & ~this.rowStates.mask);
     for (const group of groups) {
       if (!this.groups.has(group)) {
-        throw new KasaneError('not-found', `FeatureTables: no group ${group}`);
+        throw new KasaneError('not-found', `Tables: no group ${group}`);
       }
     }
     const changed = new Set<GroupHandle>();
@@ -1938,7 +1934,7 @@ export class TablesStore implements RowBlocks, TablesWriter, Tables {
     this.notifyWork();
   }
 
-  /** Makes the copies of the state of the rows of groups of features again */
+  /** Makes the copies of the state of the rows of groups again */
   private refreshGroupStates(shown: ReadonlySet<GroupHandle>): void {
     for (const table of this.tables.values()) {
       // The row groups around the members of the groups (by their keys), and the delta
@@ -1962,9 +1958,9 @@ export class TablesStore implements RowBlocks, TablesWriter, Tables {
 
   /**
    * Checks the values of a patch before anything is written: one value per row in every field,
-   * the geometries, the groups of features, the keys, and what a new row cannot be without
+   * the geometries, the groups, the keys, and what a new row cannot be without
    *
-   * @returns The handle of the group of features of each row, when the patch writes them
+   * @returns The handle of the group of each row, when the patch writes them
    */
   private checkRows(patch: RowValues): {
     groupHandles: number[] | undefined;
@@ -1979,7 +1975,7 @@ export class TablesStore implements RowBlocks, TablesWriter, Tables {
       if (!geometry || typeof geometry !== 'object' || !('type' in geometry)) {
         throw new DrawError(
           'invalid-input',
-          `FeatureTables: the geometry of the row ${handles[i]} is not a geometry`,
+          `Tables: the geometry of the row ${handles[i]} is not a geometry`,
         );
       }
     });
@@ -2005,7 +2001,7 @@ export class TablesStore implements RowBlocks, TablesWriter, Tables {
         if (typeof parent !== 'string' || parent === '') {
           throw new DrawError(
             'invalid-input',
-            `FeatureTables: the parent of the row ${handles[i]} is not an id`,
+            `Tables: the parent of the row ${handles[i]} is not an id`,
           );
         }
         const group = this.groups.handleOfId(parent);
@@ -2024,7 +2020,7 @@ export class TablesStore implements RowBlocks, TablesWriter, Tables {
       if (from !== to && !to.startsWith(from)) {
         throw new DrawError(
           'invalid-input',
-          `FeatureTables: the row ${handles[i]} has coordinates of ${from}, the table "${tableId}" of ${to}`,
+          `Tables: the row ${handles[i]} has coordinates of ${from}, the table "${tableId}" of ${to}`,
         );
       }
     });
@@ -2037,16 +2033,16 @@ export class TablesStore implements RowBlocks, TablesWriter, Tables {
         if (typeof value === 'string' || (value === undefined && !!places[i])) return;
         throw new DrawError(
           'invalid-input',
-          `FeatureTables: the ${name} of the row ${handles[i]} is not a string`,
+          `Tables: the ${name} of the row ${handles[i]} is not a string`,
         );
       });
     }
     places.forEach((place, i) => {
       if (place) return;
       if (!this.ids.has(handles[i])) {
-        throw new DrawError('not-found', `FeatureTables: no row has the handle ${handles[i]}`);
+        throw new DrawError('not-found', `Tables: no row has the handle ${handles[i]}`);
       }
-      // A new row: what a feature cannot be without
+      // A new row: what a new row cannot be without
       const missing = [
         ['type', types?.[i]],
         ['parent', parents?.[i]],
@@ -2056,7 +2052,7 @@ export class TablesStore implements RowBlocks, TablesWriter, Tables {
       if (missing.length > 0) {
         throw new DrawError(
           'invalid-input',
-          `FeatureTables: no row has the handle ${handles[i]}, and a new row needs ${missing
+          `Tables: no row has the handle ${handles[i]}, and a new row needs ${missing
             .map(([name]) => name)
             .join(', ')}`,
         );
@@ -2068,8 +2064,8 @@ export class TablesStore implements RowBlocks, TablesWriter, Tables {
   /**
    * Marks the rows a patch may give another box: every row of a patch that writes what a box is
    * made of (the geometry, the type, the table, the group or whether it is deleted). A patch of the
-   * attributes and the style marks only the rows whose box is not their bbox: the box given for
-   * their type (`rowBoxes`) reads the feature
+   * attributes and the style marks only the rows whose box is not their bbox: the box the user of
+   * the tables gives (`hasGivenBox`) reads their values
    */
   private markBoxes(patch: RowValues): void {
     const { handles, fields, deleted } = patch;
@@ -2315,7 +2311,7 @@ export class TablesStore implements RowBlocks, TablesWriter, Tables {
   }
 
   /**
-   * Writes values of groups of features (see `FeatureTablesWriter.applyGroups`): a new key of
+   * Writes values of groups (see `TablesWriter.applyGroups`): a new key of
    * the order of a group puts its members in another order (`reorderGroups`), a new parent takes
    * its members to that table with it (they are told as written), a group shown or hidden makes
    * the copies of the state of its members again
@@ -2327,21 +2323,18 @@ export class TablesStore implements RowBlocks, TablesWriter, Tables {
       if (!this.groupFields.has(field)) {
         throw new KasaneError(
           'invalid-input',
-          `FeatureTables: ${JSON.stringify(field)} is not a field of a group`,
+          `Tables: ${JSON.stringify(field)} is not a field of a group`,
         );
       }
       if (values.length !== n) {
         throw new DrawError(
           'invalid-input',
-          `FeatureTables: "${field}" has ${values.length} values for ${n} groups`,
+          `Tables: "${field}" has ${values.length} values for ${n} groups`,
         );
       }
     }
     if (deleted && deleted.length !== n) {
-      throw new DrawError(
-        'invalid-input',
-        'FeatureTables: deleted has another length than the groups',
-      );
+      throw new DrawError('invalid-input', 'Tables: deleted has another length than the groups');
     }
     const value = (field: TableGroupField, i: number) => fields.get(field)?.[i];
     for (let i = 0; i < n; i++) {
@@ -2351,13 +2344,13 @@ export class TablesStore implements RowBlocks, TablesWriter, Tables {
         if (v !== undefined && typeof v !== 'string') {
           throw new DrawError(
             'invalid-input',
-            `FeatureTables: the ${field} of the group ${handles[i]} is not a string`,
+            `Tables: the ${field} of the group ${handles[i]} is not a string`,
           );
         }
         if (v === undefined && !this.groups.has(handles[i])) {
           throw new DrawError(
             'invalid-input',
-            `FeatureTables: the new group ${handles[i]} needs its ${field}`,
+            `Tables: the new group ${handles[i]} needs its ${field}`,
           );
         }
       }
@@ -2366,7 +2359,7 @@ export class TablesStore implements RowBlocks, TablesWriter, Tables {
         if (v !== undefined && typeof v !== 'boolean') {
           throw new DrawError(
             'invalid-input',
-            `FeatureTables: the ${field} of the group ${handles[i]} is not a boolean`,
+            `Tables: the ${field} of the group ${handles[i]} is not a boolean`,
           );
         }
       }
@@ -2466,7 +2459,7 @@ export class TablesStore implements RowBlocks, TablesWriter, Tables {
   }
 
   /**
-   * Puts the members of groups of features in the order of new keys of the groups: the row
+   * Puts the members of groups in the order of new keys of the groups: the row
    * groups of the table are cut at the runs of the members and at the places they go to, and
    * the pieces are put in their new order by a version swapped in once its chunks are up (the
    * keys go in then; until then the order before is read and drawn). The rows are not written.
@@ -2559,7 +2552,7 @@ export class TablesStore implements RowBlocks, TablesWriter, Tables {
   }
 
   /**
-   * The groups of features a row (of a group, of a delta, of a creation) names, of some groups:
+   * The groups a row (of a group, of a delta, of a creation) names, of some groups:
    * the row groups around their rows (by their keys) and the deltas read once for all of them
    */
   private groupsNamed(of: Iterable<GroupHandle>): Set<GroupHandle> {
@@ -3005,8 +2998,8 @@ export class TablesStore implements RowBlocks, TablesWriter, Tables {
       for (const listener of this.writeListeners) listener(tableId, list);
     }
     this.touch(table.tableId, GroupVersions.boundsOf(version));
-    // The rows left out are gone: the handles of the ones forgotten are freed, and the groups of
-    // features deleted no row names any more are taken out
+    // The rows left out are gone: the handles of the ones forgotten are freed, and the groups
+    // deleted no row names any more are taken out
     for (const handle of version.dropped) this.freeIfGone(handle);
     if (version.dropped.length > 0) {
       const named = this.groupsNamed(this.deletedGroups);
@@ -3089,14 +3082,14 @@ export class TablesStore implements RowBlocks, TablesWriter, Tables {
       const watched = coming.length > 0 && this.versions.watches(marks.mark);
       for (let r = 0; r < group.data.length; r++) {
         const handle = group.data.handles[r];
-        // A feature drawn over a row stays in the delta as long as it is drawn
+        // A row drawn over a row stays in the delta as long as it is drawn
         if (this.drawnOnlyRows.has(handle)) kept[r] = 1;
         // A row of the delta before, in the order of the rows when they are found in their order
         const mark =
           keysKept && pairs[r * 2] === 0 ? old.marks[pairs[r * 2 + 1]] : marksOf.get(handle);
         if (mark !== undefined) group.marks[r] = mark;
         else if (this.drawnOnlyRows.has(handle)) {
-          // A feature drawn over the rows is not a value written: it has the mark of now, and
+          // A row drawn over the rows is not a value written: it has the mark of now, and
           // stamps nothing (it is drawn in a frame that writes none too)
           group.marks[r] = marks.mark;
         } else {
@@ -3207,11 +3200,11 @@ export class TablesStore implements RowBlocks, TablesWriter, Tables {
     for (let r = 0; r < data.length; r++) {
       const handle = data.handles[r];
       if (!this.ids.has(handle))
-        throw new DrawError('not-found', `FeatureTables: the handle ${handle} is unknown`);
+        throw new DrawError('not-found', `Tables: the handle ${handle} is unknown`);
       if (this.ids.mainGroup(handle) >= 0 || this.ids.deltaTable(handle) >= 0) {
         throw new DrawError(
           'already-exists',
-          `FeatureTables: "${this.ids.idOf(handle)}" is already a row`,
+          `Tables: "${this.ids.idOf(handle)}" is already a row`,
         );
       }
     }
@@ -3222,7 +3215,7 @@ export class TablesStore implements RowBlocks, TablesWriter, Tables {
       if (!this.styles.has(styles[r])) {
         throw new DrawError(
           'not-found',
-          `FeatureTables: a row names the style ${styles[r]}, which is unknown`,
+          `Tables: a row names the style ${styles[r]}, which is unknown`,
         );
       }
     }
@@ -3262,7 +3255,7 @@ export class TablesStore implements RowBlocks, TablesWriter, Tables {
     const rowFlags = (declared.rowFlags ?? []).map(({ column, states }) => {
       const flag = this.flagBits.get(column);
       if (flag === undefined) {
-        throw new KasaneError('invalid-input', `FeatureTables: "${column}" is not a flag column`);
+        throw new KasaneError('invalid-input', `Tables: "${column}" is not a flag column`);
       }
       checkStateBits(`the states of "${column}"`, states, among);
       return { flag, states };
@@ -3278,7 +3271,7 @@ export class TablesStore implements RowBlocks, TablesWriter, Tables {
         if (flag === 0) {
           throw new KasaneError(
             'invalid-input',
-            `FeatureTables: "${column}" is not a flag column of the groups`,
+            `Tables: "${column}" is not a flag column of the groups`,
           );
         }
         checkStateBits(`the states of "${column}"`, states, among);
@@ -3290,7 +3283,7 @@ export class TablesStore implements RowBlocks, TablesWriter, Tables {
       if (at === undefined) {
         throw new KasaneError(
           'invalid-input',
-          `FeatureTables: "${column}" is not a whole column each row block keeps`,
+          `Tables: "${column}" is not a whole column each row block keeps`,
         );
       }
       checkStateBits(`the states of "${column}"`, states, among);
@@ -3542,7 +3535,7 @@ function checkShape(data: RowBlockData, layout: RowColumnLayout): void {
   ) {
     throw new DrawError(
       'invalid-input',
-      'FeatureTables: a row group holds other columns than the ones declared',
+      'Tables: a row group holds other columns than the ones declared',
     );
   }
   const perRow: Array<[string, number]> = [
@@ -3573,19 +3566,13 @@ function checkShape(data: RowBlockData, layout: RowColumnLayout): void {
   ];
   for (const [name, length] of perRow) {
     if (length !== n) {
-      throw new DrawError(
-        'invalid-input',
-        `FeatureTables: ${name} has ${length} entries for ${n} rows`,
-      );
+      throw new DrawError('invalid-input', `Tables: ${name} has ${length} entries for ${n} rows`);
     }
   }
   for (const keyed of data.keyed) {
     for (const column of keyed?.columns ?? []) {
       if (column.length !== n)
-        throw new DrawError(
-          'invalid-input',
-          'FeatureTables: an attribute column has another length',
-        );
+        throw new DrawError('invalid-input', 'Tables: an attribute column has another length');
     }
   }
 }
@@ -3610,7 +3597,7 @@ function checkDims(data: RowBlockData, dims: CoordinateDimensions): void {
     if (own !== dims) {
       throw new DrawError(
         'invalid-input',
-        `FeatureTables: a row group has coordinates of ${own}, its table ${dims}`,
+        `Tables: a row group has coordinates of ${own}, its table ${dims}`,
       );
     }
   }

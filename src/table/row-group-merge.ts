@@ -61,7 +61,7 @@ export interface RowBlockMerge {
    * is taken once
    */
   readonly rows: Int32Array;
-  /** The groups of features the rows name (their keys order their members) */
+  /** The groups the rows name (their keys order their members) */
   readonly groups?: readonly GroupEntry[] | null;
   /** Whether the rows are put in the order of the table (true when omitted) */
   readonly sort?: boolean;
@@ -90,7 +90,7 @@ export interface RowBlockMerge {
 }
 
 /**
- * What the tables merge: row blocks with every column, and the groups of features as the tables
+ * What the tables merge: row blocks with every column, and the groups as the tables
  * read them
  *
  * @internal
@@ -105,7 +105,7 @@ export interface RowBlockDataMerge extends Omit<RowBlockMerge, 'sources' | 'grou
  *
  * @returns The new row blocks (none for no row); their handles are those of the rows
  * @throws `KasaneError` with the code `invalid-input` when a source holds styles not numbered yet,
- *   or `not-found` when a row names a group of features the keys do not give
+ *   or `not-found` when a row names a group the keys do not give
  */
 export function mergeRowBlock(merge: RowBlockMerge): RowBlock[] {
   return mergeRowBlockData(merge as RowBlockDataMerge);

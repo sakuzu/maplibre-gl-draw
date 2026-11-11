@@ -4,7 +4,7 @@
 /**
  * The types of a row group: a run of the rows of a table, held as columns
  *
- * The features of a document can be held as rows rather than as objects: the rows of a table
+ * The rows of a document can be held as columns rather than as objects: the rows of a table
  * are cut, in the order of the table, into groups of a few thousand rows, and every group is a
  * set of columns of typed arrays that is never changed in place in its shape. A Worker builds
  * the groups (`createRowBlockBuilder`) and sends them to the main thread without a copy
@@ -39,7 +39,7 @@ export interface RowBlock {
   /**
    * The handle of each row: a number the document gives a row once and never changes. A Worker
    * cannot give them, so a row block built in a Worker holds -1 until the main thread does
-   * (`FeatureTablesWriter.allocateHandles`)
+   * (`TablesWriter.allocateHandles`)
    */
   readonly handles: Int32Array;
   /** The id of each row */
@@ -47,7 +47,7 @@ export interface RowBlock {
   /** The hash of the bytes of each id (computed where the row block is built) */
   readonly idHashes: Uint32Array;
   /**
-   * The group of features of each row, by the handle the builder was given for it
+   * The group of each row, by the handle the builder was given for it
    * (`GroupEntry.handle`; -1 outside a group)
    */
   readonly groups: Int32Array;

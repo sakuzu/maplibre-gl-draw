@@ -4,7 +4,7 @@
 /**
  * The items of a table held as rows read a few at a time (`ItemWalk`): where an item stands, the
  * items just below and above it, the first and the last item of a table or of the members of a
- * group of features
+ * group
  *
  * The list of the items of a table (`RowTable.itemsOf`) is made again after every change of the
  * order, from every row of the table. What a write of a few items reads of the order (where to put
@@ -12,10 +12,10 @@
  * rows next to the items, so it costs the items it reads and not the rows of the table.
  *
  * The items are numbered as the changes of the order number them: a row by twice its handle, a
- * group of features by twice its handle plus one. A container is the table (-1), or a group of
- * features whose members are its items.
+ * group by twice its handle plus one. A container is the table (-1), or a group whose members
+ * are its items.
  *
- * The order walked is the order written, which the writes read: a group of features given a new
+ * The order walked is the order written, which the writes read: a group given a new
  * key stands at the place of that key at once, though its members are read and drawn in the order
  * before until their reorder goes in (`ItemWalkSource.writtenOrders`). Its rows are passed where
  * they stand, and the group is put among the other items by its new key.
@@ -38,7 +38,7 @@ export function rowCode(handle: RowHandle): number {
 }
 
 /**
- * The number of a group of features as an item
+ * The number of a group as an item
  *
  * @internal
  */
@@ -58,7 +58,7 @@ export interface ItemWalkSource {
     handle: RowHandle,
   ): { readonly table: RowTable; readonly group: RowGroup; readonly row: number } | undefined;
   /**
-   * The keys of the order of groups of features written and not in the order read yet: their
+   * The keys of the order of groups written and not in the order read yet: their
    * members are read where the keys before put them until their reorder goes in (none when
    * omitted)
    */
@@ -73,7 +73,7 @@ export interface ItemWalkSource {
 
 /**
  * The key an item is ordered by in its container: the key of its order and its id (a row or a
- * group of features in a table), or the key of its order in its group and its id (a member)
+ * group in a table), or the key of its order in its group and its id (a member)
  *
  * @internal
  */
@@ -127,9 +127,9 @@ export class ItemWalk {
 
   /**
    * The rows an item spans (null when it is not an item of the container: a row of another
-   * table or group, a deleted row, a group of features without a member that is not deleted)
+   * table or group, a deleted row, a group without a member that is not deleted)
    *
-   * @param container -1 for the table, or the group of features whose members are the items
+   * @param container -1 for the table, or the group whose members are the items
    */
   span(code: number, container: GroupHandle): ItemSpan | null {
     if ((code & 1) === 0) {
@@ -222,7 +222,7 @@ export class ItemWalk {
     return this.later(last, this.writtenBefore(key, skip), -1);
   }
 
-  /** The handles of the members of a group of features, in their order, from `start` on */
+  /** The handles of the members of a group, in their order, from `start` on */
   members(group: GroupHandle, start = 0, count = Number.POSITIVE_INFINITY): RowHandle[] {
     const out: RowHandle[] = [];
     if (!this.source.groups.has(group)) return out;
@@ -237,7 +237,7 @@ export class ItemWalk {
     return out;
   }
 
-  /** The number of the members of a group of features (deleted rows left out) */
+  /** The number of the members of a group (deleted rows left out) */
   memberCount(group: GroupHandle): number {
     return this.members(group).length;
   }
@@ -269,7 +269,7 @@ export class ItemWalk {
   }
 
   /**
-   * The key an item of the table is ordered by: the key written of a group of features, the key
+   * The key an item of the table is ordered by: the key written of a group, the key
    * of the order of a row
    */
   keyOf(code: number): ItemKey {
@@ -286,7 +286,7 @@ export class ItemWalk {
     ];
   }
 
-  /** Whether an item is a group of features whose key written is not in the order read yet */
+  /** Whether an item is a group whose key written is not in the order read yet */
   private isWritten(code: number): boolean {
     return (code & 1) === 1 && this.written.has(code >> 1);
   }
@@ -467,7 +467,7 @@ function isDeleted(at: { readonly group: RowGroup; readonly row: number }): bool
   return (at.group.data.flags[at.row] & ROW_FLAG_DELETED) !== 0;
 }
 
-/** Whether a row is a member of a group of features */
+/** Whether a row is a member of a group */
 function inGroup(at: OrderRow, group: GroupHandle): boolean {
   return at.group.data.groups[at.row] === group;
 }

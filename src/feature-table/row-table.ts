@@ -213,20 +213,20 @@ export function widenBounds(
 
 /** An item that is a row */
 const ITEM_KIND_ROW = 0;
-/** An item that is a group of features */
+/** An item that is a group */
 const ITEM_KIND_GROUP = 1;
 
 /**
- * The items of a table in their order, and the members of its groups of features
+ * The items of a table in their order, and the members of its groups
  *
  * @internal
  */
 export interface TableItems {
-  /** The kind of each item (0: a row, 1: a group of features) */
+  /** The kind of each item (0: a row, 1: a group) */
   readonly kinds: Uint8Array;
   /** The handle of the row or of the group of each item */
   readonly handles: Int32Array;
-  /** The handles of the rows of each group of features, in their order */
+  /** The handles of the rows of each group, in their order */
   readonly members: ReadonlyMap<number, Int32Array>;
   /** The number of the rows that are not deleted */
   readonly rowCount: number;
@@ -308,7 +308,7 @@ export class RowTable {
   /** The places of the rows of the delta, and what they were found with */
   private places: DeltaPlaces | null = null;
   private placesKey = '';
-  /** The revision of the keys of the groups of features the rows of the delta are in the order of */
+  /** The revision of the keys of the groups the rows of the delta are in the order of */
   deltaKeysRevision = -1;
   /** The group of each row moved since its group was built, by handle */
   private readonly moved = new Map<number, RowGroup>();
@@ -317,7 +317,7 @@ export class RowTable {
   /** The new rows read before their own groups are taken in (`setPendingSource`) */
   private pendingSource: (() => readonly RowGroup[]) | null = null;
   /**
-   * Whether a row of the delta is a feature drawn over a row for this client only (drawn, not
+   * Whether a row of the delta is a row drawn over a row for this client only (drawn, not
    * read: `setDrawnOnly`)
    */
   private drawnOnly: ((handle: number) => boolean) | null = null;
@@ -337,7 +337,7 @@ export class RowTable {
 
   /**
    * @param tableId The table
-   * @param groupKeys The keys of the groups of features the rows name
+   * @param groupKeys The keys of the groups the rows name
    * @param serial The number of the table among the tables of its tables
    * @param deltaHandle The handle of the group of its delta
    * @param dims The dimensions of the coordinates of its rows
@@ -611,7 +611,7 @@ export class RowTable {
   }
 
   /**
-   * Sets which rows of the delta are drawn and not read (the features drawn over rows for this
+   * Sets which rows of the delta are drawn and not read (the rows drawn over rows for this
    * client only): the order and the searches leave them out
    */
   setDrawnOnly(test: (handle: number) => boolean): void {
@@ -629,7 +629,7 @@ export class RowTable {
    * The rows read outside the groups of the table, in the order of their keys: the rows of the
    * delta and the new rows read before their groups are taken in, with their places among the
    * rows of the groups (found again when the groups, the delta, the new rows or the keys of the
-   * groups of features changed)
+   * groups changed)
    */
   private readExtras(): ReadExtras {
     const keys = this.groupKeys.revision ?? 0;
@@ -726,7 +726,7 @@ export class RowTable {
 
   /**
    * The places of the rows of the delta among the rows of the groups (found again when the
-   * groups, the delta or the keys of the groups of features changed)
+   * groups, the delta or the keys of the groups changed)
    */
   deltaPlaces(): DeltaPlaces {
     const delta = this.delta.group;
@@ -782,8 +782,8 @@ export class RowTable {
   }
 
   /**
-   * The items of the table in their order: its rows outside a group of features and its groups
-   * of features (one item at the place of their members, which follow each other), deleted rows
+   * The items of the table in their order: its rows outside a group and its groups (one item at
+   * the place of their members, which follow each other), deleted rows
    * left out; with the members of each group in their order. Made again when read after a change
    * of the rows (`touchItems`)
    */
@@ -791,8 +791,8 @@ export class RowTable {
     if (this.items) return this.items;
     const order = this.rowOrder();
     const n = order.handles.length;
-    // Counted first, so the arrays are made at their size: a row outside a group of features is
-    // an item, and a group of features is one item at each run of its members
+    // Counted first, so the arrays are made at their size: a row outside a group is
+    // an item, and a group is one item at each run of its members
     let count = 0;
     let deleted = 0;
     let last = -1;

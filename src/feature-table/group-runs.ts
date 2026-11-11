@@ -2,11 +2,11 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * Where the row groups of a table are cut when groups of features are given new keys of their
+ * Where the row groups of a table are cut when groups are given new keys of their
  * order (`groupRunCuts`): at the runs of the members of the groups, and at the places the new keys
  * put them
  *
- * The members of a group of features follow each other in the order of the table, at the key of
+ * The members of a group follow each other in the order of the table, at the key of
  * the group, so the row groups that hold them are found by the keys of the group, and the place a
  * new key puts them is found by its key among the rows that stay: what a group given a new key
  * reads is the row groups around its members and its place, not every row of the table.
@@ -34,7 +34,7 @@ export interface GroupRunCuts {
 }
 
 /**
- * The cuts of the row groups of a table for groups of features given new keys: before and after
+ * The cuts of the row groups of a table for groups given new keys: before and after
  * each run of their members, and before the first row that is no member of them and comes after
  * them with the new keys
  *
@@ -131,8 +131,8 @@ export function groupRunCuts(
 }
 
 /**
- * The places in the order of a table of the row groups that can hold members of groups of
- * features: the ones whose rows meet the keys of a group (its members follow each other there),
+ * The places in the order of a table of the row groups that can hold members of groups: the
+ * ones whose rows meet the keys of a group (its members follow each other there),
  * found by a search of the keys, in their order
  *
  * @internal
@@ -166,12 +166,12 @@ export function rowGroupsHolding(
   return [...holding].sort((a, b) => a - b);
 }
 
-/** A key before every member of a group of features and after every item before the group */
+/** A key before every member of a group and after every item before the group */
 function groupStart(group: GroupHandle): RowKeySource {
   return { ids: EMPTY, keys: EMPTY, groups: Int32Array.of(group) };
 }
 
-/** A key after every member of a group of features and before every item after the group */
+/** A key after every member of a group and before every item after the group */
 function groupEnd(group: GroupHandle, groups: GroupKeySource & GroupTable): RowKeySource {
   // The id of the group followed by the smallest character: no item id comes between them
   return {

@@ -80,7 +80,7 @@ export const ROW_BLOCK_TARGET_ROWS = 4096;
 export const ROW_BLOCK_TARGET_VERTICES = 40_000;
 
 /**
- * A group of features the rows can belong to: its handle, its id and the key of its order
+ * A group the rows can belong to: its handle, its id and the key of its order
  */
 export interface GroupEntry {
   /** The handle of the group, which a row names */
@@ -95,7 +95,7 @@ export interface GroupEntry {
  * The options of {@link createRowBlockBuilder}
  */
 export interface RowBlockBuilderOptions {
-  /** The groups of features the rows can belong to (none when omitted) */
+  /** The groups the rows can belong to (none when omitted) */
   readonly groups?: readonly GroupEntry[];
   /** The largest number of rows of a row block ({@link ROW_BLOCK_TARGET_ROWS} when omitted) */
   readonly targetRows?: number;
@@ -161,12 +161,12 @@ export interface RowInput {
    */
   readonly geometry: Geometry | null;
   /**
-   * The key of the order of the row: among the members of its group of features when it is in
+   * The key of the order of the row: among the members of its group when it is in
    * one, among the items of its table otherwise
    */
   readonly key: string;
   /**
-   * The handle of the group of features of the row (`GroupEntry.handle`; outside a group when
+   * The handle of the group of the row (`GroupEntry.handle`; outside a group when
    * omitted or negative)
    */
   readonly group?: number;
@@ -893,7 +893,7 @@ function sameBytes(a: Uint8Array, b: Uint8Array): boolean {
 // === Groups and geometry ===
 
 /**
- * The keys of the groups of features the rows name, by handle (null when there is none)
+ * The keys of the groups the rows name, by handle (null when there is none)
  *
  * @internal
  */

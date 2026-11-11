@@ -23,7 +23,7 @@ export type RowHandle = number;
  */
 export type RowGroupHandle = number;
 
-/** The handle of a group of features held as columns */
+/** The handle of a group held as columns */
 export type GroupHandle = number;
 
 /**

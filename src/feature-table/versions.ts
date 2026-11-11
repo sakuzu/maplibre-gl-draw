@@ -46,7 +46,7 @@ import type { GroupHandle, RowGroupHandle, RowHandle, TableWorkBudget } from './
  *
  * What is handed over can be posted as it is: it holds no function. The Worker gives the
  * system of the coordinates to the builder when the tables are given one
- * (`FeatureTablesOptions.coordinateSystem`); the builder of the entry draws the rings the
+ * (`TablesStoreOptions.coordinateSystem`); the builder of the entry draws the rings the
  * tables draw.
  *
  * @example A Worker of the host
@@ -132,20 +132,20 @@ export interface GroupVersion {
   readonly deltaMark: number;
   /**
    * The rows of the delta that stay there when it is swapped in, whatever their marks: kept there
-   * when it started (held as features), held since, or written or come in since under its mark
+   * when it started (held by the user of the tables), held since, or written or come in since under its mark
    */
   readonly stays: Set<RowHandle>;
   /**
-   * The groups of features its rows name, and the versions of their keys it was made with (a
+   * The groups its rows name, and the versions of their keys it was made with (a
    * version whose rows are in the order of other keys is dropped)
    */
   readonly keys: ReadonlyMap<GroupHandle, number>;
   /**
    * Whether it takes the rows of the deltas in its range (a next version), or only puts the rows
-   * of its groups in another order (a reorder of groups of features)
+   * of its groups in another order (a reorder of groups)
    */
   readonly takesDelta: boolean;
-  /** The keys of groups of features the swap puts in (a reorder; null for none) */
+  /** The keys of groups the swap puts in (a reorder; null for none) */
   readonly orders: ReadonlyMap<GroupHandle, string> | null;
   status: GroupVersionStatus;
   /**
@@ -197,7 +197,7 @@ export interface VersionHost {
   nextGroupHandle(): RowGroupHandle;
   /** Whether the row of a handle has a copy in a delta */
   inDelta(handle: RowHandle): boolean;
-  /** Whether a row of a delta is drawn only (a feature drawn over a row): no version takes it */
+  /** Whether a row of a delta is drawn only (a row drawn over a row): no version takes it */
   drawnOnly(handle: RowHandle): boolean;
   /** Whether a next version leaves a row out: deleted, and nothing keeps it */
   drops(handle: RowHandle, group: RowGroup, row: number): boolean;
@@ -214,11 +214,11 @@ export interface VersionHost {
   readonly coordinates: CoordinateSystem;
   /** The number of coordinates a row that draws a ring is counted as (`RowRings.ringVertices`) */
   readonly ringVertices: number;
-  /** The keys of the order of the groups of features */
+  /** The keys of the order of the groups */
   readonly groupKeys: RowBlockDataMerge['groups'];
   /** The same as a list (what a Worker is sent) */
   groupKeyList(): GroupEntry[];
-  /** The version of the key of the order of a group of features */
+  /** The version of the key of the order of a group */
   orderVersionOf(group: GroupHandle): number;
   /** Puts the groups of a version in place of the ones it replaces (see `GroupVersions.swap`) */
   swapIn(version: GroupVersion, waiting: WaitingCopies): RowsChange | null;
@@ -367,7 +367,7 @@ export class GroupVersions {
         this.due.delete(handle);
         continue;
       }
-      // While a reorder of the table waits, the keys of its groups of features are going to
+      // While a reorder of the table waits, the keys of its groups are going to
       // change: the rows of the deltas written meanwhile are placed by the keys written, which a
       // version made now would read by the keys before. It is made once the reorder is in
       if (this.reorders(found.table).length > 0) continue;
@@ -444,7 +444,7 @@ export class GroupVersions {
       if (!delta) continue;
       const places = table.deltaPlaces();
       for (let k = 0; k < delta.data.length; k++) {
-        // A row held as a feature stays in the delta until it is no longer held
+        // A row the user of the tables holds stays in the delta until it is no longer held
         if (table.delta.isKept(k)) continue;
         const g = places.groups[k];
         if (g >= 0) this.markDue(table.groupAt(g).handle);
@@ -536,7 +536,7 @@ export class GroupVersions {
       worker.merge({ ...merge, groups: host.groupKeyList() }).then(
         (built) => {
           if (version.status !== 'building') return;
-          // The keys of the groups of features of its rows changed meanwhile: dropped (the
+          // The keys of the groups of its rows changed meanwhile: dropped (the
           // rows are in another order), and the groups are due again
           if (!this.sameKeys(version)) {
             this.drop(version);
@@ -634,7 +634,7 @@ export class GroupVersions {
   }
 
   /**
-   * The versions of the keys of the groups of features the rows of a merge name (a version built
+   * The versions of the keys of the groups the rows of a merge name (a version built
    * with other keys has its rows in another order)
    */
   private keysOf(merge: RowBlockDataMerge): Map<GroupHandle, number> {
@@ -646,7 +646,7 @@ export class GroupVersions {
     return out;
   }
 
-  /** Whether the keys of the groups of features of the rows of a version are the ones it has */
+  /** Whether the keys of the groups of the rows of a version are the ones it has */
   private sameKeys(version: GroupVersion): boolean {
     for (const [group, generation] of version.keys) {
       if (this.host.orderVersionOf(group) !== generation) return false;
@@ -674,7 +674,7 @@ export class GroupVersions {
         return null;
       }
     }
-    // Made with other keys of groups of features (a reorder swapped since): made again
+    // Made with other keys of groups (a reorder swapped since): made again
     if (!this.sameKeys(version)) {
       this.drop(version);
       return null;
@@ -717,8 +717,8 @@ export class GroupVersions {
   }
 
   /**
-   * Starts a version that puts the rows of groups in another order (the keys of groups of
-   * features changed): its groups are the groups cut at the runs of the members, built already,
+   * Starts a version that puts the rows of groups in another order (the keys of groups
+   * changed): its groups are the groups cut at the runs of the members, built already,
    * and the keys go in when it is swapped. A version of the groups being made is dropped
    */
   startReorder(
@@ -760,7 +760,7 @@ export class GroupVersions {
     return version;
   }
 
-  /** The versions pending that put keys of a group of features in */
+  /** The versions pending that put keys of a group in */
   reordersOf(group: GroupHandle): GroupVersion[] {
     return [...this.pending.values()].filter((version) => version.orders?.has(group));
   }
