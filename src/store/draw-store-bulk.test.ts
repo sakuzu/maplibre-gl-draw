@@ -9,7 +9,7 @@
 
 import { describe, expect, it } from 'vitest';
 import type { FeatureTables } from '../api/tables.js';
-import { STATE_BULK } from '../feature-table/row-state.js';
+import { STATE_BULK } from '../feature-table/feature-row-states.js';
 import { TableSelection } from '../feature-table/selection.js';
 import { internalsOf } from '../test-utils.js';
 import { DrawStore } from './draw-store.js';

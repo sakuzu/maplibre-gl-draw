@@ -19,10 +19,7 @@
 
 import { ROW_FLAG_DELETED } from '../table/row-group-types.js';
 import type { RowGroup } from './layer-table.js';
-import { STATE_HIDDEN_DELTA, STATE_HIDDEN_WAIT } from './row-state.js';
-
-/** The bits of the state of a row whose copy in its group is not the row (it is read elsewhere) */
-const STATE_ELSEWHERE = STATE_HIDDEN_DELTA | STATE_HIDDEN_WAIT;
+import { STATE_ELSEWHERE } from './row-state.js';
 
 /**
  * Whether a row of a group is read there in the order of its layer: not the copy of a row read

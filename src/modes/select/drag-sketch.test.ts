@@ -16,13 +16,13 @@ import type { Engine } from '../../api/impl/engine.js';
 import { createEngine } from '../../api/impl/engine.js';
 import type { HubEvents } from '../../api/impl/events.js';
 import type { DragNormalizedEvent, MouseNormalizedEvent } from '../../dispatcher/types.js';
-import { featureTablesInternals } from '../../feature-table/feature-tables.js';
 import {
   BULK_MOVE_SET,
   SKETCH_MOVE_SET,
   STATE_MOVE_MASK,
   STATE_MOVE_SHIFT,
-} from '../../feature-table/row-state.js';
+} from '../../feature-table/feature-row-states.js';
+import { featureTablesInternals } from '../../feature-table/feature-tables.js';
 import { MemoryStore } from '../../store/memory.js';
 import type { FeaturePatch, Store } from '../../store/store.js';
 import { createTableStore } from '../../store/table-memory.js';

@@ -335,6 +335,8 @@ export function createFeatureTablesWriter(
         const followers = notify ? watchFollowers(patch) : null;
         const moves = notify ? groupMovesOf(patch) : [];
         const { rows, kept } = tables.applyGroups(withoutNames(patch), options);
+        // A group created again whose id is hidden on this client is hidden again
+        internals.states.groupsWritten(patch.handles);
         const order = [...(followers?.finish() ?? []), ...moves];
         if (rows.layers.size > 0) notify?.({ rows, ...(order.length > 0 && { order }) });
         else if (order.length > 0) notify?.({ order });

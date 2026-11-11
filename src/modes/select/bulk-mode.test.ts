@@ -19,8 +19,8 @@ import type {
   MouseNormalizedEvent,
 } from '../../dispatcher/types.js';
 import { draggedRowsOf } from '../../feature-table/dragged-rows.js';
+import { STATE_MOVE_MASK, STATE_MOVE_SHIFT } from '../../feature-table/feature-row-states.js';
 import { featureTablesInternals } from '../../feature-table/feature-tables.js';
-import { STATE_MOVE_MASK, STATE_MOVE_SHIFT } from '../../feature-table/row-state.js';
 import { BULK_SLICE_BUDGET_MS, BULK_SLICE_ROWS } from '../../operations/bulk-sliced.js';
 import { DEFAULT_SELECTION_CONFIG } from '../../shared/config/selection.js';
 import {

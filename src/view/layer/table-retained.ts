@@ -62,14 +62,6 @@
 import type { ProjectionData } from 'maplibre-gl';
 import type { GpuRowBuffer } from '../../api/extension/webgl.js';
 import type { FeatureTypeRenderer, GpuRowsSource, HeldGpuRows } from '../../extension/renderers.js';
-import type { FeatureTablesInternals } from '../../feature-table/feature-tables.js';
-import {
-  geometryAt,
-  type LayerTable,
-  type RowGroup,
-  widenBounds,
-} from '../../feature-table/layer-table.js';
-import { rowFeatureToRead, rowHasGeometry, rowType } from '../../feature-table/row-read.js';
 import {
   GPU_STATE_BULK,
   GPU_STATE_MOVE_SHIFT,
@@ -81,7 +73,15 @@ import {
   STATE_MOVE_SHIFT,
   STATE_UNIFORM,
   toGpuState,
-} from '../../feature-table/row-state.js';
+} from '../../feature-table/feature-row-states.js';
+import type { FeatureTablesInternals } from '../../feature-table/feature-tables.js';
+import {
+  geometryAt,
+  type LayerTable,
+  type RowGroup,
+  widenBounds,
+} from '../../feature-table/layer-table.js';
+import { rowFeatureToRead, rowHasGeometry, rowType } from '../../feature-table/row-read.js';
 import {
   type InPlaceRowWrite,
   ROW_WRITE_GEOMETRY,

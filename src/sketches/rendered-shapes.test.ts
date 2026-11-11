@@ -10,7 +10,7 @@
 
 import { describe, expect, it } from 'vitest';
 import type { FeatureTables } from '../api/tables.js';
-import { BULK_MOVE_SET } from '../feature-table/row-state.js';
+import { BULK_MOVE_SET } from '../feature-table/feature-row-states.js';
 import { DrawStore } from '../store/draw-store.js';
 import { TableContractStore } from '../store/table-memory.js';
 import type { Feature } from '../store/types.js';

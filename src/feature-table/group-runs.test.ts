@@ -16,11 +16,11 @@ import { createRowBlockDataBuilder } from '../table/row-group-builder.js';
 import { compareRowKeys } from '../table/row-keys.js';
 import { FEATURE_TABLE_COLUMNS } from '../table/tabane/columns.js';
 import { seededRandom } from '../test-utils.js';
+import { STATE_HIDDEN_GROUP } from './feature-row-states.js';
 import { type FeatureTablesInternals, featureTablesInternals } from './feature-tables.js';
 import { groupRunCuts } from './group-runs.js';
 import type { GroupTable } from './group-table.js';
 import type { LayerTable, RowGroup } from './layer-table.js';
-import { STATE_HIDDEN_GROUP } from './row-state.js';
 import type { GroupHandle } from './types.js';
 
 /** The cuts made by reading every row of the layer (the reference) */

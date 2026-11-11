@@ -29,9 +29,9 @@ import {
   rowPatch,
   tablesOfReference,
 } from '../test-utils.js';
+import { STATE_HIDDEN_MASK } from './feature-row-states.js';
 import type { FeatureTablesInternals } from './feature-tables.js';
 import { hitTestLayerTable } from './hit-test.js';
-import { STATE_HIDDEN_MASK } from './row-state.js';
 import type { TableWorkBudget } from './types.js';
 
 /** Points in a row, one per key every 1,000 */

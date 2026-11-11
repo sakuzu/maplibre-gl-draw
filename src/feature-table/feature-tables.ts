@@ -10,7 +10,7 @@
  * drawing and the hit testing read them through `featureTablesInternals`.
  *
  * A row is read from one place: its row in its group, or its copy in the delta of a layer when
- * it has one (the copy in its group is hidden then, `STATE_HIDDEN_DELTA`). A write that fits the
+ * it has one (the copy in its group is hidden then, `STATE_DELTA`). A write that fits the
  * columns of its row is written in place; a write that moves the row in the order or to another
  * layer, and a new row, put a copy of the row in the delta.
  */
@@ -69,6 +69,13 @@ import { compareRowKeys, type GroupKeySource, type RowKeySource } from '../table
 import type { RowRings } from '../table/row-rings.js';
 import { FeatureCache } from './feature-cache.js';
 import { featureFields } from './feature-fields.js';
+import {
+  RowStateSets,
+  STATE_HIDDEN_GROUP,
+  STATE_HIDDEN_INVISIBLE,
+  STATE_HIDDEN_SKETCH,
+  STATE_UNIFORM,
+} from './feature-row-states.js';
 import { groupRunCuts, rowGroupsHolding } from './group-runs.js';
 import { GroupTable } from './group-table.js';
 import { IdIndex } from './id-index.js';
@@ -92,17 +99,13 @@ import {
 } from './row-read.js';
 import { noteRowState } from './row-skips.js';
 import {
-  RowStateSets,
-  STATE_HIDDEN_DELETED,
-  STATE_HIDDEN_DELTA,
-  STATE_HIDDEN_GROUP,
-  STATE_HIDDEN_INVISIBLE,
-  STATE_HIDDEN_LOCAL,
-  STATE_HIDDEN_MASK,
-  STATE_HIDDEN_SKETCH,
-  STATE_HIDDEN_WAIT,
-  STATE_UNIFORM,
-  toGpuState,
+  checkStateBits,
+  RowStates,
+  STATE_DELETED,
+  STATE_DELTA,
+  STATE_WAIT,
+  TABLE_STATES,
+  USER_STATES,
 } from './row-state.js';
 import { RowFields, type RowValues, type TableColumns } from './row-values.js';
 import {
@@ -278,6 +281,22 @@ export interface TablesInternalOptions extends FeatureTablesInternalOptions {
    * a row block taken in without one has it made then
    */
   readonly caches?: readonly RowCache[];
+  /**
+   * The number of bits of the state of each handle (0 to 13; none when omitted): the lowest bits
+   * of the copy of the state of a row, set with `TablesWriter.setRowStates`. Up to 8 take one byte
+   * per handle
+   */
+  readonly rowStateBits?: number;
+  /**
+   * The bits of the copy of the state of a row that leave it out of the rows drawn
+   * (`listDrawnRows`; none when omitted). The rows deleted and read elsewhere are left out anyway
+   */
+  readonly hiddenStates?: number;
+  /**
+   * The byte per row the drawing side reads, made of the copy of the state of the row each time it
+   * is made (0 when omitted)
+   */
+  readonly stateByte?: (state: number) => number;
 }
 
 /**
@@ -563,7 +582,10 @@ export interface FeatureTablesInternals {
    * writes read the order written (`ItemWalk`)
    */
   readonly writtenOrders: ReadonlyMap<GroupHandle, string>;
+  /** The state of the rows of the library, written to the tables (`feature-row-states.ts`) */
   readonly states: RowStateSets;
+  /** The bits of the state of each handle (`setRowStates`) */
+  readonly rowStates: RowStates;
   readonly strings: ValueStringCache;
   readonly readContext: RowReadContext;
   /** Changes with every change of the rows drawn of any layer */
@@ -751,12 +773,6 @@ export interface FeatureTablesInternals {
    * @returns The function that stops the calls
    */
   onBulkSelected(listener: (rows: TableSelection | null) => void): () => void;
-  /**
-   * Hides or shows the rows of a group of features on this client only, as the features of a
-   * group hidden on this client are: the rows that are in the group by the id, now and while it
-   * is hidden, are not drawn and not hit
-   */
-  setGroupHidden(groupId: string, hidden: boolean): void;
   /** Tells the listeners of `onBulkSelected` the rows of a selection of many features decided */
   bulkSelected(rows: TableSelection | null): void;
   /**
@@ -933,8 +949,11 @@ class FeatureTablesStore implements FeatureTablesInternals, TablesWriter, Tables
   /** The layers by their serial number */
   private readonly layerList: LayerTable[] = [];
   private readonly views = new Map<string, LayerTableView>();
-  /** The ids of the groups of features hidden on this client */
-  private readonly hiddenGroupIds = new Set<string>();
+  readonly rowStates: RowStates;
+  /** The bits that leave a row out of the rows drawn: those declared, and those of the tables */
+  readonly drawnHidden: number;
+  /** The byte per row the drawing side reads, made of the copy of the state of the row */
+  private readonly stateByte: (state: number) => number;
   private readonly rowGroups = new Map<RowGroupHandle, { layer: LayerTable; group: RowGroup }>();
   private nextGroup = 0;
   private revisionCount = 0;
@@ -1042,7 +1061,12 @@ class FeatureTablesStore implements FeatureTablesInternals, TablesWriter, Tables
     );
     this.groupFields = new Set(['id', 'parent', 'key', ...Object.keys(options.groupColumns ?? {})]);
     this.strings = new ValueStringCache(options.stringCacheSize);
-    this.states = new RowStateSets((handles) => this.refreshStates(handles));
+    this.rowStates = new RowStates(options.rowStateBits ?? 0);
+    const hiddenStates = options.hiddenStates ?? 0;
+    checkStateBits('the hidden states', hiddenStates, USER_STATES);
+    this.drawnHidden = hiddenStates | TABLE_STATES;
+    this.stateByte = options.stateByte ?? noStateByte;
+    this.states = new RowStateSets(this);
     this.declaredDims = options.dimensionsOf;
     this.coordinates = options.coordinateSystem ?? planarCoordinates;
     this.readContext = {
@@ -2333,7 +2357,9 @@ class FeatureTablesStore implements FeatureTablesInternals, TablesWriter, Tables
     if (this.ids.mainGroup(handle) >= 0 || this.ids.deltaLayer(handle) >= 0) return;
     if (this.creationOf.has(handle)) return;
     this.forgotten.delete(handle);
-    this.states.clear(handle);
+    // The state of the handle goes with it; what the library keeps of it is told
+    const bits = this.rowStates.clear(handle);
+    if (bits !== 0) this.states.forgotten(handle, bits);
     this.ids.free(handle);
   }
 
@@ -2408,12 +2434,24 @@ class FeatureTablesStore implements FeatureTablesInternals, TablesWriter, Tables
 
   private readonly bulkListeners = new Set<(rows: TableSelection | null) => void>();
 
-  setGroupHidden(groupId: string, hidden: boolean): void {
-    if (this.hiddenGroupIds.has(groupId) === hidden) return;
-    if (hidden) this.hiddenGroupIds.add(groupId);
-    else this.hiddenGroupIds.delete(groupId);
-    const group = this.groups.handleOfId(groupId);
-    if (group >= 0) this.refreshGroupStates(new Set([group]));
+  setRowStates(handles: Int32Array, mask: number, bits: number): void {
+    const changed = this.rowStates.set(handles, mask, bits);
+    if (changed.length > 0) this.refreshStates(changed);
+  }
+
+  setGroupStates(groups: Int32Array, mask: number, bits: number): void {
+    checkStateBits('the bits of groups', mask, USER_STATES & ~this.rowStates.mask);
+    for (const group of groups) {
+      if (!this.groups.has(group)) {
+        throw new KasaneError('not-found', `FeatureTables: no group ${group}`);
+      }
+    }
+    const changed = new Set<GroupHandle>();
+    for (const group of groups) {
+      if (this.groups.setStates(group, mask, bits)) changed.add(group);
+    }
+    if (changed.size === 0) return;
+    this.refreshGroupStates(changed);
     this.revisionCount++;
     this.notifyWork();
   }
@@ -3974,7 +4012,7 @@ class FeatureTablesStore implements FeatureTablesInternals, TablesWriter, Tables
   private writeState(group: RowGroup, row: number): void {
     const state = this.rowStateOf(group, row);
     group.state[row] = state;
-    group.gpuState[row] = toGpuState(state);
+    group.gpuState[row] = this.stateByte(state);
     noteRowState(group, row);
   }
 
@@ -3982,20 +4020,19 @@ class FeatureTablesStore implements FeatureTablesInternals, TablesWriter, Tables
     const data = group.data;
     const handle = data.handles[row];
     const flags = data.flags[row];
-    let state = this.states.stateOf(handle);
+    let state = this.rowStates.of(handle);
     if ((flags & ROW_FLAG_HIDDEN) !== 0) state |= STATE_HIDDEN_INVISIBLE;
-    if ((flags & ROW_FLAG_DELETED) !== 0) state |= STATE_HIDDEN_DELETED;
+    if ((flags & ROW_FLAG_DELETED) !== 0) state |= STATE_DELETED;
     const featureGroup = data.groups[row];
-    if (featureGroup >= 0 && !this.groups.isVisible(featureGroup)) state |= STATE_HIDDEN_GROUP;
-    if (featureGroup >= 0 && this.hiddenGroupIds.size > 0) {
-      const id = this.groups.idOf(featureGroup);
-      if (id !== undefined && this.hiddenGroupIds.has(id)) state |= STATE_HIDDEN_LOCAL;
+    if (featureGroup >= 0) {
+      state |= this.groups.statesOf(featureGroup);
+      if (!this.groups.isVisible(featureGroup)) state |= STATE_HIDDEN_GROUP;
     }
     if (rowType(data, row) === 'Circle') state |= STATE_UNIFORM;
     if (!group.delta && !group.pending) {
       // The copy of a row read elsewhere: in the delta, or in another group until it is in this
-      if (this.ids.deltaLayer(handle) >= 0) state |= STATE_HIDDEN_DELTA;
-      if (this.ids.mainGroup(handle) !== group.handle) state |= STATE_HIDDEN_WAIT;
+      if (this.ids.deltaLayer(handle) >= 0) state |= STATE_DELTA;
+      if (this.ids.mainGroup(handle) !== group.handle) state |= STATE_WAIT;
     }
     return state;
   }
@@ -4179,8 +4216,8 @@ interface PatchColumns {
   readonly properties: ReadonlyArray<readonly [string, readonly unknown[]]>;
 }
 
-/** What makes a row not drawn, a sketch drawn over it aside */
-const DRAWN_HIDDEN_MASK = STATE_HIDDEN_MASK & ~STATE_HIDDEN_SKETCH;
+/** The byte per row of the drawing side of tables whose user gives none */
+const noStateByte = (): number => 0;
 
 /** A write in place that leaves the shape of the row (shared, never changed) */
 const SAME_SHAPE: GeometryWrite = Object.freeze({ sameShape: true, from: 0, to: 0 });
@@ -4305,8 +4342,7 @@ class LayerTableViewImpl implements LayerTableView {
   listDrawnRows(bbox: BBox): Int32Array {
     const out: number[] = [];
     this.store.searchRowBoxes(this.table, bbox[0], bbox[1], bbox[2], bbox[3], (group, row) => {
-      // A row a sketch is drawn over is drawn, by its sketch
-      if ((group.state[row] & DRAWN_HIDDEN_MASK) === 0) out.push(group.data.handles[row]);
+      if ((group.state[row] & this.store.drawnHidden) === 0) out.push(group.data.handles[row]);
     });
     return Int32Array.from(out);
   }

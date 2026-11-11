@@ -13,18 +13,19 @@ import type { LayerTableView } from '../api/tables.js';
 import { createRowBlockDataBuilder, type RowInput } from '../table/row-group-builder.js';
 import type { RowBlockData } from '../table/row-group-types.js';
 import { FEATURE_TABLE_COLUMNS } from '../table/tabane/columns.js';
-import { createFeatureTablesStore } from './feature-row-tables.js';
-import { type FeatureTablesInternals, featureTablesInternals } from './feature-tables.js';
-import type { LayerTable } from './layer-table.js';
 import {
   GPU_STATE_BULK,
   GPU_STATE_HIDDEN,
   GPU_STATE_UNIFORM,
+  STATE_BULK,
   STATE_HIDDEN_DELETED,
   STATE_HIDDEN_INVISIBLE,
   STATE_HIDDEN_LOCAL,
   toGpuState,
-} from './row-state.js';
+} from './feature-row-states.js';
+import { createFeatureTablesStore } from './feature-row-tables.js';
+import { type FeatureTablesInternals, featureTablesInternals } from './feature-tables.js';
+import type { LayerTable } from './layer-table.js';
 
 const point = (x: number, y: number): Geometry => ({ type: 'Point', coordinates: [x, y] });
 
@@ -294,7 +295,7 @@ describe('createFeatureTables', () => {
     const r4 = tables.findRow('r4') as number;
     internals?.states.setHidden(Int32Array.of(r4), true);
     internals?.states.setBulk(Int32Array.of(r4, tables.findRow('r0') as number), true);
-    expect(layer.groupAt(1).state[1]).toBe(STATE_HIDDEN_LOCAL | (1 << 8));
+    expect(layer.groupAt(1).state[1]).toBe(STATE_HIDDEN_LOCAL | STATE_BULK);
     expect(layer.groupAt(1).gpuState[1]).toBe(GPU_STATE_HIDDEN | GPU_STATE_BULK);
     expect(layer.groupAt(0).gpuState[0]).toBe(GPU_STATE_BULK);
     expect(layer.groupAt(0).stateVersion).toBe(versions[0] + 1);

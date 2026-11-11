@@ -58,9 +58,9 @@
  */
 
 import { utf8String } from '@sakuzu/tabane';
+import { STATE_BULK } from '../feature-table/feature-row-states.js';
 import { featureTablesInternals } from '../feature-table/feature-tables.js';
 import type { RowGroup } from '../feature-table/layer-table.js';
-import { STATE_BULK } from '../feature-table/row-state.js';
 import { DrawError } from '../shared/draw-error.js';
 import type { SketchController } from '../sketches/sketch-controller.js';
 import type { Store } from '../store/store.js';

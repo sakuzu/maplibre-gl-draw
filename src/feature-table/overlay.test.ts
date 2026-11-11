@@ -19,8 +19,8 @@ import { describe, expect, it } from 'vitest';
 import { drawPropertyKey } from '../shared/properties.js';
 import type { Feature } from '../shared/types/model.js';
 import { feature, internalsOf, tablesOfFeatures } from '../test-utils.js';
+import { STATE_HIDDEN_SKETCH } from './feature-row-states.js';
 import { hitTestLayerTable } from './hit-test.js';
-import { STATE_HIDDEN_SKETCH } from './row-state.js';
 
 const square = (x: number) => [
   [

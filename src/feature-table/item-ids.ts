@@ -14,10 +14,10 @@ import type { Coordinate } from '../shared/types/model.js';
 import { ROW_FLAG_LOCKED } from '../table/feature-row-columns.js';
 import { ROW_FLAG_DELETED } from '../table/row-group-types.js';
 import { compareRowKeys } from '../table/row-keys.js';
+import { STATE_HIDDEN_MASK } from './feature-row-states.js';
 import { featureTablesInternals } from './feature-tables.js';
 import { rowHitShape } from './hit-test.js';
 import { ItemWalk } from './item-walk.js';
-import { STATE_HIDDEN_MASK } from './row-state.js';
 
 /**
  * The ids of the members of a group of features of a layer held as rows, in their order (none

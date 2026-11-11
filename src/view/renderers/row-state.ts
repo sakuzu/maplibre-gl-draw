@@ -21,7 +21,7 @@
 
 import type { Gpu, GpuContext } from '../../api/extension/webgl.js';
 import { type DraggedRows, draggedRowMotionsOf } from '../../feature-table/dragged-rows.js';
-import { MOVE_SETS } from '../../feature-table/row-state.js';
+import { MOVE_SETS } from '../../feature-table/feature-row-states.js';
 import type { RowHandle } from '../../feature-table/types.js';
 import {
   type EnuEdit,

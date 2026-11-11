@@ -16,8 +16,6 @@ import type { FeatureTables, RowHandle } from '../api/tables.js';
 import { type EnuEdit, moveEnuPosition, withinTurn } from '../geometry/enu-transforms.js';
 import { DRAW_PROPERTY_KEYS } from '../shared/properties.js';
 import type { Feature } from '../shared/types/model.js';
-import { featureTablesInternals } from './feature-tables.js';
-import { rowType } from './row-read.js';
 import {
   GPU_STATE_MOVE_SHIFT,
   GPU_STATE_UNIFORM,
@@ -25,7 +23,9 @@ import {
   STATE_BY_VALUES,
   STATE_MOVE_MASK,
   STATE_MOVE_SHIFT,
-} from './row-state.js';
+} from './feature-row-states.js';
+import { featureTablesInternals } from './feature-tables.js';
+import { rowType } from './row-read.js';
 
 /**
  * The rows being dragged and how they are moved, while they are drawn moved and not written yet

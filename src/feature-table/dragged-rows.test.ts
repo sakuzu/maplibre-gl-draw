@@ -18,7 +18,7 @@ import type { Feature } from '../store/types.js';
 import { referenceRotate, referenceScale } from '../test-support/enu-reference.js';
 import { internalsOf } from '../test-utils.js';
 import { draggedRowsOf } from './dragged-rows.js';
-import { BULK_MOVE_SET } from './row-state.js';
+import { BULK_MOVE_SET } from './feature-row-states.js';
 import type { TableSelection } from './selection.js';
 
 function point(id: string, x: number, type: Feature['type'] = 'Point'): Feature {

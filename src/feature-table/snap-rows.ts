@@ -14,10 +14,10 @@ import type { FeatureTables } from '../api/tables.js';
 import type { BBox } from '../geometry/types.js';
 import type { PositionRun } from '../shared/math/position-runs.js';
 import type { Coordinate, Feature, FeatureType, VertexRef } from '../shared/types/model.js';
+import { STATE_UNHIT_MASK } from './feature-row-states.js';
 import { featureTablesInternals } from './feature-tables.js';
 import { rowHitShape } from './hit-test.js';
 import { rowFeature, rowType } from './row-read.js';
-import { STATE_UNHIT_MASK } from './row-state.js';
 
 /**
  * A row found for snapping or tracing

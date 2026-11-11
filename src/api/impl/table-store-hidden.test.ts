@@ -8,8 +8,8 @@
  */
 
 import { afterEach, describe, expect, it } from 'vitest';
+import { STATE_HIDDEN_MASK } from '../../feature-table/feature-row-states.js';
 import { featureTablesInternals } from '../../feature-table/feature-tables.js';
-import { STATE_HIDDEN_MASK } from '../../feature-table/row-state.js';
 import { createTableStore } from '../../store/table-memory.js';
 import { createMapStub } from '../../test-utils.js';
 import type { Draw } from '../draw.js';

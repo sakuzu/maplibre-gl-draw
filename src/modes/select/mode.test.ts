@@ -21,8 +21,8 @@ import type {
   KeyNormalizedEvent,
   MouseNormalizedEvent,
 } from '../../dispatcher/types.js';
+import { STATE_BULK } from '../../feature-table/feature-row-states.js';
 import { featureTablesInternals } from '../../feature-table/feature-tables.js';
-import { STATE_BULK } from '../../feature-table/row-state.js';
 import { DEFAULT_SELECTION_CONFIG } from '../../shared/config/selection.js';
 import { offsetOnTangentPlane, setScreenScaleFrame } from '../../shared/math/index.js';
 import { coordinatesOf } from '../../shared/utils/coordinates.js';

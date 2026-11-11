@@ -109,6 +109,24 @@ export interface TablesWriter {
   applyGroups(patch: TableGroupPatch, options?: TablesWriteOptions): TablesWrite;
   /** Takes every row out of the tables (`emptied`) */
   clear(): TablesWrite;
+  /**
+   * Sets the bits under a mask of the state of handles (`rowStateBits`; negative handles left
+   * out): the copies of the state of their rows are made again. The state version of their row
+   * blocks goes up, and the write mark does not: a state is not a value
+   *
+   * @throws `KasaneError` with the code `invalid-input` when the mask holds a bit that is not one
+   * of a handle
+   */
+  setRowStates(handles: Int32Array, mask: number, bits: number): void;
+  /**
+   * Sets the bits under a mask of the state of groups: the members of the groups take them, and
+   * the copies of the state of their rows are made again. The state version of their row blocks
+   * goes up, and the write mark does not. A group deleted takes its bits with it
+   *
+   * @throws `KasaneError` with the code `invalid-input` when the mask holds a bit of a handle or
+   * of the tables, `not-found` for a handle that names no group
+   */
+  setGroupStates(groups: Int32Array, mask: number, bits: number): void;
 }
 
 /**

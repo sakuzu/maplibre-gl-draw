@@ -42,14 +42,14 @@ import type {
   SketchInput,
   SketchPatch,
 } from '../api/sketches.js';
-import { featureTablesInternals } from '../feature-table/feature-tables.js';
 import {
   BULK_MOVE_SET,
   type RowStateSets,
   SKETCH_MOVE_SET,
   STATE_MOVE_MASK,
   STATE_MOVE_SHIFT,
-} from '../feature-table/row-state.js';
+} from '../feature-table/feature-row-states.js';
+import { featureTablesInternals } from '../feature-table/feature-tables.js';
 import { TableSelection } from '../feature-table/selection.js';
 import { DrawError } from '../shared/draw-error.js';
 import { coordinatesOf } from '../shared/utils/coordinates.js';

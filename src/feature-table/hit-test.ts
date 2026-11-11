@@ -20,10 +20,10 @@ import { drawPropertyKey } from '../shared/properties.js';
 import type { Coordinate, Feature, FeatureStyle, FeatureType } from '../shared/types/model.js';
 import { STYLE_COLUMN } from '../table/feature-row-columns.js';
 import type { RowBlockDictionary } from '../table/row-group-types.js';
+import { STATE_UNHIT_MASK } from './feature-row-states.js';
 import type { FeatureTablesInternals } from './feature-tables.js';
 import { geometryAt, type LayerTable, type RowGroup } from './layer-table.js';
 import { rowNumber, rowType } from './row-read.js';
-import { STATE_UNHIT_MASK } from './row-state.js';
 
 /** The key of the radius of a Circle in the attributes of a row */
 const RADIUS_KEY = drawPropertyKey('radiusMeters');

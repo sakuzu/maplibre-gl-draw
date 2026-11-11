@@ -47,6 +47,7 @@
 import type { DisplayHitTestFn } from '../../dataset/dataset.js';
 import type { DatasetManager } from '../../dataset/manager.js';
 import type { Dataset } from '../../dataset/types.js';
+import { STATE_UNHIT_MASK } from '../../feature-table/feature-row-states.js';
 import type { FeatureTablesInternals } from '../../feature-table/feature-tables.js';
 import {
   hitTestLayerTable,
@@ -55,7 +56,6 @@ import {
 } from '../../feature-table/hit-test.js';
 import type { LayerTable, RowGroup } from '../../feature-table/layer-table.js';
 import { rowFeatureToRead } from '../../feature-table/row-read.js';
-import { STATE_UNHIT_MASK } from '../../feature-table/row-state.js';
 import type { LngLat, ScreenPoint } from '../../shared/math/index.js';
 import { wrapLongitude } from '../../shared/math/longitude.js';
 import { RenderedShapes } from '../../sketches/rendered-shapes.js';

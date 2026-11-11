@@ -28,7 +28,7 @@ import type { Browser, Page } from 'playwright-core';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { FeatureTables } from '../../api/tables.js';
 import { draggedRowsOf } from '../../feature-table/dragged-rows.js';
-import { BULK_MOVE_SET } from '../../feature-table/row-state.js';
+import { BULK_MOVE_SET } from '../../feature-table/feature-row-states.js';
 import type { EnuEdit } from '../../geometry/enu-transforms.js';
 import { DrawStore } from '../../store/draw-store.js';
 import { TableContractStore } from '../../store/table-memory.js';

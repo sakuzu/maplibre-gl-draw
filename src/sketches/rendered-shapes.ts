@@ -30,9 +30,9 @@ import {
   draggedRowsInPlace,
   draggedRowsOf,
 } from '../feature-table/dragged-rows.js';
+import { BULK_MOVE_SET, type RowStateSets } from '../feature-table/feature-row-states.js';
 import type { FeatureTablesInternals } from '../feature-table/feature-tables.js';
 import { featureTablesInternals } from '../feature-table/feature-tables.js';
-import { BULK_MOVE_SET, type RowStateSets } from '../feature-table/row-state.js';
 import { forEachSnapRow, type SnapRow } from '../feature-table/snap-rows.js';
 import type { EnuEdit } from '../geometry/enu-transforms.js';
 import type { BBox } from '../geometry/types.js';

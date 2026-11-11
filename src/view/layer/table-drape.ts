@@ -33,9 +33,6 @@
  */
 
 import type { CustomRenderMethodInput, ProjectionData } from 'maplibre-gl';
-import type { FeatureTablesInternals } from '../../feature-table/feature-tables.js';
-import { geometryAt, type LayerTable, type RowGroup } from '../../feature-table/layer-table.js';
-import { rowNumber, rowType } from '../../feature-table/row-read.js';
 import {
   GPU_STATE_MOVE_SHIFT,
   MOVE_SETS,
@@ -43,7 +40,10 @@ import {
   STATE_HIDDEN_DELTA,
   STATE_HIDDEN_MASK,
   STATE_HIDDEN_WAIT,
-} from '../../feature-table/row-state.js';
+} from '../../feature-table/feature-row-states.js';
+import type { FeatureTablesInternals } from '../../feature-table/feature-tables.js';
+import { geometryAt, type LayerTable, type RowGroup } from '../../feature-table/layer-table.js';
+import { rowNumber, rowType } from '../../feature-table/row-read.js';
 import type { RowHandle } from '../../feature-table/types.js';
 import type { GroupVersion } from '../../feature-table/versions.js';
 import { generateCirclePolygon } from '../../geometry/circle.js';

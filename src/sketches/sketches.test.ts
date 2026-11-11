@@ -30,13 +30,13 @@ import type { InstanceSignals } from '../api/impl/events.js';
 import type { ConsistencyFailure } from '../api/options.js';
 import type { Sketch, SketchEdit } from '../api/sketches.js';
 import { draggedRowMotionsOf } from '../feature-table/dragged-rows.js';
-import { featureTablesInternals } from '../feature-table/feature-tables.js';
 import {
   SKETCH_MOVE_SET,
   STATE_HIDDEN_SKETCH,
   STATE_MOVE_MASK,
   STATE_MOVE_SHIFT,
-} from '../feature-table/row-state.js';
+} from '../feature-table/feature-row-states.js';
+import { featureTablesInternals } from '../feature-table/feature-tables.js';
 import { MemoryStore } from '../store/memory.js';
 import type { FeatureEdit, Store } from '../store/store.js';
 import { createTableStore } from '../store/table-memory.js';

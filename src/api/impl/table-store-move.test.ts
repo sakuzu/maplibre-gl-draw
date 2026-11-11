@@ -9,8 +9,8 @@
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { DragNormalizedEvent, MouseNormalizedEvent } from '../../dispatcher/types.js';
+import { STATE_MOVE_MASK } from '../../feature-table/feature-row-states.js';
 import { featureTablesInternals } from '../../feature-table/feature-tables.js';
-import { STATE_MOVE_MASK } from '../../feature-table/row-state.js';
 import type { Store } from '../../store/store.js';
 import { createTableStore } from '../../store/table-memory.js';
 import type { Feature } from '../../store/types.js';

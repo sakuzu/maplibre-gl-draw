@@ -1358,7 +1358,7 @@ export class TableContractStore implements StoreContract {
     const handle = this.tables.findRow(id);
     if (handle !== undefined) this.#internals.states.setHidden(Int32Array.of(handle), hidden);
     else if (this.tables.findGroup(id) !== undefined || !hidden) {
-      this.#internals.setGroupHidden(id, hidden);
+      this.#internals.states.setGroupHidden(id, hidden);
     }
   }
 

@@ -23,7 +23,7 @@ import { compareRowKeys, type GroupKeySource, type RowKeySource } from '../table
 import { GeometryColumnReader } from '../table/table.js';
 import { DeltaRows } from './delta.js';
 import { elsewhereSkipsOf, skipsOf } from './row-skips.js';
-import { STATE_HIDDEN_DELTA, STATE_HIDDEN_WAIT } from './row-state.js';
+import { STATE_ELSEWHERE } from './row-state.js';
 import type { RowGroupHandle } from './types.js';
 import type { GeometryOverrides, ValueOverrides } from './value-overrides.js';
 
@@ -38,9 +38,6 @@ export const SHAPE_COLUMN = 0;
 /** @internal */
 export const KEYED_COLUMN = 0;
 
-/** The bits of the state of a row whose copy in its group is not the row (it is read elsewhere) */
-const STATE_ELSEWHERE = STATE_HIDDEN_DELTA | STATE_HIDDEN_WAIT;
-
 /**
  * A row group as a layer holds it
  *
@@ -53,7 +50,10 @@ export interface RowGroup {
   readonly data: RowBlockData;
   /** The copy of the state of each row (`row-state.ts`) */
   readonly state: Uint16Array;
-  /** The byte of the state of each row the GPU reads */
+  /**
+   * The byte of the state of each row the drawing side reads, made of its copy by the user of the
+   * tables (`stateByte`)
+   */
   readonly gpuState: Uint8Array;
   /** Changes with every change of the state of a row of the group */
   stateVersion: number;

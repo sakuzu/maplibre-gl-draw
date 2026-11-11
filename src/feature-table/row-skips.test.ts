@@ -11,7 +11,7 @@ import { describe, expect, it } from 'vitest';
 import { ROW_FLAG_DELETED } from '../table/row-group-types.js';
 import type { RowGroup } from './layer-table.js';
 import { noteRowState, skipsOf, walkReads } from './row-skips.js';
-import { STATE_HIDDEN_DELTA } from './row-state.js';
+import { STATE_DELTA } from './row-state.js';
 
 /** A row group of `n` rows of the order, with only what the walk reads of it */
 function group(n: number): RowGroup {
@@ -52,7 +52,7 @@ describe('the runs of the rows a walk passes', () => {
       else setDeleted(of, row, false);
       // A copy of a row read elsewhere is passed too
       if (step % 97 === 0) {
-        of.state[row] = STATE_HIDDEN_DELTA;
+        of.state[row] = STATE_DELTA;
         noteRowState(of, row);
       }
       const at = Math.floor(next() * n);

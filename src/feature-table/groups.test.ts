@@ -29,8 +29,8 @@ import {
   seededRandom,
   tablesOfReference,
 } from '../test-utils.js';
+import { STATE_HIDDEN_GROUP } from './feature-row-states.js';
 import type { FeatureTablesInternals } from './feature-tables.js';
-import { STATE_HIDDEN_GROUP } from './row-state.js';
 import type { TableWorkBudget } from './types.js';
 import type { GroupVersion } from './versions.js';
 

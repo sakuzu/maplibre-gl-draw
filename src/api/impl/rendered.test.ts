@@ -10,7 +10,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { BULK_MOVE_SET } from '../../feature-table/row-state.js';
+import { BULK_MOVE_SET } from '../../feature-table/feature-row-states.js';
 import { createCoordinateTransform } from '../../shared/math/index.js';
 import { createTableStore } from '../../store/table-memory.js';
 import type { Feature as StoredFeature } from '../../store/types.js';

@@ -9,7 +9,8 @@
  * they ask the user of the tables for: the rings of the Circles (`circleRowRings`), the triangles
  * of the fills as a cache of the rows (`FEATURE_CACHES`), the boxes of the rows of an Image and of
  * the types of the extensions (`FeatureRowBoxes`), the fields whose new value places a row again,
- * the ones the drawing cuts the rows by (the type, and the zoom a feature was created at), and
+ * the ones the drawing cuts the rows by (the type, and the zoom a feature was created at), the
+ * bits of the state of the rows and the byte the GPU reads of them (`feature-row-states.ts`), and
  * when the tables run their work (while the page is idle).
  */
 
@@ -20,6 +21,7 @@ import { circleRowRings } from '../table/circle-rings.js';
 import { FEATURE_CACHES } from '../table/fill-triangles.js';
 import { FEATURE_GROUP_COLUMNS, FEATURE_TABLE_COLUMNS } from '../table/tabane/columns.js';
 import { FeatureRowBoxes, keepFeatureRowBoxes } from './feature-row-boxes.js';
+import { FEATURE_HIDDEN_STATES, FEATURE_ROW_STATE_BITS, toGpuState } from './feature-row-states.js';
 import {
   createTables,
   type FeatureTablesInternalOptions,
@@ -54,7 +56,15 @@ export const FEATURE_RELOCATING_FIELDS: readonly RowField[] = [
 export function createFeatureRowTables(
   options: Omit<
     TablesInternalOptions,
-    'columns' | 'groupColumns' | 'rowBoxes' | 'relocatingFields' | 'rings' | 'caches'
+    | 'columns'
+    | 'groupColumns'
+    | 'rowBoxes'
+    | 'relocatingFields'
+    | 'rings'
+    | 'caches'
+    | 'rowStateBits'
+    | 'hiddenStates'
+    | 'stateByte'
   > = {},
 ): {
   tables: FeatureTables;
@@ -69,6 +79,9 @@ export function createFeatureRowTables(
     caches: FEATURE_CACHES,
     rowBoxes: boxes.boxesOf,
     relocatingFields: FEATURE_RELOCATING_FIELDS,
+    rowStateBits: FEATURE_ROW_STATE_BITS,
+    hiddenStates: FEATURE_HIDDEN_STATES,
+    stateByte: toGpuState,
     whenIdle: options.whenIdle ?? whenIdle,
   });
   const internals = featureTablesInternals(made.tables) as FeatureTablesInternals;

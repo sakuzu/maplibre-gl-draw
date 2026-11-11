@@ -10,8 +10,8 @@
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { DragNormalizedEvent, MouseNormalizedEvent } from '../../dispatcher/types.js';
+import { GPU_STATE_BULK, STATE_BULK, toGpuState } from '../../feature-table/feature-row-states.js';
 import { featureTablesInternals } from '../../feature-table/feature-tables.js';
-import { GPU_STATE_BULK, STATE_BULK, toGpuState } from '../../feature-table/row-state.js';
 import { MemoryStore } from '../../store/memory.js';
 import type { Store } from '../../store/store.js';
 import { createTableStore } from '../../store/table-memory.js';

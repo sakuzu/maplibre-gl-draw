@@ -31,7 +31,7 @@ import {
   seededRandom,
   tablesOfReference as tablesOf,
 } from '../test-utils.js';
-import { STATE_HIDDEN_DELTA } from './row-state.js';
+import { STATE_HIDDEN_DELTA } from './feature-row-states.js';
 
 describe('the delta of a layer', () => {
   it('reads a row placed elsewhere in the order at its new place, and hides its copy', () => {

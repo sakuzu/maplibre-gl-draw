@@ -22,6 +22,8 @@ interface GroupState {
   locked: boolean;
   /** Advances with every change of `order` */
   orderVersion: number;
+  /** The bits of the state of the group its members take (`setGroupStates`) */
+  states: number;
 }
 
 /**
@@ -120,10 +122,29 @@ export class GroupTable implements GroupKeySource {
     const old = this.entries.get(group);
     if (old) this.byId.delete(old.id);
     const orderVersion = old ? old.orderVersion + (old.order === entry.order ? 0 : 1) : 0;
-    this.entries.set(group, { ...entry, orderVersion });
+    this.entries.set(group, { ...entry, orderVersion, states: old?.states ?? 0 });
     this.byId.set(entry.id, group);
     this.stale = true;
     this.revisionCount++;
+  }
+
+  /** The bits of the state of a group its members take (0 for an unknown handle) */
+  statesOf(group: GroupHandle): number {
+    return this.entries.get(group)?.states ?? 0;
+  }
+
+  /**
+   * Sets the bits under a mask of the state of a group
+   *
+   * @returns Whether they changed (false for an unknown handle)
+   */
+  setStates(group: GroupHandle, mask: number, bits: number): boolean {
+    const entry = this.entries.get(group);
+    if (!entry) return false;
+    const next = (entry.states & ~mask) | (bits & mask);
+    if (next === entry.states) return false;
+    entry.states = next;
+    return true;
   }
 
   /** Writes the key of the order of a group */
