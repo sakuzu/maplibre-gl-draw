@@ -18,12 +18,22 @@ interface GroupState {
   readonly id: string;
   order: string;
   layerId: string;
-  visible: boolean;
-  locked: boolean;
+  /** The values of the `flag` columns of the group, a bit each (`flagBitOf`) */
+  flags: number;
   /** Advances with every change of `order` */
   orderVersion: number;
-  /** The bits of the state of the group its members take (`setGroupStates`) */
+  /** The bits of the state of the group (`setGroupStates`) */
   states: number;
+  /** The bits of the state its members take: its own, and those its flags give them */
+  memberStates: number;
+}
+
+/** A `flag` column of the groups, and the bits of the state it gives the members of a group */
+export interface GroupFlagStates {
+  /** The bit of the column in the flags of a group (`GroupTable.flagBitOf`) */
+  readonly flag: number;
+  /** The bits of the state of the members of a group whose flag is set */
+  readonly states: number;
 }
 
 /**
@@ -33,6 +43,31 @@ interface GroupState {
  */
 export class GroupTable implements GroupKeySource {
   private readonly entries = new Map<GroupHandle, GroupState>();
+  /** The bits of the flags of the groups, by the names of their columns */
+  private readonly flagBits: ReadonlyMap<string, number>;
+  /** The bits of the state the flags give the members */
+  private memberFlags: readonly GroupFlagStates[] = [];
+
+  /**
+   * @param flagColumns - The names of the `flag` columns of the groups, in the order of their bits
+   */
+  constructor(flagColumns: readonly string[] = []) {
+    // The bits of `groupFlagBitOf`
+    this.flagBits = new Map(flagColumns.map((name, at) => [name, 1 << at]));
+  }
+
+  /** The bit of a `flag` column in the flags of a group (0 for a name that is not one) */
+  flagBitOf(name: string): number {
+    return this.flagBits.get(name) ?? 0;
+  }
+
+  /**
+   * Declares the bits of the state the flags of a group give its members (before any group is
+   * set)
+   */
+  setMemberFlags(memberFlags: readonly GroupFlagStates[]): void {
+    this.memberFlags = memberFlags;
+  }
   /** The handle of each id */
   private readonly byId = new Map<string, GroupHandle>();
   /** The handles in the order of the columns below (rebuilt on a change) */
@@ -81,14 +116,9 @@ export class GroupTable implements GroupKeySource {
     return this.entries.get(group)?.id;
   }
 
-  /** Whether a group is shown (true for an unknown handle) */
-  isVisible(group: GroupHandle): boolean {
-    return this.entries.get(group)?.visible ?? true;
-  }
-
-  /** Whether a group is locked (false for an unknown handle) */
-  isLocked(group: GroupHandle): boolean {
-    return this.entries.get(group)?.locked ?? false;
+  /** The values of the `flag` columns of a group, a bit each (0 for an unknown handle) */
+  flagsOf(group: GroupHandle): number {
+    return this.entries.get(group)?.flags ?? 0;
   }
 
   /** The handle of a group by its id (-1 for an unknown id) */
@@ -117,20 +147,34 @@ export class GroupTable implements GroupKeySource {
   /** Sets a group (its handle is given by the caller) */
   set(
     group: GroupHandle,
-    entry: { id: string; order: string; layerId: string; visible: boolean; locked: boolean },
+    entry: { id: string; order: string; layerId: string; flags: number },
   ): void {
     const old = this.entries.get(group);
     if (old) this.byId.delete(old.id);
     const orderVersion = old ? old.orderVersion + (old.order === entry.order ? 0 : 1) : 0;
-    this.entries.set(group, { ...entry, orderVersion, states: old?.states ?? 0 });
+    const states = old?.states ?? 0;
+    this.entries.set(group, {
+      ...entry,
+      orderVersion,
+      states,
+      memberStates: states | this.flagStates(entry.flags),
+    });
     this.byId.set(entry.id, group);
     this.stale = true;
     this.revisionCount++;
   }
 
-  /** The bits of the state of a group its members take (0 for an unknown handle) */
+  /** The bits of the state of a group (`setGroupStates`; 0 for an unknown handle) */
   statesOf(group: GroupHandle): number {
     return this.entries.get(group)?.states ?? 0;
+  }
+
+  /**
+   * The bits of the state the members of a group take: its own, and those its flags give them (0
+   * for an unknown handle)
+   */
+  memberStatesOf(group: GroupHandle): number {
+    return this.entries.get(group)?.memberStates ?? 0;
   }
 
   /**
@@ -144,7 +188,15 @@ export class GroupTable implements GroupKeySource {
     const next = (entry.states & ~mask) | (bits & mask);
     if (next === entry.states) return false;
     entry.states = next;
+    entry.memberStates = next | this.flagStates(entry.flags);
     return true;
+  }
+
+  /** The bits of the state the flags of a group give its members */
+  private flagStates(flags: number): number {
+    let states = 0;
+    for (const { flag, states: bits } of this.memberFlags) if ((flags & flag) !== 0) states |= bits;
+    return states;
   }
 
   /** Writes the key of the order of a group */

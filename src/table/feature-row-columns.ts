@@ -10,14 +10,16 @@
  * feature) reads its columns at these places, never by a name: the geometry is a `shape` column,
  * the type and the style are `whole` columns (the types kept by each row block, the styles by the
  * tables, as their numbers), the attributes a `keyed` column, and `hidden` and `locked` bits of the
- * flags of a row.
+ * flags of a row, as they are of the flags of a group.
  *
  * A pure module, so it runs in a Worker as well.
  */
 
 import type { PropertyColumns } from '@sakuzu/tabane';
+import type { GroupTable } from '../feature-table/group-table.js';
 import {
   flagBitOf,
+  groupFlagBitOf,
   keyedColumnOf,
   type RowColumnLayout,
   rowColumnLayoutOf,
@@ -25,7 +27,7 @@ import {
   wholeColumnOf,
 } from './row-columns.js';
 import type { RowBlockData, RowBlockDictionary, RowBlockValues } from './row-group-types.js';
-import { FEATURE_TABLE_COLUMNS } from './tabane/columns.js';
+import { FEATURE_GROUP_COLUMNS, FEATURE_TABLE_COLUMNS } from './tabane/columns.js';
 
 /**
  * The places of the columns of a feature
@@ -46,6 +48,36 @@ export const PROPERTIES_COLUMN = keyedColumnOf(FEATURE_COLUMN_LAYOUT, 'propertie
 export const ROW_FLAG_HIDDEN = flagBitOf(FEATURE_COLUMN_LAYOUT, 'hidden');
 /** The bit of {@link RowBlockData.flags} of a row that is locked @internal */
 export const ROW_FLAG_LOCKED = flagBitOf(FEATURE_COLUMN_LAYOUT, 'locked');
+
+/**
+ * The places of the columns of a group of features
+ *
+ * @internal
+ */
+export const FEATURE_GROUP_LAYOUT: RowColumnLayout = rowColumnLayoutOf(FEATURE_GROUP_COLUMNS);
+
+/** The bit of the flags of a group (`GroupTable.flagsOf`) that is not shown @internal */
+export const GROUP_FLAG_HIDDEN = groupFlagBitOf(FEATURE_GROUP_LAYOUT, 'hidden');
+/** The bit of the flags of a group (`GroupTable.flagsOf`) that is locked @internal */
+export const GROUP_FLAG_LOCKED = groupFlagBitOf(FEATURE_GROUP_LAYOUT, 'locked');
+
+/**
+ * Whether a group of features is not shown (false for an unknown handle)
+ *
+ * @internal
+ */
+export function isGroupHidden(groups: GroupTable, group: number): boolean {
+  return (groups.flagsOf(group) & GROUP_FLAG_HIDDEN) !== 0;
+}
+
+/**
+ * Whether a group of features is locked (false for an unknown handle)
+ *
+ * @internal
+ */
+export function isGroupLocked(groups: GroupTable, group: number): boolean {
+  return (groups.flagsOf(group) & GROUP_FLAG_LOCKED) !== 0;
+}
 
 /** The attributes of a row block none of whose rows holds one (shared, never changed) */
 const NO_PROPERTIES: PropertyColumns = Object.freeze({

@@ -12,6 +12,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { FeatureTables, RowField } from '../api/tables.js';
 import { createTableStore } from '../store/table-memory.js';
+import { isGroupHidden } from '../table/feature-row-columns.js';
 import { createRowBlockDataBuilder } from '../table/row-group-builder.js';
 import { compareRowKeys } from '../table/row-keys.js';
 import { FEATURE_TABLE_COLUMNS } from '../table/tabane/columns.js';
@@ -189,7 +190,7 @@ describe('groupRunCuts', () => {
             () =>
               writer.applyGroups({
                 handles: Int32Array.of(group),
-                fields: new Map([['hidden', [internals.groups.isVisible(group)]]]),
+                fields: new Map([['hidden', [!isGroupHidden(internals.groups, group)]]]),
               }),
             'remote',
           );
@@ -199,7 +200,7 @@ describe('groupRunCuts', () => {
           for (const rowGroup of rowGroups) {
             for (let r = 0; r < rowGroup.data.length; r++) {
               const named = rowGroup.data.groups[r];
-              const hidden = named >= 0 && !internals.groups.isVisible(named);
+              const hidden = named >= 0 && isGroupHidden(internals.groups, named);
               expect((rowGroup.state[r] & STATE_HIDDEN_GROUP) !== 0, `seed ${seed}`).toBe(hidden);
             }
           }

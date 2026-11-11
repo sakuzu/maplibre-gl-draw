@@ -61,7 +61,7 @@ import { wrapLongitude } from '../../shared/math/longitude.js';
 import { RenderedShapes } from '../../sketches/rendered-shapes.js';
 import type { Store } from '../../store/store.js';
 import type { Coordinate, Feature, FeatureStyle, FeatureType, Layer } from '../../store/types.js';
-import { ROW_FLAG_LOCKED } from '../../table/feature-row-columns.js';
+import { isGroupLocked, ROW_FLAG_LOCKED } from '../../table/feature-row-columns.js';
 import type {
   CompanionHitContext,
   FeatureCompanionHitResult,
@@ -376,7 +376,7 @@ export function createTopmostHitTester(deps: TopmostHitTestDeps): HitTestTopmost
     const groupHandle = data.groups[hit.row];
     const locked =
       (data.flags[hit.row] & ROW_FLAG_LOCKED) !== 0 ||
-      (groupHandle >= 0 && tables.groups.isLocked(groupHandle)) ||
+      (groupHandle >= 0 && isGroupLocked(tables.groups, groupHandle)) ||
       layer.locked === true;
     const distancePx = (): number => {
       // A point hit on the screen is measured there

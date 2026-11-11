@@ -21,7 +21,12 @@ import { circleRowRings } from '../table/circle-rings.js';
 import { FEATURE_CACHES } from '../table/fill-triangles.js';
 import { FEATURE_GROUP_COLUMNS, FEATURE_TABLE_COLUMNS } from '../table/tabane/columns.js';
 import { FeatureRowBoxes, keepFeatureRowBoxes } from './feature-row-boxes.js';
-import { FEATURE_HIDDEN_STATES, FEATURE_ROW_STATE_BITS, toGpuState } from './feature-row-states.js';
+import {
+  FEATURE_HIDDEN_STATES,
+  FEATURE_ROW_STATE_BITS,
+  FEATURE_VALUE_STATES,
+  toGpuState,
+} from './feature-row-states.js';
 import {
   createTables,
   type FeatureTablesInternalOptions,
@@ -65,6 +70,7 @@ export function createFeatureRowTables(
     | 'rowStateBits'
     | 'hiddenStates'
     | 'stateByte'
+    | 'valueStates'
   > = {},
 ): {
   tables: FeatureTables;
@@ -82,6 +88,7 @@ export function createFeatureRowTables(
     rowStateBits: FEATURE_ROW_STATE_BITS,
     hiddenStates: FEATURE_HIDDEN_STATES,
     stateByte: toGpuState,
+    valueStates: FEATURE_VALUE_STATES,
     whenIdle: options.whenIdle ?? whenIdle,
   });
   const internals = featureTablesInternals(made.tables) as FeatureTablesInternals;

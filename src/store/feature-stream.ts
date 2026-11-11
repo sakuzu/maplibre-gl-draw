@@ -13,7 +13,7 @@
 
 import type { FeatureTables, RowHandle, RowValues } from '../api/tables.js';
 import { featureTablesInternals, readWithoutKeeping } from '../feature-table/feature-tables.js';
-import { ROW_FLAG_HIDDEN, ROW_FLAG_LOCKED } from '../table/feature-row-columns.js';
+import { isGroupHidden, ROW_FLAG_HIDDEN, ROW_FLAG_LOCKED } from '../table/feature-row-columns.js';
 import { listEveryFeatureInOrder } from './ordering.js';
 import type { Feature, FeatureType, Group, Layer, ObjectGroup, ObjectLayer } from './types.js';
 
@@ -173,7 +173,7 @@ export function rowMatcher(
         shownLayer = store.getLayer(layerId)?.visible !== false;
         layerShown.set(layerId, shownLayer);
       }
-      const shown = visible && shownLayer && (group < 0 || internals.groups.isVisible(group));
+      const shown = visible && shownLayer && (group < 0 || !isGroupHidden(internals.groups, group));
       if (shown !== filter.shown) return false;
     }
     return true;

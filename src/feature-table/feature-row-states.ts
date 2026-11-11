@@ -24,7 +24,13 @@
 import type { EnuEdit } from '../geometry/enu-transforms.js';
 import { DrawError } from '../shared/draw-error.js';
 import type { GroupTable } from './group-table.js';
-import { type RowStates, STATE_DELETED, STATE_DELTA, STATE_WAIT } from './row-state.js';
+import {
+  type RowStates,
+  STATE_DELETED,
+  STATE_DELTA,
+  STATE_WAIT,
+  type ValueStates,
+} from './row-state.js';
 import type { GroupHandle, RowHandle } from './types.js';
 
 // === The bits of each handle (the lowest of the copy) ===
@@ -64,6 +70,18 @@ export const STATE_HIDDEN_INVISIBLE = 1 << 7;
 export const STATE_HIDDEN_GROUP = 1 << 8;
 /** Scaled by the same factor in x and y (a Circle) */
 export const STATE_UNIFORM = 1 << 9;
+
+/**
+ * The bits of the library from values (`valueStates`): the `hidden` flag of a row, the `hidden`
+ * flag of its group, and the type `Circle`
+ */
+export const FEATURE_VALUE_STATES: ValueStates = Object.freeze({
+  rowFlags: Object.freeze([Object.freeze({ column: 'hidden', states: STATE_HIDDEN_INVISIBLE })]),
+  groupFlags: Object.freeze([Object.freeze({ column: 'hidden', states: STATE_HIDDEN_GROUP })]),
+  wholeValues: Object.freeze([
+    Object.freeze({ column: 'type', values: Object.freeze(['Circle']), states: STATE_UNIFORM }),
+  ]),
+});
 
 // === The bits of the tables ===
 

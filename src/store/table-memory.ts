@@ -57,6 +57,7 @@ import {
 } from '../feature-table/feature-tables-writer.js';
 import { ItemWalk } from '../feature-table/item-walk.js';
 import { asFeatureValues } from '../shared/feature-values.js';
+import { isGroupHidden, isGroupLocked } from '../table/feature-row-columns.js';
 import { ROW_FLAG_DELETED } from '../table/row-group-types.js';
 import { DrawStore } from './draw-store.js';
 import {
@@ -1561,8 +1562,8 @@ export class TableContractStore implements StoreContract {
           id,
           name: typeof name === 'string' ? name : (previous?.name ?? ''),
           layerId: groups.layerOf(handle) as string,
-          visible: groups.isVisible(handle),
-          locked: groups.isLocked(handle),
+          visible: !isGroupHidden(groups, handle),
+          locked: isGroupLocked(groups, handle),
         };
         if (!previous) {
           const group = frozenCopy({ ...fields, kind: 'table' as const });

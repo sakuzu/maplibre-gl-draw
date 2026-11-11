@@ -7,7 +7,7 @@
  */
 
 import type { BBox } from '../geometry/types.js';
-import { ROW_FLAG_LOCKED } from '../table/feature-row-columns.js';
+import { isGroupHidden, isGroupLocked, ROW_FLAG_LOCKED } from '../table/feature-row-columns.js';
 import { ROW_FLAG_DELETED } from '../table/row-group-types.js';
 import { STATE_UNHIT_MASK } from './feature-row-states.js';
 import type { FeatureTablesInternals, RowPlace } from './feature-tables.js';
@@ -116,7 +116,7 @@ export function isRowShown(
   if (!containers.layerVisible(layerId) || containers.hidden(layerId)) return false;
   const group = place.group.data.groups[place.row];
   if (group >= 0) {
-    if (!internals.groups.isVisible(group)) return false;
+    if (isGroupHidden(internals.groups, group)) return false;
     const groupId = internals.groups.idOf(group);
     if (groupId !== undefined && containers.hidden(groupId)) return false;
   }
@@ -137,7 +137,7 @@ export function isRowLocked(
   if (!place) return false;
   if ((place.group.data.flags[place.row] & ROW_FLAG_LOCKED) !== 0) return true;
   const group = place.group.data.groups[place.row];
-  if (group >= 0 && internals.groups.isLocked(group)) return true;
+  if (group >= 0 && isGroupLocked(internals.groups, group)) return true;
   return containers.layerLocked(place.layer.layerId);
 }
 

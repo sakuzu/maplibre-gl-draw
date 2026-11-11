@@ -98,8 +98,7 @@ describe('the items of a layer', () => {
       id: 'g',
       order: 'k000003',
       layerId: 'layer',
-      visible: true,
-      locked: false,
+      flags: 0,
     });
     const builder = createRowBlockDataBuilder({
       columns: FEATURE_TABLE_COLUMNS,

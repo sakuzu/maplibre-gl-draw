@@ -69,13 +69,7 @@ import { compareRowKeys, type GroupKeySource, type RowKeySource } from '../table
 import type { RowRings } from '../table/row-rings.js';
 import { FeatureCache } from './feature-cache.js';
 import { featureFields } from './feature-fields.js';
-import {
-  RowStateSets,
-  STATE_HIDDEN_GROUP,
-  STATE_HIDDEN_INVISIBLE,
-  STATE_HIDDEN_SKETCH,
-  STATE_UNIFORM,
-} from './feature-row-states.js';
+import { RowStateSets, STATE_HIDDEN_SKETCH } from './feature-row-states.js';
 import { groupRunCuts, rowGroupsHolding } from './group-runs.js';
 import { GroupTable } from './group-table.js';
 import { IdIndex } from './id-index.js';
@@ -106,6 +100,7 @@ import {
   STATE_WAIT,
   TABLE_STATES,
   USER_STATES,
+  type ValueStates,
 } from './row-state.js';
 import { RowFields, type RowValues, type TableColumns } from './row-values.js';
 import {
@@ -297,6 +292,12 @@ export interface TablesInternalOptions extends FeatureTablesInternalOptions {
    * is made (0 when omitted)
    */
   readonly stateByte?: (state: number) => number;
+  /**
+   * The bits of the copy of the state of a row made from values (none when omitted): from `flag`
+   * columns of the rows and of the groups, and from values of `whole` columns kept by each row
+   * block
+   */
+  readonly valueStates?: ValueStates;
 }
 
 /**
@@ -940,7 +941,7 @@ interface LayerChangeDraft {
 class FeatureTablesStore implements FeatureTablesInternals, TablesWriter, Tables {
   readonly ids = new IdIndex();
   readonly styles = new StyleTable();
-  readonly groups = new GroupTable();
+  readonly groups: GroupTable;
   readonly writtenOrders = new Map<GroupHandle, string>();
   readonly strings: ValueStringCache;
   readonly states: RowStateSets;
@@ -1040,6 +1041,15 @@ class FeatureTablesStore implements FeatureTablesInternals, TablesWriter, Tables
   private readonly flagBits: ReadonlyMap<string, number>;
   /** The fields of the values of groups: the fixed ones, and the group columns (`groupColumns`) */
   private readonly groupFields: ReadonlySet<string>;
+  /** The `flag` columns of the groups, in the order of their bits */
+  private readonly groupFlags: readonly string[];
+  /**
+   * The bits of the copy of the state of a row its flags give it, by the byte of its flags: the
+   * deleted mark, and the `flag` columns declared (`valueStates.rowFlags`)
+   */
+  private readonly flagStates = new Uint16Array(256);
+  /** The values of `whole` columns kept by each row block that give a row bits of its state */
+  private readonly wholeStates: readonly WholeStates[];
 
   constructor(options: TablesInternalOptions) {
     this.fields = new RowFields(options.columns);
@@ -1060,11 +1070,14 @@ class FeatureTablesStore implements FeatureTablesInternals, TablesWriter, Tables
       this.layout.flags.map((name, f) => [name, ROW_FLAG_DELETED << (f + 1)]),
     );
     this.groupFields = new Set(['id', 'parent', 'key', ...Object.keys(options.groupColumns ?? {})]);
+    this.groupFlags = rowColumnLayoutOf(options.groupColumns ?? {}).flags;
+    this.groups = new GroupTable(this.groupFlags);
     this.strings = new ValueStringCache(options.stringCacheSize);
     this.rowStates = new RowStates(options.rowStateBits ?? 0);
     const hiddenStates = options.hiddenStates ?? 0;
     checkStateBits('the hidden states', hiddenStates, USER_STATES);
     this.drawnHidden = hiddenStates | TABLE_STATES;
+    this.wholeStates = this.declareValueStates(options.valueStates ?? {});
     this.stateByte = options.stateByte ?? noStateByte;
     this.states = new RowStateSets(this);
     this.declaredDims = options.dimensionsOf;
@@ -3125,8 +3138,8 @@ class FeatureTablesStore implements FeatureTablesInternals, TablesWriter, Tables
           );
         }
       }
-      for (const field of ['hidden', 'locked'] as const) {
-        const v = value(field, i);
+      for (const field of this.groupFlags) {
+        const v = value(field as TableGroupField, i);
         if (v !== undefined && typeof v !== 'boolean') {
           throw new DrawError(
             'invalid-input',
@@ -3158,29 +3171,34 @@ class FeatureTablesStore implements FeatureTablesInternals, TablesWriter, Tables
       }
       this.deletedGroups.delete(group);
       this.unkeepGroup(group);
+      // The flags written, the others kept (none set for a new group)
+      let flags = this.groups.flagsOf(group);
+      for (const field of this.groupFlags) {
+        const v = value(field as TableGroupField, i) as boolean | undefined;
+        if (v === undefined) continue;
+        const bit = this.groups.flagBitOf(field);
+        flags = v ? flags | bit : flags & ~bit;
+      }
       if (!this.groups.has(group)) {
         this.groups.set(group, {
           id: value('id', i) as string,
           order: value('key', i) as string,
           layerId: value('parent', i) as string,
-          visible: value('hidden', i) !== true,
-          locked: value('locked', i) === true,
+          flags,
         });
         continue;
       }
-      const visible = this.groups.isVisible(group);
-      const hidden = value('hidden', i) as boolean | undefined;
+      const memberStates = this.groups.memberStatesOf(group);
       const next = {
         id: this.groups.idOf(group) as string,
         // A new key goes in with the members in their new order
         order: this.groups.orderOf(group) as string,
         layerId:
           (value('parent', i) as string | undefined) ?? (this.groups.layerOf(group) as string),
-        visible: hidden === undefined ? visible : !hidden,
-        locked: (value('locked', i) as boolean | undefined) ?? this.groups.isLocked(group),
+        flags,
       };
       this.groups.set(group, next);
-      if (next.visible !== visible) shown.add(group);
+      if (this.groups.memberStatesOf(group) !== memberStates) shown.add(group);
       const order = value('key', i) as string | undefined;
       if (order !== undefined && order !== next.order) {
         let list = orders.get(next.layerId);
@@ -4008,6 +4026,55 @@ class FeatureTablesStore implements FeatureTablesInternals, TablesWriter, Tables
     this.revisionCount++;
   }
 
+  /**
+   * Reads the bits of the state of the rows declared from values once: the bits of each byte of
+   * the flags of a row, those the flags of a group give its members, and the values of the
+   * `whole` columns
+   *
+   * @throws `KasaneError` with the code `invalid-input` for a column that is not one of the kind
+   * named, or bits that are not bits of the user besides those of the handles
+   */
+  private declareValueStates(declared: ValueStates): WholeStates[] {
+    const among = USER_STATES & ~this.rowStates.mask;
+    const rowFlags = (declared.rowFlags ?? []).map(({ column, states }) => {
+      const flag = this.flagBits.get(column);
+      if (flag === undefined) {
+        throw new KasaneError('invalid-input', `FeatureTables: "${column}" is not a flag column`);
+      }
+      checkStateBits(`the states of "${column}"`, states, among);
+      return { flag, states };
+    });
+    for (let flags = 0; flags < 256; flags++) {
+      let states = (flags & ROW_FLAG_DELETED) !== 0 ? STATE_DELETED : 0;
+      for (const { flag, states: bits } of rowFlags) if ((flags & flag) !== 0) states |= bits;
+      this.flagStates[flags] = states;
+    }
+    this.groups.setMemberFlags(
+      (declared.groupFlags ?? []).map(({ column, states }) => {
+        const flag = this.groups.flagBitOf(column);
+        if (flag === 0) {
+          throw new KasaneError(
+            'invalid-input',
+            `FeatureTables: "${column}" is not a flag column of the groups`,
+          );
+        }
+        checkStateBits(`the states of "${column}"`, states, among);
+        return { flag, states };
+      }),
+    );
+    return (declared.wholeValues ?? []).map(({ column, values, states }) => {
+      const at = this.blockWholes.get(column);
+      if (at === undefined) {
+        throw new KasaneError(
+          'invalid-input',
+          `FeatureTables: "${column}" is not a whole column each row block keeps`,
+        );
+      }
+      checkStateBits(`the states of "${column}"`, states, among);
+      return { at, values: new Set(values), states };
+    });
+  }
+
   /** Makes the copy of the state of a row again */
   private writeState(group: RowGroup, row: number): void {
     const state = this.rowStateOf(group, row);
@@ -4020,15 +4087,13 @@ class FeatureTablesStore implements FeatureTablesInternals, TablesWriter, Tables
     const data = group.data;
     const handle = data.handles[row];
     const flags = data.flags[row];
-    let state = this.rowStates.of(handle);
-    if ((flags & ROW_FLAG_HIDDEN) !== 0) state |= STATE_HIDDEN_INVISIBLE;
-    if ((flags & ROW_FLAG_DELETED) !== 0) state |= STATE_DELETED;
-    const featureGroup = data.groups[row];
-    if (featureGroup >= 0) {
-      state |= this.groups.statesOf(featureGroup);
-      if (!this.groups.isVisible(featureGroup)) state |= STATE_HIDDEN_GROUP;
+    let state = this.rowStates.of(handle) | this.flagStates[flags];
+    const inGroup = data.groups[row];
+    if (inGroup >= 0) state |= this.groups.memberStatesOf(inGroup);
+    for (const { at, values, states } of this.wholeStates) {
+      const column = data.wholes[at] as RowBlockValues | null;
+      if (column && values.has(column.values[column.indexes[row]])) state |= states;
     }
-    if (rowType(data, row) === 'Circle') state |= STATE_UNIFORM;
     if (!group.delta && !group.pending) {
       // The copy of a row read elsewhere: in the delta, or in another group until it is in this
       if (this.ids.deltaLayer(handle) >= 0) state |= STATE_DELTA;
@@ -4203,6 +4268,14 @@ function finishChanges(changes: Map<string, LayerChangeDraft>): Map<string, Laye
     });
   }
   return out;
+}
+
+/** The values of a `whole` column kept by each row block that give a row bits of its state */
+interface WholeStates {
+  /** The place of the column in `RowBlockData.wholes` */
+  readonly at: number;
+  readonly values: ReadonlySet<unknown>;
+  readonly states: number;
 }
 
 /** The columns of a patch a write in place reads, taken from it once */

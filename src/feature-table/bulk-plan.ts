@@ -23,6 +23,7 @@ import type {
   RowValues,
 } from '../shared/types/model.js';
 import {
+  isGroupLocked,
   ROW_FLAG_LOCKED,
   STYLE_COLUMN,
   TYPE_COLUMN,
@@ -340,7 +341,7 @@ function lockReader(
     if (group >= 0) {
       let groupLocked = groups.get(group);
       if (groupLocked === undefined) {
-        groupLocked = internals.groups.isLocked(group);
+        groupLocked = isGroupLocked(internals.groups, group);
         groups.set(group, groupLocked);
       }
       if (groupLocked) return true;

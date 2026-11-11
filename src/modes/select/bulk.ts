@@ -24,7 +24,7 @@ import { writeKindsInSlices } from '../../operations/bulk-sliced.js';
 import { type BulkKinds, transformKinds } from '../../operations/bulk-transform.js';
 import type { TransformEdit } from '../../store/store.js';
 import type { BoxSelection, Feature } from '../../store/types.js';
-import { ROW_FLAG_LOCKED } from '../../table/feature-row-columns.js';
+import { isGroupHidden, isGroupLocked, ROW_FLAG_LOCKED } from '../../table/feature-row-columns.js';
 import { ROW_FLAG_DELETED } from '../../table/row-group-types.js';
 import type { EngineModeContext } from '../handler.js';
 import { boxRects, isFeatureInBox } from './box-selection.js';
@@ -77,8 +77,8 @@ export function queryRowsInBox(box: BoxSelection, context: EngineModeContext): T
         const featureGroup = data.groups[row];
         if (featureGroup >= 0) {
           if (
-            !internals.groups.isVisible(featureGroup) ||
-            internals.groups.isLocked(featureGroup)
+            isGroupHidden(internals.groups, featureGroup) ||
+            isGroupLocked(internals.groups, featureGroup)
           ) {
             continue;
           }

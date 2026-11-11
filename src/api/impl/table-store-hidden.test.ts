@@ -85,4 +85,21 @@ describe('a group hidden on this client in a layer held as rows', () => {
     draw.hidden.remove('g');
     expect(drawn(tables).sort()).toEqual(['a', 'b', 'c', 'd']);
   });
+
+  it('leaves the hidden ids with the group deleted: restored or created again, it is shown', () => {
+    const { draw, tables } = open();
+    draw.hidden.add('g');
+    draw.groups.delete('g');
+    expect(draw.hidden.has('g')).toBe(false);
+    expect(drawn(tables)).toEqual(['a', 'b', 'c', 'd']);
+    draw.groups.restore('g');
+    expect(draw.groups.has('g')).toBe(true);
+    expect(draw.hidden.has('g')).toBe(false);
+    expect(drawn(tables)).toEqual(['a', 'b', 'c', 'd']);
+    draw.groups.delete('g');
+    draw.groups.create({ id: 'g', name: 'g', featureIds: ['a', 'd'] });
+    expect(hiddenInState(tables, 'a')).toBe(false);
+    draw.hidden.add('g');
+    expect(drawn(tables).sort()).toEqual(['b', 'c']);
+  });
 });

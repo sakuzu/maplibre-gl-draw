@@ -61,6 +61,7 @@ import { MemoryStore } from './store/memory.js';
 import type { Store } from './store/store.js';
 import { createTableStore } from './store/table-memory.js';
 import { circleRowRings } from './table/circle-rings.js';
+import { GROUP_FLAG_HIDDEN } from './table/feature-row-columns.js';
 import { createRowBlockDataBuilder, type RowInput } from './table/row-group-builder.js';
 import { FEATURE_TABLE_COLUMNS } from './table/tabane/columns.js';
 import { GpuResources } from './view/gpu.js';
@@ -994,8 +995,7 @@ export function tablesOfReference(
       id,
       order: group.order,
       layerId: group.layerId,
-      visible: group.visible,
-      locked: false,
+      flags: group.visible ? 0 : GROUP_FLAG_HIDDEN,
     });
   }
   const groupKeys = [...reference.groups].map(([id, group]) => ({

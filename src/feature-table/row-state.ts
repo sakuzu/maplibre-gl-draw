@@ -15,7 +15,10 @@
  *   here (`RowStates`), the one place they are written
  * - The bits of each group, set with `setGroupStates(groups, mask, bits)` and kept by the table of
  *   the groups: the members of a group take them
- * - The bits the user declares from the values of the rows and of their groups
+ * - The bits the user declares from the values of the rows and of their groups (`ValueStates`):
+ *   a `flag` column of the rows and the bits it sets, a `flag` column of the groups and the bits it
+ *   sets on their members, values of a `whole` column and the bits they set. The tables read
+ *   whether two values are the same, and nothing else of them
  *
  * The user gives every bit but those of the tables its meaning, and declares the bits that leave
  * a row out of the rows drawn (`hiddenStates`). The copies are made from the sources, never the
@@ -43,6 +46,31 @@ export const TABLE_STATES = STATE_DELETED | STATE_ELSEWHERE;
 export const USER_STATES = STATE_DELETED - 1;
 /** The most bits of each handle the user can declare */
 export const MOST_ROW_STATE_BITS = 13;
+
+/**
+ * The bits of the copy of the state of a row the user declares from values (`valueStates`): each
+ * entry names a column, and the bits it sets on a row whose value it is
+ *
+ * @internal
+ */
+export interface ValueStates {
+  /** `flag` columns of the rows, and the bits each sets on the rows whose flag is set */
+  readonly rowFlags?: readonly { readonly column: string; readonly states: number }[];
+  /**
+   * `flag` columns of the groups, and the bits each sets on the members of the groups whose flag
+   * is set
+   */
+  readonly groupFlags?: readonly { readonly column: string; readonly states: number }[];
+  /**
+   * `whole` columns whose values each row block keeps (`'rowBlock'`), values of them, and the bits
+   * each sets on the rows that hold one of the values
+   */
+  readonly wholeValues?: readonly {
+    readonly column: string;
+    readonly values: readonly unknown[];
+    readonly states: number;
+  }[];
+}
 
 /**
  * Checks the bits a user declares or writes: bits of the user, among the bits given

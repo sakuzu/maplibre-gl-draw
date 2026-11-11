@@ -122,3 +122,14 @@ export function flagBitOf(layout: RowColumnLayout, name: string): number {
   const at = layout.flags.indexOf(name);
   return at < 0 ? 0 : ROW_FLAG_DELETED << (at + 1);
 }
+
+/**
+ * The bit of a `flag` column of the groups in the flags of a group (0 for a name that is not one):
+ * a bit each, in the order the columns are declared (`GroupTable.flagsOf`)
+ *
+ * @internal
+ */
+export function groupFlagBitOf(layout: RowColumnLayout, name: string): number {
+  const at = layout.flags.indexOf(name);
+  return at < 0 ? 0 : 1 << at;
+}
