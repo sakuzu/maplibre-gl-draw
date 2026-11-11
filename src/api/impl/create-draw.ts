@@ -41,7 +41,7 @@ import type { ResourceDeps } from './shared.js';
 import { invalidInput, notFound } from './shared.js';
 import { createSketches } from './sketches.js';
 import { attachTableDiagnostics } from './table-diagnostics.js';
-import { createWriter, type Writers } from './write.js';
+import { appValuesOf, createWriter, type Writers } from './write.js';
 
 /** The methods of the instance that return a promise: after destroy they reject */
 const ASYNC_MEMBERS: ReadonlySet<string> = new Set([
@@ -245,7 +245,6 @@ export function createDrawOnEngine(
     ]),
     vertexSelection: createVertexSelection(deps, events),
     drawing: createDrawingResource(engine),
-    metadata: pick(metadataResource, ['get']),
     options: {
       get value() {
         return optionsObservable.value;
@@ -254,7 +253,18 @@ export function createDrawOnEngine(
       get: drawOptions.get,
       update: drawOptions.update,
     },
-    document: pick(documentResource, ['setShown', 'getShown', 'toJSON', 'toGeoJSON']),
+    document: {
+      ...pick(documentResource, ['setShown', 'getShown', 'toJSON', 'toGeoJSON']),
+      get title() {
+        return store.getMetadata().title ?? '';
+      },
+      get description() {
+        return store.getMetadata().description ?? '';
+      },
+      get metadata() {
+        return appValuesOf(store.getMetadata() as Record<string, unknown>);
+      },
+    },
     extensions: engine.extensions.collections,
     memory: memory.memory,
 

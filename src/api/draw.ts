@@ -18,7 +18,6 @@ import type { HiddenCollection } from './hidden.js';
 import { createDraw as createDrawInstance } from './impl/create-draw.js';
 import type { LayersCollection } from './layers.js';
 import type { MemoryResource } from './memory.js';
-import type { MetadataResource } from './metadata.js';
 import type { DrawOptions, OptionsResource } from './options.js';
 import type { RenderedResource } from './rendered.js';
 import type { SelectionResource, VertexSelectionResource } from './selection.js';
@@ -75,8 +74,6 @@ export interface Draw {
   readonly vertexSelection: VertexSelectionResource;
   /** The shape the current drawing mode is drawing, to drive it from code */
   readonly drawing: DrawingResource;
-  /** The title and the description of the document */
-  readonly metadata: MetadataResource;
   /** The options that can change while the instance runs */
   readonly options: OptionsResource;
   /** The whole document, to load and to write out */

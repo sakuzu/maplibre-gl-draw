@@ -12,6 +12,7 @@
 import type { Map as MapLibreMap } from 'maplibre-gl';
 import { describe, expect, it } from 'vitest';
 import { drawLineMode } from '../../modes/draw/line.js';
+import { nativeDocument } from '../../test-support/native-document.js';
 import { createModeHarness, keyInput, pointerInput } from '../../test-utils.js';
 import { getStyleRuleChannel } from '../../view/style-rule.js';
 import { createAppliedStyles } from './applied-style.js';
@@ -75,15 +76,17 @@ describe('the spatial index derived from the Store', () => {
     });
     context.store.setReadOnly(true);
 
-    await io.load({
-      version: '3.0.0',
-      layers: [
-        { id: 'default-layer', name: 'L', visible: true, locked: false, opacity: 1, items: [] },
-      ],
-      layerOrder: ['default-layer'],
-      groups: [],
-      features: [],
-    } as never);
+    await io.load(
+      nativeDocument({
+        version: '4.0.0',
+        layers: [
+          { id: 'default-layer', name: 'L', visible: true, locked: false, opacity: 1, items: [] },
+        ],
+        layerOrder: ['default-layer'],
+        groups: [],
+        features: [],
+      }) as never,
+    );
 
     expect(context.store.getFeature('kept')).toBeDefined();
     expect(context.spatialIndex.findNear([2, 2], 0.001)).toEqual(['kept']);

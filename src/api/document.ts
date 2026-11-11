@@ -14,6 +14,15 @@ import type { DrawDocument } from './model.js';
  * `draw.open`, and added to with `tx.import`.
  */
 export interface DocumentResource {
+  /** The title (empty when there is none) */
+  readonly title: string;
+  /** The description (empty when there is none) */
+  readonly description: string;
+  /**
+   * The values an application or an extension keeps on the document, each under a key of its own
+   * prefix (`app:key`); written with `tx.document.update`
+   */
+  readonly metadata: { readonly [key: `${string}:${string}`]: unknown };
   /**
    * Shows another document in place of the document, for this client only, until `null` is
    * given: a past version of the document to look at, say, on the same map.

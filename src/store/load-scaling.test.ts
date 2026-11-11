@@ -26,6 +26,7 @@ import { createDocument } from '../api/impl/document.js';
 import { connectStoreEvents, createEventHub } from '../api/impl/events.js';
 import type { FeatureCoordinates, ObjectGroup, ObjectLayer } from '../shared/types/model.js';
 import { geometryFromCoordinates } from '../shared/utils/coordinates.js';
+import { nativeDocument } from '../test-support/native-document.js';
 import { createResourceDeps } from '../test-utils.js';
 import { MemoryStore } from './memory.js';
 import type { Data, Feature } from './types.js';
@@ -115,7 +116,13 @@ function generate(count: number): Data {
     }
     layers[li].items = [...groupIds, ...ids.slice(cursor)];
   }
-  return { version: '3.0.0', layers, layerOrder: layers.map((l) => l.id), groups, features };
+  return nativeDocument({
+    version: '4.0.0',
+    layers,
+    layerOrder: layers.map((l) => l.id),
+    groups,
+    features,
+  });
 }
 
 // Measurement equivalent to a browser: the events of the instance follow the Store, with an

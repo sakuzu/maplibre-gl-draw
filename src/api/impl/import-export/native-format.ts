@@ -25,8 +25,9 @@ import type {
   LoadResult,
 } from '../../../store/types.js';
 import { DrawError } from '../../errors.js';
+import type { DrawDocument } from '../../model.js';
+import { toFeature } from '../feature-shape.js';
 import { NATIVE_VERSION } from './constants.js';
-import { upgradeNativeData } from './native-upgrade.js';
 import { validateNativeData } from './native-validation.js';
 import type { PreparedLoad } from './types.js';
 
@@ -34,9 +35,10 @@ import type { PreparedLoad } from './types.js';
 const DEFAULT_LAYER_ID = 'default-layer';
 
 /**
- * Exports the current data in the native format
+ * Exports the current data in the native format, as `document.toJSON` gives it: the features as
+ * GeoJSON Features, the title and the description apart from the values of the application
  */
-export function exportNative(store: Store, options?: ExportOptions): Data {
+export function exportNative(store: Store, options?: ExportOptions): DrawDocument {
   // A Store of rows: its features made from its rows one at a time, in the order they are drawn.
   // Every layer and group is written with the items and the members it lists (those of a layer
   // held as rows read from its rows): the format has no layer of rows
@@ -70,19 +72,25 @@ export function exportNative(store: Store, options?: ExportOptions): Data {
     }
   }
 
-  const metadata = store.getMetadata();
+  const { title, description, ...rest } = store.getMetadata() as Record<string, unknown>;
+  const metadata: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(rest)) if (key.indexOf(':') > 0) metadata[key] = value;
   const now = new Date().toISOString();
 
   return {
     version: NATIVE_VERSION,
     created: now,
     modified: now,
-    metadata: Object.keys(metadata).length > 0 ? metadata : undefined,
-    layers,
+    ...(typeof title === 'string' && { title }),
+    ...(typeof description === 'string' && { description }),
+    ...(Object.keys(metadata).length > 0 && {
+      metadata: metadata as DrawDocument['metadata'],
+    }),
+    layers: layers as DrawDocument['layers'],
     // The whole stacking order, entries of the application that are not layers included
     layerOrder: [...store.getLayerOrder()],
-    groups,
-    features,
+    groups: groups as DrawDocument['groups'],
+    features: features.map(toFeature),
     files: Object.keys(filesRecord).length > 0 ? filesRecord : undefined,
   };
 }
@@ -105,8 +113,8 @@ export async function prepareNative(
   // still intact.
   const retainedLayerIds = new Set<string>();
   if (store.getLayer(DEFAULT_LAYER_ID)) retainedLayerIds.add(DEFAULT_LAYER_ID);
-  // Data of an earlier major version is brought to the current one first
-  const upgraded = upgradeNativeData(data) as Data;
+  // Only the version this library writes is read (another major version is refused)
+  const upgraded = data as Data & { title?: unknown; description?: unknown };
   const { layers, layerOrder, groups, features, files, fileProblems } = await validateNativeData(
     upgraded,
     retainedLayerIds,
@@ -174,10 +182,15 @@ export async function prepareNative(
     //    nothing of the previous document is left on it
     store.setLayerOrder([...retainedUnlisted, ...layerOrder]);
 
-    // 7. Import the metadata
-    if (upgraded.metadata) {
-      store.setMetadata(upgraded.metadata);
+    // 7. Replace the title, the description and the values of the application
+    const metadata: Record<string, unknown> = {};
+    for (const key of Object.keys(store.getMetadata())) metadata[key] = undefined;
+    if (typeof upgraded.title === 'string') metadata.title = upgraded.title;
+    if (typeof upgraded.description === 'string') metadata.description = upgraded.description;
+    for (const [key, value] of Object.entries(upgraded.metadata ?? {})) {
+      if (key.indexOf(':') > 0) metadata[key] = value;
     }
+    store.setMetadata(metadata as Partial<Data['metadata'] & object>);
 
     return {
       format: 'native',

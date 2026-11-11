@@ -22,7 +22,6 @@ import type {
   GroupPatch,
   LayerInput,
   LayerPatch,
-  Metadata,
   Properties,
 } from './model.js';
 import type { SelectionTarget } from './state.js';
@@ -251,8 +250,19 @@ export interface TransactionGroups extends GroupsCollection {
 export interface TransactionDocument {
   readonly title: string;
   readonly description: string;
-  /** Changes the fields given (the title, the description, and those an application adds) */
-  update(patch: Partial<Metadata>): Promise<void>;
+  /** The values an application or an extension keeps on the document, under keys of its prefix */
+  readonly metadata: { readonly [key: `${string}:${string}`]: unknown };
+  /**
+   * Changes the fields given: the title, the description, and the values of `metadata` key by
+   * key (keys of their own prefix, `app:key`, JSON values). A key is removed by naming it in
+   * `unset`.
+   */
+  update(patch: {
+    readonly title?: string;
+    readonly description?: string;
+    readonly metadata?: { readonly [key: `${string}:${string}`]: unknown };
+    readonly unset?: { readonly metadata?: readonly `${string}:${string}`[] };
+  }): Promise<void>;
 }
 
 // ============================================================================

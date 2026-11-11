@@ -63,7 +63,7 @@ describe('create and reading', () => {
       metadata: undefined,
     });
     expect(first).toBe(store.getLayer('a'));
-    const second = layers.create({ metadata: { owner: 'x' } });
+    const second = layers.create({ metadata: { 'app:owner': 'x' } });
     expect(second?.id).toBe('id-1');
     expect(second?.name).not.toBe('');
     expect(store.getLayerOrder()).toEqual(['a', 'id-1']);

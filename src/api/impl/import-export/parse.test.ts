@@ -7,6 +7,7 @@
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { processImageDataUrl, UnsupportedImageTypeError } from '../../../shared/utils/image.js';
+import { nativeDocument } from '../../../test-support/native-document.js';
 import { DrawError } from '../../errors.js';
 import type { DrawDocument, Feature, FeatureFields } from '../../model.js';
 import { parseGeoJSON, parseNative, readFeature } from '../../model.js';
@@ -408,8 +409,8 @@ describe('parseNative', () => {
     locked: false,
     ...extra,
   });
-  const doc = {
-    version: '2.0.0',
+  const doc = nativeDocument({
+    version: '4.0.0',
     created: '2026-01-01T00:00:00.000Z',
     modified: '2026-01-01T00:00:00.000Z',
     layers: [layer('front', ['p']), layer('back', ['g', 'img'])],
@@ -427,7 +428,7 @@ describe('parseNative', () => {
       }),
     ],
     files: { f: { id: 'f', mimeType: 'image/png', dataURL: SMALL } },
-  } as unknown as DrawDocument;
+  }) as unknown as DrawDocument;
 
   it('gives every layer, group, feature and file a new ID and rewires the references', async () => {
     const { minted, generateId } = counter();
@@ -498,8 +499,8 @@ describe('parseNative', () => {
       groups: [{ ...doc.groups?.[0], featureIds: ['img'] }],
       features: [
         doc.features[0],
-        { ...doc.features[3], groupId: 'g' },
-        { ...doc.features[1], groupId: undefined },
+        withGroup(doc.features[3], 'g'),
+        withGroup(doc.features[1], undefined),
       ],
       files: { f: { id: 'f', mimeType: 'image/png', dataURL: LARGE } },
     } as DrawDocument;
@@ -527,3 +528,11 @@ describe('parseNative', () => {
     ).rejects.toMatchObject({ name: 'DrawError', code: 'invalid-input' });
   });
 });
+
+/** A feature of a document put in a group, or in none */
+function withGroup<F extends { properties: object }>(feature: F, groupId: string | undefined): F {
+  const properties: Record<string, unknown> = { ...feature.properties };
+  if (groupId === undefined) delete properties['maplibre-gl-draw:groupId'];
+  else properties['maplibre-gl-draw:groupId'] = groupId;
+  return { ...feature, properties };
+}

@@ -396,8 +396,11 @@ export interface ObjectLayer {
   opacity: number;
   /** The rule that colors its features from their attributes */
   styleRule: StyleRule | undefined;
-  /** Values of the user */
-  metadata: Record<string, unknown> | undefined;
+  /**
+   * The values an application or an extension keeps on the layer, each under a key of its own
+   * prefix (`app:key`); the library does not read them
+   */
+  metadata: { readonly [key: `${string}:${string}`]: unknown } | undefined;
   /** Not set: a layer of objects */
   kind?: undefined;
   /**
@@ -424,8 +427,8 @@ export interface TableLayer {
   opacity: number;
   /** The rule that colors its features from their attributes */
   styleRule: StyleRule | undefined;
-  /** Values of the user */
-  metadata: Record<string, unknown> | undefined;
+  /** The values an application or an extension keeps on the layer, under keys of its own prefix */
+  metadata: { readonly [key: `${string}:${string}`]: unknown } | undefined;
   /** A layer held as rows */
   kind: 'table';
 }
@@ -517,8 +520,12 @@ export interface DrawDocument {
   created?: string;
   /** When it was last changed, as an ISO 8601 timestamp */
   modified?: string;
-  /** The title and the description */
-  metadata?: Metadata;
+  /** The title */
+  title?: string;
+  /** The description */
+  description?: string;
+  /** The values an application or an extension keeps on the document, under keys of its own prefix */
+  metadata?: { readonly [key: `${string}:${string}`]: unknown };
   /** The layers, each with the items it lists (a layer held as rows is not written here) */
   layers?: ObjectLayer[];
   /** The IDs of the layers in stacking order, from the back */
@@ -797,13 +804,16 @@ export interface LayerInput {
   opacity?: number;
   /** The rule that colors its features */
   styleRule?: StyleRule;
-  /** Values of the user */
-  metadata?: Record<string, unknown>;
+  /** The values of the application under keys of its own prefix (`app:key`) */
+  metadata?: { readonly [key: `${string}:${string}`]: unknown };
   /** The position in the stacking order, 0 at the back; the front when it is left out */
   index?: number;
 }
 
-/** What `layers.update` takes: only the keys given change. */
+/**
+ * What `tx.layers.update` takes: only the keys given change. `metadata` is merged key by key (the
+ * keys of its own prefix, `app:key`), and a key is removed by naming it in `unset`.
+ */
 export interface LayerPatch {
   /** The name */
   name?: string;
@@ -815,8 +825,10 @@ export interface LayerPatch {
   opacity?: number;
   /** The rule that colors its features; `undefined` removes it */
   styleRule?: StyleRule;
-  /** Values of the user */
-  metadata?: Record<string, unknown>;
+  /** The values of the application to set, under keys of its own prefix */
+  metadata?: { readonly [key: `${string}:${string}`]: unknown };
+  /** The keys of `metadata` to remove */
+  unset?: { readonly metadata?: readonly `${string}:${string}`[] };
 }
 
 /** What `layers.list` and `layers.count` keep: every key given must match. */

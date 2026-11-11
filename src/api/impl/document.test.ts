@@ -8,6 +8,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { ObjectLayer } from '../../shared/types/model.js';
 import { MemoryStore } from '../../store/memory.js';
+import { nativeDocument } from '../../test-support/native-document.js';
 import { createResourceDeps } from '../../test-utils.js';
 import { DrawError } from '../errors.js';
 import { createDocument } from './document.js';
@@ -116,8 +117,8 @@ describe('draw.document', () => {
     await expect(doc.load({ hello: 1 } as never)).rejects.toMatchObject({
       code: 'unsupported-format',
     });
-    const broken = {
-      version: '3.0.0',
+    const broken = nativeDocument({
+      version: '4.0.0',
       layerOrder: [],
       features: [
         {
@@ -127,7 +128,7 @@ describe('draw.document', () => {
           layerId: 'nowhere',
         },
       ],
-    };
+    });
     await expect(doc.load(broken as never)).rejects.toMatchObject({ code: 'invalid-input' });
     await expect(doc.load(geojson, { layerId: 'x' })).rejects.toMatchObject({ code: 'not-found' });
     expect(store.listFeatures().map((f) => f.id)).toEqual(['a']);
@@ -397,8 +398,8 @@ describe('document.loadMany store contents', () => {
     return `data:image/png;base64,${bytes.toString('base64')}`;
   })();
 
-  const native = {
-    version: '2.0.0',
+  const native = nativeDocument({
+    version: '4.0.0',
     layers: [
       {
         id: 'n1',
@@ -437,7 +438,7 @@ describe('document.loadMany store contents', () => {
       },
     ],
     files: { f1: { id: 'f1', mimeType: 'image/png', dataURL: smallPng } },
-  };
+  });
 
   const geojson = {
     type: 'FeatureCollection',

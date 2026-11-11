@@ -1109,6 +1109,9 @@ class TransactionImpl implements Transaction {
       setActive: (id) => read(() => reads.setActive(id)),
       create: (input?: LayerInput) =>
         this.#run((keep) => {
+          if (input !== undefined && isRecord(input) && input.metadata !== undefined) {
+            checkAppValues(input.metadata, 'metadata');
+          }
           const prepared = prepareLayer(
             { ...this.#deps, store: overlay.view },
             input ?? {},
@@ -1132,9 +1135,11 @@ class TransactionImpl implements Transaction {
           );
           return layer as Layer;
         }),
-      update: (id: string, patch: LayerPatch) =>
+      update: (id: string, given: LayerPatch) =>
         this.#run((keep) => {
           const layer = requireLayer(id);
+          // The values of the application are merged key by key, the keys of `unset` removed
+          const patch = layerPatchOf(given, layer);
           const updates = prepareLayerPatch(patch);
           this.#requireEditable();
           if (layerLocked(overlay.view, layer) && !onlyLockOrVisibility(patch)) {
@@ -1306,29 +1311,31 @@ class TransactionImpl implements Transaction {
   #documentWrites(): TransactionDocument {
     const self = this;
     const metadata = this.#writers.metadata;
-    let written: Partial<Metadata> = {};
-    const now = (): Metadata => ({ ...metadata.get(), ...written });
+    let written: Record<string, unknown> = {};
+    const now = (): Record<string, unknown> => {
+      const out: Record<string, unknown> = { ...metadata.get(), ...written };
+      for (const key of Object.keys(out)) if (out[key] === undefined) delete out[key];
+      return out;
+    };
     return {
       get title() {
         self.#requireSettled();
-        return now().title ?? '';
+        return (now().title as string | undefined) ?? '';
       },
       get description() {
         self.#requireSettled();
-        return now().description ?? '';
+        return (now().description as string | undefined) ?? '';
+      },
+      get metadata() {
+        self.#requireSettled();
+        return appValuesOf(now());
       },
       update: (patch) =>
         self.#run((keep) => {
-          if (!isRecord(patch)) throw invalidInput('The patch must be an object');
-          for (const key of ['title', 'description'] as const) {
-            const value = (patch as Record<string, unknown>)[key];
-            if (value !== undefined && typeof value !== 'string') {
-              throw invalidInput(`${key} must be a string`);
-            }
-          }
+          const fields = documentPatchOf(patch);
           self.#requireEditable();
-          written = { ...written, ...patch };
-          keep(() => metadata.update(patch) !== null);
+          written = { ...written, ...fields };
+          keep(() => metadata.update(fields as Partial<Metadata>) !== null);
           return undefined;
         }),
     };
@@ -1658,4 +1665,106 @@ function sameSelection(a: Selection, b: Selection): boolean {
     a.ids.length === b.ids.length &&
     a.ids.every((id, i) => id === b.ids[i])
   );
+}
+
+// ============================================================================
+// The values of the application
+// ============================================================================
+
+/** Whether a key is one of the values of an application: it has a prefix, `app:key` */
+function isAppKey(key: string): boolean {
+  const at = key.indexOf(':');
+  return at > 0 && at < key.length - 1;
+}
+
+/** Whether a value is a JSON value */
+function isJsonValue(value: unknown, depth = 0): boolean {
+  if (depth > 64) return false;
+  if (value === null || typeof value === 'string' || typeof value === 'boolean') return true;
+  if (typeof value === 'number') return Number.isFinite(value);
+  if (Array.isArray(value)) return value.every((item) => isJsonValue(item, depth + 1));
+  if (!isRecord(value) || Object.getPrototypeOf(value) !== Object.prototype) return false;
+  return Object.values(value).every((item) => isJsonValue(item, depth + 1));
+}
+
+/**
+ * Checks the values of an application: an object whose keys have a prefix and whose values are
+ * JSON values (`undefined` is refused: a key is removed by naming it in `unset`)
+ *
+ * @internal
+ */
+export function checkAppValues(values: unknown, what: string): Record<string, unknown> {
+  if (!isRecord(values)) throw invalidInput(`${what} must be an object`);
+  for (const [key, value] of Object.entries(values)) {
+    if (!isAppKey(key)) {
+      throw invalidInput(`The key ${key} of ${what} has no prefix: write it as app:${key}`);
+    }
+    if (value === undefined) throw invalidInput(`The key ${key} of ${what} is undefined: unset it`);
+    if (!isJsonValue(value)) throw invalidInput(`The key ${key} of ${what} is not a JSON value`);
+  }
+  return values;
+}
+
+/** The keys of `unset.metadata`, checked */
+function unsetKeysOf(unset: unknown): string[] {
+  if (unset === undefined) return [];
+  if (!isRecord(unset)) throw invalidInput('unset must be an object');
+  for (const key of Object.keys(unset)) {
+    if (key !== 'metadata') throw invalidInput(`unset cannot have the key ${key}`);
+  }
+  const keys = unset.metadata;
+  if (keys === undefined) return [];
+  if (!Array.isArray(keys) || keys.length === 0 || keys.some((key) => typeof key !== 'string')) {
+    throw invalidInput('unset.metadata must be a non-empty array of keys');
+  }
+  for (const key of keys as string[]) {
+    if (!isAppKey(key)) throw invalidInput(`The key ${key} has no prefix`);
+  }
+  return keys as string[];
+}
+
+/**
+ * The values of an application among the metadata the Store holds
+ *
+ * @internal
+ */
+export function appValuesOf(metadata: Record<string, unknown>): {
+  readonly [key: `${string}:${string}`]: unknown;
+} {
+  const out: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(metadata)) if (isAppKey(key)) out[key] = value;
+  return out as { readonly [key: `${string}:${string}`]: unknown };
+}
+
+/** A patch of the document as the fields of the metadata of the Store (`undefined` removes) */
+function documentPatchOf(patch: unknown): Record<string, unknown> {
+  if (!isRecord(patch)) throw invalidInput('The patch must be an object');
+  const out: Record<string, unknown> = {};
+  for (const key of Object.keys(patch)) {
+    if (!['title', 'description', 'metadata', 'unset'].includes(key)) {
+      throw invalidInput(`The patch cannot have the key ${key}`);
+    }
+  }
+  for (const key of ['title', 'description'] as const) {
+    const value = patch[key];
+    if (value !== undefined && typeof value !== 'string')
+      throw invalidInput(`${key} must be a string`);
+    if (value !== undefined) out[key] = value;
+  }
+  if (patch.metadata !== undefined) Object.assign(out, checkAppValues(patch.metadata, 'metadata'));
+  for (const key of unsetKeysOf(patch.unset)) out[key] = undefined;
+  if (Object.keys(out).length === 0) throw invalidInput('The patch changes nothing');
+  return out;
+}
+
+/** A patch of a layer as the internal resource takes it: its whole metadata, merged */
+function layerPatchOf(patch: LayerPatch, layer: StoredLayer): LayerPatch {
+  if (!isRecord(patch)) throw invalidInput('The patch must be an object');
+  const { metadata, unset, ...rest } = patch as LayerPatch & Record<string, unknown>;
+  const removed = unsetKeysOf(unset);
+  if (metadata === undefined && removed.length === 0) return rest as LayerPatch;
+  const merged: Record<string, unknown> = { ...(layer.metadata ?? {}) };
+  if (metadata !== undefined) Object.assign(merged, checkAppValues(metadata, 'metadata'));
+  for (const key of removed) delete merged[key];
+  return { ...rest, metadata: merged } as LayerPatch;
 }

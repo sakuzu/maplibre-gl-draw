@@ -12,7 +12,8 @@ import type { LoadOptions, LoadResult, LoadSource } from '../model.js';
 /**
  * @internal
  */
-export interface DocumentLoads extends DocumentResource {
+export interface DocumentLoads
+  extends Pick<DocumentResource, 'setShown' | 'getShown' | 'toJSON' | 'toGeoJSON'> {
   /**
    * Reads a file, a JSON string, a document of the library or GeoJSON.
    *

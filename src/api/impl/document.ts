@@ -34,7 +34,6 @@ export interface DocumentLoader extends DocumentLoads {
 import { DrawError } from '../errors.js';
 import type { StoreView } from '../extension/store.js';
 import type { DrawDocument, LoadOptions, LoadResult, LoadSource } from '../model.js';
-import { toFeature } from './feature-shape.js';
 import type { GroupShell } from './groups.js';
 import { prepareGroupShell } from './groups.js';
 import { isNativeFormat, toFeatureCollection } from './import-export/format-detection.js';
@@ -210,10 +209,7 @@ export function createDocument(
 
     getShown: () => shown.get(),
 
-    toJSON: (): DrawDocument => {
-      const data = exportNative(store);
-      return { ...data, features: data.features.map(toFeature) } as DrawDocument;
-    },
+    toJSON: (): DrawDocument => exportNative(store),
 
     toGeoJSON: (): FeatureCollection => exportGeoJSON(store),
   };
