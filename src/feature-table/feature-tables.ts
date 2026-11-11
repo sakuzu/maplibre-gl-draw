@@ -501,7 +501,7 @@ interface OverlayEntry {
   /** Where the row it is drawn over was when it was drawn */
   overPlace: { readonly group: RowGroup; readonly row: number } | undefined;
   /** Its layer */
-  readonly layer: RowTable;
+  readonly layer: string;
   /** The row it is drawn over (undefined for a feature of no row) */
   readonly over: RowHandle | undefined;
 }
@@ -630,7 +630,7 @@ class FeatureTablesStore extends TablesStore<FeatureStyle> implements FeatureTab
    */
   private writtenOverSketch(field: RowField): boolean {
     if (field === 'geometry') return true;
-    return field.startsWith(PROPERTY_FIELD) && !this.relocating.has(field);
+    return field.startsWith(PROPERTY_FIELD) && !this.relocatingFields.has(field);
   }
 
   /**
@@ -665,14 +665,7 @@ class FeatureTablesStore extends TablesStore<FeatureStyle> implements FeatureTab
       if (fields.size > 0) writes.push({ place, fields });
     }
     this.sketchInputs = sketches;
-    for (const { place, fields } of writes) {
-      const write = this.writeInPlace(place, 0, fields, undefined, undefined);
-      if (!write) continue;
-      const { tableId } = place.table;
-      this.touch(tableId, place.group.bounds);
-      for (const listener of this.writeListeners) listener(tableId, [write]);
-    }
-    if (writes.length > 0) this.revisionCount++;
+    this.writeDrawnRows(writes);
     return true;
   }
 
@@ -690,9 +683,9 @@ class FeatureTablesStore extends TablesStore<FeatureStyle> implements FeatureTab
    * is not drawn (`STATE_HIDDEN_SKETCH`). The rows are not written
    */
   private syncSketches(): void {
-    const leaving = new Map<RowTable, Set<RowHandle>>();
-    const coming = new Map<RowTable, DeltaInput[]>();
-    const leave = (layer: RowTable, handle: RowHandle): void => {
+    const leaving = new Map<string, Set<RowHandle>>();
+    const coming = new Map<string, DeltaInput[]>();
+    const leave = (layer: string, handle: RowHandle): void => {
       let set = leaving.get(layer);
       if (!set) {
         set = new Set();
@@ -708,7 +701,7 @@ class FeatureTablesStore extends TablesStore<FeatureStyle> implements FeatureTab
         const id = `\u0000overlay\u0000${SKETCH_OWNER}\u0000${feature.id}`;
         const [handle] = this.ids.allocate(utf8ColumnFromStrings([id]));
         const place = over === undefined ? undefined : this.placeOf(over);
-        const layer = this.tableOf(feature.layerId);
+        const layer = feature.layerId;
         let base: FeatureRowInput;
         if (place) base = rowInputOf(this.readContext, place.group, place.row);
         else if (given) {
@@ -719,7 +712,9 @@ class FeatureTablesStore extends TablesStore<FeatureStyle> implements FeatureTab
             key: given.key,
             ...(given.group === undefined ? {} : { group: given.group }),
           };
-        } else base = { id, type: feature.type, geometry: null, key: this.keyAfterLast(layer) };
+        } else {
+          base = { id, type: feature.type, geometry: null, key: this.keyAfterLast(layer) };
+        }
         const input: FeatureRowInput = {
           ...base,
           id,
@@ -745,22 +740,13 @@ class FeatureTablesStore extends TablesStore<FeatureStyle> implements FeatureTab
           over: place ? over : undefined,
           overPlace: undefined,
         });
-        this.drawnOnlyRows.add(handle);
       }
       for (const [id, previous] of before) {
         if (!next.has(id)) leave(previous.layer, previous.handle);
       }
       this.sketchEntries = next;
     }
-    for (const layer of new Set([...leaving.keys(), ...coming.keys()])) {
-      this.rebuildDelta(layer, leaving.get(layer) ?? new Set(), coming.get(layer) ?? []);
-    }
-    for (const [layer, set] of leaving) {
-      for (const handle of set) {
-        if (this.ids.deltaTable(handle) < 0) this.drawnOnlyRows.delete(handle);
-      }
-      layer.touchPending();
-    }
+    this.drawRows(leaving, coming);
     // The rows drawn over are not drawn
     const sketchedNow = new Set<RowHandle>();
     for (const entry of this.sketchEntries.values()) {
@@ -773,7 +759,6 @@ class FeatureTablesStore extends TablesStore<FeatureStyle> implements FeatureTab
     if (on.length > 0) this.states.setSketched(Int32Array.from(on), true);
     if (off.length > 0) this.states.setSketched(Int32Array.from(off), false);
     this.sketchedRows = sketchedNow;
-    this.revisionCount++;
   }
 
   checkSketches(expected: ReadonlySet<string>): string[] {
@@ -839,9 +824,9 @@ class FeatureTablesStore extends TablesStore<FeatureStyle> implements FeatureTab
   }
 
   /** A key of the order after every item of a layer (a feature drawn at its end) */
-  private keyAfterLast(layer: RowTable): string {
+  private keyAfterLast(layerId: string): string {
     // The last row of the order, read from the rows at its end
-    const last = layer.lastRow();
+    const last = this.rowTable(layerId)?.lastRow();
     if (!last) return 'V';
     const data = last.group.data;
     const row = last.row;
@@ -851,8 +836,12 @@ class FeatureTablesStore extends TablesStore<FeatureStyle> implements FeatureTab
     return `${key}~`;
   }
 
+  /** The fields whose new value places a row again (`relocatingFields`) */
+  private readonly relocatingFields: ReadonlySet<string>;
+
   constructor(options: TablesInternalOptions) {
     super(options);
+    this.relocatingFields = new Set(options.relocatingFields);
     this.states = new RowStateSets(this);
     this.featureCache = new FeatureCache({
       writeMarks: this.writeMarks,

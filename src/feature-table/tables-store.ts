@@ -494,6 +494,44 @@ export interface RowBlocks<V = unknown> {
 }
 
 /**
+ * Rows drawn over the rows of the tables and not read: what the user of the tables draws of a
+ * write it has not made yet (an edit under way), as rows of the deltas of the tables. They are
+ * neither read, nor told, nor stamped with a mark; the side that draws the rows draws them as it
+ * draws every row of a delta
+ *
+ * @internal
+ */
+export interface DrawnRows {
+  /**
+   * Puts rows drawn and not read into the deltas of tables, and takes such rows out of them: by
+   * table, the rows that leave the delta and the rows that come into it (a row that comes again
+   * is made again of the values given). A row that left the delta of its table is no row drawn
+   * any more
+   *
+   * @param leaving The rows that leave the delta of each table
+   * @param coming The rows that come into the delta of each table (the table is made when it
+   *   holds no row yet)
+   */
+  drawRows(
+    leaving: ReadonlyMap<string, ReadonlySet<RowHandle>>,
+    coming: ReadonlyMap<string, readonly DeltaInput[]>,
+  ): void;
+  /**
+   * Writes values over rows drawn, in place, as a write of rows writes them: the side that draws
+   * the rows is told (`RowBlocks.onRowsWritten`), and nobody else
+   *
+   * @param writes Each row drawn, where it is read, and the values of its fields written (one
+   *   value each)
+   */
+  writeDrawnRows(
+    writes: ReadonlyArray<{
+      readonly place: RowPlace;
+      readonly fields: ReadonlyMap<RowField, readonly unknown[]>;
+    }>,
+  ): void;
+}
+
+/**
  * A row of a patch that comes into the delta of a table
  *
  * @internal
@@ -558,14 +596,14 @@ interface TableChangeDraft {
  *
  * @typeParam V - The values of the `whole` column the tables keep (`'tables'`)
  */
-export class TablesStore<V = unknown> implements RowBlocks<V>, TablesWriter, Tables {
+export class TablesStore<V = unknown> implements RowBlocks<V>, DrawnRows, TablesWriter, Tables {
   readonly ids = new IdIndex();
   readonly styles = new StyleTable<V>();
   readonly groups: GroupTable;
   readonly writtenOrders = new Map<GroupHandle, string>();
   readonly strings: ValueStringCache;
   readonly readContext: RowReadContext<V>;
-  protected readonly tables = new Map<string, RowTable>();
+  private readonly tables = new Map<string, RowTable>();
   /** The tables by their serial number */
   private readonly tableList: RowTable[] = [];
   readonly rowStates: RowStates;
@@ -575,7 +613,7 @@ export class TablesStore<V = unknown> implements RowBlocks<V>, TablesWriter, Tab
   private readonly stateByte: (state: number) => number;
   private readonly rowGroups = new Map<RowGroupHandle, { table: RowTable; group: RowGroup }>();
   private nextGroup = 0;
-  protected revisionCount = 0;
+  private revisionCount = 0;
   readonly writeMarks = new WriteMarks();
   /** The row groups given to `adopt` and not taken in yet, in the order they were given */
   private readonly adoptions: Adoption[] = [];
@@ -584,7 +622,7 @@ export class TablesStore<V = unknown> implements RowBlocks<V>, TablesWriter, Tab
   /** The creation of each row in one */
   private readonly creationOf = new Map<RowHandle, Creation>();
   private readonly workListeners = new Set<() => void>();
-  protected readonly writeListeners = new Set<
+  private readonly writeListeners = new Set<
     (tableId: string, writes: readonly InPlaceRowWrite[]) => void
   >();
   private readonly deltaListeners = new Set<(tableId: string, change: DeltaRowsChange) => void>();
@@ -594,7 +632,7 @@ export class TablesStore<V = unknown> implements RowBlocks<V>, TablesWriter, Tab
   private readonly worker: TablesWorker | undefined;
   private readonly onRelease: ((handles: Int32Array) => void) | undefined;
   /** The rows of the deltas that are rows drawn over rows (drawn, not read) */
-  protected readonly drawnOnlyRows = new Set<RowHandle>();
+  private readonly drawnOnlyRows = new Set<RowHandle>();
   /**
    * The rows each deletion of this client keeps, by token, in the order the tokens were made (a
    * token that keeps groups only has no row)
@@ -626,7 +664,7 @@ export class TablesStore<V = unknown> implements RowBlocks<V>, TablesWriter, Tab
   /** The boxes of every row, in one spatial index (the rows a click may hit) */
   private readonly rowBoxes: RowBoxIndex;
   /** The fields whose new value places a row again (`relocatingFields`) */
-  protected readonly relocating: ReadonlySet<string>;
+  private readonly relocating: ReadonlySet<string>;
   /** The rings the rows of some types draw around their point (`rings`; null for none) */
   private readonly rings: RowRings | null;
   /** The caches of the rows (`caches`) */
@@ -753,6 +791,45 @@ export class TablesStore<V = unknown> implements RowBlocks<V>, TablesWriter, Tab
       },
       { whenIdle: options.whenIdle, sortKey: sortKeyOf(this.coordinates) },
     );
+  }
+
+  drawRows(
+    leaving: ReadonlyMap<string, ReadonlySet<RowHandle>>,
+    coming: ReadonlyMap<string, readonly DeltaInput[]>,
+  ): void {
+    for (const rows of coming.values()) {
+      for (const { handle } of rows) this.drawnOnlyRows.add(handle);
+    }
+    for (const tableId of new Set([...leaving.keys(), ...coming.keys()])) {
+      this.rebuildDelta(
+        this.tableOf(tableId),
+        leaving.get(tableId) ?? new Set(),
+        coming.get(tableId) ?? [],
+      );
+    }
+    for (const [tableId, handles] of leaving) {
+      for (const handle of handles) {
+        if (this.ids.deltaTable(handle) < 0) this.drawnOnlyRows.delete(handle);
+      }
+      this.tableOf(tableId).touchPending();
+    }
+    this.revisionCount++;
+  }
+
+  writeDrawnRows(
+    writes: ReadonlyArray<{
+      readonly place: RowPlace;
+      readonly fields: ReadonlyMap<RowField, readonly unknown[]>;
+    }>,
+  ): void {
+    for (const { place, fields } of writes) {
+      const write = this.writeInPlace(place, 0, fields, undefined, undefined);
+      if (!write) continue;
+      const { tableId } = place.table;
+      this.touch(tableId, place.group.bounds);
+      for (const listener of this.writeListeners) listener(tableId, [write]);
+    }
+    if (writes.length > 0) this.revisionCount++;
   }
 
   /**
@@ -1057,7 +1134,7 @@ export class TablesStore<V = unknown> implements RowBlocks<V>, TablesWriter, Tab
   }
 
   /** Tells the sides that draw in tiles the extent of rows whose drawing changed */
-  protected touch(tableId: string, bounds: BBox | null): void {
+  private touch(tableId: string, bounds: BBox | null): void {
     if (!bounds || this.touchListeners.size === 0) return;
     for (const listener of this.touchListeners) listener(tableId, bounds);
   }
@@ -1096,7 +1173,7 @@ export class TablesStore<V = unknown> implements RowBlocks<V>, TablesWriter, Tab
   }
 
   /** The rows of a table, made when first written (with the dimensions declared for it) */
-  protected tableOf(tableId: string): RowTable {
+  private tableOf(tableId: string): RowTable {
     let table = this.tables.get(tableId);
     if (!table) {
       table = new RowTable(
@@ -2812,7 +2889,7 @@ export class TablesStore<V = unknown> implements RowBlocks<V>, TablesWriter, Tab
    *
    * @returns What was written, as the drawing is told (null when nothing changed)
    */
-  protected writeInPlace(
+  private writeInPlace(
     place: RowPlace,
     i: number,
     fields: ReadonlyMap<RowField, readonly unknown[]>,
@@ -3112,7 +3189,7 @@ export class TablesStore<V = unknown> implements RowBlocks<V>, TablesWriter, Tab
    * the delta written in place is built again with its values, so the new rows hold no values
    * written in place
    */
-  protected rebuildDelta(
+  private rebuildDelta(
     table: RowTable,
     leaving: ReadonlySet<RowHandle>,
     coming: readonly DeltaInput[],
