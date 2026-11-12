@@ -10,6 +10,7 @@ import {
   pageRowBounds,
   ROW_FLAG_DELETED,
   ShapeFormReader,
+  shapeRowOf,
 } from '@sakuzu/kasane/render';
 import { decodeCanonicalValue, hashUtf8, readValue, utf8String } from '@sakuzu/tabane';
 import earcut from 'earcut';
@@ -52,7 +53,7 @@ function coordinatesOf(group: PageData, r: number): unknown {
   const child = geometryColumnOf(group)!.types[r];
   if (child < 0) return null;
   const column = new ShapeFormReader(geometryColumnOf(group)!.children[child]);
-  return column.coordinatesOf(geometryColumnOf(group)!.offsets[r]);
+  return column.coordinatesOf(shapeRowOf(geometryColumnOf(group)!, r));
 }
 
 /** The triangles earcut makes, in the pairs the builder keeps them in */

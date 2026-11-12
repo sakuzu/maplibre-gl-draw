@@ -18,7 +18,7 @@ import { createHash } from 'node:crypto';
 import type { PageBuildOptions } from '@sakuzu/kasane';
 import { transferList } from '@sakuzu/kasane';
 import type { PageData } from '@sakuzu/kasane/render';
-import { mergePageData, ShapeFormReader } from '@sakuzu/kasane/render';
+import { mergePageData, ShapeFormReader, shapeRowOf } from '@sakuzu/kasane/render';
 import type { CoordinateDimensions } from '@sakuzu/tabane';
 import type { Geometry, Position } from 'geojson';
 import { describe, expect, it } from 'vitest';
@@ -361,7 +361,9 @@ describe('a merge of row groups of dimensions', () => {
         );
         out.set(
           id,
-          child < 0 ? null : readers[child].fullCoordinatesOf(geometryColumnOf(data)!.offsets[r]),
+          child < 0
+            ? null
+            : readers[child].fullCoordinatesOf(shapeRowOf(geometryColumnOf(data)!, r)),
         );
       }
       return out;

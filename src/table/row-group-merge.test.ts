@@ -13,7 +13,7 @@
  */
 
 import type { PageData } from '@sakuzu/kasane/render';
-import { cacheNumbersOf, mergePageData, ShapeFormReader } from '@sakuzu/kasane/render';
+import { cacheNumbersOf, mergePageData, ShapeFormReader, shapeRowOf } from '@sakuzu/kasane/render';
 import { readValue, utf8ColumnLength, utf8String } from '@sakuzu/tabane';
 import type { Geometry } from 'geojson';
 import { describe, expect, it } from 'vitest';
@@ -163,7 +163,7 @@ function readRow(group: PageData, r: number, styles: Map<number, string>) {
       child < 0
         ? null
         : new ShapeFormReader(geometryColumnOf(group)!.children[child]).coordinatesOf(
-            geometryColumnOf(group)!.offsets[r],
+            shapeRowOf(geometryColumnOf(group)!, r),
           ),
     bounds: Array.from(group.rowBounds.subarray(r * 4, r * 4 + 4)),
     triangles,

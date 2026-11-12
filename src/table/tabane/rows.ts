@@ -23,6 +23,7 @@ import type { Page, PointRowRings, RowRead, RowShape, RowShapeColumn } from '@sa
 import {
   INT8_FORMS,
   keptRowBounds,
+  keptShapeColumn,
   type PageData,
   type PageWhole,
   ROW_FLAG_DELETED,
@@ -257,7 +258,8 @@ export function pageDataOfTabane(rowBlock: TabaneRowBlock, options: ToPageOption
   }
 
   const shapes: Array<ShapeColumn | null> = FEATURE_COLUMN_LAYOUT.shapes.map(() => null);
-  shapes[GEOMETRY_COLUMN] = geometry;
+  // A column of one form whose rows are its own rows keeps no rows within the form
+  shapes[GEOMETRY_COLUMN] = geometry ? keptShapeColumn(geometry) : null;
   const wholes: Array<PageWhole | null> = FEATURE_COLUMN_LAYOUT.wholes.map(() => null);
   wholes[TYPE_COLUMN] = { indexes: types, values: typeNames };
   wholes[STYLE_COLUMN] = { indexes: styles, dictionary: styleDictionary };
