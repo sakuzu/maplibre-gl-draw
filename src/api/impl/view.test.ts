@@ -97,6 +97,18 @@ describe('draw.view.preview', () => {
     expect(draw.isReadOnly()).toBe(false);
   });
 
+  it('keeps the entries of the stacking order that are not layers, and what the source adds', async () => {
+    const draw = live();
+    const withEntries = {
+      ...past,
+      layerOrder: ['b', 'app:tiles', 'a'],
+      records: [{ id: 'app:tiles' }],
+    };
+    await draw.view.preview(withEntries);
+    expect(draw.document.getShown()?.getLayerOrder()).toEqual(['b', 'app:tiles', 'a']);
+    await draw.view.preview(null);
+  });
+
   it('reads GeoJSON and a JSON string as draw.open does', async () => {
     const draw = live();
     await draw.view.preview(
