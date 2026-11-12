@@ -75,6 +75,7 @@ const MAIN = [
   'DrawErrorCode',
   'DrawEventListener',
   'DrawEvents',
+  'Drawing',
   'DrawingResource',
   'DrawKeyEvent',
   'DrawOptions',
