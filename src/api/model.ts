@@ -509,6 +509,18 @@ export type Group = ObjectGroup | TableGroup;
 // The document
 // ============================================================================
 
+/** A value JSON can hold */
+export type JsonValue =
+  | string
+  | number
+  | boolean
+  | null
+  | readonly JsonValue[]
+  | { readonly [key: string]: JsonValue };
+
+/** An object of values JSON can hold */
+export type JsonObject = { readonly [key: string]: JsonValue };
+
 /**
  * The title and the description of the document.
  *

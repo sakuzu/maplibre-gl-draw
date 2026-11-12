@@ -129,6 +129,8 @@ const MAIN = [
   'Hit',
   'InputHandlers',
   'isDrawProperty',
+  'JsonObject',
+  'JsonValue',
   'Layer',
   'LayerFilter',
   'LayerInput',

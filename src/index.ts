@@ -153,6 +153,8 @@ export type {
   FeatureType,
   FileData,
   Group,
+  JsonObject,
+  JsonValue,
   Layer,
   LegendEntry,
   LineStyle,
