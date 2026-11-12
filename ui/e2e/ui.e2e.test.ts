@@ -553,7 +553,7 @@ describe('operations', () => {
     const made = await page.evaluate(() => {
       const draw = (window as unknown as E2EWindow).draw;
       const [id] = draw.selection.value.ids ?? [];
-      return id ? draw.features.get(id)?.type : undefined;
+      return id ? draw.features.get(id)?.geometry?.type : undefined;
     });
     expect(['Polygon', 'MultiPolygon']).toContain(made);
   });

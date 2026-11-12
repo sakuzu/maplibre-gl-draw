@@ -242,11 +242,14 @@
   // reorder, and goes back to its own order when the reorder is refused
   async function reorderLayers(order: string[], join?: MoveJoin) {
     if (join) draw.datasets.move(join.id, { order: 'layer-order' });
-    // Each layer just above the one before it, from the back, in one commit
-    const layers = order.filter((id) => draw.layers.get(id) !== undefined);
+    // Each entry of the stacking order (a layer, a dataset placed among the layers) just above
+    // the one before it, from the back, in one commit
+    const entries = order.filter(
+      (id) => draw.layers.get(id) !== undefined || draw.datasets.get(id)?.order === 'layer-order',
+    );
     const done = await write(draw, async (tx) => {
-      for (let i = 1; i < layers.length; i++) {
-        await tx.layers.place(layers[i], { below: layers[i - 1] });
+      for (let i = 1; i < entries.length; i++) {
+        await tx.layers.place(entries[i], { below: entries[i - 1] });
       }
     });
     if (join && !done) draw.datasets.move(join.id, { order: join.order });
