@@ -25,7 +25,7 @@
  */
 
 import type { PageDictionary, RowGroup, ShapeFormReader, StyleTable } from '@sakuzu/kasane/render';
-import { geometryAt, type RowGeometryAt } from '@sakuzu/kasane/render';
+import { geometryAt, pageRowBox, type RowGeometryAt } from '@sakuzu/kasane/render';
 import type { ValueStringCache } from '@sakuzu/tabane';
 import {
   rowHasGeometry,
@@ -96,6 +96,9 @@ import {
   type TessellationStep,
 } from '../terrain/tessellation.js';
 import { tilingSignature } from '../terrain/tiling.js';
+
+/** The box of a row read for its key of the cut (`pageRowBox`) */
+const ROW_BOX = new Float64Array(4);
 
 /** The places of the columns of a feature, read once rather than through the import at every row */
 const STYLE = STYLE_COLUMN;
@@ -412,14 +415,13 @@ export function rowSurfaceKey(group: RowGroup, row: number, surface: RowsSurface
       if (surface.ground) return GROUND_KEY;
       const step = surface.fill;
       if (!step) return 0;
-      const b = group.data.rowBounds;
-      const at = row * 4;
-      if (Number.isNaN(b[at])) return 0;
+      const b = ROW_BOX;
+      if (!pageRowBox(group.data, row, b)) return 0;
       // Mercator y decreases as the latitude increases
-      const x0 = mercatorX(b[at]);
-      const y0 = mercatorY(b[at + 3]);
-      const x1 = mercatorX(b[at + 2]);
-      const y1 = mercatorY(b[at + 1]);
+      const x0 = mercatorX(b[0]);
+      const y0 = mercatorY(b[3]);
+      const x1 = mercatorX(b[2]);
+      const y1 = mercatorY(b[1]);
       let key = tilingSignature(
         step.tiling ?? null,
         step.region ?? null,

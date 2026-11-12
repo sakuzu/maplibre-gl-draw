@@ -34,7 +34,7 @@
 
 import type { RowRef } from '@sakuzu/kasane';
 import type { GroupVersion, PageDictionary } from '@sakuzu/kasane/render';
-import { geometryAt, type RowGroup, type RowTable } from '@sakuzu/kasane/render';
+import { geometryAt, pageRowBox, type RowGroup, type RowTable } from '@sakuzu/kasane/render';
 import type { CustomRenderMethodInput, ProjectionData } from 'maplibre-gl';
 import {
   GPU_STATE_MOVE_SHIFT,
@@ -1535,18 +1535,19 @@ function merged(boxes: DrapeBounds[]): DrapeBounds[] {
   return all ? [all] : [];
 }
 
+/** The box of a row read by `rowBox` */
+const ROW_BOX = new Float64Array(4);
+
 /** The Mercator box of a row (null for a row without positions) */
 function rowBox(group: RowGroup, row: number): DrapeBounds | null {
-  const b = group.data.rowBounds;
-  const at = row * 4;
-  const minLng = b[at] as number;
-  if (Number.isNaN(minLng)) return null;
+  const b = ROW_BOX;
+  if (!pageRowBox(group.data, row, b)) return null;
   return {
-    minX: drapeMercatorX(minLng),
+    minX: drapeMercatorX(b[0] as number),
     // Mercator y decreases as the latitude increases
-    minY: drapeMercatorY(b[at + 3] as number),
-    maxX: drapeMercatorX(b[at + 2] as number),
-    maxY: drapeMercatorY(b[at + 1] as number),
+    minY: drapeMercatorY(b[3] as number),
+    maxX: drapeMercatorX(b[2] as number),
+    maxY: drapeMercatorY(b[1] as number),
   };
 }
 

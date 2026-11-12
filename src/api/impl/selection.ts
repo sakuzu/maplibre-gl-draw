@@ -5,6 +5,7 @@
  * `draw.selection` and `draw.vertexSelection`: what this client has selected
  */
 
+import { pageRowBox } from '@sakuzu/kasane/render';
 import type { RowUpdate } from '../../feature-table/bulk-plan.js';
 import {
   firstRowsInOrder,
@@ -247,6 +248,7 @@ export function createSelection(
     if (!tables || !internals) return null;
     const read = (id: string) => readWithoutKeeping(tables, () => store.getFeature(id));
     const views = new Map<string, ReturnType<typeof tables.get>>();
+    const b = new Float64Array(4);
     return (handle) => {
       const place = internals.placeOf(handle);
       const id = internals.ids.idOf(handle);
@@ -261,12 +263,11 @@ export function createSelection(
       }
       const flags = data.flags[row] as number;
       const group = data.groups[row] as number;
-      const at = row * 4;
-      const b = data.rowBounds;
-      const x0 = b[at] as number;
-      const y0 = b[at + 1] as number;
-      const x1 = b[at + 2] as number;
-      const y1 = b[at + 3] as number;
+      pageRowBox(data, row, b);
+      const x0 = b[0] as number;
+      const y0 = b[1] as number;
+      const x1 = b[2] as number;
+      const y1 = b[3] as number;
       const finite =
         Number.isFinite(x0) && Number.isFinite(y0) && Number.isFinite(x1) && Number.isFinite(y1);
       return new TableFeatureRow(

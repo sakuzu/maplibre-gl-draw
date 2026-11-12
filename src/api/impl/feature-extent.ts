@@ -13,7 +13,7 @@
  * attributes, from its feature.
  */
 
-import { ROW_FLAG_DELETED } from '@sakuzu/kasane/render';
+import { pageRowBox, ROW_FLAG_DELETED } from '@sakuzu/kasane/render';
 import { featureTablesInternals } from '../../feature-table/feature-tables.js';
 import { rowPoint, rowType, rowValue } from '../../feature-table/row-read.js';
 import { coordinatesBBox } from '../../geometry/bbox.js';
@@ -89,6 +89,7 @@ export function rowsExtent(store: Store, filter: RowFilter): BBox | null {
   const internals = featureTablesInternals(tables);
   const extent = new Extent();
   if (!tables || !internals) return null;
+  const b = new Float64Array(4);
   forEachMatchingRow(store, filter, (handle) => {
     const place = internals.placeOf(handle);
     if (!place) return true;
@@ -109,9 +110,7 @@ export function rowsExtent(store: Store, filter: RowFilter): BBox | null {
       extent.addBox(circle ?? [center[0], center[1], center[0], center[1]]);
       return true;
     }
-    const b = group.data.rowBounds;
-    const at = row * 4;
-    if (!Number.isNaN(b[at])) extent.add(b[at], b[at + 1], b[at + 2], b[at + 3]);
+    if (pageRowBox(group.data, row, b)) extent.add(b[0], b[1], b[2], b[3]);
     return true;
   });
   return extent.box;

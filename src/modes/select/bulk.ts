@@ -16,7 +16,7 @@
  */
 
 import type { RowGroup } from '@sakuzu/kasane/render';
-import { ROW_FLAG_DELETED } from '@sakuzu/kasane/render';
+import { pageRowBox, ROW_FLAG_DELETED } from '@sakuzu/kasane/render';
 import { BULK_MOVE_SET, STATE_UNHIT_MASK } from '../../feature-table/feature-row-states.js';
 import { featureTablesInternals } from '../../feature-table/feature-tables.js';
 import { rowGeometry, rowProperties, rowType } from '../../feature-table/row-read.js';
@@ -48,6 +48,7 @@ export function queryRowsInBox(box: BoxSelection, context: EngineModeContext): T
   const internals = featureTablesInternals(tables);
   if (!tables || !internals) return TableSelection.empty;
   const found = new Set<number>();
+  const b = new Float64Array(4);
   const layers = new Map<string, boolean>();
   const layerOpen = (layerId: string): boolean => {
     let open = layers.get(layerId);
@@ -86,10 +87,12 @@ export function queryRowsInBox(box: BoxSelection, context: EngineModeContext): T
           if (groupId !== undefined && store.isHidden(groupId)) continue;
         }
         const type = rowType(data, row);
-        const b = data.rowBounds;
-        const at = row * 4;
         const inside =
-          b[at] >= rect[0] && b[at + 2] <= rect[2] && b[at + 1] >= rect[1] && b[at + 3] <= rect[3];
+          pageRowBox(data, row, b) &&
+          b[0] >= rect[0] &&
+          b[2] <= rect[2] &&
+          b[1] >= rect[1] &&
+          b[3] <= rect[3];
         if (inside && boxSelectionRegistry.get(type)?.insideMeetsTest === true) {
           found.add(handle);
           continue;

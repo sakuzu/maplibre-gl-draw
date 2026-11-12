@@ -5,6 +5,7 @@
  * `draw.features`: the features of the document
  */
 
+import { pageRowBox } from '@sakuzu/kasane/render';
 import type { Value } from '@sakuzu/tabane';
 import { featureTablesInternals, readWithoutKeeping } from '../../feature-table/feature-tables.js';
 import { differenceAll, intersectionAll, unionAll } from '../../geometry/boolean.js';
@@ -567,13 +568,12 @@ export function featureRowMatcher(
   const bbox = rowFilter.bbox;
   if (!bbox) return matches;
   const internals = featureTablesInternals(store.tables);
+  const b = new Float64Array(4);
   return (handle) => {
     if (!matches(handle)) return false;
     const place = internals?.placeOf(handle);
-    if (!place) return false;
-    const b = place.group.data.rowBounds;
-    const at = place.row * 4;
-    return b[at] <= bbox[2] && b[at + 2] >= bbox[0] && b[at + 1] <= bbox[3] && b[at + 3] >= bbox[1];
+    if (!place || !pageRowBox(place.group.data, place.row, b)) return false;
+    return b[0] <= bbox[2] && b[2] >= bbox[0] && b[1] <= bbox[3] && b[3] >= bbox[1];
   };
 }
 

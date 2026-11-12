@@ -7,6 +7,7 @@ import {
   cacheNumbersOf,
   type PageData,
   type PageDictionary,
+  pageRowBounds,
   ROW_FLAG_DELETED,
   ShapeFormReader,
 } from '@sakuzu/kasane/render';
@@ -305,7 +306,9 @@ describe('createPageDataBuilder', () => {
       builder.addRow(row('c', 'a', point(139.7, 35.7), { type: 'Circle', properties }));
       const [group] = builder.finish();
       expect(trianglesOf(group, 0)).toEqual([]);
-      expect(Array.from(group.rowBounds)).toEqual([139.7, 35.7, 139.7, 35.7]);
+      // A page of points keeps no boxes: the box of the row is its point
+      expect(group.rowBounds).toHaveLength(0);
+      expect(Array.from(pageRowBounds(group))).toEqual([139.7, 35.7, 139.7, 35.7]);
       expect(group.vertexCount).toBe(1);
     }
   });

@@ -22,6 +22,7 @@
 import type { Page, PointRowRings, RowRead, RowShape, RowShapeColumn } from '@sakuzu/kasane';
 import {
   INT8_FORMS,
+  keptRowBounds,
   type PageData,
   type PageWhole,
   ROW_FLAG_DELETED,
@@ -273,7 +274,7 @@ export function pageDataOfTabane(rowBlock: TabaneRowBlock, options: ToPageOption
     keys: keyColumn(rowBlock),
     groups: new Int32Array(n).fill(-1),
     flags,
-    rowBounds,
+    rowBounds: keptRowBounds(shapes, rowBounds, n),
     caches: caches.map((cache) => cache.finish()),
     vertexCount,
   };

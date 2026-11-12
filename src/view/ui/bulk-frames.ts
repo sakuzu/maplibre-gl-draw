@@ -20,7 +20,7 @@
  * turns the box of no extent of a point).
  */
 
-import type { RowGroup } from '@sakuzu/kasane/render';
+import { pageRowBounds, type RowGroup } from '@sakuzu/kasane/render';
 import type { ProjectionData } from 'maplibre-gl';
 import type { SelectionUIConfig } from '../../shared/config/selection.js';
 import { RENDERING_DEFAULTS } from '../../shared/math/constants.js';
@@ -243,7 +243,7 @@ export class BulkFramesRenderer {
     if (known) this.release(known);
     const gl = this.gl;
     const data = group.data;
-    const bounds = data.rowBounds;
+    const bounds = pageRowBounds(data);
     const n = data.length;
     // The origin of the group: the extent of its first row with one
     let origin: [number, number] = [0, 0];

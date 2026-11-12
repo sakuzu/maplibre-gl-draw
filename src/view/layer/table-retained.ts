@@ -65,6 +65,7 @@ import {
   geometryAt,
   type InPlaceRowWrite,
   type PackedRTree,
+  pageRowBox,
   ROW_WRITE_GEOMETRY,
   ROW_WRITE_STATE,
   ROW_WRITE_STYLE,
@@ -210,6 +211,9 @@ import {
   type TableRunKind,
 } from './table-partition.js';
 import { TableSurface } from './table-surface.js';
+
+/** The box of a row read where its page keeps none of its own (`pageRowBox`) */
+const ROW_BOX = new Float64Array(4);
 
 /**
  * The time the builds of the batches of the rows may take in one frame (ms)
@@ -2177,10 +2181,9 @@ export class TableLayerRenderer {
             }
             chunk.reachPx = Math.max(chunk.reachPx, extents.reachPx[row]);
           } else if ((write.what & ROW_WRITE_GEOMETRY) !== 0) {
-            const b = group.data.rowBounds;
-            const at = row * 4;
-            if (!Number.isNaN(b[at])) {
-              chunk.bounds = widenBounds(chunk.bounds, b[at], b[at + 1], b[at + 2], b[at + 3]);
+            const b = ROW_BOX;
+            if (pageRowBox(group.data, row, b)) {
+              chunk.bounds = widenBounds(chunk.bounds, b[0], b[1], b[2], b[3]);
             }
           }
           chunk.index = null;
@@ -2204,10 +2207,9 @@ export class TableLayerRenderer {
     if (!drawn || !chunk) return true;
     if ((write.what & ROW_WRITE_GEOMETRY) !== 0) {
       // The extent of the chunk only widens, so a row moved out of it is not culled with it
-      const b = group.data.rowBounds;
-      const at = row * 4;
-      if (!Number.isNaN(b[at])) {
-        chunk.bounds = widenBounds(chunk.bounds, b[at], b[at + 1], b[at + 2], b[at + 3]);
+      const b = ROW_BOX;
+      if (pageRowBox(group.data, row, b)) {
+        chunk.bounds = widenBounds(chunk.bounds, b[0], b[1], b[2], b[3]);
       }
     }
     if (chunk.job) {
@@ -2894,13 +2896,12 @@ export class TableLayerRenderer {
         const groupBounds = groupCache.group.bounds;
         if (groupBounds && !meets(groupBounds, view)) continue;
         const data = groupCache.group.data;
-        const b = data.rowBounds;
+        const b = ROW_BOX;
         for (let row = 0; row < data.length; row++) {
-          const at = row * 4;
-          if (Number.isNaN(b[at])) continue;
           const type = rowType(data, row);
           if (type !== 'Polygon' && type !== 'MultiPolygon' && type !== 'Circle') continue;
-          visit(b[at], b[at + 1], b[at + 2], b[at + 3]);
+          if (!pageRowBox(data, row, b)) continue;
+          visit(b[0], b[1], b[2], b[3]);
         }
       }
     }
@@ -3079,11 +3080,10 @@ export class TableLayerRenderer {
     if (!rows || !terrain.renderState.active || data.pointCount === 0) return;
     const values = gpu.heightValues ?? new Float32Array(data.coordCount);
     const whole = regions === null || !gpu.heightValues;
-    const bounds = group.data.rowBounds;
     for (let local = 0; local < data.rows; local++) {
       if (data.pointFirst[local + 1] === data.pointFirst[local]) continue;
       const row = data.rowBase + local;
-      if (!whole && !rowMeetsRegions(bounds, row, regions as readonly MercatorRect[])) continue;
+      if (!whole && !rowMeetsRegions(group, row, regions as readonly MercatorRect[])) continue;
       writeRowHeights(group, row, values, data.coordFirst[local], terrain);
     }
     rows.setHeights(gpu, values);
@@ -4086,15 +4086,23 @@ export class TableLayerRenderer {
   ): boolean {
     const unread = byPositions && this.rowExtents.of(group).known[row] === 0;
     const extents = unread ? null : this.rowExtents.read(group, row, featureOf);
-    const boxes = extents?.boxes ?? group.data.rowBounds;
+    // The extent read of the row, or the box of its positions
+    let boxes: Float64Array = ROW_BOX;
+    let at = 0;
+    if (extents) {
+      boxes = extents.boxes;
+      at = row;
+    } else {
+      pageRowBox(group.data, row, boxes);
+    }
     const reach = extents?.reachPx[row] ?? 0;
     let lng = 0;
     let lat = 0;
     if (reach > 0)
-      [lng, lat] = reachDegrees(reach, boxes[row * 4 + 1], boxes[row * 4 + 3], this.scaleFrame);
+      [lng, lat] = reachDegrees(reach, boxes[at * 4 + 1], boxes[at * 4 + 3], this.scaleFrame);
     const views = set > 0 ? this.setViews[set] : null;
-    if (!views) return extentInView(boxes, row, bounds, lng, lat);
-    for (const view of views) if (extentInView(boxes, row, view, lng, lat)) return true;
+    if (!views) return extentInView(boxes, at, bounds, lng, lat);
+    for (const view of views) if (extentInView(boxes, at, view, lng, lat)) return true;
     return false;
   }
 
@@ -5031,20 +5039,10 @@ function boundsMeetRegions(bounds: BBox, regions: readonly MercatorRect[]): bool
 }
 
 /** Whether the extent of a row meets one of the regions (Mercator) */
-function rowMeetsRegions(
-  rowBounds: Float64Array,
-  row: number,
-  regions: readonly MercatorRect[],
-): boolean {
-  const at = row * 4;
-  if (Number.isNaN(rowBounds[at])) return false;
-  return boxMeetsRegions(
-    rowBounds[at],
-    rowBounds[at + 1],
-    rowBounds[at + 2],
-    rowBounds[at + 3],
-    regions,
-  );
+function rowMeetsRegions(group: RowGroup, row: number, regions: readonly MercatorRect[]): boolean {
+  const b = ROW_BOX;
+  if (!pageRowBox(group.data, row, b)) return false;
+  return boxMeetsRegions(b[0], b[1], b[2], b[3], regions);
 }
 
 function boxMeetsRegions(

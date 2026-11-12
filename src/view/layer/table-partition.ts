@@ -19,7 +19,7 @@
  */
 
 import type { PageDictionary, RowGroup } from '@sakuzu/kasane/render';
-import { geometryAt } from '@sakuzu/kasane/render';
+import { geometryAt, pageRowBox } from '@sakuzu/kasane/render';
 import type { LayerTableView } from '../../api/tables.js';
 import type { GpuRowsSource } from '../../extension/renderers.js';
 import { rowHasGeometry, rowType } from '../../feature-table/row-read.js';
@@ -262,7 +262,7 @@ export function partitionRowGroup(
   sourceOf?: (row: number) => RowSpriteSource | GpuRowsSource | undefined,
 ): OrderedChunkRange[] {
   const out: OrderedChunkRange[] = [];
-  const bounds = group.data.rowBounds;
+  const b = new Float64Array(4);
   let kind: TableRunKind | null = null;
   let from = 0;
   let vertices = 0;
@@ -305,14 +305,13 @@ export function partitionRowGroup(
     if (rowKind !== null) kind = rowKind;
     if (rowSource) source = rowSource;
     vertices += rowVertices;
-    const at = row * 4;
-    if (!Number.isNaN(bounds[at])) {
-      if (!box) box = [bounds[at], bounds[at + 1], bounds[at + 2], bounds[at + 3]];
+    if (pageRowBox(group.data, row, b)) {
+      if (!box) box = [b[0], b[1], b[2], b[3]];
       else {
-        if (bounds[at] < box[0]) box[0] = bounds[at];
-        if (bounds[at + 1] < box[1]) box[1] = bounds[at + 1];
-        if (bounds[at + 2] > box[2]) box[2] = bounds[at + 2];
-        if (bounds[at + 3] > box[3]) box[3] = bounds[at + 3];
+        if (b[0] < box[0]) box[0] = b[0];
+        if (b[1] < box[1]) box[1] = b[1];
+        if (b[2] > box[2]) box[2] = b[2];
+        if (b[3] > box[3]) box[3] = b[3];
       }
     }
   }

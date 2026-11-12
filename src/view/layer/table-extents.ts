@@ -17,7 +17,7 @@
  * the rows of a layer.
  */
 
-import type { RowGroup } from '@sakuzu/kasane/render';
+import { pageRowBox, type RowGroup } from '@sakuzu/kasane/render';
 import { rowType } from '../../feature-table/row-read.js';
 import type { BBox } from '../../geometry/types.js';
 import { degreesPerMeterAt } from '../../shared/math/ground-scale.js';
@@ -132,7 +132,8 @@ export class RowExtents {
     const data = group.data;
     const at = row * 4;
     const boxes = held.boxes;
-    const own = !Number.isNaN(data.rowBounds[at]) && this.readsFeature(data, row);
+    // The box of the positions of the row, unless its feature gives an extent of its own
+    const own = pageRowBox(data, row, boxes, at) && this.readsFeature(data, row);
     const feature = own ? featureOf() : null;
     const extent = feature ? computeAnchoredExtent(feature, this.extensions) : null;
     if (extent) {
@@ -140,11 +141,6 @@ export class RowExtents {
       boxes[at + 1] = extent[1];
       boxes[at + 2] = extent[2];
       boxes[at + 3] = extent[3];
-    } else {
-      boxes[at] = data.rowBounds[at];
-      boxes[at + 1] = data.rowBounds[at + 1];
-      boxes[at + 2] = data.rowBounds[at + 2];
-      boxes[at + 3] = data.rowBounds[at + 3];
     }
     held.reachPx[row] = feature ? this.reachPxOf(feature) : 0;
     held.known[row] = 1;

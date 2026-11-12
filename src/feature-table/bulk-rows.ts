@@ -8,7 +8,7 @@
 
 import type { RowRef } from '@sakuzu/kasane';
 import type { RowPlace } from '@sakuzu/kasane/render';
-import { ROW_FLAG_DELETED } from '@sakuzu/kasane/render';
+import { pageRowBox, ROW_FLAG_DELETED } from '@sakuzu/kasane/render';
 import type { BBox } from '../geometry/types.js';
 import { isGroupHidden, isGroupLocked, ROW_FLAG_LOCKED } from '../table/feature-row-columns.js';
 import { STATE_UNHIT_MASK } from './feature-row-states.js';
@@ -61,19 +61,18 @@ export function summarizeRows(
   let maxY = Number.NEGATIVE_INFINITY;
   let count = 0;
   let hasArea = false;
+  const b = new Float64Array(4);
   for (const handle of rows.handles) {
     const place = internals.placeOf(handle);
     if (!place || (place.group.data.flags[place.row] & ROW_FLAG_DELETED) !== 0) continue;
     count++;
     layers.add(place.table.tableId);
-    const b = place.group.data.rowBounds;
-    const at = place.row * 4;
-    if (Number.isNaN(b[at])) continue;
-    if (b[at + 2] > b[at] || b[at + 3] > b[at + 1]) hasArea = true;
-    if (b[at] < minX) minX = b[at];
-    if (b[at + 1] < minY) minY = b[at + 1];
-    if (b[at + 2] > maxX) maxX = b[at + 2];
-    if (b[at + 3] > maxY) maxY = b[at + 3];
+    if (!pageRowBox(place.group.data, place.row, b)) continue;
+    if (b[2] > b[0] || b[3] > b[1]) hasArea = true;
+    if (b[0] < minX) minX = b[0];
+    if (b[1] < minY) minY = b[1];
+    if (b[2] > maxX) maxX = b[2];
+    if (b[3] > maxY) maxY = b[3];
   }
   return {
     count,
