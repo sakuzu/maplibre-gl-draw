@@ -186,6 +186,9 @@ writing it. Its changes are listed after those of 3.0.0.
   or a file) shown read-only in place of the document, through
   `draw.document.setShown` and a store of rows of its own; `null` shows
   the document again.
+- `draw.open` (and `draw.view.preview`) writes the features of a document
+  of the library in one write: a store of rows takes them in a time that
+  grows with them, not with their square.
 - `draw.memory` (`MemoryResource`): what the documents drawn on the page
   take (`get`, `MemoryUsage`: the GPU memory every instance allocated and
   an estimate of the heap from the features and their positions) against

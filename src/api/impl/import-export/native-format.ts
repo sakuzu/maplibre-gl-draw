@@ -173,10 +173,9 @@ export async function prepareNative(
       store.createGroup(group);
     }
 
-    // 4. Import the features
-    for (const feature of features) {
-      store.createFeature(feature);
-    }
+    // 4. Import the features, in one write (a Store of rows writes the rows of each layer at
+    //    once, rather than the rows of the layer once per feature)
+    store.createFeatures(features);
 
     // 5. Import the files
     for (const file of files) {

@@ -133,6 +133,14 @@ describe('draw.view.preview', () => {
     expect(draw.document.getShown()?.getMetadata().title).toBe('second');
   });
 
+  it('shows nothing when the instance is destroyed while the source is read', async () => {
+    const draw = live();
+    const reading = draw.view.preview(past);
+    draws.splice(draws.indexOf(draw), 1);
+    draw.destroy();
+    await expect(reading).resolves.toBeUndefined();
+  });
+
   it('refuses what cannot be read, and a signal that stopped it, showing nothing', async () => {
     const draw = live();
     await expect(draw.view.preview('not json')).rejects.toMatchObject({

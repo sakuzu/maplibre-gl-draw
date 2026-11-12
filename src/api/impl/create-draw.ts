@@ -313,8 +313,8 @@ export function createDrawOnEngine(
       },
     },
     view: createView({
-      generateId: context.generateFeatureId,
       setShown: (other) => documentResource.setShown(other),
+      isDestroyed: () => destroyed,
     }),
     extensions: engine.extensions.collections,
     memory: memory.memory,

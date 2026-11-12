@@ -6,6 +6,7 @@
  * rows of its own and shown with `draw.document.setShown`
  */
 
+import { createId } from '../../shared/utils/id.js';
 import { AutoNameGenerator } from '../../shared/utils/name-generator.js';
 import { createTableStore } from '../../store/table-memory.js';
 import type { StoreView } from '../extension/store.js';
@@ -17,10 +18,10 @@ import { abortedError } from './write.js';
 
 /** What the view takes from the instance */
 export interface ViewDeps {
-  /** Makes the IDs of what the source brings without one */
-  readonly generateId: () => string;
   /** Shows a Store in place of the document, or the document again (`draw.document.setShown`) */
   readonly setShown: (store: StoreView | null) => void;
+  /** Whether the instance was destroyed (a source read after it is not shown) */
+  readonly isDestroyed: () => boolean;
 }
 
 /** Creates `draw.view` @internal */
@@ -49,7 +50,7 @@ export function createView(deps: ViewDeps): View {
       const layerOf = (): string => {
         const first = store.listLayers()[0];
         if (first) return first.id;
-        const id = deps.generateId();
+        const id = createId();
         store.createLayer({
           id,
           name: autoNameGenerator.generateLayerName(),
@@ -65,12 +66,12 @@ export function createView(deps: ViewDeps): View {
       const loader = createDocument({
         store,
         autoNameGenerator,
-        generateId: deps.generateId,
+        generateId: createId,
         getActiveLayerId: layerOf,
       });
       const prepared = await loader.prepare(source, { mode: 'replace' }, new Set(), new Set());
       if (signal?.aborted) throw abortedError(signal);
-      if (mine !== turn || !prepared) return;
+      if (mine !== turn || !prepared || deps.isDestroyed()) return;
       loader.writeAll([prepared]);
       store.setReadOnly(true);
       deps.setShown(store);
