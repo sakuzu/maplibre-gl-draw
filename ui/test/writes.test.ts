@@ -57,4 +57,12 @@ describe('the group writes over features selected in bulk', () => {
       ['place', ['d'], { layerId: 'l', below: 'g2' }],
     ]);
   });
+  it('take the features selected in bulk all in one group out of it through the target, as rows', async () => {
+    const { draw, calls } = bulkDraw([
+      { id: 'a', groupId: 'g1' },
+      { id: 'b', groupId: 'g1' },
+    ]);
+    expect(await ungroupSelection(draw)).toBe(true);
+    expect(calls).toEqual([['place', draw.selection.target, { layerId: 'l', below: 'g1' }]]);
+  });
 });

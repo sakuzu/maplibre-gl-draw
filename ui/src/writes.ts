@@ -75,7 +75,9 @@ export async function groupSelection(draw: WriteDraw): Promise<boolean> {
 /**
  * Dissolves the selected groups (their features stay in their place in the layer), or takes the
  * selected features out of their groups, those selected in bulk too (read with `scan`): the
- * features of a group go just in front of it, in their order, and a group left empty goes
+ * features of a group go just in front of it, in their order, and a group left empty goes.
+ * Features selected in bulk that are all in one group are written as rows, many at once (through
+ * the target of the selection)
  */
 export async function ungroupSelection(draw: WriteDraw): Promise<boolean> {
   const { type, count, ids } = draw.selection.value;
@@ -84,9 +86,15 @@ export async function ungroupSelection(draw: WriteDraw): Promise<boolean> {
     return write(draw, (tx) => tx.groups.delete(ids, { members: 'keep' }));
   }
   if (type !== 'feature') return false;
+  // Read with the selection it names, before the selection is scanned
+  const target = ids === null ? draw.selection.target : null;
+  let outside = false;
   const byGroup = new Map<string, { layerId: string; members: string[] }>();
   await draw.selection.scan((row) => {
-    if (row.groupId === null) return;
+    if (row.groupId === null) {
+      outside = true;
+      return;
+    }
     let entry = byGroup.get(row.groupId);
     if (!entry) {
       entry = { layerId: row.layerId, members: [] };
@@ -95,6 +103,11 @@ export async function ungroupSelection(draw: WriteDraw): Promise<boolean> {
     entry.members.push(row.id);
   });
   if (byGroup.size === 0) return false;
+  const [only] = byGroup;
+  if (target && !outside && byGroup.size === 1 && only) {
+    const [groupId, { layerId }] = only;
+    return write(draw, (tx) => tx.features.place(target, { layerId, below: groupId }));
+  }
   return write(draw, async (tx) => {
     for (const [groupId, { layerId, members }] of byGroup) {
       await tx.features.place(members, { layerId, below: groupId });

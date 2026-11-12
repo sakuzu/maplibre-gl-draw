@@ -216,4 +216,48 @@ describe('the writes of a target of features selected in bulk', () => {
     // The locked one stays, selected
     expect(draw.selection.value.count).toBe(1);
   });
+  it('are each one step of the undo, which brings the rows back as they were', async () => {
+    const draw = bulkDraw();
+    const style = { 'maplibre-gl-draw:style': { pointColor: '#ff0000' } };
+    await draw.write((tx) => tx.features.update(draw.selection.target, { properties: style }));
+    await draw.undo();
+    expect(draw.features.get('r0')?.properties['maplibre-gl-draw:style']).toBeUndefined();
+    await draw.write((tx) => tx.features.place(draw.selection.target, { layerId: 'm' }));
+    expect(draw.features.count({ layerId: 'm' })).toBe(5);
+    await draw.undo();
+    expect(draw.features.count({ layerId: 'm' })).toBe(0);
+    expect(draw.features.count({ layerId: 'l' })).toBe(6);
+    draw.selection.setAll();
+    await draw.write((tx) => tx.features.delete(draw.selection.target));
+    expect(draw.features.count()).toBe(1);
+    await draw.undo();
+    expect(draw.features.count()).toBe(6);
+    expect(draw.features.list(undefined, { limit: 10 }).map((feature) => feature.id)).toEqual([
+      'r0',
+      'r1',
+      'r2',
+      'r3',
+      'r4',
+      'r5',
+    ]);
+  });
+  it('take the rows out of their group in front of it as their IDs would be, the group left empty deleted', async () => {
+    const members = ['r1', 'r2', 'r4', 'r5'];
+    const shapes: unknown[] = [];
+    for (const by of ['target', 'ids'] as const) {
+      const draw = bulkDraw();
+      await draw.write((tx) => tx.groups.create({ id: 'g', members }));
+      draw.selection.set('feature', members);
+      expect(draw.selection.value.ids).toBeNull();
+      const target = draw.selection.target;
+      const moved = await draw.write((tx) =>
+        tx.features.place(by === 'target' ? target : members, { layerId: 'l', below: 'g' }),
+      );
+      expect(moved).toBe(4);
+      expect(draw.groups.has('g')).toBe(false);
+      const { created: _c, modified: _m, ...shape } = draw.document.toJSON();
+      shapes.push(shape);
+    }
+    expect(shapes[0]).toEqual(shapes[1]);
+  });
 });
