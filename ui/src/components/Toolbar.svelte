@@ -11,7 +11,14 @@
   } from '@sakuzu/kata/svelte';
   import type { Messages } from '../messages.js';
   import { type Box, follow } from '../store.js';
-  import { BUILTIN_ICONS, DELETE_ID, drawbarTools, SNAPPING_ID, toSpec } from '../tools.js';
+  import {
+    BUILTIN_ICONS,
+    DELETE_ID,
+    drawbarTools,
+    enterToolMode,
+    SNAPPING_ID,
+    toSpec,
+  } from '../tools.js';
   import type { ToolbarDraw, ToolEntry } from '../types.js';
   import { deleteSelection } from '../writes.js';
   import SnappingSettings from './SnappingSettings.svelte';
@@ -22,7 +29,8 @@
   // read again as the observable draw.mode tells; the delete button is off while
   // draw.selection.value lists no ID, read again as draw.selection tells, and while draw is
   // read-only, read again on readOnly.changed; the magnet is on while snapping is, read again as
-  // draw.options tells. Pressing a tool calls draw.setMode and delete calls draw.selection.delete.
+  // draw.options tells. Pressing a tool enters its mode (enterToolMode) and delete deletes the
+  // selection.
   // The magnet is one of the Drawbar's switches, so that it looks like one, but pressing it opens
   // the snapping settings rather than switching snapping (SnappingSettings, which writes through
   // draw.options.update).
@@ -98,7 +106,7 @@
       return;
     }
     const spec = specs.find((s) => s.id === id);
-    if (spec) draw.setMode(spec.mode);
+    if (spec) enterToolMode(draw, spec.mode);
   }
 </script>
 

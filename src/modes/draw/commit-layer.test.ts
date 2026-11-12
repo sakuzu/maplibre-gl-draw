@@ -216,6 +216,9 @@ describe('the layer a drawing is committed into', () => {
     store.createLayer(layer('a', { visible: false }));
     store.createLayer(layer('b'));
     manager.setMode('draw_image');
+    expect(imageRequests).toEqual([]);
+    // The image mode is a mode of the engine: the click goes to its own receiver
+    manager.getHandler()?.onClick?.(click(1, 1));
     expect(imageRequests).toEqual([expect.objectContaining({ layerId: 'b' })]);
     expect(store.getMode()).toBe('select');
   });

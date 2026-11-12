@@ -477,6 +477,7 @@ export function fakeDraw(
     removeControl: vi.fn((_control: unknown) => map),
     getStyleUrl: () => styleUrl,
     getStyle: () => ({ name: styleName }),
+    getCenter: () => ({ lng: 139.767, lat: 35.681 }),
     on: vi.fn((type: string, listener: () => void) => {
       if (!mapListeners.has(type)) mapListeners.set(type, new Set());
       mapListeners.get(type)?.add(listener);
@@ -892,13 +893,22 @@ export function fakeDraw(
     return Object.assign(promise, { id, result });
   });
 
+  const enterMode = (next: Mode): void => {
+    const previous = mode;
+    mode = next;
+    emit('mode.changed', { mode: next, previous });
+  };
   const draw = {
-    mode: observable(['mode.changed'], () => mode),
+    mode: Object.assign(
+      observable(['mode.changed'], () => mode),
+      {
+        set: vi.fn((next: Mode) => enterMode(next)),
+        drawing: { add: vi.fn((_at: readonly number[]) => {}) },
+      },
+    ),
     getMode: () => mode,
     setMode: vi.fn((next: Mode) => {
-      const previous = mode;
-      mode = next;
-      emit('mode.changed', { mode: next, previous });
+      enterMode(next);
       return true;
     }),
     on: vi.fn((event: string, listener: Listener) => {

@@ -59,6 +59,7 @@ import { storedInputOf, toFeature } from './feature-shape.js';
 import { prepareFeatureInput } from './features.js';
 import { mergeOptions } from './options.js';
 import { toDatasetRow } from './rows.js';
+import { type CommitInfo, runCommit, WRITE_SOURCE, WRITE_SOURCE_NO_UNDO } from './write.js';
 
 // ============================================================================
 // Conversions
@@ -362,12 +363,27 @@ export interface ModeServices extends ContextServices {
   generateId(): string;
   /** Tells the plugins that a drawing mode created a feature (`interaction.onFeatureCommit`) */
   notifyDrawCommit(feature: Feature): void;
+  /**
+   * The commit `draw.mode.drawing.commit` asks of the mode while it runs: the feature a mode
+   * creates then is written as that commit, and is kept in `made`
+   */
+  readonly drawingCommit: { current: DrawingCommit | null };
   /** Whether new features follow the zoom with their widths */
   readonly scaleWithZoom: boolean;
   /** The resolved look of the selection */
   readonly selectionStyle: SelectionUIConfig;
   /** The resolved look of the box selection */
   readonly boxSelectionStyle: BoxSelectionStyleConfig;
+}
+
+/**
+ * The commit `draw.mode.drawing.commit` asks of the mode, and the feature the mode created in it
+ *
+ * @internal
+ */
+export interface DrawingCommit {
+  readonly info: CommitInfo;
+  made: Feature | null;
 }
 
 /**
@@ -480,7 +496,7 @@ export function createModeContext(
     messages: base.messages,
     screen: base.screen,
     invalidate: base.invalidate,
-    setMode: (mode) => services.modeManager.setMode(mode),
+    setMode: (mode) => services.modeManager.setModeFromMode(mode),
     hitTest(point, options) {
       const at = { x: point[0], y: point[1] };
       return toHit(services.hitTestTopmost(at, options?.tolerancePx), (feature) =>
@@ -519,14 +535,27 @@ export function createModeContext(
         store.createFeature(feature);
         created = store.getFeature(feature.id);
       };
+      // Written as the commit `draw.mode.drawing.commit` asks for, while it runs
+      const asked = services.drawingCommit.current;
+      const transact = (): void => {
+        if (asked === null) store.transact(write);
+        else {
+          const source = asked.info.undo ? WRITE_SOURCE : WRITE_SOURCE_NO_UNDO;
+          runCommit(store, asked.info, source, write);
+        }
+      };
       // The sketch of the shape being drawn ends committed with the write that creates it
       const sketch = drawingSketch();
       pendingId = null;
       drawing = null;
-      if (sketch !== null) sketches.commitWith(sketch, () => store.transact(write));
-      else store.transact(write);
+      if (sketch !== null) sketches.commitWith(sketch, transact);
+      else transact();
       const made = created === undefined ? null : toFeature(created);
-      if (made) services.notifyDrawCommit(made);
+      if (made) {
+        if (asked !== null) asked.made = made;
+        services.modeManager.markCreated();
+        services.notifyDrawCommit(made);
+      }
       return made;
     },
     preview: {

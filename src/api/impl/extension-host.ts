@@ -45,7 +45,7 @@ import {
   installFeatureType,
 } from './adapters.js';
 import { createAppliedStyles } from './applied-style.js';
-import type { ContextServices, ModeServices } from './contexts.js';
+import type { ContextServices, DrawingCommit, ModeServices } from './contexts.js';
 import {
   createExtensionContext,
   createModeContext,
@@ -107,6 +107,11 @@ export interface ExtensionHost {
   readonly interactions: PluginInteractions;
   /** The frontmost hit at a point on the screen, in the shape of the contract */
   hitAt(point: { x: number; y: number }): Hit | null;
+  /**
+   * The commit `draw.mode.drawing.commit` asks of the modes of the contract while it runs (see
+   * `ModeServices.drawingCommit`)
+   */
+  readonly drawingCommit: { current: DrawingCommit | null };
   /**
    * The look a feature is drawn with (`draw.features.getAppliedStyle`), which the renderers of
    * the custom types read from their render context: the look its type declares, the color of the
@@ -314,6 +319,7 @@ export function createExtensionHost(deps: ExtensionHostDeps): ExtensionHost {
 
   const view = createCoordinateTransform(map);
   const unproject = (point: { x: number; y: number }) => view.unproject(point);
+  const drawingCommit: { current: DrawingCommit | null } = { current: null };
   const modeServices: ModeServices = {
     ...services,
     hitTestTopmost(point, tolerancePx) {
@@ -354,6 +360,7 @@ export function createExtensionHost(deps: ExtensionHostDeps): ExtensionHost {
     selectionStyle: context.selectionStyle,
     boxSelectionStyle: context.renderingConfig.boxSelectionStyle,
     notifyDrawCommit: (feature) => announceDrawCommit(feature),
+    drawingCommit,
   };
 
   /**
@@ -515,6 +522,7 @@ export function createExtensionHost(deps: ExtensionHostDeps): ExtensionHost {
     input,
     interactions,
     loaded,
+    drawingCommit,
     hitAt: (point) =>
       toHit(modeServices.hitTestTopmost(point), (feature) =>
         modeServices.distanceToFeaturePx(feature, point),

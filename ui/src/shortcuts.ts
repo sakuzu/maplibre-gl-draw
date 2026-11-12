@@ -10,7 +10,7 @@
 
 import type { Shortcut } from '@sakuzu/kata/svelte';
 import type { Messages } from './messages.js';
-import { shortcutKey } from './tools.js';
+import { enterToolMode, shortcutKey } from './tools.js';
 import type { DrawUIDraw, ToolSpec } from './types.js';
 import { deleteSelection } from './writes.js';
 
@@ -33,8 +33,8 @@ export function toolbarShortcuts(
       key: shortcutKey(spec.shortcut),
       label: spec.label,
       group: messages.toolsGroup,
-      // setMode returns false when the mode cannot be entered now: the key goes on
-      run: () => draw.setMode(spec.mode),
+      // False when the mode cannot be entered now: the key goes on
+      run: () => enterToolMode(draw, spec.mode),
     });
   }
   if (deletable) {

@@ -19,7 +19,12 @@ import { createDatasets } from './datasets.js';
 import { guardAfterDestroy } from './destroy-guard.js';
 import type { DocumentLoader } from './document.js';
 import { createDocument } from './document.js';
-import { createDrawing, createDrawingResource } from './drawing.js';
+import {
+  createDrawing,
+  createDrawingResource,
+  createModeDrawing,
+  createModeSet,
+} from './drawing.js';
 import type { Engine } from './engine.js';
 import { createEngine } from './engine.js';
 import { observe, requireEventName } from './events.js';
@@ -51,6 +56,7 @@ const ASYNC_MEMBERS: ReadonlySet<string> = new Set([
   'redo',
   'open',
   'captureImage',
+  'mode.drawing.commit',
 ]);
 
 /**
@@ -202,6 +208,8 @@ export function createDrawOnEngine(
   }): void => {
     const request = drawOptions.get().requestImage;
     if (!request) return;
+    // What the image mode made: with `repeat` it stays for the next image
+    modeManager.markCreated();
     imageRequest?.abort();
     const controller = new AbortController();
     imageRequest = controller;
@@ -257,6 +265,8 @@ export function createDrawOnEngine(
   });
 
   const optionsObservable = observe(events, ['options.changed'], drawOptions.get, { kept: true });
+  const drawingResource = createDrawingResource(engine);
+  const modeObservable = observe(events, ['mode.changed'], () => modeManager.getMode());
   const members: Draw = {
     features,
     layers,
@@ -279,7 +289,7 @@ export function createDrawOnEngine(
       'scan',
     ]),
     vertexSelection: createVertexSelection(deps, events),
-    drawing: createDrawingResource(engine),
+    drawing: drawingResource,
     options: {
       get value() {
         return optionsObservable.value;
@@ -306,7 +316,14 @@ export function createDrawOnEngine(
     getMap: () => map,
     getStore: () => view,
 
-    mode: observe(events, ['mode.changed'], () => modeManager.getMode()),
+    mode: {
+      get value() {
+        return modeObservable.value;
+      },
+      subscribe: modeObservable.subscribe,
+      set: createModeSet(engine),
+      drawing: createModeDrawing(engine, drawingResource),
+    },
     getMode: () => modeManager.getMode(),
     setMode(mode) {
       if (typeof mode !== 'string') throw invalidInput('The mode must be a string');

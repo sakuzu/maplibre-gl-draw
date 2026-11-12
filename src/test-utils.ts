@@ -432,6 +432,7 @@ export function createModeHarness(options: {
     sketches,
     generateId: deps.generateId,
     notifyDrawCommit: () => {},
+    drawingCommit: { current: null },
     scaleWithZoom: options.scaleWithZoom ?? false,
     selectionStyle: DEFAULT_SELECTION_CONFIG,
     boxSelectionStyle: DEFAULT_BOX_SELECTION_STYLE_CONFIG,

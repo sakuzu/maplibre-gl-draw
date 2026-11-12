@@ -350,8 +350,8 @@ container.addEventListener('drop', async (event) => {
 ## 画像
 
 画像は画像のモード `draw_image` が置きます。このモードはオプション
-`requestImage` でアプリケーションにファイルを求め、モードに入った位置に
-置きます ([描画と編集](drawing.ja.md#画像))。コードから画像を置くときは、
+`requestImage` でアプリケーションにファイルを求め、このモードで地図を
+クリックした位置に置きます ([描画と編集](drawing.ja.md#画像))。コードから画像を置くときは、
 書き出した GeoJSON と同じ形にします。型が `Image` の地物に、画像を
 データ URL で `maplibre-gl-draw:imageData` に、その型を
 `maplibre-gl-draw:imageMimeType` に持たせ、`tx.import` に渡します

@@ -7,6 +7,8 @@
  */
 
 import type { Position } from 'geojson';
+import type { Feature, Properties } from './model.js';
+import type { Write, WriteOptions } from './write.js';
 
 /**
  * The shape the current drawing mode is drawing, driven from code: to draw from typed
@@ -89,4 +91,57 @@ export interface DrawingResource {
    * @returns True when a vertex was put back
    */
   redoVertex(): boolean;
+}
+
+/**
+ * The shape the current drawing mode is drawing, driven from code (`draw.mode.drawing`): to draw
+ * from typed coordinates, from another input device, or in an automated run.
+ *
+ * `add` and `move` act as a click and a pointer move at the position would, and `commit` as
+ * Enter: they are made into the same input the map gives, at the point of the screen the
+ * position projects to, and go the same way, through the `input` receivers of the plugins first
+ * and then to the mode. The position is used as it is: nothing snaps it. A click of the image
+ * mode asks the application for the image to place there (`requestImage`).
+ *
+ * Every method throws `DrawError` with the code `invalid-state` when the current mode is no
+ * drawing mode (`commit` rejects with it).
+ */
+export interface Drawing<P extends object = Properties> {
+  /** Whether a shape is being drawn: the mode shows a shape that is not created yet */
+  readonly active: boolean;
+  /**
+   * Places a vertex at a position, as a click there would. What the click does is up to the
+   * mode: the point mode creates the point, the image mode asks for the image to place there, and
+   * a position exactly equal to the closing vertex of a line or an area finishes it. No click
+   * tolerance applies: a vertex a few pixels from the last one is placed.
+   *
+   * @param at - The position, as `[longitude, latitude]` in degrees
+   * @throws `DrawError` with the code `invalid-input` when the position is not two finite numbers
+   */
+  add(at: Position): void;
+  /**
+   * Moves the pointer to a position, as a pointer move there would: the preview of the shape
+   * follows it.
+   *
+   * @param at - The position, as `[longitude, latitude]` in degrees
+   * @throws `DrawError` with the code `invalid-input` when the position is not two finite numbers
+   */
+  move(at: Position): void;
+  /** Removes the last vertex of the shape being drawn; nothing when there is none */
+  undo(): void;
+  /** Puts back the vertex the last `undo` removed; nothing when there is none */
+  redo(): void;
+  /**
+   * Creates the feature of the shape being drawn, as Enter would, from the vertices placed so far,
+   * as one commit of this client with the options given. The mode then goes on as after Enter
+   * (back to select, or on to the next shape when it was set with `repeat`).
+   *
+   * @returns The write of the feature created
+   * @throws `DrawError` (the promise rejects) with the code `invalid-state` when no shape is being
+   *   drawn or the mode creates nothing from it (too few vertices), `invalid-input` when an option
+   *   has the wrong type, or `aborted` when the signal is aborted already
+   */
+  commit(options?: WriteOptions): Write<Feature<P>>;
+  /** Drops the shape being drawn; the mode stays the current one. Nothing when there is none */
+  cancel(): void;
 }

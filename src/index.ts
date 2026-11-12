@@ -48,6 +48,7 @@
  * - `draw.vertexSelection` (set, clear, delete): {@link VertexSelectionResource}
  * - `draw.options` (get, update): {@link OptionsResource}
  * - `draw.document` (title, description, metadata, toJSON, toGeoJSON): {@link DocumentResource}
+ * - `draw.mode` (set, and `drawing`: add, move, commit, cancel): {@link Drawing}
  * - `draw.drawing` (addVertex, finish, cancel): {@link DrawingResource}
  * - `draw.rendered` (get, getSelectionBox): {@link RenderedResource}
  * - `draw.extensions` (plugins, modes, feature types): {@link ExtensionsCollections}
@@ -102,7 +103,7 @@ export type {
 } from './api/sketches.js';
 export type { RenderedResource } from './api/rendered.js';
 export type { SelectionResource, VertexSelectionResource } from './api/selection.js';
-export type { DrawingResource } from './api/drawing.js';
+export type { Drawing, DrawingResource } from './api/drawing.js';
 export type { DocumentResource } from './api/document.js';
 
 // Writing

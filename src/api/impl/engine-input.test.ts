@@ -2,9 +2,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * Tests for what the API shares with the input of the user: the position image.requested
- * carries when a click leads to the image mode, and selection.ungroup against the ungroup
- * shortcut
+ * Tests for what the API shares with the input of the user: the position requestImage is
+ * asked with in the image mode, and selection.ungroup against the ungroup shortcut
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -40,7 +39,8 @@ const point = (lng: number, lat: number, id?: string) =>
   });
 
 describe('requestImage', () => {
-  it('is asked with the clicked position when a click led to the image mode', () => {
+  /** The positions requestImage is asked with */
+  const askedPositions = (): unknown[] => {
     const requests: unknown[] = [];
     draw.options.update({
       requestImage: (at) => {
@@ -48,25 +48,54 @@ describe('requestImage', () => {
         return new Promise<Blob>(() => {});
       },
     });
-    const stop = draw.on('map.clicked', () => {
-      draw.setMode('draw_image');
-    });
-    createSyntheticInput(engine).click([0.5, -0.25]);
-    stop();
-    expect(requests).toEqual([[0.5, -0.25]]);
-    expect(draw.getMode()).toBe('select');
+    return requests;
+  };
+
+  it('is not asked when the image mode is entered', () => {
+    const requests = askedPositions();
+    draw.mode.set('draw_image');
+    expect(requests).toEqual([]);
+    expect(draw.mode.value).toBe('draw_image');
   });
 
-  it('is asked with the center of the map when the API entered the mode', () => {
-    const requests: unknown[] = [];
-    draw.options.update({
-      requestImage: (at) => {
-        requests.push(at);
-        return new Promise<Blob>(() => {});
-      },
-    });
-    draw.setMode('draw_image');
-    expect(requests).toEqual([[0, 0]]);
+  it('is asked with the clicked position when the map is clicked in the image mode', () => {
+    const requests = askedPositions();
+    draw.mode.set('draw_image');
+    createSyntheticInput(engine).click([0.5, -0.25]);
+    expect(requests).toEqual([[0.5, -0.25]]);
+    expect(draw.mode.value).toBe('select');
+  });
+
+  it('is asked with the position drawing.add gives', () => {
+    const requests = askedPositions();
+    draw.mode.set('draw_image');
+    draw.mode.drawing.add([0.25, 0.125]);
+    expect(requests).toEqual([[0.25, 0.125]]);
+    expect(draw.mode.value).toBe('select');
+  });
+
+  it('is asked again for each click while the mode repeats, until Escape', () => {
+    const requests = askedPositions();
+    draw.mode.set('draw_image', { repeat: true });
+    draw.mode.drawing.add([0.25, 0.125]);
+    draw.mode.drawing.add([-0.25, 0.5]);
+    expect(requests).toEqual([
+      [0.25, 0.125],
+      [-0.25, 0.5],
+    ]);
+    expect(draw.mode.value).toBe('draw_image');
+    createSyntheticInput(engine).key('Escape');
+    expect(draw.mode.value).toBe('select');
+  });
+
+  it('leaves the mode without asking when no layer can be written', () => {
+    const requests = askedPositions();
+    draw.mode.set('draw_image');
+    const [layer] = draw.layers.list();
+    writesOf(draw).layers.update(layer.id, { locked: true });
+    draw.mode.drawing.add([0.25, 0.125]);
+    expect(requests).toEqual([]);
+    expect(draw.mode.value).toBe('select');
   });
 });
 

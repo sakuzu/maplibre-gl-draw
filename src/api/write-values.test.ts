@@ -152,7 +152,8 @@ describe('the image the image mode asks for', () => {
     });
     const changes: unknown[] = [];
     draw.on('change', (change) => changes.push(change));
-    draw.setMode('draw_image');
+    draw.mode.set('draw_image');
+    draw.mode.drawing.add([0, 0]);
     await vi.waitFor(() => expect(draw.features.count()).toBe(1));
     expect(asked).toHaveLength(1);
     expect(changes).toHaveLength(1);

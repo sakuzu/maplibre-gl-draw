@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 // The tools of the toolbar: the seven built-in tools, one for each built-in mode of core, and
-// the tools an application adds. A tool only calls `draw.setMode` with its mode; the mode itself
+// the tools an application adds. A tool only enters its mode (`enterToolMode`); the mode itself
 // belongs to core (a mode an application adds is registered with `draw.extensions.modes.add`
 // before its tool is added).
 
@@ -15,7 +15,7 @@ import {
   type IconComponent,
   type IconSource,
 } from '@sakuzu/kata/svelte';
-import type { Mode } from '@sakuzu/maplibre-gl-draw';
+import type { Draw, Mode } from '@sakuzu/maplibre-gl-draw';
 import MarkupIcon from './components/MarkupIcon.svelte';
 import type { Messages } from './messages.js';
 import type { ToolEntry, ToolId, ToolSpec } from './types.js';
@@ -43,6 +43,25 @@ export const BUILTIN_TOOLS: Readonly<
   freehand: { mode: 'draw_freehand', shortcut: 'F', group: 'draw' },
   image: { mode: 'draw_image', shortcut: 'I', group: 'draw' },
 });
+
+/**
+ * Enters the mode of a tool. The Image tool asks for the image at once, placed at the center of
+ * the map: the image mode asks for one where the map is clicked, and a press of the tool is no
+ * click on the map, so the tool gives it the center.
+ *
+ * @returns False when the mode cannot be entered now
+ */
+export function enterToolMode(
+  draw: Pick<Draw, 'mode' | 'setMode' | 'getMap'>,
+  mode: Mode,
+): boolean {
+  if (mode !== 'draw_image') return draw.setMode(mode);
+  draw.mode.set(mode);
+  if (draw.mode.value !== mode) return false;
+  const center = draw.getMap().getCenter();
+  draw.mode.drawing.add([center.lng, center.lat]);
+  return true;
+}
 
 /** The IDs that the toolbar keeps for its own buttons */
 export const DELETE_ID = 'delete';

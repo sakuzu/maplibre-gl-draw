@@ -13,6 +13,7 @@ import type {
   MouseNormalizedEvent,
 } from '../../dispatcher/types.js';
 import { createCoordinateTransform } from '../../shared/math/index.js';
+import { createId } from '../../shared/utils/id.js';
 import type { TerrainRenderState } from '../../view/terrain/context.js';
 import { INITIAL_DRAPE_DEBUG } from '../../view/terrain/context.js';
 import {
@@ -21,10 +22,15 @@ import {
   INACTIVE_TERRAIN_STATE,
 } from '../../view/terrain/state.js';
 import type { Draw } from '../draw.js';
-import type { DrawingResource } from '../drawing.js';
-import type { GpuMemoryDiagnostics, LayerStackEntry, TerrainDiagnostics } from '../state.js';
+import type { Drawing, DrawingResource } from '../drawing.js';
+import { DrawError } from '../errors.js';
+import type { Feature } from '../model.js';
+import type { GpuMemoryDiagnostics, LayerStackEntry, Mode, TerrainDiagnostics } from '../state.js';
+import type { Write, WriteResult } from '../write.js';
+import type { DrawingCommit } from './contexts.js';
 import type { Engine } from './engine.js';
-import { invalidInput } from './shared.js';
+import { invalidInput, isRecord, notFound } from './shared.js';
+import { abortedError, checkWriteOptions } from './write.js';
 
 /**
  * `getLayerStack`, `hasPendingWork` and `debug` over the engine
@@ -239,5 +245,127 @@ export function createDrawingResource(
 
     undoVertex: () => modeManager.undoVertex(),
     redoVertex: () => modeManager.redoVertex(),
+  };
+}
+
+// ============================================================================
+// draw.mode
+// ============================================================================
+
+/**
+ * `draw.mode.set`: changes the mode, as `draw.setMode` does, and keeps the mode with `repeat`
+ *
+ * @internal
+ */
+export function createModeSet(
+  engine: Pick<Engine, 'modeManager'>,
+): (mode: Mode, options?: { readonly repeat?: boolean }) => void {
+  const { modeManager } = engine;
+  return (mode, options) => {
+    if (typeof mode !== 'string') throw invalidInput('The mode must be a string');
+    if (options !== undefined && !isRecord(options)) {
+      throw invalidInput('The options must be an object');
+    }
+    const repeat = options?.repeat;
+    if (repeat !== undefined && typeof repeat !== 'boolean') {
+      throw invalidInput('repeat must be a boolean');
+    }
+    if (!modeManager.hasMode(mode)) throw notFound('mode', mode);
+    modeManager.setMode(mode, repeat === true);
+  };
+}
+
+/** A write that failed before anything was committed, with the ID it would have had */
+function failedWrite<T>(error: unknown, id = createId()): Write<T> {
+  const result = Promise.reject<WriteResult<T>>(error);
+  const done = result.then(({ value }) => value);
+  return Object.assign(done, { id, result }) as Write<T>;
+}
+
+/**
+ * `draw.mode.drawing` over `draw.drawing`: the same input, refused outside a drawing mode, and the
+ * commit of the shape as one commit with the options of a write
+ *
+ * @internal
+ */
+export function createModeDrawing(
+  engine: Pick<Engine, 'context' | 'extensions'>,
+  resource: DrawingResource,
+): Drawing {
+  const { store } = engine.context;
+  const requireDrawingMode = (): void => {
+    if (!resource.isActive()) {
+      throw new DrawError('invalid-state', 'The current mode is no drawing mode');
+    }
+  };
+
+  return {
+    get active() {
+      return resource.isDrawing();
+    },
+
+    add(at) {
+      const position = requirePosition(at);
+      requireDrawingMode();
+      resource.addVertex(position);
+    },
+
+    move(at) {
+      const position = requirePosition(at);
+      requireDrawingMode();
+      resource.moveTo(position);
+    },
+
+    undo() {
+      requireDrawingMode();
+      resource.undoVertex();
+    },
+
+    redo() {
+      requireDrawingMode();
+      resource.redoVertex();
+    },
+
+    commit(options) {
+      let checked: ReturnType<typeof checkWriteOptions>;
+      try {
+        checked = checkWriteOptions(options);
+        requireDrawingMode();
+        if (checked.signal.aborted) throw abortedError(checked.signal);
+        if (store.isReadOnly()) throw new DrawError('not-editable', 'The document is read-only');
+        if (!resource.isDrawing()) throw new DrawError('invalid-state', 'No shape is being drawn');
+      } catch (error) {
+        return failedWrite(error);
+      }
+      const id = createId();
+      // The mode creates the feature as Enter makes it, written as the commit asked for
+      const asked: DrawingCommit = {
+        info: { id, label: checked.label, undo: checked.undo },
+        made: null,
+      };
+      const slot = engine.extensions.drawingCommit;
+      const outer = slot.current;
+      slot.current = asked;
+      try {
+        resource.finish();
+      } finally {
+        slot.current = outer;
+      }
+      const made: Feature | null = asked.made;
+      if (made === null) {
+        return failedWrite(
+          new DrawError('invalid-state', 'The mode created no feature from the shape being drawn'),
+          id,
+        );
+      }
+      const result = Promise.resolve<WriteResult<Feature>>({ value: made, skipped: 0 });
+      const done = result.then(({ value }) => value);
+      return Object.assign(done, { id, result }) as Write<Feature>;
+    },
+
+    cancel() {
+      requireDrawingMode();
+      resource.cancel();
+    },
   };
 }

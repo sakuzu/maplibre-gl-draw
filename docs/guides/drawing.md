@@ -148,13 +148,14 @@ first writable layer when the active one is locked or hidden.
 
 ### Images
 
-The library does not open a file dialog. Entering `draw_image` asks the
-application for an image through the option `requestImage`, with the
-position to place it at, and returns to `select` at once. The position is
-the clicked one when a click led to the mode (a listener of `map.clicked`
-entered it), and the center of the map otherwise. The application shows
-its own file picker and gives back the file; the instance places it there
-in the active layer, at the zoom of the map, as one commit:
+The library does not open a file dialog. In `draw_image`, a click on the
+map (or `draw.mode.drawing.add`) asks the application for an image
+through the option `requestImage`, with the position to place it at, and
+the mode returns to `select` at once. The application shows its own file
+picker and gives back the file; the instance places it there in the
+active layer, at the zoom of the map, as one commit. The Image tool of the
+interface package gives the center of the map as soon as it is pressed,
+so that its file picker opens at once:
 
 ```ts
 import { createDraw } from '@sakuzu/maplibre-gl-draw';
@@ -175,7 +176,10 @@ const draw = createDraw(map, {
     }),
 });
 
-draw.setMode('draw_image');
+// Ask for an image to place at the center of the map now
+draw.mode.set('draw_image');
+const center = map.getCenter();
+draw.mode.drawing.add([center.lng, center.lat]);
 ```
 
 - Without `requestImage` the image mode places nothing. The option can
@@ -194,7 +198,9 @@ one stored file.
 
 The library does not take files dropped on the map. To read a dropped
 file, the application listens to the drop and imports it; see
-[Save and load](save-load.md).
+[Save and load](save-load.md). A dropped image is placed where it was
+dropped the same way: enter `draw_image`, call `draw.mode.drawing.add` at
+the position of the drop, and give the dropped file from `requestImage`.
 
 ## Selecting and editing
 
@@ -516,6 +522,30 @@ the automatic name and the reference zoom) is a mode of your own, which
 creates its features with `commitFeature` ([Plugins](plugins.md)).
 
 ### Driving a drawing mode from code
+
+`draw.mode.set` changes the mode, as `draw.setMode` does, and returns
+nothing: a drawing mode is not entered while the interaction lock is on
+or while no layer can be written. With `{ repeat: true }` a drawing mode
+stays the current one once it has created a feature (or asked for an
+image), ready for the next; Escape still leaves it.
+
+`draw.mode.drawing` drives the shape the current drawing mode is drawing.
+`add` and `move` act as a click and a move at the position, `commit` as
+Enter, and `undo`, `redo` and `cancel` as their keys; `active` tells
+whether a shape is being drawn. Every method throws `DrawError` with the
+code `invalid-state` when the current mode is no drawing mode. `commit`
+returns the write of the feature it creates, with the `label` and `undo`
+of the options of `draw.write`, and rejects with `invalid-state` when the
+mode creates nothing from the shape (too few vertices):
+
+```ts
+draw.mode.set('draw_line');
+draw.mode.drawing.add([139.7, 35.68]);
+draw.mode.drawing.move([139.71, 35.69]);
+draw.mode.drawing.add([139.71, 35.69]);
+const line = await draw.mode.drawing.commit({ label: 'Route' });
+console.log(line.id);
+```
 
 `draw.drawing` drives the shape the current drawing mode is drawing, for
 coordinates typed one by one, another input device or an automated run.

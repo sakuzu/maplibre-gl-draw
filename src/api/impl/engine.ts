@@ -407,7 +407,7 @@ export function createEngine(
     get scaleWithZoom() {
       return context.options.scaleWithZoom;
     },
-    setMode: (mode: Mode) => modeManager.setMode(mode),
+    setMode: (mode: Mode) => modeManager.setModeFromMode(mode),
     getClickPosition: () => clickPosition,
     // The key that temporarily disables shared vertices is shared with the
     // disableKey of the snapping

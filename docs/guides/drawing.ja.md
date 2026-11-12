@@ -146,13 +146,13 @@ draw.sketches.subscribe((sketches) => {
 
 ### 画像
 
-ライブラリーはファイルのダイアログを開きません。`draw_image` に入ると、
-オプション `requestImage` で、置く位置を添えてアプリケーションに画像を
-求め、すぐに `select` に戻ります。位置は、クリックからこのモードに入った
-とき (`map.clicked` のリスナーが入ったとき) はクリックした位置、
-それ以外は地図の中心です。アプリケーションは自前のファイル選択を
-表示してファイルを返し、インスタンスはそれをその位置に、アクティブな
-レイヤーへ、地図のズームで、1 つの確定として置きます。
+ライブラリーはファイルのダイアログを開きません。`draw_image` では、地図を
+クリックすると (または `draw.mode.drawing.add` を呼ぶと)、オプション
+`requestImage` で、置く位置を添えてアプリケーションに画像を求め、すぐに
+`select` に戻ります。アプリケーションは自前のファイル選択を表示して
+ファイルを返し、インスタンスはそれをその位置に、アクティブなレイヤーへ、
+地図のズームで、1 つの確定として置きます。UI のパッケージの画像の道具は、
+押すとすぐに地図の中心を渡すので、ファイル選択がすぐに開きます。
 
 ```ts
 import { createDraw } from '@sakuzu/maplibre-gl-draw';
@@ -173,7 +173,10 @@ const draw = createDraw(map, {
     }),
 });
 
-draw.setMode('draw_image');
+// 地図の中心に置く画像をいま求める
+draw.mode.set('draw_image');
+const center = map.getCenter();
+draw.mode.drawing.add([center.lng, center.lat]);
 ```
 
 - `requestImage` が無ければ、画像のモードは何も置きません。動いている
@@ -191,7 +194,10 @@ draw.setMode('draw_image');
 
 ライブラリーは、地図にドロップされたファイルを受け取りません。ドロップ
 されたファイルを読むには、アプリケーションがドロップを受けて取り込みます
-([保存と読み込み](save-load.ja.md) を参照)。
+([保存と読み込み](save-load.ja.md) を参照)。ドロップされた画像も同じ形で
+落とした位置に置けます。`draw_image` に入り、落とした位置で
+`draw.mode.drawing.add` を呼び、`requestImage` から落とされたファイルを
+返します。
 
 ## 選択と編集
 
@@ -503,6 +509,29 @@ await draw.write((tx) =>
 作ります ([プラグイン](plugins.ja.md))。
 
 ### 描画モードをコードから動かす
+
+`draw.mode.set` は `draw.setMode` と同じくモードを替え、何も返しません。
+操作のロックがあるときと、書き込めるレイヤーが無いときは、描画モードに
+入りません。`{ repeat: true }` を渡すと、描画モードは地物を作った後 (または
+画像を求めた後) も替わらず、次の形を描けます。Escape では抜けます。
+
+`draw.mode.drawing` は、いまの描画モードが描いている形を動かします。
+`add` と `move` はその位置のクリックと移動、`commit` は Enter、`undo`、
+`redo`、`cancel` はそれぞれのキーと同じです。`active` は描いている途中の
+形があるかを答えます。いまのモードが描画モードでないときは、どれも
+コード `invalid-state` の `DrawError` を投げます。`commit` は作った地物の
+書き込みを返し、`draw.write` のオプションの `label` と `undo` を受けます。
+モードが形から何も作らないとき (頂点が足りない) は `invalid-state` で
+reject します。
+
+```ts
+draw.mode.set('draw_line');
+draw.mode.drawing.add([139.7, 35.68]);
+draw.mode.drawing.move([139.71, 35.69]);
+draw.mode.drawing.add([139.71, 35.69]);
+const line = await draw.mode.drawing.commit({ label: 'Route' });
+console.log(line.id);
+```
 
 `draw.drawing` は、いまの描画モードが描いている形をコードから動かします。
 1 つずつ入力された座標、ほかの入力機器、自動化に使えます。形を作るのは

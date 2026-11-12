@@ -8,7 +8,7 @@
 import type { Map as MaplibreMap } from 'maplibre-gl';
 import type { DatasetsCollection } from './datasets.js';
 import type { DocumentResource } from './document.js';
-import type { DrawingResource } from './drawing.js';
+import type { Drawing, DrawingResource } from './drawing.js';
 import type { DrawEvents, Observable } from './events.js';
 import type { StoreView } from './extension/store.js';
 import type { ExtensionsCollections } from './extensions.js';
@@ -93,9 +93,22 @@ export interface Draw {
   // Mode
 
   /**
-   * The current mode, told again each time it changes: what `getMode` returns
+   * The current mode, told again each time it changes (what `getMode` returns), the way to change
+   * it, and the shape a drawing mode is drawing, driven from code
    */
-  readonly mode: Observable<Mode>;
+  readonly mode: Observable<Mode> & {
+    /**
+     * Changes the mode. Nothing changes for a drawing mode while the interaction lock is on or
+     * while no layer can be written. With `repeat`, a drawing mode stays the current one once it
+     * has created a feature (or asked for an image), ready for the next; Escape still leaves it.
+     *
+     * @throws `DrawError` with the code `not-found` when there is no mode with this name, or
+     *   `invalid-input` when an option has the wrong type
+     */
+    set(mode: Mode, options?: { readonly repeat?: boolean }): void;
+    /** The shape the current drawing mode is drawing, driven from code */
+    readonly drawing: Drawing;
+  };
   /** The current mode. */
   getMode(): Mode;
   /**

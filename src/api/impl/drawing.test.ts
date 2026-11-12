@@ -2,8 +2,9 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * Tests for the members about the drawing: getLayerStack, hasPendingWork and debug.terrain, and
- * the hooks of measurement of the drawing of the rows (`tableDiagnosticsOf`)
+ * Tests for the members about the drawing: getLayerStack, hasPendingWork and debug.terrain, the
+ * hooks of measurement of the drawing of the rows (`tableDiagnosticsOf`), `draw.drawing`, and
+ * `draw.mode` (set, with repeat, and drawing)
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -371,5 +372,251 @@ describe('drawing', () => {
     draw.setMode('draw_line');
     expect(() => draw.drawing.addVertex([Number.NaN, 0])).toThrow(DrawError);
     expect(() => draw.drawing.moveTo([0] as unknown as [number, number])).toThrow(DrawError);
+  });
+});
+
+describe('mode.set', () => {
+  it('enters a mode and tells it, as setMode does', () => {
+    draw = createDraw(createMapStub().map);
+    const told: string[] = [];
+    draw.mode.subscribe((mode) => told.push(mode));
+    draw.mode.set('draw_line');
+    expect(draw.mode.value).toBe('draw_line');
+    expect(draw.getMode()).toBe('draw_line');
+    draw.mode.set('select');
+    expect(told).toEqual(['select', 'draw_line', 'select']);
+  });
+
+  it('throws not-found for a mode that is not there, and invalid-input for wrong options', () => {
+    draw = createDraw(createMapStub().map);
+    expect(() => draw.mode.set('draw_nothing')).toThrow(
+      expect.objectContaining({ code: 'not-found' }),
+    );
+    expect(() => draw.mode.set('draw_line', { repeat: 'yes' as unknown as boolean })).toThrow(
+      expect.objectContaining({ code: 'invalid-input' }),
+    );
+    expect(() => draw.mode.set(1 as unknown as string)).toThrow(
+      expect.objectContaining({ code: 'invalid-input' }),
+    );
+    expect(draw.mode.value).toBe('select');
+  });
+
+  it('changes nothing for a drawing mode while the interaction lock is on', () => {
+    draw = createDraw(createMapStub().map);
+    draw.setInteractionLocked(true);
+    draw.mode.set('draw_point');
+    expect(draw.mode.value).toBe('select');
+  });
+
+  it('keeps a drawing mode with repeat for the next shape, until Escape', () => {
+    const engine = createEngine(createMapStub().map, {}, { deferDefaultMode: true });
+    draw = createDrawOnEngine(engine);
+    engine.enterDefaultMode();
+    draw.mode.set('draw_line', { repeat: true });
+    draw.mode.drawing.add([0, 0]);
+    draw.mode.drawing.add([1, 0.5]);
+    void draw.mode.drawing.commit();
+    expect(draw.mode.value).toBe('draw_line');
+    expect(draw.mode.drawing.active).toBe(false);
+    draw.mode.drawing.add([2, 0]);
+    draw.mode.drawing.add([3, 0.5]);
+    void draw.mode.drawing.commit();
+    expect(draw.features.list({ type: 'LineString' })).toHaveLength(2);
+    // Escape in the middle of a shape drops it; Escape with nothing drawn leaves the mode
+    draw.mode.drawing.add([4, 0]);
+    createSyntheticInput(engine).key('Escape');
+    expect(draw.mode.value).toBe('draw_line');
+    createSyntheticInput(engine).key('Escape');
+    expect(draw.mode.value).toBe('select');
+    expect(draw.features.list({ type: 'LineString' })).toHaveLength(2);
+  });
+
+  it('keeps the point mode with repeat, one point for each click', () => {
+    draw = createDraw(createMapStub().map);
+    draw.mode.set('draw_point', { repeat: true });
+    draw.mode.drawing.add([0.25, -0.5]);
+    draw.mode.drawing.add([0.5, -0.25]);
+    expect(draw.features.list({ type: 'Point' })).toHaveLength(2);
+    expect(draw.mode.value).toBe('draw_point');
+    // Another mode set without repeat does not repeat
+    draw.mode.set('draw_point');
+    draw.mode.drawing.add([0.75, 0]);
+    expect(draw.mode.value).toBe('select');
+  });
+
+  it('leaves a repeated mode for select once no layer can be written', async () => {
+    draw = createDraw(createMapStub().map);
+    draw.mode.set('draw_point', { repeat: true });
+    const [layer] = draw.layers.list();
+    await draw.write((tx) => tx.layers.update(layer.id, { locked: true }));
+    draw.mode.drawing.add([0.5, -0.25]);
+    expect(draw.mode.value).toBe('select');
+    expect(draw.features.list({ type: 'Point' })).toHaveLength(0);
+  });
+
+  it('starts the repeated mode again only when the next shape can be written', async () => {
+    draw = createDraw(createMapStub().map);
+    draw.mode.set('draw_line', { repeat: true });
+    draw.mode.drawing.add([0, 0]);
+    const [layer] = draw.layers.list();
+    // The layer is locked in the middle of the shape: the shape is dropped and the mode is left
+    await draw.write((tx) => tx.layers.update(layer.id, { locked: true }));
+    draw.mode.drawing.add([1, 0.5]);
+    await draw.mode.drawing.commit().catch(() => {});
+    expect(draw.mode.value).toBe('select');
+    expect(draw.features.list({ type: 'LineString' })).toHaveLength(0);
+  });
+
+  it('places one point and goes back to select without repeat', () => {
+    draw = createDraw(createMapStub().map);
+    draw.mode.set('draw_point');
+    draw.mode.drawing.add([0.25, -0.5]);
+    expect(draw.features.list({ type: 'Point' })).toHaveLength(1);
+    expect(draw.mode.value).toBe('select');
+  });
+});
+
+describe('mode.drawing', () => {
+  it('throws invalid-state outside a drawing mode', async () => {
+    draw = createDraw(createMapStub().map);
+    const { drawing } = draw.mode;
+    expect(drawing.active).toBe(false);
+    for (const run of [
+      () => drawing.add([0, 0]),
+      () => drawing.move([0, 0]),
+      () => drawing.undo(),
+      () => drawing.redo(),
+      () => drawing.cancel(),
+    ]) {
+      expect(run).toThrow(expect.objectContaining({ code: 'invalid-state' }));
+    }
+    await expect(drawing.commit()).rejects.toMatchObject({ code: 'invalid-state' });
+  });
+
+  it('refuses a position that is not two finite numbers', () => {
+    draw = createDraw(createMapStub().map);
+    draw.mode.set('draw_line');
+    expect(() => draw.mode.drawing.add([Number.NaN, 0])).toThrow(
+      expect.objectContaining({ code: 'invalid-input' }),
+    );
+    expect(() => draw.mode.drawing.move([0] as unknown as [number, number])).toThrow(
+      expect.objectContaining({ code: 'invalid-input' }),
+    );
+  });
+
+  it('draws an area with move, undo and redo, and commits it as one commit with its label', async () => {
+    draw = createDraw(createMapStub().map);
+    const changes: Array<{
+      commit: string;
+      label: string | undefined;
+      created: readonly string[];
+    }> = [];
+    draw.on('change', (change) =>
+      changes.push({
+        commit: change.commit,
+        label: change.label,
+        created: change.features.created,
+      }),
+    );
+    draw.mode.set('draw_polygon');
+    const { drawing } = draw.mode;
+    drawing.add([0, 0]);
+    expect(drawing.active).toBe(true);
+    drawing.add([1, 0]);
+    drawing.move([1, 1]);
+    drawing.add([1, 1]);
+    drawing.add([2, 2]);
+    drawing.undo();
+    drawing.redo();
+    drawing.undo();
+    const write = drawing.commit({ label: 'Area' });
+    const area = await write;
+    expect(area.geometry).toEqual({
+      type: 'Polygon',
+      coordinates: [
+        [
+          [0, 0],
+          [1, 0],
+          [1, 1],
+          [0, 0],
+        ],
+      ],
+    });
+    expect(await write.result).toEqual({ value: area, skipped: 0 });
+    expect(changes).toEqual([{ commit: write.id, label: 'Area', created: [area.id] }]);
+    expect(draw.mode.value).toBe('select');
+    expect(drawing.active).toBe(false);
+    // It is one step of undo
+    await draw.undo();
+    expect(draw.features.count()).toBe(0);
+  });
+
+  it('commits with undo false as no step of undo', async () => {
+    draw = createDraw(createMapStub().map);
+    draw.mode.set('draw_line');
+    draw.mode.drawing.add([0, 0]);
+    draw.mode.drawing.add([1, 0.5]);
+    await draw.mode.drawing.commit({ undo: false });
+    expect(draw.features.count()).toBe(1);
+    await expect(draw.undo()).rejects.toMatchObject({ code: 'invalid-state' });
+  });
+
+  it('rejects a commit of too few vertices and keeps the shape', async () => {
+    draw = createDraw(createMapStub().map);
+    draw.mode.set('draw_line');
+    draw.mode.drawing.add([0, 0]);
+    await expect(draw.mode.drawing.commit()).rejects.toMatchObject({ code: 'invalid-state' });
+    expect(draw.mode.drawing.active).toBe(true);
+    expect(draw.features.count()).toBe(0);
+  });
+
+  it('rejects a commit stopped by its signal, or with wrong options, and keeps the shape', async () => {
+    draw = createDraw(createMapStub().map);
+    draw.mode.set('draw_line');
+    draw.mode.drawing.add([0, 0]);
+    draw.mode.drawing.add([1, 0.5]);
+    const controller = new AbortController();
+    controller.abort();
+    await expect(draw.mode.drawing.commit({ signal: controller.signal })).rejects.toMatchObject({
+      code: 'aborted',
+    });
+    await expect(draw.mode.drawing.commit({ label: 1 as unknown as string })).rejects.toMatchObject(
+      { code: 'invalid-input' },
+    );
+    expect(draw.mode.drawing.active).toBe(true);
+    expect(draw.features.count()).toBe(0);
+  });
+
+  it('rejects a commit while the document is read-only', async () => {
+    draw = createDraw(createMapStub().map);
+    draw.mode.set('draw_line');
+    draw.mode.drawing.add([0, 0]);
+    draw.mode.drawing.add([1, 0.5]);
+    draw.setReadOnly(true);
+    await expect(draw.mode.drawing.commit()).rejects.toMatchObject({ code: 'not-editable' });
+    expect(draw.features.count()).toBe(0);
+  });
+
+  it('cancels the shape and stays in the mode', () => {
+    draw = createDraw(createMapStub().map);
+    draw.mode.set('draw_line');
+    draw.mode.drawing.add([0, 0]);
+    draw.mode.drawing.cancel();
+    expect(draw.mode.drawing.active).toBe(false);
+    expect(draw.mode.value).toBe('draw_line');
+    // Nothing to cancel is nothing
+    draw.mode.drawing.cancel();
+    expect(draw.mode.value).toBe('draw_line');
+  });
+
+  it('throws invalid-state once the instance is destroyed, and commit rejects with it', async () => {
+    draw = createDraw(createMapStub().map);
+    const { mode } = draw;
+    draw.destroy();
+    expect(() => mode.set('draw_line')).toThrow(expect.objectContaining({ code: 'invalid-state' }));
+    expect(() => mode.drawing.add([0, 0])).toThrow(
+      expect.objectContaining({ code: 'invalid-state' }),
+    );
+    await expect(mode.drawing.commit()).rejects.toMatchObject({ code: 'invalid-state' });
   });
 });

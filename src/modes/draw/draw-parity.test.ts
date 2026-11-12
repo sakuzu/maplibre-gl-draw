@@ -250,7 +250,8 @@ describe.each(STORE_KINDS)('the shapes the drawing modes finish over %s', (_, ma
         return new Promise<Blob>(() => {});
       },
     });
-    view.draw.setMode('draw_image');
+    view.draw.mode.set('draw_image');
+    view.draw.mode.drawing.add([0, 0]);
     vi.runAllTimers();
     expect(requested).toHaveLength(1);
     expect(view.changes).toHaveLength(0);

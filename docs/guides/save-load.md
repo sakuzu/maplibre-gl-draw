@@ -363,7 +363,7 @@ or read a file itself and hand the features to a dataset instead
 
 An image is placed by the image mode, `draw_image`, which asks the
 application for the file through the option `requestImage` and places it
-where the mode was entered ([Drawing and editing](drawing.md#images)).
+where the map was clicked in it ([Drawing and editing](drawing.md#images)).
 Code places an image as the GeoJSON written out carries it: a feature of
 the type `Image` with the picture as a data URL in
 `maplibre-gl-draw:imageData` and its type in

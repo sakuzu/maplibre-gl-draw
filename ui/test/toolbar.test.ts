@@ -70,6 +70,16 @@ describe('createToolbar', () => {
     expect(fake.draw.setMode).toHaveBeenCalledWith('draw_polygon');
   });
 
+  it('asks for an image at once when the Image tool is pressed, placed at the center of the map', () => {
+    const fake = fakeDraw();
+    bar = createToolbar(fake.asDraw, { target: fake.container });
+    button('Image').click();
+    expect(fake.draw.mode.set).toHaveBeenCalledWith('draw_image');
+    const center = fake.asDraw.getMap().getCenter();
+    expect(fake.draw.mode.drawing.add).toHaveBeenCalledWith([center.lng, center.lat]);
+    expect(fake.draw.setMode).not.toHaveBeenCalled();
+  });
+
   it('shows the current mode of draw, whoever changed it', () => {
     const fake = fakeDraw({ mode: 'draw_line' });
     bar = createToolbar(fake.asDraw, { target: fake.container });

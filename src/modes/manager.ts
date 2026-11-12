@@ -29,9 +29,24 @@ export interface ModeManager {
    * not select while the interaction lock is on, and when the `canEnter` predicate rejects it
    * (see `ModeManagerOptions`). Asking for the current mode changes nothing and returns true.
    *
+   * @param repeat - Whether the mode stays the current one once it has created something (see
+   *   `setModeFromMode`); false when left out, and for select
    * @returns whether the mode is `mode` after the call
    */
-  setMode(mode: Mode): boolean;
+  setMode(mode: Mode, repeat?: boolean): boolean;
+
+  /**
+   * Changes the mode as the current mode asks: what a mode calls to leave. While the mode was set
+   * with `repeat` and has created something since it started (`markCreated`), a request for select
+   * starts the same mode again, ready for the next shape, instead (select when it cannot be
+   * entered again now). Any other request is `setMode`, keeping `repeat` for the same mode.
+   *
+   * @returns whether the mode is `mode` after the call, or the same mode once started again
+   */
+  setModeFromMode(mode: Mode): boolean;
+
+  /** Notes that the current mode has created something: a feature, or the image it asked for */
+  markCreated(): void;
 
   /**
    * Registers a mode
@@ -125,6 +140,10 @@ export class ModeManagerImpl implements ModeManager {
    * mode change (so a mode is never constructed twice for one transition)
    */
   private pending: { mode: Mode; handler: EngineModeHandler } | null = null;
+  /** Whether the current mode was set with `repeat` */
+  private repeat = false;
+  /** The handler that created something since it started (`markCreated`) */
+  private createdBy: EngineModeHandler | null = null;
 
   constructor(
     private readonly store: Store,
@@ -142,8 +161,11 @@ export class ModeManagerImpl implements ModeManager {
     return this.store.getMode();
   }
 
-  setMode(mode: Mode): boolean {
-    if (mode === this.store.getMode()) return true;
+  setMode(mode: Mode, repeat = false): boolean {
+    if (mode === this.store.getMode()) {
+      this.repeat = repeat && mode !== 'select';
+      return true;
+    }
 
     // A mode without a factory is refused before the Store changes, so the Store, the
     // draw.mode.change event and the running handler never disagree (a typo in a mode name
@@ -168,8 +190,46 @@ export class ModeManagerImpl implements ModeManager {
     }
     // Following SSoT, the mode change is carried out through the Store
     // The result of the mode change is handled in handleModeChange through the Store subscription
+    const repeatBefore = this.repeat;
+    this.repeat = repeat && mode !== 'select';
     this.store.setMode(mode);
-    return this.store.getMode() === mode;
+    const entered = this.store.getMode() === mode;
+    if (!entered) this.repeat = repeatBefore;
+    return entered;
+  }
+
+  setModeFromMode(mode: Mode): boolean {
+    const current = this.store.getMode();
+    if (
+      mode === 'select' &&
+      current !== 'select' &&
+      this.repeat &&
+      this.currentHandler !== null &&
+      this.createdBy === this.currentHandler
+    ) {
+      return this.startAgain(current);
+    }
+    return this.setMode(mode, mode === current && this.repeat);
+  }
+
+  markCreated(): void {
+    this.createdBy = this.currentHandler;
+  }
+
+  /**
+   * Starts the current mode again with a new handler, as when it is entered (the same refusals
+   * apply: select is entered instead)
+   */
+  private startAgain(mode: Mode): boolean {
+    const factory = this.factories.get(mode);
+    if (!factory || this.store.isInteractionLocked()) return this.setMode('select');
+    const handler = factory();
+    if (this.options.canEnter && !this.options.canEnter(handler)) return this.setMode('select');
+    this.currentHandler?.onStop?.();
+    this.currentHandler = handler;
+    this.createdBy = null;
+    if (this.context) handler.onStart?.(this.context);
+    return true;
   }
 
   registerMode(mode: Mode, factory: EngineModeFactory): () => void {
@@ -241,6 +301,7 @@ export class ModeManagerImpl implements ModeManager {
       return;
     }
 
+    if (mode === 'select') this.repeat = false;
     // End the current mode
     if (this.currentHandler) {
       this.currentHandler.onStop?.();

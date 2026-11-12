@@ -120,8 +120,12 @@ import {
 // What the commit tells
 // ============================================================================
 
-/** The commit of `draw.write` being made in a Store, read by the `change` it makes */
-interface CommitInfo {
+/**
+ * The commit of `draw.write` being made in a Store, read by the `change` it makes
+ *
+ * @internal
+ */
+export interface CommitInfo {
   readonly id: string;
   readonly label: string | undefined;
   /** Whether it is a step of undo */
@@ -232,14 +236,14 @@ export interface Writer {
 }
 
 /** The source the Store is told for a commit of `draw.write` */
-const WRITE_SOURCE = 'local';
+export const WRITE_SOURCE = 'local';
 
 /**
  * The source the Store is told for a commit of `draw.write` that is no step of undo
  * (`undo: false`): the source a subscriber recording the changes as steps leaves out, as the
  * undo of a Store that keeps steps of its own does. The change of the instance still says `local`.
  */
-const WRITE_SOURCE_NO_UNDO = 'silent';
+export const WRITE_SOURCE_NO_UNDO = 'silent';
 
 /**
  * Creates `draw.write` and `draw.open`
@@ -351,8 +355,12 @@ export function createWriter(writerDeps: WriterDeps): Writer {
 /** The signal of a write given none */
 const NEVER_ABORTED = new AbortController().signal;
 
-/** The options of `draw.write`, checked */
-function checkWriteOptions(options: WriteOptions | undefined): {
+/**
+ * The options of `draw.write`, checked
+ *
+ * @internal
+ */
+export function checkWriteOptions(options: WriteOptions | undefined): {
   signal: AbortSignal;
   label: string | undefined;
   undo: boolean;
@@ -369,7 +377,8 @@ function checkWriteOptions(options: WriteOptions | undefined): {
   return { signal: signal ?? NEVER_ABORTED, label, undo: undo ?? true };
 }
 
-function abortedError(signal: AbortSignal): DrawError {
+/** @internal */
+export function abortedError(signal: AbortSignal): DrawError {
   return new DrawError('aborted', 'The write was stopped by its signal', { cause: signal.reason });
 }
 

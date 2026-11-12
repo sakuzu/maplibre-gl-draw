@@ -24,10 +24,10 @@ const map = new maplibregl.Map({
   center: IMAGE_CENTER,
   zoom: 15.5,
 });
-// 1. The library opens no file dialog. Entering `draw_image` (the Image tool, or the I key)
-// calls requestImage with where the image goes (where the click that entered the mode was, or
-// else the center of the map); the page lets the user pick a file and gives it, and the library places it there, in the active layer at the zoom of
-// the map, as one commit. A picker left without a file gives nothing: the request is stopped by
+// 1. The library opens no file dialog. A click in `draw_image` calls requestImage with where the
+// image goes (the Image tool and the I key give the center of the map at once); the page lets the
+// user pick a file and gives it, and the library places it there, in the active layer at the
+// zoom of the map, as one commit. A picker left without a file gives nothing: the request is stopped by
 // its signal when the next one is made
 const draw = createDraw(map, {
   requestImage: (_at, { signal }) =>

@@ -725,6 +725,15 @@ the current mode enters `select` first.
 being writable while the mode is active, and the mode then discards the
 drawing and returns to select.
 
+A mode leaves through `setModeFromMode`, which its context's `setMode`
+calls. `setMode(mode, repeat)` keeps whether the mode repeats
+(`draw.mode.set` with `repeat`). While it repeats and the running handler
+has created something (`markCreated`: a feature committed through
+`commitFeature`, or the image the image mode asked for), a request for
+`select` starts the same mode again with a new handler instead, with the
+same refusals as entering it (`select` is entered when it cannot be).
+Escape with nothing created leaves the mode as before.
+
 ## Operations
 
 `operations/` holds the logic that runs inside a mode but is not a mode:
