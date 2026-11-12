@@ -16,6 +16,11 @@
  *
  * A commit from elsewhere is no step; a commit of `draw.write` with `undo: false` is none either.
  * Opening a document drops every step.
+ *
+ * With `maxSteps` 0 there is no local undo (the undo of the document is elsewhere, such as the
+ * history of a backend that keeps the Store in step): no step is recorded and nothing of the
+ * commits is kept, not even what keeps the rows a deletion deleted, which stay with the Store
+ * until it is cleared for whatever takes the deletion back.
  */
 
 import type { FileData, Metadata } from '../../shared/types/model.js';
@@ -46,6 +51,7 @@ export interface History {
 
 /** The limits of the steps kept */
 export interface HistoryOptions {
+  /** The most steps kept, the oldest let go of first; 0 for no local undo */
   readonly maxSteps?: number;
 }
 
@@ -108,7 +114,7 @@ export function createHistory(store: Store, options: HistoryOptions | undefined)
     for (const step of steps.splice(0)) release(step);
   };
 
-  const stopListening = store.subscribe((change) => {
+  const follow = (change: StoreChange): void => {
     if (applying) {
       const inverse = inverseOf(change);
       if (inverse) applying.parts.push(inverse);
@@ -145,7 +151,9 @@ export function createHistory(store: Store, options: HistoryOptions | undefined)
       dropAll(redoSteps);
     }
     if (!store.slicedWritePending) open = null;
-  });
+  };
+  // No local undo: the commits are not followed
+  const stopListening = maxSteps === 0 ? () => {} : store.subscribe(follow);
 
   const take = (direction: 'undo' | 'redo', taskOptions?: TaskOptions): Write<void> => {
     const id = createId();

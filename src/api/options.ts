@@ -493,7 +493,10 @@ export interface DrawOptions extends RuntimeOptions {
   generateId?: () => string;
   /**
    * The local undo (`draw.undo`, `draw.redo`): `maxSteps` is how many steps are kept, the oldest
-   * let go of first (100 when left out)
+   * let go of first (100 when left out). With 0 there is no local undo: give it when the document
+   * is taken back elsewhere (the history of the backend that keeps the Store in step); nothing of
+   * the commits is kept for it, and the rows a deletion deleted stay with the Store until it is
+   * cleared, for what takes the deletion back
    */
   history?: { maxSteps?: number };
   /**
