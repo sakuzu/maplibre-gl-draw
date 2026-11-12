@@ -23,6 +23,7 @@ import type { RenderedResource } from './rendered.js';
 import type { SelectionResource, VertexSelectionResource } from './selection.js';
 import type { SketchesCollection } from './sketches.js';
 import type { GpuMemoryDiagnostics, LayerStackEntry, Mode, TerrainDiagnostics } from './state.js';
+import type { View } from './view.js';
 import type {
   OpenResult,
   OpenSource,
@@ -78,6 +79,8 @@ export interface Draw {
   readonly options: OptionsResource;
   /** The whole document, to load and to write out */
   readonly document: DocumentResource;
+  /** What this client shows in place of the document */
+  readonly view: View;
   /** The plugins, modes, feature types, overlays and providers */
   readonly extensions: ExtensionsCollections;
   /** The memory the documents drawn on the page take, against the limit of the device */

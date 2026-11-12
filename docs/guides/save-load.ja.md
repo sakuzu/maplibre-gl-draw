@@ -548,6 +548,17 @@ draw.document.setShown(null);
 たくさん足すときは、少しずつ足すと描画を止めません。`copyTableStore`
 は塊ずつ写します。
 
+`draw.view.preview(source)` も同じように見せます。`source` は
+`draw.open` と同じく読みます (ライブラリーの文書、GeoJSON、JSON の文字列、
+ファイル)。自分の行のストアに読み込んで見せ、`draw.view.preview(null)` で
+文書に戻ります。読んでいる途中に別の `source` を渡すと、後の物を見せます。
+
+```ts
+await draw.view.preview(pastVersion); // ライブラリーの文書
+// ...
+await draw.view.preview(null);
+```
+
 文書を別の地図で描く (印刷する) ときは、`@sakuzu/maplibre-gl-draw/kasane`
 の `copyTableStore` で、地物を行で持つストアに写します。レイヤーと
 グループと並びは一度に、行は塊ずつ、地物を作らずに写します。

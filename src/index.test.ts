@@ -206,6 +206,7 @@ const MAIN = [
   'VertexRef',
   'VertexSelection',
   'VertexSelectionResource',
+  'View',
   'VertexTarget',
   // The writes of the document (`draw.write`, `draw.open`, `tx.import`) and their types
   'All',

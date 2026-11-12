@@ -181,6 +181,11 @@ writing it. Its changes are listed after those of 3.0.0.
   same map, for this client only. The instance is read-only meanwhile and
   the pointer and the keys move the map only; the changes from elsewhere
   are still taken.
+- `draw.view.preview(source | null)` (`View`): a source read as
+  `draw.open` reads it (a document of the library, GeoJSON, a JSON string
+  or a file) shown read-only in place of the document, through
+  `draw.document.setShown` and a store of rows of its own; `null` shows
+  the document again.
 - `draw.memory` (`MemoryResource`): what the documents drawn on the page
   take (`get`, `MemoryUsage`: the GPU memory every instance allocated and
   an estimate of the heap from the features and their positions) against

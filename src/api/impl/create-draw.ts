@@ -47,6 +47,7 @@ import type { ResourceDeps } from './shared.js';
 import { invalidInput, notFound } from './shared.js';
 import { createSketches } from './sketches.js';
 import { attachTableDiagnostics } from './table-diagnostics.js';
+import { createView } from './view.js';
 import { appValuesOf, createWriter, type Writers } from './write.js';
 
 /** The methods of the instance that return a promise: after destroy they reject */
@@ -55,6 +56,7 @@ const ASYNC_MEMBERS: ReadonlySet<string> = new Set([
   'undo',
   'redo',
   'open',
+  'view.preview',
   'captureImage',
   'mode.drawing.commit',
 ]);
@@ -310,6 +312,10 @@ export function createDrawOnEngine(
         return appValuesOf(store.getMetadata() as Record<string, unknown>);
       },
     },
+    view: createView({
+      generateId: context.generateFeatureId,
+      setShown: (other) => documentResource.setShown(other),
+    }),
     extensions: engine.extensions.collections,
     memory: memory.memory,
 

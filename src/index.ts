@@ -105,6 +105,7 @@ export type { RenderedResource } from './api/rendered.js';
 export type { SelectionResource, VertexSelectionResource } from './api/selection.js';
 export type { Drawing, DrawingResource } from './api/drawing.js';
 export type { DocumentResource } from './api/document.js';
+export type { View } from './api/view.js';
 
 // Writing
 export type {

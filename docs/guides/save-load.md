@@ -570,6 +570,18 @@ and tells their rows created, as any write of the store does
 caller that adds many keeps the draws going by adding a few at a time, as
 `copyTableStore` copies a block at a time.
 
+`draw.view.preview(source)` does the same with a source read as
+`draw.open` reads it (a document of the library, GeoJSON, a JSON string
+or a file): it reads it into a store of rows of its own and shows it;
+`draw.view.preview(null)` shows the document again. A source given while
+another is read replaces it.
+
+```ts
+await draw.view.preview(pastVersion); // a document of the library
+// ...
+await draw.view.preview(null);
+```
+
 To draw the document apart, in a map of its own (a print), copy it into a
 store of rows with `copyTableStore` of `@sakuzu/maplibre-gl-draw/kasane`:
 its layers, groups and order at once, its rows a block at a time, without
