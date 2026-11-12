@@ -87,7 +87,7 @@ export function buildDocument(
   ];
   return {
     version: '4.0.0',
-    title,
+    metadata: { title },
     layerOrder: layers.map((layer) => layer.id),
     layers: layers.map((layer) => ({
       id: layer.id,

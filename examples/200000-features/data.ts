@@ -112,7 +112,7 @@ export function createCity(center: LngLat, halfSizeKm: number, parkAtKm: [number
   ];
   const document: DrawDocument = {
     version: '4.0.0',
-    title: 'City',
+    metadata: { title: 'City' },
     layerOrder: layers.map((layer) => layer.id),
     layers: layers.map((layer) => ({
       id: layer.id,
