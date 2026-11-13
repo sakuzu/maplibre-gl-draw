@@ -80,7 +80,12 @@ import { FileStore } from './memory/file-store.js';
 import { frozenCopy } from './memory/frozen.js';
 import { MemoryClientState } from './memory/ui-state.js';
 import { compareKeys, keyAfter, keysBetween } from './order-keys.js';
-import { HeldSnapshot } from './read-snapshot.js';
+import {
+  type Containers,
+  HeldSnapshot,
+  type LastingSnapshot,
+  type SnapshotSource,
+} from './read-snapshot.js';
 import { setRowPlaceKeys } from './row-places.js';
 import {
   BULK_SLICE_BUDGET_MS,
@@ -268,6 +273,8 @@ export class TableContractStore implements StoreContract {
    * kept until its last step
    */
   #snapshot: HeldSnapshot | null = null;
+  /** The snapshots transactions keep from their beginning to the end of their functions */
+  readonly #lasting = new Set<HeldSnapshot>();
   /** The depth of the reads of the snapshot: their reads of the tables finish nothing */
   #through = 0;
 
@@ -326,19 +333,19 @@ export class TableContractStore implements StoreContract {
       ...writer,
       // The snapshot of a write over several tasks keeps what each write changes before it
       addPages: (layerId, blocks) => {
-        this.#snapshot?.invalidate();
+        for (const snapshot of this.#snapshots()) snapshot.invalidate();
         return marks.write(() => writer.addPages(layerId, blocks));
       },
       writeRows: (patch, options) => {
-        this.#snapshot?.beforeRows(patch);
+        for (const snapshot of this.#snapshots()) snapshot.beforeRows(patch);
         return marks.write(() => writer.writeRows(patch, options));
       },
       writeGroups: (patch, options) => {
-        this.#snapshot?.beforeGroups(patch);
+        for (const snapshot of this.#snapshots()) snapshot.beforeGroups(patch);
         return marks.write(() => writer.writeGroups(patch, options));
       },
       clear: () => {
-        this.#snapshot?.invalidate();
+        for (const snapshot of this.#snapshots()) snapshot.invalidate();
         return marks.write(() => writer.clear());
       },
     };
@@ -363,15 +370,14 @@ export class TableContractStore implements StoreContract {
       // Each step is a frame of the write marks, as a step of a restore is
       step: (fn) => this.#marks.frame(() => this.#bus.continueHeld(fn)),
       release: () => {
-        this.#snapshot = null;
+        this.#endSnapshot();
         this.#bus.release();
         this.#runIdleWaiting();
       },
       openSnapshot: () => this.#openSnapshot(),
-      closeSnapshot: () => {
-        this.#snapshot = null;
-      },
+      closeSnapshot: () => this.#endSnapshot(),
       snapshot: () => (this.#snapshot?.valid ? this.#snapshot : null),
+      openLasting: () => this.#openLasting(),
       placeRows: (rows, to) => {
         const placed = Array.from(rows);
         const moving = new Set(placed.map((handle) => handle * 2));
@@ -1502,6 +1508,8 @@ export class TableContractStore implements StoreContract {
   transact<T>(fn: () => T, source: UpdateSource = 'local'): T {
     // A write comes after the restore under way, finished first (in a transaction too)
     if (this.#steps && !this.#inStep) this.#finishSteps();
+    // The snapshots of the transactions keep the layers, groups and metadata it may change
+    for (const snapshot of this.#lasting) snapshot.keepContainers();
     // The outermost transaction is a frame of the write marks
     return this.#marks.frame(() => this.#bus.transact(fn, source));
   }
@@ -1535,7 +1543,7 @@ export class TableContractStore implements StoreContract {
     this.#writeSteps(steps, performance.now() + BULK_SLICE_BUDGET_MS);
     if (steps.at >= patch.handles.length) {
       this.#steps = null;
-      this.#snapshot = null;
+      this.#endSnapshot();
       steps.tellOrder();
       this.#deleteEmptyGroups();
       return false;
@@ -1600,7 +1608,6 @@ export class TableContractStore implements StoreContract {
   #endSteps(steps: RestoreSteps): void {
     if (this.#steps !== steps) return;
     this.#steps = null;
-    this.#snapshot = null;
     if (steps.timer !== null) clearTimeout(steps.timer);
     this.#marks.frame(() =>
       this.#bus.continueHeld(() => {
@@ -1608,6 +1615,7 @@ export class TableContractStore implements StoreContract {
         this.#deleteEmptyGroups();
       }),
     );
+    this.#endSnapshot();
     this.#bus.release();
     this.#runIdleWaiting();
     steps.onEnd();
@@ -1952,24 +1960,76 @@ export class TableContractStore implements StoreContract {
    * document as it is now, read until its last step
    */
   #openSnapshot(): void {
-    this.#snapshot = new HeldSnapshot(
-      {
-        tables: this.tables,
-        internals: this.#internals,
-        before: () => this.#before,
-        written: () => this.#written,
-        through: (fn) => {
-          this.#through++;
-          try {
-            return fn();
-          } finally {
-            this.#through--;
-          }
-        },
-        liveFeature: (handle) => this.#rowFeature(handle),
+    this.#snapshot = new HeldSnapshot(this.#snapshotSource(), this.#containers());
+  }
+
+  /** The layers, the groups, the stacking order and the metadata as they are now */
+  #containers(): Containers {
+    return {
+      layers: this.#layers,
+      order: this.#order,
+      groups: this.#groups,
+      metadata: this.#metadata,
+    };
+  }
+
+  /** The snapshots that follow the writes */
+  #snapshots(): HeldSnapshot[] {
+    const out = [...this.#lasting];
+    if (this.#snapshot) out.push(this.#snapshot);
+    return out;
+  }
+
+  /**
+   * Ends the snapshot of the write over several tasks under way (at its last step, before its
+   * notification): frozen when a lasting snapshot began during it
+   */
+  #endSnapshot(): void {
+    this.#snapshot?.end();
+    this.#snapshot = null;
+  }
+
+  /**
+   * Begins the snapshot of a transaction (`Store.openSnapshot`): the document as the reads of the
+   * instance read it now (the one before the write over several tasks under way, if any)
+   */
+  #openLasting(): LastingSnapshot {
+    const parent = this.#snapshot?.valid ? this.#snapshot : null;
+    const snapshot = new HeldSnapshot(this.#snapshotSource(), parent ? parent.containers : null, {
+      parent,
+      lasting: true,
+    });
+    this.#lasting.add(snapshot);
+    let released = false;
+    return {
+      snapshot: () => (snapshot.valid && snapshot.changed ? snapshot : undefined),
+      release: () => {
+        if (released) return;
+        released = true;
+        this.#lasting.delete(snapshot);
+        snapshot.release();
       },
-      { layers: this.#layers, order: this.#order, groups: this.#groups, metadata: this.#metadata },
-    );
+    };
+  }
+
+  /** What the snapshots read of this Store */
+  #snapshotSource(): SnapshotSource {
+    return {
+      tables: this.tables,
+      internals: this.#internals,
+      before: () => this.#before,
+      written: () => this.#written,
+      through: (fn) => {
+        this.#through++;
+        try {
+          return fn();
+        } finally {
+          this.#through--;
+        }
+      },
+      liveFeature: (handle) => this.#rowFeature(handle),
+      containers: () => this.#containers(),
+    };
   }
 
   /**

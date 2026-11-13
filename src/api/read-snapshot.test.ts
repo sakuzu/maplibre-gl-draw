@@ -123,14 +123,22 @@ async function readBetweenSteps(
   await stepped;
   expect(store.slicedWritePending).toBe(true);
   expect(readAll(draw)).toEqual(before);
-  // A transaction reads the document committed as well
+  // A transaction reads the document committed as well, the one it began on even once the write
+  // ends while it awaits
   let read: unknown;
   await draw.write((tx) => {
     read = readAll(tx);
   });
   expect(read).toEqual(before);
+  let later: unknown;
+  const reading = draw.write(async (tx) => {
+    await write;
+    later = readAll(tx);
+  });
   expect(store.slicedWritePending).toBe(true);
   await write;
+  await reading;
+  expect(later).toEqual(before);
   vi.restoreAllMocks();
   const after = readAll(draw);
   // The undo of many rows is written over several tasks too: read as the document before it

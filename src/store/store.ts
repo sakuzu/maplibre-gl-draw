@@ -40,7 +40,7 @@ import type { VertexId, VertexTarget } from '../api/state.js';
 import type { FeatureTables, RowWrite } from '../api/tables.js';
 import type { BulkOperation } from '../feature-table/bulk-plan.js';
 import type { TableSelection } from '../feature-table/selection.js';
-import type { DocumentSnapshot } from './read-snapshot.js';
+import type { DocumentSnapshot, LastingSnapshot } from './read-snapshot.js';
 import type {
   BoxSelection,
   DragState,
@@ -638,6 +638,12 @@ export interface Store extends StoreView, UiState {
    * without finishing it (`read-snapshot.ts`)
    */
   readSnapshot(): DocumentSnapshot | undefined;
+  /**
+   * Begins the snapshot a transaction reads from its beginning to the end of its function: the
+   * document as `readSnapshot` (or the document) gives it now, kept over the commits made after
+   * (undefined for a Store that keeps none)
+   */
+  openSnapshot(): LastingSnapshot | undefined;
   /**
    * Settles once no write over several tasks whose notification is held is under way (at once
    * when none is): what is read then reads what it wrote

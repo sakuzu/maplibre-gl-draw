@@ -29,7 +29,7 @@
  */
 
 import type { RowField, RowWrite } from '../api/tables.js';
-import type { DocumentSnapshot } from './read-snapshot.js';
+import type { DocumentSnapshot, LastingSnapshot } from './read-snapshot.js';
 import type { ItemPlacement, RowValues } from './types.js';
 
 /**
@@ -94,6 +94,11 @@ export interface HeldWrites {
   closeSnapshot(): void;
   /** The snapshot of the write over several tasks under way (null for none) */
   snapshot(): DocumentSnapshot | null;
+  /**
+   * Begins the snapshot of a transaction, kept until it is let go of: the document as the reads of
+   * the instance read it now, over any number of commits after
+   */
+  openLasting(): LastingSnapshot;
   /**
    * Begins a write of rows made in several parts, told as one write of all of them would be: its
    * changes of the order (see `FeatureTablesStoreWriter.watchOrderOf`) and the groups its parts
