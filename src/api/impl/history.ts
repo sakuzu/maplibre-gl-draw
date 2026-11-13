@@ -188,7 +188,10 @@ export function createHistory(store: Store, options: HistoryOptions | undefined)
         const reversed: Step = { label: step.label, parts };
         (direction === 'undo' ? redoSteps : undoSteps).push(reversed);
         taken = { direction, step: reversed };
-        return { value: undefined, skipped: 0 };
+        // A step of many rows is written over several tasks: it settles once its last rows are
+        // written, so that what reads after it reads them
+        const result = { value: undefined, skipped: 0 };
+        return store.slicedWritePending ? store.whenWritten().then(() => result) : result;
       });
     })();
     const done = result.then(() => undefined);

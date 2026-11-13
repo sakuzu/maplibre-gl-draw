@@ -852,6 +852,9 @@ class TransactionImpl implements Transaction {
           },
           {
             budgetMs: COMMIT_STEP_MS,
+            // A commit of many rows or features may take several steps: the reads of the
+            // instance read the document before it until its last step
+            snapshot: total > FIRST_PART,
             around: (fn) => withCommit(store, info, fn),
             onEnd: (error) => {
               if (error !== undefined) reject(refused(error));
@@ -1853,7 +1856,7 @@ class TransactionImpl implements Transaction {
             if (own) overlay.features.set(featureId, { ...own, groupId: prepared.id });
             else overlay.members.set(featureId, prepared.id);
           }
-          keep(() => {
+          const placeMembers = (): OpResult | OpParts => {
             // Many members of a group of rows are put into it in parts, once it is made
             let members: { rows: Int32Array; to: ItemPlacement } | null = null;
             const placeRows = (rows: Int32Array, to: ItemPlacement): void => {
@@ -1881,7 +1884,9 @@ class TransactionImpl implements Transaction {
               yield* parts;
               return true;
             })();
-          });
+          };
+          // Its members are how much it writes (it writes a group too: no step ends after it)
+          keep(Object.assign(placeMembers, { size: Math.max(1, prepared.featureIds.length) }));
           return made as Group;
         }),
       update: (id: string, patch: GroupPatch) =>

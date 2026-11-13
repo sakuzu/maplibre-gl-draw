@@ -24,6 +24,7 @@ import {
 import { featuresInStackingOrder } from '../../store/item-lists.js';
 import { isFeatureLocked } from '../../store/lock.js';
 import { listEveryFeatureInOrder } from '../../store/ordering.js';
+import { type DocumentSnapshot, snapshotOf } from '../../store/read-snapshot.js';
 import type { Store } from '../../store/store.js';
 import type {
   Feature as StoredFeature,
@@ -39,7 +40,13 @@ import type {
   StoredFeaturePatch as FeaturePatch,
   MoveTarget,
 } from '../model.js';
-import { featuresExtent, rowsExtent } from './feature-extent.js';
+import {
+  Extent,
+  featureExtent,
+  featuresExtent,
+  rowExtentAdder,
+  rowsExtent,
+} from './feature-extent.js';
 import type { FeatureResource } from './feature-resource.js';
 import { applyResult } from './geometry/apply.js';
 import { runBuffer } from './geometry/buffer.js';
@@ -166,6 +173,32 @@ export function createFeatures(deps: ResourceDeps): FeatureResource {
   function list(filter?: FeatureFilter, options?: FeatureListOptions): Feature[] {
     const page = options === undefined ? undefined : pageOf(options);
     const tables = store.tables;
+    // While a write over several tasks is under way, the document before it
+    const snapshot = tables ? snapshotOf(store) : undefined;
+    if (snapshot) {
+      if (page === undefined) {
+        throw invalidState(
+          'The features of a Store that holds them as rows are listed up to a limit: pass { limit }',
+        );
+      }
+      if (page.after !== undefined && !snapshot.getFeature(page.after)) {
+        throw notFound('feature', page.after);
+      }
+      const features: Feature[] = [];
+      if (page.limit === 0) return features;
+      forEachRowAt(
+        store,
+        snapshot,
+        filter,
+        (id, changed) => {
+          const feature = changed ?? snapshot.getFeature(id);
+          if (feature) features.push(feature);
+          return features.length < page.limit;
+        },
+        page.after,
+      );
+      return features;
+    }
     if (!tables) {
       const checks = filterOf(filter);
       let features = listEveryFeatureInOrder(store);
@@ -210,6 +243,15 @@ export function createFeatures(deps: ResourceDeps): FeatureResource {
     },
     list,
     count(filter) {
+      const snapshot = store.tables ? snapshotOf(store) : undefined;
+      if (snapshot) {
+        let count = 0;
+        forEachRowAt(store, snapshot, filter, () => {
+          count++;
+          return true;
+        });
+        return count;
+      }
       if (store.tables) {
         const counted = countByPlace(checkedEntries(filter));
         if (counted !== undefined) return counted;
@@ -228,6 +270,17 @@ export function createFeatures(deps: ResourceDeps): FeatureResource {
     },
     has: (id) => store.getFeature(id) !== undefined,
     bbox(filter) {
+      const snapshot = store.tables ? snapshotOf(store) : undefined;
+      if (snapshot) {
+        const extent = new Extent();
+        const add = rowExtentAdder(store);
+        forEachRowAt(store, snapshot, filter, (_id, changed, handle) => {
+          if (changed) extent.addBox(featureExtent(changed));
+          else add(handle, extent);
+          return true;
+        });
+        return extent.box;
+      }
       if (store.tables)
         return rowsExtent(store, Object.fromEntries(checkedEntries(filter)) as RowFilter);
       const checks = filterOf(filter);
@@ -480,6 +533,67 @@ function checkedFilterEntries(filter: FeatureFilter | undefined): Array<[string,
     throw invalidInput('bbox must be [west, south, east, north] in degrees');
   }
   return entries;
+}
+
+/**
+ * Visits the features of a Store of rows that match a filter as they were when the write over
+ * several tasks under way began (`Store.readSnapshot`), in stacking order then: a row the write did
+ * not change is tested where it is, without making its feature; one it changed, on its feature
+ * then
+ *
+ * @param visit Called with the ID, the feature then when the write changed it (null otherwise) and
+ *   the row; returning false stops
+ * @param after The ID of a feature the visit starts after
+ */
+function forEachRowAt(
+  store: Store,
+  snapshot: DocumentSnapshot,
+  filter: FeatureFilter | undefined,
+  visit: (id: string, changed: StoredFeature | null, handle: number) => boolean,
+  after?: string,
+): void {
+  const entries = checkedFilterEntries(filter);
+  const layerId = entries.find(([key]) => key === 'layerId')?.[1];
+  const compared = entries.filter(([key]) => key !== 'shown' && key !== 'bbox');
+  const shown = entries.find(([key]) => key === 'shown')?.[1] as boolean | undefined;
+  const bbox = entries.find(([key]) => key === 'bbox')?.[1] as BBox | undefined;
+  const changedKept = (feature: StoredFeature): boolean => {
+    if (!matches(feature, compared)) return false;
+    if (shown !== undefined && featureShown(store, feature) !== shown) return false;
+    if (bbox === undefined) return true;
+    const box = featureExtent(feature);
+    return (
+      box !== null &&
+      box[0] <= bbox[2] &&
+      box[2] >= bbox[0] &&
+      box[1] <= bbox[3] &&
+      box[3] >= bbox[1]
+    );
+  };
+  snapshot.read(() => {
+    const tables = store.tables;
+    if (!tables) return;
+    const rowKept = featureRowMatcher(store, filter);
+    let started = after === undefined;
+    const layerIds =
+      layerId !== undefined
+        ? typeof layerId === 'string' && store.getLayer(layerId)
+          ? [layerId]
+          : []
+        : layerIdsInOrder(store);
+    for (const id of layerIds) {
+      const going = snapshot.forEachRow(id, (handle, changed) => {
+        const featureId = changed ? changed.id : (tables.getRowId(handle) as string);
+        if (!started) {
+          started = featureId === after;
+          return true;
+        }
+        if (changed ? !changedKept(changed) : !rowKept?.(handle)) return true;
+        return visit(featureId, changed, handle);
+      });
+      if (!going) return;
+    }
+  });
 }
 
 /** The checks of a filter of features */

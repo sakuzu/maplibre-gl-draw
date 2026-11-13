@@ -40,6 +40,7 @@ import type { VertexId, VertexTarget } from '../api/state.js';
 import type { FeatureTables, RowWrite } from '../api/tables.js';
 import type { BulkOperation } from '../feature-table/bulk-plan.js';
 import type { TableSelection } from '../feature-table/selection.js';
+import type { DocumentSnapshot } from './read-snapshot.js';
 import type {
   BoxSelection,
   DragState,
@@ -446,6 +447,11 @@ export interface StepsOptions {
   readonly onEnd: (error: unknown) => void;
   /** Runs each step and the end around what they run (the commit they are told as) */
   readonly around?: <T>(fn: () => T) => T;
+  /**
+   * Whether the reads of the instance read the document before the write until its last step
+   * (`Store.readSnapshot`), rather than finishing it: for a write that may take several steps
+   */
+  readonly snapshot?: boolean;
 }
 
 export interface Store extends StoreView, UiState {
@@ -626,6 +632,17 @@ export interface Store extends StoreView, UiState {
     step: (deadline: number) => boolean,
     options: StepsOptions,
   ): void;
+  /**
+   * The document as it was when the write over several tasks under way began, while it is written
+   * (undefined when none is, or when it keeps none): what the reads of the instance read then,
+   * without finishing it (`read-snapshot.ts`)
+   */
+  readSnapshot(): DocumentSnapshot | undefined;
+  /**
+   * Settles once no write over several tasks whose notification is held is under way (at once
+   * when none is): what is read then reads what it wrote
+   */
+  whenWritten(): Promise<void>;
   /**
    * Begins a write of rows made in parts (the rows of `patch`), told as one write of all of them
    * would be: the writes of rows tell no change of the order, and the groups they leave without a

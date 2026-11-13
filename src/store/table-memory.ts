@@ -80,6 +80,7 @@ import { FileStore } from './memory/file-store.js';
 import { frozenCopy } from './memory/frozen.js';
 import { MemoryClientState } from './memory/ui-state.js';
 import { compareKeys, keyAfter, keysBetween } from './order-keys.js';
+import { HeldSnapshot } from './read-snapshot.js';
 import { setRowPlaceKeys } from './row-places.js';
 import {
   BULK_SLICE_BUDGET_MS,
@@ -262,6 +263,13 @@ export class TableContractStore implements StoreContract {
   #steps: RestoreSteps | null = null;
   /** Whether a step of it is being written (its own writes and reads do not finish it) */
   #inStep = false;
+  /**
+   * The document as it was when the write over several tasks under way began (`read-snapshot.ts`),
+   * kept until its last step
+   */
+  #snapshot: HeldSnapshot | null = null;
+  /** The depth of the reads of the snapshot: their reads of the tables finish nothing */
+  #through = 0;
 
   /** The computation of the edits that move, rotate and scale features (the library's when none) */
   readonly transforms?: GeometryTransforms;
@@ -316,10 +324,23 @@ export class TableContractStore implements StoreContract {
     // Every write of values of the tables raises the mark of its frame (once a frame)
     this.#writer = {
       ...writer,
-      addPages: (layerId, blocks) => marks.write(() => writer.addPages(layerId, blocks)),
-      writeRows: (patch, options) => marks.write(() => writer.writeRows(patch, options)),
-      writeGroups: (patch, options) => marks.write(() => writer.writeGroups(patch, options)),
-      clear: () => marks.write(() => writer.clear()),
+      // The snapshot of a write over several tasks keeps what each write changes before it
+      addPages: (layerId, blocks) => {
+        this.#snapshot?.invalidate();
+        return marks.write(() => writer.addPages(layerId, blocks));
+      },
+      writeRows: (patch, options) => {
+        this.#snapshot?.beforeRows(patch);
+        return marks.write(() => writer.writeRows(patch, options));
+      },
+      writeGroups: (patch, options) => {
+        this.#snapshot?.beforeGroups(patch);
+        return marks.write(() => writer.writeGroups(patch, options));
+      },
+      clear: () => {
+        this.#snapshot?.invalidate();
+        return marks.write(() => writer.clear());
+      },
     };
     const own = this.#writer;
     this.writer = {
@@ -342,9 +363,15 @@ export class TableContractStore implements StoreContract {
       // Each step is a frame of the write marks, as a step of a restore is
       step: (fn) => this.#marks.frame(() => this.#bus.continueHeld(fn)),
       release: () => {
+        this.#snapshot = null;
         this.#bus.release();
         this.#runIdleWaiting();
       },
+      openSnapshot: () => this.#openSnapshot(),
+      closeSnapshot: () => {
+        this.#snapshot = null;
+      },
+      snapshot: () => (this.#snapshot?.valid ? this.#snapshot : null),
       placeRows: (rows, to) => {
         const placed = Array.from(rows);
         const moving = new Set(placed.map((handle) => handle * 2));
@@ -1497,6 +1524,8 @@ export class TableContractStore implements StoreContract {
    */
   #beginSteps(write: RowWrite, onEnd: () => void): boolean {
     this.#finishSteps();
+    // What is read until its last step reads the document before it
+    this.#openSnapshot();
     const { patch, before } = write;
     const steps: RestoreSteps = {
       patch,
@@ -1514,6 +1543,7 @@ export class TableContractStore implements StoreContract {
     this.#writeSteps(steps, performance.now() + BULK_SLICE_BUDGET_MS);
     if (steps.at >= patch.handles.length) {
       this.#steps = null;
+      this.#snapshot = null;
       steps.tellOrder();
       this.#deleteEmptyGroups();
       return false;
@@ -1578,6 +1608,7 @@ export class TableContractStore implements StoreContract {
   #endSteps(steps: RestoreSteps): void {
     if (this.#steps !== steps) return;
     this.#steps = null;
+    this.#snapshot = null;
     if (steps.timer !== null) clearTimeout(steps.timer);
     this.#marks.frame(() =>
       this.#bus.continueHeld(() => {
@@ -1933,12 +1964,39 @@ export class TableContractStore implements StoreContract {
   }
 
   /**
+   * Begins the snapshot of a write over several tasks (in its first step, before it writes): the
+   * document as it is now, read until its last step
+   */
+  #openSnapshot(): void {
+    this.#snapshot = new HeldSnapshot(
+      {
+        tables: this.tables,
+        internals: this.#internals,
+        before: () => this.#before,
+        written: () => this.#written,
+        through: (fn) => {
+          this.#through++;
+          try {
+            return fn();
+          } finally {
+            this.#through--;
+          }
+        },
+        liveFeature: (handle) => this.#rowFeature(handle),
+      },
+      { layers: this.#layers, order: this.#order, groups: this.#groups, metadata: this.#metadata },
+    );
+  }
+
+  /**
    * Finishes the restore under way, or the write over several tasks held, before a read of the
    * rows: no read sees them half written. The layers, the groups and the metadata are read
    * without it (the drawing reads them every frame): a write over several tasks leaves them as
    * they are until its last step (see `Store.writeInSteps`)
    */
   #readGate(): void {
+    // A read of the snapshot reads the rows the write did not change where they are
+    if (this.#through > 0) return;
     if (this.#steps) {
       if (!this.#inStep) this.#finishSteps();
       return;

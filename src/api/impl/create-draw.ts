@@ -40,6 +40,7 @@ import { createLayers } from './layers.js';
 import { createMemory } from './memory.js';
 import { createMetadata } from './metadata.js';
 import { checkDrawOptions, createOptions, toEngineOptions } from './options.js';
+import { publishedStore } from './published-store.js';
 import { createRendered } from './rendered.js';
 import { createSelection, createVertexSelection } from './selection.js';
 import type { SelectionWrites } from './selection-resource.js';
@@ -152,15 +153,23 @@ export function createDrawOnEngine(
     spatialIndex: context.spatialIndex,
   };
   const featureResource = createFeatures(deps);
-  const features = publicFeatures(featureResource);
   const groupResource = createGroups(deps);
-  const groups = pick(groupResource, ['get', 'getMany', 'list', 'count', 'has', 'listMembers']);
-  const layerResource = createLayers(
-    deps,
-    (id) =>
-      engine.datasets.get(id)?.order === 'layerOrder' || context.isExternalEntry?.(id) === true,
-  );
-  const layers = pick(layerResource, [
+  const isStackEntry = (id: string): boolean =>
+    engine.datasets.get(id)?.order === 'layerOrder' || context.isExternalEntry?.(id) === true;
+  const layerResource = createLayers(deps, isStackEntry);
+  // The reads of the instance read the document committed: the one before a commit over several
+  // tasks until its last step, without finishing it
+  const readDeps: ResourceDeps = { ...deps, store: publishedStore(store) };
+  const features = publicFeatures(createFeatures(readDeps));
+  const groups = pick(createGroups(readDeps), [
+    'get',
+    'getMany',
+    'list',
+    'count',
+    'has',
+    'listMembers',
+  ]);
+  const layers = pick(createLayers(readDeps, isStackEntry), [
     'get',
     'getMany',
     'list',
