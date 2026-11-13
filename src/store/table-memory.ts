@@ -273,8 +273,13 @@ export class TableContractStore implements StoreContract {
    * kept until its last step
    */
   #snapshot: HeldSnapshot | null = null;
-  /** The snapshots transactions keep from their beginning to the end of their functions */
-  readonly #lasting = new Set<HeldSnapshot>();
+  /**
+   * The snapshots transactions keep from their beginning to the end of their functions, each made
+   * before the first transaction after it began (none while the document does not change)
+   */
+  readonly #lasting = new Set<LastingEntry>();
+  /** What the snapshots read of this Store (made with the first) */
+  #source: SnapshotSource | null = null;
   /** The depth of the reads of the snapshot: their reads of the tables finish nothing */
   #through = 0;
 
@@ -337,11 +342,15 @@ export class TableContractStore implements StoreContract {
         return marks.write(() => writer.addPages(layerId, blocks));
       },
       writeRows: (patch, options) => {
-        for (const snapshot of this.#snapshots()) snapshot.beforeRows(patch);
+        if (this.#snapshot || this.#lasting.size > 0) {
+          for (const snapshot of this.#snapshots()) snapshot.beforeRows(patch);
+        }
         return marks.write(() => writer.writeRows(patch, options));
       },
       writeGroups: (patch, options) => {
-        for (const snapshot of this.#snapshots()) snapshot.beforeGroups(patch);
+        if (this.#snapshot || this.#lasting.size > 0) {
+          for (const snapshot of this.#snapshots()) snapshot.beforeGroups(patch);
+        }
         return marks.write(() => writer.writeGroups(patch, options));
       },
       clear: () => {
@@ -1509,9 +1518,18 @@ export class TableContractStore implements StoreContract {
     // A write comes after the restore under way, finished first (in a transaction too)
     if (this.#steps && !this.#inStep) this.#finishSteps();
     // The snapshots of the transactions keep the layers, groups and metadata it may change
-    for (const snapshot of this.#lasting) snapshot.keepContainers();
+    if (this.#lasting.size > 0) {
+      for (const entry of this.#lasting) this.#makeLasting(entry);
+    }
     // The outermost transaction is a frame of the write marks
     return this.#marks.frame(() => this.#bus.transact(fn, source));
+  }
+
+  /** Makes the snapshot of a transaction before the first transaction after it began */
+  #makeLasting(entry: LastingEntry): void {
+    entry.made ??= new HeldSnapshot(this.#snapshotSource(), this.#containers(), {
+      lasting: true,
+    });
   }
 
   // ==========================================================================
@@ -1975,7 +1993,8 @@ export class TableContractStore implements StoreContract {
 
   /** The snapshots that follow the writes */
   #snapshots(): HeldSnapshot[] {
-    const out = [...this.#lasting];
+    const out: HeldSnapshot[] = [];
+    for (const { made } of this.#lasting) if (made) out.push(made);
     if (this.#snapshot) out.push(this.#snapshot);
     return out;
   }
@@ -1995,26 +2014,22 @@ export class TableContractStore implements StoreContract {
    */
   #openLasting(): LastingSnapshot {
     const parent = this.#snapshot?.valid ? this.#snapshot : null;
-    const snapshot = new HeldSnapshot(this.#snapshotSource(), parent ? parent.containers : null, {
-      parent,
-      lasting: true,
-    });
-    this.#lasting.add(snapshot);
-    let released = false;
-    return {
-      snapshot: () => (snapshot.valid && snapshot.changed ? snapshot : undefined),
-      release: () => {
-        if (released) return;
-        released = true;
-        this.#lasting.delete(snapshot);
-        snapshot.release();
-      },
-    };
+    // Made now during a write over several tasks (it reads the snapshot of the write), else before
+    // the first transaction after it began (`transact`)
+    const entry = new LastingEntry(
+      this.#lasting,
+      parent
+        ? new HeldSnapshot(this.#snapshotSource(), parent.containers, { parent, lasting: true })
+        : null,
+    );
+    this.#lasting.add(entry);
+    return entry;
   }
 
   /** What the snapshots read of this Store */
   #snapshotSource(): SnapshotSource {
-    return {
+    if (this.#source) return this.#source;
+    this.#source = {
       tables: this.tables,
       internals: this.#internals,
       before: () => this.#before,
@@ -2030,6 +2045,7 @@ export class TableContractStore implements StoreContract {
       liveFeature: (handle) => this.#rowFeature(handle),
       containers: () => this.#containers(),
     };
+    return this.#source;
   }
 
   /**
@@ -2232,4 +2248,32 @@ function tableGroupOf(group: Group): TableGroup {
   const { kind: _kind, ...fields } = group as Group & { featureIds?: unknown };
   delete (fields as { featureIds?: unknown }).featureIds;
   return frozenCopy({ ...(fields as Omit<TableGroup, 'kind'>), kind: 'table' });
+}
+
+/**
+ * The snapshot a transaction keeps (`Store.openSnapshot`): made before the first transaction after
+ * it began, or at once during a write over several tasks
+ */
+class LastingEntry implements LastingSnapshot {
+  readonly #owner: Set<LastingEntry>;
+  /** The snapshot, once made */
+  made: HeldSnapshot | null;
+  #released = false;
+
+  constructor(owner: Set<LastingEntry>, snapshot: HeldSnapshot | null) {
+    this.#owner = owner;
+    this.made = snapshot;
+  }
+
+  snapshot(): HeldSnapshot | undefined {
+    const snapshot = this.made;
+    return snapshot?.valid && snapshot.changed ? snapshot : undefined;
+  }
+
+  release(): void {
+    if (this.#released) return;
+    this.#released = true;
+    this.#owner.delete(this);
+    this.made?.release();
+  }
 }

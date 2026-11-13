@@ -612,7 +612,7 @@ class Overlay {
   /** The Store as the checks read it, with what the transaction wrote over it */
   readonly view: Store;
 
-  constructor(store: Store, published: Store) {
+  constructor(store: Store, base: () => BaseReads) {
     const read = <T>(
       written: Map<string, T | null>,
       id: string,
@@ -623,7 +623,7 @@ class Overlay {
     };
     const overrides: Record<string, unknown> = {
       getFeature: (id: string) => {
-        let feature = read(this.features, id, () => published.getFeature(id));
+        let feature = read(this.features, id, () => base().getFeature(id));
         // The writes of many rows, over a feature the transaction did not write otherwise
         if (feature && this.bulk.length > 0 && !this.features.has(id)) {
           const handle = store.tables?.getRowRef(id);
@@ -652,20 +652,23 @@ class Overlay {
         const own = this.features.get(id);
         if (own !== undefined) return own === null ? undefined : own.layerId;
         if (this.bulk.length > 0) return this.view.getFeature(id)?.layerId;
-        return published.getFeatureLayerId(id);
+        const from = base();
+        return from.getFeatureLayerId ? from.getFeatureLayerId(id) : from.getFeature(id)?.layerId;
       },
-      getLayer: (id: string) => read(this.layers, id, () => published.getLayer(id)),
-      getGroup: (id: string) => read(this.groups, id, () => published.getGroup(id)),
+      getLayer: (id: string) => read(this.layers, id, () => base().getLayer(id)),
+      getGroup: (id: string) => read(this.groups, id, () => base().getGroup(id)),
       getLayerOrder: () => {
         if (this.layerOrder) return this.layerOrder.filter((id) => this.layers.get(id) !== null);
-        const order = published.getLayerOrder().filter((id) => this.layers.get(id) !== null);
+        const order = base()
+          .getLayerOrder()
+          .filter((id) => this.layers.get(id) !== null);
         for (const [id, layer] of this.layers) {
           if (layer !== null && !order.includes(id)) order.push(id);
         }
         return order;
       },
       listLayers: () => {
-        const out = published
+        const out = base()
           .listLayers()
           .filter((layer) => this.layers.get(layer.id) !== null)
           .map((layer) => this.layers.get(layer.id) ?? layer);
@@ -684,6 +687,14 @@ class Overlay {
     });
   }
 }
+
+/** The reads of the document a transaction is checked and read against */
+type BaseReads = Pick<
+  Store,
+  'getFeature' | 'getLayer' | 'getGroup' | 'getLayerOrder' | 'listLayers'
+> & {
+  getFeatureLayerId?(id: string): string | undefined;
+};
 
 /** A transaction: its writes checked when called, kept, and made at its commit */
 class TransactionImpl implements Transaction {
@@ -731,9 +742,7 @@ class TransactionImpl implements Transaction {
     // commits made while its function runs (its reads and the checks of its writes read it)
     const lasting = this.#store.openSnapshot();
     this.#lasting = lasting;
-    this.#published = lasting
-      ? publishedStore(this.#store, () => lasting.snapshot() ?? this.#store.readSnapshot())
-      : writerDeps.published;
+    this.#published = writerDeps.published;
     this.#revision = this.#store.revision;
   }
 
@@ -764,9 +773,21 @@ class TransactionImpl implements Transaction {
 
   /** What the transaction wrote over the document, made with its first write */
   get #overlay(): Overlay {
-    this.#overlayMade ??= new Overlay(this.#store, this.#published);
+    this.#overlayMade ??= new Overlay(this.#store, this.#base);
     return this.#overlayMade;
   }
+
+  /**
+   * The reads of the document the transaction began on: the snapshot it keeps once the document may
+   * have changed since, the document the reads of the instance read otherwise (the one before a
+   * write over several tasks under way)
+   */
+  readonly #base = (): BaseReads => {
+    const lasting = this.#lasting?.snapshot();
+    if (lasting) return lasting;
+    const store = this.#store;
+    return store.slicedWritePending ? (store.readSnapshot() ?? store) : store;
+  };
 
   /**
    * The reads of the transaction over the whole document (a list, a count, the items of a layer):
@@ -788,7 +809,11 @@ class TransactionImpl implements Transaction {
         return overlay.version;
       },
     };
-    const published = this.#published;
+    const lasting = this.#lasting;
+    const store0 = this.#store;
+    const published = lasting
+      ? publishedStore(store0, () => lasting.snapshot() ?? store0.readSnapshot())
+      : this.#published;
     const reads = transactionReads(published, state);
     const own: Record<string, unknown> = {
       getFeature: reads.getFeature,
