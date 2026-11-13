@@ -76,7 +76,7 @@ function slowClock(): void {
 }
 
 /** Everything the instance reads of the document, as plain values */
-function readAll(draw: Draw): unknown {
+function readAll(draw: Pick<Draw, 'features' | 'layers' | 'groups'>): unknown {
   const list = draw.features.list({}, { limit: 10_000 });
   return {
     list: list.map((feature) => [
@@ -126,7 +126,7 @@ async function readBetweenSteps(
   // A transaction reads the document committed as well
   let read: unknown;
   await draw.write((tx) => {
-    read = readAll(tx as never);
+    read = readAll(tx);
   });
   expect(read).toEqual(before);
   expect(store.slicedWritePending).toBe(true);

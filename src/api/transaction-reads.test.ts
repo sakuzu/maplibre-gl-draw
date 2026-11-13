@@ -50,7 +50,7 @@ function square(id: string, x: number) {
 }
 
 /** What the reads over the whole document read, through the reads given */
-function readWhole(reads: Pick<Transaction, 'features' | 'layers' | 'groups'>): unknown {
+function readWhole(reads: Pick<Draw, 'features' | 'layers' | 'groups'>): unknown {
   const { features, layers, groups } = reads;
   const layerIds = layers.getOrder().filter((id) => layers.has(id));
   return {
@@ -78,7 +78,7 @@ async function sameOnceCommitted(fn: (tx: Transaction) => Promise<unknown>): Pro
     await fn(tx);
     inside = readWhole(tx);
   });
-  expect(inside).toEqual(readWhole(draw as never));
+  expect(inside).toEqual(readWhole(draw));
 }
 
 describe('the reads of a transaction over the whole document', () => {
@@ -91,8 +91,8 @@ describe('the reads of a transaction over the whole document', () => {
       initDefaultLayer: false,
     });
     await draw.write(async (tx) => {
-      await tx.layers.create({ id: 'l', name: 'l' } as never);
-      await tx.layers.create({ id: 'm', name: 'm' } as never);
+      await tx.layers.create({ id: 'l', name: 'l' });
+      await tx.layers.create({ id: 'm', name: 'm' });
       await tx.features.create(Array.from({ length: 12 }, (_, i) => point(`p${i}`, i)));
       await tx.groups.create({ id: 'g', name: 'g', members: ['p2', 'p3', 'p4'] });
       await tx.features.create([square('s0', 20), square('s1', 21)]);
@@ -119,7 +119,7 @@ describe('the reads of a transaction over the whole document', () => {
   it('leave out the features deleted, and read the ones changed', async () => {
     await sameOnceCommitted(async (tx) => {
       await tx.features.delete(['p1', 'p3']);
-      await tx.features.update('p5', { properties: { [`${'app'}:n`]: 1 } as never });
+      await tx.features.update('p5', { properties: { 'app:n': 1 } });
       await tx.features.update('p6', { properties: { 'maplibre-gl-draw:visible': false } });
     });
   });
@@ -157,7 +157,7 @@ describe('the reads of a transaction over the whole document', () => {
 
   it('read the layers created and put in another place of the stacking order', async () => {
     await sameOnceCommitted(async (tx) => {
-      await tx.layers.create({ id: 'k', name: 'k', index: 0 } as never);
+      await tx.layers.create({ id: 'k', name: 'k', index: 0 });
       await tx.layers.place('l', { above: 'k' });
       await tx.features.create(point('a', 1, 'k'));
     });
