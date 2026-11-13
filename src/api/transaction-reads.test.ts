@@ -197,4 +197,36 @@ describe('the reads of a transaction over the whole document', () => {
       await tx.features.create(point('b', 2, 'm', 'h'));
     });
   });
+
+  it('read the document they began on while other commits are made as they await', async () => {
+    const before = readWhole(draw);
+    let gate = (): void => {};
+    const waiting = new Promise<void>((resolve) => {
+      gate = resolve;
+    });
+    let inside: unknown;
+    let kept: unknown;
+    const write = draw.write(async (tx) => {
+      await waiting;
+      inside = readWhole(tx);
+      kept = tx.features.get('p1')?.id;
+      // Checked against the document it began on: made at the commit, left out there (gone)
+      await tx.features.update('p1', { properties: { 'app:n': 1 } });
+      await tx.features.update('p5', { properties: { 'app:n': 2 } });
+    });
+    await draw.write(async (tx) => {
+      await tx.features.delete('p1');
+      await tx.features.place(['p2'], { layerId: 'm' });
+      await tx.features.update('p3', { properties: { 'maplibre-gl-draw:visible': false } });
+      await tx.features.create(point('q', 30));
+      await tx.groups.delete('g', { members: 'keep' });
+    });
+    gate();
+    const result = await write.result;
+    expect(inside).toEqual(before);
+    expect(kept).toBe('p1');
+    expect(result.skipped).toBe(1);
+    expect(draw.features.has('p1')).toBe(false);
+    expect(draw.features.get('p5')?.properties['app:n']).toBe(2);
+  });
 });

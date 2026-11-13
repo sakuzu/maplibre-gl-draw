@@ -12,7 +12,7 @@
  * write first.
  */
 
-import { readThroughSnapshot } from '../../store/read-snapshot.js';
+import { type DocumentSnapshot, readThroughSnapshot } from '../../store/read-snapshot.js';
 import type { Store } from '../../store/store.js';
 
 /** The reads of the document a snapshot answers in place of the Store */
@@ -28,21 +28,26 @@ const SNAPSHOT_READS = [
 
 /**
  * The Store as the reads of the instance read it: the document before the write over several tasks
- * under way, when there is one (every other member is the Store's)
+ * under way, when there is one (every other member is the Store's). A transaction reads it through
+ * its own snapshot (`snapshotOf`): the document it began on
+
  *
  * @internal
  */
-export function publishedStore(store: Store): Store {
+export function publishedStore(
+  store: Store,
+  snapshotOf: () => DocumentSnapshot | undefined = () => store.readSnapshot(),
+): Store {
   const reads: Record<string, (...args: never[]) => unknown> = {};
   for (const key of SNAPSHOT_READS) {
     reads[key] = (...args: never[]) => {
-      const snapshot = store.readSnapshot();
+      const snapshot = snapshotOf();
       const from = (snapshot ?? store) as unknown as Record<string, (...a: never[]) => unknown>;
       return from[key](...args);
     };
   }
   reads.getFeatureLayerId = (id: never) => {
-    const snapshot = store.readSnapshot();
+    const snapshot = snapshotOf();
     return snapshot
       ? snapshot.getFeature(id as unknown as string)?.layerId
       : store.getFeatureLayerId(id);
@@ -54,6 +59,6 @@ export function publishedStore(store: Store): Store {
       return typeof value === 'function' ? value.bind(target) : value;
     },
   });
-  readThroughSnapshot(published, () => store.readSnapshot());
+  readThroughSnapshot(published, snapshotOf);
   return published;
 }

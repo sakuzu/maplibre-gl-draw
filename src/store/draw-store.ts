@@ -56,7 +56,7 @@ import { insertGroup } from './item-lists.js';
 import { ChangeBus } from './memory/change-bus.js';
 import { MemoryDrawingState } from './memory/ui-state.js';
 import { moveItemsByLists } from './move-items.js';
-import type { DocumentSnapshot } from './read-snapshot.js';
+import type { DocumentSnapshot, LastingSnapshot } from './read-snapshot.js';
 import { BULK_SLICE_ROWS, heldWritesOf, type RowSteps, rowStepsOf } from './row-steps.js';
 import { settleSelectionValues, valueOfSelection } from './selection-value.js';
 import type {
@@ -702,6 +702,10 @@ export class DrawStore implements Store {
   #settleWritten(): void {
     if (this.#queue.holding || this.#writtenWaiters.length === 0) return;
     for (const resolve of this.#writtenWaiters.splice(0)) resolve();
+  }
+
+  openSnapshot(): LastingSnapshot | undefined {
+    return heldWritesOf.get(this.#contract)?.openLasting();
   }
 
   readSnapshot(): DocumentSnapshot | undefined {

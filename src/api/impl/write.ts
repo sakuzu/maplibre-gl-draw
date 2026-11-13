@@ -29,7 +29,7 @@ import { createId } from '../../shared/utils/id.js';
 import { forEachMatchingRow, type RowFilter } from '../../store/feature-stream.js';
 import { featuresInStackingOrder } from '../../store/item-lists.js';
 import { listEveryFeatureInOrder } from '../../store/ordering.js';
-import { readThroughSnapshot } from '../../store/read-snapshot.js';
+import { type LastingSnapshot, readThroughSnapshot } from '../../store/read-snapshot.js';
 import { BULK_SLICE_ROWS, sliceRowValues } from '../../store/row-steps.js';
 import { selectedRowsOfTarget, selectionOfTarget } from '../../store/selection-value.js';
 import type { FeatureEdit, SlicedWrite, Store } from '../../store/store.js';
@@ -107,6 +107,7 @@ import { createGroups, idsInStackingOrder, prepareGroup, prepareGroupPatch } fro
 import type { LayerResource } from './layer-resource.js';
 import { createLayers, prepareLayer, prepareLayerPatch } from './layers.js';
 import { placementOf, resolveMoveTarget } from './placement.js';
+import { publishedStore } from './published-store.js';
 import type { SelectionWrites } from './selection-resource.js';
 import type { ResourceDeps } from './shared.js';
 import {
@@ -699,6 +700,8 @@ class TransactionImpl implements Transaction {
   readonly #writers: Writers;
   readonly #reads: WriterDeps['reads'];
   readonly #published: Store;
+  /** The snapshot of the document it began on, let go of once its function ends */
+  readonly #lasting: LastingSnapshot | undefined;
   #overlayMade: Overlay | undefined;
   /** The reads of the transaction over the whole document, made when first read */
   #wholeReads:
@@ -724,7 +727,13 @@ class TransactionImpl implements Transaction {
     this.#store = writerDeps.deps.store;
     this.#writers = writerDeps.writers;
     this.#reads = writerDeps.reads;
-    this.#published = writerDeps.published;
+    // The document it began on: the one the reads of the instance read now, kept over the
+    // commits made while its function runs (its reads and the checks of its writes read it)
+    const lasting = this.#store.openSnapshot();
+    this.#lasting = lasting;
+    this.#published = lasting
+      ? publishedStore(this.#store, () => lasting.snapshot() ?? this.#store.readSnapshot())
+      : writerDeps.published;
     this.#revision = this.#store.revision;
   }
 
@@ -815,6 +824,7 @@ class TransactionImpl implements Transaction {
 
   close(): void {
     this.#closed = true;
+    this.#lasting?.release();
   }
 
   /** Whether a write called has not settled yet */
