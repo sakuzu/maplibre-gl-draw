@@ -24,12 +24,12 @@ import type { BulkOperation, RowUpdate } from '../../feature-table/bulk-plan.js'
 import { TableSelection } from '../../feature-table/selection.js';
 import { differenceAll, intersectionAll, unionAll } from '../../geometry/boolean.js';
 import type { AreaCoordinates, MultiPolygonCoordinates } from '../../geometry/types.js';
-import type { ObjectGroup } from '../../shared/types/model.js';
+import type { ItemPlacement, ObjectGroup } from '../../shared/types/model.js';
 import { createId } from '../../shared/utils/id.js';
 import { forEachMatchingRow, type RowFilter } from '../../store/feature-stream.js';
 import { featuresInStackingOrder } from '../../store/item-lists.js';
 import { listEveryFeatureInOrder } from '../../store/ordering.js';
-import { BULK_SLICE_ROWS } from '../../store/row-steps.js';
+import { BULK_SLICE_ROWS, sliceRowValues } from '../../store/row-steps.js';
 import { selectedRowsOfTarget, selectionOfTarget } from '../../store/selection-value.js';
 import type { FeatureEdit, SlicedWrite, Store } from '../../store/store.js';
 import type {
@@ -475,13 +475,14 @@ const COMMIT_STEP_MS = 40;
 /** The rows or features a part of a write of many is made of, at first */
 const FIRST_PART = BULK_SLICE_ROWS;
 
-/** The time a part of a write of many is grown to (ms): it doubles while it is quicker */
-const PART_MS = 8;
+/** The time a part of a write of many is sized to (ms), from the rate of the part before */
+const PART_MS = 12;
 
 /**
- * Writes `count` items in parts, each of which a step of the commit can end after: a part doubles
- * while it is quick and halves while it is slow, so that many items cost few parts. `write` writes
- * the items `from` to `to` and says whether it wrote anything
+ * Writes `count` items in parts, each of which a step of the commit can end after: a part is sized
+ * to `PART_MS` by the rate of the one before (twice as many items at most), so that many items
+ * cost few parts and a part ends near its time. `write` writes the items `from` to `to` and says
+ * whether it wrote anything
  *
  * @returns Whether a part wrote anything
  */
@@ -496,9 +497,10 @@ function* inParts(
     const to = Math.min(count, at + size);
     const start = performance.now();
     if (write(at, to) === true) written = true;
+    // The next part as many items as this one wrote in the time of a part, twice as many at most
     const took = performance.now() - start;
-    if (took * 2 < PART_MS) size *= 2;
-    else if (took > PART_MS * 2 && size > FIRST_PART) size = Math.max(FIRST_PART, size >> 1);
+    const fit = took > 0 ? Math.floor(((to - at) / took) * PART_MS) : size * 2;
+    size = Math.max(FIRST_PART, Math.min(size * 2, fit));
     const wrote = to - at;
     at = to;
     // The last part ends the write in the step that writes it
@@ -515,6 +517,35 @@ function rowsInParts(
   return inParts(rows.count, (from, to) =>
     write(TableSelection.of(rows.handles.subarray(from, to))),
   );
+}
+
+/** Values of no row: what a write of rows told by their order keeps of before */
+const NO_ROWS: RowValues = { handles: new Int32Array(0), fields: new Map() };
+
+/**
+ * Puts rows in a place in parts: their parents and the keys of their order are made at once, as
+ * one write of all of them makes them, and written a part at a time; the changes of the order and
+ * the groups they leave empty are told once at the end. A Store that does not write rows in parts
+ * puts them in one write
+ */
+function placeRowsInParts(
+  store: Store,
+  rows: TableSelection,
+  to: ItemPlacement,
+): boolean | Generator<number, OpResult, undefined> {
+  const values = store.planPlaceRows(rows, to);
+  if (!values) return store.applyBulk({ kind: 'place', to }, rows);
+  const end = store.beginRowParts(values);
+  const parts = inParts(values.handles.length, (from, at) =>
+    store.applyRows({ patch: sliceRowValues(values, from, at), before: NO_ROWS }),
+  );
+  return (function* (): Generator<number, OpResult, undefined> {
+    try {
+      return yield* parts;
+    } finally {
+      end();
+    }
+  })();
 }
 
 /** The deletion of rows, as the values of a write of them */
@@ -1449,13 +1480,12 @@ class TransactionImpl implements Transaction {
           );
           overlay.bulk.push({ rows: bulk, apply: (feature) => ({ ...feature, layerId, groupId }) });
           const first = self.#ops.length === 0;
-          keep(() => {
-            // One write of the rows: the tables build the rows put in another place again with
-            // the rows they joined, once per write, so a write of them in parts would cost the
-            // rows already placed once per part
-            const now = first && self.#unchangedAtCommit ? bulk : self.#store.unlockedRows(bulk);
-            return now.count === 0 || self.#store.applyBulk({ kind: 'place', to: placement }, now);
-          });
+          keep(
+            featureWrite(bulk.count, () => {
+              const now = first && self.#unchangedAtCommit ? bulk : self.#store.unlockedRows(bulk);
+              return now.count === 0 || placeRowsInParts(self.#store, now, placement);
+            }),
+          );
           return bulk.count;
         }
         const ids = self.#writableIds(resolved);
@@ -1820,19 +1850,36 @@ class TransactionImpl implements Transaction {
             if (own) overlay.features.set(featureId, { ...own, groupId: prepared.id });
             else overlay.members.set(featureId, prepared.id);
           }
-          keep(() =>
+          keep(() => {
+            // Many members of a group of rows are put into it in parts, once it is made
+            let members: { rows: Int32Array; to: ItemPlacement } | null = null;
+            const placeRows = (rows: Int32Array, to: ItemPlacement): void => {
+              members = { rows, to };
+            };
             // Checked against the document as it is: made as it was checked
-            this.#unchangedAtCommit
-              ? writers.createChecked(prepared, { membersInOrder: inOrderAtCommit }) !== null
-              : writers.create({
-                  id: prepared.id,
-                  name: prepared.name,
-                  visible: prepared.visible,
-                  locked: prepared.locked,
-                  layerId: prepared.layerId,
-                  members: prepared.featureIds,
-                }) !== null,
-          );
+            const made = this.#unchangedAtCommit
+              ? writers.createChecked(prepared, { membersInOrder: inOrderAtCommit, placeRows })
+              : writers.create(
+                  {
+                    id: prepared.id,
+                    name: prepared.name,
+                    visible: prepared.visible,
+                    locked: prepared.locked,
+                    layerId: prepared.layerId,
+                    members: prepared.featureIds,
+                  },
+                  { placeRows },
+                );
+            if (made === null) return false;
+            const placed = members as { rows: Int32Array; to: ItemPlacement } | null;
+            if (placed === null) return true;
+            const parts = placeRowsInParts(this.#store, TableSelection.of(placed.rows), placed.to);
+            if (typeof parts === 'boolean') return true;
+            return (function* (): Generator<number, OpResult, undefined> {
+              yield* parts;
+              return true;
+            })();
+          });
           return made as Group;
         }),
       update: (id: string, patch: GroupPatch) =>

@@ -576,6 +576,17 @@ export class DrawStore implements Store {
     return held ? held.beginRowParts(patch) : () => {};
   }
 
+  planPlaceRows(rows: TableSelection, to: ItemPlacement): RowValues | null {
+    const contract = this.#contract;
+    const internals = featureTablesInternals(contract.tables);
+    const held = contract.tables ? heldWritesOf.get(contract) : undefined;
+    if (!internals || !held || !contract.applyRows) return null;
+    if (contract.isReadOnly() || contract.isInteractionLocked()) return null;
+    const ordered: number[] = [];
+    for (const handles of rowsByLayerInOrder(internals, rows).values()) ordered.push(...handles);
+    return ordered.length === 0 ? null : held.placeRows(Int32Array.from(ordered), to);
+  }
+
   writeInSteps(
     source: UpdateSource,
     step: (deadline: number) => boolean,

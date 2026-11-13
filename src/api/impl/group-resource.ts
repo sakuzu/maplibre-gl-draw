@@ -6,7 +6,7 @@
  * `draw.write`: the internal part each write of a transaction is made with once it is committed
  */
 
-import type { ObjectGroup } from '../../shared/types/model.js';
+import type { ItemPlacement, ObjectGroup } from '../../shared/types/model.js';
 import type {
   Group,
   GroupFilter,
@@ -15,6 +15,19 @@ import type {
   ItemListOptions,
   MoveTarget,
 } from '../model.js';
+
+/**
+ * How a group is created
+ *
+ * @internal
+ */
+export interface GroupWriteOptions {
+  /**
+   * Puts the many members of a new group of a layer held as rows into it instead of the write of
+   * the group (a commit writes them in parts): their rows, and the place in the group
+   */
+  readonly placeRows?: (rows: Int32Array, to: ItemPlacement) => void;
+}
 
 /**
  * @internal
@@ -72,14 +85,17 @@ export interface GroupResource {
    *   in `layerId`) or its ID is not one the Store takes (`Store.acceptsId`), or
    *   `alreadyExists` when its ID is taken
    */
-  create(input: GroupInput): Group | null;
+  create(input: GroupInput, options?: GroupWriteOptions): Group | null;
   /**
    * Creates a group checked before against the document as it still is (`prepareGroup`), without
    * checking it again: its members put in stacking order unless they are in it already
    *
    * @returns The group, or `null` when the document is read-only
    */
-  createChecked(group: ObjectGroup, options: { readonly membersInOrder: boolean }): Group | null;
+  createChecked(
+    group: ObjectGroup,
+    options: { readonly membersInOrder: boolean } & GroupWriteOptions,
+  ): Group | null;
   /**
    * Brings back a group this client deleted that a Store that holds its features as rows keeps
    * (`DocumentChange.restoreToken`), at the place it had in its layer, without features: its

@@ -633,6 +633,12 @@ export interface Store extends StoreView, UiState {
    * transaction). A Store whose contract does not write rows in parts tells each part
    */
   beginRowParts(patch: RowValues): () => void;
+  /**
+   * The values that put rows in a place (their parent and the keys of their order there), in the
+   * order one write of all of them puts them (by layer, each in the order of its layer), to be
+   * written in parts with `applyRows` (null when the Store does not, or refuses the write now)
+   */
+  planPlaceRows(rows: TableSelection, to: ItemPlacement): RowValues | null;
 
   /** Creates a group (see {@link DocumentStore.createGroup}) */
   createGroup(group: Group): boolean;

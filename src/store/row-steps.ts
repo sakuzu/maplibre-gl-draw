@@ -29,7 +29,7 @@
  */
 
 import type { RowField, RowWrite } from '../api/tables.js';
-import type { RowValues } from './types.js';
+import type { ItemPlacement, RowValues } from './types.js';
 
 /**
  * The time of one step of a write of many rows in steps (ms): rows are written until it is spent.
@@ -91,6 +91,12 @@ export interface HeldWrites {
    * transaction) once the last part is written
    */
   beginRowParts(patch: RowValues): () => void;
+  /**
+   * The values that put rows in a place, in their order (their parent and the keys of their
+   * order among the items there now), to be written in parts: the write of all of them a write
+   * that puts them there makes
+   */
+  placeRows(rows: Int32Array, to: ItemPlacement): RowValues;
 }
 
 /**

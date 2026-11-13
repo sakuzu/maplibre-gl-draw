@@ -241,7 +241,14 @@ function memberRows(store: GroupInsertStore, members: ReadonlySet<string>): Int3
 export function insertGroup(
   store: GroupInsertStore,
   group: Group,
-  options?: { readonly membersInOrder?: boolean },
+  options?: {
+    readonly membersInOrder?: boolean;
+    /**
+     * Puts the members of a new group of rows into it instead (a commit writes them in parts):
+     * their rows, and the place in the group
+     */
+    readonly placeRows?: (rows: Int32Array, to: ItemPlacement) => void;
+  },
 ): void {
   const members = new Set(group.kind === 'table' ? [] : group.featureIds);
   const layerId = group.layerId;
@@ -266,10 +273,9 @@ export function insertGroup(
       [group.id],
       around ? { layerId, below: around.below, above: around.above } : { layerId, above: null },
     );
-    store.applyBulk?.(
-      { kind: 'place', to: { layerId, groupId: group.id } },
-      TableSelection.of(rows),
-    );
+    const to: ItemPlacement = { layerId, groupId: group.id };
+    if (options?.placeRows) options.placeRows(rows, to);
+    else store.applyBulk?.({ kind: 'place', to }, TableSelection.of(rows));
     return;
   }
   store.createGroup(group);

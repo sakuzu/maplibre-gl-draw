@@ -311,6 +311,16 @@ export class TableContractStore implements StoreContract {
       // Each step is a frame of the write marks, as a step of a restore is
       step: (fn) => this.#marks.frame(() => this.#bus.continueHeld(fn)),
       release: () => this.#bus.release(),
+      placeRows: (rows, to) => {
+        const { parent, keys } = this.#placing(Array.from(rows), to);
+        return {
+          handles: Int32Array.from(rows),
+          fields: new Map<RowField, unknown[]>([
+            ['parent', new Array<unknown>(rows.length).fill(parent)],
+            ['key', keys],
+          ]),
+        };
+      },
       beginRowParts: (patch) => {
         const tellOrder = this.#tablesWriter.watchOrderOf(patch);
         this.#groupsHeld++;
@@ -903,26 +913,13 @@ export class TableContractStore implements StoreContract {
       this.#leaveGroups(patch);
       // The rows put in a place, the new ones after them
       if (place) {
-        const to = place.to;
-        if (!this.#layers.has(to.layerId)) {
-          throw new Error(`Layer with id "${to.layerId}" not found`);
-        }
-        const group = to.groupId === undefined ? undefined : this.#groups.get(to.groupId);
-        if (to.groupId !== undefined && !group) {
-          throw new Error(`Group with id "${to.groupId}" not found`);
-        }
         const placed = [...place.rows, ...createdHandles];
-        const keys = this.#keysAt(
-          to,
-          group,
-          new Set(placed.map((handle) => handle * 2)),
-          placed.length,
-        );
+        const { parent, keys } = this.#placing(placed, place.to);
         placed.forEach((handle, k) => {
           const at = row(handle);
           const left = this.#groupIdOfRow(handle);
-          if (left !== undefined && left !== group?.id) this.#leftGroups.add(left);
-          set('parent', at, group?.id ?? to.layerId);
+          if (left !== undefined && left !== parent) this.#leftGroups.add(left);
+          set('parent', at, parent);
           set('key', at, keys[k]);
         });
       }
@@ -937,6 +934,27 @@ export class TableContractStore implements StoreContract {
         { before: write.before, ...(deletes && this.#keeping()) },
       );
     });
+  }
+
+  /**
+   * The parent (the group, or the layer) and the keys of the order rows put in a place get,
+   * among the items there now, in the order of the rows
+   */
+  #placing(placed: readonly number[], to: ItemPlacement): { parent: string; keys: string[] } {
+    if (!this.#layers.has(to.layerId)) {
+      throw new Error(`Layer with id "${to.layerId}" not found`);
+    }
+    const group = to.groupId === undefined ? undefined : this.#groups.get(to.groupId);
+    if (to.groupId !== undefined && !group) {
+      throw new Error(`Group with id "${to.groupId}" not found`);
+    }
+    const keys = this.#keysAt(
+      to,
+      group,
+      new Set(placed.map((handle) => handle * 2)),
+      placed.length,
+    );
+    return { parent: group?.id ?? to.layerId, keys };
   }
 
   /** A row deleted leaves its group, and so does a row whose group changes */
