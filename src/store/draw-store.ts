@@ -583,8 +583,6 @@ export class DrawStore implements Store {
   ): void {
     const { budgetMs, onEnd } = options;
     const around = options.around ?? (<T>(fn: () => T): T => fn());
-    const schedule = options.schedule ?? ((next: () => void) => setTimeout(next, 0));
-    const now = options.now ?? (() => performance.now());
     const held = this.#contract.tables ? heldWritesOf.get(this.#contract) : undefined;
     if (!held) {
       // A Store that does not hold a transaction over several tasks makes every step at once
@@ -597,47 +595,59 @@ export class DrawStore implements Store {
       return;
     }
     let ended = false;
-    let cancel: unknown = null;
+    let running = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
     const write: QueuedWrite = { finish: () => finish(), holdsNotification: true };
-    /** Lets go of the notification: the contract tells into the one of this Store, which goes out */
-    const end = (error: unknown): void => {
+    /**
+     * Lets go of the notification: the contract tells into the one of this Store, which goes out.
+     * What the listeners throw goes to the end with what the steps threw
+     */
+    const end = (thrown: unknown): void => {
       if (ended) return;
       ended = true;
-      if (cancel !== null) clearTimeout(cancel as ReturnType<typeof setTimeout>);
-      around(() => {
-        try {
-          held.release();
-        } finally {
-          if (this.#queue.remove(write)) this.#bus.release();
-        }
-      });
+      if (timer !== null) clearTimeout(timer);
+      let error = thrown;
+      try {
+        around(() => {
+          try {
+            held.release();
+          } finally {
+            if (this.#queue.remove(write)) this.#bus.release();
+          }
+        });
+      } catch (released) {
+        error ??= released;
+      }
       onEnd(error);
     };
     /** A later step, in the transaction held (its writes finish nothing) */
     const run = (deadline: number): void => {
+      // A step under way is not finished from within itself
+      if (ended || running) return;
+      running = true;
       let done: boolean;
       try {
         done = around(() =>
           this.#queue.runStep(() => this.#bus.continueHeld(() => held.step(() => step(deadline)))),
         );
       } catch (error) {
+        running = false;
         end(error);
         return;
       }
+      running = false;
       if (done) end(undefined);
-      else cancel = schedule(next);
+      else timer = setTimeout(next, 0);
     };
     const next = (): void => {
-      cancel = null;
-      if (!ended) run(now() + budgetMs);
+      timer = null;
+      run(performance.now() + budgetMs);
     };
-    const finish = (): void => {
-      if (!ended) run(Number.POSITIVE_INFINITY);
-    };
+    const finish = (): void => run(Number.POSITIVE_INFINITY);
     // The first step, in a transaction of its own: the notification is held when steps are left
     const done = around(() =>
       this.transact(() => {
-        const first = step(now() + budgetMs);
+        const first = step(performance.now() + budgetMs);
         if (!first) {
           // Anything else that comes to this Store or to its contract finishes it first
           held.hold(() => write.finish());
@@ -652,7 +662,7 @@ export class DrawStore implements Store {
       onEnd(undefined);
       return;
     }
-    cancel = schedule(next);
+    timer = setTimeout(next, 0);
   }
 
   liveRows(rows: TableSelection): TableSelection {

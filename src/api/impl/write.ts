@@ -499,8 +499,10 @@ function* inParts(
     const took = performance.now() - start;
     if (took * 2 < PART_MS) size *= 2;
     else if (took > PART_MS * 2 && size > FIRST_PART) size = Math.max(FIRST_PART, size >> 1);
-    yield to - at;
+    const wrote = to - at;
     at = to;
+    // The last part ends the write in the step that writes it
+    if (at < count) yield wrote;
   }
   return written;
 }
@@ -807,7 +809,11 @@ class TransactionImpl implements Transaction {
           (deadline) => {
             const all = step(deadline);
             steps++;
-            if (!all || steps > 1) onProgress?.({ phase: 'apply', done, total });
+            if (onProgress && (!all || steps > 1)) {
+              // Told outside the step: what it throws reaches no write of the Store
+              const progress: Progress = { phase: 'apply', done, total };
+              queueMicrotask(() => onProgress(progress));
+            }
             return all;
           },
           {

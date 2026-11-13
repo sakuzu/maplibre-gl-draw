@@ -446,10 +446,6 @@ export interface StepsOptions {
   readonly onEnd: (error: unknown) => void;
   /** Runs each step and the end around what they run (the commit they are told as) */
   readonly around?: <T>(fn: () => T) => T;
-  /** Runs the next step in a later task (`setTimeout` by default); what it gives cancels it */
-  readonly schedule?: (next: () => void) => unknown;
-  /** The clock of the steps (`performance.now` by default) */
-  readonly now?: () => number;
 }
 
 export interface Store extends StoreView, UiState {
@@ -613,7 +609,7 @@ export interface Store extends StoreView, UiState {
   readonly slicedWritePending: boolean;
   /**
    * Writes over several tasks as one transaction of this client (the commit of a transaction of
-   * `draw.write` too long for one task): `step` writes until a time (of `options.now`) and says
+   * `draw.write` too long for one task): `step` writes until a time (`performance.now`) and says
    * whether it is done. The first step is made now, in a transaction of `source`; the next ones
    * in later tasks, in the transaction held; the notification goes out once, after the last.
    * Anything that comes first finishes the rest at once (`step` given no time): a write of this
@@ -622,8 +618,8 @@ export interface Store extends StoreView, UiState {
    * they are written). A Store whose contract does not hold a transaction over several tasks
    * makes every step at once.
    *
-   * What the first step throws is thrown (nothing is held then); what a later step throws ends
-   * it, and is given to `options.onEnd`.
+   * What the first step throws is thrown (nothing is held then); what a later step or the
+   * listeners of its notification throw ends it, and is given to `options.onEnd`.
    */
   writeInSteps(
     source: UpdateSource,
